@@ -1,124 +1,22 @@
 {
+  "_doc": "Manifest del modulo carta-marketing. Blueprint-driven. 4 operaciones: get_perfil, update_perfil, completar_onboarding (delega a agente), actividad (stub hasta integrar agent-observer). Persistencia: marca.json del proyecto.",
   "name": "carta-marketing",
-  "version": "2.0.0",
-  "description": "Equipo de marketing silencioso pizzepos. Escucha carta.actualizada y dispara agentes especializados (marketing-copywriter, marketing-strategist, marketing-brand-keeper) cuando detecta necesidades. Loop prevention via hash. Perfil de marca persistido en {project.base_path}/storage/config/marca.json (write atomico).",
-  "author": "Pizzepos Team",
+  "version": "1.1.0",
+  "description": "Modulo carta-marketing en modo blueprint-driven. Perfil de marca del proyecto + orquestador de agentes de marketing (copywriter, strategist, brand-keeper, onboarding).",
   "language": "es",
-  "main": "index.js",
-  "events": {
-    "publishes": [
-      {
-        "event": "agent.execute.request",
-        "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
-        "description": "Invoca agentes de marketing cuando detecta necesidades en carta. Lleva project_id top-level + correlation_id heredado + timestamp."
-      }
-    ],
-    "subscribes": [
-      { "event": "project.activated",   "handler": "onProjectActivated",   "description": "Cache base_path + carga perfil de marca." },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated", "description": "No-op multi-tenant." },
-      { "event": "carta.actualizada",   "handler": "onCartaActualizada",   "description": "Detecta necesidades y dispara agentes (con loop prevention via hash)." }
-    ]
-  },
-  "ui_handlers": [
-    { "domain": "carta-marketing", "action": "perfil",         "handler": "handleGetPerfil",     "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "carta-marketing", "action": "update-perfil",  "handler": "handleUpdatePerfil",  "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "carta-marketing", "action": "actividad",      "handler": "handleGetActividad",  "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "carta-marketing", "action": "health",         "handler": "handleHealth",        "type": "workspace_module", "zone": "barra_modulos" }
-  ],
-  "tools": [
-    {
-      "name": "marketing.get_perfil",
-      "description": "Obtiene el perfil de marca del proyecto: tono, idioma, publico, colores, valores, prohibiciones",
-      "handler": "toolGetPerfil",
-      "parameters": {
-        "type": "object",
-        "properties": { "project_id": { "type": "string" } },
-        "required": ["project_id"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT", "cuando": "project_id ausente" }
-      ]
-    },
-    {
-      "name": "marketing.update_perfil",
-      "description": "Actualiza el perfil de marca del proyecto. Acepta cualquier campo: nombre, tono, idioma, publico, valores, colores, prohibido, referencia_visual, notas",
-      "handler": "toolUpdatePerfil",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "project_id": { "type": "string" },
-          "nombre": { "type": "string" },
-          "tono": { "type": "string" },
-          "idioma": { "type": "string" },
-          "publico": { "type": "string" },
-          "valores": { "type": "string" },
-          "colores": { "type": "object" },
-          "prohibido": { "type": "string" },
-          "referencia_visual": { "type": "string" }
-        },
-        "required": ["project_id"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT",     "cuando": "project_id ausente" },
-        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del perfil" }
-      ]
-    },
-    {
-      "name": "marketing.completar_onboarding",
-      "description": "Marca el onboarding como completado. A partir de aqui, marketing trabaja automaticamente en cada cambio de carta.",
-      "handler": "toolCompletarOnboarding",
-      "parameters": {
-        "type": "object",
-        "properties": { "project_id": { "type": "string" } },
-        "required": ["project_id"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT",     "cuando": "project_id ausente" },
-        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del perfil" }
-      ]
-    },
-    {
-      "name": "marketing.actividad",
-      "description": "Muestra la actividad reciente de marketing: cartas procesadas, estado del perfil",
-      "handler": "toolGetActividad",
-      "parameters": {
-        "type": "object",
-        "properties": { "project_id": { "type": "string" } },
-        "required": ["project_id"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT", "cuando": "project_id ausente" }
-      ]
-    }
-  ],
-  "dependencies": [],
-  "tracing": {
-    "propaga_correlation_id": true
-  },
+  "blueprint_driven": true,
+  "blueprint_path": "carta-marketing.blueprint.json",
+  "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
+  "target_page_id": "carta-marketing",
   "config": {
     "persistence": {
-      "type": "json-file-per-project",
-      "owner": "CartaMarketingModule (Map perfilesPerProject + Map projectPaths + Map processedHashes)",
+      "pattern": "single-json-per-project",
       "paths": [
-        "{project.base_path}/storage/config/marca.json (write atomico tmp+rename)"
+        "data/projects/{slug}/storage/config/marca.json"
       ],
-      "restart_resilient": true,
-      "concurrency": "single-writer-per-project",
-      "lost_on_restart": ["processedHashes"]
+      "atomicidad": "fs.write.request atomic:true",
+      "concurrencia": "single-writer"
     }
   },
-  "observability": {
-    "logging": {
-      "level": "info",
-      "structured": true,
-      "correlation_id": true
-    },
-    "metrics": {
-      "enabled": true,
-      "counters": [
-        "carta-marketing.procesado",
-        "carta-marketing.errors"
-      ]
-    }
-  }
+  "cajones_enabled": true
 }

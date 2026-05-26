@@ -19,11 +19,12 @@ const KeyManager = require('./key-manager');
 const SecureEnvelope = require('./secure-envelope');
 const CryptoHandshake = require('./crypto-handshake');
 
+const BaseModule = require('../_shared/base-module');
 const MAX_SHARED_SECRETS_DEFAULT = 100;
-const UI_ACTIONS = ['status', 'public-key', 'trust-peer', 'revoke-peer', 'trusted-peers', 'health'];
 
-class SecurityP2PModule {
+class SecurityP2PModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'security-p2p';
     this.version = '2.0.0';
 
@@ -41,9 +42,6 @@ class SecurityP2PModule {
     };
 
     this.core = null;
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.cryptoHandshake = null;
 
     this._coreHooks = null;
@@ -85,9 +83,7 @@ class SecurityP2PModule {
       core.mqtt.on('message', this._mqttMessageHandler);
     }
 
-    if (core.uiHandler) {
-      this._registerUIHandlers(core.uiHandler);
-    }
+    // tools.contract v1.2: the loader auto-wires module.json.tools[] to uiHandler.
 
     this.logger?.info?.('module.loaded', {
       module: this.name,
@@ -121,11 +117,7 @@ class SecurityP2PModule {
       this._mqttMessageHandler = null;
     }
 
-    if (this.core?.uiHandler) {
-      for (const action of UI_ACTIONS) {
-        try { this.core.uiHandler.unregister('security-p2p', action); } catch (_) { /* ignore */ }
-      }
-    }
+    // The loader auto-unregisters tools[] entries from uiHandler on unload.
 
     this._sharedSecrets.clear();
     this.cryptoHandshake = null;
@@ -149,7 +141,7 @@ class SecurityP2PModule {
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
@@ -340,14 +332,14 @@ class SecurityP2PModule {
         request_id,
         error_message: err?.message || String(err)
       });
-      this.metrics?.increment?.('security-p2p.errors', { code: 'INTERNAL_ERROR', kind: 'public_key_request' });
+      this.metrics?.increment?.('security-p2p.errors', { code: 'UNKNOWN_ERROR', kind: 'public_key_request' });
       await this._publicarEvento('security.public-key.response', {
         request_id,
         correlation_id,
         public_key: null,
         fingerprint: null,
         has_keys: false,
-        error: { code: 'INTERNAL_ERROR', message: err?.message || 'Error obteniendo clave publica' }
+        error: { code: 'UNKNOWN_ERROR', message: err?.message || 'Error obteniendo clave publica' }
       }, source);
     }
   }
@@ -453,15 +445,6 @@ class SecurityP2PModule {
   // ==========================================
   // Internal
   // ==========================================
-
-  _registerUIHandlers(uiHandler) {
-    uiHandler.register('security-p2p', 'status', this.handleStatus.bind(this));
-    uiHandler.register('security-p2p', 'public-key', this.handleGetPublicKey.bind(this));
-    uiHandler.register('security-p2p', 'trust-peer', this.handleTrustPeer.bind(this));
-    uiHandler.register('security-p2p', 'revoke-peer', this.handleRevokePeer.bind(this));
-    uiHandler.register('security-p2p', 'trusted-peers', this.handleListTrustedPeers.bind(this));
-    uiHandler.register('security-p2p', 'health', this.handleHealthCheck.bind(this));
-  }
 
   _handleMqttMessage(topic, message) {
     try {

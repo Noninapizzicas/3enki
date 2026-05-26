@@ -27,15 +27,14 @@ const GlovoStrategy = require('./strategies/glovo');
 const WhatsAppStrategy = require('./strategies/whatsapp');
 const LlevadooStrategy = require('./strategies/llevadoo');
 
-class CuentasCanalesModule {
+const BaseModule = require('../../_shared/base-module');
+class CuentasCanalesModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'cuentas-canales';
     this.version = '5.0.0';
 
     // Dependencias (inyectadas en onLoad)
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.uiHandler = null;
     this.config = {};
 
@@ -80,7 +79,7 @@ class CuentasCanalesModule {
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado|no disponible/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
@@ -145,15 +144,9 @@ class CuentasCanalesModule {
       await strategy.subscribeToEvents(this.eventBus);
     }
 
-    // UI Handlers específicos por canal + agregados
-    if (this.uiHandler) {
-      for (const strategy of Object.values(this.strategies)) {
-        strategy.registerUIHandlers(this.uiHandler);
-      }
-      this.uiHandler.register('canales', 'health', this.handleHealthCheck.bind(this));
-      this.uiHandler.register('canales', 'metrics', this.handleGetMetrics.bind(this));
-      this.uiHandler.register('canales', 'list', this.handleGetCanales.bind(this));
-    }
+    // tools.contract v1.2: el loader auto-wirea TODAS las tools[] del module.json
+    // (tanto las del padre 'canales.*' como las 60 de strategies/* con handlers
+    // tipo 'strategies.<canal>.handleX') a uiHandler. No registro manual.
 
     this.iniciarReseoDiario();
 
@@ -171,14 +164,8 @@ class CuentasCanalesModule {
       this._resetInterval = null;
     }
 
-    if (this.uiHandler) {
-      for (const strategy of Object.values(this.strategies)) {
-        strategy.unregisterUIHandlers(this.uiHandler);
-      }
-      this.uiHandler.unregister('canales', 'health');
-      this.uiHandler.unregister('canales', 'metrics');
-      this.uiHandler.unregister('canales', 'list');
-    }
+    // El loader desregistra todas las tools[] (incluidas las de strategies/*)
+    // automaticamente via unregisterToolsForAI.
 
     for (const strategy of Object.values(this.strategies)) {
       strategy.cleanup();

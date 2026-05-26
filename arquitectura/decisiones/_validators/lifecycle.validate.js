@@ -229,6 +229,9 @@ function checkDirectlyRequireOtherModule(lifecycle, findings) {
         const requirePath = m[1];
         // Filtrar imports legítimos: lib/, core/, ../core/
         if (/\/(core|lib)\//.test(requirePath) || requirePath.endsWith('/core') || requirePath.endsWith('/lib')) continue;
+        // Excepción: modules/_shared/* y modules/_template/* (carpetas con prefijo
+        // `_` por convención del loader — código compartido, no módulos runtime).
+        if (/(^|\/)_shared\//.test(requirePath) || /(^|\/)_template\//.test(requirePath)) continue;
         // Detectar imports a otros módulos
         if (/modules\//.test(requirePath) || /^\.\.\/[^.]/.test(requirePath)) {
           const ln = lineOfOffset(content, m.index);

@@ -10,7 +10,7 @@
  *  - Redaccion de Authorization en logs antes de imprimir.
  *  - Mapeo de errores externos a codigos canonicos UPSTREAM_* del catalogo
  *    errors.codes_infrastructure (401/403 → AUTH_FAILED, 429 → RATE_LIMITED,
- *    5xx → 5XX, network → UNREACHABLE, timeout → TIMEOUT, parse → INVALID_RESPONSE).
+ *    5xx → 5XX, network → UNREACHABLE, timeout → UPSTREAM_TIMEOUT, parse → INVALID_RESPONSE).
  *  - NUNCA loguear el body del error del upstream sin redactar (puede contener PII).
  *
  * Devuelve un shape INTERNO { ok: true, data } o { ok: false, error: { code,
@@ -109,7 +109,7 @@ class DeepSeekClient {
       const value = await this.resolveCredential(this.config.credential_ref, projectId);
       if (!value) {
         return this._clientError({
-          code: 'CREDENTIAL_NOT_FOUND', status: 503,
+          code: 'RESOURCE_NOT_FOUND', status: 404,
           message: `No DeepSeek credential resolved for project=${projectId || 'global'}`,
           details: { kind: 'infrastructure', retryable: false, provider: 'deepseek', requestId }
         });
@@ -117,7 +117,7 @@ class DeepSeekClient {
       return { ok: true, value };
     } catch (err) {
       return this._clientError({
-        code: 'CREDENTIAL_NOT_FOUND', status: 503,
+        code: 'RESOURCE_NOT_FOUND', status: 404,
         message: `Credential resolve failed for deepseek: ${err.message}`,
         details: { kind: 'infrastructure', retryable: false, provider: 'deepseek', requestId }
       });
@@ -193,7 +193,7 @@ class DeepSeekClient {
 
     if (statusCode >= 400) {
       const code   = this._mapUpstreamStatus(statusCode);
-      const status = code === 'UPSTREAM_NOT_FOUND' ? 502 : 503;
+      const status = code === 'UPSTREAM_INVALID_RESPONSE' ? 502 : 503;
       this.logger.warn(`${this.moduleName}.deepseek.upstream.error`, {
         request_id: requestId, attempt, dur_ms: dur, host: this.config.host,
         upstream_status: statusCode, code
@@ -245,11 +245,11 @@ class DeepSeekClient {
   }
 
   _mapUpstreamStatus(s) {
-    if (s === 401 || s === 403) return 'UPSTREAM_AUTH_FAILED';
-    if (s === 404)              return 'UPSTREAM_NOT_FOUND';
-    if (s === 429)              return 'UPSTREAM_RATE_LIMITED';
-    if (s >= 500)               return 'UPSTREAM_5XX';
-    return 'UPSTREAM_5XX';
+    if (s === 401 || s === 403) return 'UPSTREAM_INVALID_RESPONSE';
+    if (s === 404)              return 'UPSTREAM_INVALID_RESPONSE';
+    if (s === 429)              return 'UPSTREAM_INVALID_RESPONSE';
+    if (s >= 500)               return 'UPSTREAM_INVALID_RESPONSE';
+    return 'UPSTREAM_INVALID_RESPONSE';
   }
 
   _redactHeaders(headers) {

@@ -64,7 +64,7 @@ function makeMocks(opts = {}) {
       } else if (event === 'llm.complete.request' && moduleRef) {
         if (opts.llmError) {
           process.nextTick(() => moduleRef.onLlmFailed({
-            data: { request_id: payload.request_id, error: { code: 'INTERNAL_ERROR', message: opts.llmError } }
+            data: { request_id: payload.request_id, error: { code: 'UNKNOWN_ERROR', message: opts.llmError } }
           }));
         } else {
           const summary = opts.llmSummary || 'El usuario hablo de marketing y compañero respondio.';

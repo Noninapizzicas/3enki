@@ -1,9 +1,9 @@
 {
   "_doc": "Captura LA disciplina de declaracion de tools del sistema event-core: qué es una tool, qué la diferencia de un agente, cómo se declara en module.json, qué shape tiene su handler, qué codigos canonicos puede emitir. Una TOOL es una CAPACIDAD CONCRETA del LLM: una funcion bien definida con parametros estructurados, ejecucion deterministica (o casi-deterministica como una llamada HTTP), y resultado canonico. Es lo que el LLM PIDE EXPLICITAMENTE en su agentic loop: 'invoca pdf.extract con file_path=X', 'invoca tarifas.assign con producto_id=Y'. Una tool NO razona — solo ejecuta lo que el caller le pide. Si necesita razonar, es agente, no tool.\n\nSin un contrato de tools, cada modulo declara sus tools de forma distinta: algunos con name kebab-case, otros camelCase, algunos con parameters JSON Schema, otros con descripcion textual de los args; algunos handlers devuelven {status, data}, otros devuelven directamente el valor, otros lanzan excepciones; algunos declaran errores_conocidos, otros omiten el campo. El LLM recibe estas tools via ai-gateway que las pasa a la API del provider — la inconsistencia se traduce en confusion del LLM, fallos al ejecutar, y degradacion del agentic loop. Con el contrato hay UN shape canonico, validable mecanicamente, que cualquier modulo del sistema cumple para que sus tools sean enchufables al compañero sin friccion.",
   "id": "tools",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "creada": "2026-05-04",
-  "supersedes_nota": "v1.1.0 (2026-05-11): canoniza la invocacion de tools como UNICA forma valida — par de eventos `<toolName>` (request con `{request_id, ...args}`) / `<toolName>.response` (con `{request_id, result|error}`). Elimina la justificacion 'por performance' de la invocacion directa via `toolsRegistry.get(name).handler(...)` que la v1.0 toleraba en convenciones_complementarias.bus-transport — esa nota legitimaba el PATH 1 de ai-gateway, violacion 3/3 de paradigma event-core. El loader (core/modules/loader.js::_wireToolBusSubscription) auto-suscribe cada tool con handler al evento `<toolName>` en el bus, garantizando que la forma canonica esta SIEMPRE disponible sin que cada modulo declare un subscribe manual. Nuevo prohibido tool_invocacion_directa_via_toolsRegistry_handler + nueva decision_arquitectonica tool_invocacion_canonica_por_bus + nuevo cross-check drift_invocacion_directa_de_tool_fuera_del_framework (error: bloquea CI cuando codigo bajo modules/ usa `toolsRegistry.get().handler` o `moduleLoader.executeTool`). v1.0.0 (2026-05-04): primera version. Recoge las practicas que ya existen implementadas en modulos como carta-scheduler (tools crear_regla / eliminar_regla / detectar_conflictos / confirmar / rechazar — todas con shape canonico response { status, data | error }), tarifas (tools assign / unassign), pdf-extractor (tool pdf.extract), credential-manager (tool credential.resolve). Eleva a contrato transversal autonomo con criterios canonicos (kebab-case prefijado, parameters JSON Schema 2020-12, handler obligatorio, errores_conocidos del catalogo errors.contract, retorno canonico). Habilita auditoria mecanica de los 66 modulos del sistema durante el horizontal de migracion: cada tool de cada modulo se valida contra el contrato y los drifts quedan en baseline.",
+  "supersedes_nota": "v1.2.1 (2026-05-20): addendum sobre handler-path. El campo handler de tools[] admite ahora paths dot-separated para sub-componentes (ej. 'strategies.mesa.handleAbrirMesa'). El loader resuelve por path y bindea this al owner del metodo. Nuevo principio canonico tool_handler_admite_path_a_subcomponente. Schema actualizado (pattern '^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*$', maxLength 80→120). Validator: readSourceFiles tambien rastrea modules/<m>/strategies/*.js; findHandlerDef usa el ultimo segmento del path como method name. Caso de uso real: cuentas-canales migra 60 handlers de las 6 strategies a tools[] del padre sin pegar forwarders triviales en index.js. Schema NAME_RE relajado para aceptar kebab-case tambien en segments siguientes ('^[a-z0-9-]+\\.[a-z0-9_-]+(\\.[a-z0-9_-]+)*$'): el contrato decia kebab-case canonico pero el schema solo permitia snake en non-primary segments (asesoria.generar-paquete y cocina.mark-ready ya eran kebab — cierra inconsistencia preexistente sin cambio semantico).\n\nv1.2.0 (2026-05-20): cierra la fragilidad de los 3 sitios donde un modulo declaraba como se le invoca (module.json.tools[] para LLM, module.json.ui_handlers[] para frontend, uiHandler.register() manual en onLoad). Eleva tools[] a UNICO origen de declaracion. El loader (core/modules/loader.js::registerToolsForAI) auto-registra cada tool en TRES destinos: toolsRegistry (ai-gateway/LLM), bus event `<toolName>` (auto-suscripcion ya existente desde v1.1), Y uiHandler con clave derivada del name (domain=primer segmento, action=resto preservando puntos). Añade tools_http[] como modo declarativo para wrappers HTTP puros que no necesitan codigo JS — el loader genera el handler closure en runtime con auth resuelta via credential-manager (sustituye el patron calling-generator/plugins archivado en _archived/2026-05-08_calling-generator-y-plugins-externos/, reabsorbiendo su capacidad declarativa al loader sin un modulo intermediario). module.json.ui_handlers[] queda redefinido como superficie del frame (frontend.contract.v1.2) — NO mecanismo de dispatch. Los formatos legacy 'uiActions' y 'handlers' que el loader toleraba (loader.js:879 normalizeUIHandlers) se prohiben — un solo origen. Nueva derivacion: schemas/tools/tool.http.declaration.schema.json. Nuevos cross-checks: drift_modulo_con_uihandler_register_manual (error), drift_ui_handlers_con_shape_de_dispatch (warning), drift_tool_http_sin_url_o_method (warning), drift_dos_tools_con_misma_clave_ui_derivada (error). Background operativo en arquitectura/decisiones/propuestas/capa-unica-tools-via-plugins.md (commit 261c7d8) — este v1.2 es la Fase 1 de ese camino. v1.1.0 (2026-05-11): canoniza la invocacion de tools como UNICA forma valida — par de eventos `<toolName>` (request con `{request_id, ...args}`) / `<toolName>.response` (con `{request_id, result|error}`). Elimina la justificacion 'por performance' de la invocacion directa via `toolsRegistry.get(name).handler(...)` que la v1.0 toleraba en convenciones_complementarias.bus-transport — esa nota legitimaba el PATH 1 de ai-gateway, violacion 3/3 de paradigma event-core. El loader (core/modules/loader.js::_wireToolBusSubscription) auto-suscribe cada tool con handler al evento `<toolName>` en el bus, garantizando que la forma canonica esta SIEMPRE disponible sin que cada modulo declare un subscribe manual. Nuevo prohibido tool_invocacion_directa_via_toolsRegistry_handler + nueva decision_arquitectonica tool_invocacion_canonica_por_bus + nuevo cross-check drift_invocacion_directa_de_tool_fuera_del_framework (error: bloquea CI cuando codigo bajo modules/ usa `toolsRegistry.get().handler` o `moduleLoader.executeTool`). v1.0.0 (2026-05-04): primera version. Recoge las practicas que ya existen implementadas en modulos como carta-scheduler (tools crear_regla / eliminar_regla / detectar_conflictos / confirmar / rechazar — todas con shape canonico response { status, data | error }), tarifas (tools assign / unassign), pdf-extractor (tool pdf.extract), credential-manager (tool credential.resolve). Eleva a contrato transversal autonomo con criterios canonicos (kebab-case prefijado, parameters JSON Schema 2020-12, handler obligatorio, errores_conocidos del catalogo errors.contract, retorno canonico). Habilita auditoria mecanica de los 66 modulos del sistema durante el horizontal de migracion: cada tool de cada modulo se valida contra el contrato y los drifts quedan en baseline.",
 
   "objetivo": "Producir UN JSON output (_outputs/tools.json) que define: shape canonico de cada entry de module.json.tools[] (name, description, parameters, handler, errores_conocidos), shape canonico del retorno del handler (success: { status: 200|201|202, data } | error: { status: 4xx|5xx, error: { code, message, details } }), reglas de naming (kebab-case, prefijo del modulo, ej: 'pdf.extract' no 'extractPdf'), patterns aceptados (handler async que devuelve shape canonico, parameters JSON Schema validable AJV), patterns prohibidos (tool que llama a otro modulo via moduleLoader.getModule, tool que lanza excepciones en lugar de devolver { error }, tool con name camelCase, tool sin errores_conocidos cuando el handler claramente puede fallar). Producir DOS JSON Schemas (tool.declaration y tool.response) que validan respectivamente cada entry de tools[] en module.json y cada respuesta del handler en runtime. Validable mecanicamente cruzando contra el codigo y contra las auditorias modulo-completo.",
 
@@ -51,9 +51,15 @@
 
     "ASINCRONIA OBLIGATORIA. Toda tool es async. Aun si la operacion es CPU-bound (calculo numerico), el handler es async. Esto permite a ai-gateway gestionar timeouts, paralelismo, cancelacion uniformemente.",
 
-    "TIMEOUT POR TOOL HEREDA DEL MODULO. Cada modulo declara su tool_timeout_ms en config (default 30000ms). Si la tool excede, ai-gateway corta y la trata como error UPSTREAM_TIMEOUT o INTERNAL_ERROR (segun naturaleza). El handler NO es responsable del timeout — el caller (ai-gateway) lo es.",
+    "UPSTREAM_TIMEOUT POR TOOL HEREDA DEL MODULO. Cada modulo declara su tool_timeout_ms en config (default 30000ms). Si la tool excede, ai-gateway corta y la trata como error UPSTREAM_TIMEOUT o UNKNOWN_ERROR (segun naturaleza). El handler NO es responsable del timeout — el caller (ai-gateway) lo es.",
 
-    "OBSERVABILIDAD ES OBLIGATORIA. Cada invocacion de tool emite metric con labels { tool_name, modulo, project_id?, status_class }. Sin esto, no se puede saber qué tools se usan, cuanto tardan, cuantas fallan. observability.contract aplica."
+    "OBSERVABILIDAD ES OBLIGATORIA. Cada invocacion de tool emite metric con labels { tool_name, modulo, project_id?, status_class }. Sin esto, no se puede saber qué tools se usan, cuanto tardan, cuantas fallan. observability.contract aplica.",
+
+    "UNA DECLARACION, TRES DESTINOS. Una tool en module.json.tools[] queda invocable por (1) el LLM via ai-gateway, (2) cualquier modulo del bus via evento `<toolName>`, (3) el frontend via mqttRequest('domain','action'). El loader hace los tres auto-wires en registerToolsForAI. Cero declaracion adicional. Cero ui_handlers[] separados para dispatch. La fragilidad operativa (handlers que dejan de funcionar al añadir tools nuevas) se cierra estructuralmente: imposible olvidar un canal porque no hay tres declaraciones que sincronizar — hay una sola.",
+
+    "EL FRONTEND HABLA EL MISMO IDIOMA QUE EL LLM. El frontend invoca tools del backend con la misma identidad canonica con la que las invoca el LLM: el name de la tool. El topic ui/request/{domain}/{action} se deriva del name por split en el primer punto: primer segmento = domain, resto = action (puntos preservados literalmente). Ej: tool 'mercadona.producto.obtener' → ui/request/mercadona/producto.obtener. Sin tablas de traduccion, sin alias, sin diccionarios intermedios. UIRequestHandler ya tolera parts.length>=4 — este principio formaliza la convencion.",
+
+    "WRAPPERS HTTP DECLARATIVOS SIN CODIGO JS. Una tool que se reduce a 'llamar a una URL externa y devolver el resultado' se declara como entry en module.json.tools_http[] (modo declarativo: url, method, auth_type, parameters JSON Schema, response_path opcional). El loader genera el handler closure en runtime y lo registra en los 3 destinos identicamente. Patron heredado del calling-generator archivado el 2026-05-08, reabsorbido al canon. Si la tool necesita logica nativa (cache, transformacion no trivial, side effects), sigue siendo tools[] normal con handler string en index.js — los dos modos coexisten."
   ],
 
   "principios": [
@@ -84,7 +90,7 @@
     },
     {
       "id": "error_code_del_catalogo_errors_contract",
-      "regla": "error.code es un codigo canonico del catalogo errors.contract.json (RESOURCE_NOT_FOUND, VALIDATION_FAILED, AUTHORIZATION_REQUIRED, INTERNAL_ERROR, UPSTREAM_*, etc.). NO se inventan codigos locales por modulo.",
+      "regla": "error.code es un codigo canonico del catalogo errors.contract.json (RESOURCE_NOT_FOUND, INVALID_INPUT, PERMISSION_DENIED, UNKNOWN_ERROR, UPSTREAM_*, etc.). NO se inventan codigos locales por modulo.",
       "razon": "Catalogo cerrado permite que ai-gateway mapee errores a respuesta del LLM uniformemente. Codigos inventados rompen ese mapeo."
     },
     {
@@ -111,6 +117,31 @@
       "id": "tool_id_unico_cross_repo",
       "regla": "Dos modulos del repo NO declaran dos tools con el mismo name. Aunque tecnicamente pueda funcionar (cada modulo invoca el suyo), el LLM se confunde si recibe el mismo name dos veces en su tool list. El validator detecta colisiones y flagea drift.",
       "razon": "Disambiguacion absoluta. La unica tool 'pdf.extract' es la del modulo pdf-extractor, no puede haber otra. Si un segundo modulo necesita extraer PDF, llama a pdf.extract via tool composition o invoca pdf-extractor via mqttRequest."
+    },
+    {
+      "id": "tool_auto_registrada_en_ui_handler",
+      "regla": "Toda tool declarada en module.json.tools[] (o module.json.tools_http[]) con handler valido queda automaticamente registrada en uiHandler con domain = primer segmento del name, action = resto del name preservando puntos. Ej: 'pdf.extract' → domain='pdf', action='extract'. 'carta-scheduler.crear_regla' → domain='carta-scheduler', action='crear_regla'. 'mercadona.producto.obtener' → domain='mercadona', action='producto.obtener'. El modulo NO llama uiHandler.register() manualmente.",
+      "razon": "Cierra la fragilidad operativa observada: tres canales auto-wired desde una sola declaracion. Imposible olvidar uno. Imposible que se desincronicen. Una tool nueva queda invocable por LLM, bus y frontend en el mismo instante que el modulo arranca."
+    },
+    {
+      "id": "ui_request_topic_derivado_del_name",
+      "regla": "El topic ui/request/{domain}/{action} consumido por UIRequestHandler se construye splitando el tool name por el PRIMER punto: domain = parte antes del primer punto, action = resto (puede contener puntos). UIRequestHandler ya tolera parts.length>=4 — esto formaliza el contrato de derivacion. El frontend al hacer mqttRequest(domain, action) usa los mismos dos strings.",
+      "razon": "Sin regla canonica de split, dos modulos podrian mapear su tool 'a.b.c' a (domain=a, action=b.c) o (domain=a.b, action=c). Disambiguacion ferrea evita ese drift y permite que el validator detecte colisiones de clave derivada (drift_dos_tools_con_misma_clave_ui_derivada)."
+    },
+    {
+      "id": "tool_http_declarativa_sin_handler_string",
+      "regla": "Una tool puede declararse en module.json.tools_http[] (NO tools[]) con shape: { name, description, parameters, http: { method, url, auth_type, credential_id?, headers?, body_template?, response_path?, timeout_ms? }, errores_conocidos }. NO lleva campo handler. El loader genera el handler closure en runtime (HTTP request + auth resuelta via credential-manager + path/query/body templating + response unwrapping segun response_path) y lo registra en los 3 destinos identicamente.",
+      "razon": "Modulos puente a APIs externas (mercadona-style sin codigo, plugins HTTP del calling-generator archivado) NO necesitan index.js con logica. La declaracion ES la implementacion. Esto elimina la tentacion de crear modulos JS triviales solo para envolver una llamada HTTP."
+    },
+    {
+      "id": "tool_handler_admite_path_a_subcomponente",
+      "regla": "El campo handler de module.json.tools[] admite dos formas: (a) nombre simple del metodo en la instancia del modulo (ej. 'handleAbrirMesa'), o (b) path dot-separated para resolver metodos en sub-componentes accesibles desde la instancia (ej. 'strategies.mesa.handleAbrirMesa' → instance.strategies.mesa.handleAbrirMesa). El loader (core/modules/loader.js::_resolveHandlerByPath) navega el path y bindea this al sub-componente duenyo del metodo, no al modulo padre — esto preserva el acceso a estado interno del sub-componente (this.mesasActivas dentro de MesaStrategy). El nombre simple sigue siendo el caso por defecto y comportamiento backward-compatible. Pattern del schema: '^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*$'.",
+      "razon": "El patron Strategy (un modulo padre orquesta N sub-clases especialistas, cada una con sus metodos) era el unico caso donde el v1.2 no podia declarar tools sin pegarse 60+ funciones forwarder en el modulo padre. cuentas-canales tiene 6 strategies (mesa, telefono, llevar, glovo, whatsapp, llevadoo) con 60 metodos handle* repartidos. Permitir handler como path elimina las 60 forwarders triviales y mantiene la cohesion de cada strategy con sus propios metodos. La regla de bind al owner correcto evita el bug clasico de 'this perdido' al referenciar metodos anidados."
+    },
+    {
+      "id": "module_json_ui_handlers_es_surface_no_dispatch",
+      "regla": "module.json.ui_handlers[] (el campo definido en frontend.contract v1.2) declara EXCLUSIVAMENTE metadata de superficie del frame: type (workspace_module|chat_tool|inline_render|system_panel), zone, action, handler-id (para discovery del frontend). NO declara mecanismo de dispatch. El dispatch viene de tools[]/tools_http[].",
+      "razon": "Hoy el mismo campo se usa para dos cosas distintas (loader.js:879 lo lee como dispatch shape {domain, action, handler}; frontend.contract lo declara como surface metadata {type, zone, action, handler}). Separacion semantica: tools[] = QUE invocable, ui_handlers[] = DONDE se renderiza. Sin esta separacion, los modulos seguirian declarando lo mismo en dos sitios y la fragilidad persistiria."
     }
   ],
 
@@ -127,7 +158,7 @@
     },
     {
       "id": "args_validacion_en_handler_no_en_framework",
-      "decision": "ai-gateway pasa al handler los args ya validados contra parameters JSON Schema (gracias a la API del provider). PERO el handler valida defensivamente igual: cada parametro requerido se chequea, y si falla devuelve { status: 400, error: { code: 'VALIDATION_FAILED', ... } }.",
+      "decision": "ai-gateway pasa al handler los args ya validados contra parameters JSON Schema (gracias a la API del provider). PERO el handler valida defensivamente igual: cada parametro requerido se chequea, y si falla devuelve { status: 400, error: { code: 'INVALID_INPUT', ... } }.",
       "razon": "Defense in depth. Si el LLM hace tool call directo sin pasar por el provider (raro pero posible en agentes con tool calls custom), la validacion del schema no aplica. El handler debe ser robusto."
     },
     {
@@ -174,16 +205,31 @@
       "id": "tools_contratuales_no_son_apis_http",
       "decision": "tools[].handler NO es una ruta HTTP. Las tools del modulo y las apis HTTP del modulo (module.json.apis_http[]) son superficies DISTINTAS. Una tool se invoca por LLM via ai-gateway. Una api HTTP se invoca por cliente HTTP via http-gateway. Pueden compartir el handler subyacente del dominio, pero la declaracion es separada.",
       "razon": "Mezclar ambas confunde: una api publica con autenticacion por header es muy distinta de una tool del LLM que se valida por shape de args. Declaracion separada permite politicas de seguridad/auth/rate-limit independientes."
+    },
+    {
+      "id": "tool_un_origen_tres_destinos",
+      "decision": "core/modules/loader.js::registerToolsForAI extiende su comportamiento de v1.1: ademas de toolsRegistry.set y _wireToolBusSubscription (auto-suscripcion del handler al evento `<toolName>` con par `<toolName>.response`), llama uiHandler.register(domain, action, boundHandler) con domain/action derivados del name por split en el primer punto. Tres registros desde una sola declaracion. unregisterToolsForAI deshace los tres simetricamente.",
+      "razon": "Resuelve el caso operativo de la propuesta capa-unica-tools-via-plugins.md: cuando se añade una tool nueva, el frontend la ve sin tocar mas codigo. Imposible olvidar el ui_handler porque no se declara — se deriva. El loader es el unico sitio donde vive el mapping name→{domain,action}, evitando que cada modulo lo reinvente."
+    },
+    {
+      "id": "tool_http_declarativa_runtime_en_loader",
+      "decision": "El loader (no un modulo aparte tipo plugin-runtime/calling-generator) interpreta module.json.tools_http[]. Para cada entry construye una closure async que: (1) resuelve auth via credential.resolve.request al credential-manager si auth_type !== 'none', (2) reemplaza {{paramName}} en url/headers/body_template con los args, (3) construye query string para GET con args no consumidos por path, (4) hace HTTP request con timeout (timeout_ms o 30000ms default), (5) mappea status HTTP a errores canonicos del errors.contract (4xx → INVALID_INPUT/RESOURCE_NOT_FOUND/PERMISSION_DENIED segun el code, 5xx → UPSTREAM_TIMEOUT/UPSTREAM_UNREACHABLE/UPSTREAM_INVALID_RESPONSE), (6) extrae subcampo via response_path si esta declarado. Esa closure es el 'handler' que se registra en los 3 destinos identicamente.",
+      "razon": "Sin modulo intermediario: una capa menos, una pieza menos que mantener. El calling-generator archivado quedo archivado el 2026-05-08 por algo (ningun modulo lo usaba en runtime) — su capacidad declarativa se absorbe al loader, no se resucita como modulo. La auth via credential-manager (no env vars como el calling-generator legacy) cierra security.contract."
+    },
+    {
+      "id": "ui_handlers_register_manual_prohibido",
+      "decision": "Los modulos NO llaman uiHandler.register() en onLoad ni en ningun otro punto. El validator detecta esa llamada via grep y la flagea como drift error. Migracion: los modulos que hoy lo hacen (productos, comandero, cocina, cuentas-canales, variaciones, cobros, pedidos, security-p2p, mesa, facturas, llevadoo, staff) declaran sus handlers como tools[] estandar — sus paginas frontend siguen funcionando porque el loader auto-registra el ui_handler derivado del name.",
+      "razon": "Cierra el tercer punto de fragilidad observado en el diagnostico operativo (3 sitios distintos donde declarar dispatch). Una sola forma de declarar un handler en todo el sistema."
     }
   ],
 
   "prohibido": [
     {
       "id": "tool_que_lanza_excepcion_no_capturada",
-      "regla": "El handler de una tool NUNCA lanza una excepcion no capturada. Devuelve { status: 5xx, error: { code: 'INTERNAL_ERROR', ... } } incluso para errores 'imposibles' del codigo (bugs).",
+      "regla": "El handler de una tool NUNCA lanza una excepcion no capturada. Devuelve { status: 5xx, error: { code: 'UNKNOWN_ERROR', ... } } incluso para errores 'imposibles' del codigo (bugs).",
       "viola_garantias": ["no_silent_failures", "extensibilidad_sin_reescritura"],
       "como_detectar": "Validator: cualquier handler de tool con un throw sin try/catch que envuelva ese path es drift. Tambien: handlers async que no devuelven nada en algun branch.",
-      "alternativa_correcta": "try { ...logica... return { status: 200, data: result }; } catch (err) { this.logger.error(...); this.metrics.increment(...); return { status: 500, error: { code: 'INTERNAL_ERROR', message: err.message } }; }"
+      "alternativa_correcta": "try { ...logica... return { status: 200, data: result }; } catch (err) { this.logger.error(...); this.metrics.increment(...); return { status: 500, error: { code: 'UNKNOWN_ERROR', message: err.message } }; }"
     },
     {
       "id": "tool_con_acceso_directo_a_otros_modulos",
@@ -201,7 +247,7 @@
     },
     {
       "id": "tool_que_inventa_error_code",
-      "regla": "tool.errores_conocidos[] NO contiene codigos fuera del catalogo errors.contract.json. NO inventa codigos como 'PDF_BROKEN' (debe ser 'UPSTREAM_INVALID_RESPONSE' si viene de servicio externo, o 'VALIDATION_FAILED' si es input invalido, o 'INTERNAL_ERROR' si es bug interno).",
+      "regla": "tool.errores_conocidos[] NO contiene codigos fuera del catalogo errors.contract.json. NO inventa codigos como 'PDF_BROKEN' (debe ser 'UPSTREAM_INVALID_RESPONSE' si viene de servicio externo, o 'INVALID_INPUT' si es input invalido, o 'UNKNOWN_ERROR' si es bug interno).",
       "viola_garantias": ["resiliencia_a_cambios_de_proveedor_llm"],
       "como_detectar": "Validator: cargar lista de codigos canonicos de errors.json. Para cada tool.errores_conocidos[i], verificar que esta en la lista. Si no, drift.",
       "alternativa_correcta": "Mapear el caso al codigo canonico mas cercano. Si genuinamente no encaja en ninguno, abrir el catalogo errors.contract para añadir un nuevo codigo (decision arquitectonica), NO inventar localmente."
@@ -254,8 +300,44 @@
       "viola_garantias": ["modularidad_real_no_solo_declarada", "extensibilidad_sin_reescritura"],
       "como_detectar": "Validator regex sobre cada *.js bajo modules/: `/\\btoolsRegistry\\s*\\??\\.\\s*get\\s*\\([^)]+\\)\\s*\\??\\.\\s*handler\\b/` y `/\\bmoduleLoader\\s*\\??\\.\\s*executeTool\\s*\\(/`. Cualquier match es drift error (no warning) — bloquea CI inmediatamente. El framework (core/modules/loader.js) esta exento porque alli es donde vive la primitiva (`_wireToolBusSubscription`).",
       "alternativa_correcta": "Publicar el evento `<toolName>` con `{request_id, ...args}` y subscribir `<toolName>.response` correlacionado por `request_id`. El loader auto-wires la suscripcion del handler en `registerToolsForAI`, asi que cualquier tool declarada con handler en module.json es invocable por bus sin que su modulo haga nada adicional."
+    },
+    {
+      "id": "modulo_con_uihandler_register_manual",
+      "regla": "Ningun *.js bajo modules/ llama uiHandler.register() ni this.uiHandler.register() en onLoad ni en ningun otro metodo. El registro UI se deriva automaticamente de tools[]/tools_http[] por el loader.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Validator regex sobre cada *.js bajo modules/ (excluyendo _legacy/, __tests__/, node_modules/): `/\\b(this\\.)?uiHandler\\s*\\.\\s*register\\s*\\(/`. Cada match drift error (bloquea CI). El framework core/ui/UIRequestHandler.js esta exento porque alli vive la primitiva.",
+      "alternativa_correcta": "Declarar la operacion como entrada en module.json.tools[] con handler apuntando al metodo del modulo. El loader (registerToolsForAI) registra automaticamente en uiHandler con domain/action derivados del tool name."
+    },
+    {
+      "id": "ui_handlers_legacy_dispatch_shape",
+      "regla": "module.json.ui_handlers[] NO contiene shape de dispatch {domain, action, handler}. Solo metadata de superficie {type, zone, action, handler-id} segun frontend.contract v1.2 donde handler-id es referencia para frontend discovery — NO el mecanismo de invocacion. Aliases legacy 'uiActions' y 'handlers' (que loader.normalizeUIHandlers acepta hoy en loader.js:879) tambien prohibidos como mecanismo de dispatch.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Validator cross-modulo: si module.json.ui_handlers[i] tiene campo 'domain' (señal de shape de dispatch), drift warning con sugerencia de migracion a tools[]. Si module.json contiene 'uiActions' o 'handlers' como top-level keys con shape {domain, action, handler}, drift warning. Lista positiva de modulos a migrar: filesystem (handlers:[]), carta-scheduler (uiActions:[]), y cualquier ui_handlers que el loader.normalizeUIHandlers acepte hoy con campo 'domain'.",
+      "alternativa_correcta": "Mover el dispatch a tools[] (declaracion canonica con handler). Mantener ui_handlers[] solo para surface metadata segun frontend.contract (o eliminarlo si el modulo no aporta superficie al frame). Renombrar uiActions/handlers a tools[]."
+    },
+    {
+      "id": "tool_http_resuelve_credenciales_via_env_var",
+      "regla": "Las entradas de tools_http[] NO resuelven credenciales leyendo process.env.X (como hacia el calling-generator legacy con la convencion {PLUGIN_NAME}_API_KEY). La auth se resuelve siempre via credential.resolve.request al credential-manager. auth_type declara que tipo (bearer|api_key_header|api_key_query|basic|none) y credential_id apunta al id del credential en credential-manager.",
+      "viola_garantias": ["security.credenciales_solo_en_credential_manager"],
+      "como_detectar": "Validator: si tools_http[i].http.auth_type !== 'none' y NO declara credential_id, drift warning. Cross-check con security.contract.disciplina_del_par_credential_resolve.",
+      "alternativa_correcta": "Declarar credential_id: 'mercadona_api_key' (string id del credential en credential-manager). El loader resuelve via credential.resolve.request en runtime antes de hacer la HTTP request, y redacta el valor de los logs."
     }
   ],
+
+  "tools_http_shape": {
+    "_doc": "Shape canonico de cada entry en module.json.tools_http[] — wrappers HTTP declarativos sin codigo JS. El loader genera el handler closure en runtime y lo registra en los 3 destinos (toolsRegistry, bus event, uiHandler) identicamente a una tool de tools[].",
+    "campos_obligatorios": ["name", "description", "parameters", "http"],
+    "campos_opcionales": ["errores_conocidos"],
+    "http_obligatorios": ["method", "url"],
+    "http_opcionales": ["auth_type", "credential_id", "headers", "body_template", "response_path", "timeout_ms"],
+    "method_validos": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    "auth_type_validos": ["none", "bearer", "api_key_header", "api_key_query", "basic"],
+    "templating": "url, headers (valores) y body_template soportan sintaxis {{paramName}} — reemplazada en runtime por el valor del arg correspondiente. Args no consumidos por path/header se agregan al body (POST/PUT/PATCH) o al query string (GET/DELETE) automaticamente.",
+    "response_path": "Path tipo 'data.results[0].text' o 'precio_unidad' para extraer subcampo del response parseado. Si ausente, el handler devuelve { status, data: body_parseado_completo }.",
+    "default_timeout_ms": 30000,
+    "auth_resolution": "Si auth_type !== 'none', el loader publica credential.resolve.request con { credential_id, request_id, correlation_id } y espera credential.resolve.response. El valor resuelto se inyecta segun auth_type: bearer → Authorization: Bearer <valor>; api_key_header → header configurable (default X-API-Key) con <valor>; api_key_query → query param configurable (default apiKey) con <valor>; basic → Authorization: Basic base64(user:pass) (credential_id apunta a un credential compuesto user+pass).",
+    "error_mapping": "El loader mapea status HTTP del upstream a codes canonicos del errors.contract: 400 → INVALID_INPUT, 401/403 → PERMISSION_DENIED, 404 → RESOURCE_NOT_FOUND, 409 → CONFLICT_STATE, 429 → RATE_LIMITED, 5xx → UPSTREAM_INVALID_RESPONSE (si body parseable) o UPSTREAM_UNREACHABLE (network error) o UPSTREAM_TIMEOUT (timeout). El handler closure devuelve { status: status_http, error: { code, message, details: { upstream_status, upstream_body_redacted } } }."
+  },
 
   "output_shape_resumen": "_outputs/tools.json contiene: { id: 'tools', version, schema_files: ['tool.declaration.schema.json', 'tool.response.schema.json'], total_tools_in_repo: N, tools_by_module: { <modulo>: [...names...] }, drifts_observed_baseline: { naming: N1, sin_errores_conocidos: N2, parameters_no_jsonschema: N3, ... }, modulos_alineados: [...], modulos_con_drift: [...] }. Snapshot del estado canonico del catalogo de tools del repo en el momento de regeneracion.",
 
@@ -283,6 +365,10 @@
     {
       "documento": "arquitectura/decisiones/_outputs/tools.json",
       "rol": "Snapshot del catalogo de tools del repo, con conteo de drifts por tipo."
+    },
+    {
+      "documento": "arquitectura/decisiones/_schemas/tools/tool.http.declaration.schema.json",
+      "rol": "Schema canonico de cada entry de module.json.tools_http[]. Required: name, description, parameters, http (con method+url). additionalProperties:false en todos los niveles. v1.2 introducido."
     }
   ],
 
@@ -370,6 +456,30 @@
       "regla": "Ningun *.js bajo modules/ contiene patrones que invoquen tool handlers fuera del bus canonico: `toolsRegistry.get(...).handler(`, `toolsRegistry.get(...)?.handler(` ni `moduleLoader.executeTool(`. La unica home valida de estas primitivas es core/modules/loader.js (framework). En modules/ se invoca SIEMPRE por bus.",
       "como_detectar": "Validator: regex sobre cada *.js bajo modules/ (excluyendo _legacy/, node_modules/, __tests__/): `/\\btoolsRegistry\\s*\\??\\.\\s*get\\s*\\([^)]+\\)\\s*\\??\\.\\s*handler\\b/` y `/\\bmoduleLoader\\s*\\??\\.\\s*executeTool\\s*\\(/`. Cada match es drift error. Tambien flageamos como warning la lectura simple `toolsRegistry.get(name)` sin `.handler` (es lectura de metadata aceptable, pero conviene verla en revision).",
       "severidad": "error"
+    },
+    {
+      "id": "drift_modulo_con_uihandler_register_manual",
+      "regla": "Ningun *.js bajo modules/ (excluyendo _legacy/, __tests__/, node_modules/) llama uiHandler.register(...) ni this.uiHandler.register(...). El registro UI se deriva automaticamente de tools[]/tools_http[] por el loader.",
+      "como_detectar": "Regex sobre cada archivo: `/\\b(this\\.)?uiHandler\\s*\\.\\s*register\\s*\\(/`. Cada match drift error (bloquea CI). Excepciones: core/ui/UIRequestHandler.js (define la primitiva), core/modules/loader.js (la framework la invoca).",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_ui_handlers_con_shape_de_dispatch",
+      "regla": "module.json.ui_handlers[i] NO tiene campo 'domain' (señal de shape legacy de dispatch). Solo {type, zone, action, handler-id} segun frontend.contract v1.2. Adicionalmente module.json NO tiene top-level 'uiActions' ni 'handlers' como aliases legacy del dispatch (loader.normalizeUIHandlers los acepta hoy en loader.js:879 — esto debe migrar).",
+      "como_detectar": "Iterar manifest-completo. Si ui_handlers[i].domain presente, drift warning. Si module.json top-level contiene 'uiActions' o 'handlers' con entries shape {domain, action, ...}, drift warning. Lista positiva conocida: filesystem (handlers:[]), carta-scheduler (uiActions:[]).",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_tool_http_sin_url_o_method",
+      "regla": "Cada tools_http[i] tiene name, description, parameters, http.method (en method_validos) y http.url (string no vacio). Si auth_type !== 'none', credential_id presente.",
+      "como_detectar": "Iterar module.json del repo. Validar shape contra schema tool.http.declaration.schema.json. Drift warning si falta campo obligatorio. Drift warning si auth_type configurado pero credential_id ausente (cross-check con security.contract).",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_dos_tools_con_misma_clave_ui_derivada",
+      "regla": "Build map global 'derivedDomain.derivedAction' (split del name por el primer punto: domain=parte_antes_del_primer_punto, action=resto) → [{modulo, source: 'tools[]' | 'tools_http[]'}]. Si alguna clave tiene 2+ origenes, drift error (dos tools resolverian al mismo topic mqttRequest 'ui/request/<domain>/<action>' y la segunda registracion sobrescribiria la primera con un warn).",
+      "como_detectar": "Iterar todas las tools[] y tools_http[] del repo. Para cada name, calcular (domain, action) por split en el primer punto. Build map. Reportar colisiones con archivo:linea de ambos modulos.",
+      "severidad": "error"
     }
   ],
 
@@ -390,13 +500,15 @@
     "frontend.contract: el frontend NO conoce las tools del repo directamente. El LLM las invoca dentro del agentic loop y el frontend solo ve las consecuencias (mensajes del compañero, eventos de dominio publicados por las tools). Si una tool genera un bloque inline (tool_invocation block del frontend.contract), el evento canonico que la representa contiene los campos que el frontend renderiza.",
     "security.contract: tools.parameters NO declara campos para credenciales/secretos como input. Las credenciales viven en credential-manager y se resuelven via credential.resolve.request. Si una tool necesita autenticarse a un servicio externo, esa credencial vive en credential-manager NO en los args de la tool.",
     "testing.contract: cada tool tiene test unitario que cubre: shape canonico de retorno (status, data | error), error paths (cada errores_conocidos[] mappeado a un test que lo dispara), parameters validation (handler defensivo aunque AJV en provider lo cubra), no acceso directo a otros modulos (mock del bus/mqttRequest).",
-    "multi-tenancy.contract: si la tool opera sobre datos por proyecto, parameters DEBE incluir project_id como required. Si project_id es ausente, error VALIDATION_FAILED. Tools globales del sistema (sin project_id) son excepciones documentadas.",
+    "multi-tenancy.contract: si la tool opera sobre datos por proyecto, parameters DEBE incluir project_id como required. Si project_id es ausente, error INVALID_INPUT. Tools globales del sistema (sin project_id) son excepciones documentadas.",
     "documentation.contract: tools[].description es la unica documentacion canonica de la tool. NO se permiten archivos README.md por tool ni docs internos. Si la description no basta, refactorizar la tool en multiples mas simples.",
     "versionado.contract: cambio en tool.parameters required = mayor (rompe callers). Cambio en parameters opcional o description = menor. Cambio en handler implementation con mismo shape = patch. Versionado se hereda del modulo, no por tool.",
     "deployment.contract: tools son parte del modulo — deploy del modulo entero deploya sus tools. NO existe deploy parcial 'solo esta tool'.",
     "module-loading.contract: tools se registran en moduleLoader.toolsRegistry durante onLoad. Si onLoad falla, las tools del modulo NO son invocables y ai-gateway las omite del tool list pasado al LLM.",
     "bus-transport.contract: TODA invocacion de tool va por el bus, sin excepcion de proceso. En el mismo proceso el bus es EventEmitter (overhead ~ns, irrelevante); en multi-proceso el mismo par de eventos viaja por MQTT sin que el codigo cambie. ai-gateway, scheduler, agentes y channels invocan tools exclusivamente publicando `<toolName>` y esperando `<toolName>.response` correlacionado por `request_id`. La nota anterior (v1.0) que toleraba `this.toolsRegistry.get(name).handler(...)` 'por performance' era un atajo que rompia el aislamiento — eliminada en v1.1. El loader (core/modules/loader.js::_wireToolBusSubscription) auto-suscribe el handler al evento, de modo que cualquier tool declarada en module.json con handler queda invocable por bus sin codigo adicional en el modulo.",
     "scheduling.contract: tools pueden ser invocadas por scheduler (cron) tambien — el scheduler publica un evento que dispara la tool indirectamente, o invoca via mqttRequest si se conoce explicitamente. El correlation_id lo genera el scheduler.",
-    "resilience.contract: ai-gateway aplica timeout (config.tool_timeout_ms) y retry policy en la invocacion de tools — no es responsabilidad del handler. El handler asume que se le invoca una vez por tool_call del LLM y dentro de su timeout."
+    "resilience.contract: ai-gateway aplica timeout (config.tool_timeout_ms) y retry policy en la invocacion de tools — no es responsabilidad del handler. El handler asume que se le invoca una vez por tool_call del LLM y dentro de su timeout.",
+    "frontend.contract.v1.2: module.json.ui_handlers[] queda EXCLUSIVAMENTE como metadata de superficie del frame (type ∈ {workspace_module, chat_tool, inline_render, system_panel}, zone ∈ {5 zonas + lateral}, action, handler-id para discovery). NO declara mecanismo de dispatch. El dispatch ui/request/{domain}/{action} se deriva del tool name en core/modules/loader.js::registerToolsForAI por split en el primer punto. loader.normalizeUIHandlers ya no acepta shape {domain, action, handler} ni aliases 'uiActions'/'handlers' — todos esos casos migran a tools[].",
+    "security.contract: tools_http[] con auth_type !== 'none' DEBE declarar credential_id. El loader resuelve via credential.resolve.request al credential-manager antes de hacer la HTTP request. Las credenciales NO viajan en module.json (proceso, env vars, parametros de la tool) — solo el id del credential. El valor resuelto se redacta de logs y traces (security.contract.redaccion_de_secretos)."
   ]
 }

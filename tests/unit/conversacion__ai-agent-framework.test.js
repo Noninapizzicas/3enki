@@ -148,35 +148,35 @@ function makeRequest(overrides = {}) {
     await m.onUnload();
   });
 
-  await testAsync('request sin agent_name publica agent.execute.failed AGENT_INPUT_INVALID', async () => {
+  await testAsync('request sin agent_name publica agent.execute.failed INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     await m.onAgentExecuteRequest({ data: { request_id: 'r1', task: 'do' } });
     const failures = publishedOf(mocks, 'agent.execute.failed');
     assert.strictEqual(failures.length, 1);
-    assert.strictEqual(failures[0].error.code, 'AGENT_INPUT_INVALID');
+    assert.strictEqual(failures[0].error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('agent_name desconocido publica agent.execute.failed AGENT_NOT_FOUND', async () => {
+  await testAsync('agent_name desconocido publica agent.execute.failed RESOURCE_NOT_FOUND', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     await m.onAgentExecuteRequest(makeRequest({ agent_name: 'no-existe' }));
     const failures = publishedOf(mocks, 'agent.execute.failed');
     assert.strictEqual(failures.length, 1);
-    assert.strictEqual(failures[0].error.code, 'AGENT_NOT_FOUND');
+    assert.strictEqual(failures[0].error.code, 'RESOURCE_NOT_FOUND');
     assert.strictEqual(failures[0].correlation_id, 'cid-1');
     assert.strictEqual(failures[0].project_id, 'p1');
     await m.onUnload();
   });
 
-  await testAsync('request sin task ni context publica AGENT_INPUT_INVALID', async () => {
+  await testAsync('request sin task ni context publica INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, { agents: [{ name: 'tester' }] });
     await m.onAgentExecuteRequest(makeRequest({ task: undefined, context: {} }));
     const failures = publishedOf(mocks, 'agent.execute.failed');
     assert.strictEqual(failures.length, 1);
-    assert.strictEqual(failures[0].error.code, 'AGENT_INPUT_INVALID');
+    assert.strictEqual(failures[0].error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -199,7 +199,7 @@ function makeRequest(overrides = {}) {
   });
 
   // Group 4: llm.complete.response success
-  await testAsync('llm response success publica agent.execute.response + chat.assistant.saved si conversation_id', async () => {
+  await testAsync('llm response success publica solo agent.execute.response (chat.assistant.saved delegado a agent-observer)', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, { agents: [{ name: 'tester' }] });
     await m.onAgentExecuteRequest(makeRequest({ conversation_id: 'conv-1' }));
@@ -207,7 +207,7 @@ function makeRequest(overrides = {}) {
 
     await m.onLlmCompleteResponse({
       data: {
-        request_id: llmReqId, success: true,
+        request_id: llmReqId,
         content: 'respuesta del agente',
         tool_calls_executed: ['tool1'],
         provider: 'deepseek', model: 'deepseek-chat',
@@ -222,9 +222,9 @@ function makeRequest(overrides = {}) {
     assert.deepStrictEqual(responses[0].result.tool_calls_executed, ['tool1']);
     assert.deepStrictEqual(responses[0].tokens, { input: 100, output: 50, total: 150 });
 
+    // chat.assistant.saved NO se publica desde ai-agent-framework (delegado a agent-observer)
     const chatSaved = publishedOf(mocks, 'chat.assistant.saved');
-    assert.strictEqual(chatSaved.length, 1);
-    assert.strictEqual(chatSaved[0].conversation_id, 'conv-1');
+    assert.strictEqual(chatSaved.length, 0);
 
     const progressEvs = publishedOf(mocks, 'agent.execute.progress');
     assert.ok(progressEvs.some(p => p.step === 'finalizing'));
@@ -237,21 +237,21 @@ function makeRequest(overrides = {}) {
     await m.onAgentExecuteRequest(makeRequest({ conversation_id: null, project_id: null }));
     const llmReqId = publishedOf(mocks, 'llm.complete.request')[0].request_id;
     await m.onLlmCompleteResponse({
-      data: { request_id: llmReqId, success: true, content: 'x' }
+      data: { request_id: llmReqId, content: 'x' }
     });
     assert.strictEqual(publishedOf(mocks, 'agent.execute.response').length, 1);
     assert.strictEqual(publishedOf(mocks, 'chat.assistant.saved').length, 0);
     await m.onUnload();
   });
 
-  // Group 5: llm.complete.response failure
+  // Group 5: llm.complete.failed (par success/failure separados segun contrato llm-flow)
   await testAsync('llm response failure publica agent.execute.failed con codigo clasificado', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, { agents: [{ name: 'tester' }] });
     await m.onAgentExecuteRequest(makeRequest());
     const llmReqId = publishedOf(mocks, 'llm.complete.request')[0].request_id;
-    await m.onLlmCompleteResponse({
-      data: { request_id: llmReqId, success: false, error: 'request timeout', provider: 'deepseek' }
+    await m.onLlmCompleteFailed({
+      data: { request_id: llmReqId, error: 'request timeout', provider: 'deepseek' }
     });
     const failures = publishedOf(mocks, 'agent.execute.failed');
     assert.strictEqual(failures.length, 1);
@@ -267,7 +267,7 @@ function makeRequest(overrides = {}) {
     await m.onInvokeAgent({ data: { request_id: 'leg-1', agent_name: 'tester', task: 'x' } });
     const llmReqId = publishedOf(mocks, 'llm.complete.request')[0].request_id;
     await m.onLlmCompleteResponse({
-      data: { request_id: llmReqId, success: true, content: 'ok' }
+      data: { request_id: llmReqId, content: 'ok' }
     });
     assert.strictEqual(publishedOf(mocks, 'invoke_agent.response').length, 1);
     assert.strictEqual(publishedOf(mocks, 'agent.execute.response').length, 0);
@@ -280,7 +280,7 @@ function makeRequest(overrides = {}) {
     await m.onInvokeAgent({ data: { request_id: 'leg-2', agent_name: 'no-existe', task: 'x' } });
     const responses = publishedOf(mocks, 'invoke_agent.response');
     assert.strictEqual(responses.length, 1);
-    assert.strictEqual(responses[0].error.code, 'AGENT_NOT_FOUND');
+    assert.strictEqual(responses[0].error.code, 'RESOURCE_NOT_FOUND');
     await m.onUnload();
   });
 
@@ -298,7 +298,7 @@ function makeRequest(overrides = {}) {
     const { module: m } = await instantiate(mocks);
     assert.deepStrictEqual(m._classifyHandlerError(new Error('field is required')), { status: 400, code: 'INVALID_INPUT' });
     assert.deepStrictEqual(m._classifyHandlerError(new Error('not found')), { status: 404, code: 'RESOURCE_NOT_FOUND' });
-    assert.deepStrictEqual(m._classifyHandlerError(new Error('timeout')), { status: 504, code: 'TIMEOUT' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('timeout')), { status: 504, code: 'UPSTREAM_TIMEOUT' });
     await m.onUnload();
   });
 
@@ -326,10 +326,10 @@ function makeRequest(overrides = {}) {
   await testAsync('_classifyLlmError clasifica errores LLM canonicamente', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    assert.strictEqual(m._classifyLlmError('429 rate limit').code, 'UPSTREAM_RATE_LIMITED');
-    assert.strictEqual(m._classifyLlmError('401 unauthorized').code, 'UPSTREAM_AUTH_FAILED');
-    assert.strictEqual(m._classifyLlmError('credential not found').code, 'CREDENTIAL_NOT_FOUND');
-    assert.strictEqual(m._classifyLlmError('boom').code, 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyLlmError('429 rate limit').code, 'UPSTREAM_INVALID_RESPONSE');
+    assert.strictEqual(m._classifyLlmError('401 unauthorized').code, 'UPSTREAM_INVALID_RESPONSE');
+    assert.strictEqual(m._classifyLlmError('credential not found').code, 'RESOURCE_NOT_FOUND');
+    assert.strictEqual(m._classifyLlmError('boom').code, 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

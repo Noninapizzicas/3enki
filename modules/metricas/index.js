@@ -26,8 +26,10 @@ const fs     = require('fs').promises;
 const path   = require('path');
 const crypto = require('crypto');
 
-class MetricasModule {
+const BaseModule = require('../_shared/base-module');
+class MetricasModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'metricas';
     this.version = '2.0.0';
 
@@ -52,9 +54,6 @@ class MetricasModule {
     this.startTime     = Date.now();
 
     // Inyectados en onLoad
-    this.logger   = null;
-    this.eventBus = null;
-    this.metrics  = null;
   }
 
   // ==========================================
@@ -519,10 +518,10 @@ class MetricasModule {
 
   _handleHandlerError(logEvent, err, kind, context) {
     const code   = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED'      ? 400 :
+    const status = code === 'INVALID_INPUT'      ? 400 :
                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                   code === 'CONFLICT'               ? 409 : 500;
+                   code === 'PERMISSION_DENIED' ? 403 :
+                   code === 'CONFLICT_STATE'               ? 409 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, {
       error:          message,
@@ -536,10 +535,10 @@ class MetricasModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found'))                                                          return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden'))                          return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('conflict') || msg.includes('already exists'))                         return 'CONFLICT';
-    return 'INTERNAL_ERROR';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
+    if (msg.includes('unauthorized') || msg.includes('forbidden'))                          return 'PERMISSION_DENIED';
+    if (msg.includes('conflict') || msg.includes('already exists'))                         return 'CONFLICT_STATE';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {

@@ -54,27 +54,9 @@ class MesaStrategy {
     await this.restaurarDesdeArchivo();
   }
 
-  registerUIHandlers(uiHandler) {
-    uiHandler.register('mesa', 'abrir', this.handleAbrirMesa.bind(this));
-    uiHandler.register('mesa', 'cerrar', this.handleCerrarMesa.bind(this));
-    uiHandler.register('mesa', 'renombrar', this.handleRenombrarMesa.bind(this));
-    uiHandler.register('mesa', 'asignar_camarero', this.handleAsignarCamarero.bind(this));
-    uiHandler.register('mesa', 'get', this.handleGetMesa.bind(this));
-    uiHandler.register('mesa', 'activas', this.handleGetActivas.bind(this));
-    uiHandler.register('mesa', 'list', this.handleListAll.bind(this));
-    uiHandler.register('mesa', 'health', this.handleHealthCheck.bind(this));
-    uiHandler.register('mesa', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.modulo.logger.info('canal.mesa.ui_handlers.registered', {
-      handlers: this._uiActions
-    });
-  }
-
-  unregisterUIHandlers(uiHandler) {
-    for (const action of this._uiActions) {
-      uiHandler.unregister('mesa', action);
-    }
-  }
+  // tools.contract v1.2: el loader auto-wirea las 9 tools 'mesa.*' declaradas
+  // en cuentas-canales/module.json.tools[] a uiHandler con handlers tipo
+  // 'strategies.mesa.handleX'. No registro manual aqui.
 
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('pedido.creado', this.onPedidoCreado.bind(this));

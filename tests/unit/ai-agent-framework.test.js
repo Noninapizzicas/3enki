@@ -4,9 +4,9 @@
  * Foco:
  *  - onAgentExecuteRequest acepta shape canonico → publica agent.execute.response canonico.
  *  - (alias agentName retirado en paso 6 de agent-flow tras migracion completa de pizzepos consumers)
- *  - Validacion: sin agent_name → publica agent.execute.failed AGENT_INPUT_INVALID.
- *  - Validacion: agent no existe → publica agent.execute.failed AGENT_NOT_FOUND.
- *  - Validacion: sin task ni context → publica agent.execute.failed AGENT_INPUT_INVALID.
+ *  - Validacion: sin agent_name → publica agent.execute.failed INVALID_INPUT.
+ *  - Validacion: agent no existe → publica agent.execute.failed RESOURCE_NOT_FOUND.
+ *  - Validacion: sin task ni context → publica agent.execute.failed INVALID_INPUT.
  *  - Payload de agent.execute.response VALIDA contra schema oficial.
  *  - Payload de agent.execute.failed VALIDA contra schema oficial.
  *  - SUCCESS: chat.assistant.saved se publica con shape canonico chat-flow cuando conversation_id presente.
@@ -89,20 +89,24 @@ function instantiate(mocks, { agents, llmResult, llmError, mqttRequestImpl } = {
   mocks.eventBus.publish = async (event, payload) => {
     await originalPublish(event, payload);
     if (event === 'llm.complete.request') {
-      // Simular respuesta del LLM (success o error segun config del test)
+      // Simular respuesta del LLM. Contrato llm-flow: par success/failure
+      // separados, eventos distintos, sin flag mixto.
       setImmediate(() => {
-        const llmResp = llmError
-          ? { request_id: payload.request_id, success: false, error: llmError }
-          : {
-              request_id: payload.request_id,
-              success: true,
-              content: llmResult?.content ?? 'respuesta del agente',
-              tool_calls_executed: llmResult?.tool_calls_executed ?? [],
-              model: llmResult?.model ?? 'deepseek-chat',
-              provider: llmResult?.provider ?? 'deepseek',
-              usage: llmResult?.usage ?? { input_tokens: 10, output_tokens: 5, total_tokens: 15 }
-            };
-        m.onLlmCompleteResponse(llmResp);
+        if (llmError) {
+          m.onLlmCompleteFailed({
+            request_id: payload.request_id,
+            error: llmError
+          });
+        } else {
+          m.onLlmCompleteResponse({
+            request_id: payload.request_id,
+            content: llmResult?.content ?? 'respuesta del agente',
+            tool_calls_executed: llmResult?.tool_calls_executed ?? [],
+            model: llmResult?.model ?? 'deepseek-chat',
+            provider: llmResult?.provider ?? 'deepseek',
+            usage: llmResult?.usage ?? { input_tokens: 10, output_tokens: 5, total_tokens: 15 }
+          });
+        }
       });
     }
   };
@@ -174,7 +178,7 @@ async function testAsync(description, fn) {
 
   // Group 2 — Validaciones de input
 
-  await testAsync('sin agent_name → agent.execute.failed AGENT_INPUT_INVALID', async () => {
+  await testAsync('sin agent_name → agent.execute.failed INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const m = instantiate(mocks);
     await m.onAgentExecuteRequest({
@@ -185,11 +189,11 @@ async function testAsync(description, fn) {
     });
     const ev = mocks.published.find(p => p[0] === 'agent.execute.failed');
     assert.ok(ev);
-    assert.strictEqual(ev[1].error.code, 'AGENT_INPUT_INVALID');
+    assert.strictEqual(ev[1].error.code, 'INVALID_INPUT');
     assert.ok(!mocks.published.find(p => p[0] === 'llm.complete.request'), 'no debe llamar al LLM');
   });
 
-  await testAsync('agent no existe → agent.execute.failed AGENT_NOT_FOUND', async () => {
+  await testAsync('agent no existe → agent.execute.failed RESOURCE_NOT_FOUND', async () => {
     const mocks = makeMocks();
     const m = instantiate(mocks);
     await m.onAgentExecuteRequest({
@@ -200,10 +204,10 @@ async function testAsync(description, fn) {
     });
     const ev = mocks.published.find(p => p[0] === 'agent.execute.failed');
     assert.ok(ev);
-    assert.strictEqual(ev[1].error.code, 'AGENT_NOT_FOUND');
+    assert.strictEqual(ev[1].error.code, 'RESOURCE_NOT_FOUND');
   });
 
-  await testAsync('sin task ni context → agent.execute.failed AGENT_INPUT_INVALID', async () => {
+  await testAsync('sin task ni context → agent.execute.failed INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const m = instantiate(mocks);
     await m.onAgentExecuteRequest({
@@ -214,7 +218,7 @@ async function testAsync(description, fn) {
     });
     const ev = mocks.published.find(p => p[0] === 'agent.execute.failed');
     assert.ok(ev);
-    assert.strictEqual(ev[1].error.code, 'AGENT_INPUT_INVALID');
+    assert.strictEqual(ev[1].error.code, 'INVALID_INPUT');
     assert.ok(/task o context/i.test(ev[1].error.message));
   });
 
@@ -246,12 +250,17 @@ async function testAsync(description, fn) {
     await nextTick(); await nextTick();
     const ev = mocks.published.find(p => p[0] === 'agent.execute.failed');
     assert.ok(ev);
-    assert.strictEqual(ev[1].error.code, 'CREDENTIAL_NOT_FOUND');
+    assert.strictEqual(ev[1].error.code, 'RESOURCE_NOT_FOUND');
   });
 
   // Group 4 — Chat multi-participante
 
-  await testAsync('SUCCESS con conversation_id → publica chat.assistant.saved canonico chat-flow', async () => {
+  await testAsync('SUCCESS con conversation_id NO publica chat.assistant.saved (delegado a agent-observer)', async () => {
+    // Antes ai-agent-framework publicaba chat.assistant.saved adicional al
+    // agent.execute.response. agent-observer (adaptador canonico agent-flow
+    // → chat-flow) ya escucha agent.execute.response y traduce a
+    // chat.assistant.saved. La doble emision causaba doble persistencia en
+    // chat-io. Ahora ai-agent-framework solo publica agent.execute.response.
     const mocks = makeMocks();
     const m = instantiate(mocks);
     await m.onAgentExecuteRequest({
@@ -263,20 +272,11 @@ async function testAsync(description, fn) {
     });
     await nextTick(); await nextTick();
     const chatEv = mocks.published.find(p => p[0] === 'chat.assistant.saved');
-    assert.ok(chatEv, 'chat.assistant.saved publicado');
-    const payload = chatEv[1];
-    assert.strictEqual(payload.correlation_id, 'corr-chat');
-    assert.strictEqual(payload.conversation_id, 'conv-99');
-    assert.strictEqual(payload.project_id, 'proj-1');
-    assert.ok(payload.message_id, 'message_id presente');
-    assert.strictEqual(payload.assistant_message, 'respuesta del agente');
-    assert.strictEqual(typeof payload.metadata, 'string', 'metadata serializada como string');
-    const meta = JSON.parse(payload.metadata);
-    assert.strictEqual(meta.author.kind, 'agent');
-    assert.strictEqual(meta.author.id, 'recipe-analyzer');
-    // Sin role legacy — el shape canonico no lo tiene
-    assert.strictEqual(payload.role, undefined, 'no debe tener campo role legacy');
-    assert.strictEqual(payload.content, undefined, 'no debe tener campo content legacy');
+    assert.strictEqual(chatEv, undefined, 'chat.assistant.saved NO debe ser publicado desde ai-agent-framework');
+    const agentResp = mocks.published.find(p => p[0] === 'agent.execute.response');
+    assert.ok(agentResp, 'agent.execute.response sigue publicandose');
+    assert.strictEqual(agentResp[1].conversation_id, 'conv-99');
+    assert.strictEqual(agentResp[1].project_id, 'proj-1');
   });
 
   // Group 5 — Legacy invoke_agent path sigue funcionando
@@ -292,7 +292,7 @@ async function testAsync(description, fn) {
     const ev = mocks.published.find(p => p[0] === 'invoke_agent.response');
     assert.ok(ev);
     assert.strictEqual(typeof ev[1].error, 'object', 'error es objeto, no string');
-    assert.strictEqual(ev[1].error.code, 'AGENT_NOT_FOUND');
+    assert.strictEqual(ev[1].error.code, 'RESOURCE_NOT_FOUND');
     assert.ok(!mocks.published.find(p => p[0] === 'agent.execute.response'), 'no debe publicar el evento canonico');
     assert.ok(!mocks.published.find(p => p[0] === 'agent.execute.failed'), 'no debe publicar el evento canonico failed');
   });
@@ -302,15 +302,15 @@ async function testAsync(description, fn) {
   await testAsync('clasificacion canonica de errores LLM cubre codigos esperados', async () => {
     const m = instantiate(makeMocks());
     const cases = [
-      ['credential resolve timeout: deepseek', 'CREDENTIAL_NOT_FOUND'],
-      ['No hay providers disponibles', 'CREDENTIAL_NOT_FOUND'],
+      ['credential resolve timeout: deepseek', 'RESOURCE_NOT_FOUND'],
+      ['No hay providers disponibles', 'RESOURCE_NOT_FOUND'],
       ['ETIMEDOUT', 'UPSTREAM_TIMEOUT'],
-      ['429 rate limit', 'UPSTREAM_RATE_LIMITED'],
-      ['401 unauthorized', 'UPSTREAM_AUTH_FAILED'],
-      ['500 Internal Server Error', 'UPSTREAM_5XX'],
+      ['429 rate limit', 'UPSTREAM_INVALID_RESPONSE'],
+      ['401 unauthorized', 'UPSTREAM_INVALID_RESPONSE'],
+      ['500 Internal Server Error', 'UPSTREAM_INVALID_RESPONSE'],
       ['ECONNREFUSED', 'UPSTREAM_UNREACHABLE'],
       ['unexpected token < in JSON', 'UPSTREAM_INVALID_RESPONSE'],
-      ['weird unknown', 'INTERNAL_ERROR']
+      ['weird unknown', 'UNKNOWN_ERROR']
     ];
     for (const [msg, expected] of cases) {
       const got = m._classifyLlmError(msg).code;

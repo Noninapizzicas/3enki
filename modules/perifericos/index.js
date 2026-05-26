@@ -20,16 +20,14 @@
 const path   = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 
-class PerifericosModule {
+class PerifericosModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'perifericos';
     this.version = '2.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
     this.provider = null;
 
     this.config = {
@@ -82,7 +80,7 @@ class PerifericosModule {
       });
     } else {
       this.logger.warn('perifericos.provider.no_disponible', {
-        nota: 'Modulo carga sin provider — handlers responderan 503 DEPENDENCY_UNAVAILABLE'
+        nota: 'Modulo carga sin provider — handlers responderan 503 UPSTREAM_UNREACHABLE'
       });
     }
 
@@ -117,10 +115,10 @@ class PerifericosModule {
 
     if (!destino || !contenido) {
       const missing = !destino ? 'destino' : 'data';
-      this._logError('perifericos.imprimir.validation_failed', { missing }, 'imprimir', 'VALIDATION_FAILED');
+      this._logError('perifericos.imprimir.validation_failed', { missing }, 'imprimir', 'INVALID_INPUT');
       await this._publicarEvento('periferico.error', {
         kind:    'imprimir',
-        code:    'VALIDATION_FAILED',
+        code:    'INVALID_INPUT',
         message: `${missing} es requerido`,
         contexto: { destino: destino || null }
       }, data);
@@ -128,9 +126,9 @@ class PerifericosModule {
     }
 
     if (!this.provider) {
-      this._logError('perifericos.imprimir.no_provider', { destino }, 'imprimir', 'DEPENDENCY_UNAVAILABLE');
+      this._logError('perifericos.imprimir.no_provider', { destino }, 'imprimir', 'UPSTREAM_UNREACHABLE');
       await this._publicarEvento('periferico.error', {
-        kind: 'imprimir', code: 'DEPENDENCY_UNAVAILABLE', message: 'Provider no disponible', contexto: { destino }
+        kind: 'imprimir', code: 'UPSTREAM_UNREACHABLE', message: 'Provider no disponible', contexto: { destino }
       }, data);
       return;
     }
@@ -154,7 +152,7 @@ class PerifericosModule {
         this.metrics?.increment('perifericos.envios.error', { capacidad: 'imprimir' });
         this.logger.error('perifericos.imprimir.send_failed', { destino, copia: i + 1, error: result.error });
         await this._publicarEvento('periferico.error', {
-          kind: 'imprimir', code: 'EXTERNAL_API_FAILED', message: result.error,
+          kind: 'imprimir', code: 'UPSTREAM_INVALID_RESPONSE', message: result.error,
           contexto: { destino, copia: i + 1 }
         }, data);
         return;
@@ -176,18 +174,18 @@ class PerifericosModule {
 
     if (!destino || !contenido) {
       const missing = !destino ? 'destino' : 'data';
-      this._logError('perifericos.display.validation_failed', { missing }, 'display', 'VALIDATION_FAILED');
+      this._logError('perifericos.display.validation_failed', { missing }, 'display', 'INVALID_INPUT');
       await this._publicarEvento('periferico.error', {
-        kind: 'display', code: 'VALIDATION_FAILED', message: `${missing} es requerido`,
+        kind: 'display', code: 'INVALID_INPUT', message: `${missing} es requerido`,
         contexto: { destino: destino || null }
       }, data);
       return;
     }
 
     if (!this.provider) {
-      this._logError('perifericos.display.no_provider', { destino }, 'display', 'DEPENDENCY_UNAVAILABLE');
+      this._logError('perifericos.display.no_provider', { destino }, 'display', 'UPSTREAM_UNREACHABLE');
       await this._publicarEvento('periferico.error', {
-        kind: 'display', code: 'DEPENDENCY_UNAVAILABLE', message: 'Provider no disponible', contexto: { destino }
+        kind: 'display', code: 'UPSTREAM_UNREACHABLE', message: 'Provider no disponible', contexto: { destino }
       }, data);
       return;
     }
@@ -211,7 +209,7 @@ class PerifericosModule {
       this.metrics?.increment('perifericos.envios.error', { capacidad: 'display' });
       this.logger.error('perifericos.display.send_failed', { destino, error: result.error });
       await this._publicarEvento('periferico.error', {
-        kind: 'display', code: 'EXTERNAL_API_FAILED', message: result.error, contexto: { destino }
+        kind: 'display', code: 'UPSTREAM_INVALID_RESPONSE', message: result.error, contexto: { destino }
       }, data);
       return;
     }
@@ -229,17 +227,17 @@ class PerifericosModule {
     const { destino, pin } = data;
 
     if (!destino) {
-      this._logError('perifericos.cajon.validation_failed', { missing: 'destino' }, 'abrir-cajon', 'VALIDATION_FAILED');
+      this._logError('perifericos.cajon.validation_failed', { missing: 'destino' }, 'abrir-cajon', 'INVALID_INPUT');
       await this._publicarEvento('periferico.error', {
-        kind: 'abrir-cajon', code: 'VALIDATION_FAILED', message: 'destino es requerido', contexto: {}
+        kind: 'abrir-cajon', code: 'INVALID_INPUT', message: 'destino es requerido', contexto: {}
       }, data);
       return;
     }
 
     if (!this.provider) {
-      this._logError('perifericos.cajon.no_provider', { destino }, 'abrir-cajon', 'DEPENDENCY_UNAVAILABLE');
+      this._logError('perifericos.cajon.no_provider', { destino }, 'abrir-cajon', 'UPSTREAM_UNREACHABLE');
       await this._publicarEvento('periferico.error', {
-        kind: 'abrir-cajon', code: 'DEPENDENCY_UNAVAILABLE', message: 'Provider no disponible', contexto: { destino }
+        kind: 'abrir-cajon', code: 'UPSTREAM_UNREACHABLE', message: 'Provider no disponible', contexto: { destino }
       }, data);
       return;
     }
@@ -264,7 +262,7 @@ class PerifericosModule {
       this.metrics?.increment('perifericos.envios.error', { capacidad: 'abrir-cajon' });
       this.logger.error('perifericos.cajon.send_failed', { destino, error: result.error });
       await this._publicarEvento('periferico.error', {
-        kind: 'abrir-cajon', code: 'EXTERNAL_API_FAILED', message: result.error, contexto: { destino }
+        kind: 'abrir-cajon', code: 'UPSTREAM_INVALID_RESPONSE', message: result.error, contexto: { destino }
       }, data);
       return;
     }
@@ -282,19 +280,19 @@ class PerifericosModule {
     const { nombre } = data;
 
     if (!nombre) {
-      this._logError('perifericos.estado.validation_failed', { missing: 'nombre' }, 'estado', 'VALIDATION_FAILED');
+      this._logError('perifericos.estado.validation_failed', { missing: 'nombre' }, 'estado', 'INVALID_INPUT');
       await this._publicarEvento('periferico.estado.respuesta', {
         nombre: null,
-        error: { code: 'VALIDATION_FAILED', message: 'nombre es requerido' }
+        error: { code: 'INVALID_INPUT', message: 'nombre es requerido' }
       }, data);
       return;
     }
 
     if (!this.provider) {
-      this._logError('perifericos.estado.no_provider', { nombre }, 'estado', 'DEPENDENCY_UNAVAILABLE');
+      this._logError('perifericos.estado.no_provider', { nombre }, 'estado', 'UPSTREAM_UNREACHABLE');
       await this._publicarEvento('periferico.estado.respuesta', {
         nombre,
-        error: { code: 'DEPENDENCY_UNAVAILABLE', message: 'Provider no disponible' }
+        error: { code: 'UPSTREAM_UNREACHABLE', message: 'Provider no disponible' }
       }, data);
       return;
     }
@@ -314,10 +312,10 @@ class PerifericosModule {
     const { tipo, capacidad } = data;
 
     if (!this.provider) {
-      this._logError('perifericos.listar.no_provider', {}, 'listar', 'DEPENDENCY_UNAVAILABLE');
+      this._logError('perifericos.listar.no_provider', {}, 'listar', 'UPSTREAM_UNREACHABLE');
       await this._publicarEvento('periferico.listado', {
         dispositivos: [], total: 0,
-        error: { code: 'DEPENDENCY_UNAVAILABLE', message: 'Provider no disponible' }
+        error: { code: 'UPSTREAM_UNREACHABLE', message: 'Provider no disponible' }
       }, data);
       return;
     }
@@ -335,9 +333,9 @@ class PerifericosModule {
     const data = this._unwrap(event);
 
     if (!this.provider) {
-      this._logError('perifericos.registrar.no_provider', {}, 'registrar', 'DEPENDENCY_UNAVAILABLE');
+      this._logError('perifericos.registrar.no_provider', {}, 'registrar', 'UPSTREAM_UNREACHABLE');
       await this._publicarEvento('periferico.error', {
-        kind: 'registrar', code: 'DEPENDENCY_UNAVAILABLE', message: 'Provider no disponible', contexto: {}
+        kind: 'registrar', code: 'UPSTREAM_UNREACHABLE', message: 'Provider no disponible', contexto: {}
       }, data);
       return;
     }
@@ -371,17 +369,17 @@ class PerifericosModule {
     const { nombre } = data;
 
     if (!nombre) {
-      this._logError('perifericos.desregistrar.validation_failed', { missing: 'nombre' }, 'desregistrar', 'VALIDATION_FAILED');
+      this._logError('perifericos.desregistrar.validation_failed', { missing: 'nombre' }, 'desregistrar', 'INVALID_INPUT');
       await this._publicarEvento('periferico.error', {
-        kind: 'desregistrar', code: 'VALIDATION_FAILED', message: 'nombre es requerido', contexto: {}
+        kind: 'desregistrar', code: 'INVALID_INPUT', message: 'nombre es requerido', contexto: {}
       }, data);
       return;
     }
 
     if (!this.provider) {
-      this._logError('perifericos.desregistrar.no_provider', { nombre }, 'desregistrar', 'DEPENDENCY_UNAVAILABLE');
+      this._logError('perifericos.desregistrar.no_provider', { nombre }, 'desregistrar', 'UPSTREAM_UNREACHABLE');
       await this._publicarEvento('periferico.error', {
-        kind: 'desregistrar', code: 'DEPENDENCY_UNAVAILABLE', message: 'Provider no disponible', contexto: { nombre }
+        kind: 'desregistrar', code: 'UPSTREAM_UNREACHABLE', message: 'Provider no disponible', contexto: { nombre }
       }, data);
       return;
     }
@@ -405,7 +403,7 @@ class PerifericosModule {
   async handleListar(data) {
     try {
       if (!this.provider) {
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'Provider de perifericos no disponible');
       }
       const result = await this.provider.list({
         tipo: data?.tipo, capacidad: data?.capacidad,
@@ -420,11 +418,11 @@ class PerifericosModule {
   async handleGet(data) {
     try {
       if (!data?.nombre) {
-        this._logError('perifericos.ui.get.validation_failed', { missing: 'nombre' }, 'ui_get', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'nombre es requerido', { field: 'nombre' });
+        this._logError('perifericos.ui.get.validation_failed', { missing: 'nombre' }, 'ui_get', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       if (!this.provider) {
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'Provider de perifericos no disponible');
       }
       const result = await this.provider.status({
         nombre: data.nombre, _context: { logger: this.logger }
@@ -444,15 +442,15 @@ class PerifericosModule {
   async handleRegistrar(data) {
     try {
       if (!data?.nombre) {
-        this._logError('perifericos.ui.register.validation_failed', { missing: 'nombre' }, 'ui_register', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'nombre es requerido', { field: 'nombre' });
+        this._logError('perifericos.ui.register.validation_failed', { missing: 'nombre' }, 'ui_register', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       if (!data?.transporte?.tipo) {
-        this._logError('perifericos.ui.register.validation_failed', { missing: 'transporte.tipo' }, 'ui_register', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'transporte.tipo es requerido', { field: 'transporte.tipo' });
+        this._logError('perifericos.ui.register.validation_failed', { missing: 'transporte.tipo' }, 'ui_register', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'transporte.tipo es requerido', { field: 'transporte.tipo' });
       }
       if (!this.provider) {
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'Provider de perifericos no disponible');
       }
 
       const result = await this.provider.register({
@@ -479,11 +477,11 @@ class PerifericosModule {
   async handleActualizar(data) {
     try {
       if (!data?.nombre) {
-        this._logError('perifericos.ui.update.validation_failed', { missing: 'nombre' }, 'ui_update', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'nombre es requerido', { field: 'nombre' });
+        this._logError('perifericos.ui.update.validation_failed', { missing: 'nombre' }, 'ui_update', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       if (!this.provider) {
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'Provider de perifericos no disponible');
       }
 
       const registry = this.provider._getRegistry();
@@ -501,11 +499,11 @@ class PerifericosModule {
   async handleDesregistrar(data) {
     try {
       if (!data?.nombre) {
-        this._logError('perifericos.ui.delete.validation_failed', { missing: 'nombre' }, 'ui_delete', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'nombre es requerido', { field: 'nombre' });
+        this._logError('perifericos.ui.delete.validation_failed', { missing: 'nombre' }, 'ui_delete', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       if (!this.provider) {
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'Provider de perifericos no disponible');
       }
 
       const result = await this.provider.unregister({
@@ -527,11 +525,11 @@ class PerifericosModule {
   async handleTestDispositivo(data) {
     try {
       if (!data?.nombre) {
-        this._logError('perifericos.ui.test.validation_failed', { missing: 'nombre' }, 'ui_test', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'nombre es requerido', { field: 'nombre' });
+        this._logError('perifericos.ui.test.validation_failed', { missing: 'nombre' }, 'ui_test', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       if (!this.provider) {
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'Provider de perifericos no disponible');
       }
 
       const testData = data.data || 'TEST PERIFERICO\n\n\n';
@@ -542,8 +540,8 @@ class PerifericosModule {
         _context: { logger: this.logger, eventBus: this.eventBus }
       });
       if (!result.success) {
-        this._logError('perifericos.ui.test.send_failed', { nombre: data.nombre, error: result.error }, 'ui_test', 'EXTERNAL_API_FAILED');
-        return this._errorResponse(502, 'EXTERNAL_API_FAILED', result.error, {
+        this._logError('perifericos.ui.test.send_failed', { nombre: data.nombre, error: result.error }, 'ui_test', 'UPSTREAM_INVALID_RESPONSE');
+        return this._errorResponse(502, 'UPSTREAM_INVALID_RESPONSE', result.error, {
           entity_type: 'periferico', entity_id: data.nombre
         });
       }
@@ -556,11 +554,11 @@ class PerifericosModule {
   async handleEstado(data) {
     try {
       if (!data?.nombre) {
-        this._logError('perifericos.ui.status.validation_failed', { missing: 'nombre' }, 'ui_status', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'nombre es requerido', { field: 'nombre' });
+        this._logError('perifericos.ui.status.validation_failed', { missing: 'nombre' }, 'ui_status', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       if (!this.provider) {
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'Provider de perifericos no disponible');
       }
 
       const result = await this.provider.status({
@@ -581,15 +579,15 @@ class PerifericosModule {
   async handleDescubrir(data) {
     try {
       if (!this.provider) {
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'Provider de perifericos no disponible');
       }
 
       const result = await this.provider.discover({
         metodo: data?.metodo, _context: { logger: this.logger }
       });
       if (!result.success) {
-        this._logError('perifericos.ui.discover.failed', { error: result.error }, 'ui_discover', 'EXTERNAL_API_FAILED');
-        return this._errorResponse(502, 'EXTERNAL_API_FAILED', result.error);
+        this._logError('perifericos.ui.discover.failed', { error: result.error }, 'ui_discover', 'UPSTREAM_INVALID_RESPONSE');
+        return this._errorResponse(502, 'UPSTREAM_INVALID_RESPONSE', result.error);
       }
 
       const registry      = this.provider._getRegistry();
@@ -627,21 +625,21 @@ class PerifericosModule {
   async handleListarPorCapacidad(data) {
     try {
       if (!data?.capacidad) {
-        this._logError('perifericos.ui.list_by_cap.validation_failed', { missing: 'capacidad' }, 'ui_list_by_capacidad', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        this._logError('perifericos.ui.list_by_cap.validation_failed', { missing: 'capacidad' }, 'ui_list_by_capacidad', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT',
           'capacidad es requerida (imprimir, display, abrir-cajon, etc.)',
           { field: 'capacidad' });
       }
       if (!this.provider) {
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'Provider de perifericos no disponible');
       }
 
       const result = await this.provider.list({
         capacidad: data.capacidad, _context: { logger: this.logger }
       });
       if (!result.success) {
-        this._logError('perifericos.ui.list_by_cap.failed', { capacidad: data.capacidad, error: result.error }, 'ui_list_by_capacidad', 'INTERNAL_ERROR');
-        return this._errorResponse(500, 'INTERNAL_ERROR', result.error);
+        this._logError('perifericos.ui.list_by_cap.failed', { capacidad: data.capacidad, error: result.error }, 'ui_list_by_capacidad', 'UNKNOWN_ERROR');
+        return this._errorResponse(500, 'UNKNOWN_ERROR', result.error);
       }
 
       const dispositivos = [];
@@ -689,7 +687,7 @@ class PerifericosModule {
       this.logger.info('perifericos.autodiscovery.iniciado', { topics });
     } catch (err) {
       this.logger.error('perifericos.autodiscovery.subscribe_error', { error: err.message });
-      this.metrics?.increment('perifericos.errors', { kind: 'mqtt_subscribe', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('perifericos.errors', { kind: 'mqtt_subscribe', code: 'UNKNOWN_ERROR' });
     }
   }
 
@@ -767,7 +765,7 @@ class PerifericosModule {
       this.logger.error('perifericos.autodiscovery.registro_error', {
         device_id: deviceId, error: err.message
       });
-      this.metrics?.increment('perifericos.errors', { kind: 'autodiscovery', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('perifericos.errors', { kind: 'autodiscovery', code: 'UNKNOWN_ERROR' });
     }
   }
 
@@ -783,12 +781,12 @@ class PerifericosModule {
 
   _handleHandlerError(logEvent, err, kind) {
     const code   = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED'      ? 400 :
+    const status = code === 'INVALID_INPUT'      ? 400 :
                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                   code === 'CONFLICT'               ? 409 :
-                   code === 'EXTERNAL_API_FAILED'    ? 502 :
-                   code === 'DEPENDENCY_UNAVAILABLE' ? 503 : 500;
+                   code === 'PERMISSION_DENIED' ? 403 :
+                   code === 'CONFLICT_STATE'               ? 409 :
+                   code === 'UPSTREAM_INVALID_RESPONSE'    ? 502 :
+                   code === 'UPSTREAM_UNREACHABLE' ? 503 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment('perifericos.errors', { kind, code });
@@ -798,11 +796,11 @@ class PerifericosModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('no encontrado'))                     return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden'))                      return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('conflict') || msg.includes('already exists'))                     return 'CONFLICT';
-    if (msg.includes('timeout'))                                                        return 'TIMEOUT';
-    return 'INTERNAL_ERROR';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
+    if (msg.includes('unauthorized') || msg.includes('forbidden'))                      return 'PERMISSION_DENIED';
+    if (msg.includes('conflict') || msg.includes('already exists'))                     return 'CONFLICT_STATE';
+    if (msg.includes('timeout'))                                                        return 'UPSTREAM_TIMEOUT';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
@@ -823,7 +821,7 @@ class PerifericosModule {
       return payload;
     } catch {
       this.logger.warn('perifericos.mqtt.parse_error', { source });
-      this.metrics?.increment('perifericos.errors', { kind: 'mqtt_parse', code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('perifericos.errors', { kind: 'mqtt_parse', code: 'INVALID_INPUT' });
       return null;
     }
   }
@@ -846,7 +844,7 @@ class PerifericosModule {
       return require('../../services/providers/local/perifericos');
     } catch (err) {
       this.logger.error('perifericos.provider.load_error', { error: err.message });
-      this.metrics?.increment('perifericos.errors', { kind: 'provider_load', code: 'DEPENDENCY_UNAVAILABLE' });
+      this.metrics?.increment('perifericos.errors', { kind: 'provider_load', code: 'UPSTREAM_UNREACHABLE' });
       return null;
     }
   }

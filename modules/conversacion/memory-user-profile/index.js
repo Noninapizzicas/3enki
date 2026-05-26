@@ -13,6 +13,7 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS user_profile_facts (
   id TEXT PRIMARY KEY,
@@ -48,17 +49,19 @@ const DEFAULT_PRIORITY = 100;
 const DEFAULT_MAX_FACTS = 200;
 const DEFAULT_MIN_FACT_LENGTH = 4;
 
-class MemoryUserProfileModule {
+class MemoryUserProfileModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'memory-user-profile';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.config = null;
     this.pendingDb = new Map();
     this.schemaReady = new Set();
   }
+
+  // ============================================================
+  // Lifecycle
+  // ============================================================
 
   async onLoad(context) {
     this.logger = context.logger;
@@ -82,57 +85,7 @@ class MemoryUserProfileModule {
   }
 
   // ============================================================
-  // Helpers POC2
-  // ============================================================
-
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details !== undefined) error.details = details;
-    return { status, error };
-  }
-
-  _classifyHandlerError(err) {
-    const msg = err?.message || String(err);
-    const code = err?.code;
-    if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
-    if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
-    if (/not found/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
-  }
-
-  _handleHandlerError(logEvent, err, kind = 'subscribe') {
-    const { status, code } = this._classifyHandlerError(err);
-    this.logger?.error?.(logEvent, {
-      kind,
-      error_code: code,
-      error_message: err?.message || String(err)
-    });
-    this.metrics?.increment?.('memory-user-profile.errors', { code, kind });
-    return this._errorResponse(status, code, err?.message || 'Error interno');
-  }
-
-  async _publicarEvento(name, payload, sourcePayload) {
-    const correlation_id =
-      payload?.correlation_id ||
-      sourcePayload?.correlation_id ||
-      crypto.randomUUID();
-    const project_id =
-      payload?.project_id ??
-      sourcePayload?.project_id ??
-      null;
-    const enriched = {
-      ...payload,
-      correlation_id,
-      timestamp: payload?.timestamp || new Date().toISOString()
-    };
-    if (project_id !== null && project_id !== undefined) enriched.project_id = project_id;
-    await this.eventBus.publish(name, enriched);
-    return enriched;
-  }
-
-  // ============================================================
-  // Bus subscribers
+  // Bus API — handlers wireados por module.json.events.subscribes
   // ============================================================
 
   async onMessageSaved(event) {
@@ -164,7 +117,7 @@ class MemoryUserProfileModule {
             error_message: err.message,
             fact: fact.slice(0, 40)
           });
-          this.metrics?.increment?.('memory-user-profile.errors', { code: 'INSERT_FAILED', kind: 'db' });
+          this.metrics?.increment?.('memory-user-profile.errors', { code: 'UNKNOWN_ERROR', kind: 'db' });
         }
       }
 
@@ -206,9 +159,18 @@ class MemoryUserProfileModule {
   }
 
   // ============================================================
-  // Internals
+  // HTTP / UI API — sin endpoints (modulo solo bus)
   // ============================================================
 
+  // ============================================================
+  // Dominio (protegido) — extraccion de hechos del dominio + overrides
+  // de los helpers heredados con identidad propia del modulo.
+  // ============================================================
+
+  /**
+   * Extrae hechos sobre el usuario aplicando las heuristicas regex PATTERNS.
+   * Salida: array de strings normalizados, sin duplicados.
+   */
   _extractFacts(text) {
     if (typeof text !== 'string') return [];
     const found = [];
@@ -225,6 +187,66 @@ class MemoryUserProfileModule {
     }
     return found;
   }
+
+  /**
+   * Override de BaseModule: el modulo usa firma local `{status, code}`
+   * (objeto, no string) para evitar la doble llamada a _statusFromCode.
+   * Reconoce ENOENT (FS) ademas de los keywords genericos.
+   * No llama super: la firma de retorno es distinta a la canonica.
+   */
+  _classifyHandlerError(err) {
+    const msg = err?.message || String(err);
+    const code = err?.code;
+    if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
+    if (/timeout/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
+    if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
+    if (/not found/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
+  }
+
+  /**
+   * Override de BaseModule: usa la firma `{status, code}` del classifier
+   * local en vez de la string del canonico. No llama super por la misma
+   * razon — la firma del classifier es propia.
+   */
+  _handleHandlerError(logEvent, err, kind = 'subscribe') {
+    const { status, code } = this._classifyHandlerError(err);
+    this.logger?.error?.(logEvent, {
+      kind,
+      error_code: code,
+      error_message: err?.message || String(err)
+    });
+    this.metrics?.increment?.('memory-user-profile.errors', { code, kind });
+    return this._errorResponse(status, code, err?.message || 'Error interno');
+  }
+
+  /**
+   * Override de BaseModule: anyade project_id al payload top-level y
+   * acepta sourcePayload con metadata.correlationId fallback.
+   */
+  async _publicarEvento(name, payload, sourcePayload) {
+    const correlation_id =
+      payload?.correlation_id ||
+      sourcePayload?.correlation_id ||
+      crypto.randomUUID();
+    const project_id =
+      payload?.project_id ??
+      sourcePayload?.project_id ??
+      null;
+    const enriched = {
+      ...payload,
+      correlation_id,
+      timestamp: payload?.timestamp || new Date().toISOString()
+    };
+    if (project_id !== null && project_id !== undefined) enriched.project_id = project_id;
+    await this.eventBus.publish(name, enriched);
+    return enriched;
+  }
+
+  // ============================================================
+  // Privados — wrapper de DB + inicializacion de schema. Sin side
+  // effects observables fuera del modulo.
+  // ============================================================
 
   async _db(project_id, query, params = [], read_only = false) {
     const request_id = crypto.randomUUID();

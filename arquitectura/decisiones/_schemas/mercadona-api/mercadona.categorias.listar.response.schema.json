@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/mercadona-api/mercadona.categorias.listar.response.schema.json",
+  "title": "mercadona.categorias.listar.response — payload schema",
+  "description": "Response success correlacionada por request_id. data es array de categorias (top-level) o objeto categoria (cuando se pidio parent_id).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "data"],
+  "properties": {
+    "status": { "type": "integer", "const": 200 },
+    "data": {
+      "oneOf": [
+        { "type": "array", "items": { "$ref": "_common.schema.json#/$defs/categoria" } },
+        { "$ref": "_common.schema.json#/$defs/categoria" }
+      ]
+    },
+    "request_id":     { "$ref": "_common.schema.json#/$defs/request_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

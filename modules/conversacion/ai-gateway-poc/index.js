@@ -103,15 +103,15 @@ class AiGateway {
     const validation = this._validateRequest(payload);
     if (!validation.ok) {
       const errResp = this._buildErrorResponse({
-        status: 400, code: 'VALIDATION_FAILED',
+        status: 400, code: 'INVALID_INPUT',
         message: validation.message,
         details: { kind: 'domain', retryable: false, field: validation.field }
       });
       this.logger.warn(`${this.name}.llm.request.invalid`, {
-        request_id: requestId || null, code: 'VALIDATION_FAILED', field: validation.field
+        request_id: requestId || null, code: 'INVALID_INPUT', field: validation.field
       });
       this._emitMetric(`${this.name}.llm.errors`, 1, {
-        code: 'VALIDATION_FAILED', kind: 'domain'
+        code: 'INVALID_INPUT', kind: 'domain'
       });
       await this._publicarEvento('llm.complete.response',
         { request_id: requestId || null, ...errResp },
@@ -139,10 +139,10 @@ class AiGateway {
         request_id: requestId, error: err.message, stack: err.stack
       });
       this._emitMetric(`${this.name}.llm.errors`, 1, {
-        code: 'INTERNAL_ERROR', kind: 'domain'
+        code: 'UNKNOWN_ERROR', kind: 'domain'
       });
       const errResp = this._buildErrorResponse({
-        status: 500, code: 'INTERNAL_ERROR',
+        status: 500, code: 'UNKNOWN_ERROR',
         message: 'Unexpected error during chat completion',
         details: { kind: 'domain', retryable: false }
       });
@@ -211,7 +211,7 @@ class AiGateway {
         request_id: requestId, reason
       });
       this._emitMetric(`${this.name}.credential.errors`, 1, {
-        code: 'CREDENTIAL_NOT_FOUND', kind: 'rejected'
+        code: 'RESOURCE_NOT_FOUND', kind: 'rejected'
       });
       pending.reject(new Error(reason));
     }
@@ -300,7 +300,7 @@ class AiGateway {
    *
    * Devuelve la api key como string. Throws si timeout / credential-manager
    * rechaza / desconectado (manejado por el caller — DeepSeekClient lo traduce
-   * a CREDENTIAL_NOT_FOUND).
+   * a RESOURCE_NOT_FOUND).
    */
   _resolveCredential(credentialRef, projectId) {
     return new Promise((resolve, reject) => {
@@ -319,7 +319,7 @@ class AiGateway {
           request_id: requestId, provider: credentialRef, project_id: projectId, timeout_ms: timeoutMs
         });
         this._emitMetric(`${this.name}.credential.errors`, 1, {
-          provider: credentialRef, code: 'CREDENTIAL_NOT_FOUND', kind: 'timeout'
+          provider: credentialRef, code: 'RESOURCE_NOT_FOUND', kind: 'timeout'
         });
         reject(new Error(`credential resolve timeout (${timeoutMs}ms) for ${credentialRef}`));
       }, timeoutMs);

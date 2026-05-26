@@ -1,0 +1,110 @@
+{
+  "_doc": "Blueprint del modulo carta-impresion. Hijo de subsistema-recetario.modulo-base. Genera versiones imprimibles de cartas en HTML print-ready. 3 operaciones (get, generar, save_html). La generacion HTML real la hace un agente impresion-architect/builder — este blueprint solo gestiona archivos.",
+
+  "id": "carta-impresion",
+  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+  "version": "blueprint-1.0.0",
+  "language": "es",
+
+  "rol": "Gestor de archivos HTML imprimibles. Carga template + datos via agente generador, persiste resultado. Agentes (impresion-architect, impresion-builder) son quienes deciden layout y producen el HTML real.",
+
+  "garantiza": [
+    "get devuelve HTML+meta de una carta impresa ya generada.",
+    "generar delega a un agente impresor via agent.execute.request, luego persiste el HTML devuelto.",
+    "save_html persiste HTML+meta tal cual (utilizado por el agente impresor o por scripts externos)."
+  ],
+
+  "no_garantiza": [
+    "Layout/diseno — eso lo hace el agente.",
+    "Render PDF — el HTML es print-ready (CSS @media print); el render PDF queda al cliente (browser print)."
+  ],
+
+  "estado_persistente": {
+    "paths_relativos": {
+      "html": "/cartas-impresion/<carta_id>.html",
+      "meta": "/cartas-impresion/<carta_id>.meta.json"
+    },
+    "paths_modulo": "modules/pizzepos/carta-impresion/templates/* (templates HTML base — NO modificables por el blueprint)",
+    "shape_meta": "{ carta_id, template, generado_at, generado_por, size_bytes }"
+  },
+
+  "eventos_publicados": [
+    "impresion.get.response", "impresion.get.failed",
+    "impresion.generar.response", "impresion.generar.failed",
+    "impresion.save_html.response", "impresion.save_html.failed",
+    "carta.impresion.lista"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "operaciones": {
+    "get": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req) }",
+      "pseudocodigo": [
+        "async get(input):",
+        "  if (!input.project_id || !input.carta_id) return INVALID_INPUT",
+        "  raw_html = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/cartas-impresion/' + input.carta_id + '.html' })",
+        "  if (raw_html.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta_impresion', hint: 'no generada — usar generar primero' }",
+        "  if (raw_html.status >= 400) return raw_html",
+        "  raw_meta = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/cartas-impresion/' + input.carta_id + '.meta.json' })",
+        "  meta = raw_meta.status === 200 ? JSON.parse(raw_meta.content) : { carta_id: input.carta_id }",
+        "  return { status: 200, data: { html: raw_html.content, meta } }"
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "generar": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), template? (default 'base'), agente? (default 'impresion-architect') }",
+      "pseudocodigo": [
+        "async generar(input):",
+        "  if (!input.project_id || !input.carta_id) return INVALID_INPUT",
+        "  // 1. Cargar carta de carta-manager.",
+        "  carta_resp = await publishAndWait('carta.get.request', { project_id: input.project_id, carta_id: input.carta_id, request_id: uuid(), correlation_id: input.correlation_id })",
+        "  if (carta_resp.status >= 400) return carta_resp",
+        "",
+        "  // 2. Delegar al agente impresor.",
+        "  agente = input.agente || 'impresion-architect'",
+        "  agent_resp = await publishAndWait('agent.execute.request', {",
+        "    request_id: uuid(), correlation_id: input.correlation_id,",
+        "    agent_name: agente,",
+        "    task: 'Generar HTML print-ready de la carta',",
+        "    context: { project_id: input.project_id, carta: carta_resp.data, template: input.template || 'base' }",
+        "  })",
+        "  if (agent_resp.status >= 400 || !agent_resp.result?.content) return agent_resp.status >= 400 ? agent_resp : INVALID_INPUT { hint: 'agente no devolvio HTML' }",
+        "",
+        "  html = agent_resp.result.content",
+        "  // 3. Persistir + emitir evento.",
+        "  meta = { carta_id: input.carta_id, template: input.template || 'base', generado_at: nowISO(), generado_por: agente, size_bytes: html.length }",
+        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/cartas-impresion/' + input.carta_id + '.html', content: html, encoding: 'utf-8', atomic: true })",
+        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/cartas-impresion/' + input.carta_id + '.meta.json', content: JSON.stringify(meta, null, 2), encoding: 'utf-8', atomic: true })",
+        "  await publish('carta.impresion.lista', { project_id: input.project_id, carta_id: input.carta_id, template: meta.template, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  return { status: 201, data: { html, meta } }"
+      ],
+      "reglas_clave": ["Delegacion al agente impresor (default impresion-architect).", "Si el agente no devuelve content, error INVALID_INPUT.", "Persiste HTML + meta companion."],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "save_html": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), html (req), template?, generado_por? }",
+      "pseudocodigo": [
+        "async save_html(input):",
+        "  if (!input.project_id || !input.carta_id || !input.html) return INVALID_INPUT",
+        "  meta = { carta_id: input.carta_id, template: input.template || 'base', generado_at: nowISO(), generado_por: input.generado_por || 'unknown', size_bytes: input.html.length }",
+        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/cartas-impresion/' + input.carta_id + '.html', content: input.html, encoding: 'utf-8', atomic: true })",
+        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/cartas-impresion/' + input.carta_id + '.meta.json', content: JSON.stringify(meta, null, 2), encoding: 'utf-8', atomic: true })",
+        "  await publish('carta.impresion.lista', { project_id: input.project_id, carta_id: input.carta_id, template: meta.template, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  return { status: 201, data: meta }"
+      ],
+      "reglas_clave": ["Persistencia pura sin invocar agente. Util cuando HTML viene de scripts externos."],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    }
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "subscriber_carta_actualizada",
+      "estado": "abierto",
+      "descripcion": "Legacy se suscribia a carta.actualizada para invalidar carta impresa existente. Blueprint no reactivo — el LLM al entrar a la page comprueba fechas meta.generado_at vs carta.meta.updated_at."
+    }
+  ]
+}

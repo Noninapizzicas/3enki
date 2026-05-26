@@ -23,7 +23,7 @@
     "si un job falla, no se reintenta automaticamente — se logea y espera al siguiente trigger"
   ],
   "integrations": {
-    "listens_to": ["scheduler.trigger.check", "project.activated"],
+    "listens_to": ["project.activated"],
     "emits": ["scheduler.job.executed", "scheduler.job.failed"]
   }
 }

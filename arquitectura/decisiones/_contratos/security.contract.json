@@ -73,7 +73,7 @@
     },
     {
       "id": "secreto_no_se_publica",
-      "regla": "Ningún payload publicado en el bus (excepto credential.resolve.response, único caso autorizado) contiene un secreto. Los códigos de error que mencionan credenciales (CREDENTIAL_NOT_FOUND, UPSTREAM_AUTH_FAILED) NO incluyen el valor de la credencial en error.message ni error.details.",
+      "regla": "Ningún payload publicado en el bus (excepto credential.resolve.response, único caso autorizado) contiene un secreto. Los códigos de error que mencionan credenciales (RESOURCE_NOT_FOUND, UPSTREAM_INVALID_RESPONSE) NO incluyen el valor de la credencial en error.message ni error.details.",
       "razon": "El bus replica payloads a múltiples consumers; un secreto en payload = leak a todos los suscriptores."
     },
     {
@@ -83,7 +83,7 @@
     },
     {
       "id": "tenancy_por_project_id",
-      "regla": "Cualquier operación sobre datos de dominio (recetas, mensajes, archivos, etc.) lleva project_id en el payload. Sin project_id, la operación es ambigua y se rechaza con AUTHORIZATION_REQUIRED.",
+      "regla": "Cualquier operación sobre datos de dominio (recetas, mensajes, archivos, etc.) lleva project_id en el payload. Sin project_id, la operación es ambigua y se rechaza con PERMISSION_DENIED.",
       "razon": "project_id es el ámbito de aislamiento. Sin él, los datos de un proyecto se mezclan con otro. Hacerlo obligatorio desde el primer evento del flow elimina la posibilidad de leak por defecto."
     },
     {
@@ -154,7 +154,7 @@
     },
     {
       "id": "fail_closed_no_fail_open_para_credentials",
-      "decision": "Si credential-manager NO está disponible o no puede resolver una credencial requerida, la operación FALLA con CREDENTIAL_NOT_FOUND. NO se ejecuta sin credenciales bajo el supuesto de 'mejor algo que nada'.",
+      "decision": "Si credential-manager NO está disponible o no puede resolver una credencial requerida, la operación FALLA con RESOURCE_NOT_FOUND. NO se ejecuta sin credenciales bajo el supuesto de 'mejor algo que nada'.",
       "alternativa_descartada": "Fail-open: si credential-manager falla, ejecutar la operación con credenciales por defecto, env vars del proceso, o sin auth.",
       "razon": "Fail-open en seguridad es la fuente clásica de breaches (defaults inseguros, env leak, request sin auth llegando a upstream). Fail-closed obliga a configurar correctamente — el sistema no funciona hasta que las credenciales están bien resueltas."
     },
@@ -211,7 +211,7 @@
     },
     {
       "id": "operacion_sin_project_id",
-      "regla": "Ninguna operación de dominio (lectura, escritura, modificación de datos del usuario) se ejecuta sin project_id en el payload. El handler rechaza con AUTHORIZATION_REQUIRED si falta.",
+      "regla": "Ninguna operación de dominio (lectura, escritura, modificación de datos del usuario) se ejecuta sin project_id en el payload. El handler rechaza con PERMISSION_DENIED si falta.",
       "enforce": "Auditoría de handlers de cada módulo: si una operación que toca DB no valida project_id, drift. Severidad warning (porque hoy single-tenant lo permite, pero es deuda)."
     },
     {
@@ -347,7 +347,7 @@
     },
     {
       "id": "drift_fail_open_en_credential_resolve_failure",
-      "regla": "Cuando un módulo no logra resolver una credencial, NO ejecuta la operación con default/fallback. Debe publicar .failed con CREDENTIAL_NOT_FOUND.",
+      "regla": "Cuando un módulo no logra resolver una credencial, NO ejecuta la operación con default/fallback. Debe publicar .failed con RESOURCE_NOT_FOUND.",
       "como_detectar": "Heurística sobre código: try/catch alrededor de credential.resolve donde el catch hace return de default value en vez de throw.",
       "severidad": "warning"
     },
@@ -377,7 +377,7 @@
     "naming": "Los eventos canónicos del subsistema (credential.saved, credential.resolve.request, etc.) cumplen la forma <module-prefix>.<entity>.<verb>. Verbos: saved, updated, deleted, resolved, resolve, issue, revoke.",
     "glossary": "Las entidades del subsistema (credential, certificate, token, secret) tienen forma canónica única en glossary.json del idioma del módulo (credential-manager es 'en', usa credential / certificate / token).",
     "events": "Hereda los principios generales: comunicación asíncrona, no esperar respuesta sincrona del propio publish. credential.resolve.request espera credential.resolve.response correlacionado por request_id.",
-    "errors": "Los códigos canónicos relacionados con seguridad ya viven en errors.json: CREDENTIAL_NOT_FOUND, UPSTREAM_AUTH_FAILED, AUTHORIZATION_REQUIRED. Este contrato refuerza no_secrets_in_messages — ningún error.message ni error.details contiene un secreto.",
+    "errors": "Los códigos canónicos relacionados con seguridad ya viven en errors.json: RESOURCE_NOT_FOUND, UPSTREAM_INVALID_RESPONSE, PERMISSION_DENIED. Este contrato refuerza no_secrets_in_messages — ningún error.message ni error.details contiene un secreto.",
     "observability": "Refuerza no_secrets_in_logs. Las operaciones de credential-manager se loguean con metadata { credential_id, project_id, action } — NUNCA con el valor.",
     "lifecycle": "credential-manager y certificate-authority cumplen lifecycle.contract. Sus subscribes están declarados en module.json para auto-wire.",
     "persistence": "credential-manager usa pattern sqlite-encrypted o similar (cifrado en reposo). El pattern exacto se documenta en su module.json.config.persistence.",

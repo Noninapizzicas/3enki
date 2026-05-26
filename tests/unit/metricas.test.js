@@ -485,7 +485,7 @@ function publishedOf(mocks, name) {
     const r = await m.handleGetAllMetrics({}, { correlationId: 'cid-x' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 500);
-    assert.strictEqual(r.error.code, 'INTERNAL_ERROR');
+    assert.strictEqual(r.error.code, 'UNKNOWN_ERROR');
     // Counter interno bumped
     assert.ok(m.counters.get('metricas.errors.http_getAll') >= 1);
 
@@ -500,10 +500,10 @@ function publishedOf(mocks, name) {
   await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'msg', { field: 'x' });
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
+    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
   });
 
@@ -511,10 +511,10 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('unauthorized request')), 'AUTHORIZATION_REQUIRED');
-    assert.strictEqual(m._classifyHandlerError(new Error('already exists')), 'CONFLICT');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('unauthorized request')), 'PERMISSION_DENIED');
+    assert.strictEqual(m._classifyHandlerError(new Error('already exists')), 'CONFLICT_STATE');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

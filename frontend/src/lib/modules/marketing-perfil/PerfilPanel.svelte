@@ -1,9 +1,15 @@
 <script lang="ts">
   /**
-   * PerfilPanel — Ver y editar el perfil de marca del proyecto
+   * PerfilPanel — Ver y editar el perfil de marca del proyecto.
    *
-   * El perfil se construye conversando con el agente marketing-onboarding.
-   * Este panel permite revisar el resultado y ajustar puntos concretos.
+   * Shape canonico: del blueprint carta-marketing (nombre_marca, tono_voz,
+   * valores como array, publico_objetivo, diferenciacion, restricciones,
+   * idiomas como array). Lecturas y escrituras directas via fs.read/fs.write
+   * sobre /storage/config/marca.json — sin handler backend dedicado.
+   *
+   * El onboarding inicial lo hace el agente marketing-onboarding via chat
+   * (operacion compleja). Este panel solo permite revisar/editar el perfil
+   * ya creado.
    */
   import { onMount } from 'svelte';
   import {
@@ -14,13 +20,27 @@
     onboardingCompletado,
     loadPerfil,
     updatePerfil,
-    clearError
+    clearError,
+    type PerfilMarca
   } from '$lib/stores/carta-marketing';
 
   export let panelId: string = '';
 
   let editMode = false;
-  let editando: any = {};
+  // Campos editables. valores e idiomas se editan como string CSV → array al save.
+  let editando: {
+    nombre_marca: string;
+    lema: string;
+    tono_voz: string;
+    valoresCsv: string;
+    publico_objetivo: string;
+    diferenciacion: string;
+    restricciones: string;
+    idiomasCsv: string;
+  } = {
+    nombre_marca: '', lema: '', tono_voz: '', valoresCsv: '',
+    publico_objetivo: '', diferenciacion: '', restricciones: '', idiomasCsv: ''
+  };
 
   $: p = $perfil;
   $: loading = $marketingLoading;
@@ -30,27 +50,45 @@
 
   onMount(() => loadPerfil());
 
+  function csvFromArray(a: string[] | undefined): string {
+    return Array.isArray(a) ? a.join(', ') : '';
+  }
+
+  function arrayFromCsv(s: string): string[] {
+    return s.split(',').map(x => x.trim()).filter(x => x.length > 0);
+  }
+
   function startEdit() {
     editando = {
-      nombre: p?.nombre || '',
-      tono: p?.tono || '',
-      idioma: p?.idioma || 'es',
-      publico: p?.publico || '',
-      valores: p?.valores || '',
-      prohibido: p?.prohibido || '',
-      referencia_visual: p?.referencia_visual || ''
+      nombre_marca: p?.nombre_marca || '',
+      lema: p?.lema || '',
+      tono_voz: p?.tono_voz || '',
+      valoresCsv: csvFromArray(p?.valores),
+      publico_objetivo: p?.publico_objetivo || '',
+      diferenciacion: p?.diferenciacion || '',
+      restricciones: p?.restricciones || '',
+      idiomasCsv: csvFromArray(p?.idiomas) || 'es'
     };
     editMode = true;
   }
 
   async function handleSave() {
-    const ok = await updatePerfil(editando);
+    const patch: Partial<PerfilMarca> = {
+      nombre_marca: editando.nombre_marca,
+      lema: editando.lema,
+      tono_voz: editando.tono_voz,
+      valores: arrayFromCsv(editando.valoresCsv),
+      publico_objetivo: editando.publico_objetivo,
+      diferenciacion: editando.diferenciacion,
+      restricciones: editando.restricciones,
+      idiomas: arrayFromCsv(editando.idiomasCsv)
+    };
+    const ok = await updatePerfil(patch);
     if (ok) editMode = false;
   }
 
   function handleCancel() {
     editMode = false;
-    editando = {};
   }
 </script>
 
@@ -77,42 +115,49 @@
   {:else if editMode}
     <!-- MODO EDICIÓN -->
     <div class="form-group">
-      <label class="form-label" for="p-nombre">Nombre</label>
-      <input id="p-nombre" class="form-input" bind:value={editando.nombre} placeholder="Nonina Pizzicas" />
+      <label class="form-label" for="p-nombre">Nombre de marca</label>
+      <input id="p-nombre" class="form-input" bind:value={editando.nombre_marca} placeholder="Nonina Pizzicas" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="p-lema">Lema</label>
+      <input id="p-lema" class="form-input" bind:value={editando.lema} placeholder="Pizza con alma" />
     </div>
 
     <div class="form-group">
       <label class="form-label" for="p-tono">Tono de voz</label>
-      <input id="p-tono" class="form-input" bind:value={editando.tono} placeholder="Cercano y familiar, con humor" />
+      <input id="p-tono" class="form-input" bind:value={editando.tono_voz} placeholder="Cercano y familiar, con humor" />
     </div>
 
     <div class="form-row">
       <div class="form-group compact">
-        <label class="form-label" for="p-idioma">Idioma</label>
-        <input id="p-idioma" class="form-input" bind:value={editando.idioma} placeholder="es" />
+        <label class="form-label" for="p-idiomas">Idiomas</label>
+        <input id="p-idiomas" class="form-input" bind:value={editando.idiomasCsv} placeholder="es, en" />
+        <span class="form-hint">separados por coma</span>
       </div>
       <div class="form-group compact">
-        <label class="form-label" for="p-publico">Público</label>
-        <input id="p-publico" class="form-input" bind:value={editando.publico} placeholder="Familias, jóvenes" />
+        <label class="form-label" for="p-publico">Público objetivo</label>
+        <input id="p-publico" class="form-input" bind:value={editando.publico_objetivo} placeholder="Familias, jóvenes" />
       </div>
     </div>
 
     <div class="form-group">
       <label class="form-label" for="p-valores">Valores</label>
-      <textarea id="p-valores" class="form-input" rows="2" bind:value={editando.valores}
-        placeholder="Producto fresco, hecho a mano, recetas de siempre"></textarea>
+      <textarea id="p-valores" class="form-input" rows="2" bind:value={editando.valoresCsv}
+        placeholder="producto fresco, hecho a mano, recetas de siempre"></textarea>
+      <span class="form-hint">separados por coma</span>
     </div>
 
     <div class="form-group">
-      <label class="form-label" for="p-prohibido">Qué evitar</label>
-      <textarea id="p-prohibido" class="form-input" rows="2" bind:value={editando.prohibido}
-        placeholder="Anglicismos, tono pretencioso"></textarea>
+      <label class="form-label" for="p-dif">Diferenciación</label>
+      <textarea id="p-dif" class="form-input" rows="2" bind:value={editando.diferenciacion}
+        placeholder="Lo que te hace único frente a la competencia"></textarea>
     </div>
 
     <div class="form-group">
-      <label class="form-label" for="p-ref">Referencia visual</label>
-      <input id="p-ref" class="form-input" bind:value={editando.referencia_visual}
-        placeholder="Trattoria italiana moderna" />
+      <label class="form-label" for="p-rest">Restricciones</label>
+      <textarea id="p-rest" class="form-input" rows="2" bind:value={editando.restricciones}
+        placeholder="Anglicismos, tono pretencioso, frases hechas..."></textarea>
     </div>
 
     <div class="actions">
@@ -126,60 +171,63 @@
     <div class="perfil-grid">
       <div class="field">
         <span class="field-label">Nombre</span>
-        <span class="field-value">{p.nombre || '—'}</span>
+        <span class="field-value">{p.nombre_marca || '—'}</span>
       </div>
+
+      {#if p.lema}
+        <div class="field">
+          <span class="field-label">Lema</span>
+          <span class="field-value">{p.lema}</span>
+        </div>
+      {/if}
 
       <div class="field">
         <span class="field-label">Tono de voz</span>
-        <span class="field-value">{p.tono || '—'}</span>
+        <span class="field-value">{p.tono_voz || '—'}</span>
       </div>
 
       <div class="field-row">
         <div class="field compact">
-          <span class="field-label">Idioma</span>
-          <span class="field-value">{p.idioma || '—'}</span>
+          <span class="field-label">Idiomas</span>
+          <span class="field-value">{csvFromArray(p.idiomas) || '—'}</span>
         </div>
         <div class="field compact">
-          <span class="field-label">Público</span>
-          <span class="field-value">{p.publico || '—'}</span>
+          <span class="field-label">Público objetivo</span>
+          <span class="field-value">{p.publico_objetivo || '—'}</span>
         </div>
       </div>
 
       <div class="field">
         <span class="field-label">Valores</span>
-        <span class="field-value">{p.valores || '—'}</span>
-      </div>
-
-      <div class="field">
-        <span class="field-label">Qué evitar</span>
-        <span class="field-value">{p.prohibido || '—'}</span>
-      </div>
-
-      <div class="field">
-        <span class="field-label">Referencia visual</span>
-        <span class="field-value">{p.referencia_visual || '—'}</span>
-      </div>
-
-      {#if p.colores && Object.keys(p.colores).length > 0}
-        <div class="field">
-          <span class="field-label">Colores</span>
-          <div class="colores">
-            {#each Object.entries(p.colores) as [nombre, valor]}
-              <div class="color-chip">
-                <span class="color-swatch" style="background: {valor}"></span>
-                <span class="color-info">{nombre}: {valor}</span>
-              </div>
+        {#if p.valores && p.valores.length > 0}
+          <div class="chips">
+            {#each p.valores as v}
+              <span class="chip">{v}</span>
             {/each}
           </div>
+        {:else}
+          <span class="field-value">—</span>
+        {/if}
+      </div>
+
+      {#if p.diferenciacion}
+        <div class="field">
+          <span class="field-label">Diferenciación</span>
+          <span class="field-value">{p.diferenciacion}</span>
         </div>
       {/if}
 
-      {#if p.notas && p.notas.length > 0}
+      {#if p.restricciones}
         <div class="field">
-          <span class="field-label">Notas</span>
-          <ul class="notas">
-            {#each p.notas as nota}<li>{nota}</li>{/each}
-          </ul>
+          <span class="field-label">Restricciones</span>
+          <span class="field-value">{p.restricciones}</span>
+        </div>
+      {/if}
+
+      {#if p._updated_at}
+        <div class="field">
+          <span class="field-label">Última actualización</span>
+          <span class="field-value field-meta">{new Date(p._updated_at).toLocaleString()}</span>
         </div>
       {/if}
     </div>
@@ -215,6 +263,7 @@
   .form-group { display: flex; flex-direction: column; gap: 0.2rem; }
   .form-group.compact { flex: 1; min-width: 0; }
   .form-label { font-size: 0.7rem; color: var(--color-text-muted, #888); font-weight: 500; }
+  .form-hint { font-size: 0.65rem; color: var(--color-text-muted, #888); font-style: italic; }
   .form-input {
     padding: 0.4rem 0.5rem;
     background: rgba(255,255,255,0.05);
@@ -243,24 +292,15 @@
     border-radius: 0.25rem;
     min-height: 1.5rem;
   }
+  .field-meta { font-family: monospace; font-size: 0.7rem; opacity: 0.7; }
 
-  .colores { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-  .color-chip {
-    display: flex; align-items: center; gap: 0.3rem;
-    padding: 0.2rem 0.4rem;
-    background: rgba(255,255,255,0.05);
-    border-radius: 0.25rem;
+  .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0.2rem 0; }
+  .chip {
+    padding: 0.2rem 0.5rem;
+    background: rgba(96, 165, 250, 0.15);
+    color: var(--color-primary, #3b82f6);
+    border-radius: 999px;
     font-size: 0.7rem;
-  }
-  .color-swatch {
-    width: 1rem; height: 1rem; border-radius: 0.2rem;
-    border: 1px solid rgba(255,255,255,0.15);
-  }
-  .color-info { font-family: monospace; font-size: 0.65rem; }
-
-  .notas {
-    margin: 0; padding-left: 1rem; font-size: 0.75rem;
-    color: var(--color-text, #e5e5e5);
   }
 
   .actions { display: flex; gap: 0.5rem; }

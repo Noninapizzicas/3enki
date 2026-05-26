@@ -1,0 +1,4742 @@
+{
+  "_meta": {
+    "convencion": "eventos-publish-subscribe",
+    "version": "1.0.0",
+    "creado_en": "2026-05-25",
+    "contrato_referencia": "arquitectura/decisiones/_contratos/blueprint-eventos-conscientes.contract.json",
+    "generado_por": "arquitectura/decisiones/_validators/blueprint-eventos-conscientes.validate.js",
+    "notas": "Catalogo curado de eventos del bus indexado por nombre. Incluye publishers (blueprints con publish/publishAndWait en su pseudocodigo + module.json.events.publishes[]) y subscribers (blueprints con eventos_que_escucho[] + module.json.events.subscribes[]). El validador lo regenera cada vez. NO editar a mano."
+  },
+  "total_eventos": 419,
+  "eventos": {
+    "*.actualizado": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/metricas/module.json",
+          "handler": "onEntityUpdated"
+        }
+      ]
+    },
+    "*.completado": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/metricas/module.json",
+          "handler": "onOperationCompleted"
+        }
+      ]
+    },
+    "*.creado": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/metricas/module.json",
+          "handler": "onEntityCreated"
+        }
+      ]
+    },
+    "*.eliminado": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/metricas/module.json",
+          "handler": "onEntityDeleted"
+        }
+      ]
+    },
+    "*.error": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/metricas/module.json",
+          "handler": "onError"
+        }
+      ]
+    },
+    "admin.agent.creado": {
+      "publishers": [
+        {
+          "source": "modules/admin-panel/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "admin.agent.eliminado": {
+      "publishers": [
+        {
+          "source": "modules/admin-panel/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "admin.plugin.toggled": {
+      "publishers": [
+        {
+          "source": "modules/admin-panel/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "admin.prompt.actualizado": {
+      "publishers": [
+        {
+          "source": "modules/admin-panel/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "admin.prompt.creado": {
+      "publishers": [
+        {
+          "source": "modules/admin-panel/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "agent-observer.consultar.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "agent.execute.failed": {
+      "publishers": [
+        {
+          "source": "modules/conversacion/ai-agent-framework/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/agent-observer/module.json",
+          "handler": "onAgentExecuteFailed"
+        }
+      ]
+    },
+    "agent.execute.progress": {
+      "publishers": [
+        {
+          "source": "modules/conversacion/ai-agent-framework/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/agent-observer/module.json",
+          "handler": "onAgentExecuteProgress"
+        }
+      ]
+    },
+    "agent.execute.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/agent-observer/module.json",
+          "handler": "onAgentExecuteRequest"
+        },
+        {
+          "source": "modules/conversacion/ai-agent-framework/module.json",
+          "handler": "onAgentExecuteRequest"
+        }
+      ]
+    },
+    "agent.execute.response": {
+      "publishers": [
+        {
+          "source": "modules/conversacion/ai-agent-framework/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/agent-observer/module.json",
+          "handler": "onAgentExecuteResponse"
+        }
+      ]
+    },
+    "ai.chat.response": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/memory-rag/module.json",
+          "handler": "onAiChatResponse"
+        }
+      ]
+    },
+    "ai.completion.completed": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/prompt-manager/module.json",
+          "handler": "onAICompletionCompleted"
+        }
+      ]
+    },
+    "ai.request.started": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/prompt-manager/module.json",
+          "handler": "onAIRequestStarted"
+        }
+      ]
+    },
+    "archivo.borrado": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "archivo.borrar.fallido": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "archivo.borrar.solicitado": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onArchivoBorrarSolicitado"
+        }
+      ]
+    },
+    "archivo.leer.fallido": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "archivo.leer.solicitado": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onArchivoLeerSolicitado"
+        }
+      ]
+    },
+    "archivo.leido": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "archivo.listado": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "archivo.listar.fallido": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "archivo.listar.solicitado": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onArchivoListarSolicitado"
+        }
+      ]
+    },
+    "asesoria.paquete.error": {
+      "publishers": [
+        {
+          "source": "modules/facturacion/asesoria/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "asesoria.paquete.generado": {
+      "publishers": [
+        {
+          "source": "modules/facturacion/asesoria/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "bot.command.received": {
+      "publishers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "bot.disabled": {
+      "publishers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "bot.enabled": {
+      "publishers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "bot.file.stored": {
+      "publishers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "bot.message.received": {
+      "publishers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "bot.registered": {
+      "publishers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "bot.unregistered": {
+      "publishers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "boton.pulsado": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "caja.cerrada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cobros/module.json",
+          "handler": "onCajaCerrada"
+        },
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "handler": "onCajaCerrada"
+        },
+        {
+          "source": "modules/pizzepos/cocina-poc/module.json",
+          "handler": "onCajaCerrada"
+        },
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "handler": "onCajaCerrada"
+        },
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "handler": "onCajaCerrada"
+        },
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "handler": "onCajaCerrada"
+        }
+      ]
+    },
+    "carta-scheduler.cambio.aplicado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta-scheduler.cambio.rechazado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta-scheduler.regla.creada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta-scheduler.regla.eliminada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.actualizada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/categorias/module.json",
+          "handler": "onCartaActualizada"
+        },
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "handler": "onCartaActualizada"
+        },
+        {
+          "source": "modules/pizzepos/ingredientes/module.json",
+          "handler": "onCartaActualizada"
+        },
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "handler": "onCartaGenerada"
+        }
+      ]
+    },
+    "carta.borrada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.creada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/menu-generator/menu-generator.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "handler": "_on_carta_creada"
+        }
+      ]
+    },
+    "carta.editada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.generar.fallida": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/menu-generator/menu-generator.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.generar.iniciada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/menu-generator/menu-generator.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.generar.solicitada": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/menu-generator/menu-generator.blueprint.json",
+          "handler": "_on_carta_generar_solicitada"
+        }
+      ]
+    },
+    "carta.get.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.html.generada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.impresion.lista": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.listada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "cartadigital.carta_publica.actualizada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "cartadigital.config.actualizada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "catalogo.actualizado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "handler": "onCatalogoActualizado"
+        },
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "handler": "onCatalogoActualizado"
+        },
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "handler": "onCatalogoActualizado"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "categoria.actualizada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/categorias/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "categoria.creada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/categorias/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "categoria.orden_actualizado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/categorias/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "certificate.expired": {
+      "publishers": [
+        {
+          "source": "modules/certificate-authority/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "certificate.issued": {
+      "publishers": [
+        {
+          "source": "modules/certificate-authority/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "certificate.renewed": {
+      "publishers": [
+        {
+          "source": "modules/certificate-authority/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "certificate.revoked": {
+      "publishers": [
+        {
+          "source": "modules/certificate-authority/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "channel-manager.resolve.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/channel-manager/module.json",
+          "handler": "onResolveRequest"
+        }
+      ]
+    },
+    "channel-manager.resolve.response": {
+      "publishers": [
+        {
+          "source": "modules/channel-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "channel.registered": {
+      "publishers": [
+        {
+          "source": "modules/channel-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "channel.removed": {
+      "publishers": [
+        {
+          "source": "modules/channel-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "channel.resolved": {
+      "publishers": [
+        {
+          "source": "modules/channel-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "channel.updated": {
+      "publishers": [
+        {
+          "source": "modules/channel-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "chat.assistant.saved": {
+      "publishers": [
+        {
+          "source": "modules/conversacion/agent-observer/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "chat.context.enriched": {
+      "publishers": [
+        {
+          "source": "modules/conversacion/memory-conversation-summary/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/conversacion/memory-rag/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/conversacion/memory-user-profile/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "chat.message.saved": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/memory-conversation-summary/module.json",
+          "handler": "onMessageSaved"
+        },
+        {
+          "source": "modules/conversacion/memory-rag/module.json",
+          "handler": "onMessageSaved"
+        },
+        {
+          "source": "modules/conversacion/memory-user-profile/module.json",
+          "handler": "onMessageSaved"
+        }
+      ]
+    },
+    "cobro.iniciado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cobros/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "handler": "onCobroIniciado"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "cobro.procesado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cobros/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "handler": "onCobroProcesado"
+        },
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "handler": "onCobroProcesado"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "cobro.reembolsado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cobros/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "cocina.device_registered": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "cocina.device_unregistered": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "cocina.device_updated": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "cocina.item_avanzado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "cocina.item_preparado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/pizzepos/cocina-poc/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "cocina.item_preparando": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/pizzepos/cocina-poc/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "cocina.item_ticket": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "handler": "onItemTicket"
+        }
+      ]
+    },
+    "cocina.pedido_listo": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/pizzepos/cocina-poc/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "handler": "onCocinaPedidoListo"
+        },
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "handler": "TelefonoStrategy/LlevarStrategy/GlovoStrategy/WhatsAppStrategy.onCocinaPedidoListo"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "comandero-cliente.bundle.fallido": {
+      "publishers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "comandero-cliente.bundle.generado": {
+      "publishers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "comandero-cliente.presentacion.actualizada": {
+      "publishers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "comandero.enviar_cocina": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "handler": "onComanderoEnviarCocina"
+        },
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "handler": "onComanderoEnviarCocina"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "comandero.item_actualizado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "handler": "onComanderoItemActualizado"
+        }
+      ]
+    },
+    "comandero.item_agregado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "handler": "onComanderoItemAgregado"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        },
+        {
+          "source": "modules/pizzepos/variaciones/module.json",
+          "handler": "onComanderoItemAgregado"
+        }
+      ]
+    },
+    "comandero.item_eliminado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "handler": "onComanderoItemEliminado"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "composition.request": {
+      "publishers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/composition-manager/module.json",
+          "handler": "onCompositionRequest"
+        }
+      ]
+    },
+    "composition.response": {
+      "publishers": [
+        {
+          "source": "modules/composition-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "handler": "onCompositionResponse"
+        }
+      ]
+    },
+    "core/+/errors/#": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/system-inspector/module.json",
+          "handler": null
+        }
+      ]
+    },
+    "core/+/events/#": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/system-inspector/module.json",
+          "handler": null
+        }
+      ]
+    },
+    "creativo.alineacion.evaluar": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/recetario-creativo/module.json",
+          "handler": "onEvaluarAlineacion"
+        }
+      ]
+    },
+    "creativo.alineacion.validada": {
+      "publishers": [
+        {
+          "source": "modules/recetario-creativo/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "creativo.iteracion.registrada": {
+      "publishers": [
+        {
+          "source": "modules/recetario-creativo/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "creativo.manifiesto.actualizar": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/recetario-creativo/module.json",
+          "handler": "onActualizarManifiesto"
+        }
+      ]
+    },
+    "creativo.prototipo.creado": {
+      "publishers": [
+        {
+          "source": "modules/recetario-creativo/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "creativo.prototipo.crear": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/recetario-creativo/module.json",
+          "handler": "onCrearPrototipo"
+        }
+      ]
+    },
+    "creativo.prototipo.iterar": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/recetario-creativo/module.json",
+          "handler": "onIterar"
+        }
+      ]
+    },
+    "credential.create.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/credential-manager/module.json",
+          "handler": "onCreateCredential"
+        }
+      ]
+    },
+    "credential.delete.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/credential-manager/module.json",
+          "handler": "onDeleteCredential"
+        }
+      ]
+    },
+    "credential.deleted": {
+      "publishers": [
+        {
+          "source": "modules/credential-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/ai-gateway-poc/module.json",
+          "handler": "onCredentialDeleted"
+        },
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onCredentialDeleted"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onCredentialDeleted"
+        }
+      ]
+    },
+    "credential.resolve.request": {
+      "publishers": [
+        {
+          "source": "modules/conversacion/ai-gateway-poc/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/credential-manager/module.json",
+          "handler": "onResolveRequest"
+        }
+      ]
+    },
+    "credential.resolve.response": {
+      "publishers": [
+        {
+          "source": "modules/credential-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/ai-gateway-poc/module.json",
+          "handler": "onCredentialResponse"
+        }
+      ]
+    },
+    "credential.saved": {
+      "publishers": [
+        {
+          "source": "modules/credential-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "handler": "onCredentialSaved"
+        },
+        {
+          "source": "modules/conversacion/ai-gateway-poc/module.json",
+          "handler": "onCredentialSaved"
+        },
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onCredentialSaved"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onCredentialSaved"
+        }
+      ]
+    },
+    "credential.state": {
+      "publishers": [
+        {
+          "source": "modules/credential-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "credential.state.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/credential-manager/module.json",
+          "handler": "onStateRequest"
+        }
+      ]
+    },
+    "credential.update.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/credential-manager/module.json",
+          "handler": "onUpdateCredential"
+        }
+      ]
+    },
+    "credential.updated": {
+      "publishers": [
+        {
+          "source": "modules/credential-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/ai-gateway-poc/module.json",
+          "handler": "onCredentialSaved"
+        }
+      ]
+    },
+    "cuenta.actualizada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cobros/module.json",
+          "handler": "onCuentaActualizada"
+        },
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "handler": "onCuentaActualizada"
+        },
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "handler": "onCuentaActualizada"
+        },
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "handler": "onCuentaActualizada"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onCuentaActualizada"
+        }
+      ]
+    },
+    "cuenta.cerrada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "handler": "onCuentaExternaCerrada"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onCuentaCerrada"
+        }
+      ]
+    },
+    "cuenta.cerrada_forzada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "cuenta.creada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cobros/module.json",
+          "handler": "onCuentaCreada"
+        },
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "handler": "onCuentaCreada"
+        },
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "handler": "onCuentaCreada"
+        },
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "handler": "onCuentaCreada"
+        },
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "handler": "onCuentaCreada"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onCuentaCreada"
+        }
+      ]
+    },
+    "cuenta.eliminada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "handler": "onCuentaEliminada"
+        },
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "handler": "onCuentaEliminada"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onCuentaEliminada"
+        }
+      ]
+    },
+    "cuenta.estado_cambiado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onCuentaEstadoCambiado"
+        }
+      ]
+    },
+    "db.created": {
+      "publishers": [
+        {
+          "source": "modules/database-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "db.deleted": {
+      "publishers": [
+        {
+          "source": "modules/database-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "db.persist.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/database-manager/module.json",
+          "handler": "onPersistRequest"
+        }
+      ]
+    },
+    "db.persist.response": {
+      "publishers": [
+        {
+          "source": "modules/database-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "db.query.executed": {
+      "publishers": [
+        {
+          "source": "modules/database-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "db.query.request": {
+      "publishers": [
+        {
+          "source": "modules/channel-manager/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/conversacion/memory-conversation-summary/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/conversacion/memory-rag/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/conversacion/memory-user-profile/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/pdf-viewer/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/project-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/database-manager/module.json",
+          "handler": "onQueryRequest"
+        }
+      ]
+    },
+    "db.query.response": {
+      "publishers": [
+        {
+          "source": "modules/database-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/channel-manager/module.json",
+          "handler": "onDbResponse"
+        },
+        {
+          "source": "modules/composition-manager/module.json",
+          "handler": "onDbQueryResponse"
+        },
+        {
+          "source": "modules/conversacion/memory-conversation-summary/module.json",
+          "handler": "onDbQueryResponse"
+        },
+        {
+          "source": "modules/conversacion/memory-rag/module.json",
+          "handler": "onDbQueryResponse"
+        },
+        {
+          "source": "modules/conversacion/memory-user-profile/module.json",
+          "handler": "onDbQueryResponse"
+        },
+        {
+          "source": "modules/project-manager/module.json",
+          "handler": "onDbQueryResponse"
+        },
+        {
+          "source": "modules/prompt-manager/module.json",
+          "handler": "onDbQueryResponse"
+        }
+      ]
+    },
+    "db.schema.init.request": {
+      "publishers": [
+        {
+          "source": "modules/channel-manager/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/project-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/database-manager/module.json",
+          "handler": "onSchemaInitRequest"
+        }
+      ]
+    },
+    "db.schema.init.response": {
+      "publishers": [
+        {
+          "source": "modules/database-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/channel-manager/module.json",
+          "handler": "onDbResponse"
+        },
+        {
+          "source": "modules/prompt-manager/module.json",
+          "handler": "onDbSchemaInitResponse"
+        }
+      ]
+    },
+    "db.schema.initialized": {
+      "publishers": [
+        {
+          "source": "modules/database-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "device.offline": {
+      "publishers": [
+        {
+          "source": "modules/device-registry/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/device-health/module.json",
+          "handler": "onDeviceOffline"
+        }
+      ]
+    },
+    "device.online": {
+      "publishers": [
+        {
+          "source": "modules/device-registry/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/device-health/module.json",
+          "handler": "onDeviceOnline"
+        }
+      ]
+    },
+    "device.register": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/device-registry/module.json",
+          "handler": "onDeviceRegister"
+        }
+      ]
+    },
+    "device.registered": {
+      "publishers": [
+        {
+          "source": "modules/device-registry/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/firmware-manager/module.json",
+          "handler": "onDeviceRegistered"
+        }
+      ]
+    },
+    "device.unregister": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/device-registry/module.json",
+          "handler": "onDeviceUnregister"
+        }
+      ]
+    },
+    "device.unregistered": {
+      "publishers": [
+        {
+          "source": "modules/device-registry/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "device.updated": {
+      "publishers": [
+        {
+          "source": "modules/device-registry/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "dia.iniciado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cobros/module.json",
+          "handler": "onDiaIniciado"
+        },
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "handler": "onDiaIniciado"
+        },
+        {
+          "source": "modules/pizzepos/cocina-poc/module.json",
+          "handler": "onDiaIniciado"
+        },
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "handler": "onDiaIniciado"
+        },
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "handler": "onDiaIniciado"
+        },
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "handler": "onDiaIniciado"
+        }
+      ]
+    },
+    "editor.error": {
+      "publishers": [
+        {
+          "source": "modules/text-editor/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "editor.format.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/text-editor/module.json",
+          "handler": "onFormatRequest"
+        }
+      ]
+    },
+    "editor.format.response": {
+      "publishers": [
+        {
+          "source": "modules/text-editor/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "editor.open.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/text-editor/module.json",
+          "handler": "onOpenRequest"
+        }
+      ]
+    },
+    "editor.open.response": {
+      "publishers": [
+        {
+          "source": "modules/text-editor/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "editor.save.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/text-editor/module.json",
+          "handler": "onSaveRequest"
+        }
+      ]
+    },
+    "editor.saved": {
+      "publishers": [
+        {
+          "source": "modules/text-editor/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "editor.validate.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/text-editor/module.json",
+          "handler": "onValidateRequest"
+        }
+      ]
+    },
+    "editor.validate.response": {
+      "publishers": [
+        {
+          "source": "modules/text-editor/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "embedding.generate.failed": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/memory-rag/module.json",
+          "handler": "onEmbeddingFailed"
+        }
+      ]
+    },
+    "embedding.generate.request": {
+      "publishers": [
+        {
+          "source": "modules/conversacion/memory-rag/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "embedding.generate.response": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/memory-rag/module.json",
+          "handler": "onEmbeddingResponse"
+        }
+      ]
+    },
+    "entity.dependency.added": {
+      "publishers": [
+        {
+          "source": "modules/composition-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "entity.dependency.removed": {
+      "publishers": [
+        {
+          "source": "modules/composition-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "entity.joined_system": {
+      "publishers": [
+        {
+          "source": "modules/composition-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "entity.left_system": {
+      "publishers": [
+        {
+          "source": "modules/composition-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "entity.linked": {
+      "publishers": [
+        {
+          "source": "modules/composition-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "entity.unlinked": {
+      "publishers": [
+        {
+          "source": "modules/composition-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "escandallo.calcular.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "escandallo.coste.calculado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/escandallo/escandallo.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
+          "handler": "_aplicar_coste_calculado"
+        }
+      ]
+    },
+    "esp32.build_completed": {
+      "publishers": [
+        {
+          "source": "modules/esp32-dev/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/firmware-manager/module.json",
+          "handler": "onBuildCompleted"
+        }
+      ]
+    },
+    "esp32.build_failed": {
+      "publishers": [
+        {
+          "source": "modules/esp32-dev/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "esp32.build_started": {
+      "publishers": [
+        {
+          "source": "modules/esp32-dev/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "esp32.project_created": {
+      "publishers": [
+        {
+          "source": "modules/esp32-dev/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "factura.entrada": {
+      "publishers": [
+        {
+          "source": "modules/facturacion/fuentes/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/facturas/module.json",
+          "handler": "onFacturaEntrada"
+        }
+      ]
+    },
+    "factura.error": {
+      "publishers": [
+        {
+          "source": "modules/facturas/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "factura.exportada": {
+      "publishers": [
+        {
+          "source": "modules/facturas/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "factura.procesada": {
+      "publishers": [
+        {
+          "source": "modules/facturas/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "factura.recibida": {
+      "publishers": [
+        {
+          "source": "modules/facturas/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "firmware.build_completed": {
+      "publishers": [
+        {
+          "source": "modules/firmware-builder/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/esp32-flasher/module.json",
+          "handler": "onBuildCompleted"
+        },
+        {
+          "source": "modules/firmware-manager/module.json",
+          "handler": "onBuildCompleted"
+        }
+      ]
+    },
+    "firmware.build_failed": {
+      "publishers": [
+        {
+          "source": "modules/firmware-builder/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "firmware.build_started": {
+      "publishers": [
+        {
+          "source": "modules/firmware-builder/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "firmware.ota_completed": {
+      "publishers": [
+        {
+          "source": "modules/firmware-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/device-health/module.json",
+          "handler": "onOtaCompleted"
+        }
+      ]
+    },
+    "firmware.ota_failed": {
+      "publishers": [
+        {
+          "source": "modules/firmware-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/device-health/module.json",
+          "handler": "onOtaFailed"
+        }
+      ]
+    },
+    "firmware.ota_requested": {
+      "publishers": [
+        {
+          "source": "modules/firmware-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "firmware.registered": {
+      "publishers": [
+        {
+          "source": "modules/firmware-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "flash.completed": {
+      "publishers": [
+        {
+          "source": "modules/esp32-flasher/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "flash.failed": {
+      "publishers": [
+        {
+          "source": "modules/esp32-flasher/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "flash.progress": {
+      "publishers": [
+        {
+          "source": "modules/esp32-flasher/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "flash.serial_output": {
+      "publishers": [
+        {
+          "source": "modules/esp32-flasher/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "flash.started": {
+      "publishers": [
+        {
+          "source": "modules/esp32-flasher/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.append.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onAppendRequest"
+        }
+      ]
+    },
+    "fs.append.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.copy.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onCopyRequest"
+        }
+      ]
+    },
+    "fs.copy.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.delete.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onDeleteRequest"
+        }
+      ]
+    },
+    "fs.delete.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.directory.created": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.exists.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onExistsRequest"
+        }
+      ]
+    },
+    "fs.exists.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.file.created": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.file.deleted": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.file.updated": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.info.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onInfoRequest"
+        }
+      ]
+    },
+    "fs.info.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.list.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onListRequest"
+        }
+      ]
+    },
+    "fs.list.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.mkdir.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onMkdirRequest"
+        }
+      ]
+    },
+    "fs.mkdir.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.move.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onMoveRequest"
+        }
+      ]
+    },
+    "fs.move.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.read.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/tecnicas/tecnicas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onReadRequest"
+        }
+      ]
+    },
+    "fs.read.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/mise-en-place/module.json",
+          "handler": "onFsReadResponse"
+        },
+        {
+          "source": "modules/pase-cocina/module.json",
+          "handler": "onFsReadResponse"
+        },
+        {
+          "source": "modules/recetario-creativo/module.json",
+          "handler": "onFsReadResponse"
+        }
+      ]
+    },
+    "fs.rename.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onMoveRequest"
+        }
+      ]
+    },
+    "fs.rename.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.search.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onSearchRequest"
+        }
+      ]
+    },
+    "fs.search.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.stats.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onStatsRequest"
+        }
+      ]
+    },
+    "fs.stats.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.workdir.changed": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.write.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/tecnicas/tecnicas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onWriteRequest"
+        }
+      ]
+    },
+    "fs.write.response": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/mise-en-place/module.json",
+          "handler": "onFsWriteResponse"
+        },
+        {
+          "source": "modules/pase-cocina/module.json",
+          "handler": "onFsWriteResponse"
+        },
+        {
+          "source": "modules/recetario-creativo/module.json",
+          "handler": "onFsWriteResponse"
+        }
+      ]
+    },
+    "gateway.device_found": {
+      "publishers": [
+        {
+          "source": "modules/gateway-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "gateway.device_lost": {
+      "publishers": [
+        {
+          "source": "modules/gateway-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "gateway.error": {
+      "publishers": [
+        {
+          "source": "modules/gateway-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "gateway.started": {
+      "publishers": [
+        {
+          "source": "modules/gateway-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "gateway.stopped": {
+      "publishers": [
+        {
+          "source": "modules/gateway-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "glovo.pedido_aceptado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "glovo.pedido_listo": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "glovo.pedido_recibido": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "health.alert.offline": {
+      "publishers": [
+        {
+          "source": "modules/device-health/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "health.alert.ota_failed": {
+      "publishers": [
+        {
+          "source": "modules/device-health/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "health.alert.reconnect_loop": {
+      "publishers": [
+        {
+          "source": "modules/device-health/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "health.report": {
+      "publishers": [
+        {
+          "source": "modules/device-health/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "impresion.comanda_generada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "impresion.error": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "impresion.ticket_pieza_generado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "impresion.ticket_venta_generado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "ingrediente.actualizado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/ingredientes/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/ingredientes/module.json",
+          "handler": "onIngredienteActualizadoExterno"
+        }
+      ]
+    },
+    "ingrediente.creado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/ingredientes/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "ingrediente.precio.actualizado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "inventario.ajustado": {
+      "publishers": [
+        {
+          "source": "modules/inventario/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "inventario.confirmado": {
+      "publishers": [
+        {
+          "source": "modules/inventario/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "inventario.reserva.creada": {
+      "publishers": [
+        {
+          "source": "modules/inventario/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "inventario.reserva.expirada": {
+      "publishers": [
+        {
+          "source": "modules/inventario/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "inventario.reserva.liberada": {
+      "publishers": [
+        {
+          "source": "modules/inventario/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "inventario.stock.bajo_minimo": {
+      "publishers": [
+        {
+          "source": "modules/inventario/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "invoke_agent": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/ai-agent-framework/module.json",
+          "handler": "onInvokeAgent"
+        }
+      ]
+    },
+    "invoke_agent.response": {
+      "publishers": [
+        {
+          "source": "modules/conversacion/ai-agent-framework/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "llevar.ticket_creado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "handler": "onLlevarTicketCreado"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "llm.complete.failed": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/ai-agent-framework/module.json",
+          "handler": "onLlmCompleteFailed"
+        },
+        {
+          "source": "modules/conversacion/memory-conversation-summary/module.json",
+          "handler": "onLlmFailed"
+        }
+      ]
+    },
+    "llm.complete.request": {
+      "publishers": [
+        {
+          "source": "modules/conversacion/ai-agent-framework/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/conversacion/memory-conversation-summary/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/ai-gateway-poc/module.json",
+          "handler": "onLlmCompleteRequest"
+        }
+      ]
+    },
+    "llm.complete.response": {
+      "publishers": [
+        {
+          "source": "modules/conversacion/ai-gateway-poc/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/conversacion/ai-agent-framework/module.json",
+          "handler": "onLlmCompleteResponse"
+        },
+        {
+          "source": "modules/conversacion/memory-conversation-summary/module.json",
+          "handler": "onLlmResponse"
+        }
+      ]
+    },
+    "local.pdf.create.request": {
+      "publishers": [
+        {
+          "source": "modules/pdf-viewer/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "marketing.onboarding.completado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "marketing.perfil.actualizado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "menu.generado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "handler": "onMenuGenerado"
+        }
+      ]
+    },
+    "menu.generation.failed": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/menu-generator/menu-generator.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "menu.generation.progress": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/menu-generator/menu-generator.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "menu.validado": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "handler": "onMenuValidado"
+        }
+      ]
+    },
+    "mercadona.categorias.listar.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/escandallo/escandallo.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/mercadona-api/module.json",
+          "handler": "onCategoriasListar"
+        }
+      ]
+    },
+    "mercadona.precio.obtenido": {
+      "publishers": [
+        {
+          "source": "modules/mercadona-api/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "mercadona.producto.obtener.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/escandallo/escandallo.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/mercadona-api/module.json",
+          "handler": "onProductoObtener"
+        }
+      ]
+    },
+    "mesa.abierta": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "handler": "onMesaAbierta"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "mesa.cerrada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "handler": "onMesaCerrada"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "mesa.renombrada": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/impresion/module.json",
+          "handler": "onMesaRenombrada"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onMesaRenombrada"
+        }
+      ]
+    },
+    "metricas.snapshot": {
+      "publishers": [
+        {
+          "source": "modules/metricas/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "notas.actualizado": {
+      "publishers": [
+        {
+          "source": "modules/notas-poc/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "notas.creado": {
+      "publishers": [
+        {
+          "source": "modules/notas-poc/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "notas.eliminado": {
+      "publishers": [
+        {
+          "source": "modules/notas-poc/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "pase.ficha.creada": {
+      "publishers": [
+        {
+          "source": "modules/pase-cocina/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "pase.ficha.crear": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pase-cocina/module.json",
+          "handler": "onCrearFicha"
+        }
+      ]
+    },
+    "pase.ficha.obtener": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pase-cocina/module.json",
+          "handler": "onObtenerFicha"
+        }
+      ]
+    },
+    "pase.fichas.listar": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pase-cocina/module.json",
+          "handler": "onListarFichas"
+        }
+      ]
+    },
+    "pase.incidencia.registrada": {
+      "publishers": [
+        {
+          "source": "modules/pase-cocina/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "pase.incidencia.registrar": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pase-cocina/module.json",
+          "handler": "onRegistrarIncidencia"
+        }
+      ]
+    },
+    "pase.sustitucion.registrada": {
+      "publishers": [
+        {
+          "source": "modules/pase-cocina/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "pase.sustitucion.registrar": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pase-cocina/module.json",
+          "handler": "onRegistrarSustitucion"
+        }
+      ]
+    },
+    "pdf.extract.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pdf-viewer/module.json",
+          "handler": "handleExtractRequest"
+        }
+      ]
+    },
+    "pdf.extract.response": {
+      "publishers": [
+        {
+          "source": "modules/pdf-viewer/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "pdf.list.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pdf-viewer/module.json",
+          "handler": "handleListRequest"
+        }
+      ]
+    },
+    "pdf.list.response": {
+      "publishers": [
+        {
+          "source": "modules/pdf-viewer/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "pdf.metadata.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pdf-viewer/module.json",
+          "handler": "handleMetadataRequest"
+        }
+      ]
+    },
+    "pdf.metadata.response": {
+      "publishers": [
+        {
+          "source": "modules/pdf-viewer/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "pdf.view.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pdf-viewer/module.json",
+          "handler": "handleViewRequest"
+        }
+      ]
+    },
+    "pdf.view.response": {
+      "publishers": [
+        {
+          "source": "modules/pdf-viewer/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "pedido.cancelado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/inventario/module.json",
+          "handler": "onPedidoCancelado"
+        },
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "handler": "onPedidoCancelado"
+        },
+        {
+          "source": "modules/pizzepos/cocina-poc/module.json",
+          "handler": "onPedidoCancelado"
+        }
+      ]
+    },
+    "pedido.completado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/inventario/module.json",
+          "handler": "onPedidoCompletado"
+        },
+        {
+          "source": "modules/pizzepos/cobros/module.json",
+          "handler": "onPedidoCompletado"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "pedido.creado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "handler": "MesaStrategy.onPedidoCreado"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onPedidoCreado"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onPedidoCreado"
+        }
+      ]
+    },
+    "pedido.crear-tienda.response": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onPedidoCrearTiendaResponse"
+        }
+      ]
+    },
+    "pedido.enviado_cocina": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "handler": "onPedidoEnviadoCocina"
+        },
+        {
+          "source": "modules/pizzepos/cocina-poc/module.json",
+          "handler": "onPedidoEnviadoCocina"
+        },
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "pedido.item_actualizado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "pedido.item_agregado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "pedido.item_eliminado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "periferico.abrir-cajon": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cobros/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "handler": "onAbrirCajon"
+        }
+      ]
+    },
+    "periferico.cajon-abierto": {
+      "publishers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "periferico.desregistrar": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "handler": "onDesregistrar"
+        }
+      ]
+    },
+    "periferico.display": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cocina/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "handler": "onDisplay"
+        }
+      ]
+    },
+    "periferico.displayed": {
+      "publishers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "periferico.dispositivo.desregistrado": {
+      "publishers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "periferico.dispositivo.registrado": {
+      "publishers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "periferico.error": {
+      "publishers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "periferico.estado": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "handler": "onEstado"
+        }
+      ]
+    },
+    "periferico.estado.respuesta": {
+      "publishers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "periferico.impreso": {
+      "publishers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "periferico.imprimir": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "handler": "onImprimir"
+        }
+      ]
+    },
+    "periferico.listado": {
+      "publishers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "periferico.listar": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "handler": "onListar"
+        }
+      ]
+    },
+    "periferico.registrar": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/perifericos/module.json",
+          "handler": "onRegistrar"
+        }
+      ]
+    },
+    "plugin.error": {
+      "publishers": [
+        {
+          "source": "modules/plugin-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "plugin.get.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/plugin-manager/module.json",
+          "handler": "onGetPluginRequest"
+        }
+      ]
+    },
+    "plugin.get.response": {
+      "publishers": [
+        {
+          "source": "modules/plugin-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "plugin.list.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/plugin-manager/module.json",
+          "handler": "onListPluginsRequest"
+        }
+      ]
+    },
+    "plugin.list.response": {
+      "publishers": [
+        {
+          "source": "modules/plugin-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "plugin.loaded": {
+      "publishers": [
+        {
+          "source": "modules/plugin-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/admin-panel/module.json",
+          "handler": "onPluginLoaded"
+        }
+      ]
+    },
+    "plugin.reloaded": {
+      "publishers": [
+        {
+          "source": "modules/plugin-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "plugin.unloaded": {
+      "publishers": [
+        {
+          "source": "modules/plugin-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "preset.created": {
+      "publishers": [
+        {
+          "source": "modules/prompt-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "preset.deleted": {
+      "publishers": [
+        {
+          "source": "modules/prompt-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "produccion.compra.calculada": {
+      "publishers": [
+        {
+          "source": "modules/mise-en-place/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "produccion.compra.calcular": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/mise-en-place/module.json",
+          "handler": "onCalcularCompra"
+        }
+      ]
+    },
+    "produccion.escalado.calculado": {
+      "publishers": [
+        {
+          "source": "modules/mise-en-place/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "produccion.escalado.calcular": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/mise-en-place/module.json",
+          "handler": "onCalcularEscalado"
+        }
+      ]
+    },
+    "produccion.plan.obtener": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/mise-en-place/module.json",
+          "handler": "onObtenerPlan"
+        }
+      ]
+    },
+    "produccion.plan.publicado": {
+      "publishers": [
+        {
+          "source": "modules/mise-en-place/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "produccion.plan.publicar": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/mise-en-place/module.json",
+          "handler": "onPublicarPlan"
+        }
+      ]
+    },
+    "produccion.planes.listar": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/mise-en-place/module.json",
+          "handler": "onListarPlanes"
+        }
+      ]
+    },
+    "producto.actualizado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "handler": "onProductoActualizado"
+        },
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "handler": "onProductoActualizado"
+        },
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "handler": "onProductoActualizado"
+        }
+      ]
+    },
+    "producto.creado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "handler": "onProductoCreado"
+        },
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "handler": "onProductoActualizado"
+        },
+        {
+          "source": "modules/pizzepos/ingredientes/module.json",
+          "handler": "onProductoCreado"
+        },
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "handler": "onProductoActualizado"
+        },
+        {
+          "source": "modules/pizzepos/variaciones/module.json",
+          "handler": "onProductoCreado"
+        }
+      ]
+    },
+    "producto.eliminado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "handler": "onProductoEliminado"
+        }
+      ]
+    },
+    "project.activate": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "handler": "onProjectActivate"
+        }
+      ]
+    },
+    "project.activated": {
+      "publishers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
+          "source": "modules/mercadona-api/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
+          "source": "modules/mise-en-place/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
+          "source": "modules/pase-cocina/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
+          "source": "modules/pizzepos/ingredientes/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
+          "source": "modules/pizzepos/tarifas/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
+          "source": "modules/recetario-creativo/module.json",
+          "handler": "onProjectActivated"
+        }
+      ]
+    },
+    "project.active.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "handler": "onGetActiveProjectRequest"
+        }
+      ]
+    },
+    "project.active.response": {
+      "publishers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "project.create": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "handler": "onProjectCreate"
+        }
+      ]
+    },
+    "project.created": {
+      "publishers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "project.deactivated": {
+      "publishers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onProjectDeactivated"
+        },
+        {
+          "source": "modules/mercadona-api/module.json",
+          "handler": "onProjectDeactivated"
+        },
+        {
+          "source": "modules/pizzepos/tarifas/module.json",
+          "handler": "onProjectDeactivated"
+        }
+      ]
+    },
+    "project.delete": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "handler": "onProjectDelete"
+        }
+      ]
+    },
+    "project.deleted": {
+      "publishers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "project.get.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "handler": "onGetProjectRequest"
+        }
+      ]
+    },
+    "project.get.response": {
+      "publishers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/mise-en-place/module.json",
+          "handler": "onProjectGetResponse"
+        },
+        {
+          "source": "modules/pase-cocina/module.json",
+          "handler": "onProjectGetResponse"
+        },
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "handler": "onProjectGetResponse"
+        },
+        {
+          "source": "modules/recetario-creativo/module.json",
+          "handler": "onProjectGetResponse"
+        }
+      ]
+    },
+    "project.list.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "handler": "onListProjectsRequest"
+        }
+      ]
+    },
+    "project.list.response": {
+      "publishers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "project.state": {
+      "publishers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "project.state.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "handler": "onProjectStateRequest"
+        }
+      ]
+    },
+    "project.update": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "handler": "onProjectUpdate"
+        }
+      ]
+    },
+    "project.updated": {
+      "publishers": [
+        {
+          "source": "modules/project-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "prompt.created": {
+      "publishers": [
+        {
+          "source": "modules/prompt-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "prompt.deleted": {
+      "publishers": [
+        {
+          "source": "modules/prompt-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "prompt.get.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/prompt-manager/module.json",
+          "handler": "onPromptGetRequest"
+        }
+      ]
+    },
+    "prompt.get.response": {
+      "publishers": [
+        {
+          "source": "modules/prompt-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "prompt.list.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/prompt-manager/module.json",
+          "handler": "onPromptListRequest"
+        }
+      ]
+    },
+    "prompt.list.response": {
+      "publishers": [
+        {
+          "source": "modules/prompt-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "prompt.updated": {
+      "publishers": [
+        {
+          "source": "modules/prompt-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "receta.actualizada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "receta.creada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "receta.eliminada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "receta.estado.actualizada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "recetas.listar.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/escandallo/escandallo.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "recetas.obtener.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/escandallo/escandallo.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "scheduler.job.completed": {
+      "publishers": [
+        {
+          "source": "modules/scheduler/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "scheduler.job.created": {
+      "publishers": [
+        {
+          "source": "modules/scheduler/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "scheduler.job.deleted": {
+      "publishers": [
+        {
+          "source": "modules/scheduler/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "scheduler.job.disabled": {
+      "publishers": [
+        {
+          "source": "modules/scheduler/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "scheduler.job.enabled": {
+      "publishers": [
+        {
+          "source": "modules/scheduler/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "scheduler.job.failed": {
+      "publishers": [
+        {
+          "source": "modules/scheduler/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "scheduler.job.triggered": {
+      "publishers": [
+        {
+          "source": "modules/scheduler/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "scheduler.job.updated": {
+      "publishers": [
+        {
+          "source": "modules/scheduler/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "security.handshake.failed": {
+      "publishers": [
+        {
+          "source": "modules/security-p2p/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "security.handshake.timeout": {
+      "publishers": [
+        {
+          "source": "modules/security-p2p/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "security.peer.revoked": {
+      "publishers": [
+        {
+          "source": "modules/security-p2p/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "security.peer.trusted": {
+      "publishers": [
+        {
+          "source": "modules/security-p2p/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "security.public-key.request": {
+      "publishers": [
+        {
+          "source": "modules/staff-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/security-p2p/module.json",
+          "handler": "onPublicKeyRequest"
+        }
+      ]
+    },
+    "security.public-key.response": {
+      "publishers": [
+        {
+          "source": "modules/security-p2p/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/staff-manager/module.json",
+          "handler": "onPublicKeyResponse"
+        }
+      ]
+    },
+    "shadow.delta": {
+      "publishers": [
+        {
+          "source": "modules/device-shadow/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "shadow.set_desired": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/device-shadow/module.json",
+          "handler": "onSetDesired"
+        }
+      ]
+    },
+    "shadow.synced": {
+      "publishers": [
+        {
+          "source": "modules/device-shadow/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "shadow.updated": {
+      "publishers": [
+        {
+          "source": "modules/device-shadow/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/firmware-manager/module.json",
+          "handler": "onShadowUpdated"
+        }
+      ]
+    },
+    "shell.error": {
+      "publishers": [
+        {
+          "source": "modules/code-executor/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "shell.exec.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/code-executor/module.json",
+          "handler": "onExecRequest"
+        }
+      ]
+    },
+    "shell.executed": {
+      "publishers": [
+        {
+          "source": "modules/code-executor/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "shell.process.started": {
+      "publishers": [
+        {
+          "source": "modules/code-executor/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "shell.process.stopped": {
+      "publishers": [
+        {
+          "source": "modules/code-executor/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "staff.session.auto_timeout": {
+      "publishers": [
+        {
+          "source": "modules/staff-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "staff.session.manager_close": {
+      "publishers": [
+        {
+          "source": "modules/staff-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "staff.session.tap_in": {
+      "publishers": [
+        {
+          "source": "modules/staff-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "staff.session.tap_out": {
+      "publishers": [
+        {
+          "source": "modules/staff-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "system.created": {
+      "publishers": [
+        {
+          "source": "modules/composition-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "system.deleted": {
+      "publishers": [
+        {
+          "source": "modules/composition-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "system.updated": {
+      "publishers": [
+        {
+          "source": "modules/composition-manager/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "tarifas.config.actualizada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/tarifas/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "handler": "onTarifasConfigActualizada"
+        },
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "handler": "onTarifasConfigActualizada"
+        }
+      ]
+    },
+    "tarifas.config.solicitada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/comandero/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/tarifas/module.json",
+          "handler": "onConfigSolicitada"
+        }
+      ]
+    },
+    "tecnica.actualizada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/tecnicas/tecnicas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "tecnica.creada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/tecnicas/tecnicas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "telefono.pedido_creado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "telegram.answer_callback.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onAnswerCallbackRequest"
+        }
+      ]
+    },
+    "telegram.audio.received": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "handler": "onFileReceived"
+        }
+      ]
+    },
+    "telegram.bot.error": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "telegram.bot.started": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "telegram.bot.stopped": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "telegram.callback.received": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "telegram.command.received": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "handler": "onCommandReceived"
+        }
+      ]
+    },
+    "telegram.contact.received": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "telegram.delete_message.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onDeleteMessageRequest"
+        }
+      ]
+    },
+    "telegram.document.received": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "handler": "onFileReceived"
+        },
+        {
+          "source": "modules/facturacion/fuentes/module.json",
+          "handler": "onTelegramDocument"
+        }
+      ]
+    },
+    "telegram.edit_message.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onEditMessageRequest"
+        }
+      ]
+    },
+    "telegram.get_chat.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onGetChatRequest"
+        }
+      ]
+    },
+    "telegram.get_file.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onGetFileRequest"
+        }
+      ]
+    },
+    "telegram.list_bots.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onListBotsRequest"
+        }
+      ]
+    },
+    "telegram.location.received": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "telegram.message.sent": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "telegram.photo.received": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "handler": "onFileReceived"
+        },
+        {
+          "source": "modules/facturacion/fuentes/module.json",
+          "handler": "onTelegramPhoto"
+        }
+      ]
+    },
+    "telegram.queue.overflow": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "telegram.send.failed": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "telegram.send_document.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onSendDocumentRequest"
+        }
+      ]
+    },
+    "telegram.send_location.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onSendLocationRequest"
+        }
+      ]
+    },
+    "telegram.send_message.request": {
+      "publishers": [
+        {
+          "source": "modules/facturas/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onSendMessageRequest"
+        }
+      ]
+    },
+    "telegram.send_photo.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onSendPhotoRequest"
+        }
+      ]
+    },
+    "telegram.send_video.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onSendVideoRequest"
+        }
+      ]
+    },
+    "telegram.set_commands.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "handler": "onSetCommandsRequest"
+        }
+      ]
+    },
+    "telegram.text.received": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "handler": "onTextReceived"
+        }
+      ]
+    },
+    "telegram.video.received": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "handler": "onFileReceived"
+        }
+      ]
+    },
+    "telegram.voice.received": {
+      "publishers": [
+        {
+          "source": "modules/telegram-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/bot-manager/module.json",
+          "handler": "onFileReceived"
+        }
+      ]
+    },
+    "ui.accion": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/persistencia-comandero/module.json",
+          "handler": "onEvento"
+        }
+      ]
+    },
+    "variacion.rechazada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/variaciones/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "handler": "onVariacionRechazada"
+        }
+      ]
+    },
+    "variacion.validada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/variaciones/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "handler": "onVariacionValidada"
+        }
+      ]
+    },
+    "viabilidad.evaluacion.completada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "viabilidad.evaluacion.descartada": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.envio.fallido": {
+      "publishers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.mensaje.enviado": {
+      "publishers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.mensaje.recibido": {
+      "publishers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.pedido.detectado": {
+      "publishers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.pedido_creado": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.pedido_listo": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/cuentas-canales/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    }
+  }
+}

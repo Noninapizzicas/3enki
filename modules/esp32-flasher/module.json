@@ -10,36 +10,130 @@
   },
   "events": {
     "publishes": [
-      { "event": "flash.started",       "description": "Flash iniciado en un puerto serial. project_id top-level (si fue parte del request) + correlation_id + timestamp." },
-      { "event": "flash.progress",      "description": "Progreso de flash (porcentaje, etapa, mensaje). project_id top-level + correlation_id + timestamp." },
-      { "event": "flash.completed",     "description": "Flash completado exitosamente. project_id top-level + correlation_id + timestamp." },
-      { "event": "flash.failed",        "description": "Flash fallo (cancelacion, exit_code != 0, spawn_error). project_id top-level + correlation_id + timestamp." },
-      { "event": "flash.serial_output", "description": "Linea de salida del monitor serial o de debug remoto MQTT (port=remote:<deviceId>). project_id top-level + correlation_id + timestamp." }
+      {
+        "event": "flash.started",
+        "description": "Flash iniciado en un puerto serial. project_id top-level (si fue parte del request) + correlation_id + timestamp."
+      },
+      {
+        "event": "flash.progress",
+        "description": "Progreso de flash (porcentaje, etapa, mensaje). project_id top-level + correlation_id + timestamp."
+      },
+      {
+        "event": "flash.completed",
+        "description": "Flash completado exitosamente. project_id top-level + correlation_id + timestamp."
+      },
+      {
+        "event": "flash.failed",
+        "description": "Flash fallo (cancelacion, exit_code != 0, spawn_error). project_id top-level + correlation_id + timestamp."
+      },
+      {
+        "event": "flash.serial_output",
+        "description": "Linea de salida del monitor serial o de debug remoto MQTT (port=remote:<deviceId>). project_id top-level + correlation_id + timestamp."
+      }
     ],
     "subscribes": [
-      { "event": "firmware.build_completed", "handler": "onBuildCompleted", "description": "Notifica que hay un binario listo para flashear (auto-suggest en list-ports)." }
+      {
+        "event": "firmware.build_completed",
+        "handler": "onBuildCompleted",
+        "description": "Notifica que hay un binario listo para flashear (auto-suggest en list-ports)."
+      }
     ]
   },
   "ui_handlers": [
-    { "domain": "flash", "action": "list-ports",     "handler": "handleListPorts",   "type": "system_panel", "zone": "lateral_derecha" },
-    { "domain": "flash", "action": "start",          "handler": "handleStart",       "type": "system_panel", "zone": "lateral_derecha" },
-    { "domain": "flash", "action": "status",         "handler": "handleStatus",      "type": "system_panel", "zone": "lateral_derecha" },
-    { "domain": "flash", "action": "cancel",         "handler": "handleCancel",      "type": "system_panel", "zone": "lateral_derecha" },
-    { "domain": "flash", "action": "monitor-start",  "handler": "handleMonitorStart","type": "system_panel", "zone": "lateral_derecha" },
-    { "domain": "flash", "action": "monitor-stop",   "handler": "handleMonitorStop", "type": "system_panel", "zone": "lateral_derecha" },
-    { "domain": "flash", "action": "monitor-send",   "handler": "handleMonitorSend", "type": "system_panel", "zone": "lateral_derecha" },
-    { "domain": "flash", "action": "history",        "handler": "handleHistory",     "type": "system_panel", "zone": "lateral_derecha" },
-    { "domain": "flash", "action": "health",         "handler": "handleHealth",      "type": "system_panel", "zone": "lateral_derecha" },
-    { "domain": "flash", "action": "debug-control",  "handler": "handleDebugControl","type": "system_panel", "zone": "lateral_derecha" },
-    { "domain": "flash", "action": "debug-stream",   "handler": "handleDebugStream", "type": "system_panel", "zone": "lateral_derecha" },
-    { "domain": "flash", "action": "serial-relay",   "handler": "handleSerialRelay", "type": "system_panel", "zone": "lateral_derecha" }
+    {
+      "domain": "flash",
+      "action": "list-ports",
+      "handler": "handleListPorts",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "flash",
+      "action": "start",
+      "handler": "handleStart",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "flash",
+      "action": "status",
+      "handler": "handleStatus",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "flash",
+      "action": "cancel",
+      "handler": "handleCancel",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "flash",
+      "action": "monitor-start",
+      "handler": "handleMonitorStart",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "flash",
+      "action": "monitor-stop",
+      "handler": "handleMonitorStop",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "flash",
+      "action": "monitor-send",
+      "handler": "handleMonitorSend",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "flash",
+      "action": "history",
+      "handler": "handleHistory",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "flash",
+      "action": "health",
+      "handler": "handleHealth",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "flash",
+      "action": "debug-control",
+      "handler": "handleDebugControl",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "flash",
+      "action": "debug-stream",
+      "handler": "handleDebugStream",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "flash",
+      "action": "serial-relay",
+      "handler": "handleSerialRelay",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ],
   "tools": [
     {
       "name": "flash.list_ports",
       "description": "Detecta puertos serial conectados (USB) donde puede haber un ESP32",
       "handler": "handleListPorts",
-      "parameters": { "type": "object", "properties": {} },
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
       "errores_conocidos": []
     },
     {
@@ -49,23 +143,66 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "port": { "type": "string", "description": "Puerto serial (ej: /dev/ttyUSB0)" },
-          "binary_path": { "type": "string", "description": "Ruta al archivo .bin" },
-          "method": { "type": "string", "enum": ["esptool", "platformio"], "description": "Metodo de flash (default esptool)" },
-          "baud": { "type": "number", "description": "Baud rate (default 460800)" },
-          "flash_mode": { "type": "string", "enum": ["qio", "qout", "dio", "dout"] },
-          "flash_freq": { "type": "string", "enum": ["20m", "26m", "40m", "80m"] },
-          "erase_before": { "type": "boolean" },
-          "project_dir": { "type": "string", "description": "Directorio del proyecto PlatformIO (auto-detect si esta vacio)" },
-          "project_id": { "type": "string", "description": "Multi-tenant project_id (opcional)" }
+          "port": {
+            "type": "string",
+            "description": "Puerto serial (ej: /dev/ttyUSB0)"
+          },
+          "binary_path": {
+            "type": "string",
+            "description": "Ruta al archivo .bin"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "esptool",
+              "platformio"
+            ],
+            "description": "Metodo de flash (default esptool)"
+          },
+          "baud": {
+            "type": "number",
+            "description": "Baud rate (default 460800)"
+          },
+          "flash_mode": {
+            "type": "string",
+            "enum": [
+              "qio",
+              "qout",
+              "dio",
+              "dout"
+            ]
+          },
+          "flash_freq": {
+            "type": "string",
+            "enum": [
+              "20m",
+              "26m",
+              "40m",
+              "80m"
+            ]
+          },
+          "erase_before": {
+            "type": "boolean"
+          },
+          "project_dir": {
+            "type": "string",
+            "description": "Directorio del proyecto PlatformIO (auto-detect si esta vacio)"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Multi-tenant project_id (opcional)"
+          }
         },
-        "required": ["port", "binary_path"]
+        "required": [
+          "port",
+          "binary_path"
+        ]
       },
       "errores_conocidos": [
-        { "code": "INVALID_INPUT",          "cuando": "port o binary_path ausentes, o port con formato invalido" },
-        { "code": "RESOURCE_NOT_FOUND",     "cuando": "binary_path no existe o port no accesible o no se encuentra platformio.ini" },
-        { "code": "CONFLICT_STATE",         "cuando": "puerto ya en uso por otro flash activo" },
-        { "code": "DEPENDENCY_UNAVAILABLE", "cuando": "esptool/platformio no estan en PATH" }
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "CONFLICT_STATE",
+        "UPSTREAM_UNREACHABLE"
       ]
     },
     {
@@ -74,10 +211,15 @@
       "handler": "handleStatus",
       "parameters": {
         "type": "object",
-        "properties": { "flash_id": { "type": "string", "description": "ID de flash especifico (opcional)" } }
+        "properties": {
+          "flash_id": {
+            "type": "string",
+            "description": "ID de flash especifico (opcional)"
+          }
+        }
       },
       "errores_conocidos": [
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "flash_id no existe ni en activos ni en historial" }
+        "RESOURCE_NOT_FOUND"
       ]
     },
     {
@@ -87,8 +229,14 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "limit": { "type": "number", "description": "Numero maximo de entradas (default 50)" },
-          "port": { "type": "string", "description": "Filtrar por puerto" }
+          "limit": {
+            "type": "number",
+            "description": "Numero maximo de entradas (default 50)"
+          },
+          "port": {
+            "type": "string",
+            "description": "Filtrar por puerto"
+          }
         }
       },
       "errores_conocidos": []
@@ -99,12 +247,18 @@
       "handler": "handleCancel",
       "parameters": {
         "type": "object",
-        "properties": { "flash_id": { "type": "string" } },
-        "required": ["flash_id"]
+        "properties": {
+          "flash_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "flash_id"
+        ]
       },
       "errores_conocidos": [
-        { "code": "INVALID_INPUT",      "cuando": "flash_id ausente" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "flash_id no encontrado o ya termino" }
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND"
       ]
     },
     {
@@ -114,15 +268,24 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "port": { "type": "string" },
-          "baud": { "type": "number", "description": "Baud rate (default 115200)" },
-          "project_id": { "type": "string" }
+          "port": {
+            "type": "string"
+          },
+          "baud": {
+            "type": "number",
+            "description": "Baud rate (default 115200)"
+          },
+          "project_id": {
+            "type": "string"
+          }
         },
-        "required": ["port"]
+        "required": [
+          "port"
+        ]
       },
       "errores_conocidos": [
-        { "code": "INVALID_INPUT",  "cuando": "port ausente" },
-        { "code": "CONFLICT_STATE", "cuando": "monitor ya activo o flash en ese puerto" }
+        "INVALID_INPUT",
+        "CONFLICT_STATE"
       ]
     },
     {
@@ -131,12 +294,18 @@
       "handler": "handleMonitorStop",
       "parameters": {
         "type": "object",
-        "properties": { "port": { "type": "string" } },
-        "required": ["port"]
+        "properties": {
+          "port": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "port"
+        ]
       },
       "errores_conocidos": [
-        { "code": "INVALID_INPUT",      "cuando": "port ausente" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "no hay monitor activo en ese puerto" }
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND"
       ]
     },
     {
@@ -146,15 +315,23 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "port": { "type": "string" },
-          "data": { "type": "string", "description": "Texto a enviar (se anade newline al final)" }
+          "port": {
+            "type": "string"
+          },
+          "data": {
+            "type": "string",
+            "description": "Texto a enviar (se anade newline al final)"
+          }
         },
-        "required": ["port", "data"]
+        "required": [
+          "port",
+          "data"
+        ]
       },
       "errores_conocidos": [
-        { "code": "INVALID_INPUT",      "cuando": "port o data ausentes" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "no hay monitor activo en ese puerto" },
-        { "code": "FILESYSTEM_ERROR",   "cuando": "fallo de escritura al puerto" }
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UNKNOWN_ERROR"
       ]
     }
   ],
@@ -166,7 +343,10 @@
     "flash_baud": 460800,
     "monitor_baud": 115200,
     "flash_timeout_ms": 120000,
-    "serial_patterns": ["/dev/ttyUSB*", "/dev/ttyACM*"],
+    "serial_patterns": [
+      "/dev/ttyUSB*",
+      "/dev/ttyACM*"
+    ],
     "max_monitor_buffer": 5000,
     "max_history": 200,
     "persistence": {
@@ -175,7 +355,13 @@
       "external": "MQTT bridge para enki/<project>/debug/<device> + spawn esptool/platformio + cat/stty para serial",
       "restart_resilient": false,
       "concurrency": "single-instance",
-      "lost_on_restart": ["activeFlashes", "activeMonitors", "flashHistory", "lastBuild", "debugBuffers"]
+      "lost_on_restart": [
+        "activeFlashes",
+        "activeMonitors",
+        "flashHistory",
+        "lastBuild",
+        "debugBuffers"
+      ]
     }
   },
   "observability": {

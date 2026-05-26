@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/creativo.alineacion.validada.schema.json",
+  "title": "creativo.alineacion.validada — payload schema",
+  "description": "Evento emitido por recetario-creativo tras cruzar una receta o prototipo con el manifiesto creativo del proyecto (filosofia culinaria, valores, identidad). Reporta cuanto se alinea (score 0-100) y que aspectos disuenan. El chef decide si ajustar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "objeto_tipo",
+    "objeto_id",
+    "score",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "objeto_tipo":    { "enum": ["receta", "prototipo"] },
+    "objeto_id":      { "type": "string", "minLength": 1, "description": "receta_id o prototipo_id segun objeto_tipo." },
+    "score":          { "type": "number", "minimum": 0, "maximum": 100, "description": "Alineacion 0-100. >=75 considerado coherente." },
+    "disuenan":       { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "resaltan":       { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

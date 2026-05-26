@@ -40,19 +40,17 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 const DEFAULT_DB_TIMEOUT_MS = 10000;
 
 const VALID_LINK_TYPES = ['inspired_by', 'related_to', 'evolved_from'];
 const VALID_DEP_TYPES = ['data', 'code', 'api', 'context'];
 
-class CompositionManagerModule {
+class CompositionManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'composition-manager';
     this.version = '2.0.0';
-
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
     this.uiHandler = null;
     this.config    = null;
 
@@ -208,7 +206,7 @@ class CompositionManagerModule {
   async _createSystem(name, description, metadata = {}, correlation_id) {
     if (!name || name.trim().length === 0) {
       throw Object.assign(new Error('System name is required'),
-        { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'name' } });
+        { _code: 'INVALID_INPUT', _details: { kind: 'domain', field: 'name' } });
     }
 
     const systemId = crypto.randomUUID();
@@ -354,7 +352,7 @@ class CompositionManagerModule {
         return { entityId, systemId, systemName: system.name, role };
       }
       throw Object.assign(new Error('Entity is already in another system'),
-        { _code: 'CONFLICT', _details: {
+        { _code: 'CONFLICT_STATE', _details: {
           kind: 'state', state: 'already_assigned',
           current_system: existing[0].system_id
         } });
@@ -434,7 +432,7 @@ class CompositionManagerModule {
   async _linkEntities(sourceId, targetId, linkType, reason, correlation_id) {
     if (sourceId === targetId) {
       throw Object.assign(new Error('Cannot link an entity to itself'),
-        { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'targetId' } });
+        { _code: 'INVALID_INPUT', _details: { kind: 'domain', field: 'targetId' } });
     }
 
     const existing = await this._queryDb(
@@ -444,7 +442,7 @@ class CompositionManagerModule {
     );
     if (existing.length > 0) {
       throw Object.assign(new Error(`Link already exists with type '${linkType}'`),
-        { _code: 'CONFLICT', _details: { existing_link_id: existing[0].id } });
+        { _code: 'CONFLICT_STATE', _details: { existing_link_id: existing[0].id } });
     }
 
     const linkId = crypto.randomUUID();
@@ -541,7 +539,7 @@ class CompositionManagerModule {
   async _addDependency(entityId, dependsOnId, dependencyType, description, correlation_id) {
     if (entityId === dependsOnId) {
       throw Object.assign(new Error('An entity cannot depend on itself'),
-        { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'dependsOnId' } });
+        { _code: 'INVALID_INPUT', _details: { kind: 'domain', field: 'dependsOnId' } });
     }
 
     const existing = await this._queryDb(
@@ -551,7 +549,7 @@ class CompositionManagerModule {
     );
     if (existing.length > 0) {
       throw Object.assign(new Error('Dependency already exists'),
-        { _code: 'CONFLICT', _details: { existing_dependency_id: existing[0].id } });
+        { _code: 'CONFLICT_STATE', _details: { existing_dependency_id: existing[0].id } });
     }
 
     const depId = crypto.randomUUID();
@@ -722,7 +720,7 @@ class CompositionManagerModule {
           break;
         default:
           throw Object.assign(new Error(`Unknown composition action: ${action}`),
-            { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'action' } });
+            { _code: 'INVALID_INPUT', _details: { kind: 'domain', field: 'action' } });
       }
 
       await this.eventBus.publish('composition.response', {
@@ -774,7 +772,7 @@ class CompositionManagerModule {
   async handleUISystemGet(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'System ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'System ID is required',
         { kind: 'domain', field: 'id' });
       const system = await this._getSystem(id, crypto.randomUUID());
       if (!system) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'System not found',
@@ -788,7 +786,7 @@ class CompositionManagerModule {
   async handleUISystemUpdate(data) {
     try {
       const { id, name, description, metadata } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'System ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'System ID is required',
         { kind: 'domain', field: 'id' });
 
       const updates = {};
@@ -806,7 +804,7 @@ class CompositionManagerModule {
   async handleUISystemDelete(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'System ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'System ID is required',
         { kind: 'domain', field: 'id' });
       const result = await this._deleteSystem(id, crypto.randomUUID());
       return { status: 200, data: { deleted: true, ...result } };
@@ -818,9 +816,9 @@ class CompositionManagerModule {
   async handleUISystemAddEntity(data) {
     try {
       const { systemId, projectId, role } = data || {};
-      if (!systemId) return this._errorResponse(400, 'VALIDATION_FAILED', 'System ID is required',
+      if (!systemId) return this._errorResponse(400, 'INVALID_INPUT', 'System ID is required',
         { kind: 'domain', field: 'systemId' });
-      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+      if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'projectId' });
       const result = await this._addEntityToSystem(systemId, projectId, role, crypto.randomUUID());
       return { status: 200, data: { added: true, ...result } };
@@ -832,7 +830,7 @@ class CompositionManagerModule {
   async handleUISystemRemoveEntity(data) {
     try {
       const { projectId } = data || {};
-      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+      if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'projectId' });
       const result = await this._removeEntityFromSystem(projectId, crypto.randomUUID());
       return { status: 200, data: { removed: true, ...result } };
@@ -858,14 +856,14 @@ class CompositionManagerModule {
   async handleUILink(data) {
     try {
       const { sourceId, targetId, linkType, reason } = data || {};
-      if (!sourceId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Source ID is required',
+      if (!sourceId) return this._errorResponse(400, 'INVALID_INPUT', 'Source ID is required',
         { kind: 'domain', field: 'sourceId' });
-      if (!targetId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Target ID is required',
+      if (!targetId) return this._errorResponse(400, 'INVALID_INPUT', 'Target ID is required',
         { kind: 'domain', field: 'targetId' });
-      if (!linkType) return this._errorResponse(400, 'VALIDATION_FAILED', 'Link type is required',
+      if (!linkType) return this._errorResponse(400, 'INVALID_INPUT', 'Link type is required',
         { kind: 'domain', field: 'linkType' });
       if (!VALID_LINK_TYPES.includes(linkType)) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           `Invalid link type. Must be one of: ${VALID_LINK_TYPES.join(', ')}`,
           { kind: 'domain', field: 'linkType', allowed: VALID_LINK_TYPES });
       }
@@ -879,7 +877,7 @@ class CompositionManagerModule {
   async handleUIUnlink(data) {
     try {
       const { linkId } = data || {};
-      if (!linkId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Link ID is required',
+      if (!linkId) return this._errorResponse(400, 'INVALID_INPUT', 'Link ID is required',
         { kind: 'domain', field: 'linkId' });
       await this._unlinkEntities(linkId, crypto.randomUUID());
       return { status: 200, data: { unlinked: true, linkId } };
@@ -891,7 +889,7 @@ class CompositionManagerModule {
   async handleUIGetLinks(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Entity ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Entity ID is required',
         { kind: 'domain', field: 'id' });
       const links = await this._getEntityLinks(id, crypto.randomUUID());
       return { status: 200, data: { projectId: id, links, count: links.length } };
@@ -903,7 +901,7 @@ class CompositionManagerModule {
   async handleUIGetRelated(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Entity ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Entity ID is required',
         { kind: 'domain', field: 'id' });
       const relatedEntities = await this._getRelatedEntities(id, crypto.randomUUID());
       return {
@@ -922,13 +920,13 @@ class CompositionManagerModule {
   async handleUIAddDependency(data) {
     try {
       const { projectId, dependsOnProjectId, dependencyType, description } = data || {};
-      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Entity ID is required',
+      if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'Entity ID is required',
         { kind: 'domain', field: 'projectId' });
-      if (!dependsOnProjectId) return this._errorResponse(400, 'VALIDATION_FAILED',
+      if (!dependsOnProjectId) return this._errorResponse(400, 'INVALID_INPUT',
         'Depends-on entity ID is required',
         { kind: 'domain', field: 'dependsOnProjectId' });
       if (dependencyType && !VALID_DEP_TYPES.includes(dependencyType)) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           `Invalid dependency type. Must be one of: ${VALID_DEP_TYPES.join(', ')}`,
           { kind: 'domain', field: 'dependencyType', allowed: VALID_DEP_TYPES });
       }
@@ -943,7 +941,7 @@ class CompositionManagerModule {
   async handleUIRemoveDependency(data) {
     try {
       const { dependencyId } = data || {};
-      if (!dependencyId) return this._errorResponse(400, 'VALIDATION_FAILED',
+      if (!dependencyId) return this._errorResponse(400, 'INVALID_INPUT',
         'Dependency ID is required',
         { kind: 'domain', field: 'dependencyId' });
       await this._removeDependency(dependencyId, crypto.randomUUID());
@@ -956,7 +954,7 @@ class CompositionManagerModule {
   async handleUIGetDependencies(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Entity ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Entity ID is required',
         { kind: 'domain', field: 'id' });
       const dependencies = await this._getDependencies(id, crypto.randomUUID());
       return { status: 200, data: { projectId: id, dependencies, count: dependencies.length } };
@@ -968,7 +966,7 @@ class CompositionManagerModule {
   async handleUIGetDependents(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Entity ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Entity ID is required',
         { kind: 'domain', field: 'id' });
       const dependents = await this._getDependents(id, crypto.randomUUID());
       return { status: 200, data: { projectId: id, dependents, count: dependents.length } };
@@ -981,46 +979,17 @@ class CompositionManagerModule {
   // Helpers POC2 (transferibles) + auxiliares
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED' ? 400 :
-                   code === 'RESOURCE_NOT_FOUND' ? 404 :
-                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                   code === 'CONFLICT' ? 409 : 500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('composition-manager.errors', { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('cannot link') || msg.includes('cannot depend')) return 'VALIDATION_FAILED';
-    if (msg.includes('already') || msg.includes('another system')) return 'CONFLICT';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
-    return 'INTERNAL_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
-  }
-
   _safeParse(val) {
     if (typeof val === 'object') return val;
     try { return JSON.parse(val); } catch { return {}; }
+  }
+
+  // Reglas especificas del dominio del modulo. BaseModule cubre los keywords genericos.
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('cannot link') || msg.includes('cannot depend')) return 'INVALID_INPUT';
+    if (msg.includes('already') || msg.includes('another system')) return 'CONFLICT_STATE';
+    return super._classifyHandlerError(err);
   }
 }
 

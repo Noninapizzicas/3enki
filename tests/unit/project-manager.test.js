@@ -9,7 +9,7 @@
  *  - getOrCreateDefaultConversation con cache pendingDefaultConversations
  *    (modelo "una via fija" — race protection).
  *  - Shape canonico de respuestas: { status, data | error: { code, message, details? } }.
- *  - error.code del catalogo (VALIDATION_FAILED, RESOURCE_NOT_FOUND, CONFLICT, INTERNAL_ERROR).
+ *  - error.code del catalogo (INVALID_INPUT, RESOURCE_NOT_FOUND, CONFLICT, UNKNOWN_ERROR).
  *  - correlation_id propagado en publishes.
  *  - reactivateExistingProjects re-emite project.activated tras restart.
  *
@@ -225,13 +225,13 @@ function isCanonicalError(result) {
   // Group 2: Validacion canonica
   // ==========================================
 
-  await testAsync('handleUIGet sin id → 400 VALIDATION_FAILED canonico', async () => {
+  await testAsync('handleUIGet sin id → 400 INVALID_INPUT canonico', async () => {
     const mocks = makeMocks();
     const { module: m, basePath } = await instantiate(mocks);
     const result = await m.handleUIGet({});
     assert.ok(isCanonicalError(result));
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(result.error.details.field, 'id');
     await m.onUnload();
     await cleanup(basePath);
@@ -254,7 +254,7 @@ function isCanonicalError(result) {
     const { module: m, basePath } = await instantiate(mocks);
     const result = await m.handleUICreate({});
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(result.error.details.field, 'name');
     await m.onUnload();
     await cleanup(basePath);
@@ -308,7 +308,7 @@ function isCanonicalError(result) {
     await m.handleUIActivate({ id });
     const result = await m.handleUIDelete({ id });
     assert.strictEqual(result.status, 409);
-    assert.strictEqual(result.error.code, 'CONFLICT');
+    assert.strictEqual(result.error.code, 'CONFLICT_STATE');
     await m.onUnload();
     await cleanup(basePath);
   });
@@ -319,7 +319,7 @@ function isCanonicalError(result) {
     await m.handleUICreate({ name: 'Mismo Nombre' });
     const result = await m.handleUICreate({ name: 'Mismo Nombre' });
     assert.strictEqual(result.status, 409);
-    assert.strictEqual(result.error.code, 'CONFLICT');
+    assert.strictEqual(result.error.code, 'CONFLICT_STATE');
     await m.onUnload();
     await cleanup(basePath);
   });
@@ -381,7 +381,7 @@ function isCanonicalError(result) {
     const id = created.data.project.id;
     const result = await m.handleUIDeactivate({ id });
     assert.strictEqual(result.status, 409);
-    assert.strictEqual(result.error.code, 'CONFLICT');
+    assert.strictEqual(result.error.code, 'CONFLICT_STATE');
     await m.onUnload();
     await cleanup(basePath);
   });
@@ -475,12 +475,12 @@ function isCanonicalError(result) {
     await cleanup(basePath);
   });
 
-  await testAsync('handleCreateProject sin name → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleCreateProject sin name → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m, basePath } = await instantiate(mocks);
     const result = await m.handleCreateProject({ body: {} });
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     await m.onUnload();
     await cleanup(basePath);
   });
@@ -513,12 +513,12 @@ function isCanonicalError(result) {
     await cleanup(basePath);
   });
 
-  await testAsync('handleUIAddFeatures sin id → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleUIAddFeatures sin id → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m, basePath } = await instantiate(mocks);
     const result = await m.handleUIAddFeatures({ features: ['x'] });
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     await m.onUnload();
     await cleanup(basePath);
   });
@@ -540,7 +540,7 @@ function isCanonicalError(result) {
     const id = created.data.project.id;
     const result = await m.handleUIAddFeatures({ id, features: [] });
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(result.error.details.field, 'features');
     await m.onUnload();
     await cleanup(basePath);
@@ -552,8 +552,8 @@ function isCanonicalError(result) {
 
   await testAsync('_errorResponse produce shape canonico', async () => {
     const m = new ProjectManagerModule();
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'bad');
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'bad' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'bad');
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'bad' } });
     const r2 = m._errorResponse(404, 'RESOURCE_NOT_FOUND', 'gone', { entity_type: 'project' });
     assert.deepStrictEqual(r2, { status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: 'gone', details: { entity_type: 'project' } } });
   });
@@ -561,10 +561,10 @@ function isCanonicalError(result) {
   await testAsync('_classifyHandlerError mapea correctamente', async () => {
     const m = new ProjectManagerModule();
     assert.strictEqual(m._classifyHandlerError(new Error('Project not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('name is required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('cannot delete active')), 'CONFLICT');
-    assert.strictEqual(m._classifyHandlerError(new Error('already exists')), 'CONFLICT');
-    assert.strictEqual(m._classifyHandlerError(new Error('boom')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('name is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('cannot delete active')), 'CONFLICT_STATE');
+    assert.strictEqual(m._classifyHandlerError(new Error('already exists')), 'CONFLICT_STATE');
+    assert.strictEqual(m._classifyHandlerError(new Error('boom')), 'UNKNOWN_ERROR');
   });
 
   await testAsync('_slugify cubre español + special chars', async () => {

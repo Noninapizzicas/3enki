@@ -147,7 +147,7 @@ async function testAsync(description, fn) {
     assert.ok(!('result' in resps[0]));
   });
 
-  await testAsync('handler con error string suelto -> envuelto en INTERNAL_ERROR canonico', async () => {
+  await testAsync('handler con error string suelto -> envuelto en UNKNOWN_ERROR canonico', async () => {
     const bus = makeMiniBus();
     const loader = makeLoader(bus);
     const instance = { run: async () => ({ status: 500, error: 'oops' }) };
@@ -155,11 +155,11 @@ async function testAsync(description, fn) {
 
     await bus.publish('m.run', { request_id: 'r-x' });
     const resp = publishedOf(bus, 'm.run.response')[0];
-    assert.strictEqual(resp.error.code, 'INTERNAL_ERROR');
+    assert.strictEqual(resp.error.code, 'UNKNOWN_ERROR');
     assert.strictEqual(resp.error.message, 'oops');
   });
 
-  await testAsync('handler que lanza excepcion -> publica response con INTERNAL_ERROR + message', async () => {
+  await testAsync('handler que lanza excepcion -> publica response con UNKNOWN_ERROR + message', async () => {
     const bus = makeMiniBus();
     const loader = makeLoader(bus);
     const instance = { boom: async () => { throw new Error('kaboom'); } };
@@ -168,7 +168,7 @@ async function testAsync(description, fn) {
     await bus.publish('m.boom', { request_id: 'r-b' });
     const resp = publishedOf(bus, 'm.boom.response')[0];
     assert.strictEqual(resp.request_id, 'r-b');
-    assert.strictEqual(resp.error.code, 'INTERNAL_ERROR');
+    assert.strictEqual(resp.error.code, 'UNKNOWN_ERROR');
     assert.strictEqual(resp.error.message, 'kaboom');
   });
 

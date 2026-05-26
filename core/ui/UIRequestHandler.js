@@ -37,7 +37,7 @@ const STATUS = {
   BAD_REQUEST: 400,
   NOT_FOUND: 404,
   CONFLICT: 409,
-  INTERNAL_ERROR: 500
+  UNKNOWN_ERROR: 500
 };
 
 // =============================================================================
@@ -67,7 +67,7 @@ class NotFoundError extends UIRequestError {
 
 class ConflictError extends UIRequestError {
   constructor(message = 'Resource already exists') {
-    super(STATUS.CONFLICT, 'CONFLICT', message);
+    super(STATUS.CONFLICT, 'CONFLICT_STATE', message);
   }
 }
 
@@ -321,8 +321,8 @@ class UIRequestHandler {
 
     } catch (error) {
       // Determine status and code from error
-      const status = error.status || STATUS.INTERNAL_ERROR;
-      const code = error.code || 'INTERNAL_ERROR';
+      const status = error.status || STATUS.UNKNOWN_ERROR;
+      const code = error.code || 'UNKNOWN_ERROR';
       const message = error.message || 'An unexpected error occurred';
 
       await this._sendError(request_id, status, code, message);

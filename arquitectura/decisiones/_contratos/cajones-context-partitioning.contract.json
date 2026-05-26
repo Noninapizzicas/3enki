@@ -1,0 +1,407 @@
+{
+  "_doc": "Contrato TRANSVERSAL que canoniza el patron 'cajones' (context partitioning + lazy loading estilo buscador) aplicado al system prompt de los modulos blueprint-driven. Sustituye el modelo actual 'todo el blueprint cargado en cada turno' por 'catalogo rankeado en system prompt + apertura explicita del cajon cuando el LLM lo necesita'. Coexiste con llm-runtime-discipline (los cajones son la implementacion estructural que reduce la superficie sobre la que la disciplina opera). Aplica SOLO a modulos blueprint-driven en v1 (10 modulos: 4 subsistema-recetario + 6 subsistema-carta). NO aplica a chat principal, agentes, memorias en v1. Anyade tambien una capa UX/UI sobre el motor: foco dinamico (el LLM mueve la pagina activa cuando la conversacion cambia de dominio) y barra lateral de destinos relacionados (grafo auto-construido desde publishAndWait de los blueprints).",
+
+  "id": "cajones-context-partitioning",
+  "version": "1.0.0",
+  "creada": "2026-05-23",
+  "supersedes_nota": "Primera version. Origen: documento de propuesta arquitectura/decisiones/propuestas/cajones-context-partitioning.md (2026-05-19, ampliado 2026-05-22 con seccion 5.5 de foco dinamico). 8 decisiones abiertas cerradas en sesion del 2026-05-23 con las recomendaciones por defecto del propio documento: persistencia A (cierre auto al siguiente turno), aplicabilidad solo-blueprints, decision de apertura por LLM autonomo, sin niveles de profundidad, detector de foco por LLM autonomo, banner en chat al cambiar foco, cajones planos sin archivadores anidados, almacenamiento inline en blueprint hijo. Pre-requisito tools.contract v1.2 cumplido (mergeado 2026-05-20).",
+
+  "objetivo": "Producir UN JSON output (_outputs/cajones-context-partitioning.json) con el estado del patron en el repo: que modulos blueprint-driven tienen cajones habilitados, que tools canonicas del subsistema cajones estan registradas en ai-gateway, que blueprints exponen mas de N operaciones (umbral de utilidad), que overrides cajon_descripcion existen, que paginas_relacionadas declaradas existen. El validator cruza las 4 tools canonicas del subsistema con el registro de ai-gateway y detecta drift: tool ausente, tool registrada fuera del patron, blueprint con cajones_enabled pero sin operaciones, override cajon_descripcion sobre operacion fantasma.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/cajones-context-partitioning.contract.json (este archivo)",
+      "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json (paradigma base)",
+      "arquitectura/decisiones/_contratos/llm-runtime-discipline.contract.json (disciplina coexistente)",
+      "arquitectura/decisiones/_contratos/tools.contract.json (v1.2+ — las 4 tools del subsistema cajones se auto-wirean por este patron)"
+    ],
+    "obligatorios_si_existen": [
+      "modules/*/<modulo>.blueprint.json (hijos concretos — para verificar cajones_enabled + cardinalidad de operaciones)",
+      "modules/*/module.json (paginas_relacionadas declarado opcional)",
+      "modules/conversacion/ai-gateway/index.js (motor donde viven las 4 tools nuevas + _extractCajones + _rankCajones)"
+    ],
+    "opcionales_para_contexto": [
+      "arquitectura/decisiones/propuestas/cajones-context-partitioning.md (documento de diseno autoritativo)",
+      "frontend/src/lib/modules/panels.ts (zona 'related-pages' donde vive la barra lateral)",
+      "frontend/src/lib/components/layout/RelatedPagesBar.svelte (componente de la barra)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL LLM NO NECESITA VER TODO EL CATALOGO PARA RAZONAR. Ver todo distrae. Ver el indice + abrir solo lo necesario es como un humano usa un buscador o una despensa con cajones. El patron Google es literalmente esto a escala web.",
+
+    "CATALOGO ES INDICE, NO CONTENIDO. El system prompt principal lleva descripciones de 1 linea por cajon. El pseudocodigo completo de una operacion se inyecta SOLO cuando el LLM abre ese cajon explicitamente. Mismo modelo que el snippet vs el documento completo en un buscador.",
+
+    "EL LLM DECIDE QUE CAJON ABRIR, NO UN ORQUESTADOR. La metafora del usuario coloca la decision en quien razona, no en quien sirve. Tener un router externo que precargue por intencion del usuario es complejidad sin valor — el LLM hace matching semantico mejor que cualquier heuristica.",
+
+    "RANKING SIMPLE GANA A MODELO ENTRENADO. Recencia + page activo basta para ~30 cajones. Embeddings + cosine similarity son overkill (mas latencia, mas dependencia, no aportan en esta escala).",
+
+    "CATALOGO AUTO-GENERADO DE LO QUE YA EXISTE. Los blueprints ya tienen operaciones declaradas con input + pseudocodigo. El catalogo se extrae de ahi. Override opcional para refinar. Cero trabajo manual obligatorio al migrar.",
+
+    "CIERRE AUTOMATICO AL SIGUIENTE TURNO. El cajon abierto es contexto efimero del turno actual. Al siguiente turno solo persiste el catalogo. Mismo modelo que cerrar pestana del navegador entre busquedas.",
+
+    "EL FOCO ACOMPANA A LA CONVERSACION. Si el usuario en page=recetas pregunta algo de viabilidad, la pagina se mueve con la conversacion (LLM autonomo via chat.cambiar_foco). La metafora es espacial: el sistema sigue al usuario, no al reves.",
+
+    "GRAFO DE RELACIONES SE EXTRAE GRATIS. Los blueprints ya referencian otros modulos via publishAndWait. Parseando esas referencias se obtiene el grafo de paginas relacionadas. Cero mantenimiento manual; override opcional via module.json.paginas_relacionadas.",
+
+    "EVOLUCION INCREMENTAL. v1 minimo viable (10 modulos blueprint + 4 tools + 1 zona frontend). Niveles de profundidad, archivadores anidados, cajones inter-modulares, persistencia configurable — todo aparcado hasta que el runtime real demuestre dolor concreto.",
+
+    "EL CONTRATO NO VALIDA QUE EL LLM ABRA EL CAJON CORRECTO. Eso solo se ve usando el sistema. Lo que SI valida: que las tools existen, que los blueprints estan registrados, que los overrides son coherentes, que el grafo no apunta a paginas inexistentes."
+  ],
+
+  "principios": [
+    {
+      "id": "catalogo_es_indice_no_contenido",
+      "regla": "El system prompt del LLM lleva el catalogo de cajones (descripcion de 1 linea por operacion del blueprint), NO el pseudocodigo de cada operacion. El pseudocodigo se inyecta SOLO cuando el LLM invoca cajon.abrir(nombre).",
+      "anti_patron": "Inyectar el blueprint hijo completo (todas las operaciones con pseudocodigo) en el system prompt como hace el modelo pre-cajones. Resultado: 400-900 lineas en cada turno, LLM distraido."
+    },
+    {
+      "id": "apertura_explicita_por_tool",
+      "regla": "El LLM abre un cajon invocando la tool cajon.abrir({nombre}). ai-gateway extrae la operacion del blueprint en memoria y devuelve { pseudocodigo, reglas_clave, errores_posibles } para inyectar en el turno actual.",
+      "anti_patron": "Precargar cajones por heuristica (clasificador de intencion del usuario antes del LLM). Riesgo de cargar el cajon equivocado + complejidad de orquestacion sin valor."
+    },
+    {
+      "id": "cierre_al_siguiente_turno",
+      "regla": "El contenido del cajon abierto vive SOLO durante el turno actual del LLM. Al siguiente turno el contexto se reconstruye con el catalogo + (si el LLM lo necesita) volver a abrir el cajon.",
+      "anti_patron": "Mantener N cajones abiertos persistentes 'por si acaso'. Vuelve la sobrecarga del modelo pre-cajones."
+    },
+    {
+      "id": "decision_de_apertura_en_el_llm",
+      "regla": "La decision de que cajon abrir vive en el LLM, NO en un router externo. El LLM razona el matching catalogo -> intencion del turno + invoca cajon.abrir.",
+      "anti_patron": "Modulo chat-router o equivalente que clasifica el mensaje del usuario y precarga un cajon antes de pasar al LLM. Coherente con la decision homologa en llm-runtime-discipline."
+    },
+    {
+      "id": "ranking_simple_sin_modelo",
+      "regla": "El catalogo se rankea con dos senales: (1) cajones del page_id activo primero, (2) cajones abiertos en los ultimos N turnos suben. Resto alfabetico/dominio. Cero embeddings, cero cosine similarity, cero ML.",
+      "anti_patron": "Introducir embeddings + similarity search para 'mejorar' el ranking. ~30 cajones no lo necesitan; el LLM razona mejor que cualquier cosine.",
+      "salvedad_si_crece_a_100": "Si el catalogo crece >100 cajones, evaluar niveles (cajones rapidos visibles + armarios profundos a peticion). Hasta entonces, plano."
+    },
+    {
+      "id": "catalogo_auto_generado_con_override_opcional",
+      "regla": "Cada operacion del blueprint produce automaticamente una entrada del catalogo (descripcion derivada del campo input + 1 frase resumiendo que hace). El blueprint puede declarar opcionalmente cajon_descripcion por operacion para refinar lo que el LLM ve. Si no se sobreescribe, gana lo auto-generado.",
+      "anti_patron": "Exigir que cada blueprint declare manualmente todas las descripciones de sus cajones antes de habilitar el patron. Bloquearia la migracion."
+    },
+    {
+      "id": "una_operacion_por_turno",
+      "regla": "cajon.abrir y chat.cambiar_foco son operaciones unicas por turno — no coexisten con otras tool calls en la misma invocacion. Extension estructural de enfoque_una_operacion (llm-runtime-discipline).",
+      "anti_patron": "LLM invoca cajon.abrir + chat.cambiar_foco + alguna_operacion_del_blueprint en el mismo turno. Mezcla 'preparar contexto' con 'ejecutar' — el ejecutar es del siguiente turno."
+    },
+    {
+      "id": "catalogo_plano_sin_jerarquia",
+      "regla": "En v1 no hay niveles de profundidad ni archivadores anidados. Catalogo plano. Si el LLM necesita agrupar mentalmente, lo hace razonando.",
+      "anti_patron": "Introducir 'cajones rapidos' vs 'armarios profundos' o 'archivadores' por dominio sin evidencia empirica de que el catalogo plano se hizo inmanejable."
+    },
+    {
+      "id": "foco_acompana_a_la_conversacion",
+      "regla": "Si la conversacion claramente se mueve a otro dominio, el LLM autonomamente invoca chat.cambiar_foco({nuevo_page_id, motivo?}). ai-gateway publica chat.foco.cambiado al bus; el frontend hace goto(nuevo_page_id) y recompone la UI. El catalogo de cajones se recompone con el nuevo page_id activo. Ayuda residual: banner en el chat indicando el motivo del cambio.",
+      "anti_patron": "Detector de foco externo (modulo chat-router con clasificador adicional). Misma razon que decision_de_apertura_en_el_llm. Tambien: cambio silencioso sin banner (el usuario no sabe quien movio la pagina)."
+    },
+    {
+      "id": "grafo_de_relaciones_auto_construido",
+      "regla": "El grafo de paginas relacionadas se extrae al arrancar parseando publishAndWait('<modulo>.<accion>.request', ...) en el pseudocodigo de los blueprints. ai-gateway (o modulo nuevo page-graph) expone tool page.related({page_id}) y/o evento page.graph.request/response. Override opcional via module.json.paginas_relacionadas para anyadir afinidad tematica no inferible del codigo.",
+      "anti_patron": "Mantener manualmente una tabla de relaciones entre paginas. Drift garantizado al anyadir o eliminar blueprints."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "persistencia_cajon_cierre_automatico_al_siguiente_turno",
+      "decision": "Opcion A del documento de propuesta (seccion 6.1). El cajon abierto vive solo durante el turno actual. Al siguiente turno solo persiste el catalogo. El LLM tiene que volver a abrir si lo necesita.",
+      "razon": "Mas simple, predecible, conserva el espiritu de la metafora ('cierra el cajon y sigue'). Si el LLM se queja de reabrir, evolucionar a hibrida (LLM pide 'manten abierto N turnos').",
+      "alternativas_descartadas_en_v1": ["B persistente hasta cierre explicito", "C hibrida con duracion declarada por el LLM"]
+    },
+    {
+      "id": "aplicabilidad_solo_blueprints_en_v1",
+      "decision": "Decision 6.2 del documento. Cajones aplican SOLO a modulos blueprint-driven (10 modulos: 4 subsistema-recetario + 6 subsistema-carta). NO aplica a chat principal, agentes especialistas, memorias.",
+      "razon": "El dolor (sobrecarga de tokens, LLM distraido) se observo en blueprints, no en chat principal. Extender sin evidencia es premature optimization.",
+      "horizonte_de_revision": "Si tras v1 los blueprints validan el patron, evaluar extender a chat principal. Memorias y agentes — mas adelante o nunca."
+    },
+    {
+      "id": "decision_de_apertura_por_llm_autonomo",
+      "decision": "Decision 6.3 del documento. El LLM decide que cajon abrir invocando la tool cajon.abrir. Cero orquestador externo.",
+      "razon": "Coherente con la metafora del usuario y trivial de implementar. +1 turno de latencia es marginal frente a los 5-25s que ya consume cada blueprint."
+    },
+    {
+      "id": "sin_niveles_de_profundidad",
+      "decision": "Decision 6.4 del documento. Catalogo plano. Sin 'cajones rapidos' visibles + 'armarios profundos' a peticion. Sin archivadores anidados (6.4 quater C).",
+      "razon": "Mantener simple v1. Si el catalogo crece >100 cajones (umbral subjetivo), reabrir la decision."
+    },
+    {
+      "id": "detector_de_foco_por_llm_autonomo",
+      "decision": "Decision 6.4 bis Opcion A del documento. El LLM detecta semanticamente que la pregunta es de otro dominio e invoca chat.cambiar_foco. Cero router intermedio.",
+      "razon": "Coherente con decision_de_apertura_por_llm_autonomo. +1 turno de latencia aceptable.",
+      "horizonte_de_revision": "Si la tasa de cambios equivocados supera 10% en runtime real, evolucionar a Opcion D hibrida (LLM avisa antes de mover, usuario confirma)."
+    },
+    {
+      "id": "ayuda_ui_al_cambio_de_foco_banner_en_chat",
+      "decision": "Decision 6.4 ter del documento. Cuando el LLM cambia la pagina, antepone un parrafo corto en el chat ('moviendote a viabilidad porque la pregunta es de coste mensual'). Cero notificacion del frontend.",
+      "razon": "Coste cero, maxima transparencia. Si confunde, anyadir breadcrumb persistente. Si requiere mas, evolucionar a confirmacion previa (Opcion D de 6.4 bis)."
+    },
+    {
+      "id": "almacenamiento_fisico_inline_en_blueprint_hijo",
+      "decision": "Decision 6.5 del documento. Los blueprints actuales NO se tocan. ai-gateway extrae los cajones del blueprint en memoria al arrancar (cache Map<conversation_id, [...cajones_abiertos_recientes]>).",
+      "razon": "Cero archivos nuevos, cero refactor de blueprints existentes. Si mas adelante el blueprint inline se vuelve inmanejable, partir a archivos separados es trivial.",
+      "alternativas_descartadas_en_v1": ["archivos separados por operacion", "hibrido con cache + fs.watch"]
+    },
+    {
+      "id": "catalogo_mixto_auto_mas_override_opcional",
+      "decision": "Decision 5.1 del documento. Descripcion auto-generada desde el campo input + 1 frase resumiendo. Override opcional via cajon_descripcion por operacion. Si no se sobreescribe, gana lo auto-generado.",
+      "razon": "Cero trabajo manual obligatorio al migrar. Refinamiento progresivo donde el LLM se equivoca eligiendo cajon."
+    },
+    {
+      "id": "ranking_simple_recencia_mas_page_activo",
+      "decision": "Decision 5.2 del documento. Cajones del page_id activo van primero; los abiertos en los ultimos N turnos suben (N=3-5 sugerido). Resto alfabetico/dominio.",
+      "razon": "Implementacion ~30 lineas de JS. Sin entrenamiento, sin embeddings, sin dependencias adicionales. Suficiente para ~30 cajones."
+    },
+    {
+      "id": "cuatro_tools_canonicas_en_ai_gateway",
+      "decision": "Subsistema cajones expone exactamente 4 tools auto-wireables via tools.contract v1.2: cajon.listar({zona?}), cajon.abrir({nombre}), chat.cambiar_foco({nuevo_page_id, motivo?}), page.related({page_id}).",
+      "razon": "Cero refactor de tools.contract. Las 4 son operaciones del subsistema cajones expuestas igual que cualquier otra tool canonica del repo."
+    },
+    {
+      "id": "grafo_extraido_del_pseudocodigo_de_blueprints",
+      "decision": "Funcion _buildPageGraph(blueprints) en ai-gateway o modulo nuevo page-graph parsea todos los blueprints cargados, extrae referencias publishAndWait('<mod>.<accion>.request', ...) del pseudocodigo, produce grafo dirigido { <page_id>: { consumes: [...], consumed_by: [...] } }.",
+      "razon": "Cero mantenimiento manual. Si anyades un blueprint, sus relaciones aparecen solas en el grafo y por tanto en la barra lateral.",
+      "override_opcional": "module.json.paginas_relacionadas: [...] para anyadir afinidad tematica no inferible (ej. relacionar dos paginas que no se invocan tecnicamente pero el usuario las usa juntas)."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "precargar_cajon_por_heuristica",
+      "regla": "NO existe orquestador externo (chat-router, clasificador de intencion, etc.) que abra un cajon antes de que el LLM lo pida. La decision vive en el LLM.",
+      "viola_garantias": ["decision_de_apertura_en_el_llm", "decision_de_apertura_por_llm_autonomo"],
+      "como_detectar": "Validator escanea el codigo de chat-io, ai-gateway, modulos *-router y verifica que NO invocan cajon.abrir programaticamente (solo el LLM via tool call lo invoca).",
+      "alternativa_correcta": "Mejorar las descripciones del catalogo (cajon_descripcion) si el LLM se equivoca abriendo."
+    },
+    {
+      "id": "embeddings_o_similarity_search_para_retrieval",
+      "regla": "NO se introduce ningun modelo de embeddings ni cosine similarity para rankear el catalogo. El ranking es recencia + page activo, ~30 lineas de JS.",
+      "viola_garantias": ["ranking_simple_sin_modelo"],
+      "como_detectar": "Validator escanea el codigo de _rankCajones y verifica que NO importa cliente de embeddings (openai.embeddings, anthropic, etc.) ni helpers de vector search.",
+      "alternativa_correcta": "Si el catalogo crece >100, reabrir la decision con evidencia empirica."
+    },
+    {
+      "id": "persistir_cajon_abierto_entre_turnos_por_defecto",
+      "regla": "El cajon se cierra automaticamente al siguiente turno. NO existe modo 'cajon pegajoso' que mantenga abiertos los N ultimos cajones sin que el LLM lo pida.",
+      "viola_garantias": ["cierre_al_siguiente_turno"],
+      "como_detectar": "Validator escanea _composeBlueprintSystemPrompt y verifica que cada llamada construye el contexto desde el catalogo, NO desde un estado acumulado de cajones de turnos anteriores.",
+      "alternativa_correcta": "El LLM vuelve a abrir el cajon que necesita. Si el patron de reapertura es recurrente, evolucionar a Opcion C (hibrida con duracion declarada)."
+    },
+    {
+      "id": "partir_blueprints_en_archivos_de_operacion_en_v1",
+      "regla": "NO se parte ningun blueprint en archivos separados por operacion (modules/<m>/cajones/<op>.json). Los blueprints actuales se mantienen inline.",
+      "viola_garantias": ["almacenamiento_fisico_inline_en_blueprint_hijo"],
+      "como_detectar": "Validator verifica que ningun directorio modules/*/cajones/ existe.",
+      "alternativa_correcta": "Si un blueprint llega a ser inmanejable inline (>1500 lineas), reabrir la decision."
+    },
+    {
+      "id": "cajones_anidados_o_jerarquicos_en_v1",
+      "regla": "NO existen archivadores dentro de cajones, ni jerarquia de cajones rapidos vs profundos, ni tags/labels para busqueda por interseccion.",
+      "viola_garantias": ["catalogo_plano_sin_jerarquia", "sin_niveles_de_profundidad"],
+      "como_detectar": "Validator verifica que el catalogo extraido es flat (array de entradas, no arbol).",
+      "alternativa_correcta": "Si emerge dolor real con el catalogo plano (>100 entradas), reabrir."
+    },
+    {
+      "id": "aplicar_cajones_a_chat_principal_agentes_o_memorias_en_v1",
+      "regla": "NO se cargan cajones en el system prompt del chat principal, ni se da a los agentes especialistas un catalogo de cajones, ni las memorias modulares se reescriben como cajones. v1 es solo blueprints.",
+      "viola_garantias": ["aplicabilidad_solo_blueprints_en_v1"],
+      "como_detectar": "Validator escanea chat-io, ai-agent-framework/agents/, memory-*/ y verifica que ninguno consume las 4 tools del subsistema cajones.",
+      "alternativa_correcta": "Validar v1 en runtime real durante 2-4 semanas. Si el patron funciona y emerge demanda concreta, extender con evidencia."
+    },
+    {
+      "id": "boton_por_cajon_en_el_frontend",
+      "regla": "NO existe ningun componente UI que renderice botones individuales por cajon disponible (al estilo de un menu). La barra lateral RelatedPagesBar apunta a PAGINAS, no a cajones. Cajon = unidad de razonamiento del LLM; pagina = unidad de navegacion del usuario.",
+      "viola_garantias": ["distincion_cajon_vs_pagina"],
+      "como_detectar": "Validator escanea frontend/src/lib/components/ buscando componentes que enumeren cajones de un blueprint y los expongan como botones.",
+      "alternativa_correcta": "Si el usuario quiere invocar una operacion directamente, lo hace por chat (el LLM abre el cajon). La UI navega entre paginas, no entre cajones."
+    }
+  ],
+
+  "output_shape_resumen": "_outputs/cajones-context-partitioning.json contiene: { id, version, fecha_extraccion, modulos_blueprint_driven_total: N, modulos_con_cajones_enabled: N, tools_canonicas_registradas: { 'cajon.listar': bool, 'cajon.abrir': bool, 'chat.cambiar_foco': bool, 'page.related': bool }, blueprints_con_overrides_cajon_descripcion: N, blueprints_con_paginas_relacionadas: N, grafo_de_relaciones: { nodos: N, aristas: N, paginas_huerfanas: [...] }, drifts_observados: { blueprints_con_cajones_enabled_pero_sin_operaciones: [...], overrides_cajon_descripcion_sobre_operacion_fantasma: [...], paginas_relacionadas_apuntan_a_pagina_inexistente: [...] } }. Snapshot del estado.",
+
+  "reglas_de_extraccion": [
+    "El validator carga este contrato y extrae la lista de 4 tools canonicas + las decisiones arquitectonicas cerradas.",
+    "Escanea modules/*/<modulo>.blueprint.json y para cada blueprint hijo verifica: campo cajones_enabled (default false), cardinalidad de operaciones (umbral util >=2), overrides cajon_descripcion por operacion, coherencia (override existe -> operacion existe).",
+    "Escanea modules/*/module.json y extrae paginas_relacionadas declarado.",
+    "Lee modules/conversacion/ai-gateway/index.js (texto fuente) y busca registro de las 4 tools en registerToolsForAI o equivalente. Lista de funciones esperadas: _extractCajones, _rankCajones, _buildPageGraph, _composeBlueprintSystemPrompt (modificado).",
+    "Construye el grafo desde el pseudocodigo de los blueprints parseando publishAndWait('<mod>.<accion>.request'. Detecta nodos huerfanos (no consumen ni son consumidos) y aristas a paginas inexistentes.",
+    "Output: _outputs/cajones-context-partitioning.json con contadores + drifts."
+  ],
+
+  "derivaciones": [
+    {
+      "documento": "arquitectura/decisiones/_validators/cajones-context-partitioning.validate.js",
+      "rol": "Validator a implementar. Cross-checks declarados en validaciones_cross_realizadas_por_validator. Sin AJV strict (el contrato es prosa estructurada).",
+      "estado": "pendiente_de_implementar"
+    },
+    {
+      "documento": "arquitectura/decisiones/_outputs/cajones-context-partitioning.json",
+      "rol": "Snapshot del estado del patron en el repo.",
+      "estado": "pendiente_de_generar"
+    },
+    {
+      "documento": "modules/conversacion/ai-gateway/index.js",
+      "rol": "Motor: aloja _extractCajones, _rankCajones, _buildPageGraph, modificacion de _composeBlueprintSystemPrompt, registro de las 4 tools canonicas, estado en memoria Map<conversation_id, [...cajones_abiertos_recientes]>, suscripcion al cambio de page_id de la conversacion.",
+      "estado": "pendiente_de_modificar"
+    },
+    {
+      "documento": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
+      "rol": "Blueprint padre. Anyadir seccion modelo_de_contexto que explique al LLM-runtime que ve un catalogo de cajones (no el blueprint hijo completo) y como invocar cajon.abrir / chat.cambiar_foco. Coexiste con disciplina_del_llm_runtime.",
+      "estado": "pendiente_de_modificar"
+    },
+    {
+      "documento": "frontend/src/lib/modules/panels.ts",
+      "rol": "Anyadir zona 'related-pages' al type union (1 linea).",
+      "estado": "pendiente_de_modificar"
+    },
+    {
+      "documento": "frontend/src/lib/components/layout/RelatedPagesBar.svelte",
+      "rol": "Nuevo componente. Suscrito a $page.url.pathname, llama a page.related({page_id}) via mqttRequest, renderiza lista de links con icono+titulo. Patron: imitar WorkBar.svelte.",
+      "estado": "pendiente_de_crear"
+    },
+    {
+      "documento": "frontend/src/lib/services/mqttClient.ts",
+      "rol": "Suscribir a chat.foco.cambiado filtrado por conversation_id activa. Al recibir: goto('/<nuevo_page_id>'). Banner en chat lo gestiona el componente del chat.",
+      "estado": "pendiente_de_modificar"
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "contrato_compila_estructuralmente",
+      "regla": "El contrato es JSON valido + tiene secciones obligatorias (id, version, principios, decisiones_arquitectonicas, prohibido, validaciones_cross_realizadas_por_validator).",
+      "como_detectar": "Parse JSON + check de keys obligatorias.",
+      "severidad": "error"
+    },
+    {
+      "id": "cada_principio_tiene_anti_patron",
+      "regla": "Cada principio del array tiene campo anti_patron no vacio.",
+      "como_detectar": "Iterar principios y verificar campo anti_patron present + len > 0.",
+      "severidad": "error"
+    },
+    {
+      "id": "cuatro_tools_canonicas_registradas_en_ai_gateway",
+      "regla": "Las 4 tools (cajon.listar, cajon.abrir, chat.cambiar_foco, page.related) estan registradas en ai-gateway con handler y declaracion conforme a tools.contract v1.2.",
+      "como_detectar": "Grep en modules/conversacion/ai-gateway/index.js + verificar shape en module.json del propio ai-gateway.",
+      "severidad": "error"
+    },
+    {
+      "id": "blueprint_con_cajones_enabled_tiene_minimo_dos_operaciones",
+      "regla": "Si un blueprint declara cajones_enabled: true, su operaciones[] debe tener >=2 entries. Con 1 sola operacion el patron no aporta (no hay nada que elegir).",
+      "como_detectar": "Iterar blueprints, contar operaciones cuando cajones_enabled true.",
+      "severidad": "warning"
+    },
+    {
+      "id": "override_cajon_descripcion_apunta_a_operacion_existente",
+      "regla": "Si un blueprint declara cajon_descripcion para una operacion X, X debe existir en operaciones[]. Override fantasma indica drift (operacion renombrada o eliminada sin actualizar override).",
+      "como_detectar": "Iterar overrides, verificar existencia.",
+      "severidad": "error"
+    },
+    {
+      "id": "paginas_relacionadas_apuntan_a_paginas_existentes",
+      "regla": "Si un module.json declara paginas_relacionadas: [...], cada entrada debe corresponder a un page_id registrado en el sistema.",
+      "como_detectar": "Iterar declaraciones, comparar con catalogo de paginas (inferido del registro de modulos blueprint).",
+      "severidad": "warning"
+    },
+    {
+      "id": "grafo_no_tiene_aristas_a_paginas_inexistentes",
+      "regla": "Las referencias publishAndWait('<mod>.<accion>.request', ...) en el pseudocodigo apuntan a modulos registrados. Aristas a modulos inexistentes indican blueprint con drift.",
+      "como_detectar": "Construir grafo + cross-check con registro de modulos.",
+      "severidad": "warning"
+    },
+    {
+      "id": "ningun_modulo_invoca_cajon_abrir_programaticamente",
+      "regla": "cajon.abrir SOLO se invoca via tool call del LLM. Ningun modulo del repo (chat-io, ai-agent-framework, etc.) lo invoca por bus directamente.",
+      "como_detectar": "Grep en modules/*/index.js de \"cajon.abrir\" como string literal en publishAndWait/publish.",
+      "severidad": "error"
+    },
+    {
+      "id": "ai_gateway_no_importa_cliente_de_embeddings_para_ranking",
+      "regla": "_rankCajones NO importa ni invoca cliente de embeddings/similarity search. Ranking es recencia + page activo.",
+      "como_detectar": "Grep en codigo de _rankCajones de imports/llamadas a embeddings.",
+      "severidad": "error"
+    },
+    {
+      "id": "v1_no_extiende_cajones_a_chat_agentes_memorias",
+      "regla": "chat-io, ai-agent-framework/agents/*, memory-*/  NO consumen las 4 tools del subsistema cajones.",
+      "como_detectar": "Grep en esos modulos de los nombres de las 4 tools.",
+      "severidad": "warning"
+    }
+  ],
+
+  "salida_validador": "PASS si contrato compila + cada principio con anti_patron + 4 tools canonicas registradas + ningun override fantasma + ningun modulo invoca cajon.abrir programaticamente + ai-gateway no importa embeddings + v1 no se extiende fuera de blueprints. Errors bloquean: shape invalido, tool ausente, override fantasma, invocacion programatica de cajon.abrir, import de embeddings. Warnings listados pero no bloquean: blueprint con cajones_enabled pero <2 operaciones, paginas_relacionadas con drift, grafo con aristas a paginas inexistentes, extensiones de cajones fuera de blueprints.",
+
+  "convenciones_complementarias": [
+    "modulos-blueprint-driven.contract: paradigma base. Este contrato canoniza una capa estructural (cajones) sobre los modulos que ya son blueprint-driven. NO redefine cuando algo es blueprint vs JS — solo describe como el LLM ve el blueprint.",
+    "llm-runtime-discipline.contract: coexiste estrechamente. Los cajones son la implementacion estructural que reduce la superficie sobre la que la disciplina opera (en particular enfoque_una_operacion). Una operacion por turno (principio 7 de este contrato) extiende enfoque_una_operacion al subsistema cajones.",
+    "tools.contract v1.2: las 4 tools del subsistema cajones (cajon.listar, cajon.abrir, chat.cambiar_foco, page.related) son tools canonicas auto-wireables via este patron. Una declaracion en module.json de ai-gateway -> tres destinos (LLM, frontend, bus interno).",
+    "events.contract: chat.foco.cambiado es evento canonico publicado por ai-gateway tras chat.cambiar_foco. Sigue el shape estandar (event_id, event_type, timestamp, source, data: {conversation_id, anterior, nuevo, motivo, request_id}, metadata).",
+    "naming.contract: las 4 tools usan kebab-case con punto separador. Los eventos siguen <modulo-prefix>.<entidad>.<verbo>. Ids de principios y decisiones en snake_case (coherencia con el resto del repo).",
+    "subsistema-recetario.contract: primer subsistema beneficiario en el piloto de Fase 5. Su blueprint padre se modifica para anyadir modelo_de_contexto que explica el patron al LLM-runtime.",
+    "frontend.contract: la zona 'related-pages' se anyade al type union de panels.ts; el componente RelatedPagesBar.svelte imita el patron de WorkBar.svelte. Sin nuevas dependencias del frontend.",
+    "observability.contract: el subsistema cajones emite metricas (cajon.abierto.count, chat.foco.cambiado.count, cajon.no_encontrado.count) sin alterar la disciplina de eventos del modo_silencioso_en_lecturas (cajon.listar es una lectura pura -> NO publica evento de dominio, solo metrica + response correlacionada).",
+    "errors.contract: cajon.abrir devuelve error canonico RESOURCE_NOT_FOUND si el nombre no existe en el blueprint cargado. chat.cambiar_foco devuelve INVALID_INPUT si nuevo_page_id no esta registrado. Sin codigos nuevos.",
+    "cajones-context-partitioning.md (documento de propuesta): fuente del diseno autoritativo. Este contrato canoniza las 8 decisiones cerradas; el documento queda como contexto de por que se eligio cada cosa."
+  ],
+
+  "trabajo_pendiente": [
+    {
+      "id": "implementar_motor_en_ai_gateway",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Fase 3 del documento de propuesta. En modules/conversacion/ai-gateway/index.js: _extractCajones(blueprint), _rankCajones(catalogo, page_id_activo, historial_abiertos), modificar _composeBlueprintSystemPrompt (system prompt con catalogo, no pseudocodigo), registrar las 4 tools canonicas, Map<conversation_id, [...cajones_abiertos_recientes]>.",
+      "criterio_de_cierre": "Las 4 tools aparecen en moduleLoader.toolsRegistry. _composeBlueprintSystemPrompt produce system prompt con catalogo + padre + disciplina, sin pseudocodigo. Tests POC2 verdes.",
+      "fecha_anotacion": "2026-05-23"
+    },
+    {
+      "id": "implementar_validator",
+      "estado": "abierto",
+      "naturaleza": "transversal",
+      "descripcion": "arquitectura/decisiones/_validators/cajones-context-partitioning.validate.js con los 10 cross-checks. Registrar en scripts/validate-all.js. Wire al baseline.",
+      "criterio_de_cierre": "npm run validate:ci incluye cajones-context-partitioning. drift-baseline tiene seccion.",
+      "fecha_anotacion": "2026-05-23"
+    },
+    {
+      "id": "anyadir_seccion_modelo_de_contexto_al_blueprint_padre",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Modificar arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json anyadiendo seccion modelo_de_contexto que explica al LLM-runtime el patron de cajones (catalogo + apertura via cajon.abrir + cierre al siguiente turno + chat.cambiar_foco).",
+      "criterio_de_cierre": "Padre tiene seccion modelo_de_contexto coherente con principios del contrato.",
+      "fecha_anotacion": "2026-05-23"
+    },
+    {
+      "id": "piloto_recetas_y_validacion_en_runtime",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Fase 5 del documento de propuesta. Activar cajones SOLO en page=recetas (resto sigue con blueprint completo, modo compat). Medir tokens/turno, numero de cajon.abrir invocados, si el LLM se distrae menos.",
+      "criterio_de_cierre": "Sesion completa de prueba con metricas registradas. Decision binaria: extender a resto de blueprints o iterar.",
+      "fecha_anotacion": "2026-05-23"
+    },
+    {
+      "id": "foco_dinamico_y_barra_lateral",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Fase 5 bis del documento de propuesta. Implementar _buildPageGraph, tool page.related, tool chat.cambiar_foco, listener en frontend para chat.foco.cambiado, zona 'related-pages' en panels.ts, componente RelatedPagesBar.svelte. SOLO si Fase 5 valida cajones.",
+      "criterio_de_cierre": "Smoke E2E: usuario en /recetas, pregunta de viabilidad, pagina cambia, barra lateral se actualiza.",
+      "fecha_anotacion": "2026-05-23"
+    },
+    {
+      "id": "migrar_resto_blueprints_a_cajones_enabled",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Fase 6 del documento de propuesta. Si el piloto valida, activar cajones_enabled: true en los 10 modulos blueprint del sistema. Cambio minimo: bandera en module.json.",
+      "criterio_de_cierre": "10 blueprints con cajones_enabled. Validator no marca drift.",
+      "fecha_anotacion": "2026-05-23"
+    },
+    {
+      "id": "documentar_paradigma_en_claude_md",
+      "estado": "abierto",
+      "naturaleza": "transversal",
+      "descripcion": "Fase 7 del documento de propuesta. Anyadir parrafo a CLAUDE.md describiendo el patron de cajones y enlazando este contrato. Cerrar el documento de propuesta moviendolo a _outputs/ tras cierre.",
+      "criterio_de_cierre": "CLAUDE.md tiene seccion. Documento de propuesta archivado.",
+      "fecha_anotacion": "2026-05-23"
+    }
+  ]
+}

@@ -4,7 +4,7 @@
     "version": "1.3.0",
     "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/http.contract.json",
-    "supersedes_nota": "v1.3.0 (POC4 finding F2): añadida validation_enforcement que documenta como el gateway HTTP enforce request_schema_ref / response_schema_ref declarados en module.json. Request validation falla → 400 VALIDATION_FAILED automatico SIN invocar handler. Response validation con modos strict/warn/off (default warn). Cierra disciplina paralela a subscribes_declaration_shape del contrato events.\n\nv1.2.0 (POC4 F1+F7): handler_signature canonica.\n\nv1.1.0 (POC2 F7): fetch inyectable.\n\nv1.0.0: primera version."
+    "supersedes_nota": "v1.3.0 (POC4 finding F2): añadida validation_enforcement que documenta como el gateway HTTP enforce request_schema_ref / response_schema_ref declarados en module.json. Request validation falla → 400 INVALID_INPUT automatico SIN invocar handler. Response validation con modos strict/warn/off (default warn). Cierra disciplina paralela a subscribes_declaration_shape del contrato events.\n\nv1.2.0 (POC4 F1+F7): handler_signature canonica.\n\nv1.1.0 (POC2 F7): fetch inyectable.\n\nv1.0.0: primera version."
   },
 
   "regla": "HTTP es la frontera externa del core. Cruza el límite del proceso. Internamente, MQTT. Tres casos legítimos: CLI, UI web, integración externa. Routing canónico /modules/<slug>/<path>. Response usa shape canónico de errors.json. Timeouts y telemetría obligatorios en cliente. Errores externos mapeados a códigos canónicos. Un único HTTP server en el core.",
@@ -29,7 +29,7 @@
       ],
       "ejemplo_request": "POST /modules/notas/crear\nContent-Type: application/json\n\n{\"titulo\":\"x\",\"contenido\":\"y\"}",
       "ejemplo_response_ok": "HTTP/1.1 201 Created\nContent-Type: application/json\n\n{\"status\":201,\"data\":{\"id\":\"abc\",\"titulo\":\"x\"}}",
-      "ejemplo_response_error": "HTTP/1.1 400 Bad Request\nContent-Type: application/json\n\n{\"status\":400,\"error\":{\"code\":\"VALIDATION_FAILED\",\"message\":\"titulo es requerido\",\"details\":{\"field\":\"titulo\"}}}",
+      "ejemplo_response_error": "HTTP/1.1 400 Bad Request\nContent-Type: application/json\n\n{\"status\":400,\"error\":{\"code\":\"INVALID_INPUT\",\"message\":\"titulo es requerido\",\"details\":{\"field\":\"titulo\"}}}",
       "ejemplo_modulos_audit": [
         "scratch-designer (20 endpoints)",
         "ui-designer (18 endpoints)",
@@ -57,15 +57,15 @@
         "Retry policy declarada en config (max_attempts, backoff_ms, retryable_status). Por defecto 0 reintentos. Solo idempotentes pueden retry > 0.",
         "Telemetría obligatoria por call: log + métrica de duración con labels {host, status, modulo}.",
         "Redacción de secretos: tokens en headers (Authorization, X-API-Key, Cookie). NUNCA en URL query params. Logs y métricas redactan headers ANTES de loguear.",
-        "Mapeo de errores externos a códigos canónicos: 401/403→UPSTREAM_AUTH_FAILED, 429→UPSTREAM_RATE_LIMITED, 5xx→UPSTREAM_5XX, network→UPSTREAM_UNREACHABLE, timeout→UPSTREAM_TIMEOUT.",
-        "Body limit en respuesta: configurable. Excediendo → UPSTREAM_PAYLOAD_TOO_LARGE.",
+        "Mapeo de errores externos a códigos canónicos: 401/403→UPSTREAM_INVALID_RESPONSE, 429→UPSTREAM_INVALID_RESPONSE, 5xx→UPSTREAM_INVALID_RESPONSE, network→UPSTREAM_UNREACHABLE, timeout→UPSTREAM_TIMEOUT.",
+        "Body limit en respuesta: configurable. Excediendo → UPSTREAM_INVALID_RESPONSE.",
         "TLS validation activa por defecto. rejectUnauthorized:false requiere justificación documentada en module.json.",
         "Cache opcional con TTL e invalidación declarada (similar a eviction_strategy de persistence).",
         "fetch (o equivalente HTTP) ACEPTADO como inyeccion opcional en el constructor del cliente para tests reproducibles. Por defecto el cliente usa global.fetch; en tests se inyecta un mock. Sin contaminar global.fetch. Patron canonico: new HttpClient({ ...config, fetch: customFetchOrUndefined })."
       ],
       "ejemplo_request": "const resp = await fetch(url, {\n  method:'POST',\n  headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },\n  body: JSON.stringify(payload),\n  signal: AbortSignal.timeout(this.config.http_clients.openai.timeout_ms)\n});",
       "ejemplo_response_ok": "Si externo devuelve 200: parsea, valida shape esperado, devuelve { status: 200, data: parsed } al caller del bus.",
-      "ejemplo_response_error": "Si externo devuelve 429: devuelve { status: 503, error: { code: 'UPSTREAM_RATE_LIMITED', message: 'Upstream rate limit', details: { kind: 'infrastructure', retryable: true, retry_after_ms: 60000 } } }",
+      "ejemplo_response_error": "Si externo devuelve 429: devuelve { status: 503, error: { code: 'UPSTREAM_INVALID_RESPONSE', message: 'Upstream rate limit', details: { kind: 'infrastructure', retryable: true, retry_after_ms: 60000 } } }",
       "ejemplo_modulos_audit": [
         "conversacion/ai-gateway (providers/* — OpenAI, Anthropic, etc.)",
         "telegram-service (probable, llama a Telegram Bot API)",
@@ -282,25 +282,25 @@
     "from_http_to_errors_json": [
       {
         "upstream_status_or_kind": "401 / 403",
-        "canonical_code": "UPSTREAM_AUTH_FAILED",
+        "canonical_code": "UPSTREAM_INVALID_RESPONSE",
         "canonical_status": 503,
         "descripcion": "Upstream rechazó nuestra credencial. El módulo es indisponible hasta que se renueve el token."
       },
       {
         "upstream_status_or_kind": "404",
-        "canonical_code": "UPSTREAM_NOT_FOUND",
+        "canonical_code": "UPSTREAM_INVALID_RESPONSE",
         "canonical_status": 502,
         "descripcion": "Upstream devuelve 404 para un recurso esperado. Drift de configuración o externo cambió su API."
       },
       {
         "upstream_status_or_kind": "429",
-        "canonical_code": "UPSTREAM_RATE_LIMITED",
+        "canonical_code": "UPSTREAM_INVALID_RESPONSE",
         "canonical_status": 503,
         "descripcion": "Upstream rate limit excedido. retry_after_ms en details si el upstream lo provee (header Retry-After)."
       },
       {
         "upstream_status_or_kind": "500-599",
-        "canonical_code": "UPSTREAM_5XX",
+        "canonical_code": "UPSTREAM_INVALID_RESPONSE",
         "canonical_status": 503,
         "descripcion": "Upstream falla internamente. retryable=true por convención (suele ser transitorio)."
       },
@@ -324,7 +324,7 @@
       },
       {
         "upstream_status_or_kind": "respuesta excede body limit",
-        "canonical_code": "UPSTREAM_PAYLOAD_TOO_LARGE",
+        "canonical_code": "UPSTREAM_INVALID_RESPONSE",
         "canonical_status": 502,
         "descripcion": "Respuesta del upstream supera el body limit configurado en el cliente."
       }
@@ -362,23 +362,23 @@
   },
 
   "validation_enforcement": {
-    "regla": "Cuando un endpoint declara request_schema_ref / response_schema_ref en module.json, el gateway HTTP central VALIDA el payload contra ese schema automaticamente. El handler no escribe codigo de validacion manual. Si el payload entrante no valida, el gateway responde 400 VALIDATION_FAILED canonico SIN invocar al handler. Esto cierra la disciplina: validacion declarativa, paralela a subscribes_declaration_shape.request_schema_ref del contrato events.",
+    "regla": "Cuando un endpoint declara request_schema_ref / response_schema_ref en module.json, el gateway HTTP central VALIDA el payload contra ese schema automaticamente. El handler no escribe codigo de validacion manual. Si el payload entrante no valida, el gateway responde 400 INVALID_INPUT canonico SIN invocar al handler. Esto cierra la disciplina: validacion declarativa, paralela a subscribes_declaration_shape.request_schema_ref del contrato events.",
     "request_validation": {
       "mecanismo": "El gateway carga el JSON Schema referenciado por apis[*].request_schema_ref en onLoad del modulo. Por cada request entrante a ese endpoint: (1) parsea body, (2) compila + valida con AJV strict, (3) si falla → 400 sin tocar handler.",
       "cuando":    "Solo si apis[*].request_schema_ref esta declarado. Sin declaracion, el handler valida manualmente (no recomendado, drift detectable).",
       "fallo_devuelve": {
         "status":           400,
-        "code":             "VALIDATION_FAILED",
+        "code":             "INVALID_INPUT",
         "message_template": "Request body does not match schema for <path>: <error de AJV>",
         "details":          "{ kind: 'domain', field: <ruta JSON-pointer del campo invalido>, schema_ref: <path>, errors: [<lista AJV>] }"
       },
-      "ejemplo": "module.json: { \"method\": \"POST\", \"path\": \"/modules/cocina/items/:item_id/preparar\", \"request_schema_ref\": \"./schemas/preparar-item-request.json\" }\n→ Si body = { /* sin pedido_id */ }, gateway responde 400 con error.code=VALIDATION_FAILED automaticamente. handlePrepararItem NUNCA se invoca."
+      "ejemplo": "module.json: { \"method\": \"POST\", \"path\": \"/modules/cocina/items/:item_id/preparar\", \"request_schema_ref\": \"./schemas/preparar-item-request.json\" }\n→ Si body = { /* sin pedido_id */ }, gateway responde 400 con error.code=INVALID_INPUT automaticamente. handlePrepararItem NUNCA se invoca."
     },
     "response_validation": {
       "mecanismo": "Igual que request, pero sobre el shape devuelto por el handler. Comprueba que el handler devuelve { status, data } o { status, error } y opcionalmente que data matchea response_schema_ref.",
       "modo_default": "warn",
       "modos": [
-        { "id": "strict", "comportamiento": "Si la response no valida, el gateway devuelve 500 INTERNAL_ERROR al cliente (proteccion: el modulo NO puede mandar shape rota al exterior). Recomendado en produccion." },
+        { "id": "strict", "comportamiento": "Si la response no valida, el gateway devuelve 500 UNKNOWN_ERROR al cliente (proteccion: el modulo NO puede mandar shape rota al exterior). Recomendado en produccion." },
         { "id": "warn",   "comportamiento": "El gateway loggea warn + metric pero deja pasar la response al cliente. Util en desarrollo y migracion gradual." },
         { "id": "off",    "comportamiento": "Sin validacion de response. El handler es responsable. Solo para casos legacy donde el shape no esta estabilizado." }
       ]
@@ -448,7 +448,7 @@
       ]
     },
     "return_shape": "El handler devuelve siempre { status, data } o { status, error: { code, message, details? } }, mutuamente excluyentes. Coherente con response_shape del contrato errors. El gateway serializa data al body HTTP y mapea status al codigo HTTP de respuesta. Sin esa forma, drift detectable.",
-    "ejemplo": "async handleGetPedido(req) {\n  const { pedido_id } = req.params;\n  if (!pedido_id) return { status: 400, error: { code: 'VALIDATION_FAILED', message: 'pedido_id required', details: { field: 'pedido_id' } } };\n  const pedido = this.pedidosActivos.get(pedido_id);\n  if (!pedido) return { status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: `Pedido ${pedido_id} no encontrado`, details: { entity_type: 'pedido', entity_id: pedido_id } } };\n  return { status: 200, data: { pedido } };\n}",
+    "ejemplo": "async handleGetPedido(req) {\n  const { pedido_id } = req.params;\n  if (!pedido_id) return { status: 400, error: { code: 'INVALID_INPUT', message: 'pedido_id required', details: { field: 'pedido_id' } } };\n  const pedido = this.pedidosActivos.get(pedido_id);\n  if (!pedido) return { status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: `Pedido ${pedido_id} no encontrado`, details: { entity_type: 'pedido', entity_id: pedido_id } } };\n  return { status: 200, data: { pedido } };\n}",
     "validado_en_poc": "modules/pizzepos/cocina-poc/index.js (POC4) — los 5 handlers HTTP siguen exactamente esta firma."
   }
 }

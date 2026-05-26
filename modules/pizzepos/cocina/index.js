@@ -18,6 +18,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 
+const BaseModule = require('../../_shared/base-module');
 const TIPOS_ESTACION = {
   general: {
     id: 'general',
@@ -50,14 +51,11 @@ const UI_ACTIONS = [
   'list-devices', 'list-station-types', 'list-displays'
 ];
 
-class CocinaModule {
+class CocinaModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'cocina';
     this.version = '3.2.0';
-
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.uiHandler = null;
     this.validator = null;
     this.config = null;
@@ -88,7 +86,7 @@ class CocinaModule {
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
     this._registerSchemas();
-    this._registerUIHandlers();
+    // tools.contract v1.2: el loader auto-wirea tools[] del module.json a uiHandler.
 
     this._snapshotFile = path.join('.', 'data', 'current', 'cocina_snapshot.json');
     const restoredFromSnapshot = await this._restaurarSnapshot();
@@ -108,12 +106,7 @@ class CocinaModule {
       try { await this._saveSnapshot(); } catch (_) { /* best-effort */ }
     }
 
-    if (this.uiHandler) {
-      for (const action of UI_ACTIONS) {
-        this.uiHandler.unregister('cocina', action);
-      }
-    }
-
+    // El loader desregistra uiHandler entries automaticamente via unregisterToolsForAI.
     this.pedidosActivos.clear();
     this.historial = [];
     this.tiemposPreparacion = [];
@@ -137,11 +130,11 @@ class CocinaModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
     if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/conflict|estado|already/i.test(msg)) return { status: 409, code: 'CONFLICT_STATE' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
@@ -300,40 +293,6 @@ class CocinaModule {
       });
     }
     return null;
-  }
-
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  _registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('cocina.uiHandler.not_available', { module: this.name });
-      return;
-    }
-
-    const map = {
-      'list-active': this.handleGetActivos,
-      'get': this.handleGetPedido,
-      'history': this.handleGetHistorial,
-      'prepare-item': this.handlePrepararItem,
-      'mark-ready': this.handleMarcarListo,
-      'health': this.handleHealthCheck,
-      'metrics': this.handleGetMetrics,
-      'register-device': this.handleRegisterDevice,
-      'unregister-device': this.handleUnregisterDevice,
-      'list-devices': this.handleListDevices,
-      'list-station-types': this.handleListTiposEstacion,
-      'list-displays': this.handleListarDisplays
-    };
-
-    for (const [action, fn] of Object.entries(map)) {
-      this.uiHandler.register('cocina', action, fn.bind(this));
-    }
-
-    this.logger.info('cocina.ui_handlers.registered', {
-      handlers: Object.keys(map)
-    });
   }
 
   // ==========================================

@@ -19,14 +19,12 @@ const ServiceExecutor = require('../../../core/service-executor');
 const TelegramStrategy = require('./strategies/telegram');
 const GmailStrategy = require('./strategies/gmail');
 
-class FuentesModule {
+const BaseModule = require('../../_shared/base-module');
+class FuentesModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'fuentes';
     this.version = '2.0.0';
-
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
     this.services = null;
     this.config = null;
 
@@ -85,12 +83,12 @@ class FuentesModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrad|no disponible/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/timeout|timed out/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
-    if (/dependency|service|unavailable/i.test(msg)) return { status: 503, code: 'DEPENDENCY_UNAVAILABLE' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    if (/timeout|timed out/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
+    if (/dependency|service|unavailable/i.test(msg)) return { status: 503, code: 'UPSTREAM_UNREACHABLE' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {

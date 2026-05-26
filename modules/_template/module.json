@@ -45,7 +45,7 @@
         "required": ["project_id", "datos"]
       },
       "handler": "toolCrear",
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
     }
   ],
 

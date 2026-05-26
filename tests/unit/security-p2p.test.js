@@ -161,7 +161,9 @@ function publishedOf(mocks, name) {
     assert.ok(hookEvents.includes('beforeEventPublish'));
     assert.ok(hookEvents.includes('afterEventReceive'));
     assert.strictEqual(mocks.mqttSubscribed.length, 2);
-    assert.strictEqual(mocks.uiRegistered.length, 6);
+    // tools.contract v1.2: the module no longer registers ui handlers manually.
+    // The loader auto-wires module.json.tools[] to uiHandler.
+    assert.strictEqual(mocks.uiRegistered.length, 0);
     await m.onUnload();
   });
 
@@ -443,7 +445,7 @@ function publishedOf(mocks, name) {
     assert.strictEqual(payload.request_id, 'req-2');
     assert.strictEqual(payload.public_key, null);
     assert.strictEqual(payload.has_keys, false);
-    assert.strictEqual(payload.error.code, 'INTERNAL_ERROR');
+    assert.strictEqual(payload.error.code, 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

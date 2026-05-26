@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/viabilidad.evaluacion.completada.schema.json",
+  "title": "viabilidad.evaluacion.completada — payload schema",
+  "description": "Evento emitido por viabilidad tras evaluar economicamente una idea de producto antes de invertir tiempo en prototipar/cocinar. Calcula coste estimado a partir de los ingredientes propuestos (con el catalogo de precios pasado por el caller) y, si hay precio_venta_objetivo, evalua food cost previsto. Veredicto deterministico: viable / viable_con_advertencias / no_viable_economicamente / sin_pvp_objetivo. NO toma decisiones cualitativas (diferenciacion comercial, encaje en oferta) — eso lo decide el LLM principal que invoca la tool.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "expediente_id",
+    "nombre_idea",
+    "veredicto",
+    "coste_total",
+    "coste_por_porcion",
+    "coste_es_real",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":    { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":        { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":           { "$ref": "_common.schema.json#/$defs/user_id" },
+    "expediente_id":     { "type": "string", "minLength": 1, "description": "ID del expediente de viabilidad persistido (audit trail)." },
+    "nombre_idea":       { "type": "string", "minLength": 1, "maxLength": 200, "description": "Nombre o descripcion breve de la idea de producto evaluada (aun no es receta)." },
+    "veredicto": {
+      "enum": ["viable", "viable_con_advertencias", "no_viable_economicamente", "sin_pvp_objetivo"],
+      "description": "Conclusion economica deterministica. 'viable' si food_cost <= umbral_advertencia (o sin PVP); 'viable_con_advertencias' si umbral_advertencia < food_cost <= umbral_alerta; 'no_viable_economicamente' si food_cost > umbral_alerta; 'sin_pvp_objetivo' cuando no se paso precio_venta_objetivo (solo informativo)."
+    },
+    "coste_total":       { "type": ["number", "null"], "minimum": 0, "description": "Coste total estimado de los ingredientes. null si no calculable (catalogo de precios vacio)." },
+    "coste_por_porcion": { "type": ["number", "null"], "minimum": 0 },
+    "coste_es_real":     { "type": "boolean", "description": "True si TODOS los ingredientes propuestos tenian precio en el catalogo pasado por el caller. False si alguno se omitio del calculo." },
+    "food_cost_pct":     { "type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "Porcentaje coste/PVP cuando se paso precio_venta_objetivo. null cuando veredicto='sin_pvp_objetivo'." },
+    "precio_venta_objetivo": { "type": ["number", "null"], "minimum": 0, "description": "PVP objetivo pasado por el caller para evaluar food cost. null si no se paso." },
+    "ingredientes_sin_precio": {
+      "type": "array",
+      "items": { "$ref": "_common.schema.json#/$defs/ingrediente_nombre" },
+      "description": "Ingredientes propuestos sin precio en catalogo (no contaron en coste_total). Si esta vacio, coste_es_real=true."
+    },
+    "advertencias": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Mensajes informativos no bloqueantes (ej. 'food cost al limite', 'falta unidad para ingrediente X')."
+    },
+    "timestamp":         { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

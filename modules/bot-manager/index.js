@@ -14,14 +14,12 @@ const BotRegistry = require('./services/bot-registry');
 const DownloadManager = require('./services/download-manager');
 const AutoResponder = require('./services/auto-responder');
 
-class BotManagerModule {
+const BaseModule = require('../_shared/base-module');
+class BotManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'bot-manager';
     this.version = '2.0.0';
-
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.config = null;
 
     this.registry = null;
@@ -75,11 +73,11 @@ class BotManagerModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
-    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
+    if (/timeout/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'subscribe') {
@@ -151,7 +149,7 @@ class BotManagerModule {
         this.logger.error('bot-manager.file-storage.failed', {
           botName, fileId, error_message: result.error
         });
-        this.metrics?.increment?.('bot-manager.errors', { code: 'DOWNLOAD_FAILED', kind: 'file' });
+        this.metrics?.increment?.('bot-manager.errors', { code: 'UPSTREAM_INVALID_RESPONSE', kind: 'file' });
         return;
       }
 

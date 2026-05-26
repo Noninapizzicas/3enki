@@ -11,15 +11,14 @@ const addFormats = require('ajv-formats');
 const cobroSchema = require('./schemas/cobro.json');
 const eventsSchema = require('./schemas/events.json');
 
-class CobrosModule {
+const BaseModule = require('../../_shared/base-module');
+class CobrosModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'cobros';
     this.version = '3.0.0';
 
     // Dependencias (inyectadas en onLoad)
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.uiHandler = null;
     this.config = {};
 
@@ -62,8 +61,8 @@ class CobrosModule {
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Event subscriptions are auto-wired from module.json by the loader.
-    this.registerUIHandlers();
+    // Event subscriptions y tools[] (incluyendo registro en uiHandler) son
+    // auto-wireados desde module.json por el loader. tools.contract v1.2.
 
     this.logger.info('module.loaded', {
       module: this.name,
@@ -75,43 +74,10 @@ class CobrosModule {
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
 
-    if (this.uiHandler) {
-      const actions = [
-        'create', 'list', 'get', 'confirm', 'refund',
-        'payment-methods', 'health', 'metrics'
-      ];
-      for (const action of actions) {
-        this.uiHandler.unregister('cobro', action);
-      }
-    }
-
+    // El loader desregistra bus subs y uiHandler entries automaticamente.
     this.cobros.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
-  }
-
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('cobros.uiHandler.not_available', { module: this.name });
-      return;
-    }
-
-    this.uiHandler.register('cobro', 'create', this.handleCreateCobro.bind(this));
-    this.uiHandler.register('cobro', 'list', this.handleListCobros.bind(this));
-    this.uiHandler.register('cobro', 'get', this.handleGetCobro.bind(this));
-    this.uiHandler.register('cobro', 'confirm', this.handleConfirmarCobro.bind(this));
-    this.uiHandler.register('cobro', 'refund', this.handleReembolsarCobro.bind(this));
-    this.uiHandler.register('cobro', 'payment-methods', this.handleGetMetodosPago.bind(this));
-    this.uiHandler.register('cobro', 'health', this.handleHealthCheck.bind(this));
-    this.uiHandler.register('cobro', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.logger.info('cobros.ui_handlers.registered', {
-      handlers: ['create', 'list', 'get', 'confirm', 'refund', 'payment-methods', 'health', 'metrics']
-    });
   }
 
   // ==========================================
@@ -660,7 +626,7 @@ class CobrosModule {
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/conflict|estado|already/i.test(msg)) return { status: 409, code: 'CONFLICT_STATE' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {

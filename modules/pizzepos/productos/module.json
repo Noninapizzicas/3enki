@@ -37,7 +37,183 @@
     { "domain": "productos", "action": "load_carta",      "handler": "handleLoadCarta",       "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "productos", "action": "carta_completa",  "handler": "handleCartaCompleta",   "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "tools": [],
+  "tools": [
+    {
+      "name": "productos.list",
+      "description": "Lista productos del catalogo del proyecto con filtros opcionales por categoria, categoria_id o activo. Ordenados por categoria + nombre.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id":   { "type": "string", "description": "Identificador del proyecto (multi-tenant)." },
+          "categoria":    { "type": "string", "description": "Filtro opcional por nombre de categoria." },
+          "categoria_id": { "type": "string", "description": "Filtro opcional por id de categoria." },
+          "activo":       { "description": "Filtro opcional por estado activo (boolean o 'true'/'false')." }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleListProductos",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "productos.get",
+      "description": "Obtiene un producto por id dentro del catalogo del proyecto.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto." },
+          "id":         { "type": "string", "description": "Identificador del producto." }
+        },
+        "required": ["project_id", "id"],
+        "additionalProperties": false
+      },
+      "handler": "handleGetProducto",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "productos.search",
+      "description": "Busqueda full-text en nombre y descripcion de productos activos del proyecto.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto." },
+          "q":          { "type": "string", "description": "Termino de busqueda (case-insensitive)." }
+        },
+        "required": ["project_id", "q"],
+        "additionalProperties": false
+      },
+      "handler": "handleSearchProductos",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "productos.update",
+      "description": "Actualiza campos de un producto. Persiste el catalogo en disco y emite producto.actualizado con el detalle de cambios.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto." },
+          "id":         { "type": "string", "description": "Identificador del producto." }
+        },
+        "required": ["project_id", "id"],
+        "additionalProperties": true
+      },
+      "handler": "handleUpdateProducto",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "productos.delete",
+      "description": "Elimina un producto del catalogo y persiste a disco. Emite producto.eliminado.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto." },
+          "id":         { "type": "string", "description": "Identificador del producto." }
+        },
+        "required": ["project_id", "id"],
+        "additionalProperties": false
+      },
+      "handler": "handleDeleteProducto",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "productos.categorias",
+      "description": "Lista categorias del proyecto con contador de productos activos en cada una, ordenadas por orden declarado.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto." }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleListCategorias",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "productos.ingredientes",
+      "description": "Delega al modulo ingredientes (fuente unica). Mantiene el endpoint por compatibilidad con el frontend del comandero.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto." },
+          "tipo":       { "type": "string", "description": "Filtro opcional por tipo de ingrediente." },
+          "grupo":      { "type": "string", "description": "Filtro opcional por grupo de ingrediente." }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleListIngredientes",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "productos.pizzas",
+      "description": "Lista productos del catalogo cuya categoria empieza por 'pizz' o tipo es 'pizza'. Ordenadas alfabeticamente.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto." }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleListPizzas",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "productos.stats",
+      "description": "Estadisticas del catalogo. Si no se pasa project_id devuelve totales agregados across proyectos cargados; con project_id devuelve detalle por proyecto.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto (opcional)." }
+        },
+        "additionalProperties": false
+      },
+      "handler": "handleGetStats",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "productos.health",
+      "description": "Health check: estado del modulo, totales agregados de productos/categorias/menus pendientes.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleHealthCheck",
+      "errores_conocidos": []
+    },
+    {
+      "name": "productos.metrics",
+      "description": "Metricas operativas del catalogo (counters y gauges).",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleGetMetrics",
+      "errores_conocidos": []
+    },
+    {
+      "name": "productos.load_carta",
+      "description": "Recarga la carta del proyecto desde disco (storage/pizzepos/cartas/). Devuelve cuantos productos y categorias se cargaron.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto." }
+        },
+        "required": ["project_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleLoadCarta",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "productos.carta_completa",
+      "description": "Devuelve la carta completa (categorias + productos + ingredientes) en un solo round-trip. Si no se pasa project_id, usa el primer proyecto con datos.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto (opcional)." }
+        },
+        "additionalProperties": false
+      },
+      "handler": "handleCartaCompleta",
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    }
+  ],
   "dependencies": ["project-manager", "ingredientes"],
   "tracing": {
     "propaga_correlation_id": true

@@ -139,20 +139,20 @@ async function testAsync(description, fn) {
     assert.strictEqual(ev[1].correlation_id, 'c1', 'correlation_id propagado');
   });
 
-  await testAsync('toolCrear sin project_id devuelve VALIDATION_FAILED', async () => {
+  await testAsync('toolCrear sin project_id devuelve INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const m = instantiate(mocks);
     const result = await m.toolCrear({ datos: { foo: 'bar' } }, null);
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
   });
 
-  await testAsync('toolCrear sin datos devuelve VALIDATION_FAILED', async () => {
+  await testAsync('toolCrear sin datos devuelve INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const m = instantiate(mocks);
     const result = await m.toolCrear({ project_id: 'p1' }, null);
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
   });
 
   await testAsync('handleUiList lista entidades del proyecto', async () => {

@@ -1,0 +1,175 @@
+{
+  "_doc": "Manual operativo de la pareja capture-bus.js + analyze-session.js que extiende los helpers de audit-module con captura cruda del bus MQTT y analisis estructurado post-sesion. Complementa manual-audit-module-y-helpers.contract.json — no lo sustituye. Cubre el shape del JSONL de captura, el shape JSON del output del analyzer, como se correlaciona con conversation-export-v2, que decisiones de diseno se cerraron deliberadamente (no asserts, no scenarios, cero impacto en core).",
+  "id": "manual-audit-bus-capture",
+  "version": "1.0.0",
+  "creada": "2026-05-26",
+  "tipo": "manual_operativo",
+
+  "proposito": {
+    "_doc": "Para testing forense de Enki via MQTT con LLM real, el observable confiable es el bus, no el habla del LLM. Una conversacion humano-LLM no se mide con asserts contra texto (assistant_contains, regex). Los eventos del bus si son deterministas en shape y orden causal — son la verdad del sistema. La pareja capture+analyze produce un dataset JSON estructurado que el operador (o un LLM como Claude) usa para juzgar narrativamente que paso en la sesion.",
+    "que_resuelve": [
+      "Capturar TODOS los eventos del bus durante una conversacion, no solo los que pasan por el LLM o por ActivityLogger.",
+      "Correlacionar eventos con la conversacion concreta sin depender de propagacion de conversation_id (la captura es por ventana temporal + topic wildcard).",
+      "Producir JSON estructurado del flujo causal — el operador o Claude lo resume narrativamente.",
+      "Cero infraestructura nueva en el sistema productivo: ambas piezas son clientes externos."
+    ],
+    "que_NO_resuelve": [
+      "Regresion determinista — eso vive en tests/unit/<slug>.test.js POC2.",
+      "Asserts pass/fail contra texto del LLM — esos son brittle, no aplican a conversaciones reales.",
+      "Observabilidad continua en produccion — esto es captura explicita por sesion."
+    ]
+  },
+
+  "limitaciones_conscientes": {
+    "_doc": "Decisiones deliberadas tomadas en sesion 2026-05-26 con el usuario tras descartar una propuesta inicial mas compleja (scenarios + asserts + runner + CI integration). El usuario fijo el rumbo: lo sencillo funciona mejor.",
+    "no_es_modulo_event_core": "Ambos scripts viven en scripts/audit-helpers/ como clientes MQTT externos. No tienen module.json, no se cargan por module-loader, no afectan lifecycle.",
+    "no_persiste_a_db_central": "El JSONL es un archivo plano por sesion. No hay tabla events ni event-store. Si se necesita historico, archivar el JSONL en disco — git-friendly.",
+    "no_modifica_conversation_export": "El export sigue siendo el que produce conversation-export. El analyzer lee ambos (export + capture) y los correlaciona.",
+    "no_modifica_activity_logger": "La propagacion incompleta de conversation_id en ActivityLogger es deuda conocida pero no bloquea esta herramienta — la captura no depende de conversation_id, depende del wildcard MQTT + ventana temporal.",
+    "no_define_asserts": "El analyzer produce datos. El juicio lo da el operador o Claude leyendo el JSON. Asserts contra LLM son brittle."
+  },
+
+  "piezas": {
+    "_doc": "Dos scripts independientes. Cada uno hace una cosa.",
+
+    "capture-bus.js": {
+      "uso": "node scripts/audit-helpers/capture-bus.js <output.jsonl> [--idle-timeout <ms>] [--max-duration <ms>] [--topic-filter <pattern>]",
+      "ubicacion": "scripts/audit-helpers/capture-bus.js",
+      "descripcion": "Cliente MQTT que se suscribe a un wildcard del bus y appendea cada evento al JSONL en orden de llegada.",
+      "suscripcion_default": "core/+/events/# — captura TODO el bus excepto topics UI directos (ui/request/*, ui/response/*).",
+      "topic_filter_opcional": "Patron regex para limitar topics. Ejemplo: --topic-filter 'core/.+/events/(receta|escandallo|viabilidad)' para capturar solo el subsistema-recetario.",
+      "terminacion": "SIGINT (Ctrl-C) cierra limpio y flushea. --idle-timeout cierra cuando no hay eventos durante N ms. --max-duration corta sin importar actividad.",
+      "robustez": "Append-only al JSONL. Si crashea o se mata el proceso, lo capturado hasta ese momento queda intacto.",
+      "no_filtra_por_conversation_id": "Deliberado. El operador delimita la ventana iniciando/parando el capture alrededor de la conversacion. El analyzer correlaciona despues por ventana temporal + correlation_id."
+    },
+
+    "analyze-session.js": {
+      "uso": "node scripts/audit-helpers/analyze-session.js --export <chat-export.json> --capture <bus-capture.jsonl> [--conversation <id>] [--out <path>]",
+      "ubicacion": "scripts/audit-helpers/analyze-session.js",
+      "descripcion": "Lee el export + el capture, los correlaciona, produce JSON estructurado con secciones canonicas.",
+      "exclusivamente_json": "El output es siempre JSON. Sin formato markdown ni HTML. El operador o Claude lo resume narrativamente.",
+      "default_out": "<conversation_id>.analysis.json en el directorio actual.",
+      "secciones_del_output": "Ver shape_json_analyzer mas abajo."
+    }
+  },
+
+  "shape_jsonl_capture": {
+    "_doc": "Cada linea del JSONL es un objeto JSON valido representando un evento del bus tal como llego al subscriber. Append-only, una linea por evento, sin separadores ni anidacion entre lineas.",
+    "campos_canonicos_por_linea": {
+      "_captured_at": "ISO 8601 — timestamp local del capturador al recibir el mensaje MQTT. Independiente del campo timestamp del envelope.",
+      "_topic": "string — topic MQTT exacto como llego (ej: 'core/c1/events/recetas/creada').",
+      "event_id": "uuid del envelope canonico — copiado tal cual.",
+      "event_type": "string — copiado tal cual (ej: 'recetas.creada').",
+      "timestamp": "ISO 8601 del envelope canonico — copiado tal cual.",
+      "source": "objeto {core_id, ...} del envelope — copiado tal cual.",
+      "data": "objeto data del envelope — copiado tal cual SIN modificar (incluye request_id, conversation_id si esta, correlation_id si esta, todo el payload).",
+      "metadata": "objeto metadata del envelope — copiado tal cual."
+    },
+    "principio": "El capturador NO transforma el envelope. Solo lo envuelve con _captured_at y _topic. Cualquier analisis posterior trabaja sobre los datos crudos.",
+    "eventos_malformados": "Si el payload no es JSON parseable, se loguea una linea {_captured_at, _topic, _parse_error: 'string', _raw: 'string-truncado-a-2kb'}. No se silencia."
+  },
+
+  "shape_json_analyzer": {
+    "_doc": "Output JSON estructurado del analyzer. Cero juicio, cero pass/fail — solo datos para que el operador o Claude lean.",
+    "campos_top_level": {
+      "_format": "audit-session-analysis-v1",
+      "_generated_at": "ISO 8601",
+      "inputs": "{ export_path, capture_path, conversation_id }",
+      "window": "{ started_at, ended_at, duration_ms } — derivada de min/max de _captured_at del JSONL.",
+      "turns": "array — un objeto por turno del usuario.",
+      "events_by_module": "objeto — agrupa eventos por source.core_id o por prefix del event_type.",
+      "orphans": "array — eventos publicados sin response correlacionado en la ventana.",
+      "errors_and_warnings": "array — eventos *.failed + logs con level >= warn.",
+      "latencies": "array — pares request/response correlacionados por request_id con delta_ms.",
+      "coverage": "{ modules_emitted: [], tools_invoked: [], agents_executed: [] } — derivado de event_type prefixes y de agent_executions del export."
+    },
+    "shape_de_turn": {
+      "_doc": "Un turno = mensaje del usuario + cadena causal de eventos hasta la respuesta del LLM.",
+      "campos": {
+        "turn_index": "number — 0-based.",
+        "user_message": "{ ts, content_excerpt }",
+        "trigger_event": "{ event_type: 'chat.message.saved', event_id, ts } — el evento de inicio del turno.",
+        "events": "array — eventos del bus entre chat.message.saved del turno y ai.chat.response (o ai.chat.failed) del mismo turno. Cada item: { ts, event_type, source, data_excerpt, correlation_id }.",
+        "assistant_response": "{ ts, content_excerpt, tool_calls_reported, error } — derivado del export.",
+        "duration_ms": "number — delta entre user_message.ts y assistant_response.ts.",
+        "providers_used": "array — leida del export para este turno."
+      }
+    },
+    "shape_de_orphan": {
+      "event_type": "string — evento publicado.",
+      "event_id": "uuid",
+      "ts": "ISO 8601",
+      "data_excerpt": "objeto truncado (~200 chars del data)",
+      "expected_response_event": "string|null — heuristica: si event_type termina en .request, se busca el .response correspondiente.",
+      "razon": "string — 'sin response correlacionado' | 'sin consumer aparente' | 'consumer aparente sin emision posterior'."
+    },
+    "principio_de_excerpts": "Los campos *_excerpt truncan a ~200 chars para mantener el JSON legible. Para inspeccion completa, el operador vuelve al export o al JSONL crudo via _refs (event_id, message_id)."
+  },
+
+  "como_se_correlaciona_con_conversation_export": {
+    "_doc": "El analyzer NO sustituye al export — los complementa. Cada uno aporta lo que el otro no tiene.",
+    "que_aporta_el_export": [
+      "messages_raw con tool_calls_executed metadata del LLM (lo que el LLM declaro hacer).",
+      "agent_executions completas con result y task.",
+      "summary con tokens, cost, duration totales."
+    ],
+    "que_aporta_el_capture": [
+      "TODOS los eventos del bus, incluso los que el LLM no toco directamente.",
+      "Eventos de handoff causal entre modulos (caso real: carta.creada → menu.actualizado).",
+      "Eventos sin conversation_id propagado que el export no captura."
+    ],
+    "como_los_une_el_analyzer": "Por ventana temporal (window.started_at..ended_at) + por correlation_id si esta presente + por filtro de conversation_id si esta en data.conversation_id."
+  },
+
+  "patron_de_uso_completo": {
+    "_doc": "Secuencia tipica para un audit con captura del bus.",
+    "secuencia": [
+      "1. node scripts/audit-helpers/capture-bus.js /tmp/capture-recetas.jsonl &  # arranca capturador en background, captura PID.",
+      "2. CONV=$(node scripts/audit-helpers/create-conversation.js 'NombreProyecto' 'audit-recetas')",
+      "3. Conversacion (improvisada por Claude via /audit-module o secuencia manual de send-message.js).",
+      "4. node scripts/audit-helpers/fetch-export.js $CONV $PROJ_UUID /tmp/export.json",
+      "5. kill -INT %1   # SIGINT al capturador, espera ~1s para flush.",
+      "6. node scripts/audit-helpers/analyze-session.js --export /tmp/export.json --capture /tmp/capture-recetas.jsonl --conversation $CONV --out /tmp/analysis.json",
+      "7. Claude (u operador) lee /tmp/analysis.json y produce el reporte narrativo."
+    ],
+    "alternativa_idle_timeout": "Si no se quiere matar el capturador manualmente: lanzar con --idle-timeout 30000 — se cierra solo cuando no haya eventos durante 30s."
+  },
+
+  "relacion_con_otros_contratos": {
+    "manual_audit_module_y_helpers": "Padre operativo. La skill /audit-module sigue conduciendo la conversacion. Este manual extiende la fase 4 (reporte) con un analyzer mas rico cuando se ha hecho captura de bus en paralelo.",
+    "manual_mqtt_conexion_directa": "Define el envelope canonico del bus que el capturador respeta byte a byte. Los topics y el shape del data son los que documenta ese manual.",
+    "events_contract": "Define que el event_type sigue naming canonico. El analyzer no valida shape — solo agrupa.",
+    "errors_contract": "Los eventos *.failed que aparezcan en errors_and_warnings llevaran error.code del catalogo canonico."
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "implementacion_capture_bus_js",
+      "descripcion": "Implementar capture-bus.js con tests unitarios que verifiquen el shape del JSONL.",
+      "depende_de": "Aprobacion de este contrato por el operador."
+    },
+    {
+      "id": "implementacion_analyze_session_js",
+      "descripcion": "Implementar analyze-session.js con tests sobre fixtures JSONL + export reales.",
+      "depende_de": "capture-bus.js operativo."
+    },
+    {
+      "id": "validacion_shape_via_ajv",
+      "descripcion": "Opcionalmente: schemas JSON 2020-12 para el JSONL (cada linea) y para el output del analyzer, validables por AJV strict. Se evalua tras Fase 2 si el shape ha quedado estable.",
+      "depende_de": "Uso real durante 2-4 semanas."
+    },
+    {
+      "id": "extension_propagacion_conversation_id",
+      "descripcion": "Si emerge necesidad de auditoria historica retrospectiva en produccion, abrir horizonte propio para propagar conversation_id consistentemente en ActivityLogger + suscripcion wildcard persistente en conversation-export. NO bloquea esta herramienta.",
+      "depende_de": "Necesidad real en produccion — no anticipar."
+    }
+  ],
+
+  "prohibido": [
+    "Convertir capture-bus.js o analyze-session.js en modulos event-core. Son clientes externos por diseno.",
+    "Anadir asserts pass/fail dentro del analyzer. El juicio queda fuera de la herramienta.",
+    "Acoplar el analyzer a un schema de scenarios. Si en algun momento emerge necesidad de scenarios scriptados, sera un contrato distinto.",
+    "Persistir el capture a SQLite o tabla central. JSONL plano por sesion, archivable en disco.",
+    "Tocar conversation-export, ActivityLogger o cualquier modulo del core para soportar la captura."
+  ]
+}

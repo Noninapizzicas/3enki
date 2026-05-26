@@ -147,7 +147,9 @@ function makePedidoEvent(overrides = {}) {
     assert.strictEqual(m.devices.size, 0);
     assert.strictEqual(m.historial.length, 0);
     assert.strictEqual(m.tiemposPreparacion.length, 0);
-    assert.ok(mocks.uiRegistered.length === 12, `expected 12 ui_handlers, got ${mocks.uiRegistered.length}`);
+    // tools.contract v1.2: el modulo NO debe registrar manualmente en uiHandler.
+    // El loader auto-wirea tools[] del module.json a uiHandler en registerToolsForAI.
+    assert.strictEqual(mocks.uiRegistered.length, 0);
     await m.onUnload();
   });
 
@@ -472,8 +474,8 @@ function makePedidoEvent(overrides = {}) {
     const { module: m } = await instantiate(mocks);
     const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
     assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
   });
 
@@ -485,7 +487,7 @@ function makePedidoEvent(overrides = {}) {
     assert.deepStrictEqual(m._classifyHandlerError(new Error('field is required')), { status: 400, code: 'INVALID_INPUT' });
     assert.deepStrictEqual(m._classifyHandlerError(new Error('not found')), { status: 404, code: 'RESOURCE_NOT_FOUND' });
     assert.deepStrictEqual(m._classifyHandlerError(new Error('conflict estado')), { status: 409, code: 'CONFLICT_STATE' });
-    assert.deepStrictEqual(m._classifyHandlerError(new Error('boom')), { status: 500, code: 'INTERNAL_ERROR' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('boom')), { status: 500, code: 'UNKNOWN_ERROR' });
     await m.onUnload();
   });
 

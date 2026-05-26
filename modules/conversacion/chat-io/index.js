@@ -21,7 +21,7 @@
  *
  * Cumple los 24 contratos transversales:
  *  - errors: handlers UI devuelven { status, data | error: { code, message,
- *    details? } }. Codes canonicos (VALIDATION_FAILED, RESOURCE_NOT_FOUND).
+ *    details? } }. Codes canonicos (INVALID_INPUT, RESOURCE_NOT_FOUND).
  *    Los codes legacy (PROJECT_REQUIRED, CONVERSATION_REQUIRED,
  *    MESSAGE_ID_REQUIRED) van a error.details.kind para disambiguacion UI.
  *  - observability: log + metric en cada error path. Prefix chat-io.*.
@@ -48,6 +48,7 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS conversations (
   id TEXT PRIMARY KEY,
@@ -83,14 +84,11 @@ const isUUID = (s) => typeof s === 'string' && UUID_REGEX.test(s);
 const defaultSettings = () => ({ context_window: 20, temperature: 0.7, max_tokens: 2000 });
 const DB_TIMEOUT_MS = 10000;
 
-class ChatIoModule {
+class ChatIoModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'chat-io';
     this.version = '2.0.0';
-
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
     this.mqtt      = null;
 
     this.pendingDb           = new Map();
@@ -270,7 +268,7 @@ class ChatIoModule {
   _requireProject(project_id) {
     if (!project_id || !isUUID(project_id)) {
       throw Object.assign(new Error('project_id is required and must be a UUID'),
-        { _code: 'VALIDATION_FAILED',
+        { _code: 'INVALID_INPUT',
           _details: { kind: 'PROJECT_REQUIRED', field: 'project_id', user_message: 'Selecciona un proyecto para chatear' } });
     }
   }
@@ -278,7 +276,7 @@ class ChatIoModule {
   _requireConversation(conversation_id) {
     if (!conversation_id || !isUUID(conversation_id)) {
       throw Object.assign(new Error('conversation_id is required and must be a UUID'),
-        { _code: 'VALIDATION_FAILED',
+        { _code: 'INVALID_INPUT',
           _details: { kind: 'CONVERSATION_REQUIRED', field: 'conversation_id', user_message: 'Selecciona o crea una conversacion' } });
     }
   }
@@ -321,7 +319,11 @@ class ChatIoModule {
         'SELECT context_window, temperature, max_tokens FROM conversations WHERE id = ?',
         [conversation_id], true
       );
-      const settings = convRows[0] || defaultSettings();
+      const dbSettings = convRows[0] || defaultSettings();
+      // Override per-mensaje: el caller (UI / helper de audit) puede pasar
+      // provider/model/temperature/etc en data.settings y gana sobre los
+      // valores almacenados en la conversacion.
+      const settings = { ...dbSettings, ...(data?.settings || {}) };
 
       const message_id = crypto.randomUUID();
       const now = Date.now();
@@ -510,7 +512,7 @@ class ChatIoModule {
       this._requireProject(project_id);
       if (!message_id) {
         throw Object.assign(new Error('message_id is required'),
-          { _code: 'VALIDATION_FAILED',
+          { _code: 'INVALID_INPUT',
             _details: { kind: 'MESSAGE_ID_REQUIRED', field: 'message_id' } });
       }
       await this._db(project_id,
@@ -571,7 +573,9 @@ class ChatIoModule {
       project_id, conversation_id,
       assistant_message,
       message_id_assistant,
-      tokens, cost, tool_calls_executed,
+      provider, model,
+      tokens, cost, duration_ms, finish_reason, iterations,
+      tool_calls_executed,
       settings,
       channel, channel_context, correlation_id
     } = data;
@@ -588,9 +592,25 @@ class ChatIoModule {
     const message_id = message_id_assistant || crypto.randomUUID();
     const now = Date.now();
     const tokens_total = tokens?.total ?? null;
-    const metadata = tool_calls_executed?.length
-      ? JSON.stringify({ tool_calls: tool_calls_executed.map(t => ({ name: t.name, status: t.result_status || t.status })) })
-      : null;
+    // Persistencia COMPLETA del payload canonico chat-flow.contract v1.1.0:
+    //   ai.chat.response.{provider, model, tokens, duration_ms, finish_reason,
+    //   iterations, cost, tool_calls_executed}
+    // Hasta ahora chat-io descartaba todo excepto tokens.total + nombres de
+    // tools — drift con el contrato. Sin esta info los audits y debugging
+    // post-hoc trabajan a ciegas (no se sabe que provider/model respondio,
+    // ni cuanto costo, ni que args paso al tool).
+    const metadataObj = {};
+    if (provider) metadataObj.provider = provider;
+    if (model) metadataObj.model = model;
+    if (tokens && typeof tokens === 'object') metadataObj.tokens = tokens;
+    if (typeof duration_ms === 'number') metadataObj.duration_ms = duration_ms;
+    if (finish_reason) metadataObj.finish_reason = finish_reason;
+    if (typeof iterations === 'number') metadataObj.iterations = iterations;
+    if (cost && typeof cost === 'object') metadataObj.cost = cost;
+    if (Array.isArray(tool_calls_executed) && tool_calls_executed.length > 0) {
+      metadataObj.tool_calls = tool_calls_executed;
+    }
+    const metadata = Object.keys(metadataObj).length > 0 ? JSON.stringify(metadataObj) : null;
 
     try {
       await this._db(project_id,
@@ -627,6 +647,56 @@ class ChatIoModule {
         metadata,
         timestamp: new Date(now).toISOString()
       });
+    }
+  }
+
+  // Persistencia de chat.assistant.saved cuando el emisor es OTRO modulo
+  // (agent-observer, ai-agent-framework). Cierra el bug arquitectonico de
+  // tarjetas de agente que se publicaban al bus sin que nadie las persistiera.
+  // Self-echo (chat-io publica este evento tras persistir desde ai.chat.response)
+  // se ignora via source.module_id.
+  async onChatAssistantSavedFromAgent(event) {
+    if (event?.source?.module_id === 'chat-io') return;
+    const data = event?.data || event;
+    const { project_id, conversation_id, assistant_message, correlation_id, metadata } = data;
+    if (!project_id || !conversation_id || !assistant_message) {
+      this.logger.warn('chat-io.agent_assistant_saved.invalid_payload', {
+        has_project: !!project_id, has_conv: !!conversation_id, has_message: !!assistant_message,
+        source_module: event?.source?.module_id, correlation_id
+      });
+      this.metrics?.increment('chat-io.errors', { kind: 'invalid_payload', source: 'agent_assistant_saved' });
+      return;
+    }
+    await this._ensureSchema(project_id);
+    if (!(await this._validateConversation(project_id, conversation_id))) {
+      this.logger.warn('chat-io.agent_assistant_saved.conv_unknown', {
+        conversation_id, source_module: event?.source?.module_id, correlation_id
+      });
+      this.metrics?.increment('chat-io.errors', { kind: 'unknown_conv', source: 'agent_assistant_saved' });
+      return;
+    }
+    const message_id = data.message_id || crypto.randomUUID();
+    const now = Date.now();
+    const metadataStr = metadata
+      ? (typeof metadata === 'string' ? metadata : JSON.stringify(metadata))
+      : null;
+    try {
+      await this._db(project_id,
+        `INSERT INTO messages (id, conversation_id, role, content, metadata, created_at)
+         VALUES (?, ?, 'assistant', ?, ?, ?)`,
+        [message_id, conversation_id, assistant_message, metadataStr, now]
+      );
+      await this._db(project_id,
+        'UPDATE conversations SET updated_at = ? WHERE id = ?',
+        [now, conversation_id]
+      );
+      this.metrics?.increment('chat-io.message.agent_assistant_saved');
+    } catch (err) {
+      this.logger.error('chat-io.agent_assistant_saved.failed', {
+        error: err.message, correlation_id, conversation_id,
+        source_module: event?.source?.module_id
+      });
+      this.metrics?.increment('chat-io.errors', { kind: 'save_agent_assistant' });
     }
   }
 
@@ -686,56 +756,19 @@ class ChatIoModule {
   // Helpers POC2 (transferibles) + auxiliares
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'VALIDATION_FAILED'      ? 400 :
-                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                    code === 'CONFLICT'               ? 409 :
-                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
-                                                        500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('chat-io.errors', { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found') || msg.includes('does not exist')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('uuid')) return 'VALIDATION_FAILED';
-    if (msg.includes('already') || msg.includes('conflict')) return 'CONFLICT';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('timeout') || msg.includes('unavailable')) return 'UPSTREAM_UNAVAILABLE';
-    return 'INTERNAL_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = { timestamp: new Date().toISOString(), ...payload };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else if (!enriched.correlation_id)  enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
-  }
-
   // Auxiliar: traduce error.code canonico a mensaje legible al usuario
   // (en su idioma, sin tecnicismos). NO expone detalles internos del sistema.
   _userMessageForErrorCode(code, raw_message) {
     const M = {
       'UPSTREAM_TIMEOUT':         'Tardé más de la cuenta en responder. Inténtalo de nuevo en un momento.',
-      'UPSTREAM_RATE_LIMITED':    'Estoy recibiendo muchas peticiones. Inténtalo en unos minutos.',
-      'UPSTREAM_AUTH_FAILED':     'Hay un problema con mis credenciales para el motor del lenguaje. Avisa al administrador.',
-      'UPSTREAM_5XX':             'El motor del lenguaje tiene un fallo temporal. Inténtalo en un momento.',
+      'UPSTREAM_INVALID_RESPONSE':    'Estoy recibiendo muchas peticiones. Inténtalo en unos minutos.',
+      'UPSTREAM_INVALID_RESPONSE':     'Hay un problema con mis credenciales para el motor del lenguaje. Avisa al administrador.',
+      'UPSTREAM_INVALID_RESPONSE':             'El motor del lenguaje tiene un fallo temporal. Inténtalo en un momento.',
       'UPSTREAM_UNREACHABLE':     'No puedo conectar con el motor del lenguaje ahora mismo. Inténtalo más tarde.',
       'UPSTREAM_INVALID_RESPONSE':'El motor del lenguaje devolvió algo que no entiendo. Inténtalo de nuevo.',
-      'UPSTREAM_PAYLOAD_TOO_LARGE':'La conversación se ha hecho demasiado larga para procesarla. Empieza una nueva y te ayudo igual.',
-      'CREDENTIAL_NOT_FOUND':     'No tengo credenciales configuradas para responder. Avisa al administrador.',
-      'INTERNAL_ERROR':           'Algo se rompió por mi parte. Inténtalo de nuevo o avisa si persiste.'
+      'UPSTREAM_INVALID_RESPONSE':'La conversación se ha hecho demasiado larga para procesarla. Empieza una nueva y te ayudo igual.',
+      'RESOURCE_NOT_FOUND':     'No tengo credenciales configuradas para responder. Avisa al administrador.',
+      'UNKNOWN_ERROR':           'Algo se rompió por mi parte. Inténtalo de nuevo o avisa si persiste.'
     };
     return M[code] || `No pude completar la respuesta (${code || 'error desconocido'}). Inténtalo de nuevo.`;
   }

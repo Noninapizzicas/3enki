@@ -15,18 +15,16 @@
 const fs = require('fs').promises;
 const path = require('path');
 
+const BaseModule = require('../_shared/base-module');
 const DEFAULT_SUPPORTED_FORMATS = ['md', 'json', 'txt', 'html', 'css', 'js', 'yaml', 'yml', 'xml'];
 const DEFAULT_MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const DEFAULT_TAB_SIZE = 2;
 
-class TextEditorModule {
+class TextEditorModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'text-editor';
     this.version = '2.0.0';
-
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
     this.config = null;
   }
 
@@ -66,12 +64,12 @@ class TextEditorModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
     if (/access denied|outside project/i.test(msg)) return { status: 403, code: 'PERMISSION_DENIED' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/too large/i.test(msg)) return { status: 413, code: 'INVALID_INPUT' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
@@ -140,7 +138,7 @@ class TextEditorModule {
       await this._publicarEvento('editor.open.response', {
         request_id: data?.request_id,
         success: false,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, data);
       this._handleHandlerError('text-editor.open_request.error', err, 'subscribe');
     }
@@ -167,7 +165,7 @@ class TextEditorModule {
       const data = event?.data || event;
       await this._publicarEvento('editor.error', {
         request_id: data?.request_id,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, data);
       this._handleHandlerError('text-editor.save_request.error', err, 'subscribe');
     }
@@ -186,7 +184,7 @@ class TextEditorModule {
       await this._publicarEvento('editor.validate.response', {
         request_id: data?.request_id,
         success: false,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, data);
       this._handleHandlerError('text-editor.validate_request.error', err, 'subscribe');
     }
@@ -205,7 +203,7 @@ class TextEditorModule {
       await this._publicarEvento('editor.format.response', {
         request_id: data?.request_id,
         success: false,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, data);
       this._handleHandlerError('text-editor.format_request.error', err, 'subscribe');
     }

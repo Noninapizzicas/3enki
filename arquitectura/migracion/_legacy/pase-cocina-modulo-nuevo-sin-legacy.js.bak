@@ -1,0 +1,11 @@
+/**
+ * PLACEHOLDER — no hay monolito legacy de `pase-cocina`.
+ *
+ * Tercer modulo nuevo del horizontal del subsistema-recetario (tras tecnicas y
+ * recetario-creativo). Nace POC2 v1.0.0 desde el primer commit. Sin legacy que
+ * archivar.
+ *
+ * Ver: arquitectura/migracion/notas/pase-cocina-mapa.md (PASO 0).
+ * Mismo patron documental que los placeholders de tecnicas y recetario-creativo.
+ */
+// Modulo nuevo POC2 — no aplica codigo legacy archivado.

@@ -1,0 +1,298 @@
+{
+  "_doc": "Blueprint del modulo tecnicas. Hijo de subsistema-recetario.modulo-base. Libreria de tecnicas culinarias codificadas del proyecto (esferificacion, confitar, marinada, ahumado, fermentacion, etc.) con sus parametros (temperaturas, tiempos, ratios, materiales). Cada tecnica es referenciable desde recetas y prototipos por tecnica_id. Aggregate root con persistencia propia (tecnicas.json del proyecto) + history para audit trail.",
+
+  "id": "tecnicas",
+  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+  "version": "blueprint-1.0.0",
+  "language": "es",
+
+  "rol": "Aggregate root del catalogo de tecnicas culinarias del proyecto. Custodio del dato canonico de cada tecnica con sus parametros tecnicos. Sin razonamiento de dominio mas alla de normalizar inputs en lenguaje natural y prevenir duplicados.",
+
+  "garantiza": [
+    "Cada tecnica tiene id (uuid), nombre, version (entero >=1), parametros (object).",
+    "No hay duplicados activos: dos tecnicas no pueden tener el mismo nombre normalizado (lowercase + trim) en el catalogo simultaneamente.",
+    "Persistencia atomica en /tecnicas.json (path relativo al base_path del proyecto, resuelto por filesystem internamente).",
+    "Cada operacion de mutacion publica el evento canonico correspondiente: tecnica.creada (codificar), tecnica.actualizada (actualizar).",
+    "Cada actualizacion pushea snapshot al history[] de la tecnica y bumps version (+1).",
+    "Listar y obtener son lectura pura — no mutan el store."
+  ],
+
+  "no_garantiza": [
+    "Validacion semantica de parametros (rangos de temperatura, tiempos coherentes con la tecnica) — eso lo razona el LLM al codificar/actualizar.",
+    "Vinculacion automatica con recetas que usan la tecnica — esa relacion vive en recetas (cada receta referencia tecnica_id si aplica).",
+    "Versionado de instrucciones paso a paso de cada tecnica — campos descripcion e instrucciones son texto libre."
+  ],
+
+  "estado_persistente": {
+    "_descripcion": "Archivo unico por proyecto con la lista de tecnicas codificadas.",
+    "path_relativo": "/tecnicas.json",
+    "shape": {
+      "_version": "1.0",
+      "_updated_at": "ISO 8601",
+      "tecnicas": [
+        {
+          "id": "uuid",
+          "nombre": "string (trim)",
+          "descripcion": "string",
+          "categoria": "string (ej. 'coccion', 'preservacion', 'transformacion')",
+          "parametros": "object (libre — temperaturas, tiempos, ratios)",
+          "materiales": "array de strings (utiles necesarios)",
+          "instrucciones": "array de strings (pasos)",
+          "etiquetas": "array de strings",
+          "version": "integer >=1",
+          "history": "array de snapshots de versiones anteriores",
+          "created_at": "ISO 8601",
+          "updated_at": "ISO 8601"
+        }
+      ]
+    }
+  },
+
+  "eventos_publicados": [
+    "tecnicas.codificar.response",
+    "tecnicas.codificar.failed",
+    "tecnicas.obtener.response",
+    "tecnicas.obtener.failed",
+    "tecnicas.listar.response",
+    "tecnicas.listar.failed",
+    "tecnicas.actualizar.response",
+    "tecnicas.actualizar.failed",
+    "tecnicas.parametros.response",
+    "tecnicas.parametros.failed",
+    "tecnica.creada",
+    "tecnica.actualizada"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "operaciones": {
+    "codificar": {
+      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, user_id?, nombre (string trim, req), descripcion?, categoria?, parametros? (object), materiales? (array string), instrucciones? (array string), etiquetas? (array string) }",
+      "pseudocodigo": [
+        "async codificar(input):",
+        "  // 1. Validacion minima.",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.nombre || input.nombre.trim() === '') return INVALID_INPUT { field: 'nombre' }",
+        "",
+        "  // 2. Leer el store.",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/tecnicas.json' })",
+        "  store = raw.status === 404",
+        "    ? { _version: '1.0', _updated_at: nowISO(), tecnicas: [] }",
+        "    : JSON.parse(raw.content)",
+        "",
+        "  // 3. Regla: no duplicado por nombre normalizado.",
+        "  duplicado = store.tecnicas.find(t => t.nombre.toLowerCase().trim() === input.nombre.toLowerCase().trim())",
+        "  if (duplicado) return ALREADY_EXISTS { entity_type: 'tecnica', existing_id: duplicado.id }",
+        "",
+        "  // 4. Normalizar input (TU lo haces en lenguaje natural).",
+        "  parametros_norm = <normalizar input.parametros — coerce strings numericos a number, kg/g/min coherentes>",
+        "  materiales_norm = Array.isArray(input.materiales) ? input.materiales.map(String).filter(Boolean) : []",
+        "  instrucciones_norm = Array.isArray(input.instrucciones) ? input.instrucciones.map(String).filter(Boolean) : []",
+        "",
+        "  // 5. Construir tecnica canonica.",
+        "  tecnica = {",
+        "    id: uuid(),",
+        "    nombre: input.nombre.trim(),",
+        "    descripcion: input.descripcion || '',",
+        "    categoria: input.categoria || null,",
+        "    parametros: parametros_norm || {},",
+        "    materiales: materiales_norm,",
+        "    instrucciones: instrucciones_norm,",
+        "    etiquetas: Array.isArray(input.etiquetas) ? input.etiquetas.map(String) : [],",
+        "    version: 1,",
+        "    history: [],",
+        "    created_at: nowISO(),",
+        "    updated_at: nowISO()",
+        "  }",
+        "",
+        "  // 6. Append + persistir atomicamente.",
+        "  store.tecnicas.push(tecnica)",
+        "  store._updated_at = nowISO()",
+        "  write_resp = await publishAndWait('fs.write.request', {",
+        "    project_id: input.project_id, path: '/tecnicas.json',",
+        "    content: JSON.stringify(store, null, 2), encoding: 'utf-8', atomic: true",
+        "  })",
+        "  if (write_resp.status >= 400) return write_resp",
+        "",
+        "  // 7. Publicar evento de dominio + response al caller.",
+        "  await publish('tecnica.creada', {",
+        "    project_id: input.project_id, user_id: input.user_id || 'system',",
+        "    tecnica_id: tecnica.id, nombre: tecnica.nombre, version: 1,",
+        "    correlation_id: input.correlation_id, timestamp: nowISO()",
+        "  })",
+        "  return { status: 201, data: tecnica }"
+      ],
+      "reglas_clave": [
+        "nombre normalizado (lowercase + trim) unico en el catalogo.",
+        "history[] vacio en creacion — solo populado tras actualizar.",
+        "parametros es object libre — la validacion semantica de rangos NO la hace el blueprint (la hace el LLM al normalizar)."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "ALREADY_EXISTS", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+    },
+
+    "obtener": {
+      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, tecnica_id? (uuid), nombre? (string — exacto o parcial) }",
+      "pseudocodigo": [
+        "async obtener(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.tecnica_id && !input.nombre) return INVALID_INPUT { hint: 'pasar tecnica_id o nombre' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/tecnicas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'tecnica' }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "",
+        "  let tecnica = null",
+        "  if (input.tecnica_id) {",
+        "    tecnica = store.tecnicas.find(t => t.id === input.tecnica_id)",
+        "  } else {",
+        "    // Match por nombre: primero exacto, luego parcial case-insensitive.",
+        "    nombre_norm = input.nombre.toLowerCase().trim()",
+        "    tecnica = store.tecnicas.find(t => t.nombre.toLowerCase().trim() === nombre_norm)",
+        "      || store.tecnicas.find(t => t.nombre.toLowerCase().includes(nombre_norm))",
+        "  }",
+        "  if (!tecnica) return RESOURCE_NOT_FOUND { entity_type: 'tecnica' }",
+        "  return { status: 200, data: tecnica }"
+      ],
+      "reglas_clave": [
+        "Lectura pura.",
+        "Match por nombre prefiere exacto > parcial.",
+        "Devuelve la tecnica completa con history."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "listar": {
+      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, categoria? (filtra por categoria), etiqueta? (filtra por etiqueta) }",
+      "pseudocodigo": [
+        "async listar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/tecnicas.json' })",
+        "  if (raw.status === 404) return { status: 200, data: [] }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "",
+        "  resultados = store.tecnicas",
+        "  if (input.categoria) resultados = resultados.filter(t => t.categoria === input.categoria)",
+        "  if (input.etiqueta) resultados = resultados.filter(t => Array.isArray(t.etiquetas) && t.etiquetas.includes(input.etiqueta))",
+        "",
+        "  // Salida ligera — sin history para no inflar payload.",
+        "  ligero = resultados.map(t => ({",
+        "    id: t.id, nombre: t.nombre, categoria: t.categoria,",
+        "    descripcion: t.descripcion, etiquetas: t.etiquetas, version: t.version",
+        "  }))",
+        "  ligero.sort((a, b) => a.nombre.localeCompare(b.nombre))",
+        "  return { status: 200, data: ligero }"
+      ],
+      "reglas_clave": [
+        "Lectura pura.",
+        "Salida ligera (sin history ni instrucciones completas) para no inflar el payload del LLM.",
+        "Orden alfabetico por nombre.",
+        "Sin paginacion v1 — catalogos de tecnicas son del orden de docenas por proyecto."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+    },
+
+    "actualizar": {
+      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, user_id?, tecnica_id (uuid, req), campos (object con los campos a modificar: descripcion?, categoria?, parametros?, materiales?, instrucciones?, etiquetas?) }",
+      "pseudocodigo": [
+        "async actualizar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.tecnica_id) return INVALID_INPUT { field: 'tecnica_id' }",
+        "  if (!input.campos || Object.keys(input.campos).length === 0) {",
+        "    return INVALID_INPUT { field: 'campos', hint: 'al menos un campo a modificar' }",
+        "  }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/tecnicas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'tecnica' }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "  idx = store.tecnicas.findIndex(t => t.id === input.tecnica_id)",
+        "  if (idx < 0) return RESOURCE_NOT_FOUND { entity_type: 'tecnica', id: input.tecnica_id }",
+        "",
+        "  tecnica = store.tecnicas[idx]",
+        "  // Snapshot de version actual antes de modificar.",
+        "  snapshot = { ...tecnica }",
+        "  delete snapshot.history",
+        "",
+        "  // Aplicar cambios (solo campos permitidos).",
+        "  campos_permitidos = ['descripcion','categoria','parametros','materiales','instrucciones','etiquetas']",
+        "  diff = {}",
+        "  for (const k of campos_permitidos) {",
+        "    if (input.campos[k] !== undefined) {",
+        "      diff[k] = { antes: tecnica[k], despues: input.campos[k] }",
+        "      tecnica[k] = input.campos[k]",
+        "    }",
+        "  }",
+        "  if (Object.keys(diff).length === 0) return INVALID_INPUT { hint: 'no se modifica ningun campo permitido' }",
+        "",
+        "  tecnica.history.push(snapshot)",
+        "  tecnica.version += 1",
+        "  tecnica.updated_at = nowISO()",
+        "  store._updated_at = nowISO()",
+        "",
+        "  write_resp = await publishAndWait('fs.write.request', {",
+        "    project_id: input.project_id, path: '/tecnicas.json',",
+        "    content: JSON.stringify(store, null, 2), encoding: 'utf-8', atomic: true",
+        "  })",
+        "  if (write_resp.status >= 400) return write_resp",
+        "",
+        "  await publish('tecnica.actualizada', {",
+        "    project_id: input.project_id, user_id: input.user_id || 'system',",
+        "    tecnica_id: tecnica.id, nombre: tecnica.nombre, version: tecnica.version,",
+        "    campos_modificados: Object.keys(diff),",
+        "    correlation_id: input.correlation_id, timestamp: nowISO()",
+        "  })",
+        "  return { status: 200, data: { tecnica, diff } }"
+      ],
+      "reglas_clave": [
+        "Solo campos del enum se pueden modificar (id, nombre, version, history, created_at NO se tocan).",
+        "history[] crece con cada actualizacion.",
+        "version bumpea +1 en cada mutacion.",
+        "Si campos no contiene ningun campo permitido → INVALID_INPUT (no escribir disco innecesariamente)."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "parametros": {
+      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, tecnica_id (uuid, req) }",
+      "pseudocodigo": [
+        "async parametros(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.tecnica_id) return INVALID_INPUT { field: 'tecnica_id' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/tecnicas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'tecnica' }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "  tecnica = store.tecnicas.find(t => t.id === input.tecnica_id)",
+        "  if (!tecnica) return RESOURCE_NOT_FOUND { entity_type: 'tecnica', id: input.tecnica_id }",
+        "",
+        "  return { status: 200, data: {",
+        "    tecnica_id: tecnica.id, nombre: tecnica.nombre,",
+        "    categoria: tecnica.categoria,",
+        "    parametros: tecnica.parametros || {}",
+        "  }}"
+      ],
+      "reglas_clave": [
+        "Lectura pura, payload acotado al subset {id, nombre, categoria, parametros}.",
+        "Razon de existir: que el LLM consulte parametros sin recibir el resto de la tecnica (mas ligero, menos tokens)."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    }
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "vincular_tecnicas_con_recetas",
+      "estado": "abierto",
+      "descripcion": "Hoy una receta puede referenciar tecnica_id pero NO hay sincronizacion: si la tecnica cambia parametros, las recetas que la usan no se enteran. Posible v2: subscribirse a tecnica.actualizada y publicar evento informativo o reaccionar para invalidar cache de escandallo si los parametros afectan al coste."
+    },
+    {
+      "id": "categorias_canonicas",
+      "estado": "abierto",
+      "descripcion": "Categoria es string libre. Cuando crezca el catalogo, definir enum canonico (coccion, preservacion, transformacion, presentacion, fermentacion, marinado, etc.) y validarlo."
+    }
+  ]
+}

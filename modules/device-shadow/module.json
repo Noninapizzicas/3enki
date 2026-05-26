@@ -79,8 +79,8 @@
         ]
       },
       "errores_conocidos": [
-        { "code": "VALIDATION_FAILED", "cuando": "device_id ausente" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "shadow no existe para el device_id" }
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND"
       ]
     },
     {
@@ -107,7 +107,7 @@
         ]
       },
       "errores_conocidos": [
-        { "code": "VALIDATION_FAILED", "cuando": "device_id o state ausentes" }
+        "INVALID_INPUT"
       ]
     },
     {
@@ -126,8 +126,8 @@
         ]
       },
       "errores_conocidos": [
-        { "code": "VALIDATION_FAILED", "cuando": "device_id ausente" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "shadow no existe para el device_id" }
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND"
       ]
     }
   ],

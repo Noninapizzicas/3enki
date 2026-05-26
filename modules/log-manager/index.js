@@ -7,18 +7,17 @@ const crypto = require('crypto');
 const LogStorage = require('./lib/storage');
 const LogCollector = require('./lib/collector');
 const SessionLogger = require('./lib/session');
+const BaseModule = require('../_shared/base-module');
 const { listSessions, readSessionLogs } = require('./lib/session');
 
-class LogManagerModule {
+class LogManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'log-manager';
     this.version = '2.1.0';
     this.storage = null;
     this.collector = null;
     this.session = null;
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
     this.config = null;
     this.cleanupInterval = null;
   }
@@ -120,8 +119,8 @@ class LogManagerModule {
   _classifyHandlerError(error) {
     const msg = (error.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('requerido') || msg.includes('missing')) return 'MISSING_FIELD';
-    if (msg.includes('not initialized') || msg.includes('unavailable')) return 'DEPENDENCY_UNAVAILABLE';
+    if (msg.includes('required') || msg.includes('requerido') || msg.includes('missing')) return 'INVALID_INPUT';
+    if (msg.includes('not initialized') || msg.includes('unavailable')) return 'UPSTREAM_UNREACHABLE';
     return 'UNKNOWN_ERROR';
   }
 
@@ -130,9 +129,9 @@ class LogManagerModule {
     const details = error._details;
     const statusMap = {
       RESOURCE_NOT_FOUND: 404,
-      MISSING_FIELD: 400,
       INVALID_INPUT: 400,
-      DEPENDENCY_UNAVAILABLE: 503,
+      INVALID_INPUT: 400,
+      UPSTREAM_UNREACHABLE: 503,
       UNKNOWN_ERROR: 500
     };
     const status = statusMap[code] || 500;
@@ -162,7 +161,7 @@ class LogManagerModule {
   _requireSession() {
     if (!this.session) {
       throw Object.assign(new Error('Session logger not initialized'), {
-        _code: 'DEPENDENCY_UNAVAILABLE'
+        _code: 'UPSTREAM_UNREACHABLE'
       });
     }
   }
@@ -170,7 +169,7 @@ class LogManagerModule {
   _requireCollector() {
     if (!this.collector) {
       throw Object.assign(new Error('Log collector not initialized'), {
-        _code: 'DEPENDENCY_UNAVAILABLE'
+        _code: 'UPSTREAM_UNREACHABLE'
       });
     }
   }
@@ -265,7 +264,7 @@ class LogManagerModule {
       const moduleName = this._extractModuleName(req?.path, 'modules', 'logs');
       if (!moduleName) {
         throw Object.assign(new Error('Module name required'), {
-          _code: 'MISSING_FIELD',
+          _code: 'INVALID_INPUT',
           _details: { field: 'module' }
         });
       }
@@ -306,7 +305,7 @@ class LogManagerModule {
       const { modules } = req?.body || {};
       if (!Array.isArray(modules)) {
         throw Object.assign(new Error('modules array required'), {
-          _code: 'MISSING_FIELD',
+          _code: 'INVALID_INPUT',
           _details: { field: 'modules' }
         });
       }
@@ -398,7 +397,7 @@ class LogManagerModule {
       const sessionId = this._extractParam(req?.path, 'sessions');
       if (!sessionId) {
         throw Object.assign(new Error('Session ID required'), {
-          _code: 'MISSING_FIELD',
+          _code: 'INVALID_INPUT',
           _details: { field: 'session_id' }
         });
       }
@@ -421,7 +420,7 @@ class LogManagerModule {
       const sessionId = this._extractSessionId(req?.path);
       if (!sessionId) {
         throw Object.assign(new Error('Session ID required'), {
-          _code: 'MISSING_FIELD',
+          _code: 'INVALID_INPUT',
           _details: { field: 'session_id' }
         });
       }
@@ -443,7 +442,7 @@ class LogManagerModule {
     try {
       if (!this.storage) {
         throw Object.assign(new Error('Log storage not initialized'), {
-          _code: 'DEPENDENCY_UNAVAILABLE'
+          _code: 'UPSTREAM_UNREACHABLE'
         });
       }
       const filters = {
@@ -470,7 +469,7 @@ class LogManagerModule {
       const msg = body.msg || body.message;
       if (!body.level || !body.module || !msg) {
         throw Object.assign(new Error('Missing required fields: level, module, msg'), {
-          _code: 'MISSING_FIELD',
+          _code: 'INVALID_INPUT',
           _details: { fields: ['level', 'module', 'msg'] }
         });
       }

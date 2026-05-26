@@ -1,0 +1,620 @@
+#!/usr/bin/env node
+/**
+ * Validador del contrato `modulo-clase-robusta` v1.0.0.
+ *
+ * Captura "cada modulo es UNA CLASE DISTINTA bajo OOP adaptado a event-core":
+ * encapsulacion + herencia vertical de BaseModule + polimorfismo limitado.
+ * NO composicion entre modulos, NO DI cross-modulo, NO herencia entre dominios.
+ *
+ * Cross-checks (14):
+ *  1.  drift_modulo_no_extiende_basemodule              (error)
+ *  2.  drift_modulo_extiende_otro_modulo                (error)
+ *  3.  drift_constructor_sin_super                      (error)
+ *  4.  drift_constructor_con_io                         (warning)
+ *  5.  drift_campo_no_declarado_en_constructor          (warning)
+ *  6.  drift_secciones_canonicas_faltantes              (warning)
+ *  7.  drift_metodo_bus_sin_naming_canonico             (warning)
+ *  8.  drift_metodo_http_sin_naming_canonico            (warning)
+ *  9.  drift_subscribe_sin_handler_implementado         (error)
+ *  10. drift_handler_publico_no_declarado_en_manifest   (warning)
+ *  11. drift_polimorfismo_sin_super                     (warning)
+ *  12. drift_publicacion_directa_sin_helper             (warning)
+ *  13. drift_onunload_no_limpia_recursos_abiertos       (warning)
+ *  14. drift_modulo_publica_estado_interno              (info)
+ */
+
+'use strict';
+
+const fs   = require('fs');
+const path = require('path');
+
+const REPO_ROOT     = path.resolve(__dirname, '../../..');
+const CONTRACT_PATH = path.join(REPO_ROOT, 'arquitectura/decisiones/_contratos/modulo-clase-robusta.contract.json');
+const MODULES_DIR   = path.join(REPO_ROOT, 'modules');
+
+const RED='\x1b[31m', GREEN='\x1b[32m', YEL='\x1b[33m', CYAN='\x1b[36m', RST='\x1b[0m';
+
+const SECCIONES_CANONICAS = [
+  '_doc', 'id', 'version', 'creada', 'supersedes_nota', 'objetivo', 'inputs',
+  'filosofia', 'principios', 'decisiones_arquitectonicas', 'prohibido',
+  'output_shape_resumen', 'reglas_de_extraccion', 'derivaciones',
+  'validaciones_cross_realizadas_por_validator', 'salida_validador',
+  'convenciones_complementarias'
+];
+
+const BASE_INHERITED = new Set([
+  '_errorResponse', '_classifyHandlerError', '_statusFromCode',
+  '_handleHandlerError', '_publicarEvento', '_enrich'
+]);
+
+const SECCION_KEYWORDS = {
+  lifecycle: /\b(lifecycle|ciclo de vida|project\s+lifecycle)\b/i,
+  busApi:    /\b(bus\s*(api|subscribers?|handlers?|listeners?|subscriptions?)|event\s*(subscribers?|handlers?|subscriptions?|listeners?)|domain\s*event\s*handlers?|bus\s+subscription|subscribe\s+to|mqtt\s+listeners?|request\s+event\s+handlers?)\b/i,
+  httpApi:   /\b((http|ui)\s*(api|handlers?|endpoints?)|api\s*http|tool\s*handlers?|tools?(\s*$|\s*\(|\b\s*[—:-])|tool[s]?\s+desde)\b/i,
+  dominio:   /\b(dominio|protegid|helpers?\s+poc\d*|domain\s*(helpers?|event)|poc2?\s*helpers?|ai\s*tool|publishers?\s*canonic|core\s*:|persistence|persistencia|version\s+control|build\s+execution|pipeline)\b/i,
+  privados:  /\b(privados|privates?|internals?|utilidades|util\s*helpers?|helpers?\s*internos?|helpers?\s*de\s*uso|helpers?\s*compartidos?|path\s+security|config\s+validation)\b/i
+};
+
+// =========================================================================
+
+function loadJson(p) { return JSON.parse(fs.readFileSync(p, 'utf-8')); }
+
+function lineOf(content, idx) { return content.slice(0, idx).split('\n').length; }
+
+function listModuleIndexes() {
+  const out = [];
+  function walk(dir, depth = 0) {
+    if (depth > 3) return;
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name.startsWith('_') || e.name.startsWith('.')) continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p, depth + 1);
+    }
+    const mj = path.join(dir, 'module.json');
+    const ij = path.join(dir, 'index.js');
+    if (fs.existsSync(mj) && fs.existsSync(ij)) {
+      out.push({ dir, indexPath: ij, manifestPath: mj });
+    }
+  }
+  if (fs.existsSync(MODULES_DIR)) walk(MODULES_DIR);
+  return out;
+}
+
+// Extract balanced method (including its braces) from content. Returns null if not found.
+function extractMethod(content, name) {
+  const re = new RegExp(`(\\n\\s+)(static\\s+)?(async\\s+)?${name}\\s*\\(`);
+  const m = content.match(re);
+  if (!m) return null;
+  const startIdx = m.index + m[1].length;
+  let i = m.index + m[0].length;
+  let parenDepth = 1;
+  while (i < content.length && parenDepth > 0) {
+    if (content[i] === '(') parenDepth++;
+    else if (content[i] === ')') parenDepth--;
+    i++;
+  }
+  while (i < content.length && /\s/.test(content[i])) i++;
+  if (content[i] !== '{') return null;
+  let braceDepth = 1;
+  i++;
+  const bodyStart = i;
+  while (i < content.length && braceDepth > 0) {
+    if (content[i] === '{') braceDepth++;
+    else if (content[i] === '}') braceDepth--;
+    i++;
+  }
+  return {
+    startIdx,
+    endIdx: i,
+    bodyStart,
+    bodyEnd: i - 1,
+    text: content.slice(startIdx, i),
+    body: content.slice(bodyStart, i - 1)
+  };
+}
+
+// List all method names declared at class top-level. Heuristic robusta:
+// busca desde la declaracion `class X extends Y {` hasta `module.exports`
+// (o final del archivo) y detecta lineas con indent EXACTAMENTE igual al
+// indent canonico de los members (normalmente 2). Esto evita confundirse
+// con regex literals dentro de cuerpos de metodos.
+function listClassMethods(content) {
+  const classMatch = content.match(/class\s+(\w+)\s+extends\s+\w+\s*\{/);
+  if (!classMatch) return [];
+  const startScan = classMatch.index + classMatch[0].length;
+  // Find module.exports or end of file as upper bound
+  const exportIdx = content.indexOf('\nmodule.exports', startScan);
+  const endScan = exportIdx > 0 ? exportIdx : content.length;
+  const scanBody = content.slice(startScan, endScan);
+
+  // Detect all candidate method-like lines, including their indent. Filtrar
+  // PRIMERO las palabras-clave de control de flujo (if/for/while/...) para
+  // que el conteo de indent no se contamine con cuerpos anidados.
+  const NOISE = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'function', 'do', 'else', 'try']);
+  const re = /^( +)(static\s+)?(async\s+)?(#?[_$A-Za-z][_$A-Za-z0-9]*)\s*\([^)]*\)\s*\{/gm;
+  const candidates = [];
+  let m;
+  while ((m = re.exec(scanBody)) !== null) {
+    if (NOISE.has(m[4])) continue;
+    candidates.push({ indent: m[1].length, name: m[4] });
+  }
+  if (candidates.length === 0) return [];
+  // Canonical class-member indent: the SMALLEST indent that appears at least once.
+  // Class members can ONLY be at this indent; deeper indents are nested closures.
+  const memberIndent = Math.min(...candidates.map(c => c.indent));
+
+  const result = [];
+  for (const c of candidates) {
+    if (c.indent !== memberIndent) continue;
+    result.push(c.name);
+  }
+  return result;
+}
+
+function getClassDecl(content) {
+  const m = content.match(/class\s+(\w+)(?:\s+extends\s+(\w+))?\s*\{/);
+  if (!m) return null;
+  return { name: m[1], extendsWhat: m[2] || null, idx: m.index };
+}
+
+function isModuleClass(name) {
+  return /Module$/.test(name) || /Gateway$/.test(name) || /^[A-Z]\w*$/.test(name);
+}
+
+function isPoc(slug) {
+  return /-poc$/.test(slug) || /^_/.test(slug);
+}
+
+// =========================================================================
+// Cross-checks
+// =========================================================================
+
+function checkExtiendeBaseModule(modules, findings) {
+  for (const { dir, indexPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    const cls = getClassDecl(content);
+    if (!cls) continue; // module without a main class (function-style legacy); skip
+    if (!cls.extendsWhat) {
+      findings.errors.push(`drift_modulo_no_extiende_basemodule: ${slug} — class ${cls.name} no extends`);
+    } else if (cls.extendsWhat !== 'BaseModule') {
+      findings.errors.push(`drift_modulo_extiende_otro_modulo: ${slug} — class ${cls.name} extends ${cls.extendsWhat} (solo BaseModule permitido)`);
+    }
+  }
+}
+
+function checkConstructorConSuper(modules, findings) {
+  for (const { dir, indexPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    const cls = getClassDecl(content);
+    if (!cls || cls.extendsWhat !== 'BaseModule') continue;
+    const ctor = extractMethod(content, 'constructor');
+    if (!ctor) {
+      findings.warnings.push(`drift_constructor_sin_super: ${slug} — sin constructor explicito`);
+      continue;
+    }
+    // First non-comment, non-whitespace statement should be super(...)
+    const trimmed = ctor.body
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '')
+      .trim();
+    if (!/^super\s*\(/.test(trimmed)) {
+      findings.errors.push(`drift_constructor_sin_super: ${slug} — constructor no llama super() como primera instruccion`);
+    }
+  }
+}
+
+function checkConstructorSinIO(modules, findings) {
+  const IO_PATTERNS = [
+    { re: /\bfs\.[a-z]+(?:Sync)?\s*\(/, label: 'fs.' },
+    { re: /\bfetch\s*\(/, label: 'fetch(' },
+    { re: /\bsetInterval\s*\(/, label: 'setInterval' },
+    { re: /\bsetTimeout\s*\(/, label: 'setTimeout' },
+    { re: /\bnew\s+Database\b/, label: 'new Database' },
+    { re: /\bmqtt\.[a-z]+\s*\(/, label: 'mqtt.' },
+    { re: /\brequire\s*\(\s*['"](?:http|https|net|dgram|child_process|sqlite3|better-sqlite3)['"]\s*\)/, label: 'require(net/http/db)' },
+    { re: /\.connect\s*\(/, label: '.connect(' }
+  ];
+  for (const { dir, indexPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    const ctor = extractMethod(content, 'constructor');
+    if (!ctor) continue;
+    for (const { re, label } of IO_PATTERNS) {
+      const m = ctor.body.match(re);
+      if (m) {
+        const ln = lineOf(content, ctor.bodyStart + m.index);
+        findings.warnings.push(`drift_constructor_con_io: ${slug} ${path.relative(REPO_ROOT, indexPath)}:${ln} — constructor invoca ${label}`);
+        break;
+      }
+    }
+  }
+}
+
+function checkCampoNoDeclaradoEnConstructor(modules, findings) {
+  for (const { dir, indexPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    const ctor = extractMethod(content, 'constructor');
+    const onLoad = extractMethod(content, 'onLoad');
+    if (!ctor) continue;
+    const declared = new Set();
+    const cap = (body) => {
+      const re = /this\.(\w+)\s*=/g; let m;
+      while ((m = re.exec(body)) !== null) declared.add(m[1]);
+    };
+    cap(ctor.body);
+    if (onLoad) cap(onLoad.body);
+    // Now find any `this.X = ...` outside ctor/onLoad
+    const allMethods = ['constructor', 'onLoad', 'onUnload'];
+    const otherBodies = [];
+    // Crude: read whole class body and remove ctor + onLoad ranges
+    const cls = getClassDecl(content);
+    if (!cls) continue;
+    let i = cls.idx + content.slice(cls.idx).indexOf('{');
+    let depth = 1; i++;
+    const cBStart = i;
+    while (i < content.length && depth > 0) {
+      if (content[i] === '{') depth++;
+      else if (content[i] === '}') depth--;
+      i++;
+    }
+    let rest = content.slice(cBStart, i - 1);
+    // Remove constructor body
+    if (ctor) rest = rest.replace(content.slice(ctor.bodyStart, ctor.bodyEnd), '');
+    if (onLoad) rest = rest.replace(content.slice(onLoad.bodyStart, onLoad.bodyEnd), '');
+    const re = /this\.(\w+)\s*=/g;
+    let m;
+    const undeclared = new Set();
+    while ((m = re.exec(rest)) !== null) {
+      if (!declared.has(m[1]) && m[1] !== 'logger' && m[1] !== 'metrics' && m[1] !== 'eventBus') {
+        undeclared.add(m[1]);
+      }
+    }
+    if (undeclared.size > 0) {
+      findings.warnings.push(`drift_campo_no_declarado_en_constructor: ${slug} — campos asignados fuera de constructor/onLoad: ${[...undeclared].join(', ')}`);
+    }
+  }
+}
+
+function checkSeccionesCanonicas(modules, findings) {
+  for (const { dir, indexPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    // Formato 1 (single-line): `// ==== Texto ====`
+    // Formato 2 (3-line block): `// ====+`\n`// Texto`\n`// ====+` (canonico)
+    // Formato 3 (block comment): /* ... */ con keyword dentro
+    const candidates = [];
+    // Delimitadores aceptados: =, -, ─ (Unicode U+2500 box-drawing)
+    const DELIM = '[=\\-\\u2500]';
+    const NONDELIM = '[^=\\-\\u2500\\n]';
+    // single-line con delimitadores a ambos lados: `// ==== Texto ====`
+    for (const m of content.matchAll(new RegExp(`//\\s*${DELIM}+${NONDELIM}+${DELIM}+`, 'g'))) candidates.push(m[0]);
+    // single-line con delimitador solo a la izquierda: `// ---- Texto`
+    for (const m of content.matchAll(new RegExp(`//\\s*${DELIM}{3,}\\s+([A-Za-z][^\\n]*)`, 'g'))) candidates.push(m[1]);
+    // block delim...delim ... delim...delim
+    for (const m of content.matchAll(new RegExp(`//\\s*${DELIM}+\\n([\\s\\S]*?)//\\s*${DELIM}+`, 'g'))) {
+      candidates.push(m[1]);
+    }
+    // block comments /* ... */
+    for (const m of content.matchAll(/\/\*[\s\S]*?\*\//g)) candidates.push(m[0]);
+
+    const found = { lifecycle: false, busApi: false, httpApi: false, dominio: false, privados: false };
+    for (const c of candidates) {
+      for (const key of Object.keys(SECCION_KEYWORDS)) {
+        if (SECCION_KEYWORDS[key].test(c)) found[key] = true;
+      }
+    }
+    const missing = Object.keys(found).filter(k => !found[k]);
+    if (missing.length >= 3) {
+      findings.warnings.push(`drift_secciones_canonicas_faltantes: ${slug} — ${missing.length}/5 secciones sin banner: ${missing.join(', ')}`);
+    }
+  }
+}
+
+function checkBusHandlersNaming(modules, findings) {
+  for (const { dir, indexPath, manifestPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    let manifest;
+    try { manifest = loadJson(manifestPath); } catch (_) { continue; }
+    const subs = manifest?.events?.subscribes || manifest?.subscribes || [];
+    for (const s of subs) {
+      const handler = s.handler;
+      if (!handler) continue;
+      if (handler === 'onLoad' || handler === 'onUnload') continue;
+      if (!/^on[A-Z]/.test(handler)) {
+        findings.warnings.push(`drift_metodo_bus_sin_naming_canonico: ${slug}/module.json — subscribe handler "${handler}" no empieza con "on"`);
+      }
+    }
+  }
+}
+
+function checkHttpHandlersNaming(modules, findings) {
+  for (const { dir, indexPath, manifestPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    let manifest;
+    try { manifest = loadJson(manifestPath); } catch (_) { continue; }
+    const apis = manifest?.apis_http || manifest?.apis || [];
+    for (const a of apis) {
+      const handler = a.handler;
+      if (!handler) continue;
+      if (!/^handle[A-Z]/.test(handler)) {
+        findings.warnings.push(`drift_metodo_http_sin_naming_canonico: ${slug}/module.json — api handler "${handler}" no empieza con "handle"`);
+      }
+    }
+  }
+}
+
+function checkSubscribeSinHandler(modules, findings) {
+  for (const { dir, indexPath, manifestPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    let manifest;
+    try { manifest = loadJson(manifestPath); } catch (_) { continue; }
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    const methods = new Set(listClassMethods(content));
+    // Skip handlers with dotted notation (Class.method, Strategy/Pattern.method) — patrones de delegacion
+    const isFlatHandler = (h) => h && !/[.\/]/.test(h);
+    const subs = manifest?.events?.subscribes || manifest?.subscribes || [];
+    for (const s of subs) {
+      if (!isFlatHandler(s.handler)) continue;
+      if (!methods.has(s.handler)) {
+        findings.errors.push(`drift_subscribe_sin_handler_implementado: ${slug} — subscribe declara handler "${s.handler}" pero el metodo no existe en index.js`);
+      }
+    }
+    const apis = manifest?.apis_http || manifest?.apis || [];
+    for (const a of apis) {
+      if (!isFlatHandler(a.handler)) continue;
+      if (!methods.has(a.handler)) {
+        findings.errors.push(`drift_subscribe_sin_handler_implementado: ${slug} — api_http declara handler "${a.handler}" pero el metodo no existe en index.js`);
+      }
+    }
+  }
+}
+
+function checkHandlerSinDeclarar(modules, findings) {
+  const CANONICOS = new Set(['onLoad', 'onUnload', 'handleHealthCheck']);
+  for (const { dir, indexPath, manifestPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    let manifest;
+    try { manifest = loadJson(manifestPath); } catch (_) { continue; }
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    const methods = listClassMethods(content);
+    const declared = new Set();
+    // Aceptar dos estructuras de manifest: `events.subscribes` (anidado) y
+    // `subscribes` (top-level). Ambas son convenciones validas pre-existentes.
+    const subs = manifest?.events?.subscribes || manifest?.subscribes || [];
+    for (const s of subs) if (s.handler) declared.add(s.handler);
+    const apis = manifest?.apis_http || manifest?.apis || [];
+    for (const a of apis) if (a.handler) declared.add(a.handler);
+    for (const t of (manifest?.tools || [])) {
+      if (typeof t.handler === 'string') declared.add(t.handler);
+      else if (t.handler?.method) declared.add(t.handler.method);
+    }
+    for (const u of (manifest?.ui_handlers || manifest?.uiActions || [])) if (u.handler) declared.add(u.handler);
+    for (const m of methods) {
+      if (CANONICOS.has(m)) continue;
+      if (declared.has(m)) continue;
+      if (/^(on|handle)[A-Z]/.test(m)) {
+        findings.warnings.push(`drift_handler_publico_no_declarado_en_manifest: ${slug} — metodo "${m}" parece publico pero no aparece en module.json`);
+      }
+    }
+  }
+}
+
+function checkPolimorfismoSinSuper(modules, findings) {
+  const BASE_OVERRIDABLES = ['_errorResponse', '_classifyHandlerError', '_handleHandlerError', '_publicarEvento', '_statusFromCode'];
+  for (const { dir, indexPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    for (const name of BASE_OVERRIDABLES) {
+      const m = extractMethod(content, name);
+      if (!m) continue;
+
+      // Caso 1: llama a super — OK
+      if (new RegExp(`super\\.${name}\\s*\\(`).test(m.body)) continue;
+
+      // Caso 2: comentario explicando por que no llama super — OK
+      // (jsdoc del metodo + 200 chars antes)
+      const docZone = content.slice(Math.max(0, m.startIdx - 600), m.startIdx);
+      if (/(NO\s+llama\s+super|override.*firma\s*(distinta|propia|incompatible)|firma\s*(distinta|propia)|no\s+es\s+compatible)/i.test(docZone)) continue;
+
+      // Caso 3: heuristica de firma distinta. Si `_classifyHandlerError`
+      // retorna `{status, code}` objeto (no string), es firma distinta a la
+      // canonica de BaseModule y no puede llamar super (rompe contrato).
+      if (name === '_classifyHandlerError' && /return\s*\{\s*status\s*:/.test(m.body)) continue;
+
+      // Caso 4: `_handleHandlerError` con namespace de metrica DOMINIO-ESPECIFICO
+      // distinto al `${this.name}.errors` canonico → es override legitimo del
+      // namespace, BaseModule no puede saber el namespace correcto. OK si
+      // tiene metric con string literal de modulo (con o sin optional chaining
+      // multiple `?.`).
+      if (name === '_handleHandlerError' && /this\.metrics(\?\.)?\??\.?increment\??\.?\s*\(\s*['"`][\w-]+\./i.test(m.body)) continue;
+
+      // Caso 5: `_publicarEvento` que tiene logica de dominio (project_id default,
+      // metadata.correlationId fallback, try/catch silencioso) — override
+      // legitimo. OK si contiene `await this.eventBus.publish(`.
+      if (name === '_publicarEvento' && /await\s+this\.eventBus\.publish\s*\(/.test(m.body)) continue;
+
+      // Caso 6: `_errorResponse` con shape ligeramente distinta (e.g. siempre
+      // anyadir details) — override legitimo. OK si retorna `{ status, error: ... }`.
+      if (name === '_errorResponse' && /return\s*\{\s*status\s*,\s*error/.test(m.body)) continue;
+
+      const ln = lineOf(content, m.startIdx);
+      findings.warnings.push(`drift_polimorfismo_sin_super: ${slug} ${path.relative(REPO_ROOT, indexPath)}:${ln} — override de ${name}() no llama super.${name}(...) ni explica por que`);
+    }
+  }
+}
+
+// Helper: dado un offset, encuentra el nombre del metodo de la clase que lo
+// contiene mirando hacia atras hasta encontrar una linea `  methodName(`.
+function findEnclosingMethod(content, offset) {
+  // Mirar lineas anteriores buscando un metodo top-level de la clase
+  const before = content.slice(0, offset);
+  const lines = before.split('\n');
+  // Indentado canonico = 2 espacios para metodos top-level
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = lines[i].match(/^( {2,4})(async\s+)?(#?[_$A-Za-z][_$A-Za-z0-9]*)\s*\(/);
+    if (m && m[1].length <= 4 && !['if','for','while','switch','catch','return','function','do'].includes(m[3])) {
+      return m[3];
+    }
+  }
+  return null;
+}
+
+function checkPublicacionDirectaSinHelper(modules, findings) {
+  for (const { dir, indexPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    const publicarEvento = extractMethod(content, '_publicarEvento');
+    const publicarRange = publicarEvento ? { start: publicarEvento.startIdx, end: publicarEvento.endIdx } : null;
+    const re = /this\.eventBus\.publish\s*\(/g;
+    let m;
+    while ((m = re.exec(content)) !== null) {
+      // Dentro del propio _publicarEvento — OK, es implementacion del helper
+      if (publicarRange && m.index >= publicarRange.start && m.index < publicarRange.end) continue;
+      const callText = content.slice(m.index, m.index + 200);
+      // RPC-over-bus: request/response correlacionado — OK
+      if (/\.publish\s*\(\s*['"`][\w-]+\.\w+\.(request|response)['"`]/.test(callText)) continue;
+      // Tool response con template literal `${toolName}.response` — OK
+      if (/\.publish\s*\(\s*`\$\{[\w_]+\}\.response`/.test(callText)) continue;
+      // Constante de eventos que termine en _REQUEST o _RESPONSE — OK (es RPC)
+      if (/\.publish\s*\(\s*[A-Z][A-Z0-9_]*\.[A-Z0-9_]+\.[A-Z0-9_]*(REQUEST|RESPONSE)/.test(callText)) continue;
+      // Si la llamada esta dentro de un metodo privado (`_xxx`), es helper
+      // (wrapper de DB, RPC, mqtt-request, etc.) — OK. La regla aplica solo
+      // a publicaciones desde handlers publicos (onXxx, handleXxx, toolXxx).
+      const enclosing = findEnclosingMethod(content, m.index);
+      if (enclosing && enclosing.startsWith('_')) continue;
+      const ln = lineOf(content, m.index);
+      findings.warnings.push(`drift_publicacion_directa_sin_helper: ${slug} ${path.relative(REPO_ROOT, indexPath)}:${ln} — this.eventBus.publish() directo en ${enclosing || 'handler'} (usar _publicarEvento para evento dominio)`);
+    }
+  }
+}
+
+function checkOnUnloadLimpiaRecursos(modules, findings) {
+  const OPENERS = [
+    { re: /setInterval\s*\(/, label: 'setInterval', closer: /clearInterval\s*\(/ },
+    { re: /setTimeout\s*\(/, label: 'setTimeout', closer: /clearTimeout\s*\(/ },
+    { re: /new\s+Database\b/, label: 'new Database', closer: /\.close\s*\(/ }
+  ];
+  for (const { dir, indexPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    const onLoad = extractMethod(content, 'onLoad');
+    const onUnload = extractMethod(content, 'onUnload');
+    if (!onLoad) continue;
+    for (const { re, label, closer } of OPENERS) {
+      if (re.test(onLoad.body)) {
+        if (!onUnload || !closer.test(onUnload.body)) {
+          findings.warnings.push(`drift_onunload_no_limpia_recursos_abiertos: ${slug} — onLoad abre ${label} pero onUnload no lo cierra (${closer.source})`);
+        }
+      }
+    }
+  }
+}
+
+function checkPublicaEstadoInterno(modules, findings) {
+  // Heuristic estricta: SOLO flagear cuando hay spread `...this.<field>`
+  // dentro de un payload publicado al bus. Eso es publicar el objeto
+  // entero. Acceso a campo (this.config.X) y pasar valor especifico
+  // (this.config.X) son lecturas legitimas, no se flagean.
+  // Falso negativo aceptable: si alguien hace `event = this.cache; publish(event)`
+  // (asignacion intermedia), el detector no lo pilla — costo de evitar
+  // falsos positivos masivos.
+  const SUSPECT_FIELDS = ['cache', 'connection', 'config', 'pendingDb', 'state'];
+  for (const { dir, indexPath } of modules) {
+    const slug = path.relative(MODULES_DIR, dir);
+    if (isPoc(slug)) continue;
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    for (const f of SUSPECT_FIELDS) {
+      // Solo spread: `...this.<field>` dentro de cualquier sitio del codigo
+      // (luego cruzamos con publish para asegurar contexto).
+      const spreadRe = new RegExp(`\\.\\.\\.\\s*this\\.${f}\\b`);
+      const m = content.match(spreadRe);
+      if (!m) continue;
+      // Buscar si esta cerca de un publish (mismo metodo): heuristica simple
+      // — mirar 1000 chars antes en busca de `_publicarEvento(` o `.publish(`
+      const before = content.slice(Math.max(0, m.index - 1000), m.index);
+      if (/_publicarEvento\s*\(|\.publish\s*\(/.test(before)) {
+        const ln = lineOf(content, m.index);
+        findings.info.push(`drift_modulo_publica_estado_interno: ${slug} ${path.relative(REPO_ROOT, indexPath)}:${ln} — spread \`...this.${f}\` en payload (estado interno)`);
+      }
+    }
+  }
+}
+
+// =========================================================================
+
+function reportFindings(f) {
+  if (f.errors.length) {
+    console.log(`${RED}cross-system errors (${f.errors.length})${RST}`);
+    for (const e of f.errors.slice(0, 20)) console.log(`  ${RED}✗${RST} ${e}`);
+    if (f.errors.length > 20) console.log(`  ... y ${f.errors.length - 20} mas`);
+  }
+  if (f.warnings.length) {
+    console.log(`${YEL}cross-system warnings (${f.warnings.length})${RST}`);
+    for (const w of f.warnings.slice(0, 20)) console.log(`  ${YEL}!${RST} ${w}`);
+    if (f.warnings.length > 20) console.log(`  ... y ${f.warnings.length - 20} mas`);
+  }
+  if (f.info.length) {
+    console.log(`${CYAN}cross-system info (${f.info.length})${RST}`);
+    for (const i of f.info.slice(0, 10)) console.log(`  ${CYAN}i${RST} ${i}`);
+    if (f.info.length > 10) console.log(`  ... y ${f.info.length - 10} mas`);
+  }
+  if (!f.errors.length && !f.warnings.length && !f.info.length) {
+    console.log(`${GREEN}cross-system: sin drift detectado${RST}`);
+  }
+}
+
+function main() {
+  const checkSystemFlag = process.argv.includes('--check-system');
+  if (!fs.existsSync(CONTRACT_PATH)) {
+    console.log(`${RED}FAIL${RST} modulo-clase-robusta.contract.json no existe`);
+    process.exit(1);
+  }
+  let contract;
+  try { contract = loadJson(CONTRACT_PATH); }
+  catch (e) { console.log(`${RED}FAIL${RST} ${e.message}`); process.exit(1); }
+  const faltan = SECCIONES_CANONICAS.filter(k => !Object.keys(contract).includes(k));
+  if (faltan.length > 0) {
+    console.log(`${RED}FAIL${RST} modulo-clase-robusta.contract amplitud incompleta. Faltan: ${faltan.join(', ')}`);
+    process.exit(1);
+  }
+  console.log(`${GREEN}PASS${RST} modulo-clase-robusta (contrato valido, ${Object.keys(contract).length} secciones canonicas)`);
+
+  if (checkSystemFlag) {
+    console.log('');
+    console.log(`${CYAN}=== cross-checks contra el repo (modulo-clase-robusta) ===${RST}`);
+    const f = { errors: [], warnings: [], info: [] };
+    const modules = listModuleIndexes();
+    checkExtiendeBaseModule(modules, f);
+    checkConstructorConSuper(modules, f);
+    checkConstructorSinIO(modules, f);
+    checkCampoNoDeclaradoEnConstructor(modules, f);
+    checkSeccionesCanonicas(modules, f);
+    checkBusHandlersNaming(modules, f);
+    checkHttpHandlersNaming(modules, f);
+    checkSubscribeSinHandler(modules, f);
+    checkHandlerSinDeclarar(modules, f);
+    checkPolimorfismoSinSuper(modules, f);
+    checkPublicacionDirectaSinHelper(modules, f);
+    checkOnUnloadLimpiaRecursos(modules, f);
+    checkPublicaEstadoInterno(modules, f);
+    reportFindings(f);
+  }
+  process.exit(0);
+}
+
+main();

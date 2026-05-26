@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/pase.ficha.creada.schema.json",
+  "title": "pase.ficha.creada — payload schema",
+  "description": "Evento emitido por pase-cocina cuando se materializa una ficha de pase para una receta en_servicio. La ficha es la version operativa de la receta para el servicio en curso (con sustituciones aplicadas, notas, etc.). Es read-only desde el frontend de pase; el cocinero solo consulta y reporta incidencias.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "ficha_pase_id",
+    "receta_id",
+    "version_receta",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "ficha_pase_id":  { "$ref": "_common.schema.json#/$defs/ficha_pase_id" },
+    "receta_id":      { "$ref": "_common.schema.json#/$defs/receta_id" },
+    "version_receta": { "$ref": "_common.schema.json#/$defs/receta_version" },
+    "nombre":         { "$ref": "_common.schema.json#/$defs/receta_nombre" },
+    "servicio":       { "type": "string", "minLength": 1, "description": "Etiqueta del servicio (ej. '2026-05-17-cena')." },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

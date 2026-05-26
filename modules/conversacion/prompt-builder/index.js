@@ -40,14 +40,13 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const BaseModule = require('../../_shared/base-module');
 
-class PromptBuilderModule {
+class PromptBuilderModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'prompt-builder';
     this.version = '2.0.0';
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
 
     this._modulesDir = null;
     this._base = null;                  // base.prompt.json
@@ -341,6 +340,11 @@ class PromptBuilderModule {
       channel: channel || 'web',
       channel_context: channel_context || {},
       message_id,
+      // page_id es necesario para que ai-gateway resuelva: catalogo de tools
+      // del modulo activo + inyeccion del system prompt blueprint cuando el
+      // page corresponde a un modulo blueprint-driven. Sin propagarlo,
+      // ai-gateway recibe page_id=undefined y cae al fallback polyfunctional.
+      page_id: page_id ?? undefined,
       system_prompt: systemPrompt,
       messages,
       // opcionales canonicos
@@ -394,40 +398,8 @@ class PromptBuilderModule {
   // Helpers POC2 (transferibles) + auxiliares
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'VALIDATION_FAILED'      ? 400 :
-                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                    code === 'CONFLICT'               ? 409 :
-                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
-                                                        500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('prompt-builder.errors', { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
-    if (msg.includes('timeout') || msg.includes('unavailable')) return 'UPSTREAM_UNAVAILABLE';
-    return 'INTERNAL_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = { timestamp: new Date().toISOString(), ...payload };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else if (!enriched.correlation_id)  enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
-  }
+  // Helpers POC2 (_errorResponse, _classifyHandlerError, _handleHandlerError,
+  // _publicarEvento) heredados de BaseModule.
 }
 
 module.exports = PromptBuilderModule;

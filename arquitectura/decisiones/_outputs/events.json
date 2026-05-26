@@ -332,7 +332,7 @@
   },
 
   "subscribes_declaration_shape": {
-    "descripcion": "Shape canonico de cada entry en module.json events.subscribes[*]. Los campos basicos son obligatorios; request_schema_ref y response_event son opcionales pero recomendados para protocol_event.request handlers, paralelos a apis[*].request_schema_ref del contrato http. Si presente, el bus (o middleware) valida el payload entrante ANTES de invocar al handler — ValidationError genera response canonica VALIDATION_FAILED sin tocar el codigo del modulo.",
+    "descripcion": "Shape canonico de cada entry en module.json events.subscribes[*]. Los campos basicos son obligatorios; request_schema_ref y response_event son opcionales pero recomendados para protocol_event.request handlers, paralelos a apis[*].request_schema_ref del contrato http. Si presente, el bus (o middleware) valida el payload entrante ANTES de invocar al handler — ValidationError genera response canonica INVALID_INPUT sin tocar el codigo del modulo.",
     "campos": [
       {
         "name": "event",
@@ -356,7 +356,7 @@
         "name": "request_schema_ref",
         "type": "string (path al JSON Schema)",
         "obligatorio_si": "opcional, recomendado para protocol_event.request",
-        "descripcion": "Path al JSON Schema del payload entrante. Si presente, el bus o middleware valida ANTES de invocar el handler. ValidationError genera response canonica VALIDATION_FAILED automaticamente. Paralelo a apis[*].request_schema_ref del contrato http."
+        "descripcion": "Path al JSON Schema del payload entrante. Si presente, el bus o middleware valida ANTES de invocar el handler. ValidationError genera response canonica INVALID_INPUT automaticamente. Paralelo a apis[*].request_schema_ref del contrato http."
       },
       {
         "name": "response_event",

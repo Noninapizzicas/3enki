@@ -172,7 +172,7 @@
       "name": "telegram.send_message",
       "description": "Enviar mensaje de texto a Telegram",
       "handler": "handleToolSendMessage",
-      "errores_conocidos": ["RESOURCE_NOT_FOUND", "EXTERNAL_API_FAILED"],
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -212,7 +212,7 @@
       "name": "telegram.send_photo",
       "description": "Enviar foto a Telegram",
       "handler": "handleToolSendPhoto",
-      "errores_conocidos": ["RESOURCE_NOT_FOUND", "EXTERNAL_API_FAILED"],
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -244,7 +244,7 @@
       "name": "telegram.send_document",
       "description": "Enviar documento a Telegram",
       "handler": "handleToolSendDocument",
-      "errores_conocidos": ["RESOURCE_NOT_FOUND", "EXTERNAL_API_FAILED"],
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -276,7 +276,7 @@
       "name": "telegram.send_video",
       "description": "Enviar video a Telegram",
       "handler": "handleToolSendVideo",
-      "errores_conocidos": ["RESOURCE_NOT_FOUND", "EXTERNAL_API_FAILED"],
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -308,7 +308,7 @@
       "name": "telegram.send_location",
       "description": "Enviar ubicacion a Telegram",
       "handler": "handleToolSendLocation",
-      "errores_conocidos": ["RESOURCE_NOT_FOUND", "EXTERNAL_API_FAILED"],
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -341,7 +341,7 @@
       "name": "telegram.edit_message",
       "description": "Editar mensaje existente",
       "handler": "handleToolEditMessage",
-      "errores_conocidos": ["RESOURCE_NOT_FOUND", "EXTERNAL_API_FAILED"],
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -374,7 +374,7 @@
       "name": "telegram.delete_message",
       "description": "Eliminar mensaje",
       "handler": "handleToolDeleteMessage",
-      "errores_conocidos": ["RESOURCE_NOT_FOUND", "EXTERNAL_API_FAILED"],
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -402,7 +402,7 @@
       "name": "telegram.answer_callback",
       "description": "Responder a callback de boton inline",
       "handler": "handleToolAnswerCallback",
-      "errores_conocidos": ["RESOURCE_NOT_FOUND", "EXTERNAL_API_FAILED"],
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -433,7 +433,7 @@
       "name": "telegram.get_file",
       "description": "Obtener info y descargar archivo",
       "handler": "handleToolGetFile",
-      "errores_conocidos": ["RESOURCE_NOT_FOUND", "EXTERNAL_API_FAILED"],
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -460,7 +460,7 @@
       "name": "telegram.get_chat",
       "description": "Obtener info de un chat",
       "handler": "handleToolGetChat",
-      "errores_conocidos": ["RESOURCE_NOT_FOUND", "EXTERNAL_API_FAILED"],
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -483,7 +483,7 @@
       "name": "telegram.set_commands",
       "description": "Configurar menu de comandos del bot",
       "handler": "handleToolSetCommands",
-      "errores_conocidos": ["RESOURCE_NOT_FOUND", "EXTERNAL_API_FAILED"],
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -517,7 +517,7 @@
       "name": "telegram.list_bots",
       "description": "Listar bots activos",
       "handler": "handleToolListBots",
-      "errores_conocidos": ["EXTERNAL_API_FAILED"],
+      "errores_conocidos": ["UPSTREAM_INVALID_RESPONSE"],
       "parameters": {
         "type": "object",
         "properties": {}

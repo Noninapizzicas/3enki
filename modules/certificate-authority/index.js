@@ -19,8 +19,10 @@
 const CAManager = require('./ca-manager');
 const MTLSMiddleware = require('./mtls-middleware');
 
-class CertificateAuthorityModule {
+const BaseModule = require('../_shared/base-module');
+class CertificateAuthorityModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'certificate-authority';
     this.version = '2.0.0';
 
@@ -37,9 +39,6 @@ class CertificateAuthorityModule {
     };
 
     this.core = null;
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
   }
 
   // ==========================================
@@ -120,11 +119,11 @@ class CertificateAuthorityModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado|revoked|expired/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/already|conflict/i.test(msg)) return { status: 409, code: 'CONFLICT_STATE' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {

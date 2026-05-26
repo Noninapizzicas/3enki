@@ -6,7 +6,7 @@
  *  - CRUD via UI handlers + HTTP handlers + bus events.
  *  - Resolucion cascada CUSTOM → CLIENT → PROJECT → GLOBAL → legacy.
  *  - Shape canonico de respuestas: { status, data | error: { code, message, details? } }.
- *  - error.code del catalogo (VALIDATION_FAILED, RESOURCE_NOT_FOUND, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR).
+ *  - error.code del catalogo (INVALID_INPUT, RESOURCE_NOT_FOUND, RESOURCE_NOT_FOUND, UNKNOWN_ERROR).
  *  - correlation_id propagado en publishes.
  *  - Persistencia .env atomica (tempfile + rename).
  *  - maskApiKey nunca expone valor completo.
@@ -109,13 +109,13 @@ function isCanonicalError(result) {
   // Group 2: Validacion canonica
   // ==========================================
 
-  await testAsync('handleUIGet sin key → 400 VALIDATION_FAILED canonico', async () => {
+  await testAsync('handleUIGet sin key → 400 INVALID_INPUT canonico', async () => {
     const mocks = makeMocks();
     const { module: m, envFile } = await instantiate(mocks);
     const result = await m.handleUIGet({});
     assert.ok(isCanonicalError(result));
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(result.error.details.field, 'key');
     await m.onUnload();
     await cleanup(envFile);
@@ -138,7 +138,7 @@ function isCanonicalError(result) {
     const { module: m, envFile } = await instantiate(mocks);
     const result = await m.handleUICreate({ level: 'GLOBAL', api_key: 'x' });
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(result.error.details.field, 'provider');
     await m.onUnload();
     await cleanup(envFile);
@@ -149,7 +149,7 @@ function isCanonicalError(result) {
     const { module: m, envFile } = await instantiate(mocks);
     const result = await m.handleUICreate({ provider: 'OPENAI', level: 'INVALID', api_key: 'x' });
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(result.error.details.field, 'level');
     await m.onUnload();
     await cleanup(envFile);
@@ -160,7 +160,7 @@ function isCanonicalError(result) {
     const { module: m, envFile } = await instantiate(mocks);
     const result = await m.handleUICreate({ provider: 'OPENAI', level: 'PROJECT', api_key: 'x' });
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(result.error.details.field, 'identifier');
     await m.onUnload();
     await cleanup(envFile);
@@ -370,12 +370,12 @@ function isCanonicalError(result) {
     await cleanup(envFile);
   });
 
-  await testAsync('handleResolveCredential HTTP devuelve 404 CREDENTIAL_NOT_FOUND si no hay', async () => {
+  await testAsync('handleResolveCredential HTTP devuelve 404 RESOURCE_NOT_FOUND si no hay', async () => {
     const mocks = makeMocks();
     const { module: m, envFile } = await instantiate(mocks);
     const result = await m.handleResolveCredential({ body: { provider: 'GHOST' } });
     assert.strictEqual(result.status, 404);
-    assert.strictEqual(result.error.code, 'CREDENTIAL_NOT_FOUND');
+    assert.strictEqual(result.error.code, 'RESOURCE_NOT_FOUND');
     await m.onUnload();
     await cleanup(envFile);
   });
@@ -456,11 +456,11 @@ function isCanonicalError(result) {
   await testAsync('_errorResponse + _classifyHandlerError producen shape canonico', async () => {
     const mocks = makeMocks();
     const { module: m, envFile } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'bad');
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'bad' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'bad');
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'bad' } });
     assert.strictEqual(m._classifyHandlerError(new Error('not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('weird')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('weird')), 'UNKNOWN_ERROR');
     await m.onUnload();
     await cleanup(envFile);
   });

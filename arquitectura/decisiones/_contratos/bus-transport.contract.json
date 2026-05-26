@@ -333,7 +333,7 @@
     "naming": "El topic MQTT == nombre del evento. naming.contract gobierna el shape <module>.<entity>.<verb>. Este contrato concreta cómo viaja el topic por el wire.",
     "glossary": "Términos: broker, topic, publish, subscribe, QoS, retained, wildcard, mTLS. Forma canónica en glossary.json.",
     "events": "events.contract gobierna la SEMÁNTICA del bus (publish-subscribe asíncrono, no-esperar-respuesta). Este contrato gobierna la INFRAESTRUCTURA (broker, transporte, autenticación).",
-    "errors": "Errores de transporte: BROKER_DISCONNECTED ya está en errors.json codes_infrastructure.",
+    "errors": "Errores de transporte: UPSTREAM_UNREACHABLE ya está en errors.json codes_infrastructure.",
     "observability": "Métricas del broker (conexiones activas, mensajes por segundo, drops) se exponen via observability.contract. Logs de conexión/desconexión llevan client_id + project_id si aplicable.",
     "lifecycle": "El broker arranca en onLoad del core (antes de cargar módulos). Se detiene en onUnload tras unloadAll de módulos.",
     "persistence": "El broker NO persiste mensajes (in-memory). Si un consumer está caído cuando se publica, pierde el mensaje. Persistencia se hace a nivel aplicación (handlers que escriben a storage).",

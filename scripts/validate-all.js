@@ -52,9 +52,17 @@ const VALIDATORS = [
   { id: 'versionado',    file: 'arquitectura/decisiones/_validators/versionado.validate.js' },
   { id: 'deployment',    file: 'arquitectura/decisiones/_validators/deployment.validate.js' },
   { id: 'module-loading',file: 'arquitectura/decisiones/_validators/module-loading.validate.js' },
+  { id: 'modulo-clase-robusta', file: 'arquitectura/decisiones/_validators/modulo-clase-robusta.validate.js' },
   { id: 'bus-transport', file: 'arquitectura/decisiones/_validators/bus-transport.validate.js' },
   { id: 'scheduling',    file: 'arquitectura/decisiones/_validators/scheduling.validate.js' },
-  { id: 'resilience',    file: 'arquitectura/decisiones/_validators/resilience.validate.js' }
+  { id: 'resilience',    file: 'arquitectura/decisiones/_validators/resilience.validate.js' },
+  { id: 'subsistema-recetario', file: 'arquitectura/decisiones/_validators/subsistema-recetario.validate.js' },
+  { id: 'cajones-context-partitioning', file: 'arquitectura/decisiones/_validators/cajones-context-partitioning.validate.js' },
+  { id: 'llm-runtime-discipline', file: 'arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js' },
+  { id: 'blueprint-eventos-conscientes', file: 'arquitectura/decisiones/_validators/blueprint-eventos-conscientes.validate.js' },
+  { id: 'dinamica-de-trabajo-companero', file: 'arquitectura/decisiones/_validators/dinamica-de-trabajo-companero.validate.js' },
+  { id: 'disciplina-llm-operador', file: 'arquitectura/decisiones/_validators/disciplina-llm-operador.validate.js' },
+  { id: 'project-identity', file: 'arquitectura/decisiones/_validators/project-identity.validate.js' }
 ];
 
 const RED   = '\x1b[31m';

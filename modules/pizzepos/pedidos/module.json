@@ -1,7 +1,7 @@
 {
   "name": "pedidos",
-  "version": "3.0.0",
-  "description": "Gestion completa de pedidos formales pizzepos. Recibe del comandero (bridge comandero.enviar_cocina) o se crea via UI handler. Persiste en memoria con restauracion desde cuentas_activas.json al arrancar (delegacion a persistencia-comandero). Cache de productos invalidada por catalogo.actualizado y producto.{creado,actualizado}.",
+  "version": "3.1.0",
+  "description": "Gestion completa de pedidos pizzepos. Dos tipos: tipo='pos' (flujo POS pizzeria con cuenta_id de cuentas-canales, items en pasos separados, enviado a cocina) y tipo='tienda' (vertical tienda PWA: plano sin cuenta_id, todos los items de una, codigo_recogida + palabra_clave anti-fraude, estado pendiente_recogida). Recibe POS del comandero (bridge comandero.enviar_cocina) o UI handler. Recibe tienda via tool pedido.crear-tienda (auto-wire). Persiste en memoria con restauracion desde cuentas_activas.json al arrancar (delegacion a persistencia-comandero; aplica solo a tipo pos en v3.1.0). Cache de productos invalidada por catalogo.actualizado y producto.{creado,actualizado}.",
   "author": "Pizzepos Team",
   "language": "es",
   "main": "index.js",
@@ -40,7 +40,213 @@
     { "domain": "pedido", "action": "total",        "handler": "handleCalcularTotal",   "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "pedido", "action": "health",       "handler": "handleHealthCheck",     "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "tools": [],
+  "tools": [
+    {
+      "name": "pedido.list",
+      "description": "Lista pedidos con filtros opcionales por cuenta_id y estado. Orden descendente por fecha de creacion.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cuenta_id": { "type": "string", "description": "Filtro por cuenta." },
+          "estado":    { "type": "string", "description": "Filtro por estado del pedido." }
+        },
+        "additionalProperties": false
+      },
+      "handler": "handleListPedidos",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "pedido.get",
+      "description": "Obtiene un pedido por id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Identificador del pedido." }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "handler": "handleGetPedido",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "pedido.create",
+      "description": "Crea un pedido formal nuevo en estado borrador vinculado a una cuenta. Detecta canal por prefijo del cuenta_id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cuenta_id":        { "type": "string", "description": "Identificador de la cuenta." },
+          "project_id":       { "type": "string", "description": "Identificador del proyecto (opcional)." },
+          "notas_generales":  { "type": "string", "description": "Notas generales del pedido." }
+        },
+        "required": ["cuenta_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleCreatePedido",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "pedido.add-item",
+      "description": "Agrega un item al pedido (solo en estado borrador/confirmado). Consulta precios al cache de productos.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pedido_id":   { "type": "string", "description": "Identificador del pedido." },
+          "producto_id": { "type": "string", "description": "Identificador del producto." },
+          "cantidad":    { "type": "integer", "description": "Cantidad (default 1)." },
+          "variaciones": { "type": "object",  "description": "Variaciones aplicadas (quitar/anadir)." },
+          "notas":       { "type": "string",  "description": "Notas del item." }
+        },
+        "required": ["pedido_id", "producto_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleAgregarItem",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "pedido.update-item",
+      "description": "Actualiza un item del pedido (cantidad, variaciones, notas).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pedido_id": { "type": "string", "description": "Identificador del pedido." },
+          "item_id":   { "type": "string", "description": "Identificador del item." }
+        },
+        "required": ["pedido_id", "item_id"],
+        "additionalProperties": true
+      },
+      "handler": "handleActualizarItem",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "pedido.delete-item",
+      "description": "Elimina un item del pedido (solo en estado borrador/confirmado).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pedido_id": { "type": "string", "description": "Identificador del pedido." },
+          "item_id":   { "type": "string", "description": "Identificador del item." }
+        },
+        "required": ["pedido_id", "item_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleEliminarItem",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "pedido.send-kitchen",
+      "description": "Marca el pedido como enviado a cocina. Emite pedido.enviado_cocina.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pedido_id": { "type": "string", "description": "Identificador del pedido." }
+        },
+        "required": ["pedido_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleEnviarCocina",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "pedido.complete",
+      "description": "Marca el pedido como completado (todos los items servidos). Emite pedido.completado.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pedido_id": { "type": "string", "description": "Identificador del pedido." }
+        },
+        "required": ["pedido_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleCompletarPedido",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "pedido.cancel",
+      "description": "Cancela el pedido. Emite pedido.cancelado.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pedido_id": { "type": "string", "description": "Identificador del pedido." },
+          "motivo":    { "type": "string", "description": "Motivo de la cancelacion." }
+        },
+        "required": ["pedido_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleCancelarPedido",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "pedido.total",
+      "description": "Recalcula el subtotal/total de un pedido sumando precios de los items.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pedido_id": { "type": "string", "description": "Identificador del pedido." }
+        },
+        "required": ["pedido_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleCalcularTotal",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "pedido.health",
+      "description": "Health check del modulo pedidos.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleHealthCheck",
+      "errores_conocidos": []
+    },
+    {
+      "name": "pedido.crear-tienda",
+      "description": "Crea un pedido plano de tienda PWA (tipo='tienda'). Sin cuenta_id, todos los items de una, estado inicial pendiente_recogida. Genera codigo_recogida unico de 6 chars sin ambiguos. Persiste palabra_clave anti-fraude y cliente_telefono transitorio solo mientras el pedido vive. Publica pedido.creado con correlation_id propagado.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug":      { "type": "string", "description": "Slug del proyecto (ej: vapers)." },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Lista de items del pedido (todos de una). Cantidad entera > 0 y descripcion no vacia.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cantidad":                  { "type": "integer", "minimum": 1, "description": "Cantidad (entero positivo)." },
+                "descripcion":               { "type": "string",  "description": "Descripcion del item." },
+                "producto_id":               { "type": "string",  "description": "Producto id si esta catalogado." },
+                "precio_unitario_centimos":  { "type": "integer", "minimum": 0, "description": "Precio unitario en centimos." },
+                "precio_total_centimos":     { "type": "integer", "minimum": 0, "description": "Precio total de la linea en centimos." }
+              },
+              "required": ["cantidad", "descripcion"]
+            }
+          },
+          "total_centimos":   { "type": "integer", "minimum": 0, "description": "Total del pedido en centimos." },
+          "canal_origen":     { "type": "string", "enum": ["whatsapp", "web", "manual"], "description": "Canal por el que llego el pedido." },
+          "cliente_telefono":      { "type": "string", "description": "Numero del cliente en E.164 sin + (ej: 34600000000). Transitorio, se desecha al cerrar el pedido. Opcional." },
+          "palabra_clave":         { "type": "string", "pattern": "^[a-z]{3}$", "description": "Palabra clave anti-fraude (3 chars [a-z]). Opcional." },
+          "mayor_edad_confirmado": { "type": "boolean", "description": "Flag opcional: el cliente confirmo mayoria de edad en la PWA (gate del proyecto si activa verificacion_edad). null si el proyecto no requiere verificacion. NO sustituye verificacion fisica del DNI al recoger." },
+          "expira_horas":          { "type": "integer", "minimum": 1, "maximum": 720, "description": "Horas hasta que la reserva expira. Default 24h." },
+          "notas_generales":  { "type": "string", "description": "Notas generales del pedido. Opcional." },
+          "correlation_id":   { "type": "string", "description": "Correlation id propagado del originador." }
+        },
+        "required": ["project_slug", "items", "total_centimos", "canal_origen"]
+      },
+      "handler": "handleCreatePedidoTienda",
+      "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "pedido.generar_codigo_recogida",
+      "description": "Genera un codigo de recogida alfanumerico unico (sin ambiguos 0/O/1/I/L). Util para flujos que necesiten un codigo sin crear pedido aun. NO verifica unicidad contra los pedidos en memoria (eso lo hace pedido.crear-tienda). Longitud configurable 4-8 chars, default 6.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "longitud": { "type": "integer", "minimum": 4, "maximum": 8, "description": "Longitud del codigo (default 6)." }
+        }
+      },
+      "handler": "handleGenerarCodigoRecogida",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    }
+  ],
   "dependencies": [],
   "tracing": {
     "propaga_correlation_id": true

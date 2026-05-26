@@ -25,6 +25,7 @@
     { id: 'groq', name: 'Groq', icon: '⚡', models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'] },
     { id: 'gemini', name: 'Google Gemini', icon: '💎', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
     { id: 'ollama', name: 'Ollama (Local)', icon: '🦙', models: ['llama2', 'codellama', 'mistral', 'mixtral'] },
+    { id: 'kimi', name: 'Kimi (Moonshot)', icon: '🌙', models: ['kimi-k2.6', 'kimi-k2.5', 'kimi-k2-thinking', 'moonshot-v1-128k'] },
   ];
 
   let selectedProvider: Provider | null = $activeProvider || providers[0];

@@ -423,8 +423,8 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks);
     const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
     assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
   });
 
@@ -433,8 +433,8 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks);
     assert.deepStrictEqual(m._classifyHandlerError(new Error('not found')), { status: 404, code: 'RESOURCE_NOT_FOUND' });
     assert.deepStrictEqual(m._classifyHandlerError(new Error('field is required')), { status: 400, code: 'INVALID_INPUT' });
-    assert.deepStrictEqual(m._classifyHandlerError(new Error('timeout while calling api')), { status: 504, code: 'TIMEOUT' });
-    assert.deepStrictEqual(m._classifyHandlerError(new Error('something exploded')), { status: 500, code: 'INTERNAL_ERROR' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('timeout while calling api')), { status: 504, code: 'UPSTREAM_TIMEOUT' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('something exploded')), { status: 500, code: 'UNKNOWN_ERROR' });
     const enoent = Object.assign(new Error('file gone'), { code: 'ENOENT' });
     assert.deepStrictEqual(m._classifyHandlerError(enoent), { status: 404, code: 'RESOURCE_NOT_FOUND' });
     await m.onUnload();

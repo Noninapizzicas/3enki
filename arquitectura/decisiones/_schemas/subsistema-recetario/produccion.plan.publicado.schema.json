@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/produccion.plan.publicado.schema.json",
+  "title": "produccion.plan.publicado — payload schema",
+  "description": "Evento emitido por mise-en-place cuando el jefe publica un plan de produccion semanal/diario. Pase-cocina y el frontend lo recogen para preparar fichas de pase de las recetas planificadas.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "plan_id",
+    "horizonte_desde",
+    "horizonte_hasta",
+    "lineas",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":  { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":      { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":         { "$ref": "_common.schema.json#/$defs/user_id" },
+    "plan_id":         { "type": "string", "minLength": 1 },
+    "horizonte_desde": { "type": "string", "format": "date-time" },
+    "horizonte_hasta": { "type": "string", "format": "date-time" },
+    "lineas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["receta_id", "porciones", "franja"],
+        "properties": {
+          "receta_id":  { "$ref": "_common.schema.json#/$defs/receta_id" },
+          "porciones":  { "type": "integer", "minimum": 1 },
+          "franja":     { "enum": ["desayuno", "comida", "merienda", "cena", "all_day"] },
+          "dia":        { "type": "string", "format": "date" }
+        }
+      }
+    },
+    "timestamp":       { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

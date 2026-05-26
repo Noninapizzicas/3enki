@@ -12,17 +12,14 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 
-class CategoriasModule {
+class CategoriasModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'categorias';
     this.version = '3.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
-
     this.categoriasPerProject = new Map();
   }
 
@@ -390,9 +387,9 @@ class CategoriasModule {
                    code === 'PERMISSION_DENIED'       ? 403 :
                    code === 'ALREADY_EXISTS'          ? 409 :
                    code === 'CONFLICT_STATE'          ? 409 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
-                   code === 'EXTERNAL_API_FAILED'     ? 502 :
-                   code === 'TIMEOUT'                 ? 504 : 500;
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 :
+                   code === 'UPSTREAM_INVALID_RESPONSE'     ? 502 :
+                   code === 'UPSTREAM_TIMEOUT'                 ? 504 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment('categorias.errors', { kind, code });
@@ -405,7 +402,7 @@ class CategoriasModule {
     if (msg.includes('already exists') || msg.includes('ya existe'))                        return 'ALREADY_EXISTS';
     if (msg.includes('permission') || msg.includes('forbidden'))                            return 'PERMISSION_DENIED';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
@@ -420,7 +417,7 @@ class CategoriasModule {
       await this.eventBus.publish(name, enriched);
     } catch (err) {
       this.logger.error('categorias.publish_error', { event: name, error: err.message });
-      this.metrics?.increment('categorias.errors', { kind: 'publish', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('categorias.errors', { kind: 'publish', code: 'UNKNOWN_ERROR' });
     }
   }
 

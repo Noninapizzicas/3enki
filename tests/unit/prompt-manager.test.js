@@ -272,41 +272,41 @@ function publishedOf(mocks, name) {
   // Group 2: Validacion canonica de handlers
   // ==========================================
 
-  await testAsync('handleCreatePrompt sin name devuelve VALIDATION_FAILED canonico', async () => {
+  await testAsync('handleCreatePrompt sin name devuelve INVALID_INPUT canonico', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleCreatePrompt({ body: { content: 'hello' } }, {});
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.ok(typeof r.error.message === 'string');
     assert.ok(!('data' in r));
     await m.onUnload();
   });
 
-  await testAsync('handleCreatePrompt sin content devuelve VALIDATION_FAILED', async () => {
+  await testAsync('handleCreatePrompt sin content devuelve INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleCreatePrompt({ body: { name: 'foo' } }, {});
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleToolPromptGet sin id ni name devuelve VALIDATION_FAILED', async () => {
+  await testAsync('handleToolPromptGet sin id ni name devuelve INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleToolPromptGet({});
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleUIComposerRender sin slots devuelve VALIDATION_FAILED', async () => {
+  await testAsync('handleUIComposerRender sin slots devuelve INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleUIComposerRender({});
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -557,10 +557,10 @@ function publishedOf(mocks, name) {
   await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'msg', { field: 'x' });
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
+    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
   });
 
@@ -568,8 +568,8 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

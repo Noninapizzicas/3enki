@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/escandallo.calculado.schema.json",
+  "title": "escandallo.calculado — payload schema",
+  "description": "Evento emitido por escandallo tras calcular el coste de una receta (a peticion o reactivo a receta.actualizada / ingrediente.precio.actualizado). El frontend lo recoge para refrescar el coste mostrado al jefe. Aplicabilidad: shape canonico tras reescritura de escandallo; hoy el payload es 'variable' segun el audit (drift).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "receta_id",
+    "nombre",
+    "coste_total",
+    "coste_por_porcion",
+    "coste_es_real",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":     { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":         { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":            { "$ref": "_common.schema.json#/$defs/user_id" },
+    "receta_id":          { "$ref": "_common.schema.json#/$defs/receta_id" },
+    "nombre":             { "$ref": "_common.schema.json#/$defs/receta_nombre" },
+    "coste_total":        { "type": ["number", "null"], "minimum": 0, "description": "Coste total de la receta. null si no calculable (faltan precios)." },
+    "coste_por_porcion":  { "type": ["number", "null"], "minimum": 0 },
+    "coste_es_real":      { "type": "boolean", "description": "True si TODOS los ingredientes estan en catalogo con precio. False si alguno se omitio." },
+    "food_cost_pct":      { "type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "Porcentaje coste/PVP cuando hay PVP definido." },
+    "ingredientes_sin_precio": {
+      "type": "array",
+      "items": { "$ref": "_common.schema.json#/$defs/ingrediente_nombre" },
+      "description": "Ingredientes que no se pudieron costar (sin precio en catalogo)."
+    },
+    "timestamp":          { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

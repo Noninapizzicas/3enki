@@ -26,17 +26,15 @@ const crypto = require('crypto');
 const fs     = require('fs').promises;
 const path   = require('path');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 const SAVE_DEBOUNCE_MS   = 1000;
 
-class ComanderoModule {
+class ComanderoModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'comandero';
     this.version = '3.1.0';
-
-    this.eventBus  = null;
-    this.logger    = null;
-    this.metrics   = null;
     this.validator = null;
 
     this.pedidos              = new Map();
@@ -680,7 +678,7 @@ class ComanderoModule {
         );
       } catch (err) {
         this.logger.warn('comandero.guardar_buffers.error', { error: err.message });
-        this.metrics?.increment('comandero.errors', { kind: 'guardar_buffers', code: 'FILESYSTEM_ERROR' });
+        this.metrics?.increment('comandero.errors', { kind: 'guardar_buffers', code: 'UNKNOWN_ERROR' });
       }
     }, SAVE_DEBOUNCE_MS);
   }
@@ -702,9 +700,9 @@ class ComanderoModule {
                    code === 'PERMISSION_DENIED'       ? 403 :
                    code === 'CONFLICT_STATE'          ? 409 :
                    code === 'ALREADY_EXISTS'          ? 409 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
-                   code === 'TIMEOUT'                 ? 504 :
-                   code === 'FILESYSTEM_ERROR'        ? 500 : 500;
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 :
+                   code === 'UPSTREAM_TIMEOUT'                 ? 504 :
+                   code === 'UNKNOWN_ERROR'        ? 500 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment('comandero.errors', { kind, code });
@@ -717,8 +715,8 @@ class ComanderoModule {
     if (ecod === 'ENOENT' || msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
     if (msg.includes('conflict') || msg.includes('already')) return 'CONFLICT_STATE';
-    if (ecod && ecod.startsWith('E')) return 'FILESYSTEM_ERROR';
-    return 'INTERNAL_ERROR';
+    if (ecod && ecod.startsWith('E')) return 'UNKNOWN_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
@@ -733,7 +731,7 @@ class ComanderoModule {
       await this.eventBus.publish(name, enriched);
     } catch (err) {
       this.logger.error('comandero.publish_error', { event: name, error: err.message });
-      this.metrics?.increment('comandero.errors', { kind: 'publish', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('comandero.errors', { kind: 'publish', code: 'UNKNOWN_ERROR' });
     }
   }
 

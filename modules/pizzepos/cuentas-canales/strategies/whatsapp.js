@@ -58,28 +58,7 @@ class WhatsAppStrategy {
     modulo.safeAddSchema(require('../schemas/whatsapp-events.json'));
   }
 
-  registerUIHandlers(uiHandler) {
-    uiHandler.register('whatsapp', 'mensaje', this.handleMensajeRecibido.bind(this));
-    uiHandler.register('whatsapp', 'crear_pedido', this.handleCrearPedido.bind(this));
-    uiHandler.register('whatsapp', 'confirmar', this.handleConfirmarPedido.bind(this));
-    uiHandler.register('whatsapp', 'marcar_listo', this.handleMarcarListo.bind(this));
-    uiHandler.register('whatsapp', 'activos', this.handleGetActivos.bind(this));
-    uiHandler.register('whatsapp', 'get', this.handleGetPedido.bind(this));
-    uiHandler.register('whatsapp', 'conversaciones', this.handleGetConversaciones.bind(this));
-    uiHandler.register('whatsapp', 'enviar', this.handleEnviarMensaje.bind(this));
-    uiHandler.register('whatsapp', 'health', this.handleHealthCheck.bind(this));
-    uiHandler.register('whatsapp', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.modulo.logger.info('canal.whatsapp.ui_handlers.registered', {
-      handlers: this._uiActions
-    });
-  }
-
-  unregisterUIHandlers(uiHandler) {
-    for (const action of this._uiActions) {
-      uiHandler.unregister('whatsapp', action);
-    }
-  }
+  // tools.contract v1.2: el loader auto-wirea las 10 tools 'whatsapp.*' a uiHandler.
 
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));

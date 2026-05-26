@@ -12,8 +12,8 @@
  *
  * Cumple los contratos transversales:
  *  - errors: handlers devuelven { status, data | error: { code, message } }.
- *    Codes canónicos: VALIDATION_FAILED, RESOURCE_NOT_FOUND, CONFLICT_STATE,
- *    QUOTA_EXCEEDED, INTERNAL_ERROR.
+ *    Codes canónicos: INVALID_INPUT, RESOURCE_NOT_FOUND, CONFLICT_STATE,
+ *    RATE_LIMITED, UNKNOWN_ERROR.
  *  - observability: correlation_id propagado vía _publicarEvento; counter
  *    firmware-builder.errors con labels kind+code en cada error path.
  *  - lifecycle: onLoad escanea drivers; onUnload mata builds activos +
@@ -42,6 +42,7 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const BaseModule = require('../_shared/base-module');
 const { spawn } = require('child_process');
 
 const BOARDS = {
@@ -55,15 +56,11 @@ const BOARDS = {
 const MAX_LOG_LINES = 500;
 const CLEAN_TIMEOUT_MS = 60 * 1000;
 
-class FirmwareBuilderModule {
+class FirmwareBuilderModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'firmware-builder';
     this.version = '2.0.0';
-
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     this.config = {
       firmware_path: './firmware/drivers',
       platformio_path: 'platformio',
@@ -187,8 +184,8 @@ class FirmwareBuilderModule {
 
     if (!driver) {
       this.logger.warn('firmware-builder.build.validation', { field: 'driver' });
-      this.metrics?.increment('firmware-builder.errors', { kind: 'build', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'driver requerido', { field: 'driver' });
+      this.metrics?.increment('firmware-builder.errors', { kind: 'build', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'driver requerido', { field: 'driver' });
     }
 
     const driverInfo = this.drivers.get(driver);
@@ -210,16 +207,16 @@ class FirmwareBuilderModule {
       this.logger.warn('firmware-builder.build.max_concurrent', {
         active: this.activeBuilds.size, max: this.config.max_concurrent_builds
       });
-      this.metrics?.increment('firmware-builder.errors', { kind: 'build', code: 'QUOTA_EXCEEDED' });
-      return this._errorResponse(429, 'QUOTA_EXCEEDED',
+      this.metrics?.increment('firmware-builder.errors', { kind: 'build', code: 'RATE_LIMITED' });
+      return this._errorResponse(429, 'RATE_LIMITED',
         `Máximo de builds concurrentes alcanzado (${this.config.max_concurrent_builds})`,
         { active: this.activeBuilds.size, max: this.config.max_concurrent_builds });
     }
 
     if (board && !BOARDS[board]) {
       this.logger.warn('firmware-builder.build.unsupported_board', { board });
-      this.metrics?.increment('firmware-builder.errors', { kind: 'build', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED',
+      this.metrics?.increment('firmware-builder.errors', { kind: 'build', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT',
         `Board '${board}' no soportado`,
         { field: 'board', valid: Object.keys(BOARDS) });
     }
@@ -241,7 +238,7 @@ class FirmwareBuilderModule {
     this._runBuild(driver, driverInfo.path, args, startTime, effectiveBoard, correlationId)
       .catch(err => {
         this.logger.error('firmware-builder.build.unhandled_error', { driver, error: err.message });
-        this.metrics?.increment('firmware-builder.errors', { kind: 'build', code: 'INTERNAL_ERROR' });
+        this.metrics?.increment('firmware-builder.errors', { kind: 'build', code: 'UNKNOWN_ERROR' });
       });
 
     return {
@@ -637,10 +634,10 @@ class FirmwareBuilderModule {
 
   _handleHandlerError(logEvent, err, kind) {
     const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED'    ? 400 :
+    const status = code === 'INVALID_INPUT'    ? 400 :
                    code === 'RESOURCE_NOT_FOUND'   ? 404 :
                    code === 'CONFLICT_STATE'       ? 409 :
-                   code === 'QUOTA_EXCEEDED'       ? 429 :
+                   code === 'RATE_LIMITED'       ? 429 :
                    code === 'AUTHENTICATION_REQUIRED' ? 401 :
                                                      500;
     const message = err.message || String(err);
@@ -655,10 +652,10 @@ class FirmwareBuilderModule {
     if (err.code === 'EEXIST') return 'CONFLICT_STATE';
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('no encontrado')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('requerido')) return 'VALIDATION_FAILED';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('requerido')) return 'INVALID_INPUT';
     if (msg.includes('already') || msg.includes('ya está') || msg.includes('ya esta')) return 'CONFLICT_STATE';
-    if (msg.includes('quota') || msg.includes('máximo') || msg.includes('maximo')) return 'QUOTA_EXCEEDED';
-    return 'INTERNAL_ERROR';
+    if (msg.includes('quota') || msg.includes('máximo') || msg.includes('maximo')) return 'RATE_LIMITED';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {

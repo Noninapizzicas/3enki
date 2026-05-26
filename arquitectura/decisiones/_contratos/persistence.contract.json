@@ -334,7 +334,7 @@
       "viola_principios": ["module_chooses_persistence (decisión robusta)"],
       "como_detectar": "Análisis: módulos que llaman mqttRequest a 'credential-manager' / 'database-manager' / equivalentes SIN manejo del error de respuesta. Si .data se asume sin chequear .error, drift.",
       "ejemplo_drift_actual": null,
-      "alternativa_correcta": "const resp = await mqttRequest('credential-manager', 'resolve', { id }); if (resp.error) { this.logger.warn('module.credencial.no_disponible', { code: resp.error.code }); return this._buildErrorResponse({ status: 503, code: 'DEPENDENCY_UNAVAILABLE', message: 'Credential manager unavailable' }); } /* usar resp.data */ — patrón propagate del contrato errors."
+      "alternativa_correcta": "const resp = await mqttRequest('credential-manager', 'resolve', { id }); if (resp.error) { this.logger.warn('module.credencial.no_disponible', { code: resp.error.code }); return this._buildErrorResponse({ status: 503, code: 'UPSTREAM_UNREACHABLE', message: 'Credential manager unavailable' }); } /* usar resp.data */ — patrón propagate del contrato errors."
     }
   ],
 
@@ -467,7 +467,7 @@
     "events.validate.js cubre la disciplina del bus. persistence.validate.js cubre la disciplina del estado del módulo.",
     "lifecycle.validate.js valida onLoad/onUnload + estado_no_limpiado (leak_potencial). persistence.validate.js cruza eso con el patrón de persistencia declarado para detectar 'in-memory sin restart_resilient declarado' o 'json-file sin _persistirADisco en onUnload'.",
     "observability.validate.js valida log/metric format. persistence.validate.js especifica la regla de telemetría OBLIGATORIA para I/O específicamente (mandatory_telemetry_on_io).",
-    "errors.validate.js valida shape de respuesta y códigos. persistence.validate.js asegura que los errores de I/O usen códigos canónicos (DATABASE_DOWN, FILESYSTEM_ERROR, etc. de errors.json.codes_infrastructure).",
+    "errors.validate.js valida shape de respuesta y códigos. persistence.validate.js asegura que los errores de I/O usen códigos canónicos (UPSTREAM_UNREACHABLE, UNKNOWN_ERROR, etc. de errors.json.codes_infrastructure).",
     "modulo-completo.validate.js valida la AUDITORÍA. persistence.validate.js cruza el patrón declarado en module.json con lo realmente detectado en estado.persistencia / estado.memoria del audit.",
     "Los 7 validators (naming, glossary, events, lifecycle, observability, errors, persistence) son complementarios y no se solapan en su scope. Se ejecutan por separado o todos en CI."
   ]

@@ -21,19 +21,18 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_CONVERSATION_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_AGENT_TIMEOUT_MS = 120000;
 const DEFAULT_AGENT_TEMPERATURE = 0.7;
 const DEFAULT_AGENT_MAX_TOKENS = 2000;
 const DEFAULT_RESOLVE_TIMEOUT_MS = 5000;
 
-class AiAgentFrameworkModule {
+class AiAgentFrameworkModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'ai-agent-framework';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.moduleLoader = null;
     this.mqttRequest = null;
     this.config = null;
@@ -44,6 +43,10 @@ class AiAgentFrameworkModule {
     this._conversationCache = new Map();
     this._conversationCacheTTL = DEFAULT_CONVERSATION_CACHE_TTL_MS;
   }
+
+  // ============================================================
+  // Lifecycle
+  // ============================================================
 
   async onLoad(context) {
     this.logger = context.logger;
@@ -92,10 +95,10 @@ class AiAgentFrameworkModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
+    if (/timeout/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
     if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'subscribe') {
@@ -129,7 +132,11 @@ class AiAgentFrameworkModule {
   }
 
   // ============================================================
-  // Carga de base prompt + agentes
+  // HTTP / UI API — sin endpoints HTTP (modulo solo bus + LLM)
+  // ============================================================
+
+  // ============================================================
+  // Privados — Carga de base prompt + agentes desde FS
   // ============================================================
 
   _loadBasePrompt() {
@@ -192,7 +199,7 @@ class AiAgentFrameworkModule {
         this.logger.warn('ai-agent-framework.agent.load.failed', {
           file, error_message: err.message
         });
-        this.metrics?.increment?.('ai-agent-framework.errors', { code: 'AGENT_LOAD_FAILED', kind: 'load' });
+        this.metrics?.increment?.('ai-agent-framework.errors', { code: 'UNKNOWN_ERROR', kind: 'load' });
       }
     }
   }
@@ -268,7 +275,7 @@ class AiAgentFrameworkModule {
       if (!agent_name) {
         return this._publishAgentExecuteFailed({
           ...baseEnvelope,
-          error: { code: 'AGENT_INPUT_INVALID', message: 'agent_name obligatorio' },
+          error: { code: 'INVALID_INPUT', message: 'agent_name obligatorio' },
           iterations_completed: 0,
           provider_attempted: null
         });
@@ -278,7 +285,7 @@ class AiAgentFrameworkModule {
       if (!agent) {
         return this._publishAgentExecuteFailed({
           ...baseEnvelope,
-          error: { code: 'AGENT_NOT_FOUND', message: `Agente '${agent_name}' no encontrado` },
+          error: { code: 'RESOURCE_NOT_FOUND', message: `Agente '${agent_name}' no encontrado` },
           iterations_completed: 0,
           provider_attempted: null
         });
@@ -287,7 +294,7 @@ class AiAgentFrameworkModule {
       if (!task && (!context || Object.keys(context).length === 0)) {
         return this._publishAgentExecuteFailed({
           ...baseEnvelope,
-          error: { code: 'AGENT_INPUT_INVALID', message: 'Debe proporcionar task o context' },
+          error: { code: 'INVALID_INPUT', message: 'Debe proporcionar task o context' },
           iterations_completed: 0,
           provider_attempted: null
         });
@@ -365,14 +372,14 @@ class AiAgentFrameworkModule {
       if (pending.shape === 'canonical') {
         this._publishAgentExecuteFailed({
           ...pending,
-          error: { code: 'AGENT_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` },
+          error: { code: 'UPSTREAM_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` },
           iterations_completed: 0,
           provider_attempted: null
         });
       } else {
         this.eventBus.publish(pending.response_event, {
           request_id: pending.original_request_id, session_id: pending.session_id,
-          error: { code: 'AGENT_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` }
+          error: { code: 'UPSTREAM_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` }
         });
       }
     }, timeout_ms);
@@ -425,7 +432,7 @@ class AiAgentFrameworkModule {
     if (!agent) {
       return this.eventBus.publish('invoke_agent.response', {
         request_id, session_id,
-        error: { code: 'AGENT_NOT_FOUND', message: `Agente '${agent_name}' no encontrado` }
+        error: { code: 'RESOURCE_NOT_FOUND', message: `Agente '${agent_name}' no encontrado` }
       });
     }
 
@@ -447,7 +454,9 @@ class AiAgentFrameworkModule {
   async onLlmCompleteResponse(event) {
     try {
       const data = event?.data || event;
-      const { request_id, success, error, content, tool_calls_executed, model, provider, usage } = data;
+      const { request_id, content, tool_calls_executed, model, provider, usage } = data;
+      // Por contrato llm-flow: llm.complete.response cierra exito (sin flag success).
+      // Los fallos vienen por evento separado llm.complete.failed, handler distinto.
 
       const pending = this.pendingLlm.get(request_id);
       if (!pending) return;
@@ -459,17 +468,8 @@ class AiAgentFrameworkModule {
         this._publishProgress({
           ...pending,
           step: 'finalizing',
-          message: success ? `Agente ${pending.agent_name} terminando` : `Agente ${pending.agent_name} fallando`
+          message: `Agente ${pending.agent_name} terminando`
         });
-        if (!success) {
-          return this._publishAgentExecuteFailed({
-            ...pending,
-            error: this._classifyLlmError(error || 'agent execution failed'),
-            duration_ms,
-            iterations_completed: 0,
-            provider_attempted: provider || null
-          });
-        }
         return this._publishAgentExecuteResponse({
           ...pending,
           content,
@@ -479,18 +479,7 @@ class AiAgentFrameworkModule {
         });
       }
 
-      // Legacy invoke_agent.response
-      if (!success) {
-        const errObj = (typeof error === 'object' && error !== null)
-          ? error
-          : this._classifyLlmError(error || 'agent execution failed');
-        return this.eventBus.publish('invoke_agent.response', {
-          request_id: pending.original_request_id,
-          session_id: pending.session_id,
-          next_state: null, should_continue: false,
-          error: errObj
-        });
-      }
+      // Legacy invoke_agent.response — exito
       return this.eventBus.publish('invoke_agent.response', {
         request_id: pending.original_request_id,
         session_id: pending.session_id,
@@ -499,6 +488,47 @@ class AiAgentFrameworkModule {
       });
     } catch (err) {
       this._handleHandlerError('ai-agent-framework.llm_complete_response.error', err);
+    }
+  }
+
+  async onLlmCompleteFailed(event) {
+    try {
+      const data = event?.data || event;
+      const { request_id, error, provider, usage } = data;
+
+      const pending = this.pendingLlm.get(request_id);
+      if (!pending) return;
+      clearTimeout(pending.timeout);
+      this.pendingLlm.delete(request_id);
+
+      if (pending.shape === 'canonical') {
+        const duration_ms = Date.now() - pending.startedAt;
+        this._publishProgress({
+          ...pending,
+          step: 'finalizing',
+          message: `Agente ${pending.agent_name} fallando`
+        });
+        return this._publishAgentExecuteFailed({
+          ...pending,
+          error: this._classifyLlmError(error || 'agent execution failed'),
+          duration_ms,
+          iterations_completed: 0,
+          provider_attempted: provider || null
+        });
+      }
+
+      // Legacy invoke_agent.response — error
+      const errObj = (typeof error === 'object' && error !== null)
+        ? error
+        : this._classifyLlmError(error || 'agent execution failed');
+      return this.eventBus.publish('invoke_agent.response', {
+        request_id: pending.original_request_id,
+        session_id: pending.session_id,
+        next_state: null, should_continue: false,
+        error: errObj
+      });
+    } catch (err) {
+      this._handleHandlerError('ai-agent-framework.llm_complete_failed.error', err);
     }
   }
 
@@ -533,24 +563,11 @@ class AiAgentFrameworkModule {
       total: ctx.usage.total_tokens || ((ctx.usage.input_tokens || 0) + (ctx.usage.output_tokens || 0))
     };
 
-    if (ctx.conversation_id) {
-      try {
-        await this._publicarEvento('chat.assistant.saved', {
-          conversation_id: ctx.conversation_id,
-          message_id: crypto.randomUUID(),
-          assistant_message: ctx.content || '',
-          metadata: JSON.stringify({
-            author: { kind: 'agent', id: ctx.agent_name, name: ctx.agent_name },
-            block: { type: 'agent_intervention', title: ctx.agent_name, status: 'closed' },
-            tool_calls: tool_calls
-          })
-        }, { correlation_id: ctx.correlation_id, project_id: ctx.project_id });
-      } catch (err) {
-        this.logger?.warn?.('ai-agent-framework.chat_assistant_saved.publish.failed', {
-          error_message: err.message, agent: ctx.agent_name
-        });
-      }
-    }
+    // chat.assistant.saved se delega a agent-observer (adaptador canonico
+    // agent-flow → chat-flow). agent-observer escucha agent.execute.response/
+    // failed/progress y traduce a chat.assistant.saved con metadata.author +
+    // metadata.block. Si ai-agent-framework lo publicara aqui tambien,
+    // chat-io persistiria la tarjeta dos veces (mismo contenido, dos rows).
 
     return this._publicarEvento('agent.execute.response', payload, {
       correlation_id: ctx.correlation_id, project_id: ctx.project_id
@@ -609,13 +626,13 @@ class AiAgentFrameworkModule {
     const raw = (rawMessage && typeof rawMessage === 'string') ? rawMessage : 'unknown error';
     const lower = raw.toLowerCase();
 
-    let code = 'INTERNAL_ERROR';
-    if (/credential .*timeout|sin credencial|no api key|api key not|credential not found/i.test(raw)) code = 'CREDENTIAL_NOT_FOUND';
-    else if (/no hay providers? disponibles?|no providers available/i.test(raw)) code = 'CREDENTIAL_NOT_FOUND';
+    let code = 'UNKNOWN_ERROR';
+    if (/credential .*timeout|sin credencial|no api key|api key not|credential not found/i.test(raw)) code = 'RESOURCE_NOT_FOUND';
+    else if (/no hay providers? disponibles?|no providers available/i.test(raw)) code = 'RESOURCE_NOT_FOUND';
     else if (lower.includes('timeout') || lower.includes('etimedout')) code = 'UPSTREAM_TIMEOUT';
-    else if (/429|rate.?limit/.test(lower)) code = 'UPSTREAM_RATE_LIMITED';
-    else if (/401|403|unauthorized|forbidden|invalid api key/.test(lower)) code = 'UPSTREAM_AUTH_FAILED';
-    else if (/5\d\d|internal server error|bad gateway|service unavailable/.test(lower)) code = 'UPSTREAM_5XX';
+    else if (/429|rate.?limit/.test(lower)) code = 'UPSTREAM_INVALID_RESPONSE';
+    else if (/401|403|unauthorized|forbidden|invalid api key/.test(lower)) code = 'UPSTREAM_INVALID_RESPONSE';
+    else if (/5\d\d|internal server error|bad gateway|service unavailable/.test(lower)) code = 'UPSTREAM_INVALID_RESPONSE';
     else if (/econnrefused|enotfound|network|unreachable|fetch failed/.test(lower)) code = 'UPSTREAM_UNREACHABLE';
     else if (/invalid response|malformed|parse|unexpected token/.test(lower)) code = 'UPSTREAM_INVALID_RESPONSE';
 

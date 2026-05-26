@@ -19,8 +19,8 @@
     { "domain": "fs", "action": "append",     "handler": "handleAppend" },
     { "domain": "fs", "action": "cleanup",    "handler": "handleCleanup" },
     { "domain": "fs", "action": "stats",      "handler": "handleStats" },
-    { "domain": "fs", "action": "setWorkDir", "handler": "handleSetWorkDir" },
-    { "domain": "fs", "action": "getWorkDir", "handler": "handleGetWorkDir" }
+    { "domain": "fs", "action": "set_work_dir", "handler": "handleSetWorkDir" },
+    { "domain": "fs", "action": "get_work_dir", "handler": "handleGetWorkDir" }
   ],
 
   "tools": [
@@ -32,32 +32,33 @@
         "type": "object",
         "properties": { "path": { "type": "string", "description": "Ruta del directorio", "default": "/" } }
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.read",
-      "description": "Lee el contenido de un archivo.",
+      "description": "Lee el contenido de un archivo. La response incluye hash (SHA-256 hex) que el caller puede pasar como expected_hash a fs.write para versionado optimista (CAS).",
       "handler": "handleRead",
       "parameters": {
         "type": "object",
         "properties": { "path": { "type": "string", "description": "Ruta del archivo" } },
         "required": ["path"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.write",
-      "description": "Escribe contenido a un archivo (crea si no existe).",
+      "description": "Escribe contenido a un archivo (crea si no existe). Soporta versionado optimista opt-in: si llega expected_hash, verifica que el contenido actual en disco lo cumple antes de escribir; si no coincide devuelve CONFLICT_STATE con current_hash y expected_hash. Sin expected_hash, comportamiento legacy (sobrescribe sin verificar).",
       "handler": "handleWrite",
       "parameters": {
         "type": "object",
         "properties": {
-          "path":    { "type": "string", "description": "Ruta del archivo" },
-          "content": { "type": "string", "description": "Contenido a escribir" }
+          "path":          { "type": "string", "description": "Ruta del archivo" },
+          "content":       { "type": "string", "description": "Contenido a escribir" },
+          "expected_hash": { "type": "string", "description": "SHA-256 hex del contenido actual del archivo (obtenido del fs.read previo). Si se pasa, fs.write valida que el disco no cambio desde el read y devuelve CONFLICT_STATE si difiere. Opcional; omitir para escritura sin verificacion (crear nuevo, single-writer puro, scripts de migracion)." }
         },
         "required": ["path", "content"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.delete",
@@ -69,7 +70,7 @@
         "properties": { "path": { "type": "string", "description": "Ruta a eliminar" } },
         "required": ["path"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.mkdir",
@@ -80,7 +81,7 @@
         "properties": { "path": { "type": "string", "description": "Ruta del directorio a crear" } },
         "required": ["path"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.move",
@@ -95,7 +96,7 @@
         },
         "required": ["from", "to"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.copy",
@@ -109,7 +110,7 @@
         },
         "required": ["from", "to"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.search",
@@ -124,7 +125,7 @@
         },
         "required": ["query"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.info",
@@ -135,7 +136,7 @@
         "properties": { "path": { "type": "string", "description": "Ruta del archivo o carpeta" } },
         "required": ["path"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.cleanup",
@@ -149,7 +150,7 @@
           "dry_run":       { "type": "boolean", "description": "Solo muestra que se eliminaria sin eliminar", "default": false }
         }
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.stats",
@@ -159,10 +160,10 @@
         "type": "object",
         "properties": { "path": { "type": "string", "description": "Ruta base", "default": "/" } }
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
-      "name": "fs.setWorkDir",
+      "name": "fs.set_work_dir",
       "description": "Cambia el directorio de trabajo actual. Las rutas relativas se resuelven desde aqui.",
       "handler": "handleSetWorkDir",
       "parameters": {
@@ -170,14 +171,14 @@
         "properties": { "path": { "type": "string", "description": "Nueva ruta de trabajo" } },
         "required": ["path"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
-      "name": "fs.getWorkDir",
+      "name": "fs.get_work_dir",
       "description": "Devuelve el directorio de trabajo actual y contexto del proyecto activo.",
       "handler": "handleGetWorkDir",
       "parameters": { "type": "object", "properties": {} },
-      "errores_conocidos": ["INTERNAL_ERROR"]
+      "errores_conocidos": ["UNKNOWN_ERROR"]
     },
     {
       "name": "fs.append",
@@ -192,7 +193,7 @@
         },
         "required": ["path", "content"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     }
   ],
 

@@ -5,7 +5,7 @@
  *  - Lifecycle (onLoad ensures basePath; onUnload limpia state).
  *  - Validacion canonica de UI/tool handlers → { status, error: { code, message, details } }.
  *  - CRUD: write/read/delete/mkdir/move/copy/append/info/list/stats/search/cleanup.
- *  - Path security: 404/403 con codes canonicos (RESOURCE_NOT_FOUND / AUTHORIZATION_REQUIRED).
+ *  - Path security: 404/403 con codes canonicos (RESOURCE_NOT_FOUND / PERMISSION_DENIED).
  *  - Bus handlers fs.*.request → fs.*.response correlacionados por request_id + correlation_id.
  *  - Spanish handlers archivo.*.solicitado.
  *  - Project lifecycle (onProjectActivated cambia working directory).
@@ -144,18 +144,18 @@ function publishedOf(mocks, name) {
   // Group 2: Validacion canonica de handlers
   // ==========================================
 
-  await testAsync('handleRead sin path → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleRead sin path → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
     const r = await m.handleRead({});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
     await cleanup(tmpDir);
   });
 
-  await testAsync('handleWrite sin content → 400 VALIDATION_FAILED + field=content', async () => {
+  await testAsync('handleWrite sin content → 400 INVALID_INPUT + field=content', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
     const r = await m.handleWrite({ path: '/x.txt' });
@@ -166,13 +166,13 @@ function publishedOf(mocks, name) {
     await cleanup(tmpDir);
   });
 
-  await testAsync('handleDelete root path → 403 AUTHORIZATION_REQUIRED', async () => {
+  await testAsync('handleDelete root path → 403 PERMISSION_DENIED', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
     const r = await m.handleDelete({ path: '/' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 403);
-    assert.strictEqual(r.error.code, 'AUTHORIZATION_REQUIRED');
+    assert.strictEqual(r.error.code, 'PERMISSION_DENIED');
     await m.onUnload();
     await cleanup(tmpDir);
   });
@@ -189,7 +189,7 @@ function publishedOf(mocks, name) {
     await cleanup(tmpDir);
   });
 
-  await testAsync('handleSearch sin query → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleSearch sin query → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
     const r = await m.handleSearch({});
@@ -347,25 +347,25 @@ function publishedOf(mocks, name) {
   // Group 4: Path security
   // ==========================================
 
-  await testAsync('validatePath rechaza path traversal con AUTHORIZATION_REQUIRED', async () => {
+  await testAsync('validatePath rechaza path traversal con PERMISSION_DENIED', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
     let caught = null;
     try { m.validatePath('../../../etc/passwd'); } catch (e) { caught = e; }
     assert.ok(caught);
-    assert.strictEqual(caught._code, 'AUTHORIZATION_REQUIRED');
+    assert.strictEqual(caught._code, 'PERMISSION_DENIED');
     assert.strictEqual(caught._details.kind, 'path_traversal');
     await m.onUnload();
     await cleanup(tmpDir);
   });
 
-  await testAsync('handleRead con path traversal → 403 AUTHORIZATION_REQUIRED canonico', async () => {
+  await testAsync('handleRead con path traversal → 403 PERMISSION_DENIED canonico', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
     const r = await m.handleRead({ path: '../../etc/passwd' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 403);
-    assert.strictEqual(r.error.code, 'AUTHORIZATION_REQUIRED');
+    assert.strictEqual(r.error.code, 'PERMISSION_DENIED');
     await m.onUnload();
     await cleanup(tmpDir);
   });
@@ -536,10 +536,10 @@ function publishedOf(mocks, name) {
   await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'msg', { field: 'x' });
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
+    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
     await cleanup(tmpDir);
   });
@@ -548,11 +548,11 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'ENOENT' })), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EACCES' })), 'AUTHORIZATION_REQUIRED');
-    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EEXIST' })), 'CONFLICT');
-    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EISDIR' })), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EACCES' })), 'PERMISSION_DENIED');
+    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EEXIST' })), 'CONFLICT_STATE');
+    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EISDIR' })), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
     await cleanup(tmpDir);
   });
@@ -581,6 +581,107 @@ function publishedOf(mocks, name) {
     assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
     const errMetric = mocks.metricsCalls.find(c => c[1] === 'filesystem.errors');
     assert.ok(errMetric);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  // ==========================================
+  // Group X: Versionado optimista CAS (Critica 1)
+  // ==========================================
+
+  await testAsync('handleRead devuelve hash SHA-256 hex valido en text', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/cas-text.json', content: '{"a":1}' });
+    const r = await m.handleRead({ path: '/cas-text.json' });
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(typeof r.data.hash, 'string');
+    assert.strictEqual(r.data.hash.length, 64, 'sha256 hex length');
+    assert.ok(/^[a-f0-9]{64}$/.test(r.data.hash), 'hex format');
+    // hash determinista del contenido conocido
+    const expected = crypto.createHash('sha256').update('{"a":1}', 'utf-8').digest('hex');
+    assert.strictEqual(r.data.hash, expected);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleWrite con expected_hash correcto pasa y devuelve nuevo hash', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/cas-ok.json', content: 'v1' });
+    const read1 = await m.handleRead({ path: '/cas-ok.json' });
+    const w2 = await m.handleWrite({
+      path: '/cas-ok.json',
+      content: 'v2',
+      expected_hash: read1.data.hash
+    });
+    assert.ok(isCanonicalSuccess(w2), 'write con expected_hash correcto pasa');
+    assert.strictEqual(w2.data.created, false);
+    assert.strictEqual(typeof w2.data.hash, 'string', 'response trae nuevo hash');
+    assert.notStrictEqual(w2.data.hash, read1.data.hash, 'hash cambia tras write');
+    // verificar persistencia
+    const read2 = await m.handleRead({ path: '/cas-ok.json' });
+    assert.strictEqual(read2.data.content, 'v2');
+    assert.strictEqual(read2.data.hash, w2.data.hash);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleWrite con expected_hash incorrecto devuelve CONFLICT_STATE', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/cas-conflict.json', content: 'original' });
+    const result = await m.handleWrite({
+      path: '/cas-conflict.json',
+      content: 'should-not-persist',
+      expected_hash: 'a'.repeat(64) // hash ficticio
+    });
+    assert.ok(isCanonicalError(result), 'response es error canonico');
+    assert.strictEqual(result.status, 409);
+    assert.strictEqual(result.error.code, 'CONFLICT_STATE');
+    assert.strictEqual(result.error.details.expected_hash, 'a'.repeat(64));
+    assert.strictEqual(typeof result.error.details.current_hash, 'string');
+    // verificar que el archivo NO se sobrescribio
+    const verify = await m.handleRead({ path: '/cas-conflict.json' });
+    assert.strictEqual(verify.data.content, 'original');
+    // metric registrada
+    const conflictMetric = mocks.metricsCalls.find(c =>
+      c[1] === 'filesystem.write.cas_conflict' && c[2]?.reason === 'hash_mismatch'
+    );
+    assert.ok(conflictMetric, 'metric cas_conflict registrada');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleWrite sin expected_hash funciona como antes (silent allow)', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/cas-no-hash.json', content: 'a' });
+    const result = await m.handleWrite({ path: '/cas-no-hash.json', content: 'b' });
+    assert.ok(isCanonicalSuccess(result), 'write sobrescribe sin verificar');
+    const verify = await m.handleRead({ path: '/cas-no-hash.json' });
+    assert.strictEqual(verify.data.content, 'b');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleWrite con expected_hash en archivo inexistente devuelve CONFLICT_STATE', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const result = await m.handleWrite({
+      path: '/cas-missing.json',
+      content: 'cualquier',
+      expected_hash: 'b'.repeat(64)
+    });
+    assert.ok(isCanonicalError(result));
+    assert.strictEqual(result.status, 409);
+    assert.strictEqual(result.error.code, 'CONFLICT_STATE');
+    assert.strictEqual(result.error.details.current_hash, null,
+      'current_hash es null cuando archivo no existe');
+    const conflictMetric = mocks.metricsCalls.find(c =>
+      c[1] === 'filesystem.write.cas_conflict' && c[2]?.reason === 'file_missing'
+    );
+    assert.ok(conflictMetric);
     await m.onUnload();
     await cleanup(tmpDir);
   });

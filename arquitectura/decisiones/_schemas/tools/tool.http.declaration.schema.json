@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/tools/tool.http.declaration.schema.json",
+  "title": "Tool HTTP declaration in module.json",
+  "description": "Shape canonico de cada entry de module.json.tools_http[]. Wrapper HTTP declarativo sin codigo JS: el loader genera el handler closure en runtime con auth resuelta via credential-manager, templating de path/headers/body, mapeo de status HTTP a errores.contract, extraccion de response_path. Una entry tools_http es equivalente a una entry tools[] desde el punto de vista del consumidor: se registra en los 3 destinos (toolsRegistry, bus event, uiHandler) identicamente. Ver tools.contract v1.2: principios.tool_http_declarativa_sin_handler_string y tools_http_shape.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "description", "parameters", "http"],
+
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+\\.[a-z0-9_-]+(\\.[a-z0-9_-]+)*$",
+      "minLength": 3,
+      "maxLength": 80,
+      "description": "Nombre canonico de la tool. Forma <module-prefix>.<entity>(.verb)? en kebab-case (segmentos siguientes admiten kebab o snake). Mismas reglas que tools[]. El loader deriva domain/action para uiHandler por split en el primer punto."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 500,
+      "description": "Frase legible para el LLM (8-500 caracteres) que explica QUE hace y CUANDO se invoca. En idioma de module.json.language."
+    },
+    "parameters": {
+      "type": "object",
+      "description": "JSON Schema 2020-12 que describe los argumentos de la tool. Mismas reglas que tools[].parameters.",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "object" },
+        "properties": { "type": "object" },
+        "required": { "type": "array", "items": { "type": "string" } },
+        "additionalProperties": {}
+      }
+    },
+    "http": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "url"],
+      "description": "Especificacion del request HTTP. El loader la interpreta para generar el handler closure.",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+          "description": "Metodo HTTP del upstream."
+        },
+        "url": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 2000,
+          "description": "URL absoluta del endpoint. Soporta sintaxis {{paramName}} reemplazada por valor del arg correspondiente. Ej: 'https://api.example.com/items/{{id}}'. Path params consumidos no se agregan al query/body."
+        },
+        "auth_type": {
+          "type": "string",
+          "enum": ["none", "bearer", "api_key_header", "api_key_query", "basic"],
+          "default": "none",
+          "description": "Tipo de autenticacion. Si !== 'none', credential_id obligatorio. El loader resuelve via credential.resolve.request al credential-manager antes de la HTTP request."
+        },
+        "credential_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "ID del credential en credential-manager. Obligatorio si auth_type !== 'none'. NO la credencial en si — solo el id."
+        },
+        "auth_header_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Nombre del header para auth_type='api_key_header' (default 'X-API-Key' si ausente)."
+        },
+        "auth_query_param_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Nombre del query param para auth_type='api_key_query' (default 'apiKey' si ausente)."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Headers HTTP fijos o templated con {{paramName}}. El loader reemplaza tokens y normaliza Content-Type / Accept si faltan."
+        },
+        "body_template": {
+          "description": "Plantilla del body para POST/PUT/PATCH. Object con tokens {{paramName}} (reemplazados por args), o string crudo (sin templating). Si ausente, los args no consumidos por path/header se serializan como JSON body."
+        },
+        "response_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Path tipo 'data.results[0].text' para extraer subcampo del response parseado. Si ausente, devuelve body parseado completo como result."
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 600000,
+          "default": 30000,
+          "description": "Timeout del request HTTP en ms. Default 30000 (30s)."
+        }
+      }
+    },
+    "errores_conocidos": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+      },
+      "uniqueItems": true,
+      "description": "Codigos que la tool puede emitir. El loader mappea automaticamente status HTTP a codes canonicos (INVALID_INPUT, RESOURCE_NOT_FOUND, PERMISSION_DENIED, CONFLICT_STATE, RATE_LIMITED, UPSTREAM_TIMEOUT, UPSTREAM_UNREACHABLE, UPSTREAM_INVALID_RESPONSE). El array declara los que el contrato del modulo garantiza posibles."
+    }
+  }
+}

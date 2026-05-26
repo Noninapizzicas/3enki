@@ -3,7 +3,7 @@
   "id": "errors",
   "version": "1.3.0",
   "creada": "2026-05-02",
-  "supersedes_nota": "v1.3.0 (sub-contrato agent-flow v1.0.0): añadidos al output codes_infrastructure 4 codigos del subsistema agentes: AGENT_NOT_FOUND (agente no existe en catalogo), AGENT_TIMEOUT (excedio timeout_ms), AGENT_INPUT_INVALID (sin task ni context, o sin agent_name), AGENT_TOOL_FAILED (tool del agente fallo de forma irrecuperable durante el agentic loop interno). Son de naturaleza infrastructure (errores de sistema/subsistema, no de dominio de negocio) — un fallo de tool en el agentic loop es infraestructura del subsistema agentes, no del negocio. Referenciados por agent.execute.failed.error.code en agent-flow.contract.json. Cierra incoherencia entre agent-flow y errors.json detectada cuando el validator de errors flaggeaba AGENT_* como drift_inventar_error_code.\n\nv1.2.0 (POC2 ai-gateway, finding F3): añadidos al output codes_infrastructure: CREDENTIAL_NOT_FOUND y los 8 UPSTREAM_* (AUTH_FAILED, NOT_FOUND, RATE_LIMITED, 5XX, TIMEOUT, UNREACHABLE, INVALID_RESPONSE, PAYLOAD_TOO_LARGE) — referenciados por http.contract.status_code_mapping_to_canonical pero ausentes hasta ahora. Schema fix: pattern de code admite digitos (^[A-Z][A-Z0-9_]*[A-Z0-9]$) para soportar UPSTREAM_5XX. Cierra incoherencia entre errors.json y http.json.\n\nv1.1.0 (POC1 notas): deprecadas PROJECT_NOT_FOUND/RECIPE_NOT_FOUND (usar RESOURCE_NOT_FOUND + entity_type). Añadidos field y all_errors a details_canonical_fields. Añadida sección recommended_helpers con _buildErrorResponse.",
+  "supersedes_nota": "v1.3.0 (sub-contrato agent-flow v1.0.0): añadidos al output codes_infrastructure 4 codigos del subsistema agentes: RESOURCE_NOT_FOUND (agente no existe en catalogo), UPSTREAM_TIMEOUT (excedio timeout_ms), INVALID_INPUT (sin task ni context, o sin agent_name), UPSTREAM_INVALID_RESPONSE (tool del agente fallo de forma irrecuperable durante el agentic loop interno). Son de naturaleza infrastructure (errores de sistema/subsistema, no de dominio de negocio) — un fallo de tool en el agentic loop es infraestructura del subsistema agentes, no del negocio. Referenciados por agent.execute.failed.error.code en agent-flow.contract.json. Cierra incoherencia entre agent-flow y errors.json detectada cuando el validator de errors flaggeaba AGENT_* como drift_inventar_error_code.\n\nv1.2.0 (POC2 ai-gateway, finding F3): añadidos al output codes_infrastructure: RESOURCE_NOT_FOUND y los 8 UPSTREAM_* (AUTH_FAILED, NOT_FOUND, RATE_LIMITED, 5XX, UPSTREAM_TIMEOUT, UNREACHABLE, INVALID_RESPONSE, PAYLOAD_TOO_LARGE) — referenciados por http.contract.status_code_mapping_to_canonical pero ausentes hasta ahora. Schema fix: pattern de code admite digitos (^[A-Z][A-Z0-9_]*[A-Z0-9]$) para soportar UPSTREAM_INVALID_RESPONSE. Cierra incoherencia entre errors.json y http.json.\n\nv1.1.0 (POC1 notas): deprecadas PROJECT_NOT_FOUND/RECIPE_NOT_FOUND (usar RESOURCE_NOT_FOUND + entity_type). Añadidos field y all_errors a details_canonical_fields. Añadida sección recommended_helpers con _buildErrorResponse.",
 
   "objetivo": "Producir UN JSON output (_outputs/errors.json) que define: shape canónica de respuesta (éxito y fallo), códigos de status estandarizados con su significado, estructura del campo error (code, message, details opcionales), política de stack traces, política de propagación (cuándo absorber, cuándo throw), telemetría obligatoria al emitir un error (log + métrica), política de exposición externa (qué se ve en respuestas vs qué solo en logs internos), distinción entre errores de dominio vs infraestructura. Validable mecánicamente cruzando contra las auditorías modulo-completo.",
 
@@ -105,7 +105,7 @@
       "decision": "Toda respuesta de tool/ui_handler/api_http/handler de mqttRequest tiene la forma exacta: { status: integer (HTTP-like), data?: object (presente en éxito, ausente en fallo), error?: { code: string UPPER_SNAKE_CASE, message: string libre, details?: object opcional } (presente en fallo, ausente en éxito) }. Mutuamente excluyentes: si hay error, NO hay data. Si hay data, NO hay error. status SIEMPRE presente.",
       "derivado_de": ["canonical_response_shape", "human_message_machine_code"],
       "razon": "Forma estricta y predecible permite a callers procesar respuestas uniformemente sin try/catch defensivos por cada call. La auditoría puede validar el shape mecánicamente.",
-      "notas": "Esto es lo que recibe el caller. El status es HTTP-like (200/400/500), el code es la subdivisión léxica del error específico ('RECIPE_NOT_FOUND', 'DATABASE_DOWN')."
+      "notas": "Esto es lo que recibe el caller. El status es HTTP-like (200/400/500), el code es la subdivisión léxica del error específico ('RECIPE_NOT_FOUND', 'UPSTREAM_UNREACHABLE')."
     },
     {
       "id": "status_codes_canonical",
@@ -115,7 +115,7 @@
     },
     {
       "id": "error_code_naming",
-      "decision": "El campo error.code es un string en UPPER_SNAKE_CASE: 'PROJECT_NOT_FOUND', 'INVALID_INPUT', 'DATABASE_DOWN', 'CREDENTIAL_EXPIRED'. Tres a cinco palabras como mucho. Identifica la causa específica dentro de la categoría del status. Lista cerrada en errors.json — no se inventan.",
+      "decision": "El campo error.code es un string en UPPER_SNAKE_CASE: 'PROJECT_NOT_FOUND', 'INVALID_INPUT', 'UPSTREAM_UNREACHABLE', 'CREDENTIAL_EXPIRED'. Tres a cinco palabras como mucho. Identifica la causa específica dentro de la categoría del status. Lista cerrada en errors.json — no se inventan.",
       "derivado_de": ["closed_code_list", "human_message_machine_code"],
       "razon": "UPPER_SNAKE_CASE es convención industria para constantes/códigos (HTTP, gRPC, proto). Distingue visualmente del status numérico y del message en prosa. Estable en el tiempo (cambiar un code es breaking change). El caller hace 'switch (error.code)' sin parsear strings.",
       "notas": "Códigos canónicos viven en errors.json bajo dos categorías: codes_domain (4xx-related) y codes_infrastructure (5xx-related)."
@@ -146,7 +146,7 @@
     },
     {
       "id": "mqttRequest_error_propagation",
-      "decision": "Cuando un módulo llama mqttRequest('domain', 'action', payload) y la respuesta es un error (status >= 400), el caller decide entre 3 opciones: (a) PROPAGAR — devolver el mismo error con el mismo code/message del peer (mismo status, mismo error.code, mismo message); (b) TRADUCIR — devolver un error propio con código del dominio del caller (ej. el peer dice 'CREDENTIAL_NOT_FOUND', el caller traduce a 'AUTHENTICATION_FAILED'); (c) ABSORBER — devolver éxito con datos parciales o defaults, registrando degradado en log+métrica. En las 3 opciones: log + métrica obligatorios.",
+      "decision": "Cuando un módulo llama mqttRequest('domain', 'action', payload) y la respuesta es un error (status >= 400), el caller decide entre 3 opciones: (a) PROPAGAR — devolver el mismo error con el mismo code/message del peer (mismo status, mismo error.code, mismo message); (b) TRADUCIR — devolver un error propio con código del dominio del caller (ej. el peer dice 'RESOURCE_NOT_FOUND', el caller traduce a 'AUTHENTICATION_FAILED'); (c) ABSORBER — devolver éxito con datos parciales o defaults, registrando degradado en log+métrica. En las 3 opciones: log + métrica obligatorios.",
       "derivado_de": ["propagate_or_absorb_with_telemetry"],
       "razon": "Cuando un error cruza fronteras de módulos, el caller decide cómo presentárselo a sus propios callers. Propagación literal expone códigos del peer (acoplamiento). Traducción aísla. Absorción mantiene UX. Las 3 son válidas; lo que NO es válido es no decidir o tragar sin telemetría."
     },
@@ -258,9 +258,9 @@
 
     "Definir status_codes como array de objetos. Cada objeto tiene: code (integer), name (string corto), kind (enum 'success'|'domain'|'infrastructure'), retryable (boolean — sugerencia explícita de si reintentar tiene sentido), descripcion (humana). Códigos: 200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504. Ej: {code: 404, name: 'Not Found', kind: 'domain', retryable: false, descripcion: 'El recurso solicitado no existe.'}.",
 
-    "Definir codes_domain como array de objetos canónicos UPPER_SNAKE_CASE para errores de dominio (que el caller puede actuar). Cada objeto: code (string), status_typical (integer 4xx — el status HTTP que típicamente acompaña), descripcion (humana), ejemplo_uso (cuándo usar este código). Lista inicial: PROJECT_NOT_FOUND, RECIPE_NOT_FOUND, INVALID_INPUT, MISSING_FIELD, FIELD_TOO_LONG, ALREADY_EXISTS, CONFLICT_STATE, PERMISSION_DENIED, RATE_LIMITED, INVALID_VERSION, etc. Lista extensible vía PR.",
+    "Definir codes_domain como array de objetos canónicos UPPER_SNAKE_CASE para errores de dominio (que el caller puede actuar). Cada objeto: code (string), status_typical (integer 4xx — el status HTTP que típicamente acompaña), descripcion (humana), ejemplo_uso (cuándo usar este código). Lista inicial: PROJECT_NOT_FOUND, RECIPE_NOT_FOUND, INVALID_INPUT, INVALID_INPUT, INVALID_INPUT, ALREADY_EXISTS, CONFLICT_STATE, PERMISSION_DENIED, RATE_LIMITED, INVALID_INPUT, etc. Lista extensible vía PR.",
 
-    "Definir codes_infrastructure como array de objetos canónicos UPPER_SNAKE_CASE para errores de infraestructura (sistema falla por debajo). Cada objeto: code, status_typical (5xx), descripcion, ejemplo_uso. Lista inicial: DATABASE_DOWN, BROKER_DISCONNECTED, FILESYSTEM_ERROR, EXTERNAL_API_FAILED, TIMEOUT, MQTT_NOT_AVAILABLE, OUT_OF_MEMORY, etc.",
+    "Definir codes_infrastructure como array de objetos canónicos UPPER_SNAKE_CASE para errores de infraestructura (sistema falla por debajo). Cada objeto: code, status_typical (5xx), descripcion, ejemplo_uso. Lista inicial: UPSTREAM_UNREACHABLE, UPSTREAM_UNREACHABLE, UNKNOWN_ERROR, UPSTREAM_INVALID_RESPONSE, UPSTREAM_TIMEOUT, UPSTREAM_UNREACHABLE, SYSTEM_RESOURCE_EXHAUSTED, etc.",
 
     "Definir details_canonical_fields como objeto describiendo cada campo canónico opcional de error.details. Claves: kind (enum 'domain'|'infrastructure', cuando no es claro por status), retryable (boolean), retry_after_ms (number), entity_type (string), entity_id (string). Para cada uno: politica (obligatorio_cuando | opcional | recomendado), formato, valores_comunes.",
 
@@ -404,7 +404,7 @@
         "1867 findings * 5 minutos por fix promedio = ~155 horas. Equivalente a 4-6 sesiones grandes dedicadas. Tiempo que vale mas en horizontales que generan capacidades nuevas.",
         "La canonizacion no rompe nada operativo — los modulos siguen funcionando con string suelto. Es deuda de calidad de telemetria, no de correctitud.",
         "Big-bang refactor masivo es alto-riesgo: muchos modulos pre-contratos no tienen tests; tocarlos a mano puede introducir regresiones que no se detectan hasta produccion.",
-        "Algunos drifts requieren conocer el dominio: drift_inventar_error_code (143) necesita decidir el codigo canonico apropiado del catalogo (RESOURCE_NOT_FOUND vs VALIDATION_FAILED vs INTERNAL_ERROR vs uno nuevo) — no es codemod automatico."
+        "Algunos drifts requieren conocer el dominio: drift_inventar_error_code (143) necesita decidir el codigo canonico apropiado del catalogo (RESOURCE_NOT_FOUND vs INVALID_INPUT vs UNKNOWN_ERROR vs uno nuevo) — no es codemod automatico."
       ],
       "criterios_de_cierre_incremental": [
         "Cuando se toca un modulo por feature o bug: aprovechar para canonizar TODOS los errores de ese modulo en el mismo commit. La regla es 'modulo tocado, modulo limpio'.",
@@ -415,10 +415,10 @@
       "candidatos_a_codemod_automatico": [
         "drift_error_sin_log (486 ocurrencias): añadir 'this.logger.error(<event_name>, { error: <var>.message })' antes del 'return { error: ... }'. Patron mecanico, mismo en todos los handlers. Escribible como AST transformer en ~50 LOC.",
         "drift_error_sin_metric (591 ocurrencias): añadir 'this.metrics?.increment(\"<modulo>.<accion>.errors\")' tras el log. Igualmente mecanico.",
-        "drift_error_como_string_suelto (511): mas dificil — requiere envolver 'return { error: <string> }' en '{ error: { code: \"INTERNAL_ERROR\", message: <string> } }'. Riesgo: si el caller asume string puede romper. Requiere review."
+        "drift_error_como_string_suelto (511): mas dificil — requiere envolver 'return { error: <string> }' en '{ error: { code: \"UNKNOWN_ERROR\", message: <string> } }'. Riesgo: si el caller asume string puede romper. Requiere review."
       ],
       "candidatos_a_review_humano_no_automatico": [
-        "drift_inventar_error_code (143): el codigo canonico depende del dominio. Un 'PROJECT_NOT_FOUND' inventado puede ser RESOURCE_NOT_FOUND canonico, pero un 'CARTA_INVALID' puede ser VALIDATION_FAILED o un nuevo dominio specific. Decision por modulo.",
+        "drift_inventar_error_code (143): el codigo canonico depende del dominio. Un 'PROJECT_NOT_FOUND' inventado puede ser RESOURCE_NOT_FOUND canonico, pero un 'CARTA_INVALID' puede ser INVALID_INPUT o un nuevo dominio specific. Decision por modulo.",
         "drift_swallow_error_silently (35): catch vacios. Cada uno requiere decidir si es benigno (el error se ignora a proposito) o si hay que loggear. Review humano caso por caso.",
         "drift_respuesta_no_canonica (97): handlers que devuelven shapes raros ({ ok: true, msg: '...' } en lugar de { status: 200, data }). Requiere migrar y verificar que callers no se rompan."
       ],

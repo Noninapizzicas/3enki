@@ -451,13 +451,13 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('_classifyHandlerError mapea MQTT_NOT_AVAILABLE', async () => {
+  await testAsync('_classifyHandlerError mapea UPSTREAM_UNREACHABLE', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('mqtt no disponible')), 'DEPENDENCY_UNAVAILABLE');
+    assert.strictEqual(m._classifyHandlerError(new Error('mqtt no disponible')), 'UPSTREAM_UNREACHABLE');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
-    assert.strictEqual(m._classifyHandlerError(new Error('connection timeout')), 'TIMEOUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('connection timeout')), 'UPSTREAM_TIMEOUT');
     await m.onUnload();
   });
 
@@ -479,7 +479,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     mocks.metricsCalls.length = 0;
-    const err = Object.assign(new Error('mqtt down'), { _code: 'MQTT_NOT_AVAILABLE' });
+    const err = Object.assign(new Error('mqtt down'), { _code: 'UPSTREAM_UNREACHABLE' });
     const r = m._handleHandlerError('t.failed', err, 'kind');
     assert.strictEqual(r.status, 503);
     const metric = mocks.metricsCalls.find(c => c[1] === 'impresion.errors');

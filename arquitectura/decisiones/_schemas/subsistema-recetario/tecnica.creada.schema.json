@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/tecnica.creada.schema.json",
+  "title": "tecnica.creada — payload schema",
+  "description": "Evento emitido por el modulo tecnicas tras codificar una nueva tecnica reutilizable (esferificacion, confitar, marinada de 24h, etc.). El frontend creativo la indexa para que el chef pueda referenciarla desde el editor de recetas.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "tecnica_id",
+    "nombre",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "tecnica_id":     { "$ref": "_common.schema.json#/$defs/tecnica_id" },
+    "nombre":         { "type": "string", "minLength": 1 },
+    "categoria":      { "type": "string", "minLength": 1, "description": "Familia (cocciones, fermentaciones, esferificaciones, marinadas, etc.)." },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

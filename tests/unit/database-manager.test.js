@@ -251,13 +251,13 @@ function isCanonicalError(result) {
     await cleanup(projectsPath);
   });
 
-  await testAsync('handleExecuteQuery sin projectId → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleExecuteQuery sin projectId → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m, projectsPath } = await instantiate(mocks);
     const result = await m.handleExecuteQuery({}, { params: {}, body: { query: 'SELECT 1' } });
     assert.ok(isCanonicalError(result));
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(result.error.details.field, 'projectId');
     await m.onUnload();
     await cleanup(projectsPath);
@@ -294,28 +294,28 @@ function isCanonicalError(result) {
     const { module: m, projectsPath } = await instantiate(mocks);
     const result = await m.handleToolQuery({ query: 'SELECT 1' });
     assert.ok(isCanonicalError(result));
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(typeof result.success, 'undefined', 'NO success: bool legacy');
     await m.onUnload();
     await cleanup(projectsPath);
   });
 
-  await testAsync('handleToolQuery con UPDATE bloqueado → 403 AUTHORIZATION_REQUIRED', async () => {
+  await testAsync('handleToolQuery con UPDATE bloqueado → 403 PERMISSION_DENIED', async () => {
     const mocks = makeMocks();
     const { module: m, projectsPath } = await instantiate(mocks);
     const result = await m.handleToolQuery({ projectId: 'system', query: 'UPDATE x SET a=1' });
     assert.strictEqual(result.status, 403);
-    assert.strictEqual(result.error.code, 'AUTHORIZATION_REQUIRED');
+    assert.strictEqual(result.error.code, 'PERMISSION_DENIED');
     await m.onUnload();
     await cleanup(projectsPath);
   });
 
-  await testAsync('handleToolExecute con SELECT bloqueado → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleToolExecute con SELECT bloqueado → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m, projectsPath } = await instantiate(mocks);
     const result = await m.handleToolExecute({ projectId: 'system', query: 'SELECT 1' });
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     await m.onUnload();
     await cleanup(projectsPath);
   });
@@ -408,8 +408,8 @@ function isCanonicalError(result) {
 
   await testAsync('_errorResponse produce shape canonico', async () => {
     const m = new DatabaseManagerModule();
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'bad');
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'bad' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'bad');
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'bad' } });
     const r2 = m._errorResponse(404, 'RESOURCE_NOT_FOUND', 'gone', { entity_type: 'db' });
     assert.deepStrictEqual(r2, { status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: 'gone', details: { entity_type: 'db' } } });
   });
@@ -417,9 +417,9 @@ function isCanonicalError(result) {
   await testAsync('_classifyHandlerError mapea sqlite errors correctamente', async () => {
     const m = new DatabaseManagerModule();
     assert.strictEqual(m._classifyHandlerError(new Error('SQLITE_ERROR: no such table: foo')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('UNIQUE constraint failed')), 'CONFLICT');
-    assert.strictEqual(m._classifyHandlerError(new Error('syntax error near')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('weird')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('UNIQUE constraint failed')), 'CONFLICT_STATE');
+    assert.strictEqual(m._classifyHandlerError(new Error('syntax error near')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('weird')), 'UNKNOWN_ERROR');
   });
 
   await testAsync('_slugify cubre español + special chars', async () => {

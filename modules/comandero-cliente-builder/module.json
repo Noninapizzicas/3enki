@@ -1,0 +1,198 @@
+{
+  "name": "comandero-cliente-builder",
+  "version": "1.0.0",
+  "description": "Builder de bundles PWA del comandero-cliente — genera un artefacto HTML/JS/CSS estatico con el catalogo del proyecto (productos enriquecidos con imagen, descripcion publica y orden visual) listo para servir al cliente final desde cf-worker. Hereda el static-template de pizzepos/carta-digital especializandolo con carrito + gesto 'enviar pedido' → MQTT al sistema interno. Hidrata su cache local de catalogo escuchando catalogo.actualizado / producto.{creado,actualizado,eliminado} de pizzepos/productos y tarifas.config.actualizada de pizzepos/tarifas (mismo patron canonico de comandero post-commit dc77c0d, paradigm isolation). Persiste presentacion y bundles como JSON files por proyecto en {project.base_path}/storage/comandero-cliente-builder/. Fase 6a: bundle se escribe a disco via fs.write.request y el operador lo sube manualmente con wrangler; Fase 6b (separada, modulo cf-worker-deployer) añadira publicacion automatica por evento. Decisiones de diseño en arquitectura/migracion/notas/comandero-cliente-builder-mapa.md.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+
+  "horizonte": "vertical-tienda-pwa-sin-datos",
+  "horizonte_doc": "arquitectura/decisiones/propuestas/vertical-tienda-pwa-sin-datos.md",
+
+  "events": {
+    "publishes": [
+      {
+        "event": "comandero-cliente.presentacion.actualizada",
+        "description": "Capa visual de un producto editada (imagen, descripcion publica, orden publico, oculto publico). Informativo para audit y para invalidar caches downstream. project_id top-level + correlation_id + timestamp.",
+        "payload": "{ project_id, producto_id, presentacion: { imagen_url?, descripcion_publica?, orden_publico?, oculto_publico? }, correlation_id }"
+      },
+      {
+        "event": "comandero-cliente.bundle.generado",
+        "description": "Bundle PWA del proyecto compilado y escrito a disco. El operador puede inspeccionarlo en bundle_path y subirlo a cf-worker manualmente con wrangler hasta que exista el modulo cf-worker-deployer.",
+        "payload": "{ project_id, bundle_id, bundle_path, productos_count, generado_en, correlation_id }"
+      },
+      {
+        "event": "comandero-cliente.bundle.fallido",
+        "description": "Fallo durante la fase de build del bundle. error.code del catalogo errors.contract. Sin stack en payload.",
+        "payload": "{ project_id, bundle_id?, fase: 'generar', error: { code, message }, correlation_id }"
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "catalogo.actualizado",
+        "handler": "onCatalogoActualizado",
+        "description": "Catalogo del proyecto sincronizado por pizzepos/productos — refresca cache local completo. NO regenera bundle automaticamente (eso lo dispara una tool explicita)."
+      },
+      {
+        "event": "producto.creado",
+        "handler": "onProductoCreado",
+        "description": "Producto nuevo en el catalogo — añade a cache local."
+      },
+      {
+        "event": "producto.actualizado",
+        "handler": "onProductoActualizado",
+        "description": "Producto modificado en el catalogo — actualiza cache local."
+      },
+      {
+        "event": "producto.eliminado",
+        "handler": "onProductoEliminado",
+        "description": "Producto eliminado del catalogo — quita de cache local y purga su presentacion huerfana si existe (warn)."
+      },
+      {
+        "event": "tarifas.config.actualizada",
+        "handler": "onTarifasConfigActualizada",
+        "description": "Snapshot canal→carta_id de tarifas. Mismo patron canonico de comandero (paradigm isolation): cache local hidratado por eventos, cero acceso directo al modulo tarifas."
+      },
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated",
+        "description": "Proyecto activado — resuelve base_path del proyecto, carga presentacion y bundles persistidos desde disco si existen."
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del modulo comandero-cliente-builder."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "comandero-cliente.presentacion.actualizar",
+      "description": "Añade o edita la capa visual de un producto del catalogo del proyecto (imagen, descripcion publica, orden publico, oculto publico). El producto debe existir ya en el catalogo (catalogo.actualizado hidratado). Persiste a disco e idempotente: re-llamar con mismos campos no genera evento adicional.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id":          { "type": "string", "description": "Identificador del proyecto (multi-tenant)." },
+          "producto_id":         { "type": "string", "description": "Id del producto en el catalogo de pizzepos/productos." },
+          "imagen_url":          { "type": "string", "description": "URL canonica de la imagen del producto (opcional)." },
+          "descripcion_publica": { "type": "string", "description": "Descripcion comercial mostrada al cliente final (opcional). NO es la descripcion operativa de pizzepos/productos." },
+          "orden_publico":       { "type": "integer", "description": "Posicion del producto en la vista publica (opcional, menor primero)." },
+          "oculto_publico":      { "type": "boolean", "description": "Si true el producto no aparece en el bundle (default false)." }
+        },
+        "required": ["project_id", "producto_id"],
+        "additionalProperties": false
+      },
+      "handler": "handlePresentacionActualizar",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "comandero-cliente.imagen.subir",
+      "description": "Sube una imagen (base64) al storage del proyecto y devuelve su URL canonica. Pensado para que el operador adjunte imagen via tool y la URL resultante alimente comandero-cliente.presentacion.actualizar.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id":    { "type": "string", "description": "Identificador del proyecto." },
+          "producto_id":   { "type": "string", "description": "Id del producto (para nombrar el archivo de forma estable)." },
+          "imagen_base64": { "type": "string", "description": "Contenido de la imagen codificado en base64 (sin prefijo data:image/...)." },
+          "content_type":  { "type": "string", "enum": ["image/png", "image/jpeg", "image/webp"], "description": "Tipo MIME de la imagen." }
+        },
+        "required": ["project_id", "producto_id", "imagen_base64", "content_type"],
+        "additionalProperties": false
+      },
+      "handler": "handleImagenSubir",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "comandero-cliente.categorias.reordenar",
+      "description": "Reordena las categorias del catalogo para la vista publica. Recibe array de categoria_id en el orden deseado. Categorias no incluidas en el array van al final preservando su orden previo.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto." },
+          "orden":      { "type": "array", "items": { "type": "string" }, "description": "Array de categoria_id en el orden deseado." }
+        },
+        "required": ["project_id", "orden"],
+        "additionalProperties": false
+      },
+      "handler": "handleCategoriasReordenar",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "comandero-cliente.bundle.generar",
+      "description": "Compila el bundle PWA del proyecto fusionando catalogo (cache local) + presentacion (disco) + identidad (parametro). Escribe el bundle a disco via fs.write.request. Devuelve bundle_id y bundle_path. Emite comandero-cliente.bundle.generado en exito o comandero-cliente.bundle.fallido en error.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto." },
+          "identidad":  {
+            "type": "object",
+            "properties": {
+              "marca":    { "type": "string", "description": "Nombre comercial mostrado al cliente." },
+              "colores":  { "type": "object", "description": "Paleta de colores de la marca (primary, secondary, background, etc.)." },
+              "logo_url": { "type": "string", "description": "URL del logo de la marca (opcional)." }
+            },
+            "required": ["marca"]
+          }
+        },
+        "required": ["project_id", "identidad"],
+        "additionalProperties": false
+      },
+      "handler": "handleBundleGenerar",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "UNKNOWN_ERROR"]
+    }
+  ],
+
+  "dependencies": ["project-manager", "filesystem"],
+
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+
+  "config": {
+    "persistence": {
+      "type": "json-file-per-project",
+      "owner": "ComanderoClienteBuilderModule (Map presentacionPerProject + Map bundlesPerProject + Map catalogoCachePerProject + Map tarifasCachePerProject)",
+      "paths": [
+        "{project.base_path}/storage/comandero-cliente-builder/presentacion.json (read+write atomic)",
+        "{project.base_path}/storage/comandero-cliente-builder/bundles.json (read+write atomic)",
+        "{project.base_path}/storage/comandero-cliente-builder/bundles/<bundle_id>.html (write only)",
+        "{project.base_path}/storage/comandero-cliente-builder/imagenes/<producto_id>.{png,jpg,webp} (write only)"
+      ],
+      "restart_resilient": true,
+      "concurrency": "single-writer-per-project",
+      "lost_on_restart": ["catalogoCachePerProject", "tarifasCachePerProject"]
+    },
+    "tool_timeout_ms": 30000
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "comandero-cliente.presentacion.actualizada.total",
+        "comandero-cliente.bundle.generado.total",
+        "comandero-cliente.bundle.fallido.total",
+        "comandero-cliente.imagen.subir.total",
+        "comandero-cliente.errors"
+      ],
+      "gauges": [
+        "comandero-cliente.productos_con_presentacion.count",
+        "comandero-cliente.bundles_generados.count"
+      ],
+      "timings": [
+        "comandero-cliente.bundle.generar.duration",
+        "comandero-cliente.imagen.subir.duration"
+      ]
+    }
+  }
+}

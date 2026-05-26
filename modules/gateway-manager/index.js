@@ -38,6 +38,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const BaseModule = require('../_shared/base-module');
 
 const GatewayTCP = require('./gateways/tcp');
 const GatewayBLE = require('./gateways/ble');
@@ -60,14 +61,11 @@ const DEFAULT_CONFIG = {
   cmd: { enabled: false, autodiscovery: false, manual_devices: [] }
 };
 
-class GatewayManagerModule {
+class GatewayManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'gateway-manager';
     this.version = '2.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
 
     this.config = { gateways: { ...DEFAULT_CONFIG } };
 
@@ -218,7 +216,7 @@ class GatewayManagerModule {
   async _restartGateway(type, correlation_id) {
     if (!VALID_TYPES.includes(type)) {
       throw Object.assign(new Error(`Gateway type not supported: ${type}`),
-        { _code: 'VALIDATION_FAILED',
+        { _code: 'INVALID_INPUT',
           _details: { kind: 'domain', field: 'type', allowed: VALID_TYPES } });
     }
 
@@ -232,7 +230,7 @@ class GatewayManagerModule {
     const mqtt = this.eventBus?.mqtt;
     if (!mqtt?.isConnected) {
       throw Object.assign(new Error('MQTT not available'),
-        { _code: 'UPSTREAM_UNAVAILABLE',
+        { _code: 'UPSTREAM_UNREACHABLE',
           _details: { upstream: 'mqtt', state: 'disconnected' } });
     }
 
@@ -258,14 +256,14 @@ class GatewayManagerModule {
   async _discoverGateway(type) {
     if (!VALID_TYPES.includes(type)) {
       throw Object.assign(new Error(`Gateway type not supported: ${type}`),
-        { _code: 'VALIDATION_FAILED',
+        { _code: 'INVALID_INPUT',
           _details: { kind: 'domain', field: 'type', allowed: VALID_TYPES } });
     }
 
     const mqtt = this.eventBus?.mqtt;
     if (!mqtt?.isConnected) {
       throw Object.assign(new Error('MQTT not available'),
-        { _code: 'UPSTREAM_UNAVAILABLE',
+        { _code: 'UPSTREAM_UNREACHABLE',
           _details: { upstream: 'mqtt', state: 'disconnected' } });
     }
 
@@ -310,12 +308,12 @@ class GatewayManagerModule {
     try {
       const { type } = data || {};
       if (!type) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           'Gateway type is required',
           { kind: 'domain', field: 'type', allowed: VALID_TYPES });
       }
       if (!VALID_TYPES.includes(type)) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           `Gateway type not supported: ${type}`,
           { kind: 'domain', field: 'type', allowed: VALID_TYPES });
       }
@@ -341,7 +339,7 @@ class GatewayManagerModule {
     try {
       const { type } = data || {};
       if (!type) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           'Gateway type is required',
           { kind: 'domain', field: 'type', allowed: VALID_TYPES });
       }
@@ -359,7 +357,7 @@ class GatewayManagerModule {
     try {
       const { type } = data || {};
       if (!type) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           'Gateway type is required',
           { kind: 'domain', field: 'type', allowed: VALID_TYPES });
       }
@@ -377,43 +375,14 @@ class GatewayManagerModule {
   // Helpers POC2 (transferibles) + auxiliares
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
+  // Helpers POC2 (_errorResponse, _classifyHandlerError, _publicarEvento)
+  // heredados de BaseModule. Override de _handleHandlerError solo para
+  // incrementar el contador interno operacional propio.
 
   _handleHandlerError(logEvent, err, kind) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'VALIDATION_FAILED'        ? 400 :
-                    code === 'RESOURCE_NOT_FOUND'       ? 404 :
-                    code === 'AUTHORIZATION_REQUIRED'   ? 403 :
-                    code === 'CONFLICT'                 ? 409 :
-                    code === 'UPSTREAM_UNAVAILABLE'     ? 503 :
-                                                          500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('gateway-manager.errors', { kind, code });
+    const result = super._handleHandlerError(logEvent, err, kind);
     this.internalMetrics.errors_total++;
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found') || msg.includes('not configured')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('not supported') || msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
-    if (msg.includes('not available') || msg.includes('unavailable') || msg.includes('disconnected')) return 'UPSTREAM_UNAVAILABLE';
-    return 'INTERNAL_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
+    return result;
   }
 
   async _instantiateGateway(GatewayClass, gatewayConfig, mqtt) {

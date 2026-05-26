@@ -3,8 +3,8 @@
  *
  * Cumple los 24 contratos transversales:
  *   - errors.contract: handlers devuelven { status, data | error: { code, message, details? } }
- *     con codigos canonicos (RESOURCE_NOT_FOUND + entity_type, VALIDATION_FAILED, ALREADY_EXISTS,
- *     INTERNAL_ERROR). Helper _errorResponse + _classifyHandlerError + _handleHandlerError.
+ *     con codigos canonicos (RESOURCE_NOT_FOUND + entity_type, INVALID_INPUT, ALREADY_EXISTS,
+ *     UNKNOWN_ERROR). Helper _errorResponse + _classifyHandlerError + _handleHandlerError.
  *   - events.contract: publish/subscribe via this.eventBus. _publicarEvento propaga correlation_id.
  *   - lifecycle.contract: onLoad recibe context, onUnload clearTimeout pendings + clear Maps.
  *   - observability.contract: logger estructurado + metrics.increment/timing en cada handler.
@@ -20,20 +20,18 @@ const fs     = require('fs').promises;
 const path   = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 const SLOT_TYPES  = ['system', 'context', 'prefix', 'suffix', 'format'];
 const SLOT_ICONS  = { system: 'system', context: 'context', prefix: 'prefix', suffix: 'suffix', format: 'format' };
 const GLOBAL_PROJECT_ID = '_prompts';
 const DB_TIMEOUT_MS     = 10000;
 const SCHEMA_TIMEOUT_MS = 5000;
 
-class PromptManagerModule {
+class PromptManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'prompt-manager';
     this.version = '3.0.0';
-
-    this.logger    = null;
-    this.eventBus  = null;
-    this.metrics   = null;
     this.config    = null;
     this.uiHandler = null;
 
@@ -166,11 +164,11 @@ class PromptManagerModule {
       this.metrics?.timing('prompt-manager.get.duration_ms', Date.now() - startTime);
     } catch (err) {
       this.logger.error('prompt-manager.get.request.failed', { error: err.message });
-      this.metrics?.increment('prompt-manager.get.errors', { code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('prompt-manager.get.errors', { code: 'UNKNOWN_ERROR' });
       await this._publicarEvento('prompt.get.response', {
         request_id,
         success: false,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, payload);
     }
   }
@@ -189,11 +187,11 @@ class PromptManagerModule {
       this.metrics?.increment('prompt-manager.list.success');
     } catch (err) {
       this.logger.error('prompt-manager.list.request.failed', { error: err.message });
-      this.metrics?.increment('prompt-manager.list.errors', { code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('prompt-manager.list.errors', { code: 'UNKNOWN_ERROR' });
       await this._publicarEvento('prompt.list.response', {
         request_id,
         success: false,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, payload);
     }
   }
@@ -261,8 +259,8 @@ class PromptManagerModule {
     try {
       const { id, name } = (args && typeof args === 'object') ? args : {};
       if (!id && !name) {
-        this.metrics?.increment('prompt-manager.tool.get.errors', { code: 'VALIDATION_FAILED' });
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'Either id or name is required', { kind: 'shape' });
+        this.metrics?.increment('prompt-manager.tool.get.errors', { code: 'INVALID_INPUT' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'Either id or name is required', { kind: 'shape' });
       }
 
       const prompt = this._findPrompt({ id, name });
@@ -287,8 +285,8 @@ class PromptManagerModule {
     try {
       const { id, name, variables } = (args && typeof args === 'object') ? args : {};
       if (!id && !name) {
-        this.metrics?.increment('prompt-manager.tool.render.errors', { code: 'VALIDATION_FAILED' });
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'Either id or name is required', { kind: 'shape' });
+        this.metrics?.increment('prompt-manager.tool.render.errors', { code: 'INVALID_INPUT' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'Either id or name is required', { kind: 'shape' });
       }
 
       const prompt = this._findPrompt({ id, name });
@@ -567,7 +565,7 @@ class PromptManagerModule {
   async handleUIGet(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id is required', { kind: 'shape', field: 'id' });
       const prompt = this._findPrompt({ id });
       if (!prompt) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Prompt not found: ${id}`, { entity_type: 'prompt', entity_id: id });
       return { status: 200, data: { prompt: this._toPublicPrompt(prompt) } };
@@ -587,7 +585,7 @@ class PromptManagerModule {
   async handleUIUpdate(data) {
     try {
       const { id, ...updates } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id is required', { kind: 'shape', field: 'id' });
       return await this._updatePromptInternal(id, updates, data || {});
     } catch (err) {
       return this._handleHandlerError('prompt-manager.ui.update.failed', err);
@@ -597,7 +595,7 @@ class PromptManagerModule {
   async handleUIDelete(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id is required', { kind: 'shape', field: 'id' });
       return await this._deletePromptInternal(id, data || {});
     } catch (err) {
       return this._handleHandlerError('prompt-manager.ui.delete.failed', err);
@@ -607,7 +605,7 @@ class PromptManagerModule {
   async handleUIVersions(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id is required', { kind: 'shape', field: 'id' });
       const prompt = this._findPrompt({ id });
       if (!prompt) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Prompt not found: ${id}`, { entity_type: 'prompt', entity_id: id });
       const projectId = prompt.project_id || GLOBAL_PROJECT_ID;
@@ -635,7 +633,7 @@ class PromptManagerModule {
   async handleUIPresetGet(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id is required', { kind: 'shape', field: 'id' });
       const preset = this.presets.get(id);
       if (!preset) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Preset not found: ${id}`, { entity_type: 'preset', entity_id: id });
       const slots = await this._loadPresetSlots(id);
@@ -656,7 +654,7 @@ class PromptManagerModule {
   async handleUIPresetDelete(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id is required', { kind: 'shape', field: 'id' });
       return await this._deletePresetInternal(id, data || {});
     } catch (err) {
       return this._handleHandlerError('prompt-manager.ui.preset.delete.failed', err);
@@ -666,7 +664,7 @@ class PromptManagerModule {
   async handleUIPresetApply(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id is required', { kind: 'shape', field: 'id' });
       const preset = this.presets.get(id);
       if (!preset) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Preset not found: ${id}`, { entity_type: 'preset', entity_id: id });
 
@@ -693,7 +691,7 @@ class PromptManagerModule {
   async handleUIComposerRender(data) {
     try {
       const { slots, variables } = data || {};
-      if (!slots) return this._errorResponse(400, 'VALIDATION_FAILED', 'slots is required', { kind: 'shape', field: 'slots' });
+      if (!slots) return this._errorResponse(400, 'INVALID_INPUT', 'slots is required', { kind: 'shape', field: 'slots' });
 
       const parts = [];
       const totalVariables = new Set();
@@ -779,12 +777,12 @@ class PromptManagerModule {
     const { name, title, description, content, slot_type, variables, tags, metadata, project_id } = input || {};
 
     if (!name || typeof name !== 'string') {
-      this.metrics?.increment('prompt-manager.create.errors', { code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'name is required (string)', { kind: 'shape', field: 'name' });
+      this.metrics?.increment('prompt-manager.create.errors', { code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'name is required (string)', { kind: 'shape', field: 'name' });
     }
     if (!content || typeof content !== 'string') {
-      this.metrics?.increment('prompt-manager.create.errors', { code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'content is required (string)', { kind: 'shape', field: 'content' });
+      this.metrics?.increment('prompt-manager.create.errors', { code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'content is required (string)', { kind: 'shape', field: 'content' });
     }
 
     const validSlotType = SLOT_TYPES.includes(slot_type) ? slot_type : 'system';
@@ -840,8 +838,8 @@ class PromptManagerModule {
 
   async _updatePromptInternal(id, updates, sourcePayload) {
     if (!id) {
-      this.metrics?.increment('prompt-manager.update.errors', { code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      this.metrics?.increment('prompt-manager.update.errors', { code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'id is required', { kind: 'shape', field: 'id' });
     }
     const prompt = this.prompts.get(id);
     if (!prompt) {
@@ -893,8 +891,8 @@ class PromptManagerModule {
 
   async _deletePromptInternal(id, sourcePayload) {
     if (!id) {
-      this.metrics?.increment('prompt-manager.delete.errors', { code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      this.metrics?.increment('prompt-manager.delete.errors', { code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'id is required', { kind: 'shape', field: 'id' });
     }
     const prompt = this.prompts.get(id);
     if (!prompt) {
@@ -919,8 +917,8 @@ class PromptManagerModule {
   async _createPresetInternal(input, sourcePayload) {
     const { name, description, slots, project_id } = input || {};
     if (!name || typeof name !== 'string') {
-      this.metrics?.increment('prompt-manager.preset.create.errors', { code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'name is required (string)', { kind: 'shape', field: 'name' });
+      this.metrics?.increment('prompt-manager.preset.create.errors', { code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'name is required (string)', { kind: 'shape', field: 'name' });
     }
 
     const id = this._generateId();
@@ -968,8 +966,8 @@ class PromptManagerModule {
 
   async _deletePresetInternal(id, sourcePayload) {
     if (!id) {
-      this.metrics?.increment('prompt-manager.preset.delete.errors', { code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      this.metrics?.increment('prompt-manager.preset.delete.errors', { code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'id is required', { kind: 'shape', field: 'id' });
     }
     if (!this.presets.has(id)) {
       this.metrics?.increment('prompt-manager.preset.delete.errors', { code: 'RESOURCE_NOT_FOUND' });
@@ -1184,20 +1182,20 @@ class PromptManagerModule {
     const msg = (err && err.message ? err.message : String(err || '')).toLowerCase();
     if (err && err._code) return err._code;
     if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('must be')) return 'VALIDATION_FAILED';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('must be')) return 'INVALID_INPUT';
     if (msg.includes('already exists') || msg.includes('unique')) return 'ALREADY_EXISTS';
-    if (msg.includes('timeout')) return 'TIMEOUT';
-    return 'INTERNAL_ERROR';
+    if (msg.includes('timeout')) return 'UPSTREAM_TIMEOUT';
+    return 'UNKNOWN_ERROR';
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
     const code = this._classifyHandlerError(err);
     const status = ({
       RESOURCE_NOT_FOUND: 404,
-      VALIDATION_FAILED:  400,
+      INVALID_INPUT:  400,
       ALREADY_EXISTS:     409,
-      TIMEOUT:            504,
-      INTERNAL_ERROR:     500
+      UPSTREAM_TIMEOUT:            504,
+      UNKNOWN_ERROR:     500
     })[code] || 500;
     const message = err && err.message ? err.message : String(err || 'unknown error');
     const details = err && err._details ? err._details : undefined;

@@ -68,13 +68,7 @@
         "description": "Job execution failed"
       }
     ],
-    "subscribes": [
-      {
-        "event": "scheduler.trigger.check",
-        "description": "Internal trigger check events",
-        "handler": "onTriggerCheck"
-      }
-    ]
+    "subscribes": []
   },
   "apis": [
     {

@@ -14,7 +14,7 @@
  *
  * Cumple los contratos transversales:
  *  - errors: todos los handlers devuelven { status, data | error: { code, message } }.
- *    Codes canónicos: VALIDATION_FAILED, RESOURCE_NOT_FOUND, INTERNAL_ERROR.
+ *    Codes canónicos: INVALID_INPUT, RESOURCE_NOT_FOUND, UNKNOWN_ERROR.
  *  - observability: correlation_id propagado vía _publicarEvento.
  *  - lifecycle: onLoad inicializa catálogo + OTA log; onUnload limpia timers y persiste.
  *  - persistence: manifest.json + ota-log.json en data_path.
@@ -36,15 +36,12 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-class FirmwareManagerModule {
+const BaseModule = require('../_shared/base-module');
+class FirmwareManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'firmware-manager';
     this.version = '3.0.0';
-
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     this.config = {
       data_path: './data/firmware',
       auto_check_on_register: true,
@@ -352,31 +349,31 @@ class FirmwareManagerModule {
 
     if (!type) {
       this.logger.warn('firmware-manager.register.validation', { field: 'type' });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'register', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'type requerido (ej: esp32-gateway-printer)');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'register', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'type requerido (ej: esp32-gateway-printer)');
     }
     if (!version) {
       this.logger.warn('firmware-manager.register.validation', { field: 'version' });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'register', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'version requerida (semver)');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'register', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'version requerida (semver)');
     }
     if (!file) {
       this.logger.warn('firmware-manager.register.validation', { field: 'file' });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'register', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'file requerido (nombre del .bin)');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'register', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'file requerido (nombre del .bin)');
     }
 
     if (!/^\d+\.\d+\.\d+/.test(version)) {
       this.logger.warn('firmware-manager.register.invalid_version', { version });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'register', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'version debe ser semver (ej: 1.2.3)');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'register', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'version debe ser semver (ej: 1.2.3)');
     }
 
     const safeFile = this._sanitizeFile(file);
     if (!safeFile) {
       this.logger.warn('firmware-manager.register.invalid_filename', { file });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'register', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'Nombre de archivo inválido (sin rutas, solo nombre)');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'register', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Nombre de archivo inválido (sin rutas, solo nombre)');
     }
 
     const binPath = path.join(this.config.data_path, 'binaries', safeFile);
@@ -444,13 +441,13 @@ class FirmwareManagerModule {
 
     if (!device_id) {
       this.logger.warn('firmware-manager.trigger_ota.validation', { field: 'device_id' });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'trigger_ota', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'device_id requerido');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'trigger_ota', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'device_id requerido');
     }
     if (!type) {
       this.logger.warn('firmware-manager.trigger_ota.validation', { field: 'type' });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'trigger_ota', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'type requerido (tipo de firmware)');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'trigger_ota', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'type requerido (tipo de firmware)');
     }
 
     const typeEntry = this.catalog[type];
@@ -473,8 +470,8 @@ class FirmwareManagerModule {
         this.logger.warn('firmware-manager.trigger_ota.min_version_fail', {
           device_id, current: data.current_version, min: release.min_version, target: targetVersion
         });
-        this.metrics?.increment('firmware-manager.errors', { kind: 'trigger_ota', code: 'VALIDATION_FAILED' });
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        this.metrics?.increment('firmware-manager.errors', { kind: 'trigger_ota', code: 'INVALID_INPUT' });
+        return this._errorResponse(400, 'INVALID_INPUT',
           `La versión mínima para actualizar a ${targetVersion} es ${release.min_version}. Dispositivo tiene ${data.current_version}.`);
       }
     }
@@ -569,18 +566,18 @@ class FirmwareManagerModule {
 
     if (!device_id) {
       this.logger.warn('firmware-manager.rollback.validation', { field: 'device_id' });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'rollback', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'device_id requerido');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'rollback', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'device_id requerido');
     }
     if (!type) {
       this.logger.warn('firmware-manager.rollback.validation', { field: 'type' });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'rollback', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'type requerido');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'rollback', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'type requerido');
     }
     if (!target_version) {
       this.logger.warn('firmware-manager.rollback.validation', { field: 'target_version' });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'rollback', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'target_version requerido (versión a la que volver)');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'rollback', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'target_version requerido (versión a la que volver)');
     }
 
     this.metrics.increment('firmware.rollback.total');
@@ -643,8 +640,8 @@ class FirmwareManagerModule {
 
     if (!type) {
       this.logger.warn('firmware-manager.update_meta.validation', { field: 'type' });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'update_meta', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'type requerido');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'update_meta', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'type requerido');
     }
 
     const entry = this.catalog[type];
@@ -672,8 +669,8 @@ class FirmwareManagerModule {
 
     if (!type) {
       this.logger.warn('firmware-manager.get_info.validation', { field: 'type' });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'get_info', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'type requerido');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'get_info', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'type requerido');
     }
 
     const entry = this.catalog[type];
@@ -715,8 +712,8 @@ class FirmwareManagerModule {
 
     if (!project_id) {
       this.logger.warn('firmware-manager.list_by_project.validation', { field: 'project_id' });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'list_by_project', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'project_id requerido');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'list_by_project', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'project_id requerido');
     }
 
     const types = [];
@@ -745,16 +742,16 @@ class FirmwareManagerModule {
     const safeFile = this._sanitizeFile(file);
     if (!safeFile) {
       this.logger.warn('firmware-manager.serve_binary.invalid_filename', { file });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'serve_binary', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'Nombre de archivo inválido');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'serve_binary', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Nombre de archivo inválido');
     }
 
     const binPath = path.join(this.config.data_path, 'binaries', safeFile);
     const binariesDir = path.resolve(this.config.data_path, 'binaries');
     if (!path.resolve(binPath).startsWith(binariesDir)) {
       this.logger.warn('firmware-manager.serve_binary.path_traversal', { file, binPath });
-      this.metrics?.increment('firmware-manager.errors', { kind: 'serve_binary', code: 'VALIDATION_FAILED' });
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'Ruta inválida');
+      this.metrics?.increment('firmware-manager.errors', { kind: 'serve_binary', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Ruta inválida');
     }
 
     this.metrics.increment('firmware.binary_served.total');
@@ -1032,51 +1029,24 @@ class FirmwareManagerModule {
   // 5 Helpers POC2
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED'      ? 400 :
-                   code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                   code === 'CONFLICT'               ? 409 :
-                   code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
-                                                        500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('firmware-manager.errors', { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    if (err.code === 'ENOENT') return 'RESOURCE_NOT_FOUND';
-    if (err.code === 'EACCES' || err.code === 'EPERM') return 'AUTHORIZATION_REQUIRED';
-    if (err.code === 'EEXIST') return 'CONFLICT';
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
-    if (msg.includes('access denied') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('already')) return 'CONFLICT';
-    return 'INTERNAL_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = { timestamp: new Date().toISOString(), ...payload };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else if (!enriched.correlation_id) enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
-  }
-
   // Auxiliar de dominio: sanitiza nombres de archivo para prevenir path traversal.
   _sanitizeFile(file) {
     if (!file || typeof file !== 'string') return null;
     const basename = path.basename(file);
     if (basename !== file || file.includes('..') || file.includes('\0')) return null;
     return basename;
+  }
+
+  // Reglas especificas del dominio del modulo. BaseModule cubre los keywords genericos.
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (err.code === 'ENOENT') return 'RESOURCE_NOT_FOUND';
+    if (err.code === 'EACCES' || err.code === 'EPERM') return 'PERMISSION_DENIED';
+    if (err.code === 'EEXIST') return 'CONFLICT_STATE';
+    if (err.code === 'ENOENT') return 'RESOURCE_NOT_FOUND';
+    if (err.code === 'EACCES' || err.code === 'EPERM') return 'PERMISSION_DENIED';
+    if (err.code === 'EEXIST') return 'CONFLICT_STATE';
+    return super._classifyHandlerError(err);
   }
 }
 

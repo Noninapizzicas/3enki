@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/_common.schema.json",
+  "title": "subsistema-recetario common definitions",
+  "description": "Definiciones canonicas compartidas por los schemas del subsistema-recetario. Cualquier schema del subsistema las referencia con $ref. Los campos transversales (correlation_id, project_id, user_id) heredan shape del documento maestro companero-viaje + multi-tenancy.contract. Los campos de dominio (receta_id, ingrediente_nombre, etc.) se definen aqui y son la referencia para todos los modulos del subsistema (recetas, escandallo, recetario-creativo, tecnicas, mise-en-place, pase-cocina y consumidores futuros).",
+
+  "$defs": {
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Hilo causal de la cadena de eventos. Generado por el originador (canal, cron, webhook, ui) y propagado SIN modificar por el subsistema."
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Proyecto activo (multi-tenancy.contract). En el subsistema-recetario el shape canonico del campo es 'project_id' (ingles), aunque el modulo emisor sea es. Los modulos ES que aun publican 'proyecto_id' estan en drift hasta su reescritura canonica."
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifica al humano que origina la accion. 'default' en single-user. Imprescindible para aislamiento."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601. El subsistema canoniza ISO 8601 — los emisores que hoy publican epoch ms (Date.now()) estan en drift hasta su reescritura."
+    },
+    "receta_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "UUID de la receta. Generado por recetas en el momento de la creacion. Inmutable durante toda la vida de la receta (incluido el archivado)."
+    },
+    "receta_nombre": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Nombre de la receta. Denormalizado en eventos para que consumers no tengan que llamar a recetas.obtener solo para mostrarlo. Si el nombre cambia, viaja un nuevo evento receta.actualizada con el nuevo valor."
+    },
+    "receta_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Version monotonica de la receta. Cada actualizacion incrementa version y archiva el snapshot anterior en history. Las versiones nunca se reciclan."
+    },
+    "receta_estado_operativo": {
+      "enum": ["borrador", "en_servicio", "archivada"],
+      "description": "Estado operativo de la receta. Triple estado canonico del subsistema: 'borrador' (en construccion por el chef, no disponible en servicio), 'en_servicio' (mise-en-place y pase-cocina la consideran activa para produccion/pase), 'archivada' (retirada del servicio pero conservada para historial). Las transiciones validas son borrador<->en_servicio, en_servicio->archivada, archivada->en_servicio."
+    },
+    "ingrediente_nombre": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Nombre canonico del ingrediente en el catalogo del proyecto. Es la clave de identificacion (recetas usa nombre, no id, para mantener legible el JSON de proyecto)."
+    },
+    "unidad": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unidad de medida (g, kg, l, ml, ud, etc.). El subsistema no canoniza la lista — cada proyecto define la suya."
+    },
+    "precio_mercado": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Precio del ingrediente en moneda del proyecto. >= 0 (puede ser 0 transitoriamente)."
+    },
+    "tecnica_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Id de tecnica codificada en la libreria. UUID o slug human-readable; cada modulo decide."
+    },
+    "prototipo_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Id de prototipo creativo (un prototipo no es todavia una receta — es una exploracion del chef)."
+    },
+    "ficha_pase_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Id de ficha de pase. Una ficha de pase es la version operativa de la receta para el servicio en curso, con sustituciones y notas aplicadas."
+    },
+    "incidencia_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Id de incidencia reportada durante el servicio (rotura, sustitucion, queja del cliente, etc.)."
+    },
+    "motivo": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Motivo libre asociado a una accion (revertir version, archivar, sustituir, etc.). Texto del operador, NO codigo canonico."
+    },
+    "alerta_tipo": {
+      "enum": ["food_cost_alto", "food_cost_bajo", "margen_negativo", "ingrediente_faltante", "precio_obsoleto"],
+      "description": "Tipo de alerta del escandallo. Lista cerrada. Si se necesita un tipo nuevo, ampliar el enum como decision consciente."
+    },
+    "error_canonical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "description": "Error canonico segun errors.contract. code en codes_dominio (DOMAIN_*) o codes_infrastructure cuando aplique.",
+      "properties": {
+        "code":    { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*[A-Z0-9]$" },
+        "message": { "type": "string", "minLength": 1 },
+        "details": { "type": "object" }
+      }
+    }
+  }
+}

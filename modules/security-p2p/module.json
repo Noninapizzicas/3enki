@@ -28,7 +28,69 @@
     { "domain": "security-p2p", "action": "trusted-peers",  "handler": "handleListTrustedPeers",  "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "security-p2p", "action": "health",         "handler": "handleHealthCheck",       "type": "system_panel", "zone": "lateral_derecha" }
   ],
-  "tools": [],
+  "tools": [
+    {
+      "name": "security-p2p.status",
+      "description": "Returns the current security-p2p status: module/version, encryption_enabled, local fingerprint, trusted_peers count, shared_secrets cache size and runtime stats.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleStatus",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "security-p2p.public-key",
+      "description": "Returns this core's public key (PEM) and its fingerprint. Used by peers performing handshake.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleGetPublicKey",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "security-p2p.trust-peer",
+      "description": "Marks a remote public_key as trusted. Computes shared secret eagerly when possible and emits security.peer.trusted.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "public_key":      { "type": "string", "description": "PEM-encoded public key of the peer." },
+          "name":            { "type": "string", "description": "Optional friendly name for the peer." },
+          "project_id":      { "type": "string", "description": "Optional project id for event propagation." },
+          "correlation_id":  { "type": "string", "description": "Optional correlation id propagated downstream." }
+        },
+        "required": ["public_key"],
+        "additionalProperties": false
+      },
+      "handler": "handleTrustPeer",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "security-p2p.revoke-peer",
+      "description": "Revokes trust for a previously trusted public_key. Drops cached shared secret and emits security.peer.revoked when applicable.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "public_key":      { "type": "string", "description": "PEM-encoded public key of the peer to revoke." },
+          "project_id":      { "type": "string", "description": "Optional project id for event propagation." },
+          "correlation_id":  { "type": "string", "description": "Optional correlation id propagated downstream." }
+        },
+        "required": ["public_key"],
+        "additionalProperties": false
+      },
+      "handler": "handleRevokePeer",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "security-p2p.trusted-peers",
+      "description": "Lists currently trusted peers (truncated public keys, friendly names, trusted_at timestamps).",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleListTrustedPeers",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "security-p2p.health",
+      "description": "Health check for the security-p2p module: has_keys, encryption_enabled, trusted_peers and shared_secrets cache size.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleHealthCheck",
+      "errores_conocidos": []
+    }
+  ],
   "dependencies": [],
   "provides": {
     "hooks": ["beforeEventPublish", "afterEventReceive"]

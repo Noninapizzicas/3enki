@@ -12,6 +12,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const BaseModule = require('../../_shared/base-module');
 
 const STEP_LABELS = {
   started:    'iniciando',
@@ -25,13 +26,11 @@ const STEP_LABELS = {
 const DEFAULT_SUMMARY_MAX_CHARS = 280;
 const DEFAULT_MIN_PROGRESS_STEP = 'thinking';
 
-class AgentObserverModule {
+class AgentObserverModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'agent-observer';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.config = null;
     this.openCards = new Map();
   }
@@ -54,23 +53,36 @@ class AgentObserverModule {
   }
 
   // ============================================================
-  // Helpers POC2
+  // Bus API — handlers wireados por module.json.events.subscribes
+  // (_publishCard es helper protegido invocado por estos)
   // ============================================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details !== undefined) error.details = details;
-    return { status, error };
-  }
+  // Bus subscribers definidos abajo (onAgentExecute*). Los helpers de
+  // dominio (_publishCard, _truncate, _stepLabel) y los overrides de
+  // BaseModule estan en las secciones Dominio (protegido) y abajo.
 
+  // ============================================================
+  // HTTP / UI API — sin endpoints (modulo observer puro del bus)
+  // ============================================================
+
+  // ============================================================
+  // Dominio (protegido) — overrides de helpers heredados con identidad
+  // propia + utilidades del observer.
+  // ============================================================
+
+  /**
+   * Override de BaseModule: firma local `{status, code}` (objeto) en vez
+   * de string canonica. No llama super: la firma de retorno es distinta.
+   * Reconoce ENOENT (errno) ademas de keywords genericos.
+   */
   _classifyHandlerError(err) {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    if (/timeout/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'subscribe') {
@@ -105,7 +117,7 @@ class AgentObserverModule {
   }
 
   // ============================================================
-  // Bus subscribers (auto-wired)
+  // Bus subscribers (handlers de los 4 eventos de agent-flow)
   // ============================================================
 
   async onAgentExecuteRequest(event) {
@@ -183,6 +195,15 @@ class AgentObserverModule {
         assistant_message: summary || `🤖 ${data.agent_name}: completado`,
         duration_ms: data.duration_ms,
         tool_calls_executed: data.tool_calls_executed,
+        // Persistir TODA la info del agent.execute.response canonica
+        // (agent-flow.contract): provider, model, tokens, cost, iterations,
+        // finish_reason. Sin esto se pierde la traza del flow del agente.
+        provider: data.provider,
+        model: data.model,
+        tokens: data.tokens,
+        cost: data.cost,
+        iterations: data.iterations,
+        finish_reason: data.finish_reason,
         detail_voluminoso: content.length > summaryMax
       });
     } catch (err) {
@@ -199,7 +220,7 @@ class AgentObserverModule {
       if (!card) return;
       this.openCards.delete(data.request_id);
 
-      const code = data.error?.code || 'INTERNAL_ERROR';
+      const code = data.error?.code || 'UNKNOWN_ERROR';
       const msg = data.error?.message || 'Falló sin mensaje';
 
       this.metrics?.increment?.('agent-observer.card.closed', { status: 'failed' });
@@ -217,10 +238,11 @@ class AgentObserverModule {
   }
 
   // ============================================================
-  // Internals
+  // Privados — construccion de payloads del observer y utilidades de
+  // formateo de texto. Sin side effects observables fuera del modulo.
   // ============================================================
 
-  async _publishCard({ data, status, assistant_message, step, tool_invoked, duration_ms, tool_calls_executed, detail_voluminoso, error, provider_attempted }) {
+  async _publishCard({ data, status, assistant_message, step, tool_invoked, duration_ms, tool_calls_executed, detail_voluminoso, error, provider_attempted, provider, model, tokens, cost, iterations, finish_reason }) {
     const block = {
       type: 'agent_intervention',
       title: data.agent_name,
@@ -240,6 +262,14 @@ class AgentObserverModule {
     if (detail_voluminoso) block.detail_url = `/agent/intervention/${data.request_id}/detail`;
     if (error) block.error = error;
     if (provider_attempted) block.provider_attempted = provider_attempted;
+    // Campos canonicos del agent.execute.response (agent-flow.contract).
+    // Conservar para auditabilidad y debugging post-hoc.
+    if (provider) block.provider = provider;
+    if (model) block.model = model;
+    if (tokens) block.tokens = tokens;
+    if (cost) block.cost = cost;
+    if (typeof iterations === 'number') block.iterations = iterations;
+    if (finish_reason) block.finish_reason = finish_reason;
 
     const metadata = JSON.stringify({
       author: { kind: 'agent', id: data.agent_name, name: data.agent_name },
@@ -260,7 +290,7 @@ class AgentObserverModule {
         request_id: data.request_id,
         error_message: err.message
       });
-      this.metrics?.increment?.('agent-observer.errors', { code: 'PUBLISH_FAILED', kind: 'publish' });
+      this.metrics?.increment?.('agent-observer.errors', { code: 'UNKNOWN_ERROR', kind: 'publish' });
     }
   }
 

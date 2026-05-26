@@ -2,11 +2,45 @@
  * Carta Digital Store
  *
  * Carga la carta completa y gestiona el carrito del cliente.
- * Mismo patrón que comandero: carta_completa + filtrado local.
- * El pedido se envía por WhatsApp con mensaje pre-formateado.
+ * Las lecturas de carta-digital van directo a /carta-digital.json del
+ * proyecto via fs.read (patron lecturas-frontend-via-fs-read). Solo se
+ * invocan handlers backend cuando la operacion es genuinamente backend
+ * (productos.carta_completa para el fallback de carta no compuesta).
  */
 import { writable, derived, get } from 'svelte/store';
-import { mqttRequest } from '$lib/ui-core/mqtt-request';
+import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request';
+
+const CARTA_DIGITAL_PATH = '/carta-digital.json';
+
+interface CartaDigitalStore {
+  _version?: string;
+  _updated_at?: string;
+  branding?: Record<string, unknown>;
+  dominio_publico?: string;
+  contacto?: { telefono?: string; email?: string; web?: string; redes?: unknown };
+  opciones_visualizacion?: Record<string, unknown>;
+  carta_compuesta?: {
+    meta?: Record<string, unknown>;
+    categorias?: unknown[];
+    productos?: unknown[];
+    ofertas?: unknown[];
+    config?: Record<string, unknown>;
+    generado_at?: string;
+    generado_por?: string;
+  } | null;
+}
+
+async function readCartaDigitalStore(): Promise<CartaDigitalStore | null> {
+  try {
+    const res = await mqttRequest<{ content: string }>('fs', 'read', { path: CARTA_DIGITAL_PATH });
+    const content = res.data?.content;
+    if (typeof content !== 'string') return null;
+    return JSON.parse(content) as CartaDigitalStore;
+  } catch (err) {
+    if (err instanceof MqttRequestError && err.code === 'RESOURCE_NOT_FOUND') return null;
+    throw err;
+  }
+}
 
 // Types
 
@@ -132,52 +166,58 @@ export async function initCarta(project_id: string) {
   cartaStore.update(s => ({ ...s, project_id, loading: true, error: null }));
 
   try {
-    // Crear sesión de analytics (fire-and-forget)
-    mqttRequest('carta-digital', 'create-session', {
-      project_id,
-      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-      referrer: typeof document !== 'undefined' ? document.referrer : ''
-    }).catch(() => {});
+    // create-session era fire-and-forget para analytics. Sin handler hoy y
+    // sin consumer real — convertido a no-op. Si se reintroduce analytics,
+    // sera fs.write a un log o un evento del bus, no este atajo.
 
-    // Intentar cargar carta enriquecida desde carta-digital (incluye config + descripciones + imágenes)
+    // Intentar cargar carta enriquecida directo del archivo /carta-digital.json
     let cats: Categoria[] = [];
     let prods: Producto[] = [];
     let ings: any[] = [];
     let loadedConfig: Partial<CartaConfig> = {};
 
-    const enrichedRes = await mqttRequest('carta-digital', 'carta-completa', { project_id }).catch(() => null);
+    let cartaDigital: CartaDigitalStore | null = null;
+    try {
+      cartaDigital = await readCartaDigitalStore();
+    } catch (readErr) {
+      console.warn('[Carta] readCartaDigitalStore failed, falling back:', readErr);
+    }
 
-    if (enrichedRes?.data?.productos?.length) {
-      const data = enrichedRes.data;
-      cats = data.categorias || [];
-      prods = data.productos || [];
-      ings = []; // enriched endpoint embeds ingredients in each product
+    const compuesta = cartaDigital?.carta_compuesta;
+    const compuestaProductos = compuesta && Array.isArray(compuesta.productos) ? compuesta.productos as Producto[] : [];
 
-      if (data.config) {
+    if (compuestaProductos.length > 0) {
+      cats = (compuesta?.categorias as Categoria[]) || [];
+      prods = compuestaProductos;
+      ings = []; // enriched compuesta embebe ingredientes en cada producto
+
+      const cfgEmbebido = compuesta?.config as Record<string, unknown> | undefined;
+      if (cfgEmbebido) {
         loadedConfig = {
-          whatsapp_telefono: data.config.whatsapp_telefono,
-          nombre_negocio: data.config.nombre_negocio,
-          moneda: data.config.moneda,
-          mensaje_header: data.config.mensaje_header,
-          tema: data.config.tema
+          whatsapp_telefono: cfgEmbebido.whatsapp_telefono as string,
+          nombre_negocio:    cfgEmbebido.nombre_negocio as string,
+          moneda:            cfgEmbebido.moneda as string,
+          mensaje_header:    cfgEmbebido.mensaje_header as string,
+          tema:              cfgEmbebido.tema as CartaTema | undefined
         };
       }
 
       console.log('[Carta] Loaded enriched carta:', prods.length, 'productos');
     } else {
-      // Fallback: cargar desde productos.carta_completa + config separada
-      const [configRes, cartaRes] = await Promise.all([
-        mqttRequest('carta-digital', 'config', { project_id }).catch(() => null),
-        mqttRequest('productos', 'carta_completa', { project_id })
-      ]);
+      // Fallback: config del archivo (si existe) + productos.carta_completa
+      const cartaRes = await mqttRequest('productos', 'carta_completa', { project_id });
 
-      if (configRes?.data) {
-        const cd = configRes.data;
+      if (cartaDigital) {
+        // Sintetizar config mapeable desde el shape del blueprint.
+        // El blueprint persiste branding + contacto; el frontend espera
+        // los campos planos de CartaConfig. Mapeo minimo viable.
+        const b = (cartaDigital.branding || {}) as Record<string, unknown>;
+        const c = (cartaDigital.contacto || {}) as Record<string, unknown>;
         loadedConfig = {
-          whatsapp_telefono: cd.whatsapp_telefono,
-          nombre_negocio: cd.nombre_negocio,
-          moneda: cd.moneda,
-          mensaje_header: cd.mensaje_header
+          whatsapp_telefono: (c.telefono as string) || '',
+          nombre_negocio:    (b.nombre as string) || DEFAULT_CONFIG.nombre_negocio,
+          moneda:            DEFAULT_CONFIG.moneda,
+          mensaje_header:    DEFAULT_CONFIG.mensaje_header
         };
       }
 

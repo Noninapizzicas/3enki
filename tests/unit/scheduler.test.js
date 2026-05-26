@@ -3,8 +3,8 @@
  *
  * Foco:
  *  - Handlers UI devuelven { status, data | error: { code, message, details? } }.
- *  - error.code es del catalogo errors.contract (VALIDATION_FAILED,
- *    RESOURCE_NOT_FOUND, INTERNAL_ERROR, AUTHORIZATION_REQUIRED, CONFLICT).
+ *  - error.code es del catalogo errors.contract (INVALID_INPUT,
+ *    RESOURCE_NOT_FOUND, UNKNOWN_ERROR, PERMISSION_DENIED, CONFLICT).
  *  - Cada error path emite log + metric.increment.
  *  - Tools (toolListJobs/Create/Trigger) devuelven shape canonico (no success: bool).
  *  - executeJob publica scheduler.job.triggered + completed con correlation_id propagado
@@ -110,13 +110,13 @@ function isCanonicalError(result) {
   // Group 2: Validacion canonica de handlers UI
   // ==========================================
 
-  await testAsync('handleUIGetJob sin jobId → 400 VALIDATION_FAILED canonico', async () => {
+  await testAsync('handleUIGetJob sin jobId → 400 INVALID_INPUT canonico', async () => {
     const mocks = makeMocks();
     const m = await instantiate(mocks);
     const result = await m.handleUIGetJob({});
     assert.ok(isCanonicalError(result));
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.ok(result.error.details && result.error.details.field === 'jobId');
     await m.onUnload();
   });
@@ -138,7 +138,7 @@ function isCanonicalError(result) {
     const m = await instantiate(mocks);
     const result = await m.handleUICreateJob({ trigger: { type: 'interval' }, action: { type: 'mqtt' } });
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(result.error.details.field, 'name');
     await m.onUnload();
   });
@@ -148,7 +148,7 @@ function isCanonicalError(result) {
     const m = await instantiate(mocks);
     const result = await m.handleUICreateJob({ name: 'job1', action: { type: 'mqtt' } });
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(result.error.details.field, 'trigger.type');
     await m.onUnload();
   });
@@ -158,7 +158,7 @@ function isCanonicalError(result) {
     const m = await instantiate(mocks);
     const result = await m.handleUICreateJob({ name: 'job1', trigger: { type: 'interval' } });
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(result.error.details.field, 'action.type');
     await m.onUnload();
   });
@@ -290,7 +290,7 @@ function isCanonicalError(result) {
     const m = await instantiate(mocks);
     const result = await m.toolCreateJob({});
     assert.strictEqual(result.status, 400);
-    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
     assert.strictEqual(typeof result.success, 'undefined');
     await m.onUnload();
   });
@@ -347,7 +347,7 @@ function isCanonicalError(result) {
     assert.ok(failed, 'scheduler.job.failed publicado');
     assert.ok(failed[1].error && typeof failed[1].error === 'object');
     assert.ok(typeof failed[1].error.code === 'string');
-    assert.ok(/UNKNOWN|INTERNAL_ERROR|UPSTREAM_/.test(failed[1].error.code) || true);
+    assert.ok(/UNKNOWN|UNKNOWN_ERROR|UPSTREAM_/.test(failed[1].error.code) || true);
     assert.strictEqual(failed[1].project_id, 'pE');
     assert.strictEqual(failed[1].correlation_id, 'c-fail');
     await m.onUnload();
@@ -386,8 +386,8 @@ function isCanonicalError(result) {
 
   await testAsync('_errorResponse produce shape canonico { status, error: { code, message, details? } }', async () => {
     const m = new SchedulerModule();
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'bad');
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'bad' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'bad');
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'bad' } });
     const r2 = m._errorResponse(404, 'RESOURCE_NOT_FOUND', 'gone', { entity_type: 'x' });
     assert.deepStrictEqual(r2, { status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: 'gone', details: { entity_type: 'x' } } });
   });
@@ -395,10 +395,10 @@ function isCanonicalError(result) {
   await testAsync('_classifyHandlerError mapea correctamente', async () => {
     const m = new SchedulerModule();
     assert.strictEqual(m._classifyHandlerError(new Error('Job not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('jobId is required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('unauthorized access')), 'AUTHORIZATION_REQUIRED');
-    assert.strictEqual(m._classifyHandlerError(new Error('conflict on save')), 'CONFLICT');
-    assert.strictEqual(m._classifyHandlerError(new Error('unexpected boom')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('jobId is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('unauthorized access')), 'PERMISSION_DENIED');
+    assert.strictEqual(m._classifyHandlerError(new Error('conflict on save')), 'CONFLICT_STATE');
+    assert.strictEqual(m._classifyHandlerError(new Error('unexpected boom')), 'UNKNOWN_ERROR');
   });
 
   await testAsync('_classifyExecutionError mapea timeouts y upstream HTTP', async () => {
@@ -406,13 +406,13 @@ function isCanonicalError(result) {
     const e1 = new Error('timeout!'); e1._timeout = true;
     assert.strictEqual(m._classifyExecutionError(e1), 'UPSTREAM_TIMEOUT');
     const e2 = new Error('http 401'); e2._upstream_status = 401;
-    assert.strictEqual(m._classifyExecutionError(e2), 'UPSTREAM_AUTH_FAILED');
+    assert.strictEqual(m._classifyExecutionError(e2), 'UPSTREAM_INVALID_RESPONSE');
     const e3 = new Error('http 503'); e3._upstream_status = 503;
-    assert.strictEqual(m._classifyExecutionError(e3), 'UPSTREAM_5XX');
+    assert.strictEqual(m._classifyExecutionError(e3), 'UPSTREAM_INVALID_RESPONSE');
     const e4 = new Error('ECONNREFUSED');
     assert.strictEqual(m._classifyExecutionError(e4), 'UPSTREAM_UNREACHABLE');
     const e5 = new Error('weird');
-    assert.strictEqual(m._classifyExecutionError(e5), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyExecutionError(e5), 'UNKNOWN_ERROR');
   });
 
   console.log('\nscheduler: todos los tests pasaron ✓');

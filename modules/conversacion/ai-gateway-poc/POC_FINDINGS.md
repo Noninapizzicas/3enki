@@ -44,12 +44,12 @@ El validador `persistence` puede leer esto sin abrir el código. Cierra el drift
 ### 5. Mapeo `upstream_status → UPSTREAM_*` funciona limpiamente con switch
 
 ```js
-if (s === 401 || s === 403) return 'UPSTREAM_AUTH_FAILED';
-if (s === 429)              return 'UPSTREAM_RATE_LIMITED';
-if (s >= 500)               return 'UPSTREAM_5XX';
+if (s === 401 || s === 403) return 'UPSTREAM_INVALID_RESPONSE';
+if (s === 429)              return 'UPSTREAM_INVALID_RESPONSE';
+if (s >= 500)               return 'UPSTREAM_INVALID_RESPONSE';
 ```
 
-Centralizado en `_mapUpstreamStatus`. El handler superior nunca ve "OpenAI dijo 429" — solo ve `code: 'UPSTREAM_RATE_LIMITED'`. La regla `external_errors_mapped_to_canonical_codes` del contrato `http` se cumple por construcción.
+Centralizado en `_mapUpstreamStatus`. El handler superior nunca ve "OpenAI dijo 429" — solo ve `code: 'UPSTREAM_INVALID_RESPONSE'`. La regla `external_errors_mapped_to_canonical_codes` del contrato `http` se cumple por construcción.
 
 ### 6. Redacción de `Authorization` en logs es trivial con regex case-insensitive
 
@@ -94,14 +94,14 @@ Sin esta distinción, el validador `events` marcará drift en módulos legítimo
 
 Recomiendo la segunda: la regla event-core de "un módulo no llama a otro" sugiere evitar dependencias compartidas; los helpers canónicos como **plantillas** copiadas mantienen autocontención.
 
-### F3 — `CREDENTIAL_NOT_FOUND` no está en el catálogo de `errors`
+### F3 — `RESOURCE_NOT_FOUND` no está en el catálogo de `errors`
 
-El POC usa el código `CREDENTIAL_NOT_FOUND` (status 503) cuando credential-manager no responde o rechaza. Pero `errors.json.codes_infrastructure` no lo lista — sí tiene `UPSTREAM_AUTH_FAILED`, `UPSTREAM_TIMEOUT`, etc., pero ese caso específico de credencial faltante no.
+El POC usa el código `RESOURCE_NOT_FOUND` (status 503) cuando credential-manager no responde o rechaza. Pero `errors.json.codes_infrastructure` no lo lista — sí tiene `UPSTREAM_INVALID_RESPONSE`, `UPSTREAM_TIMEOUT`, etc., pero ese caso específico de credencial faltante no.
 
 **Refinamiento propuesto**: añadir a `errors.json.codes_infrastructure`:
 ```json
 {
-  "code": "CREDENTIAL_NOT_FOUND",
+  "code": "RESOURCE_NOT_FOUND",
   "status_typical": 503,
   "descripcion": "Credencial requerida para llamar a un upstream no disponible (credential-manager caido, credencial no configurada, o rechazada).",
   "ejemplo_uso": "ai-gateway no obtuvo api_key de deepseek desde credential-manager"
@@ -129,7 +129,7 @@ Y deprecar `observe` como genérico. Esto elimina los helpers defensivos en cada
 
 ### F5 — Validación de payload de eventos de bus es manual
 
-`_validateRequest` valida el payload de `llm.complete.request` a mano (request_id string, messages array no vacío, longitudes máximas). Si llega malformado, devuelve `VALIDATION_FAILED`.
+`_validateRequest` valida el payload de `llm.complete.request` a mano (request_id string, messages array no vacío, longitudes máximas). Si llega malformado, devuelve `INVALID_INPUT`.
 
 Pero `subscribes` en `module.json` NO admite `request_schema_ref` — no hay forma declarativa de pedir al bus que valide ANTES de invocar el handler.
 
@@ -167,7 +167,7 @@ Por defecto usa el global. En tests inyectas el mock. Más limpio, sin contamina
 |---|---|
 | onUnload vacío (timeouts no clearados) | ✓ onUnload itera pendingCredentials con clearTimeout |
 | `metricas_emitidas: []` (cero metrics) | ✓ histogram(duration), increment(errors) en cada operación |
-| Errores upstream propagados como `'Error: <msg>'` | ✓ Mapeo a UPSTREAM_AUTH_FAILED / UPSTREAM_RATE_LIMITED / UPSTREAM_5XX / ... |
+| Errores upstream propagados como `'Error: <msg>'` | ✓ Mapeo a UPSTREAM_INVALID_RESPONSE / UPSTREAM_INVALID_RESPONSE / UPSTREAM_INVALID_RESPONSE / ... |
 | No declara `config.persistence` | ✓ Declaración completa con eviction_strategy TTL+LRU |
 | No declara `config.http_clients` | ✓ deepseek con host, base_url, timeout, retry, tls_verify, auth_method, credential_ref |
 | `correlation_id` no se propaga | ✓ `_publicarEvento(event, payload, sourcePayload)` lo propaga |
@@ -189,7 +189,7 @@ Por defecto usa el global. En tests inyectas el mock. Más limpio, sin contamina
 
 ## ✍️ Próximos pasos recomendados
 
-1. **Aplicar F3** (añadir `CREDENTIAL_NOT_FOUND` al catálogo de `errors`) — cambio chico de output, alta utilidad.
+1. **Aplicar F3** (añadir `RESOURCE_NOT_FOUND` al catálogo de `errors`) — cambio chico de output, alta utilidad.
 2. **Aplicar F1** (formalizar eventos request/response como sub-forma legítima en `events`) — desbloquea otros módulos request/response del repo (credential-manager, filesystem, etc.).
 3. **Aplicar F4** (cerrar la API de `metrics`) — elimina helpers defensivos en todo el repo.
 4. **Aplicar F2** (snippets canónicos en `recommended_helpers` de los contratos) — reduce duplicación al portar a más módulos.

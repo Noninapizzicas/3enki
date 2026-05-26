@@ -65,6 +65,10 @@
     "attachments": {
       "type": "array",
       "items": { "$ref": "_common.schema.json#/$defs/attachment" }
+    },
+    "page_id": {
+      "type": ["string", "null"],
+      "description": "Identificador del modulo activo del chat (recetas, carta-manager, etc.). Propagado por chat-io desde el ui/request/conversation/send. Lo consume ai-gateway para: 1) resolver el catalogo de tools del modulo activo via _getTools; 2) detectar si el modulo es blueprint-driven e inyectar su system prompt + las 2 tools universales bus.publish/bus.publishAndWait. Opcional — si no se propaga, ai-gateway cae al catalogo polyfunctional global."
     }
   }
 }

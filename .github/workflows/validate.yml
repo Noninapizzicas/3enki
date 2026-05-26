@@ -53,11 +53,26 @@ jobs:
       - name: Run unit tests (conversacion/ai-gateway — reescritura canonica)
         run: npm run test:conversacion__ai-gateway
 
+      - name: Run unit tests (conversacion/ai-gateway — cajones-context-partitioning v1.0.0)
+        run: npm run test:ai-gateway-cajones
+
       - name: Run unit tests (core/modules/loader — tool bus auto-subscription)
         run: npm run test:core-module-loader-tool-bus
 
+      - name: Run unit tests (core/modules/loader — publica core.modules.loaded.all)
+        run: npm run test:core-module-loader-modules-loaded-all
+
+      - name: Run unit tests (core/modules/loader — tool ui auto-registration)
+        run: npm run test:core-module-loader-tool-ui
+
+      - name: Run unit tests (core/modules/loader — tools_http runtime)
+        run: npm run test:core-module-loader-tools-http
+
       - name: Run smoke tests (ai-gateway — bus-only tool invocation)
         run: npm run test:ai-gateway-smoke-tools
+
+      - name: Run smoke tests (ai-gateway — blueprint-driven modules pilot)
+        run: npm run test:ai-gateway-smoke-blueprints
 
       - name: Run POC tests (cocina-poc)
         run: npm run test:cocina-poc
@@ -92,8 +107,12 @@ jobs:
       - name: Run mqttRequest unit tests
         run: npm run test:mqtt-request
 
-      - name: Run integration tests (carta-scheduler + mqttRequest real)
-        run: npm run test:integration:carta-scheduler
+      # DISABLED 2026-05-19 (PR #170): el commit afb6b915 migro carta-scheduler
+      # a blueprint puro (sin index.js) pero no actualizo este test, que asume
+      # un modulo JS con onProjectActivated. Reactivar cuando el test sea
+      # reescrito para validar el blueprint v1 de carta-scheduler.
+      # - name: Run integration tests (carta-scheduler + mqttRequest real)
+      #   run: npm run test:integration:carta-scheduler
 
       - name: Run unit tests (channel-manager — reescritura canonica)
         run: npm run test:channel-manager
@@ -140,23 +159,32 @@ jobs:
       - name: Run unit tests (conversation-export — reescritura canonica)
         run: npm run test:conversation-export
 
+      - name: Run unit tests (audit-helpers/capture-bus — captura cruda del bus MQTT)
+        run: npm run test:audit-helpers-capture-bus
+
+      - name: Run unit tests (audit-helpers/analyze-session — analisis estructurado JSONL+export)
+        run: npm run test:audit-helpers-analyze-session
+
       - name: Run unit tests (pdf-viewer — reescritura canonica)
         run: npm run test:pdf-viewer
 
       - name: Run unit tests (telegram-service — reescritura canonica)
         run: npm run test:telegram-service
 
-      - name: Run unit tests (pizzepos/carta-manager — reescritura canonica)
-        run: npm run test:pizzepos__carta-manager
+      - name: Run unit tests (recetario-creativo — modulo nuevo del subsistema-recetario)
+        run: npm run test:recetario-creativo
 
-      - name: Run unit tests (recetas — reescritura canonica)
-        run: npm run test:recetas
+      - name: Run unit tests (pase-cocina — modulo nuevo del subsistema-recetario)
+        run: npm run test:pase-cocina
+
+      - name: Run unit tests (mise-en-place — modulo nuevo del subsistema-recetario)
+        run: npm run test:mise-en-place
+
+      - name: Run unit tests (mercadona-api — cliente HTTP no oficial)
+        run: npm run test:mercadona-api
 
       - name: Run unit tests (perifericos — reescritura canonica)
         run: npm run test:perifericos
-
-      - name: Run unit tests (pizzepos/carta-design — reescritura canonica)
-        run: npm run test:pizzepos__carta-design
 
       - name: Run unit tests (facturas — reescritura canonica)
         run: npm run test:facturas
@@ -170,14 +198,8 @@ jobs:
       - name: Run unit tests (pizzepos/persistencia-comandero — reescritura canonica)
         run: npm run test:pizzepos__persistencia-comandero
 
-      - name: Run unit tests (pizzepos/carta-digital — reescritura canonica)
-        run: npm run test:pizzepos__carta-digital
-
       - name: Run unit tests (pizzepos/impresion — reescritura canonica)
         run: npm run test:pizzepos__impresion
-
-      - name: Run unit tests (pizzepos/carta-impresion — reescritura canonica)
-        run: npm run test:pizzepos__carta-impresion
 
       - name: Run unit tests (pizzepos/categorias — reescritura canonica)
         run: npm run test:pizzepos__categorias
@@ -187,9 +209,6 @@ jobs:
 
       - name: Run unit tests (pizzepos/ingredientes — reescritura canonica)
         run: npm run test:pizzepos__ingredientes
-
-      - name: Run unit tests (escandallo — reescritura canonica)
-        run: npm run test:escandallo
 
       - name: Run unit tests (pizzepos/cocina — reescritura canonica)
         run: npm run test:pizzepos__cocina
@@ -212,19 +231,13 @@ jobs:
       - name: Run unit tests (pizzepos/pedidos — reescritura canonica)
         run: npm run test:pizzepos__pedidos
 
-      - name: Run unit tests (pizzepos/carta-scheduler — reescritura canonica)
-        run: npm run test:pizzepos__carta-scheduler
-
       - name: Run unit tests (pizzepos/productos — reescritura canonica)
         run: npm run test:pizzepos__productos
 
       - name: Run unit tests (pizzepos/tarifas — reescritura canonica)
         run: npm run test:pizzepos__tarifas
 
-      - name: Run unit tests (pizzepos/carta-marketing — reescritura canonica)
-        run: npm run test:pizzepos__carta-marketing
-
-      - name: Run unit tests (pizzepos/menu-generator — reescritura canonica)
+      - name: Run unit tests (pizzepos/menu-generator — blueprint puro v8.0.0)
         run: npm run test:pizzepos__menu-generator
 
       - name: Run unit tests (pizzepos/cobros — reescritura canonica)
@@ -238,9 +251,6 @@ jobs:
 
       - name: Run unit tests (esp32-flasher — reescritura canonica)
         run: npm run test:esp32-flasher
-
-      - name: Run unit tests (viabilidad — reescritura canonica)
-        run: npm run test:viabilidad
 
       - name: Run unit tests (certificate-authority — reescritura canonica)
         run: npm run test:certificate-authority

@@ -121,7 +121,7 @@ async function testAsync(description, fn) {
 
   // ============================================================ Group 1: validation
 
-  await testAsync('VALIDATION_FAILED: payload sin request_id', async () => {
+  await testAsync('INVALID_INPUT: payload sin request_id', async () => {
     const mocks = makeMocks();
     const m = new AiGateway();
     await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
@@ -129,13 +129,13 @@ async function testAsync(description, fn) {
     await m.onLlmCompleteRequest({ messages: [{ role: 'user', content: 'x' }] });
     const r = mocks.published.find(p => p[0] === 'llm.complete.response');
     assert.strictEqual(r[1].status, 400);
-    assert.strictEqual(r[1].error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r[1].error.code, 'INVALID_INPUT');
     assert.strictEqual(r[1].error.details.field, 'request_id');
     assert.strictEqual(r[1].request_id, null);
     await m.onUnload();
   });
 
-  await testAsync('VALIDATION_FAILED: payload sin messages', async () => {
+  await testAsync('INVALID_INPUT: payload sin messages', async () => {
     const mocks = makeMocks();
     const m = new AiGateway();
     await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
@@ -143,19 +143,19 @@ async function testAsync(description, fn) {
     await m.onLlmCompleteRequest({ request_id: 'r1' });
     const r = findResponse(mocks.published, 'r1');
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.strictEqual(r.error.details.field, 'messages');
     await m.onUnload();
   });
 
-  await testAsync('VALIDATION_FAILED: messages array vacio', async () => {
+  await testAsync('INVALID_INPUT: messages array vacio', async () => {
     const mocks = makeMocks();
     const m = new AiGateway();
     await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r1', messages: [] });
     const r = findResponse(mocks.published, 'r1');
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.strictEqual(r.error.details.field, 'messages');
     await m.onUnload();
   });
@@ -240,7 +240,7 @@ async function testAsync(description, fn) {
 
   // ============================================================ Group 4: upstream error mapping
 
-  await testAsync('Upstream 401 → UPSTREAM_AUTH_FAILED (status 503)', async () => {
+  await testAsync('Upstream 401 → UPSTREAM_INVALID_RESPONSE (status 502)', async () => {
     setFetch(async () => errResponse(401, { error: { message: 'Invalid API key' } }));
     const mocks = makeMocks();
     const m = new AiGateway();
@@ -248,14 +248,14 @@ async function testAsync(description, fn) {
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r6', messages: [{ role: 'user', content: 'x' }] });
     const r = findResponse(mocks.published, 'r6');
-    assert.strictEqual(r.status, 503);
-    assert.strictEqual(r.error.code, 'UPSTREAM_AUTH_FAILED');
+    assert.strictEqual(r.status, 502);
+    assert.strictEqual(r.error.code, 'UPSTREAM_INVALID_RESPONSE');
     assert.strictEqual(r.error.details.upstream_status, 401);
     assert.strictEqual(r.data, undefined);
     await m.onUnload();
   });
 
-  await testAsync('Upstream 429 → UPSTREAM_RATE_LIMITED (retryable=true)', async () => {
+  await testAsync('Upstream 429 → UPSTREAM_INVALID_RESPONSE (retryable=true)', async () => {
     setFetch(async () => errResponse(429, { error: { message: 'Rate limit' } }));
     const mocks = makeMocks();
     const m = new AiGateway();
@@ -265,12 +265,12 @@ async function testAsync(description, fn) {
     moduleConfig.http_clients[0].retry = { max_attempts: 1, backoff_ms: 0, retryable_status: [429] };
     await m.onLlmCompleteRequest({ request_id: 'r7', messages: [{ role: 'user', content: 'x' }] });
     const r = findResponse(mocks.published, 'r7');
-    assert.strictEqual(r.error.code, 'UPSTREAM_RATE_LIMITED');
+    assert.strictEqual(r.error.code, 'UPSTREAM_INVALID_RESPONSE');
     assert.strictEqual(r.error.details.retryable, true);
     await m.onUnload();
   });
 
-  await testAsync('Upstream 500 → UPSTREAM_5XX', async () => {
+  await testAsync('Upstream 500 → UPSTREAM_INVALID_RESPONSE', async () => {
     setFetch(async () => errResponse(500, { error: { message: 'oops' } }));
     const mocks = makeMocks();
     const m = new AiGateway();
@@ -279,7 +279,7 @@ async function testAsync(description, fn) {
     moduleConfig.http_clients[0].retry = { max_attempts: 1, backoff_ms: 0, retryable_status: [] };
     await m.onLlmCompleteRequest({ request_id: 'r8', messages: [{ role: 'user', content: 'x' }] });
     const r = findResponse(mocks.published, 'r8');
-    assert.strictEqual(r.error.code, 'UPSTREAM_5XX');
+    assert.strictEqual(r.error.code, 'UPSTREAM_INVALID_RESPONSE');
     assert.strictEqual(r.error.details.upstream_status, 500);
     await m.onUnload();
   });
@@ -330,7 +330,7 @@ async function testAsync(description, fn) {
 
   // ============================================================ Group 6: credential failures
 
-  await testAsync('Credential timeout (no respuesta del bus) → CREDENTIAL_NOT_FOUND', async () => {
+  await testAsync('Credential timeout (no respuesta del bus) → RESOURCE_NOT_FOUND', async () => {
     const mocks = makeMocks();
     mocks.setCredentialResponse('__no_response__');
     const m = new AiGateway();
@@ -341,12 +341,12 @@ async function testAsync(description, fn) {
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r12', messages: [{ role: 'user', content: 'x' }] });
     const r = findResponse(mocks.published, 'r12');
-    assert.strictEqual(r.error.code, 'CREDENTIAL_NOT_FOUND');
-    assert.strictEqual(r.status, 503);
+    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
+    assert.strictEqual(r.status, 404);
     await m.onUnload();
   });
 
-  await testAsync('Credential rechazada → CREDENTIAL_NOT_FOUND', async () => {
+  await testAsync('Credential rechazada → RESOURCE_NOT_FOUND', async () => {
     const mocks = makeMocks();
     mocks.setCredentialResponse({ error: 'no credentials configured' });
     const m = new AiGateway();
@@ -354,7 +354,7 @@ async function testAsync(description, fn) {
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r13', messages: [{ role: 'user', content: 'x' }] });
     const r = findResponse(mocks.published, 'r13');
-    assert.strictEqual(r.error.code, 'CREDENTIAL_NOT_FOUND');
+    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
     await m.onUnload();
   });
 

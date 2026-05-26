@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/creativo.iteracion.registrada.schema.json",
+  "title": "creativo.iteracion.registrada — payload schema",
+  "description": "Evento emitido por recetario-creativo cada vez que el chef anota una iteracion sobre un prototipo (lo que cambio, que funciono, que no). Construye la historia creativa del prototipo. Cuando el prototipo promociona a receta, esta historia se conserva como contexto del chef.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "prototipo_id",
+    "iteracion_id",
+    "anotacion",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "prototipo_id":   { "$ref": "_common.schema.json#/$defs/prototipo_id" },
+    "iteracion_id":   { "type": "string", "minLength": 1, "description": "Id monotonico de la iteracion dentro del prototipo (iter-1, iter-2, ...)." },
+    "anotacion":      { "type": "string", "minLength": 1, "description": "Texto libre del chef." },
+    "resultado":      { "enum": ["aceptada", "rechazada", "indeterminada"] },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

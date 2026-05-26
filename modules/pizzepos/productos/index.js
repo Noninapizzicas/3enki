@@ -13,15 +13,14 @@ const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 
-class ProductosModule {
+const BaseModule = require('../../_shared/base-module');
+class ProductosModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'productos';
     this.version = '3.0.0';
 
     // Dependencias (inyectadas en onLoad)
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.uiHandler = null;
     this.config = {};
 
@@ -87,11 +86,11 @@ class ProductosModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    if (/timeout/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
@@ -139,9 +138,9 @@ class ProductosModule {
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Event subscriptions are auto-wired from module.json by the loader.
-    // Do NOT subscribe manually here to avoid duplicate handlers.
-    this.registerUIHandlers();
+    // Event subscriptions y tools[] (incluyendo registro en uiHandler) son
+    // auto-wireados desde module.json por el loader. tools.contract v1.2:
+    // una declaracion, tres destinos.
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
@@ -149,17 +148,8 @@ class ProductosModule {
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
 
-    if (this.uiHandler) {
-      const actions = [
-        'list', 'get', 'search', 'update', 'delete',
-        'categorias', 'ingredientes', 'pizzas',
-        'stats', 'health', 'metrics', 'load_carta'
-      ];
-      for (const action of actions) {
-        this.uiHandler.unregister('productos', action);
-      }
-    }
-
+    // El loader desregistra automaticamente bus subs y uiHandler entries de tools[]
+    // via unregisterToolsForAI. Aqui solo limpiamos estado del modulo.
     this.productosPerProject.clear();
     this.categoriasPerProject.clear();
     this.menusPendientes.clear();
@@ -171,35 +161,6 @@ class ProductosModule {
     this.pendingProjectRequests.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
-  }
-
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('productos.uiHandler.not_available', { module: this.name });
-      return;
-    }
-
-    this.uiHandler.register('productos', 'list', this.handleListProductos.bind(this));
-    this.uiHandler.register('productos', 'get', this.handleGetProducto.bind(this));
-    this.uiHandler.register('productos', 'search', this.handleSearchProductos.bind(this));
-    this.uiHandler.register('productos', 'update', this.handleUpdateProducto.bind(this));
-    this.uiHandler.register('productos', 'delete', this.handleDeleteProducto.bind(this));
-    this.uiHandler.register('productos', 'categorias', this.handleListCategorias.bind(this));
-    this.uiHandler.register('productos', 'ingredientes', this.handleListIngredientes.bind(this));
-    this.uiHandler.register('productos', 'pizzas', this.handleListPizzas.bind(this));
-    this.uiHandler.register('productos', 'stats', this.handleGetStats.bind(this));
-    this.uiHandler.register('productos', 'health', this.handleHealthCheck.bind(this));
-    this.uiHandler.register('productos', 'metrics', this.handleGetMetrics.bind(this));
-    this.uiHandler.register('productos', 'load_carta', this.handleLoadCarta.bind(this));
-    this.uiHandler.register('productos', 'carta_completa', this.handleCartaCompleta.bind(this));
-
-    this.logger.info('productos.ui_handlers.registered', {
-      handlers: ['list', 'get', 'search', 'update', 'delete', 'categorias', 'ingredientes', 'pizzas', 'stats', 'health', 'metrics', 'load_carta', 'carta_completa']
-    });
   }
 
   // ==========================================

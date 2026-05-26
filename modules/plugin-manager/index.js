@@ -37,9 +37,11 @@
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
+const BaseModule = require('../_shared/base-module');
 
-class PluginManagerModule {
+class PluginManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'plugin-manager';
     this.version = '2.1.0';
 
@@ -47,9 +49,6 @@ class PluginManagerModule {
     this.pluginsPath   = null;
     this.watchInterval = null;
 
-    this.logger   = null;
-    this.metrics  = null;
-    this.eventBus = null;
     this.config   = null;
 
     this.internalCounters = {
@@ -193,7 +192,7 @@ class PluginManagerModule {
     try {
       const { name } = context.params || {};
       if (!name) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           'Plugin name is required',
           { kind: 'domain', field: 'name' });
       }
@@ -437,43 +436,14 @@ class PluginManagerModule {
   // Helpers POC2 (transferibles) + auxiliares
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
+  // Helpers POC2 (_errorResponse, _classifyHandlerError, _publicarEvento)
+  // heredados de BaseModule. Override de _handleHandlerError solo para
+  // incrementar el contador interno operacional propio.
 
   _handleHandlerError(logEvent, err, kind) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'VALIDATION_FAILED'      ? 400 :
-                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                    code === 'CONFLICT'               ? 409 :
-                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
-                                                        500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('plugin-manager.errors', { kind, code });
+    const result = super._handleHandlerError(logEvent, err, kind);
     this.internalCounters.error_total++;
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
-    if (msg.includes('already')) return 'CONFLICT';
-    return 'INTERNAL_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
+    return result;
   }
 
   _readPluginFile(filePath) {

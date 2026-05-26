@@ -1,0 +1,250 @@
+{
+  "_doc": "Manual operativo de la skill audit-module v7 y de los helpers MQTT/HTTP que la soportan. Cubre como crear/listar conversaciones, dialogar con paginas concretas, forzar providers/modelos, sacar partido al conversation-export, y verificar estado real contra el bus. Documento de referencia — no contiene valoraciones, solo procedimientos.",
+  "id": "manual-audit-module-y-helpers",
+  "version": "1.1.0",
+  "creada": "2026-05-20",
+  "tipo": "manual_operativo",
+  "supersedes_nota": "v1.1.0 (2026-05-26): integra la pareja capture-bus.js + analyze-session.js (manual-audit-bus-capture.contract.json) en el flujo de la skill audit-module. Anade paso 0 'captura del bus en background' antes de la conversacion y paso 4 'cierre + analyze-session' antes del reporte narrativo. El reporte ahora lee analysis.json como insumo estructurado en vez de inspeccionar timeline crudo. Sin cambios al shape de los helpers existentes ni al output_directory_pattern.",
+
+  "skill_audit_module": {
+    "ubicacion": ".claude/skills/audit-module/SKILL.md",
+    "version": "v8",
+    "invocacion": "/audit-module <slug_modulo>  (slash command de Claude Code)",
+    "argumento": "slug del modulo a auditar (recetas, escandallo, viabilidad, etc.)",
+    "filosofia": [
+      "Una conversacion natural por modulo (10-15 mensajes que simulan a un usuario real).",
+      "Claude conduce y adapta cada mensaje a la respuesta anterior.",
+      "Cubre tools + delegacion + coherencia con proposito en el mismo hilo.",
+      "Forced-agent SOLO como triage si un agente fallo en la sesion natural.",
+      "Captura del bus en background desde el inicio — el observable real es el bus, no el habla del LLM.",
+      "Output narrativo con juicio que LEE el analysis.json (audit-session-analysis-v1) en vez de inspeccionar timeline crudo."
+    ],
+    "fases": {
+      "0_captura_bus_background": "Arrancar capture-bus.js en background apuntando a audit/<modulo>-<provider>-<TS>/bus-capture.jsonl. Captura TODOS los eventos del bus durante la sesion (incluso los que no propagan conversation_id).",
+      "1_comprender": "Leer module.json, prompt.json, context.json del modulo. Identificar tools y agentes con scope incluyendo el modulo.",
+      "2_conversacion_natural": "Una conversacion con page_id=<modulo>. 10-15 mensajes mezclando: lectura de estado, acciones del dominio, preguntas abiertas que invitan a delegar, pivots/ambigüedad/errores intencionados, cierre con vision de conjunto.",
+      "3_triage_condicional": "SOLO si en la conversacion natural un agente fallo: lanzar force-agent dirigido a ese agente en conversacion separada. Pregunta: ¿esta roto el agente o le llego mal contexto?",
+      "4_cierre_y_analyze": "fetch-export.js → cerrar capture-bus (SIGINT) → analyze-session.js produce audit/<modulo>-<provider>-<TS>/analysis.json con secciones turns/orphans/errors_and_warnings/latencies/coverage/events_by_module.",
+      "5_reporte": "Generar audit/<modulo>-<provider>-<TS>/reporte.md con secciones libres: Resumen, Lo que funciono, Lo que fallo o costo, Agentes no invocados, Triage si aplica, Patrones, Sugerencias accionables. Lectura primaria: analysis.json (no chat-export.json crudo)."
+    },
+    "output_directory_pattern": "audit/<modulo>-<provider>-<TS>/",
+    "output_files": {
+      "bus-capture.jsonl": "Captura cruda de TODOS los eventos del bus durante la sesion. Append-only, una linea por evento (shape definido en manual-audit-bus-capture.contract.json).",
+      "chat-export.json": "La conversacion exportada completa (timeline + messages_raw).",
+      "analysis.json": "Output de analyze-session.js — JSON estructurado audit-session-analysis-v1. Insumo primario para el reporte.",
+      "reporte.md": "Reporte narrativo con juicio.",
+      "triage/<agente>.json": "Solo si hubo escalacion forced-agent."
+    }
+  },
+
+  "helpers_atomicos": {
+    "_doc": "Scripts en scripts/audit-helpers/ que la skill usa para interactuar con el sistema. Todos comunican via MQTT (wss://enki-ai.online/mqtt por defecto) o HTTP a la API de conversation-export.",
+
+    "list-conversations.js": {
+      "uso": "node scripts/audit-helpers/list-conversations.js <project_id|name> [limit=10]",
+      "acepta_nombre_de_proyecto": true,
+      "resolucion_nombre_a_uuid_interna": "publica project.list.request, filtra por p.name === arg (case-insensitive)",
+      "imprime": "Lista de conversaciones, mas recientes primero, con id + titulo + fecha"
+    },
+
+    "create-conversation.js": {
+      "uso": "node scripts/audit-helpers/create-conversation.js <project_id|name> [titulo]",
+      "acepta_nombre_de_proyecto": true,
+      "publica": "ui/request/conversation/create con { project_id, title, user_id: 'default' }",
+      "imprime_stdout": "SOLO el conversation_id (uuid). Para capturar: CONV=$(node create-conversation.js \"P1\" \"audit-x\")",
+      "default_title_si_se_omite": "audit-<timestamp_ms>"
+    },
+
+    "send-message.js": {
+      "uso": "node scripts/audit-helpers/send-message.js <project_id> <conv_id> <page_id> \"mensaje\" [wait_ms=90000] [--provider <name>] [--model <id>] [--thinking enabled|disabled]",
+      "requiere_uuid": "project_id DEBE ser UUID (no acepta nombre — usar list-conversations para resolverlo o capturarlo de create-conversation).",
+      "publica": "ui/request/conversation/send con { project_id, conversation_id, message, user_id: 'default', channel: 'web', page_id, settings: { provider?, model?, thinking? } }",
+      "espera": "Suscribe a chat/assistant/saved y ai/chat/failed con timeout wait_ms. Devuelve la respuesta del LLM + META machine-readable.",
+      "linea_META": "Ultima linea con shape JSON: --META {\"tools\":[\"<name>:<status>\"], \"duration_ms\": N, \"length\": N, \"provider\": str|null, \"model\": str|null, \"failed\": bool, \"timeout\": bool}",
+      "flags": {
+        "--provider <name>": "Fuerza el provider del chat (settings.provider). Valores: deepseek|anthropic|openai|groq|gemini|ollama|claude-cli|kimi. Default: el del prompt/proyecto.",
+        "--model <id>": "Fuerza el modelo dentro del provider (settings.model). Ejemplo: --model kimi-k2.6.",
+        "--thinking <enabled|disabled>": "Pasa settings.thinking = { type: <enabled|disabled> }. Solo aplica si el provider lo soporta (kimi-k2.* y anthropic claude-thinking)."
+      }
+    },
+
+    "force-agent.js": {
+      "uso": "node scripts/audit-helpers/force-agent.js <project_id> <conv_id> <agent_name> \"task\" [wait_ms] [--provider <name>] [--model <id>]",
+      "publica": "agent.execute.request con { agent_name, task, project_id, conversation_id, settings: { provider?, model? } }",
+      "espera": "agent.execute.response correlacionado + opcionalmente progress + failed.",
+      "uso_recomendado": "Triage diagnostico cuando un agente fallo o dio mala salida en la sesion natural. NO usar en rutina."
+    },
+
+    "fetch-export.js": {
+      "uso": "node scripts/audit-helpers/fetch-export.js <conv_id> <project_id> [output_path]",
+      "metodo": "GET HTTP a la API de conversation-export con header Authorization.",
+      "env_var_requerida": "EXPORT_TOKEN (default 'nonina' como fallback hardcoded)",
+      "output": "JSON con shape conversation-export-v2: { _format, _generated_at, project_id, session_id, conversation_state, summary, timeline, messages_raw }",
+      "default_output_path": "<conv_id>.export.json en el directorio actual"
+    },
+
+    "list-orphan-projects.js": {
+      "uso": "node scripts/audit-helpers/list-orphan-projects.js  (sin argumentos)",
+      "ejecucion": "SOLO en el VPS (lee /opt/enki/data/projects/ directamente)",
+      "publica": "project.list.request al bus para obtener la fuente de verdad",
+      "modo": "DRY-RUN — solo lista candidatos clasificados (OK / TEMPLATE / REPO_LEAK / BAD_NAME / ORPHAN / DB_NO_DISK). NO borra nada."
+    },
+
+    "capture-bus.js": {
+      "uso": "node scripts/audit-helpers/capture-bus.js <output.jsonl> [--idle-timeout <ms>] [--max-duration <ms>] [--topic-filter <regex>]",
+      "rol": "Cliente MQTT externo que se suscribe a wildcard 'core/+/events/#' y appendea cada envelope al JSONL con _captured_at + _topic + envelope canonico tal cual. Cero impacto en event-core.",
+      "uso_en_la_skill": "Arranca en background al inicio del audit (fase 0). Cierra al final con SIGINT o se autocierra con --idle-timeout.",
+      "shape_jsonl": "Definido en manual-audit-bus-capture.contract.json — campos canonicos por linea: _captured_at + _topic + spread del envelope (event_id, event_type, timestamp, source, data, metadata).",
+      "eventos_malformados": "Se loguean como entrada con _parse_error + _raw truncado a 2KB. No se silencian."
+    },
+
+    "analyze-session.js": {
+      "uso": "node scripts/audit-helpers/analyze-session.js --export <chat-export.json> --capture <bus-capture.jsonl> [--conversation <id>] [--out <path>]",
+      "rol": "Correla el export del modulo conversation-export con el JSONL del capture-bus. Output JSON estructurado audit-session-analysis-v1.",
+      "uso_en_la_skill": "Se invoca en la fase 4 tras cerrar la captura y descargar el export. El analysis.json es el insumo primario del reporte narrativo.",
+      "shape_output": "Definido en manual-audit-bus-capture.contract.json — secciones: window, turns[], events_by_module, orphans, errors_and_warnings, latencies, coverage. Cero juicio, solo datos.",
+      "detector_de_alucinacion": "Un tool_calls_reported del assistant que no aparece en events_by_module o cuyo .request esta en orphans = el LLM dijo haber hecho algo que el bus no refleja."
+    }
+  },
+
+  "como_crear_un_proyecto": {
+    "_doc": "No hay helper dedicado. El flujo canonico es a traves del frontend (Nuevo proyecto). Para crear via bus directo (script ad-hoc):",
+    "evento": "project.create.request",
+    "shape_payload": {
+      "request_id": "uuid",
+      "name": "string trim no vacio (validado tras PR #170 — INVALID_INPUT si undefined/null/empty)",
+      "description": "string (opcional)",
+      "metadata": "objeto (opcional — color, icon, workspaceType, features)"
+    },
+    "response_event": "project.create.response con { request_id, project: { id, name, base_path, ... } }",
+    "creacion_de_directorios": "project-manager crea automaticamente <base_path>/storage/, <base_path>/config/, <base_path>/db/, etc."
+  },
+
+  "como_listar_proyectos": {
+    "via_helper": "No hay helper directo. Inline node con MQTT:",
+    "evento": "project.list.request con { request_id }",
+    "response_event": "project.list.response con { request_id, projects: [{ id, name, base_path, metadata, ... }] }",
+    "uso_tipico": "Resolver nombre_proyecto → uuid (lo hace internamente create-conversation y list-conversations)."
+  },
+
+  "como_crear_y_continuar_conversacion": {
+    "paso_1_crear": "CONV=$(node create-conversation.js \"NombreProyecto\" \"titulo-audit\")  # captura uuid en $CONV",
+    "paso_2_obtener_project_uuid": "Si create-conversation acepto nombre, necesitas el UUID para send-message. Listar projects via bus y filtrar por name.",
+    "paso_3_dialogar": "node send-message.js <project_uuid> $CONV <page_id> \"mensaje 1\" 60000",
+    "paso_4_continuar": "Mismas args, mensajes sucesivos. El historial se persiste automaticamente — cada mensaje siguiente lo ve.",
+    "paso_5_exportar": "node fetch-export.js $CONV <project_uuid> /tmp/export.json"
+  },
+
+  "como_dialogar_con_page_id": {
+    "_doc": "El page_id es el identificador del modulo activo del chat. Determina: (a) catalogo de tools que el LLM ve, (b) inyeccion del blueprint system prompt si el page corresponde a un modulo blueprint-driven.",
+    "donde_se_define": "send-message.js lo pasa como 3er argumento posicional. Viaja en ui/request/conversation/send.data.page_id.",
+    "flujo_de_propagacion": "chat-io.handleSend → chat.message.saved (con page_id) → prompt-builder.onChatMessageSaved → chat.prompt.ready (con page_id, propagado tras PR #166) → ai-gateway.onChatPromptReady (extrae page_id, llama _getTools(page_id) y _executeLLM con inyeccion blueprint si aplica).",
+    "valores_validos": "Slug del modulo (recetas, escandallo, viabilidad, etc.) o 'chat' default si no se pasa.",
+    "page_id_blueprint_driven": "Activa: system prompt del blueprint (padre + hijo) inyectado, catalogo = solo bus.publish + bus.publishAndWait.",
+    "page_id_modulo_legacy": "Catalogo = tools polyfunctional declaradas en module.json.tools. System prompt = prompt-builder estandar."
+  },
+
+  "como_forzar_provider_y_modelo": {
+    "via_send_message": "send-message.js --provider <name> --model <id> [--thinking enabled|disabled]",
+    "providers_disponibles": {
+      "deepseek": {
+        "models": ["deepseek-chat", "deepseek-reasoner"],
+        "default": "deepseek-chat",
+        "priority": 1,
+        "thinking": "no soportado"
+      },
+      "anthropic": {
+        "models": ["claude-sonnet-4-5", "claude-opus-4-5", "claude-haiku-4-5"],
+        "default": "claude-sonnet-4-5",
+        "thinking": "soportado en sonnet/opus"
+      },
+      "openai": {
+        "models": ["gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini"],
+        "default": "gpt-4o"
+      },
+      "groq": {
+        "models": ["llama-3.3-70b-versatile", "mixtral-8x7b-32768", "gemma2-9b-it"]
+      },
+      "gemini": {
+        "models": ["gemini-2.5-flash", "gemini-2.5-pro"]
+      },
+      "ollama": {
+        "models": ["llama2", "codellama", "mistral", "mixtral"],
+        "ejecucion": "local"
+      },
+      "claude-cli": {
+        "ejecucion": "Claude Code CLI local"
+      },
+      "kimi": {
+        "models": ["kimi-k2.6", "kimi-k2.5", "kimi-k2-thinking", "moonshot-v1-128k"],
+        "default": "kimi-k2.6",
+        "api_base": "https://api.moonshot.ai",
+        "priority": 8,
+        "thinking": "soportado en familia kimi-k2.* (settings.thinking = { type: 'enabled' | 'disabled' })",
+        "nota_modelo_kimi_k2_thinking": "Declarado en module.json pero la API de Moonshot devuelve 404 actualmente. Sustituible por kimi-k2.6 + --thinking enabled."
+      }
+    },
+    "fallback_si_no_se_pasa_provider": "ai-gateway._selectProvider ordena por priority en config.providers y usa el primero con credencial disponible.",
+    "credenciales": "Resueltas por credential-manager via event-driven (credential.resolve.request → response). Env vars: <PROVIDER>_API_KEY_<PROJECT> o <PROVIDER>_API_KEY fallback."
+  },
+
+  "como_sacar_partido_a_conversation_export": {
+    "_doc": "El export es la fuente forense del audit. Contiene timeline cronologico completo del bus + messages_raw con tool_calls_executed.",
+    "campos_top_level": {
+      "_format": "conversation-export-v2",
+      "_generated_at": "ISO 8601",
+      "project_id": "uuid",
+      "session_id": "conversation uuid",
+      "conversation_state": "string",
+      "summary": "{ counts, tokens, cost, started_at, ended_at, duration_ms }",
+      "timeline": "array cronologico — eventos del bus + internal_log + messages",
+      "messages_raw": "array de mensajes user/assistant con metadata"
+    },
+    "analisis_util_1_eventos_del_bus_por_turno": "Iterar timeline en orden. Detectar chat.prompt.ready (inicio del turno) y ai.chat.response (fin). Filtrar eventos del bus en ese intervalo. Util para verificar que tools se ejecutaron realmente en cada turno.",
+    "analisis_util_2_tool_calls_por_mensaje": "messages_raw[i].metadata o messages_raw[i].tool_calls_executed (segun version del export). NO siempre presente en messages_raw — buscar tambien en timeline en eventos publish:<toolName>.",
+    "analisis_util_3_correlacion_con_disco": "Tras el export, leer recetas.json / store del modulo via fs.read.request del bus y comparar con lo que el LLM dijo. Permite detectar alucinaciones.",
+    "analisis_util_4_filtrado_de_eventos": "tl.filter(e => /^(fs\\.|receta\\.|ingrediente\\.|chat\\.|ai\\.chat\\.|llm\\.)/.test(e.ctx?.eventType||'')) — extrae solo eventos del subsistema relevante.",
+    "analisis_util_5_tiempos_y_costes": "summary.duration_ms (total), summary.tokens (input+output), summary.cost. Para latencia por turno: diferencia entre chat.prompt.ready[i] y ai.chat.response[i].",
+    "limitaciones_observadas": [
+      "Los timestamps individuales de eventos del bus no estan en e.ts ni e.timestamp — la timeline esta ordenada cronologicamente pero los timestamps no son accesibles per-evento desde el export.",
+      "El payload completo del evento NO se incluye en el timeline — solo event_id + event_type + source_core. Para inspeccionar payloads hay que reconstruirlos desde messages_raw o reanudar la sesion."
+    ]
+  },
+
+  "como_verificar_estado_real_contra_disco": {
+    "_doc": "Cuando el LLM afirma haber hecho X, verificar contra el bus si realmente lo hizo. Forensico imprescindible para detectar alucinaciones.",
+    "metodo_via_bus_inline_node": "Conectar MQTT (wss://enki-ai.online/mqtt), publicar fs.read.request con { project_id, path: '/recetas.json', encoding: 'utf8' }, esperar fs.read.response correlacionado por request_id, parsear content.",
+    "modulos_que_aceptan_path_relativo_via_bus": ["filesystem (fs.read/write/list.request)", "project-manager (project.get/list.request)"],
+    "convencion_de_paths": "Tras PR #170: paths absolutos del sistema (/opt/, /home/, /var/, etc.) son rechazados con INVALID_INPUT. Usar paths con leading-slash relativos: '/recetas.json' resuelve a <base_path>/storage/recetas.json del proyecto."
+  },
+
+  "infraestructura_mqtt": {
+    "broker_default": "wss://enki-ai.online/mqtt",
+    "override_env_var": "AUDIT_BROKER (todos los helpers la respetan)",
+    "patron_topics_publish": "core/*/events/<dot.path.dashed>  (puntos del event_type se reemplazan por / hasta el penultimo segmento)",
+    "patron_topics_subscribe": "core/+/events/<dot.path.dashed>",
+    "envelope_estandar": {
+      "event_id": "uuid",
+      "event_type": "nombre.canonico.del.evento",
+      "timestamp": "ISO 8601",
+      "source": "{ core_id }",
+      "data": "{ request_id, ...payload }",
+      "metadata": "{}"
+    },
+    "correlation": "Cada par request/response correlaciona por request_id en data.",
+    "_ver_tambien": "Para el nivel bajo (cuando los helpers no bastan): manual-mqtt-conexion-directa.contract.json cubre topics UI directos vs eventbus canonica, probes forenses, errores clasicos de clientes ad-hoc, snippet de referencia minimo."
+  },
+
+  "patron_de_uso_completo": {
+    "_doc": "Secuencia tipica de una sesion de auditoria.",
+    "secuencia": [
+      "1. CONV=$(node scripts/audit-helpers/create-conversation.js 'NombreProyecto' 'audit-titulo')",
+      "2. PROJ_UUID=$(obtener via project.list.request inline o ya conocido)",
+      "3. TS=$(date -u +%Y%m%dT%H%M%S) ; DIR=audit/<slug>-<provider>-$TS ; mkdir -p $DIR",
+      "4. Por cada turno (10-15 turnos): node send-message.js $PROJ_UUID $CONV <page_id> 'msg' 60000 [flags] | tee $DIR/NN-titulo.txt",
+      "5. node fetch-export.js $CONV $PROJ_UUID $DIR/chat-export.json",
+      "6. Inspeccionar timeline + cross-check disco via fs.read.request inline",
+      "7. Escribir $DIR/reporte.md"
+    ]
+  }
+}

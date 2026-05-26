@@ -272,7 +272,7 @@ const SAMPLE_FACTURAS = [
       const { module: m } = await instantiate(mocks, { servicesMock });
       const r = await m.handleGenerarPaquete({ proyecto: 'p2', correlation_id: 'cid-err' });
       assert.ok(isCanonicalError(r));
-      assert.strictEqual(r.error.code, 'TIMEOUT');
+      assert.strictEqual(r.error.code, 'UPSTREAM_TIMEOUT');
       const errEvents = publishedOf(mocks, 'asesoria.paquete.error');
       assert.strictEqual(errEvents.length, 1);
       assert.strictEqual(errEvents[0].correlation_id, 'cid-err');
@@ -530,8 +530,8 @@ const SAMPLE_FACTURAS = [
     const e1 = Object.assign(new Error('x'), { _code: 'INVALID_INPUT' });
     assert.deepStrictEqual(m._classifyHandlerError(e1), { status: 400, code: 'INVALID_INPUT' });
     assert.deepStrictEqual(m._classifyHandlerError(new Error('not found')), { status: 404, code: 'RESOURCE_NOT_FOUND' });
-    assert.deepStrictEqual(m._classifyHandlerError(new Error('timeout')), { status: 504, code: 'TIMEOUT' });
-    assert.deepStrictEqual(m._classifyHandlerError(new Error('boom')), { status: 500, code: 'INTERNAL_ERROR' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('timeout')), { status: 504, code: 'UPSTREAM_TIMEOUT' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('boom')), { status: 500, code: 'UNKNOWN_ERROR' });
     await m.onUnload();
   });
 

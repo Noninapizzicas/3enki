@@ -143,7 +143,7 @@ async function testAsync(description, fn) {
     assert.ok(!mocks.published.find(p => p[0] === 'embedding.generate.response'));
     const ev = mocks.published.find(p => p[0] === 'embedding.generate.failed');
     assert.ok(ev, 'failed publicado');
-    assert.strictEqual(ev[1].error.code, 'UPSTREAM_RATE_LIMITED');
+    assert.strictEqual(ev[1].error.code, 'UPSTREAM_INVALID_RESPONSE');
     assert.ok(typeof ev[1].duration_ms === 'number');
   });
 
@@ -211,7 +211,7 @@ async function testAsync(description, fn) {
     assert.strictEqual(ev[1].provider, 'openai', 'priority 3 (openai) gana sobre priority 5 (gemini)');
   });
 
-  await testAsync('sin providers de embeddings disponibles → failed CREDENTIAL_NOT_FOUND', async () => {
+  await testAsync('sin providers de embeddings disponibles → failed RESOURCE_NOT_FOUND', async () => {
     const mocks = makeMocks();
     const m = instantiate(mocks, {
       deepseek: fakeProvider('deepseek', { supportsEmbeddings: false })
@@ -226,7 +226,7 @@ async function testAsync(description, fn) {
     });
     const ev = mocks.published.find(p => p[0] === 'embedding.generate.failed');
     assert.ok(ev);
-    assert.strictEqual(ev[1].error.code, 'CREDENTIAL_NOT_FOUND');
+    assert.strictEqual(ev[1].error.code, 'RESOURCE_NOT_FOUND');
   });
 
   console.log('\nai-gateway-embedding: todos los tests pasaron ✓');

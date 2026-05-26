@@ -1,9 +1,9 @@
 {
   "_doc": "Define cómo los módulos resuelven la identidad y el path físico de un proyecto. La fuente autoritativa es project.base_path; calcular slug localmente es antipatrón. Cierra un drift transversal no cubierto por module-rewrite.contract.json (POC2).",
   "id": "project-identity",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "creada": "2026-05-10",
-  "supersedes_nota": "Primera versión. Formaliza un drift detectado durante el análisis del subsistema chat/agentes: cartadigital y recetas resolvían el mismo problema (acceder al path físico del proyecto activo) con patrones distintos. El horizontal POC2 está al 100% pero su contrato no cubre identidad/paths de proyecto, por lo que el drift quedó invisible. Este contrato cierra ese gap.",
+  "supersedes_nota": "v1.0.0 (2026-05-10): primera versión. Formaliza un drift detectado durante el análisis del subsistema chat/agentes: cartadigital y recetas resolvían el mismo problema (acceder al path físico del proyecto activo) con patrones distintos. El horizontal POC2 está al 100% pero su contrato no cubre identidad/paths de proyecto, por lo que el drift quedó invisible. v1.1.0 (2026-05-26): cierra TP2 — implementado arquitectura/decisiones/_validators/project-identity.validate.js cubriendo C1-C5 con las severidades documentadas, registrado en scripts/validate-all.js, drift-baseline.json regenerado absorbiendo la deuda conocida (1 warning C1 en database-manager:641, 3 info C3 en pase-cocina/cuentas-canales/recetario-creativo, 4 info C5 en mise-en-place/pase-cocina/pizzepos/productos/recetario-creativo). C1 refinado respecto al texto literal del contrato v1.0.0: requiere ahora que el hit (a) no sea comentario, (b) tenga contexto de project en ventana ±20 líneas, (c) la línea use el resultado como slug/projectDir/projectPath/projectsDir/dbPath o lo combine con path.join — esto descarta falsos positivos de slugificación de OTRAS entidades (categoria_id, ingrediente_id, plugin id) que el grep crudo del contrato v1.0.0 generaba.",
 
   "objetivo": "Garantizar que todos los módulos que persisten o leen datos por proyecto resuelvan el path físico de forma idéntica, evitando recálculos locales de slug y dependencias de campos derivados en el bus.",
 
@@ -127,8 +127,8 @@
   "validaciones_cross_realizadas_por_validator": [
     {
       "id": "C1",
-      "regla": "Detectar módulos distintos de project-manager que llamen _slugify o tengan método con ese nombre.",
-      "como_detectar": "grep -rEn '_slugify|toLowerCase\\(\\).*replace' modules/ excluyendo modules/project-manager/. Reporta archivo y línea.",
+      "regla": "Detectar módulos distintos de project-manager que recomputen slug DE PROYECTO localmente (no slug de otras entidades).",
+      "como_detectar": "grep -rEn '_slugify|toLowerCase\\(\\).*replace' modules/ excluyendo modules/project-manager/. El hit se acota a slug-de-proyecto exigiendo tres condiciones: (a) no es comentario, (b) contexto de project en ventana ±20 líneas (base_path|projectId|project_id|projects.name|project.activated), (c) la línea usa el resultado como slug|projectDir|projectPath|projectsDir|dbPath o lo combina con path.join. Sin (c) se presume slug de otra entidad (categoria_id, ingrediente_id, etc.) y se descarta.",
       "severidad": "warning"
     },
     {
@@ -157,7 +157,7 @@
     }
   ],
 
-  "salida_validador": "Pendiente. arquitectura/decisiones/_validators/project-identity.validate.js debe implementar C1-C5 con las severidades indicadas. Hasta que se implemente, la conformidad se verifica manualmente con los greps documentados en cada check.",
+  "salida_validador": "Implementado en arquitectura/decisiones/_validators/project-identity.validate.js (v1.1.0). Estructural: PASS si las 17 secciones canónicas están presentes. Cross-checks (con --check-system): C1-C5 producen warnings/errors/info según severidades del contrato. Registrado en scripts/validate-all.js — corre como parte de npm run validate:ci.",
 
   "convenciones_complementarias": {
     "naming": "Eventos canónicos del dominio project: project.created, project.updated, project.deleted, project.activated, project.deactivated, project.state, project.get.request, project.get.response, project.list.request, project.list.response. Forma <domain>.<entity>.<verb> según naming.json.",
@@ -174,10 +174,10 @@
     },
     {
       "id": "TP2",
-      "descripcion": "Implementar arquitectura/decisiones/_validators/project-identity.validate.js cubriendo C1-C5. Registrar en scripts/validate-all.js y npm script. Regenerar drift-baseline.json para incorporar el warning conocido de recetas (PROH1, PROH2) hasta cierre de TP1.",
-      "impacto": "1 archivo nuevo (validator), 2 archivos modificados (validate-all.js, drift-baseline.json), 1 entrada en package.json.",
+      "descripcion": "CERRADO en v1.1.0 (2026-05-26). Validator implementado en arquitectura/decisiones/_validators/project-identity.validate.js. Registrado en scripts/validate-all.js. drift-baseline.json regenerado absorbiendo 8 signatures (1 warning C1 + 7 info de C3/C5). Sin npm script individual — corre via validate-all como todos los demás validators añadidos después de mayo 2026.",
+      "impacto": "Cerrado. 2 archivos creados/modificados (validator nuevo, validate-all.js).",
       "bloqueantes": [],
-      "prioridad": "baja"
+      "prioridad": "cerrado"
     },
     {
       "id": "TP3",
@@ -188,8 +188,8 @@
     },
     {
       "id": "TP4",
-      "descripcion": "Auditar otros módulos del horizontal por aparición de los antipatrones PROH1-PROH3. Posibles candidatos: módulos pizzepos legacy no migrados al patrón cartadigital, facturas, escandallo. Resultado de la auditoría se añade aquí como TPs concretos por módulo.",
-      "impacto": "Auditoría manual. Sin cambios de código hasta detección.",
+      "descripcion": "Auditar otros módulos del horizontal por aparición de los antipatrones PROH1-PROH3. Findings descubiertos por el validator v1.1.0 (deuda absorbida en baseline a fecha 2026-05-26, pendientes de decisión de dominio para cerrar): (a) database-manager:641 recompone slug del project.name para nombrar el archivo `${slug}.sqlite` dentro de `${basePath}/db/` — debate: ¿el nombre del archivo .sqlite cuenta como path de proyecto bajo PROH1 o es derivación interna aceptable? (b) C3 — pase-cocina, pizzepos/cuentas-canales y recetario-creativo tienen tools .crear|.actualizar|.eliminar sin subscribe a project.activated; verificar si necesitan path-por-proyecto o operan globalmente. (c) C5 — mise-en-place, pase-cocina, pizzepos/productos y recetario-creativo publican project.get.request; auditar si está en camino caliente (PROH5) o solo en operaciones puntuales (aceptable según P3).",
+      "impacto": "Auditoría manual. Sin cambios de código hasta decisión por finding.",
       "bloqueantes": [],
       "prioridad": "baja"
     }

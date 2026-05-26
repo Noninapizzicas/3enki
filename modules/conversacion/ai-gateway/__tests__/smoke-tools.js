@@ -13,7 +13,7 @@
  * arquitectura/decisiones/_validators/tools.validate.js (drift error).
  */
 
-const Mod = require('/home/user/2enki/modules/conversacion/ai-gateway/index.js');
+const Mod = require('../index.js');
 
 // ---------- Mock moduleLoader (solo metadata: filtrado por page_id) ----------
 const fakeModules = new Map([
@@ -87,7 +87,7 @@ function registerFakeBusTool(toolName, fakeHandler) {
       if (result && typeof result === 'object') {
         if (result.error && (result.status == null || result.status >= 400)) {
           const errObj = (typeof result.error === 'object') ? result.error
-            : { code: 'INTERNAL_ERROR', message: String(result.error) };
+            : { code: 'UNKNOWN_ERROR', message: String(result.error) };
           await eventBus.publish(`${toolName}.response`, { request_id, error: errObj });
           return;
         }
@@ -99,7 +99,7 @@ function registerFakeBusTool(toolName, fakeHandler) {
     } catch (err) {
       await eventBus.publish(`${toolName}.response`, {
         request_id,
-        error: { code: 'INTERNAL_ERROR', message: err.message || String(err) }
+        error: { code: 'UNKNOWN_ERROR', message: err.message || String(err) }
       });
     }
   });
@@ -127,7 +127,7 @@ async function main() {
   // ============================================================
   console.log('\n[1] Auto-derivado de prefijos al llamar _getTools');
 
-  assert(mod.pagePrefixes === undefined, 'pagePrefixes empieza undefined');
+  assert(mod.pagePrefixes === null, 'pagePrefixes empieza null (declarativo en constructor)');
 
   const tRecetas = mod._getTools('recetas');
   const namesRecetas = tRecetas.map(t => t.name).sort();

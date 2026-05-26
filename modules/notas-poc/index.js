@@ -144,7 +144,7 @@ class NotasModule {
       return this._buildErrorResponse({
         action: 'obtener',
         status: 400,
-        code:   'MISSING_FIELD',
+        code:   'INVALID_INPUT',
         message: 'id es obligatorio',
         details: { field: 'id' },
         correlation_id
@@ -240,7 +240,7 @@ class NotasModule {
 
     if (!id) {
       return this._buildErrorResponse({
-        action: 'actualizar', status: 400, code: 'MISSING_FIELD',
+        action: 'actualizar', status: 400, code: 'INVALID_INPUT',
         message: 'id es obligatorio', details: { field: 'id' },
         correlation_id
       });
@@ -315,7 +315,7 @@ class NotasModule {
 
     if (!id) {
       return this._buildErrorResponse({
-        action: 'eliminar', status: 400, code: 'MISSING_FIELD',
+        action: 'eliminar', status: 400, code: 'INVALID_INPUT',
         message: 'id es obligatorio', details: { field: 'id' },
         correlation_id
       });
@@ -366,7 +366,7 @@ class NotasModule {
 
     if (!id) {
       return this._buildErrorResponse({
-        action: 'fijar', status: 400, code: 'MISSING_FIELD',
+        action: 'fijar', status: 400, code: 'INVALID_INPUT',
         message: 'id es obligatorio', details: { field: 'id' },
         correlation_id
       });
@@ -499,13 +499,13 @@ class NotasModule {
 
     if (!titulo || typeof titulo !== 'string' || titulo.trim() === '') {
       errores.push({
-        code:    'MISSING_FIELD',
+        code:    'INVALID_INPUT',
         message: 'titulo es obligatorio',
         details: { field: 'titulo' }
       });
     } else if (titulo.length > this.config.max_titulo_length) {
       errores.push({
-        code:    'FIELD_TOO_LONG',
+        code:    'INVALID_INPUT',
         message: `titulo excede ${this.config.max_titulo_length} caracteres`,
         details: { field: 'titulo', max: this.config.max_titulo_length }
       });
@@ -514,7 +514,7 @@ class NotasModule {
     if (data.contenido !== undefined && typeof data.contenido === 'string' &&
         data.contenido.length > this.config.max_contenido_length) {
       errores.push({
-        code:    'FIELD_TOO_LONG',
+        code:    'INVALID_INPUT',
         message: `contenido excede ${this.config.max_contenido_length} caracteres`,
         details: { field: 'contenido', max: this.config.max_contenido_length }
       });
@@ -543,7 +543,7 @@ class NotasModule {
         });
       } else if (data.titulo.length > this.config.max_titulo_length) {
         errores.push({
-          code:    'FIELD_TOO_LONG',
+          code:    'INVALID_INPUT',
           message: `titulo excede ${this.config.max_titulo_length} caracteres`,
           details: { field: 'titulo', max: this.config.max_titulo_length }
         });
@@ -553,7 +553,7 @@ class NotasModule {
     if (data.contenido !== undefined && typeof data.contenido === 'string' &&
         data.contenido.length > this.config.max_contenido_length) {
       errores.push({
-        code:    'FIELD_TOO_LONG',
+        code:    'INVALID_INPUT',
         message: `contenido excede ${this.config.max_contenido_length} caracteres`,
         details: { field: 'contenido', max: this.config.max_contenido_length }
       });

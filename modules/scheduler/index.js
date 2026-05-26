@@ -31,16 +31,15 @@ const crypto = require('crypto');
 
 const JobManager = require('./services/job-manager');
 const TriggerManager = require('./services/trigger-manager');
+const BaseModule = require('../_shared/base-module');
 
-class SchedulerModule {
+class SchedulerModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'scheduler';
     this.version = '1.0.0';
 
-    // Inyectados en onLoad
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
+    // Inyectados en onLoad (logger, metrics, eventBus heredados de BaseModule)
     this.uiHandler = null;
     this.config = null;
 
@@ -458,7 +457,7 @@ class SchedulerModule {
   async handleUIGetJob(data) {
     try {
       const { jobId } = data || {};
-      if (!jobId) return this._errorResponse(400, 'VALIDATION_FAILED', 'jobId is required', { kind: 'domain', field: 'jobId' });
+      if (!jobId) return this._errorResponse(400, 'INVALID_INPUT', 'jobId is required', { kind: 'domain', field: 'jobId' });
       const job = this.jobManager.get(jobId);
       if (!job) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Job not found', { entity_type: 'job', entity_id: jobId });
       return { status: 200, data: { ...job, status: this.triggerManager.getStatus(jobId) } };
@@ -470,9 +469,9 @@ class SchedulerModule {
   async handleUICreateJob(data) {
     try {
       const { name, description, trigger, action, options, metadata, project_id } = data || {};
-      if (!name) return this._errorResponse(400, 'VALIDATION_FAILED', 'name is required', { kind: 'domain', field: 'name' });
-      if (!trigger || !trigger.type) return this._errorResponse(400, 'VALIDATION_FAILED', 'trigger with type is required', { kind: 'domain', field: 'trigger.type' });
-      if (!action || !action.type) return this._errorResponse(400, 'VALIDATION_FAILED', 'action with type is required', { kind: 'domain', field: 'action.type' });
+      if (!name) return this._errorResponse(400, 'INVALID_INPUT', 'name is required', { kind: 'domain', field: 'name' });
+      if (!trigger || !trigger.type) return this._errorResponse(400, 'INVALID_INPUT', 'trigger with type is required', { kind: 'domain', field: 'trigger.type' });
+      if (!action || !action.type) return this._errorResponse(400, 'INVALID_INPUT', 'action with type is required', { kind: 'domain', field: 'action.type' });
 
       const job = this.jobManager.create({
         name, description,
@@ -518,7 +517,7 @@ class SchedulerModule {
   async handleUIUpdateJob(data) {
     try {
       const { jobId, ...updates } = data || {};
-      if (!jobId) return this._errorResponse(400, 'VALIDATION_FAILED', 'jobId is required', { kind: 'domain', field: 'jobId' });
+      if (!jobId) return this._errorResponse(400, 'INVALID_INPUT', 'jobId is required', { kind: 'domain', field: 'jobId' });
 
       const existing = this.jobManager.get(jobId);
       if (!existing) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Job not found', { entity_type: 'job', entity_id: jobId });
@@ -547,7 +546,7 @@ class SchedulerModule {
   async handleUIDeleteJob(data) {
     try {
       const { jobId } = data || {};
-      if (!jobId) return this._errorResponse(400, 'VALIDATION_FAILED', 'jobId is required', { kind: 'domain', field: 'jobId' });
+      if (!jobId) return this._errorResponse(400, 'INVALID_INPUT', 'jobId is required', { kind: 'domain', field: 'jobId' });
       const job = this.jobManager.get(jobId);
       if (!job) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Job not found', { entity_type: 'job', entity_id: jobId });
 
@@ -572,7 +571,7 @@ class SchedulerModule {
   async handleUIEnableJob(data) {
     try {
       const { jobId } = data || {};
-      if (!jobId) return this._errorResponse(400, 'VALIDATION_FAILED', 'jobId is required', { kind: 'domain', field: 'jobId' });
+      if (!jobId) return this._errorResponse(400, 'INVALID_INPUT', 'jobId is required', { kind: 'domain', field: 'jobId' });
       const job = this.jobManager.get(jobId);
       if (!job) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Job not found', { entity_type: 'job', entity_id: jobId });
 
@@ -593,7 +592,7 @@ class SchedulerModule {
   async handleUIDisableJob(data) {
     try {
       const { jobId } = data || {};
-      if (!jobId) return this._errorResponse(400, 'VALIDATION_FAILED', 'jobId is required', { kind: 'domain', field: 'jobId' });
+      if (!jobId) return this._errorResponse(400, 'INVALID_INPUT', 'jobId is required', { kind: 'domain', field: 'jobId' });
       const job = this.jobManager.get(jobId);
       if (!job) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Job not found', { entity_type: 'job', entity_id: jobId });
 
@@ -614,7 +613,7 @@ class SchedulerModule {
   async handleUITriggerJob(data) {
     try {
       const { jobId } = data || {};
-      if (!jobId) return this._errorResponse(400, 'VALIDATION_FAILED', 'jobId is required', { kind: 'domain', field: 'jobId' });
+      if (!jobId) return this._errorResponse(400, 'INVALID_INPUT', 'jobId is required', { kind: 'domain', field: 'jobId' });
       const job = this.jobManager.get(jobId);
       if (!job) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Job not found', { entity_type: 'job', entity_id: jobId });
 
@@ -766,53 +765,22 @@ class SchedulerModule {
   // ==========================================
   // Internals (helpers canonicos)
   // ==========================================
-
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code = this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED' ? 400 :
-                   code === 'RESOURCE_NOT_FOUND' ? 404 :
-                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                   code === 'CONFLICT' ? 409 : 500;
-    this.logger.error(logEvent, { error: err.message, code });
-    this.metrics?.increment('scheduler.errors', { kind, code });
-    return this._errorResponse(status, code, err.message);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('conflict') || msg.includes('already')) return 'CONFLICT';
-    return 'INTERNAL_ERROR';
-  }
+  //
+  // _errorResponse, _handleHandlerError, _classifyHandlerError y
+  // _publicarEvento se heredan de BaseModule (modules/_shared/base-module.js).
+  // Eliminados del codigo local; cualquier bug fix vive en BaseModule.
 
   _classifyExecutionError(err) {
     if (err?._timeout) return 'UPSTREAM_TIMEOUT';
     if (err?._upstream_status) {
-      if (err._upstream_status === 401 || err._upstream_status === 403) return 'UPSTREAM_AUTH_FAILED';
-      if (err._upstream_status === 429) return 'UPSTREAM_RATE_LIMITED';
-      if (err._upstream_status >= 500) return 'UPSTREAM_5XX';
+      if (err._upstream_status === 401 || err._upstream_status === 403) return 'UPSTREAM_INVALID_RESPONSE';
+      if (err._upstream_status === 429) return 'UPSTREAM_INVALID_RESPONSE';
+      if (err._upstream_status >= 500) return 'UPSTREAM_INVALID_RESPONSE';
     }
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('timeout')) return 'UPSTREAM_TIMEOUT';
     if (msg.includes('econnrefused') || msg.includes('network')) return 'UPSTREAM_UNREACHABLE';
-    return 'INTERNAL_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    await this.eventBus.publish(name, enriched);
+    return 'UNKNOWN_ERROR';
   }
 
   _triggerTypesSchema() {

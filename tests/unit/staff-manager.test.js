@@ -390,14 +390,14 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('handleNfcCoreTag sin response a security.public-key.request → 503 DEPENDENCY_UNAVAILABLE', async () => {
+  await testAsync('handleNfcCoreTag sin response a security.public-key.request → 503 UPSTREAM_UNREACHABLE', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     m.publicKeyTimeoutMs = 30; // acelera el timeout para el test
     const r = await m.handleNfcCoreTag();
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 503);
-    assert.strictEqual(r.error.code, 'DEPENDENCY_UNAVAILABLE');
+    assert.strictEqual(r.error.code, 'UPSTREAM_UNREACHABLE');
     // Confirma que el request salio por bus
     const reqs = publishedOf(mocks, 'security.public-key.request');
     assert.strictEqual(reqs.length, 1);
@@ -492,7 +492,7 @@ function publishedOf(mocks, name) {
     assert.strictEqual(m._classifyHandlerError(new Error('no encontrado')),     'RESOURCE_NOT_FOUND');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
     assert.strictEqual(m._classifyHandlerError(new Error('forbidden access')),  'PERMISSION_DENIED');
-    assert.strictEqual(m._classifyHandlerError(new Error('weird')),             'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('weird')),             'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

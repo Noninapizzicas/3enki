@@ -11,19 +11,19 @@
 
 'use strict';
 
+const BaseModule = require('../_shared/base-module');
+
 const DEFAULT_BUFFER_SIZE = 1000;
 const DEFAULT_LOGS_INITIAL = 50;
 const DEFAULT_EVENTS_INITIAL = 20;
 
-class DashboardModule {
+class DashboardModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'dashboard';
     this.version = '3.0.0';
 
     this.core = null;
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.discovery = null;
 
     this.logBuffer = [];
@@ -116,8 +116,8 @@ class DashboardModule {
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/unavailable|no disponible|not available/i.test(msg)) return { status: 503, code: 'DEPENDENCY_UNAVAILABLE' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    if (/unavailable|no disponible|not available/i.test(msg)) return { status: 503, code: 'UPSTREAM_UNREACHABLE' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
@@ -177,7 +177,7 @@ class DashboardModule {
         this.logger?.warn?.('dashboard.buffer.error', {
           topic, error_message: err.message
         });
-        this.metrics?.increment?.('dashboard.errors', { code: 'BUFFER_ERROR', kind: 'subscribe' });
+        this.metrics?.increment?.('dashboard.errors', { code: 'UNKNOWN_ERROR', kind: 'subscribe' });
       }
     };
     this.eventBus.on('message', this._busMessageHandler);
@@ -215,9 +215,9 @@ class DashboardModule {
   async handleCores() {
     try {
       if (!this.discovery) {
-        this.metrics?.increment?.('dashboard.errors', { code: 'DEPENDENCY_UNAVAILABLE', kind: 'cores' });
+        this.metrics?.increment?.('dashboard.errors', { code: 'UPSTREAM_UNREACHABLE', kind: 'cores' });
         this.logger?.warn?.('dashboard.cores.no_discovery', {});
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE',
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE',
           'Discovery system not available', { dependency: 'discovery' });
       }
 
@@ -257,8 +257,8 @@ class DashboardModule {
       }
 
       if (!this.discovery) {
-        this.metrics?.increment?.('dashboard.errors', { code: 'DEPENDENCY_UNAVAILABLE', kind: 'core-detail' });
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE',
+        this.metrics?.increment?.('dashboard.errors', { code: 'UPSTREAM_UNREACHABLE', kind: 'core-detail' });
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE',
           'Discovery system not available', { dependency: 'discovery' });
       }
 

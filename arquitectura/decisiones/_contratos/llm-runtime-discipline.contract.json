@@ -1,0 +1,278 @@
+{
+  "_doc": "Contrato TRANSVERSAL que captura las reglas operativas que TODO LLM ejecutando un blueprint del sistema cumple SIEMPRE. Coexiste con modelo_de_ejecucion del blueprint padre — el modelo_de_ejecucion describe COMO el LLM lee y ejecuta el blueprint (mecanica); la disciplina describe QUE NO debe hacer y QUE debe respetar para no perderse, distraerse, inventar datos. Las 10 reglas son las que un LLM en runtime sin disciplina viola tipicamente — el catalogo recoge cada uno de esos anti-patrones observados con su principio canonico y su anti_patron explicito. Aplicable a CUALQUIER modulo del sistema declarado como blueprint_driven (subsistema-recetario, subsistema-carta y futuros). El validator cruza esta seccion del contrato con la copia operativa que vive en el blueprint padre y detecta divergencias.",
+
+  "id": "llm-runtime-discipline",
+  "version": "2.0.0",
+  "creada": "2026-05-19",
+  "supersedes_nota": "v2.0.0 (2026-05-25): anyadido principio 11 'read_modify_write_con_cas' tras evidencia empirica del audit cross-blueprint del 2026-05-25 (caso salmorejo: el LLM compuso mal una secuencia read-modify-write y sobrescribio el store entero de recetas). El blueprint padre subsistema-recetario.modulo-base bumpea a v0.5.0 incorporando la copia operativa del nuevo principio + el helper canonico safeUpdate(path, mutator) que el LLM expande mentalmente. Filesystem v3 introduce el parametro opt-in expected_hash en fs.write y el campo hash en fs.read.response (SHA-256). Cierre tipico de Critica 1 derivada del audit. v1.0.0 (2026-05-19): primera version. Origen: observacion empirica del usuario en runtime real de los 10 modulos blueprint del sistema (4 subsistema-recetario + 6 subsistema-carta migrados durante mayo 2026) — el LLM se desenfocaba, inventaba datos, ejecutaba operaciones no pedidas, mezclaba datos con distinto grado de confianza. v0.3.0 del blueprint padre subsistema-recetario.modulo-base introdujo la seccion disciplina_del_llm_runtime inline; este contrato la canoniza como documento autoritativo independiente del padre. El padre conserva la copia operativa (porque ai-gateway lo lee al componer system prompt), pero la fuente de verdad es este contrato.",
+
+  "objetivo": "Producir UN JSON output (_outputs/llm-runtime-discipline.json) con los 10 principios canonicos. El validator cruza el output con la seccion disciplina_del_llm_runtime del blueprint padre del subsistema-recetario y de cualquier futuro blueprint padre. Detecta drift: principios anyadidos solo a un lado, redactados distinto, principios omitidos. Tambien valida que cada modulo blueprint_driven enabled del repo extiende un padre que SI tiene la seccion disciplina.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/llm-runtime-discipline.contract.json (este archivo)",
+      "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json (documento maestro del paradigma)",
+      "arquitectura/decisiones/_blueprints/*.modulo-base.blueprint.json (padres abstractos canonicos)"
+    ],
+    "obligatorios_si_existen": [
+      "modules/*/<modulo>.blueprint.json (hijos concretos — para verificar que extends_blueprint_abstract apunta a un padre que tiene disciplina)"
+    ],
+    "opcionales_para_contexto": [
+      "modules/conversacion/ai-gateway/index.js (motor que compone system prompt — referencia de como se inyecta la disciplina al LLM-runtime)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL LLM-RUNTIME NO ES UN EJECUTOR DETERMINISTA. Es un razonador con tendencia a explorar, ampliar, mejorar lo que se le pide. Sin disciplina escrita, hace cosas no pedidas con buena intencion — el resultado es ruido, drift, datos inventados, eventos publicados de mas.",
+
+    "LA DISCIPLINA SE DECLARA, NO SE ASUME. Asumir que el LLM 'sabe' que no debe inventar UUIDs cuando le falta uno es naive — los modelos actuales inventan rutinariamente si la operacion se 'completa' con el invento. Hay que decirlo explicito.",
+
+    "PRINCIPIO + ANTI_PATRON. Cada regla se redacta como PRINCIPIO (lo que SI haces) y ANTI_PATRON (la version concreta de lo que NO debes hacer). El anti_patron es lo que el LLM ya hizo en runtime real — citado con suficiente concretitud para que se reconozca.",
+
+    "10 PRINCIPIOS, NO MAS. Mas reglas = mas que olvidar. 10 cubre los anti-patrones observados (mayo 2026). Si aparecen nuevos, se anyaden con criterio (bump mayor del contrato), pero la lista debe quedar legible en un solo bloque del system prompt.",
+
+    "LA DISCIPLINA NO ES OPCIONAL POR OPERACION. Aplica a TODAS las operaciones de TODOS los blueprints del sistema. Si un caso especifico necesita relajar una regla (ej. una operacion que SI confirma destructivo de otro modo), se documenta como excepcion en el blueprint hijo — pero el principio default es el del contrato.",
+
+    "VALIDACION ES DE COHERENCIA, NO DE COMPORTAMIENTO. El validator NO puede comprobar que el LLM cumpla las reglas en runtime — eso solo se ve usando el sistema. Lo que SI valida es que el contrato existe, que el padre tiene la seccion, que los principios coinciden literal en ambos sitios, y que los hijos extienden un padre con disciplina.",
+
+    "ESTA DISCIPLINA NO REEMPLAZA EL CONTRATO ERRORS NI EL PATRON DE OPERACION. Son capas distintas: errors define que codigos hay y como se devuelven; operacion define que pseudocodigo sigue; disciplina define que NO hace el LLM ANTES de leer el pseudocodigo.",
+
+    "ITERAR SOBRE EVIDENCIA EMPIRICA. Si tras esta version el LLM sigue distraido, se itera el contenido — bump version, anyadir/refinar principios. NO acumular reglas defensivas por miedo."
+  ],
+
+  "principios": [
+    {
+      "id": "enfoque_una_operacion",
+      "regla": "Cuando el usuario invoca la operacion X, el LLM ejecuta SOLO el pseudocodigo de X. No lee las demas operaciones del catalogo del blueprint a menos que el pseudocodigo de X las invoque explicitamente via publishAndWait.",
+      "anti_patron": "Leer el catalogo entero del blueprint y razonar 'cual operacion seria mas adecuada aqui' cuando el usuario ya indico que quiere X.",
+      "fallback_si_dudas": "Si el LLM no sabe que operacion ejecutar, pregunta al usuario en lenguaje natural: 'quieres X, Y o Z?'. NO ejecuta nada hasta saberlo."
+    },
+    {
+      "id": "no_inventes_datos",
+      "regla": "Si falta un campo requerido del input → devuelve INVALID_INPUT { field: ... }. Si los datos no son suficientes para razonar (ej. falta precio de un ingrediente, no se sabe la categoria, etc.) → pregunta al usuario en lenguaje natural.",
+      "anti_patron": "Inventar UUIDs, precios, fechas, ids de entidades, nombres de productos, codigos postales para 'completar' la operacion.",
+      "salvedad": "uuid() y nowISO() (helpers built-in del padre) SI los puede generar — son helpers semanticos, no 'inventar'."
+    },
+    {
+      "id": "marcador_de_fuente_por_dato",
+      "regla": "Cada dato derivado de razonamiento lleva marcador de fuente: 'usuario' (lo dijo el usuario en el chat), 'archivo' (leido via fs.read), 'modulo' (recibido de otro modulo via publishAndWait), 'mercadona' (mercadona-api), 'estimado_llm' (estimacion del LLM con disclaimer). Sin marcador → no usar.",
+      "anti_patron": "Mezclar datos del usuario con estimaciones del LLM sin distinguir. El caller del response no sabe que tan confiable es cada campo."
+    },
+    {
+      "id": "confirmacion_antes_de_mutar_destructivo",
+      "regla": "Operaciones destructivas (delete, eliminar, archivar, restaurar version antigua que sobrescribe la actual) NO se ejecutan sin confirmacion explicita del usuario en lenguaje natural en el mismo chat. Si el usuario dice 'borra X', el LLM pregunta 'confirmas que quieres archivar X? quedara accesible en historial pero ya no se listara'.",
+      "anti_patron": "Ejecutar mutaciones destructivas en cuanto el usuario las menciona sin confirmar."
+    },
+    {
+      "id": "no_explorar_estado_ajeno",
+      "regla": "El LLM accede SOLO al estado_persistente declarado en SU blueprint hijo. Si necesita datos de otro modulo, publica <otro-modulo>.<operacion>.request al bus y espera su response. NUNCA hace fs.read directo a archivos que pertenecen a otro modulo.",
+      "anti_patron": "Leer /recetas.json desde el blueprint de escandallo. Lo correcto es publishAndWait('recetas.obtener.request', ...).",
+      "salvedad_built_in_resources": "Archivos built-in del propio modulo (ej. profiles en carta-design/design-profiles/) SI los lee — viven en su propio paquete."
+    },
+    {
+      "id": "modo_silencioso_en_lecturas",
+      "regla": "Operaciones de lectura puras (listar, obtener, estadisticas, buscar, historial, parametros, get_config, ...) NO publican eventos de dominio (entidad.accion). Solo emiten su response correlacionada.",
+      "anti_patron": "Publicar 'receta.consultada' cada vez que se hace obtener — ruido en el bus sin valor.",
+      "regla_simple": "Si la operacion NO modifica el store → NO publica eventos de dominio."
+    },
+    {
+      "id": "pseudocodigo_es_ley",
+      "regla": "El pseudocodigo de cada operacion es la spec de lo que hace el LLM. Si dice 'TU calculas X', razona X siguiendo las reglas de fuentes. Si NO dice 'TU haces Z', NO hace Z. No anyade pasos 'utiles' que el pseudocodigo no pide.",
+      "anti_patron": "Anyadir 'verificacion extra' por iniciativa propia, generar log adicional no pedido, enriquecer payload con campos no canonicos.",
+      "si_pseudocodigo_te_parece_mal": "El LLM no lo corrige silenciosamente. Devuelve response correctamente formada y al final del content indica: 'nota: el pseudocodigo asume X pero he detectado Y'. Que el humano lo arregle."
+    },
+    {
+      "id": "correlacion_request_id",
+      "regla": "Cada publishAndWait downstream usa un request_id NUEVO generado con uuid(). NO reutiliza el request_id del caller. El correlation_id SI se propaga del caller en cada evento que emita.",
+      "anti_patron": "Reutilizar el request_id del caller en publishAndWait downstream — confunde la correlacion del bus."
+    },
+    {
+      "id": "response_unico_por_invocacion",
+      "regla": "Cada invocacion a una operacion del blueprint produce UNA sola response (<modulo>.<operacion>.response) o UNA sola failed (<modulo>.<operacion>.failed). Nunca ambas. Nunca dos response. Nunca cero.",
+      "anti_patron": "Publish .response Y .failed en la misma ejecucion 'por si acaso'. Publish .response dos veces 'para asegurar'."
+    },
+    {
+      "id": "no_dejes_pending_huerfanos",
+      "regla": "Cada publishAndWait debe terminar con: response recibida, timeout, o error upstream procesado. NO inicia un publishAndWait y luego abandona la ejecucion sin procesar el resultado. Si el upstream falla → propaga el error (return raw_response) o devuelve error canonico equivalente.",
+      "anti_patron": "Iniciar 3 publishAndWait, procesar 2, ignorar el 3o."
+    },
+    {
+      "id": "read_modify_write_con_cas",
+      "regla": "Toda secuencia 'leer store + modificar + escribir store' DEBE usar el patron safeUpdate (helper canonico del padre) o equivalente explicito: fs.read devuelve hash, fs.write se invoca con expected_hash. Si llega CONFLICT_STATE, reintenta desde el read (max 3 veces). Cierra la clase de bugs read-modify-write fragiles (caso testigo: salmorejo perdido, audit cross-blueprint 2026-05-25 — el LLM compuso mal la secuencia y sobrescribio el store entero).",
+      "anti_patron": "Hacer fs.write con el contenido modificado SIN pasar expected_hash. Si entre el read y el write el disco cambio (otro turno del LLM, otro proceso, race), el write destruye el cambio ajeno sin avisar."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "disciplina_inline_en_padre_no_referencia",
+      "decision": "El blueprint padre del subsistema-recetario (y futuros padres) CONTIENE la seccion disciplina_del_llm_runtime con los 10 principios completos — NO referencia por path al contrato. Razon: ai-gateway compone el system prompt del LLM incluyendo padre + hijo. Si la disciplina solo estuviera en el contrato, habria que tocar ai-gateway para que tambien leyera contratos de _contratos/. Mas simple: la disciplina inline en el padre.",
+      "razon": "Velocidad de iteracion + cero cambios en ai-gateway. El padre actua como copia operativa autoritativa al runtime; el contrato es el documento autoritativo para el repo (validator + revision humana)."
+    },
+    {
+      "id": "validator_solo_coherencia_no_comportamiento",
+      "decision": "El validator llm-runtime-discipline.validate.js compara el contenido del contrato con la seccion del padre y verifica que los principios coincidan literal. NO valida que el LLM en runtime los cumpla.",
+      "razon": "Comportamiento del LLM en runtime no es validable estaticamente. Lo unico mecanizable es la consistencia entre las dos copias del catalogo de principios. Si divergen, drift."
+    },
+    {
+      "id": "padre_unico_referenciado_en_blueprints_dir",
+      "decision": "El blueprint padre subsistema-recetario.modulo-base.blueprint.json vive en arquitectura/decisiones/_blueprints/ como artefacto unico — los module.json de los hijos referencian via blueprint_parent_path con path relativo desde repo root (resoluble por ai-gateway).",
+      "razon": "Hasta ahora el padre se copiaba x10 en cada modulo (precedente del repo). Mantener 10 copias sincronizadas es propenso a drift. Padre unico elimina ese problema. Requiere extender ai-gateway._loadBlueprints para soportar paths que empiecen con 'arquitectura/' como absolutos desde repo root."
+    },
+    {
+      "id": "10_principios_no_jerarquia",
+      "decision": "Lista plana de 10 principios sin jerarquia ni agrupacion. Orden por importancia decreciente subjetiva pero sin etiquetar.",
+      "razon": "Jerarquia introduce complejidad cognitiva al LLM. Lista plana se lee de arriba a abajo y se aplica."
+    },
+    {
+      "id": "anti_patron_explicito_por_principio",
+      "decision": "Cada principio incluye anti_patron — version concreta de lo que NO debe hacer. Si el LLM se reconoce en el anti_patron, se autocorrige.",
+      "razon": "El LLM no siempre infiere que NO hacer desde el principio positivo. Mostrarle el anti-patron concreto (sin sugerirlo) ayuda."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "anyadir_principios_sin_evidencia_empirica",
+      "regla": "NO anyadir principios al contrato 'por si acaso'. Solo se anyaden tras observar el anti_patron correspondiente en runtime real. Cada principio anyadido bumpea version mayor.",
+      "viola_garantias": ["lista_acotada_legible_en_system_prompt"],
+      "como_detectar": "Revision de PRs que toquen este contrato: el commit debe citar evidencia (log de LLM-runtime con el comportamiento observado, o issue con descripcion).",
+      "alternativa_correcta": "Documentar el anti-patron observado, esperar a verlo recurrente, entonces canonizar."
+    },
+    {
+      "id": "validar_comportamiento_llm_en_runtime",
+      "regla": "El validator NO intenta ejecutar blueprints contra un LLM mock para verificar disciplina. NO simula respuestas del LLM. Solo valida shape del contrato y coherencia con padres.",
+      "viola_garantias": ["validacion_mecanica_baratable"],
+      "como_detectar": "Codigo del validator: si importa cliente de LLM (anthropic, openai, etc.) o ai-gateway runtime, drift critico.",
+      "alternativa_correcta": "Comportamiento del LLM se valida con testing E2E manual + telemetria de runtime (no es responsabilidad de este contrato)."
+    },
+    {
+      "id": "disciplina_distinta_por_modulo",
+      "regla": "Los 10 principios aplican identicos a TODOS los blueprints del sistema. NO existe 'disciplina relajada para escandallo' ni 'disciplina extra para recetas'. Si un modulo necesita excepcion, se documenta en SU blueprint hijo como reglas_clave adicionales — pero NO toca el contrato base.",
+      "viola_garantias": ["universalidad_de_la_disciplina"],
+      "como_detectar": "Validator: si un blueprint padre tiene la seccion disciplina con principios distintos al contrato, drift.",
+      "alternativa_correcta": "Excepcion por operacion (en reglas_clave del hijo). Disciplina general inmutable."
+    }
+  ],
+
+  "output_shape_resumen": "_outputs/llm-runtime-discipline.json contiene: { id: 'llm-runtime-discipline', version, principios_count: 11, principios: [...lista completa...], padres_con_disciplina: [...lista de paths donde la seccion existe...], hijos_que_extienden_padre_con_disciplina: [...modulos que SI heredan...], drifts_observed_baseline: { padre_sin_seccion: N, principios_redactados_distinto: N, hijos_extends_padre_sin_disciplina: N } }. Snapshot del estado.",
+
+  "reglas_de_extraccion": [
+    "El validator carga este contrato y extrae la lista de 10 principios canonicos (id + regla + anti_patron).",
+    "Escanea arquitectura/decisiones/_blueprints/*.modulo-base.blueprint.json y busca seccion disciplina_del_llm_runtime.",
+    "Para cada padre encontrado, compara cada principio del contrato con el correspondiente en el padre (por id o por orden). Detecta divergencias.",
+    "Escanea modules/*/*/<modulo>.blueprint.json y resuelve extends_blueprint_abstract. Verifica que el padre apuntado tiene la seccion disciplina.",
+    "Output: _outputs/llm-runtime-discipline.json con contadores de drift."
+  ],
+
+  "derivaciones": [
+    {
+      "documento": "arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js",
+      "rol": "Compila el contrato + cross-checks: coherencia contrato vs seccion del padre, padres con seccion, hijos que extienden padres con seccion. Sin AJV schema strict (el contrato es prosa estructurada, no schema)."
+    },
+    {
+      "documento": "arquitectura/decisiones/_outputs/llm-runtime-discipline.json",
+      "rol": "Snapshot del estado de la disciplina en el repo."
+    },
+    {
+      "documento": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
+      "rol": "Blueprint padre que ESPEJEA la seccion disciplina inline (copia operativa que ai-gateway lee al componer system prompt). Fuente de verdad sigue siendo este contrato."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "contrato_compila_estructuralmente",
+      "regla": "El contrato es JSON valido + tiene secciones obligatorias (id, version, principios, prohibido, validaciones_cross_realizadas_por_validator).",
+      "como_detectar": "Parse JSON + check de keys obligatorias.",
+      "severidad": "error"
+    },
+    {
+      "id": "exactamente_11_principios",
+      "regla": "principios[] tiene exactamente 11 entradas (cardinalidad fijada en v2.0.0 tras anyadir read_modify_write_con_cas en el audit cross-blueprint del 2026-05-25).",
+      "como_detectar": "Length de principios[]. Si != 11, drift (bump mayor pendiente).",
+      "severidad": "warning"
+    },
+    {
+      "id": "cada_principio_tiene_anti_patron",
+      "regla": "Cada principio del array tiene campo anti_patron no vacio.",
+      "como_detectar": "Iterar principios y verificar campo anti_patron present + len > 0.",
+      "severidad": "error"
+    },
+    {
+      "id": "padre_canonico_tiene_seccion_disciplina",
+      "regla": "El blueprint padre arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json (o cualquier padre listado en derivaciones) tiene seccion disciplina_del_llm_runtime con todos los principios.",
+      "como_detectar": "Cargar el padre, buscar la seccion, contar principios.",
+      "severidad": "error"
+    },
+    {
+      "id": "principios_padre_coinciden_con_contrato",
+      "regla": "Para cada principio del contrato, el padre tiene el mismo id (o equivalente por orden) con el mismo principio + anti_patron.",
+      "como_detectar": "Iterar y comparar string-equals.",
+      "severidad": "warning"
+    },
+    {
+      "id": "hijos_extends_padre_con_disciplina",
+      "regla": "Cada modulo blueprint del repo cuyo extends_blueprint_abstract apunta a un padre, ese padre tiene seccion disciplina.",
+      "como_detectar": "Escanear hijos, resolver extends, validar.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_blueprint_fs_read_a_storage_ajeno",
+      "regla": "Ningun blueprint hijo invoca publishAndWait('fs.read.request' | 'fs.write.request', {path}) con un path que NO esta declarado en su propio estado_persistente. El estado_persistente puede declarar paths en cualquier shape (paths_relativos.*, paths_relativos_proyecto.*, archivo_destino, o strings sueltos) y puede usar templates como <carta_id>/<timestamp> que se normalizan a regex.",
+      "como_detectar": "Para cada blueprint: extraer paths declarados recursivamente del estado_persistente (filtrar strings que empiecen por '/'), convertir templates a regex, extraer paths usados de fs.(read|write).request en pseudocodigo, marcar como error cualquier path usado que NO matchee con (a) regex de algun declarado, (b) prefijo literal de algun declarado, ni (c) paths modules/<modulo>/ (built-in del modulo).",
+      "severidad": "error",
+      "implementado_en": "arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js::checkBlueprintsRespetanEstadoPersistente() — wireado a check-system desde 2026-05-24.",
+      "limitacion_conocida": "La heuristica respeta lo declarado en estado_persistente, por lo que NO detecta el sub-caso 'conflicto de propiedad' (dos modulos declaran el mismo path como propio). El caso testigo (escandallo declaraba archivo_destino: /recetas.json) DESAPARECIO con el refactor v3.0.0 que ejecuta el frente 2.4 — escandallo ya no declara archivo_destino, recetas es dueno absoluto via subscriber asincrono. El refinamiento queda como objetivo futuro si el patron reapareciera."
+    },
+    {
+      "id": "eventos_que_escucho_apunta_a_handler_existente",
+      "regla": "Cada entry de eventos_que_escucho[] en un blueprint hijo declara un handler (forma objeto {evento, handler} o string simple con auto-derivacion a '_on_<evento_con_underscores>'). Ese handler DEBE existir como operacion en operaciones[] del propio blueprint.",
+      "como_detectar": "Para cada blueprint hijo: leer eventos_que_escucho[]. Para cada entry, normalizar a {evento, handler_name} (objeto -> directo; string -> '_on_' + evento.replace('.','_')). Verificar que operaciones[handler_name] existe. Si no, error.",
+      "severidad": "error",
+      "implementado_en": "arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js::checkEventosQueEscuchoApuntaAHandlerExistente() — wireado a check-system desde 2026-05-24.",
+      "por_que_error_no_warning": "Sin el handler, ai-gateway al wireear emite warn y omite — el subscriber queda silencioso en runtime. Es exactamente el tipo de bug que el validador estatico debe bloquear antes del deploy."
+    },
+    {
+      "id": "eventos_que_escucho_apunta_a_evento_canonico",
+      "regla": "Cada evento declarado en eventos_que_escucho[] de un blueprint hijo debe ser publicado por ALGUIEN del repo (otro blueprint via eventos_publicados[], o un modulo POC2 JS via module.json.events.publishes[] o module.json.publishes[]). Eventos que ningun modulo publica son 'eventos fantasma' que apuntan a typo o a un origen externo no escaneable.",
+      "como_detectar": "Recolectar un Set<string> con todos los nombres canonicos de eventos publicados en el repo (escanear .blueprint.json::eventos_publicados + module.json::events.publishes y publishes). Para cada blueprint con eventos_que_escucho, comprobar que cada evento esta en el set.",
+      "severidad": "warning",
+      "implementado_en": "arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js::checkEventosQueEscuchoApuntaAEventoCanonico() — wireado a check-system desde 2026-05-24.",
+      "por_que_warning_no_error": "Algunos eventos pueden venir de origen externo no escaneable (cron del scheduler, channel-* recibiendo de Telegram/web, webhooks de servicios externos). Marcar como error daria falsos positivos. El warning alerta al lector humano para verificar manualmente; en muchos casos sera typo y se corregira."
+    }
+  ],
+
+  "salida_validador": "PASS si contrato compila + tiene exactamente 10 principios + cada uno con anti_patron + al menos un padre con la seccion + principios coinciden literal. Errors bloquean: shape invalido, padre sin seccion. Warnings listados pero no bloquean: cardinalidad != 10, divergencias literales menores.",
+
+  "convenciones_complementarias": [
+    "modulos-blueprint-driven.contract: documento maestro del paradigma blueprint. Este contrato es seccion derivada — captura LA DISCIPLINA del LLM-runtime que ese paradigma necesita.",
+    "errors.contract: la disciplina respeta los codigos canonicos (INVALID_INPUT, RESOURCE_NOT_FOUND, etc.). NO inventa codigos nuevos.",
+    "events.contract: la disciplina propaga correlation_id, usa request_id nuevo por publishAndWait downstream, declara MAX 1 response O 1 failed por invocacion.",
+    "naming.contract: los principios usan kebab-case en ids (enfoque_una_operacion, no_inventes_datos, etc.). El propio contrato usa snake_case en ids de principios — coherencia interna con el resto de contratos.",
+    "observability.contract: la disciplina NO bloquea la observabilidad — cada operacion sigue emitiendo metricas. Solo evita eventos de dominio en lecturas puras (modo_silencioso_en_lecturas), no metricas.",
+    "lifecycle.contract: NO aplica directamente — la disciplina es ejecutiva del LLM-runtime, no del ciclo de vida del modulo.",
+    "persistence.contract: la regla no_explorar_estado_ajeno es coherente con el principio de event-core (cada modulo es dueno de su persistencia)."
+  ],
+
+  "trabajo_pendiente": [
+    {
+      "id": "implementar_validator",
+      "estado": "cerrado",
+      "naturaleza": "transversal",
+      "descripcion": "Implementar arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js con los 6 cross-checks declarados. Registrar en scripts/validate-all.js. Wire al baseline.",
+      "criterio_de_cierre": "npm run validate:ci incluye llm-runtime-discipline.validate.js. drift-baseline tiene seccion.",
+      "fecha_anotacion": "2026-05-19",
+      "fecha_cierre": "2026-05-23",
+      "notas_de_cierre": "Validator implementado siguiendo patron de cajones-context-partitioning.validate.js: 3 cross-checks estructurales siempre + 3 cross-system con --check-system. PASS estructural verde. Cross-system detecta 6 warnings de divergencias literales sutiles entre contrato y padre (voz 2a/3a persona) — informativos, no bloqueantes. Wireado en scripts/validate-all.js como validator #29."
+    },
+    {
+      "id": "iterar_segun_evidencia_empirica",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Tras esta v1.0.0, observar runtime real del LLM ejecutando blueprints. Si persisten anti-patrones, refinar principios. Si aparecen nuevos, anyadir (bump mayor). Si algunos no aportan, eliminar.",
+      "fecha_anotacion": "2026-05-19"
+    }
+  ]
+}

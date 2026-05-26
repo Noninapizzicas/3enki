@@ -70,30 +70,7 @@ class LlevadooStrategy {
     await this.cargarConfigRecargo();
   }
 
-  registerUIHandlers(uiHandler) {
-    uiHandler.register('llevadoo', 'crear_pedido', this.handleCrearPedido.bind(this));
-    uiHandler.register('llevadoo', 'pendientes', this.handleGetPendientes.bind(this));
-    uiHandler.register('llevadoo', 'get', this.handleGetPedido.bind(this));
-    uiHandler.register('llevadoo', 'activos', this.handleGetActivos.bind(this));
-    uiHandler.register('llevadoo', 'aceptar', this.handleAceptarPedido.bind(this));
-    uiHandler.register('llevadoo', 'marcar_recogido', this.handleMarcarRecogido.bind(this));
-    uiHandler.register('llevadoo', 'cancelar', this.handleCancelarPedido.bind(this));
-    uiHandler.register('llevadoo', 'config_recargo', this.handleGetConfigRecargo.bind(this));
-    uiHandler.register('llevadoo', 'set_config_recargo', this.handleSetConfigRecargo.bind(this));
-    uiHandler.register('llevadoo', 'carta_delivery', this.handleGetCartaDelivery.bind(this));
-    uiHandler.register('llevadoo', 'health', this.handleHealthCheck.bind(this));
-    uiHandler.register('llevadoo', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.modulo.logger.info('canal.llevadoo.ui_handlers.registered', {
-      handlers: this._uiActions
-    });
-  }
-
-  unregisterUIHandlers(uiHandler) {
-    for (const action of this._uiActions) {
-      uiHandler.unregister('llevadoo', action);
-    }
-  }
+  // tools.contract v1.2: el loader auto-wirea las 12 tools 'llevadoo.*' a uiHandler.
 
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));

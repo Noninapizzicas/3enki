@@ -8,15 +8,15 @@
  * Consume: producto.creado, comandero.item_agregado
  */
 
-class VariacionesModule {
+const BaseModule = require('../../_shared/base-module');
+
+class VariacionesModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'variaciones';
     this.version = '4.0.0';
 
     // Dependencias (inyectadas en onLoad)
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.uiHandler = null;
 
     // Estado en memoria — solo reglas por producto, NO precios de ingredientes
@@ -39,7 +39,7 @@ class VariacionesModule {
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado|no configurado|no permite|no disponible/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
@@ -85,8 +85,8 @@ class VariacionesModule {
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Event subscriptions are auto-wired from module.json by the loader.
-    this.registerUIHandlers();
+    // Event subscriptions y tools[] son auto-wireados desde module.json por el loader
+    // (tools.contract v1.2: una declaracion, tres destinos).
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
@@ -94,37 +94,11 @@ class VariacionesModule {
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
 
-    if (this.uiHandler) {
-      const actions = ['get', 'validar', 'calcular_precio', 'health', 'metrics'];
-      for (const action of actions) {
-        this.uiHandler.unregister('variaciones', action);
-      }
-    }
-
+    // El loader desregistra automaticamente bus subs y uiHandler entries de tools[]
+    // via unregisterToolsForAI. Aqui solo limpiamos estado del modulo.
     this.configuraciones.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
-  }
-
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('variaciones.uiHandler.not_available', { module: this.name });
-      return;
-    }
-
-    this.uiHandler.register('variaciones', 'get', this.handleGetVariacionesProducto.bind(this));
-    this.uiHandler.register('variaciones', 'validar', this.handleValidarVariacion.bind(this));
-    this.uiHandler.register('variaciones', 'calcular_precio', this.handleCalcularPrecio.bind(this));
-    this.uiHandler.register('variaciones', 'health', this.handleHealthCheck.bind(this));
-    this.uiHandler.register('variaciones', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.logger.info('variaciones.ui_handlers.registered', {
-      handlers: ['get', 'validar', 'calcular_precio', 'health', 'metrics']
-    });
   }
 
   // ==========================================

@@ -200,6 +200,28 @@
       "6. Panel.svelte wrapper → drag, resize, backdrop, ESC to close"
     ],
     "registro_obligatorio": "Cada panel flotante DEBE estar en panels.ts con su loader. El autodiscovery de manifest.json descubre módulos pero los paneles se registran aparte.",
+    "doble_registro_obligatorio": {
+      "_AI_CRITICO": "LEE ESTO antes de añadir cualquier módulo UI nuevo que deba aparecer con icono en una barra (work-bar, chat-config, chat-tools, system-bar). Saltarse este punto es la trampa más común — me pasó a mí en PRs #189 y #190.",
+      "regla": "Un módulo UI con icono visible en una barra necesita DOS registros, en sitios distintos del repo. Falta de uno = icono invisible en la barra.",
+      "registry_1_autodiscovery": {
+        "donde": "frontend/src/lib/modules/<name>/manifest.json + frontend/src/lib/modules/<name>/index.ts",
+        "para_que": "El autodiscovery (loader.ts via import.meta.glob) registra el módulo en lazy-registry. Lo usa registerAllModules() en AppShell.svelte y LazyShell.svelte para cargar el panel cuando se abre.",
+        "obligatorio": true
+      },
+      "registry_2_panels_estatico": {
+        "donde": "frontend/src/lib/modules/panels.ts → objeto panels: Record<string, PanelDef>",
+        "para_que": "SystemBar.svelte / WorkBar.svelte / ChatConfig.svelte usan getPanelsByZone() que SOLO lee de panels.ts. Sin entry aquí, NO se renderiza botón en la barra aunque el módulo exista en registry_1.",
+        "obligatorio_si": "el módulo debe mostrar botón en alguna barra (work-bar/chat-config/chat-tools/system-bar)."
+      },
+      "ejemplo_canonico": {
+        "modulo": "credentials",
+        "registry_1_value": "frontend/src/lib/modules/credentials/manifest.json declara zone: 'system-bar'",
+        "registry_2_value": "frontend/src/lib/modules/panels.ts contiene entry 'credentials-list' con zone: 'chat-config', loader: () => import('$lib/modules/credentials/CredentialsPanel.svelte')",
+        "ojo": "los dos registries pueden tener metadata distinta (zona, icono, label) — el SystemBar/WorkBar/ChatConfig usa la del registry #2; el lazy-registry para apertura del panel usa la del #1. Mantener ambos coherentes es disciplina manual."
+      },
+      "ejemplo_real_de_la_trampa": "PR #189 creó frontend/src/lib/modules/related-pages/{manifest.json, index.ts, RelatedPagesPanel.svelte} siguiendo el patrón canónico pero SIN entry en panels.ts. Resultado: 0 botones en system-bar tras deploy. Fix en PR #190: añadir entry 'related-pages-panel' a panels.ts con zone: 'system-bar', loader apuntando al mismo componente.",
+      "regla_operativa_para_agentes": "Al añadir un módulo UI con icono visible: (1) crea manifest.json + index.ts + <Name>Panel.svelte siguiendo patrón de credentials, (2) AÑADE entry en panels.ts con loader explícito y zone donde debe aparecer el botón, (3) verifica que el grep cuenta exactamente 1 entry adicional con esa zona."
+    },
     "sizes": ["sm", "md", "lg"],
     "positions": ["top", "bottom", "left", "right", "center"]
   },

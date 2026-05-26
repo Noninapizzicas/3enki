@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/mercadona-api/mercadona.precio.obtenido.schema.json",
+  "title": "mercadona.precio.obtenido — payload schema (evento de dominio)",
+  "description": "Evento de dominio emitido cuando mercadona-api resuelve exitosamente el precio de un producto. Otros modulos (escandallo, recetas) pueden cachearlo. NO se emite si precio_unidad y precio_kg son ambos null.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["producto_id", "nombre", "postcode", "timestamp"],
+  "properties": {
+    "producto_id":    { "$ref": "_common.schema.json#/$defs/producto_id" },
+    "nombre":         { "type": "string", "minLength": 1 },
+    "marca":          { "type": ["string", "null"] },
+    "formato":        { "type": ["string", "null"] },
+    "precio_unidad":  { "type": ["number", "null"], "minimum": 0 },
+    "precio_kg":      { "type": ["number", "null"], "minimum": 0 },
+    "postcode":       { "$ref": "_common.schema.json#/$defs/postcode" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

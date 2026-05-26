@@ -30,19 +30,17 @@
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
+const BaseModule = require('../_shared/base-module');
 const { EVENTS } = require('../../core/constants');
 
 const DEFAULT_DB_TIMEOUT_MS = 10000;
 const DEFAULT_COMPOSITION_TIMEOUT_MS = 10000;
 
-class ProjectManagerModule {
+class ProjectManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'project-manager';
     this.version = '4.0.0';
-
-    this.logger      = null;
-    this.metrics     = null;
-    this.eventBus    = null;
     this.uiHandler   = null;
     this.mqttRequest = null;
     this.config      = null;
@@ -327,7 +325,7 @@ class ProjectManagerModule {
       this.logger.info('project-manager.default_bootstrap.created', { project_id: project.id });
       return project;
     } catch (err) {
-      if (err._code === 'CONFLICT') return null;
+      if (err._code === 'CONFLICT_STATE') return null;
       this.logger.error('project-manager.default_bootstrap.failed', { error: err.message });
       this.metrics?.increment('project-manager.errors', { kind: 'bootstrap' });
     }
@@ -338,9 +336,19 @@ class ProjectManagerModule {
   // ==========================================
 
   async _createProject({ name, description = '', metadata = {}, correlation_id, options = {} }) {
+    // Defensa: name obligatorio + no vacio. Sin esta validacion, callers que envian
+    // name=undefined/null/'' producian un directorio fantasma 'undefined/' en disco
+    // (bug observado 2026-05-18 — /opt/enki/data/projects/undefined). Validamos
+    // ANTES de cualquier IO o lookup para fallar barato.
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      throw Object.assign(new Error('name is required and must be a non-empty string'),
+        { _code: 'INVALID_INPUT', _details: { field: 'name', received: typeof name === 'string' ? '(empty)' : typeof name } });
+    }
+    name = name.trim();
+
     if (await this._projectNameExists(name)) {
       throw Object.assign(new Error(`Project with name "${name}" already exists`),
-        { _code: 'CONFLICT', _details: { kind: 'domain', field: 'name' } });
+        { _code: 'CONFLICT_STATE', _details: { kind: 'domain', field: 'name' } });
     }
 
     const projectId = crypto.randomUUID();
@@ -451,19 +459,19 @@ class ProjectManagerModule {
     }
     if (project.is_active) {
       throw Object.assign(new Error('Cannot delete active project. Deactivate first.'),
-        { _code: 'CONFLICT', _details: { kind: 'state', state: 'active' } });
+        { _code: 'CONFLICT_STATE', _details: { kind: 'state', state: 'active' } });
     }
 
     try {
       const depInfo = await this._requestComposition('dependents.has', { entity_id: projectId });
       if (depInfo?.hasDependents && !force) {
         const err = new Error(`Cannot delete project: ${depInfo.count} project(s) depend on it. Use force=true.`);
-        err._code = 'CONFLICT';
+        err._code = 'CONFLICT_STATE';
         err._details = { dependents: depInfo.dependents };
         throw err;
       }
     } catch (err) {
-      if (err._code === 'CONFLICT') throw err;
+      if (err._code === 'CONFLICT_STATE') throw err;
       this.logger.warn('project-manager.delete.dependents_check.failed', { error: err.message });
     }
 
@@ -505,7 +513,7 @@ class ProjectManagerModule {
   async _deactivateProject(projectId, correlation_id) {
     if (!this.activeProjectIds.has(projectId)) {
       throw Object.assign(new Error(`Project ${projectId} is not active`),
-        { _code: 'CONFLICT', _details: { kind: 'state', state: 'inactive' } });
+        { _code: 'CONFLICT_STATE', _details: { kind: 'state', state: 'inactive' } });
     }
     const project = this.projects.get(projectId);
     await this._queryDb('UPDATE projects SET is_active = 0 WHERE id = ?',
@@ -613,7 +621,7 @@ class ProjectManagerModule {
     }
     if (!this.mqttRequest) {
       throw Object.assign(new Error('mqttRequest not available — required to create canonical conversation'),
-        { _code: 'INTERNAL_ERROR' });
+        { _code: 'UNKNOWN_ERROR' });
     }
     if (this.pendingDefaultConversations.has(realId)) {
       return await this.pendingDefaultConversations.get(realId);
@@ -769,7 +777,7 @@ class ProjectManagerModule {
     try {
       const { name, description, metadata, parent_project_id } = req.body || {};
       if (!name || name.trim().length === 0) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'Project name is required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'Project name is required',
           { kind: 'domain', field: 'name' });
       }
       const project = await this._createProject({
@@ -885,7 +893,7 @@ class ProjectManagerModule {
     try {
       const { conversation_id } = req.body || {};
       if (!conversation_id) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'conversation_id is required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'conversation_id is required',
           { kind: 'domain', field: 'conversation_id' });
       }
       const project = await this._setLastConversation(req.params?.id, conversation_id,
@@ -943,7 +951,7 @@ class ProjectManagerModule {
   async handleUIGet(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'id' });
       const project = this._getProject(id);
       if (!project) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Project not found',
@@ -958,7 +966,7 @@ class ProjectManagerModule {
     try {
       const { name, description, color, icon, workspaceType, parentProjectId } = data || {};
       if (!name || name.trim().length === 0) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'Project name is required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'Project name is required',
           { kind: 'domain', field: 'name' });
       }
       const project = await this._createProject({
@@ -984,7 +992,7 @@ class ProjectManagerModule {
   async handleUIUpdate(data) {
     try {
       const { id, name, description, color, icon, workspaceType } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'id' });
 
       const existing = this._getProject(id);
@@ -1010,7 +1018,7 @@ class ProjectManagerModule {
   async handleUIDelete(data) {
     try {
       const { id, force } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'id' });
       if (!this._getProject(id)) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Project not found',
         { entity_type: 'project', entity_id: id });
@@ -1024,7 +1032,7 @@ class ProjectManagerModule {
   async handleUIActivate(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'id' });
       const project = this._getProject(id);
       if (!project) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Project not found',
@@ -1047,7 +1055,7 @@ class ProjectManagerModule {
   async handleUIDeactivate(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'id' });
       await this._deactivateProject(id, crypto.randomUUID());
       await this._publishUIState();
@@ -1063,7 +1071,7 @@ class ProjectManagerModule {
   async handleUISaveSession(data) {
     try {
       const { id, ...sessionData } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'id' });
       const session = await this._saveSession(id, sessionData, crypto.randomUUID());
       return { status: 200, data: { saved: true, session } };
@@ -1075,7 +1083,7 @@ class ProjectManagerModule {
   async handleUIRestoreSession(data) {
     try {
       const { id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'id' });
       const session = await this._restoreSession(id);
       return { status: 200, data: session };
@@ -1087,7 +1095,7 @@ class ProjectManagerModule {
   async handleUISetAIConfig(data) {
     try {
       const { id, provider, model, prompt_id } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'id' });
       const config = await this._setAIConfig(id, { provider, model, prompt_id }, crypto.randomUUID());
       return { status: 200, data: { updated: true, ...config } };
@@ -1099,9 +1107,9 @@ class ProjectManagerModule {
   async handleUISetLastConversation(data) {
     try {
       const { id, conversationId } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'id' });
-      if (!conversationId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Conversation ID is required',
+      if (!conversationId) return this._errorResponse(400, 'INVALID_INPUT', 'Conversation ID is required',
         { kind: 'domain', field: 'conversationId' });
       await this._setLastConversation(id, conversationId, crypto.randomUUID());
       return { status: 200, data: { updated: true, lastConversationId: conversationId } };
@@ -1113,7 +1121,7 @@ class ProjectManagerModule {
   async handleUIGetDefaultConversation(data) {
     try {
       const { project_id } = data || {};
-      if (!project_id) return this._errorResponse(400, 'VALIDATION_FAILED', 'project_id is required',
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id is required',
         { kind: 'domain', field: 'project_id' });
       if (!this._getProject(project_id)) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Project not found',
         { entity_type: 'project', entity_id: project_id });
@@ -1172,7 +1180,7 @@ class ProjectManagerModule {
   async handleUIAddFeatures(data) {
     try {
       const { id, features } = data || {};
-      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'id' });
 
       const project = this._getProject(id);
@@ -1180,7 +1188,7 @@ class ProjectManagerModule {
         { entity_type: 'project', entity_id: id });
 
       const selectedFeatures = Array.isArray(features) ? features : [];
-      if (selectedFeatures.length === 0) return this._errorResponse(400, 'VALIDATION_FAILED',
+      if (selectedFeatures.length === 0) return this._errorResponse(400, 'INVALID_INPUT',
         'At least one feature is required', { kind: 'domain', field: 'features' });
 
       const existingFeatures = project.metadata?.features || [];
@@ -1212,7 +1220,7 @@ class ProjectManagerModule {
         }
       }
       if (missingDeps.length > 0) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           `Dependencias no satisfechas: ${missingDeps.map(d => `${d.feature} requiere ${d.requires}`).join(', ')}`,
           { kind: 'domain', missingDeps });
       }
@@ -1463,40 +1471,11 @@ class ProjectManagerModule {
   // Helpers canonicos POC2 (5 transferibles)
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED' ? 400 :
-                   code === 'RESOURCE_NOT_FOUND' ? 404 :
-                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                   code === 'CONFLICT' ? 409 : 500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('project-manager.errors', { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
+  // Reglas especificas del dominio del modulo. BaseModule cubre los keywords genericos.
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('cannot delete active') || msg.includes('already exists') || msg.includes('depend')) return 'CONFLICT';
-    return 'INTERNAL_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    await this.eventBus.publish(name, enriched);
+    if (msg.includes('cannot delete active') || msg.includes('already exists') || msg.includes('depend')) return 'CONFLICT_STATE';
+    return super._classifyHandlerError(err);
   }
 }
 

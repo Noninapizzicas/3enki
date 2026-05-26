@@ -15,6 +15,7 @@
  */
 
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 
 const DeepSeekProvider  = require('./providers/deepseek-provider');
@@ -24,13 +25,14 @@ const GroqProvider      = require('./providers/groq-provider');
 const GeminiProvider    = require('./providers/gemini-provider');
 const OllamaProvider    = require('./providers/ollama-provider');
 const ClaudeCliProvider = require('./providers/claude-cli-provider');
+const KimiProvider      = require('./providers/kimi-provider');
 
-class AiGatewayModule {
+const BaseModule = require('../../_shared/base-module');
+class AiGatewayModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'ai-gateway';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
     this.config = null;
     this.moduleLoader = null;
 
@@ -38,7 +40,46 @@ class AiGatewayModule {
     this.credentialCache = new Map();    // provider → { apiKey, resolvedAt, projectId }
     this.pendingCredentials = new Map(); // request_id → { resolve, reject, timeout }
     this.pendingFsReads = new Map();     // request_id → { resolve, reject, timeout }
+    // Cache de prefijos por page_id, poblado lazy por _buildPagePrefixes()
+    this.pagePrefixes = null;            // Map<page_id, Set<prefix>>
+    // Mapa target_page_id → { manifest, parentBlueprint, childBlueprint, systemPrompt }
+    // poblado por _loadBlueprints() al arrancar. Cuando el chat tiene page_id
+    // que esta en este mapa, ai-gateway:
+    //   1. Inyecta el systemPrompt al sistema (concatena padre + hijo)
+    //   2. Expone bus.publish y bus.publishAndWait al LLM (2 tools universales)
+    //   3. El LLM lee el pseudocodigo del blueprint y publica eventos al bus
+    //      directamente via las 2 tools — sin runtime intermedio.
+    this.blueprintModules = new Map();
+
+    // cajones-context-partitioning v1.0.0
+    // target_page_id → [{nombre, descripcion}] del catalogo de cajones extraido del blueprint hijo.
+    // Solo se puebla para blueprints con cajones_enabled: true en su manifest.
+    this.cajonesCatalog = new Map();
+    // conversation_id → [{nombre, turn}] historial de cajones abiertos para ranking por recencia.
+    // Limitado a CAJONES_HISTORY_MAX entries por conversacion (FIFO).
+    this.conversationCajones = new Map();
+
+    // cajones Fase 5 bis (foco dinamico + grafo de paginas relacionadas)
+    // Grafo dirigido { page_id: { consumes: Set<page_id>, consumed_by: Set<page_id> } }
+    // construido al arrancar parseando publishAndWait('<mod>.<accion>.request', ...)
+    // en el pseudocodigo de los blueprints + paginas_relacionadas declarado en module.json.
+    this.pageGraph = new Map();
+    // conversation_id → page_id "foco" actualizado por chat.cambiar_foco. Si no hay
+    // entry, se respeta el page_id que viene en cada request del chat.
+    this.conversationPageFoco = new Map();
+
+    // Blueprint subscribers asincronos (frente 2.4 cierre 2026-05-24):
+    // event_name → [{ page_id, handler_name, unsub }]. Poblado en _wireBlueprintAsyncSubscribers
+    // al arrancar leyendo eventos_que_escucho de cada blueprint hijo. Cuando llega
+    // un evento, ai-gateway arranca una conversacion sintetica e invoca al LLM
+    // para que ejecute el handler como cualquier otra operacion del blueprint.
+    // Patron documentado en arquitectura/decisiones/propuestas/blueprint-subscribers-asincronos.md.
+    this.asyncSubscriptions = new Map();
   }
+
+  // ============================================================
+  // Lifecycle
+  // ============================================================
 
   async onLoad(context) {
     this.logger = context.logger;
@@ -47,7 +88,49 @@ class AiGatewayModule {
     this.moduleLoader = context.moduleLoader || null;
 
     await this._initializeProviders();
-    this.logger.info('ai-gateway.loaded', { providers: this.providers.size });
+    this._loadBlueprints();
+    // Wire intent al arranque: si los blueprint modules ya estan cargados
+    // (eg. ai-gateway carga ultimo) el wiring se completa aqui. Si no,
+    // este bucle no hace nada y nos apoyamos en core.modules.loaded.all
+    // (abajo) + el lazy rewire en _getTools como defensa en profundidad.
+    this._wireBlueprintAsyncSubscribers();
+
+    // Suscripcion canonica: cuando el loader termina loadAll(), publica
+    // core.modules.loaded.all. Garantiza que el wiring de blueprint async
+    // subscribers se ejecuta despues de que TODOS los modulos esten
+    // cargados, sustituyendo el lazy-rewire del PR #206 por un disparo
+    // deterministico. El lazy-rewire se conserva 1-2 semanas como red
+    // defensiva por si la suscripcion se registra despues de la emision.
+    //
+    // Tambien reconstruimos blueprintModules + pageGraph aqui: si ai-gateway
+    // se cargo antes que los blueprint modules (caso comun cuando los blueprints
+    // van al final del loadAll por no estar en config.modules.enabled), el
+    // _loadBlueprints() de onLoad encontro loadedModules sin blueprints y
+    // dejo el grafo a 0 nodos. Sin esta reconstruccion, page.related devuelve
+    // related:[] tras cualquier restart hasta que un chat dispare el lazy-load
+    // en _getTools — caso testigo 2026-05-26: deploy con grafo a 0/0 al
+    // arranque, panel "Sin paginas relacionadas" persistente sin chat previo.
+    if (this.eventBus?.subscribe) {
+      this._modulesLoadedAllUnsub = this.eventBus.subscribe(
+        'core.modules.loaded.all',
+        () => {
+          try {
+            this._loadBlueprints();
+            this._wireBlueprintAsyncSubscribers();
+          } catch (err) {
+            this.logger?.warn('ai-gateway.modules-loaded-all.handler_failed', {
+              error_message: err && err.message ? err.message : String(err)
+            });
+          }
+        }
+      );
+    }
+
+    this.logger.info('ai-gateway.loaded', {
+      providers: this.providers.size,
+      blueprints: this.blueprintModules.size,
+      async_subscribers: this.asyncSubscriptions.size
+    });
   }
 
   async onUnload() {
@@ -57,6 +140,40 @@ class AiGatewayModule {
     this.pendingCredentials.clear();
     for (const { timeout } of this.pendingFsReads.values()) clearTimeout(timeout);
     this.pendingFsReads.clear();
+    this.cajonesCatalog.clear();
+    this.conversationCajones.clear();
+    this.pageGraph.clear();
+    this.conversationPageFoco.clear();
+    // Liberar suscripcion al evento canonico core.modules.loaded.all.
+    if (typeof this._modulesLoadedAllUnsub === 'function') {
+      try {
+        this._modulesLoadedAllUnsub();
+      } catch (err) {
+        this.logger?.warn('ai-gateway.modules-loaded-all.unsub_failed', {
+          error_message: err && err.message ? err.message : String(err)
+        });
+      }
+      this._modulesLoadedAllUnsub = null;
+    }
+    // Liberar subscripciones asincronas de blueprint subscribers.
+    // Acumulamos errores y reportamos UNA vez para evitar log spam en bucle.
+    const unsubFailures = [];
+    for (const subs of this.asyncSubscriptions.values()) {
+      for (const sub of subs) {
+        try {
+          if (typeof sub.unsub === 'function') sub.unsub();
+        } catch (err) {
+          unsubFailures.push(err && err.message ? err.message : String(err));
+        }
+      }
+    }
+    if (unsubFailures.length > 0) {
+      this.logger.warn('ai-gateway.blueprint_subscriber.unsub_failed', {
+        count: unsubFailures.length,
+        sample: unsubFailures.slice(0, 5)
+      });
+    }
+    this.asyncSubscriptions.clear();
   }
 
   // ============================================================
@@ -71,7 +188,8 @@ class AiGatewayModule {
       groq: GroqProvider,
       gemini: GeminiProvider,
       ollama: OllamaProvider,
-      'claude-cli': ClaudeCliProvider
+      'claude-cli': ClaudeCliProvider,
+      kimi: KimiProvider
     };
     const credentialResolver = (provider, projectId) => this._resolveCredential(provider, projectId);
 
@@ -152,10 +270,57 @@ class AiGatewayModule {
   _getTools(page_id) {
     if (!this.moduleLoader) return [];
     const all = this.moduleLoader.getToolsForAI?.() || [];
+    // Lazy-scan de blueprintModules. ai-gateway puede haberse cargado ANTES
+    // que los modulos blueprint-driven en el orden del loader: si el modulo
+    // blueprint no aparece en config.modules.enabled, va al final del loadAll
+    // (despues de ai-gateway). El _loadBlueprints() de onLoad no los encuentra
+    // entonces. La primera llamada a _getTools sucede cuando llega un chat,
+    // momento en que ya estan todos los modulos cargados.
+    // Solo re-scaneamos si no hay nada en el mapa Y hay candidatos en
+    // loadedModules — evita coste de I/O cuando no hay blueprints.
+    if (this.blueprintModules.size === 0 && this.moduleLoader.loadedModules) {
+      let hasBp = false;
+      for (const [, mod] of this.moduleLoader.loadedModules) {
+        if (mod?.manifest?.blueprint_driven === true) { hasBp = true; break; }
+      }
+      if (hasBp) {
+        this._loadBlueprints();
+        // Re-wire los blueprint async subscribers ahora que blueprintModules
+        // tiene contenido. Sin esto, los handlers declarados en
+        // eventos_que_escucho NUNCA se registran en el bus — bug observado en
+        // produccion 2026-05-25: onLoad llama _wireBlueprintAsyncSubscribers
+        // con blueprintModules vacio porque los blueprint modules cargan
+        // DESPUES que ai-gateway en el loadAll del loader. carta-manager
+        // declaraba listener para carta.creada pero nunca se suscribia, las
+        // cartas generadas por menu-generator se perdian silenciosamente.
+        this._wireBlueprintAsyncSubscribers();
+      }
+    }
+    // Blueprint-driven pages: catalogo = solo las 2 tools universales (+ 2 de
+    // cajones si el blueprint tiene cajones_enabled). No mezclamos con
+    // polyfunctional para mantener el modelo declarativo puro (el LLM solo
+    // debe usar publish/publishAndWait segun el pseudocodigo).
+    if (page_id && this.blueprintModules.has(page_id)) {
+      const bp = this.blueprintModules.get(page_id);
+      const universal = this._getBlueprintUniversalTools();
+      if (!bp.cajonesEnabled) return universal;
+      // Cajones-enabled: catalogo + nav tools (page.related, chat.cambiar_foco)
+      // + universales. Las nav vienen desde toolsRegistry (declaradas en
+      // module.json.tools[] de ai-gateway, single source v1.2) — no duplicamos
+      // shape inline. Si no estan registradas (loader aun no las wireó), seguimos
+      // sin ellas — el catalogo y las universales bastan.
+      const navTools = [];
+      const registry = this.moduleLoader?.toolsRegistry;
+      for (const navName of ['page.related', 'chat.cambiar_foco']) {
+        const entry = registry?.get?.(navName);
+        if (entry) navTools.push({ name: entry.name, description: entry.description, parameters: entry.parameters });
+      }
+      return [...this._getCajonesTools(), ...navTools, ...universal];
+    }
     if (!page_id) return all;
     // Construcción lazy del mapa page_id → prefijos válidos. La primera vez que
     // se invoca, se escanean todos los módulos cargados y se cachea.
-    if (this.pagePrefixes === undefined) this._buildPagePrefixes();
+    if (this.pagePrefixes === null) this._buildPagePrefixes();
     // Tools globales que SIEMPRE se exponen al LLM principal aunque haya page_id activo.
     // Necesarias para que el LLM pueda delegar a agentes (invoke_agent), leer ficheros
     // del proyecto (fs.read), etc., independientemente de en qué módulo esté.
@@ -164,7 +329,7 @@ class AiGatewayModule {
     // menu-generator (tools 'menu.*') matcheen aunque el name del módulo y el
     // prefijo de la tool no coincidan literalmente — sin renombrar nada.
     const allowedPrefixes = this.pagePrefixes?.get(page_id);
-    return all.filter(t => {
+    const filtered = all.filter(t => {
       const name = t.name || '';
       if (GLOBAL_TOOLS.has(name)) return true;
       if (allowedPrefixes && name.includes('.') && allowedPrefixes.has(name.split('.')[0])) return true;
@@ -172,6 +337,890 @@ class AiGatewayModule {
       if (name.startsWith(page_id + '.')) return true;
       return false;
     });
+    // Filtrado adicional: la tool invoke_agent enumera todos los agentes en su
+    // description. Reducimos esa enumeracion a los agentes cuyo scope incluye
+    // el page actual (o '*' = global). Reduce ~1000 tokens de ruido cuando el
+    // catalogo de agentes crece, y mejora el routing del LLM al no presentarle
+    // opciones irrelevantes para el dominio en el que esta.
+    const mapped = filtered.map(t => {
+      if (t.name !== 'invoke_agent' || !Array.isArray(t._agents)) return t;
+      const relevant = t._agents.filter(a => {
+        const scope = Array.isArray(a.scope) ? a.scope : [];
+        return scope.includes('*') || scope.includes(page_id);
+      });
+      if (relevant.length === 0 || relevant.length === t._agents.length) return t;
+      const lines = relevant.map(a => `  - ${a.name}: ${a.description || ''}`).join('\n');
+      return {
+        ...t,
+        description: `PREFERENTE: invoca a un agente especialista para CUALQUIER tarea que entre en su dominio. Es la norma del sistema — los agentes saben hacer su trabajo mejor que tu encadenando tools basicos. Solo cae a tools directas si NINGUN agente cubre el caso.\n\nAgentes disponibles para esta pagina (${page_id}):\n${lines}\n\nDevuelve cuando el agente termina con el resultado.`,
+        parameters: {
+          ...t.parameters,
+          properties: {
+            ...(t.parameters?.properties || {}),
+            agent_name: {
+              ...(t.parameters?.properties?.agent_name || {}),
+              enum: relevant.map(a => a.name)
+            }
+          }
+        }
+      };
+    });
+
+    // Reordenar para que invoke_agent aparezca PRIMERO en el catalogo que el
+    // LLM ve. Los LLMs ponderan posicion al elegir tool — exponer agentes
+    // antes que tools basicas refuerza la norma "prefer agente cuando exista"
+    // sin depender solo de descripciones textuales.
+    return mapped.sort((a, b) => {
+      if (a.name === 'invoke_agent') return -1;
+      if (b.name === 'invoke_agent') return 1;
+      return 0;
+    });
+  }
+
+  // ============================================================
+  // Blueprint-driven modules (piloto)
+  // ============================================================
+  //
+  // Modelo declarativo: el modulo es un JSON (blueprint) leido por el LLM
+  // como contrato + pseudocodigo. NO hay codigo JS del modulo. El LLM publica
+  // eventos al bus via 2 tools universales (bus.publish, bus.publishAndWait).
+  //
+  // Convivencia: la coexistencia con tools polyfunctional es por page_id.
+  //   page_id = 'recetas'           → tools legacy de recetas v4.0.0
+  //   page_id = 'recetas-blueprint' → blueprint + 2 tools universales
+  //
+  // Activacion: cada modulo blueprint declara en su module.json:
+  //   { "blueprint_driven": true,
+  //     "blueprint_path": "<file>.json",
+  //     "blueprint_parent_path": "<base>.json"?,
+  //     "target_page_id": "<page>" }
+  // El loader NO instancia index.js (no existe). ai-gateway escanea
+  // loadedModules al arrancar buscando blueprint_driven: true.
+
+  _loadBlueprints() {
+    this.blueprintModules.clear();
+    this.cajonesCatalog.clear();
+    this.pageGraph.clear();
+    if (!this.moduleLoader?.loadedModules) {
+      this.logger.warn('ai-gateway.blueprints.unavailable', {
+        reason: 'moduleLoader.loadedModules no disponible'
+      });
+      return;
+    }
+    // Heuristica de path: si empieza con 'arquitectura/' o 'modules/', es
+    // relativo al repo root (padre unico compartido). Si no, relativo al
+    // directorio del modulo (legacy: padre copiado dentro del modulo).
+    const REPO_ROOT = path.resolve(__dirname, '../../..');
+    const resolveBlueprintPath = (modPath, bpPath) => {
+      if (bpPath && (bpPath.startsWith('arquitectura/') || bpPath.startsWith('modules/'))) {
+        return path.resolve(REPO_ROOT, bpPath);
+      }
+      return path.resolve(modPath, bpPath);
+    };
+    for (const [name, mod] of this.moduleLoader.loadedModules) {
+      const m = mod?.manifest;
+      if (!m || m.blueprint_driven !== true) continue;
+      const target = m.target_page_id || name;
+      try {
+        const childPath = resolveBlueprintPath(mod.path, m.blueprint_path);
+        const child = JSON.parse(fs.readFileSync(childPath, 'utf8'));
+        let parent = null;
+        if (m.blueprint_parent_path) {
+          const parentPath = resolveBlueprintPath(mod.path, m.blueprint_parent_path);
+          parent = JSON.parse(fs.readFileSync(parentPath, 'utf8'));
+        }
+        // cajones-context-partitioning: si cajones_enabled, el systemPrompt
+        // precalculado solo lleva padre + reglas + placeholder; el catalogo
+        // rankeado se inyecta por turno en _executeLLM via _buildCajonesSystemPrompt.
+        const cajonesEnabled = m.cajones_enabled === true || child.cajones_enabled === true;
+        let catalogo = null;
+        if (cajonesEnabled) {
+          catalogo = this._extractCajones(child);
+          this.cajonesCatalog.set(target, catalogo);
+        }
+        const systemPrompt = cajonesEnabled
+          ? this._composeBlueprintSystemPrompt(parent, child, { cajones_only_base: true })
+          : this._composeBlueprintSystemPrompt(parent, child);
+        this.blueprintModules.set(target, { manifest: m, parent, child, systemPrompt, cajonesEnabled });
+        this.logger.info('ai-gateway.blueprint.loaded', {
+          module: name,
+          target_page_id: target,
+          version: child.version,
+          parent_id: parent?.id || null,
+          cajones_enabled: cajonesEnabled,
+          cajones_count: catalogo ? catalogo.length : 0
+        });
+      } catch (err) {
+        this.logger.error('ai-gateway.blueprint.load.failed', {
+          module: name,
+          error: err.message
+        });
+      }
+    }
+    // Construir grafo de paginas relacionadas tras cargar todos los blueprints.
+    try {
+      this._buildPageGraph();
+      this.logger.info('ai-gateway.page-graph.built', {
+        nodes: this.pageGraph.size,
+        edges: Array.from(this.pageGraph.values()).reduce((s, v) => s + v.consumes.size, 0)
+      });
+    } catch (err) {
+      this.logger.warn('ai-gateway.page-graph.failed', { error: err.message });
+    }
+  }
+
+  _composeBlueprintSystemPrompt(parent, child, opts = {}) {
+    const sections = [];
+    sections.push(
+      'Eres el RUNTIME de un modulo del subsistema-recetario declarado como blueprint JSON. ' +
+      'Tu trabajo es leer el blueprint (padre + hijo) como contrato + pseudocodigo y ejecutarlo ' +
+      'publicando eventos al bus mediante las 2 tools universales que tienes (bus.publish, bus.publishAndWait). ' +
+      'NO inventes operaciones que no esten en operaciones[]. NO inventes eventos que no esten en el blueprint. ' +
+      'Lee TU MISMO los pseudocodigos antes de actuar — siguelos literalmente paso a paso.'
+    );
+    if (parent) {
+      sections.push('# BLUEPRINT PADRE (abstracto, heredado)');
+      sections.push('```json\n' + JSON.stringify(parent, null, 2) + '\n```');
+    }
+    // cajones_only_base: prompt base sin inyectar el child entero ni reglas
+    // operativas — el catalogo rankeado + reglas de cajones se inyectan
+    // por turno en _buildCajonesSystemPrompt.
+    if (opts.cajones_only_base) return sections.join('\n\n');
+    sections.push('# BLUEPRINT HIJO (concreto, lo que ejecutas)');
+    sections.push('```json\n' + JSON.stringify(child, null, 2) + '\n```');
+    sections.push(
+      '# REGLAS OPERATIVAS\n' +
+      '- Para CADA paso del pseudocodigo que diga `publishAndWait(...)` → llama bus.publishAndWait.\n' +
+      '- Para CADA paso que diga `publish(...)` → llama bus.publish.\n' +
+      '- Los pasos de normalizar / razonar / comparar los HACES TU mentalmente (no son tools).\n' +
+      '- Cuando termines, redacta UN mensaje al usuario describiendo lo que hiciste — no listes pasos internos.\n' +
+      '- Si una primitiva del bus devuelve error con `error.code` canonico, propagalo en tu response al caller.'
+    );
+    return sections.join('\n\n');
+  }
+
+  // ============================================================
+  // cajones-context-partitioning (v1.0.0)
+  // ============================================================
+  //
+  // Patron Google search-style aplicado al system prompt de blueprints:
+  //   - El LLM ve un CATALOGO rankeado (snippet de 1 linea por operacion).
+  //   - Para ejecutar una operacion, invoca cajon.abrir({nombre}) -> recibe
+  //     pseudocodigo + reglas + errores como contexto del turno actual.
+  //   - Al siguiente turno solo persiste el catalogo (cierre automatico).
+  //
+  // Activacion por blueprint: manifest.cajones_enabled === true.
+  // Contrato: arquitectura/decisiones/_contratos/cajones-context-partitioning.contract.json
+
+  // Limite de historial por conversacion para ranking de recencia (decision 5.2
+  // del contrato: ranking simple). 20 = holgura sobre los 3-5 turnos efectivos.
+  static get CAJONES_HISTORY_MAX() { return 20; }
+  static get CAJONES_RANK_LOOKBACK_TURNS() { return 5; }
+
+  _extractCajones(child) {
+    const ops = (child && typeof child.operaciones === 'object' && child.operaciones) || {};
+    const cajones = [];
+    for (const [nombre, op] of Object.entries(ops)) {
+      if (!op || typeof op !== 'object') continue;
+      let descripcion;
+      const override = typeof op.cajon_descripcion === 'string' ? op.cajon_descripcion.trim() : '';
+      if (override) {
+        descripcion = override;
+      } else {
+        // Auto-derivacion: usar op.descripcion si existe; si no, derivar del
+        // input. Maximo 200 chars para que el catalogo no infle el prompt.
+        const auto = (typeof op.descripcion === 'string' && op.descripcion.trim())
+          || (typeof op.input === 'string' && `input ${op.input}`)
+          || '';
+        descripcion = String(auto).split('\n')[0].slice(0, 200) || '(sin descripcion)';
+      }
+      cajones.push({ nombre, descripcion });
+    }
+    return cajones.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }
+
+  _rankCajones(catalogo, page_id_activo, conversation_id) {
+    if (!Array.isArray(catalogo) || catalogo.length === 0) return [];
+    const historial = this.conversationCajones.get(conversation_id) || [];
+    const lookback = AiGatewayModule.CAJONES_RANK_LOOKBACK_TURNS;
+    const recientes = historial.slice(-lookback).map(h => h.nombre);
+    const scorePage = (c) => (page_id_activo && c.nombre.startsWith(page_id_activo + '.')) ? 1 : 0;
+    const scoreRecencia = (c) => {
+      const idx = recientes.lastIndexOf(c.nombre);
+      return idx >= 0 ? (idx + 1) : 0;
+    };
+    return catalogo.slice().sort((a, b) => {
+      const pa = scorePage(a), pb = scorePage(b);
+      if (pa !== pb) return pb - pa;
+      const ra = scoreRecencia(a), rb = scoreRecencia(b);
+      if (ra !== rb) return rb - ra;
+      return a.nombre.localeCompare(b.nombre);
+    });
+  }
+
+  // Devuelve el system prompt completo para un turno cuando el blueprint
+  // tiene cajones_enabled. Combina prompt-base precalculado (padre + prologo)
+  // con catalogo rankeado del turno + reglas operativas del patron cajones.
+  _buildCajonesSystemPrompt(blueprintCtx, conversation_id, page_id_activo) {
+    const catalogo = this.cajonesCatalog.get(page_id_activo) || [];
+    const rankeado = this._rankCajones(catalogo, page_id_activo, conversation_id);
+    const sections = [];
+    sections.push(blueprintCtx.systemPrompt); // padre + prologo
+    sections.push(`# CATALOGO DE CAJONES — ${page_id_activo}`);
+    sections.push(
+      'Cada cajon corresponde a una operacion del blueprint. Para ejecutar una operacion, ' +
+      'primero abre su cajon con la tool cajon.abrir({nombre}). El cajon devuelve ' +
+      'pseudocodigo + reglas + errores y se mantiene en contexto SOLO durante este turno. ' +
+      'Si necesitas releer el catalogo o consultar zonas, usa cajon.listar({zona?}). ' +
+      'No tienes el pseudocodigo de ninguna operacion hasta que abras su cajon.'
+    );
+    if (rankeado.length === 0) {
+      sections.push('(catalogo vacio — el blueprint no declara operaciones)');
+    } else {
+      sections.push(rankeado.map(c => `- ${c.nombre} -> ${c.descripcion}`).join('\n'));
+    }
+    sections.push(
+      '# REGLAS OPERATIVAS\n' +
+      '- Una sola operacion por turno: cajon.abrir + ejecutar pseudocodigo (publish/publishAndWait) + responder. NO encadenar varias.\n' +
+      '- El CATALOGO YA ESTA VISIBLE ARRIBA. NO invoques cajon.listar para listarlo de nuevo — usalo SOLO si necesitas refrescarlo con filtro de zona (cajon.listar({zona:"X"})). Si el usuario pregunta "que puedes hacer aqui", respondele desde el catalogo que ya ves, sin tool calls.\n' +
+      '- Para CADA paso del pseudocodigo que diga `publishAndWait(...)` → llama bus.publishAndWait.\n' +
+      '- Para CADA paso que diga `publish(...)` → llama bus.publish.\n' +
+      '- Los pasos de normalizar / razonar / comparar los HACES TU mentalmente (no son tools).\n' +
+      '- Cuando termines, redacta UN mensaje al usuario describiendo lo que hiciste — no listes pasos internos.\n' +
+      '- Si una primitiva del bus devuelve error con `error.code` canonico, propagalo en tu response al caller.\n' +
+      '- Si dudas que cajon abrir, pregunta al usuario en lenguaje natural (no abras varios por probar).'
+    );
+    return sections.join('\n\n');
+  }
+
+  // Tools del subsistema cajones expuestas al LLM cuando el blueprint activo
+  // tiene cajones_enabled. Se SUMAN a las 2 universales (bus.publish, bus.publishAndWait).
+  _getCajonesTools() {
+    return [
+      {
+        name: 'cajon.listar',
+        description: 'Devuelve el catalogo de cajones disponibles para el modulo activo, rankeado por relevancia (cajones del page activo primero, luego abiertos recientemente, luego alfabetico). Lectura pura — no publica eventos de dominio.',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            zona: {
+              type: 'string',
+              description: 'Opcional. Filtra el catalogo por prefijo de nombre (ej. "recetas" devuelve solo cajones recetas.*).'
+            }
+          }
+        }
+      },
+      {
+        name: 'cajon.abrir',
+        description: 'Abre un cajon (operacion del blueprint). Devuelve { pseudocodigo, reglas_clave, errores_posibles, input } para inyectar en este turno. El cajon SOLO permanece en tu contexto durante este turno — al siguiente tienes que abrirlo de nuevo si lo necesitas. Solo abre UN cajon por turno (regla una_operacion_por_turno del contrato).',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            nombre: {
+              type: 'string',
+              description: 'Nombre canonico del cajon tal como aparece en el catalogo (ej. "recetas.crear", "escandallo.calcular").'
+            }
+          },
+          required: ['nombre']
+        }
+      }
+    ];
+  }
+
+  // Resuelve un cajon por su nombre en el page_id activo. Soporta nombre con o
+  // sin prefijo de page (acepta "crear" y "recetas.crear" si page_id="recetas").
+  _resolveCajon(page_id_activo, nombre) {
+    const blueprintCtx = this.blueprintModules.get(page_id_activo);
+    if (!blueprintCtx || !blueprintCtx.cajonesEnabled) return null;
+    const ops = blueprintCtx.child?.operaciones || {};
+    if (ops[nombre]) return { nombre, op: ops[nombre] };
+    const prefix = page_id_activo + '.';
+    if (nombre.startsWith(prefix)) {
+      const bare = nombre.slice(prefix.length);
+      if (ops[bare]) return { nombre: `${page_id_activo}.${bare}`, op: ops[bare] };
+    } else if (ops[nombre.replace(/^[^.]+\./, '')]) {
+      // nombre traido con prefijo de OTRO modulo — no resolver.
+      return null;
+    }
+    return null;
+  }
+
+  // Registra un cajon abierto en el historial de la conversacion (para ranking
+  // por recencia en turnos futuros). FIFO con limite CAJONES_HISTORY_MAX.
+  _trackCajonOpened(conversation_id, nombre) {
+    if (!conversation_id) return;
+    const arr = this.conversationCajones.get(conversation_id) || [];
+    arr.push({ nombre, turn: Date.now() });
+    const max = AiGatewayModule.CAJONES_HISTORY_MAX;
+    const trimmed = arr.length > max ? arr.slice(-max) : arr;
+    this.conversationCajones.set(conversation_id, trimmed);
+  }
+
+  // Handler de cajon.listar / cajon.abrir invocados como tool calls por el LLM.
+  // Se ejecuta dentro de _executeToolCall (interceptado antes del path bus).
+  _executeCajonTool(toolName, rawArgs, ctx) {
+    const args = (rawArgs && typeof rawArgs === 'object') ? rawArgs : {};
+    const page_id = ctx.page_id;
+    if (!page_id || !this.blueprintModules.has(page_id)) {
+      const err = new Error(`cajones no disponibles: page_id activo (${page_id || 'null'}) no es un blueprint`);
+      err.code = 'INVALID_INPUT';
+      throw err;
+    }
+    if (!this.blueprintModules.get(page_id).cajonesEnabled) {
+      const err = new Error(`cajones no habilitados para page_id ${page_id} (manifest.cajones_enabled !== true)`);
+      err.code = 'INVALID_INPUT';
+      throw err;
+    }
+    if (toolName === 'cajon.listar') {
+      const catalogo = this.cajonesCatalog.get(page_id) || [];
+      const rankeado = this._rankCajones(catalogo, page_id, ctx.conversation_id);
+      const zona = typeof args.zona === 'string' && args.zona.trim() ? args.zona.trim() : null;
+      const filtrado = zona ? rankeado.filter(c => c.nombre.startsWith(zona + '.') || c.nombre === zona) : rankeado;
+      return { page_id, count: filtrado.length, cajones: filtrado };
+    }
+    if (toolName === 'cajon.abrir') {
+      const nombre = typeof args.nombre === 'string' ? args.nombre.trim() : '';
+      if (!nombre) {
+        const err = new Error("cajon.abrir requiere 'nombre' (string no vacio)");
+        err.code = 'INVALID_INPUT';
+        throw err;
+      }
+      const resolved = this._resolveCajon(page_id, nombre);
+      if (!resolved) {
+        const err = new Error(`cajon '${nombre}' no encontrado en el blueprint ${page_id}`);
+        err.code = 'RESOURCE_NOT_FOUND';
+        err.details = { kind: 'domain', page_id, requested: nombre };
+        throw err;
+      }
+      this._trackCajonOpened(ctx.conversation_id, resolved.nombre);
+      const op = resolved.op;
+      return {
+        nombre: resolved.nombre,
+        input: op.input || null,
+        pseudocodigo: op.pseudocodigo || null,
+        reglas_clave: op.reglas_clave || null,
+        errores_posibles: op.errores_posibles || null
+      };
+    }
+    // No deberia alcanzarse — _executeToolCall solo enruta cajon.listar/cajon.abrir.
+    const err = new Error(`cajon tool desconocida: ${toolName}`);
+    err.code = 'INVALID_INPUT';
+    throw err;
+  }
+
+  // ============================================================
+  // cajones Fase 5 bis — grafo de paginas relacionadas + foco dinamico
+  // ============================================================
+
+  // Parsea pseudocodigo de todos los blueprints cargados, extrae referencias a
+  // publishAndWait('<mod>.<accion>.request', ...) — eso dice que el modulo
+  // CONSUME el mod referenciado. Override opcional via module.json.paginas_relacionadas.
+  // El grafo se sirve a la tool page.related y al frontend para la barra lateral.
+  _buildPageGraph() {
+    this.pageGraph.clear();
+    const ensure = (page) => {
+      if (!this.pageGraph.has(page)) this.pageGraph.set(page, { consumes: new Set(), consumed_by: new Set() });
+      return this.pageGraph.get(page);
+    };
+    // Asegurar nodo para cada blueprint, incluso si no tiene aristas detectadas.
+    for (const page_id of this.blueprintModules.keys()) ensure(page_id);
+
+    // --- 1. Aristas desde el catalogo curado eventos-publish-subscribe.json ---
+    // El catalogo lo regenera blueprint-eventos-conscientes.validate.js cada
+    // vez que corre validate:ci. Captura publishers (bus.publish Y
+    // bus.publishAndWait) y subscribers (eventos_que_escucho declarados),
+    // resolviendo los 3 bugs del regex antiguo:
+    //   (1) bus.publish fire-and-forget no se capturaba.
+    //   (2) el primer segmento del evento (e.g. 'carta.creada' -> 'carta') no
+    //       coincide con el page_id real (carta-manager) -> resuelve usando el
+    //       source path del publisher/subscriber, no el name del evento.
+    //   (3) las aristas inversas (carta-digital escucha carta.actualizada que
+    //       carta-manager publica) no se creaban -> ahora si.
+    const catalogo = this._loadEventCatalog();
+    const pathToPageId = this._buildPathToPageIdMap();
+    let catalogUsed = false;
+
+    if (catalogo && catalogo.eventos) {
+      catalogUsed = true;
+      for (const [event_name, entry] of Object.entries(catalogo.eventos)) {
+        // Skip eventos primitivos transversales (fs.*, llm.*, etc.).
+        const firstSegment = String(event_name).split('.')[0];
+        if (this._isPrimitivePrefix(firstSegment)) continue;
+        const publishers = Array.isArray(entry.publishers) ? entry.publishers : [];
+        const subscribers = Array.isArray(entry.subscribers) ? entry.subscribers : [];
+        if (publishers.length === 0 || subscribers.length === 0) continue;
+        for (const pub of publishers) {
+          const pubPage = pathToPageId.get(pub.source);
+          if (!pubPage) continue;
+          for (const sub of subscribers) {
+            const subPage = pathToPageId.get(sub.source);
+            if (!subPage || subPage === pubPage) continue;
+            ensure(pubPage).consumes.add(subPage);
+            ensure(subPage).consumed_by.add(pubPage);
+          }
+        }
+      }
+    }
+
+    // --- 2. Fallback: parseo regex del pseudocodigo (compat si catalogo no
+    //       existe, o complemento para blueprints no indexados en el catalogo) ---
+    const PA_RE = /(?:publishAndWait|publish)\s*\(\s*['"]([a-z][a-z0-9-]*)\.[\w.]+['"]/gi;
+    for (const [page_id, ctx] of this.blueprintModules.entries()) {
+      const ops = ctx.child?.operaciones || {};
+      for (const op of Object.values(ops)) {
+        const pseudo = op?.pseudocodigo;
+        if (!Array.isArray(pseudo)) continue;
+        for (const step of pseudo) {
+          if (typeof step !== 'string') continue;
+          PA_RE.lastIndex = 0;
+          let m;
+          while ((m = PA_RE.exec(step)) !== null) {
+            const target = m[1];
+            if (this._isPrimitivePrefix(target)) continue;
+            if (target === page_id) continue;
+            // Solo crear arista si el target es un page_id real (blueprint
+            // cargado). Esto evita falsos positivos cuando el primer segmento
+            // del evento es una entidad y no un modulo (caso 'carta' vs
+            // 'carta-manager'). Si el catalogo ya lo capturo, esta arista es
+            // redundante (add a Set es idempotente).
+            if (!this.blueprintModules.has(target)) continue;
+            ensure(page_id).consumes.add(target);
+            ensure(target).consumed_by.add(page_id);
+          }
+        }
+      }
+
+      // --- 3. Override declarativo: module.json.paginas_relacionadas[] ---
+      const declaradas = Array.isArray(ctx.manifest?.paginas_relacionadas) ? ctx.manifest.paginas_relacionadas : [];
+      for (const target of declaradas) {
+        if (typeof target !== 'string' || target === page_id) continue;
+        ensure(page_id).consumes.add(target);
+        ensure(target).consumed_by.add(page_id);
+      }
+    }
+
+    // --- 4. Pages JS legacy navegables (target_page_id sin blueprint) ---
+    const loaded = this.moduleLoader?.loadedModules;
+    if (loaded && typeof loaded[Symbol.iterator] === 'function') {
+      for (const [, mod] of loaded) {
+        const m = mod?.manifest;
+        const tpid = m?.target_page_id;
+        if (typeof tpid !== 'string') continue;
+        if (this.blueprintModules.has(tpid)) continue;
+        ensure(tpid);
+      }
+    }
+
+    this.logger?.debug?.('ai-gateway.page-graph.source', {
+      catalog_used: catalogUsed,
+      nodes: this.pageGraph.size
+    });
+  }
+
+  // Cargar catalogo curado de eventos generado por
+  // blueprint-eventos-conscientes.validate.js. Devuelve null si no existe (el
+  // grafo cae al fallback regex).
+  _loadEventCatalog() {
+    try {
+      const path = require('path');
+      const fs = require('fs');
+      const candidate = path.resolve(__dirname, '../../../arquitectura/decisiones/_outputs/eventos-publish-subscribe.json');
+      if (!fs.existsSync(candidate)) return null;
+      return JSON.parse(fs.readFileSync(candidate, 'utf8'));
+    } catch (err) {
+      if (this.logger) {
+        this.logger.warn('ai-gateway.page-graph.catalog_load_failed', {
+          error_message: err && err.message ? err.message : String(err)
+        });
+      }
+      return null;
+    }
+  }
+
+  // Construir mapa inverso source_path -> page_id para resolver entries del
+  // catalogo. El source del catalogo es un path relativo al repo root (e.g.
+  // 'modules/pizzepos/menu-generator/menu-generator.blueprint.json'). El
+  // page_id es el campo target_page_id del module.json del modulo.
+  _buildPathToPageIdMap() {
+    const map = new Map();
+    // 1. Blueprints cargados: para cada page_id en blueprintModules, inferir
+    //    su path canonico desde el manifest (target_page_id + nombre).
+    for (const [page_id, ctx] of this.blueprintModules.entries()) {
+      const moduleName = ctx.manifest?.name || page_id;
+      // Path canonico estimado: el blueprint hijo vive junto al module.json
+      // del modulo, con nombre <module>.blueprint.json. Caminos relativos al
+      // repo root tipo 'modules/pizzepos/menu-generator/menu-generator.blueprint.json'.
+      // Como no tenemos el path absoluto del modulo aqui directamente, hacemos
+      // un mejor esfuerzo recorriendo loadedModules.
+      const loaded = this.moduleLoader?.loadedModules;
+      if (loaded && typeof loaded.get === 'function') {
+        const mod = loaded.get(moduleName);
+        if (mod?.path) {
+          const path = require('path');
+          const REPO_ROOT = path.resolve(__dirname, '../../..');
+          const blueprintPath = path.relative(REPO_ROOT, path.join(mod.path, `${moduleName}.blueprint.json`));
+          map.set(blueprintPath, page_id);
+          // Tambien indexar el module.json (algunos modulos pueden aparecer
+          // ahi en el catalogo si declaran subscribes via events.subscribes).
+          const moduleJsonPath = path.relative(REPO_ROOT, path.join(mod.path, 'module.json'));
+          map.set(moduleJsonPath, page_id);
+        }
+      }
+    }
+    // 2. Modulos JS legacy navegables: si tienen target_page_id, indexar su
+    //    module.json al page_id correspondiente para que aristas que apunten
+    //    a ellos se construyan correctamente.
+    const loaded = this.moduleLoader?.loadedModules;
+    if (loaded && typeof loaded[Symbol.iterator] === 'function') {
+      const path = require('path');
+      const REPO_ROOT = path.resolve(__dirname, '../../..');
+      for (const [moduleName, mod] of loaded) {
+        const tpid = mod?.manifest?.target_page_id;
+        if (typeof tpid !== 'string') continue;
+        if (this.blueprintModules.has(tpid)) continue; // ya indexado arriba
+        if (!mod?.path) continue;
+        const moduleJsonPath = path.relative(REPO_ROOT, path.join(mod.path, 'module.json'));
+        map.set(moduleJsonPath, tpid);
+      }
+    }
+    return map;
+  }
+
+  // Prefijos del bus que NO cuentan como "paginas" para el grafo (son primitivas
+  // o utilidades transversales que muchos modulos consumen, no destinos de
+  // navegacion del usuario).
+  // ============================================================
+  // Blueprint subscribers asincronos (frente 2.4)
+  //
+  // El LLM es el unico interprete del pseudocodigo. Hoy se invoca por chat
+  // del usuario. Este mecanismo amplia: cuando llega un evento del bus que
+  // algun blueprint declara escuchar en eventos_que_escucho, ai-gateway
+  // arranca una conversacion sintetica y le pide al LLM que ejecute el
+  // handler con el payload del evento. Cero parser nuevo, cero codigo de
+  // dominio en JS — la logica vive 100% en el pseudocodigo del blueprint.
+  //
+  // Diseño completo en propuestas/blueprint-subscribers-asincronos.md
+  // ============================================================
+
+  _wireBlueprintAsyncSubscribers() {
+    this.asyncSubscriptions.clear();
+    if (!this.eventBus?.subscribe) {
+      this.logger?.warn('ai-gateway.async-subs.unavailable', { reason: 'eventBus sin subscribe' });
+      return;
+    }
+    for (const [page_id, ctx] of this.blueprintModules.entries()) {
+      const escucha = ctx.child?.eventos_que_escucho;
+      if (!Array.isArray(escucha) || escucha.length === 0) continue;
+      for (const entry of escucha) {
+        // Acepta dos formas: {evento, handler} o string simple.
+        // String simple: el handler se infiere como `_on_<event_name>` con dots
+        // sustituidos por underscores. Recomendado el objeto explicito.
+        const evento = typeof entry === 'string' ? entry : entry?.evento;
+        const handler_name = typeof entry === 'string'
+          ? '_on_' + entry.replace(/\./g, '_')
+          : entry?.handler;
+        if (typeof evento !== 'string' || !evento || typeof handler_name !== 'string' || !handler_name) {
+          this.logger?.warn('ai-gateway.async-subs.entry-invalida', { page_id, entry });
+          continue;
+        }
+        // Validar que la operacion handler existe en el blueprint
+        const ops = ctx.child?.operaciones || {};
+        if (!ops[handler_name]) {
+          this.logger?.warn('ai-gateway.async-subs.handler-ausente', {
+            page_id, evento, handler_name,
+            operaciones_disponibles: Object.keys(ops)
+          });
+          continue;
+        }
+        // Suscribir al bus
+        try {
+          const unsub = this.eventBus.subscribe(evento, (eventEnvelope) => {
+            // Loop-guard: si el propio modulo subscriber es el publisher, skip
+            // (evita recursion infinita si un handler publica el evento que escucha).
+            const sourceModule = eventEnvelope?.source?.module_id || eventEnvelope?.source?.core_id || null;
+            if (sourceModule && sourceModule === page_id) {
+              this.logger?.debug('ai-gateway.async-subs.loop-skip', { page_id, evento });
+              return;
+            }
+            this._handleBlueprintAsyncEvent({
+              page_id, handler_name, evento,
+              event_payload: (eventEnvelope && typeof eventEnvelope === 'object' && 'data' in eventEnvelope)
+                ? eventEnvelope.data : eventEnvelope
+            });
+          });
+          // Registrar para liberar en onUnload
+          const list = this.asyncSubscriptions.get(evento) || [];
+          list.push({ page_id, handler_name, unsub });
+          this.asyncSubscriptions.set(evento, list);
+          this.logger?.info('ai-gateway.async-subs.wired', { page_id, evento, handler_name });
+        } catch (err) {
+          this.logger?.error('ai-gateway.async-subs.wire-failed', {
+            page_id, evento, error: err.message
+          });
+        }
+      }
+    }
+  }
+
+  async _handleBlueprintAsyncEvent({ page_id, handler_name, evento, event_payload }) {
+    // Construir conversacion sintetica que inyecta el blueprint del subscriber
+    // como system prompt y le pide al LLM ejecutar el handler con el payload.
+    // El LLM ejecuta el pseudocodigo del handler igual que cualquier operacion
+    // — usando bus.publish/bus.publishAndWait/cajon.* segun el modelo del blueprint.
+    const conv_id = crypto.randomUUID();
+    const correlation_id = event_payload?.correlation_id || crypto.randomUUID();
+    const project_id = event_payload?.project_id || null;
+    const user_id = 'async-subscriber';
+
+    // Prompt sintetico — el LLM lo procesa como mensaje del usuario.
+    // El system prompt (que se inyecta automaticamente por _executeLLM al ver
+    // page_id) contiene el blueprint del subscriber. El LLM lee el handler X
+    // y lo ejecuta.
+    const synthetic_message =
+      `[sistema interno — invocacion async]\n` +
+      `Has recibido el evento canonico \`${evento}\`. ` +
+      `Ejecuta el handler \`${handler_name}\` de tu blueprint siguiendo SU pseudocodigo paso a paso. ` +
+      `El payload del evento es el INPUT del handler.\n\n` +
+      `payload:\n\`\`\`json\n${JSON.stringify(event_payload || {}, null, 2)}\n\`\`\`\n\n` +
+      `IMPORTANTE: NO respondas al usuario en lenguaje natural — esta es una invocacion automatica del bus. ` +
+      `Solo ejecuta el pseudocodigo del handler y termina (los publish/publishAndWait que haga el handler son tu output efectivo).`;
+
+    try {
+      await this._executeLLM({
+        system: null,
+        messages: [{ role: 'user', content: synthetic_message }],
+        tools: this._getTools(page_id),
+        settings: {},
+        attachments: null,
+        project_id,
+        user_id,
+        conversation_id: conv_id,
+        correlation_id,
+        page_id,
+        context: { async_invocation: true, evento, handler_name },
+        prompt: null,
+        intencion: 'async-handler',
+        providerName: null
+      });
+      this.logger?.info('ai-gateway.async-handler.completed', {
+        page_id, handler_name, evento, correlation_id
+      });
+    } catch (err) {
+      // Fire-and-forget desde la perspectiva del publisher: si el handler falla,
+      // se registra pero no se propaga al publisher (no hay request_id que
+      // correlacionar). Es parte del paradigma event-core puro.
+      this.logger?.error('ai-gateway.async-handler.failed', {
+        page_id, handler_name, evento, correlation_id, error: err.message
+      });
+    }
+  }
+
+  _isPrimitivePrefix(prefix) {
+    const PRIMITIVE = new Set([
+      'fs', 'project', 'llm', 'ai', 'agent', 'credential', 'security',
+      'bus', 'cajon', 'chat', 'page', 'observability', 'metrics', 'log',
+      'plugin', 'device', 'channel', 'firmware', 'gateway', 'composition',
+      'database', 'scheduler', 'http', 'embedding'
+    ]);
+    return PRIMITIVE.has(prefix);
+  }
+
+  // Handlers PUBLICOS (declarados en module.json.tools[]) — el loader los
+  // auto-registra en moduleLoader.toolsRegistry, uiHandler (mqttRequest), y
+  // bus (auto-suscripcion al evento <toolName>.request). Single source of
+  // truth: el shape canonico de la tool vive en module.json, no inline.
+  //
+  // Reciben `data` plano del caller (LLM tool call, frontend mqttRequest,
+  // o evento del bus). _executeNavTool centraliza la logica + validacion.
+
+  async handlePageRelated(data) {
+    const args = (data && typeof data === 'object') ? data : {};
+    const ctx = {
+      conversation_id: args.conversation_id || null,
+      project_id: args.project_id || null,
+      user_id: args.user_id || 'system',
+      page_id: args.page_id || null,
+      correlation_id: args.correlation_id || null
+    };
+    return this._executeNavTool('page.related', args, ctx);
+  }
+
+  async handleChatCambiarFoco(data) {
+    const args = (data && typeof data === 'object') ? data : {};
+    const ctx = {
+      conversation_id: args.conversation_id || null,
+      project_id: args.project_id || null,
+      user_id: args.user_id || 'system',
+      page_id: args.page_id || null,
+      correlation_id: args.correlation_id || null
+    };
+    return this._executeNavTool('chat.cambiar_foco', args, ctx);
+  }
+
+  // Page navegable = blueprint registrado en blueprintModules O modulo JS
+  // legacy con target_page_id declarado en su module.json. Mecanismo unico
+  // de "page" para chat.cambiar_foco y page.related, sin flag adicional —
+  // reusa el campo target_page_id que ya existia en blueprints.
+  // Caso testigo 2026-05-24: menu-generator (JS legacy con target_page_id).
+  _isNavegablePage(page_id) {
+    if (!page_id) return false;
+    if (this.blueprintModules.has(page_id)) return true;
+    const loaded = this.moduleLoader?.loadedModules;
+    if (!loaded || typeof loaded[Symbol.iterator] !== 'function') return false;
+    for (const [, mod] of loaded) {
+      if (mod?.manifest?.target_page_id === page_id) return true;
+    }
+    return false;
+  }
+
+  _listNavegablePages() {
+    const out = new Set(this.blueprintModules.keys());
+    const loaded = this.moduleLoader?.loadedModules;
+    if (loaded && typeof loaded[Symbol.iterator] === 'function') {
+      for (const [, mod] of loaded) {
+        const tpid = mod?.manifest?.target_page_id;
+        if (typeof tpid === 'string') out.add(tpid);
+      }
+    }
+    return Array.from(out).sort();
+  }
+
+  _executeNavTool(toolName, rawArgs, ctx) {
+    const args = (rawArgs && typeof rawArgs === 'object') ? rawArgs : {};
+    if (toolName === 'page.related') {
+      const target = (typeof args.page_id === 'string' && args.page_id.trim()) || ctx.page_id || null;
+      if (!target) {
+        const err = new Error("page.related requiere 'page_id' (o un page_id activo en la conversacion)");
+        err.code = 'INVALID_INPUT';
+        throw err;
+      }
+      const node = this.pageGraph.get(target);
+      if (!node) {
+        // No es un error duro — el page existe en el sistema pero sin aristas
+        // detectadas. Devolver lista vacia coherente con el shape esperado.
+        return { page_id: target, consumes: [], consumed_by: [], related: [] };
+      }
+      // Filtrar a solo paginas NAVEGABLES (blueprints registrados). El grafo
+      // tambien recoge nodos que aparecen en pseudocodigos pero no son
+      // blueprints (ej. eventos como 'mercadona.*' o 'carta.*' apuntan a un
+      // prefijo que no es un page_id navegable). Devolverlos al LLM lo lleva
+      // a intentar chat.cambiar_foco invalido. Mejor solo lo invocable.
+      // "Navegable" = blueprint con cajones_enabled O modulo JS legacy con
+      // target_page_id declarado en su module.json (page registrada en frontend).
+      const isNav = (p) => this._isNavegablePage(p);
+      const consumes = Array.from(node.consumes).filter(isNav).sort();
+      const consumed_by = Array.from(node.consumed_by).filter(isNav).sort();
+      const related = Array.from(new Set([...consumes, ...consumed_by])).sort();
+      return { page_id: target, consumes, consumed_by, related };
+    }
+    if (toolName === 'chat.cambiar_foco') {
+      const nuevo = typeof args.nuevo_page_id === 'string' ? args.nuevo_page_id.trim() : '';
+      if (!nuevo) {
+        const err = new Error("chat.cambiar_foco requiere 'nuevo_page_id' (string no vacio)");
+        err.code = 'INVALID_INPUT';
+        throw err;
+      }
+      // Validar que el destino es page navegable (blueprint registrado O
+      // modulo JS legacy con target_page_id en su manifest). Si no, devolver
+      // RESOURCE_NOT_FOUND para que el LLM se rectifique o pida confirmacion al
+      // usuario en lugar de mandarlo a un page fantasma.
+      if (!this._isNavegablePage(nuevo)) {
+        const err = new Error(`page '${nuevo}' no esta registrado como destino navegable en este sistema`);
+        err.code = 'RESOURCE_NOT_FOUND';
+        err.details = { kind: 'domain', page_id: nuevo, available: this._listNavegablePages() };
+        throw err;
+      }
+      const anterior = this.conversationPageFoco.get(ctx.conversation_id) || ctx.page_id || null;
+      if (anterior === nuevo) {
+        // No-op observable: ya estamos en ese page. Devolver ok pero no
+        // publicar evento (el frontend no necesita rehacer goto).
+        return { status: 'noop', nuevo_page_id: nuevo, anterior, reason: 'foco ya estaba en ese page_id' };
+      }
+      this.conversationPageFoco.set(ctx.conversation_id, nuevo);
+      // Publish chat.foco.cambiado para que frontend reaccione (goto + UI banner).
+      // Sigue el shape canonico de events.contract: event_id+event_type+timestamp+
+      // source+data+metadata. data: campos del cambio + correlacion del chat.
+      const eventPayload = {
+        conversation_id: ctx.conversation_id || null,
+        project_id: ctx.project_id || null,
+        user_id: ctx.user_id || 'system',
+        anterior,
+        nuevo,
+        motivo: typeof args.motivo === 'string' && args.motivo.trim() ? args.motivo.trim() : null,
+        correlation_id: ctx.correlation_id || ctx.conversation_id || null,
+        request_id: crypto.randomUUID(),
+        timestamp: new Date().toISOString()
+      };
+      try {
+        this.eventBus.publish('chat.foco.cambiado', eventPayload);
+      } catch (err) {
+        // No revertir el cambio interno — el LLM ya tomo la decision y el frontend
+        // se sincronizara al siguiente turno. Logueamos y seguimos.
+        this.logger?.warn('ai-gateway.foco.publish.failed', { error: err.message });
+      }
+      return { status: 'ok', nuevo_page_id: nuevo, anterior, motivo: eventPayload.motivo };
+    }
+    const err = new Error(`nav tool desconocida: ${toolName}`);
+    err.code = 'INVALID_INPUT';
+    throw err;
+  }
+
+  // Catalogo fijo de las 2 tools universales. Solo aparecen en el catalogo
+  // expuesto al LLM cuando el page_id activo es un modulo blueprint-driven.
+  // No estan disponibles cuando se opera con tools polyfunctional clasicas.
+  _getBlueprintUniversalTools() {
+    return [
+      {
+        name: 'bus.publish',
+        description: 'Publica un evento al bus sin esperar respuesta. Util para eventos de dominio (ej. receta.creada) y para el evento de respuesta canonica al caller (<modulo>.<operacion>.response). El payload debe incluir los campos canonicos del subsistema (project_id, user_id, correlation_id, timestamp, request_id cuando aplique).',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            event: {
+              type: 'string',
+              description: 'Nombre canonico del evento (ej. receta.creada, recetas.crear.response, fs.write.request).'
+            },
+            payload: {
+              type: 'object',
+              description: 'Payload del evento. Incluye campos canonicos + datos del dominio.'
+            }
+          },
+          required: ['event', 'payload']
+        }
+      },
+      {
+        name: 'bus.publishAndWait',
+        description: 'Publica un evento al bus (un request) y espera la response correlacionada por request_id. Usar para invocar primitivas del bus (fs.read.request, fs.write.request, project.get.request, llm.complete.request, etc.). Devuelve el payload del evento de respuesta. Si no llega en timeout_ms (default 10000), devuelve error UPSTREAM_TIMEOUT.',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            event: {
+              type: 'string',
+              description: 'Nombre canonico del evento request (ej. fs.read.request).'
+            },
+            payload: {
+              type: 'object',
+              description: 'Payload del request. DEBE incluir request_id (uuid generado por ti) para correlacionar la response.'
+            },
+            response_event: {
+              type: 'string',
+              description: 'Opcional. Nombre del evento response. Si se omite, se infiere reemplazando .request por .response al final.'
+            },
+            timeout_ms: {
+              type: 'integer',
+              minimum: 100,
+              maximum: 60000,
+              description: 'Timeout en milisegundos. Default 10000.'
+            }
+          },
+          required: ['event', 'payload']
+        }
+      }
+    ];
   }
 
   /**
@@ -281,8 +1330,143 @@ class AiGatewayModule {
   // Ejecución de tool calls (event-driven)
   // ============================================================
 
+  // Tools universales del modelo blueprint-driven. El LLM las invoca para
+  // empujar/leer del bus desde el pseudocodigo del blueprint. NO publican
+  // 'bus.publish' como evento — actuan directamente sobre el eventBus.
+  //
+  // bus.publish:
+  //   args: { event, payload }
+  //   side-effect: publish(event, payload). Devuelve { ok: true } inmediato.
+  //
+  // bus.publishAndWait:
+  //   args: { event, payload, response_event?, timeout_ms? }
+  //   side-effect: publish(event, payload) + subscribe(response_event) hasta
+  //   recibir payload con request_id === payload.request_id. Devuelve el
+  //   payload de la response. Timeout default 10000ms → UPSTREAM_TIMEOUT.
+  async _executeUniversalBusTool(toolName, rawArgs, ctx) {
+    const args = (rawArgs && typeof rawArgs === 'object') ? rawArgs : {};
+    const ev = args.event;
+    const payloadProvided = args.payload && typeof args.payload === 'object' && !Array.isArray(args.payload);
+    const payload = payloadProvided ? args.payload : {};
+    if (typeof ev !== 'string' || ev.length === 0) {
+      const err = new Error("missing 'event' (string) in bus tool args");
+      err.code = 'INVALID_INPUT';
+      throw err;
+    }
+    // Defensa contra recursion: el LLM no debe publicar los nombres de las tools
+    // universales como eventos (el bus no tiene oyentes para esos nombres porque
+    // son tools del ai-gateway, no eventos del subsistema).
+    if (ev === 'bus.publish' || ev === 'bus.publishAndWait') {
+      const err = new Error(`'${ev}' es el nombre de una tool, no de un evento del bus`);
+      err.code = 'INVALID_INPUT';
+      throw err;
+    }
+    // Validacion de payload: el schema de la tool universal declara
+    // payload como required (ver tool definitions arriba: required:['event','payload']),
+    // pero hay LLMs (anthropic claude-sonnet-4-6 observado, deepseek en bucle silencioso)
+    // que omiten el campo payload entero al emitir tool calls cuando el contenido
+    // a serializar es grande — devuelven solo {event:'fs.write.request'}.
+    // Sin esta validacion, llegaba un payload solo con auto-injectados
+    // (project_id/user_id/correlation_id/timestamp) al receptor del bus, que respondia
+    // INVALID_INPUT '<campo> is required' y el LLM reintentaba con el mismo defecto.
+    // Detectarlo aqui y devolver un error EXPLICITO al LLM lo obliga a reconstruir
+    // el tool call con payload completo en la siguiente iteracion en vez de
+    // bucle de retry infinito.
+    if (!payloadProvided) {
+      const err = new Error(
+        `args.payload ausente o no es objeto en ${toolName} (event='${ev}', args_keys=[${Object.keys(args).join(',')}])`
+      );
+      err.code = 'INVALID_INPUT';
+      err.details = { kind: 'domain', event: ev, args_keys: Object.keys(args), field: 'payload' };
+      throw err;
+    }
+
+    // Inyeccion de contexto del chat al payload. El LLM no siempre rellena
+    // project_id/user_id/correlation_id aunque el blueprint padre se lo diga
+    // (es probabilistico). Aqui los rellenamos si faltan — manteniendo lo
+    // que el LLM puso si vino con valor explicito. timestamp si falta lo
+    // generamos como ISO 8601 actual.
+    const enrichedPayload = {
+      project_id:     payload.project_id     ?? ctx.project_id     ?? null,
+      user_id:        payload.user_id        ?? ctx.user_id        ?? 'system',
+      correlation_id: payload.correlation_id ?? ctx.correlation_id ?? ctx.conversation_id ?? null,
+      timestamp:      payload.timestamp      ?? new Date().toISOString(),
+      ...payload
+    };
+
+    if (toolName === 'bus.publish') {
+      try {
+        this.eventBus.publish(ev, enrichedPayload);
+        // Ack canonico al LLM: shape simple, intencion "publicacion completada".
+        // No es un handler de dominio — es un side-effect ack para que el LLM
+        // sepa que el publish salio sin error y siga con su pseudocodigo.
+        const ack = { published: true, event: ev };
+        return ack;
+      } catch (err) {
+        const e = new Error(`bus.publish failed: ${err.message}`);
+        e.code = 'UNKNOWN_ERROR';
+        throw e;
+      }
+    }
+
+    // bus.publishAndWait
+    const responseEvent = typeof args.response_event === 'string' && args.response_event.length > 0
+      ? args.response_event
+      : (ev.endsWith('.request') ? ev.slice(0, -('.request'.length)) + '.response' : `${ev}.response`);
+    const timeoutMs = Math.min(60000, Math.max(100, Number(args.timeout_ms) || 10000));
+
+    // request_id: el LLM puede mandarlo o no. Si no lo manda, generamos uno.
+    // El subscribe filtra por este request_id para correlacionar.
+    if (!enrichedPayload.request_id) enrichedPayload.request_id = crypto.randomUUID();
+    const reqId = enrichedPayload.request_id;
+
+    return new Promise((resolve, reject) => {
+      let unsub = null;
+      const timeout = setTimeout(() => {
+        if (unsub) unsub();
+        const err = new Error(`bus.publishAndWait timeout: ${ev} (${timeoutMs}ms)`);
+        err.code = 'UPSTREAM_TIMEOUT';
+        reject(err);
+      }, timeoutMs);
+      try {
+        unsub = this.eventBus.subscribe(responseEvent, (event) => {
+          const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!data || data.request_id !== reqId) return;
+          clearTimeout(timeout);
+          if (unsub) unsub();
+          resolve(data);
+        });
+        this.eventBus.publish(ev, enrichedPayload);
+      } catch (err) {
+        clearTimeout(timeout);
+        if (unsub) unsub();
+        const e = new Error(`bus.publishAndWait failed: ${err.message}`);
+        e.code = 'UNKNOWN_ERROR';
+        reject(e);
+      }
+    });
+  }
+
   async _executeToolCall(toolName, args, chatContext) {
     const ctx = chatContext || {};
+    // bus.publish / bus.publishAndWait — las 2 tools universales del modelo
+    // blueprint-driven. Se interceptan ANTES del path canonico por bus porque
+    // su semantica es "actuar SOBRE el bus", no "invocar via bus". El nombre
+    // de la tool nunca se publica como evento del bus — los publish/subscribe
+    // los hace este metodo directamente.
+    if (toolName === 'bus.publish' || toolName === 'bus.publishAndWait') {
+      return this._executeUniversalBusTool(toolName, args, ctx);
+    }
+    // cajones-context-partitioning: cajon.listar / cajon.abrir actuan sobre
+    // catalogo + blueprints cargados en memoria. No publican al bus.
+    if (toolName === 'cajon.listar' || toolName === 'cajon.abrir') {
+      return this._executeCajonTool(toolName, args, ctx);
+    }
+    // cajones Fase 5 bis: chat.cambiar_foco publica evento al bus; page.related
+    // sirve del grafo en memoria. Interceptadas antes del path canonico.
+    if (toolName === 'chat.cambiar_foco' || toolName === 'page.related') {
+      return this._executeNavTool(toolName, args, ctx);
+    }
     // Enriquecemos args con los 9 campos del contrato chat-io. Los args que
     // venían del LLM (tool_call.arguments) tienen prioridad — solo rellenamos
     // los que no estén ya en args. Esto garantiza que cualquier handler de
@@ -328,8 +1512,16 @@ class AiGatewayModule {
         clearTimeout(timeout);
         if (unsub) unsub();
         if (data.error) {
-          const msg = (typeof data.error === 'object' && data.error !== null) ? data.error.message : data.error;
-          reject(new Error(msg));
+          // Preservar el shape canonico errors.contract { code, message, details? }.
+          // Si solo viene message string, envolver con UNKNOWN_ERROR.
+          const raw = data.error;
+          const errObj = (typeof raw === 'object' && raw !== null)
+            ? { code: raw.code || 'UNKNOWN_ERROR', message: raw.message || String(raw), details: raw.details }
+            : { code: 'UNKNOWN_ERROR', message: String(raw) };
+          const err = new Error(errObj.message);
+          err.code = errObj.code;
+          if (errObj.details !== undefined) err.details = errObj.details;
+          reject(err);
         } else resolve(data.result);
       });
       this.eventBus.publish(toolName, { request_id, ...enrichedArgs });
@@ -337,15 +1529,37 @@ class AiGatewayModule {
   }
 
   // ============================================================
-  // Núcleo: _executeLLM (agentic loop compartido)
+  // Privados — Nucleo: _executeLLM (agentic loop compartido)
   // ============================================================
 
-  async _executeLLM({ system, messages, tools, settings, attachments, project_id, conversation_id, page_id, context, prompt, intencion, providerName }) {
-    const { name: providerNameUsed, provider } = await this._selectProvider(providerName, project_id);
+  async _executeLLM({ system, messages, tools, settings, attachments, project_id, user_id, conversation_id, correlation_id, page_id, context, prompt, intencion, providerName }) {
+    const desiredProvider = providerName ?? settings?.provider ?? null;
+    const { name: providerNameUsed, provider } = await this._selectProvider(desiredProvider, project_id);
+
+    // Blueprint-driven page: inyectamos el blueprint (padre + hijo) como system
+    // prompt. Si el caller ya envio un system propio, va detras como nota — el
+    // blueprint manda primero por contrato del modelo de ejecucion.
+    // cajones-context-partitioning: si cajones_enabled, el system prompt se
+    // construye por turno con catalogo rankeado en lugar del child entero.
+    // Fase 5 bis: si en un turno previo el LLM cambio el foco via chat.cambiar_foco,
+    // ese page_id "pegajoso" tiene prioridad sobre el que viene en el request,
+    // hasta que el frontend lo sincronice (manda el page_id correcto) o el
+    // LLM lo vuelva a cambiar.
+    const focoPersistido = this.conversationPageFoco.get(conversation_id);
+    const effectivePageId = focoPersistido || page_id;
+    const blueprintCtx = effectivePageId ? this.blueprintModules.get(effectivePageId) : null;
+    const blueprintPrompt = blueprintCtx
+      ? (blueprintCtx.cajonesEnabled
+          ? this._buildCajonesSystemPrompt(blueprintCtx, conversation_id, effectivePageId)
+          : blueprintCtx.systemPrompt)
+      : null;
+    const effectiveSystem = blueprintPrompt
+      ? (system ? `${blueprintPrompt}\n\n# CONTEXTO ADICIONAL DEL CALLER\n${system}` : blueprintPrompt)
+      : system;
 
     // Resolver attachments y mezclarlos con el último mensaje user
     const resolvedAtt = await this._resolveAttachments(project_id, attachments);
-    let workingMessages = [{ role: 'system', content: system }, ...messages];
+    let workingMessages = [{ role: 'system', content: effectiveSystem }, ...messages];
     workingMessages = this._injectAttachmentsInMessages(workingMessages, resolvedAtt);
 
     const translatedTools = tools && tools.length > 0
@@ -357,14 +1571,20 @@ class AiGatewayModule {
       max_tokens: settings?.max_tokens ?? 2000,
       tools: translatedTools,
       projectId: project_id,
+      conversationId: conversation_id,
       retryConfig: this.config.retry
     };
+    if (settings?.model) chatOptions.model = settings.model;
+    if (settings?.thinking) chatOptions.thinking = settings.thinking;
 
     // Contexto completo del chat (9 campos del contrato chat-io) que se propaga
     // a cada tool call. Cualquier handler de tool de un módulo lo recibe en sus
     // args y puede propagarlo al evento agent.execute.request si invoca un agente.
+    // page_id efectivo (con foco persistido) tambien se propaga al chatContext
+    // para que cajon.*, page.related y chat.cambiar_foco operen sobre el page
+    // que el LLM realmente ve en su system prompt.
     const chatContext = {
-      project_id, page_id, conversation_id,
+      project_id, user_id, page_id: effectivePageId, conversation_id, correlation_id,
       settings, attachments, prompt, intencion, context
     };
 
@@ -395,12 +1615,80 @@ class AiGatewayModule {
       // Ejecutar todas las tool calls
       const toolResults = [];
       for (const tc of toolCalls) {
+        // args parseado se preserva en el resultado para que ai.chat.response
+        // y la persistencia de chat-io reciban el shape canonico completo
+        // (chat-flow.contract: tool_calls_executed[].args). Sin esto el LLM
+        // que audita post-hoc no sabe con que parametros se llamo al tool.
+        // Parseo de tc.arguments con preservacion del raw cuando falla.
+        // Bug observado en audit recetas 2026-05-20 y demo Mordisco 2026-05-21:
+        // tanto deepseek como anthropic emiten ocasionalmente tool calls con
+        // JSON corrupto/incompleto cuando un campo (content/payload) iba a ser
+        // grande (varios KB). El catch silencioso anterior convertia args en {}
+        // perdiendo el diagnostico. Ahora preservamos el raw_arguments_failed
+        // y devolvemos error explicito al LLM para que reintente con args
+        // bien formados en vez de bucle silencioso.
+        let args = {};
+        let argsParseError = null;
+        let rawArgsForError = null;
         try {
-          const args = typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : tc.arguments;
+          if (typeof tc.arguments === 'string') {
+            args = JSON.parse(tc.arguments);
+          } else {
+            args = tc.arguments || {};
+          }
+        } catch (parseErr) {
+          argsParseError = parseErr;
+          rawArgsForError = typeof tc.arguments === 'string'
+            ? tc.arguments
+            : JSON.stringify(tc.arguments);
+          this.logger.warn('ai-gateway.tool_call.args_parse_failed', {
+            tool_name: tc.name,
+            tool_call_id: tc.id,
+            parse_error: parseErr.message,
+            raw_args_length: rawArgsForError.length,
+            raw_args_preview: rawArgsForError.slice(0, 300),
+            iteration
+          });
+        }
+        if (argsParseError) {
+          // No invocar el tool con args={}. Devolver error explicito al LLM
+          // (sustituye el catch silencioso previo que convertia args en {} y
+          // resultaba en invocaciones del tool con campos requeridos ausentes).
+          toolResults.push({
+            tool_call_id: tc.id, name: tc.name, args: {},
+            status: 'error',
+            error: {
+              code: 'INVALID_INPUT',
+              message: `arguments JSON invalido en tool_call '${tc.name}': ${argsParseError.message} (raw_length=${rawArgsForError.length})`,
+              details: {
+                kind: 'domain',
+                tool_name: tc.name,
+                field: 'arguments',
+                parse_error: argsParseError.message,
+                raw_args_length: rawArgsForError.length,
+                raw_args_preview: rawArgsForError.slice(0, 200)
+              }
+            }
+          });
+          continue;
+        }
+        try {
           const result = await this._executeToolCall(tc.name, args, chatContext);
-          toolResults.push({ tool_call_id: tc.id, name: tc.name, status: 'success', result });
+          toolResults.push({ tool_call_id: tc.id, name: tc.name, args, status: 'success', result });
         } catch (err) {
-          toolResults.push({ tool_call_id: tc.id, name: tc.name, status: 'error', error: err.message });
+          // Preservar el shape canonico errors.contract { code, message, details? }
+          // — antes solo se preservaba message, lo que falseaba TODO el diagnostico
+          // (errores semanticos como RESOURCE_NOT_FOUND quedaban indistinguibles
+          // de bugs UNKNOWN_ERROR genericos).
+          toolResults.push({
+            tool_call_id: tc.id, name: tc.name, args,
+            status: 'error',
+            error: {
+              code: err.code || 'UNKNOWN_ERROR',
+              message: err.message || String(err),
+              ...(err.details !== undefined ? { details: err.details } : {})
+            }
+          });
         }
       }
       allToolResults.push(...toolResults);
@@ -408,11 +1696,28 @@ class AiGatewayModule {
       // Añadir el assistant turn con tool_calls + los tool results.
       // content: '' (no null) — DeepSeek/OpenAI requieren el campo presente
       // como string aunque sea vacío cuando el assistant solo hace tool_calls.
-      workingMessages.push({ role: 'assistant', content: result.content || '', tool_calls: result._raw_tool_calls || result.tool_calls });
+      // reasoning_content: si el provider lo expone (Kimi en thinking mode),
+      // preservarlo — Moonshot rechaza con HTTP 400 el siguiente turno si
+      // el assistant con tool_calls anterior no lo lleva.
+      const assistantTurn = { role: 'assistant', content: result.content || '', tool_calls: result._raw_tool_calls || result.tool_calls };
+      if (result.reasoning_content) assistantTurn.reasoning_content = result.reasoning_content;
+      workingMessages.push(assistantTurn);
+      // Formato del tool_result visible al LLM. Incluir el error.code es
+      // critico para que el LLM distinga errores semanticos (RESOURCE_NOT_FOUND,
+      // INVALID_INPUT) de bugs internos (UNKNOWN_ERROR) y decida si reintentar
+      // con args distintos, mencionarlo al usuario o cambiar de via.
+      const formatErr = (e) => {
+        if (e == null) return 'Error: (sin detalle)';
+        if (typeof e === 'string') return `Error: ${e}`;
+        const code = e.code || 'UNKNOWN_ERROR';
+        const msg  = e.message || '(sin mensaje)';
+        const det  = e.details ? ` — ${JSON.stringify(e.details)}` : '';
+        return `Error [${code}]: ${msg}${det}`;
+      };
       const toolMessages = provider.formatToolResults?.(toolResults) || toolResults.map(tr => ({
         role: 'tool',
         tool_call_id: tr.tool_call_id,
-        content: tr.status === 'error' ? `Error: ${tr.error}` : JSON.stringify(tr.result)
+        content: tr.status === 'error' ? formatErr(tr.error) : JSON.stringify(tr.result)
       }));
       workingMessages.push(...toolMessages);
     }
@@ -430,6 +1735,7 @@ class AiGatewayModule {
   }
 
   // ============================================================
+  // Bus API — entry points wireados por module.json.events.subscribes.
   // Entry 1: chat.prompt.ready → ai.chat.response
   // ============================================================
 
@@ -471,7 +1777,9 @@ class AiGatewayModule {
         settings,
         attachments,
         project_id,
+        user_id,
         conversation_id,
+        correlation_id,
         page_id,
         prompt: systemPrompt,
         intencion
@@ -495,14 +1803,29 @@ class AiGatewayModule {
         timestamp:            new Date().toISOString()
       };
       if (Array.isArray(llmResult.tool_calls_executed) && llmResult.tool_calls_executed.length > 0) {
+        // Propagar el shape canonico de error errors.contract en lugar de
+        // hardcodear UNKNOWN_ERROR (drift anterior que invisibilizaba
+        // RESOURCE_NOT_FOUND, INVALID_INPUT, RESOURCE_NOT_FOUND, etc).
         payload.tool_calls_executed = llmResult.tool_calls_executed
-          .map(t => ({
-            name:          t.name,
-            args:          (typeof t.args === 'object' && t.args !== null) ? t.args : {},
-            result_status: t.status === 'success' ? 'ok' : (t.status === 'timeout' ? 'timeout' : 'error'),
-            ...(t.duration_ms !== undefined ? { duration_ms: t.duration_ms } : {}),
-            ...(t.error ? { error_code: 'INTERNAL_ERROR' } : {})
-          }));
+          .map(t => {
+            const entry = {
+              name:          t.name,
+              args:          (typeof t.args === 'object' && t.args !== null) ? t.args : {},
+              result_status: t.status === 'success' ? 'ok' : (t.status === 'timeout' ? 'timeout' : 'error')
+            };
+            if (t.duration_ms !== undefined) entry.duration_ms = t.duration_ms;
+            if (t.error) {
+              if (typeof t.error === 'object') {
+                entry.error_code = t.error.code || 'UNKNOWN_ERROR';
+                if (t.error.message) entry.error_message = t.error.message;
+                if (t.error.details !== undefined) entry.error_details = t.error.details;
+              } else {
+                entry.error_code = 'UNKNOWN_ERROR';
+                entry.error_message = String(t.error);
+              }
+            }
+            return entry;
+          });
       }
       if (typeof llmResult.iterations === 'number' && llmResult.iterations >= 1) {
         payload.iterations = llmResult.iterations;
@@ -541,25 +1864,25 @@ class AiGatewayModule {
     const raw = (err && err.message) ? String(err.message) : 'unknown error';
     const lower = raw.toLowerCase();
 
-    let code = 'INTERNAL_ERROR';
+    let code = 'UNKNOWN_ERROR';
     if (/credential .*timeout|sin credencial|no api key|api key not|credential not found/i.test(raw)) {
-      code = 'CREDENTIAL_NOT_FOUND';
+      code = 'RESOURCE_NOT_FOUND';
     } else if (/no hay providers?.*disponibles?|no providers? available/i.test(raw)) {
-      code = 'CREDENTIAL_NOT_FOUND';
+      code = 'RESOURCE_NOT_FOUND';
     } else if (lower.includes('timeout') || lower.includes('etimedout')) {
       code = 'UPSTREAM_TIMEOUT';
     } else if (/429|rate.?limit/.test(lower)) {
-      code = 'UPSTREAM_RATE_LIMITED';
+      code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/401|403|unauthorized|forbidden|invalid api key/.test(lower)) {
-      code = 'UPSTREAM_AUTH_FAILED';
+      code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/5\d\d|internal server error|bad gateway|service unavailable/.test(lower)) {
-      code = 'UPSTREAM_5XX';
+      code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/econnrefused|enotfound|network|unreachable|fetch failed/.test(lower)) {
       code = 'UPSTREAM_UNREACHABLE';
     } else if (/invalid response|malformed|parse|unexpected token/.test(lower)) {
       code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/context.{0,10}(length|window|too long|too large|exceed)|prompt.{0,5}(too long|too large)|maximum.{0,10}context|too many tokens|context_length_exceeded|413/i.test(lower)) {
-      code = 'UPSTREAM_PAYLOAD_TOO_LARGE';
+      code = 'UPSTREAM_INVALID_RESPONSE';
     }
 
     return { code, message: raw, details: {} };
@@ -573,7 +1896,7 @@ class AiGatewayModule {
     const data = event.data || event;
     const {
       request_id, correlation_id, system, messages, tools, settings,
-      attachments, project_id, conversation_id, page_id, provider: providerName
+      attachments, project_id, user_id, conversation_id, page_id, provider: providerName
     } = data;
 
     if (!request_id) {
@@ -587,7 +1910,7 @@ class AiGatewayModule {
     try {
       const result = await this._executeLLM({
         system, messages, tools, settings, attachments,
-        project_id, conversation_id, page_id, providerName
+        project_id, user_id, conversation_id, correlation_id: cid, page_id, providerName
       });
 
       await this._publicarEvento('llm.complete.response', {
@@ -713,34 +2036,6 @@ class AiGatewayModule {
   // Helpers POC2 (transferibles) + auxiliares del dominio
   // ============================================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'VALIDATION_FAILED'      ? 400 :
-                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                    code === 'CONFLICT'               ? 409 :
-                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
-                                                        500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('unavailable') || msg.includes('not available')) return 'UPSTREAM_UNAVAILABLE';
-    return 'INTERNAL_ERROR';
-  }
-
   // Helper auxiliar especifico del dominio LLM:
   // mapea errores de providers/HTTP/CLI a codigos canonicos del agentic loop.
   // Renombrado de _classifyError para alinear con el contrato POC2
@@ -748,16 +2043,6 @@ class AiGatewayModule {
   // y embedding paths.
   _classifyExecutionError(err) {
     return this._classifyError(err);
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else if (!enriched.correlation_id)  enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
   }
 }
 

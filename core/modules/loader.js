@@ -295,6 +295,32 @@ class ModuleLoader {
         throw new Error(`Module ${moduleName} already loaded`);
       }
 
+      // Blueprint-driven module: declarativo puro, no hay index.js ni instancia.
+      // El LLM ejecuta el modulo via ai-gateway leyendo el blueprint JSON como
+      // system prompt + invocando bus.publish/bus.publishAndWait. Aqui solo lo
+      // registramos para que ai-gateway lo descubra al arrancar.
+      if (manifest.blueprint_driven === true) {
+        this.loadedModules.set(moduleName, {
+          manifest,
+          instance: null,
+          path: modulePath,
+          loadedAt: Date.now(),
+          blueprint_driven: true
+        });
+        if (this.logger) {
+          this.logger.info('module.loaded.blueprint', {
+            module: moduleName,
+            version: manifest.version,
+            blueprint_path: manifest.blueprint_path,
+            target_page_id: manifest.target_page_id
+          });
+        }
+        if (this.metrics) {
+          this.metrics.increment('modules.loaded.blueprint');
+        }
+        return null;
+      }
+
       // Cargar el módulo
       const indexPath = path.join(modulePath, 'index.js');
       if (!fs.existsSync(indexPath)) {
@@ -379,6 +405,14 @@ class ModuleLoader {
       // Register tools for AI if defined in manifest
       if (manifest.tools && Array.isArray(manifest.tools)) {
         this.registerToolsForAI(moduleName, manifest.tools, instance);
+      }
+
+      // tools.contract v1.2: wrappers HTTP declarativos sin codigo JS.
+      // El loader genera la closure handler en runtime (templating + auth via
+      // credential-manager + fetch + mapeo status->canon) y la registra en los
+      // 3 destinos identicamente a una tool de tools[].
+      if (manifest.tools_http && Array.isArray(manifest.tools_http)) {
+        this.registerToolsHttpForAI(moduleName, manifest.tools_http);
       }
 
       // Register intents for Conversation Router if defined in manifest
@@ -466,8 +500,9 @@ class ModuleLoader {
         }
       }
 
-      // Ejecutar onUnload si existe (solo para cleanup propio del módulo)
-      if (typeof moduleData.instance.onUnload === 'function') {
+      // Ejecutar onUnload si existe (solo para cleanup propio del módulo).
+      // Blueprint-driven modules no tienen instance — se saltan.
+      if (moduleData.instance && typeof moduleData.instance.onUnload === 'function') {
         await moduleData.instance.onUnload();
       }
 
@@ -618,6 +653,25 @@ class ModuleLoader {
         successful,
         failed
       });
+    }
+
+    // Emit canonical bus event so late wirings (e.g. ai-gateway blueprint
+    // async subscribers) can hook reliably after all modules are loaded.
+    // Replaces the lazy-rewire workaround in ai-gateway (PR #206) by a
+    // deterministic signal. The lazy-rewire stays as defense-in-depth.
+    if (this.core?.eventBus?.publish) {
+      try {
+        await this.core.eventBus.publish('core.modules.loaded.all', {
+          total: discovered.length,
+          successful,
+          failed,
+          timestamp: new Date().toISOString()
+        });
+      } catch (err) {
+        this.logger?.warn('core.modules.loaded.all.publish_failed', {
+          error_message: err && err.message ? err.message : String(err)
+        });
+      }
     }
 
     return results;
@@ -939,13 +993,19 @@ class ModuleLoader {
    */
   registerToolsForAI(moduleName, tools, instance) {
     const bus = this.core?.eventBus || null;
+    const uiHandler = this.core?.uiHandler || null;
 
     for (const tool of tools) {
       // Registrar siempre el schema para que el LLM conozca la tool.
       // La ejecución va por eventos — el handler es opcional.
       const handlerName = tool.handler || tool.name.split('.')[1];
-      const handler = instance?.[handlerName];
-      const boundHandler = typeof handler === 'function' ? handler.bind(instance) : null;
+      // tools.contract v1.2: handler puede ser un path con puntos para resolver
+      // metodos anidados (ej. 'strategies.mesa.handleAbrirMesa'). Caso comun
+      // para modulos con patron Strategy donde los handlers viven en
+      // sub-componentes accesibles desde la instance principal. Para handlers
+      // sin punto el comportamiento es identico a instance[handlerName].
+      const { fn: handler, owner: handlerOwner } = this._resolveHandlerByPath(instance, handlerName);
+      const boundHandler = typeof handler === 'function' ? handler.bind(handlerOwner) : null;
 
       const entry = {
         name: tool.name,
@@ -955,11 +1015,26 @@ class ModuleLoader {
         module: moduleName,
         confirmation: tool.confirmation || false,
         event_based: true,
-        _busUnsub: null
+        _busUnsub: null,
+        _uiKey: null
       };
 
       if (boundHandler && bus) {
         entry._busUnsub = this._wireToolBusSubscription(tool.name, boundHandler, bus);
+      }
+
+      // tools.contract v1.2: una declaracion, tres destinos.
+      // Auto-registrar en uiHandler con domain = parte antes del primer punto,
+      // action = resto (puntos preservados). Ej: 'mercadona.producto.obtener' →
+      // domain='mercadona', action='producto.obtener'. UIRequestHandler tolera
+      // action con puntos porque parsea ui/request/{domain}/{action} con split
+      // limitado al primer slash de los path segments.
+      if (boundHandler && uiHandler) {
+        const uiKey = this._deriveUiKeyFromToolName(tool.name);
+        if (uiKey) {
+          uiHandler.register(uiKey.domain, uiKey.action, boundHandler);
+          entry._uiKey = uiKey;
+        }
       }
 
       this.toolsRegistry.set(tool.name, entry);
@@ -969,7 +1044,8 @@ class ModuleLoader {
           module: moduleName,
           tool: tool.name,
           confirmation: tool.confirmation || false,
-          bus_wired: entry._busUnsub != null
+          bus_wired: entry._busUnsub != null,
+          ui_wired: entry._uiKey != null
         });
       }
     }
@@ -983,6 +1059,479 @@ class ModuleLoader {
   }
 
   /**
+   * Register tools_http declaratives for AI (tools.contract v1.2)
+   *
+   * Wrappers HTTP declarativos: el modulo declara name + parameters + http
+   * (method, url, auth_type, credential_id?, headers?, body_template?,
+   * response_path?, timeout_ms?) y el loader genera la closure handler en
+   * runtime. La closure se registra en los 3 destinos identicamente a una
+   * tool de tools[] (toolsRegistry, bus event, uiHandler).
+   *
+   * Ver tools.contract.json::decisiones_arquitectonicas.tool_http_declarativa_runtime_en_loader.
+   *
+   * @param {string} moduleName
+   * @param {Array} toolsHttp - tools_http[] del manifest
+   */
+  registerToolsHttpForAI(moduleName, toolsHttp) {
+    const bus = this.core?.eventBus || null;
+    const uiHandler = this.core?.uiHandler || null;
+
+    for (const tool of toolsHttp) {
+      // Closure runtime — captura `tool` y `bus` por cierre.
+      const closure = this._makeHttpToolHandler(tool, bus, moduleName);
+
+      const entry = {
+        name: tool.name,
+        description: tool.description || `${moduleName} ${tool.name}`,
+        parameters: tool.parameters || {},
+        handler: closure,
+        module: moduleName,
+        confirmation: tool.confirmation || false,
+        event_based: true,
+        http: true, // distinguir de tools[] normales
+        _busUnsub: null,
+        _uiKey: null
+      };
+
+      if (bus) {
+        entry._busUnsub = this._wireToolBusSubscription(tool.name, closure, bus);
+      }
+
+      if (uiHandler) {
+        const uiKey = this._deriveUiKeyFromToolName(tool.name);
+        if (uiKey) {
+          uiHandler.register(uiKey.domain, uiKey.action, closure);
+          entry._uiKey = uiKey;
+        }
+      }
+
+      this.toolsRegistry.set(tool.name, entry);
+
+      if (this.logger) {
+        this.logger.debug('module.tool_http.registered', {
+          module: moduleName,
+          tool: tool.name,
+          method: tool.http?.method,
+          auth_type: tool.http?.auth_type || 'none',
+          bus_wired: entry._busUnsub != null,
+          ui_wired: entry._uiKey != null
+        });
+      }
+    }
+
+    if (this.logger) {
+      this.logger.info('module.tools_http.registered', {
+        module: moduleName,
+        count: toolsHttp.length
+      });
+    }
+  }
+
+  /**
+   * Genera la closure runtime para una entry de tools_http[].
+   *
+   * La closure async (args) =>
+   *   1. Resuelve auth si auth_type !== 'none' via credential.resolve.request
+   *      (par bus con timeout ~5s). El secreto NO se loguea ni se publica
+   *      en otro evento — solo se aplica al request HTTP saliente.
+   *   2. Aplica templating `{{paramName}}` a url / headers / body_template
+   *      con los args. Path params consumidos no se agregan al query/body.
+   *   3. Para GET: args no consumidos van como query string.
+   *      Para POST/PUT/PATCH: body_template (templated) o args restantes
+   *      como JSON body.
+   *   4. fetch con timeout (AbortController, default 30000ms).
+   *   5. Mapea status HTTP a shape canonico (tools.contract):
+   *        2xx/3xx → { status, data }
+   *        400 → INVALID_INPUT, 401/403 → PERMISSION_DENIED,
+   *        404 → RESOURCE_NOT_FOUND, 409 → CONFLICT_STATE,
+   *        429 → RATE_LIMITED, otros 4xx → INVALID_INPUT
+   *        5xx → UPSTREAM_TIMEOUT (timeout) / UPSTREAM_UNREACHABLE / UPSTREAM_INVALID_RESPONSE
+   *   6. Si response_path, extrae subcampo via dot-path navegation.
+   *
+   * @private
+   * @param {Object} tool - entry de tools_http[]
+   * @param {Object} bus  - core.eventBus (puede ser null en tests)
+   * @param {string} moduleName
+   * @returns {Function} closure async
+   */
+  _makeHttpToolHandler(tool, bus, moduleName) {
+    const loader = this;
+    const http = tool.http || {};
+    return async function httpToolHandler(args) {
+      const inputArgs = (args && typeof args === 'object') ? args : {};
+      try {
+        // 1. Auth (si aplica)
+        let authValue = null;
+        const authType = http.auth_type || 'none';
+        if (authType !== 'none') {
+          if (!http.credential_id) {
+            return loader._httpErrorResponse(400, 'INVALID_INPUT',
+              `tools_http ${tool.name}: auth_type='${authType}' pero credential_id ausente`);
+          }
+          try {
+            authValue = await loader._resolveCredentialViaBus(http.credential_id, bus);
+          } catch (err) {
+            return loader._httpErrorResponse(500, 'PERMISSION_DENIED',
+              `No se pudo resolver credential '${http.credential_id}': ${err.message}`);
+          }
+          if (!authValue) {
+            return loader._httpErrorResponse(500, 'PERMISSION_DENIED',
+              `Credential '${http.credential_id}' no encontrada`);
+          }
+        }
+
+        // 2. Templating de url, headers, body
+        const { rendered: url, consumed: pathConsumed } = loader._renderTemplate(http.url, inputArgs);
+        const headersIn = http.headers || {};
+        const renderedHeaders = {};
+        let headerConsumed = new Set(pathConsumed);
+        for (const [hk, hv] of Object.entries(headersIn)) {
+          const r = loader._renderTemplate(hv, inputArgs);
+          renderedHeaders[hk] = r.rendered;
+          for (const c of r.consumed) headerConsumed.add(c);
+        }
+
+        // 3. Aplicar auth a request
+        if (authType === 'bearer') {
+          renderedHeaders['Authorization'] = `Bearer ${authValue}`;
+        } else if (authType === 'api_key_header') {
+          const hname = http.auth_header_name || 'X-API-Key';
+          renderedHeaders[hname] = authValue;
+        } else if (authType === 'basic') {
+          renderedHeaders['Authorization'] = `Basic ${Buffer.from(authValue).toString('base64')}`;
+        }
+
+        // 4. Construir URL final con query (api_key_query + args sobrantes en GET)
+        const method = (http.method || 'GET').toUpperCase();
+        const remainingArgs = {};
+        for (const [k, v] of Object.entries(inputArgs)) {
+          if (!headerConsumed.has(k)) remainingArgs[k] = v;
+        }
+
+        let finalUrl = url;
+        if (authType === 'api_key_query') {
+          const qname = http.auth_query_param_name || 'apiKey';
+          finalUrl = loader._appendQuery(finalUrl, { [qname]: authValue });
+        }
+
+        // 5. Body / query
+        const fetchOpts = {
+          method,
+          headers: renderedHeaders
+        };
+
+        if (method === 'GET' || method === 'DELETE') {
+          if (Object.keys(remainingArgs).length > 0) {
+            finalUrl = loader._appendQuery(finalUrl, remainingArgs);
+          }
+        } else {
+          // POST/PUT/PATCH
+          if (http.body_template !== undefined) {
+            const bodyRendered = loader._renderBodyTemplate(http.body_template, inputArgs);
+            fetchOpts.body = typeof bodyRendered === 'string'
+              ? bodyRendered
+              : JSON.stringify(bodyRendered);
+            if (!renderedHeaders['Content-Type'] && typeof bodyRendered !== 'string') {
+              renderedHeaders['Content-Type'] = 'application/json';
+            }
+          } else if (Object.keys(remainingArgs).length > 0) {
+            fetchOpts.body = JSON.stringify(remainingArgs);
+            if (!renderedHeaders['Content-Type']) {
+              renderedHeaders['Content-Type'] = 'application/json';
+            }
+          }
+        }
+
+        if (!renderedHeaders['Accept']) renderedHeaders['Accept'] = 'application/json';
+
+        // 6. fetch con timeout
+        const timeoutMs = Number.isInteger(http.timeout_ms) ? http.timeout_ms : 30000;
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), timeoutMs);
+        fetchOpts.signal = controller.signal;
+
+        const fetchImpl = loader._fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
+        if (!fetchImpl) {
+          clearTimeout(tid);
+          return loader._httpErrorResponse(500, 'UNKNOWN_ERROR', 'No fetch implementation available');
+        }
+
+        let response;
+        try {
+          response = await fetchImpl(finalUrl, fetchOpts);
+        } catch (err) {
+          clearTimeout(tid);
+          if (err.name === 'AbortError') {
+            return loader._httpErrorResponse(504, 'UPSTREAM_TIMEOUT',
+              `Timeout (${timeoutMs}ms) llamando ${tool.name}`);
+          }
+          return loader._httpErrorResponse(502, 'UPSTREAM_UNREACHABLE',
+            `Error de red llamando ${tool.name}: ${err.message}`);
+        }
+        clearTimeout(tid);
+
+        // 7. Parsear body
+        const contentType = response.headers.get?.('content-type') || '';
+        let parsed;
+        try {
+          if (contentType.includes('application/json')) {
+            parsed = await response.json();
+          } else {
+            parsed = await response.text();
+          }
+        } catch (err) {
+          return loader._httpErrorResponse(502, 'UPSTREAM_INVALID_RESPONSE',
+            `Response parse error de ${tool.name}: ${err.message}`);
+        }
+
+        // 8. Mapear status a shape canonico
+        if (response.status >= 200 && response.status < 400) {
+          let data = parsed;
+          if (http.response_path) {
+            data = loader._extractResponsePath(parsed, http.response_path);
+          }
+          return { status: response.status, data };
+        }
+
+        const errCode = loader._mapHttpStatusToCanonCode(response.status);
+        const errMessage = (parsed && typeof parsed === 'object' && parsed.message)
+          ? String(parsed.message)
+          : `HTTP ${response.status} ${response.statusText || ''}`.trim();
+        return loader._httpErrorResponse(response.status, errCode, errMessage, {
+          upstream_status: response.status
+        });
+      } catch (err) {
+        return loader._httpErrorResponse(500, 'UNKNOWN_ERROR',
+          `tools_http handler error: ${err?.message || String(err)}`);
+      }
+    };
+  }
+
+  /**
+   * Resuelve una credencial via el par bus credential.resolve.request/response.
+   * Lanza si el bus no resuelve en 5s o si la response llega con success:false.
+   * @private
+   */
+  _resolveCredentialViaBus(credentialId, bus) {
+    return new Promise((resolve, reject) => {
+      if (!bus || typeof bus.publish !== 'function' || typeof bus.subscribe !== 'function') {
+        return reject(new Error('eventBus no disponible para credential.resolve'));
+      }
+      const request_id = (this.core?.utils?.uuid?.()) || ('cred-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+      const timeoutMs = 5000;
+      let settled = false;
+      let unsub = null;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        if (typeof unsub === 'function') { try { unsub(); } catch (_) {} }
+        reject(new Error(`credential.resolve.response timeout (${timeoutMs}ms)`));
+      }, timeoutMs);
+
+      try {
+        const handler = (event) => {
+          const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!data || data.request_id !== request_id) return;
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          if (typeof unsub === 'function') { try { unsub(); } catch (_) {} }
+          if (data.success === false) {
+            return reject(new Error(data.error || 'credential resolution failed'));
+          }
+          resolve(data.api_key || null);
+        };
+        const subResult = bus.subscribe('credential.resolve.response', handler);
+        // bus.subscribe puede devolver una funcion unsub o un id
+        if (typeof subResult === 'function') unsub = subResult;
+        bus.publish('credential.resolve.request', { request_id, provider: credentialId });
+      } catch (err) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (typeof unsub === 'function') { try { unsub(); } catch (_) {} }
+        reject(err);
+      }
+    });
+  }
+
+  /**
+   * Reemplaza {{paramName}} en un string con valores de args. Devuelve el
+   * rendered string y la lista de paramName consumidos (para no duplicarlos
+   * en query/body posteriormente).
+   * @private
+   */
+  _renderTemplate(template, args) {
+    if (typeof template !== 'string') return { rendered: template, consumed: [] };
+    const consumed = [];
+    const rendered = template.replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g, (m, key) => {
+      if (Object.prototype.hasOwnProperty.call(args, key)) {
+        consumed.push(key);
+        const v = args[key];
+        return v === null || v === undefined ? '' : encodeURIComponent(String(v));
+      }
+      return m;
+    });
+    return { rendered, consumed };
+  }
+
+  /**
+   * Templating del body. Si es string, reemplaza tokens (sin encodeURIComponent
+   * — el body crudo no es URL). Si es object, recorre clave a clave reemplazando
+   * tokens en values string; valores no-string se sustituyen por el arg crudo
+   * si el value es exactamente '{{paramName}}'.
+   * @private
+   */
+  _renderBodyTemplate(template, args) {
+    if (template === null || template === undefined) return template;
+    if (typeof template === 'string') {
+      return template.replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g, (m, key) => {
+        return Object.prototype.hasOwnProperty.call(args, key)
+          ? String(args[key] === null || args[key] === undefined ? '' : args[key])
+          : m;
+      });
+    }
+    if (typeof template !== 'object') return template;
+    if (Array.isArray(template)) return template.map(v => this._renderBodyTemplate(v, args));
+    const out = {};
+    for (const [k, v] of Object.entries(template)) {
+      if (typeof v === 'string') {
+        const fullMatch = /^\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}$/.exec(v);
+        if (fullMatch && Object.prototype.hasOwnProperty.call(args, fullMatch[1])) {
+          out[k] = args[fullMatch[1]];
+        } else {
+          out[k] = v.replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g, (m, key) => {
+            return Object.prototype.hasOwnProperty.call(args, key)
+              ? String(args[key] === null || args[key] === undefined ? '' : args[key])
+              : m;
+          });
+        }
+      } else if (typeof v === 'object' && v !== null) {
+        out[k] = this._renderBodyTemplate(v, args);
+      } else {
+        out[k] = v;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Anyade query params a una URL preservando los existentes.
+   * @private
+   */
+  _appendQuery(url, params) {
+    const entries = Object.entries(params).filter(([, v]) => v !== null && v !== undefined);
+    if (entries.length === 0) return url;
+    const qs = entries
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+      .join('&');
+    return url.includes('?') ? `${url}&${qs}` : `${url}?${qs}`;
+  }
+
+  /**
+   * Mapea status HTTP a codigo canonico de errors.contract.
+   * @private
+   */
+  _mapHttpStatusToCanonCode(status) {
+    if (status === 400) return 'INVALID_INPUT';
+    if (status === 401 || status === 403) return 'PERMISSION_DENIED';
+    if (status === 404) return 'RESOURCE_NOT_FOUND';
+    if (status === 409) return 'CONFLICT_STATE';
+    if (status === 429) return 'RATE_LIMITED';
+    if (status >= 400 && status < 500) return 'INVALID_INPUT';
+    if (status === 502 || status === 503 || status === 504) return 'UPSTREAM_UNREACHABLE';
+    if (status >= 500) return 'UPSTREAM_INVALID_RESPONSE';
+    return 'UNKNOWN_ERROR';
+  }
+
+  /**
+   * Extrae subcampo del response parseado siguiendo un path tipo
+   * 'data.results[0].text'. Devuelve undefined si el path no resuelve.
+   * @private
+   */
+  _extractResponsePath(obj, path) {
+    if (obj === null || obj === undefined || !path) return obj;
+    const tokens = String(path).split(/\.|\[(\d+)\]/).filter(t => t !== '' && t !== undefined);
+    let cur = obj;
+    for (const t of tokens) {
+      if (cur === null || cur === undefined) return undefined;
+      if (/^\d+$/.test(t)) cur = cur[Number(t)];
+      else cur = cur[t];
+    }
+    return cur;
+  }
+
+  /**
+   * Helper para construir shape canonico de error de tools_http.
+   * @private
+   */
+  _httpErrorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details !== undefined) error.details = details;
+    return { status, error };
+  }
+
+  /**
+   * Deriva el par {domain, action} para el uiHandler a partir del tool name.
+   * Split en el PRIMER punto: parte anterior = domain, resto = action.
+   *
+   *   'pdf.extract'                    → { domain: 'pdf',             action: 'extract' }
+   *   'carta-scheduler.crear_regla'    → { domain: 'carta-scheduler', action: 'crear_regla' }
+   *   'mercadona.producto.obtener'     → { domain: 'mercadona',       action: 'producto.obtener' }
+   *
+   * Devuelve null si el name no tiene punto, empieza/acaba en punto, o tiene
+   * domain vacio — en esos casos la tool no se auto-registra en uiHandler
+   * (sigue siendo invocable por bus y por LLM normalmente).
+   *
+   * Ver tools.contract.json::principios.ui_request_topic_derivado_del_name.
+   *
+   * @private
+   * @param {string} toolName
+   * @returns {{domain: string, action: string} | null}
+   */
+  /**
+   * Resuelve un handler segun su string declarado en module.json.tools[].handler.
+   *
+   * Soporta dos formas:
+   *   - 'handleX'                       → instance.handleX           (caso default)
+   *   - 'strategies.mesa.handleAbrirMesa' → instance.strategies.mesa.handleAbrirMesa
+   *
+   * Para que `this` se enlace correctamente al objeto duenyo cuando el method
+   * vive en un sub-componente, devolvemos { fn, owner } y el caller hace
+   * fn.bind(owner). Sin esto, un metodo de MesaStrategy bindeado al modulo
+   * padre perderia acceso a this.mesasActivas, this.modulo, etc.
+   *
+   * @private
+   * @param {Object} instance
+   * @param {string} path
+   * @returns {{fn: Function|undefined, owner: Object}}
+   */
+  _resolveHandlerByPath(instance, path) {
+    if (!path || typeof path !== 'string') return { fn: undefined, owner: instance };
+    if (!path.includes('.')) {
+      return { fn: instance?.[path], owner: instance };
+    }
+    const parts = path.split('.');
+    let owner = instance;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (owner == null) return { fn: undefined, owner: instance };
+      owner = owner[parts[i]];
+    }
+    if (owner == null) return { fn: undefined, owner: instance };
+    return { fn: owner[parts[parts.length - 1]], owner };
+  }
+
+  _deriveUiKeyFromToolName(toolName) {
+    if (typeof toolName !== 'string') return null;
+    const firstDot = toolName.indexOf('.');
+    if (firstDot < 1 || firstDot === toolName.length - 1) return null;
+    const domain = toolName.substring(0, firstDot);
+    const action = toolName.substring(firstDot + 1);
+    if (!domain || !action) return null;
+    return { domain, action };
+  }
+
+  /**
    * Wire la suscripcion bus de una tool. Devuelve la funcion unsubscribe.
    *
    * Shape de invocacion canonica:
@@ -992,7 +1541,7 @@ class ModuleLoader {
    * Unwrapping al publicar `result`:
    *   - handler devuelve `{status, data}` con 200-399 → `result = data`.
    *   - handler devuelve `{status>=400, error}` o `{error, ...}` sin status → publica error canonico.
-   *   - handler lanza excepcion → publica `error: { code: 'INTERNAL_ERROR', message }`.
+   *   - handler lanza excepcion → publica `error: { code: 'UNKNOWN_ERROR', message }`.
    *   - cualquier otro shape → `result = raw return`.
    *
    * @private
@@ -1008,7 +1557,7 @@ class ModuleLoader {
           if (result.error && (result.status == null || result.status >= 400)) {
             const errObj = (typeof result.error === 'object' && result.error !== null)
               ? result.error
-              : { code: 'INTERNAL_ERROR', message: String(result.error) };
+              : { code: 'UNKNOWN_ERROR', message: String(result.error) };
             await bus.publish(responseEvent, { request_id, error: errObj });
             return;
           }
@@ -1020,7 +1569,7 @@ class ModuleLoader {
       } catch (err) {
         await bus.publish(responseEvent, {
           request_id,
-          error: { code: 'INTERNAL_ERROR', message: err?.message || String(err) }
+          error: { code: 'UNKNOWN_ERROR', message: err?.message || String(err) }
         });
       }
     };
@@ -1034,11 +1583,15 @@ class ModuleLoader {
    */
   unregisterToolsForAI(moduleName) {
     const toDelete = [];
+    const uiHandler = this.core?.uiHandler || null;
 
     for (const [toolName, tool] of this.toolsRegistry) {
       if (tool.module === moduleName) {
         if (typeof tool._busUnsub === 'function') {
           try { tool._busUnsub(); } catch (_) { /* ignore */ }
+        }
+        if (tool._uiKey && uiHandler) {
+          try { uiHandler.unregister(tool._uiKey.domain, tool._uiKey.action); } catch (_) { /* ignore */ }
         }
         toDelete.push(toolName);
       }

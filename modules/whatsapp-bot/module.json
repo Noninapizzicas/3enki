@@ -46,12 +46,12 @@
       {
         "event": "pedido.creado",
         "handler": "onPedidoCreado",
-        "description": "Respuesta correlacionada de pedidos tras pedido.crear.request: confirma al cliente WhatsApp con codigo de recogida y notifica al staff via telegram-service."
+        "description": "Evento informativo de pedidos tras handleCreatePedidoTienda exitoso. Filtramos por tipo='tienda' y correlation_id. Confirma al cliente WhatsApp con codigo de recogida y notifica al staff via telegram-service."
       },
       {
-        "event": "pedido.crear.failed",
-        "handler": "onPedidoCrearFailed",
-        "description": "Fallo correlacionado de pedidos: informa al cliente que su pedido no pudo procesarse."
+        "event": "pedido.crear-tienda.response",
+        "handler": "onPedidoCrearTiendaResponse",
+        "description": "Respuesta canonica auto-wireada de la tool pedido.crear-tienda (tools.contract v1.2). Solo procesamos error path — success lo trata onPedidoCreado con shape mas rico. Avisa al cliente si pedidos rechazo el shape (INVALID_INPUT, CONFLICT_STATE, etc)."
       }
     ]
   },

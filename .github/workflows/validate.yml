@@ -159,6 +159,9 @@ jobs:
       - name: Run unit tests (conversation-export — reescritura canonica)
         run: npm run test:conversation-export
 
+      - name: Run unit tests (audit-helpers/capture-bus — captura cruda del bus MQTT)
+        run: npm run test:audit-helpers-capture-bus
+
       - name: Run unit tests (pdf-viewer — reescritura canonica)
         run: npm run test:pdf-viewer
 

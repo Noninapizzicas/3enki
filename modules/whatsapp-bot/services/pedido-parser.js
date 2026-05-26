@@ -95,6 +95,19 @@ function parsearPedido(textoBruto) {
   if (!PALABRA_CLAVE_PATTERN.test(palabra_clave)) {
     return { ok: false, kind: 'palabra_clave_invalida', project_slug };
   }
+  i++;
+
+  // Linea OPCIONAL: 'Mayor 18: si' (presente solo si el proyecto activa
+  // verificacion_edad y el cliente paso el gate en la PWA). Si esta presente
+  // y dice 'si' (case-insensitive) -> mayor_edad_confirmado = true. Cualquier
+  // otro valor o ausencia -> null (sin info).
+  let mayor_edad_confirmado = null;
+  if (i < lineas.length) {
+    const matchEdad = lineas[i].match(/^Mayor\s*18:\s*(\S+)\s*$/i);
+    if (matchEdad && /^s[ií]$/i.test(matchEdad[1])) {
+      mayor_edad_confirmado = true;
+    }
+  }
 
   return {
     ok: true,
@@ -103,7 +116,8 @@ function parsearPedido(textoBruto) {
     nonce,
     items,
     total_centimos,
-    palabra_clave
+    palabra_clave,
+    mayor_edad_confirmado
   };
 }
 

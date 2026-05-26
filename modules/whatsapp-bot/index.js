@@ -432,6 +432,7 @@ class WhatsappBotModule extends BaseModule {
       items,
       total_centimos: parsed.total_centimos,
       palabra_clave: parsed.palabra_clave,
+      mayor_edad_confirmado: parsed.mayor_edad_confirmado,
       timeoutHandle,
       created_at: Date.now()
     });
@@ -447,7 +448,8 @@ class WhatsappBotModule extends BaseModule {
       total_centimos: parsed.total_centimos,
       canal_origen: 'whatsapp',
       cliente_telefono: msg.from,
-      palabra_clave: parsed.palabra_clave
+      palabra_clave: parsed.palabra_clave,
+      mayor_edad_confirmado: parsed.mayor_edad_confirmado
     });
     this.metrics?.increment('whatsapp-bot.pedido.solicitado', { project: project_slug });
   }
@@ -476,18 +478,20 @@ class WhatsappBotModule extends BaseModule {
     const itemsTxt = pending.items.map(it => `- ${it.cantidad} x ${it.descripcion}`).join('\n');
     const totalEur = (pending.total_centimos / 100).toFixed(2).replace('.', ',');
     // ANTI-FRAUDE: NO incluir palabra_clave aqui. El dependiente la pregunta al
-    // cliente al recoger, sin haberla leido antes.
-    const text = [
+    // cliente al recoger, sin haberla leido antes. mayor_edad SI viaja (es
+    // metadata operativa, no anti-fraude; util para que el staff sepa que el
+    // cliente paso el gate en la PWA — pero el dependiente sigue exigiendo DNI
+    // en presencial si la regulacion lo manda).
+    const lines = [
       `Pedido nuevo - ${pending.project_slug.toUpperCase()}`,
       `Codigo: ${pedido.codigo_recogida}`,
-      `Cliente: ${this._maskPhoneNumber(pending.from)}`,
-      '',
-      itemsTxt,
-      '',
-      `Total: ${totalEur} EUR`,
-      '',
-      `Expira: ${pedido.expira_at}`
-    ].join('\n');
+      `Cliente: ${this._maskPhoneNumber(pending.from)}`
+    ];
+    if (pending.mayor_edad_confirmado === true) {
+      lines.push('Mayor 18: confirmado en PWA');
+    }
+    lines.push('', itemsTxt, '', `Total: ${totalEur} EUR`, '', `Expira: ${pedido.expira_at}`);
+    const text = lines.join('\n');
     await this.eventBus.publish('telegram.send_message.request', {
       request_id: crypto.randomUUID(),
       botName: meta.telegram_bot_name,

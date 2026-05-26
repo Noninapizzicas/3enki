@@ -639,6 +639,58 @@ function publishedOf(mocks, name) {
     assert.strictEqual(r.total_centimos, 550);
   });
 
+  await testAsync('parser · pedido con linea "Mayor 18: si" -> mayor_edad_confirmado=true', async () => {
+    const txt = [PEDIDO_VALIDO, 'Mayor 18: si'].join('\n');
+    const r = parsearPedido(txt);
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.mayor_edad_confirmado, true);
+  });
+
+  await testAsync('parser · pedido sin linea Mayor 18 -> mayor_edad_confirmado=null', async () => {
+    const r = parsearPedido(PEDIDO_VALIDO);
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.mayor_edad_confirmado, null);
+  });
+
+  await testAsync('parser · "Mayor 18: no" -> mayor_edad_confirmado=null (no es si)', async () => {
+    const txt = [PEDIDO_VALIDO, 'Mayor 18: no'].join('\n');
+    const r = parsearPedido(txt);
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.mayor_edad_confirmado, null);
+  });
+
+  await testAsync('despacho · mayor_edad_confirmado=true viaja en pedido.crear-tienda', async () => {
+    const mocks = makeMocks();
+    const fakeClient = makeFakeMetaClient('ok');
+    process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
+    const { module: m } = await instantiate(mocks, { fakeMetaClient: fakeClient });
+    const txt = [PEDIDO_VALIDO, 'Mayor 18: si'].join('\n');
+    await m._despacharEntrante('vapers', { from: '34699999999', message_id: 'wamid.1', text: txt });
+    const reqs = publishedOf(mocks, 'pedido.crear-tienda');
+    assert.strictEqual(reqs[0].mayor_edad_confirmado, true);
+    delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
+    await m.onUnload();
+  });
+
+  await testAsync('staff notif · incluye linea Mayor 18 cuando pending.mayor_edad_confirmado=true', async () => {
+    const mocks = makeMocks();
+    const fakeClient = makeFakeMetaClient('ok');
+    process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
+    const { module: m } = await instantiate(mocks, { fakeMetaClient: fakeClient });
+    const txt = [PEDIDO_VALIDO, 'Mayor 18: si'].join('\n');
+    await m._despacharEntrante('vapers', { from: '34699999999', message_id: 'wamid.1', text: txt });
+    const [request_id] = [...m.pendingPedidos.keys()];
+    mocks.published.length = 0;
+    await m.onPedidoCreado({
+      data: { tipo: 'tienda', correlation_id: request_id, pedido_id: 'p1', codigo_recogida: 'ABC123', expira_at: '2026-05-28T00:00:00.000Z' }
+    });
+    const tg = publishedOf(mocks, 'telegram.send_message.request');
+    assert.strictEqual(tg.length, 1);
+    assert.ok(tg[0].text.includes('Mayor 18: confirmado en PWA'), 'staff debe ver flag de mayoria');
+    delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
+    await m.onUnload();
+  });
+
   await testAsync('parser · nonce con caracteres ambiguos rechazado', async () => {
     const txt = ['PEDIDO vapers-O0I1', '- 1 x cosa', 'Total: 5,00 EUR', 'Palabra clave: abc'].join('\n');
     const r = parsearPedido(txt);

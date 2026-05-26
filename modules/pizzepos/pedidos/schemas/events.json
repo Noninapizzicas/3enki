@@ -39,6 +39,7 @@
                 "codigo_recogida": {"type": "string", "pattern": "^[A-HJ-NP-Z2-9]{4,8}$"},
                 "expira_at": {"type": "string", "format": "date-time"},
                 "total_centimos": {"type": "integer", "minimum": 0},
+                "mayor_edad_confirmado": {"type": ["boolean", "null"]},
                 "project_slug": {"type": "string"},
                 "project_id": {"type": ["string", "null"]},
                 "ref_display": {"type": ["string", "null"]},

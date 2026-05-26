@@ -610,6 +610,31 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  await testAsync('tienda · mayor_edad_confirmado=true se persiste + viaja en pedido.creado', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleCreatePedidoTienda(validInputTienda({ mayor_edad_confirmado: true }));
+    assert.ok(isCanonicalSuccess(r));
+    const pedido = m.pedidos.get(r.data.pedido_id);
+    assert.strictEqual(pedido.mayor_edad_confirmado, true);
+    assert.ok(pedido.mayor_edad_confirmado_at, 'timestamp se asigna');
+    const evs = publishedOf(mocks, 'pedido.creado');
+    assert.strictEqual(evs[0].mayor_edad_confirmado, true);
+    await m.onUnload();
+  });
+
+  await testAsync('tienda · mayor_edad_confirmado omitido queda null + NO viaja en pedido.creado', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleCreatePedidoTienda(validInputTienda());
+    const pedido = m.pedidos.get(r.data.pedido_id);
+    assert.strictEqual(pedido.mayor_edad_confirmado, null);
+    assert.strictEqual(pedido.mayor_edad_confirmado_at, null);
+    const evs = publishedOf(mocks, 'pedido.creado');
+    assert.strictEqual(evs[0].mayor_edad_confirmado, undefined, 'null no debe propagarse al evento (omit-if-null)');
+    await m.onUnload();
+  });
+
   await testAsync('compatibilidad POS · handleCreatePedido sigue funcionando idéntico', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);

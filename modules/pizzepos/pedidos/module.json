@@ -222,9 +222,10 @@
           },
           "total_centimos":   { "type": "integer", "minimum": 0, "description": "Total del pedido en centimos." },
           "canal_origen":     { "type": "string", "enum": ["whatsapp", "web", "manual"], "description": "Canal por el que llego el pedido." },
-          "cliente_telefono": { "type": "string", "description": "Numero del cliente en E.164 sin + (ej: 34600000000). Transitorio, se desecha al cerrar el pedido. Opcional." },
-          "palabra_clave":    { "type": "string", "pattern": "^[a-z]{3}$", "description": "Palabra clave anti-fraude (3 chars [a-z]). Opcional." },
-          "expira_horas":     { "type": "integer", "minimum": 1, "maximum": 720, "description": "Horas hasta que la reserva expira. Default 24h." },
+          "cliente_telefono":      { "type": "string", "description": "Numero del cliente en E.164 sin + (ej: 34600000000). Transitorio, se desecha al cerrar el pedido. Opcional." },
+          "palabra_clave":         { "type": "string", "pattern": "^[a-z]{3}$", "description": "Palabra clave anti-fraude (3 chars [a-z]). Opcional." },
+          "mayor_edad_confirmado": { "type": "boolean", "description": "Flag opcional: el cliente confirmo mayoria de edad en la PWA (gate del proyecto si activa verificacion_edad). null si el proyecto no requiere verificacion. NO sustituye verificacion fisica del DNI al recoger." },
+          "expira_horas":          { "type": "integer", "minimum": 1, "maximum": 720, "description": "Horas hasta que la reserva expira. Default 24h." },
           "notas_generales":  { "type": "string", "description": "Notas generales del pedido. Opcional." },
           "correlation_id":   { "type": "string", "description": "Correlation id propagado del originador." }
         },

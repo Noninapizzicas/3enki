@@ -384,6 +384,7 @@ class PedidosModule extends BaseModule {
         canal_origen,
         cliente_telefono,
         palabra_clave,
+        mayor_edad_confirmado,
         expira_horas,
         notas_generales,
         correlation_id
@@ -458,6 +459,11 @@ class PedidosModule extends BaseModule {
         codigo_recogida,
         palabra_clave: palabra_clave || null,
         cliente_telefono: cliente_telefono || null,
+        // Decision 6.2 = C: configurable por proyecto. Si la PWA mostro gate
+        // y el cliente lo paso, este flag llega como true. Si el proyecto no
+        // activa verificacion, llega null (sin info — no aplica).
+        mayor_edad_confirmado: mayor_edad_confirmado === true ? true : (mayor_edad_confirmado === false ? false : null),
+        mayor_edad_confirmado_at: mayor_edad_confirmado === true ? created_at : null,
         expira_at,
         notas_generales: notas_generales || null,
         created_at,
@@ -880,6 +886,12 @@ class PedidosModule extends BaseModule {
     if (pedido.project_slug) payload.project_slug = pedido.project_slug;
     if (pedido.total_centimos !== undefined && pedido.total_centimos !== null) {
       payload.total_centimos = pedido.total_centimos;
+    }
+    // mayor_edad_confirmado SI viaja en el evento (es metadata operativa, no PII).
+    // El staff puede usarlo para auditoria — el dependiente sigue exigiendo DNI
+    // en presencial si la regulacion lo manda.
+    if (pedido.mayor_edad_confirmado !== undefined && pedido.mayor_edad_confirmado !== null) {
+      payload.mayor_edad_confirmado = pedido.mayor_edad_confirmado;
     }
     await this._publicarEvento('pedido.creado', payload, sourcePayload);
   }

@@ -62,7 +62,7 @@ Formato: **enunciado · opciones · recomendación del doc**.
 
 Recomendación del doc: **A**. Suficiente para volumen bajo de barrio. Si emerge problema, evolucionar a B.
 
-Mi respuesta: ___
+Mi respuesta: **B — Código + palabra clave (3 chars) que el cliente elige al confirmar y dice al recoger.** (Cerrada 2026-05-26.)
 
 ---
 
@@ -74,7 +74,7 @@ Mi respuesta: ___
 
 Recomendación del doc: **C**. Por proyecto.
 
-Mi respuesta: ___
+Mi respuesta: **C — Configurable por proyecto.** Vapers/estanco → gate al entrar. Panadería/floristería/frutería/carnicería → nada. (Cerrada 2026-05-26.)
 
 ---
 
@@ -87,7 +87,7 @@ Default 24h. ¿Configurable por proyecto o fijo?
 
 Recomendación del doc: **B**. Cero trabajo extra, permite ajustar por tipo de negocio.
 
-Mi respuesta: ___
+Mi respuesta: **B — Configurable por proyecto** desde día 1 (campo en `data/projects/{slug}/inventario.config.json`). (Cerrada 2026-05-26.)
 
 ---
 
@@ -106,6 +106,35 @@ Mi respuesta: ___
    - Fase 8: tests + audit runtime E2E (1-2h).
    - Fase 9: cierre + commit + push.
 4. **NUNCA crear PR ni mergear sin OK explícito.**
+
+---
+
+## 3.bis · Estado de avance (sesión 2026-05-26)
+
+Sesión arrancada con OK del usuario tras cerrar las 3 decisiones. Ritmo: "continúa después meto las credenciales" → avanzar todo lo que no dependa de los datos reales de Meta y dejarlos como `<PENDIENTE>` en el config del proyecto.
+
+### Fase 1 — Setup WhatsApp Cloud API · estado
+
+| Sub-paso | Quién | Estado |
+|---|---|---|
+| 1.1 Cuenta Meta Business + WABA + número | usuario | pendiente, fuera del repo |
+| 1.2 Generar token permanente | usuario | pendiente |
+| 1.3 Decidir URL pública del webhook + verify_token | usuario + LLM | LLM cierra `webhook_path: /whatsapp/webhook/vapers`; URL pública pendiente del usuario |
+| 1.4 `data/projects/vapers/config/project.json` con placeholders | LLM | ✅ creado con campos `<PENDIENTE>` |
+| 1.5 Alta de los 2 secretos en `credential-manager` | usuario | pendiente, vía `POST /credentials` |
+| 1.6 Smoke test envío con curl a Meta | usuario | pendiente |
+
+Provider names canonizados (Fase 2 los espera resolver):
+- `META_WHATSAPP` + level `PROJECT` + identifier `vapers` → token de acceso permanente Cloud API.
+- `META_WHATSAPP_VERIFY_TOKEN` + level `PROJECT` + identifier `vapers` → verify token del webhook (cadena aleatoria que elige el usuario).
+
+Resulta en `.env` keys:
+- `META_WHATSAPP_API_KEY_PROJECT_vapers`
+- `META_WHATSAPP_VERIFY_TOKEN_API_KEY_PROJECT_vapers`
+
+### Próximo paso bloqueado en OK del usuario
+
+Fase 2 (módulo `whatsapp-bot` POC2) NO depende de los datos reales de Meta para escribirse: el módulo resuelve token + verify_token vía `credential-manager` en runtime, y lee `phone_number_id`/`waba_id`/`webhook_path` del config del proyecto. Se puede escribir entera con los `<PENDIENTE>` en el config y validarse con tests unitarios + audit runtime parcial. El smoke test E2E real con Meta solo es posible cuando 1.1-1.6 estén completos.
 
 ---
 
@@ -170,11 +199,11 @@ Si dudas, frase canónica: *"Vuelve al doc maestro
 | 14 | Tarifas | **NO se usan**, precio directo en producto |
 | 15 | Notificación staff | `telegram-service` (ya en repo) reusado |
 
-### Decisiones abiertas (3)
+### Decisiones abiertas (3) → cerradas 2026-05-26
 
-1. Anti-fraude código (visual / palabra clave / QR firmado).
-2. Gate edad (antes catálogo / antes pedido / por proyecto).
-3. Expiración stock (fija 24h / configurable por proyecto).
+1. ~~Anti-fraude código~~ → **B**: código + palabra clave (3 chars) que el cliente elige y dice al recoger.
+2. ~~Gate edad~~ → **C**: configurable por proyecto (vapers/estanco gate; resto no).
+3. ~~Expiración stock~~ → **B**: configurable por proyecto desde día 1 (`data/projects/{slug}/inventario.config.json`).
 
 ### Módulos nuevos a crear (3)
 

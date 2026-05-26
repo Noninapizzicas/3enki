@@ -7,7 +7,7 @@
     "generado_por": "arquitectura/decisiones/_validators/blueprint-eventos-conscientes.validate.js",
     "notas": "Catalogo curado de eventos del bus indexado por nombre. Incluye publishers (blueprints con publish/publishAndWait en su pseudocodigo + module.json.events.publishes[]) y subscribers (blueprints con eventos_que_escucho[] + module.json.events.subscribes[]). El validador lo regenera cada vez. NO editar a mano."
   },
-  "total_eventos": 405,
+  "total_eventos": 419,
   "eventos": {
     "*.actualizado": {
       "publishers": [],
@@ -592,6 +592,10 @@
       ],
       "subscribers": [
         {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "handler": "onCatalogoActualizado"
+        },
+        {
           "source": "modules/pizzepos/comandero/module.json",
           "handler": "onCatalogoActualizado"
         },
@@ -936,6 +940,33 @@
         }
       ]
     },
+    "comandero-cliente.bundle.fallido": {
+      "publishers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "comandero-cliente.bundle.generado": {
+      "publishers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "comandero-cliente.presentacion.actualizada": {
+      "publishers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
     "comandero.enviar_cocina": {
       "publishers": [
         {
@@ -1158,6 +1189,10 @@
         {
           "source": "modules/telegram-service/module.json",
           "handler": "onCredentialDeleted"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onCredentialDeleted"
         }
       ]
     },
@@ -1207,6 +1242,10 @@
         },
         {
           "source": "modules/telegram-service/module.json",
+          "handler": "onCredentialSaved"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
           "handler": "onCredentialSaved"
         }
       ]
@@ -2624,6 +2663,60 @@
       ],
       "subscribers": []
     },
+    "inventario.ajustado": {
+      "publishers": [
+        {
+          "source": "modules/inventario/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "inventario.confirmado": {
+      "publishers": [
+        {
+          "source": "modules/inventario/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "inventario.reserva.creada": {
+      "publishers": [
+        {
+          "source": "modules/inventario/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "inventario.reserva.expirada": {
+      "publishers": [
+        {
+          "source": "modules/inventario/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "inventario.reserva.liberada": {
+      "publishers": [
+        {
+          "source": "modules/inventario/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "inventario.stock.bajo_minimo": {
+      "publishers": [
+        {
+          "source": "modules/inventario/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
     "invoke_agent": {
       "publishers": [],
       "subscribers": [
@@ -3052,6 +3145,10 @@
       ],
       "subscribers": [
         {
+          "source": "modules/inventario/module.json",
+          "handler": "onPedidoCancelado"
+        },
+        {
           "source": "modules/pizzepos/cocina/module.json",
           "handler": "onPedidoCancelado"
         },
@@ -3069,6 +3166,10 @@
         }
       ],
       "subscribers": [
+        {
+          "source": "modules/inventario/module.json",
+          "handler": "onPedidoCompletado"
+        },
         {
           "source": "modules/pizzepos/cobros/module.json",
           "handler": "onPedidoCompletado"
@@ -3094,6 +3195,19 @@
         {
           "source": "modules/pizzepos/persistencia-comandero/module.json",
           "handler": "onPedidoCreado"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onPedidoCreado"
+        }
+      ]
+    },
+    "pedido.crear-tienda.response": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onPedidoCrearTiendaResponse"
         }
       ]
     },
@@ -3467,6 +3581,10 @@
       ],
       "subscribers": [
         {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "handler": "onProductoActualizado"
+        },
+        {
           "source": "modules/pizzepos/comandero/module.json",
           "handler": "onProductoActualizado"
         },
@@ -3484,6 +3602,10 @@
         }
       ],
       "subscribers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "handler": "onProductoCreado"
+        },
         {
           "source": "modules/pizzepos/comandero/module.json",
           "handler": "onProductoActualizado"
@@ -3509,7 +3631,12 @@
           "ref": "module.json.events.publishes"
         }
       ],
-      "subscribers": []
+      "subscribers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "handler": "onProductoEliminado"
+        }
+      ]
     },
     "project.activate": {
       "publishers": [],
@@ -3528,6 +3655,10 @@
         }
       ],
       "subscribers": [
+        {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "handler": "onProjectActivated"
+        },
         {
           "source": "modules/filesystem/module.json",
           "handler": "onProjectActivated"
@@ -4143,6 +4274,10 @@
       ],
       "subscribers": [
         {
+          "source": "modules/comandero-cliente-builder/module.json",
+          "handler": "onTarifasConfigActualizada"
+        },
+        {
           "source": "modules/pizzepos/comandero/module.json",
           "handler": "onTarifasConfigActualizada"
         }
@@ -4545,6 +4680,42 @@
         {
           "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
           "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.envio.fallido": {
+      "publishers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.mensaje.enviado": {
+      "publishers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.mensaje.recibido": {
+      "publishers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.pedido.detectado": {
+      "publishers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "ref": "module.json.events.publishes"
         }
       ],
       "subscribers": []

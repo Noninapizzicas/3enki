@@ -1,0 +1,136 @@
+{
+  "name": "whatsapp-bot",
+  "version": "1.0.0",
+  "description": "Bot escueto multi-proyecto sobre WhatsApp Cloud API (Meta). Maquina de estados pequena: webhook recibe mensaje, parser detecta si es saludo o pedido formateado de la PWA tienda; si es pedido publica pedido.crear.request a pedidos y notifica al staff via telegram-service; si es saludo responde con el link de la PWA del proyecto. Multi-proyecto: mapping phone_number_id -> project_slug construido al onLoad escaneando data/projects/*/config/project.json. Credenciales (token Cloud API + verify_token del webhook) resueltas via credential-manager (providers META_WHATSAPP y META_WHATSAPP_VERIFY_TOKEN). Reusa telegram-service para notificacion al staff y pedidos para creacion canonica.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+
+  "horizonte": "vertical-tienda-pwa-sin-datos",
+  "horizonte_doc": "arquitectura/decisiones/propuestas/vertical-tienda-pwa-sin-datos.md",
+
+  "events": {
+    "publishes": [
+      {
+        "event": "whatsapp.mensaje.recibido",
+        "description": "Mensaje entrante desde el webhook de Meta. Util para audit y observabilidad. NO requiere consumer (informativo).",
+        "payload": "{ project_slug, phone_number_id, from, message_type, text?, message_id, timestamp, correlation_id }"
+      },
+      {
+        "event": "whatsapp.pedido.detectado",
+        "description": "El parser identifico un pedido bien formado en el mensaje entrante. NO requiere consumer en v1 (informativo, audit).",
+        "payload": "{ project_slug, from, items[], total_centimos, palabra_clave, message_id, correlation_id }"
+      },
+      {
+        "event": "whatsapp.mensaje.enviado",
+        "description": "Confirmacion de envio exitoso al cliente. Informativo.",
+        "payload": "{ project_slug, to, message_id, kind, correlation_id }"
+      },
+      {
+        "event": "whatsapp.envio.fallido",
+        "description": "Fallo al enviar mensaje. Causa: rate limit, api error, numero invalido, credencial no disponible.",
+        "payload": "{ project_slug, to, error_code, error_message, correlation_id }"
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "credential.saved",
+        "handler": "onCredentialSaved",
+        "description": "Detecta alta de credencial META_WHATSAPP* y rehidrata el mapping de proyectos activos."
+      },
+      {
+        "event": "credential.deleted",
+        "handler": "onCredentialDeleted",
+        "description": "Detecta baja de credencial META_WHATSAPP* y marca el proyecto como no operativo."
+      },
+      {
+        "event": "pedido.creado",
+        "handler": "onPedidoCreado",
+        "description": "Evento informativo de pedidos tras handleCreatePedidoTienda exitoso. Filtramos por tipo='tienda' y correlation_id. Confirma al cliente WhatsApp con codigo de recogida y notifica al staff via telegram-service."
+      },
+      {
+        "event": "pedido.crear-tienda.response",
+        "handler": "onPedidoCrearTiendaResponse",
+        "description": "Respuesta canonica auto-wireada de la tool pedido.crear-tienda (tools.contract v1.2). Solo procesamos error path — success lo trata onPedidoCreado con shape mas rico. Avisa al cliente si pedidos rechazo el shape (INVALID_INPUT, CONFLICT_STATE, etc)."
+      }
+    ]
+  },
+
+  "eventos_publicados_que_requieren_consumer": [
+    {
+      "event": "pedido.crear-tienda",
+      "consumer_esperado": "modules/pizzepos/pedidos",
+      "razon": "Handoff principal del flujo: cuando el cliente envia un pedido bien formado por WhatsApp, este modulo invoca la tool pedido.crear-tienda (auto-wire bus) para que pedidos lo persista plano (tipo: 'tienda', sin cuenta_id) y devuelva pedido_id + codigo_recogida via la response correlacionada. La tool pedido.crear-tienda se anade a pedidos en la Fase 2 del horizonte vertical-tienda-pwa-sin-datos (re-secuenciada antes de este modulo)."
+    },
+    {
+      "event": "telegram.send_message.request",
+      "consumer_esperado": "modules/telegram-service",
+      "razon": "Notificacion al staff cuando llega un pedido nuevo. La palabra clave NO se incluye en este payload (anti-fraude: el dependiente la pregunta al cliente al recoger, no la lee del Telegram)."
+    }
+  ],
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/whatsapp/webhook/:project",
+      "handler": "handleWebhookVerify",
+      "description": "Verificacion inicial del webhook por Meta. Espera query params hub.mode, hub.verify_token, hub.challenge. Resuelve verify_token via credential-manager (provider META_WHATSAPP_VERIFY_TOKEN, level PROJECT, identifier=:project) y responde con hub.challenge si coincide."
+    },
+    {
+      "method": "POST",
+      "path": "/whatsapp/webhook/:project",
+      "handler": "handleWebhookEvent",
+      "description": "Recepcion de mensajes desde Meta Cloud API. Parsea payload Meta v21, extrae mensaje del cliente, publica whatsapp.mensaje.recibido y dispara maquina de estados (saludo vs pedido)."
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del modulo: lista proyectos activos (con credencial + config completo)."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "whatsapp.enviar",
+      "description": "Enviar texto plano al cliente via WhatsApp Cloud API. Reusable por otros modulos del sistema (ej. notificaciones outbound v2). Requiere proyecto operativo (credencial META_WHATSAPP + config phone_number_id no PENDIENTE).",
+      "handler": "handleToolEnviar",
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "AUTHENTICATION_REQUIRED",
+        "UPSTREAM_UNREACHABLE",
+        "UPSTREAM_INVALID_RESPONSE",
+        "RATE_LIMITED"
+      ],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": {
+            "type": "string",
+            "description": "Slug del proyecto (ej: vapers). Debe estar operativo."
+          },
+          "to": {
+            "type": "string",
+            "description": "Numero del cliente en formato E.164 sin el + (ej: 34600000000)"
+          },
+          "text": {
+            "type": "string",
+            "description": "Texto plano a enviar. Max 4096 chars (limite de WhatsApp)."
+          }
+        },
+        "required": ["project_slug", "to", "text"]
+      }
+    }
+  ],
+
+  "config": {
+    "meta_api_version": "v21.0",
+    "meta_api_base": "https://graph.facebook.com",
+    "http_timeout_ms": 8000,
+    "pedido_wait_timeout_ms": 12000,
+    "credential_cache_ttl_ms": 300000,
+    "max_text_length": 4096,
+    "projects_dir": "data/projects"
+  }
+}

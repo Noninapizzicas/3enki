@@ -59,6 +59,8 @@
     "test:system-inspector": "node tests/unit/system-inspector.test.js",
     "test:prompt-manager": "node tests/unit/prompt-manager.test.js",
     "test:conversation-export": "node tests/unit/conversation-export.test.js",
+    "test:audit-helpers-capture-bus": "node tests/unit/audit-helpers-capture-bus.test.js",
+    "test:audit-helpers-analyze-session": "node tests/unit/audit-helpers-analyze-session.test.js",
     "test:pdf-viewer": "node tests/unit/pdf-viewer.test.js",
     "test:telegram-service": "node tests/unit/telegram-service.test.js",
     "test:whatsapp-bot": "node tests/unit/whatsapp-bot.test.js",

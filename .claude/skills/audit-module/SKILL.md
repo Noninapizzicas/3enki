@@ -17,6 +17,18 @@ Una conversación realista por módulo. Claude juzga. Output narrativo.
 
 ## Procedure
 
+### 0. Captura del bus (background)
+
+Antes de tocar la conversación, arranco `capture-bus.js` en background para capturar TODOS los eventos del bus que pasen durante la sesión. Esto es lo que después permite ver causalidad real (no solo lo que el LLM dijo haber hecho).
+
+```bash
+mkdir -p audit/<modulo>-<provider>-<TS>
+node scripts/audit-helpers/capture-bus.js audit/<modulo>-<provider>-<TS>/bus-capture.jsonl &
+CAPTURE_PID=$!
+```
+
+El capturador se queda escuchando hasta que lo mate al final (paso 4) o hasta que se cumpla `--idle-timeout` si lo paso.
+
 ### 1. Comprender el módulo (sin cambios)
 
 Leo `module.json`, `prompt.json`, `context.json` del módulo. Identifico tools y agentes con scope incluyendo el módulo.
@@ -42,7 +54,33 @@ NO se hace forced-agent si:
 - El agente funcionó bien (no hace falta verificar lo que ya funciona)
 - Hay varios agentes en scope que nunca aparecen (eso es finding de catálogo/triggers)
 
-### 4. Reporte narrativo
+### 4. Cierre + análisis estructurado
+
+Antes de redactar el reporte cierro la captura y corro el analyzer:
+
+```bash
+node scripts/audit-helpers/fetch-export.js $CONV $PROJ_UUID audit/<modulo>-<provider>-<TS>/chat-export.json
+kill -INT $CAPTURE_PID  # cierre limpio con flush
+sleep 1
+node scripts/audit-helpers/analyze-session.js \
+  --export   audit/<modulo>-<provider>-<TS>/chat-export.json \
+  --capture  audit/<modulo>-<provider>-<TS>/bus-capture.jsonl \
+  --conversation $CONV \
+  --out      audit/<modulo>-<provider>-<TS>/analysis.json
+```
+
+El `analysis.json` (formato `audit-session-analysis-v1`) trae las secciones que necesito leer para escribir el reporte sin inventar:
+
+- `turns[]` — cadena causal por turno: trigger event, eventos del bus en la ventana, tool_calls reportados por el LLM, duración, providers usados
+- `orphans` — requests sin response correlacionado (handoffs rotos visibles)
+- `errors_and_warnings` — eventos `.failed` + entries error/warning del timeline, ordenados por ts
+- `latencies` — pares request/response con delta_ms
+- `coverage` — módulos emitidos / tools invocadas / agentes ejecutados (lo que cubrió la conversación vs lo que el módulo declara)
+- `events_by_module` — desglose por módulo emisor
+
+Detector de alucinación clave: un `tool_calls_reported` del assistant que no aparece en `events_by_module` o que aparece pero su `.request` está en `orphans` significa que el LLM dijo haber hecho algo que el bus no refleja.
+
+### 5. Reporte narrativo
 
 `audit/<modulo>-<provider>-<TS>/reporte.md` con secciones libres:
 
@@ -65,18 +103,24 @@ Sin schema YAML. Sin metrics.json. Sin rollups. Si la información merece tabla,
 | `send-message.js <proj_uuid> <conv> <page> "msg" [wait_ms] [--provider X] [--model Y] [--thinking enabled\|disabled]` | Envía + espera + META |
 | `force-agent.js <proj_uuid> <conv> <agent> "task" [wait_ms] [--provider X] [--model Y]` | Triage diagnóstico, no rutina |
 | `fetch-export.js <conv> <proj_uuid> [out.json]` | Descarga export |
+| `capture-bus.js <out.jsonl> [--idle-timeout ms] [--max-duration ms] [--topic-filter regex]` | Captura cruda de TODOS los eventos del bus a JSONL (background) |
+| `analyze-session.js --export <e.json> --capture <c.jsonl> [--conversation id] [--out path]` | Correla export + capture, JSON `audit-session-analysis-v1` |
 
 Helpers exigen `project_uuid`, no nombre.
+
+Detalle operativo de la pareja capture+analyze: ver `arquitectura/decisiones/_contratos/manual-audit-bus-capture.contract.json`.
 
 ## Output
 
 ```
 audit/<modulo>-<provider>-<TS>/
+  bus-capture.jsonl             # TODOS los eventos del bus durante la sesión
   chat-export.json              # la conversación natural
+  analysis.json                 # audit-session-analysis-v1 (estructurado)
   triage/                       # solo si hubo escalación
     <agente-X>.json
     <agente-Y>.json
-  reporte.md                    # narrativo con juicio
+  reporte.md                    # narrativo con juicio (lee analysis.json)
 ```
 
 ## Cuándo usar

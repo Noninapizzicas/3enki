@@ -61,7 +61,8 @@ const VALIDATORS = [
   { id: 'llm-runtime-discipline', file: 'arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js' },
   { id: 'blueprint-eventos-conscientes', file: 'arquitectura/decisiones/_validators/blueprint-eventos-conscientes.validate.js' },
   { id: 'dinamica-de-trabajo-companero', file: 'arquitectura/decisiones/_validators/dinamica-de-trabajo-companero.validate.js' },
-  { id: 'disciplina-llm-operador', file: 'arquitectura/decisiones/_validators/disciplina-llm-operador.validate.js' }
+  { id: 'disciplina-llm-operador', file: 'arquitectura/decisiones/_validators/disciplina-llm-operador.validate.js' },
+  { id: 'project-identity', file: 'arquitectura/decisiones/_validators/project-identity.validate.js' }
 ];
 
 const RED   = '\x1b[31m';

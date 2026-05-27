@@ -135,9 +135,14 @@ Ficheros bajo `{project.base_path}/storage/comandero-cliente-builder/`:
   `comandero-cliente.imagen.subir`. La `imagen_url` canónica se
   resuelve relativa al `base_path` del proyecto.
 
-**Escrituras vía `fs.write.request`** (evento canónico del módulo
-`filesystem`). Cero acceso directo a `fs.*` desde el index.js del
-builder.
+**Escrituras vía `SafeUpdate`** (utility pura copiada de
+`modules/inventario/services/safe-update.js` a
+`modules/comandero-cliente-builder/services/`) + `fs.promises`
+nativo de Node. Patrón canónico del horizonte
+`vertical-tienda-pwa-sin-datos` validado en `inventario` y
+`whatsapp-bot`. NO se usa el evento `fs.write.request` (ese patrón
+es de módulos como `recetario-creativo` que necesitan request-response
+correlacionado por bus).
 
 **Cumple `persistence.contract`**: solo escribe en
 `{project.base_path}/storage/comandero-cliente-builder/`, no accede a
@@ -215,8 +220,14 @@ codes por entidad. Sin stack traces en payloads del bus.
   `carta-manager` y le llegan al builder por `catalogo.actualizado`
   como cualquier otro cambio. **No es consumer ni emisor especial**
   desde la óptica del builder.
-- **`filesystem`**: para escribir el bundle a disco. Vía evento
-  `fs.write.request` (canónico).
+- **`filesystem` (módulo nativo Node, no el módulo del bus)**: para
+  escribir el bundle a disco e imágenes. Patrón canónico del
+  horizonte vertical-tienda-pwa-sin-datos: cada módulo usa `fs.promises`
+  + `SafeUpdate` (utility pura copiada de `inventario/services/`)
+  para escritura atómica con lock por path. NO se usa el evento
+  `fs.write.request` — ese patrón es para módulos que NO persisten
+  directamente (recetario-creativo). El horizonte vertical-tienda
+  optó por filesystem nativo por simplicidad operativa.
 - **`project-manager`**: para resolver `project_id` activo en tools
   invocadas sin él explícito.
 - **`tienda-api` (módulo hermano de Fase 6a, ver mapa propio)**: el

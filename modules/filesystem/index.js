@@ -170,7 +170,8 @@ class FilesystemModule extends BaseModule {
   // Patron: invoca handle*, propaga shape canonico al response.
   // ==========================================
 
-  async onWriteRequest(event)  { return this._busDispatch(event, 'write',  'fs.write.response',  ['path', 'content', 'encoding']); }
+  async onWriteRequest(event)  { return this._busDispatch(event, 'write',  'fs.write.response',  ['path', 'content', 'encoding', 'expected_hash']); }
+  async onEditRequest(event)   { return this._busDispatch(event, 'edit',   'fs.edit.response',   ['path', 'patches', 'expected_hash']); }
   async onReadRequest(event)   { return this._busDispatch(event, 'read',   'fs.read.response',   ['path']); }
   async onDeleteRequest(event) { return this._busDispatch(event, 'delete', 'fs.delete.response', ['path']); }
   async onListRequest(event)   { return this._busDispatch(event, 'list',   'fs.list.response',   ['path']); }
@@ -617,7 +618,172 @@ class FilesystemModule extends BaseModule {
     }
   }
 
+  // ==========================================
+  // handleEdit — JSON Patch RFC 6902 sobre archivos JSON
+  // ==========================================
+  // v1: solo 'op:add' soportado. Cierra el caso testigo "salmorejo perdido"
+  // (audit 2026-05-25) de raiz — el caller declara el patch declarativo en
+  // lugar de componer el archivo entero. Imposible perder entradas viejas.
+  // CAS opcional via expected_hash (reutiliza la mecanica de handleWrite).
+  // Resto de operaciones (remove, replace, move, copy, test) se anyaden
+  // cuando se necesiten, sin libs externas — RFC 6902 es algoritmo acotado.
+
+  async handleEdit(data) {
+    try {
+      const filePath = data?.path || data?.file_path;
+      if (!filePath) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
+          { kind: 'domain', field: 'path' });
+      }
+      if (!Array.isArray(data.patches) || data.patches.length === 0) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'patches (non-empty array) is required',
+          { kind: 'domain', field: 'patches' });
+      }
+
+      const safePath = this.validatePath(filePath);
+
+      let currentContent;
+      try { currentContent = await fs.readFile(safePath, 'utf-8'); }
+      catch (e) {
+        if (e.code === 'ENOENT') {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'File not found',
+            { entity_type: 'file', entity_id: filePath });
+        }
+        throw e;
+      }
+
+      // CAS opt-in: si llega expected_hash, valida ANTES de modificar.
+      if (typeof data.expected_hash === 'string') {
+        const currentHash = this._computeHash(currentContent);
+        if (currentHash !== data.expected_hash) {
+          this.metrics?.increment('filesystem.edit.cas_conflict', { reason: 'hash_mismatch' });
+          return this._errorResponse(409, 'CONFLICT_STATE',
+            'File hash changed since read; reload and retry',
+            { kind: 'domain', path: filePath,
+              expected_hash: data.expected_hash, current_hash: currentHash });
+        }
+      }
+
+      let doc;
+      try { doc = JSON.parse(currentContent); }
+      catch (e) {
+        return this._errorResponse(400, 'INVALID_INPUT',
+          `File is not valid JSON: ${e.message}`,
+          { kind: 'domain', field: 'content', path: filePath });
+      }
+
+      try { doc = this._applyJsonPatchOperations(doc, data.patches); }
+      catch (e) {
+        return this._errorResponse(400, 'INVALID_INPUT',
+          `patch failed: ${e.message}`,
+          { kind: 'domain', field: 'patches' });
+      }
+
+      const newContent = JSON.stringify(doc, null, 2);
+      await fs.writeFile(safePath, newContent, 'utf-8');
+
+      const fileSize = Buffer.byteLength(newContent, 'utf-8');
+      await this._publicarEvento('fs.file.updated', { path: filePath, size: fileSize });
+      this.metrics?.increment('filesystem.edit.success', { patches: data.patches.length });
+
+      const newHash = this._computeHash(newContent);
+      return {
+        status: 200,
+        data: {
+          path: filePath, file_path: filePath,
+          size: fileSize,
+          hash: newHash,
+          patches_applied: data.patches.length
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('filesystem.edit.failed', err, 'edit');
+    }
+  }
+
+  // JSON Patch RFC 6902 — v1 solo soporta 'op:add'.
+  _applyJsonPatchOperations(doc, patches) {
+    for (let i = 0; i < patches.length; i++) {
+      const patch = patches[i];
+      if (!patch || typeof patch !== 'object') {
+        throw new Error(`patch[${i}] must be an object`);
+      }
+      const op = patch.op;
+      if (op !== 'add') {
+        throw new Error(`patch[${i}].op "${op}" not supported (v1 only implements "add")`);
+      }
+      if (typeof patch.path !== 'string') {
+        throw new Error(`patch[${i}].path must be a string`);
+      }
+      if (!('value' in patch)) {
+        throw new Error(`patch[${i}].value is required for op "add"`);
+      }
+      doc = this._jsonPatchAdd(doc, patch.path, patch.value);
+    }
+    return doc;
+  }
+
+  // JSON Pointer RFC 6901 — escapes: ~1 -> /, ~0 -> ~ (orden importa).
+  _parseJsonPointer(pointer) {
+    if (pointer === '') return [];
+    if (pointer[0] !== '/') {
+      throw new Error(`Invalid JSON Pointer: "${pointer}" must start with "/" or be empty`);
+    }
+    return pointer.slice(1).split('/').map(seg =>
+      seg.replace(/~1/g, '/').replace(/~0/g, '~')
+    );
+  }
+
+  // RFC 6902 "add": inserta value en la posicion del pointer.
+  // - Pointer vacio: reemplaza el documento entero.
+  // - Pointer apunta a una posicion de array: inserta (no reemplaza).
+  //   "/-" como ultimo token significa "append al final del array".
+  // - Pointer apunta a una clave de objeto: la crea o reemplaza.
+  _jsonPatchAdd(doc, pointer, value) {
+    const tokens = this._parseJsonPointer(pointer);
+    if (tokens.length === 0) {
+      return value; // reemplazo de root
+    }
+    const lastToken = tokens[tokens.length - 1];
+    const parentTokens = tokens.slice(0, -1);
+    let parent = doc;
+    for (const token of parentTokens) {
+      if (Array.isArray(parent)) {
+        const idx = parseInt(token, 10);
+        if (Number.isNaN(idx) || idx < 0 || idx >= parent.length) {
+          throw new Error(`Path not found: array index "${token}" out of range`);
+        }
+        parent = parent[idx];
+      } else if (parent !== null && typeof parent === 'object') {
+        if (!(token in parent)) {
+          throw new Error(`Path not found: key "${token}" not in object`);
+        }
+        parent = parent[token];
+      } else {
+        throw new Error(`Cannot navigate into non-container at token "${token}"`);
+      }
+    }
+    if (Array.isArray(parent)) {
+      if (lastToken === '-') {
+        parent.push(value);
+      } else {
+        const idx = parseInt(lastToken, 10);
+        if (Number.isNaN(idx) || idx < 0 || idx > parent.length) {
+          throw new Error(`Invalid array insertion index: "${lastToken}" (length is ${parent.length})`);
+        }
+        parent.splice(idx, 0, value);
+      }
+    } else if (parent !== null && typeof parent === 'object') {
+      parent[lastToken] = value;
+    } else {
+      throw new Error(`Cannot add into non-container at "${pointer}"`);
+    }
+    return doc;
+  }
+
+  // ==========================================
   // Hash canonico para el versionado optimista CAS de fs.write.
+  // ==========================================
   // SHA-256 hex del contenido raw (utf-8 para texto, buffer para binario).
   // Patron tipo ETag de HTTP. Cero normalizacion en v1 (per decision 2A):
   // si dos blueprints serializan el mismo JSON con orden de keys distinto

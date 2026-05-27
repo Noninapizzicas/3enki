@@ -1,0 +1,260 @@
+{
+  "_doc": "Etapa A3 del analisis de persistencia y orden de archivos del sistema Enki. Recorre los 78 modulos del repo y cataloga que declara cada uno sobre persistencia: forma de declaracion, patron canonico o ad-hoc, paths concretos, agrupacion por vertical. Cuantifica el drift entre lo declarado por los modulos y los 6 patrones canonicos del catalogo de persistence.contract v1.1.0.",
+  "etapa_id": "A3-modulos-declarado",
+  "creada": "2026-05-27",
+  "deriva_de": ["A1-filesystem-runtime.json", "A2-contratos-persistencia.json"],
+
+  "objetivo": "Cuantificar como esta el ecosistema de modulos respecto a la disciplina declarada en persistence.contract (declaracion en manifest, patron canonico del catalogo de 6). Identificar cuantos modulos cumplen, cuantos inventan, cuantos no declaran. Detectar drift por vertical y por tipo (blueprint vs JS POC2).",
+
+  "alcance": {
+    "incluye": [
+      "Recorrido programatico de modules/ (excluido node_modules, _archived, _legacy, .*)",
+      "Lectura de cada module.json y blueprint asociado si lo hay",
+      "Clasificacion: vertical, tipo (blueprint|poc2), forma de declaracion de persistencia, patron declarado",
+      "Cuantificacion: cuantos siguen el catalogo canonico vs ad-hoc, por vertical",
+      "Extraccion de paths declarados por los blueprints con estado_persistente"
+    ],
+    "excluye": [
+      "Cruce con disco real (etapa A4)",
+      "Frontend (etapa A5)",
+      "Sintesis cruzada final (etapa A6)",
+      "Propuesta de canonizacion (Fase B)"
+    ]
+  },
+
+  "axiomas_verificados_contra_codigo": [
+    {
+      "axioma": "Todos los modulos siguen la disciplina de persistence.contract.explicit_declaration_in_manifest",
+      "verificado": false,
+      "evidencia": "Solo ~23 de 78 modulos (29%) declaran config.persistence.pattern. 55 modulos no lo declaran. De esos 55: 11 son blueprints (declaran via estado_persistente, forma distinta) y 44 son POC2 que NO declaran de ninguna forma reconocida."
+    },
+    {
+      "axioma": "Los modulos que declaran patron usan UNO de los 6 patrones canonicos del catalogo (in-memory, json-file, json-file-per-project, sqlite, append-only-log, external-delegation)",
+      "verificado": false,
+      "evidencia": "De los 23 modulos que declaran config.persistence.pattern: 8 (35%) usan un patron canonico literal, 15 (65%) inventan patrones ad-hoc (owned-table-via-database-manager, env-file-atomic, sqlite-native-by-project, filesystem-real-per-project, json-html-per-carta, json-file-per-entity-plus-versions, etc.)."
+    },
+    {
+      "axioma": "Los blueprints declaran paths siguiendo una convencion uniforme",
+      "verificado": false,
+      "evidencia": "7 blueprints declaran paths. Ninguno usa prefijo de vertical (ej '/pizzepos/'). Coexisten 3 formas dentro del manifest del blueprint: estado_persistente.paths_relativos (5), estado_persistente.paths_relativos_proyecto (1), estado_persistente.ubicacion_logica (1)."
+    }
+  ],
+
+  "estadisticas": {
+    "total_modulos": 78,
+    "tipo": { "blueprint": 11, "poc2": 67 },
+    "por_vertical": {
+      "(plano)": 42,
+      "pizzepos": 25,
+      "conversacion": 9,
+      "facturacion": 2
+    },
+    "formas_de_declaracion_de_persistencia_observadas": {
+      "config.persistence": 63,
+      "config.data_path": 7,
+      "bp.estado_persistente.paths_relativos": 5,
+      "bp.estado_persistente.paths_relativos_proyecto": 1,
+      "bp.estado_persistente.ubicacion_logica": 1,
+      "_nota": "Algunos modulos tienen varias formas a la vez (ej blueprint con config.persistence Y estado_persistente). Las 5 formas distintas en uso confirman el A2-F6."
+    },
+    "patrones_canonicos_del_catalogo_declarados_literalmente": {
+      "in-memory": 5,
+      "json-file-per-project": 2,
+      "json-file": 1,
+      "_total": 8,
+      "_nota": "Solo 8 modulos usan el vocabulario exacto del catalogo. Los 4 patrones restantes del catalogo (sqlite, append-only-log, external-delegation) NO aparecen declarados literalmente por nadie."
+    },
+    "patrones_ad_hoc_inventados_por_modulos": {
+      "_total": 15,
+      "lista_completa": [
+        "owned-table-via-database-manager",
+        "owned-tables-via-database-manager",
+        "owned-tables-via-database-manager-per-project",
+        "env-file-atomic",
+        "sqlite-native-by-project",
+        "filesystem-real-per-project",
+        "filesystem-read-only",
+        "json-files-per-project-plus-builtin-resources",
+        "json-html-per-carta",
+        "json-file-per-entity-plus-versions",
+        "single-json-per-project",
+        "json-files-per-project",
+        "filesystem-readonly",
+        "delegated-via-database-manager",
+        "sqlite-via-database-manager"
+      ],
+      "_nota": "Cada modulo nombra a su manera. Varios son sinonimos: 'json-files-per-project' vs 'json-file-per-project' (canonico), 'filesystem-readonly' vs 'filesystem-read-only', 'owned-table-via-database-manager' vs 'sqlite-via-database-manager' vs 'delegated-via-database-manager' vs 'owned-tables-via-database-manager-per-project'."
+    },
+    "modulos_sin_persistencia_declarada": {
+      "total": 11,
+      "blueprints_sin_estado": [
+        "pizzepos/escandallo",
+        "pizzepos/menu-generator",
+        "pizzepos/tecnicas",
+        "pizzepos/viabilidad"
+      ],
+      "_nota_blueprints": "Estos 4 blueprint declaran estado_persistente=null o no lo declaran. Son delegadores/transformadores puros (menu-generator delega a carta-manager via carta.creada; escandallo/tecnicas/viabilidad probablemente similar).",
+      "poc2_sin_declarar": [
+        "code-executor",
+        "inventario",
+        "log-manager",
+        "pdf-viewer",
+        "scheduler",
+        "telegram-service",
+        "whatsapp-bot"
+      ],
+      "_nota_poc2": "Estos 7 modulos NO declaran nada sobre persistencia. Si realmente son in-memory, deberian declararlo (la regla explicit_declaration_in_manifest exige declaracion explicita incluso para in-memory). Si persisten algo y no lo declaran: violacion directa de persistence.contract.prohibido.undeclared_persistence_pattern."
+    },
+    "blueprints_con_paths_declarados": {
+      "total": 7,
+      "todos_del_subsistema": "pizzepos",
+      "lista": [
+        {
+          "modulo": "pizzepos/carta-design",
+          "paths": ["/carta-design/designs/<carta_id>__<timestamp>.html (+ companion .json con meta)", "/carta-design/profiles/<profile_id>.json"]
+        },
+        {
+          "modulo": "pizzepos/carta-digital",
+          "paths": ["/carta-digital.json"]
+        },
+        {
+          "modulo": "pizzepos/carta-impresion",
+          "paths": ["/cartas-impresion/<carta_id>.html", "/cartas-impresion/<carta_id>.meta.json"]
+        },
+        {
+          "modulo": "pizzepos/carta-manager",
+          "paths": ["/cartas/<carta_id>.json", "/cartas/versions/<carta_id>/<timestamp>.json"]
+        },
+        {
+          "modulo": "pizzepos/carta-marketing",
+          "paths": ["/storage/config/marca.json"],
+          "bug_conocido": "Double-storage. Filesystem resuelve a <base_path>/storage/storage/config/marca.json"
+        },
+        {
+          "modulo": "pizzepos/carta-scheduler",
+          "paths": ["/carta-scheduler-reglas.json", "/carta-scheduler-pendientes.json"]
+        },
+        {
+          "modulo": "pizzepos/recetas",
+          "paths": ["/recetas.json (relativo al base_path del proyecto)"],
+          "drift": "El valor del path incluye descripcion textual ('relativo al base_path del proyecto') mezclada con el path canonico. Shape feo, parseo problematico."
+        }
+      ],
+      "_observacion_clave": "NINGUNO de los 7 blueprints usa prefijo de vertical. Ninguno declara '/pizzepos/...'. La realidad operativa documentada por el usuario en sesion previa ('la ruta es pizzepos/cartas') NO esta proyectada en NINGUN blueprint."
+    }
+  },
+
+  "hallazgos": [
+    {
+      "id": "A3-F1",
+      "categoria": "violacion_catalogo_persistence",
+      "titulo": "15 patrones ad-hoc inventados por modulos individuales vs 6 patrones canonicos del catalogo",
+      "evidencia": "Conteo programatico: 23 modulos declaran config.persistence.pattern. 8 usan vocabulario canonico (in-memory, json-file, json-file-per-project). 15 inventan: owned-table-via-database-manager, env-file-atomic, sqlite-native-by-project, filesystem-real-per-project, json-html-per-carta, etc. Algunos son sinonimos del canonico (json-files-per-project vs json-file-per-project, filesystem-readonly vs filesystem-read-only).",
+      "implicacion": "El catalogo de persistence.contract no se aplica. Cada modulo nombra su patron como le suena. Cualquier auditoria mecanica que asuma los 6 patrones del catalogo no clasifica correctamente el 65% de los modulos que SI declaran algo.",
+      "severidad": "alta"
+    },
+    {
+      "id": "A3-F2",
+      "categoria": "drift_de_declaracion_obligatoria",
+      "titulo": "11 modulos sin declaracion de persistencia en ninguna forma",
+      "evidencia": "4 blueprints sin estado declarado (escandallo, menu-generator, tecnicas, viabilidad — pueden ser delegadores puros) + 7 POC2 sin declarar (code-executor, inventario, log-manager, pdf-viewer, scheduler, telegram-service, whatsapp-bot).",
+      "implicacion": "Los 4 blueprints son aceptables si su estado_persistente=null es explicito. Los 7 POC2 violan persistence.contract.prohibido.undeclared_persistence_pattern si en codigo persisten algo. Necesita verificacion en A4 (disco) y/o lectura puntual de su index.js (no en este alcance).",
+      "severidad": "media"
+    },
+    {
+      "id": "A3-F3",
+      "categoria": "cinco_formas_de_declarar_persistencia",
+      "titulo": "Coexistencia de 5 formas distintas de declarar persistencia en el manifest",
+      "evidencia": "config.persistence (63 modulos), config.data_path (7), estado_persistente.paths_relativos (5 blueprints), estado_persistente.paths_relativos_proyecto (1), estado_persistente.ubicacion_logica (1). Confirma cuantitativamente A2-F6.",
+      "implicacion": "Cualquier validator de paths debe parsear las 5 formas. Cualquier canonizacion debe decidir una unica forma cumpliendo el principio explicit_declaration_in_manifest. El subset blueprint usa estado_persistente.paths_relativos (mayoria) — convencion candidata si se canoniza la familia blueprint.",
+      "severidad": "media"
+    },
+    {
+      "id": "A3-F4",
+      "categoria": "namespace_no_aplicado",
+      "titulo": "Cero blueprints usan prefijo de vertical en sus paths declarados",
+      "evidencia": "Los 7 blueprints con paths declarados (todos del subsistema pizzepos) declaran paths planos: /carta-digital.json, /cartas/<carta_id>.json, /recetas.json, etc. Ninguno usa '/pizzepos/...'. La realidad operativa que el usuario declaro ('la ruta es pizzepos/cartas') no esta en ningun blueprint hijo.",
+      "implicacion": "Si la convencion canonica futura incluye prefijo de vertical, los 7 blueprints deben actualizarse. Cualquier herramienta que cruce paths declarados con realidad operativa por vertical detectara drift en los 7.",
+      "severidad": "alta"
+    },
+    {
+      "id": "A3-F5",
+      "categoria": "shape_del_path_feo",
+      "titulo": "recetas.blueprint mezcla descripcion textual con el path declarado",
+      "evidencia": "pizzepos/recetas declara ubicacion_logica='/recetas.json (relativo al base_path del proyecto)'. El parentesis con la descripcion forma parte del string.",
+      "implicacion": "Cualquier parser que extraiga el path tropieza con la descripcion mezclada. Shape no maquinable. Otros blueprints usan paths_relativos object (mas limpio). Otro caso de las 5 formas coexistentes (F3) — esta es la 'mas fea' de ellas.",
+      "severidad": "baja"
+    },
+    {
+      "id": "A3-F6",
+      "categoria": "double_storage_confirmado",
+      "titulo": "carta-marketing declara '/storage/config/marca.json' — sera resuelto a <base_path>/storage/storage/config/marca.json",
+      "evidencia": "Blueprint de carta-marketing.estado_persistente.paths_relativos.perfil_marca = '/storage/config/marca.json'. Filesystem (A1) prefija con /storage/ automatico. Resultado: double-storage.",
+      "implicacion": "Es bug del blueprint, no del filesystem. Probablemente el autor del blueprint conocia la convencion intermedia '/storage/' como prefijo manual y la dejo escrita, sin saber que filesystem la aplica tambien. Cualquier canonizacion debe decidir: o el blueprint NUNCA escribe 'storage/' (filesystem lo aplica) o el blueprint LO ESCRIBE y filesystem lo detecta. Mezclar produce esto.",
+      "severidad": "alta_pero_aislada"
+    },
+    {
+      "id": "A3-F7",
+      "categoria": "patrones_database_manager_proliferan",
+      "titulo": "4 variantes de patron 'X-via-database-manager' (sinonimos)",
+      "evidencia": "owned-table-via-database-manager, owned-tables-via-database-manager, owned-tables-via-database-manager-per-project, delegated-via-database-manager, sqlite-via-database-manager. 5 patrones distintos referidos al mismo concepto: el modulo delega persistencia en database-manager.",
+      "implicacion": "El patron canonico external-delegation del catalogo cubriria estos 5 con UN nombre. Los modulos no lo usan, presumiblemente porque external-delegation es generico (cualquier modulo persistidor) y los autores quieren especificar que el delegado es database-manager. Falta una sub-categorizacion en el catalogo, o disciplina para usar external-delegation con metadata extra.",
+      "severidad": "media"
+    },
+    {
+      "id": "A3-F8",
+      "categoria": "patrones_filesystem_proliferan",
+      "titulo": "3 variantes de patron 'filesystem-X' (sinonimos parciales)",
+      "evidencia": "filesystem-real-per-project, filesystem-read-only, filesystem-readonly. Las dos ultimas son el mismo concepto con guion distinto.",
+      "implicacion": "Pequeno drift de naming dentro del propio sistema. Caso para canonizar a una sola forma."
+    },
+    {
+      "id": "A3-F9",
+      "categoria": "patrones_de_carta_especificos",
+      "titulo": "Patrones unicos por modulo declarados como si fueran categoria (json-html-per-carta, json-file-per-entity-plus-versions)",
+      "evidencia": "json-html-per-carta (probablemente carta-impresion), json-file-per-entity-plus-versions (probablemente carta-manager).",
+      "implicacion": "El autor del blueprint mezclo 'patron de persistencia' con 'detalle del shape' (multi-archivo + versiones, HTML+JSON paralelos). Estos detalles deberian vivir en estado_persistente.paths_relativos, no en config.persistence.pattern. Confusion entre dos niveles: tipo de persistencia (canonico) vs estructura concreta (especifica del modulo).",
+      "severidad": "media"
+    }
+  ],
+
+  "preguntas_para_siguientes_etapas": [
+    {
+      "para_etapa": "A4",
+      "pregunta": "Cuantos de los 7 POC2 'sin declarar persistencia' realmente persisten algo en disco? Si todos persisten -> 7 violaciones de persistence.contract.prohibido.undeclared_persistence_pattern. Si ninguno persiste -> falta declarar 'in-memory' explicito."
+    },
+    {
+      "para_etapa": "A4",
+      "pregunta": "Existen directorios /carta-design/, /cartas-impresion/, /carta-digital.json, /carta-scheduler-*.json en disco real? Los blueprints los declaran pero ningun audit anterior los vio (solo /cartas/ y /recetas.json estan en disco). Confirma si esos modulos se han usado alguna vez."
+    },
+    {
+      "para_etapa": "A4",
+      "pregunta": "El archivo /storage/storage/config/marca.json (double-storage de carta-marketing) existe en disco? Si existe, carta-marketing si se ha usado y el bug es operativo. Si no, el modulo nunca fue invocado y el bug es teorico hasta que alguien lo invoque."
+    },
+    {
+      "para_etapa": "A4",
+      "pregunta": "Los modulos del subsistema-recetario sin estado declarado (escandallo, tecnicas, viabilidad, menu-generator) tienen efectos en disco? Si no, son delegadores puros confirmados. Si si, declaracion incompleta."
+    },
+    {
+      "para_etapa": "A6 / Fase B",
+      "pregunta": "Como canonizar el shape de declaracion del path? Opciones a evaluar: (a) extender persistence.contract con shape obligatorio para 'patron + paths', (b) crear paths-canonicos.contract.json con shape, (c) eliminar config.persistence en favor de un campo nuevo unificado config.storage."
+    },
+    {
+      "para_etapa": "A6 / Fase B",
+      "pregunta": "Como canonizar los 15 patrones ad-hoc? Opciones: (a) ampliar catalogo de 6 a N para cubrir todos los casos legitimos, (b) mantener 6 + dejar un patron 'custom' con sub-tipo, (c) endurecer y forzar a los 15 a mapear a uno de los 6 canonicos."
+    },
+    {
+      "para_etapa": "A6 / Fase B",
+      "pregunta": "El prefijo de vertical (/pizzepos/, /conversacion/, etc.) se introduce en los blueprints o se aplica automatico en filesystem (analogo a /storage/)? Decision arquitectonica con implicaciones distintas."
+    }
+  ],
+
+  "limitaciones_de_esta_etapa": [
+    "NO se leyo el codigo fuente (index.js) de ningun modulo POC2 para verificar si realmente persisten cuando no lo declaran. Esa verificacion es media-cara (7 modulos a inspeccionar) y se traslada a A4 cruzandolo con disco.",
+    "Los 4 blueprint sin estado se asumieron delegadores puros sin confirmar leyendo su pseudocodigo de operaciones.",
+    "No se hizo cross-check de cuantos modulos declaran ambas formas (ej config.persistence en module.json + estado_persistente en blueprint) — posible doble declaracion contradictoria.",
+    "No se midio la coherencia entre el patron declarado y la realidad: un modulo puede declarar 'json-file' y en realidad usar sqlite. Eso es A4 + lectura de codigo (proxima fase si hace falta)."
+  ],
+
+  "resumen_ejecutivo": "El catalogo de 6 patrones canonicos de persistence.contract NO se aplica en el sistema: solo 8 de 78 modulos lo usan literalmente, 15 inventan patrones ad-hoc (de los cuales varios son sinonimos del canonico), 11 no declaran nada. Los 7 blueprints con paths declarados (todos pizzepos) ninguno usa prefijo de vertical. El bug de double-storage de carta-marketing confirmado por el shape de su path declarado. La disciplina explicit_declaration_in_manifest del contrato se cumple en menos del 30% del repo. Cualquier propuesta de canonizacion (Fase B) tiene que decidir como gestionar 5 formas de declaracion + 22 valores de patron + 7 paths sin namespace + 11 modulos sin declarar. El subsistema pizzepos es el mas concentrado en blueprint-driven (7/11 blueprints del sistema viven aqui) y el que mas urge sanear."
+}

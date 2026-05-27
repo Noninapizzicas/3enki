@@ -1,0 +1,198 @@
+{
+  "_doc": "Etapa A5 del analisis de persistencia y orden de archivos del sistema Enki. Localiza el frontend, identifica como lee datos del backend, y verifica si el axioma 'frontend lee via tools del bus, no archivos directos' (declarado en subsistema-recetario) se cumple en el codigo real. Detecta cross-module reads ilegales desde el frontend y bug del double-storage replicado tambien en el frontend.",
+  "etapa_id": "A5-frontend",
+  "creada": "2026-05-27",
+  "deriva_de": ["A1-filesystem-runtime.json", "A2-contratos-persistencia.json", "A3-modulos-declarado.json", "A4-disco-real.json"],
+
+  "objetivo": "Cerrar el axioma planteado en A2 ('frontend lee via tools del bus, nunca archivos directos') con verificacion contra el codigo real del frontend. Cuantificar cuantos stores son invisibles al canon de paths del backend (patron tool nativo) vs cuantos dependen del path concreto (patron fs.read directo). Identificar violaciones de aislamiento (cross-module reads).",
+
+  "alcance": {
+    "incluye": [
+      "Localizacion del frontend en el repo",
+      "Inventario de stores y patrones de acceso a datos",
+      "Lectura cualitativa de los stores con fs.read directo (recetas, carta, carta-marketing, carta-design, escandallo)",
+      "Verificacion contra el axioma subsistema-recetario.frontend_lee_via_tools_no_via_archivos",
+      "Identificacion de cross-module reads desde el frontend",
+      "Identificacion de drift de paths replicado del backend al frontend"
+    ],
+    "excluye": [
+      "Lectura exhaustiva de los 36 stores (foco solo en stores con fs.read)",
+      "Inspeccion de paneles UI (src/lib/modules/<panel>/) salvo busqueda de fs.read",
+      "Sintesis cruzada (etapa A6)",
+      "Propuestas de fix (Fase B)"
+    ]
+  },
+
+  "axiomas_verificados_contra_codigo": [
+    {
+      "axioma": "Existe codigo del frontend dentro del repo 2enki",
+      "verificado": true,
+      "evidencia": "frontend/ existe en la raiz. SvelteKit (src/routes/+layout.svelte, +page.svelte). 36 stores en src/lib/stores/. package.json con deps mqtt@5, marked, highlight.js."
+    },
+    {
+      "axioma": "El frontend usa SOLO MQTT para comunicarse con el backend (sin HTTP directo)",
+      "verificado": true,
+      "evidencia": "package.json: 3 deps, ninguna HTTP. mqtt@5.14.1 unica dep de transporte. Stores usan mqttRequest y mqttSubscribe import('$lib/ui-core/mqtt-request')."
+    },
+    {
+      "axioma": "El frontend usa Node fs directo (require('fs') o import fs)",
+      "verificado": false,
+      "evidencia": "grep en src/ confirma cero usos de Node fs. Tecnicamente imposible desde el navegador, pero confirma que NO hay codigo server-side intermedio que use Node fs."
+    },
+    {
+      "axioma": "El frontend lee SOLO via tools del bus, nunca archivos directos (segun subsistema-recetario.frontend_lee_via_tools_no_via_archivos)",
+      "verificado": false,
+      "evidencia": "5 stores usan mqttRequest('fs', 'read', { path: <path> }) con paths hardcoded: recetas.ts (/recetas.json), carta.ts (/carta-digital.json), carta-marketing.ts (/storage/config/marca.json), carta-design.ts (/carta-design/profiles, /carta-design/designs), escandallo.ts (/recetas.json — cross-module read del store de recetas). El axioma se cumple para muchos stores pero NO para todos. Drift confirmado."
+    },
+    {
+      "axioma": "Ningun store del frontend lee el storage de OTRO modulo (aislamiento)",
+      "verificado": false,
+      "evidencia": "2 cross-module reads detectados: (1) escandallo.ts lee /recetas.json (storage de recetas), (2) carta-design.ts lee /cartas/<carta_id>.json (storage de carta-manager). Violan persistence.contract.absolute_isolation_between_modules si la regla aplica al frontend tambien."
+    }
+  ],
+
+  "estructura_del_frontend": {
+    "ruta_en_repo": "frontend/",
+    "framework": "SvelteKit",
+    "deps_transport": "mqtt@5.14.1 (unica)",
+    "deps_ui": "marked@17, highlight.js@11",
+    "stores_totales_en_lib_stores": 36,
+    "stores_lista": [
+      "attachments", "carta", "carta-design", "carta-impresion", "carta-manager",
+      "carta-marketing", "certificate-authority", "channels", "chat", "cocina",
+      "comandero", "contextStore", "conversations", "credentials", "cuentas",
+      "dispositivos", "escandallo", "esp32", "facturas", "files", "html-preview",
+      "impresion", "index", "llevadoo", "menu-generator", "projects", "prompts",
+      "recetas", "staff", "theme", "ui", "workspace"
+    ],
+    "_observacion": "Correspondencia ~1:1 con modulos del backend (pizzepos + conversacion + planos). Algunos stores tienen contraparte clara (carta-manager.ts <-> pizzepos/carta-manager), otros agregan (ui, theme, workspace, contextStore)."
+  },
+
+  "patrones_de_lectura_del_frontend": {
+    "patron_A_fs_read_directo": {
+      "descripcion": "El store invoca mqttRequest('fs', 'read', {path: <hardcoded>}) y parsea el contenido del archivo localmente. Conoce el path interno del backend.",
+      "dependencia_del_canon_de_paths": "TOTAL. Si el canon cambia el path, este store rompe.",
+      "stores_que_lo_usan": [
+        {
+          "store": "recetas.ts",
+          "path_hardcoded": "/recetas.json",
+          "es_su_propio_path": true
+        },
+        {
+          "store": "carta.ts",
+          "path_hardcoded": "/carta-digital.json",
+          "es_su_propio_path": "se llama carta.ts y lee carta-digital — borderline. Es un store generico de 'carta' que decide leer del modulo carta-digital. No es claro si es 'cross-module' o si carta.ts es el store del modulo carta-digital."
+        },
+        {
+          "store": "carta-marketing.ts",
+          "path_hardcoded": "/storage/config/marca.json",
+          "es_su_propio_path": true,
+          "bug": "Hereda el bug double-storage del blueprint de carta-marketing. Frontend lee del path bugado que filesystem resuelve a base_path/storage/storage/config/marca.json"
+        },
+        {
+          "store": "carta-design.ts",
+          "paths_hardcoded": ["/carta-design/profiles/", "/carta-design/designs/", "/cartas/<carta_id>.json"],
+          "es_su_propio_path": "parcial",
+          "cross_module_read": "El path /cartas/<carta_id>.json es de carta-manager, no de carta-design. Violacion de aislamiento."
+        },
+        {
+          "store": "escandallo.ts",
+          "path_hardcoded": "/recetas.json",
+          "es_su_propio_path": false,
+          "cross_module_read": "escandallo lee el store de recetas directamente. Violacion literal de absolute_isolation_between_modules."
+        }
+      ]
+    },
+    "patron_B_tool_nativo_del_modulo": {
+      "descripcion": "El store invoca mqttRequest('<modulo>', '<accion>', {...}) usando el tool nativo del modulo. NO conoce paths.",
+      "dependencia_del_canon_de_paths": "CERO. El canon del path es invisible al frontend mientras la tool siga respondiendo el mismo shape.",
+      "ejemplos_detectados": [
+        "carta-manager.ts: mqttRequest('carta-manager', 'list', {}) y mqttRequest('carta-manager', 'get', {})",
+        "carta.ts: mqttRequest('productos', 'carta_completa', {project_id}) — tambien usa este patron ademas del A"
+      ],
+      "_nota": "No se hizo conteo exhaustivo de stores que usan SOLO patron B (filtro del grep mal). Pero por exclusion, los 31 stores restantes (36 totales - 5 que usan patron A) o son patron B puro o no leen datos del backend (stores de UI como theme, ui, workspace, contextStore)."
+    },
+    "patron_C_subscribe_eventos_para_cache_invalidation": {
+      "descripcion": "Stores que tras crear o tocar datos, escuchan eventos del bus para invalidar su cache. Combina con A o B.",
+      "ejemplos": [
+        "recetas.ts subscribe a receta.creada, receta.actualizada, receta.eliminada",
+        "carta-manager.ts subscribe a carta.actualizada"
+      ],
+      "_implicacion": "Patron sano. Los eventos del bus son el unico canal de invalidacion. El frontend nunca polea archivos."
+    }
+  },
+
+  "hallazgos": [
+    {
+      "id": "A5-F1",
+      "categoria": "axioma_parcialmente_violado",
+      "titulo": "El axioma 'frontend lee via tools, no archivos' se cumple PARCIALMENTE",
+      "evidencia": "5 de 36 stores usan fs.read directo con paths hardcoded (recetas, carta, carta-marketing, carta-design, escandallo). El resto (31) presumiblemente usa patron B o no lee datos del backend. La regla de subsistema-recetario.frontend_lee_via_tools_no_via_archivos esta declarada pero NO se cumple en estos 5 stores.",
+      "implicacion": "El frontend NO es invisible al canon de paths del backend. Si Fase B cambia paths declarados (ej. anadir prefijo /pizzepos/), hay que actualizar tambien los stores con paths hardcoded. Probable solucion: migrar los 5 stores de patron A a patron B (usar tools nativos en lugar de fs.read).",
+      "severidad": "alta_para_diseno"
+    },
+    {
+      "id": "A5-F2",
+      "categoria": "cross_module_read_desde_frontend",
+      "titulo": "2 stores del frontend leen el storage de OTRO modulo directamente",
+      "evidencia": "escandallo.ts lee /recetas.json (storage de recetas). carta-design.ts lee /cartas/<carta_id>.json (storage de carta-manager).",
+      "implicacion": "Violacion literal de persistence.contract.absolute_isolation_between_modules: 'la persistencia de un modulo es PRIVADA. Otros modulos NO leen sus archivos directamente'. Si la regla aplica al frontend, son violaciones. Si el frontend tiene exencion (porque es lector cross-cutting por diseno), eso debe canonizarse explicitamente.",
+      "severidad": "alta_de_disciplina"
+    },
+    {
+      "id": "A5-F3",
+      "categoria": "bug_replicado_del_blueprint_al_frontend",
+      "titulo": "carta-marketing.ts hereda el bug double-storage del blueprint",
+      "evidencia": "PERFIL_PATH = '/storage/config/marca.json' en el store del frontend. Coincide LITERAL con el path del blueprint de carta-marketing. Si filesystem prefija con /storage/ automatico, el frontend pide la misma ruta bugada.",
+      "implicacion": "Cuando se arregle el bug en el blueprint (no escribir /storage/ explicito), hay que arreglar tambien el frontend. Confirma que el bug NO esta solo en el blueprint — esta replicado en el cliente que lo lee.",
+      "severidad": "alta_pero_aislada"
+    },
+    {
+      "id": "A5-F4",
+      "categoria": "no_acceso_directo_a_disco",
+      "titulo": "Frontend NUNCA accede a disco directo (sin Node fs)",
+      "evidencia": "Cero importaciones de 'fs' en src/. Tecnicamente imposible desde el navegador, pero confirma que NO hay codigo server-side intermedio.",
+      "implicacion": "El unico acceso a disco del frontend es via la tool fs.read|fs.write del modulo filesystem (que va por bus). Cualquier cambio en como filesystem resuelve paths impacta al frontend solo via el shape de la respuesta de la tool, NO via codigo Node nuevo.",
+      "severidad": "informativa_positiva"
+    },
+    {
+      "id": "A5-F5",
+      "categoria": "transporte_unico_mqtt",
+      "titulo": "Frontend usa MQTT como UNICO canal hacia el backend",
+      "evidencia": "package.json: mqtt@5.14.1 unica dep de transporte. Sin axios, sin fetch directo, sin WebSocket adicional (mqtt-over-websocket si esta en mqtt v5).",
+      "implicacion": "Toda la API del backend es event-driven via MQTT. No hay back-channel HTTP. Cualquier endpoint que el backend exponga via http.contract NO es consumido por el frontend (al menos no por estos stores).",
+      "severidad": "informativa"
+    },
+    {
+      "id": "A5-F6",
+      "categoria": "correspondencia_stores_backend",
+      "titulo": "Correspondencia ~1:1 entre stores del frontend y modulos del backend",
+      "evidencia": "36 stores cuyos nombres coinciden con modulos del backend (carta-manager, recetas, productos via comandero, escandallo, etc.). Stores extra son de UI (theme, ui, workspace, contextStore) o de gestion de credenciales/proyectos.",
+      "implicacion": "Cualquier modulo nuevo del backend probablemente requiera un store correspondiente en el frontend. Hay deuda implicita: ningun contrato declara la regla 'cada modulo del backend tiene un store correspondiente'."
+    }
+  ],
+
+  "preguntas_para_siguientes_etapas": [
+    {
+      "para_etapa": "A6",
+      "pregunta": "Los 5 stores con patron A (fs.read directo): por que no usan el tool nativo del modulo correspondiente? Posibles: (a) historicos (predataron las tools), (b) las tools no exponen lo que necesitan, (c) decision consciente de optimizacion (evitar capa intermedia). Implica decision distinta para canonizacion."
+    },
+    {
+      "para_etapa": "A6 / Fase B",
+      "pregunta": "Cross-module reads (escandallo->recetas, carta-design->carta-manager): se canonizan como excepcion (lectura permitida explicita) o se eliminan (forzar uso de tool nativo del modulo origen)? Tiene implicaciones de aislamiento."
+    },
+    {
+      "para_etapa": "A6 / Fase B",
+      "pregunta": "Si Fase B introduce prefijo de vertical en los paths del backend (/pizzepos/...), los 5 paths hardcoded del frontend tienen que cambiar coordinadamente. Es trabajo de canonizacion + migracion conjunta del backend+frontend, no del backend aislado."
+    }
+  ],
+
+  "limitaciones_de_esta_etapa": [
+    "NO se hizo conteo exhaustivo de cuantos stores usan SOLO patron B (filtro del grep mal). Solo se confirmaron los 5 que usan patron A.",
+    "NO se inspeccionaron los paneles UI en src/lib/modules/<panel>/ (40+ paneles) — solo se busco fs.read en grep amplio.",
+    "NO se valido si los 2 cross-module reads detectados son violaciones por descuido o decisiones conscientes documentadas en algun lugar (frontend.contract.json no se leyo a fondo en esta etapa).",
+    "NO se inspecciono el codigo de mqttRequest ni el broker MQTT que usa el frontend para conectar."
+  ],
+
+  "resumen_ejecutivo": "El frontend del sistema Enki vive en frontend/ del repo (SvelteKit con 36 stores). Comunicacion 100% MQTT, cero Node fs, cero HTTP a backend. CONTRA mi axioma anterior (basado en subsistema-recetario.contract): el frontend NO es invisible al canon de paths del backend. 5 stores usan mqttRequest('fs', 'read', { path: <hardcoded>}) — recetas, carta, carta-marketing, carta-design, escandallo. Si Fase B cambia el path canonico (ej. anadir prefijo /pizzepos/), esos 5 stores rompen y necesitan migracion. Ademas: 2 cross-module reads ilegales (escandallo lee /recetas.json del store ajeno, carta-design lee /cartas/<carta_id>.json del store ajeno) — violacion de persistence.contract.absolute_isolation_between_modules si la regla aplica al frontend. Y el bug double-storage de carta-marketing esta REPLICADO en el store del frontend (PERFIL_PATH = '/storage/config/marca.json'): cuando se arregle, hay que arreglar tambien el frontend. Los otros 31 stores presumiblemente usan tools nativos del modulo (patron invisible al canon de paths). Cualquier canonizacion en Fase B debe contemplar: (1) migrar los 5 stores de patron A a patron B, (2) decidir si los 2 cross-module reads son excepciones canonizables o violaciones a eliminar, (3) coordinar canon de paths entre backend y frontend en lugar de tratarlos como sistemas independientes."
+}

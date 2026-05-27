@@ -38,6 +38,20 @@ pizzepos.es {
 		reverse_proxy localhost:9001
 	}
 
+	# Vertical vapers — endpoint público de la PWA para enviar pedidos.
+	# Rewrite a `/modules/tienda-api/tienda/pedido/<project>` (path interno con
+	# prefix del module HTTP gateway). Razón de mantener `/tienda/*` público
+	# limpio en lugar de incluir el prefix en el static-template:
+	#   - La URL pública de pedido no debería filtrar el nombre del módulo
+	#     interno (acoplamiento).
+	#   - Permite renombrar `tienda-api` sin regenerar bundles.
+	#   - El static-template del builder mantiene `/tienda/pedido/<slug>` como
+	#     contrato público del canal.
+	handle /tienda/* {
+		rewrite * /modules/tienda-api{path}
+		reverse_proxy localhost:3000
+	}
+
 	# Vertical vapers — PWA pública servida desde el bundle generado por
 	# comandero-cliente-builder.bundle.generar. El bundle físico vive bajo el
 	# UUID del proyecto (no el slug) porque el módulo escribe vía fs nativo

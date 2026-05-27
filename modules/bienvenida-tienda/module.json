@@ -1,0 +1,63 @@
+{
+  "_doc": "Modulo de bienvenida al cliente final que contacta al bot del negocio (Telegram en v1, Discord en v2). Escucha telegram.text.received y telegram.command.received, filtra mensajes que vienen del chat del staff (que ya estan cubiertos por notificador-pedidos en el otro sentido), y responde al cliente con saludo + link a la PWA tienda. Multi-canal: en v2 anyade discord.text.received cuando discord-service exista.",
+  "name": "bienvenida-tienda",
+  "version": "1.0.0",
+  "description": "Cara cliente del bot del negocio. Responde con saludo + link a la PWA tienda cuando el cliente final escribe al bot por primera vez (o cualquier mensaje libre). Es contraparte de notificador-pedidos (cara staff) — mismo bot, dos roles distintos.",
+  "author": "Enki Team",
+  "language": "es",
+  "main": "index.js",
+
+  "config": {
+    "persistence": {
+      "pattern": "ninguno",
+      "_doc": "Stateless: cachea config por bot en memoria al recibir project.activated."
+    }
+  },
+
+  "horizonte": "vertical-tienda-pwa-sin-datos",
+  "horizonte_doc": "arquitectura/decisiones/propuestas/vertical-tienda-pwa-sin-datos.md",
+
+  "events": {
+    "subscribes": [
+      {
+        "event": "telegram.text.received",
+        "handler": "onTelegramTextReceived",
+        "razon": "Cliente final escribe mensaje libre al bot. Si NO es el chat del staff, responde con saludo + link PWA."
+      },
+      {
+        "event": "telegram.command.received",
+        "handler": "onTelegramCommandReceived",
+        "razon": "/start de cliente nuevo activa el bot y dispara la bienvenida."
+      },
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated",
+        "razon": "Cachea config del proyecto (botName, pwa_url, staff_chat_id, mensaje_bienvenida) sin re-leer disco por mensaje."
+      }
+    ]
+  },
+
+  "subscribes": ["telegram.text.received", "telegram.command.received", "project.activated"],
+
+  "eventos_publicados_que_requieren_consumer": [
+    {
+      "event": "telegram.send_message.request",
+      "consumer_esperado": "modules/telegram-service",
+      "razon": "Envio efectivo de la respuesta de bienvenida + link PWA al chat del cliente. telegram-service v3.1.0 auto-wireado."
+    }
+  ],
+
+  "observability": {
+    "metrics": [
+      { "name": "bienvenida.mensaje.recibido.total", "type": "counter", "labels": ["project"],                "_doc": "Mensajes recibidos (cliente + staff, antes del filtro)." },
+      { "name": "bienvenida.respondido.total",       "type": "counter", "labels": ["project", "trigger"],     "_doc": "Bienvenidas enviadas con exito. trigger ∈ {text, command_start, command_otro}." },
+      { "name": "bienvenida.descartado.total",       "type": "counter", "labels": ["project", "razon"],       "_doc": "Mensajes descartados. Razones: bot_no_registrado, chat_es_staff." }
+    ]
+  },
+
+  "tracing": {
+    "correlation_id_propagation": "Genera correlation_id propio (no hay flujo upstream a correlar — el evento entrante es del bot externo)."
+  },
+
+  "dependencies": []
+}

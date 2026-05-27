@@ -533,7 +533,12 @@ async function testAsync(description, fn) {
     assert.ok(html.includes('#abc123'));
     assert.ok(html.includes('test-slug'));
     assert.ok(html.includes('example.com'));
-    assert.ok(html.includes('/tienda/pedido/'));
+    // MQTT directo: la PWA publica pedido.crear-tienda al bus en lugar de POST HTTP
+    // a tienda-api. Verifica que el bundle carga mqtt.js, derive mqtt_url de
+    // tienda_api_url y use el topic canonico del bus.
+    assert.ok(html.includes('mqtt.min.js'), 'bundle debe cargar mqtt.js');
+    assert.ok(html.includes('wss://example.com/mqtt'), 'mqtt_url derivado de tienda_api_url');
+    assert.ok(html.includes('pedido/crear-tienda'), 'topic canonico del bus');
   });
 
   teardownTmpCwd();

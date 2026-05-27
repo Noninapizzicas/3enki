@@ -17,7 +17,7 @@
  *                                     orden_publico?, oculto_publico? } }
  *     identidad: { marca, colores: { primario, fondo, texto, acento? }, logo_url? }
  *     project_slug: 'vapers'
- *     tienda_api_url: 'https://enki-ai.online'   // origin sin path
+ *     tienda_api_url: 'https://enki-ai.online'   // origin sin path; usado para derivar mqtt_url (wss://host/mqtt)
  *     opciones: {
  *       moneda: '€',                              // default '€'
  *       requiere_telefono: true,                  // default true
@@ -155,6 +155,12 @@ function generateStaticHTML(input) {
   const CONFIG = {
     project_slug,
     tienda_api_url: tienda_api_url.replace(/\/$/, ''),
+    // mqtt_url derivado: la PWA publica pedidos directamente al bus event-core
+    // via WSS (mismo patron que el frontend admin SvelteKit, manual-mqtt-conexion-directa.contract).
+    // Evita el HTTP gateway entero — eliminando la asimetria response async del
+    // patron tienda-api.handlePedidoPost y devolviendo el codigo de recogida
+    // por evento correlacionado.
+    mqtt_url: tienda_api_url.replace(/^https?:/, 'wss:').replace(/\/$/, '') + '/mqtt',
     moneda,
     marca,
     requiere_telefono: requiereTelefono,
@@ -174,6 +180,7 @@ function generateStaticHTML(input) {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>${escHtml(textos.titulo)}</title>
 <meta name="description" content="${escHtml(textos.subtitulo)} — ${escHtml(marca)}">
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -402,6 +409,98 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 
   var LS_CART = 'cclient-cart-' + CFG.project_slug;
   var LS_DATOS = 'cclient-datos-' + CFG.project_slug;
+
+  // ============================================================
+  // MQTT: la PWA publica pedido.crear-tienda directamente al bus
+  // event-core via WSS, suscribe a pedido.crear-tienda.response
+  // correlacionada por request_id, y muestra el codigo de recogida.
+  // Patron canonico del sistema (manual-mqtt-conexion-directa.contract).
+  // ============================================================
+  var mqttClient = null;
+  var pendingMqttRequests = {};
+
+  function genRequestId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return 'req-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function ensureMqtt() {
+    if (mqttClient && mqttClient.connected) return Promise.resolve(mqttClient);
+    return new Promise(function(resolve, reject) {
+      if (typeof mqtt === 'undefined') {
+        return reject(new Error('mqtt.js no cargado (CDN bloqueado o sin red)'));
+      }
+      var c = mqtt.connect(CFG.mqtt_url, {
+        clientId: 'pwa-' + CFG.project_slug + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+        reconnectPeriod: 0,
+        connectTimeout: 8000,
+        clean: true
+      });
+      var settled = false;
+      var connectTimeout = setTimeout(function() {
+        if (settled) return;
+        settled = true;
+        try { c.end(true); } catch(_) {}
+        reject(new Error('MQTT_CONNECT_TIMEOUT'));
+      }, 10000);
+      c.on('connect', function() {
+        if (settled) return;
+        c.subscribe('core/+/events/pedido/crear-tienda/response', function(err) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(connectTimeout);
+          if (err) return reject(err);
+          mqttClient = c;
+          resolve(c);
+        });
+      });
+      c.on('message', function(topic, message) {
+        try {
+          var env = JSON.parse(message.toString());
+          var data = env.data || {};
+          var pending = pendingMqttRequests[data.request_id];
+          if (!pending) return;
+          delete pendingMqttRequests[data.request_id];
+          clearTimeout(pending.timeoutHandle);
+          pending.resolve(data);
+        } catch(_) {}
+      });
+      c.on('error', function(err) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(connectTimeout);
+        reject(err);
+      });
+    });
+  }
+
+  function enviarPedidoBus(payload, timeoutMs) {
+    return ensureMqtt().then(function(c) {
+      return new Promise(function(resolve, reject) {
+        var requestId = genRequestId();
+        var timeoutHandle = setTimeout(function() {
+          delete pendingMqttRequests[requestId];
+          reject(new Error('TIMEOUT'));
+        }, timeoutMs || 30000);
+        pendingMqttRequests[requestId] = { resolve: resolve, timeoutHandle: timeoutHandle };
+        var fullPayload = Object.assign({}, payload, {
+          request_id: requestId,
+          project_slug: CFG.project_slug,
+          canal_origen: 'web'
+        });
+        c.publish('core/*/events/pedido/crear-tienda', JSON.stringify({
+          event_id: genRequestId(),
+          event_type: 'pedido.crear-tienda',
+          timestamp: new Date().toISOString(),
+          source: { core_id: 'pwa-cliente' },
+          data: fullPayload,
+          metadata: {}
+        }));
+      });
+    });
+  }
 
   var state = {
     cart: {},        // { producto_id: cantidad }
@@ -700,28 +799,41 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
     var btn = $('btn-enviar');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>...';
-    var url = CFG.tienda_api_url + '/tienda/pedido/' + encodeURIComponent(CFG.project_slug);
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-      .then(function(r) {
-        return r.json().then(function(body) { return { status: r.status, body: body }; });
-      })
-      .then(function(res) {
+    // MQTT directo al bus event-core. Resuelve dos cosas vs el patron HTTP previo:
+    //  1. Elimina la asimetria de response async del modulo tienda-api (HTTP gateway
+    //     cerraba la conexion con 200 vacio antes de que _respondToClient async
+    //     escribiera la response real con codigo_recogida — bug observado 2026-05-27).
+    //  2. Coherencia: la PWA habla el mismo protocolo que el frontend admin SvelteKit
+    //     (manual-mqtt-conexion-directa.contract).
+    // tienda-api queda como compatibilidad opcional pero no es el flujo canonico.
+    enviarPedidoBus(payload, 30000)
+      .then(function(data) {
         btn.disabled = false;
         btn.textContent = T.form_enviar;
-        if (res.status >= 200 && res.status < 300) {
-          mostrarExito(res.body && res.body.data);
-        } else {
-          mostrarError(res.body && res.body.error);
+        if (data.error) {
+          mostrarError(data.error);
+          return;
         }
+        var result = data.result || data.data || {};
+        mostrarExito({
+          pedido_id: result.pedido_id,
+          codigo_recogida: result.codigo_recogida
+        });
       })
       .catch(function(err) {
         btn.disabled = false;
         btn.textContent = T.form_enviar;
-        mostrarError({ code: 'NETWORK_ERROR', message: err && err.message || 'Error de red' });
+        var msg = (err && err.message) || 'Error de red';
+        var code = msg === 'TIMEOUT' ? 'TIMEOUT' :
+                   msg === 'MQTT_CONNECT_TIMEOUT' ? 'NETWORK_ERROR' :
+                   /mqtt\.js no cargado/.test(msg) ? 'NETWORK_ERROR' :
+                   'NETWORK_ERROR';
+        mostrarError({
+          code: code,
+          message: code === 'TIMEOUT'
+            ? 'La tienda esta tardando en responder. Vuelve a intentarlo.'
+            : 'No hemos podido enviar el pedido. Comprueba la conexion.'
+        });
       });
   }
 

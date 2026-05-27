@@ -38,6 +38,42 @@ pizzepos.es {
 		reverse_proxy localhost:9001
 	}
 
+	# Vertical vapers — endpoint público de la PWA para enviar pedidos.
+	# Rewrite a `/modules/tienda-api/tienda/pedido/<project>` (path interno con
+	# prefix del module HTTP gateway). Razón de mantener `/tienda/*` público
+	# limpio en lugar de incluir el prefix en el static-template:
+	#   - La URL pública de pedido no debería filtrar el nombre del módulo
+	#     interno (acoplamiento).
+	#   - Permite renombrar `tienda-api` sin regenerar bundles.
+	#   - El static-template del builder mantiene `/tienda/pedido/<slug>` como
+	#     contrato público del canal.
+	handle /tienda/* {
+		rewrite * /modules/tienda-api{path}
+		reverse_proxy localhost:3000
+	}
+
+	# Vertical vapers — PWA pública servida desde el bundle generado por
+	# comandero-cliente-builder.bundle.generar. El bundle físico vive bajo el
+	# UUID del proyecto (no el slug) porque el módulo escribe vía fs nativo
+	# con base_path por UUID — drift de project-identity documentado en TP5.
+	# try_files cae a latest.html para soportar deep-links (PWA single-file).
+	#
+	# Permisos: el usuario `caddy` debe poder leer este path. Si Caddy devuelve
+	# 403, ejecutar UNA vez en el VPS:
+	#   sudo chmod -R o+rX /opt/enki/data/projects/37bc1282-e44c-467c-bb75-3d605255c9d2/storage/comandero-cliente-builder/
+	#
+	# Cuando se regenere el bundle (comandero-cliente.bundle.generar), latest.html
+	# se reemplaza atómicamente — Caddy sirve la versión nueva sin reload.
+	handle_path /vapers/* {
+		root * /opt/enki/data/projects/37bc1282-e44c-467c-bb75-3d605255c9d2/storage/comandero-cliente-builder/bundles
+		try_files {path} /latest.html
+		file_server
+	}
+
+	handle /vapers {
+		redir /vapers/ permanent
+	}
+
 	# Frontend SvelteKit (adapter-node) → todo lo demás
 	handle {
 		reverse_proxy localhost:3001

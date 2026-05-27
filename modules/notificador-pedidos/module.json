@@ -1,0 +1,58 @@
+{
+  "_doc": "Modulo de notificacion al staff cuando llega un pedido nuevo desde la PWA tienda. Escucha pedido.creado con canal_origen='web' (= pedido de PWA via tienda-api o MQTT directo del bundle) y publica telegram.send_message.request con resumen del pedido + codigo de recogida al chatId del staff del proyecto. Diseñado para extension multi-canal: en v2 se anyadira branch para discord.send_message.request cuando discord-service exista. Anti-fraude: NO incluye palabra_clave en el mensaje al staff (el dependiente la pregunta al cliente al recoger, no la lee del Telegram).",
+  "name": "notificador-pedidos",
+  "version": "1.0.0",
+  "description": "Orquesta notificaciones de pedido nuevo al staff por los canales configurados del proyecto (Telegram en v1; Discord en v2). Reemplaza la responsabilidad que tenia whatsapp-bot para la vertical tienda PWA tras pivote a Telegram-first.",
+  "author": "Enki Team",
+  "language": "es",
+  "main": "index.js",
+
+  "config": {
+    "persistence": {
+      "pattern": "ninguno",
+      "_doc": "Modulo stateless: cachea config por proyecto en memoria al recibir project.activated, sin disco propio. El estado real (pedidos) lo persiste pedidos."
+    }
+  },
+
+  "horizonte": "vertical-tienda-pwa-sin-datos",
+  "horizonte_doc": "arquitectura/decisiones/propuestas/vertical-tienda-pwa-sin-datos.md",
+
+  "events": {
+    "subscribes": [
+      {
+        "event": "pedido.creado",
+        "handler": "onPedidoCreado",
+        "razon": "Disparador principal: cuando pedidos crea un pedido nuevo, notificador-pedidos decide si emitir notificacion al staff segun canal_origen del pedido."
+      },
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated",
+        "razon": "Cachea base_path + config del proyecto (telegram.chatId, telegram.botName) para resolver el destino de la notificacion sin re-leer disco en cada pedido."
+      }
+    ]
+  },
+
+  "subscribes": ["pedido.creado", "project.activated"],
+
+  "eventos_publicados_que_requieren_consumer": [
+    {
+      "event": "telegram.send_message.request",
+      "consumer_esperado": "modules/telegram-service",
+      "razon": "Envio efectivo del mensaje al chat del staff. telegram-service v3.1.0 tiene la tool send_message auto-wired al bus."
+    }
+  ],
+
+  "observability": {
+    "metrics": [
+      { "name": "notificador.pedido.recibido.total",   "type": "counter", "labels": ["project", "canal_origen"], "_doc": "Pedidos observados via pedido.creado (todos, antes del filtro de canal)." },
+      { "name": "notificador.pedido.notificado.total", "type": "counter", "labels": ["project", "canal"],        "_doc": "Notificaciones emitidas con exito por canal (telegram, discord...)." },
+      { "name": "notificador.pedido.descartado.total", "type": "counter", "labels": ["project", "razon"],        "_doc": "Pedidos descartados sin notificar. Razones: canal_origen_no_web, proyecto_sin_chatid, proyecto_sin_config." }
+    ]
+  },
+
+  "tracing": {
+    "correlation_id_propagation": "Propaga correlation_id del evento pedido.creado original al telegram.send_message.request para que el operador pueda hilvanar el flujo en el activity log."
+  },
+
+  "dependencies": []
+}

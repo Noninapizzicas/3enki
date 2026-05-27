@@ -284,3 +284,6 @@ jobs:
 
       - name: Run unit tests (comandero-cliente-builder — Fase 6a vertical-tienda-pwa-sin-datos)
         run: npm run test:comandero-cliente-builder
+
+      - name: Run unit tests (notificador-pedidos — Telegram al staff para vertical tienda)
+        run: npm run test:notificador-pedidos

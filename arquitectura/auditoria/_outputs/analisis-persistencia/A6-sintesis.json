@@ -1,0 +1,230 @@
+{
+  "_doc": "Etapa A6 cierra la Fase A del analisis de persistencia y orden de archivos del sistema Enki. Sintetiza los hallazgos de A1-A5 identificando los drifts cross-niveles que ningun JSON individual captura. Produce el mapa consolidado de la disonancia entre los 6 niveles del sistema: codigo de filesystem, contratos, blueprints, modulos POC2, realidad fisica del disco, frontend. Lista las decisiones que Fase B tiene que tomar para canonizar.",
+  "etapa_id": "A6-sintesis",
+  "creada": "2026-05-27",
+  "deriva_de": ["A1-filesystem-runtime.json", "A2-contratos-persistencia.json", "A3-modulos-declarado.json", "A4-disco-real.json", "A5-frontend.json"],
+
+  "objetivo": "Producir la foto unica e integral del problema de persistencia/paths del sistema Enki: como interactuan los 6 niveles (filesystem, contratos, blueprints, POC2, disco, frontend), donde se contradicen, donde se cumplen, y que decisiones tiene que tomar Fase B para empezar a canonizar.",
+
+  "los_6_niveles_del_sistema_y_lo_que_dice_cada_uno": {
+    "_descripcion": "Cada nivel tiene su propia version de 'la verdad' sobre los paths. La realidad operativa es la composicion de todos ellos. Cuando difieren entre si, el sistema sigue funcionando por accidente (los huecos no se cruzan) hasta que se cruzan.",
+    "nivel_1_codigo_de_filesystem": {
+      "fuente": "modules/filesystem/index.js v2.0.0",
+      "verdad_que_declara": "Todo path leading-slash de un modulo se prefija con base_path/storage si projectMode, o con cwd si systemMode. @/ bypassa al data root. ~/ alias. Sin slash = relativo a workingDirectory mutable.",
+      "donde_se_documenta": "Solo en el codigo. NO hay contrato que lo capture.",
+      "fortaleza": "Comportamiento concreto y reproducible (verificado en A1+A4)",
+      "fragilidad": "Cambio en codigo no detectable por validator de contratos (no existe)"
+    },
+    "nivel_2_contratos_transversales": {
+      "fuente": "arquitectura/decisiones/_contratos/*.contract.json (38 contratos)",
+      "verdad_que_declara_persistencia": [
+        "persistence.contract: CATALOGO de 6 patrones (in-memory, json-file, json-file-per-project, sqlite, append-only-log, external-delegation). Aislamiento absoluto entre modulos. Declaracion obligatoria en manifest.",
+        "multi-tenancy.contract: storage aislado por project_id, fisico no logico. Ejemplo de path: 'data/<project_id>/<modulo>.json'.",
+        "project-identity.contract v1.1.0: base_path como fuente autoritativa, PROHIBIDO slug en paths y _slugify fuera de pm.",
+        "security.contract: credenciales solo via credential-manager, cifradas. Nunca fs.read directo de archivos de credenciales.",
+        "llm-runtime-discipline.contract: LLM solo accede a SU estado_persistente declarado. Nunca fs.read ajeno."
+      ],
+      "verdad_que_declara_paths_concretos": "NINGUN contrato declara: (1) la capa /storage/, (2) convencion de namespace por vertical, (3) shape canonico para declarar paths en manifest (5 formas conviven)."
+    },
+    "nivel_3_blueprints_de_modulos_blueprint_driven": {
+      "fuente": "modules/pizzepos/<modulo>/<modulo>.blueprint.json (11 blueprints)",
+      "verdad_que_declara_persistencia": "7 de los 11 blueprints declaran estado_persistente con paths_relativos. Los otros 4 son delegadores puros (estado_persistente=null o no declarado).",
+      "paths_declarados": {
+        "carta-design": ["/carta-design/designs/...", "/carta-design/profiles/..."],
+        "carta-digital": "/carta-digital.json",
+        "carta-impresion": ["/cartas-impresion/<carta_id>.html", "/cartas-impresion/<carta_id>.meta.json"],
+        "carta-manager": ["/cartas/<carta_id>.json", "/cartas/versions/..."],
+        "carta-marketing": "/storage/config/marca.json (BUG double-storage)",
+        "carta-scheduler": ["/carta-scheduler-reglas.json", "/carta-scheduler-pendientes.json"],
+        "recetas": "/recetas.json"
+      },
+      "fortaleza": "Declaracion estructurada en JSON (parseable)",
+      "fragilidad": "Cero validator que cruce paths_relativos con disco real. Cero blueprint usa prefijo de vertical (todos planos)."
+    },
+    "nivel_4_module_json_de_modulos_POC2": {
+      "fuente": "modules/**/module.json (67 modulos POC2)",
+      "verdad_que_declara_persistencia": "23 modulos declaran config.persistence.pattern. De esos, solo 8 usan vocabulario canonico (in-memory, json-file, json-file-per-project). 15 inventan patrones ad-hoc (owned-table-via-database-manager, env-file-atomic, sqlite-native-by-project, json-html-per-carta, etc.). 44 modulos restantes no declaran patron — incluyendo 7 que probablemente si persisten (code-executor, inventario, log-manager, pdf-viewer, scheduler, telegram-service, whatsapp-bot — A3.F2)."
+    },
+    "nivel_5_disco_real": {
+      "fuente": "fs.list por bus sobre el storage de Mi Proyecto + @/ root del sistema",
+      "verdad_que_declara": [
+        "Storage del proyecto Mi Proyecto: 25 entries. Solo 2 de los 7 blueprints declarantes tienen archivo real (recetas + carta-manager parcial).",
+        "13 archivos huerfanos en el root del storage = 40 productos del catalogo del usuario troceados ad-hoc. SIN declarante.",
+        "Directorio /pizzepos/ existe con 3 subdirs (cartas/, ocr/, preprocesadas/) y 2 archivos casi vacios (ingredientes.json 2b, programacion.json 18b). NINGUN blueprint declara escribir bajo /pizzepos/.",
+        "Data root @/: 13 directorios + .env. 3 POC2 sospechosos confirmados como persistidores sin declarar (log-manager en @/logs/, scheduler en @/scheduler/, bots en @/bots/). 4 dirs huerfanos (backups/, current/, eventos/, ventas/).",
+        "5 blueprints (carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler) NUNCA usados — su path declarado no existe en disco."
+      ]
+    },
+    "nivel_6_frontend": {
+      "fuente": "frontend/src/lib/stores/ (36 stores SvelteKit)",
+      "verdad_que_declara_persistencia_y_lectura": [
+        "Comunicacion 100% MQTT (sin axios, sin HTTP)",
+        "Cero acceso a disco directo (sin Node fs)",
+        "31 stores presumiblemente usan tools nativos del modulo correspondiente (patron B, invisible al canon de paths)",
+        "5 stores usan fs.read directo con paths HARDCODED: recetas (/recetas.json), carta (/carta-digital.json), carta-marketing (/storage/config/marca.json), carta-design (/carta-design/profiles, /carta-design/designs, /cartas/<id>.json), escandallo (/recetas.json)",
+        "2 cross-module reads desde el frontend: escandallo lee storage de recetas, carta-design lee storage de carta-manager — violan absolute_isolation",
+        "Bug double-storage REPLICADO: carta-marketing.ts tiene PERFIL_PATH = '/storage/config/marca.json' identico al blueprint"
+      ]
+    }
+  },
+
+  "drifts_cross_niveles_que_ninguna_etapa_individual_captura": [
+    {
+      "id": "D1",
+      "titulo": "La capa /storage/ existe en 1 nivel y es invisible en los otros 5",
+      "donde_existe": "Codigo de filesystem (nivel 1)",
+      "donde_NO_existe": [
+        "Contratos transversales (nivel 2): ningun contrato la menciona",
+        "Blueprints (nivel 3): ningun blueprint declara /storage/",
+        "Module.json POC2 (nivel 4): ningun module.json la menciona",
+        "Disco real (nivel 5): tecnicamente esta presente (todo archivo del proyecto vive bajo /storage/), pero invisible al observador",
+        "Frontend (nivel 6): ningun store la menciona explicitamente, pero 1 store (carta-marketing) la duplica por error (double-storage)"
+      ],
+      "consecuencia": "Si filesystem cambia su comportamiento (ej. elimina la capa), nadie lo detecta en CI. Si un blueprint la declara explicitamente (carta-marketing), produce double-storage sin que nadie alerte.",
+      "afectados_si_se_canoniza": "El codigo de filesystem + 1 blueprint con bug (carta-marketing) + 1 store del frontend con bug (carta-marketing.ts) + cualquier modulo futuro que asuma una cosa u otra."
+    },
+    {
+      "id": "D2",
+      "titulo": "Convencion '/pizzepos/' implicita: pista en 1 nivel, ausente en los otros 5",
+      "donde_existe": "Disco real (nivel 5): directorio /pizzepos/ con 3 subdirs y 2 archivos casi vacios",
+      "donde_NO_existe": [
+        "Codigo de filesystem (nivel 1): no aplica prefijo de vertical",
+        "Contratos (nivel 2): ningun contrato lo declara",
+        "Blueprints (nivel 3): los 7 con paths declarados NO usan /pizzepos/",
+        "POC2 (nivel 4): no se ve en config.persistence ni en config.data_path",
+        "Frontend (nivel 6): los stores con paths hardcoded no usan /pizzepos/"
+      ],
+      "consecuencia": "Hay UNA convencion tacita operando (alguien escribio en /pizzepos/), pero el resto del sistema no la conoce. Coincide PARCIALMENTE con la realidad operativa que el usuario declaro ('la ruta es pizzepos/cartas'). Es la pista que sugiere que la convencion canonica futura podria ser '/pizzepos/<modulo>/<entidad>' o similar."
+    },
+    {
+      "id": "D3",
+      "titulo": "Bug double-storage: declarado en 1 nivel, REPLICADO en otros 2, propagado a 1",
+      "ruta": "carta-marketing blueprint (nivel 3) declara '/storage/config/marca.json' → filesystem (nivel 1) lo resuelve a base_path/storage/storage/config/marca.json → carta-marketing.ts frontend (nivel 6) tiene PERFIL_PATH literal '/storage/config/marca.json' → disco (nivel 5) NO tiene el archivo (modulo nunca usado, pero si se usa explotara con el path doble).",
+      "consecuencia": "Bug latente en 3 niveles. Fix requiere tocar coordinadamente: blueprint + frontend + posiblemente migrar datos si el modulo se ha usado en algun otro proyecto."
+    },
+    {
+      "id": "D4",
+      "titulo": "Contradiccion subsistema-recetario vs project-identity: 2 contratos cerrados se contradicen literal",
+      "ruta": "subsistema-recetario v1.0.3.prohibido.doble_escritura_del_dato_canonico_de_receta menciona 'data/projects/{slug}/recetas.json' (con slug). project-identity v1.1.0.prohibido.PROH3 prohibe 'paths con {slug} en modulos no-pm'. Ambos validados.",
+      "consecuencia": "Imposible afirmar 'el path canonico de recetas es X' sin elegir un contrato como autoridad. project-identity es mas reciente (mayo 2026), deberia ganar. Decision pendiente."
+    },
+    {
+      "id": "D5",
+      "titulo": "Frontend NO es invisible al canon de paths (contradice axioma del subsistema-recetario)",
+      "axioma_declarado": "subsistema-recetario.decisiones.frontend_lee_via_tools_no_via_archivos",
+      "realidad": "5 stores del frontend usan fs.read directo con paths hardcoded (A5.F1). 2 hacen cross-module reads (A5.F2).",
+      "consecuencia": "Cualquier canonizacion de paths del backend requiere migracion coordinada del frontend. La regla del subsistema-recetario tiene que actualizarse (era aspirational, no descriptivo del estado real)."
+    },
+    {
+      "id": "D6",
+      "titulo": "El catalogo de 6 patrones de persistencia NO se respeta. 22 patrones distintos en uso",
+      "ruta": "persistence.contract v1.1.0 declara 6 patrones canonicos. Modulos declaran 8 canonicos + 15 ad-hoc (varios son sinonimos del canonico con guion distinto). Total 22 patrones distintos en el sistema. + 11 modulos sin declarar nada.",
+      "consecuencia": "El contrato existe pero su catalogo no es enforced. Cualquier validator que asuma los 6 patrones no clasifica correctamente el 65% del repo."
+    },
+    {
+      "id": "D7",
+      "titulo": "5 blueprints declaran paths pero modulos NUNCA usados en Mi Proyecto",
+      "evidencia": "carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler — paths declarados (de A3) no existen en disco (A4). 5 blueprints con bug latente (incluyendo double-storage de carta-marketing) que no se manifiesta porque nadie los invoca.",
+      "consecuencia": "Decision arquitectonica pendiente: deprecar, mantener, o auditar si se usan en otros proyectos."
+    },
+    {
+      "id": "D8",
+      "titulo": "5 formas de declarar persistencia en manifest coexisten",
+      "lista": ["config.persistence (63 modulos)", "config.data_path (7)", "estado_persistente.paths_relativos (5 blueprints)", "estado_persistente.paths_relativos_proyecto (1)", "estado_persistente.ubicacion_logica (1)"],
+      "consecuencia": "Cualquier validator de paths debe parsear 5 schemas distintos. Cualquier canonizacion debe decidir una unica forma."
+    },
+    {
+      "id": "D9",
+      "titulo": "Cross-module reads ilegales desde el frontend (escandallo, carta-design)",
+      "evidencia": "escandallo.ts lee /recetas.json (storage de recetas). carta-design.ts lee /cartas/<carta_id>.json (storage de carta-manager).",
+      "consecuencia": "Violacion de persistence.contract.absolute_isolation_between_modules si la regla aplica al frontend. Decision pendiente: canonizar excepcion o eliminar."
+    },
+    {
+      "id": "D10",
+      "titulo": "POC2 que persisten sin declarar (violacion confirmada de persistence.contract)",
+      "lista": ["log-manager → @/logs/", "scheduler → @/scheduler/", "bots → @/bots/ (probable telegram-service o whatsapp-bot)"],
+      "consecuencia": "Violacion confirmada de persistence.contract.prohibido.undeclared_persistence_pattern. 3+ modulos con drift que NO se detecta hoy porque no hay validator de declaracion vs realidad."
+    }
+  ],
+
+  "lo_que_si_funciona_consistentemente": [
+    "Aislamiento entre modulos (regla declarada en 5 contratos, respetada por la mayoria de modulos, solo 2 violaciones desde el frontend)",
+    "MQTT como unico transporte de datos backend ↔ frontend",
+    "Cero codigo Node fs en el frontend (imposible desde el navegador, pero confirma cero codigo intermedio)",
+    "El subscribe a eventos para invalidacion de cache (patron C en A5) — sano y consistente",
+    "credential-manager como modelo de modulo bien aislado (persistencia totalmente encapsulada, expuesta via bus)",
+    "filesystem rechaza paths absolutos del sistema (proteccion contra path traversal basico)"
+  ],
+
+  "decisiones_que_Fase_B_tiene_que_tomar": [
+    {
+      "id": "B-D1",
+      "decision": "¿Donde vive la capa /storage/? Codigo de filesystem (statu quo, sin contrato) o se canoniza en contrato (paths-canonicos.contract o ampliando persistence.contract)?",
+      "implicacion_si_canoniza": "Validator detecta drift si filesystem cambia. Pero hay que escribir un contrato nuevo y endurecer.",
+      "implicacion_si_no_canoniza": "Sigue siendo conocimiento implicito. Cualquier modulo nuevo o cualquier cambio de filesystem rompe sin alerta.",
+      "afectados": ["filesystem", "carta-marketing (blueprint y frontend con bug double-storage)"]
+    },
+    {
+      "id": "B-D2",
+      "decision": "¿Convencion de namespace por vertical (/pizzepos/<modulo>/<entidad>) o paths planos (/recetas.json, /cartas/<id>.json)?",
+      "evidencia_para_decidir": "Disco real tiene /pizzepos/ implicito (D2). Usuario declaro 'la ruta es pizzepos/cartas'. Pero los 7 blueprints existentes usan planos. Decision arquitectonica con efecto cascada.",
+      "afectados_si_se_introduce_vertical": "7 blueprints + 5 stores del frontend con paths hardcoded + posible migracion de datos en disco + actualizacion de subsistema-recetario.contract"
+    },
+    {
+      "id": "B-D3",
+      "decision": "¿Como canonizar los 22 patrones de persistencia? Ampliar catalogo de 6 a N, dejar 6 + permitir 'custom' con sub-tipo, o forzar a los 15 ad-hoc a mapear a uno de los 6 canonicos?",
+      "evidencia_para_decidir": "15 patrones ad-hoc, varios sinonimos del canonico con guion distinto (json-files-per-project vs json-file-per-project). 4 son variantes de external-delegation con sub-tipo (owned-tables-via-database-manager).",
+      "decision_subordinada": "Si se elige 'forzar al canonico', se necesita un mapping de 22 a 6 + migracion de declaraciones en 23 module.json."
+    },
+    {
+      "id": "B-D4",
+      "decision": "¿Canonizar UNA forma de declarar paths en manifest? 5 formas coexisten hoy.",
+      "candidatos": ["config.persistence con estado_persistente anidado (extender shape de persistence.contract)", "estado_persistente.paths_relativos en module.json (no solo en blueprint)", "Schema nuevo unificado config.storage"]
+    },
+    {
+      "id": "B-D5",
+      "decision": "¿Como resolver la contradiccion subsistema-recetario vs project-identity (slug en path)?",
+      "candidatos": ["Actualizar subsistema-recetario v1.0.3 → v1.1.0 alineando con project-identity", "Documentar excepcion en project-identity", "Bumpear ambos a una version conjunta cuando se canonize"]
+    },
+    {
+      "id": "B-D6",
+      "decision": "¿Los 2 cross-module reads del frontend (escandallo, carta-design) son excepciones canonizables o se eliminan?",
+      "implicacion_si_canoniza_excepcion": "Hay que declarar en algun contrato que 'frontend stores pueden leer ajeno bajo condiciones X'. Mas reglas, mas drift potencial.",
+      "implicacion_si_se_elimina": "Migrar escandallo a usar mqttRequest('recetas', '<tool>', ...) y carta-design a usar mqttRequest('carta-manager', 'get', ...). Quizas las tools necesarias no existen y hay que anadirlas."
+    },
+    {
+      "id": "B-D7",
+      "decision": "¿Que hacer con los 13 archivos huerfanos en el root del storage de Mi Proyecto (los 40 productos troceados)?",
+      "candidatos": ["Limpieza: borrar, asumir perdida (40 productos del usuario)", "Consolidar: ejecutar manualmente el modify que fallo, integrar en /cartas/carta_catalogo_activo.json y borrar troceados", "Preservar como backup hasta que el bug del modify se arregle y se pueda reintentar"]
+    },
+    {
+      "id": "B-D8",
+      "decision": "¿Que hacer con los 5 blueprints nunca usados (carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler)?",
+      "candidatos": ["Deprecar y mover a _archived", "Mantener y arreglar (bug double-storage de carta-marketing al menos)", "Auditar otros proyectos para ver si se usan en alguno"]
+    },
+    {
+      "id": "B-D9",
+      "decision": "¿Forzar declaracion explicita para los 11 modulos sin declarar (4 blueprint sin estado + 7 POC2)?",
+      "candidatos": ["Endurecer persistence.contract: cero tolerancia a undeclared, requerir 'pattern: in-memory' explicito incluso para in-memory genuinos", "Tolerar omision para in-memory pero exigir declaracion negativa para todos los demas"]
+    },
+    {
+      "id": "B-D10",
+      "decision": "¿Como gestionar archivos en @/ root del sistema sin declarante? (backups/, current/, eventos/, ventas/, .env)",
+      "candidatos": ["Auditar codigo para identificar quien los crea", "Crear modulo 'system-storage' que canonize y declare", "Aceptar como deuda historica con TODO comment"]
+    }
+  ],
+
+  "lo_que_NO_se_sabe_y_no_se_resolvio_en_Fase_A": [
+    "Quien crea exactamente /pizzepos/cartas/, /pizzepos/ocr/, /pizzepos/preprocesadas/ y los 2 archivos almost-empty (/pizzepos/ingredientes.json, /pizzepos/programacion.json). Hipotesis: project-manager al activar proyecto, o codigo JS de soporte de modulos pizzepos. Requiere lectura puntual de project-manager.onProjectActivated o equivalente.",
+    "El contenido del archivo @/.env y si contiene secretos en plano (potencial violacion de security.contract).",
+    "El estado del proyecto 'system' (systemMode=true). A4 confirmo su existencia pero no inspecciono contenido.",
+    "El contenido de @/projects/_prompts/ (storage de prompt-manager presumiblemente).",
+    "Si carta-design, carta-digital, carta-impresion, carta-marketing y carta-scheduler se usan en algun OTRO proyecto distinto a Mi Proyecto.",
+    "Si los 7 POC2 sospechosos genuinamente son in-memory o si persisten algo dentro del scope del proyecto activo (no se inspecciono su codigo).",
+    "El conteo exacto de stores del frontend que usan SOLO patron B (tool nativo) vs los que combinan patron A+B. Solo se confirmaron los 5 con patron A."
+  ],
+
+  "estado_de_la_Fase_A": "CERRADA. 6 etapas completadas (A1-A6). 6 artefactos en arquitectura/auditoria/_outputs/analisis-persistencia/. Sin proponer nada — diagnostico puro. Fase B (plan coherente) tiene 10 decisiones explicitas listadas para arrancar y los 6 niveles de drift documentados como fuente.",
+
+  "resumen_ejecutivo_de_la_Fase_A_completa": "El sistema Enki tiene 6 niveles que dicen cosas distintas sobre los paths: filesystem aplica una capa /storage/ que ningun contrato canoniza (D1), hay una convencion implicita /pizzepos/ en disco que ningun blueprint declara (D2), un bug double-storage replicado en blueprint+frontend (D3), dos contratos cerrados se contradicen literal (D4), el frontend depende de paths del backend en 5 stores contra el axioma declarado (D5), el catalogo de 6 patrones de persistencia se respeta solo en el 35% del repo (D6), 5 blueprints declaran paths que nunca se usan (D7), 5 formas de declarar persistencia coexisten (D8), 2 cross-module reads desde el frontend (D9), 3+ POC2 persisten sin declarar (D10). Lo que SI funciona consistentemente: aislamiento entre modulos como principio, MQTT como unico transporte, subscribe a eventos para invalidacion de cache, credential-manager como modelo de aislamiento. 10 decisiones identificadas para Fase B: donde vive /storage/, namespace por vertical o no, canonizar 22 patrones a cuantos, una forma de declarar paths en manifest, resolver contradiccion subsistema-recetario vs project-identity, cross-module reads como excepcion o eliminar, que hacer con 13 archivos huerfanos del usuario, que hacer con 5 blueprints nunca usados, forzar declaracion explicita para 11 modulos sin declarar, gestionar 5 directorios sin declarante en @/."
+}

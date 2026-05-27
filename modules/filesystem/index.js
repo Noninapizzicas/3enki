@@ -709,16 +709,20 @@ class FilesystemModule extends BaseModule {
         throw new Error(`patch[${i}] must be an object`);
       }
       const op = patch.op;
-      if (op !== 'add') {
-        throw new Error(`patch[${i}].op "${op}" not supported (v1 only implements "add")`);
+      if (op !== 'add' && op !== 'replace') {
+        throw new Error(`patch[${i}].op "${op}" not supported (v1.1 implements "add" and "replace")`);
       }
       if (typeof patch.path !== 'string') {
         throw new Error(`patch[${i}].path must be a string`);
       }
       if (!('value' in patch)) {
-        throw new Error(`patch[${i}].value is required for op "add"`);
+        throw new Error(`patch[${i}].value is required for op "${op}"`);
       }
-      doc = this._jsonPatchAdd(doc, patch.path, patch.value);
+      if (op === 'add') {
+        doc = this._jsonPatchAdd(doc, patch.path, patch.value);
+      } else {
+        doc = this._jsonPatchReplace(doc, patch.path, patch.value);
+      }
     }
     return doc;
   }
@@ -777,6 +781,56 @@ class FilesystemModule extends BaseModule {
       parent[lastToken] = value;
     } else {
       throw new Error(`Cannot add into non-container at "${pointer}"`);
+    }
+    return doc;
+  }
+
+  // RFC 6902 "replace": reemplaza el valor en la posicion del pointer.
+  // - Pointer vacio: reemplaza el documento entero (igual que add).
+  // - Pointer apunta a array: requiere indice numerico EXISTENTE (no "/-",
+  //   no se puede reemplazar lo que no existe). Sustituye en posicion.
+  // - Pointer apunta a objeto: requiere que la clave EXISTA (a diferencia
+  //   de add que la crea). Si no existe, INVALID_INPUT.
+  _jsonPatchReplace(doc, pointer, value) {
+    const tokens = this._parseJsonPointer(pointer);
+    if (tokens.length === 0) {
+      return value; // reemplazo de root
+    }
+    const lastToken = tokens[tokens.length - 1];
+    const parentTokens = tokens.slice(0, -1);
+    let parent = doc;
+    for (const token of parentTokens) {
+      if (Array.isArray(parent)) {
+        const idx = parseInt(token, 10);
+        if (Number.isNaN(idx) || idx < 0 || idx >= parent.length) {
+          throw new Error(`Path not found: array index "${token}" out of range`);
+        }
+        parent = parent[idx];
+      } else if (parent !== null && typeof parent === 'object') {
+        if (!(token in parent)) {
+          throw new Error(`Path not found: key "${token}" not in object`);
+        }
+        parent = parent[token];
+      } else {
+        throw new Error(`Cannot navigate into non-container at token "${token}"`);
+      }
+    }
+    if (Array.isArray(parent)) {
+      if (lastToken === '-') {
+        throw new Error(`Cannot replace at "/-" (would refer to non-existent position); use add instead`);
+      }
+      const idx = parseInt(lastToken, 10);
+      if (Number.isNaN(idx) || idx < 0 || idx >= parent.length) {
+        throw new Error(`Path not found: array index "${lastToken}" out of range for replace (length is ${parent.length})`);
+      }
+      parent[idx] = value;
+    } else if (parent !== null && typeof parent === 'object') {
+      if (!(lastToken in parent)) {
+        throw new Error(`Path not found: key "${lastToken}" not in object (replace requires existing key; use add to create)`);
+      }
+      parent[lastToken] = value;
+    } else {
+      throw new Error(`Cannot replace into non-container at "${pointer}"`);
     }
     return doc;
   }

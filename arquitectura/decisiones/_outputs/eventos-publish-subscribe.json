@@ -3212,6 +3212,10 @@
       ],
       "subscribers": [
         {
+          "source": "modules/notificador-pedidos/module.json",
+          "handler": "onPedidoCreado"
+        },
+        {
           "source": "modules/pizzepos/cuentas-canales/module.json",
           "handler": "MesaStrategy.onPedidoCreado"
         },
@@ -3696,6 +3700,10 @@
         },
         {
           "source": "modules/mise-en-place/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
+          "source": "modules/notificador-pedidos/module.json",
           "handler": "onProjectActivated"
         },
         {

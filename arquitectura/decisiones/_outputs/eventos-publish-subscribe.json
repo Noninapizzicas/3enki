@@ -7,7 +7,7 @@
     "generado_por": "arquitectura/decisiones/_validators/blueprint-eventos-conscientes.validate.js",
     "notas": "Catalogo curado de eventos del bus indexado por nombre. Incluye publishers (blueprints con publish/publishAndWait en su pseudocodigo + module.json.events.publishes[]) y subscribers (blueprints con eventos_que_escucho[] + module.json.events.subscribes[]). El validador lo regenera cada vez. NO editar a mano."
   },
-  "total_eventos": 422,
+  "total_eventos": 424,
   "eventos": {
     "*.actualizado": {
       "publishers": [],
@@ -2154,6 +2154,24 @@
       "subscribers": []
     },
     "fs.directory.created": {
+      "publishers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "fs.edit.request": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/filesystem/module.json",
+          "handler": "onEditRequest"
+        }
+      ]
+    },
+    "fs.edit.response": {
       "publishers": [
         {
           "source": "modules/filesystem/module.json",

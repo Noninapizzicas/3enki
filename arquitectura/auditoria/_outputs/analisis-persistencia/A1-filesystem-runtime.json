@@ -1,0 +1,279 @@
+{
+  "_doc": "Etapa A1 del analisis de persistencia y orden de archivos del sistema Enki. Documenta como el modulo 'filesystem' (autoridad de runtime para resolver paths) se comporta realmente. Sienta la base para interpretar las etapas A2-A6: lo que filesystem hace es la verdad operativa contra la que se cruzan contratos, declaraciones de modulos, disco real y cliente.",
+  "etapa_id": "A1-filesystem-runtime",
+  "creada": "2026-05-27",
+  "fuente_unica": "modules/filesystem/index.js (v2.0.0, 1115 LOC) + module.json",
+
+  "objetivo": "Capturar la mecanica real de resolucion de paths del modulo filesystem: como interpreta cada prefijo de path, donde se proyecta cada operacion en disco, que eventos publica/consume, que estado mutable mantiene y donde el comportamiento real diverge de lo que el propio docstring del modulo declara.",
+
+  "alcance": {
+    "incluye": [
+      "Lectura del codigo fuente del modulo filesystem",
+      "Lectura del module.json del modulo filesystem",
+      "Identificacion de los 4 modos de resolucion de path (leading-slash, '@/', '~/', sin prefijo)",
+      "Identificacion de los 2 modos de operacion (systemMode vs projectMode)",
+      "Catalogo de eventos publicados / consumidos / handlers UI / tools",
+      "Drift entre el docstring del propio modulo y su comportamiento"
+    ],
+    "excluye": [
+      "Lo que cada otro modulo declara o invoca (etapas A2 y A3)",
+      "Lo que existe en disco fisicamente (etapa A4)",
+      "Lo que lee el cliente / frontend (etapa A5)",
+      "Sintesis cruzada (etapa A6)",
+      "Cualquier propuesta de cambio (Fase B)"
+    ]
+  },
+
+  "axiomas_verificados_contra_codigo": [
+    {
+      "axioma": "filesystem es el unico punto de resolucion de paths en runtime",
+      "verificado": true,
+      "evidencia": "modules/filesystem/index.js:1-74. Modulo POC2 v2.0.0 con 14 ui_handlers + 14 tools + 14 bus handlers + 3 spanish bus handlers. Ningun otro modulo del subsistema-pizzepos o subsistema-carta tiene codigo JS propio que resuelva paths (carta-manager.blueprint.json no tiene index.js, recetas.blueprint.json tampoco)."
+    },
+    {
+      "axioma": "Existe una capa '/storage/' que filesystem aplica automaticamente al base_path del proyecto",
+      "verificado": true,
+      "evidencia": "modules/filesystem/index.js:134 — 'this.activeProjectPath = path.join(base_path, \"storage\")'."
+    },
+    {
+      "axioma": "La 'convencion canonica' documentada en el codigo coincide con el comportamiento real",
+      "verificado": false,
+      "evidencia": "modules/filesystem/index.js:357 dice 'Convencion canonica: paths con leading-slash son relativos al base_path del proyecto'. Realidad (linea 134): son relativos a base_path/storage. Drift del propio docstring del modulo."
+    },
+    {
+      "axioma": "filesystem aplica la misma resolucion para todos los proyectos activos",
+      "verificado": false,
+      "evidencia": "modules/filesystem/index.js:122-130 vs 131-150. Si metadata.is_system === true, activeProjectPath = process.cwd() (sin /storage/). Si es proyecto normal, base_path/storage. Dos resoluciones distintas para el mismo prefijo de path segun el proyecto activo."
+    }
+  ],
+
+  "comportamiento_clave": {
+    "estado_mutable_del_modulo": {
+      "basePath": {
+        "descripcion": "data root del sistema. Inicializado en onLoad y nunca cambia.",
+        "valor_real": "process.cwd() + '/data'",
+        "evidencia": "modules/filesystem/index.js:67"
+      },
+      "activeProjectPath": {
+        "descripcion": "Path absoluto que actua como raiz logica para paths leading-slash. Cambia en project.activated.",
+        "valor_segun_modo": {
+          "systemMode": "process.cwd() (linea 124)",
+          "projectMode_con_base_path": "base_path + '/storage' (linea 134)",
+          "projectMode_sin_base_path": "this.basePath + '/projects/' + project_id (linea 136, fallback con warning)"
+        }
+      },
+      "workingDirectory": {
+        "descripcion": "Path desde el que se resuelven paths SIN prefijo. Por defecto = activeProjectPath. Mutable en runtime via handleSetWorkDir.",
+        "evidencia_mutabilidad": "modules/filesystem/index.js:936 — handleSetWorkDir asigna this.workingDirectory = safePath y publica fs.workdir.changed."
+      },
+      "systemMode": {
+        "descripcion": "Boolean. true si el proyecto activo tiene metadata.is_system === true.",
+        "implicacion": "Cuando systemMode=true, allowedRoot = process.cwd() (no this.basePath). Permite escribir en cualquier sitio bajo el cwd del proceso."
+      },
+      "activeProjectId": "UUID del proyecto activo. Reseteado en project.deactivated."
+    },
+    "resolucion_de_paths": {
+      "_descripcion": "validatePath(userPath) en modules/filesystem/index.js:347-400 traduce el path del modulo cliente a un path absoluto en disco. La regla aplicada depende del prefijo.",
+      "casos": [
+        {
+          "prefijo": "/foo/bar.json (leading-slash)",
+          "resolucion_real": "path.resolve(activeProjectPath, 'foo/bar.json')",
+          "ejemplo_proyecto_normal_con_base_path_x": "<base_path_x>/storage/foo/bar.json",
+          "ejemplo_proyecto_sistema": "process.cwd()/foo/bar.json"
+        },
+        {
+          "prefijo": "@/foo/bar.json",
+          "resolucion_real": "path.resolve(this.basePath, 'foo/bar.json')",
+          "ejemplo": "process.cwd()/data/foo/bar.json",
+          "uso": "Bypass del project context. Cualquier modulo puede salir del scope del proyecto activo."
+        },
+        {
+          "prefijo": "~/foo/bar.json o ~",
+          "resolucion_real": "path.resolve(activeProjectPath, 'foo/bar.json')",
+          "ejemplo": "Equivalente exacto a '/foo/bar.json'. Alias del project storage root."
+        },
+        {
+          "prefijo": "foo/bar.json (sin slash inicial)",
+          "resolucion_real": "path.resolve(workingDirectory || basePath, 'foo/bar.json')",
+          "ejemplo": "Por defecto = activeProjectPath, pero workingDirectory puede haberse cambiado dinamicamente via setWorkDir.",
+          "implicacion": "Paths sin slash son estado-dependientes. Frgiles si dos modulos asumen workingDirectory distinto."
+        },
+        {
+          "prefijo": "/opt/, /home/, /var/, /usr/, /etc/, /tmp/, /root/, /srv/, /mnt/, /dev/, /proc/, /sys/",
+          "resolucion_real": "RECHAZADO con INVALID_INPUT 'absolute_system_path'",
+          "evidencia": "modules/filesystem/index.js:359-365"
+        }
+      ],
+      "validacion_de_seguridad": {
+        "_descripcion": "Tras resolver, valida que el resultado este bajo allowedRoot.",
+        "allowedRoot_systemMode": "process.cwd()",
+        "allowedRoot_projectMode": "this.basePath (= process.cwd()/data)",
+        "evidencia": "modules/filesystem/index.js:391-397"
+      },
+      "lo_que_NO_valida": [
+        "Doble storage: '/storage/config/marca.json' resuelve a base_path/storage/storage/config/marca.json sin alertar.",
+        "Path traversal con '..' al subir bajo allowedRoot solo si el resultado final cumple startsWith. No hay rechazo explicito de '..'.",
+        "Profundidad excesiva: no limite de niveles."
+      ]
+    },
+    "eventos_publicados_de_dominio": [
+      { "evento": "fs.file.created", "publica_en": "handleWrite cuando isNew=true. Evidencia: index.js:595" },
+      { "evento": "fs.file.updated", "publica_en": "handleWrite cuando archivo ya existe. Evidencia: index.js:595" },
+      { "evento": "fs.file.deleted", "publica_en": "handleDelete tras unlink. Evidencia: index.js:658" },
+      { "evento": "fs.directory.created", "publica_en": "handleMkdir tras mkdir recursive. Evidencia: index.js:684" },
+      { "evento": "fs.workdir.changed", "publica_en": "handleSetWorkDir. Evidencia: index.js:941" }
+    ],
+    "eventos_response_request_publicados": [
+      "fs.write.response", "fs.read.response", "fs.delete.response",
+      "fs.list.response", "fs.mkdir.response", "fs.info.response",
+      "fs.search.response", "fs.stats.response", "fs.copy.response",
+      "fs.move.response (o fs.rename.response segun event_type del request)",
+      "fs.append.response", "fs.exists.response"
+    ],
+    "eventos_consumidos": [
+      "project.activated (onProjectActivated, cambia activeProjectPath)",
+      "project.deactivated (onProjectDeactivated, resetea estado)",
+      "fs.write.request", "fs.read.request", "fs.delete.request",
+      "fs.list.request", "fs.mkdir.request", "fs.info.request",
+      "fs.search.request", "fs.stats.request", "fs.copy.request",
+      "fs.move.request", "fs.append.request", "fs.exists.request",
+      "archivo.listar.solicitado", "archivo.leer.solicitado", "archivo.borrar.solicitado"
+    ],
+    "tools_del_llm_expuestas": {
+      "total": 14,
+      "lista": [
+        "fs.list", "fs.read", "fs.write", "fs.delete", "fs.mkdir",
+        "fs.move", "fs.copy", "fs.search", "fs.info", "fs.append",
+        "fs.cleanup", "fs.stats", "fs.set_work_dir", "fs.get_work_dir"
+      ],
+      "implicacion": "El LLM puede invocar cualquiera con un path. filesystem resolvera segun las reglas anteriores sin saber si el blueprint que invoca tiene declarado el path correctamente."
+    }
+  },
+
+  "hallazgos": [
+    {
+      "id": "F1",
+      "categoria": "capa_oculta",
+      "titulo": "La capa '/storage/' es automatica e invisible para los blueprints",
+      "evidencia": "modules/filesystem/index.js:134 — `activeProjectPath = path.join(base_path, 'storage')`",
+      "implicacion": "Cuando carta-manager.blueprint.json declara '/cartas/<carta_id>.json', el archivo real esta en <base_path>/storage/cartas/<carta_id>.json. Ningun blueprint menciona esta capa. La 'lectura aparente' de los paths declarados no corresponde a la fisica del disco.",
+      "severidad": "alta_para_diagnostico"
+    },
+    {
+      "id": "F2",
+      "categoria": "drift_de_doc_interno",
+      "titulo": "Docstring del propio modulo miente sobre su convencion",
+      "evidencia": "modules/filesystem/index.js:357 — comentario dice 'Convencion canonica: paths con leading-slash son relativos al base_path del proyecto'. Realidad (linea 134): son relativos a base_path/storage.",
+      "implicacion": "Ni siquiera la documentacion en el propio archivo refleja el comportamiento real. Cualquier lectura del codigo que se quede en el docstring deduce un comportamiento erroneo.",
+      "severidad": "media"
+    },
+    {
+      "id": "F3",
+      "categoria": "comportamiento_divergente",
+      "titulo": "Mismo path resuelve a sitios distintos segun el proyecto activo",
+      "evidencia": "modules/filesystem/index.js:122-130 (systemMode) vs 131-150 (projectMode).",
+      "implicacion": "Una operacion fs.write con path='/foo.json' escribe en process.cwd()/foo.json si el proyecto activo es Sistema, y en <base_path>/storage/foo.json si es otro. Los modulos no saben en cual escriben sin consultar metadata del proyecto activo.",
+      "severidad": "alta_para_diagnostico"
+    },
+    {
+      "id": "F4",
+      "categoria": "fallback_inconsistente",
+      "titulo": "Fallback sin base_path NO aplica la capa /storage/",
+      "evidencia": "modules/filesystem/index.js:131-140. Si project.activated llega sin base_path: activeProjectPath = data/projects/<project_id>. Sin /storage/.",
+      "implicacion": "Comportamiento bifurcado: con base_path => /storage/ aplica; sin base_path => /storage/ no aplica. Cualquier modulo que asuma /storage/ siempre presente fallaria en el fallback. Tambien al reves: si el modulo asume nunca /storage/, falla en el modo normal.",
+      "severidad": "media"
+    },
+    {
+      "id": "F5",
+      "categoria": "doble_canon",
+      "titulo": "Coexistencia de eventos en ingles y espanol",
+      "evidencia": "modules/filesystem/index.js:233-251 — handlers archivo.listar.solicitado, archivo.leer.solicitado, archivo.borrar.solicitado conviven con fs.list.request, fs.read.request, fs.delete.request.",
+      "implicacion": "Dos shapes de evento para las mismas operaciones. Cualquier modulo cliente puede invocar via uno u otro. Deuda de naming: el contrato naming.json declara que cada modulo elige UN idioma; aqui filesystem declara language='en' pero acepta espanol como secundario sin documentarlo explicitamente.",
+      "severidad": "media"
+    },
+    {
+      "id": "F6",
+      "categoria": "estado_mutable_runtime",
+      "titulo": "workingDirectory es mutable en runtime via setWorkDir",
+      "evidencia": "modules/filesystem/index.js:929-948 — handleSetWorkDir asigna this.workingDirectory = safePath y publica fs.workdir.changed.",
+      "implicacion": "Paths sin prefijo (sin slash inicial) se resuelven relativo a workingDirectory, que cualquier llamada a fs.set_work_dir puede cambiar. Esto introduce estado global mutable en una operacion que parece deterministica. Riesgo: dos modulos que asumen workingDirectory distinto operan sobre paths distintos sin enterarse.",
+      "severidad": "alta_si_se_usa"
+    },
+    {
+      "id": "F7",
+      "categoria": "puerta_de_escape",
+      "titulo": "Prefijo '@/' bypassa el project context",
+      "evidencia": "modules/filesystem/index.js:367-370 — paths que empiezan con '@/' resuelven a this.basePath (data root del sistema), no a activeProjectPath.",
+      "implicacion": "Cualquier modulo puede salir del scope del proyecto activo. Es funcionalidad legitima (acceso a datos compartidos del sistema) pero no esta documentada en blueprints que la usen. Cualquier modulo con '@/' escribe en zona compartida sin que el contrato lo declare.",
+      "severidad": "informativa"
+    },
+    {
+      "id": "F8",
+      "categoria": "validacion_parcial",
+      "titulo": "Defensa contra paths absolutos del sistema, no contra path traversal",
+      "evidencia": "modules/filesystem/index.js:359-365 — lista de SYSTEM_PATH_PREFIXES rechazada. Pero la validacion final (linea 392) solo comprueba startsWith(allowedRoot), no rechaza '..' explicitamente.",
+      "implicacion": "Path como '/a/../../b.json' podria normalizar a '/b.json' bajo allowedRoot, pasar la validacion. No es vulnerabilidad si normalize trabaja correctamente, pero la disciplina no es explicita.",
+      "severidad": "informativa"
+    },
+    {
+      "id": "F9",
+      "categoria": "ausencia_de_validacion_semantica",
+      "titulo": "filesystem NO valida que el path tenga sentido en el dominio del modulo invocante",
+      "evidencia": "filesystem solo valida sintacticamente (prefijos rechazados, path traversal). No verifica que '/storage/config/marca.json' (declarado por carta-marketing) no resulte en doble storage. No verifica que un modulo escriba en su namespace declarado.",
+      "implicacion": "Si un blueprint declara mal un path, filesystem lo ejecuta sin alertar. No hay capa de 'governance de paths' por modulo. Esto es lo que hace que el bug 'double-storage' de carta-marketing exista silenciosamente.",
+      "severidad": "alta_para_diseno"
+    },
+    {
+      "id": "F10",
+      "categoria": "tools_disponibles_al_llm",
+      "titulo": "14 tools del LLM con acceso completo a las 14 operaciones",
+      "evidencia": "modules/filesystem/module.json — 14 tools declaradas con parameters.path como string libre.",
+      "implicacion": "Cualquier blueprint que componga un tool_call fs.write/fs.read/fs.delete puede actuar sobre cualquier path resoluble. Si el LLM 'alucina' un path (ej. siguiendo un blueprint con drift), filesystem lo ejecuta. No hay restriccion 'este modulo solo puede tocar /<su_namespace>/'.",
+      "severidad": "alta_para_diseno"
+    }
+  ],
+
+  "limitaciones_de_esta_etapa": [
+    "NO se reviso el comportamiento de archivado de versiones (handleVersionArchive si existe).",
+    "NO se reviso el modulo _shared/base-module.js que filesystem extiende.",
+    "NO se midio empiricamente el comportamiento bajo systemMode (la sesion del audit corrio sobre el proyecto 'Mi Proyecto', no sobre 'Sistema').",
+    "NO se reviso si el LLM tiene tools de fs.* expuestas en cajones (eso se cubre en A3 cuando se miran los blueprints que las invocan)."
+  ],
+
+  "preguntas_para_siguientes_etapas": [
+    {
+      "para_etapa": "A2",
+      "pregunta": "Que contratos del sistema definen reglas sobre paths/persistencia? Que dicen sobre la capa '/storage/', sobre prefijos '@/' y '~', sobre el modo 'systemMode'?"
+    },
+    {
+      "para_etapa": "A2",
+      "pregunta": "El contrato 'persistence.contract.json' o 'project-identity.contract.json' menciona la capa storage/? Si no, es un drift transversal del contrato vs el comportamiento real."
+    },
+    {
+      "para_etapa": "A3",
+      "pregunta": "Cuantos modulos declaran paths con prefijo de vertical (ej. '/pizzepos/...')? Cuantos los declaran planos? Cuantos usan '@/'? Cuantos usan paths sin slash inicial (dependientes de workingDirectory)?"
+    },
+    {
+      "para_etapa": "A3",
+      "pregunta": "El blueprint de carta-marketing declara '/storage/config/marca.json'. Confirmar que esto produce double-storage y catalogar otros casos similares en otros blueprints."
+    },
+    {
+      "para_etapa": "A4",
+      "pregunta": "El proyecto 'Mi Proyecto' tiene '/storage/' como subdir de su base_path? Que esta dentro de '/storage/' realmente vs lo que esta fuera?"
+    },
+    {
+      "para_etapa": "A4",
+      "pregunta": "Existen directorios 'pizzepos/cartas/' u otros con prefijo de vertical en la realidad fisica del disco? Quien los crea (cual operacion del LLM, cual evento)?"
+    },
+    {
+      "para_etapa": "A5",
+      "pregunta": "El cliente/frontend lee del filesystem directamente o via bus events? Si via bus, que paths le pasa a fs.read.request?"
+    },
+    {
+      "para_etapa": "A6",
+      "pregunta": "Cuantos niveles de drift hay sobre paths: (1) contratos sin mencionar /storage/, (2) blueprints declarando paths que el LLM ejecuta sin alertar, (3) filesystem documentando una convencion que no aplica, (4) disco con archivos huerfanos sin reclamante, (5) cliente leyendo de un sitio que ningun otro nivel declara?"
+    }
+  ],
+
+  "resumen_ejecutivo": "filesystem es la unica autoridad de resolucion de paths en runtime. Aplica una capa '/storage/' automatica e invisible a todo path leading-slash cuando el proyecto activo es 'normal'; cuando es el proyecto 'Sistema', no aplica esa capa y trabaja desde la raiz del cwd. NO valida que el path tenga sentido semantico para el modulo invocante: si un blueprint declara mal un path, filesystem lo ejecuta y publica fs.write.response status:ok sin alertar. Su propio docstring (linea 357) miente sobre la convencion que aplica. Esto explica tres de los bugs operativos observados en sesiones previas: (a) la capa /storage/ oculta que hace que blueprints como carta-marketing produzcan double-storage, (b) los archivos huerfanos en el root del proyecto (escritos siguiendo blueprints que no usan vertical-prefix), y (c) la incapacidad del sistema para detectar que un modulo este escribiendo fuera de su namespace declarado. Cualquier propuesta de canonizacion de paths que no integre la capa /storage/ y el systemMode es incompleta."
+}

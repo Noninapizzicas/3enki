@@ -1,0 +1,309 @@
+{
+  "_doc": "Etapa AP4 de la rama A-persistencia del analisis del sistema Enki. Catalogo de eventos de dominio que indican persistencia (carta.creada, receta.actualizada, etc.) y handoffs cross-modulo basados en eventos. Usa como input el output curado de blueprint-eventos-conscientes.validate.js (419 eventos). Identifica los 15 handoffs activos donde si hay publisher+subscriber declarados, los huerfanos criticos de persistencia (12 eventos del dominio carta/recetas que se publican pero nadie escucha), y la limitacion fundamental del catalogo: detecta wiring declarativo pero NO detecta si el handler del subscriber realmente completa su trabajo en runtime.",
+  "etapa_id": "AP4-eventos-de-dominio-vs-crud-silente",
+  "creada": "2026-05-27",
+  "deriva_de": ["AP1-motor-ejecucion-llm-runtime.json", "AP2-blueprint-padre-subsistema-recetario.json", "AP3-fs-write-atomico-cas-concurrencia.json"],
+  "input_principal": "arquitectura/decisiones/_outputs/eventos-publish-subscribe.json (4742 LOC, 419 eventos, generado por blueprint-eventos-conscientes.validate.js)",
+
+  "objetivo": "Mapear que blueprints publican que eventos de dominio cuando persisten, que modulos los escuchan, donde estan los handoffs cross-modulo activos (sanos), donde estan los huerfanos (publica sin que nadie escuche o escucha sin que nadie publique), y donde el catalogo es ciego a runtime broken (Critica 1 del audit 2026-05-25 que se cerro a nivel declarativo pero sigue rota en runtime).",
+
+  "alcance": {
+    "incluye": [
+      "Analisis del output curado eventos-publish-subscribe.json",
+      "Conteo y clasificacion de los 419 eventos del catalogo",
+      "Filtrado de los 62 eventos que indican persistencia de dominio",
+      "Identificacion de los 15 handoffs cross-modulo activos",
+      "Identificacion de los 12 huerfanos criticos del dominio carta/recetas",
+      "Limitaciones del catalogo como herramienta de detection"
+    ],
+    "excluye": [
+      "Reproduccion empirica del bug del modify (etapa AP5)",
+      "Sintesis cruzada final (etapa AP6)",
+      "Decisiones de canon (Fase B)"
+    ]
+  },
+
+  "estadisticas_globales_del_catalogo": {
+    "total_eventos": 419,
+    "eventos_con_publisher_y_subscriber": 95,
+    "eventos_publicados_sin_subscriber": 236,
+    "eventos_subscritos_sin_publisher": 88,
+    "porcentaje_eventos_sanos": "23% (95/419)",
+    "porcentaje_huerfanos": "77% (324/419)",
+    "wildcards": 5,
+    "interpretacion": "Mas de la mitad del catalogo (56%) son eventos que se publican sin que nadie los procese. Algunos son legitimos (telemetria/observabilidad fire-and-forget), pero muchos indican handoffs rotos o tras de migracion."
+  },
+
+  "eventos_de_persistencia_de_dominio": {
+    "_descripcion": "Eventos que indican que algo del dominio se persistio: <entidad>.creada/.actualizada/.eliminada/.borrada/.save.*/.delete.*/.update.*/.list.*. Filtrados del catalogo total.",
+    "total": 62,
+    "con_handoff_activo": 15,
+    "huerfanos_publicados_sin_subscriber": 12,
+    "huerfanos_subscritos_sin_publisher": "varios (no contados en esta etapa)"
+  },
+
+  "handoffs_activos_cross_modulo": {
+    "_descripcion": "Eventos donde el wiring declarativo esta completo: publisher en un modulo, subscriber en otro. Estos son los handoffs que el sistema PRETENDE tener operativos.",
+    "lista": [
+      {
+        "evento": "carta.actualizada",
+        "publisher": "pizzepos/carta-manager",
+        "subscribers": ["pizzepos/categorias", "pizzepos/comandero", "pizzepos/ingredientes", "pizzepos/productos"],
+        "proposito": "Cuando una carta se modifica, 4 modulos derivados se entan",
+        "estado_runtime": "no_verificado_en_AP4"
+      },
+      {
+        "evento": "carta.creada",
+        "publisher": "pizzepos/menu-generator",
+        "subscribers": ["pizzepos/carta-manager"],
+        "proposito": "menu-generator genera la carta, carta-manager la persiste",
+        "estado_runtime": "ROTO (segun audit previo): el wiring esta declarado pero el handler de carta-manager se dispara y no completa la persistencia. Bug del modify."
+      },
+      {
+        "evento": "catalogo.actualizado",
+        "publisher": "pizzepos/productos",
+        "subscribers": ["comandero-cliente-builder", "pizzepos/comandero", "pizzepos/pedidos", "pizzepos/persistencia-comandero"],
+        "proposito": "Sincronizacion de catalogo a los modulos que ofrecen productos al cliente",
+        "estado_runtime": "no_verificado"
+      },
+      {
+        "evento": "cuenta.creada / .actualizada / .eliminada",
+        "publisher": "pizzepos/cuentas (+ cuentas-canales para .creada)",
+        "subscribers": ["pizzepos/cobros", "pizzepos/cocina", "pizzepos/comandero", "pizzepos/impresion", "pizzepos/pedidos", "pizzepos/persistencia-comandero"],
+        "proposito": "Toda mutacion del estado de una cuenta propaga a 5-6 modulos derivados",
+        "estado_runtime": "no_verificado - aparenta mas saludable que el handoff carta"
+      },
+      {
+        "evento": "producto.creado / .actualizado / .eliminado",
+        "publisher": "pizzepos/productos",
+        "subscribers": ["comandero-cliente-builder", "pizzepos/comandero", "pizzepos/ingredientes", "pizzepos/pedidos", "pizzepos/variaciones"],
+        "proposito": "Sincronizacion de catalogo de productos a modulos derivados (variaciones, ingredientes inventory, etc.)",
+        "estado_runtime": "no_verificado"
+      },
+      {
+        "evento": "pedido.creado",
+        "publisher": "pizzepos/pedidos",
+        "subscribers": ["pizzepos/cuentas-canales", "pizzepos/persistencia-comandero", "whatsapp-bot"],
+        "proposito": "Cuando se crea pedido, persistencia + canales (incluido whatsapp) reaccionan",
+        "estado_runtime": "no_verificado"
+      },
+      {
+        "evento": "ingrediente.actualizado",
+        "publisher": "pizzepos/ingredientes",
+        "subscribers": ["pizzepos/ingredientes (a si mismo)"],
+        "proposito": "Auto-suscripcion. Probablemente para invalidacion de cache interna o variantes.",
+        "estado_runtime": "no_verificado - patron inusual (auto-subscribe sugiere uso especifico)"
+      },
+      {
+        "evento": "tarifas.config.actualizada",
+        "publisher": "pizzepos/tarifas",
+        "subscribers": ["comandero-cliente-builder", "pizzepos/comandero"],
+        "proposito": "Cambios de tarifas propagan a comandero y al builder del cliente",
+        "estado_runtime": "no_verificado"
+      },
+      {
+        "evento": "project.get.request / project.get.response",
+        "publisher": "pizzepos/productos (request) / project-manager (response)",
+        "subscribers_de_response": ["mise-en-place", "pase-cocina", "pizzepos/productos", "recetario-creativo"],
+        "proposito": "Pares request/response del bus para resolver project_id -> base_path. Confirma patron de project-identity",
+        "estado_runtime": "no_verificado"
+      },
+      {
+        "evento": "fs.list.request",
+        "publisher": "pizzepos/carta-design + pizzepos/carta-manager",
+        "subscriber": "filesystem",
+        "proposito": "Listar archivos del proyecto via bus",
+        "estado_runtime": "presumiblemente sano - filesystem es el modulo JS POC2 con handler robusto"
+      }
+    ],
+    "_observacion_critica": "El handoff carta.creada (Critica 1 del audit 2026-05-25) aparece como HANDOFF ACTIVO en el catalogo. Wiring declarativo OK. Pero AUDITS PREVIOS demostraron que el handler de carta-manager se ejecuta y NO completa la persistencia. El catalogo NO detecta runtime broken."
+  },
+
+  "huerfanos_criticos_del_dominio_carta_recetas": {
+    "_descripcion": "Eventos publicados por blueprints del subsistema-recetario que ningun modulo escucha. Para CADA UNO: o es bug (alguien deberia procesarlo y no lo hace), o es telemetria fire-and-forget (publicacion para observabilidad sin consumer), o trabajo pendiente.",
+    "publicados_sin_subscriber": [
+      {
+        "evento": "receta.creada",
+        "publisher": "pizzepos/recetas",
+        "subscribers": "NINGUNO",
+        "diagnostico_probable": "Bug critico. Otros modulos del subsistema (recetario-creativo, escandallo, viabilidad, mise-en-place) deberian reaccionar a recetas nuevas para actualizar sus calculos derivados. Si nadie escucha, esos calculos quedan desactualizados."
+      },
+      {
+        "evento": "receta.actualizada",
+        "publisher": "pizzepos/recetas",
+        "subscribers": "NINGUNO",
+        "diagnostico_probable": "Mismo problema que receta.creada. Cualquier modulo que cache una receta queda obsoleto."
+      },
+      {
+        "evento": "receta.eliminada",
+        "publisher": "pizzepos/recetas",
+        "subscribers": "NINGUNO",
+        "diagnostico_probable": "Si una receta se borra, modulos que la referencien deberian saberlo (escandallo de productos que la usan, etc.)."
+      },
+      {
+        "evento": "receta.estado.actualizada",
+        "publisher": "pizzepos/recetas",
+        "subscribers": "NINGUNO",
+        "diagnostico_probable": "Cambios de estado (borrador -> en_servicio -> archivada) no se notifican."
+      },
+      {
+        "evento": "ingrediente.creado",
+        "publisher": "pizzepos/ingredientes",
+        "subscribers": "NINGUNO",
+        "diagnostico_probable": "Productos y recetas deberian saber de nuevos ingredientes."
+      },
+      {
+        "evento": "ingrediente.precio.actualizado",
+        "publisher": "pizzepos/recetas (blueprint!)",
+        "subscribers": "NINGUNO",
+        "diagnostico_probable": "Cambios de precio de ingredientes no propagan a escandallo (recalculo de costes) ni a productos (recalculo de precios). Drift gordo."
+      },
+      {
+        "evento": "carta.borrada",
+        "publisher": "pizzepos/carta-manager",
+        "subscribers": "NINGUNO",
+        "diagnostico_probable": "Si se borra una carta, los modulos que la referenciaban (carta-digital, carta-impresion, carta-design) deberian invalidar su cache."
+      },
+      {
+        "evento": "carta.get.request",
+        "publishers": ["pizzepos/carta-design", "pizzepos/carta-impresion"],
+        "subscribers": "NINGUNO",
+        "diagnostico_probable": "BUG OPERATIVO CRITICO. Estos dos modulos publican carta.get.request esperando que carta-manager (o quien sea) responda con carta.get.response. NADIE LO ATIENDE. Por tanto carta-design y carta-impresion NO PUEDEN leer una carta. Ambos modulos estan en blueprints NUNCA usados (segun A4) — coherente con que no funcionarian aunque se invocaran."
+      },
+      {
+        "evento": "cartadigital.carta_publica.actualizada",
+        "publisher": "pizzepos/carta-digital",
+        "subscribers": "NINGUNO",
+        "diagnostico_probable": "carta-digital publica que la carta publica se actualizo. Si nadie escucha, ningun cache del frontend se invalida cuando cambia la carta visible al cliente."
+      },
+      {
+        "evento": "cartadigital.config.actualizada",
+        "publisher": "pizzepos/carta-digital",
+        "subscribers": "NINGUNO",
+        "diagnostico_probable": "Misma situacion."
+      },
+      {
+        "evento": "carta-scheduler.regla.creada / .eliminada",
+        "publisher": "pizzepos/carta-scheduler",
+        "subscribers": "NINGUNO",
+        "diagnostico_probable": "carta-scheduler publica que se creo/elimino una regla. Si nadie escucha, no se reactivan los cron jobs. Posible BUG OPERATIVO."
+      }
+    ]
+  },
+
+  "limitaciones_fundamentales_del_catalogo": [
+    {
+      "id": "L1",
+      "titulo": "El catalogo detecta WIRING DECLARATIVO pero NO RUNTIME COMPLETION",
+      "evidencia": "carta.creada aparece como handoff activo (carta-manager declara subscribe). Pero audits previos demostraron que el handler se dispara y no completa la persistencia. El catalogo NO puede detectar esto.",
+      "implicacion": "Cualquier bug del runtime LLM (modify rota, truncamiento, fidelidad rota) es invisible al validator de blueprint-eventos-conscientes."
+    },
+    {
+      "id": "L2",
+      "titulo": "Eventos publicados por codigo JS POC2 (no blueprints) pueden no estar catalogados completos",
+      "evidencia": "chat.message.saved aparece como huerfano de publisher (88 huerfanos similares). Pero el chat-io publica este evento desde su index.js — un modulo POC2. Probable que el validator no escanee el codigo JS exhaustivamente, solo blueprints.",
+      "implicacion": "Algunos huerfanos del catalogo son falsos huerfanos (el publisher existe pero el validator no lo detecto). Inflar la lista de bugs es ruido. La causa raiz: el catalogo es mejor para detectar drift entre blueprints que entre POC2+blueprints."
+    },
+    {
+      "id": "L3",
+      "titulo": "El catalogo no distingue 'huerfano por bug' vs 'fire-and-forget legitimo'",
+      "evidencia": "Eventos como bot.disabled, bot.enabled (bot-manager) son telemetria/observabilidad legitima sin consumer canonico. Pero el catalogo los marca igual que carta.borrada (que SI deberia tener consumer).",
+      "implicacion": "Para distinguir, hay que clasificar cada huerfano manualmente. Sin clasificacion, el numero '236 huerfanos' es enganoso."
+    },
+    {
+      "id": "L4",
+      "titulo": "Subscribers tienen drift de nombre (a veces sin filename source)",
+      "evidencia": "Algunos eventos aparecen con subscribers como strings sueltos, no como {source, handler}. Indica que el validator no extrajo el shape completo de algunos handlers.",
+      "implicacion": "Pequeno drift del propio output. No critico para el analisis."
+    }
+  ],
+
+  "hallazgos": [
+    {
+      "id": "AP4-F1",
+      "categoria": "handoff_critico_roto_en_runtime",
+      "titulo": "carta.creada (Critica 1 del audit 2026-05-25) aparece sano en el catalogo pero ROTO en runtime",
+      "evidencia": "Catalogo: publisher menu-generator + subscriber carta-manager declarados. Audits previos: el handler de carta-manager se dispara, hace fs.read, y NO completa el fs.write. Bug del modify intacto.",
+      "implicacion": "El fix declarativo de Critica 1 (anyadir subscribe a carta.creada en carta-manager.blueprint) CERRO el sintoma 'handoff huerfano' pero NO cerro el bug raiz. La verificacion mecanica del wiring (blueprint-eventos-conscientes.validate.js) NO detecta que el handler no complete su trabajo. Es necesario un validator distinto (de runtime) o una reproduccion empirica (AP5)."
+    },
+    {
+      "id": "AP4-F2",
+      "categoria": "huerfanos_del_dominio_recetas",
+      "titulo": "5 eventos del dominio recetas publicados sin subscriber",
+      "evidencia": "receta.creada, receta.actualizada, receta.eliminada, receta.estado.actualizada, ingrediente.precio.actualizado — TODOS publicados por recetas blueprint, NINGUNO con subscriber.",
+      "implicacion": "Si recetario-creativo, escandallo, viabilidad o mise-en-place dependen de cambios en recetas para sus calculos derivados, esos calculos quedan obsoletos. Probable bug operativo gordo si esos modulos se usan."
+    },
+    {
+      "id": "AP4-F3",
+      "categoria": "carta_design_e_impresion_no_pueden_leer_carta",
+      "titulo": "carta-design y carta-impresion publican carta.get.request — NADIE responde",
+      "evidencia": "Ambos blueprints publican carta.get.request esperando carta.get.response. Catalogo: 0 subscribers.",
+      "implicacion": "BUG OPERATIVO. Si se invoca carta-design o carta-impresion, no pueden leer la carta porque nadie procesa su request. Coherente con A4 (estos modulos NUNCA se han usado en Mi Proyecto). Si se quieren usar, hay que anyadir el subscriber (probablemente carta-manager debe escuchar carta.get.request)."
+    },
+    {
+      "id": "AP4-F4",
+      "categoria": "telemetria_fire_and_forget_legitima",
+      "titulo": "Muchos huerfanos publicados son telemetria fire-and-forget legitima",
+      "evidencia": "bot.disabled, bot.enabled, bot.registered, etc. publicados por bot-manager. No requieren subscriber.",
+      "implicacion": "El conteo '236 huerfanos publicados' incluye estos eventos legitimos. Para identificar bugs reales, hay que clasificar manualmente cada huerfano: 'bug' vs 'telemetria legitima'. Pendiente."
+    },
+    {
+      "id": "AP4-F5",
+      "categoria": "catalogo_no_detecta_runtime_broken",
+      "titulo": "El catalogo es ciego al bug del modify y a runtime broken en general",
+      "evidencia": "El validator blueprint-eventos-conscientes.validate.js inspecciona el wiring declarativo (eventos publicados y subscritos en blueprints + module.json). NO ejecuta runtime ni verifica que los handlers completen.",
+      "implicacion": "Para detectar bugs como el del modify, necesitamos otro mecanismo. Opciones: (a) tests de integracion que verifiquen que carta.creada -> cartas.json escrito, (b) auditorias periodicas via audit-module, (c) telemetria nueva (handler_completed_successfully vs handler_started_but_did_not_complete)."
+    },
+    {
+      "id": "AP4-F6",
+      "categoria": "15_handoffs_activos_no_verificados",
+      "titulo": "15 handoffs cross-modulo declarados activos, ninguno verificado empiricamente en runtime",
+      "evidencia": "El catalogo dice publisher+subscriber declarados. carta.creada como handoff activo declarado tambien estaba ROTO en runtime (verificado). Los otros 14 no se verificaron en esta etapa.",
+      "implicacion": "Por simetria, sospecha de que algunos de los otros 14 handoffs tambien esten rotos en runtime. Reproduccion empirica recomendada para los criticos (carta.actualizada, cuenta.creada, producto.creado, etc.)."
+    },
+    {
+      "id": "AP4-F7",
+      "categoria": "regla_6_explica_modo_silencioso",
+      "titulo": "La regla 6 del padre (modo_silencioso_en_lecturas) explica por que las operaciones de lectura NO publican eventos",
+      "evidencia": "regla 6 del blueprint padre: 'Operaciones de lectura puras (listar, obtener, estadisticas, buscar) NO publican eventos de dominio'. El catalogo NO tiene *.consultada, *.leida, *.listada, *.buscada.",
+      "implicacion": "Disciplina sana: el bus no se llena de ruido de lecturas. Pero requiere clasificacion correcta. Si una operacion 'compone+filtra' se llama 'listar', podria saltarse eventos que deberia publicar (caso ambiguo)."
+    }
+  ],
+
+  "preguntas_para_siguientes_etapas": [
+    {
+      "para_etapa": "AP5",
+      "pregunta": "Reproducir empiricamente el handoff carta.creada: capturar el evento publicado por menu-generator, verificar que carta-manager lo recibe (telemetria del bus), inspeccionar exactamente que tool_calls hace el LLM dentro de su handler _on_carta_creada, identificar donde se omite el fs.write completo."
+    },
+    {
+      "para_etapa": "AP5",
+      "pregunta": "Verificar empiricamente algunos handoffs activos no de carta (ej. producto.actualizado, cuenta.creada). Si tambien estan rotos en runtime, el bug del modify afecta a mas dominios que solo el subsistema-recetario."
+    },
+    {
+      "para_etapa": "AP6",
+      "pregunta": "Clasificar los 236 huerfanos publicados como 'bug' vs 'telemetria legitima'. Si solo el 20% son bugs, el numero es manejable. Si es el 80%, hay deuda transversal."
+    },
+    {
+      "para_etapa": "AP6 / Fase B",
+      "pregunta": "Anyadir validator que detecte runtime broken: para handoffs criticos, verificar via tests de integracion que el handler completa (escribe a disco, publica response, etc.). El catalogo actual es necesario pero insuficiente."
+    },
+    {
+      "para_etapa": "AP6 / Fase B",
+      "pregunta": "carta-design y carta-impresion publican carta.get.request sin subscriber. Decision: (a) anyadir handler en carta-manager para carta.get.request -> carta.get.response, (b) cambiar el patron y usar tools nativos de carta-manager (carta-manager.get) en lugar de eventos genericos, (c) deprecar carta-design y carta-impresion."
+    },
+    {
+      "para_etapa": "AP6 / Fase B",
+      "pregunta": "Los 5 eventos del dominio recetas sin subscriber: hay que anyadir subscribers (recetario-creativo, escandallo, etc.) o son telemetria? Decision por evento."
+    }
+  ],
+
+  "limitaciones_de_esta_etapa": [
+    "NO se reprodujo empiricamente ningun handoff (esa es etapa AP5).",
+    "NO se clasificaron los 236 huerfanos publicados como 'bug' vs 'telemetria legitima' (pendiente para AP6 o sesion dedicada).",
+    "NO se inspecciono el shape del handler de cada subscriber declarado para verificar si realmente completa.",
+    "NO se cruzo el catalogo con el chat-export de las sesiones reales (audits previos) para verificar que eventos pasaron realmente vs declarados.",
+    "El catalogo puede tener falsos huerfanos por la limitacion L2 (validator que no escanea POC2 exhaustivamente). Magnitud del falso positivo: desconocida."
+  ],
+
+  "resumen_ejecutivo": "El catalogo eventos-publish-subscribe.json (419 eventos, generado por blueprint-eventos-conscientes.validate.js) revela: 23% de eventos sanos (95/419), 56% publicados sin subscriber (236), 21% subscritos sin publisher (88). De los 62 eventos de persistencia de dominio: 15 handoffs cross-modulo activos (declarativamente) + 12 huerfanos criticos del dominio carta/recetas. El handoff carta.creada (Critica 1 del audit 2026-05-25) aparece SANO en el catalogo pero ROTO en runtime — el fix declarativo cerro el sintoma pero NO el bug raiz. Los 5 eventos del dominio recetas (receta.creada/.actualizada/.eliminada/.estado.actualizada + ingrediente.precio.actualizado) publicados por recetas blueprint NO TIENEN subscriber — si recetario-creativo, escandallo o mise-en-place dependen de ellos, drift gordo. carta-design y carta-impresion publican carta.get.request sin subscriber — no pueden leer cartas (coherente con A4: nunca se usan). LIMITACION CRITICA DEL CATALOGO: detecta wiring declarativo, NO runtime completion. El bug del modify es invisible al validator. Para detectarlo: tests de integracion o telemetria nueva. Fase B con 6 decisiones nuevas: clasificar huerfanos, validator de runtime, handler para carta.get.request, subscribers para receta.*, decision sobre 5 blueprints nunca usados."
+}

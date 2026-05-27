@@ -1,0 +1,304 @@
+{
+  "_doc": "Sintesis maestra A∑ de la Fase A completa del analisis del sistema Enki. Junta la rama A-orden (A1-A6, cubre paths/contratos/blueprints/disco/frontend) con la rama A-persistencia (AP1-AP6, cubre motor/runtime/safeUpdate/CAS/handoffs/reproduccion). Produce UN documento unico que Fase B puede leer sin tener que abrir 12 JSONs. Identifica el problema central unificado: el paradigma blueprint-driven depende de DOS cadenas fragiles (blueprint llega al LLM, LLM expande helpers mentalmente). Ambas cadenas tienen drifts. El bug del modify y los drifts de paths son sintomas de ambas fragilidades combinadas.",
+  "etapa_id": "A-sigma-sintesis-maestra-orden-mas-persistencia",
+  "creada": "2026-05-27",
+  "deriva_de": ["A6-sintesis.json (rama A-orden)", "AP6-sintesis-rama-persistencia.json (rama A-persistencia)"],
+  "cierra": "Fase A completa (12 etapas, 12 artefactos)",
+
+  "objetivo": "Producir la foto unificada que Fase B necesita como input unico. Identificar el problema central, los drifts cross-rama, las decisiones consolidadas (10 de orden + 10 de persistencia), las dependencias entre decisiones, y lo que queda invariante.",
+
+  "el_problema_central_unificado": {
+    "tesis": "El sistema Enki esta construido sobre un paradigma BLUEPRINT-DRIVEN: blueprints declarativos en JSON + LLM como runtime + 2 tools universales (bus.publish, bus.publishAndWait) + agentic loop. Es arquitectura elegante en teoria. PERO la operatividad real depende de DOS CADENAS FRAGILES.",
+    "cadena_1_blueprint_llega_al_LLM": {
+      "descripcion": "El blueprint padre + hijo (declarativos en JSON) deben llegar al LLM como system_prompt en cada turno donde page_id matchea.",
+      "donde_se_rompe": "AP5-F1 detecto empiricamente que NO siempre llega. El system_prompt observado fue el generico del Companero de Viaje (10500 chars), no el blueprint.",
+      "consecuencia": "Si no llega, el LLM opera con disciplina generica, sin conocer safeUpdate ni el patron read-modify-write canonico. Persistencia se ejecuta como puede, no como debe."
+    },
+    "cadena_2_LLM_expande_helpers_mentalmente": {
+      "descripcion": "Aunque el blueprint llegue, helpers como safeUpdate son SEMANTICOS no ejecutables. El LLM tiene que expandir los 5 pasos mentalmente. uuid() y nowISO() tambien son referencias semanticas.",
+      "donde_se_rompe": "AP2-F2 + AP5-F2: el LLM se desenfoca en el paso 2 (aplicar mutator). 2 variantes opuestas observadas (escribir array viejo, escribir solo nueva entrada). UUID patronado fake (AP5-F3).",
+      "consecuencia": "Bug del modify en sus 2 variantes. Perdida real de datos del usuario."
+    },
+    "la_combinacion_es_lo_grave": "Las 2 cadenas fragiles operan en serie. Si cadena 1 falla, cadena 2 nunca se evalua (LLM no conoce safeUpdate). Si cadena 1 funciona pero cadena 2 falla, persiste mal. Ambos casos producen el mismo sintoma observable: bug del modify. Por eso es dificil de diagnosticar — desde fuera parece el mismo bug."
+  },
+
+  "las_dos_ramas_de_la_Fase_A": {
+    "rama_A_orden": {
+      "etapas": ["A1-filesystem-runtime", "A2-contratos-persistencia", "A3-modulos-declarado", "A4-disco-real", "A5-frontend", "A6-sintesis"],
+      "cubre": "Como se organizan los archivos en disco. Donde viven los stores. Que dice cada contrato sobre paths. Que declaran los modulos. Que existe en disco real. Como lee el frontend.",
+      "hallazgo_central": "Cuatro formatos de path declarados, ninguno captura la realidad operativa completa. Capa /storage/ huerfana de contrato. Bug double-storage replicado en 3 niveles. Contradiccion literal entre 2 contratos cerrados (subsistema-recetario vs project-identity).",
+      "decisiones_para_Fase_B": "10 decisiones B-D1 a B-D10"
+    },
+    "rama_A_persistencia": {
+      "etapas": ["AP1-motor-ejecucion-llm-runtime", "AP2-blueprint-padre-subsistema-recetario", "AP3-fs-write-atomico-cas-concurrencia", "AP4-eventos-de-dominio-vs-crud-silente", "AP5-reproduccion-empirica-del-bug-del-modify", "AP6-sintesis-rama-persistencia"],
+      "cubre": "Como ejecuta el LLM-runtime el blueprint. Que dice el blueprint padre sobre safeUpdate. Como implementa filesystem CAS y atomicidad. Que eventos de dominio publican los blueprints. Reproduccion empirica del bug del modify.",
+      "hallazgo_central": "El bug del modify tiene 2 variantes opuestas (audit bocata: escribe array viejo; AP5: escribe solo nueva entrada). Causa raiz primaria (AP5-F1): el LLM no recibe el blueprint en system_prompt. Causa raiz secundaria: safeUpdate es semantico no ejecutable.",
+      "decisiones_para_Fase_B": "10 decisiones BP-D1 a BP-D10"
+    }
+  },
+
+  "drifts_cross_rama_orden_y_persistencia": [
+    {
+      "id": "DX1",
+      "titulo": "Capa /storage/ huerfana de contrato (orden) + filesystem la aplica automatico (persistencia)",
+      "ramas_implicadas": ["A1-F1", "A2-F1", "A4-disco"],
+      "lo_que_significa_juntos": "Todo path de blueprint o frontend leading-slash se prefija con /storage/. Pero NINGUN contrato lo declara. Si se canonizan paths (Fase B), hay que decidir si el canon incluye /storage/ explicito o si se queda en codigo de filesystem. Cualquier cambio en filesystem rompe persistencia silentemente."
+    },
+    {
+      "id": "DX2",
+      "titulo": "Convencion /pizzepos/ implicita en disco (orden) + ningun blueprint la declara (persistencia)",
+      "ramas_implicadas": ["A4-F3", "A8 de AP6 implicito"],
+      "lo_que_significa_juntos": "El disco real tiene /pizzepos/cartas/, /pizzepos/ocr/, etc. Alguien escribe ahi (posiblemente project-manager al activar proyecto). Ningun blueprint del subsistema-pizzepos declara /pizzepos/ como prefijo. Si la convencion canonica futura es '/pizzepos/<modulo>/<entidad>', hay que actualizar los 7 blueprints + 5 stores del frontend con paths hardcoded + migrar datos en disco."
+    },
+    {
+      "id": "DX3",
+      "titulo": "Bug double-storage en 3 niveles (orden + persistencia + frontend)",
+      "ramas_implicadas": ["A3-F6", "A5-F3", "AP3"],
+      "lo_que_significa_juntos": "carta-marketing declara /storage/config/marca.json en blueprint Y en store frontend. filesystem prefija con /storage/ -> double-storage. Fix requiere coordinar 3 lugares simultaneamente."
+    },
+    {
+      "id": "DX4",
+      "titulo": "Aislamiento entre modulos: la regla 5 del blueprint padre la enforce el LLM, pero el frontend la viola",
+      "ramas_implicadas": ["A5-F2", "AP2-F5"],
+      "lo_que_significa_juntos": "La regla 'no_explorar_estado_ajeno' aplica solo a LLM-runtime. El frontend SvelteKit tiene 2 cross-module reads (escandallo lee /recetas.json, carta-design lee /cartas/<id>.json). Decision pendiente: extender la regla al frontend o documentar excepcion."
+    },
+    {
+      "id": "DX5",
+      "titulo": "Contradiccion subsistema-recetario vs project-identity (orden) + bug del modify (persistencia)",
+      "ramas_implicadas": ["A2-F2", "AP5"],
+      "lo_que_significa_juntos": "subsistema-recetario.contract menciona 'data/projects/{slug}/recetas.json'. project-identity v1.1.0 prohibe slug en paths. Si fase B decide canonizar paths sin slug, hay que actualizar subsistema-recetario (orden) Y verificar que recetas.blueprint usa el path correcto (persistencia)."
+    },
+    {
+      "id": "DX6",
+      "titulo": "Catalogo de eventos detecta wiring declarativo, ciego al runtime broken",
+      "ramas_implicadas": ["AP4-F1", "AP4-F5", "DP4 de AP6"],
+      "lo_que_significa_juntos": "blueprint-eventos-conscientes.validate.js detecta handoffs huerfanos. Pero no detecta que carta-manager._on_carta_creada se dispare y no complete. Cualquier canonizacion del wiring (orden semantico) requiere ALSO validacion de runtime (persistencia operativa)."
+    },
+    {
+      "id": "DX7",
+      "titulo": "Frontend con paths hardcoded (orden) y safeUpdate semantico (persistencia) se afectan mutuamente",
+      "ramas_implicadas": ["A5-F1", "AP2-F2"],
+      "lo_que_significa_juntos": "Si Fase B convierte safeUpdate a tool ejecutable (BP-D2), el frontend que usa fs.read directo a /recetas.json sigue funcionando (lee el archivo final). Pero si se canoniza paths (B-D2 de A6, nuevo prefijo de vertical), los 5 stores del frontend con paths hardcoded necesitan migracion coordinada con la canonizacion."
+    },
+    {
+      "id": "DX8",
+      "titulo": "11 modulos sin declarar persistencia (orden) + violan el contrato (persistencia)",
+      "ramas_implicadas": ["A3-F2", "A4-F4", "AP3-F4"],
+      "lo_que_significa_juntos": "7 POC2 no declaran pattern. 3 confirmados como persistidores reales (log-manager, scheduler, bots) — violan persistence.contract.prohibido.undeclared_persistence_pattern. Si Fase B endurece la disciplina (forzar declaracion explicita), hay que actualizar esos 3+ modulos."
+    }
+  ],
+
+  "decisiones_consolidadas_para_Fase_B": {
+    "_descripcion": "20 decisiones totales agrupadas por dependencias. Algunas son PRECONDICION de otras (no se puede arreglar X sin antes Y). Otras son paralelas.",
+    "precondiciones_criticas": [
+      {
+        "id": "BP-D1",
+        "decision": "Arreglar inyeccion del blueprint en system_prompt cuando page_id matchea (AP5-F1)",
+        "es_precondicion_de": ["BP-D2", "BP-D4", "BP-D7", "todas las decisiones que asumen que el LLM tiene el blueprint cargado"],
+        "trabajo_minimo": "Leer codepath completo: chat-io -> prompt-builder -> ai-gateway._executeLLM. Identificar donde se compone el system_prompt final. Verificar si blueprintModules.get(page_id) devuelve datos en runtime. Decidir: (a) ai-gateway sobrescribe el system del caller, (b) ai-gateway concatena y el padre va primero, (c) prompt-builder consulta blueprintModules antes de armar el prompt.",
+        "impacto_si_se_arregla": "Probable cierre del 80% del bug del modify variante 'el LLM no sabe que existe safeUpdate'."
+      }
+    ],
+    "decisiones_arquitectonicas_principales": [
+      {
+        "id": "BP-D2",
+        "decision": "Convertir safeUpdate de helper SEMANTICO a TOOL EJECUTABLE en ai-gateway",
+        "rama": "persistencia",
+        "depende_de": "BP-D1",
+        "impacto": "Cierra ambas variantes del bug del modify. El LLM declara intencion (add to array X), ai-gateway ejecuta los 5 pasos deterministicamente."
+      },
+      {
+        "id": "B-D1",
+        "decision": "Donde vive la capa /storage/: codigo de filesystem (statu quo) o contrato nuevo (paths-canonicos)",
+        "rama": "orden",
+        "depende_de": "ninguno",
+        "impacto": "Sin contrato, cualquier cambio de filesystem rompe persistencia. Con contrato, validator detecta drift."
+      },
+      {
+        "id": "B-D2",
+        "decision": "Convencion de paths: namespace por vertical (/pizzepos/<modulo>/<entidad>) o paths planos (statu quo: /recetas.json, /cartas/<id>.json)",
+        "rama": "orden",
+        "depende_de": "ninguno",
+        "impacto_si_se_introduce_vertical": "7 blueprints + 5 stores frontend + posible migracion de datos en disco."
+      },
+      {
+        "id": "BP-D3",
+        "decision": "Atomicidad real en filesystem.handleWrite (tempFile + rename)",
+        "rama": "persistencia",
+        "depende_de": "ninguno",
+        "obligatorio_segun_contrato": "persistence.contract.atomic_writes_mandatory"
+      },
+      {
+        "id": "BP-D4",
+        "decision": "CAS obligatorio para paths conocidos como stores (no opt-in)",
+        "rama": "persistencia",
+        "depende_de": "BP-D1 (para que el LLM use safeUpdate consistentemente)"
+      }
+    ],
+    "decisiones_de_canon_y_disciplina": [
+      {
+        "id": "B-D3",
+        "decision": "Canon de 6 vs 22 patrones de persistencia (ampliar catalogo o forzar a 6)",
+        "rama": "orden"
+      },
+      {
+        "id": "B-D4",
+        "decision": "Una forma canonica de declarar paths en manifest (5 formas hoy)",
+        "rama": "orden"
+      },
+      {
+        "id": "B-D5",
+        "decision": "Resolver contradiccion subsistema-recetario vs project-identity (slug en path)",
+        "rama": "orden",
+        "depende_de": "B-D2"
+      },
+      {
+        "id": "B-D9",
+        "decision": "Forzar declaracion explicita para los 11 modulos sin declarar",
+        "rama": "orden"
+      },
+      {
+        "id": "BP-D5",
+        "decision": "Hash normalizado (JSON canonical) en _computeHash",
+        "rama": "persistencia",
+        "estado": "ya anotado como 'evolucionar a v2' en codigo"
+      }
+    ],
+    "decisiones_de_dominio_y_handoffs": [
+      {
+        "id": "B-D6",
+        "decision": "2 cross-module reads del frontend (escandallo, carta-design): excepcion canonizable o eliminar",
+        "rama": "orden"
+      },
+      {
+        "id": "B-D7",
+        "decision": "13 archivos huerfanos del root del storage: limpiar, consolidar, preservar",
+        "rama": "orden"
+      },
+      {
+        "id": "B-D8",
+        "decision": "5 blueprints nunca usados (carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler): deprecar, mantener, auditar otros proyectos",
+        "rama": "orden"
+      },
+      {
+        "id": "BP-D7",
+        "decision": "12 huerfanos criticos de carta/recetas: anyadir subscribers o documentar como telemetria",
+        "rama": "persistencia"
+      },
+      {
+        "id": "BP-D8",
+        "decision": "Migrar 5 stores frontend con paths hardcoded a tools nativas",
+        "rama": "persistencia",
+        "depende_de": "B-D2"
+      },
+      {
+        "id": "BP-D9",
+        "decision": "Verificar runtime de los 14 handoffs activos restantes (no solo carta.creada)",
+        "rama": "persistencia",
+        "es_trabajo_de_validacion": "tests de integracion o auditorias periodicas"
+      }
+    ],
+    "decisiones_de_infraestructura_y_telemetria": [
+      {
+        "id": "B-D10",
+        "decision": "Gestionar 5 dirs huerfanos en @/ root sin declarante (backups/, current/, eventos/, ventas/, .env)",
+        "rama": "orden"
+      },
+      {
+        "id": "BP-D6",
+        "decision": "Conectar filesystem.write.cas_conflict a dashboard/validator",
+        "rama": "persistencia",
+        "ventaja": "Telemetria existente sin usar"
+      },
+      {
+        "id": "BP-D10",
+        "decision": "Anyadir telemetria de handler_started_but_did_not_complete",
+        "rama": "persistencia",
+        "ventaja": "Detecta runtime broken del tipo del bug del modify"
+      }
+    ]
+  },
+
+  "lo_invariante_que_cualquier_canonizacion_debe_preservar": [
+    {
+      "id": "I1",
+      "regla": "Aislamiento absoluto entre modulos a nivel de storage",
+      "fuente": "persistence.contract + multi-tenancy.contract + security.contract + llm-runtime-discipline + subsistema-recetario — 5 contratos coinciden",
+      "implicacion": "Cualquier canon de paths debe garantizar que el path de cada modulo es PRIVADO al resto. Ninguna excepcion sin canonizar."
+    },
+    {
+      "id": "I2",
+      "regla": "El frontend lee via MQTT, no codigo Node fs ni HTTP directo",
+      "fuente": "A5",
+      "implicacion": "Mantener el frontend desacoplado del codigo del backend (no requiere Node ni HTTP)."
+    },
+    {
+      "id": "I3",
+      "regla": "subscribe a eventos para invalidacion de cache es patron sano",
+      "fuente": "A5 patron C",
+      "implicacion": "El frontend no polea archivos. Subscribe a <entidad>.actualizada/.creada/.eliminada y reacciona. Mantener este patron."
+    },
+    {
+      "id": "I4",
+      "regla": "credential-manager como modelo de modulo bien aislado",
+      "fuente": "A2-F8",
+      "implicacion": "Patron a replicar para otros modulos con persistencia sensible."
+    },
+    {
+      "id": "I5",
+      "regla": "filesystem rechaza paths absolutos del sistema (proteccion path traversal basico)",
+      "fuente": "AP1 + filesystem/index.js linea 359",
+      "implicacion": "Mantener la defensa."
+    },
+    {
+      "id": "I6",
+      "regla": "El modelo blueprint-driven es elegante en teoria",
+      "fuente": "modulos-blueprint-driven.contract",
+      "implicacion": "No abandonar el paradigma. Los bugs son de implementacion, no de diseno."
+    }
+  ],
+
+  "mapa_de_dependencias_entre_decisiones": {
+    "_descripcion": "Que decisiones DEBEN tomarse antes que otras. Fase B necesita este orden para no entrar en circularidad.",
+    "raiz": ["BP-D1 (inyeccion blueprint en system_prompt)"],
+    "segunda_capa": [
+      "BP-D2 (safeUpdate como tool ejecutable) -- depende de BP-D1",
+      "B-D1 (capa /storage/ en codigo o contrato) -- independiente",
+      "B-D2 (namespace por vertical o plano) -- independiente, AFECTA muchos despues",
+      "BP-D3 (atomic write real) -- independiente"
+    ],
+    "tercera_capa_dependientes_de_canon_de_paths": [
+      "BP-D8 (migrar stores frontend) -- depende de B-D2",
+      "B-D5 (resolver contradiccion contratos) -- depende de B-D2",
+      "BP-D4 (CAS obligatorio para stores) -- depende de B-D2 y BP-D1"
+    ],
+    "decisiones_paralelas_de_dominio": [
+      "B-D7, B-D8 (huerfanos en disco, blueprints sin usar) -- independientes",
+      "B-D9 (modulos sin declarar) -- independiente",
+      "BP-D7 (huerfanos de eventos) -- independiente",
+      "BP-D9 (verificar handoffs activos) -- requiere infraestructura de tests"
+    ],
+    "decisiones_de_observabilidad": [
+      "BP-D6, BP-D10, B-D6 (telemetria, cross-module reads frontend) -- independientes pero util tenerlas"
+    ]
+  },
+
+  "lo_que_NO_se_sabe_consolidado_de_la_Fase_A_completa": [
+    "Por que el LLM en AP5 no recibio el blueprint en su system_prompt. Verificacion del codepath completo chat-io -> prompt-builder -> ai-gateway es trabajo de Fase B (BP-D1).",
+    "Si el comportamiento de 'system_prompt sin blueprint' es universal o especifico de AP5. Posible que en otros turnos si llegue.",
+    "Si el bug del modify variante B (sustituir array entero) es sistematico o ocurrencia unica.",
+    "El contenido del archivo @/.env y si contiene secretos en plano.",
+    "Si los 5 blueprints nunca usados en Mi Proyecto se usan en otros proyectos del sistema (system, otros).",
+    "Si los 7 POC2 sospechosos (code-executor, inventario, log-manager, pdf-viewer, scheduler, telegram-service, whatsapp-bot) realmente persisten o son in-memory genuinos sin declarar.",
+    "Por que el LLM en AP5 respondio sobre 'invoke_agent, PWA, Vapers Local' cuando se pidio crear receta — contaminacion de memoria cross-conversacion sospechada.",
+    "Si los 14 handoffs activos restantes (no carta.creada) tienen runtime broken. Sospecha alta.",
+    "Quien crea exactamente los directorios huerfanos /pizzepos/cartas/, /pizzepos/ocr/, /pizzepos/preprocesadas/.",
+    "El UUID patternado (a1b2c3d4-0002-...) viene de fixture, mock, o el LLM inventa.",
+    "El conteo exacto de stores del frontend que usan SOLO patron B (tool nativo) vs los 5 con patron A.",
+    "Bug del payload-size NO reproducido empiricamente — queda como hipotesis."
+  ],
+
+  "estado_de_la_Fase_A_completa": "CERRADA. 12 etapas (A1-A6 + AP1-AP6 + A∑). 12 artefactos en arquitectura/auditoria/_outputs/analisis-persistencia/. Sin proponer nada — diagnostico puro. Fase B tiene 20 decisiones consolidadas (10 de orden + 10 de persistencia) con mapa de dependencias, 8 drifts cross-rama, 6 invariantes a preservar, 12 incognitas catalogadas.",
+
+  "resumen_ejecutivo_final_de_la_Fase_A": "El sistema Enki implementa paradigma blueprint-driven: blueprints declarativos + LLM como runtime + 2 tools universales + agentic loop. El paradigma es elegante en diseno pero depende de DOS CADENAS FRAGILES en operacion: (1) que el blueprint llegue al LLM como system_prompt (AP5-F1 detecta empiricamente que NO siempre llega), (2) que el LLM expanda los helpers semanticos como safeUpdate mentalmente (AP2-F2 + AP5-F2: 2 variantes del bug del modify observadas). La rama A-orden cataloga 10 drifts (capa /storage/ huerfana, contradicciones de contratos, 4 formatos de path, 13 archivos huerfanos, 5 blueprints nunca usados). La rama A-persistencia cataloga 10 drifts mas (CAS opt-in, write no atomico, catalogo ciego al runtime, 12 huerfanos criticos de carta/recetas). 8 drifts cross-rama identificados. 20 decisiones para Fase B con mapa de dependencias (BP-D1 es PRECONDICION). 6 invariantes a preservar. 12 incognitas que requieren mas trabajo. El bug del modify es sintoma de ambas fragilidades combinadas — no se arregla canonizando solo paths ni solo eventos. Requiere ataque coordinado: arreglar inyeccion del blueprint (BP-D1) + convertir safeUpdate a tool ejecutable (BP-D2) + enforce CAS y atomic real (BP-D3, BP-D4). Sin BP-D1, las demas son cosmetica. Fase B no se arranca hasta confirmar el plan de ataque secuencial."
+}

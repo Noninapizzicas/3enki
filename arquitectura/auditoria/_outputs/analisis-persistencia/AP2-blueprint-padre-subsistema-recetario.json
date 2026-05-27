@@ -1,0 +1,216 @@
+{
+  "_doc": "Etapa AP2 de la rama A-persistencia del analisis del sistema Enki. Inspecciona el blueprint padre del subsistema-recetario (arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json, 281 LOC). Su contenido reescribe la hipotesis con la que arranco AP1: el blueprint padre SI declara un patron canonico para el read-modify-write con CAS (helper safeUpdate). El bug del modify NO es de 'falta de patron en doc' — es de 'el LLM no ejecuta fielmente el patron declarado'. Y el helper cita literalmente el caso testigo del audit 2026-05-25 ('salmorejo perdido') que el patron pretendia cerrar.",
+  "etapa_id": "AP2-blueprint-padre-subsistema-recetario",
+  "creada": "2026-05-27",
+  "deriva_de": ["AP1-motor-ejecucion-llm-runtime.json"],
+
+  "objetivo": "Inspeccionar el blueprint padre que ai-gateway inyecta al LLM cuando ejecuta cualquier modulo del subsistema-recetario. Verificar si el patron read-modify-write esta canonizado o NO en el padre. Si SI esta, identificar donde se rompe. Si NO esta, identificar el gap.",
+
+  "alcance": {
+    "incluye": [
+      "Lectura completa del blueprint padre",
+      "Extraccion de las 11 reglas de disciplina_del_llm_runtime",
+      "Lectura del modelo_de_ejecucion (cadena chat-io -> ai-gateway -> LLM -> bus)",
+      "Lectura del patron_de_operacion (shape canonico de una operacion)",
+      "Catalogo de helpers_built_in para el pseudocodigo (uuid, nowISO, JSON.stringify, safeUpdate)",
+      "Catalogo de primitivas_universales_del_bus (filesystem, project_manager, ai_gateway)",
+      "Manejo de errores canonico"
+    ],
+    "excluye": [
+      "Blueprints hijos individuales (los 10 modulos blueprint-driven, etapa AP5 si hace falta)",
+      "Atomicidad de fs.write a nivel filesystem (etapa AP3)",
+      "Eventos de dominio publicados (etapa AP4)",
+      "Reproduccion empirica del bug (etapa AP5)"
+    ]
+  },
+
+  "axiomas_verificados_contra_codigo": [
+    {
+      "axioma_de_AP1": "Hipotesis 2: el bug del modify esta en el blueprint padre que no enforce 'compone array con nueva entrada' como paso explicito",
+      "verificado": false,
+      "evidencia": "AP1 hipotetizo que el padre carecia del patron. Realidad de AP2: el padre TIENE el patron canonico safeUpdate(path, mutator) explicito en helpers_built_in_para_el_pseudocodigo. La hipotesis 2 de AP1 queda RETRACTADA."
+    },
+    {
+      "axioma_de_AP1": "El LLM razona pseudocodigo en su memoria sin enforcement estructural",
+      "verificado": true,
+      "evidencia": "Confirmado por el blueprint padre mismo. patron_de_operacion.shape dice 'pseudocodigo: array de strings — el algoritmo en pseudocodigo legible. El LLM lo razona como codigo'. helpers_built_in dice: 'Funciones que el LLM puede asumir disponibles. No son tools — son referencias semanticas que el LLM razona/calcula mentalmente'."
+    },
+    {
+      "axioma": "Existe un patron canonico para el read-modify-write seguro contra race conditions en el sistema Enki",
+      "verificado": true,
+      "evidencia": "safeUpdate(path, mutator) en helpers_built_in_para_el_pseudocodigo, con expansion explicita de 5 pasos. Incluye CAS via expected_hash. La cita literal del helper menciona: 'cierra clase de bugs tipo salmorejo perdido del audit 2026-05-25'."
+    }
+  ],
+
+  "estructura_del_blueprint_padre": {
+    "ruta": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
+    "size": "281 lineas",
+    "shape": "Objeto raiz con 21 secciones top-level (no manifest.* — es shape distinto al de blueprints hijos)",
+    "secciones": [
+      "_doc, id, version, abstract, rol_generico",
+      "disciplina_del_llm_runtime (11 reglas)",
+      "modelo_de_ejecucion (cadena chat-io -> ai-gateway -> LLM -> bus)",
+      "modelo_de_contexto (legacy vs cajones)",
+      "contexto_inyectado_por_el_orquestador",
+      "payload_canonico_de_eventos_publicados (4 campos top-level obligatorios)",
+      "estado_operativo (3 valores + 4 transiciones)",
+      "manejo_de_errores (8 codigos canonicos + shape)",
+      "naming_canonico_de_eventos",
+      "primitivas_universales_del_bus (filesystem, project_manager, ai_gateway)",
+      "tools_universales_expuestas_al_llm (bus.publish, bus.publishAndWait)",
+      "helpers_built_in_para_el_pseudocodigo (uuid, nowISO, JSON.stringify, safeUpdate)",
+      "checklist_eventos_al_disenar_blueprint",
+      "limite_del_modulo, estructura_blueprint_concreto, patron_de_operacion"
+    ]
+  },
+
+  "las_11_reglas_de_disciplina_del_llm_runtime": [
+    {"id":"1_enfoque_una_operacion", "esencia": "Solo ejecutas el pseudocodigo de la operacion que el usuario invoco. NO leas el catalogo entero."},
+    {"id":"2_no_inventes_datos", "esencia": "Si falta campo requerido -> INVALID_INPUT. Si no sabes algo -> preguntas al usuario. uuid() y nowISO() los SI generas."},
+    {"id":"3_marcador_de_fuente_por_dato", "esencia": "Cada dato lleva marcador: usuario|archivo|modulo|mercadona|estimado_llm. Sin marcador NO lo uses."},
+    {"id":"4_confirmacion_antes_de_mutar_destructivo", "esencia": "Operaciones destructivas (delete/eliminar/archivar) requieren confirmacion explicita del usuario."},
+    {"id":"5_no_explorar_estado_ajeno", "esencia": "Solo accedes a TU estado_persistente. Si necesitas datos de otro modulo, publishAndWait. NUNCA fs.read directo de archivos ajenos."},
+    {"id":"6_modo_silencioso_en_lecturas", "esencia": "Lecturas puras (listar/obtener/stats/buscar) NO publican eventos de dominio. Solo response."},
+    {"id":"7_pseudocodigo_es_ley", "esencia": "El pseudocodigo es la spec. Si NO dice 'TU haces Z', NO hagas Z. No anyadas pasos utiles por iniciativa."},
+    {"id":"8_correlacion_request_id", "esencia": "Cada publishAndWait downstream usa request_id NUEVO. correlation_id SI se propaga del caller."},
+    {"id":"9_response_unico_por_invocacion", "esencia": "Una sola response O una sola failed. Nunca ambas, nunca dos, nunca cero."},
+    {"id":"10_no_dejes_pending_huerfanos", "esencia": "Cada publishAndWait debe terminar (response, timeout o error upstream). NO inicies y abandones."},
+    {"id":"11_read_modify_write_con_cas", "esencia": "Toda secuencia 'leer + modificar + escribir' DEBE usar safeUpdate o equivalente con expected_hash. fs.read devuelve hash; fs.write con expected_hash hace CAS.", "anti_patron": "fs.write con contenido modificado SIN expected_hash."}
+  ],
+
+  "el_helper_critico_safeUpdate": {
+    "_descripcion_del_padre": "Patron canonico read-modify-write seguro contra race conditions (cierra clase de bugs tipo 'salmorejo perdido' del audit 2026-05-25). El LLM lo expande mentalmente al pseudocodigo.",
+    "cita_literal_del_helper": [
+      "1. raw = publishAndWait('fs.read.request', { path })",
+      "2. if (raw.status === 404) store = mutator(undefined) else store = mutator(JSON.parse(raw.content))",
+      "3. write_args = { path, content: JSON.stringify(store, null, 2) }; if (raw.status === 200) write_args.expected_hash = raw.data.hash",
+      "4. result = publishAndWait('fs.write.request', write_args)",
+      "5. if (result.error?.code === 'CONFLICT_STATE') -> reintenta desde 1 (max 3 veces). Si tras 3 reintentos sigue CONFLICT_STATE, devuelve CONFLICT_STATE al caller."
+    ],
+    "naturaleza": "Helper SEMANTICO, NO funcion ejecutable. El LLM tiene que expandir los 5 pasos mentalmente cada vez que su pseudocodigo invoca safeUpdate.",
+    "donde_esta_la_fragilidad": [
+      "Paso 2 — aplicar mutator: si el LLM olvida aplicar el mutator (el cambio: anadir receta nueva al array), el paso 3 escribe el contenido del paso 1 SIN cambios. Esto es exactamente el bug del modify que vimos en audits.",
+      "Paso 3 — expected_hash: si el LLM omite anadirlo, el fs.write no detecta race condition. La defensa CAS depende de la disciplina del LLM.",
+      "Paso 5 — reintentar: si el LLM no implementa el reintento (lo olvida, lo trunca), errores CONFLICT_STATE pueden no propagarse al caller."
+    ],
+    "implicacion_GORDA": "El bug del modify NO ES de 'falta de patron en doc'. El patron EXISTE en el padre. El bug es del LLM al expandir mentalmente el helper. Probablemente al pasar el array por JSON.parse + aplicar mutator + JSON.stringify, el LLM se desenfoca y entrega el array original sin el mutator aplicado."
+  },
+
+  "primitivas_universales_del_bus_documentadas_en_el_padre": {
+    "fs_read_request": {
+      "shape": "{ project_id, path: '/recetas.json' }",
+      "convencion": "path con leading-slash relativo al base_path del proyecto. NO concatenar base_path absoluto del sistema (duplica prefijo y corrompe path).",
+      "response": "{ status, content } o { status: 404 } si no existe",
+      "implicacion": "Confirma la capa /storage/ que detecte en A1. El padre nombra implicitamente la capa diciendo 'no concatenar base_path absoluto'. Pero NO la documenta explicitamente."
+    },
+    "fs_write_request": {
+      "shape": "{ project_id, path: '/<archivo>', content: string, encoding: 'utf-8', atomic: true }",
+      "flag_atomic_true": "Confirma que el contrato persistence.atomic_writes_mandatory se respeta — todo write canonico declara atomic:true. La atomicidad real la garantiza filesystem (verificar en AP3).",
+      "expected_hash_NO_obligatorio_en_shape": "El campo expected_hash NO aparece en el shape canonico. Es OPCIONAL. Solo se anyade si vienes de safeUpdate y tienes hash del read previo. Si el LLM omite expected_hash, fs.write escribe sin CAS — riesgo de race condition silente."
+    },
+    "project_get_request": "Resolver project_id -> { base_path, name, ... }",
+    "llm_complete_request": "Invocar al LLM para sub-tarea acotada (sub-LLM delegation)"
+  },
+
+  "hallazgos": [
+    {
+      "id": "AP2-F1",
+      "categoria": "patron_canonico_existe_en_doc",
+      "titulo": "El patron read-modify-write con CAS SI esta canonizado en el blueprint padre",
+      "evidencia": "helpers_built_in_para_el_pseudocodigo.safeUpdate con expansion explicita de 5 pasos + regla 11 de disciplina_del_llm_runtime ('read_modify_write_con_cas').",
+      "implicacion": "Mi hipotesis 2 de AP1 (bug en falta de patron) queda RETRACTADA. El bug del modify NO viene de 'el padre no lo declara'. Viene de 'el LLM no ejecuta fielmente el patron declarado'.",
+      "severidad": "informativa_critica"
+    },
+    {
+      "id": "AP2-F2",
+      "categoria": "helper_semantico_no_ejecutable",
+      "titulo": "safeUpdate es helper SEMANTICO, no funcion ejecutable",
+      "evidencia": "helpers_built_in.descripcion: 'No son tools — son referencias semanticas que el LLM razona/calcula mentalmente'. El LLM tiene que expandir los 5 pasos en su propia memoria cada vez.",
+      "implicacion": "La fragilidad del patron descansa en la disciplina del LLM. Si el LLM se desenfoca en el paso 2 (aplicar mutator), no aplica el cambio y el paso 3 escribe el contenido sin modificar — exactamente el bug del modify."
+    },
+    {
+      "id": "AP2-F3",
+      "categoria": "expected_hash_opcional_no_enforced",
+      "titulo": "expected_hash es OPCIONAL en fs.write.request. Sin el, no hay CAS, no hay defensa contra race condition",
+      "evidencia": "primitivas_universales_del_bus.fs_write_request.shape no lista expected_hash como campo obligatorio. Es solo parte de safeUpdate paso 3.",
+      "implicacion": "Si un blueprint hijo escribe fs.write sin invocar safeUpdate (atajo, optimizacion mal entendida, etc.), pierde CAS. El bug 'salmorejo perdido' del audit 2026-05-25 quizas surge por blueprints que no invocan safeUpdate o por el LLM que omite el expected_hash al expandir."
+    },
+    {
+      "id": "AP2-F4",
+      "categoria": "cita_literal_del_caso_testigo",
+      "titulo": "El padre CITA el caso testigo del bug que pretende cerrar",
+      "evidencia": "safeUpdate._descripcion: 'cierra clase de bugs tipo salmorejo perdido del audit 2026-05-25'.",
+      "implicacion": "El equipo del repo CONOCE el bug, CREO el patron para cerrarlo, y aun asi el bug sigue activo (visto en audits de hoy). Eso significa: o (a) los blueprints hijos no invocan safeUpdate, o (b) el LLM no ejecuta fielmente el safeUpdate aunque lo invoque, o (c) ambos. Pregunta para AP5 cuando reproduzcamos."
+    },
+    {
+      "id": "AP2-F5",
+      "categoria": "regla_5_explica_violacion_del_frontend",
+      "titulo": "La regla 5 (no_explorar_estado_ajeno) explica el cross-module read del frontend que detecte en A5",
+      "evidencia": "Regla 5: 'Accedes SOLO a tu propio estado_persistente. NUNCA fs.read directo a archivos que pertenecen a otro modulo'. Anti-patron citado: 'Leer /recetas.json desde el blueprint de escandallo (que es otro modulo). Si necesitas la receta, publishAndWait recetas.obtener.request'.",
+      "implicacion": "El padre PROHIBE el patron que escandallo.ts y carta-design.ts del frontend implementan. Pero la regla esta dirigida a BLUEPRINTS (LLM-runtime), no al frontend (SvelteKit). El frontend no tiene blueprint padre que le diga 'no leas estado ajeno'. Eso es gap del enforcement — la regla existe para el LLM-runtime pero no para el frontend.",
+      "severidad": "alta_para_diseno"
+    },
+    {
+      "id": "AP2-F6",
+      "categoria": "modo_silencioso_en_lecturas_explica_falta_de_eventos",
+      "titulo": "La regla 6 (modo_silencioso_en_lecturas) explica por que las operaciones de listar/obtener no publican eventos de dominio",
+      "evidencia": "Regla 6: 'Operaciones de lectura puras (listar, obtener, estadisticas, buscar) NO publican eventos de dominio. Solo emiten su response correlacionada'.",
+      "implicacion": "Disciplina sana: el bus no se llena de ruido. Pero requiere que el LLM clasifique correctamente: si llama 'listar' a una operacion que realmente compone+filtra (no lectura pura), podria saltarse eventos que deberia publicar."
+    },
+    {
+      "id": "AP2-F7",
+      "categoria": "regla_7_pseudocodigo_es_ley_es_doble_filo",
+      "titulo": "La regla 7 prohibe al LLM anyadir pasos por iniciativa propia",
+      "evidencia": "Regla 7: 'Si el pseudocodigo NO dice TU haces Z, NO haces Z. No anyadas pasos utiles que el pseudocodigo no especifique'.",
+      "implicacion_paradojica": "Esto significa que si el pseudocodigo de un blueprint hijo dice 'escribe el array' sin decir 'aplica el mutator del safeUpdate', el LLM NO debe aplicar el mutator por iniciativa propia — solo si esta dictado. La rigidez puede acentuar el bug del modify si los pseudocodigos hijos son demasiado escuetos.",
+      "severidad": "media"
+    },
+    {
+      "id": "AP2-F8",
+      "categoria": "no_dejes_pending_huerfanos_explica_los_3_publishAndWait_error_en_audit",
+      "titulo": "La regla 10 explica por que los 3 publishAndWait:error del audit eran sintoma critico",
+      "evidencia": "Regla 10: 'Cada publishAndWait debe terminar con response recibida, timeout o error upstream. NO inicies un publishAndWait y luego abandones la ejecucion'.",
+      "implicacion": "En el audit del bocata, los turnos del LLM mostraban 3 publishAndWait:error mezclados con :ok. Si el LLM ignoraba los errores y seguia, violaba la regla 10 (no procesar el resultado de un publishAndWait fallido)."
+    }
+  ],
+
+  "preguntas_para_siguientes_etapas": [
+    {
+      "para_etapa": "AP3",
+      "pregunta": "fs.write.request con atomic:true: filesystem realmente implementa write atomico (tempFile + rename) o solo acepta el flag? Verificar en codigo de filesystem."
+    },
+    {
+      "para_etapa": "AP3",
+      "pregunta": "CAS via expected_hash: filesystem realmente compara hashes antes de escribir y devuelve CONFLICT_STATE? O el flag es declarativo sin enforcement?"
+    },
+    {
+      "para_etapa": "AP4",
+      "pregunta": "Las operaciones de DOMINIO (no de lectura) si publican eventos. Cuales blueprints publican que eventos cuando persisten? Mapa publisher → evento → subscriber esperado."
+    },
+    {
+      "para_etapa": "AP5",
+      "pregunta": "Inspeccionar el pseudocodigo del blueprint hijo de recetas (operacion 'crear'). Invoca safeUpdate explicito o reproduce el patron inline? Si inline, donde se rompe el paso 2 (aplicar mutator)?"
+    },
+    {
+      "para_etapa": "AP5",
+      "pregunta": "Reproducir el bug end-to-end con bus-capture: el LLM emite fs.read.request (paso 1), recibe response con hash, deberia aplicar mutator (paso 2 mentalmente), emitir fs.write.request con expected_hash (paso 3). Capturar exactamente que tool_calls genera el LLM y verificar si: (a) salta el paso 1 (no lee), (b) salta el paso 2 (no compone), (c) salta el paso 3 con expected_hash (escribe sin CAS)."
+    },
+    {
+      "para_etapa": "AP6 / Fase B",
+      "pregunta": "Si el patron safeUpdate existe en el padre pero el bug sigue activo, las opciones son: (a) convertir safeUpdate de helper semantico a tool ejecutable (cargar la logica en ai-gateway como `_executeSafeUpdate` que el LLM invoca como tool unica), (b) anyadir validacion en ai-gateway que detecte fs.write sin precedente fs.read (rechazar con INVALID_INPUT 'no_read_precede_write'), (c) anyadir paso explicito de mutator a los pseudocodigos hijos como verbo canonico, (d) combinar."
+    },
+    {
+      "para_etapa": "AP6 / Fase B",
+      "pregunta": "Que hacer con A5.F2 (cross-module reads desde el frontend): la regla 5 del blueprint padre prohibe estos reads para LLM-runtime pero NO aplica al frontend. Crear regla equivalente en frontend.contract o documentar excepcion para frontend?"
+    }
+  ],
+
+  "limitaciones_de_esta_etapa": [
+    "NO se leyo naming_canonico_de_eventos, contexto_inyectado_por_el_orquestador, estructura_blueprint_concreto, checklist_eventos_al_disenar_blueprint. Pueden contener detalles relevantes para AP4 (eventos de dominio).",
+    "NO se inspeccionaron los blueprints hijos individuales (que extienden este padre). Verificar si invocan safeUpdate es trabajo de AP5.",
+    "NO se verifico si el LLM realmente RECIBE este blueprint padre en su system prompt — AP1 confirmo que ai-gateway lo inyecta (linea 472), pero el contenido exacto del prompt final no se capturo.",
+    "NO se valida que el blueprint padre este actualizado: su _v_anterior_changelog o supersedes_nota no se leyeron."
+  ],
+
+  "resumen_ejecutivo": "El blueprint padre subsistema-recetario.modulo-base.blueprint.json declara EXPLICITAMENTE 11 reglas de disciplina del LLM-runtime + un helper canonico safeUpdate(path, mutator) que implementa el patron read-modify-write con CAS via expected_hash. Cita literalmente el caso testigo del audit 2026-05-25 ('salmorejo perdido') que el helper pretende cerrar. Esto RETRACTA mi hipotesis 2 de AP1 (que el padre carecia de patron): el patron existe. El bug del modify viene de que safeUpdate es helper SEMANTICO (no tool ejecutable) y el LLM tiene que expandir los 5 pasos mentalmente; si el LLM se desenfoca en el paso 2 (aplicar mutator al array), el paso 3 escribe el contenido del paso 1 sin cambios. expected_hash es OPCIONAL en fs.write.request — sin el, no hay CAS, riesgo de race condition silente. La regla 5 (no_explorar_estado_ajeno) prohibe el cross-module read pero solo aplica a blueprints/LLM-runtime, no al frontend (lo que explica el drift de A5.F2). La regla 7 (pseudocodigo_es_ley) puede agravar el bug del modify si los pseudocodigos hijos son demasiado escuetos y no explicitan 'aplica el mutator del safeUpdate'. Fase B tiene 4 caminos para cerrar: convertir safeUpdate de semantico a tool ejecutable (ai-gateway._executeSafeUpdate), anyadir validacion estructural en ai-gateway (fs.write sin precedente fs.read = error), anyadir paso de mutator explicito a los pseudocodigos hijos, o combinar. Decision arquitectonica con efectos cross-rama."
+}

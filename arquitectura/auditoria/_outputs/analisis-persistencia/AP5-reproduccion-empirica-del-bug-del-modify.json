@@ -1,0 +1,125 @@
+{
+  "_doc": "Etapa AP5 de la rama A-persistencia del analisis del sistema Enki. Intento de reproduccion empirica del bug del modify. Lanza una conversacion nueva en page_id=recetas con peticion simple (crear UNA receta de tortilla francesa). Captura el bus con capture-bus. Verifica el estado del disco antes/despues. RESULTADO: bug del modify NO reproducido literal pero descubre una variante NUEVA y mas grave (perdida de datos catastrofica: 2 recetas viejas borradas, solo queda la nueva). Y descubre que el system_prompt activo NO es el blueprint padre+hijo del subsistema-recetario sino el prompt generico del Companero de Viaje (10500 chars).",
+  "etapa_id": "AP5-reproduccion-empirica-del-bug-del-modify",
+  "creada": "2026-05-27",
+  "deriva_de": ["AP1-motor-ejecucion-llm-runtime.json", "AP2-blueprint-padre-subsistema-recetario.json", "AP3-fs-write-atomico-cas-concurrencia.json", "AP4-eventos-de-dominio-vs-crud-silente.json"],
+  "conversation_id_de_la_prueba": "c8a77ef3-289e-4e97-b52f-041369923342",
+  "directorio_de_artefactos": "audit/AP5-modify-bug-20260527-1542/",
+
+  "objetivo": "Reproducir empiricamente el bug del modify en el flujo de crear UNA receta simple (descarta payload-size). Capturar todos los tool_calls del LLM y verificar paso a paso donde se rompe el patron safeUpdate. Verificar contra disco si el bug ocurre o no.",
+
+  "alcance": {
+    "incluye": [
+      "Conversacion nueva con peticion atomica (1 receta simple, no multiple)",
+      "capture-bus para registrar todo lo que pase",
+      "Lectura del system_prompt que el LLM recibe via chat.prompt.ready",
+      "Verificacion del estado del disco antes y despues",
+      "Comparacion con el comportamiento esperado segun AP1-AP4"
+    ],
+    "excluye": [
+      "Reproduccion del payload-size (otra conversacion con JSON grande)",
+      "Sintesis cruzada (etapa AP6)"
+    ]
+  },
+
+  "hallazgos_descubiertos_en_esta_etapa": [
+    {
+      "id": "AP5-F1",
+      "categoria": "system_prompt_no_es_blueprint",
+      "titulo": "El LLM NO recibe el blueprint padre+hijo del subsistema-recetario como system_prompt. Recibe el prompt generico del Companero de Viaje (10500 chars).",
+      "evidencia": "El evento chat.prompt.ready capturado tiene system_prompt = JSON estructurado con keys [_type:'base', _version:'2.2', identity:'Compañero de viaje del usuario...', tone, system_context, agentic_behavior, ...]. NO contiene el blueprint padre safeUpdate. NO contiene el pseudocodigo de 'crear receta'. El LLM operaba como compañero generico sin saber que esta en un modulo blueprint-driven.",
+      "implicacion_GIGANTE": "Mi asuncion base de AP1 (que ai-gateway inyecta el blueprint cuando page_id matchea) era PARCIALMENTE FALSA o tiene un fallo de carga. O (a) el blueprint de 'recetas' NO esta en blueprintModules de ai-gateway, o (b) ai-gateway si lo carga pero NO lo prepone al system del caller (lo concatena DESPUES, y el LLM lee el de mas peso semantico al principio), o (c) un componente upstream (chat-io, prompt-builder) compone el system_prompt SIN consultar al blueprint. Verificacion necesaria en AP6.",
+      "severidad": "critica - explica por que el LLM responde generico cuando deberia operar segun blueprint"
+    },
+    {
+      "id": "AP5-F2",
+      "categoria": "perdida_de_datos_catastrofica",
+      "titulo": "El archivo recetas.json paso de 2 recetas a 1. Las 2 viejas DESAPARECIERON",
+      "evidencia": "Antes de la prueba: recetas.json tenia [tortilla de patatas, gazpacho] (segun A4 y audits previos). Despues de la prueba: recetas.json tiene [tortilla francesa basica] unica. _updated_at = 2026-05-27T15:46:10. modified en disco = 2026-05-27T15:46:06.756.",
+      "implicacion_GIGANTE": "Es una VARIANTE NUEVA del bug del modify. Audit previo del bocata: 'LLM escribe array viejo sin nueva entrada' (mutator no aplicado). AP5: 'LLM escribe solo la nueva entrada, perdiendo las viejas' (mutator aplicado en sustitucion en lugar de en agregacion). Ambos son fallas del paso 2 de safeUpdate (aplicar mutator). Direcciones opuestas: en un caso el LLM lee + escribe sin modify, en otro el LLM 'modifica' sustituyendo todo.",
+      "severidad": "critica - perdida real de datos del usuario"
+    },
+    {
+      "id": "AP5-F3",
+      "categoria": "uuid_fake_patternado",
+      "titulo": "La nueva receta tiene UUID con patron sospechoso (a1b2c3d4-0002-4000-8000-000000000002)",
+      "evidencia": "id = 'a1b2c3d4-0002-4000-8000-000000000002'. Patron a1b2c3d4-XXXX-... con XXXX incremental. No es un uuid v4 random (que tendria 32 chars hex sin patron).",
+      "implicacion": "El LLM NO esta usando el helper uuid() canonico del blueprint padre. O esta usando un fixture/mock, o esta INVENTANDO UUIDs con patron. La regla 2 del blueprint padre prohibe inventar UUIDs ('uuids_y_timestamps: SI puedes generar tu — uuid() para identificadores nuevos'). PERO si el LLM no tiene el blueprint cargado (AP5-F1), no sabe que debe usar uuid().",
+      "severidad": "media - sintoma adicional de que el LLM opera sin el blueprint"
+    },
+    {
+      "id": "AP5-F4",
+      "categoria": "respuesta_disociada_del_input",
+      "titulo": "La respuesta del LLM fue completamente desconectada de la peticion del usuario",
+      "evidencia": "Peticion del usuario: 'Creame una receta simple Tortilla francesa basica'. Respuesta del LLM (ai.chat.response capturado): 'Buena pregunta. La realidad es que no tengo forma de saberlo. Cuando invoco invoke_agent... te recomiendo el plan B: genero yo el bundle PWA directamente con fs.write. Tengo todos los datos: 5 productos con sus precios, Marca Vapers Local, Colores verde #22c55e...'",
+      "implicacion": "El LLM esta respondiendo sobre 'invoke_agent, bundle PWA, Vapers Local' que NO TIENEN NADA QUE VER con la peticion. Posibles: (a) contaminacion de contexto cross-conversacion (memoria/RAG arrastra otra conversacion), (b) el LLM se confundio con el prompt generico y aplico patrones de respuesta de tarea anterior, (c) algun proceso intermedio sustituyo el mensaje.",
+      "severidad": "alta - el LLM no responde a lo que se le pregunta"
+    },
+    {
+      "id": "AP5-F5",
+      "categoria": "inconsistencia_bus_disco",
+      "titulo": "El bus capture NO mostro fs.write.request para la nueva receta, pero el disco SI la tiene",
+      "evidencia": "bus-capture.jsonl (219 lineas) contiene: chat.message.saved, chat.prompt.ready, cajon_abrir, ai.chat.response, chat.assistant.saved. NO contiene bus.publish, bus.publishAndWait, fs.read.request, fs.write.request. Sin embargo el disco tiene la nueva receta.",
+      "explicacion_probable": "El capture-bus tuvo problemas tecnicos (background task fallo 2 veces durante esta prueba). Solo capturo los primeros eventos del turno. La creacion real de la receta ocurrio DESPUES del timeout del send-message helper y DESPUES de que el capture muriera. El LLM siguio trabajando en background.",
+      "implicacion": "El reportaje empirico esta INCOMPLETO. No puedo afirmar definitivamente que paso despues del cajon_abrir. La pieza clave (fs.write.request) no se capturo. AP5 queda con material parcial."
+    },
+    {
+      "id": "AP5-F6",
+      "categoria": "timeout_del_helper_send_message",
+      "titulo": "El helper send-message hizo timeout a los 90s con length:9 (respuesta de 9 chars)",
+      "evidencia": "Metadata del send-message: {tools:[], duration_ms:90017, length:9, failed:true, timeout:true}",
+      "implicacion": "El helper no recibio la respuesta final del LLM (que en el bus aparece completa con length largo). Posible que el LLM tardo mas de 90s en completar el agentic loop, y el helper se desconecto. La conversacion siguio en backend."
+    }
+  ],
+
+  "lo_que_NO_pude_verificar_en_esta_etapa": [
+    "El paso a paso exacto del safeUpdate del LLM: si emitio fs.read.request, si recibio response con hash, si emitio fs.write.request con expected_hash o sin el.",
+    "La causa raiz de la perdida de las 2 recetas viejas: bug del LLM (mutator que sustituye), race condition (otro proceso reescribio simultaneamente), o efecto secundario de otro flujo.",
+    "Si el comportamiento de 'system_prompt sin blueprint' es universal o especifico de esta prueba (puede que el blueprint se cargue en algunos turnos y otros no).",
+    "Por que el LLM respondio sobre invoke_agent y Vapers Local: si fue contaminacion de memoria, contexto residual o algo distinto."
+  ],
+
+  "lo_que_estos_hallazgos_implican_para_la_rama_A_persistencia": {
+    "AP1_reescrito": "Mi asuncion de AP1 que ai-gateway INYECTA el blueprint cuando page_id matchea queda en duda. Es posible que el codigo de _loadBlueprints + el flujo de _executeLLM CARGUE blueprintModules.get(page_id), pero el blueprint NO se inyecta como system_prompt principal del LLM. AP6 debe verificar leyendo el flujo completo de chat.prompt.ready -> _executeLLM en codigo.",
+    "AP2_sigue_valido": "El blueprint padre TIENE el patron safeUpdate. Pero si el LLM NO recibe el blueprint en su system_prompt, el patron es invisible al LLM. AP2 era analisis del archivo declarativo, AP5 muestra que el archivo declarativo no llega al LLM efectivamente.",
+    "AP3_sigue_valido": "filesystem tiene CAS opt-in y write no-atomico. Pero si el LLM no aplica safeUpdate (porque no lo conoce), no hay expected_hash, no hay CAS, escritura sin defensa. Es lo que paso aqui.",
+    "AP4_se_refuerza": "El catalogo es ciego al runtime. Aqui RT roto se confirma una vez mas. El handoff fs.write→archivo escrito si funciono pero con contenido CATASTROFICAMENTE distinto al esperado."
+  },
+
+  "preguntas_para_la_siguiente_etapa_AP6": [
+    {
+      "id": "Q1",
+      "pregunta": "Donde exactamente se compone el system_prompt que el LLM recibe? Es en chat-io, en prompt-builder, en ai-gateway? Por que NO incluye el blueprint padre+hijo aunque page_id=recetas?"
+    },
+    {
+      "id": "Q2",
+      "pregunta": "ai-gateway._loadBlueprints (linea 400 segun AP1) realmente registra los blueprints. Si registra, por que _executeLLM no compone el system_prompt con el blueprint? Verificar codigo completo del flujo."
+    },
+    {
+      "id": "Q3",
+      "pregunta": "Si el system_prompt activo es generico, como explicar que el LLM EN ALGUN MOMENTO ejecuto safeUpdate y persistio la receta nueva? Hay un mecanismo que carga el blueprint despues del primer turno?"
+    },
+    {
+      "id": "Q4",
+      "pregunta": "El UUID patternado (a1b2c3d4-0002-...) — es del LLM inventando o de algun fixture? Buscar 'a1b2c3d4' en el codigo del repo."
+    },
+    {
+      "id": "Q5",
+      "pregunta": "Por que el LLM respondio sobre invoke_agent y Vapers Local cuando le pedi una receta? Hay memoria semantica que contamina cross-conversacion? Verificar memory-* modules."
+    },
+    {
+      "id": "Q6",
+      "pregunta": "El bug del modify variante 'el LLM aplica mutator que SUSTITUYE en lugar de AÑADIR' — es comportamiento sistematico o ocurrencia unica? Reproducir mas veces para confirmar."
+    }
+  ],
+
+  "limitaciones_de_esta_etapa": [
+    "El bus capture estuvo incompleto (background task fallo durante la prueba). Faltan los eventos del momento exacto del fs.write.",
+    "Solo se hizo 1 prueba. No se sabe si la perdida de datos es sistematica o caso unico.",
+    "El helper send-message hizo timeout antes de recibir la respuesta completa. No se sabe que mas dijo el LLM despues del timeout.",
+    "No se inspecciono el codigo de chat-io ni prompt-builder para entender por que el system_prompt es el generico.",
+    "No se verifico empiricamente el bug del payload-size (segundo bug que AP5 deberia haber cubierto)."
+  ],
+
+  "resumen_ejecutivo": "Intento de reproducir empiricamente el bug del modify. Resultado mixto: (1) NO reproduje el bug original del audit del bocata (escribir array sin nueva entrada). (2) DESCUBRI una variante OPUESTA y mas grave: el LLM escribio solo la nueva entrada, perdiendo las 2 recetas viejas. Es perdida real de datos. (3) DESCUBRI un hallazgo gigante: el system_prompt que el LLM recibe en chat.prompt.ready NO es el blueprint padre+hijo del subsistema-recetario sino el prompt generico del Companero de Viaje (10500 chars). Esto invalida parcialmente mi asuncion de AP1 de que ai-gateway inyecta el blueprint cuando page_id matchea. (4) La respuesta del LLM fue completamente desconectada de la peticion (hablaba de invoke_agent, PWA, Vapers Local) — posible contaminacion de contexto cross-conversacion. (5) El UUID de la nueva receta es patternado (a1b2c3d4-0002-...), no parece uuid() real — sintoma de que el LLM no esta usando el helper canonico. (6) El bus capture esta incompleto por fallos tecnicos del background task — no pude capturar el fs.write exacto. AP5 queda con material parcial pero suficiente para 6 preguntas criticas para AP6. La rama A-persistencia debe reconsiderar el hallazgo central de AP1: si el LLM no recibe el blueprint, todas las defensas (safeUpdate, CAS, modos, reglas) son invisibles para el — el bug del modify no es de 'expansion mental defectuosa del helper', es de 'el helper nunca se le presento'."
+}

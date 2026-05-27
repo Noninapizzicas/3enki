@@ -1,0 +1,257 @@
+{
+  "_doc": "Etapa AP1 de la rama A-persistencia del analisis del sistema Enki. Analiza el motor de ejecucion del LLM-runtime: el modulo ai-gateway (modules/conversacion/ai-gateway/index.js, 2049 LOC). Identifica exactamente que parte de la persistencia operativa hace ai-gateway y que parte queda en manos del LLM. Localiza la unica defensa estructural contra bugs del LLM (payload ausente) y confirma que NO hay defensa contra el bug del modify observado en sesiones anteriores.",
+  "etapa_id": "AP1-motor-ejecucion-llm-runtime",
+  "creada": "2026-05-27",
+  "deriva_de": ["A1-A6 (rama orden cerrada)"],
+
+  "objetivo": "Capturar como ai-gateway transforma el pseudocodigo declarado en un blueprint en eventos reales del bus, donde compone los payloads, que enriquece, que valida, donde el bug del modify observado en sesiones anteriores podria interceptarse y donde NO se intercepta. Sienta la base operativa para AP2 (blueprint padre), AP3 (atomic/CAS), AP4 (eventos de dominio) y AP5 (los 2 bugs concretos).",
+
+  "alcance": {
+    "incluye": [
+      "Estructura general del modulo ai-gateway (entry points, lifecycle, caches)",
+      "Composicion del system prompt que ai-gateway inyecta al LLM",
+      "Las 2 tools universales bus.publish y bus.publishAndWait",
+      "_executeToolCall: enrutamiento de tool calls del LLM",
+      "_executeUniversalBusTool: implementacion del bus publish/publishAndWait",
+      "_executeLLM: el agentic loop completo",
+      "Defensas existentes en ai-gateway contra bugs del LLM",
+      "Donde ai-gateway ES transparente (no interviene en contenido)"
+    ],
+    "excluye": [
+      "Contenido del blueprint padre (etapa AP2)",
+      "Atomic writes y CAS en filesystem (etapa AP3)",
+      "Eventos de dominio publicados por los modulos (etapa AP4)",
+      "Reproduccion empirica del bug del modify (etapa AP5)",
+      "Comportamiento de cada provider del LLM (anthropic, deepseek, etc.)"
+    ]
+  },
+
+  "estructura_de_ai_gateway": {
+    "ruta": "modules/conversacion/ai-gateway/index.js",
+    "version_declarada": "2.0.0",
+    "size": "2049 lineas",
+    "extiende": "BaseModule (../../_shared/base-module)",
+    "entry_points_del_bus": [
+      "chat.prompt.ready (flujo del chat normal) -> publica ai.chat.response",
+      "llm.complete.request (flujo generico usado por agentes) -> publica llm.complete.response"
+    ],
+    "providers_soportados": "DeepSeek, Anthropic, OpenAI, Groq, Gemini, Ollama, ClaudeCli, Kimi",
+    "estado_mutable_relevante": [
+      "providers: Map<name, instance>",
+      "credentialCache: Map<provider, {apiKey, resolvedAt, projectId}>",
+      "pendingCredentials: Map<request_id, {resolve, reject, timeout}>",
+      "pendingFsReads: Map<request_id, {resolve, reject, timeout}>",
+      "blueprintModules: Map<target_page_id, {manifest, parentBlueprint, childBlueprint, systemPrompt, cajonesEnabled}>",
+      "conversationPageFoco: Map<conversation_id, page_id> (Fase 5 bis cajones)"
+    ]
+  },
+
+  "como_se_inyecta_el_blueprint_al_LLM": {
+    "_descripcion": "Cuando page_id activo tiene blueprint registrado, ai-gateway construye un system prompt que LE DICE AL LLM literalmente que es un runtime de blueprint y como ejecutar el pseudocodigo.",
+    "evidencia": "_composeBlueprintSystemPrompt() en lineas 472-500",
+    "texto_del_system_prompt_canonico": [
+      "Eres el RUNTIME de un modulo del subsistema-recetario declarado como blueprint JSON.",
+      "Tu trabajo es leer el blueprint (padre + hijo) como contrato + pseudocodigo y ejecutarlo publicando eventos al bus mediante las 2 tools universales que tienes (bus.publish, bus.publishAndWait).",
+      "NO inventes operaciones que no esten en operaciones[]. NO inventes eventos que no esten en el blueprint.",
+      "Lee TU MISMO los pseudocodigos antes de actuar — siguelos literalmente paso a paso.",
+      "# REGLAS OPERATIVAS",
+      "- Para CADA paso del pseudocodigo que diga `publishAndWait(...)` → llama bus.publishAndWait.",
+      "- Para CADA paso que diga `publish(...)` → llama bus.publish.",
+      "- Los pasos de normalizar / razonar / comparar los HACES TU mentalmente (no son tools).",
+      "- Cuando termines, redacta UN mensaje al usuario describiendo lo que hiciste — no listes pasos internos.",
+      "- Si una primitiva del bus devuelve error con `error.code` canonico, propagalo en tu response al caller."
+    ],
+    "implicacion": "El system prompt CONFIA en la disciplina del LLM. Frases como 'siguelos literalmente paso a paso' y 'Los pasos de normalizar / razonar / comparar los HACES TU mentalmente' canonizan que el LLM compone payloads en su propia memoria. No hay enforcement estructural de que lo haga bien."
+  },
+
+  "las_2_tools_universales_del_modelo_blueprint_driven": {
+    "bus_publish": {
+      "semantica": "fire-and-forget. El LLM publica un evento al bus sin esperar respuesta.",
+      "implementacion": "eventBus.publish(ev, enrichedPayload). Retorna ack {published: true, event: ev}.",
+      "uso_tipico_segun_blueprint": "publish('<dominio>.<entidad>.<verbo_pasado>', {...})",
+      "garantia": "Solo que el publish saio sin error. NO garantiza que nadie lo procese."
+    },
+    "bus_publishAndWait": {
+      "semantica": "Publica un evento .request y espera el .response correlacionado por request_id.",
+      "implementacion": "Subscribe al response event, publica el request, resuelve con data del response. Timeout 100ms-60s (default 10s, configurable por args.timeout_ms).",
+      "uso_tipico_segun_blueprint": "publishAndWait('<modulo>.<accion>.request', {...}) -> recibe <modulo>.<accion>.response",
+      "garantia": "Que llegue UN response con el mismo request_id antes del timeout. NO garantiza que el response sea exitoso (puede traer error)."
+    },
+    "lugar_en_el_codigo": "_executeUniversalBusTool() en lineas 1346-1448. Interceptado en _executeToolCall ANTES del path canonico por bus."
+  },
+
+  "como_ai_gateway_procesa_tool_calls_del_LLM": {
+    "metodo": "_executeToolCall(toolName, args, chatContext) en lineas 1450-1529",
+    "orden_de_evaluacion": [
+      "1. Si toolName es 'bus.publish' o 'bus.publishAndWait' -> _executeUniversalBusTool (interceptado)",
+      "2. Si toolName es 'cajon.listar' o 'cajon.abrir' -> _executeCajonTool (interceptado)",
+      "3. Si toolName es 'chat.cambiar_foco' o 'page.related' -> _executeNavTool (interceptado)",
+      "4. Resto -> path canonico por bus: publica <toolName> con request_id + enrichedArgs, espera <toolName>.response"
+    ],
+    "enrichedArgs_que_ai_gateway_anyade_a_TODO_tool_call": [
+      "project_id (del chatContext si el LLM no lo puso)",
+      "page_id",
+      "conversation_id",
+      "settings",
+      "attachments",
+      "prompt",
+      "intencion",
+      "_chat_context: ctx.context"
+    ],
+    "implicacion": "ai-gateway enriquece contexto del chat pero NO toca el contenido semantico de la tool call. Si el LLM envia args.content='abc', el handler recibe args.content='abc' + los 8 campos de contexto. Cualquier corrupcion del content viene del LLM, no de ai-gateway."
+  },
+
+  "como_ai_gateway_procesa_el_payload_de_bus_publish_y_bus_publishAndWait": {
+    "metodo": "_executeUniversalBusTool() en lineas 1346-1448",
+    "validacion_1_event_required": {
+      "codigo_lineas": "1351-1355",
+      "regla": "args.event debe ser string no vacio. Si no, error INVALID_INPUT.",
+      "implicacion": "Defensa minima contra LLM que olvide nombrar el evento."
+    },
+    "validacion_2_no_recursion": {
+      "codigo_lineas": "1359-1363",
+      "regla": "ev no puede ser 'bus.publish' ni 'bus.publishAndWait' (son nombres de tools, no de eventos).",
+      "implicacion": "Defensa contra LLM que confunde tool con evento."
+    },
+    "validacion_3_payload_required": {
+      "codigo_lineas": "1364-1382",
+      "regla": "args.payload debe estar presente y ser objeto. Si NO esta, error INVALID_INPUT explicito.",
+      "comentario_del_propio_codigo": "hay LLMs (anthropic claude-sonnet-4-6 observado, deepseek en bucle silencioso) que omiten el campo payload entero al emitir tool calls cuando el contenido a serializar es grande — devuelven solo {event:'fs.write.request'}. Sin esta validacion, llegaba un payload solo con auto-injectados al receptor del bus, que respondia INVALID_INPUT '<campo> is required' y el LLM reintentaba con el mismo defecto. Detectarlo aqui y devolver un error EXPLICITO al LLM lo obliga a reconstruir el tool call con payload completo en la siguiente iteracion en vez de bucle de retry infinito.",
+      "implicacion_GORDA": "ESTE BUG ESTA DOCUMENTADO EN EL CODIGO. El autor de ai-gateway detecto un bug del LLM (payload ausente) y construyo una defensa. Confirma que el comportamiento de 'LLM rompiendose con payloads grandes' es conocido del repo y se ataco parcialmente."
+    },
+    "enriquecimiento_del_payload": {
+      "codigo_lineas": "1389-1395",
+      "campos_inyectados_si_faltan": [
+        "project_id (de ctx.project_id)",
+        "user_id (de ctx.user_id o 'system')",
+        "correlation_id (de ctx.correlation_id o ctx.conversation_id)",
+        "timestamp (new Date().toISOString() si falta)"
+      ],
+      "lo_que_NO_se_toca": "args.payload.content, args.payload.data, args.payload.expected_hash, args.payload.<cualquier-campo-de-dominio>. Pasa tal cual lo que el LLM envio.",
+      "implicacion": "ai-gateway compone el SOBRE del evento pero NO la CARTA. El contenido semantico es responsabilidad exclusiva del LLM."
+    }
+  },
+
+  "agentic_loop": {
+    "metodo": "_executeLLM() en lineas 1535+",
+    "modelo": "while (iteration < maxIterations) { llamar provider, parsear tool_calls, ejecutar cada tool_call, volver a llamar provider con el resultado del tool en messages }",
+    "max_iterations_default": "10 (configurable en module.json)",
+    "criterio_de_salida": "El LLM NO devuelve tool_calls (entiende que termino).",
+    "implicacion_para_modify": "El LLM tiene hasta 10 turnos de tool_calls. Si en el turno 1 hace fs.read, en el turno 2 PUEDE hacer fs.write con el contenido modificado. Pero el LLM debe componer ese contenido en su memoria entre turnos. Si el contenido es grande, la composicion falla (bug A o B)."
+  },
+
+  "interceptacion_de_cajones": {
+    "metodo": "_executeCajonTool() (referenciado pero no leido en esta etapa)",
+    "tools_interceptadas": ["cajon.listar", "cajon.abrir"],
+    "naturaleza": "Operan sobre catalogo + blueprints cargados en memoria de ai-gateway. NO publican al bus.",
+    "page_foco_pegajoso": {
+      "campo": "conversationPageFoco: Map<conversation_id, page_id>",
+      "comportamiento": "Si en un turno previo el LLM invoco chat.cambiar_foco, ese page_id persiste como 'pegajoso' en futuros turnos hasta que el frontend lo sincronice o el LLM lo cambie de nuevo.",
+      "implicacion_para_AP1": "ai-gateway TIENE implementado chat.cambiar_foco y page.related (Fase 5 bis de cajones-context-partitioning) en _executeNavTool, contradiciendo la nota del CLAUDE.md que dice 'Fase 5 bis pendiente'. Posible que las tools esten implementadas pero NO se expongan al LLM en el array de tools del request. Pregunta para AP6."
+    }
+  },
+
+  "hallazgos": [
+    {
+      "id": "AP1-F1",
+      "categoria": "responsabilidad_del_contenido",
+      "titulo": "ai-gateway es TRANSPARENTE para el contenido semantico de los tool calls",
+      "evidencia": "_executeToolCall y _executeUniversalBusTool enriquecen el payload con contexto del chat (project_id, user_id, correlation_id, timestamp) pero NO tocan args.content, args.data ni campos de dominio. Pasan tal cual lo que el LLM envio.",
+      "implicacion": "El bug del modify (LLM envia content viejo sin la nueva entrada) NO es bug de ai-gateway. ai-gateway solo es el cartero, no el escritor del contenido. Si quieres detectar el bug, hay que anyadir validacion semantica nueva (post-read hash check, comparacion con last fs.read result, etc.)."
+    },
+    {
+      "id": "AP1-F2",
+      "categoria": "bug_documentado_en_codigo",
+      "titulo": "El codigo de ai-gateway DOCUMENTA explicitamente un bug conocido del LLM (payload ausente)",
+      "evidencia": "Lineas 1364-1382. Comentario cita 'anthropic claude-sonnet-4-6 observado, deepseek en bucle silencioso' como casos. La defensa: detectar payload ausente y devolver INVALID_INPUT explicito al LLM en lugar de propagar al bus.",
+      "implicacion": "El equipo del repo CONOCE bugs similares al modify y los ataca. Pero esta defensa es para 'payload completamente omitido', NO para 'payload presente con content viejo'. El bug del modify que vimos en audits es OTRO bug distinto, NO cubierto por esta defensa.",
+      "severidad": "informativa_critica_para_diseno"
+    },
+    {
+      "id": "AP1-F3",
+      "categoria": "system_prompt_de_confianza",
+      "titulo": "El system prompt del blueprint CONFIA en la disciplina del LLM para componer payloads",
+      "evidencia": "_composeBlueprintSystemPrompt() lineas 478-498. Frases: 'Lee TU MISMO los pseudocodigos antes de actuar', 'Los pasos de normalizar / razonar / comparar los HACES TU mentalmente'.",
+      "implicacion": "El modelo de ejecucion descansa en que el LLM siga el pseudocodigo del blueprint literal y componga payloads correctamente en su memoria interna. NO hay enforcement estructural. Si el LLM se desenfoca (caso observado en audits), el sistema no tiene como saber."
+    },
+    {
+      "id": "AP1-F4",
+      "categoria": "agentic_loop_finito_pero_no_protegido",
+      "titulo": "Agentic loop con max 10 iteraciones, sin proteccion contra repeticion del mismo error",
+      "evidencia": "_executeLLM linea 1591: const maxIterations = this.config.max_tool_iterations || 10. while (iteration < maxIterations) ...",
+      "implicacion": "Si el LLM cae en bucle de fs.write con payload incompleto, los 10 turnos se gastan repitiendo el mismo error. La defensa de payload ausente (AP1-F2) corta esto cuando se manifiesta como 'payload omitido'. No corta cuando se manifiesta como 'payload presente pero incompleto'."
+    },
+    {
+      "id": "AP1-F5",
+      "categoria": "transparencia_de_correlation_id",
+      "titulo": "ai-gateway propaga correlation_id automaticamente desde el chatContext",
+      "evidencia": "Linea 1392: correlation_id: payload.correlation_id ?? ctx.correlation_id ?? ctx.conversation_id ?? null.",
+      "implicacion": "Cualquier evento publicado dentro de un turno del LLM hereda automaticamente conversation_id como correlation_id si el LLM no lo puso explicito. Garantia de trazabilidad cross-modulo dentro de la conversacion."
+    },
+    {
+      "id": "AP1-F6",
+      "categoria": "implementacion_de_fase_5_bis_cajones",
+      "titulo": "_executeNavTool maneja chat.cambiar_foco y page.related (Fase 5 bis cajones)",
+      "evidencia": "Linea 1467: if (toolName === 'chat.cambiar_foco' || toolName === 'page.related') return this._executeNavTool(...). conversationPageFoco es el storage in-memory del foco pegajoso (linea 1548).",
+      "implicacion_y_pregunta_para_AP6": "El CLAUDE.md declara 'Fase 5 bis pendiente'. El codigo dice que esta implementada. Posible que las tools no se expongan en el array de tools que se envia al LLM, o que el CLAUDE.md este desactualizado. Verificar si el LLM puede invocarlas realmente."
+    },
+    {
+      "id": "AP1-F7",
+      "categoria": "donde_se_podria_interceptar_el_bug_del_modify",
+      "titulo": "Puntos potenciales para validacion semantica del modify",
+      "evidencia": "El flujo natural seria: el LLM hace fs.read.request, recibe response con content+hash. Despues hace fs.write.request con content modificado. Una defensa nueva podria: (a) hashear el content del fs.write y compararlo con el hash del ultimo fs.read; si son iguales, INVALID_INPUT 'no_changes_detected'; (b) requerir expected_hash en el fs.write (CAS) cuando ai-gateway detecta que precedio un fs.read del mismo path; (c) interceptar pares fs.read/fs.write del mismo conversation_id y enforce el modify entre ellos.",
+      "implicacion": "Ninguna de estas defensas existe hoy. Implementarlas requiere estado nuevo en ai-gateway (mapa de last_read_by_conversation_path). Decision de diseno para Fase B."
+    }
+  ],
+
+  "donde_NO_esta_el_bug_del_modify": [
+    "NO esta en ai-gateway: es transparente para el contenido",
+    "NO esta en filesystem: escribe correctamente lo que recibe (verificado en A1)",
+    "NO esta en el bus MQTT: transmite payloads completos (verificado en audits previos)",
+    "NO esta en provider del LLM: si llegan tool_calls completos, ai-gateway los procesa"
+  ],
+
+  "donde_SI_podria_estar_el_bug_del_modify": [
+    "Hipotesis_1: En la composicion del payload por el LLM (etapa de razonamiento entre fs.read response y fs.write request). El LLM se desenfoca cuando el content es grande y omite re-incluir entradas viejas + la nueva.",
+    "Hipotesis_2: En el pseudocodigo del blueprint padre, que no enforce 'compone array completo con nueva entrada' como paso explicito. Si solo dice 'escribe el array' sin pasos intermedios, el LLM puede ejecutar el ultimo paso sin haber compuesto el array.",
+    "Hipotesis_3: En el provider especifico del LLM (truncamiento de tool_call cuando los args son grandes — anthropic vs deepseek pueden tener limites distintos).",
+    "Hipotesis_4: Combinacion de los anteriores. Pseudocodigo permite ambiguedad + provider trunca + LLM no detecta truncamiento = bug compuesto."
+  ],
+
+  "preguntas_para_siguientes_etapas": [
+    {
+      "para_etapa": "AP2",
+      "pregunta": "Que dice exactamente el pseudocodigo del blueprint padre subsistema-recetario.modulo-base.blueprint.json sobre el patron read-modify-write? Hay un paso explicito de 'compone array con nueva entrada' o solo 'escribe el array'?"
+    },
+    {
+      "para_etapa": "AP3",
+      "pregunta": "ai-gateway publica fs.write.request al bus. filesystem lo escribe. Hay write atomico (tempFile + rename) en filesystem? Hay CAS via expected_hash usado por algun modulo? Si el modify es vulnerable a race condition, hay otro bug ademas del modify rota."
+    },
+    {
+      "para_etapa": "AP4",
+      "pregunta": "Cuando un blueprint persiste algo (publish a fs.write), publica TAMBIEN un evento de dominio (<entidad>.creada / .actualizada)? O el LLM solo hace publishAndWait al fs y se olvida del evento de dominio? El catalogo de carta-manager declara 10 eventos publicados (carta.save.response, carta.list.response, etc.) — verificar cuando se publican en el pseudocodigo."
+    },
+    {
+      "para_etapa": "AP5",
+      "pregunta": "Reproducir el flujo end-to-end del bug del modify: arrancar conversacion en page_id=recetas, pedir crear receta, capturar todos los tool_calls del LLM y los eventos del bus, identificar exactamente donde se omite la composicion del array."
+    },
+    {
+      "para_etapa": "AP6 / Fase B",
+      "pregunta": "La intercepcion de validacion semantica (AP1-F7) merece la pena implementarla en ai-gateway o es responsabilidad del pseudocodigo del blueprint? Es decision arquitectonica: el motor del LLM-runtime debe ser tonto y transparente, o defensivo y semantico?"
+    },
+    {
+      "para_etapa": "AP6",
+      "pregunta": "Resolver la pregunta AP1-F6: chat.cambiar_foco y page.related estan implementadas en _executeNavTool pero CLAUDE.md dice 'Fase 5 bis pendiente'. Verificar si se exponen al LLM en el array de tools."
+    }
+  ],
+
+  "limitaciones_de_esta_etapa": [
+    "NO se leyo _executeCajonTool ni _executeNavTool en profundidad (solo se referenciaron).",
+    "NO se leyo el resto de _executeLLM mas alla del agentic loop inicial (hay 200+ LOC despues que no se inspeccionaron — pueden contener validaciones adicionales).",
+    "NO se inspeccionaron los providers individuales (modules/conversacion/ai-gateway/providers/*.js). Cada provider puede tener su propio parseToolCalls que afecte como llegan los args.",
+    "NO se reprodujo el bug del modify empiricamente en esta etapa (eso es AP5).",
+    "NO se inspecciono el shape exacto del array tools[] que ai-gateway envia al provider (para verificar AP1-F6 sobre chat.cambiar_foco)."
+  ],
+
+  "resumen_ejecutivo": "ai-gateway es el motor de ejecucion del LLM-runtime: recibe chat.prompt.ready o llm.complete.request, compone system prompt (con el blueprint padre+hijo si page_id tiene blueprint), llama al provider, procesa tool_calls del LLM en un agentic loop (max 10 iteraciones), enruta cada tool_call a _executeUniversalBusTool (bus.publish/bus.publishAndWait), _executeCajonTool (cajon.*), _executeNavTool (chat.cambiar_foco, page.related — Fase 5 bis implementada, contradice CLAUDE.md) o al path canonico del bus. Es TRANSPARENTE para el contenido semantico de las tool calls: enriquece el sobre (project_id, user_id, correlation_id, timestamp) pero NO toca el contenido (args.content, args.data). Tiene UNA defensa estructural contra un bug conocido del LLM: detectar payload completamente ausente y devolver INVALID_INPUT explicito (documentado en el codigo con cita literal de los modelos afectados). NO tiene defensa contra el bug del modify observado en audits (payload presente con content viejo, sin la nueva entrada del array). El bug del modify NO esta en ai-gateway — esta en como el LLM compone el payload del fs.write entre el fs.read y el write. Defensas posibles para Fase B: hashear content del fs.write y comparar con last fs.read; requerir expected_hash (CAS) cuando ai-gateway detecta pares read/write del mismo conversation_id+path; interceptar el patron en el motor. Cualquiera requiere estado nuevo en ai-gateway."
+}

@@ -1,0 +1,281 @@
+{
+  "_doc": "Etapa AP6 cierra la rama A-persistencia del analisis del sistema Enki. Sintetiza los hallazgos de AP1-AP5 identificando los drifts cross-capas que ningun JSON individual captura. Las 5 capas son: declarativa (blueprint padre con safeUpdate), implementacion (filesystem con CAS opt-in y write no-atomico), motor (ai-gateway transparente al contenido), runtime (LLM expandiendo mentalmente el helper), observada (audits empiricos con bug del modify en 2 variantes). Reformula el bug del modify a la luz de AP5: no es 'expansion mental defectuosa', es 'el blueprint no llega al LLM'. Lista 10 decisiones explicitas para Fase B reformulada con AMBAS visiones (orden de Fase A + persistencia de AP1-AP5).",
+  "etapa_id": "AP6-sintesis-rama-persistencia",
+  "creada": "2026-05-27",
+  "deriva_de": ["AP1-motor-ejecucion-llm-runtime.json", "AP2-blueprint-padre-subsistema-recetario.json", "AP3-fs-write-atomico-cas-concurrencia.json", "AP4-eventos-de-dominio-vs-crud-silente.json", "AP5-reproduccion-empirica-del-bug-del-modify.json"],
+
+  "objetivo": "Producir la foto unica e integral de la persistencia operativa del sistema Enki: como interactuan las 5 capas (declarativa, implementacion, motor, runtime, observada), donde se contradicen, donde se cumplen, y que decisiones tiene que tomar Fase B para arreglar el bug del modify y los problemas correlacionados.",
+
+  "las_5_capas_de_la_persistencia_operativa": {
+    "_descripcion": "Cada capa tiene su propia version de 'la verdad' sobre como se persisten datos. La realidad operativa es la composicion de todas. Cuando hay drift entre ellas, el sistema sigue funcionando por accidente hasta que el drift se cruza.",
+    "capa_1_declarativa_blueprint_padre": {
+      "fuente": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
+      "verdad_que_declara": "11 reglas de disciplina_del_llm_runtime + helper safeUpdate(path, mutator) canonico con 5 pasos + primitivas universales del bus (fs.read.request, fs.write.request) + payload canonico (project_id, user_id, correlation_id, timestamp). El bug del 'salmorejo perdido' (audit 2026-05-25) que el helper pretende cerrar esta CITADO LITERALMENTE.",
+      "fortaleza": "Patron canonico explicito, con expansion paso a paso. Reglas operativas detalladas.",
+      "fragilidad": "Helper SEMANTICO no ejecutable. El LLM tiene que expandir los 5 pasos mentalmente. Y depende de que el LLM RECIBA este blueprint en su system_prompt (AP5 lo refuta)."
+    },
+    "capa_2_implementacion_filesystem": {
+      "fuente": "modules/filesystem/index.js v2.0.0",
+      "verdad_que_implementa": "fs.read devuelve hash. fs.write acepta expected_hash y compara para CAS (CONFLICT_STATE 409 si no coinciden). Defensa contra paths absolutos del sistema. _publicarEvento de fs.file.created/updated/deleted.",
+      "fortaleza": "CAS via expected_hash funciona. Hash SHA-256 hex de la representacion utf-8 / buffer.",
+      "fragilidad_critica": [
+        "fs.writeFile DIRECTO sin tempFile + rename. VIOLA persistence.contract.atomic_writes_mandatory. Si el proceso muere durante write, archivo corrupto.",
+        "CAS es OPT-IN. Si no llega expected_hash, comportamiento 'silent allow' (decision 2A de Critica 1). Si el LLM omite expected_hash, no hay defensa.",
+        "Hash sin normalizar JSON. Mismo objeto con keys en orden distinto = hash distinto. Posibles falsos CONFLICT_STATE."
+      ]
+    },
+    "capa_3_motor_ai_gateway": {
+      "fuente": "modules/conversacion/ai-gateway/index.js v2.0.0",
+      "verdad_que_implementa": "Recibe chat.prompt.ready y llm.complete.request. Compone system_prompt con blueprint padre+hijo SI page_id esta en blueprintModules cache. Llama provider del LLM. Procesa tool_calls en agentic loop (max 10 iteraciones). Enruta tool_calls a _executeUniversalBusTool, _executeCajonTool, _executeNavTool, o bus canonico. TRANSPARENTE para el contenido semantico de los tool calls.",
+      "fortaleza": [
+        "Defensa contra payload completamente ausente (documentado con cita literal: 'anthropic claude-sonnet-4-6 observado, deepseek en bucle silencioso')",
+        "Enriquece sobre del payload (project_id, user_id, correlation_id, timestamp)",
+        "chat.cambiar_foco y page.related implementados en _executeNavTool (Fase 5 bis cajones)"
+      ],
+      "fragilidad_critica": [
+        "Es transparente para args.content. Si el LLM escribe contenido erroneo, ai-gateway lo transmite.",
+        "AP5 sugiere que NO INYECTA EL BLUEPRINT en algunas circunstancias (system_prompt observado en chat.prompt.ready es el generico del Companero de Viaje, no el blueprint). Verificacion pendiente del codepath exacto."
+      ]
+    },
+    "capa_4_runtime_llm_expandiendo_safeUpdate": {
+      "fuente": "Razonamiento del LLM cuando ejecuta una operacion de blueprint",
+      "verdad_que_deberia_ejecutar": [
+        "1. raw = publishAndWait('fs.read.request', { path })",
+        "2. store = mutator(JSON.parse(raw.content))  ← AQUI compone el array con la nueva entrada",
+        "3. write_args = { path, content: JSON.stringify(store), expected_hash: raw.data.hash }",
+        "4. publishAndWait('fs.write.request', write_args)",
+        "5. Si CONFLICT_STATE: reintenta (max 3)"
+      ],
+      "fortaleza_si_funciona": "Cierra el bug 'salmorejo perdido' por CAS.",
+      "fragilidad_observada": [
+        "Si el LLM no tiene el blueprint en su system_prompt (AP5-F1), NO conoce safeUpdate ni los 5 pasos. Opera generico.",
+        "Si el LLM tiene el blueprint pero se desenfoca en el paso 2: aplica mutator que SUSTITUYE en lugar de AGREGAR (AP5-F2) o que NO APLICA (audit del bocata previo). Variantes opuestas.",
+        "Si omite expected_hash en paso 3, no hay CAS (AP3-F2).",
+        "Si trunca su respuesta antes del paso 4, no hay fs.write."
+      ]
+    },
+    "capa_5_observada_audits_empiricos": {
+      "fuente": "audit/recetas-anthropic-20260527-0201/, audit/usuario-carta-20260527-0931/, audit/AP5-modify-bug-20260527-1542/",
+      "verdad_que_se_observo_empiricamente": [
+        "Sesion bocata: el LLM dice 'creada y guardada' pero el store sigue con 2 recetas. Variante A del bug del modify: el array escrito NO incluye la nueva entrada.",
+        "Sesion carta del usuario: 13 archivos huerfanos escritos en root del storage por troceado ad-hoc. Bug del payload-size + workaround del LLM que no funciona.",
+        "Sesion AP5: las 2 recetas viejas DESAPARECEN, solo queda la nueva. Variante B del bug del modify: el array escrito sustituye en lugar de agregar.",
+        "Sesion AP5: el system_prompt observado NO incluye el blueprint. Hallazgo nuevo que reformula la causa raiz."
+      ]
+    }
+  },
+
+  "drifts_cross_capas_que_ninguna_etapa_individual_captura": [
+    {
+      "id": "DP1",
+      "titulo": "El blueprint padre SI tiene el patron canonico (capa 1), pero el LLM NO SIEMPRE lo recibe en su system_prompt (capa 4-5)",
+      "evidencia": "AP2 confirma safeUpdate canonizado en blueprint padre. AP5 captura un chat.prompt.ready con system_prompt = prompt generico del Companero de Viaje (10500 chars), SIN el blueprint. Audits previos (bocata) mostraron tool_calls compatibles con el blueprint (cajon.abrir, bus.publishAndWait) — alli si parecia tener el blueprint. Inconsistencia: a veces si, a veces no.",
+      "consecuencia": "Si el blueprint llega al LLM, este puede ejecutar safeUpdate (aunque imperfecto). Si NO llega, el LLM opera generico y la persistencia no se ejecuta como deberia. EL BUG DEL MODIFY MIGHT BE 'sometimes blueprint no llega, LLM persiste con shape distinto'.",
+      "severidad": "alta_critica"
+    },
+    {
+      "id": "DP2",
+      "titulo": "filesystem implementa CAS y atomic flag, pero ambos son DECLARATIVOS sin enforcement real",
+      "evidencia": "AP3-F1: fs.writeFile directo, NO tempFile+rename. AP3-F2: CAS opt-in. La promesa del blueprint padre ('fs.write atomic:true, expected_hash via safeUpdate') no se honra en runtime si el LLM no la invoca o si filesystem no la enforce.",
+      "consecuencia": "Cualquier blueprint que confie en atomicidad o CAS opera sobre una garantia que NO existe en runtime. Race conditions silentes. Data loss en cualquier crash del proceso durante un write."
+    },
+    {
+      "id": "DP3",
+      "titulo": "El bug del modify tiene DOS variantes opuestas observadas, ambas convergen en el mismo modo de fallo del LLM",
+      "evidencia": "Variante A (audit bocata): LLM hace fs.read, NO aplica mutator, escribe array sin nueva entrada. Variante B (AP5): LLM hace fs.read, aplica mutator que SUSTITUYE el array entero, escribe solo nueva entrada perdiendo las viejas.",
+      "consecuencia": "Ambas son falla del paso 2 de safeUpdate (aplicar mutator correctamente). La causa raiz NO es 'el LLM no compone' sino 'el LLM NO sabe componer correctamente porque NO RECIBE EL BLUEPRINT o porque el blueprint es ambiguo'. AP5-F1 sugiere que la causa primaria es la primera (no recibe blueprint). Pero variante A del bocata si tenia tool calls de blueprint — ese caso es 'tiene blueprint pero composicion ambigua'."
+    },
+    {
+      "id": "DP4",
+      "titulo": "El catalogo de eventos (AP4) detecta wiring declarativo pero es CIEGO al runtime broken",
+      "evidencia": "AP4-F1: carta.creada aparece como handoff sano (publisher menu-generator + subscriber carta-manager declarados). Audit previo demostro que el handler de carta-manager se dispara pero NO completa la persistencia.",
+      "consecuencia": "blueprint-eventos-conscientes.validate.js NO detecta el bug del modify. Cualquier fix de canonizacion del wiring (anyadir/quitar subscribers) cierra sintomas pero no bugs raiz. Necesitamos OTRO mecanismo de validacion (runtime, tests integracion, telemetria nueva)."
+    },
+    {
+      "id": "DP5",
+      "titulo": "5 formas de declarar persistencia (capa 1) + 22 patrones distintos (capa 4 cuando funciona) + filesystem opera independiente de cualquier declaracion (capa 2)",
+      "evidencia": "AP4-F3, A3-F1, A3-F3. filesystem opera segun el shape estandar de fs.read.request / fs.write.request, independiente de como el modulo declaro su 'pattern' en module.json.",
+      "consecuencia": "La declaracion de pattern en module.json es DOCUMENTAL para auditoria, NO operativa. filesystem no usa esa info para nada. Sirve solo para introspeccion (saber que dice el modulo de si mismo)."
+    },
+    {
+      "id": "DP6",
+      "titulo": "UUID generation: blueprint padre dice 'usa uuid()' (capa 1), AP5 muestra UUID patternado fake (capa 4-5)",
+      "evidencia": "AP2 menciona regla 2 'uuids_y_timestamps: SI puedes generar tu — uuid() para identificadores nuevos'. AP5-F3 muestra id='a1b2c3d4-0002-...' patronado.",
+      "consecuencia": "Si el LLM no tiene el blueprint (DP1), no sabe que debe usar uuid(). Inventa patrones falsos. Posible problema sistemico de identidad de entidades del dominio (UUIDs no unicos a largo plazo, colisiones)."
+    },
+    {
+      "id": "DP7",
+      "titulo": "expected_hash es opt-in en filesystem (capa 2) pero declarado obligatorio en safeUpdate (capa 1)",
+      "evidencia": "AP3-F2 + AP2 helper safeUpdate paso 3.",
+      "consecuencia": "Si el LLM saltea el paso 3 (omite expected_hash), filesystem permite la escritura sin CAS. No hay defensa contra race condition. La promesa del padre ('expected_hash siempre') no la enforce filesystem."
+    },
+    {
+      "id": "DP8",
+      "titulo": "Posible contaminacion de contexto cross-conversacion (capa 5)",
+      "evidencia": "AP5-F4: el LLM responde sobre 'invoke_agent, bundle PWA, Vapers Local' cuando se le pide crear una receta. Esos topicos son de conversaciones previas del proyecto.",
+      "consecuencia": "Si la memoria semantica (memory-rag, memory-conversation-summary, etc.) inyecta contexto cross-conversacion sin aislamiento adecuado, el LLM puede aplicar patrones de tareas anteriores a la actual. Bug grave en multi-tenancy a nivel de conversacion."
+    },
+    {
+      "id": "DP9",
+      "titulo": "Los handoffs declarativos como carta.creada se cierran a nivel wiring pero el bug raiz vive en el RUNTIME del subscriber",
+      "evidencia": "blueprint-eventos-conscientes.contract creo el patron 'eventos_publicados_que_requieren_consumer' para detectar handoffs huerfanos. Critica 1 del audit 2026-05-25 anyadio el subscribe de carta-manager a carta.creada. Pero AP5 + audits previos muestran que el HANDLER del subscriber sigue sin completar.",
+      "consecuencia": "Reabrir Critica 1 como 'cerrada en superficie, raiz viva'. El fix declarativo de wiring NO resuelve runtime broken."
+    },
+    {
+      "id": "DP10",
+      "titulo": "El sistema TIENE telemetria de bugs conocidos (filesystem.write.cas_conflict) pero no se usa para detectar drift",
+      "evidencia": "AP3: filesystem.handleWrite emite metric 'filesystem.write.cas_conflict' con reason='file_missing' o 'hash_mismatch'. Pero ningun validator/dashboard la consume.",
+      "consecuencia": "Hay telemetria existente que podria detectar CONFLICT_STATE en runtime. Si se conecta a una alarma o validator, detectaria race conditions sistematicas. Hoy es senial perdida."
+    }
+  ],
+
+  "los_2_bugs_reales_de_la_rama_A_persistencia": {
+    "bug_1_modify": {
+      "nombre": "Bug del modify",
+      "manifestacion_observada_en_audits": "Cuando un blueprint del subsistema-recetario debe leer-modificar-escribir un store, el LLM falla en componer correctamente el array nuevo. Dos variantes opuestas:",
+      "variante_A": "LLM escribe el contenido viejo sin la nueva entrada (audit bocata, sesion 2026-05-27 02:01)",
+      "variante_B": "LLM escribe solo la nueva entrada sustituyendo el array entero, perdiendo las viejas (AP5, sesion 2026-05-27 15:42)",
+      "causa_raiz_segun_AP1_AP5": [
+        "Causa raiz primaria (AP5-F1): el LLM NO recibe el blueprint padre+hijo en su system_prompt. Opera con prompt generico del Companero de Viaje. NO conoce safeUpdate ni el patron read-modify-write canonico.",
+        "Causa raiz secundaria (AP2-F2): aunque tuviera el blueprint, safeUpdate es helper SEMANTICO no ejecutable. El LLM tiene que expandir mentalmente los 5 pasos. Fragilidad inherente.",
+        "Causa contribuyente (AP3-F1, AP3-F2): filesystem es write-no-atomico y CAS opt-in. No defiende contra el LLM defectuoso."
+      ],
+      "donde_se_puede_arreglar": [
+        "Capa 3 (ai-gateway): VERIFICAR que efectivamente inyecta el blueprint cuando page_id matchea. Si no lo hace, arreglar.",
+        "Capa 1 (blueprint padre): convertir safeUpdate de helper semantico a TOOL EJECUTABLE — ai-gateway implementa _executeSafeUpdate como tool unica que hace los 5 pasos en codigo determinista.",
+        "Capa 2 (filesystem): hacer atomic obligatorio (tempFile + rename) en handleWrite. Hacer CAS obligatorio para paths conocidos como stores (recetas.json, cartas/<id>.json).",
+        "Capa 4 (LLM): mejorar prompts del blueprint con anti-patrones EXPLICITOS de variantes A y B del bug. Pero la disciplina del LLM es fragil — preferible la defensa estructural."
+      ]
+    },
+    "bug_2_payload_size": {
+      "nombre": "Bug del payload-size",
+      "manifestacion_observada_en_audit_carta_del_usuario": "Cuando el LLM intenta meter un JSON grande (39 productos) en un tool_call, el provider trunca o el LLM omite el campo payload. Workaround del LLM: trocear en archivos sueltos ad-hoc — falla porque no integra al final.",
+      "estado_de_la_defensa_existente": "ai-gateway tiene defensa parcial: detecta payload completamente ausente y devuelve INVALID_INPUT explicito (AP1-F2). Pero NO detecta payload con content viejo (la variante A del modify).",
+      "no_reproducido_empiricamente_en_AP5": "AP5 se centro en una receta pequena para descartar el size. El bug payload-size queda como hipotesis de la sesion carta del usuario.",
+      "donde_se_puede_arreglar": [
+        "Capa 3 (ai-gateway): anyadir validacion explicita de tamano del payload por tipo de operacion. Si excede umbral, devolver INVALID_INPUT con sugerencia de 'trocear en chunks de N entries'.",
+        "Capa 1 (blueprint padre): anyadir operacion estandar 'store.add_batch' que reciba arrays grandes en chunks. Documentar como manejarlos.",
+        "Capa 4 (LLM): instruir explicitamente en el system prompt cuando trocear y cuando no."
+      ]
+    }
+  },
+
+  "lo_que_si_funciona_consistentemente_en_persistencia": [
+    "CAS via expected_hash compara hash y devuelve CONFLICT_STATE correctamente CUANDO se invoca (AP3).",
+    "fs.read devuelve hash SHA-256 hex de la representacion utf-8 (AP3).",
+    "El agentic loop de ai-gateway con max 10 iteraciones (AP1).",
+    "_executeUniversalBusTool defends contra payload completamente ausente (AP1-F2).",
+    "La regla 6 'modo_silencioso_en_lecturas' es disciplina sana, el bus no se llena de ruido (AP4-F7).",
+    "Eventos como cuenta.creada, producto.actualizado tienen handoffs activos a multiples subscribers (AP4 — pero no verificado empiricamente que el runtime los procese correctamente).",
+    "filesystem propaga correctamente correlation_id desde el chatContext (AP1-F5)."
+  ],
+
+  "decisiones_explicitas_para_Fase_B_acumuladas_de_AP1_AP5": [
+    {
+      "id": "BP-D1",
+      "tipo": "ARQUITECTONICA_CRITICA",
+      "decision": "Investigar y arreglar por que el system_prompt del LLM NO incluye el blueprint padre+hijo cuando page_id matchea (AP5-F1)",
+      "trabajo_previo_necesario": "Leer flujo completo chat-io -> prompt-builder -> ai-gateway._executeLLM. Encontrar donde se compone el system_prompt final. Verificar si blueprintModules.get(page_id) devuelve datos o null en runtime.",
+      "impacto_si_se_arregla": "Probable cierre del bug del modify en su variante 'el LLM no sabe que existe safeUpdate'."
+    },
+    {
+      "id": "BP-D2",
+      "tipo": "ARQUITECTONICA_CRITICA",
+      "decision": "Convertir safeUpdate de helper SEMANTICO a TOOL EJECUTABLE en ai-gateway",
+      "implementacion_propuesta": "ai-gateway implementa _executeSafeUpdate(path, mutator_spec) como tool unica. El LLM la invoca con la spec del mutator (ej. 'add to array recetas' + entry). ai-gateway ejecuta los 5 pasos en codigo: read, parse, apply mutator deterministico, stringify, write con expected_hash. Si CONFLICT_STATE, reintenta automaticamente.",
+      "ventaja": "Cierra ambas variantes del bug del modify de una vez. El LLM no expande mentalmente, solo declara la intencion.",
+      "tradeoff": "Pierde la generalidad del mutator como funcion arbitraria. Solo cubre los casos comunes (add to array, update field, remove from array)."
+    },
+    {
+      "id": "BP-D3",
+      "tipo": "INFRAESTRUCTURA",
+      "decision": "Implementar write atomico real en filesystem.handleWrite",
+      "implementacion_propuesta": "fs.writeFile a path.tmp + fs.rename a path. Si el proceso muere durante el write, el tmp queda como huerfano pero el original no se corrompe.",
+      "tradeoff": "Pequena overhead. Limpieza de huerfanos tmp requiere mecanismo extra.",
+      "obligatorio_segun_contrato": "persistence.contract.atomic_writes_mandatory"
+    },
+    {
+      "id": "BP-D4",
+      "tipo": "INFRAESTRUCTURA",
+      "decision": "Hacer CAS obligatorio para paths conocidos como stores (no opt-in)",
+      "implementacion_propuesta": "ai-gateway o filesystem mantiene lista de paths-store (recetas.json, cartas/<id>.json, etc.). Si fs.write llega a un path-store SIN expected_hash, devolver INVALID_INPUT con 'expected_hash_required_for_store_paths'.",
+      "ventaja": "Cierra el bug del modify variante A (el LLM no puede escribir contenido viejo sin saber que es viejo)."
+    },
+    {
+      "id": "BP-D5",
+      "tipo": "INFRAESTRUCTURA",
+      "decision": "Normalizar el JSON antes de hashear (canonical JSON)",
+      "implementacion_propuesta": "_computeHash hace JSON.parse + JSON.stringify con orden de keys deterministico antes de computar SHA-256. Evita falsos CONFLICT_STATE.",
+      "estado": "Ya anotado en el codigo como 'evolucionar a v2'"
+    },
+    {
+      "id": "BP-D6",
+      "tipo": "TELEMETRIA",
+      "decision": "Conectar filesystem.write.cas_conflict a un dashboard o validator",
+      "implementacion_propuesta": "Si el ratio de cas_conflict supera un umbral, alerta. Si hay paths-store que NUNCA emiten cas_conflict, sospechoso (no se esta usando CAS).",
+      "ventaja": "Detecta runtime broken que el catalogo de eventos no ve (DP4)."
+    },
+    {
+      "id": "BP-D7",
+      "tipo": "DOMINIO",
+      "decision": "Resolver los 12 huerfanos criticos de carta/recetas (AP4)",
+      "subdecisiones": [
+        "5 eventos receta.* sin subscriber: anyadir handlers en recetario-creativo, escandallo, etc. O documentar como telemetria fire-and-forget.",
+        "carta-design + carta-impresion publican carta.get.request sin subscriber: anyadir handler en carta-manager. O migrar al patron mqttRequest a tool nativa.",
+        "carta-scheduler.regla.creada/eliminada huerfanos: identificar quien deberia reaccionar."
+      ]
+    },
+    {
+      "id": "BP-D8",
+      "tipo": "FRONTEND",
+      "decision": "Migrar los 5 stores del frontend con paths hardcoded a tools nativas (A5-F1)",
+      "implementacion_propuesta": "recetas.ts usa mqttRequest('recetas', 'list', {}) en lugar de mqttRequest('fs', 'read', {path: '/recetas.json'}). Requiere que recetas (blueprint) exponga 'list' como operacion del bus.",
+      "ventaja": "El frontend deja de depender de paths internos del backend. Cualquier canonizacion de paths es invisible al frontend."
+    },
+    {
+      "id": "BP-D9",
+      "tipo": "DOMINIO",
+      "decision": "Verificar empiricamente la integridad de los 14 handoffs activos restantes que NO se verificaron en runtime (AP4-F6)",
+      "implementacion_propuesta": "Tests de integracion: para cada handoff, publicar el evento de origen y verificar via fs.read que el efecto persistente ocurrio.",
+      "lista_de_handoffs": "carta.actualizada, catalogo.actualizado, cuenta.*, producto.*, pedido.creado, ingrediente.actualizado, project.*, fs.list.request, tarifas.config.actualizada"
+    },
+    {
+      "id": "BP-D10",
+      "tipo": "OBSERVABILIDAD",
+      "decision": "Anyadir telemetria de 'handler_started_but_did_not_complete' (DP4)",
+      "implementacion_propuesta": "Cada handler de subscriber emite metric al start. Si no emite metric de done en X segundos, alerta. Detecta runtime broken del tipo del bug del modify."
+    }
+  ],
+
+  "lo_que_NO_se_sabe_y_no_se_resolvio_en_la_rama_A_persistencia": [
+    "Por que exactamente el LLM no recibio el blueprint en su system_prompt en AP5. Hipotesis: el blueprintModules cache no tiene 'recetas' registrado, o ai-gateway no concatena correctamente. Verificar codigo de _loadBlueprints (linea 400) y _executeLLM (linea 1535) requiere lectura adicional.",
+    "Por que el LLM en AP5 respondio sobre 'invoke_agent, PWA, Vapers Local' cuando se le pedia crear una receta. Posible contaminacion de memoria cross-conversacion. Verificar memory-rag y memory-conversation-summary.",
+    "Si el bug del modify variante B (sustituir array entero) es sistematico o ocurrencia unica. AP5 solo hizo 1 prueba.",
+    "El comportamiento bajo systemMode (proyecto Sistema): si filesystem maneja persistencia distinta, si hay race entre Sistema y proyectos normales.",
+    "Si el UUID patternado de AP5 (a1b2c3d4-0002-...) viene de un fixture, mock, o el LLM inventa con patron. Buscar 'a1b2c3d4' en el codigo del repo.",
+    "El bug del payload-size NO se reprodujo empiricamente. Queda como hipotesis del audit carta del usuario.",
+    "Si los otros 14 handoffs activos (no carta.creada) tienen runtime broken como este. Sospecha alta pero sin verificar.",
+    "El contenido exacto del archivo @/.env. Si tiene secretos en plano, violacion de security.contract."
+  ],
+
+  "estado_de_la_rama_A_persistencia": "CERRADA. 6 etapas completadas (AP1-AP6). 6 artefactos en arquitectura/auditoria/_outputs/analisis-persistencia/. La rama identifica el bug del modify en 2 variantes opuestas (audit bocata: array viejo sin nueva entrada; AP5: solo nueva entrada perdiendo viejas). Identifica la causa raiz primaria: el LLM NO recibe el blueprint en su system_prompt (AP5-F1, requiere verificacion adicional en el codigo). Identifica 10 decisiones explicitas para Fase B reformulada con persistencia y orden (de A6). El bug del payload-size queda hipotetico (no reproducido en AP5).",
+
+  "preview_de_la_sintesis_maestra_orden_mas_persistencia": {
+    "_descripcion": "Esta es la entrada para la sintesis maestra A∑ que junta orden (A6) + persistencia (AP6). No es A∑ completo — eso requiere mas trabajo. Pero esta es la vision unificada minima.",
+    "el_problema_central_unificado": "El sistema Enki tiene paradigma blueprint-driven con LLM como runtime. La arquitectura es elegante: blueprints declarativos + 2 tools universales + agentic loop. PERO depende de DOS cadenas fragiles: (1) que el blueprint llegue al LLM como system_prompt, (2) que el LLM expanda mentalmente los helpers semanticos como safeUpdate. La rama A-orden mostro que la primera cadena tiene drifts de paths (capa /storage/ huerfana, prefijos inconsistentes). La rama A-persistencia muestra que la segunda cadena tambien tiene drifts (helper semantico no ejecutable, defensas opt-in). El bug del modify es el sintoma mas visible de ambas fragilidades combinadas.",
+    "decisiones_compartidas_entre_orden_y_persistencia": [
+      "Canon de paths (B-D1 a B-D10 de A6) afecta a recetas.json, cartas/<id>.json, etc. — los paths que safeUpdate manipula. Cualquier cambio de path requiere update en blueprints + frontend + tests.",
+      "Aislamiento entre modulos (regla 5 del blueprint padre + A2-F4) prohibe cross-module reads. A5-F2 detecto 2 violaciones desde el frontend. La regla solo aplica a LLM-runtime. Decidir si extender al frontend.",
+      "Eventos publicados que requieren consumer (blueprint-eventos-conscientes) — la disciplina del wiring declarativo es necesaria pero insuficiente (DP4). Anyadir validacion de runtime.",
+      "credential-manager como modelo de modulo bien aislado (A2-F8) — patron a replicar para otros modulos persistentes."
+    ],
+    "lo_que_DEBE_decidirse_antes_de_canonizar": [
+      "BP-D1: arreglar la inyeccion del blueprint en system_prompt es PRECONDICION de cualquier otra decision sobre persistencia. Sin blueprint, todo lo demas es opcional para el LLM.",
+      "BP-D2: convertir safeUpdate de semantico a tool ejecutable es decision arquitectonica con efecto cascada en todos los blueprints.",
+      "B-D1 de A6: donde vive la capa /storage/ (codigo o contrato).",
+      "B-D2 de A6: namespace por vertical o paths planos."
+    ]
+  },
+
+  "resumen_ejecutivo": "La rama A-persistencia identifica que el bug del modify tiene DOS variantes opuestas observadas empiricamente (variante A audit bocata: 'LLM escribe array viejo'; variante B AP5: 'LLM escribe solo nueva entrada perdiendo viejas'). La causa raiz primaria detectada en AP5: el LLM NO recibe el blueprint padre+hijo en su system_prompt (recibe el generico del Companero de Viaje, 10500 chars). Sin el blueprint, el LLM no conoce safeUpdate. Causa raiz secundaria: safeUpdate es helper SEMANTICO no ejecutable — incluso si lo recibiera, depende de expansion mental defectuosa. Defensas existentes: CAS via expected_hash funciona en filesystem pero es opt-in; write NO es atomico (viola persistence.contract); blueprint padre tiene 11 reglas de disciplina y la primitiva universal del bus declara atomic:true que filesystem ignora. 10 drifts cross-capas catalogados (DP1-DP10). 10 decisiones explicitas para Fase B (BP-D1 a BP-D10), entre las cuales BP-D1 'arreglar inyeccion del blueprint en system_prompt' es PRECONDICION de las demas. Bug del payload-size NO reproducido en AP5 — queda como hipotesis. Preview de la sintesis maestra orden+persistencia: el problema central unificado es que el paradigma blueprint-driven depende de dos cadenas fragiles (blueprint llega al LLM, LLM expande helpers mentalmente). Ambas tienen drifts. El bug del modify es sintoma de ambas fragilidades combinadas. Fase B reformulada con 10 decisiones de orden (A6) + 10 de persistencia (AP6)."
+}

@@ -10,6 +10,7 @@
     { "domain": "fs", "action": "list",       "handler": "handleList" },
     { "domain": "fs", "action": "read",       "handler": "handleRead" },
     { "domain": "fs", "action": "write",      "handler": "handleWrite" },
+    { "domain": "fs", "action": "edit",       "handler": "handleEdit" },
     { "domain": "fs", "action": "delete",     "handler": "handleDelete" },
     { "domain": "fs", "action": "mkdir",      "handler": "handleMkdir" },
     { "domain": "fs", "action": "move",       "handler": "handleMove" },
@@ -59,6 +60,33 @@
         "required": ["path", "content"]
       },
       "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "fs.edit",
+      "description": "Edita un archivo JSON aplicando JSON Patch (RFC 6902). El caller declara INTENCIONES (op:add con path /recetas/- para append a array, etc.) en lugar de componer el archivo entero — cierra el bug 'salmorejo perdido'. v1: solo op:add. CAS opcional via expected_hash. Si el archivo no existe: RESOURCE_NOT_FOUND. Si JSON malformado o patch invalido: INVALID_INPUT.",
+      "handler": "handleEdit",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path":          { "type": "string", "description": "Ruta del archivo JSON a editar" },
+          "patches":       {
+            "type": "array",
+            "description": "Array de operaciones JSON Patch (RFC 6902). v1 solo soporta op:add. Cada patch tiene { op, path, value }. path usa JSON Pointer (RFC 6901): / al principio, / como separador, '-' como ultimo segmento para append a array, indices numericos para insertar en posicion. Ejemplo: { op:'add', path:'/recetas/-', value:{...} } anyade al final del array 'recetas'.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "op":    { "type": "string", "enum": ["add"], "description": "Operacion. v1 solo soporta 'add'." },
+                "path":  { "type": "string", "description": "JSON Pointer (RFC 6901) a la posicion donde aplicar la operacion." },
+                "value": { "description": "Valor a insertar/anyadir. Puede ser cualquier JSON." }
+              },
+              "required": ["op", "path", "value"]
+            }
+          },
+          "expected_hash": { "type": "string", "description": "SHA-256 hex del contenido actual del archivo (obtenido del fs.read previo). Si se pasa, fs.edit valida CAS antes de aplicar patches. Opcional." }
+        },
+        "required": ["path", "patches"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.delete",

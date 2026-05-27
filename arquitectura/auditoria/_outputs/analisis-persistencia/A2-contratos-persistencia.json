@@ -1,0 +1,296 @@
+{
+  "_doc": "Etapa A2 del analisis de persistencia y orden de archivos del sistema Enki. Cruza lo que el modulo filesystem hace en runtime (A1) con lo que los contratos del sistema declaran sobre paths/persistencia/proyectos. Documenta solapamientos, ausencias y contradicciones literales entre contratos.",
+  "etapa_id": "A2-contratos-persistencia",
+  "creada": "2026-05-27",
+  "deriva_de": "A1-filesystem-runtime.json",
+
+  "objetivo": "Mapear que dicen los contratos del sistema sobre paths/persistencia y donde no se hablan el mismo idioma entre si. Identificar la capa autoritativa de cada decision (donde vive el path canonico, donde la convencion de subsistema, donde el shape del store).",
+
+  "alcance": {
+    "incluye": [
+      "Lectura de los 8 contratos mas densos en menciones de persistencia/paths (persistence, multi-tenancy, project-identity, subsistema-recetario, security, llm-runtime-discipline, modulos-blueprint-driven, frontend)",
+      "Extraccion de filosofia, principios, prohibido y decisiones que tocan paths o storage",
+      "Cruce con A1 (lo que filesystem hace en runtime)",
+      "Identificacion de contradicciones literales entre contratos"
+    ],
+    "excluye": [
+      "Lo que cada modulo individual declara en su module.json (etapa A3)",
+      "Disco fisico real (etapa A4)",
+      "Frontend del sistema (etapa A5)",
+      "Sintesis cruzada definitiva (etapa A6)",
+      "Propuesta de canon (Fase B)"
+    ]
+  },
+
+  "axiomas_verificados_contra_codigo": [
+    {
+      "axioma": "El contrato persistence define DONDE viven los archivos de persistencia",
+      "verificado": false,
+      "evidencia": "persistence.contract.json v1.1.0 define un CATALOGO de 6 patrones (in-memory, json-file, json-file-per-project, sqlite, append-only-log, external-delegation). Cada patron describe el COMO (atomic write, declaracion en module.json) pero NO el DONDE concreto. La ruta donde vive cada archivo queda a discrecion del modulo. No menciona la capa /storage/ que filesystem aplica."
+    },
+    {
+      "axioma": "Existe un contrato que canonice la convencion de paths del sistema",
+      "verificado": false,
+      "evidencia": "Ningun contrato declara explicitamente la convencion: 'todo path leading-slash desde un modulo se prefija con base_path/storage en runtime'. La capa /storage/ que filesystem aplica (A1.F1) es comportamiento implicito no contractualizado."
+    },
+    {
+      "axioma": "Dos contratos cerrados (subsistema-recetario y project-identity) declaran reglas sobre paths que se contradicen literalmente",
+      "verificado": true,
+      "evidencia": "subsistema-recetario.contract.json prohibido.doble_escritura_del_dato_canonico_de_receta menciona 'data/projects/{slug}/recetas.json'. project-identity.contract.json v1.1.0 prohibido.PROH3 prohibe 'Construccion de paths con @/projects/{slug}/... o ${cwd}/projects/{slug}/... en modulos que no son project-manager o filesystem' y prohibido.PROH1 prohibe '_slugify(name) o equivalentes en cualquier modulo distinto de project-manager'. Contradiccion: subsistema-recetario habla de slug en path, project-identity lo prohibe."
+    }
+  ],
+
+  "catalogo_de_contratos_relevantes": [
+    {
+      "contrato": "persistence.contract.json",
+      "version": "1.1.0",
+      "rol": "Catalogo de patrones de persistencia. Define el COMO (atomico, declarado en manifest, telemetria obligatoria, aislamiento entre modulos) pero NO el DONDE.",
+      "menciones": 123,
+      "secciones_clave": ["patrones_canonicos (6 patrones)", "principios (10)", "prohibido (10)"],
+      "lo_que_si_dice": [
+        "module_chooses_persistence: cada modulo elige patron",
+        "absolute_isolation_between_modules: la persistencia de un modulo es PRIVADA. Otros modulos NUNCA leen sus archivos directamente",
+        "explicit_declaration_in_manifest: module.json.config.persistence.pattern obligatorio",
+        "atomic_writes_mandatory: tempFile + rename, NUNCA fs.writeFile directo",
+        "non_atomic_write y cross_module_persistence_access prohibidos"
+      ],
+      "lo_que_NO_dice": [
+        "Que la capa /storage/ se aplique al base_path del proyecto en runtime",
+        "Convencion de path por subsistema (pizzepos/, conversacion/, etc.)",
+        "Como debe declarar el modulo la ruta concreta (config.persistence.path|paths_relativos|estado_persistente.paths_relativos — coexisten varias formas en el sistema)"
+      ]
+    },
+    {
+      "contrato": "multi-tenancy.contract.json",
+      "version": "1.3.0",
+      "rol": "Define aislamiento por project_id en storage. Aplica a modulos project-scoped.",
+      "menciones": 22,
+      "lo_que_si_dice": [
+        "STORAGE AISLADO POR PROJECT_ID. Datos de proyecto A nunca visibles para proyecto B",
+        "storage_scope_por_project_id: archivos en data/<project_id>/<modulo>.json, tablas con WHERE project_id, etc.",
+        "storage_scope_fisico_no_logico: directorios distintos por project_id, ficheros distintos, o tablas con WHERE obligatorio",
+        "storage_compartido_sin_scope prohibido",
+        "No hay 'modo admin' que bypassee el scope: acciones administrativas usan user_id 'system' pero el storage sigue scopeado"
+      ],
+      "formato_de_path_que_implica": "data/<project_id>/<modulo>.json — referido como ejemplo, no canonizado estrictamente. Coexiste con otros formatos en otros contratos.",
+      "contradiccion_con_A1": "Multi-tenancy implica 'data/<project_id>/<modulo>.json'. Filesystem en runtime (A1) resuelve a '<base_path>/storage/<resto>' donde base_path ya contiene 'data/projects/<slug-del-name>'. La capa /storage/ y el segmento 'projects' no estan en el ejemplo de multi-tenancy."
+    },
+    {
+      "contrato": "project-identity.contract.json",
+      "version": "1.1.0",
+      "rol": "Define como los modulos resuelven identidad y path fisico de un proyecto. Fuente autoritativa: project.base_path.",
+      "menciones": 23,
+      "lo_que_si_dice": [
+        "project.base_path es la fuente autoritativa, persistida en columna projects.base_path al crear proyecto",
+        "Modulos persistentes se suscriben a project.activated y cachean base_path",
+        "Para proyectos no activos, project.get.request devuelve base_path",
+        "PROH1: _slugify fuera de project-manager prohibido",
+        "PROH2: cache local de slug prohibido",
+        "PROH3: paths con {slug} en modulos no-pm prohibidos",
+        "PROH4: campo slug en payloads de eventos project.* prohibido",
+        "PROH5: project.get.request en camino caliente prohibido (se usa cache del subscriber)"
+      ],
+      "validator_activo": true,
+      "deuda_actual": "1 warning + 7 info en baseline (database-manager:641 + tools sin subscribe a project.activated + project.get.request fuera de pm)"
+    },
+    {
+      "contrato": "subsistema-recetario.contract.json",
+      "version": "1.0.3",
+      "rol": "Sub-contrato del subsistema-recetario. Define las garantias de aislamiento del dominio de recetas.",
+      "menciones": 27,
+      "lo_que_si_dice": [
+        "Modulo recetas es UNICO escritor del dato canonico de receta",
+        "Ningun modulo distinto de recetas escribe en 'data/projects/{slug}/recetas.json'",
+        "frontend_recetario NO persiste dato de dominio (solo cache UI volatil + estado UI en localStorage)",
+        "frontend_lee_via_tools_no_via_archivos: el frontend lee TODO via tools del bus, nunca archivos JSON directos"
+      ],
+      "contradicciones_internas": [
+        {
+          "contradice_a": "project-identity.contract.json v1.1.0",
+          "evidencia": "subsistema-recetario.prohibido.doble_escritura_del_dato_canonico_de_receta cita la ruta 'data/projects/{slug}/recetas.json' con {slug}. project-identity.PROH3 prohibe paths con {slug} en modulos no-pm. Ambos cerrados en main."
+        }
+      ]
+    },
+    {
+      "contrato": "security.contract.json",
+      "version": "1.0.0",
+      "rol": "Disciplina de credenciales y secretos. Define quien persiste credenciales (credential-manager exclusivo) y como.",
+      "menciones": 17,
+      "lo_que_si_dice": [
+        "credential-manager es UNICO modulo que persiste y resuelve credenciales",
+        "cifrado en reposo OBLIGATORIO para credenciales en disco",
+        "Consumir credenciales: publish credential.resolve.request, espera credential.resolve.response. NUNCA fs.read directo a archivos de credenciales",
+        "Ningun consumer cachea credenciales en disco (memoria valida durante vida del proceso)",
+        "Validador paranoico: hardcoded API keys, fs.readFileSync sobre rutas de credenciales, secretos en logs son ERROR"
+      ],
+      "implicacion_para_paths": "Los paths donde viven credenciales son OPACOS al resto del sistema. Solo credential-manager los conoce. Refuerza absolute_isolation_between_modules de persistence.contract."
+    },
+    {
+      "contrato": "llm-runtime-discipline.contract.json",
+      "version": "2.0.0",
+      "rol": "10 reglas operativas del LLM cuando ejecuta blueprints. Define que puede leer/escribir el LLM y como marca la fuente de cada dato.",
+      "menciones": 10,
+      "lo_que_si_dice": [
+        "marcador_de_fuente_por_dato: cada dato del LLM lleva marcador (usuario|archivo|modulo|mercadona|estimado_llm)",
+        "no_explorar_estado_ajeno: el LLM accede SOLO al estado_persistente declarado en SU blueprint hijo",
+        "Si necesita datos de otro modulo: publish <otro-modulo>.<operacion>.request, espera response. NUNCA fs.read directo de archivos de otros modulos"
+      ],
+      "implicacion_para_paths": "El LLM como runtime es el que ejecuta fs.write/fs.read invocando los paths declarados en su blueprint. Si el blueprint declara mal el path, el LLM lo ejecuta. La disciplina de NO leer estado ajeno depende de que cada blueprint declare correctamente su namespace."
+    },
+    {
+      "contrato": "modulos-blueprint-driven.contract.json",
+      "version": "1.3.0",
+      "rol": "Define que modulos son blueprint-driven y como funcionan",
+      "menciones": 8,
+      "lo_que_si_dice": [
+        "Lista cerrada de 13 modulos blueprint-driven (subsistema-recetario + memorias + agentes + prompt-manager)",
+        "El blueprint hijo declara estado_persistente con paths_relativos",
+        "Persistencia se hace via 2 tools universales bus.publish y bus.publishAndWait"
+      ],
+      "lo_que_NO_dice": [
+        "Convencion de paths que los blueprints deben seguir (cada uno declara lo que quiere en sus paths_relativos sin enforcement)"
+      ]
+    },
+    {
+      "contrato": "frontend.contract.json",
+      "version": "1.x",
+      "rol": "Disciplina del frontend del sistema",
+      "menciones": 6,
+      "extraccion_pendiente": "Confirmar en A5 que el frontend SOLO lee via tools del bus (segun subsistema-recetario), nunca abre archivos directos. Si lo confirma A5, este axioma queda cerrado."
+    }
+  ],
+
+  "hallazgos": [
+    {
+      "id": "A2-F1",
+      "categoria": "ausencia_critica",
+      "titulo": "Ningun contrato canoniza la capa '/storage/' de filesystem",
+      "evidencia": "A1.F1 establecio que filesystem aplica path.join(base_path, 'storage') automaticamente. Ningun contrato del sistema (persistence, project-identity, multi-tenancy, subsistema-recetario, modulos-blueprint-driven) menciona esta capa. Cualquier blueprint que declare paths leading-slash escribe en realidad bajo /storage/ sin saberlo.",
+      "implicacion": "El comportamiento real esta canonizado SOLO en el codigo del modulo filesystem. No hay contrato que ponga esta capa por escrito. Si alguien cambia filesystem y elimina la capa /storage/, ningun validator lo detecta."
+    },
+    {
+      "id": "A2-F2",
+      "categoria": "contradiccion_literal",
+      "titulo": "subsistema-recetario.contract contradice project-identity.contract",
+      "evidencia": "subsistema-recetario.prohibido.doble_escritura_del_dato_canonico_de_receta menciona literalmente 'data/projects/{slug}/recetas.json'. project-identity.PROH3 prohibe 'paths con {slug} en modulos no-pm' y PROH1 prohibe '_slugify fuera de project-manager'. Ambos contratos estan cerrados en main, validados, y el repo conoce la contradiccion implicitamente.",
+      "implicacion": "Dos contratos del sistema dictan reglas contradictorias sobre el path canonico de las recetas. El contrato project-identity es mas reciente (v1.1.0, 2026-05-26) que la cita slug de subsistema-recetario. Cualquier intento de canonizar paths debe decidir cual gana.",
+      "severidad": "alta"
+    },
+    {
+      "id": "A2-F3",
+      "categoria": "tres_formatos_simultaneos",
+      "titulo": "Distintos contratos proponen formatos de path mutuamente incompatibles",
+      "evidencia": "Cuatro formatos coexisten declarados en contratos distintos del sistema:",
+      "formatos_observados": [
+        {
+          "formato": "data/<project_id>/<modulo>.json",
+          "declarado_en": "multi-tenancy.contract.principios.storage_scope_por_project_id",
+          "nota": "Usa project_id (UUID), sin prefijo storage, sin subsistema"
+        },
+        {
+          "formato": "data/projects/{slug}/<modulo>.json",
+          "declarado_en": "subsistema-recetario.contract.prohibido",
+          "nota": "Usa slug (prohibido por project-identity), agrega segmento 'projects'"
+        },
+        {
+          "formato": "/<entidad>.json o /<entidad>/<id>.json",
+          "declarado_en": "blueprints individuales (recetas.blueprint, carta-manager.blueprint, etc.)",
+          "nota": "Leading-slash, sin namespace de vertical, sin storage explicito (lo añade filesystem)"
+        },
+        {
+          "formato": "<base_path>/storage/<resto>",
+          "declarado_en": "Implicito en filesystem/index.js:134",
+          "nota": "Realidad operativa que NINGUN contrato declara"
+        }
+      ],
+      "implicacion": "Imposible afirmar 'el path canonico de X es Y' sin elegir un contrato como autoridad sobre los demas. Como minimo: project-identity es el mas reciente y tiene validator activo; deberia prevalecer."
+    },
+    {
+      "id": "A2-F4",
+      "categoria": "regla_uniforme_si_clara",
+      "titulo": "Aislamiento de persistencia entre modulos: regla clara, transversal y enforcement parcial",
+      "evidencia": "persistence.contract.absolute_isolation_between_modules + multi-tenancy.contract.storage_scope_por_project_id + security.contract.credential_manager_unica_via + llm-runtime-discipline.no_explorar_estado_ajeno + subsistema-recetario.frontend_lee_via_tools_no_via_archivos. Los 5 contratos coinciden: cada modulo es duenyo de SU storage, nadie lee storage ajeno.",
+      "implicacion": "Esta regla SI esta bien sintetizada cross-contratos. Si se canoniza paths, este principio se mantiene como invariante: cualquier convencion debe garantizar que el path de cada modulo es PRIVADO al resto."
+    },
+    {
+      "id": "A2-F5",
+      "categoria": "punto_de_verdad_del_dominio",
+      "titulo": "El frontend lee SOLO via tools del bus, nunca de archivos directos",
+      "evidencia": "subsistema-recetario.decisiones.frontend_lee_via_tools_no_via_archivos + subsistema-recetario.prohibido.frontend_persiste_dato_de_dominio",
+      "implicacion": "El path canonico de cada modulo NO necesita ser conocido por el frontend (que lee via tools). Implica que cualquier convencion de paths puede cambiar sin tocar el frontend, siempre que los tools sigan respondiendo el mismo shape. Esto simplifica enormemente la migracion."
+    },
+    {
+      "id": "A2-F6",
+      "categoria": "declaracion_obligatoria_pero_shape_no_canonico",
+      "titulo": "persistence exige declarar config.persistence.pattern pero NO el shape exacto de paths_relativos",
+      "evidencia": "persistence.contract.principios.explicit_declaration_in_manifest dice 'module.json.config.persistence.pattern obligatorio'. NO define como debe declararse el path concreto. Coexisten en el sistema: config.persistence.path, config.store_path, config.data_path, estado_persistente.paths_relativos (en blueprints), estado_persistente.ubicacion_logica, estado_persistente.paths_relativos_proyecto. Cinco formas distintas para declarar lo mismo.",
+      "implicacion": "Falta canonizar UNA forma de declarar el path en el manifest. Sin eso, cualquier validator que cruce 'lo declarado vs lo real' tiene que cubrir 5 esquemas distintos."
+    },
+    {
+      "id": "A2-F7",
+      "categoria": "responsabilidad_del_path_difusa",
+      "titulo": "Capa autoritativa del path no esta clara: blueprint del modulo? contrato del subsistema? filesystem? project-identity?",
+      "evidencia": [
+        "blueprint declara paths_relativos (subjetivo a cada modulo)",
+        "contrato del subsistema (ej. subsistema-recetario) puede mencionar la ruta como ejemplo (con drift)",
+        "filesystem en runtime aplica la capa /storage/ (implicita)",
+        "project-identity establece reglas sobre slug en paths (negativa, no positiva)"
+      ],
+      "implicacion": "No hay 'fuente unica' del path de cada modulo. La realidad operativa es la composicion (no documentada) de: blueprint paths_relativos + filesystem /storage/ + project-identity reglas. Cualquier canonizacion debe declarar quien tiene la ultima palabra."
+    },
+    {
+      "id": "A2-F8",
+      "categoria": "punto_de_extension_seguro",
+      "titulo": "credential-manager como modelo de patron exclusivo bien aislado",
+      "evidencia": "security.contract.credential_manager_unica_via + cifrado_en_reposo + cache_de_credencial_persistente prohibido. credential-manager es el unico que toca su path, lo cifra, y expone via bus.",
+      "implicacion": "Es el ejemplo de 'modulo con persistencia totalmente encapsulada' que el sistema sabe disenyar. La convencion canonica de paths puede seguir el mismo patron para todos los modulos: el modulo es dueno absoluto de SU path, lo expone por tools/eventos, nadie mas lo toca."
+    }
+  ],
+
+  "donde_vive_cada_decision_de_path_HOY": {
+    "capa_/storage/": "codigo de modules/filesystem/index.js:134 — sin contrato",
+    "namespace_por_vertical": "ningun contrato la declara",
+    "patrones_de_persistencia": "persistence.contract.json (catalogo de 6 patrones, sin paths concretos)",
+    "aislamiento_por_project_id": "multi-tenancy.contract.json (regla, ejemplo de path con drift)",
+    "fuente_autoritativa_del_base_path": "project-identity.contract.json (project.base_path, NO recomputar slug)",
+    "path_del_dato_de_dominio_de_un_modulo_concreto": "blueprint hijo del modulo (estado_persistente.paths_relativos)",
+    "shape_del_dato_de_dominio": "blueprint hijo (estado_persistente.shape_carta o equivalente)",
+    "credenciales": "security.contract + credential-manager",
+    "frontend_lee_via": "subsistema-recetario.contract (via tools del bus, NO archivos directos)"
+  },
+
+  "preguntas_para_siguientes_etapas": [
+    {
+      "para_etapa": "A3",
+      "pregunta": "Cuantos modulos declaran 'config.persistence' segun persistence.contract, vs cuantos solo declaran 'paths_relativos' en blueprint, vs cuantos no declaran nada? La distincion afecta a validate-paths futuro."
+    },
+    {
+      "para_etapa": "A3",
+      "pregunta": "Algun modulo declara su path siguiendo el formato 'data/<project_id>/<modulo>.json' que sugiere multi-tenancy.contract? O todos usan el formato leading-slash que el blueprint padre del subsistema-recetario implica?"
+    },
+    {
+      "para_etapa": "A4",
+      "pregunta": "Existe '/data/projects/<project_id>/' o '/data/projects/<slug>/' en disco real, segun multi-tenancy y subsistema-recetario? O todo vive bajo '<base_path>/storage/' segun A1?"
+    },
+    {
+      "para_etapa": "A5",
+      "pregunta": "El frontend del sistema confirma el patron 'lee via tools del bus, nunca archivos directos' que declara subsistema-recetario? Si lo hace, cualquier canonizacion de paths internos del backend es invisible al frontend."
+    },
+    {
+      "para_etapa": "A6",
+      "pregunta": "Que contrato debe canonizar la capa /storage/ implicita en filesystem: el propio persistence (anyadiendo seccion), un contrato nuevo paths-canonicos, o se elimina la capa /storage/ del codigo y se declara solo via blueprints? Decision arquitectonica de Fase B."
+    },
+    {
+      "para_etapa": "A6 / Fase B",
+      "pregunta": "subsistema-recetario.contract debe ser actualizado para alinearse con project-identity v1.1.0 (eliminar mencion a slug en paths)? O era cita historica que ya no aplica?"
+    }
+  ],
+
+  "limitaciones_de_esta_etapa": [
+    "NO se leyeron en profundidad los contratos secundarios: deployment, module-rewrite, extensibilidad-modular, testing, scheduling, modulos-blueprint-driven, manual-audit-module-y-helpers, disciplina-llm-operador, tools, frontend, companero-viaje, agente-blueprint, module-loading, errors, modulo-completo, cajones-context-partitioning. Si alguno tiene reglas adicionales sobre paths, no estan capturadas aqui.",
+    "frontend.contract.json solo se referencio; lectura profunda queda para A5.",
+    "bus-transport.contract.json (17 menciones) no se reviso (probable: paths de topicos MQTT, no de filesystem)."
+  ],
+
+  "resumen_ejecutivo": "Cuatro formatos de path coexisten DECLARADOS en contratos distintos del sistema, ninguno de los cuales captura la realidad operativa completa (que es <base_path>/storage/<resto> segun filesystem en runtime). Hay UNA contradiccion literal entre dos contratos cerrados: subsistema-recetario menciona slug en paths, project-identity v1.1.0 lo prohibe. La capa /storage/ que filesystem aplica automaticamente NO esta declarada en ningun contrato. La regla 'aislamiento absoluto entre modulos' SI esta sintetizada cross-contratos y es invariante de cualquier propuesta futura. El frontend lee via tools del bus, no archivos directos, lo que simplifica la migracion: la convencion de paths interna es invisible al frontend siempre que los tools sigan respondiendo el mismo shape. Cualquier canonizacion en Fase B debera (1) decidir donde vive la capa /storage/ (codigo de filesystem o contrato explicito), (2) resolver la contradiccion subsistema-recetario vs project-identity, (3) canonizar el shape de declaracion del path en el manifest (hoy hay 5 formas), (4) preservar el principio de aislamiento absoluto."
+}

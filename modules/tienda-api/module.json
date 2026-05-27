@@ -1,0 +1,103 @@
+{
+  "name": "tienda-api",
+  "version": "1.0.0",
+  "description": "Canal HTTP de pedidos web — recibe POST desde la PWA generada por comandero-cliente-builder y emite pedido.crear-tienda al bus. Tipo modulo_de_canal del contrato extensibilidad-modular, simetrico a whatsapp-bot pero para canal web. Stateless: ningun pedido persiste aqui — pizzepos/pedidos es el dueno del estado. Multi-proyecto: el project_slug llega como path param y se propaga al bus tal cual. CORS permisivo origin:* por diseno (PWA en subdominio del proyecto, API en dominio principal del sistema). Validacion AJV strict del body contra el shape canonico de pedido.crear-tienda (mismo schema que pizzepos/pedidos espera). Sin tools del LLM en v1 (YAGNI), sin auth de cliente (mismo nivel que WhatsApp), sin rate-limiting (downstream pedidos es el ultimo filtro). Patron heredado de whatsapp-bot/handleWebhookEvent.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+
+  "horizonte": "vertical-tienda-pwa-sin-datos",
+  "horizonte_doc": "arquitectura/decisiones/propuestas/vertical-tienda-pwa-sin-datos.md",
+
+  "events": {
+    "publishes": [
+      {
+        "event": "tienda.pedido.recibido",
+        "description": "Request HTTP POST llego del cliente con body parseado. Informativo para audit y observabilidad. NO requiere consumer.",
+        "payload": "{ project_slug, items_count, total_centimos, canal_origen: 'web', has_telefono, has_nombre, correlation_id }"
+      },
+      {
+        "event": "tienda.pedido.completado",
+        "description": "El bus respondio con exito al pedido.crear-tienda y se devolvio confirmacion al cliente HTTP. Informativo.",
+        "payload": "{ project_slug, pedido_id, codigo_recogida?, correlation_id }"
+      },
+      {
+        "event": "tienda.pedido.fallido",
+        "description": "Fallo en cualquier fase: validacion del body, timeout del bus, response del bus con error. error.code del catalogo errors.contract.",
+        "payload": "{ project_slug?, fase: 'validar' | 'bus_timeout' | 'bus_error', error: { code, message }, correlation_id }"
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "pedido.crear-tienda.response",
+        "handler": "onPedidoCrearTiendaResponse",
+        "description": "Respuesta canonica auto-wireada de la tool pedido.crear-tienda (tools.contract v1.2). Correlaciona con la request HTTP en curso por request_id, resuelve la promesa pendiente y se devuelve el resultado al cliente."
+      }
+    ]
+  },
+
+  "eventos_publicados_que_requieren_consumer": [
+    {
+      "event": "pedido.crear-tienda",
+      "consumer_esperado": "modules/pizzepos/pedidos",
+      "razon": "Handoff principal del flujo: cuando el cliente final envia un pedido desde la PWA, este modulo invoca la tool pedido.crear-tienda (auto-wire bus de tools.contract v1.2) para que pedidos lo persista plano (tipo: 'tienda', sin cuenta_id) y devuelva pedido_id + codigo_recogida via la response correlacionada. Misma tool que invoca whatsapp-bot — solo cambia el canal_origen ('web' vs 'whatsapp')."
+    }
+  ],
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/tienda/pedido/:project",
+      "handler": "handlePedidoPost",
+      "description": "Recibe pedido del cliente final desde la PWA. Body con shape de pedido.crear-tienda menos project_slug (viene del path) y menos canal_origen (lo fija a 'web' el modulo). Valida AJV strict, emite pedido.crear-tienda al bus con request_id, espera response correlacionada (tool_timeout_ms del config) y devuelve { pedido_id, codigo_recogida } o error canonico."
+    },
+    {
+      "method": "OPTIONS",
+      "path": "/tienda/pedido/:project",
+      "handler": "handlePedidoOptions",
+      "description": "CORS preflight permisivo. Headers: Access-Control-Allow-Origin: *, Access-Control-Allow-Methods: POST, OPTIONS, Access-Control-Allow-Headers: Content-Type. Razon: la PWA y la API viven en dominios distintos por diseno."
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del modulo: numero de requests pendientes en curso, version, status."
+    }
+  ],
+
+  "tools": [],
+
+  "dependencies": [],
+
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+
+  "config": {
+    "pedido_wait_timeout_ms": 30000,
+    "max_body_bytes": 32768
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "tienda.pedido.recibido.total",
+        "tienda.pedido.completado.total",
+        "tienda.pedido.fallido.total",
+        "tienda-api.errors"
+      ],
+      "gauges": [
+        "tienda-api.requests_pendientes.count"
+      ],
+      "timings": [
+        "tienda-api.pedido.duration"
+      ]
+    }
+  }
+}

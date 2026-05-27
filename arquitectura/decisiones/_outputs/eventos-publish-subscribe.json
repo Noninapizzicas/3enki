@@ -3683,6 +3683,10 @@
       ],
       "subscribers": [
         {
+          "source": "modules/bienvenida-tienda/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
           "source": "modules/comandero-cliente-builder/module.json",
           "handler": "onProjectActivated"
         },
@@ -4428,6 +4432,10 @@
       ],
       "subscribers": [
         {
+          "source": "modules/bienvenida-tienda/module.json",
+          "handler": "onTelegramCommandReceived"
+        },
+        {
           "source": "modules/bot-manager/module.json",
           "handler": "onCommandReceived"
         }
@@ -4626,6 +4634,10 @@
         }
       ],
       "subscribers": [
+        {
+          "source": "modules/bienvenida-tienda/module.json",
+          "handler": "onTelegramTextReceived"
+        },
         {
           "source": "modules/bot-manager/module.json",
           "handler": "onTextReceived"

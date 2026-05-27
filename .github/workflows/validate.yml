@@ -287,3 +287,6 @@ jobs:
 
       - name: Run unit tests (notificador-pedidos — Telegram al staff para vertical tienda)
         run: npm run test:notificador-pedidos
+
+      - name: Run unit tests (bienvenida-tienda — cara cliente del bot, responde con link PWA)
+        run: npm run test:bienvenida-tienda

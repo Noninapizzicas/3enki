@@ -1,0 +1,273 @@
+{
+  "_doc": "Etapa A4 del analisis de persistencia y orden de archivos del sistema Enki. Inventario empirico de la realidad fisica del filesystem: estructura del storage del proyecto 'Mi Proyecto' + data root del sistema (@/). Cruce con paths declarados por modulos (A3). Identifica archivos huerfanos (en disco sin declarante), modulos que NUNCA se han usado (path declarado sin archivo en disco) y modulos POC2 que persisten sin declarar.",
+  "etapa_id": "A4-disco-real",
+  "creada": "2026-05-27",
+  "deriva_de": ["A1-filesystem-runtime.json", "A2-contratos-persistencia.json", "A3-modulos-declarado.json"],
+
+  "objetivo": "Capturar el estado real del disco y cruzarlo con lo declarado (A3) para identificar 4 categorias de drift: (1) paths declarados que NO existen (modulos sin usar), (2) archivos en disco sin declarante (huerfanos), (3) POC2 que persisten sin declarar, (4) directorios implicitos que sugieren convenciones tacitas no contractualizadas.",
+
+  "alcance": {
+    "incluye": [
+      "Listado recursivo del storage del proyecto 'Mi Proyecto' via fs.list por bus",
+      "Listado del data root del sistema (@/, basePath=process.cwd()/data)",
+      "Listado de @/projects para ver todos los proyectos",
+      "Verificacion punto-a-punto de cada path declarado por los 7 blueprints (A3)",
+      "Identificacion de archivos huerfanos (en disco, sin declarante)"
+    ],
+    "excluye": [
+      "Listado completo del proyecto 'Sistema' (solo se confirma su existencia)",
+      "Inspeccion del codigo de los POC2 sospechosos (eso se haria con lectura puntual)",
+      "Frontend (etapa A5)",
+      "Sintesis cruzada (etapa A6)"
+    ]
+  },
+
+  "axiomas_verificados_contra_disco": [
+    {
+      "axioma": "Existen 17 archivos sueltos y 13 dirs en el storage del proyecto Mi Proyecto",
+      "verificado": true,
+      "evidencia": "fs.list recursivo via bus. 25 entries totales: 17 archivos + 8 directorios."
+    },
+    {
+      "axioma": "El data root del sistema (@/) contiene varios directorios sin declarante",
+      "verificado": true,
+      "evidencia": "fs.list @/ devuelve 13 directorios + 1 archivo .env. Solo 3 coinciden con paths declarados por modulos POC2 (devices, esp32-dev, firmware)."
+    },
+    {
+      "axioma": "5 blueprints con paths declarados pero modulos NUNCA usados",
+      "verificado": true,
+      "evidencia": "carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler — paths declarados (de A3) no existen en disco. Solo recetas y carta-manager (parcial) tienen archivo real."
+    }
+  ],
+
+  "estado_real_del_storage_del_proyecto_Mi_Proyecto": {
+    "_path_logico": "/ (que filesystem resuelve a <base_path>/storage/, segun A1)",
+    "_base_path": "/opt/enki/data/projects/mi-proyecto",
+    "_storage_path_efectivo": "/opt/enki/data/projects/mi-proyecto/storage/",
+    "_total_entries": 25,
+    "archivos_en_root_del_storage": [
+      {"path": "recetas.json", "size_bytes": 4098, "declarante_conocido": "pizzepos/recetas (blueprint)"},
+      {"path": "carta_catalogo_activo_parte1.json", "size_bytes": 397, "declarante_conocido": "NINGUNO - escrito ad-hoc por LLM en sesion 2026-05-27 09:31"},
+      {"path": "carta_catalogo_activo_productos_1.json", "size_bytes": 2374, "declarante_conocido": "NINGUNO"},
+      {"path": "carta_catalogo_activo_productos_2.json", "size_bytes": 2189, "declarante_conocido": "NINGUNO"},
+      {"path": "carta_catalogo_activo_productos_3.json", "size_bytes": 2292, "declarante_conocido": "NINGUNO"},
+      {"path": "carta_catalogo_activo_productos_4.json", "size_bytes": 2885, "declarante_conocido": "NINGUNO"},
+      {"path": "catalogo_activo_carta.json", "size_bytes": 2191, "declarante_conocido": "NINGUNO"},
+      {"path": "catalogo_activo_meta.json", "size_bytes": 326, "declarante_conocido": "NINGUNO"},
+      {"path": "catalogo_activo.json", "size_bytes": 571, "declarante_conocido": "NINGUNO"},
+      {"path": "catalogo_productos_entrantes_bebidas.json", "size_bytes": 1207, "declarante_conocido": "NINGUNO"},
+      {"path": "catalogo_productos_pancitos_hotdogs.json", "size_bytes": 1065, "declarante_conocido": "NINGUNO"},
+      {"path": "catalogo_productos_pizzicas_1.json", "size_bytes": 2360, "declarante_conocido": "NINGUNO"},
+      {"path": "catalogo_productos_pizzicas_2.json", "size_bytes": 2167, "declarante_conocido": "NINGUNO"},
+      {"path": "catalogo_productos_pizzicas_3.json", "size_bytes": 2269, "declarante_conocido": "NINGUNO"},
+      {"path": "catalogo_productos_resto.json", "size_bytes": 2044, "declarante_conocido": "NINGUNO"}
+    ],
+    "directorios_y_contenido": [
+      {
+        "dir": "cartas/",
+        "declarante_conocido": "pizzepos/carta-manager",
+        "contenido": [
+          {"path": "cartas/carta_catalogo_activo.json", "size_bytes": 595, "nota": "El archivo canonico con productos:[] VACIO (bug del modify confirmado en audit previo)"}
+        ]
+      },
+      {
+        "dir": "temp/",
+        "declarante_conocido": "NINGUNO",
+        "contenido": [
+          {"path": "temp/carta_catalogo_activo.json", "size_bytes": 412, "nota": "Archivo en directorio temp/ sin declarante. Probable que el LLM creo el dir para storage temporal"}
+        ]
+      },
+      {
+        "dir": "pizzepos/",
+        "declarante_conocido": "NINGUNO - directorio con prefijo de vertical pizzepos pero NO declarado por ningun blueprint",
+        "contenido": [
+          {"path": "pizzepos/cartas/", "type": "directory", "contenido": "VACIO", "nota": "Directorio existe pero sin archivos. Posible que se cree por convencion implicita (el usuario menciono 'la ruta es pizzepos/cartas') pero ningun modulo escribe ahi."},
+          {"path": "pizzepos/ocr/", "type": "directory", "contenido": "VACIO"},
+          {"path": "pizzepos/preprocesadas/", "type": "directory", "contenido": "VACIO"},
+          {"path": "pizzepos/ingredientes.json", "size_bytes": 2, "contenido": "[] - array vacio", "nota": "Probable inicializacion de pizzepos/ingredientes (POC2). Pero ingredientes no declara este path en su module.json."},
+          {"path": "pizzepos/programacion.json", "size_bytes": 18, "contenido": "{reglas:[]} - objeto inicializado", "nota": "No corresponde a ningun modulo conocido. Posible deuda historica."}
+        ]
+      }
+    ]
+  },
+
+  "estado_real_del_data_root_del_sistema": {
+    "_path_logico": "@/ (filesystem resuelve a process.cwd()/data segun A1)",
+    "_total_entries_en_root": "13 dirs + 1 archivo (.env)",
+    "directorios_y_correspondencia_con_modulos": [
+      {"dir": "backups/", "declarante_conocido": "NINGUNO - posible feature de sistema"},
+      {"dir": "bots/", "declarante_conocido": "posible bot-manager o telegram-service o whatsapp-bot (los tres POC2 sin declarar)"},
+      {"dir": "current/", "declarante_conocido": "NINGUNO"},
+      {"dir": "devices/", "declarante_conocido": "device-health, device-registry, device-shadow declaran 'config.data_path: ./data/devices' (path cwd-relativo)"},
+      {"dir": "esp32-dev/", "declarante_conocido": "esp32-dev declara 'config.data_path: ./data/esp32-dev'"},
+      {"dir": "eventos/", "declarante_conocido": "NINGUNO"},
+      {"dir": "firmware/", "declarante_conocido": "firmware-manager declara 'config.data_path: ./data/firmware'"},
+      {"dir": "logs/", "declarante_conocido": "log-manager (NO declarado en A3 — sospechoso confirmado)"},
+      {"dir": "perifericos/", "declarante_conocido": "perifericos modulo, NO confirmado si declara este path"},
+      {"dir": "projects/", "declarante_conocido": "project-manager + filesystem (raiz del scope por proyecto)"},
+      {"dir": "scheduler/", "declarante_conocido": "scheduler (NO declarado en A3 — sospechoso confirmado)"},
+      {"dir": "ventas/", "declarante_conocido": "NINGUNO"},
+      {"file": ".env", "size_bytes": 1032, "declarante_conocido": "posible credential-manager (env-file-atomic patron declarado en A3). Verificar shape — si tiene secretos en plano violacion security.contract"}
+    ]
+  },
+
+  "estado_real_de_at_projects": {
+    "_path_logico": "@/projects",
+    "entries": [
+      {"path": "_prompts/", "nota": "Probable directorio compartido de prompt-manager (esta en la lista de blueprint-driven de modulos-blueprint-driven.contract)"},
+      {"path": "mi-proyecto/", "nota": "Proyecto del usuario - el que analizo"},
+      {"path": "system/", "nota": "Proyecto Sistema (systemMode=true segun A1). NO se inspecciono en esta etapa."}
+    ]
+  },
+
+  "cruce_paths_declarados_vs_realidad": [
+    {
+      "modulo": "pizzepos/recetas",
+      "declara": "/recetas.json",
+      "existe_en_disco": true,
+      "evidencia": "/recetas.json (4098b) en el storage del proyecto",
+      "estado": "OK - declarado coincide con realidad"
+    },
+    {
+      "modulo": "pizzepos/carta-manager",
+      "declara": "/cartas/<carta_id>.json + /cartas/versions/<carta_id>/<ts>.json",
+      "existe_en_disco": "parcial",
+      "evidencia": "/cartas/carta_catalogo_activo.json (595b) existe. /cartas/versions/ NO existe.",
+      "estado": "USADO PARCIALMENTE - operacion crear funciona, archivado de versiones nunca usado. Y archivo canonico vacio de productos (bug del modify)"
+    },
+    {
+      "modulo": "pizzepos/carta-design",
+      "declara": "/carta-design/designs/...html + /carta-design/profiles/<id>.json",
+      "existe_en_disco": false,
+      "estado": "NUNCA USADO - el directorio /carta-design/ no existe"
+    },
+    {
+      "modulo": "pizzepos/carta-digital",
+      "declara": "/carta-digital.json",
+      "existe_en_disco": false,
+      "estado": "NUNCA USADO"
+    },
+    {
+      "modulo": "pizzepos/carta-impresion",
+      "declara": "/cartas-impresion/<carta_id>.html + .meta.json",
+      "existe_en_disco": false,
+      "estado": "NUNCA USADO"
+    },
+    {
+      "modulo": "pizzepos/carta-marketing",
+      "declara": "/storage/config/marca.json (double-storage bug)",
+      "existe_en_disco": false,
+      "estado": "NUNCA USADO - el bug double-storage es teorico hasta que alguien invoque el modulo"
+    },
+    {
+      "modulo": "pizzepos/carta-scheduler",
+      "declara": "/carta-scheduler-reglas.json + /carta-scheduler-pendientes.json",
+      "existe_en_disco": false,
+      "estado": "NUNCA USADO"
+    }
+  ],
+
+  "hallazgos": [
+    {
+      "id": "A4-F1",
+      "categoria": "archivos_huerfanos_en_disco",
+      "titulo": "13 archivos en el root del storage sin declarante de ningun modulo",
+      "evidencia": "carta_catalogo_activo*.json (5 archivos), catalogo_productos_*.json (5 archivos), catalogo_activo*.json (3 archivos). Todos creados en la sesion del usuario 2026-05-27 09:31. El LLM los escribio troceando el JSON del catalogo cuando el bug del modify le impidio integrar en /cartas/carta_catalogo_activo.json. Total: ~24KB de datos huerfanos.",
+      "implicacion": "Estos archivos contienen los 40 productos reales del catalogo del usuario, pero NINGUN modulo sabe que existen ni como interpretarlos. Para el sistema operativamente, el catalogo esta vacio (productos:[] en el canonico). Los datos estan fisicamente persistidos, semanticamente perdidos.",
+      "severidad": "alta_operativa"
+    },
+    {
+      "id": "A4-F2",
+      "categoria": "modulos_nunca_usados",
+      "titulo": "5 de los 7 blueprints con paths declarados NUNCA se han usado en este proyecto",
+      "evidencia": "carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler. Todos declaran paths que NO existen en disco.",
+      "implicacion": "Codigo muerto en produccion del proyecto Mi Proyecto. Quizas se han usado en otros proyectos pero aqui no. El bug double-storage de carta-marketing es teorico hasta que el modulo se invoque. Si nunca se invoca, no rompe. Pero existe.",
+      "severidad": "media"
+    },
+    {
+      "id": "A4-F3",
+      "categoria": "directorio_pizzepos_implicito",
+      "titulo": "Directorio /pizzepos/ existe en el storage pero ningun blueprint lo declara",
+      "evidencia": "/pizzepos/cartas/ (vacio), /pizzepos/ocr/ (vacio), /pizzepos/preprocesadas/ (vacio), /pizzepos/ingredientes.json (2b), /pizzepos/programacion.json (18b). Ningun blueprint del subsistema-pizzepos declara escribir bajo /pizzepos/.",
+      "implicacion": "Hay UNA convencion implicita de namespace por vertical operando en el sistema (alguien creo /pizzepos/cartas/, /pizzepos/ocr/, etc.). Esta convencion NO esta declarada en ningun contrato ni blueprint. Coincide PARCIALMENTE con la realidad operativa que el usuario declaro ('la ruta es pizzepos/cartas'). Pero no esta canonizada y nada escribe ahi sistematicamente — los archivos /pizzepos/ingredientes.json y /pizzepos/programacion.json son almost vacios (2b y 18b — solo estructura).",
+      "severidad": "alta_para_diseno"
+    },
+    {
+      "id": "A4-F4",
+      "categoria": "poc2_persiste_sin_declarar",
+      "titulo": "3 de los 7 POC2 sospechosos (A3-F2) SI persisten en disco sin declarar: log-manager, scheduler, posible whatsapp-bot/telegram-service",
+      "evidencia": "@/logs/ (sin declarante = log-manager), @/scheduler/ (sin declarante = scheduler), @/bots/ (posible telegram-service o whatsapp-bot — ambos sin declarar en A3).",
+      "implicacion": "Violacion confirmada de persistence.contract.prohibido.undeclared_persistence_pattern para 3 modulos como minimo. Los otros 4 (code-executor, inventario, pdf-viewer) no aparecen con dir propio en @/, asi que o son in-memory genuinos o persisten dentro de proyecto.",
+      "severidad": "alta_de_disciplina"
+    },
+    {
+      "id": "A4-F5",
+      "categoria": "directorios_huerfanos_sin_declarante",
+      "titulo": "4 directorios en @/ sin declarante: backups/, current/, eventos/, ventas/",
+      "evidencia": "fs.list @/ devuelve estos 4 dirs sin modulo conocido que los declare.",
+      "implicacion": "Posibles features de sistema (backups), feature inactiva (eventos), modulo deshabilitado (ventas). Necesita auditoria de codigo para confirmar quien los crea. Si nadie los toca, son cruft historico.",
+      "severidad": "media_para_higiene"
+    },
+    {
+      "id": "A4-F6",
+      "categoria": "env_archivo_en_data_root",
+      "titulo": "@/.env (1032b) — archivo de variables de entorno en data root",
+      "evidencia": "Existe en disco. Patron 'env-file-atomic' aparecio en A3 como uno de los patrones ad-hoc — probablemente declarado por credential-manager.",
+      "implicacion": "Si contiene secretos en plano: violacion DIRECTA de security.contract.prohibido.leer_credenciales_directamente_del_filesystem. Si esta cifrado o solo contiene config no-secreta: OK pero merece auditar el shape para confirmar.",
+      "severidad": "alta_de_seguridad - verificar shape antes de actuar"
+    },
+    {
+      "id": "A4-F7",
+      "categoria": "tres_proyectos_en_sistema",
+      "titulo": "El sistema tiene 3 proyectos: _prompts (compartido), mi-proyecto (test del usuario), system (proyecto Sistema)",
+      "evidencia": "fs.list @/projects",
+      "implicacion": "_prompts es probablemente storage compartido de prompt-manager (uno de los 13 blueprint-driven segun modulos-blueprint-driven.contract). 'system' es el proyecto especial con systemMode=true (A1.F3). Esta etapa no inspecciono el contenido de los dos no-mi-proyecto.",
+      "severidad": "informativa"
+    },
+    {
+      "id": "A4-F8",
+      "categoria": "convencion_implicita_de_namespace",
+      "titulo": "El proyecto tiene un 'data/projects/mi-proyecto/storage/pizzepos/' (segun A4-F3) PERO los blueprints declaran paths sin /pizzepos/. Drift entre lo que el sistema cree y lo que algo escribe alli.",
+      "evidencia": "/pizzepos/cartas/ existe vacio, /pizzepos/ingredientes.json existe con [], /pizzepos/programacion.json existe con {reglas:[]}. Tres pistas de que existe convencion '/pizzepos/<algo>' pero ningun blueprint la declara.",
+      "implicacion": "Posibles explicaciones: (1) hay una migracion antigua que creo estos dirs/archivos y nadie los limpio, (2) algun codigo JS de soporte (no en blueprints) escribe ahi pero el blueprint nuevo no lo refleja, (3) project-manager o filesystem mismo lo inicializa al activar proyecto. Verificar en A6 o lectura puntual de codigo.",
+      "severidad": "media"
+    }
+  ],
+
+  "preguntas_para_siguientes_etapas": [
+    {
+      "para_etapa": "A5",
+      "pregunta": "El frontend del sistema, cuando muestra 'cartas', lee de /cartas/<carta_id>.json (donde esta el canonico vacio) o de algun otro path? Si lee del canonico, el usuario ve 'sin productos' aunque tiene 40 productos huerfanos en disco. Si lee de otro path, hay desfase mas grave."
+    },
+    {
+      "para_etapa": "A6",
+      "pregunta": "Quien creo los directorios huerfanos /pizzepos/cartas/, /pizzepos/ocr/, /pizzepos/preprocesadas/ y los archivos /pizzepos/ingredientes.json (2b), /pizzepos/programacion.json (18b)? Posibles: migracion antigua, codigo JS de soporte de modulos pizzepos, project-manager al activar proyecto. Requiere lectura puntual del codigo de project-manager.onProjectActivated o equivalente."
+    },
+    {
+      "para_etapa": "A6",
+      "pregunta": "El archivo @/.env contiene secretos en plano? Si si, es violacion de security.contract. Requiere lectura puntual."
+    },
+    {
+      "para_etapa": "A6 / Fase B",
+      "pregunta": "Que hacer con los 13 archivos huerfanos del root del storage? Opciones: (a) consolidar en /cartas/carta_catalogo_activo.json (resuelve el bug del modify), (b) declarar formalmente la convencion de troceado por lotes (raro), (c) limpiar disco como deuda. Decision de dominio."
+    },
+    {
+      "para_etapa": "A6 / Fase B",
+      "pregunta": "Los 5 blueprints 'nunca usados' (carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler): mantener, deprecar, o tienen valor latente? Si se canoniza paths, hay que tocarlos igual o se les saca del scope."
+    },
+    {
+      "para_etapa": "A6 / Fase B",
+      "pregunta": "La convencion implicita /pizzepos/ que existe en disco pero no en ningun blueprint: es lo que tu propones como prefijo de vertical canonico (Sistema -> Proyecto -> Vertical -> Modulo)? Confirmacion necesaria antes de canonizar."
+    }
+  ],
+
+  "limitaciones_de_esta_etapa": [
+    "NO se inspecciono el contenido del proyecto 'system' (proyecto Sistema con systemMode=true). Posible que tenga otras estructuras.",
+    "NO se inspecciono el contenido de @/projects/_prompts/ (storage de prompt-manager).",
+    "NO se leyo el shape del .env para confirmar si tiene secretos en plano (postergado a A6 o lectura puntual).",
+    "NO se inspecciono el codigo de los POC2 sospechosos (code-executor, inventario, pdf-viewer) para confirmar si REALMENTE son in-memory genuinos o persisten dentro de proyecto.",
+    "NO se cruzo con el estado del proyecto Sistema (que puede tener convenciones de path distintas por estar en systemMode)."
+  ],
+
+  "resumen_ejecutivo": "El disco del proyecto Mi Proyecto tiene 25 entries en su storage. Cruzando con A3: solo 2 de los 7 blueprints declarantes tienen archivos en disco (recetas y carta-manager parcial). Los otros 5 (carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler) NUNCA se han usado. Hay 13 archivos huerfanos en el root del storage — los 40 productos del catalogo del usuario troceados ad-hoc cuando el bug del modify impidio la integracion. Estos archivos son INVISIBLES al sistema operativo: el archivo canonico /cartas/carta_catalogo_activo.json tiene productos:[] vacio. Existe un directorio /pizzepos/ implicito en el storage que NINGUN blueprint declara pero que tiene 3 subdirs y 2 archivos casi vacios — sugiere convencion tacita de namespace que coincide parcialmente con la realidad operativa que el usuario describio. En el data root del sistema (@/) hay 13 directorios donde algunos POC2 escriben sin declarar (log-manager, scheduler, posible bots) — violacion confirmada de persistence.contract.prohibido.undeclared_persistence_pattern para esos modulos. El archivo @/.env existe en disco — su shape sin verificar puede ser violacion de security.contract si tiene secretos en plano. Cualquier canonizacion en Fase B debera decidir el destino de los 13 huerfanos, los 4 dirs sin declarante en @/, el directorio /pizzepos/ implicito, y los 3+ POC2 que persisten sin declarar."
+}

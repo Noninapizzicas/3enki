@@ -1,0 +1,205 @@
+{
+  "_doc": "Etapa AP3 de la rama A-persistencia del analisis del sistema Enki. Verifica empiricamente contra el codigo de filesystem si las garantias prometidas por el blueprint padre (atomic_writes, CAS via expected_hash) realmente existen en runtime, y cataloga la declaracion de concurrency en los modulos. Descubre que CAS si esta implementado pero es OPT-IN, que filesystem viola persistence.contract.atomic_writes_mandatory (escribe directo sin tempFile+rename), y que el hash no se normaliza (posibles falsos CONFLICT_STATE).",
+  "etapa_id": "AP3-fs-write-atomico-cas-concurrencia",
+  "creada": "2026-05-27",
+  "deriva_de": ["AP1-motor-ejecucion-llm-runtime.json", "AP2-blueprint-padre-subsistema-recetario.json"],
+
+  "objetivo": "Cerrar las preguntas que AP2 abrio sobre fs.write: filesystem realmente implementa write atomico? CAS via expected_hash funciona o es declarativo? Cuantos modulos declaran concurrency y como?",
+
+  "alcance": {
+    "incluye": [
+      "Lectura completa de handleWrite y handleRead en modules/filesystem/index.js",
+      "Verificacion del flag expected_hash y la comparacion de hashes (CAS)",
+      "Verificacion de si el write es atomico (tempFile + rename) o directo",
+      "Verificacion de _computeHash (algoritmo, normalizacion)",
+      "Conteo de modulos que declaran config.persistence.concurrency",
+      "Catalogo de valores de concurrency usados"
+    ],
+    "excluye": [
+      "Eventos de dominio publicados por modulos (etapa AP4)",
+      "Reproduccion empirica del bug del modify (etapa AP5)",
+      "Auditoria del codigo de cada modulo sobre como invoca safeUpdate"
+    ]
+  },
+
+  "axiomas_verificados_contra_codigo": [
+    {
+      "axioma_de_AP2": "filesystem implementa write atomico real (tempFile + rename) cuando se pasa atomic:true",
+      "verificado": false,
+      "evidencia": "modules/filesystem/index.js linea 593: 'await fs.writeFile(safePath, contentBuffer, ...)'. ESCRITURA DIRECTA, NO HAY tempFile + rename en ningun caso. El flag atomic:true del payload del fs.write.request NO SE HONRA.",
+      "implicacion": "VIOLACION DIRECTA de persistence.contract.atomic_writes_mandatory. Si el proceso muere durante un write, el archivo queda corrupto. La promesa del padre 'fs.write atomico via flag atomic:true' es DECLARATIVA sin enforcement."
+    },
+    {
+      "axioma_de_AP2": "CAS via expected_hash funciona en filesystem (compara hashes y devuelve CONFLICT_STATE)",
+      "verificado": true,
+      "evidencia": "modules/filesystem/index.js lineas 559-583: si data.expected_hash es string, lee archivo actual, computa hash con _computeHash, compara con expected_hash. Si no coinciden devuelve CONFLICT_STATE 409. Si el archivo no existe (deberia existir segun caller) tambien CONFLICT_STATE."
+    },
+    {
+      "axioma_de_AP2": "fs.read devuelve hash en la response (para que el caller pueda usarlo como expected_hash en el siguiente write)",
+      "verificado": true,
+      "evidencia": "modules/filesystem/index.js lineas 513 y 526: la response de handleRead incluye 'hash: this._computeHash(content)'. Para archivos binarios computa sobre buffer, para texto sobre el contenido utf-8."
+    },
+    {
+      "axioma_inferido": "CAS es opcional (opt-in) — si el caller no pasa expected_hash, fs.write escribe sin defensa",
+      "verificado": true,
+      "evidencia": "Comentario en filesystem/index.js lineas 553-558: 'Opt-in: si no se pasa expected_hash, comportamiento sin cambio (silent allow per decision 2A de Critica 1)'. Si el LLM omite expected_hash, ningun race condition se detecta."
+    }
+  ],
+
+  "implementacion_de_CAS_en_filesystem": {
+    "donde_vive": "modules/filesystem/index.js, handleWrite, lineas 553-583",
+    "flujo": [
+      "1. Si data.expected_hash es string -> validar; si no string, saltar todo el bloque CAS.",
+      "2. Comprobar si el archivo existe. Si no existe pero llego expected_hash -> CONFLICT_STATE (otro proceso borro entre read y write).",
+      "3. Leer archivo actual del disco con fs.readFile.",
+      "4. Computar hash SHA-256 del contenido leido.",
+      "5. Comparar currentHash con data.expected_hash. Si no coinciden -> CONFLICT_STATE 409 con detalle expected_hash + current_hash.",
+      "6. Si coinciden -> continuar con la escritura."
+    ],
+    "garantia_que_da": "Si dos procesos (o dos turnos del LLM) hacen read-modify-write paralelos, el segundo detecta CONFLICT_STATE y puede reintentar segun safeUpdate paso 5.",
+    "metrics_que_emite": [
+      "filesystem.write.cas_conflict { reason: file_missing } — caller esperaba archivo existente",
+      "filesystem.write.cas_conflict { reason: hash_mismatch } — race condition detectada"
+    ],
+    "limitacion_critica": "Es OPT-IN. Si el LLM o un caller omite expected_hash, no hay CAS, no hay defensa. Decision arquitectonica intencional ('silent allow per decision 2A de Critica 1')."
+  },
+
+  "implementacion_de_atomicidad_en_filesystem": {
+    "donde_vive": "modules/filesystem/index.js, handleWrite, linea 593",
+    "implementacion_real": "await fs.writeFile(safePath, contentBuffer, ...)",
+    "es_atomico": false,
+    "comparacion_con_contrato": {
+      "persistence_contract_v1_1_0_dice": "atomic_writes_mandatory: Toda escritura de un archivo de persistencia (JSON, YAML, ini, etc.) usa el patron write atomico: write a tempFile + fs.rename a la ruta final. NUNCA un fs.writeFile directo sobre el archivo final.",
+      "blueprint_padre_dice": "fs.write.request payload incluye flag atomic:true",
+      "filesystem_implementa": "fs.writeFile directo. NO usa tempFile + rename. El flag atomic NO se evalua ni en handleWrite ni en ninguna parte del archivo (grep verificado)."
+    },
+    "implicacion_practica": [
+      "Si el proceso muere durante un write largo, el archivo queda parcialmente escrito.",
+      "Si dos modulos escriben concurrentemente al mismo path SIN CAS, hay race en el nivel del filesystem (no del LLM).",
+      "El flag atomic:true del payload es SOLO declarativo. Cualquier caller que asume atomicidad efectiva opera con una garantia que no existe."
+    ],
+    "severidad": "alta - violacion de un contrato cerrado en main"
+  },
+
+  "implementacion_de_hash": {
+    "metodo": "_computeHash(content) en modules/filesystem/index.js lineas 625-630",
+    "algoritmo": "SHA-256 hex",
+    "normalizacion": "NINGUNA",
+    "comentario_del_codigo": "Cero normalizacion en v1 (per decision 2A): si dos blueprints serializan el mismo JSON con orden de keys distinto y emergen falsos conflictos, evolucionar a normalizado en v2.",
+    "implicacion_practica": [
+      "Si dos LLMs serializan el mismo objeto JSON con orden de keys distinto, el hash SHA-256 es distinto.",
+      "Esto puede producir falsos CONFLICT_STATE: el LLM-A lee y compone array, otro proceso reescribe el mismo array con orden distinto, LLM-A intenta escribir con expected_hash del read original, falla CAS aunque el contenido semantico es identico.",
+      "El propio comentario lo prevé: 'evolucionar a normalizado en v2'. Es deuda conocida."
+    ],
+    "decision_arquitectonica_implicita": "Aceptar falsos CONFLICT_STATE a cambio de no normalizar (mas simple, evita decisiones de canonical JSON). El reintento de safeUpdate paso 5 se asume suficiente."
+  },
+
+  "declaracion_de_concurrency_en_modulos": {
+    "metodologia": "Grep recursivo de config.persistence.concurrency en module.json de los 77 modulos. Conteo por valor.",
+    "total_modulos": 77,
+    "con_concurrency_declarada": 44,
+    "sin_concurrency_declarada": 33,
+    "porcentaje_de_cumplimiento": "57%",
+    "violacion_de_persistence_contract": "33 modulos sin declarar concurrency en su manifest. persistence.contract.principios.concurrency_documented_or_single_writer obliga a declarar el modelo de concurrencia. Sin declaracion, el contrato asume single-writer pero el validator no lo enforce.",
+    "valores_distintos_observados": 15,
+    "drift_de_vocabulario_como_en_A3": [
+      "single-writer-per-file vs single-writer-per-archivo vs single-writer-per-path — sinonimos",
+      "single-writer-per-conversation vs single-writer-per-project — distintos scopes (validos)",
+      "single-instance (11) vs single-instance-per-process (2) — variantes",
+      "Algunas declaraciones tienen explicacion inline: 'single-writer-por-paquete (filename incluye periodo + fecha; colisiones cubiertas por overwrite del ZIP)' — no enumerable, viola la disciplina de vocabulario canonico"
+    ],
+    "patron_dominante": "single-writer en sus variantes (single-writer + single-writer-per-X + single-instance + variantes) cubre la mayoria. Solo 1 modulo declara single-reader-multi-writer-external."
+  },
+
+  "hallazgos": [
+    {
+      "id": "AP3-F1",
+      "categoria": "violacion_de_contrato_cerrado",
+      "titulo": "filesystem.handleWrite VIOLA persistence.contract.atomic_writes_mandatory",
+      "evidencia": "modules/filesystem/index.js linea 593 usa fs.writeFile directo, NO tempFile + rename. El flag atomic:true del payload se ignora.",
+      "implicacion": "El contrato persistence dice 'NUNCA un fs.writeFile directo'. El modulo filesystem hace exactamente eso. Es violacion literal de un contrato cerrado en main. Si el proceso muere durante un write, archivo corrupto. Si dos clientes escriben concurrentemente sin CAS, race no detectada.",
+      "severidad": "alta_de_disciplina"
+    },
+    {
+      "id": "AP3-F2",
+      "categoria": "CAS_implementado_pero_opt_in",
+      "titulo": "CAS via expected_hash funciona en filesystem pero es OPCIONAL",
+      "evidencia": "Lineas 559-583 implementan comparacion de hash y CONFLICT_STATE. Pero comentario lineas 553-558: 'Opt-in: si no se pasa expected_hash, comportamiento sin cambio (silent allow per decision 2A de Critica 1)'.",
+      "implicacion": "La defensa contra race conditions descansa en que el LLM use safeUpdate (que anyade expected_hash). Si el LLM olvida expected_hash (por desenfoque, por truncamiento, por pseudocodigo escueto), no hay defensa. Decision arquitectonica intencional: 'silent allow'. Pero canalizada via blueprint padre, depende de disciplina del LLM-runtime."
+    },
+    {
+      "id": "AP3-F3",
+      "categoria": "hash_sin_normalizacion_genera_falsos_conflictos",
+      "titulo": "_computeHash es SHA-256 directo sin normalizar el JSON. Falsos CONFLICT_STATE posibles",
+      "evidencia": "Lineas 620-630. Comentario del codigo: 'Cero normalizacion en v1 (per decision 2A): si dos blueprints serializan el mismo JSON con orden de keys distinto y emergen falsos conflictos, evolucionar a normalizado en v2'.",
+      "implicacion": "Si dos LLMs (o uno mismo en turnos distintos) serializa el mismo objeto JSON con orden de keys distinto, el hash difiere. safeUpdate puede caer en bucle de CONFLICT_STATE retries falsos. Deuda conocida (anotada explicitamente como 'evolucionar a v2')."
+    },
+    {
+      "id": "AP3-F4",
+      "categoria": "concurrency_declarada_parcialmente",
+      "titulo": "44 de 77 modulos declaran concurrency. 33 no.",
+      "evidencia": "Conteo programatico de config.persistence.concurrency en module.json de los 77 modulos.",
+      "implicacion": "57% de cumplimiento de persistence.contract.principios.concurrency_documented_or_single_writer. 33 modulos sin declarar. El contrato asume single-writer si falta declaracion pero el validator no enforce — drift silente."
+    },
+    {
+      "id": "AP3-F5",
+      "categoria": "drift_de_vocabulario_en_concurrency",
+      "titulo": "15 valores distintos de concurrency declarados, varios sinonimos",
+      "evidencia": "single-writer-per-file, single-writer-per-archivo, single-writer-per-path son el mismo concepto con escritura distinta. single-instance vs single-instance-per-process son variantes.",
+      "implicacion": "Como en A3-F1 (patrones de persistence), el vocabulario no esta canonizado. Cualquier validator que clasifique por valores literales no agrupa correctamente las variantes. Falta canon."
+    },
+    {
+      "id": "AP3-F6",
+      "categoria": "encadenamiento_de_writes",
+      "titulo": "fs.write devuelve hash post-escritura, permitiendo encadenar writes sin re-read",
+      "evidencia": "Linea 612: response incluye 'hash: newHash' calculado del contenido recien escrito. Linea 601: comentario 'Hash post-escritura: permite encadenar writes sin re-read'.",
+      "implicacion": "Optimizacion sana para cadenas de writes. El LLM puede usar el hash de la response del write previo como expected_hash del siguiente. Pero si entre los dos writes hay otra operacion ajena, falla CAS — bien."
+    }
+  ],
+
+  "donde_estamos_con_el_bug_del_modify": {
+    "lo_que_sabemos_tras_AP1_AP2_AP3": [
+      "AP1: ai-gateway es transparente para el contenido. El bug no esta aqui.",
+      "AP2: el patron safeUpdate canonico existe en el blueprint padre. Cierra teoricamente el bug.",
+      "AP3: CAS funciona en filesystem pero es OPT-IN. Si el LLM omite expected_hash, no hay defensa.",
+      "AP3: fs.write NO es atomico. Si el LLM en su desenfoque escribe el contenido incompleto, NO hay rollback."
+    ],
+    "donde_queda_la_responsabilidad": "El bug del modify es del LLM al expandir mentalmente safeUpdate. Si lo expande mal (omite paso 2 o paso 3-expected_hash), el resto del sistema NO lo detecta. CAS opt-in + write no-atomico + hash sin normalizar = defensa parcial que depende de la disciplina del LLM."
+  },
+
+  "preguntas_para_siguientes_etapas": [
+    {
+      "para_etapa": "AP4",
+      "pregunta": "Cuando un blueprint persiste algo, publica TAMBIEN un evento de dominio (<entidad>.creada / .actualizada)? La regla 6 dice que las lecturas NO. Pero las escrituras SI. Mapa publisher -> evento -> subscriber esperado."
+    },
+    {
+      "para_etapa": "AP5",
+      "pregunta": "Reproducir empiricamente el bug del modify: capturar todos los tool_calls de un turno. Verificar si el LLM (a) emite fs.read.request, (b) recibe response con hash, (c) emite fs.write.request con expected_hash o sin el, (d) el contenido del fs.write incluye la nueva entrada o solo el contenido viejo."
+    },
+    {
+      "para_etapa": "AP6 / Fase B",
+      "pregunta": "Forzar CAS obligatorio (no opt-in) en fs.write para paths conocidos como stores (recetas.json, cartas.json, etc.) — si no llega expected_hash y el path es un store conocido, INVALID_INPUT. Esto cerraria un modo de fallo. Decision arquitectonica."
+    },
+    {
+      "para_etapa": "AP6 / Fase B",
+      "pregunta": "Implementar atomicidad real en handleWrite (tempFile + fs.rename) o documentar formalmente como excepcion del persistence.contract? Es violacion conocida — decision arquitectonica."
+    },
+    {
+      "para_etapa": "AP6 / Fase B",
+      "pregunta": "Normalizar JSON antes de hashear (v2 del helper _computeHash) — para evitar falsos CONFLICT_STATE. Es la evolucion ya anotada en el codigo."
+    },
+    {
+      "para_etapa": "AP6 / Fase B",
+      "pregunta": "Canonizar el vocabulario de concurrency: cuantos patrones distintos son realmente necesarios (single-writer, single-writer-per-project, single-reader-multi-writer-external, in-memory, ...) vs sinonimos."
+    }
+  ],
+
+  "limitaciones_de_esta_etapa": [
+    "NO se inspecciono el flag atomic:true en otros sitios del codigo (puede haberse implementado en una funcion separada que handleWrite invoca — grep busco 'atomic' general, no encontró tempFile/rename adicional).",
+    "NO se midio empiricamente el numero de falsos CONFLICT_STATE en produccion (no hay logs accesibles).",
+    "NO se verificaron las metricas filesystem.write.cas_conflict — no se sabe con que frecuencia se dispara.",
+    "NO se cruzo concurrency declarada con concurrency efectiva (si un modulo declara single-writer pero su codigo tiene multiples puntos de write, drift)."
+  ],
+
+  "resumen_ejecutivo": "filesystem implementa CAS via expected_hash correctamente (lineas 553-583, comparacion de hash SHA-256 + CONFLICT_STATE 409 cuando no coinciden). fs.read devuelve hash. fs.write devuelve hash post-escritura para encadenar. PERO: (1) CAS es OPT-IN — si el caller no pasa expected_hash, comportamiento 'silent allow' (decision arquitectonica intencional). Si el LLM omite expected_hash, ninguna defensa. (2) fs.writeFile es DIRECTO, sin tempFile + rename. VIOLA persistence.contract.atomic_writes_mandatory. El flag atomic:true del payload del fs.write.request NO se honra. (3) _computeHash es SHA-256 sin normalizar — si dos blueprints serializan el mismo JSON con orden de keys distinto, hash difiere, posibles falsos CONFLICT_STATE. Deuda conocida ('evolucionar a v2'). (4) 44 de 77 modulos declaran concurrency (57%). 15 valores distintos, varios sinonimos (single-writer-per-file vs per-archivo vs per-path). Confluencia: el bug del modify queda en el LLM al expandir mentalmente safeUpdate. CAS opt-in + write no-atomico + hash sin normalizar = defensa parcial que depende de la disciplina del LLM. Fase B con 4 decisiones nuevas: CAS obligatorio para paths conocidos como stores, atomicidad real (tempFile+rename), hash normalizado, canon del vocabulario de concurrency."
+}

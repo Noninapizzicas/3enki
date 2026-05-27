@@ -2163,7 +2163,12 @@
       "subscribers": []
     },
     "fs.edit.request": {
-      "publishers": [],
+      "publishers": [
+        {
+          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
       "subscribers": [
         {
           "source": "modules/filesystem/module.json",

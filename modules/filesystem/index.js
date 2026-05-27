@@ -591,7 +591,7 @@ class FilesystemModule extends BaseModule {
         contentBuffer = data.content;
         fileSize = Buffer.byteLength(data.content, 'utf-8');
       }
-      await fs.writeFile(safePath, contentBuffer, data.encoding === 'base64' ? undefined : 'utf-8');
+      await this._atomicWriteFile(safePath, contentBuffer, data.encoding === 'base64' ? undefined : 'utf-8');
 
       const eventType = isNew ? 'fs.file.created' : 'fs.file.updated';
       await this._publicarEvento(eventType, {
@@ -680,7 +680,7 @@ class FilesystemModule extends BaseModule {
       }
 
       const newContent = JSON.stringify(doc, null, 2);
-      await fs.writeFile(safePath, newContent, 'utf-8');
+      await this._atomicWriteFile(safePath, newContent, 'utf-8');
 
       const fileSize = Buffer.byteLength(newContent, 'utf-8');
       await this._publicarEvento('fs.file.updated', { path: filePath, size: fileSize });
@@ -702,26 +702,47 @@ class FilesystemModule extends BaseModule {
   }
 
   // JSON Patch RFC 6902 — v1 solo soporta 'op:add'.
+  // JSON Patch RFC 6902 — v2 cubre las 6 operaciones canonicas:
+  //   add, remove, replace, move, copy, test
+  // Atomicidad transaccional: si CUALQUIER patch falla, NINGUNO se persiste
+  // (porque doc se compone en memoria y solo se escribe a disco tras
+  //  completar el bucle entero — la mutacion intermedia es solo en RAM).
   _applyJsonPatchOperations(doc, patches) {
+    const VALID_OPS = new Set(['add', 'remove', 'replace', 'move', 'copy', 'test']);
     for (let i = 0; i < patches.length; i++) {
       const patch = patches[i];
       if (!patch || typeof patch !== 'object') {
         throw new Error(`patch[${i}] must be an object`);
       }
       const op = patch.op;
-      if (op !== 'add' && op !== 'replace') {
-        throw new Error(`patch[${i}].op "${op}" not supported (v1.1 implements "add" and "replace")`);
+      if (!VALID_OPS.has(op)) {
+        throw new Error(`patch[${i}].op "${op}" not supported (valid: ${[...VALID_OPS].join(', ')})`);
       }
       if (typeof patch.path !== 'string') {
         throw new Error(`patch[${i}].path must be a string`);
       }
-      if (!('value' in patch)) {
-        throw new Error(`patch[${i}].value is required for op "${op}"`);
+      // Validacion de campos por op (RFC 6902):
+      //   add, replace, test → require 'value'
+      //   move, copy         → require 'from' (string path)
+      //   remove             → solo 'path'
+      if (op === 'add' || op === 'replace' || op === 'test') {
+        if (!('value' in patch)) {
+          throw new Error(`patch[${i}].value is required for op "${op}"`);
+        }
       }
-      if (op === 'add') {
-        doc = this._jsonPatchAdd(doc, patch.path, patch.value);
-      } else {
-        doc = this._jsonPatchReplace(doc, patch.path, patch.value);
+      if (op === 'move' || op === 'copy') {
+        if (typeof patch.from !== 'string') {
+          throw new Error(`patch[${i}].from must be a string for op "${op}"`);
+        }
+      }
+      // Enrutar
+      switch (op) {
+        case 'add':     doc = this._jsonPatchAdd(doc, patch.path, patch.value); break;
+        case 'replace': doc = this._jsonPatchReplace(doc, patch.path, patch.value); break;
+        case 'remove':  doc = this._jsonPatchRemove(doc, patch.path); break;
+        case 'test':    this._jsonPatchTest(doc, patch.path, patch.value); break;
+        case 'move':    doc = this._jsonPatchMove(doc, patch.from, patch.path); break;
+        case 'copy':    doc = this._jsonPatchCopy(doc, patch.from, patch.path); break;
       }
     }
     return doc;
@@ -833,6 +854,186 @@ class FilesystemModule extends BaseModule {
       throw new Error(`Cannot replace into non-container at "${pointer}"`);
     }
     return doc;
+  }
+
+  // RFC 6902 "remove": elimina el valor en la posicion del pointer.
+  // - Pointer vacio: no permitido (no se puede eliminar el documento entero).
+  // - Pointer apunta a array: requiere indice numerico EXISTENTE; usa splice
+  //   (los elementos posteriores se desplazan, longitud del array decrece).
+  // - Pointer apunta a objeto: requiere que la clave EXISTA; usa delete.
+  _jsonPatchRemove(doc, pointer) {
+    const tokens = this._parseJsonPointer(pointer);
+    if (tokens.length === 0) {
+      throw new Error(`Cannot remove root document (empty pointer)`);
+    }
+    const lastToken = tokens[tokens.length - 1];
+    const parentTokens = tokens.slice(0, -1);
+    let parent = doc;
+    for (const token of parentTokens) {
+      if (Array.isArray(parent)) {
+        const idx = parseInt(token, 10);
+        if (Number.isNaN(idx) || idx < 0 || idx >= parent.length) {
+          throw new Error(`Path not found: array index "${token}" out of range`);
+        }
+        parent = parent[idx];
+      } else if (parent !== null && typeof parent === 'object') {
+        if (!(token in parent)) {
+          throw new Error(`Path not found: key "${token}" not in object`);
+        }
+        parent = parent[token];
+      } else {
+        throw new Error(`Cannot navigate into non-container at token "${token}"`);
+      }
+    }
+    if (Array.isArray(parent)) {
+      if (lastToken === '-') {
+        throw new Error(`Cannot remove at "/-" (would refer to non-existent position)`);
+      }
+      const idx = parseInt(lastToken, 10);
+      if (Number.isNaN(idx) || idx < 0 || idx >= parent.length) {
+        throw new Error(`Path not found: array index "${lastToken}" out of range for remove (length is ${parent.length})`);
+      }
+      parent.splice(idx, 1);
+    } else if (parent !== null && typeof parent === 'object') {
+      if (!(lastToken in parent)) {
+        throw new Error(`Path not found: key "${lastToken}" not in object`);
+      }
+      delete parent[lastToken];
+    } else {
+      throw new Error(`Cannot remove from non-container at "${pointer}"`);
+    }
+    return doc;
+  }
+
+  // RFC 6902 "test": verifica que el valor en pointer es DEEP-EQUAL al
+  // value esperado. Si no, lanza error (el array de patches se aborta
+  // completo, ningun cambio se persiste). NO modifica el documento.
+  // Igualdad: deep equal por valor (no por referencia), arrays comparados
+  // por orden, objetos por claves+valores.
+  _jsonPatchTest(doc, pointer, expectedValue) {
+    const tokens = this._parseJsonPointer(pointer);
+    let cur = doc;
+    if (tokens.length > 0) {
+      for (const token of tokens) {
+        if (Array.isArray(cur)) {
+          const idx = parseInt(token, 10);
+          if (Number.isNaN(idx) || idx < 0 || idx >= cur.length) {
+            throw new Error(`Test failed: array index "${token}" out of range at "${pointer}"`);
+          }
+          cur = cur[idx];
+        } else if (cur !== null && typeof cur === 'object') {
+          if (!(token in cur)) {
+            throw new Error(`Test failed: key "${token}" not in object at "${pointer}"`);
+          }
+          cur = cur[token];
+        } else {
+          throw new Error(`Test failed: cannot navigate into non-container at token "${token}"`);
+        }
+      }
+    }
+    if (!this._deepEqual(cur, expectedValue)) {
+      throw new Error(`Test failed at "${pointer}": value does not match expected`);
+    }
+  }
+
+  // Deep equal por valor para op:test. Soporta objetos, arrays, primitivos.
+  // Orden de keys en objetos NO importa; orden de elementos en arrays SI.
+  _deepEqual(a, b) {
+    if (a === b) return true;
+    if (a === null || b === null) return false;
+    if (typeof a !== typeof b) return false;
+    if (typeof a !== 'object') return false;
+    if (Array.isArray(a) !== Array.isArray(b)) return false;
+    if (Array.isArray(a)) {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (!this._deepEqual(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    const aKeys = Object.keys(a), bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) return false;
+    for (const k of aKeys) {
+      if (!(k in b)) return false;
+      if (!this._deepEqual(a[k], b[k])) return false;
+    }
+    return true;
+  }
+
+  // RFC 6902 "move": equivalent to remove from `from` + add to `path`.
+  // Caso especial: si `from` === `path`, no-op (RFC asks "functionally
+  // equivalent" — implementacion concreta: skip).
+  // Restriccion RFC: `path` no puede ser un descendiente de `from`
+  // (movería un padre dentro de sí mismo). Validado.
+  _jsonPatchMove(doc, fromPointer, toPointer) {
+    if (fromPointer === toPointer) return doc;
+    // path no puede ser descendiente estricto de from
+    if (toPointer.startsWith(fromPointer + '/')) {
+      throw new Error(`Cannot move "${fromPointer}" to descendant path "${toPointer}"`);
+    }
+    // Leer valor en from (sin mutar)
+    const value = this._jsonPatchGet(doc, fromPointer);
+    // Remove desde from
+    doc = this._jsonPatchRemove(doc, fromPointer);
+    // Add en path destino
+    doc = this._jsonPatchAdd(doc, toPointer, value);
+    return doc;
+  }
+
+  // RFC 6902 "copy": equivalent to read from `from` + add at `path`.
+  // Se hace deep clone del valor leido para evitar aliasing.
+  _jsonPatchCopy(doc, fromPointer, toPointer) {
+    const value = this._jsonPatchGet(doc, fromPointer);
+    const cloned = JSON.parse(JSON.stringify(value));
+    doc = this._jsonPatchAdd(doc, toPointer, cloned);
+    return doc;
+  }
+
+  // Helper interno: leer valor en un pointer sin mutar. Lanza error si no
+  // existe (mismo shape que los demas helpers).
+  _jsonPatchGet(doc, pointer) {
+    const tokens = this._parseJsonPointer(pointer);
+    if (tokens.length === 0) return doc;
+    let cur = doc;
+    for (const token of tokens) {
+      if (Array.isArray(cur)) {
+        const idx = parseInt(token, 10);
+        if (Number.isNaN(idx) || idx < 0 || idx >= cur.length) {
+          throw new Error(`Path not found: array index "${token}" out of range at "${pointer}"`);
+        }
+        cur = cur[idx];
+      } else if (cur !== null && typeof cur === 'object') {
+        if (!(token in cur)) {
+          throw new Error(`Path not found: key "${token}" not in object at "${pointer}"`);
+        }
+        cur = cur[token];
+      } else {
+        throw new Error(`Cannot navigate into non-container at token "${token}"`);
+      }
+    }
+    return cur;
+  }
+
+  // ==========================================
+  // Atomicidad de fs.write y fs.edit
+  // ==========================================
+  // Helper compartido por handleWrite y handleEdit. Cierra el bug
+  // documentado en persistence.contract.atomic_writes_mandatory que
+  // ambos handlers heredaban al usar fs.writeFile directo. Patron
+  // canonico: escribir a tempFile + fs.rename atomico. Si el proceso
+  // muere durante el write, queda el tmp huerfano pero el archivo final
+  // NO se corrompe.
+  async _atomicWriteFile(safePath, content, encoding) {
+    const tmpSuffix = '.tmp.' + crypto.randomBytes(6).toString('hex');
+    const tmpPath = safePath + tmpSuffix;
+    try {
+      await fs.writeFile(tmpPath, content, encoding);
+      await fs.rename(tmpPath, safePath);
+    } catch (err) {
+      // Cleanup best-effort del tmp si quedó por error en write o rename.
+      try { await fs.unlink(tmpPath); } catch (_) { /* nothing */ }
+      throw err;
+    }
   }
 
   // ==========================================

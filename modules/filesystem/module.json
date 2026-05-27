@@ -63,7 +63,7 @@
     },
     {
       "name": "fs.edit",
-      "description": "Edita un archivo JSON aplicando JSON Patch (RFC 6902). El caller declara INTENCIONES (op:add para anyadir, op:replace para modificar) en lugar de componer el archivo entero — cierra el bug 'salmorejo perdido'. v1.1: op:add y op:replace. CAS opcional via expected_hash. Si el archivo no existe: RESOURCE_NOT_FOUND. Si JSON malformado o patch invalido: INVALID_INPUT.",
+      "description": "Edita un archivo JSON aplicando JSON Patch (RFC 6902). El caller declara INTENCIONES en lugar de componer el archivo entero — cierra el bug 'salmorejo perdido'. v2 implementa las 6 operaciones canonicas (add, remove, replace, move, copy, test). Atomicidad real via tempFile+rename. CAS opcional via expected_hash. Si el archivo no existe: RESOURCE_NOT_FOUND. Si JSON malformado o patch invalido: INVALID_INPUT. Si op:test falla o expected_hash no coincide: CONFLICT_STATE.",
       "handler": "handleEdit",
       "parameters": {
         "type": "object",
@@ -75,11 +75,12 @@
             "items": {
               "type": "object",
               "properties": {
-                "op":    { "type": "string", "enum": ["add", "replace"], "description": "Operacion JSON Patch (RFC 6902). v1.1 soporta 'add' (anyade entrada o clave) y 'replace' (sustituye valor existente; requiere que el path apunte a una posicion existente)." },
-                "path":  { "type": "string", "description": "JSON Pointer (RFC 6901) a la posicion donde aplicar la operacion." },
-                "value": { "description": "Valor a insertar/anyadir. Puede ser cualquier JSON." }
+                "op":    { "type": "string", "enum": ["add", "remove", "replace", "move", "copy", "test"], "description": "Operacion JSON Patch (RFC 6902). 'add' anyade entrada/clave; 'remove' elimina; 'replace' sustituye existente; 'move' traslada de from->path; 'copy' clona de from->path; 'test' verifica deep-equal en path (falla todo el array si no coincide). Campos requeridos por op: add/replace/test requieren 'value'; move/copy requieren 'from'; remove solo 'path'." },
+                "path":  { "type": "string", "description": "JSON Pointer (RFC 6901) destino de la operacion. Sintaxis: / al inicio, / como separador, '-' como ultimo segmento para append a array, indices numericos para insertar/sustituir/eliminar en posicion existente." },
+                "value": { "description": "Valor a insertar/sustituir (op:add, op:replace) o valor esperado (op:test). Puede ser cualquier JSON." },
+                "from":  { "type": "string", "description": "JSON Pointer ORIGEN para op:move y op:copy. Restriccion: 'path' no puede ser descendiente estricto de 'from' en op:move." }
               },
-              "required": ["op", "path", "value"]
+              "required": ["op", "path"]
             }
           },
           "expected_hash": { "type": "string", "description": "SHA-256 hex del contenido actual del archivo (obtenido del fs.read previo). Si se pasa, fs.edit valida CAS antes de aplicar patches. Opcional." }

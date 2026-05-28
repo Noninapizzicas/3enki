@@ -1,9 +1,9 @@
 {
   "_doc": "Contrato TRANSVERSAL que canoniza el estilo de redaccion del campo operaciones[].pseudocodigo[] en los blueprints hijo del sistema. El pseudocodigo es STRING que el LLM-runtime (deepseek, claude, gpt) parsea mentalmente para emitir tool calls al bus. La sintaxis ES6 densa (destructuring con rename, mutacion implicita Object.assign) confunde al LLM y produce ejecucion divergente del pseudocodigo: cuando el LLM no entiende, IMPROVISA. Este contrato enumera los anti-patrones con caso testigo empirico y declara los patrones idiomaticos permitidos. Acoplado a llm-runtime-discipline.contract.json (principio pseudocodigo_es_ley) y a modulos-blueprint-driven.contract.json (blueprints como contrato del LLM-runtime).",
   "id": "pseudocodigo-estilo",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "creada": "2026-05-28",
-  "supersedes_nota": "Primera version. Origen empirico: test runtime end-to-end de tests/runtime-cases/recetas-update-via-llm.js (mayo 2026, sesion del 2026-05-28). deepseek-chat ejecuto recetas.revertir y NO desestructuro { history: _h, ...currentSnap } = r — pusheo la receta entera al history, anidando history dentro de history. Bug acumulativo: cada revertido posterior anidaria de nuevo, inflando el store exponencialmente. La estructura de los patches fs.edit publicados era correcta — la libertad del LLM estaba en el CONTENIDO del value, donde la sintaxis ES6 densa lo confundio. Inventario Fase 0 de los 11 blueprints mostro que el patron problematico solo aparece 2 veces (ambas en recetas: actualizar + revertir) + 1 Object.assign (recetas.revertir). Los otros 244 hits de ES6 son sintaxis idiomatica normal (arrow functions, find/filter, optional chaining) que el LLM SI parsea bien. Contract enfocado en anti-patrones con evidencia, no estilo amplio.",
+  "supersedes_nota": "v1.1.0 (2026-05-28, mismo dia): anyadida seccion patrones_canonicos_emergentes con 4 patrones POSITIVOS descubiertos durante la migracion paralela de 7 blueprints hermanos a fs.edit (creacion_pura_archivo_nuevo, objeto_plano_sin_array, root_replace, spread_delete_alternativo). NO son anti-patrones — son formas correctas de redactar pseudocodigo en escenarios donde los 3 patrones canonicos originales (APPEND PURO / UPDATE 1-campo / UPDATE compuesto) no aplican literalmente. La migracion paralela los descubrio en wall-clock <5 min (vs ~15h estimadas en serie); documentarlos retroactivamente evita que sesiones futuras los redescubran. v1.0.0 (2026-05-28): primera version. Origen empirico: test runtime end-to-end de tests/runtime-cases/recetas-update-via-llm.js. deepseek-chat ejecuto recetas.revertir y NO desestructuro { history: _h, ...currentSnap } = r — pusheo la receta entera al history, anidando history dentro de history. Bug acumulativo: cada revertido posterior anidaria de nuevo, inflando el store exponencialmente. La estructura de los patches fs.edit publicados era correcta — la libertad del LLM estaba en el CONTENIDO del value, donde la sintaxis ES6 densa lo confundio. Inventario Fase 0 de los 11 blueprints mostro que el patron problematico solo aparece 2 veces (ambas en recetas: actualizar + revertir) + 1 Object.assign (recetas.revertir). Los otros 244 hits de ES6 son sintaxis idiomatica normal (arrow functions, find/filter, optional chaining) que el LLM SI parsea bien. Contract enfocado en anti-patrones con evidencia, no estilo amplio.",
 
   "deriva_de": "arquitectura/decisiones/_contratos/llm-runtime-discipline.contract.json v2.1.0 — principio pseudocodigo_es_ley",
 
@@ -80,15 +80,74 @@
     }
   ],
 
+  "patrones_canonicos_emergentes": {
+    "_doc": "Patrones POSITIVOS de redaccion de pseudocodigo descubiertos durante la migracion paralela 2026-05-28 de los 7 blueprints hermanos a fs.edit. NO son anti-patrones — son formas validas de resolver escenarios donde los 3 patrones canonicos originales (APPEND PURO array / UPDATE 1-campo / UPDATE compuesto) no aplican literalmente. Documentados aqui para que sesiones futuras no los redescubran.",
+
+    "patrones": [
+      {
+        "id": "creacion_pura_archivo_nuevo",
+        "nombre": "fs.write como primitiva CORRECTA para crear archivos nuevos sin lectura previa",
+        "cuando_aplica": "El blueprint construye contenido 100% desde inputs (sin leer ningun archivo) y lo escribe a un path NUEVO (filename con timestamp / uuid / hash). NO hay LEE-MODIFICA-ESCRIBE — solo CONSTRUYE-ESCRIBE.",
+        "razon_es_seguro": "El bug 'salmorejo perdido' es de LEE-MODIFICA-ESCRIBE: el LLM lee un archivo existente, lo modifica mentalmente y al recomponer pierde entradas. Creacion pura no es ese patron — el LLM construye el archivo desde cero, no recompone nada.",
+        "ejemplos_repo": [
+          "carta-design.save (html + json companion con filename = <carta_id>__<ts>.html)",
+          "carta-design.save_profile (escribe profile JSON construido desde input)",
+          "carta-impresion archivos HTML (no son JSON, fs.edit no aplica)",
+          "carta-manager snapshots /cartas/versions/<ts>.json"
+        ],
+        "fuente_empirica": "Migracion paralela 2026-05-28 — agent carta-design reporto el patron disciplinadamente sin migrar"
+      },
+      {
+        "id": "objeto_plano_sin_array",
+        "nombre": "Documento JSON plano: patches dinamicos op:replace /<campo> sobre la raiz",
+        "cuando_aplica": "El archivo JSON es un objeto plano (sin coleccion de entidades). Mutar campos puntuales del documento NO requiere /<array>/<idx>/<campo>; va directo a /<campo> de la raiz.",
+        "patron_completo": "Rama A (404): fs.write atomico del store inicial con los campos mergeados. Rama B (existe): fs.edit con patches dinamicos op:replace /<campo> por cada clave en input + op:replace /_updated_at.",
+        "ejemplos_repo": [
+          "carta-digital.update_config",
+          "carta-digital.set_carta_compuesta",
+          "carta-marketing.update_perfil",
+          "carta-marketing.completar_onboarding"
+        ],
+        "fuente_empirica": "Migracion paralela 2026-05-28 — descubierto por agents carta-digital + carta-marketing (config + brand kits no son arrays indexables)"
+      },
+      {
+        "id": "root_replace",
+        "nombre": "op:replace path:'' (RFC 6901 root pointer) cuando el archivo ES la entidad entera",
+        "cuando_aplica": "Cada archivo es UNA entidad (carta, profile, etc.) en lugar de ser un STORE que contiene entidades. Modificar la entidad entera = reemplazar todo el documento JSON.",
+        "patron_completo": "Rama A (404, carta nueva): fs.write atomico. Rama B (existe, edicion): fs.edit con op:replace path:'' value:entidad_completa.",
+        "razon_es_seguro": "filesystem implementa el root pointer RFC 6901 (path vacio). El LLM no compone — declara la entidad nueva, filesystem la sustituye atomicamente.",
+        "ejemplos_repo": [
+          "carta-manager.save (cada carta es modules/.../cartas/<id>.json)",
+          "carta-manager.restore"
+        ],
+        "fuente_empirica": "Migracion paralela 2026-05-28 — agent carta-manager identifico que el patron canonico array-indexed no aplica a archivos uno-por-entidad"
+      },
+      {
+        "id": "spread_delete_alternativo",
+        "nombre": "Alternativa valida para 'snapshot sin campo X': spread completo + delete",
+        "cuando_aplica": "Construir un objeto copiando otro EXCLUYENDO uno o varios campos. NO usar { campo: _alias, ...rest } = obj (anti-patron rest_spread_rename). Hay 2 formas validas:",
+        "forma_a_for_in": "snap = {}; for (campo in obj) { if (campo !== 'X') snap[campo] = obj[campo] }",
+        "forma_b_spread_delete": "snap = { ...obj }; delete snap.X",
+        "cual_elegir": "Ambas son validas y entendidas por el LLM. La forma A es mas verbose pero explicita en la exclusion. La forma B es mas concisa. NO usar la forma destructuring con rest-spread (anti-patron canonizado).",
+        "ejemplos_repo": [
+          "recetas.actualizar / recetas.revertir / recetas.obtener / recetas.investigar_receta usan forma A",
+          "tecnicas.actualizar usa forma B"
+        ],
+        "fuente_empirica": "Migracion paralela 2026-05-28 — agent tecnicas reporto que su pseudocodigo original usaba la forma B y NO encaja en el anti-patron canonizado. Decision: ambas formas son validas."
+      }
+    ]
+  },
+
   "casos_testigo": [
     {
       "id": "rest_spread_rename_recetas_revertir",
       "fecha": "2026-05-28",
       "descripcion": "deepseek-chat ejecuto recetas.revertir y al ver el string '{ history: _h, ...currentSnap } = r' no desestructuro — pusheo la receta entera (incluyendo su history) al array history. Resultado: history anidado dentro de history. Sucesivas reversiones inflarian el store exponencialmente.",
-      "evidencia": "tests/runtime-cases/recetas-update-via-llm.js — PASO 3 FAIL en el check 'R1.history tiene 2 snapshots' (real: 1 con anidamiento)",
+      "evidencia": "tests/runtime-cases/recetas-update-via-llm.js — PASO 3 FAIL en el check 'R1.history tiene 2 snapshots' (real: 1 con anidamiento). Tras el fix de pseudocodigo (reemplazar rest_spread por for/in explicito), el mismo test PASS 5/5 contra deepseek-chat el 2026-05-28.",
       "test_runtime_path": "tests/runtime-cases/recetas-update-via-llm.js",
       "fix_aplicado": "Reescribir las 2 ocurrencias de rest_spread_rename + 1 de Object.assign en recetas.blueprint.json operaciones actualizar y revertir.",
-      "anti_patron_que_cierra": "prohibir_rest_spread_con_rename_y_omision + prohibir_object_assign_con_mutacion_implicita"
+      "anti_patron_que_cierra": "prohibir_rest_spread_con_rename_y_omision + prohibir_object_assign_con_mutacion_implicita",
+      "estado": "cerrado_runtime_verificado"
     }
   ],
 

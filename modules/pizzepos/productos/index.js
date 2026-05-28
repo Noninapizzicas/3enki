@@ -819,7 +819,15 @@ class ProductosModule extends BaseModule {
     }
 
     try {
+      const start_time = Date.now();
       const result = await this.loadCartaFromProject(project_id);
+      const stats = {
+        productos_nuevos: result.productos,
+        productos_actualizados: 0,
+        productos_desactivados: 0,
+        categorias_nuevas: result.categorias
+      };
+      await this.publishCatalogoActualizado(project_id, 'load_carta', stats, Date.now() - start_time, data?.correlation_id);
       return {
         status: 200,
         data: {

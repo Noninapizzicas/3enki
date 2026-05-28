@@ -3739,10 +3739,6 @@
           "handler": "onProjectActivated"
         },
         {
-          "source": "modules/notificador-pedidos/module.json",
-          "handler": "onProjectActivated"
-        },
-        {
           "source": "modules/pase-cocina/module.json",
           "handler": "onProjectActivated"
         },

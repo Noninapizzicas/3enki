@@ -13,7 +13,15 @@ const BaseModule = require('../_shared/base-module');
  * al chatId del staff del proyecto. Reemplaza la responsabilidad que tenia
  * whatsapp-bot tras el pivote a Telegram-first para la vertical tienda PWA.
  *
- * Diseño multi-canal: hoy solo Telegram. En v2 se anyade branch para
+ * Resolucion on-demand del proyecto: cuando llega pedido.creado, publica
+ * project.get.request con el project_id del pedido y espera la response del
+ * project-manager para obtener base_path. Lee config de disco y notifica.
+ *
+ * No cachea estado de proyecto ni depende de project.activated — evita
+ * el acoplamiento al ciclo de vida "proyecto activo" (UI session focus),
+ * que dejaba al modulo ciego tras restart si nadie reactivaba el proyecto.
+ *
+ * Diseño multi-canal: hoy solo Telegram. En v2 se anyadira branch para
  * discord.send_message.request cuando discord-service exista — la decision de
  * que canales notificar vive en project.json:
  *   "notificaciones": { "canales": ["telegram", "discord"] }
@@ -22,10 +30,13 @@ class NotificadorPedidosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'notificador-pedidos';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
 
-    // project_id -> { project_slug, base_path, telegram: { chatId, botName }, canales: [...] }
-    this.projectsConfig = new Map();
+    // request_id -> { resolve, reject, timeoutHandle } para correlar project.get.response.
+    this._pendingProjectResolves = new Map();
+    this._unsubscribeProjectGetResponse = null;
+
+    this._projectResolveTimeoutMs = 5000;
   }
 
   // ==========================================
@@ -36,58 +47,32 @@ class NotificadorPedidosModule extends BaseModule {
     this.logger = context.logger;
     this.metrics = context.metrics;
     this.eventBus = context.eventBus;
+
+    // Suscripcion unica a project.get.response que despacha por request_id
+    // a las llamadas pendientes de _resolveProject.
+    this._unsubscribeProjectGetResponse = await this.eventBus.subscribe(
+      'project.get.response',
+      (event) => this._onProjectGetResponse(event)
+    );
+
     this.logger.info('notificador-pedidos.loaded', { version: this.version });
   }
 
   async onUnload() {
-    this.projectsConfig.clear();
+    if (typeof this._unsubscribeProjectGetResponse === 'function') {
+      try { this._unsubscribeProjectGetResponse(); } catch (_) { /* ignore */ }
+      this._unsubscribeProjectGetResponse = null;
+    }
+    for (const pending of this._pendingProjectResolves.values()) {
+      clearTimeout(pending.timeoutHandle);
+      pending.reject(new Error('notificador-pedidos unloaded'));
+    }
+    this._pendingProjectResolves.clear();
   }
 
   // ==========================================
   // Bus subscribers
   // ==========================================
-
-  async onProjectActivated(event) {
-    const data = (event && event.data) || event || {};
-    const project_id = data.project_id;
-    const base_path = data.base_path;
-    if (!project_id || !base_path) {
-      this.logger.warn('notificador-pedidos.project_activated.invalid', {
-        has_project_id: !!project_id,
-        has_base_path: !!base_path
-      });
-      return;
-    }
-    try {
-      const config = await this._readProjectConfig(base_path);
-      const slug = data.project_slug || data.project_name || null;
-      const entry = {
-        project_slug: slug,
-        base_path,
-        telegram: this._extractTelegramConfig(config),
-        canales: this._extractCanales(config)
-      };
-      this.projectsConfig.set(project_id, entry);
-      // Workaround drift project-identity: pedidos/handleCreatePedidoTienda emite
-      // pedido.creado con project_id = slug (no UUID). Cacheamos por slug tambien
-      // hasta cerrar esa deuda. Ver project-identity.contract trabajo_pendiente.
-      if (slug && slug !== project_id) {
-        this.projectsConfig.set(slug, entry);
-      }
-      this.logger.info('notificador-pedidos.project.cached', {
-        project_id,
-        slug,
-        has_telegram_chat_id: !!entry.telegram?.chatId,
-        canales: entry.canales
-      });
-    } catch (err) {
-      this.logger.warn('notificador-pedidos.project_activated.config_read_failed', {
-        project_id,
-        base_path,
-        error_message: err && err.message ? err.message : String(err)
-      });
-    }
-  }
 
   async onPedidoCreado(event) {
     const data = (event && event.data) || event || {};
@@ -110,21 +95,85 @@ class NotificadorPedidosModule extends BaseModule {
       return;
     }
 
-    const config = this.projectsConfig.get(project_id);
-    if (!config) {
-      this.logger.warn('notificador-pedidos.pedido_creado.proyecto_sin_config', { project_id, pedido_id: data.pedido_id });
-      this._incrementMetric('notificador.pedido.descartado.total', { project: project_id, razon: 'proyecto_sin_config' });
+    // Resolucion on-demand del proyecto. Patron canonico:
+    // project-identity.contract — leer base_path, no recomponerlo.
+    let project;
+    try {
+      project = await this._resolveProject(project_id);
+    } catch (err) {
+      this.logger.warn('notificador-pedidos.pedido_creado.resolve_failed', {
+        project_id, pedido_id: data.pedido_id, error_message: err && err.message ? err.message : String(err)
+      });
+      this._incrementMetric('notificador.pedido.descartado.total', { project: project_id, razon: 'project_resolve_failed' });
+      return;
+    }
+    if (!project || !project.base_path) {
+      this.logger.warn('notificador-pedidos.pedido_creado.project_no_encontrado', { project_id, pedido_id: data.pedido_id });
+      this._incrementMetric('notificador.pedido.descartado.total', { project: project_id, razon: 'project_no_encontrado' });
       return;
     }
 
-    const canales = config.canales && config.canales.length > 0 ? config.canales : ['telegram'];
+    let projectConfig;
+    try {
+      projectConfig = await this._readProjectConfig(project.base_path);
+    } catch (err) {
+      this.logger.warn('notificador-pedidos.pedido_creado.config_read_failed', {
+        project_id, base_path: project.base_path, error_message: err && err.message ? err.message : String(err)
+      });
+      this._incrementMetric('notificador.pedido.descartado.total', { project: project_id, razon: 'config_read_failed' });
+      return;
+    }
 
+    const resolved = {
+      project_slug: project.slug || project.name || null,
+      base_path: project.base_path,
+      telegram: this._extractTelegramConfig(projectConfig),
+      canales: this._extractCanales(projectConfig)
+    };
+
+    const canales = resolved.canales && resolved.canales.length > 0 ? resolved.canales : ['telegram'];
     for (const canal of canales) {
       if (canal === 'telegram') {
-        await this._notificarTelegram(config, data, event);
+        await this._notificarTelegram(resolved, data, event);
       }
       // canal === 'discord' lo añadiremos cuando discord-service exista (v2).
     }
+  }
+
+  // ==========================================
+  // Resolucion de proyecto via bus (request/response)
+  // ==========================================
+
+  _onProjectGetResponse(event) {
+    const data = (event && event.data) || event || {};
+    const request_id = data.request_id;
+    if (!request_id) return;
+    const pending = this._pendingProjectResolves.get(request_id);
+    if (!pending) return;
+    this._pendingProjectResolves.delete(request_id);
+    clearTimeout(pending.timeoutHandle);
+    if (data.success && data.project) {
+      pending.resolve(data.project);
+    } else {
+      pending.resolve(null);
+    }
+  }
+
+  _resolveProject(project_id) {
+    return new Promise((resolve, reject) => {
+      const request_id = crypto.randomUUID();
+      const timeoutHandle = setTimeout(() => {
+        this._pendingProjectResolves.delete(request_id);
+        reject(new Error(`project.get.request timeout (${this._projectResolveTimeoutMs}ms) for project_id=${project_id}`));
+      }, this._projectResolveTimeoutMs);
+      this._pendingProjectResolves.set(request_id, { resolve, reject, timeoutHandle });
+      this.eventBus.publish('project.get.request', { request_id, project_id })
+        .catch((err) => {
+          this._pendingProjectResolves.delete(request_id);
+          clearTimeout(timeoutHandle);
+          reject(err);
+        });
+    });
   }
 
   // ==========================================

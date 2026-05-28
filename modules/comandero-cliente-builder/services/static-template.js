@@ -181,6 +181,17 @@ function generateStaticHTML(input) {
 <title>${escHtml(textos.titulo)}</title>
 <meta name="description" content="${escHtml(textos.subtitulo)} — ${escHtml(marca)}">
 <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+// Eruda dev console — solo se carga si la URL incluye ?eruda=1.
+// Util para debugging del bundle PWA en moviles sin acceso a DevTools.
+// Cero impacto para usuarios normales (no se descarga nada si el flag no esta).
+if (location.search.indexOf('eruda=1') !== -1) {
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/eruda';
+  s.onload = function() { if (window.eruda) window.eruda.init(); };
+  document.head.appendChild(s);
+}
+</script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{

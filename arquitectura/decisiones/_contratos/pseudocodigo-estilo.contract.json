@@ -1,0 +1,133 @@
+{
+  "_doc": "Contrato TRANSVERSAL que canoniza el estilo de redaccion del campo operaciones[].pseudocodigo[] en los blueprints hijo del sistema. El pseudocodigo es STRING que el LLM-runtime (deepseek, claude, gpt) parsea mentalmente para emitir tool calls al bus. La sintaxis ES6 densa (destructuring con rename, mutacion implicita Object.assign) confunde al LLM y produce ejecucion divergente del pseudocodigo: cuando el LLM no entiende, IMPROVISA. Este contrato enumera los anti-patrones con caso testigo empirico y declara los patrones idiomaticos permitidos. Acoplado a llm-runtime-discipline.contract.json (principio pseudocodigo_es_ley) y a modulos-blueprint-driven.contract.json (blueprints como contrato del LLM-runtime).",
+  "id": "pseudocodigo-estilo",
+  "version": "1.0.0",
+  "creada": "2026-05-28",
+  "supersedes_nota": "Primera version. Origen empirico: test runtime end-to-end de tests/runtime-cases/recetas-update-via-llm.js (mayo 2026, sesion del 2026-05-28). deepseek-chat ejecuto recetas.revertir y NO desestructuro { history: _h, ...currentSnap } = r — pusheo la receta entera al history, anidando history dentro de history. Bug acumulativo: cada revertido posterior anidaria de nuevo, inflando el store exponencialmente. La estructura de los patches fs.edit publicados era correcta — la libertad del LLM estaba en el CONTENIDO del value, donde la sintaxis ES6 densa lo confundio. Inventario Fase 0 de los 11 blueprints mostro que el patron problematico solo aparece 2 veces (ambas en recetas: actualizar + revertir) + 1 Object.assign (recetas.revertir). Los otros 244 hits de ES6 son sintaxis idiomatica normal (arrow functions, find/filter, optional chaining) que el LLM SI parsea bien. Contract enfocado en anti-patrones con evidencia, no estilo amplio.",
+
+  "deriva_de": "arquitectura/decisiones/_contratos/llm-runtime-discipline.contract.json v2.1.0 — principio pseudocodigo_es_ley",
+
+  "objetivo": "Producir validacion mecanica de que los pseudocodigos de los blueprints hijo NO usan sintaxis ES6 densa que confunde al LLM-runtime. Bloquea CI en violaciones de anti-patrones con caso testigo empirico. Documenta los patrones idiomaticos permitidos para referencia del disenador humano.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json (este archivo)",
+      "arquitectura/decisiones/_contratos/llm-runtime-discipline.contract.json (contrato padre del LLM-runtime)",
+      "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json (paradigma blueprint)"
+    ],
+    "obligatorios_si_existen": [
+      "modules/<modulo>/<modulo>.blueprint.json (cualquier blueprint hijo del repo)",
+      "arquitectura/decisiones/_blueprints/<padre>.blueprint.json (blueprints padre del repo)"
+    ],
+    "opcionales_para_contexto": [
+      "tests/runtime-cases/recetas-update-via-llm.js (caso testigo del bug revertir)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL PSEUDOCODIGO ES LEY PARA EL LLM-RUNTIME, PERO SOLO SI EL LLM LO ENTIENDE. Sintaxis ES6 densa (destructuring con rename, rest-spread con omision, Object.assign con mutacion implicita) introduce ambiguedad de parsing. El LLM-runtime no es un interprete JS — es un parser probabilistico que IMPROVISA cuando no entiende.",
+
+    "PREFERIR PYTHON-LIKE A JS-IDIOMATIC. El pseudocodigo es para HUMANOS Y LLMs leyendo. La concision de JS moderna (rest-spread, ternarios anidados, encadenamiento de optional chaining) no es valor en un contrato declarativo. Verbosidad explicita > concision elegante. Lo que un programador junior entenderia sin pensar, el LLM tambien.",
+
+    "EL BUG DE LIBERTAD CREATIVA NO ES BUG DEL MODELO LLM — ES BUG DEL CONTRATO DEL DISENADOR. Si el pseudocodigo es ambiguo, el LLM probabilisticamente improvisa. Eliminar la ambigüedad en origen es responsabilidad del disenador humano del blueprint.",
+
+    "ANTI-PATRONES SE LISTAN SOLO CON EVIDENCIA EMPIRICA. No prohibimos sintaxis hipoteticamente problematica — solo lo que un test runtime ha demostrado que el LLM falla en ejecutar correctamente. Sintaxis sospechosa pero sin evidencia queda como WARNING (referencia) hasta que produzca bug observable.",
+
+    "VALIDACION MECANICA + CASO TESTIGO POR ANTI-PATRON. Cada anti-patron lleva su caso_testigo con test_runtime_path (regla canonizada en llm-runtime-discipline.contract.json v2.1.0). Sin test que pruebe que el LLM falla, no se anyade al ERROR set. Sin contrato + validator + test, el anti-patron no existe como tal."
+  ],
+
+  "principios": [
+    {
+      "id": "prohibir_rest_spread_con_rename_y_omision",
+      "regla": "PROHIBIDO en pseudocodigo[]: la sintaxis ES6 destructuring { campo: _alias, ...rest } = obj. El proposito (copiar obj sin la propiedad campo) requiere que el LLM (a) entienda rename con alias-ignorado, (b) entienda rest-spread como omision selectiva, (c) construya rest correctamente. deepseek-chat fallo el paso (c) empiricamente en recetas.revertir.",
+      "razon": "El LLM no procesa robustamente esa sintaxis. Mentalmente simplifica a 'rest = obj' (asignacion completa) y pierde la omision. Bug acumulativo: cada uso anida los campos omitidos.",
+      "alternativa_canonica": "snapshot = {}\\nfor (campo in r) {\\n  if (campo !== 'history') snapshot[campo] = r[campo]\\n}\\n// Equivalente explicito. Cualquier LLM y cualquier humano lo entiende sin pensar.",
+      "severidad": "error"
+    },
+    {
+      "id": "prohibir_object_assign_con_mutacion_implicita",
+      "regla": "PROHIBIDO en pseudocodigo[]: Object.assign(target, source) usado para mutar target en-place. Combina mutacion implicita + funcion estatica con efecto-side. El LLM entiende Object.assign como 'copia' (correcto) pero pierde de vista que target se modifica.",
+      "razon": "La mutacion implicita es ambigua. En revertir.linea_20 el codigo decia Object.assign(r, restore) — el LLM aplico correctamente la copia PERO eso fue solo una parte; la combinacion con la linea previa (rest-spread fallido) produjo el bug acumulado.",
+      "alternativa_canonica": "for (campo in restore) {\\n  r[campo] = restore[campo]\\n}\\n// Mutacion EXPLICITA, linea por linea. Sin trampa.",
+      "severidad": "error"
+    },
+    {
+      "id": "permitir_spread_simple_en_construccion",
+      "regla": "PERMITIDO en pseudocodigo[]: { ...obj } como literal de objeto SIN omision. Por ejemplo: nuevoObj = { ...obj, campo: valor } construye objeto nuevo con todas las props de obj + override de campo. El LLM parsea esto bien.",
+      "razon": "La operacion es 'copia y luego override' — semantica clara y unidireccional. Sin omision implicita, sin rename, sin descartes.",
+      "ejemplo_ok": "publish('receta.actualizada', { receta_id: r.id, ...(input.motivo ? { motivo: input.motivo } : {}) })",
+      "severidad": "permitido"
+    },
+    {
+      "id": "permitir_lambdas_idiomatic_arrow_functions",
+      "regla": "PERMITIDO en pseudocodigo[]: arrow functions inline en array methods (.find, .filter, .map). Por ejemplo: r = store.recetas.find(x => x.id === input.receta_id). Sintaxis idiomatica de JS que el LLM ejecuta literalmente.",
+      "razon": "El inventario Fase 0 mostro 34 ocurrencias de .find(lambda) en 24 ops sin ningun caso testigo de fallo. Patron idiomatico y bien entendido por el LLM.",
+      "ejemplo_ok": "idx = store.recetas.findIndex(x => x.id === input.receta_id)",
+      "severidad": "permitido"
+    },
+    {
+      "id": "anti_patron_pendiente_spread_en_argumentos",
+      "regla": "REFERENCIA (sin implementacion en validator): el uso de ...args en argumentos de funcion / arrays. Pendiente de evidencia empirica antes de elevar a ERROR.",
+      "razon": "El inventario Fase 0 mostro 6 hits. Sin test runtime que confirme fallo del LLM, NO se implementa deteccion: heuristica regex no distingue construccion legitima { ...obj, campo } de uso problematico. Cuando aparezca caso testigo concreto, se implementa regex precisa.",
+      "severidad": "pendiente_de_evidencia"
+    },
+    {
+      "id": "anti_patron_pendiente_ternario_anidado",
+      "regla": "REFERENCIA (sin implementacion en validator): ternarios anidados ?:?: en el mismo statement. Pendiente de evidencia empirica.",
+      "razon": "4 hits en el inventario. Distinguir ternario anidado real de optional chaining (?.) es ambiguo con regex pura. Cuando aparezca caso testigo concreto, se implementa detector preciso.",
+      "severidad": "pendiente_de_evidencia"
+    }
+  ],
+
+  "casos_testigo": [
+    {
+      "id": "rest_spread_rename_recetas_revertir",
+      "fecha": "2026-05-28",
+      "descripcion": "deepseek-chat ejecuto recetas.revertir y al ver el string '{ history: _h, ...currentSnap } = r' no desestructuro — pusheo la receta entera (incluyendo su history) al array history. Resultado: history anidado dentro de history. Sucesivas reversiones inflarian el store exponencialmente.",
+      "evidencia": "tests/runtime-cases/recetas-update-via-llm.js — PASO 3 FAIL en el check 'R1.history tiene 2 snapshots' (real: 1 con anidamiento)",
+      "test_runtime_path": "tests/runtime-cases/recetas-update-via-llm.js",
+      "fix_aplicado": "Reescribir las 2 ocurrencias de rest_spread_rename + 1 de Object.assign en recetas.blueprint.json operaciones actualizar y revertir.",
+      "anti_patron_que_cierra": "prohibir_rest_spread_con_rename_y_omision + prohibir_object_assign_con_mutacion_implicita"
+    }
+  ],
+
+  "prohibido": [
+    "Anyadir un nuevo anti-patron al ERROR set sin caso testigo runtime que demuestre fallo del LLM. WARNINGs son catalogo de referencia, ERRORs son evidencia empirica.",
+    "Reescribir pseudocodigos para cerrar WARNINGs sin tener bug observable. Cerrar warnings preventivamente infla el coste de migracion sin beneficio medible.",
+    "Validar sintaxis del pseudocodigo como si fuera JS ejecutable. El pseudocodigo es STRING para el LLM, no codigo. Si lo ponemos en eval() falla — eso es OK. Lo que importa es la semantica que el LLM extrae.",
+    "Decir 'el bug es del modelo LLM' como excusa para no eliminar la ambigüedad en origen. Si el contrato del disenador es ambiguo, todos los modelos LLM presentes y futuros lo veran ambiguo. La responsabilidad es del autor del blueprint."
+  ],
+
+  "output_shape_resumen": "El validator NO produce output JSON curado — solo PASS/FAIL + lista de hits por blueprint+op+linea cuando hay drift. La validacion es directa sobre los archivos blueprint.",
+
+  "derivaciones": [
+    "Cualquier blueprint nuevo en modules/<modulo>/<modulo>.blueprint.json o arquitectura/decisiones/_blueprints/ debe pasar el validator antes de mergear.",
+    "Si un test runtime futuro detecta nuevo anti-patron (LLM ejecuta divergentemente), se anyade al contrato en la seccion principios (severidad: error) con su caso_testigo + test_runtime_path. Bump minor de version.",
+    "Si un WARNING acumula evidencia (3+ bugs runtime relacionados), se eleva a ERROR. Bump minor."
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "drift_rest_spread_rename_en_pseudocodigo",
+      "regla": "Detectar regex /\\{\\s*\\w+\\s*:\\s*_\\w+\\s*,\\s*\\.\\.\\.\\w+\\s*\\}/ en strings de operaciones[].pseudocodigo[]",
+      "como_detectar": "Recorrer cada blueprint hijo, parsear operaciones, regex sobre cada string de cada pseudocodigo[]. Reportar archivo+op+linea_idx+snippet.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_object_assign_con_mutacion_en_pseudocodigo",
+      "regla": "Detectar regex /Object\\.assign\\s*\\(/ en strings de pseudocodigo[]. La heuristica es agresiva — cualquier uso de Object.assign en pseudocodigo se marca, no solo los mutantes.",
+      "como_detectar": "Recorrer cada blueprint, regex sobre cada string. Reportar archivo+op+linea_idx+snippet.",
+      "severidad": "error"
+    }
+  ],
+
+  "salida_validador": "PASS si no hay drift ERROR. FAIL si hay drift ERROR. WARNINGs van al baseline (no bloquean CI). Por cada hit imprime: archivo:linea_idx:op_nombre :: snippet :: anti_patron_id :: severidad.",
+
+  "convenciones_complementarias": [
+    "Acoplado a naming.contract.json: este contrato solo regula el ESTILO del pseudocodigo, no el naming de eventos/operaciones (eso lo cubre naming).",
+    "Acoplado a llm-runtime-discipline.contract.json: el principio pseudocodigo_es_ley se refuerza aqui. Si el pseudocodigo es ley, debe ser pseudocodigo que el LLM ejecuta sin improvisar — este contrato dice como redactarlo.",
+    "Acoplado a modulos-blueprint-driven.contract.json: solo aplica a blueprints hijo en v1 + blueprints padre. Modulos JS POC2 NO entran (su codigo es JS real ejecutable, no string para LLM).",
+    "Independiente de glossary.contract.json: el estilo no toca terminologia de dominio."
+  ]
+}

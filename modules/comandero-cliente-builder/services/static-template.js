@@ -340,7 +340,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 
 <!-- Modal detalle producto -->
 <div class="overlay" id="detail-overlay">
-  <div class="modal" onclick="event.stopPropagation()">
+  <div class="modal">
     <div class="detail-visual" id="detail-visual"></div>
     <div class="modal-content" id="detail-content"></div>
     <div class="modal-footer" id="detail-footer"></div>
@@ -349,7 +349,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 
 <!-- Modal carrito -->
 <div class="overlay" id="cart-overlay">
-  <div class="modal" onclick="event.stopPropagation()">
+  <div class="modal">
     <header class="modal-header" style="padding:16px 20px;border-bottom:1px solid #222">
       <span class="modal-nombre">${escHtml(textos.carrito_titulo)}</span>
       <button class="close-btn" data-action="close-cart">✕</button>
@@ -361,7 +361,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 
 <!-- Modal form pedido -->
 <div class="overlay" id="form-overlay">
-  <div class="modal" onclick="event.stopPropagation()">
+  <div class="modal">
     <header class="modal-header" style="padding:16px 20px;border-bottom:1px solid #222">
       <span class="modal-nombre">${escHtml(textos.form_titulo)}</span>
       <button class="close-btn" data-action="close-form">✕</button>
@@ -402,7 +402,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 
 <!-- Modal estado (éxito/error) -->
 <div class="overlay" id="status-overlay">
-  <div class="modal" onclick="event.stopPropagation()">
+  <div class="modal">
     <div class="status-modal" id="status-content"></div>
     <div class="modal-footer">
       <button class="btn btn-primary" id="btn-cerrar-status" data-action="close-status">${escHtml(textos.exito_boton_cerrar)}</button>

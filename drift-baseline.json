@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-28T01:20:24.606Z",
-  "total": 2315,
+  "generated_at": "2026-05-28T10:26:15.761Z",
+  "total": 2316,
   "by_validator": {
     "naming": 40,
     "events": 185,
@@ -26,11 +26,11 @@
     "modulo-clase-robusta": 20,
     "scheduling": 1,
     "llm-runtime-discipline": 7,
-    "project-identity": 10
+    "project-identity": 11
   },
   "by_severity": {
     "warning": 2110,
-    "info": 144,
+    "info": 145,
     "error": 89
   },
   "signatures": [
@@ -1901,6 +1901,7 @@
     "project-identity|drift_modulo_persistente_sin_subscribe_project_activated|modules/pizzepos/pedidos/module.json — tools .crear|.actualizar|.eliminar sin 'project.activated' en subscribes (project-identity.P1)",
     "project-identity|drift_modulo_persistente_sin_subscribe_project_activated|modules/recetario-creativo/module.json — tools .crear|.actualizar|.eliminar sin 'project.activated' en subscribes (project-identity.P1)",
     "project-identity|drift_project_get_request_fuera_de_pm|modules/mise-en-place/index.js:579 — uso de project.get.request fuera de project-manager (project-identity.P3, verificar si camino caliente)",
+    "project-identity|drift_project_get_request_fuera_de_pm|modules/notificador-pedidos/index.js:170 — uso de project.get.request fuera de project-manager (project-identity.P3, verificar si camino caliente)",
     "project-identity|drift_project_get_request_fuera_de_pm|modules/pase-cocina/index.js:533 — uso de project.get.request fuera de project-manager (project-identity.P3, verificar si camino caliente)",
     "project-identity|drift_project_get_request_fuera_de_pm|modules/pizzepos/productos/index.js:235 — uso de project.get.request fuera de project-manager (project-identity.P3, verificar si camino caliente)",
     "project-identity|drift_project_get_request_fuera_de_pm|modules/recetario-creativo/index.js:593 — uso de project.get.request fuera de project-manager (project-identity.P3, verificar si camino caliente)",
@@ -1954,10 +1955,10 @@
     "testing|drift_test_filesystem_persistente|tests/unit/mqtt-request.test.js:64 — fs.mkdirSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/mqtt-request.test.js:65 — fs.writeFileSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/mqtt-request.test.js:67 — fs.writeFileSync fuera de os.tmpdir()",
-    "testing|drift_test_filesystem_persistente|tests/unit/notificador-pedidos.test.js:133 — fs.mkdirSync fuera de os.tmpdir()",
-    "testing|drift_test_filesystem_persistente|tests/unit/notificador-pedidos.test.js:134 — fs.writeFileSync fuera de os.tmpdir()",
-    "testing|drift_test_filesystem_persistente|tests/unit/notificador-pedidos.test.js:58 — fs.mkdirSync fuera de os.tmpdir()",
-    "testing|drift_test_filesystem_persistente|tests/unit/notificador-pedidos.test.js:67 — fs.writeFileSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/notificador-pedidos.test.js:101 — fs.writeFileSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/notificador-pedidos.test.js:242 — fs.mkdirSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/notificador-pedidos.test.js:243 — fs.writeFileSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/notificador-pedidos.test.js:92 — fs.mkdirSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/pizzepos__cocina.test.js:174 — fs.writeFileSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/pizzepos__cocina.test.js:539 — fs.writeFileSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/pizzepos__cocina.test.js:58 — fs.mkdirSync fuera de os.tmpdir()",

@@ -1,7 +1,7 @@
 {
-  "_doc": "Modulo de notificacion al staff cuando llega un pedido nuevo desde la PWA tienda. Escucha pedido.creado con canal_origen='web' (= pedido de PWA via tienda-api o MQTT directo del bundle) y publica telegram.send_message.request con resumen del pedido + codigo de recogida al chatId del staff del proyecto. Diseñado para extension multi-canal: en v2 se anyadira branch para discord.send_message.request cuando discord-service exista. Anti-fraude: NO incluye palabra_clave en el mensaje al staff (el dependiente la pregunta al cliente al recoger, no la lee del Telegram).",
+  "_doc": "Modulo de notificacion al staff cuando llega un pedido nuevo desde la PWA tienda. Escucha pedido.creado con canal_origen='web' (= pedido de PWA via tienda-api o MQTT directo del bundle) y publica telegram.send_message.request con resumen del pedido + codigo de recogida al chatId del staff del proyecto. Resuelve la config del proyecto on-demand via project.get.request/response (sin cache, sin dependencia de project.activated) — evita la fragilidad operativa de depender del foco UI session. Diseñado para extension multi-canal: en v2 se anyadira branch para discord.send_message.request cuando discord-service exista. Anti-fraude: NO incluye palabra_clave en el mensaje al staff (el dependiente la pregunta al cliente al recoger, no la lee del Telegram).",
   "name": "notificador-pedidos",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Orquesta notificaciones de pedido nuevo al staff por los canales configurados del proyecto (Telegram en v1; Discord en v2). Reemplaza la responsabilidad que tenia whatsapp-bot para la vertical tienda PWA tras pivote a Telegram-first.",
   "author": "Enki Team",
   "language": "es",
@@ -10,7 +10,7 @@
   "config": {
     "persistence": {
       "pattern": "ninguno",
-      "_doc": "Modulo stateless: cachea config por proyecto en memoria al recibir project.activated, sin disco propio. El estado real (pedidos) lo persiste pedidos."
+      "_doc": "Modulo stateless: resuelve la config del proyecto on-demand via project.get.request en cada pedido. No cachea estado entre invocaciones."
     }
   },
 
@@ -23,21 +23,20 @@
         "event": "pedido.creado",
         "handler": "onPedidoCreado",
         "razon": "Disparador principal: cuando pedidos crea un pedido nuevo, notificador-pedidos decide si emitir notificacion al staff segun canal_origen del pedido."
-      },
-      {
-        "event": "project.activated",
-        "handler": "onProjectActivated",
-        "razon": "Cachea base_path + config del proyecto (telegram.chatId, telegram.botName) para resolver el destino de la notificacion sin re-leer disco en cada pedido."
       }
     ]
   },
 
   "subscribes": [
-    { "event": "pedido.creado", "handler": "onPedidoCreado" },
-    { "event": "project.activated", "handler": "onProjectActivated" }
+    { "event": "pedido.creado", "handler": "onPedidoCreado" }
   ],
 
   "eventos_publicados_que_requieren_consumer": [
+    {
+      "event": "project.get.request",
+      "consumer_esperado": "modules/project-manager",
+      "razon": "Resolucion on-demand del base_path del proyecto a partir del project_id del pedido. project-manager tiene la fuente autoritativa (SQLite + projects.base_path) y responde con project.get.response correlacionado por request_id."
+    },
     {
       "event": "telegram.send_message.request",
       "consumer_esperado": "modules/telegram-service",
@@ -49,12 +48,12 @@
     "metrics": [
       { "name": "notificador.pedido.recibido.total",   "type": "counter", "labels": ["project", "canal_origen"], "_doc": "Pedidos observados via pedido.creado (todos, antes del filtro de canal)." },
       { "name": "notificador.pedido.notificado.total", "type": "counter", "labels": ["project", "canal"],        "_doc": "Notificaciones emitidas con exito por canal (telegram, discord...)." },
-      { "name": "notificador.pedido.descartado.total", "type": "counter", "labels": ["project", "razon"],        "_doc": "Pedidos descartados sin notificar. Razones: canal_origen_no_web, proyecto_sin_chatid, proyecto_sin_config." }
+      { "name": "notificador.pedido.descartado.total", "type": "counter", "labels": ["project", "razon"],        "_doc": "Pedidos descartados sin notificar. Razones: canal_origen_no_web, sin_project_id, project_resolve_failed, project_no_encontrado, config_read_failed, proyecto_sin_chatid." }
     ]
   },
 
   "tracing": {
-    "correlation_id_propagation": "Propaga correlation_id del evento pedido.creado original al telegram.send_message.request para que el operador pueda hilvanar el flujo en el activity log."
+    "correlation_id_propagation": "Propaga correlation_id del evento pedido.creado original al telegram.send_message.request para que el operador pueda hilvanar el flujo en el activity log. El project.get.request/response intermedio usa request_id propio (no se correlaciona con el pedido)."
   },
 
   "dependencies": []

@@ -2165,7 +2165,35 @@
     "fs.edit.request": {
       "publishers": [
         {
+          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
           "source": "modules/pizzepos/recetas/recetas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/tecnicas/tecnicas.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         },
         {

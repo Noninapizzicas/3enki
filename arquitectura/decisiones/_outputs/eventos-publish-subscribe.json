@@ -2473,6 +2473,10 @@
           "ref": "operaciones.pseudocodigo"
         },
         {
+          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
           "source": "modules/pizzepos/tecnicas/tecnicas.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         },

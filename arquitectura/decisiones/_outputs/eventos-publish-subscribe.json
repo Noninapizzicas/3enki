@@ -2167,6 +2167,10 @@
         {
           "source": "modules/pizzepos/recetas/recetas.blueprint.json",
           "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
         }
       ],
       "subscribers": [

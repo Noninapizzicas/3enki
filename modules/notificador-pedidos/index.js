@@ -60,16 +60,25 @@ class NotificadorPedidosModule extends BaseModule {
     }
     try {
       const config = await this._readProjectConfig(base_path);
-      this.projectsConfig.set(project_id, {
-        project_slug: data.project_slug || data.project_name || null,
+      const slug = data.project_slug || data.project_name || null;
+      const entry = {
+        project_slug: slug,
         base_path,
         telegram: this._extractTelegramConfig(config),
         canales: this._extractCanales(config)
-      });
+      };
+      this.projectsConfig.set(project_id, entry);
+      // Workaround drift project-identity: pedidos/handleCreatePedidoTienda emite
+      // pedido.creado con project_id = slug (no UUID). Cacheamos por slug tambien
+      // hasta cerrar esa deuda. Ver project-identity.contract trabajo_pendiente.
+      if (slug && slug !== project_id) {
+        this.projectsConfig.set(slug, entry);
+      }
       this.logger.info('notificador-pedidos.project.cached', {
         project_id,
-        has_telegram_chat_id: !!(this.projectsConfig.get(project_id).telegram?.chatId),
-        canales: this.projectsConfig.get(project_id).canales
+        slug,
+        has_telegram_chat_id: !!entry.telegram?.chatId,
+        canales: entry.canales
       });
     } catch (err) {
       this.logger.warn('notificador-pedidos.project_activated.config_read_failed', {

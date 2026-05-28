@@ -37,7 +37,15 @@
     ]
   },
 
+<<<<<<< HEAD
+  "subscribes": [
+    { "event": "telegram.text.received", "handler": "onTelegramTextReceived" },
+    { "event": "telegram.command.received", "handler": "onTelegramCommandReceived" },
+    { "event": "project.activated", "handler": "onProjectActivated" }
+  ],
+=======
   "subscribes": ["telegram.text.received", "telegram.command.received", "project.activated"],
+>>>>>>> origin/main
 
   "eventos_publicados_que_requieren_consumer": [
     {

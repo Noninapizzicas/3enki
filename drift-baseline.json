@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-27T23:43:39.073Z",
+  "generated_at": "2026-05-28T00:05:51.290Z",
   "total": 2315,
   "by_validator": {
     "naming": 40,
@@ -1290,7 +1290,7 @@
     "llm-runtime-discipline|principios_padre_coinciden_con_contrato|arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json principio 'no_inventes_datos' diverge: contrato='Si falta un campo requerido del input → devuelve I...' vs padre='Si falta un campo requerido del input → devuelves ...'",
     "llm-runtime-discipline|principios_padre_coinciden_con_contrato|arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json principio 'response_unico_por_invocacion' diverge: contrato='Cada invocacion a una operacion del blueprint prod...' vs padre='Cada invocacion a TU operacion produce UNA sola re...'",
     "module-loading|drift_dependency_referencia_inexistente|modules/text-editor/module.json declara dependency \"file-browser\" que no existe en modules/",
-    "module-rewrite|drift_modulo_migrado_module_json_incompleto|bienvenida-tienda — faltan secciones obligatorias: events.publishes",
+    "module-rewrite|drift_modulo_migrado_module_json_incompleto|bienvenida-tienda — module.json no parsea como JSON",
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|code-executor — faltan secciones obligatorias: config.persistence",
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|conversation-export — faltan secciones obligatorias: events.publishes, observability.metrics",
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|esp32-dev — faltan secciones obligatorias: config.persistence",

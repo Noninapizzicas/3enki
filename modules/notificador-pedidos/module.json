@@ -32,7 +32,10 @@
     ]
   },
 
-  "subscribes": ["pedido.creado", "project.activated"],
+  "subscribes": [
+    { "event": "pedido.creado", "handler": "onPedidoCreado" },
+    { "event": "project.activated", "handler": "onProjectActivated" }
+  ],
 
   "eventos_publicados_que_requieren_consumer": [
     {

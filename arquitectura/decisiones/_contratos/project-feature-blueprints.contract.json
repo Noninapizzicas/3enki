@@ -1,0 +1,259 @@
+{
+  "_doc": "Contrato TRANSVERSAL que canoniza el patron 'features de proyecto' que ya existe en el sistema desde la primera version de project-manager pero nunca fue documentado en contrato. Cada feature es un blueprint JSON declarativo en blueprints/project-types/<id>.json que project-manager interpreta para inicializar directorios, mergear config, copiar handlers y escribir archivos iniciales sobre el base_path de un proyecto. Hoy hay 2 features registrados (pizzepos, facturas). El frontend muestra checkboxes que disparan project.add-features.request; el backend aplica el blueprint via _initializeFromBlueprint. Sin contrato, este patron era invisible para validators y sesiones futuras lo redescubrian leyendo index.js linea a linea. Caso real documentado: sesion 2026-05-29 — el LLM analista (yo) no encontro el patron hasta que el usuario dijo 'mira project-manager, ahi hay un sistema de variantes'. Este contrato cierra esa ceguera mecanica.",
+  "id": "project-feature-blueprints",
+  "version": "1.0.0",
+  "creada": "2026-05-29",
+  "supersedes_nota": "Primera version. Origen empirico: sesion 2026-05-29 donde el usuario propuso anyadir 'tienda' como tercera feature paralela a pizzepos/facturas. Al revisar el patron descubri que existia pero no estaba canonizado en contrato — solo en codigo de project-manager (index.js linea 1138-1207, 1391-1445) + dos JSON en blueprints/project-types/. Sin contrato no es descubrible por validate:ci ni por auditorias automaticas. Aprovecho la creacion del feature 'tienda' (ver subsistema-tienda.contract.json) para canonizar el patron de base.",
+
+  "deriva_de": "arquitectura/decisiones/_contratos/project-identity.contract.json — el slug y el base_path del proyecto son la fuente autoritativa para resolver {{slug}} y construir paths.",
+
+  "objetivo": "Producir validacion mecanica del patron features-de-proyecto. Cada archivo en blueprints/project-types/<id>.json cumple el shape canonico, el id coincide con el filename, las dependencies apuntan a features existentes, copyHandlersFrom apunta a un proyecto plantilla existente. El catalogo del frontend (lo que ofrece ProjectPanel.svelte) coincide con el dir. Bloquea CI en violaciones estructurales.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/project-feature-blueprints.contract.json (este archivo)",
+      "arquitectura/decisiones/_contratos/project-identity.contract.json (slug + base_path canonicos)",
+      "modules/project-manager/index.js (loader + aplicador del patron)",
+      "modules/project-manager/module.json (declara handler project.add-features)"
+    ],
+    "obligatorios_si_existen": [
+      "blueprints/project-types/<id>.json (cualquier feature registrado)"
+    ],
+    "opcionales_para_contexto": [
+      "frontend/src/lib/modules/project/ProjectPanel.svelte (UI que dispara add-features)",
+      "frontend/src/lib/stores/projects.ts (cliente MQTT addFeatures)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "UNA FEATURE ES UN PRODUCTO DECLARATIVO, NO CODIGO. El blueprint en blueprints/project-types/<id>.json es la fuente autoritativa de lo que esa feature instala. project-manager es el intermediario que aplica el blueprint sobre un proyecto. Si la logica esta en index.js y no en el JSON, la feature no es descubrible.",
+
+    "EL PATRON YA EXISTE — EL CONTRATO LO CANONIZA, NO LO INVENTA. pizzepos y facturas funcionan asi desde hace meses. Este contrato describe lo que hay + cierra los gaps detectados (slug undefined, falta symlinks, falta verify_after). NO rompe lo existente.",
+
+    "FEATURES SON OPT-IN POR PROYECTO. Un proyecto NO recibe todas las features automaticamente — el usuario las elige al crear o despues. metadata.features[] es la fuente runtime de que features estan activas. Los modulos del dominio (carta-digital, facturas, etc.) NO se invocan sobre un proyecto sin la feature correspondiente.",
+
+    "SLUG ES OBLIGATORIO CUANDO EL BLUEPRINT USA {{slug}}. Si un proyecto tiene slug:undefined y el blueprint sustituye {{slug}}, el resultado es literal 'undefined' en config y paths — drift critico. El contrato exige que project-manager rechace add-features si el blueprint requiere slug y el proyecto no lo tiene.",
+
+    "EL CATALOGO DEL FRONTEND COINCIDE CON EL DIRECTORIO. El frontend NO mantiene su lista hardcodeada de features — la pide al backend, que la deriva de los archivos en blueprints/project-types/. Si el frontend ofrece una checkbox para una feature que no existe en disco, drift. Y al reves: si una feature existe en disco pero el frontend no la ofrece, drift de visibilidad.",
+
+    "FEATURES NO MODIFICAN OTROS PROYECTOS. Un blueprint solo escribe dentro del base_path del proyecto al que se aplica + symlinks declarados. NUNCA toca otros proyectos, NUNCA modifica el sistema, NUNCA escribe fuera de los paths declarados. El validator escanea por hardcoded paths absolutos en directories/initialFiles.",
+
+    "EL BLUEPRINT NO TIENE CODIGO. NO contiene scripts, NO contiene shell commands, NO contiene logica condicional. Es 100% declarativo. Si necesitas logica, vive en project-manager._initializeFromBlueprint con una rama nueva — pero los blueprints siguen siendo JSON puro."
+  ],
+
+  "principios": [
+    {
+      "id": "feature_blueprint_id_coincide_con_filename",
+      "regla": "blueprints/project-types/<id>.json declara campo id === <id> (filename sin extension). Kebab-case ASCII puro.",
+      "razon": "Una sola cadena identificadora cross-archivos elimina ambiguedad en logs, metricas, metadata.features[]."
+    },
+    {
+      "id": "feature_blueprint_shape_canonico",
+      "regla": "El blueprint declara minimo: id, label, icon, description, dependencies[], directories[]. Opcionales: config, copyHandlersFrom, initialFiles, symlinks (nuevo), verify_after (nuevo), slug_required (nuevo, boolean).",
+      "razon": "Shape estricto permite validacion AJV additionalProperties:false. Sin shape definido, cada feature inventa los suyos y el validador no puede crosschequear nada."
+    },
+    {
+      "id": "feature_blueprint_directorios_relativos_al_base_path",
+      "regla": "directories[] son siempre paths relativos. NO empiezan por '/'. NO contienen '..' (path traversal). Prefijo 'storage/' se renamespacia automaticamente a 'storage/<id>/' (logica existente en _initializeFromBlueprint).",
+      "razon": "Hardcoded /opt/enki/... o /var/... rompe portabilidad entre VPS. Path traversal es vector de seguridad. La regla del prefijo storage/ se preserva tal cual (es comportamiento estable desde el origen)."
+    },
+    {
+      "id": "feature_blueprint_dependencies_apuntan_a_features_existentes",
+      "regla": "Cada entrada de dependencies[] es un id de feature que existe como blueprints/project-types/<dep>.json. Drift si apunta a feature inexistente. NO se permiten dependencias circulares (A → B → A).",
+      "razon": "Sin validacion, una feature puede declarar dependencias fantasma que nunca se aplican. El usuario las marca, project-manager ignora silenciosamente. Resultado: estado parcial impredecible."
+    },
+    {
+      "id": "feature_blueprint_copyHandlersFrom_apunta_a_proyecto_plantilla_existente",
+      "regla": "Si el blueprint declara copyHandlersFrom: '<plantilla>', el path projectsBasePath/<plantilla>/handlers/ debe existir. Drift si no.",
+      "razon": "Hoy pizzepos.json declara copyHandlersFrom: 'pizzepos' (plantilla con ese mismo id). Si el proyecto plantilla no existe, project-manager logueaa warning pero la feature queda incompleta. Validador detecta antes de runtime."
+    },
+    {
+      "id": "feature_blueprint_slug_requirement_explicito",
+      "regla": "Si el blueprint sustituye {{slug}} en config, initialFiles, directories o symlinks, debe declarar slug_required:true. project-manager rechaza add-features sobre proyectos sin slug en ese caso.",
+      "razon": "Caso testigo Vapers (id 37bc1282) tiene slug:undefined. Si se aplica una feature con {{slug}}, queda persistido el string literal 'undefined' en config — drift silencioso. La regla obliga a hacerlo explicito en el blueprint y bloquearlo en el aplicador."
+    },
+    {
+      "id": "feature_blueprint_initialFiles_son_json_o_referencia_template",
+      "regla": "Cada entrada de initialFiles{} es: (a) un valor JSON parseable (objeto, array, primitivo) que se escribe stringified, o (b) un string que empieza por 'template:' y apunta a un archivo en blueprints/project-types/_templates/<path>. NO se permite contenido HTML/JS/CSS inline crudo como string suelto (drift de mantenibilidad).",
+      "razon": "initialFiles con HTML/JS inline grandes (caso de tienda placeholder) se vuelven inmantenibles dentro del JSON. Templates separados son legibles, versionables y permiten reutilizacion."
+    },
+    {
+      "id": "feature_blueprint_symlinks_declarativos",
+      "regla": "El campo opcional symlinks[] declara enlaces simbolicos que project-manager debe crear fuera del base_path. Cada entrada: { source: '<path-relativo-al-base_path>', target: '<path-absoluto-en-vps>' }. target puede usar {{slug}}. El aplicador crea el dir parent del target si no existe.",
+      "razon": "Nuevo en v1.0. Sirve a feature 'tienda' (symlink /opt/enki/public/tiendas/<slug> → <base_path>/public/tienda/) y a cualquier futura feature que necesite enlazar contenido del proyecto a un path publico del sistema."
+    },
+    {
+      "id": "feature_blueprint_verify_after_declarativo",
+      "regla": "El campo opcional verify_after[] declara paths que deben existir tras aplicar el blueprint. project-manager los verifica antes de marcar la feature como applied. Si falla la verificacion, applied:false + warning.",
+      "razon": "Hoy el aplicador asume exito si no hay excepcion. Pero un fs.mkdir puede silenciosamente no crear el dir (permisos, disk full). verify_after cierra el loop con post-condition explicita."
+    },
+    {
+      "id": "feature_catalogo_del_frontend_se_deriva_del_directorio",
+      "regla": "El frontend NO hardcodea la lista de features disponibles. Pide el catalogo a project-manager via project.list-features.request, que escanea blueprints/project-types/ y devuelve los blueprints validos.",
+      "razon": "Sin esto, anyadir feature nueva requiere tocar codigo del frontend ademas del JSON. El patron declarativo se rompe."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "convivencia_con_modulos_no_feature",
+      "decision": "Modulos del sistema (carta-manager, recetas, etc.) NO requieren feature para cargarse. Solo el comportamiento por-proyecto requiere feature. Una feature activa metadata.features += [<id>] que los modulos consultan para decidir si actuar.",
+      "razon": "Si modulos requiriesen feature, el sistema entero estaria gated por features — sobrecarga. Es opt-in por uso, no por carga."
+    },
+    {
+      "id": "blueprints_no_son_modulos_blueprint_driven",
+      "decision": "blueprints/project-types/<id>.json NO siguen el contrato modulos-blueprint-driven (no son ejecutados por LLM-runtime). Son interpretados por code JS en project-manager. Coexisten dos paradigmas declarativos: blueprints-de-modulo (LLM-runtime) y blueprints-de-feature (JS-runtime).",
+      "razon": "Distincion ontologica: feature es setup unico al activar; modulo blueprint-driven es comportamiento runtime continuo. Cargar ambos con LLM-runtime seria ineficiente y semanticamente confuso."
+    },
+    {
+      "id": "metadata_features_es_fuente_runtime",
+      "decision": "metadata.features[] del proyecto en SQLite es la fuente runtime. Si un proyecto tiene base_path con dirs de pizzepos pero metadata.features NO contiene 'pizzepos', el sistema asume que NO esta activa (drift de instalacion vs declaracion).",
+      "razon": "Coherencia con event-core: el estado declarado vence. Si el aplicador fallo a medias, lo refleja metadata, no el filesystem."
+    }
+  ],
+
+  "prohibido": [
+    "Hardcodear paths absolutos del VPS (/opt/, /var/, /srv/, /home/) en directories[] o initialFiles{}. Solo symlinks[].target acepta absolutos.",
+    "Path traversal con '..' en cualquier path declarado.",
+    "Dependencias circulares en dependencies[]: A → B → A.",
+    "copyHandlersFrom apuntando a feature/proyecto inexistente.",
+    "Usar {{slug}} sin declarar slug_required:true.",
+    "Contenido HTML/JS/CSS inline grande (>500 chars) en initialFiles. Usar template: en su lugar.",
+    "Logica condicional, scripts, shell commands dentro del blueprint. Es declarativo puro.",
+    "Modificar metadata.features desde otro modulo que no sea project-manager. Es la unica fuente autoritativa.",
+    "Tocar paths fuera del base_path del proyecto destino sin declararlos en symlinks[]."
+  ],
+
+  "output_shape_resumen": "_outputs/project-feature-blueprints.json contiene: { version, total_features: N, features: { <id>: { label, icon, dependencies, directories_count, has_config, has_initialFiles, has_symlinks, has_verify_after, slug_required } }, drifts_detected: { id_filename_mismatch: N1, dependencies_huerfanas: N2, copyHandlersFrom_inexistente: N3, paths_absolutos_en_directories: N4, slug_usado_sin_declarar: N5, contenido_inline_excesivo: N6 }, frontend_catalog_coincide: bool, proyectos_con_feature_no_registrada: [...] }. Snapshot ejecutable del estado del patron.",
+
+  "reglas_de_extraccion": [
+    "El validator escanea blueprints/project-types/*.json.",
+    "Para cada archivo: parsea JSON, valida contra schema AJV, cruza id con filename, valida dependencies apuntan a features existentes, valida copyHandlersFrom contra projects/.",
+    "Detecta hardcoded paths absolutos via regex /^(\\/opt|\\/var|\\/srv|\\/home|\\/etc|\\/tmp)/.",
+    "Detecta {{slug}} en config/initialFiles/directories/symlinks y verifica que slug_required:true este declarado.",
+    "Compara con el catalogo declarado en frontend/src/lib/modules/project/ProjectPanel.svelte (heuristica regex sobre el HTML del componente — opcional, si no se puede, info no error).",
+    "Cruza con metadata.features de proyectos en project-manager para detectar features instaladas pero no registradas en el catalogo (proyecto huerfano)."
+  ],
+
+  "derivaciones": [
+    {
+      "documento": "arquitectura/decisiones/_schemas/project-feature-blueprints/project-feature-blueprint.schema.json",
+      "rol": "Schema JSON 2020-12 con additionalProperties:false del shape canonico de cada blueprint. Required: id, label, icon, description, dependencies, directories. Opcionales tipados: config, copyHandlersFrom, initialFiles, symlinks, verify_after, slug_required."
+    },
+    {
+      "documento": "arquitectura/decisiones/_validators/project-feature-blueprints.validate.js",
+      "rol": "Compila schema + cross-checks contra repo. Wireado a validate:ci."
+    },
+    {
+      "documento": "arquitectura/decisiones/_outputs/project-feature-blueprints.json",
+      "rol": "Snapshot del estado del patron + drift counts por tipo."
+    },
+    {
+      "documento": "modules/project-manager/index.js — funcion _initializeFromBlueprint extendida con loops para symlinks[] y verify_after[]",
+      "rol": "Implementacion runtime de los campos nuevos del contrato. Backwards compatible (campos opcionales)."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "feature_blueprint_schema_compile_ok",
+      "regla": "El schema canonico compila AJV strict 2020-12.",
+      "como_detectar": "Compilacion AJV en arranque del validator.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_feature_blueprint_no_cumple_schema",
+      "regla": "Cada blueprints/project-types/<id>.json valida contra el schema.",
+      "como_detectar": "Para cada archivo, ajv.validate. Si falla, drift con detalle de errores.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_feature_id_filename_mismatch",
+      "regla": "blueprint.id === basename(filename, '.json').",
+      "como_detectar": "Comparacion directa tras parse JSON.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_feature_dependencies_huerfanas",
+      "regla": "Cada entrada de dependencies[] apunta a un feature blueprint que existe en el directorio.",
+      "como_detectar": "Lookup en el conjunto de blueprints cargados.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_feature_copyHandlersFrom_inexistente",
+      "regla": "Si copyHandlersFrom declarado, projectsBasePath/<valor>/handlers/ existe y contiene .js.",
+      "como_detectar": "fs.existsSync + readdir filtrado por .js.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_feature_hardcoded_path_absoluto",
+      "regla": "Ningun path en directories[] o claves de initialFiles{} empieza por /opt|/var|/srv|/home|/etc|/tmp.",
+      "como_detectar": "Regex sobre strings de directories y keys de initialFiles.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_feature_path_traversal",
+      "regla": "Ningun path declarado contiene '..' como segmento.",
+      "como_detectar": "Split por '/' y comprobar segmentos === '..'.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_feature_slug_usado_sin_declarar",
+      "regla": "Si {{slug}} aparece en config, initialFiles, directories o symlinks, slug_required:true debe estar declarado.",
+      "como_detectar": "Regex /\\{\\{slug\\}\\}/ sobre stringify del blueprint, comparado con flag slug_required.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_feature_dependency_ciclica",
+      "regla": "El grafo de dependencias no contiene ciclos.",
+      "como_detectar": "DFS sobre el grafo construido desde dependencies[] de todos los blueprints.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_feature_initialFile_inline_excesivo",
+      "regla": "Si un valor de initialFiles{} es string con >500 chars, debe usar el prefijo 'template:'.",
+      "como_detectar": "Para cada string en initialFiles values, length > 500 sin prefijo 'template:'.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_proyecto_con_feature_no_registrada",
+      "regla": "Para cada proyecto en SQLite, metadata.features[] solo contiene ids que existen en blueprints/project-types/.",
+      "como_detectar": "Cruzar metadata.features con catalogo. Si hay extras, drift.",
+      "severidad": "warning"
+    }
+  ],
+
+  "salida_validador": "PASS si no hay errors. FAIL si hay errors. Warnings van al baseline (no bloquean CI). Imprime por cada hit: blueprint:linea_aprox :: drift_id :: detalle.",
+
+  "convenciones_complementarias": [
+    "Acoplado a project-identity.contract.json: slug y base_path canonicos vienen de ahi.",
+    "Acoplado a lifecycle.contract.json: la activacion de feature (project.add-features.request/response/failed) son eventos canonicos del flow.",
+    "Acoplado a events.contract.json: los eventos publicados por add-features siguen el shape canonico (correlation_id, no_silent_failures, par success/failure).",
+    "Acoplado a errors.contract.json: codigos de error canonicos en project.add-features.failed.",
+    "Independiente de modulos-blueprint-driven.contract.json: estos blueprints NO son ejecutados por LLM-runtime — son JS-runtime via project-manager._initializeFromBlueprint."
+  ],
+
+  "casos_testigo": [
+    {
+      "id": "vapers_slug_undefined_2026_05_29",
+      "fecha": "2026-05-29",
+      "descripcion": "El proyecto 'Vapers' (id 37bc1282-e44c-467c-bb75-3d605255c9d2) tiene slug:undefined en SQLite. Si se le aplica una feature con {{slug}} (caso hipotetico de hoy: la futura feature 'tienda'), el resultado seria el string literal 'undefined' persistido en config y rutas — drift silencioso que solo se descubriria cuando un usuario intentara acceder a la URL publica /tienda/undefined.",
+      "evidencia": "project.get.response para project_id 37bc1282 devolvio { name: 'Vapers', slug: undefined, base_path: '/opt/enki/data/projects/vaiers' } (path con typo, slug ausente).",
+      "test_runtime_path": "tests/runtime-cases/project-feature-slug-required.js (pendiente de implementar)",
+      "fix_aplicado": "Anyadido principio feature_blueprint_slug_requirement_explicito + drift_feature_slug_usado_sin_declarar al contrato. project-manager debe rechazar add-features si blueprint usa {{slug}} y proyecto no tiene slug definido.",
+      "anti_patron_que_cierra": "slug usado sin declarar slug_required + aplicador silencioso ante proyecto sin slug.",
+      "estado": "documentado_pendiente_runtime"
+    }
+  ],
+
+  "trabajo_pendiente": [
+    "Implementar arquitectura/decisiones/_schemas/project-feature-blueprints/project-feature-blueprint.schema.json (AJV strict).",
+    "Implementar arquitectura/decisiones/_validators/project-feature-blueprints.validate.js + wirear a validate:ci.",
+    "Extender modules/project-manager/index.js::_initializeFromBlueprint con soporte para symlinks[] y verify_after[]. Backwards compatible.",
+    "Implementar rechazo de add-features con codigo PRECONDITION_FAILED kind:'slug_required_but_undefined' cuando aplique.",
+    "Implementar test runtime tests/runtime-cases/project-feature-slug-required.js que reproduzca el caso testigo.",
+    "Anyadir a CLAUDE.md la referencia al nuevo contrato.",
+    "Considerar si project.list-features actualmente devuelve el catalogo dinamico o si esta hardcodeado en el frontend (verificar y corregir si aplica)."
+  ]
+}

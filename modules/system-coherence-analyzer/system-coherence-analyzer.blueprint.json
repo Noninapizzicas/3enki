@@ -1,0 +1,145 @@
+{
+  "_doc": "Blueprint del agente system-coherence-analyzer. Hijo de agente-base. Su rol: dado un aspecto del sistema (persistencia, errores, blueprint pseudocodigo, etc.), escanea los archivos relevantes del repo (modulos, blueprints, contratos), identifica patrones consistentes vs divergentes, anti-patrones implicitos no validados por reglas mecanicas, y drift implicito. Produce reporte estructurado. Stateless. Sin persistencia propia. Sin operaciones de escritura.",
+
+  "id": "system-coherence-analyzer",
+  "version": "blueprint-0.1.0",
+  "language": "es",
+  "extends_blueprint_abstract": "agente-base",
+  "blueprint_parent_path": "modules/_agentes-blueprint/agente-base.blueprint.json",
+
+  "rol": "Analista meta-sistema. Mira el repo Enki transversalmente buscando coherencia y drift implicito en un aspecto declarado.",
+  "operacion_canonica": "analizar",
+
+  "system_prompt_file": "system-coherence-analyzer-system.md",
+
+  "dominios_consultados": [
+    "filesystem"
+  ],
+
+  "eventos_que_invoca": [
+    "fs.read.request"
+  ],
+
+  "llm_settings": {
+    "provider": "auto",
+    "temperature": 0.2,
+    "max_tokens": 8000,
+    "timeout_ms": 90000,
+    "max_retries": 1,
+    "context_enabled": false
+  },
+
+  "input_esperado": {
+    "_descripcion": "Lo que el caller pasa en task del agent.execute.request.",
+    "shape": "{ aspecto: string (req), scope_paths?: string[], excluir_paths?: string[] }",
+    "campos": {
+      "aspecto": "Nombre del aspecto a analizar en lenguaje natural. Ejemplos: 'persistencia con fs.edit', 'manejo de errores en handlers', 'declaracion de tools en module.json', 'pseudocodigo de blueprints', 'eventos publicados sin consumer', 'estructura de contratos transversales'.",
+      "scope_paths": "Lista opcional de paths del repo a escanear. Default: ['modules/', 'arquitectura/decisiones/_contratos/', 'arquitectura/decisiones/_blueprints/'].",
+      "excluir_paths": "Lista opcional de paths a ignorar. Default: ['modules/_legacy/', 'arquitectura/migracion/_legacy/']."
+    }
+  },
+
+  "output_canonico": {
+    "_descripcion": "Lo que el agente devuelve en agent.execute.response.result.",
+    "shape": "{ aspecto, patrones_consistentes, patrones_divergentes, anti_patrones_implicitos, drift_implicito, archivos_escaneados, observaciones_generales }",
+    "campos": {
+      "aspecto": "Eco del aspecto recibido en input.",
+      "patrones_consistentes": "Array de { patron: string, archivos: [string], razon_es_bueno?: string } — cosas hechas de forma coherente en N+ archivos.",
+      "patrones_divergentes": "Array de { problema: string, soluciones_encontradas: [{ archivo, patron, severidad: 'info'|'warning'|'critico' }], recomendacion?: string } — mismo problema resuelto distinto entre archivos.",
+      "anti_patrones_implicitos": "Array de { anti_patron: string, archivos: [string], razon_es_problematico: string } — cosas que huelen mal pero ningun validator del repo las marca.",
+      "drift_implicito": "Array de { sintoma: string, archivos: [string], hipotesis: string } — observaciones que sugieren deuda tecnica o decision pendiente.",
+      "archivos_escaneados": "Numero total de archivos leidos.",
+      "observaciones_generales": "Texto narrativo corto con conclusiones."
+    }
+  },
+
+  "pseudocodigo": [
+    "async analizar(task, context):",
+    "  // 1. Validar input — task debe traer aspecto.",
+    "  if (!task || typeof task !== 'object' || !task.aspecto || typeof task.aspecto !== 'string') {",
+    "    return INVALID_INPUT { field: 'task.aspecto', hint: 'pasar { aspecto: \"<nombre del aspecto>\" }' }",
+    "  }",
+    "  aspecto = task.aspecto.trim()",
+    "  if (aspecto === '') return INVALID_INPUT { field: 'task.aspecto', hint: 'no vacio' }",
+    "",
+    "  // 2. Resolver scope. Default: modules/ + contratos + blueprints padre.",
+    "  scope_paths = Array.isArray(task.scope_paths) && task.scope_paths.length > 0",
+    "    ? task.scope_paths",
+    "    : ['modules/', 'arquitectura/decisiones/_contratos/', 'arquitectura/decisiones/_blueprints/']",
+    "  excluir_paths = Array.isArray(task.excluir_paths) ? task.excluir_paths : ['modules/_legacy/', 'arquitectura/migracion/_legacy/']",
+    "",
+    "  // 3. Identificar archivos relevantes para el aspecto.",
+    "  //    Decision del LLM-razonador: dado el aspecto declarado, decidir que archivos",
+    "  //    leer. Ej: 'persistencia con fs.edit' -> *.blueprint.json + index.js de modulos",
+    "  //    que muten datos; 'estructura de contratos' -> *.contract.json.",
+    "  archivos_objetivo = <razonar — selecciona los archivos cuyo contenido es relevante",
+    "                       al aspecto, dentro de scope_paths, excluyendo excluir_paths>",
+    "",
+    "  // 4. Leer cada archivo via fs.read.request. Si alguno falla con 404, se ignora",
+    "  //    (puede ser un path candidato que no existe en este repo).",
+    "  archivos_leidos = []",
+    "  for (path of archivos_objetivo) {",
+    "    raw = await publishAndWait('fs.read.request', { project_id: context?.project_id, path: path })",
+    "    if (raw.status === 404) continue",
+    "    if (raw.status >= 400) continue  // error no fatal — el analista sigue",
+    "    archivos_leidos.push({ path: path, content: raw.content })",
+    "  }",
+    "",
+    "  if (archivos_leidos.length === 0) {",
+    "    return PRECONDITION_FAILED {",
+    "      kind: 'no_files_to_analyze',",
+    "      hint: 'ningun archivo del scope coincide con el aspecto, o todos devolvieron error'",
+    "    }",
+    "  }",
+    "",
+    "  // 5. Razonamiento principal — esto es lo que el LLM HACE.",
+    "  //    Lee los archivos. Para cada uno extrae el patron observable relacionado",
+    "  //    al aspecto. Cruza patrones entre archivos. Identifica:",
+    "  //    - patrones_consistentes: mismo problema, misma solucion en N+ archivos.",
+    "  //    - patrones_divergentes: mismo problema, soluciones distintas.",
+    "  //    - anti_patrones_implicitos: cosa que el LLM identifica como problematica",
+    "  //      pero que ningun validator del repo marca.",
+    "  //    - drift_implicito: sintomas sugieren deuda tecnica.",
+    "  //",
+    "  //    Reglas del razonamiento:",
+    "  //    - Cita siempre archivo:linea (linea aproximada si no es exacta) para que",
+    "  //      cada hallazgo sea verificable.",
+    "  //    - NO inventes archivos ni lineas. Solo cita lo que esta en archivos_leidos.",
+    "  //    - NO marques como anti-patron lo que ya esta en validators (es drift declarado,",
+    "  //      no implicito).",
+    "  //    - Si un patron tiene 2 variantes en 2 archivos, NO es 'divergente' todavia.",
+    "  //      Espera a ver una tercera variante o una con clara superioridad.",
+    "  resultado = <razonar y producir patrones_consistentes / divergentes / anti_patrones /",
+    "               drift_implicito segun shape declarado en output_canonico>",
+    "",
+    "  // 6. Resumen narrativo corto (1-3 frases) con la conclusion principal.",
+    "  observaciones_generales = <texto corto resumiendo lo mas relevante>",
+    "",
+    "  // 7. Response canonica.",
+    "  return { status: 200, data: {",
+    "    aspecto: aspecto,",
+    "    patrones_consistentes: resultado.patrones_consistentes,",
+    "    patrones_divergentes: resultado.patrones_divergentes,",
+    "    anti_patrones_implicitos: resultado.anti_patrones_implicitos,",
+    "    drift_implicito: resultado.drift_implicito,",
+    "    archivos_escaneados: archivos_leidos.length,",
+    "    observaciones_generales: observaciones_generales",
+    "  } }"
+  ],
+
+  "reglas_clave": [
+    "Solo LEE. Nunca escribe — no fs.write, no fs.edit, no operaciones de dominio que muten.",
+    "Cita archivo:linea para cada hallazgo. Sin cita, no es hallazgo valido.",
+    "No marques anti-patron lo que ya esta en algun validator del repo (es drift declarado, no implicito).",
+    "Patrones con N < 3 ocurrencias NO son 'consistentes' ni 'divergentes' — son anecdota.",
+    "Si scope_paths excluye archivos relevantes, lo dices en observaciones_generales — no completas con archivos fuera de scope."
+  ],
+
+  "errores_posibles": [
+    "INVALID_INPUT",
+    "PRECONDITION_FAILED",
+    "UPSTREAM_TIMEOUT",
+    "UPSTREAM_UNREACHABLE",
+    "UNKNOWN_ERROR"
+  ]
+}

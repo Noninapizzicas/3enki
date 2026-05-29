@@ -1,0 +1,105 @@
+{
+  "_doc": "Contrato propio del agente-blueprint system-coherence-analyzer. Derivado del transversal agente-blueprint.contract.json. Captura el rol, garantias, errores, version y eventos del agente. Sin contrato propio, el agente no es agente-blueprint canonico. Este agente es el PILOTO del horizonte agentes-blueprint (sesion 2026-05-28), creado en paralelo al blueprint padre agente-base v0.1.0. NO migra ninguno de los 30 agentes legacy — los 9 decisiones abiertas del horizonte de migracion siguen pendientes.",
+  "id": "system-coherence-analyzer",
+  "version": "1.0.0",
+  "creada": "2026-05-28",
+  "supersedes_nota": "Primera version. Origen: piloto del horizonte agentes-blueprint. Antes que el horizonte de migracion arranque formalmente, el usuario pidio crear UN agente-blueprint nuevo para probar el patron. Este agente aporta informacion valiosa al meta-sistema Enki (observaciones cross-modulo que ningun validator captura). Si el piloto funciona end-to-end, sirve de referencia para los 30 agentes legacy cuando empiece la migracion.",
+
+  "deriva_de": "arquitectura/decisiones/_contratos/agente-blueprint.contract.json v1.0.0",
+
+  "rol": "Analista meta-sistema del repo Enki. Dado un aspecto del sistema (persistencia, errores, blueprint pseudocodigo, declaracion de tools, eventos sin consumer, estructura de contratos), escanea los archivos relevantes y produce reporte estructurado con patrones consistentes, patrones divergentes, anti-patrones implicitos y drift implicito. Stateless. Solo lectura. Sin operaciones de dominio que muten datos.",
+
+  "operacion_canonica": "analizar",
+
+  "garantiza": [
+    "Cada hallazgo del reporte va acompanyado de archivo:linea (linea exacta o aproximada con prefijo ~).",
+    "El reporte NO incluye archivos no leidos. Si fs.read.request devuelve 404 para un path candidato, ese path se descarta silenciosamente, no se inventa.",
+    "Los patrones reportados como 'consistentes' tienen >= 3 ocurrencias verificables en archivos leidos.",
+    "Los patrones reportados como 'divergentes' tienen >= 2 variantes distintas con archivo:linea de cada una.",
+    "Los anti-patrones implicitos NO duplican lo que ya validan los validators del repo (validate:ci). Si el validator lo captura, es drift declarado, no implicito.",
+    "El reporte es stateless: cada invocacion produce un reporte independiente con base SOLO en los archivos leidos en esa invocacion. No hay memoria entre invocaciones.",
+    "El campo observaciones_generales contiene 1-3 frases con la conclusion principal — utilizable directamente por el caller humano para decidir siguiente paso."
+  ],
+
+  "no_garantiza": [
+    "NO garantiza cobertura exhaustiva del repo. El agente lee los archivos que decide relevantes para el aspecto declarado; el caller puede acotar via scope_paths.",
+    "NO garantiza que un patron consistente sea TECNICAMENTE bueno — solo que es coherente entre archivos. La razon_es_bueno es opcional y depende del juicio del LLM en la sesion.",
+    "NO garantiza orden estable en arrays del reporte (patrones_consistentes, etc.). El LLM produce el orden que considera mas relevante para la lectura humana.",
+    "NO garantiza que dos invocaciones consecutivas con el mismo aspecto produzcan resultados identicos — es razonamiento LLM, no funcion pura.",
+    "NO garantiza que el aspecto declarado sea analizable. Si el LLM decide que el aspecto es demasiado abstracto o requiere archivos no leibles, devuelve PRECONDITION_FAILED."
+  ],
+
+  "errores_posibles": [
+    {
+      "code": "INVALID_INPUT",
+      "cuando": "task no es objeto con campo aspecto string no vacio, o scope_paths no es array de strings cuando se pasa."
+    },
+    {
+      "code": "PRECONDITION_FAILED",
+      "cuando": "Ningun archivo del scope coincide con el aspecto declarado, o todos los fs.read devuelven error. kind: 'no_files_to_analyze'."
+    },
+    {
+      "code": "UPSTREAM_TIMEOUT",
+      "cuando": "fs.read.request no responde en el timeout del agente (heredado de llm_settings.timeout_ms)."
+    },
+    {
+      "code": "UPSTREAM_UNREACHABLE",
+      "cuando": "filesystem no esta cargado o no responde al request."
+    },
+    {
+      "code": "UNKNOWN_ERROR",
+      "cuando": "Cualquier otro fallo inesperado del LLM o del bus."
+    }
+  ],
+
+  "eventos_publicados": [
+    {
+      "evento": "agent.execute.response",
+      "shape_resumen": "{ agent_id: 'system-coherence-analyzer', result: { aspecto, patrones_consistentes, patrones_divergentes, anti_patrones_implicitos, drift_implicito, archivos_escaneados, observaciones_generales }, correlation_id }",
+      "cuando": "Cierre exitoso del analisis."
+    },
+    {
+      "evento": "agent.execute.failed",
+      "shape_resumen": "{ agent_id: 'system-coherence-analyzer', error: { code, message, details? }, correlation_id }",
+      "cuando": "Cualquier error de los listados en errores_posibles."
+    },
+    {
+      "evento": "fs.read.request",
+      "shape_resumen": "{ project_id?, path, request_id }",
+      "cuando": "Cada archivo que el agente decide leer para el analisis."
+    }
+  ],
+
+  "eventos_escuchados": [
+    {
+      "evento": "agent.execute.request",
+      "filter": "agent_id === 'system-coherence-analyzer'",
+      "shape_resumen": "{ agent_id, task: { aspecto, scope_paths?, excluir_paths? }, context?: { project_id?, conversation_id?, user_id? }, correlation_id }",
+      "cuando": "Punto de entrada canonico. ai-gateway lo despacha al agente."
+    }
+  ],
+
+  "naturaleza_de_razonamiento": "Lectura cross-archivo + razonamiento estructural. NO calculo cuantitativo (numeros exactos, sumas), NO clasificacion de texto generico (sentimiento, idioma), NO generacion creativa (composer). Es analisis comparativo de codigo y configuracion.",
+
+  "casos_de_uso_canonicos": [
+    "Antes de propagar un patron a N modulos, invocar al agente con aspecto = 'el patron X en modulos del subsistema Y' para verificar que los modulos a tocar realmente comparten el problema que el patron resuelve.",
+    "Despues de una migracion masiva, invocar con aspecto = 'persistencia con fs.edit' para detectar modulos que escaparon a la migracion o cuyo patron post-migracion difiere de los hermanos.",
+    "Al disenar un contrato nuevo, invocar con aspecto = 'estructura de contratos transversales' para comparar secciones del contrato propuesto vs los existentes y detectar omisiones canonicas.",
+    "Al cerrar una sesion de trabajo, invocar con aspecto = 'eventos publicados sin consumer' o 'decisiones abiertas en propuestas' para inventario rapido de hilos pendientes."
+  ],
+
+  "limitaciones_conocidas": [
+    "El LLM puede sobrevalorar la importancia de un patron raro si los pocos ejemplos son llamativos. Mitigacion: requerimiento de >= 3 ocurrencias para 'consistente' y >= 2 para 'divergente'.",
+    "El LLM puede inventar lineas si se le pide cita exacta. Mitigacion: las reglas del system prompt prohiben inventar, y la severidad ~ permite linea aproximada.",
+    "El LLM puede confundir 'no esta en validator' con 'es anti-patron'. Mitigacion: el system prompt requiere que el LLM cite el validator que captura el caso antes de descartarlo — si no encuentra validator, el caso sigue siendo candidato a anti-patron implicito.",
+    "El alcance maximo esta limitado por max_tokens (8000) y por el numero de archivos que cabe leer en un turno sin overflow del context window."
+  ],
+
+  "convenciones_complementarias": [
+    "Acoplado a agente-blueprint.contract.json: este contrato es derivado, cumple el shape canonico.",
+    "Acoplado a agent-flow.contract.json: usa los eventos canonicos del subsistema (agent.execute.request/response/failed).",
+    "Acoplado a errors.contract.json: los codigos de error son del catalogo canonico.",
+    "Acoplado a pseudocodigo-estilo.contract.json: el pseudocodigo del blueprint hijo cumple los anti-patrones canonizados (sin rest_spread con omision, sin Object.assign).",
+    "Independiente de agents-config.contract.json: el agente vive como modulo blueprint independiente, no en modules/conversacion/ai-agent-framework/agents/."
+  ]
+}

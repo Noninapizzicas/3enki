@@ -1,0 +1,114 @@
+{
+  "_doc": "Blueprint padre ABSTRACTO del que heredan todos los agentes-blueprint del sistema Enki. Captura lo invariante del modelo agente: modelo de ejecucion (LLM-runtime), contexto inyectado (system prompt + eventos), primitivas universales del bus, tools universales, manejo de errores y naming canonico de eventos. Los hijos solo declaran su delta especifico (rol, operacion_canonica, dominios_consultados, eventos_que_invoca, llm_settings, pseudocodigo). No tiene operaciones propias — los hijos las heredan via el modelo de ejecucion. Documento autoritativo: arquitectura/decisiones/_contratos/agente-blueprint.contract.json.",
+
+  "id": "agente-base",
+  "version": "blueprint-0.1.0",
+  "language": "es",
+  "creada": "2026-05-28",
+
+  "rol": "Blueprint padre abstracto de todos los agentes-blueprint del sistema. Define el contrato que cualquier hijo cumple por herencia. No se instancia directamente.",
+
+  "modelo_de_ejecucion": {
+    "_descripcion": "El LLM es el RUNTIME del agente. Al recibir agent.execute.request, ai-gateway (o el dispatcher equivalente) compone el system prompt efectivo (este padre + blueprint hijo + system.md propio) y ejecuta el pseudocodigo del hijo como secuencia de tool calls al bus. NO hay JS intermedio.",
+    "ciclo_de_ejecucion": [
+      "1. ai-gateway recibe agent.execute.request con { agent_id, task, context?, correlation_id }",
+      "2. ai-gateway resuelve el agente por agent_id (busca modules/<agent_id>/<agent_id>.blueprint.json)",
+      "3. Compone effectiveSystem = padre (este) + hijo + system.md curado del agente",
+      "4. Invoca LLM con effectiveSystem + task como user message",
+      "5. LLM ejecuta el pseudocodigo del hijo emitiendo tool calls",
+      "6. ai-gateway despacha cada tool call al bus (bus.publish / bus.publishAndWait)",
+      "7. Cuando el LLM termina (sin mas tool calls), ai-gateway publica agent.execute.response con { agent_id, result, correlation_id }",
+      "8. Si falla, ai-gateway publica agent.execute.failed con { agent_id, error: { code, message }, correlation_id }"
+    ]
+  },
+
+  "contexto_inyectado": {
+    "_descripcion": "Cosas que el LLM recibe automaticamente al arrancar la ejecucion del agente, sin que el hijo tenga que declararlas. Disponibles dentro del pseudocodigo como variables ambient.",
+    "campos": [
+      "task: lenguaje natural — lo que el caller pidio al agente",
+      "context?: objeto opcional con datos adicionales del caller (project_id, conversation_id, user_id)",
+      "correlation_id: viaja sin modificar por toda la cadena. El agente lo propaga en cada publishAndWait downstream.",
+      "agent_id: id del agente. Usado en logs y en agent.execute.response."
+    ]
+  },
+
+  "primitivas_universales_del_bus": {
+    "_descripcion": "Tools universales que TODOS los agentes pueden usar sin declararlas. ai-gateway las inyecta automaticamente.",
+    "bus_publish": {
+      "tool": "bus.publish",
+      "uso": "Fire-and-forget. Publica un evento al bus sin esperar respuesta.",
+      "ejemplo": "bus.publish('chat.notification.requested', { user_id, message, channel })"
+    },
+    "bus_publishAndWait": {
+      "tool": "bus.publishAndWait",
+      "uso": "Request-response correlacionado. Publica <event>.request y espera <event>.response (o .failed) por request_id.",
+      "ejemplo": "result = await bus.publishAndWait('recetas.obtener.request', { project_id, receta_id })"
+    },
+    "fs_read": {
+      "tool": "fs.read",
+      "uso": "Lee un archivo del filesystem del proyecto. Resuelve path relativo a base_path del proyecto via project_id.",
+      "ejemplo": "raw = await bus.publishAndWait('fs.read.request', { project_id, path: '/recetas.json' })"
+    }
+  },
+
+  "manejo_de_errores": {
+    "_descripcion": "Reglas canonicas heredadas para cualquier agente. Codigos de error del catalogo errors.contract.json.",
+    "codigos_canonicos": [
+      "INVALID_INPUT — input al agente incompleto o malformado",
+      "RESOURCE_NOT_FOUND — el agente intento leer/usar un recurso inexistente",
+      "PRECONDITION_FAILED — el estado actual no permite la operacion",
+      "UPSTREAM_TIMEOUT — un publishAndWait downstream no respondio en tiempo",
+      "UPSTREAM_UNREACHABLE — el modulo destino no esta cargado o no responde",
+      "UNKNOWN_ERROR — error inesperado"
+    ],
+    "regla_pares_separados": "Toda invocacion del agente cierra con .response (exito) O .failed (error). NUNCA mezclar (no inyectar error como texto en .response).",
+    "regla_no_stack_trace": "error.details NO incluye stack ni datos sensibles. Solo info estructurada del fallo."
+  },
+
+  "naming_canonico_de_eventos": {
+    "request": "agent.execute.request",
+    "response": "agent.execute.response",
+    "failed": "agent.execute.failed",
+    "progress": "agent.execute.progress (opcional, para tareas largas)",
+    "regla": "Forma <prefix>.<entity>.<verb>. Lengua del agente (es) determina los verbos canonicos. Eventos canonicos definidos en agent-flow.contract.json."
+  },
+
+  "limite_del_agente": {
+    "_descripcion": "Lo que un agente-blueprint NUNCA hace. Si rompe estas reglas, no es un agente canonico — es otra cosa.",
+    "no": [
+      "NO tiene estado_persistente propio (stateless por definicion).",
+      "NO escribe directo al filesystem como duenyo (delega via bus al modulo del dominio que es duenyo).",
+      "NO publica eventos de dominio (<entidad>.<verbo-participio>). Solo invoca <modulo>.<operacion>.request y deja que el modulo publique.",
+      "NO tiene index.js ni archivos JS en su directorio. Es declarativo puro.",
+      "NO referencia tools fantasma. Cada publishAndWait corresponde a un evento real declarado por algun modulo del repo.",
+      "NO duplica el rol de otro agente del mismo dominio (un_rol_un_agente)."
+    ]
+  },
+
+  "disciplina_del_llm_runtime": {
+    "_descripcion": "Reglas operativas que el LLM cumple al ejecutar el pseudocodigo del agente. Heredadas de llm-runtime-discipline.contract.json.",
+    "principios": [
+      "ENFOQUE EN UNA OPERACION — el agente hace exactamente lo que el task pide. No explora estado adicional. No publica eventos no necesarios.",
+      "NO INVENTAR DATOS — salvo uuid() y nowISO(), todo dato debe venir de input, fs.read, o publishAndWait. Nunca alucinar valores.",
+      "PSEUDOCODIGO ES LEY — sigue literalmente el pseudocodigo del hijo paso a paso. No improvises atajos. Si emerge ambigüedad, prefiere verbosidad explicita.",
+      "RESPONSE UNICO POR INVOCACION — agent.execute.response (o .failed) se publica UNA vez al final. No multiples.",
+      "CORRELACION DE REQUEST_ID — generas request_id nuevo por cada publishAndWait downstream. correlation_id (del caller) se propaga sin modificar."
+    ]
+  },
+
+  "estilo_de_pseudocodigo": {
+    "_descripcion": "Heredado de pseudocodigo-estilo.contract.json. Prohibiciones absolutas con caso testigo runtime.",
+    "prohibido": [
+      "rest-spread con omision: { campo: _alias, ...rest } = obj  →  usar for/in con if",
+      "Object.assign con mutacion implicita: Object.assign(t, s)  →  usar for/in explicito",
+      "Sintaxis ES6 densa que el LLM-runtime no parsea robustamente"
+    ],
+    "permitido": [
+      "Arrow functions en .find/.filter/.map (sintaxis idiomatica)",
+      "Spread en construccion: { ...obj, campo: x }",
+      "Optional chaining ?.",
+      "Template literals",
+      "for/in y for/of explicitos"
+    ]
+  }
+}

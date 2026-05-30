@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-05-30T00:14:41.383Z",
-  "total": 2326,
+  "generated_at": "2026-05-30T00:23:58.202Z",
+  "total": 2325,
   "by_validator": {
     "naming": 40,
     "events": 185,
     "lifecycle": 49,
     "observability": 113,
     "errors": 262,
-    "persistence": 140,
+    "persistence": 141,
     "http": 129,
     "chat-flow": 2,
     "agent-flow": 7,
@@ -28,10 +28,10 @@
     "llm-runtime-discipline": 8,
     "project-identity": 11,
     "project-feature-blueprints": 2,
-    "subsistema-tienda": 4
+    "subsistema-tienda": 2
   },
   "by_severity": {
-    "warning": 2120,
+    "warning": 2119,
     "info": 145,
     "error": 89
   },
@@ -1737,7 +1737,7 @@
     "observability|drift_log_spam_en_bucle|pizzepos/persistencia-comandero modules/pizzepos/persistencia-comandero/index.js:1015 — bucle con this.logger en línea 1018",
     "observability|drift_log_spam_en_bucle|pizzepos/persistencia-comandero modules/pizzepos/persistencia-comandero/index.js:945 — bucle con this.logger en línea 948",
     "observability|drift_log_spam_en_bucle|pizzepos/productos modules/pizzepos/productos/index.js:65 — bucle con this.logger en línea 67",
-    "observability|drift_log_spam_en_bucle|project-manager modules/project-manager/index.js:1234 — bucle con this.logger en línea 1238",
+    "observability|drift_log_spam_en_bucle|project-manager modules/project-manager/index.js:1253 — bucle con this.logger en línea 1257",
     "observability|drift_log_spam_en_bucle|project-manager modules/project-manager/index.js:204 — bucle con this.logger en línea 209",
     "observability|drift_log_spam_en_bucle|prompt-manager modules/prompt-manager/index.js:1131 — bucle con this.logger en línea 1135",
     "observability|drift_log_spam_en_bucle|scheduler modules/scheduler/index.js:150 — bucle con this.logger en línea 155",
@@ -1859,7 +1859,8 @@
     "persistence|drift_silent_io_failure|pizzepos/tarifas modules/pizzepos/tarifas/index.js:102 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|project-manager modules/project-manager/index.js:1148 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|project-manager modules/project-manager/index.js:1208 — catch sin this.logger en bloque que envuelve I/O",
-    "persistence|drift_silent_io_failure|project-manager modules/project-manager/index.js:1408 — catch sin this.logger en bloque que envuelve I/O",
+    "persistence|drift_silent_io_failure|project-manager modules/project-manager/index.js:1446 — catch sin this.logger en bloque que envuelve I/O",
+    "persistence|drift_silent_io_failure|project-manager modules/project-manager/index.js:1541 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|system-inspector modules/system-inspector/lib/file-writer.js:86 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|system-inspector modules/system-inspector/lib/file-writer.js:87 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|text-editor modules/text-editor/index.js:118 — catch sin this.logger en bloque que envuelve I/O",
@@ -1918,8 +1919,6 @@
     "security|drift_secret_en_log|modules/conversation-export/index.js:118 — variable sospechosa (apiKey/token/password/authorization) en objeto de logger; verificar manualmente que no expone valor",
     "subsistema-tienda|drift_caddy_block_tienda_no_canonico|deployment/caddy/Caddyfile.vps no contiene bloque canonico 'handle_path /tienda/*' con root '/opt/enki/public/tiendas' (trabajo pendiente del contrato)",
     "subsistema-tienda|drift_caddyfile_contiene_vapers_legacy|deployment/caddy/Caddyfile.vps contiene bloque legacy 'handle_path /vapers/*' — migrar a /tienda/<slug> via feature",
-    "subsistema-tienda|drift_feature_tienda_ausente|blueprints/project-types/tienda.json no existe (trabajo pendiente del contrato)",
-    "subsistema-tienda|drift_modulo_padre_subsistema_tienda_inexistente|modules/_subsistema-tienda/subsistema-tienda.modulo-base.blueprint.json no existe (trabajo pendiente del contrato)",
     "testing|drift_test_filesystem_persistente|tests/unit/admin-panel.test.js:25 — fs.mkdirSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/admin-panel.test.js:26 — fs.writeFileSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/bienvenida-tienda.test.js:44 — fs.mkdirSync fuera de os.tmpdir()",

@@ -1,0 +1,45 @@
+{
+  "id": "tienda",
+  "label": "Tienda",
+  "icon": "🛍",
+  "description": "PWA publica del proyecto. Accesible en /tienda/<slug>.",
+
+  "dependencies": [],
+
+  "slug_required": true,
+
+  "directories": [
+    "public/tienda"
+  ],
+
+  "config": {
+    "tienda": {
+      "enabled": true,
+      "slug": "{{slug}}",
+      "public_url": "/tienda/{{slug}}",
+      "bundle_dir": "public/tienda"
+    }
+  },
+
+  "initialFiles": {
+    "public/tienda/index.html": "<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">\n  <title>{{slug}}</title>\n  <link rel=\"manifest\" href=\"manifest.json\">\n  <meta name=\"theme-color\" content=\"#0a0a0a\">\n</head>\n<body>\n  <h1>{{slug}}</h1>\n  <p>Tienda en construccion.</p>\n</body>\n</html>\n",
+    "public/tienda/manifest.json": {
+      "name": "{{slug}}",
+      "short_name": "{{slug}}",
+      "start_url": "/tienda/{{slug}}/",
+      "display": "standalone",
+      "background_color": "#0a0a0a",
+      "theme_color": "#0a0a0a"
+    },
+    "public/tienda/sw.js": "// Service worker minimo. Sustituir por uno generado por cartadigital-pwa-builder cuando aplique.\nself.addEventListener('install', () => self.skipWaiting());\nself.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));\nself.addEventListener('fetch', () => {});\n"
+  },
+
+  "symlinks": [
+    { "source": "public/tienda", "target": "/opt/enki/public/tiendas/{{slug}}" }
+  ],
+
+  "verify_after": [
+    "public/tienda/index.html",
+    "public/tienda/manifest.json"
+  ]
+}

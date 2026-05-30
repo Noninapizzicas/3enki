@@ -1,13 +1,13 @@
 {
-  "_doc": "Contrato TRANSVERSAL del subsistema-tienda: canoniza el patron de PWA publica por proyecto servida por Caddy bajo /shop/<slug>. Cada proyecto que active la feature 'tienda' (ver project-feature-blueprints.contract) obtiene automaticamente: (a) directorio public/tienda/ en su base_path, (b) symlink /opt/enki/public/shop/<slug> apuntando a ese dir, (c) Caddy lo sirve sin reload por convencion de path. Los modulos que tocan el PWA (carta-digital, comandero-cliente-builder, cartadigital-pwa-builder) heredan reglas del blueprint padre subsistema-tienda.modulo-base donde se canoniza: path canonico del bundle, nombres de archivo canonicos (index.html, manifest.json, sw.js), eventos del bus canonicos (tienda.bundle.actualizada). Origen empirico: sesion 2026-05-29 — la conversacion 'New' del proyecto Vapers escribio el bundle a /pizzepos/bundles/vapers-local/ y el usuario no veia los cambios porque Caddy apuntaba al UUID del proyecto (37bc1282) en lugar del base_path real (vaiers). Drift triple expuso la ausencia de convencion canonica.",
+  "_doc": "Contrato TRANSVERSAL del subsistema-tienda: canoniza el patron de PWA publica por proyecto servida por Caddy bajo /shop/<slug>. Cada proyecto que active la feature 'tienda' (ver project-feature-blueprints.contract) obtiene automaticamente: (a) directorio storage/tienda/bundle/ en su base_path, (b) symlink /opt/enki/public/shop/<slug> apuntando a ese dir, (c) Caddy lo sirve sin reload por convencion de path. Los modulos que tocan el PWA (carta-digital, comandero-cliente-builder, cartadigital-pwa-builder) heredan reglas del blueprint padre subsistema-tienda.modulo-base donde se canoniza: path canonico del bundle, nombres de archivo canonicos (index.html, manifest.json, sw.js), eventos del bus canonicos (tienda.bundle.actualizada). Origen empirico: sesion 2026-05-29 — la conversacion 'New' del proyecto Vapers escribio el bundle a /pizzepos/bundles/vapers-local/ y el usuario no veia los cambios porque Caddy apuntaba al UUID del proyecto (37bc1282) en lugar del base_path real (vaiers). Drift triple expuso la ausencia de convencion canonica.",
   "id": "subsistema-tienda",
   "version": "1.0.0",
   "creada": "2026-05-29",
-  "supersedes_nota": "Primera version. Origen empirico: caso conversacion 'New' del proyecto Vapers (2026-05-29). La PWA generada por el chat quedaba persistida pero no servida porque (a) no habia convencion canonica de path del bundle dentro del proyecto, (b) Caddyfile apuntaba a un path fijo con UUID que no coincidia con base_path del proyecto (drift de project-identity), (c) la URL publica /vapers/ colisionaba con el namespace del frontend SvelteKit. Este contrato cierra los tres problemas a la vez: convencion de path interno (public/tienda/), convencion de URL publica (/shop/<slug>), y separacion limpia entre frontend del sistema (/<slug>/*) y PWA publica (/shop/<slug>/).",
+  "supersedes_nota": "Primera version. Origen empirico: caso conversacion 'New' del proyecto Vapers (2026-05-29). La PWA generada por el chat quedaba persistida pero no servida porque (a) no habia convencion canonica de path del bundle dentro del proyecto, (b) Caddyfile apuntaba a un path fijo con UUID que no coincidia con base_path del proyecto (drift de project-identity), (c) la URL publica /vapers/ colisionaba con el namespace del frontend SvelteKit. Este contrato cierra los tres problemas a la vez: convencion de path interno (storage/tienda/bundle/), convencion de URL publica (/shop/<slug>), y separacion limpia entre frontend del sistema (/<slug>/*) y PWA publica (/shop/<slug>/).",
 
   "deriva_de": "arquitectura/decisiones/_contratos/project-feature-blueprints.contract.json — 'tienda' es una feature canonica que se activa via project.add-features. arquitectura/decisiones/_contratos/project-identity.contract.json — slug y base_path son la fuente autoritativa.",
 
-  "objetivo": "Canonizar la convencion de PWA publica por proyecto: donde vive el bundle (public/tienda/ en base_path), como se publica (symlink + Caddy una sola regla), que archivos contiene (index.html, manifest.json, sw.js + opcionales), que eventos del bus publica cuando se actualiza, y como los modulos que la tocan declaran sus deltas heredando del blueprint padre. Producir validacion mecanica de que cada modulo declarado como 'toca tienda' cumple la convencion.",
+  "objetivo": "Canonizar la convencion de PWA publica por proyecto: donde vive el bundle (storage/tienda/bundle/ en base_path), como se publica (symlink + Caddy una sola regla), que archivos contiene (index.html, manifest.json, sw.js + opcionales), que eventos del bus publica cuando se actualiza, y como los modulos que la tocan declaran sus deltas heredando del blueprint padre. Producir validacion mecanica de que cada modulo declarado como 'toca tienda' cumple la convencion.",
 
   "inputs": {
     "obligatorios": [
@@ -30,7 +30,7 @@
   },
 
   "filosofia": [
-    "EL BUNDLE DE LA PWA VIVE DENTRO DEL PROYECTO. NO en un directorio fuera del base_path. Path canonico: public/tienda/ relativo al base_path. Razon: respeta project-identity (todo lo del proyecto vive bajo su base_path), permite que el bundle se mueva con el proyecto si se cambia base_path, y los modulos que escriben solo necesitan project_id + path relativo.",
+    "EL BUNDLE DE LA PWA VIVE DENTRO DEL PROYECTO. NO en un directorio fuera del base_path. Path canonico: storage/tienda/bundle/ relativo al base_path. Razon: respeta project-identity (todo lo del proyecto vive bajo su base_path), permite que el bundle se mueva con el proyecto si se cambia base_path, y los modulos que escriben solo necesitan project_id + path relativo.",
 
     "LA URL PUBLICA NO REVELA LA RUTA INTERNA. enki-ai.online/shop/<slug> NO contiene el UUID del proyecto, NO contiene el path /opt/enki/data/, NO contiene el nombre del modulo que genero el bundle. Acoplamiento minimo entre URL publica e implementacion interna.",
 
@@ -40,7 +40,7 @@
 
     "EL FRONTEND DEL SISTEMA Y LA PWA PUBLICA NO COLISIONAN. /vapers/carta-digital sirve el modulo carta-digital del frontend SvelteKit para el proyecto vapers. /shop/vapers sirve la PWA publica del proyecto vapers. Prefijo /shop/ es la frontera explicita (English por convencion URL; el contrato y la feature mantienen el nombre 'tienda' en espanyol).",
 
-    "LOS MODULOS QUE TOCAN EL PWA HEREDAN DEL PADRE. carta-digital, comandero-cliente-builder, cartadigital-pwa-builder, y cualquier futuro modulo que escriba en public/tienda/ extiende el blueprint padre subsistema-tienda.modulo-base. Heredan: path canonico, naming de archivos, evento de cierre tienda.bundle.actualizada, regla de actualizacion atomica.",
+    "LOS MODULOS QUE TOCAN EL PWA HEREDAN DEL PADRE. carta-digital, comandero-cliente-builder, cartadigital-pwa-builder, y cualquier futuro modulo que escriba en storage/tienda/bundle/ extiende el blueprint padre subsistema-tienda.modulo-base. Heredan: path canonico, naming de archivos, evento de cierre tienda.bundle.actualizada, regla de actualizacion atomica.",
 
     "ACTUALIZACION ATOMICA DEL BUNDLE. NO se escriben los archivos uno por uno tal cual — se escribe a un dir temporal y se hace rename. O en caso simple, cada archivo se escribe atomicamente (fs.write con atomic:true). Razon: el navegador no debe ver un index.html con manifest.json antiguo. Caddy con file_server sirve lo que hay en el FS en cada request — si el bundle queda a medias, hay momento de incoherencia visible."
   ],
@@ -48,18 +48,18 @@
   "principios": [
     {
       "id": "tienda_bundle_vive_en_public_tienda",
-      "regla": "El bundle de la PWA vive en <base_path>/public/tienda/. Modulos del sistema que escriban al bundle usan project_id + path relativo '/public/tienda/<archivo>'. NO se permite path fuera de public/tienda/.",
+      "regla": "El bundle de la PWA vive en <base_path>/storage/tienda/bundle/. Modulos del sistema que escriban al bundle usan project_id + path relativo '/storage/tienda/bundle/<archivo>'. NO se permite path fuera de storage/tienda/bundle/.",
       "razon": "Path canonico unico cross-modulo. Cualquier modulo que necesite saber donde esta el bundle lo consulta aqui, no a otro modulo."
     },
     {
       "id": "tienda_symlink_canonico",
-      "regla": "Cada proyecto con feature 'tienda' activa tiene symlink /opt/enki/public/shop/<slug> apuntando a <base_path>/public/tienda/. El symlink lo crea project-manager via project-feature-blueprints.symlinks[] al activar la feature.",
+      "regla": "Cada proyecto con feature 'tienda' activa tiene symlink /opt/enki/public/shop/<slug> apuntando a <base_path>/storage/tienda/bundle/. El symlink lo crea project-manager via project-feature-blueprints.symlinks[] al activar la feature.",
       "razon": "Caddy sirve desde un dir compartido. Sin el symlink, cada proyecto requeriria su propia regla Caddy."
     },
     {
       "id": "tienda_archivos_canonicos",
       "regla": "El bundle minimo contiene: index.html (entry point obligatorio), manifest.json (PWA manifest obligatorio), sw.js (service worker recomendado, opcional v1). Otros archivos permitidos: assets/, images/, *.json de datos. Prohibido: .env, .git/, archivos con credenciales, ejecutables.",
-      "razon": "Caddy sirve TODO lo que hay bajo public/tienda/. Si se escapa un secreto, se publica. La lista de prohibidos es defensa explicita."
+      "razon": "Caddy sirve TODO lo que hay bajo storage/tienda/bundle/. Si se escapa un secreto, se publica. La lista de prohibidos es defensa explicita."
     },
     {
       "id": "tienda_url_publica_canonica",
@@ -73,7 +73,7 @@
     },
     {
       "id": "tienda_actualizacion_atomica",
-      "regla": "Modulos escriben cada archivo con fs.write atomic:true O escriben a public/tienda.tmp/ y hacen rename a public/tienda/ al final. NO se acepta fs.write incremental visible para el browser.",
+      "regla": "Modulos escriben cada archivo con fs.write atomic:true O escriben a storage/tienda/bundle.tmp/ y hacen rename a storage/tienda/bundle/ al final. NO se acepta fs.write incremental visible para el browser.",
       "razon": "Coherencia visible. El navegador puede recibir cualquier request en cualquier momento. Si index.html dice 'v2' pero manifest.json todavia es v1, romperia caches o sw."
     },
     {
@@ -83,7 +83,7 @@
     },
     {
       "id": "tienda_modulos_js_declaran_paths_via_module_json",
-      "regla": "Modulos NO-blueprint-driven (JS POC2) que escriban al bundle (e.g. comandero-cliente-builder) declaran en module.json un campo tienda_paths_escritos[] con paths relativos a public/tienda/ que escriben. Validator cruza contra escrituras reales (heuristica regex sobre fs.write/fs.edit en index.js).",
+      "regla": "Modulos NO-blueprint-driven (JS POC2) que escriban al bundle (e.g. comandero-cliente-builder) declaran en module.json un campo tienda_paths_escritos[] con paths relativos a storage/tienda/bundle/ que escriben. Validator cruza contra escrituras reales (heuristica regex sobre fs.write/fs.edit en index.js).",
       "razon": "Modulos JS no heredan blueprint padre — necesitan otra via declarativa. El campo module.json lo hace explicito y validable."
     },
     {
@@ -121,14 +121,14 @@
     },
     {
       "id": "convivencia_con_bundle_actual_vapers",
-      "decision": "El bundle actual del proyecto Vapers vive en /pizzepos/bundles/vapers-local/ (no en public/tienda/). Es legacy de la conversacion 'New'. v1 del contrato lo deja donde esta + propone migracion como trabajo_pendiente. NO se migra automaticamente.",
+      "decision": "El bundle actual del proyecto Vapers vive en /pizzepos/bundles/vapers-local/ (no en storage/tienda/bundle/). Es legacy de la conversacion 'New'. v1 del contrato lo deja donde esta + propone migracion como trabajo_pendiente. NO se migra automaticamente.",
       "razon": "Cambio destructivo en estado runtime. Requiere OK explicito del usuario antes de mover."
     }
   ],
 
   "prohibido": [
-    "Escribir en public/tienda/ desde un modulo que NO declare tienda_paths_escritos[] en module.json o que NO herede del padre subsistema-tienda.modulo-base.",
-    "Escribir archivos con extension .env, .git, .ssh, *.key, *.pem en public/tienda/. Caddy los serviria publicamente — secreto leak.",
+    "Escribir en storage/tienda/bundle/ desde un modulo que NO declare tienda_paths_escritos[] en module.json o que NO herede del padre subsistema-tienda.modulo-base.",
+    "Escribir archivos con extension .env, .git, .ssh, *.key, *.pem en storage/tienda/bundle/. Caddy los serviria publicamente — secreto leak.",
     "Bloques Caddy especificos por proyecto (handle_path /shop/<slug>/*). Solo el bloque generico /shop/* es canonico.",
     "Servir el bundle desde un path fuera de /opt/enki/public/shop/ (drift de convencion).",
     "Bypassar el symlink (escribir directamente en /opt/enki/public/shop/<slug>/ sin pasar por base_path). Rompe el modelo project-identity.",
@@ -143,7 +143,7 @@
   "reglas_de_extraccion": [
     "Validator escanea modules/<id>/module.json buscando campo tienda_paths_escritos[].",
     "Tambien escanea modules/<id>/<id>.blueprint.json buscando extends_blueprint_abstract: 'subsistema-tienda.modulo-base'.",
-    "Para cada modulo encontrado: cruza paths_declarados con paths_detectados (regex sobre index.js o pseudocodigo del blueprint, buscando /public/tienda/.*).",
+    "Para cada modulo encontrado: cruza paths_declarados con paths_detectados (regex sobre index.js o pseudocodigo del blueprint, buscando /storage/tienda/bundle/.*).",
     "Lee deployment/caddy/Caddyfile.vps y verifica que existe exactamente un bloque handle_path /shop/* con root */opt/enki/public/shop.",
     "Cruza proyectos con metadata.features.includes('tienda') y verifica que tienen slug y que el symlink /opt/enki/public/shop/<slug> es resolvible.",
     "Cruza con blueprints/project-types/tienda.json (debe existir y declarar slug_required:true)."
@@ -164,7 +164,7 @@
     },
     {
       "documento": "arquitectura/decisiones/_schemas/subsistema-tienda/tienda-paths-escritos.schema.json",
-      "rol": "Schema del campo tienda_paths_escritos[] en module.json. Paths relativos a public/tienda/, sin path traversal."
+      "rol": "Schema del campo tienda_paths_escritos[] en module.json. Paths relativos a storage/tienda/bundle/, sin path traversal."
     },
     {
       "documento": "arquitectura/decisiones/_validators/subsistema-tienda.validate.js",
@@ -179,13 +179,13 @@
   "validaciones_cross_realizadas_por_validator": [
     {
       "id": "drift_modulo_toca_tienda_sin_declarar",
-      "regla": "Si modules/<id>/index.js o <id>.blueprint.json contiene escrituras a public/tienda/ (regex), module.json declara tienda_paths_escritos[] O el blueprint extiende subsistema-tienda.modulo-base.",
-      "como_detectar": "Regex sobre fuente buscando 'public/tienda' como path. Cruzar con declaracion en module.json/blueprint.",
+      "regla": "Si modules/<id>/index.js o <id>.blueprint.json contiene escrituras a storage/tienda/bundle/ (regex), module.json declara tienda_paths_escritos[] O el blueprint extiende subsistema-tienda.modulo-base.",
+      "como_detectar": "Regex sobre fuente buscando 'storage/tienda/bundle' como path. Cruzar con declaracion en module.json/blueprint.",
       "severidad": "error"
     },
     {
       "id": "drift_path_fuera_de_public_tienda",
-      "regla": "Si modulo declara tienda_paths_escritos[], cada entrada esta dentro de public/tienda/ (NO path traversal, NO absolutos).",
+      "regla": "Si modulo declara tienda_paths_escritos[], cada entrada esta dentro de storage/tienda/bundle/ (NO path traversal, NO absolutos).",
       "como_detectar": "Validacion de los strings declarados.",
       "severidad": "error"
     },
@@ -216,7 +216,7 @@
     {
       "id": "drift_symlink_de_proyecto_con_feature_tienda_no_resolvible",
       "regla": "Para cada proyecto con feature tienda + slug definido, /opt/enki/public/shop/<slug> existe como symlink resolvible.",
-      "como_detectar": "fs.readlink + verificar que apunta a base_path/public/tienda/.",
+      "como_detectar": "fs.readlink + verificar que apunta a base_path/storage/tienda/bundle/.",
       "severidad": "warning"
     },
     {
@@ -245,7 +245,7 @@
       "descripcion": "La conversacion 'New' del proyecto Vapers genero un bundle PWA (15 sabores Happ Bar GR100K Pro) y lo persistio en /opt/enki/data/projects/vaiers/pizzepos/bundles/vapers-local/. Caddy estaba configurado para servir /vapers/* desde /opt/enki/data/projects/37bc1282-e44c-467c-bb75-3d605255c9d2/storage/comandero-cliente-builder/bundles/ (path con UUID + ruta legacy). Resultado: el usuario en navegador veia version vieja (5 productos genericos) en lugar de la nueva (15 sabores Vapers Alhama). Tres drifts simultaneos: (a) no habia convencion canonica de path interno del bundle, (b) Caddyfile usaba UUID + path legacy que no coincidia con base_path real del proyecto, (c) URL publica /vapers/ colisionaba con el namespace del frontend SvelteKit (usuario al ir a /vapers/carta-digital tampoco veia su modulo del sistema).",
       "evidencia": "fs.read.request comparado entre path Caddy (UUID) y path real (vaiers): el primero devolvio archivo viejo, el segundo el nuevo. Bus capture confirma escrituras a project_id=37bc1282 path=/pizzepos/bundles/vapers-local/index.html con contenido nuevo. URL publica https://enki-ai.online/vapers/ servia version vieja.",
       "test_runtime_path": "tests/runtime-cases/subsistema-tienda-pwa-servida.js",
-      "fix_aplicado": "El contrato canoniza: (a) bundle vive en public/tienda/ del proyecto (no en /pizzepos/bundles/ ni con UUID), (b) symlink /opt/enki/public/shop/<slug> apuntando al bundle, (c) Caddy una sola regla /tienda/* sirviendo desde /opt/enki/public/shop/. Tras aplicar el contrato + crear tienda.json + extender project-manager con symlinks, una activacion de feature 'tienda' en un proyecto deja el bundle accesible automaticamente.",
+      "fix_aplicado": "El contrato canoniza: (a) bundle vive en storage/tienda/bundle/ del proyecto (no en /pizzepos/bundles/ ni con UUID), (b) symlink /opt/enki/public/shop/<slug> apuntando al bundle, (c) Caddy una sola regla /tienda/* sirviendo desde /opt/enki/public/shop/. Tras aplicar el contrato + crear tienda.json + extender project-manager con symlinks, una activacion de feature 'tienda' en un proyecto deja el bundle accesible automaticamente.",
       "anti_patron_que_cierra": "Path de bundle hardcoded con UUID en Caddyfile + ausencia de convencion canonica de donde vive el bundle + colision de namespace publico /<slug>/* con namespace de PWA.",
       "estado": "documentado_pendiente_runtime"
     }
@@ -257,7 +257,7 @@
     "Modificar deployment/caddy/Caddyfile.vps: eliminar bloque handle_path /vapers/* (legacy), anyadir bloque handle_path /shop/* canonico.",
     "Anyadir campo tienda_paths_escritos[] a module.json de modulos que escriben al bundle (carta-digital, comandero-cliente-builder, futuros).",
     "Implementar arquitectura/decisiones/_validators/subsistema-tienda.validate.js + wirear a validate:ci.",
-    "Migrar el bundle actual del proyecto Vapers de /pizzepos/bundles/vapers-local/ a /public/tienda/ (manual una vez, con OK del usuario).",
+    "Migrar el bundle actual del proyecto Vapers de /pizzepos/bundles/vapers-local/ a /storage/tienda/bundle/ (manual una vez, con OK del usuario).",
     "Implementar test runtime tests/runtime-cases/subsistema-tienda-pwa-servida.js que reproduzca el caso testigo.",
     "Decidir si comandero-cliente-builder (modulo JS) sigue siendo necesario o si su funcion absorbe directamente la feature 'tienda' (decision Fase 2 segun evolucione).",
     "Decidir si el agente legacy cartadigital-pwa-builder se elimina, se migra a agente-blueprint del subsistema, o se mantiene durante transicion.",

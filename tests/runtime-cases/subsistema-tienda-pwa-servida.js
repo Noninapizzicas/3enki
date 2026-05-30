@@ -5,7 +5,7 @@
  *
  * Verifica que tras activar la feature 'tienda' en un proyecto, la
  * convencion canonica queda en disco:
- *   1. directorio <base_path>/public/tienda/ creado
+ *   1. directorio <base_path>/storage/tienda/bundle/ creado
  *   2. index.html con slug del proyecto sustituido en {{slug}}
  *   3. manifest.json con start_url '/shop/<slug>/'
  *   4. sw.js minimo
@@ -192,10 +192,10 @@ async function main() {
     // ============================================================
     // PASO 3 — Verificar index.html
     // ============================================================
-    console.log('PASO 3: verificar public/tienda/index.html');
+    console.log('PASO 3: verificar storage/tienda/bundle/index.html');
     const idx = await busRequest('fs.read.request', {
       project_id: projectId,
-      path: '/public/tienda/index.html'
+      path: '/storage/tienda/bundle/index.html'
     });
     assert(idx && idx.content && idx.content.length > 0,
       `index.html existe (size: ${idx?.content?.length || 0} bytes)`);
@@ -208,10 +208,10 @@ async function main() {
     // ============================================================
     // PASO 4 — Verificar manifest.json
     // ============================================================
-    console.log('PASO 4: verificar public/tienda/manifest.json');
+    console.log('PASO 4: verificar storage/tienda/bundle/manifest.json');
     const mfRaw = await busRequest('fs.read.request', {
       project_id: projectId,
-      path: '/public/tienda/manifest.json'
+      path: '/storage/tienda/bundle/manifest.json'
     });
     assert(mfRaw && mfRaw.content, 'manifest.json existe');
     let manifest = null;
@@ -228,10 +228,10 @@ async function main() {
     // ============================================================
     // PASO 5 — Verificar sw.js
     // ============================================================
-    console.log('PASO 5: verificar public/tienda/sw.js');
+    console.log('PASO 5: verificar storage/tienda/bundle/sw.js');
     const sw = await busRequest('fs.read.request', {
       project_id: projectId,
-      path: '/public/tienda/sw.js'
+      path: '/storage/tienda/bundle/sw.js'
     });
     assert(sw && sw.content && sw.content.includes('addEventListener'),
       `sw.js existe y contiene addEventListener (size: ${sw?.content?.length || 0} bytes)`);
@@ -254,8 +254,8 @@ async function main() {
         `config.tienda.slug === '${EXPECTED_SLUG}' (real: '${config.tienda?.slug}')`);
       assert(config.tienda && config.tienda.public_url === `/shop/${EXPECTED_SLUG}`,
         `config.tienda.public_url === '/shop/${EXPECTED_SLUG}' (real: '${config.tienda?.public_url}')`);
-      assert(config.tienda && config.tienda.bundle_dir === 'public/tienda',
-        `config.tienda.bundle_dir === 'public/tienda'`);
+      assert(config.tienda && config.tienda.bundle_dir === 'storage/tienda/bundle',
+        `config.tienda.bundle_dir === 'storage/tienda/bundle'`);
     }
     console.log('');
 

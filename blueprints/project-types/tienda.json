@@ -2,14 +2,14 @@
   "id": "tienda",
   "label": "Tienda",
   "icon": "🛍",
-  "description": "PWA publica del proyecto. Accesible en /shop/<slug>.",
+  "description": "PWA publica del proyecto. Bundle en storage/tienda/bundle/. Accesible en /shop/<slug>.",
 
   "dependencies": [],
 
   "slug_required": true,
 
   "directories": [
-    "public/tienda"
+    "storage/tienda/bundle"
   ],
 
   "config": {
@@ -17,13 +17,13 @@
       "enabled": true,
       "slug": "{{slug}}",
       "public_url": "/shop/{{slug}}",
-      "bundle_dir": "public/tienda"
+      "bundle_dir": "storage/tienda/bundle"
     }
   },
 
   "initialFiles": {
-    "public/tienda/index.html": "<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">\n  <title>{{slug}}</title>\n  <link rel=\"manifest\" href=\"manifest.json\">\n  <meta name=\"theme-color\" content=\"#0a0a0a\">\n</head>\n<body>\n  <h1>{{slug}}</h1>\n  <p>Tienda en construccion.</p>\n</body>\n</html>\n",
-    "public/tienda/manifest.json": {
+    "storage/tienda/bundle/index.html": "<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">\n  <title>{{slug}}</title>\n  <link rel=\"manifest\" href=\"manifest.json\">\n  <meta name=\"theme-color\" content=\"#0a0a0a\">\n</head>\n<body>\n  <h1>{{slug}}</h1>\n  <p>Tienda en construccion.</p>\n</body>\n</html>\n",
+    "storage/tienda/bundle/manifest.json": {
       "name": "{{slug}}",
       "short_name": "{{slug}}",
       "start_url": "/shop/{{slug}}/",
@@ -31,15 +31,15 @@
       "background_color": "#0a0a0a",
       "theme_color": "#0a0a0a"
     },
-    "public/tienda/sw.js": "// Service worker minimo. Sustituir por uno generado por cartadigital-pwa-builder cuando aplique.\nself.addEventListener('install', () => self.skipWaiting());\nself.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));\nself.addEventListener('fetch', () => {});\n"
+    "storage/tienda/bundle/sw.js": "// Service worker minimo. Sustituir por uno generado por cartadigital-pwa-builder cuando aplique.\nself.addEventListener('install', () => self.skipWaiting());\nself.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));\nself.addEventListener('fetch', () => {});\n"
   },
 
   "symlinks": [
-    { "source": "public/tienda", "target": "/opt/enki/public/shop/{{slug}}" }
+    { "source": "storage/tienda/bundle", "target": "/opt/enki/public/shop/{{slug}}" }
   ],
 
   "verify_after": [
-    "public/tienda/index.html",
-    "public/tienda/manifest.json"
+    "storage/tienda/bundle/index.html",
+    "storage/tienda/bundle/manifest.json"
   ]
 }

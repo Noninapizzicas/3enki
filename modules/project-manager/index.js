@@ -1426,9 +1426,12 @@ class ProjectManagerModule extends BaseModule {
       return s.replace(/\{\{slug\}\}/g, projectSlug);
     };
 
-    // 1. Directorios (relativos al base_path; prefijo storage/ se renamespacia)
+    // 1. Directorios (relativos al base_path; prefijo storage/ se renamespacia
+    //    a storage/<featureId>/ EXCEPTO si el path ya empieza por
+    //    storage/<featureId>/ — opt-out para features que declaran explicitamente
+    //    su propio namespace bajo storage).
     for (const dir of (projectDef.directories || [])) {
-      const namespacedDir = dir.startsWith('storage/')
+      const namespacedDir = (dir.startsWith('storage/') && !dir.startsWith(`storage/${featureId}/`))
         ? dir.replace('storage/', `storage/${featureId}/`)
         : dir;
       await fs.promises.mkdir(path.join(basePath, substituteSlug(namespacedDir)), { recursive: true });
@@ -1479,7 +1482,8 @@ class ProjectManagerModule extends BaseModule {
     //    - {{slug}} se sustituye tanto en el path como en el contenido string.
     if (projectDef.initialFiles) {
       for (const [filePath, content] of Object.entries(projectDef.initialFiles)) {
-        const namespacedPath = filePath.startsWith('storage/')
+        // Mismo opt-out del renamespacing que en directories[]
+        const namespacedPath = (filePath.startsWith('storage/') && !filePath.startsWith(`storage/${featureId}/`))
           ? filePath.replace('storage/', `storage/${featureId}/`)
           : filePath;
         const fullPath = path.join(basePath, substituteSlug(namespacedPath));

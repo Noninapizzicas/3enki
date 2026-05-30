@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-30T03:55:10.993Z",
-  "total": 2324,
+  "generated_at": "2026-05-30T10:47:29.516Z",
+  "total": 2323,
   "by_validator": {
     "naming": 40,
     "events": 185,
@@ -27,11 +27,10 @@
     "scheduling": 1,
     "llm-runtime-discipline": 8,
     "project-identity": 11,
-    "project-feature-blueprints": 2,
-    "subsistema-tienda": 1
+    "project-feature-blueprints": 2
   },
   "by_severity": {
-    "warning": 2118,
+    "warning": 2117,
     "info": 145,
     "error": 89
   },
@@ -1859,8 +1858,8 @@
     "persistence|drift_silent_io_failure|pizzepos/tarifas modules/pizzepos/tarifas/index.js:102 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|project-manager modules/project-manager/index.js:1148 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|project-manager modules/project-manager/index.js:1208 — catch sin this.logger en bloque que envuelve I/O",
-    "persistence|drift_silent_io_failure|project-manager modules/project-manager/index.js:1446 — catch sin this.logger en bloque que envuelve I/O",
-    "persistence|drift_silent_io_failure|project-manager modules/project-manager/index.js:1541 — catch sin this.logger en bloque que envuelve I/O",
+    "persistence|drift_silent_io_failure|project-manager modules/project-manager/index.js:1449 — catch sin this.logger en bloque que envuelve I/O",
+    "persistence|drift_silent_io_failure|project-manager modules/project-manager/index.js:1545 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|system-inspector modules/system-inspector/lib/file-writer.js:86 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|system-inspector modules/system-inspector/lib/file-writer.js:87 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|text-editor modules/text-editor/index.js:118 — catch sin this.logger en bloque que envuelve I/O",
@@ -1917,7 +1916,6 @@
     "project-identity|drift_slugify_fuera_de_project_manager|modules/database-manager/index.js:641 — recompute local de slug en contexto de project (project-identity.PROH1)",
     "scheduling|drift_setinterval_subsegundo|modules/pizzepos/cuentas-canales/index.js:361 — setInterval cada 60ms (limite 100ms). Repensar el patron.",
     "security|drift_secret_en_log|modules/conversation-export/index.js:118 — variable sospechosa (apiKey/token/password/authorization) en objeto de logger; verificar manualmente que no expone valor",
-    "subsistema-tienda|drift_caddyfile_contiene_vapers_legacy|deployment/caddy/Caddyfile.vps contiene bloque legacy 'handle_path /vapers/*' — migrar a /shop/<slug> via feature",
     "testing|drift_test_filesystem_persistente|tests/unit/admin-panel.test.js:25 — fs.mkdirSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/admin-panel.test.js:26 — fs.writeFileSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/bienvenida-tienda.test.js:44 — fs.mkdirSync fuera de os.tmpdir()",

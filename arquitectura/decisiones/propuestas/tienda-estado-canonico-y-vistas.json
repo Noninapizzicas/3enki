@@ -1,0 +1,786 @@
+{
+  "_doc": "Plan ejecutable JSON del horizonte 'tienda-estado-canonico-y-vistas'. Captura el plan para hacer el subsistema-tienda visible y operable para los cuatro perfiles que lo usan (operador del repo, dev nuevo, LLM del chat, comerciante). Caso piloto: vapers. Pensado para que un LLM lo siga linealmente en la proxima sesion. Las fases usan pseudocodigo respetando pseudocodigo-estilo.contract.json (sin Object.assign, sin rest-spread con omision).",
+  "id": "tienda-estado-canonico-y-vistas",
+  "version": "1.0.0",
+  "creado_en": "2026-05-30",
+  "skill_origen": "ana",
+  "tipo": "propuesta_horizonte_abierto",
+
+  "documentos_hermanos": {
+    "vertical_pwa_whatsapp": {
+      "path": "arquitectura/decisiones/propuestas/vertical-tienda-pwa-sin-datos.md",
+      "fecha": "2026-05-26",
+      "relacion": "complementa_no_reemplaza",
+      "cubre": "verticalidad end-to-end (PWA publica + WhatsApp escueto + recogida presencial)"
+    },
+    "arranque_vertical": {
+      "path": "arquitectura/decisiones/propuestas/_arranque-vertical-tienda-pwa-sin-datos.md",
+      "relacion": "guion_del_horizonte_hermano"
+    }
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-tienda.contract.json",
+    "arquitectura/decisiones/_contratos/project-feature-blueprints.contract.json",
+    "arquitectura/decisiones/_contratos/project-identity.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/lifecycle.contract.json",
+    "arquitectura/decisiones/_contratos/blueprint-eventos-conscientes.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/llm-runtime-discipline.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json"
+  ],
+
+  "por_que_existe": {
+    "hallazgo_2026_05_30": "El sistema ya tiene varias piezas tocando 'tienda' distribuidas en sitios distintos, sin un objeto canonico que las una. Nadie --ni el operador, ni un dev nuevo, ni el LLM del chat, ni el comerciante-- puede ver de un vistazo que estado tiene una tienda y que se puede operar sobre ella.",
+    "consecuencia": "El estado de cada tienda esta esparcido entre disco (storage/comandero-cliente-builder/, storage/tienda/bundle/, metadata.features en SQLite, config.json), agentes que no persisten, CLIs sueltos y servicios externos (Cloudflare, Netlify).",
+    "solucion_propuesta": "Un objeto unico por proyecto en <base_path>/storage/tienda/estado.json que describe la realidad observable de la tienda del proyecto y que los cuatro perfiles consumen de forma distinta."
+  },
+
+  "estado_verificado_en_disco": [
+    {
+      "pieza": "modules/pizzepos/carta-digital/cf-worker/worker.js",
+      "tipo": "Cloudflare Worker",
+      "loc": 194,
+      "rol": "proxy chat LLM a DeepSeek para PWAs publicas",
+      "destino_bundle": "servicio Cloudflare",
+      "invocacion": "deploy manual con wrangler"
+    },
+    {
+      "pieza": "modules/pizzepos/carta-digital/static-template.js",
+      "tipo": "JS template",
+      "loc": 1504,
+      "rol": "genera HTML de la PWA publica (catalogo + branding + WhatsApp button)",
+      "destino_bundle": "string HTML returned",
+      "invocacion": "llamado por export-cli.js"
+    },
+    {
+      "pieza": "modules/pizzepos/carta-digital/export-cli.js",
+      "tipo": "CLI standalone",
+      "loc": 150,
+      "rol": "escribe HTML a carpeta local y dice 'subelo a Netlify drop o GitHub Pages'",
+      "destino_bundle": "local -> Netlify / GitHub Pages (manual)",
+      "invocacion": "node export-cli.js --carta X --whatsapp Y"
+    },
+    {
+      "pieza": "modules/comandero-cliente-builder/",
+      "tipo": "modulo JS POC2 del bus",
+      "rol": "genera bundle del comandero del OPERADOR (interfaz para quien atiende, NO para el cliente final)",
+      "destino_bundle": "<base_path>/storage/comandero-cliente-builder/bundles/",
+      "invocacion": "via bus comandero-cliente.bundle.generar",
+      "nota": "NO es del subsistema-tienda. Namespace propio."
+    },
+    {
+      "pieza": "modules/conversacion/ai-agent-framework/agents/cartadigital-pwa-builder.json",
+      "tipo": "agente legacy",
+      "rol": "genera contenido PWA en su response pero NO lo persiste. El caller decide donde escribirlo.",
+      "destino_bundle": "ninguno (solo response)",
+      "invocacion": "agent.execute.request desde el LLM"
+    },
+    {
+      "pieza": "modules/whatsapp-bot/",
+      "tipo": "modulo JS declarado",
+      "rol": "recibe webhooks Meta Cloud API",
+      "estado": "implementacion pendiente de verificar"
+    },
+    {
+      "pieza": "modules/tienda-api/",
+      "tipo": "modulo JS backend HTTP",
+      "rol": "recibe pedidos desde la PWA publica",
+      "invocacion": "POST /tienda/pedido/<slug>"
+    },
+    {
+      "pieza": "blueprints/project-types/tienda.json",
+      "tipo": "feature declarativa",
+      "version": "v1.0.0 (creado 2026-05-30)",
+      "rol": "al activarse crea bundle inicial en storage/tienda/bundle/ + symlink /opt/enki/public/shop/<slug>"
+    },
+    {
+      "pieza": "deployment/caddy/Caddyfile.vps",
+      "tipo": "config Caddy",
+      "rol": "bloque handle_path /shop/* sirve desde /opt/enki/public/shop/ los bundles de cualquier proyecto con la feature activa"
+    },
+    {
+      "pieza": "modules/_subsistema-tienda/subsistema-tienda.modulo-base.blueprint.json",
+      "version": "v0.1.0",
+      "rol": "blueprint padre abstracto del subsistema"
+    }
+  ],
+
+  "pieza_unificadora": {
+    "path_canonico": "<base_path>/storage/tienda/estado.json",
+    "evento_canonico_de_cierre": "tienda.estado.actualizado",
+
+    "por_que_ahi": [
+      "Bajo storage/tienda/ que ya es el namespace canonico del subsistema (consistente con subsistema-tienda.contract.json v1.0.0)",
+      "Por proyecto (cada tienda tiene su propio estado, no uno global)",
+      "Al lado del bundle/ que ya canonizamos --proximidad semantica"
+    ],
+
+    "shape_esbozo_no_cerrado": {
+      "_version": "1.0",
+      "_updated_at": "2026-05-30T18:00:00.000Z",
+      "slug": "vapers",
+      "activa": true,
+      "nombre_negocio": "Vapers Alhama",
+      "bundle": {
+        "fuente": "vps-local",
+        "ultimo_deploy_at": "2026-05-30T17:55:00.000Z",
+        "ultimo_deploy_por": "cartadigital-pwa-builder",
+        "tamano_bytes": 7599,
+        "archivos_presentes": ["index.html", "manifest.json", "sw.js"]
+      },
+      "url_publica": "https://enki-ai.online/shop/vapers",
+      "catalogo": {
+        "productos_total": 15,
+        "ultima_actualizacion_at": "2026-05-30T17:00:00.000Z"
+      },
+      "canales_pedido": {
+        "whatsapp": { "activo": true, "numero": "+34643283034" },
+        "telegram": { "activo": true, "chat_id": "..." }
+      },
+      "ofertas_activas": [],
+      "pedidos_hoy": 0,
+      "alertas": []
+    },
+
+    "reglas_del_shape": [
+      "Es ESBOZO no cerrado. additionalProperties:true en el schema AJV.",
+      "NO precompilar enum de bundle.fuente (puede crecer: vps-local, netlify, github-pages, cf-worker, otros).",
+      "NO precompilar lista de canales_pedido (otros emergeran).",
+      "Los campos requeridos minimos: _version, _updated_at, slug, activa, bundle, url_publica."
+    ],
+
+    "evento_tienda_estado_actualizado_shape": {
+      "project_id": "string uuid",
+      "slug": "string kebab-case",
+      "campos_cambiados": "string[] lista de paths JSON Pointer",
+      "correlation_id": "string uuid",
+      "timestamp": "iso8601"
+    }
+  },
+
+  "las_cuatro_vistas": {
+    "diagrama_ascii": [
+      "+---------------------------------------------------------------+",
+      "|  <base_path>/storage/tienda/estado.json  (fuente unica)       |",
+      "+--+----------+----------+----------+----------------------------+",
+      "   |          |          |          |",
+      " Operador  Dev nuevo    LLM      Comerciante",
+      "   |          |          |          |",
+      " cat / log   contrato   contexto   TiendaDashboard.svelte",
+      "            apunta      inyectado  en frontend"
+    ],
+
+    "operador": {
+      "perfil": "tu con detalle tecnico",
+      "consume_via": [
+        "Read directo (cat / Read tool)",
+        "fs.read.request del bus con path: /storage/tienda/estado.json"
+      ],
+      "casos_de_uso": [
+        "Debugging (por que la URL publica sirve viejo?)",
+        "Auditoria de despliegues (cuando se actualizo? quien?)",
+        "Validacion cross-proyecto (un script lee todos los estado.json y reporta problemas globales)"
+      ]
+    },
+
+    "dev_nuevo": {
+      "perfil": "llega al repo sin pista previa",
+      "consume_via": [
+        "El contrato subsistema-tienda.contract.json apunta a estado.json como objeto de entrada para entender el subsistema",
+        "Parrafo en CLAUDE.md o README del subsistema dice 'para entender que hace una tienda, lee el estado.json del proyecto + el contrato'"
+      ]
+    },
+
+    "llm_del_chat": {
+      "perfil": "razona sobre la tienda durante una conversacion",
+      "consume_via": "ai-gateway inyecta estado.json como contexto cuando el page_id esta en lista del subsistema-tienda",
+      "pseudocodigo_de_inyeccion": [
+        "on chat.prompt.ready:",
+        "  paginasDelSubsistema = ['carta-digital', 'tienda', 'comandero-cliente']",
+        "  if ctx.page_id en paginasDelSubsistema:",
+        "    estado = fs.read('/storage/tienda/estado.json', ctx.project_id)",
+        "    if estado.status === 200:",
+        "      effectiveSystem = effectiveSystem + '\\n\\n# ESTADO ACTUAL DE LA TIENDA\\n' + estado.content"
+      ]
+    },
+
+    "comerciante": {
+      "perfil": "dueno del negocio sin contexto tecnico",
+      "consume_via": "componente Svelte nuevo TiendaDashboard.svelte en frontend/src/lib/modules/tienda/",
+      "componentes_ui": [
+        "Card 'Tu tienda': URL publica, ultimo deploy, productos en catalogo",
+        "Card 'Canales': WhatsApp / Telegram activos o no",
+        "Card 'Pedidos hoy'",
+        "Card 'Alertas' si hay",
+        "Botones de accion: 'Regenerar PWA', 'Editar branding', 'Ver pedidos'"
+      ],
+      "actualizacion_en_vivo": "se suscribe a tienda.estado.actualizado del bus"
+    }
+  },
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "comentario": "Disciplina del contrato disciplina-llm-operador.contract.json: el LLM declara las tres listas en su primer mensaje de la proxima sesion.",
+    "verifico_en_disco": [
+      "subsistema-tienda.contract.json v1.0.0 existe",
+      "blueprints/project-types/tienda.json existe y escribe a storage/tienda/bundle/",
+      "modules/_subsistema-tienda/subsistema-tienda.modulo-base.blueprint.json v0.1.0 existe",
+      "deployment/caddy/Caddyfile.vps tiene bloque handle_path /shop/*",
+      "modules/project-manager/index.js tiene _initializeFromBlueprint con symlinks/verify_after/slug",
+      "tests/runtime-cases/subsistema-tienda-pwa-servida.js existe",
+      "NO existe storage/tienda/estado.json en ningun proyecto todavia",
+      "NO existe modules/tienda-estado/ todavia",
+      "NO existe frontend/src/lib/modules/tienda/TiendaDashboard.svelte todavia"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "carta-digital cf-worker.js sigue siendo proxy chat LLM",
+      "comandero-cliente-builder sigue siendo del operador, no del cliente final",
+      "tienda-api sigue recibiendo POST /tienda/pedido/<slug>"
+    ],
+    "no_toco_esta_sesion": [
+      "cf-worker, static-template.js, export-cli.js (legacy convive)",
+      "comandero-cliente-builder (no es del subsistema-tienda)",
+      "tienda-api (solo si emite eventos que el estado.json refleja)",
+      "whatsapp-bot (idem)",
+      "horizonte vertical-tienda-pwa-sin-datos (PR separado)"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [
+    {
+      "id": "Q1",
+      "tema": "centralizado_vs_descentralizado",
+      "pregunta": "Quien mantiene storage/tienda/estado.json al dia?",
+      "opciones": {
+        "A": "Modulo nuevo tienda-estado (JS POC2) escucha eventos del subsistema y aplica patches centralizados al estado.json via fs.edit. Unico modulo que conoce el shape.",
+        "B": "Cada modulo del subsistema aplica fs.edit directo sobre el estado.json + publish tienda.estado.actualizado. Simple pero N modulos conocen el shape."
+      },
+      "recomendacion": "sin_cerrar",
+      "comentario_recomendacion": "depende de cuantos modulos hijos tocan estado. Si son 2-3, B es mas simple; si son 6+, A reduce drift.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q2",
+      "tema": "inyeccion_al_llm",
+      "pregunta": "Cuando se inyecta el estado.json al LLM?",
+      "opciones": {
+        "A": "Siempre que page_id este en lista del subsistema-tienda (ai-gateway anyade el estado.json como contexto adicional automaticamente).",
+        "B": "Solo cuando el blueprint hijo del modulo activo declara explicitamente requires_tienda_estado:true en su module.json. Opt-in por blueprint.",
+        "C": "Bajo demanda --el LLM lo pide como tool tienda.estado.leer. Cero contexto inyectado por defecto."
+      },
+      "recomendacion": "sin_cerrar",
+      "comentario_recomendacion": "A es lo mas simple pero gasta tokens en turnos que no lo usan. B requiere mas disenyo. C es mas cuidadoso pero exige al LLM saber pedirlo.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q3",
+      "tema": "granularidad_shape",
+      "pregunta": "Campos derivados (pedidos_hoy, productos_total, ofertas_activas) en tiempo real o computados al leer?",
+      "opciones": {
+        "A": "Tiempo real. Cada evento del subsistema dispara patch al estado.json. Lectura instantanea, escritura cara.",
+        "B": "Computados al leer. El estado.json solo guarda lo que NO se puede recalcular. Los contadores se calculan en cada fs.read haciendo queries a SQLite. Lectura cara, escritura barata.",
+        "C": "Hibrido. Lo barato de mantener (URL, deploy) en tiempo real. Lo derivado (pedidos_hoy) computado al leer."
+      },
+      "recomendacion": "sin_cerrar",
+      "comentario_recomendacion": "depende de cuantos lectores haya y con que frecuencia. Para 1 lector ocasional (operador) B es mas barato; para dashboard del comerciante en vivo, A o C.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q4",
+      "tema": "multitenant_cfworker",
+      "pregunta": "Si un proyecto usa modelo legacy (PWA en Netlify + chat en cf-worker), bundle.fuente:'cf-worker'. Que shape tiene bundle.* en ese caso?",
+      "opciones": {
+        "A": "Mantener shape unico para todos los casos. Campos worker_url, worker_kv_namespace se anyaden como opcionales y quedan vacios cuando no aplica.",
+        "B": "bundle es un oneOf por fuente (vps-local, netlify, cf-worker, github-pages). Cada fuente tiene su sub-shape. Mas estricto pero mas complejo.",
+        "C": "Diferir la decision hasta que entre el primer proyecto que use modelo legacy + estado.json. v1 solo soporta vps-local."
+      },
+      "recomendacion": "C",
+      "comentario_recomendacion": "sin emergencia real --diferir.",
+      "respuesta_usuario": null
+    }
+  ],
+
+  "decisiones_ya_cerradas_en_la_cocina_2026_05_30": [
+    {
+      "id": 1,
+      "decision": "Path canonico del bundle",
+      "cierre": "storage/tienda/bundle/ en base_path (canonizado 2026-05-29 v1.0.0)"
+    },
+    {
+      "id": 2,
+      "decision": "URL publica",
+      "cierre": "/shop/<slug> (renombrado desde /tienda/<slug> para evitar colision con tienda-api)"
+    },
+    {
+      "id": 3,
+      "decision": "Servidor del bundle local",
+      "cierre": "Caddy del VPS via handle_path /shop/* + symlinks"
+    },
+    {
+      "id": 4,
+      "decision": "cf-worker legacy + Netlify export",
+      "cierre": "Conviven con el sistema nuevo. NO se tira nada. Carriles paralelos para usos distintos."
+    },
+    {
+      "id": 5,
+      "decision": "comandero-cliente-builder",
+      "cierre": "No es del subsistema-tienda. Produce el comandero del operador, namespace propio."
+    },
+    {
+      "id": 6,
+      "decision": "Estado canonico de la tienda",
+      "cierre": "storage/tienda/estado.json (nuevo en esta cocina)"
+    },
+    {
+      "id": 7,
+      "decision": "Pieza unificadora para los 4 perfiles",
+      "cierre": "El propio estado.json. Cada perfil lo consume distinto."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "fase-0",
+      "nombre": "Documentacion y bump contrato",
+      "esfuerzo_horas": "1-2",
+      "depende_de": [],
+      "bloqueada_por": ["Q1", "Q2", "Q3", "Q4"],
+      "operaciones": [
+        {
+          "id": "0.1",
+          "descripcion": "bump subsistema-tienda.contract.json v1.0.0 -> v1.1.0 anyadiendo seccion objeto_estado_canonico",
+          "pseudocodigo": [
+            "contrato = fs.read('arquitectura/decisiones/_contratos/subsistema-tienda.contract.json')",
+            "json = JSON.parse(contrato.content)",
+            "json.version = '1.1.0'",
+            "json.supersedes_nota = 'v1.1.0 (2026-05-30) anyade seccion objeto_estado_canonico apuntando a storage/tienda/estado.json como pieza unificadora para los 4 perfiles (operador, dev nuevo, LLM, comerciante).'",
+            "json.objeto_estado_canonico = construirSeccion({ path: 'storage/tienda/estado.json', proposito: 'Fuente unica de verdad observable de la tienda del proyecto', perfiles_que_consumen: ['operador','dev_nuevo','llm','comerciante'], schema_ref: 'arquitectura/decisiones/_schemas/subsistema-tienda/estado.schema.json', actualizado_por: '<respuesta Q1>', evento_de_cierre: 'tienda.estado.actualizado' })",
+            "fs.write(path, JSON.stringify(json, null, 2))"
+          ]
+        },
+        {
+          "id": "0.2",
+          "descripcion": "anyadir evento tienda.estado.actualizado al blueprint padre del subsistema",
+          "pseudocodigo": [
+            "padre = fs.read('modules/_subsistema-tienda/subsistema-tienda.modulo-base.blueprint.json')",
+            "json = JSON.parse(padre.content)",
+            "eventoNuevo = { name: 'tienda.estado.actualizado', shape: { project_id: 'string uuid', slug: 'string', campos_cambiados: 'string[]', correlation_id: 'string', timestamp: 'iso8601' }, publicado_por: '<segun Q1>', consumido_por: ['TiendaDashboard.svelte', 'ai-gateway segun Q2'] }",
+            "json.eventos_canonicos_del_subsistema = json.eventos_canonicos_del_subsistema || []",
+            "json.eventos_canonicos_del_subsistema.push(eventoNuevo)",
+            "json.entry_point_para_devs = 'storage/tienda/estado.json'",
+            "fs.write(path, JSON.stringify(json, null, 2))"
+          ]
+        },
+        {
+          "id": "0.3",
+          "descripcion": "validar JSON cambios",
+          "pseudocodigo": [
+            "bash('node -e \"JSON.parse(require(fs).readFileSync(arquitectura/decisiones/_contratos/subsistema-tienda.contract.json))\"')",
+            "bash('node arquitectura/decisiones/_validators/subsistema-tienda.validate.js')"
+          ]
+        }
+      ],
+      "salida_esperada": "contrato v1.1.0 + blueprint padre actualizado, validator PASS",
+      "ok_explicito_antes_de_continuar": true
+    },
+
+    {
+      "id": "fase-1",
+      "nombre": "Schema y validator del estado.json",
+      "esfuerzo_horas": "1-2",
+      "depende_de": ["fase-0"],
+      "operaciones": [
+        {
+          "id": "1.1",
+          "descripcion": "crear schema AJV 2020-12 con additionalProperties:true",
+          "pseudocodigo": [
+            "schema = {",
+            "  '$schema': 'https://json-schema.org/draft/2020-12/schema',",
+            "  '$id': 'https://enki.local/arquitectura/decisiones/subsistema-tienda/estado.schema.json',",
+            "  title: 'Estado canonico de tienda por proyecto',",
+            "  type: 'object',",
+            "  additionalProperties: true,",
+            "  required: ['_version', '_updated_at', 'slug', 'activa', 'bundle', 'url_publica'],",
+            "  properties: construirProperties({ _version: { const: '1.0' }, slug: { type: 'string', minLength: 1 }, activa: { type: 'boolean' }, bundle: { type: 'object' }, url_publica: { type: 'string', format: 'uri' }, catalogo: { type: 'object' }, canales_pedido: { type: 'object' }, ofertas_activas: { type: 'array' }, pedidos_hoy: { type: 'integer', minimum: 0 }, alertas: { type: 'array' } })",
+            "}",
+            "fs.write('arquitectura/decisiones/_schemas/subsistema-tienda/estado.schema.json', JSON.stringify(schema, null, 2))"
+          ]
+        },
+        {
+          "id": "1.2",
+          "descripcion": "extender subsistema-tienda.validate.js con cross-check drift_estado_json_no_canonico",
+          "pseudocodigo": [
+            "validator = fs.read('arquitectura/decisiones/_validators/subsistema-tienda.validate.js')",
+            "definir funcion checkEstadoJson(projectsRoot) que:",
+            "  para cada proyecto en projectsRoot:",
+            "    si existe <proj>/storage/tienda/estado.json:",
+            "      contenido = fs.read(...)",
+            "      validar con AJV contra estado.schema.json",
+            "      si falla -> findings.push({ tipo: 'error', code: 'drift_estado_json_no_canonico', proyecto: proj, errores: ajv.errors })",
+            "wirear checkEstadoJson en el main del validator"
+          ]
+        },
+        {
+          "id": "1.3",
+          "descripcion": "regenerar baseline y verificar PASS",
+          "pseudocodigo": [
+            "bash('npm run validate:baseline:update')",
+            "bash('npm run validate:ci')"
+          ]
+        }
+      ],
+      "salida_esperada": "schema creado, validator extendido, validate:ci PASS",
+      "ok_explicito_antes_de_continuar": true
+    },
+
+    {
+      "id": "fase-2",
+      "nombre": "Bootstrap del estado.json en la feature tienda",
+      "esfuerzo_horas": "2-3",
+      "depende_de": ["fase-1"],
+      "operaciones": [
+        {
+          "id": "2.1",
+          "descripcion": "anyadir initialFiles['storage/tienda/estado.json'] al feature blueprint",
+          "pseudocodigo": [
+            "feature = fs.read('blueprints/project-types/tienda.json')",
+            "json = JSON.parse(feature.content)",
+            "estadoInicial = {",
+            "  '_version': '1.0',",
+            "  '_updated_at': '{{now_iso}}',",
+            "  slug: '{{slug}}',",
+            "  activa: true,",
+            "  bundle: { fuente: 'vps-local', archivos_presentes: ['index.html','manifest.json','sw.js'] },",
+            "  url_publica: 'https://enki-ai.online/shop/{{slug}}',",
+            "  catalogo: { productos_total: 0 },",
+            "  canales_pedido: {},",
+            "  ofertas_activas: [],",
+            "  pedidos_hoy: 0,",
+            "  alertas: []",
+            "}",
+            "json.initialFiles['storage/tienda/estado.json'] = JSON.stringify(estadoInicial, null, 2)",
+            "fs.write(path, JSON.stringify(json, null, 2))"
+          ]
+        },
+        {
+          "id": "2.2",
+          "descripcion": "verificar que _initializeFromBlueprint sustituye {{slug}} y {{now_iso}}",
+          "pseudocodigo": [
+            "leer modules/project-manager/index.js _initializeFromBlueprint",
+            "si helper substituteSlug NO maneja {{now_iso}}:",
+            "  extender helper para soportar {{now_iso}} -> new Date().toISOString()",
+            "  caso contrario, dejar como esta"
+          ]
+        }
+      ],
+      "salida_esperada": "feature blueprint bootstraps estado.json al activarse en un proyecto nuevo",
+      "ok_explicito_antes_de_continuar": true
+    },
+
+    {
+      "id": "fase-3",
+      "nombre": "Helper canonico para actualizar el estado.json",
+      "esfuerzo_horas": "2-3",
+      "depende_de": ["fase-2"],
+      "bloqueada_por": ["Q1"],
+      "branch_segun_Q1": {
+        "A_centralizado": {
+          "descripcion": "crear modulo nuevo tienda-estado JS POC2",
+          "operaciones": [
+            {
+              "id": "3A.1",
+              "descripcion": "scaffold modulo POC2",
+              "pseudocodigo": [
+                "bash('node arquitectura/migracion/scripts/scaffold-rewrite.js tienda-estado')",
+                "editar modules/tienda-estado/module.json: language=es, subscribes=['tienda.bundle.actualizada','oferta.creada','pedido.entrado','catalogo.actualizado'], publishes=['tienda.estado.actualizado'], persistencia.escribe=['storage/tienda/estado.json']",
+                "editar index.js: clase TiendaEstado extends BaseModule con handlers onTiendaBundleActualizada, onOfertaCreada, onPedidoEntrado, onCatalogoActualizado, todos delegan a metodo privado _aplicarPatch(projectId, patch)"
+              ]
+            },
+            {
+              "id": "3A.2",
+              "descripcion": "implementar _aplicarPatch usando fs.edit con CAS",
+              "pseudocodigo": [
+                "metodo async _aplicarPatch(projectId, patch):",
+                "  path = '/storage/tienda/estado.json'",
+                "  operations = this._patchToJsonPatch(patch)",
+                "  res = await this._publicarEvento('fs.edit.request', { project_id: projectId, path: path, operations: operations, expected_hash: null })",
+                "  si res.error: return this._handleHandlerError(res.error)",
+                "  await this._publicarEvento('tienda.estado.actualizado', { project_id: projectId, slug: patch.slug, campos_cambiados: this._extractPaths(patch), correlation_id: this._currentCorrelation, timestamp: new Date().toISOString() })"
+              ]
+            }
+          ]
+        },
+        "B_descentralizado": {
+          "descripcion": "extender cada modulo del subsistema con fs.edit directo + publish",
+          "operaciones": [
+            {
+              "id": "3B.1",
+              "descripcion": "inventariar modulos del subsistema que mutan estado",
+              "pseudocodigo": [
+                "modulos_mutadores = ['tienda-api', 'whatsapp-bot', 'cartadigital-pwa-builder']",
+                "para cada modulo en modulos_mutadores:",
+                "  identificar puntos donde modifica algo que afecta al estado.json",
+                "  anyadir post-mutacion: emit fs.edit.request al estado.json + publish tienda.estado.actualizado"
+              ]
+            },
+            {
+              "id": "3B.2",
+              "descripcion": "tests por modulo de la nueva publicacion",
+              "pseudocodigo": [
+                "para cada modulo tocado:",
+                "  tests/unit/<modulo>.test.js -> caso nuevo: mutacion X dispara fs.edit + publish tienda.estado.actualizado"
+              ]
+            }
+          ]
+        }
+      },
+      "salida_esperada": "estado.json se actualiza cuando algo del subsistema cambia",
+      "ok_explicito_antes_de_continuar": true
+    },
+
+    {
+      "id": "fase-4",
+      "nombre": "Vista del LLM via ai-gateway",
+      "esfuerzo_horas": "1-2",
+      "depende_de": ["fase-3"],
+      "bloqueada_por": ["Q2"],
+      "branch_segun_Q2": {
+        "A_siempre_por_page_id": {
+          "operaciones": [
+            {
+              "id": "4A.1",
+              "descripcion": "inyectar estado.json siempre que page_id este en lista del subsistema",
+              "pseudocodigo": [
+                "constante PAGES_TIENDA = ['carta-digital','tienda','comandero-cliente']",
+                "en _composeSystemPrompt(ctx):",
+                "  si ctx.page_id esta en PAGES_TIENDA:",
+                "    res = await this._publicarEvento('fs.read.request', { project_id: ctx.project_id, path: '/storage/tienda/estado.json' })",
+                "    si res.status === 200:",
+                "      systemPrompt = systemPrompt + '\\n\\n# ESTADO ACTUAL DE LA TIENDA\\n```json\\n' + res.content + '\\n```'"
+              ]
+            }
+          ]
+        },
+        "B_opt_in_blueprint": {
+          "operaciones": [
+            {
+              "id": "4B.1",
+              "descripcion": "leer manifest del blueprint activo",
+              "pseudocodigo": [
+                "en _composeSystemPrompt(ctx):",
+                "  blueprintHijo = await this._cargarBlueprintActivo(ctx.page_id)",
+                "  si blueprintHijo.manifest.requires_tienda_estado === true:",
+                "    inyectar estado.json (igual que rama A)"
+              ]
+            }
+          ]
+        },
+        "C_tool_bajo_demanda": {
+          "operaciones": [
+            {
+              "id": "4C.1",
+              "descripcion": "declarar tool tienda.estado.leer en blueprint padre del subsistema",
+              "pseudocodigo": [
+                "padre.tools = padre.tools || []",
+                "padre.tools.push({ name: 'tienda.estado.leer', parameters: { type: 'object', properties: { project_id: { type: 'string' } } }, handler: 'fs.read.request', handler_params_template: { project_id: '{{project_id_actual}}', path: '/storage/tienda/estado.json' } })"
+              ]
+            }
+          ]
+        }
+      },
+      "salida_esperada": "LLM razona con estado real, no con suposiciones",
+      "ok_explicito_antes_de_continuar": true
+    },
+
+    {
+      "id": "fase-5",
+      "nombre": "Vista del comerciante: TiendaDashboard.svelte",
+      "esfuerzo_horas": "3-4",
+      "depende_de": ["fase-3"],
+      "operaciones": [
+        {
+          "id": "5.1",
+          "descripcion": "crear componente Svelte",
+          "pseudocodigo": [
+            "fs.write('frontend/src/lib/modules/tienda/TiendaDashboard.svelte', plantilla con:",
+            "  - script setup: usar mqttClient para fs.read.request al estado.json del project_id activo",
+            "  - subscribe a tienda.estado.actualizado para refrescos en vivo",
+            "  - cards: Tu tienda, Canales, Pedidos hoy, Alertas",
+            "  - botones de accion: Regenerar PWA, Editar branding, Ver pedidos)"
+          ]
+        },
+        {
+          "id": "5.2",
+          "descripcion": "integrar en ProjectPanel cuando metadata.features incluye tienda",
+          "pseudocodigo": [
+            "abrir frontend/src/routes/projects/[id]/+page.svelte o equivalente",
+            "anyadir bloque condicional: {#if project.metadata.features.includes('tienda')} <TiendaDashboard projectId={project.id} slug={project.slug} /> {/if}"
+          ]
+        },
+        {
+          "id": "5.3",
+          "descripcion": "test visual manual",
+          "pseudocodigo": [
+            "bash('npm run dev:frontend')",
+            "abrir proyecto vapers con feature tienda activa",
+            "verificar que dashboard muestra estado actual correctamente"
+          ]
+        }
+      ],
+      "salida_esperada": "comerciante ve su tienda de un vistazo en el panel",
+      "ok_explicito_antes_de_continuar": true
+    },
+
+    {
+      "id": "fase-6",
+      "nombre": "Documentacion entry point",
+      "esfuerzo_horas": "0.5",
+      "depende_de": ["fase-5"],
+      "operaciones": [
+        {
+          "id": "6.1",
+          "descripcion": "actualizar entrada de subsistema-tienda en CLAUDE.md",
+          "pseudocodigo": [
+            "leer CLAUDE.md",
+            "localizar parrafo de subsistema-tienda.contract.json",
+            "anyadir frase: 'Entry point para entender una tienda concreta: leer storage/tienda/estado.json del proyecto + este contrato.'"
+          ]
+        }
+      ],
+      "salida_esperada": "dev nuevo encuentra el entry point en 30 segundos",
+      "ok_explicito_antes_de_continuar": false
+    },
+
+    {
+      "id": "fase-7",
+      "nombre": "Migracion manual del estado.json de vapers",
+      "esfuerzo_horas": "0.5",
+      "depende_de": ["fase-3"],
+      "operaciones": [
+        {
+          "id": "7.1",
+          "descripcion": "construir estado.json del proyecto vapers reflejando disco actual",
+          "pseudocodigo": [
+            "leer /opt/enki/data/projects/<uuid-vapers>/storage/tienda/bundle/ via fs.read.request",
+            "construir estado inicial con datos reales: slug='vapers', activa=true, nombre_negocio='Vapers Alhama', bundle.fuente='vps-local', bundle.ultimo_deploy_at=mtime del index.html, bundle.tamano_bytes=size index.html, url_publica='https://enki-ai.online/shop/vapers', catalogo.productos_total=15, canales_pedido.whatsapp={activo:true, numero:'+34643283034'}",
+            "escribir via fs.write.request al estado.json del proyecto",
+            "verificar que TiendaDashboard.svelte lo refleja"
+          ]
+        }
+      ],
+      "salida_esperada": "vapers tiene su estado.json sin esperar a la proxima feature install",
+      "ok_explicito_antes_de_continuar": false
+    },
+
+    {
+      "id": "fase-8",
+      "nombre": "Test runtime end-to-end",
+      "esfuerzo_horas": "1",
+      "depende_de": ["fase-7"],
+      "operaciones": [
+        {
+          "id": "8.1",
+          "descripcion": "extender tests/runtime-cases/subsistema-tienda-pwa-servida.js",
+          "pseudocodigo": [
+            "anyadir PASO 7: verificar storage/tienda/estado.json existe tras activar feature",
+            "  estado = busRequest('fs.read.request', { project_id, path: '/storage/tienda/estado.json' })",
+            "  assert estado.content existe",
+            "  json = JSON.parse(estado.content)",
+            "  assert json.slug === EXPECTED_SLUG",
+            "  assert json.url_publica === 'https://enki-ai.online/shop/' + EXPECTED_SLUG",
+            "  assert json.bundle.fuente === 'vps-local'",
+            "anyadir PASO 8: verificar tienda.estado.actualizado se emite tras mutacion sintetica",
+            "  publicar evento sintetico (ej. catalogo.actualizado) y esperar tienda.estado.actualizado correlacionado"
+          ]
+        },
+        {
+          "id": "8.2",
+          "descripcion": "correr test e2e",
+          "pseudocodigo": [
+            "bash('node tests/runtime-cases/subsistema-tienda-pwa-servida.js')",
+            "verificar exit 0 + asserts PASS"
+          ]
+        }
+      ],
+      "salida_esperada": "test runtime cubre el ciclo completo del estado.json",
+      "ok_explicito_antes_de_continuar": true
+    }
+  ],
+
+  "estimacion_total_horas": "12-19",
+
+  "prohibido_absoluto": [
+    "Cerrar bundle.fuente como enum estricto (es esbozo, no closed)",
+    "Mover estado.json a sitio global /opt/enki/data/tienda-estado.json (es por proyecto)",
+    "Tirar cf-worker o static-template.js o export-cli.js (conviven)",
+    "Refactorizar comandero-cliente-builder como parte del subsistema-tienda (namespace propio)",
+    "Inyectar estado.json al LLM en TODOS los turnos sin filtrar por page_id si Q2=A (perdida de tokens)",
+    "Mantener contadores en tiempo real sin haber respondido Q3",
+    "Crear schema cf-worker en estado.json sin un proyecto real que lo necesite (recomendacion Q4=C)",
+    "Reescribir tienda.json feature (vivo en v1.0.0, solo se extiende)",
+    "Usar Object.assign en pseudocodigo de blueprints (pseudocodigo-estilo.contract anti-patron)",
+    "Usar rest-spread con renombrado en destructuring en pseudocodigo (idem)",
+    "Crear PR sin OK explicito del usuario",
+    "Mergear PR sin OK explicito + CI verde",
+    "Saltar la disciplina disciplina-llm-operador (declarar las 3 listas al arrancar)"
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "C1",
+      "regla": "validate:ci PASS sin drift nuevo despues de cada fase",
+      "comando": "npm run validate:ci"
+    },
+    {
+      "id": "C2",
+      "regla": "tests unit PASS si la fase toca un modulo con tests",
+      "comando": "npm run test:<modulo>"
+    },
+    {
+      "id": "C3",
+      "regla": "git status limpio + commit con mensaje canonico antes de pedir OK siguiente fase",
+      "comando": "git status && git log -1 --oneline"
+    },
+    {
+      "id": "C4",
+      "regla": "tienda.estado.actualizado emite con correlation_id cuando se publica desde un handler en cadena",
+      "verificacion": "leer el codigo del helper de fase-3 y confirmar que propaga correlation_id"
+    }
+  ],
+
+  "salida_final_del_horizonte": {
+    "objeto_canonico_en_disco": "<base_path>/storage/tienda/estado.json por proyecto con feature tienda activa",
+    "evento_canonico_en_bus": "tienda.estado.actualizado emitido por cada mutacion del subsistema",
+    "vista_operador": "Read directo o fs.read.request al estado.json",
+    "vista_dev_nuevo": "CLAUDE.md apunta al estado.json como entry point",
+    "vista_llm": "ai-gateway inyecta el estado.json al system prompt segun Q2",
+    "vista_comerciante": "TiendaDashboard.svelte en el ProjectPanel del proyecto activo",
+    "test_runtime_verde": "tests/runtime-cases/subsistema-tienda-pwa-servida.js PASS con PASOs 7+8"
+  },
+
+  "como_arrancar_la_proxima_sesion": {
+    "mensaje_literal_para_pegar": "Vamos a implementar el objeto canonico storage/tienda/estado.json y sus cuatro vistas. Caso piloto: vapers. Lee arquitectura/decisiones/propuestas/tienda-estado-canonico-y-vistas.json entero. Declara las 3 listas de axiomas_a_declarar_al_arrancar_la_sesion (verifico / asumo / no toco) en tu primer mensaje. Luego salta a Fase 0: cierra conmigo las 4 preguntas de preguntas_abiertas_para_el_usuario en orden. NO toques codigo hasta que las 4 esten respondidas Y yo haya dado OK explicito. NO crees PR sin OK explicito mio. NO mergees sin OK explicito mio + CI verde.",
+    "que_hace_el_llm_con_las_respuestas": [
+      "Las guarda en este JSON sustituyendo cada respuesta_usuario: null por la respuesta + 1 linea de motivo si la hay",
+      "Para y pide OK explicito antes de Fase 1",
+      "Ejecuta Fases 1-8 parando a pedir OK entre cada una"
+    ]
+  },
+
+  "patron_vivo_a_respetar": [
+    "No precompilar decisiones abiertas --las 4 preguntas se hacen al usuario, no se cierran solo porque parecen obvias (disciplina ana)",
+    "subsistema-tienda complementa la verticalidad de vertical-tienda-pwa-sin-datos --no la reemplaza. Ambos horizontes pueden ejecutarse en paralelo o secuencia segun prioridad del usuario.",
+    "Sin migrar piezas legacy (cf-worker, static-template.js, export-cli.js) en este horizonte. Solo cuadrarlos en el estado.json como bundle.fuente.",
+    "El tienda.json feature (vivo desde v1.0.0) es la pieza canonica de bootstrap del subsistema. No se reescribe --se extiende con el initialFiles['storage/tienda/estado.json']."
+  ],
+
+  "cosas_que_NO_se_incluyen_en_este_plan": [
+    "Migracion del cf-worker o static-template.js o export-cli.js. Esas piezas legacy quedan como estan.",
+    "Cambio del modelo de despliegue (Caddy local vs Netlify / cf-worker). Ambos coexisten; el estado.json describe cual usa cada proyecto.",
+    "Refactor de comandero-cliente-builder. No es del subsistema-tienda.",
+    "Cualquier cambio en tienda-api o whatsapp-bot mas alla de publicar eventos que el estado.json refleja."
+  ],
+
+  "frase_resumen_para_retomar": "Cuatro perfiles miran la tienda: operador, dev nuevo, LLM, comerciante. Todos consumen el mismo storage/tienda/estado.json. Primer paso: cerrar las 4 preguntas abiertas. Sin eso, no se toca codigo."
+}

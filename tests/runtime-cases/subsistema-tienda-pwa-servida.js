@@ -161,6 +161,16 @@ async function main() {
     console.log('');
 
     // ============================================================
+    // PASO 1.5 — Activar proyecto (filesystem cache base_path)
+    // ============================================================
+    console.log('PASO 1.5: activar proyecto (filesystem cachea base_path via project.activated)');
+    await uiRequest('project', 'activate', { id: projectId });
+    // Pequenya pausa para que project.activated propague al subscriber del filesystem
+    await new Promise(r => setTimeout(r, 500));
+    console.log('  ' + String.fromCharCode(10003) + ' proyecto activado');
+    console.log('');
+
+    // ============================================================
     // PASO 2 — Activar feature 'tienda'
     // ============================================================
     console.log('PASO 2: activar feature tienda');

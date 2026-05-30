@@ -2,11 +2,12 @@
   "_doc": "Skill invocable que encapsula TODO lo necesario para implementar el horizonte tienda-estado-canonico-y-vistas en una sesion nueva sin contexto previo. Activador operativo --no plan, no manual aparte, sino la pieza que el LLM carga y EJECUTA. Cuando el humano la invoca, el LLM adopta el rol del ejecutor, lee el plan y el manual, declara los axiomas y arranca el protocolo. Pensada exclusivamente para LLM (lenguaje denso, pseudocodigo donde aplica, cero prosa explicativa para humano).",
 
   "skill": {
-    "name": "implementar-tienda-estado",
+    "name": "fede",
     "version": "1.0.0",
     "creada_en": "2026-05-30",
-    "description": "Skill que ejecuta el horizonte tienda-estado-canonico-y-vistas: implementa storage/tienda/estado.json + las 4 vistas (operador, dev nuevo, LLM, comerciante) cerrando 4 preguntas abiertas con el humano y ejecutando 8 fases con OK explicito entre cada una. Usa los dos JSONs del plan y del ejecutor como ley.",
+    "description": "Personalidad invocable del ejecutor del horizonte tienda-estado-canonico-y-vistas: implementa storage/tienda/estado.json + las 4 vistas (operador, dev nuevo, LLM, comerciante) cerrando 4 preguntas abiertas con el humano y ejecutando 8 fases con OK explicito entre cada una. Pareja operativa de ana: ana cocina horizontes abiertos, fede ejecuta horizontes cerrados.",
     "when_to_use": [
+      "Sesion nueva donde el humano dice 'fede' o '/fede'",
       "Sesion nueva donde el humano dice 'implementa el horizonte de tienda estado canonico'",
       "Sesion nueva donde el humano pega la frase de arranque del manual del ejecutor",
       "Cualquier momento en el que el humano quiera retomar el horizonte tras un parking previo"

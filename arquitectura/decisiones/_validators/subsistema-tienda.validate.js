@@ -6,7 +6,7 @@
  *
  *   1. drift_modulo_toca_tienda_sin_declarar           (error)
  *      Modulos cuyo index.js o blueprint contiene escrituras a paths
- *      'public/tienda/...' DEBEN declarar tienda_paths_escritos[] en
+ *      'storage/tienda/bundle/...' DEBEN declarar tienda_paths_escritos[] en
  *      module.json (modulos JS) o extends subsistema-tienda.modulo-base
  *      (blueprints).
  *
@@ -16,7 +16,7 @@
  *
  *   3. drift_tienda_path_fuera_de_public_tienda        (error)
  *      Heuristico textual: si una escritura detectada incluye 'public/'
- *      pero NO 'public/tienda/', drift.
+ *      pero NO 'storage/tienda/bundle/', drift.
  *
  *   4. drift_caddy_block_tienda_no_canonico            (warning)
  *      deployment/caddy/Caddyfile.vps contiene exactamente un bloque
@@ -66,11 +66,9 @@ const YEL = '\x1b[33m';
 const CYAN = '\x1b[36m';
 const RST = '\x1b[0m';
 
-// Regex para detectar escrituras a paths 'public/tienda/...' en codigo fuente
-// Captura strings literales que contienen 'public/tienda/'.
-const PUBLIC_TIENDA_WRITE_RE = /['"`]([^'"`]*public\/tienda\/[^'"`]*)['"`]/g;
-// Heuristico: detectar 'public/<algo>' que NO sea 'public/tienda/'
-const PUBLIC_NO_TIENDA_RE = /['"`]([^'"`]*\/public\/(?!tienda\/)[^'"`]*)['"`]/g;
+// Regex para detectar escrituras a paths 'storage/tienda/bundle/...' en codigo fuente
+// Captura strings literales que contienen 'storage/tienda/bundle/'.
+const TIENDA_BUNDLE_WRITE_RE = /['"`]([^'"`]*storage\/tienda\/bundle\/[^'"`]*)['"`]/g;
 
 const PROHIBITED_EXT_RE = /\.(env|git|ssh|key|pem)$/i;
 
@@ -154,7 +152,7 @@ function scanModule(moduleDir, validate) {
     try { bp = JSON.parse(fs.readFileSync(blueprintPath, 'utf8')); } catch {}
   }
 
-  // Detect writes to public/tienda/ in source files
+  // Detect writes to storage/tienda/bundle/ in source files
   const sources = [];
   if (fs.existsSync(indexJsPath)) {
     try { sources.push({ file: indexJsPath, content: fs.readFileSync(indexJsPath, 'utf8') }); } catch {}
@@ -167,8 +165,8 @@ function scanModule(moduleDir, validate) {
   const pathsDetectados = new Set();
   for (const src of sources) {
     let match;
-    PUBLIC_TIENDA_WRITE_RE.lastIndex = 0;
-    while ((match = PUBLIC_TIENDA_WRITE_RE.exec(src.content)) !== null) {
+    TIENDA_BUNDLE_WRITE_RE.lastIndex = 0;
+    while ((match = TIENDA_BUNDLE_WRITE_RE.exec(src.content)) !== null) {
       tocaTienda = true;
       pathsDetectados.add(match[1]);
     }
@@ -182,7 +180,7 @@ function scanModule(moduleDir, validate) {
       findings.push({
         severity: 'error',
         drift_id: 'drift_modulo_toca_tienda_sin_declarar',
-        detail: `${moduleName} escribe a public/tienda/ pero no declara tienda_paths_escritos[] en module.json ni extends subsistema-tienda.modulo-base`
+        detail: `${moduleName} escribe a storage/tienda/bundle/ pero no declara tienda_paths_escritos[] en module.json ni extends subsistema-tienda.modulo-base`
       });
     }
   }

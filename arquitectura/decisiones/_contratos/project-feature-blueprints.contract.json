@@ -81,7 +81,7 @@
     {
       "id": "feature_blueprint_symlinks_declarativos",
       "regla": "El campo opcional symlinks[] declara enlaces simbolicos que project-manager debe crear fuera del base_path. Cada entrada: { source: '<path-relativo-al-base_path>', target: '<path-absoluto-en-vps>' }. target puede usar {{slug}}. El aplicador crea el dir parent del target si no existe.",
-      "razon": "Nuevo en v1.0. Sirve a feature 'tienda' (symlink /opt/enki/public/tiendas/<slug> → <base_path>/public/tienda/) y a cualquier futura feature que necesite enlazar contenido del proyecto a un path publico del sistema."
+      "razon": "Nuevo en v1.0. Sirve a feature 'tienda' (symlink /opt/enki/public/tiendas/<slug> → <base_path>/storage/tienda/bundle/) y a cualquier futura feature que necesite enlazar contenido del proyecto a un path publico del sistema."
     },
     {
       "id": "feature_blueprint_verify_after_declarativo",

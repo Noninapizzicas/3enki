@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-30T00:23:58.202Z",
-  "total": 2325,
+  "generated_at": "2026-05-30T03:41:06.710Z",
+  "total": 2324,
   "by_validator": {
     "naming": 40,
     "events": 185,
@@ -28,10 +28,10 @@
     "llm-runtime-discipline": 8,
     "project-identity": 11,
     "project-feature-blueprints": 2,
-    "subsistema-tienda": 2
+    "subsistema-tienda": 1
   },
   "by_severity": {
-    "warning": 2119,
+    "warning": 2118,
     "info": 145,
     "error": 89
   },
@@ -1917,8 +1917,7 @@
     "project-identity|drift_slugify_fuera_de_project_manager|modules/database-manager/index.js:641 — recompute local de slug en contexto de project (project-identity.PROH1)",
     "scheduling|drift_setinterval_subsegundo|modules/pizzepos/cuentas-canales/index.js:361 — setInterval cada 60ms (limite 100ms). Repensar el patron.",
     "security|drift_secret_en_log|modules/conversation-export/index.js:118 — variable sospechosa (apiKey/token/password/authorization) en objeto de logger; verificar manualmente que no expone valor",
-    "subsistema-tienda|drift_caddy_block_tienda_no_canonico|deployment/caddy/Caddyfile.vps no contiene bloque canonico 'handle_path /tienda/*' con root '/opt/enki/public/tiendas' (trabajo pendiente del contrato)",
-    "subsistema-tienda|drift_caddyfile_contiene_vapers_legacy|deployment/caddy/Caddyfile.vps contiene bloque legacy 'handle_path /vapers/*' — migrar a /tienda/<slug> via feature",
+    "subsistema-tienda|drift_caddyfile_contiene_vapers_legacy|deployment/caddy/Caddyfile.vps contiene bloque legacy 'handle_path /vapers/*' — migrar a /shop/<slug> via feature",
     "testing|drift_test_filesystem_persistente|tests/unit/admin-panel.test.js:25 — fs.mkdirSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/admin-panel.test.js:26 — fs.writeFileSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/bienvenida-tienda.test.js:44 — fs.mkdirSync fuera de os.tmpdir()",

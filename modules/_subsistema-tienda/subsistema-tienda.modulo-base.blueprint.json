@@ -11,8 +11,8 @@
   "modelo_de_contenido_de_la_tienda": {
     "_descripcion": "Donde vive el bundle de la PWA dentro del proyecto y como se accede desde fuera.",
     "path_canonico_del_bundle": "public/tienda/ (relativo al base_path del proyecto)",
-    "url_publica_canonica": "https://<dominio>/tienda/<slug>/",
-    "symlink_canonico": "/opt/enki/public/tiendas/<slug> -> <base_path>/public/tienda/",
+    "url_publica_canonica": "https://<dominio>/shop/<slug>/",
+    "symlink_canonico": "/opt/enki/public/shop/<slug> -> <base_path>/public/tienda/",
     "creado_por": "feature 'tienda' al activarse (project-feature-blueprints + project-manager._initializeFromBlueprint)"
   },
 
@@ -21,7 +21,7 @@
     "obligatorios": [
       {
         "nombre": "index.html",
-        "rol": "Entry point. Lo que Caddy sirve cuando se accede a /tienda/<slug>/. file_server con try_files /index.html."
+        "rol": "Entry point. Lo que Caddy sirve cuando se accede a /shop/<slug>/. file_server con try_files /index.html."
       },
       {
         "nombre": "manifest.json",
@@ -96,7 +96,7 @@
     ],
     "ejemplos_invalidos": [
       "public/tienda/../bundle.html  (path traversal)",
-      "/opt/enki/public/tiendas/foo  (path absoluto del VPS)",
+      "/opt/enki/public/shop/foo  (path absoluto del VPS)",
       "public/tienda/.env             (extension prohibida)",
       "public/tienda/credenciales.key (extension prohibida)"
     ]
@@ -107,7 +107,7 @@
     "no": [
       "NO escribe fuera de public/tienda/ del proyecto destino.",
       "NO escribe archivos con extensiones prohibidas (.env, .git, .ssh, .key, .pem).",
-      "NO modifica directamente /opt/enki/public/tiendas/<slug> (eso lo gestiona project-manager via symlinks de la feature).",
+      "NO modifica directamente /opt/enki/public/shop/<slug> (eso lo gestiona project-manager via symlinks de la feature).",
       "NO bypassa el evento canonico tienda.bundle.actualizada al cerrar.",
       "NO escribe sin atomicidad (vease regla_de_atomicidad)."
     ]

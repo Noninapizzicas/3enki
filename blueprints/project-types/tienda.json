@@ -2,7 +2,7 @@
   "id": "tienda",
   "label": "Tienda",
   "icon": "🛍",
-  "description": "PWA publica del proyecto. Accesible en /tienda/<slug>.",
+  "description": "PWA publica del proyecto. Accesible en /shop/<slug>.",
 
   "dependencies": [],
 
@@ -16,7 +16,7 @@
     "tienda": {
       "enabled": true,
       "slug": "{{slug}}",
-      "public_url": "/tienda/{{slug}}",
+      "public_url": "/shop/{{slug}}",
       "bundle_dir": "public/tienda"
     }
   },
@@ -26,7 +26,7 @@
     "public/tienda/manifest.json": {
       "name": "{{slug}}",
       "short_name": "{{slug}}",
-      "start_url": "/tienda/{{slug}}/",
+      "start_url": "/shop/{{slug}}/",
       "display": "standalone",
       "background_color": "#0a0a0a",
       "theme_color": "#0a0a0a"
@@ -35,7 +35,7 @@
   },
 
   "symlinks": [
-    { "source": "public/tienda", "target": "/opt/enki/public/tiendas/{{slug}}" }
+    { "source": "public/tienda", "target": "/opt/enki/public/shop/{{slug}}" }
   ],
 
   "verify_after": [

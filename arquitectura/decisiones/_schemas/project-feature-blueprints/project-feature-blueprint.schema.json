@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/project-feature-blueprints/project-feature-blueprint.schema.json",
+  "title": "Project Feature Blueprint",
+  "description": "Shape canonico de cada blueprints/project-types/<id>.json. Declarativo. Sin codigo. Backwards compatible con los 2 blueprints existentes (pizzepos.json, facturas.json) — los campos nuevos (symlinks, verify_after, slug_required) son opcionales.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "label", "icon", "description", "dependencies", "directories"],
+
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+      "minLength": 2,
+      "maxLength": 40,
+      "description": "Identificador canonico del feature. kebab-case ASCII. Coincide con el filename sin .json."
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "description": "Nombre legible para mostrar en el frontend (ej: 'PizzePOS', 'Facturas')."
+    },
+    "icon": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8,
+      "description": "Emoji o caracter unico que representa al feature en la UI."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 300,
+      "description": "Frase corta que explica que hace el feature."
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "description": "Lista de ids de otros features que este feature requiere. El validador comprueba que existan."
+    },
+    "directories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_./-]+$"
+      },
+      "uniqueItems": true,
+      "description": "Paths RELATIVOS al base_path del proyecto. NO empiezan por /. NO contienen '..' (path traversal). Prefijo 'storage/' se renamespacia automaticamente a 'storage/<id>/' por project-manager."
+    },
+    "config": {
+      "type": "object",
+      "description": "Fragmento de configuracion que se mergea en <base_path>/config/config.json al aplicar el feature. {{slug}} se sustituye por project.slug si el feature declara slug_required:true.",
+      "additionalProperties": true
+    },
+    "copyHandlersFrom": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+      "description": "Id de proyecto plantilla cuyos handlers/*.js se copian al base_path/handlers/ del proyecto destino."
+    },
+    "initialFiles": {
+      "type": "object",
+      "description": "Archivos a escribir en <base_path>/<path> con contenido inicial. Si valor es objeto/array/primitivo, se escribe JSON.stringify. Si valor es string que empieza por 'template:', es path a un template en blueprints/project-types/_templates/.",
+      "additionalProperties": {
+        "anyOf": [
+          { "type": "object" },
+          { "type": "array" },
+          { "type": "string" },
+          { "type": "number" },
+          { "type": "boolean" },
+          { "type": "null" }
+        ]
+      }
+    },
+    "symlinks": {
+      "type": "array",
+      "description": "Enlaces simbolicos a crear fuera del base_path al aplicar el feature. Nuevo en v1.0 del contrato. project-manager crea el dir parent del target si no existe. target puede usar {{slug}}.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "target"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_./-]+$",
+            "description": "Path RELATIVO al base_path del proyecto que apunta al contenido a enlazar."
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Path ABSOLUTO en el VPS donde crear el symlink. Puede usar {{slug}}."
+          }
+        }
+      }
+    },
+    "verify_after": {
+      "type": "array",
+      "description": "Paths que deben existir tras aplicar el feature. project-manager los verifica como post-condition. Si falla, applied:false + warning.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_./-]+$"
+      },
+      "uniqueItems": true
+    },
+    "slug_required": {
+      "type": "boolean",
+      "description": "Si true, project-manager rechaza add-features del feature sobre proyectos sin slug. Obligatorio cuando {{slug}} se usa en config, initialFiles, directories o symlinks."
+    }
+  }
+}

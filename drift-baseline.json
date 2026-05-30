@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-29T23:58:07.731Z",
-  "total": 2322,
+  "generated_at": "2026-05-30T00:03:06.163Z",
+  "total": 2323,
   "by_validator": {
     "naming": 40,
     "events": 185,
@@ -19,17 +19,18 @@
     "security": 1,
     "testing": 69,
     "multi-tenancy": 217,
-    "documentation": 89,
+    "documentation": 88,
     "versionado": 1,
     "deployment": 4,
     "module-loading": 1,
     "modulo-clase-robusta": 20,
     "scheduling": 1,
     "llm-runtime-discipline": 8,
-    "project-identity": 11
+    "project-identity": 11,
+    "project-feature-blueprints": 2
   },
   "by_severity": {
-    "warning": 2116,
+    "warning": 2117,
     "info": 145,
     "error": 89
   },
@@ -217,7 +218,6 @@
     "deployment|drift_install_script_no_ejecutable|scripts/install-linux.sh sin bit ejecutable (chmod +x necesario para usuarios)",
     "deployment|drift_install_script_no_ejecutable|scripts/install-termux.sh sin bit ejecutable (chmod +x necesario para usuarios)",
     "documentation|drift_contrato_sin_validator|agente-blueprint sin validator en _validators/agente-blueprint.validate.js",
-    "documentation|drift_contrato_sin_validator|project-feature-blueprints sin validator en _validators/project-feature-blueprints.validate.js",
     "documentation|drift_contrato_sin_validator|subsistema-tienda sin validator en _validators/subsistema-tienda.validate.js",
     "documentation|drift_contrato_sin_validator|system-coherence-analyzer sin validator en _validators/system-coherence-analyzer.validate.js",
     "documentation|drift_contratos_sin_indice_en_claudemd|contrato \"bus-transport\" no aparece referenciado en CLAUDE.md (sesion futura no lo descubrira)",
@@ -1901,6 +1901,8 @@
     "persistence|drift_undeclared_persistence_pattern|staff-manager — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|system-inspector — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|ui-designer — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
+    "project-feature-blueprints|drift_feature_copyHandlersFrom_inexistente|blueprints/project-types/facturas.json copyHandlersFrom='facturas-nonina' no resuelve a directorio con .js",
+    "project-feature-blueprints|drift_feature_copyHandlersFrom_inexistente|blueprints/project-types/pizzepos.json copyHandlersFrom='pizzepos' no resuelve a directorio con .js",
     "project-identity|drift_modulo_persistente_sin_subscribe_project_activated|modules/comandero-cliente-builder/module.json — tools .crear|.actualizar|.eliminar sin 'project.activated' en subscribes (project-identity.P1)",
     "project-identity|drift_modulo_persistente_sin_subscribe_project_activated|modules/pase-cocina/module.json — tools .crear|.actualizar|.eliminar sin 'project.activated' en subscribes (project-identity.P1)",
     "project-identity|drift_modulo_persistente_sin_subscribe_project_activated|modules/pizzepos/cuentas-canales/module.json — tools .crear|.actualizar|.eliminar sin 'project.activated' en subscribes (project-identity.P1)",

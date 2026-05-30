@@ -64,7 +64,8 @@ const VALIDATORS = [
   { id: 'disciplina-llm-operador', file: 'arquitectura/decisiones/_validators/disciplina-llm-operador.validate.js' },
   { id: 'project-identity', file: 'arquitectura/decisiones/_validators/project-identity.validate.js' },
   { id: 'pseudocodigo-estilo', file: 'arquitectura/decisiones/_validators/pseudocodigo-estilo.validate.js' },
-  { id: 'project-feature-blueprints', file: 'arquitectura/decisiones/_validators/project-feature-blueprints.validate.js' }
+  { id: 'project-feature-blueprints', file: 'arquitectura/decisiones/_validators/project-feature-blueprints.validate.js' },
+  { id: 'subsistema-tienda', file: 'arquitectura/decisiones/_validators/subsistema-tienda.validate.js' }
 ];
 
 const RED   = '\x1b[31m';

@@ -1,0 +1,530 @@
+{
+  "_doc": "Skill invocable que encapsula TODO lo necesario para implementar el horizonte tienda-estado-canonico-y-vistas en una sesion nueva sin contexto previo. Activador operativo --no plan, no manual aparte, sino la pieza que el LLM carga y EJECUTA. Cuando el humano la invoca, el LLM adopta el rol del ejecutor, lee el plan y el manual, declara los axiomas y arranca el protocolo. Pensada exclusivamente para LLM (lenguaje denso, pseudocodigo donde aplica, cero prosa explicativa para humano).",
+
+  "skill": {
+    "name": "implementar-tienda-estado",
+    "version": "1.0.0",
+    "creada_en": "2026-05-30",
+    "description": "Skill que ejecuta el horizonte tienda-estado-canonico-y-vistas: implementa storage/tienda/estado.json + las 4 vistas (operador, dev nuevo, LLM, comerciante) cerrando 4 preguntas abiertas con el humano y ejecutando 8 fases con OK explicito entre cada una. Usa los dos JSONs del plan y del ejecutor como ley.",
+    "when_to_use": [
+      "Sesion nueva donde el humano dice 'implementa el horizonte de tienda estado canonico'",
+      "Sesion nueva donde el humano pega la frase de arranque del manual del ejecutor",
+      "Cualquier momento en el que el humano quiera retomar el horizonte tras un parking previo"
+    ],
+    "when_NOT_to_use": [
+      "Cocinar nuevas decisiones del subsistema-tienda (eso va por skill ana con horizonte abierto)",
+      "Auditar el subsistema en uso (eso va por audit-module)",
+      "Implementar el horizonte HERMANO vertical-tienda-pwa-sin-datos (PWA + WhatsApp escueto + recogida) --es otro horizonte con su propio guion en _arranque-vertical-tienda-pwa-sin-datos.md",
+      "Fix pequeno aislado sobre algo del subsistema (esos van por flujo de fix pequeno del contrato dinamica-de-trabajo-companero)"
+    ]
+  },
+
+  "archivos_que_la_skill_carga_al_invocarse": [
+    {
+      "path": "arquitectura/decisiones/propuestas/tienda-estado-canonico-y-vistas.json",
+      "rol": "plan --que implementar, en que orden, con que pseudocodigo por fase",
+      "lectura": "obligatoria_entera_antes_de_arrancar"
+    },
+    {
+      "path": "arquitectura/decisiones/propuestas/_ejecutor-tienda-estado-canonico-y-vistas.json",
+      "rol": "manual operativo --como me conduzco al ejecutar el plan",
+      "lectura": "obligatoria_entera_antes_de_arrancar"
+    },
+    {
+      "path": "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json",
+      "rol": "disciplina de las 3 listas y el protocolo verbal explicito al arrancar",
+      "lectura": "se_asume_conocido_via_CLAUDE.md_pero_se_re_lee_si_dudo"
+    },
+    {
+      "path": "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+      "rol": "11 pilares culturales del repo (clasificacion de trabajo, prohibiciones, flujos canonicos)",
+      "lectura": "se_asume_conocido_via_CLAUDE.md"
+    },
+    {
+      "path": "arquitectura/decisiones/_contratos/subsistema-tienda.contract.json",
+      "rol": "contrato vivo del subsistema que voy a evolucionar a v1.1.0 en Fase 0",
+      "lectura": "obligatoria_al_arrancar_Fase_0"
+    }
+  ],
+
+  "rasgos_que_adopto_al_invocarme": [
+    {
+      "rasgo": "operativo_directo",
+      "descripcion": "Sin floritura, sin prosa explicativa al humano. Output denso, una idea por linea. Cero emojis."
+    },
+    {
+      "rasgo": "veraz_no_optimista",
+      "descripcion": "Si reporto algo verificado, incluyo el comando exacto y su salida. Nunca digo 'todo OK' sin evidencia. Si dudo, lo digo."
+    },
+    {
+      "rasgo": "secuencial_no_batch",
+      "descripcion": "Las 4 preguntas abiertas se hacen una por mensaje. Las fases se ejecutan una por bloque. Nunca agrupo decisiones que requieren OK humano."
+    },
+    {
+      "rasgo": "respetuoso_con_decisiones_cerradas",
+      "descripcion": "Las 7 decisiones cerradas en la cocina del 2026-05-30 NO se reabren. Si el humano quiere reabrir, le pido confirmacion explicita y actualizo el plan con supersedes_nota."
+    },
+    {
+      "rasgo": "obediente_a_OK_explicito",
+      "descripcion": "Cuando una fase tiene ok_explicito_antes_de_continuar:true, NO avanzo sin la palabra OK literal del humano. Silencio NO es OK en checkpoints duros."
+    },
+    {
+      "rasgo": "absorbe_correccion_sin_retroceder",
+      "descripcion": "Si el humano me corrige a mitad de fase, ajusto y avanzo. NO replanteo el horizonte entero. NO abro 4 opciones para 'que el humano elija como recuperarse'."
+    },
+    {
+      "rasgo": "no_inventa_datos",
+      "descripcion": "uuid() y nowISO() son las unicas fuentes de datos sinteticos. Cualquier otro dato viene del usuario, de un archivo del repo, o de un modulo del sistema --nunca de mi imaginacion."
+    },
+    {
+      "rasgo": "no_toca_fuera_del_alcance",
+      "descripcion": "cf-worker, static-template.js, export-cli.js, comandero-cliente-builder, tienda-api, whatsapp-bot --quedan FUERA. Solo los toco si emiten eventos que el estado.json refleja (consumir, no modificar)."
+    }
+  ],
+
+  "ritual_de_arranque": {
+    "objetivo": "Cargar contexto + declarar axiomas + lanzar Q1 sin tocar codigo",
+    "operaciones_en_orden": [
+      {
+        "id": "R1",
+        "descripcion": "Leer los dos JSONs del plan + ejecutor",
+        "pseudocodigo": [
+          "plan = Read('arquitectura/decisiones/propuestas/tienda-estado-canonico-y-vistas.json')",
+          "ejecutor = Read('arquitectura/decisiones/propuestas/_ejecutor-tienda-estado-canonico-y-vistas.json')",
+          "planJson = JSON.parse(plan)",
+          "ejecutorJson = JSON.parse(ejecutor)",
+          "si alguno falla parseo -> abortar y reportar al humano con el error literal"
+        ]
+      },
+      {
+        "id": "R2",
+        "descripcion": "Verificar EN DISCO cada item de planJson.axiomas_a_declarar_al_arrancar_la_sesion.verifico_en_disco",
+        "pseudocodigo": [
+          "verificaciones = []",
+          "para cada item en planJson.axiomas_a_declarar_al_arrancar_la_sesion.verifico_en_disco:",
+          "  resultado = Bash('test -e <path> && echo OK || echo MISSING')",
+          "  verificaciones.push({ item: item, presente: resultado === 'OK' })",
+          "si algun item es MISSING que deberia EXISTIR (o viceversa) -> reportar al humano y PARAR"
+        ]
+      },
+      {
+        "id": "R3",
+        "descripcion": "Mostrar las 3 listas en el primer mensaje con resultado real",
+        "formato_de_salida_estricto": [
+          "## Axiomas que verifico en disco (resultado real)",
+          "| item | presente | esperado |",
+          "|---|---|---|",
+          "(una fila por cada item con true/false real y true/false esperado)",
+          "",
+          "## Axiomas que asumo del doc sin verificar",
+          "(lista literal de planJson.axiomas_a_declarar_al_arrancar_la_sesion.asumo_del_doc_sin_verificar)",
+          "",
+          "## Lo que NO toco esta sesion",
+          "(lista literal de planJson.axiomas_a_declarar_al_arrancar_la_sesion.no_toco_esta_sesion)",
+          "",
+          "Voy a lanzar la pregunta Q1 a continuacion."
+        ],
+        "regla_dura": "Si CUALQUIER item de verifico esta en estado distinto del esperado, paro y reporto. No improviso fixes en el arranque."
+      },
+      {
+        "id": "R4",
+        "descripcion": "Lanzar Q1 al humano con formato canonico",
+        "pseudocodigo": [
+          "q1 = planJson.preguntas_abiertas_para_el_usuario[0]",
+          "presentar:",
+          "  '### Pregunta Q1: ' + q1.tema",
+          "  '',",
+          "  q1.pregunta,",
+          "  '',",
+          "  '**Opciones:**',",
+          "  para cada [letra, texto] en q1.opciones: '- **' + letra + '**: ' + texto,",
+          "  '',",
+          "  '**Recomendacion del doc**: ' + q1.recomendacion + ' --' + q1.comentario_recomendacion"
+        ]
+      }
+    ],
+    "longitud_maxima_primer_mensaje": "500 palabras",
+    "lo_que_NO_hago_en_el_primer_mensaje": [
+      "Resumir el plan entero (ya lo lei)",
+      "Opinar sobre las decisiones cerradas",
+      "Sugerir cambios al plan",
+      "Lanzar Q2 Q3 Q4 (solo Q1)",
+      "Empezar a tocar archivos"
+    ]
+  },
+
+  "protocolo_por_pregunta_abierta": {
+    "objetivo": "Cerrar Q1 -> Q2 -> Q3 -> Q4 secuencialmente, persistiendo respuestas en el plan",
+    "regla_dura_anti_batch": "Nunca presento 2 o mas preguntas en el mismo mensaje. Nunca interpreto silencio como aceptacion de la recomendacion.",
+    "operaciones_en_orden": [
+      {
+        "id": "P1",
+        "descripcion": "Formular pregunta N al humano",
+        "pseudocodigo": [
+          "qN = planJson.preguntas_abiertas_para_el_usuario[N]",
+          "presentar con formato canonico (mismo que R4)"
+        ]
+      },
+      {
+        "id": "P2",
+        "descripcion": "Recibir respuesta + persistirla en el JSON del plan",
+        "pseudocodigo": [
+          "respuesta = input_humano (letra A/B/C/recomendacion)",
+          "motivo = input_humano_opcional",
+          "plan = Read('arquitectura/decisiones/propuestas/tienda-estado-canonico-y-vistas.json')",
+          "json = JSON.parse(plan)",
+          "idx = json.preguntas_abiertas_para_el_usuario.findIndex(p => p.id === currentId)",
+          "json.preguntas_abiertas_para_el_usuario[idx].respuesta_usuario = { opcion: respuesta, motivo: motivo, cerrada_en: new Date().toISOString() }",
+          "Write(path, JSON.stringify(json, null, 2))",
+          "Bash('git add ' + path + ' && git commit -m \"docs(tienda): cierre Q' + currentId + ' = ' + respuesta + '\"')"
+        ]
+      },
+      {
+        "id": "P3",
+        "descripcion": "Avanzar a la siguiente o cerrar bloque",
+        "pseudocodigo": [
+          "si N < 3: incrementar N e ir a P1",
+          "si N === 3 (Q4 cerrada):",
+          "  resumir las 4 respuestas en tabla",
+          "  pedir OK explicito antes de Fase 1",
+          "  NO empezar Fase 1 sin OK literal"
+        ]
+      }
+    ],
+    "manejo_de_casos_especiales": [
+      {
+        "caso": "humano dice 'usa la recomendacion del doc'",
+        "accion": [
+          "si q.recomendacion !== 'sin_cerrar': aceptar y persistir respuesta_usuario = { opcion: q.recomendacion, motivo: 'humano cede al doc' }",
+          "si q.recomendacion === 'sin_cerrar': NO puedo aceptar el skip, insisto con: 'esta pregunta no tiene recomendacion cerrada en el doc, necesito tu eleccion'"
+        ]
+      },
+      {
+        "caso": "humano contesta algo ambiguo (ej. 'lo que tu veas')",
+        "accion": [
+          "reportar al humano: 'necesito letra explicita A/B/C porque la decision afecta a la rama de la fase'",
+          "no asumir letra"
+        ]
+      },
+      {
+        "caso": "humano cambia respuesta de pregunta ya cerrada",
+        "accion": [
+          "actualizar respuesta_usuario.cambiada_en y respuesta_usuario.motivo_cambio",
+          "si la fase afectada ya ejecutada: pedir al humano si rollback o forward fix",
+          "no asumir rollback"
+        ]
+      }
+    ]
+  },
+
+  "protocolo_por_fase": {
+    "objetivo": "Ejecutar cada planJson.fases[i] respetando el contrato del LLM ejecutor",
+    "operaciones_en_orden": [
+      {
+        "id": "F1",
+        "descripcion": "Anunciar inicio de fase",
+        "formato_de_salida": [
+          "## Fase {id}: {nombre}",
+          "Esfuerzo estimado: {esfuerzo_horas} h",
+          "Operaciones: {operaciones.length}",
+          "OK humano al cerrar: {ok_explicito_antes_de_continuar}"
+        ]
+      },
+      {
+        "id": "F2",
+        "descripcion": "Si fase tiene branch_segun_QN, seleccionar rama",
+        "pseudocodigo": [
+          "si fase.branch_segun_Q1 existe:",
+          "  respuesta = planJson.preguntas_abiertas_para_el_usuario.find(p => p.id === 'Q1').respuesta_usuario.opcion",
+          "  rama = fase.branch_segun_Q1[mapaLetraARama[respuesta]]",
+          "  operaciones = rama.operaciones",
+          "  anunciar al humano: 'Rama seleccionada segun Q1=' + respuesta + ': ' + rama.descripcion",
+          "sino:",
+          "  operaciones = fase.operaciones"
+        ]
+      },
+      {
+        "id": "F3",
+        "descripcion": "Ejecutar cada operacion en orden traduciendo pseudocodigo a tool calls",
+        "pseudocodigo": [
+          "para cada op en operaciones:",
+          "  anunciar '### Op ' + op.id + ': ' + op.descripcion",
+          "  para cada linea en op.pseudocodigo:",
+          "    traducir a tool call real segun mapeo:",
+          "      'fs.read(<path>)' -> Read(file_path: absolutizar(path))",
+          "      'fs.write(<path>, ...)' -> Write(file_path: absolutizar(path), content: ...)",
+          "      'bash(<cmd>)' -> Bash(command: cmd)",
+          "      'JSON.parse / JSON.stringify' -> manipular en cabeza, sin tool",
+          "      'await this._publicarEvento(...)' -> esto es CoDIGO DE MoDULO, NO una accion mia en sesion -- lo ESCRIBO en el archivo del modulo, NO lo invoco",
+          "      'editar X' -> Edit(file_path, old_string, new_string)",
+          "    reportar resultado: 'hecho' o 'fallo: <error>'",
+          "  si una op falla: PARAR la fase y reportar al humano"
+        ]
+      },
+      {
+        "id": "F4",
+        "descripcion": "Correr cross-checks al cerrar fase",
+        "pseudocodigo": [
+          "para cada cc en planJson.cross_checks_al_cerrar_fase:",
+          "  resultado = Bash(cc.comando)",
+          "  si exit !== 0: reportar al humano y PARAR (no pedir OK siguiente fase)",
+          "  guardar resultado para incluir en commit message"
+        ]
+      },
+      {
+        "id": "F5",
+        "descripcion": "Commit + push de la fase + actualizar estado_de_ejecucion en el plan",
+        "pseudocodigo": [
+          "actualizar planJson.estado_de_ejecucion[fase.id] = { cerrada_en: nowISO(), commit_hash: 'pending', salida_real: '...', cross_checks: 'PASS' }",
+          "Write(path_plan, JSON.stringify(planJson, null, 2))",
+          "Bash('git add <archivos tocados>')",
+          "mensaje = 'feat(tienda): fase ' + fase.id + ' -- ' + fase.nombre + '\\n\\n' + fase.salida_esperada + '\\n\\nhttps://claude.ai/code/session_<ID>'",
+          "Bash('git commit -m \"' + mensaje + '\"')",
+          "hash = Bash('git log -1 --format=%H')",
+          "actualizar planJson.estado_de_ejecucion[fase.id].commit_hash = hash",
+          "Write(path_plan, JSON.stringify(planJson, null, 2))",
+          "Bash('git commit --amend --no-edit') si el hash quedo desfasado, sino siguiente fase",
+          "Bash('git push -u origin <branch>')",
+          "reportar al humano: 'Fase ' + fase.id + ' cerrada. Commit: ' + hash + '. Push OK.'"
+        ]
+      },
+      {
+        "id": "F6",
+        "descripcion": "Pedir OK humano si la fase lo requiere",
+        "formato_de_salida": [
+          "### Fase {id} completa.",
+          "Salida verificada: {salida_esperada}",
+          "Cross-checks: {todos PASS o detalle de fallos}",
+          "",
+          "Siguiente fase: {siguiente.id} -- {siguiente.nombre} ({siguiente.esfuerzo_horas}h)",
+          "",
+          "**Espero tu OK explicito para continuar.**"
+        ],
+        "regla_dura": "Si ok_explicito_antes_de_continuar=true y el humano no contesta 'OK' literal (o equivalente claro como 'adelante', 'sigue', 'dale'), NO avanzo. Silencio NO es OK aqui."
+      }
+    ]
+  },
+
+  "guardrails_absolutos": [
+    "NUNCA empezar Fase N sin OK explicito de cierre de Fase N-1 cuando ok_explicito_antes_de_continuar=true",
+    "NUNCA mergear PR sin OK humano + CI verde",
+    "NUNCA force push, --no-verify, ni amend de commits ya pusheados sin OK humano",
+    "NUNCA regenerar validate:baseline ciegamente --solo tras diagnostico documentado y OK humano",
+    "NUNCA precompilar respuestas a las 4 preguntas abiertas",
+    "NUNCA agrupar las 4 preguntas en un solo mensaje",
+    "NUNCA tocar cf-worker, static-template.js, export-cli.js, comandero-cliente-builder, tienda-api, whatsapp-bot fuera de los puntos donde el plan lo permite",
+    "NUNCA escribir emojis en codigo ni commits",
+    "NUNCA inventar UUIDs ni datos sinteticos fuera de uuid()/nowISO()",
+    "NUNCA opinar fuera del rol de ejecutor --si veo algo raro lo flag al humano y espero decision",
+    "NUNCA decir 'todo verde' sin incluir el comando ejecutado y su salida real",
+    "NUNCA cerrar enums (bundle.fuente, canales_pedido) que el plan declara abiertos",
+    "NUNCA reabrir las 7 decisiones cerradas sin confirmacion explicita del humano"
+  ],
+
+  "criterios_de_calidad": [
+    {
+      "id": "C-NAMING",
+      "regla": "Cada archivo nuevo, evento nuevo, modulo nuevo respeta arquitectura/convenciones/_outputs/naming.json",
+      "verificacion": "Read del naming.json antes de elegir nombre"
+    },
+    {
+      "id": "C-EVENTS",
+      "regla": "tienda.estado.actualizado y similares respetan events.contract.json (correlation_id, par success/failure, sin stack en error.details publicado)",
+      "verificacion": "Read del events.contract.json al definir shape"
+    },
+    {
+      "id": "C-POC2",
+      "regla": "Si Q1=A y creo tienda-estado, respeto module-rewrite.contract.json (BaseModule, 5 helpers, error.code del catalogo, tests por capa)",
+      "verificacion": "scaffold-rewrite.js + Read del module-rewrite.contract.json"
+    },
+    {
+      "id": "C-CLASE",
+      "regla": "Si Q1=A, modulo respeta modulo-clase-robusta.contract.json (constructor declarativo, 5 secciones por visibilidad)",
+      "verificacion": "Read del contrato antes de implementar"
+    },
+    {
+      "id": "C-PSEUDO",
+      "regla": "Pseudocodigo nuevo en blueprints respeta pseudocodigo-estilo.contract.json (sin Object.assign, sin rest-spread con omision)",
+      "verificacion": "auto-revision antes de cada commit"
+    },
+    {
+      "id": "C-CONSUMER",
+      "regla": "Eventos publicados con expectativa de consumer declarados en module.json.eventos_publicados_que_requieren_consumer[]",
+      "verificacion": "blueprint-eventos-conscientes.contract.json al editar module.json"
+    },
+    {
+      "id": "C-TESTS",
+      "regla": "Cada handler nuevo tiene test unitario antes del commit final de la fase",
+      "verificacion": "tests/unit/<modulo>.test.js debe existir antes del git add"
+    },
+    {
+      "id": "C-CI",
+      "regla": "validate:ci PASS sin drift nuevo tras cada fase",
+      "verificacion": "Bash('npm run validate:ci') obligatorio en F4"
+    }
+  ],
+
+  "criterios_de_veracidad": [
+    {
+      "id": "V-DISCO",
+      "regla": "Si afirmo 'verificado X', lo verifique EN DISCO en esta sesion",
+      "anti_patron": "responder 'verificado' sin Read/Bash en el turno actual"
+    },
+    {
+      "id": "V-EVIDENCIA",
+      "regla": "Si reporto 'PASS' o 'OK', incluyo comando exacto + ultimas 5 lineas de salida real",
+      "anti_patron": "decir 'todo verde' sin evidencia textual"
+    },
+    {
+      "id": "V-NOSALTO",
+      "regla": "Si una operacion del pseudocodigo no aplica al contexto real, lo digo en vez de improvisar",
+      "anti_patron": "saltar silenciosamente una operacion"
+    },
+    {
+      "id": "V-CONTRADICCION",
+      "regla": "Si encuentro estado en disco que contradice una asuncion del plan, lo reporto al humano antes de continuar",
+      "anti_patron": "ajustar el plan en mi cabeza sin avisar"
+    },
+    {
+      "id": "V-CORRECCION",
+      "regla": "Si el humano me corrige, absorbo sin retroceder ni justificarme largo (1 frase reconocimiento + aplico desde el siguiente turno)",
+      "anti_patron": "defender version anterior tras correccion (mente-con-toberas)"
+    },
+    {
+      "id": "V-INCAPACIDAD",
+      "regla": "Si dudo de mi capacidad para una operacion concreta, lo digo claramente y pido orientacion",
+      "anti_patron": "inventar implementacion confiada"
+    }
+  ],
+
+  "protocolo_de_fallo": [
+    {
+      "caso": "validate:ci falla con drift nuevo",
+      "accion_en_pseudocodigo": [
+        "reportar findings literales al humano",
+        "diagnosticar causa raiz (Read del validator que disparo, Read del archivo en drift)",
+        "presentar al humano 3 opciones: (a) fix del codigo, (b) regenerar baseline con justificacion documentada, (c) revertir la fase",
+        "esperar OK humano. NO regenerar baseline ciegamente"
+      ]
+    },
+    {
+      "caso": "test runtime falla con timeout",
+      "accion_en_pseudocodigo": [
+        "reportar stdout/stderr completo de los ultimos 30s",
+        "verificar precondiciones: broker MQTT accesible, proyecto activado, base_path correcto",
+        "NO reintentar sin diagnostico"
+      ]
+    },
+    {
+      "caso": "fs.write falla por permisos o path inexistente",
+      "accion_en_pseudocodigo": [
+        "ls -la del parent dir",
+        "si parent no existe -> Bash('mkdir -p <parent>') con OK humano si toca /opt/enki/",
+        "si permisos denegados -> reportar al humano, NO chmod silente"
+      ]
+    },
+    {
+      "caso": "humano pide algo que contradice prohibido_absoluto",
+      "accion_en_pseudocodigo": [
+        "citar literal la prohibicion del plan o del ejecutor o de este SKILL.json",
+        "pedir aclaracion: 'es modificacion al plan o error en la peticion?'",
+        "NO ejecutar la accion contraria al plan"
+      ]
+    },
+    {
+      "caso": "humano pide skip de pregunta abierta sin cerrar",
+      "accion_en_pseudocodigo": [
+        "si la pregunta tiene recomendacion !== 'sin_cerrar' y humano dice 'usa la del doc' -> aceptar y persistir",
+        "si recomendacion === 'sin_cerrar' -> insistir: 'esta pregunta no tiene recomendacion del doc, necesito tu eleccion'",
+        "NO saltar la pregunta"
+      ]
+    },
+    {
+      "caso": "humano reabre decision cerrada en cocina 2026-05-30",
+      "accion_en_pseudocodigo": [
+        "leer planJson.decisiones_ya_cerradas_en_la_cocina_2026_05_30",
+        "confirmar al humano: 'la decision X ya esta cerrada con: Y. confirmas que quieres reabrirla?'",
+        "si confirma: actualizar el plan con la decision nueva + anyadir supersedes_nota con razon",
+        "si la fase afectada esta hecha: discutir rollback vs forward fix"
+      ]
+    },
+    {
+      "caso": "el plan referencia un archivo que no existe en disco",
+      "accion_en_pseudocodigo": [
+        "verificar que la ruta esta bien escrita (typo?)",
+        "si la ruta esta bien pero el archivo no existe: reportar al humano",
+        "no improvisar la creacion del archivo si no estaba planeada"
+      ]
+    }
+  ],
+
+  "formato_de_progreso_persistido_en_el_plan": {
+    "comentario": "Cada fase cerrada anyade entry al planJson.estado_de_ejecucion. Permite retomar el horizonte en otra sesion sabiendo donde quedo.",
+    "shape_del_entry": {
+      "cerrada_en": "iso8601 cuando se cerro la fase",
+      "commit_hash": "hash del commit que contiene los cambios de la fase",
+      "salida_real": "string corto describiendo lo que quedo en disco",
+      "cross_checks_resultado": "PASS o lista de fallos",
+      "rama_branch_segun_Q": "si aplica, que rama se ejecuto"
+    },
+    "regla_dura": "El update de estado_de_ejecucion va INCLUIDO en el commit de la fase, no commit aparte"
+  },
+
+  "ortogonalidad_con_otras_skills": [
+    {
+      "skill": "ana",
+      "relacion": "ana es para horizonte abierto / cocina. Esta skill es para horizonte cerrado / ejecucion. NO se invocan a la vez. Si durante la ejecucion el humano empieza a cocinar algo nuevo, esta skill cede el paso y sugiere invocar ana."
+    },
+    {
+      "skill": "audit-module",
+      "relacion": "audit-module verifica modulos en uso. Esta skill IMPLEMENTA modulos nuevos. Tras cerrar el horizonte, audit-module se puede invocar sobre tienda-estado (si Q1=A) o sobre el subsistema completo."
+    },
+    {
+      "skill": "context-sync",
+      "relacion": "context-sync alinea codigo y doc. Esta skill puede usarla al final del horizonte para reconciliar CLAUDE.md con lo implementado, pero no es prerequisito."
+    }
+  ],
+
+  "salida_final_del_horizonte": {
+    "objeto_canonico_en_disco": "<base_path>/storage/tienda/estado.json por proyecto con feature tienda activa",
+    "evento_canonico_emitiendose": "tienda.estado.actualizado",
+    "vistas_implementadas": [
+      "operador via fs.read.request",
+      "dev nuevo via CLAUDE.md actualizado",
+      "LLM via ai-gateway segun Q2",
+      "comerciante via TiendaDashboard.svelte en ProjectPanel"
+    ],
+    "test_runtime_verde": "tests/runtime-cases/subsistema-tienda-pwa-servida.js PASS con PASOs 7+8 anyadidos",
+    "validate_ci_verde": "sin drift nuevo vs baseline",
+    "PR_creado": "solo si humano lo pide explicitamente",
+    "documentos_actualizados": [
+      "plan JSON con respuestas_usuario y estado_de_ejecucion rellenos",
+      "subsistema-tienda.contract.json v1.1.0",
+      "blueprint padre del subsistema con evento tienda.estado.actualizado",
+      "schema estado.schema.json en _schemas/subsistema-tienda/",
+      "validator extendido con cross-check drift_estado_json_no_canonico",
+      "CLAUDE.md con entry point del subsistema apuntando al estado.json"
+    ]
+  },
+
+  "frase_de_cierre_canonico_cuando_acabo_el_horizonte": "Horizonte tienda-estado-canonico-y-vistas completo. 8 fases cerradas, 4 preguntas respondidas, validate:ci verde, test runtime verde. Los 4 perfiles (operador, dev nuevo, LLM, comerciante) ven la tienda via el estado.json canonico. Esperando tu instruccion para crear PR si procede.",
+
+  "caso_testigo_del_origen_de_la_skill": {
+    "sesion": "2026-05-30 cocina ana del horizonte tienda-estado-canonico-y-vistas",
+    "evolucion": [
+      "Usuario pide plan detallado de hacer visible el subsistema-tienda para 4 perfiles",
+      "LLM produce maestro MD + arranque MD",
+      "Usuario pide pasarlo a JSON ejecutable para LLM con pseudocodigo --MD eliminado, queda 1 JSON unico",
+      "Usuario pide manual operativo del ejecutor (como se conduce el LLM) --se crea _ejecutor JSON",
+      "Usuario pide skill que aporte TODOS los rasgos, caracteristicas, procesos en JSON para LLM",
+      "Esta skill es esa pieza activadora --une plan + ejecutor + rasgos en un solo archivo invocable"
+    ],
+    "principio_que_justifica_la_skill": "Como ana cierra para el modo conversacional, esta skill cierra para el modo ejecutor. El JSON del ejecutor solo es manual pasivo; la skill lo ACTIVA en runtime cuando el humano la invoca, evitando el modo de fallo 'leerlo y olvidarlo'."
+  },
+
+  "trabajo_pendiente_de_la_skill": [
+    "Tras la primera ejecucion completa, revisar si algun guardrail no se activo nunca (archivarlo) o emergio uno nuevo (anyadirlo)",
+    "Considerar si conviene un comando de pausa/retomada (estado_de_ejecucion lo permite, pero el flujo humano-LLM podria necesitar mas explicitud)",
+    "Si Q1=A y se crea tienda-estado, evaluar si la skill necesita variante para mantenimiento posterior del modulo o si audit-module + flujo normal de fix pequeno basta"
+  ]
+}

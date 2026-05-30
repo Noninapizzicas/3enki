@@ -64,6 +64,12 @@ pizzepos.es {
 	#
 	# Cuando se regenere el bundle (comandero-cliente.bundle.generar), latest.html
 	# se reemplaza atómicamente — Caddy sirve la versión nueva sin reload.
+	#
+	# (LEGACY) — bloque `/vapers/*` se mantiene transitoriamente para no romper la
+	# URL pública existente de Vapers. Se eliminará tras migrar el bundle al
+	# directorio canónico /opt/enki/public/shop/<slug> (subsistema-tienda
+	# v1.0.0). Ver `arquitectura/decisiones/_contratos/subsistema-tienda.contract.json`
+	# trabajo_pendiente.
 	handle_path /vapers/* {
 		root * /opt/enki/data/projects/37bc1282-e44c-467c-bb75-3d605255c9d2/storage/comandero-cliente-builder/bundles
 		try_files {path} /latest.html
@@ -72,6 +78,29 @@ pizzepos.es {
 
 	handle /vapers {
 		redir /vapers/ permanent
+	}
+
+	# (NUEVO subsistema-tienda v1.0.0) — PWA pública por proyecto en `/shop/<slug>`.
+	# Sirve archivos estáticos desde /opt/enki/public/shop/<slug>/ donde cada
+	# subdirectorio es un symlink creado por project-manager al activar la
+	# feature `tienda` (ver blueprints/project-types/tienda.json).
+	#
+	# Convención URL → filesystem:
+	#   GET /shop/vapers/         → /opt/enki/public/shop/vapers/index.html
+	#   GET /shop/vapers/sw.js    → /opt/enki/public/shop/vapers/sw.js
+	#   GET /shop/<otro>/         → /opt/enki/public/shop/<otro>/index.html
+	#
+	# Una sola regla para todos los proyectos. Añadir proyecto nuevo NO requiere
+	# editar este Caddyfile NI hacer reload — el symlink lo crea project-manager
+	# cuando se activa la feature.
+	#
+	# El backend de pedidos sigue en /tienda/pedido/:project (bloque anterior,
+	# reverse_proxy a tienda-api). NO colisiona porque `/tienda/*` y `/shop/*`
+	# son namespaces separados.
+	handle_path /shop/* {
+		root * /opt/enki/public/shop
+		try_files {path} {path}/index.html /index.html
+		file_server
 	}
 
 	# Frontend SvelteKit (adapter-node) → todo lo demás

@@ -20,7 +20,7 @@
  *
  *   4. drift_caddy_block_tienda_no_canonico            (warning)
  *      deployment/caddy/Caddyfile.vps contiene exactamente un bloque
- *      'handle_path /tienda/*' con root * /opt/enki/public/tiendas.
+ *      'handle_path /shop/*' con root * /opt/enki/public/shop.
  *      Hoy es trabajo pendiente — drift expected.
  *
  *   5. drift_feature_tienda_no_declara_slug_required   (error si existe el feature)
@@ -33,7 +33,7 @@
  *
  *   7. drift_caddyfile_contiene_vapers_legacy          (warning)
  *      El Caddyfile tiene bloque /vapers/* legacy. Conviene migrar
- *      a /tienda/<slug>.
+ *      a /shop/<slug>.
  *
  *   8. drift_modulo_padre_subsistema_tienda_inexistente (warning)
  *      modules/_subsistema-tienda/subsistema-tienda.modulo-base.blueprint.json
@@ -235,13 +235,13 @@ function checkCaddyfile() {
   }
   const content = fs.readFileSync(CADDYFILE_PATH, 'utf8');
 
-  // Check canonical /tienda/* block
-  const tiendaBlockRe = /handle_path\s+\/tienda\/\*\s*\{[^}]*root\s+\*\s+\/opt\/enki\/public\/tiendas/;
+  // Check canonical /shop/* block
+  const tiendaBlockRe = /handle_path\s+\/shop\/\*\s*\{[^}]*root\s+\*\s+\/opt\/enki\/public\/shop/;
   if (!tiendaBlockRe.test(content)) {
     findings.push({
       severity: 'warning',
       drift_id: 'drift_caddy_block_tienda_no_canonico',
-      detail: `${path.relative(REPO_ROOT, CADDYFILE_PATH)} no contiene bloque canonico 'handle_path /tienda/*' con root '/opt/enki/public/tiendas' (trabajo pendiente del contrato)`
+      detail: `${path.relative(REPO_ROOT, CADDYFILE_PATH)} no contiene bloque canonico 'handle_path /shop/*' con root '/opt/enki/public/shop' (trabajo pendiente del contrato)`
     });
   }
 
@@ -250,12 +250,12 @@ function checkCaddyfile() {
     findings.push({
       severity: 'warning',
       drift_id: 'drift_caddyfile_contiene_vapers_legacy',
-      detail: `${path.relative(REPO_ROOT, CADDYFILE_PATH)} contiene bloque legacy 'handle_path /vapers/*' — migrar a /tienda/<slug> via feature`
+      detail: `${path.relative(REPO_ROOT, CADDYFILE_PATH)} contiene bloque legacy 'handle_path /vapers/*' — migrar a /shop/<slug> via feature`
     });
   }
 
-  // Check no /tienda/<slug>/* blocks specific
-  const specificRe = /handle_path\s+\/tienda\/[a-z0-9_-]+\/\*/g;
+  // Check no /shop/<slug>/* blocks specific
+  const specificRe = /handle_path\s+\/shop\/[a-z0-9_-]+\/\*/g;
   let m;
   while ((m = specificRe.exec(content)) !== null) {
     findings.push({

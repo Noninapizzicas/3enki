@@ -1,0 +1,182 @@
+{
+  "_doc": "Propuesta arquitectonica que captura la decision cerrada de pre-apertura DETERMINISTA de cajones desde el cliente (mime-type de adjuntos + regex de palabras clave fuertes) ANTES de que el comerciante pulse enter, y APARQUE la linea alternativa de un LLM local que correria como AJAX al teclear para abrir/cerrar cajones a-coordinadamente con el LLM exterior. Identifica ademas un patron arquitectonico emergente (actores a-coordinados sobre estado compartido) que el repo aun no canoniza y que merece quedar observado por si emerge en mas casos. Origen empirico: sesion 2026-05-30 sobre menu-generator como puerta de entrada del sistema. Primer doc del repo en el ESTANDAR NUEVO: propuestas en JSON con lenguaje para LLM y pseudo-codigo si procede (antes eran markdown narrativo).",
+
+  "id": "cajones-anticipados-llm-local-ajax",
+  "tipo": "propuesta",
+  "version": "1.0.0",
+  "creada": "2026-05-30",
+  "estado": "decision_cerrada_con_linea_aparcada",
+
+  "origen_empirico": {
+    "sesion": "2026-05-30",
+    "skill_activa": "ana",
+    "rama": "claude/read-claude-md-74wst",
+    "contexto": "Conversacion sobre menu-generator como puerta de entrada del sistema POS / tienda. Al analizar la limitacion del modulo de no aceptar PDF/imagen/audio, el usuario articulo que el LLM companero debe tener disponibles habitaciones de pre-procesamiento (pdf-extractor, ocr-vision, audio-to-text, etc.) y que cualquier modulo que reciba input fuera de su cometido lo devuelve al companero para que enrute. Sobre esa linea base, el usuario propuso una idea adicional: que un LLM local pequenyo corriera como AJAX al teclear para pre-configurar los cajones del contexto, ahorrando una llamada al LLM exterior. La conversacion concluyo que la idea es elegante pero el dolor que cubre no esta medido, y que la solucion deterministica del lado del cliente cubre el 100% de los adjuntos (caso mas doloroso percibido) sin pieza nueva."
+  },
+
+  "problema_que_cubre": [
+    "El LLM exterior (deepseek/anthropic/etc) en page=menu-generator necesita 2 llamadas para procesar input que no llega con cajones pre-abiertos: una para decidir que cajon abrir y otra para ejecutar la operacion. Esto suma 2-4 segundos perceptibles por turno en una fraccion de las interacciones.",
+    "Adjuntos no-textuales del comerciante (PDF de factura del proveedor, foto de pizarra, audio dictando catalogo) no se procesan hoy en menu-generator porque el modulo solo acepta texto/JSON. Sin pre-procesamiento, el comerciante con catalogo en PDF/foto queda fuera de la puerta de entrada.",
+    "Decidir cajones desde el LLM exterior cuesta tokens y latencia que se acumulan a lo largo de la sesion del comerciante."
+  ],
+
+  "decisiones_cerradas": [
+    {
+      "id": "1_pre_apertura_determinista_en_cliente",
+      "decision": "El cliente (PWA del comerciante) ejecuta pre-procesado determinista del input ANTES de enviar al LLM exterior. La logica determinista actua sobre dos senyales: (1) mime-type de cualquier adjunto que el comerciante adjunte, (2) regex / parser ligero sobre palabras clave fuertes del texto en progreso (ej. 'genera carta', 'crea producto', 'tengo PDF', 'aqui tienes', 'catalogo del distribuidor'). El resultado abre cajones del contexto antes del enter.",
+      "razon": "Cubre el 100% de los adjuntos (caso mas doloroso percibido) y el 70-80% de los casos con texto puro fuerte. Cero coste operativo. Cero pieza nueva. Cero observabilidad nueva. La logica vive en el cliente; el LLM exterior trabaja con contexto pre-configurado cuando llega enter.",
+      "alcance_estimado": "100% adjuntos + 70-80% texto con palabras clave fuertes = ~80% del total de turnos del comerciante.",
+      "alcance_no_cubierto": "El 20% restante (texto natural matizado sin palabras clave fuertes) cae al patron de hoy: LLM exterior decide cajon en una llamada, ejecuta en otra. Sigue funcionando, solo con 2-4 segundos extra perceptibles en esos turnos."
+    }
+  ],
+
+  "lineas_aparcadas": [
+    {
+      "id": "2_llm_local_ajax_acoordinado",
+      "descripcion": "Un LLM local pequenyo (Ollama con llama-3.2-1B/3B, phi-3-mini, gemma-2-2b, o proveedor barato tipo Groq) corre como AJAX al teclear (debounced ~300-500ms, activacion tras umbral minimo de caracteres). Lee el texto en progreso del comerciante. Decide cajones a abrir/cerrar. Actua sobre el mismo estado del contexto que el LLM exterior. CERO ORQUESTACION entre ambos: el LLM local solo durante entrada de texto, el LLM exterior solo en enter. Si el local abre cajon equivocado, el exterior actua con cajon incorrecto, el comerciante ve respuesta desviada y corrige escribiendo - el loop natural del chat es la correccion, no se ingenia mecanismo de revertir.",
+      "razon_de_aparque": "Cero metrica de dolor hoy. La intuicion del usuario es que ahorraria llamadas al exterior, pero no esta medida la latencia/coste actual de las llamadas-de-decision en deepseek. El principio rector del repo (LLM + agentes cuando duele) prohibe extraer complejidad sin dato real. Meter LLM local tiene coste real de mantenimiento (modelo, infra, debounce, observabilidad, fallos del modelo, actualizaciones) que solo compensa cuando el dolor se demuestre.",
+      "criterios_de_reactivacion": [
+        "Metrica de runtime real (capturada via persistencia-comandero u otra observabilidad) muestre latencia perceptible en la sesion tipica del comerciante - umbral tentativo: >5 segundos acumulados de espera por sesion atribuibles a llamadas-de-decision de cajon.",
+        "Coste agregado de las llamadas-de-decision a deepseek (u otro provider exterior) empiece a pesar en factura - umbral tentativo: >1% del coste total mensual de inferencia.",
+        "Emerja una capacidad nueva del LLM local que cambie el coste-beneficio (proveedor con inferencia <100ms tipo Groq nuevo modelo barato, o Ollama con modelo pequenyo que iguale calidad de decision con consumo bajo en VPS)."
+      ],
+      "filosofia_arquitectonica_que_propone": "Especializacion dimensional del LLM. Hoy el sistema tiene UN LLM por proyecto (provider configurado). Esta linea propone multiples LLMs con roles distintos coexistiendo: LLM exterior potente para razonamiento profundo y generacion, LLM local pequenyo para decisiones rapidas y clasificacion. Cada uno corre cuando aporta. Es composicion por especializacion, no monolito.",
+      "patron_que_materializa": "actores_acoordinados_sobre_estado_compartido (ver patrones_emergentes_observados)"
+    }
+  ],
+
+  "patrones_emergentes_observados": [
+    {
+      "id": "actores_acoordinados_sobre_estado_compartido",
+      "descripcion": "Multiples actores (LLMs, agentes, scripts, regex client-side) operando sobre la misma estructura de datos (en este caso, los cajones del contexto de la sesion), independientemente, en momentos disjuntos del ciclo de interaccion. SIN protocolo entre ellos. SIN mensajes que se intercambien. SIN handshake. La convergencia sobre el estado es eventual y se resuelve por el comportamiento natural del usuario (correccion conversacional en este caso). Cada actor solo conoce SU rol y SU momento; ninguno conoce a los demas.",
+      "instancias_analogas_del_mundo_real": [
+        "IntelliSense del IDE: motor de autocompletado corre mientras tecleas, no conoce al compilador. Si sugiere mal, el desarrollador acepta o no. Cero coordinacion explicita entre autocompletado y compilacion final.",
+        "Edicion optimista en UIs colaborativas (Figma, Google Docs, Linear): las acciones se aplican localmente antes de confirmar; si emerge conflicto se reconcilia con la siguiente entrada del usuario. Cero locks, cero acuerdos previos.",
+        "CRDTs en sistemas distribuidos: nodos operan sobre el estado local sin coordinarse, convergencia eventual garantizada por las propiedades algebraicas del estado."
+      ],
+      "casos_observados_en_el_repo_hoy": [
+        "Memorias modulares que publican chat.context.enriched con su priority sin coordinarse entre si (memory-user-profile, memory-rag, memory-conversation-summary). Cada una emite, prompt-builder agrega ordenado. Es proto-patron observable.",
+        "El propio diseno de cajones-context-partitioning: el LLM autonomo abre y cierra cajones por iniciativa propia sin coordinarse con otros agentes que pudieran querer abrir tambien. Si bien hoy hay un solo LLM autonomo, el modelo deja la puerta abierta."
+      ],
+      "candidato_a_canonizar": "Aun no. Hoy el patron se observa en 1-2 instancias del repo (memorias modulares + diseno cajones). Para canonizar como contrato transversal hace falta minimo 3-4 casos donde el patron emerja organicamente. Cuando emerja la tercera instancia (LLM local de esta propuesta o cualquier otra), entonces conviene canonizar en _contratos/actores-acoordinados-sobre-estado-compartido.contract.json (nombre tentativo).",
+      "valor_de_observarlo_ahora": "Que cuando emerja la siguiente instancia, ya este nombrado y reconocible. Sin nombre, cada instancia se reinventa y se redescubre. Con nombre observado, se reconoce y se reusa el patron."
+    }
+  ],
+
+  "pseudocodigo_decision_cerrada": {
+    "_descripcion": "Mecanica determinista que el cliente (PWA del comerciante) ejecuta sobre el input del chat para pre-abrir cajones ANTES de pulsar enter. Pseudo-codigo verboso siguiendo pseudocodigo-estilo.contract.json (sin ES6 denso, sin rest-spread con renaming, sin Object.assign, explicito).",
+    "pasos": [
+      "// Disparado en dos eventos del cliente:",
+      "//   (a) keyboard event 'input' sobre el textarea del chat, con debounce de 300ms.",
+      "//   (b) file attach event cuando el comerciante adjunta archivo.",
+      "",
+      "function preAbrirCajonesDeterminista(input_actual, adjuntos_actuales, cajones_del_page) {",
+      "  // input_actual: string con el texto en progreso del comerciante.",
+      "  // adjuntos_actuales: array de File objects ya adjuntados (puede estar vacio).",
+      "  // cajones_del_page: array de objetos { id, descripcion, accepted_input_types } visibles en la page activa.",
+      "  // Devuelve: array de cajon_id que el cliente debe SOLICITAR ABRIR (via tool cajon.abrir) o CERRAR (via cajon.cerrar).",
+      "",
+      "  cajones_a_abrir = [];",
+      "  cajones_a_cerrar = [];",
+      "",
+      "  // CAPA 1: adjuntos - decision por mime-type",
+      "  for (adjunto of adjuntos_actuales) {",
+      "    mime = adjunto.type;",
+      "    if (mime.startsWith('application/pdf')) {",
+      "      cajones_a_abrir.push('pdf-extractor.extraer.texto');",
+      "    }",
+      "    if (mime.startsWith('image/')) {",
+      "      cajones_a_abrir.push('ocr-vision.extraer.texto');",
+      "    }",
+      "    if (mime.startsWith('audio/')) {",
+      "      cajones_a_abrir.push('audio-to-text.transcribir');",
+      "    }",
+      "    // ... etc para otros mime-types soportados.",
+      "  }",
+      "",
+      "  // CAPA 2: regex / palabras clave fuertes sobre el texto en progreso",
+      "  texto_lower = input_actual.toLowerCase();",
+      "  if (matchesRegex(texto_lower, /\\bgenera\\b.*\\bcarta\\b/) || matchesRegex(texto_lower, /\\bcrea\\b.*\\bproducto\\b/) || matchesRegex(texto_lower, /\\bcatalogo\\b.*\\bdistribuidor\\b/)) {",
+      "    cajones_a_abrir.push('menu-generator.generar');",
+      "  }",
+      "  if (matchesRegex(texto_lower, /\\bcuantos?\\b.*\\bproductos?\\b/) || matchesRegex(texto_lower, /\\blistame\\b/)) {",
+      "    cajones_a_abrir.push('carta-manager.listar');",
+      "  }",
+      "  // ... etc para otras palabras clave canonicas por page.",
+      "",
+      "  // Diff con estado actual del contexto: solo solicitar apertura de cajones que NO esten ya abiertos.",
+      "  cajones_a_abrir = diferencia(cajones_a_abrir, cajones_ya_abiertos);",
+      "",
+      "  // Cierre defensivo: cajones que el cliente abrio en keystrokes anteriores pero que ya no aplican (el comerciante borro texto).",
+      "  cajones_a_cerrar = interseccion(cajones_abiertos_por_pre_apertura, complemento(cajones_a_abrir));",
+      "",
+      "  return { abrir: cajones_a_abrir, cerrar: cajones_a_cerrar };",
+      "}",
+      "",
+      "// Resultado: cuando el comerciante pulsa enter, el contexto ya tiene los cajones necesarios abiertos.",
+      "// El LLM exterior recibe contexto pre-configurado y ejecuta en una sola llamada en vez de dos."
+    ],
+    "salvaguardas": [
+      "Si el determinista NO matchea nada, NO solicita apertura - el LLM exterior decide en su turno (comportamiento de hoy, no se pierde).",
+      "El determinista NO debe forzar decisiones inciertas - solo abrir cajones que las senyales detectadas justifiquen con alta confianza (mime-type es 100% determinista; regex de palabras clave fuertes tambien).",
+      "El cliente debe respetar el contrato cajones-context-partitioning - las solicitudes de apertura/cierre van a las tools canonicas (cajon.abrir, cajon.cerrar), no se modifica el estado de manera directa."
+    ],
+    "no_cubre": [
+      "Texto natural matizado sin palabras clave fuertes ('quiero meter una pizza nueva', 'oye, tengo aqui el del distribuidor'). Estos casos caen al LLM exterior con 2 llamadas (como hoy).",
+      "Inputs ambiguos donde la palabra clave aparece en contexto irrelevante ('no quiero genera nada' - el regex pillaria 'genera' pero el intent es negativo). El determinista no entiende negacion ni contexto."
+    ]
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "instrumentar_metrica_de_dolor",
+      "estado": "pendiente",
+      "descripcion": "Para validar (o invalidar) si la linea aparcada del LLM local merece reactivarse, instrumentar metrica de runtime que capture: (1) numero de llamadas al LLM exterior por turno, (2) latencia perceptible por llamada y total por turno, (3) coste agregado mensual de llamadas-de-decision vs llamadas-de-ejecucion. Sin esta metrica, la decision de reactivar queda como intuicion. Owner: cuando emerja sospecha de dolor, no antes."
+    },
+    {
+      "id": "canonizar_estandar_propuestas_en_json",
+      "estado": "abierto",
+      "descripcion": "Esta es la PRIMERA propuesta del repo en formato JSON con lenguaje para LLM (decision del usuario en sesion 2026-05-30: 'esto como estandar en adelante'). El contrato dinamica-de-trabajo-companero v1.0.0 describe propuestas como .md narrativo. Cuando se estabilice este estandar nuevo (tras 2-3 propuestas mas en el mismo formato), bumpear el contrato dinamica para reflejar el cambio. Mientras tanto este doc opera como caso testigo del estandar."
+    },
+    {
+      "id": "canonizar_patron_actores_acoordinados_cuando_emerja_tercera_instancia",
+      "estado": "diferido",
+      "descripcion": "El patron actores_acoordinados_sobre_estado_compartido se observa hoy en 2 instancias del repo (memorias modulares con chat.context.enriched + diseno de cajones). Esta propuesta lo nombrarya como tercera instancia potencial (LLM local AJAX si se reactiva). Cuando emerja una cuarta instancia organicamente, canonizar como contrato transversal en _contratos/. Hoy queda observado y nombrado."
+    },
+    {
+      "id": "implementar_capa_1_y_2_determinista_en_cliente",
+      "estado": "pendiente",
+      "descripcion": "La decision cerrada (pre-apertura determinista cliente) requiere implementacion concreta en la PWA / frontend del comerciante. Ubicacion probable: modulo frontend que gestiona el textarea del chat, con la logica del pseudo-codigo de esta propuesta. Falta validar (a) cuales son las palabras clave fuertes canonicas por page (definir tabla), (b) que cajones de pre-procesamiento existen ya (pdf-viewer existe; ocr-vision, audio-to-text no existen aun), (c) integracion con el contrato cajones-context-partitioning para las tools cajon.abrir/cajon.cerrar. Este trabajo es horizonte propio (no se ejecuta junto con esta propuesta)."
+    }
+  ],
+
+  "referencias_a_contratos": [
+    {
+      "contrato": "cajones-context-partitioning.contract.json",
+      "version_referenciada": "1.0.0",
+      "como_se_relaciona": "Esta propuesta opera DENTRO del modelo cajones. La pre-apertura determinista usa las tools canonicas cajon.abrir / cajon.cerrar declaradas alli. No extiende ni rompe el contrato; solo anticipa el momento de la apertura."
+    },
+    {
+      "contrato": "dinamica-de-trabajo-companero.contract.json",
+      "version_referenciada": "1.0.0",
+      "como_se_relaciona": "El pilar 1 (propuesta+arranque para horizontes grandes) describe propuestas como .md. Este doc es la PRIMERA propuesta en formato JSON nuevo - caso testigo del estandar. El pilar 7 (LLM + agentes cuando duele) sustenta la decision de aparcar la linea del LLM local."
+    },
+    {
+      "contrato": "llm-runtime-discipline.contract.json",
+      "version_referenciada": "2.0.0",
+      "como_se_relaciona": "El principio pseudocodigo_es_ley aplica al pseudo-codigo de esta propuesta - verboso, sin ES6 denso, explicito."
+    },
+    {
+      "contrato": "pseudocodigo-estilo.contract.json",
+      "version_referenciada": "1.1.0",
+      "como_se_relaciona": "El pseudo-codigo de la decision_cerrada sigue el estilo canonizado: sin rest-spread con renaming, sin Object.assign, verboso."
+    },
+    {
+      "contrato": "companero-viaje.contract.json",
+      "version_referenciada": "documento_maestro",
+      "como_se_relaciona": "El LLM companero como orquestador de habitaciones (preprocesadores) emerge del modelo de extensibilidad del subsistema chat/LLM/agentes. Esta propuesta es expansion natural del modelo."
+    }
+  ],
+
+  "frase_resumen_para_retomar": "Pre-apertura determinista de cajones desde el cliente (mime-type de adjuntos + regex de palabras clave fuertes) AHORA, sin pieza nueva, cubriendo ~80% de los turnos del comerciante. LLM local AJAX a-coordinado con el exterior queda APARCADO como linea reactivable cuando metrica real muestre dolor (latencia perceptible, coste agregado de llamadas-de-decision). Patron arquitectonico observado: actores a-coordinados sobre estado compartido (cajones del contexto como interfaz, no protocolo entre actores) - candidato a canonizar cuando emerja tercera instancia organica."
+}

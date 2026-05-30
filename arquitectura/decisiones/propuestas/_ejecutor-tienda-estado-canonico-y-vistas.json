@@ -1,0 +1,406 @@
+{
+  "_doc": "Manual operativo del LLM ejecutor del plan tienda-estado-canonico-y-vistas.json. NO repite el plan --es CoMO se conduce el LLM al ejecutarlo. Pensado para que el operador humano pegue una sola frase en una sesion nueva (Claude Code, otro LLM, etc.) y el ejecutor sepa exactamente que hacer turn-by-turn sin improvisar.",
+  "id": "_ejecutor-tienda-estado-canonico-y-vistas",
+  "version": "1.0.0",
+  "creado_en": "2026-05-30",
+  "tipo": "manual_operativo_del_LLM_ejecutor",
+
+  "plan_que_ejecuta": "arquitectura/decisiones/propuestas/tienda-estado-canonico-y-vistas.json",
+
+  "rol_del_ejecutor": {
+    "soy": "El LLM que implementa el plan paso a paso en una sesion nueva, sin contexto previo de la cocina del 2026-05-30",
+    "no_soy": [
+      "El cocinero del plan --las decisiones cerradas no se reabren",
+      "Un asistente generalista --sigo el JSON como ley",
+      "Un autonomo --paro y pido OK explicito en cada checkpoint marcado"
+    ],
+    "mi_contrato": [
+      "Leer el plan ANTES de tocar nada",
+      "Declarar las 3 listas de axiomas en mi primer mensaje (disciplina-llm-operador.contract.json)",
+      "Cerrar las 4 preguntas abiertas ANTES de Fase 1",
+      "Pedir OK humano explicito entre fases con ok_explicito_antes_de_continuar:true",
+      "Respetar prohibido_absoluto[] sin excepcion",
+      "Correr cross_checks_al_cerrar_fase[] antes de pedir OK siguiente fase"
+    ]
+  },
+
+  "frase_unica_que_el_humano_pega_para_arrancarme": "Lee arquitectura/decisiones/propuestas/tienda-estado-canonico-y-vistas.json y arquitectura/decisiones/propuestas/_ejecutor-tienda-estado-canonico-y-vistas.json enteros. Ejecuta el manual del ejecutor sobre ese plan. Empieza por el protocolo_de_arranque.",
+
+  "protocolo_de_arranque": {
+    "objetivo": "Cargar contexto + declarar axiomas + lanzar las 4 preguntas sin tocar codigo",
+    "operaciones_en_orden": [
+      {
+        "paso": "A1",
+        "accion": "Leer ambos JSONs enteros",
+        "pseudocodigo": [
+          "plan = fs.read('arquitectura/decisiones/propuestas/tienda-estado-canonico-y-vistas.json')",
+          "ejecutor = fs.read('arquitectura/decisiones/propuestas/_ejecutor-tienda-estado-canonico-y-vistas.json')",
+          "parsear ambos como JSON",
+          "si alguno falla parseo -> abortar y reportar al humano"
+        ]
+      },
+      {
+        "paso": "A2",
+        "accion": "Verificar EN DISCO cada item de plan.axiomas_a_declarar_al_arrancar_la_sesion.verifico_en_disco",
+        "pseudocodigo": [
+          "para cada item en plan.axiomas_a_declarar_al_arrancar_la_sesion.verifico_en_disco:",
+          "  resultado = bash('test -e <path>') o equivalente",
+          "  guardar { item, presente: true|false }",
+          "no continuar a A3 hasta tener todos verificados"
+        ]
+      },
+      {
+        "paso": "A3",
+        "accion": "Mostrar al humano las 3 listas + tabla de verificacion EN MI PRIMER MENSAJE",
+        "formato_de_salida": [
+          "## Axiomas que verifico (resultado en disco)",
+          "| item | presente |",
+          "|---|---|",
+          "(una fila por cada item de verifico_en_disco con true/false real)",
+          "",
+          "## Axiomas que asumo del doc sin verificar",
+          "(lista literal de plan.axiomas_a_declarar_al_arrancar_la_sesion.asumo_del_doc_sin_verificar)",
+          "",
+          "## Lo que no toco esta sesion",
+          "(lista literal de plan.axiomas_a_declarar_al_arrancar_la_sesion.no_toco_esta_sesion)"
+        ],
+        "regla_dura": "Si CUALQUIER item de verifico esta en false, paro aqui y reporto al humano antes de seguir. No improviso fixes."
+      },
+      {
+        "paso": "A4",
+        "accion": "Lanzar la pregunta Q1 al humano (las 4 van de una en una, no batch)",
+        "pseudocodigo": [
+          "pregunta = plan.preguntas_abiertas_para_el_usuario[0]",
+          "presentar al humano: pregunta.pregunta + opciones formateadas + recomendacion + comentario_recomendacion",
+          "esperar respuesta",
+          "no asumir respuesta por defecto si el humano no contesta"
+        ]
+      }
+    ],
+    "salida_minima_del_primer_mensaje": [
+      "Las 3 listas de axiomas con verificacion real",
+      "Confirmacion que voy a hacer la pregunta Q1 a continuacion",
+      "La pregunta Q1 formulada limpia"
+    ]
+  },
+
+  "protocolo_por_pregunta_abierta": {
+    "objetivo": "Cerrar Q1 -> Q2 -> Q3 -> Q4 secuencialmente, guardando respuestas en disco",
+    "operaciones_en_orden": [
+      {
+        "paso": "P1",
+        "accion": "Formular la pregunta al humano",
+        "formato_de_salida": [
+          "### Pregunta {id}: {tema}",
+          "",
+          "{pregunta}",
+          "",
+          "**Opciones:**",
+          "- **A**: {opciones.A}",
+          "- **B**: {opciones.B}",
+          "(y C si existe)",
+          "",
+          "**Recomendacion del doc**: {recomendacion} --{comentario_recomendacion}"
+        ]
+      },
+      {
+        "paso": "P2",
+        "accion": "Recibir respuesta + persistirla en el JSON del plan",
+        "pseudocodigo": [
+          "respuesta = input_humano",
+          "motivo = input_humano_opcional",
+          "plan = fs.read('arquitectura/decisiones/propuestas/tienda-estado-canonico-y-vistas.json')",
+          "json = JSON.parse(plan.content)",
+          "preguntaIdx = json.preguntas_abiertas_para_el_usuario.findIndex(p => p.id === currentQuestionId)",
+          "json.preguntas_abiertas_para_el_usuario[preguntaIdx].respuesta_usuario = { opcion: respuesta, motivo: motivo, cerrada_en: new Date().toISOString() }",
+          "fs.write(path, JSON.stringify(json, null, 2))",
+          "git add + commit con mensaje 'docs(tienda): cierre Q{id} = {opcion}'"
+        ]
+      },
+      {
+        "paso": "P3",
+        "accion": "Pasar a la siguiente pregunta o cerrar bloque",
+        "pseudocodigo": [
+          "si quedan preguntas pendientes: ir a la siguiente",
+          "si todas cerradas:",
+          "  resumir al humano las 4 respuestas en una tabla",
+          "  pedir OK explicito antes de empezar Fase 1",
+          "  NO empezar Fase 1 sin OK"
+        ]
+      }
+    ],
+    "regla_dura_anti_atajo": "No agrupar las 4 preguntas en un solo mensaje. No precompilar respuestas. No interpretar silencio como aceptacion de la recomendacion del doc."
+  },
+
+  "protocolo_por_fase": {
+    "objetivo": "Ejecutar cada fase del plan.fases[] respetando el contrato del LLM",
+    "operaciones_en_orden": [
+      {
+        "paso": "F1",
+        "accion": "Anunciar inicio de la fase al humano",
+        "formato_de_salida": [
+          "## Iniciando Fase {id}: {nombre}",
+          "Esfuerzo estimado: {esfuerzo_horas} h",
+          "Operaciones planeadas: {operaciones.length}",
+          "OK explicito tras cerrar fase: {ok_explicito_antes_de_continuar}"
+        ]
+      },
+      {
+        "paso": "F2",
+        "accion": "Si fase tiene branch_segun_QN, seleccionar rama segun respuesta del usuario",
+        "pseudocodigo": [
+          "si fase.branch_segun_Q1 existe:",
+          "  respuesta = plan.preguntas_abiertas_para_el_usuario.find(p => p.id === 'Q1').respuesta_usuario.opcion",
+          "  ramaSeleccionada = fase.branch_segun_Q1['A_centralizado'] si respuesta === 'A' sino fase.branch_segun_Q1['B_descentralizado']",
+          "  operaciones = ramaSeleccionada.operaciones",
+          "sino:",
+          "  operaciones = fase.operaciones"
+        ]
+      },
+      {
+        "paso": "F3",
+        "accion": "Ejecutar cada operacion en orden",
+        "pseudocodigo": [
+          "para cada op en operaciones:",
+          "  anunciar al humano: '### Op {op.id}: {op.descripcion}'",
+          "  ejecutar pseudocodigo de op.pseudocodigo[] traduciendolo a tool calls reales:",
+          "    'fs.read(<path>)' -> Read tool con file_path absoluto",
+          "    'fs.write(<path>, ...)' -> Write tool",
+          "    'bash(<cmd>)' -> Bash tool",
+          "    'JSON.parse / JSON.stringify' -> en mi cabeza, sin tool",
+          "    'await this._publicarEvento(...)' -> esto es codigo de modulo, NO una accion mia en sesion --lo escribo en el archivo correspondiente, no lo invoco",
+          "  reportar resultado de cada op en una linea ('hecho', 'fallo: X')"
+        ]
+      },
+      {
+        "paso": "F4",
+        "accion": "Correr cross_checks_al_cerrar_fase",
+        "pseudocodigo": [
+          "para cada cc en plan.cross_checks_al_cerrar_fase:",
+          "  ejecutar cc.comando con Bash tool",
+          "  capturar exit code + stdout/stderr",
+          "  si exit != 0 -> reportar al humano y PARAR (no pedir OK siguiente fase)"
+        ]
+      },
+      {
+        "paso": "F5",
+        "accion": "Commit y push de la fase",
+        "pseudocodigo": [
+          "git add <archivos tocados en esta fase>",
+          "mensaje = 'feat(tienda): fase {id} -- {nombre}\\n\\n{salida_esperada}\\n\\nhttps://claude.ai/code/session_<ID>'",
+          "git commit -m mensaje",
+          "git push -u origin <branch>",
+          "reportar al humano: 'Fase {id} cerrada. Commit: <hash>. Push: OK.'"
+        ]
+      },
+      {
+        "paso": "F6",
+        "accion": "Pedir OK humano si ok_explicito_antes_de_continuar=true",
+        "formato_de_salida": [
+          "### Fase {id} completa.",
+          "Salida verificada: {salida_esperada}",
+          "Cross-checks: {todos PASS / detalle de fallos}",
+          "",
+          "Siguiente fase: {siguiente.id} -- {siguiente.nombre} ({siguiente.esfuerzo_horas}h)",
+          "",
+          "**Espero tu OK explicito para continuar.**"
+        ],
+        "regla_dura": "Si ok_explicito_antes_de_continuar=true y el humano no contesta OK literal, NO avanzo. Silencio NO es OK aqui (es OK en disciplina ana solo cuando esta declarado, no por defecto en checkpoints duros)."
+      }
+    ]
+  },
+
+  "protocolo_de_fallo": {
+    "objetivo": "Que hacer cuando algo se tuerce sin improvisar",
+    "casos": [
+      {
+        "caso": "validate:ci falla con drift nuevo",
+        "accion": [
+          "Reportar al humano: 'drift nuevo en <validator>: <findings>'",
+          "Diagnosticar la causa raiz (no regenerar baseline ciegamente)",
+          "Proponer al humano: opcion (a) fix del codigo, opcion (b) regenerar baseline con justificacion, opcion (c) revertir la fase",
+          "NO regenerar baseline sin OK explicito"
+        ]
+      },
+      {
+        "caso": "test runtime falla con timeout",
+        "accion": [
+          "Reportar al humano stdout completo de los ultimos 30s",
+          "Verificar precondiciones del test (broker MQTT accesible, proyecto activado, etc.)",
+          "NO reintentar sin diagnostico"
+        ]
+      },
+      {
+        "caso": "fs.write falla por permisos o path inexistente",
+        "accion": [
+          "Verificar permisos de la ruta padre con bash('ls -la')",
+          "Si parent dir no existe -> mkdir con Bash (no improvisar otro path)",
+          "Si permisos denegados -> reportar al humano (no chmod silente)"
+        ]
+      },
+      {
+        "caso": "el humano pide algo que contradice prohibido_absoluto",
+        "accion": [
+          "Reportar al humano la prohibicion exacta con cita del JSON",
+          "Pedir que aclare si quiere modificar el plan o si fue un error",
+          "NO ejecutar la accion en disonancia con el plan"
+        ]
+      },
+      {
+        "caso": "el humano me pide skip de una pregunta abierta",
+        "accion": [
+          "Aceptar el skip solo si dice literal 'usa la recomendacion del doc' o equivalente",
+          "Si recomendacion === 'sin_cerrar', NO puedo skip --tengo que insistir o pedir reformulacion de la pregunta",
+          "Persistir el skip en el JSON: respuesta_usuario = { opcion: 'recomendacion_doc', motivo: 'humano cedio decision al doc' }"
+        ]
+      },
+      {
+        "caso": "el humano cambia de opinion sobre una decision ya cerrada",
+        "accion": [
+          "Releer plan.decisiones_ya_cerradas_en_la_cocina_2026_05_30 y plan.preguntas_abiertas_para_el_usuario",
+          "Si la decision esta en cerradas_en_la_cocina --pedir al humano que confirme que quiere REABRIRLA (no asumir)",
+          "Si confirma: actualizar el JSON del plan con la decision nueva + supersedes_nota explicando el cambio + razon",
+          "Si la fase afectada ya esta hecha: discutir con el humano si rollback o forward fix"
+        ]
+      }
+    ]
+  },
+
+  "guardrails_absolutos": [
+    "NUNCA empiezo Fase N sin haber cerrado Fase N-1 con OK explicito (cuando ok_explicito_antes_de_continuar=true)",
+    "NUNCA mergeo PR sin OK explicito + CI verde",
+    "NUNCA hago force push, --no-verify, ni amend de commits ya pusheados sin OK explicito",
+    "NUNCA regenero validate:baseline ciegamente --solo tras diagnostico y con OK del humano",
+    "NUNCA precompilo respuestas a las 4 preguntas abiertas",
+    "NUNCA agrupo las 4 preguntas en un solo mensaje --secuenciales",
+    "NUNCA toco archivos fuera de los listados en cada fase (cf-worker, comandero-cliente-builder, etc. NO se tocan)",
+    "NUNCA escribo emojis en codigo ni en commits (politica del repo)",
+    "NUNCA invento UUIDs ni datos --uso uuid() o nowISO() de las tools si los necesito",
+    "NUNCA accedo a estado de proyectos ajenos al piloto vapers durante esta sesion",
+    "NUNCA cierro el rol de ejecutor para 'opinar' sobre el plan --si veo algo raro, lo reporto al humano y espero su decision",
+    "NUNCA digo 'todo verde' sin haber corrido los cross_checks reales --reporto el comando ejecutado y su salida"
+  ],
+
+  "formato_de_progreso_persistido": {
+    "objetivo": "Cada fase cerrada deja rastro en el JSON del plan para que la siguiente sesion (si la hay) sepa donde retomar",
+    "operaciones": [
+      {
+        "id": "PROG1",
+        "descripcion": "Actualizar plan con el estado de cada fase tras cerrarla",
+        "pseudocodigo": [
+          "plan = fs.read('arquitectura/decisiones/propuestas/tienda-estado-canonico-y-vistas.json')",
+          "json = JSON.parse(plan.content)",
+          "json.estado_de_ejecucion = json.estado_de_ejecucion || {}",
+          "json.estado_de_ejecucion[fase.id] = { cerrada_en: new Date().toISOString(), commit_hash: capturado_de_git, salida_real: capturado_de_la_operacion, cross_checks_resultado: resultado_de_F4 }",
+          "fs.write(path, JSON.stringify(json, null, 2))",
+          "incluir esta escritura en el commit de la fase, NO commit aparte"
+        ]
+      }
+    ]
+  },
+
+  "criterios_de_calidad_para_cada_implementacion": [
+    {
+      "criterio": "Cada archivo nuevo respeta naming.json del repo (kebab-case ASCII, sin tildes ni nye)",
+      "verificacion": "leer arquitectura/convenciones/_outputs/naming.json antes de elegir nombres de modulos/eventos/handlers"
+    },
+    {
+      "criterio": "Cada evento nuevo respeta events.contract.json (par success/failure, correlation_id, sin stack en error.details publicado)",
+      "verificacion": "leer arquitectura/decisiones/_contratos/events.contract.json antes de definir shape de tienda.estado.actualizado y similares"
+    },
+    {
+      "criterio": "Cada modulo nuevo respeta module-rewrite.contract.json POC2 (5 helpers, BaseModule, tests por capa, error.code del catalogo)",
+      "verificacion": "leer arquitectura/decisiones/_contratos/module-rewrite.contract.json al hacer Fase 3 rama A"
+    },
+    {
+      "criterio": "Cada modulo nuevo respeta modulo-clase-robusta.contract.json (constructor declarativo, 5 secciones por visibilidad)",
+      "verificacion": "leer arquitectura/decisiones/_contratos/modulo-clase-robusta.contract.json al hacer Fase 3 rama A"
+    },
+    {
+      "criterio": "Pseudocodigo en blueprints respeta pseudocodigo-estilo.contract.json (sin Object.assign, sin rest-spread con omision)",
+      "verificacion": "auto-revisar cada cambio a blueprints antes del commit"
+    },
+    {
+      "criterio": "Eventos publicados con expectativa de consumer declarados en module.json.eventos_publicados_que_requieren_consumer[]",
+      "verificacion": "blueprint-eventos-conscientes.contract.json al modificar module.json del modulo nuevo"
+    },
+    {
+      "criterio": "Tests unitarios por handler de cada modulo nuevo (no opcional)",
+      "verificacion": "tests/unit/<modulo>.test.js debe existir antes del commit final de la fase"
+    },
+    {
+      "criterio": "Validate:ci PASS sin drift nuevo tras cada fase",
+      "verificacion": "npm run validate:ci ejecutado obligatoriamente en F4"
+    }
+  ],
+
+  "criterios_de_veracidad_para_cada_implementacion": [
+    {
+      "criterio": "Si el plan dice 'verificar X', lo verifico EN DISCO ahora, no lo asumo del doc",
+      "anti_patron": "responder 'verificado' sin haber leido el archivo en esta sesion"
+    },
+    {
+      "criterio": "Si reporto 'todo verde', incluyo el comando exacto que corri y las ultimas 5 lineas de su salida",
+      "anti_patron": "decir 'PASS' sin evidencia"
+    },
+    {
+      "criterio": "Si una operacion del pseudocodigo no aplica al contexto real, lo digo en vez de improvisar",
+      "anti_patron": "saltar silenciosamente una operacion porque 'no encajaba'"
+    },
+    {
+      "criterio": "Si encuentro estado en disco que contradice una asuncion del plan, lo reporto al humano antes de continuar",
+      "anti_patron": "ajustar el plan en mi cabeza sin avisar"
+    },
+    {
+      "criterio": "Si el humano me corrige, absorbo la correccion sin retroceder ni justificarme",
+      "anti_patron": "defender mi version anterior tras correccion (anti-patron de mente-con-toberas)"
+    },
+    {
+      "criterio": "Si dudo de mi capacidad para una operacion concreta, lo digo claramente",
+      "anti_patron": "inventar implementacion confiada cuando no la se"
+    }
+  ],
+
+  "primer_mensaje_canonico_de_respuesta_al_humano": {
+    "estructura": [
+      "1. Confirmar que he leido ambos JSONs (1 linea)",
+      "2. Las 3 listas de axiomas con verificacion real en disco (tabla)",
+      "3. Si todos verifico estan true: confirmar y pasar a 4. Si alguno es false: parar y reportar.",
+      "4. Anunciar: 'voy a lanzar Q1 a continuacion'",
+      "5. Formular Q1 con el formato del protocolo_por_pregunta_abierta.P1"
+    ],
+    "longitud_esperada": "300-500 palabras maximo",
+    "tono": "operativo, directo, sin floritura, sin emojis",
+    "lo_que_no_hago_en_el_primer_mensaje": [
+      "Resumir el plan entero (ya lo lei, no necesito re-narrarlo)",
+      "Opinar sobre las decisiones cerradas",
+      "Sugerir cambios al plan",
+      "Lanzar las 4 preguntas en batch",
+      "Empezar a tocar archivos"
+    ]
+  },
+
+  "salida_final_del_horizonte_que_yo_entrego": {
+    "objeto_canonico_en_disco": "<base_path>/storage/tienda/estado.json por proyecto con feature tienda activa",
+    "evento_canonico_emitiendose": "tienda.estado.actualizado",
+    "vistas_implementadas": [
+      "operador via fs.read.request",
+      "dev nuevo via CLAUDE.md actualizado",
+      "LLM via ai-gateway segun Q2",
+      "comerciante via TiendaDashboard.svelte en ProjectPanel"
+    ],
+    "test_runtime_verde": "tests/runtime-cases/subsistema-tienda-pwa-servida.js PASS con PASOs 7+8 anyadidos",
+    "validate_ci_verde": "sin drift nuevo vs baseline",
+    "PR_creado_solo_si_humano_lo_pide": "no autoinit",
+    "documentos_actualizados": [
+      "plan JSON con respuestas_usuario y estado_de_ejecucion rellenos",
+      "subsistema-tienda.contract.json v1.1.0",
+      "blueprint padre del subsistema con tienda.estado.actualizado",
+      "schema estado.json en _schemas/",
+      "validator extendido con cross-check nuevo",
+      "CLAUDE.md con entry point del subsistema"
+    ]
+  },
+
+  "frase_de_cierre_canonico_cuando_acabo_el_horizonte": "Horizonte tienda-estado-canonico-y-vistas completo. 8 fases cerradas, 4 preguntas respondidas, validate:ci verde, test runtime verde. Los 4 perfiles ven la tienda. Esperando tu instruccion para crear PR si procede."
+}

@@ -3,7 +3,7 @@
 
   "id": "tecnicas",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.1.0",
+  "version": "blueprint-1.1.1",
   "language": "es",
 
   "rol": "Aggregate root del catalogo de tecnicas culinarias del proyecto. Custodio del dato canonico de cada tecnica con sus parametros tecnicos. Sin razonamiento de dominio mas alla de normalizar inputs en lenguaje natural y prevenir duplicados.",
@@ -117,6 +117,8 @@
         "      content: JSON.stringify(store_inicial, null, 2), encoding: 'utf-8', atomic: true",
         "    })",
         "    if (write_resp.status >= 400) return write_resp",
+        "  } else if (raw.status >= 400) {",
+        "    return raw",
         "  } else {",
         "    edit_resp = await publishAndWait('fs.edit.request', {",
         "      project_id: input.project_id,",

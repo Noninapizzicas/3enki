@@ -1,0 +1,139 @@
+{
+  "_doc": "Blueprint padre ABSTRACTO del subsistema-tienda. Modulos blueprint-driven que escriben al bundle de la PWA publica heredan de aqui declarando extends_blueprint_abstract: 'subsistema-tienda.modulo-base'. Captura la convencion canonica: path del bundle (public/tienda/), archivos canonicos (index.html, manifest.json, sw.js), evento de cierre tienda.bundle.actualizada, regla de atomicidad. NO se instancia directamente. Hijos declaran solo su delta (que generan, que tools usan, que operacion canonica exponen). Documento autoritativo: arquitectura/decisiones/_contratos/subsistema-tienda.contract.json.",
+
+  "id": "subsistema-tienda-modulo-base",
+  "version": "blueprint-0.1.0",
+  "language": "es",
+  "creada": "2026-05-30",
+
+  "rol": "Blueprint padre abstracto de modulos del subsistema-tienda. Define el contrato comun que cualquier hijo cumple por herencia.",
+
+  "modelo_de_contenido_de_la_tienda": {
+    "_descripcion": "Donde vive el bundle de la PWA dentro del proyecto y como se accede desde fuera.",
+    "path_canonico_del_bundle": "public/tienda/ (relativo al base_path del proyecto)",
+    "url_publica_canonica": "https://<dominio>/tienda/<slug>/",
+    "symlink_canonico": "/opt/enki/public/tiendas/<slug> -> <base_path>/public/tienda/",
+    "creado_por": "feature 'tienda' al activarse (project-feature-blueprints + project-manager._initializeFromBlueprint)"
+  },
+
+  "archivos_canonicos_del_bundle": {
+    "_descripcion": "Archivos minimos que un bundle PWA del subsistema debe contener.",
+    "obligatorios": [
+      {
+        "nombre": "index.html",
+        "rol": "Entry point. Lo que Caddy sirve cuando se accede a /tienda/<slug>/. file_server con try_files /index.html."
+      },
+      {
+        "nombre": "manifest.json",
+        "rol": "PWA manifest. Define name, short_name, start_url, display, theme_color. Necesario para 'installable'."
+      }
+    ],
+    "recomendados": [
+      {
+        "nombre": "sw.js",
+        "rol": "Service worker para offline + cache. Opcional v1, recomendado para PWA real."
+      }
+    ],
+    "permitidos": [
+      "assets/, images/, fonts/ (sub-dirs con recursos)",
+      "*.json con datos del catalogo / productos / configuracion publica"
+    ],
+    "prohibidos": [
+      ".env, .git/, .ssh/, *.key, *.pem (secret leak)",
+      "ejecutables (.sh, .bin)",
+      "archivos con credenciales de cualquier tipo"
+    ]
+  },
+
+  "evento_canonico_de_cierre": {
+    "_descripcion": "Evento que cada modulo del subsistema publica al terminar de actualizar el bundle.",
+    "evento": "tienda.bundle.actualizada",
+    "shape_resumen": "{ project_id, slug, archivos_actualizados[], bytes_totales, generado_por_modulo, correlation_id, timestamp }",
+    "consumers_esperados": [
+      "Cualquier modulo del sistema que necesite reaccionar al cambio (cache invalidation, notificaciones, analytics, tests post-deploy).",
+      "frontend del proyecto si quiere mostrar 'ultima actualizacion'."
+    ]
+  },
+
+  "regla_de_atomicidad": {
+    "_descripcion": "Las actualizaciones del bundle se hacen atomicamente para evitar incoherencia visible (browser sirviendo index.html v2 con manifest.json v1).",
+    "modos_aceptados": [
+      "Por archivo: fs.write con atomic:true (write a tmp + rename). Aceptable para bundles pequenyos (1-5 archivos).",
+      "Por bundle: escribir a public/tienda.tmp/ y hacer rename a public/tienda/. Necesario para bundles grandes o con muchos archivos."
+    ],
+    "modo_prohibido": "fs.write incremental sin atomicidad: ningun archivo del bundle se debe ver 'a medias' por el cliente."
+  },
+
+  "primitivas_universales_del_bus": {
+    "_descripcion": "Tools que los hijos pueden usar para actualizar el bundle.",
+    "fs_write": {
+      "tool": "bus.publishAndWait('fs.write.request', { project_id, path, content, encoding, atomic:true })",
+      "uso": "Escribir un archivo del bundle atomicamente."
+    },
+    "fs_edit": {
+      "tool": "bus.publishAndWait('fs.edit.request', { project_id, path, patches, expected_hash? })",
+      "uso": "Modificar JSON Patch RFC 6902 sobre archivo existente. Util para manifest.json y JSON de datos."
+    },
+    "fs_read": {
+      "tool": "bus.publishAndWait('fs.read.request', { project_id, path })",
+      "uso": "Leer estado actual del bundle (verificar antes de escribir, etc.)."
+    },
+    "publish_evento_canonico": {
+      "tool": "bus.publish('tienda.bundle.actualizada', { ... })",
+      "uso": "Cierre obligatorio tras actualizar el bundle."
+    }
+  },
+
+  "naming_canonico_de_paths": {
+    "_descripcion": "Convencion de nombres de archivo. Los hijos los respetan al escribir.",
+    "regla": "Paths relativos a public/tienda/. Sin path traversal. Sin extensiones prohibidas. kebab-case para nombres compuestos.",
+    "ejemplos_validos": [
+      "public/tienda/index.html",
+      "public/tienda/manifest.json",
+      "public/tienda/sw.js",
+      "public/tienda/assets/logo.svg",
+      "public/tienda/data/productos.json"
+    ],
+    "ejemplos_invalidos": [
+      "public/tienda/../bundle.html  (path traversal)",
+      "/opt/enki/public/tiendas/foo  (path absoluto del VPS)",
+      "public/tienda/.env             (extension prohibida)",
+      "public/tienda/credenciales.key (extension prohibida)"
+    ]
+  },
+
+  "limite_del_modulo_del_subsistema": {
+    "_descripcion": "Lo que un modulo del subsistema-tienda NUNCA hace.",
+    "no": [
+      "NO escribe fuera de public/tienda/ del proyecto destino.",
+      "NO escribe archivos con extensiones prohibidas (.env, .git, .ssh, .key, .pem).",
+      "NO modifica directamente /opt/enki/public/tiendas/<slug> (eso lo gestiona project-manager via symlinks de la feature).",
+      "NO bypassa el evento canonico tienda.bundle.actualizada al cerrar.",
+      "NO escribe sin atomicidad (vease regla_de_atomicidad)."
+    ]
+  },
+
+  "disciplina_del_llm_runtime": {
+    "_descripcion": "Reglas operativas para LLM-runtime que ejecuta hijos blueprint del subsistema. Heredadas de llm-runtime-discipline.contract.json.",
+    "principios": [
+      "Antes de escribir, lee. fs.read del archivo destino para evitar sobrescribir contenido valido del usuario.",
+      "Si el bundle es nuevo, escribe index.html + manifest.json primero, sw.js despues. Ordena por dependencia conceptual.",
+      "Publica tienda.bundle.actualizada UNA vez al terminar todo. NO multiples eventos por archivo.",
+      "Si una escritura falla, propaga el error con error.code canonico. NO continues silenciosamente con otros archivos."
+    ]
+  },
+
+  "estilo_de_pseudocodigo": {
+    "_descripcion": "Heredado de pseudocodigo-estilo.contract.json.",
+    "prohibido": [
+      "rest-spread con omision: { campo: _alias, ...rest } = obj  →  usar for/in con if",
+      "Object.assign con mutacion implicita: Object.assign(t, s)  →  usar for/in explicito"
+    ],
+    "permitido": [
+      "Arrow functions en .find/.filter/.map",
+      "Spread en construccion: { ...obj, campo: x }",
+      "Optional chaining ?.",
+      "Template literals"
+    ]
+  }
+}

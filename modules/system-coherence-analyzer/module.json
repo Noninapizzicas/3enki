@@ -1,0 +1,37 @@
+{
+  "id": "system-coherence-analyzer",
+  "name": "system-coherence-analyzer",
+  "version": "0.1.0",
+  "language": "es",
+  "description": "Agente meta-sistema: analiza coherencia transversal del repo (patrones consistentes vs divergentes, anti-patrones implicitos, drift implicito) para un aspecto declarado (persistencia, errores, blueprint pseudocodigo, declaracion de tools, etc.). Lectura cross-modulo + razonamiento. Sin persistencia propia.",
+
+  "blueprint_driven": true,
+  "blueprint_path": "system-coherence-analyzer.blueprint.json",
+  "blueprint_parent_path": "modules/_agentes-blueprint/agente-base.blueprint.json",
+
+  "agent_kind": "agente-blueprint",
+
+  "provider": "auto",
+  "temperature": 0.2,
+  "max_tokens": 8000,
+  "timeout_ms": 90000,
+  "max_retries": 1,
+  "context_enabled": false,
+
+  "enabled": true,
+
+  "events": {
+    "subscribes": [
+      {
+        "event": "agent.execute.request",
+        "filter": "agent_id === 'system-coherence-analyzer'",
+        "description": "Punto de entrada canonico. ai-gateway lo despacha cuando el caller publica agent.execute.request apuntando a este agente."
+      }
+    ],
+    "publishes": [
+      "agent.execute.response",
+      "agent.execute.failed",
+      "fs.read.request"
+    ]
+  }
+}

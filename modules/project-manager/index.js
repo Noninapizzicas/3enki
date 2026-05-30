@@ -1225,6 +1225,25 @@ class ProjectManagerModule extends BaseModule {
           { kind: 'domain', missingDeps });
       }
 
+      // Resolver slug del proyecto desde name (project-identity: slug es interno a
+      // project-manager, derivado de name via _slugify). Si name es vacio, slug es null.
+      const projectSlug = (project.name && this._slugify(project.name)) || null;
+
+      // Validar slug_required: si algun blueprint declara slug_required:true y el proyecto
+      // no tiene slug derivable, rechazar antes de aplicar nada.
+      // Canonizado en project-feature-blueprints.contract.json principio slug_requirement_explicito.
+      const slugRequiredBy = [];
+      for (const [featureId, blueprint] of blueprints) {
+        if (blueprint.slug_required === true && !projectSlug) {
+          slugRequiredBy.push(featureId);
+        }
+      }
+      if (slugRequiredBy.length > 0) {
+        return this._errorResponse(412, 'PRECONDITION_FAILED',
+          `Features que requieren slug del proyecto pero el proyecto no lo tiene derivable: ${slugRequiredBy.join(', ')}`,
+          { kind: 'slug_required_but_undefined', features: slugRequiredBy, project_id: id });
+      }
+
       // Aplicar blueprints
       const correlation_id = crypto.randomUUID();
       const basePath = project.base_path;
@@ -1233,7 +1252,7 @@ class ProjectManagerModule extends BaseModule {
 
       for (const [featureId, blueprint] of blueprints) {
         try {
-          await this._initializeFromBlueprint(basePath, featureId, blueprint);
+          await this._initializeFromBlueprint(basePath, featureId, blueprint, projectSlug);
           applied.push(featureId);
           this.logger.info('project-manager.feature.installed', {
             project_id: id, feature_id: featureId, base_path: basePath, correlation_id
@@ -1388,15 +1407,34 @@ class ProjectManagerModule extends BaseModule {
    * Crea directorios + merge config.json + copia handlers + escribe initialFiles
    * con namespacing por featureId en storage/.
    */
-  async _initializeFromBlueprint(basePath, featureId, projectDef) {
-    const dirs = projectDef.directories || [];
-    for (const dir of dirs) {
+  /**
+   * Aplica un feature blueprint sobre el base_path del proyecto.
+   * Sigue project-feature-blueprints.contract.json v1.0.0.
+   *
+   * @param basePath  Absolute path del proyecto (project.base_path).
+   * @param featureId Id del feature (filename sin .json).
+   * @param projectDef Contenido del blueprint feature.
+   * @param projectSlug Slug del proyecto. Sustituye {{slug}}. null si no definido.
+   */
+  async _initializeFromBlueprint(basePath, featureId, projectDef, projectSlug = null) {
+    // Helper canonico: sustituye {{slug}} por projectSlug (NO por featureId).
+    // El bug previo (sustituir por featureId) producia paths con literal 'tienda' en lugar
+    // del slug real. Si slug_required:true y projectSlug es null, el caller ya rechazo.
+    const substituteSlug = (s) => {
+      if (typeof s !== 'string') return s;
+      if (projectSlug === null) return s;
+      return s.replace(/\{\{slug\}\}/g, projectSlug);
+    };
+
+    // 1. Directorios (relativos al base_path; prefijo storage/ se renamespacia)
+    for (const dir of (projectDef.directories || [])) {
       const namespacedDir = dir.startsWith('storage/')
         ? dir.replace('storage/', `storage/${featureId}/`)
         : dir;
-      await fs.promises.mkdir(path.join(basePath, namespacedDir), { recursive: true });
+      await fs.promises.mkdir(path.join(basePath, substituteSlug(namespacedDir)), { recursive: true });
     }
 
+    // 2. Config: mergea fragmento en config/config.json con {{slug}} sustituido
     if (projectDef.config && Object.keys(projectDef.config).length > 0) {
       const configDir = path.join(basePath, 'config');
       await fs.promises.mkdir(configDir, { recursive: true });
@@ -1407,11 +1445,12 @@ class ProjectManagerModule extends BaseModule {
         existingConfig = JSON.parse(await fs.promises.readFile(configPath, 'utf-8'));
       } catch (_) { /* no existing config */ }
 
-      const newConfig = JSON.parse(JSON.stringify(projectDef.config).replace(/\{\{slug\}\}/g, featureId));
+      const newConfig = JSON.parse(substituteSlug(JSON.stringify(projectDef.config)));
       const mergedConfig = { ...existingConfig, ...newConfig };
       await fs.promises.writeFile(configPath, JSON.stringify(mergedConfig, null, 2), 'utf-8');
     }
 
+    // 3. Copy handlers (compat con pizzepos/facturas; sin cambios)
     if (projectDef.copyHandlersFrom) {
       const sourcePath = path.join(this.projectsBasePath, projectDef.copyHandlersFrom, 'handlers');
       const targetPath = path.join(basePath, 'handlers');
@@ -1432,14 +1471,77 @@ class ProjectManagerModule extends BaseModule {
       }
     }
 
+    // 4. Initial files. Cambio canonico v1.0:
+    //    - Si valor es string → se escribe COMO STRING (no JSON.stringify).
+    //      Razon: initialFiles puede contener HTML/SVG/JS plano.
+    //    - Si valor es objeto/array → se escribe JSON.stringify pretty.
+    //    - Si valor es string que empieza por 'template:', se lee del template path.
+    //    - {{slug}} se sustituye tanto en el path como en el contenido string.
     if (projectDef.initialFiles) {
       for (const [filePath, content] of Object.entries(projectDef.initialFiles)) {
         const namespacedPath = filePath.startsWith('storage/')
           ? filePath.replace('storage/', `storage/${featureId}/`)
           : filePath;
-        const fullPath = path.join(basePath, namespacedPath);
+        const fullPath = path.join(basePath, substituteSlug(namespacedPath));
         await fs.promises.mkdir(path.dirname(fullPath), { recursive: true });
-        await fs.promises.writeFile(fullPath, JSON.stringify(content, null, 2), 'utf-8');
+
+        let textToWrite;
+        if (typeof content === 'string' && content.startsWith('template:')) {
+          const templateRel = content.slice('template:'.length);
+          const templatePath = path.join(process.cwd(), 'blueprints', 'project-types', '_templates', templateRel);
+          try {
+            textToWrite = await fs.promises.readFile(templatePath, 'utf-8');
+            textToWrite = substituteSlug(textToWrite);
+          } catch (err) {
+            this.logger.warn('project-manager.blueprint.template_missing', {
+              feature: featureId, template: templateRel, error: err.message
+            });
+            this.metrics?.increment('project-manager.errors', { kind: 'blueprint_template_missing' });
+            continue;
+          }
+        } else if (typeof content === 'string') {
+          textToWrite = substituteSlug(content);
+        } else {
+          // Objeto / array / primitivo: stringify pretty con sustitucion.
+          textToWrite = substituteSlug(JSON.stringify(content, null, 2));
+        }
+        await fs.promises.writeFile(fullPath, textToWrite, 'utf-8');
+      }
+    }
+
+    // 5. Symlinks (nuevo v1.0). Crea enlaces simbolicos fuera del base_path.
+    //    Target absoluto puede usar {{slug}}. Source es relativo al base_path.
+    //    Crea el dir parent del target si no existe. Si el symlink ya existe, lo
+    //    reemplaza (idempotente).
+    if (Array.isArray(projectDef.symlinks)) {
+      for (const link of projectDef.symlinks) {
+        if (!link || typeof link.source !== 'string' || typeof link.target !== 'string') continue;
+        const sourceAbs = path.join(basePath, substituteSlug(link.source));
+        const targetAbs = substituteSlug(link.target);
+        try {
+          await fs.promises.mkdir(path.dirname(targetAbs), { recursive: true });
+          try { await fs.promises.unlink(targetAbs); } catch (_) { /* no existe previo */ }
+          await fs.promises.symlink(sourceAbs, targetAbs);
+        } catch (err) {
+          this.logger.warn('project-manager.blueprint.symlink_failed', {
+            feature: featureId, source: sourceAbs, target: targetAbs, error: err.message
+          });
+          this.metrics?.increment('project-manager.errors', { kind: 'blueprint_symlink' });
+        }
+      }
+    }
+
+    // 6. Verify_after (nuevo v1.0). Post-condition: paths que deben existir tras aplicar.
+    //    Si falta alguno, lanza error — el caller lo captura como warning de feature.
+    if (Array.isArray(projectDef.verify_after)) {
+      const missing = [];
+      for (const p of projectDef.verify_after) {
+        const fullPath = path.join(basePath, substituteSlug(p));
+        try { await fs.promises.access(fullPath); }
+        catch (_) { missing.push(p); }
+      }
+      if (missing.length > 0) {
+        throw new Error(`verify_after failed: paths missing ${missing.join(', ')}`);
       }
     }
   }

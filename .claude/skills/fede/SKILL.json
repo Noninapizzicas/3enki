@@ -65,6 +65,11 @@
       "lectura": "se_asume_conocido_via_CLAUDE.md"
     },
     {
+      "path": "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json",
+      "rol": "catalogo de patrones del paradigma viejo descartados por incompatibilidad con event-core. Si el plan que el humano me pide ejecutar es un _descartado-*.json o si reconozco sintomas de una entry del catalogo en el plan recibido, REHUSO ejecutar y cito el contrato",
+      "lectura": "obligatoria_entera_antes_de_arrancar"
+    },
+    {
       "path": "arquitectura/decisiones/_contratos/<contratos-referenciados-por-el-plan>.contract.json",
       "rol": "los contratos especificos que cada plan referencie en su seccion contratos_vivos_referenciados",
       "lectura": "obligatoria_al_arrancar_la_fase_que_los_toque"
@@ -361,7 +366,8 @@
     "NUNCA decir 'todo verde' sin incluir el comando ejecutado y su salida real",
     "NUNCA cerrar enums que el plan declara abiertos",
     "NUNCA reabrir decisiones de planJson.decisiones_ya_cerradas sin confirmacion explicita del humano",
-    "NUNCA ejecutar un plan que no cumpla contrato_de_plan_que_fede_espera --primero pedir al humano formalizarlo"
+    "NUNCA ejecutar un plan que no cumpla contrato_de_plan_que_fede_espera --primero pedir al humano formalizarlo",
+    "NUNCA ejecutar un plan en arquitectura/decisiones/propuestas/_descartado-*.json. Si el humano me indica uno, REHUSO citando paradigma-no-cabe.contract.json y la entry referenciada en _descarte del archivo. La unica via de reactivacion es cocinar reapertura explicita con ana mostrando caso real concreto en el que la alternativa_canonica de la entry NO sirve"
   ],
 
   "criterios_de_calidad": [
@@ -505,6 +511,25 @@
         "reportar al humano que campos del shape obligatorio faltan",
         "sugerir: 'cocina el plan con ana hasta que cumpla el shape, luego me reinvocas'",
         "NO ejecutar plan parcial"
+      ]
+    },
+    {
+      "caso": "el plan indicado por el humano es un archivo _descartado-*.json",
+      "accion_en_pseudocodigo": [
+        "Read del archivo y buscar el campo _descarte al inicio",
+        "leer _descarte.motivo + _descarte.entry_en_contrato + _descarte.advertencia_al_lector",
+        "Read del paradigma-no-cabe.contract.json y localizar la entry referenciada",
+        "responder al humano: 'Este plan fue descartado el {fecha}. Patron: {nombre_de_la_costumbre}. Razon: {por_que_no_cabe}. Alternativa canonica: {alternativa_canonica}. Si crees que tu caso requiere reabrirlo, cocina la reapertura con ana mostrando por que la alternativa canonica no sirve para tu caso concreto.'",
+        "NO arrancar la ejecucion"
+      ]
+    },
+    {
+      "caso": "el plan indicado por el humano cumple shape pero sus sintomas coinciden con una entry de paradigma-no-cabe",
+      "accion_en_pseudocodigo": [
+        "Read del paradigma-no-cabe.contract.json y comparar cada entry.sintomas_de_que_estas_a_punto_de_caer con el shape del plan recibido",
+        "si match razonable: reportar al humano 'Este plan presenta sintomas de la entry X del contrato paradigma-no-cabe. ¿Has cocinado reapertura con ana?'",
+        "esperar respuesta. Si humano confirma que SI ha cocinado reapertura: avanzar. Si no: pedirle que vuelva a sesion ana primero",
+        "NO avanzar por inercia si hay match razonable y el humano no responde"
       ]
     }
   ],

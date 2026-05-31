@@ -1,0 +1,186 @@
+{
+  "_doc": "Contrato TRANSVERSAL que canoniza patrones de pensamiento del paradigma viejo que llegan por costumbre y NO caben en el paradigma vigente del repo (event-core puro, sin agregados materializados redundantes, YAGNI radical en diseno conceptual). Cada entry captura UNA costumbre con sintomas tempranos, razon arquitectonica del rechazo, alternativa canonica del paradigma nuestro y caso testigo con evidencia citada. Proposito: que la proxima sesion (humano o LLM) que llegue al mismo cruce reconozca el patron antes de invertir horas redescubriendo el descarte. Caliente y localizado: una entry por costumbre, no precompilar futuros hipoteticos. Lectura pasiva por ana y fede al arrancar; sin validator hasta que la familia crezca a 3+ entries.",
+  "id": "paradigma-no-cabe",
+  "version": "1.0.0",
+  "creada": "2026-05-31",
+  "supersedes_nota": "v1.0.0 (2026-05-31): primera version. Origen empirico: sesion 2026-05-30 cocina ana del horizonte tienda-estado-canonico-y-vistas. Tras cocinar plan + ejecutor + skill fede + commit + push, el usuario consulto la almohada y descarto el horizonte. Razon: el sistema event-core ya da informacion en vivo a quien escuche; el cache materializado en storage/tienda/estado.json era over-engineering, doble fuente de verdad, y resolvia un problema que nadie pidio en caliente. El usuario observo que ese patron (cache materializado del estado) va a reemerger con matices distintos por costumbre del paradigma viejo --y que sin captura sistemica, la proxima sesion lo redescubrira invirtiendo otras 3 horas. Esta pieza captura el patron como entry canonica.",
+
+  "deriva_de": "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json (los 11 pilares culturales, en particular pilar de YAGNI radical y principio rector LLM+agentes cuando duele) + arquitectura/decisiones/_contratos/extensibilidad-modular.contract.json (paradigma event-core como nucleo invariante)",
+
+  "objetivo": "Capturar costumbres importadas del paradigma viejo (CRUD, agregados materializados, estado replicado, dashboards con cache, manager modules omniscientes, etc.) que llegan por defecto cuando se disena, y NO caben en el paradigma vigente del repo. Funcion: memoria del sistema contra la costumbre. Cuando ana cocina o fede ejecuta y emerge una propuesta que se parece a una entry, citar el entry y parar antes de invertir tiempo en redescubrir el rechazo.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json (este archivo)"
+    ],
+    "obligatorios_si_existen": [
+      "arquitectura/decisiones/propuestas/_descartado-*.json (archivos descartados que cada entry cita como evidencia viva)"
+    ],
+    "opcionales_para_contexto": [
+      "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+      "arquitectura/decisiones/_contratos/extensibilidad-modular.contract.json",
+      "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL PARADIGMA VIEJO LLEGA POR COSTUMBRE. Humano o LLM, ambos arrastran patrones aprendidos de sistemas CRUD, MVC con caches, dashboards con tablas materializadas, managers que centralizan estado. Ninguno de esos cabe en event-core puro --pero la mano se va sola hacia ahi.",
+    "EL DESCARTE NO ES OPINION, ES MEMORIA. Cuando un patron del paradigma viejo se rechaza tras explorarlo, ese descarte tiene coste real (horas, decisiones cocinadas, archivos en disco). Olvidarlo significa pagar el coste de nuevo la proxima vez.",
+    "UNA ENTRY POR COSTUMBRE GENERICA, NO POR CASO CONCRETO. La entry captura el patron (cache materializado del estado), no el caso (storage/tienda/estado.json). Los casos van como casos_testigo[] dentro de la entry. Asi una entry sirve para los N casos futuros con matices distintos.",
+    "CALIENTE Y LOCALIZADO. Una entry NO se anyade preventivamente. Se anyade cuando un caso real concreto se descarta y el patron emerge nombrable. Sin caso testigo no hay entry.",
+    "PASIVO PRIMERO, ENFORCEMENT DESPUES. v1.0.0 es lectura pasiva por ana y fede. Si la familia crece a 3+ entries Y emerge un caso real en el que el LLM no lo cito a tiempo, se considera anyadir validator que cruza propuestas nuevas contra el catalogo. No antes."
+  ],
+
+  "principios": [
+    {
+      "id": "P1",
+      "regla": "Cada entry tiene nombre_de_la_costumbre canonico en kebab-case-ASCII que sirve de id estable",
+      "razon": "Para que las referencias desde archivos descartados y desde otras sesiones apunten a un identificador inmutable"
+    },
+    {
+      "id": "P2",
+      "regla": "Cada entry tiene sintomas_de_que_estas_a_punto_de_caer[] con al menos 2 sintomas tempranos observables en lenguaje natural",
+      "razon": "El proposito operativo de la entry es que ana o fede la activen cuando vean los sintomas, NO cuando vean el patron ya implementado"
+    },
+    {
+      "id": "P3",
+      "regla": "Cada entry tiene por_que_no_cabe argumentado contra el paradigma vigente, no contra preferencia personal",
+      "razon": "Un descarte por preferencia es opinion mutable. Un descarte por incompatibilidad arquitectonica es ley del sistema. Solo el segundo merece entry."
+    },
+    {
+      "id": "P4",
+      "regla": "Cada entry tiene alternativa_canonica del paradigma nuestro explicada en 1-2 lineas",
+      "razon": "Rechazar sin ofrecer alternativa es bloquear. La entry sirve para redirigir al patron correcto, no solo para vetar el incorrecto"
+    },
+    {
+      "id": "P5",
+      "regla": "Cada entry tiene casos_testigo[] con al menos 1 caso real, cada caso citando archivos en disco que existen",
+      "razon": "Sin evidencia citada, la entry es teoria. Los archivos descartados son la prueba de que se exploro y se rechazo --el siguiente que dude puede leerlos enteros"
+    },
+    {
+      "id": "P6",
+      "regla": "Una entry NO se anyade preventivamente. Solo cuando un caso real se descarta y el patron emerge nombrable",
+      "razon": "Disciplina ana: no precompilar futuros hipoteticos. YAGNI radical."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "decision": "Catalogo plano de entries[], sin jerarquia",
+      "razon": "v1.0.0 con 1 entry no justifica jerarquia. Si crece a 10+, se reconsidera agrupacion por familia (estado/agregados/managers/...)"
+    },
+    {
+      "decision": "Archivos descartados quedan en arquitectura/decisiones/propuestas/ con prefijo _descartado-",
+      "razon": "Coherente con la familia _arranque-, _ejecutor- ya existente. No introducir subcarpeta nueva (descartado/) hasta que haya 5+ archivos descartados que justifiquen separacion fisica. Patron emerge del _legacy/ en modulos POC2 que vive al lado del modulo nuevo, no en otra carpeta."
+    },
+    {
+      "decision": "Cada archivo _descartado-*.json lleva campo _descarte al inicio del JSON con metadato canonico",
+      "razon": "Cualquiera que abra el JSON ve en 2 segundos que es evidencia descartada y no plan ejecutable. El campo _descarte va ANTES de _doc porque la advertencia es lo primero que debe leerse."
+    },
+    {
+      "decision": "Sin validator en v1.0.0",
+      "razon": "Una entry no justifica enforcement mecanico. La lectura pasiva por ana y fede al arrancar es suficiente. Si crece a 3+ entries Y se detecta sesion que cayo en el patron sin citar el entry, se considera validator."
+    },
+    {
+      "decision": "Lectura por ana y fede declarada en su SKILL respectivo",
+      "razon": "Activacion sin proceso nuevo: las dos skills que cocinan o ejecutan ya leen contratos transversales al arrancar. Anyadir paradigma-no-cabe a esa lista lo hace operativamente vivo."
+    }
+  ],
+
+  "prohibido": [
+    "Anyadir entry preventiva sin caso real descartado (rompe P6 y disciplina ana)",
+    "Anyadir entry por preferencia personal de un disenador en vez de incompatibilidad con paradigma (rompe P3)",
+    "Anyadir entry sin alternativa_canonica (rompe P4 --rechazar sin redirigir)",
+    "Anyadir entry sin casos_testigo[] con archivos reales (rompe P5)",
+    "Mover archivos descartados a subcarpeta descartado/ sin 5+ archivos que justifiquen separacion (rompe decision arquitectonica)",
+    "Borrar archivos descartados aunque haya entry --la evidencia citada debe seguir leible (asi se sostiene P5)",
+    "Activar el patron descartado en nuevo horizonte sin cocinar antes una reapertura explicita de la entry con info nueva concreta",
+    "Generalizar una entry a 'todo lo que se parezca' --la entry captura UN patron nombrable, no es comodin"
+  ],
+
+  "entries": [
+    {
+      "id": "cache_materializado_del_estado_de_un_dominio",
+      "nombre_de_la_costumbre": "Cache materializado del estado de un dominio (storage/<dominio>/estado.json o equivalente)",
+      "otros_nombres_que_toma": [
+        "agregado del estado (DDD)",
+        "vista materializada (CQRS read model)",
+        "tabla de estado actual del dominio",
+        "snapshot por dominio",
+        "JSON de presentacion del dominio",
+        "dashboard data file",
+        "estado canonico de <X>"
+      ],
+      "sintomas_de_que_estas_a_punto_de_caer": [
+        "Alguien dice 'el LLM debe ver el estado actual de X' sin definir que es 'el estado actual'",
+        "Alguien dibuja un archivo storage/<dominio>/estado.json o tabla SQLite con campos derivados",
+        "Alguien propone un modulo X-estado o X-manager que centralice el shape del estado de un dominio",
+        "Alguien propone que N modulos del subsistema escriban a un agregado compartido tras cada mutacion",
+        "Aparece el patron 'cuando emite evento E, actualiza el cache con patch'",
+        "El diseno habla de 'una pieza unificadora' que todos consumen y todos actualizan",
+        "Aparece una vista para dashboard del usuario final con cache local que se sincroniza por eventos"
+      ],
+      "por_que_no_cabe": "El paradigma del sistema es event-core puro (CLAUDE.md, seccion 'La regla que no se rompe'). Los eventos del bus son la fuente unica de verdad observable de cada dominio. Un cache materializado introduce SEGUNDA fuente de verdad que puede divergir de los eventos (drift), exige logica de mantenimiento (modulo nuevo o N modulos modificados que aplican patches), exige CAS o atomicidad para concurrencia, introduce schema de validacion adicional, exige migracion de estado existente, y resuelve un problema --lectura instantanea del estado actual-- que en este sistema se resuelve por composicion: el cliente que quiere el estado se suscribe a los eventos del subsistema y compone el estado al vuelo, o pide via tools especificos (fs.read.request, <dominio>.list.request) lo que necesite. La latencia es la misma; la infraestructura es 10x menor. El cache materializado solo se justifica si emerge UN caso real concreto en el que la composicion al vuelo NO basta --no por intuicion de que 'sera util'.",
+      "alternativa_canonica": "El cliente que necesita ver el estado del dominio se suscribe via MQTT a los eventos canonicos del subsistema (core/+/events/<dominio>/#) y compone el estado en su propia capa --frontend Svelte, dashboard del comerciante, helper del operador, contexto del LLM. Los componentes Svelte se suscriben directo al bus, no a un JSON intermediario. El LLM pide via tools (fs.read.request, <dominio>.list.request) lo que requiera en cada turno. El operador usa scripts/audit-helpers/capture-bus.js con filtro del subsistema. El dev nuevo lee el contrato del subsistema + arquitectura/decisiones/_outputs/eventos-publish-subscribe.json (catalogo de los 405 eventos del repo).",
+      "casos_testigo": [
+        {
+          "fecha_de_descarte": "2026-05-30",
+          "sesion_que_lo_descarto": "cocina ana del horizonte tienda-estado-canonico-y-vistas",
+          "horas_invertidas_antes_del_descarte": "aproximadamente 4 (cocina del plan + cocina del ejecutor + cocina de la skill fede v1.0.0 cableada al horizonte)",
+          "archivos_de_evidencia": [
+            "arquitectura/decisiones/propuestas/_descartado-tienda-estado-canonico-y-vistas.json",
+            "arquitectura/decisiones/propuestas/_descartado-ejecutor-tienda-estado-canonico-y-vistas.json"
+          ],
+          "resumen_de_lo_que_se_cocino": "Plan + ejecutor + skill ejecutora para implementar storage/tienda/estado.json por proyecto, mantenido por modulo nuevo (rama A de Q1) o por N modulos del subsistema (rama B), consumido por 4 perfiles (operador, dev nuevo, LLM, comerciante) via 4 vistas distintas (fs.read directo, contrato apuntando al estado, ai-gateway inyectando estado al system prompt, TiendaDashboard.svelte con suscripcion a tienda.estado.actualizado).",
+          "frase_que_disparo_el_descarte": "Tras consultar la almohada, el usuario observo que el sistema event-core ya da la informacion en vivo a quien escuche los eventos del subsistema; el cache materializado en estado.json era over-engineering --doble fuente de verdad, modulo nuevo o N modulos modificados, CAS, schema, validator, migracion manual de vapers, 12-19h-- para resolver un problema (lectura instantanea) que nadie pidio en caliente.",
+          "lo_que_si_sobrevive_del_descarte": "El componente TiendaDashboard.svelte para el comerciante sigue siendo util --pero suscrito DIRECTO al bus MQTT, sin JSON cache intermediario. La migracion del path canonico del bundle de la PWA a storage/tienda/bundle/ + Caddyfile + symlinks tambien sobrevive (esta vivo en main desde 2026-05-29, no se reabre)."
+        }
+      ]
+    }
+  ],
+
+  "como_se_anyade_una_entry_nueva": [
+    "Cuando una sesion (ana o fede) descarta un horizonte por incompatibilidad con el paradigma:",
+    "1. Renombrar los archivos del horizonte descartado en propuestas/ con prefijo _descartado-",
+    "2. Anyadir campo _descarte al inicio de cada JSON descartado con motivo, patron, entry_en_contrato, advertencia_al_lector",
+    "3. Identificar el patron generico del paradigma viejo (no el caso concreto)",
+    "4. Si el patron NO tiene entry en este contrato: cocinar entry nueva en sesion ana con shape canonico (nombre_de_la_costumbre, sintomas, por_que_no_cabe, alternativa_canonica, casos_testigo)",
+    "5. Si el patron YA tiene entry: anyadir caso_testigo nuevo a la entry existente",
+    "6. NUNCA anyadir entry preventiva sin caso real (P6)",
+    "7. Commit del contrato + archivos descartados en mismo commit",
+    "8. CLAUDE.md NO se actualiza por cada entry --solo cuando el contrato emerge nuevo o cuando cambia su rol global"
+  ],
+
+  "como_se_reabre_una_entry": [
+    "Una entry rechaza el patron. NO es ley absoluta inmutable. Si emerge un caso real concreto en el que el modelo canonico del paradigma NO basta:",
+    "1. Documentar el caso en sesion ana antes de cualquier implementacion",
+    "2. Mostrar concretamente por que la alternativa_canonica no sirve para ESTE caso (no basta intuicion)",
+    "3. Si tras la cocina el caso justifica el patron descartado: anyadir nota_de_reapertura en la entry con caso + motivo + fecha",
+    "4. NO borrar la entry. La nota_de_reapertura matiza el rechazo, no lo anula",
+    "5. NO precipitarse: la mayoria de casos que parecen justificar el patron descartado son redirigibles a la alternativa_canonica con disenyo cuidadoso"
+  ],
+
+  "salida_validador": "n/a en v1.0.0 (sin validator). Lectura pasiva por ana y fede al arrancar. Si emerge necesidad de enforcement, validator futuro cruzara cada propuesta nueva en propuestas/ contra entries[].sintomas_de_que_estas_a_punto_de_caer[] con heuristica de match. Por ahora la activacion es semantica via lectura del LLM.",
+
+  "derivaciones": [
+    "SKILL.md de ana anyade entry en 'Ortogonalidad con otros contratos del repo' mencionando paradigma-no-cabe como lectura al arrancar",
+    "SKILL.json de fede anyade entry en archivos_que_la_skill_carga_al_invocarse con paradigma-no-cabe.contract.json como contrato a leer obligatoriamente",
+    "CLAUDE.md anyade parrafo en la lista de contratos transversales describiendo paradigma-no-cabe y su rol como memoria del sistema contra la costumbre",
+    "Futuros horizontes cocinados en propuestas/ pueden citar entries de este contrato como salvaguarda explicita en su seccion 'lo que NO se incluye'"
+  ],
+
+  "convenciones_complementarias": {
+    "naming": "id del contrato y de cada entry en kebab-case-ASCII, sin tildes ni nye, conforme a arquitectura/convenciones/_outputs/naming.json",
+    "glossary": "Si un patron del catalogo introduce termino nuevo cross-modulo, anyadir a arquitectura/convenciones/_outputs/glossary.json --no relevante en v1.0.0 con 1 entry",
+    "dinamica_de_trabajo_companero": "El protocolo de anyadir entry sigue el flujo 'horizonte grande' del contrato dinamica-de-trabajo-companero --cocina con ana, OK del humano, commit con cita del caso testigo",
+    "disciplina_llm_operador": "ana y fede declaran este contrato en su 'asumo del doc sin verificar' al arrancar sesion --la activacion semantica depende de que el LLM lo recuerde, no de validator"
+  },
+
+  "trabajo_pendiente": [
+    "Si emerge segunda entry, considerar agrupacion por familia (estado/agregados/managers/...) o mantener catalogo plano",
+    "Si emerge tercera entry, evaluar validator que cruce propuestas/*.json contra entries[].sintomas con heuristica de match",
+    "Si emerge caso de reapertura legitima, formalizar protocolo de reapertura con cambios al shape de la entry (anyadir nota_de_reapertura como campo canonico)",
+    "Considerar si fede debe rechazar invocaciones sobre planes _descartado-*.json con mensaje canonico citando la entry del contrato --hoy solo la advertencia_al_lector dentro del archivo descartado lo bloquea por convencion semantica"
+  ]
+}

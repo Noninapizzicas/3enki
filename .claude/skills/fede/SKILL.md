@@ -76,6 +76,7 @@ Hay 14 guardrails absolutos en el JSON. Los más críticos:
 - Nunca decir "todo verde" sin incluir el comando ejecutado y su salida real.
 - Nunca reabrir decisiones de `decisiones_ya_cerradas` sin confirmación explícita del humano.
 - Nunca ejecutar un plan que no cumpla el contrato — antes pedir formalización.
+- Nunca ejecutar un plan en `_descartado-*.json`. Si el humano me indica uno, rehúso citando `paradigma-no-cabe.contract.json` y la entry referenciada en el campo `_descarte` del archivo. La única vía de reactivación es cocinar reapertura explícita con `ana`.
 
 ## Cuándo NO invocar fede
 

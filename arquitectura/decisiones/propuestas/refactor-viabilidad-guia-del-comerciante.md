@@ -205,7 +205,7 @@ El frontend ya bosquejo casi toda la experiencia. Estado real verificado:
 
 ---
 
-## 8. Hilos abiertos menores (no bloquean el spec)
+## 8. Hilos abiertos menores → RESUELTOS (ver seccion 10)
 
 - **¿Como se inicia una evaluacion desde la estancia?** Postura B dice que las
   mutaciones van via prefill al chat. Evaluar crea un expediente (mutacion).
@@ -222,12 +222,13 @@ Esto es horizonte grande. Antes de codigo, esta propuesta es el deposito de lo
 cocinado. Cuando se arranque la implementacion (sesion `fede` o equivalente),
 respetando la disciplina contrato-primero del repo:
 
-0. **Contrato primero**: precisar `subsistema-recetario.contract.json` —
-   viabilidad pasa de "puramente determinista" a "determinista + genera caminos
-   ligeros (puntos de entrada); profundidad cualitativa en el chat". Actualizar
-   las 2 descripciones de schema (`viabilidad.evaluacion.{completada,descartada}`)
-   que hoy dicen "NO cualitativo". **Retirar el agente** legacy
+0. **Contrato primero**: precisar el ROL de viabilidad en
+   `subsistema-recetario.contract.json` — pasa de "puramente determinista" a
+   "determinista + genera caminos ligeros (puntos de entrada accionables);
+   profundidad cualitativa en el chat". **Retirar el agente** legacy
    `viabilidad-receta-analyzer.json` + su prompt (footprint limpio, seccion 5bis).
+   Los 2 schemas de evento **NO se tocan** (ver seccion 10: los caminos viven en
+   el expediente, no en el evento; el evento sigue canonico tras v1.1.1).
 1. **Blueprint** (`viabilidad.blueprint.json`): la operacion `evaluar` gana un
    paso donde el LLM-runtime, tras el calculo determinista, propone los
    `caminos` (capa 3) y los incluye en el expediente. El veredicto se mantiene
@@ -239,6 +240,78 @@ respetando la disciplina contrato-primero del repo:
 3. Evaluar si conviene un **plan ejecutable** `cierre-ui-viabilidad.json` al
    estilo de `cierre-ui-recetas.json` / `cierre-ui-escandallo.json` ya
    existentes (la familia de cierres UI por modulo blueprint).
+
+---
+
+## 10. Specs de ejecucion (cubos A+B cerrados, 2026-06-01)
+
+Bajada de lo cocinado a specs concretas, para que el ejecutor (cubo C) no re-decida.
+
+### Decisiones (cubo A, cerradas)
+- **Iniciacion = Postura B (prefill→chat).** Boton "Evaluar un producto" en la
+  estancia que hace `prefillChatInput` con un arranque; el comerciante describe
+  el producto hablando, el LLM lo estructura. Atajo: desde una receta existente,
+  boton que prefilla con su `receta_id`. NO formulario (el input es
+  conversacional, no denso — Postura B del contrato `ui-frontend-blueprint`).
+- **Regla de caminos = cuando hay palanca real, 0–3, sin inventar.** El veredicto
+  y el juicio salen siempre; los caminos salen cuando aportan. Producto redondo
+  → `caminos = []`. Tope blando 2–3 (estancia de un vistazo). Contenido abierto
+  (LLM por caso); solo la *regla* esta cerrada.
+
+### Shape de `caminos[]` (cubo B) — en el expediente, NO en el evento
+Campo nuevo en el `estado_persistente` del expediente:
+```
+"caminos": [
+  { "titulo": "string — recomendacion visible en la tarjeta (ej. 'Subir el PVP a 9€')",
+    "prompt": "string — lo que se inyecta al chat al tocar la tarjeta: incluye los datos
+               del expediente (nombre_idea, coste_por_porcion, pvp) + la consulta del
+               camino. Lo redacta el LLM entero al evaluar; el frontend solo lo inyecta." }
+]
+```
+Sin `tipo`/`prioridad`/`impacto` — eso seria recerrar el enum que el usuario abrio.
+
+### Paso nuevo del pseudocodigo de `evaluar` (cubo B)
+Entre el veredicto (paso 4) y la construccion del expediente (paso 5):
+```
+"  // 4b. Generar caminos (la brujula). Stubs ligeros, NO analisis pesado.",
+"  //     Regla: 0-3. Si hay palanca que merezca la pena para ESTE caso, proponla.",
+"  //     Si sale redondo y no hay nada que tocar, caminos = [] (NO inventar).",
+"  //     El desarrollo cualitativo NO se hace aqui — vive en el chat al tocar la tarjeta.",
+"  caminos = <TU propones 0-3 caminos segun veredicto, food_cost_pct, margen y advertencias;",
+"             cada uno { titulo, prompt }, con el prompt incluyendo nombre_idea,",
+"             coste_por_porcion, pvp_efectivo y la consulta del camino>"
+```
+Y en el paso 5 (construir expediente): anadir `caminos: caminos`.
+
+### Contrato-primero (cubo B) — footprint MENOR de lo anunciado
+- **`subsistema-recetario.contract.json`**: precisar el ROL de viabilidad —
+  "determinista + genera caminos ligeros (puntos de entrada); profundidad
+  cualitativa en el chat". Retirar el agente `viabilidad-receta-analyzer`.
+- **Los 2 schemas de evento: NO se tocan.** Refinamiento honesto sobre lo dicho
+  en turnos previos: los caminos viven en el EXPEDIENTE persistido, NO en el
+  evento. El evento sigue determinista (canonico tras v1.1.1) y la frase de los
+  schemas "lo cualitativo lo decide el LLM principal" SIGUE siendo cierta — la
+  profundidad esta en el chat (= LLM principal). Contrato mas pequeno de tocar.
+
+### Frontend (cubo B)
+- **Panel** (`ViabilidadPanel`): ya lee `/viabilidad.json`. Anadir boton
+  "Evaluar un producto" → `prefillChatInput(arranque)`.
+- **Detail** (`ViabilidadDetail`): remapear al shape real del expediente —
+  `nombre_idea` (era `receta_nombre`), `coste_por_porcion`, `pvp_efectivo` (era
+  `precio_venta`), `margen_porcion` (era `margen_bruto`), `food_cost_pct` (era
+  `food_cost_porcentaje`), `veredicto` (era `estado` VIABLE/...). **Quitar** la
+  seccion "Comparacion Historica".
+- **Recomendaciones** (`ViabilidadRecomendaciones`): cambiar props de
+  recomendaciones-de-tipo-fijo a `caminos` (`{titulo, prompt}`); cada tarjeta =
+  `prefillChatInput(camino.prompt)`. Fuera `prioridad`/`tipo`/`impacto`.
+
+### Lo que queda (cubo C — el ejecutor)
+**Cerrado**: `cierre-refactor-viabilidad-guia-del-comerciante.json` (hermano de
+este doc). Plan ejecutable estilo `cierre-ui-*.json` que corre `fede`: 4 fases
+(F0 contrato + retirar agente, F1 blueprint con caminos, F2 frontend, F3
+runtime-case) con OK explicito entre cada una, archivos exactos, cross-checks y
+prohibiciones absolutas. En blueprint-driven el runtime-case (F3) sustituye al
+test-por-handler.
 
 ---
 

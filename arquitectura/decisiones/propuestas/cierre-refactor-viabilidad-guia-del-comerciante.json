@@ -78,7 +78,13 @@
     {
       "id": "Qopcional",
       "pregunta": "El texto exacto del arranque que prefilla el boton 'Evaluar un producto' (ej. 'Quiero evaluar la viabilidad de un producto: '). Es cosmetico; si no hay respuesta, fede usa ese default y sigue.",
-      "bloquea": false
+      "bloquea": false,
+      "respuesta_usuario": {
+        "opcion": "default",
+        "texto": "Quiero evaluar la viabilidad de un producto: ",
+        "motivo": "humano indica ejecutar sin elegir texto; se usa el default cosmetico del plan",
+        "cerrada_en": "2026-06-01"
+      }
     }
   ],
 

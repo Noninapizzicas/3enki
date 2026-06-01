@@ -1,0 +1,812 @@
+{
+  "_doc": "Plan ejecutable JSON del horizonte 'cierre-ui-recetas'. Materializa la UI del modulo recetas siguiendo Postura B (UI solo lectura + pre-relleno del chat input para acciones). Caso piloto del principio 'todos los blueprint con UI para que los cajones funcionen'. Pensado para que fede lo ejecute linealmente. Las operaciones usan pseudocodigo respetando pseudocodigo-estilo.contract.json (sin Object.assign, sin rest-spread con omision, verboso explicito).",
+
+  "id": "cierre-ui-recetas",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "cierre_ui_modulo_blueprint",
+
+  "documentos_hermanos": {
+    "captura_visual_referencia": "captura movil enviada por usuario 2026-06-01 con work-bar superior subrayada como zona editable por modulo",
+    "patron_hermano_a_seguir": "frontend/src/lib/modules/viabilidad/ViabilidadPanel.svelte (router interno con activeView)",
+    "patron_hermano_alternativo": "frontend/src/lib/modules/escandallo/EscandalloPanel.svelte"
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json",
+    "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json",
+    "arquitectura/decisiones/_contratos/cajones-context-partitioning.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json"
+  ],
+
+  "por_que_existe": {
+    "principio_arquitectonico_descubierto_en_la_cocina": "Todos los modulos blueprint del sistema deben tener UI propia. Sin UI, los cajones (chat.cambiar_foco a target_page_id) hacen goto() a una ruta inexistente y rompen el flujo. La diferencia entre modulos es el TIPO de UI que consume cada uno, no si la lleva o no. Excepciones: agentes blueprint y blueprints padre abstractos (headless por diseno).",
+    "criterio_de_inclusion_chat_vs_ui": {
+      "ui_imprescindible": [
+        "densidad visual instantanea (listas, catalogos, detalle estructurado)",
+        "acciones rapidas sin formularla (botones de archivar, cambiar estado)",
+        "edicion estructurada de muchos campos (bulk update, formularios densos)",
+        "preview de salidas visuales (diffs, HTML imprimible, previews)",
+        "estado vivo del sistema (cartas activas, proximos cambios)"
+      ],
+      "se_queda_en_chat": [
+        "busqueda semantica natural",
+        "calculos on-demand sin desglose visual",
+        "investigacion por nombre",
+        "creacion y edicion compleja de entidades (LLM estructura mejor el input que un form)"
+      ]
+    },
+    "postura_para_recetas": "Postura B --UI solo lectura. Las mutaciones (crear, actualizar, eliminar, cambiar_estado, revertir, actualizar_precio) se ejecutan SIEMPRE via chat. Los botones de accion en la UI pre-rellenan el chat input con la frase canonica; el usuario revisa y envia.",
+    "por_que_postura_B": [
+      "Cero duplicacion: el blueprint sigue siendo el unico punto de mutacion, via LLM siempre",
+      "Coherencia con principio 'UI es escena, chat es operador'",
+      "Reduce codigo a mantener (no form complejo, no manejo de errores de mutacion en store, no validaciones cliente)",
+      "El LLM estructura mejor que un form la creacion de entidades complejas (recetas con ingredientes, pasos, alergenos)"
+    ]
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "frontend/src/routes/[project_id]/recetas/+page.svelte",
+      "existe": true,
+      "contenido": "shell minimal <LazyShell />",
+      "linea_count": 5
+    },
+    {
+      "pieza": "frontend/src/lib/modules/recetas/",
+      "archivos_presentes": ["RecetasPanel.svelte (19.8 KB, 649 lineas, monolito 3-tabs solo lectura)", "index.ts (1.3 KB)", "manifest.json (0.25 KB)"]
+    },
+    {
+      "pieza": "frontend/src/lib/stores/recetas.ts",
+      "lineas": 476,
+      "funciones_actuales": ["loadRecetas", "getReceta", "loadIngredientes", "loadStats", "setActiveTab", "selectReceta", "clearError", "initRecetasSubscriptions"],
+      "tools_blueprint_invocados_directamente": "ninguno --solo lee /recetas.json via fs.read"
+    },
+    {
+      "pieza": "frontend/src/lib/components/layout/ChatInput.svelte",
+      "input_state": "variable Svelte local 'let inputValue = \"\"' (linea 16) --NO exportado como store",
+      "mecanismo_prefill_existente": "ninguno --hay que cocinarlo"
+    },
+    {
+      "pieza": "frontend/src/lib/modules/viabilidad/",
+      "archivos": ["ViabilidadPanel.svelte (router activeView browser|detail)", "ViabilidadBrowser.svelte", "ViabilidadCard.svelte", "ViabilidadDetail.svelte", "ViabilidadRecomendaciones.svelte", "index.ts", "manifest.json"],
+      "rol_como_referencia": "patron hermano canonico a seguir para router interno con activeView local"
+    },
+    {
+      "pieza": "frontend/src/lib/modules/escandallo/",
+      "archivos": ["EscandalloPanel.svelte", "EscandalloBrowser.svelte", "EscandalloCard.svelte", "EscandalloDetail.svelte", "EscandalloAlerts.svelte", "index.ts", "manifest.json"],
+      "rol_como_referencia": "segundo hermano canonico"
+    },
+    {
+      "pieza": "modules/pizzepos/recetas/recetas.blueprint.json",
+      "tools_expuestos": ["recetas.crear", "recetas.listar", "recetas.obtener", "recetas.buscar", "recetas.actualizar", "recetas.historial", "recetas.revertir", "recetas.eliminar", "recetas.cambiar_estado", "recetas.estadisticas", "recetas.ingredientes", "recetas.actualizar_precio", "recetas.analizar", "recetas.investigar_receta"],
+      "handler_interno": "recetas._aplicar_coste_calculado (subscriber a escandallo.coste.calculado)"
+    },
+    {
+      "pieza": "frontend/package.json scripts",
+      "disponibles": ["dev (vite dev)", "build (vite build)"],
+      "infra_tests": "INEXISTENTE --no vitest, no playwright, no archivos *.test.ts en frontend/src"
+    },
+    {
+      "pieza": "scripts/validate-all.js",
+      "alcance": "8 validators arquitectonicos solo backend/contratos --no cubre frontend"
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/hola-2Pn9F antes de empezar",
+      "frontend/src/lib/components/layout/ChatInput.svelte sigue teniendo 'let inputValue = \"\"' como variable local",
+      "frontend/src/lib/modules/viabilidad/ViabilidadPanel.svelte sigue siendo router con 'let activeView' local",
+      "frontend/src/lib/modules/recetas/RecetasPanel.svelte sigue siendo el monolito de ~649 lineas con 3 tabs (Recetas|Detalle|Ingredientes)",
+      "frontend/src/lib/modules/recetas/manifest.json declara 1 boton work-bar con id=recetas",
+      "frontend/src/lib/stores/recetas.ts existe y exporta las funciones de lectura listadas",
+      "frontend/src/routes/[project_id]/recetas/+page.svelte existe con shell minimal",
+      "modules/pizzepos/recetas/recetas.blueprint.json expone los 14 tools del catalogo",
+      "no existe frontend/src/lib/modules/ingredientes/",
+      "no existe frontend/src/routes/[project_id]/ingredientes/+page.svelte",
+      "no existe frontend/src/lib/stores/chatInputDraft.ts",
+      "npm run validate:ci en la raiz da PASS antes de empezar (baseline aceptado)"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Los 5 criterios chat-vs-UI son la disciplina vigente del repo para decidir alcance UI",
+      "Postura B (UI solo lectura + pre-relleno del chat) es la cocinada y cerrada para este modulo",
+      "Patron 'un blueprint backend = N modulos frontend segun recursos observables' deriva de menu-generator (menu-cartas + menu-generate) y carta-marketing (marketing-perfil + marketing-actividad)",
+      "El blueprint backend recetas publica eventos canonicos tras mutaciones (recetas.creada, recetas.actualizada, recetas.eliminada, etc.) que el store frontend captura via initRecetasSubscriptions para refrescar /recetas.json",
+      "El cajon abre target_page_id via chat.cambiar_foco que dispara goto() en chat.ts a la ruta /<project_id>/<target_page_id>/",
+      "viabilidad y escandallo son la referencia canonica del patron Panel router + Browser/Card/Detail",
+      "ChatInput.svelte renderiza con bind:value contra una variable local que se puede sustituir por bind contra store sin romper la UX",
+      "El test infrastructure del frontend NO existe y NO se cocina en este plan --es deuda separada"
+    ],
+    "no_toco_esta_sesion": [
+      "modules/pizzepos/recetas/recetas.blueprint.json (backend del blueprint)",
+      "modules/pizzepos/recetas/module.json",
+      "cualquier otro modulo blueprint backend",
+      "frontend/src/lib/modules/escandallo/, viabilidad/, carta-* (otros modulos frontend)",
+      "scripts/validate-all.js y sus validators",
+      "drift-baseline.json",
+      "arquitectura/decisiones/_contratos/ (cero modificacion de contratos)",
+      "frontend/src/lib/components/layout/LazyShell.svelte (motor generico, no se toca)",
+      "frontend/src/lib/modules/loader.ts (registry autodescubierto, no se toca)",
+      "Infra de tests frontend (vitest, playwright, etc.) --deuda separada",
+      "Cualquier archivo fuera de los explicitamente listados en las fases"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [
+    {
+      "id": "Q1",
+      "tema": "buscador_visual_en_browser",
+      "pregunta": "RecetasBrowser y IngredientesBrowser, ¿incluyen buscador visual simple (input que filtra la lista en cliente por substring de nombre) o sin buscador (la busqueda va por chat)?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "con buscador visual simple",
+          "comentario": "filtro client-side por substring del nombre, no requiere invocar tool. Util cuando hay 20+ items."
+        },
+        {
+          "id": "B",
+          "label": "sin buscador visual",
+          "comentario": "coherente con Postura B (busqueda semantica = chat). Pero busqueda por substring NO es semantica, es filtro --podria caer en 'densidad'."
+        }
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Filtro por substring del nombre en cliente es densidad (criterio 1), no busqueda semantica. Util y barato. El tool recetas.buscar del blueprint cubre busqueda semantica avanzada y se queda en chat.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q2",
+      "tema": "frases_canonicas_de_prefill",
+      "pregunta": "¿Confirmas las frases de pre-relleno propuestas o las matizas? Las propuestas son:\n- Eliminar: 'Elimina la receta \"<nombre>\".'\n- Cambiar estado: 'Cambia el estado de la receta \"<nombre>\" a <estado_target>.'\n- Editar: 'Edita la receta \"<nombre>\". Cambia [describe que].'\n- Nueva receta: 'Crea una receta nueva: [describe nombre, ingredientes, pasos].'\n- Ver historial: NO pre-rellena (es navegacion interna a HistorialView).\n- Revertir: 'Revierte la receta \"<nombre>\" a la version del <fecha_version>.'\n- Actualizar precio (1 ingrediente): 'Actualiza el precio del ingrediente \"<nombre>\" a <precio>€/<unidad>.'\n- Actualizar precios bulk: 'Actualiza estos precios: <lista_ingredientes_actuales>.'",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "las acepto literalmente como propuestas",
+          "comentario": "fede usa estas frases tal cual con template strings"
+        },
+        {
+          "id": "B",
+          "label": "las matizo (dare nueva redaccion)",
+          "comentario": "usuario provee versiones nuevas; fede las usa"
+        }
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Las frases son operativas. Si emerge necesidad de ajuste tras uso real, vuelta posterior.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q3",
+      "tema": "formato_preview_diff_revertir",
+      "pregunta": "El boton 'Revertir' en HistorialView, ¿como muestra el preview de diff antes de pre-rellenar el chat?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "lado_a_lado (columnas: version_anterior | actual)",
+          "comentario": "denso visualmente; util para campos cortos"
+        },
+        {
+          "id": "B",
+          "label": "inline (solo lista de campos que cambian con valor antes -> valor despues)",
+          "comentario": "compacto; util cuando solo cambian pocos campos"
+        },
+        {
+          "id": "C",
+          "label": "solo lista de campos cambiados sin valores (resumen)",
+          "comentario": "minimo; el usuario lee la frase pre-rellenada y el chat hace el diff completo"
+        }
+      ],
+      "recomendacion": "B",
+      "comentario_recomendacion": "Inline con lista de campos antes/despues cumple criterio 4 (preview de diff) sin sobreingenierar. Si los campos son muchos, lado-a-lado emerge como mejora en vuelta posterior.",
+      "respuesta_usuario": null
+    }
+  ],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1",
+      "decision": "Los 5 criterios cocinados (densidad / accion rapida / edicion estructurada / preview / estado vivo) son el filtro vigente para mapear tools-a-UI vs tools-a-chat",
+      "no_reabrir_sin": "cocinar revision del principio con ana en sesion nueva"
+    },
+    {
+      "id": "D2",
+      "decision": "Postura B para recetas: UI es solo lectura. Cero mutaciones via store. Todas las acciones pre-rellenan el chat input para que el usuario revise y envie",
+      "no_reabrir_sin": "demostrar caso real concreto donde el chat es ineficiente y el form gana claramente"
+    },
+    {
+      "id": "D3",
+      "decision": "Recetas se materializa en DOS modulos frontend separados: recetas/ (recurso 'recetas') y ingredientes/ (recurso 'ingredientes con precios')",
+      "razon": "Principio: 1 boton work-bar = 1 recurso observable. Recetas tiene 2 recursos paralelos.",
+      "no_reabrir_sin": "redefinir el principio que rige work-bar"
+    },
+    {
+      "id": "D4",
+      "decision": "Cada modulo frontend declara 1 boton en work-bar superior. Las sub-vistas (Detail, Form, Historial, PreciosBulk) son internas al Panel con activeView local, NO botones de work-bar",
+      "razon": "Patron hermano viabilidad/escandallo verificado en disco"
+    },
+    {
+      "id": "D5",
+      "decision": "Router interno de cada Panel usa variable Svelte local 'let activeView' + handlers que cambian activeView y estado seleccionado. NO store global de UI navigation",
+      "razon": "Patron hermano viabilidad/escandallo verificado en disco; navegacion entre Browser/Detail es interna del modulo, no afecta a otros"
+    },
+    {
+      "id": "D6",
+      "decision": "Store de recetas se mantiene SOLO LECTURA. Funciones nuevas permitidas: loadHistorial(recetaId). Funciones NO permitidas: cualquier crearReceta/actualizarReceta/eliminarReceta/cambiarEstado/revertirReceta/actualizarPrecio*",
+      "razon": "Postura B"
+    },
+    {
+      "id": "D7",
+      "decision": "Mecanismo de pre-relleno del chat input es compartido entre todos los modulos: store nuevo frontend/src/lib/stores/chatInputDraft.ts con writable y funcion prefillChatInput(text). ChatInput.svelte se modifica para bind:value contra el store",
+      "razon": "Reusable por los 11 modulos con UI a futuro --inversion una vez, beneficio en todos"
+    },
+    {
+      "id": "D8",
+      "decision": "Tests automatizados FUERA del plan. Anotados como deuda separada (cocinar infra de tests frontend en horizonte propio)",
+      "razon": "Infra de tests frontend inexistente en repo; cocinar la infra explota el alcance"
+    },
+    {
+      "id": "D9",
+      "decision": "Verificacion final del horizonte es MANUAL con dev server. Fede levanta npm run dev en frontend/ y prueba cada flow del listado en Pieza E del plan",
+      "razon": "Sin infra de tests, la verificacion solo puede ser observacional"
+    },
+    {
+      "id": "D10",
+      "decision": "El plan es piloto del principio 'todos los blueprint con UI'. Modulos siguientes (escandallo a verificar, viabilidad a verificar, carta-manager, tecnicas, carta-scheduler, etc.) se cocinaran como cierres propios en planes individuales aplicando el mismo patron",
+      "razon": "Disciplina ana 'no escatimar en analizar, modulo a modulo'"
+    },
+    {
+      "id": "D11",
+      "decision": "El control de UI desde el chat (LLM cambiando activeView, abriendo Form pre-cargado, etc.) NO se implementa en este plan. UI escena, chat operador --el chat actua sobre datos, no sobre UI",
+      "razon": "Coherencia con principio cocinado"
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Cocinar mecanismo compartido de pre-relleno del chat input",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1",
+          "descripcion": "Crear frontend/src/lib/stores/chatInputDraft.ts",
+          "pseudocodigo": [
+            "crear archivo nuevo frontend/src/lib/stores/chatInputDraft.ts",
+            "contenido literal:",
+            "  import { writable } from 'svelte/store'",
+            "  export const chatInputDraft = writable('')",
+            "  export function prefillChatInput(text) {",
+            "    chatInputDraft.set(text)",
+            "  }"
+          ]
+        },
+        {
+          "id": "F1.op2",
+          "descripcion": "Modificar ChatInput.svelte para hacer bind con el store",
+          "pseudocodigo": [
+            "leer frontend/src/lib/components/layout/ChatInput.svelte entero",
+            "localizar linea con 'let inputValue = \"\"' (linea 16 segun verificacion)",
+            "anyadir import en la seccion de imports:",
+            "  import { chatInputDraft } from '$lib/stores/chatInputDraft'",
+            "sustituir 'let inputValue = \"\"' por 'let inputValue = $chatInputDraft' (Svelte auto-suscribe)",
+            "localizar el textarea/input con bind:value={inputValue}",
+            "verificar que el bind:value siga funcionando bidireccionalmente",
+            "en handleSubmit, despues de 'inputValue = \"\"' anyadir 'chatInputDraft.set(\"\")' para mantener store sincronizado",
+            "guardar archivo"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["frontend/src/lib/stores/chatInputDraft.ts"],
+        "archivos_modificados": ["frontend/src/lib/components/layout/ChatInput.svelte"],
+        "verificacion_funcional": "Desde consola navegador: importar prefillChatInput, invocar prefillChatInput('test'), confirmar que el input del chat muestra 'test'"
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Ampliar store recetas con loadHistorial",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op1",
+          "descripcion": "Anyadir funcion loadHistorial(recetaId) al store",
+          "pseudocodigo": [
+            "leer frontend/src/lib/stores/recetas.ts entero",
+            "anyadir funcion exportada loadHistorial(recetaId: string):",
+            "  asincrona; invoca mqttRequest('recetas', 'historial', { id: recetaId })",
+            "  retorna array de versiones tal como devuelve el blueprint",
+            "  manejo de errores: throw upstream, el panel captura",
+            "anyadir tipos TypeScript necesarios (Version, etc.) extraidos del schema del blueprint si se conocen; si no, usar 'any[]' temporalmente",
+            "NO anyadir ninguna funcion de mutacion --solo loadHistorial",
+            "guardar archivo"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["frontend/src/lib/stores/recetas.ts"],
+        "tamano_aproximado": "+30 lineas",
+        "no_cambia": "funciones de lectura existentes; setters; initRecetasSubscriptions"
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Refactorizar modulo frontend recetas/ a Panel router + sub-componentes",
+      "esfuerzo_horas": 4,
+      "ok_explicito_antes_de_continuar": true,
+      "branch_segun_QN": "ajustes finales de buscador (Q1), frases prefill (Q2) y formato diff (Q3) aplicados segun respuesta del usuario",
+      "operaciones": [
+        {
+          "id": "F3.op0_preparacion",
+          "descripcion": "Archivar el monolito actual",
+          "pseudocodigo": [
+            "renombrar RecetasPanel.svelte a RecetasPanel.svelte.legacy_2026_06_01",
+            "comentario explicativo opcional en commit"
+          ]
+        },
+        {
+          "id": "F3.op1_panel_router",
+          "descripcion": "Crear RecetasPanel.svelte como router con activeView local",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/recetas/RecetasPanel.svelte",
+            "patron heredado de ViabilidadPanel.svelte:",
+            "  <script>",
+            "    import { onMount } from 'svelte'",
+            "    import RecetasBrowser from './RecetasBrowser.svelte'",
+            "    import RecetasDetail from './RecetasDetail.svelte'",
+            "    import HistorialView from './HistorialView.svelte'",
+            "    import { loadRecetas, initRecetasSubscriptions } from '$lib/stores/recetas'",
+            "    let activeView: 'browser' | 'detail' | 'historial' = 'browser'",
+            "    let selectedRecetaId: string | null = null",
+            "    let cleanupSubs: (() => void) | null = null",
+            "    onMount(() => {",
+            "      loadRecetas()",
+            "      cleanupSubs = initRecetasSubscriptions()",
+            "      return () => { if (cleanupSubs) cleanupSubs() }",
+            "    })",
+            "    function handleSelectReceta(id) { selectedRecetaId = id; activeView = 'detail' }",
+            "    function handleVerHistorial() { activeView = 'historial' }",
+            "    function handleVolverADetail() { activeView = 'detail' }",
+            "    function handleBack() { activeView = 'browser' }",
+            "  </script>",
+            "  <div class='panel-container'>",
+            "    {#if activeView === 'browser'}",
+            "      <RecetasBrowser onSelectReceta={handleSelectReceta} />",
+            "    {:else if activeView === 'detail'}",
+            "      <RecetasDetail {selectedRecetaId} onVerHistorial={handleVerHistorial} onBack={handleBack} />",
+            "    {:else if activeView === 'historial'}",
+            "      <HistorialView recetaId={selectedRecetaId} onBack={handleVolverADetail} />",
+            "    {/if}",
+            "  </div>"
+          ]
+        },
+        {
+          "id": "F3.op2_browser",
+          "descripcion": "Crear RecetasBrowser.svelte (lista + stats + buscador segun Q1)",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/recetas/RecetasBrowser.svelte",
+            "props: onSelectReceta callback",
+            "subscribe a sortedRecetas, recetasStats, recetasLoading, recetasError",
+            "renderiza:",
+            "  banner de error si recetasError no null",
+            "  stats-bar con conteos (total, por estado, incompletas)",
+            "  si Q1 == 'A': input buscador con bind a variable local 'filterText'; lista filtrada por filterText.toLowerCase() contra receta.nombre.toLowerCase()",
+            "  si Q1 == 'B': sin input buscador",
+            "  boton 'Nueva receta' arriba a la derecha --invoca prefillChatInput con frase Q2.crear_nueva",
+            "  grid de RecetasCard, una por receta filtrada, click invoca onSelectReceta(receta.id)",
+            "usar estilos heredados del monolito legacy donde apliquen"
+          ]
+        },
+        {
+          "id": "F3.op3_card",
+          "descripcion": "Crear RecetasCard.svelte (card resumen)",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/recetas/RecetasCard.svelte",
+            "props: receta, onClick callback",
+            "renderiza: nombre, version, estado (badge con color via estadoColor del legacy), dificultad badge, ingredientes_count, porciones, coste_porcion (con asterisco si coste_incompleto), tag 'INCOMPLETA' si campos_pendientes no vacio",
+            "click en card invoca onClick(receta.id)",
+            "estilos sobrios; cumple criterio densidad"
+          ]
+        },
+        {
+          "id": "F3.op4_detail",
+          "descripcion": "Crear RecetasDetail.svelte (detalle + botones accion)",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/recetas/RecetasDetail.svelte",
+            "props: selectedRecetaId, onVerHistorial, onBack",
+            "import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "import { getReceta, selectedReceta } from '$lib/stores/recetas'",
+            "onMount: invoca getReceta(selectedRecetaId) si no esta cargada",
+            "subscribe a selectedReceta",
+            "renderiza receta completa: descripcion, badges (estado, dificultad), campos_pendientes warning si incompleta, coste box (coste_total + coste_porcion), desglose ingredientes_detalle con precios unitarios (est/nd markers), lista ingredientes basica, elaboracion (pasos numerados), tags, notas",
+            "barra de acciones inferior:",
+            "  boton 'Editar' --click invoca prefillChatInput(frase Q2.editar con receta.nombre)",
+            "  boton 'Cambiar estado' --abre dropdown con transiciones validas (borrador|en_servicio|archivada) menos el estado actual; click en opcion invoca prefillChatInput(frase Q2.cambiar_estado)",
+            "  boton 'Ver historial' --invoca onVerHistorial()",
+            "  boton 'Eliminar' (destructivo, color rojo) --invoca prefillChatInput(frase Q2.eliminar)",
+            "boton 'Volver' arriba izquierda invoca onBack()",
+            "manejo error: banner si receta no encontrada"
+          ]
+        },
+        {
+          "id": "F3.op5_historial",
+          "descripcion": "Crear HistorialView.svelte (versiones + revertir con preview Q3)",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/recetas/HistorialView.svelte",
+            "props: recetaId, onBack",
+            "import { loadHistorial } from '$lib/stores/recetas'",
+            "import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "let versiones: any[] = []",
+            "let loading = false",
+            "let error: string | null = null",
+            "let previewVersionId: string | null = null  // que version esta mostrando preview de diff",
+            "onMount: invoca loadHistorial(recetaId), guarda en versiones, maneja error",
+            "renderiza:",
+            "  boton 'Volver' arriba izquierda invoca onBack()",
+            "  titulo 'Historial de versiones'",
+            "  lista de versiones (mas reciente primero) con: fecha, motivo del cambio (si existe), boton 'Ver diff' (abre preview de Q3), boton 'Revertir a esta version'",
+            "  preview de diff:",
+            "    si Q3 == 'A' (lado_a_lado): 2 columnas con campos --izq version, der actual, resaltar diferentes",
+            "    si Q3 == 'B' (inline): lista de campos cambiados con 'campo: valor_version -> valor_actual'",
+            "    si Q3 == 'C' (solo lista): lista de nombres de campos cambiados sin valores",
+            "  boton 'Revertir' invoca prefillChatInput(frase Q2.revertir con receta.nombre y fecha_version)"
+          ]
+        },
+        {
+          "id": "F3.op6_manifest_y_index",
+          "descripcion": "Actualizar manifest.json e index.ts para reflejar el nuevo Panel",
+          "pseudocodigo": [
+            "manifest.json se mantiene IGUAL (id=recetas, zone=work-bar, order=1, routes=['/recetas'], icon='📖', label='Recetas')",
+            "leer index.ts entero",
+            "asegurar que el UIModule export apunta a RecetasPanel.svelte (no al legacy)",
+            "los re-exports de stores siguen igual",
+            "guardar"
+          ]
+        },
+        {
+          "id": "F3.op7_eliminar_legacy",
+          "descripcion": "Eliminar el monolito legacy una vez verificado que el nuevo Panel funciona",
+          "pseudocodigo": [
+            "tras verificacion visual de F6 etapa Recetas, eliminar RecetasPanel.svelte.legacy_2026_06_01",
+            "NO ejecutar antes de F6 --el legacy sirve de referencia rapida si algo falla en el refactor"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": [
+          "frontend/src/lib/modules/recetas/RecetasPanel.svelte (router, ~80 lineas)",
+          "frontend/src/lib/modules/recetas/RecetasBrowser.svelte (~150 lineas con stats + lista + buscador opcional)",
+          "frontend/src/lib/modules/recetas/RecetasCard.svelte (~80 lineas)",
+          "frontend/src/lib/modules/recetas/RecetasDetail.svelte (~250 lineas con detalle + acciones)",
+          "frontend/src/lib/modules/recetas/HistorialView.svelte (~150 lineas con versiones + diff preview)"
+        ],
+        "archivos_modificados": [
+          "frontend/src/lib/modules/recetas/index.ts (apunta al nuevo Panel)"
+        ],
+        "archivos_archivados_temporalmente": [
+          "frontend/src/lib/modules/recetas/RecetasPanel.svelte.legacy_2026_06_01 (eliminado al final de F6)"
+        ]
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Crear modulo frontend ingredientes/",
+      "esfuerzo_horas": 3,
+      "ok_explicito_antes_de_continuar": true,
+      "branch_segun_QN": "buscador (Q1), frases prefill (Q2) aplicados segun respuesta",
+      "operaciones": [
+        {
+          "id": "F4.op1_panel",
+          "descripcion": "Crear IngredientesPanel.svelte (router)",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/ingredientes/IngredientesPanel.svelte",
+            "patron analogo a RecetasPanel:",
+            "  let activeView: 'browser' | 'detail' = 'browser'",
+            "  let selectedIngredienteId: string | null = null",
+            "  onMount: loadIngredientes() (funcion existente del store recetas)",
+            "  handlers: handleSelect, handleBack",
+            "  renderiza condicional IngredientesBrowser o IngredienteDetail"
+          ]
+        },
+        {
+          "id": "F4.op2_browser",
+          "descripcion": "Crear IngredientesBrowser.svelte (catalogo + bulk + buscador opcional)",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/ingredientes/IngredientesBrowser.svelte",
+            "props: onSelectIngrediente",
+            "subscribe a recetasIngredientes (del store recetas)",
+            "renderiza:",
+            "  buscador si Q1 == 'A' (filtro client-side por nombre)",
+            "  boton arriba derecha 'Actualizar precios en bloque' --invoca prefillChatInput con frase Q2.precios_bulk + JSON.stringify lista ingredientes actuales como contexto",
+            "  lista de IngredienteCard"
+          ]
+        },
+        {
+          "id": "F4.op3_card",
+          "descripcion": "Crear IngredienteCard.svelte",
+          "pseudocodigo": [
+            "props: ingrediente, onClick",
+            "renderiza: nombre, precio_mercado (con unidad), categoria, alergenos badge, proveedor",
+            "click invoca onClick(ingrediente.id)"
+          ]
+        },
+        {
+          "id": "F4.op4_detail",
+          "descripcion": "Crear IngredienteDetail.svelte",
+          "pseudocodigo": [
+            "props: selectedIngredienteId, onBack",
+            "lee ingrediente del catalogo cargado (recetasIngredientes)",
+            "renderiza datos completos: nombre, precio actual, alergenos, proveedor, fuente_precio (mercadona/estimado_llm/manual), fecha_actualizacion",
+            "boton 'Actualizar precio' --invoca prefillChatInput con frase Q2.actualizar_precio del ingrediente",
+            "boton 'Volver' invoca onBack()"
+          ]
+        },
+        {
+          "id": "F4.op5_index_manifest",
+          "descripcion": "Crear index.ts y manifest.json del modulo",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/ingredientes/manifest.json:",
+            "  { id: 'ingredientes', name: 'Ingredientes', description: 'Catalogo de ingredientes con precios', version: '1.0.0', zone: 'work-bar', order: 2, routes: ['/ingredientes'], icon: '🥬', label: 'Ingredientes' }",
+            "crear frontend/src/lib/modules/ingredientes/index.ts:",
+            "  patron de menu-cartas/index.ts adaptado:",
+            "  import IngredientesPanel desde './IngredientesPanel.svelte'",
+            "  export default UIModule con manifest paralelo al JSON + PanelComponent: IngredientesPanel"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": [
+          "frontend/src/lib/modules/ingredientes/IngredientesPanel.svelte",
+          "frontend/src/lib/modules/ingredientes/IngredientesBrowser.svelte",
+          "frontend/src/lib/modules/ingredientes/IngredienteCard.svelte",
+          "frontend/src/lib/modules/ingredientes/IngredienteDetail.svelte",
+          "frontend/src/lib/modules/ingredientes/index.ts",
+          "frontend/src/lib/modules/ingredientes/manifest.json"
+        ]
+      }
+    },
+    {
+      "id": "F5",
+      "nombre": "Crear ruta SvelteKit /ingredientes",
+      "esfuerzo_horas": 0.1,
+      "ok_explicito_antes_de_continuar": false,
+      "operaciones": [
+        {
+          "id": "F5.op1",
+          "descripcion": "Crear placeholder LazyShell para ruta ingredientes",
+          "pseudocodigo": [
+            "crear frontend/src/routes/[project_id]/ingredientes/+page.svelte",
+            "contenido literal (copia exacta del patron hermano /recetas):",
+            "  <script lang='ts'>",
+            "    import { LazyShell } from '$lib/components/layout'",
+            "  </script>",
+            "  <LazyShell />"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["frontend/src/routes/[project_id]/ingredientes/+page.svelte"]
+      }
+    },
+    {
+      "id": "F6",
+      "nombre": "Verificacion manual con dev server",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F6.op1_arrancar_dev",
+          "descripcion": "Levantar dev server",
+          "pseudocodigo": [
+            "cd frontend",
+            "npm install si no instalado",
+            "npm run dev",
+            "obtener URL local (vite imprime puerto)",
+            "abrir navegador en localhost en URL del proyecto activo"
+          ]
+        },
+        {
+          "id": "F6.op2_golden_recetas",
+          "descripcion": "Verificar golden path del modulo recetas",
+          "pseudocodigo": [
+            "navegar a /<project_id>/recetas",
+            "comprobar:",
+            "  ✓ boton 📖 Recetas aparece en work-bar superior",
+            "  ✓ click abre RecetasBrowser con lista + stats",
+            "  ✓ click en una card abre RecetasDetail",
+            "  ✓ Detail muestra todos los campos correctamente",
+            "  ✓ boton 'Eliminar' pre-rellena chat con la frase canonica de Q2",
+            "  ✓ boton 'Cambiar estado' abre dropdown y pre-rellena al seleccionar opcion",
+            "  ✓ boton 'Editar' pre-rellena",
+            "  ✓ boton 'Ver historial' cambia activeView a 'historial'",
+            "  ✓ HistorialView muestra lista de versiones",
+            "  ✓ 'Ver diff' muestra preview segun Q3",
+            "  ✓ 'Revertir' pre-rellena chat con frase canonica",
+            "  ✓ boton 'Volver' funciona en cada nivel",
+            "  ✓ boton 'Nueva receta' en Browser pre-rellena chat"
+          ]
+        },
+        {
+          "id": "F6.op3_golden_ingredientes",
+          "descripcion": "Verificar golden path del modulo ingredientes",
+          "pseudocodigo": [
+            "navegar a /<project_id>/ingredientes",
+            "comprobar:",
+            "  ✓ boton 🥬 Ingredientes aparece en work-bar superior",
+            "  ✓ click abre IngredientesBrowser con catalogo",
+            "  ✓ click en card abre IngredienteDetail",
+            "  ✓ Detail muestra precio, alergenos, proveedor, fuente",
+            "  ✓ boton 'Actualizar precio' pre-rellena chat",
+            "  ✓ boton 'Volver' funciona",
+            "  ✓ boton 'Actualizar precios en bloque' en Browser pre-rellena chat con contexto"
+          ]
+        },
+        {
+          "id": "F6.op4_edge_cases",
+          "descripcion": "Edge cases minimos",
+          "pseudocodigo": [
+            "✓ Lista vacia (sin recetas): browser muestra estado vacio sin crashear",
+            "✓ Receta sin ingredientes: detail no crashea",
+            "✓ Click rapido en multiples botones pre-relleno: input se reemplaza con el ultimo (no acumula)",
+            "✓ Backend offline: errores se muestran en banner, no crashes"
+          ]
+        },
+        {
+          "id": "F6.op5_reactividad",
+          "descripcion": "Verificar reactividad del bus",
+          "pseudocodigo": [
+            "estando en /recetas con Browser visible",
+            "desde otra pestaña o desde el chat de la misma sesion, pedir 'crea una receta de prueba con tomate y pan'",
+            "esperar respuesta del chat con confirmacion de creacion",
+            "✓ Browser debe refrescarse automaticamente y mostrar la nueva receta sin recargar pagina"
+          ]
+        },
+        {
+          "id": "F6.op6_eliminar_legacy",
+          "descripcion": "Si todos los checks anteriores pasan, eliminar el archivo legacy",
+          "pseudocodigo": [
+            "rm frontend/src/lib/modules/recetas/RecetasPanel.svelte.legacy_2026_06_01"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "documento_de_resultados": "fede reporta cada checkmark con ✓ o ✗ + descripcion del problema si falla",
+        "estado_terminal_para_avanzar_a_F7": "TODOS los checks ✓"
+      }
+    },
+    {
+      "id": "F7",
+      "nombre": "Commit + push a claude/hola-2Pn9F",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F7.op1_status",
+          "descripcion": "Revisar git status",
+          "pseudocodigo": [
+            "git status",
+            "git diff",
+            "confirmar que solo hay cambios listados en salidas_esperadas de F1-F6"
+          ]
+        },
+        {
+          "id": "F7.op2_commit",
+          "descripcion": "Crear commit estructurado",
+          "pseudocodigo": [
+            "git add (archivos especificos, NUNCA git add . o git add -A)",
+            "git commit con mensaje:",
+            "  feat(ui:recetas): cierre UI modulo recetas siguiendo Postura B",
+            "  + chatInputDraft store compartido para pre-relleno",
+            "  + recetas/ refactor a Panel router + Browser + Card + Detail + HistorialView",
+            "  + ingredientes/ modulo frontend nuevo con catalogo y bulk precios",
+            "  + ruta /ingredientes",
+            "  Decisiones cerradas en arquitectura/decisiones/propuestas/cierre-ui-recetas.json"
+          ]
+        },
+        {
+          "id": "F7.op3_push",
+          "descripcion": "Push con retry exponencial",
+          "pseudocodigo": [
+            "git push -u origin claude/hola-2Pn9F",
+            "si falla por red: retry 2s, 4s, 8s, 16s",
+            "si falla por otra razon: parar, diagnosticar, reportar al humano"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo que el humano lo pida explicitamente"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "descripcion": "validate:ci no debe romper nada (solo cubre backend pero confirma que no se toco lo prohibido)",
+      "comando": "npm run validate:ci",
+      "directorio": "raiz repo",
+      "ejecutar_tras": ["F1", "F2", "F3", "F4", "F5"],
+      "salida_esperada": "PASS sin drift nuevo"
+    },
+    {
+      "id": "CC2_build_frontend",
+      "descripcion": "Compilacion del frontend sin errores",
+      "comando": "npm run build",
+      "directorio": "frontend/",
+      "ejecutar_tras": ["F3", "F4", "F5"],
+      "salida_esperada": "build OK sin errores TypeScript"
+    },
+    {
+      "id": "CC3_git_status",
+      "descripcion": "Verificar que solo cambian archivos del scope declarado",
+      "comando": "git status",
+      "ejecutar_tras": ["F1", "F2", "F3", "F4", "F5", "F6"],
+      "verificar": "ningun archivo modificado fuera de los listados en salida_esperada de la fase actual"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Tocar modules/pizzepos/recetas/recetas.blueprint.json o module.json (backend del blueprint)",
+    "Tocar cualquier otro blueprint backend",
+    "Anyadir funciones de mutacion al store de recetas (crearReceta, actualizarReceta, eliminarReceta, cambiarEstadoReceta, revertirReceta, actualizarPrecio*) --rompe Postura B",
+    "Crear archivos RecetaForm.svelte, PreciosBulkForm.svelte u otros forms de mutacion --la mutacion es chat",
+    "Cocinar infra de tests frontend (vitest, playwright, archivos *.test.ts) --deuda separada",
+    "Anyadir tools al blueprint backend para controlar UI desde chat (cambiar activeView, abrir panel, etc.) --rompe principio 'UI escena, chat operador'",
+    "Modificar otros modulos frontend (escandallo, viabilidad, carta-*, menu-*, marketing-*)",
+    "Modificar scripts/validate-all.js, validators, drift-baseline.json",
+    "Modificar arquitectura/decisiones/_contratos/ --cero modificacion de contratos durante este horizonte",
+    "Modificar LazyShell.svelte, loader.ts o cualquier pieza generica de infra frontend",
+    "Crear PR sin OK explicito del humano",
+    "Hacer commit con git add . o git add -A (siempre archivos especificos)",
+    "Hacer push con --force",
+    "Saltar OK humano entre F1 y F2, entre F2 y F3, entre F3 y F4, entre F6 y F7",
+    "Regenerar drift-baseline.json",
+    "Eliminar RecetasPanel.svelte.legacy_2026_06_01 antes de F6 (sirve de referencia rapida)",
+    "Anyadir librerias nuevas al package.json sin que sean necesarias para el plan",
+    "Decir 'todo OK' sin reportar el comando ejecutado y su salida real"
+  ],
+
+  "salida_final_del_horizonte": {
+    "modulo_recetas_estado_terminal": "UI completa siguiendo Postura B: 2 botones en work-bar superior (📖 Recetas + 🥬 Ingredientes) cuando el foco esta en /recetas o /ingredientes",
+    "archivos_finales_modulo_recetas": [
+      "frontend/src/lib/modules/recetas/RecetasPanel.svelte (router)",
+      "frontend/src/lib/modules/recetas/RecetasBrowser.svelte",
+      "frontend/src/lib/modules/recetas/RecetasCard.svelte",
+      "frontend/src/lib/modules/recetas/RecetasDetail.svelte",
+      "frontend/src/lib/modules/recetas/HistorialView.svelte",
+      "frontend/src/lib/modules/recetas/index.ts (apunta a nuevo Panel)",
+      "frontend/src/lib/modules/recetas/manifest.json (sin cambios)"
+    ],
+    "archivos_finales_modulo_ingredientes": [
+      "frontend/src/lib/modules/ingredientes/IngredientesPanel.svelte",
+      "frontend/src/lib/modules/ingredientes/IngredientesBrowser.svelte",
+      "frontend/src/lib/modules/ingredientes/IngredienteCard.svelte",
+      "frontend/src/lib/modules/ingredientes/IngredienteDetail.svelte",
+      "frontend/src/lib/modules/ingredientes/index.ts",
+      "frontend/src/lib/modules/ingredientes/manifest.json"
+    ],
+    "archivos_finales_infra_compartida": [
+      "frontend/src/lib/stores/chatInputDraft.ts (NUEVO)",
+      "frontend/src/lib/components/layout/ChatInput.svelte (MODIFICADO --bind con chatInputDraft)",
+      "frontend/src/lib/stores/recetas.ts (MODIFICADO --anyadida loadHistorial)",
+      "frontend/src/routes/[project_id]/ingredientes/+page.svelte (NUEVO)"
+    ],
+    "verificacion_terminal": [
+      "Todos los flujos de F6 verificados ✓",
+      "validate:ci verde",
+      "frontend build OK",
+      "git status: solo archivos listados arriba",
+      "commit pusheado a origin/claude/hola-2Pn9F"
+    ],
+    "deuda_anotada_para_horizontes_futuros": [
+      "Infra de tests frontend (vitest/playwright) --aplica a todos los modulos UI",
+      "Resto de modulos blueprint sin UI completa: tecnicas, carta-scheduler, carta-manager, etc. --un plan de cierre por modulo siguiendo este patron piloto"
+    ]
+  }
+}

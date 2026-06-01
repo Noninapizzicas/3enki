@@ -52,34 +52,6 @@ pizzepos.es {
 		reverse_proxy localhost:3000
 	}
 
-	# Vertical vapers — PWA pública servida desde el bundle generado por
-	# comandero-cliente-builder.bundle.generar. El bundle físico vive bajo el
-	# UUID del proyecto (no el slug) porque el módulo escribe vía fs nativo
-	# con base_path por UUID — drift de project-identity documentado en TP5.
-	# try_files cae a latest.html para soportar deep-links (PWA single-file).
-	#
-	# Permisos: el usuario `caddy` debe poder leer este path. Si Caddy devuelve
-	# 403, ejecutar UNA vez en el VPS:
-	#   sudo chmod -R o+rX /opt/enki/data/projects/37bc1282-e44c-467c-bb75-3d605255c9d2/storage/comandero-cliente-builder/
-	#
-	# Cuando se regenere el bundle (comandero-cliente.bundle.generar), latest.html
-	# se reemplaza atómicamente — Caddy sirve la versión nueva sin reload.
-	#
-	# (LEGACY) — bloque `/vapers/*` se mantiene transitoriamente para no romper la
-	# URL pública existente de Vapers. Se eliminará tras migrar el bundle al
-	# directorio canónico /opt/enki/public/shop/<slug> (subsistema-tienda
-	# v1.0.0). Ver `arquitectura/decisiones/_contratos/subsistema-tienda.contract.json`
-	# trabajo_pendiente.
-	handle_path /vapers/* {
-		root * /opt/enki/data/projects/37bc1282-e44c-467c-bb75-3d605255c9d2/storage/comandero-cliente-builder/bundles
-		try_files {path} /latest.html
-		file_server
-	}
-
-	handle /vapers {
-		redir /vapers/ permanent
-	}
-
 	# (NUEVO subsistema-tienda v1.0.0) — PWA pública por proyecto en `/shop/<slug>`.
 	# Sirve archivos estáticos desde /opt/enki/public/shop/<slug>/ donde cada
 	# subdirectorio es un symlink creado por project-manager al activar la

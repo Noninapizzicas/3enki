@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://enki.local/arquitectura/decisiones/subsistema-tienda/tienda-paths-escritos.schema.json",
   "title": "Tienda paths escritos",
-  "description": "Shape del campo tienda_paths_escritos[] en module.json de modulos JS POC2 que escriben al bundle de la PWA. Cada path es relativo a public/tienda/ del proyecto, sin path traversal, sin extensiones prohibidas.",
+  "description": "Shape del campo tienda_paths_escritos[] en module.json de modulos JS POC2 que escriben al bundle de la PWA. Cada path es relativo a storage/tienda/bundle/ del proyecto, sin path traversal, sin extensiones prohibidas.",
 
   "type": "array",
   "uniqueItems": true,
@@ -11,6 +11,6 @@
     "minLength": 1,
     "maxLength": 200,
     "pattern": "^(?!.*\\.\\.)(?!.*\\.(env|git|ssh|key|pem)$)[A-Za-z0-9_./-]+$",
-    "description": "Path relativo dentro de public/tienda/. NO empieza por /. NO contiene '..'. Extensiones prohibidas: .env, .git, .ssh, .key, .pem."
+    "description": "Path relativo dentro de storage/tienda/bundle/. NO empieza por /. NO contiene '..'. Extensiones prohibidas: .env, .git, .ssh, .key, .pem."
   }
 }

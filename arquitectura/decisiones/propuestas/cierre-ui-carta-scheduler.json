@@ -1,0 +1,678 @@
+{
+  "_doc": "Plan ejecutable de UI carta-scheduler. Carta-scheduler es el unico hermano que NO tiene route ni store ni nada en frontend --se crea TODO desde cero (route + store + modulo + componentes + registro). Dos catalogos navegables (reglas + pendientes) justifican Panel router con tabs activeView reglas|pendientes (no zonas apiladas como tarifas/carta-marketing). UI operativa real: ver reglas activas, ver conflictos detectados como banner, ver pendientes esperando OK del usuario, confirmar/rechazar pendientes via prefill chat, crear nueva regla via prefill, eliminar regla. Postura B canonica. NO amplia el blueprint (las 7 ops + lectura directa de pendientes via fs.read son suficientes). Pseudocodigo respeta pseudocodigo-estilo.contract.",
+
+  "id": "cierre-ui-carta-scheduler",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "cierre_ui_modulo_blueprint_desde_cero",
+
+  "documentos_hermanos": {
+    "contrato_canonico_dominio": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.4"
+    },
+    "contrato_canonico_ui_pattern": {
+      "path": "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+      "version": "1.0.1",
+      "relacion": "Postura B canonica + Panel router con activeView. 2 recursos observables paralelos (reglas + pendientes) materializados como 2 tabs dentro del mismo modulo frontend (un boton work-bar para el modulo entero --principio 3 ui-frontend-blueprint). Alternativa descartada: 2 modulos frontend separados; demasiada fragmentacion para 2 catalogos cercanos."
+    },
+    "plan_backend_hermano": {
+      "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-carta-scheduler.json",
+      "version": "1.0.0",
+      "estado": "cocinado en el mismo commit"
+    }
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+    "arquitectura/decisiones/_contratos/frontend.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json"
+  ],
+
+  "dependencias_explicitas": [
+    {
+      "id": "DEP1",
+      "depende_de": "cierre-ui-recetas.json F1",
+      "que_debe_estar_hecho": "frontend/src/lib/stores/chatInputDraft.ts existe con prefillChatInput",
+      "afecta_a_fase": "F3"
+    }
+  ],
+
+  "por_que_existe": {
+    "rol_de_carta_scheduler_en_el_subsistema": "Programa cambios de carta+canal por franja horaria. El comerciante define reglas (esta carta para glovo los viernes de 19-23, esta otra para mesa los sabados), el sistema calcula pendientes (cambios que se aplicaran) y pide OK humano antes de aplicar (guardrail). El cron worker JS (futuro) ejecuta automaticamente.",
+    "gap_principal": "Backend blueprint maduro pero CERO frontend --el unico hermano que no tiene ni route. El comerciante no puede ver sus reglas activas, ni los pendientes, ni resolver conflictos sin tirar del chat. Y los cajones rompen al hacer chat.cambiar_foco a target_page_id='carta-scheduler'.",
+    "alcance": "Crear desde cero: ruta SvelteKit + store + modulo frontend con Panel router + ReglasView + PendientesView + componentes auxiliares + manifest + index + registro en loader."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+      "version_actual": "blueprint-1.1.0 (1.2.0 tras plan backend)",
+      "operaciones": ["crear_regla", "listar_reglas", "eliminar_regla", "detectar_conflictos", "proximos_cambios", "confirmar", "rechazar"]
+    },
+    {
+      "pieza": "frontend/src/routes/[project_id]/carta-scheduler/",
+      "existe": false,
+      "esperado_tras_plan": "directorio con +page.svelte conteniendo <LazyShell />"
+    },
+    {
+      "pieza": "frontend/src/lib/stores/carta-scheduler.ts",
+      "existe": false,
+      "esperado_tras_plan": "loadReglas, loadPendientes, getReglas, initCartaSchedulerSubscriptions"
+    },
+    {
+      "pieza": "frontend/src/lib/modules/carta-scheduler/",
+      "existe": false,
+      "esperado_tras_plan": "manifest.json + index.ts + CartaSchedulerPanel.svelte + ReglasView.svelte + ReglaCard.svelte + PendientesView.svelte + PendienteCard.svelte + ConflictosBanner.svelte"
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio",
+      "frontend/src/routes/[project_id]/carta-scheduler/ NO existe (TODO se crea)",
+      "frontend/src/lib/stores/carta-scheduler.ts NO existe",
+      "frontend/src/lib/modules/carta-scheduler/ NO existe",
+      "frontend/src/lib/stores/chatInputDraft.ts EXISTE (DEP1)",
+      "modules/pizzepos/carta-scheduler/module.json y blueprint existen con version 1.1.0+",
+      "npm run validate:ci PASS"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "11 decisiones contrato subsistema-carta v1.0.4",
+      "7 principios ui-frontend-blueprint v1.0.1",
+      "Principio 4 ui-frontend-blueprint: blueprint con N recursos paralelos puede mapearse a 1 modulo frontend con tabs (el caso aqui --2 recursos cercanos: reglas + pendientes)",
+      "A1 preservado: la UI NO triggerea ejecucion automatica; cuando el cron worker llegue, sera quien ejecute --la UI solo muestra estado",
+      "Paths canonicos para fs.read: /storage/pizzepos/carta-scheduler/reglas.json y /pendientes.json (tras plan backend)"
+    ],
+    "no_toco_esta_sesion": [
+      "Backend de carta-scheduler (plan separado mismo commit)",
+      "Artefactos pendientes-timer.js, project-storage.js, POC_FINDINGS.md",
+      "Otros modulos backend o frontend",
+      "arquitectura/decisiones/*",
+      "schemas, validators",
+      "Datos en disco",
+      "scripts/validate-all.js"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [
+    {
+      "id": "Q1",
+      "tema": "icono_y_label",
+      "pregunta": "Icono + label",
+      "opciones": [
+        {"id": "A", "label": "📅 + 'Programacion'", "comentario": "calendario, claro"},
+        {"id": "B", "label": "⏰ + 'Programacion'", "comentario": "reloj, mas activo"},
+        {"id": "C", "label": "🔄 + 'Rotacion cartas'", "comentario": "mas descriptivo del dominio"}
+      ],
+      "recomendacion": "A"
+    },
+    {
+      "id": "Q2",
+      "tema": "orden_workbar",
+      "pregunta": "Orden",
+      "opciones": [
+        {"id": "A", "label": "9 --tras carta-marketing (8)", "comentario": "secuencial sin huecos"}
+      ],
+      "recomendacion": "A"
+    },
+    {
+      "id": "Q3",
+      "tema": "render_conflictos",
+      "pregunta": "¿Como se muestran los conflictos detectados entre reglas?",
+      "opciones": [
+        {"id": "A", "label": "Banner arriba del Panel --siempre visible si hay conflictos", "comentario": "alta visibilidad, accion rapida"},
+        {"id": "B", "label": "Vista separada (tab 3): activeView = 'reglas' | 'pendientes' | 'conflictos'", "comentario": "ordena pero requiere navegar"},
+        {"id": "C", "label": "Badge en la ReglaCard de cada regla en conflicto --warning visual por regla", "comentario": "contextual a cada regla"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Banner es accion alta-prioridad --el comerciante necesita ver los conflictos antes de pasar a aplicar cambios. C es complemento bueno tambien (badge por regla); A+C juntos son ideales."
+    },
+    {
+      "id": "Q4",
+      "tema": "frases_canonicas_prefill",
+      "pregunta": "Confirmas frases?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "acepto literalmente",
+          "comentario": "Propuestas:\n- Crear regla: 'Crea una regla de programacion: [describe canal, carta, cron_expression, prioridad opcional].'\n- Eliminar regla: 'Elimina la regla de programacion <regla_id> (canal=<canal>, carta=<carta>).'\n- Confirmar pendiente: 'Confirma el cambio pendiente <pendiente_id> (aplicar carta <carta> al canal <canal>).'\n- Rechazar pendiente: 'Rechaza el cambio pendiente <pendiente_id>. Motivo: [explica].'\n- Detectar conflictos: 'Detecta conflictos entre las reglas activas de programacion.'\n- Recalcular proximos cambios: 'Recalcula los proximos cambios programados de carta+canal.'"
+        },
+        {"id": "B", "label": "matiza"}
+      ],
+      "recomendacion": "A"
+    }
+  ],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_panel_router_activeView_tabs",
+      "decision": "Panel router con activeView local: 'reglas' | 'pendientes'. NO zonas apiladas --los 2 recursos son catalogos navegables con cardinalidad distinta. Tabs visuales en la parte superior del panel.",
+      "no_reabrir_sin": "principio 3 ui-frontend-blueprint distinto"
+    },
+    {
+      "id": "D2_un_solo_boton_workbar",
+      "decision": "1 boton en work-bar (no 2). Aunque hay 2 recursos paralelos, son tan cercanos conceptualmente que crear 2 modulos frontend separados (recetas+ingredientes pattern) seria fragmentar de mas. Tabs internas son suficientes.",
+      "no_reabrir_sin": "que los recursos crezcan en separacion conceptual"
+    },
+    {
+      "id": "D3_conflictos_banner_top",
+      "decision": "Q3.A cerrada: ConflictosBanner aparece arriba del Panel si hay conflictos detectados. Banner con boton 'Resolver conflictos' que pre-rellena chat (Q4 detectar_conflictos). Accion alta-prioridad para el comerciante.",
+      "no_reabrir_sin": "decision visual distinta"
+    },
+    {
+      "id": "D4_store_solo_lectura_principio_6",
+      "decision": "Store lee via fs.read.request del path canonico /storage/pizzepos/carta-scheduler/{reglas,pendientes}.json. NUNCA invoca tools del blueprint. detectar_conflictos local en el store (cruza reglas activas y detecta colisiones canal+franja).",
+      "no_reabrir_sin": "cambio paradigma"
+    },
+    {
+      "id": "D5_suscripciones_canonicas",
+      "decision": "initCartaSchedulerSubscriptions: (a) carta-scheduler.regla.{creada,actualizada,eliminada} --recargan loadReglas; (b) carta-scheduler.cambio.{aplicado,rechazado} --recargan loadPendientes.",
+      "no_reabrir_sin": "cambio eventos"
+    },
+    {
+      "id": "D6_no_amplia_blueprint",
+      "decision": "NO amplia operaciones del blueprint. Las 7 son suficientes (la UI lee pendientes via fs.read directo, no necesita operacion listar_pendientes nueva --principio 6).",
+      "no_reabrir_sin": "necesidad operativa"
+    },
+    {
+      "id": "D7_no_proximos_cambios_local",
+      "decision": "El calculo de proximos_cambios requiere evaluar cron expressions con fechas futuras --eso es responsabilidad del backend (operacion proximos_cambios del blueprint). La UI muestra los pendientes (que SON proximos_cambios calculados), pero NO calcula localmente. Si el comerciante quiere recalcular, click en boton 'Recalcular proximos cambios' pre-rellena chat (Q4).",
+      "no_reabrir_sin": "decision diferente sobre calculo local"
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Crear ruta SvelteKit + store",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1_crear_ruta",
+          "descripcion": "Crear frontend/src/routes/[project_id]/carta-scheduler/+page.svelte",
+          "pseudocodigo": [
+            "mkdir -p frontend/src/routes/[project_id]/carta-scheduler",
+            "crear +page.svelte con shell minimal:",
+            "  <script lang='ts'>",
+            "    import { LazyShell } from '$lib/components/layout'",
+            "  </script>",
+            "  <LazyShell />"
+          ]
+        },
+        {
+          "id": "F1.op2_crear_store",
+          "descripcion": "Crear frontend/src/lib/stores/carta-scheduler.ts",
+          "pseudocodigo": [
+            "crear archivo",
+            "imports:",
+            "  import { writable, derived } from 'svelte/store'",
+            "  import { mqttRequest } from '$lib/ui-core/mqtt-request'",
+            "  import { subscribe as busSubscribe } from '$lib/ui-core/bus'",
+            "constantes:",
+            "  const REGLAS_PATH = '/storage/pizzepos/carta-scheduler/reglas.json'",
+            "  const PENDIENTES_PATH = '/storage/pizzepos/carta-scheduler/pendientes.json'",
+            "tipos:",
+            "  interface Regla { id: string, canal: string, carta_id_destino: string, cron_expression: string, etiquetas?: string[], prioridad?: number, descripcion?: string, activa?: boolean, created_at?: string, updated_at?: string }",
+            "  interface Pendiente { id: string, regla_id: string, canal: string, carta_id_destino: string, carta_id_anterior?: string, fecha_objetivo?: string, estado?: string, motivo?: string, created_at?: string }",
+            "stores:",
+            "  export const reglasStore = writable<Regla[]>([])",
+            "  export const pendientesStore = writable<Pendiente[]>([])",
+            "  export const reglasActivas = derived(reglasStore, $r => $r.filter(x => x.activa !== false))",
+            "  export const reglasLoading = writable<boolean>(false)",
+            "  export const pendientesLoading = writable<boolean>(false)",
+            "  export const cartaSchedulerError = writable<string | null>(null)",
+            "  // Conflictos: detecta colisiones canal+cron approximado (mismo canal, expressions similares)",
+            "  export const conflictosDetectados = derived(reglasActivas, ($activas) => {",
+            "    const conflictos = []",
+            "    for (let i = 0; i < $activas.length; i++) {",
+            "      for (let j = i + 1; j < $activas.length; j++) {",
+            "        const a = $activas[i], b = $activas[j]",
+            "        if (a.canal === b.canal && a.cron_expression === b.cron_expression && a.carta_id_destino !== b.carta_id_destino) {",
+            "          conflictos.push({ regla_a: a, regla_b: b, motivo: 'mismo canal + cron, diferente carta destino' })",
+            "        }",
+            "      }",
+            "    }",
+            "    return conflictos",
+            "  })",
+            "funciones:",
+            "  export async function loadReglas() {",
+            "    reglasLoading.set(true)",
+            "    cartaSchedulerError.set(null)",
+            "    try {",
+            "      const res = await mqttRequest('fs', 'read', { path: REGLAS_PATH })",
+            "      if (res?.status === 404) { reglasStore.set([]); return }",
+            "      if (res?.status >= 400) throw new Error('fs.read fallo ' + res.status)",
+            "      const store = JSON.parse(res.data.content)",
+            "      reglasStore.set(Array.isArray(store.reglas) ? store.reglas : [])",
+            "    } catch (err) {",
+            "      cartaSchedulerError.set(err?.message || 'Error al cargar reglas')",
+            "    } finally {",
+            "      reglasLoading.set(false)",
+            "    }",
+            "  }",
+            "  export async function loadPendientes() {",
+            "    pendientesLoading.set(true)",
+            "    try {",
+            "      const res = await mqttRequest('fs', 'read', { path: PENDIENTES_PATH })",
+            "      if (res?.status === 404) { pendientesStore.set([]); return }",
+            "      if (res?.status >= 400) throw new Error('fs.read fallo ' + res.status)",
+            "      const store = JSON.parse(res.data.content)",
+            "      pendientesStore.set(Array.isArray(store.pendientes) ? store.pendientes : [])",
+            "    } catch (err) {",
+            "      cartaSchedulerError.set(err?.message || 'Error al cargar pendientes')",
+            "    } finally {",
+            "      pendientesLoading.set(false)",
+            "    }",
+            "  }",
+            "  export function initCartaSchedulerSubscriptions(): () => void {",
+            "    const unsubs: Array<() => void> = []",
+            "    unsubs.push(busSubscribe('carta-scheduler.regla.creada', () => loadReglas()))",
+            "    unsubs.push(busSubscribe('carta-scheduler.regla.actualizada', () => loadReglas()))",
+            "    unsubs.push(busSubscribe('carta-scheduler.regla.eliminada', () => loadReglas()))",
+            "    unsubs.push(busSubscribe('carta-scheduler.cambio.aplicado', () => loadPendientes()))",
+            "    unsubs.push(busSubscribe('carta-scheduler.cambio.rechazado', () => loadPendientes()))",
+            "    return () => unsubs.forEach(u => u())",
+            "  }"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": [
+          "frontend/src/routes/[project_id]/carta-scheduler/+page.svelte",
+          "frontend/src/lib/stores/carta-scheduler.ts (~180 lineas)"
+        ]
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Crear modulo frontend con Panel router + tabs",
+      "esfuerzo_horas": 4,
+      "ok_explicito_antes_de_continuar": true,
+      "depende_de": "DEP1",
+      "operaciones": [
+        {
+          "id": "F2.op0_dep1",
+          "pseudocodigo": ["comprobar chatInputDraft", "si NO existe parar"]
+        },
+        {
+          "id": "F2.op1_CartaSchedulerPanel",
+          "descripcion": "Panel router con tabs reglas|pendientes + ConflictosBanner arriba",
+          "pseudocodigo": [
+            "crear CartaSchedulerPanel.svelte:",
+            "  <script>",
+            "    import { onMount, onDestroy } from 'svelte'",
+            "    import ReglasView from './ReglasView.svelte'",
+            "    import PendientesView from './PendientesView.svelte'",
+            "    import ConflictosBanner from './ConflictosBanner.svelte'",
+            "    import { loadReglas, loadPendientes, initCartaSchedulerSubscriptions, conflictosDetectados, cartaSchedulerError } from '$lib/stores/carta-scheduler'",
+            "    let activeView: 'reglas' | 'pendientes' = 'reglas'",
+            "    let cleanupSubs: (() => void) | null = null",
+            "    onMount(() => {",
+            "      loadReglas()",
+            "      loadPendientes()",
+            "      cleanupSubs = initCartaSchedulerSubscriptions()",
+            "    })",
+            "    onDestroy(() => { if (cleanupSubs) cleanupSubs() })",
+            "  </script>",
+            "  <div class='carta-scheduler-panel'>",
+            "    {#if $cartaSchedulerError}<div class='error-banner'>{$cartaSchedulerError}</div>{/if}",
+            "    {#if $conflictosDetectados.length > 0}",
+            "      <ConflictosBanner conflictos={$conflictosDetectados} />",
+            "    {/if}",
+            "    <nav class='tabs'>",
+            "      <button class:active={activeView === 'reglas'} on:click={() => activeView = 'reglas'}>Reglas</button>",
+            "      <button class:active={activeView === 'pendientes'} on:click={() => activeView = 'pendientes'}>Pendientes</button>",
+            "    </nav>",
+            "    {#if activeView === 'reglas'}",
+            "      <ReglasView />",
+            "    {:else if activeView === 'pendientes'}",
+            "      <PendientesView />",
+            "    {/if}",
+            "  </div>"
+          ]
+        },
+        {
+          "id": "F2.op2_ConflictosBanner",
+          "descripcion": "Banner arriba si hay conflictos",
+          "pseudocodigo": [
+            "crear ConflictosBanner.svelte:",
+            "  <script>",
+            "    import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "    export let conflictos: Array<any>",
+            "    function resolver() {",
+            "      prefillChatInput('Detecta conflictos entre las reglas activas de programacion.')",
+            "    }",
+            "  </script>",
+            "  <div class='conflictos-banner'>",
+            "    <h3>⚠ {conflictos.length} conflicto{conflictos.length > 1 ? 's' : ''} detectado{conflictos.length > 1 ? 's' : ''} en las reglas</h3>",
+            "    <ul>",
+            "      {#each conflictos as c}",
+            "        <li>Canal <strong>{c.regla_a.canal}</strong>: regla \"{c.regla_a.cron_expression}\" colisiona con otra (cartas distintas).</li>",
+            "      {/each}",
+            "    </ul>",
+            "    <button on:click={resolver}>Resolver conflictos en chat</button>",
+            "  </div>"
+          ]
+        },
+        {
+          "id": "F2.op3_ReglasView",
+          "descripcion": "Vista de reglas activas con boton crear + accion eliminar",
+          "pseudocodigo": [
+            "crear ReglasView.svelte:",
+            "  <script>",
+            "    import { reglasActivas, reglasLoading } from '$lib/stores/carta-scheduler'",
+            "    import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "    import ReglaCard from './ReglaCard.svelte'",
+            "    function crearRegla() {",
+            "      prefillChatInput('Crea una regla de programacion: [describe canal, carta, cron_expression, prioridad opcional].')",
+            "    }",
+            "    function recalcular() {",
+            "      prefillChatInput('Recalcula los proximos cambios programados de carta+canal.')",
+            "    }",
+            "  </script>",
+            "  <section class='reglas-view'>",
+            "    <header class='view-header'>",
+            "      <h2>Reglas activas</h2>",
+            "      <div class='acciones-header'>",
+            "        <button on:click={crearRegla}>+ Nueva regla</button>",
+            "        <button on:click={recalcular}>↻ Recalcular pendientes</button>",
+            "      </div>",
+            "    </header>",
+            "    {#if $reglasLoading}",
+            "      <div class='loading'>Cargando...</div>",
+            "    {:else if $reglasActivas.length === 0}",
+            "      <div class='empty-state'>",
+            "        <p>Sin reglas activas. Crea la primera regla de programacion para que las cartas roten automaticamente por canal y franja horaria.</p>",
+            "        <button on:click={crearRegla}>Crear primera regla</button>",
+            "      </div>",
+            "    {:else}",
+            "      <ul class='reglas-list'>",
+            "        {#each $reglasActivas as regla}",
+            "          <ReglaCard {regla} />",
+            "        {/each}",
+            "      </ul>",
+            "    {/if}",
+            "  </section>"
+          ]
+        },
+        {
+          "id": "F2.op4_ReglaCard",
+          "descripcion": "Card de cada regla",
+          "pseudocodigo": [
+            "crear ReglaCard.svelte:",
+            "  <script>",
+            "    import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "    export let regla",
+            "    function eliminar() {",
+            "      prefillChatInput('Elimina la regla de programacion ' + regla.id + ' (canal=' + regla.canal + ', carta=' + regla.carta_id_destino + ').')",
+            "    }",
+            "  </script>",
+            "  <li class='regla-card'>",
+            "    <div class='regla-header'>",
+            "      <span class='canal-badge'>📡 {regla.canal}</span>",
+            "      <span class='cron'>⏰ {regla.cron_expression}</span>",
+            "      {#if regla.prioridad !== undefined}<span class='prioridad'>prio: {regla.prioridad}</span>{/if}",
+            "    </div>",
+            "    <div class='carta-destino'><strong>Carta:</strong> {regla.carta_id_destino}</div>",
+            "    {#if regla.descripcion}<div class='descripcion'>{regla.descripcion}</div>{/if}",
+            "    {#if regla.etiquetas?.length > 0}",
+            "      <div class='etiquetas'>{#each regla.etiquetas as et}<span class='etiqueta'>{et}</span>{/each}</div>",
+            "    {/if}",
+            "    <div class='regla-meta'>",
+            "      <span class='id'>{regla.id}</span>",
+            "      {#if regla.created_at}<span class='ts'>creada: {regla.created_at}</span>{/if}",
+            "      <button class='eliminar' on:click={eliminar}>🗑 Eliminar</button>",
+            "    </div>",
+            "  </li>"
+          ]
+        },
+        {
+          "id": "F2.op5_PendientesView",
+          "descripcion": "Vista de pendientes con confirmar/rechazar",
+          "pseudocodigo": [
+            "crear PendientesView.svelte:",
+            "  <script>",
+            "    import { pendientesStore, pendientesLoading } from '$lib/stores/carta-scheduler'",
+            "    import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "    import PendienteCard from './PendienteCard.svelte'",
+            "  </script>",
+            "  <section class='pendientes-view'>",
+            "    <header class='view-header'>",
+            "      <h2>Pendientes de confirmar</h2>",
+            "      <p class='hint'>Cambios calculados a partir de las reglas activas que esperan OK humano antes de aplicarse.</p>",
+            "    </header>",
+            "    {#if $pendientesLoading}",
+            "      <div class='loading'>Cargando...</div>",
+            "    {:else if $pendientesStore.length === 0}",
+            "      <div class='empty-state'>",
+            "        <p>Sin cambios pendientes. Las reglas activas no tienen disparos proximos o ya se aplicaron todos.</p>",
+            "      </div>",
+            "    {:else}",
+            "      <ul class='pendientes-list'>",
+            "        {#each $pendientesStore as p}",
+            "          <PendienteCard pendiente={p} />",
+            "        {/each}",
+            "      </ul>",
+            "    {/if}",
+            "  </section>"
+          ]
+        },
+        {
+          "id": "F2.op6_PendienteCard",
+          "descripcion": "Card con botones confirmar/rechazar",
+          "pseudocodigo": [
+            "crear PendienteCard.svelte:",
+            "  <script>",
+            "    import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "    export let pendiente",
+            "    function confirmar() {",
+            "      prefillChatInput('Confirma el cambio pendiente ' + pendiente.id + ' (aplicar carta ' + pendiente.carta_id_destino + ' al canal ' + pendiente.canal + ').')",
+            "    }",
+            "    function rechazar() {",
+            "      prefillChatInput('Rechaza el cambio pendiente ' + pendiente.id + '. Motivo: [explica].')",
+            "    }",
+            "  </script>",
+            "  <li class='pendiente-card'>",
+            "    <div class='pendiente-header'>",
+            "      <span class='canal-badge'>📡 {pendiente.canal}</span>",
+            "      {#if pendiente.fecha_objetivo}<span class='ts-objetivo'>⏰ {pendiente.fecha_objetivo}</span>{/if}",
+            "      {#if pendiente.estado}<span class='estado-badge'>{pendiente.estado}</span>{/if}",
+            "    </div>",
+            "    <div class='cambio'>",
+            "      {#if pendiente.carta_id_anterior}<span class='anterior'>{pendiente.carta_id_anterior}</span> → {/if}<strong class='destino'>{pendiente.carta_id_destino}</strong>",
+            "    </div>",
+            "    {#if pendiente.motivo}<div class='motivo'>{pendiente.motivo}</div>{/if}",
+            "    <div class='acciones'>",
+            "      <button class='confirmar' on:click={confirmar}>✓ Confirmar</button>",
+            "      <button class='rechazar' on:click={rechazar}>✗ Rechazar</button>",
+            "    </div>",
+            "  </li>"
+          ]
+        },
+        {
+          "id": "F2.op7_manifest_e_index",
+          "descripcion": "manifest + index + registro en loader",
+          "pseudocodigo": [
+            "crear manifest.json: {id, name <Q1.label>, description, version 1.0.0, zone work-bar, order <Q2>, routes ['/carta-scheduler'], icon <Q1.icon>, label <Q1.label>}",
+            "crear index.ts: import CartaSchedulerPanel, exporta cartaSchedulerModule + re-exports del store",
+            "registrar en loader (mismo patron que los hermanos)"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": [
+          "frontend/src/lib/modules/carta-scheduler/CartaSchedulerPanel.svelte (~70 lineas)",
+          "frontend/src/lib/modules/carta-scheduler/ConflictosBanner.svelte (~50 lineas)",
+          "frontend/src/lib/modules/carta-scheduler/ReglasView.svelte (~60 lineas)",
+          "frontend/src/lib/modules/carta-scheduler/ReglaCard.svelte (~80 lineas)",
+          "frontend/src/lib/modules/carta-scheduler/PendientesView.svelte (~50 lineas)",
+          "frontend/src/lib/modules/carta-scheduler/PendienteCard.svelte (~70 lineas)",
+          "frontend/src/lib/modules/carta-scheduler/manifest.json",
+          "frontend/src/lib/modules/carta-scheduler/index.ts"
+        ],
+        "archivos_modificados": ["frontend/src/lib/modules/index.ts o loader.ts"]
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Verificacion manual",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1_dev",
+          "pseudocodigo": ["cd frontend && npm run dev", "abrir /<project_id>/carta-scheduler"]
+        },
+        {
+          "id": "F3.op2_golden_path",
+          "pseudocodigo": [
+            "✓ boton work-bar aparece",
+            "✓ Click abre Panel con tabs Reglas | Pendientes",
+            "✓ Si reglas vacio: empty state + 'Crear primera regla'",
+            "✓ Si reglas presentes: lista con ReglaCard (canal badge, cron, prioridad, carta destino, etiquetas, fecha)",
+            "✓ Cambiar a tab Pendientes funciona",
+            "✓ Pendientes con botones Confirmar/Rechazar pre-rellenan chat correctamente",
+            "✓ Si hay conflictos detectados: ConflictosBanner aparece arriba con lista + boton Resolver",
+            "✓ Boton 'Nueva regla' pre-rellena chat con frase crear",
+            "✓ Boton 'Recalcular pendientes' pre-rellena frase recalcular",
+            "✓ Boton 'Eliminar' en ReglaCard pre-rellena frase eliminar con id+canal+carta",
+            "✓ Backend offline: error banner sin crash"
+          ]
+        },
+        {
+          "id": "F3.op3_reactividad",
+          "pseudocodigo": [
+            "desde chat crear regla (publica carta-scheduler.regla.creada) --aparece en lista automaticamente",
+            "desde chat eliminar regla (publica regla.eliminada) --desaparece",
+            "desde chat confirmar pendiente (publica cambio.aplicado) --desaparece de pendientes"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "estado_terminal_para_avanzar_a_F4": "TODOS ✓"
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Commit + push",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_status",
+          "pseudocodigo": ["git status", "solo archivos del scope"]
+        },
+        {
+          "id": "F4.op2_commit",
+          "pseudocodigo": [
+            "git add (especificos)",
+            "git commit:",
+            "  feat(ui:carta-scheduler): cierre UI desde cero --Panel + tabs reglas/pendientes + conflictos banner",
+            "",
+            "  Aplica ui-frontend-blueprint v1.0.1 (Postura B + Panel router + tabs activeView).",
+            "  Carta-scheduler era el unico hermano sin route ni store --se crea TODO desde cero.",
+            "",
+            "  + ruta SvelteKit /carta-scheduler con LazyShell",
+            "  + store frontend/src/lib/stores/carta-scheduler.ts (lecturas + suscripciones +",
+            "    conflictosDetectados derived que cruza reglas activas)",
+            "  + modulo con Panel router + ReglasView/ReglaCard + PendientesView/PendienteCard",
+            "    + ConflictosBanner + manifest + index + registro",
+            "",
+            "  Tabs reglas|pendientes (D1). 1 boton work-bar (D2). ConflictosBanner top si hay",
+            "  conflictos (D3). Mutaciones via prefillChatInput (Postura B). Store solo lectura",
+            "  via fs.read del path canonico /storage/pizzepos/carta-scheduler/{reglas,pendientes}.json",
+            "  (principio 6 ui-frontend-blueprint).",
+            "",
+            "  Plan: cierre-ui-carta-scheduler.json"
+          ]
+        },
+        {
+          "id": "F4.op3_push",
+          "pseudocodigo": ["git push -u origin <rama>"]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "PASS sin drift NUEVO"
+    },
+    {
+      "id": "CC2_build",
+      "comando": "npm run build",
+      "directorio": "frontend/",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC3_store_no_mutaciones",
+      "comando": "grep -E 'export.*(crear|eliminar|confirmar|rechazar)' frontend/src/lib/stores/carta-scheduler.ts || echo OK",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC4_no_invocaciones_tools",
+      "comando": "grep -E 'carta-scheduler\\.(crear_regla|listar_reglas|eliminar_regla|detectar_conflictos|proximos_cambios|confirmar|rechazar)' frontend/src/lib/stores/carta-scheduler.ts frontend/src/lib/modules/carta-scheduler/*.svelte || echo OK",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC5_prefill",
+      "comando": "grep -c 'prefillChatInput' frontend/src/lib/modules/carta-scheduler/*.svelte",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": ">= 6"
+    },
+    {
+      "id": "CC6_paths_canonicos_store",
+      "comando": "grep -c '/storage/pizzepos/carta-scheduler/' frontend/src/lib/stores/carta-scheduler.ts",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": ">= 2"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Backend de carta-scheduler",
+    "Artefactos pendientes-timer.js, project-storage.js, POC_FINDINGS.md",
+    "Otros modulos",
+    "Mutaciones en store (CC3)",
+    "Invocar tools del blueprint (CC4)",
+    "Forms",
+    "Calcular proximos_cambios local en la UI (D7 --es del backend)",
+    "Tocar arquitectura/decisiones/*, schemas, validators",
+    "Migrar datos",
+    "scripts/validate-all.js",
+    "Crear PR sin OK",
+    "git add . o git add -A",
+    "Saltar OK humano",
+    "Decir 'todo OK' sin reportar comando + salida"
+  ],
+
+  "salida_final_del_horizonte": {
+    "carta_scheduler_ui_estado_terminal": "UI completa desde cero. Panel router con tabs Reglas|Pendientes. ConflictosBanner top si hay. Cards con acciones via prefill. Reactivo a 5 eventos del bus.",
+    "archivos_finales_creados": [
+      "frontend/src/routes/[project_id]/carta-scheduler/+page.svelte",
+      "frontend/src/lib/stores/carta-scheduler.ts (~180 lineas)",
+      "frontend/src/lib/modules/carta-scheduler/* (8 archivos)"
+    ],
+    "archivos_finales_modificados": ["frontend/src/lib/modules/index.ts o loader.ts"],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "Hermano carta-scheduler cerrado completo (backend + UI). 4 de 5 hermanos terminados.",
+      "Unico hermano sin route ni store --ahora con UI desde cero."
+    ],
+    "siguiente_natural": "carta-design (5to y ULTIMO hermano). Aplicar disciplina: releer blueprint, bumpear contrato v1.0.5 si emerge drift, cocinar plan backend + UI."
+  }
+}

@@ -106,8 +106,47 @@ de entrada concretos.
 - Es exactamente la **Postura B** de `ui-frontend-blueprint.contract.json`
   (UI de lectura + pre-relleno del chat para las acciones).
 
-Tambien resuelve el "¿hace falta un agente?": en v1 **no**. El handoff
-estancia→chat ya es el taller. Un agente es posible despues, no es la forma v1.
+Tambien resuelve el "¿hace falta un agente?": en v1 **no** (ver seccion 5bis,
+fork resuelto). El handoff estancia→chat ya es el taller.
+
+---
+
+## 5bis. Fork del agente — RESUELTO: sin agente, solo blueprint
+
+La revision completa del blueprint (2026-06-01) desenterro que la "brujula" que
+cocinamos **ya existia diseñada como agente legacy**:
+`modules/conversacion/ai-agent-framework/agents/viabilidad-receta-analyzer.json`
+(`enabled: true`, dispara en `viabilidad.evaluacion.completada`, produce
+`{analisis, riesgos, recomendaciones}`). Pero estaba **dormido**
+(`executions: 0`) y **desincronizado** del blueprint (esperaba `nombre_idea` /
+`coste_por_porcion` / `coste_es_real`, que el blueprint no enviaba — drift
+cerrado en v1.1.1, ver seccion 6).
+
+**Decision cocinada con el usuario (2026-06-01): no se usa el agente. La brujula
+vive solo en el blueprint.**
+
+Por que encaja:
+- El modulo blueprint **ya tiene al LLM como runtime** — generar los caminos al
+  evaluar es "gratis": sin segunda llamada al LLM, sin segundo evento, sin
+  enriquecimiento asincrono, sin prompt aparte.
+- El agente nunca corrio. No se pierde nada vivo.
+- La profundidad cualitativa **sigue en el chat** (al tocar la tarjeta) — donde
+  el contrato ya la pone. El blueprint solo genera los *stubs* ligeros de los
+  caminos. El agente (analisis pesado como evento aparte) es **redundante** con
+  el handoff tarjeta→chat.
+
+Matiz de contrato (honesto): hoy `subsistema-recetario` y los 2 schemas dicen
+*"viabilidad NO toma decisiones cualitativas"*. "Solo blueprint" no contradice
+eso — lo **precisa**: viabilidad genera puntos de entrada ligeros; el desarrollo
+cualitativo vive en el chat (LLM principal). Eso exige tocar el contrato (ver
+seccion 9).
+
+**Footprint de jubilar el agente — limpio (verificado en disco):**
+- Sus eventos de salida (`viabilidad.analisis.cualitativo.completado/fallido`):
+  **sin schema, sin consumidor**. Quitarlos no rompe nada.
+- Se va con su prompt (`prompts/viabilidad-receta-analyzer.json`).
+- Referencias restantes: auditorias auto-generadas (se regeneran) + espejo en
+  `conversacion-ref/` + posible entrada en `drift-baseline.json`. Nada estructural.
 
 ---
 
@@ -129,6 +168,18 @@ veredicto, advertencias) se mantiene — es el "numero de habitacion" del audit
 trail, y sobrevive: poder repasar "evalue X con PVP Y y no salia". Repasar
 sesiones de guia pasadas ≠ seguir el rendimiento real (eso es la otra
 maquinaria, fuera).
+
+> **Nota — drift de eventos ya cerrado (v1.1.1, 2026-06-01).** La revision
+> completa encontro que los 2 eventos de dominio publicaban un payload no
+> conforme a su schema oficial (faltaban `user_id`/`nombre_idea`/`coste_es_real`,
+> nombres `nombre`/`coste_porcion` en vez de `nombre_idea`/`coste_por_porcion`,
+> sobraban `receta_id`/`pvp_efectivo`/`margen_porcion` contra
+> `additionalProperties:false`). Alineados al schema canonico en el commit
+> `7f7435b`. Tambien se cerro el hueco del `nombre_idea` al evaluar por
+> `receta_id` (ahora via `recetas.obtener.request`, antes placeholder que
+> invitaba a inventarlo). Esto es independiente del refactor — era correccion de
+> conformidad — pero queda anotado porque el campo `caminos[]` se añade sobre
+> ese expediente ya saneado.
 
 ---
 
@@ -168,8 +219,15 @@ El frontend ya bosquejo casi toda la experiencia. Estado real verificado:
 ## 9. Proximo paso
 
 Esto es horizonte grande. Antes de codigo, esta propuesta es el deposito de lo
-cocinado. Cuando se arranque la implementacion (sesion `fede` o equivalente):
+cocinado. Cuando se arranque la implementacion (sesion `fede` o equivalente),
+respetando la disciplina contrato-primero del repo:
 
+0. **Contrato primero**: precisar `subsistema-recetario.contract.json` —
+   viabilidad pasa de "puramente determinista" a "determinista + genera caminos
+   ligeros (puntos de entrada); profundidad cualitativa en el chat". Actualizar
+   las 2 descripciones de schema (`viabilidad.evaluacion.{completada,descartada}`)
+   que hoy dicen "NO cualitativo". **Retirar el agente** legacy
+   `viabilidad-receta-analyzer.json` + su prompt (footprint limpio, seccion 5bis).
 1. **Blueprint** (`viabilidad.blueprint.json`): la operacion `evaluar` gana un
    paso donde el LLM-runtime, tras el calculo determinista, propone los
    `caminos` (capa 3) y los incluye en el expediente. El veredicto se mantiene

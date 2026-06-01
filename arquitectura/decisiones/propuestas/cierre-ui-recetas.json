@@ -178,7 +178,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Las frases son operativas. Si emerge necesidad de ajuste tras uso real, vuelta posterior.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "frases aceptadas literalmente", "cerrada_en": "2026-06-01T04:10:24.340Z" }
     },
     {
       "id": "Q3",

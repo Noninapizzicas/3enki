@@ -1,0 +1,628 @@
+{
+  "_doc": "Plan ejecutable de UI carta-marketing. UN perfil de marca por proyecto --patron zonas apiladas (no Browser+Detail). 3 zonas: PerfilZone (vista del perfil con todos los campos + editar via prefill), OnboardingZone (CTA destacado si onboarding_completado=false; estado + revisitar si true), ActividadZone (stub hasta integrar agent-observer --muestra placeholder informativo). Patron Postura B canonica + store solo lectura via fs.read.request al path canonico /storage/config/marca.json. NO amplia el blueprint (las 4 operaciones existentes son suficientes). Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
+
+  "id": "cierre-ui-carta-marketing",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "cierre_ui_modulo_blueprint",
+
+  "documentos_hermanos": {
+    "contrato_canonico_dominio": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.3",
+      "relacion": "Contrato vigente. UI respeta A1 (no-reactivo) y D1 (path canonico ya en /storage/config/marca.json)."
+    },
+    "contrato_canonico_ui_pattern": {
+      "path": "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+      "version": "1.0.1",
+      "relacion": "Postura B canonica + Panel zonas apiladas (hay UN perfil --no Browser). 5 criterios chat-vs-UI aplicados: zonas justificadas por densidad visual + estado vivo (onboarding_completado)."
+    },
+    "plan_backend_hermano": {
+      "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-carta-marketing.json",
+      "version": "1.0.0",
+      "estado": "cocinado en el mismo commit",
+      "relacion": "Independiente operativamente --la UI funciona aunque el backend este en v1.1.0 (correlation_id opcional vs obligatorio no afecta lectura)."
+    },
+    "plan_modelo_estructural": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-carta-digital.json",
+      "relacion": "Modelo estructural --patron zonas apiladas + store via fs.read del path canonico."
+    }
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+    "arquitectura/decisiones/_contratos/frontend.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json"
+  ],
+
+  "dependencias_explicitas": [
+    {
+      "id": "DEP1",
+      "depende_de": "cierre-ui-recetas.json F1",
+      "que_debe_estar_hecho": "frontend/src/lib/stores/chatInputDraft.ts existe con prefillChatInput",
+      "afecta_a_fase": "F2",
+      "comportamiento_si_no_se_cumple": "parar antes de F2"
+    }
+  ],
+
+  "por_que_existe": {
+    "rol_de_carta_marketing_en_el_subsistema": "Gestiona el perfil de marca del proyecto + orquesta agentes de marketing. El comerciante completa onboarding una vez al arrancar el proyecto y revisita el perfil ocasionalmente para ajustar tono de voz, publico objetivo, etc.",
+    "gap_principal": "Backend blueprint maduro, ruta SvelteKit existe, sin modulo frontend ni store --el comerciante no puede ver/editar el perfil ni iniciar onboarding sin tirar del chat directamente.",
+    "alcance": "Creacion UI: store solo lectura + modulo con Panel + 3 zonas (Perfil / Onboarding / Actividad) + manifest + index + registro en loader."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+      "version_actual": "blueprint-1.1.0 (1.2.0 tras plan backend)",
+      "operaciones": ["get_perfil", "update_perfil", "completar_onboarding", "actividad"],
+      "shape_perfil": "{ _version, _updated_at, nombre_marca, lema?, tono_voz, valores: [...], publico_objetivo, diferenciacion, restricciones?, idiomas: [...], onboarding_completado: boolean }"
+    },
+    {
+      "pieza": "frontend/src/routes/[project_id]/carta-marketing/+page.svelte",
+      "existe": true,
+      "rol": "ruta con <LazyShell /> --se preserva"
+    },
+    {
+      "pieza": "frontend/src/lib/stores/carta-marketing.ts",
+      "existe": "verificar (tabla usuario indicaba SI existe parcial)",
+      "comportamiento_si_existe": "fede REPORTA contenido antes de sobrescribir. Si legacy invoca tools del blueprint, REEMPLAZAR. Si ya usa fs.read, EXTENDER/reemplazar segun caso."
+    },
+    {
+      "pieza": "frontend/src/lib/modules/carta-marketing/",
+      "existe": false,
+      "esperado_tras_plan": "manifest.json + index.ts + CartaMarketingPanel.svelte + PerfilZone.svelte + OnboardingZone.svelte + ActividadZone.svelte"
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio",
+      "frontend/src/lib/modules/carta-marketing/ NO existe",
+      "frontend/src/lib/stores/carta-marketing.ts si existe REPORTAR contenido",
+      "frontend/src/routes/[project_id]/carta-marketing/+page.svelte EXISTE",
+      "frontend/src/lib/stores/chatInputDraft.ts EXISTE (DEP1)",
+      "npm run validate:ci PASS"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "11 decisiones del contrato subsistema-carta v1.0.3",
+      "7 principios ui-frontend-blueprint v1.0.1 (principio 6: store NUNCA invoca tools, lee via fs.read)",
+      "A1 preservado: UI NO recompose automatico",
+      "Shape estable del perfil de marca segun blueprint v1.1.0/v1.2.0"
+    ],
+    "no_toco_esta_sesion": [
+      "Backend de carta-marketing (plan separado mismo commit)",
+      "Agentes (marketing-copywriter, strategist, brand-keeper, onboarding)",
+      "Otros modulos",
+      "arquitectura/decisiones/*",
+      "schemas, validators",
+      "data/projects/*/storage/config/marca.json (cero migracion)",
+      "scripts/validate-all.js"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [
+    {
+      "id": "Q1",
+      "tema": "icono_y_label",
+      "pregunta": "Icono + label work-bar",
+      "opciones": [
+        {"id": "A", "label": "✨ + 'Marketing'", "comentario": "estrella conecta con marca/identidad"},
+        {"id": "B", "label": "🎯 + 'Marca'", "comentario": "diana conecta con publico objetivo"},
+        {"id": "C", "label": "📣 + 'Marketing'", "comentario": "megafono mas directo"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Estrella sugiere 'perfil destacado, identidad de la marca' --coherente con el dominio."
+    },
+    {
+      "id": "Q2",
+      "tema": "orden_workbar",
+      "pregunta": "Orden relativo a otros",
+      "opciones": [
+        {"id": "A", "label": "8 --tras carta-impresion (7)", "comentario": "secuencia natural en la cadena"},
+        {"id": "B", "label": "antes de carta-digital --el branding de marca es input para carta-digital", "comentario": "logica del dato"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Orden secuencial sin huecos. Si emerge necesidad de reordenar tras uso, se ajusta."
+    },
+    {
+      "id": "Q3",
+      "tema": "frases_canonicas_prefill",
+      "pregunta": "Confirmas las frases?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "acepto literalmente",
+          "comentario": "Propuestas:\n- Editar perfil completo: 'Actualiza el perfil de marca: [describe cambios: nombre_marca, tono_voz, valores, publico_objetivo, diferenciacion, idiomas].'\n- Iniciar onboarding: 'Inicia el onboarding guiado de marketing. Quiero completar el perfil de marca paso a paso.'\n- Revisitar onboarding: 'Quiero revisar y actualizar el perfil de marca completado.'\n- Editar campo X: 'Actualiza el campo <campo> del perfil de marca a: [nuevo valor].'"
+        },
+        {"id": "B", "label": "matiza", "comentario": "usuario provee nuevas"}
+      ],
+      "recomendacion": "A"
+    }
+  ],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_pattern_zonas_apiladas_no_browser",
+      "decision": "UN perfil de marca por proyecto --no hay catalogo navegable. Patron zonas apiladas (similar a tarifas y carta-digital, NO Browser+Detail como carta-impresion).",
+      "no_reabrir_sin": "que emerja necesidad de multiples perfiles (improbable)"
+    },
+    {
+      "id": "D2_3_zonas_perfil_onboarding_actividad",
+      "decision": "Tres zonas apiladas verticalmente: PerfilZone (vista de los campos + boton editar), OnboardingZone (estado + CTA destacado si !completado, confirmacion + revisitar si completado), ActividadZone (stub --muestra placeholder informativo hasta integrar agent-observer).",
+      "no_reabrir_sin": "decision diferente sobre estructura visual"
+    },
+    {
+      "id": "D3_postura_B_canonica",
+      "decision": "Postura B integral: cero forms de mutacion. Editar perfil + iniciar onboarding via prefillChatInput.",
+      "no_reabrir_sin": "caso real de form bulk"
+    },
+    {
+      "id": "D4_store_solo_lectura_principio_6",
+      "decision": "Store lee via fs.read.request del path canonico /storage/config/marca.json. NUNCA invoca tools del blueprint (principio 6).",
+      "no_reabrir_sin": "cambio paradigma"
+    },
+    {
+      "id": "D5_suscripciones_canonicas",
+      "decision": "initCartaMarketingSubscriptions registra: (a) marketing.perfil.actualizado --recarga loadPerfilMarca; (b) marketing.onboarding.completado --recarga.",
+      "no_reabrir_sin": "cambio eventos canonicos"
+    },
+    {
+      "id": "D6_actividad_zona_stub_documentado",
+      "decision": "ActividadZone muestra placeholder informativo 'Integracion con agent-observer pendiente' --coherente con el backend que tambien es stub. Cuando agent-observer se integre, ambos se actualizan en horizonte aparte.",
+      "no_reabrir_sin": "integracion agent-observer disponible"
+    },
+    {
+      "id": "D7_no_amplia_blueprint",
+      "decision": "NO amplia el backend con operaciones nuevas. Las 4 existentes son suficientes (get_perfil + update_perfil + completar_onboarding + actividad).",
+      "no_reabrir_sin": "necesidad operativa concreta"
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Crear store frontend/src/lib/stores/carta-marketing.ts",
+      "esfuerzo_horas": 1,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op0_verificar_legacy",
+          "descripcion": "Si existe store legacy, leer y decidir",
+          "pseudocodigo": [
+            "ls frontend/src/lib/stores/carta-marketing.ts 2>/dev/null",
+            "si existe: Read y reportar al humano. Si invoca tools, reemplazar."
+          ]
+        },
+        {
+          "id": "F1.op1_crear_archivo",
+          "descripcion": "Crear store con shape canonico",
+          "pseudocodigo": [
+            "crear frontend/src/lib/stores/carta-marketing.ts",
+            "imports:",
+            "  import { writable, derived } from 'svelte/store'",
+            "  import { mqttRequest } from '$lib/ui-core/mqtt-request'",
+            "  import { subscribe as busSubscribe } from '$lib/ui-core/bus'",
+            "constantes:",
+            "  const PERFIL_PATH = '/storage/config/marca.json'",
+            "tipos:",
+            "  interface PerfilMarca {",
+            "    _version?: string",
+            "    _updated_at?: string",
+            "    nombre_marca?: string",
+            "    lema?: string",
+            "    tono_voz?: string",
+            "    valores?: string[]",
+            "    publico_objetivo?: string",
+            "    diferenciacion?: string",
+            "    restricciones?: string",
+            "    idiomas?: string[]",
+            "    onboarding_completado?: boolean",
+            "    [key: string]: any",
+            "  }",
+            "stores:",
+            "  export const perfilMarcaStore = writable<PerfilMarca | null>(null)",
+            "  export const perfilMarcaLoading = writable<boolean>(false)",
+            "  export const perfilMarcaError = writable<string | null>(null)",
+            "  export const onboardingCompletado = derived(perfilMarcaStore, $p => $p?.onboarding_completado === true)",
+            "  export const perfilVacio = derived(perfilMarcaStore, $p => !$p || (!$p.nombre_marca && !$p.tono_voz && (!$p.valores || $p.valores.length === 0)))"
+          ]
+        },
+        {
+          "id": "F1.op2_loadPerfilMarca",
+          "descripcion": "Funcion loadPerfilMarca",
+          "pseudocodigo": [
+            "export async function loadPerfilMarca() {",
+            "  perfilMarcaLoading.set(true)",
+            "  perfilMarcaError.set(null)",
+            "  try {",
+            "    const res = await mqttRequest('fs', 'read', { path: PERFIL_PATH })",
+            "    if (res?.status === 404) {",
+            "      perfilMarcaStore.set({",
+            "        _version: '1.0',",
+            "        _updated_at: null,",
+            "        nombre_marca: '',",
+            "        tono_voz: '',",
+            "        valores: [],",
+            "        publico_objetivo: '',",
+            "        idiomas: ['es'],",
+            "        onboarding_completado: false",
+            "      })",
+            "      return",
+            "    }",
+            "    if (res?.status >= 400) throw new Error('fs.read fallo status ' + res.status)",
+            "    perfilMarcaStore.set(JSON.parse(res.data.content))",
+            "  } catch (err) {",
+            "    perfilMarcaError.set(err?.message || 'Error al cargar perfil de marca')",
+            "  } finally {",
+            "    perfilMarcaLoading.set(false)",
+            "  }",
+            "}"
+          ]
+        },
+        {
+          "id": "F1.op3_initSubscriptions",
+          "descripcion": "initCartaMarketingSubscriptions",
+          "pseudocodigo": [
+            "export function initCartaMarketingSubscriptions(): () => void {",
+            "  const unsubs: Array<() => void> = []",
+            "  unsubs.push(busSubscribe('marketing.perfil.actualizado', () => loadPerfilMarca()))",
+            "  unsubs.push(busSubscribe('marketing.onboarding.completado', () => loadPerfilMarca()))",
+            "  return () => unsubs.forEach(u => u())",
+            "}"
+          ]
+        },
+        {
+          "id": "F1.op4_exports",
+          "descripcion": "Verificar exports",
+          "pseudocodigo": [
+            "Confirmar exports:",
+            "  stores: perfilMarcaStore, perfilMarcaLoading, perfilMarcaError, onboardingCompletado, perfilVacio",
+            "  funciones: loadPerfilMarca, initCartaMarketingSubscriptions",
+            "NO exportar mutaciones."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["frontend/src/lib/stores/carta-marketing.ts (~120 lineas)"]
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Crear modulo frontend",
+      "esfuerzo_horas": 3,
+      "ok_explicito_antes_de_continuar": true,
+      "depende_de": "DEP1",
+      "operaciones": [
+        {
+          "id": "F2.op0_verificar_dep1",
+          "pseudocodigo": [
+            "comprobar chatInputDraft existe",
+            "si NO: parar"
+          ]
+        },
+        {
+          "id": "F2.op1_CartaMarketingPanel",
+          "descripcion": "Panel sin router con 3 zonas apiladas",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-marketing/CartaMarketingPanel.svelte",
+            "  <script>",
+            "    import { onMount, onDestroy } from 'svelte'",
+            "    import PerfilZone from './PerfilZone.svelte'",
+            "    import OnboardingZone from './OnboardingZone.svelte'",
+            "    import ActividadZone from './ActividadZone.svelte'",
+            "    import { loadPerfilMarca, initCartaMarketingSubscriptions, perfilMarcaLoading, perfilMarcaError } from '$lib/stores/carta-marketing'",
+            "    let cleanupSubs: (() => void) | null = null",
+            "    onMount(() => { loadPerfilMarca(); cleanupSubs = initCartaMarketingSubscriptions() })",
+            "    onDestroy(() => { if (cleanupSubs) cleanupSubs() })",
+            "  </script>",
+            "  <div class='carta-marketing-panel'>",
+            "    {#if $perfilMarcaError}<div class='error-banner'>{$perfilMarcaError}</div>{/if}",
+            "    {#if $perfilMarcaLoading}",
+            "      <div class='loading'>Cargando perfil de marca...</div>",
+            "    {:else}",
+            "      <OnboardingZone />",
+            "      <PerfilZone />",
+            "      <ActividadZone />",
+            "    {/if}",
+            "  </div>"
+          ]
+        },
+        {
+          "id": "F2.op2_OnboardingZone",
+          "descripcion": "Zona Onboarding --estado + CTA segun onboarding_completado",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-marketing/OnboardingZone.svelte",
+            "  <script>",
+            "    import { onboardingCompletado, perfilVacio } from '$lib/stores/carta-marketing'",
+            "    import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "    function iniciarOnboarding() {",
+            "      prefillChatInput('Inicia el onboarding guiado de marketing. Quiero completar el perfil de marca paso a paso.')",
+            "    }",
+            "    function revisitarOnboarding() {",
+            "      prefillChatInput('Quiero revisar y actualizar el perfil de marca completado.')",
+            "    }",
+            "  </script>",
+            "  <section class='zona-onboarding'>",
+            "    {#if !$onboardingCompletado}",
+            "      <div class='cta-onboarding'>",
+            "        <h2>📋 Onboarding pendiente</h2>",
+            "        <p>Completa el perfil de marca con un onboarding guiado por el agente de marketing.</p>",
+            "        <button class='primaria' on:click={iniciarOnboarding}>Iniciar onboarding guiado</button>",
+            "      </div>",
+            "    {:else}",
+            "      <div class='estado-onboarding'>",
+            "        <h2>✓ Onboarding completado</h2>",
+            "        <p>El perfil de marca esta configurado. Puedes revisitarlo si quieres ajustar.</p>",
+            "        <button on:click={revisitarOnboarding}>Revisitar perfil</button>",
+            "      </div>",
+            "    {/if}",
+            "  </section>"
+          ]
+        },
+        {
+          "id": "F2.op3_PerfilZone",
+          "descripcion": "Zona Perfil --vista de campos + boton editar",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-marketing/PerfilZone.svelte",
+            "  <script>",
+            "    import { perfilMarcaStore, perfilVacio } from '$lib/stores/carta-marketing'",
+            "    import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "    function editarPerfil() {",
+            "      prefillChatInput('Actualiza el perfil de marca: [describe cambios: nombre_marca, tono_voz, valores, publico_objetivo, diferenciacion, idiomas].')",
+            "    }",
+            "    function editarCampo(campo) {",
+            "      prefillChatInput('Actualiza el campo ' + campo + ' del perfil de marca a: [nuevo valor].')",
+            "    }",
+            "  </script>",
+            "  <section class='zona-perfil'>",
+            "    <header class='zona-header'>",
+            "      <h2>Perfil de marca</h2>",
+            "      <button on:click={editarPerfil}>Editar perfil</button>",
+            "    </header>",
+            "    {#if $perfilVacio}",
+            "      <div class='empty-perfil'>",
+            "        <p>Perfil vacio. Completa el onboarding o edita los campos manualmente.</p>",
+            "      </div>",
+            "    {:else if $perfilMarcaStore}",
+            "      <dl class='perfil-campos'>",
+            "        {#if $perfilMarcaStore.nombre_marca}",
+            "          <dt>Nombre de marca:</dt>",
+            "          <dd>{$perfilMarcaStore.nombre_marca} <button class='editar-campo' on:click={() => editarCampo('nombre_marca')}>✏</button></dd>",
+            "        {/if}",
+            "        {#if $perfilMarcaStore.lema}",
+            "          <dt>Lema:</dt>",
+            "          <dd>{$perfilMarcaStore.lema} <button class='editar-campo' on:click={() => editarCampo('lema')}>✏</button></dd>",
+            "        {/if}",
+            "        {#if $perfilMarcaStore.tono_voz}",
+            "          <dt>Tono de voz:</dt>",
+            "          <dd>{$perfilMarcaStore.tono_voz} <button class='editar-campo' on:click={() => editarCampo('tono_voz')}>✏</button></dd>",
+            "        {/if}",
+            "        {#if $perfilMarcaStore.valores?.length > 0}",
+            "          <dt>Valores:</dt>",
+            "          <dd>",
+            "            <ul class='lista-valores'>{#each $perfilMarcaStore.valores as v}<li>{v}</li>{/each}</ul>",
+            "            <button class='editar-campo' on:click={() => editarCampo('valores')}>✏</button>",
+            "          </dd>",
+            "        {/if}",
+            "        {#if $perfilMarcaStore.publico_objetivo}",
+            "          <dt>Publico objetivo:</dt>",
+            "          <dd>{$perfilMarcaStore.publico_objetivo} <button class='editar-campo' on:click={() => editarCampo('publico_objetivo')}>✏</button></dd>",
+            "        {/if}",
+            "        {#if $perfilMarcaStore.diferenciacion}",
+            "          <dt>Diferenciacion:</dt>",
+            "          <dd>{$perfilMarcaStore.diferenciacion} <button class='editar-campo' on:click={() => editarCampo('diferenciacion')}>✏</button></dd>",
+            "        {/if}",
+            "        {#if $perfilMarcaStore.restricciones}",
+            "          <dt>Restricciones:</dt>",
+            "          <dd>{$perfilMarcaStore.restricciones} <button class='editar-campo' on:click={() => editarCampo('restricciones')}>✏</button></dd>",
+            "        {/if}",
+            "        {#if $perfilMarcaStore.idiomas?.length > 0}",
+            "          <dt>Idiomas:</dt>",
+            "          <dd>{$perfilMarcaStore.idiomas.join(', ')} <button class='editar-campo' on:click={() => editarCampo('idiomas')}>✏</button></dd>",
+            "        {/if}",
+            "      </dl>",
+            "      {#if $perfilMarcaStore._updated_at}",
+            "        <div class='ts-update'>Actualizado: {$perfilMarcaStore._updated_at}</div>",
+            "      {/if}",
+            "    {/if}",
+            "  </section>"
+          ]
+        },
+        {
+          "id": "F2.op4_ActividadZone",
+          "descripcion": "Zona Actividad --placeholder informativo",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-marketing/ActividadZone.svelte",
+            "  <section class='zona-actividad'>",
+            "    <h2>Actividad reciente</h2>",
+            "    <div class='placeholder-actividad'>",
+            "      <p class='nota'>Integracion con agent-observer pendiente.</p>",
+            "      <p class='hint'>Cuando este disponible, esta zona mostrara las ultimas invocaciones a los agentes de marketing (copywriter, strategist, brand-keeper, onboarding).</p>",
+            "    </div>",
+            "  </section>"
+          ]
+        },
+        {
+          "id": "F2.op5_manifest_e_index",
+          "descripcion": "manifest.json + index.ts + registro",
+          "pseudocodigo": [
+            "crear manifest.json:",
+            "  { \"id\": \"carta-marketing\", \"name\": \"<Q1.label>\", \"description\": \"Perfil de marca del proyecto + orquestacion agentes marketing.\", \"version\": \"1.0.0\", \"zone\": \"work-bar\", \"order\": <Q2 valor>, \"routes\": [\"/carta-marketing\"], \"icon\": \"<Q1.icon>\", \"label\": \"<Q1.label>\" }",
+            "crear index.ts:",
+            "  import CartaMarketingPanel from './CartaMarketingPanel.svelte'",
+            "  export { default as CartaMarketingPanel } from './CartaMarketingPanel.svelte'",
+            "  export const cartaMarketingModule: UIModule = { manifest: {...}, PanelComponent: CartaMarketingPanel }",
+            "  export default cartaMarketingModule",
+            "  export { perfilMarcaStore, onboardingCompletado, perfilVacio, loadPerfilMarca, initCartaMarketingSubscriptions } from '$lib/stores/carta-marketing'",
+            "registrar en loader (mismo patron que carta-digital)"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": [
+          "frontend/src/lib/modules/carta-marketing/CartaMarketingPanel.svelte (~50 lineas)",
+          "frontend/src/lib/modules/carta-marketing/OnboardingZone.svelte (~50 lineas)",
+          "frontend/src/lib/modules/carta-marketing/PerfilZone.svelte (~150 lineas)",
+          "frontend/src/lib/modules/carta-marketing/ActividadZone.svelte (~30 lineas)",
+          "frontend/src/lib/modules/carta-marketing/manifest.json",
+          "frontend/src/lib/modules/carta-marketing/index.ts"
+        ],
+        "archivos_modificados": ["frontend/src/lib/modules/index.ts o loader.ts"]
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Verificacion manual",
+      "esfuerzo_horas": 1,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1_dev",
+          "pseudocodigo": ["cd frontend && npm run dev", "abrir /<project_id>/carta-marketing"]
+        },
+        {
+          "id": "F3.op2_golden_path",
+          "pseudocodigo": [
+            "✓ boton work-bar aparece con <Q1>",
+            "✓ click abre panel",
+            "✓ Si onboarding_completado=false: OnboardingZone destaca CTA",
+            "✓ Si true: OnboardingZone muestra confirmacion + revisitar",
+            "✓ PerfilZone muestra campos presentes (defensive: solo los que existen)",
+            "✓ Botones 'Editar perfil' y los ✏ por campo pre-rellenan chat con frases Q3",
+            "✓ ActividadZone muestra placeholder informativo",
+            "✓ Tras update via chat (publish marketing.perfil.actualizado), panel se refresca automaticamente"
+          ]
+        },
+        {
+          "id": "F3.op3_edge_cases",
+          "pseudocodigo": [
+            "✓ Proyecto sin /storage/config/marca.json: panel renderiza con perfil vacio + CTA onboarding",
+            "✓ Backend offline: error banner sin crash"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "estado_terminal_para_avanzar_a_F4": "TODOS ✓"
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Commit + push",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_status",
+          "pseudocodigo": ["git status", "confirmar archivos del scope"]
+        },
+        {
+          "id": "F4.op2_commit",
+          "pseudocodigo": [
+            "git add (especificos)",
+            "git commit:",
+            "  feat(ui:carta-marketing): cierre UI --3 zonas (onboarding / perfil / actividad)",
+            "",
+            "  Aplica ui-frontend-blueprint v1.0.1 (Postura B + zonas apiladas + store lectura).",
+            "  Patron zonas (no Browser+Detail --hay UN perfil por proyecto).",
+            "  + store solo lectura via fs.read del path canonico /storage/config/marca.json",
+            "  + modulo con Panel + OnboardingZone + PerfilZone + ActividadZone + manifest + index",
+            "",
+            "  OnboardingZone: CTA destacado si onboarding_completado=false, confirmacion si true.",
+            "  PerfilZone: render defensivo de los campos presentes + botones ✏ por campo.",
+            "  ActividadZone: placeholder hasta integrar agent-observer (coherente con backend stub).",
+            "  Mutaciones via prefillChatInput (Postura B).",
+            "",
+            "  Plan: cierre-ui-carta-marketing.json"
+          ]
+        },
+        {
+          "id": "F4.op3_push",
+          "pseudocodigo": ["git push -u origin <rama>"]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "PASS sin drift NUEVO"
+    },
+    {
+      "id": "CC2_build_frontend",
+      "comando": "npm run build",
+      "directorio": "frontend/",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "build OK"
+    },
+    {
+      "id": "CC3_store_no_mutaciones",
+      "comando": "grep -E 'export.*(update|set|delete|completar)' frontend/src/lib/stores/carta-marketing.ts || echo OK",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC4_no_invocaciones_tools",
+      "comando": "grep -E 'marketing\\.(get_perfil|update_perfil|completar_onboarding|actividad)' frontend/src/lib/stores/carta-marketing.ts frontend/src/lib/modules/carta-marketing/*.svelte || echo OK",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC5_prefill_en_zonas",
+      "comando": "grep -c 'prefillChatInput' frontend/src/lib/modules/carta-marketing/*.svelte",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": ">= 4"
+    },
+    {
+      "id": "CC6_path_canonico",
+      "comando": "grep -c '/storage/config/marca.json' frontend/src/lib/stores/carta-marketing.ts",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": ">= 1"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Backend de carta-marketing (plan separado)",
+    "Agentes (marketing-copywriter, etc.)",
+    "Otros modulos",
+    "Mutaciones en store (CC3)",
+    "Invocar tools del blueprint (CC4)",
+    "Forms de edicion (Postura B)",
+    "Tocar arquitectura/decisiones/* o schemas o validators",
+    "Migrar datos en disco",
+    "Tocar scripts/validate-all.js",
+    "Crear PR sin OK",
+    "git add . o git add -A",
+    "Saltar OK humano entre fases",
+    "Decir 'todo OK' sin reportar comando + salida real"
+  ],
+
+  "salida_final_del_horizonte": {
+    "carta_marketing_ui_estado_terminal": "UI con 3 zonas apiladas. Onboarding CTA segun estado. Perfil con render defensivo + edicion via prefill. Actividad placeholder hasta agent-observer. Reactivo a eventos del bus.",
+    "archivos_finales_creados": [
+      "frontend/src/lib/stores/carta-marketing.ts (~120 lineas)",
+      "frontend/src/lib/modules/carta-marketing/manifest.json",
+      "frontend/src/lib/modules/carta-marketing/index.ts",
+      "frontend/src/lib/modules/carta-marketing/CartaMarketingPanel.svelte",
+      "frontend/src/lib/modules/carta-marketing/OnboardingZone.svelte",
+      "frontend/src/lib/modules/carta-marketing/PerfilZone.svelte",
+      "frontend/src/lib/modules/carta-marketing/ActividadZone.svelte"
+    ],
+    "archivos_finales_modificados": ["frontend/src/lib/modules/index.ts o loader.ts"],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "Hermano carta-marketing cerrado completo (backend mini + UI). 3 de 5 hermanos terminados."
+    ],
+    "siguiente_natural": "carta-scheduler (siguiente hermano). Aplicar disciplina: releer blueprint, bumpear contrato si drift."
+  }
+}

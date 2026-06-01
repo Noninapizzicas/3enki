@@ -2,9 +2,9 @@
   "_doc": "Sub-contrato TRANSVERSAL del subsistema-carta del vertical pizzepos. Canoniza el camino unico desde que una carta nace (en cualquier puerta de entrada: menu-generator, dictado al chat, json importado, etc.) hasta que llega al catalogo operativo del POS. Define: path canonico de persistencia (data/projects/{slug}/storage/pizzepos/cartas/<carta_id>.json), shape de los 5 eventos del subsistema (carta.creada zona 1, carta.actualizada/editada/borrada zona 3, tarifas.config.actualizada para activacion canal+carta), modelo pre/acto/post storage, activacion delegada al modulo tarifas, modelo de variantes como cartas con precios escritos (no reglas runtime), separacion de UI carta-manager (documento) vs tarifas (asignacion), correlation_id obligatorio en todos los eventos, patron blueprint-eventos-conscientes aplicado en v1. NO canoniza el shape interno de productos ni categorias --queda abierto porque el sistema sirve proyectos con modelos distintos (pizzepos pizzas, vapers sabores, futuros N modelos). Cocinado en sesion 2026-06-01 con ana sobre el material del analisis previo _analisis-flujo-pos-y-engranajes-carta.md y los blueprints reales de menu-generator v8.1 y carta-manager v1.2.",
 
   "id": "subsistema-carta",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "creada": "2026-06-01",
-  "supersedes_nota": "v1.0.1 (2026-06-01): correccion descriptiva tras verificar el blueprint real de carta-digital v1.1.0. El contrato v1.0.0 declaraba prescriptivamente consume_canonico:['carta.actualizada', 'tarifas.config.actualizada'] para carta-digital --inferencia, no verificacion. El blueprint real declara explicitamente 'no reactivo en background, el LLM al entrar a page=carta-digital decide cuando recomponer' como decision razonada (ver carta-digital.blueprint.json _doc y trabajo_pendiente). Ajustada la entrada de carta-digital en tipos_canonicos_de_modulo_del_subsistema: consume_canonico=[], nota explicita sobre el modelo no-reactivo. Reconoce la leccion: cocinar el plan ejecutable de un hermano DEBE empezar por leer su blueprint real, no prescribir desde el contrato. Aplicable a los 4 hermanos restantes cuando se cocinen sus planes individuales (carta-impresion, carta-marketing, carta-scheduler, carta-design) --puede emerger drift contrato-vs-blueprint similar.\n\nv1.0.0 (2026-06-01): Primera version. Cierra cuatro drifts vivos al cocinar el contrato: (a) tres paths conviviendo (legacy /storage/pizzepos/cartas/ raiz, /cartas/ del blueprint v1.2, {project.base_path}/storage/pizzepos/cartas/ de productos) --se canoniza el ultimo; (b) shape de carta.actualizada divergente (auditoria vieja decia spread ...carta, blueprint v1.2 dice solo metadatos) --se canoniza la carta entera embebida; (c) ausencia de canonizacion sobre donde vive la activacion carta+canal (analisis previo proponia un active.json nuevo) --se canoniza tarifas como dueno unico, sin nueva capa; (d) correlation_id no propagado en carta.actualizada del blueprint v1.2 --se canoniza obligatorio en los 5 eventos del subsistema.",
+  "supersedes_nota": "v1.0.4 (2026-06-01): cuarta correccion descriptiva tras verificar el blueprint real de carta-scheduler v1.1.0. Confirma definitivamente el patron: el blueprint declara explicitamente eventos_que_escucho:[] y no_garantiza.ejecucion_automatica razona la decision ('eso requiere un cron worker JS que escuche scheduler.job.triggered'). El cron worker es OTRO modulo separado (artefactos pendientes-timer.js + project-storage.js en el directorio, NO en el blueprint).\n\nEl contrato v1.0.3 declaraba prescriptivamente para carta-scheduler:\n  consume_canonico: ['scheduler.job.triggered']\n  invoca_canonico: ['tarifas.assign']\nAmbos son DEUDA de otro modulo (el cron worker), no del blueprint actual. v1.0.4 corrige:\n  consume_canonico: [] (el blueprint NO escucha)\n  invoca_canonico_eventualmente: ['tarifas.assign'] (cuando el cron worker llegue, sera quien invoque tras evaluar reglas).\n\nLeccion consolidada: los 4 hermanos verificados (carta-digital, carta-impresion, carta-marketing, carta-scheduler) son TODOS no-reactivos. El blueprint es la capa declarativa que el LLM ejecuta a demanda; los workers/cron son JS separados que cierran el bucle reactivo cuando aplica. carta-design (5to hermano, el ultimo) probablemente sigue el mismo patron --se confirmara o se documentara excepcion.\n\nv1.0.3 (2026-06-01): tercera correccion descriptiva tras verificar el blueprint real de carta-marketing v1.1.0. Mismo patron que carta-digital (v1.0.1) y carta-impresion (v1.0.2): el blueprint declara explicitamente eventos_que_escucho:[] y trabajo_pendiente.subscriber_carta_actualizada razona la decision ('Blueprint no reactivo; los agentes se invocan a demanda'). El contrato v1.0.2 declaraba prescriptivamente consume_canonico:['carta.actualizada'] para carta-marketing. v1.0.3 corrige a [] alineandose con el blueprint. Confirmacion del patron: los 3 hermanos verificados (carta-digital + carta-impresion + carta-marketing) son TODOS no-reactivos. Hipotesis fuerte: los 2 restantes (carta-scheduler + carta-design) lo seran tambien --carta-scheduler porque su trabajo es reactivo a scheduler.job.triggered (no a carta.actualizada), y carta-design porque sigue el mismo patron 'agentes a demanda'. Si emerge un hermano REACTIVO real, sera la excepcion y se documenta entonces.\n\nv1.0.2 (2026-06-01): segunda correccion descriptiva tras verificar el blueprint real de carta-impresion v1.1.0. Mismo patron que carta-digital v1.0.1: el blueprint declara explicitamente eventos_que_escucho:[] y trabajo_pendiente razona la decision ('Blueprint no reactivo --el LLM al entrar a la page comprueba fechas meta.generado_at vs carta.meta.updated_at'). El contrato v1.0.1 declaraba prescriptivamente consume_canonico:['carta.actualizada'] para carta-impresion. v1.0.2 corrige a [] alineandose con el blueprint cocinado. Lecciones acumuladas: (1) el modelo no-reactivo es patron extendido en el subsistema-carta --probablemente aplique tambien a los 3 hermanos restantes (carta-marketing, carta-scheduler, carta-design); (2) verificar siempre el blueprint antes de cocinar el plan del hermano siguiente.\n\nv1.0.1 (2026-06-01): correccion descriptiva tras verificar el blueprint real de carta-digital v1.1.0. El contrato v1.0.0 declaraba prescriptivamente consume_canonico:['carta.actualizada', 'tarifas.config.actualizada'] para carta-digital --inferencia, no verificacion. El blueprint real declara explicitamente 'no reactivo en background, el LLM al entrar a page=carta-digital decide cuando recomponer' como decision razonada (ver carta-digital.blueprint.json _doc y trabajo_pendiente). Ajustada la entrada de carta-digital en tipos_canonicos_de_modulo_del_subsistema: consume_canonico=[], nota explicita sobre el modelo no-reactivo. Reconoce la leccion: cocinar el plan ejecutable de un hermano DEBE empezar por leer su blueprint real, no prescribir desde el contrato. Aplicable a los 4 hermanos restantes cuando se cocinen sus planes individuales (carta-impresion, carta-marketing, carta-scheduler, carta-design) --puede emerger drift contrato-vs-blueprint similar.\n\nv1.0.0 (2026-06-01): Primera version. Cierra cuatro drifts vivos al cocinar el contrato: (a) tres paths conviviendo (legacy /storage/pizzepos/cartas/ raiz, /cartas/ del blueprint v1.2, {project.base_path}/storage/pizzepos/cartas/ de productos) --se canoniza el ultimo; (b) shape de carta.actualizada divergente (auditoria vieja decia spread ...carta, blueprint v1.2 dice solo metadatos) --se canoniza la carta entera embebida; (c) ausencia de canonizacion sobre donde vive la activacion carta+canal (analisis previo proponia un active.json nuevo) --se canoniza tarifas como dueno unico, sin nueva capa; (d) correlation_id no propagado en carta.actualizada del blueprint v1.2 --se canoniza obligatorio en los 5 eventos del subsistema.",
 
   "deriva_de": "arquitectura/decisiones/_contratos/multi-tenancy.contract.json --modelo data/projects/{slug}/... y aislamiento por project_id. arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json --carta-manager y menu-generator son blueprint-driven, este contrato es de dominio, no contradice el de paradigma.",
 
@@ -242,9 +242,11 @@
     },
     {
       "modulo": "carta-impresion",
-      "tipo": "blueprint-driven",
-      "rol": "Genera HTML print-ready de cartas.",
-      "consume_canonico": ["carta.actualizada"]
+      "tipo": "blueprint-driven v1.1+",
+      "rol": "Genera versiones HTML print-ready de cartas delegando al agente impresion-architect/builder. NO reactivo en background --decision cocinada del blueprint v1.1.0: el LLM al entrar a page=carta-impresion compara meta.generado_at vs carta.meta.updated_at y propone regenerar cuando proceda.",
+      "consume_canonico": [],
+      "_consume_canonico_nota": "v1.0.2 (2026-06-01): mismo patron que carta-digital --el blueprint v1.1.0 declara eventos_que_escucho:[] y trabajo_pendiente.subscriber_carta_actualizada razona la decision. El contrato v1.0.1 declaraba prescriptivamente ['carta.actualizada']; v1.0.2 corrige a [] alineandose con el blueprint.",
+      "publica_canonico": ["carta.impresion.lista"]
     },
     {
       "modulo": "carta-digital",
@@ -256,16 +258,28 @@
     },
     {
       "modulo": "carta-marketing",
-      "tipo": "blueprint-driven",
-      "rol": "Enriquece y pule cartas segun perfil de marca del proyecto.",
-      "consume_canonico": ["carta.actualizada"]
+      "tipo": "blueprint-driven v1.1+",
+      "rol": "Gestor del perfil de marca del proyecto + orquestador de agentes de marketing (marketing-copywriter, marketing-strategist, marketing-brand-keeper, marketing-onboarding). NO reactivo en background --decision cocinada del blueprint v1.1.0: los agentes se invocan a demanda cuando el LLM o el usuario lo dispara, no automaticamente al cambiar la carta.",
+      "consume_canonico": [],
+      "_consume_canonico_nota": "v1.0.3 (2026-06-01): mismo patron A1 que carta-digital y carta-impresion. Blueprint v1.1.0 declara eventos_que_escucho:[] y trabajo_pendiente.subscriber_carta_actualizada razona la decision. El contrato v1.0.2 declaraba prescriptivamente ['carta.actualizada']; v1.0.3 corrige a [] alineandose con el blueprint.",
+      "publica_canonico": ["marketing.perfil.actualizado", "marketing.onboarding.completado"],
+      "persiste": "data/projects/{slug}/storage/config/marca.json (config transversal del proyecto, coherente con tarifas.json --no namespace pizzepos porque la marca es identidad del proyecto, no especifica del vertical)"
     },
     {
       "modulo": "carta-scheduler",
-      "tipo": "blueprint-driven",
-      "rol": "Programa cambios de carta+canal por franja horaria. Invoca tarifas.assign segun reglas registradas.",
-      "consume_canonico": ["scheduler.job.triggered"],
-      "invoca_canonico": ["tarifas.assign"]
+      "tipo": "blueprint-driven v1.1+",
+      "rol": "Programador conversacional de cambios de carta+canal por franja horaria. Reglas (cron expression + canal + carta_id) + pendientes (cambios calculados esperando OK del usuario). El LLM en page=carta-scheduler revisa proximos_cambios, detecta conflictos, confirma o rechaza pendientes. NO ejecuta automaticamente las reglas en background --eso queda como cron worker JS separado (artefactos pendientes-timer.js + project-storage.js en el directorio, fuera del blueprint).",
+      "consume_canonico": [],
+      "_consume_canonico_nota": "v1.0.4 (2026-06-01): blueprint declara eventos_que_escucho:[] explicito. El blueprint v1.1.0 no_garantiza.ejecucion_automatica documenta: 'eso requiere un cron worker JS que escuche scheduler.job.triggered'. El cron worker es OTRO modulo. El contrato v1.0.3 declaraba prescriptivamente ['scheduler.job.triggered']; v1.0.4 corrige a [] alineandose con el blueprint.",
+      "publica_canonico": [
+        "carta-scheduler.regla.creada",
+        "carta-scheduler.regla.actualizada",
+        "carta-scheduler.regla.eliminada",
+        "carta-scheduler.cambio.aplicado",
+        "carta-scheduler.cambio.rechazado"
+      ],
+      "invoca_canonico_eventualmente": ["tarifas.assign"],
+      "_invoca_nota": "v1.0.4: tarifas.assign es invocado por el CRON WORKER FUTURO (pendientes-timer.js u otro modulo JS separado), NO por el blueprint. Cuando el cron worker llegue como modulo wireado, se cierra el bucle reactivo: scheduler.job.triggered -> cron worker lee reglas activas -> evalua -> invoca tarifas.assign."
     },
     {
       "modulo": "cuentas-canales",

@@ -236,7 +236,7 @@
     },
     {
       "id": "D6",
-      "decision": "Store de recetas se mantiene SOLO LECTURA. Funciones nuevas permitidas: loadHistorial(recetaId). Funciones NO permitidas: cualquier crearReceta/actualizarReceta/eliminarReceta/cambiarEstado/revertirReceta/actualizarPrecio*",
+      "decision": "Store de recetas se mantiene SOLO LECTURA. Funciones nuevas permitidas: loadHistorial(recetaId) y loadVersionSnapshot(recetaId, versionId) --ambas leen /recetas.json via modules/filesystem/ (modulo POC2 generico), CERO invocaciones a tools del blueprint recetas (que es LLM-runtime sin servicio JS que responda al bus). Funciones NO permitidas: cualquier crearReceta/actualizarReceta/eliminarReceta/cambiarEstado/revertirReceta/actualizarPrecio*",
       "razon": "Postura B"
     },
     {
@@ -310,29 +310,72 @@
     },
     {
       "id": "F2",
-      "nombre": "Ampliar store recetas con loadHistorial",
-      "esfuerzo_horas": 0.5,
+      "nombre": "Ampliar store recetas con loadHistorial y loadVersionSnapshot",
+      "esfuerzo_horas": 0.75,
       "ok_explicito_antes_de_continuar": true,
+      "_recalibrado_2026_06_01": "Version original asumia mqttRequest('recetas','historial',{...}) lo cual era incorrecto: el modulo recetas es blueprint-driven LLM-runtime, no tiene servicio JS que responda al bus, solo se ejecuta cuando el LLM lo invoca por chat. La lectura de historial es trivial en frontend: el array r.history[] vive dentro de cada receta en /recetas.json. El frontend lee /recetas.json via modules/filesystem/ (modulo POC2 generico con JS, ya existe) y extrae history del find por id. Cero JS de recetas. Cero LLM en el loop.",
       "operaciones": [
         {
           "id": "F2.op1",
-          "descripcion": "Anyadir funcion loadHistorial(recetaId) al store",
+          "descripcion": "Anyadir funcion loadHistorial(recetaId) al store --resumen de versiones para pintar lista",
           "pseudocodigo": [
             "leer frontend/src/lib/stores/recetas.ts entero",
             "anyadir funcion exportada loadHistorial(recetaId: string):",
-            "  asincrona; invoca mqttRequest('recetas', 'historial', { id: recetaId })",
-            "  retorna array de versiones tal como devuelve el blueprint",
-            "  manejo de errores: throw upstream, el panel captura",
-            "anyadir tipos TypeScript necesarios (Version, etc.) extraidos del schema del blueprint si se conocen; si no, usar 'any[]' temporalmente",
-            "NO anyadir ninguna funcion de mutacion --solo loadHistorial",
-            "guardar archivo"
+            "  asincrona; CERO invocaciones a tools del blueprint recetas.",
+            "  paso 1: obtener la receta entera",
+            "    opcion A (recomendada): reusar getReceta(recetaId) ya existente en el store",
+            "      (que hace mqttRequest('fs','read',{path:'/recetas.json'}) contra modules/filesystem/).",
+            "    opcion B (fallback si getReceta no cachea o falla):",
+            "      const res = await mqttRequest('fs','read',{path:STORE_PATH})",
+            "      const store = JSON.parse(res.data.content)",
+            "      const r = store.recetas.find(x => x.id === recetaId)",
+            "  paso 2: extraer y mapear el array history",
+            "    if (!r) throw new Error('receta no encontrada')",
+            "    const historyRaw = Array.isArray(r.history) ? r.history : []",
+            "    const versiones = historyRaw.map(h => ({",
+            "      version:            h.version,",
+            "      archived_at:        h._archived_at,",
+            "      nombre:             h.nombre,",
+            "      porciones:          h.porciones,",
+            "      dificultad:         h.dificultad,",
+            "      ingredientes_count: Array.isArray(h.ingredientes) ? h.ingredientes.length : 0",
+            "    }))",
+            "    return {",
+            "      receta_id:            r.id,",
+            "      nombre:               r.nombre,",
+            "      version_actual:       r.version,",
+            "      versiones_anteriores: versiones.length,",
+            "      historial:            versiones",
+            "    }",
+            "  manejo de errores: throw upstream; el panel HistorialView captura en banner",
+            "NOTA: el shape de retorno reproduce literal el shape que el blueprint devuelve",
+            "en su operacion 'historial' (verificado en disco 2026-06-01: modules/pizzepos/recetas/recetas.blueprint.json operaciones.historial pseudocodigo). Si el blueprint cambia el shape, esta funcion debe actualizarse en paralelo --y al reves: si la UI necesita campos extra, se anyaden tambien al blueprint."
+          ]
+        },
+        {
+          "id": "F2.op2",
+          "descripcion": "Anyadir funcion loadVersionSnapshot(recetaId, versionId) al store --snapshot completo de UNA version, para diff de revertir",
+          "pseudocodigo": [
+            "anyadir funcion exportada loadVersionSnapshot(recetaId: string, versionId: number | string):",
+            "  asincrona; CERO invocaciones a tools del blueprint recetas.",
+            "  paso 1: obtener la receta entera (mismo patron que loadHistorial)",
+            "  paso 2: find del snapshot por versionId",
+            "    if (!r) throw new Error('receta no encontrada')",
+            "    const snapshot = (r.history || []).find(h => h.version === versionId)",
+            "    if (!snapshot) throw new Error('version no encontrada en history')",
+            "    return snapshot  // shape completo: nombre, ingredientes[], elaboracion[], notas, etc.",
+            "  manejo de errores: throw upstream; HistorialView captura en banner del sub-componente RevertPreview",
+            "NOTA: snapshot completo vs resumen --loadHistorial proyecta resumen (cards de lista),",
+            "loadVersionSnapshot devuelve el snapshot crudo (para diff campo a campo contra receta actual).",
+            "El diff se construye en frontend (RevertPreview component) comparando snapshot vs selectedReceta."
           ]
         }
       ],
       "salida_esperada": {
         "archivos_modificados": ["frontend/src/lib/stores/recetas.ts"],
-        "tamano_aproximado": "+30 lineas",
-        "no_cambia": "funciones de lectura existentes; setters; initRecetasSubscriptions"
+        "tamano_aproximado": "+50 lineas (loadHistorial + loadVersionSnapshot + tipos)",
+        "no_cambia": "funciones de lectura existentes; setters; initRecetasSubscriptions",
+        "verificacion_funcional": "desde consola navegador: cargar pagina /recetas, importar loadHistorial e invocar con un recetaId real, confirmar que retorna el shape esperado. Idem loadVersionSnapshot."
       }
     },
     {
@@ -441,21 +484,31 @@
             "crear frontend/src/lib/modules/recetas/HistorialView.svelte",
             "props: recetaId, onBack",
             "import { loadHistorial } from '$lib/stores/recetas'",
+            "import { loadHistorial, loadVersionSnapshot } from '$lib/stores/recetas'",
             "import { prefillChatInput } from '$lib/stores/chatInputDraft'",
-            "let versiones: any[] = []",
+            "let resumen: any = null  // shape de loadHistorial: {receta_id, nombre, version_actual, versiones_anteriores, historial:[...]}",
             "let loading = false",
             "let error: string | null = null",
-            "let previewVersionId: string | null = null  // que version esta mostrando preview de diff",
-            "onMount: invoca loadHistorial(recetaId), guarda en versiones, maneja error",
+            "let previewVersionId: number | string | null = null  // version actualmente expandida en preview de diff",
+            "let snapshotPreview: any = null  // snapshot completo cargado bajo demanda al pulsar 'Ver diff'",
+            "onMount: invoca loadHistorial(recetaId), guarda en 'resumen', maneja error",
             "renderiza:",
             "  boton 'Volver' arriba izquierda invoca onBack()",
-            "  titulo 'Historial de versiones'",
-            "  lista de versiones (mas reciente primero) con: fecha, motivo del cambio (si existe), boton 'Ver diff' (abre preview de Q3), boton 'Revertir a esta version'",
-            "  preview de diff:",
-            "    si Q3 == 'A' (lado_a_lado): 2 columnas con campos --izq version, der actual, resaltar diferentes",
-            "    si Q3 == 'B' (inline): lista de campos cambiados con 'campo: valor_version -> valor_actual'",
-            "    si Q3 == 'C' (solo lista): lista de nombres de campos cambiados sin valores",
-            "  boton 'Revertir' invoca prefillChatInput(frase Q2.revertir con receta.nombre y fecha_version)"
+            "  titulo 'Historial de versiones de <resumen.nombre>' (subtitulo: 'version actual: v<X>, <N> versiones anteriores')",
+            "  lista de cards desde resumen.historial[] (mas reciente primero):",
+            "    cada card pinta: version, archived_at humanizado, nombre, porciones, dificultad, ingredientes_count",
+            "    2 botones por card: 'Ver diff' y 'Revertir a esta version'",
+            "  flow 'Ver diff':",
+            "    on click 'Ver diff' en card de version X:",
+            "      previewVersionId = X",
+            "      snapshotPreview = await loadVersionSnapshot(recetaId, X)  // snapshot completo",
+            "      renderiza RevertPreview component (sub-componente inline o modal interno) que compara snapshotPreview vs selectedReceta (ya cacheada)",
+            "    RevertPreview construye el diff en frontend (campo a campo):",
+            "      si Q3 == 'A' (lado_a_lado): 2 columnas --izq snapshotPreview, der selectedReceta, resaltar campos diferentes",
+            "      si Q3 == 'B' (inline): lista de campos cambiados con 'campo: snapshot.valor -> actual.valor'",
+            "      si Q3 == 'C' (solo lista): lista de nombres de campos cambiados sin valores",
+            "  flow 'Revertir':",
+            "    on click 'Revertir' en card o en RevertPreview: invoca prefillChatInput(frase Q2.revertir con receta.nombre y archived_at de la version)"
           ]
         },
         {

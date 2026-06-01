@@ -186,7 +186,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Escandallo es lectura mayoritariamente: muestra coste, alertas, historico. Las unicas acciones de mutacion son calcular (Q1) y recalcular_todas (Q2). El resto es navegacion interna del Panel.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "solo Q1; resto lectura pura", "cerrada_en": "2026-06-01T09:29:22.759Z" }
     }
   ],
 

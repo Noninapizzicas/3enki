@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-31T00:13:12.493Z",
-  "total": 2324,
+  "generated_at": "2026-06-01T03:44:10.683Z",
+  "total": 2330,
   "by_validator": {
     "naming": 40,
     "events": 185,
@@ -27,10 +27,11 @@
     "scheduling": 1,
     "llm-runtime-discipline": 8,
     "project-identity": 11,
-    "project-feature-blueprints": 2
+    "project-feature-blueprints": 2,
+    "ui-frontend-blueprint": 6
   },
   "by_severity": {
-    "warning": 2118,
+    "warning": 2124,
     "info": 145,
     "error": 89
   },
@@ -2358,6 +2359,12 @@
     "tools|drift_ui_handlers_con_shape_de_dispatch|text-editor ui_handlers[2] tiene campo 'domain' (editor). tools.contract v1.2 + frontend.contract v1.2: ui_handlers[] es solo surface metadata {type, zone, action, handler}. El dispatch se declara en tools[] (el loader deriva domain/action automaticamente del tool name).",
     "tools|drift_ui_handlers_con_shape_de_dispatch|text-editor ui_handlers[3] tiene campo 'domain' (editor). tools.contract v1.2 + frontend.contract v1.2: ui_handlers[] es solo surface metadata {type, zone, action, handler}. El dispatch se declara en tools[] (el loader deriva domain/action automaticamente del tool name).",
     "tools|drift_ui_handlers_con_shape_de_dispatch|text-editor ui_handlers[4] tiene campo 'domain' (editor). tools.contract v1.2 + frontend.contract v1.2: ui_handlers[] es solo surface metadata {type, zone, action, handler}. El dispatch se declara en tools[] (el loader deriva domain/action automaticamente del tool name).",
+    "ui-frontend-blueprint|C1_blueprint_con_target_page_id_tiene_ruta_sveltekit|modules/pizzepos/carta-manager/module.json: target_page_id='carta-manager' pero no existe frontend/src/routes/[project_id]/carta-manager/+page.svelte",
+    "ui-frontend-blueprint|C1_blueprint_con_target_page_id_tiene_ruta_sveltekit|modules/pizzepos/carta-scheduler/module.json: target_page_id='carta-scheduler' pero no existe frontend/src/routes/[project_id]/carta-scheduler/+page.svelte",
+    "ui-frontend-blueprint|C1_blueprint_con_target_page_id_tiene_ruta_sveltekit|modules/pizzepos/tecnicas/module.json: target_page_id='tecnicas' pero no existe frontend/src/routes/[project_id]/tecnicas/+page.svelte",
+    "ui-frontend-blueprint|C2_blueprint_con_target_page_id_tiene_modulo_frontend|modules/pizzepos/carta-manager/module.json: target_page_id='carta-manager' pero ningun manifest en frontend/src/lib/modules/ declara routes=['/carta-manager'] ni id='carta-manager'",
+    "ui-frontend-blueprint|C2_blueprint_con_target_page_id_tiene_modulo_frontend|modules/pizzepos/carta-scheduler/module.json: target_page_id='carta-scheduler' pero ningun manifest en frontend/src/lib/modules/ declara routes=['/carta-scheduler'] ni id='carta-scheduler'",
+    "ui-frontend-blueprint|C2_blueprint_con_target_page_id_tiene_modulo_frontend|modules/pizzepos/tecnicas/module.json: target_page_id='tecnicas' pero ningun manifest en frontend/src/lib/modules/ declara routes=['/tecnicas'] ni id='tecnicas'",
     "versionado|drift_supersedes_nota_no_actualizada|arquitectura/auditoria/_contratos/manifest-completo.contract.json — version 2.0.0 pero supersedes_nota trivial"
   ]
 }

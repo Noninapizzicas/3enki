@@ -141,7 +141,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "El criterio 'accion rapida sin formularla' del contrato aplica directamente. Hint estatico crea friccion sin razon.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "boton Calcular escandallo con prefillChatInput", "cerrada_en": "2026-06-01T09:23:44.855Z" }
     },
     {
       "id": "Q2",

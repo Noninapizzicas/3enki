@@ -306,11 +306,12 @@ Y en el paso 5 (construir expediente): anadir `caminos: caminos`.
   `prefillChatInput(camino.prompt)`. Fuera `prioridad`/`tipo`/`impacto`.
 
 ### Lo que queda (cubo C — el ejecutor)
-Empaquetar esto como plan ejecutable estilo `cierre-ui-*.json`: fases con OK
-explicito entre cada una, archivos exactos a tocar, y un **runtime-case** que
-verifique que `evaluar` produce caminos coherentes (0-3, sin inventar, shape
-`{titulo, prompt}`) y que el evento sigue canonico. En blueprint-driven el
-runtime-case sustituye al test-por-handler.
+**Cerrado**: `cierre-refactor-viabilidad-guia-del-comerciante.json` (hermano de
+este doc). Plan ejecutable estilo `cierre-ui-*.json` que corre `fede`: 4 fases
+(F0 contrato + retirar agente, F1 blueprint con caminos, F2 frontend, F3
+runtime-case) con OK explicito entre cada una, archivos exactos, cross-checks y
+prohibiciones absolutas. En blueprint-driven el runtime-case (F3) sustituye al
+test-por-handler.
 
 ---
 

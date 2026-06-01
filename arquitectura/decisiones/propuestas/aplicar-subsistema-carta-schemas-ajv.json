@@ -1,0 +1,645 @@
+{
+  "_doc": "Plan ejecutable JSON del horizonte 'producir schemas AJV del subsistema-carta'. Materializa TP8 del contrato subsistema-carta v1.0.0: genera 6 archivos JSON Schema 2020-12 en arquitectura/decisiones/_schemas/subsistema-carta/ que canonizan el shape de los 5 eventos canonicos + _common con $defs compartidos. Sigue el patron de agent-flow/ (precedente del mismo tamano): _common.schema.json con $defs + 1 schema por evento con $ref a los $defs. Aplica strict additionalProperties:false en envelope; permite additionalProperties:true en items[] de categorias/productos (P7/D9 del contrato: shape interno abierto). correlation_id en required[] de los 5 schemas. Preparativo de TP9 (validator subsistema-carta.validate.js) que cruza estos schemas contra los publishes reales detectados en blueprints + module.json. NO ejecuta el validator (TP9 separado). Pensado para que fede ejecute linealmente. Cero cambio en runtime --solo crea archivos de schema.",
+
+  "id": "aplicar-subsistema-carta-schemas-ajv",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "produccion_schemas_ajv",
+
+  "documentos_hermanos": {
+    "contrato_canonico_dominio": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.0",
+      "relacion": "TP8 del contrato. La seccion derivaciones[] lista los 6 schemas exactos a producir con su rol. La seccion eventos[] tiene los shape_resumen de cada evento que estos schemas formalizan."
+    },
+    "patron_de_referencia": {
+      "path": "arquitectura/decisiones/_schemas/agent-flow/",
+      "relacion": "Precedente exacto en tamano y estructura: _common.schema.json + 4 schemas individuales (request, response, failed, progress). Mismo subsistema con $defs compartidos. Este plan replica el patron a 1 _common + 5 schemas para subsistema-carta."
+    },
+    "otros_patrones_consultados": [
+      "arquitectura/decisiones/_schemas/chat-flow/ (5 schemas similar pattern)",
+      "arquitectura/decisiones/_schemas/subsistema-recetario/ (mas grande, mismo patron)",
+      "arquitectura/decisiones/_schemas/tools/ (3 schemas: declaration, http.declaration, response)"
+    ]
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/errors.contract.json",
+    "arquitectura/decisiones/_contratos/multi-tenancy.contract.json",
+    "arquitectura/decisiones/_contratos/naming.contract.json --para verbos canonicos lifecycle (creada, actualizada, editada, borrada)",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json"
+  ],
+
+  "dependencias_explicitas": [],
+
+  "por_que_existe": {
+    "que_cierra": "El contrato subsistema-carta v1.0.0 canoniza el shape de los 5 eventos en su seccion eventos[] con shape_resumen narrativo (obligatorios, opcionales, metadata, descripcion del campo carta). Pero el shape narrativo NO es validable mecanicamente --necesita schemas AJV strict para que tools (ajv-cli, validators internos del repo) puedan rechazar payloads mal formados. Este plan produce esos schemas con la disciplina del repo (additionalProperties:false en envelope, $defs compartidos en _common, $id local).",
+    "que_no_cierra": "Este plan NO implementa el validator subsistema-carta.validate.js (TP9 separado, espera a que el camino este wireado). NO modifica runtime: los blueprints/modulos siguen publicando sin validar contra schema --solo se prepara el schema para que TP9 los use.",
+    "alcance": "Crear 6 archivos JSON nuevos en arquitectura/decisiones/_schemas/subsistema-carta/. Cero modificacion de codigo runtime. Cero modificacion de blueprints o module.json. Cero modificacion de contratos. validate:ci + commit + push."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "arquitectura/decisiones/_schemas/subsistema-carta/",
+      "existe": "verificar al arrancar la sesion --probablemente NO existe el directorio todavia",
+      "comportamiento_si_existe": "Si existe con algun schema ya, REPORTAR al humano antes de F1 (puede ser drift de sesion previa que no se cerro)."
+    },
+    {
+      "pieza": "arquitectura/decisiones/_schemas/agent-flow/_common.schema.json",
+      "existe": true,
+      "rol": "patron de referencia exacto --se replica su estructura ($schema, $id local con dominio enki.local, title, description, $defs sin schema raiz)"
+    },
+    {
+      "pieza": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "existe": true,
+      "rol": "fuente autoritativa de los shape_resumen de los 5 eventos que estos schemas formalizan. Cada schema cita el contrato en su description."
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/<rama-asignada> antes de empezar",
+      "arquitectura/decisiones/_contratos/subsistema-carta.contract.json existe y declara version='1.0.0' con TP8 abierto",
+      "arquitectura/decisiones/_schemas/agent-flow/_common.schema.json existe (patron de referencia)",
+      "arquitectura/decisiones/_schemas/subsistema-carta/ NO existe (o esta vacio) --si existe con archivos, parar y reportar",
+      "npm run validate:ci en la raiz da PASS antes de empezar",
+      "node, ajv o jq disponibles en el entorno (para F3 validacion sintactica)"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones del contrato subsistema-carta v1.0.0 (D1-D11)",
+      "Los 5 shape_resumen declarados en eventos[] del contrato son la fuente autoritativa del payload de cada evento",
+      "P7/D9 del contrato: shape interno de productos y categorias ABIERTO --los schemas usan additionalProperties:true en los items[] dentro de carta.categorias y carta.productos",
+      "envelope canonico de events.contract.json (event_id, event_type, timestamp, source, data, metadata) NO se duplica en estos schemas --estos schemas validan el campo data del envelope, no el envelope completo",
+      "naming.contract.json: verbos canonicos creada, actualizada, editada, borrada usados en los 4 eventos de carta",
+      "Patron $id: https://enki.local/arquitectura/decisiones/subsistema-carta/<schema>.schema.json (replica del patron agent-flow/)"
+    ],
+    "no_toco_esta_sesion": [
+      "Cualquier archivo bajo modules/* (no aplica)",
+      "frontend/* (no aplica)",
+      "arquitectura/decisiones/_contratos/* (cero modificacion --si emerge necesidad de bump del contrato, se hace al cerrar horizonte)",
+      "arquitectura/decisiones/_validators/* (TP9 separado --no se implementa validator aqui)",
+      "arquitectura/decisiones/_outputs/subsistema-carta.json (lo regenera el validator en TP9)",
+      "arquitectura/decisiones/_schemas/agent-flow/, chat-flow/, otros existentes (cero modificacion --solo se LEEN como referencia)",
+      "scripts/validate-all.js, drift-baseline.json (no se modifican --el validator se anyade en TP9, no aqui)",
+      "CLAUDE.md (TP11 ritual de limpieza al cerrar horizonte)"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_patron_common_y_refs",
+      "decision": "Sigue el patron de agent-flow: 1 _common.schema.json con $defs compartidos (correlation_id, project_id, user_id, request_id, timestamp, motivo, operacion_carta_editada_enum, tipo_tarifas_actualizada_enum, canales_enum, estados_carta_enum, carta_envelope, etc.) + 5 schemas individuales que referencian via $ref los $defs. Reduce duplicacion y garantiza coherencia interna.",
+      "no_reabrir_sin": "decision arquitectonica nueva sobre como estructurar schemas en el repo."
+    },
+    {
+      "id": "D2_id_local_dominio_enki",
+      "decision": "$id pattern: https://enki.local/arquitectura/decisiones/subsistema-carta/<nombre>.schema.json. Replica el patron de agent-flow/_common.schema.json y otros del repo.",
+      "no_reabrir_sin": "decision arquitectonica nueva sobre el dominio de $id."
+    },
+    {
+      "id": "D3_envelope_strict_items_abierto",
+      "decision": "Cada schema individual tiene additionalProperties:false en el nivel envelope (objetos del payload del bus). PERO los items[] dentro de carta.categorias y carta.productos tienen additionalProperties:true --shape interno abierto (P7/D9 del contrato). Solo se obliga id + nombre (string minLength 1) por item.",
+      "no_reabrir_sin": "cambio en P7 o D9 del contrato subsistema-carta."
+    },
+    {
+      "id": "D4_correlation_id_en_required_de_los_5",
+      "decision": "Los 5 schemas declaran correlation_id en su array required[] (D10 del contrato).",
+      "no_reabrir_sin": "cambio en D10 del contrato."
+    },
+    {
+      "id": "D5_carta_borrada_estado_archivada_const",
+      "decision": "carta-borrada.schema.json declara carta.meta.estado='archivada' obligatorio (via 'const': 'archivada' en JSON Schema 2020-12). Cualquier otro estado en este evento es violation.",
+      "no_reabrir_sin": "decision sobre que carta.borrada pueda tener otro estado (no veo razon)."
+    },
+    {
+      "id": "D6_carta_editada_operacion_enum_cerrado",
+      "decision": "carta-editada.schema.json declara carta.editada.operacion como enum cerrado: ['add_product', 'remove_product', 'update_product', 'add_category', 'update_prices']. Cualquier otro valor es violacion.",
+      "no_reabrir_sin": "anyadir una operacion nueva al blueprint de carta-manager. En ese caso, anyadir tambien al enum del schema."
+    },
+    {
+      "id": "D7_tarifas_config_tipo_enum_cerrado",
+      "decision": "tarifas-config-actualizada.schema.json declara tipo como enum cerrado: ['general', 'assign', 'variant_registered', 'snapshot']. Coincide con la documentacion de events.publishes en tarifas/module.json.",
+      "no_reabrir_sin": "anyadir tipo nuevo en tarifas. En ese caso, anyadir al enum."
+    },
+    {
+      "id": "D8_no_implementa_validator",
+      "decision": "Este plan SOLO produce los archivos JSON Schema. NO implementa subsistema-carta.validate.js (TP9 separado). NO registra el validator en scripts/validate-all.js. NO modifica drift-baseline.json.",
+      "no_reabrir_sin": "decision de adelantar TP9 a este plan."
+    },
+    {
+      "id": "D9_canales_canonicos_enum",
+      "decision": "El _common.schema.json declara canales_enum como enum cerrado: ['mesa', 'telefono', 'llevar', 'glovo', 'whatsapp', 'llevadoo']. Coincide con cuentas-canales v5.0.0 (D4 del contrato subsistema-carta).",
+      "no_reabrir_sin": "cambio en cuentas-canales."
+    },
+    {
+      "id": "D10_validacion_sintactica_obligatoria",
+      "decision": "F3 ejecuta validacion sintactica de los 6 schemas con ajv-cli o equivalente para confirmar que son JSON Schema 2020-12 validos. Si alguno no compila, parar y reportar antes de commit.",
+      "no_reabrir_sin": "que no haya ajv-cli en el entorno (en cuyo caso usar jq + node con script puntual)."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Crear directorio + _common.schema.json con $defs compartidos",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1_crear_directorio",
+          "descripcion": "Crear el directorio arquitectura/decisiones/_schemas/subsistema-carta/",
+          "pseudocodigo": [
+            "mkdir -p arquitectura/decisiones/_schemas/subsistema-carta",
+            "Verificar con ls: el directorio existe vacio"
+          ]
+        },
+        {
+          "id": "F1.op2_crear_common",
+          "descripcion": "Crear _common.schema.json con todos los $defs compartidos",
+          "pseudocodigo": [
+            "crear arquitectura/decisiones/_schemas/subsistema-carta/_common.schema.json",
+            "estructura JSON Schema 2020-12:",
+            "  $schema: 'https://json-schema.org/draft/2020-12/schema'",
+            "  $id: 'https://enki.local/arquitectura/decisiones/subsistema-carta/_common.schema.json'",
+            "  title: 'subsistema-carta common definitions'",
+            "  description: explica que define defs compartidos por los 5 schemas + cita el contrato",
+            "  $defs:",
+            "    correlation_id: { type: string, minLength: 1, description: 'Hilo causal de la cadena de eventos...' }",
+            "    project_id: { type: string, minLength: 1, description: 'Proyecto activo, obligatorio (multi-tenancy.contract)' }",
+            "    request_id: { type: string, minLength: 1, description: 'Identifica una operacion concreta dentro del bus' }",
+            "    user_id: { type: string, minLength: 1, description: 'Identifica al humano. Opcional en eventos sistemicos.' }",
+            "    timestamp: { type: string, format: date-time, description: 'ISO 8601' }",
+            "    motivo: { type: string, minLength: 1, description: 'Texto libre explicando la causa de la operacion' }",
+            "    carta_id: { type: string, minLength: 1, description: 'UUID o slug determinista de la carta' }",
+            "    canal_canonico: { enum: ['mesa', 'telefono', 'llevar', 'glovo', 'whatsapp', 'llevadoo'], description: 'Canal de venta canonizado por cuentas-canales v5.0.0' }",
+            "    estado_carta: { enum: ['borrador', 'activa', 'archivada'], description: 'Estado del ciclo de vida del documento carta' }",
+            "    operacion_carta_editada: { enum: ['add_product', 'remove_product', 'update_product', 'add_category', 'update_prices'], description: 'Tipo de mutacion para carta.editada' }",
+            "    tipo_tarifas_actualizada: { enum: ['general', 'assign', 'variant_registered', 'snapshot'], description: 'Tipo de cambio en tarifas.config' }",
+            "    item_categoria: {",
+            "      type: object",
+            "      additionalProperties: true,  // shape interno abierto P7/D9",
+            "      required: ['id', 'nombre'],",
+            "      properties: {",
+            "        id: { type: string, minLength: 1 },",
+            "        nombre: { type: string, minLength: 1 }",
+            "      },",
+            "      description: 'Categoria de la carta. id+nombre obligatorios; resto abierto.'",
+            "    }",
+            "    item_producto: {",
+            "      type: object",
+            "      additionalProperties: true,  // shape interno abierto P7/D9",
+            "      required: ['id', 'nombre'],",
+            "      properties: {",
+            "        id: { type: string, minLength: 1 },",
+            "        nombre: { type: string, minLength: 1 }",
+            "      },",
+            "      description: 'Producto de la carta. id+nombre obligatorios; resto abierto (precio, ingredientes, alergenos, etc. dependen del vertical pizzepos/vapers/futuros).'",
+            "    }",
+            "    carta_meta: {",
+            "      type: object",
+            "      additionalProperties: false,",
+            "      required: ['id', 'nombre', 'version', 'created_at', 'updated_at'],",
+            "      properties: {",
+            "        id: { $ref: '#/$defs/carta_id' },",
+            "        nombre: { type: string, minLength: 1 },",
+            "        version: { type: integer, minimum: 1 },",
+            "        created_at: { type: string, format: date-time },",
+            "        updated_at: { type: string, format: date-time },",
+            "        estado: { $ref: '#/$defs/estado_carta' },",
+            "        descripcion: { type: ['string', 'null'] },",
+            "        tags: { type: array, items: { type: string } },",
+            "        generado_desde: { type: string },",
+            "        notas_revision: { type: string }",
+            "      },",
+            "      description: 'Metadatos canonicos de la carta. id+nombre+version+timestamps obligatorios; resto opcional.'",
+            "    }",
+            "    carta_envelope: {",
+            "      type: object",
+            "      additionalProperties: false,",
+            "      required: ['meta', 'categorias', 'productos'],",
+            "      properties: {",
+            "        meta: { $ref: '#/$defs/carta_meta' },",
+            "        categorias: { type: array, items: { $ref: '#/$defs/item_categoria' }, description: 'Lista de categorias. Puede estar vacia pero debe existir.' },",
+            "        productos: { type: array, items: { $ref: '#/$defs/item_producto' }, description: 'Lista de productos. Puede estar vacia pero debe existir.' }",
+            "      },",
+            "      description: 'Shape envelope canonico de carta. Envelope strict, items abiertos (P7/D9 del contrato).'",
+            "    }",
+            "    carta_envelope_archivada: {",
+            "      allOf: [",
+            "        { $ref: '#/$defs/carta_envelope' },",
+            "        {",
+            "          type: object,",
+            "          properties: {",
+            "            meta: {",
+            "              type: object,",
+            "              properties: {",
+            "                estado: { const: 'archivada' }",
+            "              },",
+            "              required: ['estado']",
+            "            }",
+            "          },",
+            "          required: ['meta']",
+            "        }",
+            "      ],",
+            "      description: 'Variante del envelope para carta.borrada: meta.estado debe ser archivada.'",
+            "    }",
+            "    tarifas_canales_config: {",
+            "      type: object",
+            "      additionalProperties: false,",
+            "      required: ['mesa', 'telefono', 'llevar', 'glovo', 'whatsapp', 'llevadoo'],",
+            "      properties: {",
+            "        mesa:      { type: ['string', 'null'], description: 'carta_id asignado al canal mesa o null' },",
+            "        telefono:  { type: ['string', 'null'] },",
+            "        llevar:    { type: ['string', 'null'] },",
+            "        glovo:     { type: ['string', 'null'] },",
+            "        whatsapp:  { type: ['string', 'null'] },",
+            "        llevadoo:  { type: ['string', 'null'] }",
+            "      },",
+            "      description: 'Mapping canal -> carta_id|null. Los 6 canales canonicos son obligatorios en la declaracion (pueden ser null).'",
+            "    }",
+            "    tarifas_variante: {",
+            "      type: object",
+            "      additionalProperties: false,",
+            "      required: ['carta_id', 'base_carta_id', 'nombre', 'canales'],",
+            "      properties: {",
+            "        carta_id: { $ref: '#/$defs/carta_id' },",
+            "        base_carta_id: { $ref: '#/$defs/carta_id' },",
+            "        nombre: { type: string, minLength: 1 },",
+            "        canales: { type: array, items: { $ref: '#/$defs/canal_canonico' } },",
+            "        reglas: { description: 'Metadata historica de como se materializo la variante. Tipo abierto: puede ser string o objeto.' }",
+            "      },",
+            "      description: 'Variante registrada en tarifas. Es OTRA carta archivo con sus precios escritos (D7 del contrato).'",
+            "    }",
+            "    tarifas_config: {",
+            "      type: object",
+            "      additionalProperties: false,",
+            "      required: ['general', 'canales', 'variantes'],",
+            "      properties: {",
+            "        general: { type: ['string', 'null'], description: 'carta_id de la carta general del proyecto, o null si no asignada' },",
+            "        canales: { $ref: '#/$defs/tarifas_canales_config' },",
+            "        variantes: { type: array, items: { $ref: '#/$defs/tarifas_variante' } }",
+            "      },",
+            "      description: 'Shape completo de tarifas.config persistido en storage/config/tarifas.json y embebido en tarifas.config.actualizada.'",
+            "    }",
+            "guardar el archivo"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["arquitectura/decisiones/_schemas/subsistema-carta/_common.schema.json"],
+        "tamano_aproximado": "~180 lineas",
+        "verificacion": "jq . _common.schema.json > /dev/null && echo OK (JSON valido)"
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Crear los 5 schemas individuales",
+      "esfuerzo_horas": 2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op1_carta_creada",
+          "descripcion": "Crear carta-creada.schema.json (zona 1, evento privado generador<->carta-manager)",
+          "pseudocodigo": [
+            "crear arquitectura/decisiones/_schemas/subsistema-carta/carta-creada.schema.json:",
+            "  $schema: 'https://json-schema.org/draft/2020-12/schema'",
+            "  $id: 'https://enki.local/arquitectura/decisiones/subsistema-carta/carta-creada.schema.json'",
+            "  title: 'carta.creada — payload schema'",
+            "  description: 'EVENTO PRIVADO entre generador (menu-generator y futuros) y custodio (carta-manager). Zona 1 pre-storage. Solo carta-manager._on_carta_creada debe escucharlo --otros consumers operan sobre carta no persistida y violan P2 del contrato subsistema-carta.'",
+            "  type: object",
+            "  additionalProperties: false",
+            "  required: ['project_id', 'request_id', 'carta', 'correlation_id', 'timestamp']",
+            "  properties:",
+            "    project_id: { $ref: '_common.schema.json#/$defs/project_id' }",
+            "    request_id: { $ref: '_common.schema.json#/$defs/request_id' }",
+            "    correlation_id: { $ref: '_common.schema.json#/$defs/correlation_id' }",
+            "    timestamp: { $ref: '_common.schema.json#/$defs/timestamp' }",
+            "    user_id: { $ref: '_common.schema.json#/$defs/user_id' }  // opcional",
+            "    motivo: { $ref: '_common.schema.json#/$defs/motivo' }  // opcional",
+            "    carta: { $ref: '_common.schema.json#/$defs/carta_envelope' }"
+          ]
+        },
+        {
+          "id": "F2.op2_carta_actualizada",
+          "descripcion": "Crear carta-actualizada.schema.json (zona 3, certificado oficial)",
+          "pseudocodigo": [
+            "crear arquitectura/decisiones/_schemas/subsistema-carta/carta-actualizada.schema.json:",
+            "  $id: 'https://enki.local/arquitectura/decisiones/subsistema-carta/carta-actualizada.schema.json'",
+            "  title: 'carta.actualizada — payload schema'",
+            "  description: 'Certificado oficial de carta persistida. Publicado por carta-manager (save, restore). Frontera segura para consumers del subsistema-carta y del POS.'",
+            "  type: object",
+            "  additionalProperties: false",
+            "  required: ['project_id', 'carta', 'correlation_id', 'timestamp']",
+            "  properties:",
+            "    project_id: { $ref: '_common.schema.json#/$defs/project_id' }",
+            "    correlation_id: { $ref: '_common.schema.json#/$defs/correlation_id' }",
+            "    timestamp: { $ref: '_common.schema.json#/$defs/timestamp' }",
+            "    user_id: { $ref: '_common.schema.json#/$defs/user_id' }  // opcional",
+            "    motivo: { $ref: '_common.schema.json#/$defs/motivo' }  // opcional",
+            "    carta: { $ref: '_common.schema.json#/$defs/carta_envelope' }"
+          ]
+        },
+        {
+          "id": "F2.op3_carta_editada",
+          "descripcion": "Crear carta-editada.schema.json (zona 3, mutaciones puntuales)",
+          "pseudocodigo": [
+            "crear arquitectura/decisiones/_schemas/subsistema-carta/carta-editada.schema.json:",
+            "  $id: 'https://enki.local/arquitectura/decisiones/subsistema-carta/carta-editada.schema.json'",
+            "  title: 'carta.editada — payload schema'",
+            "  description: 'Mutacion puntual de carta existente persistida. Publicado por carta-manager en operaciones add_product, remove_product, update_product, add_category, update_prices. El campo operacion identifica que mutacion se aplico.'",
+            "  type: object",
+            "  additionalProperties: false",
+            "  required: ['project_id', 'carta', 'operacion', 'correlation_id', 'timestamp']",
+            "  properties:",
+            "    project_id: { $ref: '_common.schema.json#/$defs/project_id' }",
+            "    correlation_id: { $ref: '_common.schema.json#/$defs/correlation_id' }",
+            "    timestamp: { $ref: '_common.schema.json#/$defs/timestamp' }",
+            "    operacion: { $ref: '_common.schema.json#/$defs/operacion_carta_editada' }",
+            "    carta: { $ref: '_common.schema.json#/$defs/carta_envelope' }"
+          ]
+        },
+        {
+          "id": "F2.op4_carta_borrada",
+          "descripcion": "Crear carta-borrada.schema.json (zona 3, soft-delete a archivada)",
+          "pseudocodigo": [
+            "crear arquitectura/decisiones/_schemas/subsistema-carta/carta-borrada.schema.json:",
+            "  $id: 'https://enki.local/arquitectura/decisiones/subsistema-carta/carta-borrada.schema.json'",
+            "  title: 'carta.borrada — payload schema'",
+            "  description: 'Soft-delete. La carta sigue existiendo en disco con meta.estado=archivada. Publicado por carta-manager.delete. Consumers la sacan de listas activas pero pueden seguir consultandola via carta.get.'",
+            "  type: object",
+            "  additionalProperties: false",
+            "  required: ['project_id', 'carta', 'correlation_id', 'timestamp']",
+            "  properties:",
+            "    project_id: { $ref: '_common.schema.json#/$defs/project_id' }",
+            "    correlation_id: { $ref: '_common.schema.json#/$defs/correlation_id' }",
+            "    timestamp: { $ref: '_common.schema.json#/$defs/timestamp' }",
+            "    motivo: { $ref: '_common.schema.json#/$defs/motivo' }  // opcional",
+            "    carta: { $ref: '_common.schema.json#/$defs/carta_envelope_archivada' }  // forza meta.estado=archivada"
+          ]
+        },
+        {
+          "id": "F2.op5_tarifas_config_actualizada",
+          "descripcion": "Crear tarifas-config-actualizada.schema.json (zona 3, asignacion carta+canal)",
+          "pseudocodigo": [
+            "crear arquitectura/decisiones/_schemas/subsistema-carta/tarifas-config-actualizada.schema.json:",
+            "  $id: 'https://enki.local/arquitectura/decisiones/subsistema-carta/tarifas-config-actualizada.schema.json'",
+            "  title: 'tarifas.config.actualizada — payload schema'",
+            "  description: 'Snapshot completo del estado de tarifas. Publicado por tarifas (set_general, assign, register_variant, snapshot). Quien escuche reemplaza su cache local con config del payload.'",
+            "  type: object",
+            "  additionalProperties: false",
+            "  required: ['project_id', 'tipo', 'config', 'correlation_id', 'timestamp']",
+            "  properties:",
+            "    project_id: { $ref: '_common.schema.json#/$defs/project_id' }",
+            "    correlation_id: { $ref: '_common.schema.json#/$defs/correlation_id' }",
+            "    timestamp: { $ref: '_common.schema.json#/$defs/timestamp' }",
+            "    tipo: { $ref: '_common.schema.json#/$defs/tipo_tarifas_actualizada' }",
+            "    config: { $ref: '_common.schema.json#/$defs/tarifas_config' }"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": [
+          "arquitectura/decisiones/_schemas/subsistema-carta/carta-creada.schema.json (~40 lineas)",
+          "arquitectura/decisiones/_schemas/subsistema-carta/carta-actualizada.schema.json (~38 lineas)",
+          "arquitectura/decisiones/_schemas/subsistema-carta/carta-editada.schema.json (~38 lineas)",
+          "arquitectura/decisiones/_schemas/subsistema-carta/carta-borrada.schema.json (~38 lineas)",
+          "arquitectura/decisiones/_schemas/subsistema-carta/tarifas-config-actualizada.schema.json (~38 lineas)"
+        ],
+        "verificacion": "Para cada archivo: jq . <archivo> > /dev/null && echo OK"
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Validacion sintactica de los 6 schemas + validate:ci",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1_jq_valido_cada_archivo",
+          "descripcion": "Verificar que los 6 archivos son JSON valido",
+          "pseudocodigo": [
+            "Para cada archivo en arquitectura/decisiones/_schemas/subsistema-carta/*.schema.json:",
+            "  jq . <archivo> > /dev/null",
+            "  si falla, REPORTAR exactamente que archivo y la linea del error.",
+            "Esperado: 6 OK consecutivos (incluyendo _common)."
+          ]
+        },
+        {
+          "id": "F3.op2_ajv_compile_check",
+          "descripcion": "Verificar que cada schema individual COMPILA con ajv (no solo es JSON valido --es JSON Schema 2020-12 valido)",
+          "pseudocodigo": [
+            "Si existe ajv-cli en el entorno (verificar con: which ajv || npx ajv-cli --version):",
+            "  ajv compile -s arquitectura/decisiones/_schemas/subsistema-carta/<schema>.schema.json -r arquitectura/decisiones/_schemas/subsistema-carta/_common.schema.json",
+            "  para cada uno de los 5 schemas individuales.",
+            "  Esperado: 'schema is valid' por cada uno.",
+            "Si NO existe ajv-cli, crear script puntual scripts/_verify-subsistema-carta-schemas.js:",
+            "  const Ajv2020 = require('ajv/dist/2020')",
+            "  const ajv = new Ajv2020({ allErrors: true })",
+            "  const common = require('../arquitectura/decisiones/_schemas/subsistema-carta/_common.schema.json')",
+            "  ajv.addSchema(common, '_common.schema.json')",
+            "  for (const f of ['carta-creada', 'carta-actualizada', 'carta-editada', 'carta-borrada', 'tarifas-config-actualizada']) {",
+            "    const s = require('../arquitectura/decisiones/_schemas/subsistema-carta/' + f + '.schema.json')",
+            "    try {",
+            "      ajv.compile(s)",
+            "      console.log(f + ' OK')",
+            "    } catch (err) {",
+            "      console.error(f + ' FAIL: ' + err.message)",
+            "      process.exit(1)",
+            "    }",
+            "  }",
+            "Ejecutar: node scripts/_verify-subsistema-carta-schemas.js",
+            "Si funciona, eliminar el script puntual tras verificacion (no se commitea --es solo para sesion).",
+            "Si algun schema NO compila, REPORTAR el mensaje exacto de ajv y PARAR."
+          ]
+        },
+        {
+          "id": "F3.op3_validate_ci",
+          "descripcion": "Correr validate:ci general del repo",
+          "pseudocodigo": [
+            "npm run validate:ci",
+            "esperado: PASS sin drift NUEVO. Los warnings actuales del baseline siguen igual.",
+            "Nota: validate:ci hoy NO valida estos schemas nuevos especificamente (TP9 sera el validator dedicado). Pero verifica el estado general del repo --no debe romper nada al anyadir archivos JSON en _schemas/."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "estado_terminal": "6 schemas validos como JSON + 5 individuales compilables por AJV 2020 con _common como ref + validate:ci verde sin drift nuevo."
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Commit + push",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_status",
+          "descripcion": "Verificar scope",
+          "pseudocodigo": [
+            "git status",
+            "git diff --stat",
+            "confirmar que SOLO hay archivos NUEVOS en arquitectura/decisiones/_schemas/subsistema-carta/:",
+            "  _common.schema.json",
+            "  carta-creada.schema.json",
+            "  carta-actualizada.schema.json",
+            "  carta-editada.schema.json",
+            "  carta-borrada.schema.json",
+            "  tarifas-config-actualizada.schema.json",
+            "Si hay cambios fuera de ese scope: PARAR, reportar, NO commitear.",
+            "Verificar que NO se commitea ningun script puntual de F3.op2 (debe haberse eliminado si se creo)."
+          ]
+        },
+        {
+          "id": "F4.op2_commit",
+          "descripcion": "Commit estructurado",
+          "pseudocodigo": [
+            "git add arquitectura/decisiones/_schemas/subsistema-carta/",
+            "",
+            "git commit con mensaje:",
+            "  feat(schemas): subsistema-carta --6 schemas AJV strict 2020-12",
+            "",
+            "  Aplica TP8 del contrato subsistema-carta v1.0.0. Produce los 6 archivos JSON",
+            "  Schema 2020-12 que formalizan el shape de los 5 eventos canonicos:",
+            "",
+            "  - _common.schema.json: $defs compartidos (correlation_id, project_id, request_id,",
+            "    user_id, timestamp, motivo, carta_id, canal_canonico, estado_carta,",
+            "    operacion_carta_editada, tipo_tarifas_actualizada, item_categoria,",
+            "    item_producto, carta_meta, carta_envelope, carta_envelope_archivada,",
+            "    tarifas_canales_config, tarifas_variante, tarifas_config).",
+            "  - carta-creada.schema.json: zona 1, evento privado generador<->carta-manager.",
+            "  - carta-actualizada.schema.json: zona 3, certificado oficial de carta persistida.",
+            "  - carta-editada.schema.json: zona 3, mutaciones puntuales con operacion enum.",
+            "  - carta-borrada.schema.json: zona 3, soft-delete con meta.estado=archivada const.",
+            "  - tarifas-config-actualizada.schema.json: zona 3, snapshot de asignacion carta+canal.",
+            "",
+            "  Disciplina aplicada:",
+            "  - additionalProperties:false en envelopes (strict)",
+            "  - additionalProperties:true en items[] de categorias/productos (P7/D9 shape interno",
+            "    abierto --multi-proyecto)",
+            "  - correlation_id en required[] de los 5 (D10 del contrato)",
+            "  - patron $id local con dominio enki.local (replica de agent-flow/)",
+            "",
+            "  Preparativo de TP9 (validator subsistema-carta.validate.js, separado).",
+            "  Cero cambio en runtime --solo se crean archivos de schema.",
+            "",
+            "  Plan ejecutable: arquitectura/decisiones/propuestas/aplicar-subsistema-carta-schemas-ajv.json",
+            "  Contrato canonico: arquitectura/decisiones/_contratos/subsistema-carta.contract.json"
+          ]
+        },
+        {
+          "id": "F4.op3_push",
+          "descripcion": "Push con retry exponencial",
+          "pseudocodigo": [
+            "git push -u origin <rama-de-la-sesion>",
+            "si falla por red: retry 2s, 4s, 8s, 16s",
+            "si falla por otra razon: parar, diagnosticar, reportar.",
+            "NO --force, NO --no-verify"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo OK explicito"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_jq_valido_cada_schema",
+      "descripcion": "Los 6 archivos son JSON valido",
+      "comando": "for f in arquitectura/decisiones/_schemas/subsistema-carta/*.schema.json; do jq . \"$f\" > /dev/null && echo \"OK $f\" || echo \"FAIL $f\"; done",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "6 OK lines"
+    },
+    {
+      "id": "CC2_ajv_compile_each",
+      "descripcion": "Los 5 schemas individuales compilan con AJV 2020 usando _common como ref",
+      "comando": "node scripts/_verify-subsistema-carta-schemas.js (puntual) o ajv compile equivalente",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "5 OK lines (carta-creada, carta-actualizada, carta-editada, carta-borrada, tarifas-config-actualizada)"
+    },
+    {
+      "id": "CC3_correlation_id_en_required",
+      "descripcion": "Los 5 schemas individuales declaran correlation_id en required[]",
+      "comando": "for f in arquitectura/decisiones/_schemas/subsistema-carta/carta-*.schema.json arquitectura/decisiones/_schemas/subsistema-carta/tarifas-*.schema.json; do jq -e '.required | contains([\"correlation_id\"])' \"$f\" > /dev/null && echo \"OK $f\" || echo \"FAIL $f\"; done",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "5 OK lines"
+    },
+    {
+      "id": "CC4_envelope_strict_items_open",
+      "descripcion": "_common declara items abiertos en categorias/productos",
+      "comando": "jq '.\\$defs.item_categoria.additionalProperties, .\\$defs.item_producto.additionalProperties' arquitectura/decisiones/_schemas/subsistema-carta/_common.schema.json",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "true\\ntrue (ambos abiertos por P7/D9)"
+    },
+    {
+      "id": "CC5_validate_ci",
+      "descripcion": "validate:ci pasa sin drift nuevo",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F3"],
+      "salida_esperada": "PASS sin drift NUEVO"
+    },
+    {
+      "id": "CC6_git_status_scope",
+      "descripcion": "Solo archivos nuevos en _schemas/subsistema-carta/",
+      "comando": "git status --short",
+      "ejecutar_tras": ["F4.op1"],
+      "verificar": "Solo aparecen los 6 archivos en _schemas/subsistema-carta/. Si aparece cualquier otra cosa (incluido un script puntual de F3.op2), PARAR --el script puntual debe haberse eliminado tras uso."
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Modificar archivos existentes en arquitectura/decisiones/_schemas/ (cualquier otro directorio --cero edicion de schemas hermanos)",
+    "Modificar arquitectura/decisiones/_contratos/* (cero modificacion del contrato; si emerge necesidad de bump v1.0.1 del contrato, se hace al cerrar horizonte como ritual de limpieza, no aqui)",
+    "Implementar arquitectura/decisiones/_validators/subsistema-carta.validate.js (TP9 separado, NO en este plan --D8 cerrada)",
+    "Registrar el validator en scripts/validate-all.js (TP9 separado)",
+    "Modificar drift-baseline.json (no se cierra drift aqui --solo se crean schemas)",
+    "Tocar modules/* o frontend/* (no aplica)",
+    "Crear el directorio arquitectura/decisiones/_outputs/subsistema-carta.json (lo regenera el validator en TP9)",
+    "Tocar otros schemas existentes (agent-flow, chat-flow, etc.) --se LEEN como referencia, no se modifican",
+    "Commitear scripts puntuales de F3.op2 (verify-subsistema-carta-schemas.js debe eliminarse tras uso)",
+    "Anyadir campos opcionales a los schemas mas alla de lo declarado en el contrato (e.g. NO anyadir 'source' o 'event_id' --esos son del envelope canonico de events.contract, no del data del evento)",
+    "Cerrar additionalProperties en items de categorias/productos --rompe P7/D9 multi-proyecto",
+    "Omitir correlation_id de required[] --rompe D10 del contrato",
+    "Crear PR sin OK explicito del humano",
+    "Hacer commit con git add . o git add -A",
+    "Saltar OK humano entre F1 y F2, F2 y F3, F3 y F4",
+    "Decir 'todo OK' sin reportar el comando ejecutado y su salida real",
+    "Continuar a F4 si CC1-CC5 no pasan"
+  ],
+
+  "salida_final_del_horizonte": {
+    "schemas_subsistema_carta_estado_terminal": "6 archivos JSON Schema 2020-12 strict en arquitectura/decisiones/_schemas/subsistema-carta/ que formalizan el shape de los 5 eventos canonicos del subsistema-carta + _common con $defs compartidos. Disciplina canonica del repo: $id local enki.local, $ref a _common, additionalProperties:false en envelopes, additionalProperties:true en items abiertos (P7/D9), correlation_id en required[] (D10). Preparativos de TP9.",
+    "archivos_finales_creados": [
+      "arquitectura/decisiones/_schemas/subsistema-carta/_common.schema.json (~180 lineas)",
+      "arquitectura/decisiones/_schemas/subsistema-carta/carta-creada.schema.json (~40 lineas)",
+      "arquitectura/decisiones/_schemas/subsistema-carta/carta-actualizada.schema.json (~38 lineas)",
+      "arquitectura/decisiones/_schemas/subsistema-carta/carta-editada.schema.json (~38 lineas)",
+      "arquitectura/decisiones/_schemas/subsistema-carta/carta-borrada.schema.json (~38 lineas)",
+      "arquitectura/decisiones/_schemas/subsistema-carta/tarifas-config-actualizada.schema.json (~38 lineas)"
+    ],
+    "verificacion_terminal": [
+      "CC1-CC6 todos pasan",
+      "6 archivos JSON validos",
+      "5 schemas individuales compilables con AJV 2020 + _common como ref",
+      "validate:ci verde sin drift nuevo",
+      "git status: solo los 6 archivos del scope",
+      "commit pusheado a la rama",
+      "Ningun script puntual de F3.op2 commiteado por error"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "TP8 del contrato subsistema-carta v1.0.0 --estado: 'cerrado'",
+      "Shape de los 5 eventos canonicos formalizado mecanicamente (validable con AJV)",
+      "Preparativo de TP9: el validator subsistema-carta.validate.js podra compilar estos schemas y cruzar contra publishes detectados"
+    ],
+    "siguiente_natural": "TP9 (validator subsistema-carta.validate.js) --espera a que TP1+TP3+TP4 esten ejecutadas para evitar falsos positivos sobre el shape pre-bump. TP11 (ritual de limpieza CLAUDE.md) cuando todos los TPs activos esten cerrados --anyadir bloque para subsistema-carta.contract.json en la seccion 'Decisiones cross-modulo' (a la altura del bloque de subsistema-tienda/subsistema-recetario)."
+  }
+}

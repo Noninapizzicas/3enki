@@ -1,0 +1,990 @@
+{
+  "_doc": "Plan ejecutable JSON COMBINADO del horizonte 'cerrar carta-impresion UI operativa'. NO escatima: amplia el backend con 2 operaciones nuevas (list + delete) necesarias para que la UI sea operativa real (Browser navegable + delete), y cocina la UI completa con patron Browser+Detail+Preview que incluye iframe del HTML real, botones Imprimir (window.print) + Descargar (blob) + Regenerar (prefill chat) + Borrar (prefill chat). Bumpea carta-impresion blueprint v1.2.0 -> v1.3.0 anyadiendo list + delete (publish carta.impresion.borrada). UN solo commit con backend + UI acoplados. Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
+
+  "id": "cierre-ui-carta-impresion",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "cierre_ui_modulo_blueprint_con_ampliacion_backend",
+
+  "documentos_hermanos": {
+    "contrato_canonico_dominio": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.2",
+      "relacion": "Contrato vigente. La UI respeta A1 (no-reactivo) y D1 (path canonico)."
+    },
+    "contrato_canonico_ui_pattern": {
+      "path": "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+      "version": "1.0.1",
+      "relacion": "Postura B canonica + Panel router + store solo lectura + prefillChatInput. Patron Browser+Detail aplicable porque hay multiples cartas impresas (no zona unica). Los 5 criterios chat-vs-UI aplicados: list (1 densidad visual + 5 estado vivo), preview iframe (4 preview de salidas visuales), imprimir/descargar (2 accion rapida sin formularla)."
+    },
+    "plan_backend_hermano_previo": {
+      "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-carta-impresion.json",
+      "version": "1.0.0",
+      "estado": "cocinado --hace path canonico + correlation_id + bump a v1.2.0",
+      "relacion": "Este plan AMPLIA el blueprint v1.2.0 (producto del plan anterior) a v1.3.0 anyadiendo list+delete. Si fede ejecuta este plan ANTES del backend previo: parar y reportar (la base v1.2.0 debe existir). Si fede ejecuta los dos en orden (backend previo, despues este): perfecto."
+    },
+    "plan_modelo_estructural": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-carta-manager.json",
+      "relacion": "Modelo estructural: Browser+Card+Detail+Historial. carta-impresion usa Browser+Card+Detail (sin Historial --no hay versionado de impresiones, las viejas se sobreescriben)."
+    }
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+    "arquitectura/decisiones/_contratos/frontend.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/persistence.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/errors.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json"
+  ],
+
+  "dependencias_explicitas": [
+    {
+      "id": "DEP1",
+      "depende_de": "aplicar-subsistema-carta-a-carta-impresion.json (plan backend previo ejecutado)",
+      "que_debe_estar_hecho": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json declara version='blueprint-1.2.0' (o superior). Si declara 'blueprint-1.1.0', el plan backend previo NO se ha ejecutado.",
+      "afecta_a_fase": "F1",
+      "comportamiento_si_no_se_cumple": "fede para al inicio de F1 y reporta al humano: 'Este plan amplia el blueprint v1.2.0 a v1.3.0. La base v1.2.0 debe existir; ejecuta primero aplicar-subsistema-carta-a-carta-impresion.json.'"
+    },
+    {
+      "id": "DEP2",
+      "depende_de": "cierre-ui-recetas.json F1",
+      "que_debe_estar_hecho": "frontend/src/lib/stores/chatInputDraft.ts existe con prefillChatInput.",
+      "afecta_a_fase": "F3",
+      "comportamiento_si_no_se_cumple": "parar antes de F3 y reportar"
+    }
+  ],
+
+  "por_que_existe": {
+    "rol_de_carta_impresion_en_el_subsistema": "Gestiona cartas impresas en HTML print-ready --el comerciante imprime su carta para mesa, plastificada, encarpetada. El agente impresion-architect/builder produce el HTML; carta-impresion persiste + sirve.",
+    "gap_principal": "Backend blueprint maduro (3 operaciones --4 tras este plan), ruta SvelteKit existe, pero sin modulo frontend ni store. Y el blueprint v1.2.0 no permite LISTAR cartas impresas existentes ni BORRARLAS --operaciones imprescindibles para una UI navegable.",
+    "alcance": "Ampliacion backend (list + delete, bump v1.2.0 -> v1.3.0) + UI completa con Browser navegable + Detail con preview iframe del HTML + acciones Imprimir/Descargar/Regenerar/Borrar. Patron Browser+Card+Detail (no zonas apiladas) porque hay multiples cartas impresas en cada proyecto. Postura B canonica para mutaciones."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+      "version_actual": "blueprint-1.1.0 (blueprint-1.2.0 tras plan backend previo, blueprint-1.3.0 tras este plan)",
+      "operaciones_actuales": ["get", "generar", "save_html"],
+      "operaciones_objetivo": ["get", "generar", "save_html", "list", "delete"]
+    },
+    {
+      "pieza": "frontend/src/routes/[project_id]/carta-impresion/+page.svelte",
+      "existe": true,
+      "rol": "ruta con <LazyShell /> --se preserva"
+    },
+    {
+      "pieza": "frontend/src/lib/stores/carta-impresion.ts",
+      "existe": "verificar (probable: SI existe parcial segun tabla del usuario, NO existe completo). Si existe pero es legacy, fede LEE primero y reporta antes de sobrescribir.",
+      "comportamiento_si_existe_legacy": "fede compara contenido con lo que este plan propone. Si la version legacy invoca tools del blueprint (anti-patron principio 6 ui-frontend-blueprint), se reemplaza por la version nueva basada en fs.read/fs.list. Si el legacy ya usa fs.read, se extiende/aprovecha."
+    },
+    {
+      "pieza": "frontend/src/lib/modules/carta-impresion/",
+      "existe": false,
+      "esperado_tras_plan": "manifest.json + index.ts + CartaImpresionPanel.svelte + CartasImpresasBrowser.svelte + CartaImpresaCard.svelte + CartaImpresaDetail.svelte"
+    },
+    {
+      "pieza": "frontend/src/lib/stores/chatInputDraft.ts",
+      "existe": "verificar (DEP2)",
+      "comportamiento_si_no_existe": "parar antes de F3"
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/<rama-asignada>",
+      "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json declara version='blueprint-1.2.0' --si declara 1.1.0, parar (DEP1)",
+      "frontend/src/lib/modules/carta-impresion/ NO existe (verificar con ls)",
+      "frontend/src/lib/stores/carta-impresion.ts: si existe, REPORTAR contenido al humano antes de editar (tabla del usuario indicaba SI existe parcial)",
+      "frontend/src/routes/[project_id]/carta-impresion/+page.svelte EXISTE con <LazyShell />",
+      "frontend/src/lib/stores/chatInputDraft.ts EXISTE (DEP2)",
+      "npm run validate:ci PASS antes de empezar"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones del contrato subsistema-carta v1.0.2",
+      "Los 7 principios del contrato ui-frontend-blueprint v1.0.1 --especialmente principio 6 (store NUNCA invoca tools del blueprint, lee via fs.read/fs.list)",
+      "A1 preservado: la UI NO recompose automaticamente al recibir carta.actualizada. Solo se subscribe a carta.impresion.lista (cuando el agente termina) y carta.impresion.borrada (cuando delete completa).",
+      "Templates conocidos hardcode en store: ['base'] como minimo (templates built-in del modulo). Si emergen mas templates en modules/pizzepos/carta-impresion/templates/, anyadir al hardcode aqui.",
+      "El HTML es texto plano largo --el store puede cachearlo en memoria sin problema (carta impresa tipica < 200KB)."
+    ],
+    "no_toco_esta_sesion": [
+      "modules/pizzepos/carta-impresion/templates/* (templates built-in --no se editan, solo se mencionan en el selector)",
+      "modules/pizzepos/carta-impresion/context.json, prompt.json (legacy revisable)",
+      "Agente impresion-architect / impresion-builder",
+      "Cualquier otro modulo backend o frontend",
+      "arquitectura/decisiones/_contratos/ (cero modificacion --el modelo no-reactivo y el path canonico ya estan en v1.0.2)",
+      "arquitectura/decisiones/_schemas/, _validators/",
+      "data/projects/*/storage/pizzepos/carta-impresion/* (cero migracion de datos)",
+      "scripts/validate-all.js, drift-baseline.json",
+      "CLAUDE.md"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [
+    {
+      "id": "Q1",
+      "tema": "icono_y_label_workbar",
+      "pregunta": "¿Icono y label?",
+      "opciones": [
+        {"id": "A", "label": "🖨️ + 'Imprimir cartas'", "comentario": "metafora directa de la accion: el comerciante imprime cartas"},
+        {"id": "B", "label": "📄 + 'Cartas imprimibles'", "comentario": "metafora documento"},
+        {"id": "C", "label": "🖨️ + 'Impresion'", "comentario": "mas corto"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Verbo directo: el comerciante imprime cartas para mesa. La accion es clara desde el icono+label.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q2",
+      "tema": "orden_workbar",
+      "pregunta": "Orden relativo a otros botones",
+      "opciones": [
+        {"id": "A", "label": "7 --tras carta-digital (6)", "comentario": "agrupa los outputs (digital + impresion juntos)"},
+        {"id": "B", "label": "secuencial sin ordenar", "comentario": "deja que el usuario decida tras uso"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Imprimir es output de carta, similar a digital. Agruparlos visualmente ayuda.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q3",
+      "tema": "lista_templates_conocidos_hardcode",
+      "pregunta": "¿Qué templates aparecen en el selector?",
+      "opciones": [
+        {"id": "A", "label": "['base'] solo --minimo", "comentario": "el unico template built-in conocido segun la auditoria"},
+        {"id": "B", "label": "['base', 'compacto', 'elegante'] --tres por defecto", "comentario": "asume que hay 3 templates futuros; pero si solo hay 'base', el selector mostraria 2 opciones que fallarian al generar"},
+        {"id": "C", "label": "leer dinamicamente de modules/pizzepos/carta-impresion/templates/ --requiere op nueva templates_disponibles en blueprint", "comentario": "operativo pero amplia mas el backend"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "A es lo concreto verificable. Si en futuro hay mas templates, anyadirlos al hardcode --o si la lista crece, F-extension a operacion templates_disponibles.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q4",
+      "tema": "frases_canonicas_prefill",
+      "pregunta": "¿Confirmas las frases canonicas?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "acepto literalmente",
+          "comentario": "Propuestas:\n- Regenerar carta impresa: 'Regenera la carta impresa de \"<nombre_carta>\" con el template <template>.'\n- Generar nueva carta impresa: 'Genera una carta impresa de la carta \"<nombre_carta>\" con el template <template>.'\n- Borrar carta impresa: 'Borra la carta impresa de \"<nombre_carta>\".'\n- Cambiar template: 'Regenera la carta impresa de \"<nombre_carta>\" usando el template <nuevo_template>.'"
+        },
+        {"id": "B", "label": "matiza", "comentario": "usuario provee nuevas"}
+      ],
+      "recomendacion": "A",
+      "respuesta_usuario": null
+    }
+  ],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_amplia_backend_2_ops_nuevas",
+      "decision": "Bumpea blueprint v1.2.0 -> v1.3.0 anyadiendo 2 operaciones: list (lista cartas impresas del proyecto via fs.list+fs.read de .meta.json) y delete (borra .html + .meta.json y publica carta.impresion.borrada). NO anyade templates_disponibles (Q3=A: hardcode en store)."
+    },
+    {
+      "id": "D2_evento_nuevo_carta_impresion_borrada",
+      "decision": "Operacion delete publica evento nuevo carta.impresion.borrada con shape { project_id, carta_id, correlation_id, timestamp }. correlation_id obligatorio. NO requires_consumer (no hay consumer real --leccion TP1).",
+      "no_reabrir_sin": "consumer real que emerja"
+    },
+    {
+      "id": "D3_patron_browser_detail_no_zonas",
+      "decision": "UI con Panel router + activeView local (browser/detail). NO zonas apiladas como tarifas/carta-digital --aqui hay multiples cartas impresas, navegacion necesaria.",
+      "no_reabrir_sin": "que solo haya 1 carta impresa por proyecto (improbable)"
+    },
+    {
+      "id": "D4_preview_iframe_HTML_real",
+      "decision": "CartaImpresaDetail incluye iframe que carga el HTML real (preview visual). El comerciante VE lo que va a imprimir. Criterio 4 chat-vs-UI cumplido al 100% (preview salida visual).",
+      "no_reabrir_sin": "que el iframe presente problema de seguridad real"
+    },
+    {
+      "id": "D5_botones_imprimir_descargar_son_browser_native",
+      "decision": "Imprimir: window.print() del iframe (dialog nativo del navegador). Descargar: crear Blob del HTML y trigger download. Estos NO van por chat --son acciones del browser, no del backend. Las otras acciones (Regenerar, Borrar) SI van por chat (Postura B).",
+      "no_reabrir_sin": "decision arquitectonica nueva"
+    },
+    {
+      "id": "D6_store_solo_lectura_principio_6",
+      "decision": "Store lee via fs.list.request + fs.read.request al path canonico /storage/pizzepos/carta-impresion/. NUNCA invoca tools del blueprint. Funciones exportadas: loadCartasImpresas, getCartaImpresa, initCartaImpresionSubscriptions. Helpers: TEMPLATES_CONOCIDOS const.",
+      "no_reabrir_sin": "cambio paradigma"
+    },
+    {
+      "id": "D7_suscripciones_canonicas",
+      "decision": "initCartaImpresionSubscriptions registra: (a) carta.impresion.lista --recarga loadCartasImpresas (nueva carta impresa); (b) carta.impresion.borrada --recarga; (c) NO escucha carta.actualizada (A1 preservado --el modelo no-reactivo del blueprint v1.1.0+ vale tambien para la UI)."
+    },
+    {
+      "id": "D8_no_se_cocina_historial_view",
+      "decision": "NO HistorialCartaImpresaView. No hay versionado de cartas impresas en el blueprint (cada generar sobreescribe). Si emerge necesidad de version, es F-extension futura.",
+      "no_reabrir_sin": "anyadir versionado al blueprint"
+    },
+    {
+      "id": "D9_commit_unico_backend_y_ui",
+      "decision": "Backend (bump blueprint v1.3.0) y UI van en el MISMO commit. Coherencia conceptual: la UI necesita las 2 ops nuevas para ser operativa --estan acopladas.",
+      "no_reabrir_sin": "decision diferente sobre granularidad"
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Bump blueprint backend v1.2.0 -> v1.3.0 anyadiendo list + delete",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op0_verificar_dep1",
+          "descripcion": "Verificar que la base v1.2.0 esta",
+          "pseudocodigo": [
+            "Read modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+            "Verificar que version es 'blueprint-1.2.0' (o superior).",
+            "Si es 'blueprint-1.1.0', PARAR y reportar: 'Este plan amplia v1.2.0 a v1.3.0. Ejecuta primero aplicar-subsistema-carta-a-carta-impresion.json.'"
+          ]
+        },
+        {
+          "id": "F1.op1_bump_version_blueprint",
+          "descripcion": "blueprint-1.2.0 -> blueprint-1.3.0",
+          "pseudocodigo": [
+            "Edit blueprint",
+            "old: \"version\": \"blueprint-1.2.0\"",
+            "new: \"version\": \"blueprint-1.3.0\""
+          ]
+        },
+        {
+          "id": "F1.op2_anyadir_changelog",
+          "descripcion": "_v1_3_changelog",
+          "pseudocodigo": [
+            "Edit anyadiendo tras _v1_2_changelog:",
+            "  \"_v1_3_changelog\": \"v1.3.0 (2026-06-01): anyade 2 operaciones nuevas requeridas por la UI operativa: (a) list --lista cartas impresas del proyecto via fs.list+fs.read de .meta.json. (b) delete --borra .html + .meta.json del path canonico y publica carta.impresion.borrada (correlation_id obligatorio). Cero cambio en operaciones existentes (get, generar, save_html, todos con paths canonicos del v1.2.0). eventos_publicados anyade carta.impresion.borrada; eventos_que_escucho preservado [] (A1 modelo no-reactivo del v1.1.0+).\""
+          ]
+        },
+        {
+          "id": "F1.op3_anyadir_evento_publicado",
+          "descripcion": "Anyadir carta.impresion.borrada a eventos_publicados",
+          "pseudocodigo": [
+            "Edit blueprint eventos_publicados, anyadir entrada:",
+            "  \"carta.impresion.borrada\"",
+            "Tras los eventos existentes (impresion.delete.response, impresion.delete.failed se anyaden automaticamente porque hay tool delete --pero los explicitos del subsistema son los .lista/.borrada)."
+          ]
+        },
+        {
+          "id": "F1.op4_anyadir_operacion_list",
+          "descripcion": "Anyadir operacion list al blueprint",
+          "pseudocodigo": [
+            "Edit blueprint operaciones, anyadir tras save_html:",
+            "  \"list\": {",
+            "    \"input\": \"{ project_id (req), request_id (req), correlation_id? }\",",
+            "    \"pseudocodigo\": [",
+            "      \"async list(input):\",",
+            "      \"  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }\",",
+            "      \"  files = await publishAndWait('fs.list.request', { project_id: input.project_id, path: '/storage/pizzepos/carta-impresion/', pattern: '*.meta.json' })\",",
+            "      \"  if (files.status === 404) return { status: 200, data: [] }\",",
+            "      \"  if (files.status >= 400) return files\",",
+            "      \"  resultados = []\",",
+            "      \"  for (file of files.data || []) {\",",
+            "      \"    raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/storage/pizzepos/carta-impresion/' + file })\",",
+            "      \"    if (raw.status !== 200) continue\",",
+            "      \"    try {\",",
+            "      \"      meta = JSON.parse(raw.content)\",",
+            "      \"      resultados.push(meta)\",",
+            "      \"    } catch { continue }\",",
+            "      \"  }\",",
+            "      \"  resultados.sort((a, b) => String(b.generado_at || '').localeCompare(String(a.generado_at || '')))\",",
+            "      \"  return { status: 200, data: resultados }\"",
+            "    ],",
+            "    \"reglas_clave\": [\"Lectura ligera --solo meta.json, no HTML. Orden por generado_at desc.\"],",
+            "    \"errores_posibles\": [\"INVALID_INPUT\", \"UPSTREAM_TIMEOUT\", \"UPSTREAM_UNREACHABLE\"]",
+            "  }"
+          ]
+        },
+        {
+          "id": "F1.op5_anyadir_operacion_delete",
+          "descripcion": "Anyadir operacion delete al blueprint",
+          "pseudocodigo": [
+            "Edit blueprint operaciones, anyadir tras list:",
+            "  \"delete\": {",
+            "    \"input\": \"{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req) }\",",
+            "    \"pseudocodigo\": [",
+            "      \"async delete(input):\",",
+            "      \"  if (!input.project_id || !input.carta_id) return INVALID_INPUT\",",
+            "      \"  // Borrar HTML --si no existe, no_op (devolvemos 404 pero seguimos)\",",
+            "      \"  html_resp = await publishAndWait('fs.delete.request', { project_id: input.project_id, path: '/storage/pizzepos/carta-impresion/' + input.carta_id + '.html' })\",",
+            "      \"  if (html_resp.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta_impresion', id: input.carta_id }\",",
+            "      \"  if (html_resp.status >= 400) return html_resp\",",
+            "      \"  // Borrar meta companion --si no existe, ok (huerfano del HTML que ya borramos)\",",
+            "      \"  meta_resp = await publishAndWait('fs.delete.request', { project_id: input.project_id, path: '/storage/pizzepos/carta-impresion/' + input.carta_id + '.meta.json' })\",",
+            "      \"  if (meta_resp.status >= 400 && meta_resp.status !== 404) return meta_resp\",",
+            "      \"  correlation_id_efectivo = input.correlation_id || uuid()\",",
+            "      \"  await publish('carta.impresion.borrada', {\",",
+            "      \"    project_id: input.project_id,\",",
+            "      \"    carta_id: input.carta_id,\",",
+            "      \"    correlation_id: correlation_id_efectivo,\",",
+            "      \"    timestamp: nowISO()\",",
+            "      \"  })\",",
+            "      \"  return { status: 200, data: { carta_id: input.carta_id, borrada: true } }\"",
+            "    ],",
+            "    \"reglas_clave\": [\"Borra HTML + meta companion. Si HTML no existe, RESOURCE_NOT_FOUND. correlation_id_efectivo garantizado uuid si falta.\"],",
+            "    \"errores_posibles\": [\"INVALID_INPUT\", \"RESOURCE_NOT_FOUND\", \"UPSTREAM_TIMEOUT\", \"UPSTREAM_UNREACHABLE\"]",
+            "  }"
+          ]
+        },
+        {
+          "id": "F1.op6_verificar_consistencia_backend",
+          "descripcion": "Releer blueprint y verificar",
+          "pseudocodigo": [
+            "Read blueprint entero.",
+            "Verificaciones:",
+            "  - version es blueprint-1.3.0",
+            "  - _v1_3_changelog existe",
+            "  - operaciones contiene get, generar, save_html, list, delete (5 total)",
+            "  - eventos_publicados contiene carta.impresion.borrada nuevo",
+            "  - eventos_que_escucho sigue [] (A1 preservado)",
+            "  - grep -c 'storage/pizzepos/carta-impresion' >= 10 (las nuevas ops + las anteriores)",
+            "  - grep -c 'correlation_id_efectivo' >= 3 (los 2 publishes de generar/save_html + el nuevo de delete)",
+            "JSON valido (jq .)"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-impresion/carta-impresion.blueprint.json"]
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Crear store frontend/src/lib/stores/carta-impresion.ts",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op0_verificar_legacy",
+          "descripcion": "Si existe store legacy, leer y decidir",
+          "pseudocodigo": [
+            "ls frontend/src/lib/stores/carta-impresion.ts 2>/dev/null",
+            "si EXISTE:",
+            "  Read entero",
+            "  Reportar contenido al humano antes de sobrescribir",
+            "  Si el legacy invoca tools del blueprint (impresion.* via mqttRequest), REEMPLAZAR.",
+            "  Si el legacy ya usa fs.read/fs.list, EXTENDER o reemplazar segun coincidencia.",
+            "si NO existe: continuar"
+          ]
+        },
+        {
+          "id": "F2.op1_crear_archivo",
+          "descripcion": "Crear store con shape canonico",
+          "pseudocodigo": [
+            "crear frontend/src/lib/stores/carta-impresion.ts",
+            "imports:",
+            "  import { writable, derived } from 'svelte/store'",
+            "  import { mqttRequest } from '$lib/ui-core/mqtt-request'",
+            "  import { subscribe as busSubscribe } from '$lib/ui-core/bus'",
+            "constantes:",
+            "  const IMPRESION_DIR = '/storage/pizzepos/carta-impresion/'",
+            "  export const TEMPLATES_CONOCIDOS = ['base']  // Q3.A --extender si emergen mas",
+            "tipos:",
+            "  interface CartaImpresaMeta {",
+            "    carta_id: string",
+            "    template?: string",
+            "    generado_at?: string",
+            "    generado_por?: string",
+            "    size_bytes?: number",
+            "    [key: string]: any",
+            "  }",
+            "stores:",
+            "  export const cartasImpresasStore = writable<CartaImpresaMeta[]>([])",
+            "  export const cartaImpresaSeleccionada = writable<{ meta: CartaImpresaMeta, html: string } | null>(null)",
+            "  export const cartaImpresionLoading = writable<boolean>(false)",
+            "  export const cartaImpresionError = writable<string | null>(null)",
+            "  export const sortedCartasImpresas = derived(cartasImpresasStore, $c => [...$c].sort((a, b) => String(b.generado_at || '').localeCompare(String(a.generado_at || ''))))"
+          ]
+        },
+        {
+          "id": "F2.op2_loadCartasImpresas",
+          "descripcion": "Funcion loadCartasImpresas",
+          "pseudocodigo": [
+            "export async function loadCartasImpresas() {",
+            "  cartaImpresionLoading.set(true)",
+            "  cartaImpresionError.set(null)",
+            "  try {",
+            "    const listRes = await mqttRequest('fs', 'list', { path: IMPRESION_DIR, pattern: '*.meta.json' })",
+            "    const archivos = listRes?.data?.archivos || []",
+            "    const lecturas = await Promise.all(archivos.map(async (f) => {",
+            "      const res = await mqttRequest('fs', 'read', { path: IMPRESION_DIR + f })",
+            "      try { return JSON.parse(res.data.content) } catch { return null }",
+            "    }))",
+            "    const metas = lecturas.filter(m => m && typeof m.carta_id === 'string')",
+            "    cartasImpresasStore.set(metas)",
+            "  } catch (err) {",
+            "    cartaImpresionError.set(err?.message || 'Error al cargar cartas impresas')",
+            "  } finally {",
+            "    cartaImpresionLoading.set(false)",
+            "  }",
+            "}"
+          ]
+        },
+        {
+          "id": "F2.op3_getCartaImpresa",
+          "descripcion": "Funcion getCartaImpresa --carga HTML+meta de una carta concreta",
+          "pseudocodigo": [
+            "export async function getCartaImpresa(cartaId: string) {",
+            "  try {",
+            "    const htmlRes = await mqttRequest('fs', 'read', { path: IMPRESION_DIR + cartaId + '.html' })",
+            "    if (htmlRes?.status === 404) {",
+            "      cartaImpresaSeleccionada.set(null)",
+            "      return null",
+            "    }",
+            "    const metaRes = await mqttRequest('fs', 'read', { path: IMPRESION_DIR + cartaId + '.meta.json' })",
+            "    let meta: CartaImpresaMeta = { carta_id: cartaId }",
+            "    if (metaRes?.status === 200) {",
+            "      try { meta = JSON.parse(metaRes.data.content) } catch { /* mantener default */ }",
+            "    }",
+            "    const seleccionada = { meta, html: htmlRes.data.content }",
+            "    cartaImpresaSeleccionada.set(seleccionada)",
+            "    return seleccionada",
+            "  } catch (err) {",
+            "    cartaImpresionError.set(err?.message || 'Error al cargar carta impresa')",
+            "    return null",
+            "  }",
+            "}"
+          ]
+        },
+        {
+          "id": "F2.op4_initSubscriptions",
+          "descripcion": "Funcion initCartaImpresionSubscriptions",
+          "pseudocodigo": [
+            "export function initCartaImpresionSubscriptions(): () => void {",
+            "  const unsubs: Array<() => void> = []",
+            "  unsubs.push(busSubscribe('carta.impresion.lista', () => loadCartasImpresas()))",
+            "  unsubs.push(busSubscribe('carta.impresion.borrada', (envelope) => {",
+            "    loadCartasImpresas()",
+            "    // si la borrada era la seleccionada, limpiar",
+            "    const cartaId = envelope?.data?.carta_id || envelope?.carta_id",
+            "    cartaImpresaSeleccionada.update(s => s && s.meta.carta_id === cartaId ? null : s)",
+            "  }))",
+            "  return () => unsubs.forEach(u => u())",
+            "}"
+          ]
+        },
+        {
+          "id": "F2.op5_exports",
+          "descripcion": "Verificar exports",
+          "pseudocodigo": [
+            "Confirmar exports:",
+            "  - stores: cartasImpresasStore, cartaImpresaSeleccionada, cartaImpresionLoading, cartaImpresionError, sortedCartasImpresas",
+            "  - funciones: loadCartasImpresas, getCartaImpresa, initCartaImpresionSubscriptions",
+            "  - constante: TEMPLATES_CONOCIDOS",
+            "NO exportar funciones de mutacion (D6 principio 6)."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["frontend/src/lib/stores/carta-impresion.ts (~160 lineas)"]
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Crear modulo frontend/src/lib/modules/carta-impresion/",
+      "esfuerzo_horas": 4,
+      "ok_explicito_antes_de_continuar": true,
+      "depende_de": "DEP2",
+      "operaciones": [
+        {
+          "id": "F3.op0_verificar_dep2",
+          "descripcion": "Verificar chatInputDraft",
+          "pseudocodigo": [
+            "comprobar frontend/src/lib/stores/chatInputDraft.ts existe con prefillChatInput",
+            "si NO: parar y reportar"
+          ]
+        },
+        {
+          "id": "F3.op1_CartaImpresionPanel",
+          "descripcion": "Panel router con activeView local",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-impresion/CartaImpresionPanel.svelte",
+            "  <script>",
+            "    import { onMount, onDestroy } from 'svelte'",
+            "    import CartasImpresasBrowser from './CartasImpresasBrowser.svelte'",
+            "    import CartaImpresaDetail from './CartaImpresaDetail.svelte'",
+            "    import { loadCartasImpresas, initCartaImpresionSubscriptions, getCartaImpresa, cartaImpresionLoading, cartaImpresionError } from '$lib/stores/carta-impresion'",
+            "    let activeView: 'browser' | 'detail' = 'browser'",
+            "    let selectedCartaId: string | null = null",
+            "    let cleanupSubs: (() => void) | null = null",
+            "    onMount(() => {",
+            "      loadCartasImpresas()",
+            "      cleanupSubs = initCartaImpresionSubscriptions()",
+            "    })",
+            "    onDestroy(() => { if (cleanupSubs) cleanupSubs() })",
+            "    function handleSelect(id) { selectedCartaId = id; getCartaImpresa(id); activeView = 'detail' }",
+            "    function handleBack() { activeView = 'browser'; selectedCartaId = null }",
+            "  </script>",
+            "  <div class='carta-impresion-panel'>",
+            "    {#if $cartaImpresionError}",
+            "      <div class='error-banner'>{$cartaImpresionError}</div>",
+            "    {/if}",
+            "    {#if activeView === 'browser'}",
+            "      <CartasImpresasBrowser onSelect={handleSelect} />",
+            "    {:else if activeView === 'detail'}",
+            "      <CartaImpresaDetail {selectedCartaId} onBack={handleBack} />",
+            "    {/if}",
+            "  </div>"
+          ]
+        },
+        {
+          "id": "F3.op2_CartasImpresasBrowser",
+          "descripcion": "Browser --lista de cartas impresas con accion 'Nueva'",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-impresion/CartasImpresasBrowser.svelte",
+            "imports:",
+            "  import { sortedCartasImpresas, cartaImpresionLoading, TEMPLATES_CONOCIDOS } from '$lib/stores/carta-impresion'",
+            "  import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "  import CartaImpresaCard from './CartaImpresaCard.svelte'",
+            "  export let onSelect: (id: string) => void",
+            "renderiza:",
+            "  <section class='cartas-impresas-browser'>",
+            "    <header class='browser-header'>",
+            "      <h2>Cartas impresas</h2>",
+            "      <button class='accion-nueva' on:click={generarNueva}>+ Nueva carta impresa</button>",
+            "    </header>",
+            "    {#if $cartaImpresionLoading}",
+            "      <div class='loading'>Cargando...</div>",
+            "    {:else if $sortedCartasImpresas.length === 0}",
+            "      <div class='empty-state'>",
+            "        <p>Sin cartas impresas todavia.</p>",
+            "        <p class='hint'>Pide al chat que genere una carta impresa de cualquiera de tus cartas activas.</p>",
+            "        <button on:click={generarNueva}>Generar primera carta impresa</button>",
+            "      </div>",
+            "    {:else}",
+            "      <div class='grid'>",
+            "        {#each $sortedCartasImpresas as carta}",
+            "          <CartaImpresaCard {carta} onClick={() => onSelect(carta.carta_id)} />",
+            "        {/each}",
+            "      </div>",
+            "    {/if}",
+            "  </section>",
+            "  function generarNueva() {",
+            "    // Q4.A frase canonica con template default",
+            "    prefillChatInput('Genera una carta impresa de la carta \"[escribe el nombre de la carta]\" con el template ' + TEMPLATES_CONOCIDOS[0] + '.')",
+            "  }"
+          ]
+        },
+        {
+          "id": "F3.op3_CartaImpresaCard",
+          "descripcion": "Card de cada carta impresa --resumen visual",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-impresion/CartaImpresaCard.svelte",
+            "  <script>",
+            "    export let carta",
+            "    export let onClick",
+            "    function humanizar(iso) {",
+            "      if (!iso) return ''",
+            "      try { return new Date(iso).toLocaleString() } catch { return iso }",
+            "    }",
+            "    function tamanyo(bytes) {",
+            "      if (!bytes) return ''",
+            "      if (bytes < 1024) return bytes + ' B'",
+            "      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'",
+            "      return (bytes / 1024 / 1024).toFixed(1) + ' MB'",
+            "    }",
+            "  </script>",
+            "  <div class='carta-impresa-card' on:click={onClick} role='button' tabindex='0'>",
+            "    <div class='nombre'>{carta.carta_id}</div>",
+            "    {#if carta.template}<div class='badge-template'>📄 {carta.template}</div>{/if}",
+            "    <dl>",
+            "      {#if carta.generado_at}<dt>Generada:</dt><dd>{humanizar(carta.generado_at)}</dd>{/if}",
+            "      {#if carta.generado_por}<dt>Por:</dt><dd>{carta.generado_por}</dd>{/if}",
+            "      {#if carta.size_bytes}<dt>Tamanyo:</dt><dd>{tamanyo(carta.size_bytes)}</dd>{/if}",
+            "    </dl>",
+            "  </div>"
+          ]
+        },
+        {
+          "id": "F3.op4_CartaImpresaDetail",
+          "descripcion": "Detail --preview iframe + acciones (la zona principal)",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-impresion/CartaImpresaDetail.svelte",
+            "  <script>",
+            "    import { cartaImpresaSeleccionada, TEMPLATES_CONOCIDOS } from '$lib/stores/carta-impresion'",
+            "    import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "    export let selectedCartaId: string | null",
+            "    export let onBack: () => void",
+            "    let iframeRef: HTMLIFrameElement",
+            "    let templateSeleccionado: string = TEMPLATES_CONOCIDOS[0]",
+            "    $: actual = $cartaImpresaSeleccionada",
+            "    $: if (actual?.meta?.template) templateSeleccionado = actual.meta.template",
+            "    function imprimir() {",
+            "      // Trigger window.print() del iframe --dialog nativo del navegador",
+            "      if (iframeRef?.contentWindow) {",
+            "        iframeRef.contentWindow.focus()",
+            "        iframeRef.contentWindow.print()",
+            "      }",
+            "    }",
+            "    function descargar() {",
+            "      // Blob download del HTML",
+            "      if (!actual?.html) return",
+            "      const blob = new Blob([actual.html], { type: 'text/html' })",
+            "      const url = URL.createObjectURL(blob)",
+            "      const a = document.createElement('a')",
+            "      a.href = url",
+            "      a.download = (actual.meta.carta_id || 'carta-impresa') + '.html'",
+            "      a.click()",
+            "      URL.revokeObjectURL(url)",
+            "    }",
+            "    function regenerar() {",
+            "      // Q4.A frase canonica",
+            "      prefillChatInput('Regenera la carta impresa de \"' + actual.meta.carta_id + '\" con el template ' + templateSeleccionado + '.')",
+            "    }",
+            "    function cambiarTemplate(nuevo: string) {",
+            "      prefillChatInput('Regenera la carta impresa de \"' + actual.meta.carta_id + '\" usando el template ' + nuevo + '.')",
+            "    }",
+            "    function borrar() {",
+            "      prefillChatInput('Borra la carta impresa de \"' + actual.meta.carta_id + '\".')",
+            "    }",
+            "  </script>",
+            "  <section class='carta-impresa-detail'>",
+            "    <header class='detail-header'>",
+            "      <button class='volver' on:click={onBack}>← Volver</button>",
+            "      {#if actual}",
+            "        <h2>{actual.meta.carta_id}</h2>",
+            "        <div class='meta-resumen'>",
+            "          {#if actual.meta.template}<span class='badge-template'>📄 {actual.meta.template}</span>{/if}",
+            "          {#if actual.meta.generado_at}<span class='ts'>{actual.meta.generado_at}</span>{/if}",
+            "        </div>",
+            "      {/if}",
+            "    </header>",
+            "    {#if !actual}",
+            "      <div class='loading-detail'>Cargando carta impresa...</div>",
+            "    {:else}",
+            "      <!-- Acciones -->",
+            "      <div class='acciones-bar'>",
+            "        <button class='accion primaria' on:click={imprimir}>🖨️ Imprimir</button>",
+            "        <button class='accion' on:click={descargar}>⬇ Descargar HTML</button>",
+            "        <button class='accion' on:click={regenerar}>↻ Regenerar</button>",
+            "        <button class='accion peligro' on:click={borrar}>🗑 Borrar</button>",
+            "      </div>",
+            "      <!-- Selector de template (cambiar dispara prefill) -->",
+            "      <div class='templates-selector'>",
+            "        <span>Cambiar template:</span>",
+            "        {#each TEMPLATES_CONOCIDOS as t}",
+            "          <button class='template-btn {t === actual.meta.template ? \"activo\" : \"\"}' on:click={() => cambiarTemplate(t)} disabled={t === actual.meta.template}>{t}</button>",
+            "        {/each}",
+            "      </div>",
+            "      <!-- Preview iframe del HTML real -->",
+            "      <div class='preview-container'>",
+            "        <iframe",
+            "          bind:this={iframeRef}",
+            "          srcdoc={actual.html}",
+            "          title='Preview de la carta impresa'",
+            "          sandbox='allow-same-origin allow-popups'",
+            "          loading='lazy'",
+            "        />",
+            "      </div>",
+            "    {/if}",
+            "  </section>",
+            "  <style>",
+            "    .preview-container { width: 100%; height: calc(100vh - 250px); border: 1px solid var(--border, #ccc); border-radius: 4px; overflow: hidden; }",
+            "    .preview-container iframe { width: 100%; height: 100%; border: 0; background: white; }",
+            "    .acciones-bar { display: flex; gap: 0.5em; flex-wrap: wrap; margin: 0.5em 0; }",
+            "    .accion.primaria { background: var(--accent, #228b22); color: white; }",
+            "    .accion.peligro { background: rgba(220, 53, 69, 0.1); color: #b02a37; }",
+            "    .templates-selector { display: flex; gap: 0.3em; align-items: center; margin: 0.5em 0; }",
+            "    .template-btn.activo { background: var(--accent-soft, #e0e0e0); font-weight: bold; }",
+            "  </style>"
+          ]
+        },
+        {
+          "id": "F3.op5_manifest",
+          "descripcion": "manifest.json",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-impresion/manifest.json:",
+            "  {",
+            "    \"id\": \"carta-impresion\",",
+            "    \"name\": \"<Q1.label>\",",
+            "    \"description\": \"Catalogo de cartas impresas: preview iframe HTML real, imprimir, descargar, regenerar, borrar.\",",
+            "    \"version\": \"1.0.0\",",
+            "    \"zone\": \"work-bar\",",
+            "    \"order\": <Q2 valor>,",
+            "    \"routes\": [\"/carta-impresion\"],",
+            "    \"icon\": \"<Q1.icon>\",",
+            "    \"label\": \"<Q1.label>\"",
+            "  }"
+          ]
+        },
+        {
+          "id": "F3.op6_index",
+          "descripcion": "index.ts",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-impresion/index.ts:",
+            "  import type { UIModule } from '$lib/ui-core'",
+            "  import CartaImpresionPanel from './CartaImpresionPanel.svelte'",
+            "  export { default as CartaImpresionPanel } from './CartaImpresionPanel.svelte'",
+            "  export const cartaImpresionModule: UIModule = {",
+            "    manifest: { ...mismo manifest en formato UIModule... },",
+            "    PanelComponent: CartaImpresionPanel",
+            "  }",
+            "  export default cartaImpresionModule",
+            "  export { cartasImpresasStore, cartaImpresaSeleccionada, sortedCartasImpresas, TEMPLATES_CONOCIDOS, loadCartasImpresas, getCartaImpresa, initCartaImpresionSubscriptions } from '$lib/stores/carta-impresion'"
+          ]
+        },
+        {
+          "id": "F3.op7_registrar_loader",
+          "descripcion": "Registrar modulo en loader",
+          "pseudocodigo": [
+            "Identificar como esta registrado un modulo hermano (ej. carta-digital tras su plan UI, o tarifas).",
+            "Anyadir registro de carta-impresion siguiendo el mismo patron."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": [
+          "frontend/src/lib/modules/carta-impresion/CartaImpresionPanel.svelte (~50 lineas)",
+          "frontend/src/lib/modules/carta-impresion/CartasImpresasBrowser.svelte (~90 lineas)",
+          "frontend/src/lib/modules/carta-impresion/CartaImpresaCard.svelte (~70 lineas)",
+          "frontend/src/lib/modules/carta-impresion/CartaImpresaDetail.svelte (~200 lineas)",
+          "frontend/src/lib/modules/carta-impresion/manifest.json",
+          "frontend/src/lib/modules/carta-impresion/index.ts"
+        ],
+        "archivos_modificados": ["frontend/src/lib/modules/index.ts o loader.ts (registro)"]
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Verificacion manual con dev server",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_arrancar_dev",
+          "descripcion": "npm run dev",
+          "pseudocodigo": [
+            "cd frontend && npm run dev",
+            "abrir navegador en /<project_id>/carta-impresion"
+          ]
+        },
+        {
+          "id": "F4.op2_golden_path",
+          "descripcion": "Verificar flujo completo",
+          "pseudocodigo": [
+            "navegar a /<project_id>/carta-impresion",
+            "comprobar:",
+            "  ✓ boton <Q1.icon> <Q1.label> aparece en work-bar",
+            "  ✓ click abre Browser",
+            "  ✓ Si sin cartas impresas: empty state + boton 'Generar primera carta impresa'",
+            "  ✓ Si hay cartas: grid de Cards con nombre + template + fecha + tamanyo",
+            "  ✓ Click en boton 'Nueva carta impresa' pre-rellena chat con frase Q4 generar",
+            "  ✓ Click en una Card abre Detail",
+            "  ✓ Detail muestra: header con nombre + template + ts, acciones (Imprimir, Descargar, Regenerar, Borrar), selector de templates, iframe del HTML real",
+            "  ✓ Click en 'Imprimir' abre dialog nativo print del navegador",
+            "  ✓ Click en 'Descargar HTML' descarga archivo .html con el contenido",
+            "  ✓ Click en 'Regenerar' pre-rellena chat con frase Q4 regenerar (incluye nombre + template actual)",
+            "  ✓ Click en template distinto del actual pre-rellena chat con frase Q4 cambiar template",
+            "  ✓ Click en 'Borrar' pre-rellena chat con frase Q4 borrar",
+            "  ✓ Click en 'Volver' regresa al Browser"
+          ]
+        },
+        {
+          "id": "F4.op3_reactividad_bus",
+          "descripcion": "Verificar reactividad",
+          "pseudocodigo": [
+            "estando en /carta-impresion con panel abierto",
+            "desde chat pedir generacion de una carta impresa --el blueprint procesa generar y publica carta.impresion.lista",
+            "✓ Browser refresca y muestra la nueva carta",
+            "desde chat pedir borrar una carta --publica carta.impresion.borrada",
+            "✓ Browser refresca, la borrada desaparece",
+            "✓ Si la borrada era la seleccionada, vuelve al Browser automaticamente"
+          ]
+        },
+        {
+          "id": "F4.op4_edge_cases",
+          "descripcion": "Edge cases",
+          "pseudocodigo": [
+            "✓ Proyecto sin carpeta /storage/pizzepos/carta-impresion: empty state limpio",
+            "✓ HTML grande (1+ MB): preview iframe sigue cargando sin crash",
+            "✓ Meta companion roto/inexistente: card muestra solo carta_id, sin crash",
+            "✓ Backend offline: error banner sin crash",
+            "✓ Iframe sandbox: el HTML no puede ejecutar scripts maliciosos (sandbox sin allow-scripts)"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "documento_de_resultados": "fede reporta cada checkmark con ✓ o ✗",
+        "estado_terminal_para_avanzar_a_F5": "TODOS los checks ✓"
+      }
+    },
+    {
+      "id": "F5",
+      "nombre": "Commit + push",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F5.op1_status",
+          "descripcion": "Verificar scope",
+          "pseudocodigo": [
+            "git status",
+            "git diff",
+            "confirmar archivos solo del scope:",
+            "  modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+            "  frontend/src/lib/stores/carta-impresion.ts",
+            "  frontend/src/lib/modules/carta-impresion/*",
+            "  frontend/src/lib/modules/index.ts o loader.ts (registro)",
+            "Si hay mas, PARAR."
+          ]
+        },
+        {
+          "id": "F5.op2_commit",
+          "descripcion": "Commit",
+          "pseudocodigo": [
+            "git add (especificos)",
+            "git commit:",
+            "  feat(carta-impresion): UI operativa --Browser + Detail con preview iframe + bump blueprint v1.3.0",
+            "",
+            "  Cierra el hermano carta-impresion completo (backend ampliado + UI).",
+            "",
+            "  Backend (modules/pizzepos/carta-impresion/carta-impresion.blueprint.json):",
+            "  - bump blueprint-1.2.0 -> blueprint-1.3.0",
+            "  - 2 operaciones nuevas:",
+            "    - list: lista cartas impresas del proyecto via fs.list + fs.read de .meta.json",
+            "    - delete: borra .html + .meta.json y publica carta.impresion.borrada",
+            "  - evento canonico nuevo carta.impresion.borrada (correlation_id obligatorio)",
+            "  - eventos_que_escucho:[] preservado (A1 modelo no-reactivo)",
+            "",
+            "  UI (frontend/src/lib/{stores,modules}/carta-impresion):",
+            "  - store solo lectura via fs.list+fs.read (principio 6 ui-frontend-blueprint)",
+            "  - Panel router activeView local + Browser + Card + Detail",
+            "  - Detail con preview iframe del HTML real (criterio 4 chat-vs-UI), botones Imprimir",
+            "    (window.print del iframe) + Descargar (Blob), selector de templates con prefill",
+            "    chat al cambiar, Regenerar y Borrar via prefill chat (Postura B)",
+            "  - reactivo a carta.impresion.lista y carta.impresion.borrada del bus",
+            "  - templates conocidos hardcode (TEMPLATES_CONOCIDOS = ['base'])",
+            "",
+            "  Decisiones cocinadas: usuario autorizo no escatimar en UI y retocar blueprints si",
+            "  hace falta. list+delete materializaron Browser navegable real + limpieza.",
+            "",
+            "  Plan ejecutable: arquitectura/decisiones/propuestas/cierre-ui-carta-impresion.json",
+            "  Contrato canonico: arquitectura/decisiones/_contratos/subsistema-carta.contract.json v1.0.2"
+          ]
+        },
+        {
+          "id": "F5.op3_push",
+          "descripcion": "Push",
+          "pseudocodigo": [
+            "git push -u origin <rama>",
+            "retry exponencial si red"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo OK explicito"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F1", "F2", "F3"],
+      "salida_esperada": "PASS sin drift NUEVO"
+    },
+    {
+      "id": "CC2_jq_blueprint",
+      "comando": "jq . modules/pizzepos/carta-impresion/carta-impresion.blueprint.json > /dev/null && echo OK",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC3_blueprint_5_operaciones",
+      "comando": "jq '.operaciones | keys' modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "['delete', 'generar', 'get', 'list', 'save_html'] --las 5 operaciones canonicas"
+    },
+    {
+      "id": "CC4_evento_borrada_declarado",
+      "comando": "jq '.eventos_publicados | map(select(. == \"carta.impresion.borrada\"))' modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "['carta.impresion.borrada']"
+    },
+    {
+      "id": "CC5_build_frontend",
+      "comando": "npm run build",
+      "directorio": "frontend/",
+      "ejecutar_tras": ["F3"],
+      "salida_esperada": "build OK"
+    },
+    {
+      "id": "CC6_store_no_invoca_tools_blueprint",
+      "comando": "grep -E 'impresion\\.(get|generar|save_html|list|delete)' frontend/src/lib/stores/carta-impresion.ts frontend/src/lib/modules/carta-impresion/*.svelte || echo OK",
+      "ejecutar_tras": ["F2", "F3"],
+      "salida_esperada": "OK (las invocaciones a tools del blueprint NO aparecen --solo prefillChatInput)"
+    },
+    {
+      "id": "CC7_prefill_en_zonas",
+      "comando": "grep -c 'prefillChatInput' frontend/src/lib/modules/carta-impresion/*.svelte",
+      "ejecutar_tras": ["F3"],
+      "salida_esperada": ">= 4 (Browser nueva + Detail regenerar + Detail cambiar template + Detail borrar)"
+    },
+    {
+      "id": "CC8_iframe_sandbox_seguro",
+      "comando": "grep -c \"sandbox='allow-same-origin allow-popups'\" frontend/src/lib/modules/carta-impresion/CartaImpresaDetail.svelte",
+      "ejecutar_tras": ["F3"],
+      "salida_esperada": ">= 1 (sin allow-scripts --seguro)"
+    },
+    {
+      "id": "CC9_git_status_scope",
+      "comando": "git status --short",
+      "ejecutar_tras": ["F5.op1"],
+      "verificar": "solo archivos del scope"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Tocar otros modulos backend o frontend",
+    "Anyadir eventos_que_escucho al blueprint (A1 preservado)",
+    "Declarar requires_consumer:true en carta.impresion.lista o carta.impresion.borrada (no hay consumer real)",
+    "Anyadir funciones de mutacion al store (D6)",
+    "Invocar tools del blueprint via mqttRequest (CC6)",
+    "Forms de creacion/edicion --todo via prefill chat (Postura B)",
+    "iframe con sandbox='allow-scripts' --inseguro (CC8)",
+    "Tocar templates/, context.json, prompt.json del modulo backend",
+    "Tocar agente impresion-architect/builder",
+    "Tocar arquitectura/decisiones/* (cero modificacion --contrato v1.0.2 sigue vigente)",
+    "Tocar drift-baseline.json, validators, scripts/validate-all.js",
+    "Migrar archivos de path viejo a nuevo (D5 del plan backend previo lo declara fuera de scope)",
+    "Crear PR sin OK explicito del humano",
+    "git add . o git add -A",
+    "Saltar OK humano entre F1, F2, F3, F4, F5",
+    "Decir 'todo OK' sin reportar comando + salida real",
+    "Continuar a F5 si CC1-CC8 no pasan",
+    "Anyadir operaciones blueprint mas alla de list+delete (e.g. templates_disponibles, versiones, etc.) --Q3=A cerrada"
+  ],
+
+  "salida_final_del_horizonte": {
+    "carta_impresion_estado_terminal": "Hermano completo cerrado (backend v1.3.0 + UI operativa). Browser con grid de cartas impresas existentes, Detail con preview iframe del HTML real + Imprimir nativo + Descargar HTML + Regenerar/Cambiar template/Borrar via prefill chat. Reactivo a carta.impresion.lista/borrada. Modelo no-reactivo preservado.",
+    "archivos_finales_modificados_o_creados": [
+      "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json (bump v1.3.0 + 2 ops nuevas + evento nuevo)",
+      "frontend/src/lib/stores/carta-impresion.ts (~160 lineas, solo lectura)",
+      "frontend/src/lib/modules/carta-impresion/manifest.json",
+      "frontend/src/lib/modules/carta-impresion/index.ts",
+      "frontend/src/lib/modules/carta-impresion/CartaImpresionPanel.svelte (~50 lineas)",
+      "frontend/src/lib/modules/carta-impresion/CartasImpresasBrowser.svelte (~90 lineas)",
+      "frontend/src/lib/modules/carta-impresion/CartaImpresaCard.svelte (~70 lineas)",
+      "frontend/src/lib/modules/carta-impresion/CartaImpresaDetail.svelte (~200 lineas)",
+      "frontend/src/lib/modules/index.ts o loader.ts (registro)"
+    ],
+    "verificacion_terminal": [
+      "Todos los flujos de F4 ✓",
+      "CC1-CC9 ✓",
+      "validate:ci verde",
+      "frontend build OK",
+      "commit pusheado"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "Hermano carta-impresion cerrado COMPLETO (backend ampliado + UI). 2 de 5 hermanos terminados.",
+      "Operaciones nuevas list + delete materializadas en el blueprint (ampliacion de v1.2.0 cocinada por necesidad real de la UI)",
+      "Preview iframe operativo --el comerciante VE lo que va a imprimir"
+    ],
+    "siguiente_natural": "carta-marketing (siguiente hermano). Antes de cocinar: releer su blueprint real, verificar drift, bumpear contrato a v1.0.3 si emerge."
+  }
+}

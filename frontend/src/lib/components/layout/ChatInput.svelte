@@ -12,22 +12,22 @@
   import { hasAttachments } from '$lib/stores/attachments';
   import { sendMessage, isStreaming, stopGeneration, agentWorking, agentWorkingName, agentWorkingStep } from '$lib/stores';
   import { setupRequired } from '$lib/stores/contextStore';
+  import { chatInputDraft } from '$lib/stores/chatInputDraft';
 
-  let inputValue = '';
   let textareaEl: HTMLTextAreaElement;
 
   $: needsSetup = $setupRequired !== null;
   $: isBlocked = $isStreaming || $agentWorking || needsSetup;
-  $: canSend = (inputValue.trim().length > 0 || $hasAttachments) && !isBlocked;
+  $: canSend = ($chatInputDraft.trim().length > 0 || $hasAttachments) && !isBlocked;
 
   async function handleSend() {
     if (!canSend) return;
 
-    const content = inputValue.trim();
+    const content = $chatInputDraft.trim();
     console.log('[ChatInput] Sending:', content);
 
     // Limpiar input inmediatamente
-    inputValue = '';
+    chatInputDraft.set('');
 
     // Reset textarea height
     if (textareaEl) {
@@ -75,7 +75,7 @@
 <div class="chat-input">
   <textarea
     bind:this={textareaEl}
-    bind:value={inputValue}
+    bind:value={$chatInputDraft}
     on:keydown={handleKeydown}
     on:input={handleInput}
     placeholder={needsSetup ? 'Necesitas un proyecto y conversación activos' : 'Escribe un mensaje...'}

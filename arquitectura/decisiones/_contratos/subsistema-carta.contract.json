@@ -1,0 +1,572 @@
+{
+  "_doc": "Sub-contrato TRANSVERSAL del subsistema-carta del vertical pizzepos. Canoniza el camino unico desde que una carta nace (en cualquier puerta de entrada: menu-generator, dictado al chat, json importado, etc.) hasta que llega al catalogo operativo del POS. Define: path canonico de persistencia (data/projects/{slug}/storage/pizzepos/cartas/<carta_id>.json), shape de los 5 eventos del subsistema (carta.creada zona 1, carta.actualizada/editada/borrada zona 3, tarifas.config.actualizada para activacion canal+carta), modelo pre/acto/post storage, activacion delegada al modulo tarifas, modelo de variantes como cartas con precios escritos (no reglas runtime), separacion de UI carta-manager (documento) vs tarifas (asignacion), correlation_id obligatorio en todos los eventos, patron blueprint-eventos-conscientes aplicado en v1. NO canoniza el shape interno de productos ni categorias --queda abierto porque el sistema sirve proyectos con modelos distintos (pizzepos pizzas, vapers sabores, futuros N modelos). Cocinado en sesion 2026-06-01 con ana sobre el material del analisis previo _analisis-flujo-pos-y-engranajes-carta.md y los blueprints reales de menu-generator v8.1 y carta-manager v1.2.",
+
+  "id": "subsistema-carta",
+  "version": "1.0.0",
+  "creada": "2026-06-01",
+  "supersedes_nota": "Primera version. Cierra cuatro drifts vivos al cocinar el contrato: (a) tres paths conviviendo (legacy /storage/pizzepos/cartas/ raiz, /cartas/ del blueprint v1.2, {project.base_path}/storage/pizzepos/cartas/ de productos) --se canoniza el ultimo; (b) shape de carta.actualizada divergente (auditoria vieja decia spread ...carta, blueprint v1.2 dice solo metadatos) --se canoniza la carta entera embebida; (c) ausencia de canonizacion sobre donde vive la activacion carta+canal (analisis previo proponia un active.json nuevo) --se canoniza tarifas como dueno unico, sin nueva capa; (d) correlation_id no propagado en carta.actualizada del blueprint v1.2 --se canoniza obligatorio en los 5 eventos del subsistema.",
+
+  "deriva_de": "arquitectura/decisiones/_contratos/multi-tenancy.contract.json --modelo data/projects/{slug}/... y aislamiento por project_id. arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json --carta-manager y menu-generator son blueprint-driven, este contrato es de dominio, no contradice el de paradigma.",
+
+  "objetivo": "Fijar el camino unico del que beben todos los consumers del subsistema-carta y del POS pizzepos: donde se persiste cada carta, que eventos publican su estado, donde vive la activacion carta+canal, que modelo de variantes se usa. Permitir que cualquier puerta de entrada converja en el mismo storage sin que los consumers tengan que conocer la puerta. Validable mecanicamente cruzando module.json/audits de los modulos del subsistema contra las reglas declaradas aqui.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/subsistema-carta.contract.json (este archivo)",
+      "arquitectura/decisiones/_contratos/multi-tenancy.contract.json",
+      "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json",
+      "arquitectura/decisiones/_contratos/events.contract.json",
+      "arquitectura/decisiones/_contratos/persistence.contract.json",
+      "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+      "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+      "arquitectura/decisiones/_contratos/blueprint-eventos-conscientes.contract.json"
+    ],
+    "obligatorios_si_existen": [
+      "modules/pizzepos/menu-generator/menu-generator.blueprint.json",
+      "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+      "modules/pizzepos/tarifas/module.json",
+      "modules/pizzepos/productos/module.json",
+      "modules/pizzepos/cuentas-canales/module.json",
+      "modules/pizzepos/carta-design/module.json",
+      "modules/pizzepos/carta-impresion/module.json",
+      "modules/pizzepos/carta-digital/module.json",
+      "modules/pizzepos/carta-marketing/module.json",
+      "modules/pizzepos/carta-scheduler/module.json"
+    ],
+    "opcionales_para_contexto": [
+      "arquitectura/decisiones/propuestas/_analisis-flujo-pos-y-engranajes-carta.md (analisis previo cocinado en sesion 2026-06-01)",
+      "arquitectura/decisiones/propuestas/cierre-ui-carta-manager.json (plan ejecutable de la UI de carta-manager, decisiones D1-D10 acopladas)",
+      "arquitectura/auditoria/_outputs/modulo-completo/pizzepos__*.json (auditorias de los modulos del subsistema --pueden estar desactualizadas frente a blueprints reales)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL CAMINO CANONICO ES DE SALIDA, NO DE ENTRADA. Multiples puertas de entrada son rasgo del sistema (friccion minima del 80%); la salida converge en un solo storage y unos pocos eventos canonicos de los que beben todos los consumers. Cerrar la entrada a UNA sola via violaria la realidad operativa del comerciante.",
+
+    "CADA MODULO DUENO DE SU DOMINIO. menu-generator NO escribe filesystem. carta-manager es el unico que escribe a /storage/pizzepos/cartas/. tarifas es el unico que escribe a /storage/config/tarifas.json. productos lee, no escribe el dato canonico. Quien rompe esta regla acumula drift cross-modulo.",
+
+    "CERO CALCULO DE PRECIOS EN RUNTIME. Los precios viven escritos en cada carta (base o variante). tarifas-creator (agente) materializa variantes con precios calculados al crearse. tarifas-sync (agente) las regenera si la base cambia. Comandero/pedidos/cobros leen lo que esta escrito --sin calculos, sin reglas evaluadas en cada venta.",
+
+    "SHAPE INTERNO DE PRODUCTOS Y CATEGORIAS ABIERTO. El subsistema sirve proyectos con modelos distintos (pizzepos pizzas con ingredientes, vapers sabores con nicotina, futuros N modelos). El contrato canoniza el envelope (meta + categorias[] + productos[] como conceptos) pero NO el shape interno. Cerrar el shape de producto romperia multi-proyecto.",
+
+    "LA CARTA ENTERA VIAJA EN EL EVENTO. carta.actualizada / carta.editada / carta.borrada embedden la carta completa en el payload, no metadatos solo. El caso real (pocas cartas, modificaciones esporadicas) hace el coste teorico irrelevante; la simplicidad de un solo round-trip es operativa.",
+
+    "ACTIVACION CARTA+CANAL VIVE EN TARIFAS, NO EN LA CARTA. La carta como documento solo tiene meta.estado (borrador|activa|archivada) como ciclo de vida. La asignacion operativa a canales (mesa, glovo, etc.) vive en tarifas.config. Cambiar que carta sirve glovo NO debe tocar el documento de la carta.",
+
+    "TRES ZONAS EN EL CICLO DE VIDA. Zona 1 (pre-storage): carta en vuelo, sin dueno ni identidad, SOLO carta-manager._on_carta_creada la oye. Zona 2 (acto): carta-manager.save fija identidad y persiste. Zona 3 (post-storage): todos los consumers beben de aqui. Escuchar zona 1 desde un consumer es drift: opera sobre dato que puede evaporarse.",
+
+    "TRAZA CAUSAL OBLIGATORIA. correlation_id se genera en el originador (canal, cron, webhook, usuario en chat) y se propaga sin modificar en TODOS los eventos del subsistema, desde la puerta de entrada hasta el ultimo consumer. Sin trazabilidad, debugging multi-modulo ciego."
+  ],
+
+  "principios": [
+    {
+      "id": "subsistema_carta_storage_canonico",
+      "regla": "Toda carta de un proyecto pizzepos vive en data/projects/{slug}/storage/pizzepos/cartas/<carta_id>.json. Versiones anteriores en data/projects/{slug}/storage/pizzepos/cartas/.versions/<carta_id>/<timestamp>.json. Otros paths para cartas son drift.",
+      "razon": "Sin un unico lugar canonico, los consumers se acoplan a multiples fuentes y la consistencia se vuelve imposible. El namespace pizzepos/ respeta el modelo multi-vertical (otros verticales tendran su propio namespace)."
+    },
+    {
+      "id": "subsistema_carta_evento_es_certificado",
+      "regla": "carta.actualizada / carta.editada / carta.borrada son el unico certificado oficial de 'carta persistida'. Quien escuche eventos de zona 1 (menu.generado, menu.validado, carta.creada) opera sobre dato que puede evaporarse y debe corregirse.",
+      "razon": "El consumer no puede sincronizarse contra carta no persistida --el comandero estaria vendiendo productos que manana no existen si la persistencia falla."
+    },
+    {
+      "id": "subsistema_carta_payload_carta_entera",
+      "regla": "carta.actualizada / carta.editada / carta.borrada llevan la carta entera embebida en el payload (campo carta: <objeto completo envelope meta+categorias+productos>). No se permite payload solo de metadatos para estos tres eventos.",
+      "razon": "El caso real (pocas cartas, modificaciones esporadicas) hace el coste del payload teorico. La simplicidad de un solo round-trip (el evento ES la entrega) es operativa para todos los consumers."
+    },
+    {
+      "id": "subsistema_carta_activacion_en_tarifas",
+      "regla": "La asignacion carta+canal vive en el modulo tarifas (v3.1.0). Fuente de verdad: {project.base_path}/storage/config/tarifas.json. Cambios via tools tarifas.set_general(carta_id) y tarifas.assign(canal, carta_id). Evento canonico de cambio: tarifas.config.actualizada.",
+      "razon": "tarifas ya existe, ya implementa la logica y ya maneja precios por canal via variantes. Inventar una capa nueva (active.json u otro) seria duplicacion."
+    },
+    {
+      "id": "subsistema_carta_variante_es_carta_completa",
+      "regla": "Una variante de carta (e.g. 'Pizzicas Delivery +15%') es OTRA carta archivo en /storage/pizzepos/cartas/ con sus precios escritos. NO es una regla evaluada en runtime sobre la base. tarifas-creator (agente) la materializa. tarifas-sync (agente) la regenera cuando la base cambia.",
+      "razon": "Cero calculo en runtime simplifica todo el camino downstream. La 'regla' que genero la variante es metadata historica en tarifas.variantes[].reglas, no se evalua en cada venta."
+    },
+    {
+      "id": "subsistema_carta_ui_dueno_unico_por_dominio",
+      "regla": "carta-manager UI gestiona el documento carta (CRUD, versiones, history). tarifas UI gestiona la asignacion carta+canal y las variantes. carta-manager NO permite activar cartas (muestra badge 'activa en: ...' como info derivada solo lectura). tarifas NO permite editar precios producto-a-producto ni crear cartas desde cero.",
+      "razon": "Cada modulo dueno de su UI sobre su dominio. Si carta-manager permitiera activar, se acopla a tarifas y duplica la decision. Si tarifas permitiera editar precios, se acopla a carta-manager."
+    },
+    {
+      "id": "subsistema_carta_shape_interno_abierto",
+      "regla": "El contrato canoniza el envelope (meta + categorias[] + productos[]) y los minimos por item (id + nombre). El shape interno de cada producto y categoria es ABIERTO: cada proyecto declara los suyos. UI y consumers renderizan/procesan los campos presentes sin validar contra schema rigido.",
+      "razon": "El subsistema sirve proyectos con modelos distintos (pizzepos pizzas con ingredientes+alergenos, vapers sabores con nicotina+volumen, futuros N modelos). Cerrar shape rompe la promesa multi-proyecto. Acoplado a D3 de cierre-ui-carta-manager.json."
+    },
+    {
+      "id": "subsistema_carta_solo_carta_manager_oye_zona_1",
+      "regla": "Ningun modulo (excepto carta-manager._on_carta_creada) declara subscribe a carta.creada, menu.generado o menu.validado en su module.json. Estos son eventos de zona 1 (pre-storage) --opera sobre dato que aun puede evaporarse.",
+      "razon": "Sincronizar catalogo o cache operativo contra zona 1 lleva al consumer a estado inconsistente si la persistencia falla. La frontera segura es zona 3 (carta.actualizada y companeros)."
+    },
+    {
+      "id": "subsistema_carta_correlation_id_obligatorio",
+      "regla": "Los 5 eventos canonicos del subsistema (carta.creada, carta.actualizada, carta.editada, carta.borrada, tarifas.config.actualizada) llevan correlation_id como campo OBLIGATORIO del payload. El originador lo genera; los handlers intermedios lo propagan sin modificar.",
+      "razon": "Deriva de events.contract + CLAUDE.md disciplina general del repo. Cierra drift heredado: la auditoria vieja de carta-manager declaraba que carta.actualizada (de v1.0) no propagaba correlation_id --se canoniza obligatorio para corregir."
+    },
+    {
+      "id": "subsistema_carta_eventos_conscientes",
+      "regla": "Los 5 eventos canonicos del subsistema declaran si requieren consumer (requires_consumer: bool en este contrato). Los blueprints hijos que publican estos eventos (menu-generator, carta-manager, tarifas) declaran eventos_publicados_que_requieren_consumer[] en su raiz, paralelo simetrico al campo ya canonico eventos_que_escucho[].",
+      "razon": "Deriva de blueprint-eventos-conscientes.contract.json v1.0.0. Permite que el validator detecte huerfanos: eventos que se publican declarando que necesitan consumer pero ningun modulo los escucha (caso bug carta.creada huerfano del audit 2026-05-25)."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "path_canonico_namespace_pizzepos",
+      "decision": "data/projects/{slug}/storage/pizzepos/cartas/<carta_id>.json para cartas. data/projects/{slug}/storage/pizzepos/cartas/.versions/<carta_id>/<timestamp>.json para snapshots.",
+      "alternativas_descartadas": "data/projects/{slug}/cartas/ (carta-manager v1.2 hoy --pierde namespace), data/projects/{slug}/storage/cartas/ (sin namespace --mezcla con futuros verticales).",
+      "razon": "El sistema es multi-vertical. Modules viven bajo modules/pizzepos/, el storage sigue la misma convencion: storage/pizzepos/. Otros verticales (retail, clinica, etc.) tendran su propio namespace sin mezclarse."
+    },
+    {
+      "id": "payload_carta_entera_en_eventos_zona_3",
+      "decision": "carta.actualizada / carta.editada / carta.borrada embedden la carta completa en el campo 'carta' del payload.",
+      "alternativas_descartadas": "Payload ligero con metadatos (carta_id, nombre, version) + carta.get.request explicito --2 round-trips por consumer, complejidad innecesaria.",
+      "razon": "Pocas cartas (1-5 por proyecto), modificaciones esporadicas. Coste del payload entero es teorico."
+    },
+    {
+      "id": "activacion_en_tarifas_no_active_json",
+      "decision": "tarifas es dueno unico de la asignacion carta+canal. fuente: {project.base_path}/storage/config/tarifas.json. Cambios via tarifas.set_general y tarifas.assign. Evento canonico: tarifas.config.actualizada.",
+      "alternativas_descartadas": "Inventar active.json nuevo --duplica tarifas. Mover cartas fisicamente entre directorios por canal --rompe identidad estable, rompe versionado, complica carta.get.",
+      "razon": "tarifas ya existe (v3.1.0) y funciona. Ademas gestiona precios por canal via variantes. No anyadir capas nuevas."
+    },
+    {
+      "id": "canales_enum_cerrado_de_cuentas_canales",
+      "decision": "Los canales del enum son: mesa, telefono, llevar, glovo, whatsapp, llevadoo. Canonizados por cuentas-canales v5.0.0 (patron Strategy).",
+      "alternativas_descartadas": "Canales dinamicos como strings arbitrarios --rompe canonizacion de cuentas-canales y sus schemas por canal.",
+      "razon": "Cada canal es una strategy con shape, eventos, prefijo, UI propios. Anyadir un canal es trabajo arquitectonico (nueva strategy + schemas), no input de runtime."
+    },
+    {
+      "id": "productos_sigue_js_no_blueprint",
+      "decision": "El modulo productos (catalogo operativo del POS) sigue JS POC2 en este horizonte. NO migra a blueprint.",
+      "razon": "productos no tiene dominio razonable en lenguaje natural (es cache derivado y serving para comandero/pedidos en hot path). Migrar a blueprint anyadiria latencia LLM al camino caliente del POS sin valor."
+    },
+    {
+      "id": "separacion_ui_carta_manager_lee_tarifas_escribe",
+      "decision": "carta-manager UI muestra badges 'activa en: <canal>' como info derivada solo lectura (leida de tarifas.config.actualizada). tarifas UI es donde se cambia. Click en badge desde carta-manager navega a tarifas. UI de tarifas tiene 3 zonas: general (siempre visible), por canal (colapsado por defecto), variantes (avanzado).",
+      "razon": "Cada modulo dueno de su UI sobre su dominio. Acoplado a cierre-ui-carta-manager.json (plan ejecutable de la UI de carta-manager, Postura B canonica)."
+    },
+    {
+      "id": "variante_es_carta_completa_no_regla",
+      "decision": "Una variante (e.g. Carta Verano Delivery con +15%) es OTRA carta archivo en /storage/pizzepos/cartas/ con sus precios escritos. tarifas-creator (agente) la materializa desde reglas en lenguaje natural. tarifas-sync (agente) la regenera cuando la base cambia. La 'regla' se guarda como metadata historica en tarifas.variantes[].reglas, NO se evalua en runtime.",
+      "razon": "Cero calculo en runtime. Comandero/pedidos/cobros leen lo escrito en la carta asignada al canal --sin reglas, sin calculos."
+    },
+    {
+      "id": "auto_promocion_primera_carta_a_general",
+      "decision": "Cuando el comerciante crea la primera carta de un proyecto y tarifas.config esta vacio (general=null Y todos los canales=null), carta-manager dispara automaticamente tarifas.set_general(carta_id) tras persistir. Solo la primera. Las siguientes las activa el comerciante explicitamente.",
+      "pseudocodigo": [
+        "// dentro de carta-manager.save, despues del snapshot y la escritura:",
+        "config_actual = await publishAndWait fs.read.request con path /storage/config/tarifas.json",
+        "if config_actual.status === 200:",
+        "  config_data = JSON.parse(config_actual.content)",
+        "  general_vacio = config_data.general === null o config_data.general === undefined",
+        "  algun_canal_asignado = false",
+        "  for canal in [mesa, telefono, llevar, glovo, whatsapp, llevadoo]:",
+        "    if config_data.canales[canal] !== null y config_data.canales[canal] !== undefined:",
+        "      algun_canal_asignado = true",
+        "  if general_vacio y algun_canal_asignado === false:",
+        "    // proyecto en estado vacio de tarifas --auto-promover",
+        "    await publish tarifas.set_general.request con { project_id, carta_id, correlation_id, request_id: uuid() }",
+        "// si config_actual.status === 404 --tarifas.json aun no existe-- mismo flujo: tarifas crea el archivo al recibir set_general",
+        "// fire-and-forget --carta-manager NO espera respuesta. Si tarifas no responde, carta queda persistida igual sin activacion."
+      ],
+      "razon": "Friccion minima del 80%. Comerciante recien montado que crea su primera carta no debe ir a otra pantalla a 'activarla' --el sistema asume que la primera es la operativa de salida."
+    },
+    {
+      "id": "regla_de_resolucion_carta_por_canal",
+      "decision": "Cualquier consumer que necesite saber 'que carta sirvo en canal X' aplica esta regla: si tarifas.config.canales[X] no es null usa esa; si no, usa tarifas.config.general; si general tambien es null, no hay carta servible para ese canal.",
+      "pseudocodigo": [
+        "RESOLVER_CARTA(project_id, canal):",
+        "  config = await invocar tarifas.get con project_id",
+        "  if config.canales[canal] !== null:",
+        "    return config.canales[canal]",
+        "  if config.general !== null:",
+        "    return config.general",
+        "  return null  // proyecto sin carta servible aun"
+      ],
+      "razon": "Override por canal gana sobre general. Si no hay nada, proyecto recien montado --el comerciante debe crear su primera carta (auto-promocion la pondra como general)."
+    },
+    {
+      "id": "correlation_id_obligatorio_en_eventos_del_subsistema",
+      "decision": "Los 5 eventos canonicos del subsistema (carta.creada, carta.actualizada, carta.editada, carta.borrada, tarifas.config.actualizada) declaran correlation_id como campo OBLIGATORIO del payload (NO opcional). El originador lo genera con uuid(); los handlers intermedios lo propagan sin modificar. Los schemas AJV asociados (TP7) declaran correlation_id en required[].",
+      "razon": "Deriva de la disciplina general del repo declarada en CLAUDE.md y en events.contract.json. Cierra drift heredado de carta-manager v1.0 donde carta.actualizada no propagaba correlation_id (registrado en su auditoria como 'tracing parcial'). Sin trazabilidad cross-modulo el debugging es ciego."
+    },
+    {
+      "id": "aplicar_blueprint_eventos_conscientes_v1_a_los_5_canonicos",
+      "decision": "Los 5 eventos canonicos del subsistema declaran requires_consumer: true en este contrato. Los blueprints hijos que los publican (menu-generator publica carta.creada; carta-manager publica carta.actualizada/editada/borrada; tarifas publica tarifas.config.actualizada) declaran en su raiz el campo eventos_publicados_que_requieren_consumer[] (paralelo a eventos_que_escucho[] ya canonico). El validador del subsistema-carta cruza ambos lados: contrato vs blueprint vs subscribers detectados en el repo.",
+      "razon": "Deriva de blueprint-eventos-conscientes.contract.json v1.0.0. Aplicacion opt-in en v1 (CLAUDE.md). Justificado: el bug carta.creada huerfano detectado en audit 2026-05-25 es exactamente el modo de fallo que este pattern previene. Aplicarlo desde el inicio del subsistema-carta cierra esa familia de drift por diseno."
+    }
+  ],
+
+  "tipos_canonicos_de_modulo_del_subsistema": [
+    {
+      "modulo": "menu-generator",
+      "tipo": "blueprint-driven v8.1+",
+      "rol": "Puerta de entrada principal del subsistema. Estructura input bruto (texto/json) en carta canonica y publica carta.creada fire-and-forget.",
+      "publica_canonico": ["carta.creada", "menu.generation.progress", "menu.generation.failed", "carta.generar.iniciada", "carta.generar.fallida"],
+      "escucha_canonico": ["carta.generar.solicitada"],
+      "no_persiste": true,
+      "eventos_publicados_que_requieren_consumer_a_declarar": ["carta.creada"]
+    },
+    {
+      "modulo": "carta-manager",
+      "tipo": "blueprint-driven v1.2+",
+      "rol": "Aggregate root del subsistema. Custodio del dato canonico. CRUD + versionado + manipulacion estructurada de productos y categorias dentro de cada carta.",
+      "publica_canonico": ["carta.actualizada", "carta.editada", "carta.borrada"],
+      "escucha_canonico": ["carta.creada", "project.activated", "project.deactivated"],
+      "persiste": "data/projects/{slug}/storage/pizzepos/cartas/<carta_id>.json + .versions/<carta_id>/<timestamp>.json",
+      "eventos_publicados_que_requieren_consumer_a_declarar": ["carta.actualizada", "carta.editada", "carta.borrada"]
+    },
+    {
+      "modulo": "tarifas",
+      "tipo": "JS POC2 v3.1.0",
+      "rol": "Dueno de la asignacion carta+canal y del registro de variantes.",
+      "publica_canonico": ["tarifas.config.actualizada"],
+      "escucha_canonico": ["tarifas.config.solicitada", "project.activated"],
+      "persiste": "data/projects/{slug}/storage/config/tarifas.json",
+      "eventos_publicados_que_requieren_consumer_a_declarar": ["tarifas.config.actualizada"]
+    },
+    {
+      "modulo": "productos",
+      "tipo": "JS POC2 v3.0.0+ (no migra a blueprint --decision)",
+      "rol": "Catalogo operativo del POS. Cache local sincronizado desde carta.actualizada + tarifas.config.actualizada. Sirve a comandero/pedidos/cocina.",
+      "consume_canonico": ["carta.actualizada", "carta.editada", "carta.borrada", "tarifas.config.actualizada"],
+      "no_escribe_dato_canonico": "Solo escribe su cache local derivado. NUNCA escribe a /storage/pizzepos/cartas/ ni a /storage/config/tarifas.json."
+    },
+    {
+      "modulo": "carta-design",
+      "tipo": "blueprint-driven",
+      "rol": "Estudio de diseno visual de cartas impresas.",
+      "consume_canonico": ["carta.actualizada"]
+    },
+    {
+      "modulo": "carta-impresion",
+      "tipo": "blueprint-driven",
+      "rol": "Genera HTML print-ready de cartas.",
+      "consume_canonico": ["carta.actualizada"]
+    },
+    {
+      "modulo": "carta-digital",
+      "tipo": "blueprint-driven",
+      "rol": "Backoffice de la carta publica (PWA). Configura branding y compone carta final.",
+      "consume_canonico": ["carta.actualizada", "tarifas.config.actualizada"]
+    },
+    {
+      "modulo": "carta-marketing",
+      "tipo": "blueprint-driven",
+      "rol": "Enriquece y pule cartas segun perfil de marca del proyecto.",
+      "consume_canonico": ["carta.actualizada"]
+    },
+    {
+      "modulo": "carta-scheduler",
+      "tipo": "blueprint-driven",
+      "rol": "Programa cambios de carta+canal por franja horaria. Invoca tarifas.assign segun reglas registradas.",
+      "consume_canonico": ["scheduler.job.triggered"],
+      "invoca_canonico": ["tarifas.assign"]
+    },
+    {
+      "modulo": "cuentas-canales",
+      "tipo": "JS POC2 v5.0.0",
+      "rol": "Canoniza los 6 canales del POS como strategies. Define el enum cerrado de canales que tarifas usa en config.canales.",
+      "rol_en_este_contrato": "referencia (no produce ni consume eventos del subsistema-carta directamente)"
+    }
+  ],
+
+  "eventos": [
+    {
+      "name": "carta.creada",
+      "zona": 1,
+      "publicado_por": "menu-generator (y futuras puertas de entrada como agentes de receta, importador-json)",
+      "consumido_por": ["carta-manager (via _on_carta_creada, blueprint-subscribers-asincronos)"],
+      "proposito": "Generador notifica al custodio que tiene una carta nueva que persistir. EVENTO PRIVADO entre generador y custodio --otros modulos NO deben escucharlo (zona 1 = no persistido).",
+      "requires_consumer": true,
+      "shape_resumen": {
+        "obligatorios": ["project_id", "request_id", "carta", "correlation_id"],
+        "opcionales": ["user_id", "motivo"],
+        "metadata": ["timestamp"],
+        "carta": "objeto completo envelope { meta: { id?, nombre, ...}, categorias: [...], productos: [...] }. Shape interno de productos/categorias ABIERTO."
+      },
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-carta/carta-creada.schema.json (a producir)"
+    },
+    {
+      "name": "carta.actualizada",
+      "zona": 3,
+      "publicado_por": "carta-manager (operaciones save, restore)",
+      "consumido_por": ["productos", "carta-design", "carta-impresion", "carta-digital", "carta-marketing", "carta-scheduler", "tarifas-sync (si la carta es base de variantes registradas)"],
+      "proposito": "Certificado oficial de 'carta persistida con identidad y version'. Frontera segura para todos los consumers del ecosistema.",
+      "requires_consumer": true,
+      "shape_resumen": {
+        "obligatorios": ["project_id", "carta", "correlation_id"],
+        "opcionales": ["user_id", "motivo"],
+        "metadata": ["timestamp"],
+        "carta": "objeto completo envelope con meta.version >= 1, meta.created_at, meta.updated_at. Shape interno de productos/categorias ABIERTO."
+      },
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-carta/carta-actualizada.schema.json (a producir)"
+    },
+    {
+      "name": "carta.editada",
+      "zona": 3,
+      "publicado_por": "carta-manager (operaciones add_product, remove_product, update_product, add_category, update_prices)",
+      "consumido_por": "mismos que carta.actualizada",
+      "proposito": "Mutacion puntual de una carta existente persistida. El campo 'operacion' identifica que tipo de mutacion fue.",
+      "requires_consumer": true,
+      "shape_resumen": {
+        "obligatorios": ["project_id", "carta", "operacion", "correlation_id"],
+        "opcionales": [],
+        "metadata": ["timestamp"],
+        "operacion": "string enum: add_product | remove_product | update_product | add_category | update_prices",
+        "carta": "objeto completo envelope (con la mutacion ya aplicada). meta.version incrementada."
+      },
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-carta/carta-editada.schema.json (a producir)"
+    },
+    {
+      "name": "carta.borrada",
+      "zona": 3,
+      "publicado_por": "carta-manager (operacion delete --soft-delete a estado='archivada')",
+      "consumido_por": "mismos que carta.actualizada",
+      "proposito": "Soft-delete. La carta sigue existiendo en disco con meta.estado='archivada'. Consumers la sacan de sus listas activas pero pueden seguir consultandola por carta.get.",
+      "requires_consumer": true,
+      "shape_resumen": {
+        "obligatorios": ["project_id", "carta", "correlation_id"],
+        "opcionales": ["motivo"],
+        "metadata": ["timestamp"],
+        "carta": "objeto completo envelope con meta.estado='archivada' y meta.version incrementada."
+      },
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-carta/carta-borrada.schema.json (a producir)"
+    },
+    {
+      "name": "tarifas.config.actualizada",
+      "zona": 3,
+      "publicado_por": "tarifas (operaciones set_general, assign, register_variant, y al recibir tarifas.config.solicitada con tipo=snapshot)",
+      "consumido_por": ["productos", "comandero", "carta-digital", "cualquier modulo que necesite la asignacion carta+canal actual"],
+      "proposito": "Snapshot completo del estado de tarifas. Quien escuche reemplaza su cache local con el config del payload.",
+      "requires_consumer": true,
+      "shape_resumen": {
+        "obligatorios": ["project_id", "tipo", "config", "correlation_id"],
+        "opcionales": [],
+        "metadata": ["timestamp"],
+        "tipo": "string enum: general | assign | variant_registered | snapshot",
+        "config": "{ general: carta_id|null, canales: { mesa, telefono, llevar, glovo, whatsapp, llevadoo all carta_id|null }, variantes: [{ carta_id, base_carta_id, nombre, canales, reglas }] }"
+      },
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-carta/tarifas-config-actualizada.schema.json (a producir)"
+    }
+  ],
+
+  "prohibido": [
+    "Que cualquier modulo escuche menu.generado, menu.validado o carta.creada para sincronizar catalogo o cache operativo. Solo carta-manager._on_carta_creada escucha carta.creada. Los demas son drift.",
+    "Que cualquier modulo escriba a /storage/pizzepos/cartas/ (carta o snapshot de version) que no sea carta-manager. El blueprint de carta-manager es el unico autorizado.",
+    "Que cualquier modulo escriba a /storage/config/tarifas.json que no sea tarifas.",
+    "Que carta-manager UI permita activar cartas o cambiar la asignacion carta+canal --esa decision es de tarifas. carta-manager UI solo lee tarifas.config para mostrar badges.",
+    "Que tarifas UI permita editar precios producto-a-producto o crear cartas desde cero. Tarifas solo asigna cartas a canales y registra variantes.",
+    "Que cualquier modulo invente paths para cartas distintos del canonico (storage/pizzepos/cartas/, storage/cartas/, /cartas/ pelado, etc.). Todo lo que no sea data/projects/{slug}/storage/pizzepos/cartas/<carta_id>.json es drift.",
+    "Que un modulo calcule precios en runtime aplicando 'reglas de variante' sobre la carta base. Los precios viven escritos en la carta asignada al canal. tarifas-creator materializa al crear, tarifas-sync regenera al cambiar la base.",
+    "Inventar una capa nueva de activacion (active.json u otro archivo) duplicando lo que tarifas ya hace.",
+    "Forzar shape rigido de productos o categorias en validators, schemas o consumers. Romperia la promesa multi-proyecto. Solo se validan envelope (meta+categorias+productos) y minimos por item (id+nombre).",
+    "Cambiar el shape del payload de carta.actualizada/editada/borrada para que NO lleve la carta entera. Si emergiera necesidad real, se reabre el contrato; no se decide ad-hoc en codigo.",
+    "Publicar un evento del subsistema sin correlation_id en el payload. Originador lo genera (uuid si es entrada nueva, o lo propaga del evento previo si es handler). Handlers intermedios NO modifican correlation_id."
+  ],
+
+  "output_shape_resumen": "_outputs/subsistema-carta.json contiene: { version, total_modulos_en_subsistema, modulos: { <id>: { tipo: 'blueprint'|'js', rol_declarado, publica: [...eventos canonicos detectados...], escucha: [...subscribes detectados...], eventos_publicados_que_requieren_consumer_declarados: [...], paths_canonicos_declarados: [...], paths_no_canonicos_detectados: [...], drift_subscribe_zona_1: bool, drift_escritura_fuera_canonico: bool, drift_shape_payload: bool, drift_correlation_id_ausente: bool, drift_requires_consumer_huerfano: bool } }, drifts: { modulos_que_oyen_zona_1_indebidamente: [...], paths_no_canonicos_en_subsistema: [...], publishers_no_carta_manager_de_carta_actualizada: [...], shape_envelope_invalido: [...], eventos_canonicos_sin_correlation_id: [...], eventos_requires_consumer_huerfanos: [...] }, snapshot del estado del subsistema-carta + POS.",
+
+  "reglas_de_extraccion": [
+    "Validator escanea modules/pizzepos/<id>/module.json buscando los modulos del subsistema (lista en tipos_canonicos_de_modulo_del_subsistema).",
+    "Para modulos blueprint-driven (menu-generator, carta-manager, carta-design, carta-impresion, carta-digital, carta-marketing, carta-scheduler): lee el blueprint correspondiente y extrae eventos_publicados[], eventos_que_escucho[], eventos_publicados_que_requieren_consumer[].",
+    "Para modulos JS POC2 (tarifas, productos, cuentas-canales): lee events.publishes[] y events.subscribes[] del module.json.",
+    "Cruza publica con la lista canonica de eventos del subsistema --detecta modulos que publican eventos canonicos sin ser el publicador autorizado.",
+    "Cruza escucha contra la lista de eventos de zona 1 (menu.generado, menu.validado, carta.creada) --detecta consumers que escuchan zona 1 indebidamente.",
+    "Lee config.persistence.paths de cada module.json (o el campo equivalente en blueprint) --busca paths que contengan 'pizzepos/cartas' o '/cartas/' fuera de carta-manager (drift).",
+    "Lee module.json de tarifas y verifica que config.persistence.paths contiene 'storage/config/tarifas.json'.",
+    "Para los 5 eventos canonicos en seccion 'eventos': verifica que los schemas AJV correspondientes en arquitectura/decisiones/_schemas/subsistema-carta/ existen, declaran correlation_id en required[], y declaran additionalProperties:false en el envelope (con additionalProperties:true en items[] de categorias/productos).",
+    "Para cada evento con requires_consumer:true: cruza contra los subscribers detectados en el repo --si ningun modulo escucha, drift huerfano.",
+    "Para cada blueprint hijo que publica eventos del subsistema: cruza eventos_publicados_que_requieren_consumer[] contra los requires_consumer:true declarados aqui (deben coincidir).",
+    "Cruza con cuentas-canales/module.json: verifica que strategies son exactamente {mesa, telefono, llevar, glovo, whatsapp, llevadoo} --si difiere, drift de canales."
+  ],
+
+  "derivaciones": [
+    {
+      "documento": "arquitectura/decisiones/_schemas/subsistema-carta/carta-creada.schema.json",
+      "rol": "Schema AJV strict additionalProperties:false del envelope de carta.creada. correlation_id en required[]. Productos/categorias permiten additionalProperties:true (shape interno abierto)."
+    },
+    {
+      "documento": "arquitectura/decisiones/_schemas/subsistema-carta/carta-actualizada.schema.json",
+      "rol": "Schema AJV strict del envelope de carta.actualizada. correlation_id en required[]."
+    },
+    {
+      "documento": "arquitectura/decisiones/_schemas/subsistema-carta/carta-editada.schema.json",
+      "rol": "Schema AJV strict del envelope de carta.editada con campo operacion enum y correlation_id en required[]."
+    },
+    {
+      "documento": "arquitectura/decisiones/_schemas/subsistema-carta/carta-borrada.schema.json",
+      "rol": "Schema AJV strict del envelope de carta.borrada (meta.estado='archivada' obligatorio, correlation_id en required[])."
+    },
+    {
+      "documento": "arquitectura/decisiones/_schemas/subsistema-carta/tarifas-config-actualizada.schema.json",
+      "rol": "Schema AJV strict del payload de tarifas.config.actualizada con tipo enum, config shape y correlation_id en required[]."
+    },
+    {
+      "documento": "arquitectura/decisiones/_schemas/subsistema-carta/_common.schema.json",
+      "rol": "Definiciones compartidas: shape_carta_envelope (meta + categorias + productos con minimos por item), tipo_canales_enum, tipo_estados_carta_enum."
+    },
+    {
+      "documento": "arquitectura/decisiones/_validators/subsistema-carta.validate.js",
+      "rol": "Compila schemas + cross-checks sobre module.json/blueprints de los 10 modulos del subsistema. Wireado a validate:ci."
+    },
+    {
+      "documento": "arquitectura/decisiones/_outputs/subsistema-carta.json",
+      "rol": "Output curado del estado del subsistema. Regenerado por el validator."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "drift_consumer_oye_zona_1",
+      "regla": "Solo carta-manager declara subscribe a carta.creada. Ningun modulo declara subscribe a menu.generado o menu.validado.",
+      "como_detectar": "Parse events.subscribes[] de cada module.json del subsistema y eventos_que_escucho[] de cada blueprint --buscar entradas con los nombres prohibidos.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_publisher_no_autorizado_de_eventos_de_zona_3",
+      "regla": "Solo carta-manager publica carta.actualizada, carta.editada, carta.borrada. Solo tarifas publica tarifas.config.actualizada.",
+      "como_detectar": "Parse events.publishes[] de cada module.json del subsistema y eventos_publicados[] de cada blueprint --buscar publishers no autorizados de estos 4 eventos.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_path_carta_fuera_de_canonico",
+      "regla": "Ningun modulo (excepto carta-manager) declara persistencia que contenga 'pizzepos/cartas' en su paths. Los consumers solo cachean en su propio storage local (ej. productos en storage/pizzepos/productos/, NO en storage/pizzepos/cartas/).",
+      "como_detectar": "Lee config.persistence.paths o el campo equivalente del blueprint --busca substring 'pizzepos/cartas' fuera de carta-manager.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_path_tarifas_fuera_de_canonico",
+      "regla": "Solo tarifas declara persistencia a storage/config/tarifas.json. Otros modulos leen via tarifas.config.actualizada o tarifas.get.request.",
+      "como_detectar": "Lee config.persistence.paths --busca substring 'storage/config/tarifas.json' fuera de tarifas.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_payload_shape_carta_no_envelope_minimo",
+      "regla": "Los publishes de carta.actualizada/editada/borrada en el pseudocodigo del blueprint de carta-manager contienen el campo 'carta' con shape envelope (meta + categorias + productos). NO se acepta payload que solo lleve metadatos.",
+      "como_detectar": "Heuristica regex sobre el pseudocodigo del blueprint de carta-manager --buscar publishes de estos 3 eventos y verificar que mencionan la carta entera (no solo carta_id/nombre/version).",
+      "severidad": "warning",
+      "nota": "Validacion heuristica --falsos positivos posibles si el pseudocodigo cambia de redaccion. Si se vuelve ruido, subir a error solo cuando schema AJV este wireado en runtime."
+    },
+    {
+      "id": "drift_canales_de_tarifas_divergen_de_cuentas_canales",
+      "regla": "El enum de canales declarado en el shape de tarifas.config.canales coincide exactamente con cuentas-canales.strategies = {mesa, telefono, llevar, glovo, whatsapp, llevadoo}.",
+      "como_detectar": "Parse cuentas-canales/module.json strategies + comparar con la lista declarada en este contrato (eventos.tarifas-config-actualizada.shape_resumen.config.canales).",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_shape_interno_productos_categorias_cerrado",
+      "regla": "Ningun schema AJV de los 5 eventos canonicos del subsistema declara additionalProperties:false en items[] de categorias o productos. El envelope si tiene additionalProperties:false; los items dentro de categorias/productos lo permiten true.",
+      "como_detectar": "Parse los schemas AJV en arquitectura/decisiones/_schemas/subsistema-carta/ --verificar la flag en los items.",
+      "severidad": "error",
+      "nota": "Cumple P7 (shape_interno_abierto). Si se cierra el shape de productos, se rompe multi-proyecto."
+    },
+    {
+      "id": "drift_modulo_del_subsistema_no_declarado",
+      "regla": "Cualquier modulo bajo modules/pizzepos/ que publique o escuche eventos canonicos del subsistema-carta esta declarado en tipos_canonicos_de_modulo_del_subsistema[].",
+      "como_detectar": "Cruza modules/pizzepos/* contra la lista declarada en este contrato. Modulo que publica/escucha sin estar en la lista es drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_evento_canonico_sin_correlation_id",
+      "regla": "Los 5 schemas AJV de los eventos canonicos del subsistema (carta.creada, carta.actualizada, carta.editada, carta.borrada, tarifas.config.actualizada) declaran correlation_id en su array required[]. Pseudocodigos de los blueprints que publican estos eventos incluyen correlation_id en el payload.",
+      "como_detectar": "(a) Parse de los schemas en arquitectura/decisiones/_schemas/subsistema-carta/ --verificar correlation_id en required[]. (b) Heuristica regex sobre el pseudocodigo del blueprint de carta-manager y de tarifas --buscar publishes de los 5 eventos y verificar que el payload menciona correlation_id.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_evento_requires_consumer_huerfano",
+      "regla": "Para cada evento canonico del subsistema declarado con requires_consumer:true en este contrato, al menos un modulo del repo declara subscribe (en module.json events.subscribes o blueprint eventos_que_escucho) a ese evento. Si ningun modulo lo escucha, el evento se publica al vacio --drift de wiring.",
+      "como_detectar": "Para cada evento con requires_consumer:true: scan global de subscribes en module.json + eventos_que_escucho en blueprints. Si la lista de subscribers para ese evento es vacia, drift huerfano.",
+      "severidad": "error",
+      "nota": "Caso testigo del bug carta.creada huerfano (audit 2026-05-25): menu-generator publicaba carta.creada pero ningun modulo lo escuchaba porque el wiring blueprint-subscribers-asincronos no estaba implementado. Este cross-check evita repetir el modo de fallo."
+    },
+    {
+      "id": "drift_blueprint_no_declara_requires_consumer_paralelo",
+      "regla": "Los blueprints hijos que publican eventos canonicos del subsistema con requires_consumer:true (menu-generator publica carta.creada; carta-manager publica carta.actualizada/editada/borrada; tarifas publica tarifas.config.actualizada) declaran en su raiz eventos_publicados_que_requieren_consumer[] con esos eventos.",
+      "como_detectar": "Parse blueprint hijo y verificar que la lista contiene exactamente los eventos canonicos requires_consumer:true que publica.",
+      "severidad": "warning",
+      "nota": "Severidad warning en v1 porque el campo es opt-in (CLAUDE.md). Subir a error si tras 2-4 semanas de adopcion estable se decide endurecer (acoplado a blueprint-eventos-conscientes trabajo_pendiente)."
+    }
+  ],
+
+  "salida_validador": "PASS si no hay errors. FAIL si hay errors. Imprime por cada hit: archivo:contexto :: drift_id :: detalle. Warnings se acumulan en drift-baseline.json --CI bloquea solo cuando aparece warning nuevo. Errors bloquean siempre.",
+
+  "convenciones_complementarias": [
+    "Acoplado a multi-tenancy.contract.json: el path canonico deriva del modelo data/projects/{slug}/... + project_id obligatorio en todos los eventos del subsistema.",
+    "Acoplado a events.contract.json: los 5 eventos canonicos cumplen shape envelope (event_id, event_type, timestamp, source, data, metadata) y propagan correlation_id (canonizado obligatorio en este contrato).",
+    "Acoplado a persistence.contract.json: carta-manager y tarifas usan fs.read.request/fs.write.request/fs.edit.request --no fs directo.",
+    "Acoplado a errors.contract.json: los handlers usan codigos canonicos (INVALID_INPUT, RESOURCE_NOT_FOUND, PRECONDITION_FAILED, etc.).",
+    "Acoplado a modulos-blueprint-driven.contract.json: menu-generator y carta-manager son blueprint-driven; el resto del subsistema usa el patron en la medida que cumpla las 4 condiciones del contrato.",
+    "Acoplado a pseudocodigo-estilo.contract.json: los pseudocodigos del blueprint de carta-manager (save, add_product, etc.) y de tarifas no usan ES6 denso ni rest-spread con omision.",
+    "Acoplado a ui-frontend-blueprint.contract.json: la UI de carta-manager y la UI de tarifas siguen el patron de implementacion frontend de modulos blueprint --Postura B canonica.",
+    "Acoplado a cierre-ui-carta-manager.json (propuesta plan ejecutable): D3 (shape ABIERTO en UI) y D6 (store solo lectura) coinciden con este contrato. P7 y D9 de este contrato amparan esas decisiones.",
+    "Acoplado a blueprint-eventos-conscientes.contract.json v1.0.0: este contrato aplica el patron en v1 declarando requires_consumer:true en los 5 eventos canonicos. Los blueprints hijos (TP1, TP2, TP3 trabajo_pendiente) declararan eventos_publicados_que_requieren_consumer[] paralelo simetrico al campo ya canonico eventos_que_escucho[].",
+    "Acoplado a naming.json: verbos canonicos lifecycle (creada, actualizada, editada, borrada) usados en los 4 eventos de carta.",
+    "Acoplado a glossary.json: terminos cross-modulo --carta, variante, canal, tarifa, producto."
+  ],
+
+  "trabajo_pendiente": [
+    {
+      "id": "TP1_bump_carta_manager_blueprint",
+      "estado": "abierto",
+      "descripcion": "Bump carta-manager.blueprint.json a v1.3.0. Cambios: (a) paths /cartas/ -> /storage/pizzepos/cartas/ en pseudocodigo y config.persistence.paths; (b) shape de carta.actualizada / carta.editada / carta.borrada con la carta entera embebida en payload.carta; (c) anadir auto-promocion primera carta al final de save (pseudocodigo en decision auto_promocion_primera_carta_a_general); (d) anadir correlation_id obligatorio en payloads de los 3 eventos canonicos publicados; (e) declarar en la raiz del blueprint eventos_publicados_que_requieren_consumer: ['carta.actualizada', 'carta.editada', 'carta.borrada']."
+    },
+    {
+      "id": "TP2_revisar_menu_generator_blueprint",
+      "estado": "abierto",
+      "descripcion": "Revisar menu-generator.blueprint.json v8.1. Cambios: (a) verificar shape del payload de carta.creada coincide con el envelope canonico (meta+categorias+productos); (b) verificar correlation_id obligatorio en el publish de carta.creada (heredado del input o uuid si es entrada nueva); (c) declarar en la raiz del blueprint eventos_publicados_que_requieren_consumer: ['carta.creada']."
+    },
+    {
+      "id": "TP3_ajustar_productos_js",
+      "estado": "abierto",
+      "descripcion": "Productos v3.0.0 -> v4.0.0. Cambios: (a) aceptar payload con carta entera en carta.actualizada/editada/borrada (eliminar logica que asume solo metadatos); (b) suscribir a tarifas.config.actualizada para resolver canal -> carta con la regla RESOLVER_CARTA; (c) eliminar subscribes a menu.generado y menu.validado (zona 1, drift); (d) declarar config.persistence.paths reflejando solo el cache local, no /storage/pizzepos/cartas/ (esa es de carta-manager); (e) propagar correlation_id en cualquier publish que productos haga (catalogo.actualizado, producto.creado, etc.)."
+    },
+    {
+      "id": "TP4_ajustar_tarifas_js",
+      "estado": "abierto",
+      "descripcion": "Tarifas v3.1.0: verificar/anadir correlation_id obligatorio en payload de tarifas.config.actualizada. Declarar en module.json events.publishes que tarifas.config.actualizada lleva correlation_id."
+    },
+    {
+      "id": "TP5_migrar_archivo_legacy",
+      "estado": "abierto",
+      "descripcion": "Migrar /home/user/2enki/storage/pizzepos/cartas/carta_pizzicas.json (legacy single-tenant raiz repo) al path canonico multi-tenant data/projects/{slug}/storage/pizzepos/cartas/. Verificar slug del proyecto pizzicas. Operacion manual con OK explicito --no automatica."
+    },
+    {
+      "id": "TP6_ui_tarifas",
+      "estado": "abierto",
+      "descripcion": "Implementar UI de tarifas con las 3 zonas (general siempre visible / por canal colapsado / variantes avanzado). Patron Postura B del ui-frontend-blueprint. Plan ejecutable a cocinar aparte (estilo cierre-ui-tarifas.json)."
+    },
+    {
+      "id": "TP7_badges_carta_manager",
+      "estado": "abierto",
+      "descripcion": "Anadir badges 'activa en: <canal>' en CartaDetail.svelte y CartaCard.svelte de carta-manager UI. Hidratacion desde tarifas.config.actualizada via store. Click navega a tarifas UI. NO modifica el plan cierre-ui-carta-manager.json --se anade como F-extension despues de que ese plan se ejecute."
+    },
+    {
+      "id": "TP8_schemas_ajv_eventos",
+      "estado": "abierto",
+      "descripcion": "Producir los 6 schemas AJV strict en arquitectura/decisiones/_schemas/subsistema-carta/: carta-creada, carta-actualizada, carta-editada, carta-borrada, tarifas-config-actualizada, _common. additionalProperties:false en envelope con correlation_id en required[]; productos/categorias permiten additionalProperties:true (P7, D9)."
+    },
+    {
+      "id": "TP9_validator_subsistema_carta",
+      "estado": "abierto",
+      "descripcion": "Implementar arquitectura/decisiones/_validators/subsistema-carta.validate.js con los 11 cross-checks declarados en validaciones_cross_realizadas_por_validator. Registrar en scripts/validate-all.js. Wirear a npm run validate:ci."
+    },
+    {
+      "id": "TP10_padre_propio_subsistema_carta",
+      "estado": "diferido",
+      "descripcion": "Heredado del trabajo_pendiente del blueprint de carta-manager: cuando el subsistema-carta tenga particularidades propias (estado_operativo distinto del recetario, transiciones distintas), crear modules/_subsistema-carta/subsistema-carta.modulo-base.blueprint.json como blueprint padre abstracto y migrar los hijos. Hoy carta-manager y los hermanos extienden subsistema-recetario.modulo-base por reuso pragmatico. Diferido hasta que emerja particularidad."
+    },
+    {
+      "id": "TP11_anadir_referencia_en_claude_md",
+      "estado": "abierto",
+      "descripcion": "Anadir bloque para subsistema-carta.contract.json en CLAUDE.md (seccion 'Decisiones cross-modulo'), con descripcion 1-paragraph del scope y enlace al contrato."
+    },
+    {
+      "id": "TP12_verificar_consumers_requires_consumer",
+      "estado": "diferido_hasta_validador",
+      "descripcion": "Tras implementar el validator (TP9), correr cross-check drift_evento_requires_consumer_huerfano. Si algun evento canonico declara requires_consumer:true pero ningun modulo lo escucha en su declaracion, materializar el subscribe en el consumer correspondiente (productos para tarifas.config.actualizada y carta.actualizada/editada/borrada). NO marcar como warning silencioso."
+    }
+  ]
+}

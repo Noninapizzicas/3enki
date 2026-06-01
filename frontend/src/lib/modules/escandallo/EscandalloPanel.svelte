@@ -18,6 +18,7 @@
     setActiveView,
     clearError
   } from '$lib/stores/escandallo';
+  import { prefillChatInput } from '$lib/stores/chatInputDraft';
 
   export let panelId: string = '';
 
@@ -37,7 +38,7 @@
 
   function getFoodCostColor(fc: number): string {
     if (fc <= 25) return '#22c55e';
-    if (fc <= 33) return '#f59e0b';
+    if (fc <= 33) return 'rgba(245, 158, 11, 1)';
     return '#ef4444';
   }
 </script>
@@ -69,8 +70,10 @@
       {#if !global_ || global_.total_recetas === 0}
         <div class="empty">
           <p>No hay datos de escandallo.</p>
-          <p class="hint">Crea recetas primero en la sección Recetas, y luego pide al chat:<br>
-            <em>"Dame el escandallo global"</em></p>
+          <p class="hint">Crea recetas primero en la sección Recetas. Luego:</p>
+          <button class="action-button" on:click={() => prefillChatInput('Dame el escandallo global.')}>
+            Calcular escandallo global
+          </button>
         </div>
       {:else}
         <div class="kpi-row">
@@ -124,13 +127,21 @@
       {#if !receta}
         <div class="empty">
           <p>Selecciona una receta para ver su escandallo.</p>
-          <p class="hint">Pide al chat: <em>"Escandallo de la carbonara a 12€"</em></p>
+          <button class="action-button" on:click={() => prefillChatInput('Calcula el escandallo de la receta "<nombre>".')}>
+            Calcular escandallo
+          </button>
         </div>
       {:else}
         <h3>{receta.nombre}</h3>
         <div class="badge-row">
           <span class="badge">{receta.categoria}</span>
           <span class="badge">{receta.porciones} porciones</span>
+        </div>
+
+        <div class="action-bar">
+          <button class="action-button" on:click={() => prefillChatInput(`Calcula el escandallo de la receta "${receta.nombre}".`)}>
+            Recalcular escandallo
+          </button>
         </div>
 
         <div class="kpi-row">
@@ -188,7 +199,7 @@
     flex-direction: column;
     height: 100%;
     font-size: 13px;
-    color: var(--text-primary, #e4e4e7);
+    color: var(--text-primary, rgba(228, 228, 231, 1));
   }
 
   .tabs {
@@ -202,23 +213,36 @@
     background: none;
     border: none;
     border-bottom: 2px solid transparent;
-    color: var(--text-secondary, #a1a1aa);
+    color: var(--text-secondary, rgba(161, 161, 170, 1));
     cursor: pointer;
     font-size: 12px;
   }
-  .tab:hover:not(:disabled) { color: var(--text-primary, #e4e4e7); }
-  .tab.active { color: var(--accent-color, #60a5fa); border-bottom-color: var(--accent-color, #60a5fa); }
+  .tab:hover:not(:disabled) { color: var(--text-primary, rgba(228, 228, 231, 1)); }
+  .tab.active { color: var(--accent-color, rgba(96, 165, 250, 1)); border-bottom-color: var(--accent-color, rgba(96, 165, 250, 1)); }
   .tab:disabled { opacity: 0.4; cursor: default; }
 
   .content { flex: 1; overflow-y: auto; padding: 12px; }
-  .error { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(239, 68, 68, 0.15); color: #f87171; font-size: 12px; }
+  .error { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(239, 68, 68, 0.15); color: rgba(248, 113, 113, 1); font-size: 12px; }
   .error button { background: none; border: none; color: inherit; cursor: pointer; font-size: 16px; }
-  .loading { padding: 12px; text-align: center; color: var(--text-secondary, #a1a1aa); font-size: 12px; }
-  .empty { text-align: center; padding: 32px 16px; color: var(--text-secondary, #a1a1aa); }
+  .loading { padding: 12px; text-align: center; color: var(--text-secondary, rgba(161, 161, 170, 1)); font-size: 12px; }
+  .empty { text-align: center; padding: 32px 16px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
   .empty .hint { font-size: 12px; margin-top: 8px; opacity: 0.7; }
 
+  .action-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+  .action-button {
+    padding: 6px 12px;
+    background: rgba(96, 165, 250, 0.15);
+    border: 1px solid rgba(96, 165, 250, 0.4);
+    border-radius: 6px;
+    color: var(--accent-color, rgba(96, 165, 250, 1));
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+  }
+  .action-button:hover { background: rgba(96, 165, 250, 0.25); }
+
   h3 { margin: 0 0 8px; font-size: 16px; }
-  h4 { margin: 16px 0 8px; font-size: 13px; color: var(--text-secondary, #a1a1aa); }
+  h4 { margin: 16px 0 8px; font-size: 13px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
 
   .badge-row { display: flex; gap: 6px; margin-bottom: 12px; }
   .badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); }
@@ -235,7 +259,7 @@
   }
   .kpi.highlight { background: rgba(96, 165, 250, 0.08); border-color: rgba(96, 165, 250, 0.3); }
   .kpi-value { font-size: 18px; font-weight: 700; }
-  .kpi-label { font-size: 10px; color: var(--text-secondary, #a1a1aa); margin-top: 2px; }
+  .kpi-label { font-size: 10px; color: var(--text-secondary, rgba(161, 161, 170, 1)); margin-top: 2px; }
 
   .ranking { display: flex; flex-direction: column; gap: 2px; }
   .ranking-row {
@@ -247,10 +271,10 @@
     background: rgba(255, 255, 255, 0.02);
   }
   .ranking-row:hover { background: rgba(255, 255, 255, 0.05); }
-  .ranking-pos { font-size: 11px; color: var(--text-secondary, #71717a); width: 24px; }
+  .ranking-pos { font-size: 11px; color: var(--text-secondary, rgba(113, 113, 122, 1)); width: 24px; }
   .ranking-name { flex: 1; }
-  .ranking-cat { font-size: 11px; color: var(--text-secondary, #a1a1aa); }
-  .ranking-cost { font-weight: 600; color: var(--accent-color, #60a5fa); }
+  .ranking-cat { font-size: 11px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
+  .ranking-cost { font-weight: 600; color: var(--accent-color, rgba(96, 165, 250, 1)); }
 
   .desglose { display: flex; flex-direction: column; gap: 3px; }
   .desglose-row {
@@ -271,9 +295,9 @@
     border-radius: 4px;
   }
   .desglose-name { flex: 1; position: relative; z-index: 1; }
-  .desglose-qty { font-size: 11px; color: var(--text-secondary, #a1a1aa); position: relative; z-index: 1; }
-  .desglose-pct { font-size: 11px; color: var(--text-secondary, #a1a1aa); width: 40px; text-align: right; position: relative; z-index: 1; }
-  .desglose-price { font-weight: 600; color: var(--accent-color, #60a5fa); width: 50px; text-align: right; position: relative; z-index: 1; }
+  .desglose-qty { font-size: 11px; color: var(--text-secondary, rgba(161, 161, 170, 1)); position: relative; z-index: 1; }
+  .desglose-pct { font-size: 11px; color: var(--text-secondary, rgba(161, 161, 170, 1)); width: 40px; text-align: right; position: relative; z-index: 1; }
+  .desglose-price { font-weight: 600; color: var(--accent-color, rgba(96, 165, 250, 1)); width: 50px; text-align: right; position: relative; z-index: 1; }
 
   .insights { padding-left: 20px; font-size: 12px; line-height: 1.6; }
   .insights li { margin-bottom: 4px; }

@@ -1,0 +1,411 @@
+{
+  "_doc": "Plan ejecutable de carta-design backend. Bumpea blueprint v1.1.0 a v1.2.0 aplicando subsistema-carta v1.0.5. Dos cambios: (a) paths /carta-design/designs/ + /carta-design/profiles/ -> /storage/pizzepos/carta-design/designs/ + .../profiles/ (D1 namespace + subdir); (b) correlation_id obligatorio en publish de carta.html.generada (D10/P9). NO modifica modelo no-reactivo (A1). NO toca artefactos built-in (design-profiles/, context.json, prompt.json). NO declara requires_consumer (ningun consumer real --leccion TP1). Cero cambio en las 6 operaciones funcionales mas alla de paths + correlation_id.\n\nNOTA IMPORTANTE: el plan UI de carta-design NO se cocina --segun decision arquitectonica documentada en _analisis-flujo-pos-y-engranajes-carta.md ('carta-design aparcado por reapertura de proposito --el usuario observo no aporta nada interesante al comerciante. Solapamiento aparente con carta-impresion'). Este plan backend es mantenimiento de alineacion al contrato, valido independientemente de si la UI se cocina o no.",
+
+  "id": "aplicar-subsistema-carta-a-carta-design",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "bump_blueprint_backend",
+
+  "documentos_hermanos": {
+    "contrato_canonico": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.5",
+      "relacion": "Bumpeado en el mismo commit. v1.0.5 cierra el patron A1 confirmado en los 5 hermanos."
+    },
+    "analisis_de_aparcamiento": {
+      "path": "arquitectura/decisiones/propuestas/_analisis-flujo-pos-y-engranajes-carta.md",
+      "relacion": "Decision arquitectonica que aparca la cocina de UI de carta-design por reapertura de proposito. Este plan backend NO contradice el aparcamiento --es alineacion al contrato."
+    },
+    "ui_NO_cocinada": {
+      "estado": "aparcada por decision previa",
+      "comportamiento_si_se_reabre": "Si el usuario reabre el proposito de carta-design, se cocina cierre-ui-carta-design.json entonces. Si confirma aparcamiento definitivo, el backend v1.2.0 sigue siendo valido como mantenimiento."
+    }
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/persistence.contract.json"
+  ],
+
+  "dependencias_explicitas": [],
+
+  "por_que_existe": {
+    "que_cierra": "carta-design v1.1.0 arrastra 2 drifts contra subsistema-carta v1.0.5: (a) paths /carta-design/ pelados sin namespace pizzepos; (b) correlation_id opcional en publish de carta.html.generada.",
+    "que_no_cierra": "NO cocina UI (aparcada por decision arquitectonica previa). NO modifica modelo no-reactivo. NO declara requires_consumer. NO toca design-profiles/ built-in (5 profiles canonicos: elegant-minimal, modern-bold, rock-bold, rustic-italian, seasonal-fresh). NO toca context.json ni prompt.json (legacy revisable). NO modifica las 6 operaciones funcionales mas alla del cambio mecanico de paths + correlation_id.",
+    "alcance": "Editar SOLO modules/pizzepos/carta-design/module.json y carta-design.blueprint.json."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/carta-design/module.json",
+      "version_actual": "1.1.0",
+      "paths_persistencia_actuales": [
+        "data/projects/{slug}/carta-design/designs/<carta_id>__<timestamp>.html",
+        "data/projects/{slug}/carta-design/designs/<carta_id>__<timestamp>.json (meta companion)",
+        "data/projects/{slug}/carta-design/profiles/<profile_id>.json"
+      ],
+      "paths_modulo_built_in": [
+        "modules/pizzepos/carta-design/design-profiles/<built-in>.json (5 profiles)"
+      ],
+      "lo_que_debe_quedar_tras_el_plan": {
+        "version": "1.2.0",
+        "_v1_2_changelog": "presente",
+        "paths_proyecto_canonicos": [
+          "data/projects/{slug}/storage/pizzepos/carta-design/designs/<carta_id>__<timestamp>.html",
+          "data/projects/{slug}/storage/pizzepos/carta-design/designs/<carta_id>__<timestamp>.json",
+          "data/projects/{slug}/storage/pizzepos/carta-design/profiles/<profile_id>.json"
+        ],
+        "paths_modulo_built_in_PRESERVADOS": "modules/pizzepos/carta-design/design-profiles/<built-in>.json (sin cambio)"
+      }
+    },
+    {
+      "pieza": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+      "version_actual": "blueprint-1.1.0",
+      "operaciones": ["load_carta", "save", "profiles", "save_profile", "delete_profile", "gallery"],
+      "evento_canonico_de_dominio": "carta.html.generada (en save)",
+      "lo_que_debe_quedar_tras_el_plan": {
+        "version_blueprint": "blueprint-1.2.0",
+        "todos_los_paths_de_pseudocodigo_apuntan_a": "/storage/pizzepos/carta-design/...",
+        "publish_carta_html_generada_lleva_correlation_id_obligatorio": true,
+        "eventos_que_escucho_PRESERVADO_vacio": true
+      }
+    },
+    {
+      "pieza": "modules/pizzepos/carta-design/design-profiles/, context.json, prompt.json",
+      "rol": "artefactos built-in --NO se tocan"
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio",
+      "modules/pizzepos/carta-design/module.json declara version='1.1.0'",
+      "carta-design.blueprint.json declara version='blueprint-1.1.0' con 6 operaciones",
+      "arquitectura/decisiones/_contratos/subsistema-carta.contract.json declara version='1.0.5'",
+      "modules/pizzepos/carta-design/design-profiles/ EXISTE con 5 archivos JSON --NO se tocan",
+      "data/projects/* --si hay archivos en path viejo (carta-design/designs/ o profiles/ sueltos sin storage/pizzepos/), reportar al humano antes de F3",
+      "npm run validate:ci PASS antes de empezar"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones del contrato subsistema-carta v1.0.5",
+      "A1 preservado: carta-design sigue no-reactivo (eventos_que_escucho:[])",
+      "Aparcamiento de UI documentado en _analisis-flujo-pos-y-engranajes-carta.md vigente --no se cocina UI ni se ejecuta UI",
+      "Las 6 operaciones funcionales (load_carta, save, profiles, save_profile, delete_profile, gallery) son correctas y se preservan",
+      "pseudocodigo-estilo: sin spread, sin Object.assign"
+    ],
+    "no_toco_esta_sesion": [
+      "modules/pizzepos/carta-design/design-profiles/ (5 built-in JSON)",
+      "modules/pizzepos/carta-design/context.json, prompt.json (legacy revisable)",
+      "Agente disenador (cartadigital-composer o equivalente)",
+      "Cualquier otro modulo del subsistema o del POS",
+      "arquitectura/decisiones/* (bump v1.0.5 ya esta en el commit)",
+      "frontend/* --la UI de carta-design esta aparcada por decision arquitectonica",
+      "schemas, validators",
+      "data/projects/*/carta-design/ (cero migracion de datos --reportar si hay archivos en path viejo)",
+      "scripts/validate-all.js, drift-baseline.json",
+      "CLAUDE.md"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_paths_canonicos_namespace_subdir",
+      "decision": "Nuevo path: data/projects/{slug}/storage/pizzepos/carta-design/{designs,profiles}/...  Subdir por modulo (coherente con carta-impresion, carta-digital, carta-scheduler).",
+      "no_reabrir_sin": "decision arquitectonica nueva"
+    },
+    {
+      "id": "D2_a1_preservado",
+      "decision": "eventos_que_escucho:[] preservado. Quinto hermano confirmando el patron al 100%.",
+      "no_reabrir_sin": "decision diferente"
+    },
+    {
+      "id": "D3_correlation_id_obligatorio_carta_html_generada",
+      "decision": "correlation_id_efectivo (uuid si input no trae) en el publish de carta.html.generada en save.",
+      "no_reabrir_sin": "decision diferente"
+    },
+    {
+      "id": "D4_no_requires_consumer",
+      "decision": "carta.html.generada NO declara requires_consumer (ningun consumer real --leccion TP1).",
+      "no_reabrir_sin": "consumer real"
+    },
+    {
+      "id": "D5_ui_aparcada_documentada",
+      "decision": "Este plan NO cocina UI de carta-design. Respeta decision arquitectonica documentada en _analisis-flujo-pos-y-engranajes-carta.md ('aparcado por reapertura de proposito'). Si emerge reapertura, se cocina entonces.",
+      "no_reabrir_sin": "el usuario reabre proposito de carta-design"
+    },
+    {
+      "id": "D6_no_se_migran_archivos",
+      "decision": "Cero migracion. Fede reporta si hay archivos en path viejo.",
+      "no_reabrir_sin": "OK explicito"
+    },
+    {
+      "id": "D7_bump_minor",
+      "decision": "Bump v1.1.0 -> v1.2.0 (minor)."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Bump module.json + paths canonicos + changelog",
+      "esfuerzo_horas": 0.3,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1_bump_version",
+          "pseudocodigo": [
+            "Edit module.json",
+            "old: \"version\": \"1.1.0\"",
+            "new: \"version\": \"1.2.0\""
+          ]
+        },
+        {
+          "id": "F1.op2_changelog",
+          "pseudocodigo": [
+            "Edit anyadiendo:",
+            "  \"_v1_2_changelog\": \"v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.5. Dos cambios: (a) paths_proyecto /carta-design/designs/ + /carta-design/profiles/ -> /storage/pizzepos/carta-design/designs/ + /storage/pizzepos/carta-design/profiles/ (D1 namespace + subdir, coherente con los otros 4 hermanos); (b) correlation_id obligatorio en payload de carta.html.generada (D10/P9). NO modifica modelo no-reactivo (eventos_que_escucho:[] preservado --A1). NO declara requires_consumer en carta.html.generada (ningun consumer real --leccion TP1). NO toca paths_modulo (design-profiles/ built-in preservado). NO toca operaciones funcionales mas alla de paths + correlation_id. Aparcamiento de UI documentado en _analisis-flujo-pos-y-engranajes-carta.md sigue vigente.\""
+          ]
+        },
+        {
+          "id": "F1.op3_paths_proyecto",
+          "pseudocodigo": [
+            "Edit config.persistence.paths_proyecto:",
+            "old: [",
+            "  'data/projects/{slug}/carta-design/designs/<carta_id>__<timestamp>.html',",
+            "  'data/projects/{slug}/carta-design/designs/<carta_id>__<timestamp>.json (meta companion)',",
+            "  'data/projects/{slug}/carta-design/profiles/<profile_id>.json'",
+            "]",
+            "new: [",
+            "  'data/projects/{slug}/storage/pizzepos/carta-design/designs/<carta_id>__<timestamp>.html',",
+            "  'data/projects/{slug}/storage/pizzepos/carta-design/designs/<carta_id>__<timestamp>.json (meta companion)',",
+            "  'data/projects/{slug}/storage/pizzepos/carta-design/profiles/<profile_id>.json'",
+            "]"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-design/module.json"]
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Bump blueprint v1.2.0 con paths canonicos + correlation_id_efectivo en publish",
+      "esfuerzo_horas": 1,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op1_bump_version_blueprint",
+          "pseudocodigo": [
+            "Edit blueprint",
+            "old: \"version\": \"blueprint-1.1.0\"",
+            "new: \"version\": \"blueprint-1.2.0\""
+          ]
+        },
+        {
+          "id": "F2.op2_changelog_blueprint",
+          "pseudocodigo": [
+            "Edit anyadiendo tras version:",
+            "  \"_v1_2_changelog\": \"v1.2.0 (2026-06-01): aplica subsistema-carta v1.0.5. Paths canonicos /storage/pizzepos/carta-design/{designs,profiles}/ en las 6 operaciones. correlation_id_efectivo en publish de carta.html.generada. eventos_que_escucho:[] preservado (A1).\""
+          ]
+        },
+        {
+          "id": "F2.op3_actualizar_estado_persistente",
+          "pseudocodigo": [
+            "Edit estado_persistente.paths_relativos_proyecto:",
+            "  designs: '/carta-design/designs/<carta_id>__<timestamp>.html (+ companion .json con meta)' -> '/storage/pizzepos/carta-design/designs/<carta_id>__<timestamp>.html (+ companion .json con meta)'",
+            "  profiles_custom: '/carta-design/profiles/<profile_id>.json' -> '/storage/pizzepos/carta-design/profiles/<profile_id>.json'"
+          ]
+        },
+        {
+          "id": "F2.op4_cambiar_paths_pseudocodigos",
+          "descripcion": "Reemplazar paths en las 6 operaciones",
+          "pseudocodigo": [
+            "Edit con replace_all:",
+            "  old: '/carta-design/designs/'",
+            "  new: '/storage/pizzepos/carta-design/designs/'",
+            "Edit con replace_all:",
+            "  old: '/carta-design/profiles/'",
+            "  new: '/storage/pizzepos/carta-design/profiles/'",
+            "Tambien revisar el uso en patron template literal:",
+            "  path_html = '/carta-design/designs/' + filename -> path_html = '/storage/pizzepos/carta-design/designs/' + filename",
+            "  path_meta = '/carta-design/designs/' + filename.replace(...) -> /storage/pizzepos/carta-design/designs/' + ...",
+            "VERIFICAR con grep:",
+            "  grep -c \"'/carta-design/\" carta-design.blueprint.json --debe ser 0",
+            "  grep -c \"/storage/pizzepos/carta-design/\" --debe ser >= 6"
+          ]
+        },
+        {
+          "id": "F2.op5_correlation_id_efectivo_save",
+          "descripcion": "Garantizar correlation_id no-vacio en publish de carta.html.generada (operacion save)",
+          "pseudocodigo": [
+            "Localizar en save el publish (linea ~75):",
+            "  await publish('carta.html.generada', { project_id: input.project_id, carta_id: input.carta_id, filename, profile_id: input.profile_id || null, correlation_id: input.correlation_id, timestamp: nowISO() })",
+            "Insertar al inicio de save (tras validacion INVALID_INPUT, antes del primer fs.write):",
+            "  correlation_id_efectivo = input.correlation_id || uuid()",
+            "Modificar el publish:",
+            "  await publish('carta.html.generada', {",
+            "    project_id: input.project_id,",
+            "    carta_id: input.carta_id,",
+            "    filename,",
+            "    profile_id: input.profile_id || null,",
+            "    correlation_id: correlation_id_efectivo,",
+            "    timestamp: nowISO()",
+            "  })"
+          ]
+        },
+        {
+          "id": "F2.op6_verificar",
+          "pseudocodigo": [
+            "Read blueprint entero.",
+            "Verificaciones:",
+            "  - version blueprint-1.2.0",
+            "  - _v1_2_changelog existe",
+            "  - grep -c \"'/carta-design/\" devuelve 0 (paths viejos limpios)",
+            "  - grep -c \"'/storage/pizzepos/carta-design/\" devuelve >= 6 (apariciones en 6 ops)",
+            "  - grep -c 'correlation_id_efectivo' devuelve >= 1 (declaracion + uso en save)",
+            "  - eventos_que_escucho sigue [] (A1)",
+            "  - 6 operaciones preservadas (load_carta, save, profiles, save_profile, delete_profile, gallery)",
+            "  - JSON valido"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-design/carta-design.blueprint.json"]
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "validate:ci",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1",
+          "pseudocodigo": ["cd raiz", "npm run validate:ci", "esperado: PASS sin drift NUEVO"]
+        }
+      ],
+      "salida_esperada": {
+        "estado_terminal": "verde"
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Commit + push",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_status",
+          "pseudocodigo": ["git status", "solo 2 archivos del scope"]
+        },
+        {
+          "id": "F4.op2_commit",
+          "pseudocodigo": [
+            "git add (especificos)",
+            "git commit:",
+            "  feat(carta-design): bump blueprint v1.2.0 --paths canonicos + correlation_id",
+            "",
+            "  Aplica subsistema-carta v1.0.5. Dos cambios:",
+            "  (a) paths /carta-design/{designs,profiles}/ -> /storage/pizzepos/carta-design/",
+            "      {designs,profiles}/ (D1).",
+            "  (b) correlation_id_efectivo en publish de carta.html.generada (D10/P9).",
+            "",
+            "  A1 preservado (eventos_que_escucho:[]). Las 6 operaciones funcionales",
+            "  preservadas. NO toca design-profiles/ built-in (5 profiles canonicos).",
+            "",
+            "  NOTA: plan UI de carta-design NO se cocina --aparcado por decision",
+            "  arquitectonica previa documentada en _analisis-flujo-pos-y-engranajes-carta.md",
+            "  ('no aporta nada interesante al comerciante, solapamiento aparente con",
+            "  carta-impresion'). Este backend es mantenimiento de alineacion al contrato.",
+            "",
+            "  Plan: aplicar-subsistema-carta-a-carta-design.json"
+          ]
+        },
+        {
+          "id": "F4.op3_push",
+          "pseudocodigo": ["git push -u origin <rama>"]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F1", "F2", "F3"],
+      "salida_esperada": "PASS"
+    },
+    {
+      "id": "CC2_jq",
+      "comando": "jq . module.json > /dev/null && jq . carta-design.blueprint.json > /dev/null && echo OK",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC3_paths_viejos_cero",
+      "comando": "grep -c \"'/carta-design/\" modules/pizzepos/carta-design/carta-design.blueprint.json || echo 0",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "0"
+    },
+    {
+      "id": "CC4_correlation_id_efectivo",
+      "comando": "grep -c 'correlation_id_efectivo' modules/pizzepos/carta-design/carta-design.blueprint.json",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": ">= 1"
+    },
+    {
+      "id": "CC5_eventos_que_escucho_vacio",
+      "comando": "jq '.eventos_que_escucho' modules/pizzepos/carta-design/carta-design.blueprint.json",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "[]"
+    },
+    {
+      "id": "CC6_git_scope",
+      "comando": "git status --short",
+      "ejecutar_tras": ["F4.op1"],
+      "verificar": "solo 2 archivos"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Tocar design-profiles/ (5 built-in JSON)",
+    "Tocar context.json, prompt.json del modulo",
+    "Anyadir eventos_que_escucho (A1)",
+    "Declarar requires_consumer en carta.html.generada",
+    "Modificar las 6 operaciones funcionales mas alla de paths + correlation_id_efectivo",
+    "Cocinar UI de carta-design (D5 aparcado por decision arquitectonica previa)",
+    "Tocar otros modulos",
+    "Modificar arquitectura/decisiones/* (bump v1.0.5 ya esta en commit)",
+    "Migrar datos en disco",
+    "frontend/* (UI aparcada, fuera de scope)",
+    "Tocar drift-baseline, validators, validate-all.js",
+    "Crear PR sin OK",
+    "git add . o git add -A",
+    "Saltar OK humano entre fases",
+    "Decir 'todo OK' sin reportar comando + salida"
+  ],
+
+  "salida_final_del_horizonte": {
+    "carta_design_estado_terminal": "blueprint v1.2.0 cumpliendo subsistema-carta v1.0.5: paths canonicos + correlation_id obligatorio. Modelo no-reactivo preservado. Sin UI cocinada --aparcada por decision arquitectonica previa.",
+    "archivos_finales_modificados": [
+      "modules/pizzepos/carta-design/module.json",
+      "modules/pizzepos/carta-design/carta-design.blueprint.json"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "Hermano backend carta-design cerrado (5 de 5 backends --HORIZONTE BACKEND AL 100%)",
+      "Plan UI de carta-design NO cocinado (decision arquitectonica respetada)",
+      "Patron A1 (no-reactivo) confirmado en los 5 hermanos --contrato v1.0.5 lo cierra explicito"
+    ],
+    "siguiente_natural": "CIERRE DEL HORIZONTE refactor-hermanos. Resumen al usuario: 5/5 backends cocinados, 4/5 UIs cocinadas (carta-design UI aparcada). Despues, ritual de limpieza CLAUDE.md (TP11 del contrato original)."
+  }
+}

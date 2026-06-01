@@ -1,8 +1,9 @@
 {
-  "_doc": "Manifest del modulo carta-manager. NO tiene index.js — blueprint-driven. El LLM ejecuta el blueprint declarativo publicando eventos al bus via ai-gateway. Activable via page_id='carta-manager'. 13 operaciones (CRUD + manipulacion productos/categorias + versionado + restore + search + stats). Persistencia multi-archivo: data/projects/{slug}/cartas/<id>.json + cartas/versions/<id>/<timestamp>.json. Sustituye al modulo carta-manager v1.1.0 legacy JS (826 lineas + tests + 13 tools polyfunctional al LLM).",
+  "_doc": "Manifest del modulo carta-manager. NO tiene index.js — blueprint-driven. El LLM ejecuta el blueprint declarativo publicando eventos al bus via ai-gateway. Activable via page_id='carta-manager'. 13 operaciones (CRUD + manipulacion productos/categorias + versionado + restore + search + stats). Persistencia multi-archivo: data/projects/{slug}/storage/pizzepos/cartas/<id>.json + storage/pizzepos/cartas/.versions/<id>/<timestamp>.json. Sustituye al modulo carta-manager v1.1.0 legacy JS (826 lineas + tests + 13 tools polyfunctional al LLM).",
   "name": "carta-manager",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "_version_nota": "v1.2.0 (2026-05-25): subscriber a 'carta.creada' anyadido al blueprint (cierra deuda subsistema-carta cross-blueprint runtime tras audit menu-generator Fase 7b). v1.1.0 (2026-05-19): migracion a blueprint-driven (legacy JS 826 LOC archivado).",
+  "_v1_3_changelog": "v1.3.0 (2026-06-01): aplica contrato subsistema-carta v1.0.0. Cinco cambios: (a) paths /cartas/ -> /storage/pizzepos/cartas/ con namespace pizzepos para multi-vertical (D1); (b) shape de carta.actualizada/editada/borrada lleva la carta entera embebida (D2/P3); (c) correlation_id obligatorio en payloads de los 3 eventos canonicos publicados (D10/P9); (d) auto-promocion primera carta a tarifas.set_general al final de save cuando tarifas.config esta vacio (D8); (e) declarar eventos_publicados_que_requieren_consumer en raiz del blueprint con los 3 eventos canonicos (D11/P10).",
   "description": "Modulo carta-manager en modo blueprint-driven. Aggregate root del subsistema-carta. CRUD/versionado/manipulacion de cartas, productos y categorias del proyecto. Los hermanos del subsistema (carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler) leen via carta-manager pero NUNCA escriben al store directamente.",
   "language": "es",
   "blueprint_driven": true,
@@ -13,8 +14,8 @@
     "persistence": {
       "pattern": "json-file-per-entity-plus-versions",
       "paths": [
-        "data/projects/{slug}/cartas/<carta_id>.json",
-        "data/projects/{slug}/cartas/versions/<carta_id>/<timestamp>.json"
+        "data/projects/{slug}/storage/pizzepos/cartas/<carta_id>.json",
+        "data/projects/{slug}/storage/pizzepos/cartas/.versions/<carta_id>/<timestamp>.json"
       ],
       "atomicidad": "fs.write.request atomic:true por cada operacion de mutacion",
       "concurrencia": "single-writer (el blueprint serializa via publishAndWait)"

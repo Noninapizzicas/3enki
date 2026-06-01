@@ -9,6 +9,5 @@
   "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
   "target_page_id": "menu-generator",
   "_target_page_id_nota": "Declarado como page navegable del sistema cajones. ai-gateway lo trata como destino valido para chat.cambiar_foco y como nodo del grafo page.related. v8.0.0 lo eleva a blueprint_driven: true tras cerrar el bloqueo OCR del contrato modulos-blueprint-driven v1.1.0 (Fase 6 de la migracion bumpea el contrato a v1.2.0 quitando la nota).",
-  "cajones_enabled": false,
-  "_cajones_enabled_nota": "false porque el blueprint declara solo 2 operaciones (1 publica + 1 handler async interno con prefijo _). El motor _extractCajones no filtra prefijo _, asi que activarlo expondria el handler interno como cajon visible al LLM. Con 2 operaciones el partitioning no aporta vs cargar el blueprint inline. Revisable si se anyaden operaciones publicas en el futuro."
+  "cajones_enabled": true
 }

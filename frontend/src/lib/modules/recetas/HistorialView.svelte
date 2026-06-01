@@ -112,7 +112,7 @@
   {:else if resumen}
     <h3>Historial de versiones de {resumen.nombre}</h3>
     <p class="subtitle">
-      Versión actual: v{resumen.version_actual} · {resumen.versiones_anteriores} versión{resumen.versiones_anteriores === 1 ? '' : 'es'} anterior{resumen.versiones_anteriores === 1 ? '' : 'es'}
+      Versión actual: v{resumen.version_actual} · {resumen.versiones_anteriores} versi{resumen.versiones_anteriores === 1 ? 'ón' : 'ones'} anterior{resumen.versiones_anteriores === 1 ? '' : 'es'}
     </p>
 
     {#if resumen.historial.length === 0}

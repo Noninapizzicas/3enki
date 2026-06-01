@@ -178,7 +178,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Las frases son operativas. Si emerge necesidad de ajuste tras uso real, vuelta posterior.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "frases aceptadas literalmente", "cerrada_en": "2026-06-01T04:10:24.340Z" }
     },
     {
       "id": "Q3",
@@ -203,7 +203,7 @@
       ],
       "recomendacion": "B",
       "comentario_recomendacion": "Inline con lista de campos antes/despues cumple criterio 4 (preview de diff) sin sobreingenierar. Si los campos son muchos, lado-a-lado emerge como mejora en vuelta posterior.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "B", "motivo": "diff inline campos antes->despues", "cerrada_en": "2026-06-01T04:14:26.892Z" }
     }
   ],
 

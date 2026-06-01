@@ -14,6 +14,8 @@
   },
 
   "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+    "arquitectura/decisiones/_contratos/frontend.contract.json",
     "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
     "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json",
     "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json",

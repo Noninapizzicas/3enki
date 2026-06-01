@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-06-01T18:16:43.664Z",
-  "total": 2322,
+  "generated_at": "2026-06-01T21:26:36.652Z",
+  "total": 2323,
   "by_validator": {
     "naming": 40,
     "events": 185,
@@ -19,7 +19,7 @@
     "security": 1,
     "testing": 69,
     "multi-tenancy": 217,
-    "documentation": 89,
+    "documentation": 90,
     "versionado": 1,
     "deployment": 4,
     "module-loading": 1,
@@ -31,7 +31,7 @@
     "ui-frontend-blueprint": 6
   },
   "by_severity": {
-    "warning": 2120,
+    "warning": 2121,
     "info": 144,
     "error": 86
   },
@@ -213,6 +213,7 @@
     "deployment|drift_install_script_no_ejecutable|scripts/install-termux.sh sin bit ejecutable (chmod +x necesario para usuarios)",
     "documentation|drift_contrato_sin_validator|agente-blueprint sin validator en _validators/agente-blueprint.validate.js",
     "documentation|drift_contrato_sin_validator|paradigma-no-cabe sin validator en _validators/paradigma-no-cabe.validate.js",
+    "documentation|drift_contrato_sin_validator|subsistema-carta sin validator en _validators/subsistema-carta.validate.js",
     "documentation|drift_contrato_sin_validator|system-coherence-analyzer sin validator en _validators/system-coherence-analyzer.validate.js",
     "documentation|drift_contratos_sin_indice_en_claudemd|contrato \"bus-transport\" no aparece referenciado en CLAUDE.md (sesion futura no lo descubrira)",
     "documentation|drift_contratos_sin_indice_en_claudemd|contrato \"deployment\" no aparece referenciado en CLAUDE.md (sesion futura no lo descubrira)",

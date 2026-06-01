@@ -166,7 +166,7 @@
       ],
       "recomendacion": "C",
       "comentario_recomendacion": "Operacion potencialmente cara (N LLM calls, N consultas Mercadona). Postura B no obliga a tener boton para todo --solo para acciones frecuentes/baratas/seguras. Recalcular_todas es excepcion natural.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "C", "motivo": "operacion cara, se queda solo en chat", "cerrada_en": "2026-06-01T09:27:33.196Z" }
     },
     {
       "id": "Q3",

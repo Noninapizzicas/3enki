@@ -1,0 +1,340 @@
+{
+  "_doc": "Plan ejecutable JSON del horizonte 'aplicar subsistema-carta a tarifas'. Cierra TP4 del contrato subsistema-carta v1.0.0: declarar correlation_id obligatorio en el payload de tarifas.config.actualizada. Plan MUY LIGERO --la auditoria al cocinarlo confirmo que tarifas v3.1.0 YA propaga correlation_id robustamente via un helper centralizado (lineas 76-91 del index.js que construye 'enriched' con correlation_id antes de cualquier publish). El bump se reduce a actualizar la description de events.publishes en module.json para dejar el contrato explicito + pequeño bump de version + changelog. Cero refactor de codigo de runtime. Pensado para que fede lo ejecute linealmente en ~15 minutos. Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
+
+  "id": "aplicar-subsistema-carta-a-tarifas",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "bump_modulo_js_poc2_menor",
+
+  "documentos_hermanos": {
+    "contrato_canonico": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.0",
+      "relacion": "Contrato que canoniza el camino carta->POS. Este plan ejecuta el TP4 del contrato (correlation_id obligatorio declarado en payload de tarifas.config.actualizada)."
+    },
+    "planes_hermanos_del_horizonte": [
+      {
+        "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-carta-manager.json",
+        "version": "1.0.0",
+        "estado": "cocinado, pendiente ejecucion por fede",
+        "relacion": "TP1 del contrato. Independiente."
+      },
+      {
+        "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-productos.json",
+        "version": "1.0.0",
+        "estado": "cocinado, pendiente ejecucion por fede",
+        "relacion": "TP3 del contrato. Independiente."
+      }
+    ]
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/tools.contract.json",
+    "arquitectura/decisiones/_contratos/observability.contract.json",
+    "arquitectura/decisiones/_contratos/modulo-clase-robusta.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json"
+  ],
+
+  "dependencias_explicitas": [],
+
+  "por_que_existe": {
+    "que_cierra": "Tarifas v3.1.0 propaga correlation_id robustamente via helper centralizado (lineas 76-91 del index.js que construye 'enriched' con correlation_id desde payload o sourcePayload antes de cada publish). Pero su module.json events.publishes describe tarifas.config.actualizada con 'project_id top-level + correlation_id + timestamp + tipo + config' sin que la declaracion del campo correlation_id sea inequivoca como obligatorio. El contrato subsistema-carta v1.0.0 (D10/P9) canoniza correlation_id obligatorio en los 5 eventos del subsistema --este plan deja explicito que tarifas cumple.",
+    "que_no_cierra": "Este plan NO toca: el helper de runtime (linea 76-91, ya correcto), las tools tarifas.set_general/assign/etc. (sin cambios), los handlers (sin cambios), la persistencia (sin cambios), schemas AJV de tarifas.config.actualizada (TP8 del contrato, separado).",
+    "alcance": "Editar SOLO modules/pizzepos/tarifas/module.json. Cero edicion en index.js. Verificar validate:ci. Commit + push."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/tarifas/module.json",
+      "version_actual": "3.1.0",
+      "language": "es",
+      "tipo_modulo": "JS POC2 (main: index.js)",
+      "events_publishes_declarados": [
+        {
+          "event": "tarifas.config.actualizada",
+          "description_actual": "Config cambiada o snapshot del estado actual. Lleva project_id top-level + correlation_id + timestamp + tipo (general|assign|variant_registered|snapshot) + config (estado completo: general, canales, variantes). Permite a otros modulos mantener cache local sin acceso directo."
+        }
+      ],
+      "lo_que_debe_quedar_tras_el_plan": {
+        "version": "3.1.1 (bump patch --solo cambio de declaracion, no codigo)",
+        "_v3_1_1_changelog": "presente",
+        "events_publishes.tarifas.config.actualizada.description": "actualizada para indicar correlation_id OBLIGATORIO explicitamente, alineado con contrato subsistema-carta v1.0.0 (P9/D10)"
+      }
+    },
+    {
+      "pieza": "modules/pizzepos/tarifas/index.js",
+      "lineas_aproximadas": 446,
+      "helper_centralizado_correlation_id": {
+        "ubicacion": "lineas 76-91",
+        "snippet_clave": "const correlation_id = payload?.correlation_id || sourcePayload?.correlation_id || sourcePayload?.metadata?.correlationId || (genera uno --verificar fallback exacto al releer); const enriched = { ...campos, correlation_id, timestamp }; await this.eventBus.publish(name, enriched);",
+        "implicacion": "TODOS los publishes de tarifas pasan por este helper y reciben correlation_id automaticamente. TP4.a esta cumplido sin cambios en codigo."
+      }
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/<rama-asignada> antes de empezar",
+      "modules/pizzepos/tarifas/module.json existe y declara version='3.1.0'",
+      "modules/pizzepos/tarifas/index.js existe con ~446 LOC y contiene el helper de publish con correlation_id en lineas ~76-91",
+      "arquitectura/decisiones/_contratos/subsistema-carta.contract.json existe y declara version='1.0.0' con TP4 abierto",
+      "npm run validate:ci en la raiz da PASS antes de empezar"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones del contrato subsistema-carta v1.0.0 (D1-D11)",
+      "events.contract.json: correlation_id es disciplina general del repo (originador genera, handlers propagan sin modificar)",
+      "El helper centralizado de tarifas (linea 76-91) cubre todos los publishes --verificable con grep 'this.eventBus.publish' en index.js (si hay publishes que NO pasan por el helper, anotarlo en F1.op0 y reportar)",
+      "Bump patch (3.1.0 -> 3.1.1) es apropiado porque no hay breaking change en runtime --solo se hace explicita la declaracion del campo correlation_id"
+    ],
+    "no_toco_esta_sesion": [
+      "modules/pizzepos/tarifas/index.js (cero edicion --el codigo ya esta correcto)",
+      "modules/pizzepos/carta-manager/*, menu-generator/*, productos/* (planes separados)",
+      "Cualquier otro modulo bajo modules/pizzepos/ (no es alcance)",
+      "arquitectura/decisiones/_contratos/* (cero modificacion)",
+      "arquitectura/decisiones/_schemas/* o _validators/* (TP8/TP9 separados)",
+      "data/projects/*/storage/* (cero migracion)",
+      "frontend/* (no aplica)",
+      "scripts/validate-all.js, drift-baseline.json (no se regenera baseline en este plan)",
+      "CLAUDE.md (TP11 ritual de limpieza al cerrar horizonte)"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_bump_patch_no_minor",
+      "decision": "El bump es patch (3.1.0 -> 3.1.1), no minor. Razon: no hay cambio en runtime --la declaracion en events.publishes ya describia que correlation_id iba en el payload (palabras 'project_id top-level + correlation_id + timestamp'); este plan solo afina la description para que quede explicito como OBLIGATORIO. El comportamiento de runtime no cambia (el helper ya lo propagaba siempre).",
+      "no_reabrir_sin": "decision de bumpear minor por cualquier razon (e.g. otros cambios menores en module.json que se decidan al ejecutar)."
+    },
+    {
+      "id": "D2_solo_module_json_no_index_js",
+      "decision": "Este plan SOLO toca modules/pizzepos/tarifas/module.json. NO edita index.js. La auditoria al cocinarlo confirmo que el helper de runtime (linea 76-91) ya construye el campo correlation_id en todos los publishes.",
+      "no_reabrir_sin": "que F1.op0 (verificacion del helper) detecte algun publish que NO pasa por el helper. En ese caso parar, reportar al humano, y decidir aparte si se ajusta en este plan o en uno separado."
+    },
+    {
+      "id": "D3_no_se_genera_schema_ajv",
+      "decision": "Este plan NO produce el schema AJV de tarifas.config.actualizada con correlation_id en required[]. Eso es TP8 del contrato (plan separado).",
+      "no_reabrir_sin": "decision de adelantar TP8 a este plan."
+    },
+    {
+      "id": "D4_no_se_anyade_validator",
+      "decision": "Este plan NO implementa el validator subsistema-carta.validate.js. Eso es TP9 del contrato (plan separado, diferido hasta que el camino este wireado).",
+      "no_reabrir_sin": "decision de adelantar TP9."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Auditoria + bump module.json + actualizacion de description",
+      "esfuerzo_horas": 0.3,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op0_verificar_helper_centralizado",
+          "descripcion": "Verificar que TODOS los publishes de tarifas pasan por el helper de lineas 76-91 (que construye correlation_id automaticamente)",
+          "pseudocodigo": [
+            "Releer modules/pizzepos/tarifas/index.js lineas 70-100 para confirmar el helper.",
+            "Buscar otros usos de this.eventBus.publish en el archivo:",
+            "  grep -nE 'this.eventBus.publish' modules/pizzepos/tarifas/index.js",
+            "Para cada match:",
+            "  Verificar que esta DENTRO del helper (linea ~91, la del publish que pertenece al helper)",
+            "  O que el publish externo construye correlation_id de forma equivalente.",
+            "Si hay algun publish que NO propaga correlation_id:",
+            "  PARAR. Documentar la linea exacta. Reportar al humano.",
+            "  El plan se vuelve mas grande (refactor de ese publish) --decidir como continuar.",
+            "Si TODOS los publishes pasan por el helper o equivalente:",
+            "  Continuar con F1.op1."
+          ]
+        },
+        {
+          "id": "F1.op1_bump_version",
+          "descripcion": "Cambiar version 3.1.0 a 3.1.1 en module.json",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/tarifas/module.json",
+            "old: \"version\": \"3.1.0\"",
+            "new: \"version\": \"3.1.1\""
+          ]
+        },
+        {
+          "id": "F1.op2_anyadir_changelog",
+          "descripcion": "Anyadir _v3_1_1_changelog en module.json",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/tarifas/module.json",
+            "Anyadir tras la clave version:",
+            "  \"_v3_1_1_changelog\": \"v3.1.1 (2026-06-01): aplica TP4 del contrato subsistema-carta v1.0.0. Declaracion explicita en events.publishes.tarifas.config.actualizada.description de que correlation_id es OBLIGATORIO en el payload, alineado con P9/D10 del contrato (correlation_id obligatorio en los 5 eventos canonicos del subsistema). Cero cambio en runtime --el helper centralizado de publishes (index.js lineas ~76-91) ya construye correlation_id en todos los publishes desde antes. Bump patch porque el comportamiento no cambia; solo se afina la documentacion.\""
+          ]
+        },
+        {
+          "id": "F1.op3_actualizar_description_de_events_publishes",
+          "descripcion": "Actualizar la description del evento tarifas.config.actualizada para que correlation_id este explicitamente declarado como obligatorio",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/tarifas/module.json en events.publishes[0]",
+            "old (description):",
+            "  \"Config cambiada o snapshot del estado actual. Lleva project_id top-level + correlation_id + timestamp + tipo (general|assign|variant_registered|snapshot) + config (estado completo: general, canales, variantes). Permite a otros modulos mantener cache local sin acceso directo.\"",
+            "new:",
+            "  \"Config cambiada o snapshot del estado actual. Payload: project_id (obligatorio), correlation_id (OBLIGATORIO --canonizado por contrato subsistema-carta v1.0.0 P9/D10), timestamp (obligatorio), tipo (obligatorio enum: general|assign|variant_registered|snapshot), config (obligatorio, estado completo: general, canales, variantes). Permite a otros modulos mantener cache local sin acceso directo.\""
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/tarifas/module.json"],
+        "verificacion": "jq '{version, changelog: ._v3_1_1_changelog, pub_desc: .events.publishes[0].description}' module.json muestra 3.1.1 + changelog + description con palabra OBLIGATORIO."
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Verificacion validate:ci + tests",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op1_validate_ci",
+          "descripcion": "Correr validate:ci y verificar PASS",
+          "pseudocodigo": [
+            "cd raiz del repo",
+            "npm run validate:ci",
+            "esperado: PASS sin drift NUEVO. Los warnings actuales del baseline siguen igual.",
+            "Si aparece drift nuevo: leer salida, diagnosticar. Si el drift esta relacionado con la description editada (e.g. validator de events.contract muy estricto), REPORTAR al humano."
+          ]
+        },
+        {
+          "id": "F2.op2_tests_unitarios",
+          "descripcion": "Correr tests unitarios de tarifas si existen",
+          "pseudocodigo": [
+            "ls tests/unit/pizzepos__tarifas.test.js 2>/dev/null",
+            "si existe:",
+            "  npm test -- tests/unit/pizzepos__tarifas.test.js",
+            "  esperado: PASS (este cambio es solo de description, no afecta runtime)",
+            "si NO existe:",
+            "  documentar que no hay test unitario --NO crear test nuevo en este plan."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "estado_terminal": "validate:ci verde sin drift NUEVO. Tests unitarios verdes (o documentado que no hay)."
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Commit + push",
+      "esfuerzo_horas": 0.1,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1_status",
+          "descripcion": "Verificar scope",
+          "pseudocodigo": [
+            "git status",
+            "git diff",
+            "confirmar que SOLO hay cambios en modules/pizzepos/tarifas/module.json.",
+            "Si hay cambios fuera: PARAR, reportar, NO commitear."
+          ]
+        },
+        {
+          "id": "F3.op2_commit",
+          "descripcion": "Commit estructurado",
+          "pseudocodigo": [
+            "git add modules/pizzepos/tarifas/module.json",
+            "",
+            "git commit con mensaje:",
+            "  feat(tarifas): bump v3.1.1 --declara correlation_id obligatorio en tarifas.config.actualizada",
+            "",
+            "  Aplica TP4 del contrato subsistema-carta v1.0.0 (P9/D10): correlation_id",
+            "  obligatorio en los 5 eventos canonicos del subsistema. Cero cambio en runtime",
+            "  --el helper centralizado de publishes (index.js lineas ~76-91) ya construye",
+            "  correlation_id en todos los publishes desde antes. Bump patch porque solo se",
+            "  afina la documentacion de events.publishes.tarifas.config.actualizada.description.",
+            "",
+            "  Plan ejecutable: arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-tarifas.json",
+            "  Contrato canonico: arquitectura/decisiones/_contratos/subsistema-carta.contract.json"
+          ]
+        },
+        {
+          "id": "F3.op3_push",
+          "descripcion": "Push con retry exponencial",
+          "pseudocodigo": [
+            "git push -u origin <rama-de-la-sesion>",
+            "si falla por red: retry 2s, 4s, 8s, 16s",
+            "si falla por otra razon: parar y reportar.",
+            "NO --force, NO --no-verify"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo OK explicito"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_jq_valido",
+      "descripcion": "module.json sigue siendo JSON valido",
+      "comando": "jq . modules/pizzepos/tarifas/module.json > /dev/null && echo OK",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC2_description_contiene_obligatorio",
+      "descripcion": "La description del evento tarifas.config.actualizada contiene la palabra OBLIGATORIO explicita para correlation_id",
+      "comando": "jq -r '.events.publishes[0].description' modules/pizzepos/tarifas/module.json | grep -c 'OBLIGATORIO'",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": ">= 1"
+    },
+    {
+      "id": "CC3_validate_ci",
+      "descripcion": "validate:ci pasa sin drift nuevo",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "PASS sin drift NUEVO"
+    },
+    {
+      "id": "CC4_git_status_scope",
+      "descripcion": "Solo un archivo modificado",
+      "comando": "git status --short",
+      "ejecutar_tras": ["F3.op1"],
+      "verificar": "Solo aparece modules/pizzepos/tarifas/module.json. Si aparece algo mas, PARAR."
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Tocar modules/pizzepos/tarifas/index.js (cero edicion --el helper de runtime ya es correcto, D2 cerrada)",
+    "Tocar cualquier otro modulo de pizzepos/ (no es alcance)",
+    "Tocar arquitectura/decisiones/_contratos/* (cero modificacion)",
+    "Tocar _schemas/ o _validators/ (TP8/TP9 separados)",
+    "Bumpear a 3.2.0 o 4.0.0 (D1 cerrada: bump patch 3.1.1 --no hay breaking change)",
+    "Anyadir nuevos eventos, tools, o handlers en este plan (alcance acotado a una sola description)",
+    "Crear PR sin OK explicito del humano",
+    "Hacer commit con git add . o git add -A",
+    "Saltar OK humano entre F1 y F2, F2 y F3",
+    "Decir 'todo OK' sin reportar el comando ejecutado y su salida real",
+    "Continuar a F3 si CC1-CC3 no pasan",
+    "Improvisar fixes a otros modulos si validate:ci detecta drift fuera del alcance --PARAR y reportar",
+    "Regenerar drift-baseline.json en este plan (no es necesario --no hay drift que se cierre, solo declaracion explicita)"
+  ],
+
+  "salida_final_del_horizonte": {
+    "tarifas_estado_terminal": "JS POC2 v3.1.1 cumpliendo TP4 del contrato subsistema-carta v1.0.0: declaracion explicita en events.publishes.tarifas.config.actualizada.description de correlation_id OBLIGATORIO. Helper centralizado en index.js lineas 76-91 inalterado --ya cumplia el contrato antes del bump.",
+    "archivos_finales_modificados": [
+      "modules/pizzepos/tarifas/module.json (version 3.1.1 + _v3_1_1_changelog + description actualizada)"
+    ],
+    "verificacion_terminal": [
+      "CC1-CC4 todos pasan",
+      "validate:ci verde sin drift nuevo",
+      "git status: solo el archivo del scope",
+      "commit pusheado a la rama",
+      "NO se creo PR"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "TP4 del contrato subsistema-carta v1.0.0 --estado: 'cerrado' (tarifas v3.1.1 con correlation_id obligatorio declarado explicito)"
+    ],
+    "siguiente_natural": "TP6 (UI tarifas, grande, estilo cierre-ui-*). TP7 (badges carta-manager UI). TP8 (schemas AJV preparativo). TP9 (validator, espera al camino operativo). TP11 ritual de limpieza CLAUDE.md cuando todos los TPs activos esten cerrados."
+  }
+}

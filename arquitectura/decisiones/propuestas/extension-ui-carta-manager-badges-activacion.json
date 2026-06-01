@@ -1,0 +1,721 @@
+{
+  "_doc": "Plan ejecutable JSON del horizonte 'extension UI carta-manager con badges de activacion'. Materializa TP7 del contrato subsistema-carta v1.0.0 (D6 separacion_de_ui): anyade badges 'activa en: <canal>' en CartaCard.svelte y CartaDetail.svelte de la UI de carta-manager, hidratados desde tarifas.config.actualizada via store tarifas. Click en el badge navega a la UI de tarifas (no ejecuta tool, no abre modal --Postura B canonica). Es F-extension porque MODIFICA componentes ya creados por cierre-ui-carta-manager.json --no se puede ejecutar antes de que ese plan este aplicado. Dependencia doble: cierre-ui-carta-manager + cierre-ui-tarifas. Tamano compacto (3 archivos modificados, sin nuevos componentes). Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
+
+  "id": "extension-ui-carta-manager-badges-activacion",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "f_extension_ui_modulo",
+
+  "documentos_hermanos": {
+    "contrato_canonico_dominio": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.0",
+      "relacion": "TP7 del contrato. D6 separacion_de_ui declara: 'carta-manager UI muestra badges activa en: <canal> como info derivada solo lectura (leida de tarifas.config.actualizada). Click en badge -> navega a tarifas UI. carta-manager NO permite activar cartas.'"
+    },
+    "plan_base_carta_manager": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-carta-manager.json",
+      "version": "1.0.0",
+      "relacion": "Plan base que crea CartaCard.svelte y CartaDetail.svelte. Este plan los EXTIENDE anyadiendo badges. NO se modifica el plan base --se anyade en commit aparte tras ejecucion."
+    },
+    "plan_base_tarifas": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-tarifas.json",
+      "version": "1.0.0",
+      "relacion": "Plan base que crea el store tarifas.ts con tarifasConfig + CANALES_CANONICOS. Este plan IMPORTA esos exports desde el store de carta-manager para resolver el mapping carta_id->canales."
+    },
+    "contratos_de_ui_pattern": [
+      "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json (Postura B canonica)",
+      "arquitectura/decisiones/_contratos/frontend.contract.json (frame general)"
+    ]
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+    "arquitectura/decisiones/_contratos/frontend.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json"
+  ],
+
+  "dependencias_explicitas": [
+    {
+      "id": "DEP1",
+      "depende_de": "cierre-ui-carta-manager.json --ejecucion completa F1-F5",
+      "que_debe_estar_hecho": "frontend/src/lib/modules/carta-manager/CartaCard.svelte existe. frontend/src/lib/modules/carta-manager/CartaDetail.svelte existe. frontend/src/lib/stores/carta-manager.ts existe con cartasStore + initCartaManagerSubscriptions.",
+      "afecta_a_fase": "F1, F2, F3",
+      "comportamiento_si_no_se_cumple": "fede para al inicio de F1 y reporta: 'TP7 requiere que cierre-ui-carta-manager.json este ejecutado primero. Ejecuta ese plan completo y luego retoma este.' NO continua."
+    },
+    {
+      "id": "DEP2",
+      "depende_de": "cierre-ui-tarifas.json --ejecucion completa F1-F5",
+      "que_debe_estar_hecho": "frontend/src/lib/stores/tarifas.ts existe y exporta: tarifasConfig (writable), CANALES_CANONICOS (const), loadTarifasConfig, initTarifasSubscriptions. frontend/src/lib/modules/tarifas/ existe con su manifest. frontend/src/routes/[project_id]/tarifas/+page.svelte existe (para que el goto desde badge funcione).",
+      "afecta_a_fase": "F1, F2, F3",
+      "comportamiento_si_no_se_cumple": "fede para al inicio de F1 y reporta: 'TP7 requiere que cierre-ui-tarifas.json este ejecutado primero. Ejecuta ese plan completo y luego retoma este.' NO continua."
+    }
+  ],
+
+  "por_que_existe": {
+    "que_cierra": "Tras cierre-ui-carta-manager y cierre-ui-tarifas ejecutados, la UI de carta-manager muestra cartas (catalogo, detail, historial) pero NO indica cuales estan activas en cada canal. El comerciante tiene que ir a tarifas para saber donde se usa cada carta. Este plan anyade los badges como info derivada solo lectura --el comerciante ve de un vistazo el estado de activacion sin salir de carta-manager.",
+    "que_no_cierra": "Este plan NO permite ACTIVAR cartas desde carta-manager (prohibido explicito del contrato D6 + P7). El badge es solo lectura. Click navega a /tarifas para que el comerciante haga el cambio alli.",
+    "alcance": "Editar 2 archivos del modulo carta-manager (CartaCard.svelte + CartaDetail.svelte) y 1 archivo del store carta-manager.ts (anyadir suscripcion a tarifas + derived store). Cero archivos nuevos. Cero efecto en otros modulos."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "frontend/src/lib/modules/carta-manager/CartaCard.svelte",
+      "existe": "DEP1 requerido --este plan asume que existe tras ejecucion de cierre-ui-carta-manager",
+      "shape_esperado": "componente con props carta (Carta | resumen), onClick. Renderiza nombre + algun otro campo (estado, version, productos_count). Este plan lo extiende anyadiendo el badge."
+    },
+    {
+      "pieza": "frontend/src/lib/modules/carta-manager/CartaDetail.svelte",
+      "existe": "DEP1 requerido",
+      "shape_esperado": "componente con props selectedCartaId + callbacks. Renderiza meta + categorias + productos + acciones. Este plan extiende anyadiendo el badge en la cabecera."
+    },
+    {
+      "pieza": "frontend/src/lib/stores/carta-manager.ts",
+      "existe": "DEP1 requerido",
+      "shape_esperado": "exporta cartasStore, cartaSeleccionada, initCartaManagerSubscriptions. Este plan extiende el archivo anyadiendo derived store activacionPorCartaId + extension de initCartaManagerSubscriptions para hidratar tarifas."
+    },
+    {
+      "pieza": "frontend/src/lib/stores/tarifas.ts",
+      "existe": "DEP2 requerido",
+      "shape_esperado": "exporta tarifasConfig, CANALES_CANONICOS, loadTarifasConfig. Este plan los importa desde carta-manager.ts."
+    },
+    {
+      "pieza": "frontend/src/routes/[project_id]/tarifas/+page.svelte",
+      "existe": "DEP2 requerido --usado por goto desde badge",
+      "shape_esperado": "ruta SvelteKit valida"
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/<rama-asignada> antes de empezar",
+      "frontend/src/lib/modules/carta-manager/CartaCard.svelte EXISTE (DEP1)",
+      "frontend/src/lib/modules/carta-manager/CartaDetail.svelte EXISTE (DEP1)",
+      "frontend/src/lib/stores/carta-manager.ts EXISTE (DEP1)",
+      "frontend/src/lib/stores/tarifas.ts EXISTE y exporta tarifasConfig + CANALES_CANONICOS + loadTarifasConfig (DEP2)",
+      "frontend/src/routes/[project_id]/tarifas/+page.svelte EXISTE (DEP2)",
+      "npm run build en frontend/ da OK antes de empezar (verificar que el estado base esta sano)",
+      "npm run validate:ci da PASS antes de empezar"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones del contrato subsistema-carta v1.0.0 (D1-D11)",
+      "Las 10 decisiones del plan cierre-ui-carta-manager (D1-D10) --especialmente D3 shape abierto y D6 store solo lectura",
+      "Las 10 decisiones del plan cierre-ui-tarifas (D1-D10) --especialmente D6 store solo lectura y D7 suscripciones canonicas",
+      "Postura B canonica de ui-frontend-blueprint: badge muestra info derivada, click navega via goto() de svelte/navigation (no abre modal, no ejecuta tool)",
+      "El shape de tarifasConfig.canales es estable: { mesa, telefono, llevar, glovo, whatsapp, llevadoo all carta_id|null }",
+      "Si tarifas.config no esta cargado (proyecto sin tarifas.json todavia), el badge se renderiza como 'no activa' (sin warning, sin banner)"
+    ],
+    "no_toco_esta_sesion": [
+      "frontend/src/lib/modules/carta-manager/CartaManagerPanel.svelte (panel router --no necesita cambio)",
+      "frontend/src/lib/modules/carta-manager/CartasBrowser.svelte (browser --no necesita cambio, las cards se renderizan dentro)",
+      "frontend/src/lib/modules/carta-manager/HistorialCartaView.svelte (no aplica)",
+      "frontend/src/lib/modules/tarifas/* (no se toca el modulo de tarifas)",
+      "frontend/src/lib/stores/tarifas.ts (cero edicion --se importa, no se modifica)",
+      "modules/pizzepos/carta-manager/* o tarifas/* (backend)",
+      "arquitectura/decisiones/* (cero modificacion)",
+      "scripts/validate-all.js, validators, drift-baseline.json",
+      "cierre-ui-carta-manager.json o cierre-ui-tarifas.json (planes ya cocinados --este es plan paralelo, no edita los existentes)",
+      "CLAUDE.md"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [
+    {
+      "id": "Q1",
+      "tema": "texto_del_badge_segun_estado_de_activacion",
+      "pregunta": "¿Cual es el texto exacto del badge segun el estado de activacion de la carta?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "explicito y detallado",
+          "comentario": "Si activa en general + canales: 'activa en: general, glovo, llevadoo'. Si solo en general: 'activa en: general'. Si solo en canales: 'activa en: glovo'. Si en ninguno: 'no activa'."
+        },
+        {
+          "id": "B",
+          "label": "compacto",
+          "comentario": "Si en general: 'general'. Si en canales especificos: 'glovo, llevadoo' (sin la palabra 'activa en:'). Si en ninguno: 'borrador' (usando meta.estado)."
+        },
+        {
+          "id": "C",
+          "label": "icono + numero",
+          "comentario": "Si activa en N canales (incluye general): 'badge verde N'. Si no activa: 'badge gris -'. Hover muestra detalle. Mas visual, menos texto."
+        }
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Explicito es mas claro para el 80% del comerciante que no esta familiarizado con la UI todavia. La palabra 'activa en:' guia la lectura. C es atractivo visualmente pero requiere hover para entender --friccion mas alta.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q2",
+      "tema": "comportamiento_click_badge",
+      "pregunta": "¿Que pasa cuando el comerciante hace click en el badge?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "navega a /tarifas (la pantalla general)",
+          "comentario": "Postura B canonica. El comerciante ve la UI completa de tarifas y decide alli."
+        },
+        {
+          "id": "B",
+          "label": "navega a /tarifas con query string del carta_id (e.g. /tarifas?carta=X)",
+          "comentario": "Postura B + scroll automatico a la zona donde aparece esa carta. Mas ergonomico pero requiere logica de query string en /tarifas."
+        },
+        {
+          "id": "C",
+          "label": "tooltip on hover, click no hace nada",
+          "comentario": "Mas pasivo --solo lectura sin navegacion. Postura B estricta. Pero menos util."
+        }
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "A es la opcion mas simple y coherente con D6 del contrato ('click en badge navega a tarifas UI'). B es mejora futura si Q2.A se queda corto. C reduce utilidad sin razon clara.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q3",
+      "tema": "estilo_visual_del_badge",
+      "pregunta": "¿Estilo visual del badge?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "badge pildora con color por estado",
+          "comentario": "Activa en algun canal: verde/azul. No activa: gris. Bordes redondeados, padding pequenyo. Coherente con badge de 'estado' que ya pueda haber en CartaCard."
+        },
+        {
+          "id": "B",
+          "label": "texto pequenyo gris bajo el nombre",
+          "comentario": "Menos prominente, no compite visualmente con el resto de info. Underline en hover para indicar clickable."
+        }
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Badge pildora hace explicito el clickable y le da visibilidad al estado de activacion --es info operativa importante. Si emerge que es demasiado prominente, ajustar a B en revision posterior.",
+      "respuesta_usuario": null
+    }
+  ],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_reutilizar_store_tarifas",
+      "decision": "carta-manager.ts IMPORTA tarifasConfig y CANALES_CANONICOS del store tarifas.ts. NO duplica el shape. Si tarifas.ts cambia su shape (improbable, es estable D3 del plan cierre-ui-tarifas), se rompe aqui y se actualiza.",
+      "no_reabrir_sin": "decision arquitectonica nueva sobre stores derivados cross-modulo."
+    },
+    {
+      "id": "D2_derived_store_activacionPorCartaId",
+      "decision": "Crear derived store activacionPorCartaId en carta-manager.ts que cruza tarifasConfig + (implicitamente) cualquier carta. Es Map<carta_id, { activa_en_general: bool, canales: string[] }>. El componente CartaCard/Detail consulta este map por su carta.id.",
+      "no_reabrir_sin": "cambio en el shape de tarifas.config."
+    },
+    {
+      "id": "D3_carta_manager_hidrata_tarifas_al_montar",
+      "decision": "initCartaManagerSubscriptions (existente del plan base) se EXTIENDE para: (a) llamar loadTarifasConfig() del store tarifas si tarifasConfig esta vacio; (b) suscribir a tarifas.config.actualizada del bus para refrescar tarifasConfig llamando loadTarifasConfig(). NO se duplica suscripcion --si ya esta suscrito desde el panel de tarifas, ambas suscripciones se ejecutan pero llaman a la misma loadTarifasConfig que reescribe el writable (idempotente).",
+      "no_reabrir_sin": "deteccion en runtime de problemas de doble suscripcion (memory leak, doble fetch). En ese caso refactorizar a un init global compartido."
+    },
+    {
+      "id": "D4_click_badge_navega_via_goto",
+      "decision": "Click en el badge llama goto('/' + project_id + '/tarifas') de '$app/navigation'. NO abre modal. NO invoca tool. NO ejecuta accion. Postura B estricta.",
+      "no_reabrir_sin": "decision diferente sobre routing (e.g. query string para deeplink). En ese caso seria Q2.B."
+    },
+    {
+      "id": "D5_proyecto_sin_tarifas_no_es_error",
+      "decision": "Si tarifas.config esta vacio o no existe (proyecto recien montado), el badge se renderiza como 'no activa' sin warning, sin banner. NO es un error visible --el comerciante puede no haber activado nada todavia.",
+      "no_reabrir_sin": "decision sobre comunicar al comerciante que un proyecto sin general puede no estar operativo."
+    },
+    {
+      "id": "D6_no_se_modifica_plan_base",
+      "decision": "Este plan NO modifica cierre-ui-carta-manager.json. Sus salidas_esperadas siguen siendo las mismas (cartas browse/detail/historial). Este plan anyade los badges en commit separado tras ejecucion del plan base.",
+      "no_reabrir_sin": "decision de consolidar este plan en cierre-ui-carta-manager v1.1.0 --en ese caso reescritura del plan base."
+    },
+    {
+      "id": "D7_badge_solo_en_card_y_detail_no_browser",
+      "decision": "Los badges se anyaden en CartaCard.svelte (uno por carta en el grid) y CartaDetail.svelte (uno destacado en la cabecera de la vista detail). NO se anyaden en CartasBrowser (que renderiza el grid de cards) ni en HistorialCartaView (history muestra versiones, no activacion).",
+      "no_reabrir_sin": "decision de mostrar activacion tambien en otras subvistas de carta-manager."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Extender store frontend/src/lib/stores/carta-manager.ts con activacion",
+      "esfuerzo_horas": 1,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op0_verificar_dependencias",
+          "descripcion": "Verificar DEP1 y DEP2",
+          "pseudocodigo": [
+            "comprobar que frontend/src/lib/stores/carta-manager.ts EXISTE",
+            "comprobar que frontend/src/lib/stores/tarifas.ts EXISTE y exporta tarifasConfig + CANALES_CANONICOS + loadTarifasConfig",
+            "comprobar que frontend/src/lib/modules/carta-manager/CartaCard.svelte EXISTE",
+            "comprobar que frontend/src/lib/modules/carta-manager/CartaDetail.svelte EXISTE",
+            "comprobar que frontend/src/routes/[project_id]/tarifas/+page.svelte EXISTE",
+            "si alguno falta: parar y reportar (DEP1 o DEP2 no se han ejecutado)"
+          ]
+        },
+        {
+          "id": "F1.op1_imports_de_tarifas",
+          "descripcion": "Anyadir imports de tarifas.ts al inicio de carta-manager.ts",
+          "pseudocodigo": [
+            "Read frontend/src/lib/stores/carta-manager.ts seccion imports.",
+            "Edit anyadiendo:",
+            "  import { derived } from 'svelte/store'  // si no esta importado",
+            "  import { tarifasConfig, CANALES_CANONICOS, loadTarifasConfig } from './tarifas'",
+            "Nota: 'svelte/store' ya esta importado en carta-manager.ts (writable, derived) en el plan base."
+          ]
+        },
+        {
+          "id": "F1.op2_derived_store_activacionPorCartaId",
+          "descripcion": "Crear derived store activacionPorCartaId que cruza tarifasConfig",
+          "pseudocodigo": [
+            "Edit carta-manager.ts anyadiendo tras los stores existentes:",
+            "",
+            "  // v1.0 (TP7): mapping carta_id -> info de activacion derivado de tarifasConfig",
+            "  // Postura B canonica: solo lectura, no muta tarifas.",
+            "  export const activacionPorCartaId = derived(tarifasConfig, ($config) => {",
+            "    const map = new Map()",
+            "    if (!$config) return map",
+            "    // carta general",
+            "    if ($config.general) {",
+            "      const existing = map.get($config.general) || { activa_en_general: false, canales: [] }",
+            "      existing.activa_en_general = true",
+            "      map.set($config.general, existing)",
+            "    }",
+            "    // canales con override",
+            "    for (const canal of CANALES_CANONICOS) {",
+            "      const carta_id = $config.canales?.[canal]",
+            "      if (carta_id) {",
+            "        const existing = map.get(carta_id) || { activa_en_general: false, canales: [] }",
+            "        existing.canales.push(canal)",
+            "        map.set(carta_id, existing)",
+            "      }",
+            "    }",
+            "    return map",
+            "  })",
+            "",
+            "  // Helper para construir el texto del badge segun el shape de activacion (Q1.A explicito)",
+            "  export function badgeTextForCarta(activacion) {",
+            "    if (!activacion) return 'no activa'",
+            "    const partes = []",
+            "    if (activacion.activa_en_general) partes.push('general')",
+            "    if (activacion.canales && activacion.canales.length > 0) {",
+            "      partes.push(...activacion.canales)",
+            "    }",
+            "    if (partes.length === 0) return 'no activa'",
+            "    return 'activa en: ' + partes.join(', ')",
+            "  }",
+            "",
+            "  // Helper booleano por si los componentes solo quieren saber si esta activa",
+            "  export function isCartaActiva(activacion) {",
+            "    if (!activacion) return false",
+            "    return activacion.activa_en_general || (activacion.canales && activacion.canales.length > 0)",
+            "  }"
+          ]
+        },
+        {
+          "id": "F1.op3_extender_initSubscriptions",
+          "descripcion": "Extender initCartaManagerSubscriptions para hidratar tarifasConfig y suscribir a tarifas.config.actualizada",
+          "pseudocodigo": [
+            "Localizar la funcion initCartaManagerSubscriptions en carta-manager.ts (creada por el plan base D7).",
+            "Edit anyadiendo al final del bloque de subscribes (antes del return de la funcion cleanup):",
+            "",
+            "  // v1.0 (TP7): hidratacion inicial y suscripcion a cambios de tarifas para badges de activacion",
+            "  unsubs.push(busSubscribe('tarifas.config.actualizada', () => {",
+            "    loadTarifasConfig()",
+            "  }))",
+            "  // hidratacion inicial fire-and-forget --si ya esta hidratado por el panel de tarifas, es idempotente",
+            "  loadTarifasConfig().catch(() => {})",
+            "",
+            "El return existente (() => unsubs.forEach(u => u())) no cambia."
+          ]
+        },
+        {
+          "id": "F1.op4_verificar_exports",
+          "descripcion": "Verificar que los nuevos exports estan presentes",
+          "pseudocodigo": [
+            "Read carta-manager.ts y confirmar que aparecen los exports:",
+            "  activacionPorCartaId, badgeTextForCarta, isCartaActiva",
+            "Confirmar que los imports de tarifas.ts estan en el bloque de imports.",
+            "Confirmar que initCartaManagerSubscriptions tiene la suscripcion + hidratacion nuevas."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["frontend/src/lib/stores/carta-manager.ts"],
+        "verificacion": "grep -c 'activacionPorCartaId\\|badgeTextForCarta\\|loadTarifasConfig' frontend/src/lib/stores/carta-manager.ts >= 6"
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Anyadir badge en CartaCard.svelte",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op1_imports_y_subscripcion",
+          "descripcion": "Anyadir imports y subscription al activacionPorCartaId derived store",
+          "pseudocodigo": [
+            "Read frontend/src/lib/modules/carta-manager/CartaCard.svelte.",
+            "Localizar el bloque <script>.",
+            "Edit anyadiendo:",
+            "  import { activacionPorCartaId, badgeTextForCarta, isCartaActiva } from '$lib/stores/carta-manager'",
+            "  import { goto } from '$app/navigation'",
+            "  import { page } from '$app/stores'",
+            "",
+            "  $: activacion = $activacionPorCartaId.get(carta.id)",
+            "  $: badgeText = badgeTextForCarta(activacion)",
+            "  $: badgeActiva = isCartaActiva(activacion)",
+            "",
+            "  function handleBadgeClick(event) {",
+            "    event.stopPropagation()  // evitar que el click bobble a la card y dispare onClick de la card",
+            "    const project_id = $page.params.project_id",
+            "    goto('/' + project_id + '/tarifas')",
+            "  }"
+          ]
+        },
+        {
+          "id": "F2.op2_renderizar_badge",
+          "descripcion": "Anyadir el badge al renderizado de CartaCard",
+          "pseudocodigo": [
+            "Read el bloque renderizado de CartaCard (tras el <script>).",
+            "Localizar un sitio coherente para el badge (tipicamente al lado del nombre o como ultima linea de la card).",
+            "Edit anyadiendo el badge:",
+            "",
+            "  <button class='badge-activacion {badgeActiva ? \"activa\" : \"no-activa\"}' on:click={handleBadgeClick}>",
+            "    {badgeText}",
+            "  </button>",
+            "",
+            "Q3.A cerrada: estilo pildora. Estilos minimos --los detalles visuales finales (color exacto, espacios) son decision implementacional dentro de la convencion existente del proyecto."
+          ]
+        },
+        {
+          "id": "F2.op3_estilos_badge",
+          "descripcion": "Anyadir bloque de estilos minimos para el badge en el <style> de CartaCard",
+          "pseudocodigo": [
+            "Edit el bloque <style> de CartaCard.svelte anyadiendo:",
+            "",
+            "  .badge-activacion {",
+            "    display: inline-block;",
+            "    padding: 0.2em 0.6em;",
+            "    border-radius: 999px;",
+            "    font-size: 0.85em;",
+            "    border: 1px solid transparent;",
+            "    cursor: pointer;",
+            "    background: var(--badge-bg, transparent);",
+            "    color: var(--badge-fg, inherit);",
+            "  }",
+            "  .badge-activacion.activa {",
+            "    --badge-bg: rgba(34, 139, 34, 0.15);",
+            "    --badge-fg: #228b22;",
+            "    border-color: rgba(34, 139, 34, 0.4);",
+            "  }",
+            "  .badge-activacion.no-activa {",
+            "    --badge-bg: rgba(128, 128, 128, 0.1);",
+            "    --badge-fg: #666;",
+            "    border-color: rgba(128, 128, 128, 0.3);",
+            "  }",
+            "  .badge-activacion:hover {",
+            "    filter: brightness(0.95);",
+            "  }"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["frontend/src/lib/modules/carta-manager/CartaCard.svelte"],
+        "verificacion": "grep -c 'badge-activacion\\|activacionPorCartaId\\|handleBadgeClick' CartaCard.svelte >= 4"
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Anyadir badge en CartaDetail.svelte",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1_imports_y_subscripcion",
+          "descripcion": "Anyadir imports y subscripcion al activacionPorCartaId derived store",
+          "pseudocodigo": [
+            "Read frontend/src/lib/modules/carta-manager/CartaDetail.svelte.",
+            "Localizar el bloque <script>.",
+            "Edit anyadiendo (similar a CartaCard):",
+            "  import { activacionPorCartaId, badgeTextForCarta, isCartaActiva, cartaSeleccionada } from '$lib/stores/carta-manager'",
+            "  import { goto } from '$app/navigation'",
+            "  import { page } from '$app/stores'",
+            "",
+            "  $: cartaActual = $cartaSeleccionada  // ya disponible del plan base D5",
+            "  $: activacion = cartaActual ? $activacionPorCartaId.get(cartaActual.meta?.id || cartaActual.id) : null",
+            "  $: badgeText = badgeTextForCarta(activacion)",
+            "  $: badgeActiva = isCartaActiva(activacion)",
+            "",
+            "  function handleBadgeClick(event) {",
+            "    event.stopPropagation()",
+            "    const project_id = $page.params.project_id",
+            "    goto('/' + project_id + '/tarifas')",
+            "  }"
+          ]
+        },
+        {
+          "id": "F3.op2_renderizar_badge_en_cabecera",
+          "descripcion": "Anyadir el badge a la cabecera de CartaDetail",
+          "pseudocodigo": [
+            "Read el bloque renderizado de CartaDetail.",
+            "Localizar la cabecera (tipicamente donde se muestra el nombre + estado + version segun el plan base D3+D9).",
+            "Edit anyadiendo el badge junto a los otros elementos de la cabecera:",
+            "",
+            "  <button class='badge-activacion-detail {badgeActiva ? \"activa\" : \"no-activa\"}' on:click={handleBadgeClick}>",
+            "    {badgeText}",
+            "  </button>",
+            "",
+            "El estilo aqui puede ser ligeramente mas grande (e.g. font-size 1em vs 0.85em de la card) para destacar en el detail. Misma clase base + un selector descendiente."
+          ]
+        },
+        {
+          "id": "F3.op3_estilos_badge_detail",
+          "descripcion": "Anyadir o reutilizar estilos del badge en el <style> de CartaDetail",
+          "pseudocodigo": [
+            "Edit el bloque <style> anyadiendo:",
+            "",
+            "  .badge-activacion-detail {",
+            "    display: inline-block;",
+            "    padding: 0.3em 0.8em;",
+            "    border-radius: 999px;",
+            "    font-size: 1em;",
+            "    margin-left: 0.5em;",
+            "    border: 1px solid transparent;",
+            "    cursor: pointer;",
+            "    background: var(--badge-bg, transparent);",
+            "    color: var(--badge-fg, inherit);",
+            "  }",
+            "  .badge-activacion-detail.activa {",
+            "    --badge-bg: rgba(34, 139, 34, 0.15);",
+            "    --badge-fg: #228b22;",
+            "    border-color: rgba(34, 139, 34, 0.4);",
+            "  }",
+            "  .badge-activacion-detail.no-activa {",
+            "    --badge-bg: rgba(128, 128, 128, 0.1);",
+            "    --badge-fg: #666;",
+            "    border-color: rgba(128, 128, 128, 0.3);",
+            "  }",
+            "  .badge-activacion-detail:hover {",
+            "    filter: brightness(0.95);",
+            "  }"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["frontend/src/lib/modules/carta-manager/CartaDetail.svelte"],
+        "verificacion": "grep -c 'badge-activacion-detail\\|activacionPorCartaId\\|handleBadgeClick' CartaDetail.svelte >= 4"
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Verificacion manual con dev server",
+      "esfuerzo_horas": 1,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_arrancar_dev",
+          "descripcion": "Levantar dev server",
+          "pseudocodigo": [
+            "cd frontend",
+            "npm run dev",
+            "abrir navegador en URL del proyecto activo"
+          ]
+        },
+        {
+          "id": "F4.op2_golden_path",
+          "descripcion": "Verificar golden path de badges",
+          "pseudocodigo": [
+            "navegar a /<project_id>/carta-manager",
+            "comprobar:",
+            "  ✓ CartasBrowser muestra el grid de cards",
+            "  ✓ cada CartaCard tiene badge de activacion (verde si activa, gris si no)",
+            "  ✓ texto del badge correcto: 'activa en: general' / 'activa en: glovo' / 'activa en: general, glovo, llevadoo' / 'no activa'",
+            "  ✓ click en badge navega a /<project_id>/tarifas (no abre la carta en detail --stopPropagation funciona)",
+            "  ✓ click en el resto de la card abre detail (no se rompe el comportamiento existente)",
+            "navegar a la vista detail de una carta cualquiera (click sobre la card, no sobre el badge)",
+            "comprobar:",
+            "  ✓ CartaDetail tambien tiene badge en la cabecera",
+            "  ✓ badge mas grande/destacado (tamano 1em vs 0.85em de la card)",
+            "  ✓ click en badge navega a /tarifas (no afecta detail)",
+            "  ✓ resto de la cabecera (nombre, estado, version) inalterada"
+          ]
+        },
+        {
+          "id": "F4.op3_reactividad_cross_modulo",
+          "descripcion": "Verificar que cambios en tarifas refrescan los badges en carta-manager",
+          "pseudocodigo": [
+            "estando en /<project_id>/carta-manager con cards visibles",
+            "desde el chat pedir 'Asigna la carta X al canal glovo' (Q4.A del plan tarifas)",
+            "esperar que tarifas procese y publique tarifas.config.actualizada",
+            "✓ el badge de la carta X se actualiza a 'activa en: glovo' (o suma 'glovo' si ya estaba en general)",
+            "✓ otras cards inalteradas",
+            "estando en /tarifas, hacer cambio (e.g. quitar override de glovo)",
+            "regresar a /<project_id>/carta-manager",
+            "✓ el badge de la carta X se actualiza correctamente"
+          ]
+        },
+        {
+          "id": "F4.op4_edge_cases",
+          "descripcion": "Edge cases minimos",
+          "pseudocodigo": [
+            "✓ Proyecto sin tarifas.json: todas las cards muestran 'no activa' sin error",
+            "✓ Carta archivada (meta.estado='archivada') con activacion vigente: muestra badge igual (la activacion es independiente del estado del documento)",
+            "✓ Carta cuyo id no esta en tarifas.config: badge 'no activa' (sin warning)",
+            "✓ Backend offline: badges renderizan 'no activa' por fallback, no crashea"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "documento_de_resultados": "fede reporta cada checkmark con ✓ o ✗",
+        "estado_terminal_para_avanzar_a_F5": "TODOS los checks ✓"
+      }
+    },
+    {
+      "id": "F5",
+      "nombre": "Commit + push a la rama de la sesion",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F5.op1_status",
+          "descripcion": "Revisar git status",
+          "pseudocodigo": [
+            "git status",
+            "git diff",
+            "confirmar que solo hay cambios en los 3 archivos:",
+            "  frontend/src/lib/stores/carta-manager.ts",
+            "  frontend/src/lib/modules/carta-manager/CartaCard.svelte",
+            "  frontend/src/lib/modules/carta-manager/CartaDetail.svelte",
+            "si hay cambios fuera: parar y reportar"
+          ]
+        },
+        {
+          "id": "F5.op2_commit",
+          "descripcion": "Crear commit",
+          "pseudocodigo": [
+            "git add (archivos especificos)",
+            "git commit con mensaje:",
+            "  feat(ui:carta-manager): badges de activacion en CartaCard + CartaDetail",
+            "",
+            "  Aplica TP7 del contrato subsistema-carta v1.0.0 (D6 separacion_de_ui).",
+            "  + extension del store carta-manager.ts: derived store activacionPorCartaId",
+            "    cruza tarifasConfig (importado de tarifas store) + helpers badgeTextForCarta",
+            "    e isCartaActiva. initCartaManagerSubscriptions extendido para suscribir a",
+            "    tarifas.config.actualizada e hidratar al montar.",
+            "  + badge en CartaCard.svelte con click -> goto(/tarifas).",
+            "  + badge mas grande en cabecera de CartaDetail.svelte con misma navegacion.",
+            "",
+            "  Postura B canonica: badge es info derivada solo lectura, mutacion se hace en /tarifas.",
+            "  Cero modificacion de cierre-ui-carta-manager.json (este plan es F-extension paralelo).",
+            "",
+            "  Plan ejecutable: arquitectura/decisiones/propuestas/extension-ui-carta-manager-badges-activacion.json"
+          ]
+        },
+        {
+          "id": "F5.op3_push",
+          "descripcion": "Push",
+          "pseudocodigo": [
+            "git push -u origin <rama-de-la-sesion>",
+            "retry exponencial si falla por red"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo OK explicito"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "descripcion": "validate:ci pasa sin drift nuevo",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F1", "F2", "F3"],
+      "salida_esperada": "PASS sin drift NUEVO"
+    },
+    {
+      "id": "CC2_build_frontend",
+      "descripcion": "Frontend compila",
+      "comando": "npm run build",
+      "directorio": "frontend/",
+      "ejecutar_tras": ["F2", "F3"],
+      "salida_esperada": "build OK sin errores TypeScript"
+    },
+    {
+      "id": "CC3_git_status_scope",
+      "descripcion": "Solo 3 archivos modificados",
+      "comando": "git status --short",
+      "ejecutar_tras": ["F5.op1"],
+      "verificar": "Solo aparecen: stores/carta-manager.ts + modules/carta-manager/CartaCard.svelte + modules/carta-manager/CartaDetail.svelte"
+    },
+    {
+      "id": "CC4_no_invocaciones_a_tools_de_tarifas",
+      "descripcion": "Ningun archivo modificado invoca tarifas.set_general/assign/etc. directamente",
+      "comando": "grep -E 'tarifas.set_general|tarifas.assign|tarifas.register_variant' frontend/src/lib/stores/carta-manager.ts frontend/src/lib/modules/carta-manager/CartaCard.svelte frontend/src/lib/modules/carta-manager/CartaDetail.svelte || echo OK",
+      "ejecutar_tras": ["F1", "F2", "F3"],
+      "salida_esperada": "OK (sin invocaciones --Postura B)"
+    },
+    {
+      "id": "CC5_goto_a_tarifas_existe",
+      "descripcion": "Los componentes navegan a /tarifas",
+      "comando": "grep -c \"goto.*tarifas\" frontend/src/lib/modules/carta-manager/CartaCard.svelte frontend/src/lib/modules/carta-manager/CartaDetail.svelte",
+      "ejecutar_tras": ["F2", "F3"],
+      "salida_esperada": ">= 2 (uno por archivo)"
+    },
+    {
+      "id": "CC6_stopPropagation_en_badge_click",
+      "descripcion": "Click en badge no propaga al click de la card",
+      "comando": "grep -c 'stopPropagation' frontend/src/lib/modules/carta-manager/CartaCard.svelte",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": ">= 1"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Modificar el plan cierre-ui-carta-manager.json (D6 cerrada --este plan es paralelo, no edita el base)",
+    "Modificar el plan cierre-ui-tarifas.json",
+    "Modificar frontend/src/lib/stores/tarifas.ts (se importa, no se edita)",
+    "Modificar frontend/src/lib/modules/tarifas/* (no es alcance)",
+    "Anyadir tool de mutacion (set_general, assign, etc.) en carta-manager UI --prohibido explicito del contrato D6",
+    "Invocar mqttRequest a tarifas.* desde los archivos de carta-manager --Postura B (CC4)",
+    "Abrir modal de cambio de activacion al hacer click en badge (D4 cerrada: solo goto)",
+    "Crear archivos nuevos en frontend/src/lib/modules/carta-manager/ (este plan modifica los existentes, no crea)",
+    "Crear archivos nuevos en frontend/src/lib/stores/ (este plan extiende carta-manager.ts existente)",
+    "Tocar otros stores frontend o modulos frontend",
+    "Modificar scripts/validate-all.js, drift-baseline.json, validators",
+    "Modificar arquitectura/decisiones/* ",
+    "Tocar backend modules/pizzepos/*",
+    "Crear PR sin OK explicito del humano",
+    "Hacer commit con git add . o git add -A",
+    "Saltar OK humano entre F1 y F2, F2 y F3, F3 y F4, F4 y F5",
+    "Decir 'todo OK' sin reportar el comando ejecutado",
+    "Continuar a F5 si CC1-CC6 no pasan",
+    "Improvisar fixes en otros archivos si build/validate detecta drift fuera del scope --PARAR y reportar"
+  ],
+
+  "salida_final_del_horizonte": {
+    "carta_manager_ui_estado_terminal": "CartaCard y CartaDetail muestran badge 'activa en: <canal>' hidratado desde tarifas via store derivado activacionPorCartaId. Click navega a /tarifas. Reactivo a tarifas.config.actualizada. Postura B canonica preservada (cero mutaciones desde carta-manager).",
+    "archivos_finales_modificados": [
+      "frontend/src/lib/stores/carta-manager.ts (+ activacionPorCartaId + badgeTextForCarta + isCartaActiva + extensiones de initCartaManagerSubscriptions)",
+      "frontend/src/lib/modules/carta-manager/CartaCard.svelte (+ badge + handleBadgeClick + estilos)",
+      "frontend/src/lib/modules/carta-manager/CartaDetail.svelte (+ badge cabecera + handleBadgeClick + estilos)"
+    ],
+    "archivos_creados": [],
+    "verificacion_terminal": [
+      "Todos los flujos de F4 ✓",
+      "CC1-CC6 todos pasan",
+      "validate:ci verde sin drift nuevo",
+      "frontend build OK",
+      "git status: solo los 3 archivos del scope",
+      "commit pusheado a la rama"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "TP7 del contrato subsistema-carta v1.0.0 --estado: 'cerrado'",
+      "Comerciante ve estado de activacion desde carta-manager sin tener que salir a tarifas (read-only)",
+      "Navegacion de carta-manager -> tarifas materializada para mutaciones"
+    ],
+    "siguiente_natural": "TP8 (schemas AJV de los 5 eventos canonicos) --medio, preparativo de TP9. TP9 (validator subsistema-carta) puede esperar a que las familias TP1+TP3+TP4 esten ejecutadas para evitar falsos positivos. TP11 (ritual de limpieza CLAUDE.md) cuando los TPs activos esten cerrados."
+  }
+}

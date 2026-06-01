@@ -302,10 +302,16 @@
   "estado_de_ejecucion": {
     "F0": {
       "cerrada_en": "2026-06-01",
-      "commit_hash": "pending",
+      "commit_hash": "a18b2345eaf406cef8bcac9d73fa35af99184a80",
       "salida_real": "subsistema-recetario.contract.json v1.0.3->v1.1.0 (rol de viabilidad precisado: determinista + generador de caminos ligeros; profundidad cualitativa en el chat). Agente legacy viabilidad-receta-analyzer borrado (agents+prompts). Eventos viabilidad.analisis.cualitativo.* confirmados sin schema ni consumidor antes de borrar.",
       "cross_checks_resultado": "CC1 validate:ci PASS (no drift nuevo; findings 2357->2350, descenso legitimo por salida del agente). CC3 git status scope OK (solo los 3 archivos esperados).",
-      "nota_baseline": "Descenso de warnings legitimo pero baseline NO regenerado: CI pasa sin regenerar (solo bloquea drift nuevo). Regeneracion pendiente de OK humano."
+      "nota_baseline": "Descenso de warnings legitimo pero baseline NO regenerado: CI pasa sin regenerar (solo bloquea drift nuevo). Regeneracion pendiente de OK humano (diferida al cierre del horizonte)."
+    },
+    "F1": {
+      "cerrada_en": "2026-06-01",
+      "commit_hash": "pending",
+      "salida_real": "viabilidad.blueprint.json blueprint-1.1.1->blueprint-1.2.0: paso 4b (generar caminos 0-3 { titulo, prompt }, enum abierto, [] si redondo) insertado entre veredicto y construccion del expediente; campo caminos persistido en el expediente (paso 5) y declarado en estado_persistente.shape; garantiza[] y reglas_clave actualizadas (caminos viven solo en el expediente, evento canonico intacto). module.json 1.1.1->1.2.0 + nota en _doc.",
+      "cross_checks_resultado": "JSON valido (node -e require). CC1 validate:ci PASS (no drift nuevo; pseudocodigo-estilo PASS sin findings; subsistema-recetario PASS sin findings). CC3 git status scope OK (solo los 2 archivos de viabilidad)."
     }
   },
 

@@ -102,9 +102,10 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'productos');
-    assert.strictEqual(m.version, '3.0.0');
+    assert.strictEqual(m.version, '4.0.0');
     assert.strictEqual(m.productosPerProject.size, 0);
     assert.strictEqual(m.categoriasPerProject.size, 0);
+    assert.strictEqual(m.mappingCanalesPerProject.size, 0);
     // tools.contract v1.2: el modulo NO debe registrar manualmente en uiHandler.
     // El loader auto-wirea tools[] del module.json a uiHandler en registerToolsForAI.
     assert.strictEqual(mocks.uiRegistered.length, 0);
@@ -309,7 +310,7 @@ function publishedOf(mocks, name) {
     const r = await m.handleHealthCheck();
     assert.ok(isCanonicalSuccess(r));
     assert.strictEqual(r.data.status, 'healthy');
-    assert.strictEqual(r.data.version, '3.0.0');
+    assert.strictEqual(r.data.version, '4.0.0');
     await m.onUnload();
   });
 

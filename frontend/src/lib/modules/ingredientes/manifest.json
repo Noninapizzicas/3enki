@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "zone": "work-bar",
   "order": 2,
-  "routes": ["/ingredientes"],
+  "routes": ["/ingredientes", "/recetas"],
   "icon": "🥬",
   "label": "Ingredientes"
 }

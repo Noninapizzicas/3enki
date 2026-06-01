@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "zone": "work-bar",
   "order": 1,
-  "routes": ["/recetas"],
+  "routes": ["/recetas", "/ingredientes"],
   "icon": "📖",
   "label": "Recetas"
 }

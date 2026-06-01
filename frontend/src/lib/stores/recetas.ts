@@ -84,6 +84,8 @@ export interface Receta {
   fuentes_precios?: FuentePrecio[];
   ingredientes_detalle?: IngredienteDetalle[];
   ingredientes_sin_precio?: string[];
+  // Snapshots de versiones anteriores (escritos por recetas.actualizar/revertir del blueprint).
+  history?: RecetaVersionSnapshot[];
 }
 
 export interface RecetaResumen {
@@ -361,6 +363,101 @@ export async function loadStats(): Promise<void> {
   } catch (error) {
     console.error('[Recetas] Stats failed:', getErrorMessage(error));
   }
+}
+
+// =============================================================================
+// HISTORIAL — versiones (lectura pura de r.history en /recetas.json)
+// =============================================================================
+//
+// CERO invocaciones a tools del blueprint recetas: es blueprint-driven
+// LLM-runtime, no tiene servicio JS escuchando el bus, solo corre cuando el
+// LLM lo invoca via chat. El array history[] vive dentro de cada receta en
+// /recetas.json y se lee igual que el resto del store (modules/filesystem es
+// POC2 y responde fs.read.request directo). El shape de loadHistorial
+// reproduce literal el de la operacion 'historial' del blueprint
+// (modules/pizzepos/recetas/recetas.blueprint.json, verificado 2026-06-01).
+// Si el blueprint cambia el shape, estas funciones se actualizan en paralelo.
+
+export interface RecetaVersionSnapshot {
+  version: number;
+  _archived_at?: string;
+  nombre?: string;
+  porciones?: number | null;
+  dificultad?: number | null;
+  ingredientes?: RecetaIngrediente[];
+  elaboracion?: string[];
+  notas?: string;
+  [key: string]: unknown;
+}
+
+export interface RecetaHistorialEntry {
+  version: number;
+  archived_at?: string;
+  nombre?: string;
+  porciones?: number | null;
+  dificultad?: number | null;
+  ingredientes_count: number;
+}
+
+export interface RecetaHistorialResult {
+  receta_id: string;
+  nombre: string;
+  version_actual: number;
+  versiones_anteriores: number;
+  historial: RecetaHistorialEntry[];
+}
+
+/**
+ * Resumen de versiones de una receta (para pintar la lista de HistorialView).
+ * Lectura pura: lee /recetas.json, encuentra la receta y proyecta r.history[].
+ * Throw upstream — el panel HistorialView captura en banner.
+ */
+export async function loadHistorial(recetaId: string): Promise<RecetaHistorialResult> {
+  const store = await readRecetasStore();
+  if (!store) throw new Error('No hay recetas todavia');
+  const items = Array.isArray(store.recetas) ? store.recetas : [];
+  const r = items.find(x => x && x.id === recetaId);
+  if (!r) throw new Error(`Receta ${recetaId} no encontrada`);
+
+  const historyRaw: RecetaVersionSnapshot[] = Array.isArray(r.history) ? r.history : [];
+  const versiones: RecetaHistorialEntry[] = historyRaw.map(h => ({
+    version: h.version,
+    archived_at: h._archived_at,
+    nombre: h.nombre,
+    porciones: h.porciones,
+    dificultad: h.dificultad,
+    ingredientes_count: Array.isArray(h.ingredientes) ? h.ingredientes.length : 0
+  }));
+
+  return {
+    receta_id: r.id,
+    nombre: r.nombre,
+    version_actual: r.version,
+    versiones_anteriores: versiones.length,
+    historial: versiones
+  };
+}
+
+/**
+ * Snapshot completo de UNA version anterior (para el diff campo-a-campo del
+ * boton Revertir). Devuelve el snapshot crudo de r.history; el diff contra la
+ * receta actual lo construye el componente RevertPreview en frontend.
+ * Throw upstream.
+ */
+export async function loadVersionSnapshot(
+  recetaId: string,
+  versionId: number | string
+): Promise<RecetaVersionSnapshot> {
+  const store = await readRecetasStore();
+  if (!store) throw new Error('No hay recetas todavia');
+  const items = Array.isArray(store.recetas) ? store.recetas : [];
+  const r = items.find(x => x && x.id === recetaId);
+  if (!r) throw new Error(`Receta ${recetaId} no encontrada`);
+
+  const historyRaw: RecetaVersionSnapshot[] = Array.isArray(r.history) ? r.history : [];
+  const snapshot = historyRaw.find(h => h.version === versionId);
+  if (!snapshot) throw new Error(`Version ${versionId} no encontrada en history`);
+  return snapshot;
 }
 
 // =============================================================================

@@ -1,0 +1,506 @@
+{
+  "_doc": "Plan ejecutable JSON del horizonte 'cierre-ui-escandallo'. Materializa la alineacion del modulo escandallo con el contrato ui-frontend-blueprint v1.0.1. Verificacion previa (foto factual en sesion 2026-06-01) confirma que escandallo cumple 7/7 principios del contrato; solo 2 gaps menores: (1) evento del bus desfasado en el subscriber del store, (2) hints 'pide al chat...' son texto estatico cuando deberian ser botones accionables con prefillChatInput. Pensado para que fede lo ejecute linealmente. Las operaciones usan pseudocodigo respetando pseudocodigo-estilo.contract.json (sin Object.assign, sin rest-spread con omision, verboso explicito).",
+
+  "id": "cierre-ui-escandallo",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "cierre_ui_modulo_blueprint",
+
+  "documentos_hermanos": {
+    "plan_piloto": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-recetas.json",
+      "version": "1.0.0",
+      "relacion": "PRIMER plan del horizonte cierre-ui-blueprints. Este plan (escandallo) es el SEGUNDO. Hereda el mecanismo chatInputDraft compartido cocinado en F1 del plan piloto."
+    },
+    "contrato_canonico": "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json v1.0.1",
+    "arranque_horizonte": "arquitectura/decisiones/propuestas/_arranque-cierre-ui-blueprints.md"
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+    "arquitectura/decisiones/_contratos/frontend.contract.json",
+    "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json"
+  ],
+
+  "dependencias_explicitas": [
+    {
+      "id": "DEP1",
+      "depende_de": "cierre-ui-recetas.json F1",
+      "que_debe_estar_hecho": "frontend/src/lib/stores/chatInputDraft.ts existe con writable y funcion prefillChatInput exportada. frontend/src/lib/components/layout/ChatInput.svelte hace bind:value contra ese store.",
+      "afecta_a_fase": "F2",
+      "comportamiento_si_no_se_cumple": "fede para al cerrar F1 y reportar al humano: 'F2 requiere la pieza compartida chatInputDraft que se materializa en cierre-ui-recetas F1. Ejecuta primero ese plan al menos hasta F1 incluido, luego retoma este.' NO continua a F2 hasta confirmacion."
+    }
+  ],
+
+  "por_que_existe": {
+    "hallazgo_2026_06_01": "Auditoria de escandallo contra contrato ui-frontend-blueprint v1.0.1. Cumple 7/7 principios: tiene ruta SvelteKit + manifest + 5 componentes (Panel router + Browser + Card + Detail + Alerts) + store solo lectura via fs.read + 1 boton work-bar + convencion de archivos canonica. Pero hay 2 gaps menores de alineacion.",
+    "gap_1": "El store frontend/src/lib/stores/escandallo.ts subscribe a evento legacy 'escandallo.coste.actualizado' (linea 377 aprox). El blueprint v3 publica el evento canonico 'escandallo.coste.calculado'. Mismo nombre, distinto verbo. Si el blueprint v3 deja de publicar el legacy en algun momento, el store se queda sin reactividad sin error visible.",
+    "gap_2": "EscandalloPanel.svelte (linea ~72) muestra un hint estatico: 'Pide al chat: Dame el escandallo de la receta X'. Eso cumple Postura B en espiritu (la mutacion va por chat), pero rompe el principio operativo del contrato: las acciones pre-rellenan el chat con prefillChatInput, no son texto que el usuario tiene que copiar manualmente. Fricción innecesaria.",
+    "alcance_acotado": "Solo estos 2 gaps. Cero refactor del Panel (es router con activeView local correcto). Cero cambios en Browser/Card/Detail/Alerts. Cero nuevas rutas. Cero cambios en el manifest (1 boton work-bar correcto). Cero en el store mas alla del nombre del evento."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/escandallo/module.json",
+      "version": "1.1.0",
+      "target_page_id": "escandallo",
+      "blueprint_driven": true,
+      "cajones_enabled": true
+    },
+    {
+      "pieza": "modules/pizzepos/escandallo/escandallo.blueprint.json",
+      "version": "blueprint-3.0.0",
+      "extends": "subsistema-recetario.modulo-base",
+      "evento_canonico_publicado": "escandallo.coste.calculado",
+      "tools_expuestos": ["calcular", "recalcular_todas"]
+    },
+    {
+      "pieza": "frontend/src/routes/[project_id]/escandallo/+page.svelte",
+      "existe": true,
+      "contenido": "shell minimal <LazyShell />"
+    },
+    {
+      "pieza": "frontend/src/lib/modules/escandallo/",
+      "archivos": ["EscandalloPanel.svelte (280 lineas, router con activeView local)", "EscandalloBrowser.svelte (421 lineas)", "EscandalloCard.svelte (181 lineas)", "EscandalloDetail.svelte (354 lineas)", "EscandalloAlerts.svelte (384 lineas)", "index.ts (1.8 KB)", "manifest.json (243 bytes, zone=work-bar, icon=📊, label='Escandallo')"]
+    },
+    {
+      "pieza": "frontend/src/lib/stores/escandallo.ts",
+      "lineas": 410,
+      "tools_invocados_via_mqttRequest": ["fs.read (solo lectura via modules/filesystem/, modulo POC2)"],
+      "tools_blueprint_invocados": "ninguno (cero llamadas a escandallo.* desde el store)",
+      "evento_actual_suscrito": "escandallo.coste.actualizado (LEGACY, hay que cambiar a escandallo.coste.calculado)"
+    },
+    {
+      "pieza": "EscandalloPanel.svelte hints estaticos",
+      "linea_aproximada": 72,
+      "contenido_actual": "texto estatico tipo 'Pide al chat: \"Dame el escandallo de la receta X\"'",
+      "transformacion_esperada": "boton con on:click que invoca prefillChatInput(`Calcula el escandallo de la receta \"<nombre>\".`)"
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/<rama-asignada> antes de empezar",
+      "frontend/src/lib/stores/escandallo.ts sigue suscrito a 'escandallo.coste.actualizado' (busqueda regex contra el archivo)",
+      "modules/pizzepos/escandallo/escandallo.blueprint.json sigue publicando 'escandallo.coste.calculado' (no se ha renombrado)",
+      "EscandalloPanel.svelte sigue teniendo hints estaticos en el codigo (busqueda por 'Pide al chat' o similar)",
+      "frontend/src/lib/stores/chatInputDraft.ts existe y exporta prefillChatInput --SI NO existe, parar y avisar antes de F2 (dependencia DEP1)",
+      "frontend/src/lib/components/layout/ChatInput.svelte hace bind con chatInputDraft --SI NO, parar y avisar",
+      "npm run validate:ci en la raiz da PASS antes de empezar (baseline aceptado)"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Los 7 principios del contrato ui-frontend-blueprint v1.0.1 son la disciplina vigente",
+      "Postura B se aplica a escandallo (lectura + pre-relleno chat, sin forms de mutacion)",
+      "Patron 'store invoca solo modulos POC2 (fs.read.request), nunca tools del blueprint LLM-runtime' es regla absoluta",
+      "Mecanismo chatInputDraft es el unico mecanismo canonico de pre-relleno del chat",
+      "Los componentes existentes (Panel router + Browser + Card + Detail + Alerts) cumplen el contrato --no se refactorizan, solo se anyaden botones y se cambia 1 nombre de evento"
+    ],
+    "no_toco_esta_sesion": [
+      "modules/pizzepos/escandallo/escandallo.blueprint.json (backend del blueprint)",
+      "modules/pizzepos/escandallo/module.json",
+      "cualquier otro modulo blueprint backend (incluido recetas, viabilidad, etc.)",
+      "frontend/src/lib/modules/recetas/ y demas modulos frontend (excepto escandallo)",
+      "frontend/src/lib/stores/recetas.ts y demas stores (excepto escandallo)",
+      "frontend/src/lib/stores/chatInputDraft.ts (creado por F1 de cierre-ui-recetas, ya no se toca aqui)",
+      "frontend/src/lib/components/layout/ChatInput.svelte (modificado en F1 de cierre-ui-recetas, no se toca)",
+      "scripts/validate-all.js y sus validators",
+      "drift-baseline.json (no regenerar)",
+      "arquitectura/decisiones/_contratos/ (cero modificacion de contratos)",
+      "LazyShell.svelte, loader.ts (motores genericos)",
+      "Estructura general del Panel/Browser/Card/Detail/Alerts (solo se anyaden botones, no se reescriben)"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [
+    {
+      "id": "Q1",
+      "tema": "boton_calcular_escandallo_de_receta",
+      "pregunta": "EscandalloPanel.svelte (o el sub-componente del flow de calculo) ¿incluye un boton 'Calcular escandallo' que pre-rellena el chat con la frase canonica, sustituyendo el hint estatico actual?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "Si, boton con prefillChatInput",
+          "comentario": "boton sustituye el hint. Texto del boton: 'Calcular escandallo'. Frase: 'Calcula el escandallo de la receta \"<nombre>\".'"
+        },
+        {
+          "id": "B",
+          "label": "Si pero como menu dropdown sobre la receta seleccionada",
+          "comentario": "el boton aparece cuando hay receta seleccionada, mas contextual"
+        },
+        {
+          "id": "C",
+          "label": "No, el hint queda como esta (texto estatico)",
+          "comentario": "se acepta la friccion --el usuario copia/pega o escribe"
+        }
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "El criterio 'accion rapida sin formularla' del contrato aplica directamente. Hint estatico crea friccion sin razon.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q2",
+      "tema": "boton_recalcular_todas",
+      "pregunta": "El tool blueprint 'recalcular_todas' (batch sobre todas las recetas en_servicio, operacion potencialmente cara con N invocaciones LLM Mercadona) ¿se expone como boton en la UI?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "Si, boton 'Recalcular todas' con modal de confirmacion en frontend",
+          "comentario": "modal pregunta 'esto puede tardar y consumir tokens. ¿Continuar?'. Si OK, prefillChatInput('Recalcula el escandallo de todas las recetas en servicio.')"
+        },
+        {
+          "id": "B",
+          "label": "Si, boton sin modal (el chat lo hara con confirmacion implicita)",
+          "comentario": "el LLM probablemente preguntara antes de ejecutar; el boton solo pre-rellena la frase"
+        },
+        {
+          "id": "C",
+          "label": "No, se queda solo en chat",
+          "comentario": "operaciones costosas no merecen boton de un solo click --acceso explicito por chat reduce riesgo de invocacion accidental"
+        }
+      ],
+      "recomendacion": "C",
+      "comentario_recomendacion": "Operacion potencialmente cara (N LLM calls, N consultas Mercadona). Postura B no obliga a tener boton para todo --solo para acciones frecuentes/baratas/seguras. Recalcular_todas es excepcion natural.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q3",
+      "tema": "frases_canonicas_de_prefill_extras",
+      "pregunta": "¿Hay otros casos de uso que cubren con boton + prefillChatInput que no esten en Q1 (calcular) y Q2 (recalcular_todas)?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "No, solo Q1 (y Q2 si la respuesta no es C)",
+          "comentario": "el resto de flows son lectura pura sin acciones de mutacion"
+        },
+        {
+          "id": "B",
+          "label": "Si, anyadir: <que el usuario describa>",
+          "comentario": "abrir a posibles botones extra detectados al revisar la UI"
+        }
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Escandallo es lectura mayoritariamente: muestra coste, alertas, historico. Las unicas acciones de mutacion son calcular (Q1) y recalcular_todas (Q2). El resto es navegacion interna del Panel.",
+      "respuesta_usuario": null
+    }
+  ],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1",
+      "decision": "Escandallo cumple 7/7 principios del contrato ui-frontend-blueprint v1.0.1 --solo gaps de alineacion menor, NO refactor estructural",
+      "no_reabrir_sin": "verificacion nueva en disco que contradiga el dossier 2026-06-01"
+    },
+    {
+      "id": "D2",
+      "decision": "Postura B aplica integralmente: cero forms de mutacion, store solo lectura, acciones via prefillChatInput",
+      "no_reabrir_sin": "caso real concreto que justifique Postura A para escandallo"
+    },
+    {
+      "id": "D3",
+      "decision": "Cero invocaciones a tools del blueprint desde el store. Solo fs.read.request contra modules/filesystem/. El store ya cumple esto (verificado en disco)",
+      "no_reabrir_sin": "cambio del paradigma event-core"
+    },
+    {
+      "id": "D4",
+      "decision": "El plan NO toca: blueprint backend, otros modulos frontend, stores de otros modulos, LazyShell, loader, ChatInput (ya modificado por cierre-ui-recetas F1), chatInputDraft store (ya creado por cierre-ui-recetas F1)",
+      "no_reabrir_sin": "errores que solo se resuelvan tocando esos archivos --en cuyo caso el plan se pausa y se cocina amendment"
+    },
+    {
+      "id": "D5",
+      "decision": "Dependencia con cierre-ui-recetas F1: fede al arrancar verifica que existe chatInputDraft.ts y que ChatInput.svelte hace bind. Si NO, para antes de F2 y reporta",
+      "no_reabrir_sin": "cambio en el patron canonico de pre-relleno"
+    },
+    {
+      "id": "D6",
+      "decision": "Componentes Browser/Card/Detail/Alerts NO se refactorizan, solo se les anyaden botones en los puntos detectados (segun respuestas Q1, Q2, Q3)",
+      "no_reabrir_sin": "que la verificacion final F3 detecte gaps de criterio que no se cubrieron en F2"
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Alinear suscripcion del store al evento canonico",
+      "esfuerzo_horas": 0.25,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1",
+          "descripcion": "Cambiar nombre del evento suscrito en initEscandalloSubscriptions",
+          "pseudocodigo": [
+            "leer frontend/src/lib/stores/escandallo.ts entero",
+            "localizar funcion initEscandalloSubscriptions",
+            "localizar la suscripcion a 'escandallo.coste.actualizado' (busqueda exacta del string)",
+            "sustituir el string 'escandallo.coste.actualizado' por 'escandallo.coste.calculado'",
+            "verificar que el handler asociado sigue siendo correcto (recarga del store via fs.read del path canonico)",
+            "guardar archivo"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["frontend/src/lib/stores/escandallo.ts"],
+        "tamano_aproximado": "+0 -0 lineas netas (sustitucion de string)",
+        "verificacion_funcional": "desde consola navegador: cargar pagina /escandallo, en otra pestana invocar 'calcula el escandallo de la receta X' al chat, esperar que el blueprint publique 'escandallo.coste.calculado' (visible en MQTT explorer si esta disponible) y el store recargue --la UI debe refrescarse sin recargar pagina"
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Convertir hints estaticos en botones accionables con prefillChatInput",
+      "esfuerzo_horas": 1,
+      "ok_explicito_antes_de_continuar": true,
+      "branch_segun_QN": "aplicar Q1 (boton calcular), Q2 (boton recalcular_todas o no), Q3 (cualquier boton extra que el usuario haya anyadido)",
+      "depende_de": "dependencia explicita DEP1 (cierre-ui-recetas F1 ejecutado, chatInputDraft.ts y ChatInput.svelte modificado existen). Verificar primero. Si no se cumple, NO ejecutar F2.",
+      "operaciones": [
+        {
+          "id": "F2.op0_verificar_dependencia",
+          "descripcion": "Verificar que F1 de cierre-ui-recetas esta ejecutada",
+          "pseudocodigo": [
+            "comprobar que existe el archivo frontend/src/lib/stores/chatInputDraft.ts",
+            "si NO existe: parar, reportar al humano 'F2 requiere chatInputDraft que se materializa en cierre-ui-recetas F1. Ejecuta primero ese plan al menos hasta F1, luego retoma este. Mientras tanto F1 de este plan (cambio de nombre de evento) si esta hecho.'",
+            "comprobar que frontend/src/lib/components/layout/ChatInput.svelte importa chatInputDraft (busqueda regex)",
+            "si NO: idem mensaje de parada",
+            "si todo OK: continuar a F2.op1"
+          ]
+        },
+        {
+          "id": "F2.op1_localizar_hints",
+          "descripcion": "Encontrar los hints estaticos en el codigo",
+          "pseudocodigo": [
+            "leer frontend/src/lib/modules/escandallo/EscandalloPanel.svelte entero",
+            "leer Browser, Detail, Alerts tambien si Q3 indica botones extra",
+            "localizar todos los strings que coincidan con patrones tipo:",
+            "  'Pide al chat'",
+            "  'pide al chat'",
+            "  'pide al asistente'",
+            "  'escribe en el chat'",
+            "anotar para cada uno: archivo, linea, contexto, intent (que accion describe)",
+            "reportar al humano la lista antes de sustituir"
+          ]
+        },
+        {
+          "id": "F2.op2_aplicar_Q1_calcular",
+          "descripcion": "Sustituir hint 'Pide al chat: Dame el escandallo...' por boton si Q1.respuesta in (A, B)",
+          "pseudocodigo": [
+            "si Q1.respuesta_usuario.opcion === 'C': skip (queda como hint estatico)",
+            "si Q1.respuesta_usuario.opcion === 'A' o 'B':",
+            "  en EscandalloPanel.svelte (o el sub-componente que renderiza el contexto de receta seleccionada):",
+            "    import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "    sustituir el bloque que renderiza el hint estatico por:",
+            "      <button on:click={() => prefillChatInput(`Calcula el escandallo de la receta \"${recetaSeleccionada.nombre}\".`)} class='action-button'>",
+            "        Calcular escandallo",
+            "      </button>",
+            "    si Q1.respuesta === 'B' (contextual): renderizar solo cuando recetaSeleccionada !== null (con {#if})",
+            "    si Q1.respuesta === 'A': renderizar siempre en barra de acciones del panel",
+            "  estilos del boton: heredados de patron canonico del repo (revisar como lo hacen Browser/Detail), o usar clase comun 'action-button' con borde, padding, color de acento del proyecto"
+          ]
+        },
+        {
+          "id": "F2.op3_aplicar_Q2_recalcular_todas",
+          "descripcion": "Anyadir boton 'Recalcular todas' segun Q2",
+          "pseudocodigo": [
+            "si Q2.respuesta === 'C': skip (sin boton, queda en chat)",
+            "si Q2.respuesta === 'A' (boton con modal):",
+            "  anyadir en EscandalloPanel.svelte o EscandalloBrowser.svelte (vista global):",
+            "    let modalAbierto = false",
+            "    <button on:click={() => modalAbierto = true}>Recalcular todas</button>",
+            "    {#if modalAbierto}",
+            "      <div class='modal-confirmation'>",
+            "        <p>Esto recalcula el escandallo de todas las recetas en servicio. Puede tardar y consumir tokens. ¿Continuar?</p>",
+            "        <button on:click={() => { prefillChatInput('Recalcula el escandallo de todas las recetas en servicio.'); modalAbierto = false; }}>Si, recalcular</button>",
+            "        <button on:click={() => modalAbierto = false}>Cancelar</button>",
+            "      </div>",
+            "    {/if}",
+            "  modal NO es bloqueante segun frontend.contract --es un panel inline tipo system_panel; aplicar size <= 33vh",
+            "si Q2.respuesta === 'B' (boton sin modal):",
+            "  similar pero sin {#if modalAbierto}, click directo invoca prefillChatInput"
+          ]
+        },
+        {
+          "id": "F2.op4_aplicar_Q3_extras",
+          "descripcion": "Anyadir botones extra que el usuario haya identificado en Q3",
+          "pseudocodigo": [
+            "si Q3.respuesta === 'A' (no extras): skip",
+            "si Q3.respuesta === 'B': para cada extra descrito por el usuario, anyadir boton siguiendo el patron de F2.op2"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["frontend/src/lib/modules/escandallo/EscandalloPanel.svelte (probablemente)", "posiblemente otros componentes si Q3 lo indica"],
+        "tamano_aproximado": "+20 a +50 lineas segun cuantos botones",
+        "no_cambia": "estructura del Panel, navegacion interna, store, manifest, ruta"
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Verificacion manual con dev server",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1_arrancar_dev",
+          "descripcion": "Levantar dev server",
+          "pseudocodigo": [
+            "cd frontend",
+            "npm install si no instalado",
+            "npm run dev",
+            "abrir navegador en URL del proyecto activo"
+          ]
+        },
+        {
+          "id": "F3.op2_golden_path",
+          "descripcion": "Verificar flujos completos de escandallo",
+          "pseudocodigo": [
+            "navegar a /<project_id>/escandallo",
+            "comprobar:",
+            "  ✓ boton 📊 Escandallo aparece en work-bar superior",
+            "  ✓ click abre EscandalloPanel con vista global o receta segun activeView",
+            "  ✓ los hints estaticos viejos NO aparecen (verificacion visual)",
+            "  ✓ boton 'Calcular escandallo' aparece (segun Q1) y al hacer click pre-rellena chat con la frase",
+            "  ✓ si Q2 in (A,B): boton 'Recalcular todas' aparece y funciona segun el modo elegido",
+            "  ✓ si Q1 == 'B': boton solo aparece cuando hay receta seleccionada",
+            "  ✓ navegacion entre browser y detail sigue funcionando",
+            "  ✓ alertas siguen mostrandose correctamente"
+          ]
+        },
+        {
+          "id": "F3.op3_reactividad_evento",
+          "descripcion": "Verificar que el cambio de evento legacy->canonico funciona en vivo",
+          "pseudocodigo": [
+            "estando en /escandallo con browser visible",
+            "desde el chat (de la misma sesion o paralelo) pedir 'calcula el escandallo de la receta X'",
+            "esperar que el blueprint procese (puede tardar varios segundos por Mercadona + LLM)",
+            "✓ Browser debe refrescarse automaticamente con el nuevo coste",
+            "✓ NO debe necesitar recargar pagina manualmente"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "documento_de_resultados": "fede reporta cada checkmark con ✓ o ✗ + descripcion del problema si falla",
+        "estado_terminal_para_avanzar_a_F4": "TODOS los checks ✓"
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Commit + push a la rama de la sesion",
+      "esfuerzo_horas": 0.1,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_status",
+          "descripcion": "Revisar git status",
+          "pseudocodigo": [
+            "git status",
+            "git diff",
+            "confirmar que solo hay cambios listados en salidas_esperadas de F1-F2"
+          ]
+        },
+        {
+          "id": "F4.op2_commit",
+          "descripcion": "Crear commit estructurado",
+          "pseudocodigo": [
+            "git add (archivos especificos, NUNCA git add . o git add -A)",
+            "git commit con mensaje:",
+            "  feat(ui:escandallo): cierre UI modulo escandallo alineado a ui-frontend-blueprint v1.0.1",
+            "  + suscripcion del store actualizada a evento canonico escandallo.coste.calculado",
+            "  + hints estaticos sustituidos por botones con prefillChatInput",
+            "  + (lista de botones segun Q1 Q2 Q3 cerradas)",
+            "  Decisiones en arquitectura/decisiones/propuestas/cierre-ui-escandallo.json"
+          ]
+        },
+        {
+          "id": "F4.op3_push",
+          "descripcion": "Push con retry exponencial",
+          "pseudocodigo": [
+            "git push -u origin <rama-de-la-sesion>",
+            "si falla por red: retry 2s, 4s, 8s, 16s",
+            "si falla por otra razon: parar, diagnosticar, reportar al humano"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo que el humano lo pida explicitamente"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "descripcion": "validate:ci no debe romper nada",
+      "comando": "npm run validate:ci",
+      "directorio": "raiz repo",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "PASS sin drift nuevo"
+    },
+    {
+      "id": "CC2_build_frontend",
+      "descripcion": "Compilacion del frontend sin errores",
+      "comando": "npm run build",
+      "directorio": "frontend/",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "build OK sin errores TypeScript"
+    },
+    {
+      "id": "CC3_git_status",
+      "descripcion": "Verificar scope",
+      "comando": "git status",
+      "ejecutar_tras": ["F1", "F2", "F3"],
+      "verificar": "ningun archivo modificado fuera del scope de la fase"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Tocar modules/pizzepos/escandallo/escandallo.blueprint.json o module.json",
+    "Tocar cualquier otro blueprint backend",
+    "Anyadir funciones de mutacion al store de escandallo --rompe Postura B y D3",
+    "Invocar tools del blueprint (escandallo.calcular, escandallo.recalcular_todas) desde el store via mqttRequest --los blueprints son LLM-runtime, no responden al bus directamente",
+    "Refactorizar Browser/Card/Detail/Alerts (cumplen contrato segun D6)",
+    "Tocar frontend/src/lib/stores/chatInputDraft.ts o ChatInput.svelte (esos viven en el plan de recetas)",
+    "Tocar otros stores frontend",
+    "Crear forms de creacion/edicion --postura B no los lleva",
+    "Modificar scripts/validate-all.js, validators, drift-baseline.json",
+    "Modificar arquitectura/decisiones/_contratos/",
+    "Modificar LazyShell.svelte, loader.ts",
+    "Anyadir mas botones de los que las preguntas abiertas Q1/Q2/Q3 hayan cerrado",
+    "Modificar el manifest del modulo (1 boton work-bar correcto, NO anyadir mas)",
+    "Crear nuevas rutas SvelteKit (la /escandallo existente es suficiente)",
+    "Crear PR sin OK explicito del humano",
+    "Hacer commit con git add . o git add -A",
+    "Saltar OK humano entre F1 y F2, F2 y F3, F3 y F4",
+    "Decir 'todo OK' sin reportar el comando ejecutado y su salida real",
+    "Continuar a F2 si la verificacion de dependencia DEP1 en F2.op0 falla"
+  ],
+
+  "salida_final_del_horizonte": {
+    "modulo_escandallo_estado_terminal": "UI alineada al contrato ui-frontend-blueprint v1.0.1: 7/7 principios cumplidos, evento del bus actualizado al canonico, hints estaticos sustituidos por botones accionables segun decisiones cerradas en Q1/Q2/Q3",
+    "archivos_finales_modificados": [
+      "frontend/src/lib/stores/escandallo.ts (cambio de nombre de evento: escandallo.coste.actualizado -> escandallo.coste.calculado)",
+      "frontend/src/lib/modules/escandallo/EscandalloPanel.svelte (botones de accion anyadidos segun Q1/Q2)",
+      "(posiblemente otros componentes si Q3 lo indica)"
+    ],
+    "archivos_NO_modificados": [
+      "Todo el backend del blueprint escandallo",
+      "Otros modulos del repo",
+      "Stores compartidos (chatInputDraft, ChatInput)",
+      "Browser/Card/Detail/Alerts (estructura intacta)"
+    ],
+    "verificacion_terminal": [
+      "Todos los flujos de F3 verificados ✓",
+      "validate:ci verde (sin drift nuevo)",
+      "frontend build OK",
+      "git status: solo archivos listados arriba",
+      "commit pusheado a la rama de la sesion"
+    ],
+    "deuda_cerrada_del_horizonte_global": [
+      "Escandallo deja de ser '#2 en _arranque-cierre-ui-blueprints.md como CERRADO segun dossier, falta verificacion contra contrato' --pasa a 'CERRADO Y VERIFICADO'"
+    ]
+  }
+}

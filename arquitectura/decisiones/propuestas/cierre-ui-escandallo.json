@@ -141,7 +141,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "El criterio 'accion rapida sin formularla' del contrato aplica directamente. Hint estatico crea friccion sin razon.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "boton Calcular escandallo con prefillChatInput", "cerrada_en": "2026-06-01T09:23:44.855Z" }
     },
     {
       "id": "Q2",
@@ -166,7 +166,7 @@
       ],
       "recomendacion": "C",
       "comentario_recomendacion": "Operacion potencialmente cara (N LLM calls, N consultas Mercadona). Postura B no obliga a tener boton para todo --solo para acciones frecuentes/baratas/seguras. Recalcular_todas es excepcion natural.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "C", "motivo": "operacion cara, se queda solo en chat", "cerrada_en": "2026-06-01T09:27:33.196Z" }
     },
     {
       "id": "Q3",
@@ -186,7 +186,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Escandallo es lectura mayoritariamente: muestra coste, alertas, historico. Las unicas acciones de mutacion son calcular (Q1) y recalcular_todas (Q2). El resto es navegacion interna del Panel.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "solo Q1; resto lectura pura", "cerrada_en": "2026-06-01T09:29:22.759Z" }
     }
   ],
 

@@ -372,11 +372,12 @@ export function initEscandalloSubscriptions(): () => void {
   cleanupFns.forEach(fn => fn());
   cleanupFns = [];
 
-  // Cuando escandallo v2 termina de calcular y persistir, refrescamos.
+  // Cuando escandallo (blueprint v3) termina de calcular y persistir, refrescamos.
+  // Evento canonico del blueprint: escandallo.coste.calculado.
   cleanupFns.push(
-    mqttSubscribe('escandallo.coste.actualizado', (_topic, payload) => {
+    mqttSubscribe('escandallo.coste.calculado', (_topic, payload) => {
       const data = payload as { receta_id?: string };
-      console.log('[Escandallo] Coste actualizado:', data?.receta_id);
+      console.log('[Escandallo] Coste calculado:', data?.receta_id);
       loadEscandalloGlobal();
     })
   );

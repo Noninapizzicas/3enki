@@ -4043,6 +4043,10 @@
         {
           "source": "modules/pizzepos/escandallo/escandallo.blueprint.json",
           "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
         }
       ],
       "subscribers": []

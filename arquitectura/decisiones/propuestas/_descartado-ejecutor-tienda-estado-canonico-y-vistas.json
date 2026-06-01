@@ -1,4 +1,13 @@
 {
+  "_descarte": {
+    "no_ejecutar": true,
+    "fecha": "2026-05-30",
+    "motivo": "Manual operativo del horizonte tienda-estado-canonico-y-vistas, descartado por las razones documentadas en el plan companero (_descartado-tienda-estado-canonico-y-vistas.json) y en la entry del contrato paradigma-no-cabe.",
+    "patron_del_paradigma_viejo_que_lo_origino": "cache_materializado_del_estado_de_un_dominio",
+    "entry_en_contrato": "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json#entries.cache_materializado_del_estado_de_un_dominio",
+    "advertencia_al_lector": "Este JSON queda como EVIDENCIA del ejecutor cocinado para el horizonte descartado. NO arrancar fede sobre el. Si fede recibe este path como horizonte a ejecutar, debe rechazar y citar el contrato.",
+    "plan_que_acompanaba": "arquitectura/decisiones/propuestas/_descartado-tienda-estado-canonico-y-vistas.json"
+  },
   "_doc": "Manual operativo del LLM ejecutor del plan tienda-estado-canonico-y-vistas.json. NO repite el plan --es CoMO se conduce el LLM al ejecutarlo. Pensado para que el operador humano pegue una sola frase en una sesion nueva (Claude Code, otro LLM, etc.) y el ejecutor sepa exactamente que hacer turn-by-turn sin improvisar.",
   "id": "_ejecutor-tienda-estado-canonico-y-vistas",
   "version": "1.0.0",

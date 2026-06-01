@@ -1,4 +1,13 @@
 {
+  "_descarte": {
+    "no_ejecutar": true,
+    "fecha": "2026-05-30",
+    "motivo": "El cache materializado de estado.json era over-engineering. El sistema event-core ya da la informacion en vivo a cualquier cliente que escuche los eventos del subsistema. Reemplazar fuente unica de verdad (los eventos del bus) por una fuente derivada (un JSON cache) introduce drift, doble mantenimiento, y resuelve un problema que nadie pidio en caliente.",
+    "patron_del_paradigma_viejo_que_lo_origino": "cache_materializado_del_estado_de_un_dominio",
+    "entry_en_contrato": "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json#entries.cache_materializado_del_estado_de_un_dominio",
+    "advertencia_al_lector": "Este JSON queda como EVIDENCIA del camino explorado, NO como plan ejecutable. Si te dispones a ejecutarlo (manual o via fede), PARA: ese horizonte se rechazo. Lee paradigma-no-cabe.contract.json para entender por que.",
+    "este_horizonte_NO_resucita_sin": "demostrar que ha emergido un caso real concreto que el modelo event-core directo NO resuelve --no basta con 'me parece util tener cache'"
+  },
   "_doc": "Plan ejecutable JSON del horizonte 'tienda-estado-canonico-y-vistas'. Captura el plan para hacer el subsistema-tienda visible y operable para los cuatro perfiles que lo usan (operador del repo, dev nuevo, LLM del chat, comerciante). Caso piloto: vapers. Pensado para que un LLM lo siga linealmente en la proxima sesion. Las fases usan pseudocodigo respetando pseudocodigo-estilo.contract.json (sin Object.assign, sin rest-spread con omision).",
   "id": "tienda-estado-canonico-y-vistas",
   "version": "1.0.0",

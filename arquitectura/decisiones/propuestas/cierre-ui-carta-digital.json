@@ -1,0 +1,894 @@
+{
+  "_doc": "Plan ejecutable JSON del horizonte 'cierre-ui-carta-digital'. Crea desde cero la UI del modulo carta-digital --backend blueprint-driven (4 operaciones: get_config, update_config, get_carta_publica, set_carta_compuesta; persistencia /storage/pizzepos/carta-digital/config.json tras TP-hermano-1; modelo no-reactivo A1), frontend cero al cocinar este plan (la ruta SvelteKit con LazyShell ya existe). Aplica las convenciones visuales del contrato ui-frontend-blueprint v1.0.1: Postura B canonica + Panel router + store solo lectura + prefillChatInput. Tras aplicar los 5 criterios chat-vs-UI: 3 zonas fijas --Identidad (branding+contacto fusionados), Opciones de visualizacion (ligera), Carta compuesta (principal, con badge desfasada y acciones de regenerar PWA). Vista tabular del shape JSON de la carta compuesta (no mockup visual real --el preview visual lo da el PWA publico via cartadigital-pwa-builder). Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
+
+  "id": "cierre-ui-carta-digital",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "cierre_ui_modulo_blueprint",
+
+  "documentos_hermanos": {
+    "contrato_canonico_dominio": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.1",
+      "relacion": "v1.0.1 ajusto consume_canonico de carta-digital a [] (A1 no-reactivo). La UI respeta este modelo --NO recompose automatico, el LLM decide cuando entrar al page."
+    },
+    "contrato_canonico_ui_pattern": {
+      "path": "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+      "version": "1.0.1",
+      "relacion": "Patron canonico UI para modulos blueprint. carta-digital ES blueprint-driven --aplica directo (cross-checks del validator aplican). Los 5 criterios chat-vs-UI del principio 2 ya fueron aplicados al cocinar --resultado: 3 zonas justificadas."
+    },
+    "plan_backend_hermano": {
+      "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-carta-digital.json",
+      "version": "1.0.0",
+      "relacion": "Plan backend del MISMO hermano. Cocinado en el commit anterior. Cero acoplamiento de ejecucion --este plan UI puede ejecutarse antes o despues del backend; los paths que la UI lee son los nuevos canonicos /storage/pizzepos/carta-digital/config.json (asumimos que el backend ya esta ejecutado, si no, el store devuelve estado vacio limpio)."
+    },
+    "plan_piloto_estructural": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-tarifas.json",
+      "version": "1.0.0",
+      "relacion": "Plan modelo mas reciente con Panel + N zonas (no Browser+Card+Detail). carta-digital reutiliza su shape estructural --pero con 3 zonas distintas y patron de comparador de timestamps."
+    },
+    "patron_hermano_estructural_existente": {
+      "path": "frontend/src/lib/modules/recetas/",
+      "relacion": "Patron hermano estructural ya en disco. NO se modifica --solo se replica el patron de organizacion."
+    },
+    "dependencia_chatInputDraft": {
+      "path": "frontend/src/lib/stores/chatInputDraft.ts",
+      "estado_esperado": "EXISTE y exporta writable + prefillChatInput. Materializado por cierre-ui-recetas F1.",
+      "comportamiento_si_no_existe": "PARAR antes de F2 (las 3 zonas usan prefillChatInput). Reportar al humano."
+    }
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+    "arquitectura/decisiones/_contratos/frontend.contract.json",
+    "arquitectura/decisiones/_contratos/modulo-clase-robusta.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json"
+  ],
+
+  "dependencias_explicitas": [
+    {
+      "id": "DEP1",
+      "depende_de": "cierre-ui-recetas.json F1",
+      "que_debe_estar_hecho": "frontend/src/lib/stores/chatInputDraft.ts existe con writable y prefillChatInput exportada.",
+      "afecta_a_fase": "F2",
+      "comportamiento_si_no_se_cumple": "fede para al inicio de F2 y reporta al humano. NO continua."
+    }
+  ],
+
+  "por_que_existe": {
+    "rol_de_carta_digital_en_el_subsistema": "Backoffice de la carta publica del cliente final del comerciante (PWA bajo /shop/<slug>). Custodio del config (branding + contacto + opciones + carta_compuesta snapshot). NO compone --los agentes (cartadigital-composer, cartadigital-pwa-builder, cartadigital-ofertas) lo hacen cuando el LLM les delega. Modelo no-reactivo: el LLM al entrar a page=carta-digital decide cuando recomponer (A1 del contrato v1.0.1).",
+    "gap_principal": "Backend blueprint maduro (4 operaciones), ruta SvelteKit /carta-digital con LazyShell existente, PERO sin modulo frontend ni store. Cajones rompen al hacer chat.cambiar_foco a target_page_id='carta-digital'. Y el comerciante no puede ver el branding actual ni el estado de la carta compuesta sin tirar del chat.",
+    "alcance": "Creacion de UI desde cero siguiendo Postura B + 3 zonas justificadas por los 5 criterios chat-vs-UI: store + modulo frontend (Panel + IdentidadZone + OpcionesZone + CartaCompuestaZone + manifest + index) + registro del modulo en el loader. La ruta SvelteKit ya existe."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/carta-digital/module.json",
+      "version_actual": "1.1.0 (1.2.0 tras ejecucion del plan backend)",
+      "blueprint_driven": true,
+      "target_page_id": "carta-digital"
+    },
+    {
+      "pieza": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+      "version_actual": "blueprint-1.1.0 (blueprint-1.2.0 tras ejecucion del plan backend)",
+      "operaciones_expuestas": ["get_config", "update_config", "get_carta_publica", "set_carta_compuesta"],
+      "eventos_publicados": ["cartadigital.config.actualizada", "cartadigital.carta_publica.actualizada"],
+      "eventos_que_escucho": "[] (A1 no-reactivo, preservado en bump v1.2.0)",
+      "shape_config": "{ _version, _updated_at, branding: {nombre, lema, colores, logo_url, fuente, ...}, dominio_publico, contacto: {telefono, email, web, redes}, opciones_visualizacion, carta_compuesta: {meta, categorias, productos, ofertas, generado_at, generado_por} }"
+    },
+    {
+      "pieza": "frontend/src/routes/[project_id]/carta-digital/+page.svelte",
+      "existe": true,
+      "contenido": "<LazyShell /> (patron canonico ya aplicado --se preserva sin cambios)"
+    },
+    {
+      "pieza": "frontend/src/lib/modules/carta-digital/",
+      "existe": false,
+      "esperado_tras_plan": "manifest.json + index.ts + CartaDigitalPanel.svelte + IdentidadZone.svelte + OpcionesZone.svelte + CartaCompuestaZone.svelte"
+    },
+    {
+      "pieza": "frontend/src/lib/stores/carta-digital.ts",
+      "existe": false,
+      "esperado_tras_plan": "loadCartaDigitalConfig + initCartaDigitalSubscriptions + estaCartaCompuestaDesfasada (derived)"
+    },
+    {
+      "pieza": "frontend/src/lib/modules/recetas/",
+      "existe": true,
+      "rol": "patron hermano estructural --se usa como referencia, NO se modifica"
+    },
+    {
+      "pieza": "frontend/src/lib/stores/chatInputDraft.ts",
+      "existe": "verificar al arrancar la sesion (DEP1)",
+      "comportamiento_si_no_existe": "parar antes de F2 y reportar"
+    },
+    {
+      "pieza": "data/projects/{slug}/storage/pizzepos/carta-digital/config.json",
+      "existencia_real": "tras backend plan ejecutado --no existe todavia, store devuelve estado vacio limpio.",
+      "rol_para_el_store": "fuente que carta-digital.ts lee via fs.read.request"
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/<rama-asignada> antes de empezar",
+      "frontend/src/lib/modules/carta-digital/ NO existe (verificar con ls)",
+      "frontend/src/lib/stores/carta-digital.ts NO existe",
+      "frontend/src/routes/[project_id]/carta-digital/+page.svelte EXISTE con <LazyShell />",
+      "frontend/src/lib/stores/chatInputDraft.ts EXISTE y exporta prefillChatInput --SI NO, parar antes de F2",
+      "frontend/src/lib/components/layout/ChatInput.svelte hace bind con chatInputDraft --SI NO, parar antes de F2",
+      "frontend/src/lib/modules/recetas/ existe como referencia del patron hermano --NO se modifica",
+      "frontend/src/lib/modules/index.ts o loader.ts existen --se modifican solo para registrar el modulo carta-digital en F2.op7",
+      "modules/pizzepos/carta-digital/module.json EXISTE y declara target_page_id='carta-digital' (cualquier version 1.1.0+)",
+      "npm run validate:ci en la raiz da PASS antes de empezar"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones del contrato subsistema-carta v1.0.1 (D1-D11) --especialmente A1 (carta-digital no reactivo) y D9 (shape interno abierto)",
+      "Los 7 principios del contrato ui-frontend-blueprint v1.0.1 --especialmente principio 6 (store es lector reactivo, NUNCA invoca tools del blueprint LLM-runtime)",
+      "Los 5 criterios chat-vs-UI ya aplicados al cocinar: 3 zonas justificadas (Identidad + Opciones + Carta Compuesta).",
+      "Postura B canonica: cero forms de mutacion, prefillChatInput para acciones",
+      "Patron hermano: cierre-ui-tarifas.json es el modelo estructural mas cercano (Panel + N zonas)",
+      "Mecanismo chatInputDraft es el unico canonico de pre-relleno del chat",
+      "Eventos del bus a escuchar: cartadigital.config.actualizada + cartadigital.carta_publica.actualizada (publicados por el propio blueprint) + carta.actualizada (de carta-manager --para saber si la carta_compuesta esta desfasada respecto a la carta upstream)",
+      "Path canonico de lectura del store: /storage/pizzepos/carta-digital/config.json (canonizado por TP-backend de carta-digital). Si el plan backend NO se ha ejecutado todavia, el store devuelve estado vacio limpio (el fs.read.request devuelve 404)",
+      "Shape estable de config: branding + contacto + opciones_visualizacion + carta_compuesta. NO es shape interno abierto como cartas --aqui los campos estan canonizados por el blueprint"
+    ],
+    "no_toco_esta_sesion": [
+      "modules/pizzepos/carta-digital/* (backend --plan separado)",
+      "Artefactos de deploy: cf-worker/, export-cli.js, static-template.js, context.json, prompt.json del directorio de carta-digital",
+      "Agentes asociados (cartadigital-composer, cartadigital-pwa-builder, cartadigital-ofertas, cartadigital-reviewer)",
+      "Cualquier otro modulo backend (carta-manager, menu-generator, tarifas, productos)",
+      "frontend/src/lib/modules/recetas/, escandallo/, viabilidad/, carta-manager/, tarifas/ (modulos hermanos --planes propios o ya cocinados)",
+      "frontend/src/lib/stores/recetas.ts, escandallo.ts, carta-manager.ts, tarifas.ts",
+      "frontend/src/lib/stores/chatInputDraft.ts (vive en cierre-ui-recetas F1)",
+      "frontend/src/lib/components/layout/ChatInput.svelte (modificado por cierre-ui-recetas F1)",
+      "scripts/validate-all.js, validators, drift-baseline.json",
+      "arquitectura/decisiones/_contratos/ (cero modificacion)",
+      "LazyShell.svelte, loader.ts mas alla del registro minimo del modulo carta-digital",
+      "Datos reales en disco /storage/pizzepos/carta-digital/config.json (cero migracion --leemos el path nuevo, si esta vacio o no existe se renderiza estado vacio)"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [
+    {
+      "id": "Q1",
+      "tema": "icono_y_label_boton_workbar",
+      "pregunta": "¿Que icono y label tiene el boton del work-bar para abrir carta-digital?",
+      "opciones": [
+        {"id": "A", "label": "📱 + 'Carta digital'", "comentario": "metafora movil/PWA, conecta con que es la carta del cliente final"},
+        {"id": "B", "label": "🌐 + 'Carta digital'", "comentario": "metafora web/publico"},
+        {"id": "C", "label": "📲 + 'PWA'", "comentario": "mas tecnico, menos amigable al comerciante"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "📱 + 'Carta digital' conecta con la realidad: es la carta que el cliente del comerciante ve en su movil. Mas amigable al comerciante que un termino tecnico (PWA).",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q2",
+      "tema": "orden_del_boton_workbar",
+      "pregunta": "¿Que orden tiene el boton carta-digital en la work-bar relativo a los otros?",
+      "opciones": [
+        {"id": "A", "label": "6 --tras tarifas (5)", "comentario": "carta-digital opera sobre la carta ya activada en tarifas; logico despues"},
+        {"id": "B", "label": "5 --tras carta-manager (4), antes de tarifas", "comentario": "agrupa: cartas (4) -> carta-digital (5) -> tarifas (6)"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "carta-digital es el ultimo eslabon de salida hacia el cliente final --logico despues de tarifas que decide que carta sirve cada canal.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q3",
+      "tema": "render_carta_compuesta",
+      "pregunta": "¿Como se renderiza la carta_compuesta en la zona principal?",
+      "opciones": [
+        {"id": "A", "label": "tabla por categorias con expansion por producto", "comentario": "como cierre-ui-carta-manager Q3.C --vista densa con detalles bajo demanda"},
+        {"id": "B", "label": "lista plana de categorias y productos, sin expansion", "comentario": "mas simple, menos navegacion"},
+        {"id": "C", "label": "iframe del HTML compuesto --vista previa real del PWA", "comentario": "preview visual real pero requiere generar HTML inline; complejo en v1"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Coherencia con la UI de carta-manager (mismo patron de tabla con expansion). El comerciante reconoce el patron. Iframe (C) es trabajo de complejidad mayor; se deja como F-extension futura si emerge necesidad.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q4",
+      "tema": "badge_carta_desfasada",
+      "pregunta": "¿Como detecta la UI que la carta_compuesta esta desfasada respecto a la carta upstream?",
+      "opciones": [
+        {"id": "A", "label": "compara timestamps: carta_compuesta.generado_at vs ultima carta.actualizada conocida", "comentario": "el store cachea el ultimo evento carta.actualizada/editada por subscribirse al bus; si es posterior al generado_at, badge desfasada"},
+        {"id": "B", "label": "compara version: carta_compuesta.meta.version vs carta general activa segun tarifas", "comentario": "requiere cruzar con tarifasConfig --mas acoplamiento"},
+        {"id": "C", "label": "NO se muestra badge --el LLM lo evalua al entrar al page, sin pista visual", "comentario": "minimalismo, A1 estricto"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "A es lo mas pragmatico: el store ya escucha carta.actualizada por otros consumers; comparar timestamps es trivial. El badge ayuda al comerciante a saber que algo se actualizo upstream. NO recompose automatico (preserva A1) --solo info.",
+      "respuesta_usuario": null
+    },
+    {
+      "id": "Q5",
+      "tema": "frases_canonicas_de_prefill",
+      "pregunta": "¿Confirmas las frases canonicas de prefill propuestas o las matizas?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "acepto literalmente",
+          "comentario": "Propuestas:\n- Editar branding: 'Cambia el branding de la carta digital: [describe cambios: nombre, lema, colores, logo, fuente].'\n- Editar contacto: 'Actualiza los datos de contacto de la carta digital: [telefono, email, web, redes].'\n- Editar opciones de visualizacion: 'Cambia las opciones de visualizacion de la carta digital: [describe cambios].'\n- Regenerar carta compuesta: 'Recompone la carta digital con la carta actual del proyecto. Si hay ofertas activas, incluyelas.'\n- Regenerar PWA bundle: 'Genera el bundle de la PWA con la carta compuesta actual. Despliegalo a /shop/<slug>.'\n- Ver carta publica: 'Devuelveme la carta publica actual (lo que ve el cliente final).'"
+        },
+        {"id": "B", "label": "las matizo", "comentario": "usuario provee nuevas redacciones"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Frases operativas que el LLM puede procesar sin ambiguedad. Ajustables tras uso real.",
+      "respuesta_usuario": null
+    }
+  ],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_postura_B_canonica",
+      "decision": "Postura B aplica integralmente: cero forms de mutacion, store solo lectura, acciones via prefillChatInput. Las mutaciones (update_config, set_carta_compuesta, recompose, deploy PWA) las hace el LLM a peticion del chat tras click en boton de la UI.",
+      "no_reabrir_sin": "caso concreto que justifique form bulk."
+    },
+    {
+      "id": "D2_3_zonas_no_4",
+      "decision": "3 zonas: IdentidadZone (branding + contacto fundidos --el comerciante los percibe como 'datos del local'), OpcionesZone (visualizacion, ligera), CartaCompuestaZone (principal, con carta + badge desfasada + acciones de regenerar). NO 4 zonas separadas (branding y contacto fusionados).",
+      "no_reabrir_sin": "el shape de branding+contacto creze tanto que justifique separarlos --por ahora son ~10 campos totales."
+    },
+    {
+      "id": "D3_store_solo_lectura_via_fs_read",
+      "decision": "El store lee /storage/pizzepos/carta-digital/config.json via fs.read.request. NUNCA invoca tools del blueprint LLM-runtime (cartadigital.get_config, etc.) --principio 6 del contrato ui-frontend-blueprint + leccion bug PR #264 del horizonte cierre-ui-recetas.",
+      "no_reabrir_sin": "cambio del paradigma event-core."
+    },
+    {
+      "id": "D4_suscripciones_canonicas",
+      "decision": "initCartaDigitalSubscriptions registra: (a) cartadigital.config.actualizada --recarga loadCartaDigitalConfig; (b) cartadigital.carta_publica.actualizada --recarga loadCartaDigitalConfig (carta_compuesta cambio); (c) carta.actualizada + carta.editada --actualiza un store derivado de 'ultima carta upstream conocida' usado para calcular si carta_compuesta esta desfasada.",
+      "no_reabrir_sin": "cambio en eventos canonicos del subsistema."
+    },
+    {
+      "id": "D5_panel_sin_router_3_zonas_apiladas",
+      "decision": "CartaDigitalPanel.svelte renderiza las 3 zonas apiladas verticalmente. NO usa router con activeView local (como recetas/CartaManagerPanel). El estado colapsado/expandido es local de cada zona. Mismo patron que TarifasPanel.",
+      "no_reabrir_sin": "que la UI crezca tanto que necesite paginacion."
+    },
+    {
+      "id": "D6_badge_desfasada_basado_en_timestamps",
+      "decision": "Q4.A cerrada: el store cachea ultimaActualizacionCartaUpstream (timestamp del ultimo carta.actualizada/editada recibido). La zona CartaCompuesta compara contra carta_compuesta.generado_at y muestra badge 'desfasada' + boton 'Recomponer' si la upstream es posterior. NO recompose automatico (preserva A1 backend) --solo pista visual.",
+      "no_reabrir_sin": "decision arquitectonica nueva sobre reactividad."
+    },
+    {
+      "id": "D7_render_carta_compuesta_tabular_con_expansion",
+      "decision": "Q3.A cerrada: CartaCompuestaZone renderiza la carta_compuesta como tabla por categorias con expansion por producto. Mismo patron que CartaDetail.svelte de carta-manager. NO iframe del HTML real (complejidad innecesaria en v1).",
+      "no_reabrir_sin": "emergencia de preview visual real (en cuyo caso, F-extension)."
+    },
+    {
+      "id": "D8_no_se_invocan_acciones_de_deploy_directamente",
+      "decision": "Botones de Regenerar PWA / Recompose / Deploy NO invocan tools del backend ni de agentes. Pre-rellenan chat con frases Q5. El LLM ejecuta lo que toca (carta-digital.set_carta_compuesta + agent.execute.request al cartadigital-pwa-builder).",
+      "no_reabrir_sin": "decision arquitectonica nueva sobre Postura A para deploy."
+    },
+    {
+      "id": "D9_state_vivo_se_renderiza_pero_no_se_compone_local",
+      "decision": "La UI muestra timestamp de carta_compuesta + comparador con upstream + lista de categorias/productos --todo del config persistido. NO compone localmente la carta_compuesta (eso es trabajo del agente cartadigital-composer cuando el LLM le delega).",
+      "no_reabrir_sin": "decision diferente sobre composicion local."
+    },
+    {
+      "id": "D10_no_se_migran_datos_existentes",
+      "decision": "Si existe carta-digital.json en el path viejo (data/projects/{slug}/carta-digital.json antes del bump backend), este plan NO lo migra. El store lee el path nuevo /storage/pizzepos/carta-digital/config.json --si no existe, devuelve estado vacio limpio. La migracion de datos es trabajo separado (TP-backend lo declara fuera de scope).",
+      "no_reabrir_sin": "OK explicito del usuario."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Crear store frontend/src/lib/stores/carta-digital.ts",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1_crear_archivo_y_imports",
+          "descripcion": "Crear el archivo del store con estructura canonica",
+          "pseudocodigo": [
+            "crear archivo nuevo frontend/src/lib/stores/carta-digital.ts",
+            "imports:",
+            "  import { writable, derived, get } from 'svelte/store'",
+            "  import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request'",
+            "  import { subscribe as busSubscribe } from '$lib/ui-core/bus'",
+            "constantes:",
+            "  const CONFIG_PATH = '/storage/pizzepos/carta-digital/config.json'",
+            "tipos TypeScript:",
+            "  interface BrandingConfig { nombre?: string, lema?: string, colores?: any, logo_url?: string, fuente?: string, [key: string]: any }",
+            "  interface ContactoConfig { telefono?: string, email?: string, web?: string, redes?: any, [key: string]: any }",
+            "  interface CartaCompuesta { meta?: any, categorias?: any[], productos?: any[], ofertas?: any[], generado_at?: string, generado_por?: string, [key: string]: any }",
+            "  interface CartaDigitalConfig {",
+            "    _version?: string",
+            "    _updated_at?: string",
+            "    branding?: BrandingConfig",
+            "    dominio_publico?: string",
+            "    contacto?: ContactoConfig",
+            "    opciones_visualizacion?: { [key: string]: any }",
+            "    carta_compuesta?: CartaCompuesta | null",
+            "  }",
+            "stores writables y derivados:",
+            "  export const cartaDigitalConfig = writable<CartaDigitalConfig | null>(null)",
+            "  export const ultimaActualizacionCartaUpstream = writable<string | null>(null)",
+            "  export const cartaDigitalLoading = writable<boolean>(false)",
+            "  export const cartaDigitalError = writable<string | null>(null)",
+            "  export const estaCartaCompuestaDesfasada = derived([cartaDigitalConfig, ultimaActualizacionCartaUpstream], ([config, upstream]) => {",
+            "    if (!config || !config.carta_compuesta || !config.carta_compuesta.generado_at) return false",
+            "    if (!upstream) return false",
+            "    return upstream > config.carta_compuesta.generado_at  // comparacion lexicografica de ISO 8601",
+            "  })"
+          ]
+        },
+        {
+          "id": "F1.op2_loadCartaDigitalConfig",
+          "descripcion": "Funcion loadCartaDigitalConfig --carga el config persistido",
+          "pseudocodigo": [
+            "export async function loadCartaDigitalConfig() {",
+            "  cartaDigitalLoading.set(true)",
+            "  cartaDigitalError.set(null)",
+            "  try {",
+            "    const res = await mqttRequest('fs', 'read', { path: CONFIG_PATH })",
+            "    if (res?.status === 404) {",
+            "      cartaDigitalConfig.set({",
+            "        _version: '1.0',",
+            "        _updated_at: null,",
+            "        branding: {},",
+            "        contacto: {},",
+            "        opciones_visualizacion: {},",
+            "        carta_compuesta: null",
+            "      })",
+            "      return",
+            "    }",
+            "    if (res?.status >= 400) {",
+            "      throw new Error('fs.read.request fallo con status ' + res.status)",
+            "    }",
+            "    const config = JSON.parse(res.data.content)",
+            "    cartaDigitalConfig.set(config)",
+            "  } catch (err) {",
+            "    cartaDigitalError.set(err?.message || 'Error al cargar carta digital')",
+            "  } finally {",
+            "    cartaDigitalLoading.set(false)",
+            "  }",
+            "}"
+          ]
+        },
+        {
+          "id": "F1.op3_initCartaDigitalSubscriptions",
+          "descripcion": "Funcion initCartaDigitalSubscriptions --suscribe a eventos del bus",
+          "pseudocodigo": [
+            "export function initCartaDigitalSubscriptions(): () => void {",
+            "  const unsubs: Array<() => void> = []",
+            "  // Eventos propios del modulo --recargar config completo",
+            "  unsubs.push(busSubscribe('cartadigital.config.actualizada', () => loadCartaDigitalConfig()))",
+            "  unsubs.push(busSubscribe('cartadigital.carta_publica.actualizada', () => loadCartaDigitalConfig()))",
+            "  // Eventos upstream --actualizar timestamp de ultima actualizacion conocida (para badge desfasada)",
+            "  unsubs.push(busSubscribe('carta.actualizada', (envelope) => {",
+            "    const ts = envelope?.timestamp || envelope?.metadata?.timestamp || envelope?.data?.timestamp",
+            "    if (ts) ultimaActualizacionCartaUpstream.set(ts)",
+            "  }))",
+            "  unsubs.push(busSubscribe('carta.editada', (envelope) => {",
+            "    const ts = envelope?.timestamp || envelope?.metadata?.timestamp || envelope?.data?.timestamp",
+            "    if (ts) ultimaActualizacionCartaUpstream.set(ts)",
+            "  }))",
+            "  return () => unsubs.forEach(u => u())",
+            "}"
+          ]
+        },
+        {
+          "id": "F1.op4_exports",
+          "descripcion": "Verificar exports",
+          "pseudocodigo": [
+            "Confirmar que el archivo exporta:",
+            "  - stores: cartaDigitalConfig, ultimaActualizacionCartaUpstream, cartaDigitalLoading, cartaDigitalError, estaCartaCompuestaDesfasada",
+            "  - funciones: loadCartaDigitalConfig, initCartaDigitalSubscriptions",
+            "NO exportar ninguna funcion de mutacion (D1)."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["frontend/src/lib/stores/carta-digital.ts"],
+        "tamano_aproximado": "~140 lineas"
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Crear modulo frontend frontend/src/lib/modules/carta-digital/",
+      "esfuerzo_horas": 4,
+      "ok_explicito_antes_de_continuar": true,
+      "depende_de": "DEP1 (cierre-ui-recetas F1)",
+      "branch_segun_QN": "aplicar Q1, Q2, Q3, Q4, Q5 segun respuestas",
+      "operaciones": [
+        {
+          "id": "F2.op0_verificar_dependencia",
+          "descripcion": "Verificar DEP1",
+          "pseudocodigo": [
+            "comprobar que frontend/src/lib/stores/chatInputDraft.ts EXISTE y exporta prefillChatInput",
+            "si NO: parar y reportar"
+          ]
+        },
+        {
+          "id": "F2.op1_CartaDigitalPanel",
+          "descripcion": "Crear CartaDigitalPanel.svelte --panel principal con 3 zonas apiladas",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-digital/CartaDigitalPanel.svelte",
+            "patron sin router (D5):",
+            "  <script>",
+            "    import { onMount, onDestroy } from 'svelte'",
+            "    import IdentidadZone from './IdentidadZone.svelte'",
+            "    import OpcionesZone from './OpcionesZone.svelte'",
+            "    import CartaCompuestaZone from './CartaCompuestaZone.svelte'",
+            "    import { loadCartaDigitalConfig, initCartaDigitalSubscriptions, cartaDigitalLoading, cartaDigitalError } from '$lib/stores/carta-digital'",
+            "    let cleanupSubs: (() => void) | null = null",
+            "    onMount(() => {",
+            "      loadCartaDigitalConfig()",
+            "      cleanupSubs = initCartaDigitalSubscriptions()",
+            "    })",
+            "    onDestroy(() => { if (cleanupSubs) cleanupSubs() })",
+            "  </script>",
+            "  <div class='carta-digital-panel'>",
+            "    {#if $cartaDigitalError}",
+            "      <div class='error-banner'>{$cartaDigitalError}</div>",
+            "    {/if}",
+            "    {#if $cartaDigitalLoading}",
+            "      <div class='loading'>Cargando carta digital...</div>",
+            "    {:else}",
+            "      <IdentidadZone />",
+            "      <OpcionesZone />",
+            "      <CartaCompuestaZone />",
+            "    {/if}",
+            "  </div>"
+          ]
+        },
+        {
+          "id": "F2.op2_IdentidadZone",
+          "descripcion": "Crear IdentidadZone.svelte --branding + contacto fusionados",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-digital/IdentidadZone.svelte",
+            "imports:",
+            "  import { cartaDigitalConfig } from '$lib/stores/carta-digital'",
+            "  import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "renderiza:",
+            "  <section class='zona-identidad'>",
+            "    <h2>Identidad del local</h2>",
+            "    <p class='hint'>Datos que el cliente final ve en la carta publica.</p>",
+            "    {#if $cartaDigitalConfig}",
+            "      <!-- Branding -->",
+            "      <div class='subseccion'>",
+            "        <h3>Branding</h3>",
+            "        <dl>",
+            "          {#if $cartaDigitalConfig.branding?.nombre}<dt>Nombre:</dt><dd>{$cartaDigitalConfig.branding.nombre}</dd>{/if}",
+            "          {#if $cartaDigitalConfig.branding?.lema}<dt>Lema:</dt><dd>{$cartaDigitalConfig.branding.lema}</dd>{/if}",
+            "          {#if $cartaDigitalConfig.branding?.colores}<dt>Colores:</dt><dd><pre>{JSON.stringify($cartaDigitalConfig.branding.colores, null, 2)}</pre></dd>{/if}",
+            "          {#if $cartaDigitalConfig.branding?.logo_url}<dt>Logo:</dt><dd><img src={$cartaDigitalConfig.branding.logo_url} alt='logo' style='max-height: 50px;' /></dd>{/if}",
+            "          {#if $cartaDigitalConfig.branding?.fuente}<dt>Fuente:</dt><dd>{$cartaDigitalConfig.branding.fuente}</dd>{/if}",
+            "        </dl>",
+            "        <button on:click={editarBranding}>Editar branding</button>",
+            "      </div>",
+            "      <!-- Contacto -->",
+            "      <div class='subseccion'>",
+            "        <h3>Contacto</h3>",
+            "        <dl>",
+            "          {#if $cartaDigitalConfig.contacto?.telefono}<dt>Telefono:</dt><dd>{$cartaDigitalConfig.contacto.telefono}</dd>{/if}",
+            "          {#if $cartaDigitalConfig.contacto?.email}<dt>Email:</dt><dd>{$cartaDigitalConfig.contacto.email}</dd>{/if}",
+            "          {#if $cartaDigitalConfig.contacto?.web}<dt>Web:</dt><dd>{$cartaDigitalConfig.contacto.web}</dd>{/if}",
+            "          {#if $cartaDigitalConfig.contacto?.redes}<dt>Redes:</dt><dd><pre>{JSON.stringify($cartaDigitalConfig.contacto.redes, null, 2)}</pre></dd>{/if}",
+            "        </dl>",
+            "        <button on:click={editarContacto}>Editar contacto</button>",
+            "      </div>",
+            "      <!-- Dominio publico (si existe) -->",
+            "      {#if $cartaDigitalConfig.dominio_publico}",
+            "        <div class='subseccion'>",
+            "          <h3>Dominio publico</h3>",
+            "          <a href={$cartaDigitalConfig.dominio_publico} target='_blank'>{$cartaDigitalConfig.dominio_publico}</a>",
+            "        </div>",
+            "      {/if}",
+            "    {/if}",
+            "  </section>",
+            "  function editarBranding() {",
+            "    prefillChatInput('Cambia el branding de la carta digital: [describe cambios: nombre, lema, colores, logo, fuente].')",
+            "  }",
+            "  function editarContacto() {",
+            "    prefillChatInput('Actualiza los datos de contacto de la carta digital: [telefono, email, web, redes].')",
+            "  }"
+          ]
+        },
+        {
+          "id": "F2.op3_OpcionesZone",
+          "descripcion": "Crear OpcionesZone.svelte --opciones de visualizacion, ligera",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-digital/OpcionesZone.svelte",
+            "imports:",
+            "  import { cartaDigitalConfig } from '$lib/stores/carta-digital'",
+            "  import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "  let expanded = false",
+            "  $: opciones = $cartaDigitalConfig?.opciones_visualizacion || {}",
+            "  $: hayOpciones = Object.keys(opciones).length > 0",
+            "renderiza:",
+            "  <section class='zona-opciones'>",
+            "    <button on:click={() => expanded = !expanded} class='header-colapsable'>",
+            "      <span class='caret'>{expanded ? '▾' : '▸'}</span>",
+            "      <span class='titulo'>Opciones de visualizacion</span>",
+            "      {#if !expanded && hayOpciones}",
+            "        <span class='resumen'>({Object.keys(opciones).length} opciones configuradas)</span>",
+            "      {/if}",
+            "    </button>",
+            "    {#if expanded}",
+            "      {#if hayOpciones}",
+            "        <dl>",
+            "          {#each Object.entries(opciones) as [k, v]}",
+            "            <dt>{k}:</dt>",
+            "            <dd>{typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v)}</dd>",
+            "          {/each}",
+            "        </dl>",
+            "      {:else}",
+            "        <p>Sin opciones de visualizacion configuradas.</p>",
+            "      {/if}",
+            "      <button on:click={editarOpciones}>Editar opciones</button>",
+            "    {/if}",
+            "  </section>",
+            "  function editarOpciones() {",
+            "    prefillChatInput('Cambia las opciones de visualizacion de la carta digital: [describe cambios].')",
+            "  }"
+          ]
+        },
+        {
+          "id": "F2.op4_CartaCompuestaZone",
+          "descripcion": "Crear CartaCompuestaZone.svelte --zona principal con render tabular + badge desfasada + acciones",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-digital/CartaCompuestaZone.svelte",
+            "imports:",
+            "  import { cartaDigitalConfig, estaCartaCompuestaDesfasada, ultimaActualizacionCartaUpstream } from '$lib/stores/carta-digital'",
+            "  import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "  $: cartaCompuesta = $cartaDigitalConfig?.carta_compuesta",
+            "  $: hayCarta = cartaCompuesta && cartaCompuesta.meta",
+            "  $: productos = cartaCompuesta?.productos || []",
+            "  $: categorias = cartaCompuesta?.categorias || []",
+            "  $: ofertas = cartaCompuesta?.ofertas || []",
+            "  let expandedProducto: string | null = null",
+            "renderiza:",
+            "  <section class='zona-carta-compuesta'>",
+            "    <h2>Carta compuesta (lo que ve el cliente)</h2>",
+            "    {#if !hayCarta}",
+            "      <div class='empty-state'>",
+            "        <p>Aun no hay carta compuesta para servir.</p>",
+            "        <p class='hint'>Pide al chat que componga la carta digital con la carta activa del proyecto.</p>",
+            "        <button on:click={recomponer}>Componer carta</button>",
+            "      </div>",
+            "    {:else}",
+            "      <!-- Metadata + badge desfasada -->",
+            "      <div class='meta-carta-compuesta'>",
+            "        <div><strong>Generada:</strong> {cartaCompuesta.generado_at}</div>",
+            "        {#if cartaCompuesta.generado_por}<div><strong>Por:</strong> {cartaCompuesta.generado_por}</div>{/if}",
+            "        {#if $estaCartaCompuestaDesfasada}",
+            "          <div class='badge-desfasada'>",
+            "            ⚠ DESFASADA --la carta upstream se actualizo el {$ultimaActualizacionCartaUpstream}",
+            "            <button on:click={recomponer}>Recomponer</button>",
+            "          </div>",
+            "        {/if}",
+            "      </div>",
+            "      <!-- Render por categorias con expansion por producto (Q3.A) -->",
+            "      {#each categorias as cat}",
+            "        <div class='categoria-bloque'>",
+            "          <h3>{cat.nombre || cat.id}</h3>",
+            "          <table>",
+            "            <thead>",
+            "              <tr><th>Nombre</th><th>Precio</th><th>Descripcion</th><th></th></tr>",
+            "            </thead>",
+            "            <tbody>",
+            "              {#each productos.filter(p => p.categoria_id === cat.id || p.categoria === cat.nombre) as prod}",
+            "                <tr on:click={() => expandedProducto = expandedProducto === prod.id ? null : prod.id}>",
+            "                  <td>{prod.nombre}</td>",
+            "                  <td>{prod.precio ?? '—'}</td>",
+            "                  <td>{(prod.descripcion || '').slice(0, 60)}{prod.descripcion?.length > 60 ? '...' : ''}</td>",
+            "                  <td>{expandedProducto === prod.id ? '▾' : '▸'}</td>",
+            "                </tr>",
+            "                {#if expandedProducto === prod.id}",
+            "                  <tr class='detalle-producto'>",
+            "                    <td colspan='4'><pre>{JSON.stringify(prod, null, 2)}</pre></td>",
+            "                  </tr>",
+            "                {/if}",
+            "              {/each}",
+            "            </tbody>",
+            "          </table>",
+            "        </div>",
+            "      {/each}",
+            "      <!-- Ofertas -->",
+            "      {#if ofertas.length > 0}",
+            "        <div class='ofertas-bloque'>",
+            "          <h3>Ofertas activas ({ofertas.length})</h3>",
+            "          {#each ofertas as oferta}",
+            "            <details>",
+            "              <summary>{oferta.nombre || 'Oferta sin nombre'}</summary>",
+            "              <pre>{JSON.stringify(oferta, null, 2)}</pre>",
+            "            </details>",
+            "          {/each}",
+            "        </div>",
+            "      {/if}",
+            "      <!-- Acciones -->",
+            "      <div class='acciones-carta-compuesta'>",
+            "        <button on:click={recomponer}>Recomponer carta</button>",
+            "        <button on:click={generarPWA}>Regenerar PWA</button>",
+            "        <button on:click={verPublica}>Ver carta publica</button>",
+            "      </div>",
+            "    {/if}",
+            "  </section>",
+            "  function recomponer() {",
+            "    prefillChatInput('Recompone la carta digital con la carta actual del proyecto. Si hay ofertas activas, incluyelas.')",
+            "  }",
+            "  function generarPWA() {",
+            "    prefillChatInput('Genera el bundle de la PWA con la carta compuesta actual. Despliegalo a /shop/<slug>.')",
+            "  }",
+            "  function verPublica() {",
+            "    prefillChatInput('Devuelveme la carta publica actual (lo que ve el cliente final).')",
+            "  }"
+          ]
+        },
+        {
+          "id": "F2.op5_manifest",
+          "descripcion": "Crear manifest.json",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-digital/manifest.json:",
+            "  {",
+            "    \"id\": \"carta-digital\",",
+            "    \"name\": \"<Q1.label>\",",
+            "    \"description\": \"Backoffice de la carta publica del cliente final: branding del local, opciones de visualizacion y carta compuesta lista para servir.\",",
+            "    \"version\": \"1.0.0\",",
+            "    \"zone\": \"work-bar\",",
+            "    \"order\": <Q2 valor>,",
+            "    \"routes\": [\"/carta-digital\"],",
+            "    \"icon\": \"<Q1.icon>\",",
+            "    \"label\": \"<Q1.label>\"",
+            "  }"
+          ]
+        },
+        {
+          "id": "F2.op6_index",
+          "descripcion": "Crear index.ts del modulo",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-digital/index.ts:",
+            "  import type { UIModule } from '$lib/ui-core'",
+            "  import CartaDigitalPanel from './CartaDigitalPanel.svelte'",
+            "  export { default as CartaDigitalPanel } from './CartaDigitalPanel.svelte'",
+            "  export const cartaDigitalModule: UIModule = {",
+            "    manifest: { ...mismo manifest declarado en F2.op5 en formato UIModule... },",
+            "    PanelComponent: CartaDigitalPanel",
+            "  }",
+            "  export default cartaDigitalModule",
+            "  export { cartaDigitalConfig, ultimaActualizacionCartaUpstream, estaCartaCompuestaDesfasada, loadCartaDigitalConfig, initCartaDigitalSubscriptions } from '$lib/stores/carta-digital'"
+          ]
+        },
+        {
+          "id": "F2.op7_registrar_modulo_en_loader",
+          "descripcion": "Registrar el modulo carta-digital en el loader",
+          "pseudocodigo": [
+            "Read frontend/src/lib/modules/index.ts y/o loader.ts.",
+            "Identificar como esta registrado un modulo hermano (ej. tarifas tras cierre-ui-tarifas, o recetas).",
+            "Anyadir el registro de carta-digital siguiendo el mismo patron."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": [
+          "frontend/src/lib/modules/carta-digital/CartaDigitalPanel.svelte (~50 lineas)",
+          "frontend/src/lib/modules/carta-digital/IdentidadZone.svelte (~120 lineas)",
+          "frontend/src/lib/modules/carta-digital/OpcionesZone.svelte (~70 lineas)",
+          "frontend/src/lib/modules/carta-digital/CartaCompuestaZone.svelte (~200 lineas)",
+          "frontend/src/lib/modules/carta-digital/manifest.json",
+          "frontend/src/lib/modules/carta-digital/index.ts"
+        ],
+        "archivos_modificados": ["frontend/src/lib/modules/index.ts o loader.ts (registro del modulo)"]
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Verificacion manual con dev server",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1_arrancar_dev",
+          "descripcion": "Levantar dev server",
+          "pseudocodigo": [
+            "cd frontend",
+            "npm run dev",
+            "abrir navegador en URL del proyecto"
+          ]
+        },
+        {
+          "id": "F3.op2_golden_path",
+          "descripcion": "Verificar golden path",
+          "pseudocodigo": [
+            "navegar a /<project_id>/carta-digital",
+            "comprobar:",
+            "  ✓ boton <Q1.icon> <Q1.label> aparece en work-bar",
+            "  ✓ click abre CartaDigitalPanel",
+            "  ✓ 3 zonas apiladas: Identidad / Opciones (colapsada) / Carta compuesta",
+            "  ✓ Si NO hay config (404 fs.read): zonas con estado vacio, sin error",
+            "  ✓ Si HAY config: Identidad muestra branding+contacto correctamente; Opciones colapsada con resumen si hay opciones",
+            "  ✓ Carta compuesta vacia: empty state + boton 'Componer carta'",
+            "  ✓ Carta compuesta presente: metadata + tabla por categorias con expansion + ofertas + acciones",
+            "  ✓ Si carta_compuesta.generado_at < ultimaActualizacionCartaUpstream: badge desfasada visible",
+            "  ✓ Click en 'Editar branding' / 'Editar contacto' / 'Recomponer' / 'Regenerar PWA' / 'Ver carta publica' pre-rellena chat con frase Q5 correspondiente",
+            "  ✓ Click en fila de producto expande detalles JSON"
+          ]
+        },
+        {
+          "id": "F3.op3_reactividad_bus",
+          "descripcion": "Verificar reactividad a eventos del bus",
+          "pseudocodigo": [
+            "estando en /carta-digital con panel abierto",
+            "desde chat pedir cambio de branding --el blueprint procesa update_config y publica cartadigital.config.actualizada",
+            "✓ Identidad se refresca con el branding nuevo automaticamente",
+            "desde chat pedir set_carta_compuesta (manualmente o via composer) --publica cartadigital.carta_publica.actualizada",
+            "✓ Carta compuesta se refresca",
+            "desde chat editar una carta en carta-manager (publica carta.editada)",
+            "✓ badge desfasada aparece en Carta compuesta (porque ultimaActualizacionCartaUpstream se actualiza)"
+          ]
+        },
+        {
+          "id": "F3.op4_edge_cases",
+          "descripcion": "Edge cases minimos",
+          "pseudocodigo": [
+            "✓ Proyecto sin config.json: render estado vacio limpio sin crash",
+            "✓ Carta compuesta con shape inesperado: render con campos presentes, defensivo",
+            "✓ Backend offline: errores en banner sin crash",
+            "✓ Click rapido en multiples botones prefill: input se reemplaza con el ultimo"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "estado_terminal_para_avanzar_a_F4": "Todos los checks ✓"
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Commit + push",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_status",
+          "descripcion": "Revisar scope",
+          "pseudocodigo": [
+            "git status",
+            "git diff",
+            "confirmar que solo hay archivos del scope"
+          ]
+        },
+        {
+          "id": "F4.op2_commit",
+          "descripcion": "Commit",
+          "pseudocodigo": [
+            "git add (archivos especificos)",
+            "git commit con mensaje:",
+            "  feat(ui:carta-digital): cierre UI carta-digital --3 zonas (identidad / opciones / carta compuesta)",
+            "",
+            "  Aplica el contrato ui-frontend-blueprint v1.0.1 (Postura B + Panel router + store lectura)",
+            "  + nuevo store frontend/src/lib/stores/carta-digital.ts (lecturas + suscripciones bus +",
+            "    estaCartaCompuestaDesfasada derived)",
+            "  + modulo frontend con CartaDigitalPanel + IdentidadZone + OpcionesZone + CartaCompuestaZone",
+            "  + manifest + index + registro en loader",
+            "",
+            "  3 zonas justificadas por los 5 criterios chat-vs-UI (densidad visual + preview + estado vivo).",
+            "  Carta compuesta como zona principal con render tabular + badge desfasada (comparador",
+            "  timestamps) + acciones via prefill chat (recomponer / generar PWA / ver publica).",
+            "  Modelo no-reactivo PRESERVADO --A1 del contrato subsistema-carta v1.0.1.",
+            "",
+            "  Plan ejecutable: arquitectura/decisiones/propuestas/cierre-ui-carta-digital.json"
+          ]
+        },
+        {
+          "id": "F4.op3_push",
+          "descripcion": "Push",
+          "pseudocodigo": [
+            "git push -u origin <rama-de-la-sesion>",
+            "retry exponencial si falla por red"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo OK explicito"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "descripcion": "validate:ci pasa sin drift nuevo",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "PASS sin drift NUEVO"
+    },
+    {
+      "id": "CC2_build_frontend",
+      "descripcion": "Frontend compila",
+      "comando": "npm run build",
+      "directorio": "frontend/",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "build OK"
+    },
+    {
+      "id": "CC3_store_no_mutaciones",
+      "descripcion": "El store NO expone funciones de mutacion",
+      "comando": "grep -E 'export.*(update|set|delete|recompose)' frontend/src/lib/stores/carta-digital.ts || echo OK",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC4_no_invocaciones_a_tools_del_blueprint",
+      "descripcion": "Cero llamadas a cartadigital.* via mqttRequest",
+      "comando": "grep -E 'cartadigital\\.(get_config|update_config|get_carta_publica|set_carta_compuesta)' frontend/src/lib/stores/carta-digital.ts frontend/src/lib/modules/carta-digital/*.svelte || echo OK",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC5_prefill_en_zonas",
+      "descripcion": "Las zonas usan prefillChatInput",
+      "comando": "grep -c 'prefillChatInput' frontend/src/lib/modules/carta-digital/*.svelte",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": ">= 5"
+    },
+    {
+      "id": "CC6_path_canonico_lectura",
+      "descripcion": "El store lee del path canonico nuevo /storage/pizzepos/carta-digital/config.json",
+      "comando": "grep -c '/storage/pizzepos/carta-digital/config.json' frontend/src/lib/stores/carta-digital.ts",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": ">= 1"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Tocar modules/pizzepos/carta-digital/* (backend, plan separado)",
+    "Tocar cualquier otro modulo backend o frontend",
+    "Anyadir funciones de mutacion al store (D3)",
+    "Invocar tools del blueprint (cartadigital.*) desde el store o componentes",
+    "Forms de creacion/edicion (D1 Postura B)",
+    "Editar precios de productos (eso es carta-manager)",
+    "Crear cartas desde cero (eso es menu-generator)",
+    "Composicion local de carta_compuesta (D9 --eso es el agente)",
+    "Recompose automatico al recibir carta.actualizada (preserva A1 del backend)",
+    "Tocar frontend/src/lib/stores/chatInputDraft.ts o ChatInput.svelte",
+    "Modificar scripts/validate-all.js, drift-baseline.json, validators",
+    "Modificar arquitectura/decisiones/_contratos/ o _schemas/ o _validators/",
+    "Tocar LazyShell.svelte mas alla del registro del modulo en loader",
+    "Migrar archivos en disco /carta-digital.json (TP-backend lo declara fuera de scope)",
+    "Iframe del HTML real del PWA (D7 --F-extension futura)",
+    "Crear PR sin OK explicito del humano",
+    "Hacer commit con git add . o git add -A",
+    "Saltar OK humano entre F1 y F2, F2 y F3, F3 y F4",
+    "Decir 'todo OK' sin reportar comando + salida real",
+    "Continuar a F4 si CC1-CC6 no pasan"
+  ],
+
+  "salida_final_del_horizonte": {
+    "carta_digital_ui_estado_terminal": "UI completa con 3 zonas justificadas por los 5 criterios chat-vs-UI: Identidad (branding+contacto), Opciones (visualizacion), Carta compuesta (principal con render tabular + badge desfasada + acciones prefill). Postura B canonica, store solo lectura via fs.read.request al path canonico, reactivo a eventos del bus (cartadigital.* y carta.* upstream para badge desfasada), modelo no-reactivo PRESERVADO.",
+    "archivos_finales_creados": [
+      "frontend/src/lib/stores/carta-digital.ts (~140 lineas)",
+      "frontend/src/lib/modules/carta-digital/manifest.json",
+      "frontend/src/lib/modules/carta-digital/index.ts",
+      "frontend/src/lib/modules/carta-digital/CartaDigitalPanel.svelte (~50 lineas)",
+      "frontend/src/lib/modules/carta-digital/IdentidadZone.svelte (~120 lineas)",
+      "frontend/src/lib/modules/carta-digital/OpcionesZone.svelte (~70 lineas)",
+      "frontend/src/lib/modules/carta-digital/CartaCompuestaZone.svelte (~200 lineas)"
+    ],
+    "archivos_finales_modificados": [
+      "frontend/src/lib/modules/index.ts o loader.ts (registro carta-digital)"
+    ],
+    "verificacion_terminal": [
+      "Todos los flujos de F3 ✓",
+      "CC1-CC6 ✓",
+      "validate:ci verde",
+      "frontend build OK",
+      "commit pusheado"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "Hermano carta-digital cerrado completo (backend plan + UI plan)",
+      "1 de 5 hermanos terminado"
+    ],
+    "siguiente_natural": "carta-impresion backend + UI (siguiente hermano). Antes de cocinar, releer su blueprint y ajustar contrato subsistema-carta a v1.0.2 si emerge drift contrato-vs-blueprint similar."
+  }
+}

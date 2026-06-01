@@ -1,0 +1,554 @@
+{
+  "_doc": "Plan ejecutable JSON del horizonte 'aplicar subsistema-carta a carta-digital'. Bumpea carta-digital de blueprint-driven v1.1.0 a v1.2.0 aplicando el contrato subsistema-carta v1.0.1. Cambios estructurales pequenos: (a) path de persistencia /carta-digital.json -> /storage/pizzepos/carta-digital/config.json (D1 namespace pizzepos del contrato); (b) correlation_id obligatorio en payloads de los 2 eventos publicados (cartadigital.config.actualizada + cartadigital.carta_publica.actualizada); (c) actualizar paths de pseudocodigo en las 4 operaciones (get_config, update_config, get_carta_publica, set_carta_compuesta) que apuntan al path viejo. NO hace carta-digital reactivo (A1 cerrada con el usuario --el blueprint conserva eventos_que_escucho:[] coherente con su diseno cocinado en v1.1.0). NO anyade requires_consumer a los eventos publicados (no hay consumer real hoy en el repo --leccion de TP1). NO toca artefactos extra del directorio (cf-worker/, export-cli.js, static-template.js, context.json, prompt.json) que son tooling de deploy de la PWA publica. Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
+
+  "id": "aplicar-subsistema-carta-a-carta-digital",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "bump_blueprint_backend",
+
+  "documentos_hermanos": {
+    "contrato_canonico": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.1",
+      "relacion": "Cocinado en el mismo commit que este plan. v1.0.1 corrige consume_canonico de carta-digital a [] alineandose con el blueprint v1.1.0 'no reactivo'. Este plan ejecuta los ajustes RESTANTES (paths + correlation_id) que SI son drift contra el contrato."
+    },
+    "contrato_acoplado_subsistema_tienda": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-tienda.contract.json",
+      "version": "1.0.0",
+      "relacion": "Subsistema-tienda canoniza el path del bundle PWA en /storage/tienda/bundle/. carta-digital NO escribe el bundle (lo hace cartadigital-pwa-builder agente). Este plan NO toca el bundle ni el agente --solo el blueprint de carta-digital."
+    },
+    "planes_hermanos_del_horizonte": [
+      {
+        "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-carta-manager.json",
+        "estado": "cocinado, pendiente ejecucion",
+        "relacion": "TP1 del contrato. Independiente."
+      },
+      {
+        "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-productos.json",
+        "estado": "cocinado, pendiente ejecucion",
+        "relacion": "TP3 del contrato. Recomendado ejecutar TP3 antes de TP1 (consumers de carta.editada/borrada). Independiente de este plan de carta-digital."
+      },
+      {
+        "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-tarifas.json",
+        "estado": "cocinado, pendiente ejecucion",
+        "relacion": "TP4 del contrato. Independiente."
+      }
+    ],
+    "ui_separada": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-carta-digital.json",
+      "estado": "a_cocinar_aparte",
+      "relacion": "UI de carta-digital --plan paralelo a cocinar en siguiente vuelta tras este. Cero acoplamiento de ejecucion con este plan backend (pueden ir en cualquier orden)."
+    }
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/subsistema-tienda.contract.json",
+    "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/persistence.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/errors.contract.json",
+    "arquitectura/decisiones/_contratos/multi-tenancy.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json"
+  ],
+
+  "dependencias_explicitas": [],
+
+  "por_que_existe": {
+    "que_cierra": "carta-digital v1.1.0 arrastra 2 drifts contra el contrato subsistema-carta v1.0.1: (a) path /carta-digital.json sin namespace pizzepos (D1 del contrato exige /storage/pizzepos/<modulo>/...); (b) eventos publicados (cartadigital.config.actualizada + cartadigital.carta_publica.actualizada) sin correlation_id obligatorio --auditoria del pseudocodigo confirma que el campo va en el payload pero como opcional, no garantizado.",
+    "que_no_cierra": "Este plan NO modifica el modelo no-reactivo del blueprint (A1 cocinada con el usuario --decision arquitectonica diferida hasta que emerja necesidad real). NO anyade requires_consumer a los eventos publicados (leccion TP1: no declarar requires_consumer sin consumer real). NO toca artefactos extra del directorio (cf-worker/, export-cli.js, static-template.js, context.json, prompt.json). NO toca los agentes asociados (cartadigital-composer, cartadigital-pwa-builder, cartadigital-ofertas, cartadigital-reviewer).",
+    "alcance": "Editar SOLO modules/pizzepos/carta-digital/module.json y modules/pizzepos/carta-digital/carta-digital.blueprint.json. Cero efecto en otros modulos."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/carta-digital/module.json",
+      "version_actual": "1.1.0",
+      "blueprint_driven": true,
+      "cajones_enabled": true,
+      "target_page_id": "carta-digital",
+      "config_persistence_paths_actual": [
+        "data/projects/{slug}/carta-digital.json"
+      ],
+      "artefactos_extras_declarados": [
+        "cf-worker/ — Cloudflare Worker que sirve la carta publica al cliente final",
+        "export-cli.js — CLI para exportar carta compuesta a deploy",
+        "static-template.js — template HTML de la PWA",
+        "context.json, prompt.json — contexto LLM legacy (revisable)"
+      ],
+      "lo_que_debe_quedar_tras_el_plan": {
+        "version": "1.2.0",
+        "_v1_2_changelog": "presente describiendo los 2 cambios",
+        "config_persistence_paths": [
+          "data/projects/{slug}/storage/pizzepos/carta-digital/config.json"
+        ]
+      }
+    },
+    {
+      "pieza": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+      "version_actual": "blueprint-1.1.0",
+      "operaciones_que_publican_eventos": [
+        {
+          "operacion": "update_config",
+          "publica": "cartadigital.config.actualizada",
+          "shape_actual_payload": "{ project_id, campos_modificados, correlation_id (opcional), timestamp }",
+          "shape_objetivo_payload": "{ project_id, campos_modificados, correlation_id (OBLIGATORIO --garantizado por uuid() si falta), timestamp }"
+        },
+        {
+          "operacion": "set_carta_compuesta",
+          "publica": "cartadigital.carta_publica.actualizada",
+          "shape_actual_payload": "{ project_id, generado_at, generado_por, correlation_id (opcional), timestamp }",
+          "shape_objetivo_payload": "{ project_id, generado_at, generado_por, correlation_id (OBLIGATORIO --garantizado por uuid() si falta), timestamp }"
+        }
+      ],
+      "operaciones_que_leen_o_escriben_paths": [
+        "get_config: lee /carta-digital.json -> debe leer /storage/pizzepos/carta-digital/config.json",
+        "update_config: lee + write/edit /carta-digital.json -> ambos al path nuevo",
+        "get_carta_publica: lee /carta-digital.json -> al path nuevo",
+        "set_carta_compuesta: lee + write/edit /carta-digital.json -> al path nuevo"
+      ],
+      "eventos_que_escucho_actual": [],
+      "eventos_que_escucho_objetivo": "[] (preserva el modelo no-reactivo --A1 cocinada con el usuario, alineado con el contrato v1.0.1)",
+      "lo_que_debe_quedar_tras_el_plan": {
+        "version_blueprint": "blueprint-1.2.0",
+        "_v1_2_changelog": "presente",
+        "todos_los_paths_de_pseudocodigo_y_persistence_apuntan_a": "/storage/pizzepos/carta-digital/config.json",
+        "los_2_publishes_de_eventos_propios_llevan_correlation_id_obligatorio": true,
+        "eventos_que_escucho_PRESERVADO_vacio": true
+      }
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/<rama-asignada> antes de empezar",
+      "modules/pizzepos/carta-digital/module.json existe y declara version='1.1.0', blueprint_driven=true",
+      "modules/pizzepos/carta-digital/carta-digital.blueprint.json existe y declara version='blueprint-1.1.0' con 4 operaciones (get_config, update_config, get_carta_publica, set_carta_compuesta)",
+      "arquitectura/decisiones/_contratos/subsistema-carta.contract.json existe y declara version='1.0.1' (con el ajuste de consume_canonico de carta-digital)",
+      "data/projects/* --verificar si hay /carta-digital.json en algun proyecto (path viejo). Si los hay, reportar al usuario antes de F3 (decision de migrar o separar)",
+      "npm run validate:ci en la raiz da PASS antes de empezar"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones del contrato subsistema-carta v1.0.1 (D1-D11)",
+      "Decision A1 cocinada con el usuario: carta-digital permanece NO reactivo (eventos_que_escucho:[]). Si TP futuro propone hacerlo reactivo, decision aparte.",
+      "Leccion TP1: NO declarar requires_consumer:true para eventos publicados sin verificar que hay consumer real en el repo. Los 2 eventos de carta-digital no tienen consumer conocido --no se declaran requires_consumer.",
+      "pseudocodigo-estilo.contract.json v1.0.0: prohibido rest-spread con omision, Object.assign, verboso explicito.",
+      "Subsistema-tienda v1.0.0: el bundle de PWA vive en /storage/tienda/bundle/ y carta-digital NO lo escribe (lo hace cartadigital-pwa-builder agente). Este plan NO toca esa convencion."
+    ],
+    "no_toco_esta_sesion": [
+      "modules/pizzepos/carta-digital/cf-worker/ (Cloudflare Worker)",
+      "modules/pizzepos/carta-digital/export-cli.js (CLI deploy)",
+      "modules/pizzepos/carta-digital/static-template.js (template HTML PWA)",
+      "modules/pizzepos/carta-digital/context.json (legacy revisable, separado)",
+      "modules/pizzepos/carta-digital/prompt.json (legacy revisable, separado)",
+      "modules/pizzepos/carta-manager/* (TP1 plan separado)",
+      "modules/pizzepos/menu-generator/* (TP2 fede)",
+      "modules/pizzepos/tarifas/* (TP4 plan separado)",
+      "modules/pizzepos/productos/* (TP3 plan separado)",
+      "Cualquier otro modulo bajo modules/pizzepos/",
+      "Agentes (cartadigital-composer, cartadigital-pwa-builder, cartadigital-ofertas, cartadigital-reviewer) --se invocan via agent.execute.request, no se modifican aqui",
+      "arquitectura/decisiones/_contratos/* (cero modificacion --el bump v1.0.1 ya esta cocinado en el commit del plan)",
+      "arquitectura/decisiones/_schemas/* o _validators/* (TP8/TP9 separados)",
+      "data/projects/*/carta-digital.json (cero migracion de datos --si existe en path viejo, reportar al usuario)",
+      "frontend/* (UI plan separado --cierre-ui-carta-digital.json a cocinar despues)",
+      "scripts/validate-all.js, drift-baseline.json, validators existentes",
+      "CLAUDE.md (ritual de limpieza al cerrar horizonte completo)"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_alcance_solo_blueprint_y_module_json",
+      "decision": "Este plan toca SOLO modules/pizzepos/carta-digital/module.json y modules/pizzepos/carta-digital/carta-digital.blueprint.json. Cero edicion del resto del directorio (cf-worker, export-cli, static-template, context, prompt) ni de agentes ni de otros modulos.",
+      "no_reabrir_sin": "que algun cambio del blueprint requiera explicitamente tocar otro archivo. En ese caso parar, reportar, NO improvisar."
+    },
+    {
+      "id": "D2_carta_digital_NO_reactivo_A1",
+      "decision": "carta-digital preserva eventos_que_escucho:[] del blueprint v1.1.0. NO se anyaden subscribes a carta.actualizada/editada/borrada ni tarifas.config.actualizada. El modelo no-reactivo se mantiene --el LLM al entrar a page=carta-digital decide cuando recomponer.",
+      "no_reabrir_sin": "decision arquitectonica nueva sobre reactividad de carta-digital (recomendable solo si emerge dolor en runtime --LLM no entra al page con frecuencia suficiente, carta_compuesta desfasada sin que nadie se entere)."
+    },
+    {
+      "id": "D3_no_requires_consumer_para_eventos_publicados",
+      "decision": "Los 2 eventos publicados (cartadigital.config.actualizada + cartadigital.carta_publica.actualizada) NO declaran requires_consumer:true. Razon: ningun modulo del repo escucha estos eventos HOY (verificable via grep). Si se declarase requires_consumer, validator blueprint-eventos-conscientes fallaria con drift huerfano (mismo problema que TP1 carta-manager).",
+      "no_reabrir_sin": "que un consumer real anyada subscribe a alguno de estos eventos en el repo. En ese caso, anyadir requires_consumer al evento correspondiente."
+    },
+    {
+      "id": "D4_path_canonico_namespace_pizzepos_subdirectorio_carta_digital",
+      "decision": "Nuevo path canonico: data/projects/{slug}/storage/pizzepos/carta-digital/config.json. NO se usa /storage/pizzepos/<nada>/carta-digital.json (sin subdirectorio) ni /storage/pizzepos/carta-digital.json (sin subdirectorio): el namespace por modulo es /storage/pizzepos/<modulo>/. Coherente con el patron de carta-manager (/storage/pizzepos/cartas/) y productos (/storage/pizzepos/productos/).",
+      "alternativas_descartadas": "/storage/pizzepos/carta-digital.json sin subdirectorio --pierde paralelo con el patron de los otros modulos. /storage/carta-digital.json sin namespace --rompe multi-vertical (D1 del contrato).",
+      "razon": "Coherencia interna del subsistema --cada modulo del subsistema tiene su subdirectorio bajo /storage/pizzepos/."
+    },
+    {
+      "id": "D5_correlation_id_uuid_si_falta",
+      "decision": "Si la operacion del blueprint se invoca sin correlation_id en el input, el handler genera uno con uuid() al inicio (idem al patron de TP1 carta-manager). Asi el publish siempre lleva correlation_id no-vacio.",
+      "no_reabrir_sin": "decision diferente sobre validacion estricta al inicio (rechazar input sin correlation_id en lugar de generar uno)."
+    },
+    {
+      "id": "D6_no_se_migra_archivos_en_disco",
+      "decision": "Este plan NO migra archivos existentes /carta-digital.json en proyectos al path canonico nuevo. Si fede detecta archivos en path viejo durante F0 verifico_en_disco, REPORTA al humano y se decide aparte.",
+      "no_reabrir_sin": "OK explicito del usuario para incluir migracion en este plan."
+    },
+    {
+      "id": "D7_bump_minor_no_major",
+      "decision": "Bump v1.1.0 -> v1.2.0 (minor). Razon: cambio de path es breaking del modelo de persistencia (las cartas existentes en path viejo no se encuentran --pero D6 cierra la migracion como fuera de scope, asi que el modelo se restaurara desde cero o se migra manualmente). El correlation_id obligatorio es coherente con el contrato del subsistema --no breaking conceptual.",
+      "no_reabrir_sin": "decision diferente sobre bump major (si se considera breaking)."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Bump module.json a v1.2.0 con path canonico + changelog",
+      "esfuerzo_horas": 0.3,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1_bump_version",
+          "descripcion": "Cambiar version 1.1.0 -> 1.2.0 en module.json",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/carta-digital/module.json",
+            "old: \"version\": \"1.1.0\"",
+            "new: \"version\": \"1.2.0\""
+          ]
+        },
+        {
+          "id": "F1.op2_anyadir_changelog",
+          "descripcion": "Anyadir _v1_2_changelog en module.json",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/carta-digital/module.json",
+            "Anyadir tras la clave version:",
+            "  \"_v1_2_changelog\": \"v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.1. Dos cambios: (a) path persistence /carta-digital.json -> /storage/pizzepos/carta-digital/config.json (D1 namespace pizzepos del contrato + coherencia con patron de carta-manager y productos); (b) correlation_id obligatorio en payloads de cartadigital.config.actualizada y cartadigital.carta_publica.actualizada (D10/P9 del contrato). NO se modifica eventos_que_escucho ([] preservado --A1 cocinada con el usuario, modelo no-reactivo del blueprint v1.1.0 coherente con el contrato v1.0.1). NO se declara requires_consumer para los 2 eventos publicados (ningun consumer real hoy --leccion TP1).\""
+          ]
+        },
+        {
+          "id": "F1.op3_cambiar_persistence_paths",
+          "descripcion": "Actualizar config.persistence.paths al canonico",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/carta-digital/module.json",
+            "old (config.persistence.paths):",
+            "  [\"data/projects/{slug}/carta-digital.json\"]",
+            "new:",
+            "  [\"data/projects/{slug}/storage/pizzepos/carta-digital/config.json\"]"
+          ]
+        },
+        {
+          "id": "F1.op4_actualizar_doc_si_menciona_path_viejo",
+          "descripcion": "Si el campo _doc menciona el path viejo, actualizarlo",
+          "pseudocodigo": [
+            "Read modules/pizzepos/carta-digital/module.json",
+            "grep el _doc por 'carta-digital.json del proyecto' o similar.",
+            "Si menciona el path viejo: Edit ajustando a 'storage/pizzepos/carta-digital/config.json'.",
+            "Nota: el _doc menciona 'Persistencia: carta-digital.json del proyecto' --debe ajustarse."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-digital/module.json"],
+        "verificacion": "jq '{version, paths: .config.persistence.paths}' module.json muestra 1.2.0 y el path canonico."
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Cambios estructurales en carta-digital.blueprint.json",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op1_bump_version_blueprint",
+          "descripcion": "Cambiar version del blueprint a blueprint-1.2.0",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+            "old: \"version\": \"blueprint-1.1.0\"",
+            "new: \"version\": \"blueprint-1.2.0\""
+          ]
+        },
+        {
+          "id": "F2.op2_anyadir_changelog_blueprint",
+          "descripcion": "Anyadir _v1_2_changelog en el blueprint",
+          "pseudocodigo": [
+            "Edit el blueprint anyadiendo tras version:",
+            "  \"_v1_2_changelog\": \"v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.1. Path canonico /storage/pizzepos/carta-digital/config.json en TODAS las operaciones (get_config, update_config, get_carta_publica, set_carta_compuesta) reemplazando /carta-digital.json pelado. correlation_id obligatorio en payloads de cartadigital.config.actualizada (update_config) y cartadigital.carta_publica.actualizada (set_carta_compuesta) --garantizado con uuid() si el input no lo trae. eventos_que_escucho:[] preservado --decision A1 del horizonte, el blueprint conserva su modelo no-reactivo cocinado en v1.1.0.\""
+          ]
+        },
+        {
+          "id": "F2.op3_actualizar_path_estado_persistente",
+          "descripcion": "Actualizar estado_persistente.paths_relativos.config",
+          "pseudocodigo": [
+            "Edit el blueprint:",
+            "  estado_persistente.paths_relativos.config:",
+            "    old: '/carta-digital.json'",
+            "    new: '/storage/pizzepos/carta-digital/config.json'"
+          ]
+        },
+        {
+          "id": "F2.op4_cambiar_paths_en_pseudocodigos",
+          "descripcion": "Reemplazar TODOS los paths /carta-digital.json en pseudocodigos de las 4 operaciones",
+          "pseudocodigo": [
+            "Edit con replace_all:",
+            "  old: '/carta-digital.json'",
+            "  new: '/storage/pizzepos/carta-digital/config.json'",
+            "Las apariciones tipicamente son:",
+            "  - get_config: 1 (en fs.read.request)",
+            "  - update_config: 3 (fs.read + fs.write + fs.edit)",
+            "  - get_carta_publica: 1 (en fs.read.request)",
+            "  - set_carta_compuesta: 3 (fs.read + fs.write + fs.edit)",
+            "Total: ~8 apariciones.",
+            "VERIFICAR despues con grep:",
+            "  grep -c \"'/carta-digital.json'\" modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+            "  debe ser 0 (cero apariciones del path viejo)."
+          ]
+        },
+        {
+          "id": "F2.op5_correlation_id_obligatorio_en_update_config",
+          "descripcion": "Garantizar correlation_id no-vacio en publish de cartadigital.config.actualizada (operacion update_config)",
+          "pseudocodigo": [
+            "Localizar en el pseudocodigo de update_config la linea del publish:",
+            "  await publish('cartadigital.config.actualizada', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: input.correlation_id, timestamp: nowISO() })",
+            "Edit modificando:",
+            "  // Garantizar correlation_id no-vacio --uuid() si input no trae",
+            "  correlation_id_efectivo = input.correlation_id || uuid()",
+            "  await publish('cartadigital.config.actualizada', {",
+            "    project_id: input.project_id,",
+            "    campos_modificados: Object.keys(input.campos),",
+            "    correlation_id: correlation_id_efectivo,",
+            "    timestamp: nowISO()",
+            "  })",
+            "Insertar la linea 'correlation_id_efectivo = input.correlation_id || uuid()' ANTES del publish."
+          ]
+        },
+        {
+          "id": "F2.op6_correlation_id_obligatorio_en_set_carta_compuesta",
+          "descripcion": "Garantizar correlation_id no-vacio en publish de cartadigital.carta_publica.actualizada (operacion set_carta_compuesta)",
+          "pseudocodigo": [
+            "Localizar en el pseudocodigo de set_carta_compuesta la linea del publish:",
+            "  await publish('cartadigital.carta_publica.actualizada', { project_id: input.project_id, generado_at: carta_nueva.generado_at, generado_por: carta_nueva.generado_por, correlation_id: input.correlation_id, timestamp: nowISO() })",
+            "Edit modificando:",
+            "  // Garantizar correlation_id no-vacio --uuid() si input no trae",
+            "  correlation_id_efectivo = input.correlation_id || uuid()",
+            "  await publish('cartadigital.carta_publica.actualizada', {",
+            "    project_id: input.project_id,",
+            "    generado_at: carta_nueva.generado_at,",
+            "    generado_por: carta_nueva.generado_por,",
+            "    correlation_id: correlation_id_efectivo,",
+            "    timestamp: nowISO()",
+            "  })"
+          ]
+        },
+        {
+          "id": "F2.op7_verificar_consistencia_final",
+          "descripcion": "Releer el blueprint completo y verificar consistencia",
+          "pseudocodigo": [
+            "Read modules/pizzepos/carta-digital/carta-digital.blueprint.json entero.",
+            "Verificaciones:",
+            "  - version es blueprint-1.2.0",
+            "  - _v1_2_changelog existe",
+            "  - grep -c \"'/carta-digital.json'\" devuelve 0",
+            "  - grep -c \"'/storage/pizzepos/carta-digital/config.json'\" devuelve >= 8",
+            "  - grep -c 'correlation_id_efectivo' devuelve >= 2 (las 2 publishes modificadas)",
+            "  - eventos_que_escucho sigue siendo [] (cero cambio --A1 preservada)",
+            "  - eventos_publicados[] sigue conteniendo cartadigital.config.actualizada y cartadigital.carta_publica.actualizada"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-digital/carta-digital.blueprint.json"],
+        "verificacion": "Todas las verificaciones de F2.op7 pasan. JSON valido (jq . carta-digital.blueprint.json no falla)."
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Verificacion validate:ci + tests",
+      "esfuerzo_horas": 0.4,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1_validate_ci",
+          "descripcion": "Correr validate:ci y verificar PASS sin drift nuevo",
+          "pseudocodigo": [
+            "cd raiz del repo",
+            "npm run validate:ci",
+            "esperado: PASS sin drift NUEVO.",
+            "Si aparece drift:",
+            "  - drift de paths: verificar F2.op4 (replace_all completo).",
+            "  - drift estructural: verificar F2.op7 (JSON valido + campos presentes).",
+            "  - drift de cualquier otro tipo: REPORTAR al humano, NO improvisar."
+          ]
+        },
+        {
+          "id": "F3.op2_tests_unitarios",
+          "descripcion": "Correr tests unitarios de carta-digital si existen",
+          "pseudocodigo": [
+            "ls tests/unit/pizzepos__carta-digital.test.js 2>/dev/null",
+            "si existe:",
+            "  npm test -- tests/unit/pizzepos__carta-digital.test.js",
+            "  esperado: PASS",
+            "  si FAIL por path viejo (test esperaba /carta-digital.json): actualizar test al path canonico.",
+            "  si FAIL por otra razon: REPORTAR al humano.",
+            "si NO existe: documentar y continuar (no es alcance crear tests aqui)."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "estado_terminal": "validate:ci PASS sin drift NUEVO. Tests unitarios verdes (o documentado que no hay)."
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Commit + push",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_status",
+          "descripcion": "Verificar scope",
+          "pseudocodigo": [
+            "git status",
+            "git diff",
+            "confirmar que SOLO hay cambios en:",
+            "  modules/pizzepos/carta-digital/module.json",
+            "  modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+            "  posiblemente tests/unit/pizzepos__carta-digital.test.js (si F3.op2 modifico)",
+            "Si hay cambios fuera de ese scope: PARAR, reportar, NO commitear."
+          ]
+        },
+        {
+          "id": "F4.op2_commit",
+          "descripcion": "Commit estructurado",
+          "pseudocodigo": [
+            "git add (archivos especificos --NO git add .)",
+            "",
+            "git commit con mensaje:",
+            "  feat(carta-digital): bump blueprint v1.2.0 --aplica contrato subsistema-carta v1.0.1",
+            "",
+            "  Dos cambios estructurales:",
+            "  (a) Path canonico /storage/pizzepos/carta-digital/config.json en pseudocodigos",
+            "      y config.persistence.paths (D1 del contrato: namespace pizzepos coherente",
+            "      con carta-manager y productos).",
+            "  (b) correlation_id obligatorio en payloads de cartadigital.config.actualizada y",
+            "      cartadigital.carta_publica.actualizada (D10/P9 del contrato).",
+            "",
+            "  NO cambia eventos_que_escucho ([] preservado --A1 cocinada con ana: el blueprint",
+            "  conserva su modelo no-reactivo del v1.1.0; el LLM al entrar a page=carta-digital",
+            "  decide cuando recomponer). NO declara requires_consumer en los 2 eventos publicados",
+            "  (ningun consumer real hoy --leccion TP1).",
+            "",
+            "  Plan ejecutable: arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-carta-digital.json",
+            "  Contrato canonico: arquitectura/decisiones/_contratos/subsistema-carta.contract.json v1.0.1"
+          ]
+        },
+        {
+          "id": "F4.op3_push",
+          "descripcion": "Push con retry exponencial",
+          "pseudocodigo": [
+            "git push -u origin <rama-de-la-sesion>",
+            "si falla por red: retry 2s, 4s, 8s, 16s",
+            "si falla por otra razon: parar, diagnosticar, reportar.",
+            "NO --force, NO --no-verify"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo OK explicito"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "descripcion": "validate:ci pasa sin drift nuevo",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F1", "F2", "F3"],
+      "salida_esperada": "PASS sin drift NUEVO"
+    },
+    {
+      "id": "CC2_jq_valido",
+      "descripcion": "Los 2 archivos modificados son JSON valido",
+      "comando": "jq . modules/pizzepos/carta-digital/module.json > /dev/null && jq . modules/pizzepos/carta-digital/carta-digital.blueprint.json > /dev/null && echo OK",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC3_grep_paths_canonicos",
+      "descripcion": "NO queda ningun path '/carta-digital.json' suelto en el blueprint",
+      "comando": "grep -c \"'/carta-digital.json'\" modules/pizzepos/carta-digital/carta-digital.blueprint.json || echo 0",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "0"
+    },
+    {
+      "id": "CC4_grep_correlation_id_efectivo",
+      "descripcion": "Los 2 publishes usan correlation_id_efectivo (garantizado no-vacio)",
+      "comando": "grep -c 'correlation_id_efectivo' modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": ">= 2 (los 2 publishes de eventos publicados)"
+    },
+    {
+      "id": "CC5_eventos_que_escucho_preservado_vacio",
+      "descripcion": "eventos_que_escucho sigue siendo [] (A1 preservada)",
+      "comando": "jq '.eventos_que_escucho' modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "[] (array vacio)"
+    },
+    {
+      "id": "CC6_git_status_scope",
+      "descripcion": "Solo los 2 archivos modificados (3 si test ajustado)",
+      "comando": "git status --short",
+      "ejecutar_tras": ["F4.op1"],
+      "verificar": "Solo aparecen module.json + carta-digital.blueprint.json (+ test si aplica). Si algo mas, PARAR."
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Anyadir subscribes a carta.actualizada/editada/borrada/tarifas.config.actualizada en el blueprint (A1 cerrada, eventos_que_escucho:[] preservado)",
+    "Declarar requires_consumer:true para los 2 eventos publicados (D3 cerrada --leccion TP1: validador blueprint-eventos-conscientes fallaria con huerfanos)",
+    "Tocar artefactos del directorio: cf-worker/, export-cli.js, static-template.js, context.json, prompt.json",
+    "Tocar agentes asociados (cartadigital-composer, cartadigital-pwa-builder, cartadigital-ofertas, cartadigital-reviewer) --se invocan via agent.execute.request, son independientes",
+    "Tocar modules/pizzepos/carta-manager/* (TP1 plan separado)",
+    "Tocar modules/pizzepos/menu-generator/* (TP2 fede)",
+    "Tocar modules/pizzepos/tarifas/* (TP4 plan separado)",
+    "Tocar modules/pizzepos/productos/* (TP3 plan separado)",
+    "Tocar cualquier otro modulo de pizzepos/",
+    "Modificar arquitectura/decisiones/_contratos/ (el bump v1.0.1 ya esta cocinado en el commit del plan, NO se vuelve a editar)",
+    "Modificar arquitectura/decisiones/_schemas/ o _validators/",
+    "Migrar archivos /carta-digital.json existentes en disco al path canonico nuevo (D6 cerrada --reportar al usuario si los hay, decidir aparte)",
+    "Tocar frontend/* (UI plan separado --cierre-ui-carta-digital.json)",
+    "Tocar scripts/validate-all.js, drift-baseline.json, validators existentes",
+    "Tocar CLAUDE.md",
+    "Crear PR sin OK explicito del humano",
+    "Hacer commit con git add . o git add -A",
+    "Saltar OK humano entre F1 y F2, F2 y F3, F3 y F4",
+    "Decir 'todo OK' sin reportar el comando ejecutado",
+    "Continuar a F4 si CC1-CC5 no pasan",
+    "Improvisar fixes en otros modulos si validate:ci detecta drift fuera del alcance --PARAR y reportar",
+    "Romper el formato JSON del blueprint (jq tras cada Edit)",
+    "Anyadir features no listadas (e.g. metricas nuevas, validaciones extra, comentarios en pseudocodigo no estandar)"
+  ],
+
+  "salida_final_del_horizonte": {
+    "carta_digital_estado_terminal": "blueprint v1.2.0 cumpliendo contrato subsistema-carta v1.0.1: path canonico /storage/pizzepos/carta-digital/config.json, correlation_id obligatorio en payloads de los 2 eventos publicados. Modelo no-reactivo PRESERVADO (eventos_que_escucho:[] coherente con A1 + v1.0.1 del contrato). Sin requires_consumer en eventos publicados (D3 leccion TP1).",
+    "archivos_finales_modificados": [
+      "modules/pizzepos/carta-digital/module.json (version 1.2.0 + _v1_2_changelog + persistence.paths canonicos)",
+      "modules/pizzepos/carta-digital/carta-digital.blueprint.json (blueprint-1.2.0 + paths canonicos en 4 operaciones + correlation_id_efectivo en 2 publishes + changelog)",
+      "posiblemente tests/unit/pizzepos__carta-digital.test.js (si pre-existian tests con path viejo)"
+    ],
+    "verificacion_terminal": [
+      "CC1-CC6 todos pasan",
+      "validate:ci verde sin drift nuevo",
+      "git status: solo archivos del scope",
+      "commit pusheado a la rama"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "Hermano backend carta-digital cerrado (1 de 5)",
+      "Drift de path /carta-digital.json -> /storage/pizzepos/carta-digital/config.json cerrado",
+      "Drift de correlation_id opcional -> obligatorio cerrado"
+    ],
+    "siguiente_natural": "Cocinar cierre-ui-carta-digital.json (plan paralelo de UI). Despues continuar con los otros 4 hermanos --carta-impresion siguiente. Antes de cocinar cada hermano, releer su blueprint real y ajustar el contrato subsistema-carta a v1.0.2, v1.0.3, etc. si emerge drift contrato-vs-blueprint similar al de carta-digital."
+  }
+}

@@ -2,107 +2,104 @@
   /**
    * ViabilidadCard Component
    *
-   * Compact card view for a single recipe viability.
-   * Shows:
-   * - Recipe name and margin
-   * - Food cost percentage
-   * - Viability status (VIABLE, ACEPTABLE, CRÍTICO, INVIABLE)
-   * - Pending recommendations count
-   * - Color-coded indicators
+   * Tarjeta compacta de un expediente de viabilidad (shape canonico del
+   * blueprint). Muestra nombre del producto, veredicto, food cost, margen
+   * por porcion y conteo de caminos disponibles.
    */
 
   export let viabilidad: any = null;
   export let onSelect: ((id: string) => void) | null = null;
   export let compact = false;
 
-  $: hasRecommendations = viabilidad?.recomendaciones_pendientes > 0;
-  $: hasCriticalRisks = viabilidad?.riesgos_criticos > 0;
+  $: nombre = viabilidad?.input?.nombre;
+  $: foodCostPct = viabilidad?.food_cost_pct;
+  $: margenPct = typeof foodCostPct === 'number' ? 100 - foodCostPct : null;
+  $: margenPorcion = viabilidad?.margen_porcion;
+  $: numCaminos = Array.isArray(viabilidad?.caminos) ? viabilidad.caminos.length : 0;
 
   function formatPrice(n: number): string {
-    return parseFloat(n).toFixed(2) + '€';
+    if (typeof n !== 'number' || isNaN(n)) return '—';
+    return n.toFixed(2) + '€';
   }
 
   function formatPercent(n: number): string {
-    return parseFloat(n).toFixed(1) + '%';
+    if (typeof n !== 'number' || isNaN(n)) return '—';
+    return n.toFixed(1) + '%';
   }
 
-  function formatDate(timestamp: number): string {
-    const date = new Date(timestamp);
+  function formatDate(iso: string): string {
+    if (!iso) return '—';
+    const date = new Date(iso);
+    if (isNaN(date.getTime())) return '—';
     return date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
-  function getEstadoClass(estado: string): string {
-    if (estado === 'VIABLE') return 'viable';
-    if (estado === 'ACEPTABLE') return 'aceptable';
-    if (estado === 'CRÍTICO') return 'critico';
-    if (estado === 'INVIABLE') return 'inviable';
+  function getVeredictoClass(v: string): string {
+    if (v === 'viable') return 'viable';
+    if (v === 'viable_con_advertencias') return 'aceptable';
+    if (v === 'no_viable_economicamente') return 'inviable';
+    if (v === 'sin_pvp_objetivo') return 'orientativo';
     return 'unknown';
   }
 
-  function getEstadoLabel(estado: string): string {
-    if (estado === 'VIABLE') return '✓ Viable';
-    if (estado === 'ACEPTABLE') return '⊕ Aceptable';
-    if (estado === 'CRÍTICO') return '⚠ Crítico';
-    if (estado === 'INVIABLE') return '✗ Inviable';
-    return estado;
+  function getVeredictoLabel(v: string): string {
+    if (v === 'viable') return '✓ Viable';
+    if (v === 'viable_con_advertencias') return '⚠ Con advertencias';
+    if (v === 'no_viable_economicamente') return '✗ No viable';
+    if (v === 'sin_pvp_objetivo') return '⊙ Sin PVP';
+    return v || '—';
   }
 
   function getFoodCostClass(fc: number): string {
+    if (typeof fc !== 'number' || isNaN(fc)) return '';
     if (fc <= 30) return 'optimal';
     if (fc <= 35) return 'good';
-    if (fc <= 40) return 'warning';
-    return 'critical';
-  }
-
-  function getMargenClass(margen: number): string {
-    if (margen > 25) return 'optimal';
-    if (margen >= 15) return 'good';
-    if (margen >= 5) return 'warning';
+    if (fc <= 45) return 'warning';
     return 'critical';
   }
 </script>
 
 <div class="card" class:compact on:click={() => onSelect?.(viabilidad.id)}>
   <div class="card-header">
-    <h3>{viabilidad.receta_nombre || 'Receta'}</h3>
-    <span class="estado-badge {getEstadoClass(viabilidad.estado)}">
-      {getEstadoLabel(viabilidad.estado)}
+    <h3>{nombre || 'Producto'}</h3>
+    <span class="estado-badge {getVeredictoClass(viabilidad?.veredicto)}">
+      {getVeredictoLabel(viabilidad?.veredicto)}
     </span>
   </div>
 
   <div class="card-content">
     <div class="margin-main">
       <span class="label">Margen</span>
-      <span class="value {getMargenClass(viabilidad.margen_porcentaje)}">
-        {formatPercent(viabilidad.margen_porcentaje)}
+      <span class="value {getFoodCostClass(foodCostPct)}">
+        {formatPercent(margenPct)}
       </span>
     </div>
 
     <div class="food-cost">
       <span class="label">Food Cost</span>
-      <span class="value {getFoodCostClass(viabilidad.food_cost_porcentaje)}">
-        {formatPercent(viabilidad.food_cost_porcentaje)}
+      <span class="value {getFoodCostClass(foodCostPct)}">
+        {formatPercent(foodCostPct)}
       </span>
     </div>
 
-    {#if viabilidad.margen_bruto}
+    {#if typeof margenPorcion === 'number'}
       <div class="margin-bruto">
         <span class="label">Margen €</span>
-        <span class="value">{formatPrice(viabilidad.margen_bruto)}</span>
+        <span class="value">{formatPrice(margenPorcion)}</span>
       </div>
     {/if}
   </div>
 
   <div class="card-alerts">
-    {#if hasRecommendations}
-      <span class="alert-badge {hasCriticalRisks ? 'critical' : 'warning'}">
-        {viabilidad.recomendaciones_pendientes} rec{viabilidad.recomendaciones_pendientes > 1 ? 's' : ''}
+    {#if numCaminos > 0}
+      <span class="alert-badge caminos">
+        🧭 {numCaminos} camino{numCaminos > 1 ? 's' : ''}
       </span>
     {/if}
   </div>
 
   <div class="card-footer">
-    <span class="date">{formatDate(viabilidad.evaluado_at)}</span>
+    <span class="date">{formatDate(viabilidad?.fecha_evaluacion)}</span>
     <span class="clickhint">→</span>
   </div>
 </div>
@@ -158,18 +155,23 @@
   }
 
   .estado-badge.aceptable {
-    background: #dbeafe;
-    color: #0c4a6e;
+    background: #fef3c7;
+    color: #92400e;
   }
 
-  .estado-badge.critico {
-    background: #fed7aa;
-    color: #92400e;
+  .estado-badge.orientativo {
+    background: #dbeafe;
+    color: #0c4a6e;
   }
 
   .estado-badge.inviable {
     background: #fecaca;
     color: #991b1b;
+  }
+
+  .estado-badge.unknown {
+    background: #f3f4f6;
+    color: #6b7280;
   }
 
   .card-content {
@@ -231,14 +233,9 @@
     white-space: nowrap;
   }
 
-  .alert-badge.warning {
-    background: #fef3c7;
-    color: #92400e;
-  }
-
-  .alert-badge.critical {
-    background: #fee2e2;
-    color: #991b1b;
+  .alert-badge.caminos {
+    background: #eff6ff;
+    color: #1d4ed8;
   }
 
   .card-footer {

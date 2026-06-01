@@ -2,99 +2,82 @@
   /**
    * ViabilidadDetail Component
    *
-   * Full details view for a single recipe viability.
-   * Shows:
-   * - Cost and pricing breakdown
-   * - Margin analysis
-   * - Food cost assessment
-   * - Recommendations panel
-   * - Historical comparison
+   * Vista de detalle de un expediente de viabilidad (shape canonico del
+   * blueprint: input.nombre, calculo.coste_porcion, pvp_efectivo,
+   * food_cost_pct, margen_porcion, veredicto, advertencias, caminos).
+   * Muestra costes y precio, rentabilidad (food cost / margen), veredicto,
+   * advertencias y los caminos (la brujula) como tarjetas que lanzan el chat.
    */
 
   import ViabilidadRecomendaciones from './ViabilidadRecomendaciones.svelte';
 
   export let viabilidad: any = null;
-  export let recomendaciones: any[] = [];
-  export let historico: any[] = [];
-  export let onImplementRecondacion: ((id: string) => void) | null = null;
+  export let caminos: any[] = [];
   export let onBack: (() => void) | null = null;
 
-  let showHistory = false;
-
   function formatPrice(n: number): string {
-    return parseFloat(n).toFixed(2) + '€';
+    if (typeof n !== 'number' || isNaN(n)) return '—';
+    return n.toFixed(2) + '€';
   }
 
   function formatPercent(n: number): string {
-    return parseFloat(n).toFixed(1) + '%';
+    if (typeof n !== 'number' || isNaN(n)) return '—';
+    return n.toFixed(1) + '%';
   }
 
-  function formatDate(timestamp: number): string {
-    const date = new Date(timestamp);
+  function formatDate(iso: string): string {
+    if (!iso) return '—';
+    const date = new Date(iso);
+    if (isNaN(date.getTime())) return '—';
     return date.toLocaleDateString('es-ES', { month: 'long', day: 'numeric', year: 'numeric' });
   }
 
-  function getEstadoClass(estado: string): string {
-    if (estado === 'VIABLE') return 'viable';
-    if (estado === 'ACEPTABLE') return 'aceptable';
-    if (estado === 'CRÍTICO') return 'critico';
-    if (estado === 'INVIABLE') return 'inviable';
+  function getVeredictoClass(v: string): string {
+    if (v === 'viable') return 'viable';
+    if (v === 'viable_con_advertencias') return 'aceptable';
+    if (v === 'no_viable_economicamente') return 'inviable';
+    if (v === 'sin_pvp_objetivo') return 'orientativo';
     return 'unknown';
   }
 
-  function getEstadoLabel(estado: string): string {
-    if (estado === 'VIABLE') return '✓ Viable';
-    if (estado === 'ACEPTABLE') return '⊕ Aceptable';
-    if (estado === 'CRÍTICO') return '⚠ Crítico';
-    if (estado === 'INVIABLE') return '✗ Inviable';
-    return estado;
-  }
-
-  function getMargenHealthClass(margen: number): string {
-    if (margen > 25) return 'excellent';
-    if (margen >= 20) return 'good';
-    if (margen >= 15) return 'fair';
-    if (margen >= 5) return 'poor';
-    return 'critical';
-  }
-
-  function getMargenHealthLabel(margen: number): string {
-    if (margen > 25) return 'Excelente';
-    if (margen >= 20) return 'Bueno';
-    if (margen >= 15) return 'Aceptable';
-    if (margen >= 5) return 'Pobre';
-    return 'Crítico';
+  function getVeredictoLabel(v: string): string {
+    if (v === 'viable') return '✓ Viable';
+    if (v === 'viable_con_advertencias') return '⚠ Viable con advertencias';
+    if (v === 'no_viable_economicamente') return '✗ No viable';
+    if (v === 'sin_pvp_objetivo') return '⊙ Sin PVP objetivo';
+    return v || '—';
   }
 
   function getFoodCostHealthClass(fc: number): string {
+    if (typeof fc !== 'number' || isNaN(fc)) return '';
     if (fc <= 30) return 'optimal';
     if (fc <= 35) return 'good';
-    if (fc <= 40) return 'warning';
+    if (fc <= 45) return 'warning';
     return 'critical';
   }
 
   function getFoodCostHealthLabel(fc: number): string {
+    if (typeof fc !== 'number' || isNaN(fc)) return '—';
     if (fc <= 30) return 'Óptimo';
     if (fc <= 35) return 'Bueno';
-    if (fc <= 40) return 'Advertencia';
+    if (fc <= 45) return 'Apretado';
     return 'Crítico';
   }
 
-  function calculateMarkup(coste: number, precio: number): number {
-    if (coste === 0) return 0;
-    return ((precio - coste) / coste) * 100;
-  }
-
-  $: markup = viabilidad ? calculateMarkup(viabilidad.coste_porcion, viabilidad.precio_venta) : 0;
-  $: previousVersion = historico && historico.length > 1 ? historico[1] : null;
-  $: marginChange = previousVersion ? viabilidad.margen_bruto - previousVersion.margen_bruto : 0;
-  $: marginChangePercent = previousVersion ? ((marginChange / previousVersion.margen_bruto) * 100) : 0;
+  $: costePorcion = viabilidad?.calculo?.coste_porcion;
+  $: pvpEfectivo = viabilidad?.pvp_efectivo;
+  $: pvpSugerido = viabilidad?.pvp_sugerido;
+  $: margenPorcion = viabilidad?.margen_porcion;
+  $: foodCostPct = viabilidad?.food_cost_pct;
+  $: margenPct = typeof foodCostPct === 'number' ? 100 - foodCostPct : null;
+  $: nombre = viabilidad?.input?.nombre;
+  $: advertencias = Array.isArray(viabilidad?.advertencias) ? viabilidad.advertencias : [];
 </script>
 
 <div class="detail-container">
   {#if !viabilidad}
     <div class="empty-state">
-      <p>Selecciona una receta para ver detalles</p>
+      <p>Selecciona un expediente para ver detalles</p>
     </div>
   {:else}
     <!-- HEADER -->
@@ -103,9 +86,9 @@
         <button class="btn-back" on:click={onBack}>← Atrás</button>
       </div>
       <div class="header-title">
-        <h1>{viabilidad.receta_nombre}</h1>
-        <span class="estado-badge {getEstadoClass(viabilidad.estado)}">
-          {getEstadoLabel(viabilidad.estado)}
+        <h1>{nombre || 'Producto sin nombre'}</h1>
+        <span class="estado-badge {getVeredictoClass(viabilidad.veredicto)}">
+          {getVeredictoLabel(viabilidad.veredicto)}
         </span>
       </div>
     </div>
@@ -118,19 +101,19 @@
         <div class="breakdown-grid">
           <div class="breakdown-item">
             <span class="label">Coste por Porción</span>
-            <span class="value price">{formatPrice(viabilidad.coste_porcion)}</span>
+            <span class="value price">{formatPrice(costePorcion)}</span>
           </div>
           <div class="breakdown-item">
-            <span class="label">Precio de Venta</span>
-            <span class="value price">{formatPrice(viabilidad.precio_venta)}</span>
+            <span class="label">PVP Efectivo</span>
+            <span class="value price">{formatPrice(pvpEfectivo)}</span>
           </div>
           <div class="breakdown-item">
-            <span class="label">Margen Bruto €</span>
-            <span class="value price">{formatPrice(viabilidad.margen_bruto)}</span>
+            <span class="label">Margen por Porción</span>
+            <span class="value price">{formatPrice(margenPorcion)}</span>
           </div>
           <div class="breakdown-item">
-            <span class="label">Markup</span>
-            <span class="value">{markup.toFixed(1)}%</span>
+            <span class="label">PVP Sugerido</span>
+            <span class="value">{formatPrice(pvpSugerido)}</span>
           </div>
         </div>
       </section>
@@ -139,85 +122,63 @@
       <section class="section">
         <h2 class="section-title">📊 Rentabilidad</h2>
         <div class="metrics-grid">
-          <div class="metric-card {getMargenHealthClass(viabilidad.margen_porcentaje)}">
+          <div class="metric-card {getFoodCostHealthClass(foodCostPct)}">
             <div class="metric-label">Margen %</div>
-            <div class="metric-value">{formatPercent(viabilidad.margen_porcentaje)}</div>
-            <div class="metric-status">{getMargenHealthLabel(viabilidad.margen_porcentaje)}</div>
+            <div class="metric-value">{formatPercent(margenPct)}</div>
+            <div class="metric-status">{getFoodCostHealthLabel(foodCostPct)}</div>
           </div>
 
-          <div class="metric-card {getFoodCostHealthClass(viabilidad.food_cost_porcentaje)}">
+          <div class="metric-card {getFoodCostHealthClass(foodCostPct)}">
             <div class="metric-label">Food Cost</div>
-            <div class="metric-value">{formatPercent(viabilidad.food_cost_porcentaje)}</div>
-            <div class="metric-status">{getFoodCostHealthLabel(viabilidad.food_cost_porcentaje)}</div>
+            <div class="metric-value">{formatPercent(foodCostPct)}</div>
+            <div class="metric-status">{getFoodCostHealthLabel(foodCostPct)}</div>
           </div>
         </div>
 
         <!-- Margin Visualization -->
-        <div class="margin-visualization">
-          <div class="margin-bar">
-            <div class="margin-segment cost" style={`width: ${viabilidad.food_cost_porcentaje}%`}>
-              <span class="segment-label" style={`opacity: ${viabilidad.food_cost_porcentaje > 15 ? 1 : 0}`}>
-                Food Cost
-              </span>
-            </div>
-            <div class="margin-segment profit" style={`width: ${viabilidad.margen_porcentaje}%`}>
-              <span class="segment-label" style={`opacity: ${viabilidad.margen_porcentaje > 15 ? 1 : 0}`}>
-                Margen
-              </span>
-            </div>
-            {#if viabilidad.food_cost_porcentaje + viabilidad.margen_porcentaje < 100}
-              <div class="margin-segment other" style={`width: ${100 - viabilidad.food_cost_porcentaje - viabilidad.margen_porcentaje}%`}>
-                <span class="segment-label">Otros</span>
+        {#if typeof foodCostPct === 'number' && typeof margenPct === 'number'}
+          <div class="margin-visualization">
+            <div class="margin-bar">
+              <div class="margin-segment cost" style={`width: ${foodCostPct}%`}>
+                <span class="segment-label" style={`opacity: ${foodCostPct > 15 ? 1 : 0}`}>
+                  Food Cost
+                </span>
               </div>
-            {/if}
+              <div class="margin-segment profit" style={`width: ${margenPct}%`}>
+                <span class="segment-label" style={`opacity: ${margenPct > 15 ? 1 : 0}`}>
+                  Margen
+                </span>
+              </div>
+            </div>
+            <div class="margin-legend">
+              <span class="legend-item cost">Food Cost: {formatPercent(foodCostPct)}</span>
+              <span class="legend-item profit">Margen: {formatPercent(margenPct)}</span>
+            </div>
           </div>
-          <div class="margin-legend">
-            <span class="legend-item cost">Food Cost: {formatPercent(viabilidad.food_cost_porcentaje)}</span>
-            <span class="legend-item profit">Margen: {formatPercent(viabilidad.margen_porcentaje)}</span>
-          </div>
-        </div>
+        {/if}
       </section>
 
-      <!-- Historical Comparison -->
-      {#if previousVersion}
+      <!-- Advertencias -->
+      {#if advertencias.length > 0}
         <section class="section">
-          <h2 class="section-title">📈 Comparación Histórica</h2>
-          <div class="historical-comparison">
-            <div class="comparison-item">
-              <span class="label">Margen Anterior</span>
-              <span class="value">{formatPrice(previousVersion.margen_bruto)}</span>
-              <span class="date">{formatDate(previousVersion.evaluado_at)}</span>
-            </div>
-            <div class="comparison-item">
-              <span class="label">Margen Actual</span>
-              <span class="value">{formatPrice(viabilidad.margen_bruto)}</span>
-              <span class="date">{formatDate(viabilidad.evaluado_at)}</span>
-            </div>
-            <div class="comparison-change" class:positive={marginChange > 0} class:negative={marginChange < 0}>
-              <span class="change-label">Cambio</span>
-              <span class="change-value">
-                {marginChange > 0 ? '+' : ''}{formatPrice(marginChange)}
-                ({marginChangePercent > 0 ? '+' : ''}{marginChangePercent.toFixed(1)}%)
-              </span>
-            </div>
-          </div>
+          <h2 class="section-title">⚠ Advertencias</h2>
+          <ul class="advertencias-list">
+            {#each advertencias as adv}
+              <li>{adv}</li>
+            {/each}
+          </ul>
         </section>
       {/if}
 
-      <!-- Recommendations Section -->
-      {#if recomendaciones.length > 0}
-        <section class="section">
-          <h2 class="section-title">💡 Recomendaciones ({recomendaciones.filter(r => !r.implementada).length})</h2>
-          <ViabilidadRecomendaciones
-            {recomendaciones}
-            onImplement={onImplementRecondacion}
-          />
-        </section>
-      {/if}
+      <!-- Caminos (la brujula) -->
+      <section class="section">
+        <h2 class="section-title">🧭 Caminos ({caminos.length})</h2>
+        <ViabilidadRecomendaciones {caminos} />
+      </section>
 
       <!-- Footer -->
       <div class="detail-footer">
-        <span class="evaluado-at">Evaluado: {formatDate(viabilidad.evaluado_at)}</span>
+        <span class="evaluado-at">Evaluado: {formatDate(viabilidad.fecha_evaluacion)}</span>
       </div>
     </div>
   {/if}
@@ -295,18 +256,23 @@
   }
 
   .estado-badge.aceptable {
-    background: #dbeafe;
-    color: #0c4a6e;
+    background: #fef3c7;
+    color: #92400e;
   }
 
-  .estado-badge.critico {
-    background: #fed7aa;
-    color: #92400e;
+  .estado-badge.orientativo {
+    background: #dbeafe;
+    color: #0c4a6e;
   }
 
   .estado-badge.inviable {
     background: #fecaca;
     color: #991b1b;
+  }
+
+  .estado-badge.unknown {
+    background: #f3f4f6;
+    color: #6b7280;
   }
 
   .detail-content {
@@ -383,7 +349,6 @@
     gap: 8px;
   }
 
-  .metric-card.excellent,
   .metric-card.optimal {
     background: #f0fdf4;
     border-color: #dcfce7;
@@ -394,13 +359,11 @@
     border-color: #bfdbfe;
   }
 
-  .metric-card.fair,
   .metric-card.warning {
     background: #fef3c7;
     border-color: #fcd34d;
   }
 
-  .metric-card.poor,
   .metric-card.critical {
     background: #fee2e2;
     border-color: #fca5a5;
@@ -457,10 +420,6 @@
     background: #10b981;
   }
 
-  .margin-segment.other {
-    background: #9ca3af;
-  }
-
   .segment-label {
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   }
@@ -495,66 +454,18 @@
     background: #10b981;
   }
 
-  .historical-comparison {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 12px;
-  }
-
-  .comparison-item {
-    background: white;
-    border: 1px solid #e5e7eb;
-    border-radius: 4px;
-    padding: 12px;
+  .advertencias-list {
+    margin: 0;
+    padding-left: 18px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
   }
 
-  .comparison-change {
-    background: white;
-    border: 2px solid #e5e7eb;
-    border-radius: 4px;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    text-align: center;
-  }
-
-  .comparison-change.positive {
-    background: #f0fdf4;
-    border-color: #dcfce7;
-  }
-
-  .comparison-change.negative {
-    background: #fee2e2;
-    border-color: #fca5a5;
-  }
-
-  .change-label {
-    font-size: 11px;
-    text-transform: uppercase;
-    color: #6b7280;
-    letter-spacing: 0.5px;
-  }
-
-  .change-value {
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  .comparison-change.positive .change-value {
-    color: #059669;
-  }
-
-  .comparison-change.negative .change-value {
-    color: #dc2626;
-  }
-
-  .date {
-    font-size: 10px;
-    color: #9ca3af;
+  .advertencias-list li {
+    font-size: 12px;
+    color: #92400e;
+    line-height: 1.4;
   }
 
   .detail-footer {

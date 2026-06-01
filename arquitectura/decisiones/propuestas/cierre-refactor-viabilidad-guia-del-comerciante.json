@@ -299,6 +299,16 @@
     "Mezclar fases: cada una cierra con OK explicito del humano antes de la siguiente."
   ],
 
+  "estado_de_ejecucion": {
+    "F0": {
+      "cerrada_en": "2026-06-01",
+      "commit_hash": "pending",
+      "salida_real": "subsistema-recetario.contract.json v1.0.3->v1.1.0 (rol de viabilidad precisado: determinista + generador de caminos ligeros; profundidad cualitativa en el chat). Agente legacy viabilidad-receta-analyzer borrado (agents+prompts). Eventos viabilidad.analisis.cualitativo.* confirmados sin schema ni consumidor antes de borrar.",
+      "cross_checks_resultado": "CC1 validate:ci PASS (no drift nuevo; findings 2357->2350, descenso legitimo por salida del agente). CC3 git status scope OK (solo los 3 archivos esperados).",
+      "nota_baseline": "Descenso de warnings legitimo pero baseline NO regenerado: CI pasa sin regenerar (solo bloquea drift nuevo). Regeneracion pendiente de OK humano."
+    }
+  },
+
   "salida_final_del_horizonte": {
     "viabilidad_estado_terminal": "Guia del comerciante operativa: el blueprint genera 0-3 caminos { titulo, prompt } al evaluar (la brujula), persistidos en el expediente; la estancia los renderiza como tarjetas que lanzan el chat con datos + consulta via prefillChatInput; el Detail muestra el shape real; sin seccion historica; sin agente. Evento de dominio canonico intacto.",
     "archivos_finales_tocados": [

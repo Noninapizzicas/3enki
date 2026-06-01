@@ -158,7 +158,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Filtro por substring del nombre en cliente es densidad (criterio 1), no busqueda semantica. Util y barato. El tool recetas.buscar del blueprint cubre busqueda semantica avanzada y se queda en chat.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "buscador visual simple en cliente", "cerrada_en": "2026-06-01T03:26:13.390Z" }
     },
     {
       "id": "Q2",

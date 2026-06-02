@@ -1,7 +1,8 @@
 {
   "_doc": "Manifest del modulo carta-design. Blueprint-driven. 6 operaciones de gestion de designs (HTML) y profiles (estilos). NO genera HTML — eso lo hace un agente. 5 profiles built-in en design-profiles/ (NO modificables). Custom profiles + designs en data/projects/{slug}/carta-design/.",
   "name": "carta-design",
-  "version": "1.1.0",
+  "version": "1.2.0",
+  "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.5. Dos cambios: (a) paths_proyecto /carta-design/designs/ + /carta-design/profiles/ -> /storage/pizzepos/carta-design/designs/ + /storage/pizzepos/carta-design/profiles/ (D1 namespace + subdir, coherente con los otros 4 hermanos); (b) correlation_id obligatorio en payload de carta.html.generada (D10/P9). NO modifica modelo no-reactivo (eventos_que_escucho:[] preservado --A1). NO declara requires_consumer en carta.html.generada (ningun consumer real --leccion TP1). NO toca paths_modulo (design-profiles/ built-in preservado). NO toca operaciones funcionales mas alla de paths + correlation_id. Aparcamiento de UI documentado en _analisis-flujo-pos-y-engranajes-carta.md sigue vigente.",
   "description": "Modulo carta-design en modo blueprint-driven. Estudio de diseno de cartas impresas. Gestiona archivos: cargar carta para disenar, guardar HTML generado, biblioteca de profiles reutilizables (built-in + custom).",
   "language": "es",
   "blueprint_driven": true,
@@ -12,9 +13,9 @@
     "persistence": {
       "pattern": "json-files-per-project-plus-builtin-resources",
       "paths_proyecto": [
-        "data/projects/{slug}/carta-design/designs/<carta_id>__<timestamp>.html",
-        "data/projects/{slug}/carta-design/designs/<carta_id>__<timestamp>.json (meta companion)",
-        "data/projects/{slug}/carta-design/profiles/<profile_id>.json"
+        "data/projects/{slug}/storage/pizzepos/carta-design/designs/<carta_id>__<timestamp>.html",
+        "data/projects/{slug}/storage/pizzepos/carta-design/designs/<carta_id>__<timestamp>.json (meta companion)",
+        "data/projects/{slug}/storage/pizzepos/carta-design/profiles/<profile_id>.json"
       ],
       "paths_modulo": [
         "modules/pizzepos/carta-design/design-profiles/<built-in>.json (5 profiles incluidos)"

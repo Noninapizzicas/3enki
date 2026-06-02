@@ -119,7 +119,8 @@
       "opciones": [
         {"id": "A", "label": "9 --tras carta-marketing (8)", "comentario": "secuencial sin huecos"}
       ],
-      "recomendacion": "A"
+      "recomendacion": "A",
+      "respuesta_usuario": {"opcion": "A", "motivo": "order=9 secuencial sin huecos", "cerrada_en": "2026-06-02"}
     },
     {
       "id": "Q3",

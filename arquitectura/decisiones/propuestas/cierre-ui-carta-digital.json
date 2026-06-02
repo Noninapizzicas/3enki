@@ -220,7 +220,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Frases operativas que el LLM puede procesar sin ambiguedad. Ajustables tras uso real.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "eleccion directa del humano (acepta frases prefill literales)", "cerrada_en": "2026-06-02" }
     }
   ],
 

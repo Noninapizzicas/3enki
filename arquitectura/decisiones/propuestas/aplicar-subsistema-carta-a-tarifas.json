@@ -1,4 +1,12 @@
 {
+  "_terminado": {
+    "estado": "terminado",
+    "cerrado_en": "2026-06-01",
+    "rama": "claude/fede-3Qhte",
+    "ejecutado_por": "fede",
+    "commits": ["8912727"],
+    "evidencia": "F1 tarifas/module.json 3.1.0->3.1.1 + _v3_1_1_changelog + events.publishes.tarifas.config.actualizada.description con correlation_id (OBLIGATORIO). F1.op0: helper centralizado index.js L76-91 verificado, unico this.eventBus.publish (L91) pasa por el; cero edicion de index.js (D2). F2 validate:ci PASS sin drift nuevo + test tests/unit/pizzepos__tarifas.test.js 9/9 verde (aislado). F3 git status limpio, remoto al dia, sin PR. Cierra TP4_ajustar_tarifas_js del contrato subsistema-carta (vigente en v1.0.5; P9/D10 canonizados en v1.0.0). Nota: npm test chain tiene conversation-manager.test.js roto pre-existente (ajeno, fuera de scope)."
+  },
   "_doc": "Plan ejecutable JSON del horizonte 'aplicar subsistema-carta a tarifas'. Cierra TP4 del contrato subsistema-carta v1.0.0: declarar correlation_id obligatorio en el payload de tarifas.config.actualizada. Plan MUY LIGERO --la auditoria al cocinarlo confirmo que tarifas v3.1.0 YA propaga correlation_id robustamente via un helper centralizado (lineas 76-91 del index.js que construye 'enriched' con correlation_id antes de cualquier publish). El bump se reduce a actualizar la description de events.publishes en module.json para dejar el contrato explicito + pequeño bump de version + changelog. Cero refactor de codigo de runtime. Pensado para que fede lo ejecute linealmente en ~15 minutos. Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
 
   "id": "aplicar-subsistema-carta-a-tarifas",

@@ -138,9 +138,13 @@ class FilesystemModule extends BaseModule {
             if (!syncFs.statSync(childDir).isDirectory()) continue;
             const mj2 = path.join(childDir, 'module.json');
             if (syncFs.existsSync(mj2)) tryRegister(mj2);
-          } catch (_) {}
+          } catch (err) {
+            this.logger?.warn('filesystem.manifest.scan.lvl2.failed', { path: childDir, error: err.message });
+          }
         }
-      } catch (_) {}
+      } catch (err) {
+        this.logger?.warn('filesystem.manifest.scan.lvl1.failed', { path: lvl1, error: err.message });
+      }
     }
   }
 
@@ -432,7 +436,7 @@ class FilesystemModule extends BaseModule {
     // modulo emisor (ej: 'pizzepos/cartas/X.json' para carta-manager).
     const RESERVED_INTERNAL_PREFIXES = ['/storage/', '/projects/', '/data/'];
     if (RESERVED_INTERNAL_PREFIXES.some(p => inputPath === p.slice(0, -1) || inputPath.startsWith(p))) {
-      const error = new Error(`Path con prefijo reservado: '${inputPath}'. Los prefijos /storage/, /projects/, /data/ los compone filesystem desde base_path del proyecto activo. Pasa el path relativo al data_path declarado en module.json del modulo emisor (ej: 'pizzepos/cartas/<id>.json' o '<modulo>/<archivo>'). Ver storage-layout.contract.json.`);
+      const error = new Error(`Path con prefijo reservado: '${inputPath}'. Los prefijos /storage/, /projects/, /data/ los compone filesystem desde base_path del proyecto activo. Pasa el path relativo al data_path declarado en module.json del modulo emisor (formato: '/<vertical>/<entidad>/<archivo>.json' o '/<modulo>/<archivo>'). Ver storage-layout.contract.json.`);
       error._code = 'INVALID_INPUT';
       error._details = { kind: 'reserved_internal_prefix', requested: inputPath };
       throw error;

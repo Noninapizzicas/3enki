@@ -1,0 +1,11 @@
+{
+  "id": "carta-manager",
+  "name": "Cartas",
+  "description": "Aggregate root del subsistema-carta: catalogo de cartas con versionado y history",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 4,
+  "routes": ["/carta-manager"],
+  "icon": "🃏",
+  "label": "Cartas"
+}

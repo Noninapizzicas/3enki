@@ -11,12 +11,10 @@
   "target_page_id": "carta-marketing",
   "config": {
     "persistence": {
+      "scope": "project",
+      "data_path": "pizzepos/carta-marketing",
       "pattern": "single-json-per-project",
-      "paths": [
-        "data/projects/{slug}/storage/config/marca.json"
-      ],
-      "atomicidad": "fs.write.request atomic:true",
-      "concurrencia": "single-writer"
+      "concurrency": "single-writer"
     }
   },
   "cajones_enabled": true

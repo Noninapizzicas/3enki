@@ -1,8 +1,7 @@
 {
-  "_doc": "Manifest del modulo carta-digital. NO tiene index.js (blueprint-driven). 4 operaciones (get_config, update_config, get_carta_publica, set_carta_compuesta). Persistencia: storage/pizzepos/carta-digital/config.json del proyecto. Composicion real (PWA build, ofertas, copy) delegada a agentes via agent.execute.request. El directorio incluye artefactos NO blueprint (cf-worker/, export-cli.js, static-template.js, context.json, prompt.json) que son tooling de deploy de la PWA publica y coexisten con el blueprint sin conflicto.",
+  "_doc": "Manifest del modulo carta-digital. NO tiene index.js (blueprint-driven). 4 operaciones (get_config, update_config, get_carta_publica, set_carta_compuesta). Persistencia: carta-digital.json del proyecto. Composicion real (PWA build, ofertas, copy) delegada a agentes via agent.execute.request. El directorio incluye artefactos NO blueprint (cf-worker/, export-cli.js, static-template.js, context.json, prompt.json) que son tooling de deploy de la PWA publica y coexisten con el blueprint sin conflicto.",
   "name": "carta-digital",
-  "version": "1.2.0",
-  "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.1. Dos cambios: (a) path persistence /carta-digital.json -> /storage/pizzepos/carta-digital/config.json (D1 namespace pizzepos del contrato + coherencia con patron de carta-manager y productos); (b) correlation_id obligatorio en payloads de cartadigital.config.actualizada y cartadigital.carta_publica.actualizada (D10/P9 del contrato). NO se modifica eventos_que_escucho ([] preservado --A1 cocinada con el usuario, modelo no-reactivo del blueprint v1.1.0 coherente con el contrato v1.0.1). NO se declara requires_consumer para los 2 eventos publicados (ningun consumer real hoy --leccion TP1).",
+  "version": "1.1.0",
   "description": "Modulo carta-digital en modo blueprint-driven. Backoffice de la carta publica: branding del proyecto + carta compuesta lista para servir al cliente.",
   "language": "es",
   "blueprint_driven": true,
@@ -11,12 +10,10 @@
   "target_page_id": "carta-digital",
   "config": {
     "persistence": {
+      "scope": "project",
+      "data_path": "pizzepos/carta-digital",
       "pattern": "json-file-per-project",
-      "paths": [
-        "data/projects/{slug}/storage/pizzepos/carta-digital/config.json"
-      ],
-      "atomicidad": "fs.write.request atomic:true",
-      "concurrencia": "single-writer (blueprint serializa via publishAndWait)"
+      "concurrency": "single-writer"
     },
     "artefactos_deploy_extras": [
       "cf-worker/ — Cloudflare Worker que sirve la carta publica al cliente final",

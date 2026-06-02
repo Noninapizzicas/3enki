@@ -1,0 +1,297 @@
+{
+  "_doc": "Define la convencion canonica de layout del filesystem en proyectos Enki: los tres pilares (Sistema / Proyecto / Vertical), donde vive cada uno, y como se compone el path fisico. Es la fuente autoritativa para que filesystem (guardian de la composicion) y los modulos emisores (que pasan paths relativos) hablen el mismo idioma. Cierra el caos historico de cinco resoluciones simultaneas de 'donde va una carta' detectado en el audit 2026-06-02 del subsistema-carta de pizzepos: paths duplicados tipo <proj>/storage/storage/pizzepos/cartas/, archivos sueltos al raiz de storage/, dos sqlite en el mismo proyecto, etc.",
+  "id": "storage-layout",
+  "version": "1.0.0",
+  "creada": "2026-06-02",
+  "supersedes_nota": "v1.0.0 (2026-06-02): primera version. Origen empirico: audit 2026-06-02 del flujo carta-manager runtime, donde una carta recien creada (carta_si.json) acabo en <proj>/storage/storage/pizzepos/cartas/ — doble storage/. Los tres sumandos detectados (filesystem cablea sufijo storage/ silencioso, LLM-runtime antepone /storage/pizzepos/ al path declarado por el blueprint, blueprint declara paths relativos sin la disciplina de no-prefijo) componen el bug. Decisiones cerradas con el usuario: namespace por vertical (storage/<vertical>/<entidad>/), naming de proyectos como slug autoritativo, borrar y recrear data/projects/ con el patron nuevo. Coherente con la directriz 'todo por eventos' — filesystem es guardian de la composicion, los modulos emisores nunca recomponen base_path ni storage/.",
+
+  "objetivo": "Producir UN JSON output (_outputs/storage-layout.json) que enumera: por cada modulo persistente, su data_path declarado y su scope (project|system); por cada feature de blueprints/project-types/, los directorios y archivos iniciales que crea respetando el namespace canonico; lista de prefijos sinteticos prohibidos en path. Validable mecanicamente cruzando contra module.json, blueprints y codigo JS de los modulos.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/storage-layout.contract.json (este archivo)",
+      "arquitectura/decisiones/_schemas/storage-layout/persistence-config.schema.json",
+      "arquitectura/decisiones/_outputs/persistence.json (este contrato extiende persistence)",
+      "arquitectura/decisiones/_outputs/project-identity.json (base_path autoritativo se hereda)"
+    ],
+    "obligatorios_si_existen": [
+      "blueprints/project-types/*.json — declaracion de features que crean directorios/archivos iniciales en el proyecto"
+    ],
+    "opcionales_para_contexto": [
+      "modules/*/module.json — config.persistence declarado",
+      "modules/*/*/module.json — modulos de vertical (modules/<vertical>/<modulo>/)",
+      "modules/*/index.js — codigo JS que publica fs.*.request",
+      "modules/*/*.blueprint.json — blueprints que componen paths"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "TRES PILARES, UN LAYOUT. El sistema Enki tiene tres pilares ortogonales (Sistema Enki / Proyecto / Vertical) y un unico layout fisico que los compone. Sistema vive en /opt/enki/ (codigo + data/_system/ para datos globales). Proyecto vive en data/projects/<slug>/ con tres subdirectorios fijos (config/, db/, storage/). Vertical posee un namespace dentro de storage/<vertical>/<entidad>/. Quitando o cambiando uno de los pilares no cambia donde viven los otros dos.",
+
+    "BASE_PATH AUTORITATIVO. El path fisico de un proyecto se lee de project.base_path, NO se recompone ni con _slugify(name) ni concatenando partes. Lo dice project-identity.contract — aqui se aplica: nadie excepto project-manager y filesystem construye paths absolutos de proyecto.",
+
+    "STORAGE/ LO AÑADE FILESYSTEM. El subdirectorio storage/ debajo de base_path es convencion del filesystem, NO se declara en ningun module.json ni en ningun blueprint. Cuando un modulo declara data_path, lo declara relativo a storage/ del proyecto activo. Cuando un blueprint pasa un path, lo pasa relativo al data_path del modulo. Filesystem compone: base_path + 'storage' + data_path + path. Un solo lugar sabe la composicion completa.",
+
+    "EL VERTICAL POSEE SU NAMESPACE. Cuando un modulo vive en modules/<vertical>/<modulo>/ (pertenece a un vertical), su data_path comienza con <vertical>/ obligatoriamente. Las cartas del vertical pizzepos viven en storage/pizzepos/cartas/, no en storage/cartas/ ni en storage/carta-manager/. El namespace del vertical es la barrera contra colision cuando dos verticales tienen entidades del mismo nombre.",
+
+    "MODULO TRANSVERSAL POSEE SU CARPETA. Un modulo que NO vive bajo un vertical (modules/<modulo>/ sin nivel intermedio) usa su propio nombre como data_path. conversation-export declara data_path: 'conversation-export'. No se mezcla con verticales.",
+
+    "PROJECT-SCOPE VS SYSTEM-SCOPE EXPLICITO. Cada modulo persistente declara persistence.scope: 'project' (datos por proyecto, viven bajo base_path) o 'system' (datos globales del sistema, viven en data/_system/<modulo>/). Sin declaracion, el modulo no persiste. La eleccion es del modulo segun su dominio, no del repo. credential-manager es system; carta-manager es project.",
+
+    "EMISORES PASAN PATH RELATIVO, NUNCA SINTETICO. Cuando un modulo publica fs.*.request, el campo 'path' es relativo al data_path declarado del modulo emisor. NUNCA empieza con /storage/, /projects/, /data/, ni con el nombre del vertical (lo añade filesystem desde el data_path declarado). NUNCA contiene {slug} o el name del proyecto recompuesto. Filesystem rechaza con INVALID_INPUT cualquier path que viole esto — disciplina mecanica, no buenas intenciones.",
+
+    "TODO POR EVENTOS. La operacion de borrar el data/projects/ actual y crear los proyectos al nuevo layout se hace exclusivamente publicando eventos al bus (project.delete.request, project.create.request, fs.delete.request). Cero rm -rf de shell, cero fs.writeFile directo. La disciplina event-core gobierna no solo el runtime normal, tambien las operaciones de reset y migracion. La excepcion son los cambios en codigo + JSON del repo, que pasan por git.",
+
+    "FEATURE-BLUEPRINT RESPETA NAMESPACE. blueprints/project-types/<feature>.json declara directorios e initialFiles relativos a base_path del proyecto. Si la feature es de un vertical (ej. pizzepos.json), todos sus directorios e archivos viven bajo storage/<vertical>/. Cero archivos sueltos en storage/ raiz. Cero directorios sin namespace del vertical.",
+
+    "AISLAMIENTO POR NAMESPACE. La persistencia de un modulo es PRIVADA — refuerzo del principio absolute_isolation_between_modules de persistence.contract. Aqui se concreta: aislamiento via namespace. Un modulo del vertical X no escribe paths bajo storage/<vertical-Y>/, ni bajo storage/<otro-modulo>/. Si necesita datos de otro modulo, los pide via bus."
+  ],
+
+  "principios": [
+    {
+      "id": "base_path_autoritativo",
+      "regla": "El path fisico del proyecto se lee de project.base_path tal cual viaja en project.activated. No se recompone localmente con _slugify(name), name.toLowerCase(), ni concatenaciones del path. Refuerzo del principio P5 de project-identity.contract aplicado al layout de storage.",
+      "razon": "Renombrar un proyecto no debe romper sus datos. base_path queda fijado al crear el proyecto y sobrevive a renames. _slugify(newName) diverge del path fisico si name cambia. Lo que aqui se añade: tampoco se reconstruye 'base_path + storage' del lado del emisor — filesystem hace eso."
+    },
+    {
+      "id": "storage_es_convencion_de_filesystem",
+      "regla": "El subdirectorio storage/ debajo de base_path es decision cableada del modulo filesystem (la añade en onProjectActivated). Ningun module.json declara storage/ como prefijo. Ningun blueprint pasa /storage/ en path. Ningun feature-blueprint mete directorios fuera de storage/ excepto db/ y config/ (que son del proyecto, no del storage).",
+      "razon": "Tener UN lugar que sabe la convencion 'storage/' permite cambiarla sin migrar 70+ module.json y 10+ blueprints. Si mañana el repo decide 'data/' en vez de 'storage/', solo cambia filesystem y los datos se mueven una vez."
+    },
+    {
+      "id": "data_path_obligatorio_si_persiste",
+      "regla": "Todo modulo que publica fs.*.request DEBE declarar config.persistence.data_path en module.json. data_path es string sin leading slash, sin trailing slash, sin {slug}/{base_path}/{name}, sin segmentos absolutos. Modulos que no persisten via filesystem (solo sqlite via database-manager, o in-memory) no necesitan declararlo.",
+      "razon": "data_path es la unica fuente de verdad de donde vive lo de cada modulo. Sin declaracion explicita, filesystem no puede componer ni el validator detectar drifts. Hace la persistencia introspectable — el JSON output del contrato lista 'modulo X persiste en storage/Y/Z' sin grepear codigo."
+    },
+    {
+      "id": "data_path_refleja_pilar",
+      "regla": "El data_path declarado refleja a que pilar pertenece el modulo. Modulos en modules/<vertical>/<modulo>/ (con vertical) declaran data_path que comienza con '<vertical>/'. Modulos en modules/<modulo>/ (sin vertical) declaran data_path igual al nombre del modulo. Modulos system-wide declaran scope='system' y data_path libre bajo data/_system/.",
+      "razon": "La estructura del filesystem refleja la estructura del codigo. Viendo el tree del proyecto sabes que verticales tiene activos y que modulos transversales tocan ese proyecto. Refleja organizacion mental del usuario (los pilares como los nombro) en estructura fisica."
+    },
+    {
+      "id": "scope_project_o_system_explicito",
+      "regla": "persistence.scope es enum cerrado ['project', 'system']. 'project': los datos viven en <base_path>/storage/<data_path>/ — un set por proyecto. 'system': los datos viven en /opt/enki/data/_system/<data_path>/ — un set global. Sin scope, el modulo no persiste y data_path no aplica.",
+      "razon": "Distinguir dominio del proyecto vs dominio del sistema explicitamente. credential-manager, project-manager, database-manager (el motor) y prompt-manager son system. carta-manager, recetas, mise-en-place son project. Mezclar las dos clases sin declaracion ha producido caos historicamente."
+    },
+    {
+      "id": "path_relativo_sin_prefijos_sinteticos",
+      "regla": "Cuando un modulo publica fs.*.request, el campo path empieza directamente con el nombre del archivo o subcarpeta dentro del data_path del modulo. PROHIBIDO: paths que empiecen con '/storage/', '/projects/', '/data/', '/<vertical>/' (si el modulo pertenece al vertical), o cualquier segmento que filesystem ya añadiria desde base_path/storage/data_path.",
+      "razon": "Cada prefijo sintetico mete una composicion extra que multiplica la combinatoria. /storage/pizzepos/cartas/X.json + filesystem add /storage/ + filesystem add /pizzepos/cartas/ = doble basura. Path relativo limpio = composicion unica y predecible."
+    },
+    {
+      "id": "filesystem_unico_componente",
+      "regla": "Solo el modulo filesystem compone el path absoluto. El emisor pasa path relativo al data_path del modulo. Filesystem hace: scope==='system' ? path.join('/opt/enki/data/_system', data_path, path) : path.join(base_path, 'storage', data_path, path). Ningun otro modulo concatena partes del path fisico.",
+      "razon": "Un solo lugar que sabe componer significa un solo lugar que cambiar si la convencion evoluciona. Filesystem es el guardian del scope. tools.contract.linea 264-267 ya asignaba este rol — aqui se hace operacional."
+    },
+    {
+      "id": "feature_blueprint_namespacea",
+      "regla": "blueprints/project-types/<feature>.json declara directorios e initialFiles bajo storage/<feature_namespace>/. El feature_namespace es el id de la feature (igual al nombre del vertical si la feature crea un vertical, o un id propio). NUNCA crea directorios o archivos directamente en storage/ raiz. NUNCA mezcla namespace de varias features.",
+      "razon": "El namespace de feature en el filesystem es el unico aviso visual de que features tiene activas un proyecto. tree data/projects/companero/storage/ debe mostrar carpetas por feature (pizzepos/, tienda/, facturas/), no archivos sueltos."
+    },
+    {
+      "id": "reset_y_migracion_por_eventos",
+      "regla": "Borrar proyectos, crearlos, migrar datos entre layouts viejo y nuevo se hace exclusivamente via eventos al bus (project.delete.request, project.create.request, fs.delete.request, fs.write.request). PROHIBIDO rm -rf del shell, fs.writeFile directo, scripts que tocan disco sin pasar por filesystem. La operacion queda capturada por el bus y auditable por capture-bus.",
+      "razon": "Mantiene el paradigma event-core como invariante incluso durante operaciones excepcionales. Lo que NO se ve en el bus no existio — si una operacion de reset bypasa eventos, queda fuera del rastro causal y no se puede diagnosticar. Es la regla 'todo por eventos' aplicada a operaciones de migracion."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "decision": "Namespace canonico por vertical: storage/<vertical>/<entidad>/.",
+      "alternativa_descartada": "storage/<modulo>/ — el modulo posee directamente, sin nivel de vertical.",
+      "razon": "El usuario piensa en pilares (Sistema / Proyecto / Vertical), no en modulos individuales. Ver 'lo de pizzepos' es mas natural que ver 'lo de carta-manager + carta-design + carta-impresion + ...'. Los modulos del vertical ya viven juntos en modules/<vertical>/. Replicar esa agrupacion en filesystem cierra la simetria. El precio: dos modulos de verticales distintos no pueden compartir entidad del mismo nombre (storage/pizzepos/cartas y storage/tienda/cartas conviven sin chocar — exactamente lo que querias)."
+    },
+    {
+      "decision": "Naming de proyectos: slug autoritativo en el directorio (data/projects/<slug>/).",
+      "alternativa_descartada": "UUID en directorio + slug solo visible en config (renombrar no toca disco).",
+      "razon": "project-identity.contract ya canoniza base_path = path.join(projectsBasePath, _slugify(name)) calculado UNA vez en _createProjectDirectories. Mantenemos eso. Lo que añadimos: project-manager rechaza crear proyectos con slug que colisione (incluyendo similares por typo+correccion como vaiers <-> vapers — bloqueo del caso testigo)."
+    },
+    {
+      "decision": "storage/ cableado en filesystem, NO declarado por cada modulo.",
+      "alternativa_descartada": "Cada module.json declara data_path completo incluyendo storage/ — patron mas explicito.",
+      "razon": "Cablear el sufijo storage/ en UN lugar (filesystem.onProjectActivated) permite cambiar convencion futura sin migrar 14+ module.json. Y deja claro que filesystem es el guardian, no decoracion. El precio: filesystem tiene mas conocimiento de la convencion que un disenyo puramente declarativo — aceptable porque filesystem ya tiene rol especial (guardian del scope segun tools.contract)."
+    },
+    {
+      "decision": "scope explicito ['project', 'system'] como campo obligatorio en config.persistence.",
+      "alternativa_descartada": "Inferir scope del nombre/ubicacion del modulo (heuristica).",
+      "razon": "La inferencia falla en bordes (project-manager es system pero el nombre sugiere project; ai-gateway es system pero se usa por proyecto). Declaracion explicita = cero ambiguedad, validable mecanicamente, autodocumentante."
+    },
+    {
+      "decision": "Reset operacional del data/projects/ actual via eventos (no rm -rf).",
+      "alternativa_descartada": "Script bash que borra el directorio y luego project-manager lo recrea en arranque.",
+      "razon": "Cumplir la directriz transversal 'todo por eventos' del usuario. project.delete.request orquesta cierre limpio de DB, borrado de symlinks, limpieza de cache de modulos consumidores del proyecto. capture-bus deja rastro de la operacion. Si algo falla a mitad de borrado, el bus tiene la evidencia para diagnosticar — un rm -rf falla en silencio."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "path_con_prefijo_sintetico",
+      "regla": "Publish de fs.*.request con campo 'path' que empieza con '/storage/', '/projects/', '/data/', o con el nombre del vertical/modulo del propio emisor (lo añade filesystem desde data_path).",
+      "viola_principios": ["path_relativo_sin_prefijos_sinteticos", "filesystem_unico_componente"],
+      "como_detectar": "Validator parsea blueprints (modules/**/*.blueprint.json) y JS de modulos (modules/**/*.js) buscando 'fs.*.request' con string literal 'path' que matche regex /^['\"]/(storage|projects|data)\\//. Para el caso vertical: regex /^['\"]/<vertical-del-modulo>\\// cuando el modulo vive en modules/<vertical>/.",
+      "alternativa_correcta": "Pasar path relativo al data_path del modulo. Ej: en carta-manager (data_path='pizzepos/cartas'), pasar path: '<carta_id>.json' o 'versions/<carta_id>/<ts>.json'. Filesystem compone el resto."
+    },
+    {
+      "id": "module_persistente_sin_data_path",
+      "regla": "module.json de un modulo que publica fs.*.request sin declarar config.persistence.data_path y config.persistence.scope.",
+      "viola_principios": ["data_path_obligatorio_si_persiste", "scope_project_o_system_explicito"],
+      "como_detectar": "Cross-check: para cada modulo cuyo index.js o blueprint contiene fs.*.request, verificar que su module.json tiene config.persistence.{data_path, scope}. Si falta, ERROR.",
+      "alternativa_correcta": "Añadir al module.json: \"config\": { \"persistence\": { \"scope\": \"project\", \"data_path\": \"<vertical>/<entidad>\" } } (o 'system' segun el caso)."
+    },
+    {
+      "id": "data_path_con_recomposicion",
+      "regla": "data_path que incluya '{slug}', '{base_path}', '{project_id}', '{name}', leading/trailing slash, '..', o que empiece con 'storage/'.",
+      "viola_principios": ["base_path_autoritativo", "storage_es_convencion_de_filesystem"],
+      "como_detectar": "Schema AJV: data_path es string que matchea regex ^[a-z][a-z0-9_-]*(/[a-z][a-z0-9_-]*)*$ — kebab-case por segmento, separador '/', sin variables ni absoluto.",
+      "alternativa_correcta": "data_path declara SOLO el namespace dentro de storage/ del modulo: 'pizzepos/cartas' para carta-manager, 'conversation-export' para conversation-export. base_path y storage/ los compone filesystem."
+    },
+    {
+      "id": "feature_blueprint_directorio_sin_namespace",
+      "regla": "blueprints/project-types/<feature>.json con 'directories' o claves de 'initialFiles' que NO empiezan con 'storage/<feature_namespace>/', o que ponen archivos directamente en 'storage/' raiz.",
+      "viola_principios": ["feature_blueprint_namespacea"],
+      "como_detectar": "Validator parsea blueprints/project-types/*.json. Para cada feature, su feature_namespace es el id de la feature. Cada entry en directories y cada clave de initialFiles debe matchear regex ^storage/<feature_namespace>/. Excepciones: config/ y db/ son del proyecto, no del storage — permitidos como directorios fuera de storage/.",
+      "alternativa_correcta": "En pizzepos.json migrar directories de ['storage/cartas', 'storage/preprocesadas', 'storage/ocr'] a ['storage/pizzepos/cartas', 'storage/pizzepos/preprocesadas', 'storage/pizzepos/ocr']. initialFiles igual."
+    },
+    {
+      "id": "archivos_sueltos_en_storage_raiz",
+      "regla": "Crear archivos o directorios directamente en storage/ del proyecto sin pasar por un namespace de feature/modulo.",
+      "viola_principios": ["feature_blueprint_namespacea", "data_path_refleja_pilar"],
+      "como_detectar": "Validator detecta initialFiles con clave 'storage/<archivo>.<ext>' sin subdirectorio intermedio. Tambien: blueprints o codigo que publica fs.write.request con path que normalizado caeria en storage/raiz.",
+      "alternativa_correcta": "Mover el archivo dentro del namespace del modulo o feature dueno: 'storage/<feature_namespace>/<archivo>.<ext>'."
+    },
+    {
+      "id": "bypass_filesystem",
+      "regla": "Modulo que escribe o lee disco sin pasar por filesystem (fs.writeFile directo, fs.readFile directo, fs.mkdir, etc.) salvo casos canonizados (filesystem mismo, database-manager para sqlite, project-manager para crear/borrar directorios de proyecto).",
+      "viola_principios": ["filesystem_unico_componente", "reset_y_migracion_por_eventos"],
+      "como_detectar": "Validator escanea modules/**/*.js (excluyendo filesystem, database-manager, project-manager) buscando require('fs') con writeFile/readFile/mkdir/unlink/rmdir aplicado fuera de helpers canonizados. Cruzar con persistence.contract cross_module_persistence_access.",
+      "alternativa_correcta": "Publish fs.*.request al bus. Filesystem responde con fs.*.response correlacionado por request_id."
+    },
+    {
+      "id": "reset_via_rm_rf_o_shell",
+      "regla": "Operacion de borrado masivo de data/projects/ via rm -rf, scripts bash, o cualquier mecanismo que no publique eventos.",
+      "viola_principios": ["reset_y_migracion_por_eventos"],
+      "como_detectar": "Inspeccion manual + audit de scripts/ buscando rm -rf data/projects o similar. No es validator estatico — es disciplina del operador que el contrato canoniza para que cualquier sesion futura sepa que la regla existe.",
+      "alternativa_correcta": "Helper en scripts/audit-helpers/ que es cliente MQTT, publica project.delete.request por cada proyecto del listado actual. project-manager orquesta el borrado limpio cascada (cierre DB, fs.delete.request por path, limpieza de symlinks)."
+    }
+  ],
+
+  "output_shape_resumen": "_outputs/storage-layout.json contiene: { _meta: {schema_version, generated_at}, modulos: [{ name, ubicacion: 'modules/<vertical>?/<modulo>', scope: 'project'|'system', data_path: '<vertical>/<entidad>' | '<modulo>' | null, persiste: bool, declarado_en_module_json: bool }], features: [{ id, namespace, directorios: [...], archivos_iniciales: [...], cumple_namespace: bool }], prefijos_prohibidos: ['/storage/', '/projects/', '/data/'] }. Una linea por modulo, una por feature.",
+
+  "reglas_de_extraccion": "Para 'modulos': enumerar todos los module.json bajo modules/ (1 y 2 niveles). Para cada uno, mirar si su index.js o blueprint contiene fs.*.request. Si si, persiste=true. Si su module.json declara config.persistence.data_path y .scope, declarado_en_module_json=true. ubicacion derivada del path del archivo (split por '/'). Para 'features': leer blueprints/project-types/*.json. namespace = id de la feature. directorios = campo directories del feature. archivos_iniciales = claves de initialFiles. cumple_namespace = true si todos los paths matchean regex ^storage/<namespace>/.",
+
+  "derivaciones": [
+    {
+      "contrato": "arquitectura/decisiones/_contratos/persistence.contract.json",
+      "relacion": "storage-layout extiende persistence con la convencion ESPECIFICA del layout en proyectos Enki. persistence declara que cada modulo declara su data_path en module.json (linea 150) y que la persistencia es privada (absolute_isolation_between_modules) — storage-layout dice DONDE va ese data_path dentro del proyecto y como se compone con base_path. Sin contradiccion: lo que era ambiguo en persistence (donde empieza data_path) lo cierra storage-layout."
+    },
+    {
+      "contrato": "arquitectura/decisiones/_contratos/project-identity.contract.json",
+      "relacion": "storage-layout aplica el principio P5 de project-identity (base_path autoritativo) al layout de filesystem. Refuerza PROH1 (construccion de paths con {slug} o {cwd}) extendiendola a la composicion de storage/. project-identity dice 'usa base_path'; storage-layout dice 'usa base_path Y deja que filesystem añada storage/ Y declara data_path relativo'."
+    },
+    {
+      "contrato": "arquitectura/decisiones/_contratos/tools.contract.json",
+      "relacion": "tools.contract linea 264-267 canoniza que tool handlers no tocan filesystem fuera del scope del modulo y que 'persistencia desde tools se hace via fs.write.request a filesystem con paths del proyecto'. storage-layout operacionaliza ese 'paths del proyecto': son relativos al data_path declarado, sin prefijos sinteticos. Filesystem aplica el guardian del scope que tools le asigna."
+    },
+    {
+      "contrato": "arquitectura/decisiones/_contratos/events.contract.json",
+      "relacion": "El payload de fs.*.request lleva campos {project_id, path, content, ...}. storage-layout fija la semantica de 'path': relativo al data_path del modulo emisor. events governs el envelope; storage-layout governs el contenido semantico de path."
+    },
+    {
+      "contrato": "arquitectura/decisiones/_contratos/errors.contract.json",
+      "relacion": "Cuando filesystem rechaza un path con prefijo sintetico, devuelve error.code='INVALID_INPUT' con details.kind='reserved_internal_prefix' o 'absolute_system_path'. Codigos canonicos heredados de errors.contract — sin inventar nuevos."
+    },
+    {
+      "contrato": "arquitectura/decisiones/_contratos/security.contract.json",
+      "relacion": "El rechazo de paths con prefijos sinteticos extiende la familia SYSTEM_PATH_PREFIXES de filesystem (ya consolidada como defensa contra path traversal). RESERVED_INTERNAL_PREFIXES es del mismo registro: contener el blast radius de errores del emisor."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "drift_path_con_prefijo_sintetico",
+      "regla": "Ningun blueprint ni codigo JS publica fs.*.request con path empezando por /storage/, /projects/, /data/, o por el nombre del vertical/modulo del emisor.",
+      "como_detectar": "Parsear modules/**/*.blueprint.json buscando regex /['\"]path['\"]\\s*:\\s*['\"]\\/(storage|projects|data)\\//. Parsear modules/**/*.js buscando 'fs.*.request' con path literal matcheando. Reportar archivo:linea.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_module_persistente_sin_data_path",
+      "regla": "Si un modulo publica fs.*.request, su module.json declara config.persistence.data_path y config.persistence.scope.",
+      "como_detectar": "Para cada modulo cuyo index.js o blueprint contenga 'fs.write.request|fs.read.request|fs.edit.request|fs.delete.request|fs.append.request|fs.copy.request|fs.move.request|fs.mkdir.request', leer su module.json y verificar config.persistence.{data_path, scope}. Si falta cualquiera, drift con archivo y campo faltante.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_data_path_invalido",
+      "regla": "data_path es string sin leading/trailing slash, sin variables ({slug} etc), sin '..', kebab-case por segmento, separador '/'.",
+      "como_detectar": "Schema AJV strict valida pattern '^[a-z][a-z0-9_-]*(/[a-z][a-z0-9_-]*)*$' aplicado a config.persistence.data_path. Validator falla con mensaje del schema.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_feature_blueprint_directorio_fuera_namespace",
+      "regla": "blueprints/project-types/<feature>.json declara directorios e initialFiles bajo storage/<feature.id>/ (o config/, db/ a nivel proyecto).",
+      "como_detectar": "Para cada feature, su namespace esperado es feature.id. Cada entry de directories y cada clave de initialFiles debe matchear ^storage/<namespace>/ o ser exactamente 'config/...' o 'db/...'. Si no, drift.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_archivo_inicial_en_storage_raiz",
+      "regla": "Ninguna feature crea archivos directamente en storage/ sin subdirectorio de namespace.",
+      "como_detectar": "Sub-check del anterior. Detectar claves de initialFiles que matchean ^storage/[^/]+\\.[^/]+$ (archivo directamente en storage/).",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_module_json_con_slug_en_paths",
+      "regla": "config.persistence.paths o config.persistence.data_path NO contienen variables {slug}, {base_path}, {name}, {project_id}.",
+      "como_detectar": "Regex sobre el JSON serializado de config.persistence buscando /\\{(slug|base_path|name|project_id)\\}/. Drift por modulo.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_bypass_filesystem",
+      "regla": "Modulos (excepto filesystem, database-manager, project-manager) NO usan require('fs') con writeFile/readFile/mkdir/unlink directos.",
+      "como_detectar": "grep -rEn \"require\\(['\\\"]fs['\\\"]\\)\" modules/ excluyendo filesystem, database-manager, project-manager. Para cada hit, comprobar si hay writeFile/readFile/mkdir/unlink/rmdir cerca. Warning (puede ser path de tests, mocks o helpers legitimos — revision manual).",
+      "severidad": "warning"
+    }
+  ],
+
+  "salida_validador": "PASS: el _outputs/storage-layout.json escrito a disco refleja el estado actual del repo, todos los modulos persistentes declaran data_path+scope validos, todas las features namespacean correctamente, y no hay paths con prefijos sinteticos en blueprints ni codigo. FAIL: cualquier drift de severidad error. Warnings no bloquean PASS pero se reportan. Formato del banner igual al resto: '== storage-layout == PASS/FAIL', findings agrupados por severidad, archivo:linea cuando aplique.",
+
+  "convenciones_complementarias": {
+    "naming": "data_path sigue convenciones de naming.json: kebab-case por segmento, ASCII puro, separador '/'. El nombre de feature.id sigue las mismas reglas. NO se usan tildes, espacios, mayusculas ni ñ.",
+    "glossary": "Terminos canonicos definidos en glossary o aqui: 'data_path' (string relativo dentro de storage/), 'scope' (project|system), 'vertical' (subsistema de dominio cuyo namespace agrupa sus modulos), 'feature' (capacidad activable en un proyecto via blueprints/project-types/), 'feature_namespace' (id de la feature usado como nombre del subdirectorio en storage/).",
+    "events": "El evento fs.*.request lleva campos canonicos del bus (event_id, event_type, timestamp, source.module, correlation_id) + data.{project_id, path, content?, ...}. storage-layout no añade campos al envelope — solo restringe el contenido semantico de data.path. events governs envelope, storage-layout governs path semantics.",
+    "persistence": "storage-layout es derivacion de persistence — extiende su catalogo con la convencion concreta del layout. persistence.contract.line 150 dice 'declarar config.persistence.pattern + data_path'; storage-layout cierra que data_path es relativo a storage/, sin prefijos, kebab-case, scope explicito.",
+    "errors": "El validator usa codigos canonicos de errors.contract: INVALID_INPUT cuando el path tiene prefijo prohibido, ABSENT_REQUIRED_FIELD cuando falta data_path/scope, INVALID_FORMAT cuando data_path viola el schema."
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "TP1",
+      "descripcion": "Migrar los 14 modulos persistentes a declarar config.persistence.{data_path, scope} en module.json. Lista: pizzepos/{carta-manager, carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler, recetas, tecnicas, viabilidad}, mise-en-place, pase-cocina, recetario-creativo, ai-gateway, comandero-cliente-builder.",
+      "impacto": "14 module.json modificados. Sin cambios en codigo de los modulos. Drift cerrado: drift_module_persistente_sin_data_path."
+    },
+    {
+      "id": "TP2",
+      "descripcion": "Migrar los 10 blueprints que componen paths como string para que emitan paths relativos al data_path: quitar prefijos /storage/, /<vertical>/ del campo path en fs.*.request. Lista: agente-base (modules/_agentes-blueprint/) + 9 de pizzepos (carta-{design, digital, impresion, manager, marketing, scheduler}, recetas, tecnicas, viabilidad).",
+      "impacto": "10 archivos *.blueprint.json modificados. Drift cerrado: drift_path_con_prefijo_sintetico."
+    },
+    {
+      "id": "TP3",
+      "descripcion": "Migrar feature-blueprints (blueprints/project-types/pizzepos.json y facturas.json) para que namespaceen sus directorios e initialFiles bajo storage/<feature.id>/. tienda.json ya cumple.",
+      "impacto": "2 archivos JSON modificados. Drift cerrado: drift_feature_blueprint_directorio_fuera_namespace + drift_archivo_inicial_en_storage_raiz."
+    },
+    {
+      "id": "TP4",
+      "descripcion": "Implementar diff en modules/filesystem/index.js: añadir RESERVED_INTERNAL_PREFIXES en validatePath, cambiar composicion de activeProjectPath para leer data_path del manifest del modulo emisor, soportar scope=system con path /opt/enki/data/_system/.",
+      "impacto": "~50 lineas modificadas en filesystem. Tests unitarios actualizados. Runtime cambia: filesystem rechaza paths con prefijos sinteticos."
+    },
+    {
+      "id": "TP5",
+      "descripcion": "Reset operacional del data/projects/ actual via eventos. Helper script (cliente MQTT) que publica project.delete.request por cada proyecto. Crear proyectos limpios via project.create.request.",
+      "impacto": "Operacional, no de codigo. Captura en capture-bus.jsonl para auditar."
+    },
+    {
+      "id": "TP6",
+      "descripcion": "Verificar y posiblemente ajustar project-manager._initializeFromBlueprint para que respete el namespace de feature en los directorios que crea (probable: ya respeta lo declarado en el feature.json — solo hay que migrar los feature.json y project-manager lo aplicara). Añadir guardia contra colision de slug (evitar caso vaiers <-> vapers).",
+      "impacto": "Probable 0-30 lineas en project-manager. Cerrar deuda historica de proyectos paralelos por typo."
+    }
+  ]
+}

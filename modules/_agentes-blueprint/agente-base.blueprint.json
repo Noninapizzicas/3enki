@@ -47,7 +47,7 @@
     "fs_read": {
       "tool": "fs.read",
       "uso": "Lee un archivo del filesystem del proyecto. Resuelve path relativo a base_path del proyecto via project_id.",
-      "ejemplo": "raw = await bus.publishAndWait('fs.read.request', { project_id, path: '/recetas.json' })"
+      "ejemplo": "raw = await bus.publishAndWait('fs.read.request', { project_id, path: '/pizzepos/recetas.json' })"
     }
   },
 

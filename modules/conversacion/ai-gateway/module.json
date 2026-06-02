@@ -114,7 +114,9 @@
             "description": "Opcional. Auto-rellenado por el chat al invocar; si se llama via mqttRequest desde el frontend, el caller lo pasa."
           }
         },
-        "required": ["nuevo_page_id"]
+        "required": [
+          "nuevo_page_id"
+        ]
       },
       "handler": "handleChatCambiarFoco"
     }
@@ -221,10 +223,11 @@
     "max_tool_iterations": 10,
     "tool_timeout_ms": 150000,
     "persistence": {
-      "pattern":           "in-memory",
+      "scope": "system",
+      "data_path": "conversacion/ai-gateway",
+      "pattern": "in-memory",
       "restart_resilient": false,
-      "concurrency":       "single-writer",
-      "lost_on_restart":   ["providers", "credentialCache", "pendingCredentials", "pendingFsReads", "pagePrefixes"]
+      "concurrency": "single-writer"
     }
   },
   "observability": {

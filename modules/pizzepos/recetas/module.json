@@ -8,5 +8,13 @@
   "blueprint_path": "recetas.blueprint.json",
   "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
   "target_page_id": "recetas",
-  "cajones_enabled": true
+  "cajones_enabled": true,
+  "config": {
+    "persistence": {
+      "scope": "project",
+      "data_path": "pizzepos/recetas",
+      "pattern": "single-json-per-project",
+      "concurrency": "single-writer"
+    }
+  }
 }

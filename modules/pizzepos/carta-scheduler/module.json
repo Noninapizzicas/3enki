@@ -1,8 +1,7 @@
 {
   "_doc": "Manifest del modulo carta-scheduler. NO tiene index.js — blueprint-driven. Programacion conversacional de cambios de carta por canal con confirmacion humana previa. 7 operaciones. Persistencia: reglas + pendientes en archivos JSON del proyecto. NO incluye ejecutor de cron (deuda explicita — sera modulo JS separado). Sustituye al modulo carta-scheduler legacy JS (603 lineas).",
   "name": "carta-scheduler",
-  "version": "1.2.0",
-  "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.4. Dos cambios: (a) paths /carta-scheduler-reglas.json + /carta-scheduler-pendientes.json -> /storage/pizzepos/carta-scheduler/reglas.json + pendientes.json (D1 namespace + subdir por modulo); (b) correlation_id obligatorio en los 4 publishes canonicos de dominio existentes (regla.creada, regla.eliminada, cambio.aplicado, cambio.rechazado) via correlation_id_efectivo. NOTA: el plan listaba 5 incluyendo regla.actualizada, pero esa operacion no existe en el blueprint (inventario F2.op0 = 4 publishes). NO modifica las 7 operaciones funcionales ni eventos_que_escucho ([] preservado --A1). NO toca artefactos extras (pendientes-timer.js, project-storage.js).",
+  "version": "1.1.0",
   "description": "Modulo carta-scheduler en modo blueprint-driven. Reglas (cron expression + canal + carta_id) + pendientes (cambios calculados esperando OK del usuario). El LLM en page=carta-scheduler revisa proximos_cambios, detecta conflictos, confirma o rechaza pendientes.",
   "language": "es",
   "blueprint_driven": true,
@@ -11,13 +10,10 @@
   "target_page_id": "carta-scheduler",
   "config": {
     "persistence": {
+      "scope": "project",
+      "data_path": "pizzepos/carta-scheduler",
       "pattern": "json-files-per-project",
-      "paths": [
-        "data/projects/{slug}/storage/pizzepos/carta-scheduler/reglas.json",
-        "data/projects/{slug}/storage/pizzepos/carta-scheduler/pendientes.json"
-      ],
-      "atomicidad": "fs.write.request atomic:true por cada operacion de mutacion",
-      "concurrencia": "single-writer (el blueprint serializa via publishAndWait)"
+      "concurrency": "single-writer"
     }
   },
   "cajones_enabled": true

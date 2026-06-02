@@ -419,6 +419,48 @@ class ProjectManagerModule extends BaseModule {
         { _code: 'RESOURCE_NOT_FOUND', _details: { entity_type: 'project', entity_id: projectId } });
     }
 
+    // TP6 — guardia anti-colision por rename. Si el name nuevo produce un slug
+    // distinto al actual, el base_path persistido queda desfasado (apunta al
+    // slug viejo) y el sistema queda en drift silencioso: name dice una cosa,
+    // path fisico otra. Caso testigo (audit 2026-06-02): proyecto creado como
+    // "Vaiers" (typo) con base_path=vaiers/, luego renombrado a "Vapers" via
+    // _updateProject — name en BD quedo "Vapers" pero los datos siguieron en
+    // /opt/enki/data/projects/vaiers/. Rechazamos el rename con cambio de slug
+    // para forzar disciplina explicita (borrar + recrear con nombre correcto).
+    // Si solo cambia capitalizacion/acentos (slug igual), permitir el rename.
+    // Cierra storage-layout.contract.json TP6.
+    if (updates.name !== undefined && typeof updates.name === 'string') {
+      const newName = updates.name.trim();
+      if (newName.length === 0) {
+        throw Object.assign(new Error('name cannot be empty on update'),
+          { _code: 'INVALID_INPUT', _details: { field: 'name' } });
+      }
+      const oldSlug = this._slugify(project.name);
+      const newSlug = this._slugify(newName);
+      if (newSlug !== oldSlug) {
+        throw Object.assign(new Error(
+            `Rename rejected: name "${newName}" produces slug "${newSlug}" but project base_path uses "${oldSlug}". ` +
+            `Renombrar el slug implica mover el directorio fisico y todos los datos persistidos por modulos del vertical — operacion compleja no soportada via update. ` +
+            `Si necesitas el nombre nuevo: (a) borra el proyecto y crealo limpio con el nombre correcto, o (b) usa --keep el id actual y solo ajusta name a algo cuyo slug coincida con "${oldSlug}".`
+          ),
+          { _code: 'CONFLICT_STATE', _details: {
+              kind: 'rename_changes_slug',
+              current_name: project.name, current_slug: oldSlug,
+              requested_name: newName, requested_slug: newSlug
+            } });
+      }
+      // Tambien chequear colision con otro proyecto existente (defensive — _projectNameExists
+      // cubre creacion pero update podria llevar a colision si dos proyectos converjan a mismo slug).
+      for (const other of this.projects.values()) {
+        if (other.id === projectId) continue;
+        if (this._slugify(other.name) === newSlug) {
+          throw Object.assign(new Error(`Rename rejected: another project ("${other.name}", id ${other.id}) already uses slug "${newSlug}".`),
+            { _code: 'ALREADY_EXISTS', _details: { kind: 'slug_collision', existing_project_id: other.id, slug: newSlug } });
+        }
+      }
+      updates.name = newName;
+    }
+
     const now = new Date().toISOString();
     const parts = [];
     const params = [];

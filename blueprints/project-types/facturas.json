@@ -3,25 +3,27 @@
   "label": "Facturas",
   "icon": "🧾",
   "description": "Pipeline OCR + IA + CSV",
-
   "dependencies": [],
-
   "directories": [
-    "storage/procesados",
-    "storage/pendientes",
-    "storage/preprocesadas",
-    "storage/ocr",
-    "storage/estructuradas",
-    "storage/export"
+    "storage/facturas/procesados",
+    "storage/facturas/pendientes",
+    "storage/facturas/preprocesadas",
+    "storage/facturas/ocr",
+    "storage/facturas/estructuradas",
+    "storage/facturas/export"
   ],
-
   "config": {
     "facturas": {
       "enabled": true,
-      "gmail": { "account": "", "query": "has:attachment is:unread", "maxResults": 20 },
-      "processing": { "language": "es" }
+      "gmail": {
+        "account": "",
+        "query": "has:attachment is:unread",
+        "maxResults": 20
+      },
+      "processing": {
+        "language": "es"
+      }
     }
   },
-
   "copyHandlersFrom": "facturas-nonina"
 }

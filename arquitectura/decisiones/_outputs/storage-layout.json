@@ -1,0 +1,880 @@
+{
+  "_meta": {
+    "schema_version": "1.0.0",
+    "generated_at": "2026-06-02T21:55:26.604Z",
+    "contract_version": "1.0.0"
+  },
+  "modulos": [
+    {
+      "name": "_template",
+      "ubicacion": "modules/_template",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "admin-panel",
+      "ubicacion": "modules/admin-panel",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "bienvenida-tienda",
+      "ubicacion": "modules/bienvenida-tienda",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "bot-manager",
+      "ubicacion": "modules/bot-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "certificate-authority",
+      "ubicacion": "modules/certificate-authority",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "channel-manager",
+      "ubicacion": "modules/channel-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "code-executor",
+      "ubicacion": "modules/code-executor",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "comandero-cliente-builder",
+      "ubicacion": "modules/comandero-cliente-builder",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "project",
+      "data_path": "comandero-cliente-builder",
+      "declarado_completo": null
+    },
+    {
+      "name": "composition-manager",
+      "ubicacion": "modules/composition-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "agent-observer",
+      "ubicacion": "modules/conversacion/agent-observer",
+      "vertical": "conversacion",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ai-agent-framework",
+      "ubicacion": "modules/conversacion/ai-agent-framework",
+      "vertical": "conversacion",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ai-gateway",
+      "ubicacion": "modules/conversacion/ai-gateway",
+      "vertical": "conversacion",
+      "persiste": true,
+      "evidence_file": "modules/conversacion/ai-gateway/index.js",
+      "scope": "system",
+      "data_path": "conversacion/ai-gateway",
+      "declarado_completo": true
+    },
+    {
+      "name": "ai-gateway-poc",
+      "ubicacion": "modules/conversacion/ai-gateway-poc",
+      "vertical": "conversacion",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "chat-io",
+      "ubicacion": "modules/conversacion/chat-io",
+      "vertical": "conversacion",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "memory-conversation-summary",
+      "ubicacion": "modules/conversacion/memory-conversation-summary",
+      "vertical": "conversacion",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "memory-rag",
+      "ubicacion": "modules/conversacion/memory-rag",
+      "vertical": "conversacion",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "memory-user-profile",
+      "ubicacion": "modules/conversacion/memory-user-profile",
+      "vertical": "conversacion",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "prompt-builder",
+      "ubicacion": "modules/conversacion/prompt-builder",
+      "vertical": "conversacion",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "conversation-export",
+      "ubicacion": "modules/conversation-export",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "credential-manager",
+      "ubicacion": "modules/credential-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "dashboard",
+      "ubicacion": "modules/dashboard",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "database-manager",
+      "ubicacion": "modules/database-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "device-health",
+      "ubicacion": "modules/device-health",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "device-registry",
+      "ubicacion": "modules/device-registry",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "device-shadow",
+      "ubicacion": "modules/device-shadow",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "esp32-dev",
+      "ubicacion": "modules/esp32-dev",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "esp32-flasher",
+      "ubicacion": "modules/esp32-flasher",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "asesoria",
+      "ubicacion": "modules/facturacion/asesoria",
+      "vertical": "facturacion",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "fuentes",
+      "ubicacion": "modules/facturacion/fuentes",
+      "vertical": "facturacion",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "facturas",
+      "ubicacion": "modules/facturas",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "filesystem",
+      "ubicacion": "modules/filesystem",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "firmware-builder",
+      "ubicacion": "modules/firmware-builder",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "firmware-manager",
+      "ubicacion": "modules/firmware-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "gateway-manager",
+      "ubicacion": "modules/gateway-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "inventario",
+      "ubicacion": "modules/inventario",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "log-manager",
+      "ubicacion": "modules/log-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "mercadona-api",
+      "ubicacion": "modules/mercadona-api",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "metricas",
+      "ubicacion": "modules/metricas",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "mise-en-place",
+      "ubicacion": "modules/mise-en-place",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/mise-en-place/index.js",
+      "scope": "project",
+      "data_path": "mise-en-place",
+      "declarado_completo": true
+    },
+    {
+      "name": "notas-poc",
+      "ubicacion": "modules/notas-poc",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "notificador-pedidos",
+      "ubicacion": "modules/notificador-pedidos",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "pase-cocina",
+      "ubicacion": "modules/pase-cocina",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/pase-cocina/index.js",
+      "scope": "project",
+      "data_path": "pase-cocina",
+      "declarado_completo": true
+    },
+    {
+      "name": "pdf-viewer",
+      "ubicacion": "modules/pdf-viewer",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "perifericos",
+      "ubicacion": "modules/perifericos",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "carta-design",
+      "ubicacion": "modules/pizzepos/carta-design",
+      "vertical": "pizzepos",
+      "persiste": true,
+      "evidence_file": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+      "scope": "project",
+      "data_path": "pizzepos/carta-design",
+      "declarado_completo": true
+    },
+    {
+      "name": "carta-digital",
+      "ubicacion": "modules/pizzepos/carta-digital",
+      "vertical": "pizzepos",
+      "persiste": true,
+      "evidence_file": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+      "scope": "project",
+      "data_path": "pizzepos/carta-digital",
+      "declarado_completo": true
+    },
+    {
+      "name": "carta-impresion",
+      "ubicacion": "modules/pizzepos/carta-impresion",
+      "vertical": "pizzepos",
+      "persiste": true,
+      "evidence_file": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+      "scope": "project",
+      "data_path": "pizzepos/cartas-impresion",
+      "declarado_completo": true
+    },
+    {
+      "name": "carta-manager",
+      "ubicacion": "modules/pizzepos/carta-manager",
+      "vertical": "pizzepos",
+      "persiste": true,
+      "evidence_file": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+      "scope": "project",
+      "data_path": "pizzepos/cartas",
+      "declarado_completo": true
+    },
+    {
+      "name": "carta-marketing",
+      "ubicacion": "modules/pizzepos/carta-marketing",
+      "vertical": "pizzepos",
+      "persiste": true,
+      "evidence_file": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+      "scope": "project",
+      "data_path": "pizzepos/carta-marketing",
+      "declarado_completo": true
+    },
+    {
+      "name": "carta-scheduler",
+      "ubicacion": "modules/pizzepos/carta-scheduler",
+      "vertical": "pizzepos",
+      "persiste": true,
+      "evidence_file": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+      "scope": "project",
+      "data_path": "pizzepos/carta-scheduler",
+      "declarado_completo": true
+    },
+    {
+      "name": "categorias",
+      "ubicacion": "modules/pizzepos/categorias",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cobros",
+      "ubicacion": "modules/pizzepos/cobros",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cocina",
+      "ubicacion": "modules/pizzepos/cocina",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cocina-poc",
+      "ubicacion": "modules/pizzepos/cocina-poc",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": "./data/cocina/snapshot.json",
+      "declarado_completo": null
+    },
+    {
+      "name": "comandero",
+      "ubicacion": "modules/pizzepos/comandero",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cuentas",
+      "ubicacion": "modules/pizzepos/cuentas",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cuentas-canales",
+      "ubicacion": "modules/pizzepos/cuentas-canales",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "escandallo",
+      "ubicacion": "modules/pizzepos/escandallo",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "impresion",
+      "ubicacion": "modules/pizzepos/impresion",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ingredientes",
+      "ubicacion": "modules/pizzepos/ingredientes",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "menu-generator",
+      "ubicacion": "modules/pizzepos/menu-generator",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "pedidos",
+      "ubicacion": "modules/pizzepos/pedidos",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "persistencia-comandero",
+      "ubicacion": "modules/pizzepos/persistencia-comandero",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "productos",
+      "ubicacion": "modules/pizzepos/productos",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "recetas",
+      "ubicacion": "modules/pizzepos/recetas",
+      "vertical": "pizzepos",
+      "persiste": true,
+      "evidence_file": "modules/pizzepos/recetas/recetas.blueprint.json",
+      "scope": "project",
+      "data_path": "pizzepos/recetas",
+      "declarado_completo": true
+    },
+    {
+      "name": "tarifas",
+      "ubicacion": "modules/pizzepos/tarifas",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "tecnicas",
+      "ubicacion": "modules/pizzepos/tecnicas",
+      "vertical": "pizzepos",
+      "persiste": true,
+      "evidence_file": "modules/pizzepos/tecnicas/tecnicas.blueprint.json",
+      "scope": "project",
+      "data_path": "pizzepos/tecnicas",
+      "declarado_completo": true
+    },
+    {
+      "name": "variaciones",
+      "ubicacion": "modules/pizzepos/variaciones",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "viabilidad",
+      "ubicacion": "modules/pizzepos/viabilidad",
+      "vertical": "pizzepos",
+      "persiste": true,
+      "evidence_file": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+      "scope": "project",
+      "data_path": "pizzepos/viabilidad",
+      "declarado_completo": true
+    },
+    {
+      "name": "plugin-manager",
+      "ubicacion": "modules/plugin-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "project-manager",
+      "ubicacion": "modules/project-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "prompt-manager",
+      "ubicacion": "modules/prompt-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "recetario-creativo",
+      "ubicacion": "modules/recetario-creativo",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/recetario-creativo/index.js",
+      "scope": "project",
+      "data_path": "recetario-creativo",
+      "declarado_completo": true
+    },
+    {
+      "name": "scheduler",
+      "ubicacion": "modules/scheduler",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "security-p2p",
+      "ubicacion": "modules/security-p2p",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "staff-manager",
+      "ubicacion": "modules/staff-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "system-coherence-analyzer",
+      "ubicacion": "modules/system-coherence-analyzer",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/system-coherence-analyzer/system-coherence-analyzer.blueprint.json",
+      "scope": "system",
+      "data_path": "system-coherence-analyzer",
+      "declarado_completo": true
+    },
+    {
+      "name": "system-inspector",
+      "ubicacion": "modules/system-inspector",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "telegram-service",
+      "ubicacion": "modules/telegram-service",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "text-editor",
+      "ubicacion": "modules/text-editor",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "tienda-api",
+      "ubicacion": "modules/tienda-api",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "whatsapp-bot",
+      "ubicacion": "modules/whatsapp-bot",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    }
+  ],
+  "features": [
+    {
+      "id": "facturas",
+      "file": "blueprints/project-types/facturas.json",
+      "directorios": [
+        "storage/facturas/procesados",
+        "storage/facturas/pendientes",
+        "storage/facturas/preprocesadas",
+        "storage/facturas/ocr",
+        "storage/facturas/estructuradas",
+        "storage/facturas/export"
+      ],
+      "archivos_iniciales": [],
+      "cumple_namespace": true,
+      "drifts": []
+    },
+    {
+      "id": "pizzepos",
+      "file": "blueprints/project-types/pizzepos.json",
+      "directorios": [
+        "storage/pizzepos/cartas",
+        "storage/pizzepos/preprocesadas",
+        "storage/pizzepos/ocr"
+      ],
+      "archivos_iniciales": [
+        "storage/pizzepos/ingredientes.json",
+        "storage/pizzepos/programacion.json"
+      ],
+      "cumple_namespace": true,
+      "drifts": []
+    },
+    {
+      "id": "tienda",
+      "file": "blueprints/project-types/tienda.json",
+      "directorios": [
+        "storage/tienda/bundle"
+      ],
+      "archivos_iniciales": [
+        "storage/tienda/bundle/index.html",
+        "storage/tienda/bundle/manifest.json",
+        "storage/tienda/bundle/sw.js"
+      ],
+      "cumple_namespace": true,
+      "drifts": []
+    }
+  ],
+  "prefijos_prohibidos": [
+    "/storage/",
+    "/projects/",
+    "/data/"
+  ]
+}

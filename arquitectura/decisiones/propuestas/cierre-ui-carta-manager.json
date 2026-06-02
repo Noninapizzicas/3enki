@@ -2,8 +2,10 @@
   "_doc": "Plan ejecutable JSON del horizonte 'cierre-ui-carta-manager'. Crea desde cero la UI del modulo carta-manager --eje central del subsistema-carta, backend maduro (13+1 operaciones, persistencia /cartas/<id>.json + /cartas/versions/<id>/<timestamp>.json), frontend cero al cocinar este plan. Aplica el contrato ui-frontend-blueprint v1.0.1 con dos especificidades del modulo: (1) replica el patron hermano de recetas (catalogo + versionado + history), (2) shape ABIERTO de productos --la UI es agnostica del shape concreto, renderiza los campos presentes en cada carta sin obligar campos del blueprint, porque el sistema sirve proyectos con modelos de producto distintos (pizzepos con pizzas, vapers con sabores, futuros con N modelos). Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json (sin Object.assign, sin rest-spread con omision, verboso explicito).",
 
   "id": "cierre-ui-carta-manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "_v1_1_changelog": "v1.1.0 (2026-06-02): cocinado tras devolucion de fede ('aparcado: bloqueo greenfield, es refactor de sprawl existente, necesita ana'). Anyade F0 al principio del plan que audita y resuelve el sprawl pre-existente identificado por audit: (a) frontend/src/lib/stores/carta-manager.ts ya existe (213 lineas) con shape rigido pizzepos (Producto { precio, categoria, ingredientes } etc.) contradiciendo D3 (shape ABIERTO), (b) invoca mqttRequest('carta-manager','list/get') --tools del blueprint LLM-runtime que NO tiene servicio JS escuchando el bus --hacen timeout en runtime (mismo bug que cazamos en PR #264). F0 elimina el archivo huerfano para que F1 cree limpio. Tambien actualiza estado_verificado backend a v1.3.0 (vs v1.2.0 cocinado), paths a /storage/pizzepos/cartas/ (subsistema-carta v1.0.0 D1), reconoce shape carta entera embebida en payloads (D2/P3 subsistema-carta) lo que simplifica suscripciones (cuando llega carta.actualizada ya viene la carta, no hace falta re-fetch). Anyade D11 que documenta el tratamiento del sprawl. Las 10 decisiones D1-D10 originales se preservan integras. F1-F5 originales se preservan con paths actualizados.",
   "creado_en": "2026-06-01",
+  "actualizado_en": "2026-06-02",
   "skill_origen": "ana",
   "tipo": "cierre_ui_modulo_blueprint",
 
@@ -48,18 +50,31 @@
   "estado_verificado_en_disco_al_cocinar_el_plan": [
     {
       "pieza": "modules/pizzepos/carta-manager/module.json",
-      "version": "1.2.0",
+      "version": "1.3.0",
+      "_v1_1_actualizado": "Bump v1.2.0 -> v1.3.0 ocurrio 2026-06-01 (commit 9176cf6) aplicando subsistema-carta v1.0.0. Paths cambiaron de /cartas/ a /storage/pizzepos/cartas/ con namespace pizzepos para multi-vertical (D1). Shape de payloads de los 3 eventos canonicos publicados lleva la carta entera embebida (D2/P3). correlation_id obligatorio en payloads (D10/P9). Auto-promocion a tarifas.set_general en save cuando tarifas.config esta vacio (D8). eventos_publicados_que_requieren_consumer declarados en raiz del blueprint (D11/P10).",
       "target_page_id": "carta-manager",
       "blueprint_driven": true,
       "cajones_enabled": true,
-      "persistencia": "json-file-per-entity-plus-versions (paths /cartas/<id>.json + /cartas/versions/<id>/<timestamp>.json)"
+      "persistencia": "json-file-per-entity-plus-versions (paths /storage/pizzepos/cartas/<id>.json + /storage/pizzepos/cartas/.versions/<id>/<timestamp>.json)"
     },
     {
       "pieza": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
       "operaciones_expuestas": ["save", "get", "list", "delete", "add_product", "remove_product", "update_product", "add_category", "update_prices", "search", "stats", "versions", "restore"],
-      "handler_interno": "_on_carta_creada (async subscriber a evento carta.creada, prefijo _ = no expuesto al LLM en chat normal)",
+      "handler_interno": "_on_carta_creada (async subscriber a evento carta.creada, prefijo _ = no expuesto al LLM en chat normal --es la 14a operacion canonica del blueprint en v1.3.0)",
       "eventos_publicados_canonicos": ["carta.actualizada", "carta.editada", "carta.borrada"],
+      "shape_de_payloads_v1_3": "Los 3 eventos llevan ahora la carta entera embebida en data.carta + correlation_id obligatorio + timestamp + project_id. La UI puede leer la carta DEL EVENTO sin re-fetch via fs.read --simplifica suscripciones (ver F0.op4 ajuste de F1.op6).",
       "eventos_escuchados": ["carta.creada (de menu-generator)"]
+    },
+    {
+      "pieza": "frontend/src/lib/stores/carta-manager.ts (SPRAWL pre-existente, identificado por audit 2026-06-02)",
+      "existe": true,
+      "lineas": 213,
+      "problemas_criticos": [
+        "(1) Shape RIGIDO pizzepos: interfaces Producto { id, nombre, categoria, precio: number, ingredientes: Ingrediente[] }, Ingrediente { nombre, emoji?, tipo? }, Categoria { id, nombre, orden }, Carta { meta, categorias, productos } --contradice directamente D3 del plan (shape ABIERTO multi-proyecto). Si vapers o futuros consumieran esta UI, los tipos romperian.",
+        "(2) BUG runtime: el store invoca mqttRequest('carta-manager', 'list', ...) y mqttRequest('carta-manager', 'get', ...) directamente al BLUEPRINT LLM-runtime. Pero carta-manager no tiene servicio JS escuchando el bus desde la migracion a blueprint-driven v1.1.0 (2026-05-19). Estas llamadas HACEN TIMEOUT en runtime. Es el mismo bug que cazamos en PR #264 (mencionado en D6). El store esta efectivamente roto.",
+        "(3) Sigue patron mqttSubscribe('carta.actualizada', ...) pero asume payload con shape concreto (data.meta.id, data.meta.nombre, etc.) --aprovechable para v1.3.0 (que envia carta entera embebida) pero el shape concreto sigue atado a pizzepos."
+      ],
+      "decision_tratamiento": "Borrar entero en F0 y dejar que F1 cree limpio con shape abierto + fs.read.request al modulo POC2 filesystem (D6 + D3 del plan honrados). Ver D11 nueva."
     },
     {
       "pieza": "/cartas/carta_pizzicas.json (en proyecto pizzepos)",
@@ -95,7 +110,7 @@
       "modules/pizzepos/carta-manager/carta-manager.blueprint.json sigue exponiendo las 13 operaciones listadas en estado_verificado_en_disco",
       "frontend/src/lib/modules/carta-manager/ NO existe (verificar con ls)",
       "frontend/src/routes/[project_id]/carta-manager/ NO existe (verificar con ls)",
-      "frontend/src/lib/stores/carta-manager.ts NO existe",
+      "frontend/src/lib/stores/carta-manager.ts EXISTE (213 lineas) con sprawl pre-existente --F0 lo elimina antes de F1. Si tras F0 sigue existiendo, F0 no se ejecuto correctamente --PARAR.",
       "frontend/src/lib/stores/chatInputDraft.ts EXISTE y exporta prefillChatInput --SI NO, parar antes de F2 (DEP1)",
       "frontend/src/lib/components/layout/ChatInput.svelte hace bind con chatInputDraft --SI NO, parar antes de F2",
       "frontend/src/lib/modules/recetas/ existe como referencia del patron hermano (Panel router + Browser + Card + Detail + HistorialView). NO se modifica.",
@@ -286,10 +301,72 @@
       "id": "D10",
       "decision": "El boton 'Editar carta entera' NO se anade --la edicion de campos sueltos (productos, categorias, precios) se hace por chat via prefillChatInput especifico. NO hay form de edicion de carta completa",
       "no_reabrir_sin": "que el dominio cambie hacia edicion masiva justificable con form"
+    },
+    {
+      "id": "D11",
+      "decision": "El archivo huerfano frontend/src/lib/stores/carta-manager.ts (213 lineas, shape rigido + bug runtime) se BORRA ENTERO en F0. F1 lo recrea desde cero respetando D3 (shape abierto) + D6 (solo lectura via fs.read.request al modulo POC2 filesystem, NO tools del blueprint LLM-runtime). NO se rescatan partes del archivo viejo --aunque algunas funciones (selectCarta, clearError, derived stores) sean tecnicamente reusables, su shape esta tied a los tipos rigidos y separarlos es mas trabajo que reescribir limpio. La auditoria pizzepos__carta-manager.json desactualizada (describe el modulo como JS legacy pre-blueprint) queda FUERA DEL SCOPE de este plan --regenerar la auditoria es horizonte ortogonal cuando alguien la consuma.",
+      "no_reabrir_sin": "evidencia de que alguna parte del archivo huerfano es claramente reusable + tiene shape abierto + no invoca tools del blueprint --en cuyo caso documentar selectivamente que se rescata"
     }
   ],
 
   "fases": [
+    {
+      "id": "F0",
+      "nombre": "Auditar y eliminar sprawl frontend pre-existente",
+      "esfuerzo_horas": 0.3,
+      "ok_explicito_antes_de_continuar": true,
+      "_por_que_existe": "v1.0.0 del plan asumio greenfield total. Audit 2026-06-02 detecto frontend/src/lib/stores/carta-manager.ts (213 lineas) con shape rigido pizzepos + bug runtime (invoca tools del blueprint LLM-runtime que hacen timeout). Fede al intentar ejecutar v1.0.0 paro: 'aparcado: bloqueo greenfield, es refactor de sprawl existente, necesita ana'. F0 resuelve el sprawl ANTES de F1 para que F1 pueda ejecutar como greenfield real.",
+      "operaciones": [
+        {
+          "id": "F0.op1_verificar_sprawl_factual",
+          "descripcion": "Verificar que el sprawl identificado por el audit existe efectivamente",
+          "pseudocodigo": [
+            "ls -la frontend/src/lib/stores/carta-manager.ts",
+            "wc -l frontend/src/lib/stores/carta-manager.ts",
+            "esperado: archivo existe, 213 lineas (o aproximado --si lineas difieren significativamente, alguien tocó el archivo despues del audit; PARAR y reportar al humano antes de borrar para confirmar tratamiento)",
+            "grep -E \"mqttRequest\\('carta-manager'\" frontend/src/lib/stores/carta-manager.ts",
+            "esperado: al menos 1 hit (confirma el bug runtime --invocacion a tool del blueprint LLM-runtime). Si no hay hits, el archivo ya no tiene el bug --revisar antes de borrar.",
+            "grep -E \"interface (Producto|Carta|Ingrediente|Categoria)\" frontend/src/lib/stores/carta-manager.ts",
+            "esperado: al menos 4 hits (confirma shape rigido pizzepos)"
+          ]
+        },
+        {
+          "id": "F0.op2_verificar_no_referencias_externas",
+          "descripcion": "Verificar que ningun otro archivo del frontend importa del store huerfano (porque si lo hace, borrarlo rompe consumers)",
+          "pseudocodigo": [
+            "grep -rE \"from '\\$lib/stores/carta-manager'\" frontend/src --include='*.svelte' --include='*.ts'",
+            "esperado: 0 hits. Si hay hits, son consumers que tienen que descacharrarse junto al borrado --REPORTAR al humano cada hit antes de proceder.",
+            "grep -rE \"import .* from .*stores/carta-manager\" frontend/src --include='*.svelte' --include='*.ts'",
+            "esperado: 0 hits."
+          ]
+        },
+        {
+          "id": "F0.op3_eliminar_archivo_huerfano",
+          "descripcion": "Borrar el archivo del store huerfano",
+          "pseudocodigo": [
+            "git rm frontend/src/lib/stores/carta-manager.ts",
+            "verificar: ls frontend/src/lib/stores/carta-manager.ts --debe devolver 'no such file or directory'",
+            "NO commit aun --se commitea junto con el resto del trabajo del plan al final (F7)"
+          ]
+        },
+        {
+          "id": "F0.op4_documentar_aprovechamiento_v1_3_en_F1",
+          "descripcion": "Anotar en el contexto de la sesion el cambio que F1.op6 aprovecha del shape v1.3.0",
+          "pseudocodigo": [
+            "Recordatorio para F1.op6 al cocinarlo:",
+            "  Antes (cuando el plan se cocino con backend v1.2.0): el handler de busSubscribe('carta.actualizada') recibia un payload con poca info y tenia que invocar loadCartas + getCarta para refrescar.",
+            "  Ahora (backend v1.3.0): el payload de carta.actualizada lleva la CARTA ENTERA EMBEBIDA en data.carta + correlation_id obligatorio + project_id + timestamp.",
+            "  Optimizacion posible en F1.op6: el handler puede actualizar el store DIRECTAMENTE desde envelope.data.carta sin invocar loadCartas/getCarta.",
+            "  Pero el plan v1.0.0 ya escribe el handler asi, llamando loadCartas() + getCarta() --funciona pero es subóptimo (lecturas redundantes a disco).",
+            "  Decision para F1.op6: implementar la version optimizada (actualizar store desde envelope.data.carta) si el shape envelope esta claro al cocinar; si emerge duda, mantener la version original con loadCartas/getCarta (correcto pero no optimo). NO bloquea --es mejora interna."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_eliminados": ["frontend/src/lib/stores/carta-manager.ts"],
+        "verificacion": "git status muestra archivo como deleted; F1 puede proceder con git status mostrando solo el delete pendiente (se commitea junto al resto en F7)"
+      }
+    },
     {
       "id": "F1",
       "nombre": "Crear store de lectura frontend/src/lib/stores/carta-manager.ts",
@@ -306,9 +383,11 @@
             "  import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request'",
             "  import { subscribe as busSubscribe } from '$lib/ui-core/bus'",
             "constantes:",
-            "  const CARTAS_DIR = '/cartas/'",
+            "  // PATHS CANONICOS v1.3.0 backend (subsistema-carta v1.0.0 D1: namespace pizzepos + .versions con punto)",
+            "  const CARTAS_DIR = '/storage/pizzepos/cartas/'",
+            "  const VERSIONS_DIR = '/storage/pizzepos/cartas/.versions/'",
             "  function cartaPath(id) { return CARTAS_DIR + id + '.json' }",
-            "  function versionPath(id, ts) { return CARTAS_DIR + 'versions/' + id + '/' + ts + '.json' }",
+            "  function versionPath(id, ts) { return VERSIONS_DIR + id + '/' + ts + '.json' }",
             "tipos TypeScript:",
             "  interface Carta { id: string; nombre: string; [key: string]: any }  // shape abierto",
             "  interface CartaResumen { id: string; nombre: string; estado?: string; productos_count?: number; categorias_count?: number; version?: number; updated_at?: string }",
@@ -329,9 +408,9 @@
             "  cartasLoading.set(true)",
             "  cartasError.set(null)",
             "  try {",
-            "    // Estrategia: listar archivos de /cartas/ via fs.list, luego leer cada uno via fs.read en paralelo.",
+            "    // Estrategia: listar archivos de CARTAS_DIR via fs.list, luego leer cada uno via fs.read en paralelo.",
             "    // Alternativa: si el modulo filesystem tiene operacion fs.search o fs.list mas eficiente, usarla.",
-            "    const listRes = await mqttRequest('fs', 'list', { path: '/cartas/', pattern: '*.json' })",
+            "    const listRes = await mqttRequest('fs', 'list', { path: CARTAS_DIR, pattern: '*.json' })",
             "    const archivos = listRes.data?.archivos || []  // array de paths o nombres",
             "    const lecturas = await Promise.all(",
             "      archivos.map(async (archivoPath) => {",
@@ -351,7 +430,7 @@
             "    cartasLoading.set(false)",
             "  }",
             "}",
-            "NOTA: si fs.list no esta disponible (verificar en modules/filesystem/), fallback a fs.search o leer un indice /cartas/index.json si existe. El blueprint tiene tool 'list' pero como recordamos del bug F2 de recetas, NO se invoca tools del blueprint --solo fs.read.request y operaciones del modulo filesystem POC2."
+            "NOTA: si fs.list no esta disponible (verificar en modules/filesystem/), fallback a fs.search o leer un indice CARTAS_DIR + 'index.json' si existe. El blueprint tiene tool 'list' pero como recordamos del bug F2 de recetas, NO se invoca tools del blueprint --solo fs.read.request y operaciones del modulo filesystem POC2."
           ]
         },
         {
@@ -377,8 +456,8 @@
           "descripcion": "Funcion loadHistorial(cartaId) --listar versiones (resumen)",
           "pseudocodigo": [
             "async function loadHistorial(cartaId: string): Promise<Array<{version: any; archived_at: string; nombre: string; productos_count?: number; categorias_count?: number}>> {",
-            "  // El blueprint usa /cartas/versions/<cartaId>/<timestamp>.json --listar todos los snapshots",
-            "  const listRes = await mqttRequest('fs', 'list', { path: '/cartas/versions/' + cartaId + '/', pattern: '*.json' })",
+            "  // El blueprint v1.3.0 usa /storage/pizzepos/cartas/.versions/<cartaId>/<timestamp>.json --listar todos los snapshots",
+            "  const listRes = await mqttRequest('fs', 'list', { path: VERSIONS_DIR + cartaId + '/', pattern: '*.json' })",
             "  const archivos = listRes.data?.archivos || []",
             "  const lecturas = await Promise.all(",
             "    archivos.map(async (archivoPath) => {",
@@ -405,8 +484,8 @@
           "descripcion": "Funcion loadVersionSnapshot(cartaId, archivedAt) --snapshot completo de una version para diff",
           "pseudocodigo": [
             "async function loadVersionSnapshot(cartaId: string, archivedAt: string): Promise<Carta | null> {",
-            "  // archived_at sirve como nombre de archivo (timestamp). El blueprint usa /cartas/versions/<id>/<timestamp>.json",
-            "  const archivoPath = '/cartas/versions/' + cartaId + '/' + archivedAt + '.json'",
+            "  // archived_at sirve como nombre de archivo (timestamp). El blueprint v1.3.0 usa /storage/pizzepos/cartas/.versions/<id>/<timestamp>.json",
+            "  const archivoPath = VERSIONS_DIR + cartaId + '/' + archivedAt + '.json'",
             "  try {",
             "    const res = await mqttRequest('fs', 'read', { path: archivoPath })",
             "    return JSON.parse(res.data.content)",

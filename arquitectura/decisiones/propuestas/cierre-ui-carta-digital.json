@@ -191,7 +191,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Coherencia con la UI de carta-manager (mismo patron de tabla con expansion). El comerciante reconoce el patron. Iframe (C) es trabajo de complejidad mayor; se deja como F-extension futura si emerge necesidad.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "eleccion directa del humano (tabla con expansion como carta-manager)", "cerrada_en": "2026-06-02" }
     },
     {
       "id": "Q4",

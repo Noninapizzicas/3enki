@@ -2,8 +2,8 @@
   "_doc": "Plan ejecutable JSON del horizonte 'cierre-ui-carta-manager'. Crea desde cero la UI del modulo carta-manager --eje central del subsistema-carta, backend maduro (13+1 operaciones, persistencia /cartas/<id>.json + /cartas/versions/<id>/<timestamp>.json), frontend cero al cocinar este plan. Aplica el contrato ui-frontend-blueprint v1.0.1 con dos especificidades del modulo: (1) replica el patron hermano de recetas (catalogo + versionado + history), (2) shape ABIERTO de productos --la UI es agnostica del shape concreto, renderiza los campos presentes en cada carta sin obligar campos del blueprint, porque el sistema sirve proyectos con modelos de producto distintos (pizzepos con pizzas, vapers con sabores, futuros con N modelos). Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json (sin Object.assign, sin rest-spread con omision, verboso explicito).",
 
   "id": "cierre-ui-carta-manager",
-  "version": "1.1.0",
-  "_v1_1_changelog": "v1.1.0 (2026-06-02): cocinado tras devolucion de fede ('aparcado: bloqueo greenfield, es refactor de sprawl existente, necesita ana'). Anyade F0 al principio del plan que audita y resuelve el sprawl pre-existente identificado por audit: (a) frontend/src/lib/stores/carta-manager.ts ya existe (213 lineas) con shape rigido pizzepos (Producto { precio, categoria, ingredientes } etc.) contradiciendo D3 (shape ABIERTO), (b) invoca mqttRequest('carta-manager','list/get') --tools del blueprint LLM-runtime que NO tiene servicio JS escuchando el bus --hacen timeout en runtime (mismo bug que cazamos en PR #264). F0 elimina el archivo huerfano para que F1 cree limpio. Tambien actualiza estado_verificado backend a v1.3.0 (vs v1.2.0 cocinado), paths a /storage/pizzepos/cartas/ (subsistema-carta v1.0.0 D1), reconoce shape carta entera embebida en payloads (D2/P3 subsistema-carta) lo que simplifica suscripciones (cuando llega carta.actualizada ya viene la carta, no hace falta re-fetch). Anyade D11 que documenta el tratamiento del sprawl. Las 10 decisiones D1-D10 originales se preservan integras. F1-F5 originales se preservan con paths actualizados.",
+  "version": "1.2.0",
+  "_v1_2_changelog": "v1.2.0 (2026-06-02): cocinado tras dos descubrimientos del audit ampliado: (1) F0.op2 de v1.1.0 fallaba porque encontraba 3 importadores del store carta-manager.ts (menu-cartas, impresion-cartas, menu-generator/index.ts), no 0. (2) El audit revelo que menu-cartas era deuda implicita (PR #148 del 14-may-2026 'fix(ai-gateway/anthropic)' la creo como side-effect; cero commits posteriores la nombran; v2.0.0 sin paper trail). Borrado fuera del plan en commit 50c0963: directorio menu-cartas/ entero + bloque 'menu-cartas-panel' en panels.ts + mencion en comentario de menu-generator/index.ts. Tras el borrado, el sprawl menu-cartas ya no existe y F0 del plan deja de tener objeto. Pero el store carta-manager.ts sigue existiendo con bug runtime + tipos rigidos, y tiene 2 consumers legitimos (impresion-cartas con uso acotado, menu-generator/index.ts con re-exports probablemente muertos). v1.2.0 elimina F0, reescribe F1 para 'reescribir el store existente preservando contrato de exports', anyade D12 (preservacion de exports) + D13 (tratamiento del re-export en menu-generator/index.ts), amplia F4 con npm run build para verificar que impresion-cartas + menu-generator/index.ts siguen compilando tras la reescritura. Las 11 decisiones D1-D11 anteriores se preservan integras. F2-F5 originales se preservan (con F4 ampliado).\n\nv1.1.0 (2026-06-02): cocinado tras devolucion de fede ('aparcado: bloqueo greenfield, es refactor de sprawl existente, necesita ana'). Anyade F0 al principio del plan que audita y resuelve el sprawl pre-existente identificado por audit. Anyade D11 que documenta el tratamiento del sprawl. Actualiza estado_verificado backend a v1.3.0, paths a /storage/pizzepos/cartas/, reconoce shape carta entera embebida.\n\nv1.0.0 (2026-06-01): primera version, asumio greenfield total e ignoro la nota del arranque del horizonte cierre-ui-blueprints sobre 'menu-generator UI dispersa: panel propio archivado + menu-cartas + menu-generate'.",
   "creado_en": "2026-06-01",
   "actualizado_en": "2026-06-02",
   "skill_origen": "ana",
@@ -304,82 +304,47 @@
     },
     {
       "id": "D11",
-      "decision": "El archivo huerfano frontend/src/lib/stores/carta-manager.ts (213 lineas, shape rigido + bug runtime) se BORRA ENTERO en F0. F1 lo recrea desde cero respetando D3 (shape abierto) + D6 (solo lectura via fs.read.request al modulo POC2 filesystem, NO tools del blueprint LLM-runtime). NO se rescatan partes del archivo viejo --aunque algunas funciones (selectCarta, clearError, derived stores) sean tecnicamente reusables, su shape esta tied a los tipos rigidos y separarlos es mas trabajo que reescribir limpio. La auditoria pizzepos__carta-manager.json desactualizada (describe el modulo como JS legacy pre-blueprint) queda FUERA DEL SCOPE de este plan --regenerar la auditoria es horizonte ortogonal cuando alguien la consuma.",
+      "decision": "El archivo huerfano frontend/src/lib/stores/carta-manager.ts (213 lineas, shape rigido + bug runtime) se BORRA ENTERO en F1.op0. F1 lo recrea desde cero respetando D3 (shape abierto) + D6 (solo lectura via fs.read.request al modulo POC2 filesystem, NO tools del blueprint LLM-runtime). NO se rescatan partes del archivo viejo --aunque algunas funciones (selectCarta, clearError, derived stores) sean tecnicamente reusables, su shape esta tied a los tipos rigidos y separarlos es mas trabajo que reescribir limpio. La auditoria pizzepos__carta-manager.json desactualizada (describe el modulo como JS legacy pre-blueprint) queda FUERA DEL SCOPE de este plan --regenerar la auditoria es horizonte ortogonal cuando alguien la consuma.",
       "no_reabrir_sin": "evidencia de que alguna parte del archivo huerfano es claramente reusable + tiene shape abierto + no invoca tools del blueprint --en cuyo caso documentar selectivamente que se rescata"
+    },
+    {
+      "id": "D12",
+      "decision": "v1.2.0: Preservar el CONTRATO DE EXPORTS del store al reescribirlo. Tras borrar menu-cartas (commit 50c0963), quedan 2 consumers reales del store: (a) frontend/src/lib/modules/impresion-cartas/CartasImpresionPanel.svelte usa sortedCartas + initCartaManagerSubscriptions + selectCarta + type CartaResumen --uso acotado, real, NO llama a las funciones rotas (loadCartas/getCarta). (b) frontend/src/lib/modules/menu-generator/index.ts re-exporta 10 simbolos + 5 tipos rigidos --ver D13. F1 reescribe el store conservando los nombres canonicos de exports: cartaManagerStore, cartasStore, cartaSeleccionada, sortedCartas, cartasStats, cartasLoading, cartasError, cartaCount, selectedCarta, selectCarta, clearError, loadCartas, getCarta, loadHistorial, loadVersionSnapshot, initCartaManagerSubscriptions, type CartaResumen. Los INTERNOS (shape de Carta y Producto) pasan a shape ABIERTO (Carta = { id: string; nombre: string; [key]: unknown }; CartaResumen igual con campos opcionales). impresion-cartas sigue compilando porque sus usos no dependen del shape interno rigido --usa el tipo CartaResumen flexibilizado y funciones por nombre.",
+      "no_reabrir_sin": "que el shape abierto rompa a impresion-cartas en TypeScript estricto (verificable en F4 via npm run build)"
+    },
+    {
+      "id": "D13",
+      "decision": "v1.2.0: Tratamiento del re-export en frontend/src/lib/modules/menu-generator/index.ts. Tras borrar menu-cartas, ese archivo reexporta cartaManagerStore + loadCartas + getCarta + selectCarta + clearError + initCartaManagerSubscriptions + sortedCartas + selectedCarta + cartaLoading + cartaError + cartaCount + types (Carta, CartaResumen, Producto, Categoria, Ingrediente) por si 'algun componente legacy' los importa. Tras el audit: ningun componente externo importa de menu-generator/index.ts (verificable con grep). F1.opN incluye sub-operacion auditora: grep importadores de '\\$lib/modules/menu-generator' en el frontend. Si 0 hits, F1.opN tambien LIMPIA menu-generator/index.ts: quita re-exports de tipos rigidos (Producto/Categoria/Ingrediente) que ya no existen (shape abierto los disuelve), conserva re-exports del propio store carta-manager solo si emergen consumers reales (decision granular). Si hits > 0, lista los consumers y se decide caso a caso --probable que sea relicto migrable. CERO commits separados para esto --se hace en el mismo trabajo de F1.",
+      "no_reabrir_sin": "que emerjan consumers reales de menu-generator/index.ts que justifiquen mantener los re-exports legacy intactos"
     }
   ],
 
   "fases": [
     {
-      "id": "F0",
-      "nombre": "Auditar y eliminar sprawl frontend pre-existente",
-      "esfuerzo_horas": 0.3,
-      "ok_explicito_antes_de_continuar": true,
-      "_por_que_existe": "v1.0.0 del plan asumio greenfield total. Audit 2026-06-02 detecto frontend/src/lib/stores/carta-manager.ts (213 lineas) con shape rigido pizzepos + bug runtime (invoca tools del blueprint LLM-runtime que hacen timeout). Fede al intentar ejecutar v1.0.0 paro: 'aparcado: bloqueo greenfield, es refactor de sprawl existente, necesita ana'. F0 resuelve el sprawl ANTES de F1 para que F1 pueda ejecutar como greenfield real.",
-      "operaciones": [
-        {
-          "id": "F0.op1_verificar_sprawl_factual",
-          "descripcion": "Verificar que el sprawl identificado por el audit existe efectivamente",
-          "pseudocodigo": [
-            "ls -la frontend/src/lib/stores/carta-manager.ts",
-            "wc -l frontend/src/lib/stores/carta-manager.ts",
-            "esperado: archivo existe, 213 lineas (o aproximado --si lineas difieren significativamente, alguien tocó el archivo despues del audit; PARAR y reportar al humano antes de borrar para confirmar tratamiento)",
-            "grep -E \"mqttRequest\\('carta-manager'\" frontend/src/lib/stores/carta-manager.ts",
-            "esperado: al menos 1 hit (confirma el bug runtime --invocacion a tool del blueprint LLM-runtime). Si no hay hits, el archivo ya no tiene el bug --revisar antes de borrar.",
-            "grep -E \"interface (Producto|Carta|Ingrediente|Categoria)\" frontend/src/lib/stores/carta-manager.ts",
-            "esperado: al menos 4 hits (confirma shape rigido pizzepos)"
-          ]
-        },
-        {
-          "id": "F0.op2_verificar_no_referencias_externas",
-          "descripcion": "Verificar que ningun otro archivo del frontend importa del store huerfano (porque si lo hace, borrarlo rompe consumers)",
-          "pseudocodigo": [
-            "grep -rE \"from '\\$lib/stores/carta-manager'\" frontend/src --include='*.svelte' --include='*.ts'",
-            "esperado: 0 hits. Si hay hits, son consumers que tienen que descacharrarse junto al borrado --REPORTAR al humano cada hit antes de proceder.",
-            "grep -rE \"import .* from .*stores/carta-manager\" frontend/src --include='*.svelte' --include='*.ts'",
-            "esperado: 0 hits."
-          ]
-        },
-        {
-          "id": "F0.op3_eliminar_archivo_huerfano",
-          "descripcion": "Borrar el archivo del store huerfano",
-          "pseudocodigo": [
-            "git rm frontend/src/lib/stores/carta-manager.ts",
-            "verificar: ls frontend/src/lib/stores/carta-manager.ts --debe devolver 'no such file or directory'",
-            "NO commit aun --se commitea junto con el resto del trabajo del plan al final (F7)"
-          ]
-        },
-        {
-          "id": "F0.op4_documentar_aprovechamiento_v1_3_en_F1",
-          "descripcion": "Anotar en el contexto de la sesion el cambio que F1.op6 aprovecha del shape v1.3.0",
-          "pseudocodigo": [
-            "Recordatorio para F1.op6 al cocinarlo:",
-            "  Antes (cuando el plan se cocino con backend v1.2.0): el handler de busSubscribe('carta.actualizada') recibia un payload con poca info y tenia que invocar loadCartas + getCarta para refrescar.",
-            "  Ahora (backend v1.3.0): el payload de carta.actualizada lleva la CARTA ENTERA EMBEBIDA en data.carta + correlation_id obligatorio + project_id + timestamp.",
-            "  Optimizacion posible en F1.op6: el handler puede actualizar el store DIRECTAMENTE desde envelope.data.carta sin invocar loadCartas/getCarta.",
-            "  Pero el plan v1.0.0 ya escribe el handler asi, llamando loadCartas() + getCarta() --funciona pero es subóptimo (lecturas redundantes a disco).",
-            "  Decision para F1.op6: implementar la version optimizada (actualizar store desde envelope.data.carta) si el shape envelope esta claro al cocinar; si emerge duda, mantener la version original con loadCartas/getCarta (correcto pero no optimo). NO bloquea --es mejora interna."
-          ]
-        }
-      ],
-      "salida_esperada": {
-        "archivos_eliminados": ["frontend/src/lib/stores/carta-manager.ts"],
-        "verificacion": "git status muestra archivo como deleted; F1 puede proceder con git status mostrando solo el delete pendiente (se commitea junto al resto en F7)"
-      }
-    },
-    {
       "id": "F1",
-      "nombre": "Crear store de lectura frontend/src/lib/stores/carta-manager.ts",
-      "esfuerzo_horas": 1.5,
+      "nombre": "Reescribir store frontend/src/lib/stores/carta-manager.ts preservando contrato de exports",
+      "_v1_2_cambio_clave": "v1.0.0 y v1.1.0 asumian 'crear archivo nuevo'. Realidad tras commit 50c0963: archivo existe (213 lineas, bug runtime + tipos rigidos) Y tiene 2 consumers activos (impresion-cartas con uso semantico real + menu-generator/index.ts con re-exports probables muertos). F1 ahora REESCRIBE in-place: borra el contenido viejo, escribe el nuevo cumpliendo D3 (shape abierto) + D6 (solo lectura via fs.read.request) + D12 (preservar nombres de exports que impresion-cartas necesita) + D13 (decision sobre re-exports muertos). Path del archivo NO cambia --consumers siguen importando desde '\\$lib/stores/carta-manager' sin tocar imports.",
+      "esfuerzo_horas": 1.8,
       "ok_explicito_antes_de_continuar": true,
       "operaciones": [
+        {
+          "id": "F1.op0_borrar_archivo_existente",
+          "descripcion": "Borrar el archivo del store actual (213 lineas con bug runtime + tipos rigidos) para reescribirlo limpio. Los consumers (impresion-cartas, menu-generator/index.ts) siguen importando del mismo path --solo cambia el contenido del archivo, no la ubicacion.",
+          "pseudocodigo": [
+            "ls -la frontend/src/lib/stores/carta-manager.ts (debe existir; si no, alguien lo toco fuera del plan --PARAR y reportar)",
+            "wc -l frontend/src/lib/stores/carta-manager.ts (esperado: 213 lineas aprox; si difiere mucho, alguien edito --PARAR y reportar)",
+            "git rm frontend/src/lib/stores/carta-manager.ts",
+            "verificar: ls frontend/src/lib/stores/carta-manager.ts debe devolver 'no such file or directory'",
+            "NO commit aun --se commitea junto con el resto del trabajo del plan al final (F5)"
+          ]
+        },
         {
           "id": "F1.op1",
-          "descripcion": "Crear el archivo del store con estructura canonica del patron recetas",
+          "descripcion": "Crear el nuevo archivo del store con estructura canonica del patron recetas + D12 preservacion del contrato de exports",
           "pseudocodigo": [
-            "crear archivo nuevo frontend/src/lib/stores/carta-manager.ts",
+            "crear archivo nuevo frontend/src/lib/stores/carta-manager.ts (mismo path, contenido nuevo)",
             "imports:",
-            "  import { writable, derived } from 'svelte/store'",
+            "  import { writable, derived, get } from 'svelte/store'",
             "  import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request'",
             "  import { subscribe as busSubscribe } from '$lib/ui-core/bus'",
             "constantes:",
@@ -751,10 +716,20 @@
     },
     {
       "id": "F4",
-      "nombre": "Verificacion manual con dev server",
-      "esfuerzo_horas": 1.5,
+      "nombre": "Verificacion build + manual con dev server",
+      "esfuerzo_horas": 1.8,
       "ok_explicito_antes_de_continuar": true,
       "operaciones": [
+        {
+          "id": "F4.op0_npm_build_typecheck",
+          "descripcion": "v1.2.0: verificacion CRITICA --el frontend completo debe compilar tras reescribir el store (D12). Garantiza que impresion-cartas + menu-generator/index.ts siguen pasando TypeScript estricto contra el nuevo store con shape abierto.",
+          "pseudocodigo": [
+            "cd frontend",
+            "npm install si no instalado",
+            "npm run build",
+            "esperado: build OK sin errores TypeScript. Si hay errores, los hits estan probablemente en impresion-cartas/CartasImpresionPanel.svelte (que usa type CartaResumen) o en menu-generator/index.ts (re-exports). Si rompe build --PARAR, diagnosticar, ajustar el shape de tipos exportados (probable: flexibilizar mas el CartaResumen, o ajustar el re-export tras D13). NO continuar a F4.op1 hasta build verde."
+          ]
+        },
         {
           "id": "F4.op1_arrancar_dev",
           "descripcion": "Levantar dev server",

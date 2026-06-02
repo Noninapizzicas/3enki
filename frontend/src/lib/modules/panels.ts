@@ -120,16 +120,6 @@ export const panels: Record<string, PanelDef> = {
     order: 4,
     loader: () => import('$lib/modules/menu-generate/GeneratePanel.svelte')
   },
-  'menu-cartas-panel': {
-    id: 'menu-cartas-panel',
-    title: 'Cartas Generadas',
-    icon: '📋',
-    size: 'lg',
-    position: 'top',
-    zone: 'work-bar',
-    order: 5,
-    loader: () => import('$lib/modules/menu-cartas/CartasPanel.svelte')
-  },
 
   // === WORK BAR — Carta Digital ===
   'carta-config-panel': {

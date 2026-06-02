@@ -41,7 +41,7 @@
 
 <style>
   .zona-opciones {
-    border: 1px solid #e0e0e0;
+    border: 1px solid #ddd;
     border-radius: 8px;
     padding: 0.75rem 1.25rem;
   }

@@ -46,9 +46,9 @@
     padding: 1rem;
   }
   .error-banner {
-    background: #fdecea;
-    color: #b71c1c;
-    border: 1px solid #f5c6cb;
+    background: #fee;
+    color: #b00;
+    border: 1px solid #fcc;
     border-radius: 6px;
     padding: 0.75rem 1rem;
   }

@@ -106,7 +106,7 @@
 
 <style>
   .zona-carta-compuesta {
-    border: 1px solid #e0e0e0;
+    border: 1px solid #ddd;
     border-radius: 8px;
     padding: 1rem 1.25rem;
   }
@@ -128,9 +128,9 @@
     font-size: 0.9rem;
   }
   .badge-desfasada {
-    background: #fff3cd;
-    color: #856404;
-    border: 1px solid #ffeeba;
+    background: #ffc;
+    color: #850;
+    border: 1px solid #fea;
     border-radius: 6px;
     padding: 0.4rem 0.75rem;
     display: flex;
@@ -152,13 +152,13 @@
   th, td {
     text-align: left;
     padding: 0.35rem 0.5rem;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid #eee;
   }
   .fila-producto {
     cursor: pointer;
   }
   .fila-producto:hover {
-    background: #fafafa;
+    background: #eeeeee;
   }
   .detalle-producto pre {
     margin: 0;

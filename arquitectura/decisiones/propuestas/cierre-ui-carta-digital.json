@@ -1,4 +1,14 @@
 {
+  "_terminado": {
+    "estado": "terminado",
+    "cerrado_en": "2026-06-02",
+    "rama": "claude/fede-3Qhte",
+    "ejecutado_por": "fede",
+    "merged_en_pr": 291,
+    "desvio_respecto_al_plan": "El plan asumia 'frontend cero' y target route /carta-digital. FALSO en disco: la UI de carta-digital ya existia en produccion como modulos separados carta-config + carta-preview + carta-export (Postura A, forms) compartiendo /carta-digital. Para no duplicar, el modulo nuevo (Postura B, 3 zonas) se sirve en ruta aislada /carta1 (manifest.routes + routes/[project_id]/carta1/+page.svelte). Coexisten: Postura A en /carta-digital, Postura B en /carta1. Consolidar ambas en una sola es horizonte aparte (a cocinar con ana).",
+    "evidencia": "5/5 preguntas cerradas (Q1=A icono 📱, Q2=A orden 6, Q3=A tabla con expansion, Q4=A badge timestamps, Q5=A frases prefill). F1 store frontend/src/lib/stores/carta-digital.ts (solo lectura via fs.read del path canonico, suscripciones bus, derived estaCartaCompuestaDesfasada, cero mutaciones, cero tools del blueprint). F2 modulo frontend/src/lib/modules/carta-digital/ (CartaDigitalPanel + IdentidadZone + OpcionesZone + CartaCompuestaZone + manifest + index, autodiscovery). Drift de color cerrado migrando hex custom a paleta permitida (no se toco baseline). validate:ci PASS sin drift + npm run build OK. F3 verificacion visual confirmada por el humano en produccion (panel 📱 Carta digital renderiza Identidad del local con estado vacio limpio). Mergeado a main via PR #291.",
+    "commits": ["fc80cff", "504a0d2", "964f865", "6deeff1", "a834a80"]
+  },
   "_doc": "Plan ejecutable JSON del horizonte 'cierre-ui-carta-digital'. Crea desde cero la UI del modulo carta-digital --backend blueprint-driven (4 operaciones: get_config, update_config, get_carta_publica, set_carta_compuesta; persistencia /storage/pizzepos/carta-digital/config.json tras TP-hermano-1; modelo no-reactivo A1), frontend cero al cocinar este plan (la ruta SvelteKit con LazyShell ya existe). Aplica las convenciones visuales del contrato ui-frontend-blueprint v1.0.1: Postura B canonica + Panel router + store solo lectura + prefillChatInput. Tras aplicar los 5 criterios chat-vs-UI: 3 zonas fijas --Identidad (branding+contacto fusionados), Opciones de visualizacion (ligera), Carta compuesta (principal, con badge desfasada y acciones de regenerar PWA). Vista tabular del shape JSON de la carta compuesta (no mockup visual real --el preview visual lo da el PWA publico via cartadigital-pwa-builder). Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
 
   "id": "cierre-ui-carta-digital",

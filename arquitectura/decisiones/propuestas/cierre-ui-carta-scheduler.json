@@ -109,7 +109,8 @@
         {"id": "B", "label": "⏰ + 'Programacion'", "comentario": "reloj, mas activo"},
         {"id": "C", "label": "🔄 + 'Rotacion cartas'", "comentario": "mas descriptivo del dominio"}
       ],
-      "recomendacion": "A"
+      "recomendacion": "A",
+      "respuesta_usuario": {"opcion": "A", "motivo": "icono calendario + label Programacion", "cerrada_en": "2026-06-02"}
     },
     {
       "id": "Q2",

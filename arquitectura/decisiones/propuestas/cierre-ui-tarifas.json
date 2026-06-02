@@ -149,7 +149,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Tarifas es el modulo donde el comerciante decide que carta sirve cada canal --la metafora dinero conecta con la asignacion comercial (canal glovo cobra comision distinta, etc.). Si el usuario prefiere otra metafora, fede aplica esa.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "icono 💰 + label Tarifas", "cerrada_en": "2026-06-02T00:00:00.000Z" }
     },
     {
       "id": "Q2",
@@ -161,7 +161,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Orden secuencial sin huecos. Si emergen modulos nuevos del subsistema-carta, se reorganiza entonces.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "order=5, tras carta-manager", "cerrada_en": "2026-06-02T00:00:00.000Z" }
     },
     {
       "id": "Q3",
@@ -174,7 +174,7 @@
       ],
       "recomendacion": "B",
       "comentario_recomendacion": "Coherente con el principio de friccion minima del 80%. La zona avanzada permanece oculta hasta que el comerciante muestre interes (click) o ya tenga variantes. Empty state mas explicito (A) puede aparecer dentro de la zona expandida si esta vacia.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "B", "motivo": "zona oculta por defecto, visible si hay variantes o click", "cerrada_en": "2026-06-02T00:00:00.000Z" }
     },
     {
       "id": "Q4",
@@ -190,7 +190,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Frases operativas que el LLM puede procesar sin ambiguedad. Si emerge necesidad de ajuste tras uso real, vuelta posterior.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "frases canonicas aceptadas literalmente", "cerrada_en": "2026-06-02T00:00:00.000Z" }
     }
   ],
 
@@ -907,5 +907,35 @@
       "Comerciante puede ver y operar la asignacion carta+canal sin conocer nombres exactos de tools"
     ],
     "siguiente_natural": "TP7 (badges activacion en carta-manager UI) --requiere que cierre-ui-carta-manager.json este ejecutado primero. TP8 (schemas AJV) preparativo para TP9 (validator). TP9 esperar a que la familia este wireada para no producir falsos positivos. TP11 ritual de limpieza CLAUDE.md cuando todos los TPs activos esten cerrados."
+  },
+
+  "estado": "terminado",
+  "estado_de_ejecucion": {
+    "ejecutado_por": "fede",
+    "rama": "claude/ana-tX6dS",
+    "preguntas_cerradas": { "Q1": "A", "Q2": "A", "Q3": "B", "Q4": "A" },
+    "F1": {
+      "cerrada_en": "2026-06-02",
+      "commit_hash": "1729676",
+      "salida_real": "frontend/src/lib/stores/tarifas.ts creado (solo lectura, suscripciones bus). API fs real (MqttRequestError/items) en vez de res.status literal del pseudocodigo (fiel a D5). Path /storage/pizzepos/cartas/ confirmado canonico (v1.3.0).",
+      "cross_checks": "CC1 validate:ci PASS sin drift; CC3 scope limpio; CC4 sin mutaciones OK; CC6 6 canales OK; type-check 0 errores en tarifas.ts"
+    },
+    "F2": {
+      "cerrada_en": "2026-06-02",
+      "commit_hash": "27859c5",
+      "salida_real": "frontend/src/lib/modules/tarifas/ (manifest+index+Panel+3 zonas). F2.op7 no-op: loader autodescubre por import.meta.glob, definitions.ts no se toca.",
+      "cross_checks": "CC1 validate:ci PASS; CC2 build OK (modulo en bundle); CC3 scope limpio; CC5 prefill=7 (>=6); type-check 0 errores"
+    },
+    "F3": {
+      "cerrada_en": "2026-06-02",
+      "commit_hash": "f5360b1",
+      "salida_real": "frontend/src/routes/[project_id]/tarifas/+page.svelte (LazyShell). Build emite _project_id_/tarifas/_page.svelte.js.",
+      "cross_checks": "CC2 build OK; CC3 scope limpio. Warning cosmetico unused-export panelId identico al hermano RecetasPanel."
+    },
+    "F4": {
+      "cerrada_en": "2026-06-02",
+      "metodo": "review a nivel de codigo (entorno remoto sin navegador/broker). Golden path y edge cases verificados estaticamente contra el codigo. 2 items (reactividad del bus tras mutacion real) quedan para QA manual del humano con npm run dev + proyecto activo.",
+      "cross_checks": "build produccion OK; type-check limpio en todo el modulo"
+    }
   }
 }

@@ -166,7 +166,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "📋 Cartas es lo que aparece en la captura inicial subrayada por el usuario --consistencia con lo que el ya tiene en cabeza.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "C", "motivo": "eleccion del usuario (🃏 carta-de-baraja)", "cerrada_en": "2026-06-02" }
     },
     {
       "id": "Q2",

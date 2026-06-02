@@ -166,7 +166,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "📱 + 'Carta digital' conecta con la realidad: es la carta que el cliente del comerciante ve en su movil. Mas amigable al comerciante que un termino tecnico (PWA).",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "eleccion directa del humano", "cerrada_en": "2026-06-02" }
     },
     {
       "id": "Q2",
@@ -178,7 +178,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "carta-digital es el ultimo eslabon de salida hacia el cliente final --logico despues de tarifas que decide que carta sirve cada canal.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "eleccion directa del humano (orden 6 tras tarifas)", "cerrada_en": "2026-06-02" }
     },
     {
       "id": "Q3",

@@ -5,45 +5,36 @@
  * la clausula transversal "todo por eventos" canonizada en
  * arquitectura/decisiones/_contratos/storage-layout.contract.json (P9).
  *
- * Operacion: cliente MQTT externo (no modulo event-core). Publica
- * project.list.request, recibe project.list.response, filtra segun flags,
- * para cada candidato publica project.delete y espera project.deleted
- * filtrado por project_id. project-manager orquesta la cascada (cierre de
- * sqlite, fs.delete.request por cada path del proyecto, eliminacion de
- * symlinks de Caddy).
+ * Usa el carril UI canonico (ui/request/<dominio>/<accion> + ui/response/
+ * <request_id>) en lugar del carril eventbus crudo. Razon: los UI handlers
+ * de project-manager (handleUIList, handleUIDeactivate, handleUIDelete)
+ * devuelven response shape {status, data|error} con detalle del fallo,
+ * mientras que los bus handlers (onProjectDelete) hacen early-return
+ * silencioso si el payload no cumple shape esperado (onProjectDelete espera
+ * data.id, no data.project_id que seria la costumbre).
  *
- * CREACION DE PROYECTOS NUEVOS: este script SOLO borra. La creacion de
- * proyectos nuevos al layout canonico se hace por el usuario desde su chat
- * normal (project.create publicado por chat-io u otro canal). Mantiene la
- * disciplina de que el operador humano decide que proyectos existen.
+ * Orquestacion: por cada proyecto candidato publica primero
+ * ui/request/project/deactivate (porque _deleteProject exige is_active=false)
+ * y despues ui/request/project/delete con force=true (por si tiene dependents).
+ * project-manager orquesta la cascada (cierre sqlite, fs.delete.request por
+ * cada path, eliminacion de symlinks).
+ *
+ * NO crea proyectos nuevos. La creacion la hace el usuario desde su chat
+ * cuando los necesite.
  *
  * Uso:
  *   node scripts/audit-helpers/reset-projects-via-bus.js [opciones]
  *
  * Flags:
- *   --dry-run               No publica project.delete. Solo lista lo que haria.
- *   --yes                   Salta la confirmacion interactiva. Solo en CI/automation.
- *   --keep <csv>            Lista de slugs/ids a conservar (no borrar).
- *   --only <csv>            Lista de slugs/ids a borrar (el resto se ignora).
- *                           Mutuamente exclusivo con --keep.
- *   --broker <url>          Default: wss://enki-ai.online/mqtt o AUDIT_BROKER.
- *   --timeout <ms>          Timeout por respuesta. Default 10000.
- *   --pause <ms>            Pausa entre deletes. Default 500.
+ *   --dry-run       No publica delete. Solo lista lo que haria.
+ *   --yes           Salta confirmacion interactiva.
+ *   --keep <csv>    Slugs/ids a conservar. Excluyente con --only.
+ *   --only <csv>    Slugs/ids a borrar (resto se ignora).
+ *   --broker <url>  Default: wss://enki-ai.online/mqtt o AUDIT_BROKER.
+ *   --timeout <ms>  Timeout por respuesta. Default 10000.
+ *   --pause <ms>    Pausa entre proyectos. Default 500.
  *
- * Ejemplos:
- *   # Ver que borraria sin tocar nada (recomendado primero):
- *   node scripts/audit-helpers/reset-projects-via-bus.js --dry-run
- *
- *   # Borrar todo menos vapersalhama:
- *   node scripts/audit-helpers/reset-projects-via-bus.js --keep vapersalhama
- *
- *   # Borrar solo los UUIDs huerfanos:
- *   node scripts/audit-helpers/reset-projects-via-bus.js --only 00939fa3-5ba7-40ab-803b-e6c21ea06359,37bc1282-e44c-467c-bb75-3d605255c9d2
- *
- * Salida: log linea por linea con cada publish y cada response correlacionada.
- * El bus queda capturable por capture-bus.js para auditoria.
- *
- * Manual operativo: arquitectura/decisiones/_contratos/manual-mqtt-conexion-directa.contract.json
+ * Manual: arquitectura/decisiones/_contratos/manual-mqtt-conexion-directa.contract.json
  */
 
 'use strict';
@@ -54,13 +45,9 @@ const readline = require('readline');
 
 function parseArgs(argv) {
   const flags = {
-    dryRun: false,
-    yes: false,
-    keep: [],
-    only: [],
+    dryRun: false, yes: false, keep: [], only: [],
     broker: process.env.AUDIT_BROKER || 'wss://enki-ai.online/mqtt',
-    timeout: 10000,
-    pause: 500,
+    timeout: 10000, pause: 500,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -72,7 +59,7 @@ function parseArgs(argv) {
     else if (a === '--timeout') flags.timeout = parseInt(argv[++i], 10);
     else if (a === '--pause') flags.pause = parseInt(argv[++i], 10);
     else if (a === '--help' || a === '-h') {
-      console.log(require('fs').readFileSync(__filename, 'utf-8').split('\n').slice(2, 50).join('\n').replace(/^ \*\s?/gm, ''));
+      console.log(require('fs').readFileSync(__filename, 'utf-8').split('\n').slice(2, 40).join('\n').replace(/^ \*\s?/gm, ''));
       process.exit(0);
     }
   }
@@ -83,39 +70,23 @@ function parseArgs(argv) {
   return flags;
 }
 
-function envelope(eventType, data) {
-  return {
-    event_id: crypto.randomUUID(),
-    event_type: eventType,
-    timestamp: new Date().toISOString(),
-    source: { core_id: 'reset-projects-helper' },
-    data,
-    metadata: {}
-  };
-}
-
-function publish(client, eventType, data) {
-  const env = envelope(eventType, data);
-  // Topic canonical: replace '.' with '/' (manual-mqtt-conexion-directa)
-  const topic = 'core/*/events/' + eventType.replace(/\./g, '/');
-  client.publish(topic, JSON.stringify(env));
-  return env;
-}
-
-function waitForEvent(client, expectedType, predicate, timeoutMs) {
-  const subTopic = 'core/+/events/' + expectedType.replace(/\./g, '/');
+// Carril UI: publish ui/request/<dominio>/<accion>, subscribe ui/response/<request_id>.
+// Payload: { request_id, data: {...campos} }. Response: { status, data|error }.
+function uiRequest(client, domain, action, data, timeoutMs) {
+  const requestId = crypto.randomUUID();
+  const responseTopic = `ui/response/${requestId}`;
+  const requestTopic = `ui/request/${domain}/${action}`;
   return new Promise((resolve, reject) => {
     let settled = false;
     const onMessage = (topic, message) => {
+      if (topic !== responseTopic) return;
       try {
         const env = JSON.parse(message.toString());
-        if (env.event_type !== expectedType) return;
-        if (!predicate(env)) return;
         if (settled) return;
         settled = true;
         clearTimeout(timer);
         client.removeListener('message', onMessage);
-        client.unsubscribe(subTopic);
+        client.unsubscribe(responseTopic);
         resolve(env);
       } catch (_) {}
     };
@@ -123,48 +94,41 @@ function waitForEvent(client, expectedType, predicate, timeoutMs) {
       if (settled) return;
       settled = true;
       client.removeListener('message', onMessage);
-      client.unsubscribe(subTopic);
-      reject(new Error(`timeout waiting for ${expectedType} (${timeoutMs}ms)`));
+      client.unsubscribe(responseTopic);
+      reject(new Error(`timeout waiting for ${responseTopic} (${timeoutMs}ms)`));
     }, timeoutMs);
     client.on('message', onMessage);
-    client.subscribe(subTopic, (err) => {
-      if (err && !settled) {
-        settled = true;
+    client.subscribe(responseTopic, (err) => {
+      if (err) {
         clearTimeout(timer);
-        client.removeListener('message', onMessage);
-        reject(err);
+        if (!settled) { settled = true; reject(err); }
+        return;
       }
+      client.publish(requestTopic, JSON.stringify({ request_id: requestId, data }));
     });
   });
 }
 
 async function listProjects(client, timeoutMs) {
-  const requestId = crypto.randomUUID();
-  const promise = waitForEvent(client, 'project.list.response',
-    env => env.data?.request_id === requestId, timeoutMs);
-  // Pequeña pausa para asegurar que subscribe se completo antes del publish
-  await new Promise(r => setTimeout(r, 200));
-  publish(client, 'project.list.request', { request_id: requestId });
-  const resp = await promise;
-  return resp.data?.projects || [];
+  const env = await uiRequest(client, 'project', 'list', {}, timeoutMs);
+  if (env.status !== 200) {
+    throw new Error(`project.list failed: ${env.status} ${env.error?.code} ${env.error?.message}`);
+  }
+  return env.data?.projects || [];
 }
 
-async function deleteProject(client, project, timeoutMs) {
-  // project.delete -> project-manager orquesta y publica project.deleted al terminar
-  const promise = waitForEvent(client, 'project.deleted',
-    env => env.data?.project_id === project.id, timeoutMs);
-  await new Promise(r => setTimeout(r, 100));
-  publish(client, 'project.delete', { project_id: project.id });
-  return promise;
+async function deactivateProject(client, projectId, timeoutMs) {
+  return uiRequest(client, 'project', 'deactivate', { id: projectId }, timeoutMs);
+}
+
+async function deleteProject(client, projectId, timeoutMs) {
+  return uiRequest(client, 'project', 'delete', { id: projectId, force: true }, timeoutMs);
 }
 
 function confirmInteractive(question) {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
+    rl.question(question, (answer) => { rl.close(); resolve(answer.trim()); });
   });
 }
 
@@ -174,8 +138,7 @@ async function main() {
 
   const client = mqtt.connect(flags.broker, {
     clientId: 'reset-projects-' + crypto.randomUUID().slice(0, 8),
-    connectTimeout: 8000,
-    reconnectPeriod: 0
+    connectTimeout: 8000, reconnectPeriod: 0
   });
 
   try {
@@ -186,11 +149,9 @@ async function main() {
     });
     console.error('[reset] mqtt connected');
 
-    // 1. Listar
     const projects = await listProjects(client, flags.timeout);
     console.error(`[reset] sistema reporta ${projects.length} proyectos`);
 
-    // 2. Filtrar
     const isKeyMatch = (p, key) => p.id === key || p.slug === key ||
       (p.name && p.name.toLowerCase() === key.toLowerCase());
 
@@ -199,36 +160,32 @@ async function main() {
       if (flags.keep.length > 0 && flags.keep.some(k => isKeyMatch(p, k))) return false;
       return true;
     });
-
     const toKeep = projects.filter(p => !toDelete.includes(p));
 
     console.log('\n=== A BORRAR (' + toDelete.length + ') ===');
     for (const p of toDelete) {
-      console.log(`  - ${p.id}  name=${JSON.stringify(p.name || '(no name)')}  slug=${p.slug || '(no slug)'}  base_path=${p.base_path || '(none)'}`);
+      console.log(`  - ${p.id}  name=${JSON.stringify(p.name || '(no name)')}  isActive=${p.isActive}  systemRole=${p.systemRole || '(none)'}`);
     }
     if (toKeep.length > 0) {
       console.log('\n=== A CONSERVAR (' + toKeep.length + ') ===');
       for (const p of toKeep) {
-        console.log(`  - ${p.id}  name=${JSON.stringify(p.name || '(no name)')}  slug=${p.slug || '(no slug)'}`);
+        console.log(`  - ${p.id}  name=${JSON.stringify(p.name || '(no name)')}`);
       }
     }
 
     if (flags.dryRun) {
-      console.error('\n[reset] DRY-RUN: no se publica project.delete. Fin.');
+      console.error('\n[reset] DRY-RUN: no se publica nada. Fin.');
       client.end();
       return;
     }
-
     if (toDelete.length === 0) {
-      console.error('\n[reset] nada que borrar segun los filtros. Fin.');
+      console.error('\n[reset] nada que borrar segun filtros. Fin.');
       client.end();
       return;
     }
-
-    // 3. Confirmar
     if (!flags.yes) {
       const answer = await confirmInteractive(
-        `\n[reset] CONFIRMA: escribe exactamente DELETE para borrar los ${toDelete.length} proyectos listados arriba: `
+        `\n[reset] CONFIRMA: escribe DELETE para borrar los ${toDelete.length} proyectos: `
       );
       if (answer !== 'DELETE') {
         console.error('[reset] confirmacion incorrecta. Abortado.');
@@ -237,26 +194,48 @@ async function main() {
       }
     }
 
-    // 4. Borrar uno por uno con pausa
-    console.error('\n[reset] empezando borrado...');
-    const results = { ok: 0, failed: 0 };
+    console.error('\n[reset] empezando: deactivate -> delete por proyecto via carril UI');
+    const results = { ok: 0, deactivate_failed: 0, delete_failed: 0 };
     for (const p of toDelete) {
-      const t0 = Date.now();
-      try {
-        const resp = await deleteProject(client, p, flags.timeout);
-        const dur = Date.now() - t0;
-        console.log(`  OK    ${p.id} (${p.name || ''})  ${dur}ms  status=${resp.data?.status || 'deleted'}`);
-        results.ok++;
-      } catch (e) {
-        console.log(`  FAIL  ${p.id} (${p.name || ''})  error=${e.message}`);
-        results.failed++;
+      const tag = `${p.id} (${p.name || ''})`;
+      if (p.isActive) {
+        try {
+          const r = await deactivateProject(client, p.id, flags.timeout);
+          if (r.status !== 200) {
+            console.log(`  DEACT_FAIL ${tag}  status=${r.status} code=${r.error?.code} msg=${(r.error?.message || '').slice(0,100)}`);
+            results.deactivate_failed++;
+            if (flags.pause > 0) await new Promise(rr => setTimeout(rr, flags.pause));
+            continue;
+          }
+          console.log(`  deactivated  ${tag}`);
+        } catch (e) {
+          console.log(`  DEACT_FAIL ${tag}  ${e.message}`);
+          results.deactivate_failed++;
+          if (flags.pause > 0) await new Promise(rr => setTimeout(rr, flags.pause));
+          continue;
+        }
       }
-      if (flags.pause > 0) await new Promise(r => setTimeout(r, flags.pause));
+      try {
+        const t0 = Date.now();
+        const r = await deleteProject(client, p.id, flags.timeout);
+        const dur = Date.now() - t0;
+        if (r.status !== 200) {
+          console.log(`  DEL_FAIL   ${tag}  ${dur}ms  status=${r.status} code=${r.error?.code} msg=${(r.error?.message || '').slice(0,100)}`);
+          results.delete_failed++;
+        } else {
+          console.log(`  DELETED    ${tag}  ${dur}ms`);
+          results.ok++;
+        }
+      } catch (e) {
+        console.log(`  DEL_FAIL   ${tag}  ${e.message}`);
+        results.delete_failed++;
+      }
+      if (flags.pause > 0) await new Promise(rr => setTimeout(rr, flags.pause));
     }
 
-    console.error(`\n[reset] fin. ok=${results.ok} failed=${results.failed} total=${toDelete.length}`);
+    console.error(`\n[reset] fin. ok=${results.ok}  deactivate_failed=${results.deactivate_failed}  delete_failed=${results.delete_failed}  total=${toDelete.length}`);
     client.end();
-    if (results.failed > 0) process.exit(1);
+    if (results.ok < toDelete.length) process.exit(1);
   } catch (e) {
     console.error('[reset] error:', e.message);
     try { client.end(true); } catch (_) {}
@@ -268,4 +247,4 @@ if (require.main === module) {
   main().catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { listProjects, deleteProject };
+module.exports = { listProjects, deactivateProject, deleteProject };

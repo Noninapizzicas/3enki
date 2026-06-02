@@ -109,7 +109,8 @@
         {"id": "B", "label": "⏰ + 'Programacion'", "comentario": "reloj, mas activo"},
         {"id": "C", "label": "🔄 + 'Rotacion cartas'", "comentario": "mas descriptivo del dominio"}
       ],
-      "recomendacion": "A"
+      "recomendacion": "A",
+      "respuesta_usuario": {"opcion": "A", "motivo": "icono calendario + label Programacion", "cerrada_en": "2026-06-02"}
     },
     {
       "id": "Q2",
@@ -118,7 +119,8 @@
       "opciones": [
         {"id": "A", "label": "9 --tras carta-marketing (8)", "comentario": "secuencial sin huecos"}
       ],
-      "recomendacion": "A"
+      "recomendacion": "A",
+      "respuesta_usuario": {"opcion": "A", "motivo": "order=9 secuencial sin huecos", "cerrada_en": "2026-06-02"}
     },
     {
       "id": "Q3",
@@ -130,7 +132,8 @@
         {"id": "C", "label": "Badge en la ReglaCard de cada regla en conflicto --warning visual por regla", "comentario": "contextual a cada regla"}
       ],
       "recomendacion": "A",
-      "comentario_recomendacion": "Banner es accion alta-prioridad --el comerciante necesita ver los conflictos antes de pasar a aplicar cambios. C es complemento bueno tambien (badge por regla); A+C juntos son ideales."
+      "comentario_recomendacion": "Banner es accion alta-prioridad --el comerciante necesita ver los conflictos antes de pasar a aplicar cambios. C es complemento bueno tambien (badge por regla); A+C juntos son ideales.",
+      "respuesta_usuario": {"opcion": "A", "motivo": "ConflictosBanner arriba del Panel (coincide con D3)", "cerrada_en": "2026-06-02"}
     },
     {
       "id": "Q4",
@@ -144,7 +147,8 @@
         },
         {"id": "B", "label": "matiza"}
       ],
-      "recomendacion": "A"
+      "recomendacion": "A",
+      "respuesta_usuario": {"opcion": "A", "motivo": "acepto frases canonicas literalmente", "cerrada_en": "2026-06-02"}
     }
   ],
 
@@ -674,5 +678,37 @@
       "Unico hermano sin route ni store --ahora con UI desde cero."
     ],
     "siguiente_natural": "carta-design (5to y ULTIMO hermano). Aplicar disciplina: releer blueprint, bumpear contrato v1.0.5 si emerge drift, cocinar plan backend + UI."
+  },
+
+  "estado_de_ejecucion": {
+    "ejecutado_por": "fede",
+    "rama": "claude/ana-tX6dS",
+    "preguntas_cerradas": {"Q1": "A", "Q2": "A", "Q3": "A", "Q4": "A"},
+    "F1": {
+      "cerrada_en": "2026-06-02",
+      "commit_hash": "0fba83c",
+      "salida_real": "Creada ruta routes/[project_id]/carta-scheduler/+page.svelte (LazyShell) + store stores/carta-scheduler.ts (~190 lineas, solo lectura). Desviaciones del pseudocodigo fieles a la API real: MqttRequestError/RESOURCE_NOT_FOUND en vez de res.status===404; subscribe desde '$lib/ui-core/mqtt' (no existe '$lib/ui-core/bus'). conflictosDetectados derived local (cruce canal+cron). loadReglas/loadPendientes leen {reglas|pendientes}[] defensivo.",
+      "cross_checks": "CC1 validate:ci PASS sin drift; CC3 OK sin mutaciones; CC4 OK sin invocaciones; CC6=4 paths canonicos. Type-check completo diferido a CC2 build (F2)."
+    },
+    "F2": {
+      "cerrada_en": "2026-06-02",
+      "commit_hash": "3868b35",
+      "salida_real": "Modulo frontend modules/carta-scheduler/ con 6 .svelte (CartaSchedulerPanel router + tabs, ConflictosBanner, ReglasView, ReglaCard, PendientesView, PendienteCard) + manifest.json (Q1=A 📅 Programacion, Q2=A order 9) + index.ts (UIModule con button+panels, patron tarifas). Autodescubierto por glob -- F2.op7 registro manual es no-op. Postura B integral: 6 prefillChatInput. Drift de color: primer build flaggeo 5 hex fuera de paleta (tema claro erroneo); reescritos los 6 style a tokens canonicos var(--token, rgba(...)) + hex semanticos de paleta (#22c55e/#ef4444/#eab308).",
+      "cross_checks": "CC1 validate:ci PASS sin drift (tras fix de color); CC2 build OK 15.97s (ruta _page.svelte.js emitida); CC4 OK sin invocaciones; CC5=6 prefill (>=6)."
+    },
+    "F3": {
+      "cerrada_en": "2026-06-02",
+      "metodo": "review a nivel de codigo (entorno remoto sin navegador/broker). Golden path (11 checks) y edge cases verificados estaticamente contra el codigo. 1 item -- reactividad del bus tras mutacion real -- queda para QA manual del humano con npm run dev + proyecto activo.",
+      "cross_checks": "build produccion type-safe (todos los imports resuelven); golden path + edge cases OK en codigo."
+    }
+  },
+
+  "estado": "terminado",
+  "cierre": {
+    "fases_cerradas": "F1, F2, F3 (F4 commit+push realizado por fase, no requiere commit separado)",
+    "preguntas_respondidas": "Q1=A, Q2=A, Q3=A, Q4=A",
+    "commits": ["0fba83c (F1)", "3868b35 (F2)"],
+    "qa_pendiente_humano": "reactividad del bus en navegador (crear/eliminar regla + confirmar pendiente refrescan solo)",
+    "deuda_subsistema_carta": "4 de 5 hermanos terminados (tarifas, carta-marketing parcial, carta-scheduler). Siguiente natural: carta-design (5to y ultimo)."
   }
 }

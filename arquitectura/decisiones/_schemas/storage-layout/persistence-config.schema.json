@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki/schemas/storage-layout/persistence-config.schema.json",
+  "title": "module.json config.persistence (storage-layout v1)",
+  "description": "Shape canonico del bloque config.persistence declarado por cada modulo del sistema event-core que persiste datos via filesystem. Define scope (project|system) y data_path (relativo a storage/ del proyecto o a /opt/enki/data/_system/ segun scope). Validado por storage-layout.validate.js para todos los modulos cuyo index.js o blueprint publica fs.*.request.",
+  "type": "object",
+  "required": ["scope", "data_path"],
+  "additionalProperties": true,
+  "properties": {
+    "scope": {
+      "description": "Donde viven los datos del modulo. 'project': bajo base_path del proyecto activo + storage/. 'system': global en /opt/enki/data/_system/. Eleccion del modulo segun su dominio.",
+      "type": "string",
+      "enum": ["project", "system"]
+    },
+    "data_path": {
+      "description": "Path relativo al storage del scope (storage/ del proyecto para scope=project, data/_system/ para scope=system). Kebab-case por segmento, separador '/', sin leading/trailing slash, sin variables ({slug}/{base_path}/etc), sin '..'. Para modulos de un vertical (modules/<vertical>/<modulo>/) comienza con '<vertical>/'. Ejemplos: 'pizzepos/cartas', 'conversation-export', 'pizzepos/recetas'.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(/[a-z][a-z0-9_-]*)*$",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "pattern": {
+      "description": "Patron de persistencia segun persistence.contract.json (in-memory, json-file, json-file-per-project, json-file-per-entity-plus-versions, sqlite, append-only-log, external-delegation). Opcional aqui — su disciplina la enforce persistence.validate.",
+      "type": "string"
+    },
+    "concurrency": {
+      "description": "Modelo de concurrencia segun persistence.contract.json.",
+      "type": "string",
+      "enum": ["single-writer", "multi-writer-locked", "multi-writer-optimistic"]
+    },
+    "restart_resilient": {
+      "description": "Si tras reinicio del core el modulo recupera su estado desde la persistencia. Heredado de persistence.contract.json.",
+      "type": "boolean"
+    }
+  },
+  "$comment": "Drifts validables: (1) scope ausente -> ERROR drift_module_persistente_sin_data_path. (2) data_path no matchea pattern -> ERROR drift_data_path_invalido. (3) data_path con variables {slug}/{base_path}/{name}/{project_id} -> ERROR drift_module_json_con_slug_en_paths. (4) data_path empieza con 'storage/' -> ERROR (storage/ lo añade filesystem, no se declara). El pattern del schema captura los cuatro casos sin codigo extra del validator."
+}

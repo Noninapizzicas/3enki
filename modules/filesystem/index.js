@@ -71,6 +71,14 @@ class FilesystemModule extends BaseModule {
     this.activeProjectPath = null;
     this.workingDirectory = null;
     this.systemMode = false;
+
+    // TP4 — cache de manifests de modulos persistentes. Indexado por module.name.
+    // Cada entry: { scope: 'project'|'system', data_path: '<namespace>' }. Lo carga
+    // _loadModuleManifests al onLoad escaneando modules/**/module.json. validatePath
+    // lo usa para componer paths con scope=system contra data/_system/<data_path>/.
+    // Sin sourceModule en el evento, fallback al comportamiento scope=project.
+    // Cierra storage-layout.contract.json TP4 (capa 2 de la composicion canonica).
+    this._moduleManifests = new Map();
   }
 
   // ==========================================
@@ -88,8 +96,52 @@ class FilesystemModule extends BaseModule {
     });
 
     await this._ensureDataDirectory();
+    this._loadModuleManifests();
 
-    this.logger.info('filesystem.loaded', { basePath: this.basePath });
+    this.logger.info('filesystem.loaded', {
+      basePath: this.basePath,
+      manifests_loaded: this._moduleManifests.size
+    });
+  }
+
+  // TP4 — escanea modules/**/module.json y cachea los que declaran
+  // config.persistence.{scope, data_path}. Sincrono porque es boot one-shot
+  // y la cantidad de modules es baja (~70). Tolerante a errores: un module.json
+  // malformado no rompe el load — se loguea warn y se sigue.
+  _loadModuleManifests() {
+    const syncFs = require('fs');
+    const modulesDir = path.join(process.cwd(), 'modules');
+    if (!syncFs.existsSync(modulesDir)) return;
+    const tryRegister = (mjPath) => {
+      try {
+        const m = JSON.parse(syncFs.readFileSync(mjPath, 'utf8'));
+        const p = m.config?.persistence;
+        if (m.name && p && p.scope && p.data_path) {
+          this._moduleManifests.set(m.name, { scope: p.scope, data_path: p.data_path });
+        }
+      } catch (err) {
+        this.logger?.warn('filesystem.manifest.parse.failed', { path: mjPath, error: err.message });
+      }
+    };
+    for (const name of syncFs.readdirSync(modulesDir)) {
+      if (name.startsWith('.') || name === 'node_modules' || name === '_archived' || name === '_legacy') continue;
+      const lvl1 = path.join(modulesDir, name);
+      try {
+        if (!syncFs.statSync(lvl1).isDirectory()) continue;
+        const mj1 = path.join(lvl1, 'module.json');
+        if (syncFs.existsSync(mj1)) { tryRegister(mj1); continue; }
+        // Nivel 2: vertical/modulo (ej: modules/conversacion/ai-gateway/, modules/pizzepos/carta-manager/)
+        for (const child of syncFs.readdirSync(lvl1)) {
+          if (child.startsWith('.') || child === 'node_modules' || child === '_archived' || child === '_legacy') continue;
+          const childDir = path.join(lvl1, child);
+          try {
+            if (!syncFs.statSync(childDir).isDirectory()) continue;
+            const mj2 = path.join(childDir, 'module.json');
+            if (syncFs.existsSync(mj2)) tryRegister(mj2);
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
   }
 
   async onUnload() {
@@ -206,7 +258,7 @@ class FilesystemModule extends BaseModule {
     const { request_id, correlation_id, path: p } = data;
     const cid = correlation_id || crypto.randomUUID();
     try {
-      const safePath = this.validatePath(p);
+      const safePath = this.validatePath(p, { sourceModule: data?._source_module ?? args?._source_module });
       const stats = await fs.stat(safePath);
       await this._publicarEvento('fs.exists.response', {
         request_id, exists: true, path: p,
@@ -310,6 +362,10 @@ class FilesystemModule extends BaseModule {
     const data = event?.data || event?.payload || event;
     const args = {};
     for (const f of fields) args[f] = data[f];
+    // TP4 — propagar identidad del emisor para que validatePath pueda resolver
+    // scope=system. Si event.source.module esta y matchea un manifest cacheado,
+    // validatePath usa data_path + scope declarados. Si no, fallback project.
+    args._source_module = event?.source?.module;
     return this._busDispatchWithData(event, op, responseEvent, args);
   }
 
@@ -382,6 +438,30 @@ class FilesystemModule extends BaseModule {
       throw error;
     }
 
+    // TP4 — capa 2: composicion por scope declarado del modulo emisor.
+    // Si el caller pasa sourceModule y ese modulo declara scope=system en su
+    // module.json (cacheado en _moduleManifests al onLoad), resolvemos contra
+    // data/_system/<data_path>/ en lugar de contra activeProjectPath. Esto
+    // separa formalmente datos system-wide (credential-manager, ai-gateway,
+    // system-coherence-analyzer) de datos por proyecto. Si sourceModule no
+    // esta declarado, o no esta en el cache, comportamiento actual (capa 1).
+    const sourceModule = options.sourceModule;
+    if (sourceModule && this._moduleManifests.has(sourceModule)) {
+      const manifest = this._moduleManifests.get(sourceModule);
+      if (manifest.scope === 'system') {
+        const systemRoot = path.join(this.basePath, '_system', manifest.data_path);
+        const normalized = path.normalize(inputPath.replace(/^\/+/, ''));
+        resolved = path.resolve(systemRoot, normalized);
+        if (!resolved.startsWith(systemRoot)) {
+          const error = new Error(`Access denied: path outside system scope of module '${sourceModule}'`);
+          error._code = 'PERMISSION_DENIED';
+          error._details = { kind: 'path_traversal_system_scope', requested: inputPath, root: systemRoot };
+          throw error;
+        }
+        return resolved;
+      }
+    }
+
     if (inputPath.startsWith('@/') || inputPath === '@') {
       const relativePart = inputPath === '@' ? '' : inputPath.slice(2);
       const normalized = path.normalize(relativePart).replace(/^\/+/, '');
@@ -437,7 +517,7 @@ class FilesystemModule extends BaseModule {
   async handleList(data) {
     try {
       const dirPath = data?.path || '/';
-      const safePath = this.validatePath(dirPath);
+      const safePath = this.validatePath(dirPath, { sourceModule: data?._source_module ?? args?._source_module });
 
       let stats;
       try { stats = await fs.stat(safePath); }
@@ -497,7 +577,7 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
-      const safePath = this.validatePath(data.path);
+      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module ?? args?._source_module });
 
       let stats;
       try { stats = await fs.stat(safePath); }
@@ -561,7 +641,7 @@ class FilesystemModule extends BaseModule {
           { kind: 'domain', field: 'content' });
       }
 
-      const safePath = this.validatePath(filePath);
+      const safePath = this.validatePath(filePath, { sourceModule: data?._source_module ?? args?._source_module });
       await fs.mkdir(path.dirname(safePath), { recursive: true });
 
       let isNew = false;
@@ -657,7 +737,7 @@ class FilesystemModule extends BaseModule {
           { kind: 'domain', field: 'patches' });
       }
 
-      const safePath = this.validatePath(filePath);
+      const safePath = this.validatePath(filePath, { sourceModule: data?._source_module ?? args?._source_module });
 
       let currentContent;
       try { currentContent = await fs.readFile(safePath, 'utf-8'); }
@@ -1079,7 +1159,7 @@ class FilesystemModule extends BaseModule {
           { kind: 'protected_path' });
       }
 
-      const safePath = this.validatePath(filePath);
+      const safePath = this.validatePath(filePath, { sourceModule: data?._source_module ?? args?._source_module });
       let stats;
       try { stats = await fs.stat(safePath); }
       catch (e) {
@@ -1116,7 +1196,7 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
-      const safePath = this.validatePath(data.path);
+      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module ?? args?._source_module });
       await fs.mkdir(safePath, { recursive: true });
 
       await this._publicarEvento('fs.directory.created', { path: data.path });
@@ -1134,8 +1214,8 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'from and to are required',
           { kind: 'domain', field: 'from|to' });
       }
-      const safeFrom = this.validatePath(data.from);
-      const safeTo   = this.validatePath(data.to);
+      const safeFrom = this.validatePath(data.from, { sourceModule: data?._source_module ?? args?._source_module });
+      const safeTo   = this.validatePath(data.to, { sourceModule: data?._source_module ?? args?._source_module });
       try { await fs.stat(safeFrom); }
       catch (e) {
         if (e.code === 'ENOENT') {
@@ -1160,8 +1240,8 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'from and to are required',
           { kind: 'domain', field: 'from|to' });
       }
-      const safeFrom = this.validatePath(data.from);
-      const safeTo   = this.validatePath(data.to);
+      const safeFrom = this.validatePath(data.from, { sourceModule: data?._source_module ?? args?._source_module });
+      const safeTo   = this.validatePath(data.to, { sourceModule: data?._source_module ?? args?._source_module });
       let stats;
       try { stats = await fs.stat(safeFrom); }
       catch (e) {
@@ -1191,7 +1271,7 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'query is required',
           { kind: 'domain', field: 'query' });
       }
-      const basePath = this.validatePath(data.path || '/');
+      const basePath = this.validatePath(data.path || '/', { sourceModule: data?._source_module ?? args?._source_module });
       const searchContent = data.content === true;
       const query = data.query.toLowerCase();
       const results = [];
@@ -1219,7 +1299,7 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
-      const safePath = this.validatePath(data.path);
+      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module ?? args?._source_module });
       let stats;
       try { stats = await fs.stat(safePath); }
       catch (e) {
@@ -1255,7 +1335,7 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'content is required',
           { kind: 'domain', field: 'content' });
       }
-      const safePath = this.validatePath(data.path);
+      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module ?? args?._source_module });
       await fs.mkdir(path.dirname(safePath), { recursive: true });
       await fs.appendFile(safePath, data.content, data.encoding || 'utf-8');
       const stats = await fs.stat(safePath);
@@ -1276,7 +1356,7 @@ class FilesystemModule extends BaseModule {
       const maxAgeHours = data?.max_age_hours || 24;
       const dryRun = data?.dry_run === true;
 
-      const safePath = this.validatePath(cleanupPath);
+      const safePath = this.validatePath(cleanupPath, { sourceModule: data?._source_module ?? args?._source_module });
       try {
         const stats = await fs.stat(safePath);
         if (!stats.isDirectory()) {
@@ -1315,7 +1395,7 @@ class FilesystemModule extends BaseModule {
   async handleStats(data) {
     try {
       const statsPath = data?.path || '/';
-      const safePath = this.validatePath(statsPath);
+      const safePath = this.validatePath(statsPath, { sourceModule: data?._source_module ?? args?._source_module });
 
       try {
         const dirStats = await fs.stat(safePath);
@@ -1364,7 +1444,7 @@ class FilesystemModule extends BaseModule {
   async handleSetWorkDir(data) {
     try {
       const requestedPath = data?.path || '/';
-      const safePath = this.validatePath(requestedPath);
+      const safePath = this.validatePath(requestedPath, { sourceModule: data?._source_module ?? args?._source_module });
       const stats = await fs.stat(safePath);
       if (!stats.isDirectory()) {
         return this._errorResponse(400, 'INVALID_INPUT', 'Path is not a directory',

@@ -178,7 +178,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Filtro por substring del nombre cumple criterio densidad. El tool .search del blueprint cubre busqueda semantica avanzada y se queda en chat (criterio diferente).",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "buscador visual por nombre, filtro client-side", "cerrada_en": "2026-06-02" }
     },
     {
       "id": "Q3",

@@ -147,7 +147,8 @@
         },
         {"id": "B", "label": "matiza"}
       ],
-      "recomendacion": "A"
+      "recomendacion": "A",
+      "respuesta_usuario": {"opcion": "A", "motivo": "acepto frases canonicas literalmente", "cerrada_en": "2026-06-02"}
     }
   ],
 

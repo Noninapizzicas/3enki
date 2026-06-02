@@ -132,7 +132,8 @@
         {"id": "C", "label": "Badge en la ReglaCard de cada regla en conflicto --warning visual por regla", "comentario": "contextual a cada regla"}
       ],
       "recomendacion": "A",
-      "comentario_recomendacion": "Banner es accion alta-prioridad --el comerciante necesita ver los conflictos antes de pasar a aplicar cambios. C es complemento bueno tambien (badge por regla); A+C juntos son ideales."
+      "comentario_recomendacion": "Banner es accion alta-prioridad --el comerciante necesita ver los conflictos antes de pasar a aplicar cambios. C es complemento bueno tambien (badge por regla); A+C juntos son ideales.",
+      "respuesta_usuario": {"opcion": "A", "motivo": "ConflictosBanner arriba del Panel (coincide con D3)", "cerrada_en": "2026-06-02"}
     },
     {
       "id": "Q4",

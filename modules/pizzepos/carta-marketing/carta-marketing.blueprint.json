@@ -25,7 +25,7 @@
 
   "estado_persistente": {
     "paths_relativos": {
-      "perfil_marca": "config/marca.json"
+      "perfil_marca": "/config/marca.json"
     },
     "shape_perfil": "{ _version, _updated_at, nombre_marca, lema?, tono_voz, valores: [...], publico_objetivo, diferenciacion, restricciones?, idiomas: [...], onboarding_completado: boolean }"
   },
@@ -46,7 +46,7 @@
       "pseudocodigo": [
         "async get_perfil(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: 'config/marca.json' })",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/config/marca.json' })",
         "  if (raw.status === 404) {",
         "    return { status: 200, data: { _version: '1.0', _updated_at: nowISO(), nombre_marca: '', tono_voz: '', valores: [], publico_objetivo: '', idiomas: ['es'], onboarding_completado: false } }",
         "  }",
@@ -62,7 +62,7 @@
         "async update_perfil(input):",
         "  if (!input.project_id || !input.campos || Object.keys(input.campos).length === 0) return INVALID_INPUT",
         "  correlation_id_efectivo = input.correlation_id || uuid()",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: 'config/marca.json' })",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/config/marca.json' })",
         "  now = nowISO()",
         "",
         "  // Rama A — archivo NO existe: fs.write atomico del store inicial con los campos aplicados.",
@@ -73,7 +73,7 @@
         "    }",
         "    perfil_inicial._updated_at = now",
         "    write_resp = await publishAndWait('fs.write.request', {",
-        "      project_id: input.project_id, path: 'config/marca.json',",
+        "      project_id: input.project_id, path: '/config/marca.json',",
         "      content: JSON.stringify(perfil_inicial, null, 2), encoding: 'utf-8', atomic: true",
         "    })",
         "    if (write_resp.status >= 400) return write_resp",
@@ -98,7 +98,7 @@
         "  perfil._updated_at = now",
         "  edit_resp = await publishAndWait('fs.edit.request', {",
         "    project_id: input.project_id,",
-        "    path: 'config/marca.json',",
+        "    path: '/config/marca.json',",
         "    patches: patches",
         "  })",
         "  if (edit_resp.status >= 400) return edit_resp",
@@ -130,12 +130,12 @@
         "  now = nowISO()",
         "  perfil_propuesto._updated_at = now",
         "  // Leer el archivo para saber si existe (determina rama A vs B).",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: 'config/marca.json' })",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/config/marca.json' })",
         "  // Rama A — archivo NO existe: fs.write atomico con el perfil completo propuesto por el agente.",
         "  if (raw.status === 404) {",
         "    if (!perfil_propuesto._version) perfil_propuesto._version = '1.0'",
         "    write_resp = await publishAndWait('fs.write.request', {",
-        "      project_id: input.project_id, path: 'config/marca.json',",
+        "      project_id: input.project_id, path: '/config/marca.json',",
         "      content: JSON.stringify(perfil_propuesto, null, 2), encoding: 'utf-8', atomic: true",
         "    })",
         "    if (write_resp.status >= 400) return write_resp",
@@ -150,7 +150,7 @@
         "    }",
         "    edit_resp = await publishAndWait('fs.edit.request', {",
         "      project_id: input.project_id,",
-        "      path: 'config/marca.json',",
+        "      path: '/config/marca.json',",
         "      patches: patches",
         "    })",
         "    if (edit_resp.status >= 400) return edit_resp",

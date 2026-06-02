@@ -203,7 +203,7 @@
       ],
       "recomendacion": "C",
       "comentario_recomendacion": "Tabla con expansion combina densidad visual (vista inicial corta) con flexibilidad (productos con muchos/pocos campos se ven uniformes). Si la carta tiene 42 productos como carta_pizzicas, A se vuelve abrumadora; C permite escanear y profundizar.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "C", "motivo": "tabla con expansion (acordeon) por producto", "cerrada_en": "2026-06-02" }
     },
     {
       "id": "Q4",

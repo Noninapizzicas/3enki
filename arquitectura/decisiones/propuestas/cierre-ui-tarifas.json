@@ -174,7 +174,7 @@
       ],
       "recomendacion": "B",
       "comentario_recomendacion": "Coherente con el principio de friccion minima del 80%. La zona avanzada permanece oculta hasta que el comerciante muestre interes (click) o ya tenga variantes. Empty state mas explicito (A) puede aparecer dentro de la zona expandida si esta vacia.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "B", "motivo": "zona oculta por defecto, visible si hay variantes o click", "cerrada_en": "2026-06-02T00:00:00.000Z" }
     },
     {
       "id": "Q4",

@@ -1,0 +1,371 @@
+{
+  "_doc": "Plan ejecutable JSON ligero del horizonte 'aplicar subsistema-carta a carta-marketing'. Bumpea carta-marketing de blueprint v1.1.0 a v1.2.0 aplicando el contrato subsistema-carta v1.0.3. Cambio MUY pequenyo: solo correlation_id obligatorio en los 3 publishes (marketing.perfil.actualizado x2 + marketing.onboarding.completado x1). NO cambia paths (ya canonicos /storage/config/marca.json desde v1.1.0). NO modifica modelo no-reactivo (A1 preservado). NO declara requires_consumer (no hay consumer real). Plan ligero ~350 lineas, similar a TP4 tarifas.",
+
+  "id": "aplicar-subsistema-carta-a-carta-marketing",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "bump_blueprint_backend_ligero",
+
+  "documentos_hermanos": {
+    "contrato_canonico": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.3",
+      "relacion": "Bumpeado en el mismo commit. v1.0.3 corrige consume_canonico de carta-marketing a [] (tercer hermano confirmando patron A1)."
+    },
+    "ui_separada": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-carta-marketing.json",
+      "estado": "cocinado en paralelo (mismo commit)",
+      "relacion": "UI con patron zonas apiladas (hay UN perfil de marca por proyecto, no multiples)."
+    }
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json"
+  ],
+
+  "dependencias_explicitas": [],
+
+  "por_que_existe": {
+    "que_cierra": "carta-marketing v1.1.0 arrastra 1 drift contra subsistema-carta v1.0.3: correlation_id opcional en los 3 publishes canonicos (D10/P9 exige obligatorio).",
+    "que_no_cierra": "Cero cambio de paths (ya canonicos). NO modifica modelo no-reactivo. NO declara requires_consumer. NO modifica las 4 operaciones funcionales (get_perfil, update_perfil, completar_onboarding, actividad).",
+    "alcance": "Editar SOLO modules/pizzepos/carta-marketing/module.json y carta-marketing.blueprint.json."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/carta-marketing/module.json",
+      "version_actual": "1.1.0",
+      "path_persistencia_actual": "data/projects/{slug}/storage/config/marca.json (YA CANONICO --no cambia)",
+      "lo_que_debe_quedar_tras_el_plan": {
+        "version": "1.2.0",
+        "_v1_2_changelog": "presente"
+      }
+    },
+    {
+      "pieza": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+      "version_actual": "blueprint-1.1.0",
+      "operaciones": ["get_perfil", "update_perfil", "completar_onboarding", "actividad"],
+      "publishes_canonicos_actuales_con_correlation_id_opcional": [
+        "update_perfil rama A (linea ~78): publish marketing.perfil.actualizado",
+        "update_perfil rama B (linea ~104): publish marketing.perfil.actualizado",
+        "completar_onboarding (linea ~155): publish marketing.onboarding.completado"
+      ],
+      "lo_que_debe_quedar_tras_el_plan": {
+        "version_blueprint": "blueprint-1.2.0",
+        "_v1_2_changelog": "presente",
+        "los_3_publishes_llevan_correlation_id_efectivo": true,
+        "eventos_que_escucho_PRESERVADO_vacio": true,
+        "paths_PRESERVADOS_canonicos": true
+      }
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio",
+      "modules/pizzepos/carta-marketing/module.json declara version='1.1.0'",
+      "carta-marketing.blueprint.json declara version='blueprint-1.1.0' con 4 operaciones",
+      "arquitectura/decisiones/_contratos/subsistema-carta.contract.json declara version='1.0.3'",
+      "npm run validate:ci PASS antes de empezar"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones del contrato subsistema-carta v1.0.3",
+      "A1 preservado: carta-marketing sigue no-reactivo (eventos_que_escucho:[])",
+      "Path /storage/config/marca.json ya canonico, no cambia",
+      "Leccion TP1: no declarar requires_consumer en los 2 eventos publicados (no hay consumer real)",
+      "pseudocodigo-estilo: sin spread, sin Object.assign"
+    ],
+    "no_toco_esta_sesion": [
+      "Operaciones funcionales del blueprint (get_perfil, update_perfil, completar_onboarding, actividad --se preservan)",
+      "Agentes asociados (marketing-copywriter, marketing-strategist, marketing-brand-keeper, marketing-onboarding)",
+      "Otros modulos backend o frontend",
+      "arquitectura/decisiones/* (bump v1.0.3 ya esta en el commit)",
+      "schemas, validators",
+      "data/projects/*/storage/config/marca.json (cero migracion de datos)",
+      "scripts/validate-all.js, drift-baseline.json"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_solo_correlation_id_no_otros_cambios",
+      "decision": "Este plan SOLO anyade correlation_id obligatorio en los 3 publishes. NO cambia paths (ya canonicos). NO modifica operaciones funcionales. NO toca templates ni context. Es bump ligero --el unico drift real es correlation_id.",
+      "no_reabrir_sin": "que F1 verifique drift mas grande no detectado al cocinar"
+    },
+    {
+      "id": "D2_a1_preservado",
+      "decision": "eventos_que_escucho:[] preservado --A1 modelo no-reactivo. La UI carta-marketing tampoco va a recompose automatico (coherente con A1).",
+      "no_reabrir_sin": "decision arquitectonica nueva"
+    },
+    {
+      "id": "D3_no_requires_consumer",
+      "decision": "marketing.perfil.actualizado y marketing.onboarding.completado NO declaran requires_consumer:true. Ningun modulo del repo los escucha hoy (leccion TP1).",
+      "no_reabrir_sin": "consumer real"
+    },
+    {
+      "id": "D4_bump_minor",
+      "decision": "Bump v1.1.0 -> v1.2.0 (minor) --coherente con los otros hermanos. correlation_id obligatorio es alineacion con contrato, no breaking real."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Bump module.json a v1.2.0 + changelog",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1_bump_version",
+          "descripcion": "version 1.1.0 -> 1.2.0",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/carta-marketing/module.json",
+            "old: \"version\": \"1.1.0\"",
+            "new: \"version\": \"1.2.0\""
+          ]
+        },
+        {
+          "id": "F1.op2_anyadir_changelog",
+          "descripcion": "_v1_2_changelog",
+          "pseudocodigo": [
+            "Edit anyadiendo tras version:",
+            "  \"_v1_2_changelog\": \"v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.3. Un solo cambio: correlation_id obligatorio en los 3 publishes canonicos (marketing.perfil.actualizado x2 en update_perfil + marketing.onboarding.completado x1 en completar_onboarding) --garantizado con uuid() si el input no lo trae (D10/P9 del contrato). Cero cambio de paths (ya canonicos /storage/config/marca.json desde v1.1.0). eventos_que_escucho:[] preservado (A1 modelo no-reactivo). NO declara requires_consumer (ningun consumer real --leccion TP1).\""
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-marketing/module.json"]
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Bump blueprint v1.1.0 -> v1.2.0 con correlation_id_efectivo en los 3 publishes",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op1_bump_version_blueprint",
+          "descripcion": "version blueprint-1.1.0 -> blueprint-1.2.0",
+          "pseudocodigo": [
+            "Edit blueprint",
+            "old: \"version\": \"blueprint-1.1.0\"",
+            "new: \"version\": \"blueprint-1.2.0\""
+          ]
+        },
+        {
+          "id": "F2.op2_anyadir_changelog_blueprint",
+          "descripcion": "_v1_2_changelog en blueprint",
+          "pseudocodigo": [
+            "Edit anyadiendo tras version:",
+            "  \"_v1_2_changelog\": \"v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.3. correlation_id obligatorio en los 3 publishes --garantizado con uuid() via correlation_id_efectivo si input no trae. NO cambia paths (ya canonicos). NO modifica operaciones funcionales ni delegacion a agentes.\""
+          ]
+        },
+        {
+          "id": "F2.op3_correlation_id_en_update_perfil_rama_A",
+          "descripcion": "correlation_id_efectivo en publish de update_perfil rama A (archivo nuevo)",
+          "pseudocodigo": [
+            "Localizar en update_perfil rama A (linea ~78) el publish:",
+            "  await publish('marketing.perfil.actualizado', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: input.correlation_id, timestamp: nowISO() })",
+            "Edit insertar ANTES del publish:",
+            "  correlation_id_efectivo = input.correlation_id || uuid()",
+            "Y modificar el publish:",
+            "  await publish('marketing.perfil.actualizado', {",
+            "    project_id: input.project_id,",
+            "    campos_modificados: Object.keys(input.campos),",
+            "    correlation_id: correlation_id_efectivo,",
+            "    timestamp: nowISO()",
+            "  })"
+          ]
+        },
+        {
+          "id": "F2.op4_correlation_id_en_update_perfil_rama_B",
+          "descripcion": "correlation_id_efectivo en publish de update_perfil rama B (archivo existe, fs.edit)",
+          "pseudocodigo": [
+            "Localizar en update_perfil rama B (linea ~104, tras edit_resp) el publish:",
+            "  await publish('marketing.perfil.actualizado', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: input.correlation_id, timestamp: nowISO() })",
+            "Reutilizar el correlation_id_efectivo declarado en op3 (esta arriba en el mismo bloque async update_perfil --no hace falta redeclarar).",
+            "Edit modificando el publish:",
+            "  await publish('marketing.perfil.actualizado', {",
+            "    project_id: input.project_id,",
+            "    campos_modificados: Object.keys(input.campos),",
+            "    correlation_id: correlation_id_efectivo,",
+            "    timestamp: nowISO()",
+            "  })",
+            "Nota: correlation_id_efectivo debe declararse al INICIO del bloque async update_perfil para que sea accesible desde ambas ramas."
+          ]
+        },
+        {
+          "id": "F2.op5_mover_correlation_id_efectivo_al_inicio_update_perfil",
+          "descripcion": "Asegurar que correlation_id_efectivo se declara al inicio de update_perfil --accesible desde rama A y rama B",
+          "pseudocodigo": [
+            "Edit update_perfil pseudocodigo: insertar al inicio (despues de la validacion INVALID_INPUT, antes del fs.read):",
+            "  correlation_id_efectivo = input.correlation_id || uuid()",
+            "Despues los publishes de las dos ramas usan esta variable.",
+            "Si op3 y op4 ya generaron correlation_id_efectivo dentro de cada rama, eliminar la duplicacion y dejarlo solo al inicio."
+          ]
+        },
+        {
+          "id": "F2.op6_correlation_id_en_completar_onboarding",
+          "descripcion": "correlation_id_efectivo en publish de completar_onboarding",
+          "pseudocodigo": [
+            "Edit completar_onboarding pseudocodigo: insertar al inicio (tras validacion):",
+            "  correlation_id_efectivo = input.correlation_id || uuid()",
+            "Localizar el publish (linea ~155):",
+            "  await publish('marketing.onboarding.completado', { project_id: input.project_id, correlation_id: input.correlation_id, timestamp: nowISO() })",
+            "Edit modificando:",
+            "  await publish('marketing.onboarding.completado', {",
+            "    project_id: input.project_id,",
+            "    correlation_id: correlation_id_efectivo,",
+            "    timestamp: nowISO()",
+            "  })"
+          ]
+        },
+        {
+          "id": "F2.op7_verificar_consistencia",
+          "descripcion": "Releer blueprint y verificar",
+          "pseudocodigo": [
+            "Read blueprint entero.",
+            "Verificaciones:",
+            "  - version es blueprint-1.2.0",
+            "  - _v1_2_changelog existe",
+            "  - grep -c 'correlation_id_efectivo' devuelve >= 3 (declaraciones + uso)",
+            "  - operaciones funcionales preservadas (get_perfil, update_perfil, completar_onboarding, actividad)",
+            "  - eventos_que_escucho sigue [] (A1)",
+            "  - paths siguen /storage/config/marca.json",
+            "  - JSON valido (jq)"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-marketing/carta-marketing.blueprint.json"]
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "validate:ci",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1_validate_ci",
+          "descripcion": "PASS sin drift nuevo",
+          "pseudocodigo": [
+            "cd raiz",
+            "npm run validate:ci",
+            "esperado: PASS sin drift NUEVO"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "estado_terminal": "validate:ci verde"
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Commit + push",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_status",
+          "pseudocodigo": [
+            "git status",
+            "confirmar solo los 2 archivos del scope"
+          ]
+        },
+        {
+          "id": "F4.op2_commit",
+          "pseudocodigo": [
+            "git add (especificos)",
+            "git commit:",
+            "  feat(carta-marketing): bump blueprint v1.2.0 --correlation_id obligatorio en publishes",
+            "",
+            "  Aplica contrato subsistema-carta v1.0.3. Un solo cambio: correlation_id_efectivo",
+            "  en los 3 publishes canonicos (marketing.perfil.actualizado x2 + marketing.",
+            "  onboarding.completado x1). Cero cambio de paths (ya canonicos). eventos_que_escucho:",
+            "  [] preservado (A1 modelo no-reactivo del v1.1.0).",
+            "",
+            "  Plan: aplicar-subsistema-carta-a-carta-marketing.json"
+          ]
+        },
+        {
+          "id": "F4.op3_push",
+          "pseudocodigo": [
+            "git push -u origin <rama>",
+            "retry exponencial si red"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F1", "F2", "F3"],
+      "salida_esperada": "PASS sin drift NUEVO"
+    },
+    {
+      "id": "CC2_jq_valido",
+      "comando": "jq . modules/pizzepos/carta-marketing/module.json > /dev/null && jq . modules/pizzepos/carta-marketing/carta-marketing.blueprint.json > /dev/null && echo OK",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC3_correlation_id_efectivo",
+      "comando": "grep -c 'correlation_id_efectivo' modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": ">= 3"
+    },
+    {
+      "id": "CC4_eventos_que_escucho_vacio",
+      "comando": "jq '.eventos_que_escucho' modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "[]"
+    },
+    {
+      "id": "CC5_git_status_scope",
+      "comando": "git status --short",
+      "ejecutar_tras": ["F4.op1"],
+      "verificar": "solo 2 archivos del scope"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Cambiar paths del blueprint (ya canonicos)",
+    "Anyadir eventos_que_escucho (A1)",
+    "Declarar requires_consumer en los eventos publicados (D3)",
+    "Modificar las 4 operaciones funcionales del blueprint mas alla de anyadir correlation_id_efectivo",
+    "Tocar otros modulos o agentes asociados",
+    "Modificar arquitectura/decisiones/* (cero adicional)",
+    "Tocar drift-baseline, validators, validate-all.js",
+    "Migrar datos en disco",
+    "Crear PR sin OK",
+    "git add . o git add -A",
+    "Saltar OK humano entre fases",
+    "Decir 'todo OK' sin reportar comando + salida"
+  ],
+
+  "salida_final_del_horizonte": {
+    "carta_marketing_estado_terminal": "blueprint v1.2.0 cumpliendo subsistema-carta v1.0.3: correlation_id obligatorio en 3 publishes. Modelo no-reactivo preservado. Sin cambio de paths ni operaciones funcionales.",
+    "archivos_finales_modificados": [
+      "modules/pizzepos/carta-marketing/module.json",
+      "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "Hermano backend carta-marketing cerrado (3 de 5)"
+    ],
+    "siguiente_natural": "UI carta-marketing (plan paralelo en mismo commit) o carta-scheduler backend (siguiente hermano)."
+  }
+}

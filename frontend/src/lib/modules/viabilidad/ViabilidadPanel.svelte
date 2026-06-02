@@ -22,8 +22,6 @@
   let activeView: 'browser' | 'detail' = 'browser';
   let selectedViabilidad: any = null;
   let results: any[] = [];
-  let recomendaciones: any[] = [];
-  let historico: any[] = [];
   let summary: any = null;
   let loading = false;
   let error: string | null = null;
@@ -100,20 +98,9 @@
   async function selectViabilidad(id: string) {
     selectedViabilidad = results.find(r => r.id === id);
     if (selectedViabilidad) {
-      // Sin /api/viabilidad/{id} backend; el detalle vive en el expediente mismo.
-      // recomendaciones e historico se quedan vacios — la UI del Detail los
-      // renderizara como vacios. Si en el futuro escandallo persiste un
-      // historico de coste por receta, conectarlo aqui.
-      recomendaciones = [];
-      historico = [];
+      // El detalle (incluidos los caminos) vive en el expediente mismo.
       activeView = 'detail';
     }
-  }
-
-  function implementRecomendacion(_recId: string) {
-    // Sin /api/viabilidad/recomendacion/{id}/implement backend; las
-    // recomendaciones se piden al chat (el LLM las aplica con context).
-    error = 'Las recomendaciones se piden al chat. El agente las aplica con contexto.';
   }
 
   function handleSearch(criteria: any) {
@@ -149,9 +136,7 @@
   {:else if activeView === 'detail'}
     <ViabilidadDetail
       viabilidad={selectedViabilidad}
-      {recomendaciones}
-      {historico}
-      onImplementRecondacion={implementRecomendacion}
+      caminos={selectedViabilidad?.caminos || []}
       onBack={handleBack}
     />
   {/if}

@@ -3,13 +3,14 @@
 
   "id": "carta-digital",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.1.0",
+  "version": "blueprint-1.2.0",
+  "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.1. Path canonico /storage/pizzepos/carta-digital/config.json en TODAS las operaciones (get_config, update_config, get_carta_publica, set_carta_compuesta) reemplazando /carta-digital.json pelado. correlation_id obligatorio en payloads de cartadigital.config.actualizada (update_config) y cartadigital.carta_publica.actualizada (set_carta_compuesta) --garantizado con uuid() si el input no lo trae. eventos_que_escucho:[] preservado --decision A1 del horizonte, el blueprint conserva su modelo no-reactivo cocinado en v1.1.0.",
   "language": "es",
 
   "rol": "Backoffice de la carta publica del cliente. Custodio del archivo de config (branding, dominio publico, opciones) + la carta compuesta final (snapshot listo para servir). NO compone — eso lo hacen los agentes cartadigital-composer / ofertas / reviewer cuando el LLM les delega via agent.execute.request.",
 
   "garantiza": [
-    "Config de carta digital persistida en /carta-digital.json del proyecto.",
+    "Config de carta digital persistida en /storage/pizzepos/carta-digital/config.json del proyecto.",
     "get_config / update_config son CRUD sobre ese archivo.",
     "set_carta_compuesta guarda el snapshot final (compuesto por agentes) listo para servir.",
     "get_carta_publica devuelve el snapshot compuesto tal cual."
@@ -24,7 +25,7 @@
 
   "estado_persistente": {
     "paths_relativos": {
-      "config": "/carta-digital.json"
+      "config": "/storage/pizzepos/carta-digital/config.json"
     },
     "shape_config": "{ _version, _updated_at, branding: {nombre, lema, colores, logo_url, fuente, ...}, dominio_publico, contacto: {telefono, email, web, redes}, opciones_visualizacion, carta_compuesta: {meta, categorias, productos, ofertas, generado_at, generado_por} }"
   },
@@ -45,7 +46,7 @@
       "pseudocodigo": [
         "async get_config(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-digital.json' })",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/storage/pizzepos/carta-digital/config.json' })",
         "  if (raw.status === 404) return { status: 200, data: { _version: '1.0', _updated_at: nowISO(), branding: {}, opciones_visualizacion: {}, carta_compuesta: null } }",
         "  if (raw.status >= 400) return raw",
         "  return { status: 200, data: JSON.parse(raw.content) }"
@@ -60,7 +61,7 @@
         "async update_config(input):",
         "  if (!input.project_id || !input.campos || Object.keys(input.campos).length === 0) return INVALID_INPUT",
         "",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-digital.json' })",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/storage/pizzepos/carta-digital/config.json' })",
         "  if (raw.status >= 400 && raw.status !== 404) return raw",
         "  now = nowISO()",
         "",
@@ -83,7 +84,7 @@
         "    }",
         "    config._updated_at = now",
         "    write_resp = await publishAndWait('fs.write.request', {",
-        "      project_id: input.project_id, path: '/carta-digital.json',",
+        "      project_id: input.project_id, path: '/storage/pizzepos/carta-digital/config.json',",
         "      content: JSON.stringify(config, null, 2), encoding: 'utf-8', atomic: true",
         "    })",
         "    if (write_resp.status >= 400) return write_resp",
@@ -106,13 +107,15 @@
         "    patches.push({ op: 'replace', path: '/_updated_at', value: now })",
         "    config._updated_at = now",
         "    edit_resp = await publishAndWait('fs.edit.request', {",
-        "      project_id: input.project_id, path: '/carta-digital.json',",
+        "      project_id: input.project_id, path: '/storage/pizzepos/carta-digital/config.json',",
         "      patches: patches",
         "    })",
         "    if (edit_resp.status >= 400) return edit_resp",
         "  }",
         "",
-        "  await publish('cartadigital.config.actualizada', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  // Garantizar correlation_id no-vacio --uuid() si input no trae",
+        "  correlation_id_efectivo = input.correlation_id || uuid()",
+        "  await publish('cartadigital.config.actualizada', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
         "  return { status: 200, data: config }"
       ],
       "reglas_clave": [
@@ -128,7 +131,7 @@
       "pseudocodigo": [
         "async get_carta_publica(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-digital.json' })",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/storage/pizzepos/carta-digital/config.json' })",
         "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta_publica', hint: 'aun no hay carta compuesta — el LLM debe delegar a cartadigital-composer primero' }",
         "  if (raw.status >= 400) return raw",
         "  config = JSON.parse(raw.content)",
@@ -145,7 +148,7 @@
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
         "  if (!input.carta_compuesta || typeof input.carta_compuesta !== 'object') return INVALID_INPUT { field: 'carta_compuesta' }",
         "",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-digital.json' })",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/storage/pizzepos/carta-digital/config.json' })",
         "  if (raw.status >= 400 && raw.status !== 404) return raw",
         "  now = nowISO()",
         "",
@@ -163,13 +166,13 @@
         "  if (raw.status === 404) {",
         "    config = { _version: '1.0', _updated_at: now, branding: {}, opciones_visualizacion: {}, carta_compuesta: carta_nueva }",
         "    write_resp = await publishAndWait('fs.write.request', {",
-        "      project_id: input.project_id, path: '/carta-digital.json',",
+        "      project_id: input.project_id, path: '/storage/pizzepos/carta-digital/config.json',",
         "      content: JSON.stringify(config, null, 2), encoding: 'utf-8', atomic: true",
         "    })",
         "    if (write_resp.status >= 400) return write_resp",
         "  } else {",
         "    edit_resp = await publishAndWait('fs.edit.request', {",
-        "      project_id: input.project_id, path: '/carta-digital.json',",
+        "      project_id: input.project_id, path: '/storage/pizzepos/carta-digital/config.json',",
         "      patches: [",
         "        { op: 'replace', path: '/carta_compuesta', value: carta_nueva },",
         "        { op: 'replace', path: '/_updated_at',     value: now }",
@@ -178,7 +181,9 @@
         "    if (edit_resp.status >= 400) return edit_resp",
         "  }",
         "",
-        "  await publish('cartadigital.carta_publica.actualizada', { project_id: input.project_id, generado_at: carta_nueva.generado_at, generado_por: carta_nueva.generado_por, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  // Garantizar correlation_id no-vacio --uuid() si input no trae",
+        "  correlation_id_efectivo = input.correlation_id || uuid()",
+        "  await publish('cartadigital.carta_publica.actualizada', { project_id: input.project_id, generado_at: carta_nueva.generado_at, generado_por: carta_nueva.generado_por, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
         "  return { status: 200, data: carta_nueva }"
       ],
       "reglas_clave": [

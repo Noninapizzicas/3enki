@@ -6,7 +6,7 @@
  * Persiste cambios a disco en cartas JSON
  *
  * Emite: producto.creado, producto.actualizado, producto.eliminado, catalogo.actualizado
- * Consume: carta.generada, menu.generado, menu.validado
+ * Consume: carta.actualizada, carta.editada, carta.borrada, tarifas.config.actualizada (v4.0.0 subsistema-carta)
  */
 
 const fs = require('fs').promises;
@@ -18,7 +18,7 @@ class ProductosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'productos';
-    this.version = '3.0.0';
+    this.version = '4.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -27,7 +27,10 @@ class ProductosModule extends BaseModule {
     // Estado en memoria - por proyecto
     this.productosPerProject = new Map(); // project_id -> Map<producto_id, producto>
     this.categoriasPerProject = new Map(); // project_id -> Map<categoria_id, categoria>
-    this.menusPendientes = new Map(); // menu_id -> { project_id, productos_draft }
+    this.menusPendientes = new Map(); // menu_id -> { project_id, productos_draft } (legacy: ya no se popula en v4; lo leen health/stats)
+    // v4.0.0 (subsistema-carta): cache del mapping canal->carta_id por proyecto desde tarifas.config.actualizada.
+    // Postura C: solo cachea. NO expone tool de resolucion --los consumers (comandero/pedidos) hacen RESOLVER_CARTA.
+    this.mappingCanalesPerProject = new Map(); // project_id -> { general, mesa, telefono, llevar, glovo, whatsapp, llevadoo }
 
     // Rutas de storage por proyecto (project_id -> base_path/storage/pizzepos)
     this.storageSection = 'pizzepos';
@@ -153,6 +156,7 @@ class ProductosModule extends BaseModule {
     this.productosPerProject.clear();
     this.categoriasPerProject.clear();
     this.menusPendientes.clear();
+    this.mappingCanalesPerProject.clear();
     this.projectPaths.clear();
     for (const [, pending] of this.pendingProjectRequests) {
       clearTimeout(pending.timeout);
@@ -192,6 +196,21 @@ class ProductosModule extends BaseModule {
         }
       } catch (err) {
         this.logger.warn('productos.auto_load.failed', { project_id, error: err.message });
+      }
+
+      // v4.0.0 (subsistema-carta): solicitar snapshot inicial de tarifas para hidratar el mapping canal->carta_id.
+      // Fire-and-forget --si tarifas no responde, el mapping queda vacio y se hidratara cuando tarifas publique
+      // tarifas.config.actualizada por cambio.
+      const correlation_id = event?.metadata?.correlationId || crypto.randomUUID();
+      try {
+        await this.eventBus.publish('tarifas.config.solicitada', {
+          project_id,
+          tipo: 'snapshot',
+          correlation_id,
+          timestamp: new Date().toISOString()
+        });
+      } catch (err) {
+        this.logger.warn('tarifas.config.solicitada.publish_failed', { project_id, error: err?.message });
       }
     }
   }
@@ -248,116 +267,11 @@ class ProductosModule extends BaseModule {
   // Event Handlers
   // ==========================================
 
-  async onMenuGenerado(event) {
-    const eventData = event?.data || event?.payload || event;
-    const correlationId = event?.metadata?.correlationId;
-    const { menu_id, project_id, productos, categorias, ingredientes_catalogo, source } = eventData;
-    const start_time = Date.now();
-
-    // Skip events from disk_load (we already loaded products directly)
-    if (source === 'disk_load') {
-      this.logger.debug('menu.generado.skipped_disk_load', { project_id, menu_id });
-      return;
-    }
-
-    this.logger.info('menu.generado.received', {
-      menu_id,
-      project_id,
-      productos_count: productos?.length || 0,
-      categorias_count: categorias?.length || 0,
-      ingredientes_count: ingredientes_catalogo?.length || 0,
-      correlation_id: correlationId
-    });
-
-    try {
-      this.menusPendientes.set(menu_id, {
-        project_id: project_id || null,
-        productos: productos || [],
-        categorias: categorias || [],
-        received_at: new Date().toISOString()
-      });
-
-      this.logger.info('menu.productos_guardados', {
-        menu_id,
-        project_id,
-        productos_count: productos?.length || 0,
-        estado: 'pendiente_validacion',
-        correlation_id: correlationId,
-        duration: Date.now() - start_time
-      });
-
-    } catch (error) {
-      this.logger.error('menu.generado.error', {
-        menu_id,
-        project_id,
-        error: error.message,
-        correlation_id: correlationId
-      });
-
-      this.metrics?.increment?.('producto.errors.total', 1, { operation: 'menu_generado' });
-    }
-  }
-
-  async onMenuValidado(event) {
-    const eventData = event?.data || event?.payload || event;
-    const correlationId = event?.metadata?.correlationId;
-    const { menu_id, correcciones } = eventData;
-    const start_time = Date.now();
-
-    this.logger.info('menu.validado.received', {
-      menu_id,
-      correcciones_count: correcciones ? correcciones.length : 0,
-      correlation_id: correlationId
-    });
-
-    try {
-      const menuPendiente = this.menusPendientes.get(menu_id);
-      if (!menuPendiente) {
-        this.logger.warn('menu.validado.not_found', {
-          menu_id,
-          correlation_id: correlationId
-        });
-        return;
-      }
-
-      let { project_id, productos, categorias } = menuPendiente;
-
-      if (correcciones && correcciones.length > 0) {
-        productos = this.applyCorrections(productos, correcciones);
-      }
-
-      const stats = await this.syncCatalogo(project_id, menu_id, productos, categorias, correlationId);
-
-      this.menusPendientes.delete(menu_id);
-
-      this.metrics?.increment?.('catalogo.actualizado.total');
-      this.metrics?.timing?.('catalogo.sync.duration', Date.now() - start_time);
-      this.metrics?.gauge?.('producto.activos.count', this.getProductos(project_id).size);
-
-      await this.publishCatalogoActualizado(project_id, menu_id, stats, Date.now() - start_time, correlationId);
-
-      // Persist updated catalog to disk
-      await this.persistCatalog(project_id);
-
-      this.logger.info('catalogo.sincronizado', {
-        menu_id,
-        project_id,
-        estadisticas: stats,
-        correlation_id: correlationId,
-        duration: Date.now() - start_time
-      });
-
-    } catch (error) {
-      this.logger.error('menu.validado.error', {
-        menu_id,
-        error: error.message,
-        stack: error.stack,
-        correlation_id: correlationId
-      });
-
-      this.metrics?.increment?.('producto.errors.total', 1, { operation: 'menu_validado' });
-    }
-  }
+  // v4.0.0 (subsistema-carta): handlers onMenuGenerado y onMenuValidado ELIMINADOS (zona 1 = drift).
+  // Auditoria F0 confirmo que solo productos los consumia (sin terceros). El catalogo se sincroniza
+  // ahora SOLO desde zona 3: carta.actualizada/editada (onCartaGenerada), carta.borrada (onCartaBorrada)
+  // y tarifas.config.actualizada (onTarifasConfigActualizada). menusPendientes queda vestigial (lo leen
+  // health/stats; siempre 0 al no poblarse).
 
 
   // ==========================================
@@ -370,15 +284,19 @@ class ProductosModule extends BaseModule {
    * Esto cierra la brecha: antes solo toolExportToPOS propagaba cambios.
    */
   async onCartaGenerada(event) {
-    const carta = event?.data || event?.payload || event;
+    // v4.0.0 (subsistema-carta): el payload canonico de carta.actualizada/editada es
+    //   { project_id, carta: <envelope meta+categorias+productos>, correlation_id, ... }.
+    // Compat: si event.data ya ES la carta (shape antiguo con meta al root), se usa tal cual.
+    const data = event?.data || event?.payload || event;
+    const carta = data?.carta || data;
     if (!carta?.meta?.id || !carta?.productos) {
-      this.logger.debug('carta.generada.ignored', { reason: 'no meta.id or productos' });
+      this.logger.debug('carta.evento.ignored', { reason: 'no carta.meta.id or carta.productos' });
       return;
     }
 
-    const project_id = carta.project_id;
+    const project_id = data?.project_id || carta.project_id;
     if (!project_id) {
-      this.logger.warn('carta.generada.no_project', { carta_id: carta.meta.id });
+      this.logger.warn('carta.evento.no_project', { carta_id: carta.meta.id });
       return;
     }
 
@@ -448,6 +366,113 @@ class ProductosModule extends BaseModule {
         correlation_id: correlationId
       });
     }
+  }
+
+  // ==========================================
+  // carta.borrada — soft-delete (subsistema-carta zona 3)
+  // ==========================================
+
+  /**
+   * Recibe carta.borrada (carta archivada por carta-manager.delete).
+   * Payload canonico: { project_id, carta: <envelope con meta.estado='archivada'>, correlation_id, motivo? }.
+   * El consumer saca los productos de esa carta de su catalogo activo (los marca activo:false).
+   * No borra del disco --la carta sigue consultable por carta.get (soft-delete, contrato subsistema-carta).
+   */
+  async onCartaBorrada(event) {
+    const data = event?.data || event?.payload || event;
+    const carta = data?.carta || data;
+    if (!carta?.meta?.id) {
+      this.logger.debug('carta.borrada.ignored', { reason: 'no carta.meta.id' });
+      return;
+    }
+    const project_id = data?.project_id || carta.project_id;
+    if (!project_id) {
+      this.logger.warn('carta.borrada.no_project', { carta_id: carta.meta.id });
+      return;
+    }
+    const correlationId = event?.metadata?.correlationId || data?.correlation_id || crypto.randomUUID();
+    const start_time = Date.now();
+
+    try {
+      const productosMap = this.getProductos(project_id);
+      const ids = Array.isArray(carta.productos) ? carta.productos.map(p => p.id) : [];
+      let desactivados = 0;
+      for (const id of ids) {
+        const prod = productosMap.get(id);
+        if (prod && prod.activo !== false) {
+          prod.activo = false;
+          prod.updated_at = new Date().toISOString();
+          productosMap.set(id, prod);
+          desactivados++;
+          await this.publishProductoActualizado(project_id, id, { activo: false }, correlationId);
+        }
+      }
+
+      if (desactivados > 0) {
+        await this.persistCatalog(project_id);
+        const stats = { productos_desactivados: desactivados };
+        await this.publishCatalogoActualizado(project_id, carta.meta.id, stats, Date.now() - start_time, correlationId);
+      }
+
+      this.logger.info('carta.borrada.applied', {
+        carta_id: carta.meta.id,
+        project_id,
+        productos_desactivados: desactivados,
+        correlation_id: correlationId,
+        duration: Date.now() - start_time
+      });
+    } catch (error) {
+      this.logger.error('carta.borrada.error', {
+        carta_id: carta.meta.id,
+        project_id,
+        error: error.message,
+        correlation_id: correlationId
+      });
+    }
+  }
+
+  // ==========================================
+  // tarifas.config.actualizada — cache mapping canal->carta_id (subsistema-carta)
+  // ==========================================
+
+  /**
+   * Recibe tarifas.config.actualizada (snapshot del estado de tarifas).
+   * Payload canonico: { project_id, tipo, config: { general, canales: {...}, variantes }, correlation_id }.
+   * Postura C: productos solo cachea el mapping canal->carta_id en memoria. NO expone tool de resolucion
+   * --los consumers (comandero/pedidos) hacen RESOLVER_CARTA por su cuenta e invocan productos.list({carta_id}).
+   */
+  async onTarifasConfigActualizada(event) {
+    const data = event?.data || event?.payload || event;
+    const project_id = data?.project_id;
+    if (!project_id) {
+      this.logger.debug('tarifas.config.actualizada.no_project_id', {});
+      return;
+    }
+    const config = data?.config;
+    if (!config) {
+      this.logger.debug('tarifas.config.actualizada.no_config', { project_id });
+      return;
+    }
+    const correlation_id = event?.metadata?.correlationId || data?.correlation_id || crypto.randomUUID();
+    const canales = config.canales || {};
+    const mapping = {
+      general: config.general || null,
+      mesa: canales.mesa || null,
+      telefono: canales.telefono || null,
+      llevar: canales.llevar || null,
+      glovo: canales.glovo || null,
+      whatsapp: canales.whatsapp || null,
+      llevadoo: canales.llevadoo || null
+    };
+    this.mappingCanalesPerProject.set(project_id, mapping);
+    this.logger.info('tarifas.config.applied', {
+      project_id,
+      tipo: data?.tipo || 'unknown',
+      mapping_general: mapping.general,
+      canales_con_override: Object.keys(mapping).filter(k => k !== 'general' && mapping[k] !== null),
+      correlation_id
+    });
+    // No emite publish propio --productos solo cachea internamente.
   }
 
   // ==========================================
@@ -966,7 +991,7 @@ class ProductosModule extends BaseModule {
 
   /**
    * Persiste el catálogo actual a disco como carta JSON.
-   * Guarda productos y categorías en {storagePath}/cartas/catalogo_activo.json
+   * Guarda productos y categorías en {storagePath}/productos/catalogo_activo.json (namespace propio, v4.0.0)
    */
   async persistCatalog(project_id) {
     let storagePath;
@@ -977,11 +1002,13 @@ class ProductosModule extends BaseModule {
       return;
     }
 
-    const cartasDir = path.join(storagePath, 'cartas');
-    const catalogPath = path.join(cartasDir, 'catalogo_activo.json');
+    // v4.0.0 (subsistema-carta): productos escribe su catalogo en su PROPIO namespace.
+    // Solo carta-manager escribe a /storage/pizzepos/cartas/ (contrato D1).
+    const productosDir = path.join(storagePath, 'productos');
+    const catalogPath = path.join(productosDir, 'catalogo_activo.json');
 
     try {
-      await fs.mkdir(cartasDir, { recursive: true });
+      await fs.mkdir(productosDir, { recursive: true });
 
       const productosMap = this.getProductos(project_id);
       const categoriasMap = this.getCategorias(project_id);
@@ -1158,17 +1185,8 @@ class ProductosModule extends BaseModule {
         categorias: result.categorias
       });
 
-      // Emit menu.generado so categorias module gets populated from disk data
-      if (result.categorias > 0 || result.productos > 0) {
-        const allCategorias = Array.from(this.getCategorias(project_id).values());
-        const allProductos = Array.from(this.getProductos(project_id).values());
-        await this._publicarEvento('menu.generado', {
-          project_id,
-          categorias: allCategorias,
-          productos: allProductos,
-          source: 'disk_load'
-        });
-      }
+      // v4.0.0 (subsistema-carta): re-emit de menu.generado eliminado (zona 1 = drift).
+      // categorias se popula via carta.actualizada/editada (zona 3), no via menu.generado.
 
       return result;
     } catch (error) {

@@ -1,0 +1,402 @@
+{
+  "_doc": "Plan ejecutable de carta-scheduler backend. Bumpea blueprint v1.1.0 a v1.2.0 aplicando subsistema-carta v1.0.4. Dos cambios: (a) paths /carta-scheduler-reglas.json + /carta-scheduler-pendientes.json -> /storage/pizzepos/carta-scheduler/reglas.json + pendientes.json (D1 namespace + subdir por modulo, coherente con carta-impresion y carta-digital); (b) correlation_id obligatorio en los 5 publishes canonicos de dominio (regla.creada, regla.actualizada, regla.eliminada, cambio.aplicado, cambio.rechazado). NO modifica modelo no-reactivo (A1). NO toca artefactos extras (pendientes-timer.js, project-storage.js, POC_FINDINGS.md) --el cron worker es otro modulo separado fuera de scope. NO declara requires_consumer (no hay consumer real). Pseudocodigo respeta pseudocodigo-estilo.contract.",
+
+  "id": "aplicar-subsistema-carta-a-carta-scheduler",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "bump_blueprint_backend",
+
+  "documentos_hermanos": {
+    "contrato_canonico": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.4",
+      "relacion": "Bumpeado en el mismo commit. v1.0.4 confirma patron A1 en 4 hermanos verificados."
+    },
+    "ui_separada": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-carta-scheduler.json",
+      "estado": "cocinado en paralelo (mismo commit)",
+      "relacion": "UI con Panel router activeView reglas|pendientes."
+    }
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/persistence.contract.json"
+  ],
+
+  "dependencias_explicitas": [],
+
+  "por_que_existe": {
+    "que_cierra": "carta-scheduler v1.1.0 arrastra 2 drifts contra subsistema-carta v1.0.4: (a) paths sin namespace pizzepos ni subdir por modulo; (b) correlation_id opcional en 5 publishes canonicos.",
+    "que_no_cierra": "Cero cambio en las 7 operaciones funcionales (crear_regla, listar_reglas, eliminar_regla, detectar_conflictos, proximos_cambios, confirmar, rechazar). NO toca artefactos extras (pendientes-timer.js, project-storage.js, POC_FINDINGS.md) --son el cron worker JS separado, fuera del scope del blueprint y de este plan.",
+    "alcance": "Editar SOLO module.json y carta-scheduler.blueprint.json."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/carta-scheduler/module.json",
+      "version_actual": "1.1.0",
+      "paths_persistencia_actuales": [
+        "data/projects/{slug}/carta-scheduler-reglas.json",
+        "data/projects/{slug}/carta-scheduler-pendientes.json"
+      ],
+      "lo_que_debe_quedar_tras_el_plan": {
+        "version": "1.2.0",
+        "_v1_2_changelog": "presente",
+        "config_persistence_paths": [
+          "data/projects/{slug}/storage/pizzepos/carta-scheduler/reglas.json",
+          "data/projects/{slug}/storage/pizzepos/carta-scheduler/pendientes.json"
+        ]
+      }
+    },
+    {
+      "pieza": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+      "version_actual": "blueprint-1.1.0",
+      "operaciones": ["crear_regla", "listar_reglas", "eliminar_regla", "detectar_conflictos", "proximos_cambios", "confirmar", "rechazar"],
+      "publishes_canonicos_de_dominio_actuales": [
+        "carta-scheduler.regla.creada (en crear_regla)",
+        "carta-scheduler.regla.actualizada (si la operacion actualizar_regla existe --verificar)",
+        "carta-scheduler.regla.eliminada (en eliminar_regla)",
+        "carta-scheduler.cambio.aplicado (en confirmar)",
+        "carta-scheduler.cambio.rechazado (en rechazar)"
+      ],
+      "lo_que_debe_quedar_tras_el_plan": {
+        "version_blueprint": "blueprint-1.2.0",
+        "todos_los_paths_apuntan_a": "/storage/pizzepos/carta-scheduler/reglas.json y /pendientes.json",
+        "los_5_publishes_llevan_correlation_id_efectivo": true,
+        "eventos_que_escucho_PRESERVADO_vacio": true
+      }
+    },
+    {
+      "pieza": "modules/pizzepos/carta-scheduler/pendientes-timer.js + project-storage.js + POC_FINDINGS.md",
+      "rol": "artefactos del cron worker hipotetico --NO se tocan en este plan"
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio",
+      "modules/pizzepos/carta-scheduler/module.json declara version='1.1.0'",
+      "carta-scheduler.blueprint.json declara version='blueprint-1.1.0' con 7 operaciones",
+      "arquitectura/decisiones/_contratos/subsistema-carta.contract.json declara version='1.0.4'",
+      "modules/pizzepos/carta-scheduler/pendientes-timer.js EXISTE (artefacto extra, no se toca)",
+      "modules/pizzepos/carta-scheduler/project-storage.js EXISTE (artefacto extra, no se toca)",
+      "data/projects/* --si hay archivos en path viejo (carta-scheduler-reglas.json o carta-scheduler-pendientes.json sueltos), reportar al humano antes de F3 (no se migra automatico)",
+      "npm run validate:ci PASS antes de empezar"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones del contrato subsistema-carta v1.0.4",
+      "A1 preservado: blueprint sigue no-reactivo. El cron worker JS (pendientes-timer.js o futuro modulo wireado) es OTRO scope --no se toca en este plan.",
+      "pseudocodigo-estilo: sin spread, sin Object.assign",
+      "Las 7 operaciones funcionales son correctas y NO se modifican --solo se ajustan paths + correlation_id"
+    ],
+    "no_toco_esta_sesion": [
+      "pendientes-timer.js (cron worker JS separado, fuera de scope)",
+      "project-storage.js (helper JS del cron worker)",
+      "POC_FINDINGS.md (notas POC)",
+      "Cualquier otro modulo del subsistema o del POS",
+      "arquitectura/decisiones/* (cero modificacion adicional --el bump v1.0.4 ya esta en el commit)",
+      "schemas, validators",
+      "data/projects/*/carta-scheduler-*.json (cero migracion de datos --reportar si los hay)",
+      "scripts/validate-all.js, drift-baseline.json",
+      "CLAUDE.md"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_paths_canonicos_namespace_subdir",
+      "decision": "Nuevo path: data/projects/{slug}/storage/pizzepos/carta-scheduler/reglas.json + .../pendientes.json. Subdir por modulo (coherente con carta-impresion, carta-digital).",
+      "no_reabrir_sin": "decision arquitectonica nueva"
+    },
+    {
+      "id": "D2_a1_preservado",
+      "decision": "eventos_que_escucho:[] preservado (A1). El cron worker JS separado es quien escuchara scheduler.job.triggered cuando se implemente --no este blueprint.",
+      "no_reabrir_sin": "decision diferente"
+    },
+    {
+      "id": "D3_correlation_id_obligatorio_5_publishes",
+      "decision": "correlation_id_efectivo (uuid si input no trae) en los 5 publishes canonicos de dominio: regla.creada (crear_regla), regla.actualizada (si operacion actualizar_regla existe --verificar en F2.op0), regla.eliminada (eliminar_regla), cambio.aplicado (confirmar), cambio.rechazado (rechazar).",
+      "no_reabrir_sin": "decision diferente sobre origen"
+    },
+    {
+      "id": "D4_no_requires_consumer",
+      "decision": "Los 5 eventos publicados NO declaran requires_consumer (no hay consumer real --leccion TP1). Cuando el cron worker llegue, podra ser consumer de regla.creada/actualizada/eliminada para refrescar su cache de reglas activas; pero ese horizonte es separado.",
+      "no_reabrir_sin": "consumer real"
+    },
+    {
+      "id": "D5_no_amplia_operaciones",
+      "decision": "Las 7 operaciones existentes (crear_regla, listar_reglas, eliminar_regla, detectar_conflictos, proximos_cambios, confirmar, rechazar) son suficientes. NO se anyaden operaciones nuevas (listar_pendientes implicito --la UI puede leer el archivo directamente principio 6 ui-frontend-blueprint).",
+      "no_reabrir_sin": "necesidad operativa concreta"
+    },
+    {
+      "id": "D6_no_se_migran_archivos",
+      "decision": "Cero migracion de carta-scheduler-reglas.json + carta-scheduler-pendientes.json existentes en path viejo. Fede REPORTA si los hay.",
+      "no_reabrir_sin": "OK explicito"
+    },
+    {
+      "id": "D7_bump_minor",
+      "decision": "Bump v1.1.0 -> v1.2.0 (minor). Cambio de path es breaking del modelo de persistencia pero archivos legacy se mantienen.",
+      "no_reabrir_sin": "decision distinta"
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Bump module.json + changelog",
+      "esfuerzo_horas": 0.3,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1_bump_version",
+          "pseudocodigo": [
+            "Edit module.json",
+            "old: \"version\": \"1.1.0\"",
+            "new: \"version\": \"1.2.0\""
+          ]
+        },
+        {
+          "id": "F1.op2_changelog",
+          "pseudocodigo": [
+            "Edit anyadiendo:",
+            "  \"_v1_2_changelog\": \"v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.4. Dos cambios: (a) paths /carta-scheduler-reglas.json + /carta-scheduler-pendientes.json -> /storage/pizzepos/carta-scheduler/reglas.json + pendientes.json (D1 namespace + subdir por modulo); (b) correlation_id obligatorio en los 5 publishes canonicos de dominio (regla.creada, regla.actualizada, regla.eliminada, cambio.aplicado, cambio.rechazado) via correlation_id_efectivo. NO modifica las 7 operaciones funcionales ni eventos_que_escucho ([] preservado --A1). NO toca artefactos extras (pendientes-timer.js, project-storage.js).\""
+          ]
+        },
+        {
+          "id": "F1.op3_paths",
+          "pseudocodigo": [
+            "Edit config.persistence.paths:",
+            "old: [\"data/projects/{slug}/carta-scheduler-reglas.json\", \"data/projects/{slug}/carta-scheduler-pendientes.json\"]",
+            "new: [\"data/projects/{slug}/storage/pizzepos/carta-scheduler/reglas.json\", \"data/projects/{slug}/storage/pizzepos/carta-scheduler/pendientes.json\"]"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-scheduler/module.json"]
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Bump blueprint v1.2.0 con paths canonicos + correlation_id_efectivo en 5 publishes",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op0_inventario_publishes",
+          "descripcion": "Releer blueprint y listar exactamente que publishes existen",
+          "pseudocodigo": [
+            "Read blueprint completo.",
+            "grep -nE 'publish\\(' modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+            "Para cada publish detectado:",
+            "  - Verificar nombre del evento",
+            "  - Verificar operacion contenedora",
+            "  - Verificar si correlation_id se pasa (deberia ser opcional hoy)",
+            "Lista esperada (5): regla.creada (crear_regla), regla.actualizada (si existe op actualizar_regla, sino solo 4), regla.eliminada (eliminar_regla), cambio.aplicado (confirmar), cambio.rechazado (rechazar).",
+            "Reportar al humano el inventario exacto antes de continuar (puede que hayan menos de 5 publishes si actualizar_regla no es operacion separada)."
+          ]
+        },
+        {
+          "id": "F2.op1_bump_version_blueprint",
+          "pseudocodigo": [
+            "Edit blueprint",
+            "old: \"version\": \"blueprint-1.1.0\"",
+            "new: \"version\": \"blueprint-1.2.0\""
+          ]
+        },
+        {
+          "id": "F2.op2_changelog_blueprint",
+          "pseudocodigo": [
+            "Edit anyadiendo tras version:",
+            "  \"_v1_2_changelog\": \"v1.2.0 (2026-06-01): aplica subsistema-carta v1.0.4. Paths canonicos /storage/pizzepos/carta-scheduler/reglas.json + pendientes.json en las 7 operaciones reemplazando /carta-scheduler-reglas.json + /carta-scheduler-pendientes.json pelados. correlation_id_efectivo obligatorio en los publishes canonicos de dominio. eventos_que_escucho:[] preservado (A1).\""
+          ]
+        },
+        {
+          "id": "F2.op3_actualizar_estado_persistente",
+          "pseudocodigo": [
+            "Edit estado_persistente.paths_relativos:",
+            "  reglas: '/carta-scheduler-reglas.json' -> '/storage/pizzepos/carta-scheduler/reglas.json'",
+            "  pendientes: '/carta-scheduler-pendientes.json' -> '/storage/pizzepos/carta-scheduler/pendientes.json'"
+          ]
+        },
+        {
+          "id": "F2.op4_cambiar_paths_pseudocodigos",
+          "descripcion": "Reemplazar paths en las 7 operaciones",
+          "pseudocodigo": [
+            "Edit con replace_all:",
+            "  old: '/carta-scheduler-reglas.json'",
+            "  new: '/storage/pizzepos/carta-scheduler/reglas.json'",
+            "Edit con replace_all:",
+            "  old: '/carta-scheduler-pendientes.json'",
+            "  new: '/storage/pizzepos/carta-scheduler/pendientes.json'",
+            "VERIFICAR con grep:",
+            "  grep -c \"'/carta-scheduler-reglas.json'\" carta-scheduler.blueprint.json --debe ser 0",
+            "  grep -c \"'/carta-scheduler-pendientes.json'\" --debe ser 0"
+          ]
+        },
+        {
+          "id": "F2.op5_correlation_id_efectivo_en_publishes",
+          "descripcion": "Para cada publish canonico de dominio identificado en F2.op0, insertar correlation_id_efectivo",
+          "pseudocodigo": [
+            "Para cada operacion que publica (crear_regla, eliminar_regla, confirmar, rechazar, y actualizar_regla si existe):",
+            "  Localizar el publish.",
+            "  Insertar al INICIO de la operacion (tras validacion INVALID_INPUT, antes del fs.read):",
+            "    correlation_id_efectivo = input.correlation_id || uuid()",
+            "  Modificar el publish para usar correlation_id_efectivo:",
+            "    correlation_id: correlation_id_efectivo",
+            "Aplicar a las 4-5 operaciones que publican (segun inventario F2.op0)."
+          ]
+        },
+        {
+          "id": "F2.op6_verificar",
+          "pseudocodigo": [
+            "Read blueprint entero.",
+            "Verificaciones:",
+            "  - version blueprint-1.2.0",
+            "  - _v1_2_changelog existe",
+            "  - grep -c 'carta-scheduler-(reglas|pendientes).json' devuelve 0 (paths viejos)",
+            "  - grep -c '/storage/pizzepos/carta-scheduler/' devuelve >= 7 (paths nuevos en operaciones)",
+            "  - grep -c 'correlation_id_efectivo' devuelve >= 4 (segun inventario F2.op0)",
+            "  - eventos_que_escucho sigue [] (A1)",
+            "  - operaciones contiene las 7 originales",
+            "  - JSON valido"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json"]
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "validate:ci",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1",
+          "pseudocodigo": [
+            "cd raiz",
+            "npm run validate:ci",
+            "esperado: PASS sin drift NUEVO"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "estado_terminal": "verde"
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Commit + push",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_status",
+          "pseudocodigo": ["git status", "solo 2 archivos del scope"]
+        },
+        {
+          "id": "F4.op2_commit",
+          "pseudocodigo": [
+            "git add (especificos)",
+            "git commit:",
+            "  feat(carta-scheduler): bump blueprint v1.2.0 --paths canonicos + correlation_id obligatorio",
+            "",
+            "  Aplica subsistema-carta v1.0.4. Dos cambios:",
+            "  (a) paths /carta-scheduler-(reglas|pendientes).json -> /storage/pizzepos/",
+            "      carta-scheduler/(reglas|pendientes).json (D1 namespace + subdir).",
+            "  (b) correlation_id obligatorio en publishes canonicos de dominio.",
+            "",
+            "  A1 preservado (eventos_que_escucho:[]). Las 7 operaciones funcionales",
+            "  preservadas. NO toca artefactos extras (pendientes-timer.js, project-storage.js,",
+            "  POC_FINDINGS.md --el cron worker es otro scope).",
+            "",
+            "  Plan: aplicar-subsistema-carta-a-carta-scheduler.json"
+          ]
+        },
+        {
+          "id": "F4.op3_push",
+          "pseudocodigo": ["git push -u origin <rama>"]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F1", "F2", "F3"],
+      "salida_esperada": "PASS"
+    },
+    {
+      "id": "CC2_jq",
+      "comando": "jq . module.json > /dev/null && jq . carta-scheduler.blueprint.json > /dev/null && echo OK",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC3_paths_viejos_cero",
+      "comando": "grep -c \"'/carta-scheduler-\" modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json || echo 0",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "0"
+    },
+    {
+      "id": "CC4_correlation_id_efectivo",
+      "comando": "grep -c 'correlation_id_efectivo' modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": ">= 4"
+    },
+    {
+      "id": "CC5_eventos_que_escucho_vacio",
+      "comando": "jq '.eventos_que_escucho' modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "[]"
+    },
+    {
+      "id": "CC6_git_scope",
+      "comando": "git status --short",
+      "ejecutar_tras": ["F4.op1"],
+      "verificar": "solo 2 archivos"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Tocar pendientes-timer.js (cron worker JS separado)",
+    "Tocar project-storage.js (helper JS del cron worker)",
+    "Tocar POC_FINDINGS.md (notas POC)",
+    "Anyadir eventos_que_escucho (A1)",
+    "Declarar requires_consumer en publishes",
+    "Modificar las 7 operaciones funcionales mas alla de correlation_id_efectivo + paths",
+    "Anyadir operaciones nuevas",
+    "Tocar otros modulos",
+    "Modificar arquitectura/decisiones/* (bump v1.0.4 ya esta en commit)",
+    "Migrar datos en disco",
+    "Crear PR sin OK",
+    "git add . o git add -A",
+    "Saltar OK humano entre fases",
+    "Decir 'todo OK' sin reportar comando + salida"
+  ],
+
+  "salida_final_del_horizonte": {
+    "carta_scheduler_estado_terminal": "blueprint v1.2.0 cumpliendo subsistema-carta v1.0.4: paths canonicos + correlation_id obligatorio. Modelo no-reactivo preservado. Artefactos cron worker JS NO se tocan.",
+    "archivos_finales_modificados": [
+      "modules/pizzepos/carta-scheduler/module.json",
+      "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "Hermano backend carta-scheduler cerrado (4 de 5)"
+    ],
+    "siguiente_natural": "UI carta-scheduler (plan paralelo mismo commit). Despues carta-design (5to y ultimo hermano)."
+  }
+}

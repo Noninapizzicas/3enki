@@ -1,7 +1,8 @@
 {
   "name": "productos",
-  "version": "3.0.0",
-  "description": "Catalogo de productos pizzepos multi-tenant. Cada proyecto tiene su propio catalogo, sincronizado desde menus generados por IA o cartas (carta.actualizada). Persiste a disco como cartas JSON en {project.base_path}/storage/pizzepos/cartas/. Emite producto.{creado,actualizado,eliminado} y catalogo.actualizado para que comandero/pedidos refresquen su cache.",
+  "version": "4.0.0",
+  "_v4_0_changelog": "v4.0.0 (2026-06-01): aplica TP3 del contrato subsistema-carta v1.0.0. Cambios: (a) verificacion --onCartaGenerada ya esperaba carta entera, no requirio cambio; (b) anyade subscribe a tarifas.config.actualizada + handler onTarifasConfigActualizada que cachea mapping canal->carta_id en memoria (postura C, no expone tool de resolucion); (c) elimina subscribes a menu.generado y menu.validado y handlers asociados, mas re-emit interno de menu.generado (auditoria F0: solo productos los consumia, sin terceros); (d) config.persistence.paths cambia a {project.base_path}/storage/pizzepos/productos/catalogo_activo.json (su propio namespace, NO /storage/pizzepos/cartas/ que es de carta-manager); (e) propaga correlation_id en todos los publishes tomando del evento origen o generando con crypto.randomUUID().",
+  "description": "Catalogo de productos pizzepos multi-tenant. Cada proyecto tiene su propio catalogo, sincronizado desde cartas (carta.actualizada/editada/borrada). Lee el dato canonico de cartas desde {project.base_path}/storage/pizzepos/cartas/ (propiedad de carta-manager) y persiste su catalogo activo en su propio namespace {project.base_path}/storage/pizzepos/productos/. Emite producto.{creado,actualizado,eliminado} y catalogo.actualizado para que comandero/pedidos refresquen su cache.",
   "author": "Pizzepos Team",
   "language": "es",
   "main": "index.js",
@@ -10,16 +11,17 @@
       { "event": "producto.creado",       "description": "Nuevo producto creado desde menu generado o carta. project_id top-level + correlation_id + timestamp." },
       { "event": "producto.actualizado",  "description": "Producto actualizado (precio, ingredientes, activo). project_id top-level + correlation_id + timestamp." },
       { "event": "producto.eliminado",    "description": "Producto eliminado del catalogo. project_id top-level + correlation_id + timestamp." },
-      { "event": "catalogo.actualizado",  "description": "Catalogo completo actualizado desde menu o carta. Consumido por pedidos/comandero para refrescar cache. project_id top-level + correlation_id + timestamp." },
-      { "event": "menu.generado",         "description": "Re-emitido tras carga inicial desde disco para que categorias se popule (source=disk_load)." },
-      { "event": "project.get.request",   "description": "Request a project-manager para resolver base_path. Correlacionado por request_id." }
+      { "event": "catalogo.actualizado",  "description": "Catalogo completo actualizado desde carta. Consumido por pedidos/comandero para refrescar cache. project_id top-level + correlation_id + timestamp." },
+      { "event": "project.get.request",   "description": "Request a project-manager para resolver base_path. Correlacionado por request_id." },
+      { "event": "tarifas.config.solicitada", "description": "Solicita snapshot de tarifas en onProjectActivated para hidratar el mapping canal->carta_id. Fire-and-forget." }
     ],
     "subscribes": [
-      { "event": "carta.actualizada",     "handler": "onCartaGenerada",      "description": "Carta creada o modificada — auto-sync al catalogo de productos." },
-      { "event": "menu.generado",         "handler": "onMenuGenerado",       "description": "Menu generado por IA — guarda en menusPendientes esperando validacion." },
-      { "event": "menu.validado",         "handler": "onMenuValidado",       "description": "Menu validado — sync al catalogo y persiste a disco." },
-      { "event": "project.activated",     "handler": "onProjectActivated",   "description": "Cache base_path del proyecto + auto-load cartas desde disco." },
-      { "event": "project.get.response",  "handler": "onProjectGetResponse", "description": "Resolves pending project path resolve por request_id." }
+      { "event": "carta.actualizada",        "handler": "onCartaGenerada",            "description": "Carta creada o modificada (save/restore) — auto-sync al catalogo. Payload con carta entera embebida." },
+      { "event": "carta.editada",            "handler": "onCartaGenerada",            "description": "Carta editada (add/remove/update producto, add_category, update_prices). Mismo handler que carta.actualizada: shape de payload identico (carta entera embebida)." },
+      { "event": "carta.borrada",            "handler": "onCartaBorrada",             "description": "Carta archivada (soft-delete). Productos saca esta carta de su catalogo activo si era la asignada." },
+      { "event": "tarifas.config.actualizada", "handler": "onTarifasConfigActualizada", "description": "Snapshot del estado de tarifas. Productos cachea el mapping canal->carta_id en memoria. No expone tool de resolucion --los consumers hacen el resolve (postura C)." },
+      { "event": "project.activated",        "handler": "onProjectActivated",         "description": "Cache base_path del proyecto + auto-load cartas desde disco + solicita snapshot inicial de tarifas." },
+      { "event": "project.get.response",     "handler": "onProjectGetResponse",       "description": "Resolves pending project path resolve por request_id." }
     ]
   },
   "ui_handlers": [
@@ -223,9 +225,9 @@
       "type": "json-file-per-project",
       "owner": "ProductosModule (Map productosPerProject + Map categoriasPerProject + Map menusPendientes)",
       "paths": [
-        "{project.base_path}/storage/pizzepos/cartas/*.json (read+write)",
-        "{project.base_path}/storage/pizzepos/cartas/catalogo_activo.json (write atomic on update/delete)"
+        "{project.base_path}/storage/pizzepos/productos/catalogo_activo.json (write atomic on update/delete)"
       ],
+      "_nota_lectura_cartas": "Productos LEE el dato canonico de cartas desde {project.base_path}/storage/pizzepos/cartas/ (propiedad de carta-manager) via fs.read.request, pero NO lo declara aqui porque config.persistence.paths describe solo lo que productos POSEE/ESCRIBE.",
       "restart_resilient": true,
       "concurrency": "single-writer-per-project",
       "lost_on_restart": ["menusPendientes", "pendingProjectRequests"]

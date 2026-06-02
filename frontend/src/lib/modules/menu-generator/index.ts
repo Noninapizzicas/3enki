@@ -3,7 +3,6 @@
  *
  * Reemplazado por:
  *   menu-generate (panel de generación)
- *   menu-cartas (panel de listado, usa carta-manager store)
  *
  * Este archivo re-exporta stores actuales por si algún componente legacy lo importa.
  */

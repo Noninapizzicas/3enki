@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-carta/carta-creada.schema.json",
+  "title": "carta.creada — payload schema",
+  "description": "EVENTO PRIVADO entre generador (menu-generator y futuros) y custodio (carta-manager). Zona 1 pre-storage. Solo carta-manager._on_carta_creada debe escucharlo --otros consumers operan sobre carta no persistida y violan P2 del contrato subsistema-carta. Valida el campo data del envelope del bus, no el envelope canonico de events.contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "request_id", "carta", "correlation_id", "timestamp"],
+  "properties": {
+    "project_id": { "$ref": "_common.schema.json#/$defs/project_id" },
+    "request_id": { "$ref": "_common.schema.json#/$defs/request_id" },
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "timestamp": { "$ref": "_common.schema.json#/$defs/timestamp" },
+    "user_id": { "$ref": "_common.schema.json#/$defs/user_id" },
+    "motivo": { "$ref": "_common.schema.json#/$defs/motivo" },
+    "carta": { "$ref": "_common.schema.json#/$defs/carta_envelope" }
+  }
+}

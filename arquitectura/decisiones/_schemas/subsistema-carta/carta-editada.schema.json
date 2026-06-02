@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-carta/carta-editada.schema.json",
+  "title": "carta.editada — payload schema",
+  "description": "Mutacion puntual de carta existente persistida. Publicado por carta-manager en operaciones add_product, remove_product, update_product, add_category, update_prices. El campo operacion identifica que mutacion se aplico. Valida el campo data del envelope del bus.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "carta", "operacion", "correlation_id", "timestamp"],
+  "properties": {
+    "project_id": { "$ref": "_common.schema.json#/$defs/project_id" },
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "timestamp": { "$ref": "_common.schema.json#/$defs/timestamp" },
+    "operacion": { "$ref": "_common.schema.json#/$defs/operacion_carta_editada" },
+    "carta": { "$ref": "_common.schema.json#/$defs/carta_envelope" }
+  }
+}

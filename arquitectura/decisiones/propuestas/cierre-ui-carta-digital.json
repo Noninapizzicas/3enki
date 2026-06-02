@@ -166,7 +166,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "📱 + 'Carta digital' conecta con la realidad: es la carta que el cliente del comerciante ve en su movil. Mas amigable al comerciante que un termino tecnico (PWA).",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "eleccion directa del humano", "cerrada_en": "2026-06-02" }
     },
     {
       "id": "Q2",
@@ -178,7 +178,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "carta-digital es el ultimo eslabon de salida hacia el cliente final --logico despues de tarifas que decide que carta sirve cada canal.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "eleccion directa del humano (orden 6 tras tarifas)", "cerrada_en": "2026-06-02" }
     },
     {
       "id": "Q3",
@@ -191,7 +191,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Coherencia con la UI de carta-manager (mismo patron de tabla con expansion). El comerciante reconoce el patron. Iframe (C) es trabajo de complejidad mayor; se deja como F-extension futura si emerge necesidad.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "eleccion directa del humano (tabla con expansion como carta-manager)", "cerrada_en": "2026-06-02" }
     },
     {
       "id": "Q4",
@@ -204,7 +204,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "A es lo mas pragmatico: el store ya escucha carta.actualizada por otros consumers; comparar timestamps es trivial. El badge ayuda al comerciante a saber que algo se actualizo upstream. NO recompose automatico (preserva A1) --solo info.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "eleccion directa del humano (comparador de timestamps, badge informativo sin recompose auto)", "cerrada_en": "2026-06-02" }
     },
     {
       "id": "Q5",
@@ -220,7 +220,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Frases operativas que el LLM puede procesar sin ambiguedad. Ajustables tras uso real.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "eleccion directa del humano (acepta frases prefill literales)", "cerrada_en": "2026-06-02" }
     }
   ],
 

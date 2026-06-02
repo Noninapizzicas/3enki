@@ -1,7 +1,8 @@
 {
   "_doc": "Manifest del modulo carta-marketing. Blueprint-driven. 4 operaciones: get_perfil, update_perfil, completar_onboarding (delega a agente), actividad (stub hasta integrar agent-observer). Persistencia: marca.json del proyecto.",
   "name": "carta-marketing",
-  "version": "1.1.0",
+  "version": "1.2.0",
+  "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.3. Un solo cambio: correlation_id obligatorio en los 3 publishes canonicos (marketing.perfil.actualizado x2 en update_perfil + marketing.onboarding.completado x1 en completar_onboarding) --garantizado con uuid() si el input no lo trae (D10/P9 del contrato). Cero cambio de paths (ya canonicos /storage/config/marca.json desde v1.1.0). eventos_que_escucho:[] preservado (A1 modelo no-reactivo). NO declara requires_consumer (ningun consumer real --leccion TP1).",
   "description": "Modulo carta-marketing en modo blueprint-driven. Perfil de marca del proyecto + orquestador de agentes de marketing (copywriter, strategist, brand-keeper, onboarding).",
   "language": "es",
   "blueprint_driven": true,

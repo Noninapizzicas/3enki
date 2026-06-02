@@ -3,7 +3,8 @@
 
   "id": "carta-marketing",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.1.0",
+  "version": "blueprint-1.2.0",
+  "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.3. correlation_id obligatorio en los 3 publishes --garantizado con uuid() via correlation_id_efectivo si input no trae. NO cambia paths (ya canonicos). NO modifica operaciones funcionales ni delegacion a agentes.",
   "language": "es",
 
   "rol": "Gestor del perfil de marca del proyecto + orquestador de agentes de marketing. NO genera copy ni estrategia — eso lo hacen marketing-copywriter / strategist / brand-keeper. El blueprint persiste perfil y consulta actividad reciente de los agentes.",
@@ -60,6 +61,7 @@
       "pseudocodigo": [
         "async update_perfil(input):",
         "  if (!input.project_id || !input.campos || Object.keys(input.campos).length === 0) return INVALID_INPUT",
+        "  correlation_id_efectivo = input.correlation_id || uuid()",
         "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/storage/config/marca.json' })",
         "  now = nowISO()",
         "",
@@ -75,7 +77,7 @@
         "      content: JSON.stringify(perfil_inicial, null, 2), encoding: 'utf-8', atomic: true",
         "    })",
         "    if (write_resp.status >= 400) return write_resp",
-        "    await publish('marketing.perfil.actualizado', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "    await publish('marketing.perfil.actualizado', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
         "    return { status: 200, data: perfil_inicial }",
         "  }",
         "",
@@ -101,7 +103,7 @@
         "  })",
         "  if (edit_resp.status >= 400) return edit_resp",
         "",
-        "  await publish('marketing.perfil.actualizado', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  await publish('marketing.perfil.actualizado', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
         "  return { status: 200, data: perfil }"
       ],
       "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
@@ -112,6 +114,7 @@
       "pseudocodigo": [
         "async completar_onboarding(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  correlation_id_efectivo = input.correlation_id || uuid()",
         "  // Delegar al agente marketing-onboarding.",
         "  agent_resp = await publishAndWait('agent.execute.request', {",
         "    request_id: uuid(), correlation_id: input.correlation_id,",
@@ -152,7 +155,7 @@
         "    })",
         "    if (edit_resp.status >= 400) return edit_resp",
         "  }",
-        "  await publish('marketing.onboarding.completado', { project_id: input.project_id, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  await publish('marketing.onboarding.completado', { project_id: input.project_id, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
         "  return { status: 200, data: perfil_propuesto }"
       ],
       "reglas_clave": ["Delegacion al agente onboarding. El agente devuelve perfil propuesto, se persiste con onboarding_completado:true."],

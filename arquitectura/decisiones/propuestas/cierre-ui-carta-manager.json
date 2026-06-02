@@ -228,7 +228,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Prompt abierto respeta la capacidad del LLM de decidir ruta. menu-generator existe precisamente para entradas libres; carta-manager.save es para shape estructurado. El usuario escribe lo que tiene y el LLM rutea.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "prompt abierto, el LLM decide ruta menu-generator|carta-manager", "cerrada_en": "2026-06-02" }
     },
     {
       "id": "Q5",

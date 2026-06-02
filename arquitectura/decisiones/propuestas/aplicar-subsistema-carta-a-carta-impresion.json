@@ -1,4 +1,12 @@
 {
+  "_terminado": {
+    "estado": "terminado",
+    "cerrado_en": "2026-06-01",
+    "rama": "claude/fede-3Qhte",
+    "ejecutado_por": "fede",
+    "commits": ["1d1c7b1", "8212558"],
+    "evidencia": "F1 module.json 1.1.0->1.2.0 + _v1_2_changelog + persistence.paths_proyecto + _doc al path canonico /storage/pizzepos/carta-impresion/. F2 blueprint-1.1.0->blueprint-1.2.0 + estado_persistente.paths_relativos + 12 ocurrencias de pseudocodigo (get, generar, save_html) al path canonico + correlation_id_efectivo (uuid si falta) en los 2 publishes de carta.impresion.lista + eventos_que_escucho:[] PRESERVADO (A1). F3 validate:ci PASS sin drift + test pizzepos__impresion.test.js verde (aislado). F4 git status limpio, remoto al dia, sin PR. D5 no se activo: no habia /cartas-impresion/ en data/projects/* que migrar. Contrato vigente en v1.0.5 (plan cocinado contra v1.0.2; carta-impresion confirmado no-reactivo)."
+  },
   "_doc": "Plan ejecutable JSON del horizonte 'aplicar subsistema-carta a carta-impresion'. Bumpea carta-impresion de blueprint-driven v1.1.0 a v1.2.0 aplicando el contrato subsistema-carta v1.0.2. Dos cambios estructurales pequenyos: (a) paths /cartas-impresion/<carta_id>.{html,meta.json} -> /storage/pizzepos/carta-impresion/<carta_id>.{html,meta.json} (D1 namespace pizzepos); (b) correlation_id obligatorio en payload de carta.impresion.lista (D10/P9). NO hace carta-impresion reactivo (A1 preservado --el blueprint conserva eventos_que_escucho:[] coherente con su diseno cocinado en v1.1.0). NO declara requires_consumer (no hay consumer conocido del evento canonico --leccion TP1). Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
 
   "id": "aplicar-subsistema-carta-a-carta-impresion",

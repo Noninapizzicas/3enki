@@ -907,5 +907,35 @@
       "Comerciante puede ver y operar la asignacion carta+canal sin conocer nombres exactos de tools"
     ],
     "siguiente_natural": "TP7 (badges activacion en carta-manager UI) --requiere que cierre-ui-carta-manager.json este ejecutado primero. TP8 (schemas AJV) preparativo para TP9 (validator). TP9 esperar a que la familia este wireada para no producir falsos positivos. TP11 ritual de limpieza CLAUDE.md cuando todos los TPs activos esten cerrados."
+  },
+
+  "estado": "terminado",
+  "estado_de_ejecucion": {
+    "ejecutado_por": "fede",
+    "rama": "claude/ana-tX6dS",
+    "preguntas_cerradas": { "Q1": "A", "Q2": "A", "Q3": "B", "Q4": "A" },
+    "F1": {
+      "cerrada_en": "2026-06-02",
+      "commit_hash": "1729676",
+      "salida_real": "frontend/src/lib/stores/tarifas.ts creado (solo lectura, suscripciones bus). API fs real (MqttRequestError/items) en vez de res.status literal del pseudocodigo (fiel a D5). Path /storage/pizzepos/cartas/ confirmado canonico (v1.3.0).",
+      "cross_checks": "CC1 validate:ci PASS sin drift; CC3 scope limpio; CC4 sin mutaciones OK; CC6 6 canales OK; type-check 0 errores en tarifas.ts"
+    },
+    "F2": {
+      "cerrada_en": "2026-06-02",
+      "commit_hash": "27859c5",
+      "salida_real": "frontend/src/lib/modules/tarifas/ (manifest+index+Panel+3 zonas). F2.op7 no-op: loader autodescubre por import.meta.glob, definitions.ts no se toca.",
+      "cross_checks": "CC1 validate:ci PASS; CC2 build OK (modulo en bundle); CC3 scope limpio; CC5 prefill=7 (>=6); type-check 0 errores"
+    },
+    "F3": {
+      "cerrada_en": "2026-06-02",
+      "commit_hash": "f5360b1",
+      "salida_real": "frontend/src/routes/[project_id]/tarifas/+page.svelte (LazyShell). Build emite _project_id_/tarifas/_page.svelte.js.",
+      "cross_checks": "CC2 build OK; CC3 scope limpio. Warning cosmetico unused-export panelId identico al hermano RecetasPanel."
+    },
+    "F4": {
+      "cerrada_en": "2026-06-02",
+      "metodo": "review a nivel de codigo (entorno remoto sin navegador/broker). Golden path y edge cases verificados estaticamente contra el codigo. 2 items (reactividad del bus tras mutacion real) quedan para QA manual del humano con npm run dev + proyecto activo.",
+      "cross_checks": "build produccion OK; type-check limpio en todo el modulo"
+    }
   }
 }

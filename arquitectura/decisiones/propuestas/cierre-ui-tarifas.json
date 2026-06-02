@@ -161,7 +161,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Orden secuencial sin huecos. Si emergen modulos nuevos del subsistema-carta, se reorganiza entonces.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "order=5, tras carta-manager", "cerrada_en": "2026-06-02T00:00:00.000Z" }
     },
     {
       "id": "Q3",

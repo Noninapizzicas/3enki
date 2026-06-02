@@ -149,7 +149,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Tarifas es el modulo donde el comerciante decide que carta sirve cada canal --la metafora dinero conecta con la asignacion comercial (canal glovo cobra comision distinta, etc.). Si el usuario prefiere otra metafora, fede aplica esa.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "icono 💰 + label Tarifas", "cerrada_en": "2026-06-02T00:00:00.000Z" }
     },
     {
       "id": "Q2",

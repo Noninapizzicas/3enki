@@ -1,4 +1,12 @@
 {
+  "_terminado": {
+    "estado": "terminado",
+    "cerrado_en": "2026-06-01",
+    "rama": "claude/fede-3Qhte",
+    "ejecutado_por": "fede",
+    "commits": ["3914512", "903cb51"],
+    "evidencia": "F1 module.json 1.1.0->1.2.0 + path canonico /storage/pizzepos/carta-digital/config.json + changelog. F2 blueprint-1.1.0->blueprint-1.2.0 + path canonico en estado_persistente + 8 ocurrencias de pseudocodigo (4 operaciones) + correlation_id_efectivo (uuid si falta) en los 2 publishes (cartadigital.config.actualizada, cartadigital.carta_publica.actualizada) + eventos_que_escucho:[] PRESERVADO (A1). F3 validate:ci PASS sin drift nuevo; sin tests unitarios (blueprint-driven). F4 git status limpio, remoto al dia, sin PR. D6 no se activo: no habia /carta-digital.json en data/projects/* que migrar."
+  },
   "_doc": "Plan ejecutable JSON del horizonte 'aplicar subsistema-carta a carta-digital'. Bumpea carta-digital de blueprint-driven v1.1.0 a v1.2.0 aplicando el contrato subsistema-carta v1.0.1. Cambios estructurales pequenos: (a) path de persistencia /carta-digital.json -> /storage/pizzepos/carta-digital/config.json (D1 namespace pizzepos del contrato); (b) correlation_id obligatorio en payloads de los 2 eventos publicados (cartadigital.config.actualizada + cartadigital.carta_publica.actualizada); (c) actualizar paths de pseudocodigo en las 4 operaciones (get_config, update_config, get_carta_publica, set_carta_compuesta) que apuntan al path viejo. NO hace carta-digital reactivo (A1 cerrada con el usuario --el blueprint conserva eventos_que_escucho:[] coherente con su diseno cocinado en v1.1.0). NO anyade requires_consumer a los eventos publicados (no hay consumer real hoy en el repo --leccion de TP1). NO toca artefactos extra del directorio (cf-worker/, export-cli.js, static-template.js, context.json, prompt.json) que son tooling de deploy de la PWA publica. Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
 
   "id": "aplicar-subsistema-carta-a-carta-digital",

@@ -1,0 +1,751 @@
+{
+  "_doc": "Plan ejecutable JSON del horizonte 'aplicar subsistema-carta a carta-manager'. Bumpea carta-manager.blueprint.json de v1.2.0 a v1.3.0 aplicando las 5 decisiones del contrato subsistema-carta v1.0.0: (a) path canonico /storage/pizzepos/cartas/, (b) payload carta entera en carta.actualizada/editada/borrada, (c) correlation_id obligatorio en los 3 eventos canonicos publicados, (d) auto-promocion primera carta a tarifas.general al final de save, (e) declarar eventos_publicados_que_requieren_consumer en raiz del blueprint. Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json (sin Object.assign, sin rest-spread con omision, verboso explicito).",
+
+  "id": "aplicar-subsistema-carta-a-carta-manager",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "bump_blueprint_backend",
+
+  "documentos_hermanos": {
+    "contrato_canonico": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.0",
+      "relacion": "Contrato que canoniza el camino carta->POS. Este plan ejecuta el TP1 del contrato (bump carta-manager.blueprint a v1.3.0)."
+    },
+    "planes_paralelos_del_horizonte": [
+      {
+        "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-menu-generator.json",
+        "estado": "trabajo_de_fede_pendiente_paralelo",
+        "relacion": "TP2 del contrato. Verificacion de shape de carta.creada + correlation_id en payload + declarar eventos_publicados_que_requieren_consumer en blueprint v8.1 de menu-generator. fede ya tiene este trabajo pendiente paralelo. Indenpendiente de este plan --pueden ejecutarse en cualquier orden o en paralelo."
+      },
+      {
+        "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-productos.json",
+        "estado": "a_cocinar_aparte",
+        "relacion": "TP3 del contrato. Productos v3.0.0 -> v4.0.0 (JS POC2, no blueprint). Acepta payload carta entera, suscribe a tarifas.config.actualizada, elimina suscripciones a menu.generado/menu.validado. Plan aparte porque es JS, no blueprint."
+      }
+    ],
+    "ui_relacionada": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-carta-manager.json",
+      "version": "1.0.0",
+      "relacion": "Plan ejecutable de la UI de carta-manager (frontend). NO se toca en este plan --este es bump del blueprint BACKEND. La UI sigue Postura B (lee, no escribe) coherente con D6 del contrato subsistema-carta."
+    }
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/persistence.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/tools.contract.json",
+    "arquitectura/decisiones/_contratos/errors.contract.json",
+    "arquitectura/decisiones/_contratos/multi-tenancy.contract.json",
+    "arquitectura/decisiones/_contratos/blueprint-eventos-conscientes.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json"
+  ],
+
+  "dependencias_explicitas": [],
+
+  "por_que_existe": {
+    "que_cierra": "El blueprint v1.2.0 de carta-manager arrastra tres drifts ya canonizados como cerrados en subsistema-carta.contract.json: (1) path /cartas/ pelado pierde el namespace pizzepos del modelo multi-vertical; (2) eventos carta.actualizada/editada/borrada publican solo metadatos (carta_id, nombre, version) en lugar de la carta entera --los consumers tienen que hacer round-trip a carta.get; (3) correlation_id ausente en payloads de eventos de dominio (auditoria vieja lo registraba como 'tracing parcial'). Mas dos decisiones nuevas del contrato: auto-promocion primera carta + patron blueprint-eventos-conscientes.",
+    "que_no_cierra": "Este plan NO toca: schemas AJV de los eventos (TP8 del contrato, separado), validator subsistema-carta (TP9, separado), migracion del archivo legacy en raiz (TP5, manual con OK), UI de carta-manager (cierre-ui-carta-manager.json, separado), referencia en CLAUDE.md (TP11, ritual de limpieza al cerrar horizonte). Tampoco toca menu-generator (TP2, paralelo con fede) ni productos (TP3, plan aparte).",
+    "alcance": "Editar SOLO dos archivos: modules/pizzepos/carta-manager/module.json (bump version + changelog + paths) y modules/pizzepos/carta-manager/carta-manager.blueprint.json (5 cambios estructurales del contrato). Verificar validate:ci. Commit + push."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/carta-manager/module.json",
+      "version_actual": "1.2.0",
+      "blueprint_driven": true,
+      "cajones_enabled": true,
+      "config_persistence_paths_actual": [
+        "data/projects/{slug}/cartas/<carta_id>.json",
+        "data/projects/{slug}/cartas/versions/<carta_id>/<timestamp>.json"
+      ],
+      "lo_que_debe_quedar_tras_F1": {
+        "version": "1.3.0",
+        "_v1_3_changelog": "presente con descripcion de los 5 cambios",
+        "config_persistence_paths": [
+          "data/projects/{slug}/storage/pizzepos/cartas/<carta_id>.json",
+          "data/projects/{slug}/storage/pizzepos/cartas/.versions/<carta_id>/<timestamp>.json"
+        ]
+      }
+    },
+    {
+      "pieza": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+      "version_actual": "blueprint-1.2.0",
+      "operaciones_que_publican_eventos_canonicos": [
+        {
+          "operacion": "save",
+          "publica": "carta.actualizada",
+          "shape_actual_payload": "{ project_id, user_id, carta_id, nombre, version, motivo, correlation_id?, timestamp }",
+          "shape_objetivo_payload": "{ project_id, user_id, carta: <objeto_completo>, motivo, correlation_id, timestamp }"
+        },
+        {
+          "operacion": "restore",
+          "publica": "carta.actualizada",
+          "shape_actual_payload": "{ project_id, carta_id, version, motivo: 'restore:...', correlation_id?, timestamp }",
+          "shape_objetivo_payload": "{ project_id, carta: <objeto_completo>, motivo: 'restore:...', correlation_id, timestamp }"
+        },
+        {
+          "operacion": "add_product",
+          "publica": "carta.editada",
+          "shape_actual_payload": "{ project_id, carta_id, version, operacion: 'add_product', producto_id, correlation_id?, timestamp }",
+          "shape_objetivo_payload": "{ project_id, carta: <objeto_completo>, operacion: 'add_product', correlation_id, timestamp }"
+        },
+        {
+          "operacion": "remove_product",
+          "publica": "carta.editada",
+          "shape_actual_payload": "{ project_id, carta_id, version, operacion: 'remove_product', producto_id, correlation_id?, timestamp }",
+          "shape_objetivo_payload": "{ project_id, carta: <objeto_completo>, operacion: 'remove_product', correlation_id, timestamp }"
+        },
+        {
+          "operacion": "update_product",
+          "publica": "carta.editada",
+          "shape_actual_payload": "{ project_id, carta_id, version, operacion: 'update_product', producto_id, correlation_id?, timestamp }",
+          "shape_objetivo_payload": "{ project_id, carta: <objeto_completo>, operacion: 'update_product', correlation_id, timestamp }"
+        },
+        {
+          "operacion": "add_category",
+          "publica": "carta.editada",
+          "shape_actual_payload": "{ project_id, carta_id, version, operacion: 'add_category', categoria_id, correlation_id?, timestamp }",
+          "shape_objetivo_payload": "{ project_id, carta: <objeto_completo>, operacion: 'add_category', correlation_id, timestamp }"
+        },
+        {
+          "operacion": "update_prices",
+          "publica": "carta.editada",
+          "shape_actual_payload": "{ project_id, carta_id, version, operacion: 'update_prices', count, correlation_id?, timestamp }",
+          "shape_objetivo_payload": "{ project_id, carta: <objeto_completo>, operacion: 'update_prices', correlation_id, timestamp }"
+        },
+        {
+          "operacion": "delete",
+          "publica": "carta.borrada",
+          "shape_actual_payload": "{ project_id, carta_id, motivo, correlation_id?, timestamp }",
+          "shape_objetivo_payload": "{ project_id, carta: <objeto_completo_con_estado_archivada>, motivo, correlation_id, timestamp }"
+        }
+      ],
+      "paths_actuales_en_pseudocodigos": "Todos los publishAndWait fs.* usan path '/cartas/<carta_id>.json' o '/cartas/versions/<carta_id>/<ts>.json'. Aparece literal en pseudocodigos de: save, get, list, delete, add_product, remove_product, update_product, add_category, update_prices, search, stats, versions, restore, _on_carta_creada (este delega en save asi que no toca paths directamente).",
+      "lo_que_debe_quedar_tras_F2": {
+        "version_blueprint": "blueprint-1.3.0",
+        "_v1_3_changelog": "presente",
+        "todos_los_paths_de_pseudocodigo_y_persistence_apuntan_a": "/storage/pizzepos/cartas/<carta_id>.json + /storage/pizzepos/cartas/.versions/<carta_id>/<ts>.json",
+        "los_8_publishes_de_eventos_canonicos_llevan_carta_entera_y_correlation_id_obligatorio": true,
+        "auto_promocion_anyadida_al_final_de_save": true,
+        "eventos_publicados_que_requieren_consumer_declarado_en_raiz": ["carta.actualizada", "carta.editada", "carta.borrada"]
+      }
+    },
+    {
+      "pieza": "modules/pizzepos/carta-manager/_legacy/",
+      "existe": "verificar al arrancar la sesion",
+      "comportamiento_si_existe": "Contiene el JS legacy v1.1.0 archivado. NO se toca en este plan."
+    },
+    {
+      "pieza": "data/projects/<algun_slug>/cartas/<id>.json",
+      "comportamiento_si_existe": "Drift de paths viejos en disco. Migracion NO automatica (TP5 del contrato, plan separado). Este plan deja el blueprint apuntando a /storage/pizzepos/cartas/ --las cartas que ya existen en /cartas/ pelado no se moveran automaticamente. Si hay cartas en /cartas/ pelado, fede reporta al humano antes de F4 (validate:ci) y se decide si TP5 se incluye en este horizonte o se separa."
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/<rama-asignada> antes de empezar",
+      "modules/pizzepos/carta-manager/module.json existe y declara version='1.2.0', blueprint_driven=true, blueprint_path='carta-manager.blueprint.json'",
+      "modules/pizzepos/carta-manager/carta-manager.blueprint.json existe y declara version='blueprint-1.2.0'",
+      "El blueprint contiene las 13 operaciones del contrato del subsistema (save, get, list, delete, add_product, remove_product, update_product, add_category, update_prices, search, stats, versions, restore) + handler interno _on_carta_creada",
+      "arquitectura/decisiones/_contratos/subsistema-carta.contract.json existe y declara version='1.0.0'",
+      "data/projects/* --revisar si hay cartas en /cartas/ pelado (path viejo). Si las hay, reportar al usuario antes de F4 (decision de migrar o separar TP5)",
+      "npm run validate:ci en la raiz da PASS antes de empezar (baseline aceptado con warnings actuales)"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones arquitectonicas del contrato subsistema-carta v1.0.0 (D1-D11)",
+      "tools.contract.json: la invocacion de tools cross-blueprint es publish('<toolName>', {...}) o publishAndWait('<toolName>', {...}). NO se anyade sufijo '.request' al name de la tool al publicar --el loader hace auto-wire.",
+      "pseudocodigo-estilo.contract.json v1.0.0: prohibido rest-spread con omision (...currentSnap = r), prohibido Object.assign, verboso explicito",
+      "El blueprint padre subsistema-recetario.modulo-base.blueprint.json sigue siendo el padre operativo de carta-manager (no se cambia en este plan --TP10 del contrato es diferido)",
+      "tarifas v3.1.0 ya registra la tool tarifas.set_general (verificado en module.json al cocinar plan) --por tools.contract.UNA_DECLARACION_TRES_DESTINOS el loader la auto-suscribe al evento 'tarifas.set_general'",
+      "blueprint-eventos-conscientes.contract.json v1.0.0: campo eventos_publicados_que_requieren_consumer[] va en la RAIZ del blueprint, paralelo simetrico a eventos_que_escucho[]"
+    ],
+    "no_toco_esta_sesion": [
+      "modules/pizzepos/menu-generator/menu-generator.blueprint.json (TP2 paralelo, fede ya lo tiene pendiente)",
+      "modules/pizzepos/tarifas/* (TP4 separado, no este plan)",
+      "modules/pizzepos/productos/* (TP3 plan aparte)",
+      "Cualquier otro blueprint del subsistema-carta (carta-design, carta-impresion, carta-digital, carta-marketing, carta-scheduler) --sus consumers de carta.actualizada/editada/borrada se ajustan en planes propios si hace falta",
+      "arquitectura/decisiones/_contratos/ (cero modificacion --si emerge necesidad de bump v1.0.1 del contrato, se hace al cerrar horizonte como ritual de limpieza, no aqui)",
+      "arquitectura/decisiones/_schemas/subsistema-carta/* (TP8 del contrato, plan separado)",
+      "arquitectura/decisiones/_validators/subsistema-carta.validate.js (TP9 del contrato, plan separado)",
+      "Cualquier carta en disco /storage/pizzepos/cartas/* o data/projects/<slug>/cartas/* (cero migracion de datos --TP5 separado)",
+      "frontend/src/lib/modules/carta-manager/* (UI, plan cierre-ui-carta-manager.json separado)",
+      "frontend/src/lib/stores/carta-manager.ts (UI, separado)",
+      "scripts/validate-all.js, validators existentes, drift-baseline.json (cero modificacion --regenerar baseline solo tras OK explicito al cerrar fase)",
+      "CLAUDE.md (TP11 del contrato, ritual de limpieza al cerrar horizonte)"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_alcance_solo_blueprint_y_module_json",
+      "decision": "Este plan toca SOLO los dos archivos del modulo carta-manager: module.json (bump version + changelog + paths) y carta-manager.blueprint.json (5 cambios estructurales). Cero efecto colateral en otros modulos.",
+      "no_reabrir_sin": "verificacion que algun cambio del blueprint rompa explicitamente otro modulo. En ese caso parar, reportar al humano, NO continuar improvisando fixes en otros modulos."
+    },
+    {
+      "id": "D2_pseudocodigo_invoca_tarifas_set_general_no_request",
+      "decision": "El pseudocodigo de auto-promocion en save publica el evento 'tarifas.set_general' (sin sufijo '.request'). El contrato subsistema-carta v1.0.0 en su D8 menciona 'tarifas.set_general.request' --es imprecision del contrato que se respeta aqui usando el name canonico del tool segun tools.contract.UNA_DECLARACION_TRES_DESTINOS.",
+      "no_reabrir_sin": "que tarifas no registre la tool tarifas.set_general en su module.json. En ese caso, parar y reportar."
+    },
+    {
+      "id": "D3_auto_promocion_es_fire_and_forget",
+      "decision": "carta-manager NO espera respuesta de tarifas tras publicar tarifas.set_general (fire-and-forget). Si tarifas no responde por cualquier razon, la carta queda persistida igual sin activacion. El comerciante la puede activar manual luego.",
+      "no_reabrir_sin": "caso real donde la auto-promocion falla silenciosa y el usuario no se entera. Si emerge, anyadir log estructural o reabrir como sync (publishAndWait con timeout corto)."
+    },
+    {
+      "id": "D4_no_se_migra_archivos_en_disco",
+      "decision": "Este plan NO migra cartas existentes en /cartas/ pelado o en /storage/pizzepos/cartas/ raiz al path canonico nuevo. Si fede detecta cartas en disco con path viejo durante F1 verifico_en_disco, REPORTA al humano y se decide aparte (TP5 del contrato).",
+      "no_reabrir_sin": "OK explicito del humano para incluir TP5 en este horizonte. En ese caso se anyade fase F5_migrar_legacy."
+    },
+    {
+      "id": "D5_eventos_legacy_response_y_failed_preservan",
+      "decision": "Los publishes de carta.X.response y carta.X.failed declarados en eventos_publicados[] del blueprint v1.2.0 (carta.save.response, carta.save.failed, etc.) se mantienen en v1.3.0 sin cambios. NO se eliminan --son el shape canonico de response del par request/response de tools.",
+      "no_reabrir_sin": "horizonte aparte que cierre el legacy request_response del bus si se decide consolidar."
+    },
+    {
+      "id": "D6_no_cambia_blueprint_parent",
+      "decision": "El campo blueprint_parent_path sigue apuntando a subsistema-recetario.modulo-base. NO se crea subsistema-carta.modulo-base en este plan (TP10 diferido del contrato).",
+      "no_reabrir_sin": "particularidad propia del subsistema-carta que emerja en runtime."
+    },
+    {
+      "id": "D7_payload_carta_completa_lleva_categorias_y_productos",
+      "decision": "En los 8 publishes que se modifican, el campo 'carta' del payload es el objeto COMPLETO --meta + categorias[] + productos[] tal cual existe en memoria tras la operacion. NO se filtran campos, NO se serializa parcial, NO se omiten arrays vacios.",
+      "no_reabrir_sin": "caso de carta tan grande que rompa el bus MQTT (limite ~256MB por payload). Si emerge, anyadir compresion o paginado --pero hasta entonces, payload completo."
+    },
+    {
+      "id": "D8_correlation_id_uuid_si_falta_en_input",
+      "decision": "Si la operacion del blueprint se invoca sin correlation_id en el input (caso raro --el chat siempre lo propaga), el handler genera uno con uuid() al inicio. Asi el publish siempre lleva correlation_id no-vacio. NO se permite publish con correlation_id=null o undefined.",
+      "no_reabrir_sin": "decision diferente sobre validacion stricta al inicio (rechazar input sin correlation_id en lugar de generar uno)."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Bump module.json a v1.3.0 con paths canonicos y changelog",
+      "esfuerzo_horas": 0.3,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1_bump_version",
+          "descripcion": "Cambiar campo version en module.json de '1.2.0' a '1.3.0'",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/carta-manager/module.json",
+            "old: \"version\": \"1.2.0\"",
+            "new: \"version\": \"1.3.0\""
+          ]
+        },
+        {
+          "id": "F1.op2_anyadir_changelog",
+          "descripcion": "Anyadir campo _v1_3_changelog en module.json (al lado de _v1_2_changelog y _v1_1_nota existentes)",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/carta-manager/module.json",
+            "Anyadir tras _v1_2_changelog:",
+            "  \"_v1_3_changelog\": \"v1.3.0 (2026-06-01): aplica contrato subsistema-carta v1.0.0. Cinco cambios: (a) paths /cartas/ -> /storage/pizzepos/cartas/ con namespace pizzepos para multi-vertical (D1); (b) shape de carta.actualizada/editada/borrada lleva la carta entera embebida (D2/P3); (c) correlation_id obligatorio en payloads de los 3 eventos canonicos publicados (D10/P9); (d) auto-promocion primera carta a tarifas.set_general al final de save cuando tarifas.config esta vacio (D8); (e) declarar eventos_publicados_que_requieren_consumer en raiz del blueprint con los 3 eventos canonicos (D11/P10).\""
+          ]
+        },
+        {
+          "id": "F1.op3_cambiar_persistence_paths",
+          "descripcion": "Actualizar config.persistence.paths para que apunte al path canonico nuevo",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/carta-manager/module.json",
+            "old (config.persistence.paths array):",
+            "  [",
+            "    \"data/projects/{slug}/cartas/<carta_id>.json\",",
+            "    \"data/projects/{slug}/cartas/versions/<carta_id>/<timestamp>.json\"",
+            "  ]",
+            "new:",
+            "  [",
+            "    \"data/projects/{slug}/storage/pizzepos/cartas/<carta_id>.json\",",
+            "    \"data/projects/{slug}/storage/pizzepos/cartas/.versions/<carta_id>/<timestamp>.json\"",
+            "  ]"
+          ]
+        },
+        {
+          "id": "F1.op4_actualizar_doc_si_menciona_path_viejo",
+          "descripcion": "Releer el campo _doc de module.json. Si menciona el path viejo, actualizarlo al canonico.",
+          "pseudocodigo": [
+            "Read modules/pizzepos/carta-manager/module.json",
+            "buscar substring 'data/projects/{slug}/cartas/' en _doc",
+            "si aparece: Edit cambiando a 'data/projects/{slug}/storage/pizzepos/cartas/'",
+            "tambien actualizar la referencia a 'cartas/versions/' por 'cartas/.versions/' si aparece"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-manager/module.json"],
+        "verificacion": "jq '{version, persistence: .config.persistence.paths}' module.json muestra version 1.3.0 y los 2 paths canonicos nuevos"
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Cambios estructurales en carta-manager.blueprint.json",
+      "esfuerzo_horas": 3,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op1_bump_version_blueprint",
+          "descripcion": "Cambiar campo version del blueprint de 'blueprint-1.2.0' a 'blueprint-1.3.0'",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+            "old: \"version\": \"blueprint-1.2.0\"",
+            "new: \"version\": \"blueprint-1.3.0\""
+          ]
+        },
+        {
+          "id": "F2.op2_anyadir_changelog_blueprint",
+          "descripcion": "Anyadir campo _v1_3_changelog en el blueprint (al lado de _v1_2_changelog existente)",
+          "pseudocodigo": [
+            "Edit blueprint anyadiendo tras _v1_2_changelog:",
+            "  \"_v1_3_changelog\": \"v1.3.0 (2026-06-01): aplica contrato subsistema-carta v1.0.0. Path canonico /storage/pizzepos/cartas/ en TODOS los publishAndWait fs.*. Shape de carta.actualizada/editada/borrada lleva la carta entera en campo 'carta' del payload. correlation_id obligatorio en payloads de los 3 eventos canonicos publicados (save/restore -> carta.actualizada; add_product/remove_product/update_product/add_category/update_prices -> carta.editada; delete -> carta.borrada). Auto-promocion en save: si tarifas.config esta vacio (general=null Y todos canales=null), publish('tarifas.set_general', {...}) tras persistir. eventos_publicados_que_requieren_consumer en raiz: ['carta.actualizada', 'carta.editada', 'carta.borrada'].\""
+          ]
+        },
+        {
+          "id": "F2.op3_cambiar_paths_en_todos_los_pseudocodigos",
+          "descripcion": "Reemplazar TODOS los paths /cartas/<carta_id>.json y /cartas/versions/... por los canonicos en todos los pseudocodigos de operaciones",
+          "pseudocodigo": [
+            "Edit blueprint con replace_all:",
+            "  old: '/cartas/' + carta_id + '.json'",
+            "  new: '/storage/pizzepos/cartas/' + carta_id + '.json'",
+            "Edit blueprint con replace_all:",
+            "  old: '/cartas/versions/' + carta_id + '/'",
+            "  new: '/storage/pizzepos/cartas/.versions/' + carta_id + '/'",
+            "Edit blueprint con replace_all:",
+            "  old: '/cartas/versions/' + input.carta_id + '/'",
+            "  new: '/storage/pizzepos/cartas/.versions/' + input.carta_id + '/'",
+            "Tambien revisar manualmente el pseudocodigo de list y search (que listan archivos de /cartas/):",
+            "  old: path: '/cartas/'",
+            "  new: path: '/storage/pizzepos/cartas/'",
+            "Y los startsWith('versions/'):",
+            "  old: if (file.startsWith('versions/'))",
+            "  new: if (file.startsWith('.versions/'))",
+            "VERIFICAR despues de los replace_all: leer el blueprint entero y confirmar que NO queda ningun '/cartas/' suelto sin el prefijo /storage/pizzepos/."
+          ]
+        },
+        {
+          "id": "F2.op4_actualizar_estado_persistente_paths_relativos",
+          "descripcion": "Actualizar el campo estado_persistente.paths_relativos del blueprint para reflejar los paths canonicos nuevos",
+          "pseudocodigo": [
+            "Edit blueprint:",
+            "  estado_persistente.paths_relativos.carta_actual: '/cartas/<carta_id>.json' -> '/storage/pizzepos/cartas/<carta_id>.json'",
+            "  estado_persistente.paths_relativos.version_archivada: '/cartas/versions/<carta_id>/<timestamp>.json' -> '/storage/pizzepos/cartas/.versions/<carta_id>/<timestamp>.json'"
+          ]
+        },
+        {
+          "id": "F2.op5_modificar_publish_save_a_carta_entera_con_correlation_id",
+          "descripcion": "Cambiar el publish de carta.actualizada al final de la operacion save para embeder la carta entera + correlation_id obligatorio",
+          "pseudocodigo": [
+            "Edit pseudocodigo de save en blueprint:",
+            "old (al final tras edit_resp o write_resp):",
+            "  await publish('carta.actualizada', {",
+            "    project_id: input.project_id, user_id: input.user_id || 'system',",
+            "    carta_id: carta_id, nombre: input.carta.meta.nombre, version: input.carta.meta.version,",
+            "    motivo: input.motivo || null, correlation_id: input.correlation_id, timestamp: nowISO()",
+            "  })",
+            "new:",
+            "  // Asegurar correlation_id no-vacio --si input no trajo, generar uno",
+            "  correlation_id_efectivo = input.correlation_id || uuid()",
+            "  await publish('carta.actualizada', {",
+            "    project_id: input.project_id,",
+            "    user_id: input.user_id || 'system',",
+            "    carta: input.carta,",
+            "    motivo: input.motivo || null,",
+            "    correlation_id: correlation_id_efectivo,",
+            "    timestamp: nowISO()",
+            "  })"
+          ]
+        },
+        {
+          "id": "F2.op6_modificar_publish_restore_a_carta_entera_con_correlation_id",
+          "descripcion": "Cambiar el publish de carta.actualizada al final de restore",
+          "pseudocodigo": [
+            "Edit pseudocodigo de restore en blueprint:",
+            "old:",
+            "  await publish('carta.actualizada', {",
+            "    project_id: input.project_id, carta_id: input.carta_id, version: carta_restaurada.meta.version,",
+            "    motivo: 'restore:' + input.version_filename, correlation_id: input.correlation_id, timestamp: nowISO()",
+            "  })",
+            "new:",
+            "  correlation_id_efectivo = input.correlation_id || uuid()",
+            "  await publish('carta.actualizada', {",
+            "    project_id: input.project_id,",
+            "    carta: carta_restaurada,",
+            "    motivo: 'restore:' + input.version_filename,",
+            "    correlation_id: correlation_id_efectivo,",
+            "    timestamp: nowISO()",
+            "  })"
+          ]
+        },
+        {
+          "id": "F2.op7_modificar_publish_carta_editada_en_5_operaciones",
+          "descripcion": "Cambiar los publishes de carta.editada al final de add_product, remove_product, update_product, add_category, update_prices --carta entera + correlation_id obligatorio. Mantener el campo 'operacion' que identifica el tipo de mutacion.",
+          "pseudocodigo": [
+            "Edit pseudocodigo de add_product en blueprint:",
+            "old:",
+            "  await publish('carta.editada', {",
+            "    project_id: input.project_id, carta_id: input.carta_id, version: carta.meta.version,",
+            "    operacion: 'add_product', producto_id: producto_nuevo.id,",
+            "    correlation_id: input.correlation_id, timestamp: nowISO()",
+            "  })",
+            "new:",
+            "  correlation_id_efectivo = input.correlation_id || uuid()",
+            "  await publish('carta.editada', {",
+            "    project_id: input.project_id,",
+            "    carta: carta,",
+            "    operacion: 'add_product',",
+            "    correlation_id: correlation_id_efectivo,",
+            "    timestamp: nowISO()",
+            "  })",
+            "",
+            "Mismo patron para remove_product (operacion: 'remove_product'), update_product, add_category, update_prices.",
+            "",
+            "Edit pseudocodigo de remove_product:",
+            "old: await publish('carta.editada', { project_id: input.project_id, carta_id: input.carta_id, version: ..., operacion: 'remove_product', producto_id: input.producto_id, correlation_id: ..., timestamp: ... })",
+            "new: igual al patron de save pero con operacion: 'remove_product'",
+            "",
+            "Edit pseudocodigo de update_product:",
+            "old: await publish('carta.editada', { ..., operacion: 'update_product', producto_id: input.producto_id, ... })",
+            "new: igual al patron pero con operacion: 'update_product'",
+            "",
+            "Edit pseudocodigo de add_category:",
+            "old: await publish('carta.editada', { ..., operacion: 'add_category', categoria_id: cat_nueva.id, ... })",
+            "new: igual al patron pero con operacion: 'add_category'",
+            "",
+            "Edit pseudocodigo de update_prices:",
+            "old: await publish('carta.editada', { ..., operacion: 'update_prices', count: aplicados.length, ... })",
+            "new: igual al patron pero con operacion: 'update_prices'"
+          ]
+        },
+        {
+          "id": "F2.op8_modificar_publish_carta_borrada",
+          "descripcion": "Cambiar el publish de carta.borrada al final de delete (soft-delete a estado='archivada') --carta entera con estado actualizado + correlation_id obligatorio",
+          "pseudocodigo": [
+            "Edit pseudocodigo de delete en blueprint:",
+            "old:",
+            "  await publish('carta.borrada', {",
+            "    project_id: input.project_id, carta_id: input.carta_id,",
+            "    motivo: input.motivo || null, correlation_id: input.correlation_id, timestamp: nowISO()",
+            "  })",
+            "new (tras aplicar los patches de fs.edit que cambian estado, version y updated_at en memoria local 'carta'):",
+            "  // Actualizar carta en memoria con los nuevos valores antes de embeder en payload",
+            "  carta.meta.estado = 'archivada'",
+            "  carta.meta.version = version_nueva",
+            "  carta.meta.updated_at = now",
+            "  correlation_id_efectivo = input.correlation_id || uuid()",
+            "  await publish('carta.borrada', {",
+            "    project_id: input.project_id,",
+            "    carta: carta,",
+            "    motivo: input.motivo || null,",
+            "    correlation_id: correlation_id_efectivo,",
+            "    timestamp: nowISO()",
+            "  })"
+          ]
+        },
+        {
+          "id": "F2.op9_auto_promocion_en_save",
+          "descripcion": "Anyadir el bloque de auto-promocion al final del pseudocodigo de save, justo despues del publish carta.actualizada",
+          "pseudocodigo": [
+            "Edit pseudocodigo de save en blueprint:",
+            "Anyadir al final, despues del publish carta.actualizada y antes del return:",
+            "",
+            "  // Auto-promocion primera carta: si tarifas.config esta vacio, esta carta se vuelve la general.",
+            "  // Fire-and-forget --la carta queda persistida igual si esto falla.",
+            "  try {",
+            "    raw_tarifas = await publishAndWait('fs.read.request', {",
+            "      project_id: input.project_id,",
+            "      path: '/storage/config/tarifas.json'",
+            "    })",
+            "    promocionar = false",
+            "    if (raw_tarifas.status === 404) {",
+            "      // tarifas.json no existe --proyecto recien montado, promocionar",
+            "      promocionar = true",
+            "    } else if (raw_tarifas.status === 200) {",
+            "      config_data = JSON.parse(raw_tarifas.content)",
+            "      general_vacio = config_data.general === null || config_data.general === undefined",
+            "      canales = config_data.canales || {}",
+            "      algun_canal_asignado = false",
+            "      for (const canal_key of ['mesa', 'telefono', 'llevar', 'glovo', 'whatsapp', 'llevadoo']) {",
+            "        if (canales[canal_key] !== null && canales[canal_key] !== undefined) {",
+            "          algun_canal_asignado = true",
+            "        }",
+            "      }",
+            "      if (general_vacio && algun_canal_asignado === false) {",
+            "        promocionar = true",
+            "      }",
+            "    }",
+            "    if (promocionar === true) {",
+            "      await publish('tarifas.set_general', {",
+            "        project_id: input.project_id,",
+            "        carta_id: carta_id,",
+            "        correlation_id: correlation_id_efectivo,",
+            "        request_id: uuid(),",
+            "        timestamp: nowISO()",
+            "      })",
+            "    }",
+            "  } catch (err) {",
+            "    // Auto-promocion no es critica --la carta se persistio. Continuar sin fallar el save.",
+            "    // El log estructural lo emite ai-gateway por defecto cuando el try captura.",
+            "  }",
+            "",
+            "  return { status: 200, data: input.carta }"
+          ]
+        },
+        {
+          "id": "F2.op10_anyadir_eventos_publicados_que_requieren_consumer",
+          "descripcion": "Anyadir el campo eventos_publicados_que_requieren_consumer[] en la raiz del blueprint (paralelo a eventos_que_escucho[])",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+            "Anyadir en la raiz del blueprint, despues de eventos_publicados[] y antes de eventos_que_escucho[]:",
+            "",
+            "  \"eventos_publicados_que_requieren_consumer\": [",
+            "    \"carta.actualizada\",",
+            "    \"carta.editada\",",
+            "    \"carta.borrada\"",
+            "  ],",
+            "",
+            "Nota: NO se incluye carta.creada porque carta-manager NO la publica --la escucha (de menu-generator). Tampoco se incluyen los eventos request/response (carta.save.response, etc.) porque su consumer es siempre el caller del par, garantizado por tools.contract."
+          ]
+        },
+        {
+          "id": "F2.op11_verificar_consistencia_final",
+          "descripcion": "Releer el blueprint completo y verificar que no quedan inconsistencias",
+          "pseudocodigo": [
+            "Read modules/pizzepos/carta-manager/carta-manager.blueprint.json entero",
+            "grep -c '/cartas/' --debe ser 0 (todo deberia estar bajo /storage/pizzepos/cartas/)",
+            "grep -c '/storage/pizzepos/cartas/' --debe ser >= 14 (apariciones en al menos 13 operaciones + estado_persistente.paths_relativos)",
+            "grep -c 'correlation_id_efectivo' --debe ser >= 8 (las 8 publishes de eventos canonicos: save, restore, add_product, remove_product, update_product, add_category, update_prices, delete)",
+            "verificar que aparece 'tarifas.set_general' (auto-promocion) sin sufijo .request",
+            "verificar que el campo eventos_publicados_que_requieren_consumer existe en raiz con los 3 eventos",
+            "verificar que version del blueprint dice blueprint-1.3.0",
+            "verificar que _v1_3_changelog existe"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-manager/carta-manager.blueprint.json"],
+        "verificacion": "Todas las verificaciones de F2.op11 pasan. El blueprint mantiene su forma JSON valido (jq . carta-manager.blueprint.json no falla)."
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Verificacion validate:ci + tests unitarios existentes",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1_validate_ci",
+          "descripcion": "Correr validate:ci desde la raiz del repo y verificar que pasa",
+          "pseudocodigo": [
+            "cd raiz del repo",
+            "npm run validate:ci",
+            "esperado: PASS sin drift NUEVO. Los warnings actuales del baseline siguen igual.",
+            "Si aparece drift nuevo, leer la salida y diagnosticar:",
+            "  - drift de paths fuera de canonico: indica que algun pseudocodigo del blueprint mantiene path viejo --revisar F2.op3 y F2.op4",
+            "  - drift de schema o estructura del blueprint: indica error de sintaxis JSON o de campo --revisar F2.op11",
+            "  - drift de cualquier otro tipo: REPORTAR al humano, NO continuar improvisando fixes."
+          ]
+        },
+        {
+          "id": "F3.op2_tests_unitarios_carta_manager",
+          "descripcion": "Correr tests unitarios existentes de carta-manager si existen",
+          "pseudocodigo": [
+            "ls tests/unit/pizzepos__carta-manager.test.js 2>/dev/null",
+            "si existe:",
+            "  npm test -- tests/unit/pizzepos__carta-manager.test.js",
+            "  esperado: PASS",
+            "  si FAIL: leer salida, diagnosticar. Si el test esperaba el shape viejo del payload (sin carta entera), el test esta obsoleto --reportar al humano para decidir si actualizar el test ahora (en F3.op3) o aparte.",
+            "si NO existe:",
+            "  documentar en salida_esperada que no hay test unitario para este blueprint",
+            "  NO crear test nuevo en este plan --es scope separado."
+          ]
+        },
+        {
+          "id": "F3.op3_actualizar_tests_si_fallan_por_shape_nuevo",
+          "descripcion": "Solo si F3.op2 detecta tests rotos por el shape nuevo del payload, actualizar los asserts",
+          "pseudocodigo": [
+            "Si el test asume payload con carta_id, nombre, version sueltos:",
+            "  Edit el test cambiando los asserts:",
+            "    old: expect(payload).toHaveProperty('carta_id')",
+            "    new: expect(payload).toHaveProperty('carta.meta.id')",
+            "    old: expect(payload.nombre).toBe(...)",
+            "    new: expect(payload.carta.meta.nombre).toBe(...)",
+            "    old: expect(payload.version).toBe(...)",
+            "    new: expect(payload.carta.meta.version).toBe(...)",
+            "  Y verificar que asserts de correlation_id existen (deben pasar a obligatorios).",
+            "Si los tests no estan disponibles o estan en otra estructura, REPORTAR al humano antes de improvisar."
+          ]
+        },
+        {
+          "id": "F3.op4_re_validate_ci_tras_cambios_de_tests",
+          "descripcion": "Si F3.op3 modifico tests, correr validate:ci de nuevo para verificar que todo sigue verde",
+          "pseudocodigo": [
+            "Solo si F3.op3 hizo cambios:",
+            "  npm run validate:ci",
+            "  npm test -- tests/unit/pizzepos__carta-manager.test.js",
+            "  esperado: ambos PASS"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "estado_terminal": "validate:ci PASS sin drift nuevo. Tests unitarios verdes (o documentado que no hay)."
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Commit + push a la rama de la sesion",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_status",
+          "descripcion": "Revisar git status y confirmar scope",
+          "pseudocodigo": [
+            "git status",
+            "git diff",
+            "confirmar que SOLO hay cambios en:",
+            "  modules/pizzepos/carta-manager/module.json",
+            "  modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+            "  posiblemente tests/unit/pizzepos__carta-manager.test.js (si F3.op3 hizo cambios)",
+            "Si hay cambios fuera de ese scope: PARAR, reportar al humano, NO commitear sin diagnosticar."
+          ]
+        },
+        {
+          "id": "F4.op2_commit",
+          "descripcion": "Crear commit estructurado",
+          "pseudocodigo": [
+            "git add (archivos especificos, NUNCA git add . o git add -A):",
+            "  git add modules/pizzepos/carta-manager/module.json modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+            "  si tests modificados: git add tests/unit/pizzepos__carta-manager.test.js",
+            "",
+            "git commit con mensaje (formato del repo --feat con scope):",
+            "  feat(carta-manager): bump blueprint v1.3.0 --aplica contrato subsistema-carta v1.0.0",
+            "",
+            "  Cinco cambios estructurales del contrato:",
+            "  (a) Path canonico /storage/pizzepos/cartas/ en pseudocodigos y config.persistence.paths.",
+            "  (b) Payload carta entera embebida en carta.actualizada / carta.editada / carta.borrada.",
+            "  (c) correlation_id obligatorio en payloads de los 3 eventos canonicos publicados.",
+            "  (d) Auto-promocion primera carta a tarifas.set_general al final de save si tarifas.config esta vacio.",
+            "  (e) eventos_publicados_que_requieren_consumer declarado en raiz del blueprint.",
+            "",
+            "  Plan ejecutable: arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-carta-manager.json",
+            "  Contrato canonico: arquitectura/decisiones/_contratos/subsistema-carta.contract.json"
+          ]
+        },
+        {
+          "id": "F4.op3_push",
+          "descripcion": "Push con retry exponencial",
+          "pseudocodigo": [
+            "git push -u origin <rama-de-la-sesion>",
+            "si falla por red: retry 2s, 4s, 8s, 16s",
+            "si falla por otra razon: parar, diagnosticar, reportar al humano",
+            "NO --force, NO --no-verify"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo que el humano lo pida explicitamente"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "descripcion": "validate:ci pasa sin drift nuevo",
+      "comando": "npm run validate:ci",
+      "directorio": "raiz del repo",
+      "ejecutar_tras": ["F1", "F2", "F3"],
+      "salida_esperada": "PASS sin drift NUEVO frente al baseline. Errors bloquean. Warnings preservados."
+    },
+    {
+      "id": "CC2_jq_valido",
+      "descripcion": "Los dos archivos JSON modificados son JSON valido",
+      "comando": "jq . modules/pizzepos/carta-manager/module.json > /dev/null && jq . modules/pizzepos/carta-manager/carta-manager.blueprint.json > /dev/null && echo OK",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC3_grep_paths_canonicos",
+      "descripcion": "Verificar que NO queda ningun path '/cartas/' suelto (sin el prefijo /storage/pizzepos/) en el blueprint",
+      "comando": "grep -c \"'/cartas/'\" modules/pizzepos/carta-manager/carta-manager.blueprint.json || echo 0",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "0 (cero ocurrencias del path viejo en el blueprint)"
+    },
+    {
+      "id": "CC4_grep_eventos_consumer",
+      "descripcion": "Verificar que el campo eventos_publicados_que_requieren_consumer existe en raiz del blueprint con los 3 eventos esperados",
+      "comando": "jq '.eventos_publicados_que_requieren_consumer' modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "['carta.actualizada', 'carta.editada', 'carta.borrada']"
+    },
+    {
+      "id": "CC5_grep_correlation_id_efectivo",
+      "descripcion": "Verificar que el blueprint usa correlation_id_efectivo (la nueva variable que garantiza no-nulo) en los publishes de eventos canonicos",
+      "comando": "grep -c 'correlation_id_efectivo' modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": ">= 8 (las 8 publishes de eventos canonicos: save+restore -> carta.actualizada, 5 ops -> carta.editada, delete -> carta.borrada)"
+    },
+    {
+      "id": "CC6_git_status_scope",
+      "descripcion": "Verificar scope del commit",
+      "comando": "git status --short",
+      "ejecutar_tras": ["F4.op1"],
+      "verificar": "Solo aparecen los 2 archivos esperados (3 si F3.op3 modifico test). Si aparece algo mas, PARAR y reportar."
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Tocar modules/pizzepos/menu-generator/* (TP2 paralelo de fede)",
+    "Tocar modules/pizzepos/tarifas/* (TP4 separado)",
+    "Tocar modules/pizzepos/productos/* (TP3 plan aparte)",
+    "Tocar arquitectura/decisiones/_contratos/* (cero modificacion --bump del contrato si emerge necesidad es ritual de limpieza al cerrar horizonte)",
+    "Tocar arquitectura/decisiones/_schemas/* (TP8 plan separado)",
+    "Tocar arquitectura/decisiones/_validators/* (TP9 plan separado)",
+    "Migrar cartas en disco de /cartas/ a /storage/pizzepos/cartas/ (TP5 separado --requiere OK explicito del humano)",
+    "Tocar frontend/* (UI plan separado --cierre-ui-carta-manager.json)",
+    "Tocar scripts/validate-all.js, drift-baseline.json, validators existentes",
+    "Tocar CLAUDE.md (TP11 ritual de limpieza al cerrar horizonte)",
+    "Crear PR sin OK explicito del humano",
+    "Hacer commit con git add . o git add -A",
+    "Saltar OK humano entre F1 y F2, F2 y F3, F3 y F4",
+    "Decir 'todo OK' sin reportar el comando ejecutado y su salida real",
+    "Continuar a F4 si CC1-CC5 no pasan",
+    "Improvisar fixes a otros modulos si validate:ci detecta drift en ellos --PARAR y reportar al humano",
+    "Eliminar campos del blueprint que no esten explicitamente listados en este plan (NO eliminar carta.save.response, carta.save.failed, etc. de eventos_publicados --se preservan)",
+    "Cambiar el blueprint_parent_path (sigue apuntando a subsistema-recetario.modulo-base --TP10 diferido)",
+    "Romper el formato JSON del blueprint (verificar con jq tras cada Edit)",
+    "Anyadir features no listadas en este plan aunque parezcan buena idea (e.g., metricas nuevas, validaciones extra, comentarios en pseudocodigo no estandar)"
+  ],
+
+  "salida_final_del_horizonte": {
+    "blueprint_carta_manager_estado_terminal": "v1.3.0 cumpliendo contrato subsistema-carta v1.0.0: paths /storage/pizzepos/cartas/, 8 publishes con carta entera + correlation_id obligatorio, auto-promocion en save, eventos_publicados_que_requieren_consumer declarados.",
+    "archivos_finales_modificados": [
+      "modules/pizzepos/carta-manager/module.json (version 1.3.0 + _v1_3_changelog + persistence.paths canonicos)",
+      "modules/pizzepos/carta-manager/carta-manager.blueprint.json (~ +20 lineas netas: auto-promocion + eventos_publicados_que_requieren_consumer + changelog + ajustes a publishes)",
+      "posiblemente tests/unit/pizzepos__carta-manager.test.js (si tests pre-existentes asumian shape viejo)"
+    ],
+    "verificacion_terminal": [
+      "Todos los CC1-CC5 pasan",
+      "validate:ci verde (sin drift nuevo)",
+      "git status: solo archivos del scope",
+      "commit pusheado a la rama de la sesion",
+      "NO se creo PR"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "TP1 del contrato subsistema-carta v1.0.0 --estado: 'cerrado' (carta-manager.blueprint.json a v1.3.0)",
+      "Tres drifts del estado anterior cerrados: path /cartas/ pelado, payload metadatos solo, correlation_id ausente",
+      "Auto-promocion primera carta materializada en pseudocodigo",
+      "Patron blueprint-eventos-conscientes v1 aplicado al blueprint hijo"
+    ],
+    "siguiente_natural": "TP2 (carta-manager paralelo --fede ya lo tiene). Tras eso, TP3 (productos JS) o TP6 (UI de tarifas). El validator subsistema-carta.validate.js (TP9) puede esperar a que la familia este wireada para no producir falsos positivos."
+  }
+}

@@ -2,17 +2,15 @@
   /**
    * ViabilidadBrowser Component
    *
-   * Search and filter interface for viability data.
-   * Features:
-   * - Viability status filtering (VIABLE, ACEPTABLE, CRÍTICO, INVIABLE)
-   * - Margin range filtering
-   * - Food cost range filtering
-   * - Risk level filtering
-   * - Sort/rank options
-   * - Results summary statistics
+   * Explorador de expedientes de viabilidad. Filtra por veredicto canonico
+   * (viable | viable_con_advertencias | no_viable_economicamente |
+   * sin_pvp_objetivo) y muestra un resumen (total, desglose por veredicto,
+   * food cost medio). El boton 'Evaluar un producto' lanza el chat
+   * pre-rellenado (Postura B: el comerciante describe el producto al chat).
    */
 
   import ViabilidadCard from './ViabilidadCard.svelte';
+  import { prefillChatInput } from '$lib/stores/chatInputDraft';
 
   export let results: any[] = [];
   export let summary: any = null;
@@ -20,77 +18,58 @@
   export let onSearch: ((criteria: any) => void) | null = null;
   export let onSelect: ((id: string) => void) | null = null;
 
-  let margenMin = '';
-  let margenMax = '';
-  let foodCostMin = '';
-  let foodCostMax = '';
-  let selectedEstados: string[] = [];
-  let tieneRiesgo = false;
-  let sortBy = 'relevance';
+  const EVALUAR_PROMPT = 'Quiero evaluar la viabilidad de un producto: ';
+
+  let selectedVeredicto = '';
   let expandFilters = false;
 
-  const estadoOptions = [
-    { value: 'VIABLE', label: 'Viable' },
-    { value: 'ACEPTABLE', label: 'Aceptable' },
-    { value: 'CRÍTICO', label: 'Crítico' },
-    { value: 'INVIABLE', label: 'Inviable' }
+  const veredictoOptions = [
+    { value: 'viable', label: 'Viable' },
+    { value: 'viable_con_advertencias', label: 'Con advertencias' },
+    { value: 'no_viable_economicamente', label: 'No viable' },
+    { value: 'sin_pvp_objetivo', label: 'Sin PVP' }
   ];
 
   function applyFilters() {
     const criteria: any = {};
-
-    if (margenMin) criteria.margen_min = parseFloat(margenMin);
-    if (margenMax) criteria.margen_max = parseFloat(margenMax);
-    if (foodCostMin) criteria.food_cost_min = parseFloat(foodCostMin);
-    if (foodCostMax) criteria.food_cost_max = parseFloat(foodCostMax);
-    if (selectedEstados.length > 0) criteria.estado = selectedEstados;
-    if (tieneRiesgo) criteria.tiene_riesgo = true;
-
-    onSearch?.({
-      ...criteria,
-      rankBy: sortBy
-    });
+    if (selectedVeredicto) criteria.veredicto = selectedVeredicto;
+    onSearch?.(criteria);
   }
 
   function resetFilters() {
-    margenMin = '';
-    margenMax = '';
-    foodCostMin = '';
-    foodCostMax = '';
-    selectedEstados = [];
-    tieneRiesgo = false;
-    sortBy = 'relevance';
+    selectedVeredicto = '';
     applyFilters();
   }
 
-  function toggleEstado(estado: string) {
-    if (selectedEstados.includes(estado)) {
-      selectedEstados = selectedEstados.filter(e => e !== estado);
-    } else {
-      selectedEstados = [...selectedEstados, estado];
-    }
+  function toggleVeredicto(veredicto: string) {
+    selectedVeredicto = selectedVeredicto === veredicto ? '' : veredicto;
+    applyFilters();
   }
 
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
-      applyFilters();
-    }
+  function evaluarProducto() {
+    prefillChatInput(EVALUAR_PROMPT);
   }
 
-  $: hasActiveFilters = margenMin || margenMax || foodCostMin || foodCostMax || selectedEstados.length > 0 || tieneRiesgo;
+  $: hasActiveFilters = selectedVeredicto !== '';
 
-  function getEstadoColor(estado: string): string {
-    if (estado === 'VIABLE') return '#059669';
-    if (estado === 'ACEPTABLE') return '#0891b2';
-    if (estado === 'CRÍTICO') return '#d97706';
-    if (estado === 'INVIABLE') return '#dc2626';
+  function getVeredictoColor(veredicto: string): string {
+    if (veredicto === 'viable') return '#059669';
+    if (veredicto === 'viable_con_advertencias') return '#d97706';
+    if (veredicto === 'no_viable_economicamente') return '#dc2626';
+    if (veredicto === 'sin_pvp_objetivo') return '#0891b2';
     return '#6b7280';
+  }
+
+  function formatPercent(n: number): string {
+    if (typeof n !== 'number' || isNaN(n)) return '—';
+    return n.toFixed(1) + '%';
   }
 </script>
 
 <div class="browser-container">
   <div class="header">
     <h2>Explorador de Viabilidad</h2>
+    <button class="btn-evaluar" on:click={evaluarProducto}>+ Evaluar un producto</button>
   </div>
 
   <!-- FILTERS PANEL -->
@@ -103,16 +82,16 @@
 
     {#if expandFilters}
       <div class="filters-content">
-        <!-- Estado Filters -->
+        <!-- Veredicto Filter -->
         <div class="filter-group">
-          <label>Estado</label>
+          <label>Veredicto</label>
           <div class="estado-buttons">
-            {#each estadoOptions as option}
+            {#each veredictoOptions as option}
               <button
                 class="estado-btn"
-                class:active={selectedEstados.includes(option.value)}
-                style={selectedEstados.includes(option.value) ? `border-color: ${getEstadoColor(option.value)}; background-color: ${getEstadoColor(option.value)}22;` : ''}
-                on:click={() => toggleEstado(option.value)}
+                class:active={selectedVeredicto === option.value}
+                style={selectedVeredicto === option.value ? `border-color: ${getVeredictoColor(option.value)}; background-color: ${getVeredictoColor(option.value)}22;` : ''}
+                on:click={() => toggleVeredicto(option.value)}
               >
                 {option.label}
               </button>
@@ -120,88 +99,11 @@
           </div>
         </div>
 
-        <!-- Margin Range -->
-        <div class="filter-group">
-          <label>Rango de Margen (%)</label>
-          <div class="range-inputs">
-            <input
-              type="number"
-              placeholder="Mín"
-              bind:value={margenMin}
-              on:keydown={handleKeydown}
-              step="0.5"
-              min="0"
-              max="100"
-            />
-            <span class="range-sep">-</span>
-            <input
-              type="number"
-              placeholder="Máx"
-              bind:value={margenMax}
-              on:keydown={handleKeydown}
-              step="0.5"
-              min="0"
-              max="100"
-            />
-          </div>
-        </div>
-
-        <!-- Food Cost Range -->
-        <div class="filter-group">
-          <label>Rango de Food Cost (%)</label>
-          <div class="range-inputs">
-            <input
-              type="number"
-              placeholder="Mín"
-              bind:value={foodCostMin}
-              on:keydown={handleKeydown}
-              step="0.5"
-              min="0"
-              max="100"
-            />
-            <span class="range-sep">-</span>
-            <input
-              type="number"
-              placeholder="Máx"
-              bind:value={foodCostMax}
-              on:keydown={handleKeydown}
-              step="0.5"
-              min="0"
-              max="100"
-            />
-          </div>
-        </div>
-
-        <!-- Risk Filter -->
-        <div class="filter-group">
-          <label>Filtros</label>
-          <label class="checkbox">
-            <input type="checkbox" bind:checked={tieneRiesgo} on:change={applyFilters} />
-            Solo con riesgos
-          </label>
-        </div>
-
-        <!-- Sort -->
-        <div class="filter-group">
-          <label>Ordenar por</label>
-          <select bind:value={sortBy} on:change={applyFilters}>
-            <option value="relevance">Relevancia</option>
-            <option value="riesgo">Por Riesgo</option>
-            <option value="margen">Mayor Margen</option>
-            <option value="margen_asc">Menor Margen</option>
-            <option value="mejora">Potencial de Mejora</option>
-            <option value="viable_first">Viables Primero</option>
-          </select>
-        </div>
-
-        <div class="filter-actions">
-          <button class="btn-search" on:click={applyFilters} disabled={loading}>
-            {loading ? '⟳ Buscando...' : '🔍 Buscar'}
-          </button>
-          {#if hasActiveFilters}
+        {#if hasActiveFilters}
+          <div class="filter-actions">
             <button class="btn-reset" on:click={resetFilters}>✕ Limpiar</button>
-          {/if}
-        </div>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -213,32 +115,30 @@
         <span class="stat-label">Total</span>
         <span class="stat-value">{summary.total}</span>
       </div>
-      {#if summary.viable > 0}
+      {#if summary.por_veredicto?.viable > 0}
         <div class="stat viable">
           <span class="stat-label">Viables</span>
-          <span class="stat-value">{summary.viable} ({summary.porcentaje_viable?.toFixed(0)}%)</span>
+          <span class="stat-value">{summary.por_veredicto.viable}</span>
         </div>
       {/if}
-      {#if summary.aceptable > 0}
+      {#if summary.por_veredicto?.viable_con_advertencias > 0}
         <div class="stat aceptable">
-          <span class="stat-label">Aceptables</span>
-          <span class="stat-value">{summary.aceptable}</span>
+          <span class="stat-label">Con Advertencias</span>
+          <span class="stat-value">{summary.por_veredicto.viable_con_advertencias}</span>
         </div>
       {/if}
-      {#if summary.critico > 0 || summary.inviable > 0}
+      {#if summary.por_veredicto?.no_viable_economicamente > 0}
         <div class="stat alert">
-          <span class="stat-label">Con Riesgo</span>
-          <span class="stat-value">{summary.critico + summary.inviable}</span>
+          <span class="stat-label">No Viables</span>
+          <span class="stat-value">{summary.por_veredicto.no_viable_economicamente}</span>
         </div>
       {/if}
-      <div class="stat">
-        <span class="stat-label">Margen Promedio</span>
-        <span class="stat-value">{summary.margen_promedio?.toFixed(1)}%</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Food Cost Promedio</span>
-        <span class="stat-value">{summary.food_cost_promedio?.toFixed(1)}%</span>
-      </div>
+      {#if summary.food_cost_medio != null}
+        <div class="stat">
+          <span class="stat-label">Food Cost Medio</span>
+          <span class="stat-value">{formatPercent(summary.food_cost_medio)}</span>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -250,8 +150,8 @@
       </div>
     {:else if results.length === 0}
       <div class="empty-state">
-        <p>Sin resultados</p>
-        <p class="hint">Ajusta los filtros para encontrar recetas</p>
+        <p>Sin expedientes</p>
+        <p class="hint">Pulsa "Evaluar un producto" para empezar</p>
       </div>
     {:else}
       <div class="results-grid">
@@ -277,12 +177,34 @@
   .header {
     padding: 16px 20px;
     border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
   }
 
   .header h2 {
     margin: 0;
     font-size: 18px;
     color: #1f2937;
+  }
+
+  .btn-evaluar {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-evaluar:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
   }
 
   .filters-panel {
@@ -353,71 +275,16 @@
   }
 
   .estado-btn.active {
-    color: white;
-  }
-
-  .range-inputs {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .range-inputs input {
-    flex: 1;
-    padding: 6px 8px;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    font-size: 12px;
-  }
-
-  .range-inputs input:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-
-  .range-sep {
-    color: #d1d5db;
-  }
-
-  .checkbox {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    cursor: pointer;
-    user-select: none;
-    font-weight: 400;
-  }
-
-  .checkbox input[type='checkbox'] {
-    cursor: pointer;
-  }
-
-  select {
-    padding: 6px 8px;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    font-size: 12px;
-    background-color: white;
-    cursor: pointer;
-  }
-
-  select:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    font-weight: 600;
   }
 
   .filter-actions {
     display: flex;
     gap: 8px;
-    grid-column: 1 / -1;
+    align-items: flex-end;
   }
 
-  .btn-search,
   .btn-reset {
-    flex: 1;
     padding: 8px 12px;
     border: none;
     border-radius: 4px;
@@ -425,24 +292,6 @@
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
-  }
-
-  .btn-search {
-    background: #3b82f6;
-    color: white;
-  }
-
-  .btn-search:hover:not(:disabled) {
-    background: #2563eb;
-    transform: translateY(-1px);
-  }
-
-  .btn-search:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .btn-reset {
     background: #f3f4f6;
     color: #6b7280;
   }
@@ -477,13 +326,13 @@
   }
 
   .stat.aceptable {
-    background: #f0f9ff;
-    border-color: #bfdbfe;
+    background: #fef3c7;
+    border-color: #fcd34d;
   }
 
   .stat.alert {
-    background: #fef3c7;
-    border-color: #fcd34d;
+    background: #fee2e2;
+    border-color: #fca5a5;
   }
 
   .stat-label {

@@ -1,0 +1,941 @@
+{
+  "_doc": "Plan ejecutable JSON del horizonte 'cierre-ui-tarifas'. Crea desde cero la UI del modulo tarifas --backend maduro (JS POC2 v3.1.0+, 5 tools: tarifas.get, set_general, assign, register_variant, get_variants; persistencia storage/config/tarifas.json), frontend cero al cocinar este plan. Aplica las convenciones visuales del contrato ui-frontend-blueprint v1.0.1 (Postura B canonica, Panel router, store solo lectura) extendidas a un modulo JS POC2 --el contrato canoniza el patron para blueprints pero el shape visual se reutiliza por coherencia cross-modulo del repo. Estructura: Panel con 3 zonas fijas declaradas en subsistema-carta.contract D6 (general siempre visible / por canal colapsado / variantes avanzado). Shape de tarifas.json es ESTABLE (general carta_id|null + canales 6 fijos + variantes array) --no aplica el principio shape abierto de cartas. Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
+
+  "id": "cierre-ui-tarifas",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "cierre_ui_modulo_js_poc2",
+
+  "documentos_hermanos": {
+    "contrato_canonico_dominio": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.0",
+      "relacion": "TP6 del contrato. La separacion_de_ui declara las 3 zonas exactas de tarifas (general/por_canal/variantes), las prohibiciones (no editar precios, no crear cartas) y el flujo de navegacion desde carta-manager (badge -> click -> tarifas)."
+    },
+    "contrato_canonico_ui_pattern": {
+      "path": "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+      "version": "1.0.1",
+      "relacion_y_matiz": "Este contrato canoniza el patron UI para modulos blueprint. Tarifas es JS POC2 (no blueprint) --por tanto los cross-checks del validator ui-frontend-blueprint NO aplican directamente. PERO las convenciones visuales (Postura B, Panel router, store solo lectura, prefillChatInput, manifest declarando boton work-bar) SE REUTILIZAN por coherencia cross-modulo del repo. Documentado como decision D1 del plan."
+    },
+    "plan_piloto_y_modelo_estructural": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-carta-manager.json",
+      "version": "1.0.0",
+      "relacion": "Plan modelo estructural --tarifas reutiliza su shape (axiomas, decisiones cerradas, fases F1 store / F2 modulo / F3 ruta / F4 verificacion / F5 commit). Pero tarifas tiene 3 zonas fijas, no catalogo navegable como cartas --F2 produce menos componentes (Panel + 3 zonas, sin Browser+Card+Detail+Historial)."
+    },
+    "patron_hermano_estructural": {
+      "path": "frontend/src/lib/modules/recetas/",
+      "relacion": "Patron hermano estructural ya en disco (RecetasPanel.svelte, manifest.json, index.ts). NO se modifica --solo se replica el patron de organizacion de archivos y el mecanismo chatInputDraft + prefillChatInput."
+    },
+    "dependencia_chatInputDraft": {
+      "path": "frontend/src/lib/stores/chatInputDraft.ts",
+      "estado_esperado": "EXISTE y exporta writable + prefillChatInput. Materializado por cierre-ui-recetas F1 (plan piloto del horizonte cierre-ui-blueprints).",
+      "comportamiento_si_no_existe": "PARAR antes de F2.op2 (CartaGeneralSelector + acciones). Reportar al humano que cierre-ui-recetas F1 debe estar ejecutado primero."
+    }
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+    "arquitectura/decisiones/_contratos/frontend.contract.json",
+    "arquitectura/decisiones/_contratos/modulo-clase-robusta.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json"
+  ],
+
+  "dependencias_explicitas": [
+    {
+      "id": "DEP1",
+      "depende_de": "cierre-ui-recetas.json F1",
+      "que_debe_estar_hecho": "frontend/src/lib/stores/chatInputDraft.ts existe con writable y funcion prefillChatInput exportada. frontend/src/lib/components/layout/ChatInput.svelte hace bind:value contra ese store.",
+      "afecta_a_fase": "F2",
+      "comportamiento_si_no_se_cumple": "fede para al inicio de F2 y reporta: 'F2 requiere chatInputDraft que se materializa en cierre-ui-recetas F1. Ejecuta primero ese plan al menos hasta F1, luego retoma este.' NO continua hasta confirmacion."
+    }
+  ],
+
+  "por_que_existe": {
+    "rol_de_tarifas_en_el_subsistema": "Dueno de la asignacion carta+canal y del registro de variantes (storage/config/tarifas.json). El contrato subsistema-carta canoniza tarifas como modulo unico que escribe ese archivo y publica tarifas.config.actualizada. UI canonica con 3 zonas: general (lo unico que el 80% del comerciante toca) + por canal (override colapsado) + variantes registradas (avanzado).",
+    "gap_principal": "Tarifas backend maduro y vivo --persiste configuracion real en disco y publica eventos canonicos. PERO NO tiene UI. Hoy la unica forma de cambiar la carta general o asignar canales es via chat invocando tarifas.set_general / tarifas.assign. Sin pantalla, el comerciante no ve el estado actual (que carta sirve cada canal) ni puede operar sin saber los nombres exactos de las tools.",
+    "alcance": "Creacion de UI desde cero: ruta SvelteKit + modulo frontend (Panel router con 3 zonas + 3 sub-componentes) + store de lectura + suscripciones a eventos del bus (tarifas.config.actualizada + carta.actualizada para mantener cache de cartas). Postura B canonica: lectura + pre-relleno chat para mutaciones. Cero forms de mutacion, cero invocaciones a tools del backend desde el store.",
+    "decision_arquitectonica_clave_3_zonas": "Las 3 zonas estan canonizadas en subsistema-carta.contract D6: 'general (siempre visible), por_canal (colapsado por defecto, expandido si hay override o el comerciante hace click), variantes_registradas (avanzado, expandido a peticion)'. NO se inventan zonas adicionales. NO se mezclan funciones (carta-manager edita cartas, tarifas las asigna)."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/tarifas/module.json",
+      "version_actual": "3.1.0",
+      "tipo_modulo": "JS POC2 (main: index.js, NO blueprint-driven)",
+      "tools_expuestas": ["tarifas.get", "tarifas.set_general", "tarifas.assign", "tarifas.register_variant", "tarifas.get_variants"],
+      "persistencia": "{project.base_path}/storage/config/tarifas.json (write atomico tmp+rename)",
+      "evento_canonico_de_cambio": "tarifas.config.actualizada (tipo: general|assign|variant_registered|snapshot)",
+      "evento_para_hidratacion_inicial": "publicar tarifas.config.solicitada para recibir tarifas.config.actualizada tipo=snapshot"
+    },
+    {
+      "pieza": "frontend/src/routes/[project_id]/tarifas/",
+      "existe": false,
+      "esperado_tras_plan": "directorio con +page.svelte conteniendo shell minimal <LazyShell />"
+    },
+    {
+      "pieza": "frontend/src/lib/modules/tarifas/",
+      "existe": false,
+      "esperado_tras_plan": "manifest.json + index.ts + TarifasPanel.svelte + CartaGeneralZone.svelte + CanalesZone.svelte + VariantesZone.svelte"
+    },
+    {
+      "pieza": "frontend/src/lib/stores/tarifas.ts",
+      "existe": false,
+      "esperado_tras_plan": "loadTarifasConfig, loadCartasDisponibles, initTarifasSubscriptions"
+    },
+    {
+      "pieza": "frontend/src/lib/modules/recetas/",
+      "existe": true,
+      "rol": "patron hermano estructural --se usa como referencia, NO se modifica"
+    },
+    {
+      "pieza": "frontend/src/lib/stores/chatInputDraft.ts",
+      "existe": "verificar al arrancar la sesion (DEP1)",
+      "comportamiento_si_no_existe": "parar antes de F2 y reportar"
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/<rama-asignada> antes de empezar",
+      "modules/pizzepos/tarifas/module.json sigue declarando los 5 tools listados",
+      "frontend/src/lib/modules/tarifas/ NO existe (verificar con ls)",
+      "frontend/src/routes/[project_id]/tarifas/ NO existe",
+      "frontend/src/lib/stores/tarifas.ts NO existe",
+      "frontend/src/lib/stores/chatInputDraft.ts EXISTE y exporta prefillChatInput --SI NO, parar antes de F2 (DEP1)",
+      "frontend/src/lib/components/layout/ChatInput.svelte hace bind con chatInputDraft --SI NO, parar antes de F2",
+      "frontend/src/lib/modules/recetas/ existe como referencia del patron hermano --NO se modifica",
+      "frontend/src/lib/modules/index.ts y loader.ts existen --se modifican solo para registrar el modulo tarifas en F2.op7",
+      "npm run validate:ci en la raiz da PASS antes de empezar (baseline aceptado con warnings actuales)"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones del contrato subsistema-carta v1.0.0 (D1-D11)",
+      "La separacion_de_ui canonizada por D6 del contrato subsistema-carta: 3 zonas exactas, prohibiciones explicitas (no editar precios, no crear cartas desde cero)",
+      "Postura B canonica del ui-frontend-blueprint: store solo lectura, mutaciones via prefillChatInput",
+      "Patron hermano recetas (Panel + componentes + store + manifest + index) es referencia estructural valida",
+      "Mecanismo chatInputDraft + prefillChatInput es el unico canonico de pre-relleno del chat",
+      "Eventos del bus a escuchar: tarifas.config.actualizada (cambios en tarifas), carta.actualizada/editada/borrada (para mantener cache de cartas disponibles para selectores)",
+      "El shape de tarifas.config es ESTABLE y conocido: { general: carta_id|null, canales: { mesa, telefono, llevar, glovo, whatsapp, llevadoo all carta_id|null }, variantes: [{ carta_id, base_carta_id, nombre, canales, reglas }] }. NO es shape abierto como cartas."
+    ],
+    "no_toco_esta_sesion": [
+      "modules/pizzepos/tarifas/index.js (backend del modulo)",
+      "modules/pizzepos/tarifas/module.json",
+      "Cualquier blueprint backend o modulo JS de pizzepos",
+      "frontend/src/lib/modules/recetas/, escandallo/, viabilidad/, carta-manager/ (modulos hermanos, planes propios)",
+      "frontend/src/lib/stores/recetas.ts, escandallo.ts, carta-manager.ts (stores hermanos)",
+      "frontend/src/lib/stores/chatInputDraft.ts (vive en cierre-ui-recetas F1)",
+      "frontend/src/lib/components/layout/ChatInput.svelte (modificado por cierre-ui-recetas F1)",
+      "scripts/validate-all.js, validators, drift-baseline.json",
+      "arquitectura/decisiones/_contratos/ (cero modificacion)",
+      "LazyShell.svelte, loader.ts mas alla del registro minimo del modulo tarifas",
+      "{project.base_path}/storage/config/tarifas.json u otras tarifas reales en disco (cero migracion de datos)"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [
+    {
+      "id": "Q1",
+      "tema": "icono_y_label_boton_workbar",
+      "pregunta": "¿Que icono y label tiene el boton del work-bar para abrir tarifas?",
+      "opciones": [
+        {"id": "A", "label": "💰 + 'Tarifas'", "comentario": "metafora dinero, claro"},
+        {"id": "B", "label": "🏷️ + 'Tarifas'", "comentario": "metafora etiqueta de precio, sutil"},
+        {"id": "C", "label": "⚙️ + 'Tarifas'", "comentario": "metafora configuracion --tarifas es asignacion+config"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Tarifas es el modulo donde el comerciante decide que carta sirve cada canal --la metafora dinero conecta con la asignacion comercial (canal glovo cobra comision distinta, etc.). Si el usuario prefiere otra metafora, fede aplica esa.",
+      "respuesta_usuario": { "opcion": "A", "motivo": "icono 💰 + label Tarifas", "cerrada_en": "2026-06-02T00:00:00.000Z" }
+    },
+    {
+      "id": "Q2",
+      "tema": "orden_del_boton_workbar",
+      "pregunta": "¿Que orden tiene el boton tarifas en la work-bar relativo a los otros (recetas=1, escandallo=2, viabilidad=3, carta-manager=4)?",
+      "opciones": [
+        {"id": "A", "label": "5 --tras carta-manager", "comentario": "tarifas opera sobre cartas ya creadas; lo logico es despues de carta-manager"},
+        {"id": "B", "label": "6 --con un hueco intermedio para variantes/marketing", "comentario": "deja espacio para futuros modulos del subsistema-carta"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Orden secuencial sin huecos. Si emergen modulos nuevos del subsistema-carta, se reorganiza entonces.",
+      "respuesta_usuario": { "opcion": "A", "motivo": "order=5, tras carta-manager", "cerrada_en": "2026-06-02T00:00:00.000Z" }
+    },
+    {
+      "id": "Q3",
+      "tema": "render_zona_variantes_cuando_no_hay_ninguna",
+      "pregunta": "Si el proyecto no tiene variantes registradas, ¿como se ve la zona Variantes?",
+      "opciones": [
+        {"id": "A", "label": "Empty state con CTA 'Crea tu primera variante'", "comentario": "click pre-rellena chat con frase canonica de nueva variante"},
+        {"id": "B", "label": "Zona oculta por defecto, solo visible si hay variantes O si el comerciante hace click en '+'", "comentario": "menos ruido para el 80% que no usa variantes"},
+        {"id": "C", "label": "Texto pequenyo 'sin variantes' + boton '+'", "comentario": "intermedio entre A y B"}
+      ],
+      "recomendacion": "B",
+      "comentario_recomendacion": "Coherente con el principio de friccion minima del 80%. La zona avanzada permanece oculta hasta que el comerciante muestre interes (click) o ya tenga variantes. Empty state mas explicito (A) puede aparecer dentro de la zona expandida si esta vacia.",
+      "respuesta_usuario": { "opcion": "B", "motivo": "zona oculta por defecto, visible si hay variantes o click", "cerrada_en": "2026-06-02T00:00:00.000Z" }
+    },
+    {
+      "id": "Q4",
+      "tema": "frases_canonicas_de_prefill",
+      "pregunta": "¿Confirmas las frases canonicas de prefill propuestas o las matizas?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "acepto las propuestas literalmente",
+          "comentario": "Propuestas:\n- Cambiar carta general: 'Cambia la carta general del proyecto a \"<nombre carta>\".'\n- Asignar carta a canal: 'Asigna la carta \"<nombre carta>\" al canal <canal>.'\n- Quitar override de canal: 'Quita la asignacion especifica del canal <canal>. Que vuelva a usar la carta general.'\n- Nueva variante: 'Crea una variante de la carta \"<base>\" con esta regla: <describe regla en lenguaje natural>.'\n- Re-sincronizar variante: 'Re-sincroniza la variante \"<nombre>\" con su carta base.'\n- Borrar variante: 'Borra la variante \"<nombre>\".'"
+        },
+        {"id": "B", "label": "las matizo (dare nuevas redacciones)", "comentario": "usuario provee versiones nuevas; fede las usa"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Frases operativas que el LLM puede procesar sin ambiguedad. Si emerge necesidad de ajuste tras uso real, vuelta posterior.",
+      "respuesta_usuario": { "opcion": "A", "motivo": "frases canonicas aceptadas literalmente", "cerrada_en": "2026-06-02T00:00:00.000Z" }
+    }
+  ],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_aplica_ui_frontend_blueprint_aunque_tarifas_sea_js_poc2",
+      "decision": "Tarifas es JS POC2, NO blueprint. Por tanto los cross-checks del validator ui-frontend-blueprint NO aplican directamente. PERO las convenciones visuales del contrato (Postura B, Panel router, store solo lectura, prefillChatInput, manifest con boton work-bar) se REUTILIZAN por coherencia cross-modulo del repo.",
+      "no_reabrir_sin": "decision arquitectonica nueva sobre UIs de modulos no-blueprint."
+    },
+    {
+      "id": "D2_postura_B_canonica",
+      "decision": "Postura B aplica integralmente: cero forms de mutacion, store solo lectura, acciones via prefillChatInput. Las mutaciones (set_general, assign, register_variant, etc.) las hace el LLM a peticion del chat tras click en boton de la UI.",
+      "no_reabrir_sin": "caso concreto que justifique form bulk (no se ve hoy --las acciones de tarifas son puntuales)."
+    },
+    {
+      "id": "D3_shape_tarifas_estable",
+      "decision": "El shape de tarifas.config es ESTABLE (general carta_id|null + canales con 6 fijos + variantes array). NO es shape abierto como cartas (cuyos productos varian por proyecto). La UI puede asumir estos campos y no defensivamente renderizar 'que encuentra'.",
+      "no_reabrir_sin": "cambio en el contrato subsistema-carta que abra el shape de tarifas."
+    },
+    {
+      "id": "D4_canales_enum_cerrado",
+      "decision": "Los 6 canales en la zona 'por canal' son enum cerrado: mesa, telefono, llevar, glovo, whatsapp, llevadoo. Se renderizan en este orden. NO se permite anyadir canales desde la UI (eso es trabajo arquitectonico, no input de usuario).",
+      "no_reabrir_sin": "cambio de cuentas-canales que anyada un canal nuevo --en cuyo caso este plan se actualiza."
+    },
+    {
+      "id": "D5_lista_cartas_via_fs_list_y_fs_read",
+      "decision": "El store carga las cartas disponibles del proyecto via fs.list.request sobre /storage/pizzepos/cartas/ + fs.read.request por cada archivo .json. NO invoca tool carta.list del blueprint LLM-runtime (mismo bug que se cazo en PR #264 del horizonte cierre-ui-recetas).",
+      "no_reabrir_sin": "cambio del paradigma event-core o del patron POC2 de filesystem."
+    },
+    {
+      "id": "D6_store_solo_lectura",
+      "decision": "Funciones permitidas en el store: loadTarifasConfig, loadCartasDisponibles, initTarifasSubscriptions. Cero funciones de mutacion (no setGeneral, no assign desde el store). Cero invocaciones a tools del backend desde el store.",
+      "no_reabrir_sin": "cambio del paradigma event-core."
+    },
+    {
+      "id": "D7_suscripciones_canonicas",
+      "decision": "initTarifasSubscriptions registra: (a) tarifas.config.actualizada --recarga loadTarifasConfig; (b) carta.actualizada + carta.editada + carta.borrada --recargan loadCartasDisponibles (los nombres de las cartas pueden haber cambiado, los selectores se refrescan).",
+      "no_reabrir_sin": "cambio en los eventos canonicos del subsistema."
+    },
+    {
+      "id": "D8_panel_router_con_3_zonas_pero_sin_subviews",
+      "decision": "TarifasPanel.svelte NO usa router con activeView local (como RecetasPanel). Renderiza las 3 zonas en la misma vista (CartaGeneralZone + CanalesZone + VariantesZone apilados verticalmente). El estado 'colapsado/expandido' es local de cada zona, no un activeView global.",
+      "no_reabrir_sin": "que la UI crezca tanto que necesite paginacion vertical."
+    },
+    {
+      "id": "D9_zona_general_siempre_visible",
+      "decision": "La zona 'general' (selector unico de carta general del proyecto) esta siempre visible y en la parte superior del panel. Las otras dos zonas (por canal + variantes) pueden estar colapsadas por defecto.",
+      "no_reabrir_sin": "decision arquitectonica nueva sobre el orden visual."
+    },
+    {
+      "id": "D10_no_hay_form_de_creacion_de_variante",
+      "decision": "Crear una variante no es un form de la UI --es chat. Click en boton 'Nueva variante' pre-rellena el chat con la frase canonica (Q4) y el LLM (via tarifas-creator agente) materializa la variante. La UI solo muestra el resultado tras carta.actualizada + tarifas.config.actualizada.",
+      "no_reabrir_sin": "decision arquitectonica nueva sobre forms de creacion."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Crear store frontend/src/lib/stores/tarifas.ts",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1_crear_archivo_y_imports",
+          "descripcion": "Crear el archivo del store con estructura canonica",
+          "pseudocodigo": [
+            "crear archivo nuevo frontend/src/lib/stores/tarifas.ts",
+            "imports:",
+            "  import { writable, derived } from 'svelte/store'",
+            "  import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request'",
+            "  import { subscribe as busSubscribe } from '$lib/ui-core/bus'",
+            "constantes:",
+            "  const TARIFAS_PATH = '/storage/config/tarifas.json'",
+            "  const CARTAS_DIR = '/storage/pizzepos/cartas/'",
+            "  const CANALES_CANONICOS = ['mesa', 'telefono', 'llevar', 'glovo', 'whatsapp', 'llevadoo']",
+            "tipos TypeScript:",
+            "  interface TarifasConfig {",
+            "    general: string | null",
+            "    canales: { mesa: string|null, telefono: string|null, llevar: string|null, glovo: string|null, whatsapp: string|null, llevadoo: string|null }",
+            "    variantes: Array<{ carta_id: string, base_carta_id: string, nombre: string, canales: string[], reglas: any }>",
+            "  }",
+            "  interface CartaResumen { id: string, nombre: string, estado?: string }",
+            "stores writables y derivados:",
+            "  export const tarifasConfig = writable<TarifasConfig | null>(null)",
+            "  export const cartasDisponibles = writable<CartaResumen[]>([])",
+            "  export const tarifasLoading = writable<boolean>(false)",
+            "  export const tarifasError = writable<string | null>(null)",
+            "  export const cartaGeneralResuelta = derived([tarifasConfig, cartasDisponibles], ([config, cartas]) => {",
+            "    if (!config || !config.general) return null",
+            "    return cartas.find(c => c.id === config.general) || { id: config.general, nombre: '(carta no encontrada)' }",
+            "  })"
+          ]
+        },
+        {
+          "id": "F1.op2_loadTarifasConfig",
+          "descripcion": "Funcion loadTarifasConfig --carga el archivo /storage/config/tarifas.json",
+          "pseudocodigo": [
+            "export async function loadTarifasConfig() {",
+            "  tarifasLoading.set(true)",
+            "  tarifasError.set(null)",
+            "  try {",
+            "    const res = await mqttRequest('fs', 'read', { path: TARIFAS_PATH })",
+            "    if (res?.status === 404) {",
+            "      // proyecto recien montado, sin tarifas aun --estado vacio",
+            "      tarifasConfig.set({",
+            "        general: null,",
+            "        canales: { mesa: null, telefono: null, llevar: null, glovo: null, whatsapp: null, llevadoo: null },",
+            "        variantes: []",
+            "      })",
+            "      return",
+            "    }",
+            "    if (res?.status >= 400) {",
+            "      throw new Error('fs.read.request fallo con status ' + res.status)",
+            "    }",
+            "    const config = JSON.parse(res.data.content)",
+            "    // Sanitizar shape minimo --garantizar canales todos presentes con null si faltan",
+            "    const sanitized = {",
+            "      general: config.general || null,",
+            "      canales: {",
+            "        mesa: config.canales?.mesa || null,",
+            "        telefono: config.canales?.telefono || null,",
+            "        llevar: config.canales?.llevar || null,",
+            "        glovo: config.canales?.glovo || null,",
+            "        whatsapp: config.canales?.whatsapp || null,",
+            "        llevadoo: config.canales?.llevadoo || null",
+            "      },",
+            "      variantes: Array.isArray(config.variantes) ? config.variantes : []",
+            "    }",
+            "    tarifasConfig.set(sanitized)",
+            "  } catch (err) {",
+            "    tarifasError.set(err?.message || 'Error al cargar tarifas')",
+            "  } finally {",
+            "    tarifasLoading.set(false)",
+            "  }",
+            "}"
+          ]
+        },
+        {
+          "id": "F1.op3_loadCartasDisponibles",
+          "descripcion": "Funcion loadCartasDisponibles --lista cartas del proyecto para selectores",
+          "pseudocodigo": [
+            "export async function loadCartasDisponibles() {",
+            "  try {",
+            "    const listRes = await mqttRequest('fs', 'list', { path: CARTAS_DIR, pattern: '*.json' })",
+            "    const archivos = listRes?.data?.archivos || []",
+            "    const lecturas = await Promise.all(",
+            "      archivos.filter(f => !f.startsWith('.versions/')).map(async (archivoPath) => {",
+            "        const res = await mqttRequest('fs', 'read', { path: CARTAS_DIR + archivoPath })",
+            "        try {",
+            "          const carta = JSON.parse(res.data.content)",
+            "          if (carta?.meta?.id && carta?.meta?.nombre) {",
+            "            return { id: carta.meta.id, nombre: carta.meta.nombre, estado: carta.meta.estado }",
+            "          }",
+            "          return null",
+            "        } catch {",
+            "          return null",
+            "        }",
+            "      })",
+            "    )",
+            "    const cartas = lecturas.filter(c => c !== null) as CartaResumen[]",
+            "    // Filtrar archivadas si queremos mostrar solo activas (decision UI: mostrar TODAS, marcar archivadas con badge)",
+            "    cartas.sort((a, b) => a.nombre.localeCompare(b.nombre))",
+            "    cartasDisponibles.set(cartas)",
+            "  } catch (err) {",
+            "    // Fallback: lista vacia --los selectores muestran 'sin cartas disponibles'",
+            "    cartasDisponibles.set([])",
+            "  }",
+            "}"
+          ]
+        },
+        {
+          "id": "F1.op4_initTarifasSubscriptions",
+          "descripcion": "Funcion initTarifasSubscriptions --suscribe a eventos del bus",
+          "pseudocodigo": [
+            "export function initTarifasSubscriptions(): () => void {",
+            "  const unsubs: Array<() => void> = []",
+            "  // tarifas.config.actualizada --recargar config",
+            "  unsubs.push(busSubscribe('tarifas.config.actualizada', (envelope) => {",
+            "    loadTarifasConfig()",
+            "  }))",
+            "  // carta.actualizada/editada/borrada --recargar lista de cartas (nombres pueden haber cambiado)",
+            "  unsubs.push(busSubscribe('carta.actualizada', () => loadCartasDisponibles()))",
+            "  unsubs.push(busSubscribe('carta.editada', () => loadCartasDisponibles()))",
+            "  unsubs.push(busSubscribe('carta.borrada', () => loadCartasDisponibles()))",
+            "  return () => unsubs.forEach(u => u())",
+            "}"
+          ]
+        },
+        {
+          "id": "F1.op5_exports",
+          "descripcion": "Verificar que todas las funciones y stores estan exportadas",
+          "pseudocodigo": [
+            "Confirmar que el archivo exporta:",
+            "  - stores: tarifasConfig, cartasDisponibles, tarifasLoading, tarifasError, cartaGeneralResuelta",
+            "  - funciones: loadTarifasConfig, loadCartasDisponibles, initTarifasSubscriptions",
+            "  - constante: CANALES_CANONICOS",
+            "NO exportar ninguna funcion de mutacion (D6).",
+            "guardar archivo."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["frontend/src/lib/stores/tarifas.ts"],
+        "tamano_aproximado": "~180 lineas"
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Crear modulo frontend frontend/src/lib/modules/tarifas/",
+      "esfuerzo_horas": 4,
+      "ok_explicito_antes_de_continuar": true,
+      "branch_segun_QN": "aplicar Q1 (icono+label), Q2 (orden), Q3 (zona variantes vacia), Q4 (frases prefill) segun respuestas del usuario",
+      "depende_de": "DEP1 (cierre-ui-recetas F1)",
+      "operaciones": [
+        {
+          "id": "F2.op0_verificar_dependencia",
+          "descripcion": "Verificar que cierre-ui-recetas F1 esta ejecutado",
+          "pseudocodigo": [
+            "comprobar que existe frontend/src/lib/stores/chatInputDraft.ts",
+            "comprobar que ChatInput.svelte importa chatInputDraft",
+            "si NO: parar y reportar 'F2 requiere chatInputDraft de cierre-ui-recetas F1.'"
+          ]
+        },
+        {
+          "id": "F2.op1_TarifasPanel",
+          "descripcion": "Crear TarifasPanel.svelte --panel principal con las 3 zonas apiladas",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/tarifas/TarifasPanel.svelte",
+            "patron sin router (D8 cerrada):",
+            "  <script>",
+            "    import { onMount, onDestroy } from 'svelte'",
+            "    import CartaGeneralZone from './CartaGeneralZone.svelte'",
+            "    import CanalesZone from './CanalesZone.svelte'",
+            "    import VariantesZone from './VariantesZone.svelte'",
+            "    import { loadTarifasConfig, loadCartasDisponibles, initTarifasSubscriptions, tarifasLoading, tarifasError } from '$lib/stores/tarifas'",
+            "    let cleanupSubs: (() => void) | null = null",
+            "    onMount(() => {",
+            "      loadTarifasConfig()",
+            "      loadCartasDisponibles()",
+            "      cleanupSubs = initTarifasSubscriptions()",
+            "    })",
+            "    onDestroy(() => { if (cleanupSubs) cleanupSubs() })",
+            "  </script>",
+            "  <div class='tarifas-panel'>",
+            "    {#if $tarifasError}",
+            "      <div class='error-banner'>{$tarifasError}</div>",
+            "    {/if}",
+            "    {#if $tarifasLoading}",
+            "      <div class='loading'>Cargando tarifas...</div>",
+            "    {:else}",
+            "      <CartaGeneralZone />",
+            "      <CanalesZone />",
+            "      <VariantesZone />",
+            "    {/if}",
+            "  </div>"
+          ]
+        },
+        {
+          "id": "F2.op2_CartaGeneralZone",
+          "descripcion": "Crear CartaGeneralZone.svelte --zona siempre visible con selector unico",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/tarifas/CartaGeneralZone.svelte",
+            "imports:",
+            "  import { tarifasConfig, cartasDisponibles, cartaGeneralResuelta } from '$lib/stores/tarifas'",
+            "  import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "renderiza:",
+            "  <section class='zona-general'>",
+            "    <h2>Carta general</h2>",
+            "    <p class='hint'>La carta que sirven todos los canales que no tengan asignacion propia.</p>",
+            "    {#if $cartaGeneralResuelta}",
+            "      <div class='selector-actual'>",
+            "        <span class='label'>Actual:</span>",
+            "        <span class='valor'>{$cartaGeneralResuelta.nombre}</span>",
+            "        <button on:click={cambiarGeneral}>Cambiar</button>",
+            "      </div>",
+            "    {:else}",
+            "      <div class='empty-general'>",
+            "        <span>Sin carta general asignada.</span>",
+            "        <button on:click={asignarPrimera}>Asignar primera carta</button>",
+            "      </div>",
+            "    {/if}",
+            "  </section>",
+            "  function cambiarGeneral() {",
+            "    // Q4 frase canonica de cambio. fede inserta el nombre actual entre comillas si quiere.",
+            "    prefillChatInput('Cambia la carta general del proyecto a [escribe el nombre de la nueva carta].')",
+            "  }",
+            "  function asignarPrimera() {",
+            "    prefillChatInput('Asigna la carta [escribe el nombre] como carta general del proyecto.')",
+            "  }",
+            "estilos sobrios. El selector es VISUAL (span + button), NO un <select> de form (Postura B, D2 cerrada)."
+          ]
+        },
+        {
+          "id": "F2.op3_CanalesZone",
+          "descripcion": "Crear CanalesZone.svelte --zona con override por canal, colapsada por defecto",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/tarifas/CanalesZone.svelte",
+            "imports:",
+            "  import { tarifasConfig, cartasDisponibles, CANALES_CANONICOS } from '$lib/stores/tarifas'",
+            "  import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "  let expanded = false",
+            "  // auto-expand si hay algun override",
+            "  $: hayOverrides = $tarifasConfig && CANALES_CANONICOS.some(c => $tarifasConfig.canales[c] !== null)",
+            "  $: shouldExpand = expanded || hayOverrides",
+            "renderiza:",
+            "  <section class='zona-canales'>",
+            "    <button on:click={() => expanded = !expanded} class='header-colapsable'>",
+            "      <span class='caret'>{shouldExpand ? '▾' : '▸'}</span>",
+            "      <span class='titulo'>Personalizar por canal</span>",
+            "      {#if !shouldExpand}",
+            "        <span class='resumen'>(todos usan la general)</span>",
+            "      {/if}",
+            "    </button>",
+            "    {#if shouldExpand}",
+            "      <ul class='canales-grid'>",
+            "        {#each CANALES_CANONICOS as canal}",
+            "          {@const overrideId = $tarifasConfig?.canales[canal]}",
+            "          {@const cartaOverride = overrideId ? $cartasDisponibles.find(c => c.id === overrideId) : null}",
+            "          <li class='canal-row'>",
+            "            <span class='nombre-canal'>{canal}</span>",
+            "            {#if cartaOverride}",
+            "              <span class='asignacion'>{cartaOverride.nombre}</span>",
+            "              <button on:click={() => cambiarAsignacion(canal)}>Cambiar</button>",
+            "              <button on:click={() => quitarOverride(canal)}>Quitar</button>",
+            "            {:else if overrideId}",
+            "              <span class='asignacion warn'>(carta_id desconocido: {overrideId})</span>",
+            "              <button on:click={() => quitarOverride(canal)}>Quitar</button>",
+            "            {:else}",
+            "              <span class='asignacion muted'>usa general</span>",
+            "              <button on:click={() => cambiarAsignacion(canal)}>Asignar</button>",
+            "            {/if}",
+            "          </li>",
+            "        {/each}",
+            "      </ul>",
+            "    {/if}",
+            "  </section>",
+            "  function cambiarAsignacion(canal) {",
+            "    prefillChatInput(`Asigna la carta [escribe el nombre] al canal ${canal}.`)",
+            "  }",
+            "  function quitarOverride(canal) {",
+            "    prefillChatInput(`Quita la asignacion especifica del canal ${canal}. Que vuelva a usar la carta general.`)",
+            "  }"
+          ]
+        },
+        {
+          "id": "F2.op4_VariantesZone",
+          "descripcion": "Crear VariantesZone.svelte --zona avanzada, oculta por defecto",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/tarifas/VariantesZone.svelte",
+            "imports:",
+            "  import { tarifasConfig, cartasDisponibles } from '$lib/stores/tarifas'",
+            "  import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "  let expanded = false",
+            "  // Q3 cerrada como B: zona oculta por defecto, solo visible si hay variantes O click",
+            "  $: hayVariantes = $tarifasConfig && Array.isArray($tarifasConfig.variantes) && $tarifasConfig.variantes.length > 0",
+            "  $: shouldExpand = expanded || hayVariantes",
+            "renderiza:",
+            "  <section class='zona-variantes'>",
+            "    <button on:click={() => expanded = !expanded} class='header-colapsable'>",
+            "      <span class='caret'>{shouldExpand ? '▾' : '▸'}</span>",
+            "      <span class='titulo'>Variantes con reglas (avanzado)</span>",
+            "    </button>",
+            "    {#if shouldExpand}",
+            "      {#if hayVariantes}",
+            "        <ul class='variantes-list'>",
+            "          {#each $tarifasConfig.variantes as v}",
+            "            {@const carta = $cartasDisponibles.find(c => c.id === v.carta_id)}",
+            "            {@const base = $cartasDisponibles.find(c => c.id === v.base_carta_id)}",
+            "            <li class='variante-row'>",
+            "              <div class='variante-header'>",
+            "                <span class='nombre'>{v.nombre || carta?.nombre || v.carta_id}</span>",
+            "                <span class='base'>← {base?.nombre || v.base_carta_id}</span>",
+            "              </div>",
+            "              <div class='reglas'>Como se hizo: {typeof v.reglas === 'string' ? v.reglas : JSON.stringify(v.reglas)}</div>",
+            "              <div class='canales-asignados'>",
+            "                Asignada a: {(v.canales || []).join(', ') || '(ninguno)'}",
+            "              </div>",
+            "              <div class='acciones'>",
+            "                <button on:click={() => resincronizar(v)}>Re-sincronizar</button>",
+            "                <button on:click={() => borrar(v)}>Borrar</button>",
+            "              </div>",
+            "            </li>",
+            "          {/each}",
+            "        </ul>",
+            "      {:else}",
+            "        <div class='empty-variantes'>",
+            "          <p>Sin variantes registradas.</p>",
+            "          <p class='hint'>Las variantes son cartas derivadas de una base con una regla (por ejemplo: +15% en delivery). Crear una abre conversacion con el agente tarifas-creator.</p>",
+            "        </div>",
+            "      {/if}",
+            "      <button class='nueva-variante' on:click={nueva}>+ Nueva variante de una carta existente</button>",
+            "    {/if}",
+            "  </section>",
+            "  function resincronizar(v) {",
+            "    prefillChatInput(`Re-sincroniza la variante \"${v.nombre || v.carta_id}\" con su carta base.`)",
+            "  }",
+            "  function borrar(v) {",
+            "    prefillChatInput(`Borra la variante \"${v.nombre || v.carta_id}\".`)",
+            "  }",
+            "  function nueva() {",
+            "    prefillChatInput('Crea una variante de la carta [escribe el nombre de la base] con esta regla: [describe la regla en lenguaje natural].')",
+            "  }"
+          ]
+        },
+        {
+          "id": "F2.op5_manifest",
+          "descripcion": "Crear manifest.json del modulo tarifas",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/tarifas/manifest.json",
+            "segun respuesta Q1 (icono + label) y Q2 (orden):",
+            "  {",
+            "    \"id\": \"tarifas\",",
+            "    \"name\": \"<Q1.label>\",",
+            "    \"description\": \"Asignacion carta+canal del proyecto. Carta general por defecto, override por canal, variantes registradas.\",",
+            "    \"version\": \"1.0.0\",",
+            "    \"zone\": \"work-bar\",",
+            "    \"order\": <Q2 valor>,",
+            "    \"routes\": [\"/tarifas\"],",
+            "    \"icon\": \"<Q1.icon>\",",
+            "    \"label\": \"<Q1.label>\"",
+            "  }"
+          ]
+        },
+        {
+          "id": "F2.op6_index",
+          "descripcion": "Crear index.ts del modulo --exports + UIModule",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/tarifas/index.ts (patron menu-cartas/index.ts):",
+            "  import type { UIModule } from '$lib/ui-core'",
+            "  import TarifasPanel from './TarifasPanel.svelte'",
+            "  export { default as TarifasPanel } from './TarifasPanel.svelte'",
+            "  export const tarifasModule: UIModule = {",
+            "    manifest: { ...mismo manifest declarado en F2.op5 en formato UIModule... },",
+            "    PanelComponent: TarifasPanel",
+            "  }",
+            "  export default tarifasModule",
+            "  // re-exports del store para conveniencia:",
+            "  export { tarifasConfig, cartasDisponibles, cartaGeneralResuelta, CANALES_CANONICOS, loadTarifasConfig, loadCartasDisponibles, initTarifasSubscriptions } from '$lib/stores/tarifas'"
+          ]
+        },
+        {
+          "id": "F2.op7_registrar_modulo_en_loader",
+          "descripcion": "Registrar el modulo tarifas en frontend/src/lib/modules/index.ts y/o loader.ts",
+          "pseudocodigo": [
+            "Read frontend/src/lib/modules/index.ts para entender el patron de registro.",
+            "Si los modulos se importan dinamicamente via loader.ts (lazy), Edit loader.ts anyadiendo la entrada tarifas con su ruta y componente.",
+            "Si los modulos se registran estaticamente en index.ts, Edit anyadiendo import { tarifasModule } from './tarifas' y exportandolo o registrandolo donde corresponda.",
+            "Patron exacto a replicar: como esta registrado recetas o carta-manager (si carta-manager ya existe en disco) --los hermanos de pattern."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": [
+          "frontend/src/lib/modules/tarifas/TarifasPanel.svelte (~50 lineas)",
+          "frontend/src/lib/modules/tarifas/CartaGeneralZone.svelte (~80 lineas)",
+          "frontend/src/lib/modules/tarifas/CanalesZone.svelte (~130 lineas)",
+          "frontend/src/lib/modules/tarifas/VariantesZone.svelte (~150 lineas)",
+          "frontend/src/lib/modules/tarifas/manifest.json",
+          "frontend/src/lib/modules/tarifas/index.ts"
+        ],
+        "archivos_modificados": ["frontend/src/lib/modules/index.ts o loader.ts (registro del modulo)"]
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Crear ruta SvelteKit /tarifas",
+      "esfuerzo_horas": 0.1,
+      "ok_explicito_antes_de_continuar": false,
+      "operaciones": [
+        {
+          "id": "F3.op1",
+          "descripcion": "Crear placeholder LazyShell para la ruta",
+          "pseudocodigo": [
+            "crear frontend/src/routes/[project_id]/tarifas/+page.svelte",
+            "contenido literal (copia del patron hermano /recetas):",
+            "  <script lang='ts'>",
+            "    import { LazyShell } from '$lib/components/layout'",
+            "  </script>",
+            "  <LazyShell />"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["frontend/src/routes/[project_id]/tarifas/+page.svelte"]
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Verificacion manual con dev server",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_arrancar_dev",
+          "descripcion": "Levantar dev server",
+          "pseudocodigo": [
+            "cd frontend",
+            "npm install si no instalado",
+            "npm run dev",
+            "abrir navegador en URL del proyecto activo"
+          ]
+        },
+        {
+          "id": "F4.op2_golden_path",
+          "descripcion": "Verificar golden path completo",
+          "pseudocodigo": [
+            "navegar a /<project_id>/tarifas",
+            "comprobar:",
+            "  ✓ boton <Q1.icon> <Q1.label> aparece en work-bar superior",
+            "  ✓ click abre TarifasPanel",
+            "  ✓ Zona 'general' visible arriba",
+            "  ✓ Si hay general asignada: muestra nombre + boton 'Cambiar'",
+            "  ✓ Si NO hay general: muestra 'Sin carta general' + boton 'Asignar primera carta'",
+            "  ✓ Zona 'por canal' colapsada por defecto si no hay overrides",
+            "  ✓ Click en header expande/colapsa la zona",
+            "  ✓ Si hay overrides: zona auto-expandida",
+            "  ✓ Cada canal muestra: nombre, asignacion (carta o 'usa general'), botones Asignar/Cambiar/Quitar",
+            "  ✓ Zona 'variantes' colapsada si no hay variantes",
+            "  ✓ Click expande y muestra empty state O lista de variantes",
+            "  ✓ Boton 'Cambiar' general pre-rellena Q4 frase de cambio",
+            "  ✓ Boton 'Asignar' canal pre-rellena Q4 frase de asignar al canal",
+            "  ✓ Boton 'Quitar' canal pre-rellena Q4 frase de quitar override",
+            "  ✓ Boton 'Nueva variante' pre-rellena Q4 frase de nueva variante",
+            "  ✓ Boton 'Re-sincronizar' variante pre-rellena la frase correspondiente",
+            "  ✓ Boton 'Borrar' variante pre-rellena la frase correspondiente",
+            "  ✓ Suscripcion bus reactiva: si desde chat se ejecuta tarifas.assign, el panel refresca automaticamente"
+          ]
+        },
+        {
+          "id": "F4.op3_edge_cases",
+          "descripcion": "Edge cases minimos",
+          "pseudocodigo": [
+            "✓ Proyecto sin tarifas.json todavia (404): panel muestra estado vacio, no crashea",
+            "✓ Proyecto sin cartas disponibles: selectores muestran prompts pero no crashean",
+            "✓ Carta referenciada por canal que no existe en cartasDisponibles: render con warning (asignacion warn)",
+            "✓ Variante con reglas en formato no-string: render con JSON.stringify (defensivo)",
+            "✓ Click rapido en multiples botones prefill: input se reemplaza con el ultimo",
+            "✓ Backend offline: errores en banner, no crash"
+          ]
+        },
+        {
+          "id": "F4.op4_reactividad_bus",
+          "descripcion": "Verificar reactividad del bus tras mutaciones desde chat",
+          "pseudocodigo": [
+            "estando en /tarifas con panel abierto",
+            "desde el chat pedir 'Asigna la carta X al canal glovo'",
+            "esperar que tarifas procese y publique tarifas.config.actualizada",
+            "✓ Zona por canal se refresca y muestra la nueva asignacion para glovo",
+            "✓ Si el panel estaba con la zona colapsada, se auto-expande (hayOverrides true)",
+            "✓ NO debe necesitar recargar pagina manualmente"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "documento_de_resultados": "fede reporta cada checkmark con ✓ o ✗ + descripcion del problema si falla",
+        "estado_terminal_para_avanzar_a_F5": "TODOS los checks ✓"
+      }
+    },
+    {
+      "id": "F5",
+      "nombre": "Commit + push a la rama de la sesion",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F5.op1_status",
+          "descripcion": "Revisar git status",
+          "pseudocodigo": [
+            "git status",
+            "git diff",
+            "confirmar que solo hay cambios listados en salidas_esperadas de F1-F3"
+          ]
+        },
+        {
+          "id": "F5.op2_commit",
+          "descripcion": "Crear commit estructurado",
+          "pseudocodigo": [
+            "git add (archivos especificos):",
+            "  git add frontend/src/lib/stores/tarifas.ts",
+            "  git add frontend/src/lib/modules/tarifas/",
+            "  git add frontend/src/routes/[project_id]/tarifas/",
+            "  git add frontend/src/lib/modules/index.ts (o loader.ts, segun F2.op7)",
+            "",
+            "git commit con mensaje:",
+            "  feat(ui:tarifas): cierre UI tarifas --3 zonas (general / por canal / variantes)",
+            "",
+            "  Aplica TP6 del contrato subsistema-carta v1.0.0 (D6 separacion_de_ui).",
+            "  + nuevo store frontend/src/lib/stores/tarifas.ts (lecturas + suscripciones bus)",
+            "  + modulo frontend con TarifasPanel + CartaGeneralZone + CanalesZone + VariantesZone",
+            "  + ruta SvelteKit /tarifas",
+            "  + registro del modulo en loader",
+            "",
+            "  Postura B canonica (cero forms de mutacion, prefillChatInput para acciones).",
+            "  Shape estable de tarifas.config (general + 6 canales fijos + variantes array).",
+            "",
+            "  Plan ejecutable: arquitectura/decisiones/propuestas/cierre-ui-tarifas.json",
+            "  Contrato canonico: arquitectura/decisiones/_contratos/subsistema-carta.contract.json"
+          ]
+        },
+        {
+          "id": "F5.op3_push",
+          "descripcion": "Push con retry exponencial",
+          "pseudocodigo": [
+            "git push -u origin <rama-de-la-sesion>",
+            "si falla por red: retry 2s, 4s, 8s, 16s",
+            "si falla por otra razon: parar, diagnosticar, reportar al humano"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo OK explicito"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "descripcion": "validate:ci pasa sin drift nuevo",
+      "comando": "npm run validate:ci",
+      "directorio": "raiz repo",
+      "ejecutar_tras": ["F1", "F2", "F3"],
+      "salida_esperada": "PASS sin drift NUEVO"
+    },
+    {
+      "id": "CC2_build_frontend",
+      "descripcion": "Frontend compila sin errores",
+      "comando": "npm run build",
+      "directorio": "frontend/",
+      "ejecutar_tras": ["F2", "F3"],
+      "salida_esperada": "build OK sin errores TypeScript"
+    },
+    {
+      "id": "CC3_git_status",
+      "descripcion": "Scope del commit",
+      "comando": "git status",
+      "ejecutar_tras": ["F1", "F2", "F3", "F4"],
+      "verificar": "ningun archivo modificado fuera del scope"
+    },
+    {
+      "id": "CC4_store_no_mutaciones",
+      "descripcion": "El store NO expone funciones de mutacion (D6)",
+      "comando": "grep -E 'export.*(setGeneral|assign|registerVariant|deleteVariant)' frontend/src/lib/stores/tarifas.ts || echo OK",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "OK (ninguna funcion de mutacion exportada)"
+    },
+    {
+      "id": "CC5_prefill_en_zonas",
+      "descripcion": "Las zonas usan prefillChatInput, no llamadas directas a tools",
+      "comando": "grep -c 'prefillChatInput' frontend/src/lib/modules/tarifas/*.svelte",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": ">= 6 (al menos una llamada por accion en cada zona)"
+    },
+    {
+      "id": "CC6_canales_canonicos",
+      "descripcion": "CANALES_CANONICOS contiene exactamente los 6 canales del contrato",
+      "comando": "grep 'CANALES_CANONICOS' frontend/src/lib/stores/tarifas.ts | head -3",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "Contiene mesa, telefono, llevar, glovo, whatsapp, llevadoo"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Tocar modules/pizzepos/tarifas/* (backend del modulo)",
+    "Tocar cualquier otro modulo backend del subsistema-carta o del POS",
+    "Anyadir funciones de mutacion al store de tarifas (D6) --rompe Postura B",
+    "Invocar tools de tarifas backend (tarifas.set_general, tarifas.assign, etc.) desde el store via mqttRequest",
+    "Forms de creacion/edicion de variantes o asignaciones (D10)",
+    "Editar precios de productos desde la UI de tarifas (prohibido explicito del contrato D6 separacion_de_ui)",
+    "Crear cartas desde cero desde la UI de tarifas (prohibido explicito del contrato D6)",
+    "Anyadir/quitar canales del enum (D4 enum cerrado)",
+    "Tocar frontend/src/lib/stores/chatInputDraft.ts o ChatInput.svelte (viven en cierre-ui-recetas F1)",
+    "Tocar otros stores frontend o modulos frontend",
+    "Modificar scripts/validate-all.js, validators, drift-baseline.json",
+    "Modificar arquitectura/decisiones/_contratos/",
+    "Modificar LazyShell.svelte mas alla del registro del modulo en loader",
+    "Crear PR sin OK explicito del humano",
+    "Hacer commit con git add . o git add -A",
+    "Saltar OK humano entre F1 y F2, F2 y F4, F4 y F5 (F3 puede continuar a F4 sin OK porque es trivial)",
+    "Decir 'todo OK' sin reportar el comando ejecutado y su salida real",
+    "Continuar a F2 si la verificacion DEP1 en F2.op0 falla",
+    "Tocar modules/pizzepos/carta-manager, menu-generator, productos, etc. (otros modulos --planes propios)"
+  ],
+
+  "salida_final_del_horizonte": {
+    "modulo_tarifas_estado_terminal": "UI completa con 3 zonas canonizadas por subsistema-carta D6: general (siempre visible con selector visual), por canal (colapsada por defecto, auto-expand si hay overrides), variantes (oculta por defecto, expandible). Cero forms, cero invocaciones a tools del backend --todas las acciones pre-rellenan chat con frases canonicas Q4. Reactivo a tarifas.config.actualizada y carta.*. Coherente con cierre-ui-carta-manager (paralelo en estructura) y respeta la separacion de dominios del contrato.",
+    "archivos_finales_creados": [
+      "frontend/src/lib/stores/tarifas.ts (~180 lineas)",
+      "frontend/src/lib/modules/tarifas/manifest.json",
+      "frontend/src/lib/modules/tarifas/index.ts",
+      "frontend/src/lib/modules/tarifas/TarifasPanel.svelte (~50 lineas)",
+      "frontend/src/lib/modules/tarifas/CartaGeneralZone.svelte (~80 lineas)",
+      "frontend/src/lib/modules/tarifas/CanalesZone.svelte (~130 lineas)",
+      "frontend/src/lib/modules/tarifas/VariantesZone.svelte (~150 lineas)",
+      "frontend/src/routes/[project_id]/tarifas/+page.svelte"
+    ],
+    "archivos_finales_modificados": [
+      "frontend/src/lib/modules/index.ts o loader.ts (registro del modulo tarifas)"
+    ],
+    "verificacion_terminal": [
+      "Todos los flujos de F4 verificados ✓",
+      "CC1-CC6 todos pasan",
+      "validate:ci verde sin drift nuevo",
+      "frontend build OK",
+      "git status: solo archivos del scope",
+      "commit pusheado a la rama"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "TP6 del contrato subsistema-carta v1.0.0 --estado: 'cerrado'",
+      "Tarifas cuenta con UI propia con las 3 zonas canonizadas",
+      "Comerciante puede ver y operar la asignacion carta+canal sin conocer nombres exactos de tools"
+    ],
+    "siguiente_natural": "TP7 (badges activacion en carta-manager UI) --requiere que cierre-ui-carta-manager.json este ejecutado primero. TP8 (schemas AJV) preparativo para TP9 (validator). TP9 esperar a que la familia este wireada para no producir falsos positivos. TP11 ritual de limpieza CLAUDE.md cuando todos los TPs activos esten cerrados."
+  },
+
+  "estado": "terminado",
+  "estado_de_ejecucion": {
+    "ejecutado_por": "fede",
+    "rama": "claude/ana-tX6dS",
+    "preguntas_cerradas": { "Q1": "A", "Q2": "A", "Q3": "B", "Q4": "A" },
+    "F1": {
+      "cerrada_en": "2026-06-02",
+      "commit_hash": "1729676",
+      "salida_real": "frontend/src/lib/stores/tarifas.ts creado (solo lectura, suscripciones bus). API fs real (MqttRequestError/items) en vez de res.status literal del pseudocodigo (fiel a D5). Path /storage/pizzepos/cartas/ confirmado canonico (v1.3.0).",
+      "cross_checks": "CC1 validate:ci PASS sin drift; CC3 scope limpio; CC4 sin mutaciones OK; CC6 6 canales OK; type-check 0 errores en tarifas.ts"
+    },
+    "F2": {
+      "cerrada_en": "2026-06-02",
+      "commit_hash": "27859c5",
+      "salida_real": "frontend/src/lib/modules/tarifas/ (manifest+index+Panel+3 zonas). F2.op7 no-op: loader autodescubre por import.meta.glob, definitions.ts no se toca.",
+      "cross_checks": "CC1 validate:ci PASS; CC2 build OK (modulo en bundle); CC3 scope limpio; CC5 prefill=7 (>=6); type-check 0 errores"
+    },
+    "F3": {
+      "cerrada_en": "2026-06-02",
+      "commit_hash": "f5360b1",
+      "salida_real": "frontend/src/routes/[project_id]/tarifas/+page.svelte (LazyShell). Build emite _project_id_/tarifas/_page.svelte.js.",
+      "cross_checks": "CC2 build OK; CC3 scope limpio. Warning cosmetico unused-export panelId identico al hermano RecetasPanel."
+    },
+    "F4": {
+      "cerrada_en": "2026-06-02",
+      "metodo": "review a nivel de codigo (entorno remoto sin navegador/broker). Golden path y edge cases verificados estaticamente contra el codigo. 2 items (reactividad del bus tras mutacion real) quedan para QA manual del humano con npm run dev + proyecto activo.",
+      "cross_checks": "build produccion OK; type-check limpio en todo el modulo"
+    }
+  }
+}

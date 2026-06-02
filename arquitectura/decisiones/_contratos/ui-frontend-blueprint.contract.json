@@ -1,0 +1,204 @@
+{
+  "_doc": "Contrato TRANSVERSAL que canoniza el patron de implementacion frontend de un modulo blueprint individual. Deriva de frontend.contract.json (que define el frame general: zonas, tipos, no modales, no SPA). Este contrato cierra UN nivel mas abajo: como un blueprint backend concreto se materializa en N modulos frontend con sus paneles, routers, y patron de invocacion. Cocinado en sesion 2026-06-01 cuando se observo que el principio 'todos los blueprint con UI porque sin UI los cajones rompen el goto()' no estaba canonizado, y que cada plan de cierre UI por modulo (recetas, tecnicas, carta-scheduler, ...) iba a redescubrir las mismas decisiones. Origen empirico: cocina con ana del horizonte cierre-ui-recetas. El plan piloto cierre-ui-recetas.json es el primer caso que aplica este contrato.",
+
+  "id": "ui-frontend-blueprint",
+  "version": "1.0.1",
+  "creada": "2026-06-01",
+  "supersedes_nota": "v1.0.1 (2026-06-01, misma sesion): correccion en redaccion del principio store_frontend_es_lector_reactivo_no_dueno_del_estado. v1.0.0 decia 'el store lee via fs.read O tools .listar/.obtener del blueprint' --la segunda mitad era INCORRECTA: los blueprints son LLM-runtime, no tienen servicio JS escuchando el bus, invocarlos por mqttRequest hace timeout. v1.0.1 clarifica: el store SOLO invoca modulos POC2 del backend que SI tienen JS (canonicamente fs.read.request contra modules/filesystem/); cualquier proyeccion/find/map se hace en el propio frontend tras el fs.read. Las mutaciones SIEMPRE pasan por chat. Bug detectado en cocina del plan cierre-ui-recetas.json F2 (mqttRequest('recetas','historial',...) que habria timeout) --plan corregido en paralelo.\n\nv1.0.0: Primera version. Canoniza 7 patrones cross-modulo descubiertos en la cocina con ana 2026-06-01: principio 'todos los blueprint con UI', los 5 criterios chat-vs-UI, '1 boton work-bar = 1 recurso observable', '1 blueprint backend = N modulos frontend segun recursos', 'Panel router con activeView local', 'UI lectora reactiva no duena del estado', y convencion de archivos del modulo frontend. Tambien canoniza la distincion Postura A (UI completa con forms) vs Postura B (solo lectura + pre-relleno chat) y el mecanismo chatInputDraft compartido.",
+
+  "deriva_de": "arquitectura/decisiones/_contratos/frontend.contract.json (frame general del frontend: zonas, tipos, no modales, no SPA)",
+
+  "objetivo": "Validar mecanicamente que cada modulo blueprint del sistema event-core con dominio observable tiene su UI frontend completa siguiendo el patron canonico (ruta SvelteKit + manifest declarando boton work-bar + componentes Panel router + sub-componentes). El validator cruza modules/<scope>/<slug>/module.json (target_page_id declarado) contra frontend/src/routes/ y frontend/src/lib/modules/, detectando blueprints sin UI o UIs huerfanas. NO valida el contenido visual concreto de cada panel ni el estilo CSS --eso es horizontal, decision del modulo.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json (este archivo)",
+      "arquitectura/decisiones/_contratos/frontend.contract.json (frame general del que deriva)",
+      "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json (paradigma del blueprint backend)",
+      "arquitectura/decisiones/_contratos/cajones-context-partitioning.contract.json (cajones dependen de target_page_id navegable)"
+    ],
+    "obligatorios_si_existen": [
+      "modules/<scope>/<slug>/module.json (manifest de cada blueprint del sistema)",
+      "frontend/src/routes/[project_id]/<slug>/+page.svelte (ruta SvelteKit del modulo)",
+      "frontend/src/lib/modules/<slug>/manifest.json (manifest del modulo frontend)",
+      "frontend/src/lib/modules/<slug>/index.ts (registro del UIModule)"
+    ],
+    "opcionales_para_contexto": [
+      "arquitectura/decisiones/propuestas/cierre-ui-recetas.json (plan piloto del patron)",
+      "frontend/src/lib/components/layout/LazyShell.svelte (motor generico que monta los modulos)",
+      "frontend/src/lib/modules/loader.ts (autodescubrimiento de modulos frontend)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "LA UI ES LA ESCENA DONDE EL CHAT OPERA. No es alternativa al chat ni compite con el. El chat sigue siendo el operador principal del sistema (invoca tools del blueprint, escribe diffs, razona). La UI muestra lo que el chat no puede mostrar bien (densidad visual, previews, estado vivo) y ofrece atajos para acciones frecuentes. Cuando hay duda, el chat gana --la UI solo aparece donde aporta valor que el chat no puede dar.",
+
+    "TODOS LOS BLUEPRINT CON DOMINIO OBSERVABLE TIENEN UI. Sin UI propia, los cajones (chat.cambiar_foco hacia un target_page_id) hacen goto() a una ruta SvelteKit inexistente y rompen el flujo conversacional. La UI no es opcional para blueprints con dominio observable --es prerrequisito de la mecanica de cajones. Excepciones canonicas: agentes blueprint (razonan, no tienen estado observable) y padres abstractos (no se instancian directamente).",
+
+    "EL RECURSO OBSERVABLE DEL USUARIO ES LA UNIDAD MINIMA DE WORK-BAR. Un boton en la zona barra_modulos representa UN recurso que el usuario puede ver y navegar (catalogo de recetas, lista de cartas, expedientes de viabilidad). Las acciones SOBRE ese recurso son botones dentro de su panel, no recursos en la work-bar. Si un blueprint backend expone varios recursos paralelos (caso recetas: recetas + ingredientes), se materializa en N modulos frontend.",
+
+    "EL STORE FRONTEND NO ES DUENO DEL ESTADO. El agregado backend (blueprint que persiste) es la unica fuente de verdad. El store frontend lee /<recurso>.json via fs.read y se subscribe a eventos del bus que el blueprint publica tras mutar. Cuando una mutacion ocurre (sea por chat, por otro modulo, por agente), el bus la publica y el store recarga. NUNCA el store actualiza state local con el resultado de un tool --eso introduce drift entre disco y UI."
+  ],
+
+  "principios": [
+    {
+      "id": "todos_los_blueprint_con_dominio_observable_tienen_ui",
+      "regla": "Cada modulo blueprint del repo (modules/<scope>/<slug>/ con blueprint_driven:true en module.json) que NO sea headless declarado debe tener: (a) ruta SvelteKit en frontend/src/routes/[project_id]/<slug>/+page.svelte, (b) al menos un modulo frontend en frontend/src/lib/modules/ cuyo manifest declare routes que incluya '/<slug>' o cuyo id sea '<slug>'.",
+      "razon": "Sin estos dos archivos, chat.cambiar_foco({nuevo_page_id: '<slug>'}) hace goto('/<project_id>/<slug>') que renderiza 404 o LazyShell vacio. El cajon rompe el flujo. La UI es prerrequisito del mecanismo de cajones."
+    },
+    {
+      "id": "cinco_criterios_chat_vs_ui_para_alcance",
+      "regla": "Al decidir que tools del blueprint van a UI vs se quedan en chat, aplicar el filtro canonico de 5 criterios. UI cuando cumple alguno: (1) densidad visual instantanea, (2) accion rapida sin formularla, (3) edicion estructurada de muchos campos, (4) preview de salidas visuales, (5) estado vivo del sistema. Chat cuando: busqueda semantica natural, calculo on-demand sin desglose visual, investigacion por nombre, creacion de entidades complejas que el LLM estructura mejor que un form.",
+      "razon": "Sin criterio explicito, cada plan de cierre UI redescubre el mismo debate y resuelve distinto. El filtro produce decisiones consistentes y reduce trabajo duplicado."
+    },
+    {
+      "id": "un_boton_work_bar_por_recurso_observable",
+      "regla": "Cada manifest en frontend/src/lib/modules/<slug>/manifest.json declara exactamente 1 boton work-bar (zone='barra_modulos'). El boton representa UN recurso observable del usuario. Las acciones sobre ese recurso (eliminar, editar, etc.) son botones dentro del panel, no recursos en work-bar.",
+      "razon": "Mantiene la work-bar como mapa de recursos, no de operaciones. Evita ruido visual. Patron heredado de viabilidad/escandallo verificado en disco. Hermanos rompiendo este patron (declarando >1 boton por modulo) crean inconsistencia."
+    },
+    {
+      "id": "un_blueprint_backend_puede_mapear_a_n_modulos_frontend",
+      "regla": "Si un blueprint backend expone varios recursos observables paralelos (caso recetas: recetas + ingredientes), se materializa en N modulos frontend, no en N tabs dentro de un solo modulo. Cada modulo frontend tiene su propio directorio con manifest+index+componentes y aporta 1 boton work-bar al mismo target_page_id del blueprint.",
+      "razon": "El frontend ya implementa el patron implicitamente: menu-generator -> menu-cartas + menu-generate; carta-marketing -> marketing-perfil + marketing-actividad. Este principio lo hace explicito. Tabs dentro de un solo modulo confunden el principio 'work-bar = recursos'."
+    },
+    {
+      "id": "panel_router_con_activeview_local_no_store_global",
+      "regla": "El componente principal de cada modulo frontend (<Nombre>Panel.svelte) es un router con variable Svelte local 'let activeView' que renderiza condicionalmente sub-componentes (Browser, Detail, Form, Historial, etc.). NO se usa store global para navegacion entre sub-vistas. Las sub-vistas se pasan props y callbacks como onBack/onSelect.",
+      "razon": "Patron heredado de viabilidad/escandallo verificado en disco. Navegacion entre Browser/Detail/Form es interna del modulo, no afecta a otros modulos, no debe publicarse al bus ni al store global. Store global de navegacion crea acoplamientos innecesarios."
+    },
+    {
+      "id": "store_frontend_es_lector_reactivo_no_dueno_del_estado",
+      "regla": "El store de cada modulo en frontend/src/lib/stores/<slug>.ts solo LEE el agregado backend, y SIEMPRE via modulos POC2 del backend que tienen JS y responden directamente al bus (canonicamente: fs.read.request contra modules/filesystem/ leyendo el JSON canonico del agregado). NUNCA invoca tools de blueprints LLM-runtime (que NO tienen servicio JS escuchando el bus --solo se ejecutan cuando el LLM los invoca por chat; invocarlos por mqttRequest hace timeout). Si el frontend necesita un dato derivado (find, map, proyeccion), lo hace en el propio store TypeScript despues del fs.read --el mismo trabajo que el blueprint hace en su pseudocodigo de lectura. Las mutaciones SIEMPRE van por chat: el panel invoca prefillChatInput; el LLM ejecuta el tool del blueprint; el blueprint persiste y publica evento; el store escucha el evento y dispara recarga via fs.read. El store NUNCA actualiza state local con el resultado de una mutacion --solo al recibir el evento del bus.",
+      "razon": "El blueprint backend es la unica fuente de verdad. State local actualizado con resultado de mutacion introduce drift cuando: (a) el blueprint normaliza el dato (slug, calculados), (b) otros modulos del backend o agentes mutan tambien (multi-canal real), (c) el blueprint rechaza por validacion. El patron lector reactivo mantiene coherencia siempre."
+    },
+    {
+      "id": "convencion_archivos_modulo_frontend",
+      "regla": "Cada modulo frontend tiene estructura canonica: frontend/src/lib/modules/<slug>/manifest.json (1 boton work-bar) + index.ts (registro UIModule + re-exports del store) + <Nombre>Panel.svelte (router con activeView) + sub-componentes (Browser/Card/Detail/etc.). Y su ruta correspondiente frontend/src/routes/[project_id]/<slug>/+page.svelte con shell minimal <LazyShell />.",
+      "razon": "Estructura predecible permite navegacion entre modulos del repo sin redescubrir convenciones. Facilita el autodescubrimiento del loader.ts (escanea manifest.json en cada directorio). Hace cocinable replicar el patron a nuevos modulos."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "postura_A_vs_postura_B_por_modulo",
+      "descripcion": "Cada modulo elige su postura segun la naturaleza de su dominio.",
+      "postura_A": {
+        "label": "UI completa con forms para mutaciones",
+        "aplica_cuando": "El dominio requiere validacion cliente estricta, autocompletes complejos, edicion estructurada que el LLM hace tedioso (ej: muchos campos numericos validados, decimales criticos con unidad)",
+        "implementacion": "Store con funciones de mutacion (crear, actualizar, eliminar) que invocan tools del blueprint via mqttRequest. Forms .svelte con validacion + estado loading + banners de error."
+      },
+      "postura_B": {
+        "label": "UI solo lectura + pre-relleno del chat para acciones",
+        "aplica_cuando": "El dominio se describe bien en lenguaje natural (entidades complejas con jerarquia, ingredientes, pasos, texto libre). El LLM estructura mejor el input que un form. Cocinar y mantener forms es coste sin retorno claro.",
+        "implementacion": "Store solo lectura (cero funciones de mutacion). Acciones de UI invocan prefillChatInput(text) que pone el texto en el chat input para que el usuario revise y envie. El LLM ejecuta la mutacion via tools del blueprint."
+      },
+      "regla_de_decision": "Postura B por defecto cuando el dominio es complejo y conversacional. Postura A solo cuando se justifica con caso real (forms criticos por densidad de validacion). Mezclas validas: lectura B (lo normal) + atajos rapidos como botones (eliminar, archivar, cambiar estado) que tambien pre-rellenan chat.",
+      "ejemplo_postura_B_canonica": "modulo recetas cocinado en cierre-ui-recetas.json: catalogos visibles, botones que pre-rellenan, cero forms de creacion/edicion."
+    },
+    {
+      "id": "mecanismo_chatInputDraft_compartido",
+      "descripcion": "Para Postura B, el mecanismo de pre-relleno del chat es UNICO y COMPARTIDO entre todos los modulos frontend.",
+      "implementacion_canonica": [
+        "Store: frontend/src/lib/stores/chatInputDraft.ts exporta 'chatInputDraft' (writable) y 'prefillChatInput(text)'.",
+        "ChatInput.svelte hace bind:value contra el store, manteniendo bidireccionalidad (usuario escribe -> store actualiza; pseudo-codigo invoca prefillChatInput -> input visible se rellena).",
+        "Cualquier componente de cualquier modulo importa 'prefillChatInput' y lo invoca en handlers de botones de accion."
+      ],
+      "razon": "Inversion una vez, reuso en los 11+ modulos blueprint con UI. Evita N implementaciones divergentes."
+    },
+    {
+      "id": "excepciones_canonicas_headless",
+      "descripcion": "Hay dos clases de blueprint que NO llevan UI por diseno consciente.",
+      "agentes_blueprint": {
+        "razon": "Razonan sobre el dominio sin estado observable propio. Su salida es texto que el chat renderiza. No tienen target_page_id, no se instancian como page navegable.",
+        "ejemplo": "system-coherence-analyzer"
+      },
+      "padres_abstractos": {
+        "razon": "Blueprint padre que solo se hereda. No se instancia ni se invoca directamente.",
+        "ejemplo": "agente-base.blueprint.json"
+      },
+      "como_se_declara_headless": "Sin target_page_id en module.json y sin entrada en el registry de pages."
+    }
+  ],
+
+  "prohibido": [
+    "Store global compartido para navegacion entre sub-vistas de un modulo (rompe principio panel_router_local).",
+    "UI como duena del estado del agregado: actualizar state local con resultado de un tool de mutacion (rompe principio store_lector_reactivo). El store solo actualiza al recibir evento del bus.",
+    "Botones en work-bar que no correspondan a un recurso observable (ejemplo: boton 'Crear receta' como recurso work-bar; lo correcto es boton dentro del panel Recetas).",
+    "Forms de creacion/edicion de entidades complejas cuando el LLM las estructura mejor (heuristica Postura B). Forms se permiten cuando se justifican por caso real (Postura A).",
+    "Control de UI desde el chat: anyadir tools al blueprint backend para cambiar activeView, abrir paneles, etc. UI escena, chat operador --el chat actua sobre datos, no sobre UI.",
+    "Multiples botones work-bar declarados en un unico manifest.json. Si un blueprint expone varios recursos, se materializa en N modulos frontend.",
+    "Pre-relleno del chat input con mecanismos privados de cada modulo (variables locales, eventos custom). Usar SIEMPRE el chatInputDraft store compartido.",
+    "Blueprints con target_page_id declarado pero sin ruta SvelteKit ni modulo frontend (rompe principio todos_los_blueprint_con_dominio_observable_tienen_ui).",
+    "Blueprints headless (agentes, padres abstractos) con modulo frontend o ruta SvelteKit asociada (inconsistencia: declaras headless pero materializas UI).",
+    "Modificar el frame general (LazyShell.svelte, loader.ts, zonas canonicas de frontend.contract.json) desde un horizontal de cierre UI por modulo. Esos cambios son transversales y van por commit separado."
+  ],
+
+  "output_shape_resumen": {
+    "descripcion": "Este contrato NO genera output curado (_outputs/<id>.json). Es contrato de patrones de implementacion, no de inventario.",
+    "validator_output": "El validator emite findings (info/warning/error) por cada cross-check fallado, con file:line cuando aplique. No persiste output a disco."
+  },
+
+  "reglas_de_extraccion": {
+    "descripcion": "El validator no extrae output a disco. Solo emite findings al stdout/stderr y devuelve exit code segun severidad maxima encontrada."
+  },
+
+  "derivaciones": [
+    "Cada plan de cierre UI por modulo (cierre-ui-<slug>.json en arquitectura/decisiones/propuestas/) deriva de este contrato. El plan piloto es cierre-ui-recetas.json.",
+    "Cualquier modulo blueprint nuevo cocinado a futuro debe respetar este contrato al cocinar su frontend.",
+    "Si en el futuro emerge la necesidad de un patron Postura C (mixta?, distinta?), se cocina como amendment a este contrato (v1.1.0+), no como contrato paralelo."
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "C1_blueprint_con_target_page_id_tiene_ruta_sveltekit",
+      "regla": "Cada modulo en modules/<scope>/<slug>/ con module.json.blueprint_driven:true y module.json.target_page_id declarado, debe tener archivo frontend/src/routes/[project_id]/<target_page_id>/+page.svelte. Excepcion: blueprints en _agentes-blueprint/ y blueprints headless declarados.",
+      "como_detectar": "Por cada module.json con blueprint_driven y target_page_id, comprobar existencia del archivo +page.svelte. Si NO existe, emitir warning con la ruta esperada.",
+      "severidad": "warning"
+    },
+    {
+      "id": "C2_blueprint_con_target_page_id_tiene_modulo_frontend",
+      "regla": "Cada modulo en modules/<scope>/<slug>/ con module.json.blueprint_driven:true y module.json.target_page_id declarado, debe tener al menos un manifest en frontend/src/lib/modules/<X>/manifest.json cuyo campo routes incluya '/<target_page_id>' O cuyo id sea exactamente '<target_page_id>'. Excepcion: blueprints headless declarados.",
+      "como_detectar": "Cargar todos los manifest.json en frontend/src/lib/modules/*/. Para cada blueprint con target_page_id, buscar manifest cuyo routes incluya '/<target_page_id>' o cuyo id sea '<target_page_id>'. Si no hay match, emitir warning.",
+      "severidad": "warning"
+    },
+    {
+      "id": "C3_modulo_frontend_tiene_estructura_canonica",
+      "regla": "Cada directorio en frontend/src/lib/modules/<X>/ debe contener: manifest.json (con campos id, name, version, zone, routes, icon, label), index.ts, y al menos un archivo .svelte. Excepcion: modulos archivados (manifest.json.archived o nombrados *.legacy).",
+      "como_detectar": "Por cada directorio en frontend/src/lib/modules/*/, verificar presencia de los tres archivos. Si falta alguno, emitir error con archivo faltante.",
+      "severidad": "error"
+    },
+    {
+      "id": "C4_manifest_frontend_declara_un_boton_workbar",
+      "regla": "Cada manifest.json en frontend/src/lib/modules/<X>/ con zone='work-bar' o 'barra_modulos' declara UN solo boton work-bar (campos id, icon, label todos presentes y unicos por modulo). NO declarar 2+ botones en un mismo manifest.",
+      "como_detectar": "Cargar manifest.json. Si declara zone work-bar/barra_modulos, comprobar que tiene icon y label como strings y order como number. Si tiene array de botones, emitir info (revision manual).",
+      "severidad": "info"
+    },
+    {
+      "id": "C5_blueprints_headless_no_tienen_modulo_frontend",
+      "regla": "Blueprints declarados headless (sin target_page_id en module.json, O ubicados en modules/_agentes-blueprint/, O cuyo id matchea patron 'agente-*') NO deben tener modulo frontend ni ruta SvelteKit asociados.",
+      "como_detectar": "Por cada blueprint headless, comprobar que NO existe frontend/src/lib/modules/<slug>/ ni frontend/src/routes/[project_id]/<slug>/+page.svelte. Si existe alguno, emitir warning (inconsistencia: declarado headless pero tiene UI).",
+      "severidad": "warning"
+    }
+  ],
+
+  "salida_validador": {
+    "modo_schema_only": "node ui-frontend-blueprint.validate.js --> verifica que este contrato es JSON valido y tiene amplitud canonica. Exit 0 si OK.",
+    "modo_check_system": "node ui-frontend-blueprint.validate.js --check-system --> ejecuta C1-C5 contra el repo. Output: lista de findings con severidad + file:line. Exit code: 0 si solo info, 1 si warning o error (override por baseline en CI).",
+    "formato_finding": "[<severidad>] <check_id>: <descripcion corta>. file:line si aplica."
+  },
+
+  "convenciones_complementarias": {
+    "frontend_contract": "ui-frontend-blueprint deriva de frontend.contract.json. El frame general (zonas, tipos, no modales, no SPA) lo define frontend.contract; este contrato define el patron de un modulo individual.",
+    "modulos_blueprint_driven": "Cada blueprint cuyo frontend este sujeto a este contrato cumple tambien modulos-blueprint-driven.contract.json. La distincion: aquel contrato define cuando un modulo es blueprint-driven; este define como su frontend se materializa.",
+    "cajones_context_partitioning": "El principio todos_los_blueprint_con_dominio_observable_tienen_ui existe PORQUE los cajones (cajones-context-partitioning.contract.json) dependen de target_page_id navegable. Sin UI, el goto() del cajon rompe el flujo.",
+    "events": "El principio store_frontend_es_lector_reactivo depende de eventos canonicos publicados por el blueprint (events.contract.json). El store frontend se subscribe a esos eventos para recargar tras mutaciones.",
+    "dinamica_de_trabajo_companero": "Cada plan de cierre UI por modulo (cierre-ui-<slug>.json) sigue el flujo de horizonte cerrado del contrato dinamica-de-trabajo-companero --se cocina con ana y se ejecuta con fede."
+  },
+
+  "trabajo_pendiente": [
+    "Migracion: aplicar este patron a los modulos blueprint que hoy no lo cumplen. Inventario inicial verificado 2026-06-01: tecnicas (sin UI), carta-scheduler (sin UI), carta-manager (sin UI), recetas (UI parcial --en proceso via cierre-ui-recetas.json), menu-generator (UI dispersa). Cocinar plan de cierre UI por modulo y ejecutar con fede.",
+    "Postura A no tiene caso testigo en el repo a 2026-06-01. Si emerge un modulo que la justifique, documentar como ejemplo canonico en este contrato.",
+    "Revisar tras N cierres (probablemente 3-4 modulos) si algun principio no aplica nunca o si emerge uno nuevo recurrente."
+  ]
+}

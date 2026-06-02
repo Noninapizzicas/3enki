@@ -7,7 +7,7 @@
     "generado_por": "arquitectura/decisiones/_validators/blueprint-eventos-conscientes.validate.js",
     "notas": "Catalogo curado de eventos del bus indexado por nombre. Incluye publishers (blueprints con publish/publishAndWait en su pseudocodigo + module.json.events.publishes[]) y subscribers (blueprints con eventos_que_escucho[] + module.json.events.subscribes[]). El validador lo regenera cada vez. NO editar a mano."
   },
-  "total_eventos": 424,
+  "total_eventos": 423,
   "eventos": {
     "*.actualizado": {
       "publishers": [],
@@ -473,7 +473,12 @@
           "ref": "operaciones.pseudocodigo"
         }
       ],
-      "subscribers": []
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "handler": "onCartaBorrada"
+        }
+      ]
     },
     "carta.creada": {
       "publishers": [
@@ -496,7 +501,12 @@
           "ref": "operaciones.pseudocodigo"
         }
       ],
-      "subscribers": []
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "handler": "onCartaGenerada"
+        }
+      ]
     },
     "carta.generar.fallida": {
       "publishers": [
@@ -2884,20 +2894,6 @@
       ],
       "subscribers": []
     },
-    "menu.generado": {
-      "publishers": [
-        {
-          "source": "modules/pizzepos/productos/module.json",
-          "ref": "module.json.events.publishes"
-        }
-      ],
-      "subscribers": [
-        {
-          "source": "modules/pizzepos/productos/module.json",
-          "handler": "onMenuGenerado"
-        }
-      ]
-    },
     "menu.generation.failed": {
       "publishers": [
         {
@@ -2915,15 +2911,6 @@
         }
       ],
       "subscribers": []
-    },
-    "menu.validado": {
-      "publishers": [],
-      "subscribers": [
-        {
-          "source": "modules/pizzepos/productos/module.json",
-          "handler": "onMenuValidado"
-        }
-      ]
     },
     "mercadona.categorias.listar.request": {
       "publishers": [
@@ -4043,6 +4030,10 @@
         {
           "source": "modules/pizzepos/escandallo/escandallo.blueprint.json",
           "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
         }
       ],
       "subscribers": []
@@ -4347,6 +4338,10 @@
         {
           "source": "modules/pizzepos/comandero/module.json",
           "handler": "onTarifasConfigActualizada"
+        },
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "handler": "onTarifasConfigActualizada"
         }
       ]
     },
@@ -4354,6 +4349,10 @@
       "publishers": [
         {
           "source": "modules/pizzepos/comandero/module.json",
+          "ref": "module.json.events.publishes"
+        },
+        {
+          "source": "modules/pizzepos/productos/module.json",
           "ref": "module.json.events.publishes"
         }
       ],
@@ -4363,6 +4362,15 @@
           "handler": "onConfigSolicitada"
         }
       ]
+    },
+    "tarifas.set_general": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
     },
     "tecnica.actualizada": {
       "publishers": [

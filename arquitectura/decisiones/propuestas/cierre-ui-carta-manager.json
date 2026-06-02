@@ -1,0 +1,934 @@
+{
+  "_doc": "Plan ejecutable JSON del horizonte 'cierre-ui-carta-manager'. Crea desde cero la UI del modulo carta-manager --eje central del subsistema-carta, backend maduro (13+1 operaciones, persistencia /cartas/<id>.json + /cartas/versions/<id>/<timestamp>.json), frontend cero al cocinar este plan. Aplica el contrato ui-frontend-blueprint v1.0.1 con dos especificidades del modulo: (1) replica el patron hermano de recetas (catalogo + versionado + history), (2) shape ABIERTO de productos --la UI es agnostica del shape concreto, renderiza los campos presentes en cada carta sin obligar campos del blueprint, porque el sistema sirve proyectos con modelos de producto distintos (pizzepos con pizzas, vapers con sabores, futuros con N modelos). Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json (sin Object.assign, sin rest-spread con omision, verboso explicito).",
+
+  "id": "cierre-ui-carta-manager",
+  "version": "1.3.0",
+  "_v1_3_changelog": "v1.3.0 (2026-06-02): reconciliacion de 4 inconsistencias internas que fede destapo al intentar ejecutar v1.2.0 (las decisiones D12/D13 eran correctas pero operaciones/axioma/prohibido quedaron desfasados). (1) axioma de verifico_en_disco actualizado: el store lo borra F1.op0, no F0 (F0 no existe desde v1.2.0). (2) F1.op1 declara las interfaces con 'export'; F1.op7 exporta 'type Carta' y 'type CartaResumen' --impresion-cartas importa CartaResumen y sin export rompe el build. (3) materializada la sub-operacion que D13 describia como 'F1.opN' pero no existia en las operaciones: nueva F1.op8 que audita importadores externos del barrel menu-generator/index.ts (verificado 0) y limpia su bloque de re-exports muertos del store. (4) prohibido_absoluto afinado: la clausula generica 'tocar otros modulos frontend' ahora exceptua explicitamente la limpieza de menu-generator/index.ts autorizada por D13. Interaccion D12<->D13 aclarada: como D13 limpia menu-generator (unico consumer de los nombres legacy cartaManagerStore/selectCarta/clearError/cartaCount/selectedCarta), el store nuevo NO necesita preservarlos --solo exporta la API de lectura nueva + tipos; el unico consumer vivo restante (impresion-cartas) usa sortedCartas + initCartaManagerSubscriptions + CartaResumen, todos provistos. Cero cambio en D1-D13. F2-F5 intactas.",
+  "_v1_2_changelog": "v1.2.0 (2026-06-02): cocinado tras dos descubrimientos del audit ampliado: (1) F0.op2 de v1.1.0 fallaba porque encontraba 3 importadores del store carta-manager.ts (menu-cartas, impresion-cartas, menu-generator/index.ts), no 0. (2) El audit revelo que menu-cartas era deuda implicita (PR #148 del 14-may-2026 'fix(ai-gateway/anthropic)' la creo como side-effect; cero commits posteriores la nombran; v2.0.0 sin paper trail). Borrado fuera del plan en commit 50c0963: directorio menu-cartas/ entero + bloque 'menu-cartas-panel' en panels.ts + mencion en comentario de menu-generator/index.ts. Tras el borrado, el sprawl menu-cartas ya no existe y F0 del plan deja de tener objeto. Pero el store carta-manager.ts sigue existiendo con bug runtime + tipos rigidos, y tiene 2 consumers legitimos (impresion-cartas con uso acotado, menu-generator/index.ts con re-exports probablemente muertos). v1.2.0 elimina F0, reescribe F1 para 'reescribir el store existente preservando contrato de exports', anyade D12 (preservacion de exports) + D13 (tratamiento del re-export en menu-generator/index.ts), amplia F4 con npm run build para verificar que impresion-cartas + menu-generator/index.ts siguen compilando tras la reescritura. Las 11 decisiones D1-D11 anteriores se preservan integras. F2-F5 originales se preservan (con F4 ampliado).\n\nv1.1.0 (2026-06-02): cocinado tras devolucion de fede ('aparcado: bloqueo greenfield, es refactor de sprawl existente, necesita ana'). Anyade F0 al principio del plan que audita y resuelve el sprawl pre-existente identificado por audit. Anyade D11 que documenta el tratamiento del sprawl. Actualiza estado_verificado backend a v1.3.0, paths a /storage/pizzepos/cartas/, reconoce shape carta entera embebida.\n\nv1.0.0 (2026-06-01): primera version, asumio greenfield total e ignoro la nota del arranque del horizonte cierre-ui-blueprints sobre 'menu-generator UI dispersa: panel propio archivado + menu-cartas + menu-generate'.",
+  "creado_en": "2026-06-01",
+  "actualizado_en": "2026-06-02",
+  "skill_origen": "ana",
+  "tipo": "cierre_ui_modulo_blueprint",
+
+  "documentos_hermanos": {
+    "plan_piloto_y_modelo": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-recetas.json",
+      "version": "1.0.0",
+      "relacion": "PRIMER plan del horizonte. Este (carta-manager) es el TERCERO (despues de cierre-ui-escandallo). Hereda el mecanismo chatInputDraft compartido cocinado en F1 del plan piloto y el patron de Browser + Card + Detail + HistorialView (recetas)."
+    },
+    "contrato_canonico": "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json v1.0.1",
+    "arranque_horizonte": "arquitectura/decisiones/propuestas/_arranque-cierre-ui-blueprints.md"
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+    "arquitectura/decisiones/_contratos/frontend.contract.json",
+    "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json"
+  ],
+
+  "dependencias_explicitas": [
+    {
+      "id": "DEP1",
+      "depende_de": "cierre-ui-recetas.json F1",
+      "que_debe_estar_hecho": "frontend/src/lib/stores/chatInputDraft.ts existe con writable y funcion prefillChatInput exportada. frontend/src/lib/components/layout/ChatInput.svelte hace bind:value contra ese store.",
+      "afecta_a_fase": "F2",
+      "comportamiento_si_no_se_cumple": "fede para al inicio de F2 y reporta: 'F2 requiere chatInputDraft que se materializa en cierre-ui-recetas F1. Ejecuta primero ese plan al menos hasta F1, luego retoma este.' NO continua hasta confirmacion."
+    }
+  ],
+
+  "por_que_existe": {
+    "rol_de_carta_manager_en_el_subsistema": "Eje central del subsistema-carta. Aggregate root del recurso 'carta'. Persiste cartas (/cartas/<id>.json) + snapshots versionados (/cartas/versions/<id>/<timestamp>.json). Otros modulos del subsistema (carta-impresion, carta-design, carta-digital, carta-marketing, carta-scheduler) LEEN cartas via carta.get.request o fs.read pero NUNCA escriben directamente. menu-generator publica carta.creada (fire-and-forget) y carta-manager (async subscriber) lo procesa y delega a save.",
+    "gap_principal": "El blueprint backend esta maduro y vivo --serving 1 carta real en disco (carta_pizzicas.json con 5 categorias y ~42 productos) y procesando creaciones desde menu-generator-- pero NO tiene UI. Los cajones (chat.cambiar_foco a target_page_id='carta-manager') hacen goto() a una ruta inexistente y rompen el flujo conversacional.",
+    "alcance": "Creacion de UI desde cero: ruta SvelteKit + modulo frontend (Panel router + Browser + Card + Detail + HistorialView) + store de lectura + suscripciones a eventos del bus. Postura B canonica: lectura + pre-relleno chat para mutaciones. Cero forms, cero invocaciones a tools del blueprint LLM-runtime.",
+    "decision_arquitectonica_clave_shape_abierto": "La UI es AGNOSTICA del shape concreto de productos y categorias. Renderiza los campos PRESENTES en cada carta sin obligar el shape canonico del blueprint. Razon: el sistema sirve proyectos con modelos de producto distintos (pizzepos con pizzas, vapers con sabores, futuros con N modelos). Forzar shape rigido romperia multi-proyecto. Mínimos asumidos: solo 'id' (string) y 'nombre' (string). El resto se renderiza si esta presente, se ignora si no."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/carta-manager/module.json",
+      "version": "1.3.0",
+      "_v1_1_actualizado": "Bump v1.2.0 -> v1.3.0 ocurrio 2026-06-01 (commit 9176cf6) aplicando subsistema-carta v1.0.0. Paths cambiaron de /cartas/ a /storage/pizzepos/cartas/ con namespace pizzepos para multi-vertical (D1). Shape de payloads de los 3 eventos canonicos publicados lleva la carta entera embebida (D2/P3). correlation_id obligatorio en payloads (D10/P9). Auto-promocion a tarifas.set_general en save cuando tarifas.config esta vacio (D8). eventos_publicados_que_requieren_consumer declarados en raiz del blueprint (D11/P10).",
+      "target_page_id": "carta-manager",
+      "blueprint_driven": true,
+      "cajones_enabled": true,
+      "persistencia": "json-file-per-entity-plus-versions (paths /storage/pizzepos/cartas/<id>.json + /storage/pizzepos/cartas/.versions/<id>/<timestamp>.json)"
+    },
+    {
+      "pieza": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+      "operaciones_expuestas": ["save", "get", "list", "delete", "add_product", "remove_product", "update_product", "add_category", "update_prices", "search", "stats", "versions", "restore"],
+      "handler_interno": "_on_carta_creada (async subscriber a evento carta.creada, prefijo _ = no expuesto al LLM en chat normal --es la 14a operacion canonica del blueprint en v1.3.0)",
+      "eventos_publicados_canonicos": ["carta.actualizada", "carta.editada", "carta.borrada"],
+      "shape_de_payloads_v1_3": "Los 3 eventos llevan ahora la carta entera embebida en data.carta + correlation_id obligatorio + timestamp + project_id. La UI puede leer la carta DEL EVENTO sin re-fetch via fs.read --simplifica suscripciones (ver F0.op4 ajuste de F1.op6).",
+      "eventos_escuchados": ["carta.creada (de menu-generator)"]
+    },
+    {
+      "pieza": "frontend/src/lib/stores/carta-manager.ts (SPRAWL pre-existente, identificado por audit 2026-06-02)",
+      "existe": true,
+      "lineas": 213,
+      "problemas_criticos": [
+        "(1) Shape RIGIDO pizzepos: interfaces Producto { id, nombre, categoria, precio: number, ingredientes: Ingrediente[] }, Ingrediente { nombre, emoji?, tipo? }, Categoria { id, nombre, orden }, Carta { meta, categorias, productos } --contradice directamente D3 del plan (shape ABIERTO multi-proyecto). Si vapers o futuros consumieran esta UI, los tipos romperian.",
+        "(2) BUG runtime: el store invoca mqttRequest('carta-manager', 'list', ...) y mqttRequest('carta-manager', 'get', ...) directamente al BLUEPRINT LLM-runtime. Pero carta-manager no tiene servicio JS escuchando el bus desde la migracion a blueprint-driven v1.1.0 (2026-05-19). Estas llamadas HACEN TIMEOUT en runtime. Es el mismo bug que cazamos en PR #264 (mencionado en D6). El store esta efectivamente roto.",
+        "(3) Sigue patron mqttSubscribe('carta.actualizada', ...) pero asume payload con shape concreto (data.meta.id, data.meta.nombre, etc.) --aprovechable para v1.3.0 (que envia carta entera embebida) pero el shape concreto sigue atado a pizzepos."
+      ],
+      "decision_tratamiento": "Borrar entero en F0 y dejar que F1 cree limpio con shape abierto + fs.read.request al modulo POC2 filesystem (D6 + D3 del plan honrados). Ver D11 nueva."
+    },
+    {
+      "pieza": "/cartas/carta_pizzicas.json (en proyecto pizzepos)",
+      "existe": true,
+      "shape_actual": "meta:{id, nombre, created_at, updated_at, generado_desde, notas_revision} + categorias:[5 con campos {id, nombre, orden, ...}] + productos:[~42 con campos {id, nombre, categoria, precio, ingredientes}]",
+      "nota_divergencia_shape": "El shape real diverge ligeramente del blueprint canonico (productos usa 'categoria' string + 'ingredientes' array, no necesariamente el shape esperado por el contrato del blueprint). Esto NO se corrige aqui --es deuda de datos, fuera del scope del plan UI. La UI debe renderizar lo que encuentra (D3 abajo)."
+    },
+    {
+      "pieza": "frontend/src/routes/[project_id]/carta-manager/",
+      "existe": false,
+      "esperado_tras_plan": "/+page.svelte con shell minimal <LazyShell />"
+    },
+    {
+      "pieza": "frontend/src/lib/modules/carta-manager/",
+      "existe": false,
+      "esperado_tras_plan": "manifest.json + index.ts + CartaManagerPanel.svelte + CartasBrowser.svelte + CartaCard.svelte + CartaDetail.svelte + HistorialCartaView.svelte"
+    },
+    {
+      "pieza": "frontend/src/lib/stores/carta-manager.ts",
+      "existe": false,
+      "esperado_tras_plan": "loadCartas, getCarta, loadHistorial, loadVersionSnapshot, initCartaManagerSubscriptions"
+    },
+    {
+      "pieza": "frontend/src/lib/modules/carta-impresion/ y carta-design/",
+      "existencia_relacionada": "Ambos modulos hermanos invocan carta.get.request desde sus blueprints para obtener cartas. Eso NO se toca en este plan."
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/<rama-asignada> antes de empezar",
+      "modules/pizzepos/carta-manager/module.json sigue declarando target_page_id='carta-manager' y blueprint_driven=true",
+      "modules/pizzepos/carta-manager/carta-manager.blueprint.json sigue exponiendo las 13 operaciones listadas en estado_verificado_en_disco",
+      "frontend/src/lib/modules/carta-manager/ NO existe (verificar con ls)",
+      "frontend/src/routes/[project_id]/carta-manager/ NO existe (verificar con ls)",
+      "frontend/src/lib/stores/carta-manager.ts EXISTE (213 lineas) con sprawl pre-existente --F1.op0 lo borra antes de reescribirlo limpio. Si tras F1.op0 sigue con el contenido viejo, no se ejecuto correctamente --PARAR.",
+      "frontend/src/lib/stores/chatInputDraft.ts EXISTE y exporta prefillChatInput --SI NO, parar antes de F2 (DEP1)",
+      "frontend/src/lib/components/layout/ChatInput.svelte hace bind con chatInputDraft --SI NO, parar antes de F2",
+      "frontend/src/lib/modules/recetas/ existe como referencia del patron hermano (Panel router + Browser + Card + Detail + HistorialView). NO se modifica.",
+      "npm run validate:ci en la raiz da PASS antes de empezar (baseline aceptado con los 6 warnings actuales de C1+C2)"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Los 7 principios del contrato ui-frontend-blueprint v1.0.1",
+      "Postura B aplica a carta-manager (verificado en cocina: mutaciones simples + dominio conversacional)",
+      "Patron 'store invoca solo modulos POC2 (fs.read.request), nunca tools del blueprint LLM-runtime' es regla absoluta",
+      "Mecanismo chatInputDraft es el unico mecanismo canonico de pre-relleno del chat",
+      "Patron hermano recetas (en frontend/src/lib/modules/recetas/) es la referencia estructural a replicar para carta-manager: Panel router + Browser + Card + Detail + HistorialView + store con lecturas + suscripciones a eventos",
+      "Eventos del bus a escuchar: carta.actualizada, carta.editada, carta.borrada (publicados por el blueprint backend en cada mutacion exitosa)",
+      "El shape de productos y categorias es ABIERTO --la UI no valida shape ni muestra banners legacy; renderiza lo que encuentra. Solo asume id + nombre como minimos"
+    ],
+    "no_toco_esta_sesion": [
+      "modules/pizzepos/carta-manager/carta-manager.blueprint.json (backend del blueprint)",
+      "modules/pizzepos/carta-manager/module.json",
+      "cualquier otro blueprint backend del subsistema-carta o del subsistema-recetario",
+      "frontend/src/lib/modules/recetas/, escandallo/, viabilidad/ (otros modulos frontend)",
+      "frontend/src/lib/stores/recetas.ts, escandallo.ts, viabilidad.ts",
+      "frontend/src/lib/stores/chatInputDraft.ts (vive en cierre-ui-recetas F1)",
+      "frontend/src/lib/components/layout/ChatInput.svelte (modificado por cierre-ui-recetas F1)",
+      "scripts/validate-all.js, validators, drift-baseline.json",
+      "arquitectura/decisiones/_contratos/ (cero modificacion)",
+      "LazyShell.svelte, loader.ts (motores genericos)",
+      "/cartas/carta_pizzicas.json u otras cartas reales en disco (cero migracion de datos)",
+      "carta-impresion, carta-design, carta-digital, carta-marketing, carta-scheduler (otros modulos del subsistema-carta --se cocinan en planes propios)"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [
+    {
+      "id": "Q1",
+      "tema": "icono_y_label_boton_workbar",
+      "pregunta": "¿Que icono y label tiene el boton del work-bar para abrir carta-manager?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "📋 + 'Cartas'",
+          "comentario": "alineado con la captura subrayada del usuario en la cocina inicial (la work-bar mostraba 📋 Cartas como uno de los botones)"
+        },
+        {
+          "id": "B",
+          "label": "📖 + 'Cartas'",
+          "comentario": "libro como metafora del catalogo"
+        },
+        {
+          "id": "C",
+          "label": "🃏 + 'Cartas'",
+          "comentario": "metafora carta-de-baraja, vibe distinta"
+        }
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "📋 Cartas es lo que aparece en la captura inicial subrayada por el usuario --consistencia con lo que el ya tiene en cabeza.",
+      "respuesta_usuario": { "opcion": "C", "motivo": "eleccion del usuario (🃏 carta-de-baraja)", "cerrada_en": "2026-06-02" }
+    },
+    {
+      "id": "Q2",
+      "tema": "buscador_visual_simple_en_browser",
+      "pregunta": "¿CartasBrowser incluye buscador visual simple (filtro client-side por substring de nombre)?",
+      "opciones": [
+        {"id": "A", "label": "si, buscador por nombre", "comentario": "filtro client-side, sin tool del blueprint --criterio densidad"},
+        {"id": "B", "label": "no, busqueda va por chat", "comentario": "la busqueda semantica usa tool .search del blueprint"}
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Filtro por substring del nombre cumple criterio densidad. El tool .search del blueprint cubre busqueda semantica avanzada y se queda en chat (criterio diferente).",
+      "respuesta_usuario": { "opcion": "A", "motivo": "buscador visual por nombre, filtro client-side", "cerrada_en": "2026-06-02" }
+    },
+    {
+      "id": "Q3",
+      "tema": "render_de_productos_en_cartadetail",
+      "pregunta": "En CartaDetail.svelte, ¿como se renderizan los productos de la carta (recordando el principio de shape ABIERTO)?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "tabla densa con columnas dinamicas",
+          "comentario": "una fila por producto, columnas se generan a partir de los campos presentes en al menos un producto (excluyendo campos internos como id si no aporta visualmente). Compacto, criterio densidad."
+        },
+        {
+          "id": "B",
+          "label": "cards apiladas, una por producto",
+          "comentario": "cada producto como tarjeta con sus campos como key:value. Mas visual, menos denso."
+        },
+        {
+          "id": "C",
+          "label": "tabla con expansion (acordeon) por producto",
+          "comentario": "vista tabla compacta + click expande para ver campos extra del producto"
+        }
+      ],
+      "recomendacion": "C",
+      "comentario_recomendacion": "Tabla con expansion combina densidad visual (vista inicial corta) con flexibilidad (productos con muchos/pocos campos se ven uniformes). Si la carta tiene 42 productos como carta_pizzicas, A se vuelve abrumadora; C permite escanear y profundizar.",
+      "respuesta_usuario": { "opcion": "C", "motivo": "tabla con expansion (acordeon) por producto", "cerrada_en": "2026-06-02" }
+    },
+    {
+      "id": "Q4",
+      "tema": "boton_crear_carta_y_ruteo",
+      "pregunta": "El boton 'Crear nueva carta' en CartasBrowser, ¿como pre-rellena el chat?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "prompt abierto (LLM decide ruta a menu-generator o carta-manager)",
+          "comentario": "'Crea una carta nueva: [describe nombre, productos, categorias, formato].' El LLM decide si pasa por menu-generator (si la descripcion es libre) o invoca carta-manager.save directamente (si es estructurada)."
+        },
+        {
+          "id": "B",
+          "label": "prompt especifico a carta-manager.save",
+          "comentario": "'Crea una carta vacia con nombre X.' Carta vacia, despues el usuario anade productos via prompts adicionales."
+        },
+        {
+          "id": "C",
+          "label": "prompt especifico a menu-generator",
+          "comentario": "'Genera una carta desde este texto: [pega texto].' Forza la ruta por menu-generator."
+        }
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Prompt abierto respeta la capacidad del LLM de decidir ruta. menu-generator existe precisamente para entradas libres; carta-manager.save es para shape estructurado. El usuario escribe lo que tiene y el LLM rutea.",
+      "respuesta_usuario": { "opcion": "A", "motivo": "prompt abierto, el LLM decide ruta menu-generator|carta-manager", "cerrada_en": "2026-06-02" }
+    },
+    {
+      "id": "Q5",
+      "tema": "frases_canonicas_de_prefill",
+      "pregunta": "¿Confirmas las frases canonicas de prefill propuestas o las matizas?",
+      "opciones": [
+        {
+          "id": "A",
+          "label": "acepto las propuestas literalmente",
+          "comentario": "Propuestas:\n- Crear: 'Crea una carta nueva: [describe nombre, productos, categorias].'\n- Eliminar (archivar): 'Archiva la carta \"<nombre>\".'\n- Editar producto: 'Edita el producto \"<nombre>\" de la carta \"<nombre>\". Cambia [describe que].'\n- Anadir producto: 'Anade un producto a la carta \"<nombre>\": [nombre + campos].'\n- Eliminar producto: 'Elimina el producto \"<nombre>\" de la carta \"<nombre>\".'\n- Anadir categoria: 'Anade la categoria \"<nombre>\" a la carta \"<nombre>\".'\n- Actualizar precios (bulk): 'Actualiza los precios de la carta \"<nombre>\": [lista].'\n- Restaurar version: 'Restaura la carta \"<nombre>\" a la version del <fecha>.'"
+        },
+        {
+          "id": "B",
+          "label": "las matizo (dare nuevas redacciones)",
+          "comentario": "usuario provee versiones nuevas; fede las usa"
+        }
+      ],
+      "recomendacion": "A",
+      "comentario_recomendacion": "Las frases son operativas. Si emerge necesidad de ajuste tras uso real, vuelta posterior.",
+      "respuesta_usuario": { "opcion": "A", "motivo": "acepta las frases de prefill propuestas literalmente", "cerrada_en": "2026-06-02" }
+    }
+  ],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1",
+      "decision": "Carta-manager es eje central del subsistema-carta. Backend maduro (13 ops + handler async). Frontend cero --plan crea desde cero, NO refactor",
+      "no_reabrir_sin": "verificacion nueva en disco que contradiga el dossier 2026-06-01"
+    },
+    {
+      "id": "D2",
+      "decision": "Postura B aplica integralmente: cero forms de mutacion, store solo lectura, acciones via prefillChatInput",
+      "no_reabrir_sin": "caso real concreto que justifique Postura A (ej: form bulk de precios si update_prices es flujo critico frecuente)"
+    },
+    {
+      "id": "D3",
+      "decision": "Shape de productos y categorias es ABIERTO. La UI renderiza campos presentes, sin validacion contra schema, sin banners 'legacy'. Asume solo id (string) y nombre (string) como minimos en cada carta. Razon: sistema multi-proyecto (pizzepos con pizzas, vapers con sabores, futuros con N modelos)",
+      "no_reabrir_sin": "decision arquitectonica nueva que canonice shape rigido --en cuyo caso es horizonte propio que toca el contrato"
+    },
+    {
+      "id": "D4",
+      "decision": "1 boton work-bar (1 recurso observable: el catalogo de cartas). Versions son audit, NO recurso navegable propio (caben dentro de HistorialCartaView sub-vista)",
+      "no_reabrir_sin": "emergencia de N recursos observables paralelos"
+    },
+    {
+      "id": "D5",
+      "decision": "Patron hermano replica recetas: Panel router con activeView local + Browser + Card + Detail + HistorialView + store con lecturas via fs.read.request",
+      "no_reabrir_sin": "que recetas no sea referencia adecuada (lo cual es improbable porque recetas es el plan piloto del horizonte)"
+    },
+    {
+      "id": "D6",
+      "decision": "Store solo lectura. Funciones permitidas: loadCartas, getCarta, loadHistorial, loadVersionSnapshot (mismo patron F2 de cierre-ui-recetas). Cero funciones de mutacion. Cero invocaciones a tools del blueprint (mismo bug que cazamos en PR #264)",
+      "no_reabrir_sin": "cambio del paradigma event-core"
+    },
+    {
+      "id": "D7",
+      "decision": "Eventos del bus a escuchar en initCartaManagerSubscriptions: carta.actualizada + carta.editada + carta.bordar. Cada uno dispara recarga via loadCartas (o getCarta si la carta afectada esta seleccionada)",
+      "no_reabrir_sin": "cambio en los eventos canonicos publicados por el blueprint"
+    },
+    {
+      "id": "D8",
+      "decision": "Cero migracion de datos. La carta legacy en disco (carta_pizzicas con shape pre-v8) se renderiza con el principio D3. La migracion de shape es horizonte aparte que NO toca este plan",
+      "no_reabrir_sin": "imposibilidad real de renderizar (algun fallo que requiera migrar)"
+    },
+    {
+      "id": "D9",
+      "decision": "HistorialCartaView con loadHistorial + loadVersionSnapshot (mismo patron F2 de cierre-ui-recetas). El blueprint expone 'versions' (listar) y 'restore' (aplicar). La UI los expone como botones que pre-rellenan chat",
+      "no_reabrir_sin": "cambio del patron en cierre-ui-recetas que invalide esta replica"
+    },
+    {
+      "id": "D10",
+      "decision": "El boton 'Editar carta entera' NO se anade --la edicion de campos sueltos (productos, categorias, precios) se hace por chat via prefillChatInput especifico. NO hay form de edicion de carta completa",
+      "no_reabrir_sin": "que el dominio cambie hacia edicion masiva justificable con form"
+    },
+    {
+      "id": "D11",
+      "decision": "El archivo huerfano frontend/src/lib/stores/carta-manager.ts (213 lineas, shape rigido + bug runtime) se BORRA ENTERO en F1.op0. F1 lo recrea desde cero respetando D3 (shape abierto) + D6 (solo lectura via fs.read.request al modulo POC2 filesystem, NO tools del blueprint LLM-runtime). NO se rescatan partes del archivo viejo --aunque algunas funciones (selectCarta, clearError, derived stores) sean tecnicamente reusables, su shape esta tied a los tipos rigidos y separarlos es mas trabajo que reescribir limpio. La auditoria pizzepos__carta-manager.json desactualizada (describe el modulo como JS legacy pre-blueprint) queda FUERA DEL SCOPE de este plan --regenerar la auditoria es horizonte ortogonal cuando alguien la consuma.",
+      "no_reabrir_sin": "evidencia de que alguna parte del archivo huerfano es claramente reusable + tiene shape abierto + no invoca tools del blueprint --en cuyo caso documentar selectivamente que se rescata"
+    },
+    {
+      "id": "D12",
+      "decision": "v1.2.0: Preservar el CONTRATO DE EXPORTS del store al reescribirlo. Tras borrar menu-cartas (commit 50c0963), quedan 2 consumers reales del store: (a) frontend/src/lib/modules/impresion-cartas/CartasImpresionPanel.svelte usa sortedCartas + initCartaManagerSubscriptions + selectCarta + type CartaResumen --uso acotado, real, NO llama a las funciones rotas (loadCartas/getCarta). (b) frontend/src/lib/modules/menu-generator/index.ts re-exporta 10 simbolos + 5 tipos rigidos --ver D13. F1 reescribe el store conservando los nombres canonicos de exports: cartaManagerStore, cartasStore, cartaSeleccionada, sortedCartas, cartasStats, cartasLoading, cartasError, cartaCount, selectedCarta, selectCarta, clearError, loadCartas, getCarta, loadHistorial, loadVersionSnapshot, initCartaManagerSubscriptions, type CartaResumen. Los INTERNOS (shape de Carta y Producto) pasan a shape ABIERTO (Carta = { id: string; nombre: string; [key]: unknown }; CartaResumen igual con campos opcionales). impresion-cartas sigue compilando porque sus usos no dependen del shape interno rigido --usa el tipo CartaResumen flexibilizado y funciones por nombre.",
+      "no_reabrir_sin": "que el shape abierto rompa a impresion-cartas en TypeScript estricto (verificable en F4 via npm run build)"
+    },
+    {
+      "id": "D13",
+      "decision": "v1.2.0: Tratamiento del re-export en frontend/src/lib/modules/menu-generator/index.ts. Tras borrar menu-cartas, ese archivo reexporta cartaManagerStore + loadCartas + getCarta + selectCarta + clearError + initCartaManagerSubscriptions + sortedCartas + selectedCarta + cartaLoading + cartaError + cartaCount + types (Carta, CartaResumen, Producto, Categoria, Ingrediente) por si 'algun componente legacy' los importa. Tras el audit: ningun componente externo importa de menu-generator/index.ts (verificable con grep). F1.opN incluye sub-operacion auditora: grep importadores de '\\$lib/modules/menu-generator' en el frontend. Si 0 hits, F1.opN tambien LIMPIA menu-generator/index.ts: quita re-exports de tipos rigidos (Producto/Categoria/Ingrediente) que ya no existen (shape abierto los disuelve), conserva re-exports del propio store carta-manager solo si emergen consumers reales (decision granular). Si hits > 0, lista los consumers y se decide caso a caso --probable que sea relicto migrable. CERO commits separados para esto --se hace en el mismo trabajo de F1.",
+      "no_reabrir_sin": "que emerjan consumers reales de menu-generator/index.ts que justifiquen mantener los re-exports legacy intactos"
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Reescribir store frontend/src/lib/stores/carta-manager.ts preservando contrato de exports",
+      "_v1_2_cambio_clave": "v1.0.0 y v1.1.0 asumian 'crear archivo nuevo'. Realidad tras commit 50c0963: archivo existe (213 lineas, bug runtime + tipos rigidos) Y tiene 2 consumers activos (impresion-cartas con uso semantico real + menu-generator/index.ts con re-exports probables muertos). F1 ahora REESCRIBE in-place: borra el contenido viejo, escribe el nuevo cumpliendo D3 (shape abierto) + D6 (solo lectura via fs.read.request) + D12 (preservar nombres de exports que impresion-cartas necesita) + D13 (decision sobre re-exports muertos). Path del archivo NO cambia --consumers siguen importando desde '\\$lib/stores/carta-manager' sin tocar imports.",
+      "esfuerzo_horas": 1.8,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op0_borrar_archivo_existente",
+          "descripcion": "Borrar el archivo del store actual (213 lineas con bug runtime + tipos rigidos) para reescribirlo limpio. Los consumers (impresion-cartas, menu-generator/index.ts) siguen importando del mismo path --solo cambia el contenido del archivo, no la ubicacion.",
+          "pseudocodigo": [
+            "ls -la frontend/src/lib/stores/carta-manager.ts (debe existir; si no, alguien lo toco fuera del plan --PARAR y reportar)",
+            "wc -l frontend/src/lib/stores/carta-manager.ts (esperado: 213 lineas aprox; si difiere mucho, alguien edito --PARAR y reportar)",
+            "git rm frontend/src/lib/stores/carta-manager.ts",
+            "verificar: ls frontend/src/lib/stores/carta-manager.ts debe devolver 'no such file or directory'",
+            "NO commit aun --se commitea junto con el resto del trabajo del plan al final (F5)"
+          ]
+        },
+        {
+          "id": "F1.op1",
+          "descripcion": "Crear el nuevo archivo del store con estructura canonica del patron recetas + D12 preservacion del contrato de exports",
+          "pseudocodigo": [
+            "crear archivo nuevo frontend/src/lib/stores/carta-manager.ts (mismo path, contenido nuevo)",
+            "imports:",
+            "  import { writable, derived, get } from 'svelte/store'",
+            "  import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request'",
+            "  import { subscribe as busSubscribe } from '$lib/ui-core/bus'",
+            "constantes:",
+            "  // PATHS CANONICOS v1.3.0 backend (subsistema-carta v1.0.0 D1: namespace pizzepos + .versions con punto)",
+            "  const CARTAS_DIR = '/storage/pizzepos/cartas/'",
+            "  const VERSIONS_DIR = '/storage/pizzepos/cartas/.versions/'",
+            "  function cartaPath(id) { return CARTAS_DIR + id + '.json' }",
+            "  function versionPath(id, ts) { return VERSIONS_DIR + id + '/' + ts + '.json' }",
+            "tipos TypeScript:",
+            "  export interface Carta { id: string; nombre: string; [key: string]: any }  // shape abierto",
+            "  export interface CartaResumen { id: string; nombre: string; estado?: string; productos_count?: number; categorias_count?: number; version?: number; updated_at?: string }",
+            "stores writables y derivados:",
+            "  export const cartasStore = writable<Carta[]>([])",
+            "  export const cartaSeleccionada = writable<Carta | null>(null)",
+            "  export const cartasLoading = writable<boolean>(false)",
+            "  export const cartasError = writable<string | null>(null)",
+            "  export const cartasStats = derived(cartasStore, $cartas => ({ total: $cartas.length, por_estado: groupBy($cartas, 'estado') }))",
+            "  export const sortedCartas = derived(cartasStore, $cartas => [...$cartas].sort((a,b) => (a.nombre || '').localeCompare(b.nombre || '')))"
+          ]
+        },
+        {
+          "id": "F1.op2",
+          "descripcion": "Funcion loadCartas() --lista de cartas (resumen via list o leyendo todos los archivos)",
+          "pseudocodigo": [
+            "async function loadCartas() {",
+            "  cartasLoading.set(true)",
+            "  cartasError.set(null)",
+            "  try {",
+            "    // Estrategia: listar archivos de CARTAS_DIR via fs.list, luego leer cada uno via fs.read en paralelo.",
+            "    // Alternativa: si el modulo filesystem tiene operacion fs.search o fs.list mas eficiente, usarla.",
+            "    const listRes = await mqttRequest('fs', 'list', { path: CARTAS_DIR, pattern: '*.json' })",
+            "    const archivos = listRes.data?.archivos || []  // array de paths o nombres",
+            "    const lecturas = await Promise.all(",
+            "      archivos.map(async (archivoPath) => {",
+            "        const res = await mqttRequest('fs', 'read', { path: archivoPath })",
+            "        try {",
+            "          return JSON.parse(res.data.content)",
+            "        } catch {",
+            "          return null  // ignorar archivos corruptos",
+            "        }",
+            "      })",
+            "    )",
+            "    const cartas = lecturas.filter(c => c && typeof c.id === 'string' && typeof c.nombre === 'string')",
+            "    cartasStore.set(cartas)",
+            "  } catch (err) {",
+            "    cartasError.set(err.message || 'Error al cargar cartas')",
+            "  } finally {",
+            "    cartasLoading.set(false)",
+            "  }",
+            "}",
+            "NOTA: si fs.list no esta disponible (verificar en modules/filesystem/), fallback a fs.search o leer un indice CARTAS_DIR + 'index.json' si existe. El blueprint tiene tool 'list' pero como recordamos del bug F2 de recetas, NO se invoca tools del blueprint --solo fs.read.request y operaciones del modulo filesystem POC2."
+          ]
+        },
+        {
+          "id": "F1.op3",
+          "descripcion": "Funcion getCarta(cartaId) --una carta completa",
+          "pseudocodigo": [
+            "async function getCarta(cartaId: string): Promise<Carta | null> {",
+            "  try {",
+            "    const res = await mqttRequest('fs', 'read', { path: cartaPath(cartaId) })",
+            "    const carta = JSON.parse(res.data.content)",
+            "    if (!carta || typeof carta.id !== 'string' || typeof carta.nombre !== 'string') return null",
+            "    cartaSeleccionada.set(carta)",
+            "    return carta",
+            "  } catch (err) {",
+            "    cartasError.set(err.message || 'Error al cargar carta')",
+            "    return null",
+            "  }",
+            "}"
+          ]
+        },
+        {
+          "id": "F1.op4",
+          "descripcion": "Funcion loadHistorial(cartaId) --listar versiones (resumen)",
+          "pseudocodigo": [
+            "async function loadHistorial(cartaId: string): Promise<Array<{version: any; archived_at: string; nombre: string; productos_count?: number; categorias_count?: number}>> {",
+            "  // El blueprint v1.3.0 usa /storage/pizzepos/cartas/.versions/<cartaId>/<timestamp>.json --listar todos los snapshots",
+            "  const listRes = await mqttRequest('fs', 'list', { path: VERSIONS_DIR + cartaId + '/', pattern: '*.json' })",
+            "  const archivos = listRes.data?.archivos || []",
+            "  const lecturas = await Promise.all(",
+            "    archivos.map(async (archivoPath) => {",
+            "      const res = await mqttRequest('fs', 'read', { path: archivoPath })",
+            "      try { return JSON.parse(res.data.content) } catch { return null }",
+            "    })",
+            "  )",
+            "  const versiones = lecturas",
+            "    .filter(v => v !== null)",
+            "    .map(v => ({",
+            "      version:           v.version,  // puede ser undefined si el shape no tiene version",
+            "      archived_at:       v._archived_at || v.updated_at || v.created_at,",
+            "      nombre:            v.nombre,",
+            "      productos_count:   Array.isArray(v.productos) ? v.productos.length : undefined,",
+            "      categorias_count:  Array.isArray(v.categorias) ? v.categorias.length : undefined",
+            "    }))",
+            "    .sort((a, b) => String(b.archived_at || '').localeCompare(String(a.archived_at || '')))",
+            "  return versiones",
+            "}"
+          ]
+        },
+        {
+          "id": "F1.op5",
+          "descripcion": "Funcion loadVersionSnapshot(cartaId, archivedAt) --snapshot completo de una version para diff",
+          "pseudocodigo": [
+            "async function loadVersionSnapshot(cartaId: string, archivedAt: string): Promise<Carta | null> {",
+            "  // archived_at sirve como nombre de archivo (timestamp). El blueprint v1.3.0 usa /storage/pizzepos/cartas/.versions/<id>/<timestamp>.json",
+            "  const archivoPath = VERSIONS_DIR + cartaId + '/' + archivedAt + '.json'",
+            "  try {",
+            "    const res = await mqttRequest('fs', 'read', { path: archivoPath })",
+            "    return JSON.parse(res.data.content)",
+            "  } catch (err) {",
+            "    return null",
+            "  }",
+            "}"
+          ]
+        },
+        {
+          "id": "F1.op6",
+          "descripcion": "Funcion initCartaManagerSubscriptions() --suscripciones a eventos del bus",
+          "pseudocodigo": [
+            "export function initCartaManagerSubscriptions(): () => void {",
+            "  const unsubs: Array<() => void> = []",
+            "  unsubs.push(busSubscribe('carta.actualizada', (envelope) => {",
+            "    // El blueprint publica este evento tras save y add/remove/update_product etc.",
+            "    // Recargar la lista de cartas (loadCartas) y si la carta afectada esta seleccionada, refrescarla.",
+            "    loadCartas()",
+            "    const seleccionada = get(cartaSeleccionada)",
+            "    if (seleccionada && envelope.data?.carta_id === seleccionada.id) {",
+            "      getCarta(seleccionada.id)",
+            "    }",
+            "  }))",
+            "  unsubs.push(busSubscribe('carta.editada', () => loadCartas()))",
+            "  unsubs.push(busSubscribe('carta.borrada', () => {",
+            "    loadCartas()",
+            "    cartaSeleccionada.set(null)  // si la borrada era la seleccionada, limpiar",
+            "  }))",
+            "  return () => unsubs.forEach(u => u())",
+            "}"
+          ]
+        },
+        {
+          "id": "F1.op7",
+          "descripcion": "Exportar todas las funciones y stores",
+          "pseudocodigo": [
+            "export {",
+            "  cartasStore, cartaSeleccionada, cartasLoading, cartasError, cartasStats, sortedCartas,",
+            "  loadCartas, getCarta, loadHistorial, loadVersionSnapshot, initCartaManagerSubscriptions",
+            "}",
+            "export type { Carta, CartaResumen }  // D12: impresion-cartas importa CartaResumen --sin export rompe el build",
+            "NO exportar ninguna funcion de mutacion --solo lecturas (D6).",
+            "NOTA D12<->D13: los nombres legacy (cartaManagerStore, selectCarta, clearError, cartaCount, selectedCarta) NO se exportan --su unico consumer era menu-generator/index.ts, que F1.op8 limpia. impresion-cartas (unico consumer vivo) usa solo sortedCartas + initCartaManagerSubscriptions + CartaResumen.",
+            "guardar archivo."
+          ]
+        },
+        {
+          "id": "F1.op8_auditar_y_limpiar_menu_generator",
+          "descripcion": "v1.3.0 (materializa la 'F1.opN' que D13 describia pero no existia en las operaciones): auditar importadores externos del barrel menu-generator/index.ts y, si 0, limpiar su bloque de re-exports muertos del store carta-manager (los simbolos legacy ya no existen en el store reescrito --shape abierto los disuelve). Autorizado por D13; el prohibido_absoluto exceptua explicitamente esta limpieza.",
+          "pseudocodigo": [
+            "grep -rn \"from '$lib/modules/menu-generator'\" frontend/src --include='*.svelte' --include='*.ts'",
+            "esperado: 0 hits (verificado al cocinar v1.3.0: 0 importadores externos del barrel).",
+            "si 0 hits: editar frontend/src/lib/modules/menu-generator/index.ts:",
+            "  eliminar entero el bloque de re-exports del store: 'export { cartaManagerStore, loadCartas, getCarta, selectCarta, clearError, initCartaManagerSubscriptions, sortedCartas, selectedCarta, cartaLoading, cartaError, cartaCount, type Carta, type CartaResumen, type Producto, type Categoria, type Ingrediente } from $lib/stores/carta-manager;' (re-exports muertos: 0 consumers + referencian simbolos/tipos que el store nuevo ya no exporta --rompian build).",
+            "  conservar el resto de index.ts intacto (lo que menu-generator exporta de su propio dominio).",
+            "si hits > 0: PARAR y reportar los consumers --decision caso a caso (no previsto; el audit dio 0).",
+            "verificar tras editar: grep del bloque eliminado devuelve 0; el resto de index.ts intacto."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["frontend/src/lib/stores/carta-manager.ts"],
+        "archivos_modificados": ["frontend/src/lib/modules/menu-generator/index.ts (D13: limpieza de re-exports muertos del store)"],
+        "tamano_aproximado": "~250 lineas store + limpieza de menu-generator/index.ts"
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Crear modulo frontend frontend/src/lib/modules/carta-manager/",
+      "esfuerzo_horas": 5,
+      "ok_explicito_antes_de_continuar": true,
+      "branch_segun_QN": "aplicar Q1 (icono+label), Q2 (buscador), Q3 (render productos), Q4 (boton crear), Q5 (frases prefill) segun respuestas del usuario",
+      "depende_de": "DEP1 (cierre-ui-recetas F1)",
+      "operaciones": [
+        {
+          "id": "F2.op0_verificar_dependencia",
+          "descripcion": "Verificar que F1 de cierre-ui-recetas esta ejecutada",
+          "pseudocodigo": [
+            "comprobar que existe frontend/src/lib/stores/chatInputDraft.ts",
+            "comprobar que ChatInput.svelte importa chatInputDraft",
+            "si NO: parar y reportar 'F2 requiere chatInputDraft de cierre-ui-recetas F1. Ejecuta primero ese plan al menos hasta F1.'"
+          ]
+        },
+        {
+          "id": "F2.op1_panel_router",
+          "descripcion": "Crear CartaManagerPanel.svelte (router con activeView local)",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-manager/CartaManagerPanel.svelte",
+            "patron heredado de RecetasPanel:",
+            "  <script>",
+            "    import { onMount, onDestroy } from 'svelte'",
+            "    import CartasBrowser from './CartasBrowser.svelte'",
+            "    import CartaDetail from './CartaDetail.svelte'",
+            "    import HistorialCartaView from './HistorialCartaView.svelte'",
+            "    import { loadCartas, initCartaManagerSubscriptions, getCarta, cartaSeleccionada } from '$lib/stores/carta-manager'",
+            "    let activeView: 'browser' | 'detail' | 'historial' = 'browser'",
+            "    let selectedCartaId: string | null = null",
+            "    let cleanupSubs: (() => void) | null = null",
+            "    onMount(() => {",
+            "      loadCartas()",
+            "      cleanupSubs = initCartaManagerSubscriptions()",
+            "    })",
+            "    onDestroy(() => { if (cleanupSubs) cleanupSubs() })",
+            "    function handleSelectCarta(id) { selectedCartaId = id; getCarta(id); activeView = 'detail' }",
+            "    function handleVerHistorial() { activeView = 'historial' }",
+            "    function handleVolverADetail() { activeView = 'detail' }",
+            "    function handleBack() { activeView = 'browser' }",
+            "  </script>",
+            "  <div class='panel-container'>",
+            "    {#if activeView === 'browser'}",
+            "      <CartasBrowser onSelectCarta={handleSelectCarta} />",
+            "    {:else if activeView === 'detail'}",
+            "      <CartaDetail {selectedCartaId} onVerHistorial={handleVerHistorial} onBack={handleBack} />",
+            "    {:else if activeView === 'historial'}",
+            "      <HistorialCartaView cartaId={selectedCartaId} onBack={handleVolverADetail} />",
+            "    {/if}",
+            "  </div>"
+          ]
+        },
+        {
+          "id": "F2.op2_browser",
+          "descripcion": "Crear CartasBrowser.svelte --lista + stats + buscador opcional + boton crear",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-manager/CartasBrowser.svelte",
+            "props: onSelectCarta callback",
+            "subscribe a sortedCartas, cartasStats, cartasLoading, cartasError",
+            "import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "import CartaCard from './CartaCard.svelte'",
+            "renderiza:",
+            "  banner de error si cartasError no null",
+            "  stats-bar (total, por_estado si los hay)",
+            "  si Q2 == 'A': input buscador con bind:value contra variable local 'filterText', lista filtrada client-side por substring de nombre",
+            "  boton 'Nueva carta' (arriba a la derecha) --on:click pre-rellena chat con Q5 frase canonica de crear (segun Q4)",
+            "  grid de CartaCard, una por carta filtrada, click invoca onSelectCarta(carta.id)",
+            "estado vacio (sin cartas): card grande con CTA 'Crea tu primera carta' que pre-rellena igual"
+          ]
+        },
+        {
+          "id": "F2.op3_card",
+          "descripcion": "Crear CartaCard.svelte --card resumen con shape abierto",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-manager/CartaCard.svelte",
+            "props: carta, onClick callback",
+            "renderiza siguiendo principio shape ABIERTO (D3):",
+            "  - nombre (siempre, obligatorio)",
+            "  - estado badge (solo si carta.estado existe)",
+            "  - productos_count: si carta.productos es array, len(carta.productos); si no, omitir",
+            "  - categorias_count: si carta.categorias es array, len; si no, omitir",
+            "  - version: solo si carta.version existe",
+            "  - updated_at: humanizado solo si existe",
+            "click en card invoca onClick(carta.id)",
+            "estilos sobrios. NO mostrar warning de 'campos faltantes' --el shape abierto es feature, no bug."
+          ]
+        },
+        {
+          "id": "F2.op4_detail",
+          "descripcion": "Crear CartaDetail.svelte --vista completa con render dinamico de productos y categorias",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-manager/CartaDetail.svelte",
+            "props: selectedCartaId, onVerHistorial, onBack",
+            "import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "import { cartaSeleccionada, getCarta } from '$lib/stores/carta-manager'",
+            "onMount: si la carta no esta cargada en store, invoca getCarta(selectedCartaId)",
+            "subscribe a cartaSeleccionada",
+            "renderiza con principio shape ABIERTO (D3):",
+            "  cabecera con: nombre (siempre), estado badge si existe, version si existe, updated_at humanizado si existe",
+            "  seccion 'Categorias' --solo si carta.categorias es array:",
+            "    una seccion por categoria con: categoria.nombre (siempre), campos extra si existen (orden, descripcion, etc.)",
+            "    cada seccion lista los productos de esa categoria filtrando carta.productos por categoria.id o por producto.categoria === categoria.nombre (shape abierto: el matching depende de los datos)",
+            "  si Q3 == 'A' (tabla densa): tabla con columnas dinamicas extraidas de Object.keys(union de todos los productos), excluyendo campos meta (id, internal)",
+            "  si Q3 == 'B' (cards apiladas): grid de mini-cards por producto, cada una renderiza Object.entries(producto) como key:value",
+            "  si Q3 == 'C' (tabla con expansion): tabla con columnas principales (nombre, precio si existe, descripcion truncada si existe), click en fila expande mostrando resto de campos",
+            "  meta extra (created_at, generado_desde, notas_revision, etc.) en seccion plegable abajo, renderizando Object.entries de campos meta no estandar",
+            "barra de acciones inferior:",
+            "  boton 'Eliminar' --pre-rellena Q5.eliminar con carta.nombre",
+            "  boton 'Ver historial' --invoca onVerHistorial()",
+            "  boton 'Editar entera' --NO se incluye (D10). En su lugar:",
+            "  boton 'Anadir producto' --pre-rellena Q5.add_product",
+            "  boton 'Anadir categoria' --pre-rellena Q5.add_category",
+            "  boton 'Actualizar precios' --pre-rellena Q5.update_prices",
+            "boton 'Volver' arriba izquierda invoca onBack()",
+            "manejo error: banner si carta no se carga"
+          ]
+        },
+        {
+          "id": "F2.op5_historial",
+          "descripcion": "Crear HistorialCartaView.svelte --replica de HistorialView de recetas",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-manager/HistorialCartaView.svelte",
+            "props: cartaId, onBack",
+            "import { loadHistorial, loadVersionSnapshot, cartaSeleccionada } from '$lib/stores/carta-manager'",
+            "import { prefillChatInput } from '$lib/stores/chatInputDraft'",
+            "let resumen: any[] = []  // shape de loadHistorial",
+            "let loading = false",
+            "let error: string | null = null",
+            "let previewVersion: any = null  // snapshot completo cargado bajo demanda",
+            "let mostrandoPreview = false",
+            "onMount: invoca loadHistorial(cartaId), guarda en 'resumen', maneja error. Si resumen.length === 0, mostrar estado vacio 'Sin historial todavia' (NO es error).",
+            "renderiza:",
+            "  boton 'Volver' arriba izquierda invoca onBack()",
+            "  titulo 'Historial de versiones de <carta.nombre>'",
+            "  lista de cards desde resumen[] (mas reciente primero):",
+            "    cada card pinta: version (si existe), archived_at humanizado, nombre, productos_count, categorias_count",
+            "    2 botones por card: 'Ver diff' y 'Restaurar a esta version'",
+            "  flow 'Ver diff':",
+            "    on click 'Ver diff' en card: previewVersion = await loadVersionSnapshot(cartaId, archived_at); mostrandoPreview = true",
+            "    renderiza sub-componente DiffView comparando previewVersion vs cartaSeleccionada (ya en store)",
+            "    diff inline: lista de campos cambiados con 'campo: snapshot.valor -> actual.valor', respetando shape abierto (renderiza campos que existen en cualquiera de los dos)",
+            "  flow 'Restaurar':",
+            "    on click 'Restaurar': prefillChatInput(Q5.restaurar con carta.nombre y archived_at)"
+          ]
+        },
+        {
+          "id": "F2.op6_manifest_y_index",
+          "descripcion": "Crear manifest.json e index.ts del modulo",
+          "pseudocodigo": [
+            "crear frontend/src/lib/modules/carta-manager/manifest.json:",
+            "  segun respuesta Q1 (icono + label):",
+            "  {",
+            "    \"id\": \"carta-manager\",",
+            "    \"name\": \"<Q1.label>\",",
+            "    \"description\": \"Aggregate root del subsistema-carta: catalogo de cartas con versionado y history\",",
+            "    \"version\": \"1.0.0\",",
+            "    \"zone\": \"work-bar\",",
+            "    \"order\": 4,  // tras recetas(1), escandallo(2), viabilidad(3)",
+            "    \"routes\": [\"/carta-manager\"],",
+            "    \"icon\": \"<Q1.icon>\",",
+            "    \"label\": \"<Q1.label>\"",
+            "  }",
+            "crear frontend/src/lib/modules/carta-manager/index.ts (patron menu-cartas/index.ts):",
+            "  import type { UIModule } from '$lib/ui-core'",
+            "  import CartaManagerPanel from './CartaManagerPanel.svelte'",
+            "  export { default as CartaManagerPanel } from './CartaManagerPanel.svelte'",
+            "  export const cartaManagerModule: UIModule = {",
+            "    manifest: { ...mismo manifest declarado arriba en formato UIModule... },",
+            "    PanelComponent: CartaManagerPanel",
+            "  }",
+            "  export default cartaManagerModule",
+            "  // re-exports del store para conveniencia:",
+            "  export { cartasStore, cartaSeleccionada, loadCartas, getCarta, loadHistorial, loadVersionSnapshot, initCartaManagerSubscriptions } from '$lib/stores/carta-manager'"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": [
+          "frontend/src/lib/modules/carta-manager/CartaManagerPanel.svelte (~80 lineas)",
+          "frontend/src/lib/modules/carta-manager/CartasBrowser.svelte (~180 lineas)",
+          "frontend/src/lib/modules/carta-manager/CartaCard.svelte (~90 lineas)",
+          "frontend/src/lib/modules/carta-manager/CartaDetail.svelte (~280 lineas)",
+          "frontend/src/lib/modules/carta-manager/HistorialCartaView.svelte (~150 lineas)",
+          "frontend/src/lib/modules/carta-manager/manifest.json",
+          "frontend/src/lib/modules/carta-manager/index.ts"
+        ]
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Crear ruta SvelteKit /carta-manager",
+      "esfuerzo_horas": 0.1,
+      "ok_explicito_antes_de_continuar": false,
+      "operaciones": [
+        {
+          "id": "F3.op1",
+          "descripcion": "Crear placeholder LazyShell para la ruta",
+          "pseudocodigo": [
+            "crear frontend/src/routes/[project_id]/carta-manager/+page.svelte",
+            "contenido literal (copia exacta del patron hermano /recetas):",
+            "  <script lang='ts'>",
+            "    import { LazyShell } from '$lib/components/layout'",
+            "  </script>",
+            "  <LazyShell />"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["frontend/src/routes/[project_id]/carta-manager/+page.svelte"]
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Verificacion build + manual con dev server",
+      "esfuerzo_horas": 1.8,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op0_npm_build_typecheck",
+          "descripcion": "v1.2.0: verificacion CRITICA --el frontend completo debe compilar tras reescribir el store (D12). Garantiza que impresion-cartas + menu-generator/index.ts siguen pasando TypeScript estricto contra el nuevo store con shape abierto.",
+          "pseudocodigo": [
+            "cd frontend",
+            "npm install si no instalado",
+            "npm run build",
+            "esperado: build OK sin errores TypeScript. Si hay errores, los hits estan probablemente en impresion-cartas/CartasImpresionPanel.svelte (que usa type CartaResumen) o en menu-generator/index.ts (re-exports). Si rompe build --PARAR, diagnosticar, ajustar el shape de tipos exportados (probable: flexibilizar mas el CartaResumen, o ajustar el re-export tras D13). NO continuar a F4.op1 hasta build verde."
+          ]
+        },
+        {
+          "id": "F4.op1_arrancar_dev",
+          "descripcion": "Levantar dev server",
+          "pseudocodigo": [
+            "cd frontend",
+            "npm install si no instalado",
+            "npm run dev",
+            "abrir navegador en URL del proyecto activo"
+          ]
+        },
+        {
+          "id": "F4.op2_golden_path",
+          "descripcion": "Verificar golden path completo",
+          "pseudocodigo": [
+            "navegar a /<project_id>/carta-manager",
+            "comprobar:",
+            "  ✓ boton <Q1.icon> <Q1.label> aparece en work-bar superior",
+            "  ✓ click abre CartasBrowser",
+            "  ✓ Browser muestra la(s) carta(s) en disco (al menos carta_pizzicas si estamos en pizzepos)",
+            "  ✓ CartaCard renderiza correctamente para una carta con shape legacy (carta_pizzicas con campo 'categoria' string en producto, sin warnings)",
+            "  ✓ stats-bar muestra totales correctos",
+            "  ✓ si Q2 == 'A': buscador filtra client-side",
+            "  ✓ click en card abre CartaDetail",
+            "  ✓ Detail muestra meta + categorias + productos respetando shape abierto",
+            "  ✓ Detail renderiza campos extra (generado_desde, notas_revision) en seccion plegable",
+            "  ✓ boton 'Eliminar' pre-rellena chat con frase Q5.eliminar",
+            "  ✓ boton 'Anadir producto' pre-rellena Q5.add_product",
+            "  ✓ boton 'Ver historial' cambia activeView a 'historial'",
+            "  ✓ HistorialCartaView con estado vacio si no hay versiones (sin error)",
+            "  ✓ Si hay versiones: cards de version + botones 'Ver diff' y 'Restaurar' funcionan",
+            "  ✓ boton 'Volver' funciona en cada nivel",
+            "  ✓ boton 'Nueva carta' en Browser pre-rellena Q5.crear segun Q4"
+          ]
+        },
+        {
+          "id": "F4.op3_edge_cases",
+          "descripcion": "Edge cases minimos",
+          "pseudocodigo": [
+            "✓ Lista vacia (proyecto sin cartas): browser muestra estado vacio con CTA, sin crashear",
+            "✓ Carta con shape minimo {id, nombre} sin productos ni categorias: detail muestra solo nombre, sin secciones vacias",
+            "✓ Carta con producto sin precio: tabla/cards muestran lo que hay sin error",
+            "✓ Click rapido en multiples botones prefill: input se reemplaza con el ultimo",
+            "✓ Backend offline: errores se muestran en banner, no crashes"
+          ]
+        },
+        {
+          "id": "F4.op4_reactividad_bus",
+          "descripcion": "Verificar reactividad del bus tras mutaciones desde chat",
+          "pseudocodigo": [
+            "estando en /carta-manager con Browser visible",
+            "desde el chat (misma sesion o paralelo) pedir 'Anade un producto Margarita 8€ a la carta carta_pizzicas'",
+            "esperar que el blueprint procese y publique carta.actualizada",
+            "✓ Browser debe refrescarse automaticamente y mostrar el nuevo conteo de productos",
+            "✓ Si CartaDetail esta abierto con esa carta, debe refrescarse tambien",
+            "✓ NO debe necesitar recargar pagina manualmente"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "documento_de_resultados": "fede reporta cada checkmark con ✓ o ✗ + descripcion del problema si falla",
+        "estado_terminal_para_avanzar_a_F5": "TODOS los checks ✓"
+      }
+    },
+    {
+      "id": "F5",
+      "nombre": "Commit + push a la rama de la sesion",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F5.op1_status",
+          "descripcion": "Revisar git status",
+          "pseudocodigo": [
+            "git status",
+            "git diff",
+            "confirmar que solo hay cambios listados en salidas_esperadas de F1-F3"
+          ]
+        },
+        {
+          "id": "F5.op2_commit",
+          "descripcion": "Crear commit estructurado",
+          "pseudocodigo": [
+            "git add (archivos especificos, NUNCA git add . o git add -A)",
+            "git commit con mensaje:",
+            "  feat(ui:carta-manager): cierre UI carta-manager --eje central del subsistema-carta",
+            "  + nuevo store frontend/src/lib/stores/carta-manager.ts (lecturas + suscripciones bus)",
+            "  + modulo frontend con Panel router + Browser + Card + Detail + HistorialView",
+            "  + ruta SvelteKit /carta-manager",
+            "  Postura B canonica + shape abierto (renderiza campos presentes sin obligar shape rigido).",
+            "  Decisiones cerradas en arquitectura/decisiones/propuestas/cierre-ui-carta-manager.json"
+          ]
+        },
+        {
+          "id": "F5.op3_push",
+          "descripcion": "Push con retry exponencial",
+          "pseudocodigo": [
+            "git push -u origin <rama-de-la-sesion>",
+            "si falla por red: retry 2s, 4s, 8s, 16s",
+            "si falla por otra razon: parar, diagnosticar, reportar al humano"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo que el humano lo pida explicitamente"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "descripcion": "validate:ci no debe romper nada (cerrar el modulo elimina 2 warnings del baseline: C1+C2 sobre carta-manager)",
+      "comando": "npm run validate:ci",
+      "directorio": "raiz repo",
+      "ejecutar_tras": ["F1", "F2", "F3"],
+      "salida_esperada": "PASS sin drift nuevo. Tras F3, los warnings C1+C2 sobre carta-manager desaparecen --baseline puede regenerarse (decision aparte tras OK humano)"
+    },
+    {
+      "id": "CC2_build_frontend",
+      "descripcion": "Compilacion del frontend sin errores",
+      "comando": "npm run build",
+      "directorio": "frontend/",
+      "ejecutar_tras": ["F2", "F3"],
+      "salida_esperada": "build OK sin errores TypeScript"
+    },
+    {
+      "id": "CC3_git_status",
+      "descripcion": "Verificar scope",
+      "comando": "git status",
+      "ejecutar_tras": ["F1", "F2", "F3", "F4"],
+      "verificar": "ningun archivo modificado fuera del scope de la fase"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Tocar modules/pizzepos/carta-manager/carta-manager.blueprint.json o module.json",
+    "Tocar cualquier otro blueprint backend",
+    "Anyadir funciones de mutacion al store de carta-manager (crearCarta, actualizarCarta, eliminarCarta, etc.) --rompe Postura B y D6",
+    "Invocar tools del blueprint (carta.save, carta.delete, carta.add_product, etc.) desde el store via mqttRequest --los blueprints son LLM-runtime, no responden al bus directamente",
+    "Forms de creacion/edicion de cartas o productos",
+    "Validar shape contra schema del blueprint en la UI (rompe D3)",
+    "Mostrar banner 'carta en formato legacy' o similar (rompe D3)",
+    "Migrar datos de cartas en disco (rompe D8)",
+    "Tocar frontend/src/lib/stores/chatInputDraft.ts o ChatInput.svelte (esos viven en plan de recetas)",
+    "Tocar otros stores frontend o modulos frontend --EXCEPTO la limpieza de re-exports muertos de menu-generator/index.ts que D13 autoriza explicitamente (verificado: 0 importadores externos del barrel; la hace F1.op8)",
+    "Modificar scripts/validate-all.js, validators, drift-baseline.json (regenerar baseline es decision separada tras OK humano cuando se cierre el modulo)",
+    "Modificar arquitectura/decisiones/_contratos/",
+    "Modificar LazyShell.svelte, loader.ts",
+    "Crear PR sin OK explicito del humano",
+    "Hacer commit con git add . o git add -A",
+    "Saltar OK humano entre F1 y F2, F2 y F4, F4 y F5 (F3 puede continuar a F4 sin OK porque es trivial)",
+    "Decir 'todo OK' sin reportar el comando ejecutado y su salida real",
+    "Continuar a F2 si la verificacion DEP1 en F2.op0 falla",
+    "Tocar carta-impresion, carta-design, carta-digital, carta-marketing, carta-scheduler (otros modulos del subsistema --planes propios)"
+  ],
+
+  "salida_final_del_horizonte": {
+    "modulo_carta_manager_estado_terminal": "UI completa siguiendo Postura B con shape abierto: 1 boton en work-bar (segun Q1) cuando el foco esta en /carta-manager. Browser muestra catalogo de cartas con shape variable (pizzepos pizzas, vapers sabores, etc.) sin validacion ni banners legacy. Detail renderiza productos y categorias dinamicamente. HistorialCartaView con versions + restore pre-rellena chat. Todos los flujos de F4 verificados.",
+    "archivos_finales_creados": [
+      "frontend/src/lib/stores/carta-manager.ts (~250 lineas)",
+      "frontend/src/lib/modules/carta-manager/manifest.json",
+      "frontend/src/lib/modules/carta-manager/index.ts",
+      "frontend/src/lib/modules/carta-manager/CartaManagerPanel.svelte",
+      "frontend/src/lib/modules/carta-manager/CartasBrowser.svelte",
+      "frontend/src/lib/modules/carta-manager/CartaCard.svelte",
+      "frontend/src/lib/modules/carta-manager/CartaDetail.svelte",
+      "frontend/src/lib/modules/carta-manager/HistorialCartaView.svelte",
+      "frontend/src/routes/[project_id]/carta-manager/+page.svelte"
+    ],
+    "verificacion_terminal": [
+      "Todos los flujos de F4 verificados ✓",
+      "validate:ci verde (sin drift nuevo)",
+      "frontend build OK",
+      "git status: solo archivos listados arriba",
+      "commit pusheado a la rama de la sesion",
+      "Los warnings C1+C2 sobre carta-manager en baseline pueden cerrarse en commit aparte tras OK humano (regenerar baseline)"
+    ],
+    "deuda_cerrada_del_horizonte_global": [
+      "carta-manager deja de ser '#5 SIN UI' en _arranque-cierre-ui-blueprints.md --pasa a 'CERRADO'",
+      "Eje central del subsistema-carta cuenta con UI propia --los cajones funcionan al cambiar foco a target_page_id='carta-manager'"
+    ]
+  }
+}

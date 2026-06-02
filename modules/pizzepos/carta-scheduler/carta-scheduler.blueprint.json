@@ -3,15 +3,16 @@
 
   "id": "carta-scheduler",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.1.0",
+  "version": "blueprint-1.2.0",
+  "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica subsistema-carta v1.0.4. Paths canonicos /storage/pizzepos/carta-scheduler/reglas.json + pendientes.json en las 7 operaciones reemplazando /storage/pizzepos/carta-scheduler/reglas.json + /storage/pizzepos/carta-scheduler/pendientes.json pelados. correlation_id_efectivo obligatorio en los 4 publishes canonicos de dominio existentes (regla.creada, regla.eliminada, cambio.aplicado, cambio.rechazado). eventos_que_escucho:[] preservado (A1).",
   "language": "es",
 
   "rol": "Programador de cambios de carta por canal con guardrail de confirmacion humana. Reglas (cron expression + canal + carta_id) + pendientes (cambios calculados que esperan OK del usuario).",
 
   "garantiza": [
     "Cada regla tiene id, canal, carta_id_destino, cron_expression, etiquetas?, prioridad?, created_at.",
-    "Reglas persistidas en pizzepos/carta-scheduler/reglas.json del proyecto.",
-    "Pendientes persistidos en pizzepos/carta-scheduler/pendientes.json del proyecto.",
+    "Reglas persistidas en /storage/pizzepos/carta-scheduler/reglas.json del proyecto.",
+    "Pendientes persistidos en /storage/pizzepos/carta-scheduler/pendientes.json del proyecto.",
     "detectar_conflictos compara dos reglas y reporta si tienen colision de canal+franja temporal.",
     "confirmar aplica un pendiente: publica carta-scheduler.cambio.aplicado y elimina el pendiente.",
     "rechazar descarta un pendiente: publica carta-scheduler.cambio.rechazado."
@@ -54,6 +55,7 @@
         "  for (const f of ['canal','carta_id_destino','cron_expression']) if (!input[f]) return INVALID_INPUT { field: f }",
         "  partes = input.cron_expression.trim().split(/\\s+/)",
         "  if (partes.length < 5 || partes.length > 6) return INVALID_INPUT { field: 'cron_expression', hint: '5 o 6 campos' }",
+        "  correlation_id_efectivo = input.correlation_id || uuid()",
         "",
         "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: 'pizzepos/carta-scheduler/reglas.json' })",
         "  if (raw.status >= 400 && raw.status !== 404) return raw",
@@ -73,7 +75,7 @@
         "    })",
         "    if (edit_resp.status >= 400) return edit_resp",
         "  }",
-        "  await publish('carta-scheduler.regla.creada', { project_id: input.project_id, regla_id: regla.id, canal: regla.canal, carta_id_destino: regla.carta_id_destino, cron_expression: regla.cron_expression, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  await publish('carta-scheduler.regla.creada', { project_id: input.project_id, regla_id: regla.id, canal: regla.canal, carta_id_destino: regla.carta_id_destino, cron_expression: regla.cron_expression, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
         "  return { status: 201, data: regla }"
       ],
       "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
@@ -101,6 +103,7 @@
       "pseudocodigo": [
         "async eliminar_regla(input):",
         "  if (!input.project_id || !input.regla_id) return INVALID_INPUT",
+        "  correlation_id_efectivo = input.correlation_id || uuid()",
         "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: 'pizzepos/carta-scheduler/reglas.json' })",
         "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'regla' }",
         "  if (raw.status >= 400) return raw",
@@ -118,7 +121,7 @@
         "    ]",
         "  })",
         "  if (edit_resp.status >= 400) return edit_resp",
-        "  await publish('carta-scheduler.regla.eliminada', { project_id: input.project_id, regla_id: input.regla_id, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  await publish('carta-scheduler.regla.eliminada', { project_id: input.project_id, regla_id: input.regla_id, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
         "  return { status: 200, data: { regla_id: input.regla_id, activa: false } }"
       ],
       "reglas_clave": ["Soft delete: activa=false. La regla queda en el archivo para audit trail."],
@@ -193,6 +196,7 @@
       "pseudocodigo": [
         "async confirmar(input):",
         "  if (!input.project_id || !input.pendiente_id) return INVALID_INPUT",
+        "  correlation_id_efectivo = input.correlation_id || uuid()",
         "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: 'pizzepos/carta-scheduler/pendientes.json' })",
         "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'pendiente' }",
         "  if (raw.status >= 400) return raw",
@@ -215,7 +219,7 @@
         "  if (edit_resp.status >= 400) return edit_resp",
         "  pend.estado = 'aplicado'",
         "  pend.aplicado_at = aplicado_at",
-        "  await publish('carta-scheduler.cambio.aplicado', { project_id: input.project_id, pendiente_id: pend.id, canal: pend.canal, carta_id_destino: pend.carta_id_destino, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  await publish('carta-scheduler.cambio.aplicado', { project_id: input.project_id, pendiente_id: pend.id, canal: pend.canal, carta_id_destino: pend.carta_id_destino, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
         "  return { status: 200, data: pend }"
       ],
       "reglas_clave": ["Solo cambia estado a 'aplicado'. La aplicacion real (publicar carta a canal) la hace OTRO modulo escuchando carta-scheduler.cambio.aplicado (tarifas?)."],
@@ -227,6 +231,7 @@
       "pseudocodigo": [
         "async rechazar(input):",
         "  if (!input.project_id || !input.pendiente_id) return INVALID_INPUT",
+        "  correlation_id_efectivo = input.correlation_id || uuid()",
         "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: 'pizzepos/carta-scheduler/pendientes.json' })",
         "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'pendiente' }",
         "  if (raw.status >= 400) return raw",
@@ -251,7 +256,7 @@
         "  pend.estado = 'rechazado'",
         "  pend.motivo_rechazo = motivo_rechazo",
         "  pend.rechazado_at = rechazado_at",
-        "  await publish('carta-scheduler.cambio.rechazado', { project_id: input.project_id, pendiente_id: pend.id, motivo: pend.motivo_rechazo, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  await publish('carta-scheduler.cambio.rechazado', { project_id: input.project_id, pendiente_id: pend.id, motivo: pend.motivo_rechazo, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
         "  return { status: 200, data: pend }"
       ],
       "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]

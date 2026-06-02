@@ -1,0 +1,452 @@
+{
+  "_terminado": {
+    "estado": "terminado",
+    "cerrado_en": "2026-06-01",
+    "rama": "claude/fede-3Qhte",
+    "ejecutado_por": "fede",
+    "commits": ["1d1c7b1", "8212558"],
+    "evidencia": "F1 module.json 1.1.0->1.2.0 + _v1_2_changelog + persistence.paths_proyecto + _doc al path canonico /storage/pizzepos/carta-impresion/. F2 blueprint-1.1.0->blueprint-1.2.0 + estado_persistente.paths_relativos + 12 ocurrencias de pseudocodigo (get, generar, save_html) al path canonico + correlation_id_efectivo (uuid si falta) en los 2 publishes de carta.impresion.lista + eventos_que_escucho:[] PRESERVADO (A1). F3 validate:ci PASS sin drift + test pizzepos__impresion.test.js verde (aislado). F4 git status limpio, remoto al dia, sin PR. D5 no se activo: no habia /cartas-impresion/ en data/projects/* que migrar. Contrato vigente en v1.0.5 (plan cocinado contra v1.0.2; carta-impresion confirmado no-reactivo)."
+  },
+  "_doc": "Plan ejecutable JSON del horizonte 'aplicar subsistema-carta a carta-impresion'. Bumpea carta-impresion de blueprint-driven v1.1.0 a v1.2.0 aplicando el contrato subsistema-carta v1.0.2. Dos cambios estructurales pequenyos: (a) paths /cartas-impresion/<carta_id>.{html,meta.json} -> /storage/pizzepos/carta-impresion/<carta_id>.{html,meta.json} (D1 namespace pizzepos); (b) correlation_id obligatorio en payload de carta.impresion.lista (D10/P9). NO hace carta-impresion reactivo (A1 preservado --el blueprint conserva eventos_que_escucho:[] coherente con su diseno cocinado en v1.1.0). NO declara requires_consumer (no hay consumer conocido del evento canonico --leccion TP1). Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
+
+  "id": "aplicar-subsistema-carta-a-carta-impresion",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "bump_blueprint_backend",
+
+  "documentos_hermanos": {
+    "contrato_canonico": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.2",
+      "relacion": "Bumpeado en el mismo commit que este plan. v1.0.2 corrige consume_canonico de carta-impresion a [] alineandose con el blueprint v1.1.0 (mismo patron A1 que carta-digital)."
+    },
+    "plan_hermano_estructural": {
+      "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-carta-digital.json",
+      "relacion": "Plan modelo --carta-impresion sigue el mismo patron (no-reactivo, paths canonicos, correlation_id en evento de dominio). Estructura paralela."
+    },
+    "ui_separada": {
+      "path": "arquitectura/decisiones/propuestas/cierre-ui-carta-impresion.json",
+      "estado": "a_cocinar_aparte",
+      "relacion": "UI separada --plan siguiente."
+    }
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/persistence.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/errors.contract.json",
+    "arquitectura/decisiones/_contratos/multi-tenancy.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json"
+  ],
+
+  "dependencias_explicitas": [],
+
+  "por_que_existe": {
+    "que_cierra": "carta-impresion v1.1.0 arrastra 2 drifts contra el contrato subsistema-carta v1.0.2: (a) paths /cartas-impresion/ sin namespace pizzepos (D1); (b) carta.impresion.lista sin correlation_id obligatorio (D10/P9).",
+    "que_no_cierra": "Este plan NO modifica el modelo no-reactivo del blueprint (A1 preservado). NO declara requires_consumer en carta.impresion.lista (ningun consumer real hoy --leccion TP1). NO toca artefactos extras (templates/, context.json, prompt.json, ni el agente impresion-architect/builder). NO migra archivos existentes en path viejo.",
+    "alcance": "Editar SOLO modules/pizzepos/carta-impresion/module.json y carta-impresion.blueprint.json."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/carta-impresion/module.json",
+      "version_actual": "1.1.0",
+      "blueprint_driven": true,
+      "target_page_id": "carta-impresion",
+      "config_persistence_paths_actual": [
+        "data/projects/{slug}/cartas-impresion/<carta_id>.html",
+        "data/projects/{slug}/cartas-impresion/<carta_id>.meta.json"
+      ],
+      "lo_que_debe_quedar_tras_el_plan": {
+        "version": "1.2.0",
+        "_v1_2_changelog": "presente",
+        "config_persistence_paths_proyecto": [
+          "data/projects/{slug}/storage/pizzepos/carta-impresion/<carta_id>.html",
+          "data/projects/{slug}/storage/pizzepos/carta-impresion/<carta_id>.meta.json"
+        ]
+      }
+    },
+    {
+      "pieza": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+      "version_actual": "blueprint-1.1.0",
+      "operaciones": ["get", "generar", "save_html"],
+      "evento_canonico_publicado": "carta.impresion.lista",
+      "paths_actuales_en_pseudocodigos": "/cartas-impresion/<carta_id>.html + /cartas-impresion/<carta_id>.meta.json en get + generar + save_html",
+      "lo_que_debe_quedar_tras_el_plan": {
+        "version_blueprint": "blueprint-1.2.0",
+        "_v1_2_changelog": "presente",
+        "todos_los_paths_apuntan_a": "/storage/pizzepos/carta-impresion/<carta_id>.html y .meta.json",
+        "publish_carta_impresion_lista_lleva_correlation_id_obligatorio": true,
+        "eventos_que_escucho_PRESERVADO_vacio": true
+      }
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/<rama-asignada> antes de empezar",
+      "modules/pizzepos/carta-impresion/module.json existe con version='1.1.0'",
+      "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json existe con version='blueprint-1.1.0' y 3 operaciones",
+      "arquitectura/decisiones/_contratos/subsistema-carta.contract.json declara version='1.0.2'",
+      "data/projects/* --verificar si hay /cartas-impresion/ con archivos en path viejo. Si los hay, reportar al humano antes de F3",
+      "npm run validate:ci PASS antes de empezar"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones del contrato subsistema-carta v1.0.2 (D1-D11)",
+      "Decision A1 aplicada a carta-impresion (igual que carta-digital): NO reactivo, eventos_que_escucho:[] preservado.",
+      "Leccion TP1: no declarar requires_consumer en carta.impresion.lista (no hay consumer conocido).",
+      "pseudocodigo-estilo.contract.json: sin spread, sin Object.assign, verboso explicito.",
+      "El agente impresion-architect/builder y los templates built-in se preservan sin cambios --este plan NO los toca."
+    ],
+    "no_toco_esta_sesion": [
+      "modules/pizzepos/carta-impresion/templates/* (templates HTML built-in)",
+      "modules/pizzepos/carta-impresion/context.json, prompt.json (legacy revisable, separado)",
+      "Agentes asociados (impresion-architect, impresion-builder)",
+      "Otros modulos del subsistema (carta-manager, carta-digital, carta-marketing, carta-scheduler, carta-design)",
+      "menu-generator, tarifas, productos",
+      "arquitectura/decisiones/_contratos/* (cero modificacion adicional --el bump v1.0.2 ya esta en el commit)",
+      "arquitectura/decisiones/_schemas/ o _validators/",
+      "data/projects/*/cartas-impresion/ (cero migracion de datos --reportar si hay archivos)",
+      "frontend/* (UI plan separado)",
+      "scripts/validate-all.js, drift-baseline.json",
+      "CLAUDE.md"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_no_reactivo_A1_preservado",
+      "decision": "carta-impresion preserva eventos_que_escucho:[] del blueprint v1.1.0. NO se anyaden subscribes. Modelo no-reactivo se mantiene --el LLM al entrar a page=carta-impresion compara meta.generado_at vs carta.meta.updated_at.",
+      "no_reabrir_sin": "decision arquitectonica nueva sobre reactividad."
+    },
+    {
+      "id": "D2_no_requires_consumer_carta_impresion_lista",
+      "decision": "carta.impresion.lista NO declara requires_consumer:true. Ningun modulo del repo lo escucha hoy.",
+      "no_reabrir_sin": "que un consumer real anyada subscribe."
+    },
+    {
+      "id": "D3_path_canonico_namespace",
+      "decision": "Nuevo path: data/projects/{slug}/storage/pizzepos/carta-impresion/<carta_id>.{html,meta.json}. Coherente con carta-digital, carta-manager, productos.",
+      "no_reabrir_sin": "decision arquitectonica nueva sobre namespace."
+    },
+    {
+      "id": "D4_correlation_id_uuid_si_falta",
+      "decision": "correlation_id se genera con uuid() si input no lo trae. correlation_id_efectivo en el publish.",
+      "no_reabrir_sin": "decision diferente sobre validacion estricta."
+    },
+    {
+      "id": "D5_no_migra_archivos_en_disco",
+      "decision": "Si existen archivos en /cartas-impresion/ pelado, fede reporta. NO migra automatico.",
+      "no_reabrir_sin": "OK explicito del usuario."
+    },
+    {
+      "id": "D6_bump_minor",
+      "decision": "Bump v1.1.0 -> v1.2.0 (minor). Cambio de path es breaking del modelo de persistencia pero los archivos legacy se mantienen --el modelo se restaura desde regenerar."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Bump module.json a v1.2.0 con paths canonicos + changelog",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1_bump_version",
+          "descripcion": "version 1.1.0 -> 1.2.0",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/carta-impresion/module.json",
+            "old: \"version\": \"1.1.0\"",
+            "new: \"version\": \"1.2.0\""
+          ]
+        },
+        {
+          "id": "F1.op2_anyadir_changelog",
+          "descripcion": "Anyadir _v1_2_changelog",
+          "pseudocodigo": [
+            "Edit anyadiendo tras version:",
+            "  \"_v1_2_changelog\": \"v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.2. Dos cambios: (a) path persistence /cartas-impresion/ -> /storage/pizzepos/carta-impresion/ (D1 namespace pizzepos); (b) correlation_id obligatorio en payload de carta.impresion.lista (D10/P9). NO cambia eventos_que_escucho ([] preservado --A1, modelo no-reactivo del blueprint v1.1.0 coherente con el contrato v1.0.2). NO declara requires_consumer.\""
+          ]
+        },
+        {
+          "id": "F1.op3_cambiar_persistence_paths",
+          "descripcion": "Actualizar config.persistence.paths_proyecto",
+          "pseudocodigo": [
+            "Edit module.json:",
+            "old (paths_proyecto):",
+            "  [\"data/projects/{slug}/cartas-impresion/<carta_id>.html\", \"data/projects/{slug}/cartas-impresion/<carta_id>.meta.json\"]",
+            "new:",
+            "  [\"data/projects/{slug}/storage/pizzepos/carta-impresion/<carta_id>.html\", \"data/projects/{slug}/storage/pizzepos/carta-impresion/<carta_id>.meta.json\"]"
+          ]
+        },
+        {
+          "id": "F1.op4_actualizar_doc",
+          "descripcion": "Si _doc menciona path viejo, actualizar",
+          "pseudocodigo": [
+            "Read module.json _doc.",
+            "Si menciona 'data/projects/{slug}/cartas-impresion/' (el _doc actual dice 'Persistencia en data/projects/{slug}/cartas-impresion/'): ajustar a 'data/projects/{slug}/storage/pizzepos/carta-impresion/'."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-impresion/module.json"]
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Cambios estructurales en carta-impresion.blueprint.json",
+      "esfuerzo_horas": 1.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op1_bump_version_blueprint",
+          "descripcion": "version blueprint-1.1.0 -> blueprint-1.2.0",
+          "pseudocodigo": [
+            "Edit carta-impresion.blueprint.json",
+            "old: \"version\": \"blueprint-1.1.0\"",
+            "new: \"version\": \"blueprint-1.2.0\""
+          ]
+        },
+        {
+          "id": "F2.op2_anyadir_changelog_blueprint",
+          "descripcion": "_v1_2_changelog en blueprint",
+          "pseudocodigo": [
+            "Edit anyadiendo tras version:",
+            "  \"_v1_2_changelog\": \"v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.2. Path canonico /storage/pizzepos/carta-impresion/ en las 3 operaciones (get, generar, save_html) reemplazando /cartas-impresion/ pelado. correlation_id obligatorio en payload de carta.impresion.lista --garantizado con uuid() si el input no lo trae. eventos_que_escucho:[] preservado (A1 modelo no-reactivo).\""
+          ]
+        },
+        {
+          "id": "F2.op3_actualizar_estado_persistente_paths",
+          "descripcion": "Actualizar estado_persistente.paths_relativos",
+          "pseudocodigo": [
+            "Edit blueprint:",
+            "  estado_persistente.paths_relativos.html:",
+            "    old: '/cartas-impresion/<carta_id>.html'",
+            "    new: '/storage/pizzepos/carta-impresion/<carta_id>.html'",
+            "  estado_persistente.paths_relativos.meta:",
+            "    old: '/cartas-impresion/<carta_id>.meta.json'",
+            "    new: '/storage/pizzepos/carta-impresion/<carta_id>.meta.json'"
+          ]
+        },
+        {
+          "id": "F2.op4_cambiar_paths_en_pseudocodigos",
+          "descripcion": "Reemplazar paths en las 3 operaciones",
+          "pseudocodigo": [
+            "Edit con replace_all:",
+            "  old: '/cartas-impresion/'",
+            "  new: '/storage/pizzepos/carta-impresion/'",
+            "Apariciones tipicas en pseudocodigos:",
+            "  - get: 2 (html + meta)",
+            "  - generar: 3 (write html + read meta + write/edit meta)",
+            "  - save_html: 3 (write html + read meta + write/edit meta)",
+            "Total: ~8 apariciones.",
+            "VERIFICAR con grep:",
+            "  grep -c \"'/cartas-impresion/\" modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+            "  debe ser 0."
+          ]
+        },
+        {
+          "id": "F2.op5_correlation_id_obligatorio_en_publishes",
+          "descripcion": "Garantizar correlation_id no-vacio en los 2 publishes de carta.impresion.lista (en generar y save_html)",
+          "pseudocodigo": [
+            "Localizar en generar y save_html las lineas:",
+            "  await publish('carta.impresion.lista', { project_id: input.project_id, carta_id: input.carta_id, template: meta.template, correlation_id: input.correlation_id, timestamp: nowISO() })",
+            "Edit en cada uno modificando:",
+            "  correlation_id_efectivo = input.correlation_id || uuid()",
+            "  await publish('carta.impresion.lista', {",
+            "    project_id: input.project_id,",
+            "    carta_id: input.carta_id,",
+            "    template: meta.template,",
+            "    correlation_id: correlation_id_efectivo,",
+            "    timestamp: nowISO()",
+            "  })",
+            "La linea correlation_id_efectivo se inserta ANTES del publish.",
+            "Aparece 2 veces (una en generar, una en save_html)."
+          ]
+        },
+        {
+          "id": "F2.op6_verificar_consistencia",
+          "descripcion": "Releer blueprint y verificar",
+          "pseudocodigo": [
+            "Read carta-impresion.blueprint.json entero.",
+            "Verificaciones:",
+            "  - version es blueprint-1.2.0",
+            "  - _v1_2_changelog existe",
+            "  - grep -c \"'/cartas-impresion/\" devuelve 0",
+            "  - grep -c \"'/storage/pizzepos/carta-impresion/\" devuelve >= 8",
+            "  - grep -c 'correlation_id_efectivo' devuelve >= 2",
+            "  - eventos_que_escucho sigue [] (cero cambio)",
+            "  - eventos_publicados sigue conteniendo carta.impresion.lista"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/carta-impresion/carta-impresion.blueprint.json"]
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "validate:ci + tests",
+      "esfuerzo_horas": 0.3,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1_validate_ci",
+          "descripcion": "validate:ci PASS sin drift nuevo",
+          "pseudocodigo": [
+            "cd raiz",
+            "npm run validate:ci",
+            "esperado: PASS sin drift NUEVO",
+            "si drift: leer y diagnosticar; si fuera de scope, REPORTAR sin improvisar"
+          ]
+        },
+        {
+          "id": "F3.op2_tests",
+          "descripcion": "Tests unitarios si existen",
+          "pseudocodigo": [
+            "ls tests/unit/pizzepos__carta-impresion.test.js 2>/dev/null",
+            "si existe: npm test -- ese archivo",
+            "si FAIL por path viejo: actualizar test",
+            "si NO existe: documentar"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "estado_terminal": "validate:ci verde sin drift nuevo"
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Commit + push",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_status",
+          "descripcion": "Verificar scope",
+          "pseudocodigo": [
+            "git status",
+            "git diff",
+            "confirmar SOLO module.json + blueprint del modulo (+ posible test)",
+            "si hay mas, PARAR"
+          ]
+        },
+        {
+          "id": "F4.op2_commit",
+          "descripcion": "Commit",
+          "pseudocodigo": [
+            "git add (especificos)",
+            "git commit:",
+            "  feat(carta-impresion): bump blueprint v1.2.0 --aplica subsistema-carta v1.0.2",
+            "",
+            "  Dos cambios:",
+            "  (a) Path canonico /storage/pizzepos/carta-impresion/ en las 3 operaciones y",
+            "      config.persistence (D1).",
+            "  (b) correlation_id obligatorio en payload de carta.impresion.lista (D10/P9).",
+            "",
+            "  Preserva eventos_que_escucho:[] (A1 modelo no-reactivo cocinado en v1.1.0,",
+            "  alineado con el contrato v1.0.2). NO declara requires_consumer en",
+            "  carta.impresion.lista (ningun consumer real).",
+            "",
+            "  Plan: aplicar-subsistema-carta-a-carta-impresion.json",
+            "  Contrato: subsistema-carta.contract.json v1.0.2"
+          ]
+        },
+        {
+          "id": "F4.op3_push",
+          "descripcion": "Push con retry",
+          "pseudocodigo": [
+            "git push -u origin <rama>",
+            "retry exponencial si red"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo OK explicito"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F1", "F2", "F3"],
+      "salida_esperada": "PASS sin drift NUEVO"
+    },
+    {
+      "id": "CC2_jq_valido",
+      "comando": "jq . modules/pizzepos/carta-impresion/module.json > /dev/null && jq . modules/pizzepos/carta-impresion/carta-impresion.blueprint.json > /dev/null && echo OK",
+      "ejecutar_tras": ["F1", "F2"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC3_grep_paths_canonicos",
+      "comando": "grep -c \"'/cartas-impresion/\" modules/pizzepos/carta-impresion/carta-impresion.blueprint.json || echo 0",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "0"
+    },
+    {
+      "id": "CC4_grep_correlation_id_efectivo",
+      "comando": "grep -c 'correlation_id_efectivo' modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": ">= 2"
+    },
+    {
+      "id": "CC5_eventos_que_escucho_vacio",
+      "comando": "jq '.eventos_que_escucho' modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "[] (vacio)"
+    },
+    {
+      "id": "CC6_git_status_scope",
+      "comando": "git status --short",
+      "ejecutar_tras": ["F4.op1"],
+      "verificar": "solo los 2 archivos del scope"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Anyadir subscribes a carta.actualizada/editada/borrada/tarifas.config.actualizada (A1 preservado)",
+    "Declarar requires_consumer:true en carta.impresion.lista (D2)",
+    "Tocar templates/, context.json, prompt.json del directorio",
+    "Tocar agente impresion-architect/builder",
+    "Tocar otros modulos del subsistema o de pizzepos/",
+    "Modificar contratos, schemas, validators",
+    "Migrar archivos /cartas-impresion/ existentes en disco (D5)",
+    "Tocar frontend/* (UI plan separado)",
+    "Tocar scripts/validate-all.js, drift-baseline.json",
+    "Crear PR sin OK explicito",
+    "git add . o git add -A",
+    "Saltar OK humano entre fases",
+    "Decir 'todo OK' sin reportar comando + salida real",
+    "Continuar a F4 si CC1-CC5 no pasan"
+  ],
+
+  "salida_final_del_horizonte": {
+    "carta_impresion_estado_terminal": "blueprint v1.2.0 cumpliendo subsistema-carta v1.0.2: paths canonicos /storage/pizzepos/carta-impresion/, correlation_id obligatorio en carta.impresion.lista. Modelo no-reactivo PRESERVADO. Sin requires_consumer en evento publicado.",
+    "archivos_finales_modificados": [
+      "modules/pizzepos/carta-impresion/module.json",
+      "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json"
+    ],
+    "verificacion_terminal": [
+      "CC1-CC6 ✓",
+      "validate:ci verde",
+      "commit pusheado"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "Hermano backend carta-impresion cerrado (2 de 5)"
+    ],
+    "siguiente_natural": "UI de carta-impresion (cierre-ui-carta-impresion.json). Despues carta-marketing backend --releer su blueprint primero por disciplina."
+  }
+}

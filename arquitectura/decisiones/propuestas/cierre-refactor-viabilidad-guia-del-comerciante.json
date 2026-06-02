@@ -1,0 +1,357 @@
+{
+  "_doc": "Ejecutor (cubo C) del refactor de viabilidad cocinado en sesion ana 2026-06-01. Pareja operativa del documento de cocina refactor-viabilidad-guia-del-comerciante.md: aquel captura el QUE y el PORQUE; este es el itinerario que corre fede (fases con OK explicito entre cada una, archivos exactos, runtime-case de verificacion). Convierte viabilidad de veredicto seco a guia del comerciante: el blueprint genera caminos ligeros (la brujula), renderizados como tarjetas que lanzan el chat via prefillChatInput. Sin agente (se jubila el legacy). Contrato-primero.",
+  "id": "cierre-refactor-viabilidad-guia-del-comerciante",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "ejecutor_refactor_modulo_blueprint",
+
+  "documentos_hermanos": [
+    "arquitectura/decisiones/propuestas/refactor-viabilidad-guia-del-comerciante.md (cocina: QUE y PORQUE, secciones 1-10)"
+  ],
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json (Postura B + prefillChatInput)",
+    "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json (el LLM es runtime del blueprint)",
+    "arquitectura/decisiones/_contratos/subsistema-recetario.contract.json (viabilidad como 7o modulo; se precisa su rol en F0)",
+    "arquitectura/decisiones/_contratos/llm-runtime-discipline.contract.json (no_inventes_datos: caminos = [] si no hay palanca)",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json (paso 4b sin ES6 denso)",
+    "arquitectura/decisiones/_contratos/errors.contract.json",
+    "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json (padre)"
+  ],
+
+  "dependencias_explicitas": [
+    {
+      "id": "DEP1",
+      "que": "frontend/src/lib/stores/chatInputDraft.ts exporta prefillChatInput + store chatInputDraft, cableado en ChatInput.svelte",
+      "verificado_al_cocinar": true,
+      "si_no_se_cumple": "parar antes de F2 y avisar: la pieza clave (tarjeta->chat) no tiene mecanismo"
+    },
+    {
+      "id": "DEP2",
+      "que": "recetas.obtener.request existe y su response trae .data.nombre (fuente del nombre_idea al evaluar por receta_id)",
+      "verificado_al_cocinar": true,
+      "si_no_se_cumple": "parar antes de F1 y avisar"
+    },
+    {
+      "id": "DEP3",
+      "que": "viabilidad v1.1.1 esta en main (eventos canonicos + fix nombre_idea, PR #272). Sin esto, F1 parte de un blueprint con drift de eventos",
+      "verificado_al_cocinar": true,
+      "si_no_se_cumple": "rebasear sobre main antes de empezar"
+    }
+  ],
+
+  "por_que_existe": "El plan de viabilidad estaba completo a nivel de diseno (cocina) y specs (cubo A+B) pero le faltaba el itinerario ejecutable. Este artefacto cierra el cubo C: lo que fede corre fase a fase para materializar la guia del comerciante, sin re-decidir nada (todo lo decidible se cerro en la cocina).",
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": {
+    "blueprint": "modules/pizzepos/viabilidad/viabilidad.blueprint.json v1.1.1 — 4 operaciones (evaluar, obtener, listar, descartar). Eventos de dominio canonicos. NO genera caminos todavia.",
+    "frontend": "frontend/src/lib/modules/viabilidad/ — ViabilidadBrowser al dia (lee /viabilidad.json). ViabilidadDetail ROTO (espera shape viejo: receta_nombre, precio_venta, margen_bruto, food_cost_porcentaje, estado VIABLE/...). ViabilidadRecomendaciones e historico = puertas muertas (Panel pasa [] siempre).",
+    "agente": "modules/conversacion/ai-agent-framework/agents/viabilidad-receta-analyzer.json — enabled:true, executions:0 (dormido). Prompt en prompts/viabilidad-receta-analyzer.json. Eventos de salida (viabilidad.analisis.cualitativo.completado/fallido) sin schema ni consumidor.",
+    "validate_ci": "PASS global, cero drift atribuible a viabilidad (al cocinar)."
+  },
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en la rama asignada antes de empezar",
+      "npm run validate:ci da PASS (baseline aceptado) antes de tocar nada",
+      "viabilidad.blueprint.json es v1.1.1 y publica viabilidad.evaluacion.completada con shape canonico (nombre_idea, coste_por_porcion, coste_es_real) — DEP3",
+      "frontend/src/lib/stores/chatInputDraft.ts exporta prefillChatInput — DEP1; si no, parar antes de F2",
+      "recetas.obtener.request existe y devuelve .data.nombre — DEP2; si no, parar antes de F1",
+      "el agente viabilidad-receta-analyzer.json sigue en disco con enabled:true (para retirarlo en F0)"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las decisiones de cocina del refactor-viabilidad-guia-del-comerciante.md (secciones 1-10) son ley: guia al comienzo, datos estimados, no seguimiento, estancia visible, tres capas, caminos como tarjetas->chat, sin agente",
+      "Cubo A cerrado: iniciacion Postura B; regla de caminos 0-3 cuando hay palanca real, sin inventar",
+      "Los contratos transversales referenciados estan vigentes y no cambian durante esta ejecucion"
+    ],
+    "no_toco_esta_sesion": [
+      "El seguimiento / compras-vs-ventas / datos reales (otra maquinaria, otra estancia)",
+      "La generalizacion padre/hijo a otras verticales (renombre recetas->producto-a-estudio): OTRO horizonte",
+      "Los 2 schemas de evento (los caminos viven en el expediente, no en el evento; el evento ya es canonico)",
+      "Los umbrales de food cost por proyecto (trabajo_pendiente preexistente, ortogonal)",
+      "El calculo determinista de viabilidad (esta sano) y la delegacion a escandallo",
+      "Cualquier otro modulo del repo"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [
+    {
+      "id": "Qopcional",
+      "pregunta": "El texto exacto del arranque que prefilla el boton 'Evaluar un producto' (ej. 'Quiero evaluar la viabilidad de un producto: '). Es cosmetico; si no hay respuesta, fede usa ese default y sigue.",
+      "bloquea": false,
+      "respuesta_usuario": {
+        "opcion": "default",
+        "texto": "Quiero evaluar la viabilidad de un producto: ",
+        "motivo": "humano indica ejecutar sin elegir texto; se usa el default cosmetico del plan",
+        "cerrada_en": "2026-06-01"
+      }
+    }
+  ],
+
+  "decisiones_ya_cerradas": [
+    "Iniciacion de evaluacion = Postura B (prefill->chat), NO formulario",
+    "Caminos = cuando hay palanca real, 0-3, sin inventar. Producto redondo -> caminos = []",
+    "caminos[] vive en el expediente persistido, NO en el evento de dominio",
+    "Shape de cada camino = { titulo, prompt } — sin tipo/prioridad/impacto (no recerrar el enum)",
+    "El prompt del camino lo redacta el LLM entero al evaluar (datos + consulta); el frontend solo lo inyecta",
+    "Sin agente: se jubila viabilidad-receta-analyzer. La profundidad cualitativa vive en el chat",
+    "Los 2 schemas de evento NO se tocan"
+  ],
+
+  "fases": [
+    {
+      "id": "F0",
+      "nombre": "Contrato-primero: precisar rol de viabilidad + retirar el agente",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F0.op1",
+          "descripcion": "Precisar el rol de viabilidad en subsistema-recetario.contract.json",
+          "pseudocodigo": [
+            "leer arquitectura/decisiones/_contratos/subsistema-recetario.contract.json",
+            "localizar la entrada/seccion que describe el modulo viabilidad (rol/descripcion, ~linea 221 y supersedes_nota)",
+            "precisar el texto: viabilidad pasa de 'puramente determinista' a 'determinista + genera caminos ligeros (puntos de entrada accionables); la profundidad cualitativa vive en el chat (LLM principal), NO en el modulo'",
+            "anyadir nota a supersedes_nota documentando el cambio de rol + la retirada del agente, con fecha 2026-06-01",
+            "bump de version del contrato (patch o minor segun politica del propio contrato)",
+            "NO tocar los 2 schemas de evento ni el catalogo de eventos del subsistema"
+          ]
+        },
+        {
+          "id": "F0.op2",
+          "descripcion": "Retirar el agente legacy viabilidad-receta-analyzer",
+          "pseudocodigo": [
+            "borrar modules/conversacion/ai-agent-framework/agents/viabilidad-receta-analyzer.json",
+            "borrar modules/conversacion/ai-agent-framework/prompts/viabilidad-receta-analyzer.json",
+            "confirmar que sus eventos de salida (viabilidad.analisis.cualitativo.completado/fallido) no tienen schema ni consumidor (ya verificado al cocinar; re-confirmar con grep)",
+            "NO tocar el espejo en arquitectura/conversacion-ref/ salvo que el equipo lo pida (es referencia historica)"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": [
+          "arquitectura/decisiones/_contratos/subsistema-recetario.contract.json"
+        ],
+        "archivos_borrados": [
+          "modules/conversacion/ai-agent-framework/agents/viabilidad-receta-analyzer.json",
+          "modules/conversacion/ai-agent-framework/prompts/viabilidad-receta-analyzer.json"
+        ],
+        "verificacion": "npm run validate:ci sigue PASS (puede bajar warnings del baseline al irse el agente; regenerar baseline solo si el descenso es legitimo y documentado)"
+      }
+    },
+    {
+      "id": "F1",
+      "nombre": "Blueprint: generar caminos al evaluar + persistirlos en el expediente",
+      "esfuerzo_horas": 0.75,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1",
+          "descripcion": "Anyadir el paso 4b (generar caminos) en el pseudocodigo de evaluar",
+          "pseudocodigo": [
+            "leer modules/pizzepos/viabilidad/viabilidad.blueprint.json entero",
+            "localizar operaciones.evaluar.pseudocodigo, entre el bloque del veredicto (paso 4) y la construccion del expediente (paso 5)",
+            "insertar el paso 4b con estas lineas (estilo pseudocodigo sin ES6 denso, ver pseudocodigo-estilo.contract):",
+            "  // 4b. Generar caminos (la brujula). Stubs ligeros, NO analisis pesado.",
+            "  //     Regla: 0-3. Si hay palanca que merezca la pena para ESTE caso, proponla.",
+            "  //     Si sale redondo y no hay nada que tocar, caminos = [] (NO inventar).",
+            "  //     El desarrollo cualitativo NO se hace aqui — vive en el chat al tocar la tarjeta.",
+            "  caminos = <TU propones 0-3 caminos segun veredicto, food_cost_pct, margen y advertencias; cada uno { titulo, prompt }, con el prompt incluyendo nombre_idea, coste_por_porcion, pvp_efectivo y la consulta del camino>"
+          ]
+        },
+        {
+          "id": "F1.op2",
+          "descripcion": "Persistir caminos en el expediente + declarar el campo en estado_persistente",
+          "pseudocodigo": [
+            "en operaciones.evaluar.pseudocodigo paso 5 (construir expediente), anyadir el campo: caminos: caminos",
+            "en estado_persistente.shape.expedientes[], anyadir: caminos: [ { titulo: 'string', prompt: 'string' } ]",
+            "actualizar la seccion garantiza[] para mencionar que cada evaluacion produce 0-3 caminos { titulo, prompt }",
+            "actualizar reglas_clave de evaluar: caminos abiertos en contenido, 0-3, sin inventar (no_inventes_datos)"
+          ]
+        },
+        {
+          "id": "F1.op3",
+          "descripcion": "Bump de version del blueprint + module.json",
+          "pseudocodigo": [
+            "viabilidad.blueprint.json version: blueprint-1.1.1 -> blueprint-1.2.0 (feature: caminos)",
+            "module.json version: 1.1.1 -> 1.2.0 + nota en _doc"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": [
+          "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+          "modules/pizzepos/viabilidad/module.json"
+        ],
+        "verificacion": "JSON valido (node -e require); npm run validate:ci PASS; pseudocodigo-estilo sin findings nuevos sobre viabilidad"
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Frontend: reconectar la estancia al shape real + caminos como tarjetas->chat",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op1",
+          "descripcion": "Remapear ViabilidadDetail al shape real del expediente",
+          "pseudocodigo": [
+            "leer frontend/src/lib/modules/viabilidad/ViabilidadDetail.svelte",
+            "sustituir campos viejos por canonicos: receta_nombre->nombre_idea (input.nombre), precio_venta->pvp_efectivo, margen_bruto->margen_porcion, margen_porcentaje->derivar de food_cost_pct, food_cost_porcentaje->food_cost_pct, coste->coste_porcion, estado(VIABLE/ACEPTABLE/...)->veredicto(viable/viable_con_advertencias/no_viable_economicamente/sin_pvp_objetivo)",
+            "ajustar getEstadoClass/getEstadoLabel al enum canonico del veredicto",
+            "QUITAR la seccion 'Comparacion Historica' (pertenece a la maquinaria compras-vs-ventas, fuera de viabilidad)",
+            "quitar los props historico/previousVersion/marginChange y su logica"
+          ]
+        },
+        {
+          "id": "F2.op2",
+          "descripcion": "ViabilidadRecomendaciones pasa a renderizar caminos con prefillChatInput",
+          "pseudocodigo": [
+            "leer frontend/src/lib/modules/viabilidad/ViabilidadRecomendaciones.svelte",
+            "cambiar prop 'recomendaciones' (tipo fijo) por 'caminos' ({ titulo, prompt }[])",
+            "cada tarjeta muestra camino.titulo; el boton de accion llama prefillChatInput(camino.prompt) (import desde $lib/stores/chatInputDraft)",
+            "eliminar el mapeo de tipo/prioridad/impacto (getPrioridadColor, getTipoLabel, getImpactoEmoji) — ya no hay taxonomia fija",
+            "en ViabilidadPanel.svelte: pasar selectedViabilidad.caminos a la seccion en vez de recomendaciones=[]; quitar historico=[]"
+          ]
+        },
+        {
+          "id": "F2.op3",
+          "descripcion": "Boton 'Evaluar un producto' que prefilla el chat (Postura B)",
+          "pseudocodigo": [
+            "en ViabilidadBrowser.svelte (o el header del Panel), anyadir boton 'Evaluar un producto'",
+            "al click: prefillChatInput('Quiero evaluar la viabilidad de un producto: ') (texto de Qopcional)",
+            "no abre formulario; deja al comerciante describir el producto en el chat"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": [
+          "frontend/src/lib/modules/viabilidad/ViabilidadDetail.svelte",
+          "frontend/src/lib/modules/viabilidad/ViabilidadRecomendaciones.svelte",
+          "frontend/src/lib/modules/viabilidad/ViabilidadPanel.svelte",
+          "frontend/src/lib/modules/viabilidad/ViabilidadBrowser.svelte"
+        ],
+        "verificacion_funcional": "cargar /viabilidad: el Browser lista expedientes; abrir uno muestra costes/margen/veredicto con el shape real (sin NaN/undefined); las tarjetas de caminos rellenan el chat al tocarlas; el boton 'Evaluar un producto' prefilla el chat. Sin seccion historica."
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Verificacion runtime (sustituye al test-por-handler en blueprint-driven)",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1",
+          "descripcion": "Runtime-case de evaluar con caminos",
+          "pseudocodigo": [
+            "crear tests/runtime-cases/viabilidad-evaluar-con-caminos.js (estilo de los runtime-cases existentes)",
+            "caso 1: evaluar un producto con margen apretado -> espera veredicto + 1-3 caminos { titulo, prompt }, prompt con datos del expediente",
+            "caso 2: evaluar un producto claramente rentable y sin palanca -> espera caminos = [] (NO inventados)",
+            "caso 3: evaluar por receta_id sin nombre -> nombre_idea resuelto via recetas.obtener (no inventado)",
+            "verificar que viabilidad.evaluacion.completada publicado sigue siendo canonico (sin caminos en el evento)"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": [
+          "tests/runtime-cases/viabilidad-evaluar-con-caminos.js"
+        ],
+        "verificacion": "el runtime-case pasa contra un provider real (deepseek/anthropic) o queda documentado como manual si la infra no esta disponible en la sesion"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "descripcion": "validate:ci no rompe nada",
+      "comando": "npm run validate:ci",
+      "directorio": "raiz repo",
+      "ejecutar_tras": ["F0", "F1", "F2"],
+      "salida_esperada": "PASS sin drift nuevo (en F0 puede bajar warnings al irse el agente; regenerar baseline solo si es legitimo)"
+    },
+    {
+      "id": "CC2_build_frontend",
+      "descripcion": "El frontend compila sin errores TypeScript",
+      "comando": "npm run build",
+      "directorio": "frontend/",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": "build OK"
+    },
+    {
+      "id": "CC3_git_status_scope",
+      "descripcion": "Ningun archivo modificado fuera del scope de la fase",
+      "comando": "git status",
+      "ejecutar_tras": ["F0", "F1", "F2", "F3"],
+      "verificar": "solo los archivos listados en salida_esperada de la fase"
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Cerrar el enum de caminos: NO anyadir tipo/prioridad/impacto fijos. El contenido lo razona el LLM por caso.",
+    "Forzar N caminos siempre: si no hay palanca real, caminos = []. NO inventar (no_inventes_datos).",
+    "Meter caminos en el evento de dominio: viven en el expediente. El evento sigue canonico.",
+    "Tocar los 2 schemas de evento o el catalogo de eventos del subsistema.",
+    "Traer seguimiento / compras-vs-ventas / datos reales / historico de rendimiento a la estancia.",
+    "Renombrar viabilidad/recetas/escandallo o sus eventos (la generalizacion padre/hijo es OTRO horizonte).",
+    "Dejar el agente viabilidad-receta-analyzer activo tras F0.",
+    "Inventar el nombre_idea al evaluar por receta_id: resolverlo via recetas.obtener.request.",
+    "Mezclar fases: cada una cierra con OK explicito del humano antes de la siguiente."
+  ],
+
+  "estado_de_ejecucion": {
+    "F0": {
+      "cerrada_en": "2026-06-01",
+      "commit_hash": "a18b2345eaf406cef8bcac9d73fa35af99184a80",
+      "salida_real": "subsistema-recetario.contract.json v1.0.3->v1.1.0 (rol de viabilidad precisado: determinista + generador de caminos ligeros; profundidad cualitativa en el chat). Agente legacy viabilidad-receta-analyzer borrado (agents+prompts). Eventos viabilidad.analisis.cualitativo.* confirmados sin schema ni consumidor antes de borrar.",
+      "cross_checks_resultado": "CC1 validate:ci PASS (no drift nuevo; findings 2357->2350, descenso legitimo por salida del agente). CC3 git status scope OK (solo los 3 archivos esperados).",
+      "nota_baseline": "Descenso de warnings legitimo pero baseline NO regenerado: CI pasa sin regenerar (solo bloquea drift nuevo). Regeneracion pendiente de OK humano (diferida al cierre del horizonte)."
+    },
+    "F1": {
+      "cerrada_en": "2026-06-01",
+      "commit_hash": "bf4936704fe9bb6d2c2b317aa34dee40e9ca20af",
+      "salida_real": "viabilidad.blueprint.json blueprint-1.1.1->blueprint-1.2.0: paso 4b (generar caminos 0-3 { titulo, prompt }, enum abierto, [] si redondo) insertado entre veredicto y construccion del expediente; campo caminos persistido en el expediente (paso 5) y declarado en estado_persistente.shape; garantiza[] y reglas_clave actualizadas (caminos viven solo en el expediente, evento canonico intacto). module.json 1.1.1->1.2.0 + nota en _doc.",
+      "cross_checks_resultado": "JSON valido (node -e require). CC1 validate:ci PASS (no drift nuevo; pseudocodigo-estilo PASS sin findings; subsistema-recetario PASS sin findings). CC3 git status scope OK (solo los 2 archivos de viabilidad)."
+    },
+    "F2": {
+      "cerrada_en": "2026-06-01",
+      "commit_hash": "56b6031de4589d59bdb66c1f44741b5b7730d268",
+      "extension_de_scope_con_ok_humano": "El plan declaraba 4 archivos (Detail, Recomendaciones, Panel, Browser). Al leer el codigo se detecto que ViabilidadCard.svelte (no listado) y los filtros+summary del Browser usaban el shape viejo (receta_nombre, estado VIABLE/..., margen_porcentaje, food_cost_porcentaje, evaluado_at) y romperian la estancia (NaN/undefined, badge vacio) contra el shape real del expediente. El humano eligio opcion B (estancia coherente) sobre A (estricto al plan): se remapeo tambien ViabilidadCard al shape canonico y se alinearon filtros (enum veredicto) + summary (total/por_veredicto/food_cost_medio del buildSummary del Panel) del Browser, eliminando los filtros muertos (rangos/riesgo/sort que el Panel no honra).",
+      "salida_real": "ViabilidadDetail remapeado al shape real (input.nombre, calculo.coste_porcion, pvp_efectivo, pvp_sugerido, margen_porcion, food_cost_pct, veredicto, advertencias) + seccion historica eliminada + seccion caminos. ViabilidadRecomendaciones renderiza caminos { titulo, prompt } con prefillChatInput (Postura B), sin taxonomia fija. ViabilidadCard remapeado (input.nombre, veredicto, food_cost_pct, margen_porcion, fecha_evaluacion, conteo de caminos). ViabilidadPanel pasa selectedViabilidad.caminos al Detail; eliminados recomendaciones/historico/implementRecomendacion. ViabilidadBrowser: boton 'Evaluar un producto' (prefill EVALUAR_PROMPT default), filtro por veredicto canonico, summary alineado al buildSummary, filtros muertos eliminados.",
+      "cross_checks_resultado": "CC2 npm run build (frontend) OK (built in 15.65s, ViabilidadPanel.js compilado). CC1 validate:ci: primer intento FAIL por 5 drift de line-shift (drift_color_hex_custom_en_frontend_src en los 5 archivos editados, net warnings 2120->2120 sin cambio). Diagnostico: misma categoria/mismos 5 archivos ya en baseline, lineas desplazadas por la reescritura; migracion a paleta canonica fuera de scope. Con OK humano se regenero baseline (npm run validate:baseline:update -> 2322 signatures, -9 por salida del agente F0); re-validate:ci PASS sin drift nuevo. CC3 git scope OK (5 svelte de viabilidad + drift-baseline.json).",
+      "nota_baseline": "Baseline regenerado en F2 (no diferido al cierre): el FAIL de CC1 bloqueaba el commit de F2. La regeneracion capturo de una el line-shift de F2 y el descenso legitimo de F0 (errors 89->86 por salida del agente)."
+    },
+    "F3": {
+      "cerrada_en": "2026-06-01",
+      "commit_hash": "pending",
+      "salida_real": "tests/runtime-cases/viabilidad-evaluar-con-caminos.js creado (artefacto entregable): 3 casos (margen apretado -> caminos>=1 con datos del expediente; rentable redondo -> caminos=[]; por receta_id sin nombre -> nombre via recetas.obtener) + cross-check de que viabilidad.evaluacion.completada publicado NO lleva caminos. Sintaxis OK (node --check), estilo alineado a los runtime-cases existentes (mqtt + chat real + lectura de store).",
+      "verificacion_runtime": "MANUAL PENDIENTE POST-MERGE (decision humana opcion a). El test se ejecuto contra el sistema live (broker enki-ai.online accesible, proyecto activado, conversacion creada, fs.* responde) pero NO puede pasar pre-merge por DOS factores ajenos a los entregables F0/F1/F2: (1) produccion sirve el blueprint DESPLEGADO v1.1.1 SIN el paso 4b de F1 -> el expediente persistido no trae campo caminos (esperado, la feature no esta live); (2) escandallo no respondio (3 timeouts esta sesion) -> viabilidad.evaluar delega el coste a escandallo; sin el, CASO1/CASO3 no persistieron y en CASO2 el LLM estimo el coste (fuente: estimado_llm, con advertencia). El PASS runtime queda condicionado a: rama desplegada/mergeada (blueprint v1.2.0 live) + escandallo sano. Reejecutar entonces: node tests/runtime-cases/viabilidad-evaluar-con-caminos.js [--provider deepseek|anthropic].",
+      "cross_checks_resultado": "CC3 git scope OK (1 archivo nuevo en tests/runtime-cases/ + plan). validate:ci de seguridad PASS (el .js de test no anade drift)."
+    }
+  },
+
+  "salida_final_del_horizonte": {
+    "viabilidad_estado_terminal": "Guia del comerciante operativa: el blueprint genera 0-3 caminos { titulo, prompt } al evaluar (la brujula), persistidos en el expediente; la estancia los renderiza como tarjetas que lanzan el chat con datos + consulta via prefillChatInput; el Detail muestra el shape real; sin seccion historica; sin agente. Evento de dominio canonico intacto.",
+    "archivos_finales_tocados": [
+      "arquitectura/decisiones/_contratos/subsistema-recetario.contract.json (rol precisado)",
+      "modules/pizzepos/viabilidad/viabilidad.blueprint.json (paso 4b + caminos en expediente, v1.2.0)",
+      "modules/pizzepos/viabilidad/module.json (v1.2.0)",
+      "frontend/src/lib/modules/viabilidad/ViabilidadDetail.svelte",
+      "frontend/src/lib/modules/viabilidad/ViabilidadRecomendaciones.svelte",
+      "frontend/src/lib/modules/viabilidad/ViabilidadPanel.svelte",
+      "frontend/src/lib/modules/viabilidad/ViabilidadBrowser.svelte",
+      "tests/runtime-cases/viabilidad-evaluar-con-caminos.js (nuevo)"
+    ],
+    "archivos_borrados": [
+      "modules/conversacion/ai-agent-framework/agents/viabilidad-receta-analyzer.json",
+      "modules/conversacion/ai-agent-framework/prompts/viabilidad-receta-analyzer.json"
+    ],
+    "lo_que_NO_se_toco": [
+      "El calculo determinista del blueprint y la delegacion a escandallo",
+      "Los 2 schemas de evento y el catalogo del subsistema",
+      "Otros modulos del repo",
+      "La generalizacion padre/hijo (otro horizonte)"
+    ],
+    "esfuerzo_total_estimado_horas": "3.25-3.5"
+  }
+}

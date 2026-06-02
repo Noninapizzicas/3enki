@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-carta/tarifas-config-actualizada.schema.json",
+  "title": "tarifas.config.actualizada — payload schema",
+  "description": "Snapshot completo del estado de tarifas. Publicado por tarifas (set_general, assign, register_variant, snapshot). Quien escuche reemplaza su cache local con config del payload. Valida el campo data del envelope del bus.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "tipo", "config", "correlation_id", "timestamp"],
+  "properties": {
+    "project_id": { "$ref": "_common.schema.json#/$defs/project_id" },
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "timestamp": { "$ref": "_common.schema.json#/$defs/timestamp" },
+    "tipo": { "$ref": "_common.schema.json#/$defs/tipo_tarifas_actualizada" },
+    "config": { "$ref": "_common.schema.json#/$defs/tarifas_config" }
+  }
+}

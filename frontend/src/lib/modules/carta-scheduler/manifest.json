@@ -1,0 +1,11 @@
+{
+  "id": "carta-scheduler",
+  "name": "Programacion",
+  "description": "Programacion de cambios de carta+canal por franja horaria. Reglas activas + cambios pendientes de confirmar.",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 9,
+  "routes": ["/carta-scheduler"],
+  "icon": "📅",
+  "label": "Programacion"
+}

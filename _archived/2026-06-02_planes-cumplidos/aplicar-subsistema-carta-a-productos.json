@@ -1,0 +1,735 @@
+{
+  "_doc": "Plan ejecutable JSON del horizonte 'aplicar subsistema-carta a productos'. Bumpea productos de JS POC2 v3.0.0 a v4.0.0 aplicando los aspectos del TP3 del contrato subsistema-carta v1.0.0. Tres familias de cambio: (1) suscribir a tarifas.config.actualizada y cachear mapping canal->carta_id en memoria (postura C cerrada: productos NO expone resolver, solo cachea --el resolve lo hacen comandero/pedidos); (2) cambiar config.persistence.paths para reflejar solo el cache local productos (NO /storage/pizzepos/cartas/ que es de carta-manager); (3) limpieza de subscribes a zona 1 (menu.generado, menu.validado) condicionado a auditoria de consumers. TP3.a (aceptar payload con carta entera) NO requiere cambios --el handler onCartaGenerada ya espera la carta entera, verificado en linea 372 del index.js v3.0.0. TP3.e (correlation_id propagado) requiere verificacion en publishes, no refactor profundo. Pensado para que fede lo ejecute linealmente. Pseudocodigo respeta pseudocodigo-estilo.contract.json.",
+
+  "id": "aplicar-subsistema-carta-a-productos",
+  "version": "1.0.0",
+  "creado_en": "2026-06-01",
+  "skill_origen": "ana",
+  "tipo": "bump_modulo_js_poc2",
+
+  "documentos_hermanos": {
+    "contrato_canonico": {
+      "path": "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+      "version": "1.0.0",
+      "relacion": "Contrato que canoniza el camino carta->POS. Este plan ejecuta el TP3 del contrato (bump productos JS a v4.0.0)."
+    },
+    "planes_hermanos_del_horizonte": [
+      {
+        "path": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-carta-manager.json",
+        "version": "1.0.0",
+        "estado": "cocinado, pendiente ejecucion por fede",
+        "relacion": "TP1 del contrato. Bumpea carta-manager.blueprint a v1.3.0 con paths /storage/pizzepos/cartas/, payload carta entera, correlation_id obligatorio, auto-promocion primera carta. Independiente de este plan --pueden ejecutarse en cualquier orden."
+      },
+      {
+        "path": "arquitectura/decisiones/propuestas/migracion-menu-generator-blueprint.md",
+        "estado": "ejecutado v8.1, validacion runtime diferida por VPS roto",
+        "relacion": "TP2 paralelo de fede --familia A (cleanup v8) + familia B (alinear con subsistema-carta v1.0). NO toca este plan."
+      }
+    ]
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/modulo-clase-robusta.contract.json",
+    "arquitectura/decisiones/_contratos/module-rewrite.contract.json",
+    "arquitectura/decisiones/_contratos/persistence.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/errors.contract.json",
+    "arquitectura/decisiones/_contratos/multi-tenancy.contract.json",
+    "arquitectura/decisiones/_contratos/observability.contract.json",
+    "arquitectura/decisiones/_contratos/tools.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json"
+  ],
+
+  "dependencias_explicitas": [],
+
+  "por_que_existe": {
+    "que_cierra": "Productos JS v3.0.0 arrastra tres drifts contra el contrato subsistema-carta v1.0.0: (1) declara config.persistence.paths a {project.base_path}/storage/pizzepos/cartas/*.json (read+write) lo que viola que solo carta-manager escribe a ese directorio; (2) escucha menu.generado y menu.validado (eventos de zona 1, pre-storage) lo que viola el principio P8 del contrato; (3) NO escucha tarifas.config.actualizada lo que impide que conozca la asignacion carta+canal actual del proyecto.",
+    "que_no_cierra": "Este plan NO toca: handlers internos onCartaGenerada de productos mas alla de verificar que ya espera la carta entera (TP3.a YA esta implementado), el shape de los publishes catalogo.actualizado/producto.* mas alla de verificar correlation_id, la migracion de archivos legacy en disco (TP5 del contrato, separado), la implementacion de RESOLVER_CARTA en comandero/pedidos (decision Q1=C: productos solo cachea mapping, el resolve lo hacen los consumers).",
+    "alcance": "Editar SOLO modules/pizzepos/productos/module.json y modules/pizzepos/productos/index.js. Cero efecto colateral en otros modulos del subsistema. Verificar validate:ci. Commit + push."
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/productos/module.json",
+      "version_actual": "3.0.0",
+      "language": "es",
+      "tipo_modulo": "JS POC2 (main: index.js)",
+      "events_publishes_declarados": ["producto.creado", "producto.actualizado", "producto.eliminado", "catalogo.actualizado", "menu.generado (re-emitido)", "project.get.request (no declarado --drift de auditoria viejo)"],
+      "events_subscribes_declarados": ["carta.actualizada", "menu.generado", "menu.validado", "project.activated", "project.get.response"],
+      "config_persistence_paths_actual": [
+        "{project.base_path}/storage/pizzepos/cartas/*.json (read+write)",
+        "{project.base_path}/storage/pizzepos/cartas/catalogo_activo.json (write atomic on update/delete)"
+      ],
+      "lo_que_debe_quedar_tras_el_plan": {
+        "version": "4.0.0",
+        "_v4_0_changelog": "presente con descripcion de los 4 cambios",
+        "events_subscribes": "['carta.actualizada', 'carta.editada', 'carta.borrada', 'tarifas.config.actualizada', 'project.activated', 'project.get.response'] (anyade los 3 canonicos zona 3 + tarifas.config.actualizada; elimina menu.generado y menu.validado SI auditoria F0 permite)",
+        "events_publishes": "lista limpia de drifts (anyadir project.get.request y eliminar menu.generado re-emit si auditoria F0 permite)",
+        "config_persistence_paths": [
+          "{project.base_path}/storage/pizzepos/productos/catalogo_activo.json (write atomic)",
+          "{project.base_path}/storage/pizzepos/productos/mapping_canales.json (write atomic, opcional segun F3)"
+        ]
+      }
+    },
+    {
+      "pieza": "modules/pizzepos/productos/index.js",
+      "lineas_aproximadas": 1233,
+      "handlers_verificados_en_disco": [
+        {
+          "handler": "onCartaGenerada (linea 372)",
+          "estado": "YA espera carta entera (accede a carta.meta.id, carta.productos, carta.categorias) --TP3.a cumplido sin cambios"
+        },
+        {
+          "handler": "onMenuGenerado (linea 251)",
+          "estado": "EXISTE --guarda en menusPendientes esperando validacion. Su destino depende de auditoria F0."
+        },
+        {
+          "handler": "onMenuValidado (linea 301)",
+          "estado": "EXISTE --sync al catalogo y persiste. Su destino depende de auditoria F0."
+        },
+        {
+          "handler": "onTarifasConfigActualizada",
+          "estado": "NO EXISTE --este plan lo crea"
+        }
+      ],
+      "correlation_id_en_publishes": "Verificado linea 385 que onCartaGenerada lo propaga (event?.metadata?.correlationId || crypto.randomUUID()). Resto de publishes (catalogo.actualizado, producto.*) requieren verificacion explicita en F4 del plan."
+    },
+    {
+      "pieza": "ningun_consumer_conocido_de_menu_generado",
+      "estado": "verificar en F0 del plan --el doc maestro de migracion-menu-generator-blueprint.md indica que productos re-emite menu.generado tras carga inicial desde disco para que categorias se populate. La auditoria de productos confirma este quirk. Si categorias depende de menu.generado, TP3.c (eliminar subscribes) NO se ejecuta en este plan --se difiere y se documenta."
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/<rama-asignada> antes de empezar",
+      "modules/pizzepos/productos/module.json existe y declara version='3.0.0', main='index.js', language='es'",
+      "modules/pizzepos/productos/index.js existe con ~1233 LOC, contiene handlers onCartaGenerada (linea 372), onMenuGenerado (linea 251), onMenuValidado (linea 301)",
+      "arquitectura/decisiones/_contratos/subsistema-carta.contract.json existe y declara version='1.0.0'",
+      "modules/pizzepos/categorias/module.json existe y declarar sus subscribes --verificar si depende de menu.generado",
+      "modules/pizzepos/carta-manager/module.json declara version='1.2.0' (si ya es 1.3.0 significa que TP1 esta ejecutado; este plan funciona igual)",
+      "npm run validate:ci en la raiz da PASS antes de empezar (baseline aceptado con warnings actuales)"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 11 decisiones arquitectonicas del contrato subsistema-carta v1.0.0 (D1-D11)",
+      "tools.contract.json: la invocacion de tools cross-modulo es publish('<toolName>', {...}) auto-wireada por el loader",
+      "module-rewrite.contract.json + modulo-clase-robusta.contract.json: productos es JS POC2 con helpers canonicos. Mantener la estructura POC2 al editar.",
+      "Q1 del plan cerrada como C: productos solo cachea el mapping canal->carta_id en memoria. NO expone tool de resolucion. NO cambia tools existentes (productos.list, productos.search, etc.) para anyadir parametro canal.",
+      "Comandero/pedidos haran RESOLVER_CARTA por su cuenta en horizonte aparte (no este plan)",
+      "La regla del contrato 'productos no escribe el dato canonico' significa que productos PUEDE leer de /storage/pizzepos/cartas/ via fs.read.request pero NO declara esa ruta en su config.persistence.paths (solo escribe a su propio namespace /storage/pizzepos/productos/)"
+    ],
+    "no_toco_esta_sesion": [
+      "modules/pizzepos/carta-manager/* (TP1 plan separado)",
+      "modules/pizzepos/menu-generator/* (TP2 fede)",
+      "modules/pizzepos/tarifas/* (TP4 plan separado)",
+      "modules/pizzepos/comandero/* (no es alcance de este plan --el resolve carta-por-canal lo cocinaremos aparte)",
+      "modules/pizzepos/pedidos/* (no es alcance)",
+      "modules/pizzepos/categorias/* (puede leerse en F0 para auditar dependencia de menu.generado; no se modifica)",
+      "Cualquier otro modulo bajo modules/pizzepos/ (no es alcance)",
+      "arquitectura/decisiones/_contratos/* (cero modificacion)",
+      "arquitectura/decisiones/_schemas/* (TP8 plan separado)",
+      "arquitectura/decisiones/_validators/* (TP9 plan separado)",
+      "Cualquier archivo en data/projects/*/storage/* (cero migracion de datos --TP5 separado)",
+      "frontend/* (no aplica)",
+      "scripts/validate-all.js, drift-baseline.json, validators existentes (regenerar baseline solo tras OK explicito)",
+      "CLAUDE.md (TP11 ritual de limpieza al cerrar horizonte)"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "D1_postura_C_productos_no_expone_resolver",
+      "decision": "Q1 cerrada como C: productos cachea el mapping canal->carta_id en memoria desde tarifas.config.actualizada, pero NO expone tool de resolucion canal->carta. Los consumers (comandero, pedidos) hacen el resolve por su cuenta y luego invocan productos.list({carta_id}) cuando necesiten productos de una carta especifica.",
+      "razon": "Mantiene principio 'cada modulo dueno de su dominio' del contrato subsistema-carta P5. Productos dueno de cartas y catalogo. Tarifas dueno de la asignacion. Comandero los une. Sin acoplamiento cross-dominio.",
+      "no_reabrir_sin": "que aparezca consumer real (e.g. comandero) que necesita resolver canal->carta y prefiere delegar en productos. En ese caso decidir aparte si extender API de productos o mantener el resolve en el consumer."
+    },
+    {
+      "id": "D2_TP3a_ya_implementado",
+      "decision": "TP3.a (aceptar payload con carta entera en carta.actualizada/editada/borrada) NO requiere cambios en codigo --el handler onCartaGenerada (linea 372 del index.js v3.0.0) ya espera la carta entera. F2 del plan verifica que sigue funcionando contra el shape nuevo de TP1.",
+      "razon": "Auditoria de codigo realizada al cocinar este plan confirmo que productos ya esta alineado con el shape canonico nuevo --el drift estaba en carta-manager v1.2 (que cambio a metadatos solo), no en productos.",
+      "no_reabrir_sin": "que TP1 (carta-manager bump v1.3) cambie el shape de forma que rompa onCartaGenerada. En ese caso parar y reportar."
+    },
+    {
+      "id": "D3_TP3c_condicionado_a_auditoria",
+      "decision": "TP3.c (eliminar subscribes a menu.generado y menu.validado) se ejecuta SOLO si la auditoria F0 confirma que ningun consumer real necesita estos eventos. Si categorias (o cualquier otro modulo) depende de menu.generado, TP3.c se DIFIERE: queda anotado como warning en la auditoria y se cierra en horizonte aparte.",
+      "razon": "Eliminar un subscribe sin verificar consumers es eliminar wiring que puede romper otro modulo del subsistema. La auditoria garantiza que no rompemos categorias o similar al limpiar productos.",
+      "no_reabrir_sin": "estrategia clara de migracion de categorias (o quien dependa) a otro evento canonico --en horizonte propio, no en este plan."
+    },
+    {
+      "id": "D4_paths_persistence_canonico",
+      "decision": "Nuevo path canonico de productos: {project.base_path}/storage/pizzepos/productos/catalogo_activo.json (write atomic). Y si F3 implementa cache persistido de mapping: {project.base_path}/storage/pizzepos/productos/mapping_canales.json (write atomic). Productos NO declara /storage/pizzepos/cartas/ en su config.persistence.paths --aunque LEE de ahi via fs.read.request (lectura de dato canonico de carta-manager).",
+      "razon": "Contrato subsistema-carta D1 + prohibido: solo carta-manager escribe a /storage/pizzepos/cartas/. Los consumers tienen su propio namespace de cache. /storage/pizzepos/productos/ es el namespace propio de productos.",
+      "no_reabrir_sin": "decision arquitectonica nueva sobre namespace de modulos del subsistema POS."
+    },
+    {
+      "id": "D5_mapping_canales_solo_en_memoria_v1",
+      "decision": "En v1 del bump, el mapping canal->carta_id se cachea SOLO en memoria (this.mappingCanalesPerProject = new Map). NO se persiste a disco. Si productos se reinicia, el mapping se rehidrata pidiendo tarifas.config.solicitada con tipo=snapshot en onProjectActivated.",
+      "razon": "Friccion minima del primer bump. Persistir mapping a disco anyade complejidad sin valor obvio (el rehidratado por tarifas.config.solicitada es rapido). Si emerge que el reinicio sin tarifas activo deja productos ciego, anyadir persistencia como F-extension.",
+      "no_reabrir_sin": "caso real donde el reinicio sin tarifas operativo causa drift visible."
+    },
+    {
+      "id": "D6_correlation_id_uuid_si_falta",
+      "decision": "Para los publishes que productos emite (catalogo.actualizado, producto.creado, producto.actualizado, producto.eliminado, project.get.request), correlation_id se toma del evento de origen si lo tiene, o se genera con crypto.randomUUID() si no.",
+      "razon": "Mismo patron que ya tiene onCartaGenerada (linea 385). Coherencia interna del modulo.",
+      "no_reabrir_sin": "decision diferente sobre origen estricto vs generacion local del correlation_id."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F0",
+      "nombre": "Auditoria de consumers de menu.generado y menu.validado",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F0.op1_grep_consumers",
+          "descripcion": "Grep exhaustivo de quien escucha menu.generado y menu.validado en el repo",
+          "pseudocodigo": [
+            "Desde la raiz del repo:",
+            "  grep -rn 'menu.generado' modules/ frontend/ scripts/ tests/ 2>/dev/null | grep -v node_modules",
+            "  grep -rn 'menu.validado' modules/ frontend/ scripts/ tests/ 2>/dev/null | grep -v node_modules",
+            "Identificar:",
+            "  (a) Quien PUBLICA menu.generado/menu.validado (productos? menu-generator legacy? otros?)",
+            "  (b) Quien ESCUCHA menu.generado/menu.validado (productos via onMenuGenerado/onMenuValidado; categorias? otros?)",
+            "Documentar resultados en un comentario del PR o en notas/auditoria-menu-eventos.md temporal."
+          ]
+        },
+        {
+          "id": "F0.op2_decidir_TP3c",
+          "descripcion": "Segun resultados de F0.op1, decidir si TP3.c se ejecuta o se difiere",
+          "pseudocodigo": [
+            "Si SOLO productos consume menu.generado y menu.validado (sin terceros):",
+            "  TP3.c se EJECUTA en F5 del plan.",
+            "  El re-emit de menu.generado en productos tambien se elimina.",
+            "Si categorias (u otro modulo) depende de menu.generado/menu.validado:",
+            "  TP3.c se DIFIERE.",
+            "  Crear nota en arquitectura/migracion/notas/ documentando que categorias depende de menu.generado y que la limpieza requiere migracion previa de categorias.",
+            "  El plan continua con F1-F4 + F6-F8 (sin F5)."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "documento_de_decision": "Resumen en notas del PR de quien escucha que evento + decision de ejecutar o diferir TP3.c."
+      }
+    },
+    {
+      "id": "F1",
+      "nombre": "Bump module.json a v4.0.0 con paths canonicos + changelog",
+      "esfuerzo_horas": 0.3,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1_bump_version",
+          "descripcion": "Cambiar version 3.0.0 a 4.0.0 en module.json",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/productos/module.json",
+            "old: \"version\": \"3.0.0\"",
+            "new: \"version\": \"4.0.0\""
+          ]
+        },
+        {
+          "id": "F1.op2_anyadir_changelog",
+          "descripcion": "Anyadir _v4_0_changelog en module.json",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/productos/module.json",
+            "Anyadir tras la clave version:",
+            "  \"_v4_0_changelog\": \"v4.0.0 (2026-06-01): aplica TP3 del contrato subsistema-carta v1.0.0. Cambios: (a) verificacion --onCartaGenerada ya esperaba carta entera, no requirio cambio; (b) anyade subscribe a tarifas.config.actualizada + handler onTarifasConfigActualizada que cachea mapping canal->carta_id en memoria (postura C, no expone tool de resolucion); (c) condicional --si auditoria F0 lo permite, elimina subscribes a menu.generado y menu.validado y handlers asociados, mas re-emit interno de menu.generado; (d) config.persistence.paths cambia a {project.base_path}/storage/pizzepos/productos/catalogo_activo.json (su propio namespace, NO /storage/pizzepos/cartas/ que es de carta-manager); (e) propaga correlation_id en todos los publishes (catalogo.actualizado, producto.*) tomando del evento origen o generando con crypto.randomUUID().\""
+          ]
+        },
+        {
+          "id": "F1.op3_cambiar_persistence_paths",
+          "descripcion": "Actualizar config.persistence.paths al namespace canonico de productos",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/productos/module.json",
+            "old (config.persistence.paths):",
+            "  [",
+            "    \"{project.base_path}/storage/pizzepos/cartas/*.json (read+write)\",",
+            "    \"{project.base_path}/storage/pizzepos/cartas/catalogo_activo.json (write atomic on update/delete)\"",
+            "  ]",
+            "new:",
+            "  [",
+            "    \"{project.base_path}/storage/pizzepos/productos/catalogo_activo.json (write atomic on update/delete)\"",
+            "  ]",
+            "Nota: productos sigue LEYENDO de /storage/pizzepos/cartas/ via fs.read.request cuando arranca el proyecto (onProjectActivated) para hidratar su cache, pero esa lectura NO se declara en su config.persistence.paths (que solo describe lo que productos POSEE/ESCRIBE). El dato canonico de cartas vive bajo el namespace de carta-manager."
+          ]
+        },
+        {
+          "id": "F1.op4_anyadir_subscribe_tarifas_y_actualizar_subscribes",
+          "descripcion": "Actualizar events.subscribes y events.publishes en module.json",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/productos/module.json events.subscribes",
+            "Anyadir entrada nueva:",
+            "  { \"event\": \"tarifas.config.actualizada\", \"handler\": \"onTarifasConfigActualizada\", \"description\": \"Snapshot del estado de tarifas. Productos actualiza el mapping canal->carta_id en memoria. No expone tool de resolucion --los consumers hacen el resolve por su cuenta.\" }",
+            "Anyadir entradas que faltaban en v3.0.0 (drift de auditoria viejo):",
+            "  { \"event\": \"carta.editada\", \"handler\": \"onCartaGenerada\", \"description\": \"Carta editada (productos/categorias modificados). Mismo handler que carta.actualizada porque el shape de payload es identico (carta entera embebida).\" }",
+            "  { \"event\": \"carta.borrada\", \"handler\": \"onCartaBorrada\", \"description\": \"Carta archivada (soft-delete). Productos saca esta carta de su catalogo activo si era la asignada al canal general.\" }",
+            "Si F0 decidio que TP3.c se EJECUTA, eliminar:",
+            "  { \"event\": \"menu.generado\", ... }",
+            "  { \"event\": \"menu.validado\", ... }",
+            "Si F0 difiere TP3.c, NO eliminar (anyadir comentario _drift_pendiente: 'menu.generado/menu.validado siguen --auditoria pendiente de migrar consumers')",
+            "Actualizar events.publishes para anyadir entradas no declaradas detectadas en auditoria vieja:",
+            "  { \"event\": \"project.get.request\", \"description\": \"Request tecnico a project-manager para resolver base_path. Correlacionado por request_id.\" }",
+            "Si TP3.c se ejecuta, eliminar la entrada menu.generado de events.publishes (es el re-emit interno)."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/productos/module.json"],
+        "verificacion": "jq '{version, subscribes: .events.subscribes | length, paths: .config.persistence.paths}' module.json muestra v4.0.0, subscribes con la lista correcta, paths con la ruta canonica nueva."
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Verificar que onCartaGenerada acepta payload nuevo + propagacion correlation_id",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op1_releer_onCartaGenerada",
+          "descripcion": "Releer linea 372-440 del index.js para confirmar que el handler espera carta entera",
+          "pseudocodigo": [
+            "Read modules/pizzepos/productos/index.js offset=370 limit=80",
+            "Verificar que el handler:",
+            "  (a) extrae carta de event.data || event.payload || event (linea 373)",
+            "  (b) requiere carta.meta.id y carta.productos (linea 374)",
+            "  (c) extrae project_id de carta.project_id (linea 379)",
+            "  (d) toma correlation_id de event.metadata.correlationId o genera uno (linea 385)",
+            "Si todo OK: TP3.a CONFIRMADO sin cambios.",
+            "Si algo difiere: REPORTAR al humano antes de continuar (puede ser que el codigo cambio entre cocinar plan y ejecutar)."
+          ]
+        },
+        {
+          "id": "F2.op2_correlation_id_en_publishes_secundarios",
+          "descripcion": "Verificar que los publishes secundarios (catalogo.actualizado, producto.creado, producto.actualizado, producto.eliminado, project.get.request) propagan correlation_id",
+          "pseudocodigo": [
+            "Read modules/pizzepos/productos/index.js completo o usar grep:",
+            "  grep -nE 'this.eventBus.publish|publishCatalogoActualizado|publishProductoCreado' modules/pizzepos/productos/index.js",
+            "Para cada publish identificado:",
+            "  Verificar que el payload incluye correlation_id (sea propagado desde el evento de origen o generado con crypto.randomUUID() local).",
+            "  Si algun publish NO incluye correlation_id, anotarlo para F2.op3 (Edit).",
+            "Verificacion via grep:",
+            "  grep -c 'correlation_id' modules/pizzepos/productos/index.js",
+            "  esperado: >= 5 (al menos una vez por handler y por publish)"
+          ]
+        },
+        {
+          "id": "F2.op3_anyadir_correlation_id_donde_falte",
+          "descripcion": "Solo si F2.op2 detecta publishes sin correlation_id, hacer Edit puntuales",
+          "pseudocodigo": [
+            "Para cada publish sin correlation_id detectado en F2.op2:",
+            "  Edit del bloque correspondiente anyadiendo correlation_id al payload:",
+            "    old: await this.eventBus.publish('producto.creado', { producto_id, project_id, timestamp: ... })",
+            "    new: await this.eventBus.publish('producto.creado', { producto_id, project_id, correlation_id: correlation_id || crypto.randomUUID(), timestamp: ... })",
+            "  donde correlation_id se debe haber recibido en el contexto del handler que origina el publish.",
+            "Nota: NO refactorizar logica que no requiere cambio --solo anyadir correlation_id al payload del publish."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/productos/index.js (si F2.op3 requirio cambios)"],
+        "verificacion": "grep -c 'correlation_id' productos/index.js da al menos 6 (1 por cada publish + verificaciones)"
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Implementar handler onTarifasConfigActualizada + cache mapping en memoria",
+      "esfuerzo_horas": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F3.op1_anyadir_mapping_canales_per_project",
+          "descripcion": "En la clase ProductosModule, anyadir un Map para cachear el mapping canal->carta_id por project_id",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/productos/index.js",
+            "Localizar el constructor de ProductosModule o el lugar donde se declaran los Maps existentes (probablemente al inicio de onLoad o como propiedades).",
+            "Anyadir la propiedad:",
+            "  this.mappingCanalesPerProject = new Map()  // Map<project_id, { general: carta_id|null, mesa: ..., telefono: ..., ... }>",
+            "Comentario explicativo en codigo:",
+            "  // v4.0.0: cachea el mapping canal->carta_id desde tarifas.config.actualizada.",
+            "  // Postura C: solo cachea. NO expone tool de resolucion --los consumers (comandero/pedidos)",
+            "  // hacen RESOLVER_CARTA por su cuenta y luego invocan productos.list({carta_id})."
+          ]
+        },
+        {
+          "id": "F3.op2_implementar_handler_onTarifasConfigActualizada",
+          "descripcion": "Implementar el handler que recibe tarifas.config.actualizada y actualiza el mapping",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/productos/index.js",
+            "Anyadir metodo a la clase ProductosModule (junto a los otros handlers):",
+            "",
+            "  async onTarifasConfigActualizada(event) {",
+            "    const project_id = event?.data?.project_id || event?.payload?.project_id",
+            "    if (!project_id) {",
+            "      this.logger.debug('tarifas.config.actualizada.no_project_id', { event })",
+            "      return",
+            "    }",
+            "    const config = event?.data?.config || event?.payload?.config",
+            "    if (!config) {",
+            "      this.logger.debug('tarifas.config.actualizada.no_config', { project_id })",
+            "      return",
+            "    }",
+            "    const correlation_id = event?.metadata?.correlationId || event?.data?.correlation_id || crypto.randomUUID()",
+            "    // Construir el snapshot del mapping para este proyecto",
+            "    const mapping = {",
+            "      general: config.general || null,",
+            "      mesa: config.canales?.mesa || null,",
+            "      telefono: config.canales?.telefono || null,",
+            "      llevar: config.canales?.llevar || null,",
+            "      glovo: config.canales?.glovo || null,",
+            "      whatsapp: config.canales?.whatsapp || null,",
+            "      llevadoo: config.canales?.llevadoo || null",
+            "    }",
+            "    this.mappingCanalesPerProject.set(project_id, mapping)",
+            "    this.logger.info('tarifas.config.applied', {",
+            "      project_id,",
+            "      tipo: event?.data?.tipo || 'unknown',",
+            "      mapping_general: mapping.general,",
+            "      canales_con_override: Object.keys(mapping).filter(k => k !== 'general' && mapping[k] !== null),",
+            "      correlation_id",
+            "    })",
+            "    // No emite publish propio --el evento de salida tarifas.config.actualizada es de tarifas.",
+            "    // Productos solo cachea internamente.",
+            "  }"
+          ]
+        },
+        {
+          "id": "F3.op3_solicitar_snapshot_inicial_en_onProjectActivated",
+          "descripcion": "Cuando productos recibe project.activated, ademas de su trabajo actual, publica tarifas.config.solicitada para hidratar el mapping inicial",
+          "pseudocodigo": [
+            "Read del handler onProjectActivated en index.js (grep linea o leer offset relevante)",
+            "Edit anyadiendo al final del handler:",
+            "  // v4.0.0: solicitar snapshot inicial de tarifas para hidratar el mapping canal->carta_id.",
+            "  // Fire-and-forget --si tarifas no responde, el mapping queda vacio y se hidratara la proxima vez",
+            "  // que tarifas publique tarifas.config.actualizada por cambio.",
+            "  try {",
+            "    await this.eventBus.publish('tarifas.config.solicitada', {",
+            "      project_id: project_id,",
+            "      tipo: 'snapshot',",
+            "      correlation_id: correlation_id || crypto.randomUUID(),",
+            "      timestamp: new Date().toISOString()",
+            "    })",
+            "  } catch (err) {",
+            "    this.logger.warn('tarifas.config.solicitada.publish_failed', { project_id, error: err?.message })",
+            "  }",
+            "Verificar que correlation_id y project_id estan en scope --si no, ajustar."
+          ]
+        },
+        {
+          "id": "F3.op4_limpiar_mapping_en_onProjectDeactivated",
+          "descripcion": "Cuando se desactiva un proyecto, limpiar su mapping del Map",
+          "pseudocodigo": [
+            "Buscar handler onProjectDeactivated en index.js. Si no existe, considerar si crearlo es necesario (segun otros Maps que tambien se limpian al desactivar).",
+            "Si existe, Edit anyadiendo:",
+            "  this.mappingCanalesPerProject.delete(project_id)",
+            "Si NO existe handler y otros Maps tampoco se limpian al desactivar (puede ser que el patron del modulo sea no-op multi-tenant), entonces NO crear --consistente con el patron del modulo. Documentar como comentario."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/productos/index.js"],
+        "verificacion": "grep -c 'mappingCanalesPerProject' productos/index.js >= 3 (declaracion + set en handler + opcional delete en deactivate). grep -c 'onTarifasConfigActualizada' >= 2 (declaracion del metodo + opcional otra referencia)."
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Cambiar paths de escritura del catalogo_activo.json al namespace nuevo",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_grep_catalogo_activo",
+          "descripcion": "Identificar todas las referencias a /storage/pizzepos/cartas/catalogo_activo.json en index.js",
+          "pseudocodigo": [
+            "Desde la raiz:",
+            "  grep -nE 'catalogo_activo\\.json|/storage/pizzepos/cartas/' modules/pizzepos/productos/index.js",
+            "Listar todas las apariciones. Tipicamente: persistCatalog method y posible load inicial."
+          ]
+        },
+        {
+          "id": "F4.op2_cambiar_path_de_escritura",
+          "descripcion": "Cambiar el path donde productos escribe catalogo_activo.json --de /storage/pizzepos/cartas/ a /storage/pizzepos/productos/",
+          "pseudocodigo": [
+            "Edit las llamadas a fs.write.request o equivalente en persistCatalog:",
+            "  old: path: project_base_path + '/storage/pizzepos/cartas/catalogo_activo.json'",
+            "  new: path: project_base_path + '/storage/pizzepos/productos/catalogo_activo.json'",
+            "  OR si usa pattern {project.base_path}:",
+            "  old: path: '{project.base_path}/storage/pizzepos/cartas/catalogo_activo.json'",
+            "  new: path: '{project.base_path}/storage/pizzepos/productos/catalogo_activo.json'",
+            "Aplicar a TODAS las apariciones identificadas en F4.op1."
+          ]
+        },
+        {
+          "id": "F4.op3_preservar_lectura_de_cartas",
+          "descripcion": "VERIFICAR (no cambiar) que la lectura inicial de cartas en onProjectActivated SIGUE usando /storage/pizzepos/cartas/ (lectura del dato canonico de carta-manager)",
+          "pseudocodigo": [
+            "Releer onProjectActivated en index.js.",
+            "Identificar las llamadas a fs.read.request o fs.list para cargar cartas iniciales.",
+            "VERIFICAR que el path es /storage/pizzepos/cartas/* --este path se PRESERVA (no se cambia) porque productos LEE de ahi (no escribe).",
+            "Si actualmente usa un path distinto (e.g. /cartas/ pelado tras decision TP1), AJUSTAR a /storage/pizzepos/cartas/ canonico.",
+            "NO declarar este path en config.persistence.paths --es lectura, no escritura."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/productos/index.js"],
+        "verificacion": "grep -c '/storage/pizzepos/productos/' productos/index.js >= 1. grep -c 'cartas/catalogo_activo' productos/index.js debe ser 0 (path viejo eliminado)."
+      }
+    },
+    {
+      "id": "F5",
+      "nombre": "Eliminar subscribes a menu.generado y menu.validado (CONDICIONAL --solo si F0 lo permite)",
+      "esfuerzo_horas": 0.7,
+      "ok_explicito_antes_de_continuar": true,
+      "se_ejecuta_si": "F0.op2 decidio que TP3.c se ejecuta (ningun consumer real necesita menu.generado/menu.validado).",
+      "operaciones": [
+        {
+          "id": "F5.op1_eliminar_handlers_del_index",
+          "descripcion": "Eliminar metodos onMenuGenerado y onMenuValidado de la clase ProductosModule",
+          "pseudocodigo": [
+            "Edit modules/pizzepos/productos/index.js",
+            "Eliminar metodo onMenuGenerado (linea ~251) y su bloque completo de logica.",
+            "Eliminar metodo onMenuValidado (linea ~301) y su bloque completo.",
+            "Si los metodos referencian propiedades como this.menusPendientesPerProject:",
+            "  Localizar la inicializacion de menusPendientesPerProject (Map).",
+            "  Si SOLO se usa en onMenuGenerado/onMenuValidado, eliminar tambien la inicializacion.",
+            "  Si se usa tambien en otros lugares, NO eliminar (revisar caso por caso)."
+          ]
+        },
+        {
+          "id": "F5.op2_eliminar_re_emit_interno",
+          "descripcion": "Si productos re-emite menu.generado tras carga inicial desde disco (segun auditoria), eliminar ese re-emit",
+          "pseudocodigo": [
+            "Localizar en index.js la linea o bloque que publica menu.generado tras carga inicial:",
+            "  grep -n 'menu.generado' modules/pizzepos/productos/index.js",
+            "Si aparece publish('menu.generado', ...):",
+            "  Edit eliminando esa llamada.",
+            "  Verificar que el codigo circundante sigue siendo coherente (no rompe el flujo de carga inicial)."
+          ]
+        },
+        {
+          "id": "F5.op3_limpiar_referencias_residuales",
+          "descripcion": "Limpiar cualquier referencia residual a menusPendientesPerProject o handlers eliminados en el resto del codigo",
+          "pseudocodigo": [
+            "grep -nE 'menusPendientes|onMenuGenerado|onMenuValidado' modules/pizzepos/productos/index.js",
+            "Para cada match restante:",
+            "  Si es comentario o documentacion: limpiar.",
+            "  Si es referencia activa (uso real): REPORTAR al humano (puede indicar que la eliminacion no esta completa)."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_modificados": ["modules/pizzepos/productos/index.js"],
+        "verificacion": "grep -c 'onMenuGenerado\\|onMenuValidado' productos/index.js debe ser 0. grep -c 'menu.generado\\|menu.validado' tambien debe ser 0 (excepto quizas en comentarios de changelog)."
+      }
+    },
+    {
+      "id": "F6",
+      "nombre": "Verificacion validate:ci + tests unitarios existentes",
+      "esfuerzo_horas": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F6.op1_validate_ci",
+          "descripcion": "Correr validate:ci y verificar PASS",
+          "pseudocodigo": [
+            "cd raiz del repo",
+            "npm run validate:ci",
+            "esperado: PASS sin drift NUEVO.",
+            "Si aparece drift nuevo, leer la salida y diagnosticar:",
+            "  - drift de paths fuera de canonico: indica que F4 no termino limpio.",
+            "  - drift de subscribes obsoletos en module.json: indica que F1.op4 no actualizo correctamente.",
+            "  - drift de cualquier otro tipo: REPORTAR al humano, NO improvisar fixes."
+          ]
+        },
+        {
+          "id": "F6.op2_tests_unitarios_productos",
+          "descripcion": "Correr tests unitarios existentes de productos si los hay",
+          "pseudocodigo": [
+            "ls tests/unit/pizzepos__productos.test.js 2>/dev/null",
+            "si existe:",
+            "  npm test -- tests/unit/pizzepos__productos.test.js",
+            "  esperado: PASS",
+            "  si FAIL: leer la salida.",
+            "    Si el test esperaba paths viejos (/storage/pizzepos/cartas/catalogo_activo.json): actualizar el test al path nuevo.",
+            "    Si el test esperaba que onMenuGenerado existiera: verificar que F5 se ejecuto y actualizar el test.",
+            "    Si el FAIL es por cambio de shape no relacionado con este plan: REPORTAR al humano.",
+            "si NO existe:",
+            "  documentar en salida_esperada que no hay test unitario para este modulo.",
+            "  NO crear test nuevo en este plan."
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "estado_terminal": "validate:ci verde sin drift NUEVO. Tests unitarios verdes (o documentado que no hay)."
+      }
+    },
+    {
+      "id": "F7",
+      "nombre": "Commit + push a la rama de la sesion",
+      "esfuerzo_horas": 0.2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F7.op1_status",
+          "descripcion": "Revisar git status y confirmar scope",
+          "pseudocodigo": [
+            "git status",
+            "git diff",
+            "confirmar que SOLO hay cambios en:",
+            "  modules/pizzepos/productos/module.json",
+            "  modules/pizzepos/productos/index.js",
+            "  posiblemente tests/unit/pizzepos__productos.test.js (si F6.op2 hizo cambios)",
+            "Si hay cambios fuera del scope: PARAR, reportar, NO commitear."
+          ]
+        },
+        {
+          "id": "F7.op2_commit",
+          "descripcion": "Crear commit estructurado",
+          "pseudocodigo": [
+            "git add (archivos especificos):",
+            "  git add modules/pizzepos/productos/module.json modules/pizzepos/productos/index.js",
+            "  si tests modificados: git add tests/unit/pizzepos__productos.test.js",
+            "",
+            "git commit con mensaje:",
+            "  feat(productos): bump v4.0.0 --aplica contrato subsistema-carta v1.0.0",
+            "",
+            "  Cinco familias del TP3 del contrato:",
+            "  (a) onCartaGenerada ya esperaba carta entera --verificado sin cambios.",
+            "  (b) Anyade subscribe a tarifas.config.actualizada + handler onTarifasConfigActualizada",
+            "      que cachea mapping canal->carta_id en memoria (postura C cerrada, no expone resolver).",
+            "  (c) Elimina subscribes a menu.generado y menu.validado [condicional --segun auditoria F0].",
+            "  (d) config.persistence.paths cambia a /storage/pizzepos/productos/catalogo_activo.json",
+            "      (productos lee de /storage/pizzepos/cartas/ pero NO escribe ahi --solo carta-manager).",
+            "  (e) correlation_id propagado en todos los publishes [verificado/anyadido segun F2].",
+            "",
+            "  Plan ejecutable: arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-productos.json",
+            "  Contrato canonico: arquitectura/decisiones/_contratos/subsistema-carta.contract.json"
+          ]
+        },
+        {
+          "id": "F7.op3_push",
+          "descripcion": "Push con retry exponencial",
+          "pseudocodigo": [
+            "git push -u origin <rama-de-la-sesion>",
+            "si falla por red: retry 2s, 4s, 8s, 16s",
+            "si falla por otra razon: parar, diagnosticar, reportar.",
+            "NO --force, NO --no-verify"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "commit_creado": true,
+        "push_remoto": true,
+        "no_PR_creada": "no crear PR salvo OK explicito del humano"
+      }
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {
+      "id": "CC1_validate_ci",
+      "descripcion": "validate:ci pasa sin drift nuevo",
+      "comando": "npm run validate:ci",
+      "ejecutar_tras": ["F1", "F3", "F4", "F5", "F6"],
+      "salida_esperada": "PASS sin drift NUEVO frente al baseline. Errors bloquean. Warnings preservados."
+    },
+    {
+      "id": "CC2_jq_valido",
+      "descripcion": "module.json sigue siendo JSON valido",
+      "comando": "jq . modules/pizzepos/productos/module.json > /dev/null && echo OK",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "OK"
+    },
+    {
+      "id": "CC3_persistence_paths_canonicos",
+      "descripcion": "config.persistence.paths apunta solo a /storage/pizzepos/productos/ (NO a /storage/pizzepos/cartas/)",
+      "comando": "jq '.config.persistence.paths' modules/pizzepos/productos/module.json",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "['{project.base_path}/storage/pizzepos/productos/catalogo_activo.json (...)']  --sin ningun path en /storage/pizzepos/cartas/"
+    },
+    {
+      "id": "CC4_subscribes_actualizados",
+      "descripcion": "events.subscribes contiene tarifas.config.actualizada + carta.editada + carta.borrada (y NO contiene menu.generado/menu.validado si TP3.c se ejecuto)",
+      "comando": "jq '.events.subscribes | map(.event)' modules/pizzepos/productos/module.json",
+      "ejecutar_tras": ["F1"],
+      "salida_esperada": "Debe contener: carta.actualizada, carta.editada, carta.borrada, tarifas.config.actualizada, project.activated, project.get.response. Si F5 se ejecuto, NO contiene menu.generado ni menu.validado."
+    },
+    {
+      "id": "CC5_handler_onTarifasConfigActualizada_existe",
+      "descripcion": "El metodo onTarifasConfigActualizada esta declarado en index.js",
+      "comando": "grep -c 'onTarifasConfigActualizada' modules/pizzepos/productos/index.js",
+      "ejecutar_tras": ["F3"],
+      "salida_esperada": ">= 1"
+    },
+    {
+      "id": "CC6_correlation_id_propagado",
+      "descripcion": "Productos propaga correlation_id en publishes",
+      "comando": "grep -c 'correlation_id' modules/pizzepos/productos/index.js",
+      "ejecutar_tras": ["F2"],
+      "salida_esperada": ">= 5"
+    },
+    {
+      "id": "CC7_git_status_scope",
+      "descripcion": "Verificar scope del commit",
+      "comando": "git status --short",
+      "ejecutar_tras": ["F7.op1"],
+      "verificar": "Solo aparecen los 2 archivos (3 si test modificado). Si aparece algo mas, PARAR."
+    }
+  ],
+
+  "prohibido_absoluto": [
+    "Tocar modules/pizzepos/carta-manager/* (TP1 plan separado)",
+    "Tocar modules/pizzepos/menu-generator/* (TP2 fede)",
+    "Tocar modules/pizzepos/tarifas/* (TP4 plan separado)",
+    "Tocar modules/pizzepos/comandero/* o pedidos/* (no es alcance --RESOLVER_CARTA en consumers es horizonte aparte)",
+    "Tocar modules/pizzepos/categorias/* (puede leerse en F0 para auditar; NO se modifica)",
+    "Tocar cualquier otro modulo bajo modules/pizzepos/ (no es alcance)",
+    "Exponer tool nueva de resolver canal->carta en productos (D1 cerrada como C --solo cachea, no expone)",
+    "Modificar tools existentes (productos.list, productos.search, etc.) para anyadir parametro canal (D1 cerrada como C)",
+    "Tocar arquitectura/decisiones/_contratos/* (cero modificacion)",
+    "Tocar arquitectura/decisiones/_schemas/* o _validators/* (TP8/TP9 separados)",
+    "Migrar archivos en disco data/projects/*/storage/* (TP5 separado --requiere OK explicito)",
+    "Mover el catalogo_activo.json fisico existente de /storage/pizzepos/cartas/ a /storage/pizzepos/productos/ (cero migracion de datos --el archivo viejo se queda; si productos no lo encuentra en el path nuevo, lo crea desde cero al primer write atomico)",
+    "Tocar frontend/* (no aplica al modulo backend productos)",
+    "Tocar scripts/validate-all.js, drift-baseline.json, validators existentes",
+    "Tocar CLAUDE.md (TP11 ritual de limpieza al cerrar horizonte)",
+    "Eliminar subscribes a menu.generado/menu.validado SI F0 detecto consumers reales (TP3.c es CONDICIONAL --se difiere si rompe categorias o similar)",
+    "Persistir el mapping canal->carta_id a disco en v1 (D5 cerrada: solo memoria; persistencia es F-extension futura)",
+    "Crear PR sin OK explicito del humano",
+    "Hacer commit con git add . o git add -A",
+    "Saltar OK humano entre F0 y F1, F1 y F2, F3 y F4, F5 y F6, F6 y F7",
+    "Decir 'todo OK' sin reportar el comando ejecutado y su salida real",
+    "Continuar a F7 si CC1-CC6 no pasan",
+    "Improvisar fixes en otros modulos si validate:ci detecta drift fuera del alcance --PARAR y reportar",
+    "Romper el patron POC2 de productos al editar (mantener helpers canonicos, error shape canonico, retornos canonicos)"
+  ],
+
+  "salida_final_del_horizonte": {
+    "productos_estado_terminal": "JS POC2 v4.0.0 cumpliendo TP3 del contrato subsistema-carta v1.0.0: subscribe a tarifas.config.actualizada con mapping canal->carta_id cacheado en memoria, paths de escritura en /storage/pizzepos/productos/, sin colision con dominio de carta-manager, correlation_id propagado en publishes. Si F0 lo permitio, subscribes a menu.generado/menu.validado eliminados.",
+    "archivos_finales_modificados": [
+      "modules/pizzepos/productos/module.json (version 4.0.0 + paths canonicos + subscribes actualizados + _v4_0_changelog)",
+      "modules/pizzepos/productos/index.js (handler onTarifasConfigActualizada nuevo + ajustes en onProjectActivated + path de escritura cambiado + condicional limpieza onMenuGenerado/onMenuValidado)",
+      "posiblemente tests/unit/pizzepos__productos.test.js (si tests pre-existentes asumian shape/paths viejos)"
+    ],
+    "verificacion_terminal": [
+      "Todos los CC1-CC7 pasan",
+      "validate:ci verde sin drift nuevo",
+      "git status: solo archivos del scope",
+      "commit pusheado a la rama de la sesion",
+      "NO se creo PR"
+    ],
+    "deuda_cerrada_del_horizonte_subsistema_carta": [
+      "TP3 del contrato subsistema-carta v1.0.0 --estado: 'cerrado' (productos JS a v4.0.0)",
+      "Drift de path persistence /storage/pizzepos/cartas/ -> /storage/pizzepos/productos/ cerrado",
+      "Drift de escucha a zona 1 (menu.generado/menu.validado) cerrado SI F0 lo permitio (sino documentado para horizonte aparte)",
+      "Drift de no escuchar tarifas.config.actualizada cerrado",
+      "correlation_id propagado en publishes (drift de tracing parcial documentado en auditoria vieja)"
+    ],
+    "siguiente_natural": "TP4 (tarifas correlation_id, pequeño). Despues TP6 (UI tarifas, grande estilo cierre-ui-*). TP7 (badges carta-manager UI) cuando cierre-ui-carta-manager.json se haya ejecutado. TP8 (schemas AJV) preparativo para TP9 (validator). TP9 esperar a que el camino este wireado para evitar falsos positivos."
+  }
+}

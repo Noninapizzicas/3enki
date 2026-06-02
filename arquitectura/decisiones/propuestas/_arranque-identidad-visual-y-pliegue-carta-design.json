@@ -1,0 +1,341 @@
+{
+  "_doc": "Arranque del horizonte identidad-visual-y-pliegue-carta-design. Reapertura del proposito que el commit 2a6d3b3 (2026-06-01) habia aparcado. La D5 del plan aplicar-subsistema-carta-a-carta-design.json prevista exactamente este escenario: 'Si el usuario reabre el proposito de carta-design, se cocina entonces.' Este documento captura lo cocinado con ana en sesion 2026-06-02 y estructura el horizonte en 4 planes encadenados. NO es plan ejecutable por fede --es mapa que ana lee al cocinar cada plan individual. JSON con lenguaje LLM (no MD) porque el contenido es estructura pura, cero narrativa libre --el validator documentation.validate.js sugiere explicitamente absorber a contrato JSON los MD con shape estructurable.",
+
+  "id": "_arranque-identidad-visual-y-pliegue-carta-design",
+  "version": "1.0.0",
+  "creado_en": "2026-06-02",
+  "skill_origen": "ana",
+  "tipo": "arranque_de_horizonte",
+  "estado": "abierto",
+
+  "origen": {
+    "commit_que_aparco_la_ui": "2a6d3b3",
+    "plan_que_documento_el_aparcamiento": "arquitectura/decisiones/propuestas/aplicar-subsistema-carta-a-carta-design.json",
+    "analisis_del_aparcamiento": "arquitectura/decisiones/propuestas/_analisis-flujo-pos-y-engranajes-carta.md",
+    "citacion_del_aparcamiento": "no aporta nada interesante al comerciante, solapamiento aparente con carta-impresion",
+    "decision_D5_que_previno_esta_reapertura": "Si el usuario reabre el proposito de carta-design, se cocina cierre-ui-carta-design.json entonces. Si confirma aparcamiento definitivo, el backend v1.2.0 sigue siendo valido como mantenimiento.",
+    "evento_que_reabre": "sesion de cocina 2026-06-02 con ana --el usuario reabre proposito explicitamente"
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/subsistema-carta.contract.json",
+    "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json",
+    "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json",
+    "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
+    "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json",
+    "arquitectura/decisiones/_contratos/llm-runtime-discipline.contract.json",
+    "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json",
+    "arquitectura/decisiones/_contratos/frontend.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/persistence.contract.json",
+    "arquitectura/decisiones/_contratos/errors.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json"
+  ],
+
+  "decisiones_cocinadas_en_la_sesion_2026_06_02": {
+
+    "naturaleza_del_recurso": [
+      "carta-design tal como esta hoy NO aporta lo que su nombre sugiere. La parte de generacion de HTML (operaciones load_carta, save, gallery) solapa con carta-impresion sin valor diferencial.",
+      "La pieza valiosa son los profiles (operaciones profiles, save_profile, delete_profile + 5 built-in).",
+      "Los profiles NO son 'estetica para carta impresa' --son identidad visual transversal del local (paleta, tipografia, vibra), consumidos por N generadores presentes y futuros (carta-impresion hoy, carta-digital cuando crezca, futuros cartel/redes).",
+      "El profile es fuente CSS canonica ejecutable, no metadata reinterpretable. Garantiza coherencia visual del local entre todos los outputs por construccion --los agentes pasan de 'disenadores con guia estetica vaga' a 'maquetadores con stylesheet fijo'. Mas simple, mas predecible, sin drift estetico."
+    ],
+
+    "modelo_del_recurso": [
+      "Almacen plural desde el dia uno --biblioteca de N profiles, donde N empieza con los 5 built-in semilla.",
+      "Estado de 'activo' arranca singular (un default_profile_id del proyecto) con hueco previsto para crecer a plural por destino (carta-impresion: X, carta-digital: Y) cuando emerja la necesidad --sin migracion.",
+      "Los 5 built-in (elegant-minimal, modern-bold, rock-bold, rustic-italian, seasonal-fresh) se reescriben en CSS canonico limpio. Sistema virgen --no es migracion desde JSON sino reescritura desde cero."
+    ],
+
+    "funciones_del_modulo": [
+      "Almacen + editor + creador como tres operaciones sobre el mismo recurso (no tres modulos separados).",
+      "Pantalla canonica: biblioteca a un lado + preview vivo del producto del comerciante al otro.",
+      "Cambiar de profile = cambiar el <link> CSS del HTML ya generado = instantaneo, barato, sin regenerar nada ni invocar agente."
+    ],
+
+    "ux_mecanica_del_enganche": [
+      "NO hay onboarding forzado al crear proyecto. El proyecto arranca con CSS neutro del sistema y los generadores producen producto funcional desde el primer minuto.",
+      "El disparador es emergente del sistema: cuando hay producto vivo sin estilo asignado, el sistema propone 'ahora dale estilo' y el comerciante ve su propia carta cambiar.",
+      "El como concreto del disparador queda en lluvia abierta para cocinar en el Plan 2 cuando se cocine el frontend del modulo: cambio de cajon via chat.cambiar_foco / badge persistente / chat lo suelta tras N turnos / strip sigiloso en pantalla del producto / hibrido. El modulo es el mismo en cualquier caso."
+    ],
+
+    "consecuencias_sobre_el_sistema_actual": [
+      "carta-design se despoja de las operaciones HTML (load_carta, save, gallery). Plegadas.",
+      "El modulo se renombra --'carta-design' ya no nombra nada de lo que es. Nombre concreto sin cocinar (decision del Plan 2).",
+      "carta-impresion crece para aceptar profile_id opcional como input y enlazar/inyectar el CSS canonico del profile.",
+      "carta-digital y futuros generadores consumen el mismo profile cuando emerja --alineamiento progresivo, no parte del horizonte inicial.",
+      "Frontend: design-gallery (icono palette) desaparece --era para HTML designs. design-profiles (icono masks) se reemplaza por la pantalla canonica del modulo nuevo."
+    ],
+
+    "sistema_virgen_y_borrar_reemplazar": [
+      "El sistema no tiene operadores comerciantes en produccion a fecha de cocina (2026-06-02).",
+      "No hay HTML designs ya generados que migrar.",
+      "No hay profiles custom guardados que preservar.",
+      "No hay backwards compatibility que respetar.",
+      "El horizonte es 'borrar y reemplazar limpio', no refactor con compat transitoria."
+    ]
+  },
+
+  "estructura_del_horizonte": {
+    "orden_estricto": "Plan 1 -> Plan 2 -> Plan 3 -> Plan 4",
+    "razon_del_orden_estricto": [
+      "Plan 2 necesita Plan 1 porque sin contrato no hay shape canonico del recurso.",
+      "Plan 3 necesita Plan 2 porque sin modulo nuevo no hay profile a consumir.",
+      "Plan 4 necesita Plan 3 porque sin carta-impresion ajustado, borrar carta-design romperia el generador."
+    ],
+
+    "planes": [
+      {
+        "id": "plan_1_contrato_transversal_identidad_visual",
+        "nombre_corto": "Contrato transversal de identidad visual",
+        "tipo": "transversal_puro",
+        "esencia": "Disciplina transversal antes que horizontal. Sale solo en commit propio. NO toca modulos.",
+        "producto_esperado": [
+          "arquitectura/decisiones/_contratos/identidad-visual.contract.json (o sub-contrato derivado si emerge esa opcion al cocinarlo)",
+          "Schemas AJV additionalProperties:false para el shape canonico del recurso",
+          "Validator en arquitectura/decisiones/_validators/identidad-visual.validate.js",
+          "Entry en scripts/validate-all.js",
+          "Entry en package.json (script npm)",
+          "Entry en CLAUDE.md",
+          "Regeneracion de drift-baseline.json para absorber warnings nuevos legitimos"
+        ],
+        "decisiones_a_cocinar_con_ana_en_este_plan": [
+          {
+            "id": "p1_d1_naturaleza_del_contrato",
+            "pregunta": "Contrato transversal propio o sub-contrato derivado del subsistema-carta?",
+            "tesis_al_cocinar": "Transversal propio, porque los consumidores son N mas alla de carta-* (PWA, cartel, redes, futuros)."
+          },
+          {
+            "id": "p1_d2_nombre_del_contrato",
+            "pregunta": "Nombre exacto del contrato?",
+            "candidatos_sin_atar": ["identidad-visual", "marca-visual", "estilos-local"]
+          },
+          {
+            "id": "p1_d3_shape_canonico_del_profile",
+            "pregunta": "Shape canonico del recurso profile (CSS + metadata) y del estado default_profile_id?"
+          },
+          {
+            "id": "p1_d4_eventos_canonicos",
+            "pregunta": "Eventos canonicos del recurso (creado / actualizado / eliminado / activado)?"
+          },
+          {
+            "id": "p1_d5_granularidad_del_css",
+            "pregunta": "El CSS por profile es un archivo unico o componentizado (paleta + tipografia + spacing + ...)?",
+            "tesis_al_cocinar": "Uno unico por simplicidad. Si emerge necesidad de remix, se cocina despues."
+          },
+          {
+            "id": "p1_d6_garantias_y_prohibiciones",
+            "pregunta": "Cuales son las garantias observables y las prohibiciones canonicas del contrato?"
+          },
+          {
+            "id": "p1_d7_relacion_con_paradigma_no_cabe",
+            "afirmacion_a_documentar_en_el_contrato": "Este recurso NO es cache materializado del catalogo paradigma-no-cabe. Es la fuente canonica, persistida en disco, leida via fs.read por los consumidores. Cumple event-core sin trampa."
+          }
+        ]
+      },
+
+      {
+        "id": "plan_2_modulo_identidad_visual_nuevo",
+        "nombre_corto": "Modulo identidad-visual nuevo (backend + frontend)",
+        "tipo": "creacion_modulo_nuevo_y_sustitucion_carta_design",
+        "esencia": "Sustituye carta-design por modulo de identidad visual. Backend (blueprint) + frontend (pantalla canonica con preview vivo). Backend y frontend pueden ir en un solo plan grande o dividirse en dos planes encadenados --se decide al cocinarlo con ana.",
+        "producto_esperado_backend": [
+          "modules/pizzepos/<nuevo-nombre>/module.json (blueprint_driven, target_page_id, cajones_enabled)",
+          "modules/pizzepos/<nuevo-nombre>/<nuevo-nombre>.blueprint.json con 6-7 operaciones (listar, obtener, crear, actualizar, eliminar, activar default)",
+          "5 built-in CSS canonicos en modules/pizzepos/<nuevo-nombre>/<carpeta-semillas>/",
+          "Persistence en data/projects/{slug}/storage/pizzepos/<nuevo>/<id>.css + .meta.json",
+          "Eventos canonicos publicados"
+        ],
+        "producto_esperado_frontend": [
+          "frontend/src/lib/modules/<nuevo-nombre>/ con manifest + index.ts + Panel router + Browser + Editor + Creator + PreviewLive",
+          "frontend/src/routes/[project_id]/<nuevo-nombre>/+page.svelte con shell minimal",
+          "Reuso del chatInputDraft store ya existente (no se recocina)"
+        ],
+        "decisiones_a_cocinar_con_ana_en_este_plan": [
+          {
+            "id": "p2_d1_nombre_concreto_del_modulo",
+            "pregunta": "Renombrar carta-design a?",
+            "candidatos_sin_atar": ["identidad-visual", "estilos-local", "vibras", "marca-visual"]
+          },
+          {
+            "id": "p2_d2_como_se_materializa_el_editor",
+            "candidatos_sin_atar": ["textarea con highlight CSS", "paleta visual estructurada", "conversacional con LLM", "hibrido"]
+          },
+          {
+            "id": "p2_d3_como_se_materializa_el_creador",
+            "candidatos_sin_atar": ["clonar built-in y editar", "conversacional con LLM que genera CSS desde descripcion de vibra", "ambos"]
+          },
+          {
+            "id": "p2_d4_como_concreto_del_disparador_del_enganche",
+            "lluvia_tirada_en_sesion_2026_06_02": [
+              "cambio de cajon via chat.cambiar_foco al primer producto vivo",
+              "badge persistente en cajon Estilos mientras no haya default_profile_id",
+              "chat propone tras N turnos sin estilo",
+              "strip sigiloso en pantalla del producto",
+              "hibrido en capas (primera vez = cambio cajon; despues = badge + propuesta chat)"
+            ],
+            "comentario": "Si frontend va en plan propio separado del backend, esta decision se cocina ahi."
+          },
+          {
+            "id": "p2_d5_postura_con_matiz",
+            "afirmacion_canonica": "Postura B con matiz: solo lectura para mutaciones del agregado (via chat), pero con preview vivo que es interaccion reactiva sin tocar persistencia (cambiar <link> CSS no es mutacion, es render)."
+          },
+          {
+            "id": "p2_d6_contenido_de_los_5_builtin_css",
+            "pregunta": "Que CSS exacto define cada vibra semilla (elegant-minimal, modern-bold, rock-bold, rustic-italian, seasonal-fresh)?"
+          },
+          {
+            "id": "p2_d7_division_un_plan_o_dos",
+            "pregunta": "Plan 2 unico (backend + frontend juntos) o dos planes encadenados (Plan 2a backend, Plan 2b frontend)?",
+            "criterio": "Se decide al cocinarlo segun tamano estimado en horas y dependencias internas."
+          }
+        ]
+      },
+
+      {
+        "id": "plan_3_carta_impresion_bumpeado_a_consumir_profile_id",
+        "nombre_corto": "carta-impresion bumpeado",
+        "tipo": "bump_blueprint_backend_consumer",
+        "esencia": "Bump del blueprint de carta-impresion: la operacion generar acepta profile_id opcional, lee CSS canonico del profile, lo inyecta en el HTML que el agente impresor maqueta. Ajuste del prompt del agente impresor.",
+        "producto_esperado": [
+          "Bump del blueprint modules/pizzepos/carta-impresion/carta-impresion.blueprint.json v1.x -> v1.y",
+          "Operacion generar acepta profile_id opcional, lee CSS via fs.read.request, inyecta en HTML",
+          "Ajuste del prompt del agente impresor en modules/pizzepos/carta-impresion/prompt.json (o equivalente)",
+          "Bump module.json version + changelog"
+        ],
+        "decisiones_a_cocinar_con_ana_en_este_plan": [
+          {
+            "id": "p3_d1_mecanica_de_inyeccion_del_css",
+            "candidatos_sin_atar": ["<link> a URL servida por el sistema", "<style> inline en el HTML", "ambos segun destino"]
+          },
+          {
+            "id": "p3_d2_shape_exacto_del_input_generar_ampliado",
+            "pregunta": "Como queda el shape del input de la operacion generar tras anyadir profile_id?"
+          },
+          {
+            "id": "p3_d3_cambios_concretos_del_prompt_agente_impresor",
+            "afirmacion_canonica": "El agente pasa de 'disenador con guia estetica' a 'maquetador con stylesheet fijo'. Cambios concretos del prompt se cocinan en el plan."
+          },
+          {
+            "id": "p3_d4_comportamiento_sin_profile_id",
+            "candidatos_sin_atar": [
+              "Usar CSS neutro del sistema",
+              "Usar default_profile_id del proyecto si existe; si no, neutro del sistema",
+              "Error explicito 'no hay profile asignado'"
+            ]
+          }
+        ]
+      },
+
+      {
+        "id": "plan_4_limpieza_de_carta_design",
+        "nombre_corto": "Limpieza de carta-design",
+        "tipo": "borrar_y_desmantelar_modulo",
+        "esencia": "Borrar carta-design backend + frontend asociado. Sistema virgen --sin compat transitoria.",
+        "producto_esperado": [
+          "Borrar modules/pizzepos/carta-design/ completo",
+          "Borrar frontend/src/lib/modules/design-gallery/",
+          "Borrar frontend/src/lib/modules/design-profiles/",
+          "Borrar o redirigir frontend/src/routes/[project_id]/carta-design/+page.svelte",
+          "Actualizar referencias en CLAUDE.md, otras propuestas pendientes, validators que enumeren modulos",
+          "Regenerar drift-baseline.json si procede"
+        ],
+        "verificacion_previa_obligatoria_antes_de_ejecutar": [
+          "Modulo identidad-visual nuevo en pie con tests verdes",
+          "carta-impresion ajustado funcionando con profile_id opcional",
+          "npm run validate:ci verde",
+          "Ningun consumer roto"
+        ],
+        "decisiones_a_cocinar_con_ana_en_este_plan": [
+          {
+            "id": "p4_d1_redireccion_vs_borrado_de_ruta",
+            "pregunta": "La ruta /carta-design del frontend se borra a 404 o se redirige a la ruta del modulo nuevo?"
+          },
+          {
+            "id": "p4_d2_archivos_data_projects_designs_y_profiles",
+            "pregunta": "Los archivos en data/projects/*/storage/pizzepos/carta-design/ (si existen) se borran, ignoran o conservan como referencia historica?"
+          }
+        ]
+      }
+    ]
+  },
+
+  "decisiones_canon_del_horizonte_heredables_por_cada_plan": [
+    "Profile = identidad visual transversal del local, NO estetica para carta impresa.",
+    "Profile = fuente CSS canonica ejecutable, NO metadata reinterpretable por agentes.",
+    "Almacen plural desde el dia uno, default singular evolucionable a plural por destino sin migracion.",
+    "5 built-in reescritos en CSS limpio (sistema virgen, sin migracion JSON->CSS).",
+    "Almacen + editor + creador como tres operaciones de UN modulo unico (no tres modulos).",
+    "Pantalla canonica del modulo: biblioteca + preview vivo del producto del comerciante.",
+    "Sin onboarding forzado al crear proyecto. Disparador emergente del sistema cuando hay producto vivo sin estilo asignado.",
+    "Generadores enlazan/inyectan CSS, NO reinterpretan profile.",
+    "Despojar carta-design de operaciones HTML; renombrar el modulo; borrar y reemplazar (NO compat transitoria)."
+  ],
+
+  "disciplina_de_ejecucion_del_horizonte": [
+    "Orden estricto Plan 1 -> Plan 2 -> Plan 3 -> Plan 4. NO paralelizar --dependencia tecnica entre planes.",
+    "Cada plan: cocinado con ana en sesion propia -> JSON ejecutable en arquitectura/decisiones/propuestas/<nombre>.json -> OK explicito del humano -> ejecutado por fede con OK explicito entre fases -> commit -> push -> merge a main.",
+    "Disciplina transversal antes que horizontal: el Plan 1 (contrato + schemas + validator) se cierra y mergea ANTES de tocar ningun modulo. Saltarse esa fase es el anti-patron que CLAUDE.md prohibe explicitamente.",
+    "Verificacion al cierre de cada plan: npm run validate:ci PASS, baseline regenerado si procede, frontend build OK (Planes 2+), git status limpio del scope declarado.",
+    "Cada plan que se cocine respetara pseudocodigo-estilo.contract.json en sus operaciones --sin Object.assign, sin rest-spread con omision, verbosidad explicita."
+  ],
+
+  "prohibido_en_el_horizonte_global": [
+    "Saltar la fase transversal (Plan 1) y empezar directamente por el modulo nuevo. Anti-patron explicito.",
+    "Paralelizar planes --cada uno necesita su cocina propia con ana y su OK humano de fede.",
+    "Crear PR sin OK explicito del humano.",
+    "Regenerar drift-baseline.json para silenciar warnings NUEVOS no legitimos --solo se regenera tras cierre real de deuda.",
+    "Mezclar este horizonte con el horizonte hermano cierre-ui-blueprints --son distintos, cada uno con su disciplina.",
+    "Asumir que la decision D5 del plan aplicar-subsistema-carta-a-carta-design.json sigue vigente. Esta sesion la reabre explicitamente; el aparcamiento del backend (v1.2.0) sigue siendo valido como mantenimiento, pero la suposicion 'no se cocina UI' caduca.",
+    "Cocinar el nombre del modulo nuevo en este arranque --es decision del Plan 2 cuando ana lo cocine."
+  ],
+
+  "trabajo_pendiente_del_horizonte_anotado_fuera_del_flow_inmediato": [
+    {
+      "id": "tp_horizonte_1",
+      "descripcion": "Migracion de carta-digital y futuros generadores al consumo de profiles del modulo nuevo. Cocinar cuando carta-digital crezca lo suficiente para justificar el ajuste (probablemente como bump menor del subsistema).",
+      "bloqueante_para_cerrar_horizonte": false
+    },
+    {
+      "id": "tp_horizonte_2",
+      "descripcion": "Mecanica de servir el CSS como URL publica del proyecto (tipo /<slug>/identidad.css) si emerge necesidad de cachear o enlazar desde clientes externos. Hoy basta con inline o link al archivo en data/projects/.",
+      "bloqueante_para_cerrar_horizonte": false
+    },
+    {
+      "id": "tp_horizonte_3",
+      "descripcion": "Editor conversacional con LLM del profile (creador via dialogo: 'quiero rock, tipografia gotica, paleta noche' -> agente genera CSS canonico). Si se cocina, va como ampliacion del Plan 2.",
+      "bloqueante_para_cerrar_horizonte": false
+    },
+    {
+      "id": "tp_horizonte_4",
+      "descripcion": "Foco dinamico de cajones (la lluvia 'carta terminada -> cambio a cajon estilos') depende de que los cajones operen en produccion real y se vea uso. Cocinar despues del Plan 2 cuando haya material observable.",
+      "bloqueante_para_cerrar_horizonte": false
+    }
+  ],
+
+  "proxima_sesion_por_donde_retomar": {
+    "skill_a_invocar": "/ana",
+    "instruccion_canonica_al_arrancar": "Cocinemos Plan 1 del horizonte identidad-visual --el contrato transversal.",
+    "lecturas_previas_obligatorias_para_ana": [
+      "arquitectura/decisiones/propuestas/_arranque-identidad-visual-y-pliegue-carta-design.json (este archivo)",
+      "arquitectura/decisiones/_contratos/subsistema-carta.contract.json (hermano canonico)",
+      "arquitectura/decisiones/_contratos/ui-frontend-blueprint.contract.json (hermano canonico)",
+      "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json",
+      "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json (asegurar que no caemos en patron descartado)",
+      "arquitectura/decisiones/_contratos/events.contract.json",
+      "arquitectura/decisiones/_contratos/persistence.contract.json"
+    ],
+    "ritual_de_arranque_obligatorio_de_ana": "Declarar las tres listas (verifico / asumo / no toco) del contrato disciplina-llm-operador antes de tocar nada.",
+    "producto_esperado_de_la_sesion": "arquitectura/decisiones/_contratos/identidad-visual.contract.json v1.0.0 (o nombre que se cocine) + schemas AJV + validator + entry en scripts/validate-all.js + entry en package.json + entry en CLAUDE.md + baseline regenerado, mergeado a main via commit propio."
+  },
+
+  "cierre_del_ritual_de_cocina_2026_06_02": {
+    "lo_importante_esta_en_disco": [
+      "Este arranque JSON con estructura completa del horizonte",
+      "Las decisiones canonicas heredables por cada plan",
+      "Las decisiones especificas que cada plan cierra individualmente",
+      "La disciplina de ejecucion del horizonte"
+    ],
+    "proxima_sesion_puede_arrancar_limpia": "Leyendo CLAUDE.md, este arranque, y el contrato dinamica-de-trabajo-companero para retomar disciplina."
+  }
+}

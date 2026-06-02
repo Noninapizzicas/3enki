@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-carta/_common.schema.json",
+  "title": "subsistema-carta common definitions",
+  "description": "Definiciones canonicas compartidas por los 5 schemas del subsistema-carta. Cualquier schema individual las referencia con $ref. Fuente autoritativa: arquitectura/decisiones/_contratos/subsistema-carta.contract.json (seccion eventos[] con shape_resumen). Disciplina: additionalProperties:false en envelopes; additionalProperties:true en items[] de categorias/productos (P7/D9, shape interno abierto multi-proyecto).",
+
+  "$defs": {
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Hilo causal de la cadena de eventos. Heredado del originador (canal, cron, webhook). Se propaga sin modificar. Obligatorio en los 5 eventos (D10 del contrato)."
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Proyecto activo. Obligatorio siempre (multi-tenancy.contract). Identidad de tenant para aislamiento."
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifica una operacion concreta dentro del bus. Lo genera el caller; la response/failed lo devuelve sin modificar para correlacion."
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifica al humano. Opcional en eventos sistemicos (creacion automatica, snapshots)."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601."
+    },
+    "motivo": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Texto libre explicando la causa de la operacion."
+    },
+    "carta_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "UUID o slug determinista de la carta."
+    },
+    "canal_canonico": {
+      "enum": ["mesa", "telefono", "llevar", "glovo", "whatsapp", "llevadoo"],
+      "description": "Canal de venta canonizado por cuentas-canales v5.0.0 (D9 del contrato subsistema-carta)."
+    },
+    "estado_carta": {
+      "enum": ["borrador", "activa", "archivada"],
+      "description": "Estado del ciclo de vida del documento carta."
+    },
+    "operacion_carta_editada": {
+      "enum": ["add_product", "remove_product", "update_product", "add_category", "update_prices"],
+      "description": "Tipo de mutacion puntual para carta.editada (D6 del contrato)."
+    },
+    "tipo_tarifas_actualizada": {
+      "enum": ["general", "assign", "variant_registered", "snapshot"],
+      "description": "Tipo de cambio en tarifas.config (D7 del contrato). Coincide con events.publishes en tarifas/module.json."
+    },
+    "item_categoria": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "nombre"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "nombre": { "type": "string", "minLength": 1 }
+      },
+      "description": "Categoria de la carta. id+nombre obligatorios; resto abierto (orden, descripcion, etc. dependen del vertical). P7/D9."
+    },
+    "item_producto": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "nombre"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "nombre": { "type": "string", "minLength": 1 }
+      },
+      "description": "Producto de la carta. id+nombre obligatorios; resto abierto (precio, ingredientes, alergenos, etc. dependen del vertical pizzepos/vapers/futuros). P7/D9."
+    },
+    "carta_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "nombre", "version", "created_at", "updated_at"],
+      "properties": {
+        "id": { "$ref": "#/$defs/carta_id" },
+        "nombre": { "type": "string", "minLength": 1 },
+        "version": { "type": "integer", "minimum": 1 },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "estado": { "$ref": "#/$defs/estado_carta" },
+        "descripcion": { "type": ["string", "null"] },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "generado_desde": { "type": "string" },
+        "notas_revision": { "type": "string" }
+      },
+      "description": "Metadatos canonicos de la carta. id+nombre+version+timestamps obligatorios; resto opcional."
+    },
+    "carta_envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["meta", "categorias", "productos"],
+      "properties": {
+        "meta": { "$ref": "#/$defs/carta_meta" },
+        "categorias": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/item_categoria" },
+          "description": "Lista de categorias. Puede estar vacia pero debe existir."
+        },
+        "productos": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/item_producto" },
+          "description": "Lista de productos. Puede estar vacia pero debe existir."
+        }
+      },
+      "description": "Shape envelope canonico de carta. Envelope strict, items abiertos (P7/D9 del contrato)."
+    },
+    "carta_envelope_archivada": {
+      "allOf": [
+        { "$ref": "#/$defs/carta_envelope" },
+        {
+          "type": "object",
+          "properties": {
+            "meta": {
+              "type": "object",
+              "properties": {
+                "estado": { "const": "archivada" }
+              },
+              "required": ["estado"]
+            }
+          },
+          "required": ["meta"]
+        }
+      ],
+      "description": "Variante del envelope para carta.borrada: meta.estado debe ser archivada."
+    },
+    "tarifas_canales_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mesa", "telefono", "llevar", "glovo", "whatsapp", "llevadoo"],
+      "properties": {
+        "mesa": { "type": ["string", "null"], "description": "carta_id asignado al canal mesa o null" },
+        "telefono": { "type": ["string", "null"] },
+        "llevar": { "type": ["string", "null"] },
+        "glovo": { "type": ["string", "null"] },
+        "whatsapp": { "type": ["string", "null"] },
+        "llevadoo": { "type": ["string", "null"] }
+      },
+      "description": "Mapping canal -> carta_id|null. Los 6 canales canonicos son obligatorios en la declaracion (pueden ser null)."
+    },
+    "tarifas_variante": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["carta_id", "base_carta_id", "nombre", "canales"],
+      "properties": {
+        "carta_id": { "$ref": "#/$defs/carta_id" },
+        "base_carta_id": { "$ref": "#/$defs/carta_id" },
+        "nombre": { "type": "string", "minLength": 1 },
+        "canales": { "type": "array", "items": { "$ref": "#/$defs/canal_canonico" } },
+        "reglas": { "description": "Metadata historica de como se materializo la variante. Tipo abierto: puede ser string o objeto." }
+      },
+      "description": "Variante registrada en tarifas. Es OTRA carta archivo con sus precios escritos (D7 del contrato)."
+    },
+    "tarifas_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["general", "canales", "variantes"],
+      "properties": {
+        "general": { "type": ["string", "null"], "description": "carta_id de la carta general del proyecto, o null si no asignada" },
+        "canales": { "$ref": "#/$defs/tarifas_canales_config" },
+        "variantes": { "type": "array", "items": { "$ref": "#/$defs/tarifas_variante" } }
+      },
+      "description": "Shape completo de tarifas.config persistido en storage/config/tarifas.json y embebido en tarifas.config.actualizada."
+    }
+  }
+}

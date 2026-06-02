@@ -56,6 +56,7 @@ const VALIDATORS = [
   { id: 'bus-transport', file: 'arquitectura/decisiones/_validators/bus-transport.validate.js' },
   { id: 'scheduling',    file: 'arquitectura/decisiones/_validators/scheduling.validate.js' },
   { id: 'resilience',    file: 'arquitectura/decisiones/_validators/resilience.validate.js' },
+  { id: 'subsistema-carta', file: 'arquitectura/decisiones/_validators/subsistema-carta.validate.js' },
   { id: 'subsistema-recetario', file: 'arquitectura/decisiones/_validators/subsistema-recetario.validate.js' },
   { id: 'cajones-context-partitioning', file: 'arquitectura/decisiones/_validators/cajones-context-partitioning.validate.js' },
   { id: 'llm-runtime-discipline', file: 'arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js' },
@@ -66,7 +67,8 @@ const VALIDATORS = [
   { id: 'pseudocodigo-estilo', file: 'arquitectura/decisiones/_validators/pseudocodigo-estilo.validate.js' },
   { id: 'project-feature-blueprints', file: 'arquitectura/decisiones/_validators/project-feature-blueprints.validate.js' },
   { id: 'subsistema-tienda', file: 'arquitectura/decisiones/_validators/subsistema-tienda.validate.js' },
-  { id: 'storage-layout', file: 'arquitectura/decisiones/_validators/storage-layout.validate.js' }
+  { id: 'storage-layout', file: 'arquitectura/decisiones/_validators/storage-layout.validate.js' },
+  { id: 'ui-frontend-blueprint', file: 'arquitectura/decisiones/_validators/ui-frontend-blueprint.validate.js' }
 ];
 
 const RED   = '\x1b[31m';

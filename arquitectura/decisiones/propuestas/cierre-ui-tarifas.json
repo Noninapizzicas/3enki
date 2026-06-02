@@ -190,7 +190,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "Frases operativas que el LLM puede procesar sin ambiguedad. Si emerge necesidad de ajuste tras uso real, vuelta posterior.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "frases canonicas aceptadas literalmente", "cerrada_en": "2026-06-02T00:00:00.000Z" }
     }
   ],
 

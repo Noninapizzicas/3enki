@@ -1,0 +1,11 @@
+{
+  "id": "tarifas",
+  "name": "Tarifas",
+  "description": "Asignacion carta+canal del proyecto. Carta general por defecto, override por canal, variantes registradas.",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 5,
+  "routes": ["/tarifas"],
+  "icon": "💰",
+  "label": "Tarifas"
+}

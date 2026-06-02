@@ -1,0 +1,11 @@
+{
+  "id": "carta-digital",
+  "name": "Carta digital",
+  "description": "Backoffice de la carta publica del cliente final: branding del local, opciones de visualizacion y carta compuesta lista para servir.",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 6,
+  "routes": ["/carta-digital"],
+  "icon": "📱",
+  "label": "Carta digital"
+}

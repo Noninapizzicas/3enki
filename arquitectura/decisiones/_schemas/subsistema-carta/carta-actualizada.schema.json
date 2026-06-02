@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-carta/carta-actualizada.schema.json",
+  "title": "carta.actualizada — payload schema",
+  "description": "Certificado oficial de carta persistida. Publicado por carta-manager (save, restore). Frontera segura para consumers del subsistema-carta y del POS. Valida el campo data del envelope del bus.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "carta", "correlation_id", "timestamp"],
+  "properties": {
+    "project_id": { "$ref": "_common.schema.json#/$defs/project_id" },
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "timestamp": { "$ref": "_common.schema.json#/$defs/timestamp" },
+    "user_id": { "$ref": "_common.schema.json#/$defs/user_id" },
+    "motivo": { "$ref": "_common.schema.json#/$defs/motivo" },
+    "carta": { "$ref": "_common.schema.json#/$defs/carta_envelope" }
+  }
+}

@@ -10,13 +10,10 @@
   "target_page_id": "carta-scheduler",
   "config": {
     "persistence": {
+      "scope": "project",
+      "data_path": "pizzepos/carta-scheduler",
       "pattern": "json-files-per-project",
-      "paths": [
-        "data/projects/{slug}/carta-scheduler-reglas.json",
-        "data/projects/{slug}/carta-scheduler-pendientes.json"
-      ],
-      "atomicidad": "fs.write.request atomic:true por cada operacion de mutacion",
-      "concurrencia": "single-writer (el blueprint serializa via publishAndWait)"
+      "concurrency": "single-writer"
     }
   },
   "cajones_enabled": true

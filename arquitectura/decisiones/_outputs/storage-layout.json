@@ -1,7 +1,7 @@
 {
   "_meta": {
     "schema_version": "1.0.0",
-    "generated_at": "2026-06-02T19:11:01.059Z",
+    "generated_at": "2026-06-02T19:24:01.218Z",
     "contract_version": "1.0.0"
   },
   "modulos": [
@@ -81,8 +81,8 @@
       "vertical": null,
       "persiste": false,
       "evidence_file": null,
-      "scope": null,
-      "data_path": null,
+      "scope": "project",
+      "data_path": "comandero-cliente-builder",
       "declarado_completo": null
     },
     {
@@ -121,9 +121,9 @@
       "vertical": "conversacion",
       "persiste": true,
       "evidence_file": "modules/conversacion/ai-gateway/index.js",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "system",
+      "data_path": "conversacion/ai-gateway",
+      "declarado_completo": true
     },
     {
       "name": "ai-gateway-poc",
@@ -391,9 +391,9 @@
       "vertical": null,
       "persiste": true,
       "evidence_file": "modules/mise-en-place/index.js",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "project",
+      "data_path": "mise-en-place",
+      "declarado_completo": true
     },
     {
       "name": "notas-poc",
@@ -421,9 +421,9 @@
       "vertical": null,
       "persiste": true,
       "evidence_file": "modules/pase-cocina/index.js",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "project",
+      "data_path": "pase-cocina",
+      "declarado_completo": true
     },
     {
       "name": "pdf-viewer",
@@ -451,9 +451,9 @@
       "vertical": "pizzepos",
       "persiste": true,
       "evidence_file": "modules/pizzepos/carta-design/carta-design.blueprint.json",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "project",
+      "data_path": "pizzepos/carta-design",
+      "declarado_completo": true
     },
     {
       "name": "carta-digital",
@@ -461,9 +461,9 @@
       "vertical": "pizzepos",
       "persiste": true,
       "evidence_file": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "project",
+      "data_path": "pizzepos/carta-digital",
+      "declarado_completo": true
     },
     {
       "name": "carta-impresion",
@@ -471,9 +471,9 @@
       "vertical": "pizzepos",
       "persiste": true,
       "evidence_file": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "project",
+      "data_path": "pizzepos/cartas-impresion",
+      "declarado_completo": true
     },
     {
       "name": "carta-manager",
@@ -481,9 +481,9 @@
       "vertical": "pizzepos",
       "persiste": true,
       "evidence_file": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "project",
+      "data_path": "pizzepos/cartas",
+      "declarado_completo": true
     },
     {
       "name": "carta-marketing",
@@ -491,9 +491,9 @@
       "vertical": "pizzepos",
       "persiste": true,
       "evidence_file": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "project",
+      "data_path": "pizzepos/carta-marketing",
+      "declarado_completo": true
     },
     {
       "name": "carta-scheduler",
@@ -501,9 +501,9 @@
       "vertical": "pizzepos",
       "persiste": true,
       "evidence_file": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "project",
+      "data_path": "pizzepos/carta-scheduler",
+      "declarado_completo": true
     },
     {
       "name": "categorias",
@@ -651,9 +651,9 @@
       "vertical": "pizzepos",
       "persiste": true,
       "evidence_file": "modules/pizzepos/recetas/recetas.blueprint.json",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "project",
+      "data_path": "pizzepos/recetas",
+      "declarado_completo": true
     },
     {
       "name": "tarifas",
@@ -671,9 +671,9 @@
       "vertical": "pizzepos",
       "persiste": true,
       "evidence_file": "modules/pizzepos/tecnicas/tecnicas.blueprint.json",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "project",
+      "data_path": "pizzepos/tecnicas",
+      "declarado_completo": true
     },
     {
       "name": "variaciones",
@@ -691,9 +691,9 @@
       "vertical": "pizzepos",
       "persiste": true,
       "evidence_file": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "project",
+      "data_path": "pizzepos/viabilidad",
+      "declarado_completo": true
     },
     {
       "name": "plugin-manager",
@@ -731,9 +731,9 @@
       "vertical": null,
       "persiste": true,
       "evidence_file": "modules/recetario-creativo/index.js",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "project",
+      "data_path": "recetario-creativo",
+      "declarado_completo": true
     },
     {
       "name": "scheduler",
@@ -771,9 +771,9 @@
       "vertical": null,
       "persiste": true,
       "evidence_file": "modules/system-coherence-analyzer/system-coherence-analyzer.blueprint.json",
-      "scope": null,
-      "data_path": null,
-      "declarado_completo": false
+      "scope": "system",
+      "data_path": "system-coherence-analyzer",
+      "declarado_completo": true
     },
     {
       "name": "system-inspector",
@@ -831,44 +831,31 @@
       "id": "facturas",
       "file": "blueprints/project-types/facturas.json",
       "directorios": [
-        "storage/procesados",
-        "storage/pendientes",
-        "storage/preprocesadas",
-        "storage/ocr",
-        "storage/estructuradas",
-        "storage/export"
+        "storage/facturas/procesados",
+        "storage/facturas/pendientes",
+        "storage/facturas/preprocesadas",
+        "storage/facturas/ocr",
+        "storage/facturas/estructuradas",
+        "storage/facturas/export"
       ],
       "archivos_iniciales": [],
-      "cumple_namespace": false,
-      "drifts": [
-        "directorio fuera de namespace: storage/procesados",
-        "directorio fuera de namespace: storage/pendientes",
-        "directorio fuera de namespace: storage/preprocesadas",
-        "directorio fuera de namespace: storage/ocr",
-        "directorio fuera de namespace: storage/estructuradas",
-        "directorio fuera de namespace: storage/export"
-      ]
+      "cumple_namespace": true,
+      "drifts": []
     },
     {
       "id": "pizzepos",
       "file": "blueprints/project-types/pizzepos.json",
       "directorios": [
-        "storage/cartas",
-        "storage/preprocesadas",
-        "storage/ocr"
+        "storage/pizzepos/cartas",
+        "storage/pizzepos/preprocesadas",
+        "storage/pizzepos/ocr"
       ],
       "archivos_iniciales": [
-        "storage/ingredientes.json",
-        "storage/programacion.json"
+        "storage/pizzepos/ingredientes.json",
+        "storage/pizzepos/programacion.json"
       ],
-      "cumple_namespace": false,
-      "drifts": [
-        "directorio fuera de namespace: storage/cartas",
-        "directorio fuera de namespace: storage/preprocesadas",
-        "directorio fuera de namespace: storage/ocr",
-        "archivo suelto en storage/ raiz: storage/ingredientes.json",
-        "archivo suelto en storage/ raiz: storage/programacion.json"
-      ]
+      "cumple_namespace": true,
+      "drifts": []
     },
     {
       "id": "tienda",

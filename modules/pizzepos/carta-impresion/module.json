@@ -10,16 +10,10 @@
   "target_page_id": "carta-impresion",
   "config": {
     "persistence": {
+      "scope": "project",
+      "data_path": "pizzepos/cartas-impresion",
       "pattern": "json-html-per-carta",
-      "paths_proyecto": [
-        "data/projects/{slug}/cartas-impresion/<carta_id>.html",
-        "data/projects/{slug}/cartas-impresion/<carta_id>.meta.json"
-      ],
-      "paths_modulo": [
-        "modules/pizzepos/carta-impresion/templates/* (built-in)"
-      ],
-      "atomicidad": "fs.write.request atomic:true",
-      "concurrencia": "single-writer"
+      "concurrency": "single-writer"
     }
   },
   "cajones_enabled": true

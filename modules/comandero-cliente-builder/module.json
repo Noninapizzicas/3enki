@@ -5,10 +5,8 @@
   "author": "Event Core Team",
   "language": "es",
   "main": "index.js",
-
   "horizonte": "vertical-tienda-pwa-sin-datos",
   "horizonte_doc": "arquitectura/decisiones/propuestas/vertical-tienda-pwa-sin-datos.md",
-
   "events": {
     "publishes": [
       {
@@ -60,7 +58,6 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "GET",
@@ -69,7 +66,6 @@
       "description": "Health check del modulo comandero-cliente-builder."
     }
   ],
-
   "tools": [
     {
       "name": "comandero-cliente.presentacion.actualizar",
@@ -77,18 +73,44 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":          { "type": "string", "description": "Identificador del proyecto (multi-tenant)." },
-          "producto_id":         { "type": "string", "description": "Id del producto en el catalogo de pizzepos/productos." },
-          "imagen_url":          { "type": "string", "description": "URL canonica de la imagen del producto (opcional)." },
-          "descripcion_publica": { "type": "string", "description": "Descripcion comercial mostrada al cliente final (opcional). NO es la descripcion operativa de pizzepos/productos." },
-          "orden_publico":       { "type": "integer", "description": "Posicion del producto en la vista publica (opcional, menor primero)." },
-          "oculto_publico":      { "type": "boolean", "description": "Si true el producto no aparece en el bundle (default false)." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto (multi-tenant)."
+          },
+          "producto_id": {
+            "type": "string",
+            "description": "Id del producto en el catalogo de pizzepos/productos."
+          },
+          "imagen_url": {
+            "type": "string",
+            "description": "URL canonica de la imagen del producto (opcional)."
+          },
+          "descripcion_publica": {
+            "type": "string",
+            "description": "Descripcion comercial mostrada al cliente final (opcional). NO es la descripcion operativa de pizzepos/productos."
+          },
+          "orden_publico": {
+            "type": "integer",
+            "description": "Posicion del producto en la vista publica (opcional, menor primero)."
+          },
+          "oculto_publico": {
+            "type": "boolean",
+            "description": "Si true el producto no aparece en el bundle (default false)."
+          }
         },
-        "required": ["project_id", "producto_id"],
+        "required": [
+          "project_id",
+          "producto_id"
+        ],
         "additionalProperties": false
       },
       "handler": "handlePresentacionActualizar",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PRECONDITION_FAILED",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "comandero-cliente.imagen.subir",
@@ -96,16 +118,42 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":    { "type": "string", "description": "Identificador del proyecto." },
-          "producto_id":   { "type": "string", "description": "Id del producto (para nombrar el archivo de forma estable)." },
-          "imagen_base64": { "type": "string", "description": "Contenido de la imagen codificado en base64 (sin prefijo data:image/...)." },
-          "content_type":  { "type": "string", "enum": ["image/png", "image/jpeg", "image/webp"], "description": "Tipo MIME de la imagen." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          },
+          "producto_id": {
+            "type": "string",
+            "description": "Id del producto (para nombrar el archivo de forma estable)."
+          },
+          "imagen_base64": {
+            "type": "string",
+            "description": "Contenido de la imagen codificado en base64 (sin prefijo data:image/...)."
+          },
+          "content_type": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/webp"
+            ],
+            "description": "Tipo MIME de la imagen."
+          }
         },
-        "required": ["project_id", "producto_id", "imagen_base64", "content_type"],
+        "required": [
+          "project_id",
+          "producto_id",
+          "imagen_base64",
+          "content_type"
+        ],
         "additionalProperties": false
       },
       "handler": "handleImagenSubir",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "comandero-cliente.categorias.reordenar",
@@ -113,14 +161,30 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto." },
-          "orden":      { "type": "array", "items": { "type": "string" }, "description": "Array de categoria_id en el orden deseado." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          },
+          "orden": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array de categoria_id en el orden deseado."
+          }
         },
-        "required": ["project_id", "orden"],
+        "required": [
+          "project_id",
+          "orden"
+        ],
         "additionalProperties": false
       },
       "handler": "handleCategoriasReordenar",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "comandero-cliente.bundle.generar",
@@ -128,61 +192,96 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto." },
-          "identidad":  {
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          },
+          "identidad": {
             "type": "object",
             "properties": {
-              "marca":    { "type": "string", "description": "Nombre comercial mostrado al cliente." },
-              "colores":  { "type": "object", "description": "Paleta de colores de la marca con claves opcionales primario, fondo, texto, acento. Cada valor es un color CSS (hex, rgb, etc.)." },
-              "logo_url": { "type": "string", "description": "URL del logo de la marca (opcional)." }
+              "marca": {
+                "type": "string",
+                "description": "Nombre comercial mostrado al cliente."
+              },
+              "colores": {
+                "type": "object",
+                "description": "Paleta de colores de la marca con claves opcionales primario, fondo, texto, acento. Cada valor es un color CSS (hex, rgb, etc.)."
+              },
+              "logo_url": {
+                "type": "string",
+                "description": "URL del logo de la marca (opcional)."
+              }
             },
-            "required": ["marca"]
+            "required": [
+              "marca"
+            ]
           },
-          "tienda_api_url": { "type": "string", "description": "Origen HTTP del modulo tienda-api al que la PWA generada hara POST /tienda/pedido/<project_slug>. Ej: 'https://enki-ai.online'. Necesario porque el bundle se aloja en subdominio del proyecto y la API en dominio principal (cross-origin obligado). Si no se pasa, el builder lee tienda_api_url del config/project.json del proyecto." },
+          "tienda_api_url": {
+            "type": "string",
+            "description": "Origen HTTP del modulo tienda-api al que la PWA generada hara POST /tienda/pedido/<project_slug>. Ej: 'https://enki-ai.online'. Necesario porque el bundle se aloja en subdominio del proyecto y la API en dominio principal (cross-origin obligado). Si no se pasa, el builder lee tienda_api_url del config/project.json del proyecto."
+          },
           "opciones": {
             "type": "object",
             "description": "Configuracion del template por proyecto. Todas opcionales con defaults razonables.",
             "properties": {
-              "moneda":              { "type": "string", "description": "Simbolo de moneda (default '€')." },
-              "requiere_telefono":   { "type": "boolean", "description": "Pedir telefono en el form (default true)." },
-              "requiere_nombre":     { "type": "boolean", "description": "Pedir nombre en el form (default true)." },
-              "requiere_mayor_edad": { "type": "boolean", "description": "Mostrar checkbox de confirmacion mayoria de edad (default false; true para tabaco/vapeo/alcohol)." },
-              "permite_notas":       { "type": "boolean", "description": "Mostrar campo de notas (default true)." },
-              "textos":              { "type": "object", "description": "Override de strings del template (titulo, subtitulo, boton_enviar, exito_titulo, etc.)." }
+              "moneda": {
+                "type": "string",
+                "description": "Simbolo de moneda (default '€')."
+              },
+              "requiere_telefono": {
+                "type": "boolean",
+                "description": "Pedir telefono en el form (default true)."
+              },
+              "requiere_nombre": {
+                "type": "boolean",
+                "description": "Pedir nombre en el form (default true)."
+              },
+              "requiere_mayor_edad": {
+                "type": "boolean",
+                "description": "Mostrar checkbox de confirmacion mayoria de edad (default false; true para tabaco/vapeo/alcohol)."
+              },
+              "permite_notas": {
+                "type": "boolean",
+                "description": "Mostrar campo de notas (default true)."
+              },
+              "textos": {
+                "type": "object",
+                "description": "Override de strings del template (titulo, subtitulo, boton_enviar, exito_titulo, etc.)."
+              }
             }
           }
         },
-        "required": ["project_id", "identidad"],
+        "required": [
+          "project_id",
+          "identidad"
+        ],
         "additionalProperties": false
       },
       "handler": "handleBundleGenerar",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PRECONDITION_FAILED",
+        "UNKNOWN_ERROR"
+      ]
     }
   ],
-
-  "dependencies": ["project-manager", "filesystem"],
-
+  "dependencies": [
+    "project-manager",
+    "filesystem"
+  ],
   "tracing": {
     "propaga_correlation_id": true
   },
-
   "config": {
     "persistence": {
-      "type": "json-file-per-project",
-      "owner": "ComanderoClienteBuilderModule (Map presentacionPerProject + Map bundlesPerProject + Map catalogoCachePerProject + Map tarifasCachePerProject)",
-      "paths": [
-        "{project.base_path}/storage/comandero-cliente-builder/presentacion.json (read+write atomic)",
-        "{project.base_path}/storage/comandero-cliente-builder/bundles.json (read+write atomic)",
-        "{project.base_path}/storage/comandero-cliente-builder/bundles/<bundle_id>.html (write only)",
-        "{project.base_path}/storage/comandero-cliente-builder/imagenes/<producto_id>.{png,jpg,webp} (write only)"
-      ],
-      "restart_resilient": true,
-      "concurrency": "single-writer-per-project",
-      "lost_on_restart": ["catalogoCachePerProject", "tarifasCachePerProject"]
+      "scope": "project",
+      "data_path": "comandero-cliente-builder",
+      "pattern": "json-file-per-project",
+      "concurrency": "single-writer"
     },
     "tool_timeout_ms": 30000
   },
-
   "observability": {
     "logging": {
       "level": "info",

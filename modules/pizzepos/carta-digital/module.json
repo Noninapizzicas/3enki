@@ -10,12 +10,10 @@
   "target_page_id": "carta-digital",
   "config": {
     "persistence": {
+      "scope": "project",
+      "data_path": "pizzepos/carta-digital",
       "pattern": "json-file-per-project",
-      "paths": [
-        "data/projects/{slug}/carta-digital.json"
-      ],
-      "atomicidad": "fs.write.request atomic:true",
-      "concurrencia": "single-writer (blueprint serializa via publishAndWait)"
+      "concurrency": "single-writer"
     },
     "artefactos_deploy_extras": [
       "cf-worker/ — Cloudflare Worker que sirve la carta publica al cliente final",

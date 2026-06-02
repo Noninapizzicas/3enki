@@ -365,6 +365,23 @@ class FilesystemModule extends BaseModule {
       throw error;
     }
 
+    // Defensa contra prefijos internos sinteticos. Bug observado en audit 2026-06-02
+    // del flujo carta-manager: una carta termino en <proj>/storage/storage/pizzepos/
+    // porque el caller paso path='/storage/pizzepos/cartas/X.json' y filesystem
+    // (que ya tiene activeProjectPath terminado en 'storage/') concateno un segundo
+    // 'storage/'. /storage/, /projects/, /data/ los compone filesystem desde
+    // base_path internamente — pasarlos en el path duplica. Canonizado en
+    // storage-layout.contract.json (P6, P7). Convencion: el path en fs.*.request
+    // es relativo a storage/ del proyecto activo, empieza con el data_path del
+    // modulo emisor (ej: 'pizzepos/cartas/X.json' para carta-manager).
+    const RESERVED_INTERNAL_PREFIXES = ['/storage/', '/projects/', '/data/'];
+    if (RESERVED_INTERNAL_PREFIXES.some(p => inputPath === p.slice(0, -1) || inputPath.startsWith(p))) {
+      const error = new Error(`Path con prefijo reservado: '${inputPath}'. Los prefijos /storage/, /projects/, /data/ los compone filesystem desde base_path del proyecto activo. Pasa el path relativo al data_path declarado en module.json del modulo emisor (ej: 'pizzepos/cartas/<id>.json' o '<modulo>/<archivo>'). Ver storage-layout.contract.json.`);
+      error._code = 'INVALID_INPUT';
+      error._details = { kind: 'reserved_internal_prefix', requested: inputPath };
+      throw error;
+    }
+
     if (inputPath.startsWith('@/') || inputPath === '@') {
       const relativePart = inputPath === '@' ? '' : inputPath.slice(2);
       const normalized = path.normalize(relativePart).replace(/^\/+/, '');

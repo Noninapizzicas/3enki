@@ -10,17 +10,10 @@
   "target_page_id": "carta-design",
   "config": {
     "persistence": {
-      "pattern": "json-files-per-project-plus-builtin-resources",
-      "paths_proyecto": [
-        "data/projects/{slug}/carta-design/designs/<carta_id>__<timestamp>.html",
-        "data/projects/{slug}/carta-design/designs/<carta_id>__<timestamp>.json (meta companion)",
-        "data/projects/{slug}/carta-design/profiles/<profile_id>.json"
-      ],
-      "paths_modulo": [
-        "modules/pizzepos/carta-design/design-profiles/<built-in>.json (5 profiles incluidos)"
-      ],
-      "atomicidad": "fs.write.request atomic:true",
-      "concurrencia": "single-writer"
+      "scope": "project",
+      "data_path": "pizzepos/carta-design",
+      "pattern": "json-files-per-project",
+      "concurrency": "single-writer"
     }
   },
   "cajones_enabled": true

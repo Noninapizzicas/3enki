@@ -10,9 +10,9 @@
 
   "garantiza": [
     "load_carta delega a carta-manager.get y devuelve la carta lista para diseno.",
-    "save persiste HTML+metadata en /carta-design/designs/<carta_id>__<timestamp>.html del proyecto.",
+    "save persiste HTML+metadata en pizzepos/carta-design/designs/<carta_id>__<timestamp>.html del proyecto.",
     "profiles lista profiles built-in (del modulo) + custom (del proyecto). Cada profile es JSON con tipografia, colores, estructura.",
-    "save_profile guarda profile custom en /carta-design/profiles/ del proyecto.",
+    "save_profile guarda profile custom en pizzepos/carta-design/profiles/ del proyecto.",
     "delete_profile borra profile custom. PROTEGIDO contra built-in.",
     "gallery lista designs HTML guardados con metadata."
   ],
@@ -24,10 +24,10 @@
 
   "estado_persistente": {
     "paths_relativos_proyecto": {
-      "designs": "/carta-design/designs/<carta_id>__<timestamp>.html (+ companion .json con meta)",
-      "profiles_custom": "/carta-design/profiles/<profile_id>.json"
+      "designs": "pizzepos/carta-design/designs/<carta_id>__<timestamp>.html (+ companion .json con meta)",
+      "profiles_custom": "pizzepos/carta-design/profiles/<profile_id>.json"
     },
-    "paths_modulo_built_in": "modules/pizzepos/carta-design/design-profiles/*.json (5 profiles incluidos: elegant-minimal, modern-bold, rock-bold, rustic-italian, seasonal-fresh). NO modificables.",
+    "paths_modulo_built_in": "modules/pizzepospizzepos/carta-design/design-profiles/*.json (5 profiles incluidos: elegant-minimal, modern-bold, rock-bold, rustic-italian, seasonal-fresh). NO modificables.",
     "shape_profile": "{ id, nombre, tipo: 'built-in'|'custom', descripcion, tipografia: {familia_titulo, familia_cuerpo, ...}, colores: {primario, secundario, fondo, ...}, estructura: {densidad, secciones, decoraciones, ...} }",
     "shape_design_meta": "{ carta_id, profile_id, generado_at, generado_por, filename, size_bytes }"
   },
@@ -64,8 +64,8 @@
         "  if (!input.project_id || !input.carta_id || !input.html) return INVALID_INPUT",
         "  ts = nowISO().replace(/[:.]/g, '-')",
         "  filename = input.carta_id + '__' + ts + '.html'",
-        "  path_html = '/carta-design/designs/' + filename",
-        "  path_meta = '/carta-design/designs/' + filename.replace(/\\.html$/, '.json')",
+        "  path_html = 'pizzepos/carta-design/designs/' + filename",
+        "  path_meta = 'pizzepos/carta-design/designs/' + filename.replace(/\\.html$/, '.json')",
         "",
         "  w1 = await publishAndWait('fs.write.request', { project_id: input.project_id, path: path_html, content: input.html, encoding: 'utf-8', atomic: true })",
         "  if (w1.status >= 400) return w1",
@@ -89,7 +89,7 @@
         "  built_in_names = ['elegant-minimal', 'modern-bold', 'rock-bold', 'rustic-italian', 'seasonal-fresh']",
         "  built_in = []",
         "  for (n of built_in_names) {",
-        "    raw = await publishAndWait('fs.read.request', { project_id: '__module__', path: 'modules/pizzepos/carta-design/design-profiles/' + n + '.json' })",
+        "    raw = await publishAndWait('fs.read.request', { project_id: '__module__', path: 'modules/pizzepospizzepos/carta-design/design-profiles/' + n + '.json' })",
         "    if (raw.status === 200) {",
         "      p = JSON.parse(raw.content)",
         "      p.tipo = 'built-in'",
@@ -97,11 +97,11 @@
         "    }",
         "  }",
         "  // 2. Custom del proyecto.",
-        "  files = await publishAndWait('fs.list.request', { project_id: input.project_id, path: '/carta-design/profiles/', extension: 'json' })",
+        "  files = await publishAndWait('fs.list.request', { project_id: input.project_id, path: 'pizzepos/carta-design/profiles/', extension: 'json' })",
         "  custom = []",
         "  if (files.status === 200) {",
         "    for (f of files.data || []) {",
-        "      raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-design/profiles/' + f })",
+        "      raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: 'pizzepos/carta-design/profiles/' + f })",
         "      if (raw.status === 200) {",
         "        p = JSON.parse(raw.content)",
         "        p.tipo = 'custom'",
@@ -135,7 +135,7 @@
         "    tipografia: input.tipografia || {}, colores: input.colores || {}, estructura: input.estructura || {},",
         "    created_at: nowISO(), updated_at: nowISO()",
         "  }",
-        "  w = await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/carta-design/profiles/' + id + '.json', content: JSON.stringify(profile, null, 2), encoding: 'utf-8', atomic: true })",
+        "  w = await publishAndWait('fs.write.request', { project_id: input.project_id, path: 'pizzepos/carta-design/profiles/' + id + '.json', content: JSON.stringify(profile, null, 2), encoding: 'utf-8', atomic: true })",
         "  if (w.status >= 400) return w",
         "  return { status: 201, data: profile }"
       ],
@@ -152,7 +152,7 @@
         "  if (built_in_names.includes(input.profile_id)) return PERMISSION_DENIED { hint: 'built-in protegido' }",
         "  // No hay fs.delete primitiva — usar fs.edit para marcar campos de soft-delete.",
         "  // Patron UPDATE 1-campo sobre archivo JSON standalone: op:test verifica id antes de mutar.",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-design/profiles/' + input.profile_id + '.json' })",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: 'pizzepos/carta-design/profiles/' + input.profile_id + '.json' })",
         "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'profile', id: input.profile_id }",
         "  if (raw.status >= 400) return raw",
         "  now = nowISO()",
@@ -160,7 +160,7 @@
         "  // No se recompone el archivo entero: solo se escriben los 3 campos que cambian.",
         "  edit_resp = await publishAndWait('fs.edit.request', {",
         "    project_id: input.project_id,",
-        "    path: '/carta-design/profiles/' + input.profile_id + '.json',",
+        "    path: 'pizzepos/carta-design/profiles/' + input.profile_id + '.json',",
         "    patches: [",
         "      { op: 'test',    path: '/id',         value: input.profile_id },",
         "      { op: 'replace', path: '/activo',      value: false },",
@@ -179,12 +179,12 @@
       "pseudocodigo": [
         "async gallery(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  files = await publishAndWait('fs.list.request', { project_id: input.project_id, path: '/carta-design/designs/', extension: 'json' })",
+        "  files = await publishAndWait('fs.list.request', { project_id: input.project_id, path: 'pizzepos/carta-design/designs/', extension: 'json' })",
         "  if (files.status === 404) return { status: 200, data: [] }",
         "  if (files.status >= 400) return files",
         "  galeria = []",
         "  for (f of files.data || []) {",
-        "    raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-design/designs/' + f })",
+        "    raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: 'pizzepos/carta-design/designs/' + f })",
         "    if (raw.status !== 200) continue",
         "    meta = JSON.parse(raw.content)",
         "    if (input.carta_id && meta.carta_id !== input.carta_id) continue",
@@ -201,7 +201,7 @@
     {
       "id": "fs_primitiva_para_paths_del_modulo",
       "estado": "abierto",
-      "descripcion": "El blueprint necesita leer profiles built-in que viven en modules/pizzepos/carta-design/design-profiles/ (paths del repo, no del proyecto). Usamos la convencion project_id='__module__' como sugerencia, pero filesystem aun no lo soporta. Alternativa temporal: incluir los 5 profiles JSON inline en el blueprint padre del subsistema-carta. O extender filesystem con primitiva module.read.request."
+      "descripcion": "El blueprint necesita leer profiles built-in que viven en modules/pizzepospizzepos/carta-design/design-profiles/ (paths del repo, no del proyecto). Usamos la convencion project_id='__module__' como sugerencia, pero filesystem aun no lo soporta. Alternativa temporal: incluir los 5 profiles JSON inline en el blueprint padre del subsistema-carta. O extender filesystem con primitiva module.read.request."
     },
     {
       "id": "fs_delete_primitiva",

@@ -3,25 +3,22 @@
   "label": "PizzePOS",
   "icon": "🍕",
   "description": "Comandero, cocina y cobros",
-
   "dependencies": [],
-
   "directories": [
-    "storage/cartas",
-    "storage/preprocesadas",
-    "storage/ocr"
+    "storage/pizzepos/cartas",
+    "storage/pizzepos/preprocesadas",
+    "storage/pizzepos/ocr"
   ],
-
   "config": {
     "pizzepos": {
       "enabled": true
     }
   },
-
   "copyHandlersFrom": "pizzepos",
-
   "initialFiles": {
-    "storage/ingredientes.json": [],
-    "storage/programacion.json": { "reglas": [] }
+    "storage/pizzepos/ingredientes.json": [],
+    "storage/pizzepos/programacion.json": {
+      "reglas": []
+    }
   }
 }

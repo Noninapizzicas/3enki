@@ -11,13 +11,10 @@
   "target_page_id": "carta-manager",
   "config": {
     "persistence": {
+      "scope": "project",
+      "data_path": "pizzepos/cartas",
       "pattern": "json-file-per-entity-plus-versions",
-      "paths": [
-        "data/projects/{slug}/cartas/<carta_id>.json",
-        "data/projects/{slug}/cartas/versions/<carta_id>/<timestamp>.json"
-      ],
-      "atomicidad": "fs.write.request atomic:true por cada operacion de mutacion",
-      "concurrencia": "single-writer (el blueprint serializa via publishAndWait)"
+      "concurrency": "single-writer"
     }
   },
   "cajones_enabled": true

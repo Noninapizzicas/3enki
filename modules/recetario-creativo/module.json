@@ -5,137 +5,284 @@
   "author": "Enki",
   "language": "es",
   "tier": "tier_4_dominio",
-
   "events": {
     "publishes": [
       {
-        "event":               "creativo.prototipo.creado",
-        "description":         "Un prototipo creativo nuevo fue abierto por el chef.",
+        "event": "creativo.prototipo.creado",
+        "description": "Un prototipo creativo nuevo fue abierto por el chef.",
         "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/creativo.prototipo.creado.schema.json"
       },
       {
-        "event":               "creativo.iteracion.registrada",
-        "description":         "Una iteracion fue anotada sobre un prototipo existente.",
+        "event": "creativo.iteracion.registrada",
+        "description": "Una iteracion fue anotada sobre un prototipo existente.",
         "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/creativo.iteracion.registrada.schema.json"
       },
       {
-        "event":               "creativo.alineacion.validada",
-        "description":         "Resultado de cruzar un prototipo o receta con el manifiesto del proyecto.",
+        "event": "creativo.alineacion.validada",
+        "description": "Resultado de cruzar un prototipo o receta con el manifiesto del proyecto.",
         "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/creativo.alineacion.validada.schema.json"
       }
     ],
     "subscribes": [
-      { "event": "project.activated",          "handler": "onProjectActivated",   "description": "Cachea base_path del proyecto activado." },
-      { "event": "project.get.response",       "handler": "onProjectGetResponse", "description": "Resuelve project.get pendiente por request_id." },
-      { "event": "fs.read.response",           "handler": "onFsReadResponse",     "description": "Resuelve lectura pendiente por request_id." },
-      { "event": "fs.write.response",          "handler": "onFsWriteResponse",    "description": "Resuelve escritura pendiente por request_id." },
-
-      { "event": "creativo.prototipo.crear",   "handler": "onCrearPrototipo",     "description": "Tool LLM: crear prototipo nuevo." },
-      { "event": "creativo.prototipo.iterar",  "handler": "onIterar",             "description": "Tool LLM: anotar iteracion sobre prototipo." },
-      { "event": "creativo.alineacion.evaluar","handler": "onEvaluarAlineacion",  "description": "Tool LLM: evaluar alineacion con manifiesto." },
-      { "event": "creativo.manifiesto.actualizar","handler": "onActualizarManifiesto","description": "Tool LLM: actualizar manifiesto creativo del proyecto." }
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated",
+        "description": "Cachea base_path del proyecto activado."
+      },
+      {
+        "event": "project.get.response",
+        "handler": "onProjectGetResponse",
+        "description": "Resuelve project.get pendiente por request_id."
+      },
+      {
+        "event": "fs.read.response",
+        "handler": "onFsReadResponse",
+        "description": "Resuelve lectura pendiente por request_id."
+      },
+      {
+        "event": "fs.write.response",
+        "handler": "onFsWriteResponse",
+        "description": "Resuelve escritura pendiente por request_id."
+      },
+      {
+        "event": "creativo.prototipo.crear",
+        "handler": "onCrearPrototipo",
+        "description": "Tool LLM: crear prototipo nuevo."
+      },
+      {
+        "event": "creativo.prototipo.iterar",
+        "handler": "onIterar",
+        "description": "Tool LLM: anotar iteracion sobre prototipo."
+      },
+      {
+        "event": "creativo.alineacion.evaluar",
+        "handler": "onEvaluarAlineacion",
+        "description": "Tool LLM: evaluar alineacion con manifiesto."
+      },
+      {
+        "event": "creativo.manifiesto.actualizar",
+        "handler": "onActualizarManifiesto",
+        "description": "Tool LLM: actualizar manifiesto creativo del proyecto."
+      }
     ]
   },
-
   "apis": [],
-
   "tools": [
     {
-      "name":        "creativo.prototipo.crear",
+      "name": "creativo.prototipo.crear",
       "description": "Abrir un prototipo creativo nuevo. Un prototipo no es receta canonica — es una exploracion del chef que puede iterarse y eventualmente promocionarse a receta.",
-      "handler":     "onCrearPrototipo",
+      "handler": "onCrearPrototipo",
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":        { "type": "string", "description": "ID del proyecto activo." },
-          "nombre":            { "type": "string", "description": "Nombre del prototipo (1-100 chars)." },
-          "tags_creativos":    { "type": "array",  "items": { "type": "string" }, "description": "Tags libres (concepto, perfil sensorial, inspiracion). Opcional." },
-          "descripcion":       { "type": "string", "description": "Descripcion del prototipo. Opcional, max 1000 chars." },
-          "receta_id_origen":  { "type": "string", "description": "Receta existente que sirve de punto de partida. Opcional." },
-          "user_id":           { "type": "string", "description": "ID del chef que abre el prototipo. Opcional." }
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto activo."
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre del prototipo (1-100 chars)."
+          },
+          "tags_creativos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tags libres (concepto, perfil sensorial, inspiracion). Opcional."
+          },
+          "descripcion": {
+            "type": "string",
+            "description": "Descripcion del prototipo. Opcional, max 1000 chars."
+          },
+          "receta_id_origen": {
+            "type": "string",
+            "description": "Receta existente que sirve de punto de partida. Opcional."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "ID del chef que abre el prototipo. Opcional."
+          }
         },
-        "required": ["project_id", "nombre"]
+        "required": [
+          "project_id",
+          "nombre"
+        ]
       },
-      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
-      "name":        "creativo.prototipo.iterar",
+      "name": "creativo.prototipo.iterar",
       "description": "Anotar una iteracion sobre un prototipo existente (lo que cambio, que funciono, que no). Construye la historia creativa del prototipo.",
-      "handler":     "onIterar",
+      "handler": "onIterar",
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":   { "type": "string", "description": "ID del proyecto activo." },
-          "prototipo_id": { "type": "string", "description": "ID del prototipo a iterar." },
-          "anotacion":    { "type": "string", "description": "Texto libre de la iteracion (max 1000 chars)." },
-          "resultado":    { "type": "string", "enum": ["aceptada", "rechazada", "indeterminada"], "description": "Veredicto del chef sobre la iteracion. Opcional." },
-          "user_id":      { "type": "string", "description": "Opcional." }
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto activo."
+          },
+          "prototipo_id": {
+            "type": "string",
+            "description": "ID del prototipo a iterar."
+          },
+          "anotacion": {
+            "type": "string",
+            "description": "Texto libre de la iteracion (max 1000 chars)."
+          },
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "aceptada",
+              "rechazada",
+              "indeterminada"
+            ],
+            "description": "Veredicto del chef sobre la iteracion. Opcional."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Opcional."
+          }
         },
-        "required": ["project_id", "prototipo_id", "anotacion"]
+        "required": [
+          "project_id",
+          "prototipo_id",
+          "anotacion"
+        ]
       },
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND"
+      ]
     },
     {
-      "name":        "creativo.alineacion.evaluar",
+      "name": "creativo.alineacion.evaluar",
       "description": "Cruzar un prototipo o receta con el manifiesto creativo del proyecto. Devuelve score 0-100 + listas resaltan/disuenan. Heuristica determinista (sin LLM): coincidencias en tags suben score, presencia de prohibidos lo baja.",
-      "handler":     "onEvaluarAlineacion",
+      "handler": "onEvaluarAlineacion",
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":   { "type": "string", "description": "ID del proyecto activo." },
-          "objeto_tipo":  { "type": "string", "enum": ["prototipo", "receta"], "description": "Tipo del objeto a evaluar." },
-          "prototipo_id": { "type": "string", "description": "Si objeto_tipo='prototipo': id del prototipo (se busca en el store)." },
-          "receta_id":    { "type": "string", "description": "Si objeto_tipo='receta': id de la receta (solo se usa en el payload publicado; el modulo NO llama a recetas.obtener)." },
-          "nombre":       { "type": "string", "description": "Si objeto_tipo='receta': nombre de la receta para la heuristica. Obligatorio en este caso." },
-          "tags":         { "type": "array",  "items": { "type": "string" }, "description": "Si objeto_tipo='receta': tags del objeto para la heuristica. Opcional." },
-          "user_id":      { "type": "string", "description": "Opcional." }
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto activo."
+          },
+          "objeto_tipo": {
+            "type": "string",
+            "enum": [
+              "prototipo",
+              "receta"
+            ],
+            "description": "Tipo del objeto a evaluar."
+          },
+          "prototipo_id": {
+            "type": "string",
+            "description": "Si objeto_tipo='prototipo': id del prototipo (se busca en el store)."
+          },
+          "receta_id": {
+            "type": "string",
+            "description": "Si objeto_tipo='receta': id de la receta (solo se usa en el payload publicado; el modulo NO llama a recetas.obtener)."
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Si objeto_tipo='receta': nombre de la receta para la heuristica. Obligatorio en este caso."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Si objeto_tipo='receta': tags del objeto para la heuristica. Opcional."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Opcional."
+          }
         },
-        "required": ["project_id", "objeto_tipo"]
+        "required": [
+          "project_id",
+          "objeto_tipo"
+        ]
       },
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND"
+      ]
     },
     {
-      "name":        "creativo.manifiesto.actualizar",
+      "name": "creativo.manifiesto.actualizar",
       "description": "Actualizar el manifiesto creativo del proyecto (valores, prohibido, tradicion de referencia, notas libres). Es setting interno del modulo: no emite evento.",
-      "handler":     "onActualizarManifiesto",
+      "handler": "onActualizarManifiesto",
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "ID del proyecto activo." },
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto activo."
+          },
           "manifiesto": {
             "type": "object",
             "description": "Manifiesto a aplicar. Los campos presentes reemplazan los existentes; los ausentes se preservan.",
             "properties": {
-              "valores":               { "type": "array",  "items": { "type": "string" } },
-              "prohibido":             { "type": "array",  "items": { "type": "string" } },
-              "tradicion_referencia":  { "type": "string" },
-              "notas_libres":          { "type": "string" }
+              "valores": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "prohibido": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tradicion_referencia": {
+                "type": "string"
+              },
+              "notas_libres": {
+                "type": "string"
+              }
             }
           },
-          "user_id":    { "type": "string", "description": "Opcional." }
+          "user_id": {
+            "type": "string",
+            "description": "Opcional."
+          }
         },
-        "required": ["project_id", "manifiesto"]
+        "required": [
+          "project_id",
+          "manifiesto"
+        ]
       },
-      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ]
     }
   ],
-
   "config": {
-    "data_file_pattern":            "data/projects/{slug}/recetario-creativo.json",
-    "persistence":                  "json-per-project",
-    "max_nombre_length":            100,
-    "max_descripcion_length":       1000,
-    "max_anotacion_length":         1000,
-    "max_tag_length":               50,
-    "max_tradicion_length":         200,
-    "max_notas_libres_length":      2000,
-    "project_get_timeout_ms":       5000,
-    "fs_request_timeout_ms":        5000,
-    "alineacion_valor_bonus":       10,
+    "data_file_pattern": "data/projects/{slug}/recetario-creativo.json",
+    "persistence": {
+      "scope": "project",
+      "data_path": "recetario-creativo",
+      "pattern": "json-per-project"
+    },
+    "max_nombre_length": 100,
+    "max_descripcion_length": 1000,
+    "max_anotacion_length": 1000,
+    "max_tag_length": 50,
+    "max_tradicion_length": 200,
+    "max_notas_libres_length": 2000,
+    "project_get_timeout_ms": 5000,
+    "fs_request_timeout_ms": 5000,
+    "alineacion_valor_bonus": 10,
     "alineacion_prohibido_penalty": 25,
-    "alineacion_score_base":        50
+    "alineacion_score_base": 50
   },
-
   "observability": {
     "metrics": {
       "counters": [

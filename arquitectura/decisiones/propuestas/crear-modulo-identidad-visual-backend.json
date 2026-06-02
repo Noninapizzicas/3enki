@@ -1,0 +1,554 @@
+{
+  "_doc": "Plan 2a backend del horizonte identidad-visual-y-pliegue-carta-design. Crea el modulo identidad-visual nuevo (modulo blueprint-driven que sustituye a carta-design) con su blueprint, 5 CSS canonicos semilla y persistence. NO toca frontend (eso es Plan 2b cuando 2a este mergeado). NO toca carta-impresion (Plan 3). NO borra carta-design (Plan 4 --carta-design v1.2.0 sigue intacto durante 2a). El modulo entrega 'el traje': biblioteca + estado activado + eventos canonicos. El editor/creador del frontend es afordance que pre-rellena chat (Plan 2b); el backend solo expone las operaciones canonicas que el LLM invoca cuando el comerciante le pide algo.",
+
+  "id": "crear-modulo-identidad-visual-backend",
+  "version": "1.0.0",
+  "creado_en": "2026-06-02",
+  "skill_origen": "ana",
+  "tipo": "creacion_modulo_blueprint_driven_nuevo",
+
+  "documentos_hermanos": {
+    "arranque_del_horizonte": "arquitectura/decisiones/propuestas/_arranque-identidad-visual-y-pliegue-carta-design.json",
+    "plan_1_del_horizonte": "arquitectura/decisiones/propuestas/crear-contrato-identidad-visual.json",
+    "modulo_que_sustituye": "modules/pizzepos/carta-design/ (v1.2.0, se borrara en Plan 4 cuando 2a y 3 esten mergeados)",
+    "modulo_hermano_referencia_shape_blueprint": "modules/pizzepos/escandallo/escandallo.blueprint.json (blueprint-driven hijo del subsistema-recetario)"
+  },
+
+  "contratos_vivos_referenciados": [
+    "arquitectura/decisiones/_contratos/identidad-visual.contract.json (creado por Plan 1, prerequisito de ejecucion)",
+    "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json",
+    "arquitectura/decisiones/_contratos/multi-tenancy.contract.json",
+    "arquitectura/decisiones/_contratos/events.contract.json",
+    "arquitectura/decisiones/_contratos/persistence.contract.json",
+    "arquitectura/decisiones/_contratos/llm-runtime-discipline.contract.json",
+    "arquitectura/decisiones/_contratos/pseudocodigo-estilo.contract.json",
+    "arquitectura/decisiones/_contratos/errors.contract.json",
+    "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json"
+  ],
+
+  "prerequisitos_de_ejecucion": [
+    "Plan 1 (crear-contrato-identidad-visual) EJECUTADO por fede y mergeado a main. Verificable: ls arquitectura/decisiones/_contratos/identidad-visual.contract.json devuelve archivo existente.",
+    "validate:ci PASS en main",
+    "El comerciante o cliente que ejecute Plan 2a debe verificar que estos prerequisitos se cumplen antes de F1; si no, ejecutar Plan 1 primero."
+  ],
+
+  "por_que_existe": {
+    "principio_arquitectonico_que_materializa": "El recurso 'identidad visual transversal del local' definido en identidad-visual.contract.json necesita un modulo dueño que lo gestione: persistir biblioteca, mantener default_profile_id, publicar eventos canonicos cuando cambia. Este modulo lo es. Sustituye a carta-design despojado de sus operaciones de HTML (que pasan a carta-impresion en Plan 3).",
+    "que_entrega_v1_0": [
+      "Modulo blueprint-driven en modules/pizzepos/identidad-visual/ con 6 operaciones canonicas (listar, obtener, crear, actualizar, eliminar, activar)",
+      "5 CSS canonicos semilla en carpeta builtin (transformados de los 5 design-profiles JSON actuales de carta-design)",
+      "Persistence per-proyecto bajo data/projects/{slug}/storage/pizzepos/identidad-visual/index.json + <id>.css",
+      "Eventos canonicos publicados conforme al contrato (identidad-visual.profile.creado/actualizado/eliminado, identidad-visual.default.cambiado)",
+      "Test runtime end-to-end que cubre: crear -> listar -> obtener -> activar -> eliminar"
+    ],
+    "que_NO_entrega": [
+      "Frontend (eso es Plan 2b cuando 2a este mergeado)",
+      "Modificacion del agente impresor para consumir profile_id (eso es Plan 3)",
+      "Limpieza de carta-design (eso es Plan 4)",
+      "Editor o creador conversacional cocinado en detalle (afordances minimas en Plan 2b, mecanica cocinada v1.1+ si emerge dolor real)"
+    ]
+  },
+
+  "estado_verificado_en_disco_al_cocinar_el_plan": [
+    {
+      "pieza": "modules/pizzepos/carta-design/",
+      "estado": "v1.2.0 intacto, design-profiles/ con 5 JSON semilla (elegant-minimal, modern-bold, rock-bold, rustic-italian, seasonal-fresh)",
+      "verificacion": "ls modules/pizzepos/carta-design/design-profiles/*.json | wc -l --debe devolver 5"
+    },
+    {
+      "pieza": "modules/pizzepos/identidad-visual/",
+      "estado": "NO EXISTE --este plan lo crea",
+      "verificacion": "ls modules/pizzepos/identidad-visual --debe devolver no such file"
+    },
+    {
+      "pieza": "arquitectura/decisiones/_contratos/identidad-visual.contract.json",
+      "estado": "Debe existir tras Plan 1 ejecutado (prerequisito). Si no existe, parar y ejecutar Plan 1 primero.",
+      "verificacion": "ls arquitectura/decisiones/_contratos/identidad-visual.contract.json --debe devolver archivo existente"
+    },
+    {
+      "pieza": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
+      "estado": "Existe como padre canonico de modulos blueprint-driven actuales (carta-design hereda de aqui). identidad-visual hereda del mismo por consistencia en v1.0; si emerge necesidad de padre transversal nuevo, se cocina v1.1+.",
+      "verificacion": "ls arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json --debe devolver archivo existente"
+    }
+  ],
+
+  "axiomas_a_declarar_al_arrancar_la_sesion": {
+    "verifico_en_disco": [
+      "git status limpio en rama claude/hola-2Pn9F",
+      "validate:ci PASS antes de empezar",
+      "Prerequisito: identidad-visual.contract.json existe (Plan 1 ejecutado y mergeado)",
+      "Las 4 piezas en estado_verificado_en_disco tienen el estado descrito",
+      "modules/pizzepos/escandallo/escandallo.blueprint.json existe como referencia de shape blueprint"
+    ],
+    "asumo_del_doc_sin_verificar": [
+      "Las 7 decisiones del Plan 2 cocinadas con ana en sesion 2026-06-02 (listadas en decisiones_ya_cerradas) son canon",
+      "Las 9 decisiones canonicas heredables del horizonte estan en el arranque",
+      "El contrato identidad-visual.contract.json materializado por Plan 1 cumple las 7 decisiones del Plan 1 (shape del recurso, eventos, garantias, prohibiciones)",
+      "Los 5 design-profiles JSON actuales de carta-design contienen suficiente informacion estetica para transformarlos a CSS canonico (paleta, fuentes, etc.)",
+      "El modulo blueprint-driven es LLM-runtime: no tiene JS escuchando el bus, las operaciones se invocan via tools del blueprint cuando el LLM las llama por chat"
+    ],
+    "no_toco_esta_sesion": [
+      "frontend/* completo (eso es Plan 2b)",
+      "carta-design (sigue intacto hasta Plan 4)",
+      "carta-impresion, agente impresor (eso es Plan 3)",
+      "Otros modulos del repo",
+      "Contratos transversales (cocinados, no se modifican retroactivamente)",
+      "Validators arquitectonicos",
+      "drift-baseline.json salvo en F5 si emerge drift legitimo del modulo nuevo con OK explicito",
+      "PR sin OK explicito",
+      "Rama distinta de claude/hola-2Pn9F"
+    ]
+  },
+
+  "preguntas_abiertas_para_el_usuario": [],
+
+  "decisiones_ya_cerradas": [
+    {
+      "id": "p2_d1",
+      "tema": "nombre_del_modulo",
+      "decision": "identidad-visual. Path: modules/pizzepos/identidad-visual/. Coherente con el contrato y con la convencion del repo (modulo bajo vertical pizzepos para multi-tenancy estandar; el dia que vapers crezca tendra modules/vapers/identidad-visual/)."
+    },
+    {
+      "id": "p2_d2",
+      "tema": "editor",
+      "decision": "Afordance minima en v1.0 (Plan 2b frontend). El backend NO tiene operacion 'edit' separada --la edicion de un profile se materializa como invocacion del LLM a la tool 'actualizar' del blueprint, con el contenido CSS nuevo como input. La apertura para editor mas rico (controles directos, modo tecnico textarea, etc.) queda para v1.1+ si emerge dolor real del comerciante. v1.0 entrega 'el traje', no el sastre."
+    },
+    {
+      "id": "p2_d3",
+      "tema": "creador",
+      "decision": "Mismo patron que p2_d2. Backend tiene operacion 'crear' que el LLM invoca cuando el comerciante le pide un profile nuevo por chat. Sin mecanica conversacional cocinada en backend --es flujo del LLM en runtime. Frontend en Plan 2b tendra botones 'Crear nuevo' / 'Duplicar' que pre-rellenan chat. Sin Creator.svelte como componente."
+    },
+    {
+      "id": "p2_d4",
+      "tema": "disparador_del_enganche",
+      "decision": "Hibrido suave: cambio de cajon via chat.cambiar_foco al primer carta.html.generada con default_profile_id ausente (push fuerte una vez) + badge persistente en cajon Estilos despues (pull suave si comerciante ignora). Implementacion del disparador esta en Plan 2b frontend (suscripcion del store a eventos del bus). Plan 2a backend solo necesita publicar identidad-visual.default.cambiado correctamente para que la mecanica funcione cuando 2b llegue."
+    },
+    {
+      "id": "p2_d5",
+      "tema": "postura_b_con_matiz",
+      "decision": "Cerrada en arranque. Backend respeta: no expone tools de UI-control (no 'abrir panel', no 'cambiar activeView', etc.). Las mutaciones del agregado pasan por tools del blueprint que el LLM invoca cuando el comerciante le pide algo por chat."
+    },
+    {
+      "id": "p2_d6",
+      "tema": "contenido_de_los_5_built_in_css",
+      "decision": "Transformacion de los 5 design-profiles JSON actuales (modules/pizzepos/carta-design/design-profiles/) a 5 CSS canonicos. Fede al ejecutar F3 hace la transformacion siguiendo el patron: extrae paleta + tipografia + spacing del JSON y los materializa como variables CSS + reglas para elementos tipicos de carta (h1, h2, listas, precios). Output en modules/pizzepos/identidad-visual/builtin/<id>.css."
+    },
+    {
+      "id": "p2_d7",
+      "tema": "division_del_plan",
+      "decision": "Plan 2 dividido en 2a (backend, este plan) + 2b (frontend, cocinable cuando 2a este mergeado). Razon: scope contenido, testable independiente, patron del repo en planes UI hermanos."
+    },
+    {
+      "id": "p2a_d8",
+      "tema": "blueprint_parent",
+      "decision": "El blueprint del modulo identidad-visual hereda de subsistema-recetario.modulo-base.blueprint.json (mismo padre que carta-design por consistencia v1.0). Si emerge necesidad de padre transversal nuevo (porque identidad-visual no es realmente del subsistema-recetario), se cocina como bump v1.1+ del modulo o como nuevo padre transversal."
+    }
+  ],
+
+  "fases": [
+    {
+      "id": "F1",
+      "nombre": "Crear modules/pizzepos/identidad-visual/ con module.json",
+      "esfuerzo_horas_estimado": 0.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F1.op1_crear_directorio",
+          "pseudocodigo": [
+            "mkdir -p modules/pizzepos/identidad-visual",
+            "mkdir -p modules/pizzepos/identidad-visual/builtin"
+          ]
+        },
+        {
+          "id": "F1.op2_crear_module_json",
+          "descripcion": "Crear module.json siguiendo shape canonico de modulos blueprint-driven del repo",
+          "pseudocodigo": [
+            "crear modules/pizzepos/identidad-visual/module.json con campos:",
+            "  _doc: descripcion del modulo (identidad visual transversal del local, biblioteca de profiles CSS canonicos)",
+            "  name: identidad-visual",
+            "  version: 1.0.0",
+            "  description: Modulo identidad-visual en modo blueprint-driven. Biblioteca de profiles CSS canonicos del local. Consumida por generadores visuales (carta-impresion, futuros).",
+            "  language: es",
+            "  blueprint_driven: true",
+            "  blueprint_path: identidad-visual.blueprint.json",
+            "  blueprint_parent_path: arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
+            "  target_page_id: identidad-visual",
+            "  config.persistence:",
+            "    pattern: json-files-per-project-plus-builtin-resources",
+            "    paths_proyecto: ['data/projects/{slug}/storage/pizzepos/identidad-visual/index.json', 'data/projects/{slug}/storage/pizzepos/identidad-visual/<id>.css']",
+            "    paths_modulo: ['modules/pizzepos/identidad-visual/builtin/<id>.css (5 semillas)']",
+            "    atomicidad: fs.write.request atomic:true",
+            "    concurrencia: single-writer",
+            "  cajones_enabled: true (target_page_id navegable habilita cajones)"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["modules/pizzepos/identidad-visual/module.json"],
+        "directorios_creados": ["modules/pizzepos/identidad-visual/", "modules/pizzepos/identidad-visual/builtin/"]
+      }
+    },
+    {
+      "id": "F2",
+      "nombre": "Crear identidad-visual.blueprint.json con 6 operaciones canonicas",
+      "esfuerzo_horas_estimado": 2,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F2.op1_esqueleto_blueprint",
+          "pseudocodigo": [
+            "crear modules/pizzepos/identidad-visual/identidad-visual.blueprint.json con metadata:",
+            "  _doc: Blueprint del modulo identidad-visual. Hijo de subsistema-recetario.modulo-base. Biblioteca de profiles CSS canonicos del local.",
+            "  id: identidad-visual",
+            "  version: blueprint-1.0.0",
+            "  blueprint_parent_path: arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
+            "  eventos_que_escucho: []  (modulo no-reactivo, A1 patron)",
+            "  estado_persistente: descripcion del agregado (index.json + .css por profile)"
+          ]
+        },
+        {
+          "id": "F2.op2_operacion_listar",
+          "descripcion": "operacion listar --devuelve la biblioteca completa + default_profile_id",
+          "pseudocodigo": [
+            "anyadir operacion 'listar' al blueprint con:",
+            "  input: { project_id }",
+            "  pseudocodigo (respeta pseudocodigo-estilo: sin Object.assign, sin spread con omision, verboso):",
+            "    leer '/storage/pizzepos/identidad-visual/index.json' del proyecto via fs.read.request",
+            "    if (no existe): inicializar copiando los 5 built-in CSS del modulo a storage del proyecto y crear index.json con los 5 profiles + default_profile_id=elegant-minimal",
+            "    devolver { profiles: store.profiles, default_profile_id: store.default_profile_id }"
+          ]
+        },
+        {
+          "id": "F2.op3_operacion_obtener",
+          "descripcion": "operacion obtener --devuelve un profile especifico + contenido del CSS",
+          "pseudocodigo": [
+            "anyadir operacion 'obtener' al blueprint con:",
+            "  input: { project_id, profile_id }",
+            "  pseudocodigo:",
+            "    leer index.json del proyecto",
+            "    profile = store.profiles.find(p => p.id === profile_id)",
+            "    if (!profile): devolver error PROFILE_NO_ENCONTRADO (errors.contract)",
+            "    leer contenido del CSS desde profile.css_path via fs.read.request",
+            "    devolver { profile: { ...campos meta }, css_content: contenido_del_css }"
+          ]
+        },
+        {
+          "id": "F2.op4_operacion_crear",
+          "descripcion": "operacion crear --anyadir profile nuevo (custom)",
+          "pseudocodigo": [
+            "anyadir operacion 'crear' al blueprint con:",
+            "  input: { project_id, nombre, descripcion?, css_content, correlation_id? }",
+            "  pseudocodigo:",
+            "    validar input (nombre no vacio, css_content valido CSS sintactico minimo)",
+            "    if (invalido): devolver error INVALID_INPUT",
+            "    correlation_id_efectivo = input.correlation_id || uuid()",
+            "    profile_id = slugify_kebab_case(nombre) con sufijo unico si colisiona",
+            "    css_path = '/storage/pizzepos/identidad-visual/' + profile_id + '.css'",
+            "    leer index.json (si no existe, inicializar como en listar)",
+            "    nuevo_profile = { id: profile_id, nombre: input.nombre, descripcion: input.descripcion || '', css_path, builtin: false, created_at: nowISO(), updated_at: nowISO() }",
+            "    escribir CSS file en data/projects/{slug}/storage/pizzepos/identidad-visual/<profile_id>.css con input.css_content via fs.write.request atomic",
+            "    store.profiles.push(nuevo_profile)",
+            "    escribir index.json actualizado via fs.write.request atomic",
+            "    publicar evento identidad-visual.profile.creado con payload conforme al schema",
+            "    devolver { profile_id, status: 'creado' }"
+          ]
+        },
+        {
+          "id": "F2.op5_operacion_actualizar",
+          "descripcion": "operacion actualizar --modificar profile existente (CSS o metadata)",
+          "pseudocodigo": [
+            "anyadir operacion 'actualizar' al blueprint con:",
+            "  input: { project_id, profile_id, nombre?, descripcion?, css_content?, correlation_id? }",
+            "  pseudocodigo:",
+            "    leer index.json",
+            "    profile = store.profiles.find(p => p.id === profile_id)",
+            "    if (!profile): devolver error PROFILE_NO_ENCONTRADO",
+            "    correlation_id_efectivo = input.correlation_id || uuid()",
+            "    campos_modificados = []",
+            "    if (input.nombre !== undefined && input.nombre !== profile.nombre): profile.nombre = input.nombre; campos_modificados.push('nombre')",
+            "    if (input.descripcion !== undefined): profile.descripcion = input.descripcion; campos_modificados.push('descripcion')",
+            "    if (input.css_content !== undefined): escribir CSS nuevo a profile.css_path via fs.write.request atomic; campos_modificados.push('css_content')",
+            "    if (campos_modificados.length === 0): devolver { status: 'sin_cambios' }",
+            "    profile.updated_at = nowISO()",
+            "    escribir index.json via fs.write.request atomic",
+            "    publicar evento identidad-visual.profile.actualizado con payload incluyendo campos_modificados",
+            "    devolver { profile_id, campos_modificados, status: 'actualizado' }"
+          ]
+        },
+        {
+          "id": "F2.op6_operacion_eliminar",
+          "descripcion": "operacion eliminar --borrar profile (con reasignacion automatica de default si procede)",
+          "pseudocodigo": [
+            "anyadir operacion 'eliminar' al blueprint con:",
+            "  input: { project_id, profile_id, correlation_id? }",
+            "  pseudocodigo:",
+            "    leer index.json",
+            "    profile = store.profiles.find(p => p.id === profile_id)",
+            "    if (!profile): devolver error PROFILE_NO_ENCONTRADO",
+            "    if (profile.builtin === true): devolver error CANNOT_DELETE_BUILTIN (los 5 semillas no se borran --se pueden duplicar y editar el duplicado)",
+            "    correlation_id_efectivo = input.correlation_id || uuid()",
+            "    era_default = (store.default_profile_id === profile_id)",
+            "    new_default = era_default ? 'elegant-minimal' : store.default_profile_id",
+            "    eliminar CSS file via fs.delete.request (o soft-delete si fs.delete no esta disponible aun)",
+            "    filtrar profiles array sin el eliminado",
+            "    if (era_default): store.default_profile_id = new_default",
+            "    escribir index.json via fs.write.request atomic",
+            "    publicar evento identidad-visual.profile.eliminado",
+            "    if (era_default): publicar TAMBIEN identidad-visual.default.cambiado con default_profile_id_anterior y default_profile_id_nuevo",
+            "    devolver { profile_id, status: 'eliminado', new_default_profile_id: new_default }"
+          ]
+        },
+        {
+          "id": "F2.op7_operacion_activar",
+          "descripcion": "operacion activar --cambia default_profile_id del proyecto",
+          "pseudocodigo": [
+            "anyadir operacion 'activar' al blueprint con:",
+            "  input: { project_id, profile_id, correlation_id? }",
+            "  pseudocodigo:",
+            "    leer index.json",
+            "    profile = store.profiles.find(p => p.id === profile_id)",
+            "    if (!profile): devolver error PROFILE_NO_ENCONTRADO",
+            "    if (store.default_profile_id === profile_id): devolver { status: 'ya_estaba_activo' }",
+            "    correlation_id_efectivo = input.correlation_id || uuid()",
+            "    default_anterior = store.default_profile_id",
+            "    store.default_profile_id = profile_id",
+            "    escribir index.json via fs.write.request atomic",
+            "    publicar evento identidad-visual.default.cambiado con default_profile_id_anterior=default_anterior y default_profile_id_nuevo=profile_id",
+            "    devolver { profile_id, status: 'activado', default_profile_id_anterior: default_anterior }"
+          ]
+        },
+        {
+          "id": "F2.op8_verificar_blueprint",
+          "pseudocodigo": [
+            "jq . modules/pizzepos/identidad-visual/identidad-visual.blueprint.json --debe pasar sin error",
+            "verificar que las 6 operaciones estan declaradas",
+            "verificar que eventos_que_escucho: [] (no-reactivo)",
+            "verificar que pseudocodigo de cada operacion no usa Object.assign ni rest-spread con omision"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["modules/pizzepos/identidad-visual/identidad-visual.blueprint.json"]
+      }
+    },
+    {
+      "id": "F3",
+      "nombre": "Transformar los 5 design-profiles JSON actuales a 5 CSS canonicos semilla",
+      "esfuerzo_horas_estimado": 2,
+      "ok_explicito_antes_de_continuar": true,
+      "descripcion": "Para cada uno de los 5 design-profiles JSON en modules/pizzepos/carta-design/design-profiles/, extraer la informacion estetica (paleta, tipografia, spacing) y generar el CSS canonico equivalente en modules/pizzepos/identidad-visual/builtin/<id>.css. Cada CSS debe definir variables CSS para los elementos tipicos de una carta y reglas basicas que el agente impresor pueda enlazar.",
+      "operaciones": [
+        {
+          "id": "F3.op1_leer_design_profile_actual",
+          "pseudocodigo": [
+            "para cada profile en modules/pizzepos/carta-design/design-profiles/*.json:",
+            "  leer el JSON",
+            "  identificar campos esteticos (probablemente: colors, fonts, spacing, decoration)"
+          ]
+        },
+        {
+          "id": "F3.op2_disenar_estructura_canonica_del_css",
+          "descripcion": "Definir las variables CSS canonicas y las reglas que cada profile expondra",
+          "pseudocodigo": [
+            "estructura canonica de cada profile CSS:",
+            "  :root [data-profile='<id>'] {",
+            "    --color-primary: ...;",
+            "    --color-secondary: ...;",
+            "    --color-background: ...;",
+            "    --color-text: ...;",
+            "    --color-accent: ...;",
+            "    --font-family-heading: '...', serif/sans-serif;",
+            "    --font-family-body: '...', serif/sans-serif;",
+            "    --font-size-base: 16px;",
+            "    --font-size-heading-1: 32px;",
+            "    --font-size-heading-2: 24px;",
+            "    --spacing-small: 8px;",
+            "    --spacing-medium: 16px;",
+            "    --spacing-large: 32px;",
+            "  }",
+            "  + reglas para elementos tipicos de carta:",
+            "  .carta { background: var(--color-background); color: var(--color-text); font-family: var(--font-family-body); }",
+            "  .carta h1 { font-family: var(--font-family-heading); font-size: var(--font-size-heading-1); color: var(--color-primary); }",
+            "  .carta h2 { font-family: var(--font-family-heading); font-size: var(--font-size-heading-2); color: var(--color-secondary); }",
+            "  .carta .producto { ... }",
+            "  .carta .precio { color: var(--color-accent); font-weight: bold; }",
+            "  .carta .categoria { ... }",
+            "esta estructura es la misma para los 5 built-in --solo cambian los valores de las variables"
+          ]
+        },
+        {
+          "id": "F3.op3_materializar_5_css",
+          "descripcion": "Generar los 5 archivos CSS aplicando la estructura canonica con los valores extraidos de cada JSON",
+          "pseudocodigo": [
+            "para cada uno de los 5 profiles (elegant-minimal, modern-bold, rock-bold, rustic-italian, seasonal-fresh):",
+            "  crear modules/pizzepos/identidad-visual/builtin/<id>.css aplicando la estructura canonica F3.op2",
+            "  rellenar los valores de variables con los datos extraidos del JSON original (paleta, fuentes, etc.)",
+            "  documentar en comentario CSS al inicio: /* Built-in semilla --vibra: <descripcion> */",
+            "verificar que los 5 archivos son CSS sintacticamente validos (parser CSS si esta disponible, o al menos eyeball check)"
+          ]
+        },
+        {
+          "id": "F3.op4_NO_borrar_los_design_profiles_originales",
+          "descripcion": "Los design-profiles JSON de carta-design siguen intactos --carta-design v1.2.0 sigue en pie hasta Plan 4",
+          "pseudocodigo": [
+            "verificar: ls modules/pizzepos/carta-design/design-profiles/*.json | wc -l --sigue siendo 5",
+            "NO tocar modules/pizzepos/carta-design/"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": [
+          "modules/pizzepos/identidad-visual/builtin/elegant-minimal.css",
+          "modules/pizzepos/identidad-visual/builtin/modern-bold.css",
+          "modules/pizzepos/identidad-visual/builtin/rock-bold.css",
+          "modules/pizzepos/identidad-visual/builtin/rustic-italian.css",
+          "modules/pizzepos/identidad-visual/builtin/seasonal-fresh.css"
+        ]
+      }
+    },
+    {
+      "id": "F4",
+      "nombre": "Test runtime end-to-end del modulo",
+      "esfuerzo_horas_estimado": 1.5,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F4.op1_crear_runtime_case",
+          "descripcion": "Crear test runtime que cubra el ciclo basico del modulo: crear -> listar -> obtener -> activar -> eliminar",
+          "pseudocodigo": [
+            "crear tests/runtime-cases/identidad-visual-ciclo-basico.js siguiendo el patron de otros runtime-cases del repo",
+            "el test:",
+            "  1. activa un proyecto de test",
+            "  2. invoca identidad-visual.listar --verifica que devuelve los 5 built-in + default_profile_id=elegant-minimal (inicializacion automatica)",
+            "  3. invoca identidad-visual.crear con nombre='test-vibra' y css_content='/* test */' --verifica respuesta 'creado' + evento identidad-visual.profile.creado en bus",
+            "  4. invoca identidad-visual.obtener con profile_id='test-vibra' --verifica que devuelve metadata + css_content",
+            "  5. invoca identidad-visual.activar con profile_id='test-vibra' --verifica respuesta 'activado' + evento identidad-visual.default.cambiado en bus",
+            "  6. invoca identidad-visual.eliminar con profile_id='test-vibra' --verifica respuesta 'eliminado' + evento identidad-visual.profile.eliminado + identidad-visual.default.cambiado (reasignacion a elegant-minimal)",
+            "  7. verifica que invocar identidad-visual.eliminar con profile_id='elegant-minimal' (builtin) devuelve error CANNOT_DELETE_BUILTIN"
+          ]
+        },
+        {
+          "id": "F4.op2_ejecutar_runtime_case",
+          "pseudocodigo": [
+            "ejecutar el runtime case",
+            "debe pasar sin errores",
+            "verificar que los eventos esperados se publicaron en el bus con shape correcto"
+          ]
+        }
+      ],
+      "salida_esperada": {
+        "archivos_creados": ["tests/runtime-cases/identidad-visual-ciclo-basico.js"],
+        "verificacion": "test runtime PASA"
+      }
+    },
+    {
+      "id": "F5",
+      "nombre": "validate:ci + baseline si emerge drift legitimo del modulo nuevo",
+      "esfuerzo_horas_estimado": 0.25,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F5.op1",
+          "pseudocodigo": [
+            "npm run validate:ci",
+            "esperado: PASS sin drift NUEVO",
+            "si emerge drift y todo es del modulo nuevo (legitimo): reportar al humano, esperar OK, regenerar baseline con npm run validate:baseline:update, verificar que diff del baseline solo incluye entries del modulo nuevo",
+            "si drift incluye otros validators: PARAR y diagnosticar"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F6",
+      "nombre": "Commit + push a claude/hola-2Pn9F",
+      "esfuerzo_horas_estimado": 0.25,
+      "ok_explicito_antes_de_continuar": true,
+      "operaciones": [
+        {
+          "id": "F6.op1_status",
+          "pseudocodigo": [
+            "git status --short",
+            "verificar scope: solo archivos del plan (module.json, blueprint, 5 CSS, test runtime, posiblemente baseline)"
+          ]
+        },
+        {
+          "id": "F6.op2_commit",
+          "pseudocodigo": [
+            "git add archivos especificos (nunca git add .)",
+            "git commit con mensaje:",
+            "  feat(identidad-visual): modulo backend v1.0.0 --Plan 2a del horizonte",
+            "  ",
+            "  Crea modulo identidad-visual blueprint-driven que gestiona biblioteca de profiles",
+            "  CSS canonicos del local. 6 operaciones canonicas (listar, obtener, crear, actualizar,",
+            "  eliminar, activar). 5 built-in CSS semilla transformados de design-profiles de carta-design.",
+            "  Eventos canonicos conformes al contrato identidad-visual v1.0.0 (Plan 1 mergeado).",
+            "  ",
+            "  NO toca carta-design (sigue intacto v1.2.0 hasta Plan 4). NO toca carta-impresion",
+            "  (eso es Plan 3). NO toca frontend (eso es Plan 2b).",
+            "  ",
+            "  Plan: arquitectura/decisiones/propuestas/crear-modulo-identidad-visual-backend.json"
+          ]
+        },
+        {
+          "id": "F6.op3_push",
+          "pseudocodigo": [
+            "git push -u origin claude/hola-2Pn9F",
+            "si falla por red: retry 2s, 4s, 8s, 16s",
+            "NO crear PR sin OK humano explicito"
+          ]
+        }
+      ]
+    }
+  ],
+
+  "cross_checks_al_cerrar_fase": [
+    {"id": "CC1", "comando": "npm run validate:ci", "ejecutar_tras": ["F1", "F2", "F3", "F4", "F5"], "salida_esperada": "PASS"},
+    {"id": "CC2_jq_module_json", "comando": "jq . modules/pizzepos/identidad-visual/module.json > /dev/null", "ejecutar_tras": ["F1"], "salida_esperada": "OK"},
+    {"id": "CC3_jq_blueprint", "comando": "jq . modules/pizzepos/identidad-visual/identidad-visual.blueprint.json > /dev/null", "ejecutar_tras": ["F2"], "salida_esperada": "OK"},
+    {"id": "CC4_5_css_existen", "comando": "ls modules/pizzepos/identidad-visual/builtin/*.css | wc -l", "ejecutar_tras": ["F3"], "salida_esperada": "5"},
+    {"id": "CC5_runtime_test_passes", "comando": "node tests/runtime-cases/identidad-visual-ciclo-basico.js", "ejecutar_tras": ["F4"], "salida_esperada": "PASS"},
+    {"id": "CC6_carta_design_intacto", "comando": "ls modules/pizzepos/carta-design/design-profiles/*.json | wc -l", "ejecutar_tras": ["F3", "F4", "F5"], "salida_esperada": "5 (intacto)"},
+    {"id": "CC7_git_scope", "comando": "git status --short", "ejecutar_tras": ["F6.op1"], "verificar": "solo archivos del scope"}
+  ],
+
+  "prohibido_absoluto": [
+    "Tocar modules/pizzepos/carta-design/ (sigue intacto v1.2.0 hasta Plan 4)",
+    "Tocar modules/pizzepos/carta-impresion/ (eso es Plan 3)",
+    "Tocar frontend/* (eso es Plan 2b)",
+    "Tocar otros modulos del repo",
+    "Modificar contratos transversales o validators",
+    "Crear PR sin OK humano explicito",
+    "Hacer commit con git add . o git add -A",
+    "Hacer push con --force",
+    "Saltar OK explicito entre fases F1-F6",
+    "Regenerar drift-baseline sin OK humano y verificacion de que diff solo incluye entries del modulo nuevo",
+    "Implementar editor o creador frontend (eso es Plan 2b)",
+    "Cocinar mecanica conversacional del editor en el blueprint (afordance minima en frontend, mecanica completa v1.1+)",
+    "Reabrir las 8 decisiones ya cocinadas (p2_d1..p2_d7 + p2a_d8) al ejecutar el plan",
+    "Pushear sin haber verificado que prerequisitos de ejecucion se cumplen (Plan 1 ejecutado y mergeado)",
+    "Anyadir librerias nuevas al package.json sin necesidad real",
+    "Decir 'todo OK' sin reportar comando ejecutado y salida real"
+  ],
+
+  "salida_final_del_horizonte": {
+    "plan_2a_estado_terminal": "Modulo identidad-visual backend v1.0.0 en main. 6 operaciones canonicas funcionando. 5 CSS built-in semilla. Eventos canonicos publicados. Test runtime pasando. carta-design intacto. Listo para que Plan 2b (frontend) se cocine y ejecute.",
+    "archivos_finales_creados": [
+      "modules/pizzepos/identidad-visual/module.json",
+      "modules/pizzepos/identidad-visual/identidad-visual.blueprint.json",
+      "modules/pizzepos/identidad-visual/builtin/elegant-minimal.css",
+      "modules/pizzepos/identidad-visual/builtin/modern-bold.css",
+      "modules/pizzepos/identidad-visual/builtin/rock-bold.css",
+      "modules/pizzepos/identidad-visual/builtin/rustic-italian.css",
+      "modules/pizzepos/identidad-visual/builtin/seasonal-fresh.css",
+      "tests/runtime-cases/identidad-visual-ciclo-basico.js"
+    ],
+    "archivos_posiblemente_modificados": ["drift-baseline.json (solo si emerge drift legitimo del modulo nuevo con OK humano)"],
+    "verificacion_terminal": [
+      "Todos los CC1-CC7 verificados como salida esperada",
+      "validate:ci PASS sin drift nuevo",
+      "git status limpio del scope",
+      "Commit pusheado a origin/claude/hola-2Pn9F"
+    ],
+    "siguiente_natural_para_el_humano": "Tras merge del Plan 2a a main, invocar /ana en sesion nueva y decir: 'cocinemos Plan 2b del horizonte identidad-visual --el frontend'. El cocinado de Plan 2b puede empezar con: pantalla canonica con Browser + Preview vivo del producto + boton Activar + afordances que pre-rellenan chat."
+  }
+}

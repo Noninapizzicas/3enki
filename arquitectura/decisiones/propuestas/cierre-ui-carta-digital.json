@@ -204,7 +204,7 @@
       ],
       "recomendacion": "A",
       "comentario_recomendacion": "A es lo mas pragmatico: el store ya escucha carta.actualizada por otros consumers; comparar timestamps es trivial. El badge ayuda al comerciante a saber que algo se actualizo upstream. NO recompose automatico (preserva A1) --solo info.",
-      "respuesta_usuario": null
+      "respuesta_usuario": { "opcion": "A", "motivo": "eleccion directa del humano (comparador de timestamps, badge informativo sin recompose auto)", "cerrada_en": "2026-06-02" }
     },
     {
       "id": "Q5",

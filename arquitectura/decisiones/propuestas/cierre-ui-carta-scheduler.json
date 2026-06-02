@@ -678,5 +678,17 @@
       "Unico hermano sin route ni store --ahora con UI desde cero."
     ],
     "siguiente_natural": "carta-design (5to y ULTIMO hermano). Aplicar disciplina: releer blueprint, bumpear contrato v1.0.5 si emerge drift, cocinar plan backend + UI."
+  },
+
+  "estado_de_ejecucion": {
+    "ejecutado_por": "fede",
+    "rama": "claude/ana-tX6dS",
+    "preguntas_cerradas": {"Q1": "A", "Q2": "A", "Q3": "A", "Q4": "A"},
+    "F1": {
+      "cerrada_en": "2026-06-02",
+      "commit_hash": "pending",
+      "salida_real": "Creada ruta routes/[project_id]/carta-scheduler/+page.svelte (LazyShell) + store stores/carta-scheduler.ts (~190 lineas, solo lectura). Desviaciones del pseudocodigo fieles a la API real: MqttRequestError/RESOURCE_NOT_FOUND en vez de res.status===404; subscribe desde '$lib/ui-core/mqtt' (no existe '$lib/ui-core/bus'). conflictosDetectados derived local (cruce canal+cron). loadReglas/loadPendientes leen {reglas|pendientes}[] defensivo.",
+      "cross_checks": "CC1 validate:ci PASS sin drift; CC3 OK sin mutaciones; CC4 OK sin invocaciones; CC6=4 paths canonicos. Type-check completo diferido a CC2 build (F2)."
+    }
   }
 }

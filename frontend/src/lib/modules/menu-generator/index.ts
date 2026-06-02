@@ -22,23 +22,3 @@ export {
   type GenerationState,
   type GenerationResult
 } from '$lib/stores/menu-generator';
-
-// Carta manager store
-export {
-  cartaManagerStore,
-  loadCartas,
-  getCarta,
-  selectCarta,
-  clearError,
-  initCartaManagerSubscriptions,
-  sortedCartas,
-  selectedCarta,
-  cartaLoading,
-  cartaError,
-  cartaCount,
-  type Carta,
-  type CartaResumen,
-  type Producto,
-  type Categoria,
-  type Ingrediente
-} from '$lib/stores/carta-manager';

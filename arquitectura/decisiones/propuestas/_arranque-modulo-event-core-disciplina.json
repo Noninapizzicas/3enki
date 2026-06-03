@@ -1,0 +1,350 @@
+{
+  "_doc": "Documento de arranque que CONGELA el analisis cocinado en la sesion 2026-06-02/03 del audit en vivo del proyecto V (Vapers_Alhama + V) que termino descubriendo el patron meta de centralismo local en modulos event-core. NO es contrato canonico — es memo de cocina en formato JSON+pseudocodigo+OOP, elegido deliberadamente para que el LLM-runtime futuro lo lea literal y no lo recomponga con su propio ruido idiomatico. El formato es parte del mensaje. Cuando llegue el momento de canonizar (tajadas decididas con el humano), este documento es el insumo invariante. Las prohibiciones autoreferenciales al final son la barrera contra la propia degeneracion.",
+
+  "id": "_arranque-modulo-event-core-disciplina",
+  "version": "0.1.0",
+  "creada": "2026-06-03",
+  "estado": "analisis_cocinado_no_canonizado",
+  "autor_efectivo": "claude_sonnet_4_5_via_sesion_humano_compañero",
+
+  "razon_del_formato": {
+    "problema_observado_durante_la_sesion": "Los contratos del repo en JSON con principios en prosa libre se LEEN como prosa por el LLM, decodifican a representaciones internas, pierden precision en la decodificacion, y cuando el LLM despues escribe codigo el resultado recompone con ruido idiomatico (cache defensiva, fallback silencioso, lectura disco directa). La conciencia intelectual del contrato leido al inicio de sesion NO sostiene la disciplina en el turno 20 al escribir un modulo.",
+    "decision_de_forma": [
+      "campos discretos JSON sin prosa libre",
+      "pseudocodigo OOP en metodos_canonicos y metodos_prohibidos (no descripciones)",
+      "regex concretas en patrones de codigo a evitar (no 'evita la cache')",
+      "casos testigo con archivo:linea (no 'a veces ocurre')",
+      "creencias del LLM nombradas literalmente para que el LLM se reconozca al leer"
+    ],
+    "evidencia_indirecta_de_que_funciona": "Los blueprints del repo (JSON+pseudocodigo) se ejecutan razonablemente literal por el LLM-runtime. Las violaciones existen pero son excepciones. Las skills Markdown (`audit-module.md`, `ana.md`, etc.) divagan mas — el LLM las usa como background, no como instruccion ejecutable en cada acto."
+  },
+
+  "insight_central": {
+    "nombre_canonico": "centralismo_local",
+    "tambien_llamado": ["soberania_sin_pacto", "autonomia_sin_federacion", "modulo_sin_conciencia_federal"],
+    "definicion_corta": "Cada modulo se trata a si mismo como centro autosuficiente del sistema y al resto como contexto opcional.",
+    "verdad_event_core_que_lo_contradice": "Event-core exige federacion: cada modulo soberano en su dominio Y obligado al bus como autoridad superior a su memoria propia. La primera mitad de la regla se cumple; la segunda se olvida.",
+    "manifestacion_general": "El modulo asume que su version interna del estado es la verdad. Los desencuentros con el resto del sistema los atribuye al resto. Se cubre con cache, fallback, lectura disco directa, catch tragador, decision libre sobre campos que el pseudocodigo deja abiertos. Cada cubrimiento individual es 'buena programacion defensiva' segun el corpus del que el LLM aprendio. Estructuralmente rompen event-core puro."
+  },
+
+  "paradigma_forzado_clausula_clave_de_la_sesion": {
+    "todo_el_codigo_del_repo_lo_escribio_un_llm": true,
+    "el_paradigma_event_core_va_contracorriente_del_entrenamiento_del_llm": true,
+    "razon": "El corpus de codigo del que el LLM aprendio esta dominado por microservicios autonomos, defensive programming, cache local, fallback silencioso, retry, optimistic UI, lazy loading. Esos son los IDIOMS aprendidos. Event-core puro (sin cache propia, sin fallback, sin lectura disco directa, sin defensa local) es excepcion en el corpus.",
+    "consecuencia_operativa_critica": "La tendencia idiomatica sale por defecto cuando el LLM escribe un modulo. El contrato leido al inicio de la sesion no domina al impulso aprendido. El alcoholico reconoce el alcoholismo en otros y aun asi toma el proximo trago — la conciencia no cura la tendencia.",
+    "implicacion_para_canonizar": "Los contratos narrativos NO bastan. La disciplina activa requiere andamios mecanicos: validators de regex sobre patrones especificos, prompts que activan la disciplina antes de cada acto de escribir, blueprints que dejan menos espacio a la divagacion. La disciplina NO se transmite por comprension del principio, se transmite por estructura del formato."
+  },
+
+  "actitudes_observadas_por_modulo_durante_la_sesion": [
+    {
+      "modulo": "pizzepos/productos",
+      "actitud_central": "desconfianza_del_bus_se_cubre_solo",
+      "descripcion_corta": "No cree que el bus le notifique a tiempo o correctamente. Se cubre por dentro con cache, fallback, lectura disco directa.",
+      "manifestaciones_codigo_caso_testigo": [
+        {
+          "archivo": "modules/pizzepos/productos/index.js",
+          "linea_aprox": 28,
+          "codigo": "this.productosPerProject = new Map();",
+          "tipo": "cache_defensiva"
+        },
+        {
+          "archivo": "modules/pizzepos/productos/index.js",
+          "linea_aprox": 62,
+          "codigo": "resolveToActiveProject(projectId) { if (no_tiene_datos(projectId)) return primer_otro_con_datos(); }",
+          "tipo": "fallback_silencioso_de_identidad"
+        },
+        {
+          "archivo": "modules/pizzepos/productos/index.js",
+          "linea_aprox": 1133,
+          "codigo": "const files = await fs.readdir(cartasDir);",
+          "tipo": "bypass_filesystem"
+        },
+        {
+          "archivo": "modules/pizzepos/productos/index.js",
+          "linea_aprox": 1167,
+          "codigo": "productosMap.set(prod.id, { ...prod, activo: true });",
+          "tipo": "sobreescritura_de_estado_al_recargar"
+        },
+        {
+          "archivo": "modules/pizzepos/productos/index.js",
+          "linea_aprox": 1115,
+          "codigo": "async loadCartaFromProject(project_id) { // ignora carta_id parametro, lee todas }",
+          "tipo": "declaracion_vs_codigo_divergente_en_la_tool"
+        }
+      ]
+    },
+    {
+      "modulo": "pizzepos/carta-manager",
+      "actitud_central": "publico_ahora_persisto_despues",
+      "descripcion_corta": "Eventual consistency como protagonismo prematuro. Publica carta.creada antes de que el disco este escrito; quien reaccione encuentra hueco.",
+      "manifestaciones_observadas": [
+        "carta.creada publicado 60-68 segundos antes del fs.write.request correspondiente (audit 2026-06-02)",
+        "module.json declara que publica project.deleted; el codigo _deleteProject no lo hace, solo _publishUIState"
+      ]
+    },
+    {
+      "modulo": "pizzepos/menu-generator",
+      "actitud_central": "interpreto_libremente_no_soy_literal",
+      "descripcion_corta": "Decide ids, alucina timestamps, mete blobs compuestos en campo nombre. Trata pseudocodigo del blueprint como sugerencia.",
+      "manifestaciones_observadas": [
+        "created_at: 2025-07-10 (pasado falso) y updated_at: 2026-06-20 (futuro) en carta Catalogo Activo — fechas alucinadas, no nowISO()",
+        "version: 2 en carta recien creada (deberia ser 1)",
+        "nombre: 'Smells Like Teen Spirit (Nirvana) - Huele a Espiritu Adolescente' — tres campos canonicos (titulo, artista, traduccion) pegados en blob en lugar de descomponer a nombre + descripcion + etiquetas",
+        "inconsistencia de shape: categoria_id en una carta, categoria en otra"
+      ]
+    },
+    {
+      "modulo": "project-manager",
+      "actitud_central": "cada_cara_mia_es_independiente",
+      "descripcion_corta": "Las distintas superficies (UI handler, bus handler, declaracion module.json) tienen shapes y reglas distintas sin coordinacion interna.",
+      "manifestaciones_observadas": [
+        "onProjectDelete espera data.id; el envelope canonico del bus lleva data.project_id — early-return silencioso",
+        "module.json declara publish de project.deleted; _deleteProject no lo publica",
+        "_deleteProject exige is_active=false (regla single-active); handleUIActivate devuelve activeProjectIds Set (modelo multi-active) — los dos handlers se contradicen sobre el modelo de identidad activa",
+        "UI rail devuelve camelCase (isActive, createdAt); bus envelope usa snake_case (project_id, correlation_id, created_at)"
+      ]
+    },
+    {
+      "modulo": "filesystem",
+      "actitud_central_pre_fix_de_esta_sesion": "todo_lo_que_me_llega_es_valido",
+      "descripcion_corta": "Aceptaba paths con prefijo /storage/ y los duplicaba. Sin defensa frente a emisores que recomponen base_path.",
+      "estado_post_fix": "RESERVED_INTERNAL_PREFIXES anyadido en pieza 2 del horizonte storage-layout (commit fba922bd). Familia cerrada para /storage/, /projects/, /data/."
+    }
+  ],
+
+  "tendencias_del_llm_que_producen_centralismo_local": [
+    {
+      "id": "T1_cache_defensiva",
+      "creencia_aprendida_corpus": "Memorizar evita llamadas extra al bus y mejora performance.",
+      "verdad_event_core": "El bus es fuente unica de autoridad. Memorizar duplica autoridad. El estado canonico vive en eventos, no en this._cache.",
+      "patron_codigo_a_evitar_pseudocodigo_oop": [
+        "this._cache = new Map<Key, Value>()",
+        "if (this._cache.has(key)) return this._cache.get(key)",
+        "this._cache.set(key, value) // sin invalidacion via bus"
+      ],
+      "alternativa_canonica_pseudocodigo": [
+        "result = await this.bus.publishAndWait(eventType, payload)",
+        "// O si el modulo es dueno del dominio: mantener estado solo en memoria volatil que se reconstruye al onLoad escuchando los eventos canonicos del propio dominio. NUNCA leer disco directo."
+      ],
+      "caso_testigo_en_repo": "modules/pizzepos/productos/index.js:28"
+    },
+    {
+      "id": "T2_fallback_silencioso",
+      "creencia_aprendida_corpus": "Si el id no resuelve, busco algo parecido para no romper el flujo.",
+      "verdad_event_core": "Un id que no resuelve es bug. Fallar ruidoso expone el desencuentro. Fallback silencioso lo enmascara y produce estados imposibles de diagnosticar.",
+      "patron_codigo_a_evitar_pseudocodigo_oop": [
+        "resolveTo*Fallback(id) {",
+        "  if (this.cache.has(id)) return id;",
+        "  for (const otroId of this.cache.keys()) return otroId; // fallback al primero",
+        "  return id;",
+        "}"
+      ],
+      "alternativa_canonica_pseudocodigo": [
+        "if (!this.cache.has(id)) {",
+        "  throw new Error(`Id no resuelto: ${id}. Esperaba evento project.activated con base_path para este proyecto.`)._withCode('INVALID_INPUT');",
+        "}"
+      ],
+      "caso_testigo_en_repo": "modules/pizzepos/productos/index.js:62-76"
+    },
+    {
+      "id": "T3_bypass_filesystem",
+      "creencia_aprendida_corpus": "fs.readdir y fs.readFile son APIs nativas estandar; usarlas es eficiente.",
+      "verdad_event_core": "filesystem es modulo dueno del scope; pasar por el bus es la unica forma de que el modulo dueno detecte cambios y aplique disciplina (validacion de path, scope=system, audit).",
+      "patron_codigo_a_evitar_pseudocodigo_oop": [
+        "const fs = require('fs').promises;",
+        "await fs.readdir(absolutePath);",
+        "await fs.readFile(absolutePath, 'utf8');",
+        "await fs.writeFile(absolutePath, data);"
+      ],
+      "alternativa_canonica_pseudocodigo": [
+        "list_resp = await this.bus.publishAndWait('fs.list.request', { project_id, path: '/<vertical>/<entidad>/' });",
+        "read_resp = await this.bus.publishAndWait('fs.read.request', { project_id, path: '/<vertical>/<entidad>/<id>.json' });",
+        "edit_resp = await this.bus.publishAndWait('fs.edit.request', { project_id, path, patches: [...rfc6902...] });"
+      ],
+      "caso_testigo_en_repo": "modules/pizzepos/productos/index.js:1133",
+      "drift_relacionado_existente_en_baseline": "drift_bypass_filesystem (31 warnings en validator storage-layout)"
+    },
+    {
+      "id": "T4_catch_tragador",
+      "creencia_aprendida_corpus": "try { ... } catch (_) {} para que el flujo no rompa.",
+      "verdad_event_core": "El error oculto se manifiesta despues como inconsistencia inexplicable. El error publicado al bus (con error.code canonico) es la unica forma de que el sistema se diagnostique a si mismo.",
+      "patron_codigo_a_evitar_pseudocodigo_oop": [
+        "try { await this.doThing(); } catch (_) {}",
+        "try { this.cache.set(k, v); } catch { /* ignore */ }"
+      ],
+      "alternativa_canonica_pseudocodigo": [
+        "try {",
+        "  await this.doThing();",
+        "} catch (err) {",
+        "  this.logger.error('modulo.operacion.failed', { error: err.message, kind: '...', code: err._code });",
+        "  this.metrics?.increment('modulo.errors', { kind });",
+        "  throw err; // O return errorResponse canonico, NUNCA tragar silencioso",
+        "}"
+      ],
+      "caso_testigo_en_repo": "modules/filesystem/index.js:141,143 (pre-fix de esta sesion; corregido en commit a38d1eb0)"
+    },
+    {
+      "id": "T5_completar_campos_que_el_pseudocodigo_no_pide",
+      "creencia_aprendida_corpus": "El blueprint dejo un campo vacio o sugerido; completo con valor 'razonable'.",
+      "verdad_event_core": "El pseudocodigo es ley. nowISO() es nowISO(), no '2025-07-10'. version=1 al crear, no version=2 porque queda mejor. uuid() es uuid(), no '3f4a5b6c-7d8e-9f0a-...' inventado parcialmente.",
+      "patron_codigo_a_evitar_pseudocodigo_oop": [
+        "// pseudocodigo dice: created_at: nowISO()",
+        "// el LLM escribe: created_at: '2025-07-10T12:00:00.000Z'",
+        "// pseudocodigo dice: id: uuid()",
+        "// el LLM escribe: id: 'carta_catalogo_activo' o inventa UUID parcial"
+      ],
+      "alternativa_canonica_pseudocodigo": [
+        "// Literal: si el pseudocodigo dice nowISO() y uuid(), el LLM-runtime invoca esas funciones primitivas via codigo o las usa por defecto del JSON Patch op",
+        "// Sin libertad creativa sobre campos canonicos del shape"
+      ],
+      "caso_testigo_en_repo": "audit 2026-06-02 carta Catalogo Activo: created_at:'2025-07-10T12:00:00.000Z' (pasado falso), updated_at:'2026-06-20T12:00:00.000Z' (futuro), version:2 en carta nueva. Y tarifas.json.general apuntaba a UUID con primer segmento correcto pero resto inventado, no matcheando el archivo real de la carta.",
+      "drift_relacionado_existente": "llm-runtime-discipline.contract principio `no_inventes_datos` + `pseudocodigo_es_ley`"
+    },
+    {
+      "id": "T6_doble_shape_segun_la_cara",
+      "creencia_aprendida_corpus": "Convencion de la comunidad: camelCase para JS/UI, snake_case para APIs. Aplico la idiomatica de cada superficie.",
+      "verdad_event_core": "Un solo shape canonico across-the-board. El modulo project-manager.handleUIList devuelve isActive, createdAt; bus envelope canonico usa is_active, created_at. No-shape consistente = no contrato verificable.",
+      "patron_codigo_a_evitar_pseudocodigo_oop": [
+        "class HandlerUI { return { isActive: x.is_active, createdAt: x.created_at } }",
+        "class HandlerBus { return { is_active: x.is_active, created_at: x.created_at } }"
+      ],
+      "alternativa_canonica_pseudocodigo": [
+        "// Un solo shape por evento canonico, declarado en events.contract/<subsistema>-flow.contract",
+        "// Si el frontend prefiere camelCase, transformacion en la frontera del frontend, no en el modulo del bus"
+      ],
+      "caso_testigo_en_repo": "modules/project-manager/index.js handleUI* (camelCase) vs onProject* (snake_case via envelope canonico)"
+    },
+    {
+      "id": "T7_publico_ahora_persisto_despues_handoff_prematuro",
+      "creencia_aprendida_corpus": "Eventual consistency es patron canonico. Publico la notificacion en el momento que la accion empieza para que los consumidores reaccionen rapido.",
+      "verdad_event_core": "Eventual consistency es legitimo solo si el evento publicado tiene la informacion completa para que el consumer trabaje sin ir al disco. Publicar carta.creada 60 segundos antes de fs.write.request del archivo deja un hueco diagnostico donde otros modulos van a leer y no encuentran. Publicar cuando el cambio aterrizo, o publicar con payload suficiente para que consumers no necesiten leer disco hasta que aterrice.",
+      "patron_codigo_a_evitar_pseudocodigo_oop": [
+        "async function save(carta) {",
+        "  this.publish('carta.creada', { carta_id: carta.meta.id });",
+        "  // ... 60s de procesamiento ...",
+        "  await fs.write.request({ path, content: carta });",
+        "}"
+      ],
+      "alternativa_canonica_pseudocodigo": [
+        "async function save(carta) {",
+        "  await fs.write.request({ path, content: carta });",
+        "  this.publish('carta.creada', { carta_id, carta }); // payload completo, post-aterrizaje",
+        "}"
+      ],
+      "caso_testigo_en_repo": "audit 2026-06-02 flujo carta-manager: carta.creada @ 17:59:41, fs.write.request @ 18:00:49 (68s de hueco)"
+    }
+  ],
+
+  "preguntas_canonicas_a_hacerse_al_escribir_metodo_de_un_modulo_event_core": [
+    "¿este metodo cambia estado que solo yo conozco? (si si: el estado deberia ser publicable al bus, no privado)",
+    "¿este metodo asume identidad (project_id, user_id, carta_id) que el evento de entrada no trajo explicito? (si si: estoy haciendo fallback silencioso)",
+    "¿este metodo lee o escribe filesystem con require('fs')? (si si: estoy bypassando filesystem; debe ser fs.*.request por bus)",
+    "¿este metodo tiene try { ... } catch (_) {} o catch sin logger? (si si: estoy tragando errores silenciosos)",
+    "¿este metodo decide valores para campos que el blueprint/pseudocodigo deja sin valor explicito? (si si: estoy inventando)",
+    "¿este metodo devuelve un shape distinto segun la cara (UI vs bus) sin que ese cambio este canonizado por contrato? (si si: estoy creando doble shape)",
+    "¿este metodo publica un evento de notificacion ANTES de que la mutacion correspondiente este aterrizada en disco/BD? (si si: handoff prematuro)"
+  ],
+
+  "molde_propuesto_para_el_contrato_canonico_futuro": {
+    "nombre_tentativo": "modulo-event-core-disciplina",
+    "no_usar_en_ninguna_seccion": ["Markdown narrativo", "prosa libre en campos JSON", "skills .md como soporte"],
+    "usar_obligatoriamente": ["JSON con campos discretos", "pseudocodigo OOP en metodos_canonicos y metodos_prohibidos", "regex concretas sobre patrones de codigo", "casos testigo con archivo:linea_aproximada", "creencias del LLM nombradas literalmente"],
+    "shape_canonico_tentativo": {
+      "clase_abstracta": {
+        "nombre": "ModuloEventCore",
+        "extends": "BaseModule",
+        "invariantes_runtime": ["lista de pseudocodigo verificable"],
+        "metodos_canonicos": "objeto: { nombre_metodo: pseudocodigo[] }",
+        "metodos_prohibidos": "array de { nombre_o_patron_regex, razon, alternativa_canonica_pseudocodigo[] }"
+      },
+      "tendencias_que_el_llm_debe_descreer": "array de { id, creencia_aprendida_corpus, verdad_event_core, patron_codigo_a_evitar_pseudocodigo, alternativa_canonica_pseudocodigo, caso_testigo_en_repo }",
+      "preguntas_canonicas_al_escribir_metodo": "array de string en forma de pregunta directa"
+    },
+    "validators_complementarios_que_enforce": [
+      "regex de cada metodos_prohibidos.nombre_o_patron sobre cada modules/**/*.js — drift_centralismo_local_<patron>",
+      "verificacion de que ningun modulo (excepto whitelist canonica filesystem/database-manager/project-manager) tiene require('fs') con writeFile/readFile/readdir/mkdir/unlink directos",
+      "verificacion de que ningun modulo tiene catch sin logger en bloque que envuelve I/O",
+      "verificacion de que campos timestamp en payloads publicados al bus tienen pattern ISO8601 valido y NO tienen año < 2026-01 o > now+1d (caza alucinaciones de fechas)"
+    ]
+  },
+
+  "tajadas_propuestas_no_decididas_aun": [
+    {
+      "id": "tajada_1_canonizar_modulo_event_core_disciplina_v1",
+      "scope": "Escribir el contrato modulo-event-core-disciplina.contract.json siguiendo el molde de este documento + schema AJV + validator + entry en CLAUDE.md + entry en scripts/validate-all.js.",
+      "horizonte_estimado": "1-2 sesiones",
+      "blocker_para_siguientes_tajadas": true,
+      "razon_de_ir_primero": "Sin el contrato canonico mecanico, las siguientes tajadas no tienen barandilla."
+    },
+    {
+      "id": "tajada_2_reescritura_modulo_productos_bajo_disciplina_nueva",
+      "scope": "Reescribir modules/pizzepos/productos desde cero como caso piloto del contrato disciplina. Aggregate root vs vista declarada. Sin cache propia. Sin resolveTo*Fallback. Sin fs.readdir directo. Sin sobreescritura de activo:true.",
+      "horizonte_estimado": "1 sesion",
+      "blocker_para_siguientes_tajadas": false,
+      "razon": "productos es el caso testigo mas claro de centralismo local; arreglarlo demuestra que la disciplina funciona en runtime"
+    },
+    {
+      "id": "tajada_3_canonizar_aggregate_vs_vista",
+      "scope": "Contrato modulo-aggregate-vs-vista.contract.json — distingue los dos roles canonicamente. productos seria 'vista proyectada' (read model regenerable). carta-manager seria 'aggregate root' (write side). Reglas distintas para cada uno.",
+      "horizonte_estimado": "1-2 sesiones",
+      "depende_de": ["tajada_1"]
+    },
+    {
+      "id": "tajada_4_canonizar_project_context_propagation",
+      "scope": "Contrato project-context-propagation.contract.json — el project_id viaja explicito en cada evento, sin fallback al activo conocido. Cierra T2 (fallback silencioso de identidad).",
+      "horizonte_estimado": "1 sesion",
+      "depende_de": ["tajada_1"]
+    },
+    {
+      "id": "tajada_5_endurecer_storage_layout_bypass_filesystem",
+      "scope": "Subir drift_bypass_filesystem de warning a error en validator storage-layout despues de gracia de migracion. Los 31 warnings preexistentes se convierten en deuda forzada. Cierra T3 (bypass_filesystem) mecanicamente.",
+      "horizonte_estimado": "horizonte de migracion 5-10 sesiones para cerrar los 31 modulos uno por uno",
+      "depende_de": ["tajada_1"]
+    },
+    {
+      "id": "tajada_6_canonizar_evento_mutacion_vs_notificacion",
+      "scope": "Refuerzo de events.contract con seccion 'mutacion vs notificacion'. producto.actualizado es notificacion, NO mutacion (no se publica para que otros recompongan estado). Cierra T7 (handoff prematuro) parcialmente.",
+      "horizonte_estimado": "1 sesion",
+      "depende_de": ["tajada_1"]
+    }
+  ],
+
+  "prohibido_en_proximas_sesiones_para_este_documento": [
+    "Recomponer este documento en prosa Markdown para 'mejor legibilidad humana' — el formato JSON+pseudocodigo es la barrera; perderla es perder el insight",
+    "Eliminar campos discretos por considerarlos 'redundantes' — la redundancia es parte del andamio",
+    "Mover el contenido a un .md de propuestas — ese formato es el que el insight identifica como degenerable",
+    "Aceptar tajadas adicionales sin que esten en este documento — el ambito de las tajadas es fijo hasta que se cocine con el humano una version 0.2.0 actualizada",
+    "Aceptar que un LLM futuro 'resuma' este documento como contexto previo — el documento debe leerse literal; el resumen es donde el ruido vuelve",
+    "Renombrar 'centralismo_local' a algo 'mas profesional' — el nombre es del humano y captura la actitud; cualquier rename pierde la marca de origen"
+  ],
+
+  "casos_testigo_runtime_que_originaron_este_documento": [
+    "audit 2026-06-02 flujo menu-generator -> carta-manager en proyecto Companero: doble /storage/ en path final, carta_si.json acabo en companero/storage/storage/pizzepos/cartas/. Cerrado parcialmente en horizonte storage-layout.",
+    "audit 2026-06-02 proyecto V tras crear las 3 cartas (Happ Bar vapers, Catalogo Activo pizzeria, Vapers Premium): pestaña Europe... aparece vacia en POS aunque archivo en disco tiene 15 vapers; productos.list devuelve 0 aunque productos.load_carta reporto 'exitosamente cargada'. Diagnostico: 4 drifts simultaneos en modules/pizzepos/productos (cache, fallback, bypass filesystem, sobreescritura activo:true).",
+    "audit 2026-06-02 reset proyectos via bus: onProjectDelete espera data.id no data.project_id, fail silencioso en 4 proyectos. Doble shape camelCase UI vs snake_case bus.",
+    "audit 2026-06-02 carta Catalogo Activo: timestamps alucinados (2025-07 pasado, 2026-06-20 futuro), version:2 en carta nueva, blob compuesto en nombre de pancitos sin descomponer a campos canonicos."
+  ],
+
+  "conexion_con_contratos_existentes_que_NO_capturaron_estos_drifts": [
+    {
+      "contrato": "llm-runtime-discipline.contract.json",
+      "principios_relacionados": ["pseudocodigo_es_ley", "no_inventes_datos", "no_explorar_estado_ajeno"],
+      "por_que_no_basto": "Texto del principio es prosa narrativa. El LLM lo lee al inicio de sesion, asentir, olvida durante 20 turnos al escribir. Necesita patron_codigo_a_evitar_pseudocodigo concreto y regex de validator para forzar la disciplina mecanicamente, no por buena voluntad."
+    },
+    {
+      "contrato": "paradigma-no-cabe.contract.json",
+      "entries_relacionadas": ["cache_materializado_del_estado_de_un_dominio"],
+      "por_que_no_basto": "Una entry no es la familia. Centralismo local es la familia abstracta; cache_materializado es un caso. Tendencias T1-T7 son las facetas. La forma del contrato permite escalar."
+    },
+    {
+      "contrato": "storage-layout.contract.json",
+      "drifts_capturados_parcialmente": ["bypass_filesystem (warning, no error)"],
+      "por_que_no_basto": "Warning permite ignorar. Subirlo a error (tajada_5) lo cura. Pero falta canonizar las otras 6 tendencias en formato accionable."
+    },
+    {
+      "contrato": "modulo-clase-robusta.contract.json",
+      "principios_relacionados": ["constructor declarativo", "5 secciones canonicas"],
+      "por_que_no_basto": "Se enfoca en la FORMA del modulo OOP (clase, secciones, banners), no en la ACTITUD del modulo respecto al bus. Es complementario, no sustituto."
+    }
+  ]
+}

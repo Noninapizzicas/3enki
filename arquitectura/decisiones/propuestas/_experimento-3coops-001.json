@@ -1,0 +1,194 @@
+{
+  "_meta": {
+    "documento_id": "experimento-3coops-001",
+    "version": "0.2.0",
+    "creado": "2026-06-03",
+    "lenguaje": "3coops",
+    "intencion": "Define el lenguaje 3coops (code + OOP + pseudo-code) como sustrato formal de canonizacion para documentos del repo. Universal: aplica a cualquier subsistema. Self-bootstrap: define la gramatica usando las primitivas que la gramatica declara.",
+    "supersedes": "version 0.1.0 contaminada con mezcla conceptual pipeline ana/notario/fede; rehecha tras feedback del humano companyero. La tendencia T8_deducir_terminos_nuevos_del_contexto_inmediato (caso testigo: yo asumi 3coops como tres cooperantes sin verificar) queda anotada en el documento de uso _arranque-modulo-event-core-disciplina v0.2.0"
+  },
+
+  "lenguaje_3coops": {
+    "type": "abstract_language",
+    "name": "3coops",
+    "etimologia": "3 componentes formales (Code, OOP, Pseudo-code) — NO 3 cooperantes",
+    "componentes": [
+      {
+        "id": "code",
+        "descripcion_corta": "JSON estricto como contenedor sintactico",
+        "constraints": [
+          "no prosa libre",
+          "cada string tiene maxLength o pattern regex",
+          "no conectores discursivos en valores: aunque, salvo_que, en_general"
+        ]
+      },
+      {
+        "id": "OOP",
+        "descripcion_corta": "Modelo conceptual mediante clases abstractas, metodos, fields, invariantes, herencia explicita",
+        "constraints": [
+          "clase abstracta declara extends explicito o null",
+          "cada metodo tiene visibility + params + returns + pseudo_code + throws",
+          "invariantes son pseudo_code evaluable mentalmente"
+        ]
+      },
+      {
+        "id": "pseudo_code",
+        "descripcion_corta": "Lineas que parsean como JS/TS-like, no descripciones en lenguaje natural",
+        "constraints": [
+          "cada linea comienza con palabra reservada o identificador: this, await, const, let, if, for, return, function, class",
+          "comentarios solo // breves",
+          "no parrafos explicativos"
+        ]
+      }
+    ]
+  },
+
+  "primitivas_canonicas": [
+    {
+      "type": "primitiva",
+      "name": "AbstractClass",
+      "shape_json": {
+        "type": "literal_string \"abstract_class\"",
+        "name": "string matches /^[A-Z][A-Za-z0-9]*$/",
+        "extends": "string | null",
+        "abstract_methods": "object<MethodName, pseudo_code_line>",
+        "concrete_invariants": "array<pseudo_code_line>",
+        "forbidden_patterns": "array<ForbiddenPattern>"
+      }
+    },
+    {
+      "type": "primitiva",
+      "name": "Method",
+      "shape_json": {
+        "type": "literal_string \"method\"",
+        "name": "string matches /^[a-z][A-Za-z0-9]*$/",
+        "visibility": "enum [\"public\", \"private\", \"protected\"]",
+        "params": "array<Param>",
+        "returns": "type_expression",
+        "pseudo_code": "array<pseudo_code_line> maxItems 30",
+        "throws": "array<error_code>"
+      }
+    },
+    {
+      "type": "primitiva",
+      "name": "Invariant",
+      "shape_json": {
+        "type": "literal_string \"invariant\"",
+        "expression": "pseudo_code_line maxLength 200",
+        "applies_to": "ClassName | MethodName | global"
+      }
+    },
+    {
+      "type": "primitiva",
+      "name": "ForbiddenPattern",
+      "shape_json": {
+        "type": "literal_string \"forbidden_pattern\"",
+        "pattern_regex": "string PCRE valida",
+        "reason": "string maxLength 200",
+        "alternative_pseudo_code": "array<pseudo_code_line> maxItems 10"
+      }
+    },
+    {
+      "type": "primitiva",
+      "name": "Tendencia",
+      "shape_json": {
+        "type": "literal_string \"tendencia\"",
+        "id": "string matches /^T[0-9]+_[a-z_]+$/",
+        "creencia_aprendida_corpus": "string maxLength 200 sin conectores discursivos",
+        "verdad_paradigma_que_la_contradice": "string maxLength 200 sin conectores discursivos",
+        "patron_codigo_a_evitar_regex": "array<regex>",
+        "patron_codigo_canonico_pseudo_code": "array<pseudo_code_line>",
+        "caso_testigo_repo": "FileLineReference"
+      }
+    },
+    {
+      "type": "primitiva",
+      "name": "FileLineReference",
+      "shape_json": {
+        "archivo": "string matches /^[a-z0-9_/.-]+\\.[a-z]+$|^audit_[0-9-]+_[a-z_]+$/",
+        "linea_aprox": "integer >= 0",
+        "drift_id": "string matches /^drift_[a-z_]+$/"
+      }
+    },
+    {
+      "type": "primitiva",
+      "name": "Param",
+      "shape_json": {
+        "name": "string camelCase",
+        "type_expression": "string maxLength 50",
+        "required": "boolean"
+      }
+    }
+  ],
+
+  "documento_3coops": {
+    "type": "abstract_class",
+    "name": "Documento3coops",
+    "extends": null,
+    "concrete_invariants": [
+      "this._meta.documento_id is set",
+      "this._meta.version matches /^[0-9]+\\.[0-9]+\\.[0-9]+$/",
+      "this._meta.lenguaje === '3coops'",
+      "for each string_field of this: string_field has maxLength OR matches pattern",
+      "no string_field contains conectores: ['aunque', 'salvo que', 'en general', 'sin embargo']"
+    ],
+    "forbidden_patterns": [
+      {
+        "type": "forbidden_pattern",
+        "pattern_regex": "\\b(aunque|salvo que|en general|sin embargo|por otro lado)\\b",
+        "reason": "Conectores discursivos = sintoma de prosa libre infiltrada",
+        "alternative_pseudo_code": [
+          "// Si hay matiz que justifica conector: extraer a sub-objeto estructurado",
+          "{ caso_borde: { condicion: '...', comportamiento: '...' } }"
+        ]
+      },
+      {
+        "type": "forbidden_pattern",
+        "pattern_regex": "[a-z]{30,}",
+        "reason": "Palabra > 30 chars = sintoma de parrafo concatenado o terminologia inventada",
+        "alternative_pseudo_code": [
+          "// Descomponer a campos discretos o partir en sub-objetos"
+        ]
+      }
+    ]
+  },
+
+  "prohibido_absoluto_para_documentos_3coops": [
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "definicion_del_lenguaje\\s*[+]\\s*caso_de_uso_del_lenguaje en el mismo documento",
+      "reason": "Mezclar definicion universal con caso particular pierde universalidad. La definicion del lenguaje vive aislada; los casos viven en documentos de uso que referencian la definicion.",
+      "alternative_pseudo_code": [
+        "// Documento A: defines lenguaje (universal)",
+        "// Documento B: usa lenguaje (particular, referencia A)"
+      ],
+      "caso_testigo_de_esta_pifia_documentado": {
+        "archivo": "arquitectura/decisiones/propuestas/_experimento-3coops-001.json",
+        "linea_aprox": 0,
+        "drift_id": "drift_mezcla_definicion_y_caso_de_uso",
+        "version_donde_ocurrio": "0.1.0",
+        "version_donde_se_corrige": "0.2.0"
+      }
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "asumir significado de termino tecnico sin verificar",
+      "reason": "Construir documento sobre interpretacion no verificada produce edificio coherente pero erroneo",
+      "alternative_pseudo_code": [
+        "// Si el termino es nuevo y no consta en repo:",
+        "// devolver testigo de aclaracion antes de plasmar",
+        "// NO inferir del contexto reciente"
+      ]
+    }
+  ],
+
+  "self_bootstrap_verificacion": {
+    "tipo_invariante": "este_documento_cumple_su_propia_definicion",
+    "checks": [
+      "no aparece pipeline_ana_notario_fede en este documento",
+      "no aparece subsistema_concreto en este documento",
+      "todas las primitivas estan declaradas como shape_json",
+      "este documento podria validarse contra un schema AJV generado desde sus propias primitivas"
+    ]
+  }
+}

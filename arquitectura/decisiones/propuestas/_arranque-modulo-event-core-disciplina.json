@@ -1,0 +1,302 @@
+{
+  "_meta": {
+    "documento_id": "_arranque-modulo-event-core-disciplina",
+    "version": "0.2.0",
+    "creado": "2026-06-03",
+    "lenguaje": "3coops",
+    "lenguaje_definicion_ref": "arquitectura/decisiones/propuestas/_experimento-3coops-001.json",
+    "intencion": "Captura el analisis cocinado en sesion 2026-06-02/03 sobre la actitud comun de los modulos drifteados (centralismo_local). Aplicacion concreta del lenguaje 3coops a un subsistema. Sin contenido meta-proceso ni pipeline.",
+    "supersedes": "version 0.1.0 que tenia prosa en algunos campos y mezclaba la definicion del lenguaje con su aplicacion"
+  },
+
+  "subsistema_diagnosticado": {
+    "name": "modulo-event-core-disciplina",
+    "alcance_archivos": "modules/**/*.js + modules/**/*.blueprint.json",
+    "origen_empirico": [
+      {
+        "archivo": "audit_2026-06-02_proyecto_companero",
+        "linea_aprox": 0,
+        "drift_id": "drift_doble_storage_en_path_resuelto"
+      },
+      {
+        "archivo": "audit_2026-06-02_proyecto_V_carta_vapers",
+        "linea_aprox": 0,
+        "drift_id": "drift_productos_list_devuelve_0_aunque_archivo_tiene_15"
+      },
+      {
+        "archivo": "audit_2026-06-02_reset_proyectos",
+        "linea_aprox": 0,
+        "drift_id": "drift_onProjectDelete_espera_data_id_no_project_id"
+      }
+    ]
+  },
+
+  "insight_central": {
+    "type": "invariant",
+    "name": "centralismo_local",
+    "expression": "cada modulo se trata a si mismo como centro autosuficiente y al resto como contexto opcional",
+    "verdad_paradigma_que_lo_contradice": "event-core exige federacion: soberania en el dominio Y bus como autoridad superior a memoria propia",
+    "manifestacion_general": "modulo asume su estado interno es la verdad; desencuentros con el resto los atribuye al resto; se cubre con cache, fallback, lectura disco directa, catch tragador, decision libre sobre campos no especificados"
+  },
+
+  "paradigma_forzado": {
+    "type": "invariant",
+    "name": "el_llm_escribe_contracorriente_de_su_corpus",
+    "expression": "corpus_dominante_aprendido === microservicios_autonomos_con_defensa_local; event_core_puro !== corpus_dominante; tendencia_idiomatica > disciplina_leida_al_inicio_de_sesion",
+    "consecuencia": "conciencia intelectual del paradigma no impide regresion al escribir; disciplina requiere andamios mecanicos, no narrativos"
+  },
+
+  "ModuloEventCore_canonico": {
+    "type": "abstract_class",
+    "name": "ModuloEventCore",
+    "extends": "BaseModule",
+    "abstract_methods": {
+      "onLoad(context)": "register subscribers; initialize state by replaying canonical events of own domain from bus; never read disk directly",
+      "onUnload()": "release resources without persisting outside bus"
+    },
+    "concrete_invariants": [
+      "this.cache === null || this.cache instanceof CacheIncremental",
+      "for each publish(event): event.payload is complete before publish",
+      "for each handler(event): event.source.module is read explicit, no fallback to active",
+      "all I/O passes through bus events; no direct fs.* or db.* calls outside whitelist [filesystem, database-manager, project-manager]"
+    ],
+    "forbidden_patterns": [
+      {
+        "type": "forbidden_pattern",
+        "pattern_regex": "this\\._?cache\\s*=\\s*new Map",
+        "reason": "cache defensiva propia duplica autoridad del bus",
+        "alternative_pseudo_code": [
+          "// estado solo en memoria volatil reconstruida al onLoad",
+          "// o consulta sincrona via this.bus.publishAndWait(...)"
+        ]
+      },
+      {
+        "type": "forbidden_pattern",
+        "pattern_regex": "require\\(['\"]fs['\"]\\)",
+        "reason": "bypass del modulo filesystem dueño del scope",
+        "alternative_pseudo_code": [
+          "const r = await this.bus.publishAndWait('fs.read.request', { project_id, path })"
+        ]
+      },
+      {
+        "type": "forbidden_pattern",
+        "pattern_regex": "catch\\s*\\(\\s*_\\s*\\)\\s*\\{\\s*\\}",
+        "reason": "catch tragador oculta error",
+        "alternative_pseudo_code": [
+          "catch (err) {",
+          "  this.logger.error('mod.op.failed', { error: err.message, code: err._code })",
+          "  throw err",
+          "}"
+        ]
+      },
+      {
+        "type": "forbidden_pattern",
+        "pattern_regex": "resolveTo\\w*Fallback|resolveToActive\\w*",
+        "reason": "fallback silencioso de identidad enmascara desincronizacion",
+        "alternative_pseudo_code": [
+          "if (!this.cache.has(id)) {",
+          "  throw new Error('id no resuelto: ' + id)._withCode('INVALID_INPUT')",
+          "}"
+        ]
+      }
+    ]
+  },
+
+  "tendencias_llm_observadas": [
+    {
+      "type": "tendencia",
+      "id": "T1_cache_defensiva",
+      "creencia_aprendida_corpus": "memorizar evita llamadas extra al bus y mejora performance",
+      "verdad_paradigma_que_la_contradice": "bus es fuente unica de autoridad; memorizar duplica autoridad",
+      "patron_codigo_a_evitar_regex": [
+        "this\\._?cache\\s*=\\s*new Map",
+        "this\\.\\w+PerProject\\s*=\\s*new Map",
+        "if\\s*\\(this\\._?cache\\.has"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        "const result = await this.bus.publishAndWait(eventType, payload)",
+        "// si soy dueño: estado en memoria reconstruido al onLoad"
+      ],
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 28,
+        "drift_id": "drift_cache_defensiva"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T2_fallback_silencioso_identidad",
+      "creencia_aprendida_corpus": "si el id no resuelve busco algo parecido para no romper flujo",
+      "verdad_paradigma_que_la_contradice": "id no resuelto es bug; fallar ruidoso expone el desencuentro",
+      "patron_codigo_a_evitar_regex": [
+        "resolveTo\\w*Fallback",
+        "for\\s*\\(.*of this\\.\\w+\\.keys\\(\\)\\)\\s*\\{?\\s*return"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        "if (!this.cache.has(id)) {",
+        "  throw new Error('id no resuelto: ' + id)._withCode('INVALID_INPUT')",
+        "}"
+      ],
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 62,
+        "drift_id": "drift_fallback_silencioso_identidad"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T3_bypass_filesystem",
+      "creencia_aprendida_corpus": "fs.readdir y fs.readFile son APIs estandar; usarlas es eficiente",
+      "verdad_paradigma_que_la_contradice": "filesystem es modulo dueño del scope; bus es la unica forma de mantener autoridad",
+      "patron_codigo_a_evitar_regex": [
+        "require\\(['\"]fs['\"]\\)",
+        "await fs\\.readdir",
+        "await fs\\.readFile",
+        "await fs\\.writeFile"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        "const list = await this.bus.publishAndWait('fs.list.request', { project_id, path })",
+        "const content = await this.bus.publishAndWait('fs.read.request', { project_id, path })"
+      ],
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 1133,
+        "drift_id": "drift_bypass_filesystem"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T4_catch_tragador",
+      "creencia_aprendida_corpus": "try catch vacio para que el flujo no rompa",
+      "verdad_paradigma_que_la_contradice": "error oculto se manifiesta despues como inconsistencia inexplicable",
+      "patron_codigo_a_evitar_regex": [
+        "catch\\s*\\(\\s*_\\s*\\)\\s*\\{\\s*\\}",
+        "catch\\s*\\(.+\\)\\s*\\{\\s*\\}"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        "catch (err) {",
+        "  this.logger.error('mod.op.failed', { error: err.message })",
+        "  this.metrics?.increment('mod.errors', { kind })",
+        "  throw err",
+        "}"
+      ],
+      "caso_testigo_repo": {
+        "archivo": "modules/filesystem/index.js",
+        "linea_aprox": 141,
+        "drift_id": "drift_catch_tragador_pre_fix"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T5_sobreescribir_estado_al_recargar",
+      "creencia_aprendida_corpus": "al cargar carta normalizo todos los productos como activos para tener estado consistente",
+      "verdad_paradigma_que_la_contradice": "estado persistido es la verdad; sobreescribir en carga pierde el estado real",
+      "patron_codigo_a_evitar_regex": [
+        "\\{\\s*\\.\\.\\.\\w+,\\s*activo:\\s*true\\s*\\}",
+        "\\{\\s*\\.\\.\\.\\w+,\\s*estado:\\s*['\"][a-z]+['\"]\\s*\\}"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        "const item = { ...rawData }",
+        "// sin sobreescribir campos persistidos en disco"
+      ],
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 1167,
+        "drift_id": "drift_sobreescritura_estado_al_recargar"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T6_completar_campos_que_el_pseudocodigo_no_pide",
+      "creencia_aprendida_corpus": "el campo esta vacio; pongo un valor razonable",
+      "verdad_paradigma_que_la_contradice": "pseudo_code es ley; nowISO es nowISO; valores no especificados no se inventan",
+      "patron_codigo_a_evitar_regex": [
+        "created_at:\\s*['\"][0-9]{4}-",
+        "version:\\s*2\\s*,",
+        "id:\\s*['\"][a-f0-9]{8}-[a-f0-9]{4}-"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        "created_at: nowISO()",
+        "version: 1",
+        "id: uuid()"
+      ],
+      "caso_testigo_repo": {
+        "archivo": "audit_2026-06-02_carta_catalogo_activo",
+        "linea_aprox": 0,
+        "drift_id": "drift_alucinacion_timestamps_y_version"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T7_handoff_prematuro",
+      "creencia_aprendida_corpus": "eventual consistency es legitimo; publico la notificacion al empezar la accion",
+      "verdad_paradigma_que_la_contradice": "publico cuando el cambio aterrizo, o con payload completo para que consumers no necesiten leer disco",
+      "patron_codigo_a_evitar_regex": [
+        "this\\.publish\\([^)]+\\);[\\s\\S]{0,200}?await\\s+\\w*\\.?write"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        "await this.bus.publishAndWait('fs.write.request', { path, content })",
+        "this.publish('foo.creada', { id, payload: completo })"
+      ],
+      "caso_testigo_repo": {
+        "archivo": "audit_2026-06-02_flujo_carta_manager",
+        "linea_aprox": 0,
+        "drift_id": "drift_handoff_prematuro"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T8_deducir_terminos_nuevos_del_contexto_inmediato",
+      "creencia_aprendida_corpus": "cuando el humano usa termino tecnico nuevo lo deduzco del contexto reciente",
+      "verdad_paradigma_que_la_contradice": "deducir mal contamina el documento; preguntar es mas barato que reescribir",
+      "patron_codigo_a_evitar_regex": [
+        "// asumir significado sin verificar"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        "if (termino_nuevo && !termino_existe_en_repo) {",
+        "  return testigo_de_aclaracion(termino_nuevo)",
+        "}",
+        "// no inferir del contexto reciente"
+      ],
+      "caso_testigo_repo": {
+        "archivo": "arquitectura/decisiones/propuestas/_experimento-3coops-001.json",
+        "linea_aprox": 0,
+        "drift_id": "drift_deducir_terminos_sin_verificar"
+      }
+    }
+  ],
+
+  "tajadas_canonizar_propuestas": [
+    {
+      "id": "tajada_1",
+      "name": "contrato_modulo_event_core_disciplina_v1",
+      "depende_de": [],
+      "blocker_para_otras": true
+    },
+    {
+      "id": "tajada_2",
+      "name": "reescribir_modules_pizzepos_productos_caso_piloto",
+      "depende_de": ["tajada_1"]
+    },
+    {
+      "id": "tajada_3",
+      "name": "contrato_aggregate_vs_vista",
+      "depende_de": ["tajada_1"]
+    },
+    {
+      "id": "tajada_4",
+      "name": "contrato_project_context_propagation",
+      "depende_de": ["tajada_1"]
+    },
+    {
+      "id": "tajada_5",
+      "name": "endurecer_storage_layout_bypass_filesystem_a_error",
+      "depende_de": ["tajada_1"]
+    },
+    {
+      "id": "tajada_6",
+      "name": "contrato_evento_mutacion_vs_notificacion",
+      "depende_de": ["tajada_1"]
+    }
+  ]
+}

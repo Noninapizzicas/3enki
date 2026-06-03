@@ -1,278 +1,194 @@
 {
-  "_doc": "Experimento 001 del pipeline 3coops (ana / notario / fede), anotado en el propio lenguaje 3coops que el experimento diseña. Es self-bootstrap: el lenguaje se inventa mientras se usa para anotar el primer caso. Practica del horizonte modulo-event-core-disciplina v0.1.0 cocinado en sesion 2026-06-02/03 con el humano companyero.\n\nEl lenguaje 3coops es HORIZONTAL (meta-proceso: describe COLABORACION entre cooperantes para cualquier horizonte). Es distinto del lenguaje del subsistema disciplina-modulo, que es VERTICAL (describe contratos de un subsistema concreto). Notario usa ambos: 3coops para saber su rol operativo, lenguaje vertical del subsistema para saber el formato del documento que produce.",
-
-  "id": "_experimento-3coops-001",
-  "version": "0.1.0",
-  "lenguaje": "3coops",
-  "creado": "2026-06-03",
-  "estado_documento": "lenguaje_y_experimento_self_bootstrap_no_canonizado_aun",
-
-  "definicion_del_lenguaje_3coops": {
-    "cooperantes": {
-      "ana": {
-        "rol_canonico": "ingeniera/arquitecta",
-        "conversa_con_humanos": true,
-        "modo_de_trabajo": "horizonte_abierto",
-        "input_acepta": ["intuicion_humana", "testigo_de_notario", "testigo_de_fede"],
-        "produce": "plano_ana",
-        "premisa_lenguaje": "natural_acotado_no_obligatorio_canonico"
-      },
-      "notario": {
-        "rol_canonico": "traductor_a_lenguaje_canonico_de_subsistema",
-        "conversa_con_humanos": false,
-        "modo_de_trabajo": "horizonte_cerrado_traductor",
-        "input_acepta": ["plano_ana"],
-        "produce": "canonico_notario",
-        "premisa_lenguaje": "json_validable_contra_schema_de_subsistema_cero_prosa",
-        "forma_canonica": "subagente_claude_code_contexto_aislado"
-      },
-      "fede": {
-        "rol_canonico": "traductor_a_codigo_fiel",
-        "conversa_con_humanos": false,
-        "modo_de_trabajo": "horizonte_cerrado_ejecutor",
-        "input_acepta": ["canonico_notario"],
-        "produce": "codigo_fede",
-        "premisa_lenguaje": "archivos_del_repo_validables_validators_verde",
-        "nota_estado_actual_repo": "fede como esta canonizado hoy si conversa con humano (OK explicito entre fases). En el modelo 3coops debe purificarse para no conversar; cuando requiera OK pasa testigo a ana. Horizonte aparte."
-      }
-    },
-    "primitivas_de_output": {
-      "plano_ana": {
-        "que_es": "Estructura legible que captura el horizonte cocinado por ana, suficiente para que notario lo traduzca sin ambiguedad",
-        "shape_minimo": {
-          "titulo": "string",
-          "horizonte": "string",
-          "insight_central": "object con nombre y definicion corta",
-          "decisiones_cerradas": "array de objetos { decision, razon, alternativa_descartada }",
-          "decisiones_abiertas": "array de objetos { pregunta, opciones, voto_ana }",
-          "casos_testigo": "array de archivo:linea",
-          "encaja_con_subsistema": "string identificador",
-          "siguiente_paso_propuesto": "string"
-        }
-      },
-      "canonico_notario": {
-        "que_es": "JSON validable contra el schema del subsistema que ana indicó",
-        "shape": "depende del subsistema. Notario lo conoce porque tiene cargado el lenguaje vertical del subsistema correspondiente"
-      },
-      "codigo_fede": {
-        "que_es": "Archivos del repo creados o editados que cumplen el canonico_notario al pie de la letra y pasan los validators",
-        "shape": "set de paths del repo + diff de cada uno"
-      }
-    },
-    "primitivas_de_testigo": {
-      "testigo_avance": {
-        "que_es": "Un cooperante termina su trabajo y pasa el output al siguiente en el pipeline",
-        "shape": {
-          "origen": "cooperante",
-          "destino": "cooperante",
-          "payload_referencia": "path o id del output",
-          "estado": "ok"
-        }
-      },
-      "testigo_requiere_aclaracion": {
-        "que_es": "Un cooperante (notario o fede) no puede avanzar porque hay ambiguedad en el input. Devuelve testigo a ana SIN preguntar al humano",
-        "shape": {
-          "origen": "cooperante",
-          "destino": "ana",
-          "ambiguedades": "array de strings con cada pregunta concreta",
-          "payload_parcial_consumido": "lo que si pudo procesar",
-          "estado": "requiere_aclaracion"
-        }
-      },
-      "testigo_bloqueado": {
-        "que_es": "Un cooperante encuentra una imposibilidad estructural (schema invalido, validator rojo, contrato faltante). Devuelve hacia atras con diagnostico",
-        "shape": {
-          "origen": "cooperante",
-          "destino": "ana_o_humano_via_ana",
-          "bloqueador": "string que describe la imposibilidad",
-          "estado": "bloqueado"
-        }
-      }
-    },
-    "prohibiciones_lenguaje_3coops": [
-      "notario conversa con humano",
-      "fede conversa con humano",
-      "ana escribe directamente codigo fiel sin pasar por notario+fede",
-      "saltarse el pipeline (humano -> notario directo, o humano -> fede directo)",
-      "notario produce salida que no valide contra schema del subsistema correspondiente",
-      "fede produce codigo que no este declarado/canonizado en el canonico_notario recibido"
-    ],
-    "preguntas_canonicas_al_disenar_un_paso_del_pipeline": [
-      "¿este paso lo deberia hacer ana (necesita conversar) o un cooperante traductor?",
-      "¿el output de este paso es plano_ana (lenguaje natural acotado), canonico_notario (json validable) o codigo_fede (archivos del repo)?",
-      "¿el siguiente paso del pipeline tiene input suficiente para no requerir aclaracion?",
-      "¿el cooperante destinatario tiene cargado el lenguaje vertical necesario para procesar este input?"
-    ]
+  "_meta": {
+    "documento_id": "experimento-3coops-001",
+    "version": "0.2.0",
+    "creado": "2026-06-03",
+    "lenguaje": "3coops",
+    "intencion": "Define el lenguaje 3coops (code + OOP + pseudo-code) como sustrato formal de canonizacion para documentos del repo. Universal: aplica a cualquier subsistema. Self-bootstrap: define la gramatica usando las primitivas que la gramatica declara.",
+    "supersedes": "version 0.1.0 contaminada con mezcla conceptual pipeline ana/notario/fede; rehecha tras feedback del humano companyero. La tendencia T8_deducir_terminos_nuevos_del_contexto_inmediato (caso testigo: yo asumi 3coops como tres cooperantes sin verificar) queda anotada en el documento de uso _arranque-modulo-event-core-disciplina v0.2.0"
   },
 
-  "experimento_001_anotado": {
-    "horizonte_que_aborda": "Diseno del pipeline 3coops + lenguaje 3coops + cocinado del lenguaje del subsistema modulo-event-core-disciplina",
-    "contexto_origen": "Sesion 2026-06-02/03. Audit en vivo del proyecto V destapo el patron meta de centralismo local en modulos event-core. El humano propuso que la canonizacion del aprendizaje requiere un lenguaje formal que el LLM no degenere + un cooperante especialista monolingue en ese lenguaje (notario). Esta es la primera vez que el pipeline 3coops se piensa explicitamente.",
-
-    "fases_completadas": [
+  "lenguaje_3coops": {
+    "type": "abstract_language",
+    "name": "3coops",
+    "etimologia": "3 componentes formales (Code, OOP, Pseudo-code) — NO 3 cooperantes",
+    "componentes": [
       {
-        "fase_id": "F1",
-        "cooperante": "ana",
-        "trabajo": "Audit en vivo del flujo carta-manager + productos en proyecto V via wss://enki-ai.online/mqtt. Descubrimiento de 4 drifts simultaneos en modules/pizzepos/productos",
-        "output_referencia": "Hallazgos comentados en chat de sesion",
-        "casos_testigo_producidos": [
-          "modules/pizzepos/productos/index.js:28 cache defensiva",
-          "modules/pizzepos/productos/index.js:62 fallback silencioso",
-          "modules/pizzepos/productos/index.js:1133 bypass filesystem",
-          "modules/pizzepos/productos/index.js:1167 sobreescritura activo:true"
+        "id": "code",
+        "descripcion_corta": "JSON estricto como contenedor sintactico",
+        "constraints": [
+          "no prosa libre",
+          "cada string tiene maxLength o pattern regex",
+          "no conectores discursivos en valores: aunque, salvo_que, en_general"
         ]
       },
       {
-        "fase_id": "F2",
-        "cooperante": "ana",
-        "trabajo": "Cocinado del insight meta: centralismo_local como actitud comun de los modulos drifteados. Nombrado del patron",
-        "output_referencia": "Sesion turnos sobre actitudes por modulo"
+        "id": "OOP",
+        "descripcion_corta": "Modelo conceptual mediante clases abstractas, metodos, fields, invariantes, herencia explicita",
+        "constraints": [
+          "clase abstracta declara extends explicito o null",
+          "cada metodo tiene visibility + params + returns + pseudo_code + throws",
+          "invariantes son pseudo_code evaluable mentalmente"
+        ]
       },
       {
-        "fase_id": "F3",
-        "cooperante": "ana",
-        "trabajo": "Reconocimiento del matiz: todo el codigo del repo lo escribio un LLM. Event-core va contracorriente del corpus aprendido. La conciencia no cura la tendencia",
-        "output_referencia": "Aporte explicito del humano + sintesis cocinada"
-      },
-      {
-        "fase_id": "F4",
-        "cooperante": "ana",
-        "trabajo": "Reconocimiento del matiz: Markdown narrativo degenera, JSON+pseudocodigo+OOP es vacuna parcial. El formato es parte del mensaje",
-        "output_referencia": "Aporte explicito del humano + sintesis cocinada"
-      },
-      {
-        "fase_id": "F5",
-        "cooperante": "ana + notario_mano",
-        "trabajo": "Plasmado del analisis cocinado en JSON canonico self-bootstrap. Notario no existe aun, lo plasma Claude Code a mano siguiendo el formato que el lenguaje propone",
-        "output_referencia": "arquitectura/decisiones/propuestas/_arranque-modulo-event-core-disciplina.json v0.1.0",
-        "commit": "408a09ca"
-      },
-      {
-        "fase_id": "F6",
-        "cooperante": "ana",
-        "trabajo": "Cocinado del pipeline triada y purificacion de roles: ana conversa, notario y fede no. Si notario/fede requieren algo, pasan testigo a ana",
-        "output_referencia": "Sesion turnos sobre purificacion de cooperantes"
-      },
-      {
-        "fase_id": "F7",
-        "cooperante": "ana",
-        "trabajo": "Resolucion de skill vs subagente para notario: la skill comparte mi contexto y mi tendencia idiomatica acumulada; el subagente tiene contexto aislado y empieza en turno 1 sin ruido. Voto subagente como MVP",
-        "output_referencia": "Sesion turnos sobre agente vs skill"
-      },
-      {
-        "fase_id": "F8",
-        "cooperante": "ana + notario_mano",
-        "trabajo": "Anotado de este experimento en lenguaje 3coops. Self-bootstrap doble: define el lenguaje 3coops mientras lo usa para registrar la sesion",
-        "output_referencia": "arquitectura/decisiones/propuestas/_experimento-3coops-001.json (este archivo)"
-      }
-    ],
-
-    "fases_pendientes": [
-      {
-        "fase_id": "F9",
-        "cooperante_propuesto": "ana",
-        "trabajo": "Cocinar el lenguaje del subsistema modulo-event-core-disciplina v0.1.0 (las primitivas: contrato / arranque / tajada-plan / tendencia-nueva, sus schemas AJV strict, las heuristicas anti-prosa). Voto: empezar piloto con tipo tendencia-nueva por ser el mas simple y urgente",
-        "output_esperado": "plano_ana del lenguaje vertical",
-        "blocker_para_siguientes": true
-      },
-      {
-        "fase_id": "F10",
-        "cooperante_propuesto": "notario_mano",
-        "trabajo": "Plasmar el lenguaje vertical v0.1.0 a JSON canonico self-bootstrap (notario aun no existe; lo plasma Claude Code a mano)",
-        "output_esperado": "arquitectura/decisiones/_contratos/disciplina-modulo-lenguaje.contract.json + arquitectura/decisiones/_schemas/disciplina-modulo/<tipo>.schema.json + validator",
-        "depende_de": ["F9"]
-      },
-      {
-        "fase_id": "F11",
-        "cooperante_propuesto": "ana",
-        "trabajo": "Diseñar notario como subagente Claude Code: ubicacion del archivo de definicion en repo (.claude/agents/ o similar), system prompt monolingue, tools restringidos (Read/Write/Grep scope arquitectura/decisiones/), shape de input/output, comportamiento ante ambiguedad (devuelve testigo_requiere_aclaracion a ana)",
-        "output_esperado": "plano_ana del subagente notario",
-        "depende_de": ["F10"]
-      },
-      {
-        "fase_id": "F12",
-        "cooperante_propuesto": "notario_mano",
-        "trabajo": "Plasmar la definicion del subagente notario en su formato canonico de Claude Code (probablemente .claude/agents/notario.md u otro path canonico de subagentes de Claude Code)",
-        "output_esperado": "archivo de definicion del subagente notario + actualizacion CLAUDE.md indice",
-        "depende_de": ["F11"]
-      },
-      {
-        "fase_id": "F13",
-        "cooperante_propuesto": "fede_actual",
-        "trabajo": "Probar notario plasmando un caso testigo concreto: por ejemplo, una tendencia-nueva del T1-T7 cocinado, o re-plasmar parte del _arranque-modulo-event-core-disciplina.json para comparar si notario produce equivalente",
-        "output_esperado": "JSON canonico producido por notario + diff vs version escrita a mano + observaciones sobre fidelidad",
-        "depende_de": ["F12"]
-      },
-      {
-        "fase_id": "F14",
-        "cooperante_propuesto": "ana",
-        "trabajo": "Horizonte aparte: re-purificar fede para que no converse con humano (cuando requiera OK pasa testigo a ana). Implica actualizar dinamica-de-trabajo-companero.contract.json y la skill fede actual",
-        "depende_de": ["F13"],
-        "estado": "diferido_no_bloquea_pipeline_3coops"
-      }
-    ],
-
-    "testigos_registrados_en_la_sesion": [
-      {
-        "tipo": "testigo_avance",
-        "origen": "humano",
-        "destino": "ana",
-        "payload": "Vamos muy bien antes de empezar con nada con lo que tu sabes utilizando JSON con lenguaje pseudocodigo plasma ese analisis",
-        "fase_disparada": "F5"
-      },
-      {
-        "tipo": "testigo_avance",
-        "origen": "humano",
-        "destino": "ana",
-        "payload": "Notario lee todo pero solo escribe el lenguaje a crear; pipeline ana disena notario plasma fede implementa",
-        "fase_disparada": "F6+F7+F8"
-      },
-      {
-        "tipo": "testigo_avance_pendiente",
-        "origen": "ana",
-        "destino": "notario_mano",
-        "payload": "cuando llegue F10",
-        "fase_disparada": "F10"
+        "id": "pseudo_code",
+        "descripcion_corta": "Lineas que parsean como JS/TS-like, no descripciones en lenguaje natural",
+        "constraints": [
+          "cada linea comienza con palabra reservada o identificador: this, await, const, let, if, for, return, function, class",
+          "comentarios solo // breves",
+          "no parrafos explicativos"
+        ]
       }
     ]
   },
 
-  "observaciones_meta_del_experimento": {
-    "self_bootstrap_doble": "Este documento (a) define el lenguaje 3coops y (b) usa ese mismo lenguaje 3coops para registrar la sesion en la que se define. Es el caso testigo del propio lenguaje.",
-    "limitaciones_v0_1_0_lenguaje_3coops": [
-      "No esta validado por schema AJV todavia",
-      "Solo aplica a horizontes de canonizacion de documentos. Otros tipos de horizonte (operacionales, debug en vivo) probablemente necesitan otras primitivas",
-      "El testigo_requiere_aclaracion necesita mas refinamiento operativo: como se serializa el payload parcial consumido sin que la siguiente iteracion de ana lo malinterprete"
-    ],
-    "validacion_de_que_3coops_funciona_pendiente": "Necesita correr F9..F13 al completo. Si notario logra producir un canonico_notario fiel al plano_ana sin ambiguedad y fede logra ejecutarlo sin testigos de aclaracion, 3coops esta validado v0.1.0. Si hay loops de aclaracion, hay que refinar v0.2.0."
-  },
-
-  "prohibido_en_proximas_sesiones_para_este_documento": [
-    "Recomponer este documento en prosa Markdown",
-    "Eliminar la seccion definicion_del_lenguaje_3coops por considerarla 'meta'",
-    "Mezclar el lenguaje 3coops con el lenguaje del subsistema modulo-event-core-disciplina (son ortogonales: 3coops horizontal, lenguaje del subsistema vertical)",
-    "Asumir que notario ya existe en fases F9-F10. Hasta F12 notario es 'notario_mano' (Claude Code en sesion). Solo en F13+ notario es entidad real invocable",
-    "Re-asignar tareas conversacionales a notario o fede para 'agilizar'. La purificacion de roles es la vacuna; quebrarla devuelve el problema original",
-    "Resumir este documento como contexto previo en proximas sesiones. Releerlo literal."
+  "primitivas_canonicas": [
+    {
+      "type": "primitiva",
+      "name": "AbstractClass",
+      "shape_json": {
+        "type": "literal_string \"abstract_class\"",
+        "name": "string matches /^[A-Z][A-Za-z0-9]*$/",
+        "extends": "string | null",
+        "abstract_methods": "object<MethodName, pseudo_code_line>",
+        "concrete_invariants": "array<pseudo_code_line>",
+        "forbidden_patterns": "array<ForbiddenPattern>"
+      }
+    },
+    {
+      "type": "primitiva",
+      "name": "Method",
+      "shape_json": {
+        "type": "literal_string \"method\"",
+        "name": "string matches /^[a-z][A-Za-z0-9]*$/",
+        "visibility": "enum [\"public\", \"private\", \"protected\"]",
+        "params": "array<Param>",
+        "returns": "type_expression",
+        "pseudo_code": "array<pseudo_code_line> maxItems 30",
+        "throws": "array<error_code>"
+      }
+    },
+    {
+      "type": "primitiva",
+      "name": "Invariant",
+      "shape_json": {
+        "type": "literal_string \"invariant\"",
+        "expression": "pseudo_code_line maxLength 200",
+        "applies_to": "ClassName | MethodName | global"
+      }
+    },
+    {
+      "type": "primitiva",
+      "name": "ForbiddenPattern",
+      "shape_json": {
+        "type": "literal_string \"forbidden_pattern\"",
+        "pattern_regex": "string PCRE valida",
+        "reason": "string maxLength 200",
+        "alternative_pseudo_code": "array<pseudo_code_line> maxItems 10"
+      }
+    },
+    {
+      "type": "primitiva",
+      "name": "Tendencia",
+      "shape_json": {
+        "type": "literal_string \"tendencia\"",
+        "id": "string matches /^T[0-9]+_[a-z_]+$/",
+        "creencia_aprendida_corpus": "string maxLength 200 sin conectores discursivos",
+        "verdad_paradigma_que_la_contradice": "string maxLength 200 sin conectores discursivos",
+        "patron_codigo_a_evitar_regex": "array<regex>",
+        "patron_codigo_canonico_pseudo_code": "array<pseudo_code_line>",
+        "caso_testigo_repo": "FileLineReference"
+      }
+    },
+    {
+      "type": "primitiva",
+      "name": "FileLineReference",
+      "shape_json": {
+        "archivo": "string matches /^[a-z0-9_/.-]+\\.[a-z]+$|^audit_[0-9-]+_[a-z_]+$/",
+        "linea_aprox": "integer >= 0",
+        "drift_id": "string matches /^drift_[a-z_]+$/"
+      }
+    },
+    {
+      "type": "primitiva",
+      "name": "Param",
+      "shape_json": {
+        "name": "string camelCase",
+        "type_expression": "string maxLength 50",
+        "required": "boolean"
+      }
+    }
   ],
 
-  "conexion_con_documentos_existentes": [
+  "documento_3coops": {
+    "type": "abstract_class",
+    "name": "Documento3coops",
+    "extends": null,
+    "concrete_invariants": [
+      "this._meta.documento_id is set",
+      "this._meta.version matches /^[0-9]+\\.[0-9]+\\.[0-9]+$/",
+      "this._meta.lenguaje === '3coops'",
+      "for each string_field of this: string_field has maxLength OR matches pattern",
+      "no string_field contains conectores: ['aunque', 'salvo que', 'en general', 'sin embargo']"
+    ],
+    "forbidden_patterns": [
+      {
+        "type": "forbidden_pattern",
+        "pattern_regex": "\\b(aunque|salvo que|en general|sin embargo|por otro lado)\\b",
+        "reason": "Conectores discursivos = sintoma de prosa libre infiltrada",
+        "alternative_pseudo_code": [
+          "// Si hay matiz que justifica conector: extraer a sub-objeto estructurado",
+          "{ caso_borde: { condicion: '...', comportamiento: '...' } }"
+        ]
+      },
+      {
+        "type": "forbidden_pattern",
+        "pattern_regex": "[a-z]{30,}",
+        "reason": "Palabra > 30 chars = sintoma de parrafo concatenado o terminologia inventada",
+        "alternative_pseudo_code": [
+          "// Descomponer a campos discretos o partir en sub-objetos"
+        ]
+      }
+    ]
+  },
+
+  "prohibido_absoluto_para_documentos_3coops": [
     {
-      "documento": "arquitectura/decisiones/propuestas/_arranque-modulo-event-core-disciplina.json",
-      "version": "0.1.0",
-      "relacion": "Es el plano_ana del primer subsistema vertical que 3coops va a canonizar. Producido en F5 de este experimento. notario lo procesara cuando exista en F13"
+      "type": "forbidden_pattern",
+      "pattern_regex": "definicion_del_lenguaje\\s*[+]\\s*caso_de_uso_del_lenguaje en el mismo documento",
+      "reason": "Mezclar definicion universal con caso particular pierde universalidad. La definicion del lenguaje vive aislada; los casos viven en documentos de uso que referencian la definicion.",
+      "alternative_pseudo_code": [
+        "// Documento A: defines lenguaje (universal)",
+        "// Documento B: usa lenguaje (particular, referencia A)"
+      ],
+      "caso_testigo_de_esta_pifia_documentado": {
+        "archivo": "arquitectura/decisiones/propuestas/_experimento-3coops-001.json",
+        "linea_aprox": 0,
+        "drift_id": "drift_mezcla_definicion_y_caso_de_uso",
+        "version_donde_ocurrio": "0.1.0",
+        "version_donde_se_corrige": "0.2.0"
+      }
     },
     {
-      "documento": "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json",
-      "relacion": "Canoniza ana y fede como skills actuales. NO incorpora aun a notario ni purifica fede. F14 cocinaria la actualizacion (diferido)"
-    },
-    {
-      "documento": "arquitectura/decisiones/_contratos/agente-blueprint.contract.json",
-      "relacion": "Canoniza agentes-blueprint de Enki. NO aplica a notario porque notario es subagente de Claude Code, no agente de Enki. Distincion importante: notario no toca el runtime del sistema vivo"
-    },
-    {
-      "documento": "arquitectura/decisiones/_contratos/disciplina-llm-operador.contract.json",
-      "relacion": "Disciplina del LLM como observador/auditor en sesion. Cubre parcialmente lo que ana hace en F1-F4 de este experimento. 3coops lo extiende anyadiendo notario y fede como cooperantes adicionales"
+      "type": "forbidden_pattern",
+      "pattern_regex": "asumir significado de termino tecnico sin verificar",
+      "reason": "Construir documento sobre interpretacion no verificada produce edificio coherente pero erroneo",
+      "alternative_pseudo_code": [
+        "// Si el termino es nuevo y no consta en repo:",
+        "// devolver testigo de aclaracion antes de plasmar",
+        "// NO inferir del contexto reciente"
+      ]
     }
-  ]
+  ],
+
+  "self_bootstrap_verificacion": {
+    "tipo_invariante": "este_documento_cumple_su_propia_definicion",
+    "checks": [
+      "no aparece pipeline_ana_notario_fede en este documento",
+      "no aparece subsistema_concreto en este documento",
+      "todas las primitivas estan declaradas como shape_json",
+      "este documento podria validarse contra un schema AJV generado desde sus propias primitivas"
+    ]
+  }
 }

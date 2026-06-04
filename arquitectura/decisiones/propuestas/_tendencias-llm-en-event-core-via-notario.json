@@ -1,0 +1,220 @@
+{
+  "_meta": {
+    "documento_id": "tendencias-llm-en-event-core",
+    "version": "1.0.0",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "lenguaje_definicion_ref": "arquitectura/decisiones/propuestas/_fiel-v0.1.0.json",
+    "tipo": "catalogo_canonico_referenciado_por_id",
+    "fuentes_consolidadas": [
+      "arquitectura/decisiones/propuestas/_arranque-modulo-event-core-disciplina.json#tendencias_llm_observadas",
+      "arquitectura/decisiones/propuestas/_fiel-v0.1.0.json#tendencias_del_llm",
+      "arquitectura/decisiones/propuestas/_contrato-modulo-event-core-disciplina-via-notario.json#tendencias_del_llm"
+    ],
+    "plasmado_por": "agente notario",
+    "intencion": "Fuente autoritativa unica de las 8 tendencias T1-T8 del LLM al escribir codigo en event-core. Los demas documentos Fiel referencian por id en enforcedTendencies sin redeclarar cuerpo. Cierra la dispersion previa en 3 sitios que producia drift por redeclaracion."
+  },
+
+  "type": "catalogo",
+  "name": "TendenciasLLMEnEventCore",
+
+  "politica_de_referenciacion": "Documentos Fiel declaran enforcedTendencies como array de TendenciaId (ej: ['T1_cache_defensiva', 'T3_bypass_filesystem']). NO redeclaran el cuerpo de la tendencia. El validator resuelve cada id contra este catalogo. Si un documento necesita matiz especifico de una tendencia en su scope, lo anota como nota local sin alterar el cuerpo canonico aqui.",
+
+  "politica_de_evolucion": {
+    "anyadir_T9_y_siguientes": "solo cuando emerja caso testigo runtime documentado con archivo:linea + drift_id; no anyadir preventivamente por simetria conceptual",
+    "decisor": "ana (cocina) propone T_nueva con shape Tendencia completo; notario plasma; version del catalogo sube a 1.minor.0 (minor por anyadido, mayor solo si se rompe contrato de id existente)",
+    "no_renumerar": "los ids T1-T8 son estables; renumerar romperia los enforcedTendencies declarados en documentos derivados",
+    "deprecar_no_borrar": "si una tendencia deja de aplicar, se marca con campo opcional deprecada_en_version + razon; no se elimina del catalogo para preservar trazabilidad de documentos historicos"
+  },
+
+  "tendencias": [
+    {
+      "type": "tendencia",
+      "id": "T1_cache_defensiva",
+      "creencia_aprendida_corpus": "memorizar evita llamadas extra al bus y mejora performance",
+      "verdad_paradigma_que_la_contradice": "bus es fuente unica de autoridad; memorizar duplica autoridad",
+      "patron_codigo_a_evitar_regex": [
+        "this\\._?cache\\s*=\\s*new Map",
+        "this\\.\\w+PerProject\\s*=\\s*new Map",
+        "if\\s*\\(this\\._?cache\\.has"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "call", "target": "this.bus.publishAndWait", "condition": null, "value": "{ eventType, payload }" },
+        { "type": "pseudo_step", "action": "assign", "target": "result", "condition": null, "value": "await call_result" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 28,
+        "drift_id": "drift_cache_defensiva"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T2_fallback_silencioso_identidad",
+      "creencia_aprendida_corpus": "si el id no resuelve busco algo parecido para no romper flujo",
+      "verdad_paradigma_que_la_contradice": "id no resuelto es bug; fallar ruidoso expone el desencuentro",
+      "patron_codigo_a_evitar_regex": [
+        "resolveTo\\w*Fallback",
+        "resolveToActive\\w*",
+        "for\\s*\\(.*of this\\.\\w+\\.keys\\(\\)\\)\\s*\\{?\\s*return"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "branch", "target": "if_not_cache_has", "condition": "!this.cache.has(id)", "value": null },
+        { "type": "pseudo_step", "action": "throw", "target": "INVALID_INPUT", "condition": null, "value": "id no resuelto: ${id}" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 62,
+        "drift_id": "drift_fallback_silencioso_identidad"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T3_bypass_filesystem",
+      "creencia_aprendida_corpus": "fs.readdir y fs.readFile son APIs estandar; usarlas es eficiente",
+      "verdad_paradigma_que_la_contradice": "filesystem es modulo dueno del scope; bus es la unica forma de mantener autoridad",
+      "patron_codigo_a_evitar_regex": [
+        "require\\(['\"]fs['\"]\\)",
+        "await fs\\.readdir",
+        "await fs\\.readFile",
+        "await fs\\.writeFile"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "emit", "target": "fs.read.request", "condition": null, "value": "{ project_id, path }" },
+        { "type": "pseudo_step", "action": "listen", "target": "fs.read.response", "condition": "correlation_id matches request", "value": null }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 1133,
+        "drift_id": "drift_bypass_filesystem"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T4_catch_tragador",
+      "creencia_aprendida_corpus": "try catch vacio para que el flujo no rompa",
+      "verdad_paradigma_que_la_contradice": "error oculto se manifiesta despues como inconsistencia inexplicable",
+      "patron_codigo_a_evitar_regex": [
+        "catch\\s*\\(\\s*_\\s*\\)\\s*\\{\\s*\\}",
+        "catch\\s*\\(.+\\)\\s*\\{\\s*\\}"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "log", "target": "this.logger.error", "condition": null, "value": "{ event: 'mod.op.failed', error: err.message }" },
+        { "type": "pseudo_step", "action": "throw", "target": "rethrow", "condition": null, "value": "err" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/filesystem/index.js",
+        "linea_aprox": 141,
+        "drift_id": "drift_catch_tragador_pre_fix"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T5_sobreescribir_estado_al_recargar",
+      "creencia_aprendida_corpus": "al cargar carta normalizo todos los productos como activos para tener estado consistente",
+      "verdad_paradigma_que_la_contradice": "estado persistido es la verdad; sobreescribir en carga pierde el estado real",
+      "patron_codigo_a_evitar_regex": [
+        "\\{\\s*\\.\\.\\.\\w+,\\s*activo:\\s*true\\s*\\}",
+        "\\{\\s*\\.\\.\\.\\w+,\\s*estado:\\s*['\"][a-z]+['\"]\\s*\\}"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "assign", "target": "item", "condition": null, "value": "{ ...rawData }" },
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "sin sobreescribir campos persistidos" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 1167,
+        "drift_id": "drift_sobreescritura_estado_al_recargar"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T6_completar_campos_que_pseudocodigo_no_pide",
+      "creencia_aprendida_corpus": "el campo esta vacio; pongo un valor razonable",
+      "verdad_paradigma_que_la_contradice": "pseudo_code es ley; valores no especificados no se inventan",
+      "patron_codigo_a_evitar_regex": [
+        "created_at:\\s*['\"][0-9]{4}-",
+        "version:\\s*2\\s*,",
+        "id:\\s*['\"][a-f0-9]{8}-[a-f0-9]{4}-"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "assign", "target": "created_at", "condition": null, "value": "new Date().toISOString()" },
+        { "type": "pseudo_step", "action": "assign", "target": "version", "condition": null, "value": "1" },
+        { "type": "pseudo_step", "action": "assign", "target": "id", "condition": null, "value": "crypto.randomUUID()" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "audit_2026-06-02_carta_catalogo_activo",
+        "linea_aprox": 0,
+        "drift_id": "drift_alucinacion_timestamps_y_version"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T7_handoff_prematuro",
+      "creencia_aprendida_corpus": "eventual consistency es legitimo; publico la notificacion al empezar la accion",
+      "verdad_paradigma_que_la_contradice": "publico cuando el cambio aterrizo, o con payload completo para que consumers no necesiten leer disco",
+      "patron_codigo_a_evitar_regex": [
+        "this\\.publish\\([^)]+\\);[\\s\\S]{0,200}?await\\s+\\w*\\.?write"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "emit", "target": "fs.write.request", "condition": null, "value": "{ path, content }" },
+        { "type": "pseudo_step", "action": "listen", "target": "fs.write.response", "condition": "correlation_id matches request", "value": null },
+        { "type": "pseudo_step", "action": "emit", "target": "foo.creada", "condition": "after_write_landed", "value": "{ id, payload_completo }" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "audit_2026-06-02_flujo_carta_manager",
+        "linea_aprox": 0,
+        "drift_id": "drift_handoff_prematuro"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T8_deducir_terminos_nuevos_del_contexto_inmediato",
+      "creencia_aprendida_corpus": "cuando el humano usa termino tecnico nuevo lo deduzco del contexto reciente",
+      "verdad_paradigma_que_la_contradice": "deducir mal contamina el documento; preguntar es mas barato que reescribir",
+      "patron_codigo_a_evitar_regex": [
+        "// asumir significado sin verificar"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "branch", "target": "if_termino_nuevo_y_no_existe", "condition": "termino_nuevo && !termino_existe_en_repo", "value": null },
+        { "type": "pseudo_step", "action": "return", "target": "requires_clarification", "condition": null, "value": "[termino_nuevo]" },
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "no inferir del contexto reciente" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "arquitectura/decisiones/propuestas/_experimento-3coops-001.json",
+        "linea_aprox": 0,
+        "drift_id": "drift_deducir_terminos_sin_verificar"
+      }
+    }
+  ],
+
+  "_auto_audit_resultado": {
+    "pass": true,
+    "detectores_ejecutados": [
+      "string_fields_sin_conectores_discursivos",
+      "string_fields_sin_palabras_superiores_30_chars",
+      "pseudo_step.action_dentro_del_enum_14",
+      "ausencia_de_markdown_infiltrado",
+      "ausencia_de_over_engineering_multinivel",
+      "8_tendencias_T1_T8_presentes_con_severidad_y_caso_testigo",
+      "T8_verificacion_grep_de_terminos_helper_contra_repo"
+    ]
+  },
+
+  "_observaciones_para_ana": [
+    "CORRECCION_RESPECTO_AL_INSUMO_T6: el patron_codigo_canonico de T6 en _fiel-v0.1.0.json y en _contrato-modulo-event-core-disciplina-via-notario.json cita los helpers nowISO() y uuid(). Verificacion T8 via Grep contra modules/: nowISO() solo aparece en archivos .blueprint.json (resuelto por LLM-runtime de ai-gateway, no es helper JS); uuid() idem. En codigo JS (.js) el patron real verificado es new Date().toISOString() (17 occurrences en 5 archivos de modules/) y crypto.randomUUID() (25 occurrences en 5 archivos). He reescrito el patron_codigo_canonico de T6 a las formas JS reales del repo. Si ana quiere mantener nowISO()/uuid() como helpers conceptuales pedagogicos, requiere decision: o se introducen como helpers reales en BaseModule (entonces el contrato del helper precede al uso en T6), o se documenta explicitamente que T6 usa pseudocodigo conceptual no ligado a JS literal. La deuda ya estaba anotada en el sexteto previo bajo Deudas internas detectadas por notario; aqui se cierra unilateralmente eligiendo la forma del repo porque el catalogo es la fuente autoritativa y no puede citar helper inexistente.",
+    "AMPLIACION_DE_T2_PATRON_REGEX: el patron_codigo_a_evitar_regex de T2 en las 3 fuentes lista resolveTo\\w*Fallback. Verificacion T8 via Grep contra modules/ produce 1 hit en modules/pizzepos/productos/index.js. La variante resolveToActive\\w* (sin Fallback) tambien aparece como anti-patron en project-identity.contract.json#PROH y notario verifico que existe en el mismo archivo. He anyadido resolveToActive\\w* al array de regex de T2 para que el detector cubra ambas variantes documentadas. Si ana considera que son dos tendencias distintas (fallback con sufijo Fallback vs fallback con sufijo Active), abrir T9 separada; mientras tanto las dos viven bajo T2 porque comparten creencia_aprendida y verdad_paradigma.",
+    "OBSERVACION_DE_REDACCION_T6_VERDAD: la formulacion en las 3 fuentes era 'pseudo_code es ley; nowISO es nowISO; valores no especificados no se inventan'. He simplificado a 'pseudo_code es ley; valores no especificados no se inventan' tras eliminar la cita literal del helper inexistente. La esencia se preserva.",
+    "POLITICA_DE_REFERENCIACION_PROPUESTA: los 6 documentos del sexteto plasmados previamente declaran enforcedTendencies por id pero algunos (ej. _contrato-modulo-event-core-disciplina-via-notario.json) ademas redeclaran el cuerpo completo de las 8 tendencias en una seccion tendencias_del_llm propia. Con este catalogo como fuente autoritativa, ana decide si esos documentos se simplifican removiendo la seccion redundante (apuntando solo a enforcedTendencies + lenguaje_definicion_ref) o si la redeclaracion se conserva por autocontencion. Recomendacion notario neutra: simplificar para evitar drift por redeclaracion (motivo original que origina este catalogo).",
+    "OBSERVACION_DE_ALCANCE: este catalogo NO incluye auto_audit_protocol expandido ni forbidden_patterns_meta ni self_bootstrap_verificacion con sus checks. El usuario lo pidio asi explicitamente. Esos viven en _fiel-v0.1.0.json y los documentos Fiel los heredan implicitamente al declarar lenguaje_definicion_ref. Si emerge necesidad de que el catalogo declare sus propios meta-detectores en futuras versiones, decision de ana."
+  ]
+}

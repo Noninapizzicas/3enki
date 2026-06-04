@@ -263,18 +263,116 @@
     ]
   },
 
-  "_observaciones_para_ana": [
-    "CAMPO_NUEVO_CANONIZADO_catalogo_tendencias_ref: el campo _meta.catalogo_tendencias_ref no existe todavia en ningun documento del repo (verificado por Grep). Esta propuesta lo canoniza por primera vez como referencia explicita al catalogo desde cada documento Fiel que aplique politica_de_referenciacion. Decision de ana: si el campo se llama exactamente catalogo_tendencias_ref o si conviene un nombre mas generico (catalogo_ref, catalogo_canonico_ref) para reservar el prefijo a futuros catalogos canonizados (no solo tendencias). Recomiendo conservar catalogo_tendencias_ref especifico porque es trazable a una funcion concreta; si emerge segundo catalogo canonico se anyade catalogo_<nombre>_ref como campo independiente.",
-    "MATIZ_DOC_1_T2_REGEX_INCOMPLETA: el doc orden 1 _contrato-modulo-event-core-disciplina-via-notario.json en su tendencias_del_llm[T2] declara patron_codigo_a_evitar_regex con resolveTo\\w*Fallback pero NO incluye resolveToActive\\w*. El catalogo v1.0.0 ya incluye ambas variantes (cierre documentado en _observaciones_para_ana del catalogo). Al remover la seccion del doc 1, el catalogo pasa a ser fuente unica y la variante adicional queda automaticamente cubierta sin que fede tenga que hacer nada explicito. Esto es exactamente el beneficio de la politica de referenciacion. Sin embargo, el forbidden_pattern del doc 1 a nivel raiz (no en tendencias_del_llm sino en forbidden_patterns) declara resolveTo\\w*Fallback|resolveToActive\\w* unidos por OR; ESE ya esta correcto. La inconsistencia entre las dos secciones del propio doc 1 es deuda interna que se cierra al simplificar.",
-    "MATIZ_DOC_1_T6_HELPERS_NO_VERIFICADOS: el doc orden 1 en su tendencias_del_llm[T6] cita nowISO() y uuid() como patron_codigo_canonico_pseudo_code. El catalogo v1.0.0 ya corrigio a new Date().toISOString() y crypto.randomUUID() porque Grep contra modules/ produce 0 hits de nowISO/uuid en codigo JS. Al remover la seccion, la correccion del catalogo aplica transitivamente al doc 1 sin trabajo adicional de fede. Si ana prefiere mantener nowISO/uuid como helpers conceptuales pedagogicos, la decision debe ir al catalogo v1.1 (anyadir helpers reales en BaseModule o documentar pedagogia explicita); el doc 1 hereda lo que diga el catalogo.",
-    "MATIZ_DOC_2_VIOLATIONS_Y_FORBIDDEN_PATTERNS_APLICABLES: doc orden 2 _pizzepos-productos-disciplina-via-notario.json tiene seccion violations[] con snippet real archivo:linea por cada tendencia confirmada en el modulo, y seccion forbidden_patterns_aplicables[] que reescribe los regex del padre para el modulo concreto. Estas NO son redeclaracion del cuerpo del catalogo; son instancias de violacion del scope concreto. fede las conserva intactas. Si ana quisiera que el catalogo expusiera tambien casos_de_violacion_documentados[] indexados por tendencia, requiere v1.1 del catalogo con seccion nueva; mientras tanto las violations[] viven en cada documento testigo.",
-    "MATIZ_DOC_3_Y_6_ENFORCED_TENDENCIES_POR_CLASE: docs 3 y 6 declaran enforcedTendencies dentro de cada abstract_class en lugar de a nivel raiz porque ambos documentos contienen dos AbstractClass ortogonales (AggregateRoot+Vista; MutacionCanonica+Notificacion). La politica del catalogo asume enforcedTendencies a nivel documento singular. Decision pendiente de ana sobre como el validator AJV de Fiel resuelve esta pluralidad: opcion (A) union de enforcedTendencies de todas las abstract_classes como subset del catalogo; opcion (B) evaluar tendencias por clase con scope acotado a cada subset declarado. Recomiendo (B) porque permite que una clase declare solo las tendencias que aplican a su shape sin contaminar con las de la clase hermana; (A) seria mas simple para el validator pero menos preciso. Mientras tanto esta propuesta NO toca enforcedTendencies de ningun documento; la decision se aplaza a la implementacion del validator AJV.",
-    "MATIZ_DOC_5_FORBIDDEN_PATTERNS_DEL_PLAN: doc orden 5 _propuesta-endurecer-storage-layout-bypass-via-notario.json tiene forbidden_patterns operativos del propio plan (no se ampliar whitelist, no subir severidad con drift>0, no migracion batch). Estos NO son meta-detectores de prosa (forbidden_patterns_meta) ni redeclaracion del catalogo; son disciplinas del plan de migracion en si mismo. fede los conserva intactos. Por si esto causa duda al validator AJV de Fiel: el shape de Fiel admite forbidden_patterns top-level en cualquier ConcreteClass; la naturaleza operativa vs meta es semantica del contenido, no del shape.",
-    "ESTADO_ACTUAL_RESUMIDO: de los 6 documentos solo el doc orden 1 tiene operacion sustancial (remover seccion completa de tendencias_del_llm de unas 166 lineas). Los otros 5 ya estan en el modelo limpio del catalogo; solo necesitan el campo _meta.catalogo_tendencias_ref que es metadata pura. El ahorro real en bytes es casi todo del doc 1.",
-    "ORDEN_DE_EJECUCION_DE_FEDE: recomiendo orden 1 primero porque es el unico documento donde la operacion puede revelar problema (parseo JSON tras remover seccion grande); los otros 5 son metadata trivial que pueden hacerse en batch al final. Si fede sigue strictly el invariante 5 (documento a documento con verificacion), el orden listado en plan_migracion_por_documento es ya el correcto.",
-    "INTERACCION_CON_CATALOGO_V1_0_0_OBSERVACION_POLITICA_DE_REFERENCIACION: el catalogo v1.0.0 anota en sus _observaciones_para_ana[3] (politica POLITICA_DE_REFERENCIACION_PROPUESTA) que recomendacion neutra del notario era simplificar los documentos del sexteto para evitar drift por redeclaracion. Esta propuesta es la operacionalizacion de esa recomendacion; ana toma la decision al cocinar este testigo y fede ejecuta.",
-    "VALIDATOR_AJV_DE_FIEL_PENDIENTE: cuando se implemente el validator AJV de Fiel (anotado como v0.2.0_propuesto en _fiel-v0.1.0.json), debera (a) resolver _meta.catalogo_tendencias_ref como ruta valida al catalogo, (b) cargar el catalogo y construir indice por TendenciaId, (c) verificar que cada id en enforcedTendencies del documento existe en el indice, (d) decidir politica para documentos con enforcedTendencies por clase (opcion A union o B por scope). Este trabajo es ortogonal a la operacion de fede; el validator se implementa una vez los 6 documentos esten en el modelo limpio.",
-    "RIESGO_OPERACIONAL_BAJO: la operacion no toca enforcedTendencies ni forbidden_patterns ni invariantes; solo metadata (anyadir campo) y en doc 1 ademas remueve seccion redundante. JSON.parse y enforcedTendencies-invariante son las dos verificaciones que blindan contra regresion. El plan no introduce dependencias entre documentos; el orden es para minimizar latencia de deteccion de error no por acoplamiento.",
-    "PENDIENTE_DE_ANA_SI_TAMBIEN_APLICAR_AL_CATALOGO_MISMO: el documento _tendencias-llm-en-event-core-via-notario.json (el catalogo) no es del sexteto pero es del horizonte. NO se le anyade _meta.catalogo_tendencias_ref porque el catalogo ES el catalogo (referenciarse a si mismo es circular). Esta exclusion explicita queda registrada aqui; si en el futuro emerge un meta-catalogo de catalogos canonicos, decision de ana."
-  ]
+  "_observaciones_resueltas_por_ana": [
+    {
+      "id": "CAMPO_NUEVO_CANONIZADO_catalogo_tendencias_ref",
+      "observacion_original": "CAMPO_NUEVO_CANONIZADO_catalogo_tendencias_ref: el campo _meta.catalogo_tendencias_ref no existe todavia en ningun documento del repo (verificado por Grep). Esta propuesta lo canoniza por primera vez como referencia explicita al catalogo desde cada documento Fiel que aplique politica_de_referenciacion. Decision de ana: si el campo se llama exactamente catalogo_tendencias_ref o si conviene un nombre mas generico (catalogo_ref, catalogo_canonico_ref) para reservar el prefijo a futuros catalogos canonizados (no solo tendencias). Recomiendo conservar catalogo_tendencias_ref especifico porque es trazable a una funcion concreta; si emerge segundo catalogo canonico se anyade catalogo_<nombre>_ref como campo independiente.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "confirmado_nombre_especifico",
+        "detalle": "ana confirma el nombre especifico catalogo_tendencias_ref. Razon: escala mejor si emergen catalogos paralelos (catalogo_<nombre>_ref como campos independientes) que un generico que tendria que pluralizarse."
+      }
+    },
+    {
+      "id": "MATIZ_DOC_1_T2_REGEX_INCOMPLETA",
+      "observacion_original": "MATIZ_DOC_1_T2_REGEX_INCOMPLETA: el doc orden 1 _contrato-modulo-event-core-disciplina-via-notario.json en su tendencias_del_llm[T2] declara patron_codigo_a_evitar_regex con resolveTo\\w*Fallback pero NO incluye resolveToActive\\w*. El catalogo v1.0.0 ya incluye ambas variantes (cierre documentado en _observaciones_para_ana del catalogo). Al remover la seccion del doc 1, el catalogo pasa a ser fuente unica y la variante adicional queda automaticamente cubierta sin que fede tenga que hacer nada explicito. Esto es exactamente el beneficio de la politica de referenciacion. Sin embargo, el forbidden_pattern del doc 1 a nivel raiz (no en tendencias_del_llm sino en forbidden_patterns) declara resolveTo\\w*Fallback|resolveToActive\\w* unidos por OR; ESE ya esta correcto. La inconsistencia entre las dos secciones del propio doc 1 es deuda interna que se cierra al simplificar.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "cierre_por_cascada_transitiva",
+        "detalle": "la inconsistencia entre la seccion tendencias_del_llm[T2] del doc 1 y el forbidden_patterns raiz del propio doc 1 se cierra automaticamente al remover la seccion redundante. Cascada transitiva. Sin accion adicional."
+      }
+    },
+    {
+      "id": "MATIZ_DOC_1_T6_HELPERS_NO_VERIFICADOS",
+      "observacion_original": "MATIZ_DOC_1_T6_HELPERS_NO_VERIFICADOS: el doc orden 1 en su tendencias_del_llm[T6] cita nowISO() y uuid() como patron_codigo_canonico_pseudo_code. El catalogo v1.0.0 ya corrigio a new Date().toISOString() y crypto.randomUUID() porque Grep contra modules/ produce 0 hits de nowISO/uuid en codigo JS. Al remover la seccion, la correccion del catalogo aplica transitivamente al doc 1 sin trabajo adicional de fede. Si ana prefiere mantener nowISO/uuid como helpers conceptuales pedagogicos, la decision debe ir al catalogo v1.1 (anyadir helpers reales en BaseModule o documentar pedagogia explicita); el doc 1 hereda lo que diga el catalogo.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "cierre_por_cascada_transitiva",
+        "detalle": "misma cascada que MATIZ_DOC_1_T2. Al remover la seccion redundante del doc 1, el catalogo v1.0.0 pasa a ser fuente unica y la correccion de los helpers (new Date().toISOString() y crypto.randomUUID()) aplica transitivamente sin trabajo adicional. Si en el futuro ana decide introducir nowISO() y uuid() como helpers reales en BaseModule, la decision va al catalogo v1.1, no al doc 1."
+      }
+    },
+    {
+      "id": "MATIZ_DOC_2_VIOLATIONS_Y_FORBIDDEN_PATTERNS_APLICABLES",
+      "observacion_original": "MATIZ_DOC_2_VIOLATIONS_Y_FORBIDDEN_PATTERNS_APLICABLES: doc orden 2 _pizzepos-productos-disciplina-via-notario.json tiene seccion violations[] con snippet real archivo:linea por cada tendencia confirmada en el modulo, y seccion forbidden_patterns_aplicables[] que reescribe los regex del padre para el modulo concreto. Estas NO son redeclaracion del cuerpo del catalogo; son instancias de violacion del scope concreto. fede las conserva intactas. Si ana quisiera que el catalogo expusiera tambien casos_de_violacion_documentados[] indexados por tendencia, requiere v1.1 del catalogo con seccion nueva; mientras tanto las violations[] viven en cada documento testigo.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "confirmado_conservar_intacto",
+        "detalle": "confirmado. Las secciones violations[] y forbidden_patterns_aplicables[] del doc 2 son instancias de violacion del scope concreto, no redeclaracion del catalogo. Se conservan intactas."
+      }
+    },
+    {
+      "id": "MATIZ_DOC_3_Y_6_ENFORCED_TENDENCIES_POR_CLASE",
+      "observacion_original": "MATIZ_DOC_3_Y_6_ENFORCED_TENDENCIES_POR_CLASE: docs 3 y 6 declaran enforcedTendencies dentro de cada abstract_class en lugar de a nivel raiz porque ambos documentos contienen dos AbstractClass ortogonales (AggregateRoot+Vista; MutacionCanonica+Notificacion). La politica del catalogo asume enforcedTendencies a nivel documento singular. Decision pendiente de ana sobre como el validator AJV de Fiel resuelve esta pluralidad: opcion (A) union de enforcedTendencies de todas las abstract_classes como subset del catalogo; opcion (B) evaluar tendencias por clase con scope acotado a cada subset declarado. Recomiendo (B) porque permite que una clase declare solo las tendencias que aplican a su shape sin contaminar con las de la clase hermana; (A) seria mas simple para el validator pero menos preciso. Mientras tanto esta propuesta NO toca enforcedTendencies de ningun documento; la decision se aplaza a la implementacion del validator AJV.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "opcion_B_evaluar_por_clase_con_scope_acotado",
+        "detalle": "ana decide opcion B (evaluar tendencias por clase con scope acotado a cada subset declarado). Anotada para implementacion del validator AJV de Fiel v0.2.0_propuesto. No bloquea esta propuesta; esta operacion no toca enforcedTendencies de ningun documento."
+      }
+    },
+    {
+      "id": "MATIZ_DOC_5_FORBIDDEN_PATTERNS_DEL_PLAN",
+      "observacion_original": "MATIZ_DOC_5_FORBIDDEN_PATTERNS_DEL_PLAN: doc orden 5 _propuesta-endurecer-storage-layout-bypass-via-notario.json tiene forbidden_patterns operativos del propio plan (no se ampliar whitelist, no subir severidad con drift>0, no migracion batch). Estos NO son meta-detectores de prosa (forbidden_patterns_meta) ni redeclaracion del catalogo; son disciplinas del plan de migracion en si mismo. fede los conserva intactos. Por si esto causa duda al validator AJV de Fiel: el shape de Fiel admite forbidden_patterns top-level en cualquier ConcreteClass; la naturaleza operativa vs meta es semantica del contenido, no del shape.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "confirmado_conservar_intacto",
+        "detalle": "confirmado. Los forbidden_patterns operativos del propio plan de migracion no son meta-detectores ni redeclaracion del catalogo. Se conservan intactos."
+      }
+    },
+    {
+      "id": "ESTADO_ACTUAL_RESUMIDO",
+      "observacion_original": "ESTADO_ACTUAL_RESUMIDO: de los 6 documentos solo el doc orden 1 tiene operacion sustancial (remover seccion completa de tendencias_del_llm de unas 166 lineas). Los otros 5 ya estan en el modelo limpio del catalogo; solo necesitan el campo _meta.catalogo_tendencias_ref que es metadata pura. El ahorro real en bytes es casi todo del doc 1.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "observacion_informativa_sin_decision_requerida",
+        "detalle": "observacion informativa, sin decision requerida."
+      }
+    },
+    {
+      "id": "ORDEN_DE_EJECUCION_DE_FEDE",
+      "observacion_original": "ORDEN_DE_EJECUCION_DE_FEDE: recomiendo orden 1 primero porque es el unico documento donde la operacion puede revelar problema (parseo JSON tras remover seccion grande); los otros 5 son metadata trivial que pueden hacerse en batch al final. Si fede sigue strictly el invariante 5 (documento a documento con verificacion), el orden listado en plan_migracion_por_documento es ya el correcto.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "confirmado_orden_actual_correcto_aplica_a_noa",
+        "detalle": "el orden listado en plan_migracion_por_documento es el correcto (doc 1 primero por ser el unico con operacion sustancial). Aplica identico a Noa."
+      }
+    },
+    {
+      "id": "INTERACCION_CON_CATALOGO_V1_0_0_OBSERVACION_POLITICA_DE_REFERENCIACION",
+      "observacion_original": "INTERACCION_CON_CATALOGO_V1_0_0_OBSERVACION_POLITICA_DE_REFERENCIACION: el catalogo v1.0.0 anota en sus _observaciones_para_ana[3] (politica POLITICA_DE_REFERENCIACION_PROPUESTA) que recomendacion neutra del notario era simplificar los documentos del sexteto para evitar drift por redeclaracion. Esta propuesta es la operacionalizacion de esa recomendacion; ana toma la decision al cocinar este testigo y fede ejecuta.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "observacion_de_operacionalizacion_ya_cocinada",
+        "detalle": "observacion de operacionalizacion ya cocinada por ana al producir este plan. Sin accion."
+      }
+    },
+    {
+      "id": "VALIDATOR_AJV_DE_FIEL_PENDIENTE",
+      "observacion_original": "VALIDATOR_AJV_DE_FIEL_PENDIENTE: cuando se implemente el validator AJV de Fiel (anotado como v0.2.0_propuesto en _fiel-v0.1.0.json), debera (a) resolver _meta.catalogo_tendencias_ref como ruta valida al catalogo, (b) cargar el catalogo y construir indice por TendenciaId, (c) verificar que cada id en enforcedTendencies del documento existe en el indice, (d) decidir politica para documentos con enforcedTendencies por clase (opcion A union o B por scope). Este trabajo es ortogonal a la operacion de fede; el validator se implementa una vez los 6 documentos esten en el modelo limpio.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "anotada_para_v0_2_0_no_bloquea",
+        "detalle": "anotada para implementacion de Fiel v0.2.0_propuesto. No bloquea ni esta operacion ni el trabajo de Noa."
+      }
+    },
+    {
+      "id": "RIESGO_OPERACIONAL_BAJO",
+      "observacion_original": "RIESGO_OPERACIONAL_BAJO: la operacion no toca enforcedTendencies ni forbidden_patterns ni invariantes; solo metadata (anyadir campo) y en doc 1 ademas remueve seccion redundante. JSON.parse y enforcedTendencies-invariante son las dos verificaciones que blindan contra regresion. El plan no introduce dependencias entre documentos; el orden es para minimizar latencia de deteccion de error no por acoplamiento.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "evaluacion_informativa_sin_decision_requerida",
+        "detalle": "evaluacion informativa, sin decision requerida."
+      }
+    },
+    {
+      "id": "PENDIENTE_DE_ANA_SI_TAMBIEN_APLICAR_AL_CATALOGO_MISMO",
+      "observacion_original": "PENDIENTE_DE_ANA_SI_TAMBIEN_APLICAR_AL_CATALOGO_MISMO: el documento _tendencias-llm-en-event-core-via-notario.json (el catalogo) no es del sexteto pero es del horizonte. NO se le anyade _meta.catalogo_tendencias_ref porque el catalogo ES el catalogo (referenciarse a si mismo es circular). Esta exclusion explicita queda registrada aqui; si en el futuro emerge un meta-catalogo de catalogos canonicos, decision de ana.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "confirmado_exclusion_explicita_preservada",
+        "detalle": "confirmado. El catalogo _tendencias-llm-en-event-core-via-notario.json NO recibe _meta.catalogo_tendencias_ref (referenciarse a si mismo es circular). Exclusion explicita preservada."
+      }
+    }
+  ],
+
+  "_observaciones_para_ana": []
 }

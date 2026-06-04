@@ -137,7 +137,7 @@
         { "type": "pseudo_step", "action": "assign", "target": "this.estadoConversacional", "condition": null, "value": "recorriendo_plan" },
         { "type": "pseudo_step", "action": "assign", "target": "pseudoCodeNodes", "condition": null, "value": "[]" },
         { "type": "pseudo_step", "action": "loop", "target": "walk_json_tree(plan)", "condition": null, "value": null },
-        { "type": "pseudo_step", "action": "branch", "target": "if_nodo_es_pseudo_code", "condition": "Array.isArray(node.value) && node.key matches /pseudo_code|pseudocodigo/", "value": null },
+        { "type": "pseudo_step", "action": "branch", "target": "if_nodo_es_pseudo_code", "condition": "Array.isArray(node.value) && node.key matches /pseudo_code/", "value": null },
         { "type": "pseudo_step", "action": "store", "target": "pseudoCodeNodes", "condition": null, "value": "push({ path: node.path, steps: node.value })" },
         { "type": "pseudo_step", "action": "loop", "target": "for_each_node_of_pseudoCodeNodes_en_orden_de_aparicion", "condition": null, "value": null },
         { "type": "pseudo_step", "action": "loop", "target": "for_each_step_of_node.steps", "condition": null, "value": null },
@@ -298,26 +298,59 @@
     ]
   },
 
-  "_observaciones_para_ana": [
+  "_observaciones_resueltas_por_ana": [
     {
       "id": "obs_1_canal_runtime_con_ana_no_es_bidireccional_intra_invocacion",
-      "observacion": "El testigo describe el canal Noa / ana en runtime como 'Noa devuelve mensaje al invocador con la pregunta; ana responde via SendMessage; Noa continua desde donde quedo'. Mecanicamente una invocacion del Agent tool de Claude Code es one-shot: Noa devuelve una unica salida y termina. Para que Noa 'continue desde donde quedo' tras la respuesta de ana, el invocador debe reinvocar Noa con un nuevo prompt que incluya el snapshot_de_progreso devuelto + la respuesta de ana. Plasmado asi en consultarAna. Decision para ana: aceptar este modelo (reinvocacion con snapshot) o cocinar un mecanismo de continuacion persistente (ej: archivo de checkpoint que Noa lee al reinvocarse) antes de poner Noa en produccion."
+      "observacion": "El testigo describe el canal Noa / ana en runtime como 'Noa devuelve mensaje al invocador con la pregunta; ana responde via SendMessage; Noa continua desde donde quedo'. Mecanicamente una invocacion del Agent tool de Claude Code es one-shot: Noa devuelve una unica salida y termina. Para que Noa 'continue desde donde quedo' tras la respuesta de ana, el invocador debe reinvocar Noa con un nuevo prompt que incluya el snapshot_de_progreso devuelto + la respuesta de ana. Plasmado asi en consultarAna. Decision para ana: aceptar este modelo (reinvocacion con snapshot) o cocinar un mecanismo de continuacion persistente (ej: archivo de checkpoint que Noa lee al reinvocarse) antes de poner Noa en produccion.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "aceptado_modelo_plasmado",
+        "detalle": "ana acepta el modelo plasmado (snapshot + reinvocacion via SendMessage). No cocinar checkpoint persistente. El SendMessage del Agent tool ya da continuacion de contexto. La diferencia mecanica entre intra-invocacion y terminacion+reinvocacion es invisible para el humano que lee la conversacion.",
+        "aplicado_en_shape": false
+      }
     },
     {
       "id": "obs_2_walk_json_tree_para_identificar_pseudo_code_nodes",
-      "observacion": "El testigo dice 'identifica los nodos cuyo valor sea un array de PseudoStep, es decir, todos los pseudo_code: [...] y equivalentes que existan en el plan, independientemente de la seccion donde esten'. Plasmado como walk_json_tree con match sobre key matches /pseudo_code|pseudocodigo/ AND value es Array. Decision para ana: confirmar que esos son los unicos nombres de key validos (pseudo_code en Fiel, pseudocodigo en planes legacy de fede) o ampliar a otros nombres si emergen (ej: steps, pasos, instrucciones)."
+      "observacion": "El testigo dice 'identifica los nodos cuyo valor sea un array de PseudoStep, es decir, todos los pseudo_code: [...] y equivalentes que existan en el plan, independientemente de la seccion donde esten'. Plasmado como walk_json_tree con match sobre key matches /pseudo_code|pseudocodigo/ AND value es Array. Decision para ana: confirmar que esos son los unicos nombres de key validos (pseudo_code en Fiel, pseudocodigo en planes legacy de fede) o ampliar a otros nombres si emergen (ej: steps, pasos, instrucciones).",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "solo_pseudo_code_de_fiel",
+        "detalle": "ana decide solo pseudo_code (Fiel). Quitar pseudocodigo legacy de fede del shape de Noa. Razon: Noa nace para consumir notario, no fede; mantener pseudocodigo arrastra contra el principio 'no heredar nada' cocinado con el humano.",
+        "aplicado_en_shape": true,
+        "cambio_aplicado": "regex de recorrerPlanIdentificandoPseudoCode pasa de /pseudo_code|pseudocodigo/ a /pseudo_code/ (linea originalmente en 140)"
+      }
     },
     {
       "id": "obs_3_orden_de_aparicion_en_documento_como_orden_de_ejecucion",
-      "observacion": "El testigo dice 'los ejecuta en orden de aparicion en el documento'. Plasmado como recorrido top-down del JSON. Decision para ana: confirmar que el orden top-down del JSON es semanticamente correcto para todos los planes que notario plasme, o si algun plan requiere orden alternativo (ej: por id de fase, por dependencia declarada). Si emerge necesidad, notario debera plasmar el orden explicitamente en el plan y Noa leerlo de ahi."
+      "observacion": "El testigo dice 'los ejecuta en orden de aparicion en el documento'. Plasmado como recorrido top-down del JSON. Decision para ana: confirmar que el orden top-down del JSON es semanticamente correcto para todos los planes que notario plasme, o si algun plan requiere orden alternativo (ej: por id de fase, por dependencia declarada). Si emerge necesidad, notario debera plasmar el orden explicitamente en el plan y Noa leerlo de ahi.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "orden_top_down_por_defecto",
+        "detalle": "ana confirma orden top-down del JSON como orden de ejecucion. Es natural y predecible. Si en el futuro algun plan necesita orden alternativo, lo declara explicito y se reabre. Por defecto basta.",
+        "aplicado_en_shape": false
+      }
     },
     {
       "id": "obs_4_emit_y_listen_en_pseudo_code_describen_modulo_final_no_invocan_bus",
-      "observacion": "El testigo dice 'emit / listen: si la pseudo_code describe lo que un modulo final hace (no Noa), Noa escribe ese codigo en el archivo del modulo, no lo invoca. Distincion contextual'. Plasmado en traducirAccionATool con condicion 'contexto_node_path describe modulo a generar'. La distincion contextual queda en mano de Noa al leer el node_path. Decision para ana: confirmar que en los planes que notario plasme, pseudo_code de emit/listen siempre describe el modulo final (nunca pide a Noa misma publicar al bus). Si en algun plan futuro Noa necesitara publicar al bus directamente (ej: invocar un validator via bus), eso requiere ampliar el shape del plan y revisitar este punto."
+      "observacion": "El testigo dice 'emit / listen: si la pseudo_code describe lo que un modulo final hace (no Noa), Noa escribe ese codigo en el archivo del modulo, no lo invoca. Distincion contextual'. Plasmado en traducirAccionATool con condicion 'contexto_node_path describe modulo a generar'. La distincion contextual queda en mano de Noa al leer el node_path. Decision para ana: confirmar que en los planes que notario plasme, pseudo_code de emit/listen siempre describe el modulo final (nunca pide a Noa misma publicar al bus). Si en algun plan futuro Noa necesitara publicar al bus directamente (ej: invocar un validator via bus), eso requiere ampliar el shape del plan y revisitar este punto.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "invariante_por_defecto_emit_listen_describen_modulo_final",
+        "detalle": "ana confirma como invariante por defecto. Cuando una pseudo_step describe lo que un modulo del sistema hace (publish/listen del bus), Noa escribe ese codigo en el archivo del modulo, no invoca el bus directamente. YAGNI excepciones.",
+        "aplicado_en_shape": false
+      }
     },
     {
       "id": "obs_5_decision_de_cocina_que_emerge_vs_obstaculo_tecnico",
-      "observacion": "El testigo distingue dos salidas tempranas: obstaculo tecnico (para y reporta) vs decision de cocina (consulta a ana). El criterio mecanico para distinguir uno de otro queda en Noa al ejecutar. Decision para ana: si en la primera ejecucion real de Noa el criterio resulta ambiguo, considerar formalizar marcadores explicitos en el plan (ej: campo decision_de_ana_pendiente_si en cada operacion) que notario plasme para que Noa los lea sin ambiguedad."
+      "observacion": "El testigo distingue dos salidas tempranas: obstaculo tecnico (para y reporta) vs decision de cocina (consulta a ana). El criterio mecanico para distinguir uno de otro queda en Noa al ejecutar. Decision para ana: si en la primera ejecucion real de Noa el criterio resulta ambiguo, considerar formalizar marcadores explicitos en el plan (ej: campo decision_de_ana_pendiente_si en cada operacion) que notario plasme para que Noa los lea sin ambiguedad.",
+      "decision_de_ana": {
+        "fecha": "2026-06-04",
+        "resolucion": "distincion_por_contexto_en_runtime_sin_marcadores_precompilados",
+        "detalle": "ana decide no precompilar marcadores en el plan. Distincion por contexto en runtime: tecnico = JSON.parse error, archivo no encontrado, cross-check falla, regex no matchea (Noa para y reporta al humano). Cocina = el plan dice algo ambiguo que requiere decision de dominio (Noa consulta a ana via reinvocacion). Si emerge ambiguedad real en produccion, se formaliza marcadores entonces.",
+        "aplicado_en_shape": false
+      }
     }
-  ]
+  ],
+
+  "_observaciones_para_ana": []
 }

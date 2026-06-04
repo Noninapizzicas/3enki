@@ -1,0 +1,440 @@
+{
+  "_meta": {
+    "documento_id": "modulo-event-core-disciplina",
+    "version": "1.0.0",
+    "creado": "2026-06-03",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "lenguaje_definicion_ref": "arquitectura/decisiones/propuestas/_fiel-v0.1.0.json",
+    "fuente_cocinado_ref": "arquitectura/decisiones/propuestas/_arranque-modulo-event-core-disciplina.json#tajada_1",
+    "plasmado_por": "agente notario primera prueba",
+    "intencion": "Canoniza la disciplina arquitectonica del modulo event-core. Captura ModuloEventCore como AbstractClass con sus invariantes y forbidden_patterns; declara las 8 tendencias T1-T8 del LLM observadas en auditorias 2026-06-02; instala auto_audit_protocol heredado de Fiel para que el propio documento se valide contra sus primitivas.",
+    "supersedes_nota": "primer contrato derivado del experimento 7-LLMs; reemplaza disciplina implicita dispersa por shape Fiel verificable"
+  },
+
+  "type": "abstract_class",
+  "name": "ModuloEventCore",
+  "extends": "BaseModule",
+
+  "properties": [
+    {
+      "type": "property",
+      "name": "bus",
+      "type_expression": "BusConnection",
+      "visibility": "protected",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "type": "property",
+      "name": "logger",
+      "type_expression": "Logger",
+      "visibility": "protected",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "type": "property",
+      "name": "metrics",
+      "type_expression": "MetricsCollector | null",
+      "visibility": "protected",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "type": "property",
+      "name": "cache",
+      "type_expression": "Map | null",
+      "visibility": "protected",
+      "nullable": true,
+      "default": null
+    }
+  ],
+
+  "abstract_methods": {
+    "onLoad(context)": "registra subscribers; inicializa estado por replay de eventos canonicos del dominio propio desde el bus; nunca lee disco directamente",
+    "onUnload()": "libera recursos sin persistir fuera del bus"
+  },
+
+  "concrete_invariants": [
+    {
+      "type": "invariant",
+      "expression": "this.cache es estructura volatil reconstruible al onLoad, nunca fuente de autoridad",
+      "applies_to": "ModuloEventCore"
+    },
+    {
+      "type": "invariant",
+      "expression": "for each publish(event): event.payload completo antes de publish",
+      "applies_to": "global"
+    },
+    {
+      "type": "invariant",
+      "expression": "for each handler(event): event.source.module leido explicito, sin fallback a active",
+      "applies_to": "global"
+    },
+    {
+      "type": "invariant",
+      "expression": "all I/O passes through bus events; sin fs.* ni db.* directos fuera del whitelist [filesystem, database-manager, project-manager]",
+      "applies_to": "global"
+    },
+    {
+      "type": "invariant",
+      "expression": "id no resuelto produce throw INVALID_INPUT, nunca fallback silencioso",
+      "applies_to": "global"
+    }
+  ],
+
+  "forbidden_patterns": [
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "this\\._?cache\\s*=\\s*new Map",
+      "reason": "cache defensiva propia duplica autoridad del bus",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "call", "target": "this.bus.publishAndWait", "condition": null, "value": "{ eventType, payload }" },
+        { "type": "pseudo_step", "action": "assign", "target": "result", "condition": null, "value": "await call_result" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "require\\(['\"]fs['\"]\\)",
+      "reason": "bypass del modulo filesystem dueno del scope",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "emit", "target": "fs.read.request", "condition": null, "value": "{ project_id, path }" },
+        { "type": "pseudo_step", "action": "listen", "target": "fs.read.response", "condition": "correlation_id matches request", "value": null }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "catch\\s*\\(\\s*_\\s*\\)\\s*\\{\\s*\\}",
+      "reason": "catch tragador oculta error",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "log", "target": "this.logger.error", "condition": null, "value": "{ event: 'mod.op.failed', error: err.message }" },
+        { "type": "pseudo_step", "action": "call", "target": "this.metrics.increment", "condition": "this.metrics != null", "value": "{ name: 'mod.errors', tags: { kind } }" },
+        { "type": "pseudo_step", "action": "throw", "target": "rethrow", "condition": null, "value": "err" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "resolveTo\\w*Fallback|resolveToActive\\w*",
+      "reason": "fallback silencioso de identidad enmascara desincronizacion",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "branch", "target": "if_not_cache_has", "condition": "!this.cache.has(id)", "value": null },
+        { "type": "pseudo_step", "action": "throw", "target": "INVALID_INPUT", "condition": null, "value": "id no resuelto: ${id}" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "\\{\\s*\\.\\.\\.\\w+,\\s*activo:\\s*true\\s*\\}",
+      "reason": "sobreescritura de estado persistido al recargar pierde la verdad del disco",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "assign", "target": "item", "condition": null, "value": "{ ...rawData }" },
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "sin sobreescribir campos persistidos" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "this\\.publish\\([^)]+\\);[\\s\\S]{0,200}?await\\s+\\w*\\.?write",
+      "reason": "handoff prematuro: publish de notificacion antes de que el cambio aterrice en disco",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "emit", "target": "fs.write.request", "condition": null, "value": "{ path, content }" },
+        { "type": "pseudo_step", "action": "listen", "target": "fs.write.response", "condition": "correlation_id matches request", "value": null },
+        { "type": "pseudo_step", "action": "emit", "target": "foo.creada", "condition": "after_write_landed", "value": "{ id, payload_completo }" }
+      ],
+      "severidad": "error"
+    }
+  ],
+
+  "enforcedTendencies": [
+    "T1_cache_defensiva",
+    "T2_fallback_silencioso_identidad",
+    "T3_bypass_filesystem",
+    "T4_catch_tragador",
+    "T5_sobreescribir_estado_al_recargar",
+    "T6_completar_campos_que_pseudocodigo_no_pide",
+    "T7_handoff_prematuro",
+    "T8_deducir_terminos_nuevos_del_contexto_inmediato"
+  ],
+
+  "tendencias_del_llm": [
+    {
+      "type": "tendencia",
+      "id": "T1_cache_defensiva",
+      "creencia_aprendida_corpus": "memorizar evita llamadas extra al bus y mejora performance",
+      "verdad_paradigma_que_la_contradice": "bus es fuente unica de autoridad; memorizar duplica autoridad",
+      "patron_codigo_a_evitar_regex": [
+        "this\\._?cache\\s*=\\s*new Map",
+        "this\\.\\w+PerProject\\s*=\\s*new Map",
+        "if\\s*\\(this\\._?cache\\.has"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "call", "target": "this.bus.publishAndWait", "condition": null, "value": "{ eventType, payload }" },
+        { "type": "pseudo_step", "action": "assign", "target": "result", "condition": null, "value": "await call_result" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 28,
+        "drift_id": "drift_cache_defensiva"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T2_fallback_silencioso_identidad",
+      "creencia_aprendida_corpus": "si el id no resuelve busco algo parecido para no romper flujo",
+      "verdad_paradigma_que_la_contradice": "id no resuelto es bug; fallar ruidoso expone el desencuentro",
+      "patron_codigo_a_evitar_regex": [
+        "resolveTo\\w*Fallback",
+        "for\\s*\\(.*of this\\.\\w+\\.keys\\(\\)\\)\\s*\\{?\\s*return"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "branch", "target": "if_not_cache_has", "condition": "!this.cache.has(id)", "value": null },
+        { "type": "pseudo_step", "action": "throw", "target": "INVALID_INPUT", "condition": null, "value": "id no resuelto: ${id}" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 62,
+        "drift_id": "drift_fallback_silencioso_identidad"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T3_bypass_filesystem",
+      "creencia_aprendida_corpus": "fs.readdir y fs.readFile son APIs estandar; usarlas es eficiente",
+      "verdad_paradigma_que_la_contradice": "filesystem es modulo dueno del scope; bus es la unica forma de mantener autoridad",
+      "patron_codigo_a_evitar_regex": [
+        "require\\(['\"]fs['\"]\\)",
+        "await fs\\.readdir",
+        "await fs\\.readFile",
+        "await fs\\.writeFile"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "emit", "target": "fs.read.request", "condition": null, "value": "{ project_id, path }" },
+        { "type": "pseudo_step", "action": "listen", "target": "fs.read.response", "condition": "correlation_id matches request", "value": null }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 1133,
+        "drift_id": "drift_bypass_filesystem"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T4_catch_tragador",
+      "creencia_aprendida_corpus": "try catch vacio para que el flujo no rompa",
+      "verdad_paradigma_que_la_contradice": "error oculto se manifiesta despues como inconsistencia inexplicable",
+      "patron_codigo_a_evitar_regex": [
+        "catch\\s*\\(\\s*_\\s*\\)\\s*\\{\\s*\\}",
+        "catch\\s*\\(.+\\)\\s*\\{\\s*\\}"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "log", "target": "this.logger.error", "condition": null, "value": "{ event: 'mod.op.failed', error: err.message }" },
+        { "type": "pseudo_step", "action": "throw", "target": "rethrow", "condition": null, "value": "err" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/filesystem/index.js",
+        "linea_aprox": 141,
+        "drift_id": "drift_catch_tragador_pre_fix"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T5_sobreescribir_estado_al_recargar",
+      "creencia_aprendida_corpus": "al cargar carta normalizo todos los productos como activos para tener estado consistente",
+      "verdad_paradigma_que_la_contradice": "estado persistido es la verdad; sobreescribir en carga pierde el estado real",
+      "patron_codigo_a_evitar_regex": [
+        "\\{\\s*\\.\\.\\.\\w+,\\s*activo:\\s*true\\s*\\}",
+        "\\{\\s*\\.\\.\\.\\w+,\\s*estado:\\s*['\"][a-z]+['\"]\\s*\\}"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "assign", "target": "item", "condition": null, "value": "{ ...rawData }" },
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "sin sobreescribir campos persistidos" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 1167,
+        "drift_id": "drift_sobreescritura_estado_al_recargar"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T6_completar_campos_que_pseudocodigo_no_pide",
+      "creencia_aprendida_corpus": "el campo esta vacio; pongo un valor razonable",
+      "verdad_paradigma_que_la_contradice": "pseudo_code es ley; nowISO es nowISO; valores no especificados no se inventan",
+      "patron_codigo_a_evitar_regex": [
+        "created_at:\\s*['\"][0-9]{4}-",
+        "version:\\s*2\\s*,",
+        "id:\\s*['\"][a-f0-9]{8}-[a-f0-9]{4}-"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "assign", "target": "created_at", "condition": null, "value": "nowISO()" },
+        { "type": "pseudo_step", "action": "assign", "target": "version", "condition": null, "value": "1" },
+        { "type": "pseudo_step", "action": "assign", "target": "id", "condition": null, "value": "uuid()" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "audit_2026-06-02_carta_catalogo_activo",
+        "linea_aprox": 0,
+        "drift_id": "drift_alucinacion_timestamps_y_version"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T7_handoff_prematuro",
+      "creencia_aprendida_corpus": "eventual consistency es legitimo; publico la notificacion al empezar la accion",
+      "verdad_paradigma_que_la_contradice": "publico cuando el cambio aterrizo, o con payload completo para que consumers no necesiten leer disco",
+      "patron_codigo_a_evitar_regex": [
+        "this\\.publish\\([^)]+\\);[\\s\\S]{0,200}?await\\s+\\w*\\.?write"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "emit", "target": "fs.write.request", "condition": null, "value": "{ path, content }" },
+        { "type": "pseudo_step", "action": "listen", "target": "fs.write.response", "condition": "correlation_id matches request", "value": null },
+        { "type": "pseudo_step", "action": "emit", "target": "foo.creada", "condition": "after_write_landed", "value": "{ id, payload_completo }" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "audit_2026-06-02_flujo_carta_manager",
+        "linea_aprox": 0,
+        "drift_id": "drift_handoff_prematuro"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T8_deducir_terminos_nuevos_del_contexto_inmediato",
+      "creencia_aprendida_corpus": "cuando el humano usa termino tecnico nuevo lo deduzco del contexto reciente",
+      "verdad_paradigma_que_la_contradice": "deducir mal contamina el documento; preguntar es mas barato que reescribir",
+      "patron_codigo_a_evitar_regex": [
+        "// asumir significado sin verificar"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "branch", "target": "if_termino_nuevo_y_no_existe", "condition": "termino_nuevo && !termino_existe_en_repo", "value": null },
+        { "type": "pseudo_step", "action": "return", "target": "requires_clarification", "condition": null, "value": "[termino_nuevo]" },
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "no inferir del contexto reciente" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "arquitectura/decisiones/propuestas/_experimento-3coops-001.json",
+        "linea_aprox": 0,
+        "drift_id": "drift_deducir_terminos_sin_verificar"
+      }
+    }
+  ],
+
+  "forbidden_patterns_meta": [
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "\\b(aunque|salvo que|en general|sin embargo|por otro lado)\\b",
+      "reason": "conectores discursivos sintoma de prosa libre infiltrada",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "extraer matiz a sub-objeto estructurado" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "[a-z]{30,}",
+      "reason": "palabra superior a 30 chars sintoma de parrafo concatenado o terminologia inventada",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "descomponer a campos discretos" }
+      ],
+      "severidad": "warning"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "(MODEL|INSTANCE|EXECUTION)_LAYER|compilador|sub-DSL",
+      "reason": "over-engineering: el contrato no justifica multinivel",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "shape plano; multinivel cuando emerja necesidad real" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "tendencias?\\s*:\\s*\\[\\s*\\]",
+      "reason": "omitir las 8 tendencias T1-T8 en un documento que canoniza disciplina arquitectonica",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "declarar enforcedTendencies del subset T1-T8 que aplican" }
+      ],
+      "severidad": "error"
+    }
+  ],
+
+  "auto_audit_protocol": {
+    "type": "protocolo_obligatorio",
+    "name": "auto_audit_before_return",
+    "descripcion_corta": "Antes de devolver este documento, el plasmador se evalua contra forbidden_patterns_meta y los 3 detectores de drift heredados de Fiel. Si hay violacion, regenera la seccion antes de devolver.",
+    "pseudo_code": [
+      { "type": "pseudo_step", "action": "loop", "target": "for_each_string_field_of_output", "condition": null, "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "has maxLength OR pattern", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "!matches conectores_discursivos", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "!matches palabras_30_chars", "value": null },
+      { "type": "pseudo_step", "action": "loop", "target": "for_each_pseudo_step_of_output", "condition": null, "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "pseudo_step.action", "condition": "in enum_14_acciones_de_Fiel", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "no_markdown_outside_doc_corto", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "no_over_engineering_multinivel", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "8_tendencias_T1_T8_presentes", "value": null },
+      { "type": "pseudo_step", "action": "branch", "target": "if_any_violation", "condition": "violations.length > 0", "value": null },
+      { "type": "pseudo_step", "action": "call", "target": "regenerate_violating_section", "condition": null, "value": "violations" },
+      { "type": "pseudo_step", "action": "return", "target": "output", "condition": "auto_audit_passed", "value": null }
+    ]
+  },
+
+  "self_bootstrap_verificacion": {
+    "tipo_invariante": "este_documento_cumple_su_propia_definicion",
+    "checks": [
+      "es ConcreteClass-shape declarada como abstract_class (Fiel primitiva)",
+      "properties usan shape Property con visibility enum cerrado",
+      "abstract_methods describe signature por linea de texto corta",
+      "concrete_invariants usan primitiva Invariant con applies_to declarado",
+      "forbidden_patterns usan primitiva ForbiddenPattern con regex + alternative_pseudo_code + severidad",
+      "alternative_pseudo_code es array de PseudoStep con action del enum 14",
+      "enforcedTendencies lista las 8 tendencias T1-T8 declaradas abajo",
+      "tendencias_del_llm presenta las 8 tendencias con shape Tendencia completo (creencia + verdad + regex + pseudo_code + severidad + caso_testigo)",
+      "forbidden_patterns_meta cubre los 4 detectores meta de Fiel",
+      "auto_audit_protocol presente con pseudo_code que valida string_fields + pseudo_steps + ausencia markdown + over_engineering + 8 tendencias",
+      "ningun campo MAYUSCULAS con sintaxis fuera de JSON",
+      "ningun caso de uso particular se confunde con definicion del lenguaje Fiel"
+    ]
+  },
+
+  "_auto_audit_resultado": {
+    "pass": true,
+    "detectores_ejecutados": [
+      "string_fields_con_maxLength_o_pattern",
+      "ausencia_de_conectores_discursivos",
+      "ausencia_de_palabras_superiores_30_chars",
+      "pseudo_step.action_dentro_del_enum_14",
+      "ausencia_de_markdown_infiltrado",
+      "ausencia_de_over_engineering_multinivel",
+      "8_tendencias_T1_T8_presentes_con_severidad",
+      "ausencia_de_plagio_literal_StructoLang_LINC_Lumina_CognitoScript_LOP_LLM_SPEC_LANG"
+    ],
+    "violaciones_detectadas_y_regeneradas": [
+      {
+        "violacion_inicial": "concrete_invariant del insumo usaba tipo CacheIncremental no presente en el repo",
+        "deteccion": "T8 verificacion contra repo via Grep produjo 0 hits para CacheIncremental",
+        "regeneracion": "invariant reformulado a expresion neutra 'this.cache es estructura volatil reconstruible al onLoad' sin inventar tipo"
+      },
+      {
+        "violacion_inicial": "pseudo_code alternativo del insumo usaba helper _withCode no presente en el repo",
+        "deteccion": "T8 verificacion contra repo via Grep produjo 0 hits para _withCode",
+        "regeneracion": "pseudo_code reformulado con action throw target INVALID_INPUT y value descriptivo, alineado con patron real en uso"
+      }
+    ]
+  },
+
+  "_observaciones_para_ana": [
+    "TERMINO_NO_VERIFICADO_EN_REPO: 'CacheIncremental' aparece en el insumo cocinado como tipo de this.cache en una concrete_invariant. Grep contra el repo produce 0 hits. He sustituido la invariante por formulacion neutra que captura la intencion (cache es volatil reconstruible, no fuente de autoridad) sin canonizar un tipo inexistente. Si CacheIncremental es una abstraccion que ana quiere introducir, requiere contrato propio donde se defina antes de citarse aqui.",
+    "TERMINO_NO_VERIFICADO_EN_REPO: '_withCode' aparece en pseudo_code alternativo del insumo como helper para anexar codigo de error. Grep contra el repo produce 0 hits. El patron real en uso es objeto con propiedad explicita code (ej: { status: 400, code: 'INVALID_INPUT' } en modules/facturacion/fuentes/index.js:87). He plasmado el pseudo_code con throw + target INVALID_INPUT, alineado con el patron real.",
+    "OBSERVACION_DE_SHAPE: la AbstractClass ContratoArquitectonico declarada en Fiel v0.1.0 lista properties (id, version, _doc) y abstract_methods (validar, outputShape) que este documento podria heredar formalmente declarando extends ContratoArquitectonico. He optado por declarar extends BaseModule porque el sujeto canonizado es ModuloEventCore (clase de modulo), no el contrato como entidad. Si ana quiere que el documento sea ademas instancia de ContratoArquitectonico, hace falta decidir como se modela la dualidad sujeto-vs-contrato en Fiel v0.1.0 o esperar a v0.2.0.",
+    "OBSERVACION_DE_ALCANCE: este contrato canoniza la disciplina (invariantes + forbidden_patterns + tendencias). No declara BusConnection con publishes/listens/publishes_and_waits porque ModuloEventCore es abstracta; las clases concretas que la extiendan declararan su BusConnection. Si ana quiere que el abstracto declare el shape minimo de BusConnection esperado, abrir tajada complementaria."
+  ]
+}

@@ -1,0 +1,673 @@
+{
+  "_meta": {
+    "documento_id": "_fiel-v0.1.0",
+    "version": "0.1.0",
+    "creado": "2026-06-03",
+    "language": "es-ES",
+    "supersedes": null,
+    "intencion": "v0.1.0 del lenguaje Fiel. Sintesis del experimento 7-LLMs (Kimi/Claude_puro/ChatGPT/DeepSeek/Grok/Manus/Gemini) usando Fiel (Claude puro) como base + cuatro piezas aditivas: (1) enforcedTendencies por clase (DeepSeek CanonLang), (2) severidad enum en tendencias (Kimi ContraForma), (3) auto_audit detecta plagio + markdown + over-engineering (Kimi ContraForma), (4) bus_connection como primitiva nativa (Gemini KanonJSON). Caso de uso: canonizar contratos arquitectonicos del repo Enki event-core.",
+    "origen_empirico": {
+      "experimento": "arquitectura/decisiones/propuestas/_prompt-disenyo-lenguaje-3coops-v0.1.json",
+      "respuestas_LLM_sintetizadas": [
+        "Fiel (Claude puro, base)",
+        "CanonLang (DeepSeek, aporta enforcedTendencies)",
+        "ContraForma (Kimi, aporta severidad + auto_audit ampliado)",
+        "KanonJSON (Gemini, aporta bus_connection)",
+        "CanonLang_v2 (Grok, convergente con CanonLang)",
+        "LLM-SPEC-LANG (ChatGPT, descartado por over-engineering)",
+        "CognitoScript (Manus, no descargable, conceptual)"
+      ]
+    }
+  },
+
+  "name": "Fiel",
+
+  "philosophy_breve": "JSON estricto como contenedor sintactico. OOP minimal como modelado conceptual. Pseudocodigo natural acotado por shape como logica algoritmica. Tendencias del LLM inyectadas como primitivas de primer nivel. Auto-auditoria como protocolo obligatorio antes de devolver output. Sin meta-niveles, sin compiladores, sin extensiones por dominio. Lo justo para canonizar contratos arquitectonicos sin que el LLM reintroduzca drift.",
+
+  "componentes": [
+    {
+      "id": "code",
+      "descripcion_corta": "JSON estricto. Cada string tiene maxLength o pattern regex. Sin prosa libre fuera de campos _doc cortos."
+    },
+    {
+      "id": "OOP",
+      "descripcion_corta": "Modelado conceptual via abstract_class, concrete_class, properties, methods, constructor, extends, invariants, forbidden_patterns. Herencia vertical explicita o null."
+    },
+    {
+      "id": "pseudo_code",
+      "descripcion_corta": "Cada paso es objeto JSON con shape { action, target, condition, value }. NO strings raw multilinea. NO sintaxis libre."
+    }
+  ],
+
+  "primitivas_canonicas": [
+    {
+      "name": "AbstractClass",
+      "type": "primitiva_oop",
+      "shape_json": {
+        "type": "literal_string \"abstract_class\"",
+        "name": "string matches /^[A-Z][A-Za-z0-9]*$/",
+        "extends": "string | null",
+        "properties": "array<Property>",
+        "abstract_methods": "object<MethodName, pseudo_code_signature>",
+        "concrete_invariants": "array<Invariant>",
+        "forbidden_patterns": "array<ForbiddenPattern>",
+        "enforcedTendencies": "array<TendenciaId> matches /^T[0-9]+_[a-z_]+$/"
+      }
+    },
+    {
+      "name": "ConcreteClass",
+      "type": "primitiva_oop",
+      "shape_json": {
+        "type": "literal_string \"concrete_class\"",
+        "name": "string matches /^[A-Z][A-Za-z0-9]*$/",
+        "extends": "string | null",
+        "properties": "array<Property>",
+        "methods": "array<Method>",
+        "invariants": "array<Invariant>",
+        "forbidden_patterns": "array<ForbiddenPattern>",
+        "enforcedTendencies": "array<TendenciaId>"
+      }
+    },
+    {
+      "name": "Property",
+      "type": "primitiva_oop",
+      "shape_json": {
+        "type": "literal_string \"property\"",
+        "name": "string camelCase",
+        "type_expression": "string maxLength 50",
+        "visibility": "enum [\"public\", \"private\", \"protected\"]",
+        "nullable": "boolean",
+        "default": "any | null"
+      }
+    },
+    {
+      "name": "Method",
+      "type": "primitiva_oop",
+      "shape_json": {
+        "type": "literal_string \"method\"",
+        "name": "string matches /^[a-z][A-Za-z0-9]*$/",
+        "visibility": "enum [\"public\", \"private\", \"protected\"]",
+        "params": "array<Param>",
+        "returns": "type_expression",
+        "pseudo_code": "array<PseudoStep> maxItems 30",
+        "throws": "array<error_code>"
+      }
+    },
+    {
+      "name": "Constructor",
+      "type": "primitiva_oop",
+      "shape_json": {
+        "type": "literal_string \"constructor\"",
+        "params": "array<Param>",
+        "pseudo_code": "array<PseudoStep> maxItems 15",
+        "invariants_after": "array<Invariant>"
+      }
+    },
+    {
+      "name": "Param",
+      "type": "primitiva_oop",
+      "shape_json": {
+        "name": "string camelCase",
+        "type_expression": "string maxLength 50",
+        "required": "boolean",
+        "default": "any | null"
+      }
+    },
+    {
+      "name": "Invariant",
+      "type": "primitiva_logica",
+      "shape_json": {
+        "type": "literal_string \"invariant\"",
+        "expression": "string maxLength 200",
+        "applies_to": "ClassName | MethodName | \"global\""
+      }
+    },
+    {
+      "name": "PseudoStep",
+      "type": "primitiva_logica",
+      "shape_json": {
+        "type": "literal_string \"pseudo_step\"",
+        "action": "enum [\"emit\", \"listen\", \"store\", \"fetch\", \"validate\", \"transform\", \"branch\", \"loop\", \"assign\", \"call\", \"return\", \"throw\", \"log\", \"comment\"]",
+        "target": "string | null",
+        "condition": "string | null",
+        "value": "any | null"
+      },
+      "constraints": [
+        "action es enum cerrado de 14 valores",
+        "target es identificador del subject del action (event_type para emit/listen, var_name para assign/store, etc.)",
+        "condition es expresion booleana evaluable mentalmente; null si action incondicional",
+        "value es el dato literal o expresion; null si action no produce valor"
+      ]
+    },
+    {
+      "name": "ForbiddenPattern",
+      "type": "primitiva_logica",
+      "shape_json": {
+        "type": "literal_string \"forbidden_pattern\"",
+        "pattern_regex": "string PCRE valida",
+        "reason": "string maxLength 200",
+        "alternative_pseudo_code": "array<PseudoStep> maxItems 10",
+        "severidad": "enum [\"error\", \"warning\", \"info\"]"
+      }
+    },
+    {
+      "name": "Tendencia",
+      "type": "primitiva_meta",
+      "shape_json": {
+        "type": "literal_string \"tendencia\"",
+        "id": "string matches /^T[0-9]+_[a-z_]+$/",
+        "creencia_aprendida_corpus": "string maxLength 200 sin conectores discursivos",
+        "verdad_paradigma_que_la_contradice": "string maxLength 200 sin conectores discursivos",
+        "patron_codigo_a_evitar_regex": "array<string PCRE>",
+        "patron_codigo_canonico_pseudo_code": "array<PseudoStep>",
+        "severidad": "enum [\"error\", \"warning\", \"info\"]",
+        "caso_testigo_repo": "FileLineReference"
+      }
+    },
+    {
+      "name": "BusConnection",
+      "type": "primitiva_dominio",
+      "shape_json": {
+        "type": "literal_string \"bus_connection\"",
+        "publishes": "array<EventDeclaration>",
+        "listens": "array<EventDeclaration>",
+        "publishes_and_waits": "array<EventPair>",
+        "constraints": "array<Invariant>"
+      },
+      "_doc": "Captura la interaccion modulo-bus como ciudadano de primer nivel. Reemplaza la mezcla habitual de publishes/subscribes desperdigada por methods. Heredado de KanonJSON (Gemini)."
+    },
+    {
+      "name": "EventDeclaration",
+      "type": "primitiva_dominio",
+      "shape_json": {
+        "event_type": "string matches /^[a-z][a-z0-9-]*\\.[a-z][a-z0-9_]*\\.[a-z]+$/",
+        "shape_ref": "string maxLength 200",
+        "consumed_by": "array<string> | null",
+        "produces_response_event": "string | null"
+      }
+    },
+    {
+      "name": "EventPair",
+      "type": "primitiva_dominio",
+      "shape_json": {
+        "request_event": "EventDeclaration",
+        "response_event": "EventDeclaration",
+        "timeout_ms_default": "integer >= 1000"
+      }
+    },
+    {
+      "name": "FileLineReference",
+      "type": "primitiva_meta",
+      "shape_json": {
+        "archivo": "string matches /^[a-z0-9_/.-]+\\.[a-z]+$|^audit_[0-9-]+_[a-z_]+$/",
+        "linea_aprox": "integer >= 0",
+        "drift_id": "string matches /^drift_[a-z_]+$/"
+      }
+    }
+  ],
+
+  "AbstractClass_ejemplar_que_modela_caso_de_uso_real": {
+    "type": "abstract_class",
+    "name": "ContratoArquitectonico",
+    "extends": null,
+    "properties": [
+      {
+        "type": "property",
+        "name": "id",
+        "type_expression": "string matches /^[a-z][a-z0-9-]+$/",
+        "visibility": "public",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "type": "property",
+        "name": "version",
+        "type_expression": "string matches semver",
+        "visibility": "public",
+        "nullable": false,
+        "default": null
+      },
+      {
+        "type": "property",
+        "name": "_doc",
+        "type_expression": "string maxLength 500",
+        "visibility": "public",
+        "nullable": false,
+        "default": null
+      }
+    ],
+    "abstract_methods": {
+      "validar(input)": "Evaluates input against this._invariants and forbidden_patterns; returns array<Violation>",
+      "outputShape()": "Returns the canonical shape of _outputs/<id>.json that derives from this contract"
+    },
+    "concrete_invariants": [
+      {
+        "type": "invariant",
+        "expression": "this._doc.length > 0 && this._doc.length <= 500",
+        "applies_to": "ContratoArquitectonico"
+      },
+      {
+        "type": "invariant",
+        "expression": "for each string_field of this: string_field has maxLength OR matches pattern",
+        "applies_to": "global"
+      }
+    ],
+    "forbidden_patterns": [
+      {
+        "type": "forbidden_pattern",
+        "pattern_regex": "\\b(aunque|salvo que|en general|sin embargo|por otro lado)\\b",
+        "reason": "Conectores discursivos sintoma de prosa libre infiltrada",
+        "alternative_pseudo_code": [
+          { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "extraer matiz a sub-objeto estructurado" }
+        ],
+        "severidad": "error"
+      },
+      {
+        "type": "forbidden_pattern",
+        "pattern_regex": "[a-z]{30,}",
+        "reason": "Palabra > 30 chars sintoma de parrafo concatenado o terminologia inventada",
+        "alternative_pseudo_code": [
+          { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "descomponer a campos discretos" }
+        ],
+        "severidad": "warning"
+      }
+    ],
+    "enforcedTendencies": ["T6_completar_campos_que_pseudocodigo_no_pide", "T8_deducir_terminos_nuevos_del_contexto_inmediato"]
+  },
+
+  "tendencias_del_llm": [
+    {
+      "type": "tendencia",
+      "id": "T1_cache_defensiva",
+      "creencia_aprendida_corpus": "memorizar evita llamadas extra al bus y mejora performance",
+      "verdad_paradigma_que_la_contradice": "bus es fuente unica de autoridad; memorizar duplica autoridad",
+      "patron_codigo_a_evitar_regex": [
+        "this\\._?cache\\s*=\\s*new Map",
+        "this\\.\\w+PerProject\\s*=\\s*new Map",
+        "if\\s*\\(this\\._?cache\\.has"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "call", "target": "this.bus.publishAndWait", "condition": null, "value": "{ eventType, payload }" },
+        { "type": "pseudo_step", "action": "assign", "target": "result", "condition": null, "value": "await call_result" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 28,
+        "drift_id": "drift_cache_defensiva"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T2_fallback_silencioso_identidad",
+      "creencia_aprendida_corpus": "si el id no resuelve busco algo parecido para no romper flujo",
+      "verdad_paradigma_que_la_contradice": "id no resuelto es bug; fallar ruidoso expone el desencuentro",
+      "patron_codigo_a_evitar_regex": [
+        "resolveTo\\w*Fallback",
+        "for\\s*\\(.*of this\\.\\w+\\.keys\\(\\)\\)\\s*\\{?\\s*return"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "branch", "target": "if_not_cache_has", "condition": "!this.cache.has(id)", "value": null },
+        { "type": "pseudo_step", "action": "throw", "target": "INVALID_INPUT", "condition": null, "value": "id no resuelto: ${id}" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 62,
+        "drift_id": "drift_fallback_silencioso_identidad"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T3_bypass_filesystem",
+      "creencia_aprendida_corpus": "fs.readdir y fs.readFile son APIs estandar; usarlas es eficiente",
+      "verdad_paradigma_que_la_contradice": "filesystem es modulo dueño del scope; bus es la unica forma de mantener autoridad",
+      "patron_codigo_a_evitar_regex": [
+        "require\\(['\"]fs['\"]\\)",
+        "await fs\\.readdir",
+        "await fs\\.readFile",
+        "await fs\\.writeFile"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "emit", "target": "fs.read.request", "condition": null, "value": "{ project_id, path }" },
+        { "type": "pseudo_step", "action": "listen", "target": "fs.read.response", "condition": "correlation_id matches request", "value": null }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 1133,
+        "drift_id": "drift_bypass_filesystem"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T4_catch_tragador",
+      "creencia_aprendida_corpus": "try catch vacio para que el flujo no rompa",
+      "verdad_paradigma_que_la_contradice": "error oculto se manifiesta despues como inconsistencia inexplicable",
+      "patron_codigo_a_evitar_regex": [
+        "catch\\s*\\(\\s*_\\s*\\)\\s*\\{\\s*\\}",
+        "catch\\s*\\(.+\\)\\s*\\{\\s*\\}"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "log", "target": "this.logger.error", "condition": null, "value": "{ event: 'mod.op.failed', error: err.message }" },
+        { "type": "pseudo_step", "action": "throw", "target": "rethrow", "condition": null, "value": "err" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/filesystem/index.js",
+        "linea_aprox": 141,
+        "drift_id": "drift_catch_tragador_pre_fix"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T5_sobreescribir_estado_al_recargar",
+      "creencia_aprendida_corpus": "al cargar carta normalizo todos los productos como activos para tener estado consistente",
+      "verdad_paradigma_que_la_contradice": "estado persistido es la verdad; sobreescribir en carga pierde el estado real",
+      "patron_codigo_a_evitar_regex": [
+        "\\{\\s*\\.\\.\\.\\w+,\\s*activo:\\s*true\\s*\\}",
+        "\\{\\s*\\.\\.\\.\\w+,\\s*estado:\\s*['\"][a-z]+['\"]\\s*\\}"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "assign", "target": "item", "condition": null, "value": "{ ...rawData }" },
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "sin sobreescribir campos persistidos" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "modules/pizzepos/productos/index.js",
+        "linea_aprox": 1167,
+        "drift_id": "drift_sobreescritura_estado_al_recargar"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T6_completar_campos_que_pseudocodigo_no_pide",
+      "creencia_aprendida_corpus": "el campo esta vacio; pongo un valor razonable",
+      "verdad_paradigma_que_la_contradice": "pseudo_code es ley; nowISO es nowISO; valores no especificados no se inventan",
+      "patron_codigo_a_evitar_regex": [
+        "created_at:\\s*['\"][0-9]{4}-",
+        "version:\\s*2\\s*,",
+        "id:\\s*['\"][a-f0-9]{8}-[a-f0-9]{4}-"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "assign", "target": "created_at", "condition": null, "value": "nowISO()" },
+        { "type": "pseudo_step", "action": "assign", "target": "version", "condition": null, "value": "1" },
+        { "type": "pseudo_step", "action": "assign", "target": "id", "condition": null, "value": "uuid()" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "audit_2026-06-02_carta_catalogo_activo",
+        "linea_aprox": 0,
+        "drift_id": "drift_alucinacion_timestamps_y_version"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T7_handoff_prematuro",
+      "creencia_aprendida_corpus": "eventual consistency es legitimo; publico la notificacion al empezar la accion",
+      "verdad_paradigma_que_la_contradice": "publico cuando el cambio aterrizo, o con payload completo para que consumers no necesiten leer disco",
+      "patron_codigo_a_evitar_regex": [
+        "this\\.publish\\([^)]+\\);[\\s\\S]{0,200}?await\\s+\\w*\\.?write"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "emit", "target": "fs.write.request", "condition": null, "value": "{ path, content }" },
+        { "type": "pseudo_step", "action": "listen", "target": "fs.write.response", "condition": "correlation_id matches request", "value": null },
+        { "type": "pseudo_step", "action": "emit", "target": "foo.creada", "condition": "after_write_landed", "value": "{ id, payload_completo }" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "audit_2026-06-02_flujo_carta_manager",
+        "linea_aprox": 0,
+        "drift_id": "drift_handoff_prematuro"
+      }
+    },
+    {
+      "type": "tendencia",
+      "id": "T8_deducir_terminos_nuevos_del_contexto_inmediato",
+      "creencia_aprendida_corpus": "cuando el humano usa termino tecnico nuevo lo deduzco del contexto reciente",
+      "verdad_paradigma_que_la_contradice": "deducir mal contamina el documento; preguntar es mas barato que reescribir",
+      "patron_codigo_a_evitar_regex": [
+        "// asumir significado sin verificar"
+      ],
+      "patron_codigo_canonico_pseudo_code": [
+        { "type": "pseudo_step", "action": "branch", "target": "if_termino_nuevo_y_no_existe", "condition": "termino_nuevo && !termino_existe_en_repo", "value": null },
+        { "type": "pseudo_step", "action": "return", "target": "requires_clarification", "condition": null, "value": "[termino_nuevo]" },
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "no inferir del contexto reciente" }
+      ],
+      "severidad": "error",
+      "caso_testigo_repo": {
+        "archivo": "arquitectura/decisiones/propuestas/_experimento-3coops-001.json",
+        "linea_aprox": 0,
+        "drift_id": "drift_deducir_terminos_sin_verificar"
+      }
+    }
+  ],
+
+  "auto_audit_protocol": {
+    "type": "protocolo_obligatorio",
+    "name": "auto_audit_before_return",
+    "descripcion_corta": "Antes de devolver un documento escrito en Fiel, el LLM se evalua contra forbidden_patterns_meta y los 5 detectores de drift. Si hay violacion, regenera la seccion antes de devolver.",
+    "pseudo_code": [
+      { "type": "pseudo_step", "action": "loop", "target": "for_each_string_field_of_output", "condition": null, "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "has maxLength OR pattern", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "!matches /\\b(aunque|salvo que|en general|sin embargo|por otro lado)\\b/", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "!matches /[a-z]{30,}/", "value": null },
+      { "type": "pseudo_step", "action": "loop", "target": "for_each_pseudo_step_of_output", "condition": null, "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "pseudo_step.action", "condition": "in enum_14_acciones", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "no_markdown_outside_doc_corto", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "no_plagio_literal_de_StructoLang_LINC_Lumina_CognitoScript_LOP_LLM_SPEC_LANG", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "no_over_engineering_multinivel_compilador_capas", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "8_tendencias_T1_T8_presentes", "value": null },
+      { "type": "pseudo_step", "action": "branch", "target": "if_any_violation", "condition": "violations.length > 0", "value": null },
+      { "type": "pseudo_step", "action": "call", "target": "regenerate_violating_section", "condition": null, "value": "violations" },
+      { "type": "pseudo_step", "action": "return", "target": "output", "condition": "auto_audit_passed", "value": null }
+    ],
+    "detectores_extra_de_drift": [
+      {
+        "name": "deteccion_plagio",
+        "descripcion_corta": "Si tres frases consecutivas coinciden literal con StructoLang/LINC/Lumina/CognitoScript/LOP/LLM-SPEC-LANG el output se considera contaminado",
+        "severidad": "error"
+      },
+      {
+        "name": "deteccion_markdown_infiltrado",
+        "descripcion_corta": "Cualquier campo distinto de _doc cortos que contenga ##/```/**/_/[]() es markdown infiltrado",
+        "severidad": "error"
+      },
+      {
+        "name": "deteccion_over_engineering",
+        "descripcion_corta": "Si el output declara capas MODEL/INSTANCE/EXECUTION separadas o un campo compilador o sub-DSLs por dominio, es over-engineering para v0.1.0",
+        "severidad": "error"
+      }
+    ]
+  },
+
+  "output_rules_para_LLM_que_use_el_lenguaje": [
+    "Responde SOLO con JSON valido. Sin Markdown. Sin comentarios fuera del JSON.",
+    "Si la peticion del humano es ambigua devuelve JSON con `requires_clarification: [lista_concreta]` y NO inventes.",
+    "Antes de cerrar el output ejecuta auto_audit_protocol; si detectas violacion regenera la seccion.",
+    "Idioma del output igual a _meta.language. NO mezclar es-ES y en-US dentro del mismo documento.",
+    "Cada documento declara enforcedTendencies del subset T1-T8 que aplican a su scope; las tendencias no declaradas no se validan."
+  ],
+
+  "forbidden_patterns_meta": [
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "definicion_del_lenguaje\\s*\\+\\s*caso_de_uso_del_lenguaje en mismo documento",
+      "reason": "Mezclar definicion universal con caso particular pierde universalidad",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "definicion del lenguaje en documento A, casos de uso en documento B que referencia A" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "pseudo_code\\s*:\\s*\"[\\s\\S]+\\\\n[\\s\\S]+\"",
+      "reason": "pseudocodigo como string raw multilinea sin estructura PseudoStep",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "pseudo_code es array<PseudoStep>, no string raw" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "(OBJECT|CLASE|INICIO|FIN|BEGIN|END)\\s*[:{]",
+      "reason": "Inventar sintaxis fuera de JSON con keywords MAYUSCULAS",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "todo es JSON; OOP via primitivas declaradas" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "tendencias?\\s*:\\s*\\[\\s*\\]",
+      "reason": "Omitir las 8 tendencias T1-T8 en un documento que canoniza disciplina arquitectonica",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "declarar enforcedTendencies del subset T1-T8 que aplican" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "(MODEL|INSTANCE|EXECUTION)_LAYER|compilador|sub-DSL",
+      "reason": "Over-engineering: el caso de uso (canonizar contratos) no justifica multinivel en v0.1.0",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "v0.1.0 plano; multinivel cuando emerja necesidad real" }
+      ],
+      "severidad": "error"
+    }
+  ],
+
+  "ejemplo_completo": {
+    "_meta": {
+      "documento_id": "ejemplo_contrato_modulo_filesystem",
+      "version": "0.1.0",
+      "language": "es-ES",
+      "lenguaje": "Fiel"
+    },
+    "type": "concrete_class",
+    "name": "FilesystemModule",
+    "extends": "ModuloEventCore",
+    "properties": [
+      { "type": "property", "name": "manifests", "type_expression": "Map<ModuleSlug, ManifestPersistence>", "visibility": "private", "nullable": false, "default": "new Map()" },
+      { "type": "property", "name": "activeProjectPath", "type_expression": "string | null", "visibility": "private", "nullable": true, "default": null }
+    ],
+    "methods": [
+      {
+        "type": "method",
+        "name": "handleRead",
+        "visibility": "public",
+        "params": [
+          { "name": "data", "type_expression": "{ project_id, path }", "required": true, "default": null }
+        ],
+        "returns": "{ status: 200, data: { content } } | { status: 4xx, error: { code, message } }",
+        "pseudo_code": [
+          { "type": "pseudo_step", "action": "validate", "target": "data.path", "condition": "!startsWith /storage/ AND !startsWith /projects/ AND !startsWith /data/", "value": null },
+          { "type": "pseudo_step", "action": "throw", "target": "INVALID_INPUT", "condition": "validation_failed", "value": "path con prefijo sintetico prohibido" },
+          { "type": "pseudo_step", "action": "assign", "target": "resolved_path", "condition": null, "value": "this._resolvePath(data.project_id, data.path)" },
+          { "type": "pseudo_step", "action": "fetch", "target": "fs", "condition": null, "value": "readFile(resolved_path)" },
+          { "type": "pseudo_step", "action": "return", "target": "response", "condition": null, "value": "{ status: 200, data: { content } }" }
+        ],
+        "throws": ["INVALID_INPUT", "NOT_FOUND", "INTERNAL_ERROR"]
+      }
+    ],
+    "invariants": [
+      { "type": "invariant", "expression": "this.manifests instanceof Map", "applies_to": "FilesystemModule" },
+      { "type": "invariant", "expression": "for each path in inputs: !startsWith /storage/", "applies_to": "handleRead" }
+    ],
+    "forbidden_patterns": [
+      {
+        "type": "forbidden_pattern",
+        "pattern_regex": "args\\?\\._source_module",
+        "reason": "fallback fantasma a variable inexistente en strict mode",
+        "alternative_pseudo_code": [
+          { "type": "pseudo_step", "action": "assign", "target": "source_module", "condition": null, "value": "data?._source_module" }
+        ],
+        "severidad": "error"
+      }
+    ],
+    "enforcedTendencies": ["T3_bypass_filesystem", "T4_catch_tragador", "T6_completar_campos_que_pseudocodigo_no_pide"]
+  },
+
+  "evolution_roadmap": {
+    "v0.1.0": {
+      "alcance_actual": "JSON + OOP minimal + PseudoStep enum 14 acciones + 8 tendencias + auto_audit + bus_connection + enforcedTendencies + severidad",
+      "casos_de_uso_cubiertos": [
+        "canonizar contratos arquitectonicos del repo",
+        "modelar tendencias del LLM con regex + alternativa pseudo_code",
+        "describir modulos event-core como ConcreteClass con BusConnection",
+        "self-bootstrap: el propio documento Fiel valida contra sus primitivas"
+      ]
+    },
+    "v0.2.0_propuesto": {
+      "anyade": [
+        "validator AJV strict generado desde las primitivas (cierra self-bootstrap mecanicamente)",
+        "primitiva EventChoreography para describir secuencias multi-modulo",
+        "extension de auto_audit con cross-checks entre tendencias_del_llm y enforcedTendencies de cada clase"
+      ]
+    },
+    "v0.3.0_propuesto": {
+      "anyade": [
+        "primitiva InvariantTest con shape ejecutable mentalmente que el validator puede transpilar a JS",
+        "extension para canonizar blueprints con disciplina_del_llm_runtime declarada",
+        "soporte opcional en-US sin perder es-ES como default"
+      ]
+    },
+    "no_hara": [
+      "compilador",
+      "capas MODEL/INSTANCE/EXECUTION separadas",
+      "extensiones por dominio (trading, agentes, CRUD)",
+      "sintaxis fuera de JSON"
+    ]
+  },
+
+  "self_bootstrap_verificacion": {
+    "tipo_invariante": "este_documento_cumple_su_propia_definicion",
+    "checks": [
+      "todas las primitivas declaradas como shape_json",
+      "PseudoStep usado consistentemente con enum 14 acciones cerrado",
+      "ningun string_field excede maxLength declarado",
+      "ningun conector discursivo prohibido en string_fields",
+      "8 tendencias T1-T8 presentes con severidad declarada",
+      "auto_audit_protocol presente con sus 3 detectores extra (plagio, markdown, over-engineering)",
+      "ningun campo en MAYUSCULAS con sintaxis fuera de JSON",
+      "ningun caso de uso particular (event-core/pizzepos) confundido con definicion del lenguaje",
+      "ejemplo_completo es ConcreteClass real del repo (FilesystemModule), no agente trading inventado"
+    ]
+  },
+
+  "decisiones_de_sintesis_cerradas": [
+    {
+      "id": "decision_1",
+      "nombre": "enum_acciones_PseudoStep_es_cerrado_14_valores",
+      "decidido": "enum [emit, listen, store, fetch, validate, transform, branch, loop, assign, call, return, throw, log, comment]",
+      "alternativas_descartadas": [
+        "enum abierto (rechazado por Fiel: mecaniza la disciplina)",
+        "12 acciones de Fiel sin log/branch (rechazado: log es esencial para T4, branch para condicionales)"
+      ]
+    },
+    {
+      "id": "decision_2",
+      "nombre": "enforcedTendencies_es_array_de_TendenciaId_en_cada_clase",
+      "fuente": "CanonLang (DeepSeek)",
+      "porque": "permite que el validator cruce que clase X solo se evalua contra T3+T4 si declara enforcedTendencies y no contra las 8 todas, reduciendo falsos positivos"
+    },
+    {
+      "id": "decision_3",
+      "nombre": "severidad_enum_error_warning_info_en_tendencias_y_forbidden_patterns",
+      "fuente": "ContraForma (Kimi)",
+      "porque": "alinea Fiel con el resto de validators del repo que ya usan esa terna; permite que CI bloquee solo en error y conserve warning/info en baseline"
+    },
+    {
+      "id": "decision_4",
+      "nombre": "auto_audit_incorpora_detectores_plagio_markdown_over_engineering",
+      "fuente": "ContraForma (Kimi)",
+      "porque": "el experimento 7-LLMs documenta los tres modos de fallo; canonizar los detectores en el protocolo blinda v0.1.0 contra regresion al regenerar"
+    },
+    {
+      "id": "decision_5",
+      "nombre": "BusConnection_como_primitiva_nativa_separada_de_methods",
+      "fuente": "KanonJSON (Gemini)",
+      "porque": "captura publishes/listens/publishes_and_waits como ciudadanos de primer nivel del dominio event-core; evita la mezcla habitual de eventos desperdigados por methods"
+    }
+  ]
+}

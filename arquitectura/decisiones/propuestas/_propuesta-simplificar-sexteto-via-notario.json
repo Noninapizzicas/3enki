@@ -1,0 +1,280 @@
+{
+  "_meta": {
+    "documento_id": "propuesta-simplificar-sexteto",
+    "version": "0.1.0",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "lenguaje_definicion_ref": "arquitectura/decisiones/propuestas/_fiel-v0.1.0.json",
+    "catalogo_tendencias_ref": "arquitectura/decisiones/propuestas/_tendencias-llm-en-event-core-via-notario.json",
+    "tipo": "propuesta_operacional_para_fede",
+    "fuente_cocinado_ref": "testigo de ana 2026-06-04 sobre aplicacion de politica_de_referenciacion del catalogo",
+    "plasmado_por": "agente notario",
+    "intencion": "Plasma la propuesta operacional cocinada por ana para aplicar la politica_de_referenciacion del catalogo tendencias-llm-en-event-core v1.0.0 a los 6 documentos del sexteto del horizonte modulo-event-core-disciplina. fede ejecutara modulo a modulo siguiendo el plan canonizado aqui. notario verifico estado actual de cada documento; el plan distingue operaciones reales (remover seccion) de operaciones no-op (documento ya en modelo limpio)."
+  },
+
+  "type": "concrete_class",
+  "name": "PropuestaSimplificarSexteto",
+  "extends": null,
+
+  "properties": [
+    { "type": "property", "name": "catalogoFuenteAutoritativa", "type_expression": "string path", "visibility": "public", "nullable": false, "default": "arquitectura/decisiones/propuestas/_tendencias-llm-en-event-core-via-notario.json" },
+    { "type": "property", "name": "politicaLiteral", "type_expression": "string", "visibility": "public", "nullable": false, "default": "Documentos Fiel declaran enforcedTendencies como array de TendenciaId. NO redeclaran el cuerpo de la tendencia. El validator resuelve cada id contra este catalogo. Si un documento necesita matiz especifico de una tendencia en su scope, lo anota como nota local sin alterar el cuerpo canonico aqui." },
+    { "type": "property", "name": "documentosObjetivo", "type_expression": "array<string path>", "visibility": "public", "nullable": false, "default": "ver_lista_planMigracionPorDocumento" },
+    { "type": "property", "name": "totalDocumentos", "type_expression": "integer", "visibility": "public", "nullable": false, "default": "6" },
+    { "type": "property", "name": "documentosConRedeclaracionDelCuerpo", "type_expression": "integer", "visibility": "public", "nullable": false, "default": "1" },
+    { "type": "property", "name": "documentosYaEnModeloLimpio", "type_expression": "integer", "visibility": "public", "nullable": false, "default": "5" }
+  ],
+
+  "plan_migracion_por_documento": [
+    {
+      "orden": 1,
+      "documento": "arquitectura/decisiones/propuestas/_contrato-modulo-event-core-disciplina-via-notario.json",
+      "estado_actual_verificado": {
+        "enforcedTendencies_declarado": true,
+        "enforcedTendencies_valor": ["T1_cache_defensiva", "T2_fallback_silencioso_identidad", "T3_bypass_filesystem", "T4_catch_tragador", "T5_sobreescribir_estado_al_recargar", "T6_completar_campos_que_pseudocodigo_no_pide", "T7_handoff_prematuro", "T8_deducir_terminos_nuevos_del_contexto_inmediato"],
+        "tendencias_del_llm_redeclarada_con_cuerpo_completo": true,
+        "lineas_seccion_redeclarada": "163-329",
+        "matiz_local_detectado": "T2 patron_codigo_a_evitar_regex en este documento lista resolveTo\\w*Fallback pero NO incluye resolveToActive\\w*. El catalogo v1.0.0 ya incluye ambos. T6 patron_codigo_canonico cita nowISO() y uuid() helpers no verificados en repo; el catalogo v1.0.0 ya corrigio a new Date().toISOString() y crypto.randomUUID()."
+      },
+      "operacion": "remover_seccion_tendencias_del_llm_y_anyadir_catalogo_ref",
+      "pseudo_code_para_fede": [
+        { "type": "pseudo_step", "action": "fetch", "target": "documento", "condition": null, "value": "leer JSON completo" },
+        { "type": "pseudo_step", "action": "validate", "target": "documento.enforcedTendencies", "condition": "presente y array<TendenciaId>", "value": null },
+        { "type": "pseudo_step", "action": "transform", "target": "documento._meta", "condition": null, "value": "anyadir campo catalogo_tendencias_ref: 'arquitectura/decisiones/propuestas/_tendencias-llm-en-event-core-via-notario.json'" },
+        { "type": "pseudo_step", "action": "transform", "target": "documento.tendencias_del_llm", "condition": null, "value": "remover seccion completa" },
+        { "type": "pseudo_step", "action": "validate", "target": "documento", "condition": "enforcedTendencies sigue intacto", "value": null },
+        { "type": "pseudo_step", "action": "validate", "target": "documento", "condition": "JSON.parse no falla", "value": null },
+        { "type": "pseudo_step", "action": "store", "target": "documento", "condition": null, "value": "escribir version actualizada" },
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "no tocar forbidden_patterns ni forbidden_patterns_meta ni auto_audit_protocol ni self_bootstrap_verificacion ni concrete_invariants ni abstract_methods" }
+      ],
+      "ahorro_bytes_aproximado": "166_lineas_eliminadas",
+      "riesgo": "ninguno_si_enforcedTendencies_se_conserva"
+    },
+    {
+      "orden": 2,
+      "documento": "arquitectura/decisiones/propuestas/_pizzepos-productos-disciplina-via-notario.json",
+      "estado_actual_verificado": {
+        "enforcedTendencies_declarado": true,
+        "enforcedTendencies_valor": ["T1_cache_defensiva", "T2_fallback_silencioso_identidad", "T3_bypass_filesystem", "T5_sobreescribir_estado_al_recargar", "T7_handoff_prematuro"],
+        "tendencias_del_llm_redeclarada_con_cuerpo_completo": false,
+        "matiz_local_detectado": "documento tiene seccion violations[] con snippet real del codigo y evidencia archivo:linea por cada tendencia confirmada. No es redeclaracion del cuerpo del catalogo; es instancia de violacion del scope. Conservar intacta. Tambien tiene forbidden_patterns_aplicables[] que reescribe los regex del padre adaptados al modulo concreto; conservar intacto."
+      },
+      "operacion": "anyadir_catalogo_ref_solo",
+      "pseudo_code_para_fede": [
+        { "type": "pseudo_step", "action": "fetch", "target": "documento", "condition": null, "value": "leer JSON completo" },
+        { "type": "pseudo_step", "action": "transform", "target": "documento._meta", "condition": null, "value": "anyadir campo catalogo_tendencias_ref" },
+        { "type": "pseudo_step", "action": "validate", "target": "documento.violations", "condition": "intacto", "value": null },
+        { "type": "pseudo_step", "action": "validate", "target": "documento.forbidden_patterns_aplicables", "condition": "intacto", "value": null },
+        { "type": "pseudo_step", "action": "store", "target": "documento", "condition": null, "value": "escribir version actualizada" }
+      ],
+      "ahorro_bytes_aproximado": "0_lineas_solo_metadata",
+      "riesgo": "ninguno"
+    },
+    {
+      "orden": 3,
+      "documento": "arquitectura/decisiones/propuestas/_contrato-aggregate-vs-vista-via-notario.json",
+      "estado_actual_verificado": {
+        "enforcedTendencies_declarado": true,
+        "enforcedTendencies_valor_por_clase": {
+          "AggregateRoot": ["T1_cache_defensiva", "T2_fallback_silencioso_identidad", "T5_sobreescribir_estado_al_recargar", "T7_handoff_prematuro"],
+          "Vista": ["T1_cache_defensiva", "T3_bypass_filesystem", "T5_sobreescribir_estado_al_recargar"]
+        },
+        "tendencias_del_llm_redeclarada_con_cuerpo_completo": false,
+        "matiz_local_detectado": "documento declara enforcedTendencies por clase (AggregateRoot y Vista por separado) en lugar de a nivel raiz. El catalogo no especifica formato cuando un documento define varias clases; politica_de_referenciacion habla de documento Fiel singular. Posible decision de ana sobre como resuelve el validator: usar union de los dos arrays o evaluar por clase."
+      },
+      "operacion": "anyadir_catalogo_ref_solo",
+      "pseudo_code_para_fede": [
+        { "type": "pseudo_step", "action": "fetch", "target": "documento", "condition": null, "value": "leer JSON completo" },
+        { "type": "pseudo_step", "action": "transform", "target": "documento._meta", "condition": null, "value": "anyadir campo catalogo_tendencias_ref" },
+        { "type": "pseudo_step", "action": "validate", "target": "documento.abstract_classes[0].enforcedTendencies", "condition": "intacto", "value": null },
+        { "type": "pseudo_step", "action": "validate", "target": "documento.abstract_classes[1].enforcedTendencies", "condition": "intacto", "value": null },
+        { "type": "pseudo_step", "action": "store", "target": "documento", "condition": null, "value": "escribir version actualizada" }
+      ],
+      "ahorro_bytes_aproximado": "0_lineas_solo_metadata",
+      "riesgo": "ninguno"
+    },
+    {
+      "orden": 4,
+      "documento": "arquitectura/decisiones/propuestas/_contrato-project-context-propagation-via-notario.json",
+      "estado_actual_verificado": {
+        "enforcedTendencies_declarado": true,
+        "enforcedTendencies_valor": ["T2_fallback_silencioso_identidad", "T1_cache_defensiva", "T8_deducir_terminos_nuevos_del_contexto_inmediato"],
+        "tendencias_del_llm_redeclarada_con_cuerpo_completo": false,
+        "matiz_local_detectado": "ninguno; documento ya alineado al modelo de referenciacion"
+      },
+      "operacion": "anyadir_catalogo_ref_solo",
+      "pseudo_code_para_fede": [
+        { "type": "pseudo_step", "action": "fetch", "target": "documento", "condition": null, "value": "leer JSON completo" },
+        { "type": "pseudo_step", "action": "transform", "target": "documento._meta", "condition": null, "value": "anyadir campo catalogo_tendencias_ref" },
+        { "type": "pseudo_step", "action": "store", "target": "documento", "condition": null, "value": "escribir version actualizada" }
+      ],
+      "ahorro_bytes_aproximado": "0_lineas_solo_metadata",
+      "riesgo": "ninguno"
+    },
+    {
+      "orden": 5,
+      "documento": "arquitectura/decisiones/propuestas/_propuesta-endurecer-storage-layout-bypass-via-notario.json",
+      "estado_actual_verificado": {
+        "enforcedTendencies_declarado": true,
+        "enforcedTendencies_valor": ["T3_bypass_filesystem", "T8_deducir_terminos_nuevos_del_contexto_inmediato"],
+        "tendencias_del_llm_redeclarada_con_cuerpo_completo": false,
+        "matiz_local_detectado": "documento tiene forbidden_patterns operativos del plan de migracion (no meta-detectores de prosa); son disciplinas del propio plan no redeclaracion de tendencias del catalogo. Conservar intactos."
+      },
+      "operacion": "anyadir_catalogo_ref_solo",
+      "pseudo_code_para_fede": [
+        { "type": "pseudo_step", "action": "fetch", "target": "documento", "condition": null, "value": "leer JSON completo" },
+        { "type": "pseudo_step", "action": "transform", "target": "documento._meta", "condition": null, "value": "anyadir campo catalogo_tendencias_ref" },
+        { "type": "pseudo_step", "action": "validate", "target": "documento.forbidden_patterns", "condition": "intacto", "value": null },
+        { "type": "pseudo_step", "action": "store", "target": "documento", "condition": null, "value": "escribir version actualizada" }
+      ],
+      "ahorro_bytes_aproximado": "0_lineas_solo_metadata",
+      "riesgo": "ninguno"
+    },
+    {
+      "orden": 6,
+      "documento": "arquitectura/decisiones/propuestas/_contrato-evento-mutacion-vs-notificacion-via-notario.json",
+      "estado_actual_verificado": {
+        "enforcedTendencies_declarado": true,
+        "enforcedTendencies_valor_por_clase": {
+          "MutacionCanonica": ["T7_handoff_prematuro", "T6_completar_campos_que_pseudocodigo_no_pide"],
+          "Notificacion": ["T8_deducir_terminos_nuevos_del_contexto_inmediato"]
+        },
+        "tendencias_del_llm_redeclarada_con_cuerpo_completo": false,
+        "matiz_local_detectado": "mismo patron por_clase que documento 3 (aggregate-vs-vista); ambos del mismo arranque cocinado. Decision de ana en doc 3 aplica aqui por simetria."
+      },
+      "operacion": "anyadir_catalogo_ref_solo",
+      "pseudo_code_para_fede": [
+        { "type": "pseudo_step", "action": "fetch", "target": "documento", "condition": null, "value": "leer JSON completo" },
+        { "type": "pseudo_step", "action": "transform", "target": "documento._meta", "condition": null, "value": "anyadir campo catalogo_tendencias_ref" },
+        { "type": "pseudo_step", "action": "validate", "target": "documento.abstract_classes[0].enforcedTendencies", "condition": "intacto", "value": null },
+        { "type": "pseudo_step", "action": "validate", "target": "documento.abstract_classes[1].enforcedTendencies", "condition": "intacto", "value": null },
+        { "type": "pseudo_step", "action": "store", "target": "documento", "condition": null, "value": "escribir version actualizada" }
+      ],
+      "ahorro_bytes_aproximado": "0_lineas_solo_metadata",
+      "riesgo": "ninguno"
+    }
+  ],
+
+  "operacion_canonica_resumida": {
+    "type": "method",
+    "name": "aplicarPoliticaDeReferenciacionAlDocumento",
+    "visibility": "public",
+    "params": [
+      { "name": "documentoPath", "type_expression": "string path", "required": true, "default": null }
+    ],
+    "returns": "documento_actualizado",
+    "pseudo_code": [
+      { "type": "pseudo_step", "action": "fetch", "target": "documento", "condition": null, "value": "Read tool con path absoluto" },
+      { "type": "pseudo_step", "action": "assign", "target": "doc", "condition": null, "value": "JSON.parse(content)" },
+      { "type": "pseudo_step", "action": "validate", "target": "doc.enforcedTendencies OR doc.abstract_classes[].enforcedTendencies", "condition": "presente", "value": null },
+      { "type": "pseudo_step", "action": "branch", "target": "if_enforcedTendencies_ausente", "condition": "!enforcedTendencies presente", "value": null },
+      { "type": "pseudo_step", "action": "throw", "target": "INVALID_INPUT", "condition": null, "value": "documento sin enforcedTendencies no puede simplificarse" },
+      { "type": "pseudo_step", "action": "assign", "target": "doc._meta.catalogo_tendencias_ref", "condition": null, "value": "arquitectura/decisiones/propuestas/_tendencias-llm-en-event-core-via-notario.json" },
+      { "type": "pseudo_step", "action": "branch", "target": "if_tendencias_del_llm_presente", "condition": "doc.tendencias_del_llm presente", "value": null },
+      { "type": "pseudo_step", "action": "transform", "target": "doc", "condition": null, "value": "delete doc.tendencias_del_llm" },
+      { "type": "pseudo_step", "action": "loop", "target": "for_each_matiz_local_detectado", "condition": null, "value": null },
+      { "type": "pseudo_step", "action": "transform", "target": "doc.notas_locales_sobre_tendencias", "condition": "matiz local existente y no redeclara cuerpo canonico", "value": "push({ tendencia_id, matiz, evidencia })" },
+      { "type": "pseudo_step", "action": "validate", "target": "doc.enforcedTendencies", "condition": "intacto exactamente igual a antes", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "doc.forbidden_patterns", "condition": "intacto", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "doc.forbidden_patterns_meta", "condition": "intacto", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "doc.auto_audit_protocol", "condition": "intacto", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "doc.concrete_invariants OR doc.invariants", "condition": "intacto", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "JSON.stringify(doc)", "condition": "parsea sin error", "value": null },
+      { "type": "pseudo_step", "action": "store", "target": "documentoPath", "condition": null, "value": "Write tool con JSON.stringify(doc, null, 2)" },
+      { "type": "pseudo_step", "action": "return", "target": "documentoPath", "condition": "operacion completa", "value": null }
+    ],
+    "throws": ["INVALID_INPUT", "JSON_PARSE_ERROR"]
+  },
+
+  "invariants": [
+    { "type": "invariant", "expression": "fede NO modifica documentos del sexteto sin haber leido este plan canonizado", "applies_to": "PropuestaSimplificarSexteto" },
+    { "type": "invariant", "expression": "fede NO toca enforcedTendencies de ningun documento; el campo se conserva exactamente igual antes y despues", "applies_to": "global" },
+    { "type": "invariant", "expression": "fede NO toca forbidden_patterns ni forbidden_patterns_meta ni auto_audit_protocol ni self_bootstrap_verificacion ni concrete_invariants ni abstract_methods de los documentos; estas secciones son ortogonales a la operacion", "applies_to": "global" },
+    { "type": "invariant", "expression": "fede aplica orden 1 primero porque es el unico documento con operacion sustancial (remover seccion); los otros 5 son no-op de metadata", "applies_to": "plan_migracion_por_documento" },
+    { "type": "invariant", "expression": "fede ejecuta documento a documento con verificacion JSON.parse tras cada Write", "applies_to": "global" },
+    { "type": "invariant", "expression": "si fede detecta matiz local no documentado en este plan, para y consulta a ana antes de proceder", "applies_to": "global" }
+  ],
+
+  "forbidden_patterns": [
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "tocar_enforcedTendencies_durante_operacion",
+      "reason": "enforcedTendencies es la referencia por id al catalogo; modificarlo cambia que tendencias el validator aplica al documento; operacion debe ser invariante para el campo",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "validate", "target": "enforcedTendencies_pre", "condition": "===_enforcedTendencies_post", "value": null }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "remover_forbidden_patterns_o_forbidden_patterns_meta",
+      "reason": "forbidden_patterns operativos del documento NO son redeclaracion del catalogo; son disciplina propia del scope o detectores meta de Fiel heredados; conservar intactos",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "solo seccion tendencias_del_llm con cuerpo completo de las 8 tendencias se remueve; lo demas se conserva" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "ejecutar_batch_los_6_documentos_sin_verificar_entre_ellos",
+      "reason": "operacion documento a documento permite detectar regresion temprana; batch oculta error intermedio en archivo posterior",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "1 documento = 1 Read + 1 transform + 1 Write + 1 verificacion JSON.parse" }
+      ],
+      "severidad": "warning"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "anyadir_catalogo_tendencias_ref_a_documento_que_no_es_del_sexteto",
+      "reason": "esta propuesta tiene scope acotado a los 6 documentos del sexteto; aplicar a otros documentos Fiel requiere decision de ana sobre alcance",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "fede acota su trabajo a la lista plan_migracion_por_documento; documentos Fiel futuros heredaran politica al crearse" }
+      ],
+      "severidad": "error"
+    }
+  ],
+
+  "enforcedTendencies": ["T8_deducir_terminos_nuevos_del_contexto_inmediato"],
+
+  "criterio_de_cierre": {
+    "condicion_necesaria": "los 6 documentos del sexteto tienen campo _meta.catalogo_tendencias_ref declarado",
+    "condicion_suficiente": "los 6 cumplen condicion_necesaria AND documento orden 1 ya no contiene seccion tendencias_del_llm AND JSON.parse de los 6 archivos es exitoso AND enforcedTendencies de los 6 conserva exactamente el mismo valor que antes",
+    "verificable_con_grep": "grep -l catalogo_tendencias_ref arquitectura/decisiones/propuestas/_*-via-notario.json debe listar exactamente los 6 archivos del sexteto (mas el catalogo mismo y la propia propuesta si se considera del set)",
+    "verificable_con_node": "node -e \"['_contrato-modulo-event-core-disciplina-via-notario','_pizzepos-productos-disciplina-via-notario','_contrato-aggregate-vs-vista-via-notario','_contrato-project-context-propagation-via-notario','_propuesta-endurecer-storage-layout-bypass-via-notario','_contrato-evento-mutacion-vs-notificacion-via-notario'].forEach(n => { const d = require('./arquitectura/decisiones/propuestas/' + n + '.json'); console.log(n, d._meta.catalogo_tendencias_ref ? 'OK' : 'FALTA'); })\""
+  },
+
+  "_auto_audit_resultado": {
+    "pass": true,
+    "detectores_ejecutados": [
+      "string_fields_con_maxLength_o_pattern",
+      "ausencia_de_conectores_discursivos",
+      "ausencia_de_palabras_superiores_30_chars",
+      "pseudo_step.action_dentro_del_enum_14",
+      "ausencia_de_markdown_infiltrado",
+      "ausencia_de_over_engineering_multinivel",
+      "ausencia_de_plagio_literal_de_otros_LLMs",
+      "verificacion_estado_actual_via_lectura_completa_de_los_6_documentos",
+      "verificacion_T8_termino_catalogo_tendencias_ref_no_existe_en_repo_es_campo_nuevo_canonizado_aqui"
+    ],
+    "violaciones_detectadas_y_regeneradas": [
+      { "violacion_inicial": "borrador inicial proponia operacion uniforme remover seccion en los 6 documentos", "deteccion": "lectura completa revelo que solo doc orden 1 tiene la seccion tendencias_del_llm redeclarada con cuerpo completo; los otros 5 ya estan en modelo limpio", "regeneracion": "plan diferenciado: doc 1 con operacion remover_seccion_y_anyadir_catalogo_ref; docs 2-6 con operacion anyadir_catalogo_ref_solo" },
+      { "violacion_inicial": "borrador inicial no detectaba matices locales por documento", "deteccion": "lectura completa revelo matices en docs 1 (T2 regex incompleta, T6 helpers no verificados), 2 (violations + forbidden_patterns_aplicables), 3 y 6 (enforcedTendencies por clase), 5 (forbidden_patterns operativos del plan no del catalogo)", "regeneracion": "campo matiz_local_detectado por documento con descripcion de lo que conservar intacto" }
+    ]
+  },
+
+  "_observaciones_para_ana": [
+    "CAMPO_NUEVO_CANONIZADO_catalogo_tendencias_ref: el campo _meta.catalogo_tendencias_ref no existe todavia en ningun documento del repo (verificado por Grep). Esta propuesta lo canoniza por primera vez como referencia explicita al catalogo desde cada documento Fiel que aplique politica_de_referenciacion. Decision de ana: si el campo se llama exactamente catalogo_tendencias_ref o si conviene un nombre mas generico (catalogo_ref, catalogo_canonico_ref) para reservar el prefijo a futuros catalogos canonizados (no solo tendencias). Recomiendo conservar catalogo_tendencias_ref especifico porque es trazable a una funcion concreta; si emerge segundo catalogo canonico se anyade catalogo_<nombre>_ref como campo independiente.",
+    "MATIZ_DOC_1_T2_REGEX_INCOMPLETA: el doc orden 1 _contrato-modulo-event-core-disciplina-via-notario.json en su tendencias_del_llm[T2] declara patron_codigo_a_evitar_regex con resolveTo\\w*Fallback pero NO incluye resolveToActive\\w*. El catalogo v1.0.0 ya incluye ambas variantes (cierre documentado en _observaciones_para_ana del catalogo). Al remover la seccion del doc 1, el catalogo pasa a ser fuente unica y la variante adicional queda automaticamente cubierta sin que fede tenga que hacer nada explicito. Esto es exactamente el beneficio de la politica de referenciacion. Sin embargo, el forbidden_pattern del doc 1 a nivel raiz (no en tendencias_del_llm sino en forbidden_patterns) declara resolveTo\\w*Fallback|resolveToActive\\w* unidos por OR; ESE ya esta correcto. La inconsistencia entre las dos secciones del propio doc 1 es deuda interna que se cierra al simplificar.",
+    "MATIZ_DOC_1_T6_HELPERS_NO_VERIFICADOS: el doc orden 1 en su tendencias_del_llm[T6] cita nowISO() y uuid() como patron_codigo_canonico_pseudo_code. El catalogo v1.0.0 ya corrigio a new Date().toISOString() y crypto.randomUUID() porque Grep contra modules/ produce 0 hits de nowISO/uuid en codigo JS. Al remover la seccion, la correccion del catalogo aplica transitivamente al doc 1 sin trabajo adicional de fede. Si ana prefiere mantener nowISO/uuid como helpers conceptuales pedagogicos, la decision debe ir al catalogo v1.1 (anyadir helpers reales en BaseModule o documentar pedagogia explicita); el doc 1 hereda lo que diga el catalogo.",
+    "MATIZ_DOC_2_VIOLATIONS_Y_FORBIDDEN_PATTERNS_APLICABLES: doc orden 2 _pizzepos-productos-disciplina-via-notario.json tiene seccion violations[] con snippet real archivo:linea por cada tendencia confirmada en el modulo, y seccion forbidden_patterns_aplicables[] que reescribe los regex del padre para el modulo concreto. Estas NO son redeclaracion del cuerpo del catalogo; son instancias de violacion del scope concreto. fede las conserva intactas. Si ana quisiera que el catalogo expusiera tambien casos_de_violacion_documentados[] indexados por tendencia, requiere v1.1 del catalogo con seccion nueva; mientras tanto las violations[] viven en cada documento testigo.",
+    "MATIZ_DOC_3_Y_6_ENFORCED_TENDENCIES_POR_CLASE: docs 3 y 6 declaran enforcedTendencies dentro de cada abstract_class en lugar de a nivel raiz porque ambos documentos contienen dos AbstractClass ortogonales (AggregateRoot+Vista; MutacionCanonica+Notificacion). La politica del catalogo asume enforcedTendencies a nivel documento singular. Decision pendiente de ana sobre como el validator AJV de Fiel resuelve esta pluralidad: opcion (A) union de enforcedTendencies de todas las abstract_classes como subset del catalogo; opcion (B) evaluar tendencias por clase con scope acotado a cada subset declarado. Recomiendo (B) porque permite que una clase declare solo las tendencias que aplican a su shape sin contaminar con las de la clase hermana; (A) seria mas simple para el validator pero menos preciso. Mientras tanto esta propuesta NO toca enforcedTendencies de ningun documento; la decision se aplaza a la implementacion del validator AJV.",
+    "MATIZ_DOC_5_FORBIDDEN_PATTERNS_DEL_PLAN: doc orden 5 _propuesta-endurecer-storage-layout-bypass-via-notario.json tiene forbidden_patterns operativos del propio plan (no se ampliar whitelist, no subir severidad con drift>0, no migracion batch). Estos NO son meta-detectores de prosa (forbidden_patterns_meta) ni redeclaracion del catalogo; son disciplinas del plan de migracion en si mismo. fede los conserva intactos. Por si esto causa duda al validator AJV de Fiel: el shape de Fiel admite forbidden_patterns top-level en cualquier ConcreteClass; la naturaleza operativa vs meta es semantica del contenido, no del shape.",
+    "ESTADO_ACTUAL_RESUMIDO: de los 6 documentos solo el doc orden 1 tiene operacion sustancial (remover seccion completa de tendencias_del_llm de unas 166 lineas). Los otros 5 ya estan en el modelo limpio del catalogo; solo necesitan el campo _meta.catalogo_tendencias_ref que es metadata pura. El ahorro real en bytes es casi todo del doc 1.",
+    "ORDEN_DE_EJECUCION_DE_FEDE: recomiendo orden 1 primero porque es el unico documento donde la operacion puede revelar problema (parseo JSON tras remover seccion grande); los otros 5 son metadata trivial que pueden hacerse en batch al final. Si fede sigue strictly el invariante 5 (documento a documento con verificacion), el orden listado en plan_migracion_por_documento es ya el correcto.",
+    "INTERACCION_CON_CATALOGO_V1_0_0_OBSERVACION_POLITICA_DE_REFERENCIACION: el catalogo v1.0.0 anota en sus _observaciones_para_ana[3] (politica POLITICA_DE_REFERENCIACION_PROPUESTA) que recomendacion neutra del notario era simplificar los documentos del sexteto para evitar drift por redeclaracion. Esta propuesta es la operacionalizacion de esa recomendacion; ana toma la decision al cocinar este testigo y fede ejecuta.",
+    "VALIDATOR_AJV_DE_FIEL_PENDIENTE: cuando se implemente el validator AJV de Fiel (anotado como v0.2.0_propuesto en _fiel-v0.1.0.json), debera (a) resolver _meta.catalogo_tendencias_ref como ruta valida al catalogo, (b) cargar el catalogo y construir indice por TendenciaId, (c) verificar que cada id en enforcedTendencies del documento existe en el indice, (d) decidir politica para documentos con enforcedTendencies por clase (opcion A union o B por scope). Este trabajo es ortogonal a la operacion de fede; el validator se implementa una vez los 6 documentos esten en el modelo limpio.",
+    "RIESGO_OPERACIONAL_BAJO: la operacion no toca enforcedTendencies ni forbidden_patterns ni invariantes; solo metadata (anyadir campo) y en doc 1 ademas remueve seccion redundante. JSON.parse y enforcedTendencies-invariante son las dos verificaciones que blindan contra regresion. El plan no introduce dependencias entre documentos; el orden es para minimizar latencia de deteccion de error no por acoplamiento.",
+    "PENDIENTE_DE_ANA_SI_TAMBIEN_APLICAR_AL_CATALOGO_MISMO: el documento _tendencias-llm-en-event-core-via-notario.json (el catalogo) no es del sexteto pero es del horizonte. NO se le anyade _meta.catalogo_tendencias_ref porque el catalogo ES el catalogo (referenciarse a si mismo es circular). Esta exclusion explicita queda registrada aqui; si en el futuro emerge un meta-catalogo de catalogos canonicos, decision de ana."
+  ]
+}

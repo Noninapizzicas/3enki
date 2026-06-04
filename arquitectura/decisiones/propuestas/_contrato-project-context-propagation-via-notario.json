@@ -1,0 +1,216 @@
+{
+  "_meta": {
+    "documento_id": "project-context-propagation",
+    "version": "1.0.0",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "lenguaje_definicion_ref": "arquitectura/decisiones/propuestas/_fiel-v0.1.0.json",
+    "deriva_de": "arquitectura/decisiones/_contratos/project-identity.contract.json",
+    "fuente_cocinado_ref": "arquitectura/decisiones/propuestas/_arranque-modulo-event-core-disciplina.json#tajada_4",
+    "contrato_hermano_ref": "arquitectura/decisiones/propuestas/_contrato-modulo-event-core-disciplina-via-notario.json",
+    "caso_testigo_drift_ref": "arquitectura/decisiones/propuestas/_pizzepos-productos-disciplina-via-notario.json#violations[T2]",
+    "plasmado_por": "agente notario tercera prueba",
+    "intencion": "Canoniza la propagacion del contexto de proyecto (project_id + base_path) entre modulos via bus. Complementa project-identity.contract.json: ese fija quien posee la identidad y el path; este fija como viaja el contexto y cuando se cachea localmente. Cierra el drift de active_project implicito documentado en pizzepos/productos:62 (resolveToActiveProject) que itera el Map y devuelve el primero con datos."
+  },
+
+  "type": "abstract_class",
+  "name": "PropagacionContextoProyecto",
+  "extends": "ModuloEventCore",
+
+  "properties": [
+    { "type": "property", "name": "activeProjectCache", "type_expression": "Map<projectId, ProjectContext>", "visibility": "protected", "nullable": false, "default": "new Map()" },
+    { "type": "property", "name": "pendingProjectRequests", "type_expression": "Map<requestId, PendingRequest>", "visibility": "protected", "nullable": false, "default": "new Map()" },
+    { "type": "property", "name": "propagationProtocol", "type_expression": "enum [suscripcion_a_project_activated, request_para_no_activos]", "visibility": "protected", "nullable": false, "default": "suscripcion_a_project_activated" }
+  ],
+
+  "abstract_methods": {
+    "onProjectActivated(event)": "cachea event.data.base_path indexado por event.data.project_id; nunca recalcula slug desde event.data.name",
+    "onProjectDeactivated(event)": "elimina entrada del cache para event.data.project_id; sin fallback al primer proyecto restante",
+    "resolveProjectContext(projectId)": "devuelve ProjectContext del cache si esta presente; si no, throw INVALID_INPUT; nunca itera el Map buscando otro project_id con datos"
+  },
+
+  "concrete_invariants": [
+    { "type": "invariant", "expression": "this.activeProjectCache.get(projectId) devuelve ProjectContext con base_path absoluto persistido en project.activated", "applies_to": "PropagacionContextoProyecto" },
+    { "type": "invariant", "expression": "for each operation(projectId): si !this.activeProjectCache.has(projectId) entonces throw INVALID_INPUT sin iteracion del Map", "applies_to": "global" },
+    { "type": "invariant", "expression": "for each handler(event): event.data.project_id leido explicito desde el payload, sin fallback a primer activo", "applies_to": "global" },
+    { "type": "invariant", "expression": "base_path se lee de event.data.base_path; nunca se computa con _slugify(event.data.name) ni con path.join cwd", "applies_to": "onProjectActivated" },
+    { "type": "invariant", "expression": "project.get.request solo se publica para project_id no presente en cache local AND fuera del camino caliente", "applies_to": "global" }
+  ],
+
+  "forbidden_patterns": [
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "resolveTo\\w*Fallback|resolveToActive\\w*",
+      "reason": "fallback silencioso al primer proyecto con datos convierte modulo multi-tenant en single-tenant accidental; caso testigo modules/pizzepos/productos/index.js:62",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "branch", "target": "if_not_cache_has", "condition": "!this.activeProjectCache.has(projectId)", "value": null },
+        { "type": "pseudo_step", "action": "throw", "target": "INVALID_INPUT", "condition": null, "value": "project_id no resuelto: ${projectId}" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "for\\s*\\(.*of this\\.\\w+\\.keys\\(\\)\\)\\s*\\{?\\s*return",
+      "reason": "iteracion del Map buscando el primer proyecto con datos enmascara desincronizacion entre llamador y cache local",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "branch", "target": "if_not_cache_has", "condition": "!this.activeProjectCache.has(projectId)", "value": null },
+        { "type": "pseudo_step", "action": "throw", "target": "INVALID_INPUT", "condition": null, "value": "project_id no resuelto" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "this\\.activeProjectId\\s*=|this\\._activeProject\\s*=",
+      "reason": "single active project implicito; project-manager soporta activeProjectIds Set (multi-active), asumir un unico activo viola la realidad del sistema",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "store", "target": "this.activeProjectCache", "condition": null, "value": "set(project_id, { base_path, name })" },
+        { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "cardinalidad N: cada operacion lleva su project_id explicito" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "_slugify\\s*\\(.*name|name\\.toLowerCase\\(\\)\\.replace",
+      "reason": "recomputar slug desde name viola P2 del project-identity.contract; base_path en event.data ya cubre la necesidad",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "assign", "target": "context", "condition": null, "value": "{ base_path: event.data.base_path }" }
+      ],
+      "severidad": "error"
+    },
+    {
+      "type": "forbidden_pattern",
+      "pattern_regex": "publishAndWait\\(['\"]project\\.get\\.request['\"]",
+      "reason": "publishAndWait a project.get.request en camino caliente viola PROH5 del project-identity; project.activated entrega base_path al activar y eso debe bastar",
+      "alternative_pseudo_code": [
+        { "type": "pseudo_step", "action": "fetch", "target": "this.activeProjectCache", "condition": null, "value": "get(projectId)" },
+        { "type": "pseudo_step", "action": "branch", "target": "if_solo_para_no_activos_fuera_camino_caliente", "condition": "operacion_no_frecuente AND !cache_has", "value": null },
+        { "type": "pseudo_step", "action": "call", "target": "this.bus.publishAndWait", "condition": null, "value": "{ eventType: 'project.get.request', payload: { request_id, project_id } }" }
+      ],
+      "severidad": "warning"
+    }
+  ],
+
+  "bus_connection": {
+    "type": "bus_connection",
+    "publishes": [
+      { "event_type": "project.activated", "shape_ref": "{ project_id, name, base_path, provider, model, prompt_id, session_state, correlation_id, timestamp }", "consumed_by": ["filesystem", "pizzepos/productos", "pizzepos/tarifas", "mercadona-api", "recetario-creativo", "mise-en-place", "pase-cocina", "comandero-cliente-builder", "bienvenida-tienda", "notificador-pedidos"], "produces_response_event": null },
+      { "event_type": "project.deactivated", "shape_ref": "{ project_id, correlation_id, timestamp }", "consumed_by": ["filesystem", "pizzepos/tarifas", "mercadona-api"], "produces_response_event": null },
+      { "event_type": "project.get.response", "shape_ref": "{ request_id, success, project: { id, name, base_path, provider, model, prompt_id, session_state, system_role } }", "consumed_by": ["pizzepos/productos", "notificador-pedidos", "recetario-creativo", "mise-en-place", "pase-cocina"], "produces_response_event": null }
+    ],
+    "listens": [
+      { "event_type": "project.get.request", "shape_ref": "{ request_id, project_id }", "consumed_by": null, "produces_response_event": "project.get.response" }
+    ],
+    "publishes_and_waits": [
+      {
+        "request_event": { "event_type": "project.get.request", "shape_ref": "{ request_id, project_id }", "consumed_by": ["project-manager"], "produces_response_event": "project.get.response" },
+        "response_event": { "event_type": "project.get.response", "shape_ref": "{ request_id, success, project }", "consumed_by": null, "produces_response_event": null },
+        "timeout_ms_default": 5000
+      }
+    ],
+    "constraints": [
+      { "type": "invariant", "expression": "project.activated emitido por project-manager es autoridad unica del contexto activo; otros modulos no lo republican", "applies_to": "global" },
+      { "type": "invariant", "expression": "project.get.request reservado a consultas de metadata de proyectos no activos; fuera del camino caliente de operaciones del dominio", "applies_to": "global" }
+    ]
+  },
+
+  "reglas_cuando_si_cachear_localmente": [
+    { "id": "R1", "regla": "Modulo que persiste o lee datos por proyecto SE SUSCRIBE a project.activated y cachea base_path en activeProjectCache indexado por project_id", "razon": "evita roundtrip sincrono al bus en cada operacion del dominio; project-manager es autoridad pero no debe estar en el camino caliente" },
+    { "id": "R2", "regla": "Modulo que cachea base_path SE SUSCRIBE tambien a project.deactivated y elimina la entrada correspondiente", "razon": "cache sin invalidacion diverge cuando proyecto se desactiva; entrada huerfana habilita operaciones contra proyecto que el sistema ya no considera activo" },
+    { "id": "R3", "regla": "Cache local indexado por project_id (clave UUID opaco); nunca por slug ni por name", "razon": "project_id es identificador estable; slug y name son derivados que pueden cambiar via rename" },
+    { "id": "R4", "regla": "Modulo que necesita base_path de proyecto NO activo publica project.get.request fuera del camino caliente y consume project.get.response correlacionado por request_id", "razon": "P3 del project-identity.contract: project-manager centraliza el conocimiento del path; modulos solo consumen" }
+  ],
+
+  "reglas_cuando_no_cachear_localmente": [
+    { "id": "N1", "regla": "NO mantener un campo activeProjectId singular; el sistema soporta activeProjectIds como Set multi-active", "razon": "project-manager:50 declara this.activeProjectIds = new Set(); asumir cardinalidad 1 viola la realidad multi-tenant" },
+    { "id": "N2", "regla": "NO iterar el cache buscando un project_id alternativo cuando la clave pedida no resuelve; throw INVALID_INPUT ruidoso", "razon": "fallback silencioso enmascara desincronizacion entre llamador y modulo; caso testigo pizzepos/productos:62" },
+    { "id": "N3", "regla": "NO cachear base_path por modulo cuando el modulo es stateless del proyecto (no persiste datos por project_id); en ese caso consume project.activated solo si su logica depende del contexto activo", "razon": "cache sin uso es deuda; suscripcion innecesaria genera handler dead-code" },
+    { "id": "N4", "regla": "NO usar project.get.request en handler de operacion frecuente (handleCrear, handleActualizar, handleListar); P5 del project-identity.contract lo marca info pero este contrato lo eleva a warning operativo", "razon": "acoplamiento sincrono a project-manager en camino caliente degrada latencia y crea dependencia que rompe si project-manager se reinicia" }
+  ],
+
+  "forbidden_patterns_meta": [
+    { "type": "forbidden_pattern", "pattern_regex": "\\b(aunque|salvo que|en general|sin embargo|por otro lado)\\b", "reason": "conectores discursivos sintoma de prosa libre infiltrada", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "extraer matiz a sub-objeto estructurado" } ], "severidad": "error" },
+    { "type": "forbidden_pattern", "pattern_regex": "[a-z]{30,}", "reason": "palabra superior a 30 chars sintoma de parrafo concatenado o terminologia inventada", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "descomponer a campos discretos" } ], "severidad": "warning" },
+    { "type": "forbidden_pattern", "pattern_regex": "(MODEL|INSTANCE|EXECUTION)_LAYER|compilador|sub-DSL", "reason": "over-engineering: el contrato no justifica multinivel", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "shape plano; multinivel cuando emerja necesidad real" } ], "severidad": "error" },
+    { "type": "forbidden_pattern", "pattern_regex": "tendencias?\\s*:\\s*\\[\\s*\\]", "reason": "omitir las tendencias T1-T8 aplicables en un documento que canoniza disciplina arquitectonica", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "declarar enforcedTendencies del subset T1-T8 que aplican" } ], "severidad": "error" }
+  ],
+
+  "enforcedTendencies": [
+    "T2_fallback_silencioso_identidad",
+    "T1_cache_defensiva",
+    "T8_deducir_terminos_nuevos_del_contexto_inmediato"
+  ],
+
+  "auto_audit_protocol": {
+    "type": "protocolo_obligatorio",
+    "name": "auto_audit_before_return",
+    "descripcion_corta": "Antes de devolver este documento, el plasmador se evalua contra forbidden_patterns_meta y los detectores heredados de Fiel. Si hay violacion, regenera la seccion antes de devolver.",
+    "pseudo_code": [
+      { "type": "pseudo_step", "action": "loop", "target": "for_each_string_field_of_output", "condition": null, "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "has maxLength OR pattern", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "!matches conectores_discursivos", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "!matches palabras_30_chars", "value": null },
+      { "type": "pseudo_step", "action": "loop", "target": "for_each_pseudo_step_of_output", "condition": null, "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "pseudo_step.action", "condition": "in enum_14_acciones_de_Fiel", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "no_markdown_outside_doc_corto", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "no_over_engineering_multinivel", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "enforcedTendencies_subset_T1_T8_declarado", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "no_duplica_project_identity_contract_solo_complementa", "value": null },
+      { "type": "pseudo_step", "action": "branch", "target": "if_any_violation", "condition": "violations.length > 0", "value": null },
+      { "type": "pseudo_step", "action": "call", "target": "regenerate_violating_section", "condition": null, "value": "violations" },
+      { "type": "pseudo_step", "action": "return", "target": "output", "condition": "auto_audit_passed", "value": null }
+    ]
+  },
+
+  "self_bootstrap_verificacion": {
+    "tipo_invariante": "este_documento_cumple_su_propia_definicion",
+    "checks": [
+      "es AbstractClass-shape declarada con primitiva abstract_class de Fiel",
+      "properties usan shape Property con visibility enum cerrado",
+      "abstract_methods describe signature por linea de texto corta",
+      "concrete_invariants usan primitiva Invariant con applies_to declarado",
+      "forbidden_patterns usan primitiva ForbiddenPattern con regex + alternative_pseudo_code + severidad",
+      "bus_connection declarada como primitiva nativa con publishes/listens/publishes_and_waits",
+      "EventDeclaration con event_type matching regex de Fiel kebab-case con puntos",
+      "enforcedTendencies declara subset T1-T8 aplicable (T1, T2, T8) y no la lista entera",
+      "reglas_cuando_si_cachear_localmente y reglas_cuando_no_cachear_localmente son listas estructuradas con id, regla, razon",
+      "forbidden_patterns_meta cubre los 4 detectores meta heredados de Fiel",
+      "auto_audit_protocol presente con pseudo_code que valida string_fields + pseudo_steps + ausencia markdown + over_engineering + no_duplicacion",
+      "deriva_de project-identity.contract.json declarado en _meta sin duplicar sus P1-P5 ni sus PROH1-PROH5",
+      "ningun caso de uso particular se confunde con la AbstractClass: la clase modela el aspecto propagacion, los modulos concretos (pizzepos/productos, recetario-creativo, etc) extienden por separado"
+    ]
+  },
+
+  "_auto_audit_resultado": {
+    "pass": true,
+    "detectores_ejecutados": [
+      "string_fields_con_maxLength_o_pattern",
+      "ausencia_de_conectores_discursivos",
+      "ausencia_de_palabras_superiores_30_chars",
+      "pseudo_step.action_dentro_del_enum_14",
+      "ausencia_de_markdown_infiltrado",
+      "ausencia_de_over_engineering_multinivel",
+      "enforcedTendencies_subset_T1_T8_declarado",
+      "ausencia_de_plagio_literal_de_otros_LLMs",
+      "verificacion_terminos_contra_repo_via_Grep",
+      "no_duplica_principios_de_project_identity_contract"
+    ],
+    "violaciones_detectadas_y_regeneradas": [
+      { "violacion_inicial": "borrador inicial declaraba T6 y T4 en enforcedTendencies por mimesis con el contrato hermano", "deteccion": "este contrato es sobre propagacion de contexto; T6 y T4 no son tendencias aplicables al aspecto propagacion", "regeneracion": "enforcedTendencies acotado a T1, T2, T8" },
+      { "violacion_inicial": "borrador inicial repetia los principios P1-P5 del project-identity.contract palabra por palabra", "deteccion": "duplicar principios del contrato del que se deriva es over-engineering y crea dos fuentes de autoridad para la misma regla", "regeneracion": "este documento solo declara reglas nuevas del aspecto propagacion (R1-R4 / N1-N4) y referencia project-identity por _meta.deriva_de" },
+      { "violacion_inicial": "borrador inicial declaraba publishes_and_waits con timeout 30000ms", "deteccion": "Grep contra modules/ produce hits de timeout 5000ms como default en publishAndWait del bus; 30000 era invencion", "regeneracion": "timeout_ms_default ajustado a 5000 alineado con patron real en uso" }
+    ]
+  },
+
+  "_observaciones_para_ana": [
+    "VERIFICACION_T8_BASE_PATH: el termino base_path verificado via Grep contra modules/project-manager/index.js produce hits en linea 191 (schema SQL), 226, 273, 384, 521, 547, 1021, 1291, 1605 (lectura del campo), confirmando que project.activated transporta base_path explicito segun D1 del project-identity.contract.",
+    "VERIFICACION_T8_RESOLVE_TO_ACTIVE: Grep de resolveToActive en modules/ produce 6 hits todos en pizzepos/productos/index.js (linea 62 definicion, lineas 490, 535, 557, 581, 626 uso). Es el unico modulo del repo con este patron, lo que valida elevarlo a forbidden_pattern del contrato.",
+    "VERIFICACION_T8_ACTIVE_PROJECT_IDS_ES_SET: Grep de activeProjectIds en project-manager confirma cardinalidad N (linea 50 'new Set()', linea 219 'size', linea 277 'add'). N1 del bloque reglas_cuando_no_cachear_localmente apunta a esto: asumir activeProjectId singular es invencion.",
+    "VERIFICACION_T8_NOWISO: el termino nowISO citado por el contrato hermano _contrato-modulo-event-core-disciplina-via-notario.json en T6 NO existe como funcion en modules/. Grep produce 0 hits en el dominio de modulos. El patron real es new Date().toISOString() inline. No bloquea esta plasmation porque este contrato no enforcedT6, pero refuerza la observacion ya levantada al contrato hermano.",
+    "VERIFICACION_T8_PIZZEPOS_PRODUCTOS_TIENE_CACHE_CORRECTO: lectura de modules/pizzepos/productos/index.js:37 muestra this.projectPaths = new Map() y linea 174 onProjectActivated que cachea correctamente base_path. El modulo SI cumple las R1-R3 de este contrato. El drift es solo T2 (resolveToActiveProject:62), no T-propagacion. La AbstractClass canoniza el patron que pizzepos/productos ya implementa parcialmente bien.",
+    "DELIMITACION_VS_PROJECT_IDENTITY: project-identity.contract.json fija quien posee identidad (project-manager) y como se construye el path (base_path persistido al crear, no recomputado). Este contrato fija como viaja ese contexto en runtime entre modulos consumidores: suscripcion a project.activated, cache local indexado por project_id, prohibicion de iterar el cache buscando otro proyecto, prohibicion de project.get.request en camino caliente. Las PROH1-PROH5 de project-identity y las forbidden_patterns de este contrato no se solapan.",
+    "VALIDATOR_PENDIENTE: project-identity.validate.js v1.1.0 ya cubre C1-C5 (slug recomputado, cache de slug, suscribir a project.activated, slug en payloads, project.get.request en camino caliente). Las forbidden_patterns nuevas que introduce este contrato (resolveToActive*, iteracion de Map.keys() con return, activeProjectId singular) requieren extender el validator o crear project-context-propagation.validate.js separado. Decision de ana: extender existente vs crear nuevo.",
+    "OBSERVACION_DE_ALCANCE: PropagacionContextoProyecto se declara extends ModuloEventCore (la AbstractClass del contrato hermano) y no de BaseModule directamente. Esto canoniza que la propagacion de contexto es una disciplina especifica de modulos event-core que persisten o leen datos por proyecto. Modulos sin persistencia per-project no necesitan extender esta AbstractClass.",
+    "TRABAJO_PENDIENTE_TP4_DEL_PROJECT_IDENTITY: el TP4 de project-identity.contract.json menciona findings de C3 (pase-cocina, cuentas-canales, recetario-creativo sin subscribe a project.activated) y C5 (mise-en-place, pase-cocina, pizzepos/productos, recetario-creativo publican project.get.request, auditar si camino caliente). Esos findings son insumo directo para evaluar conformidad con R1, R4, N4 de este contrato una vez se decida en dominio."
+  ]
+}

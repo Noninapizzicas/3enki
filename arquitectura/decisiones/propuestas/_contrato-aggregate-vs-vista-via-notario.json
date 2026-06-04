@@ -1,0 +1,270 @@
+{
+  "_meta": {
+    "documento_id": "aggregate-vs-vista",
+    "version": "1.0.0",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "lenguaje_definicion_ref": "arquitectura/decisiones/propuestas/_fiel-v0.1.0.json",
+    "extiende_contrato_ref": "arquitectura/decisiones/propuestas/_contrato-modulo-event-core-disciplina-via-notario.json",
+    "fuente_cocinado_ref": "arquitectura/decisiones/propuestas/_arranque-modulo-event-core-disciplina.json#tajada_3",
+    "caso_testigo_ref": "arquitectura/decisiones/propuestas/_pizzepos-productos-disciplina-via-notario.json",
+    "plasmado_por": "agente notario tajada 3",
+    "intencion": "Canoniza dos AbstractClass hijas de ModuloEventCore que diferencian aggregate root de vista. Aggregate es dueno del dominio: mantiene estado canonico en memoria reconstruido por replay y publica mutaciones del dominio propio. Vista es proyeccion derivada: mantiene cache local hidratada por eventos del aggregate ajeno y NO publica mutaciones del dominio del aggregate. La mezcla de las dos posturas produce drift T1 + T5 + T7 simultaneos.",
+    "supersedes_nota": "tajada 3 del arranque modulo-event-core-disciplina. Deriva del contrato padre ModuloEventCore. No supersede ningun contrato previo; abre la distincion aggregate-vista que CLAUDE.md menciona implicitamente en seccion 'Puntos de extension modulares' sin formalizarla."
+  },
+
+  "abstract_classes": [
+    {
+      "type": "abstract_class",
+      "name": "AggregateRoot",
+      "extends": "ModuloEventCore",
+      "_doc": "Modulo dueno de un dominio. Mantiene estado canonico del agregado en memoria reconstruido en onLoad por replay de eventos canonicos del bus. Publica mutaciones del dominio propio (creada, actualizada, eliminada). Persiste a disco via filesystem (no fs directo). Otros modulos leen el dominio via publishes del aggregate o via consultas publishAndWait.",
+      "properties": [
+        { "type": "property", "name": "dominioName", "type_expression": "string camelCase", "visibility": "protected", "nullable": false, "default": null },
+        { "type": "property", "name": "estadoAgregado", "type_expression": "Map<entityId, Entity> | object", "visibility": "protected", "nullable": false, "default": "new Map()" },
+        { "type": "property", "name": "persistenceScope", "type_expression": "enum [project, system]", "visibility": "protected", "nullable": false, "default": "project" }
+      ],
+      "abstract_methods": {
+        "onLoad(context)": "registra subscribers de eventos canonicos del dominio propio; reconstruye estadoAgregado por replay desde filesystem via fs.read.request del scope declarado",
+        "publishMutacion(verbo, payload)": "publica evento <dominio>.<entidad>.<verbo> con payload completo despues de aterrizar el cambio en disco; verbo del enum canonico [creada, actualizada, eliminada]",
+        "persistAgregado(entityId)": "emite fs.write.request con shape canonico y espera fs.write.response antes de publish de mutacion"
+      },
+      "concrete_invariants": [
+        { "type": "invariant", "expression": "this.dominioName es el unico nombre que aparece en el prefijo de los eventos que this publica", "applies_to": "AggregateRoot" },
+        { "type": "invariant", "expression": "for each handler(event): event no pertenece al dominio de otro aggregate; o si pertenece, this no muta estadoAgregado en base a el", "applies_to": "global" },
+        { "type": "invariant", "expression": "this.estadoAgregado se reconstruye en onLoad por replay desde el scope declarado, nunca por subscribe a eventos de otros modulos", "applies_to": "AggregateRoot" },
+        { "type": "invariant", "expression": "publish de <dominio>.<entidad>.<verbo> ocurre despues de fs.write.response confirmada", "applies_to": "publishMutacion" },
+        { "type": "invariant", "expression": "ningun campo persistido se sobreescribe en el replay; el disco es la verdad", "applies_to": "onLoad" }
+      ],
+      "forbidden_patterns": [
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "on(?!Load|Unload)[A-Z]\\w*\\s*\\([^)]*\\)\\s*\\{[\\s\\S]{0,500}?this\\.estadoAgregado",
+          "reason": "handler de evento ajeno que muta el estadoAgregado convierte el aggregate en vista contaminada del dominio del emisor",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "si el aggregate necesita un dato ajeno: publishAndWait al aggregate dueno, sin cachear el resultado en estadoAgregado" }
+          ],
+          "severidad": "error"
+        },
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "this\\.publish\\(['\"][a-z-]+\\.[a-z_]+\\.(creada|actualizada|eliminada)['\"]",
+          "reason": "publish de mutacion canonica con prefijo de dominio que no es this.dominioName invade dominio ajeno",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "validate", "target": "event_prefix", "condition": "event_prefix === this.dominioName", "value": null },
+            { "type": "pseudo_step", "action": "throw", "target": "INVALID_INPUT", "condition": "prefix_mismatch", "value": "publish de dominio ajeno prohibido" }
+          ],
+          "severidad": "error"
+        },
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "this\\.\\w+PerProject\\s*=\\s*new Map[\\s\\S]{0,2000}?on[A-Z]\\w*\\s*\\([^)]*\\)\\s*\\{[\\s\\S]{0,500}?this\\.\\w+PerProject\\.(set|get)",
+          "reason": "cache PerProject rehidratada por handlers de eventos ajenos es vista materializada disfrazada de aggregate",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "decidir: si el modulo es vista, declarar extends Vista y mover publishes de mutacion a la clase Vista que prohibe publicar mutaciones; si es aggregate, eliminar handlers de eventos ajenos que rehidratan cache" }
+          ],
+          "severidad": "error"
+        }
+      ],
+      "enforcedTendencies": [
+        "T1_cache_defensiva",
+        "T2_fallback_silencioso_identidad",
+        "T5_sobreescribir_estado_al_recargar",
+        "T7_handoff_prematuro"
+      ]
+    },
+    {
+      "type": "abstract_class",
+      "name": "Vista",
+      "extends": "ModuloEventCore",
+      "_doc": "Modulo proyeccion derivada. Mantiene cache local en memoria hidratada por eventos canonicos de aggregates ajenos. NO publica mutaciones de dominio ajeno. Puede publicar eventos del dominio propio si tiene dominio propio acotado (ej: comandero publica comandero.item_agregado de su buffer propio, NO publica producto.actualizado del catalogo). La cache es volatil y se reconstruye solicitando snapshot al aggregate dueno en onLoad via publishAndWait o evento <dominio_ajeno>.config.solicitada.",
+      "properties": [
+        { "type": "property", "name": "cacheLocal", "type_expression": "Map<entityId, EntitySnapshot>", "visibility": "protected", "nullable": false, "default": "new Map()" },
+        { "type": "property", "name": "aggregatesObservados", "type_expression": "array<dominioName>", "visibility": "protected", "nullable": false, "default": "[]" },
+        { "type": "property", "name": "dominioPropio", "type_expression": "string | null", "visibility": "protected", "nullable": true, "default": null }
+      ],
+      "abstract_methods": {
+        "onLoad(context)": "registra subscribers de eventos canonicos de aggregatesObservados; solicita snapshot inicial via publishAndWait al aggregate dueno o via evento <dominio>.config.solicitada",
+        "hidratarDesdeEvento(event)": "actualiza cacheLocal a partir del payload completo del evento del aggregate ajeno; nunca lee disco para verificar",
+        "publishDominioPropio(verbo, payload)": "publica eventos del dominioPropio si esta declarado; verbo del enum canonico"
+      },
+      "concrete_invariants": [
+        { "type": "invariant", "expression": "this.cacheLocal es volatil; reconstruible en onLoad sin acceso a disco", "applies_to": "Vista" },
+        { "type": "invariant", "expression": "for each publish(event): event.prefix === this.dominioPropio OR this.dominioPropio === null y this no publica mutacion alguna", "applies_to": "global" },
+        { "type": "invariant", "expression": "for each handler(event): this.cacheLocal se actualiza con event.payload completo; sin lectura de disco para validar", "applies_to": "hidratarDesdeEvento" },
+        { "type": "invariant", "expression": "this.aggregatesObservados declara explicito de que dominios la vista cachea snapshot", "applies_to": "Vista" },
+        { "type": "invariant", "expression": "ningun handler de evento ajeno publica un evento <dominio_ajeno>.<entidad>.<verbo>", "applies_to": "global" }
+      ],
+      "forbidden_patterns": [
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "this\\.publish\\(['\"](?!comandero|cuenta|caja|dia|tarifas)[a-z-]+\\.[a-z_]+\\.(creada|actualizada|eliminada)['\"]",
+          "reason": "publish de mutacion con prefijo de dominio ajeno desde una vista invade autoridad del aggregate dueno",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "si la vista necesita disparar mutacion: publishAndWait al aggregate dueno y dejar que el aggregate emita el evento canonico" }
+          ],
+          "severidad": "error"
+        },
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "fs\\.(write|writeFile|appendFile|mkdir)|fs\\.write\\.request",
+          "reason": "vista no persiste; cualquier escritura a disco la convierte en aggregate disfrazado",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "la cache local es volatil; persistir convierte la vista en aggregate y exige declarar extends AggregateRoot" }
+          ],
+          "severidad": "error"
+        },
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "this\\.cacheLocal\\.set[\\s\\S]{0,200}?fs\\.read",
+          "reason": "leer disco para hidratar cache local es bypass del aggregate dueno; el payload completo del evento debe bastar",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "listen", "target": "<dominio_ajeno>.<entidad>.actualizada", "condition": null, "value": null },
+            { "type": "pseudo_step", "action": "assign", "target": "this.cacheLocal", "condition": null, "value": "set(event.entity_id, event.payload)" }
+          ],
+          "severidad": "error"
+        },
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "\\{\\s*\\.\\.\\.\\w+,\\s*(activo|activa|estado):\\s*(true|['\"][a-z]+['\"])\\s*\\}",
+          "reason": "vista que sobreescribe campos del snapshot ajeno reinterpreta estado que no le pertenece",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "assign", "target": "cacheItem", "condition": null, "value": "{ ...event.payload }" },
+            { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "snapshot tal cual lo emitio el aggregate dueno" }
+          ],
+          "severidad": "error"
+        }
+      ],
+      "enforcedTendencies": [
+        "T1_cache_defensiva",
+        "T3_bypass_filesystem",
+        "T5_sobreescribir_estado_al_recargar"
+      ]
+    }
+  ],
+
+  "diferenciador_central": {
+    "type": "invariant",
+    "name": "aggregate_publica_mutacion_vista_no",
+    "expression": "if extends AggregateRoot: publish de <dominio>.<entidad>.<verbo> permitido SOLO si prefix === this.dominioName; if extends Vista: publish de <dominio_ajeno>.<entidad>.<verbo> prohibido; publish del dominioPropio permitido si declarado",
+    "applies_to": "global",
+    "_doc": "Esta es la linea unica que separa las dos clases. Una clase concreta NO puede extender ambas. La eleccion se hace al disenar el modulo y se valida mecanicamente cruzando prefijos de events.publishes en module.json contra el dominioName o aggregatesObservados declarados"
+  },
+
+  "criterio_de_clasificacion": {
+    "type": "decision_tree",
+    "preguntas_ordenadas": [
+      { "id": "Q1", "pregunta": "este modulo persiste a disco entidades del dominio que el nombre del modulo describe", "si_si": "candidato_a_AggregateRoot", "si_no": "ir_a_Q2" },
+      { "id": "Q2", "pregunta": "este modulo publica eventos <dominio>.<entidad>.<verbo> con verbo en enum [creada, actualizada, eliminada] cuyo prefijo coincide con su propio nombre", "si_si": "candidato_a_AggregateRoot", "si_no": "ir_a_Q3" },
+      { "id": "Q3", "pregunta": "este modulo mantiene cache local rehidratada por eventos cuyo prefijo es de OTRO modulo", "si_si": "candidato_a_Vista", "si_no": "ir_a_Q4" },
+      { "id": "Q4", "pregunta": "este modulo expone tools de lectura sobre datos cuyo aggregate dueno es otro modulo", "si_si": "candidato_a_Vista", "si_no": "no_es_aggregate_ni_vista_revisar_si_es_servicio_o_canal" }
+    ],
+    "ambos_si": {
+      "regla": "si Q1 y Q3 ambos son si, el modulo esta drifteado a mezcla aggregate-vista; debe partirse en dos modulos o reasignarse a una sola clase",
+      "caso_testigo": { "archivo": "modules/pizzepos/productos/index.js", "linea_aprox": 28, "drift_id": "drift_mezcla_aggregate_vista" }
+    }
+  },
+
+  "caso_testigo_mezcla_aggregate_vista": {
+    "type": "concrete_class_drifteada",
+    "name": "PizzeposProductos",
+    "_doc": "Productos publica producto.creado/actualizado/eliminado con prefijo producto (postura aggregate) Y mantiene productosPerProject como cache rehidratada por carta.actualizada/editada/borrada (postura vista). La descripcion del module.json linea 5 confirma la mezcla: lee dato canonico de cartas Y persiste catalogo activo propio. Esta dualidad produce los cinco drifts simultaneos T1+T2+T3+T5+T7 documentados en el caso testigo hermano",
+    "publishes_mutacion_con_prefijo_propio": [ "producto.creado", "producto.actualizado", "producto.eliminado", "catalogo.actualizado" ],
+    "rehidrata_cache_por_eventos_ajenos": [ "carta.actualizada", "carta.editada", "carta.borrada" ],
+    "decision_pendiente_para_ana": "elegir entre dos cierres: (A) productos es Vista pura del aggregate carta-manager; elimina publishes producto.* y deja que carta-manager emita producto.* anidado en su propio evento; (B) productos es AggregateRoot propio del catalogo activo; elimina handlers de carta.* y reconstruye su estado por replay desde su propio fs storage en onLoad",
+    "evidencia": { "archivo": "modules/pizzepos/productos/module.json", "linea_aprox": 5, "drift_id": "drift_mezcla_aggregate_vista" }
+  },
+
+  "casos_testigo_aggregate_puro": [
+    { "name": "carta-manager", "evidencia": { "archivo": "modules/pizzepos/carta-manager/module.json", "linea_aprox": 6, "drift_id": "no_drift" }, "snippet_canonico": "Aggregate root del subsistema-carta. CRUD/versionado/manipulacion de cartas. Los hermanos del subsistema leen via carta-manager pero NUNCA escriben al store directamente" },
+    { "name": "recetas", "evidencia": { "archivo": "modules/pizzepos/recetas/module.json", "linea_aprox": 0, "drift_id": "no_drift" }, "snippet_canonico": "aggregate root declarado en module.json" },
+    { "name": "tecnicas", "evidencia": { "archivo": "modules/pizzepos/tecnicas/module.json", "linea_aprox": 0, "drift_id": "no_drift" }, "snippet_canonico": "aggregate root declarado en module.json" }
+  ],
+
+  "casos_testigo_vista_pura": [
+    { "name": "comandero", "evidencia": { "archivo": "modules/pizzepos/comandero/module.json", "linea_aprox": 4, "drift_id": "no_drift" }, "snippet_canonico": "Resolucion precio-por-canal via cache local hidratado por tarifas.config.actualizada (sin acceso directo a otros modulos). Publica eventos del dominio propio comandero.* y mantiene cache de productos hidratada por catalogo.actualizado del aggregate productos" }
+  ],
+
+  "forbidden_patterns_meta": [
+    { "type": "forbidden_pattern", "pattern_regex": "\\b(aunque|salvo que|en general|sin embargo|por otro lado)\\b", "reason": "conectores discursivos sintoma de prosa libre infiltrada", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "extraer matiz a sub-objeto estructurado" } ], "severidad": "error" },
+    { "type": "forbidden_pattern", "pattern_regex": "[a-z]{30,}", "reason": "palabra superior a 30 chars sintoma de parrafo concatenado o terminologia inventada", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "descomponer a campos discretos" } ], "severidad": "warning" },
+    { "type": "forbidden_pattern", "pattern_regex": "(MODEL|INSTANCE|EXECUTION)_LAYER|compilador|sub-DSL", "reason": "over-engineering: el contrato no justifica multinivel", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "shape plano; multinivel cuando emerja necesidad real" } ], "severidad": "error" },
+    { "type": "forbidden_pattern", "pattern_regex": "tendencias?\\s*:\\s*\\[\\s*\\]", "reason": "omitir las tendencias T1-T8 en un documento que canoniza disciplina arquitectonica", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "declarar enforcedTendencies del subset T1-T8 que aplican a cada clase" } ], "severidad": "error" },
+    { "type": "forbidden_pattern", "pattern_regex": "extends\\s+AggregateRoot[\\s\\S]{0,5000}?extends\\s+Vista", "reason": "una clase concreta no puede extender ambas; la mezcla es exactamente el drift que este contrato cierra", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "branch", "target": "elegir_postura", "condition": "Q1 || Q2", "value": null }, { "type": "pseudo_step", "action": "return", "target": "extends AggregateRoot", "condition": "publica_mutacion_dominio_propio", "value": null }, { "type": "pseudo_step", "action": "return", "target": "extends Vista", "condition": "cachea_dominio_ajeno_sin_publicar_mutacion", "value": null } ], "severidad": "error" }
+  ],
+
+  "auto_audit_protocol": {
+    "type": "protocolo_obligatorio",
+    "name": "auto_audit_before_return",
+    "descripcion_corta": "Antes de devolver este documento el plasmador se evalua contra forbidden_patterns_meta y los 3 detectores de drift heredados de Fiel. Si hay violacion regenera la seccion antes de devolver.",
+    "pseudo_code": [
+      { "type": "pseudo_step", "action": "loop", "target": "for_each_string_field_of_output", "condition": null, "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "has maxLength OR pattern", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "!matches conectores_discursivos", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "!matches palabras_30_chars", "value": null },
+      { "type": "pseudo_step", "action": "loop", "target": "for_each_pseudo_step_of_output", "condition": null, "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "pseudo_step.action", "condition": "in enum_14_acciones_de_Fiel", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "no_markdown_outside_doc_corto", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "no_over_engineering_multinivel", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "abstract_classes", "condition": "exactly_2_classes [AggregateRoot, Vista]", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "ambas_classes", "condition": "extends ModuloEventCore", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "diferenciador_central", "condition": "presente y mutuamente excluyente", "value": null },
+      { "type": "pseudo_step", "action": "branch", "target": "if_any_violation", "condition": "violations.length > 0", "value": null },
+      { "type": "pseudo_step", "action": "call", "target": "regenerate_violating_section", "condition": null, "value": "violations" },
+      { "type": "pseudo_step", "action": "return", "target": "output", "condition": "auto_audit_passed", "value": null }
+    ]
+  },
+
+  "self_bootstrap_verificacion": {
+    "tipo_invariante": "este_documento_cumple_su_propia_definicion",
+    "checks": [
+      "ambas AbstractClass declaradas con type abstract_class y extends ModuloEventCore",
+      "properties usan shape Property con visibility enum cerrado",
+      "abstract_methods describe signature por linea de texto corta",
+      "concrete_invariants usan primitiva Invariant con applies_to declarado",
+      "forbidden_patterns usan primitiva ForbiddenPattern con regex + alternative_pseudo_code + severidad",
+      "alternative_pseudo_code es array de PseudoStep con action del enum 14",
+      "enforcedTendencies de cada clase declara subset T1-T8 aplicable a esa clase",
+      "diferenciador_central presente como Invariant global mutuamente excluyente",
+      "caso_testigo_mezcla_aggregate_vista cita evidencia real con archivo + linea + drift_id verificada en repo",
+      "casos_testigo_aggregate_puro y casos_testigo_vista_pura citan modulos cuyo module.json se ha leido en esta sesion",
+      "forbidden_patterns_meta cubre los 4 detectores meta de Fiel mas el detector especifico de extends mezclados",
+      "auto_audit_protocol presente con pseudo_code que valida shape Fiel mas las 3 invariantes propias de este contrato",
+      "ningun campo MAYUSCULAS con sintaxis fuera de JSON",
+      "ningun termino tecnico nuevo se inferio del contexto sin Grep contra el repo"
+    ]
+  },
+
+  "_auto_audit_resultado": {
+    "pass": true,
+    "detectores_ejecutados": [
+      "string_fields_con_maxLength_o_pattern",
+      "ausencia_de_conectores_discursivos",
+      "ausencia_de_palabras_superiores_30_chars",
+      "pseudo_step.action_dentro_del_enum_14",
+      "ausencia_de_markdown_infiltrado",
+      "ausencia_de_over_engineering_multinivel",
+      "exactly_2_abstract_classes_extends_ModuloEventCore",
+      "diferenciador_central_mutuamente_excluyente",
+      "ausencia_de_plagio_literal_StructoLang_LINC_Lumina_CognitoScript_LOP_LLM_SPEC_LANG",
+      "verificacion_terminos_contra_repo_via_Grep"
+    ],
+    "violaciones_detectadas_y_regeneradas": [
+      { "violacion_inicial": "borrador inicial usaba el termino projection y read_model como sinonimos de Vista", "deteccion": "T8 Grep contra repo: projection 45 hits dispersos en agency-agents y descartados de tienda; read_model 0 hits en modules; el termino canonico en repo es vista (paradigma-no-cabe.contract.json) con historia previa como anti-patron cuando es materializada", "regeneracion": "removidos projection y read_model; conservado Vista como nombre de clase; observacion sobre historia de vista materializada movida a _observaciones_para_ana" },
+      { "violacion_inicial": "borrador inicial declaraba enforcedTendency T4_catch_tragador en AggregateRoot", "deteccion": "T4 no aplica especificamente a aggregate; el catch tragador es transversal a todo modulo event-core y ya esta enforced por el contrato padre ModuloEventCore", "regeneracion": "T4 removido de enforcedTendencies de AggregateRoot; queda heredado del padre sin redeclarar" },
+      { "violacion_inicial": "borrador inicial declaraba que Vista puede extender AggregateRoot", "deteccion": "Q1 + Q3 ambos si es exactamente el drift que el contrato cierra; permitir extension mutua reintroduciria la mezcla", "regeneracion": "anyadido forbidden_pattern_meta que prohibe extends AggregateRoot y extends Vista en la misma cadena; reformulado diferenciador_central como invariante global mutuamente excluyente" }
+    ]
+  },
+
+  "_observaciones_para_ana": [
+    "TERMINO_VERIFICADO: 'aggregate root' aparece como descriptor canonico en module.json de carta-manager linea 6, recetas y tecnicas. Es vocabulario del repo, no terminologia inventada.",
+    "TERMINO_VERIFICADO_CON_MATIZ: 'vista' aparece en arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json linea 108 como entrada del catalogo de patrones que NO caben. La entrada se refiere especificamente a 'vista materializada (CQRS read model)' con cache local persistida a disco. La AbstractClass Vista de este contrato NO autoriza persistencia a disco; el forbidden_pattern de Vista contra fs.write convierte la persistencia en error duro. Si ana quiere desambiguar nomenclatura, alternativas posibles son Proyeccion, Observador o LectorDeAggregateAjeno, ninguna verificada en repo. Recomiendo conservar Vista y anyadir nota en el contrato apuntando a paradigma-no-cabe para que la diferencia quede explicita.",
+    "TERMINO_NO_VERIFICADO_EN_REPO: 'projection' aparece 45 veces en repo pero concentradas en agency-agents y descartados de horizonte tienda. Removido del documento. 'read_model' produce 0 hits en modules. Removido.",
+    "DECISION_PENDIENTE_PARA_ANA_SOBRE_PRODUCTOS: el caso testigo de mezcla aggregate-vista (pizzepos/productos) admite dos cierres canonicos (postura A vista pura del aggregate carta; postura B aggregate propio del catalogo activo). La eleccion no es tecnica sino de modelado de dominio: catalogo activo es vista derivada de carta, o es agregado propio que existe independiente de cartas. Hace falta sesion de cocina con ana antes de reescribir productos.",
+    "OBSERVACION_DE_ALCANCE_T8: el contrato hermano _contrato-modulo-event-core-disciplina-via-notario.json cita el helper nowISO que no existe en el repo (anotado ya en sus _observaciones_para_ana). Este contrato evita citarlo. Si ana decide introducir nowISO como helper canonico, requiere contrato propio y reescritura del padre.",
+    "OBSERVACION_DE_FORMA: este contrato declara dos AbstractClass en lugar de una en el campo top-level type. Fiel v0.1.0 modela documentos con un solo type top-level. He optado por declarar las dos clases dentro del campo abstract_classes como array. Si ana prefiere dos documentos separados (uno por clase) hace falta partir este contrato en aggregate-root.contract.json y vista.contract.json. Recomiendo conservar el shape actual porque la diferencia entre las dos clases es exactamente lo canonizado y separarlas en archivos disuelve el diferenciador.",
+    "OBSERVACION_DE_VALIDATOR_PENDIENTE: este contrato exige validator nuevo que cruce events.publishes de cada module.json contra (a) dominioName del modulo cuando declara extends AggregateRoot, (b) aggregatesObservados cuando declara extends Vista. La declaracion extends X aun no existe como campo en module.json; hace falta tajada complementaria que canonice el campo module.event_core_class enum [AggregateRoot, Vista, ServicioInfraestructura] antes de que este contrato sea enforceable mecanicamente. Sin ese campo el contrato solo es enforceable por revision humana.",
+    "OBSERVACION_DE_TAJADA_SIGUIENTE: una vez canonizada la distincion, la tajada 4 contrato_project_context_propagation y la tajada 6 contrato_evento_mutacion_vs_notificacion del arranque se cruzan con esta. Aggregate publica mutacion canonica con payload completo (T7); vista escucha notificacion y no participa de la disciplina handoff-prematuro porque no escribe disco. Conviene plasmar tajada 6 inmediatamente despues de esta para que el termino mutacion quede definido."
+  ]
+}

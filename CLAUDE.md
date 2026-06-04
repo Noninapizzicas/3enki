@@ -143,6 +143,36 @@ Vive en `arquitectura/decisiones/` como contratos JSON con schemas + validators.
 
 - **Otros contratos transversales:** `events`, `lifecycle`, `observability`, `errors`, `persistence`, `http`, `security`. Cada uno con su validator en `_validators/<n>.validate.js` y su sección en `drift-baseline.json`. El de `security` define la disciplina del par `credential.resolve.request/response` y la prohibición de pasar API keys como `parameters` de tools (las credenciales se resuelven en runtime via `credential-manager`).
 
+### Cocina abierta en `propuestas/` — Fiel + notario + sexteto modulo-event-core (junio 2026)
+
+Experimento abierto en `propuestas/`, **no autoridad todavía** (no son `_contratos/`, sin validator AJV, pendiente de decisiones de `ana`):
+
+- **`_fiel-v0.1.0.json`** — lenguaje formal JSON+OOP+pseudocódigo para canonizar contratos arquitectónicos. Síntesis del experimento 7-LLMs (Kimi/Claude puro/ChatGPT/DeepSeek/Grok/Manus/Gemini) usando Fiel (Claude puro) como base + 4 piezas aditivas: `enforcedTendencies` por clase (CanonLang/DeepSeek), `severidad` enum error|warning|info en tendencias y forbidden_patterns (ContraForma/Kimi), `auto_audit_protocol` con detectores extra de plagio/markdown/over-engineering (ContraForma/Kimi), `BusConnection` como primitiva nativa (KanonJSON/Gemini). Enum cerrado de 14 acciones `PseudoStep` (`emit, listen, store, fetch, validate, transform, branch, loop, assign, call, return, throw, log, comment`). 14 primitivas, 8 tendencias T1-T8. Self-bootstrap declarado, validator AJV pendiente.
+
+- **`.claude/agents/notario.{md,json}`** — **agente Claude Code** (NO skill) que sólo escribe en Fiel. El `.md` es wrapper minimal con frontmatter; el shape operativo vive 100% en `notario.json` escrito en el propio Fiel (self-bootstrap). Pieza intermedia del pipeline `ana` (cocina) → `notario` (plasma) → `fede` (implementa). No conversa con el humano, recibe testigo del Claude principal, verifica términos contra el repo con Grep (T8), aplica `auto_audit_protocol`, devuelve UN JSON Fiel al invocador con `_auto_audit_resultado` y `_observaciones_para_ana[]`. Si encuentra término que no consta en el repo, devuelve `requires_clarification` y para — NO inventa. Invocación: `Agent(subagent_type: "notario", prompt: "<testigo de plasmación>")`.
+
+- **`_arranque-modulo-event-core-disciplina.json` v0.2.0** — el análisis cocinado origen de las 6 tajadas. Captura `insight_central: centralismo_local` y 8 tendencias T1-T8 con casos testigo archivo:línea apuntando a `pizzepos/productos` como módulo piloto drifteado.
+
+- **Sexteto de tajadas plasmado por notario (6 documentos en `propuestas/_*-via-notario.json`)** — primera prueba a fondo de Fiel + notario en producción real:
+
+  1. **`_contrato-modulo-event-core-disciplina-via-notario.json`** — AbstractClass `ModuloEventCore extends BaseModule`. Padre del resto. 5 invariantes, 6 forbidden_patterns, 8 tendencias T1-T8 con severidad, `enforcedTendencies` completo.
+  2. **`_pizzepos-productos-disciplina-via-notario.json`** — ConcreteClass `PizzeposProductos extends ModuloEventCore`. Caso testigo de drift. 5 violations confirmadas con archivo:línea y snippet real (T1, T2, T3, T5, T7 — T4/T6/T8 verificadas y descartadas). Notario destapó 4 driftes nuevos no documentados: handler `onCartaGenerada` para `carta.actualizada`, 3 versiones distintas del mismo módulo (4.0.0/2.3/1.0.0), property `eventBus` vs contrato padre `bus`, evento `catalogo.actualizado` polisémico (líneas 173 y 938 con shapes distintos).
+  3. **`_contrato-aggregate-vs-vista-via-notario.json`** — 2 AbstractClass mutuamente excluyentes: `AggregateRoot` (publica mutación con prefijo propio) y `Vista` (cachea por eventos ajenos, NO publica mutación). Decision tree Q1-Q4. Caso testigo de mezcla = `pizzepos/productos`. Auto-audit removió términos `projection` y `read_model` (no en repo).
+  4. **`_contrato-project-context-propagation-via-notario.json`** — AbstractClass `PropagacionContextoProyecto extends ModuloEventCore`. Complementa `project-identity.contract` (no duplica P1-P5/PROH1-PROH5). 4 reglas R1-R4 cuándo cachear localmente + 4 reglas N1-N4 cuándo no. forbidden_patterns: `resolveToActive*`, iteración `Map.keys()` con return, `activeProjectId` singular, `_slugify(name)`, `publishAndWait('project.get.request')` en camino caliente.
+  5. **`_propuesta-endurecer-storage-layout-bypass-via-notario.json`** — Propuesta operativa para subir `drift_bypass_filesystem` de warning a error en `storage-layout.validate.js`. Lista exhaustiva 31 módulos drifteados verificada via Grep. Plan migración 5 fases empezando por `pizzepos/productos` (caso testigo cocinado). Criterio cierre: `drift_count === 0`.
+  6. **`_contrato-evento-mutacion-vs-notificacion-via-notario.json`** — 2 AbstractClass ortogonales (extends null cada una): `MutacionCanonica` (verbo enum cerrado `[creada, actualizada, eliminada]`, emisor es aggregate dueño, payload completo, publish post `fs.write.response`) y `Notificacion` (verbo libre del whitelist `naming.json` fuera del enum mutación, sin disciplina handoff). Diferenciador mecánico por verbo del eventType. Canoniza el caso testigo `catalogo.actualizado` polisémico.
+
+**4 decisiones grandes pendientes para `ana`** (anotadas por notario en `_observaciones_para_ana[]` de los 6 documentos, no decidibles por notario):
+
+1. **¿Qué hace `pizzepos/productos` al reescribirse?** Postura A (Vista pura del aggregate `carta-manager`) vs Postura B (AggregateRoot propio del catálogo activo). Modelado de dominio.
+2. **¿Verbo en femenino o masculino?** El enum real en código es `[creada, actualizada, eliminada]` (concordancia castellana con entidad femenina: `carta`, `receta`); `naming.json` declara `[creado, actualizado, eliminado]` en masculino. Migrar rompe correlation_id de cientos de eventos. Recomendación notario: opción A (verbo se conjuga al género, `naming.json` se flexibiliza).
+3. **¿Validator nuevo o extender existente?** Las nuevas forbidden_patterns requieren extender `project-identity.validate.js` o crear validators nuevos. Y los contratos exigen un campo `module.event_core_class` enum `[AggregateRoot, Vista, ServicioInfraestructura]` que aún no existe en `module.json`.
+4. **¿Whitelist filesystem se amplía?** `admin-panel`, `code-executor`, `pizzepos/persistencia-comandero`, `metricas`, `conversation-export` entran en los 31 drifteados pero su rol puede legitimar I/O directo. Decisión de dominio antes de migrar.
+
+**Deudas internas detectadas por notario en el material previo**: el helper `nowISO()` citado en el contrato hermano `_contrato-modulo-event-core-disciplina-via-notario.json` no existe en `modules/` (el patrón real es `new Date().toISOString()` inline). Anotado para reconciliar.
+
+**Ascenso a `_contratos/` bloqueado** hasta cerrar las 4 decisiones de ana + escribir validator AJV de Fiel + validar self-bootstrap mecánicamente.
+
 Todos los validators corren juntos via `npm run validate:ci`. Para añadir un sub-contrato nuevo: contrato JSON → schemas estrictos → validator → registrar en `scripts/validate-all.js` → npm script.
 
 ## Estructura de los contratos y para qué se redactan

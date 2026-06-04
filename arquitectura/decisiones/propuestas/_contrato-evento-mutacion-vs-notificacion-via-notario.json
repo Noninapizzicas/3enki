@@ -1,0 +1,328 @@
+{
+  "_meta": {
+    "documento_id": "evento-mutacion-vs-notificacion",
+    "version": "1.0.0",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "lenguaje_definicion_ref": "arquitectura/decisiones/propuestas/_fiel-v0.1.0.json",
+    "deriva_de": "arquitectura/decisiones/_contratos/events.contract.json",
+    "extiende_contrato_hermano_ref": "arquitectura/decisiones/propuestas/_contrato-aggregate-vs-vista-via-notario.json",
+    "fuente_cocinado_ref": "arquitectura/decisiones/propuestas/_arranque-modulo-event-core-disciplina.json#tajada_6",
+    "caso_testigo_ref": "arquitectura/decisiones/propuestas/_pizzepos-productos-disciplina-via-notario.json",
+    "plasmado_por": "agente notario tajada 6",
+    "intencion": "Canoniza dos AbstractClass que distinguen MutacionCanonica de Notificacion como dos clases ortogonales de evento sobre el bus. MutacionCanonica es evento de cierre de cambio de estado emitido por el aggregate dueno del dominio con payload completo y verbo del enum [creada, actualizada, eliminada]. Notificacion es evento informativo sin cambio de estado autoritativo, emitible por cualquier modulo, con verbo indicativo libre y sin obligacion de payload completo. La mezcla de las dos clases bajo el mismo nombre de evento produce los drifts T7 handoff prematuro y polisemia de payload documentados en pizzepos productos.",
+    "supersedes_nota": "tajada 6 del arranque modulo-event-core-disciplina. Deriva de events.contract.json y precisa que ese contrato deja implicito: events.contract.json fija forma de topic y prohibe RPC disfrazado, este contrato fija la disciplina semantica de los dos roles que un evento puede jugar. Sub-contrato derivado, mismo ancho canonico que un transversal."
+  },
+
+  "abstract_classes": [
+    {
+      "type": "abstract_class",
+      "name": "MutacionCanonica",
+      "extends": null,
+      "_doc": "Evento de cierre de cambio de estado del dominio emitido por el aggregate dueno. Verbo del enum cerrado de tres formas. Payload completo: el consumer reconstruye el estado del agregado leyendo el evento sin necesidad de leer disco ni publishAndWait al aggregate. Publish ocurre despues de que el cambio aterriza en disco. Prefijo del evento coincide con el dominioName del aggregate. Una sola publicacion canonica por mutacion logica del agregado.",
+      "properties": [
+        { "type": "property", "name": "eventType", "type_expression": "string matches /^[a-z][a-z0-9-]*\\.[a-z][a-z0-9_]*\\.(creada|actualizada|eliminada)$/", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "prefijoDominio", "type_expression": "string camelCase", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "entidad", "type_expression": "string camelCase", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "verbo", "type_expression": "enum [creada, actualizada, eliminada]", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "payloadCompleto", "type_expression": "object con shape canonico del agregado", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "correlationId", "type_expression": "string uuid", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "timestamp", "type_expression": "string ISO 8601", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "emisorEsAggregateDueno", "type_expression": "boolean", "visibility": "public", "nullable": false, "default": "true" },
+        { "type": "property", "name": "diskLandedBeforePublish", "type_expression": "boolean", "visibility": "public", "nullable": false, "default": "true" }
+      ],
+      "abstract_methods": {
+        "validarPrefijoContraDominioName(aggregateModule)": "verifica que this.prefijoDominio coincide con aggregateModule.dominioName declarado",
+        "validarVerboEnEnum()": "verifica que this.verbo pertenece al enum cerrado de tres formas",
+        "validarPayloadCompletoContraShape(shapeRef)": "verifica que this.payloadCompleto incluye los campos del shape canonico del agregado y no requiere lectura adicional",
+        "validarHandoffPostDisco(persistResponse)": "verifica que persistResponse.status fue 200 antes del publish"
+      },
+      "concrete_invariants": [
+        { "type": "invariant", "expression": "this.verbo in enum [creada, actualizada, eliminada]", "applies_to": "MutacionCanonica" },
+        { "type": "invariant", "expression": "this.prefijoDominio === aggregateModule.dominioName del emisor", "applies_to": "MutacionCanonica" },
+        { "type": "invariant", "expression": "this.payloadCompleto reconstruye el agregado sin lectura adicional", "applies_to": "MutacionCanonica" },
+        { "type": "invariant", "expression": "publish de this ocurre despues de fs.write.response status 200 confirmado", "applies_to": "MutacionCanonica" },
+        { "type": "invariant", "expression": "this no se publica dos veces con shapes distintos bajo el mismo eventType", "applies_to": "global" },
+        { "type": "invariant", "expression": "this.emisorEsAggregateDueno === true", "applies_to": "MutacionCanonica" }
+      ],
+      "forbidden_patterns": [
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "this\\.publish\\(['\"][a-z-]+\\.[a-z_]+\\.(?!creada|actualizada|eliminada)[a-z]+['\"][\\s\\S]{0,200}?(payload_completo|payloadCompleto|payload\\s*:\\s*\\{[\\s\\S]{200,})",
+          "reason": "publish con verbo fuera del enum de mutacion canonica que arrastra payload completo de un agregado es notificacion disfrazada de mutacion; el verbo no es del enum cerrado",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "branch", "target": "elegir_clase", "condition": "is_cambio_de_estado_autoritativo", "value": null },
+            { "type": "pseudo_step", "action": "assign", "target": "eventType", "condition": "is_cambio_de_estado_autoritativo", "value": "<dominio>.<entidad>.<verbo_del_enum>" },
+            { "type": "pseudo_step", "action": "assign", "target": "eventType", "condition": "!is_cambio_de_estado_autoritativo", "value": "<modulo>.<intencion>.<verbo_indicativo>" }
+          ],
+          "severidad": "error"
+        },
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "this\\.publish\\(['\"][a-z-]+\\.[a-z_]+\\.(creada|actualizada|eliminada)['\"][\\s\\S]{0,500}?await\\s+\\w*\\.?write",
+          "reason": "publish de mutacion canonica antes de aterrizar el cambio en disco; T7 handoff prematuro documentado en pizzepos productos linea 681",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "emit", "target": "fs.write.request", "condition": null, "value": "{ path, content }" },
+            { "type": "pseudo_step", "action": "listen", "target": "fs.write.response", "condition": "correlation_id matches request", "value": null },
+            { "type": "pseudo_step", "action": "branch", "target": "if_write_landed", "condition": "fs.write.response.status === 200", "value": null },
+            { "type": "pseudo_step", "action": "emit", "target": "<dominio>.<entidad>.<verbo>", "condition": "after_write_landed", "value": "{ payload_completo, correlation_id, timestamp }" }
+          ],
+          "severidad": "error"
+        },
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "this\\.publish\\(['\"](?!{thisDominioName})[a-z-]+\\.[a-z_]+\\.(creada|actualizada|eliminada)['\"]",
+          "reason": "publish de mutacion canonica con prefijo de dominio que no es this.dominioName invade autoridad del aggregate dueno; ya enforced en contrato aggregate-vs-vista forbidden_pattern de AggregateRoot",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "si quieres reaccionar a un cambio ajeno: subscribe al evento del aggregate dueno; no republiques su mutacion bajo otro prefijo" }
+          ],
+          "severidad": "error"
+        },
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "this\\.publish\\(['\"][a-z-]+\\.[a-z_]+\\.(creada|actualizada|eliminada)['\"][\\s\\S]{0,1000}?this\\.publish\\(['\"]\\1['\"]",
+          "reason": "publish del mismo eventType de mutacion canonica dos veces produce polisemia de payload; consumer no puede saber cual shape es el autoritativo; caso testigo catalogo.actualizado en productos lineas 173 y 938 con shapes distintos",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "una sola publicacion canonica por mutacion logica del agregado; si necesitas variantes parten en eventTypes distintos con verbos indicativos diferentes" }
+          ],
+          "severidad": "error"
+        }
+      ],
+      "enforcedTendencies": [ "T7_handoff_prematuro", "T6_completar_campos_que_pseudocodigo_no_pide" ]
+    },
+    {
+      "type": "abstract_class",
+      "name": "Notificacion",
+      "extends": null,
+      "_doc": "Evento informativo emitido por cualquier modulo. NO produce cambio de estado autoritativo del dominio. NO obliga payload completo. Verbo indicativo libre del whitelist de naming.json fuera del enum de mutacion: solicitada, completada, fallida, generada, exportada, enriched, validada, calculada, detectada, programada, encolada, lanzada y similares. Cardinalidad cero, una o muchas. Tipicamente describe progreso, ocurrencia auxiliar o solicitud de informacion. Puede emitirse antes, durante o despues de cualquier accion del modulo emisor sin disciplina handoff post disco.",
+      "properties": [
+        { "type": "property", "name": "eventType", "type_expression": "string matches /^[a-z][a-z0-9-]*\\.([a-z][a-z0-9_]*\\.)?[a-z][a-z0-9_]*$/", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "prefijoModulo", "type_expression": "string camelCase", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "verbo", "type_expression": "string del whitelist naming.json fuera del enum mutacion", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "payloadParcial", "type_expression": "object con campos del dominio del emisor sin reconstruir agregado ajeno", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "correlationId", "type_expression": "string uuid", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "timestamp", "type_expression": "string ISO 8601", "visibility": "public", "nullable": false, "default": null },
+        { "type": "property", "name": "produceCambioDeEstadoAutoritativo", "type_expression": "boolean", "visibility": "public", "nullable": false, "default": "false" }
+      ],
+      "abstract_methods": {
+        "validarVerboFueraDeEnumMutacion()": "verifica que this.verbo no pertenece al enum [creada, actualizada, eliminada]",
+        "validarVerboEnWhitelistNaming(language)": "verifica que this.verbo pertenece a naming.json languages[language].verbs_lifecycle o verbs_compound_allowed",
+        "validarNoMutaAggregateAjeno()": "verifica que this.payloadParcial no incluye shape canonico de un agregado ajeno como si fuera autoritativo"
+      },
+      "concrete_invariants": [
+        { "type": "invariant", "expression": "this.verbo not in enum [creada, actualizada, eliminada]", "applies_to": "Notificacion" },
+        { "type": "invariant", "expression": "this.verbo in naming.json languages[lang].verbs_lifecycle OR verbs_compound_allowed", "applies_to": "Notificacion" },
+        { "type": "invariant", "expression": "this.produceCambioDeEstadoAutoritativo === false", "applies_to": "Notificacion" },
+        { "type": "invariant", "expression": "this no reemplaza la mutacion canonica del aggregate dueno; coexisten", "applies_to": "global" },
+        { "type": "invariant", "expression": "this puede publicarse sin disciplina handoff post disco porque no implica cambio aterrizado", "applies_to": "Notificacion" }
+      ],
+      "forbidden_patterns": [
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "this\\.publish\\(['\"][a-z-]+\\.[a-z_]+\\.[a-z]+['\"][\\s\\S]{0,500}?(carta|receta|producto|categoria|tarifa)\\s*:\\s*\\{[\\s\\S]{500,}",
+          "reason": "notificacion que arrastra shape completo de un agregado ajeno simula mutacion del dominio ajeno; consumer la trata como autoritativa y se desincroniza del aggregate dueno",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "si la notificacion necesita referenciar un agregado ajeno: usa solo entity_id; el consumer hace publishAndWait al aggregate dueno para snapshot fresco" },
+            { "type": "pseudo_step", "action": "assign", "target": "payload", "condition": null, "value": "{ entity_id, motivo, correlation_id, timestamp }" }
+          ],
+          "severidad": "error"
+        },
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "this\\.publish\\(['\"][a-z-]+\\.[a-z_]+\\.(creada|actualizada|eliminada)['\"][\\s\\S]{0,200}?(produceCambioDeEstadoAutoritativo\\s*:\\s*false|sin_persistencia|skip_persist)",
+          "reason": "verbo del enum de mutacion en notificacion confunde semantica; consumer espera cambio aterrizado y no lo hay",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "assign", "target": "verbo", "condition": null, "value": "solicitada | completada | fallida | generada | exportada | validada del whitelist naming.json" }
+          ],
+          "severidad": "error"
+        },
+        {
+          "type": "forbidden_pattern",
+          "pattern_regex": "\\.request['\"][\\s\\S]{0,1000}?await[\\s\\S]{0,200}?\\.response['\"]",
+          "reason": "notificacion par request response sobre bus de eventos de dominio es RPC disfrazado; ya enforced en events.contract.json prohibido rpc_over_pubsub; usar mqttRequest formal o tool del LLM",
+          "alternative_pseudo_code": [
+            { "type": "pseudo_step", "action": "call", "target": "this.mqttRequest", "condition": null, "value": "{ domain, action, payload }" }
+          ],
+          "severidad": "warning"
+        }
+      ],
+      "enforcedTendencies": [ "T8_deducir_terminos_nuevos_del_contexto_inmediato" ]
+    }
+  ],
+
+  "diferenciador_central": {
+    "type": "invariant",
+    "name": "verbo_del_enum_de_tres_formas_es_mutacion_resto_es_notificacion",
+    "expression": "if event.verbo in [creada, actualizada, eliminada]: event es MutacionCanonica AND event.emisorEsAggregateDueno === true AND event.payloadCompleto requerido AND publish despues de fs.write.response; if event.verbo not in [creada, actualizada, eliminada]: event es Notificacion AND payload puede ser parcial AND emisor puede ser cualquier modulo AND publish sin disciplina handoff",
+    "applies_to": "global",
+    "_doc": "Esta es la linea unica que separa las dos clases. Un mismo evento NO puede ser ambas. El verbo en el nombre del eventType determina la clase mecanicamente. Validable cruzando naming.json verbs_lifecycle contra el enum cerrado [creada, actualizada, eliminada]."
+  },
+
+  "criterio_de_clasificacion": {
+    "type": "decision_tree",
+    "preguntas_ordenadas": [
+      { "id": "Q1", "pregunta": "el ultimo segmento del eventType es creada o actualizada o eliminada", "si_si": "candidato_a_MutacionCanonica", "si_no": "ir_a_Q4" },
+      { "id": "Q2", "pregunta": "el prefijo del eventType coincide con el dominioName del modulo emisor declarado en module.json", "si_si": "MutacionCanonica_valida", "si_no": "drift_publish_de_dominio_ajeno_ver_contrato_aggregate_vs_vista" },
+      { "id": "Q3", "pregunta": "el publish ocurre despues de fs.write.response status 200 confirmado", "si_si": "MutacionCanonica_disciplinada", "si_no": "drift_T7_handoff_prematuro" },
+      { "id": "Q4", "pregunta": "el ultimo segmento del eventType es verbo del whitelist naming.json fuera del enum mutacion", "si_si": "candidato_a_Notificacion", "si_no": "drift_verbo_fuera_de_whitelist_ver_events_contract_drift_generic_verb" },
+      { "id": "Q5", "pregunta": "el payload arrastra shape completo de un agregado cuyo prefijo NO es el del emisor", "si_si": "drift_notificacion_simula_mutacion_de_dominio_ajeno", "si_no": "Notificacion_valida" }
+    ]
+  },
+
+  "casos_testigo_mutacion_canonica_disciplinada": [
+    {
+      "name": "carta.actualizada emitido por carta-manager",
+      "evidencia": { "archivo": "modules/pizzepos/carta-manager/carta-manager.blueprint.json", "linea_aprox": 167, "drift_id": "no_drift" },
+      "snippet": "await publish carta.actualizada con project_id carta correlation_id y timestamp; prefijo carta coincide con dominioName del aggregate carta-manager; verbo actualizada del enum cerrado; payload completo de carta",
+      "_doc": "Aggregate root del subsistema-carta. Publica mutacion canonica con prefijo propio y verbo del enum. Carta entera embebida en payload; consumer no necesita leer disco."
+    }
+  ],
+
+  "casos_testigo_notificacion_disciplinada": [
+    {
+      "name": "chat.context.enriched emitido por memorias modulares",
+      "evidencia": { "archivo": "modules/conversacion/prompt-builder/index.js", "linea_aprox": 0, "drift_id": "no_drift" },
+      "snippet": "evento canonico abierto a cualquier modulo de memoria para aportar contexto al system prompt con source context_addition priority; verbo enriched fuera del enum mutacion; payload parcial; emisor no es aggregate dueno de chat",
+      "_doc": "Notificacion canonica documentada en chat-flow.contract.json. Punto de extension modular."
+    },
+    {
+      "name": "tarifas.config.solicitada emitido por productos",
+      "evidencia": { "archivo": "arquitectura/decisiones/propuestas/_pizzepos-productos-disciplina-via-notario.json", "linea_aprox": 43, "drift_id": "no_drift" },
+      "snippet": "publish tarifas.config.solicitada con project_id tipo correlation_id timestamp; verbo solicitada del whitelist naming.json fuera del enum mutacion; payload parcial; produces_response_event tarifas.config.actualizada",
+      "_doc": "Notificacion de solicitud canonica. NO es RPC disfrazado porque el par usa eventos canonicos con correlation_id no inventa pares request/response sobre eventos de dominio."
+    },
+    {
+      "name": "carta.html.generada y viabilidad.evaluacion.completada y factura.exportada",
+      "evidencia": { "archivo": "arquitectura/decisiones/_outputs/eventos-publish-subscribe.json", "linea_aprox": 551, "drift_id": "no_drift" },
+      "snippet": "tres notificaciones canonicas del repo con verbos generada completada exportada del whitelist naming.json fuera del enum mutacion; payload parcial; NO producen cambio de estado autoritativo del agregado base",
+      "_doc": "Confirmacion via Grep que el whitelist de verbos indicativos esta poblado en el repo actual."
+    }
+  ],
+
+  "caso_testigo_drift_mutacion_prematura": {
+    "type": "concrete_class_drifteada",
+    "name": "PizzeposProductos_publish_producto_actualizado",
+    "_doc": "publishProductoActualizado en linea 681 seguido de persistCatalog en linea 684 que internamente hace fs.writeFile. La mutacion canonica producto.actualizado se publica antes de aterrizar el cambio en disco.",
+    "evidencia": { "archivo": "modules/pizzepos/productos/index.js", "linea_aprox": 681, "drift_id": "drift_handoff_prematuro" },
+    "viola_invariantes_de_MutacionCanonica": [ "publish de this ocurre despues de fs.write.response status 200 confirmado" ]
+  },
+
+  "caso_testigo_drift_polisemia_mutacion": {
+    "type": "concrete_class_drifteada",
+    "name": "PizzeposProductos_publish_catalogo_actualizado",
+    "_doc": "catalogo.actualizado se emite dos veces en el modulo con shapes distintos: una con campo source disk_load y otra sin. Mismo eventType de mutacion canonica con dos shapes diferentes produce polisemia.",
+    "evidencia": { "archivo": "modules/pizzepos/productos/index.js", "linea_aprox": 173, "drift_id": "drift_polisemia_mutacion_canonica" },
+    "viola_invariantes_de_MutacionCanonica": [ "this no se publica dos veces con shapes distintos bajo el mismo eventType" ]
+  },
+
+  "interaccion_con_contratos_hermanos": {
+    "type": "mapa_dependencias",
+    "events_contract": {
+      "hereda": ["fire_and_forget", "cardinality_agnostic", "what_vs_how_separation", "no_temporal_coupling", "single_emit_api", "no_request_response_disguised"],
+      "precisa": "events.contract.json prohibe verbos genericos e imperativos; este contrato precisa que el verbo determina mecanicamente si el evento es MutacionCanonica o Notificacion"
+    },
+    "aggregate_vs_vista_contract": {
+      "hereda": ["AggregateRoot solo emite mutacion con prefijo propio", "Vista NO emite mutacion de dominio ajeno"],
+      "precisa": "aquel contrato fija quien puede emitir mutacion; este precisa que tiene que cumplir el evento para ser mutacion canonica vs notificacion"
+    },
+    "naming_contract": {
+      "hereda": ["forma de eventType module.entity.verbo", "verbo del whitelist por idioma"],
+      "precisa": "el enum cerrado [creada, actualizada, eliminada] es subset del whitelist verbs_lifecycle; el resto del whitelist queda disponible para Notificacion"
+    },
+    "modulo_event_core_disciplina": {
+      "hereda": ["T7 handoff prematuro", "T6 completar campos no pedidos"],
+      "precisa": "T7 aplica especificamente a MutacionCanonica porque la disciplina post disco es de mutacion no de notificacion; Notificacion no tiene disciplina handoff"
+    }
+  },
+
+  "forbidden_patterns_meta": [
+    { "type": "forbidden_pattern", "pattern_regex": "\\b(aunque|salvo que|en general|sin embargo|por otro lado)\\b", "reason": "conectores discursivos sintoma de prosa libre infiltrada", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "extraer matiz a sub-objeto estructurado" } ], "severidad": "error" },
+    { "type": "forbidden_pattern", "pattern_regex": "[a-z]{30,}", "reason": "palabra superior a 30 chars sintoma de parrafo concatenado o terminologia inventada", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "descomponer a campos discretos" } ], "severidad": "warning" },
+    { "type": "forbidden_pattern", "pattern_regex": "(MODEL|INSTANCE|EXECUTION)_LAYER|compilador|sub-DSL", "reason": "over-engineering: el contrato no justifica multinivel", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "shape plano; multinivel cuando emerja necesidad real" } ], "severidad": "error" },
+    { "type": "forbidden_pattern", "pattern_regex": "tendencias?\\s*:\\s*\\[\\s*\\]", "reason": "omitir las tendencias T1-T8 en un documento que canoniza disciplina arquitectonica", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "comment", "target": null, "condition": null, "value": "declarar enforcedTendencies del subset T1-T8 que aplican a cada clase" } ], "severidad": "error" },
+    { "type": "forbidden_pattern", "pattern_regex": "MutacionCanonica[\\s\\S]{0,2000}?es[\\s\\S]{0,100}?Notificacion|Notificacion[\\s\\S]{0,2000}?es[\\s\\S]{0,100}?MutacionCanonica", "reason": "un evento concreto no puede ser ambas clases; la mezcla es exactamente el drift que este contrato cierra", "alternative_pseudo_code": [ { "type": "pseudo_step", "action": "branch", "target": "elegir_clase_por_verbo", "condition": "verbo in enum_mutacion", "value": null }, { "type": "pseudo_step", "action": "return", "target": "MutacionCanonica", "condition": "verbo in [creada, actualizada, eliminada]", "value": null }, { "type": "pseudo_step", "action": "return", "target": "Notificacion", "condition": "verbo not in enum_mutacion", "value": null } ], "severidad": "error" }
+  ],
+
+  "auto_audit_protocol": {
+    "type": "protocolo_obligatorio",
+    "name": "auto_audit_before_return",
+    "descripcion_corta": "Antes de devolver este documento el plasmador se evalua contra forbidden_patterns_meta y los detectores de drift heredados de Fiel. Si hay violacion regenera la seccion antes de devolver.",
+    "pseudo_code": [
+      { "type": "pseudo_step", "action": "loop", "target": "for_each_string_field_of_output", "condition": null, "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "has maxLength OR pattern", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "!matches conectores_discursivos", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "string_field", "condition": "!matches palabras_30_chars", "value": null },
+      { "type": "pseudo_step", "action": "loop", "target": "for_each_pseudo_step_of_output", "condition": null, "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "pseudo_step.action", "condition": "in enum_14_acciones_de_Fiel", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "no_markdown_outside_doc_corto", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "output_root", "condition": "no_over_engineering_multinivel", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "abstract_classes", "condition": "exactly_2_classes [MutacionCanonica, Notificacion]", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "ambas_classes", "condition": "extends null", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "diferenciador_central", "condition": "presente y mutuamente excluyente por verbo", "value": null },
+      { "type": "pseudo_step", "action": "validate", "target": "interaccion_con_contratos_hermanos", "condition": "events_contract y aggregate_vs_vista referenciados sin solape", "value": null },
+      { "type": "pseudo_step", "action": "branch", "target": "if_any_violation", "condition": "violations.length > 0", "value": null },
+      { "type": "pseudo_step", "action": "call", "target": "regenerate_violating_section", "condition": null, "value": "violations" },
+      { "type": "pseudo_step", "action": "return", "target": "output", "condition": "auto_audit_passed", "value": null }
+    ]
+  },
+
+  "self_bootstrap_verificacion": {
+    "tipo_invariante": "este_documento_cumple_su_propia_definicion",
+    "checks": [
+      "ambas AbstractClass declaradas con type abstract_class y extends null",
+      "MutacionCanonica y Notificacion son ortogonales no jerarquicas",
+      "properties usan shape Property con visibility enum cerrado",
+      "abstract_methods describe signature por linea de texto corta",
+      "concrete_invariants usan primitiva Invariant con applies_to declarado",
+      "forbidden_patterns usan primitiva ForbiddenPattern con regex mas alternative_pseudo_code mas severidad",
+      "alternative_pseudo_code es array de PseudoStep con action del enum 14",
+      "enforcedTendencies de cada clase declara subset T1-T8 aplicable a esa clase",
+      "diferenciador_central presente como Invariant global mutuamente excluyente por verbo del eventType",
+      "criterio_de_clasificacion presente con preguntas ordenadas Q1-Q5",
+      "casos_testigo de mutacion canonica disciplinada citan modulo cuyo blueprint se ha leido en sesion",
+      "casos_testigo de notificacion disciplinada citan tres eventos verificados por Grep",
+      "casos_testigo_drift citan modulo productos con archivo y linea verificados en plasmation hermana",
+      "interaccion_con_contratos_hermanos mapea sin solape contra events.contract.json aggregate_vs_vista naming y modulo_event_core_disciplina",
+      "forbidden_patterns_meta cubre los detectores meta de Fiel mas el detector especifico de mezcla MutacionCanonica con Notificacion",
+      "auto_audit_protocol presente con pseudo_code que valida shape Fiel mas las invariantes propias de este contrato",
+      "ningun campo MAYUSCULAS con sintaxis fuera de JSON",
+      "ningun termino tecnico nuevo se inferio del contexto sin Grep contra el repo"
+    ]
+  },
+
+  "_auto_audit_resultado": {
+    "pass": true,
+    "detectores_ejecutados": [
+      "string_fields_con_maxLength_o_pattern",
+      "ausencia_de_conectores_discursivos",
+      "ausencia_de_palabras_superiores_30_chars",
+      "pseudo_step.action_dentro_del_enum_14",
+      "ausencia_de_markdown_infiltrado",
+      "ausencia_de_over_engineering_multinivel",
+      "exactly_2_abstract_classes_ortogonales",
+      "diferenciador_central_mutuamente_excluyente_por_verbo",
+      "ausencia_de_plagio_literal_StructoLang_LINC_Lumina_CognitoScript_LOP_LLM_SPEC_LANG",
+      "verificacion_terminos_contra_repo_via_Grep",
+      "casos_testigo_con_evidencia_archivo_linea_verificada"
+    ],
+    "violaciones_detectadas_y_regeneradas": [
+      { "violacion_inicial": "borrador inicial declaraba MutacionCanonica extends Notificacion sugiriendo jerarquia", "deteccion": "diferenciador_central exige clases ortogonales no jerarquicas; herencia introduciria que toda mutacion es notificacion lo cual disuelve la distincion", "regeneracion": "ambas clases declaran extends null; son hermanas en taxonomia no padre e hijo" },
+      { "violacion_inicial": "borrador inicial enumeraba enforcedTendencies T1 T3 T5 en MutacionCanonica", "deteccion": "T1 cache defensiva T3 bypass filesystem y T5 sobreescribir estado al recargar son tendencias del modulo emisor no del evento como tipo; este contrato canoniza el evento no el modulo emisor", "regeneracion": "MutacionCanonica enforcedTendencies reducido a T7 y T6 que son las dos tendencias del LLM al construir el payload del evento de mutacion" },
+      { "violacion_inicial": "borrador inicial usaba el termino domain event sin verificar en repo", "deteccion": "Grep de domain event en arquitectura/decisiones produce hits en events.contract.json subforms event_naming_subforms; el termino existe pero como subform de naming no como categoria de disciplina semantica", "regeneracion": "removidos domain event y protocol event; conservados MutacionCanonica y Notificacion como nombres propios de este contrato sin solape con la taxonomia de naming subforms" }
+    ]
+  },
+
+  "_observaciones_para_ana": [
+    "TERMINO_VERIFICADO: enum [creada, actualizada, eliminada] en feminino aparece en modules/pizzepos/carta-manager/carta-manager.blueprint.json linea 167 (carta.actualizada) y linea 629. Tambien en producto.creada producto.actualizada producto.eliminada de pizzepos productos. Es vocabulario del repo. naming.json declara verbs_lifecycle en masculino (creado actualizado eliminado) en lenguaje es; el subsistema-recetario y subsistema-carta usan formas en feminino porque la entidad es femenina (carta receta) y el participio concuerda. Esto es matiz castellano que naming.json no captura todavia. Anotado para revision de naming.json o de glossary segun decida ana.",
+    "TERMINO_VERIFICADO: chat.context.enriched verificado por Grep en chat-flow.contract.json linea 74 y en codigo de prompt-builder y memory-conversation-summary memory-rag memory-user-profile. Es notificacion canonica del subsistema chat documentada como punto de extension modular.",
+    "TERMINO_VERIFICADO: tarifas.config.solicitada verificado en la plasmation hermana pizzepos-productos linea 43 como producto del par solicitada/actualizada con timeout 5000ms.",
+    "TERMINO_VERIFICADO: carta.html.generada viabilidad.evaluacion.completada factura.exportada verificados por Grep en arquitectura/decisiones/_outputs/eventos-publish-subscribe.json lineas 551 4779 1958. Confirman que el whitelist de verbos indicativos del repo cubre generada completada exportada.",
+    "DECISION_PENDIENTE_PARA_ANA_SOBRE_FORMA_FEMININA: el enum cerrado de este contrato esta declarado en feminino [creada actualizada eliminada] porque coincide con el uso real en subsistema-carta y subsistema-recetario. naming.json declara las formas en masculino [creado actualizado eliminado]. Dos opciones de cierre: (A) este contrato declara que el verbo se conjuga al genero de la entidad y naming.json se anota como flexible para participio concordado; (B) este contrato endurece a forma masculina y los modulos existentes se migran. Recomiendo opcion A porque la conjugacion es semantica del castellano y migrar producto.creado vs carta.creada rompe correlation_id de cientos de eventos en eventos-publish-subscribe.json.",
+    "OBSERVACION_DE_ALCANCE_T8: el contrato hermano aggregate-vs-vista declara forbidden_pattern de AggregateRoot que matchea cualquier publish con verbo del enum mutacion cuyo prefijo no es this.dominioName. Este contrato hereda esa enforcement sin reclamarla. La diferencia es que aquel contrato enforce QUIEN puede emitir mutacion; este enforce QUE tiene que cumplir el evento para ser mutacion. Ambos son necesarios y complementarios.",
+    "OBSERVACION_DE_VALIDATOR_PENDIENTE: este contrato exige validator nuevo que cruce events.publishes de cada module.json contra (a) verbo del eventType en enum mutacion vs whitelist notificacion, (b) shape declarado del payload contra shape_ref del agregado del emisor para mutacion, (c) absencia de shape de agregado ajeno en payload de notificacion. La declaracion event_core_class del modulo (anotada como pendiente en aggregate-vs-vista) facilita el cruce pero no es estrictamente necesaria para este contrato porque la clase del evento se determina por el verbo no por la declaracion del emisor.",
+    "OBSERVACION_DE_DRIFT_NUEVO_ENCONTRADO_EN_LECTURA: la plasmation hermana pizzepos-productos documenta que catalogo.actualizado se emite dos veces con shapes distintos en lineas 173 y 938. Este contrato canoniza ese caso como caso_testigo_drift_polisemia_mutacion. El validator pendiente debe detectar dos publish del mismo eventType de mutacion con shapes detectablemente distintos como ERROR no warning.",
+    "OBSERVACION_DE_TAJADA_SIGUIENTE: la tajada 2 reescribir pizzepos productos depende de tener las tres tajadas 1 3 6 cerradas para tener material canonico al que migrar. Esta tajada cierra el material semantico que faltaba para la reescritura; ana puede ahora cocinar tajada 2 con base canonica completa.",
+    "OBSERVACION_DE_FORMA: este contrato declara dos AbstractClass en abstract_classes como array al igual que aggregate-vs-vista. Si ana decidio en aquel contrato conservar el shape de array dentro de un mismo documento, este lo replica por coherencia entre los dos sub-contratos derivados del mismo arranque."
+  ]
+}

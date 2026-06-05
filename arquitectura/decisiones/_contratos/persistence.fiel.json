@@ -1,0 +1,108 @@
+{
+  "_meta": {
+    "documento_id": "persistence",
+    "version": "2.0.0",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "base_ref": "lenguaje/_fiel-base.json",
+    "lenguaje_ref": "lenguaje/_fiel-2.json",
+    "fuente": "contratos-referenciados/persistence.contract.json v1.1.0",
+    "intencion": "Como persiste su estado un modulo. Es un catalogo: cada modulo elige su patron y lo declara. Cuarto contrato sobre la base; cuarto testigo de closed_enum (metadata densa)."
+  },
+
+  "type": "concrete_class",
+  "name": "ContratoPersistencia",
+  "extends": "ContratoArquitectonico",
+
+  "identidad": {
+    "es": "un catalogo de patrones de persistencia, no un mandato; cada modulo elige el suyo segun su dominio y lo declara en module.json",
+    "aislamiento": "la persistencia de un modulo es privada; otros piden sus datos por el bus, no leen sus archivos ni su tabla ni su memoria",
+    "lo_que_persiste": "el modulo guarda estado de SU dominio; lo que es de otro vive en el otro y se obtiene por el bus",
+    "razon": "la uniformidad sale de las reglas comunes, no de imponer un patron unico; imponerlo abusa de la herramienta unica"
+  },
+
+  "reglas_comunes": [
+    "toda escritura de archivo es atomica: se escribe a tempFile y se renombra (salvo append-only, que solo anade)",
+    "leer y no encontrar es informacion: el modulo arranca con estado vacio y lo loguea; no es fallo",
+    "todo fallo de I/O (read, write, query, commit) deja log y metrica",
+    "cada modulo declara su patron en module.json: pattern, restart_resilient, lo que se pierde al reiniciar, concurrencia",
+    "tras un restart el modulo recupera su estado; si es in-memory, lo declara para que el operador sepa que se pierde",
+    "los secretos van cifrados o por credential-manager; nunca en disco plano"
+  ],
+
+  "patrones": {
+    "type": "closed_enum",
+    "value_type": "string",
+    "se_extiende": "por PR",
+    "_doc": "los seis patrones aceptados; cada modulo declara cual usa",
+    "entries": [
+      {
+        "value": "in-memory",
+        "cuando": "estado claramente efimero: caches reconstruibles, sesiones activas, contadores de runtime",
+        "restart_resilient": false,
+        "declara": ["lost_on_restart"],
+        "concurrencia": "single-process (el event loop ya serializa)"
+      },
+      {
+        "value": "json-file",
+        "cuando": "estado pequeno-medio que cabe en memoria, lectura frecuente, escritura ocasional, sin queries complejas",
+        "reglas": ["write atomico", "ENOENT graceful", "UTF-8 indent 2", "_version y _updated en el JSON", "corrupto -> log warn y arranca limpio"],
+        "restart_resilient": true,
+        "concurrencia": "single-writer"
+      },
+      {
+        "value": "json-file-per-project",
+        "cuando": "multi-tenant: un archivo por proyecto, el mismo modulo gestiona N proyectos sin mezclarlos",
+        "reglas": ["path con project_id", "todas las reglas de json-file por archivo", "nunca toca archivos de proyectos ajenos al request"],
+        "restart_resilient": true,
+        "concurrencia": "single-writer por archivo"
+      },
+      {
+        "value": "sqlite",
+        "cuando": "estado relacional, queries complejas, volumenes grandes, transacciones multi-tabla",
+        "reglas": ["declara tablas y migraciones en module.json", "escritura multiple en transaccion BEGIN/COMMIT", "WAL si hay concurrencia", "cierra conexion en onUnload"],
+        "restart_resilient": true,
+        "concurrencia": "WAL: muchos lectores + 1 escritor; sin WAL: single-writer global"
+      },
+      {
+        "value": "append-only-log",
+        "cuando": "logs, audit trails, event sourcing; el contenido no se edita, solo se anade",
+        "reglas": ["solo append (flag 'a'), nunca writeFile sobre el archivo", "una linea JSON por entrada (JSONL)", "rotacion declarada", "lectura por stream"],
+        "restart_resilient": true,
+        "concurrencia": "multi-writer si las entradas son pequenas (atomicidad del SO); si no, single-writer"
+      },
+      {
+        "value": "external-delegation",
+        "cuando": "secretos (siempre credential-manager), data con otro modulo dueno, modulos sin estado propio",
+        "reglas": ["declara delegated_to", "comunicacion siempre por bus", "tolera que el persistidor este caido: timeout, fallback, error claro"],
+        "restart_resilient": "depende del persistidor",
+        "concurrencia": "segun el persistidor"
+      }
+    ]
+  },
+
+  "declaracion_en_module_json": {
+    "_doc": "el modulo declara su eleccion bajo config.persistence",
+    "campos": [
+      { "nombre": "pattern", "es": "uno de los seis valores de patrones" },
+      { "nombre": "data_path", "es": "ruta o db_path, segun patron" },
+      { "nombre": "restart_resilient", "es": "true o false" },
+      { "nombre": "lost_on_restart", "es": "que se pierde, en in-memory" },
+      { "nombre": "tables", "es": "tablas y columnas, en sqlite" },
+      { "nombre": "migrations", "es": "lista ordenada, en sqlite" },
+      { "nombre": "concurrency", "es": "single-writer | multi-writer-locked | multi-writer-optimistic" },
+      { "nombre": "delegated_to", "es": "modulos persistidores, en external-delegation" }
+    ]
+  },
+
+  "en_la_duda": {
+    "el_archivo_no_existe": "el modulo arranca con estado vacio y loguea info",
+    "el_write_podria_corromper": "se escribe a tempFile y se renombra a la ruta final",
+    "el_io_falla": "se loguea y se cuenta en metrica con kind infrastructure; nunca silencioso",
+    "necesitas_datos_de_otro_modulo": "se piden por el bus; su persistencia es privada",
+    "tienes_que_guardar_un_secreto": "va por credential-manager, nunca en plano",
+    "el_persistidor_externo_no_responde": "se tolera: timeout, fallback, error claro al caller con UPSTREAM_UNREACHABLE",
+    "un_cache_crece_sin_limite": "se declara TTL o eviction; el estado acotado no es leak"
+  }
+}

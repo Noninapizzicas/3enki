@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "documento_id": "project-identity",
+    "version": "2.0.0",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "base_ref": "lenguaje/_fiel-base.json",
+    "lenguaje_ref": "lenguaje/_fiel-2.json",
+    "fuente": "contratos-referenciados/project-identity.contract.json v1.1.0",
+    "intencion": "Como un modulo resuelve la identidad y el path de un proyecto. Quinto contrato sobre la base. No pare grano nuevo: ejercita la base en su forma pura (una fuente autoritativa; lo derivado se lee, no se recalcula)."
+  },
+
+  "type": "concrete_class",
+  "name": "ContratoProjectIdentity",
+  "extends": "ContratoArquitectonico",
+
+  "identidad": {
+    "project_id": "UUID opaco; nadie deriva significado de su forma",
+    "base_path": "la fuente autoritativa del path fisico del proyecto; se fija al crear (una vez, path.join(projectsBasePath, slug)) y viaja explicito en project.activated",
+    "slug": "derivado del name; lo computa y lo posee project-manager; es interno (UI y creacion de directorios), no viaja por el bus",
+    "name": "presentational, mostrable al usuario"
+  },
+
+  "como_se_resuelve_el_path": {
+    "proyecto_activo": "el modulo escucha project.activated y cachea base_path por project_id; lo lee de ese cache",
+    "proyecto_no_activo": "project.get.request devuelve base_path en la response; el modulo lo usa directo",
+    "razon": "base_path sobrevive a renames; recomputar el slug desde el name diverge del path real en cuanto el name cambia. Hay una fuente; lo derivado se lee de ella"
+  },
+
+  "presencia_en_el_bus": {
+    "escucha": "project.activated (project_id + base_path + metadata)",
+    "para_no_activos": "project.get.request -> project.get.response (con base_path)"
+  },
+
+  "en_la_duda": {
+    "necesitas_un_id_estable": "project.id (el UUID)",
+    "necesitas_algo_legible": "project.name",
+    "necesitas_el_path": "se lee base_path de la fuente; no se construye con el slug ni con {name.toLowerCase()}",
+    "el_proyecto_no_esta_activo": "project.get.request, fuera del camino caliente",
+    "el_slug": "vive dentro de project-manager; los demas no lo recomputan, no lo cachean, no lo esperan en el bus"
+  }
+}

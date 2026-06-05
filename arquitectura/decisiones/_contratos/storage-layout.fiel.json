@@ -1,0 +1,84 @@
+{
+  "_meta": {
+    "documento_id": "storage-layout",
+    "version": "2.0.0",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "base_ref": "lenguaje/_fiel-base.json",
+    "lenguaje_ref": "lenguaje/_fiel-2.json",
+    "fuente": "contratos-referenciados/storage-layout.contract.json v1.0.0",
+    "intencion": "El layout fisico de los proyectos: tres pilares y una sola composicion de path. Sexto contrato sobre la base. Cierra antes/despues (2o testigo limpio: la composicion del path), suma closed_enum (scope) y forma (data_path)."
+  },
+
+  "type": "concrete_class",
+  "name": "ContratoStorageLayout",
+  "extends": "ContratoArquitectonico",
+
+  "identidad": {
+    "es": "el layout fisico de los proyectos: tres pilares ortogonales y una sola composicion de path",
+    "sistema": "vive en /opt/enki/ (codigo + data/_system/ para datos globales)",
+    "proyecto": "vive en data/projects/<slug>/ con tres subdirectorios fijos: config/, db/, storage/",
+    "vertical": "posee un namespace dentro de storage/<vertical>/<entidad>/",
+    "razon": "quitar o cambiar un pilar no cambia donde viven los otros dos"
+  },
+
+  "scope": {
+    "type": "closed_enum",
+    "value_type": "string",
+    "_doc": "cada modulo persistente declara donde viven sus datos",
+    "entries": [
+      { "value": "project", "vive_en": "<base_path>/storage/<data_path>/ -- un set por proyecto" },
+      { "value": "system", "vive_en": "/opt/enki/data/_system/<data_path>/ -- un set global" }
+    ],
+    "razon": "distinguir dominio del proyecto del dominio del sistema, explicito y validable. credential-manager y project-manager son system; carta-manager y recetas son project"
+  },
+
+  "forma_del_data_path": {
+    "type": "forma",
+    "plantilla": "<vertical>/<entidad> (modulo de vertical)  |  <modulo> (modulo transversal)",
+    "patron": "^[a-z][a-z0-9_-]*(/[a-z][a-z0-9_-]*)*$",
+    "alfabeto": "kebab-case por segmento, separador '/'; relativo a storage/, sin leading slash, sin {slug} {base_path} {name}, sin '..'",
+    "razon": "data_path es la unica fuente de donde vive lo de cada modulo; el vertical en el prefijo es la barrera contra colision entre verticales con entidad del mismo nombre"
+  },
+
+  "composicion_del_path": {
+    "type": "method",
+    "_doc": "solo filesystem compone el path absoluto; el emisor pasa relativo",
+    "antes": [
+      "el modulo declara config.persistence.scope y data_path en module.json",
+      "el path del emisor es relativo al data_path: empieza por el archivo o subcarpeta, sin /storage/ /projects/ /data/ ni el nombre del vertical (lo anade filesystem)"
+    ],
+    "hace": [
+      { "action": "branch", "target": "if_system", "condition": "scope == 'system'", "value": null },
+      { "action": "assign", "target": "absoluto", "condition": "scope == 'system'", "value": "path.join('/opt/enki/data/_system', data_path, path)" },
+      { "action": "assign", "target": "absoluto", "condition": "scope == 'project'", "value": "path.join(base_path, 'storage', data_path, path)" }
+    ],
+    "despues": [
+      "el path absoluto se compuso en un solo lugar: filesystem",
+      "si el path traia prefijo sintetico, filesystem responde INVALID_INPUT con kind reserved_internal_prefix; el error se dice, no se compone basura"
+    ],
+    "razon": "un solo lugar que compone es un solo lugar que cambiar si la convencion evoluciona (storage/ -> data/ se cambia una vez)"
+  },
+
+  "feature_blueprint": {
+    "_doc": "una feature de proyecto crea sus directorios y archivos iniciales bajo su namespace",
+    "namespacea_en": "storage/<feature.id>/ -- nunca en storage/ raiz, nunca mezclando namespaces de features",
+    "fuera_de_storage": "config/ y db/ son del proyecto, no del storage; viven a nivel proyecto",
+    "razon": "el namespace de feature en el tree es el unico aviso visual de que features tiene un proyecto"
+  },
+
+  "reset_y_migracion": {
+    "via": "por eventos: project.delete.request, project.create.request, fs.delete.request, fs.write.request",
+    "el_codigo_y_los_json": "esos pasan por git",
+    "razon": "el paradigma event-core gobierna tambien las operaciones excepcionales; lo que no pasa por el bus no deja rastro causal"
+  },
+
+  "en_la_duda": {
+    "un_modulo_persiste_via_filesystem": "declara config.persistence.scope y data_path; sin eso, no persiste",
+    "donde_va_el_path": "se pasa relativo al data_path; filesystem anade base_path, storage/ y el resto",
+    "necesitas_datos_de_otro_modulo": "se piden por el bus; el namespace de cada modulo es privado",
+    "tienes_que_resetear_proyectos": "por eventos (project.delete.request), nunca rm -rf",
+    "escribes_o_lees_disco": "se publica fs.*.request y filesystem responde fs.*.response correlacionado (salvo filesystem, database-manager, project-manager)"
+  }
+}

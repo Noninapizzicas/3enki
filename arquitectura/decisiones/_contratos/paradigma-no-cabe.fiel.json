@@ -1,0 +1,47 @@
+{
+  "_meta": {
+    "documento_id": "paradigma-no-cabe",
+    "version": "2.0.0",
+    "registro": "disciplina (hermano de la base, no dominio)",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "base_ref": "lenguaje/_fiel-base.json",
+    "fuente": "contratos-referenciados/paradigma-no-cabe.contract.json v1.0.0",
+    "intencion": "Memoria contra la costumbre, dicha en positivo. Tercera y ultima piedra de B. La prueba mas dura de que el sustento es accion: un catalogo de lo que no cabe, dicho como el sintoma que reconoces y el canonico que haces. closed_enum con metadata cultural: su testigo cruzando los registros."
+  },
+
+  "type": "disciplina",
+  "name": "MemoriaContraLaCostumbre",
+
+  "identidad": "memoria contra la costumbre: cuando el paradigma viejo (CRUD, agregados, caches del estado, managers omniscientes) tira por habito, reconoces el sintoma temprano y vas al canonico de event-core, sin gastar horas redescubriendo el descarte.",
+
+  "de_esta_forma": "una entry por costumbre generica, no por caso concreto; caliente y localizado -una costumbre entra cuando un caso real se descarta y el patron emerge nombrable; cada entry redirige al canonico, no solo nombra la tentacion.",
+
+  "costumbres": {
+    "type": "closed_enum",
+    "value_type": "string",
+    "se_extiende": "por PR, cuando un caso real se descarta",
+    "_doc": "cada costumbre del paradigma viejo: como la reconoces y el canonico que haces en su lugar",
+    "entries": [
+      {
+        "value": "cache-materializado-del-estado-de-un-dominio",
+        "otros_nombres": ["agregado del estado", "vista materializada (CQRS read model)", "snapshot por dominio", "estado canonico de X", "dashboard data file"],
+        "reconoces_que_vas_a_caer_cuando": [
+          "alguien dice 'el LLM debe ver el estado actual de X' sin definir que es el estado actual",
+          "alguien dibuja un storage/<dominio>/estado.json o una tabla con campos derivados",
+          "alguien propone un modulo X-estado o X-manager que centralice el shape del estado",
+          "aparece el patron 'cuando emite evento E, actualiza el cache con patch'",
+          "el diseno habla de una pieza unificadora que todos consumen y todos actualizan"
+        ],
+        "el_canonico": "el cliente que necesita el estado se suscribe a los eventos del subsistema (core/+/events/<dominio>/#) y compone el estado en su propia capa: frontend Svelte, dashboard, contexto del LLM via tools. La latencia es la misma; la infraestructura, 10x menor.",
+        "razon": "el bus es la fuente unica observable de cada dominio; componer al vuelo desde los eventos evita una segunda fuente que pueda divergir, su logica de mantenimiento, su CAS, su schema y su migracion.",
+        "si_dudas": "lees los archivos descartados (_descartado-tienda-estado-canonico-y-vistas.json): 4h de cocina exploradas y descartadas el 2026-05-30, cuando el usuario vio que el cache resolvia un problema que nadie pidio en caliente."
+      }
+    ]
+  },
+
+  "como_nace_una_costumbre_nueva": "cuando una sesion descarta un horizonte por incompatibilidad con el paradigma: renombras los archivos a _descartado-, identificas el patron generico (no el caso concreto), y si no tiene entry, cocinas una con ana (costumbre, reconoces_que_vas_a_caer, el_canonico, razon, casos_testigo). Sin caso real descartado, no hay entry.",
+
+  "si_la_costumbre_parece_justificarse": "una entry redirige, no es ley absoluta. Si un caso real concreto muestra que el canonico no basta, lo documentas con ana antes de implementar, muestras por que el canonico no sirve para ESE caso, y si se justifica anades una nota de reapertura, sin borrar la entry."
+}

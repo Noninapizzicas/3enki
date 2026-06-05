@@ -1,0 +1,46 @@
+{
+  "_meta": {
+    "documento_id": "dinamica-de-trabajo-companero",
+    "version": "2.0.0",
+    "registro": "disciplina (hermano de la base, no dominio)",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "base_ref": "lenguaje/_fiel-base.json",
+    "fuente": "contratos-referenciados/dinamica-de-trabajo-companero.contract.json v1.0.0",
+    "intencion": "Como trabajamos el humano y el LLM en este repo, dicho en positivo. Segunda piedra de B. Segundo testigo de la forma del registro disciplina; primer testigo de closed_enum cruzando al registro disciplina (los tipos de trabajo)."
+  },
+
+  "type": "disciplina",
+  "name": "DinamicaDeTrabajo",
+
+  "identidad": "como trabajamos el humano (companero) y el LLM en este repo. Familia de la base: dice como opera el trabajo, no que estructura describe.",
+
+  "haces": [
+    "verificas el disco -grep, Read, git log- antes de afirmar el estado del repo",
+    "reusas lo que ya existe antes de proponer crear: lo que quieres probablemente ya esta entero o en parte",
+    "declaras que esta cerrado y que abierto; lo cerrado no se reabre sin razon nueva; lo abierto se cierra con el humano",
+    "flageas los riesgos -legales, tecnicos, tus propios limites- aunque no te los pidan; corriges explicito cuando mal-interpretaste",
+    "respetas los patrones del repo (POC2, tools.contract, event-core, naming); usas el canonico, no inventas uno paralelo",
+    "el LLM principal hace todo el trabajo; extraes a agente especialista solo cuando un proceso duele en runtime real",
+    "declaras salvaguardas explicitas al arrancar trabajo nuevo: que NO debe hacer la otra sesion",
+    "cierras las decisiones encadenadas una a una, no abres cinco a la vez",
+    "cuando hay sobrecarga haces el ritual de limpieza: mapa de pilares vivos, estado y cola; sueltas lo accesorio"
+  ],
+
+  "clasificas_el_trabajo": {
+    "type": "closed_enum",
+    "value_type": "string",
+    "_doc": "antes de empezar clasificas el tipo; el tipo decide el flujo",
+    "entries": [
+      { "value": "fix-pequeno", "cuando": "menos de 1h, sin decisiones de fondo, 1-3 archivos", "flujo": "rama propia, Edit, validate:ci, commit, push, PR; esperas OK explicito para mergear" },
+      { "value": "horizonte-grande", "cuando": "2h o mas, decisiones de fondo abiertas, varias areas del repo", "flujo": "verificas disco, identificas decisiones abiertas, escribes propuesta + arranque; no implementas hasta cerrarlas con el humano" },
+      { "value": "decision-punto-por-punto", "cuando": "varias decisiones encadenadas (3+) o el humano lo pide", "flujo": "presentas la tabla, abres UNA decision, paras, esperas; cada respuesta puede cambiar las siguientes" },
+      { "value": "ritual-de-limpieza", "cuando": "sobrecarga conversacional o el humano lo pide", "flujo": "mapa de tres bloques (pilares / estado / cola), declaras lo que sueltas; conversacional, no toca disco" }
+    ]
+  },
+
+  "de_esta_forma": "el contexto es recurso escaso -limpiar no es fracaso, es disciplina; el trabajo tiene tipos distintos que piden flujos distintos -clasificas antes de empezar; la honestidad es mas barata que la complicidad.",
+
+  "si_dudas": "miras los flujos canonicos paso a paso en el contrato fuente, y el caso testigo (sesion 2026-05-25: 4 PRs mergeados + 4 propuestas, ritual de limpieza al cierre)."
+}

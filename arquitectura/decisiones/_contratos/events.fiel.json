@@ -1,0 +1,107 @@
+{
+  "_meta": {
+    "documento_id": "events",
+    "version": "2.0.0",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "base_ref": "lenguaje/_fiel-base.json",
+    "lenguaje_ref": "lenguaje/_fiel-2.json",
+    "fuente": "contratos-referenciados/events.contract.json v1.2.0",
+    "intencion": "La forma de comunicarse entre modulos: emite y desentiende. Tercer contrato sobre la base. Confirma closed_enum (tercer testigo) y da a forma su segundo testigo (el topic)."
+  },
+
+  "type": "concrete_class",
+  "name": "ContratoEventos",
+  "extends": "ContratoArquitectonico",
+
+  "identidad": {
+    "es": "un modulo emite un evento al bus y sigue; quien escucha reacciona a su ritmo",
+    "cardinalidad": "cero, uno o muchos oyentes; las tres valen",
+    "reparto_de_saber": "el emisor describe que paso con datos de su dominio; el receptor decide como y cuando reacciona",
+    "misma_api_toda_escala": "el codigo del modulo no cambia entre un proceso (Casa) y N cores (Manzana); la escala la decide el transporte"
+  },
+
+  "como_se_emite": {
+    "via": "this.eventBus.publish(nombre, payload)",
+    "el_payload": "siempre un objeto; deja anadir campos transversales sin romper compatibilidad",
+    "devuelve": "una promesa que resuelve cuando el broker acepto el mensaje; no implica que los handlers lo procesaran",
+    "razon": "una sola via hace el sistema observable y refactorable"
+  },
+
+  "como_se_suscribe": {
+    "via": "declararlo en module.json.events.subscribes (lo cablea el loader), o registrarlo en onLoad por la api del bus",
+    "el_handler": "asume que puede recibir el mismo evento mas de una vez; es idempotente o tolera duplicados",
+    "razon": "MQTT QoS 1 garantiza al-menos-una-vez; la idempotencia es la defensa robusta"
+  },
+
+  "forma_del_nombre": {
+    "type": "forma",
+    "plantilla": "<module-prefix>.<entity>.<verb>  |  <module-prefix>.<verb>",
+    "alfabeto": "a-z, digitos y guion (ASCII); kebab-case en compuestos",
+    "el_verbo": "past participle del whitelist del idioma del modulo (ver contrato naming)",
+    "razon": "el nombre cuenta un hecho consumado; el verbo dice que paso"
+  },
+
+  "forma_del_topic": {
+    "type": "forma",
+    "plantilla": "core/{core-id}/<categoria>/<detalle>   y   ui/<request|response>/<...>",
+    "traduccion": "el modulo usa el nombre con puntos; el bus lo traduce a topic con barras y prefijo de categoria. recipe.created -> core/{core-id}/events/recipe/created",
+    "razon": "puntos para leer, barras para los wildcards de MQTT; el modulo nunca ve el topic crudo"
+  },
+
+  "categorias": {
+    "type": "closed_enum",
+    "value_type": "string",
+    "_doc": "cada categoria de topic con su QoS y su retain",
+    "entries": [
+      { "value": "events", "qos": 1, "retain": false },
+      { "value": "state", "qos": 1, "retain": true },
+      { "value": "commands", "qos": 1, "retain": false },
+      { "value": "api/request", "qos": 1, "retain": false },
+      { "value": "api/response", "qos": 1, "retain": false },
+      { "value": "status", "qos": 1, "retain": true },
+      { "value": "heartbeat", "qos": 0, "retain": false },
+      { "value": "logs", "qos": 0, "retain": false },
+      { "value": "ui/request", "qos": 1, "retain": false },
+      { "value": "ui/response", "qos": 1, "retain": false }
+    ],
+    "razon": "QoS 1 + idempotencia para lo que importa; QoS 0 para senales transitorias; retain donde el ultimo valor importa (state, status)"
+  },
+
+  "transporte": {
+    "protocolo": "MQTT",
+    "broker": "Aedes embebido por defecto (Casa); broker externo compartido en Manzana, con Aedes como bridge",
+    "bus_interno": "hibrido: EventEmitter intra-proceso, MQTT inter-core, Hooks para logging/metricas/tracing; el modulo solo ve publish/subscribe"
+  },
+
+  "presencia_en_el_bus": {
+    "last_will": "cada cliente declara al conectar un Last-Will en core/{core-id}/status con { state: 'offline', timestamp } retain; publica { state: 'online' } al conectar y el LWT salta solo si la conexion muere",
+    "discovery": "cada core publica su status en core/{core-id}/status retain (state, version, modulos, apis, suscripciones); los demas se suscriben a core/+/status y descubren peers sin registro central"
+  },
+
+  "respuesta_sincronica": {
+    "_doc": "cuando hace falta respuesta de verdad: UI esperando datos, tool del LLM esperando resultado",
+    "via": "mqttRequest(domain, action, payload) devuelve una promesa",
+    "como": "publica a ui/request/{domain}/{action} con correlation_id, escucha la respuesta correlacionada, resuelve al llegar o rechaza por timeout (~5s)",
+    "responde_con": "status HTTP-like (200/400/404/500) y datos en ui/response/{correlation_id}",
+    "razon": "un solo patron formal; lo sincronico vive del lado del caller, el handler sigue desacoplado"
+  },
+
+  "payload": {
+    "_doc": "campos transversales; el resto son del dominio del evento, JSON-serializables",
+    "campos": [
+      { "nombre": "timestamp", "cuando": "recomendado siempre", "forma": "ISO 8601" },
+      { "nombre": "correlation_id", "cuando": "obligatorio en respuestas; se propaga sin cambiar" },
+      { "nombre": "project_id", "cuando": "obligatorio si el dominio es multi-tenant" },
+      { "nombre": "source", "cuando": "opcional", "valores": ["cli", "ui", "auto", "agent"] }
+    ]
+  },
+
+  "en_la_duda": {
+    "necesitas_respuesta": "usas mqttRequest formal con correlation_id y timeout; no un .request esperando un .response por el bus de dominio",
+    "el_publish_falla": "se loguea (await que propaga, o .catch que registra); nunca se silencia",
+    "el_verbo_no_encaja": "se usa el past participle del whitelist de naming; si falta, entra por PR",
+    "necesitas_confirmar_que_un_handler_actuo": "no se espera al handler tras publicar; si de verdad hace falta, mqttRequest"
+  }
+}

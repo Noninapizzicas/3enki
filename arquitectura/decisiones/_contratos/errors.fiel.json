@@ -1,0 +1,115 @@
+{
+  "_meta": {
+    "documento_id": "errors",
+    "version": "2.0.0",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "base_ref": "lenguaje/_fiel-base.json",
+    "fuente": "contratos-referenciados/errors.contract.json v1.3.0",
+    "intencion": "La forma de la respuesta cuando algo sale mal. Primer contrato dicho sobre la base positiva: dice que es, como se construye, como se mueve en la duda. Sin capa defensiva."
+  },
+
+  "type": "concrete_class",
+  "name": "ContratoErrores",
+  "extends": "ContratoArquitectonico",
+
+  "identidad": "toda respuesta de tool, ui_handler, api_http o handler de bus tiene una sola forma; cambia el contenido entre exito y fallo",
+
+  "forma_de_la_respuesta": {
+    "siempre": { "status": "entero de status_canonicos" },
+    "en_exito": { "data": "objeto" },
+    "en_fallo": { "error": { "code": "de codigos_dominio o codigos_infraestructura", "message": "frase que describe el hecho", "details": "objeto opcional" } },
+    "regla": "status siempre presente; data y error mutuamente excluyentes",
+    "razon": "una sola forma deja que cualquier caller lea status, data y error en el mismo sitio"
+  },
+
+  "status_canonicos": {
+    "type": "closed_enum",
+    "value_type": "integer",
+    "se_extiende": "por PR",
+    "razon": "4xx es dominio, el caller corrige; 5xx es infraestructura, el caller reintenta",
+    "entries": [
+      { "value": 200, "nombre": "OK", "clase": "exito" },
+      { "value": 201, "nombre": "Created", "clase": "exito" },
+      { "value": 202, "nombre": "Accepted", "clase": "exito" },
+      { "value": 204, "nombre": "No Content", "clase": "exito" },
+      { "value": 400, "nombre": "Bad Request", "clase": "dominio", "recuperable": false },
+      { "value": 401, "nombre": "Unauthorized", "clase": "dominio", "recuperable": false },
+      { "value": 403, "nombre": "Forbidden", "clase": "dominio", "recuperable": false },
+      { "value": 404, "nombre": "Not Found", "clase": "dominio", "recuperable": false },
+      { "value": 409, "nombre": "Conflict", "clase": "dominio", "recuperable": false },
+      { "value": 422, "nombre": "Unprocessable", "clase": "dominio", "recuperable": false },
+      { "value": 429, "nombre": "Too Many Requests", "clase": "dominio", "recuperable": true },
+      { "value": 500, "nombre": "Internal Error", "clase": "infraestructura", "recuperable": true },
+      { "value": 502, "nombre": "Bad Gateway", "clase": "infraestructura", "recuperable": true },
+      { "value": 503, "nombre": "Service Unavailable", "clase": "infraestructura", "recuperable": true },
+      { "value": 504, "nombre": "Gateway Timeout", "clase": "infraestructura", "recuperable": true }
+    ]
+  },
+
+  "codigos_dominio": {
+    "type": "closed_enum",
+    "value_type": "string UPPER_SNAKE",
+    "se_extiende": "por PR",
+    "entries": [
+      { "value": "INVALID_INPUT", "status": 400 },
+      { "value": "RESOURCE_NOT_FOUND", "status": 404, "lleva": ["entity_type", "entity_id"] },
+      { "value": "ALREADY_EXISTS", "status": 409 },
+      { "value": "CONFLICT_STATE", "status": 409 },
+      { "value": "PERMISSION_DENIED", "status": 403 },
+      { "value": "RATE_LIMITED", "status": 429, "lleva": ["retry_after_ms"] }
+    ]
+  },
+
+  "codigos_infraestructura": {
+    "type": "closed_enum",
+    "value_type": "string UPPER_SNAKE",
+    "se_extiende": "por PR",
+    "entries": [
+      { "value": "UPSTREAM_UNREACHABLE", "status": 502 },
+      { "value": "UPSTREAM_TIMEOUT", "status": 504 },
+      { "value": "UPSTREAM_INVALID_RESPONSE", "status": 502 },
+      { "value": "SYSTEM_RESOURCE_EXHAUSTED", "status": 503 },
+      { "value": "UNKNOWN_ERROR", "status": 500 }
+    ]
+  },
+
+  "construir_respuesta": {
+    "type": "method",
+    "antes": ["status pertenece a status_canonicos", "viene data o viene error, no ambos"],
+    "hace": [
+      { "action": "branch", "target": "if_error", "condition": "hay error", "value": null },
+      { "action": "call", "target": "this.construirError", "condition": "hay error", "value": "{ status, error }" },
+      { "action": "return", "target": "respuesta", "condition": "hay data", "value": "{ status, data }" }
+    ],
+    "despues": ["la respuesta lleva status; lleva data en exito, error en fallo"]
+  },
+
+  "construir_error": {
+    "type": "method",
+    "antes": [
+      "error.code pertenece a codigos_dominio o codigos_infraestructura",
+      "error.message describe el hecho",
+      "error.message y error.details no llevan secretos ni stack"
+    ],
+    "hace": [
+      { "action": "assign", "target": "level", "condition": null, "value": "status < 500 -> 'warn'; si no -> 'error'" },
+      { "action": "log", "target": "this.logger[level]", "condition": null, "value": "{ event: this.name + '.' + accion + '.failed', code, message, stack: errOriginal?.stack }" },
+      { "action": "call", "target": "this.metrics.increment", "condition": null, "value": "{ name: this.name + '.' + accion + '.errors', labels: { code, kind } }" },
+      { "action": "return", "target": "respuesta", "condition": null, "value": "{ status, error: { code, message, details } }" }
+    ],
+    "despues": [
+      "el error quedo en el log y contado en la metrica",
+      "la respuesta lleva solo { code, message, details }"
+    ],
+    "razon": "el error es informacion: se observa en el momento de emitirse, no despues"
+  },
+
+  "en_la_duda": {
+    "un_id_no_resuelve": "se devuelve INVALID_INPUT con el id; el desencuentro se dice, no se tapa",
+    "el_dato_no_existe": "se devuelve RESOURCE_NOT_FOUND con entity_type y entity_id",
+    "algo_falla_de_otro_modulo": "el que recibe elige: propaga el mismo error, lo traduce a un codigo propio, o absorbe y se degrada; en las tres deja log y metrica",
+    "el_stack": "el stack va al log; la respuesta nunca lo lleva"
+  }
+}

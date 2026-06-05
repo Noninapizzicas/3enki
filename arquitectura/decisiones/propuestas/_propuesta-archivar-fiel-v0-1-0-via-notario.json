@@ -1,0 +1,142 @@
+{
+  "_meta": {
+    "documento_id": "_propuesta-archivar-fiel-v0-1-0",
+    "version": "0.1.0",
+    "creado": "2026-06-05",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "base_ref": "lenguaje/_fiel-base.json",
+    "lenguaje_ref": "lenguaje/_fiel-2.json",
+    "registro": "disciplina",
+    "plasmado_por": "notario",
+    "testigo_cocinado_por": "ana",
+    "fecha_testigo": "2026-06-05",
+    "intencion": "Propuesta operacional para archivar arquitectura/decisiones/propuestas/_fiel-v0.1.0.json tras la canonizacion de Fiel 2. Plasma la operacion en haces de acciones verificables: crear el directorio _archived, mover el archivo viejo, dejar un README de archivado, actualizar tres referencias activas para apuntar a Fiel 2, actualizar ocho referencias historicas para que cambien solo de path (no de version semantica). Honor de la historia: los plasmados v0.1 siguen siendo Fiel v0.1 archivado."
+  },
+
+  "identidad": "Propuesta operacional dirigida a fede. Cierra la canonizacion de Fiel 2 archivando el lenguaje viejo, dejando rastro legible del archivado y reconciliando las referencias activas con el lenguaje nuevo. Distingue dos clases de referencia: las activas (que migran a Fiel 2) y las historicas (que se mueven de path sin cambiar de version semantica).",
+
+  "contexto": {
+    "que_se_canonizo": "Fiel 2 (lenguaje/_fiel-base.json + lenguaje/_fiel-2.json) en sesion de cocina del 2026-06-04, con tres primitivas cristalizadas: closed_enum, forma, antes_despues.",
+    "que_se_archiva": "arquitectura/decisiones/propuestas/_fiel-v0.1.0.json: el lenguaje viejo con aparato defensivo (tendencias_del_llm, forbidden_patterns, auto_audit_protocol), obsoleto tras la canonizacion de Fiel 2.",
+    "que_no_se_archiva": "Los ocho plasmados _*-via-notario.json escritos en Fiel v0.1. Siguen siendo Fiel v0.1 honestamente. Su shape NO cambia. Solo cambia el path al que apunta su lenguaje_definicion_ref (de propuestas a _archived).",
+    "principio_de_honor": "El plasmado refleja el lenguaje en el que se escribio. Migrar un plasmado v0.1 a Fiel 2 falsifica la historia. La referencia rastrea el archivo aunque se mueva; la version semantica no se reescribe."
+  },
+
+  "ambito_de_la_propuesta": {
+    "type": "closed_enum",
+    "value_type": "string",
+    "se_extiende": "cerrado",
+    "razon": "el testigo define exactamente tres clases de operacion y enumera los archivos de cada clase",
+    "entries": [
+      {
+        "value": "mover_archivo_viejo_a_archivado",
+        "_doc": "Crear directorio _archived/2026-06-05_canonizacion-fiel-2/ y mover el archivo viejo dentro, dejando README de archivado.",
+        "archivos_afectados": [
+          "origen: arquitectura/decisiones/propuestas/_fiel-v0.1.0.json",
+          "destino: arquitectura/decisiones/propuestas/_archived/2026-06-05_canonizacion-fiel-2/_fiel-v0.1.0.json",
+          "nuevo: arquitectura/decisiones/propuestas/_archived/2026-06-05_canonizacion-fiel-2/README.md"
+        ]
+      },
+      {
+        "value": "actualizar_referencias_activas_a_fiel_2",
+        "_doc": "Tres referencias en archivos vivos que apuntan al lenguaje viejo y deben migrar a Fiel 2.",
+        "archivos_afectados": [
+          ".claude/agents/notario.md linea 10",
+          ".claude/agents/noa.md linea 11",
+          "CLAUDE.md seccion 'Cocina abierta en propuestas/'"
+        ]
+      },
+      {
+        "value": "actualizar_referencias_historicas_al_path_nuevo",
+        "_doc": "Ocho plasmados que mantienen su shape Fiel v0.1 pero cuyo lenguaje_definicion_ref debe rastrear el archivo a su nuevo path.",
+        "archivos_afectados": [
+          "_contrato-modulo-event-core-disciplina-via-notario.json linea 8",
+          "_pizzepos-productos-disciplina-via-notario.json linea 8",
+          "_contrato-aggregate-vs-vista-via-notario.json linea 8",
+          "_contrato-project-context-propagation-via-notario.json linea 8",
+          "_propuesta-endurecer-storage-layout-bypass-via-notario.json linea 8",
+          "_contrato-evento-mutacion-vs-notificacion-via-notario.json linea 8",
+          "_propuesta-simplificar-sexteto-via-notario.json linea 8",
+          "_tendencias-llm-en-event-core-via-notario.json linea 8"
+        ]
+      }
+    ]
+  },
+
+  "forma_del_directorio_archivado": {
+    "type": "forma",
+    "plantilla": "arquitectura/decisiones/propuestas/_archived/<fecha-ISO>_<motivo-kebab>/",
+    "alfabeto": "a-z, digitos, guion, barra, guion-bajo (solo como prefijo del directorio _archived)",
+    "compuestos": "kebab-case en el motivo",
+    "razon": "el directorio rastrea cuando y por que se archivo. Esta primera vez fija el patron de los archivados futuros del repo."
+  },
+
+  "haces": [
+    "creas arquitectura/decisiones/propuestas/_archived/ si no existe",
+    "creas arquitectura/decisiones/propuestas/_archived/2026-06-05_canonizacion-fiel-2/ dentro",
+    "mueves arquitectura/decisiones/propuestas/_fiel-v0.1.0.json a arquitectura/decisiones/propuestas/_archived/2026-06-05_canonizacion-fiel-2/_fiel-v0.1.0.json sin tocar su contenido",
+    "escribes arquitectura/decisiones/propuestas/_archived/2026-06-05_canonizacion-fiel-2/README.md con nota de archivado en lenguaje natural: que se archiva, por que (Fiel 2 canonizado el 2026-06-05 cocinado con ana), que lo supersedes (lenguaje/_fiel-base.json + lenguaje/_fiel-2.json), referencias historicas que siguen apuntando aqui (los ocho plasmados del sexteto)",
+    "editas .claude/agents/notario.md sustituyendo la mencion de arquitectura/decisiones/propuestas/_fiel-v0.1.0.json por las dos lecturas canonicas de Fiel 2: lenguaje/_fiel-base.json y lenguaje/_fiel-2.json (el wrapper indica el lenguaje; el shape operativo de notario en notario.json ya las declara)",
+    "editas .claude/agents/noa.md aplicando la misma sustitucion del paso anterior",
+    "editas CLAUDE.md reescribiendo la seccion 'Cocina abierta en propuestas/ — Fiel + notario + sexteto modulo-event-core (junio 2026)' para reflejar que Fiel 2 es estandar canonizado (no experimento abierto), que _fiel-v0.1.0.json esta archivado en _archived/2026-06-05_canonizacion-fiel-2/, y que las tres personalidades (ana, notario, noa) estan migradas al registro disciplina; la mencion del catalogo de tendencias que cita _fiel-v0.1.0.json se mantiene en su contexto historico",
+    "editas cada uno de los ocho plasmados historicos cambiando su _meta.lenguaje_definicion_ref de arquitectura/decisiones/propuestas/_fiel-v0.1.0.json a arquitectura/decisiones/propuestas/_archived/2026-06-05_canonizacion-fiel-2/_fiel-v0.1.0.json; no tocas ningun otro campo de esos plasmados",
+    "verificas con Grep que ya no quedan referencias activas al path viejo arquitectura/decisiones/propuestas/_fiel-v0.1.0.json salvo en los lugares legitimos: el contenido del propio archivo movido, lenguaje/_fiel-base.json (mencion semantica historica), el cuerpo descriptivo de _tendencias-llm-en-event-core-via-notario.json linea 218 (texto historico, no referencia), y el README de archivado"
+  ],
+
+  "lo_que_no_se_toca": [
+    "el contenido del archivo movido _fiel-v0.1.0.json se preserva intacto",
+    "el shape de los ocho plasmados historicos se preserva intacto: solo cambia _meta.lenguaje_definicion_ref",
+    "lenguaje/_fiel-base.json campo supersedes: la mencion semantica historica de lenguaje/_fiel-v0.1.0.json (con prefijo lenguaje/, no propuestas/) es correcta y debe quedar",
+    "el cuerpo descriptivo de _tendencias-llm-en-event-core-via-notario.json linea 218 que cita _fiel-v0.1.0.json es texto descriptivo, no referencia funcional",
+    "_arranque-modulo-event-core-disciplina.json cuyo lenguaje_definicion_ref apunta a _experimento-3coops-001.json (fuera del scope del testigo)"
+  ],
+
+  "si_dudas": {
+    "directorio_archived_ya_existe": "si arquitectura/decisiones/propuestas/_archived/ ya existe, lo reutilizas. Si la subcarpeta 2026-06-05_canonizacion-fiel-2/ ya existe (sesion previa), paras y reportas: no sobreescribes un archivado previo.",
+    "archivo_origen_ya_no_existe": "si arquitectura/decisiones/propuestas/_fiel-v0.1.0.json ya no esta (operacion parcialmente aplicada), paras y reportas. No regeneras el archivo viejo.",
+    "edicion_de_CLAUDE_md_pierde_contenido_no_descrito": "el testigo dice 'reescribir la seccion' pero CLAUDE.md tiene mucho contexto adjunto. Te limitas a la seccion 'Cocina abierta en propuestas/ — Fiel + notario + sexteto modulo-event-core (junio 2026)' y conservas el resto del documento intacto. Si el limite de la seccion es ambiguo, paras y pides aclaracion a ana.",
+    "grep_de_verificacion_encuentra_referencia_imprevista": "si Grep encuentra una novena referencia al path viejo no listada en el testigo, la registras en el reporte final y paras antes de modificarla. Ana decide si entra en esta operacion o en otra."
+  },
+
+  "_observaciones_resueltas_por_ana": [
+    {
+      "id": "obs_1_conteo_8_no_9",
+      "observacion_original": "Discrepancia de conteo entre testigo y repo: el testigo enumera ocho plasmados nominativamente y anade 'el noveno: verifica via Grep'. El Grep devuelve exactamente ocho archivos.",
+      "decision_de_ana": {
+        "fecha": "2026-06-05",
+        "resolucion": "aceptada la correccion de notario",
+        "detalle": "el conteo correcto es 8. Mi testigo cito 9 por error. La propuesta procede con los 8 plasmados reales."
+      }
+    },
+    {
+      "id": "obs_2_wrappers_md_desfasados",
+      "observacion_original": "Los wrappers .md de notario y noa estan desfasados frente a sus .json v0.2.0. La propuesta cierra esa desincronizacion alineando el wrapper con el shape autoritativo.",
+      "decision_de_ana": {
+        "fecha": "2026-06-05",
+        "resolucion": "aceptada la reconciliacion en esta propuesta",
+        "detalle": "la operacion 4 del plan actualiza ambos .md. La desincronizacion se cierra al ejecutar."
+      }
+    },
+    {
+      "id": "obs_3_linea_218_catalogo_cuerpo_descriptivo",
+      "observacion_original": "La mencion en _tendencias-llm-en-event-core-via-notario.json linea 218 cita _fiel-v0.1.0.json en cuerpo descriptivo, no en lenguaje_definicion_ref. Preservada intacta.",
+      "decision_de_ana": {
+        "fecha": "2026-06-05",
+        "resolucion": "aceptada la preservacion",
+        "detalle": "el cuerpo descriptivo es contexto historico, no referencia activa. Correcto no tocarlo."
+      }
+    },
+    {
+      "id": "obs_4_plantilla_archived_precedente",
+      "observacion_original": "La plantilla _archived/<fecha-ISO>_<motivo-kebab>/ sienta precedente. Si ana quiere canonizarla como convencion del repo, seria contrato transversal separado.",
+      "decision_de_ana": {
+        "fecha": "2026-06-05",
+        "resolucion": "anotada para horizonte futuro",
+        "detalle": "no bloquea esta operacion. La convencion se aplica aqui localmente; canonizarla como contrato transversal cuando emerja segundo testigo."
+      }
+    }
+  ],
+
+  "_observaciones_para_ana": []
+}

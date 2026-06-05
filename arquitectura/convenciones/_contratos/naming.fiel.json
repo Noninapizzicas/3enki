@@ -1,0 +1,109 @@
+{
+  "_meta": {
+    "documento_id": "naming",
+    "version": "2.0.0",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "lenguaje": "Fiel",
+    "base_ref": "lenguaje/_fiel-base.json",
+    "fuente": "contratos-referenciados/naming.json v1.1.0",
+    "intencion": "La forma de los nombres del sistema. Dice como se llama un evento, que verbos existen por idioma, y como entra uno nuevo. Segundo contrato sobre la base; segundo testigo de closed_enum; primer testigo de forma."
+  },
+
+  "type": "concrete_class",
+  "name": "ContratoNaming",
+  "extends": "ContratoArquitectonico",
+
+  "identidad": "cada modulo es monolingue; su idioma se declara en module.json.language. Los nombres de eventos tienen una forma, y los verbos vienen de un whitelist por idioma",
+
+  "forma_del_nombre": {
+    "type": "forma",
+    "plantilla": "<module-prefix>.<entity>.<verb>  |  <module-prefix>.<verb> cuando entity coincide con el modulo",
+    "patron": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*){1,2}$",
+    "alfabeto": "a-z, digitos y guion",
+    "compuestos": "kebab-case",
+    "razon": "una forma unica deja que cualquier modulo y el LLM lean prefijo, entidad y verbo sin ambiguedad"
+  },
+
+  "idiomas": {
+    "type": "closed_enum",
+    "value_type": "string",
+    "entries": ["es", "en"],
+    "razon": "el nombre del directorio del modulo casa con su idioma"
+  },
+
+  "por_idioma": {
+    "es": {
+      "verbos_de_ciclo_de_vida": {
+        "type": "closed_enum",
+        "value_type": "string",
+        "se_extiende": "por PR",
+        "entries": [
+          "creado", "actualizado", "eliminado", "enviado", "recibido", "procesado",
+          "cancelado", "fallido", "completado", "iniciado", "registrado", "conectado",
+          "desconectado", "publicado", "archivado", "programado", "expirado", "aceptado",
+          "rechazado", "sincronizado", "abierto", "cerrado", "pagado", "asignado",
+          "liberado", "validado", "invalidado", "guardado", "cargado", "exportado",
+          "importado", "solicitado", "encolado", "lanzado", "devuelto", "calculado",
+          "detectado", "ignorado"
+        ]
+      },
+      "verbos_compuestos": { "type": "closed_enum", "value_type": "string", "entries": [] },
+      "pistas_de_directorio": {
+        "type": "closed_enum",
+        "value_type": "string",
+        "entries": [
+          "recetas", "notas", "facturas", "facturacion", "perifericos", "viabilidad",
+          "escandallo", "pizzepos", "pedidos", "cobros", "cocina", "carta", "comandero",
+          "comanda", "categorias", "productos", "ingredientes", "variaciones", "tarifas",
+          "cuentas", "impresion", "asesoria", "fuentes"
+        ]
+      }
+    },
+    "en": {
+      "verbos_de_ciclo_de_vida": {
+        "type": "closed_enum",
+        "value_type": "string",
+        "se_extiende": "por PR",
+        "entries": [
+          "created", "updated", "deleted", "sent", "received", "processed", "cancelled",
+          "failed", "completed", "started", "registered", "online", "offline", "published",
+          "archived", "scheduled", "expired", "accepted", "rejected", "synced", "opened",
+          "closed", "paid", "assigned", "released", "validated", "invalidated", "saved",
+          "loaded", "exported", "imported", "requested", "queued", "fired", "bumped",
+          "refunded", "calculated", "detected", "ignored", "found", "lost", "delta",
+          "stopped", "killed", "timeout"
+        ]
+      },
+      "verbos_compuestos": {
+        "type": "closed_enum",
+        "value_type": "string",
+        "entries": [
+          "build_started", "build_completed", "build_failed", "ota_requested",
+          "ota_completed", "ota_failed", "set_desired", "alert_offline",
+          "alert_reconnect_loop", "alert_ota_failed", "device_found", "device_lost",
+          "session_timeout", "serial_output", "manager_close", "auto_timeout",
+          "tap_in", "tap_out"
+        ]
+      },
+      "pistas_de_directorio": {
+        "type": "closed_enum",
+        "value_type": "string",
+        "entries": [
+          "device", "firmware", "shadow", "gateway", "flash", "esp32", "mqtt", "scheduler",
+          "filesystem", "database", "metric", "log", "credential", "certificate", "security",
+          "p2p", "system", "inspector", "manager", "service", "agent", "framework",
+          "designer", "builder", "executor", "viewer", "editor", "registry", "channel",
+          "bot", "telegram", "dashboard", "admin", "panel", "plugin", "project", "prompt",
+          "ai", "chat", "io", "code", "text", "pdf", "scratch", "ui", "staff", "health",
+          "composition", "menu", "calling", "generator"
+        ]
+      }
+    }
+  },
+
+  "en_la_duda": {
+    "un_verbo_no_esta_en_el_whitelist": "entra por PR; mientras, se usa el verbo canonico mas cercano del idioma del modulo",
+    "el_idioma_del_modulo": "se lee de module.json.language; no se infiere del contenido"
+  }
+}

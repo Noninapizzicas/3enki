@@ -6,6 +6,7 @@
     "language": "es-ES",
     "lenguaje": "Fiel",
     "lenguaje_definicion_ref": "arquitectura/decisiones/propuestas/_fiel-v0.1.0.json",
+    "catalogo_tendencias_ref": "arquitectura/decisiones/propuestas/_tendencias-llm-en-event-core-via-notario.json",
     "tipo": "propuesta_de_endurecimiento_de_contrato_existente",
     "contrato_objeto": "arquitectura/decisiones/_contratos/storage-layout.contract.json",
     "validator_objeto": "arquitectura/decisiones/_validators/storage-layout.validate.js",

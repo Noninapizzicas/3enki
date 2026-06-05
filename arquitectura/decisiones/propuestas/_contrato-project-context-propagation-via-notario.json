@@ -6,6 +6,7 @@
     "language": "es-ES",
     "lenguaje": "Fiel",
     "lenguaje_definicion_ref": "arquitectura/decisiones/propuestas/_fiel-v0.1.0.json",
+    "catalogo_tendencias_ref": "arquitectura/decisiones/propuestas/_tendencias-llm-en-event-core-via-notario.json",
     "deriva_de": "arquitectura/decisiones/_contratos/project-identity.contract.json",
     "fuente_cocinado_ref": "arquitectura/decisiones/propuestas/_arranque-modulo-event-core-disciplina.json#tajada_4",
     "contrato_hermano_ref": "arquitectura/decisiones/propuestas/_contrato-modulo-event-core-disciplina-via-notario.json",

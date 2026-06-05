@@ -1,0 +1,82 @@
+{
+  "_meta": {
+    "documento_id": "_fiel-2",
+    "version": "2.0.0",
+    "estado": "en crecimiento: 3 primitivas nuevas cristalizadas",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "base_ref": "lenguaje/_fiel-base.json",
+    "intencion": "La definicion de Fiel 2. Crece de abajo arriba: una primitiva nueva entra cuando dos contratos distintos la piden. Dice la forma; el chequeo se genera de la forma. Hereda de Fiel 1 el esqueleto positivo; deja fuera la capa defensiva."
+  },
+
+  "name": "Fiel",
+
+  "fundamento": "lenguaje/_fiel-base.json. Un documento dice la forma: identidad (que es), forma de hacer (como hace), forma en la duda (que hace cuando no sabe). El razon acompana donde pesa. El miedo no esta en los cimientos.",
+
+  "hereda_de_fiel_1": {
+    "_doc": "el esqueleto positivo de Fiel 1 sigue; dice estructura, no guarda contra el error",
+    "conserva": ["abstract_class", "concrete_class", "property", "method", "constructor", "param", "invariant", "pseudo_step (acciones de enum cerrado)", "bus_connection"],
+    "deja_fuera": ["tendencias_del_llm", "forbidden_patterns", "forbidden_patterns_meta", "auto_audit_protocol"]
+  },
+
+  "como_crece": "una primitiva nueva entra cuando algo no se puede decir en JSON plano y dos contratos distintos lo piden. Variedad de forma pesa mas que cantidad de testigos. Con un solo testigo se usa localmente hasta que un segundo contrato distinto lo confirme. El razon y el en_la_duda son la base en uso.",
+
+  "primitivas_cristalizadas": [
+    {
+      "type": "closed_enum",
+      "_doc": "el conjunto cerrado de valores canonicos de algo. Cada valor es del value_type. Una entrada es el valor pelado, o el valor con su metadata.",
+      "shape": {
+        "type": "closed_enum",
+        "value_type": "tipo de los valores: integer | string | string UPPER_SNAKE | ...",
+        "se_extiende": "como entra un valor nuevo (por PR | cerrado); opcional",
+        "razon": "por que el conjunto es cerrado; opcional",
+        "entries": "array; cada entrada es un valor pelado, o un objeto { value, ...metadata }"
+      },
+      "el_chequeo": "se genera del conjunto: un valor pertenece o no pertenece. La prohibicion no se autora; es la sombra del conjunto.",
+      "testigos": [
+        { "contrato": "errors", "forma": "clase con metodos", "uso": "status_canonicos (integer + metadata clase/recuperable); codigos_dominio e infraestructura (UPPER_SNAKE + status + lleva)" },
+        { "contrato": "naming", "forma": "catalogo por idioma", "uso": "verbos_de_ciclo_de_vida, verbos_compuestos, pistas_de_directorio, idiomas (valores pelados)" },
+        { "contrato": "events", "forma": "catalogo con metadata", "uso": "categorias (string + qos + retain por entrada)" },
+        { "contrato": "persistence", "forma": "catalogo de patrones", "uso": "patrones (string + cuando/reglas/restart_resilient/concurrencia por entrada: metadata densa)" },
+        { "contrato": "storage-layout", "forma": "enum binario", "uso": "scope (project | system, con vive_en por entrada)" }
+      ],
+      "_nota": "cinco testigos cross-shape (clase con metodos / catalogo pelado / catalogo con metadata / catalogo de patrones / enum binario): captura lo esencial"
+    },
+    {
+      "type": "forma",
+      "_doc": "la forma canonica de un identificador: como se escribe y de que esta hecho.",
+      "shape": {
+        "type": "forma",
+        "plantilla": "la forma legible con placeholders, ej: <module>.<entity>.<verb>",
+        "patron": "el patron preciso (regex); opcional",
+        "alfabeto": "los caracteres permitidos, ej: a-z, digitos, guion; opcional",
+        "compuestos": "el caso de los compuestos, ej: kebab-case; opcional",
+        "razon": "opcional"
+      },
+      "el_chequeo": "se genera de la forma: un identificador encaja o no. La prohibicion (no-ASCII, imperativo) es la sombra, no se autora.",
+      "testigos": [
+        { "contrato": "naming", "uso": "forma_del_nombre (el nombre de un evento)" },
+        { "contrato": "events", "uso": "forma_del_topic y forma_del_nombre (el topic MQTT y el nombre)" },
+        { "contrato": "storage-layout", "uso": "forma_del_data_path (el data_path: kebab-case por segmento, relativo)" }
+      ],
+      "_nota": "tres identificadores distintos (nombre / topic / data_path) con la misma forma: confirma el grano"
+    },
+    {
+      "type": "antes_despues",
+      "_doc": "el pre/post de una operacion: que se cumple antes de hacerla, que queda cierto despues.",
+      "shape": {
+        "type": "method",
+        "antes": "array de condiciones que se cumplen antes (precondiciones)",
+        "hace": "array de PseudoStep",
+        "despues": "array de hechos que quedan ciertos despues (postcondiciones)",
+        "razon": "opcional"
+      },
+      "el_chequeo": "se genera del par: si el antes no se cumple no se entra; si el despues no queda cierto la operacion no cumplio. La verificacion es sombra del par, no se autora.",
+      "testigos": [
+        { "contrato": "errors", "uso": "construir_respuesta y construir_error (antes: code en lista, sin secretos; despues: error logueado y contado, response { code, message, details })" },
+        { "contrato": "storage-layout", "uso": "composicion_del_path (antes: path relativo sin prefijo sintetico, scope+data_path declarados; despues: path absoluto compuesto en un solo lugar, o INVALID_INPUT)" }
+      ],
+      "_nota": "dos testigos cross-shape (constructor de respuesta / compositor de path): el par pre/post dice como se hace una operacion sin prohibir"
+    }
+  ]
+}

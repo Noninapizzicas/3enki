@@ -5,11 +5,11 @@
     "creado": "2026-06-04",
     "language": "es-ES",
     "lenguaje": "Fiel",
-    "lenguaje_definicion_ref": "arquitectura/decisiones/propuestas/_fiel-v0.1.0.json",
+    "lenguaje_definicion_ref": "arquitectura/decisiones/propuestas/_archived/2026-06-05_canonizacion-fiel-2/_fiel-v0.1.0.json",
     "tipo": "catalogo_canonico_referenciado_por_id",
     "fuentes_consolidadas": [
       "arquitectura/decisiones/propuestas/_arranque-modulo-event-core-disciplina.json#tendencias_llm_observadas",
-      "arquitectura/decisiones/propuestas/_fiel-v0.1.0.json#tendencias_del_llm",
+      "arquitectura/decisiones/propuestas/_archived/2026-06-05_canonizacion-fiel-2/_fiel-v0.1.0.json#tendencias_del_llm",
       "arquitectura/decisiones/propuestas/_contrato-modulo-event-core-disciplina-via-notario.json#tendencias_del_llm"
     ],
     "plasmado_por": "agente notario",
@@ -215,6 +215,6 @@
     "AMPLIACION_DE_T2_PATRON_REGEX: el patron_codigo_a_evitar_regex de T2 en las 3 fuentes lista resolveTo\\w*Fallback. Verificacion T8 via Grep contra modules/ produce 1 hit en modules/pizzepos/productos/index.js. La variante resolveToActive\\w* (sin Fallback) tambien aparece como anti-patron en project-identity.contract.json#PROH y notario verifico que existe en el mismo archivo. He anyadido resolveToActive\\w* al array de regex de T2 para que el detector cubra ambas variantes documentadas. Si ana considera que son dos tendencias distintas (fallback con sufijo Fallback vs fallback con sufijo Active), abrir T9 separada; mientras tanto las dos viven bajo T2 porque comparten creencia_aprendida y verdad_paradigma.",
     "OBSERVACION_DE_REDACCION_T6_VERDAD: la formulacion en las 3 fuentes era 'pseudo_code es ley; nowISO es nowISO; valores no especificados no se inventan'. He simplificado a 'pseudo_code es ley; valores no especificados no se inventan' tras eliminar la cita literal del helper inexistente. La esencia se preserva.",
     "POLITICA_DE_REFERENCIACION_PROPUESTA: los 6 documentos del sexteto plasmados previamente declaran enforcedTendencies por id pero algunos (ej. _contrato-modulo-event-core-disciplina-via-notario.json) ademas redeclaran el cuerpo completo de las 8 tendencias en una seccion tendencias_del_llm propia. Con este catalogo como fuente autoritativa, ana decide si esos documentos se simplifican removiendo la seccion redundante (apuntando solo a enforcedTendencies + lenguaje_definicion_ref) o si la redeclaracion se conserva por autocontencion. Recomendacion notario neutra: simplificar para evitar drift por redeclaracion (motivo original que origina este catalogo).",
-    "OBSERVACION_DE_ALCANCE: este catalogo NO incluye auto_audit_protocol expandido ni forbidden_patterns_meta ni self_bootstrap_verificacion con sus checks. El usuario lo pidio asi explicitamente. Esos viven en _fiel-v0.1.0.json y los documentos Fiel los heredan implicitamente al declarar lenguaje_definicion_ref. Si emerge necesidad de que el catalogo declare sus propios meta-detectores en futuras versiones, decision de ana."
+    "OBSERVACION_DE_ALCANCE: este catalogo NO incluye auto_audit_protocol expandido ni forbidden_patterns_meta ni self_bootstrap_verificacion con sus checks. El usuario lo pidio asi explicitamente. Esos viven en arquitectura/decisiones/propuestas/_archived/2026-06-05_canonizacion-fiel-2/_fiel-v0.1.0.json y los documentos Fiel los heredan implicitamente al declarar lenguaje_definicion_ref. Si emerge necesidad de que el catalogo declare sus propios meta-detectores en futuras versiones, decision de ana."
   ]
 }

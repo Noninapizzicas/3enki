@@ -1,0 +1,62 @@
+{
+  "_meta": {
+    "documento_id": "fiel-base",
+    "version": "base",
+    "creado": "2026-06-04",
+    "language": "es-ES",
+    "intencion": "La base de Fiel. Un documento Fiel dice la forma: que es, como hace, como se mueve en la duda. El miedo no esta en los cimientos. De esta base nace el Fiel nuevo.",
+    "nace_de": "conversacion/sesion-dios-COMPLETA + cocina 2026-06-04",
+    "supersedes": "el cuerpo defensivo de lenguaje/_fiel-v0.1.0.json: tendencias_del_llm, forbidden_patterns y auto_audit dejan de ser sustancia autorada"
+  },
+
+  "name": "Fiel",
+
+  "principio": "Un documento Fiel dice lo que es verdad. Declara la forma. No prohibe.",
+
+  "lo_que_dice_todo_documento": {
+    "identidad": "que es la cosa: su forma, lo que la define, su papel",
+    "forma_de_hacer": "como hace cada cosa: la via canonica",
+    "forma_en_la_duda": "que hace cuando no sabe: la via canonica para la incertidumbre y el fallo"
+  },
+
+  "tres_registros": {
+    "_doc": "donde vive cada cosa en el repo",
+    "dominio": "documentos Fiel: la estructura del sistema (errors, events, persistence, paths...). Persiste, estructural, positivo.",
+    "proceso": "el chat con el humano: la cocina, la exploracion, la decision. Es proceso; no persiste como artefacto.",
+    "disciplina": "como opera la mente: esta base y la cultura del repo (dinamica de trabajo, disciplina del observador, memoria contra la costumbre). Persiste, conductual, no estructural. Familia de esta base.",
+    "nota": "Fiel 2 (lenguaje/_fiel-2.json) vive en el registro dominio. La base y la disciplina viven en el tercer registro; este se dijo en Fiel positivo en el movimiento B (2026-06-04)"
+  },
+
+  "el_registro_disciplina_usa_la_forma_de_la_base": {
+    "_doc": "B no creo una forma nueva: el registro disciplina usa la misma forma de la base, con superficie conductual. Cristalizado y refinado en el movimiento B",
+    "como_aparece": {
+      "identidad": "que clase de mente o de trabajo pide la tarea (igual que en la base)",
+      "forma_de_hacer": "aparece como haces[] -una lista de acciones- porque el hacer conductual es lista, no metodos con pre/post",
+      "forma_en_la_duda": "aparece como si_dudas: donde miras cuando no sabes (el caso testigo, la fuente, los contratos)",
+      "de_esta_forma": "nota de encuadre (el paradigma, la mente), como el razon; no es un pilar nuevo ni una primitiva"
+    },
+    "tambien_usa": "closed_enum (transversal) para sus catalogos: los tipos de trabajo de dinamica, las costumbres de paradigma-no-cabe.",
+    "testigos": [
+      "disciplina-llm-operador (la mente del observador)",
+      "dinamica-de-trabajo-companero (el trabajo: haces + closed_enum de tipos)",
+      "paradigma-no-cabe (memoria contra la costumbre: closed_enum de costumbres)"
+    ],
+    "el_sustento": "la disciplina se sustenta en la accion, no en la negacion. Cada 'no' tenia una accion debajo; la accion es el sustento, la prohibicion es la sombra.",
+    "lo_que_demuestra": "la forma de la base es universal -sirve al dominio y a la disciplina; closed_enum es la unica primitiva transversal; ninguna primitiva nueva nace en el registro disciplina."
+  },
+
+  "el_miedo_no_existe": "La contramedida nace del miedo a equivocarse. El miedo sobrecarga y emponzona lo escrito, y al final se dice 'esto no, esto no' sin decir nunca 'esto'. Fiel dice 'esto'. Lo que antes se prohibia ahora se dice como forma, incluida la forma de moverse en la duda y en el fallo.",
+
+  "cada_miedo_es_ahora_forma": {
+    "_doc": "Caso testigo event-core: las ocho evitaciones T1-T8 del Fiel viejo, dichas como forma positiva. Ninguna se pierde al borrar la capa defensiva; todas estaban ya cubiertas por una forma.",
+    "el_estado": "el estado se obtiene del bus; el bus es la fuente",
+    "la_persistencia": "la persistencia se pide a filesystem por el bus",
+    "los_valores": "cada valor viene del dato o de la forma (uuid(), nowISO()); cada valor tiene origen",
+    "el_anuncio": "se publica cuando el cambio ha aterrizado, con el payload completo",
+    "la_identidad_en_la_duda": "cuando un id no resuelve, se dice: se devuelve INVALID_INPUT",
+    "el_fallo": "cuando algo falla, se registra y se propaga",
+    "el_termino_desconocido": "cuando un termino no se conoce, se verifica contra el repo; si no esta, se pide aclaracion"
+  },
+
+  "como_se_chequea": "Si hace falta un validador, se genera desde la forma. El chequeo es la sombra del positivo; nunca se autora. Una fuente (la forma), las comprobaciones derivadas."
+}

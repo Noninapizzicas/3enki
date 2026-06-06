@@ -620,9 +620,284 @@ CLASS Module (contrato base):
 }
 ```
 
-## Pendiente (siguiente capa, fuera del core)
+---
 
-- **Subsistema compañero de viaje** — `ai-gateway`, `conversacion`, `ai-agent-framework`,
-  `agent-manager` como clases (motor LLM + especialización por proyecto/dominio + tools vía bus).
+# 🧭 Subsistema Compañero de Viaje — Definición de Clases (Pseudocódigo)
+
+> La apuesta central junto al core. Captura el modelo del contrato `companero-viaje` (la
+> *piedra angular*): **NO es un chat, es un compañero de viaje con especialistas reactivos.**
+> Toda clase de aquí preserva las **4 capacidades invariantes**:
+> ① memoria sostenida (`conversation_id` persistente + FIFO) · ② especialización por contexto
+> (proyecto + agentes) · ③ acceso al sistema (tools + agentes, siempre por el bus) ·
+> ④ modularidad infinita (canal/tool/agente/memoria nuevos = módulo, sin tocar el núcleo).
+>
+> Todos los módulos extienden el contrato `Module` (clase 11): `onLoad(context)`,
+> `_publicarEvento`, shape `{status, data|error}`, DIP estricto (solo `eventBus` + `mqttRequest`).
+> Vive bajo `modules/conversacion/*`. Fiel al código real (v2.0.0 de cada módulo).
+
+## Mapa de flujos (4 grafos de eventos sobre el bus)
+
+```
+① CHAT-FLOW (el razonamiento del compañero) — correlación: correlation_id
+   USER → chat-io.handleSend
+            ├─ persiste msg (db.query.request → database-manager)
+            └─ publish chat.message.saved {correlation_id, project_id, user_id, channel,
+                                            channel_context, message_id, user_message,
+                                            settings, attachments, intencion}
+                 ├→ prompt-builder.onMessageSaved   → arma system prompt base
+                 └→ memory-*.onMessageSaved         → publish chat.context.enriched {priority, content}
+                      └→ prompt-builder.onContextEnriched → agrega por priority
+                           → publish chat.prompt.ready {system, messages, settings, page_id, …}
+                                └→ ai-gateway.onChatPromptReady → _executeLLM (agentic loop)
+                                     → publish ai.chat.response | ai.chat.failed
+                                          └→ chat-io.onAiResponse → reenvía al canal de origen
+                                               (MQTT conversation/{id}/message) + chat.assistant.saved
+
+② LLM-FLOW (completado LLM genérico, sin contexto chat) — correlación: request_id
+   módulo/agente → llm.complete.request → ai-gateway.onLlmCompleteRequest → _executeLLM
+                 → llm.complete.response | llm.complete.failed
+
+③ AGENT-FLOW (especialistas reactivos = el gabinete) — correlación: correlation_id
+   módulo/cron/LLM-tool → agent.execute.request {agent, input}
+        └→ ai-agent-framework.onAgentExecuteRequest → arma system prompt+tools del agente
+             ├─ publish agent.execute.progress (started)  → agent-observer → tarjeta en chat
+             └─ publish llm.complete.request → (②) → llm.complete.response
+                  └→ ai-agent-framework.onLlmCompleteResponse
+                       → agent.execute.response | agent.execute.failed
+                            └→ agent-observer.onAgentExecuteResponse → chat.assistant.saved (tarjeta final)
+
+④ EMBEDDING-FLOW — correlación: request_id
+   módulo → embedding.generate.request → ai-gateway → embedding.generate.response | .failed
+```
+
+Patrón maestro: **emite y desentiende** (events.contract). Ningún módulo conoce a otro; se
+encadenan por eventos correlados. `memory-*` y los agentes son **puntos de extensión** que se
+enchufan sin tocar el pipeline.
+
+## 12. `ChatIoModule` — canal de entrada/salida (memoria sostenida ①)
+
+```
+CLASS ChatIoModule extends Module:
+  state: { db(via database-manager), pendingDb:Map<reqId,{resolve}>, basePath }
+  # persiste conversaciones+mensajes en SQLite POR PROYECTO; NO materializa estado global
+
+  # ── ENTRADA (ui_handlers, puerta req/resp ②) ──
+  async handleSend(data):                      # {project_id, conversation_id, user_message, settings, channel, channel_context, attachments}
+    _requireProject(project_id); _requireExistingConversation(...)
+    msg_id ← await _db(INSERT messages role=user)
+    await _applyContextFIFO(project_id, conversation_id, context_window)   # ① memoria limitada
+    await _publicarEvento('chat.message.saved', { correlation_id, project_id, user_id,
+                          channel, channel_context, message_id, user_message, settings,
+                          attachments, intencion })                        # TRIGGER del razonamiento
+    return { status:'ok', data:{ message_id } }
+  handleCreate/List/Load/Delete/UpdateSettings/ToggleContext/ContextStats(data) → {status,data|error}
+
+  # ── SALIDA (bus handlers) ──
+  async onAiResponse(event):                   # ai.chat.response del compañero
+    await _db(INSERT messages role=assistant)
+    reenviar_al_canal(event.channel_context)   # web → publish MQTT conversation/{id}/message
+    await _publicarEvento('chat.assistant.saved', {...})
+  async onAiFailed(event):                     # traduce error.code → mensaje user-facing, entrega al canal
+  async onChatAssistantSavedFromAgent(event):  # persiste tarjetas de agente; ignora self-echo (source.module_id=='chat-io')
+  onDbQueryResponse(event):  pendingDb.get(request_id)?.resolve(rows)      # resuelve _db()
+  onProjectActivated(event): _ensureSchema(project_id)                     # best-effort, no bloquea
+
+  # edge: PROJECT_REQUIRED/CONVERSATION_REQUIRED/MESSAGE_ID_REQUIRED → error.details.kind (disambiguación UI)
+```
+
+## 13. `PromptBuilderModule` — construye el system prompt (especialización ②)
+
+```
+CLASS PromptBuilderModule extends Module:
+  state: { _base, _modulePrompts:Map, _moduleContexts:Map, _userPrompts:Map,
+           _pendingEnrichments:Map<correlation_id, [enrichment]>, pendingDb:Map }
+
+  async onLoad(ctx):
+    _loadBase()                       # base.prompt.json
+    _scanModules(modulesDir)          # cachea prompt.json/context.json de cada módulo (FS)
+    _requestUserPrompts()             # prompt.list.request → prompt-manager (hidrata cache async)
+
+  ▸ onMessageSaved(event):            # chat.message.saved
+      base ← _resolvePromptContent(page_id, módulo)    # base + contexto del proyecto/página
+      _pendingEnrichments.set(correlation_id, [])      # abre ventana para memorias
+      schedule_aggregate(correlation_id)               # agrega tras recoger enriquecimientos
+  ▸ onContextEnriched(event):         # chat.context.enriched (de cualquier memory-*)
+      _pendingEnrichments.get(correlation_id).push({ priority, content })   # ④ extensión
+  ▸ _aggregate(correlation_id):
+      enriquecimientos ← sort_by(priority)             # mayor priority primero
+      system ← base + "\n" + join(enriquecimientos.content)
+      await _publicarEvento('chat.prompt.ready', { correlation_id, system, messages, settings, page_id, … })
+
+  # cache reactiva: onPromptListResponse / onPromptUpserted / onPromptDeleted mantienen _userPrompts vivo
+```
+
+## 14. Memorias modulares — `MemoryUserProfile` / `MemoryConversationSummary` / `MemoryRag`
+
+```
+CLASS MemoryModule extends Module:    # patrón común; punto de extensión ④ del compañero
+  ▸ onMessageSaved(event):            # subscribe chat.message.saved
+      hechos ← extraer(event.user_message)              # perfil / resumen / chunks RAG
+      persistir(db.query.request)                       # memoria de largo plazo en SQLite
+      await _publicarEvento('chat.context.enriched', {
+              correlation_id, project_id, priority, content })   # prompt-builder lo agrega
+  # priorities: user-profile=100, summary=…, rag=…  (mayor = más arriba en el system prompt)
+  # NUEVA MEMORIA = NUEVO MÓDULO. El compañero no se reescribe; se enriquece (nucleo_invariante).
+```
+
+## 15. `AiGatewayModule` — motor LLM + agentic loop (acceso al sistema ③)
+
+> El ejecutor del LLM. **Tres entry points** (chat / genérico / embedding) sobre **un mismo
+> agentic loop** con providers fallback + tools + credenciales event-driven + blueprints/cajones.
+
+```
+CLASS AiGatewayModule extends Module:
+  state: {
+    providers:Map<name, Provider>,          # Strategy; fallback por priority
+    credentialCache:Map<provider,{apiKey}>,  pendingCredentials:Map<reqId,{resolve,timer}>,
+    pendingFsReads:Map<reqId,{resolve}>,
+    blueprintModules:Map<page_id, {systemPrompt, cajonesEnabled}>,   # módulos declarativos
+    cajonesCatalog:Map,  conversationPageFoco:Map<conv_id, page_id>  # foco "pegajoso" cajones
+  }
+
+  # ── ENTRY POINTS (3 puertas, mismo núcleo) ──
+  async onChatPromptReady(event):     # ① chat-flow
+     try:  r ← _executeLLM({ system, messages, settings, attachments, project_id, …, correlation_id })
+           await _publicarEvento('ai.chat.response', { ...r, correlation_id })
+     catch e: await _publicarEvento('ai.chat.failed', { error:_classifyExecutionError(e), correlation_id })
+  async onLlmCompleteRequest(event):  # ② llm-flow → llm.complete.response | llm.complete.failed
+  async onEmbeddingGenerateRequest(event): # ④ → embedding.generate.response | .failed
+
+  # ── NÚCLEO: agentic loop compartido ──
+  ▸ _executeLLM({ system, messages, tools, settings, attachments, …, page_id, conversation_id }):
+      { name, provider } ← _selectProvider(settings.provider, project_id)   # fallback automático
+      effectiveSystem ← _composeBlueprint(page_id, conversation_id) ?? system   # ② blueprint/cajones
+      workingMessages ← [{role:system, content:effectiveSystem}, ...messages]
+      workingMessages ← _injectAttachments(workingMessages, await _resolveAttachments(...))
+      tools ← provider.translateTools(_getTools(page_id))                  # ③ tools del registry+cajones+nav+bus
+      iteration ← 0 ; maxIterations ← config.max_tool_iterations ?? 10
+      WHILE iteration++ < maxIterations:
+         result ← await provider.withRetry(() → provider.chatCompletion(workingMessages, opts))   # retry/circuit
+         acumular(tokens, cost)
+         IF no result.tool_calls: BREAK                                    # respuesta final
+         PARA cada tool_call:
+            args ← JSON.parse(tc.arguments)   # si falla → tool_result error INVALID_INPUT al LLM (no bucle silencioso)
+            tr   ← await _executeToolCall(tc.name, args, chatContext)      # dispatch a registry/cajón/nav/bus
+            toolResults.push(tr)
+         workingMessages += [assistant(tool_calls), ...toolResults]        # el LLM ve los resultados y sigue
+      return { content:result, usage, cost, tool_calls_executed, finish_reason }
+
+  # ── CREDENCIALES EVENT-DRIVEN (nunca lee secretos directos) ──
+  ▸ _resolveCredential(provider, projectId):
+      if credentialCache.has(provider): return cached
+      reqId ← uuid(); await _publicarEvento('credential.resolve.request', { provider, projectId, request_id:reqId })
+      return await promise(pendingCredentials[reqId])      # onCredentialResponse lo resuelve; timeout → error
+  onCredentialResponse(event): pendingCredentials.get(request_id)?.resolve(apiKey); credentialCache.set(...)
+  onCredentialSaved/Deleted(event): credentialCache.invalidate(provider)    # cache reactiva
+
+  ▸ _selectProvider(requested, projectId):
+      if requested && providers.has(requested): return it
+      return primer provider enabled por priority order      # fallback (todos caídos → error en _executeLLM)
+  ▸ _getTools(page_id): toolsRegistry(moduleLoader) ⊕ _getCajonesTools() ⊕ navTools ⊕ universalBusTools
+  ▸ _executeToolCall(name,args,ctx): dispatch → cajón | nav | bus-tool | módulo (vía agent.execute.request o mqttRequest)
+```
+
+### `Provider` — contrato Strategy (anthropic / deepseek / openai / local…)
+
+```
+INTERFACE Provider:
+  async chatCompletion(messages, opts) → { content, tool_calls?, usage, cost, finish_reason }
+  async withRetry(fn, retryConfig) → result            # retry + backoff + circuit breaker
+  translateTools(tools) → providerToolFormat           # tools genéricas → formato del provider
+  parseToolCalls(result) → [{ id, name, arguments }]   # normaliza la salida del provider
+  async generateEmbedding(text, opts) → vector
+  # intercambiables sin tocar el agentic loop (DIP) — un provider nuevo = una clase nueva
+```
+
+## 16. `AiAgentFrameworkModule` — gabinete de especialistas (especialización ②)
+
+> Carga agentes declarativos (`agents/*.json` + `prompts/*.{json,md}`). Cada agente = system prompt
+> + tools acotadas (NO es código JS — es declaración). Dos entry points: `agent.execute.request`
+> (canónico) y la tool `invoke_agent` (legacy, que el LLM invoca dentro del agentic loop).
+
+```
+CLASS AiAgentFrameworkModule extends Module:
+  state: { agents:Map<name,{systemPrompt,tools,config}>, basePromptText,
+           pendingLlm:Map<corrId,{shape,meta}>, _conversationCache(TTL) }
+
+  async onLoad(ctx): _loadBasePrompt(); _loadAgents()    # agents/*.json + prompts/*
+
+  ▸ onAgentExecuteRequest(event):       # agent.execute.request {agent, input, correlation_id, project_id}
+      agente ← agents.get(event.agent)  → si no: agent.execute.failed (RESOURCE_NOT_FOUND)
+      await _publicarEvento('agent.execute.progress', { step:'started', correlation_id })
+      pendingLlm.set(correlation_id, { shape:'agent_flow', meta })
+      await _publicarEvento('llm.complete.request', {                    # delega el LLM a ai-gateway
+              system: agente.systemPrompt, messages: input, tools: agente.tools, request_id:correlation_id })
+
+  ▸ onLlmCompleteResponse(event):       # llm.complete.response (de ai-gateway)
+      p ← pendingLlm.get(correlation_id)
+      IF p.shape == 'agent_flow': await _publicarEvento('agent.execute.response', { ...result, correlation_id })
+      ELSE                      : await _publicarEvento('invoke_agent.response', { result })   # legacy tool flow
+  ▸ onLlmCompleteFailed(event): → agent.execute.failed | invoke_agent.response(error)   # no_silent_failures
+  ▸ onInvokeAgent(event):               # tool del LLM (agentic loop) → shape propio (no canónico)
+      pendingLlm.set(corrId, { shape:'invoke_agent' }); publish llm.complete.request
+```
+
+## 17. `AgentObserverModule` — adaptador agent-flow → chat-flow (renderizado)
+
+> Traduce los eventos `agent.execute.*` a `chat.assistant.saved` para pintar **tarjetas** en el
+> chat (intervención del especialista) **sin doble persistencia** — chat-io ignora su self-echo.
+
+```
+CLASS AgentObserverModule extends Module:
+  state: { openCards:Map<correlation_id, cardState> }
+  ▸ onAgentExecuteRequest(event):  openCards.set(corr, {…}); _publishCard(step:'started')
+  ▸ onAgentExecuteProgress(event): _publishCard(step)                         # 'started' | 'finalizing'
+  ▸ onAgentExecuteResponse(event): _publishCard(status:'ok', assistant_message, tokens, cost, …); openCards.delete
+  ▸ onAgentExecuteFailed(event):   _publishCard(status:'error', error); openCards.delete
+  ▸ _publishCard({...}): await _publicarEvento('chat.assistant.saved', { card_payload })  # → chat-io persiste
+```
+
+## Envelopes canónicos del chat-flow (JSON de referencia)
+
+```json
+// chat.message.saved — trigger del razonamiento (publica chat-io)
+{
+  "correlation_id": "uuid", "project_id": "...", "user_id": "...",
+  "channel": "web", "channel_context": { "conversation_id": "..." },
+  "message_id": "...", "user_message": "texto del usuario",
+  "settings": { "provider": "anthropic", "model": "...", "temperature": 0.7 },
+  "attachments": [], "intencion": null, "timestamp": "ISO-8601"
+}
+// chat.prompt.ready — system prompt completo (publica prompt-builder)
+{ "correlation_id": "uuid", "system": "…prompt+memorias agregadas…",
+  "messages": [ { "role": "user", "content": "…" } ], "settings": { }, "page_id": null }
+// ai.chat.response — cierre exitoso (publica ai-gateway)
+{ "correlation_id": "uuid", "content": "respuesta del compañero",
+  "tool_calls_executed": [ { "name": "fs.read", "args": { }, "status": "ok" } ],
+  "usage": { "input_tokens": 0, "output_tokens": 0 }, "cost": 0.0, "finish_reason": "stop" }
+// ai.chat.failed — cierre canónico en error (no_silent_failures)
+{ "correlation_id": "uuid", "error": { "code": "UPSTREAM_TIMEOUT", "message": "…", "details": {} } }
+```
+
+## Jerarquía de topics + QoS (compañero de viaje)
+
+```
+core/<id>/events/chat/message/saved        QoS 1   # trigger del razonamiento
+core/<id>/events/chat/context/enriched     QoS 1   # memorias modulares (cardinalidad N)
+core/<id>/events/chat/prompt/ready         QoS 1   # prompt construido
+core/<id>/events/ai/chat/response|failed   QoS 1   # cierre del compañero (par success/failure)
+core/<id>/events/llm/complete/request      QoS 1   # entry point LLM genérico
+core/<id>/events/agent/execute/request     QoS 1   # invocar especialista
+core/<id>/events/agent/execute/progress    QoS 1   # feedback intermedio (tarjeta)
+conversation/<conversation_id>/message     QoS 1   # SALIDA al canal web (frontend por WS)
+```
+
+*Justificación QoS 1:* cada evento cierra (o encadena) un razonamiento con coste real (tokens);
+perder uno deja al compañero colgado o sin responder. Idempotencia por `correlation_id` /
+`request_id`. **Garantía `no_silent_failures`:** todo flujo emite SIEMPRE su par `*.failed`
+canónico — nunca se queda mudo.
+
+## Pendiente (siguiente capa)
+
 - **Vertical tienda/restaurante** — `pizzepos` (pedidos, cocina, comandero, cobros, productos…).
 - **Capa IoT/ESP32** — `device-registry`, `device-shadow`, `firmware-*`, `esp32-*`.

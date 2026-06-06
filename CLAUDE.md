@@ -1047,6 +1047,141 @@ core/<id>/events/db/query/{request,response}   QoS 1   # acceso DB event-driven 
 perder el `request`/`response` cuelga al caller (ai-gateway, chat-io). Idempotencia por
 `request_id` / `correlation_id`. Secretos: **solo** en `credential.resolve.response`, nunca en snapshots.
 
+---
+
+# 🛡️ Capa de seguridad — `security-p2p` & `certificate-authority`
+
+> Los dos habilitadores del multi-core seguro (lo que `bus-transport` reserva para clientes
+> **externos del cluster con mTLS**). Patrón maestro: ambos operan **vía hooks transparentes**
+> (`HookManager`, clase 6) — son **decoradores transversales** que añaden cifrado/autenticación
+> sin que ningún módulo de dominio se entere (Decorator + DIP). Hoy **`disabled` en config**:
+> dormidos hasta que exista un 2º core real (coherente con decisión ③ / `paradigma-no-cabe`:
+> no se activa la distribución antes de que duela).
+
+## 20. `SecurityP2PModule` — Zero Trust crypto entre cores (X25519 + AES-256-GCM)
+
+> Cifra/descifra eventos **entre cores** de forma transparente vía hooks `beforeEventPublish` /
+> `afterEventReceive`. Handshake P2P sobre MQTT. Cache de `shared_secrets` con eviction LRU.
+> Composición: `KeyManager` + `SecureEnvelope` + `CryptoHandshake`.
+
+```
+CLASS SecurityP2PModule extends Module:
+  →helpers: { keyManager:KeyManager, cryptoHandshake:CryptoHandshake }
+  state: { _sharedSecrets:Map<peerFp, secret>(LRU, max=100), encryptionEnabled, stats }
+
+  async onLoad(core):
+    keyManager.generateKeyPair()                                  # X25519 propio del core
+    cryptoHandshake ← new CryptoHandshake(core, keyManager)
+    core.hooks.register('beforeEventPublish', hookBeforeEventPublish)   # ← DECORADOR de salida
+    core.hooks.register('afterEventReceive',  hookAfterEventReceive)    # ← DECORADOR de entrada
+    suscribir handshake MQTT: core/+/security/handshake/{request,response}/#
+
+  # ── CIFRADO TRANSPARENTE (el módulo emisor no sabe que va cifrado) ──
+  ▸ hookBeforeEventPublish(context):       # context = { topic, targetCoreId, envelope }
+      peer ← _peerForTarget(targetCoreId)
+      IF peer && keyManager.isTrusted(peer):
+         secret ← _getOrDeriveSecret(peer)                        # ECDH cacheado (LRU)
+         context.envelope ← SecureEnvelope.encrypt(envelope, secret)   # AES-256-GCM
+      return context                                              # si no hay peer trusted → pasa en claro
+  ▸ hookAfterEventReceive(context):
+      IF SecureEnvelope.isEncrypted(context.envelope):
+         secret ← _getOrDeriveSecret(context.envelope.from_fingerprint)
+         context.envelope ← SecureEnvelope.decrypt(context.envelope, secret)   # restaura plaintext
+      return context                                              # HMAC mismatch → descarta + security.handshake.failed
+
+  # ── TRUST / HANDSHAKE ──
+  ▸ handleTrustPeer({public_key, name}):   keyManager.trustPeer(pk); _getOrDeriveSecret(pk)  # eager
+                                           _publicarEvento('security.peer.trusted', {fingerprint})
+  ▸ handleRevokePeer({fingerprint}):       keyManager.untrustPeer(pk); _sharedSecrets.delete(fp)
+                                           _publicarEvento('security.peer.revoked', {fingerprint})
+  ▸ onPublicKeyRequest(event):             # otros módulos piden la pubkey por BUS (no vía moduleLoader)
+       _publicarEvento('security.public-key.response', { public_key, fingerprint, request_id })
+
+  # edge: _sharedSecrets lleno → eviction LRU; handshake sin response en timeout → security.handshake.timeout
+
+# ── HELPERS (composición sobre herencia) ──
+CLASS KeyManager:                          # par de claves X25519 + registro de peers
+  generateKeyPair() ; getPublicKey()/PEM ; getFingerprint() → SHA(pubkey)
+  computeSharedSecret(peerPubPEM) → ECDH   # X25519 → secreto compartido
+  trustPeer(pk,meta) ; isTrusted(pk) ; untrustPeer(pk) ; listTrustedPeers() ; export/importState()
+
+CLASS SecureEnvelope:                      # AEAD AES-256-GCM (estático, sin estado)
+  static encrypt(envelope, sharedSecret) → { iv, ciphertext, tag, from_fingerprint }
+  static decrypt(encrypted, sharedSecret) → envelope         # falla → throw (HMAC/tag inválido)
+
+CLASS CryptoHandshake:                      # handshake mutuo sobre MQTT (challenge-response)
+  →deps: { core, keyManager }
+  initiate(peerCoreId) → reto A ; respond(reqB) → reto B + pubkey
+  calculateMutualHMAC(challengeA, challengeB, sharedSecret, coreIdA, coreIdB)   # autenticación mutua
+```
+
+## 21. `CertificateAuthorityModule` — CA X.509 interna + mTLS (hook `beforeRequest`)
+
+> Emite / revoca / verifica certificados X.509 cliente (portal de facturación + dispositivos).
+> Autenticación mTLS transparente vía hook `beforeRequest` cuando `mtls_enabled`. Persiste CA +
+> certs + CRL en filesystem. Composición: `CAManager` + `MTLSMiddleware`.
+
+```
+CLASS CertificateAuthorityModule extends Module:
+  →helpers: { caManager:CAManager, mtlsMiddleware:MTLSMiddleware }
+  state: { stats }
+
+  async onLoad(core):
+    caManager ← new CAManager({ storagePath, ca_cn, ca_validity_days, cert_validity_days, key_size })
+    caManager.loadOrCreateCA()                                   # carga ca.crt/ca.key o los genera
+    mtlsMiddleware ← new MTLSMiddleware({ caManager, cert_header, allowUnauthenticated })
+    IF config.mtls_enabled:
+       core.hooks.register('beforeRequest', mtlsMiddleware.authenticate)   # ← DECORADOR de auth (decisión ②: pipeline)
+
+  # ── GESTIÓN DE CERTIFICADOS (ui_handlers + lifecycle) ──
+  ▸ handleIssueCertificate(data):  cert ← caManager.issueCertificate({ cn, type })
+                                   _publicarEvento('certificate.issued', { serial, cn })
+  ▸ handleRevokeCertificate(data): caManager.revokeCertificate(serial, reason)
+                                   _publicarEvento('certificate.revoked', { serial, reason })
+  ▸ handleRenewCertificate(data):  caManager.renewCertificate(serial)    # revoca viejo (superseded) + emite nuevo
+                                   _publicarEvento('certificate.renewed', { old_serial, new_serial })
+  ▸ handleVerifyCertificate / handleListCertificates / handleGetCACert / handleGetCRL / handleDownloadP12
+  ▸ handleGetNginxConfig:          genera config nginx para terminación mTLS en el proxy
+
+# ── HELPERS ──
+CLASS CAManager:                            # la CA real; persiste todo en disco (single-instance)
+  loadOrCreateCA() ; _generateCA()                              # ca.crt + ca.key (self-signed root)
+  async issueCertificate({cn,type,validityDays}) → { serial, crt, p12, info }   # firma con la CA
+  revokeCertificate(serial, reason) → añade a CRL + _saveCRL()  # crl.json
+  verifyCertificate(pem) → { valid, reason }                    # firma OK + NO en CRL + NO expirado
+  async renewCertificate(serial, overrides)                     # issue nuevo + revoke(superseded)
+  listCertificates(filters) ; getCACertificate() ; getCRL() ; getStats()
+  # persistencia: {storagePath}/ca.{crt,key} · issued/<serial>.{crt,p12,json} · crl.json  (restart-resilient)
+
+CLASS MTLSMiddleware:                        # hook beforeRequest — auth transparente
+  →deps: { caManager, certHeader, allowUnauthenticated }
+  ▸ async authenticate(context):
+       clientCert ← context.headers[certHeader]                 # mtls_mode='proxy': el cert llega por header (nginx)
+       IF !clientCert:
+          IF allowUnauthenticated: context.auth = {authenticated:false, method:'none'}; return context
+          ELSE: throw ERR(401, 'UNAUTHENTICATED')
+       v ← caManager.verifyCertificate(clientCert)              # valida contra CA + CRL
+       IF !v.valid: throw ERR(403, 'CERT_INVALID', v.reason)
+       context.auth = { authenticated:true, method:'mtls', cn }  # enriquece el contexto del request
+       return context
+```
+
+## Jerarquía de topics + QoS (seguridad)
+
+```
+core/+/security/handshake/request/#         QoS 1   # inicio handshake P2P (mutuo)
+core/+/security/handshake/response/#        QoS 1   # respuesta del peer
+core/<id>/events/security/peer/{trusted,revoked}        QoS 1   # cambios de confianza
+core/<id>/events/security/handshake/{timeout,failed}    QoS 1   # fallos de handshake
+core/<id>/events/security/public-key/{request,response} QoS 1   # pubkey por bus (no acceso directo)
+core/<id>/events/certificate/{issued,revoked,renewed,expired}   QoS 1   # lifecycle de certs
+```
+
+*Justificación QoS 1:* el handshake y los cambios de confianza no pueden perderse (un peer
+quedaría en estado inconsistente: cifrando contra un secreto que el otro no tiene). Idempotencia
+por `fingerprint` / `serialNumber`. El cifrado de payload es **AES-256-GCM** (confidencialidad +
+integridad/AEAD); la confianza es **Zero Trust** (nada se cifra hacia un peer no `trusted`).
+
 ## Pendiente (siguiente capa)
 
 - **Vertical tienda/restaurante** — `pizzepos` (pedidos, cocina, comandero, cobros, productos…).

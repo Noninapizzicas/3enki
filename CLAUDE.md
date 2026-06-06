@@ -1182,9 +1182,96 @@ quedaría en estado inconsistente: cifrando contra un secreto que el otro no tie
 por `fingerprint` / `serialNumber`. El cifrado de payload es **AES-256-GCM** (confidencialidad +
 integridad/AEAD); la confianza es **Zero Trust** (nada se cifra hacia un peer no `trusted`).
 
+---
+
+# 🗂️ Conversaciones y sistema de cajones (context partitioning)
+
+## 22. Quién rige y guarda las conversaciones — el rol `conversation-manager` vive en `chat-io`
+
+> **Aclaración de desvío doc↔código:** NO existe un módulo `conversation-manager` vivo (aparece
+> solo en la lista `disabled` de `config`, legacy). La autoridad de conversaciones — crear, listar,
+> persistir, aplicar memoria — es **`chat-io` (clase 12)**. Una conversación pertenece a un proyecto
+> y vive en su SQLite. No hay agregado global de conversaciones (paradigma-no-cabe).
+
+```
+MODELO DE PERSISTENCIA (chat-io, clase 12 — autoridad de conversaciones):
+  · conversación  ⊂  proyecto        # data/projects/<project_id>/...  (SQLite por proyecto)
+  · cada conversación tiene: id, project_id, title, settings, last_conversation_id (en project-manager)
+  · mensajes (role=user|assistant) persistidos en tabla messages por conversación
+  · "una vía fija": project-manager._getOrCreateDefaultConversation → mqttRequest('chat-io','create')  (decisión ②)
+
+  MEMORIA DE LA CONVERSACIÓN (capacidad invariante ① del compañero):
+    _applyContextFIFO(project_id, conversation_id, context_window):
+      ▸ recorta el historial a las últimas N entradas (FIFO)         # evita explosión de contexto
+      ▸ el historial recortado es PARTE DEL CONTEXTO que viaja al LLM (no es opcional)
+    # más allá del FIFO: capas de memoria adicionales = memory-* (clase 14), enchufables sin tocar chat-io
+```
+
+## 23. Sistema de cajones — partición de contexto + lazy loading (idea central)
+
+> **El concepto:** el LLM no necesita ver TODO el catálogo de operaciones de un módulo para razonar.
+> El system prompt lleva un **índice** (descripción de 1 línea por cajón); el **pseudocódigo completo**
+> de una operación se inyecta SÓLO cuando el LLM **abre el cajón** que necesita. Modelo Google
+> (snippet vs documento) / despensa con cajones. Reduce la ventana de contexto del chat interior.
+>
+> Estado real: contrato `cajones-context-partitioning` v1.0.0 (cerrado, 8 decisiones zanjadas).
+> **Parcialmente implementado** dentro de `AiGatewayModule` (clase 15). Aplica SOLO a módulos
+> **blueprint-driven** en v1 (recetario + carta) — NO al chat principal, agentes ni memorias.
+
+```
+SUBSISTEMA CAJONES (motor embebido en AiGatewayModule — clase 15)
+  state (ai-gateway): {
+    cajonesCatalog:Map<page_id, [cajon]>,            # índice extraído de los blueprints
+    conversationCajones:Map<conv_id, [nombre]>(FIFO),# historial de cajones abiertos (recencia)
+    conversationPageFoco:Map<conv_id, page_id>       # foco "pegajoso" del LLM
+  }
+
+  # ── CATÁLOGO ES ÍNDICE, NO CONTENIDO ──
+  ▸ _extractCajones(child):           # de blueprint.operaciones → [{nombre, descripcion(1 línea)}]
+  ▸ _rankCajones(catalogo, page_id_activo, conversation_id):
+      # RANKING SIMPLE (sin embeddings — anti-patrón a esta escala):
+      #   1º cajones del page activo (nombre empieza por page_id+'.')
+      #   2º abiertos recientemente (recencia, lookback sobre conversationCajones)
+      #   3º alfabético
+  ▸ _buildCajonesSystemPrompt(blueprintCtx, conv_id, page_id_activo):
+      catalogo ← _rankCajones(...)     # inyecta SOLO el índice rankeado en el system prompt del turno
+
+  # ── 4 TOOLS CANÓNICAS (auto-wired; una_operacion_por_turno) ──
+  cajon.listar({zona?})       → catálogo rankeado (lectura pura, no publica eventos)
+  cajon.abrir({nombre})       → _resolveCajon(page, nombre) → { pseudocodigo, reglas_clave,
+                                  errores_posibles, input }   # SOLO vive este turno; _trackCajonOpened(FIFO)
+  chat.cambiar_foco({page_id, motivo?}) → foco pegajoso ← page_id; publish chat.foco.cambiado
+                                  # el frontend hace goto(page_id) + recompone; banner en chat con el motivo
+  page.related({page_id})     → destinos relacionados (grafo auto-construido de publishAndWait en blueprints)
+
+  # ── REGLAS DEL PATRÓN (del contrato) ──
+  #  · CIERRE AUTOMÁTICO AL SIGUIENTE TURNO: el cajón abierto es contexto efímero; al turno siguiente
+  #    solo persiste el catálogo (el LLM reabre si lo necesita). Como cerrar pestaña entre búsquedas.
+  #  · EL LLM DECIDE QUÉ ABRIR, no un orquestador externo (matching semántico > heurística/router).
+  #  · EL FOCO ACOMPAÑA A LA CONVERSACIÓN: si el tema cambia de dominio, el LLM mueve la página
+  #    (chat.cambiar_foco autónomo). Metáfora espacial: el sistema sigue al usuario, no al revés.
+  #  · DISCIPLINA: cajon.abrir y chat.cambiar_foco son únicas por turno — preparar contexto ≠ ejecutar
+  #    (el ejecutar es del siguiente turno). Extensión de enfoque_una_operacion (llm-runtime-discipline).
+  #  · EVOLUCIÓN INCREMENTAL: niveles de profundidad, archivadores anidados, cajones inter-modulares
+  #    y persistencia configurable → APARCADOS hasta que el runtime real demuestre dolor concreto (YAGNI).
+```
+
+### Jerarquía de topics + QoS (cajones / foco)
+
+```
+core/<id>/events/chat/foco/cambiado          QoS 1   # el LLM movió la página activa (banner + goto frontend)
+core/<id>/events/page/graph/{request,response}  QoS 1   # grafo de páginas relacionadas (barra lateral)
+# cajon.listar / cajon.abrir NO publican eventos de dominio: son lectura del blueprint en memoria
+```
+
+*Justificación:* `chat.foco.cambiado` reordena la UI y el catálogo del siguiente turno — perderlo
+desincroniza usuario↔compañero, de ahí QoS 1. Los cajones operan **en memoria** sobre el blueprint
+ya cargado: cero latencia de red, cero estado materializado redundante.
+
 ## Pendiente (siguiente capa)
 
 - **Vertical tienda/restaurante** — `pizzepos` (pedidos, cocina, comandero, cobros, productos…).
+- **Módulos blueprint-driven con cajones** — subsistema-recetario + subsistema-carta (consumidores del patrón ②3).
 - **Capa IoT/ESP32** — `device-registry`, `device-shadow`, `firmware-*`, `esp32-*`.
 - **Resto de infra/plataforma** — `database-manager`, `composition-manager`, `scheduler`,
   `prompt-manager`, `filesystem`, `plugin-manager`.

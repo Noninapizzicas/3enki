@@ -1268,10 +1268,130 @@ core/<id>/events/page/graph/{request,response}  QoS 1   # grafo de páginas rela
 desincroniza usuario↔compañero, de ahí QoS 1. Los cajones operan **en memoria** sobre el blueprint
 ya cargado: cero latencia de red, cero estado materializado redundante.
 
+---
+
+# 🍕 Rama blueprints — `menu-generator` → subsistema-carta (pizzepos)
+
+> ~13 de ~70 módulos NO son código JS procedural: son **blueprints JSON declarativos** que el LLM
+> ejecuta como runtime. El subsistema-carta de pizzepos es el exponente: `menu-generator` genera la
+> carta, `carta-manager` la custodia (aggregate root), y cinco hermanos la consumen. Todos
+> `blueprint_driven: true`. Caso testigo del paradigma: **el JSON de la carta ES la fuente de
+> verdad** (en filesystem), no hay agregado materializado redundante (paradigma-no-cabe).
+
+## 24. Paradigma blueprint-driven — el LLM como runtime
+
+```
+CÓMO SE EJECUTA UN MÓDULO BLUEPRINT (sin index.js):
+  · ModuleLoader (clase 10) [BLUEPRINT] → lo registra con instance:null, no instancia clase
+  · AiGatewayModule (clase 15) carga el <modulo>.blueprint.json como SYSTEM PROMPT del page
+    (+ cajones si cajones_enabled, clase 23)
+  · El LLM, dentro del agentic loop, EJECUTA las operaciones del blueprint usando
+    SOLO 2 tools universales:
+        bus.publish(evento, payload)          # emite y desentiende (fire-and-forget)
+        bus.publishAndWait(evento, payload)   # request/response correlado (espera la response)
+  · No hay JS de dominio: la lógica vive como pseudocódigo en el propio blueprint
+
+FORMA CANÓNICA DE UN BLUEPRINT (JSON declarativo):
+  {
+    id, version, extends_blueprint_abstract,        # hereda de un blueprint base abstracto
+    rol,                                            # qué es este módulo en 1 párrafo
+    garantiza / no_garantiza,                       # contrato explícito de alcance
+    estado_persistente,                             # dónde vive su dato (fs path, no DB redundante)
+    eventos_publicados,                             # emite y desentiende
+    eventos_publicados_que_requieren_consumer,      # los que SÍ esperan a alguien
+    eventos_que_escucho,                            # subscripciones
+    operaciones: {                                  # cada operación = input + pseudocódigo
+      <nombre>: { input: "{...campos...}", pseudocodigo: [ "async op(input):", "  ...", ... ] }
+    }
+  }
+```
+
+## 25. `menu-generator` (blueprint) — generador de cartas estructuradas
+
+```
+BLUEPRINT menu-generator (v8.0.0, page=menu-generator):
+  rol: generador PURO. Input = texto libre (pegado/dictado) o JSON ya estructurado
+       → produce carta JSON conforme al shape canónico 'carta-pizzepos'. NO persiste:
+       delega en carta-manager (separación generar ≠ guardar).
+  operaciones: { generar, _on_carta_generar_solicitada }
+  ▸ generar(input):
+      carta ← razonar_estructura(input.texto)         # el LLM estructura siguiendo el shape canónico
+      publish('menu.generation.progress', {...})       # feedback intermedio (UX)
+      publish('carta.creada', { project_id, carta })   # → lo consume carta-manager
+  eventos_publicados: menu.generation.{progress,failed}, carta.generar.{iniciada,fallida}, carta.creada
+```
+
+## 26. `carta-manager` (blueprint) — aggregate root del subsistema-carta
+
+```
+BLUEPRINT carta-manager (v1.2.0, page=carta-manager):
+  rol: AGGREGATE ROOT. Custodio del dato canónico de cada carta del proyecto.
+       CRUD + versionado + manipulación estructurada de productos/categorías.
+       Los hermanos (design/digital/impresion/marketing/scheduler) LEEN de aquí.
+  estado_persistente: /pizzepos/cartas/<carta_id>.json  (+ versions/ snapshots)   # fs = fuente de verdad
+  operaciones (14): _on_carta_creada, save, get, list, delete,
+                    add_product, remove_product, update_product, add_category,
+                    update_prices, search, stats, versions, restore
+
+  ▸ save(input):                                  # ejemplo real del patrón publishAndWait + versionado
+      if !input.project_id: return INVALID_INPUT { field:'project_id' }
+      if !input.carta?.meta?.nombre: return INVALID_INPUT { field:'carta.meta.nombre' }
+      carta_id ← input.carta.meta.id ?? uuid()
+      path ← '/pizzepos/cartas/' + carta_id + '.json'
+      raw_prev ← await publishAndWait('fs.read.request', { project_id, path })   # ← req/resp por bus
+      if raw_prev.status == 200:                   # ya existía → snapshot a versions/ ANTES de sobrescribir
+         await publishAndWait('fs.write.request', { project_id, path:'/pizzepos/cartas/versions/'+carta_id+'-'+ts+'.json', content: raw_prev.content })
+      await publishAndWait('fs.write.request', { project_id, path, content: JSON.stringify(input.carta) })
+      publish('carta.actualizada', { carta_id })   # los hermanos reaccionan
+
+  ▸ _on_carta_creada(event):  save({ carta: event.carta, ... })   # escucha a menu-generator → persiste
+```
+
+## 27. Hermanos del subsistema-carta — consumidores del aggregate root
+
+```
+TODOS blueprint_driven, cada uno su page, LEEN cartas de carta-manager vía publishAndWait('carta.get.request'):
+
+carta-digital     (v1.1.0)  → backoffice de la carta PÚBLICA: branding del proyecto + carta compuesta
+                              lista para servir al cliente (cf-worker para el frontend público)
+carta-impresion   (v1.1.0)  → versiones imprimibles HTML print-ready; DELEGA al agente 'impresor'
+                              (agent.execute.request → ai-agent-framework, clase 16)
+carta-design      (v1.1.0)  → estudio de diseño impreso: profiles reutilizables (built-in + custom),
+                              cargar carta → guardar HTML generado
+carta-marketing   (v1.2.0)  → perfil de marca + ORQUESTA agentes de marketing
+                              (copywriter, strategist, brand-keeper, onboarding) vía agent.execute.request
+carta-scheduler   (v1.1.0)  → reglas (cron + canal + carta_id) + pendientes (cambios esperando OK del
+                              usuario); el LLM revisa próximos_cambios, detecta conflictos, confirma
+
+GRAFO DEL SUBSISTEMA:
+   menu-generator ──carta.creada──▶ carta-manager (aggregate root, /pizzepos/cartas/*.json)
+                                          ▲   │ carta.actualizada
+              carta.get.request (publishAndWait) │   ▼
+        ┌──────────────┬──────────────┬──────────┴───┬───────────────┐
+   carta-digital  carta-impresion  carta-design  carta-marketing  carta-scheduler
+                       │                                │
+                  agente impresor                 agentes marketing   (③ agent-flow, clase 16)
+```
+
+### Jerarquía de topics + QoS (rama carta)
+
+```
+core/<id>/events/carta/creada                 QoS 1   # menu-generator → carta-manager
+core/<id>/events/carta/actualizada            QoS 1   # carta-manager → hermanos
+core/<id>/events/carta/{get,list,delete}/{request,response}   QoS 1   # CRUD correlado (publishAndWait)
+core/<id>/events/menu/generation/{progress,failed}            QoS 1   # feedback de generación
+core/<id>/events/fs/{read,write}/{request,response}           QoS 1   # persistencia vía filesystem
+```
+
+*Justificación QoS 1:* generar/guardar una carta es una operación con coste (trabajo del LLM) cuya
+pérdida deja la carta sin persistir o a un hermano desincronizado. `publishAndWait` exige entrega
+garantizada del par request/response. La carta vive en **fs como JSON** (fuente de verdad única);
+los hermanos NO cachean una copia materializada — releen del aggregate root (paradigma-no-cabe).
+
 ## Pendiente (siguiente capa)
 
-- **Vertical tienda/restaurante** — `pizzepos` (pedidos, cocina, comandero, cobros, productos…).
-- **Módulos blueprint-driven con cajones** — subsistema-recetario + subsistema-carta (consumidores del patrón ②3).
+- **Subsistema-recetario** (blueprint-driven) — `recetas`, `escandallo`, `viabilidad`, `tecnicas`, `tarifas`.
+- **Vertical tienda OPERATIVA** — pizzepos POS: `pedidos`, `cocina`, `comandero`, `cobros`, `productos`, `cuentas`.
 - **Capa IoT/ESP32** — `device-registry`, `device-shadow`, `firmware-*`, `esp32-*`.
 - **Resto de infra/plataforma** — `database-manager`, `composition-manager`, `scheduler`,
   `prompt-manager`, `filesystem`, `plugin-manager`.

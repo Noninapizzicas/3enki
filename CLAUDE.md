@@ -1388,9 +1388,115 @@ pérdida deja la carta sin persistir o a un hermano desincronizado. `publishAndW
 garantizada del par request/response. La carta vive en **fs como JSON** (fuente de verdad única);
 los hermanos NO cachean una copia materializada — releen del aggregate root (paradigma-no-cabe).
 
+---
+
+# 🧪 Subsistema-recetario (blueprint-driven) — `recetas` · `escandallo` · `viabilidad`
+
+> Segunda rama blueprint-driven de pizzepos. Grafo de dependencias **100% por eventos** con DIP
+> estricto: `escandallo` (calculador de coste) es la pieza compartida; `recetas` (aggregate root)
+> y `viabilidad` (evaluador económico) dependen de él **por el bus**, nunca por acceso a su storage.
+> Caso testigo doble del paradigma: **`escandallo` no tiene estado** (su cálculo es derivación
+> publicada como evento), y ningún módulo lee el JSON de otro — todo va por operación canónica.
+
+## 28. `recetas` (blueprint) — aggregate root del subsistema-recetario
+
+```
+BLUEPRINT recetas (v1.1.0, page=recetas, cajones_enabled):    # clase 23: catálogo de 14 ops, abre la que necesita
+  rol: AGGREGATE ROOT. Custodio del dato canónico de cada receta + catálogo de ingredientes del proyecto.
+  estado_persistente: /pizzepos/recetas.json                  # fs = fuente de verdad (paradigma-no-cabe)
+  operaciones (14): crear, listar, obtener, buscar, actualizar, historial, revertir, eliminar,
+                    cambiar_estado, estadisticas, ingredientes, actualizar_precio, analizar,
+                    investigar_receta, _aplicar_coste_calculado
+  eventos_publicados: receta.{creada,actualizada,estado.actualizada,eliminada}, ingrediente.precio.actualizado
+  eventos_que_escucho: escandallo.coste.calculado            # ← reacciona al coste recalculado
+  ▸ _aplicar_coste_calculado(event):   # escandallo publicó un coste nuevo → lo persiste en la receta
+      receta ← leer(receta_id); receta.coste ← event.coste; save(receta)
+  ▸ obtener(input):   # la fuente canónica de la receta para escandallo/viabilidad (NO fs.read ajeno)
+      → publishAndWait('recetas.obtener.request') lo resuelve
+```
+
+## 29. `escandallo` (blueprint) — calculador de coste SIN estado propio
+
+> Testigo puro de `paradigma-no-cabe`: **no persiste nada**. Su cálculo es una **derivación**
+> que publica como evento. Resuelve precios reales vía `mercadona-api` (cache 48h en memoria) o
+> los **estima con el LLM** cuando Mercadona no tiene el producto (con marcador de estimación).
+
+```
+BLUEPRINT escandallo (v1.1.0, page=escandallo):
+  rol: calculador + publicador de coste de receta. NO tiene estado persistente propio.
+  estado_persistente: NINGUNO — el coste se publica como escandallo.coste.calculado (derivación, no store)
+  operaciones: { calcular, recalcular_todas }
+  ▸ calcular(input):                                          # {receta_id} O {ingredientes, porciones}
+      if !project_id: return INVALID_INPUT
+      if receta_id:
+         receta ← await publishAndWait('recetas.obtener.request', {receta_id})   # DIP: NO fs.read ajeno
+         if 404: return RESOURCE_NOT_FOUND ; ingredientes ← receta.ingredientes
+      else: ingredientes ← input.ingredientes
+      PARA cada ingrediente:
+         precio ← await publishAndWait('mercadona.precio.request', {nombre})      # cache 48h
+         if !precio: precio ← estimar_con_LLM(ingrediente)                        # marcador estimación
+      coste_total, coste_porcion ← agregar(ingredientes, porciones)
+      if persistir: publish('escandallo.coste.calculado', {receta_id, coste})     # recetas lo escucha
+      return { status:'ok', data:{ coste_total, coste_porcion, ingredientes_detalle, ingredientes_sin_precio } }
+  eventos_publicados: escandallo.calcular.{response,failed}, escandallo.coste.{calculado,actualizado}, escandallo.recalcular_todas.{response,failed}
+```
+
+## 30. `viabilidad` (blueprint) — evaluador económico previo
+
+> Decide **antes** de meter una receta en carta: combina el coste (delegado a `escandallo`) con el
+> PVP objetivo y aplica reglas de **food cost** para emitir veredicto. Persiste un expediente por
+> evaluación. **No recalcula el coste** — delega (separación evaluar ≠ calcular).
+
+```
+BLUEPRINT viabilidad (v1.2.0, page=viabilidad):
+  rol: evaluador económico previo del subsistema-recetario.
+  estado_persistente: /pizzepos/viabilidad.json    # lista de expedientes de evaluación
+  operaciones: { evaluar, obtener, listar, descartar }
+  ▸ evaluar(input):                                 # {receta_id} O {nombre, ingredientes, porciones} + pvp_objetivo?
+      validar(project_id, receta_id|propuesta, pvp_objetivo>0?)
+      food_cost_obj ← input.food_cost_objetivo_pct ?? 30                          # % por defecto
+      esc ← await publishAndWait('escandallo.calcular.request', {receta_id|ingredientes})   # delega el coste
+      if esc.status >= 400: return esc                                           # propaga tal cual
+      nombre ← input.nombre ?? (await publishAndWait('recetas.obtener.request', {receta_id})).nombre  # NO inventar
+      pvp ← input.pvp_objetivo ?? sugerir_pvp(esc.coste_porcion, food_cost_obj)
+      veredicto ← aplicar_reglas_food_cost(esc.coste_porcion, pvp, food_cost_obj) # viable / ajustar / inviable
+      persistir_expediente(/pizzepos/viabilidad.json, {veredicto, coste, pvp, ...})
+      return { status:'ok', data:{ veredicto, coste_porcion, pvp, food_cost_pct } }
+  eventos_publicados: viabilidad.{evaluar,obtener,listar,descartar}.{response,failed}
+```
+
+### Grafo del subsistema-recetario
+
+```
+   viabilidad.evaluar ──publishAndWait('escandallo.calcular.request')──▶ escandallo
+        │                                                                    │
+        │ publishAndWait('recetas.obtener.request')                          │ publishAndWait('recetas.obtener.request')
+        ▼                                                                    ▼  + mercadona.precio.request (o estima LLM)
+   recetas (aggregate root, /pizzepos/recetas.json) ◀──escandallo.coste.calculado──┘
+        ▲ recetas.obtener.request (fuente canónica de la receta — nadie lee su JSON directo)
+
+  (hermanos del catálogo: tecnicas → /pizzepos/tecnicas.json · tarifas v3.1.1 procedural)
+```
+
+### Jerarquía de topics + QoS (recetario)
+
+```
+core/<id>/events/recetas/{obtener,...}/{request,response}     QoS 1   # CRUD correlado (publishAndWait)
+core/<id>/events/escandallo/calcular/{request,response,failed} QoS 1  # delegación de coste
+core/<id>/events/escandallo/coste/calculado                   QoS 1   # derivación → recetas la persiste
+core/<id>/events/viabilidad/evaluar/{response,failed}         QoS 1   # veredicto económico
+core/<id>/events/mercadona/precio/request                     QoS 1   # precio real (cache 48h) o estima LLM
+core/<id>/events/receta/{creada,actualizada,eliminada}        QoS 1   # lifecycle de receta
+```
+
+*Justificación QoS 1:* cada `publishAndWait` (coste, receta, precio) cuelga al caller hasta su
+response — perderlo rompe la cadena evaluar→calcular→precio. `escandallo` no materializa estado:
+su coste vive como **evento** que `recetas` persiste en SU agregado — separación de
+responsabilidades sin duplicar fuente de verdad (paradigma-no-cabe).
+
 ## Pendiente (siguiente capa)
 
-- **Subsistema-recetario** (blueprint-driven) — `recetas`, `escandallo`, `viabilidad`, `tecnicas`, `tarifas`.
+- **Resto del recetario** — `tecnicas` (blueprint, catálogo de técnicas culinarias) · `tarifas` (procedural, carta+canal).
 - **Vertical tienda OPERATIVA** — pizzepos POS: `pedidos`, `cocina`, `comandero`, `cobros`, `productos`, `cuentas`.
 - **Capa IoT/ESP32** — `device-registry`, `device-shadow`, `firmware-*`, `esp32-*`.
 - **Resto de infra/plataforma** — `database-manager`, `composition-manager`, `scheduler`,

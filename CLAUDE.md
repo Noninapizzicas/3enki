@@ -897,7 +897,159 @@ perder uno deja al compañero colgado o sin responder. Idempotencia por `correla
 `request_id`. **Garantía `no_silent_failures`:** todo flujo emite SIEMPRE su par `*.failed`
 canónico — nunca se queda mudo.
 
+---
+
+# 🔐 Módulos fundacionales — `credential-manager` & `project-manager`
+
+> Las dos piezas sobre las que se apoya casi todo el sistema. `credential-manager` carga **primero**
+> de todos (tier-1 infra) porque otros módulos resuelven secretos durante su `onLoad`;
+> `project-manager` (tier-3) define la noción de **proyecto activo** que especializa al compañero.
+> Ambos son **casos testigo** del paradigma: estado en vivo (no agregados materializados redundantes),
+> comunicación 100% por eventos correlados, secretos nunca expuestos en snapshots.
+
+## 18. `CredentialManagerModule` — CRUD + resolución en cascada + cache `.env` atómico
+
+> CRUD de credenciales API + **resolución cascada `CUSTOM → CLIENT → PROJECT → GLOBAL`** +
+> cache `.env` atómico. Patrón request/response correlado por `request_id` (lo consume
+> `ai-gateway._resolveCredential`). El snapshot de estado **NUNCA lleva los valores**.
+
+```
+CLASS CredentialManagerModule extends Module:
+  state: { credentials:Map<key, apiKey>, envFilePath }     # Map = cache en vivo; .env = fuente persistente
+
+  async onLoad(core):
+    envFilePath ← config.envFile ?? data/.env
+    await _loadEnvFile()                  # hidrata credentials:Map desde .env (clave→valor)
+
+  # ── RESOLUCIÓN EN CASCADA (el método clave; lo invoca ai-gateway) ──
+  ▸ _resolveCredential(provider, { customId, clientId, projectId }):
+      attempts ← []
+      PARA nivel,id EN [ (CUSTOM,customId), (CLIENT,clientId), (PROJECT,projectId), (GLOBAL,null) ]:
+         k ← _buildKey(provider, nivel, id)               # ej: ANTHROPIC_PROJECT_<id>, ANTHROPIC_GLOBAL
+         attempts.push(k)
+         IF credentials.has(k): RETURN { found:true, apiKey, resolvedFrom:nivel, attempts }
+      legacyK ← `${PROVIDER}_API_KEY` ; attempts.push(legacyK)   # fallback legacy sin nivel
+      IF credentials.has(legacyK): RETURN { found:true, apiKey, resolvedFrom:'GLOBAL', attempts }
+      RETURN { found:false, attempts }                    # caller decide degradación
+
+  # ── REQUEST/RESPONSE correlado (decisión ②: correlation_id propagado) ──
+  ▸ onResolveRequest(event):              # credential.resolve.request {provider, customId?, clientId?, projectId?, request_id}
+      r ← _resolveCredential(provider, ids)
+      await _publishResolveResponse(request_id, r.found ? {apiKey:r.apiKey, resolvedFrom} : {error}, correlation_id)
+  ▸ _publishResolveResponse(request_id, payload, correlation_id):
+      await eventBus.publish('credential.resolve.response', { request_id, ...payload, correlation_id, timestamp })
+
+  # ── CRUD (bus handlers) → mutación atómica + evento + snapshot ──
+  ▸ onCreateCredential(event):  credentials.set(key,apiKey); await _saveEnvFile()   # escritura ATÓMICA (tmp+rename)
+                                await _publicarEvento('credential.saved',  {key}, {correlation_id}); _publishState(cid)
+  ▸ onUpdateCredential(event):  → credential.updated   ;  onDeleteCredential(event): → credential.deleted
+  ▸ onStateRequest(event):      _publishState(correlation_id)
+
+  # ── SNAPSHOT (sin secretos) ──
+  ▸ _publishState(correlation_id):
+      lista ← [ {provider, level, identifier} POR key EN credentials ]   # ¡SIN api_key!
+      await eventBus.publish('credential.state', { credentials:lista, correlation_id, timestamp })
+
+  # UI handlers (handleUIList/Get/Create/Update/Delete) + tool (handleToolCredentialList) + HTTP apis
+  #   → todos sobre el mismo CRUD; los list/get devuelven metadata, jamás el valor en claro
+
+  # REGLAS / EDGE:
+  #  · api_key NUNCA viaja en credential.state ni en logs (solo metadata)
+  #  · _saveEnvFile atómico (write tmp + rename) → sin corrupción ante crash a mitad de escritura
+  #  · cache reactiva: tras cada CRUD se republica credential.state (los consumidores se auto-actualizan)
+  #  · descompuesto 2026-05-04: NO testea credenciales, NO OAuth, NO vendor multi-campo (módulos aparte pendientes)
+```
+
+## 19. `ProjectManagerModule` — lifecycle + bootstrap + "una vía fija"
+
+> Lifecycle de proyectos (CRUD + activate/deactivate + session + AI config) + bootstrap de los
+> proyectos canónicos (**Sistema** + **Mi Proyecto**) + resolución **"una vía fija"** de la
+> conversación por defecto. Habla con `database-manager` y `composition-manager` **solo por eventos**
+> (DIP), y crea la conversación canónica vía `mqttRequest` (decisión ②) con idempotencia.
+
+```
+CLASS ProjectManagerModule extends Module:
+  state: {
+    projects:Map<id, project>, activeProjectIds:Set,           # estado EN VIVO (no materializado en disco redundante)
+    pendingDbRequests:Map<corrId,{resolve}>,                   # DB event-driven
+    pendingCompositionRequests:Map<corrId,{resolve}>,
+    pendingDefaultConversations:Map<projectId, Promise>        # dedup de "una vía fija"
+  }
+
+  # ── BOOTSTRAP (orden estricto en onLoad) ──
+  async onLoad(core):
+    mqttRequest ← core.mqttRequest                             # para llamar a chat-io (decisión ②)
+    await _initializeSystemSchema()        # db.schema.init.request → database-manager
+    await _loadExistingProjects()          # hidrata projects:Map desde DB
+    await _reactivateExistingProjects()    # re-emite project.activated por cada is_active=1 (rehidrata consumidores)
+    await _ensureSystemProject()           # proyecto "Sistema" (root, modo system)
+    await _ensureDefaultProject()          # proyecto "Mi Proyecto" (default del usuario)
+
+  # ── DEPENDENCIAS POR EVENTOS (nunca acceso directo — DIP) ──
+  ▸ _queryDb(query, params, readOnly, correlation_id):
+      reqId ← correlation_id ?? uuid()
+      await eventBus.publish('db.query.request', { query, params, read_only:readOnly, request_id:reqId })
+      return await promise(pendingDbRequests[reqId])           # onDbQueryResponse lo resuelve
+  ▸ onDbQueryResponse(event):  pendingDbRequests.get(request_id)?.resolve(rows)
+  ▸ _requestComposition(action,data): composition.request → onCompositionResponse (mismo patrón)
+
+  # ── CRUD (cada mutación: persiste vía evento + emite dominio + snapshot) ──
+  ▸ _createProject({name, description, metadata, correlation_id}):
+      project ← { id:uuid(), slug, name, ... }
+      await _queryDb(INSERT projects ...)
+      projects.set(id, project)
+      await _publicarEvento('project.created', { project_id:id, name, ... }, {correlation_id})
+      _publishState()
+  ▸ _updateProject / _deleteProject / _activateProject / _deactivateProject  → project.updated/deleted/activated/deactivated
+  ▸ _activateProject(id): activeProjectIds.add(id); persist; publish project.activated
+      # project.activated lo oye chat-io, prompt-builder, etc. → especializa al compañero (capacidad ②)
+
+  # ── SESIÓN / AI-CONFIG por proyecto (especialización ②) ──
+  ▸ _saveSession / _restoreSession(projectId)                  # session_state persistente
+  ▸ _setAIConfig(projectId, {provider, model, prompt_id})      # el compañero efectivo cambia por proyecto
+  ▸ _setLastConversation(projectId, conversationId)
+
+  # ── "UNA VÍA FIJA": conversación canónica del proyecto (idempotente) ──
+  ▸ _getOrCreateDefaultConversation(projectId, correlation_id):
+      project ← _getProject(projectId)  → si no: RESOURCE_NOT_FOUND
+      IF project.last_conversation_id: RETURN { conversation_id, created:false }    # ya existe
+      IF pendingDefaultConversations.has(id): RETURN await pending[id]              # dedup concurrente
+      promise ← (async →
+         r ← await mqttRequest('chat-io', 'create', { project_id, title }, { timeout_ms:5000 })  # decisión ②
+         await _setLastConversation(id, r.conversation_id, correlation_id)
+         RETURN { conversation_id:r.conversation_id, created:true }
+      ).finally(→ pendingDefaultConversations.delete(id))
+      pendingDefaultConversations.set(id, promise) ; RETURN await promise
+
+  # Bus handlers (onProjectCreate/Update/Delete/Activate, onGet/List/Active/StateRequest)
+  # + HTTP apis (handleCreateProject, handleActivateProject, handleSaveSession, handleSetAIConfig, …)
+
+  # REGLAS / EDGE:
+  #  · projects:Map es estado EN VIVO; la DB es la persistencia — NO se duplica un agregado redundante (paradigma-no-cabe)
+  #  · _reactivateExistingProjects re-emite project.activated al arrancar → los consumidores rehidratan SIN estado compartido
+  #  · _getOrCreateDefaultConversation: idempotencia por promise-sharing → N llamadas concurrentes = 1 sola conversación
+  #  · mqttRequest a chat-io pasa por el pipeline ② (validación+hooks) — no es atajo crudo
+```
+
+## Jerarquía de topics + QoS (fundacionales)
+
+```
+core/<id>/events/credential/resolve/request    QoS 1   # resolver secreto (correlado request_id)
+core/<id>/events/credential/resolve/response   QoS 1   # api_key resuelta o error
+core/<id>/events/credential/{saved,updated,deleted}  QoS 1   # mutaciones CRUD
+core/<id>/events/credential/state              QoS 1   # snapshot SIN valores
+core/<id>/events/project/{created,updated,deleted,activated,deactivated}  QoS 1
+core/<id>/events/project/state                 QoS 1   # snapshot completo (proyectos + activos)
+core/<id>/events/db/query/{request,response}   QoS 1   # acceso DB event-driven (database-manager)
+```
+
+*Justificación QoS 1:* resolver una credencial o activar un proyecto son operaciones críticas;
+perder el `request`/`response` cuelga al caller (ai-gateway, chat-io). Idempotencia por
+`request_id` / `correlation_id`. Secretos: **solo** en `credential.resolve.response`, nunca en snapshots.
+
 ## Pendiente (siguiente capa)
 
 - **Vertical tienda/restaurante** — `pizzepos` (pedidos, cocina, comandero, cobros, productos…).
 - **Capa IoT/ESP32** — `device-registry`, `device-shadow`, `firmware-*`, `esp32-*`.
+- **Resto de infra/plataforma** — `database-manager`, `composition-manager`, `scheduler`,
+  `prompt-manager`, `filesystem`, `plugin-manager`.

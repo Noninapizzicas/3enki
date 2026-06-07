@@ -30,15 +30,51 @@ CLASS ProductoBtn implements Composer:
   ▸ partido (doble zona): izquierda 'íntegro' = entero ; derecha '+/-' = handoff → VariacionesComposer(producto)
 ```
 
-## `MitadMitadComposer`
+## `VariacionesComposer` — la unidad "partido" reutilizable
+
+> Es la lógica del botón **partido** aislada como composer reutilizable: carga un producto de la
+> carta del canal, deja quitar/añadir contra el catálogo por familia, y resuelve `base + Σ extras`.
+> Lo usan: el `ProductoBtn` partido (handoff +/-) **y** `MitadMitad` (una por mitad).
+
+```
+CLASS VariacionesComposer implements Composer:
+  →deps: { carta(del canal), producto_id }
+  ▸ getPanel():                              # lo que pinta el panel de variaciones
+      prod ← this.carta.producto[producto_id]
+      v ← await mqttRequest('variaciones','getVariacionesProducto',{ project_id, producto:prod, canal })
+      return { quitables:prod.ingredientes, anadibles_por_familia:v.anadibles_por_familia, max_extras:v.max_extras }
+  ▸ resolver():                              # estado configurado de ESTA pizza/mitad
+      base  ← this.carta.producto[producto_id].precio_base                 # del CANAL
+      extra ← Σ this.carta.precio_extra[ing_id]  para ing_id EN this.extras
+      return { producto_id, quitados:this.quitados, extras:this.extras, base, extra_total:extra }
+  ▸ componer():                              # cuando se usa SOLO (partido de un producto)
+      h ← resolver()
+      emit { tipo:'variado', regla_precio:'base_mas_extras', componentes:{ producto_ids:[h.producto_id], quitados:h.quitados, extras:h.extras },
+             precio_final: h.base + h.extra_total }
+```
+
+## `MitadMitadComposer` — COMPOSITE de dos mitades partido
+
+> No reimplementa nada: **compone dos `VariacionesComposer`** (una por mitad). Cada mitad es una
+> pizza configurable con toda la lógica del partido (quitar/añadir). Reuso puro (mantenimiento en un sitio).
 
 ```
 CLASS MitadMitadComposer implements Composer:
-  ▸ componer({ izq, der }):
-      pIzq ← this.carta.producto[izq].precio_base ; pDer ← this.carta.producto[der].precio_base   # del CANAL
-      precio_final ← max(pIzq, pDer)                                                              # regla 'max' (la lógica del botón)
-      emit { tipo:'mitad', regla_precio:'max', componentes:{ mitades:{ izquierda:izq, derecha:der } },
-             precio_final, capa_imagen:{ nombre_compuesto:'½ '+nombre(izq)+' + ½ '+nombre(der) } }
+  state: { half_izq: VariacionesComposer, half_der: VariacionesComposer }   # ambas sobre this.carta (canal)
+
+  ▸ elegirMitad(lado, producto_id):          # abre el flujo partido de esa mitad
+      this['half_'+lado] ← new VariacionesComposer(this.carta, producto_id)  # MISMA lógica del botón partido
+
+  ▸ componer():
+      hi ← half_izq.resolver()    # { producto_id, quitados, extras, base, extra_total }   ← variaciones REUSADO
+      hd ← half_der.resolver()
+      # ── REGLA DE PRECIO COMBINADA (PROPUESTA 'mitad_variada' — CONFIRMAR) ──
+      base_final  ← max(hi.base, hd.base)            # la pizza vale la mitad más cara (regla 'max' preservada)
+      extra_final ← hi.extra_total + hd.extra_total  # los extras de ambas mitades SUMAN (precio_extra completo)
+      precio_final ← base_final + extra_final
+      emit { tipo:'mitad', regla_precio:'mitad_variada',
+             componentes:{ mitades:{ izquierda: hi, derecha: hd } },   # cada mitad CONFIGURADA (producto+quitados+extras)
+             precio_final, capa_imagen:{ nombre_compuesto:'½ '+nombre(hi)+' + ½ '+nombre(hd) } }
 ```
 
 ## `AlGustoComposer`

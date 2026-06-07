@@ -19,9 +19,10 @@
         "producto_ids": { "type": "array", "items": { "type": "string" } },
         "mitades": {
           "type": "object",
+          "description": "cada mitad es una pizza CONFIGURADA con la logica del boton partido (reuso de VariacionesComposer): producto + quitados + extras.",
           "properties": {
-            "izquierda": { "type": "string", "description": "producto_id" },
-            "derecha": { "type": "string", "description": "producto_id" }
+            "izquierda": { "$ref": "#/$defs/mitad_configurada" },
+            "derecha": { "$ref": "#/$defs/mitad_configurada" }
           }
         },
         "quitados": { "type": "array", "items": { "type": "string", "description": "id de ingrediente base quitado" } },
@@ -35,6 +36,20 @@
       "properties": {
         "nombre_compuesto": { "type": "string" },
         "emojis": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "$defs": {
+    "mitad_configurada": {
+      "type": "object",
+      "description": "una mitad de un mitad/mitad, configurada con la logica del boton partido (VariacionesComposer).",
+      "required": ["producto_id"],
+      "properties": {
+        "producto_id": { "type": "string" },
+        "quitados": { "type": "array", "items": { "type": "string", "description": "id de ingrediente base quitado" } },
+        "extras": { "type": "array", "items": { "type": "string", "description": "id de ingrediente anadido" } },
+        "base": { "type": "number", "description": "precio_base del producto en la carta del canal" },
+        "extra_total": { "type": "number", "description": "SUM precio_extra de los extras de esta mitad" }
       }
     }
   }

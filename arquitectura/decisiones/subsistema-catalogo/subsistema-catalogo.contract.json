@@ -160,6 +160,12 @@
         },
         "regla_tiene_variaciones": "tiene_variaciones = producto.tiene_variaciones ?? (ingredientes.length > 0). Default heuristico (tiene ingredientes -> partido). Override EXPLICITO en el catalogo SOLO para excepciones: producto con ingredientes que se quiere entero -> tiene_variaciones:false. No hay que marcarlo en cada producto, solo donde la heuristica falla. Es lo que ya hace el codigo (comandero.ts: p.tiene_variaciones ?? (ingredientes.length > 0)).",
         "matiz_precio": "ProductoBtn pinta hoy producto.precio del catalogo general (productos) -> en delivery muestra/manda el precio equivocado, mismo bug que los compuestos. Con D3 tira de la carta del canal. Sin caso especial."
+      },
+      "composicion_de_composers": {
+        "_doc": "Los composers se COMPONEN: un composer complejo reutiliza otro en vez de reimplementar su logica. Mantenimiento en un solo sitio.",
+        "caso": "mitad/mitad usa el boton PARTIDO con toda su logica: MitadMitadComposer es un COMPOSITE de dos VariacionesComposer (una por mitad). Cada mitad es una pizza configurable (quitar/anadir) con la misma logica del partido. Reuso puro, no reimplementacion.",
+        "shape": "item.compuesto.componentes.mitades.{izquierda,derecha} = mitad CONFIGURADA { producto_id, quitados[], extras[], base, extra_total } (no un simple producto_id).",
+        "regla_precio_combinada": "PROPUESTA 'mitad_variada' (CONFIRMAR): precio_final = max(base_izq, base_der) + (extra_total_izq + extra_total_der). La pizza vale la mitad mas cara (regla 'max' preservada); los extras de ambas mitades suman a precio_extra completo. Alternativas posibles: max de las dos mitades ya configuradas; medio extra por topping en media pizza."
       }
     }
   },

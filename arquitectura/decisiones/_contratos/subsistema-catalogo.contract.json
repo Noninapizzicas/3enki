@@ -171,12 +171,30 @@
     "Cero copias materializadas del catalogo (productos/catalogo_activo.json se elimina; se deriva por pull).",
     "Modelo vertical-agnostico (item/componente/familia).",
     "D2 (cerrada): canal = carta independiente (C). Personalizacion por canal via operaciones de LLM en carta-manager (clonar + quita/pon/sube-familia/sube-producto), sin overlay, sin sync automatico. Runtime de precio = precio_base + SUM precio_extra dentro de la carta resuelta; SIN modulo precio nuevo. tarifas = solo asignacion carta<->canal, saneada bajo /pizzepos.",
-    "D3 (cerrada): composer AUTOCONTENIDO (logica de composicion + regla de precio + capa de imagen). Tira de la carta efectiva del canal activo y tasa contra ella -> precio correcto en mesa y delivery. Emite item.compuesto con precio_final. comandero elimina _resolverPrecioCanal y confia: un solo punto tasa (el composer), backend mas simple."
+    "D3 (cerrada): composer AUTOCONTENIDO (logica de composicion + regla de precio + capa de imagen). Tira de la carta efectiva del canal activo y tasa contra ella -> precio correcto en mesa y delivery. Emite item.compuesto con precio_final. comandero elimina _resolverPrecioCanal y confia: un solo punto tasa (el composer), backend mas simple. ProductoBtn = composer base (layouts entero/partido; tiene_variaciones = heuristica ingredientes>0 + override del catalogo para excepciones).",
+    "Persistencia (cerrada): JSON por proyecto (filesystem). 3 gatillos nombrados para reconsiderar SQLite (catalogo grande / concurrencia real / derivaciones complejas)."
   ],
 
-  "decisiones_abiertas": [
-    "Persistencia (consecuencia, no decision de fondo): JSON-por-proyecto vs SQLite-por-proyecto para el catalogo. Se decide DESPUES, derivada del modelo."
-  ],
+  "decision_persistencia": {
+    "_doc": "Substrato del catalogo. Decidido DESPUES del modelo (es consecuencia, no decision de fondo).",
+    "decision": "JSON por proyecto (via filesystem / fs.read-write.request), bajo data/projects/<project_id>/storage/pizzepos/...",
+    "razon": [
+      "La carta ES un documento anidado ({meta, categorias, productos}); JSON la modela 1:1. Tablas+joins serian impedance mismatch.",
+      "Coherencia con el paradigma blueprint: carta-manager es blueprint-driven; el LLM lee/escribe por fs.read/write.request. SQLite meteria db.query en el modelo declarativo.",
+      "Legible, git-able, versionado trivial (copiar el doc a .versions/).",
+      "Read-heavy + pequeno + cacheado en memoria: una vez en RAM, JSON y SQLite leen igual; la ventaja de query sin cargar se evapora.",
+      "YAGNI / paradigma del repo: lo mas simple que funciona, y el repo ya lo hace para cartas/blueprints."
+    ],
+    "gatillos_para_reconsiderar_sqlite": [
+      "Vertical con catalogo grande (miles de SKUs: super, retail) -> cargar el doc entero duele.",
+      "Concurrencia real (agente re-derivando cartas mientras el POS escribe) -> hacen falta transacciones.",
+      "Derivaciones complejas frecuentes (reporting, busquedas, filtros cruzados) -> GROUP BY > codigo a mano."
+    ],
+    "nota": "SQLite no es overkill teorico — sus ventajas (queries, atomicidad, integridad relacional, escala) son reales — pero muerden a otra escala/complejidad que pizzeria no toca, y pelean con el paradigma blueprint. Si aparece UN gatillo, reconsiderar; no antes."
+  },
+
+  "decisiones_abiertas": [],
+  "estado_diseno": "CERRADO. D1+D2+D3+persistencia decididas. Pendiente solo el aterrizaje (ver desvio_codigo_actual).",
 
   "desvio_codigo_actual": {
     "_doc": "El codigo HOY no implementa este contrato. Lista de divergencias a aterrizar cuando se ejecute el rediseno.",

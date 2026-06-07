@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "item-compuesto",
+  "title": "item.compuesto",
+  "_doc": "Lo que emite un composer (boton) tras componer un item. Evento canonico que sustituye los eventos Svelte sueltos por composer + el precio_override actual. CLAVE (D3): precio_final ya viene RESUELTO contra la carta del canal activo — el composer tira de carta_efectiva(canal) y tasa contra ella. comandero NO re-tasa: registra y suma. Puerta abierta: un tipo nuevo de composer = un nuevo 'tipo', sin tocar el nucleo.",
+  "type": "object",
+  "required": ["project_id", "tipo", "componentes", "precio_final"],
+  "additionalProperties": false,
+  "properties": {
+    "project_id": { "type": "string", "description": "multi-tenant: siempre presente" },
+    "correlation_id": { "type": "string" },
+    "canal": { "type": "string", "description": "canal activo (mesa, llevar, telefono, whatsapp, glovo, llevadoo). La carta efectiva de este canal ya se uso para tasar." },
+    "tipo": { "type": "string", "description": "entero | mitad | al_gusto | porcion | ... (puerta abierta: N tipos)" },
+    "regla_precio": { "type": "string", "description": "la logica que el composer declara y aplica: producto | max | base_mas_extras | porciones | ..." },
+    "componentes": {
+      "type": "object",
+      "description": "depende del tipo; el composer rellena lo que su regla necesita",
+      "properties": {
+        "producto_ids": { "type": "array", "items": { "type": "string" } },
+        "mitades": {
+          "type": "object",
+          "properties": {
+            "izquierda": { "type": "string", "description": "producto_id" },
+            "derecha": { "type": "string", "description": "producto_id" }
+          }
+        },
+        "quitados": { "type": "array", "items": { "type": "string", "description": "id de ingrediente base quitado" } },
+        "extras": { "type": "array", "items": { "type": "string", "description": "id de ingrediente anadido" } }
+      }
+    },
+    "precio_final": { "type": "number", "minimum": 0, "description": "YA resuelto contra la carta del canal activo. comandero confia en este numero." },
+    "capa_imagen": {
+      "type": "object",
+      "description": "capa visual del composer (nombre compuesto, emojis, ...). No afecta a la tasacion.",
+      "properties": {
+        "nombre_compuesto": { "type": "string" },
+        "emojis": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

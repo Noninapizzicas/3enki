@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "carta-pizzepos.v2",
+  "title": "carta-pizzepos v2 (semilla enriquecida)",
+  "_doc": "Salida canonica de menu-generator. v2 vs v1: cada ingrediente lleva id canonico + familia, asignados EN ORIGEN por menu-generator (el LLM ya esta leyendo la carta). El dato del catalogo NACE aqui; todo lo demas (precio_extra en ingredientes, vista por familia en variaciones, precio por canal en tarifas) se deriva o enriquece desde esta forma. precio_extra NO esta en la semilla: lo posee ingredientes (enriquecimiento).",
+  "type": "object",
+  "required": ["meta", "categorias", "productos"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["id", "nombre", "generado_desde", "created_at"],
+      "properties": {
+        "id": { "type": "string" },
+        "nombre": { "type": "string" },
+        "generado_desde": { "type": "string", "description": "texto | dictado | json" },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "categorias": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "nombre", "orden"],
+        "properties": {
+          "id": { "type": "string" },
+          "nombre": { "type": "string" },
+          "orden": { "type": "integer" },
+          "descripcion": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "productos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "nombre", "categoria", "precio_base", "ingredientes"],
+        "properties": {
+          "id": { "type": "string" },
+          "nombre": { "type": "string" },
+          "categoria": { "type": "string", "description": "id de categoria" },
+          "precio_base": { "type": "number", "minimum": 0 },
+          "tiene_variaciones": {
+            "type": "boolean",
+            "description": "OVERRIDE opcional. Si ausente: se deduce de ingredientes.length > 0. Excepcion canonica: producto con ingredientes que se quiere ENTERO (no partido) -> fijar false. No hay que marcarlo en cada producto, solo donde la heuristica falla."
+          },
+          "ingredientes": {
+            "type": "array",
+            "description": "ingredientes BASE del producto (los que vienen / quitables).",
+            "items": {
+              "type": "object",
+              "required": ["id", "nombre", "familia"],
+              "properties": {
+                "id": { "type": "string", "description": "id canonico (slug normalizado). El enlace producto<->ingrediente<->familia de punta a punta. NUNCA se enlaza por nombre." },
+                "nombre": { "type": "string", "description": "solo display" },
+                "emoji": { "type": "string" },
+                "familia": { "type": "string", "description": "id de familia (Queso, Verdura, Carne, Salsa, ...) asignada EN ORIGEN. ingredientes puede corregirla; precio_extra lo posee ingredientes, NO viaja en la semilla." }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

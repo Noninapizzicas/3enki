@@ -3,7 +3,8 @@
 
   "id": "carta-manager",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.3.0",
+  "version": "blueprint-1.4.0",
+  "_v1_4_changelog": "v1.4.0 (aterrizaje subsistema-catalogo, D2): añadida operacion 'clonar' (carta_base_id + nuevo_nombre -> carta INDEPENDIENTE nueva). Es el paso 1 de 'carta por canal': el LLM clona la base, la manipula (update_prices/add_product/remove_product) segun instrucciones NL, y tarifas la asigna a un canal. carta-manager solo PRODUCE; la asignacion canal<->carta es de tarifas. Cambio ADITIVO (op nueva, no toca las 14 existentes). El shape que persiste es ahora carta-pizzepos v2 (ingredientes con id+familia) pero save persiste cualquier shape literal -> sin break. Pendiente (futuro): extender update_prices con target por categoria/familia + factor (hoy es per-producto absoluto).",
   "language": "es",
   "_v1_1_changelog": "v1.1.0 (2026-05-25): anyade subscriber asincrono al evento 'carta.creada' via mecanismo blueprint-subscribers-asincronos (mismo wiring que recetas usa para escandallo.coste.calculado — frente 2.4). Operacion interna nueva _on_carta_creada (prefijo _ = no expuesta como cajon al LLM, solo invocada cuando llega el evento). Delega a save sin duplicar logica. Origen: audit runtime Fase 7b de la migracion menu-generator (decision 5.3 refactorizada de RPC a fire-and-forget). Operaciones pre-existentes (save, get, list, delete, etc.) sin cambios.",
   "_v1_2_changelog": "v1.2.0 (2026-05-28): migra todas las escrituras de la carta principal de fs.write.request a fs.edit.request (RFC 6902 JSON Patch). Elimina la composicion mental del LLM al escribir las cartas — filesystem aplica los patches deterministicamente. Las escrituras de snapshots a /cartas/versions/ (archivos nuevos con timestamp) permanecen como fs.write.request porque fs.edit no puede crear archivos nuevos. Patrones aplicados: UPDATE 1-campo en delete (estado+version+updated_at puntuales), UPDATE compuesto en add_product/remove_product/update_product/update_prices/add_category (replace array + meta puntuales), APPEND PURO en add_category (op:add /categorias/-), root-replace dual-branch en save y restore (fs.write si archivo nuevo, fs.edit op:replace '' si existente). Anti-patron ...spread eliminado en add_product (reemplazado por construccion campo a campo).",
@@ -518,6 +519,36 @@
       ],
       "reglas_clave": ["Update masivo: aplica los validos, reporta errores por producto. Si NINGUNO valido, PRECONDITION_FAILED."],
       "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "clonar": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_base_id (req), nuevo_nombre (req) }",
+      "pseudocodigo": [
+        "async clonar(input):",
+        "  // D2 subsistema-catalogo: deriva una carta INDEPENDIENTE a partir de otra (base) — paso 1 de 'carta por canal'.",
+        "  // Tras clonar, el LLM manipula la copia (update_prices / add_product / remove_product) segun instrucciones NL,",
+        "  // y tarifas asigna canal -> carta_id. carta-manager solo PRODUCE la carta; la asignacion es de tarifas.",
+        "  if (!input.project_id || !input.carta_base_id) return INVALID_INPUT { field: 'carta_base_id' }",
+        "  if (!input.nuevo_nombre || input.nuevo_nombre.trim() === '') return INVALID_INPUT { field: 'nuevo_nombre' }",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_base_id + '.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta', id: input.carta_base_id }",
+        "  base = JSON.parse(raw.content)",
+        "  nueva = deepCopy(base)",
+        "  nueva.meta.id = 'carta_' + slug(input.nuevo_nombre)",
+        "  nueva.meta.nombre = input.nuevo_nombre",
+        "  nueva.meta.version = 1",
+        "  nueva.meta.created_at = nowISO()",
+        "  nueva.meta.updated_at = nowISO()",
+        "  if (nueva.meta.id === base.meta.id) return CONFLICT_STATE { hint: 'nuevo_nombre genera el mismo id que la base' }",
+        "  exists = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + nueva.meta.id + '.json' })",
+        "  if (exists.status === 200) return CONFLICT_STATE { entity_type: 'carta', id: nueva.meta.id, hint: 'ya existe una carta con ese id' }",
+        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + nueva.meta.id + '.json', content: JSON.stringify(nueva) })",
+        "  correlation_id_efectivo = input.correlation_id || uuid()",
+        "  await publish('carta.actualizada', { project_id: input.project_id, carta: nueva, operacion: 'clonar', origen: base.meta.id, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
+        "  return { status: 201, data: { carta_id: nueva.meta.id, origen: base.meta.id, nombre: nueva.meta.nombre } }"
+      ],
+      "reglas_clave": ["Produce una carta INDEPENDIENTE (no overlay declarativo). El LLM la manipula despues; tarifas la asigna a un canal. carta-manager solo produce.", "Falla con CONFLICT_STATE si el id derivado ya existe — NO sobrescribe."],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
     },
 
     "search": {

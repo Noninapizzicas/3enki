@@ -157,7 +157,10 @@
           nombre: ing.nombre,
           emoji: ing.emoji,
           precio_extra: ing.precio_extra || 0,
-          tipo: (ing.tipo || 'otro').toLowerCase(),
+          // D3/rebanada 7: agrupar por FAMILIA canónica (semilla v2 + #322). El tipoConfig de
+          // este panel ya usa vocabulario de familia (queso/verdura/carne/marisco/salsa/masa).
+          // Fallback a tipo y luego 'otro' para ingredientes v1 sin familia (cero regresión).
+          tipo: (ing.familia || ing.tipo || 'otro').toLowerCase(),
           disponible: true
         }));
 

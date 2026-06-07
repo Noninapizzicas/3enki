@@ -31,6 +31,7 @@
     nombre: string;
     emoji?: string;
     tipo: string;
+    familia?: string; // semilla v2 + #322: familia canónica (agrupación preferida)
     precio_extra: number;
     es_alergeno?: boolean;
     alergenos?: string[];
@@ -48,18 +49,24 @@
   let seleccionados: Map<string, Ingrediente> = new Map();
 
   // Config de tipos
+  // Claves = familias canónicas (menu-generator: queso/verdura/carne/salsa/pescado/fruta/extra/
+  // condimento/otro) + alias del clasificador de ingredientes (marisco/masa) y del vocabulario
+  // legacy por tipo (base/proteina/vegetal). Familia desconocida → cae a 'otro'.
   const tipoConfig: Record<string, { emoji: string; label: string; orden: number }> = {
     base: { emoji: '🫓', label: 'Base', orden: 1 },
+    masa: { emoji: '🫓', label: 'Masa/Base', orden: 1 },
     salsa: { emoji: '🍅', label: 'Salsa', orden: 2 },
     queso: { emoji: '🧀', label: 'Queso', orden: 3 },
     proteina: { emoji: '🥓', label: 'Proteína', orden: 4 },
     carne: { emoji: '🍖', label: 'Carne', orden: 4 },
-    vegetal: { emoji: '🥬', label: 'Vegetal', orden: 5 },
-    verdura: { emoji: '🥬', label: 'Verdura', orden: 5 },
-    fruta: { emoji: '🍍', label: 'Fruta', orden: 6 },
-    extra: { emoji: '✨', label: 'Extra', orden: 7 },
-    condimento: { emoji: '🧂', label: 'Condimento', orden: 8 },
-    otro: { emoji: '📦', label: 'Otro', orden: 9 }
+    pescado: { emoji: '🐟', label: 'Pescado', orden: 5 },
+    marisco: { emoji: '🦐', label: 'Marisco', orden: 5 },
+    vegetal: { emoji: '🥬', label: 'Vegetal', orden: 6 },
+    verdura: { emoji: '🥬', label: 'Verdura', orden: 6 },
+    fruta: { emoji: '🍍', label: 'Fruta', orden: 7 },
+    extra: { emoji: '✨', label: 'Extra', orden: 8 },
+    condimento: { emoji: '🧂', label: 'Condimento', orden: 9 },
+    otro: { emoji: '📦', label: 'Otro', orden: 10 }
   };
 
   // Cálculos — pasar dependencias explícitas para reactividad Svelte
@@ -106,7 +113,9 @@
         ingredientesPorTipo = new Map();
 
         ingredientes.forEach(ing => {
-          const tipo = (ing.tipo || 'otro').toLowerCase();
+          // D3/rebanada 7: agrupar por FAMILIA canónica (semilla v2 + #322); fallback a tipo y
+          // luego 'otro' para ingredientes v1 sin familia (cero regresión).
+          const tipo = (ing.familia || ing.tipo || 'otro').toLowerCase();
           if (!ingredientesPorTipo.has(tipo)) {
             ingredientesPorTipo.set(tipo, []);
           }

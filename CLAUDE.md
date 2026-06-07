@@ -1979,3 +1979,157 @@ frente al disco (fuente de verdad); perder un `menu.generation.progress` cuelga 
 progreso. La UI **no materializa** copia del estado — releva del aggregate root vía `fs` y se
 re-sincroniza por evento. Mutaciones por **prefill del chat** (Postura B): cero escrituras
 directas desde el front, el compañero es el único que ejecuta las tools del blueprint.
+
+---
+
+# 🍕 Frontend pizzepos SIN chat — Pantallas operativas del TPV (tiempo real)
+
+> La otra mitad de la vertical pizzepos: las **pantallas operativas** de la pizzería —
+> `comandero` (TPV camarero), `cocina` (KDS), `carta` (cara cliente), `llevadoo` (delivery).
+> **NO usan `AppShell` ni chat ni compañero**: son apps a pantalla completa para tablet/ESP32-P4.
+> Diferencia esencial con la línea carta/blueprints (clases 37–39):
+>
+> | | Línea carta/blueprints (37–39) | Pantallas operativas (40–43) |
+> |---|---|---|
+> | Shell | `AppShell` (con chat) | `<X>Screen.svelte` directa, **sin chat** |
+> | Raíz de composición | `AppShell` (una para todas) | **cada Screen es su propia raíz** (connect/disconnect propios) |
+> | Mutación | **Postura B**: prefill del chat → el compañero ejecuta | **directa por el bus**: `mqttRequest('<dominio>','<comando>')` |
+> | Backend espejo | blueprint LLM-runtime | **módulo procedural dedicado** (cuenta, comandero, cocina, llevadoo) |
+> | Estado | lectura-fs + recarga por evento | **máquina de estado en vivo** reconstruida desde eventos |
+> | Tiempo real | bajo (carta cambia poco) | **alto** (pedidos, items, KDS — flujo constante) |
+
+## 40. `OperationalScreen` — patrón común (la Screen como raíz de composición sin chat)
+
+```
+PATRÓN OperationalScreen — replicado por comandero/cocina/carta/llevadoo:
+
+  ① LA SCREEN ES SU PROPIA RAÍZ DE COMPOSICIÓN (no hay AppShell):
+     CLASE <X>Screen.svelte:
+       props: { projectId, onNavigate? }                  # projectId viene de la URL (activeProjectId ?? param)
+       alMontar():
+         ▸ connect()                                       # ← la propia Screen abre el MQTT (como AppShell, clase 31)
+             .luego(→ cleanupSubs ← init<X>Subscriptions(projectId))   # subs de dominio en vivo
+         ▸ setupVisibilityHandler()                        # fix HyperOS/MIUI (tablet KDS siempre encendida)
+         ▸ init<X>(projectId)  ó  load<X>()                # carga inicial (catálogo/cuentas activas)
+       alDestruir():
+         ▸ cleanupSubs?.()                                 # desuscribe del bus
+         ▸ disconnect() ; removeVisibilityHandler()        # simétrico
+     # Full-screen, dark, alto contraste. NO work-bar, NO ChatInput, NO paneles flotantes.
+
+  ② STORE OPERATIVO (lib/stores/<x>.ts) — máquina de estado de dominio EN VIVO:
+     state: writable<<X>State{ items/pedidos/cuentas, loading, error, metrics, ... }>
+            + muchos derived (listas filtradas, contadores, totales, métricas)
+     ▸ COMANDOS (mutación DIRECTA — no Postura B):           # backend procedural dedicado
+         await mqttRequest('<dominio>','<comando>', {project_id, ...})   # crear/add/enviar/preparar/marcar…
+         # actualización OPTIMISTA local; el evento del bus reconcilia
+     ▸ init<X>Subscriptions(projectId) → cleanupFn:          # REACTIVIDAD: estado reconstruido por eventos
+         subscribe('<dominio>.<algo>', e → mutar estado en vivo)   # N suscripciones (flujo de trabajo real)
+         return ()→ unsubs.forEach(u→u())
+
+  # SIN cache materializado redundante (paradigma-no-cabe): carga inicial + estado alimentado por eventos.
+  # DIP idéntico: el store solo ve mqttRequest + subscribe; jamás toca mqtt.js (clase 31 es la única frontera).
+  # onReconnect(→ init<X>()): tras caída del WS, recarga el estado (cocina/dispositivos lo usan explícitamente).
+```
+
+## 41. `CuentasStore` + `ComanderoStore` — el TPV del camarero (cuentas + pedido)
+
+```
+CLASE CuentasStore (lib/stores/cuentas.ts) — pantalla CuentasScreen (mesas/llevar/llevadoo activos):
+  estado: cuentasStore<{cuentas[], loading, error}> ; derivados: cuentas, cuentasCount, cuentasLoading
+  COMANDOS: createMesa/createLlevar/createLlevadoo · renameCuenta/renameMesa · deleteCuenta ·
+            marcarEntregado · getStats   → mqttRequest('cuenta'|'mesa'|'llevar'|'llevadoo', <accion>)
+  loadCuentasFromPersistencia(projectId) → mqttRequest('persistencia','cuentas_activas')   # carga inicial
+  initCuentasSubscriptions(projectId):   # ~18 suscripciones — el corazón del flujo en vivo del TPV
+     subscribe('cuenta.{creada,actualizada,eliminada,estado_cambiado,cerrada}', → mutar lista)
+     subscribe('mesa.{abierta,renombrada}', 'pedido.creado', 'cobro.procesado', → mutar)
+     subscribe('comandero.item_{agregado,eliminado,actualizado}', → recalcular cuenta)
+     subscribe('cocina.{item_preparando,item_preparado,pedido_listo}', → reflejar estado de cocina en la card)
+     subscribe('glovo.pedido_listo', 'llevadoo.{pedido_listo,pedido_recogido}', → mutar)
+
+CLASE ComanderoStore (lib/stores/comandero.ts) — pantalla del pedido de UNA cuenta:
+  estado: comanderoStore<{pedido, categorias, productos, ingredientes, categoriaActiva, loading}>
+  derivados: pedido, pedidoItems, pedidoTotal, pedidoCount, categorias, productos, categoriaActiva
+  initComandero(projectId, cuentaId):  carga carta_completa + el pedido en curso (mqttRequest('productos'|'comandero'))
+  COMANDOS: addItem/removeItem/updateItem → mqttRequest('comandero', …) (OPTIMISTA) ;
+            enviarCocina() → dispara el flujo pedido.enviado_cocina → cocina
+  initComanderoSubscriptions(projectId):
+     subscribe('comandero.item_{agregado,eliminado}', 'pedido.enviado_cocina',
+               'cocina.{item_preparando,item_preparado,pedido_listo}', → reflejar avance en vivo)
+```
+
+## 42. `CocinaStore` — KDS multi-dispositivo en tiempo real (clase testigo del patrón)
+
+```
+CLASE CocinaStore (lib/stores/cocina.ts) — pantalla CocinaScreen (Kitchen Display, ESP32-P4/tablet):
+  estado: cocinaStore<{pedidos[], metrics, loading, devices, myColor/myNombre/myEstacion,
+                       filtrosActivos, tipoEstacion, tipoEstacionInfo, impresora}>
+  derivados: pedidosCocina, pedidosCount, cocinaMetrics, itemsPendientes, itemsPreparando,
+             my{DeviceColor,DeviceNombre,Estacion}, cocinaDevices, ...
+
+  COMANDOS (mqttRequest): prepararItem · marcarListo · registerDevice · updateDeviceName/Estacion ·
+                          setTipoEstacion · setImpresora · confirmarGlovo/rechazarGlovo('glovo',…) · loadMetrics
+  loadPedidosActivos() ; loadTiposEstacion() ; loadImpresorasDisponibles()   # carga inicial
+
+  initCocinaSubscriptions():   # el flujo en vivo del KDS
+     subscribe('pedido.enviado_cocina', → push pedido nuevo + ALERTA sonora)   # ⬅ entra comanda
+     subscribe('cocina.item_{preparando,preparado,avanzado}', 'cocina.pedido_listo', → mutar tarjeta)
+     subscribe('pedido.cancelado', 'glovo.pedido_{aceptado,rechazado}', → mutar)
+     subscribe('cocina.device_{registered,unregistered}', → mapa de dispositivos del KDS)
+
+  # PERIFÉRICOS DEL DISPOSITIVO (lo que lo distingue de un store puro):
+  #  · AudioContext (resumeAudioContext, desbloqueo por gesto) → bip al entrar comanda
+  #  · Notification API (requestNotificationPermission) · filtros por familia/estación · impresora térmica
+  #  · onReconnect → reload (la tablet vive 24/7; tras micro-caída del WS rehidrata sin intervención)
+  # FILTRADO POR ESTACIÓN: itemPassesFilter + itemMatchesStation → cada KDS ve solo SUS items (pizza/fríos/…)
+```
+
+## 43. `CartaStore` (cliente) + `LlevadooStore` (delivery) — cara pública con carrito
+
+```
+CLASE CartaStore (lib/stores/carta.ts) — pantalla CartaScreen (PWA del CLIENTE final):
+  estado: cartaStore<{categorias, productos, ingredientes, carrito, productoDetalle, loading}>
+  derivados: categorias, productos, carrito, carritoCount, carritoTotal, productoDetalle
+  initCarta(projectId):  mqttRequest('productos','carta_completa') (+ fs.read de config)   # solo lectura del catálogo
+  CARRITO 100% LOCAL: addToCart/removeFromCart/updateCartQuantity/clearCart (sin bus — estado efímero del cliente)
+  ▸ formatPedidoWhatsApp() / getWhatsAppUrl()   # SALIDA: el pedido se envía por WhatsApp, NO por MQTT
+  # SIN suscripciones al bus: es una vista de catálogo + carrito; el "pedido" sale por WhatsApp deep-link.
+
+CLASE LlevadooStore (lib/stores/llevadoo.ts) — pantalla LlevadooScreen (delivery propio del local):
+  estado: llevadooStore<{categorias, productos, carrito, pedidosActivos, pedidoActual, vista, configRecargo}>
+  derivados: carrito, carritoTotal, carritoRecargoTotal, pedidosActivos, vistaActiva, configRecargo
+  initLlevadoo(projectId): mqttRequest('llevadoo','carta_delivery')   # carta con recargo de delivery
+  COMANDOS: enviarPedido → mqttRequest('llevadoo','crear_pedido') ; marcarRecogido ; cancelarPedido ; setConfigRecargo
+  initLlevadooSubscriptions(projectId):
+     subscribe('llevadoo.{para_recoger,pedido_listo,pedido_entregado,pedido_recibido}', 'cocina.pedido_listo', → mutar)
+  # HÍBRIDO: carrito local (como carta) + comandos reales por bus + estado en vivo (como comandero).
+```
+
+### Tabla de instancias (pantallas operativas sin chat)
+
+| Pantalla (`Screen`) | Ruta | Backend procedural espejo | Rol | Periféricos |
+|---|---|---|---|---|
+| `CuentasScreen` | `/comandero` | `cuenta` + `mesa` + `persistencia` | cuentas activas (mesas/llevar/llevadoo) | — |
+| `ComanderoScreen` | `/comandero/[cuenta_id]` | `comandero` + `productos` | toma de pedido de una cuenta | voz (dictado de nombre) |
+| `CocinaScreen` | `/cocina` | `cocina` + `glovo` | KDS multi-dispositivo | audio · notificaciones · impresora · estaciones |
+| `CartaScreen` | `/carta` | `productos` (solo lectura) | carta del cliente (PWA) | carrito local · WhatsApp |
+| `LlevadooScreen` | `/llevadoo` | `llevadoo` | delivery propio | carrito local + comandos |
+
+### Jerarquía de topics + QoS (pantallas operativas)
+
+```
+ui/request/{cuenta,mesa,comandero,cocina,llevadoo,productos,glovo,persistencia}/<accion>  QoS 1   # SALIDA: comandos del TPV
+core/*/events/cuenta/{creada,actualizada,eliminada,estado_cambiado,cerrada}               QoS 1   # ENTRADA: cuentas en vivo
+core/*/events/comandero/item_{agregado,eliminado,actualizado}                             QoS 1   # ENTRADA: pedido en vivo
+core/*/events/pedido/{enviado_cocina,creado,cancelado}                                    QoS 1   # ENTRADA: ciclo de comanda
+core/*/events/cocina/{item_preparando,item_preparado,item_avanzado,pedido_listo}          QoS 1   # ENTRADA: KDS
+core/*/events/cocina/device_{registered,unregistered}                                     QoS 1   # ENTRADA: dispositivos KDS
+core/*/events/{glovo,llevadoo}/pedido_*                                                    QoS 1   # ENTRADA: canales delivery
+```
+
+*Justificación QoS 1:* es flujo de trabajo de una cocina **en producción** — perder un
+`pedido.enviado_cocina` deja una comanda sin aparecer en el KDS (cliente esperando comida);
+perder un `cocina.pedido_listo` deja a la cuenta sin avisar que el plato está listo. La pérdida
+tiene **coste físico** (un pedido real). Idempotencia por `cuenta_id`/`item_id`/`pedido_id`.
+`retain=false` (los eventos son flujo, no estado retenido). QoS 2 vetado. A diferencia de la
+línea carta (Postura B), aquí la UI **sí emite comandos directos** al bus: el backend procedural
+(no el compañero LLM) los ejecuta — la cocina no puede depender de un turno de chat.

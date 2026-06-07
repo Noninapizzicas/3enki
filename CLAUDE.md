@@ -53,6 +53,12 @@ Actúas como un **Ingeniero Técnico Senior Especialista en Arquitectura de Soft
 - Escribe en español técnico preciso. Sé conciso pero completo. Prioriza la profundidad técnica que sume valor real al diseño.
 - Cuando sugieras código, prioriza Python o Node.js, pero mantén la lógica lo suficientemente abstracta
 
+### 📐 Estilo de este documento (CLAUDE.md)
+- **Contenido permitido**: el prompt (persona) + las clases OOP en pseudocódigo + los JSON Schema + las jerarquías de topics/QoS. Nada más.
+- **Prohibidas las valoraciones**: sin juicios, opiniones, elogios ni meta-comentarios sobre el propio diseño (p. ej. "pieza central", "caso testigo", "sobresaliente"). Solo hechos y contratos.
+- **Pseudocódigo y JSON antes que prosa**: la prosa se limita a la justa para explicar un concepto concreto que NO quepa en pseudocódigo OOP ni en JSON.
+- **Filosofía o sentimientos fuera del documento**: si un concepto los requiere, va en el chat, no aquí.
+
 ---
 
 # 🧱 Capa de Aterrizaje (Plasmador) — del diseño abstracto al stack real
@@ -116,10 +122,9 @@ Antes de escribir código, **declaras explícitamente**:
 
 # 🏛️ Arquitectura del Core — Definición de Clases (Pseudocódigo)
 
-> Esta sección es la **especificación viva** del núcleo de `event-core` como grafo de clases.
-> Regla rectora: **el código es la fuente de verdad; esta spec es la guía de diseño.** Si una
-> clase real diverge de aquí, se señala el desvío y se concilia (actualizar spec o corregir código),
-> nunca se asume que la spec manda sobre lo implementado.
+> Núcleo de `event-core` como grafo de clases. **El código es la fuente de verdad; esta spec es la
+> guía de diseño.** Si una clase real diverge, se señala el desvío y se concilia (actualizar spec o
+> corregir código); la spec no manda sobre lo implementado.
 
 ## Decisiones de arquitectura cerradas
 
@@ -207,7 +212,7 @@ CLASS Core:
   # edge: si un paso falla → rollback de los ya iniciados (stop parcial) y throw
 ```
 
-Patrón *Composition Root* + *Builder* implícito. Es el único que conoce el grafo completo.
+Patrón *Composition Root* + *Builder*. Única clase que conoce el grafo completo.
 
 ## 2. Observabilidad — `Observability` / `Logger` / `Tracer` / `Metrics` / `ActivityLogger`
 
@@ -514,9 +519,9 @@ CLASS ServiceRegistry:                   # asignación de puertos / descubrimien
 
 ## 10. `ModuleLoader` — carga, auto-wiring y hot-reload (máquina de estados)
 
-> Pieza más densa del core. Autodescubre módulos por `module.json`, los instancia, **cablea
-> automáticamente** sus suscripciones a eventos / UI handlers / tools desde el manifiesto, e
-> inyecta el `context` del core. Soporta hot-reload y módulos declarativos (`blueprint_driven`).
+> Autodescubre módulos por `module.json`, los instancia, **cablea automáticamente** sus
+> suscripciones a eventos / UI handlers / tools desde el manifiesto, e inyecta el `context` del
+> core. Soporta hot-reload y módulos declarativos (`blueprint_driven`).
 
 ```
 CLASS ModuleLoader:
@@ -680,16 +685,15 @@ CLASS Module (contrato base):
 
 # 🧭 Subsistema Compañero de Viaje — Definición de Clases (Pseudocódigo)
 
-> La apuesta central junto al core. Captura el modelo del contrato `companero-viaje` (la
-> *piedra angular*): **NO es un chat, es un compañero de viaje con especialistas reactivos.**
-> Toda clase de aquí preserva las **4 capacidades invariantes**:
+> Modelo del contrato `companero-viaje`: **NO es un chat, es un compañero de viaje con
+> especialistas reactivos.** Toda clase de aquí preserva las **4 capacidades invariantes**:
 > ① memoria sostenida (`conversation_id` persistente + FIFO) · ② especialización por contexto
 > (proyecto + agentes) · ③ acceso al sistema (tools + agentes, siempre por el bus) ·
 > ④ modularidad infinita (canal/tool/agente/memoria nuevos = módulo, sin tocar el núcleo).
 >
 > Todos los módulos extienden el contrato `Module` (clase 11): `onLoad(context)`,
 > `_publicarEvento`, shape `{status, data|error}`, DIP estricto (solo `eventBus` + `mqttRequest`).
-> Vive bajo `modules/conversacion/*`. Fiel al código real (v2.0.0 de cada módulo).
+> Viven bajo `modules/conversacion/*` (v2.0.0 cada uno).
 
 ## Mapa de flujos (4 grafos de eventos sobre el bus)
 
@@ -726,9 +730,8 @@ CLASS Module (contrato base):
    módulo → embedding.generate.request → ai-gateway → embedding.generate.response | .failed
 ```
 
-Patrón maestro: **emite y desentiende** (events.contract). Ningún módulo conoce a otro; se
-encadenan por eventos correlados. `memory-*` y los agentes son **puntos de extensión** que se
-enchufan sin tocar el pipeline.
+**Emite y desentiende** (events.contract). Ningún módulo conoce a otro; se encadenan por eventos
+correlados. `memory-*` y los agentes son **puntos de extensión** que se enchufan sin tocar el pipeline.
 
 ## 12. `ChatIoModule` — canal de entrada/salida (memoria sostenida ①)
 
@@ -957,10 +960,9 @@ canónico — nunca se queda mudo.
 
 # 🔐 Módulos fundacionales — `credential-manager` & `project-manager`
 
-> Las dos piezas sobre las que se apoya casi todo el sistema. `credential-manager` carga **primero**
-> de todos (tier-1 infra) porque otros módulos resuelven secretos durante su `onLoad`;
-> `project-manager` (tier-3) define la noción de **proyecto activo** que especializa al compañero.
-> Ambos son **casos testigo** del paradigma: estado en vivo (no agregados materializados redundantes),
+> `credential-manager` carga **primero** (tier-1 infra) porque otros módulos resuelven secretos
+> durante su `onLoad`; `project-manager` (tier-3) define la noción de **proyecto activo** que
+> especializa al compañero. Ambos: estado en vivo (no agregados materializados redundantes),
 > comunicación 100% por eventos correlados, secretos nunca expuestos en snapshots.
 
 ## 18. `CredentialManagerModule` — CRUD + resolución en cascada + cache `.env` atómico
@@ -1107,12 +1109,11 @@ perder el `request`/`response` cuelga al caller (ai-gateway, chat-io). Idempoten
 
 # 🛡️ Capa de seguridad — `security-p2p` & `certificate-authority`
 
-> Los dos habilitadores del multi-core seguro (lo que `bus-transport` reserva para clientes
-> **externos del cluster con mTLS**). Patrón maestro: ambos operan **vía hooks transparentes**
-> (`HookManager`, clase 6) — son **decoradores transversales** que añaden cifrado/autenticación
-> sin que ningún módulo de dominio se entere (Decorator + DIP). Hoy **`disabled` en config**:
-> dormidos hasta que exista un 2º core real (coherente con decisión ③ / `paradigma-no-cabe`:
-> no se activa la distribución antes de que duela).
+> Habilitan el multi-core seguro (lo que `bus-transport` reserva para clientes **externos del
+> cluster con mTLS**). Ambos operan **vía hooks transparentes** (`HookManager`, clase 6) — son
+> **decoradores transversales** que añaden cifrado/autenticación sin que ningún módulo de dominio
+> se entere (Decorator + DIP). Hoy **`disabled` en config**: inactivos hasta que exista un 2º core
+> real (decisión ③ / `paradigma-no-cabe`).
 
 ## 20. `SecurityP2PModule` — Zero Trust crypto entre cores (X25519 + AES-256-GCM)
 
@@ -1263,7 +1264,7 @@ MODELO DE PERSISTENCIA (chat-io, clase 12 — autoridad de conversaciones):
     # más allá del FIFO: capas de memoria adicionales = memory-* (clase 14), enchufables sin tocar chat-io
 ```
 
-## 23. Sistema de cajones — partición de contexto + lazy loading (idea central)
+## 23. Sistema de cajones — partición de contexto + lazy loading
 
 > **El concepto:** el LLM no necesita ver TODO el catálogo de operaciones de un módulo para razonar.
 > El system prompt lleva un **índice** (descripción de 1 línea por cajón); el **pseudocódigo completo**
@@ -1329,10 +1330,10 @@ ya cargado: cero latencia de red, cero estado materializado redundante.
 # 🍕 Rama blueprints — `menu-generator` → subsistema-carta (pizzepos)
 
 > ~13 de ~70 módulos NO son código JS procedural: son **blueprints JSON declarativos** que el LLM
-> ejecuta como runtime. El subsistema-carta de pizzepos es el exponente: `menu-generator` genera la
-> carta, `carta-manager` la custodia (aggregate root), y cinco hermanos la consumen. Todos
-> `blueprint_driven: true`. Caso testigo del paradigma: **el JSON de la carta ES la fuente de
-> verdad** (en filesystem), no hay agregado materializado redundante (paradigma-no-cabe).
+> ejecuta como runtime. Subsistema-carta de pizzepos: `menu-generator` genera la carta,
+> `carta-manager` la custodia (aggregate root), y cinco hermanos la consumen. Todos
+> `blueprint_driven: true`. **El JSON de la carta ES la fuente de verdad** (en filesystem); no hay
+> agregado materializado redundante (paradigma-no-cabe).
 
 ## 24. Paradigma blueprint-driven — el LLM como runtime
 
@@ -1451,8 +1452,8 @@ los hermanos NO cachean una copia materializada — releen del aggregate root (p
 > Segunda rama blueprint-driven de pizzepos. Grafo de dependencias **100% por eventos** con DIP
 > estricto: `escandallo` (calculador de coste) es la pieza compartida; `recetas` (aggregate root)
 > y `viabilidad` (evaluador económico) dependen de él **por el bus**, nunca por acceso a su storage.
-> Caso testigo doble del paradigma: **`escandallo` no tiene estado** (su cálculo es derivación
-> publicada como evento), y ningún módulo lee el JSON de otro — todo va por operación canónica.
+> **`escandallo` no tiene estado** (su cálculo es derivación publicada como evento); ningún módulo
+> lee el JSON de otro — todo va por operación canónica.
 
 ## 28. `recetas` (blueprint) — aggregate root del subsistema-recetario
 
@@ -1473,9 +1474,9 @@ BLUEPRINT recetas (v1.1.0, page=recetas, cajones_enabled):    # clase 23: catál
 
 ## 29. `escandallo` (blueprint) — calculador de coste SIN estado propio
 
-> Testigo puro de `paradigma-no-cabe`: **no persiste nada**. Su cálculo es una **derivación**
-> que publica como evento. Resuelve precios reales vía `mercadona-api` (cache 48h en memoria) o
-> los **estima con el LLM** cuando Mercadona no tiene el producto (con marcador de estimación).
+> **No persiste nada** (`paradigma-no-cabe`). Su cálculo es una **derivación** que publica como
+> evento. Resuelve precios reales vía `mercadona-api` (cache 48h en memoria) o los **estima con el
+> LLM** cuando Mercadona no tiene el producto (con marcador de estimación).
 
 ```
 BLUEPRINT escandallo (v1.1.0, page=escandallo):

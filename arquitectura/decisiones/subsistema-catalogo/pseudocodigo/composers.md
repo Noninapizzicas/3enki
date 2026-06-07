@@ -121,3 +121,38 @@ aterrizaje vs hoy:
   · canal: de prefijo de cuenta_id → cuenta.canal explícito.
   · añadir un composer nuevo = una config del motor (o una clase si es realmente distinto, como Porciones).
 ```
+
+## Estado de aterrizaje D3 (2026-06-07) — qué tasa por canal y qué no
+
+> **Decisión cerrada (el código manda; este .md de arriba es el ideal, no lo aterrizado).**
+> El aterrizaje real de D3 NO unificó el motor todavía: siguen vivos `MitadMitadPanel`, `AlGustoPanel`
+> y el selector de porciones inline. Y, sobre todo, **no todos los composers tasan contra la carta del
+> canal** — solo los que derivan de un producto de carta lo hacen.
+
+```
+QUÉ DERIVA SU PRECIO DE UNA CARTA (→ puede tasar por canal vía D3):
+  · MitadMitad ✅ ATERRIZADO  → carga productos.pizzas({carta_id del canal}); si el canal tiene
+      override, tasa contra esa carta y marca precio_canal_resuelto=true (comandero confía).
+      Sin override / mesa / fallo → catálogo activo, sin flag (comportamiento previo, cero regresión).
+  · ProductoBtn entero/partido → precio_base del producto de carta (ya por canal cuando productos sirve
+      la carta del canal). [el motor unificado del .md queda como trabajo futuro]
+
+QUÉ ES GLOBAL POR DECISIÓN (NO tasa por canal — mismo precio en todos los canales):
+  · AlGusto   → base hardcodeada (prop, 8.00€) + Σ precio_extra de ingredientes. Los ingredientes son
+      la FUENTE ÚNICA por proyecto (módulo ingredientes, sin carta_id, por D1). NO hay producto de carta
+      "al gusto" sembrado → no hay carta_id que redirigir. Se acepta precio igual en todos los canales.
+  · Porciones → constantes (3€ suelta / 10.50€ media) en el composer. NO hay config_porciones por carta.
+      Se acepta precio igual en todos los canales.
+
+POR QUÉ (decisión 2026-06-07, "dejarlos globales"):
+  · hacerlos channel-correct NO es replicar el patrón MitadMitad: exige MODELO NUEVO (sembrar un producto
+    "al gusto" override-able + mover las constantes de porciones a config de carta). YAGNI hasta que un
+    operador real pida precio de pizza-personalizada/porciones distinto por canal.
+  · el ideal del .md (al-gusto = producto con base vacía · porciones = config_porciones en la carta) queda
+    APARCADO, no descartado: cuando duela, se siembra el dato y el precio pasa a ser por canal sin tocar
+    el composer (el panel solo deja de hardcodear). Camino abierto, no cerrado.
+
+INVARIANTE QUE SÍ SE RESPETA HOY:
+  · un composer SOLO marca precio_canal_resuelto cuando de verdad tasó contra la carta del canal.
+    AlGusto/Porciones nunca lo marcan → comandero los trata como siempre. Sin marca = sin promesa rota.
+```

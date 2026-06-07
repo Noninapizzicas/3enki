@@ -98,6 +98,10 @@ class IngredientesModule extends BaseModule {
           const ingrediente = {
             ...ing,
             tipo:         ing.tipo || this._clasificarIngrediente(ing.nombre),
+            // v2 semilla enriquecida: familia canónica asignada en origen por menu-generator.
+            // Fallback a la heurística por nombre para ingredientes v1 (sin familia). Término
+            // canónico 'familia' (glosario; sinónimo histórico 'grupo' deprecado).
+            familia:      ing.familia || ing.tipo || this._clasificarIngrediente(ing.nombre),
             grupos:       ing.grupos || [],
             disponible:   true,
             precio_extra: ing.precio_extra || 0,
@@ -142,6 +146,8 @@ class IngredientesModule extends BaseModule {
               nombre:       ing.nombre,
               emoji:        ing.emoji || '',
               tipo:         ing.tipo || this._clasificarIngrediente(ing.nombre),
+              // v2 semilla enriquecida: familia canónica de la semilla; fallback heurístico para v1.
+              familia:      ing.familia || ing.tipo || this._clasificarIngrediente(ing.nombre),
               es_alergeno:  false,
               precio_extra: ing.precio_extra ?? 0,
               grupos:       [grupo],
@@ -155,8 +161,11 @@ class IngredientesModule extends BaseModule {
             await this._publicarEvento('ingrediente.creado', this._buildCreadoPayload(ingrediente, project_id), eventData);
           } else {
             existente.grupos = existente.grupos || [];
-            if (!existente.grupos.includes(grupo)) {
-              existente.grupos.push(grupo);
+            let cambiado = false;
+            if (!existente.grupos.includes(grupo)) { existente.grupos.push(grupo); cambiado = true; }
+            // v2: backfill de familia canónica si la semilla la trae y aún no la tiene (migración-on-touch).
+            if (ing.familia && existente.familia !== ing.familia) { existente.familia = ing.familia; cambiado = true; }
+            if (cambiado) {
               existente.updated_at = new Date().toISOString();
               this.ingredientes.set(id, existente);
             }

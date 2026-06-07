@@ -45,12 +45,21 @@ comandero — por eso el precio tiene que salir BIEN de ahí (composición + can
 - **Persistencia.** **JSON por proyecto** (filesystem). 3 gatillos para reconsiderar SQLite
   (catálogo grande · concurrencia real · derivaciones complejas).
 
-## Cómo se llena `pseudocodigo/`
-
-Orden de dependencia, desde el origen:
+## `pseudocodigo/` — OOP por pieza (orden de dependencia)
 
 ```
 menu-generator → carta-manager → ingredientes → variaciones → tarifas → comandero → composers
 ```
 
-Una pieza a la vez; cada una encaja contra las dos costuras canónicas de `schemas/`.
+| Pieza | Naturaleza | Qué hace en el rediseño |
+|---|---|---|
+| `menu-generator.md` | blueprint | produce la **semilla v2** (id canónico + familia en origen) |
+| `carta-manager.md` | blueprint | dueño del **diseño**; save+versionado; manipulación y `clonar` (canal = carta independiente, D2) |
+| `ingredientes.md` | JS | autoridad de **precio_extra**; catálogo = **unión por id** (deriva, no copia) |
+| `variaciones.md` | JS | **vista por familia** + reglas; **tasa** base+extras (D2: sin módulo precio) |
+| `tarifas.md` | JS | **solo** asignación canal↔carta (saneado bajo /pizzepos) |
+| `comandero.md` | JS | buffer del ticket; **YA NO tasa** (elimina `_resolverPrecioCanal`, confía en el composer) |
+| `composers.md` | front | **autocontenidos**; tiran de la carta del canal y **tasan** ahí; emiten `item.compuesto` |
+
+Cada pieza encaja contra las dos costuras canónicas de `schemas/`.
+Estado: **pseudocódigo completo**; pendiente el aterrizaje a código (ver `desvio_codigo_actual` del contrato).

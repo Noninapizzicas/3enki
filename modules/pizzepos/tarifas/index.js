@@ -6,7 +6,7 @@
  * cartas (eso lo hacen agentes tarifas-creator y tarifas-sync).
  *
  * Comandero llama resolverCarta(canal) → obtiene carta_id → carga esa carta.
- * Config: {project.base_path}/storage/config/tarifas.json (write atomico).
+ * Config: {project.base_path}/storage/pizzepos/tarifas.json (write atomico). v2 saneo: antes en /storage/config (lectura legacy compat).
  */
 
 'use strict';
@@ -171,6 +171,15 @@ class TarifasModule extends BaseModule {
   configPathFor(projectId) {
     const basePath = this.projectPaths.get(projectId);
     if (!basePath) return null;
+    // v2 saneo (subsistema-catalogo D2): config bajo el vertical /pizzepos, no en /config genérico.
+    return path.join(basePath, 'storage', 'pizzepos', 'tarifas.json');
+  }
+
+  // Ruta legacy (antes del saneo). Solo para LECTURA backward-compat: si la nueva no existe
+  // pero la legacy sí, se lee la legacy; el próximo saveConfig escribe en la nueva (migración-on-write).
+  legacyConfigPathFor(projectId) {
+    const basePath = this.projectPaths.get(projectId);
+    if (!basePath) return null;
     return path.join(basePath, 'storage', 'config', 'tarifas.json');
   }
 
@@ -195,7 +204,27 @@ class TarifasModule extends BaseModule {
       this.configPerProject.set(projectId, config);
       this.logger.info('tarifas.config.loaded', { project_id: projectId });
     } catch (err) {
-      if (err.code !== 'ENOENT') {
+      if (err.code === 'ENOENT') {
+        // v2 saneo: la ruta nueva no existe → intentar la legacy (storage/config) para NO orfanar
+        // la config existente. El próximo saveConfig la migra a la ruta nueva (migración-on-write).
+        const legacy = this.legacyConfigPathFor(projectId);
+        if (legacy) {
+          try {
+            const content = await fs.readFile(legacy, 'utf-8');
+            const config = { ...this.defaultConfig(), ...JSON.parse(content) };
+            this.configPerProject.set(projectId, config);
+            this.logger.info('tarifas.config.loaded', { project_id: projectId, from: 'legacy' });
+            return;
+          } catch (e2) {
+            if (e2.code !== 'ENOENT') {
+              this.logger.warn('tarifas.config.load_error', {
+                project_id: projectId, error_code: e2.code || 'PARSE_ERROR', error_message: e2.message, from: 'legacy'
+              });
+            }
+            // ni nueva ni legacy → default (proyecto nuevo, no es error)
+          }
+        }
+      } else {
         this.logger.warn('tarifas.config.load_error', {
           project_id: projectId,
           error_code: err.code || 'PARSE_ERROR',

@@ -166,6 +166,13 @@
         "caso": "mitad/mitad usa el boton PARTIDO con toda su logica: MitadMitadComposer es un COMPOSITE de dos VariacionesComposer (una por mitad). Cada mitad es una pizza configurable (quitar/anadir) con la misma logica del partido. Reuso puro, no reimplementacion.",
         "shape": "item.compuesto.componentes.mitades.{izquierda,derecha} = mitad CONFIGURADA { producto_id, quitados[], extras[], base, extra_total } (no un simple producto_id).",
         "regla_precio_combinada": "DECIDIDA 'mitad_max_configurada': half_total(lado) = base(producto del lado, del canal) + SUM(precio_extra[ing]/2 para ing en extras del lado)  [medio extra por topping, es media pizza]. precio_final = max(half_total_izq, half_total_der)  [max de las dos mitades YA CONFIGURADAS, con sus extras]. Redondeo a centimos (/2 puede dar medio centimo). La base NO se halva (max elige la mitad dominante); solo los extras van a mitad de precio."
+      },
+      "consistencia_composers": {
+        "_doc": "Al tirar del reuso, casi todos los composers colapsan en UN motor.",
+        "motor_unico": "VariacionesComposer(carta, producto_id, fraccion=1) cubre entero (sin extras), partido (quitar/anadir) y al-gusto (base vacia + anadir). fraccion: 1 pizza entera, 0.5 media pizza. mitad/mitad = composite de dos con fraccion=0.5. Porciones es el UNICO motor distinto.",
+        "al_gusto_es_dato": "A1: 'Pizza Al Gusto' NO es un composer aparte. Es un PRODUCTO de la carta con ingredientes base VACIOS + tiene_variaciones=true. El flujo partido (VariacionesComposer) lo cubre tal cual (base + anadir de familias). Cero codigo nuevo. AlGustoPanel desaparece como componente especial.",
+        "canal_explicito": "A3: la cuenta lleva canal como CAMPO EXPLICITO (cuenta.canal), fijado al crearla (TipoButton). El composer lo lee para resolver carta_efectiva(canal). Se DEPRECA la deteccion por prefijo de cuenta_id (_detectarCanalCuenta) — mata la costura del string-parsing.",
+        "porciones_config": "A2 (PROPUESTO — confirmar): la config de porciones vive en la CARTA (per-canal, porque canal = carta): carta.config_porciones = { precio_suelta, bundle:{ cada, precio } }. PorcionesComposer la lee y aplica el bundle. Pendiente confirmar ubicacion (carta-level vs por-producto) y shape."
       }
     }
   },

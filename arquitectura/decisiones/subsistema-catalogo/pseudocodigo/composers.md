@@ -1,112 +1,118 @@
-# `composers` — pseudocódigo (frontend; autocontenidos; tasan contra la carta del canal)
+# `composers` — pseudocódigo (un solo motor: `VariacionesComposer`)
 
-> **Naturaleza:** frontend (componentes). D3: cada composer es **autocontenido** (su lógica + su regla
-> de precio + su capa de imagen). Tira de `carta_efectiva(canal)` y **tasa contra ella** → emite
-> `item.compuesto` con `precio_final`. **Puerta abierta:** un tipo nuevo = un composer nuevo, sin tocar
-> el núcleo. comandero confía (no re-tasa).
+> **D3 + unificación.** Casi todos los composers son el **mismo motor** —
+> `VariacionesComposer(carta, producto_id, fraccion)`— parametrizado. `entero` / `partido` /
+> `al-gusto` / `mitad` son configuraciones de ese motor; **`Porciones` es el único distinto**.
+> Todos **tasan contra la carta del canal** (de `cuenta.canal`) y emiten `item.compuesto`.
+> comandero confía (no re-tasa). Puerta abierta: un tipo nuevo = una config del motor, sin tocar el núcleo.
+
+## El canal (A3): explícito en la cuenta
+
+```
+· la cuenta se crea para un canal (TipoButton) → cuenta.canal = campo EXPLÍCITO (mesa, glovo, ...)
+· NO se deduce por prefijo de cuenta_id (se deprecia _detectarCanalCuenta / la costura del string-parsing)
+· el composer lee cuenta.canal y resuelve la carta del canal
+```
 
 ## Contrato común
 
 ```
 INTERFACE Composer:
-  async cargar(canal):                       # LA CLAVE de la correctitud: pull de la carta del canal activo
+  async cargar(canal):                       # carta del canal activo (la clave de la correctitud)
      carta_id ← await mqttRequest('tarifas','resolverCarta',{ project_id, canal })
      this.carta ← (await mqttRequest('carta-manager','get',{ project_id, carta_id })).carta
-  componer(elecciones) → emit item.compuesto # aplica SU regla sobre this.carta + pinta capa_imagen
-
-# emite: item.compuesto { project_id, cuenta_id, canal, tipo, regla_precio, componentes, precio_final, capa_imagen }
-# REGLA TRANSVERSAL: el precio SIEMPRE sale de this.carta (la del canal). Cero precio_override ciego.
-#                    Mesa y delivery dan el MISMO número correcto por construcción.
+  componer() → emit item.compuesto           # tasa contra this.carta + pinta capa_imagen
+# REGLA TRANSVERSAL: el precio SIEMPRE sale de this.carta (del canal). Mesa y delivery = mismo número correcto.
 ```
 
-## Composer base — `ProductoBtn` (entero / partido)
+## EL MOTOR — `VariacionesComposer(carta, producto_id, fraccion=1)`
 
-```
-CLASS ProductoBtn implements Composer:
-  layout ← (producto.tiene_variaciones ?? (producto.ingredientes.length > 0)) ? 'partido' : 'entero'
-  ▸ entero (tap en todo el botón):
-       precio_final ← this.carta.producto[id].precio_base        # del CANAL (no del catálogo general)
-       emit { tipo:'entero', regla_precio:'producto', componentes:{ producto_ids:[id] }, precio_final }
-  ▸ partido (doble zona): izquierda 'íntegro' = entero ; derecha '+/-' = handoff → VariacionesComposer(producto)
-```
-
-## `VariacionesComposer` — la unidad "partido" reutilizable
-
-> Es la lógica del botón **partido** aislada como composer reutilizable: carga un producto de la
-> carta del canal, deja quitar/añadir contra el catálogo por familia, y resuelve `base + Σ extras`.
-> Lo usan: el `ProductoBtn` partido (handoff +/-) **y** `MitadMitad` (una por mitad).
+> Cubre **entero** (sin extras), **partido** (quitar/añadir) y **al-gusto** (base vacía + añadir).
+> `fraccion`: 1 = pizza entera · 0.5 = media pizza (lo usa mitad/mitad).
 
 ```
 CLASS VariacionesComposer implements Composer:
-  →deps: { carta(del canal), producto_id }
+  →deps: { carta(del canal), producto_id, fraccion=1 }
+  state: { quitados:[], extras:[] }
+
   ▸ getPanel():                              # lo que pinta el panel de variaciones
       prod ← this.carta.producto[producto_id]
       v ← await mqttRequest('variaciones','getVariacionesProducto',{ project_id, producto:prod, canal })
-      return { quitables:prod.ingredientes, anadibles_por_familia:v.anadibles_por_familia, max_extras:v.max_extras }
-  ▸ resolver():                              # estado configurado de ESTA pizza/mitad
-      base  ← this.carta.producto[producto_id].precio_base                 # del CANAL
-      extra ← Σ this.carta.precio_extra[ing_id]  para ing_id EN this.extras
-      return { producto_id, quitados:this.quitados, extras:this.extras, base, extra_total:extra }
-  ▸ componer():                              # cuando se usa SOLO (partido de un producto)
+      return { quitables: prod.ingredientes, anadibles_por_familia: v.anadibles_por_familia, max_extras: v.max_extras }
+
+  ▸ resolver():                              # estado configurado (pizza o media)
+      base  ← this.carta.producto[producto_id].precio_base
+      extra ← Σ ( this.carta.precio_extra[ing] * this.fraccion )  para ing EN this.extras   # fraccion=1 entera · 0.5 media
+      return { producto_id, quitados:this.quitados, extras:this.extras, base, extra_total: extra }
+
+  ▸ componer():                              # cuando se usa SOLO (partido / al-gusto)
       h ← resolver()
-      emit { tipo:'variado', regla_precio:'base_mas_extras', componentes:{ producto_ids:[h.producto_id], quitados:h.quitados, extras:h.extras },
-             precio_final: h.base + h.extra_total }
+      emit { tipo: this.tipo ?? 'variado', regla_precio:'base_mas_extras',
+             componentes:{ producto_ids:[h.producto_id], quitados:h.quitados, extras:h.extras },
+             precio_final: redondear_cents(h.base + h.extra_total) }
 ```
 
-## `MitadMitadComposer` — COMPOSITE de dos mitades partido
+## `ProductoBtn` — la entrada (entero / partido)
 
-> No reimplementa nada: **compone dos `VariacionesComposer`** (una por mitad). Cada mitad es una
-> pizza configurable con toda la lógica del partido (quitar/añadir). Reuso puro (mantenimiento en un sitio).
+```
+CLASS ProductoBtn:
+  layout ← (producto.tiene_variaciones ?? (producto.ingredientes.length > 0)) ? 'partido' : 'entero'
+  ▸ entero (tap):     # sin panel; precio = precio_base del CANAL
+      emit item.compuesto { tipo:'entero', regla_precio:'producto',
+            componentes:{ producto_ids:[id] }, precio_final: this.carta.producto[id].precio_base }
+  ▸ partido (+/-):    abre VariacionesComposer(this.carta, id, fraccion=1)   # quitar/añadir
+```
+
+## AL GUSTO (A1) — **NO es un composer aparte**
+
+```
+"Pizza Al Gusto" = un PRODUCTO de la carta con ingredientes base VACÍOS + tiene_variaciones=true.
+  → el flujo PARTIDO (VariacionesComposer, fraccion=1) lo cubre tal cual:
+      base (p.ej. 8.00€, del canal) + añadir ingredientes de las familias.
+  → CERO código nuevo. Lo único "al gusto" es el DATO (producto con base sin ingredientes).
+  → si al-gusto necesita reglas propias (ej. mínimo 1 salsa) = reglas de variaciones por producto (variaciones).
+```
+
+## `MitadMitadComposer` — COMPOSITE de dos mitades (fraccion=0.5)
 
 ```
 CLASS MitadMitadComposer implements Composer:
-  state: { half_izq: VariacionesComposer, half_der: VariacionesComposer }   # ambas sobre this.carta (canal)
+  state: { half_izq: VariacionesComposer, half_der: VariacionesComposer }   # ambas sobre this.carta, fraccion=0.5
 
-  ▸ elegirMitad(lado, producto_id):          # abre el flujo partido de esa mitad
-      this['half_'+lado] ← new VariacionesComposer(this.carta, producto_id)  # MISMA lógica del botón partido
+  ▸ elegirMitad(lado, producto_id):
+      this['half_'+lado] ← new VariacionesComposer(this.carta, producto_id, fraccion=0.5)   # MISMA lógica del partido
 
   ▸ componer():
-      hi ← half_izq.resolver()    # { producto_id, quitados, extras, base, extra_total }   ← variaciones REUSADO
-      hd ← half_der.resolver()
-      # ── REGLA 'mitad_max_configurada' (DECIDIDA) ──
-      #   · medio precio_extra por topping (es media pizza)
-      #   · la pizza vale la mitad CONFIGURADA más cara (max de las dos, ya con sus extras)
-      half_total(h) ← h.base + Σ( this.carta.precio_extra[ing] / 2  para ing EN h.extras )   # medio extra en media pizza
-      precio_final  ← max( half_total(hi), half_total(hd) )
-      precio_final  ← redondear_cents(precio_final)                                          # /2 puede dar medio céntimo
+      hi ← half_izq.resolver() ; hd ← half_der.resolver()    # cada h.extra_total ya va a MEDIO precio (fraccion=0.5)
+      # REGLA 'mitad_max_configurada': max de las dos mitades YA configuradas
+      half_total(h) ← h.base + h.extra_total
+      precio_final  ← redondear_cents( max( half_total(hi), half_total(hd) ) )
       emit { tipo:'mitad', regla_precio:'mitad_max_configurada',
-             componentes:{ mitades:{ izquierda: hi, derecha: hd } },   # cada mitad CONFIGURADA (producto+quitados+extras)
+             componentes:{ mitades:{ izquierda: hi, derecha: hd } },
              precio_final, capa_imagen:{ nombre_compuesto:'½ '+nombre(hi)+' + ½ '+nombre(hd) } }
 ```
 
-## `AlGustoComposer`
+## `PorcionesComposer` (A2) — el único motor distinto
 
-```
-CLASS AlGustoComposer implements Composer:
-  ▸ componer({ base_id, extras:[ing_id] }):
-      base  ← this.carta.producto[base_id].precio_base                  # del CANAL (NO 8.00 hardcodeado)
-      extra ← Σ this.carta.precio_extra[ing_id]   (o mqttRequest('ingredientes','catalogo'))
-      precio_final ← base + extra                                       # regla 'base_mas_extras'
-      emit { tipo:'al_gusto', regla_precio:'base_mas_extras', componentes:{ producto_ids:[base_id], extras }, precio_final }
-```
-
-## `PorcionesComposer`
+> Venta por porciones con bundle. La config vive en la **carta** (per-canal, porque canal = carta).
 
 ```
 CLASS PorcionesComposer implements Composer:
   ▸ componer({ cantidad }):
-      precio_final ← regla_porciones(cantidad, this.carta.config_porciones)   # cada 4 = media; sueltas = 3 — desde config del CANAL, no hardcode
+      cfg ← this.carta.config_porciones      # { precio_suelta:3.00, bundle:{ cada:4, precio:10.50 } }  (PROPUESTO — confirmar)
+      precio_final ← aplicar_bundle(cantidad, cfg)   # nº bundles*precio + resto*precio_suelta
       emit { tipo:'porcion', regla_precio:'porciones', componentes:{ cantidad }, precio_final }
 ```
 
 ## Encaje · aterrizaje
 
 ```
-encaje: D3 — composer autocontenido que tasa contra la carta del canal. Emite item.compuesto (schema canónico).
-        comandero lo recibe pre-tasado y confía. ProductoBtn = composer base (entero/partido).
-aterrizaje vs hoy: los Panels (MitadMitadPanel/AlGustoPanel/ProductoBtn/porciones-inline) tiran de `productos`
-        general y mandan precio_override; el back re-tasa por canal → bug en delivery.
-        v2: tiran de carta_efectiva(canal), tasan ahí, emiten item.compuesto.
-        Sale el hardcode (max, 8.00, 10.50/3) a favor de la carta + config del canal.
-        Añadir un composer nuevo = una clase nueva que implementa Composer, cero cambio de núcleo.
+encaje: D3 + unificación. Motor único VariacionesComposer(carta, producto, fraccion) para entero/partido/al-gusto/mitad.
+        Porciones aparte. Todos tasan contra carta del canal → item.compuesto. comandero confía.
+aterrizaje vs hoy:
+  · MitadMitadPanel / AlGustoPanel / ProductoBtn / porciones-inline → un solo motor + Porciones.
+  · AlGustoPanel desaparece como componente especial: "Pizza Al Gusto" pasa a ser un producto con base vacía.
+  · sale el hardcode (max, 8.00, 10.50/3) a favor de la carta + config del canal.
+  · canal: de prefijo de cuenta_id → cuenta.canal explícito.
+  · añadir un composer nuevo = una config del motor (o una clase si es realmente distinto, como Porciones).
 ```

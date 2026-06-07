@@ -1853,3 +1853,129 @@ CLASE ChatStore (contrato DomainStore — lib/stores/chat.ts):
 | **②2b** clave canónica `correlation_id` (`request_id` solo alias de borde) | usa `request_id` en todo el req/resp | coherente como borde; no propaga `correlation_id` |
 | **①** evento `core/<core_id>/events/...` | publica con comodín `core/*/events/...` (no su id) | sirve para subscribe multi-core; en publish debería llevar id propio |
 | OOP con `class` + `#private` | módulos-singleton funcionales (closures + stores) | desvío de forma; contrato OOP respetado |
+
+---
+
+# 🍕 Frontend línea carta/pizzepos — UI de blueprints (Postura B: lectura + prefill)
+
+> Los módulos UI de la rama carta (`menu-generator`, `carta-manager` y sus hermanos) son el
+> **espejo en el navegador** de los blueprints backend (clases 25–30). **Todos comparten la
+> MISMA estructura** — por eso se documentan como UN patrón (clase 37) + dos ejemplares de store
+> (38, 39) + tabla de instancias. Caso testigo del paradigma en el front: **NO hay backend
+> dedicado en la UI**; el front lee el JSON del storage del proyecto vía las tools `fs.read/list`
+> del módulo `filesystem`, y **NO muta directo**.
+>
+> **"Postura B" (decisión de UI, D2/D6):** la UI es **solo lectura**. Las mutaciones (las tools
+> del blueprint: `save/delete/add_product/crear_regla/…`) son **LLM-runtime** — no responden al
+> bus directamente. La UI las dispara **rellenando el chat** (`prefillChatInput(texto)`): el
+> usuario confirma y el compañero las ejecuta. Sin cache materializado: el store se suscribe a los
+> eventos del bus y recarga (`paradigma-no-cabe`).
+
+## 37. `BlueprintUIModule` — patrón común de la línea (módulo fino + store lectura + prefill)
+
+```
+PATRÓN BlueprintUIModule (Postura B) — replicado por TODA la línea carta:
+
+  ① MÓDULO FINO (lib/modules/<x>/index.ts):                # autodescubierto por el loader
+     UIModule = { manifest:{ id, name, version, zone:'work-bar',
+                             button:{ icon, label, action:{panel,'<x>-panel'}, order },
+                             panels:[{ id:'<x>-panel', size:'lg'|'md' }] },
+                  PanelComponent: <X>Panel }               # el .svelte real (lazy)
+     # + manifest.json hermano: { id, zone, order, routes:['/<ruta>'], icon, label }
+     #   routes → en qué página es visible la work-bar (LazyModuleRegistry filtra por ruta, clase 34)
+     # SIN lógica: el módulo solo declara botón+panel; el trabajo vive en el store.
+
+  ② STORE LECTURA-DIRECTA (lib/stores/<x>.ts):             # consumidor del bus, sin backend propio
+     state: writables { datos, seleccionado, loading, error } + derived { sorted, stats }
+     ▸ load<X>():                                          # LECTURA: fs directo (no tool de blueprint)
+         items ← await mqttRequest('fs','list',{path:'/storage/pizzepos/<dir>/'})   # decisión ②/⑥
+         crudos ← await Promise.all(items.map → mqttRequest('fs','read',{path}))
+         datos ← crudos.map(normalize).filter(notNull)    # normalize: levanta `meta` al top-level
+         # RESOURCE_NOT_FOUND (proyecto sin datos) → lista vacía, NO error (edge canónico)
+     ▸ init<X>Subscriptions() → cleanupFn:                 # REACTIVIDAD: re-carga al oír el bus
+         subscribe('<dominio>.actualizada', → load<X>())   # carta.actualizada/editada/borrada, etc.
+         return ()→ unsubs.forEach(u→u())
+
+  ③ MUTACIÓN POR PREFILL (en los .svelte del panel):       # Postura B — la UI NUNCA muta directo
+     onAccion(): prefillChatInput(`Archiva la carta "${x.nombre}".`)   # rellena el chat input
+                 # → el usuario revisa+envía → el compañero ejecuta la tool del blueprint (LLM-runtime)
+
+  # SHAPE ABIERTO (D3): el dato solo garantiza id+nombre; el resto se renderiza si está presente.
+  #   Sin validación contra schema (multi-vertical: pizzas, vapers, N modelos futuros).
+  # DIP: el store solo ve mqttRequest + subscribe; jamás toca mqtt.js (igual que el backend).
+```
+
+## 38. `CartaManagerStore` — ejemplar store de lectura-fs (espejo del aggregate root)
+
+```
+CLASE CartaManagerStore (lib/stores/carta-manager.ts) — refleja el blueprint carta-manager (clase 26):
+  estado: { cartasStore, cartaSeleccionada, cartasLoading, cartasError }
+  derivados: { cartasStats (total + por_estado), sortedCartas (alfabético) }
+  CONST: CARTAS_DIR='/storage/pizzepos/cartas/' ; VERSIONS_DIR='…/.versions/'   # paths canónicos D1
+
+  interfaz:
+    ▸ loadCartas():        fs.list(CARTAS_DIR) → fs.read por archivo (paralelo) → normalizeCarta → store
+    ▸ getCarta(id):        fs.read(cartaPath(id)) → normalize → cartaSeleccionada
+    ▸ loadHistorial(id):   fs.list(.versions/<id>/) → resumen por snapshot (nombre del archivo = archived_at)
+    ▸ loadVersionSnapshot(id, ts):  fs.read del snapshot completo (para diff)
+    ▸ initCartaManagerSubscriptions():
+         subscribe('carta.actualizada', e → loadCartas(); si e.carta_id==seleccionada: getCarta())
+         subscribe('carta.editada',  → loadCartas())
+         subscribe('carta.borrada',  → loadCartas(); cartaSeleccionada←null)
+    ▸ normalizeCarta(raw): si no obj→null; levanta raw.meta{id,nombre,estado,version} al top-level,
+                           conserva categorias/productos/extras; null si falta id+nombre (mínimos D3)
+
+  # MUTACIONES (en CartaDetail.svelte / CartasBrowser.svelte) → SOLO prefill:
+  #   "Crea una carta nueva: […]" · "Archiva la carta X" · "Añade un producto a X: […]" ·
+  #   "Actualiza los precios de X: […]" · "Restaura X a la versión del <fecha>"
+  # EDGE: NO invoca las tools del blueprint (save/delete/…) — son LLM-runtime, no responden al bus (D6, bug PR#264)
+```
+
+## 39. `MenuGeneratorStore` — ejemplar store de operación + progreso (no lectura-fs)
+
+```
+CLASE MenuGeneratorStore (lib/stores/menu-generator.ts) — refleja el blueprint menu-generator (clase 25):
+  estado: generationStore<{ step:'idle'|'extracting'|'structuring'|'done'|'error', nombre, message, error, result }>
+  derivados: generationStep, generationError, generationResult, isGenerating
+
+  interfaz:
+    ▸ generateFromText(nombre, texto):   await mqttRequest('menu','generate', {nombre,texto,project_id}, {timeout:30000})
+    ▸ generateFromFile(nombre, path):    await mqttRequest('menu','generate', {nombre,filePath,project_id}, {timeout:120000})  # OCR
+    ▸ resetGeneration() ; getErrorMessage(e) → traduce MqttTimeout/RequestError a texto user-facing
+    ▸ initGenerationSubscriptions():     # MÁQUINA DE ESTADOS por eventos del pipeline
+         subscribe('menu.generation.progress', p → step←p.step; message←p.message)   # extracting→structuring
+         subscribe('menu.generation.failed',   p → step←'error'; error←p.error)
+         subscribe('carta.actualizada',         p → si step∈{structuring,extracting}: step←'done'; result←{carta_id,nombre,productos,categorias})
+         # ↑ el cierre del flujo lo marca carta-manager al persistir (separación generar≠guardar, clase 25)
+
+  # A DIFERENCIA de carta-manager: NO lee fs — DISPARA una operación (menu.generate) y refleja
+  # su progreso vía los eventos menu.generation.* + el carta.actualizada del aggregate root.
+```
+
+### Tabla de instancias de la línea (todas siguen el patrón 37)
+
+| Módulo UI (`order`) | Ruta donde aparece | Blueprint backend espejo | Store / rol |
+|---|---|---|---|
+| `menu-generator` | `/menu-generator` | menu-generator (25) | operación+progreso (clase 39) |
+| `carta-manager` (4) | `/carta-manager` | carta-manager (26, aggregate root) | lectura-fs + versiones (clase 38) |
+| `carta-digital` (6) | `/carta1` | carta-digital (27) | lectura-fs (config carta pública) |
+| `carta-config` (1) · `carta-preview` (2) · `carta-export` (3) · `carta-stats` (4) | `/carta-digital` | carta-digital (27) | work-bar satélite de la carta pública |
+| `design-gallery` (1) · `design-profiles` (2) | `/carta-design` | carta-design (27) | lectura-fs (perfiles/diseños) |
+| `impresion-cartas` | `/carta-impresion` | carta-impresion (27) → agente impresor | lectura-fs + prefill |
+| `marketing-actividad` · `marketing-perfil` | `/carta-marketing` | carta-marketing (27) → agentes marketing | lectura-fs + prefill |
+| `carta-scheduler` (9) | `/carta-scheduler` | carta-scheduler (27) | lectura-fs (reglas+pendientes) + prefill (guardrail OK humano) |
+
+### Jerarquía de topics + QoS (línea carta, lado frontend)
+
+```
+ui/request/fs/{read,list}                     QoS 1   # SALIDA: lectura del storage del proyecto (sin backend UI)
+ui/request/menu/generate                      QoS 1   # SALIDA: dispara generación (menu-generator)
+core/*/events/carta/{actualizada,editada,borrada}   QoS 1   # ENTRADA: el store recarga (reactividad sin cache)
+core/*/events/menu/generation/{progress,failed}     QoS 1   # ENTRADA: máquina de estados de generación
+```
+
+*Justificación QoS 1:* perder un `carta.actualizada` deja la UI mostrando un catálogo desfasado
+frente al disco (fuente de verdad); perder un `menu.generation.progress` cuelga la barra de
+progreso. La UI **no materializa** copia del estado — releva del aggregate root vía `fs` y se
+re-sincroniza por evento. Mutaciones por **prefill del chat** (Postura B): cero escrituras
+directas desde el front, el compañero es el único que ejecuta las tools del blueprint.

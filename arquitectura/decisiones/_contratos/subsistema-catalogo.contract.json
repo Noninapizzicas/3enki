@@ -151,7 +151,16 @@
       "condicion_de_correctitud": "El composer pull-ea la carta EFECTIVA del canal activo (carta_efectiva(canal)), NO el catalogo general productos. Aplica su regla sobre ESOS precios -> el precio ya es el del canal. Asi 'todo contenido' es ademas correcto en mesa Y en delivery.",
       "evento_canonico": "item.compuesto { tipo, componentes:{producto_ids?,mitades?,extras?}, precio_final, capa_imagen }. Sustituye los eventos Svelte sueltos por composer + el precio_override actual.",
       "backend_simplifica": "comandero ELIMINA _resolverPrecioCanal (el re-calculo por canal que causaba el bug). Confia en el precio del composer porque el composer ya uso la carta correcta. comandero solo registra el item + precio y suma. Desaparece el split de autoridad front/back: un solo punto tasa (el composer).",
-      "requisito": "El front debe poder resolver canal_activo -> carta_efectiva(canal) (hoy el canal se detecta por prefijo de cuenta_id en el back; hay que exponer la carta del canal al composer)."
+      "requisito": "El front debe poder resolver canal_activo -> carta_efectiva(canal) (hoy el canal se detecta por prefijo de cuenta_id en el back; hay que exponer la carta del canal al composer).",
+      "composer_base_producto": {
+        "_doc": "El boton de producto (ProductoBtn.svelte) ES el composer base. No es un caso especial: cae bajo el mismo modelo D3 (tasa contra la carta del canal, emite item.compuesto).",
+        "layouts": {
+          "entero": "zona unica. tiene_variaciones === false. Un tap -> add producto entero a su precio (de la carta del canal). item.compuesto { tipo:'entero', componentes:{producto_id}, precio_final }.",
+          "partido": "doble zona. tiene_variaciones === true. Izquierda 'Anadir integro' = entero; derecha '+/-' = handoff al composer de variaciones (base + SUM extra, carta del canal)."
+        },
+        "regla_tiene_variaciones": "tiene_variaciones = producto.tiene_variaciones ?? (ingredientes.length > 0). Default heuristico (tiene ingredientes -> partido). Override EXPLICITO en el catalogo SOLO para excepciones: producto con ingredientes que se quiere entero -> tiene_variaciones:false. No hay que marcarlo en cada producto, solo donde la heuristica falla. Es lo que ya hace el codigo (comandero.ts: p.tiene_variaciones ?? (ingredientes.length > 0)).",
+        "matiz_precio": "ProductoBtn pinta hoy producto.precio del catalogo general (productos) -> en delivery muestra/manda el precio equivocado, mismo bug que los compuestos. Con D3 tira de la carta del canal. Sin caso especial."
+      }
     }
   },
 

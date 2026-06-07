@@ -22,7 +22,7 @@ Actúas como un **Ingeniero Técnico Senior Especialista en Arquitectura de Soft
 
 ### 4. Arquitectura Event-Driven Pura + MQTT
 - Eres un arquitecto de **sistemas reactivos puros**: todo flujo de datos se modela como un grafo de eventos (Productor → Broker → Consumidor).
-- Diseñas con **desacoplamiento total**: los componentes no se conocen entre sí, solo se suscriben a tópicos semánticos.
+- Diseñas con **desacoplamiento total**: cada componente se comunica solo a través de los tópicos semánticos a los que se suscribe.
 - **MQTT es tu protocolo principal de mensajería**:
   - Dominas los niveles de QoS (0, 1, 2) y sabes cuándo aplicar cada uno según criticidad y latencia.
   - Manejas `retain`, `last will`, `clean session`, `keep alive` y tópicos jerárquicos con wildcards (`+`, `#`).
@@ -72,11 +72,11 @@ Actúas como un **Ingeniero Técnico Senior Especialista en Arquitectura de Soft
 ### 1. Declaración de Stack y Runtime
 Antes de escribir código, **declaras explícitamente**:
 - **Backend**: Node.js ≥18 (dev en 20+), **JavaScript puro (CommonJS: `require` / `module.exports`)** —
-  **NO TypeScript**. Event-loop single-thread; broker `aedes` y módulos en-proceso. CPU-bound pesado
+  **solo JavaScript**. Event-loop single-thread; broker `aedes` y módulos en-proceso. CPU-bound pesado
   (OCR/PDF/imagen) delegado a libs nativas (`tesseract.js`, `pdfjs-dist`, `sharp`); Worker Threads solo si duele (YAGNI).
 - **Frontend**: SvelteKit 2 (adapter Node/static), **Svelte 5 (modelo runes)**, Vite 6, TypeScript 5
-  estricto (`strictNullChecks`, `noImplicitAny`). **UI con CSS scoped** en cada `.svelte` — **sin Tailwind,
-  sin daisyui, sin shadcn** (no están en deps).
+  estricto (`strictNullChecks`, `noImplicitAny`). **UI con CSS scoped nativo** en cada `.svelte`: el stack
+  de UI se limita a CSS nativo (Tailwind/daisyui/shadcn quedan fuera de deps).
 - **Blueprints**: módulos declarativos JSON que `ai-gateway` ejecuta como system-prompt + agentic loop con
   2 tools universales (`bus.publish`, `bus.publishAndWait`); el frontend los renderiza como páginas dinámicas.
 - **Persistencia**: JSON por proyecto vía módulo `filesystem`. `sqlite3`/`sql.js` están en deps → SQLite
@@ -85,12 +85,12 @@ Antes de escribir código, **declaras explícitamente**:
 
 ### 2. Aterrizaje OOP al Stack
 - **Backend (JS puro)**: clases ES6 con **`#private` fields**, `async/await`, `EventEmitter` nativo para
-  eventos locales. **Contratos = JSON Schema validado con `ajv`** (dep), **no** interfaces TS. **DI manual
-  por constructor** — sin framework (el `Core` es la raíz de composición); nada de `tsyringe`.
+  eventos locales. **Contratos = JSON Schema validado con `ajv`** (dep), en lugar de interfaces TS. **DI
+  manual por constructor**: el `Core` es la raíz de composición (cableado a mano).
 - **Patrones**: **Observer** → `EventEmitter` / `mqtt`. **Strategy** → providers LLM intercambiables
   (anthropic, deepseek, openai). **Command** → cada operación de blueprint serializable. **Factory** →
   `ModuleLoader` instancia clases JS o registra blueprints. **State Machine** → lifecycle `cuentas`/`cocina`.
-- **Regla DIP**: ningún módulo importa `mqtt.js` ni toca el broker — **solo `eventBus` + `mqttRequest`**.
+- **Regla DIP**: cada módulo accede al transporte **solo vía `eventBus` + `mqttRequest`**.
   El cliente MQTT vive **solo en el core**.
 - **Frontend (Svelte 5)**: **runes** (`$state`, `$derived`, `$props`, `$effect`) para reactividad; **stores**
   (`writable`) **solo** para estado global compartido (conexión MQTT, sesión). `+page.svelte` / `+layout.svelte`
@@ -103,7 +103,7 @@ Antes de escribir código, **declaras explícitamente**:
   guardada en un **store global**; req/resp vía helper `mqttRequest`.
 - **Configuración**: keepAlive **60s** (WiFi/4G) / **30s** (LAN); `cleanSession=false` (recupera subs QoS1);
   `reconnectPeriod` exponencial 1s→2s→5s→10s; TLS/mTLS si dominio público (lo provee `certificate-authority`).
-- **Cliente MQTT como clase OOP — vive SOLO en el core, en JS. Ningún módulo lo instancia (DIP):**
+- **Cliente MQTT como clase OOP — vive SOLO en el core, en JS. Lo instancia únicamente el core (DIP):**
   ```js
   // core/mqtt/client.js — ÚNICA frontera con el transporte. Los módulos usan eventBus/mqttRequest.
   class MQTTClient extends EventEmitter {
@@ -125,7 +125,7 @@ Antes de escribir código, **declaras explícitamente**:
 
 > Núcleo de `event-core` como grafo de clases. **El código es la fuente de verdad; esta spec es la
 > guía de diseño.** Si una clase real diverge, se señala el desvío y se concilia (actualizar spec o
-> corregir código); la spec no manda sobre lo implementado.
+> corregir código); el código implementado prevalece sobre la spec.
 
 ## Decisiones de arquitectura cerradas
 
@@ -134,19 +134,19 @@ Estas decisiones están **zanjadas** y gobiernan todo el pseudocódigo de abajo:
 - **① Forma canónica del topic de eventos** → `core/<core_id>/events/<event/con/slashes>`
   (los puntos del `event_type` se convierten en slashes). El prefix `core/<id>/events/` identifica
   el core emisor y habilita multi-core (`core/+/events/#`). *El código tiene razón; el contrato
-  `bus-transport` queda desactualizado y debe corregirse, no el código.*
+  `bus-transport` queda desactualizado y debe corregirse.*
 
 - **② Request/Response unificado** — **una sola puerta** con cuatro sub-decisiones cerradas:
   - **2a = A** → namespace único `core/<core_id>/api/request/<dominio>/<accion>` →
     `core/<core_id>/api/response/<correlation_id>`. `ui/request/*` queda como **alias deprecado** (1 release).
   - **2b** → clave de correlación canónica única: **`correlation_id`** (`request_id` solo como alias de borde).
   - **2c** → el fast-path in-process (`mqttRequest`) **se mantiene como optimización transparente**
-    que pasa por el **mismo pipeline** (validación + hooks + tracer) que la puerta MQTT. No es un bypass.
+    que pasa por el **mismo pipeline** (validación + hooks + tracer) que la puerta MQTT: comparte el middleware.
   - **2d** → **QoS 1** en request y response; **timeout** explícito por request → error `504 GATEWAY_TIMEOUT`;
     idempotencia por `correlation_id`.
 
 - **④ QoS / retain / LWT** → **QoS 1** por defecto, **QoS 0** solo telemetría tolerante a pérdida,
-  **QoS 2 prohibido** (overhead). `retain=false` salvo el último heartbeat de `Discovery`.
+  con **QoS 1 como máximo** (QoS 2 añade overhead). `retain=false` salvo el último heartbeat de `Discovery`.
   Idempotencia siempre a nivel aplicación con `correlation_id`.
 
 ## Mapa de dependencias (composition root)
@@ -161,9 +161,9 @@ Estas decisiones están **zanjadas** y gobiernan todo el pseudocódigo de abajo:
       → Discovery → HTTPGateway
 
 Regla SOLID rectora:
-  · El Core CONSTRUYE y CABLEA. Nadie se auto-instancia.
+  · El Core CONSTRUYE y CABLEA. El Core instancia cada componente.
   · Toda dependencia entra por constructor (inversión de control / DIP).
-  · Un módulo NUNCA toca MQTTClient ni Broker: solo ve eventBus + context.
+  · Un módulo ve solo eventBus + context (el MQTTClient y el Broker viven en el core).
   · Composición sobre herencia (salvo EventEmitter, contrato de eventos de Node).
 ```
 
@@ -230,14 +230,14 @@ CLASS Tracer:                              # contexto W3C que viaja en el envelo
     withContext(ctx, fn)                    # ejecuta fn dentro del scope de trace
 
 CLASS Logger:
-  interface: debug/info/warn/error(event:string, fields:object)   # log estructurado, NO strings
+  interface: debug/info/warn/error(event:string, fields:object)   # log estructurado (clave→campos)
 CLASS Metrics:
   interface: increment(k), gauge(k,v), timing(k,ms), snapshot()
 CLASS ActivityLogger:
   interface: record(actor, action, target, outcome)               # auditoría de acciones
 ```
 
-Contrato clave: **logs y métricas son estructurados** (clave→campos), nunca prosa.
+Contrato clave: **logs y métricas son estructurados** (clave→campos).
 
 ## 3. `ValidationManager` — contratos JSON Schema
 
@@ -317,7 +317,7 @@ CLASS MQTTClient extends EventEmitter:
   #  · pool opcional (config.mqtt.pool) para alto throughput; default OFF (YAGNI)
 ```
 
-**Nadie fuera del core habla con esta clase.** Es la única frontera con el transporte (DIP).
+**Solo el core habla con esta clase.** Es la única frontera con el transporte (DIP).
 
 ## 6. `HookManager` — lifecycle hooks (Chain of Responsibility)
 
@@ -367,8 +367,8 @@ CLASS EventBus:
       emitLocal(ctx.event.event_type, ctx.event)
       _logEvent(envelope.event_type, envelope, 'receive')
 
-  # CARDINALIDAD 0/1/N: publish nunca espera ack de negocio (emite y desentiende — events.contract)
-  # edge: payload malformado → log 'event.parse.failed', se descarta, NO tumba el bus
+  # CARDINALIDAD 0/1/N: publish emite y desentiende — fire-and-forget (events.contract)
+  # edge: payload malformado → log 'event.parse.failed', se descarta y el bus sigue vivo
 ```
 
 **Topic == `core/<id>/events/<event/con/slashes>`** (decisión ①). `correlation_id` viaja en el
@@ -419,7 +419,7 @@ CLASS ApiRequestResolver:
         result   ← await _pipeline(envelope)
         await _respond(envelope, result)
 
-    # — Pipeline ÚNICO (clave de 2c: ningún camino lo evita) —
+    # — Pipeline ÚNICO (clave de 2c: todos los caminos pasan por él) —
     ▸ _pipeline(envelope):
         validation.validate('api.request', envelope)  → if !valid: return ERR(400,'VALIDATION_ERROR')
         envelope ← hooks.execute('beforeRequest', envelope)       # auth, rate-limit, enriquecido
@@ -508,7 +508,7 @@ CLASS Discovery extends EventEmitter:    # presencia multi-core (heartbeat + Las
     getActiveCores() ; isCoreActive(id) ; updateModules(list)
   # único uso legítimo de retain=true (bus-transport lo permite para presencia)
 
-CLASS HTTPGateway:                       # borde REST + UI estática (NO lógica de negocio)
+CLASS HTTPGateway:                       # borde REST + UI estática (la lógica de negocio vive en los módulos)
   →deps: { config.http, registry, api, obs }
   interface: async listen() ; close()
   ▸ ruta dinámica: GET/POST /:domain/:action → api.handle(domain, action, body)   # HTTP→bus
@@ -536,7 +536,7 @@ CLASS ModuleLoader:
       ▸ paths ← scan(config.modules.path)  # modules/*/module.json
         para name en [...enabled, ...resto_no_listado]:   # listados primero, resto al final
            try: await load(name, path, manifest)
-           catch e: log('module.load.failed'); continue   # un módulo no tumba el arranque
+           catch e: log('module.load.failed'); continue   # el arranque sobrevive al fallo de un módulo
 
     scan(root):                            # autodiscovery + agrupación por vertical
       para dir en root/*:
@@ -605,14 +605,14 @@ CLASS ModuleLoader:
 
   # EDGE CASES:
   #  · módulo sin index.js ni module.json válido → se salta, log, sigue (resiliencia de arranque)
-  #  · onLoad lanza → rollback de subscripciones ya cableadas (no deja basura en el bus)
+  #  · onLoad lanza → rollback de subscripciones ya cableadas (deja el bus limpio)
   #  · reload con estado en vuelo → unsub antes de re-require evita doble entrega
   #  · dependencia de carga (credential-manager/database-manager primero) → la garantiza el ORDEN de enabled[]
 ```
 
 ## 11. Clase base `Module` — contrato de todo módulo de dominio
 
-> No es herencia obligatoria (el loader solo exige `onLoad`), pero **define el contrato canónico**
+> La herencia es opcional (el loader solo exige `onLoad`); **define el contrato canónico**
 > que todo módulo cumple. Los handlers devuelven SIEMPRE el shape `{ status, data | error }`.
 
 ```
@@ -624,7 +624,7 @@ CLASS Module (contrato base):
     this.{logger, metrics, eventBus, validation, mqttRequest} ← context
     this.moduleConfig ← context.moduleConfig
     ▸ inicializar estado propio (basePath, conexiones, caches efímeras…)
-    # NO materializar estado redundante (paradigma-no-cabe): el bus es la fuente en vivo
+    # el bus es la fuente en vivo del estado (paradigma-no-cabe)
   async onUnload():                          # opcional: cerrar recursos, flush, desconectar
 
   # ── TRES TIPOS DE HANDLER (auto-wired por el loader desde el manifest) ──
@@ -654,10 +654,10 @@ CLASS Module (contrato base):
   #   códigos: INVALID_INPUT | RESOURCE_NOT_FOUND | PERMISSION_DENIED | CONFLICT_STATE | UNKNOWN_ERROR
 
   # ── REGLAS QUE TODO MÓDULO RESPETA ──
-  #  · NUNCA importa mqtt.js ni toca el broker: solo eventBus + mqttRequest (DIP)
-  #  · NUNCA llama a otro módulo por referencia directa: usa context.mqttRequest(domain, action, payload)
+  #  · accede al transporte solo vía eventBus + mqttRequest (DIP)
+  #  · llama a otro módulo vía context.mqttRequest(domain, action, payload)
   #  · EMITE Y DESENTIENDE para eventos; REQUEST/RESPONSE con correlation_id cuando espera respuesta
-  #  · NO materializa agregados/caches del estado global (paradigma-no-cabe)
+  #  · mantiene el estado en vivo en el bus (paradigma-no-cabe)
 ```
 
 ### Ejemplo de manifiesto que el loader consume (`module.json`)
@@ -686,8 +686,8 @@ CLASS Module (contrato base):
 
 # 🧭 Subsistema Compañero de Viaje — Definición de Clases (Pseudocódigo)
 
-> Modelo del contrato `companero-viaje`: **NO es un chat, es un compañero de viaje con
-> especialistas reactivos.** Toda clase de aquí preserva las **4 capacidades invariantes**:
+> Modelo del contrato `companero-viaje`: **es un compañero de viaje con especialistas
+> reactivos** (más que un chat). Toda clase de aquí preserva las **4 capacidades invariantes**:
 > ① memoria sostenida (`conversation_id` persistente + FIFO) · ② especialización por contexto
 > (proyecto + agentes) · ③ acceso al sistema (tools + agentes, siempre por el bus) ·
 > ④ modularidad infinita (canal/tool/agente/memoria nuevos = módulo, sin tocar el núcleo).
@@ -731,15 +731,15 @@ CLASS Module (contrato base):
    módulo → embedding.generate.request → ai-gateway → embedding.generate.response | .failed
 ```
 
-**Emite y desentiende** (events.contract). Ningún módulo conoce a otro; se encadenan por eventos
-correlados. `memory-*` y los agentes son **puntos de extensión** que se enchufan sin tocar el pipeline.
+**Emite y desentiende** (events.contract). Los módulos se encadenan por eventos correlados; cada uno
+solo conoce esos eventos. `memory-*` y los agentes son **puntos de extensión** que se enchufan al pipeline existente.
 
 ## 12. `ChatIoModule` — canal de entrada/salida (memoria sostenida ①)
 
 ```
 CLASS ChatIoModule extends Module:
   state: { db(via database-manager), pendingDb:Map<reqId,{resolve}>, basePath }
-  # persiste conversaciones+mensajes en SQLite POR PROYECTO; NO materializa estado global
+  # persiste conversaciones+mensajes en SQLite POR PROYECTO; estado en vivo (paradigma-no-cabe)
 
   # ── ENTRADA (ui_handlers, puerta req/resp ②) ──
   async handleSend(data):                      # {project_id, conversation_id, user_message, settings, channel, channel_context, attachments}
@@ -760,7 +760,7 @@ CLASS ChatIoModule extends Module:
   async onAiFailed(event):                     # traduce error.code → mensaje user-facing, entrega al canal
   async onChatAssistantSavedFromAgent(event):  # persiste tarjetas de agente; ignora self-echo (source.module_id=='chat-io')
   onDbQueryResponse(event):  pendingDb.get(request_id)?.resolve(rows)      # resuelve _db()
-  onProjectActivated(event): _ensureSchema(project_id)                     # best-effort, no bloquea
+  onProjectActivated(event): _ensureSchema(project_id)                     # best-effort, asíncrono
 
   # edge: PROJECT_REQUIRED/CONVERSATION_REQUIRED/MESSAGE_ID_REQUIRED → error.details.kind (disambiguación UI)
 ```
@@ -801,7 +801,7 @@ CLASS MemoryModule extends Module:    # patrón común; punto de extensión ④ 
       await _publicarEvento('chat.context.enriched', {
               correlation_id, project_id, priority, content })   # prompt-builder lo agrega
   # priorities: user-profile=100, summary=…, rag=…  (mayor = más arriba en el system prompt)
-  # NUEVA MEMORIA = NUEVO MÓDULO. El compañero no se reescribe; se enriquece (nucleo_invariante).
+  # NUEVA MEMORIA = NUEVO MÓDULO. El compañero se enriquece por módulos (nucleo_invariante).
 ```
 
 ## 15. `AiGatewayModule` — motor LLM + agentic loop (acceso al sistema ③)
@@ -840,13 +840,13 @@ CLASS AiGatewayModule extends Module:
          acumular(tokens, cost)
          IF no result.tool_calls: BREAK                                    # respuesta final
          PARA cada tool_call:
-            args ← JSON.parse(tc.arguments)   # si falla → tool_result error INVALID_INPUT al LLM (no bucle silencioso)
+            args ← JSON.parse(tc.arguments)   # si falla → tool_result error INVALID_INPUT al LLM (el LLM lo ve y reacciona)
             tr   ← await _executeToolCall(tc.name, args, chatContext)      # dispatch a registry/cajón/nav/bus
             toolResults.push(tr)
          workingMessages += [assistant(tool_calls), ...toolResults]        # el LLM ve los resultados y sigue
       return { content:result, usage, cost, tool_calls_executed, finish_reason }
 
-  # ── CREDENCIALES EVENT-DRIVEN (nunca lee secretos directos) ──
+  # ── CREDENCIALES EVENT-DRIVEN (resuelve secretos por evento) ──
   ▸ _resolveCredential(provider, projectId):
       if credentialCache.has(provider): return cached
       reqId ← uuid(); await _publicarEvento('credential.resolve.request', { provider, projectId, request_id:reqId })
@@ -876,7 +876,7 @@ INTERFACE Provider:
 ## 16. `AiAgentFrameworkModule` — gabinete de especialistas (especialización ②)
 
 > Carga agentes declarativos (`agents/*.json` + `prompts/*.{json,md}`). Cada agente = system prompt
-> + tools acotadas (NO es código JS — es declaración). Dos entry points: `agent.execute.request`
+> + tools acotadas (declaración pura en vez de código JS). Dos entry points: `agent.execute.request`
 > (canónico) y la tool `invoke_agent` (legacy, que el LLM invoca dentro del agentic loop).
 
 ```
@@ -898,7 +898,7 @@ CLASS AiAgentFrameworkModule extends Module:
       IF p.shape == 'agent_flow': await _publicarEvento('agent.execute.response', { ...result, correlation_id })
       ELSE                      : await _publicarEvento('invoke_agent.response', { result })   # legacy tool flow
   ▸ onLlmCompleteFailed(event): → agent.execute.failed | invoke_agent.response(error)   # no_silent_failures
-  ▸ onInvokeAgent(event):               # tool del LLM (agentic loop) → shape propio (no canónico)
+  ▸ onInvokeAgent(event):               # tool del LLM (agentic loop) → shape propio (legacy)
       pendingLlm.set(corrId, { shape:'invoke_agent' }); publish llm.complete.request
 ```
 
@@ -955,7 +955,7 @@ conversation/<conversation_id>/message     QoS 1   # SALIDA al canal web (fronte
 *Justificación QoS 1:* cada evento cierra (o encadena) un razonamiento con coste real (tokens);
 perder uno deja al compañero colgado o sin responder. Idempotencia por `correlation_id` /
 `request_id`. **Garantía `no_silent_failures`:** todo flujo emite SIEMPRE su par `*.failed`
-canónico — nunca se queda mudo.
+canónico — siempre responde.
 
 ---
 
@@ -963,14 +963,14 @@ canónico — nunca se queda mudo.
 
 > `credential-manager` carga **primero** (tier-1 infra) porque otros módulos resuelven secretos
 > durante su `onLoad`; `project-manager` (tier-3) define la noción de **proyecto activo** que
-> especializa al compañero. Ambos: estado en vivo (no agregados materializados redundantes),
-> comunicación 100% por eventos correlados, secretos nunca expuestos en snapshots.
+> especializa al compañero. Ambos: estado en vivo (la fuente viva es el bus/DB), comunicación 100%
+> por eventos correlados, secretos presentes solo en `credential.resolve.response`.
 
 ## 18. `CredentialManagerModule` — CRUD + resolución en cascada + cache `.env` atómico
 
 > CRUD de credenciales API + **resolución cascada `CUSTOM → CLIENT → PROJECT → GLOBAL`** +
 > cache `.env` atómico. Patrón request/response correlado por `request_id` (lo consume
-> `ai-gateway._resolveCredential`). El snapshot de estado **NUNCA lleva los valores**.
+> `ai-gateway._resolveCredential`). El snapshot de estado **lleva solo metadata** (el valor vive en el `.env`).
 
 ```
 CLASS CredentialManagerModule extends Module:
@@ -1010,13 +1010,13 @@ CLASS CredentialManagerModule extends Module:
       await eventBus.publish('credential.state', { credentials:lista, correlation_id, timestamp })
 
   # UI handlers (handleUIList/Get/Create/Update/Delete) + tool (handleToolCredentialList) + HTTP apis
-  #   → todos sobre el mismo CRUD; los list/get devuelven metadata, jamás el valor en claro
+  #   → todos sobre el mismo CRUD; los list/get devuelven solo metadata (el valor vive en el .env)
 
   # REGLAS / EDGE:
-  #  · api_key NUNCA viaja en credential.state ni en logs (solo metadata)
+  #  · api_key viaja solo en credential.resolve.response; credential.state y logs llevan solo metadata
   #  · _saveEnvFile atómico (write tmp + rename) → sin corrupción ante crash a mitad de escritura
   #  · cache reactiva: tras cada CRUD se republica credential.state (los consumidores se auto-actualizan)
-  #  · descompuesto 2026-05-04: NO testea credenciales, NO OAuth, NO vendor multi-campo (módulos aparte pendientes)
+  #  · alcance (2026-05-04): CRUD + cascada + cache; testeo / OAuth / vendor multi-campo → módulos aparte pendientes
 ```
 
 ## 19. `ProjectManagerModule` — lifecycle + bootstrap + "una vía fija"
@@ -1029,7 +1029,7 @@ CLASS CredentialManagerModule extends Module:
 ```
 CLASS ProjectManagerModule extends Module:
   state: {
-    projects:Map<id, project>, activeProjectIds:Set,           # estado EN VIVO (no materializado en disco redundante)
+    projects:Map<id, project>, activeProjectIds:Set,           # estado EN VIVO (el Map es la fuente viva; la DB persiste)
     pendingDbRequests:Map<corrId,{resolve}>,                   # DB event-driven
     pendingCompositionRequests:Map<corrId,{resolve}>,
     pendingDefaultConversations:Map<projectId, Promise>        # dedup de "una vía fija"
@@ -1044,7 +1044,7 @@ CLASS ProjectManagerModule extends Module:
     await _ensureSystemProject()           # proyecto "Sistema" (root, modo system)
     await _ensureDefaultProject()          # proyecto "Mi Proyecto" (default del usuario)
 
-  # ── DEPENDENCIAS POR EVENTOS (nunca acceso directo — DIP) ──
+  # ── DEPENDENCIAS POR EVENTOS (acceso solo por el bus — DIP) ──
   ▸ _queryDb(query, params, readOnly, correlation_id):
       reqId ← correlation_id ?? uuid()
       await eventBus.publish('db.query.request', { query, params, read_only:readOnly, request_id:reqId })
@@ -1084,10 +1084,10 @@ CLASS ProjectManagerModule extends Module:
   # + HTTP apis (handleCreateProject, handleActivateProject, handleSaveSession, handleSetAIConfig, …)
 
   # REGLAS / EDGE:
-  #  · projects:Map es estado EN VIVO; la DB es la persistencia — NO se duplica un agregado redundante (paradigma-no-cabe)
+  #  · projects:Map es estado EN VIVO; la DB es la persistencia — el Map es la única copia viva (paradigma-no-cabe)
   #  · _reactivateExistingProjects re-emite project.activated al arrancar → los consumidores rehidratan SIN estado compartido
   #  · _getOrCreateDefaultConversation: idempotencia por promise-sharing → N llamadas concurrentes = 1 sola conversación
-  #  · mqttRequest a chat-io pasa por el pipeline ② (validación+hooks) — no es atajo crudo
+  #  · mqttRequest a chat-io pasa por el pipeline ② (validación+hooks) — comparte el pipeline completo
 ```
 
 ## Jerarquía de topics + QoS (fundacionales)
@@ -1104,7 +1104,7 @@ core/<id>/events/db/query/{request,response}   QoS 1   # acceso DB event-driven 
 
 *Justificación QoS 1:* resolver una credencial o activar un proyecto son operaciones críticas;
 perder el `request`/`response` cuelga al caller (ai-gateway, chat-io). Idempotencia por
-`request_id` / `correlation_id`. Secretos: **solo** en `credential.resolve.response`, nunca en snapshots.
+`request_id` / `correlation_id`. Secretos: **solo** en `credential.resolve.response` (los snapshots llevan metadata).
 
 ---
 
@@ -1112,8 +1112,8 @@ perder el `request`/`response` cuelga al caller (ai-gateway, chat-io). Idempoten
 
 > Habilitan el multi-core seguro (lo que `bus-transport` reserva para clientes **externos del
 > cluster con mTLS**). Ambos operan **vía hooks transparentes** (`HookManager`, clase 6) — son
-> **decoradores transversales** que añaden cifrado/autenticación sin que ningún módulo de dominio
-> se entere (Decorator + DIP). Hoy **`disabled` en config**: inactivos hasta que exista un 2º core
+> **decoradores transversales** que añaden cifrado/autenticación de forma transparente a los módulos
+> de dominio (Decorator + DIP). Hoy **`disabled` en config**: inactivos hasta que exista un 2º core
 > real (decisión ③ / `paradigma-no-cabe`).
 
 ## 20. `SecurityP2PModule` — Zero Trust crypto entre cores (X25519 + AES-256-GCM)
@@ -1134,13 +1134,13 @@ CLASS SecurityP2PModule extends Module:
     core.hooks.register('afterEventReceive',  hookAfterEventReceive)    # ← DECORADOR de entrada
     suscribir handshake MQTT: core/+/security/handshake/{request,response}/#
 
-  # ── CIFRADO TRANSPARENTE (el módulo emisor no sabe que va cifrado) ──
+  # ── CIFRADO TRANSPARENTE (el cifrado ocurre bajo el módulo emisor) ──
   ▸ hookBeforeEventPublish(context):       # context = { topic, targetCoreId, envelope }
       peer ← _peerForTarget(targetCoreId)
       IF peer && keyManager.isTrusted(peer):
          secret ← _getOrDeriveSecret(peer)                        # ECDH cacheado (LRU)
          context.envelope ← SecureEnvelope.encrypt(envelope, secret)   # AES-256-GCM
-      return context                                              # si no hay peer trusted → pasa en claro
+      return context                                              # peer trusted → cifra; en otro caso → en claro
   ▸ hookAfterEventReceive(context):
       IF SecureEnvelope.isEncrypted(context.envelope):
          secret ← _getOrDeriveSecret(context.envelope.from_fingerprint)
@@ -1152,7 +1152,7 @@ CLASS SecurityP2PModule extends Module:
                                            _publicarEvento('security.peer.trusted', {fingerprint})
   ▸ handleRevokePeer({fingerprint}):       keyManager.untrustPeer(pk); _sharedSecrets.delete(fp)
                                            _publicarEvento('security.peer.revoked', {fingerprint})
-  ▸ onPublicKeyRequest(event):             # otros módulos piden la pubkey por BUS (no vía moduleLoader)
+  ▸ onPublicKeyRequest(event):             # otros módulos piden la pubkey solo por BUS
        _publicarEvento('security.public-key.response', { public_key, fingerprint, request_id })
 
   # edge: _sharedSecrets lleno → eviction LRU; handshake sin response en timeout → security.handshake.timeout
@@ -1206,7 +1206,7 @@ CLASS CAManager:                            # la CA real; persiste todo en disco
   loadOrCreateCA() ; _generateCA()                              # ca.crt + ca.key (self-signed root)
   async issueCertificate({cn,type,validityDays}) → { serial, crt, p12, info }   # firma con la CA
   revokeCertificate(serial, reason) → añade a CRL + _saveCRL()  # crl.json
-  verifyCertificate(pem) → { valid, reason }                    # firma OK + NO en CRL + NO expirado
+  verifyCertificate(pem) → { valid, reason }                    # válido = firma OK + vigente + ausente de la CRL
   async renewCertificate(serial, overrides)                     # issue nuevo + revoke(superseded)
   listCertificates(filters) ; getCACertificate() ; getCRL() ; getStats()
   # persistencia: {storagePath}/ca.{crt,key} · issued/<serial>.{crt,p12,json} · crl.json  (restart-resilient)
@@ -1231,14 +1231,14 @@ core/+/security/handshake/request/#         QoS 1   # inicio handshake P2P (mutu
 core/+/security/handshake/response/#        QoS 1   # respuesta del peer
 core/<id>/events/security/peer/{trusted,revoked}        QoS 1   # cambios de confianza
 core/<id>/events/security/handshake/{timeout,failed}    QoS 1   # fallos de handshake
-core/<id>/events/security/public-key/{request,response} QoS 1   # pubkey por bus (no acceso directo)
+core/<id>/events/security/public-key/{request,response} QoS 1   # pubkey solo por bus
 core/<id>/events/certificate/{issued,revoked,renewed,expired}   QoS 1   # lifecycle de certs
 ```
 
-*Justificación QoS 1:* el handshake y los cambios de confianza no pueden perderse (un peer
-quedaría en estado inconsistente: cifrando contra un secreto que el otro no tiene). Idempotencia
-por `fingerprint` / `serialNumber`. El cifrado de payload es **AES-256-GCM** (confidencialidad +
-integridad/AEAD); la confianza es **Zero Trust** (nada se cifra hacia un peer no `trusted`).
+*Justificación QoS 1:* el handshake y los cambios de confianza exigen entrega garantizada (con
+pérdida, un peer quedaría inconsistente: cifraría contra un secreto que el otro aún desconoce).
+Idempotencia por `fingerprint` / `serialNumber`. El cifrado de payload es **AES-256-GCM**
+(confidencialidad + integridad/AEAD); la confianza es **Zero Trust** (el cifrado ocurre solo hacia un peer `trusted`).
 
 ---
 
@@ -1246,10 +1246,10 @@ integridad/AEAD); la confianza es **Zero Trust** (nada se cifra hacia un peer no
 
 ## 22. Quién rige y guarda las conversaciones — el rol `conversation-manager` vive en `chat-io`
 
-> **Aclaración de desvío doc↔código:** NO existe un módulo `conversation-manager` vivo (aparece
-> solo en la lista `disabled` de `config`, legacy). La autoridad de conversaciones — crear, listar,
+> **Desvío doc↔código:** el módulo `conversation-manager` aparece solo en la lista `disabled` de
+> `config` (legacy). La autoridad de conversaciones — crear, listar,
 > persistir, aplicar memoria — es **`chat-io` (clase 12)**. Una conversación pertenece a un proyecto
-> y vive en su SQLite. No hay agregado global de conversaciones (paradigma-no-cabe).
+> y vive en su SQLite. Cada conversación vive en su proyecto (paradigma-no-cabe).
 
 ```
 MODELO DE PERSISTENCIA (chat-io, clase 12 — autoridad de conversaciones):
@@ -1261,20 +1261,20 @@ MODELO DE PERSISTENCIA (chat-io, clase 12 — autoridad de conversaciones):
   MEMORIA DE LA CONVERSACIÓN (capacidad invariante ① del compañero):
     _applyContextFIFO(project_id, conversation_id, context_window):
       ▸ recorta el historial a las últimas N entradas (FIFO)         # evita explosión de contexto
-      ▸ el historial recortado es PARTE DEL CONTEXTO que viaja al LLM (no es opcional)
+      ▸ el historial recortado es PARTE DEL CONTEXTO que viaja al LLM (siempre incluido)
     # más allá del FIFO: capas de memoria adicionales = memory-* (clase 14), enchufables sin tocar chat-io
 ```
 
 ## 23. Sistema de cajones — partición de contexto + lazy loading
 
-> **El concepto:** el LLM no necesita ver TODO el catálogo de operaciones de un módulo para razonar.
+> **El concepto:** al LLM le basta un índice del catálogo de operaciones del módulo para razonar.
 > El system prompt lleva un **índice** (descripción de 1 línea por cajón); el **pseudocódigo completo**
 > de una operación se inyecta SÓLO cuando el LLM **abre el cajón** que necesita. Modelo Google
 > (snippet vs documento) / despensa con cajones. Reduce la ventana de contexto del chat interior.
 >
 > Estado real: contrato `cajones-context-partitioning` v1.0.0 (cerrado, 8 decisiones zanjadas).
 > **Parcialmente implementado** dentro de `AiGatewayModule` (clase 15). Aplica SOLO a módulos
-> **blueprint-driven** en v1 (recetario + carta) — NO al chat principal, agentes ni memorias.
+> **blueprint-driven** en v1 (recetario + carta); el chat principal, agentes y memorias quedan para una fase posterior.
 
 ```
 SUBSISTEMA CAJONES (motor embebido en AiGatewayModule — clase 15)
@@ -1284,7 +1284,7 @@ SUBSISTEMA CAJONES (motor embebido en AiGatewayModule — clase 15)
     conversationPageFoco:Map<conv_id, page_id>       # foco "pegajoso" del LLM
   }
 
-  # ── CATÁLOGO ES ÍNDICE, NO CONTENIDO ──
+  # ── CATÁLOGO = ÍNDICE (el contenido se abre bajo demanda) ──
   ▸ _extractCajones(child):           # de blueprint.operaciones → [{nombre, descripcion(1 línea)}]
   ▸ _rankCajones(catalogo, page_id_activo, conversation_id):
       # RANKING SIMPLE (sin embeddings — anti-patrón a esta escala):
@@ -1295,7 +1295,7 @@ SUBSISTEMA CAJONES (motor embebido en AiGatewayModule — clase 15)
       catalogo ← _rankCajones(...)     # inyecta SOLO el índice rankeado en el system prompt del turno
 
   # ── 4 TOOLS CANÓNICAS (auto-wired; una_operacion_por_turno) ──
-  cajon.listar({zona?})       → catálogo rankeado (lectura pura, no publica eventos)
+  cajon.listar({zona?})       → catálogo rankeado (lectura pura en memoria)
   cajon.abrir({nombre})       → _resolveCajon(page, nombre) → { pseudocodigo, reglas_clave,
                                   errores_posibles, input }   # SOLO vive este turno; _trackCajonOpened(FIFO)
   chat.cambiar_foco({page_id, motivo?}) → foco pegajoso ← page_id; publish chat.foco.cambiado
@@ -1305,9 +1305,9 @@ SUBSISTEMA CAJONES (motor embebido en AiGatewayModule — clase 15)
   # ── REGLAS DEL PATRÓN (del contrato) ──
   #  · CIERRE AUTOMÁTICO AL SIGUIENTE TURNO: el cajón abierto es contexto efímero; al turno siguiente
   #    solo persiste el catálogo (el LLM reabre si lo necesita). Como cerrar pestaña entre búsquedas.
-  #  · EL LLM DECIDE QUÉ ABRIR, no un orquestador externo (matching semántico > heurística/router).
+  #  · EL LLM DECIDE QUÉ ABRIR por matching semántico (en lugar de un orquestador/router externo).
   #  · EL FOCO ACOMPAÑA A LA CONVERSACIÓN: si el tema cambia de dominio, el LLM mueve la página
-  #    (chat.cambiar_foco autónomo). Metáfora espacial: el sistema sigue al usuario, no al revés.
+  #    (chat.cambiar_foco autónomo). Metáfora espacial: el sistema sigue al usuario.
   #  · DISCIPLINA: cajon.abrir y chat.cambiar_foco son únicas por turno — preparar contexto ≠ ejecutar
   #    (el ejecutar es del siguiente turno). Extensión de enfoque_una_operacion (llm-runtime-discipline).
   #  · EVOLUCIÓN INCREMENTAL: niveles de profundidad, archivadores anidados, cajones inter-modulares
@@ -1319,7 +1319,7 @@ SUBSISTEMA CAJONES (motor embebido en AiGatewayModule — clase 15)
 ```
 core/<id>/events/chat/foco/cambiado          QoS 1   # el LLM movió la página activa (banner + goto frontend)
 core/<id>/events/page/graph/{request,response}  QoS 1   # grafo de páginas relacionadas (barra lateral)
-# cajon.listar / cajon.abrir NO publican eventos de dominio: son lectura del blueprint en memoria
+# cajon.listar / cajon.abrir leen el blueprint en memoria (lectura pura, sin eventos de dominio)
 ```
 
 *Justificación:* `chat.foco.cambiado` reordena la UI y el catálogo del siguiente turno — perderlo
@@ -1330,31 +1330,31 @@ ya cargado: cero latencia de red, cero estado materializado redundante.
 
 # 🍕 Rama blueprints — `menu-generator` → subsistema-carta (pizzepos)
 
-> ~13 de ~70 módulos NO son código JS procedural: son **blueprints JSON declarativos** que el LLM
+> ~13 de ~70 módulos son **blueprints JSON declarativos** (en lugar de código JS procedural) que el LLM
 > ejecuta como runtime. Subsistema-carta de pizzepos: `menu-generator` genera la carta,
 > `carta-manager` la custodia (aggregate root), y cinco hermanos la consumen. Todos
-> `blueprint_driven: true`. **El JSON de la carta ES la fuente de verdad** (en filesystem); no hay
-> agregado materializado redundante (paradigma-no-cabe).
+> `blueprint_driven: true`. **El JSON de la carta ES la fuente de verdad** (en filesystem); la carta
+> vive como un único JSON (paradigma-no-cabe).
 
 ## 24. Paradigma blueprint-driven — el LLM como runtime
 
 ```
 CÓMO SE EJECUTA UN MÓDULO BLUEPRINT (sin index.js):
-  · ModuleLoader (clase 10) [BLUEPRINT] → lo registra con instance:null, no instancia clase
+  · ModuleLoader (clase 10) [BLUEPRINT] → lo registra con instance:null; el LLM lo ejecuta como declaración
   · AiGatewayModule (clase 15) carga el <modulo>.blueprint.json como SYSTEM PROMPT del page
     (+ cajones si cajones_enabled, clase 23)
   · El LLM, dentro del agentic loop, EJECUTA las operaciones del blueprint usando
     SOLO 2 tools universales:
         bus.publish(evento, payload)          # emite y desentiende (fire-and-forget)
         bus.publishAndWait(evento, payload)   # request/response correlado (espera la response)
-  · No hay JS de dominio: la lógica vive como pseudocódigo en el propio blueprint
+  · La lógica de dominio vive como pseudocódigo en el propio blueprint
 
 FORMA CANÓNICA DE UN BLUEPRINT (JSON declarativo):
   {
     id, version, extends_blueprint_abstract,        # hereda de un blueprint base abstracto
     rol,                                            # qué es este módulo en 1 párrafo
     garantiza / no_garantiza,                       # contrato explícito de alcance
-    estado_persistente,                             # dónde vive su dato (fs path, no DB redundante)
+    estado_persistente,                             # dónde vive su dato (fs path = fuente viva)
     eventos_publicados,                             # emite y desentiende
     eventos_publicados_que_requieren_consumer,      # los que SÍ esperan a alguien
     eventos_que_escucho,                            # subscripciones
@@ -1369,8 +1369,8 @@ FORMA CANÓNICA DE UN BLUEPRINT (JSON declarativo):
 ```
 BLUEPRINT menu-generator (v8.0.0, page=menu-generator):
   rol: generador PURO. Input = texto libre (pegado/dictado) o JSON ya estructurado
-       → produce carta JSON conforme al shape canónico 'carta-pizzepos'. NO persiste:
-       delega en carta-manager (separación generar ≠ guardar).
+       → produce carta JSON conforme al shape canónico 'carta-pizzepos'; delega la persistencia
+       en carta-manager (separación generar ≠ guardar).
   operaciones: { generar, _on_carta_generar_solicitada }
   ▸ generar(input):
       carta ← razonar_estructura(input.texto)         # el LLM estructura siguiendo el shape canónico
@@ -1444,7 +1444,7 @@ core/<id>/events/fs/{read,write}/{request,response}           QoS 1   # persiste
 *Justificación QoS 1:* generar/guardar una carta es una operación con coste (trabajo del LLM) cuya
 pérdida deja la carta sin persistir o a un hermano desincronizado. `publishAndWait` exige entrega
 garantizada del par request/response. La carta vive en **fs como JSON** (fuente de verdad única);
-los hermanos NO cachean una copia materializada — releen del aggregate root (paradigma-no-cabe).
+los hermanos releen del aggregate root en cada uso (paradigma-no-cabe).
 
 ---
 
@@ -1452,9 +1452,9 @@ los hermanos NO cachean una copia materializada — releen del aggregate root (p
 
 > Segunda rama blueprint-driven de pizzepos. Grafo de dependencias **100% por eventos** con DIP
 > estricto: `escandallo` (calculador de coste) es la pieza compartida; `recetas` (aggregate root)
-> y `viabilidad` (evaluador económico) dependen de él **por el bus**, nunca por acceso a su storage.
-> **`escandallo` no tiene estado** (su cálculo es derivación publicada como evento); ningún módulo
-> lee el JSON de otro — todo va por operación canónica.
+> y `viabilidad` (evaluador económico) dependen de él **solo por el bus**. **`escandallo` es
+> stateless** (su cálculo es derivación publicada como evento); cada módulo lee el dato de otro vía
+> operación canónica.
 
 ## 28. `recetas` (blueprint) — aggregate root del subsistema-recetario
 
@@ -1469,25 +1469,25 @@ BLUEPRINT recetas (v1.1.0, page=recetas, cajones_enabled):    # clase 23: catál
   eventos_que_escucho: escandallo.coste.calculado            # ← reacciona al coste recalculado
   ▸ _aplicar_coste_calculado(event):   # escandallo publicó un coste nuevo → lo persiste en la receta
       receta ← leer(receta_id); receta.coste ← event.coste; save(receta)
-  ▸ obtener(input):   # la fuente canónica de la receta para escandallo/viabilidad (NO fs.read ajeno)
+  ▸ obtener(input):   # la fuente canónica de la receta para escandallo/viabilidad (vía operación canónica)
       → publishAndWait('recetas.obtener.request') lo resuelve
 ```
 
 ## 29. `escandallo` (blueprint) — calculador de coste SIN estado propio
 
-> **No persiste nada** (`paradigma-no-cabe`). Su cálculo es una **derivación** que publica como
+> **Es stateless** (`paradigma-no-cabe`). Su cálculo es una **derivación** que publica como
 > evento. Resuelve precios reales vía `mercadona-api` (cache 48h en memoria) o los **estima con el
-> LLM** cuando Mercadona no tiene el producto (con marcador de estimación).
+> LLM** para productos ausentes de Mercadona (con marcador de estimación).
 
 ```
 BLUEPRINT escandallo (v1.1.0, page=escandallo):
-  rol: calculador + publicador de coste de receta. NO tiene estado persistente propio.
-  estado_persistente: NINGUNO — el coste se publica como escandallo.coste.calculado (derivación, no store)
+  rol: calculador + publicador de coste de receta; stateless (el coste se publica como evento).
+  estado_persistente: efímero — el coste se publica como escandallo.coste.calculado (derivación en evento)
   operaciones: { calcular, recalcular_todas }
   ▸ calcular(input):                                          # {receta_id} O {ingredientes, porciones}
       if !project_id: return INVALID_INPUT
       if receta_id:
-         receta ← await publishAndWait('recetas.obtener.request', {receta_id})   # DIP: NO fs.read ajeno
+         receta ← await publishAndWait('recetas.obtener.request', {receta_id})   # DIP: lectura vía operación canónica
          if 404: return RESOURCE_NOT_FOUND ; ingredientes ← receta.ingredientes
       else: ingredientes ← input.ingredientes
       PARA cada ingrediente:
@@ -1503,7 +1503,7 @@ BLUEPRINT escandallo (v1.1.0, page=escandallo):
 
 > Decide **antes** de meter una receta en carta: combina el coste (delegado a `escandallo`) con el
 > PVP objetivo y aplica reglas de **food cost** para emitir veredicto. Persiste un expediente por
-> evaluación. **No recalcula el coste** — delega (separación evaluar ≠ calcular).
+> evaluación. **Delega el cálculo del coste** en escandallo (separación evaluar ≠ calcular).
 
 ```
 BLUEPRINT viabilidad (v1.2.0, page=viabilidad):
@@ -1515,7 +1515,7 @@ BLUEPRINT viabilidad (v1.2.0, page=viabilidad):
       food_cost_obj ← input.food_cost_objetivo_pct ?? 30                          # % por defecto
       esc ← await publishAndWait('escandallo.calcular.request', {receta_id|ingredientes})   # delega el coste
       if esc.status >= 400: return esc                                           # propaga tal cual
-      nombre ← input.nombre ?? (await publishAndWait('recetas.obtener.request', {receta_id})).nombre  # NO inventar
+      nombre ← input.nombre ?? (await publishAndWait('recetas.obtener.request', {receta_id})).nombre  # nombre desde la fuente canónica
       pvp ← input.pvp_objetivo ?? sugerir_pvp(esc.coste_porcion, food_cost_obj)
       veredicto ← aplicar_reglas_food_cost(esc.coste_porcion, pvp, food_cost_obj) # viable / ajustar / inviable
       persistir_expediente(/pizzepos/viabilidad.json, {veredicto, coste, pvp, ...})
@@ -1531,7 +1531,7 @@ BLUEPRINT viabilidad (v1.2.0, page=viabilidad):
         │ publishAndWait('recetas.obtener.request')                          │ publishAndWait('recetas.obtener.request')
         ▼                                                                    ▼  + mercadona.precio.request (o estima LLM)
    recetas (aggregate root, /pizzepos/recetas.json) ◀──escandallo.coste.calculado──┘
-        ▲ recetas.obtener.request (fuente canónica de la receta — nadie lee su JSON directo)
+        ▲ recetas.obtener.request (fuente canónica de la receta — lectura vía operación canónica)
 
   (hermanos del catálogo: tecnicas → /pizzepos/tecnicas.json · tarifas v3.1.1 procedural)
 ```
@@ -1548,6 +1548,6 @@ core/<id>/events/receta/{creada,actualizada,eliminada}        QoS 1   # lifecycl
 ```
 
 *Justificación QoS 1:* cada `publishAndWait` (coste, receta, precio) cuelga al caller hasta su
-response — perderlo rompe la cadena evaluar→calcular→precio. `escandallo` no materializa estado:
+response — perderlo rompe la cadena evaluar→calcular→precio. `escandallo` es stateless:
 su coste vive como **evento** que `recetas` persiste en SU agregado — separación de
-responsabilidades sin duplicar fuente de verdad (paradigma-no-cabe).
+responsabilidades con una única fuente de verdad (paradigma-no-cabe).

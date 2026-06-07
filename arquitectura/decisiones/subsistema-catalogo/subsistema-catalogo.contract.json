@@ -172,7 +172,7 @@
         "motor_unico": "VariacionesComposer(carta, producto_id, fraccion=1) cubre entero (sin extras), partido (quitar/anadir) y al-gusto (base vacia + anadir). fraccion: 1 pizza entera, 0.5 media pizza. mitad/mitad = composite de dos con fraccion=0.5. Porciones es el UNICO motor distinto.",
         "al_gusto_es_dato": "A1: 'Pizza Al Gusto' NO es un composer aparte. Es un PRODUCTO de la carta con ingredientes base VACIOS + tiene_variaciones=true. El flujo partido (VariacionesComposer) lo cubre tal cual (base + anadir de familias). Cero codigo nuevo. AlGustoPanel desaparece como componente especial.",
         "canal_explicito": "A3: la cuenta lleva canal como CAMPO EXPLICITO (cuenta.canal), fijado al crearla (TipoButton). El composer lo lee para resolver carta_efectiva(canal). Se DEPRECA la deteccion por prefijo de cuenta_id (_detectarCanalCuenta) — mata la costura del string-parsing.",
-        "porciones_config": "A2 (PROPUESTO — confirmar): la config de porciones vive en la CARTA (per-canal, porque canal = carta): carta.config_porciones = { precio_suelta, bundle:{ cada, precio } }. PorcionesComposer la lee y aplica el bundle. Pendiente confirmar ubicacion (carta-level vs por-producto) y shape."
+        "porciones_config": "A2 (DECIDIDA): la config de porciones vive en la CARTA, a nivel carta (per-canal, porque canal = carta): carta.config_porciones = { precio_suelta, bundle:{ cada, precio } }. PorcionesComposer la lee y aplica el bundle (n bundles a precio + resto a precio_suelta). Ej: cada 4 = media 10.50, sueltas a 3.00."
       }
     }
   },

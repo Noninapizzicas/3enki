@@ -99,7 +99,7 @@ CLASS MitadMitadComposer implements Composer:
 ```
 CLASS PorcionesComposer implements Composer:
   ▸ componer({ cantidad }):
-      cfg ← this.carta.config_porciones      # { precio_suelta:3.00, bundle:{ cada:4, precio:10.50 } }  (PROPUESTO — confirmar)
+      cfg ← this.carta.config_porciones      # { precio_suelta:3.00, bundle:{ cada:4, precio:10.50 } }  (carta-level, per-canal)
       precio_final ← aplicar_bundle(cantidad, cfg)   # nº bundles*precio + resto*precio_suelta
       emit { tipo:'porcion', regla_precio:'porciones', componentes:{ cantidad }, precio_final }
 ```

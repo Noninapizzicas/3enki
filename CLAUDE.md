@@ -2133,3 +2133,106 @@ tiene **coste físico** (un pedido real). Idempotencia por `cuenta_id`/`item_id`
 `retain=false` (los eventos son flujo, no estado retenido). QoS 2 vetado. A diferencia de la
 línea carta (Postura B), aquí la UI **sí emite comandos directos** al bus: el backend procedural
 (no el compañero LLM) los ejecuta — la cocina no puede depender de un turno de chat.
+
+---
+
+# ⚙️ Frontend — Barra de configuración del compañero (encima del `ChatInput`)
+
+> La fila fija de botones **justo encima del `ChatInput`** (📁 🤖 🧘 💬 🔐 … 📝contador): la zona
+> **`chat-config`**. NO son módulos de trabajo de página (work-bar, clases 37–39) ni pantallas
+> operativas (40–43): son los **5 paneles que configuran al compañero** — qué proyecto, qué
+> provider/modelo, qué prompt, qué conversación, qué credenciales. Aparecen en **todas** las
+> páginas que montan `AppShell` (no se filtran por ruta). Su simétrica está **debajo** del input:
+> la zona **`chat-tools`** (🗂️ `files`). Patrón rector: **barra dirigida por metadata + paneles
+> lazy + iconos dinámicos derivados de `AppState`**.
+
+## 44. `PanelRegistry` — registro centralizado de paneles (metadata + lazy + cache)
+
+> `lib/modules/panels.ts`. **Fuente única de verdad de las 4 barras** (chat-config, chat-tools,
+> work-bar, system-bar): separa la *metadata* (icono, título, zona, orden) del *componente*
+> (importado bajo demanda). Distinto del `LazyModuleRegistry` (clase 34): aquí el catálogo es
+> **estático y declarativo**, no autodescubierto.
+
+```
+CLASE PanelRegistry (panels.ts):
+  estado: { panels:Record<id, PanelDef>, componentCache:Map<id, Componente> }
+  # PanelDef = { id, title, icon, size, position, zone, order, showInBar?, loader:()→import() }
+
+  interfaz:
+    getPanelsByZone(zone) → PanelDef[]:                # alimenta cada barra
+       Object.values(panels).filter(p.zone==zone && p.showInBar!=false).sort(by order)
+    async loadPanelComponent(id) → Componente|null:    # lazy + cache (Factory)
+       si componentCache.has(id): return cache         # ya cargado
+       comp ← (await panels[id].loader()).default      # import() dinámico (code-splitting)
+       componentCache.set(id, comp) ; return comp
+    getPanel(id) ; isPanelLoaded(id)
+
+  # showInBar:false → panel SOLO accesible vía openPanel() (ej: 'html-preview', 'related-pages')
+  # CASO LÍMITE: loader() falla → log + null (la barra simplemente no abre ese panel)
+```
+
+## 45. `ChatConfigBar` — la barra encima del input (+ contador de contexto)
+
+```
+CLASE ChatConfigBar (lib/components/layout/ChatConfig.svelte):
+  →deps: { getPanelsByZone, openPanel, contextStats, hasActiveConversation }
+  ▸ render:
+      configPanels ← getPanelsByZone('chat-config')   # 📁🤖🧘💬🔐 ordenados por order
+      para panel en configPanels: <Button icon onClick=openPanel(panel.id)>   # 1 clic = 1 panel (lazy)
+      <spacer/>
+      si hasActiveConversation && stats.total>0:       # CONTADOR DE CONTEXTO (derecha)
+         📝 {stats.active}/{stats.maxContext}  + barra de progreso
+         clase .warning si ≥80% · .limit si ≥100%      # feedback de saturación de ventana
+  # SIMÉTRICA: ChatToolsBar (ChatTools.svelte) = zona 'chat-tools' DEBAJO del input → 🗂️ files
+  # Ambas son FIJAS (AppShell, clase 'AppShell'): visibles en toda página con chat, sin filtro de ruta.
+```
+
+## 46. `CompanionConfigModule` — patrón de los 5 módulos que configuran al compañero
+
+> Cada uno declara `zone:'chat-config'`, un **icono dinámico** (`getIcon(AppState)`) y opcionalmente
+> un **badge**. Mutan el `AppState` (clase de tipos `ui-core`) que especializa al compañero:
+> `{ project, provider, model, prompt, credentials, conversationCount }`. Usan los topics de borde
+> **estilo legacy** (`project/activate`, `provider/selected`…) declarados en `manifest.mqtt`.
+
+```
+PATRÓN CompanionConfigModule (UIModule con icono/badge reactivos a AppState):
+  manifest: { id, zone:'chat-config', button:{icon, dynamicIcon:true, action:{panel,…}, order}, panels, mqtt }
+  getIcon(state)?  → string   # icono REACTIVO al estado global (color del proyecto, icono del provider…)
+  getBadge(state)? → string   # ej: nombre corto del modelo activo
+  PanelComponent   → <X>Panel.svelte (lazy)
+
+  # Los 5 INSTANCIAS (orden en la barra) — cada uno fija una pieza del AppState del compañero:
+```
+
+| Módulo (`icon`, order) | Panel | Qué configura del compañero | Icono dinámico / badge |
+|---|---|---|---|
+| `project` (📁, 0) | Seleccionar proyecto | `AppState.project` (proyecto activo → especializa todo) | emoji del color del proyecto activo |
+| `provider` (🤖, 1) | Provider + modelo IA | `AppState.provider`/`model` | icono del provider · badge = modelo corto |
+| `prompts` (🧘, 2) | Composer/librería/presets | `AppState.prompt` (slot del system prompt) | 🧘 |
+| `conversations` (💬, 3) | Conversaciones + historial | conversación activa (`conversationId` del ChatStore) | 💬 |
+| `credentials` (🔐, 4) | API keys (lista/nuevo/config) | `AppState.credentials` (validez por provider) | ✅ ok · ⚠️ falta · 🔐 base |
+
+```
+  # CONTRASTE con las otras familias del front:
+  #  · vs work-bar (37–39): la barra config es FIJA (toda página), no filtra por ruta
+  #  · vs operativas (40–43): no es flujo de trabajo de dominio, es CONFIGURACIÓN del compañero
+  #  · el AppState que fijan aquí viaja en cada chat.message.saved (settings, project_id) → backend
+  # DESVÍO: manifest.mqtt usa topics legacy sin prefijo (project/activate, provider/selected),
+  #         no la forma canónica core/<id>/events/... (① ); pendiente de migración como el req/resp ②.
+```
+
+### Jerarquía de topics + QoS (barra de configuración)
+
+```
+project/activate · project/activated · project/list          QoS 1   # selección de proyecto (legacy topics)
+provider/selected · provider/state · credential/resolved      QoS 1   # provider+modelo activos
+prompt/{list,get,create,update,delete} · preset/{...}         QoS 1   # CRUD de prompts (req/resp)
+credential/{state/request,create,update,delete} · credential.{saved,updated,deleted}  QoS 1
+conversation/{load,loaded,...}                                QoS 1   # selección/carga de conversación
+```
+
+*Justificación QoS 1:* fijar proyecto/provider/credencial es **precondición** de cada turno del
+compañero (sin proyecto no hay chat — `PROJECT_REQUIRED`; sin credencial válida el ai-gateway no
+puede llamar al LLM). Perder un `project/activated` dejaría la UI y el backend desincronizados
+sobre qué proyecto está activo. El **contador de contexto** (`📝 active/max`) es lectura derivada
+del `ChatStore`, no genera tráfico. `retain=false`; idempotencia por id de proyecto/credencial.

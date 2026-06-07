@@ -49,3 +49,20 @@ encaje: quitables = semilla del producto · añadibles = catálogo de ingredient
 aterrizaje vs v4: ya deriva en vivo (✅, no materializa). Cambio = consume el catálogo DERIVADO de ingredientes
         (por id), no el productos materializado. El enlace pasa a ser por id (robusto).
 ```
+
+## Nota de aterrizaje — reconciliación con el código real (rebanada 4)
+
+> **Desvío doc↔código verificado al aterrizar.** El `variaciones` REAL (v4.0.0) es más simple que este
+> pseudocódigo: guarda **config por producto** (`grupo`=categoría del producto, `permite_quitar/anadir`,
+> `extras_sugeridos`, `max_ingredientes_extra`) y **calcula precio** (`base + Σ precio_extra`, consultando
+> `ingredientes`). **NO construye la vista `anadibles_por_familia`** — esa agrupación la hace el **frontend**
+> (los paneles agrupan el catálogo de ingredientes por su `familia`).
+>
+> **Consecuencia (rebanada 4):** `variaciones` backend es **ya v2-compatible, sin cambios** — calcula con
+> `precio_extra`, no con `familia`; su `grupo` es la categoría del producto, no la familia del ingrediente
+> (no se renombra). El test `pizzepos__variaciones` pasa intacto.
+>
+> **La mejora "agrupar añadibles por familia canónica" es del FRONTEND** (rebanada 7, composers): ahora que
+> los ingredientes llevan `familia` (rebanada 3 + semilla v2), los paneles agrupan por `ing.familia` en vez
+> de por categoría. Si en el futuro se quiere mover esa agrupación al backend (que `variaciones` exponga
+> `anadibles_por_familia`), sería un cambio aparte, no aditivo.

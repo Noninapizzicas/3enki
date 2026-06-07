@@ -19,7 +19,7 @@ CLASS VariacionesModule extends Module:
   state: { reglas: Map<producto_id, { max_extras, familias_permitidas?, quitables_bloqueados? }> }  # solo reglas
 
   # CONFIG de variación de un producto = lo que pinta el botón partido
-  ▸ getVariacionesProducto(input):     # { project_id, producto, canal? }   (producto viene de la carta del canal)
+  ▸ get-variaciones-producto(input):     # { project_id, producto, canal? }   (producto viene de la carta del canal)
       quitables ← producto.ingredientes                                  # los del propio producto (semilla, por id)
       cat ← await mqttRequest('ingredientes','catalogo',{ project_id })  # catálogo derivado
       r   ← reglas.get(producto.id)

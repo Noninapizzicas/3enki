@@ -106,14 +106,14 @@ async clonar(input):          # { project_id, carta_base_id, nuevo_nombre }
 ```
 async versions(input):  # { project_id, carta_id } → lista .versions/<carta_id>/*.json
 async restore(input):   # { project_id, carta_id, ts } → lee snapshot, save() (genera nueva versión)
-async delete(input):    # { project_id, carta_id } → fs borra carta + emite carta.borrada
+async delete(input):    # { project_id, carta_id } → fs borra carta + emite carta.eliminada
 ```
 
 ## Eventos
 
 ```
 PUBLICA:  carta.actualizada { project_id, carta }   (tras cada mutación → hermanos reaccionan)
-          carta.borrada { project_id, carta_id }
+          carta.eliminada { project_id, carta_id }
           fs.read.request / fs.write.request          (publishAndWait, persistencia)
 ESCUCHA:  carta.creada (de menu-generator) → _on_carta_creada
 ```

@@ -149,7 +149,7 @@
     "modelo": {
       "composer_autocontenido": "Cada composer (tipo de item) lleva: logica de composicion (que productos/mitades/extras), regla de precio (max | base_mas_extras | porciones | ...), capa de imagen. Un tipo nuevo = un composer nuevo, sin tocar nucleo. Puerta abierta.",
       "condicion_de_correctitud": "El composer pull-ea la carta EFECTIVA del canal activo (carta_efectiva(canal)), NO el catalogo general productos. Aplica su regla sobre ESOS precios -> el precio ya es el del canal. Asi 'todo contenido' es ademas correcto en mesa Y en delivery.",
-      "evento_canonico": "item.compuesto { tipo, componentes:{producto_ids?,mitades?,extras?}, precio_final, capa_imagen }. Sustituye los eventos Svelte sueltos por composer + el precio_override actual.",
+      "payload_add_item": "El composer NO emite un evento: ENVIA el item a comandero por la request comandero/add-item. item-compuesto es el SHAPE del PAYLOAD { tipo, componentes:{producto_ids?,mitades?,extras?}, precio_final, capa_imagen }, NO un topic (no encaja en modulo.entidad.verbo). Sustituye los eventos Svelte sueltos por composer + el precio_override actual.",
       "backend_simplifica": "comandero ELIMINA _resolverPrecioCanal (el re-calculo por canal que causaba el bug). Confia en el precio del composer porque el composer ya uso la carta correcta. comandero solo registra el item + precio y suma. Desaparece el split de autoridad front/back: un solo punto tasa (el composer).",
       "requisito": "El front debe poder resolver canal_activo -> carta_efectiva(canal) (hoy el canal se detecta por prefijo de cuenta_id en el back; hay que exponer la carta del canal al composer).",
       "composer_base_producto": {
@@ -208,6 +208,22 @@
 
   "decisiones_abiertas": [],
   "estado_diseno": "CERRADO. D1+D2+D3+persistencia decididas. Pendiente solo el aterrizaje (ver desvio_codigo_actual).",
+
+  "nomenclatura": {
+    "_doc": "Auditoria del rediseno contra arquitectura/convenciones/_outputs/{naming,glossary}.json y events.contract. Eventos = modulo.entidad.verbo (verbo del whitelist) o modulo.verbo; req/resp = modulo.intent.request|response; ASCII, kebab-case, sin tildes/n.",
+    "terminos_canonicos_usados": "carta(menu) · producto(menu-item) · categoria(menu-category) · variacion(modifier) · ingrediente(ingredient) · tarifa(pricing) · comandero(pos-terminal) · comanda(kitchen-ticket) · pedido(client-order) · cuenta(table-check) · cocina(kds). Todos del glosario.",
+    "correcciones_aplicadas": [
+      "carta.borrada -> carta.eliminada (verbo del whitelist: eliminado, no 'borrado').",
+      "acciones de request a kebab-case: resolverCarta -> resolver-carta; getVariacionesProducto -> get-variaciones-producto (consistencia con add-item/remove-item).",
+      "item.compuesto NO es un evento: es el shape del PAYLOAD de la request comandero/add-item (no encaja en modulo.entidad.verbo)."
+    ],
+    "drift_existente_no_introducido_por_el_rediseno": [
+      "comandero.item_agregado / item_eliminado / item_actualizado: snake_case en el entity_verb + verbo 'agregado' fuera del whitelist. Son eventos EXISTENTES del codigo; los consumidores (cuentas, etc.) dependen de ellos. El rediseno los conserva por continuidad; canonizar (p.ej. comandero.item.creado) o anadir 'agregado' al whitelist es una tarea de naming aparte.",
+      "comandero.enviar_cocina: 'enviar' (infinitivo) en vez de verbo-pasado del whitelist ('enviado'). Existente; mismo criterio."
+    ],
+    "decision_abierta_de_termino": "FAMILIA vs GRUPO: el rediseno usa 'familia' (familia de ingrediente) en 8 ficheros; el codigo/UI existentes usan 'grupo'/'GRUPO' (ingredientes 'organizado por GRUPO'). NO esta en el glosario -> riesgo de sinonimo cross-modulo. Hay que elegir UNO y anadirlo al glosario. Pendiente de decision del usuario.",
+    "termino_no_en_glosario": "'canal' es cross-modulo (tarifas, comandero, cuentas-canales) y consistente, pero no esta en el glosario: deberia entrar (sales-channel)."
+  },
 
   "desvio_codigo_actual": {
     "_doc": "El codigo HOY no implementa este contrato. Lista de divergencias a aterrizar cuando se ejecute el rediseno.",

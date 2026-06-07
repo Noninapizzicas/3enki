@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "item-compuesto",
   "title": "item.compuesto",
-  "_doc": "Lo que emite un composer (boton) tras componer un item. Evento canonico que sustituye los eventos Svelte sueltos por composer + el precio_override actual. CLAVE (D3): precio_final ya viene RESUELTO contra la carta del canal activo — el composer tira de carta_efectiva(canal) y tasa contra ella. comandero NO re-tasa: registra y suma. Puerta abierta: un tipo nuevo de composer = un nuevo 'tipo', sin tocar el nucleo.",
+  "_doc": "PAYLOAD de la request comandero/add-item (NO es un topic de evento: 'item.compuesto' no encaja en modulo.entidad.verbo). Es lo que el composer envia a comandero tras componer un item. Sustituye los eventos Svelte sueltos por composer + el precio_override actual. CLAVE (D3): precio_final ya viene RESUELTO contra la carta del canal activo — el composer tira de carta_efectiva(canal) y tasa contra ella. comandero NO re-tasa: registra y suma. Puerta abierta: un tipo nuevo de composer = un nuevo 'tipo', sin tocar el nucleo.",
   "type": "object",
   "required": ["project_id", "tipo", "componentes", "precio_final"],
   "additionalProperties": false,

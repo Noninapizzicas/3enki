@@ -313,7 +313,14 @@ class ComanderoModule extends BaseModule {
       }
 
       const canal      = this._detectarCanalCuenta(cuenta_id);
-      const itemPrecio = this._resolverPrecioCanal(producto_id, precioBase, canal, project_id);
+      // D3 (subsistema-catalogo): si el composer ya tasó el item contra la carta del canal,
+      // llega precio_canal_resuelto=true → comandero CONFÍA en el precio recibido (un solo punto tasa,
+      // mata el bug de delivery de items compuestos). Si NO llega el flag (composers actuales que mandan
+      // precio_override del catálogo general), se mantiene la re-resolución por canal. Puente
+      // backward-compat: ambos conviven sin ruptura; los composers se migran después (Fase 7 frontend).
+      const itemPrecio = (data.precio_canal_resuelto === true)
+        ? precioBase
+        : this._resolverPrecioCanal(producto_id, precioBase, canal, project_id);
 
       const item_id = crypto.randomUUID();
       const item = {

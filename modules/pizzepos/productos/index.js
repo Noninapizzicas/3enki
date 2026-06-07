@@ -616,8 +616,34 @@ class ProductosModule extends BaseModule {
     return result;
   }
 
+  // v2 D3 (subsistema-catalogo): lee los productos de UNA carta concreta por id (carta de canal),
+  // SIN tocar el catálogo activo general. Devuelve el mismo shape POS (con .precio mapeado de precio_base).
+  // Devuelve null si la carta no existe o falla → el caller cae al catálogo activo (fallback seguro).
+  async _readCartaProductos(project_id, carta_id) {
+    try {
+      const storagePath = await this.resolveStoragePath(project_id);
+      const cartaPath = path.join(storagePath, 'cartas', `${carta_id}.json`);
+      const carta = JSON.parse(await fs.readFile(cartaPath, 'utf8'));
+      return (carta.productos || []).map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        categoria: p.categoria,
+        categoria_id: p.categoria_id || p.categoria,
+        precio: (p.precio ?? p.precio_base ?? 0),
+        tipo: p.tipo || null,
+        activo: p.activo !== false,
+        ingredientes_base: p.ingredientes_base || p.ingredientes || []
+      }));
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        this.logger.warn('productos.read_carta_by_id.failed', { project_id, carta_id, error: err.message });
+      }
+      return null;
+    }
+  }
+
   async handleListPizzas(data) {
-    const { project_id: raw_pid } = data || {};
+    const { project_id: raw_pid, carta_id } = data || {};
 
     if (!raw_pid) {
       return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
@@ -625,13 +651,17 @@ class ProductosModule extends BaseModule {
 
     const project_id = this.resolveToActiveProject(raw_pid);
 
-    // Cargar desde archivo si no hay productos en memoria
-    const productosMap = this.getProductos(project_id);
-    if (productosMap.size === 0) {
-      await this.loadCartaFromProject(project_id);
+    // v2 D3: si llega carta_id (carta de canal), servir ESA carta; si no o si no existe, catálogo activo (fallback).
+    let source = carta_id ? await this._readCartaProductos(project_id, carta_id) : null;
+    if (!source) {
+      const productosMap = this.getProductos(project_id);
+      if (productosMap.size === 0) {
+        await this.loadCartaFromProject(project_id);
+      }
+      source = Array.from(this.getProductos(project_id).values());
     }
 
-    const pizzas = Array.from(this.getProductos(project_id).values())
+    const pizzas = source
       .filter(p =>
         p.activo !== false && (
           (p.categoria && p.categoria.toLowerCase().startsWith('pizz')) ||
@@ -642,13 +672,12 @@ class ProductosModule extends BaseModule {
       .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
 
     this.logger.debug('productos.pizzas.list', {
-      project_id, raw_pid, total: pizzas.length,
-      all_products: this.getProductos(project_id).size
+      project_id, raw_pid, total: pizzas.length, carta_id: carta_id || null
     });
 
     return {
       status: 200,
-      data: { project_id, pizzas, total: pizzas.length }
+      data: { project_id, pizzas, total: pizzas.length, carta_id: carta_id || null }
     };
   }
 

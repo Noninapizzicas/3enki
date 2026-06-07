@@ -11,9 +11,11 @@
    */
   import { createEventDispatcher, onMount } from 'svelte';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
+  import { resolverCartaIdCanal } from '$lib/ui-core/carta-canal';
 
   export let visible: boolean = true;
   export let projectId: string = '';
+  export let canal: string | null = null;
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -22,6 +24,7 @@
       pizza_derecha: Pizza;
       precio_final: number;
       nombre_compuesto: string;
+      precio_canal_resuelto: boolean;
     };
   }>();
 
@@ -37,6 +40,8 @@
   let loading = true;
   let error: string | null = null;
   let pizzas: Pizza[] = [];
+  // D3: true si las pizzas se cargaron de la carta del canal (precio ya tasado contra ese canal)
+  let precioCanalResuelto = false;
 
   // Selección
   let pizzaIzquierda: Pizza | null = null;
@@ -66,14 +71,23 @@
   async function loadPizzas() {
     loading = true;
     error = null;
+    precioCanalResuelto = false;
 
     try {
-      const res = await mqttRequest('productos', 'pizzas', { project_id: projectId });
+      // D3: si el canal tiene carta propia (override), cargar SUS pizzas (precios del canal) →
+      // el precio compuesto sale tasado contra el canal y se marca precio_canal_resuelto.
+      // Si no hay carta de canal (mesa/general/sin-override) → catálogo activo, como hasta ahora.
+      const cartaId = await resolverCartaIdCanal(projectId, canal);
+      const payload = cartaId
+        ? { project_id: projectId, carta_id: cartaId }
+        : { project_id: projectId };
+      const res = await mqttRequest('productos', 'pizzas', payload);
 
       // Handle both unwrapped and legacy double-wrapped responses
       const pizzaData = res?.data?.pizzas ? res.data : res?.data?.data;
       if (res?.status === 200 && pizzaData?.pizzas) {
         pizzas = pizzaData.pizzas;
+        precioCanalResuelto = !!cartaId;
       } else {
         error = res?.error || 'Error al cargar pizzas';
       }
@@ -111,7 +125,8 @@
       pizza_izquierda: pizzaIzquierda,
       pizza_derecha: pizzaDerecha,
       precio_final: precioFinal,
-      nombre_compuesto: nombreCompuesto
+      nombre_compuesto: nombreCompuesto,
+      precio_canal_resuelto: precioCanalResuelto
     });
   }
 

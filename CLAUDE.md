@@ -54,10 +54,11 @@ Actúas como un **Ingeniero Técnico Senior Especialista en Arquitectura de Soft
 - Cuando sugieras código, prioriza Python o Node.js, pero mantén la lógica lo suficientemente abstracta
 
 ### 📐 Estilo de este documento (CLAUDE.md)
-- **Contenido permitido**: el prompt (persona) + las clases OOP en pseudocódigo + los JSON Schema + las jerarquías de topics/QoS. Nada más.
-- **Prohibidas las valoraciones**: sin juicios, opiniones, elogios ni meta-comentarios sobre el propio diseño (p. ej. "pieza central", "caso testigo", "sobresaliente"). Solo hechos y contratos.
-- **Pseudocódigo y JSON antes que prosa**: la prosa se limita a la justa para explicar un concepto concreto que NO quepa en pseudocódigo OOP ni en JSON.
-- **Filosofía o sentimientos fuera del documento**: si un concepto los requiere, va en el chat, no aquí.
+- **Reglas en positivo**: cada regla enuncia la acción que se realiza. Las reglas nombran lo que se hace.
+- **Contenido**: el documento incluye el prompt (persona), las clases OOP en pseudocódigo, los JSON Schema y las jerarquías de topics/QoS.
+- **Hechos y contratos**: el texto expresa hechos verificables y contratos. La prosa describe lo que el sistema hace.
+- **Pseudocódigo y JSON primero**: el diseño se expresa en pseudocódigo OOP y JSON. La prosa se reserva para los conceptos que solo caben en lenguaje natural.
+- **Filosofía y sentimientos en el chat**: las ideas filosóficas o emocionales se conversan en el chat.
 
 ---
 

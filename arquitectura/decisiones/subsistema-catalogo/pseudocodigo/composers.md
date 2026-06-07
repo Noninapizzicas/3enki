@@ -68,11 +68,13 @@ CLASS MitadMitadComposer implements Composer:
   ▸ componer():
       hi ← half_izq.resolver()    # { producto_id, quitados, extras, base, extra_total }   ← variaciones REUSADO
       hd ← half_der.resolver()
-      # ── REGLA DE PRECIO COMBINADA (PROPUESTA 'mitad_variada' — CONFIRMAR) ──
-      base_final  ← max(hi.base, hd.base)            # la pizza vale la mitad más cara (regla 'max' preservada)
-      extra_final ← hi.extra_total + hd.extra_total  # los extras de ambas mitades SUMAN (precio_extra completo)
-      precio_final ← base_final + extra_final
-      emit { tipo:'mitad', regla_precio:'mitad_variada',
+      # ── REGLA 'mitad_max_configurada' (DECIDIDA) ──
+      #   · medio precio_extra por topping (es media pizza)
+      #   · la pizza vale la mitad CONFIGURADA más cara (max de las dos, ya con sus extras)
+      half_total(h) ← h.base + Σ( this.carta.precio_extra[ing] / 2  para ing EN h.extras )   # medio extra en media pizza
+      precio_final  ← max( half_total(hi), half_total(hd) )
+      precio_final  ← redondear_cents(precio_final)                                          # /2 puede dar medio céntimo
+      emit { tipo:'mitad', regla_precio:'mitad_max_configurada',
              componentes:{ mitades:{ izquierda: hi, derecha: hd } },   # cada mitad CONFIGURADA (producto+quitados+extras)
              precio_final, capa_imagen:{ nombre_compuesto:'½ '+nombre(hi)+' + ½ '+nombre(hd) } }
 ```

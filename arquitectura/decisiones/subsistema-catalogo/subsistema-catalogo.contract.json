@@ -165,7 +165,7 @@
         "_doc": "Los composers se COMPONEN: un composer complejo reutiliza otro en vez de reimplementar su logica. Mantenimiento en un solo sitio.",
         "caso": "mitad/mitad usa el boton PARTIDO con toda su logica: MitadMitadComposer es un COMPOSITE de dos VariacionesComposer (una por mitad). Cada mitad es una pizza configurable (quitar/anadir) con la misma logica del partido. Reuso puro, no reimplementacion.",
         "shape": "item.compuesto.componentes.mitades.{izquierda,derecha} = mitad CONFIGURADA { producto_id, quitados[], extras[], base, extra_total } (no un simple producto_id).",
-        "regla_precio_combinada": "PROPUESTA 'mitad_variada' (CONFIRMAR): precio_final = max(base_izq, base_der) + (extra_total_izq + extra_total_der). La pizza vale la mitad mas cara (regla 'max' preservada); los extras de ambas mitades suman a precio_extra completo. Alternativas posibles: max de las dos mitades ya configuradas; medio extra por topping en media pizza."
+        "regla_precio_combinada": "DECIDIDA 'mitad_max_configurada': half_total(lado) = base(producto del lado, del canal) + SUM(precio_extra[ing]/2 para ing en extras del lado)  [medio extra por topping, es media pizza]. precio_final = max(half_total_izq, half_total_der)  [max de las dos mitades YA CONFIGURADAS, con sus extras]. Redondeo a centimos (/2 puede dar medio centimo). La base NO se halva (max elige la mitad dominante); solo los extras van a mitad de precio."
       }
     }
   },

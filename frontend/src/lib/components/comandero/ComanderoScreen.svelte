@@ -285,6 +285,15 @@
 
   // Acciones sidebar (llevadoo no tiene cobro — pago externo)
   $: isLlevadoo = cuenta_id.startsWith('llevadoo_');
+
+  // D3 (subsistema-catalogo): canal activo desde el prefijo de cuenta_id. Los composers lo usan
+  // para tasar contra la carta del canal (si tiene override). 'mesa' por defecto.
+  $: canalActivo = cuenta_id.startsWith('telefono_') || cuenta_id.startsWith('tel_') ? 'telefono'
+    : cuenta_id.startsWith('llevar_') ? 'llevar'
+    : cuenta_id.startsWith('whatsapp_') ? 'whatsapp'
+    : cuenta_id.startsWith('glovo_') ? 'glovo'
+    : cuenta_id.startsWith('llevadoo_') ? 'llevadoo'
+    : 'mesa';
   const accionesBase = [
     { id: 'cuenta', label: 'Cuenta', icon: '📄', variant: 'default' as const },
     { id: 'enviar', label: 'Enviar', icon: '🍳', variant: 'primary' as const },
@@ -400,8 +409,9 @@
     pizza_derecha: any;
     precio_final: number;
     nombre_compuesto: string;
+    precio_canal_resuelto?: boolean;
   }>) {
-    const { pizza_izquierda, pizza_derecha, precio_final, nombre_compuesto } = e.detail;
+    const { pizza_izquierda, pizza_derecha, precio_final, nombre_compuesto, precio_canal_resuelto } = e.detail;
 
     // Incluir ingredientes_base de cada mitad para que cocina vea qué lleva
     const extractBase = (pizza: any) => ({
@@ -416,6 +426,8 @@
       tipo: 'mitad_mitad',
       nombre_override: nombre_compuesto,
       precio_override: precio_final,
+      // D3: si el precio ya se tasó contra la carta del canal, comandero confía y NO re-resuelve.
+      ...(precio_canal_resuelto && { precio_canal_resuelto: true }),
       pizza_izquierda: extractBase(pizza_izquierda),
       pizza_derecha: extractBase(pizza_derecha)
     });
@@ -777,6 +789,7 @@
     <MitadMitadPanel
       visible={showMitadMitad}
       {projectId}
+      canal={canalActivo}
       on:close={handleMitadMitadClose}
       on:confirm={handleMitadMitadConfirm}
     />

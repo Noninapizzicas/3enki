@@ -7,6 +7,20 @@
   "required": ["meta", "categorias", "productos"],
   "additionalProperties": false,
   "properties": {
+    "config_porciones": {
+      "type": "object",
+      "description": "opcional. Config de venta por porciones a nivel carta (per-canal, porque canal = carta). La lee PorcionesComposer.",
+      "properties": {
+        "precio_suelta": { "type": "number", "minimum": 0 },
+        "bundle": {
+          "type": "object",
+          "properties": {
+            "cada": { "type": "integer", "minimum": 1 },
+            "precio": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
     "meta": {
       "type": "object",
       "required": ["id", "nombre", "generado_desde", "created_at"],

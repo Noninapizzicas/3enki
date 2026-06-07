@@ -1,0 +1,211 @@
+{
+  "_doc": "Contrato de REDISEÑO del subsistema-catalogo de pizzepos (carta / productos / ingredientes / variaciones / familias). Captura el modelo objetivo acordado en sesion 2026-06-07 tras un analisis de descongestion: el dato del catalogo se empuja y materializa ~6 veces (carta -> productos/catalogo_activo.json -> caches de comandero -> snapshot de cocina), con dueno difuso, sync a medias (carta->productos si, carta->tarifas no) y 5 convenciones de ruta. La regla maestra del rediseno: el dato NACE en la salida de menu-generator (la semilla), cada modulo es dueno de UN slice, el enlace es por id de ingrediente, todos PIDEN lo que necesitan (decision 2 de events/api) y NADIE copia el slice del otro. IMPORTANTE: esto es el OBJETIVO; el codigo actual aun NO lo refleja (ver seccion desvio_codigo_actual). El codigo es la fuente de verdad; este contrato es la guia de aterrizaje.",
+
+  "id": "subsistema-catalogo",
+  "version": "1.0.0",
+  "creada": "2026-06-07",
+  "estado": "rediseno_acordado_no_implementado",
+
+  "deriva_de": "arquitectura/decisiones/_contratos/paradigma-no-cabe.contract.json (anti agregados materializados redundantes) + events.contract (emite y desentiende + request/response correlado) + modulos-blueprint-driven.contract (menu-generator y carta-manager son blueprint-driven)",
+
+  "origen": {
+    "sesion": "2026-06-07",
+    "gatillo": "El usuario pidio descongestionar la rama carta->productos. El analisis revelo que el nudo no es de rutas sino de MODELO DE DATOS: una cascada de precio y un catalogo legitimos que cada capa resuelve a su manera (unas derivan en vivo, otras materializan a disco), con el dato del producto reconstruido ~6 veces.",
+    "correccion_clave": "El punto de partida NO es la persistencia (JSON vs SQLite) ni el acceso (cache vs llamada). Es la SALIDA de menu-generator (la semilla). Su forma determina como se articula todo lo demas."
+  },
+
+  "problema_que_resuelve": {
+    "nudos_detectados": [
+      "Doble fuente de verdad del producto: embebido en la carta (carta-manager) Y re-materializado en productos/catalogo_activo.json (sync desde carta.actualizada). Anti-patron paradigma-no-cabe.",
+      "Sync con transformacion no idempotente: productos genera ids de ingrediente con slugify al sincronizar -> regenerar desde la carta puede cambiar ids.",
+      "Sync a medias: productos e ingredientes auto-sincronizan desde carta.actualizada; tarifas NO escucha carta.actualizada -> precios por canal obsoletos hasta correr el agente tarifas-sync.",
+      "Estrategia incoherente: variaciones deriva en vivo (bien); productos y tarifas materializan a disco (mal/ambiguo).",
+      "5 convenciones de ruta: /pizzepos/cartas/<id>.json, /storage/pizzepos/productos/catalogo_activo.json, /storage/pizzepos/ingredientes.json, /storage/config/tarifas.json (fuera del vertical), data/current/cocina_snapshot.json (GLOBAL, rompe multi-tenant).",
+      "Enlace producto<->ingrediente por NOMBRE -> fragil (typos rompen familia/precio)."
+    ]
+  },
+
+  "modelo_vertical_agnostico": {
+    "_doc": "El motor no es de pizzeria. Es catalogo / componentes / clasificacion-por-familia. La vertical solo cambia los datos.",
+    "abstraccion": {
+      "CATALOGO": "conjunto de ITEMS vendibles            -> carta-manager (el conjunto)",
+      "ITEM": "vendible, con COMPONENTES base",
+      "COMPONENTE": "parte/atributo del item              -> ingredientes (por item + enriquecimiento)",
+      "FAMILIA": "clase de componente                     -> variaciones (clasificacion por familia)",
+      "VARIACION": "eleccion de componentes dentro de las familias permitidas"
+    },
+    "mapeos": {
+      "hosteleria": { "ITEM": "pizza", "COMPONENTE": "ingrediente", "FAMILIA": "Queso / Verdura / Carne / Salsa" },
+      "moda": { "ITEM": "prenda", "COMPONENTE": "atributo", "FAMILIA": "Color / Talla" },
+      "generico": { "ITEM": "producto", "COMPONENTE": "opcion", "FAMILIA": "familia de opcion" }
+    }
+  },
+
+  "decision_de_origen_semilla_enriquecida": {
+    "_doc": "El dato nace en menu-generator. Se elige semilla ENRIQUECIDA: menu-generator, al estructurar la carta, ademas de extraer ingredientes asigna id canonico + familia en el origen (el LLM ya esta leyendo la carta; clasificar Mozzarella->Queso le cuesta cero). Asi el enlace es por id (robusto) y la familia nace arriba, no se reconstruye a ciegas abajo.",
+    "shape_carta_pizzepos_v2": {
+      "meta": { "id": "string", "nombre": "string", "generado_desde": "string", "created_at": "ISO-8601" },
+      "categorias": [ { "id": "string", "nombre": "string", "orden": "integer" } ],
+      "productos": [ {
+        "id": "string",
+        "nombre": "string",
+        "categoria": "string (id de categoria)",
+        "precio_base": "number >= 0",
+        "ingredientes": [ { "id": "string (canonico, slug normalizado)", "nombre": "string", "emoji": "string?", "familia": "string (id de familia)" } ]
+      } ]
+    },
+    "menu_generator_anade": [
+      "normaliza cada ingrediente a un id canonico estable (mozzarella, no 'Mozzarella'/'mozarella')",
+      "clasifica cada ingrediente en su familia (Mozzarella->Queso, Tomate->Salsa/Verdura, ...)"
+    ]
+  },
+
+  "reparto_de_responsabilidades": {
+    "_doc": "Un solo dueno por slice. Enlace SIEMPRE por id de ingrediente. Todos PIDEN (request/response por bus). NADIE copia el slice del otro.",
+    "carta-manager": {
+      "dueno_de": "el DISENO: la carta como conjunto (productos, categorias, precio_base, que ingredientes lleva cada producto). Unico escritor de la carta.",
+      "no_le_aplica": "logica de ingredientes ni de variaciones (no se le carga mas logica)."
+    },
+    "ingredientes": {
+      "dueno_de": "precio_extra de cada ingrediente (+ puede corregir familia). Autoridad del ingrediente.",
+      "catalogo": "UNION deduplicada por id de todos los productos[].ingredientes -> DERIVADO de la semilla, no copiado a disco."
+    },
+    "variaciones": {
+      "dueno_de": "vista por familia + reglas por producto (maximo, que familias). 100% DERIVADO, no almacena dato de catalogo.",
+      "quitables": "los ingredientes del propio producto (de la semilla, por id)",
+      "anadibles": "el catalogo agrupado por familia (de ingredientes)"
+    },
+    "fuera_de_este_contrato": "precio final / tarifas / canales (decision 2, intacta) y composers de UI tipo pizza-mitad/al-gusto (decision 3, intacta)."
+  },
+
+  "principios": [
+    { "id": "el_dato_nace_en_la_semilla", "regla": "El catalogo nace en la salida de menu-generator. Su forma (carta-pizzepos v2) determina como se articula el resto. No se disena la persistencia antes que la semilla.", "razon": "Decidir substrato/acceso antes que el modelo de datos es lo que genero las capas pegadas y la materializacion redundante actual." },
+    { "id": "un_dueno_por_slice", "regla": "carta-manager=diseno, ingredientes=precio_extra(+familia), variaciones=vista-por-familia+reglas. Nadie absorbe al otro; nadie materializa el slice ajeno.", "razon": "Reparto claro mata la doble fuente de verdad sin cargar de logica a un solo modulo." },
+    { "id": "enlace_por_id_no_por_nombre", "regla": "Producto<->ingrediente<->familia se enlaza por id canonico asignado en origen por menu-generator. El nombre es solo display.", "razon": "El enlace por nombre se rompe con typos/variantes y desincroniza familia y precio_extra." },
+    { "id": "derivar_no_copiar", "regla": "Los catalogos y vistas (catalogo de ingredientes, vista por familia) se DERIVAN por pull, no se materializan a disco. Cache en memoria efimera e invalidada por evento SI; copia persistida NO.", "razon": "La copia persistida es un segundo dueno que diverge (productos/catalogo_activo.json es el caso testigo). La cache efimera read-only es rendimiento legitimo." },
+    { "id": "cada_uno_pide_lo_que_necesita", "regla": "Los consumidores (comandero, etc.) obtienen el catalogo/precio por request/response (decision 2 api), no por sync empujado que materializa. Hilvanar = que cada uno pida y reciba, no coser con orquestacion.", "razon": "Desacople total: el origen no conoce a sus consumidores; los consumidores piden el slice que necesitan, fresco." },
+    { "id": "multi_tenant_por_proyecto", "regla": "Todo request lleva project_id; todo store vive bajo data/projects/<project_id>/storage/...; cero archivos globales.", "razon": "N proyectos a la vez sin solaparse. Hoy cocina (data/current) y tarifas (/storage/config) rompen el aislamiento." },
+    { "id": "vertical_agnostico", "regla": "carta-manager/ingredientes/variaciones modelan catalogo/componente/familia, no pizza/ingrediente/grupo. La vertical solo cambia datos.", "razon": "El mismo motor sirve moda (prenda/atributo/color-talla) u otras verticales sin reescribir nada." }
+  ],
+
+  "decision_2_canal_y_precio": {
+    "_doc": "Como se modela el precio por canal. CORRECCION de supuesto: tarifas NO es un % ni precios escritos por producto — es ASIGNACION carta<->canal: cada canal apunta a una carta entera (tarifas.config = { general:carta_id, canales:{canal->carta_id}, variantes:[] }; resolverCarta(canal)->carta_id). El precio de un canal es el precio escrito en SU carta.",
+    "decision": "C — canal = CARTA INDEPENDIENTE (no overlay declarativo, no carta-base + ajuste en resolve).",
+    "razon_del_usuario": [
+      "Un overlay declarativo es mas dificil de gestionar toda la variedad de opciones (seleccion + renombrado + ajuste + overrides).",
+      "No van a ser 50 cartas — pocas cartas por proyecto, copias completas manejables.",
+      "La variedad la maneja el LLM en lenguaje natural, no un motor de reglas."
+    ],
+    "modelo": {
+      "personalizacion_por_canal": "operaciones de LLM sobre carta-manager: clonar(base) + 'quita estos productos / sube la familia X un N% / este producto a P€'. Mapean 1:1 a operaciones existentes de carta-manager (add_product, remove_product, update_product, update_prices, add_category). Blueprint-driven: el LLM las invoca via bus.publishAndWait.",
+      "sin_overlay": "NO hay motor de overlay ni cascada cruzada entre cartas. Un overlay declarativo seria el anti-patron heuristico que el repo evita — el LLM razona la manipulacion mejor en NL.",
+      "sin_sync_automatico": "NO hay sync automatico carta-base -> carta-canal. Si cambia la base y se quiere propagar, se le pide al LLM re-derivar la carta del canal (manejable: pocas cartas). Trade consciente: re-derivacion explicita > overlay automatico complejo.",
+      "runtime_precio": "TONTO-SIMPLE: canal -> tarifas.resolverCarta -> carta_id -> esa carta. precio_item = precio_base + SUM precio_extra(extras elegidos). NO hace falta modulo 'precio' nuevo: variaciones ya calcula base+extras. El canal solo elige la carta.",
+      "donde_vive_la_manipulacion": "carta-manager (aggregate root de cartas, ya tiene add/remove/update_prices). menu-generator queda como generador puro (crea desde input crudo). El LLM dirige ambos.",
+      "tarifas_queda": "solo ASIGNACION carta<->canal { general, canales:{canal->carta_id}, variantes }. Saneado: bajo /pizzepos, multi-tenant (hoy esta en /storage/config/tarifas.json, fuera del vertical)."
+    }
+  },
+
+  "mapa_operativo_completo": {
+    "_doc": "Mapa completo del subsistema pizzepos operativo (de la semilla al cobro) levantado leyendo el codigo en sesion 2026-06-07. Referencia del ESTADO ACTUAL para el rediseno. Incluye el limite de scope: que modulos entran en el rediseno catalogo/precio y cuales quedan fuera (consumidores que confian en el precio).",
+    "grafo": [
+      "DISENO: menu-generator --carta.creada--> carta-manager (/pizzepos/cartas/<id>.json: productos + precio_base + ingredientes). Emite carta.actualizada por cada carta (general + 1 por canal).",
+      "CATALOGO: productos (catalogo_activo.json) + ingredientes (ingredientes.json, precio_extra) + categorias sincronizan desde carta.actualizada. tarifas (tarifas.json) asigna canal->carta_id.",
+      "COMPOSICION (front, lib/components/comandero/*): MitadMitadPanel precio=max(izq,der); AlGustoPanel precio=8.00+SUMextra; porciones inline en ComanderoScreen 10.50/3; VariacionesPanel quitar/anadir. addItem(producto_id, precio_override).",
+      "COMANDERO: 2 caches (productosCache + cartasProductosCache xN). canal=_detectarCanalCuenta(cuenta_id) por PREFIJO del id. precio=_resolverPrecioCanal: mesa confia override; otro canal pisa con carta(canal)[producto_id].precio.",
+      "TICKET: comandero.enviar_cocina --> cuentas (state machine 7 estados, acumula total, confia precio) + cuentas-canales (Strategy comportamiento por canal).",
+      "COCINA: comandero.enviar_cocina --> pedidos (bridge, su propio cache) --pedido.enviado_cocina--> cocina (display general->horno, snapshot GLOBAL data/current).",
+      "COBRO: cobros (cuenta.total -> 7 metodos de pago; NO recalcula precio)."
+    ],
+    "caches_del_producto_o_precio": [
+      "carta-manager: /pizzepos/cartas/*.json (N cartas) — origen",
+      "productos: catalogo_activo.json (disco) — sync carta.actualizada",
+      "ingredientes: ingredientes.json (disco) — sync carta + producto.creado",
+      "tarifas: tarifas.json (disco, /config) — agentes",
+      "comandero: productosCache + cartasProductosCache (memoria xN) — catalogo + carta + tarifas.config",
+      "pedidos/cocina: cache mem + cocina_snapshot.json (GLOBAL) — comandero.enviar_cocina"
+    ],
+    "costuras": [
+      "Precio partido: composicion en el front (precio_override, vale en mesa); canal en el back (_resolverPrecioCanal, pisa en delivery). BUG: compuestos mal tasados en glovo/llevar (re-resuelve por producto_id de una mitad).",
+      "Canal por convencion de id: _detectarCanalCuenta lee el prefijo de cuenta_id (glovo_, mesa_...). Acoplamiento implicito.",
+      "N cartas completas (una por canal) cacheadas enteras en comandero.cartasProductosCache.",
+      "6 copias del producto materializadas/cacheadas, hidratadas por fan-out de 4 eventos (carta.actualizada, catalogo.actualizado, producto.*, tarifas.config.actualizada).",
+      "Enlace ingrediente por nombre (slugify en runtime) — fragil (D1 lo arregla con id en origen).",
+      "5 convenciones de ruta, 2 fuera de sitio (/config/tarifas.json, data/current/cocina_snapshot.json GLOBAL -> rompe multi-tenant).",
+      "pedidos es un bridge con su propio cache: comandero->cuentas->pedidos->cocina (3 saltos + renombrado de evento).",
+      "Logica de negocio hardcodeada en el front: max, 8.00, 10.50/3 (reglas de precio en componentes Svelte)."
+    ],
+    "limite_de_scope": {
+      "dentro": "menu-generator, carta-manager, ingredientes, variaciones, categorias, productos, tarifas, comandero (resolucion de precio + composicion). El precio sale correcto de comandero.",
+      "fuera": "cuentas (lifecycle + acumula total, confia precio), cuentas-canales (comportamiento de canal: contadores, delegacion de cobro, tiempos — no toca catalogo/precio), cobros (pago, confia total), pedidos/cocina (display, reciben el item ya tasado).",
+      "lectura_clave": "Todo lo de FUERA confia en el precio que produce comandero y nadie lo recalcula. Por eso el precio tiene que salir BIEN de comandero (composicion + canal coherentes) — es lo que D3 garantiza."
+    }
+  },
+
+  "decision_3_composers_y_tasacion": {
+    "_doc": "Los composers (botones que arman un item: mitad/mitad, al-gusto, porciones, ...) y como se tasa el item compuesto de forma coherente con el canal. Hoy la logica de composicion+precio vive en componentes Svelte del front (lib/components/comandero/*Panel.svelte) y el back re-resuelve por canal (comandero._resolverPrecioCanal), lo que rompe los compuestos en delivery (BUG documentado en mapa_operativo_completo.costuras).",
+    "decision": "Composer AUTOCONTENIDO (su logica de composicion + su regla de precio + su capa de imagen, todo junto), pero pull-ea la carta EFECTIVA del canal activo y tasa contra ELLA. El backend confia.",
+    "razon_del_usuario": "El composer tiene la logica y todo contenido; siguiendo ese patron el mantenimiento es mas sencillo (un sitio por tipo de item; anadir un composer no obliga a tocar el backend).",
+    "modelo": {
+      "composer_autocontenido": "Cada composer (tipo de item) lleva: logica de composicion (que productos/mitades/extras), regla de precio (max | base_mas_extras | porciones | ...), capa de imagen. Un tipo nuevo = un composer nuevo, sin tocar nucleo. Puerta abierta.",
+      "condicion_de_correctitud": "El composer pull-ea la carta EFECTIVA del canal activo (carta_efectiva(canal)), NO el catalogo general productos. Aplica su regla sobre ESOS precios -> el precio ya es el del canal. Asi 'todo contenido' es ademas correcto en mesa Y en delivery.",
+      "evento_canonico": "item.compuesto { tipo, componentes:{producto_ids?,mitades?,extras?}, precio_final, capa_imagen }. Sustituye los eventos Svelte sueltos por composer + el precio_override actual.",
+      "backend_simplifica": "comandero ELIMINA _resolverPrecioCanal (el re-calculo por canal que causaba el bug). Confia en el precio del composer porque el composer ya uso la carta correcta. comandero solo registra el item + precio y suma. Desaparece el split de autoridad front/back: un solo punto tasa (el composer).",
+      "requisito": "El front debe poder resolver canal_activo -> carta_efectiva(canal) (hoy el canal se detecta por prefijo de cuenta_id en el back; hay que exponer la carta del canal al composer).",
+      "composer_base_producto": {
+        "_doc": "El boton de producto (ProductoBtn.svelte) ES el composer base. No es un caso especial: cae bajo el mismo modelo D3 (tasa contra la carta del canal, emite item.compuesto).",
+        "layouts": {
+          "entero": "zona unica. tiene_variaciones === false. Un tap -> add producto entero a su precio (de la carta del canal). item.compuesto { tipo:'entero', componentes:{producto_id}, precio_final }.",
+          "partido": "doble zona. tiene_variaciones === true. Izquierda 'Anadir integro' = entero; derecha '+/-' = handoff al composer de variaciones (base + SUM extra, carta del canal)."
+        },
+        "regla_tiene_variaciones": "tiene_variaciones = producto.tiene_variaciones ?? (ingredientes.length > 0). Default heuristico (tiene ingredientes -> partido). Override EXPLICITO en el catalogo SOLO para excepciones: producto con ingredientes que se quiere entero -> tiene_variaciones:false. No hay que marcarlo en cada producto, solo donde la heuristica falla. Es lo que ya hace el codigo (comandero.ts: p.tiene_variaciones ?? (ingredientes.length > 0)).",
+        "matiz_precio": "ProductoBtn pinta hoy producto.precio del catalogo general (productos) -> en delivery muestra/manda el precio equivocado, mismo bug que los compuestos. Con D3 tira de la carta del canal. Sin caso especial."
+      }
+    }
+  },
+
+  "decisiones_cerradas": [
+    "D1 (cerrada): reparto de responsabilidades sin absorcion (carta-manager / ingredientes / variaciones).",
+    "Origen: semilla ENRIQUECIDA (menu-generator asigna id canonico + familia).",
+    "Enlace por id de ingrediente de punta a punta.",
+    "Cero copias materializadas del catalogo (productos/catalogo_activo.json se elimina; se deriva por pull).",
+    "Modelo vertical-agnostico (item/componente/familia).",
+    "D2 (cerrada): canal = carta independiente (C). Personalizacion por canal via operaciones de LLM en carta-manager (clonar + quita/pon/sube-familia/sube-producto), sin overlay, sin sync automatico. Runtime de precio = precio_base + SUM precio_extra dentro de la carta resuelta; SIN modulo precio nuevo. tarifas = solo asignacion carta<->canal, saneada bajo /pizzepos.",
+    "D3 (cerrada): composer AUTOCONTENIDO (logica de composicion + regla de precio + capa de imagen). Tira de la carta efectiva del canal activo y tasa contra ella -> precio correcto en mesa y delivery. Emite item.compuesto con precio_final. comandero elimina _resolverPrecioCanal y confia: un solo punto tasa (el composer), backend mas simple. ProductoBtn = composer base (layouts entero/partido; tiene_variaciones = heuristica ingredientes>0 + override del catalogo para excepciones).",
+    "Persistencia (cerrada): JSON por proyecto (filesystem). 3 gatillos nombrados para reconsiderar SQLite (catalogo grande / concurrencia real / derivaciones complejas)."
+  ],
+
+  "decision_persistencia": {
+    "_doc": "Substrato del catalogo. Decidido DESPUES del modelo (es consecuencia, no decision de fondo).",
+    "decision": "JSON por proyecto (via filesystem / fs.read-write.request), bajo data/projects/<project_id>/storage/pizzepos/...",
+    "razon": [
+      "La carta ES un documento anidado ({meta, categorias, productos}); JSON la modela 1:1. Tablas+joins serian impedance mismatch.",
+      "Coherencia con el paradigma blueprint: carta-manager es blueprint-driven; el LLM lee/escribe por fs.read/write.request. SQLite meteria db.query en el modelo declarativo.",
+      "Legible, git-able, versionado trivial (copiar el doc a .versions/).",
+      "Read-heavy + pequeno + cacheado en memoria: una vez en RAM, JSON y SQLite leen igual; la ventaja de query sin cargar se evapora.",
+      "YAGNI / paradigma del repo: lo mas simple que funciona, y el repo ya lo hace para cartas/blueprints."
+    ],
+    "gatillos_para_reconsiderar_sqlite": [
+      "Vertical con catalogo grande (miles de SKUs: super, retail) -> cargar el doc entero duele.",
+      "Concurrencia real (agente re-derivando cartas mientras el POS escribe) -> hacen falta transacciones.",
+      "Derivaciones complejas frecuentes (reporting, busquedas, filtros cruzados) -> GROUP BY > codigo a mano."
+    ],
+    "nota": "SQLite no es overkill teorico — sus ventajas (queries, atomicidad, integridad relacional, escala) son reales — pero muerden a otra escala/complejidad que pizzeria no toca, y pelean con el paradigma blueprint. Si aparece UN gatillo, reconsiderar; no antes."
+  },
+
+  "decisiones_abiertas": [],
+  "estado_diseno": "CERRADO. D1+D2+D3+persistencia decididas. Pendiente solo el aterrizaje (ver desvio_codigo_actual).",
+
+  "desvio_codigo_actual": {
+    "_doc": "El codigo HOY no implementa este contrato. Lista de divergencias a aterrizar cuando se ejecute el rediseno.",
+    "divergencias": [
+      "menu-generator (v8) produce semilla MINIMA: ingredientes solo {nombre, emoji}, sin id canonico ni familia. -> enriquecer a carta-pizzepos v2.",
+      "productos (v4) materializa /storage/pizzepos/productos/catalogo_activo.json sincronizando desde carta.actualizada. -> eliminar materializacion; derivar por pull.",
+      "ingredientes (v5) y categorias (v3) tienen store propio y sync desde carta. -> ingredientes conserva solo precio_extra(+familia override); categorias se deriva de la carta.",
+      "tarifas (v3.1.1) guarda en /storage/config/tarifas.json (fuera del vertical). -> mover bajo /pizzepos, multi-tenant. Sigue siendo solo asignacion carta<->canal (D2). El gap carta->canal NO se cierra con sync automatico: la re-derivacion de la carta de un canal es una operacion de LLM en carta-manager a peticion.",
+      "personalizacion por canal hoy via agentes tarifas-creator/tarifas-sync que clonan/sincronizan cartas. -> D2: la manipulacion (clonar + quita/pon/sube-familia/sube-producto) son operaciones de carta-manager que el LLM invoca en NL; no agente de sync obligatorio.",
+      "cocina (v3.2.0) guarda snapshot en data/current/cocina_snapshot.json (GLOBAL). -> mover a data/projects/<id>/storage (multi-tenant).",
+      "enlace producto<->ingrediente por nombre/slugify en runtime. -> id canonico asignado en origen por menu-generator."
+    ]
+  }
+}

@@ -61,9 +61,6 @@ Actúas como un **Ingeniero Técnico Senior Especialista en Arquitectura de Soft
 > Regla rectora: **el código es la fuente de verdad; esta spec es la guía de diseño.** Si una
 > clase real diverge de aquí, se señala el desvío y se concilia (actualizar spec o corregir código),
 > nunca se asume que la spec manda sobre lo implementado.
->
-> Alcance actual: **solo el core (infraestructura pura, sin dominio)**. Pendiente: `ModuleLoader`
-> en detalle, clase base `Module`, y las capas de módulos/dominio.
 
 ## Decisiones de arquitectura cerradas
 
@@ -1493,11 +1490,3 @@ core/<id>/events/receta/{creada,actualizada,eliminada}        QoS 1   # lifecycl
 response — perderlo rompe la cadena evaluar→calcular→precio. `escandallo` no materializa estado:
 su coste vive como **evento** que `recetas` persiste en SU agregado — separación de
 responsabilidades sin duplicar fuente de verdad (paradigma-no-cabe).
-
-## Pendiente (siguiente capa)
-
-- **Resto del recetario** — `tecnicas` (blueprint, catálogo de técnicas culinarias) · `tarifas` (procedural, carta+canal).
-- **Vertical tienda OPERATIVA** — pizzepos POS: `pedidos`, `cocina`, `comandero`, `cobros`, `productos`, `cuentas`.
-- **Capa IoT/ESP32** — `device-registry`, `device-shadow`, `firmware-*`, `esp32-*`.
-- **Resto de infra/plataforma** — `database-manager`, `composition-manager`, `scheduler`,
-  `prompt-manager`, `filesystem`, `plugin-manager`.

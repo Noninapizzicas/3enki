@@ -85,7 +85,7 @@ test('module.json: NO declara dependencies nativas (pdfjs/sharp/google-vision el
 
 test('blueprint: id, version, extends correctos', () => {
   assert.strictEqual(blueprint.id, 'menu-generator');
-  assert.strictEqual(blueprint.version, 'blueprint-8.1.0');
+  assert.strictEqual(blueprint.version, 'blueprint-9.0.0');
   assert.strictEqual(blueprint.extends_blueprint_abstract, 'subsistema-recetario.modulo-base');
   assert.strictEqual(blueprint.language, 'es');
 });
@@ -239,8 +239,8 @@ test('schema: ingrediente con emoji valida (ayuda visual del POS comandero)', ()
       categoria: 'c',
       precio: 10,
       ingredientes: [
-        { nombre: 'Tomate', emoji: '🍅' },
-        { nombre: 'Queso', emoji: '🧀' }
+        { id: 'tomate', nombre: 'Tomate', emoji: '🍅', familia: 'salsa' },
+        { id: 'queso', nombre: 'Queso', emoji: '🧀', familia: 'queso' }
       ]
     }]
   };

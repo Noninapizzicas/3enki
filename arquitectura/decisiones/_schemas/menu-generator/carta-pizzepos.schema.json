@@ -94,21 +94,31 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["nombre"],
+              "required": ["id", "nombre", "familia"],
               "additionalProperties": false,
               "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "id canónico (slug normalizado del nombre). v2 (semilla enriquecida): el enlace producto↔ingrediente↔familia de punta a punta. NUNCA se enlaza por nombre. Ej: 'Mozzarella' -> 'mozzarella'."
+                },
                 "nombre": {
                   "type": "string",
                   "minLength": 1,
-                  "description": "Nombre del ingrediente."
+                  "description": "Nombre del ingrediente (display). El LLM lo normaliza a su forma canónica antes de derivar el id."
                 },
                 "emoji": {
                   "type": "string",
                   "description": "Emoji representativo. El comandero (pantalla del POS) los renderiza como ayuda visual del cliente al añadir/quitar ingredientes de un producto. Verificado en runtime real 2026-05-25."
+                },
+                "familia": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Familia del ingrediente (queso, verdura, carne, salsa, pescado, fruta, extra, condimento, otro), asignada EN ORIGEN por menu-generator. v2 (semilla enriquecida). ingredientes es la autoridad (puede corregirla). Término canónico 'familia' (glosario v1.2.0; sinónimo histórico 'grupo' deprecado)."
                 }
               }
             },
-            "description": "Lista de ingredientes del producto. Shape canónico del POS pizzepos — el comandero los muestra agrupados por categoría con emojis (caso testigo: producto 'Blues' de Pizzicas con QUESO/VERDURA/CARNE Y EMBUTIDO)."
+            "description": "Lista de ingredientes BASE del producto. Shape canónico del POS pizzepos — el comandero los muestra agrupados por familia con emojis (caso testigo: producto 'Blues' de Pizzicas con QUESO/VERDURA/CARNE Y EMBUTIDO). v2: cada ingrediente lleva id canónico + familia asignados en origen."
           }
         }
       }
@@ -134,13 +144,13 @@
           "categoria": "pizzicas",
           "precio": 11.50,
           "ingredientes": [
-            { "nombre": "Tomate", "emoji": "🍅" },
-            { "nombre": "Salsa BBQ", "emoji": "🔥" },
-            { "nombre": "Nata", "emoji": "🥛" },
-            { "nombre": "Pollo", "emoji": "🍗" },
-            { "nombre": "Mezcla de quesos", "emoji": "🧀" },
-            { "nombre": "Cebolla", "emoji": "🧅" },
-            { "nombre": "Bacon", "emoji": "🥓" }
+            { "id": "tomate", "nombre": "Tomate", "emoji": "🍅", "familia": "salsa" },
+            { "id": "salsa_bbq", "nombre": "Salsa BBQ", "emoji": "🔥", "familia": "salsa" },
+            { "id": "nata", "nombre": "Nata", "emoji": "🥛", "familia": "salsa" },
+            { "id": "pollo", "nombre": "Pollo", "emoji": "🍗", "familia": "carne" },
+            { "id": "mezcla_de_quesos", "nombre": "Mezcla de quesos", "emoji": "🧀", "familia": "queso" },
+            { "id": "cebolla", "nombre": "Cebolla", "emoji": "🧅", "familia": "verdura" },
+            { "id": "bacon", "nombre": "Bacon", "emoji": "🥓", "familia": "carne" }
           ]
         },
         {
@@ -149,10 +159,10 @@
           "categoria": "entrantes",
           "precio": 3.50,
           "ingredientes": [
-            { "nombre": "Huevos", "emoji": "🥚" },
-            { "nombre": "Salsa de ajo asado", "emoji": "🧄" },
-            { "nombre": "Trufa", "emoji": "🍄" },
-            { "nombre": "Mayonesa", "emoji": "🥫" }
+            { "id": "huevos", "nombre": "Huevos", "emoji": "🥚", "familia": "otro" },
+            { "id": "salsa_de_ajo_asado", "nombre": "Salsa de ajo asado", "emoji": "🧄", "familia": "salsa" },
+            { "id": "trufa", "nombre": "Trufa", "emoji": "🍄", "familia": "verdura" },
+            { "id": "mayonesa", "nombre": "Mayonesa", "emoji": "🥫", "familia": "salsa" }
           ]
         }
       ]

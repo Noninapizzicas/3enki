@@ -106,6 +106,42 @@
     }
   },
 
+  "mapa_operativo_completo": {
+    "_doc": "Mapa completo del subsistema pizzepos operativo (de la semilla al cobro) levantado leyendo el codigo en sesion 2026-06-07. Referencia del ESTADO ACTUAL para el rediseno. Incluye el limite de scope: que modulos entran en el rediseno catalogo/precio y cuales quedan fuera (consumidores que confian en el precio).",
+    "grafo": [
+      "DISENO: menu-generator --carta.creada--> carta-manager (/pizzepos/cartas/<id>.json: productos + precio_base + ingredientes). Emite carta.actualizada por cada carta (general + 1 por canal).",
+      "CATALOGO: productos (catalogo_activo.json) + ingredientes (ingredientes.json, precio_extra) + categorias sincronizan desde carta.actualizada. tarifas (tarifas.json) asigna canal->carta_id.",
+      "COMPOSICION (front, lib/components/comandero/*): MitadMitadPanel precio=max(izq,der); AlGustoPanel precio=8.00+SUMextra; porciones inline en ComanderoScreen 10.50/3; VariacionesPanel quitar/anadir. addItem(producto_id, precio_override).",
+      "COMANDERO: 2 caches (productosCache + cartasProductosCache xN). canal=_detectarCanalCuenta(cuenta_id) por PREFIJO del id. precio=_resolverPrecioCanal: mesa confia override; otro canal pisa con carta(canal)[producto_id].precio.",
+      "TICKET: comandero.enviar_cocina --> cuentas (state machine 7 estados, acumula total, confia precio) + cuentas-canales (Strategy comportamiento por canal).",
+      "COCINA: comandero.enviar_cocina --> pedidos (bridge, su propio cache) --pedido.enviado_cocina--> cocina (display general->horno, snapshot GLOBAL data/current).",
+      "COBRO: cobros (cuenta.total -> 7 metodos de pago; NO recalcula precio)."
+    ],
+    "caches_del_producto_o_precio": [
+      "carta-manager: /pizzepos/cartas/*.json (N cartas) — origen",
+      "productos: catalogo_activo.json (disco) — sync carta.actualizada",
+      "ingredientes: ingredientes.json (disco) — sync carta + producto.creado",
+      "tarifas: tarifas.json (disco, /config) — agentes",
+      "comandero: productosCache + cartasProductosCache (memoria xN) — catalogo + carta + tarifas.config",
+      "pedidos/cocina: cache mem + cocina_snapshot.json (GLOBAL) — comandero.enviar_cocina"
+    ],
+    "costuras": [
+      "Precio partido: composicion en el front (precio_override, vale en mesa); canal en el back (_resolverPrecioCanal, pisa en delivery). BUG: compuestos mal tasados en glovo/llevar (re-resuelve por producto_id de una mitad).",
+      "Canal por convencion de id: _detectarCanalCuenta lee el prefijo de cuenta_id (glovo_, mesa_...). Acoplamiento implicito.",
+      "N cartas completas (una por canal) cacheadas enteras en comandero.cartasProductosCache.",
+      "6 copias del producto materializadas/cacheadas, hidratadas por fan-out de 4 eventos (carta.actualizada, catalogo.actualizado, producto.*, tarifas.config.actualizada).",
+      "Enlace ingrediente por nombre (slugify en runtime) — fragil (D1 lo arregla con id en origen).",
+      "5 convenciones de ruta, 2 fuera de sitio (/config/tarifas.json, data/current/cocina_snapshot.json GLOBAL -> rompe multi-tenant).",
+      "pedidos es un bridge con su propio cache: comandero->cuentas->pedidos->cocina (3 saltos + renombrado de evento).",
+      "Logica de negocio hardcodeada en el front: max, 8.00, 10.50/3 (reglas de precio en componentes Svelte)."
+    ],
+    "limite_de_scope": {
+      "dentro": "menu-generator, carta-manager, ingredientes, variaciones, categorias, productos, tarifas, comandero (resolucion de precio + composicion). El precio sale correcto de comandero.",
+      "fuera": "cuentas (lifecycle + acumula total, confia precio), cuentas-canales (comportamiento de canal: contadores, delegacion de cobro, tiempos — no toca catalogo/precio), cobros (pago, confia total), pedidos/cocina (display, reciben el item ya tasado).",
+      "lectura_clave": "Todo lo de FUERA confia en el precio que produce comandero y nadie lo recalcula. Por eso el precio tiene que salir BIEN de comandero (composicion + canal coherentes) — es lo que D3 garantiza."
+    }
+  },
+
   "decisiones_cerradas": [
     "D1 (cerrada): reparto de responsabilidades sin absorcion (carta-manager / ingredientes / variaciones).",
     "Origen: semilla ENRIQUECIDA (menu-generator asigna id canonico + familia).",

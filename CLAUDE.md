@@ -55,6 +55,65 @@ Actúas como un **Ingeniero Técnico Senior Especialista en Arquitectura de Soft
 
 ---
 
+# 🧱 Capa de Aterrizaje (Plasmador) — del diseño abstracto al stack real
+
+> Esta capa es **obligatoria al pasar de pseudocódigo a código**. Aterriza el diseño abstracto al
+> stack REAL del repo (verificado en `package.json`). Stack: **Node.js 18+ en JavaScript puro (backend) ·
+> SvelteKit 2 + Svelte 5 (runes) + TypeScript 5 (frontend) · CSS scoped por componente (UI) ·
+> Blueprints-driven (módulos declarativos ejecutados por LLM)**.
+
+### 1. Declaración de Stack y Runtime
+Antes de escribir código, **declaras explícitamente**:
+- **Backend**: Node.js ≥18 (dev en 20+), **JavaScript puro (CommonJS: `require` / `module.exports`)** —
+  **NO TypeScript**. Event-loop single-thread; broker `aedes` y módulos en-proceso. CPU-bound pesado
+  (OCR/PDF/imagen) delegado a libs nativas (`tesseract.js`, `pdfjs-dist`, `sharp`); Worker Threads solo si duele (YAGNI).
+- **Frontend**: SvelteKit 2 (adapter Node/static), **Svelte 5 (modelo runes)**, Vite 6, TypeScript 5
+  estricto (`strictNullChecks`, `noImplicitAny`). **UI con CSS scoped** en cada `.svelte` — **sin Tailwind,
+  sin daisyui, sin shadcn** (no están en deps).
+- **Blueprints**: módulos declarativos JSON que `ai-gateway` ejecuta como system-prompt + agentic loop con
+  2 tools universales (`bus.publish`, `bus.publishAndWait`); el frontend los renderiza como páginas dinámicas.
+- **Persistencia**: JSON por proyecto vía módulo `filesystem`. `sqlite3`/`sql.js` están en deps → SQLite
+  disponible si se dispara un gatillo (catálogo grande / concurrencia / derivaciones complejas).
+- **Restricciones**: heap Node ~1.5GB default, SSR/CSR híbrido en SvelteKit, MQTT over WS en browser.
+
+### 2. Aterrizaje OOP al Stack
+- **Backend (JS puro)**: clases ES6 con **`#private` fields**, `async/await`, `EventEmitter` nativo para
+  eventos locales. **Contratos = JSON Schema validado con `ajv`** (dep), **no** interfaces TS. **DI manual
+  por constructor** — sin framework (el `Core` es la raíz de composición); nada de `tsyringe`.
+- **Patrones**: **Observer** → `EventEmitter` / `mqtt`. **Strategy** → providers LLM intercambiables
+  (anthropic, deepseek, openai). **Command** → cada operación de blueprint serializable. **Factory** →
+  `ModuleLoader` instancia clases JS o registra blueprints. **State Machine** → lifecycle `cuentas`/`cocina`.
+- **Regla DIP**: ningún módulo importa `mqtt.js` ni toca el broker — **solo `eventBus` + `mqttRequest`**.
+  El cliente MQTT vive **solo en el core**.
+- **Frontend (Svelte 5)**: **runes** (`$state`, `$derived`, `$props`, `$effect`) para reactividad; **stores**
+  (`writable`) **solo** para estado global compartido (conexión MQTT, sesión). `+page.svelte` / `+layout.svelte`
+  rutas, `+server.ts` endpoints. CSS scoped por componente.
+
+### 3. Aterrizaje MQTT a Librería y Red
+- **Backend**: `mqtt` (npm **v5**) cliente sobre loopback al `aedes` embebido; `ws` para el puerto WebSocket
+  del frontend; envelopes validados con `ajv`.
+- **Frontend**: `mqtt` (**v5**, browser bundle) sobre WebSocket (`ws://`/`wss://`); conexión en `+layout.ts`,
+  guardada en un **store global**; req/resp vía helper `mqttRequest`.
+- **Configuración**: keepAlive **60s** (WiFi/4G) / **30s** (LAN); `cleanSession=false` (recupera subs QoS1);
+  `reconnectPeriod` exponencial 1s→2s→5s→10s; TLS/mTLS si dominio público (lo provee `certificate-authority`).
+- **Cliente MQTT como clase OOP — vive SOLO en el core, en JS. Ningún módulo lo instancia (DIP):**
+  ```js
+  // core/mqtt/client.js — ÚNICA frontera con el transporte. Los módulos usan eventBus/mqttRequest.
+  class MQTTClient extends EventEmitter {
+    #client;
+    #subscriptions = new Set();
+    async connect() { /* loopback al aedes embebido (o broker externo si config.external) */ }
+    async publish(topic, payload, { qos = 1 } = {}) { /* default QoS 1 */ }
+    async subscribe(topics, { qos = 1 } = {}) { this.#subscriptions.add(...topics); /* ... */ }
+    #onMessage(topic, message) { this.emit('message', topic, message); }
+    #onReconnect() { /* resubscribe(this.#subscriptions) — idempotente */ }
+    #onError(error) { this.emit('error', error); }
+  }
+  module.exports = MQTTClient;
+  ```
+
+---
+
 # 🏛️ Arquitectura del Core — Definición de Clases (Pseudocódigo)
 
 > Esta sección es la **especificación viva** del núcleo de `event-core` como grafo de clases.

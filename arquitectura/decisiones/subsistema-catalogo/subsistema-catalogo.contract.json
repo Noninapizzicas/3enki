@@ -221,8 +221,8 @@
       "comandero.item_agregado / item_eliminado / item_actualizado: snake_case en el entity_verb + verbo 'agregado' fuera del whitelist. Son eventos EXISTENTES del codigo; los consumidores (cuentas, etc.) dependen de ellos. El rediseno los conserva por continuidad; canonizar (p.ej. comandero.item.creado) o anadir 'agregado' al whitelist es una tarea de naming aparte.",
       "comandero.enviar_cocina: 'enviar' (infinitivo) en vez de verbo-pasado del whitelist ('enviado'). Existente; mismo criterio."
     ],
-    "decision_abierta_de_termino": "FAMILIA vs GRUPO: el rediseno usa 'familia' (familia de ingrediente) en 8 ficheros; el codigo/UI existentes usan 'grupo'/'GRUPO' (ingredientes 'organizado por GRUPO'). NO esta en el glosario -> riesgo de sinonimo cross-modulo. Hay que elegir UNO y anadirlo al glosario. Pendiente de decision del usuario.",
-    "termino_no_en_glosario": "'canal' es cross-modulo (tarifas, comandero, cuentas-canales) y consistente, pero no esta en el glosario: deberia entrar (sales-channel)."
+    "decision_de_termino": "FAMILIA (DECIDIDA): termino canonico = 'familia' (es) / 'ingredient-family' (en). Anadido al glosario v1.2.0. 'grupo'/'GRUPO' (codigo/UI pizzepos) queda como sinonimo historico DEPRECADO -> migrar a 'familia' en el aterrizaje. Razon: mas claro y vertical-agnostico (familia de atributo: color/talla), y el rename viaja gratis en la migracion v1->v2.",
+    "canal_en_glosario": "'canal' (sales-channel) anadido al glosario v1.2.0."
   },
 
   "desvio_codigo_actual": {
@@ -233,6 +233,9 @@
       "ingredientes (v5) y categorias (v3) tienen store propio y sync desde carta. -> ingredientes conserva solo precio_extra(+familia override); categorias se deriva de la carta.",
       "tarifas (v3.1.1) guarda en /storage/config/tarifas.json (fuera del vertical). -> mover bajo /pizzepos, multi-tenant. Sigue siendo solo asignacion carta<->canal (D2). El gap carta->canal NO se cierra con sync automatico: la re-derivacion de la carta de un canal es una operacion de LLM en carta-manager a peticion.",
       "personalizacion por canal hoy via agentes tarifas-creator/tarifas-sync que clonan/sincronizan cartas. -> D2: la manipulacion (clonar + quita/pon/sube-familia/sube-producto) son operaciones de carta-manager que el LLM invoca en NL; no agente de sync obligatorio.",
+      "nomenclatura 'grupo' -> 'familia': el codigo/UI (ingredientes 'organizado por GRUPO', frontend) usan 'grupo'; renombrar a 'familia' (termino canonico glosario v1.2.0) en la migracion v1->v2.",
+      "canal por prefijo de cuenta_id (comandero._detectarCanalCuenta) -> cuenta.canal explicito (A3).",
+      "el composer envia el item por la request comandero/add-item (payload shape item-compuesto); deja de mandar precio_override y eventos Svelte sueltos.",
       "cocina (v3.2.0) guarda snapshot en data/current/cocina_snapshot.json (GLOBAL). -> mover a data/projects/<id>/storage (multi-tenant).",
       "enlace producto<->ingrediente por nombre/slugify en runtime. -> id canonico asignado en origen por menu-generator."
     ]

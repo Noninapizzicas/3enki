@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "glossary",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "creado_en": "2026-04-30",
     "contrato_referencia": "arquitectura/convenciones/_contratos/glossary.contract.json",
-    "supersedes_nota": "v1.1.0 (cierre transversal del subsistema-recetario): anadidos 7 conceptos cross-modulo del subsistema (recipe-prototype, culinary-technique, mise-en-place, pass-card, recipe-substitution, kitchen-incident, recipe-operative-state). Estos terminos cruzan entre recetas, escandallo, tecnicas, recetario-creativo, mise-en-place, pase-cocina y frontend-recetario; sin entrada canonica, cada modulo redescubriria su naming. recipe y ingredient ya estaban (v1.0.0). Mantiene el criterio: solo terminos cross-modulo, sinonimos prohibidos, forma canonica unica por idioma."
+    "supersedes_nota": "v1.2.0 (rediseno subsistema-catalogo): anadidos 'ingredient-family' (es: familia; sinonimo historico 'grupo' DEPRECADO) y 'sales-channel' (es: canal), ambos cross-modulo del subsistema-catalogo. v1.1.0 (cierre transversal del subsistema-recetario): anadidos 7 conceptos cross-modulo del subsistema (recipe-prototype, culinary-technique, mise-en-place, pass-card, recipe-substitution, kitchen-incident, recipe-operative-state). Estos terminos cruzan entre recetas, escandallo, tecnicas, recetario-creativo, mise-en-place, pase-cocina y frontend-recetario; sin entrada canonica, cada modulo redescubriria su naming. recipe y ingredient ya estaban (v1.0.0). Mantiene el criterio: solo terminos cross-modulo, sinonimos prohibidos, forma canonica unica por idioma."
   },
 
   "scope": "Términos cross-módulo del sistema event-core. Solo entran conceptos compartidos entre dos o más módulos. Las entidades internas de un único módulo no entran. Sinónimos prohibidos.",
@@ -339,6 +339,22 @@
       "en": "operative-state",
       "notes": "Estado canonico triple de una receta: borrador, en_servicio, archivada. Determina que modulos del subsistema-recetario operan sobre ella (mise-en-place y pase-cocina solo procesan en_servicio). Distinto del 'estado' UI o de cualquier flag interno; este es el unico estado autoritativo del dominio.",
       "industry_reference": null
+    },
+    {
+      "id": "ingredient-family",
+      "domain": "horeca",
+      "es": "familia",
+      "en": "ingredient-family",
+      "notes": "Clase de ingrediente para agrupar opciones (Queso, Verdura, Carne, Salsa...). Cross-modulo del subsistema-catalogo: la semilla (menu-generator) la asigna en origen, ingredientes es la autoridad (puede corregirla), variaciones agrupa los anadibles por ella. Sinonimo historico 'grupo' (codigo/UI pizzepos, 'organizado por GRUPO') DEPRECADO a favor de 'familia'. Generaliza a otras verticales como familia de atributo (moda: color, talla).",
+      "industry_reference": null
+    },
+    {
+      "id": "sales-channel",
+      "domain": "horeca",
+      "es": "canal",
+      "en": "sales-channel",
+      "notes": "Canal de venta (mesa, telefono, llevar, glovo, whatsapp, llevadoo). Cross-modulo: tarifas asigna canal->carta, comandero lo propaga, cuentas-canales gestiona su comportamiento. Cada canal puede tener su propia carta (D2 subsistema-catalogo).",
+      "industry_reference": "POS/delivery industry: 'sales channel' / 'order channel'."
     }
   ]
 }

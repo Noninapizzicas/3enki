@@ -7,8 +7,8 @@
 ## Rol y estado
 
 ```
-ROL: buffer del pedido por cuenta. Recibe items YA tasados (item.compuesto), suma, persiste el ticket,
-     envía a cocina. NO calcula precio (lo hizo el composer).
+ROL: buffer del pedido por cuenta. Recibe items YA tasados por la request comandero/add-item
+     (payload = shape item-compuesto), suma, persiste el ticket, envía a cocina. NO calcula precio.
 
 CLASS ComanderoModule extends Module:
   state: { pedidos: Map<cuenta_id, { items:[], total }> }   # SU dato (el ticket en curso) — persiste (transitorio atómico)
@@ -18,7 +18,7 @@ CLASS ComanderoModule extends Module:
 ## Operaciones
 
 ```
-▸ onItemCompuesto(input):       # = item-compuesto.schema  { project_id, cuenta_id, canal, tipo, componentes, precio_final, cantidad? }
+▸ handleAddItem(input):         # request comandero/add-item; payload = shape item-compuesto { project_id, cuenta_id, canal, tipo, componentes, precio_final, cantidad? }
     if input.precio_final == null: return INVALID_INPUT { field:'precio_final', hint:'el composer DEBE tasar' }
     item ← { id:uuid(), tipo:input.tipo, componentes:input.componentes,
              precio: input.precio_final, cantidad: input.cantidad ?? 1, canal: input.canal }
@@ -36,11 +36,12 @@ CLASS ComanderoModule extends Module:
 ## Eventos · edge · encaje
 
 ```
-PUBLICA: comandero.{item_agregado, item_eliminado, item_actualizado, enviar_cocina}
-ESCUCHA: item.compuesto, cuenta.*
+REQUEST handler: comandero/add-item (payload shape item-compuesto)
+PUBLICA: comandero.{item_agregado, item_eliminado, item_actualizado, enviar_cocina}   # nombres EXISTENTES (drift de naming, ver contrato)
+ESCUCHA: cuenta.*
 edge: precio_final ausente → INVALID_INPUT (comandero NO inventa precio; el composer es el único que tasa)
       canal: viene en item.compuesto (lo supo el composer desde la cuenta) — comandero solo lo propaga, no lo re-detecta para precio
 encaje: D3 — un solo punto tasa (el composer), comandero confía. Desaparece el split front/back y el bug en delivery.
 aterrizaje vs v3.2: ELIMINA _resolverPrecioCanal + cartasProductosCache + la hidratación de N cartas para precio.
-        Recibe item.compuesto pre-tasado; conserva solo el buffer del ticket. Mucho más simple.
+        Recibe el item pre-tasado por add-item (payload item-compuesto); conserva solo el buffer. Mucho más simple.
 ```

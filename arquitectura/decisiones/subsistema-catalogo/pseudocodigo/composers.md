@@ -3,8 +3,13 @@
 > **D3 + unificación.** Casi todos los composers son el **mismo motor** —
 > `VariacionesComposer(carta, producto_id, fraccion)`— parametrizado. `entero` / `partido` /
 > `al-gusto` / `mitad` son configuraciones de ese motor; **`Porciones` es el único distinto**.
-> Todos **tasan contra la carta del canal** (de `cuenta.canal`) y emiten `item.compuesto`.
-> comandero confía (no re-tasa). Puerta abierta: un tipo nuevo = una config del motor, sin tocar el núcleo.
+> Todos **tasan contra la carta del canal** (de `cuenta.canal`) y **envían el item a comandero por la
+> request `comandero/add-item`** — `item-compuesto` es el **shape del payload**, NO un evento del bus
+> (no encaja en `módulo.entidad.verbo`). comandero confía (no re-tasa). Puerta abierta: un tipo nuevo =
+> una config del motor, sin tocar el núcleo.
+>
+> *Notación: en el pseudocódigo, `emit {…}` = el composer **envía** ese payload (shape `item-compuesto`)
+> a `comandero/add-item` (request, no evento).*
 
 ## El canal (A3): explícito en la cuenta
 
@@ -19,9 +24,9 @@
 ```
 INTERFACE Composer:
   async cargar(canal):                       # carta del canal activo (la clave de la correctitud)
-     carta_id ← await mqttRequest('tarifas','resolverCarta',{ project_id, canal })
+     carta_id ← await mqttRequest('tarifas','resolver-carta',{ project_id, canal })
      this.carta ← (await mqttRequest('carta-manager','get',{ project_id, carta_id })).carta
-  componer() → emit item.compuesto           # tasa contra this.carta + pinta capa_imagen
+  componer() → comandero/add-item(payload)   # request (no evento); payload = shape item-compuesto; tasa contra this.carta
 # REGLA TRANSVERSAL: el precio SIEMPRE sale de this.carta (del canal). Mesa y delivery = mismo número correcto.
 ```
 
@@ -37,7 +42,7 @@ CLASS VariacionesComposer implements Composer:
 
   ▸ getPanel():                              # lo que pinta el panel de variaciones
       prod ← this.carta.producto[producto_id]
-      v ← await mqttRequest('variaciones','getVariacionesProducto',{ project_id, producto:prod, canal })
+      v ← await mqttRequest('variaciones','get-variaciones-producto',{ project_id, producto:prod, canal })
       return { quitables: prod.ingredientes, anadibles_por_familia: v.anadibles_por_familia, max_extras: v.max_extras }
 
   ▸ resolver():                              # estado configurado (pizza o media)

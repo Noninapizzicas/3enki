@@ -1549,3 +1549,433 @@ core/<id>/events/receta/{creada,actualizada,eliminada}        QoS 1   # lifecycl
 response — perderlo rompe la cadena evaluar→calcular→precio. `escandallo` no materializa estado:
 su coste vive como **evento** que `recetas` persiste en SU agregado — separación de
 responsabilidades sin duplicar fuente de verdad (paradigma-no-cabe).
+
+---
+
+# 🖥️ Frontend `ui-core` — Definición de Clases (Pseudocódigo)
+
+> El frontend **NO es un cliente REST: es un core más conectado al broker MQTT** (`mqtt.ts:4`).
+> Espejo en el navegador del transporte del backend. La pieza rectora es la capa `lib/ui-core/`:
+> la **frontera única con el transporte** (DIP), de la que cuelga todo lo demás (stores, módulos,
+> componentes Svelte). Stack: **SvelteKit 2 · Svelte (stores `writable`/`derived`) · TS 5 estricto ·
+> `mqtt` v5 (browser, lazy ~2MB) sobre WebSocket · SSR desactivado** (`+layout.ts: ssr=false`,
+> porque todo depende de MQTT/WS/localStorage).
+>
+> **Desvío de forma (señalado, código = fuente de verdad):** en el código real estas clases son
+> **módulos-singleton funcionales** (closures sobre estado de módulo + stores), no `class` ES6 con
+> `#private`. El contrato OOP de abajo se respeta; la forma sintáctica no. Mantener al migrar.
+
+## Mapa de dependencias del frontend (raíz de composición = `AppShell`)
+
+```
+                          ┌─────────────┐
+                          │  AppShell   │  (componente raíz — orden de arranque de la UI)
+                          └──────┬──────┘
+        cablea (alMontar) en orden ▼
+ registerAllModules → iniciarSuscripcionesWorkspace → MqttClient.connect()
+      └─(al resolver)→ iniciarSuscripcionesProyectos + Chat + Conversaciones
+ ─────────────────────────────────────────────────────────────────────────
+ MqttClient ──(_setMqttClient)──▶ MqttRequestResolver
+     ▲ subscribe/publish (refcount)         │ ui/request/<d>/<a> → ui/response/<id>
+     │                                       │
+ DomainStores (chat, projects, recetas…)   ModuleRegistry / LazyModuleRegistry
+     │ subscribe(evento) / mqttRequest()     │ defineModule → loadModule → mountModule
+     ▼                                       ▼
+ Componentes .svelte  (UIModule.PanelComponent, lazy)
+
+Regla SOLID rectora (idéntica al backend):
+  · AppShell CONSTRUYE y CABLEA en alMontar; limpia en orden inverso en alDestruir.
+  · Nadie fuera de `ui-core` instancia `mqtt` (DIP). Stores/módulos solo ven publish/subscribe/mqttRequest.
+  · El cliente MQTT vive SOLO en MqttClient — única frontera con el transporte (espejo del core).
+```
+
+## 31. `MqttClient` — frontera única con el transporte (mqtt.js sobre WebSocket)
+
+```
+CLASE MqttClient (emisor de eventos vía stores Svelte):
+  →deps: config { url:auto, clientId, keepalive:60, reconnectPeriod:2000, connectTimeout:5000, clean:true }
+  estado:
+    cliente:MqttClientLike|nulo ; manejadores:Map<patrón,Set<handler>>
+    topicSubs:Map<topic,refcount>          # ① suscripción con conteo de referencias
+    mensajesPendientes:Cola(máx=100)       # ② cola previa a conexión (backpressure → drop)
+    yaConectoUnaVez:bool ; callbacksReconexion:[]
+    storeEstado:writable<'disconnected'|'connecting'|'connected'|'error'> ; storeError ; storeUltimoMensaje
+
+  interfaz:
+    ▸ obtenerUrlMqtt():                    # Strategy por entorno
+        Vite-dev(:5173)→'ws(s)://host:5173/mqtt' · https→'wss://host/mqtt' · sino→'ws://host:9001'
+        # normaliza localhost→127.0.0.1 (evita cuelgue IPv6 ::1)
+
+    async connect(config?):
+      si cliente: return                   # idempotente
+      storeEstado←'connecting'
+      iniciarConexionMqtt(cfg) EN SEGUNDO PLANO ; return Promesa.resolver()   # ← NO bloquea la UI
+
+    ▸ iniciarConexionMqtt(cfg):            # máquina de estados de conexión
+      mqtt ← await import('mqtt')          # PEREZOSO: 0KB en bundle inicial, ~2MB on-demand
+      cliente ← mqtt.connect(url, {...opts, clientId})
+      tiempoLimite(5s) → si !conecta: estado='error' (UI trabaja offline)
+      cliente.on('connect', _alConectar) ; on('message',_alRecibirMensaje)
+      on('error',→estado='error') ; on('close',→'disconnected') ; on('reconnect',→'connecting')
+
+    ▸ _alConectar():
+      estado←'connected' ; _setMqttClient({publish})            # ④ inyecta publish crudo al Resolver
+      para t en topicSubs.claves(): cliente.subscribe(t)        # RE-SUSCRIBE idempotente
+      vaciarMensajesPendientes()
+      si yaConectoUnaVez: para cb en callbacksReconexion: cb()  # SOLO reconexión: stores recargan
+      yaConectoUnaVez←true
+
+    publish(topic, carga, retener=false):  # envuelve en SobreDeEvento; encola si no hay conexión
+      sobre ← crearSobre(topic, carga)     # event_id, event_type(barras→puntos), source:{core_id:'ui-frontend'}
+      si !cliente?.conectado: encolar(si <100) ó descartar(warn); return
+      cliente.publish(topic, JSON(sobre), {qos:1, retener})     # ④ QoS 1 por defecto
+
+    subscribe(patrón, handler) → unsub:    # modo dual + refcount
+      {topic,esEvento} ← normalizarPatrónEvento(patrón)
+      handlerEf ← esEvento ? (_t,p)→handler(p,p) : handler      # eventos: sobre como 1er arg
+      manejadores[topic].add(handlerEf)
+      si refcount(topic)==0 && conectado: cliente.subscribe(topic)
+      topicSubs[topic]++
+      return ()→{ manejadores[topic].delete(handlerEf); si --topicSubs[topic]<=0: unsubscribe }
+
+    ▸ normalizarPatrónEvento(patrón):      # ⑤ traductor evento↔topic
+        tiene('/')→{topic:patrón, esEvento:false}                       # topic MQTT directo
+        tiene('.')→{topic:`core/*/events/${dom}/${acc}`, esEvento:true} # notación-punto → decisión ①
+        sino     →{topic:patrón, esEvento:false}
+
+    ▸ _alRecibirMensaje(topic, buffer):
+        carga←parsearCarga(buffer)         # JSON.parse con respaldo a texto crudo
+        storeUltimoMensaje←{topic,carga,ts} ; notificarManejadores(topic,carga)  # matchTopic +/#
+    onReconnect(cb)→unreg ; disconnect() ; isConnected()
+
+  # RESILIENCIA (3 capas):
+  #  · mqtt.js reconnectPeriod 2s (backoff interno) · refcount+re-subscribe en _alConectar
+  #  · VisibilityHandler: tab >30s en background (HyperOS/MIUI matan WS) → end(true)+connect() tras 500ms
+  #  · mensajesPendientes: encola ≤100 durante caída, vacía al reconectar
+  # CASOS LÍMITE: carga malformada→texto crudo (no tumba) · handler lanza→try/catch por handler
+  #               cola llena→drop+warn (sin fuga de memoria) · timeout 5s→estado='error' (UI offline)
+```
+
+**Nadie fuera de `ui-core` habla con esta clase.** Única frontera con el transporte (DIP), espejo
+del `MQTTClient` del core (clase 5).
+
+## 32. `MqttRequestResolver` — petición/respuesta sobre MQTT (semántica REST)
+
+```
+CLASE MqttRequestResolver:                 # espejo cliente del ApiRequestResolver (clase 8)
+  →deps: { MqttClient.subscribe, MqttClient.estado, _publicarCrudo }
+  estado: { refClienteMqtt:{publish}|nulo, peticionesPendientes:Map<reqId,{resolve,reject,timer,unsub}>,
+            CLIENT_ID:`ui-<b36>-<rand>`, TIMEOUT_DEFECTO:10000 }
+  interfaz:
+    async mqttRequest<T>(dominio, accion, datos?, {timeout=10000}) → UIResponse<T>:
+      reqId ← `req_<b36>_<rand>`
+      si estado!='connected': await esperarConexion(8000)        # espera reactiva (no polling)
+      return nueva Promesa((resolve,reject) →
+         topicResp ← `ui/response/${reqId}`                       # ⑥ namespace deprecado (ver desvíos)
+         timer ← setTimeout(→limpiar();reject(MqttTimeoutError), timeout)
+         unsub ← subscribe(topicResp, (_t,carga) →
+            resp←carga ; si resp.request_id!=reqId: return        # idempotencia por request_id
+            limpiar() ; resp.success ? resolve(resp) : reject(MqttRequestError(resp)))
+         limpiar ← →{clearTimeout(timer); unsub(); peticionesPendientes.delete(reqId)}
+         peticionesPendientes.set(reqId, {...})
+         _publicarCrudo(`ui/request/${dominio}/${accion}`, {request_id,action,data,timestamp,source})  # ⑥ SIN sobre
+      )
+    ▸ esperarConexion(ms): suscribe a storeEstado, resuelve al 'connected'
+    ▸ _publicarCrudo(t,p): si !refClienteMqtt: throw MqttNotConnectedError; ref.publish(t,p,{qos:1})
+    cancelarPeticion(id) ; cancelarTodas() ; conteoPendientes()
+    # wrappers: listRequest/getRequest/createRequest/updateRequest/deleteRequest
+
+  # JERARQUÍA DE ERRORES (Strategy por tipo):
+  CLASE MqttTimeoutError      ←Error {requestId,dominio,accion}        # sin respuesta
+  CLASE MqttRequestError      ←Error {requestId,status,code,response}  # backend respondió error
+  CLASE MqttNotConnectedError ←Error {}                                # sin transporte
+  # CASOS LÍMITE: timeout→error (respuesta tardía se descarta) · doble response→1ª limpia, 2ª no matchea
+  #   sin conexión al publicar→limpiar+reject · timeouts por dominio: chat 180000ms (LLM+tools), CRUD 10000ms
+```
+
+### Jerarquía de topics + QoS (frontend ↔ broker)
+
+```
+ui/request/<dominio>/<accion>             QoS 1   # SALIDA: petición CRUDA (sin sobre); req/resp
+core/*/events/<evento/con/barras>         QoS 1   # SALIDA: eventos (publish); * = cualquier core_id
+ui/response/<request_id>                  QoS 1   # ENTRADA: respuesta dirigida y correlada
+conversation/<conversation_id>/message    QoS 1   # ENTRADA: PUSH del compañero al canal web
+conversation/<id>/{tool-status,agent_status} ; conversation/stream/end   QoS 1
+```
+
+*Justificación QoS 1:* req/resp deja colgado al caller hasta timeout si se pierde; los pushes del
+compañero cierran turnos con coste real en tokens — perder uno deja al usuario sin respuesta.
+Idempotencia por `request_id`. `retain=false` en todo (el front no emite presencia). QoS 2 vetado.
+
+### Envelopes canónicos (JSON) que el front produce/consume
+
+```json
+// SobreDeEvento — lo que MqttClient.publish() envuelve (eventos "emite y desentiende")
+{ "event_id":"uuid-v4", "event_type":"project.state.request", "timestamp":"ISO-8601",
+  "source":{ "core_id":"ui-frontend" }, "data":{ }, "metadata":{ } }
+// UIRequest — publicado CRUDO (sin sobre) en ui/request/<dom>/<acc>
+{ "request_id":"req_<b36>_<rand>", "action":"send", "data":{ }, "timestamp":"ISO-8601",
+  "source":{ "client_id":"ui-<b36>-<rand>" } }
+// UIResponse — esperado en ui/response/<request_id>
+{ "request_id":"req_...", "status":200, "success":true, "data":{ }, "error":null, "timestamp":"ISO-8601" }
+```
+
+## 33. `ModuleRegistry` — registro temprano por zona (Observer + Factory)
+
+```
+CLASE ModuleRegistry:
+  estado: { storeModulos:writable<Map<id,UIModule>>, suscripcionesModulo:Map<id,unsub[]>,
+            storeEstadoApp:writable<EstadoApp>, storePanelActivo:writable<id|nulo> }
+  interfaz:
+    register(modulo) → unregisterFn:
+      si storeModulos.tiene(id): warn; return noop                # idempotente
+      storeModulos.set(id, modulo)
+      ctx ← crearContextoModulo(id)        # {publish, subscribe(auto-limpieza), abrirPanel, cerrarPanel}
+      modulo.onMount?(ctx)
+      para topic en manifest.mqtt.subscribes: mqttSubscribe(topic, onMessage[topic]) → recolectar
+      return ()→unregister(id)
+    unregister(id): modulo.onUnmount?(); subs.forEach(unsub); storeModulos.delete(id)
+    abrirPanel(id) ; cerrarPanel() ; obtenerComponentePanel(id) ; obtenerConfigPanel(id)
+    actualizarEstadoApp(parcial) ; obtenerEstadoApp()
+  # STORES DERIVADOS POR ZONA (Observer): filtrarPorZona ordenado por button.order
+  #   modulosWorkBar · modulosChatConfig · modulosChatTools · modulosSystemBar ← derived(storeModulos)
+  # ZONAS (enum del dominio UI): 'work-bar' | 'chat-config' | 'chat-tools' | 'system-bar'
+```
+
+## 34. `LazyModuleRegistry` — carga bajo demanda (máquina de estados)
+
+> Pieza más densa del front, equivalente al `ModuleLoader` del backend (clase 10). Los módulos
+> **no se importan** hasta que se navega a ellos; eventos con **ámbito** `ui.<modulo>.*` (Decorator).
+
+```
+CLASE LazyModuleRegistry:
+  estado: { storeDefiniciones:writable<Map<id,DefinicionPerezosa>>,   # {id,zona,orden,cargador(),icono,etiqueta,deps?,rutas?}
+            storeCargados:writable<Map<id,ModuloCargado>>,            # {modulo,cargando,error,suscripciones,montado}
+            storeRutaActual:writable<texto> }
+
+  # MÁQUINA DE ESTADOS POR MÓDULO:
+  #   [DEFINIDO] → loadModule → [CARGANDO] → [CARGADO] → mountModule → [MONTADO]
+  #                                 ↓ error                              ↓ unmountModule
+  #                             [ERROR]                              [CARGADO]
+  interfaz:
+    defineModule(def): storeDefiniciones.set(id,def); storeCargados.set(id,{modulo:nulo,montado:false})
+    async loadModule(id) → UIModule|nulo:
+      [GUARDA]   si cargado.modulo: return éste                  # ya cargado
+                 si cargado.cargando: return await(suscribir hasta !cargando)   # dedup concurrente
+      [DEPS]     para dep en def.dependencias: await loadModule(dep)            # orden topológico
+      [CARGANDO] cargado.cargando←true
+      [CARGAR]   modulo ← await def.cargador()                  # import() dinámico (code-splitting real)
+      [CARGADO]  cargado.modulo←modulo; cargado.cargando←false; return modulo
+      [ERROR]    catch → cargado.error←e; cargado.cargando←false; return nulo
+    async mountModule(id) → bool:
+      modulo ← await loadModule(id); si !modulo: return false
+      si cargado.montado: return true
+      ctx ← crearContextoConAmbito(id)                          # ⑦ eventos con ámbito ui.<id>.*
+      modulo.onMount?(ctx)
+      para topic en manifest.mqtt.subscribes: mqttSubscribe(topic, onMessage[topic]) → recolectar
+      cargado.montado←true
+    unmountModule(id): subs.forEach(unsub); modulo.onUnmount?(); cargado.{suscripciones:[],montado:false}
+    preloadModules(ids): setTimeout(→ para id: loadModule(id), 100)   # precalentamiento en background
+    ▸ crearContextoConAmbito(id):                               # ⑦ Decorator de aislamiento
+        publish: pone ámbito `ui.${id}.${topic}` salvo prefijo ui./system. · subscribe: ídem + recolecta
+        subscribeGlobal: sin ámbito (eventos de sistema) · abrirPanel/cerrarPanel/limpieza
+    setCurrentRoute(ruta) ; coincidirRuta(ruta, rutasManifest)  # soporta /[proyecto]/pagina
+  # STORES DERIVADOS: definicionesWorkBar ← derived([defs,ruta]) filtra zona Y ruta (cada ruta su work-bar)
+  #   definicionesChatConfig/ChatTools/SystemBar ← compartidas en todas las rutas
+  # CASO LÍMITE: carga concurrente → dedup vía [CARGANDO]+suscribir-una-vez · cargador() falla → [ERROR] persistido (reintentable)
+```
+
+## 35. `UIModule` — contrato declarativo de todo módulo de UI (Factory + Command)
+
+```
+INTERFAZ UIModule:                          # = module.json del backend, lado UI
+  manifest: { id, name, version, zone:UIZone,
+              button:{ id, icon, dynamicIcon?, label, action, order? },
+              panels?:[{ id, title, size:'sm'|'md'|'lg', position?, resizable?, draggable? }],
+              mqtt?:{ publishes:[], subscribes:[] } }
+  getIcon?(estado:EstadoApp) → texto         # icono reactivo al estado global
+  getBadge?(estado:EstadoApp) → texto|número|nulo
+  PanelComponent?: ComponenteSvelte<{panelId}>   # el .svelte real (perezoso)
+  onMount?(ctx:ContextoModulo) ; onUnmount?()    # ciclo de vida (lo único que el registry exige)
+  onMessage?: Record<topic, ManejadorMensaje>    # handlers MQTT auto-cableados desde el manifest
+
+  # UIButtonAction (Command — 4 variantes): {panel,panelId} | {publish,topic,payload} | {navigate,route} | {callback,handler}
+  # EJEMPLO REAL (recetas): zona='work-bar', button{icon:'📖', action:{panel:'recetas-panel'}},
+  #                         panels:[{id:'recetas-panel', size:'lg'}], PanelComponent:RecetasPanel
+```
+
+## 36. `DomainStore` — contrato de los stores de dominio (ejemplar: `ChatStore`)
+
+> Cada dominio (chat, projects, recetas, cuentas…) es un **store-módulo**: estado reactivo Svelte +
+> suscripciones MQTT (push del backend) + acciones que llaman `mqttRequest`. Es el consumidor del bus
+> en el front. Patrón maestro: **actualización optimista + reconciliación por push**.
+
+```
+CLASE ChatStore (contrato DomainStore — lib/stores/chat.ts):
+  estado (writables): messages ; conversationId ; isStreaming ; streamingMessageId
+                      toolStatus ; agentWorking ; agentWorkingName ; agentWorkingStep
+  derivados: messageCount ; hasConversation ; lastMessage ; userMessages ; assistantMessages
+
+  # ── ACCIONES (publican / hacen request) ──
+  async sendMessage(contenido):
+    [GUARDA]    si !projectId: notify+abrirPanel('project'); return    # precondiciones de dominio
+                si !convId:    notify+abrirPanel('conversations'); return
+    [OPTIMISTA] messages.push(msgUsuario); limpiarAdjuntos(); isStreaming←true
+    [REQUEST]   resp ← await mqttRequest('conversation','send', {       # contrato fijo: 9 campos, en orden
+                   project_id, page_id:obtenerRutaPagina(), conversation_id, context:{}, settings,
+                   prompt, attachments, intencion, message }, {timeout:180000})
+    [ACK]       # backend devuelve solo {conversation_id, message_id}; la respuesta del LLM llega
+                # DESPUÉS por push en conversation/<id>/message → NO cerramos streaming aquí
+    [FAILSAFE]  setTimeout(180s → si isStreaming: cerrar+notifyError)   # LLM colgado / ai-gateway down
+    [CATCH]     PROJECT_REQUIRED→abrirPanel('project') · CONVERSATION_REQUIRED→abrirPanel('conversations')
+
+  # ── SUSCRIPCIONES MQTT (push del backend → estado reactivo) ──
+  initChatSubscriptions() → cleanupFn:
+    subscribe('conversation/+/message',      (t,p)→ si convActiva(t): addMessage(p); apagar streaming si assistant final)
+    subscribe('conversation/+/tool-status',  (t,p)→ si convActiva(t): toolStatus←p.tool)
+    subscribe('conversation/stream/end',     ()  → finalizar último msg en streaming)
+    subscribe('conversation/+/agent_status', (t,p)→ agentWorking/name/step)
+    subscribe('conversation/loaded',         (_,p)→ messages←p.messages)
+    subscribe('chat.foco.cambiado',          (sobre)→ si conv activa: goto(/<proyecto>/<nueva_pagina>))  # cajones (clase 23)
+    return ()→ desuscripciones.forEach(fn→fn())
+
+  ▸ addMessage(msg): fusión de chunks de streaming sobre el último assistant
+  ▸ obtenerRutaPagina(): deriva page_id de la URL (sin prefijo /[project_id]) → el backend lo mapea a módulo
+  # PATRÓN: el ACK del request (~50ms) NO cierra el "escribiendo…"; lo cierra el push del assistant (5-30s)
+  #         o el failsafe (180s). CASO LÍMITE: convActiva filtra → ignora pushes de otras conversaciones.
+```
+
+### Desvíos doc↔código del frontend (el código es la fuente de verdad)
+
+| Decisión del core | Frontend hoy | Veredicto |
+|---|---|---|
+| **②2a** canónico `core/<id>/api/request/...`; `ui/request/*` = alias deprecado (1 release) | usa `ui/request/<d>/<a>` + `ui/response/<id>` | front en la **vía deprecada**; pendiente migrar |
+| **②2b** clave canónica `correlation_id` (`request_id` solo alias de borde) | usa `request_id` en todo el req/resp | coherente como borde; no propaga `correlation_id` |
+| **①** evento `core/<core_id>/events/...` | publica con comodín `core/*/events/...` (no su id) | sirve para subscribe multi-core; en publish debería llevar id propio |
+| OOP con `class` + `#private` | módulos-singleton funcionales (closures + stores) | desvío de forma; contrato OOP respetado |
+
+---
+
+# 🍕 Frontend línea carta/pizzepos — UI de blueprints (Postura B: lectura + prefill)
+
+> Los módulos UI de la rama carta (`menu-generator`, `carta-manager` y sus hermanos) son el
+> **espejo en el navegador** de los blueprints backend (clases 25–30). **Todos comparten la
+> MISMA estructura** — por eso se documentan como UN patrón (clase 37) + dos ejemplares de store
+> (38, 39) + tabla de instancias. Caso testigo del paradigma en el front: **NO hay backend
+> dedicado en la UI**; el front lee el JSON del storage del proyecto vía las tools `fs.read/list`
+> del módulo `filesystem`, y **NO muta directo**.
+>
+> **"Postura B" (decisión de UI, D2/D6):** la UI es **solo lectura**. Las mutaciones (las tools
+> del blueprint: `save/delete/add_product/crear_regla/…`) son **LLM-runtime** — no responden al
+> bus directamente. La UI las dispara **rellenando el chat** (`prefillChatInput(texto)`): el
+> usuario confirma y el compañero las ejecuta. Sin cache materializado: el store se suscribe a los
+> eventos del bus y recarga (`paradigma-no-cabe`).
+
+## 37. `BlueprintUIModule` — patrón común de la línea (módulo fino + store lectura + prefill)
+
+```
+PATRÓN BlueprintUIModule (Postura B) — replicado por TODA la línea carta:
+
+  ① MÓDULO FINO (lib/modules/<x>/index.ts):                # autodescubierto por el loader
+     UIModule = { manifest:{ id, name, version, zone:'work-bar',
+                             button:{ icon, label, action:{panel,'<x>-panel'}, order },
+                             panels:[{ id:'<x>-panel', size:'lg'|'md' }] },
+                  PanelComponent: <X>Panel }               # el .svelte real (lazy)
+     # + manifest.json hermano: { id, zone, order, routes:['/<ruta>'], icon, label }
+     #   routes → en qué página es visible la work-bar (LazyModuleRegistry filtra por ruta, clase 34)
+     # SIN lógica: el módulo solo declara botón+panel; el trabajo vive en el store.
+
+  ② STORE LECTURA-DIRECTA (lib/stores/<x>.ts):             # consumidor del bus, sin backend propio
+     state: writables { datos, seleccionado, loading, error } + derived { sorted, stats }
+     ▸ load<X>():                                          # LECTURA: fs directo (no tool de blueprint)
+         items ← await mqttRequest('fs','list',{path:'/storage/pizzepos/<dir>/'})   # decisión ②/⑥
+         crudos ← await Promise.all(items.map → mqttRequest('fs','read',{path}))
+         datos ← crudos.map(normalize).filter(notNull)    # normalize: levanta `meta` al top-level
+         # RESOURCE_NOT_FOUND (proyecto sin datos) → lista vacía, NO error (edge canónico)
+     ▸ init<X>Subscriptions() → cleanupFn:                 # REACTIVIDAD: re-carga al oír el bus
+         subscribe('<dominio>.actualizada', → load<X>())   # carta.actualizada/editada/borrada, etc.
+         return ()→ unsubs.forEach(u→u())
+
+  ③ MUTACIÓN POR PREFILL (en los .svelte del panel):       # Postura B — la UI NUNCA muta directo
+     onAccion(): prefillChatInput(`Archiva la carta "${x.nombre}".`)   # rellena el chat input
+                 # → el usuario revisa+envía → el compañero ejecuta la tool del blueprint (LLM-runtime)
+
+  # SHAPE ABIERTO (D3): el dato solo garantiza id+nombre; el resto se renderiza si está presente.
+  #   Sin validación contra schema (multi-vertical: pizzas, vapers, N modelos futuros).
+  # DIP: el store solo ve mqttRequest + subscribe; jamás toca mqtt.js (igual que el backend).
+```
+
+## 38. `CartaManagerStore` — ejemplar store de lectura-fs (espejo del aggregate root)
+
+```
+CLASE CartaManagerStore (lib/stores/carta-manager.ts) — refleja el blueprint carta-manager (clase 26):
+  estado: { cartasStore, cartaSeleccionada, cartasLoading, cartasError }
+  derivados: { cartasStats (total + por_estado), sortedCartas (alfabético) }
+  CONST: CARTAS_DIR='/storage/pizzepos/cartas/' ; VERSIONS_DIR='…/.versions/'   # paths canónicos D1
+
+  interfaz:
+    ▸ loadCartas():        fs.list(CARTAS_DIR) → fs.read por archivo (paralelo) → normalizeCarta → store
+    ▸ getCarta(id):        fs.read(cartaPath(id)) → normalize → cartaSeleccionada
+    ▸ loadHistorial(id):   fs.list(.versions/<id>/) → resumen por snapshot (nombre del archivo = archived_at)
+    ▸ loadVersionSnapshot(id, ts):  fs.read del snapshot completo (para diff)
+    ▸ initCartaManagerSubscriptions():
+         subscribe('carta.actualizada', e → loadCartas(); si e.carta_id==seleccionada: getCarta())
+         subscribe('carta.editada',  → loadCartas())
+         subscribe('carta.borrada',  → loadCartas(); cartaSeleccionada←null)
+    ▸ normalizeCarta(raw): si no obj→null; levanta raw.meta{id,nombre,estado,version} al top-level,
+                           conserva categorias/productos/extras; null si falta id+nombre (mínimos D3)
+
+  # MUTACIONES (en CartaDetail.svelte / CartasBrowser.svelte) → SOLO prefill:
+  #   "Crea una carta nueva: […]" · "Archiva la carta X" · "Añade un producto a X: […]" ·
+  #   "Actualiza los precios de X: […]" · "Restaura X a la versión del <fecha>"
+  # EDGE: NO invoca las tools del blueprint (save/delete/…) — son LLM-runtime, no responden al bus (D6, bug PR#264)
+```
+
+## 39. `MenuGeneratorStore` — ejemplar store de operación + progreso (no lectura-fs)
+
+```
+CLASE MenuGeneratorStore (lib/stores/menu-generator.ts) — refleja el blueprint menu-generator (clase 25):
+  estado: generationStore<{ step:'idle'|'extracting'|'structuring'|'done'|'error', nombre, message, error, result }>
+  derivados: generationStep, generationError, generationResult, isGenerating
+
+  interfaz:
+    ▸ generateFromText(nombre, texto):   await mqttRequest('menu','generate', {nombre,texto,project_id}, {timeout:30000})
+    ▸ generateFromFile(nombre, path):    await mqttRequest('menu','generate', {nombre,filePath,project_id}, {timeout:120000})  # OCR
+    ▸ resetGeneration() ; getErrorMessage(e) → traduce MqttTimeout/RequestError a texto user-facing
+    ▸ initGenerationSubscriptions():     # MÁQUINA DE ESTADOS por eventos del pipeline
+         subscribe('menu.generation.progress', p → step←p.step; message←p.message)   # extracting→structuring
+         subscribe('menu.generation.failed',   p → step←'error'; error←p.error)
+         subscribe('carta.actualizada',         p → si step∈{structuring,extracting}: step←'done'; result←{carta_id,nombre,productos,categorias})
+         # ↑ el cierre del flujo lo marca carta-manager al persistir (separación generar≠guardar, clase 25)
+
+  # A DIFERENCIA de carta-manager: NO lee fs — DISPARA una operación (menu.generate) y refleja
+  # su progreso vía los eventos menu.generation.* + el carta.actualizada del aggregate root.
+```
+
+### Tabla de instancias de la línea (todas siguen el patrón 37)
+
+| Módulo UI (`order`) | Ruta donde aparece | Blueprint backend espejo | Store / rol |
+|---|---|---|---|
+| `menu-generator` | `/menu-generator` | menu-generator (25) | operación+progreso (clase 39) |
+| `carta-manager` (4) | `/carta-manager` | carta-manager (26, aggregate root) | lectura-fs + versiones (clase 38) |
+| `carta-digital` (6) | `/carta1` | carta-digital (27) | lectura-fs (config carta pública) |
+| `carta-config` (1) · `carta-preview` (2) · `carta-export` (3) · `carta-stats` (4) | `/carta-digital` | carta-digital (27) | work-bar satélite de la carta pública |
+| `design-gallery` (1) · `design-profiles` (2) | `/carta-design` | carta-design (27) | lectura-fs (perfiles/diseños) |
+| `impresion-cartas` | `/carta-impresion` | carta-impresion (27) → agente impresor | lectura-fs + prefill |
+| `marketing-actividad` · `marketing-perfil` | `/carta-marketing` | carta-marketing (27) → agentes marketing | lectura-fs + prefill |
+| `carta-scheduler` (9) | `/carta-scheduler` | carta-scheduler (27) | lectura-fs (reglas+pendientes) + prefill (guardrail OK humano) |
+
+### Jerarquía de topics + QoS (línea carta, lado frontend)
+
+```
+ui/request/fs/{read,list}                     QoS 1   # SALIDA: lectura del storage del proyecto (sin backend UI)
+ui/request/menu/generate                      QoS 1   # SALIDA: dispara generación (menu-generator)
+core/*/events/carta/{actualizada,editada,borrada}   QoS 1   # ENTRADA: el store recarga (reactividad sin cache)
+core/*/events/menu/generation/{progress,failed}     QoS 1   # ENTRADA: máquina de estados de generación
+```
+
+*Justificación QoS 1:* perder un `carta.actualizada` deja la UI mostrando un catálogo desfasado
+frente al disco (fuente de verdad); perder un `menu.generation.progress` cuelga la barra de
+progreso. La UI **no materializa** copia del estado — releva del aggregate root vía `fs` y se
+re-sincroniza por evento. Mutaciones por **prefill del chat** (Postura B): cero escrituras
+directas desde el front, el compañero es el único que ejecuta las tools del blueprint.

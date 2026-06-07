@@ -88,16 +88,34 @@
     { "id": "vertical_agnostico", "regla": "carta-manager/ingredientes/variaciones modelan catalogo/componente/familia, no pizza/ingrediente/grupo. La vertical solo cambia datos.", "razon": "El mismo motor sirve moda (prenda/atributo/color-talla) u otras verticales sin reescribir nada." }
   ],
 
+  "decision_2_canal_y_precio": {
+    "_doc": "Como se modela el precio por canal. CORRECCION de supuesto: tarifas NO es un % ni precios escritos por producto — es ASIGNACION carta<->canal: cada canal apunta a una carta entera (tarifas.config = { general:carta_id, canales:{canal->carta_id}, variantes:[] }; resolverCarta(canal)->carta_id). El precio de un canal es el precio escrito en SU carta.",
+    "decision": "C — canal = CARTA INDEPENDIENTE (no overlay declarativo, no carta-base + ajuste en resolve).",
+    "razon_del_usuario": [
+      "Un overlay declarativo es mas dificil de gestionar toda la variedad de opciones (seleccion + renombrado + ajuste + overrides).",
+      "No van a ser 50 cartas — pocas cartas por proyecto, copias completas manejables.",
+      "La variedad la maneja el LLM en lenguaje natural, no un motor de reglas."
+    ],
+    "modelo": {
+      "personalizacion_por_canal": "operaciones de LLM sobre carta-manager: clonar(base) + 'quita estos productos / sube la familia X un N% / este producto a P€'. Mapean 1:1 a operaciones existentes de carta-manager (add_product, remove_product, update_product, update_prices, add_category). Blueprint-driven: el LLM las invoca via bus.publishAndWait.",
+      "sin_overlay": "NO hay motor de overlay ni cascada cruzada entre cartas. Un overlay declarativo seria el anti-patron heuristico que el repo evita — el LLM razona la manipulacion mejor en NL.",
+      "sin_sync_automatico": "NO hay sync automatico carta-base -> carta-canal. Si cambia la base y se quiere propagar, se le pide al LLM re-derivar la carta del canal (manejable: pocas cartas). Trade consciente: re-derivacion explicita > overlay automatico complejo.",
+      "runtime_precio": "TONTO-SIMPLE: canal -> tarifas.resolverCarta -> carta_id -> esa carta. precio_item = precio_base + SUM precio_extra(extras elegidos). NO hace falta modulo 'precio' nuevo: variaciones ya calcula base+extras. El canal solo elige la carta.",
+      "donde_vive_la_manipulacion": "carta-manager (aggregate root de cartas, ya tiene add/remove/update_prices). menu-generator queda como generador puro (crea desde input crudo). El LLM dirige ambos.",
+      "tarifas_queda": "solo ASIGNACION carta<->canal { general, canales:{canal->carta_id}, variantes }. Saneado: bajo /pizzepos, multi-tenant (hoy esta en /storage/config/tarifas.json, fuera del vertical)."
+    }
+  },
+
   "decisiones_cerradas": [
     "D1 (cerrada): reparto de responsabilidades sin absorcion (carta-manager / ingredientes / variaciones).",
     "Origen: semilla ENRIQUECIDA (menu-generator asigna id canonico + familia).",
     "Enlace por id de ingrediente de punta a punta.",
     "Cero copias materializadas del catalogo (productos/catalogo_activo.json se elimina; se deriva por pull).",
-    "Modelo vertical-agnostico (item/componente/familia)."
+    "Modelo vertical-agnostico (item/componente/familia).",
+    "D2 (cerrada): canal = carta independiente (C). Personalizacion por canal via operaciones de LLM en carta-manager (clonar + quita/pon/sube-familia/sube-producto), sin overlay, sin sync automatico. Runtime de precio = precio_base + SUM precio_extra dentro de la carta resuelta; SIN modulo precio nuevo. tarifas = solo asignacion carta<->canal, saneada bajo /pizzepos."
   ],
 
   "decisiones_abiertas": [
-    "D2 (intacta): donde vive el RESOLVER de precio (cascada precio_base -> precio_extra -> variacion -> precio_canal) y como se sincroniza tarifas con cambios de carta.",
     "D3 (intacta): los composers de UI (pizza-mitad, al-gusto, ...) como generadores de eventos item.compuesto; frontend puro vs blueprint-driven.",
     "Persistencia (consecuencia, no decision de fondo): JSON-por-proyecto vs SQLite-por-proyecto para el catalogo. Se decide DESPUES, derivada del modelo."
   ],
@@ -108,7 +126,8 @@
       "menu-generator (v8) produce semilla MINIMA: ingredientes solo {nombre, emoji}, sin id canonico ni familia. -> enriquecer a carta-pizzepos v2.",
       "productos (v4) materializa /storage/pizzepos/productos/catalogo_activo.json sincronizando desde carta.actualizada. -> eliminar materializacion; derivar por pull.",
       "ingredientes (v5) y categorias (v3) tienen store propio y sync desde carta. -> ingredientes conserva solo precio_extra(+familia override); categorias se deriva de la carta.",
-      "tarifas (v3.1.1) guarda en /storage/config/tarifas.json (fuera del vertical) y NO escucha carta.actualizada. -> mover bajo /pizzepos y cerrar el gap de sync (decision 2).",
+      "tarifas (v3.1.1) guarda en /storage/config/tarifas.json (fuera del vertical). -> mover bajo /pizzepos, multi-tenant. Sigue siendo solo asignacion carta<->canal (D2). El gap carta->canal NO se cierra con sync automatico: la re-derivacion de la carta de un canal es una operacion de LLM en carta-manager a peticion.",
+      "personalizacion por canal hoy via agentes tarifas-creator/tarifas-sync que clonan/sincronizan cartas. -> D2: la manipulacion (clonar + quita/pon/sube-familia/sube-producto) son operaciones de carta-manager que el LLM invoca en NL; no agente de sync obligatorio.",
       "cocina (v3.2.0) guarda snapshot en data/current/cocina_snapshot.json (GLOBAL). -> mover a data/projects/<id>/storage (multi-tenant).",
       "enlace producto<->ingrediente por nombre/slugify en runtime. -> id canonico asignado en origen por menu-generator."
     ]

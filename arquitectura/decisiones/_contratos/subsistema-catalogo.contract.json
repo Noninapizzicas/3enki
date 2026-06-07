@@ -142,17 +142,30 @@
     }
   },
 
+  "decision_3_composers_y_tasacion": {
+    "_doc": "Los composers (botones que arman un item: mitad/mitad, al-gusto, porciones, ...) y como se tasa el item compuesto de forma coherente con el canal. Hoy la logica de composicion+precio vive en componentes Svelte del front (lib/components/comandero/*Panel.svelte) y el back re-resuelve por canal (comandero._resolverPrecioCanal), lo que rompe los compuestos en delivery (BUG documentado en mapa_operativo_completo.costuras).",
+    "decision": "Composer AUTOCONTENIDO (su logica de composicion + su regla de precio + su capa de imagen, todo junto), pero pull-ea la carta EFECTIVA del canal activo y tasa contra ELLA. El backend confia.",
+    "razon_del_usuario": "El composer tiene la logica y todo contenido; siguiendo ese patron el mantenimiento es mas sencillo (un sitio por tipo de item; anadir un composer no obliga a tocar el backend).",
+    "modelo": {
+      "composer_autocontenido": "Cada composer (tipo de item) lleva: logica de composicion (que productos/mitades/extras), regla de precio (max | base_mas_extras | porciones | ...), capa de imagen. Un tipo nuevo = un composer nuevo, sin tocar nucleo. Puerta abierta.",
+      "condicion_de_correctitud": "El composer pull-ea la carta EFECTIVA del canal activo (carta_efectiva(canal)), NO el catalogo general productos. Aplica su regla sobre ESOS precios -> el precio ya es el del canal. Asi 'todo contenido' es ademas correcto en mesa Y en delivery.",
+      "evento_canonico": "item.compuesto { tipo, componentes:{producto_ids?,mitades?,extras?}, precio_final, capa_imagen }. Sustituye los eventos Svelte sueltos por composer + el precio_override actual.",
+      "backend_simplifica": "comandero ELIMINA _resolverPrecioCanal (el re-calculo por canal que causaba el bug). Confia en el precio del composer porque el composer ya uso la carta correcta. comandero solo registra el item + precio y suma. Desaparece el split de autoridad front/back: un solo punto tasa (el composer).",
+      "requisito": "El front debe poder resolver canal_activo -> carta_efectiva(canal) (hoy el canal se detecta por prefijo de cuenta_id en el back; hay que exponer la carta del canal al composer)."
+    }
+  },
+
   "decisiones_cerradas": [
     "D1 (cerrada): reparto de responsabilidades sin absorcion (carta-manager / ingredientes / variaciones).",
     "Origen: semilla ENRIQUECIDA (menu-generator asigna id canonico + familia).",
     "Enlace por id de ingrediente de punta a punta.",
     "Cero copias materializadas del catalogo (productos/catalogo_activo.json se elimina; se deriva por pull).",
     "Modelo vertical-agnostico (item/componente/familia).",
-    "D2 (cerrada): canal = carta independiente (C). Personalizacion por canal via operaciones de LLM en carta-manager (clonar + quita/pon/sube-familia/sube-producto), sin overlay, sin sync automatico. Runtime de precio = precio_base + SUM precio_extra dentro de la carta resuelta; SIN modulo precio nuevo. tarifas = solo asignacion carta<->canal, saneada bajo /pizzepos."
+    "D2 (cerrada): canal = carta independiente (C). Personalizacion por canal via operaciones de LLM en carta-manager (clonar + quita/pon/sube-familia/sube-producto), sin overlay, sin sync automatico. Runtime de precio = precio_base + SUM precio_extra dentro de la carta resuelta; SIN modulo precio nuevo. tarifas = solo asignacion carta<->canal, saneada bajo /pizzepos.",
+    "D3 (cerrada): composer AUTOCONTENIDO (logica de composicion + regla de precio + capa de imagen). Tira de la carta efectiva del canal activo y tasa contra ella -> precio correcto en mesa y delivery. Emite item.compuesto con precio_final. comandero elimina _resolverPrecioCanal y confia: un solo punto tasa (el composer), backend mas simple."
   ],
 
   "decisiones_abiertas": [
-    "D3 (intacta): los composers de UI (pizza-mitad, al-gusto, ...) como generadores de eventos item.compuesto; frontend puro vs blueprint-driven.",
     "Persistencia (consecuencia, no decision de fondo): JSON-por-proyecto vs SQLite-por-proyecto para el catalogo. Se decide DESPUES, derivada del modelo."
   ],
 

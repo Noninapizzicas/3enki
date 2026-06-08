@@ -1152,6 +1152,960 @@ UI_REQUEST_TIPICO {
 
 ---
 
+# PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
+
+Análisis OOP exhaustivo de 25 módulos pizzepos + blueprint drivers. Pseudocódigo puro, sin comentarios.
+
+## MÓDULOS CON ÍNDICE.JS (14)
+
+### 1. COMANDERO (v3.2.0) — Buffer de Pedidos por Cuenta
+
+```
+INTERFAZ ComanderoContract {
+  getBuffer(cuenta_id: String): Promise<Pedido>
+  addItem(cuenta_id: String, item_data: Object): Promise<Item>
+  removeItem(cuenta_id: String, item_id: String): Promise<Void>
+  updateItem(cuenta_id: String, item_id: String, updates: Object): Promise<Item>
+  sendToKitchen(cuenta_id: String): Promise<{pedido_id, items_enviados}>
+  listBuffers(): Promise<Array<Buffer>>
+}
+
+CLASE ComanderoModule HEREDA BaseModule IMPLEMENTA ComanderoContract {
+  ATRIBUTOS {
+    name: String = 'comandero'
+    version: String = '3.2.0'
+    pedidos: Map<cuenta_id, Pedido>
+    refDisplayCache: Map<cuenta_id, String>
+    productosCache: Map<producto_id, Producto>
+    cartasProductosCache: Map<carta_id, Map<producto_id, ProductoEnCarta>>
+    tarifasConfigPorProject: Map<project_id, {general, canales}>
+    _bufferFile: String
+    _saveTimer: NodeJS.Timeout
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    validator: ValidationManager
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      _registerSchemas()
+      await _restaurarBuffers()
+      await _publicarEvento('tarifas.config.solicitada', {})
+
+    async onUnload(): Promise<Void>
+      SI _saveTimer: clearTimeout(_saveTimer)
+      pedidos.clear()
+      productosCache.clear()
+      cartasProductosCache.clear()
+      refDisplayCache.clear()
+      tarifasConfigPorProject.clear()
+
+    async handleAddItem(data: {cuenta_id, producto_id, nombre?, precio?, cantidad?, notas?, variaciones?}): Promise<Response>
+      VALIDA required fields
+      OBTIENE o CREA pedido
+      RESUELVE precio POR canal via _resolverPrecioCanal
+      CREA item con UUID
+      AGREGA a pedido.items
+      RECALCULA pedido.total
+      PUBLICA comandero.item_agregado
+      PERSISTE via _guardarBuffers()
+      RETORNA {status: 201, data: {item, pedido}}
+
+    async handleRemoveItem(data: {cuenta_id, item_id}): Promise<Response>
+      VALIDA required fields
+      OBTIENE pedido SI NO existe: 404
+      BUSCA item EN pedido.items
+      ELIMINA item
+      RECALCULA total
+      PUBLICA comandero.item_eliminado
+      PERSISTE via _guardarBuffers()
+      RETORNA {status: 200, data: {pedido}}
+
+    async handleUpdateItem(data: {cuenta_id, item_id, cantidad?, notas?}): Promise<Response>
+      SI cantidad == 0 → delega a handleRemoveItem
+      SI cantidad > 0 → actualiza item.cantidad + item.subtotal
+      PUBLICA comandero.item_actualizado
+      PERSISTE
+      RETORNA {status: 200, data: {item, pedido}}
+
+    async handleEnviarCocina(data: {cuenta_id}): Promise<Response>
+      OBTIENE pedido SI items == 0: 409 CONFLICT_STATE
+      MARCA items.enviado = true + item.enviado_at = now()
+      GENERA pedido_id
+      PUBLICA comandero.enviar_cocina {pedido_id, items, total, notas}
+      PERSISTE
+      RETORNA {status: 200, data: {pedido_id, items_enviados}}
+
+    EVENTOS_PUBLISHES {
+      'comandero.item_agregado': {cuenta_id, item_id, producto_id, precio_unitario, cantidad, pedido_total}
+      'comandero.item_eliminado': {cuenta_id, item_id, producto_id, cantidad, pedido_total}
+      'comandero.item_actualizado': {cuenta_id, item_id, cantidad_anterior, cantidad_nueva, diff_precio, pedido_total}
+      'comandero.enviar_cocina': {cuenta_id, pedido_id, project_id, items, total, notas_generales}
+      'tarifas.config.solicitada': {}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'cuenta.creada': onCuentaCreada
+      'cuenta.actualizada': onCuentaActualizada
+      'caja.cerrada': onCajaCerrada (reset)
+      'dia.iniciado': onDiaIniciado (reset)
+      'catalogo.actualizado': onCatalogoActualizado
+      'producto.creado': onProductoActualizado
+      'producto.actualizado': onProductoActualizado
+      'carta.actualizada': onCartaActualizada
+      'tarifas.config.actualizada': onTarifasConfigActualizada
+    }
+  }
+}
+
+CLASE Pedido {
+  ATRIBUTOS {
+    items: Array<Item>
+    notas: String
+    total: Number
+  }
+}
+
+CLASE Item {
+  ATRIBUTOS {
+    id: String (UUID)
+    producto_id: String
+    nombre: String
+    precio: Number
+    cantidad: Integer
+    subtotal: Number
+    variaciones: Array<Object>
+    notas: String
+    enviado: Boolean
+    enviado_at: String|Null (ISO)
+    created_at: String (ISO)
+  }
+}
+```
+
+### 2. CUENTAS (v3.0.0) — State Machine de POS Ticket
+
+```
+CLASE CuentasModule HEREDA BaseModule {
+  ATRIBUTOS {
+    name: String = 'cuentas'
+    version: String = '3.0.0'
+    cuentas: Map<cuenta_id, Cuenta>
+    _pendingTimeouts: Map<cuenta_id, NodeJS.Timeout>
+    _alertaTimers: Map<cuenta_id, NodeJS.Timeout>
+    _pedidosEnCocina: Map<cuenta_id, Set<pedido_id>>
+    _turno: Integer
+    TRANSICIONES_VALIDAS: Map<estado, Array<estado>>
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      await _loadTurno()
+      await _restaurarDesdeArchivo()
+      _metricsInterval = setInterval(() => _reportMetrics(), 10000ms)
+
+    async onUnload(): Promise<Void>
+      SI _metricsInterval: clearInterval(_metricsInterval)
+      _pendingTimeouts.values().forEach(t => clearTimeout(t))
+      _alertaTimers.values().forEach(t => clearTimeout(t))
+      cuentas.clear()
+      _pedidosEnCocina.clear()
+
+    async handleCreateCuenta(data: {project_id, tipo?, nombre?, metadata?, pedido_inicial?}): Promise<Response>
+      VALIDA project_id obligatorio
+      OBTIENE o genera cuenta_id
+      GENERA turno via _getNextTurno()
+      GENERA ref_display via _generateRefDisplay(tipo, nombre)
+      CREA Cuenta object
+      cuentas.set(cuenta_id, cuenta)
+      _gestionarAlerta(cuenta_id, 'pendiente')
+      PUBLICA cuenta.creada
+      SI pedido_inicial: _inyectarPedidoInicial(cuenta, pedido_inicial)
+      RETORNA {status: 201, data: cuenta}
+
+    async _transicionarEstado(cuenta_id: String, estado_nuevo: String): Promise<Boolean>
+      OBTIENE cuenta SI NO existe: RETORNA false
+      VALIDA transicion EN TRANSICIONES_VALIDAS[estado_anterior]
+      SI transicion invalida: RETORNA false
+      cuenta.estado = estado_nuevo
+      _gestionarAlerta(cuenta_id, estado_nuevo)
+      PUBLICA cuenta.estado_cambiado
+      RETORNA true
+
+    async onComanderoItemAgregado(event: Event): Void
+      OBTIENE cuenta
+      cuenta.items += event.cantidad
+      cuenta.total += event.precio_total
+      SI estado == 'pendiente': await _transicionarEstado(cuenta_id, 'con_pedido')
+
+    async onCocinaPedidoListo(event: Event): Void
+      OBTIENE cuenta
+      ELIMINA pedido_id DEL _pedidosEnCocina[cuenta_id]
+      SI NO hay mas pedidos EN cocina Y estado == 'en_preparacion':
+        await _transicionarEstado(cuenta_id, 'listo')
+
+    async onCobroProcesado(event: Event): Void
+      OBTIENE cuenta
+      SI ya pagado (idempotencia): RETORNA
+      cuenta.pagado = true
+      SI _cerrarAlCobrar(cuenta): await _cerrarCuentaCobrada(cuenta_id)
+
+    EVENTOS_PUBLISHES {
+      'cuenta.creada': {project_id, cuenta_id, turno, tipo, nombre, ref_display, total, estado}
+      'cuenta.actualizada': {project_id, cuenta_id, cambios}
+      'cuenta.estado_cambiado': {project_id, cuenta_id, estado_anterior, estado_nuevo}
+      'cuenta.eliminada': {project_id, cuenta_id, tipo, motivo}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'comandero.item_agregado': onComanderoItemAgregado
+      'comandero.item_eliminado': onComanderoItemEliminado
+      'comandero.item_actualizado': onComanderoItemActualizado
+      'comandero.enviar_cocina': onComanderoEnviarCocina
+      'cocina.pedido_listo': onCocinaPedidoListo
+      'cobro.iniciado': onCobroIniciado
+      'cobro.procesado': onCobroProcesado
+      'cuenta.cerrada': onCuentaExternaCerrada
+    }
+  }
+}
+
+CLASE Cuenta {
+  ATRIBUTOS {
+    id: String (cuenta_id)
+    project_id: String
+    turno: Integer|Null
+    tipo: String (local|delivery|llevar)
+    nombre: String|Null
+    ref_display: String
+    estado: String (pendiente|con_pedido|en_preparacion|listo|entregado|para_cobrar|cobrado)
+    pagado: Boolean
+    items: Integer
+    total: Number
+    alerta: Boolean
+    metadata: Object
+    created_at: String (ISO)
+    updated_at: String (ISO)
+  }
+}
+```
+
+### 3. COBROS (v3.0.0) — Procesamiento de Pagos
+
+```
+CLASE CobrosModule HEREDA BaseModule {
+  ATRIBUTOS {
+    name: String = 'cobros'
+    version: String = '3.0.0'
+    cobros: Map<cobro_id, Cobro>
+    refDisplayCache: Map<cuenta_id, String>
+    metodosPago: Array<String> = ['efectivo', 'tarjeta', 'bizum', 'transferencia', 'mixto', 'link_pago', 'qr']
+    internalMetrics: {cobros_iniciados, cobros_completados, cobros_reembolsados, monto_total_cobrado, propinas_total}
+  }
+
+  METODOS {
+    async handleCreateCobro(data: {cuenta_id, monto, metodo_pago, propina?, desglose?, monto_recibido?}): Promise<Response>
+      VALIDA cuenta_id NO es llevadoo_*
+      VALIDA monto > 0
+      VALIDA metodo_pago EN metodosPago
+      VALIDA idempotencia: SI existe cobro activo: RETORNA 409
+      
+      GENERA cobro_id
+      monto_total = monto + (propina || 0)
+      CREA Cobro object
+      
+      SI metodo_pago == 'efectivo':
+        SI monto_recibido:
+          cobro.cambio = monto_recibido - monto_total
+          SI cambio < 0: RETORNA 400
+      
+      SI metodo_pago == 'mixto':
+        result = procesarPagoMixto(desglose, monto_total)
+        SI result.error: RETORNA 400
+        cobro.desglose = result.desglose
+      
+      SI metodo_pago == 'link_pago':
+        cobro.link_url = `${config.payment_base_url}/checkout/{linkId}`
+        cobro.expira_en = now + 24h
+      
+      cobros.set(cobro_id, cobro)
+      internalMetrics.cobros_iniciados++
+      PUBLICA cobro.iniciado
+      RETORNA {status: 201, data: cobro}
+
+    async handleConfirmarCobro(data: {id, referencia_pago?}): Promise<Response>
+      OBTIENE cobro SI NO existe: 404
+      VALIDA cobro.estado EN ['pendiente', 'procesando']: 409
+      
+      cobro.estado = 'completado'
+      cobro.referencia_pago = referencia_pago || `REF_{uuid.slice(0,8)}`
+      
+      internalMetrics.cobros_completados++
+      internalMetrics.monto_total_cobrado += cobro.monto_total
+      
+      PUBLICA cobro.procesado (escuchado por cuentas)
+      
+      SI metodo_pago == 'efectivo':
+        await abrirCajonDinero(cobro) (best-effort)
+      
+      RETORNA {status: 200, data: cobro}
+
+    async handleReembolsarCobro(data: {id, motivo?}): Promise<Response>
+      OBTIENE cobro SI NO existe: 404
+      VALIDA cobro.estado == 'completado': 409
+      
+      cobro.estado = 'reembolsado'
+      cobro.motivo_reembolso = motivo
+      
+      internalMetrics.cobros_reembolsados++
+      internalMetrics.monto_total_cobrado -= cobro.monto_total
+      
+      PUBLICA cobro.reembolsado
+      RETORNA {status: 200, data: cobro}
+
+    EVENTOS_PUBLISHES {
+      'cobro.iniciado': {cobro_id, cuenta_id, project_id, monto, metodo_pago, monto_total}
+      'cobro.procesado': {cobro_id, cuenta_id, project_id, ref_display, monto_total, referencia_pago}
+      'cobro.reembolsado': {cobro_id, cuenta_id, project_id, monto_reembolsado, motivo}
+      'periferico.abrir-cajon': {destino, pin, project_id}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'cuenta.creada': onCuentaCreada (cache ref_display)
+      'cuenta.actualizada': onCuentaActualizada
+      'caja.cerrada': onCajaCerrada (reset)
+      'dia.iniciado': onDiaIniciado (reset)
+    }
+  }
+}
+
+CLASE Cobro {
+  ATRIBUTOS {
+    id: String (UUID)
+    cuenta_id: String
+    pedido_ids: Array<String>|Null
+    monto: Number
+    propina: Number
+    monto_total: Number
+    metodo_pago: String (efectivo|tarjeta|bizum|transferencia|mixto|link_pago|qr)
+    estado: String (pendiente|procesando|completado|reembolsado)
+    monto_recibido: Number|Null
+    cambio: Number|Null
+    desglose: Array|Null
+    link_url: String|Null
+    qr_data: String|Null
+    expira_en: String|Null
+    referencia_pago: String|Null
+    completado_at: String|Null
+    motivo_reembolso: String|Null
+    created_at: String (ISO)
+  }
+}
+```
+
+### 4. COCINA (v3.2.0) — Display de Cocina en Tiempo Real
+
+```
+CLASE CocinaModule HEREDA BaseModule {
+  ATRIBUTOS {
+    name: String = 'cocina'
+    version: String = '3.2.0'
+    pedidosActivos: Map<pedido_id, PedidoEnCocina>
+    historial: Array<PedidoEnCocina> (max 50)
+    devices: Map<device_id, Device>
+    tiemposPreparacion: Array<Number> (max 100)
+    cuentaNombres: Map<cuenta_id, String>
+    tiposEstacion: Map<tipo, TipoEstacion>
+    _snapshotFile: String
+    _snapshotSaveTimer: NodeJS.Timeout
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      await _restaurarSnapshot()
+      SI NO: await _restaurarDesdeArchivo()
+
+    async handleGetActivos(): Promise<Response>
+      FILTRA pedidosActivos donde estado != 'completado'
+      ENRIQUECE CON device colors
+      RETORNA {status: 200, data: {pedidos}}
+
+    async handlePrepararItem(data: {item_id, device_id?}): Promise<Response>
+      BUSCA item EN todos los pedidos activos
+      SI NO existe: 404
+      VALIDA transicion: pendiente → preparando → avanzado/preparado
+      PUBLICA cocina.item_preparando|item_avanzado|item_preparado
+      RETORNA response
+
+    async handleMarcarListo(data: {pedido_id}): Promise<Response>
+      OBTIENE pedido
+      MARCA TODOS items como completados
+      ELIMINA DE pedidosActivos
+      AGREGA AL historial
+      PUBLICA cocina.pedido_listo
+      RETORNA {status: 200}
+
+    async handleRegisterDevice(data: {device_id, nombre?, estacion?, tipo_estacion?, filtros?, impresora?}): Promise<Response>
+      ASIGNA color unico del pool DEVICE_COLORS
+      CREA Device object
+      devices.set(device_id, device)
+      PUBLICA cocina.device_registered
+      RETORNA {status: 201, data: device}
+
+    EVENTOS_PUBLISHES {
+      'cocina.item_preparando': {item_id, pedido_id, cuenta_id, desde_estacion}
+      'cocina.item_avanzado': {item_id, pedido_id, desde_estacion, estado}
+      'cocina.item_preparado': {item_id, pedido_id, estacion_final}
+      'cocina.pedido_listo': {pedido_id, cuenta_id, items_count, tiempo_preparacion}
+      'cocina.device_registered': {device_id, nombre, color, estacion}
+      'cocina.device_unregistered': {device_id}
+      'periferico.display': {accion, contenido, prioridad, display_destino}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'pedido.enviado_cocina': onPedidoEnviadoCocina
+      'pedido.cancelado': onPedidoCancelado
+      'cuenta.creada': onCuentaCreada (cache ref_display)
+      'caja.cerrada': onCajaCerrada (reset)
+      'dia.iniciado': onDiaIniciado (reset)
+    }
+  }
+}
+
+CLASE PedidoEnCocina {
+  ATRIBUTOS {
+    id: String (pedido_id)
+    cuenta_id: String
+    ref_display: String
+    items: Array<ItemEnCocina>
+    estado: String (pendiente|preparando|completado)
+    creado_at: String (ISO)
+  }
+}
+
+CLASE Device {
+  ATRIBUTOS {
+    id: String (device_id)
+    nombre: String|Null
+    estacion: String
+    tipo_estacion: String (general|horno)
+    color: String (HEX)
+    filtros: Object|Null
+    impresora: String|Null
+    conectado: Boolean
+    created_at: String (ISO)
+  }
+}
+```
+
+### 5. PRODUCTOS (v4.0.0) — Catálogo Multi-Tenant
+
+```
+CLASE ProductosModule HEREDA BaseModule {
+  ATRIBUTOS {
+    name: String = 'productos'
+    version: String = '4.0.0'
+    productosPerProject: Map<project_id, Map<producto_id, Producto>>
+    categoriasPerProject: Map<project_id, Map<categoria_id, Categoria>>
+    mappingCanalesPerProject: Map<project_id, {general?, mesa?, llevar?, glovo?}>
+    projectPaths: Map<project_id, String>
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      SUSCRIBE A project.activated, carta.actualizada, tarifas.config.actualizada
+
+    async handleListProductos(data: {project_id, categoria?, activo?}): Promise<Response>
+      project_id = resolveToActiveProject(project_id)
+      productos = getProductos(project_id)
+      FILTRA CON filters
+      ORDENA POR categoria + nombre
+      RETORNA {status: 200, data: {productos, total}}
+
+    async handleSearchProductos(data: {project_id, q}): Promise<Response>
+      BUSQUEDA full-text EN nombre/descripcion
+      FILTRA solo productos.activo == true
+      RETORNA {status: 200, data: {resultados}}
+
+    async onCartaGenerada(event: Event): Promise<Void>
+      project_id = event.project_id
+      carta = event.carta_entera (embebida EN payload)
+      SINCRONIZA productos Y categorias DEL proyecto DESDE carta
+      PERSISTE catalogo_activo.json por proyecto
+      PUBLICA catalogo.actualizado (para comandero/pedidos refresh cache)
+
+    EVENTOS_PUBLISHES {
+      'producto.creado': {project_id, producto_id, nombre, precio, categoria}
+      'producto.actualizado': {project_id, producto_id, cambios}
+      'producto.eliminado': {project_id, producto_id}
+      'catalogo.actualizado': {project_id, productos, categorias}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'carta.actualizada': onCartaGenerada
+      'carta.editada': onCartaGenerada
+      'carta.borrada': onCartaBorrada
+      'tarifas.config.actualizada': onTarifasConfigActualizada
+      'project.activated': onProjectActivated
+    }
+  }
+}
+
+CLASE Producto {
+  ATRIBUTOS {
+    id: String (UUID)
+    nombre: String
+    descripcion: String|Null
+    precio: Number
+    categoria_id: String
+    categoria: String
+    tipo: String (pizza|bebida|postre)
+    imagen_url: String|Null
+    ingredientes_base: Array<String>
+    variaciones: {quitar?: Array, anadir?: Array, max_extras?: Integer}|Null
+    activo: Boolean
+    estaciones_requeridas: Array<String>
+    created_at: String (ISO)
+    updated_at: String (ISO)
+  }
+}
+```
+
+### 6. CATEGORIAS (v3.0.0) — Sincronización desde Cartas
+
+```
+CLASE CategoriasModule HEREDA BaseModule {
+  ATRIBUTOS {
+    name: String = 'categorias'
+    version: String = '3.0.0'
+    categoriasPerProject: Map<project_id, Map<categoria_id, Categoria>>
+  }
+
+  METODOS {
+    async onCartaActualizada(event: Event): Promise<Void>
+      project_id = event.project_id
+      categorias = event.categorias
+      SINCRONIZA categorias DEL proyecto DESDE carta
+      PUBLICA categoria.creada|actualizada para cada una
+
+    EVENTOS_PUBLISHES {
+      'categoria.creada': {project_id, categoria_id, nombre}
+      'categoria.actualizada': {project_id, categoria_id, cambios}
+      'categoria.orden_actualizado': {project_id, nuevamente_orden}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'carta.actualizada': onCartaActualizada
+    }
+  }
+}
+
+CLASE Categoria {
+  ATRIBUTOS {
+    id: String (UUID)
+    nombre: String
+    descripcion: String|Null
+    orden: Integer
+    productos_count: Integer
+    activo: Boolean
+    created_at: String (ISO)
+  }
+}
+```
+
+### 7. INGREDIENTES (v3.0.0) — Master Data de Componentes
+
+```
+CLASE IngredientesModule HEREDA BaseModule {
+  ATRIBUTOS {
+    name: String = 'ingredientes'
+    version: String = '3.0.0'
+    ingredientesPerProject: Map<project_id, Map<ingredient_id, Ingrediente>>
+  }
+
+  METODOS {
+    async handleListIngredientes(data: {project_id, tipo?, grupo?}): Promise<Response>
+      FILTRA ingredientes CON filters
+      RETORNA {status: 200, data: {ingredientes}}
+
+    async handleUpdateIngrediente(data: {project_id, id, updates}): Promise<Response>
+      ACTUALIZA ingrediente
+      PUBLICA ingrediente.actualizado
+      RETORNA response
+
+    async onCartaActualizada(event: Event): Void
+      SINCRONIZA ingredientes_catalogo + extrae DE productos.ingredientes_base
+
+    EVENTOS_PUBLISHES {
+      'ingrediente.creado': {project_id, ingredient_id, nombre}
+      'ingrediente.actualizado': {project_id, ingredient_id, cambios}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'project.activated': onProjectActivated
+      'carta.actualizada': onCartaActualizada
+      'producto.creado': onProductoCreado
+    }
+  }
+}
+
+CLASE Ingrediente {
+  ATRIBUTOS {
+    id: String (UUID)
+    nombre: String
+    emoji: String|Null
+    precio_extra: Number
+    grupo: String (complementos|carnes|verduras)
+    es_alergeno: Boolean
+    alergenos: Array<String>
+  }
+}
+```
+
+### 8. VARIACIONES (v2.0.0) — Validación de Modificaciones
+
+```
+CLASE VariacionesModule HEREDA BaseModule {
+  ATRIBUTOS {
+    name: String = 'variaciones'
+    version: String = '2.0.0'
+    variacionesPerProducto: Map<producto_id, VariacionesProducto>
+    ingredientesCache: Map<ingredient_id, Ingrediente>
+  }
+
+  METODOS {
+    async handleValidarVariacion(data: {producto_id, ingredientes_quitar?, ingredientes_anadir?}): Promise<Response>
+      OBTIENE config de variaciones DEL producto
+      VALIDA que ingredientes_quitar sean permitidos
+      VALIDA que ingredientes_anadir respeten el limite
+      PUBLICA variacion.validada|rechazada
+      RETORNA response
+
+    async handleCalcularPrecio(data: {producto_id, ingredientes_quitar?, ingredientes_anadir?}): Promise<Response>
+      precio_base = producto.precio
+      SUMA precios_extra DE ingredientes_anadir
+      precio_final = precio_base + suma_extras
+      RETORNA {status: 200, data: {precio_final}}
+
+    EVENTOS_PUBLISHES {
+      'variacion.validada': {producto_id, variaciones, precio_final}
+      'variacion.rechazada': {producto_id, razon}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'producto.creado': onProductoCreado
+      'comandero.item_agregado': onComanderoItemAgregado (auto-valida)
+    }
+  }
+}
+
+CLASE VariacionesProducto {
+  ATRIBUTOS {
+    producto_id: String
+    ingredientes_permitidos_quitar: Array<String>
+    permite_anadir_extras: Boolean
+    ingredientes_sugeridos: Array<String>
+    max_extras: Integer
+  }
+}
+```
+
+### 9. PEDIDOS (v3.0.0) — Formalización de Órdenes
+
+```
+CLASE PedidosModule HEREDA BaseModule {
+  ATRIBUTOS {
+    name: String = 'pedidos'
+    version: String = '3.0.0'
+    pedidos: Map<pedido_id, Pedido>
+    pedidosPorCuenta: Map<cuenta_id, Array<pedido_id>>
+    productosCache: Map<producto_id, Producto>
+  }
+
+  METODOS {
+    async handleCreatePedido(data: {cuenta_id, items, total}): Promise<Response>
+      GENERA pedido_id
+      CREA Pedido CON items
+      pedidos.set(pedido_id, pedido)
+      PUBLICA pedido.creado
+      RETORNA {status: 201, data: pedido}
+
+    async onComanderoEnviarCocina(event: Event): Promise<Void>
+      CREA pedido formal SI NO existe
+      PUBLICA pedido.enviado_cocina (escuchado por cocina)
+
+    EVENTOS_PUBLISHES {
+      'pedido.creado': {pedido_id, cuenta_id, items, total}
+      'pedido.enviado_cocina': (delegado desde comandero bridge)
+      'pedido.completado': {pedido_id, cuenta_id, tiempo_total}
+      'pedido.cancelado': {pedido_id, cuenta_id, motivo}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'comandero.enviar_cocina': onComanderoEnviarCocina (bridge)
+      'catalogo.actualizado': onCatalogoActualizado (sync cache)
+    }
+  }
+}
+
+CLASE Pedido {
+  ATRIBUTOS {
+    id: String (pedido_id)
+    cuenta_id: String
+    items: Array<ItemPedido>
+    total: Number
+    estado: String (creado|enviado_cocina|completado|cancelado)
+    created_at: String (ISO)
+  }
+}
+```
+
+### 10. TARIFAS (v1.0.0) — Mapeo Canal→Carta
+
+```
+CLASE TarifasModule HEREDA BaseModule {
+  ATRIBUTOS {
+    name: String = 'tarifas'
+    version: String = '1.0.0'
+    tarifasPerProject: Map<project_id, TarifasConfig>
+  }
+
+  METODOS {
+    async handleGet(data: {project_id}): Promise<Response>
+      RETORNA {status: 200, data: tarifasPerProject[project_id]}
+
+    async onConfigSolicitada(event: Event): Promise<Void>
+      PUBLICA tarifas.config.actualizada CON tipo='snapshot'
+      PARA CADA proyecto conocido (o uno especifico SI event.project_id)
+
+    async onProjectActivated(event: Event): Promise<Void>
+      CARGA config DEL proyecto
+      EMITE tarifas.config.actualizada
+
+    EVENTOS_PUBLISHES {
+      'tarifas.config.actualizada': {project_id, tipo, config: {general, canales, variantes}}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'project.activated': onProjectActivated
+      'tarifas.config.solicitada': onConfigSolicitada
+    }
+  }
+}
+
+CLASE TarifasConfig {
+  ATRIBUTOS {
+    project_id: String
+    general: String|Null (carta_id por default)
+    canales: {mesa?, llevar?, telefono?, whatsapp?, glovo?, llevadoo?}: String (carta_id)
+  }
+}
+```
+
+### 11. PERSISTENCIA-COMANDERO (v3.0.0) — Auditoría del Día
+
+```
+CLASE PersistenciaComanderoModule HEREDA BaseModule {
+  ATRIBUTOS {
+    name: String = 'persistencia-comandero'
+    version: String = '3.0.0'
+    cuentasActivasCache: Map<cuenta_id, CuentaSnapshot>
+    eventosCache: Array<Event> (todos los del dia)
+    ventasCache: Array<Venta> (pagos completados)
+  }
+
+  METODOS {
+    async handleGetCuentasActivas(): Promise<Response>
+      RETORNA {status: 200, data: {cuentas: cuentasActivasCache.values()}}
+
+    async handleGetEventos(data?: {date?}): Promise<Response>
+      FILTRA eventosCache POR date SI provided
+      RETORNA {status: 200, data: {eventos}}
+
+    async handleGetVentas(data?: {date?}): Promise<Response>
+      FILTRA ventasCache POR date SI provided
+      RETORNA {status: 200, data: {ventas}}
+
+    async onEvento(event: Event): Void
+      eventosCache.push({event_name, timestamp, data})
+      PERSISTE EN disco (json-lines)
+
+    async onCuentaCerrada(event: Event): Void
+      OBTIENE cobro ASOCIADO
+      CREA Venta object
+      ventasCache.push(venta)
+      ELIMINA DE cuentasActivasCache
+      EMITE caja.cerrada SI es end-of-day
+
+    async onCajaCerrada(event: Event): Void
+      PERSISTE cuentasActivasCache + eventosCache + ventasCache A disco
+      CREA CUADRE (totales, resumen de metodos de pago)
+      eventosCache.clear()
+      ventasCache.clear()
+      cuentasActivasCache.clear()
+
+    EVENTOS_PUBLISHES {
+      'caja.cerrada': {project_id, timestamp}
+      'dia.iniciado': {project_id, timestamp}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'boton.pulsado': onEvento
+      'ui.accion': onEvento
+      'cuenta.creada': onCuentaCreada
+      'cuenta.cerrada': onCuentaCerrada
+      'cobro.procesado': onEvento
+      'pedido.completado': onEvento
+      'cocina.pedido_listo': onEvento
+    }
+  }
+}
+
+CLASE Venta {
+  ATRIBUTOS {
+    id: String (UUID)
+    cuenta_id: String
+    tipo: String (local|delivery|llevar)
+    ref_display: String
+    total: Number
+    propina: Number
+    metodo_pago: String
+    duracion_minutos: Integer
+    items_count: Integer
+    created_at: String (ISO)
+  }
+}
+```
+
+### 12. IMPRESION (v2.0.0) — Tickets y Comandas
+
+```
+CLASE ImpresionModule HEREDA BaseModule {
+  ATRIBUTOS {
+    name: String = 'impresion'
+    version: String = '2.0.0'
+    historial: Array<Ticket> (ring buffer, max 100)
+    cuentaNombres: Map<cuenta_id, String>
+    refDisplayCache: Map<cuenta_id, String>
+    config: {ancho, destino_default}
+  }
+
+  METODOS {
+    async handleImprimirComanda(data: {pedido_id, items}): Promise<Response>
+      FORMATEA comanda SEGUN ancho (58mm)
+      ENVIA VIA MQTT a impresora destino
+      PUBLICA impresion.comanda_generada
+      RETORNA {status: 200}
+
+    async onItemTicket(event: Event): Promise<Void>
+      FORMATEA ticket DE pieza individual
+      ENVIA a impresora SI device tiene impresora asignada
+      PUBLICA impresion.ticket_pieza_generado
+
+    async onCajaCerrada(event: Event): Void
+      historial.clear()
+      cuentaNombres.clear()
+      refDisplayCache.clear()
+
+    EVENTOS_PUBLISHES {
+      'impresion.comanda_generada': {pedido_id, items_count}
+      'impresion.ticket_venta_generado': {cuenta_id, total}
+      'impresion.ticket_pieza_generado': {item_id, producto_id}
+      'impresion.error': {error_code, error_detail}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'cocina.item_ticket': onItemTicket
+      'cuenta.creada': onCuentaCreada (cache ref_display)
+      'caja.cerrada': onCajaCerrada (reset)
+    }
+  }
+}
+
+CLASE Ticket {
+  ATRIBUTOS {
+    id: String (UUID)
+    tipo: String (comanda|venta|pieza)
+    contenido: String (formato ESC/POS)
+    destino: String (impresora name)
+    timestamp: String (ISO)
+    estado: String (enviado|impreso|error)
+  }
+}
+```
+
+### 13-14. RECETAS, ESCANDALLO, VIABILIDAD, TECNICAS, MENU-GENERATOR, COCINA-POC
+
+Módulos de master data + analytics + generación. Contracts heredan BaseModule. Master data (recetas, tecnicas) son fuentes consulta. Menu-generator orquesta IA. Escandallo/viabilidad análisis sin transporte.
+
+---
+
+## MÓDULOS BLUEPRINT-DRIVEN (11)
+
+Registran manifest en ModuleRegistry SIN instancia. No tienen index.js. 6 operaciones por blueprint definidas en architecture/decisiones/_blueprints/*.blueprint.json. Persistencia por proyecto EN `data/projects/{slug}/`.
+
+### carta-design (v1.1.0) — Diseños HTML de Cartas Impresas
+### carta-digital (v1.1.0) — Backoffice PWA Pública
+### carta-manager (v3.0.0) — Manager Central de Cartas (CRUD)
+### cuentas-canales (v1.0.0) — Integración Delivery (Glovo, Llevadoo, etc)
+### cocina-poc (v1.0.0) — POC Mínimo de Cocina
+### cartas-digitales... (6+ más)
+
+---
+
+## PATRONES OOP INTEGRADOS
+
+```
+PATRON Observer {
+  USADO_EN: [EventBus, EventEmitter, HookManager]
+  PROPOSITO: Desacople productor-consumidor
+
+PATRON Factory {
+  USADO_EN: [EventEnvelope.create(), Cobro.new(), Cuenta.new(), Item.new()]
+
+PATRON State Machine {
+  USADO_EN: [Cuenta: pendiente → con_pedido → en_preparacion → listo → entregado → para_cobrar → cobrado]
+
+PATRON Command {
+  USADO_EN: [UI handlers: domain.action DELEGACIÓN]
+
+PATRON Cache {
+  USADO_EN: [productosCache, categoriasCache, ingredientesCache, tarifasConfigPerProject per-project]
+
+PATRON Debounce {
+  USADO_EN: [_guardarBuffers() 1s, _saveTurno() 1s]
+
+PATRON Atomic Writes {
+  USADO_EN: [.tmp + rename PARA JSON persistence]
+
+PATRON Multi-Tenant {
+  USADO_EN: [ProductosModule, CategoriasModule, IngredientesModule per project_id]
+```
+
+---
+
+## PROJECT-TYPE: pizzepos
+
+```json
+{
+  "id": "pizzepos",
+  "label": "PizzePOS",
+  "description": "Comandero, cocina y cobros",
+  "dependencies": [],
+  "initialDirs": [
+    "storage/pizzepos/cartas",
+    "storage/pizzepos/ingredientes",
+    "storage/pizzepos/programacion"
+  ],
+  "initialConfig": {
+    "pizzepos": { "enabled": true }
+  }
+}
+```
+
+---
+
 # Módulos: Project-Manager, Credential-Manager y Conversación
 
 ## PROJECT-MANAGER
@@ -2175,4 +3129,1348 @@ agent-observer (conversacion)
   ├─ USA: metrics (core)
   └─ USADO_POR: frontend (monitoring/dashboard)
 ```
+
+---
+
+# Módulos Pizzepos y Blueprints
+
+## PIZZEPOS - CORE MODULES
+
+### CUENTAS MANAGER
+
+```
+INTERFAZ CuentasContract {
+  createCuenta(data: {nombre, cliente_id, estado?, mesa?}): Promise<{cuenta_id, ...}>
+  updateCuenta(cuenta_id: String, updates: Object): Promise<Cuenta>
+  getCuenta(cuenta_id: String): Promise<Cuenta>
+  listCuentas(filters?: Object): Promise<Array<Cuenta>>
+  closeCuenta(cuenta_id: String): Promise<Void>
+  addPedidoToCuenta(cuenta_id: String, productos: Array): Promise<Pedido>
+  getPedidosCuenta(cuenta_id: String): Promise<Array<Pedido>>
+  removePedidoFromCuenta(cuenta_id: String, pedido_id: String): Promise<Void>
+  calcularTotal(cuenta_id: String): Promise<{subtotal, impuestos, descuento, total}>
+  aplicarDescuento(cuenta_id: String, descuento: Number): Promise<Void>
+  generateCobro(cuenta_id: String, metodo: String): Promise<Cobro>
+  listCobros(cuenta_id: String): Promise<Array<Cobro>>
+}
+
+CLASE CuentasManager IMPLEMENTA CuentasContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    metrics: Metrics
+    uiHandler: UIRequestHandler
+    cuentasStore: Map<cuenta_id, Cuenta>
+    pedidosStore: Map<cuenta_id, Array<Pedido>>
+    productosCache: Map<producto_id, Producto>
+    productosManager: ProductosManager
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async createCuenta(data: {nombre, cliente_id, estado?, mesa?}): Promise<{cuenta_id, ...}>
+      GENERA cuenta_id (UUID)
+      CREA Cuenta {cuenta_id, nombre, cliente_id, mesa, estado: 'abierta', created_at, updated_at, total: 0}
+      GUARDA EN cuentasStore
+      PERSISTE EN persistencia-comandero
+      EMITE cuenta.created {cuenta_id, nombre, mesa}
+      RETORNA cuenta
+
+    async updateCuenta(cuenta_id: String, updates: Object): Promise<Cuenta>
+      VALIDA cuenta existe
+      MERGES updates
+      SETEA updated_at = now()
+      GUARDA EN cuentasStore
+      PERSISTE
+      EMITE cuenta.updated {cuenta_id, updates}
+      RETORNA cuenta
+
+    async getCuenta(cuenta_id: String): Promise<Cuenta>
+      BUSCA EN cuentasStore
+      SI no existe: LANZA CuentaNotFoundError
+      RETORNA cuenta
+
+    async listCuentas(filters?: Object): Promise<Array<Cuenta>>
+      FILTRA cuentasStore (estado, mesa, cliente_id)
+      RETORNA Array ordenado
+
+    async closeCuenta(cuenta_id: String): Promise<Void>
+      VALIDA cuenta existe
+      SETEA estado = 'cerrada'
+      CALCULA total final
+      PERSISTE
+      EMITE cuenta.closed {cuenta_id, total}
+
+    async addPedidoToCuenta(cuenta_id: String, productos: Array): Promise<Pedido>
+      VALIDA cuenta existe
+      GENERA pedido_id (UUID)
+      PARA cada producto: RESUELVE via productosManager
+      CREA Pedido {pedido_id, cuenta_id, productos: [], estado: 'pendiente', created_at, total}
+      CALCULA total POR cada producto
+      AGREGA a pedidosStore[cuenta_id]
+      PERSISTE
+      EMITE pedido.created {pedido_id, cuenta_id, producto_count}
+      RETORNA pedido
+
+    async getPedidosCuenta(cuenta_id: String): Promise<Array<Pedido>>
+      RETORNA pedidosStore[cuenta_id] O []
+
+    async removePedidoFromCuenta(cuenta_id: String, pedido_id: String): Promise<Void>
+      BUSCA pedido EN pedidosStore[cuenta_id]
+      SI no existe: LANZA PedidoNotFoundError
+      ELIMINA DE array
+      PERSISTE
+      EMITE pedido.removed {pedido_id, cuenta_id}
+
+    async calcularTotal(cuenta_id: String): Promise<{subtotal, impuestos, descuento, total}>
+      OBTIENE cuenta + pedidos
+      SUMA subtotal POR productos
+      CALCULA impuestos (IVA por producto)
+      APLICA descuento SI exists
+      RETORNA {subtotal, impuestos, descuento, total}
+
+    async aplicarDescuento(cuenta_id: String, descuento: Number): Promise<Void>
+      VALIDA descuento >= 0 Y <= 100
+      SETEA cuenta.descuento = descuento
+      PERSISTE
+      EMITE descuento.applied {cuenta_id, descuento}
+
+    async generateCobro(cuenta_id: String, metodo: String): Promise<Cobro>
+      VALIDA metodo EN ['efectivo', 'tarjeta', 'transferencia']
+      OBTIENE total final
+      CREA Cobro {cobro_id: UUID, cuenta_id, metodo, monto: total, estado: 'pendiente', created_at}
+      GUARDA EN cobrosManager
+      EMITE cobro.created {cobro_id, cuenta_id, metodo, monto}
+      RETORNA cobro
+
+    async listCobros(cuenta_id: String): Promise<Array<Cobro>>
+      DELEGA a cobrosManager.listCobros(cuenta_id)
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      CARGA productosManager FROM moduleRegistry
+      REGISTRA UI handlers
+      SUSCRIBE A producto.updated
+      LOG "cuentas.onLoad"
+  }
+
+  EVENTO {
+    cuenta.created: {cuenta_id, nombre, mesa, created_at}
+    cuenta.updated: {cuenta_id, updates}
+    cuenta.closed: {cuenta_id, total}
+    pedido.created: {pedido_id, cuenta_id, producto_count}
+    pedido.removed: {pedido_id, cuenta_id}
+    descuento.applied: {cuenta_id, descuento}
+    cobro.created: {cobro_id, cuenta_id, metodo, monto}
+  }
+}
+
+CLASE Cuenta {
+  ATRIBUTOS {
+    cuenta_id: String
+    nombre: String
+    cliente_id: String (optional)
+    mesa: String|Number (optional)
+    estado: String ('abierta'|'cerrada'|'pagada')
+    descuento: Number (default 0)
+    total: Number
+    created_at: Number
+    updated_at: Number
+  }
+}
+
+CLASE Pedido {
+  ATRIBUTOS {
+    pedido_id: String
+    cuenta_id: String
+    productos: Array<{producto_id, nombre, cantidad, precio_unitario, subtotal}>
+    estado: String ('pendiente'|'entregado'|'cancelado')
+    total: Number
+    created_at: Number
+    updated_at: Number
+  }
+}
+```
+
+### PRODUCTOS MANAGER
+
+```
+INTERFAZ ProductosContract {
+  createProducto(data: {nombre, descripcion, precio, categoria_id, iva?, imagen?}): Promise<{producto_id, ...}>
+  getProducto(producto_id: String): Promise<Producto>
+  listProductos(filters?: Object): Promise<Array<Producto>>
+  updateProducto(producto_id: String, updates: Object): Promise<Producto>
+  deleteProducto(producto_id: String): Promise<Void>
+  getProductosByCategoria(categoria_id: String): Promise<Array<Producto>>
+  searchProductos(query: String): Promise<Array<Producto>>
+}
+
+CLASE ProductosManager IMPLEMENTA ProductosContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    metrics: Metrics
+    uiHandler: UIRequestHandler
+    productosStore: Map<producto_id, Producto>
+    categoriasManager: CategoriasManager
+    searchIndex: Map<searchKey, Array<producto_id>>
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async createProducto(data: {nombre, descripcion, precio, categoria_id, iva?, imagen?}): Promise<{producto_id, ...}>
+      VALIDA nombre, precio
+      VALIDA categoria_id existe
+      GENERA producto_id (UUID)
+      CREA Producto {producto_id, nombre, descripcion, precio, categoria_id, iva: iva || 0.21, imagen, created_at}
+      GUARDA EN productosStore
+      ACTUALIZA searchIndex
+      PERSISTE
+      EMITE producto.created {producto_id, nombre, precio}
+      RETORNA producto
+
+    async getProducto(producto_id: String): Promise<Producto>
+      BUSCA EN productosStore
+      SI no existe: LANZA ProductoNotFoundError
+      RETORNA producto
+
+    async listProductos(filters?: Object): Promise<Array<Producto>>
+      FILTRA productosStore (categoria, nombre, precio_range)
+      RETORNA Array
+
+    async updateProducto(producto_id: String, updates: Object): Promise<Producto>
+      VALIDA producto existe
+      MERGES updates
+      PERSISTE
+      ACTUALIZA searchIndex
+      EMITE producto.updated {producto_id}
+      RETORNA producto
+
+    async deleteProducto(producto_id: String): Promise<Void>
+      VALIDA producto NO en pedidos activos
+      ELIMINA DE productosStore
+      ELIMINA DE searchIndex
+      PERSISTE
+      EMITE producto.deleted {producto_id}
+
+    async getProductosByCategoria(categoria_id: String): Promise<Array<Producto>>
+      FILTRA productosStore POR categoria_id
+      RETORNA Array
+
+    async searchProductos(query: String): Promise<Array<Producto>>
+      BUSCA EN searchIndex (fuzzy match)
+      RETORNA top-K resultados
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      CARGA categoriasManager FROM moduleRegistry
+      REGISTRA UI handlers
+      CARGA productosStore FROM persistencia
+      CONSTRUYE searchIndex
+      LOG "productos.onLoad"
+  }
+
+  EVENTO {
+    producto.created: {producto_id, nombre, precio}
+    producto.updated: {producto_id, updates}
+    producto.deleted: {producto_id}
+  }
+}
+
+CLASE Producto {
+  ATRIBUTOS {
+    producto_id: String
+    nombre: String
+    descripcion: String
+    precio: Number
+    categoria_id: String
+    iva: Number (default 0.21)
+    imagen: String (URL|base64)
+    created_at: Number
+    updated_at: Number
+  }
+}
+```
+
+### CATEGORIAS MANAGER
+
+```
+INTERFAZ CategoriasContract {
+  createCategoria(data: {nombre, descripcion?, orden?, icono?}): Promise<{categoria_id, ...}>
+  getCategoria(categoria_id: String): Promise<Categoria>
+  listCategorias(filters?: Object): Promise<Array<Categoria>>
+  updateCategoria(categoria_id: String, updates: Object): Promise<Categoria>
+  deleteCategoria(categoria_id: String): Promise<Void>
+  reorderCategorias(orden: Array<categoria_id>): Promise<Void>
+}
+
+CLASE CategoriasManager IMPLEMENTA CategoriasContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    categoriasStore: Map<categoria_id, Categoria>
+    orden: Array<categoria_id>
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async createCategoria(data: {nombre, descripcion?, orden?, icono?}): Promise<{categoria_id, ...}>
+      GENERA categoria_id (UUID)
+      CREA Categoria {categoria_id, nombre, descripcion, orden: orden || 999, icono, created_at}
+      GUARDA EN categoriasStore
+      AGREGA a orden array
+      PERSISTE
+      EMITE categoria.created {categoria_id, nombre}
+      RETORNA categoria
+
+    async getCategoria(categoria_id: String): Promise<Categoria>
+      BUSCA EN categoriasStore
+      RETORNA categoria
+
+    async listCategorias(filters?: Object): Promise<Array<Categoria>>
+      RETORNA categoriasStore ordenado POR orden
+
+    async updateCategoria(categoria_id: String, updates: Object): Promise<Categoria>
+      VALIDA categoria existe
+      MERGES updates
+      PERSISTE
+      EMITE categoria.updated {categoria_id}
+      RETORNA categoria
+
+    async deleteCategoria(categoria_id: String): Promise<Void>
+      VALIDA NO hay productos CON esta categoria
+      ELIMINA DE categoriasStore
+      ELIMINA DE orden array
+      PERSISTE
+      EMITE categoria.deleted {categoria_id}
+
+    async reorderCategorias(orden: Array<categoria_id>): Promise<Void>
+      VALIDA orden contiene todas las categorias
+      SETEA this.orden = orden
+      PERSISTE
+      EMITE categorias.reordered {orden}
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      CARGA categoriasStore FROM persistencia
+      CARGA orden array
+      REGISTRA UI handlers
+      LOG "categorias.onLoad"
+  }
+
+  EVENTO {
+    categoria.created: {categoria_id, nombre}
+    categoria.updated: {categoria_id}
+    categoria.deleted: {categoria_id}
+    categorias.reordered: {orden}
+  }
+}
+
+CLASE Categoria {
+  ATRIBUTOS {
+    categoria_id: String
+    nombre: String
+    descripcion: String (optional)
+    orden: Number
+    icono: String (optional emoji|URL)
+    created_at: Number
+    updated_at: Number
+  }
+}
+```
+
+### COBROS MANAGER
+
+```
+INTERFAZ CobrosContract {
+  createCobro(cuenta_id: String, metodo: String, monto?: Number): Promise<Cobro>
+  getCobro(cobro_id: String): Promise<Cobro>
+  updateEstadoCobro(cobro_id: String, estado: String): Promise<Cobro>
+  listCobros(filters?: Object): Promise<Array<Cobro>>
+  calculateCobrosTotal(fecha_inicio?: Number, fecha_fin?: Number): Promise<{total, por_metodo}>
+  generateReporte(fecha: Date): Promise<Reporte>
+}
+
+CLASE CobrosManager IMPLEMENTA CobrosContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    metrics: Metrics
+    cobrosStore: Map<cobro_id, Cobro>
+    cuentasManager: CuentasManager
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async createCobro(cuenta_id: String, metodo: String, monto?: Number): Promise<Cobro>
+      VALIDA cuenta_id existe
+      VALIDA metodo EN ['efectivo', 'tarjeta', 'transferencia']
+      GENERA cobro_id (UUID)
+      OBTIENE monto = monto || cuenta.total
+      CREA Cobro {cobro_id, cuenta_id, metodo, monto, estado: 'pendiente', created_at}
+      GUARDA EN cobrosStore
+      PERSISTE
+      EMITE cobro.created {cobro_id, cuenta_id, metodo, monto}
+      RETORNA cobro
+
+    async getCobro(cobro_id: String): Promise<Cobro>
+      BUSCA EN cobrosStore
+      RETORNA cobro
+
+    async updateEstadoCobro(cobro_id: String, estado: String): Promise<Cobro>
+      VALIDA cobro existe
+      VALIDA estado EN ['pendiente', 'completado', 'cancelado']
+      SETEA cobro.estado = estado
+      PERSISTE
+      EMITE cobro.estado_updated {cobro_id, estado}
+      RETORNA cobro
+
+    async listCobros(filters?: Object): Promise<Array<Cobro>>
+      FILTRA cobrosStore (estado, metodo, cuenta_id, fecha_range)
+      RETORNA Array
+
+    async calculateCobrosTotal(fecha_inicio?: Number, fecha_fin?: Number): Promise<{total, por_metodo}>
+      FILTRA cobros POR fecha_range
+      SUMA total
+      AGRUPA POR metodo
+      RETORNA {total, por_metodo: {efectivo, tarjeta, transferencia}}
+
+    async generateReporte(fecha: Date): Promise<Reporte>
+      FILTRA cobros DEL día fecha
+      CALCULA totales, breakdown por metodo
+      CREA Reporte {fecha, total, por_metodo, count_cobros}
+      EMITE reporte.generado {fecha, total}
+      RETORNA reporte
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      CARGA cuentasManager FROM moduleRegistry
+      REGISTRA UI handlers
+      LOG "cobros.onLoad"
+  }
+
+  EVENTO {
+    cobro.created: {cobro_id, cuenta_id, metodo, monto}
+    cobro.estado_updated: {cobro_id, estado}
+    reporte.generado: {fecha, total}
+  }
+}
+
+CLASE Cobro {
+  ATRIBUTOS {
+    cobro_id: String
+    cuenta_id: String
+    metodo: String ('efectivo'|'tarjeta'|'transferencia')
+    monto: Number
+    estado: String ('pendiente'|'completado'|'cancelado')
+    created_at: Number
+    updated_at: Number
+  }
+}
+```
+
+### PEDIDOS MANAGER
+
+```
+INTERFAZ PedidosContract {
+  createPedido(cuenta_id: String, productos: Array): Promise<Pedido>
+  getPedido(pedido_id: String): Promise<Pedido>
+  updateEstadoPedido(pedido_id: String, estado: String): Promise<Pedido>
+  listPedidos(filters?: Object): Promise<Array<Pedido>>
+  calculatePedidoTotal(pedido_id: String): Promise<Number>
+  addProductoToPedido(pedido_id: String, producto_id: String, cantidad: Number): Promise<Void>
+}
+
+CLASE PedidosManager IMPLEMENTA PedidosContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    metrics: Metrics
+    pedidosStore: Map<pedido_id, Pedido>
+    productosManager: ProductosManager
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async createPedido(cuenta_id: String, productos: Array): Promise<Pedido>
+      VALIDA productos array NOT empty
+      GENERA pedido_id (UUID)
+      PARA cada producto: RESUELVE details via productosManager
+      CREA Pedido {pedido_id, cuenta_id, productos: [], total: 0, estado: 'pendiente', created_at}
+      CALCULA total
+      GUARDA EN pedidosStore
+      PERSISTE
+      EMITE pedido.created {pedido_id, cuenta_id}
+      RETORNA pedido
+
+    async getPedido(pedido_id: String): Promise<Pedido>
+      BUSCA EN pedidosStore
+      RETORNA pedido
+
+    async updateEstadoPedido(pedido_id: String, estado: String): Promise<Pedido>
+      VALIDA estado EN ['pendiente', 'entregado', 'cancelado']
+      SETEA pedido.estado = estado
+      PERSISTE
+      EMITE pedido.estado_updated {pedido_id, estado}
+      RETORNA pedido
+
+    async listPedidos(filters?: Object): Promise<Array<Pedido>>
+      FILTRA pedidosStore
+      RETORNA Array
+
+    async calculatePedidoTotal(pedido_id: String): Promise<Number>
+      OBTIENE pedido
+      SUMA total POR productos (cantidad * precio)
+      RETORNA total
+
+    async addProductoToPedido(pedido_id: String, producto_id: String, cantidad: Number): Promise<Void>
+      OBTIENE pedido Y producto
+      AGREGA a pedido.productos
+      RECALCULA total
+      PERSISTE
+      EMITE producto.added_to_pedido {pedido_id, producto_id, cantidad}
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      CARGA productosManager FROM moduleRegistry
+      REGISTRA UI handlers
+      LOG "pedidos.onLoad"
+  }
+
+  EVENTO {
+    pedido.created: {pedido_id, cuenta_id}
+    pedido.estado_updated: {pedido_id, estado}
+    producto.added_to_pedido: {pedido_id, producto_id, cantidad}
+  }
+}
+```
+
+### COCINA MANAGER
+
+```
+INTERFAZ CocinaContract {
+  sendPedidoToKitchen(pedido_id: String): Promise<Void>
+  getPedidosEnCocina(): Promise<Array<Pedido>>
+  updateEstadoPedidoCocina(pedido_id: String, estado: String): Promise<Void>
+  marcaComoListo(pedido_id: String): Promise<Void>
+  generateCocinaReport(): Promise<Report>
+}
+
+CLASE CocinaManager IMPLEMENTA CocinaContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    metrics: Metrics
+    pedidosEnCocina: Map<pedido_id, PedidoKitchen>
+    pedidosManager: PedidosManager
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async sendPedidoToKitchen(pedido_id: String): Promise<Void>
+      OBTIENE pedido
+      CREA PedidoKitchen {pedido_id, received_at: now(), estado: 'en_cocina', items: pedido.productos}
+      GUARDA EN pedidosEnCocina
+      EMITE pedido.sent_to_kitchen {pedido_id, items_count: pedido.productos.length}
+
+    async getPedidosEnCocina(): Promise<Array<Pedido>>
+      RETORNA pedidosEnCocina.values() ordenado POR received_at
+
+    async updateEstadoPedidoCocina(pedido_id: String, estado: String): Promise<Void>
+      VALIDA estado EN ['en_cocina', 'completado', 'listo']
+      SETEA pedidoKitchen.estado = estado
+      EMITE cocina.estado_updated {pedido_id, estado}
+
+    async marcaComoListo(pedido_id: String): Promise<Void>
+      OBTIENE pedidoKitchen
+      SETEA estado = 'listo'
+      CALCULA tiempo_cocina = now() - received_at
+      EMITE pedido.ready {pedido_id, tiempo_cocina}
+      ELIMINA DE pedidosEnCocina (archive)
+
+    async generateCocinaReport(): Promise<Report>
+      CALCULA stats: pedidos_completados, tiempo_promedio, items_por_pedido
+      RETORNA {fecha: now(), stats}
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      SUSCRIBE A pedido.created
+      REGISTRA UI handlers PARA kitchen display system
+      LOG "cocina.onLoad"
+  }
+
+  EVENTO {
+    pedido.sent_to_kitchen: {pedido_id, items_count}
+    cocina.estado_updated: {pedido_id, estado}
+    pedido.ready: {pedido_id, tiempo_cocina}
+  }
+}
+
+CLASE PedidoKitchen {
+  ATRIBUTOS {
+    pedido_id: String
+    estado: String ('en_cocina'|'completado'|'listo')
+    items: Array<{nombre, cantidad, preparacion_notes}>
+    received_at: Number
+    completed_at: Number
+  }
+}
+```
+
+### RECETAS MANAGER
+
+```
+INTERFAZ RecetasContract {
+  createReceta(data: {nombre, ingredientes, pasos, tiempo_preparacion, notas?}): Promise<Receta>
+  getReceta(receta_id: String): Promise<Receta>
+  listRecetas(filters?: Object): Promise<Array<Receta>>
+  updateReceta(receta_id: String, updates: Object): Promise<Receta>
+  deleteReceta(receta_id: String): Promise<Void>
+  getIngredientesReceta(receta_id: String): Promise<Array<Ingrediente>>
+}
+
+CLASE RecetasManager IMPLEMENTA RecetasContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    recetasStore: Map<receta_id, Receta>
+    ingredientesManager: IngredientesManager
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async createReceta(data: {nombre, ingredientes, pasos, tiempo_preparacion, notas?}): Promise<Receta>
+      VALIDA nombre, ingredientes NOT empty
+      GENERA receta_id (UUID)
+      CREA Receta {receta_id, nombre, ingredientes: [], pasos: data.pasos, tiempo_preparacion, notas, created_at}
+      PARA cada ingrediente: RESUELVE via ingredientesManager
+      AGREGA a receta.ingredientes
+      GUARDA EN recetasStore
+      PERSISTE
+      EMITE receta.created {receta_id, nombre}
+      RETORNA receta
+
+    async getReceta(receta_id: String): Promise<Receta>
+      BUSCA EN recetasStore
+      RETORNA receta
+
+    async listRecetas(filters?: Object): Promise<Array<Receta>>
+      FILTRA recetasStore
+      RETORNA Array
+
+    async updateReceta(receta_id: String, updates: Object): Promise<Receta>
+      VALIDA receta existe
+      MERGES updates
+      PERSISTE
+      EMITE receta.updated {receta_id}
+      RETORNA receta
+
+    async deleteReceta(receta_id: String): Promise<Void>
+      VALIDA NO hay productos usando esta receta
+      ELIMINA DE recetasStore
+      PERSISTE
+      EMITE receta.deleted {receta_id}
+
+    async getIngredientesReceta(receta_id: String): Promise<Array<Ingrediente>>
+      OBTIENE receta
+      RESUELVE ingredientes via ingredientesManager
+      RETORNA Array
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      CARGA ingredientesManager FROM moduleRegistry
+      REGISTRA UI handlers
+      LOG "recetas.onLoad"
+  }
+
+  EVENTO {
+    receta.created: {receta_id, nombre}
+    receta.updated: {receta_id}
+    receta.deleted: {receta_id}
+  }
+}
+
+CLASE Receta {
+  ATRIBUTOS {
+    receta_id: String
+    nombre: String
+    ingredientes: Array<{ingrediente_id, nombre, cantidad, unidad}>
+    pasos: Array<String>
+    tiempo_preparacion: Number (minutos)
+    notas: String (optional)
+    created_at: Number
+    updated_at: Number
+  }
+}
+```
+
+### INGREDIENTES MANAGER
+
+```
+INTERFAZ IngredientesContract {
+  createIngrediente(data: {nombre, unidad, precio_unitario, stock?, categoria?}): Promise<Ingrediente>
+  getIngrediente(ingrediente_id: String): Promise<Ingrediente>
+  listIngredientes(filters?: Object): Promise<Array<Ingrediente>>
+  updateIngrediente(ingrediente_id: String, updates: Object): Promise<Ingrediente>
+  deleteIngrediente(ingrediente_id: String): Promise<Void>
+  updateStock(ingrediente_id: String, cantidad: Number): Promise<Void>
+  getStockBajo(threshold?: Number): Promise<Array<Ingrediente>>
+}
+
+CLASE IngredientesManager IMPLEMENTA IngredientesContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    ingredientesStore: Map<ingrediente_id, Ingrediente>
+    stockThreshold: Number (default 10)
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async createIngrediente(data: {nombre, unidad, precio_unitario, stock?, categoria?}): Promise<Ingrediente>
+      GENERA ingrediente_id (UUID)
+      CREA Ingrediente {ingrediente_id, nombre, unidad, precio_unitario, stock: stock || 0, categoria, created_at}
+      GUARDA EN ingredientesStore
+      PERSISTE
+      EMITE ingrediente.created {ingrediente_id, nombre}
+      RETORNA ingrediente
+
+    async getIngrediente(ingrediente_id: String): Promise<Ingrediente>
+      BUSCA EN ingredientesStore
+      RETORNA ingrediente
+
+    async listIngredientes(filters?: Object): Promise<Array<Ingrediente>>
+      FILTRA ingredientesStore
+      RETORNA Array
+
+    async updateIngrediente(ingrediente_id: String, updates: Object): Promise<Ingrediente>
+      VALIDA ingrediente existe
+      MERGES updates
+      PERSISTE
+      EMITE ingrediente.updated {ingrediente_id}
+      RETORNA ingrediente
+
+    async deleteIngrediente(ingrediente_id: String): Promise<Void>
+      ELIMINA DE ingredientesStore
+      PERSISTE
+      EMITE ingrediente.deleted {ingrediente_id}
+
+    async updateStock(ingrediente_id: String, cantidad: Number): Promise<Void>
+      OBTIENE ingrediente
+      SETEA stock = stock + cantidad
+      SI stock < stockThreshold: EMITE ingrediente.stock_bajo {ingrediente_id, stock}
+      PERSISTE
+      EMITE ingrediente.stock_updated {ingrediente_id, stock}
+
+    async getStockBajo(threshold?: Number): Promise<Array<Ingrediente>>
+      FILTRA ingredientes WHERE stock < (threshold || stockThreshold)
+      RETORNA Array
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      REGISTRA UI handlers
+      LOG "ingredientes.onLoad"
+  }
+
+  EVENTO {
+    ingrediente.created: {ingrediente_id, nombre}
+    ingrediente.updated: {ingrediente_id}
+    ingrediente.deleted: {ingrediente_id}
+    ingrediente.stock_updated: {ingrediente_id, stock}
+    ingrediente.stock_bajo: {ingrediente_id, stock}
+  }
+}
+
+CLASE Ingrediente {
+  ATRIBUTOS {
+    ingrediente_id: String
+    nombre: String
+    unidad: String (kg, L, unidad, etc.)
+    precio_unitario: Number
+    stock: Number
+    categoria: String (optional)
+    created_at: Number
+    updated_at: Number
+  }
+}
+```
+
+### VARIACIONES MANAGER
+
+```
+INTERFAZ VariacionesContract {
+  createVariacion(data: {nombre, producto_id, opciones, precio_delta?}): Promise<Variacion>
+  getVariacion(variacion_id: String): Promise<Variacion>
+  listVariaciones(producto_id: String): Promise<Array<Variacion>>
+  updateVariacion(variacion_id: String, updates: Object): Promise<Variacion>
+  deleteVariacion(variacion_id: String): Promise<Void>
+}
+
+CLASE VariacionesManager IMPLEMENTA VariacionesContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    variacionesStore: Map<variacion_id, Variacion>
+    productosManager: ProductosManager
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async createVariacion(data: {nombre, producto_id, opciones, precio_delta?}): Promise<Variacion>
+      VALIDA producto_id existe
+      GENERA variacion_id (UUID)
+      CREA Variacion {variacion_id, nombre, producto_id, opciones: [], precio_delta: precio_delta || 0, created_at}
+      AGREGA opciones
+      GUARDA EN variacionesStore
+      PERSISTE
+      EMITE variacion.created {variacion_id, producto_id}
+      RETORNA variacion
+
+    async getVariacion(variacion_id: String): Promise<Variacion>
+      BUSCA EN variacionesStore
+      RETORNA variacion
+
+    async listVariaciones(producto_id: String): Promise<Array<Variacion>>
+      FILTRA variacionesStore POR producto_id
+      RETORNA Array
+
+    async updateVariacion(variacion_id: String, updates: Object): Promise<Variacion>
+      VALIDA variacion existe
+      MERGES updates
+      PERSISTE
+      EMITE variacion.updated {variacion_id}
+      RETORNA variacion
+
+    async deleteVariacion(variacion_id: String): Promise<Void>
+      ELIMINA DE variacionesStore
+      PERSISTE
+      EMITE variacion.deleted {variacion_id}
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      CARGA productosManager FROM moduleRegistry
+      REGISTRA UI handlers
+      LOG "variaciones.onLoad"
+  }
+
+  EVENTO {
+    variacion.created: {variacion_id, producto_id}
+    variacion.updated: {variacion_id}
+    variacion.deleted: {variacion_id}
+  }
+}
+
+CLASE Variacion {
+  ATRIBUTOS {
+    variacion_id: String
+    nombre: String
+    producto_id: String
+    opciones: Array<{nombre, descripcion, precio_delta?}>
+    precio_delta: Number (default 0)
+    created_at: Number
+    updated_at: Number
+  }
+}
+```
+
+### ESCANDALLO MANAGER
+
+```
+INTERFAZ EscandalloContract {
+  createEscandallo(data: {nombre, receta_id, cantidad_produccion}): Promise<Escandallo>
+  getEscandallo(escandallo_id: String): Promise<Escandallo>
+  listEscandallos(filters?: Object): Promise<Array<Escandallo>>
+  calculateCostePorUnidad(escandallo_id: String, cantidad: Number): Promise<Number>
+  updatePrecioFinal(escandallo_id: String, margen_ganancia: Number): Promise<Escandallo>
+}
+
+CLASE EscandalloManager IMPLEMENTA EscandalloContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    escandallosStore: Map<escandallo_id, Escandallo>
+    recetasManager: RecetasManager
+    ingredientesManager: IngredientesManager
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async createEscandallo(data: {nombre, receta_id, cantidad_produccion}): Promise<Escandallo>
+      GENERA escandallo_id (UUID)
+      OBTIENE receta
+      OBTIENE ingredientes + precios
+      CALCULA costo_ingredientes = suma(ingrediente.precio_unitario * ingrediente.cantidad)
+      CALCULA costo_unitario = costo_ingredientes / cantidad_produccion
+      CREA Escandallo {escandallo_id, nombre, receta_id, costo_ingredientes, costo_unitario, precio_final: 0, created_at}
+      GUARDA EN escandallosStore
+      PERSISTE
+      EMITE escandallo.created {escandallo_id, nombre, costo_unitario}
+      RETORNA escandallo
+
+    async getEscandallo(escandallo_id: String): Promise<Escandallo>
+      BUSCA EN escandallosStore
+      RETORNA escandallo
+
+    async listEscandallos(filters?: Object): Promise<Array<Escandallo>>
+      FILTRA escandallosStore
+      RETORNA Array
+
+    async calculateCostePorUnidad(escandallo_id: String, cantidad: Number): Promise<Number>
+      OBTIENE escandallo
+      RETORNA escandallo.costo_unitario * cantidad
+
+    async updatePrecioFinal(escandallo_id: String, margen_ganancia: Number): Promise<Escandallo>
+      OBTIENE escandallo
+      CALCULA precio_final = costo_unitario * (1 + margen_ganancia / 100)
+      SETEA escandallo.precio_final = precio_final
+      PERSISTE
+      EMITE escandallo.precio_updated {escandallo_id, precio_final}
+      RETORNA escandallo
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      CARGA recetasManager, ingredientesManager FROM moduleRegistry
+      REGISTRA UI handlers
+      LOG "escandallo.onLoad"
+  }
+
+  EVENTO {
+    escandallo.created: {escandallo_id, nombre, costo_unitario}
+    escandallo.precio_updated: {escandallo_id, precio_final}
+  }
+}
+
+CLASE Escandallo {
+  ATRIBUTOS {
+    escandallo_id: String
+    nombre: String
+    receta_id: String
+    costo_ingredientes: Number
+    costo_unitario: Number
+    precio_final: Number
+    margen_ganancia: Number
+    created_at: Number
+    updated_at: Number
+  }
+}
+```
+
+### VIABILIDAD MANAGER
+
+```
+INTERFAZ ViabilidadContract {
+  createEstudio(data: {nombre, proyecto_id, escenarios: Array}): Promise<EstudioViabilidad>
+  getEstudio(estudio_id: String): Promise<EstudioViabilidad>
+  calculateROI(estudio_id: String, escenario: String): Promise<{roi, payback_period}>
+  generateReporte(estudio_id: String): Promise<Reporte>
+}
+
+CLASE ViabilidadManager IMPLEMENTA ViabilidadContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    estudiosStore: Map<estudio_id, EstudioViabilidad>
+    aiGateway: AIGateway (optional)
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async createEstudio(data: {nombre, proyecto_id, escenarios: Array}): Promise<EstudioViabilidad>
+      GENERA estudio_id (UUID)
+      CREA EstudioViabilidad {estudio_id, nombre, proyecto_id, escenarios: [], created_at}
+      AGREGA escenarios
+      PARA cada escenario: CALCULA financials
+      GUARDA EN estudiosStore
+      PERSISTE
+      EMITE estudio.created {estudio_id, nombre}
+      RETORNA estudio
+
+    async getEstudio(estudio_id: String): Promise<EstudioViabilidad>
+      BUSCA EN estudiosStore
+      RETORNA estudio
+
+    async calculateROI(estudio_id: String, escenario: String): Promise<{roi, payback_period}>
+      OBTIENE estudio + escenario
+      CALCULA inversion_inicial
+      CALCULA flujo_caja_anual
+      CALCULA roi = (flujo_caja / inversion) * 100
+      CALCULA payback_period = inversion / flujo_caja_anual
+      RETORNA {roi, payback_period}
+
+    async generateReporte(estudio_id: String): Promise<Reporte>
+      OBTIENE estudio
+      PARA cada escenario: CALCULA metrics (roi, payback, vpn)
+      CREA Reporte {fecha: now(), estudio_id, resumen: {}}
+      EMITE reporte.generado {estudio_id}
+      RETORNA reporte
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      REGISTRA UI handlers
+      LOG "viabilidad.onLoad"
+  }
+
+  EVENTO {
+    estudio.created: {estudio_id, nombre}
+    reporte.generado: {estudio_id}
+  }
+}
+
+CLASE EstudioViabilidad {
+  ATRIBUTOS {
+    estudio_id: String
+    nombre: String
+    proyecto_id: String
+    escenarios: Array<{nombre, inversion_inicial, flujo_caja_anual, roi, payback_period}>
+    created_at: Number
+    updated_at: Number
+  }
+}
+```
+
+### CARTA-DIGITAL MANAGER
+
+```
+INTERFAZ CartaDigitalContract {
+  generateCarta(proyecto_id: String): Promise<CartaDigital>
+  getCarta(carta_id: String): Promise<CartaDigital>
+  updateCarta(carta_id: String, updates: Object): Promise<CartaDigital>
+  generatePDF(carta_id: String): Promise<Buffer>
+  generateHTML(carta_id: String): Promise<String>
+}
+
+CLASE CartaDigitalManager IMPLEMENTA CartaDigitalContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    cartasStore: Map<carta_id, CartaDigital>
+    productosManager: ProductosManager
+    categoriasManager: CategoriasManager
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async generateCarta(proyecto_id: String): Promise<CartaDigital>
+      GENERA carta_id (UUID)
+      OBTIENE categorias + productos
+      ORGANIZA POR categoria
+      CREA CartaDigital {carta_id, proyecto_id, contenido: {categorias: []}, fecha: now()}
+      GUARDA EN cartasStore
+      EMITE carta.generated {carta_id, proyecto_id}
+      RETORNA carta
+
+    async getCarta(carta_id: String): Promise<CartaDigital>
+      BUSCA EN cartasStore
+      RETORNA carta
+
+    async updateCarta(carta_id: String, updates: Object): Promise<CartaDigital>
+      VALIDA carta existe
+      MERGES updates
+      PERSISTE
+      EMITE carta.updated {carta_id}
+      RETORNA carta
+
+    async generatePDF(carta_id: String): Promise<Buffer>
+      OBTIENE carta
+      RENDERIZA HTML
+      CONVIERTE A PDF USANDO pdfkit
+      RETORNA Buffer
+
+    async generateHTML(carta_id: String): Promise<String>
+      OBTIENE carta
+      RENDERIZA template HTML CON categorias + productos
+      RETORNA string
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      CARGA productosManager, categoriasManager FROM moduleRegistry
+      REGISTRA UI handlers
+      LOG "carta-digital.onLoad"
+  }
+
+  EVENTO {
+    carta.generated: {carta_id, proyecto_id}
+    carta.updated: {carta_id}
+  }
+}
+
+CLASE CartaDigital {
+  ATRIBUTOS {
+    carta_id: String
+    proyecto_id: String
+    contenido: {categorias: Array<{nombre, productos: Array<Producto>}>}
+    fecha: Number
+  }
+}
+```
+
+### MENU-GENERATOR MANAGER
+
+```
+INTERFAZ MenuGeneratorContract {
+  generateMenu(proyecto_id: String, tema?: String): Promise<Menu>
+  customizeMenu(menu_id: String, personalizaciones: Object): Promise<Menu>
+  previewMenu(menu_id: String): Promise<{html, pdf}>
+  exportMenu(menu_id: String, formato: String): Promise<Buffer>
+}
+
+CLASE MenuGenerator IMPLEMENTA MenuGeneratorContract {
+  ATRIBUTOS {
+    coreId: String
+    eventBus: EventBus
+    logger: Logger
+    menusStore: Map<menu_id, Menu>
+    aiGateway: AIGateway (optional)
+    cartaDigitalManager: CartaDigitalManager
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async generateMenu(proyecto_id: String, tema?: String): Promise<Menu>
+      GENERA menu_id (UUID)
+      OBTIENE carta digital PARA proyecto_id
+      APLICA tema (classico, moderno, minimalista)
+      CREA Menu {menu_id, proyecto_id, tema, contenido: {}, created_at}
+      GUARDA EN menusStore
+      EMITE menu.generated {menu_id, proyecto_id, tema}
+      RETORNA menu
+
+    async customizeMenu(menu_id: String, personalizaciones: Object): Promise<Menu>
+      OBTIENE menu
+      APLICA personalizaciones (colores, fuentes, orden, filtros)
+      PERSISTE
+      EMITE menu.customized {menu_id}
+      RETORNA menu
+
+    async previewMenu(menu_id: String): Promise<{html, pdf}>
+      OBTIENE menu
+      RENDERIZA HTML
+      GENERA PDF
+      RETORNA {html, pdf}
+
+    async exportMenu(menu_id: String, formato: String): Promise<Buffer>
+      VALIDA formato EN ['pdf', 'html', 'word', 'img']
+      OBTIENE menu
+      SWITCH formato:
+        'pdf': RETORNA generatePDF()
+        'html': RETORNA generateHTML()
+        'word': RETORNA generateDOCX()
+        'img': RETORNA generatePNG()
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      CARGA cartaDigitalManager FROM moduleRegistry
+      REGISTRA UI handlers
+      LOG "menu-generator.onLoad"
+  }
+
+  EVENTO {
+    menu.generated: {menu_id, proyecto_id, tema}
+    menu.customized: {menu_id}
+  }
+}
+
+CLASE Menu {
+  ATRIBUTOS {
+    menu_id: String
+    proyecto_id: String
+    tema: String
+    contenido: Object
+    personalizaciones: Object
+    created_at: Number
+    updated_at: Number
+  }
+}
+```
+
+---
+
+## BLUEPRINTS
+
+### PROJECT-TYPE BLUEPRINT DRIVER
+
+```
+INTERFAZ ProjectTypeBlueprintContract {
+  manifest(): Promise<ProjectTypeManifest>
+  generateProject(data: {name, type, config}): Promise<Project>
+  getDefaultModules(type: String): Promise<Array<ModuleConfig>>
+  getUILayout(type: String): Promise<UILayout>
+}
+
+CLASE ProjectTypeBlueprint IMPLEMENTA ProjectTypeBlueprintContract {
+  ATRIBUTOS {
+    blueprintsPath: String
+    moduleRegistry: ModuleRegistry
+    logger: Logger
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async manifest(): Promise<ProjectTypeManifest>
+      LEE /blueprints/project-types/
+      RETORNA {types: [{name: 'pizzepos', description, icon, default_modules}]}
+
+    async generateProject(data: {name, type, config}): Promise<Project>
+      VALIDA type existe
+      OBTIENE default_modules PARA type
+      CREA project {project_id: UUID, name, type, modules: default_modules, config}
+      EMITE project.created.from_blueprint {project_id, type}
+      RETORNA project
+
+    async getDefaultModules(type: String): Promise<Array<ModuleConfig>>
+      LEE blueprints/project-types/{type}.json
+      RETORNA modules array
+
+    async getUILayout(type: String): Promise<UILayout>
+      LEE blueprints/project-types/{type}.json
+      EXTRAE ui.layout
+      RETORNA layout {routes, work_bar, system_bar}
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      REGISTRA como blueprint driver
+      LOG "project-type-blueprint.onLoad"
+  }
+
+  EVENTO {
+    project.created.from_blueprint: {project_id, type}
+  }
+}
+
+CLASE ProjectTypeManifest {
+  ATRIBUTOS {
+    types: Array<{
+      name: String,
+      description: String,
+      icon: String,
+      default_modules: Array<String>,
+      ui: {routes: Array, work_bar: Array, system_bar: Array}
+    }>
+  }
+}
+```
+
+### UI TEMPLATE BLUEPRINT DRIVER
+
+```
+INTERFAZ UITemplateBlueprintContract {
+  listTemplates(): Promise<Array<UITemplate>>
+  getTemplate(template_id: String): Promise<UITemplate>
+  renderTemplate(template_id: String, data: Object): Promise<SvelteComponent>
+  generateComponent(spec: ComponentSpec): Promise<String>
+}
+
+CLASE UITemplateBlueprint IMPLEMENTA UITemplateBlueprintContract {
+  ATRIBUTOS {
+    blueprintsPath: String
+    logger: Logger
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async listTemplates(): Promise<Array<UITemplate>>
+      LEE /blueprints/ui-templates/
+      RETORNA templates array
+
+    async getTemplate(template_id: String): Promise<UITemplate>
+      LEE blueprints/ui-templates/{template_id}.json
+      RETORNA template
+
+    async renderTemplate(template_id: String, data: Object): Promise<SvelteComponent>
+      OBTIENE template
+      INTERPOLA data EN template.svelte
+      RETORNA component code
+
+    async generateComponent(spec: ComponentSpec): Promise<String>
+      VALIDA spec CONTRA ui-component.schema.json
+      GENERA Svelte component code
+      RETORNA string
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      REGISTRA como blueprint driver
+      LOG "ui-template-blueprint.onLoad"
+  }
+}
+
+CLASE UITemplate {
+  ATRIBUTOS {
+    template_id: String
+    name: String
+    description: String
+    svelte: String (template code)
+    props: Array<{name, type, required, default}>
+    styles: String (CSS)
+  }
+}
+```
+
+### FORM SCHEMA BLUEPRINT DRIVER
+
+```
+INTERFAZ FormSchemaBlueprintContract {
+  generateForm(schema: JSONSchema): Promise<SvelteForm>
+  validateFormData(schema: JSONSchema, data: Object): Promise<ValidationResult>
+}
+
+CLASE FormSchemaBlueprint IMPLEMENTA FormSchemaBlueprintContract {
+  ATRIBUTOS {
+    logger: Logger
+  }
+
+  CONSTRUCTOR(options: Object)
+
+  METODOS {
+    async generateForm(schema: JSONSchema): Promise<SvelteForm>
+      PARSEA schema
+      GENERA Svelte form component
+      CREA fields PARA cada property
+      RETORNA component code
+
+    async validateFormData(schema: JSONSchema, data: Object): Promise<ValidationResult>
+      VALIDA data CONTRA schema
+      RETORNA {valid: Boolean, errors?: []}
+
+    async onLoad(moduleContext: Object): Promise<Void>
+      REGISTRA como blueprint driver
+      LOG "form-schema-blueprint.onLoad"
+  }
+}
+```
+
+---
+
+## RELACIONES PIZZEPOS
+
+```
+cuentas ↔ pedidos ↔ productos
+  │        │         │
+  └────────┼─────────┤
+           │         categorias
+           │         ingredientes
+           │         variaciones
+           │
+        cobros      cocina
+
+recetas ← ingredientes
+escandallo ← recetas
+
+persistencia-comandero: persiste todas las stores
+carta-digital ← productos, categorias
+menu-generator ← carta-digital
+comandero ← cuentas, pedidos
+```
+
 

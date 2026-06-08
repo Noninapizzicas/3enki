@@ -1551,3 +1551,490 @@ core/<id>/events/receta/{creada,actualizada,eliminada}        QoS 1   # lifecycl
 response — perderlo rompe la cadena evaluar→calcular→precio. `escandallo` es stateless:
 su coste vive como **evento** que `recetas` persiste en SU agregado — separación de
 responsabilidades con una única fuente de verdad (paradigma-no-cabe).
+
+---
+
+# 🏛️ Core de `event-core` — plasmado OOP desde el código real
+
+> Fiel al código real (no a la spec idealizada de arriba). Donde divergen, se señala; el código
+> implementado prevalece sobre la spec.
+
+## 0. Raíz de composición — `index.js` (NO es una clase `Core`)
+
+> **Desvío spec↔código #1:** la spec describe una `CLASS Core`. El código real es una **función `main()`**
+> que cablea un **objeto plano `core`** (composition root procedural). Mismo patrón *Composition Root*, sin clase contenedora.
+
+```
+FUNCTION main():                              # raíz de composición real
+  cliArgs ← parseCLIArgs()                    # --port --broker-port --core-id --modules-path --log-level --config
+  config  ← loadConfig({ configPath, cliArgs })   # prioridad: CLI > env(EVENT_CORE_*) > config.<NODE_ENV>.json > config.json
+  core ← { id, config, mqttClient:null, eventBus:null, hooks:null, moduleLoader:null,
+           httpGateway:null, logger:null, tracer:null, metrics:null, activity:null,
+           validationManager:null, serviceRegistry:null, uiHandler:null, providerSystem:null }
+
+  TRY:                                         # ── arranque en 8 pasos (orden estricto) ──
+    [1] obs:  core.logger ← new Logger({level, coreId})
+              core.tracer ← new Tracer({service_name})
+              core.metrics ← new Metrics()
+    [2] val:  core.validationManager ← new ValidationManager({logger, allErrors, removeAdditional,
+                                                               useDefaults, coerceTypes})
+              registrar commonSchemas
+    [3] mqtt: core.mqttClient ← new MQTTClient({brokerUrl, coreId, brokerPort, logger, metrics, usePool})
+              await core.mqttClient.connect()           # externo → si falla → broker embebido (fallback)
+    [4] hooks:core.hooks ← new HookManager()
+    [5] bus:  core.eventBus ← new EventBus({coreId, mqtt, hooks, logger, tracer, metrics})
+              core.activity ← new ActivityLogger({coreId, eventBus, logger})   # tras el bus
+              core.eventBus.activity ← core.activity                            # back-ref
+    [5.5] ui: core.uiHandler ← new UIRequestHandler({mqttClient, logger, metrics})
+              await core.uiHandler.start()              # sub 'ui/request/#'
+    [6] prov: core.providerSystem ← createProviderSystem({providersPath, eventBus, logger})
+              await providerSystem.loader.loadAll()     # OCR/PDF/gmail… como providers (Strategy)
+    [6.5] mods: coreContext ← { id, config, logger, metrics, hooks, eventBus, tracer,
+                               activity, uiHandler, providerRegistry, moduleRegistry }
+              core.moduleRegistry ← new ModuleRegistry({logger, metrics})
+              core.moduleLoader   ← new ModuleLoader({modulesPath, core:coreContext, registry, config})
+              moduleLoader.registerProviderTools(providerSystem.registry)   # provider fns → tools LLM
+              await moduleLoader.loadAll()
+    [6.7] handlers: core.serviceExecutor ← new ServiceExecutor(eventBus, logger)
+              core.handlerLoader ← new HandlerLoader(eventBus, serviceExecutor, logger)
+              handlerLoader.loadCentralized('./handlers', './data/projects')   # handlers globales + por proyecto
+    [7] svc:  core.serviceRegistry ← new ServiceRegistry({autocleanup:true})
+              httpPort ← cliArgs.httpPort ?? await serviceRegistry.findFreePort('EVENT_CORE')
+    [8] http: core.httpGateway ← new HTTPGateway({port, coreId, eventBus, moduleLoader,
+                                                  registry, validationManager, compression, cache, core})
+              await core.httpGateway.listen()
+    serviceRegistry.register(coreId, 'EVENT_CORE', httpPort, {version, pid, modules, mqtt_port})
+    heartbeatTimer ← setInterval(→ serviceRegistry.heartbeat(coreId), 10_000)   # presencia por fichero
+    project-manager.reactivateExistingProjects()        # re-emite project.activated (rehidrata consumidores)
+    registrar SIGINT/SIGTERM/uncaughtException/unhandledRejection → shutdown()
+
+  CATCH error:                                 # edge: cualquier paso falla → log + process.exit(1)
+    # (NO hay rollback parcial real: se sale del proceso; la spec describe rollback que el código no implementa)
+
+  FUNCTION shutdown(signal):                   # orden INVERSO, idempotente
+    clearInterval(heartbeatTimer)
+    serviceRegistry.unregister(coreId)
+    activity.close()
+    await httpGateway.stop()  ; await uiHandler.stop()
+    await moduleLoader.unloadAll() ; handlerLoader.unloadAll()
+    await providerSystem.loader.unloadAll()
+    await mqttClient.disconnect()              # también para el broker embebido
+    process.exit(0)
+```
+
+**Grafo de dependencias real (cableado a mano por `main()`):**
+```
+Observability(Logger,Tracer,Metrics) → ValidationManager → MQTTClient(+EmbeddedBroker fallback)
+  → HookManager → EventBus → ActivityLogger → UIRequestHandler → ProviderSystem
+  → ModuleRegistry → ModuleLoader(+IntentRegistry) → HandlerLoader → ServiceRegistry → HTTPGateway
+```
+
+## 1. `MQTTClient extends EventEmitter` — única frontera con el transporte (DIP)
+
+```
+CLASS MQTTClient extends EventEmitter:
+  →deps: { brokerUrl, coreId, connectTimeout:2000, brokerPort:1883, logger, metrics, usePool:false, poolConfig }
+  state: { mqtt, embeddedBroker, isConnected:false, usingEmbedded:false, pool, subscriptions:Map<topic,qos> }
+
+  interface:
+    async connect():
+      TRY  connectToExternalBroker()                  # intenta broker externo (timeout 2s, reconnectPeriod:0)
+      CATCH→ startEmbeddedBrokerAndConnect()          # FALLBACK: arranca EmbeddedBroker y conecta loopback
+      isConnected←true ; if usePool → _initializePool() ; emit('connected',{usingEmbedded})
+
+    setupMQTTHandlers():                              # tras 'connect'
+      mqtt.on('message', (t,raw) → parsed=JSON.parse(raw)||string ; emit('message', t, parsed, raw))
+      mqtt.on('error',    e → emit('error', e))
+      mqtt.on('reconnect',→ emit('reconnecting'))     # backoff propio de mqtt.js (keepalive 30s)
+      mqtt.on('close',    → isConnected=false ; emit('disconnected'))
+
+    async publish(topic, msg, {qos:0, retain:false}):    # ⚠ DEFAULT QoS 0 (no 1)
+        usePool&&pool ? _publishPooled(...) : _publishDirect(...)   # serializa a JSON si no es string
+    async subscribe(topics, {qos:0}): mqtt.subscribe(...) ; subscriptions.set(topic,qos)   # ⚠ DEFAULT QoS 0
+    async unsubscribe(topics) ; async disconnect() ; getStats()
+
+  # RESILIENCIA: keepalive 30s ; clean:true (⚠ la spec dice cleanSession=false; el código usa clean:true)
+  # pool opcional (config.mqtt.pool.enabled) para throughput; default OFF
+```
+
+> **Desvío #2:** el QoS por defecto del cliente es **0**, no 1. La garantía QoS 1 la fija **quien publica**
+> (EventBus, UIRequestHandler, Discovery). Y `clean:true` (no `cleanSession=false`).
+
+## 2. `EmbeddedBroker extends EventEmitter` — Aedes en proceso
+
+```
+CLASS EmbeddedBroker extends EventEmitter:
+  →deps: { port:1883, wsPort:9001, host:'0.0.0.0', logger, metrics }
+  state: { aedes, server(TCP), wsServer, httpServer, isRunning:false, stats }
+
+  interface:
+    async start():
+      aedes ← new Aedes({ heartbeatInterval:30000, connectTimeout:60000 })
+      setupAedesHandlers()                            # client/clientDisconnect/publish/subscribe/unsubscribe/clientError → emit
+      server ← net.createServer(aedes.handle).listen(port)
+      await startWebSocketServer()                    # ws://:9001 para el frontend (ping/pong cada 25s vs keepalive 60s)
+    publish(packet) ; getClients() ; getStats() ; async stop()
+
+  # ⚠ NO hay aedes.authenticate: el broker embebido es ABIERTO en loopback (la spec describe auth mTLS no implementada aquí)
+  # edge: puerto ocupado (EADDRINUSE) → throw en start ; WS que no arranca → warn, TCP sigue
+```
+
+## 3. `EventBus extends EventEmitter` — pub/sub híbrido (local + MQTT)
+
+```
+CLASS EventBus extends EventEmitter:
+  →deps: { coreId, mqtt, hooks, logger, metrics, tracer, activity, validateEvents:false, strictValidation:false }
+  state: { unknownEvents:Set, logCollectorEnabled:true }
+
+  interface:
+    async setupMQTTSubscriptions():                  # en el constructor si hay mqtt
+      await mqtt.subscribe(`core/${coreId}/events/#`)         # propios
+      await mqtt.subscribe(`core/*/events/#`)                 # ⚠ literal '*' (la spec dice '+')
+      mqtt.on('message', _onMessage)
+
+    async emit(eventType, data, opts={}):            # === publish (alias) ===
+      validateEvent(eventType)                                # opcional contra constants.js
+      env ← EventEnvelope.create(eventType, data, {coreId, moduleId, tracer, metadata})
+      ctx ← hooks.execute('beforeEventPublish', {eventType, data, options, envelope:env})
+      if ctx===null → return                                  # hook bloqueó
+      emitLocal(eventType, ctx.envelope)                      # 1) entrega local (EventEmitter)
+      if mqtt.isConnected:                                    # 2) MQTT
+         topic ← opts.targetCoreId ? topics.event(targetCoreId, eventType)
+                                   : topics.event('*', eventType)    # broadcast
+         await mqtt.publish(topic, env, { qos: opts.qos ?? 1, retain: opts.retain ?? false })  # ⚠ QoS 1 aquí
+
+    ▸ _onMessage(topic, raw):                         # recepción MQTT
+        if !topic.includes('/events/') → return
+        env ← EventEnvelope.deserialize(raw) ; if !validate → warn,return
+        if env.source.core_id === coreId → return              # ignora el propio eco (anti-loop)
+        ctx ← hooks.execute('afterEventReceive', {event:env, topic})
+        if ctx===null → return                                 # hook bloqueó
+        emitLocal((ctx.event ?? env).event_type, ctx.event ?? env)
+
+    subscribe(eventType, handler) → unsubFn          # on() + retorna desuscriptor
+    publish = emit ; emitTo(target,...) = emit(...,{targetCoreId})
+    emitLocal(type, env) ; once() ; isConnected() ; getStats()
+
+  # ① topic == 'core/<id>/events/<domain>/<accion/con/slashes>'  (puntos→slashes; coincide con la spec)
+  # CARDINALIDAD 0/1/N: fire-and-forget ; payload malformado → log y descarta, el bus sigue vivo
+  # hooks transversales: 'beforeEventPublish' (salida) / 'afterEventReceive' (entrada)
+```
+
+> **Desvío #3:** suscripción a `core/*/events/#` con **`*` literal** (no el wildcard `+`). Hooks canónicos son
+> `beforeEventPublish`/`afterEventReceive` (la spec menciona `event.received`).
+
+### Envelope canónico (real — `EventEnvelope.create`)
+```json
+{
+  "event_id": "uuid-v4",
+  "event_type": "credential.resolve.response",
+  "timestamp": "ISO-8601",
+  "source": { "core_id": "core-a", "module_id": "credential-manager" },
+  "data": { },
+  "trace": { "trace_id": "...", "span_id": "...", "parent_span_id": "..." },
+  "metadata": { }
+}
+```
+`EventEnvelope` (clase estática): `create · generateEventId(crypto.randomUUID) · validate · clone · serialize · deserialize · enrich · getDomain · getAction · extractType/CoreId/ModuleId`.
+
+## 4. `HookManager` — Chain of Responsibility transversal
+
+```
+CLASS HookManager:
+  state: { hooks:Object<name,handler[]>, stats:Object<name,{executions,blocked,errors}> }
+  interface:
+    register(name, handler) → unregisterFn          # push al array del hook
+    async execute(name, context) → context|null:
+        for h in hooks[name]:
+           r ← await h(context)
+           if r===null → stats.blocked++ ; return null       # ABORTA la cadena (bloqueo)
+           if r!==undefined → context←r                       # muta el contexto
+        return context                                        # (handler que lanza → enhancedError, corta cadena)
+    clear(name) ; clearAll() ; getHandlerCount(name) ; listHooks() ; getStats(name) ; resetStats(name)
+
+  # hooks REALES usados en el core: 'beforeEventPublish', 'afterEventReceive' (EventBus) · 'beforeRequest' (HTTPGateway)
+```
+
+## 5. `UIRequestHandler` — puerta request/response real (legacy, NO `ApiRequestResolver`)
+
+> **Desvío #4 (el más grande):** la spec describe `ApiRequestResolver` con namespace `core/<id>/api/request/...`
+> y clave `correlation_id`. **El código real sigue siendo `UIRequestHandler`**: topics `ui/request/{domain}/{action}`
+> → `ui/response/{request_id}`, clave `request_id`, key interna `domain.action`.
+
+```
+CLASS UIRequestHandler:
+  →deps: { mqttClient, logger, metrics }
+  state: { handlers:Map<"domain.action", fn> }
+
+  interface:
+    async start(): await mqtt.subscribe('ui/request/#', {qos:1}) ; mqtt.on('message', _onMessage)
+    register(domain, action, handler)               # auto-wired por el loader desde manifest.ui_handlers
+    unregister(domain, action)
+
+    # — Fast-path in-process (modo "Casa"): lo usa context.mqttRequest —
+    async handle(domain, action, data):
+        h ← handlers.get(`${domain}.${action}`)
+        if !h → return { status:404, error:'No handler...' }
+        return await h(data)                         # ⚠ NO pasa por hooks ni validación (la spec dice pipeline compartido)
+
+    # — Camino MQTT (frontend) —
+    ▸ _onMessage(topic, msg):
+        if !topic.startsWith('ui/request/') → return
+        {domain, action} ← parse(topic) ; {request_id, data} ← JSON.parse(msg)
+        if !request_id → warn,return
+        h ← handlers.get(`${domain}.${action}`) ; if !h → _sendError(404,'HANDLER_NOT_FOUND')
+        TRY  result ← await h(data, request)
+             # UNWRAP: {status,data}→data ; {status>=400,error}→_sendError ; else→_sendSuccess
+             _sendSuccess(request_id, status, data)
+        CATCH e → _sendError(request_id, e.status||500, e.code||'UNKNOWN_ERROR', e.message)
+    ▸ _sendSuccess(id,status,data): mqtt.publish(`ui/response/${id}`, {request_id,status,success:true,data,timestamp}, {qos:1})
+    ▸ _sendError(id,status,code,msg): mqtt.publish(`ui/response/${id}`, {request_id,status,success:false,error:{code,message},timestamp}, {qos:1})
+
+  # STATUS canónico: 200/201/400/404/409/500  (UIRequestError ⊃ ValidationError/NotFoundError/ConflictError)
+  # ⚠ El timeout (504) lo arma el CALLER (frontend mqttRequest), no esta clase
+```
+
+### Topics + QoS (req/resp real)
+```
+ui/request/<dominio>/<accion>      QoS 1   # petición del frontend
+ui/response/<request_id>           QoS 1   # respuesta dirigida (correlación por request_id)
+```
+*Justificación QoS 1:* perder una request/response cuelga al caller hasta su propio timeout. Idempotencia por `request_id`.
+
+## 6. `ValidationManager` — contratos JSON Schema (ajv)
+
+```
+CLASS ValidationManager:
+  →deps: { logger, allErrors:true, removeAdditional:true, useDefaults:true, coerceTypes:true, strict:false }
+  state: { ajv(+ajv-formats), schemas:Map<id,{schema,validate}>, stats }
+  interface:
+    registerSchema(id, jsonSchema)                  # ajv.compile + cachea
+    validate(id, data) → { valid, errors|null, data }   # data puede mutar (coerción/defaults/removeAdditional)
+    validateInline(schema, data) → { valid, errors, data }
+    formatErrors(ajvErrors) → [{ path, keyword, message, params, data }]   # mensajes legibles por keyword
+    unregisterSchema · hasSchema · getSchema · listSchemas · getStats
+CLASS ValidationError extends Error: { errors, statusCode:400 ; toJSON() }
+```
+
+## 7. `ModuleLoader` — autodiscovery + auto-wiring + hot-reload + 3 sistemas de tools
+
+```
+CLASS ModuleLoader:
+  →deps: { modulesPath, core(context), registry, logger, metrics, config }
+  state: { loadedModules:Map, watchers:Map, toolsRegistry:Map, intentRegistry:IntentRegistry }
+
+  interface:
+    discover():                                      # modules/*/module.json  (+ modules/<vertical>/*/module.json)
+    validateManifest(m): require name+version(semver)+description
+
+    async load(name, path, manifest):
+      [VALIDATE]   manifest válido ; no duplicado
+      [BLUEPRINT]  if manifest.blueprint_driven → registrar {instance:null, blueprint_driven:true} ; return null
+                   # (ai-gateway lo ejecuta leyendo el blueprint como system-prompt)
+      [REQUIRE]    delete require.cache[index.js] ; ModuleClass ← require(index.js)   # purga = hot-reload
+      [INSTANCE]   instance ← new ModuleClass() ; assert instance.onLoad
+      [WIRE-EVT]   eventUnsubs ← wireEventSubscriptions(manifest, instance)   # ANTES de onLoad
+      [CONTEXT]    ctx ← { ...core, moduleConfig, moduleLoader:this,
+                           mqttRequest:(d,a,p)→ core.uiHandler.handle(d,a,p) }   # fast-path in-process
+      [ONLOAD]     try await instance.onLoad(ctx)  catch→ eventUnsubs.forEach(unsub); throw   # rollback subs
+      [STORE]      loadedModules.set(name, {manifest, instance, path, loadedAt, _eventUnsubs})
+      [REGISTER]   registry.register(name, {manifest, instance, apis:buildAPIsFromManifest(...), hooks, subscribes})
+      [TOOLS]      manifest.tools → registerToolsForAI ; tools_http → registerToolsHttpForAI ; intents → intentRegistry.register
+      [WIRE-UI]    _uiRegistrations ← wireUIHandlers(manifest, instance)
+      return instance
+
+    async loadAll():
+      discovered ← discover() ; quitar config.disabled[] ; ordenar por config.enabled[] (resto al final)
+      para cada → try load() catch→ continue   # el arranque sobrevive al fallo de un módulo
+      await eventBus.publish('core.modules.loaded.all', {total,successful,failed})   # señal para wirings tardíos
+
+    async unload(name): _eventUnsubs.forEach(unsub) ; _uiRegistrations.forEach(unregister)
+                        intentRegistry.unregister ; unregisterToolsForAI ; registry.unregister
+                        await instance.onUnload?.() ; loadedModules.delete
+    async reload(name): unload + load (require.cache purgado)
+    watch(name)/watchAll(): fs.watch → debounce 500ms → reload   # hot-reload opcional
+    getLoadedModules() ; getModule(name) ; isLoaded(name)
+
+    # ── AUTO-WIRING declarativo desde module.json ──
+    wireEventSubscriptions(m,inst):  para {event,handler} en (subscribes|events.subscribes) → bus.subscribe(event, inst[handler].bind(inst))
+    wireUIHandlers(m,inst):          para {domain,action,handler} en (ui_handlers|uiActions|handlers) → uiHandler.register(domain,action, inst[handler].bind(inst))
+    buildAPIsFromManifest(m,inst):   (apis|provides.apis) → {name,method,path,handler:bind} (handler explícito o handle<Action>)
+
+    # ── 3 SISTEMAS DE TOOLS PARA EL LLM (una declaración → tres destinos) ──
+    registerToolsForAI(name,tools,inst):     # tools[] con handler (soporta path anidado 'strategies.mesa.handleX')
+        para cada tool: 1) toolsRegistry.set ; 2) _wireToolBusSubscription(tool) ; 3) uiHandler.register(domain,action)
+    registerToolsHttpForAI(name,toolsHttp):  # tools_http[] declarativas → closure runtime (sin código JS)
+        _makeHttpToolHandler: resolver credential(bus) → templating {{param}} → fetch(timeout) → mapear status→canon
+    registerProviderTools(providerRegistry): # provider fns → tools (gmail_send, ocr_extract…)
+
+    ▸ _wireToolBusSubscription(toolName, handler, bus):
+        bus.subscribe(toolName, async (ev) → {request_id,...args}=ev.data
+           r ← await handler(args)
+           unwrap {status,data}→data | {status>=400,error}→error
+           bus.publish(`${toolName}.response`, { request_id, result|error }))   # invocación canónica por bus
+    executeTool(name,args) ; getToolsForAI() ; getTool(name) ; toolRequiresConfirmation(name)
+```
+
+### Manifiesto que consume el loader
+```json
+{
+  "name": "filesystem", "version": "2.0.0", "main": "index.js", "config": {},
+  "subscribes":   [ { "event": "fs.read.request", "handler": "onFsReadRequest" } ],
+  "ui_handlers":  [ { "domain": "fs", "action": "read", "handler": "handleRead" } ],
+  "tools":        [ { "name": "fs.read", "handler": "handleRead",
+                      "parameters": { "type":"object","properties":{"path":{"type":"string"}},"required":["path"] } } ]
+}
+```
+
+## 8. `ModuleRegistry` — catálogo de módulos + índice de APIs HTTP
+
+```
+CLASS ModuleRegistry:
+  →deps: { logger, metrics }
+  state: { modules:Map, apiIndex:Map<"METHOD:/path">, hookIndex:Map<hook,Set>, codeIndex:Map<routeCode,module> }
+  interface:
+    register(name, {manifest,instance,apis,hooks,subscribes}):   # indexa /modules/<name><path> (+ /<routeCode><path>)
+    unregister(name) ; get(name) ; getAll() ; has(name)
+    findAPI(path, method) → {handler, params}      # exact match, luego matchPath con :params
+    matchPath(pattern, path) → params|null         # /modules/x/menus/:id ↔ /modules/x/menus/123
+    getAllAPIs() ; getModuleAPIs(name) ; getModulesWithHook(hook) ; resolveCode(code) ; getStats()
+```
+
+## 9. `IntentRegistry` — NL→módulo sin LLM (matching por keywords)
+
+```
+CLASS IntentRegistry:
+  state: { intents:[{module,keywords[],action,tool?,agent?,multi_turn,description}] }
+  interface:
+    register(module, intents) ; unregister(module)
+    match(msg) → { intent, confidence, level }     # level: ≥10 high | ≥5 medium | <5 low
+    matchAll(msg) → ranked[]
+    _score(msg, keywords): Σ keyword.length si msg.includes(keyword)   # keyword más larga = más específica
+    getAll · getByModule · getStats
+```
+
+## 10. Observabilidad — `Logger` · `Tracer` · `Metrics` · `ActivityLogger`
+
+```
+CLASS Logger:        debug/info/warn/error(event, fields[, error]) ; child(ctx) ; publishToMQTT ; setTraceContext
+                     # log estructurado (clave→campos), niveles, formato JSON
+CLASS Tracer:        start(op, parentCtx) → span ; getCurrentContext() → {traceId,spanId,parentSpanId}
+                     extract(event)/inject(event,ctx) ; fromW3C/toW3C(traceparent)   # contexto W3C que viaja en el envelope
+CLASS Metrics:       increment/decrement(k,v) ; gauge(k,v) ; timing(k,ms) ; observe(k,v)→histograma
+                     getCounter ; getHistogram ; percentile ; measure(name,fn) ; getStats ; publishMetrics
+CLASS ActivityLogger: →deps {coreId, eventBus, logger, enabled, minLevel}
+                     logModuleAction · logEventFlow(dir,type) · logApiOperation · logCommunication
+                     logPerformance · logSystem · logError · startTimer · forModule(m) · _flush · close
+                     # auditoría central; el EventBus la alimenta con logEventFlow en cada publish/receive
+```
+> `Observability` (facade en `index.js`) agrupa las cuatro; en el código real se instancian sueltas en `main()`
+> (no hay clase `Observability` contenedora — desvío menor con la spec).
+
+## 11. `Discovery extends EventEmitter` — presencia multi-core (⚠ código DURMIENTE)
+
+> **Desvío #5:** la clase `Discovery` (heartbeat + LWT + registry de cores) **existe pero `index.js` NUNCA la instancia**.
+> La presencia real la da `ServiceRegistry` (fichero `.services.json` + heartbeat 10s). Además `setupLastWill()`
+> es un **stub que solo loguea** (no reconfigura el cliente MQTT con `will`).
+
+```
+CLASS Discovery extends EventEmitter:              # NO cableada en el arranque actual
+  →deps: { coreId, version, port, modules, capabilities, mqttClient, heartbeatInterval:30000, aliveTimeout:60000 }
+  state: { cores:Map<id,CoreStatus>, ownStatus:CoreStatus, heartbeatTimer, checkAliveTimer }
+  interface:
+    async start(): setupLastWill() ; subscribeToDiscovery() ; publishStatus() ; startHeartbeat() ; startAliveCheck()
+    subscribeToDiscovery(): mqtt.subscribe('core/+/status',{qos:1}) ; on('message', handleDiscoveryMessage)
+    publishStatus(): mqtt.publish(`core/${coreId}/status`, ownStatus, { qos:1, retain:true })   # ÚNICO retain=true legítimo
+    handleDiscoveryMessage(t,p): if offline→handleCoreOffline ; else updateCore   # ignora los propios
+    getActiveCores() ; getCore(id) ; isCoreActive(id) ; updateModules(list) ; updateCapabilities(caps)
+    # setupLastWill() → ⚠ solo logea (LWT real sin implementar)
+```
+
+## 11b. `ServiceRegistry` — presencia REAL (fichero + PID)
+
+```
+CLASS ServiceRegistry:
+  →deps: { registryFile:'.services.json', heartbeatTimeout:60000, autocleanup:true, cleanupInterval:30000 }
+  state: { services:Map, portManager:PortManager }
+  interface:
+    register(id, type, port, metadata) ; unregister(id) ; heartbeat(id)
+    findFreePort(type) → puerto en el rango de config/port-ranges
+    cleanup(): elimina servicios sin heartbeat cuyo PID ya no existe (process.kill(pid,0))
+    getActiveServices ; getServicesByType ; getStats ; save()/load() (persistencia JSON best-effort)
+```
+
+## 12. `HTTPGateway` — borde REST + UI estática (HTTP → bus/módulos)
+
+```
+CLASS HTTPGateway:
+  →deps: { port, coreId, eventBus, moduleLoader, registry, validationManager, activity, compression, cache, core }
+  state: { server, stats, cache:GatewayCache, uiGateway }
+  interface:
+    async start()/stop()
+    ▸ handleRequest(req,res):
+        rutas fijas: /health /ready /stats /cache/stats /cache/clear /ui/* /blueprints[/<name>]
+        body ← parseBody() si POST/PUT/PATCH
+        ctx ← hooks.execute('beforeRequest', {request_id,method,path,query,body,headers})   # ← auth/mTLS (decorador)
+        if ctx===null → 403 ; cache.get(req)?→ 304/HIT
+        apiData ← registry.findAPI(pathname, method)  → if !apiData → 404
+        validateRequest(...) opcional → 400 si falla
+        result ← await apiData.handler({method,path,query,body,headers}, handlerContext)   # ejecuta el módulo
+        sendResponse(res, status, result)   # + compression(gzip) + cache + ETag
+    handleHealth/Ready/Stats ; handleListBlueprints/GetBlueprint ; handleUIRoute ; getStats()
+  # cache + compression como decorators opcionales (config.http.cache/compression)
+```
+
+## 13. Provider System — Strategy intercambiable (IA / OCR / PDF / gmail…)
+
+```
+FACTORY createProviderSystem({providersPath, eventBus, logger}) → { registry, executor, loader }
+
+CLASS ProviderRegistry:  register(name,data) ; get(name) ; getFunction(name,fn) ; findByEvent(event)
+                         isAvailable(name) ; getAll/getAvailable ; getAllEvents ; getStats
+CLASS ProviderExecutor:  execute(provider, fn, input, opts) → executeLocal | executeHTTP
+                         replaceTemplateVars(deep) ; extractByPath ; httpRequest   # credentialResolver inyectable
+CLASS ProviderLoader:    discover() (external + local services) ; loadExternal/loadLocal ; loadAll/unloadAll
+                         registerEventHandlers():  por cada fn → subscribe `<provider>.<fn>.request`
+                                                   → executor.execute → publish `<provider>.<fn>.response`
+                         resolveOAuthCredentials(provider, account)   # OAuth opcional
+```
+
+## 14. Handler System — acciones declarativas event-driven (paralelo a módulos)
+
+```
+CLASS HandlerLoader:   →deps {eventBus, serviceExecutor, logger}
+   loadCentralized('./handlers', './data/projects'): global + por proyecto (handlers/projects/<id>/)
+   register(handler, projectId): suscribe el handler a su evento ; createEmit(name,projectId) inyecta emisión
+   loadProject/unloadProject/reloadProject ; list(scope) ; get(name,projectId) ; getStats
+CLASS ServiceExecutor: →deps {eventBus, logger}
+   call(service, action, params, opts): publish `<service>.<action>.request` → espera `.response` (correlado, timeout)
+   scoped(projectId) ; cancelAll()
+```
+
+## Jerarquía de topics + QoS (REAL, consolidada)
+
+```
+core/<id>/events/<dominio>/<accion/con/slashes>   QoS 1   # EventBus.emit (fire-and-forget) — ①
+core/*/events/#                                   QoS 0   # suscripción broadcast (default del cliente)
+ui/request/<dominio>/<accion>                     QoS 1   # UIRequestHandler — petición frontend
+ui/response/<request_id>                          QoS 1   # respuesta dirigida (correlación request_id)
+core/<id>/status                                  QoS 1 retain=true   # Discovery (durmiente) / presencia
+log/eventbus                                      QoS 0   # log de flujo de eventos (best-effort)
+<toolName>  /  <toolName>.response                QoS 1   # invocación canónica de tools por bus
+<provider>.<fn>.request / .response               QoS 1   # provider system
+```
+*Justificación QoS:* eventos de dominio y req/resp → **QoS 1** (perder uno cuelga al caller o desincroniza);
+telemetría/logs → **QoS 0** tolerante a pérdida; presencia → **retain=true** (único caso legítimo). Idempotencia
+siempre a nivel app por `request_id` / `event_id`. El cliente MQTT publica **QoS 0 por defecto**; cada productor
+crítico **sube a QoS 1 explícitamente**.
+
+## Resumen de desvíos código ↔ spec
+
+| # | Spec (arriba) | Código real |
+|---|---|---|
+| 1 | `CLASS Core` orquestador | objeto plano `core` cableado por `main()` |
+| 2 | MQTT `cleanSession=false`, QoS 1 default | `clean:true`, QoS 0 default (productores suben a 1) |
+| 3 | sub `core/+/events/#`, hook `event.received` | sub `core/*/events/#` (`*` literal), hooks `beforeEventPublish`/`afterEventReceive` |
+| 4 | `ApiRequestResolver` · `core/<id>/api/request/*` · `correlation_id` | `UIRequestHandler` · `ui/request/*` · `request_id` |
+| 5 | `Discovery` con LWT activo cableado | clase durmiente (no instanciada); presencia vía `ServiceRegistry` (fichero+PID); LWT = stub |
+| 6 | rollback parcial en fallo de arranque | `process.exit(1)` sin rollback |
+| 7 | `EmbeddedBroker` con `authenticate` mTLS | broker abierto en loopback (auth no implementada) |

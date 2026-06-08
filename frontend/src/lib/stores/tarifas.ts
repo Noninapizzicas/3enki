@@ -6,9 +6,9 @@
  *     por el loader en uiHandler con domain='fs'), asi que el frontend las invoca
  *     via mqttRequest('fs', 'read'|'list', {path}). Filesystem resuelve el path
  *     relativo contra el storage del proyecto activo.
- *   - Este store SOLO LEE: la config de tarifas (/storage/config/tarifas.json,
+ *   - Este store SOLO LEE: la config de tarifas (/pizzepos/tarifas.json,
  *     que escribe el backend modules/pizzepos/tarifas) y la lista de cartas del
- *     proyecto (/storage/pizzepos/cartas/, propiedad de carta-manager) para
+ *     proyecto (/pizzepos/cartas/, propiedad de carta-manager) para
  *     resolver los selectores. NO invoca tools de mutacion del backend tarifas
  *     (set_general, assign, register_variant). Esas acciones las dispara el chat
  *     via prefillChatInput (Postura B, decision D2/D6 del plan cierre-ui-tarifas).
@@ -34,8 +34,8 @@ import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
 // CONSTANTES
 // =============================================================================
 
-const TARIFAS_PATH = '/storage/config/tarifas.json';
-const CARTAS_DIR = '/storage/pizzepos/cartas/';
+const TARIFAS_PATH = '/pizzepos/tarifas.json';
+const CARTAS_DIR = '/pizzepos/cartas/';
 
 /** Enum cerrado de canales (decision D4). Orden de render canonico. */
 export const CANALES_CANONICOS = ['mesa', 'telefono', 'llevar', 'glovo', 'whatsapp', 'llevadoo'] as const;
@@ -114,7 +114,7 @@ const canalesVacios = (): Record<Canal, string | null> => ({
 // =============================================================================
 
 /**
- * Carga /storage/config/tarifas.json del proyecto activo. Si el archivo no
+ * Carga /pizzepos/tarifas.json del proyecto activo. Si el archivo no
  * existe todavia (proyecto recien montado), deja un estado vacio coherente en
  * vez de crashear. No-encontrado se senyaliza via MqttRequestError con code
  * RESOURCE_NOT_FOUND (patron canonico, mismo que recetas/carta-design — el bug
@@ -158,7 +158,7 @@ export async function loadTarifasConfig(): Promise<void> {
 }
 
 /**
- * Lista las cartas del proyecto (para los selectores). Lee /storage/pizzepos/cartas/
+ * Lista las cartas del proyecto (para los selectores). Lee /pizzepos/cartas/
  * (propiedad de carta-manager, path canonico v1.3.0 por D1) via fs.list + fs.read
  * por archivo. NO invoca tool carta-manager.list del blueprint LLM-runtime (D5).
  * Fallback a lista vacia si el directorio no existe.

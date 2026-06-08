@@ -1,7 +1,7 @@
 /**
  * Carta Digital Store — lecturas directas via fs.read sobre el config persistido.
  *
- * Postura B (solo lectura): el store lee /storage/pizzepos/carta-digital/config.json
+ * Postura B (solo lectura): el store lee /pizzepos/carta-digital/config.json
  * via mqttRequest('fs', 'read') y se suscribe a eventos del bus para refrescarse.
  * NUNCA invoca tools del blueprint LLM-runtime (cartadigital.*) --principio 6 del
  * contrato ui-frontend-blueprint + leccion bug PR #264. Las mutaciones las hace el
@@ -15,7 +15,7 @@ import { writable, derived } from 'svelte/store';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
 import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request';
 
-const CONFIG_PATH = '/storage/pizzepos/carta-digital/config.json';
+const CONFIG_PATH = '/pizzepos/carta-digital/config.json';
 
 // =============================================================================
 // TYPES

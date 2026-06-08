@@ -2,7 +2,7 @@
  * Carta Marketing Store — perfil de marca + actividad, lecturas+escrituras directas.
  *
  * El blueprint del modulo carta-marketing (modules/pizzepos/carta-marketing/)
- * persiste el perfil en /storage/config/marca.json del proyecto activo.
+ * persiste el perfil en /config/marca.json del proyecto activo.
  * Operaciones simples (get/update/actividad) van directo via fs.read/fs.write.
  * Operaciones que requieren razonamiento del LLM (completar_onboarding) las
  * pide el usuario al chat — el blueprint sigue siendo el runtime para eso.
@@ -52,7 +52,7 @@ export interface MarketingState {
   error: string | null;
 }
 
-const PERFIL_PATH = '/storage/config/marca.json';
+const PERFIL_PATH = '/config/marca.json';
 
 const DEFAULT_PERFIL: PerfilMarca = {
   _version: '1.0',

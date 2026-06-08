@@ -2,8 +2,8 @@
  * Carta Scheduler Store — solo lectura (Postura B, principio 6 ui-frontend-blueprint).
  *
  * Lee reglas y pendientes via fs.read del path canonico del proyecto activo:
- *   /storage/pizzepos/carta-scheduler/reglas.json
- *   /storage/pizzepos/carta-scheduler/pendientes.json
+ *   /pizzepos/carta-scheduler/reglas.json
+ *   /pizzepos/carta-scheduler/pendientes.json
  *
  * NUNCA invoca tools del blueprint (crear_regla, eliminar_regla, confirmar,
  * rechazar, detectar_conflictos, proximos_cambios). Esas mutaciones las pide el
@@ -60,8 +60,8 @@ export interface Conflicto {
   motivo: string;
 }
 
-const REGLAS_PATH = '/storage/pizzepos/carta-scheduler/reglas.json';
-const PENDIENTES_PATH = '/storage/pizzepos/carta-scheduler/pendientes.json';
+const REGLAS_PATH = '/pizzepos/carta-scheduler/reglas.json';
+const PENDIENTES_PATH = '/pizzepos/carta-scheduler/pendientes.json';
 
 // =============================================================================
 // STORES

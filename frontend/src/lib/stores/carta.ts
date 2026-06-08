@@ -2,7 +2,7 @@
  * Carta Digital Store
  *
  * Carga la carta completa y gestiona el carrito del cliente.
- * Las lecturas de carta-digital van directo a /carta-digital.json del
+ * Las lecturas de carta-digital van directo a /pizzepos/carta-digital/config.json del
  * proyecto via fs.read (patron lecturas-frontend-via-fs-read). Solo se
  * invocan handlers backend cuando la operacion es genuinamente backend
  * (productos.carta_completa para el fallback de carta no compuesta).
@@ -10,7 +10,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request';
 
-const CARTA_DIGITAL_PATH = '/carta-digital.json';
+const CARTA_DIGITAL_PATH = '/pizzepos/carta-digital/config.json';
 
 interface CartaDigitalStore {
   _version?: string;
@@ -170,7 +170,7 @@ export async function initCarta(project_id: string) {
     // sin consumer real — convertido a no-op. Si se reintroduce analytics,
     // sera fs.write a un log o un evento del bus, no este atajo.
 
-    // Intentar cargar carta enriquecida directo del archivo /carta-digital.json
+    // Intentar cargar carta enriquecida directo del archivo /pizzepos/carta-digital/config.json
     let cats: Categoria[] = [];
     let prods: Producto[] = [];
     let ings: any[] = [];

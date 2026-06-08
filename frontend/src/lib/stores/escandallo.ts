@@ -122,7 +122,7 @@ interface RecetasStorePersisted {
   _updated_at?: string;
 }
 
-const STORE_PATH = '/pizzepos/pizzepos/recetas.json';
+const STORE_PATH = '/pizzepos/recetas.json';
 
 // =============================================================================
 // STORE

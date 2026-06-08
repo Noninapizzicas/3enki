@@ -147,7 +147,7 @@ interface RecetasStore {
   ingredientes_catalogo?: CatalogoIngrediente[];
 }
 
-const STORE_PATH = '/pizzepos/pizzepos/recetas.json';
+const STORE_PATH = '/pizzepos/recetas.json';
 const DEFAULT_LIST_LIMIT = 100;
 
 // =============================================================================

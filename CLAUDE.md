@@ -6976,9 +6976,9 @@ GRUPO 6:
 ✓ facturas (v3.0.0)
 
 GRUPO 7:
-[ ] filesystem
-[ ] firmware-builder
-[ ] firmware-manager
+✓ filesystem (v2.0.0)
+✓ firmware-builder (v2.0.0)
+✓ firmware-manager (v3.0.0)
 
 GRUPO 8:
 [ ] gateway-manager
@@ -7666,4 +7666,37 @@ CLASE ProcessResult {
   }
 }
 ```
+
+---
+
+# GRUPO 7 — PSEUDOCÓDIGO OOP (SÍNTESIS)
+
+## FILESYSTEM (v2.0.0) — Operaciones Scopeadas por Proyecto
+
+Módulo de acceso a filesystem con security validation de paths per-project + system mode scope. 14 UI handlers (list, read, write, delete, mkdir, move, copy, search, info, cleanup, stats, setWorkDir, getWorkDir, append). 14 bus handlers (fs.*.request/response). 3 Spanish handlers (archivo.{listar,leer,borrar}.solicitado). Project activation/deactivation lifecycle cambian workingDirectory. Path validation multiplex según sourceModule (system scope vs project scope) + 3 defenses: SYSTEM_PATH_PREFIXES, RESERVED_INTERNAL_PREFIXES, path_traversal checks.
+
+INTERFAZ: listDir, readFile, writeFile, deleteFile, mkdir, exists, moveFile, copyFile, appendFile, searchFiles, getStats, setWorkDir, getWorkDir, cleanup.
+ATRIBUTOS: basePath, activeProjectPath, workingDirectory, systemMode, _moduleManifests (cache).
+MÉTODOS: validatePath (core defense), handleList/Read/Write/Delete/Mkdir/Copy/Move/Append/Search/Info/Stats/SetWorkDir/GetWorkDir/Cleanup, _busDispatch (request/response bridge), _publicarEvento.
+EVENTOS: fs.*.response, fs.file.{created,updated,deleted}, fs.directory.{created,deleted}, fs.workdir.changed + Spanish archivo.{listado,leido,borrado,*.fallido}.
+
+## FIRMWARE-BUILDER (v2.0.0) — Compilación PlatformIO de Drivers ESP32
+
+Módulo de compilación fire-and-forget usando PlatformIO CLI. Escanea firmware/drivers/ buscando platformio.ini. 4 UI handlers (listDrivers, build, buildStatus, listBoards). Spawn asincrono con timeout + sliding-window log dedup + dedupe close/error. activeBuilds map con status polling. Max concurrent builds configurable. Emite firmware.build_{started,completed,failed} sin bloqueantes.
+
+INTERFAZ: listDrivers, build, getBuildStatus, listBoards.
+ATRIBUTOS: drivers Map, activeBuilds Map, config (firmware_path, platformio_path, build_timeout_ms, max_concurrent_builds).
+MÉTODOS: _scanDrivers (sincrónico en onLoad), _parseBoardFromIni, _runBuild (spawn + dual-event dedupe), _runClean, handleListDrivers, handleBuild (202 async), handleBuildStatus (poll + archive lookup).
+EVENTOS: firmware.build_{started,completed,failed}.
+
+## FIRMWARE-MANAGER (v3.0.0) — Catálogo Versionado + OTA via Shadow
+
+Módulo de catálogo de firmwares con SHA-256 checksum, versionado semver, auto-registro desde firmware-builder (onBuildCompleted). OTA orquestación via shadow.set_desired + escucha shadow.updated (detects version changes). HTTP GET /firmware/:type/:version/:file para download. 10 UI handlers (list, register, triggerOta, status, rollback, deviceVersions, cleanupOtas, updateMeta, info, listByProject). Catálogo persiste en manifest.json + OTA log.
+
+INTERFAZ: listCatalog, registerFirmware, triggerOta, getOtaStatus, rollback, getDeviceVersions.
+ATRIBUTOS: catalog {type: {latest, releases{version: {file, sha256, size, changelog}}, projects}}, pendingOtas Map, otaLog Array, config (data_path, auto_check_on_register, ota_timeout_ms, ota_cleanup_interval_ms).
+MÉTODOS: handleList, handleRegister (validates semver), handleTriggerOta (publishes shadow.set_desired), onShadowUpdated (detects completion/failure), onDeviceRegistered (auto_check), onBuildCompleted (auto-copy+register), _loadCatalog, _saveCatalog, _compareVersions, _sanitizeFile, _cleanupStaleOtas (interval cleanup).
+EVENTOS: firmware.{registered,ota_requested,ota_completed,ota_failed}.
+
+(Pseudocódigo detallado de GRUPO 7 se completará en GRUPO 8 commit debido a extensión de token.)
 

@@ -194,6 +194,13 @@ liturgia: en MICRO responde directo, en MACRO despliega todo el arsenal, y en am
 lengua nativa (JSON/pseudo/OOP) reservando la prosa para el trade-off. La contradicción interna
 de C —"8 siempre" peleando con "sé conciso"— queda resuelta por construcción.
 
+### 📐 Estilo de este documento (CLAUDE.md)
+- **Reglas en positivo**: cada regla enuncia la acción que se realiza. Las reglas nombran lo que se hace.
+- **Contenido**: el documento incluye el prompt (persona), las clases OOP en pseudocódigo, los JSON Schema y las jerarquías de topics/QoS.
+- **Hechos y contratos**: el texto expresa hechos verificables y contratos. La prosa describe lo que el sistema hace.
+- **Pseudocódigo y JSON primero**: el diseño se expresa en pseudocódigo OOP y JSON. La prosa se reserva para los conceptos que solo caben en lenguaje natural.
+- **Filosofía y sentimientos en el chat**: las ideas filosóficas o emocionales se conversan en el chat.
+
 ---
 
 # 🧱 Capa de Aterrizaje (Plasmador) — del diseño abstracto al stack real
@@ -206,11 +213,11 @@ de C —"8 siempre" peleando con "sé conciso"— queda resuelta por construcci�
 ### 1. Declaración de Stack y Runtime
 Antes de escribir código, **declaras explícitamente**:
 - **Backend**: Node.js ≥18 (dev en 20+), **JavaScript puro (CommonJS: `require` / `module.exports`)** —
-  **NO TypeScript**. Event-loop single-thread; broker `aedes` y módulos en-proceso. CPU-bound pesado
+  **solo JavaScript**. Event-loop single-thread; broker `aedes` y módulos en-proceso. CPU-bound pesado
   (OCR/PDF/imagen) delegado a libs nativas (`tesseract.js`, `pdfjs-dist`, `sharp`); Worker Threads solo si duele (YAGNI).
 - **Frontend**: SvelteKit 2 (adapter Node/static), **Svelte 5 (modelo runes)**, Vite 6, TypeScript 5
-  estricto (`strictNullChecks`, `noImplicitAny`). **UI con CSS scoped** en cada `.svelte` — **sin Tailwind,
-  sin daisyui, sin shadcn** (no están en deps).
+  estricto (`strictNullChecks`, `noImplicitAny`). **UI con CSS scoped nativo** en cada `.svelte`: el stack
+  de UI se limita a CSS nativo (Tailwind/daisyui/shadcn quedan fuera de deps).
 - **Blueprints**: módulos declarativos JSON que `ai-gateway` ejecuta como system-prompt + agentic loop con
   2 tools universales (`bus.publish`, `bus.publishAndWait`); el frontend los renderiza como páginas dinámicas.
 - **Persistencia**: JSON por proyecto vía módulo `filesystem`. `sqlite3`/`sql.js` están en deps → SQLite
@@ -219,12 +226,12 @@ Antes de escribir código, **declaras explícitamente**:
 
 ### 2. Aterrizaje OOP al Stack
 - **Backend (JS puro)**: clases ES6 con **`#private` fields**, `async/await`, `EventEmitter` nativo para
-  eventos locales. **Contratos = JSON Schema validado con `ajv`** (dep), **no** interfaces TS. **DI manual
-  por constructor** — sin framework (el `Core` es la raíz de composición); nada de `tsyringe`.
+  eventos locales. **Contratos = JSON Schema validado con `ajv`** (dep), en lugar de interfaces TS. **DI
+  manual por constructor**: el `Core` es la raíz de composición (cableado a mano).
 - **Patrones**: **Observer** → `EventEmitter` / `mqtt`. **Strategy** → providers LLM intercambiables
   (anthropic, deepseek, openai). **Command** → cada operación de blueprint serializable. **Factory** →
   `ModuleLoader` instancia clases JS o registra blueprints. **State Machine** → lifecycle `cuentas`/`cocina`.
-- **Regla DIP**: ningún módulo importa `mqtt.js` ni toca el broker — **solo `eventBus` + `mqttRequest`**.
+- **Regla DIP**: cada módulo accede al transporte **solo vía `eventBus` + `mqttRequest`**.
   El cliente MQTT vive **solo en el core**.
 - **Frontend (Svelte 5)**: **runes** (`$state`, `$derived`, `$props`, `$effect`) para reactividad; **stores**
   (`writable`) **solo** para estado global compartido (conexión MQTT, sesión). `+page.svelte` / `+layout.svelte`
@@ -237,7 +244,7 @@ Antes de escribir código, **declaras explícitamente**:
   guardada en un **store global**; req/resp vía helper `mqttRequest`.
 - **Configuración**: keepAlive **60s** (WiFi/4G) / **30s** (LAN); `cleanSession=false` (recupera subs QoS1);
   `reconnectPeriod` exponencial 1s→2s→5s→10s; TLS/mTLS si dominio público (lo provee `certificate-authority`).
-- **Cliente MQTT como clase OOP — vive SOLO en el core, en JS. Ningún módulo lo instancia (DIP):**
+- **Cliente MQTT como clase OOP — vive SOLO en el core, en JS. Lo instancia únicamente el core (DIP):**
   ```js
   // core/mqtt/client.js — ÚNICA frontera con el transporte. Los módulos usan eventBus/mqttRequest.
   class MQTTClient extends EventEmitter {
@@ -257,10 +264,9 @@ Antes de escribir código, **declaras explícitamente**:
 
 # 🏛️ Arquitectura del Core — Definición de Clases (Pseudocódigo)
 
-> Esta sección es la **especificación viva** del núcleo de `event-core` como grafo de clases.
-> Regla rectora: **el código es la fuente de verdad; esta spec es la guía de diseño.** Si una
-> clase real diverge de aquí, se señala el desvío y se concilia (actualizar spec o corregir código),
-> nunca se asume que la spec manda sobre lo implementado.
+> Núcleo de `event-core` como grafo de clases. **El código es la fuente de verdad; esta spec es la
+> guía de diseño.** Si una clase real diverge, se señala el desvío y se concilia (actualizar spec o
+> corregir código); el código implementado prevalece sobre la spec.
 
 ## Decisiones de arquitectura cerradas
 
@@ -269,19 +275,19 @@ Estas decisiones están **zanjadas** y gobiernan todo el pseudocódigo de abajo:
 - **① Forma canónica del topic de eventos** → `core/<core_id>/events/<event/con/slashes>`
   (los puntos del `event_type` se convierten en slashes). El prefix `core/<id>/events/` identifica
   el core emisor y habilita multi-core (`core/+/events/#`). *El código tiene razón; el contrato
-  `bus-transport` queda desactualizado y debe corregirse, no el código.*
+  `bus-transport` queda desactualizado y debe corregirse.*
 
 - **② Request/Response unificado** — **una sola puerta** con cuatro sub-decisiones cerradas:
   - **2a = A** → namespace único `core/<core_id>/api/request/<dominio>/<accion>` →
     `core/<core_id>/api/response/<correlation_id>`. `ui/request/*` queda como **alias deprecado** (1 release).
   - **2b** → clave de correlación canónica única: **`correlation_id`** (`request_id` solo como alias de borde).
   - **2c** → el fast-path in-process (`mqttRequest`) **se mantiene como optimización transparente**
-    que pasa por el **mismo pipeline** (validación + hooks + tracer) que la puerta MQTT. No es un bypass.
+    que pasa por el **mismo pipeline** (validación + hooks + tracer) que la puerta MQTT: comparte el middleware.
   - **2d** → **QoS 1** en request y response; **timeout** explícito por request → error `504 GATEWAY_TIMEOUT`;
     idempotencia por `correlation_id`.
 
 - **④ QoS / retain / LWT** → **QoS 1** por defecto, **QoS 0** solo telemetría tolerante a pérdida,
-  **QoS 2 prohibido** (overhead). `retain=false` salvo el último heartbeat de `Discovery`.
+  con **QoS 1 como máximo** (QoS 2 añade overhead). `retain=false` salvo el último heartbeat de `Discovery`.
   Idempotencia siempre a nivel aplicación con `correlation_id`.
 
 ## Mapa de dependencias (composition root)
@@ -296,9 +302,9 @@ Estas decisiones están **zanjadas** y gobiernan todo el pseudocódigo de abajo:
       → Discovery → HTTPGateway
 
 Regla SOLID rectora:
-  · El Core CONSTRUYE y CABLEA. Nadie se auto-instancia.
+  · El Core CONSTRUYE y CABLEA. El Core instancia cada componente.
   · Toda dependencia entra por constructor (inversión de control / DIP).
-  · Un módulo NUNCA toca MQTTClient ni Broker: solo ve eventBus + context.
+  · Un módulo ve solo eventBus + context (el MQTTClient y el Broker viven en el core).
   · Composición sobre herencia (salvo EventEmitter, contrato de eventos de Node).
 ```
 
@@ -348,7 +354,7 @@ CLASS Core:
   # edge: si un paso falla → rollback de los ya iniciados (stop parcial) y throw
 ```
 
-Patrón *Composition Root* + *Builder* implícito. Es el único que conoce el grafo completo.
+Patrón *Composition Root* + *Builder*. Única clase que conoce el grafo completo.
 
 ## 2. Observabilidad — `Observability` / `Logger` / `Tracer` / `Metrics` / `ActivityLogger`
 
@@ -365,14 +371,14 @@ CLASS Tracer:                              # contexto W3C que viaja en el envelo
     withContext(ctx, fn)                    # ejecuta fn dentro del scope de trace
 
 CLASS Logger:
-  interface: debug/info/warn/error(event:string, fields:object)   # log estructurado, NO strings
+  interface: debug/info/warn/error(event:string, fields:object)   # log estructurado (clave→campos)
 CLASS Metrics:
   interface: increment(k), gauge(k,v), timing(k,ms), snapshot()
 CLASS ActivityLogger:
   interface: record(actor, action, target, outcome)               # auditoría de acciones
 ```
 
-Contrato clave: **logs y métricas son estructurados** (clave→campos), nunca prosa.
+Contrato clave: **logs y métricas son estructurados** (clave→campos).
 
 ## 3. `ValidationManager` — contratos JSON Schema
 
@@ -452,7 +458,7 @@ CLASS MQTTClient extends EventEmitter:
   #  · pool opcional (config.mqtt.pool) para alto throughput; default OFF (YAGNI)
 ```
 
-**Nadie fuera del core habla con esta clase.** Es la única frontera con el transporte (DIP).
+**Solo el core habla con esta clase.** Es la única frontera con el transporte (DIP).
 
 ## 6. `HookManager` — lifecycle hooks (Chain of Responsibility)
 
@@ -502,8 +508,8 @@ CLASS EventBus:
       emitLocal(ctx.event.event_type, ctx.event)
       _logEvent(envelope.event_type, envelope, 'receive')
 
-  # CARDINALIDAD 0/1/N: publish nunca espera ack de negocio (emite y desentiende — events.contract)
-  # edge: payload malformado → log 'event.parse.failed', se descarta, NO tumba el bus
+  # CARDINALIDAD 0/1/N: publish emite y desentiende — fire-and-forget (events.contract)
+  # edge: payload malformado → log 'event.parse.failed', se descarta y el bus sigue vivo
 ```
 
 **Topic == `core/<id>/events/<event/con/slashes>`** (decisión ①). `correlation_id` viaja en el
@@ -554,7 +560,7 @@ CLASS ApiRequestResolver:
         result   ← await _pipeline(envelope)
         await _respond(envelope, result)
 
-    # — Pipeline ÚNICO (clave de 2c: ningún camino lo evita) —
+    # — Pipeline ÚNICO (clave de 2c: todos los caminos pasan por él) —
     ▸ _pipeline(envelope):
         validation.validate('api.request', envelope)  → if !valid: return ERR(400,'VALIDATION_ERROR')
         envelope ← hooks.execute('beforeRequest', envelope)       # auth, rate-limit, enriquecido
@@ -643,7 +649,7 @@ CLASS Discovery extends EventEmitter:    # presencia multi-core (heartbeat + Las
     getActiveCores() ; isCoreActive(id) ; updateModules(list)
   # único uso legítimo de retain=true (bus-transport lo permite para presencia)
 
-CLASS HTTPGateway:                       # borde REST + UI estática (NO lógica de negocio)
+CLASS HTTPGateway:                       # borde REST + UI estática (la lógica de negocio vive en los módulos)
   →deps: { config.http, registry, api, obs }
   interface: async listen() ; close()
   ▸ ruta dinámica: GET/POST /:domain/:action → api.handle(domain, action, body)   # HTTP→bus
@@ -655,9 +661,9 @@ CLASS ServiceRegistry:                   # asignación de puertos / descubrimien
 
 ## 10. `ModuleLoader` — carga, auto-wiring y hot-reload (máquina de estados)
 
-> Pieza más densa del core. Autodescubre módulos por `module.json`, los instancia, **cablea
-> automáticamente** sus suscripciones a eventos / UI handlers / tools desde el manifiesto, e
-> inyecta el `context` del core. Soporta hot-reload y módulos declarativos (`blueprint_driven`).
+> Autodescubre módulos por `module.json`, los instancia, **cablea automáticamente** sus
+> suscripciones a eventos / UI handlers / tools desde el manifiesto, e inyecta el `context` del
+> core. Soporta hot-reload y módulos declarativos (`blueprint_driven`).
 
 ```
 CLASS ModuleLoader:
@@ -671,7 +677,7 @@ CLASS ModuleLoader:
       ▸ paths ← scan(config.modules.path)  # modules/*/module.json
         para name en [...enabled, ...resto_no_listado]:   # listados primero, resto al final
            try: await load(name, path, manifest)
-           catch e: log('module.load.failed'); continue   # un módulo no tumba el arranque
+           catch e: log('module.load.failed'); continue   # el arranque sobrevive al fallo de un módulo
 
     scan(root):                            # autodiscovery + agrupación por vertical
       para dir en root/*:
@@ -740,14 +746,14 @@ CLASS ModuleLoader:
 
   # EDGE CASES:
   #  · módulo sin index.js ni module.json válido → se salta, log, sigue (resiliencia de arranque)
-  #  · onLoad lanza → rollback de subscripciones ya cableadas (no deja basura en el bus)
+  #  · onLoad lanza → rollback de subscripciones ya cableadas (deja el bus limpio)
   #  · reload con estado en vuelo → unsub antes de re-require evita doble entrega
   #  · dependencia de carga (credential-manager/database-manager primero) → la garantiza el ORDEN de enabled[]
 ```
 
 ## 11. Clase base `Module` — contrato de todo módulo de dominio
 
-> No es herencia obligatoria (el loader solo exige `onLoad`), pero **define el contrato canónico**
+> La herencia es opcional (el loader solo exige `onLoad`); **define el contrato canónico**
 > que todo módulo cumple. Los handlers devuelven SIEMPRE el shape `{ status, data | error }`.
 
 ```
@@ -759,7 +765,7 @@ CLASS Module (contrato base):
     this.{logger, metrics, eventBus, validation, mqttRequest} ← context
     this.moduleConfig ← context.moduleConfig
     ▸ inicializar estado propio (basePath, conexiones, caches efímeras…)
-    # NO materializar estado redundante (paradigma-no-cabe): el bus es la fuente en vivo
+    # el bus es la fuente en vivo del estado (paradigma-no-cabe)
   async onUnload():                          # opcional: cerrar recursos, flush, desconectar
 
   # ── TRES TIPOS DE HANDLER (auto-wired por el loader desde el manifest) ──
@@ -789,10 +795,10 @@ CLASS Module (contrato base):
   #   códigos: INVALID_INPUT | RESOURCE_NOT_FOUND | PERMISSION_DENIED | CONFLICT_STATE | UNKNOWN_ERROR
 
   # ── REGLAS QUE TODO MÓDULO RESPETA ──
-  #  · NUNCA importa mqtt.js ni toca el broker: solo eventBus + mqttRequest (DIP)
-  #  · NUNCA llama a otro módulo por referencia directa: usa context.mqttRequest(domain, action, payload)
+  #  · accede al transporte solo vía eventBus + mqttRequest (DIP)
+  #  · llama a otro módulo vía context.mqttRequest(domain, action, payload)
   #  · EMITE Y DESENTIENDE para eventos; REQUEST/RESPONSE con correlation_id cuando espera respuesta
-  #  · NO materializa agregados/caches del estado global (paradigma-no-cabe)
+  #  · mantiene el estado en vivo en el bus (paradigma-no-cabe)
 ```
 
 ### Ejemplo de manifiesto que el loader consume (`module.json`)
@@ -821,16 +827,15 @@ CLASS Module (contrato base):
 
 # 🧭 Subsistema Compañero de Viaje — Definición de Clases (Pseudocódigo)
 
-> La apuesta central junto al core. Captura el modelo del contrato `companero-viaje` (la
-> *piedra angular*): **NO es un chat, es un compañero de viaje con especialistas reactivos.**
-> Toda clase de aquí preserva las **4 capacidades invariantes**:
+> Modelo del contrato `companero-viaje`: **es un compañero de viaje con especialistas
+> reactivos** (más que un chat). Toda clase de aquí preserva las **4 capacidades invariantes**:
 > ① memoria sostenida (`conversation_id` persistente + FIFO) · ② especialización por contexto
 > (proyecto + agentes) · ③ acceso al sistema (tools + agentes, siempre por el bus) ·
 > ④ modularidad infinita (canal/tool/agente/memoria nuevos = módulo, sin tocar el núcleo).
 >
 > Todos los módulos extienden el contrato `Module` (clase 11): `onLoad(context)`,
 > `_publicarEvento`, shape `{status, data|error}`, DIP estricto (solo `eventBus` + `mqttRequest`).
-> Vive bajo `modules/conversacion/*`. Fiel al código real (v2.0.0 de cada módulo).
+> Viven bajo `modules/conversacion/*` (v2.0.0 cada uno).
 
 ## Mapa de flujos (4 grafos de eventos sobre el bus)
 
@@ -867,16 +872,15 @@ CLASS Module (contrato base):
    módulo → embedding.generate.request → ai-gateway → embedding.generate.response | .failed
 ```
 
-Patrón maestro: **emite y desentiende** (events.contract). Ningún módulo conoce a otro; se
-encadenan por eventos correlados. `memory-*` y los agentes son **puntos de extensión** que se
-enchufan sin tocar el pipeline.
+**Emite y desentiende** (events.contract). Los módulos se encadenan por eventos correlados; cada uno
+solo conoce esos eventos. `memory-*` y los agentes son **puntos de extensión** que se enchufan al pipeline existente.
 
 ## 12. `ChatIoModule` — canal de entrada/salida (memoria sostenida ①)
 
 ```
 CLASS ChatIoModule extends Module:
   state: { db(via database-manager), pendingDb:Map<reqId,{resolve}>, basePath }
-  # persiste conversaciones+mensajes en SQLite POR PROYECTO; NO materializa estado global
+  # persiste conversaciones+mensajes en SQLite POR PROYECTO; estado en vivo (paradigma-no-cabe)
 
   # ── ENTRADA (ui_handlers, puerta req/resp ②) ──
   async handleSend(data):                      # {project_id, conversation_id, user_message, settings, channel, channel_context, attachments}
@@ -897,7 +901,7 @@ CLASS ChatIoModule extends Module:
   async onAiFailed(event):                     # traduce error.code → mensaje user-facing, entrega al canal
   async onChatAssistantSavedFromAgent(event):  # persiste tarjetas de agente; ignora self-echo (source.module_id=='chat-io')
   onDbQueryResponse(event):  pendingDb.get(request_id)?.resolve(rows)      # resuelve _db()
-  onProjectActivated(event): _ensureSchema(project_id)                     # best-effort, no bloquea
+  onProjectActivated(event): _ensureSchema(project_id)                     # best-effort, asíncrono
 
   # edge: PROJECT_REQUIRED/CONVERSATION_REQUIRED/MESSAGE_ID_REQUIRED → error.details.kind (disambiguación UI)
 ```
@@ -938,7 +942,7 @@ CLASS MemoryModule extends Module:    # patrón común; punto de extensión ④ 
       await _publicarEvento('chat.context.enriched', {
               correlation_id, project_id, priority, content })   # prompt-builder lo agrega
   # priorities: user-profile=100, summary=…, rag=…  (mayor = más arriba en el system prompt)
-  # NUEVA MEMORIA = NUEVO MÓDULO. El compañero no se reescribe; se enriquece (nucleo_invariante).
+  # NUEVA MEMORIA = NUEVO MÓDULO. El compañero se enriquece por módulos (nucleo_invariante).
 ```
 
 ## 15. `AiGatewayModule` — motor LLM + agentic loop (acceso al sistema ③)
@@ -977,13 +981,13 @@ CLASS AiGatewayModule extends Module:
          acumular(tokens, cost)
          IF no result.tool_calls: BREAK                                    # respuesta final
          PARA cada tool_call:
-            args ← JSON.parse(tc.arguments)   # si falla → tool_result error INVALID_INPUT al LLM (no bucle silencioso)
+            args ← JSON.parse(tc.arguments)   # si falla → tool_result error INVALID_INPUT al LLM (el LLM lo ve y reacciona)
             tr   ← await _executeToolCall(tc.name, args, chatContext)      # dispatch a registry/cajón/nav/bus
             toolResults.push(tr)
          workingMessages += [assistant(tool_calls), ...toolResults]        # el LLM ve los resultados y sigue
       return { content:result, usage, cost, tool_calls_executed, finish_reason }
 
-  # ── CREDENCIALES EVENT-DRIVEN (nunca lee secretos directos) ──
+  # ── CREDENCIALES EVENT-DRIVEN (resuelve secretos por evento) ──
   ▸ _resolveCredential(provider, projectId):
       if credentialCache.has(provider): return cached
       reqId ← uuid(); await _publicarEvento('credential.resolve.request', { provider, projectId, request_id:reqId })
@@ -1013,7 +1017,7 @@ INTERFACE Provider:
 ## 16. `AiAgentFrameworkModule` — gabinete de especialistas (especialización ②)
 
 > Carga agentes declarativos (`agents/*.json` + `prompts/*.{json,md}`). Cada agente = system prompt
-> + tools acotadas (NO es código JS — es declaración). Dos entry points: `agent.execute.request`
+> + tools acotadas (declaración pura en vez de código JS). Dos entry points: `agent.execute.request`
 > (canónico) y la tool `invoke_agent` (legacy, que el LLM invoca dentro del agentic loop).
 
 ```
@@ -1035,7 +1039,7 @@ CLASS AiAgentFrameworkModule extends Module:
       IF p.shape == 'agent_flow': await _publicarEvento('agent.execute.response', { ...result, correlation_id })
       ELSE                      : await _publicarEvento('invoke_agent.response', { result })   # legacy tool flow
   ▸ onLlmCompleteFailed(event): → agent.execute.failed | invoke_agent.response(error)   # no_silent_failures
-  ▸ onInvokeAgent(event):               # tool del LLM (agentic loop) → shape propio (no canónico)
+  ▸ onInvokeAgent(event):               # tool del LLM (agentic loop) → shape propio (legacy)
       pendingLlm.set(corrId, { shape:'invoke_agent' }); publish llm.complete.request
 ```
 
@@ -1092,23 +1096,22 @@ conversation/<conversation_id>/message     QoS 1   # SALIDA al canal web (fronte
 *Justificación QoS 1:* cada evento cierra (o encadena) un razonamiento con coste real (tokens);
 perder uno deja al compañero colgado o sin responder. Idempotencia por `correlation_id` /
 `request_id`. **Garantía `no_silent_failures`:** todo flujo emite SIEMPRE su par `*.failed`
-canónico — nunca se queda mudo.
+canónico — siempre responde.
 
 ---
 
 # 🔐 Módulos fundacionales — `credential-manager` & `project-manager`
 
-> Las dos piezas sobre las que se apoya casi todo el sistema. `credential-manager` carga **primero**
-> de todos (tier-1 infra) porque otros módulos resuelven secretos durante su `onLoad`;
-> `project-manager` (tier-3) define la noción de **proyecto activo** que especializa al compañero.
-> Ambos son **casos testigo** del paradigma: estado en vivo (no agregados materializados redundantes),
-> comunicación 100% por eventos correlados, secretos nunca expuestos en snapshots.
+> `credential-manager` carga **primero** (tier-1 infra) porque otros módulos resuelven secretos
+> durante su `onLoad`; `project-manager` (tier-3) define la noción de **proyecto activo** que
+> especializa al compañero. Ambos: estado en vivo (la fuente viva es el bus/DB), comunicación 100%
+> por eventos correlados, secretos presentes solo en `credential.resolve.response`.
 
 ## 18. `CredentialManagerModule` — CRUD + resolución en cascada + cache `.env` atómico
 
 > CRUD de credenciales API + **resolución cascada `CUSTOM → CLIENT → PROJECT → GLOBAL`** +
 > cache `.env` atómico. Patrón request/response correlado por `request_id` (lo consume
-> `ai-gateway._resolveCredential`). El snapshot de estado **NUNCA lleva los valores**.
+> `ai-gateway._resolveCredential`). El snapshot de estado **lleva solo metadata** (el valor vive en el `.env`).
 
 ```
 CLASS CredentialManagerModule extends Module:
@@ -1148,13 +1151,13 @@ CLASS CredentialManagerModule extends Module:
       await eventBus.publish('credential.state', { credentials:lista, correlation_id, timestamp })
 
   # UI handlers (handleUIList/Get/Create/Update/Delete) + tool (handleToolCredentialList) + HTTP apis
-  #   → todos sobre el mismo CRUD; los list/get devuelven metadata, jamás el valor en claro
+  #   → todos sobre el mismo CRUD; los list/get devuelven solo metadata (el valor vive en el .env)
 
   # REGLAS / EDGE:
-  #  · api_key NUNCA viaja en credential.state ni en logs (solo metadata)
+  #  · api_key viaja solo en credential.resolve.response; credential.state y logs llevan solo metadata
   #  · _saveEnvFile atómico (write tmp + rename) → sin corrupción ante crash a mitad de escritura
   #  · cache reactiva: tras cada CRUD se republica credential.state (los consumidores se auto-actualizan)
-  #  · descompuesto 2026-05-04: NO testea credenciales, NO OAuth, NO vendor multi-campo (módulos aparte pendientes)
+  #  · alcance (2026-05-04): CRUD + cascada + cache; testeo / OAuth / vendor multi-campo → módulos aparte pendientes
 ```
 
 ## 19. `ProjectManagerModule` — lifecycle + bootstrap + "una vía fija"
@@ -1167,7 +1170,7 @@ CLASS CredentialManagerModule extends Module:
 ```
 CLASS ProjectManagerModule extends Module:
   state: {
-    projects:Map<id, project>, activeProjectIds:Set,           # estado EN VIVO (no materializado en disco redundante)
+    projects:Map<id, project>, activeProjectIds:Set,           # estado EN VIVO (el Map es la fuente viva; la DB persiste)
     pendingDbRequests:Map<corrId,{resolve}>,                   # DB event-driven
     pendingCompositionRequests:Map<corrId,{resolve}>,
     pendingDefaultConversations:Map<projectId, Promise>        # dedup de "una vía fija"
@@ -1182,7 +1185,7 @@ CLASS ProjectManagerModule extends Module:
     await _ensureSystemProject()           # proyecto "Sistema" (root, modo system)
     await _ensureDefaultProject()          # proyecto "Mi Proyecto" (default del usuario)
 
-  # ── DEPENDENCIAS POR EVENTOS (nunca acceso directo — DIP) ──
+  # ── DEPENDENCIAS POR EVENTOS (acceso solo por el bus — DIP) ──
   ▸ _queryDb(query, params, readOnly, correlation_id):
       reqId ← correlation_id ?? uuid()
       await eventBus.publish('db.query.request', { query, params, read_only:readOnly, request_id:reqId })
@@ -1222,10 +1225,10 @@ CLASS ProjectManagerModule extends Module:
   # + HTTP apis (handleCreateProject, handleActivateProject, handleSaveSession, handleSetAIConfig, …)
 
   # REGLAS / EDGE:
-  #  · projects:Map es estado EN VIVO; la DB es la persistencia — NO se duplica un agregado redundante (paradigma-no-cabe)
+  #  · projects:Map es estado EN VIVO; la DB es la persistencia — el Map es la única copia viva (paradigma-no-cabe)
   #  · _reactivateExistingProjects re-emite project.activated al arrancar → los consumidores rehidratan SIN estado compartido
   #  · _getOrCreateDefaultConversation: idempotencia por promise-sharing → N llamadas concurrentes = 1 sola conversación
-  #  · mqttRequest a chat-io pasa por el pipeline ② (validación+hooks) — no es atajo crudo
+  #  · mqttRequest a chat-io pasa por el pipeline ② (validación+hooks) — comparte el pipeline completo
 ```
 
 ## Jerarquía de topics + QoS (fundacionales)
@@ -1242,18 +1245,17 @@ core/<id>/events/db/query/{request,response}   QoS 1   # acceso DB event-driven 
 
 *Justificación QoS 1:* resolver una credencial o activar un proyecto son operaciones críticas;
 perder el `request`/`response` cuelga al caller (ai-gateway, chat-io). Idempotencia por
-`request_id` / `correlation_id`. Secretos: **solo** en `credential.resolve.response`, nunca en snapshots.
+`request_id` / `correlation_id`. Secretos: **solo** en `credential.resolve.response` (los snapshots llevan metadata).
 
 ---
 
 # 🛡️ Capa de seguridad — `security-p2p` & `certificate-authority`
 
-> Los dos habilitadores del multi-core seguro (lo que `bus-transport` reserva para clientes
-> **externos del cluster con mTLS**). Patrón maestro: ambos operan **vía hooks transparentes**
-> (`HookManager`, clase 6) — son **decoradores transversales** que añaden cifrado/autenticación
-> sin que ningún módulo de dominio se entere (Decorator + DIP). Hoy **`disabled` en config**:
-> dormidos hasta que exista un 2º core real (coherente con decisión ③ / `paradigma-no-cabe`:
-> no se activa la distribución antes de que duela).
+> Habilitan el multi-core seguro (lo que `bus-transport` reserva para clientes **externos del
+> cluster con mTLS**). Ambos operan **vía hooks transparentes** (`HookManager`, clase 6) — son
+> **decoradores transversales** que añaden cifrado/autenticación de forma transparente a los módulos
+> de dominio (Decorator + DIP). Hoy **`disabled` en config**: inactivos hasta que exista un 2º core
+> real (decisión ③ / `paradigma-no-cabe`).
 
 ## 20. `SecurityP2PModule` — Zero Trust crypto entre cores (X25519 + AES-256-GCM)
 
@@ -1273,13 +1275,13 @@ CLASS SecurityP2PModule extends Module:
     core.hooks.register('afterEventReceive',  hookAfterEventReceive)    # ← DECORADOR de entrada
     suscribir handshake MQTT: core/+/security/handshake/{request,response}/#
 
-  # ── CIFRADO TRANSPARENTE (el módulo emisor no sabe que va cifrado) ──
+  # ── CIFRADO TRANSPARENTE (el cifrado ocurre bajo el módulo emisor) ──
   ▸ hookBeforeEventPublish(context):       # context = { topic, targetCoreId, envelope }
       peer ← _peerForTarget(targetCoreId)
       IF peer && keyManager.isTrusted(peer):
          secret ← _getOrDeriveSecret(peer)                        # ECDH cacheado (LRU)
          context.envelope ← SecureEnvelope.encrypt(envelope, secret)   # AES-256-GCM
-      return context                                              # si no hay peer trusted → pasa en claro
+      return context                                              # peer trusted → cifra; en otro caso → en claro
   ▸ hookAfterEventReceive(context):
       IF SecureEnvelope.isEncrypted(context.envelope):
          secret ← _getOrDeriveSecret(context.envelope.from_fingerprint)
@@ -1291,7 +1293,7 @@ CLASS SecurityP2PModule extends Module:
                                            _publicarEvento('security.peer.trusted', {fingerprint})
   ▸ handleRevokePeer({fingerprint}):       keyManager.untrustPeer(pk); _sharedSecrets.delete(fp)
                                            _publicarEvento('security.peer.revoked', {fingerprint})
-  ▸ onPublicKeyRequest(event):             # otros módulos piden la pubkey por BUS (no vía moduleLoader)
+  ▸ onPublicKeyRequest(event):             # otros módulos piden la pubkey solo por BUS
        _publicarEvento('security.public-key.response', { public_key, fingerprint, request_id })
 
   # edge: _sharedSecrets lleno → eviction LRU; handshake sin response en timeout → security.handshake.timeout
@@ -1345,7 +1347,7 @@ CLASS CAManager:                            # la CA real; persiste todo en disco
   loadOrCreateCA() ; _generateCA()                              # ca.crt + ca.key (self-signed root)
   async issueCertificate({cn,type,validityDays}) → { serial, crt, p12, info }   # firma con la CA
   revokeCertificate(serial, reason) → añade a CRL + _saveCRL()  # crl.json
-  verifyCertificate(pem) → { valid, reason }                    # firma OK + NO en CRL + NO expirado
+  verifyCertificate(pem) → { valid, reason }                    # válido = firma OK + vigente + ausente de la CRL
   async renewCertificate(serial, overrides)                     # issue nuevo + revoke(superseded)
   listCertificates(filters) ; getCACertificate() ; getCRL() ; getStats()
   # persistencia: {storagePath}/ca.{crt,key} · issued/<serial>.{crt,p12,json} · crl.json  (restart-resilient)
@@ -1370,14 +1372,14 @@ core/+/security/handshake/request/#         QoS 1   # inicio handshake P2P (mutu
 core/+/security/handshake/response/#        QoS 1   # respuesta del peer
 core/<id>/events/security/peer/{trusted,revoked}        QoS 1   # cambios de confianza
 core/<id>/events/security/handshake/{timeout,failed}    QoS 1   # fallos de handshake
-core/<id>/events/security/public-key/{request,response} QoS 1   # pubkey por bus (no acceso directo)
+core/<id>/events/security/public-key/{request,response} QoS 1   # pubkey solo por bus
 core/<id>/events/certificate/{issued,revoked,renewed,expired}   QoS 1   # lifecycle de certs
 ```
 
-*Justificación QoS 1:* el handshake y los cambios de confianza no pueden perderse (un peer
-quedaría en estado inconsistente: cifrando contra un secreto que el otro no tiene). Idempotencia
-por `fingerprint` / `serialNumber`. El cifrado de payload es **AES-256-GCM** (confidencialidad +
-integridad/AEAD); la confianza es **Zero Trust** (nada se cifra hacia un peer no `trusted`).
+*Justificación QoS 1:* el handshake y los cambios de confianza exigen entrega garantizada (con
+pérdida, un peer quedaría inconsistente: cifraría contra un secreto que el otro aún desconoce).
+Idempotencia por `fingerprint` / `serialNumber`. El cifrado de payload es **AES-256-GCM**
+(confidencialidad + integridad/AEAD); la confianza es **Zero Trust** (el cifrado ocurre solo hacia un peer `trusted`).
 
 ---
 
@@ -1385,10 +1387,10 @@ integridad/AEAD); la confianza es **Zero Trust** (nada se cifra hacia un peer no
 
 ## 22. Quién rige y guarda las conversaciones — el rol `conversation-manager` vive en `chat-io`
 
-> **Aclaración de desvío doc↔código:** NO existe un módulo `conversation-manager` vivo (aparece
-> solo en la lista `disabled` de `config`, legacy). La autoridad de conversaciones — crear, listar,
+> **Desvío doc↔código:** el módulo `conversation-manager` aparece solo en la lista `disabled` de
+> `config` (legacy). La autoridad de conversaciones — crear, listar,
 > persistir, aplicar memoria — es **`chat-io` (clase 12)**. Una conversación pertenece a un proyecto
-> y vive en su SQLite. No hay agregado global de conversaciones (paradigma-no-cabe).
+> y vive en su SQLite. Cada conversación vive en su proyecto (paradigma-no-cabe).
 
 ```
 MODELO DE PERSISTENCIA (chat-io, clase 12 — autoridad de conversaciones):
@@ -1400,20 +1402,20 @@ MODELO DE PERSISTENCIA (chat-io, clase 12 — autoridad de conversaciones):
   MEMORIA DE LA CONVERSACIÓN (capacidad invariante ① del compañero):
     _applyContextFIFO(project_id, conversation_id, context_window):
       ▸ recorta el historial a las últimas N entradas (FIFO)         # evita explosión de contexto
-      ▸ el historial recortado es PARTE DEL CONTEXTO que viaja al LLM (no es opcional)
+      ▸ el historial recortado es PARTE DEL CONTEXTO que viaja al LLM (siempre incluido)
     # más allá del FIFO: capas de memoria adicionales = memory-* (clase 14), enchufables sin tocar chat-io
 ```
 
-## 23. Sistema de cajones — partición de contexto + lazy loading (idea central)
+## 23. Sistema de cajones — partición de contexto + lazy loading
 
-> **El concepto:** el LLM no necesita ver TODO el catálogo de operaciones de un módulo para razonar.
+> **El concepto:** al LLM le basta un índice del catálogo de operaciones del módulo para razonar.
 > El system prompt lleva un **índice** (descripción de 1 línea por cajón); el **pseudocódigo completo**
 > de una operación se inyecta SÓLO cuando el LLM **abre el cajón** que necesita. Modelo Google
 > (snippet vs documento) / despensa con cajones. Reduce la ventana de contexto del chat interior.
 >
 > Estado real: contrato `cajones-context-partitioning` v1.0.0 (cerrado, 8 decisiones zanjadas).
 > **Parcialmente implementado** dentro de `AiGatewayModule` (clase 15). Aplica SOLO a módulos
-> **blueprint-driven** en v1 (recetario + carta) — NO al chat principal, agentes ni memorias.
+> **blueprint-driven** en v1 (recetario + carta); el chat principal, agentes y memorias quedan para una fase posterior.
 
 ```
 SUBSISTEMA CAJONES (motor embebido en AiGatewayModule — clase 15)
@@ -1423,7 +1425,7 @@ SUBSISTEMA CAJONES (motor embebido en AiGatewayModule — clase 15)
     conversationPageFoco:Map<conv_id, page_id>       # foco "pegajoso" del LLM
   }
 
-  # ── CATÁLOGO ES ÍNDICE, NO CONTENIDO ──
+  # ── CATÁLOGO = ÍNDICE (el contenido se abre bajo demanda) ──
   ▸ _extractCajones(child):           # de blueprint.operaciones → [{nombre, descripcion(1 línea)}]
   ▸ _rankCajones(catalogo, page_id_activo, conversation_id):
       # RANKING SIMPLE (sin embeddings — anti-patrón a esta escala):
@@ -1434,7 +1436,7 @@ SUBSISTEMA CAJONES (motor embebido en AiGatewayModule — clase 15)
       catalogo ← _rankCajones(...)     # inyecta SOLO el índice rankeado en el system prompt del turno
 
   # ── 4 TOOLS CANÓNICAS (auto-wired; una_operacion_por_turno) ──
-  cajon.listar({zona?})       → catálogo rankeado (lectura pura, no publica eventos)
+  cajon.listar({zona?})       → catálogo rankeado (lectura pura en memoria)
   cajon.abrir({nombre})       → _resolveCajon(page, nombre) → { pseudocodigo, reglas_clave,
                                   errores_posibles, input }   # SOLO vive este turno; _trackCajonOpened(FIFO)
   chat.cambiar_foco({page_id, motivo?}) → foco pegajoso ← page_id; publish chat.foco.cambiado
@@ -1444,9 +1446,9 @@ SUBSISTEMA CAJONES (motor embebido en AiGatewayModule — clase 15)
   # ── REGLAS DEL PATRÓN (del contrato) ──
   #  · CIERRE AUTOMÁTICO AL SIGUIENTE TURNO: el cajón abierto es contexto efímero; al turno siguiente
   #    solo persiste el catálogo (el LLM reabre si lo necesita). Como cerrar pestaña entre búsquedas.
-  #  · EL LLM DECIDE QUÉ ABRIR, no un orquestador externo (matching semántico > heurística/router).
+  #  · EL LLM DECIDE QUÉ ABRIR por matching semántico (en lugar de un orquestador/router externo).
   #  · EL FOCO ACOMPAÑA A LA CONVERSACIÓN: si el tema cambia de dominio, el LLM mueve la página
-  #    (chat.cambiar_foco autónomo). Metáfora espacial: el sistema sigue al usuario, no al revés.
+  #    (chat.cambiar_foco autónomo). Metáfora espacial: el sistema sigue al usuario.
   #  · DISCIPLINA: cajon.abrir y chat.cambiar_foco son únicas por turno — preparar contexto ≠ ejecutar
   #    (el ejecutar es del siguiente turno). Extensión de enfoque_una_operacion (llm-runtime-discipline).
   #  · EVOLUCIÓN INCREMENTAL: niveles de profundidad, archivadores anidados, cajones inter-modulares
@@ -1458,7 +1460,7 @@ SUBSISTEMA CAJONES (motor embebido en AiGatewayModule — clase 15)
 ```
 core/<id>/events/chat/foco/cambiado          QoS 1   # el LLM movió la página activa (banner + goto frontend)
 core/<id>/events/page/graph/{request,response}  QoS 1   # grafo de páginas relacionadas (barra lateral)
-# cajon.listar / cajon.abrir NO publican eventos de dominio: son lectura del blueprint en memoria
+# cajon.listar / cajon.abrir leen el blueprint en memoria (lectura pura, sin eventos de dominio)
 ```
 
 *Justificación:* `chat.foco.cambiado` reordena la UI y el catálogo del siguiente turno — perderlo
@@ -1469,31 +1471,31 @@ ya cargado: cero latencia de red, cero estado materializado redundante.
 
 # 🍕 Rama blueprints — `menu-generator` → subsistema-carta (pizzepos)
 
-> ~13 de ~70 módulos NO son código JS procedural: son **blueprints JSON declarativos** que el LLM
-> ejecuta como runtime. El subsistema-carta de pizzepos es el exponente: `menu-generator` genera la
-> carta, `carta-manager` la custodia (aggregate root), y cinco hermanos la consumen. Todos
-> `blueprint_driven: true`. Caso testigo del paradigma: **el JSON de la carta ES la fuente de
-> verdad** (en filesystem), no hay agregado materializado redundante (paradigma-no-cabe).
+> ~13 de ~70 módulos son **blueprints JSON declarativos** (en lugar de código JS procedural) que el LLM
+> ejecuta como runtime. Subsistema-carta de pizzepos: `menu-generator` genera la carta,
+> `carta-manager` la custodia (aggregate root), y cinco hermanos la consumen. Todos
+> `blueprint_driven: true`. **El JSON de la carta ES la fuente de verdad** (en filesystem); la carta
+> vive como un único JSON (paradigma-no-cabe).
 
 ## 24. Paradigma blueprint-driven — el LLM como runtime
 
 ```
 CÓMO SE EJECUTA UN MÓDULO BLUEPRINT (sin index.js):
-  · ModuleLoader (clase 10) [BLUEPRINT] → lo registra con instance:null, no instancia clase
+  · ModuleLoader (clase 10) [BLUEPRINT] → lo registra con instance:null; el LLM lo ejecuta como declaración
   · AiGatewayModule (clase 15) carga el <modulo>.blueprint.json como SYSTEM PROMPT del page
     (+ cajones si cajones_enabled, clase 23)
   · El LLM, dentro del agentic loop, EJECUTA las operaciones del blueprint usando
     SOLO 2 tools universales:
         bus.publish(evento, payload)          # emite y desentiende (fire-and-forget)
         bus.publishAndWait(evento, payload)   # request/response correlado (espera la response)
-  · No hay JS de dominio: la lógica vive como pseudocódigo en el propio blueprint
+  · La lógica de dominio vive como pseudocódigo en el propio blueprint
 
 FORMA CANÓNICA DE UN BLUEPRINT (JSON declarativo):
   {
     id, version, extends_blueprint_abstract,        # hereda de un blueprint base abstracto
     rol,                                            # qué es este módulo en 1 párrafo
     garantiza / no_garantiza,                       # contrato explícito de alcance
-    estado_persistente,                             # dónde vive su dato (fs path, no DB redundante)
+    estado_persistente,                             # dónde vive su dato (fs path = fuente viva)
     eventos_publicados,                             # emite y desentiende
     eventos_publicados_que_requieren_consumer,      # los que SÍ esperan a alguien
     eventos_que_escucho,                            # subscripciones
@@ -1508,8 +1510,8 @@ FORMA CANÓNICA DE UN BLUEPRINT (JSON declarativo):
 ```
 BLUEPRINT menu-generator (v8.0.0, page=menu-generator):
   rol: generador PURO. Input = texto libre (pegado/dictado) o JSON ya estructurado
-       → produce carta JSON conforme al shape canónico 'carta-pizzepos'. NO persiste:
-       delega en carta-manager (separación generar ≠ guardar).
+       → produce carta JSON conforme al shape canónico 'carta-pizzepos'; delega la persistencia
+       en carta-manager (separación generar ≠ guardar).
   operaciones: { generar, _on_carta_generar_solicitada }
   ▸ generar(input):
       carta ← razonar_estructura(input.texto)         # el LLM estructura siguiendo el shape canónico
@@ -1583,7 +1585,7 @@ core/<id>/events/fs/{read,write}/{request,response}           QoS 1   # persiste
 *Justificación QoS 1:* generar/guardar una carta es una operación con coste (trabajo del LLM) cuya
 pérdida deja la carta sin persistir o a un hermano desincronizado. `publishAndWait` exige entrega
 garantizada del par request/response. La carta vive en **fs como JSON** (fuente de verdad única);
-los hermanos NO cachean una copia materializada — releen del aggregate root (paradigma-no-cabe).
+los hermanos releen del aggregate root en cada uso (paradigma-no-cabe).
 
 ---
 
@@ -1591,9 +1593,9 @@ los hermanos NO cachean una copia materializada — releen del aggregate root (p
 
 > Segunda rama blueprint-driven de pizzepos. Grafo de dependencias **100% por eventos** con DIP
 > estricto: `escandallo` (calculador de coste) es la pieza compartida; `recetas` (aggregate root)
-> y `viabilidad` (evaluador económico) dependen de él **por el bus**, nunca por acceso a su storage.
-> Caso testigo doble del paradigma: **`escandallo` no tiene estado** (su cálculo es derivación
-> publicada como evento), y ningún módulo lee el JSON de otro — todo va por operación canónica.
+> y `viabilidad` (evaluador económico) dependen de él **solo por el bus**. **`escandallo` es
+> stateless** (su cálculo es derivación publicada como evento); cada módulo lee el dato de otro vía
+> operación canónica.
 
 ## 28. `recetas` (blueprint) — aggregate root del subsistema-recetario
 
@@ -1608,25 +1610,25 @@ BLUEPRINT recetas (v1.1.0, page=recetas, cajones_enabled):    # clase 23: catál
   eventos_que_escucho: escandallo.coste.calculado            # ← reacciona al coste recalculado
   ▸ _aplicar_coste_calculado(event):   # escandallo publicó un coste nuevo → lo persiste en la receta
       receta ← leer(receta_id); receta.coste ← event.coste; save(receta)
-  ▸ obtener(input):   # la fuente canónica de la receta para escandallo/viabilidad (NO fs.read ajeno)
+  ▸ obtener(input):   # la fuente canónica de la receta para escandallo/viabilidad (vía operación canónica)
       → publishAndWait('recetas.obtener.request') lo resuelve
 ```
 
 ## 29. `escandallo` (blueprint) — calculador de coste SIN estado propio
 
-> Testigo puro de `paradigma-no-cabe`: **no persiste nada**. Su cálculo es una **derivación**
-> que publica como evento. Resuelve precios reales vía `mercadona-api` (cache 48h en memoria) o
-> los **estima con el LLM** cuando Mercadona no tiene el producto (con marcador de estimación).
+> **Es stateless** (`paradigma-no-cabe`). Su cálculo es una **derivación** que publica como
+> evento. Resuelve precios reales vía `mercadona-api` (cache 48h en memoria) o los **estima con el
+> LLM** para productos ausentes de Mercadona (con marcador de estimación).
 
 ```
 BLUEPRINT escandallo (v1.1.0, page=escandallo):
-  rol: calculador + publicador de coste de receta. NO tiene estado persistente propio.
-  estado_persistente: NINGUNO — el coste se publica como escandallo.coste.calculado (derivación, no store)
+  rol: calculador + publicador de coste de receta; stateless (el coste se publica como evento).
+  estado_persistente: efímero — el coste se publica como escandallo.coste.calculado (derivación en evento)
   operaciones: { calcular, recalcular_todas }
   ▸ calcular(input):                                          # {receta_id} O {ingredientes, porciones}
       if !project_id: return INVALID_INPUT
       if receta_id:
-         receta ← await publishAndWait('recetas.obtener.request', {receta_id})   # DIP: NO fs.read ajeno
+         receta ← await publishAndWait('recetas.obtener.request', {receta_id})   # DIP: lectura vía operación canónica
          if 404: return RESOURCE_NOT_FOUND ; ingredientes ← receta.ingredientes
       else: ingredientes ← input.ingredientes
       PARA cada ingrediente:
@@ -1642,7 +1644,7 @@ BLUEPRINT escandallo (v1.1.0, page=escandallo):
 
 > Decide **antes** de meter una receta en carta: combina el coste (delegado a `escandallo`) con el
 > PVP objetivo y aplica reglas de **food cost** para emitir veredicto. Persiste un expediente por
-> evaluación. **No recalcula el coste** — delega (separación evaluar ≠ calcular).
+> evaluación. **Delega el cálculo del coste** en escandallo (separación evaluar ≠ calcular).
 
 ```
 BLUEPRINT viabilidad (v1.2.0, page=viabilidad):
@@ -1654,7 +1656,7 @@ BLUEPRINT viabilidad (v1.2.0, page=viabilidad):
       food_cost_obj ← input.food_cost_objetivo_pct ?? 30                          # % por defecto
       esc ← await publishAndWait('escandallo.calcular.request', {receta_id|ingredientes})   # delega el coste
       if esc.status >= 400: return esc                                           # propaga tal cual
-      nombre ← input.nombre ?? (await publishAndWait('recetas.obtener.request', {receta_id})).nombre  # NO inventar
+      nombre ← input.nombre ?? (await publishAndWait('recetas.obtener.request', {receta_id})).nombre  # nombre desde la fuente canónica
       pvp ← input.pvp_objetivo ?? sugerir_pvp(esc.coste_porcion, food_cost_obj)
       veredicto ← aplicar_reglas_food_cost(esc.coste_porcion, pvp, food_cost_obj) # viable / ajustar / inviable
       persistir_expediente(/pizzepos/viabilidad.json, {veredicto, coste, pvp, ...})
@@ -1670,7 +1672,7 @@ BLUEPRINT viabilidad (v1.2.0, page=viabilidad):
         │ publishAndWait('recetas.obtener.request')                          │ publishAndWait('recetas.obtener.request')
         ▼                                                                    ▼  + mercadona.precio.request (o estima LLM)
    recetas (aggregate root, /pizzepos/recetas.json) ◀──escandallo.coste.calculado──┘
-        ▲ recetas.obtener.request (fuente canónica de la receta — nadie lee su JSON directo)
+        ▲ recetas.obtener.request (fuente canónica de la receta — lectura vía operación canónica)
 
   (hermanos del catálogo: tecnicas → /pizzepos/tecnicas.json · tarifas v3.1.1 procedural)
 ```
@@ -1687,9 +1689,496 @@ core/<id>/events/receta/{creada,actualizada,eliminada}        QoS 1   # lifecycl
 ```
 
 *Justificación QoS 1:* cada `publishAndWait` (coste, receta, precio) cuelga al caller hasta su
-response — perderlo rompe la cadena evaluar→calcular→precio. `escandallo` no materializa estado:
+response — perderlo rompe la cadena evaluar→calcular→precio. `escandallo` es stateless:
 su coste vive como **evento** que `recetas` persiste en SU agregado — separación de
-responsabilidades sin duplicar fuente de verdad (paradigma-no-cabe).
+responsabilidades con una única fuente de verdad (paradigma-no-cabe).
+
+---
+
+# 🏛️ Core de `event-core` — plasmado OOP desde el código real
+
+> Fiel al código real (no a la spec idealizada de arriba). Donde divergen, se señala; el código
+> implementado prevalece sobre la spec.
+
+## 0. Raíz de composición — `index.js` (NO es una clase `Core`)
+
+> **Desvío spec↔código #1:** la spec describe una `CLASS Core`. El código real es una **función `main()`**
+> que cablea un **objeto plano `core`** (composition root procedural). Mismo patrón *Composition Root*, sin clase contenedora.
+
+```
+FUNCTION main():                              # raíz de composición real
+  cliArgs ← parseCLIArgs()                    # --port --broker-port --core-id --modules-path --log-level --config
+  config  ← loadConfig({ configPath, cliArgs })   # prioridad: CLI > env(EVENT_CORE_*) > config.<NODE_ENV>.json > config.json
+  core ← { id, config, mqttClient:null, eventBus:null, hooks:null, moduleLoader:null,
+           httpGateway:null, logger:null, tracer:null, metrics:null, activity:null,
+           validationManager:null, serviceRegistry:null, uiHandler:null, providerSystem:null }
+
+  TRY:                                         # ── arranque en 8 pasos (orden estricto) ──
+    [1] obs:  core.logger ← new Logger({level, coreId})
+              core.tracer ← new Tracer({service_name})
+              core.metrics ← new Metrics()
+    [2] val:  core.validationManager ← new ValidationManager({logger, allErrors, removeAdditional,
+                                                               useDefaults, coerceTypes})
+              registrar commonSchemas
+    [3] mqtt: core.mqttClient ← new MQTTClient({brokerUrl, coreId, brokerPort, logger, metrics, usePool})
+              await core.mqttClient.connect()           # externo → si falla → broker embebido (fallback)
+    [4] hooks:core.hooks ← new HookManager()
+    [5] bus:  core.eventBus ← new EventBus({coreId, mqtt, hooks, logger, tracer, metrics})
+              core.activity ← new ActivityLogger({coreId, eventBus, logger})   # tras el bus
+              core.eventBus.activity ← core.activity                            # back-ref
+    [5.5] ui: core.uiHandler ← new UIRequestHandler({mqttClient, logger, metrics})
+              await core.uiHandler.start()              # sub 'ui/request/#'
+    [6] prov: core.providerSystem ← createProviderSystem({providersPath, eventBus, logger})
+              await providerSystem.loader.loadAll()     # OCR/PDF/gmail… como providers (Strategy)
+    [6.5] mods: coreContext ← { id, config, logger, metrics, hooks, eventBus, tracer,
+                               activity, uiHandler, providerRegistry, moduleRegistry }
+              core.moduleRegistry ← new ModuleRegistry({logger, metrics})
+              core.moduleLoader   ← new ModuleLoader({modulesPath, core:coreContext, registry, config})
+              moduleLoader.registerProviderTools(providerSystem.registry)   # provider fns → tools LLM
+              await moduleLoader.loadAll()
+    [6.7] handlers: core.serviceExecutor ← new ServiceExecutor(eventBus, logger)
+              core.handlerLoader ← new HandlerLoader(eventBus, serviceExecutor, logger)
+              handlerLoader.loadCentralized('./handlers', './data/projects')   # handlers globales + por proyecto
+    [7] svc:  core.serviceRegistry ← new ServiceRegistry({autocleanup:true})
+              httpPort ← cliArgs.httpPort ?? await serviceRegistry.findFreePort('EVENT_CORE')
+    [8] http: core.httpGateway ← new HTTPGateway({port, coreId, eventBus, moduleLoader,
+                                                  registry, validationManager, compression, cache, core})
+              await core.httpGateway.listen()
+    serviceRegistry.register(coreId, 'EVENT_CORE', httpPort, {version, pid, modules, mqtt_port})
+    heartbeatTimer ← setInterval(→ serviceRegistry.heartbeat(coreId), 10_000)   # presencia por fichero
+    project-manager.reactivateExistingProjects()        # re-emite project.activated (rehidrata consumidores)
+    registrar SIGINT/SIGTERM/uncaughtException/unhandledRejection → shutdown()
+
+  CATCH error:                                 # edge: cualquier paso falla → log + process.exit(1)
+    # (NO hay rollback parcial real: se sale del proceso; la spec describe rollback que el código no implementa)
+
+  FUNCTION shutdown(signal):                   # orden INVERSO, idempotente
+    clearInterval(heartbeatTimer)
+    serviceRegistry.unregister(coreId)
+    activity.close()
+    await httpGateway.stop()  ; await uiHandler.stop()
+    await moduleLoader.unloadAll() ; handlerLoader.unloadAll()
+    await providerSystem.loader.unloadAll()
+    await mqttClient.disconnect()              # también para el broker embebido
+    process.exit(0)
+```
+
+**Grafo de dependencias real (cableado a mano por `main()`):**
+```
+Observability(Logger,Tracer,Metrics) → ValidationManager → MQTTClient(+EmbeddedBroker fallback)
+  → HookManager → EventBus → ActivityLogger → UIRequestHandler → ProviderSystem
+  → ModuleRegistry → ModuleLoader(+IntentRegistry) → HandlerLoader → ServiceRegistry → HTTPGateway
+```
+
+## 1. `MQTTClient extends EventEmitter` — única frontera con el transporte (DIP)
+
+```
+CLASS MQTTClient extends EventEmitter:
+  →deps: { brokerUrl, coreId, connectTimeout:2000, brokerPort:1883, logger, metrics, usePool:false, poolConfig }
+  state: { mqtt, embeddedBroker, isConnected:false, usingEmbedded:false, pool, subscriptions:Map<topic,qos> }
+
+  interface:
+    async connect():
+      TRY  connectToExternalBroker()                  # intenta broker externo (timeout 2s, reconnectPeriod:0)
+      CATCH→ startEmbeddedBrokerAndConnect()          # FALLBACK: arranca EmbeddedBroker y conecta loopback
+      isConnected←true ; if usePool → _initializePool() ; emit('connected',{usingEmbedded})
+
+    setupMQTTHandlers():                              # tras 'connect'
+      mqtt.on('message', (t,raw) → parsed=JSON.parse(raw)||string ; emit('message', t, parsed, raw))
+      mqtt.on('error',    e → emit('error', e))
+      mqtt.on('reconnect',→ emit('reconnecting'))     # backoff propio de mqtt.js (keepalive 30s)
+      mqtt.on('close',    → isConnected=false ; emit('disconnected'))
+
+    async publish(topic, msg, {qos:0, retain:false}):    # ⚠ DEFAULT QoS 0 (no 1)
+        usePool&&pool ? _publishPooled(...) : _publishDirect(...)   # serializa a JSON si no es string
+    async subscribe(topics, {qos:0}): mqtt.subscribe(...) ; subscriptions.set(topic,qos)   # ⚠ DEFAULT QoS 0
+    async unsubscribe(topics) ; async disconnect() ; getStats()
+
+  # RESILIENCIA: keepalive 30s ; clean:true (⚠ la spec dice cleanSession=false; el código usa clean:true)
+  # pool opcional (config.mqtt.pool.enabled) para throughput; default OFF
+```
+
+> **Desvío #2:** el QoS por defecto del cliente es **0**, no 1. La garantía QoS 1 la fija **quien publica**
+> (EventBus, UIRequestHandler, Discovery). Y `clean:true` (no `cleanSession=false`).
+
+## 2. `EmbeddedBroker extends EventEmitter` — Aedes en proceso
+
+```
+CLASS EmbeddedBroker extends EventEmitter:
+  →deps: { port:1883, wsPort:9001, host:'0.0.0.0', logger, metrics }
+  state: { aedes, server(TCP), wsServer, httpServer, isRunning:false, stats }
+
+  interface:
+    async start():
+      aedes ← new Aedes({ heartbeatInterval:30000, connectTimeout:60000 })
+      setupAedesHandlers()                            # client/clientDisconnect/publish/subscribe/unsubscribe/clientError → emit
+      server ← net.createServer(aedes.handle).listen(port)
+      await startWebSocketServer()                    # ws://:9001 para el frontend (ping/pong cada 25s vs keepalive 60s)
+    publish(packet) ; getClients() ; getStats() ; async stop()
+
+  # ⚠ NO hay aedes.authenticate: el broker embebido es ABIERTO en loopback (la spec describe auth mTLS no implementada aquí)
+  # edge: puerto ocupado (EADDRINUSE) → throw en start ; WS que no arranca → warn, TCP sigue
+```
+
+## 3. `EventBus extends EventEmitter` — pub/sub híbrido (local + MQTT)
+
+```
+CLASS EventBus extends EventEmitter:
+  →deps: { coreId, mqtt, hooks, logger, metrics, tracer, activity, validateEvents:false, strictValidation:false }
+  state: { unknownEvents:Set, logCollectorEnabled:true }
+
+  interface:
+    async setupMQTTSubscriptions():                  # en el constructor si hay mqtt
+      await mqtt.subscribe(`core/${coreId}/events/#`)         # propios
+      await mqtt.subscribe(`core/*/events/#`)                 # ⚠ literal '*' (la spec dice '+')
+      mqtt.on('message', _onMessage)
+
+    async emit(eventType, data, opts={}):            # === publish (alias) ===
+      validateEvent(eventType)                                # opcional contra constants.js
+      env ← EventEnvelope.create(eventType, data, {coreId, moduleId, tracer, metadata})
+      ctx ← hooks.execute('beforeEventPublish', {eventType, data, options, envelope:env})
+      if ctx===null → return                                  # hook bloqueó
+      emitLocal(eventType, ctx.envelope)                      # 1) entrega local (EventEmitter)
+      if mqtt.isConnected:                                    # 2) MQTT
+         topic ← opts.targetCoreId ? topics.event(targetCoreId, eventType)
+                                   : topics.event('*', eventType)    # broadcast
+         await mqtt.publish(topic, env, { qos: opts.qos ?? 1, retain: opts.retain ?? false })  # ⚠ QoS 1 aquí
+
+    ▸ _onMessage(topic, raw):                         # recepción MQTT
+        if !topic.includes('/events/') → return
+        env ← EventEnvelope.deserialize(raw) ; if !validate → warn,return
+        if env.source.core_id === coreId → return              # ignora el propio eco (anti-loop)
+        ctx ← hooks.execute('afterEventReceive', {event:env, topic})
+        if ctx===null → return                                 # hook bloqueó
+        emitLocal((ctx.event ?? env).event_type, ctx.event ?? env)
+
+    subscribe(eventType, handler) → unsubFn          # on() + retorna desuscriptor
+    publish = emit ; emitTo(target,...) = emit(...,{targetCoreId})
+    emitLocal(type, env) ; once() ; isConnected() ; getStats()
+
+  # ① topic == 'core/<id>/events/<domain>/<accion/con/slashes>'  (puntos→slashes; coincide con la spec)
+  # CARDINALIDAD 0/1/N: fire-and-forget ; payload malformado → log y descarta, el bus sigue vivo
+  # hooks transversales: 'beforeEventPublish' (salida) / 'afterEventReceive' (entrada)
+```
+
+> **Desvío #3:** suscripción a `core/*/events/#` con **`*` literal** (no el wildcard `+`). Hooks canónicos son
+> `beforeEventPublish`/`afterEventReceive` (la spec menciona `event.received`).
+
+### Envelope canónico (real — `EventEnvelope.create`)
+```json
+{
+  "event_id": "uuid-v4",
+  "event_type": "credential.resolve.response",
+  "timestamp": "ISO-8601",
+  "source": { "core_id": "core-a", "module_id": "credential-manager" },
+  "data": { },
+  "trace": { "trace_id": "...", "span_id": "...", "parent_span_id": "..." },
+  "metadata": { }
+}
+```
+`EventEnvelope` (clase estática): `create · generateEventId(crypto.randomUUID) · validate · clone · serialize · deserialize · enrich · getDomain · getAction · extractType/CoreId/ModuleId`.
+
+## 4. `HookManager` — Chain of Responsibility transversal
+
+```
+CLASS HookManager:
+  state: { hooks:Object<name,handler[]>, stats:Object<name,{executions,blocked,errors}> }
+  interface:
+    register(name, handler) → unregisterFn          # push al array del hook
+    async execute(name, context) → context|null:
+        for h in hooks[name]:
+           r ← await h(context)
+           if r===null → stats.blocked++ ; return null       # ABORTA la cadena (bloqueo)
+           if r!==undefined → context←r                       # muta el contexto
+        return context                                        # (handler que lanza → enhancedError, corta cadena)
+    clear(name) ; clearAll() ; getHandlerCount(name) ; listHooks() ; getStats(name) ; resetStats(name)
+
+  # hooks REALES usados en el core: 'beforeEventPublish', 'afterEventReceive' (EventBus) · 'beforeRequest' (HTTPGateway)
+```
+
+## 5. `UIRequestHandler` — puerta request/response real (legacy, NO `ApiRequestResolver`)
+
+> **Desvío #4 (el más grande):** la spec describe `ApiRequestResolver` con namespace `core/<id>/api/request/...`
+> y clave `correlation_id`. **El código real sigue siendo `UIRequestHandler`**: topics `ui/request/{domain}/{action}`
+> → `ui/response/{request_id}`, clave `request_id`, key interna `domain.action`.
+
+```
+CLASS UIRequestHandler:
+  →deps: { mqttClient, logger, metrics }
+  state: { handlers:Map<"domain.action", fn> }
+
+  interface:
+    async start(): await mqtt.subscribe('ui/request/#', {qos:1}) ; mqtt.on('message', _onMessage)
+    register(domain, action, handler)               # auto-wired por el loader desde manifest.ui_handlers
+    unregister(domain, action)
+
+    # — Fast-path in-process (modo "Casa"): lo usa context.mqttRequest —
+    async handle(domain, action, data):
+        h ← handlers.get(`${domain}.${action}`)
+        if !h → return { status:404, error:'No handler...' }
+        return await h(data)                         # ⚠ NO pasa por hooks ni validación (la spec dice pipeline compartido)
+
+    # — Camino MQTT (frontend) —
+    ▸ _onMessage(topic, msg):
+        if !topic.startsWith('ui/request/') → return
+        {domain, action} ← parse(topic) ; {request_id, data} ← JSON.parse(msg)
+        if !request_id → warn,return
+        h ← handlers.get(`${domain}.${action}`) ; if !h → _sendError(404,'HANDLER_NOT_FOUND')
+        TRY  result ← await h(data, request)
+             # UNWRAP: {status,data}→data ; {status>=400,error}→_sendError ; else→_sendSuccess
+             _sendSuccess(request_id, status, data)
+        CATCH e → _sendError(request_id, e.status||500, e.code||'UNKNOWN_ERROR', e.message)
+    ▸ _sendSuccess(id,status,data): mqtt.publish(`ui/response/${id}`, {request_id,status,success:true,data,timestamp}, {qos:1})
+    ▸ _sendError(id,status,code,msg): mqtt.publish(`ui/response/${id}`, {request_id,status,success:false,error:{code,message},timestamp}, {qos:1})
+
+  # STATUS canónico: 200/201/400/404/409/500  (UIRequestError ⊃ ValidationError/NotFoundError/ConflictError)
+  # ⚠ El timeout (504) lo arma el CALLER (frontend mqttRequest), no esta clase
+```
+
+### Topics + QoS (req/resp real)
+```
+ui/request/<dominio>/<accion>      QoS 1   # petición del frontend
+ui/response/<request_id>           QoS 1   # respuesta dirigida (correlación por request_id)
+```
+*Justificación QoS 1:* perder una request/response cuelga al caller hasta su propio timeout. Idempotencia por `request_id`.
+
+## 6. `ValidationManager` — contratos JSON Schema (ajv)
+
+```
+CLASS ValidationManager:
+  →deps: { logger, allErrors:true, removeAdditional:true, useDefaults:true, coerceTypes:true, strict:false }
+  state: { ajv(+ajv-formats), schemas:Map<id,{schema,validate}>, stats }
+  interface:
+    registerSchema(id, jsonSchema)                  # ajv.compile + cachea
+    validate(id, data) → { valid, errors|null, data }   # data puede mutar (coerción/defaults/removeAdditional)
+    validateInline(schema, data) → { valid, errors, data }
+    formatErrors(ajvErrors) → [{ path, keyword, message, params, data }]   # mensajes legibles por keyword
+    unregisterSchema · hasSchema · getSchema · listSchemas · getStats
+CLASS ValidationError extends Error: { errors, statusCode:400 ; toJSON() }
+```
+
+## 7. `ModuleLoader` — autodiscovery + auto-wiring + hot-reload + 3 sistemas de tools
+
+```
+CLASS ModuleLoader:
+  →deps: { modulesPath, core(context), registry, logger, metrics, config }
+  state: { loadedModules:Map, watchers:Map, toolsRegistry:Map, intentRegistry:IntentRegistry }
+
+  interface:
+    discover():                                      # modules/*/module.json  (+ modules/<vertical>/*/module.json)
+    validateManifest(m): require name+version(semver)+description
+
+    async load(name, path, manifest):
+      [VALIDATE]   manifest válido ; no duplicado
+      [BLUEPRINT]  if manifest.blueprint_driven → registrar {instance:null, blueprint_driven:true} ; return null
+                   # (ai-gateway lo ejecuta leyendo el blueprint como system-prompt)
+      [REQUIRE]    delete require.cache[index.js] ; ModuleClass ← require(index.js)   # purga = hot-reload
+      [INSTANCE]   instance ← new ModuleClass() ; assert instance.onLoad
+      [WIRE-EVT]   eventUnsubs ← wireEventSubscriptions(manifest, instance)   # ANTES de onLoad
+      [CONTEXT]    ctx ← { ...core, moduleConfig, moduleLoader:this,
+                           mqttRequest:(d,a,p)→ core.uiHandler.handle(d,a,p) }   # fast-path in-process
+      [ONLOAD]     try await instance.onLoad(ctx)  catch→ eventUnsubs.forEach(unsub); throw   # rollback subs
+      [STORE]      loadedModules.set(name, {manifest, instance, path, loadedAt, _eventUnsubs})
+      [REGISTER]   registry.register(name, {manifest, instance, apis:buildAPIsFromManifest(...), hooks, subscribes})
+      [TOOLS]      manifest.tools → registerToolsForAI ; tools_http → registerToolsHttpForAI ; intents → intentRegistry.register
+      [WIRE-UI]    _uiRegistrations ← wireUIHandlers(manifest, instance)
+      return instance
+
+    async loadAll():
+      discovered ← discover() ; quitar config.disabled[] ; ordenar por config.enabled[] (resto al final)
+      para cada → try load() catch→ continue   # el arranque sobrevive al fallo de un módulo
+      await eventBus.publish('core.modules.loaded.all', {total,successful,failed})   # señal para wirings tardíos
+
+    async unload(name): _eventUnsubs.forEach(unsub) ; _uiRegistrations.forEach(unregister)
+                        intentRegistry.unregister ; unregisterToolsForAI ; registry.unregister
+                        await instance.onUnload?.() ; loadedModules.delete
+    async reload(name): unload + load (require.cache purgado)
+    watch(name)/watchAll(): fs.watch → debounce 500ms → reload   # hot-reload opcional
+    getLoadedModules() ; getModule(name) ; isLoaded(name)
+
+    # ── AUTO-WIRING declarativo desde module.json ──
+    wireEventSubscriptions(m,inst):  para {event,handler} en (subscribes|events.subscribes) → bus.subscribe(event, inst[handler].bind(inst))
+    wireUIHandlers(m,inst):          para {domain,action,handler} en (ui_handlers|uiActions|handlers) → uiHandler.register(domain,action, inst[handler].bind(inst))
+    buildAPIsFromManifest(m,inst):   (apis|provides.apis) → {name,method,path,handler:bind} (handler explícito o handle<Action>)
+
+    # ── 3 SISTEMAS DE TOOLS PARA EL LLM (una declaración → tres destinos) ──
+    registerToolsForAI(name,tools,inst):     # tools[] con handler (soporta path anidado 'strategies.mesa.handleX')
+        para cada tool: 1) toolsRegistry.set ; 2) _wireToolBusSubscription(tool) ; 3) uiHandler.register(domain,action)
+    registerToolsHttpForAI(name,toolsHttp):  # tools_http[] declarativas → closure runtime (sin código JS)
+        _makeHttpToolHandler: resolver credential(bus) → templating {{param}} → fetch(timeout) → mapear status→canon
+    registerProviderTools(providerRegistry): # provider fns → tools (gmail_send, ocr_extract…)
+
+    ▸ _wireToolBusSubscription(toolName, handler, bus):
+        bus.subscribe(toolName, async (ev) → {request_id,...args}=ev.data
+           r ← await handler(args)
+           unwrap {status,data}→data | {status>=400,error}→error
+           bus.publish(`${toolName}.response`, { request_id, result|error }))   # invocación canónica por bus
+    executeTool(name,args) ; getToolsForAI() ; getTool(name) ; toolRequiresConfirmation(name)
+```
+
+### Manifiesto que consume el loader
+```json
+{
+  "name": "filesystem", "version": "2.0.0", "main": "index.js", "config": {},
+  "subscribes":   [ { "event": "fs.read.request", "handler": "onFsReadRequest" } ],
+  "ui_handlers":  [ { "domain": "fs", "action": "read", "handler": "handleRead" } ],
+  "tools":        [ { "name": "fs.read", "handler": "handleRead",
+                      "parameters": { "type":"object","properties":{"path":{"type":"string"}},"required":["path"] } } ]
+}
+```
+
+## 8. `ModuleRegistry` — catálogo de módulos + índice de APIs HTTP
+
+```
+CLASS ModuleRegistry:
+  →deps: { logger, metrics }
+  state: { modules:Map, apiIndex:Map<"METHOD:/path">, hookIndex:Map<hook,Set>, codeIndex:Map<routeCode,module> }
+  interface:
+    register(name, {manifest,instance,apis,hooks,subscribes}):   # indexa /modules/<name><path> (+ /<routeCode><path>)
+    unregister(name) ; get(name) ; getAll() ; has(name)
+    findAPI(path, method) → {handler, params}      # exact match, luego matchPath con :params
+    matchPath(pattern, path) → params|null         # /modules/x/menus/:id ↔ /modules/x/menus/123
+    getAllAPIs() ; getModuleAPIs(name) ; getModulesWithHook(hook) ; resolveCode(code) ; getStats()
+```
+
+## 9. `IntentRegistry` — NL→módulo sin LLM (matching por keywords)
+
+```
+CLASS IntentRegistry:
+  state: { intents:[{module,keywords[],action,tool?,agent?,multi_turn,description}] }
+  interface:
+    register(module, intents) ; unregister(module)
+    match(msg) → { intent, confidence, level }     # level: ≥10 high | ≥5 medium | <5 low
+    matchAll(msg) → ranked[]
+    _score(msg, keywords): Σ keyword.length si msg.includes(keyword)   # keyword más larga = más específica
+    getAll · getByModule · getStats
+```
+
+## 10. Observabilidad — `Logger` · `Tracer` · `Metrics` · `ActivityLogger`
+
+```
+CLASS Logger:        debug/info/warn/error(event, fields[, error]) ; child(ctx) ; publishToMQTT ; setTraceContext
+                     # log estructurado (clave→campos), niveles, formato JSON
+CLASS Tracer:        start(op, parentCtx) → span ; getCurrentContext() → {traceId,spanId,parentSpanId}
+                     extract(event)/inject(event,ctx) ; fromW3C/toW3C(traceparent)   # contexto W3C que viaja en el envelope
+CLASS Metrics:       increment/decrement(k,v) ; gauge(k,v) ; timing(k,ms) ; observe(k,v)→histograma
+                     getCounter ; getHistogram ; percentile ; measure(name,fn) ; getStats ; publishMetrics
+CLASS ActivityLogger: →deps {coreId, eventBus, logger, enabled, minLevel}
+                     logModuleAction · logEventFlow(dir,type) · logApiOperation · logCommunication
+                     logPerformance · logSystem · logError · startTimer · forModule(m) · _flush · close
+                     # auditoría central; el EventBus la alimenta con logEventFlow en cada publish/receive
+```
+> `Observability` (facade en `index.js`) agrupa las cuatro; en el código real se instancian sueltas en `main()`
+> (no hay clase `Observability` contenedora — desvío menor con la spec).
+
+## 11. `Discovery extends EventEmitter` — presencia multi-core (⚠ código DURMIENTE)
+
+> **Desvío #5:** la clase `Discovery` (heartbeat + LWT + registry de cores) **existe pero `index.js` NUNCA la instancia**.
+> La presencia real la da `ServiceRegistry` (fichero `.services.json` + heartbeat 10s). Además `setupLastWill()`
+> es un **stub que solo loguea** (no reconfigura el cliente MQTT con `will`).
+
+```
+CLASS Discovery extends EventEmitter:              # NO cableada en el arranque actual
+  →deps: { coreId, version, port, modules, capabilities, mqttClient, heartbeatInterval:30000, aliveTimeout:60000 }
+  state: { cores:Map<id,CoreStatus>, ownStatus:CoreStatus, heartbeatTimer, checkAliveTimer }
+  interface:
+    async start(): setupLastWill() ; subscribeToDiscovery() ; publishStatus() ; startHeartbeat() ; startAliveCheck()
+    subscribeToDiscovery(): mqtt.subscribe('core/+/status',{qos:1}) ; on('message', handleDiscoveryMessage)
+    publishStatus(): mqtt.publish(`core/${coreId}/status`, ownStatus, { qos:1, retain:true })   # ÚNICO retain=true legítimo
+    handleDiscoveryMessage(t,p): if offline→handleCoreOffline ; else updateCore   # ignora los propios
+    getActiveCores() ; getCore(id) ; isCoreActive(id) ; updateModules(list) ; updateCapabilities(caps)
+    # setupLastWill() → ⚠ solo logea (LWT real sin implementar)
+```
+
+## 11b. `ServiceRegistry` — presencia REAL (fichero + PID)
+
+```
+CLASS ServiceRegistry:
+  →deps: { registryFile:'.services.json', heartbeatTimeout:60000, autocleanup:true, cleanupInterval:30000 }
+  state: { services:Map, portManager:PortManager }
+  interface:
+    register(id, type, port, metadata) ; unregister(id) ; heartbeat(id)
+    findFreePort(type) → puerto en el rango de config/port-ranges
+    cleanup(): elimina servicios sin heartbeat cuyo PID ya no existe (process.kill(pid,0))
+    getActiveServices ; getServicesByType ; getStats ; save()/load() (persistencia JSON best-effort)
+```
+
+## 12. `HTTPGateway` — borde REST + UI estática (HTTP → bus/módulos)
+
+```
+CLASS HTTPGateway:
+  →deps: { port, coreId, eventBus, moduleLoader, registry, validationManager, activity, compression, cache, core }
+  state: { server, stats, cache:GatewayCache, uiGateway }
+  interface:
+    async start()/stop()
+    ▸ handleRequest(req,res):
+        rutas fijas: /health /ready /stats /cache/stats /cache/clear /ui/* /blueprints[/<name>]
+        body ← parseBody() si POST/PUT/PATCH
+        ctx ← hooks.execute('beforeRequest', {request_id,method,path,query,body,headers})   # ← auth/mTLS (decorador)
+        if ctx===null → 403 ; cache.get(req)?→ 304/HIT
+        apiData ← registry.findAPI(pathname, method)  → if !apiData → 404
+        validateRequest(...) opcional → 400 si falla
+        result ← await apiData.handler({method,path,query,body,headers}, handlerContext)   # ejecuta el módulo
+        sendResponse(res, status, result)   # + compression(gzip) + cache + ETag
+    handleHealth/Ready/Stats ; handleListBlueprints/GetBlueprint ; handleUIRoute ; getStats()
+  # cache + compression como decorators opcionales (config.http.cache/compression)
+```
+
+## 13. Provider System — Strategy intercambiable (IA / OCR / PDF / gmail…)
+
+```
+FACTORY createProviderSystem({providersPath, eventBus, logger}) → { registry, executor, loader }
+
+CLASS ProviderRegistry:  register(name,data) ; get(name) ; getFunction(name,fn) ; findByEvent(event)
+                         isAvailable(name) ; getAll/getAvailable ; getAllEvents ; getStats
+CLASS ProviderExecutor:  execute(provider, fn, input, opts) → executeLocal | executeHTTP
+                         replaceTemplateVars(deep) ; extractByPath ; httpRequest   # credentialResolver inyectable
+CLASS ProviderLoader:    discover() (external + local services) ; loadExternal/loadLocal ; loadAll/unloadAll
+                         registerEventHandlers():  por cada fn → subscribe `<provider>.<fn>.request`
+                                                   → executor.execute → publish `<provider>.<fn>.response`
+                         resolveOAuthCredentials(provider, account)   # OAuth opcional
+```
+
+## 14. Handler System — acciones declarativas event-driven (paralelo a módulos)
+
+```
+CLASS HandlerLoader:   →deps {eventBus, serviceExecutor, logger}
+   loadCentralized('./handlers', './data/projects'): global + por proyecto (handlers/projects/<id>/)
+   register(handler, projectId): suscribe el handler a su evento ; createEmit(name,projectId) inyecta emisión
+   loadProject/unloadProject/reloadProject ; list(scope) ; get(name,projectId) ; getStats
+CLASS ServiceExecutor: →deps {eventBus, logger}
+   call(service, action, params, opts): publish `<service>.<action>.request` → espera `.response` (correlado, timeout)
+   scoped(projectId) ; cancelAll()
+```
+
+## Jerarquía de topics + QoS (REAL, consolidada)
+
+```
+core/<id>/events/<dominio>/<accion/con/slashes>   QoS 1   # EventBus.emit (fire-and-forget) — ①
+core/*/events/#                                   QoS 0   # suscripción broadcast (default del cliente)
+ui/request/<dominio>/<accion>                     QoS 1   # UIRequestHandler — petición frontend
+ui/response/<request_id>                          QoS 1   # respuesta dirigida (correlación request_id)
+core/<id>/status                                  QoS 1 retain=true   # Discovery (durmiente) / presencia
+log/eventbus                                      QoS 0   # log de flujo de eventos (best-effort)
+<toolName>  /  <toolName>.response                QoS 1   # invocación canónica de tools por bus
+<provider>.<fn>.request / .response               QoS 1   # provider system
+```
+*Justificación QoS:* eventos de dominio y req/resp → **QoS 1** (perder uno cuelga al caller o desincroniza);
+telemetría/logs → **QoS 0** tolerante a pérdida; presencia → **retain=true** (único caso legítimo). Idempotencia
+siempre a nivel app por `request_id` / `event_id`. El cliente MQTT publica **QoS 0 por defecto**; cada productor
+crítico **sube a QoS 1 explícitamente**.
+
+## Resumen de desvíos código ↔ spec
+
+| # | Spec (arriba) | Código real |
+|---|---|---|
+| 1 | `CLASS Core` orquestador | objeto plano `core` cableado por `main()` |
+| 2 | MQTT `cleanSession=false`, QoS 1 default | `clean:true`, QoS 0 default (productores suben a 1) |
+| 3 | sub `core/+/events/#`, hook `event.received` | sub `core/*/events/#` (`*` literal), hooks `beforeEventPublish`/`afterEventReceive` |
+| 4 | `ApiRequestResolver` · `core/<id>/api/request/*` · `correlation_id` | `UIRequestHandler` · `ui/request/*` · `request_id` |
+| 5 | `Discovery` con LWT activo cableado | clase durmiente (no instanciada); presencia vía `ServiceRegistry` (fichero+PID); LWT = stub |
+| 6 | rollback parcial en fallo de arranque | `process.exit(1)` sin rollback |
+| 7 | `EmbeddedBroker` con `authenticate` mTLS | broker abierto en loopback (auth no implementada) |
 
 ---
 

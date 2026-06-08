@@ -6,7 +6,7 @@
  *     por el loader en uiHandler con domain='fs'), asi que el frontend las invoca
  *     via mqttRequest('fs', 'read'|'list', {path}). Filesystem resuelve el path
  *     relativo contra el storage del proyecto activo.
- *   - Este store SOLO LEE el catalogo de cartas (/storage/pizzepos/cartas/,
+ *   - Este store SOLO LEE el catalogo de cartas (/pizzepos/cartas/,
  *     propiedad de carta-manager, path canonico v1.3.0 por D1) + sus snapshots de
  *     version (.versions/<id>/<ts>.json). NO invoca las tools del blueprint
  *     carta-manager (save/delete/add_product/...) --esas son LLM-runtime, no
@@ -37,8 +37,8 @@ import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
 // CONSTANTES — paths canonicos v1.3.0 (subsistema-carta v1.0.0 D1)
 // =============================================================================
 
-const CARTAS_DIR = '/storage/pizzepos/cartas/';
-const VERSIONS_DIR = '/storage/pizzepos/cartas/.versions/';
+const CARTAS_DIR = '/pizzepos/cartas/';
+const VERSIONS_DIR = '/pizzepos/cartas/.versions/';
 
 function cartaPath(id: string): string {
   return CARTAS_DIR + id + '.json';

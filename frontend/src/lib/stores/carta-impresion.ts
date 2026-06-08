@@ -1,8 +1,8 @@
 /**
  * Carta Impresion Store — versiones imprimibles de cartas.
  *
- * Lecturas directas via fs.read sobre /cartas-impresion/<carta_id>.html
- * y /cartas-impresion/<carta_id>.meta.json (patron lecturas-frontend-via-
+ * Lecturas directas via fs.read sobre /pizzepos/carta-impresion/<carta_id>.html
+ * y /pizzepos/carta-impresion/<carta_id>.meta.json (patron lecturas-frontend-via-
  * fs-read). La generacion de un imprimible la hace el agente impresor
  * (impresion-architect) — operacion compleja del blueprint, se pide al
  * chat. El frontend solo escucha carta.impresion.lista para refrescar
@@ -72,8 +72,8 @@ async function readFileOrNull(path: string): Promise<string | null> {
 export async function loadImpresion(cartaId: string): Promise<ImpresionItem | null> {
   impresionStore.update(s => ({ ...s, loading: true, error: null }));
   try {
-    const htmlPath = `/cartas-impresion/${cartaId}.html`;
-    const metaPath = `/cartas-impresion/${cartaId}.meta.json`;
+    const htmlPath = `/pizzepos/carta-impresion/${cartaId}.html`;
+    const metaPath = `/pizzepos/carta-impresion/${cartaId}.meta.json`;
 
     const [html, metaRaw] = await Promise.all([
       readFileOrNull(htmlPath),

@@ -7,7 +7,7 @@
  *     esa tool en uiHandler con domain='fs', action='read', asi que el
  *     frontend la invoca via mqttRequest('fs', 'read', {path}). Filesystem
  *     resuelve el path relativo contra el storage del proyecto activo.
- *   - Este store lee /recetas.json una vez por operacion y transforma
+ *   - Este store lee /pizzepos/recetas.json una vez por operacion y transforma
  *     localmente: filter por estado, sort por updated_at, slice por limit,
  *     derivar ingredientes_count.
  *   - No hay modulo backend dedicado al dominio recetas — el blueprint del
@@ -17,7 +17,7 @@
  *
  * Shape canonico: del blueprint del subsistema-recetario (estado_operativo,
  * dificultad, incompleta, campos_pendientes). Sin `categoria`, `coste_total`
- * ni `coste_porcion` — esos datos no viven en /recetas.json hoy (escandallo
+ * ni `coste_porcion` — esos datos no viven en /pizzepos/recetas.json hoy (escandallo
  * es stateless on-demand). Si el usuario quiere coste, lo pide al chat.
  */
 
@@ -137,7 +137,7 @@ export interface RecetasState {
 }
 
 // =============================================================================
-// INTERNAL — shape de /recetas.json en disco
+// INTERNAL — shape de /pizzepos/recetas.json en disco
 // =============================================================================
 
 interface RecetasStore {
@@ -147,7 +147,7 @@ interface RecetasStore {
   ingredientes_catalogo?: CatalogoIngrediente[];
 }
 
-const STORE_PATH = '/recetas.json';
+const STORE_PATH = '/pizzepos/pizzepos/recetas.json';
 const DEFAULT_LIST_LIMIT = 100;
 
 // =============================================================================
@@ -172,7 +172,7 @@ export const recetasStore = writable<RecetasState>(initialState);
 // =============================================================================
 
 /**
- * Lee /recetas.json del proyecto activo via mqttRequest('fs', 'read').
+ * Lee /pizzepos/recetas.json del proyecto activo via mqttRequest('fs', 'read').
  * Devuelve el objeto parseado o null si el archivo no existe (RESOURCE_NOT_FOUND).
  * Throws con error legible para otros errores.
  */
@@ -366,13 +366,13 @@ export async function loadStats(): Promise<void> {
 }
 
 // =============================================================================
-// HISTORIAL — versiones (lectura pura de r.history en /recetas.json)
+// HISTORIAL — versiones (lectura pura de r.history en /pizzepos/recetas.json)
 // =============================================================================
 //
 // CERO invocaciones a tools del blueprint recetas: es blueprint-driven
 // LLM-runtime, no tiene servicio JS escuchando el bus, solo corre cuando el
 // LLM lo invoca via chat. El array history[] vive dentro de cada receta en
-// /recetas.json y se lee igual que el resto del store (modules/filesystem es
+// /pizzepos/recetas.json y se lee igual que el resto del store (modules/filesystem es
 // POC2 y responde fs.read.request directo). El shape de loadHistorial
 // reproduce literal el de la operacion 'historial' del blueprint
 // (modules/pizzepos/recetas/recetas.blueprint.json, verificado 2026-06-01).
@@ -409,7 +409,7 @@ export interface RecetaHistorialResult {
 
 /**
  * Resumen de versiones de una receta (para pintar la lista de HistorialView).
- * Lectura pura: lee /recetas.json, encuentra la receta y proyecta r.history[].
+ * Lectura pura: lee /pizzepos/recetas.json, encuentra la receta y proyecta r.history[].
  * Throw upstream — el panel HistorialView captura en banner.
  */
 export async function loadHistorial(recetaId: string): Promise<RecetaHistorialResult> {

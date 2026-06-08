@@ -1,8 +1,8 @@
 /**
- * Escandallo Store — lecturas directas via fs.read sobre /recetas.json.
+ * Escandallo Store — lecturas directas via fs.read sobre /pizzepos/recetas.json.
  *
  * Tras el bump de escandallo a blueprint v2.0.0 (commit b37cd7e en main),
- * los costes se persisten en cada receta dentro de /recetas.json (campos
+ * los costes se persisten en cada receta dentro de /pizzepos/recetas.json (campos
  * coste_total, coste_porcion, ingredientes_detalle, ingredientes_sin_precio,
  * etc.). Este store agrega/sintetiza las vistas que la pagina necesita
  * leyendo ese mismo archivo — cero handler backend, mismo patron que el
@@ -85,7 +85,7 @@ export interface EscandalloState {
 }
 
 // =============================================================================
-// INTERNAL — shape de /recetas.json
+// INTERNAL — shape de /pizzepos/recetas.json
 // =============================================================================
 
 interface IngredienteDetallePersisted {
@@ -122,7 +122,7 @@ interface RecetasStorePersisted {
   _updated_at?: string;
 }
 
-const STORE_PATH = '/recetas.json';
+const STORE_PATH = '/pizzepos/pizzepos/recetas.json';
 
 // =============================================================================
 // STORE

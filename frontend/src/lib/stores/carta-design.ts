@@ -72,8 +72,8 @@ export interface CartaDesignState {
   error: string | null;
 }
 
-const PROFILES_DIR = '/carta-design/profiles';
-const DESIGNS_DIR = '/carta-design/designs';
+const PROFILES_DIR = '/pizzepos/carta-design/profiles';
+const DESIGNS_DIR = '/pizzepos/carta-design/designs';
 
 // =============================================================================
 // BUILT-IN PROFILES (5 — lista cerrada del subsistema-carta)

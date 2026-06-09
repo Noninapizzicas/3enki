@@ -2,9 +2,10 @@
   "_doc": "Blueprint CONCRETO del modulo recetas v1.0.0. Reemplaza completamente al modulo recetas legacy v4.0.0 (cuyo index.js queda como referencia historica). Declara las 13 operaciones del dominio en formato declarativo: contrato + pseudocodigo + reglas. El LLM ES el runtime: lee este blueprint (junto con el padre) como su contrato, sigue el pseudocodigo de cada operacion publicando eventos al bus directamente via bus.publish / bus.publishAndWait. NO existe runtime intermedio. NO existen helpers JS del dominio.",
 
   "id": "recetas",
-  "version": "blueprint-1.7.1",
+  "version": "blueprint-1.8.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
+  "_v1_8_changelog": "v1.8.0 (2026-06-09): educa al LLM en la disciplina receta↔ingrediente para que las recetas nazcan costeables y no haya que reparar el dato a posteriori. (1) shape_ingrediente gana campo opcional ref_receta_id (uuid|null): cuando un ingrediente es a su vez una preparacion mantenida como receta (masa, salsa base, semi-elaborado) se referencia por id (cantidad = nº porciones, unidad='ud') en vez de duplicar su formula como commodity — escandallo usara su coste_porcion real en vez de estimar. (2) normalizadores_que_aplica_el_llm gana bloque disciplina_ingredientes con 4 reglas: UNIDAD CANONICA (g|kg|ml|l|ud, prohibido peso embebido en unidad tipo 'bola (315g)'), NOMBRE RESOLUBLE Y UNICO (comercial/Mercadona, sin genericos como 'Queso', mismo nombre en todas las recetas), SUB-RECETA (ref_receta_id), NO DUPLICAR PREPARACIONES (listar antes de crear, reusar la masa existente). (3) garantiza añade la invariante correspondiente. Sin cambios en operaciones ni en el shape persistido fuera del campo nuevo (opcional, retrocompatible: recetas sin ref_receta_id siguen valiendo).",
   "_v1_1_changelog": "v1.1.0 (2026-05-24): anyade subscriber asincrono al evento 'escandallo.coste.calculado' via mecanismo blueprint-subscribers-asincronos (ai-gateway commit 6cb2082c). Operacion interna nueva _aplicar_coste_calculado (prefijo _ = no expuesta como cajon al LLM, solo invocada cuando llega el evento). Recetas mantiene la propiedad absoluta de pizzepos/recetas.json — escandallo NO escribe directo (paradigma event-core puro), publica el evento y recetas lo aplica. Operaciones pre-existentes (crear, listar, obtener, etc.) sin cambios.",
 
   "rol": "Aggregate root del subsistema-recetario. Custodio del dato canonico de cada receta y del catalogo de ingredientes del proyecto.",
@@ -16,7 +17,8 @@
     "Cada operacion de mutacion publica el evento canonico correspondiente (receta.creada, receta.actualizada, receta.estado.actualizada, receta.eliminada, ingrediente.precio.actualizado).",
     "Cada actualizacion pushea snapshot al history[] de la receta y bumps version (+1). Las versiones anteriores se pueden restaurar via revertir.",
     "Las transiciones de estado_operativo respetan TRANSICIONES_VALIDAS (declaradas en el padre). Transicion invalida → PRECONDITION_FAILED.",
-    "incompleta + campos_pendientes se recalculan en cada mutacion (crear, actualizar, revertir) — campos_pendientes son los de {nombre, ingredientes, instrucciones, porciones} vacios."
+    "incompleta + campos_pendientes se recalculan en cada mutacion (crear, actualizar, revertir) — campos_pendientes son los de {nombre, ingredientes, instrucciones, porciones} vacios.",
+    "Los ingredientes usan unidad canonica convertible (g|kg|ml|l|ud) y nombre comercial unico; una preparacion que el proyecto mantiene como receta se referencia con ref_receta_id (sub-receta), nunca se duplica como commodity ni se re-lista su formula."
   ],
 
   "no_garantiza": [
@@ -45,7 +47,8 @@
       "id":                "uuid v4 (generado por el LLM cuando crea — en esta version vale uuid alucinado del LLM; sugerencia futura: primitiva bus.newId)",
       "nombre":            "string trim",
       "descripcion":       "string | ''",
-      "ingredientes":      "array de { nombre, cantidad: number|null, unidad: string|null, notas: string }",
+      "ingredientes":      "array de { nombre, cantidad: number|null, unidad: string|null, notas: string, ref_receta_id: uuid|null }",
+      "_ingredientes_nota": "ref_receta_id ≠ null → la linea ES una sub-receta del proyecto (preparacion mantenida como receta propia: masa, salsa base...). cantidad = nº de porciones de esa receta, unidad='ud'. escandallo usa el coste_porcion de la receta referida × cantidad en vez de buscar precio externo. null → ingrediente commodity normal (precio via Mercadona/estimacion).",
       "instrucciones":     "array de string (pasos numerados)",
       "porciones":         "number > 0 | null",
       "tiempo_min":        "number >= 0 | null",
@@ -92,10 +95,16 @@
     "_descripcion": "El LLM razona estos normalizadores mentalmente — son lenguaje natural + reglas. No son tools.",
     "nombre": "trim. Comparacion para duplicados: toLowerCase + trim.",
     "ingredientes": [
-      "Si input es array de strings → cada string es { nombre, cantidad: null, unidad: null, notas: '' }.",
-      "Si input es array de objetos → mapear sinonimos (name→nombre, quantity→cantidad, unit→unidad, notes→notas). Default notas: ''.",
-      "Si input es string libre con saltos de linea, ; o , → split + cada item como { nombre, cantidad: null, unidad: null, notas: '' }.",
+      "Si input es array de strings → cada string es { nombre, cantidad: null, unidad: null, notas: '', ref_receta_id: null }.",
+      "Si input es array de objetos → mapear sinonimos (name→nombre, quantity→cantidad, unit→unidad, notes→notas, recipe_id/sub_receta→ref_receta_id). Default notas: '', ref_receta_id: null.",
+      "Si input es string libre con saltos de linea, ; o , → split + cada item como { nombre, cantidad: null, unidad: null, notas: '', ref_receta_id: null }.",
       "Filtrar al final items con nombre vacio."
+    ],
+    "disciplina_ingredientes": [
+      "UNIDAD CANONICA: cada ingrediente usa una unidad convertible — 'g' | 'kg' | 'ml' | 'l' | 'ud'. NUNCA metas peso o cantidad dentro de 'unidad' como texto libre (mal: unidad='bola (315g)'; bien: cantidad=315, unidad='g'). Si una medida no es convertible (hojas, pizca, al gusto) usa 'ud' con la cantidad aproximada — nunca inventes una unidad textual.",
+      "NOMBRE RESOLUBLE Y UNICO: usa el nombre comercial comun tal como se compra, especifico para que sea localizable en Mercadona. Evita genericos (mal: 'Queso'; bien: 'Mozzarella' o 'Queso cheddar'). El MISMO ingrediente lleva SIEMPRE el mismo nombre en todas las recetas — no crees variantes de un mismo producto.",
+      "SUB-RECETA (semi-elaborado): si un ingrediente es a su vez una preparacion que el proyecto mantiene como receta propia (masa, salsa base, sofrito, masa madre...), NO lo trates como commodity ni dupliques su formula como lista de ingredientes: pon ref_receta_id apuntando al id de esa receta, cantidad = nº de porciones que usa, unidad='ud'. Asi escandallo calcula su coste real (coste_porcion de la sub-receta) en vez de estimarlo.",
+      "NO DUPLICAR PREPARACIONES: antes de crear una receta-preparacion o referenciarla como sub-receta, LISTA primero las recetas del proyecto y comprueba si ya existe una equivalente (nombre normalizado). Si existe, reusala (su id). Prohibido crear 'Masa Nonina' y 'Masa napolitana' para la misma masa."
     ],
     "instrucciones": [
       "Si input es array → trim cada string, filtrar vacios.",

@@ -8353,5 +8353,3434 @@ CLASE OtaLogEntry {
 }
 ```
 
+---
+
+# GRUPO A — gateway-manager, log-manager, mercadona-api
+
+## GATEWAY-MANAGER (v2.0.0) — Ciclo de Vida de Gateways Software
+
+```
+INTERFAZ GatewayManagerContract {
+  handleList(): Promise<Response>
+  handleStatus(data: {type}): Promise<Response>
+  handleRestart(data: {type}): Promise<Response>
+  handleDiscover(data: {type}): Promise<Response>
+}
+
+CLASE GatewayManagerModule HEREDA BaseModule IMPLEMENTA GatewayManagerContract {
+  ATRIBUTOS {
+    name: String = 'gateway-manager'
+    version: String = '2.0.0'
+    config: {gateways: {tcp: {enabled, autodiscovery, manual_devices}, ble: {...}, usb: {...}, cmd: {...}}}
+    gateways: Map<type, Gateway>
+    internalMetrics: {started_total, devices_found_total, commands_processed_total, errors_total}
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus FROM core
+      CARGA config FROM core.config['gateway-manager'] || DEFAULT_CONFIG
+      LLAMA _startEnabledGateways()
+      logger.info('gateway-manager.loaded', {active_gateways: gateways.size, types: Array.from(gateways.keys()).toArray()})
+
+    async onUnload(): Promise<Void>
+      entries = Array.from(gateways.entries())
+      gateways.clear()
+      PARA cada [type, gateway] EN entries:
+        await _stopGateway(type, gateway, crypto.randomUUID())
+      RESETEA internalMetrics
+
+    async _startEnabledGateways(correlation_id: String): Promise<Void>
+      mqtt = eventBus?.mqtt
+      SI !mqtt OR !mqtt.isConnected:
+        logger.warn('gateway-manager.mqtt.not_available', {correlation_id})
+        metrics?.increment('gateway-manager.errors', {kind: 'mqtt_not_available'})
+        RETORNA
+      PARA cada [type, gatewayConfig] EN Object.entries(config.gateways):
+        SI !gatewayConfig.enabled: CONTINÚA
+        await _tryStartGateway(type, gatewayConfig, mqtt, correlation_id)
+
+    async _tryStartGateway(type: String, gatewayConfig: Object, mqtt: MQTTClient, correlation_id: String): Promise<Void>
+      GatewayClass = GATEWAY_TYPES[type]
+      SI !GatewayClass:
+        logger.warn('gateway-manager.unknown_type', {type, correlation_id})
+        RETORNA
+      TRY:
+        gateway = await _instantiateGateway(GatewayClass, gatewayConfig, mqtt)
+        await gateway.start()
+        gateways.set(type, gateway)
+        internalMetrics.started_total++
+        internalMetrics.devices_found_total += gateway.metrics.devices_found
+        logger.info('gateway-manager.gateway.started', {type, devices: gateway.devices.size, correlation_id})
+        metrics?.increment('gateway-manager.gateway.started', {type})
+        await _publicarEvento('gateway.started', {type, devices_count: gateway.devices.size}, {correlation_id})
+        await _publishDeviceFoundEvents(type, gateway, correlation_id)
+      CATCH err:
+        internalMetrics.errors_total++
+        logger.error('gateway-manager.gateway.start.failed', {type, error: err.message, correlation_id})
+        metrics?.increment('gateway-manager.errors', {kind: 'start', type})
+        await _publicarEvento('gateway.error', {type, error: err.message}, {correlation_id})
+
+    async _publishDeviceFoundEvents(type: String, gateway: Gateway, correlation_id: String): Promise<Void>
+      PARA cada [deviceId, entry] EN gateway.devices:
+        await _publicarEvento('gateway.device_found', {
+          device_id: deviceId,
+          gateway_type: type,
+          device_type: entry.type,
+          capabilities: entry.capabilities
+        }, {correlation_id})
+
+    async _stopGateway(type: String, gateway: Gateway, correlation_id: String): Promise<Void>
+      TRY:
+        await gateway.stop()
+        await _publicarEvento('gateway.stopped', {type}, {correlation_id})
+      CATCH err:
+        logger.error('gateway-manager.stop.failed', {type, error: err.message, correlation_id})
+        metrics?.increment('gateway-manager.errors', {kind: 'stop', type})
+        internalMetrics.errors_total++
+
+    async _restartGateway(type: String, correlation_id: String): Promise<Object>
+      SI !VALID_TYPES.includes(type):
+        LANZA Error CON _code: 'INVALID_INPUT', _details: {kind: 'domain', field: 'type', allowed: VALID_TYPES}
+      gatewayConfig = config.gateways[type]
+      SI !gatewayConfig:
+        LANZA Error CON _code: 'RESOURCE_NOT_FOUND', _details: {entity_type: 'gateway_config', entity_id: type}
+      mqtt = eventBus?.mqtt
+      SI !mqtt?.isConnected:
+        LANZA Error CON _code: 'UPSTREAM_UNREACHABLE', _details: {upstream: 'mqtt', state: 'disconnected'}
+      existing = gateways.get(type)
+      SI existing:
+        gateways.delete(type)
+        TRY:
+          await existing.stop()
+        CATCH err:
+          logger.warn('gateway-manager.restart.stop_failed', {type, error: err.message, correlation_id})
+      GatewayClass = GATEWAY_TYPES[type]
+      gateway = await _instantiateGateway(GatewayClass, gatewayConfig, mqtt)
+      await gateway.start()
+      gateways.set(type, gateway)
+      metrics?.increment('gateway-manager.gateway.restarted', {type})
+      RETORNA {type, devices: gateway.devices.size}
+
+    async _discoverGateway(type: String): Promise<Object>
+      SI !VALID_TYPES.includes(type):
+        LANZA Error CON _code: 'INVALID_INPUT'
+      mqtt = eventBus?.mqtt
+      SI !mqtt?.isConnected:
+        LANZA Error CON _code: 'UPSTREAM_UNREACHABLE'
+      GatewayClass = GATEWAY_TYPES[type]
+      tempConfig = {autodiscovery: true, ...config.gateways[type]}
+      tempGateway = await _instantiateGateway(GatewayClass, tempConfig, mqtt)
+      devices = await tempGateway._discoverDevices()
+      RETORNA {type, devices, count: devices.length}
+
+    async handleList(): Promise<Response>
+      TRY:
+        gateways_list = []
+        PARA cada [type, gwConfig] EN Object.entries(config.gateways):
+          running = gateways.get(type)
+          gateways_list.push({
+            type,
+            enabled: gwConfig.enabled || false,
+            running: !!running,
+            ...(running ? running.getInfo() : {devices_count: 0})
+          })
+        RETORNA {status: 200, data: {gateways: gateways_list, active: gateways.size, total_configured: Object.keys(config.gateways).length}}
+      CATCH err:
+        RETORNA _handleHandlerError('gateway-manager.ui.list.failed', err, 'ui_list')
+
+    async handleStatus(data: {type}): Promise<Response>
+      TRY:
+        {type} = data || {}
+        SI !type:
+          RETORNA _errorResponse(400, 'INVALID_INPUT', 'Gateway type is required', {kind: 'domain', field: 'type', allowed: VALID_TYPES})
+        SI !VALID_TYPES.includes(type):
+          RETORNA _errorResponse(400, 'INVALID_INPUT', `Gateway type not supported: {type}`, {kind: 'domain', field: 'type', allowed: VALID_TYPES})
+        gateway = gateways.get(type)
+        SI !gateway:
+          RETORNA {status: 200, data: {type, running: false, enabled: config.gateways[type]?.enabled || false}}
+        RETORNA {status: 200, data: gateway.getInfo()}
+      CATCH err:
+        RETORNA _handleHandlerError('gateway-manager.ui.status.failed', err, 'ui_status')
+
+    async handleRestart(data: {type}): Promise<Response>
+      TRY:
+        {type} = data || {}
+        SI !type:
+          RETORNA _errorResponse(400, 'INVALID_INPUT', 'Gateway type is required', {kind: 'domain', field: 'type', allowed: VALID_TYPES})
+        result = await _restartGateway(type, crypto.randomUUID())
+        RETORNA {status: 200, data: {type: result.type, restarted: true, devices: result.devices}}
+      CATCH err:
+        RETORNA _handleHandlerError('gateway-manager.ui.restart.failed', err, 'ui_restart')
+
+    async handleDiscover(data: {type}): Promise<Response>
+      TRY:
+        {type} = data || {}
+        SI !type:
+          RETORNA _errorResponse(400, 'INVALID_INPUT', 'Gateway type is required', {kind: 'domain', field: 'type', allowed: VALID_TYPES})
+        result = await _discoverGateway(type)
+        RETORNA {status: 200, data: result}
+      CATCH err:
+        RETORNA _handleHandlerError('gateway-manager.ui.discover.failed', err, 'ui_discover')
+
+    _handleHandlerError(logEvent: String, err: Error, kind: String): Object
+      result = super._handleHandlerError(logEvent, err, kind)
+      internalMetrics.errors_total++
+      RETORNA result
+
+    async _instantiateGateway(GatewayClass: Class, gatewayConfig: Object, mqtt: MQTTClient): Promise<Gateway>
+      RETORNA new GatewayClass(gatewayConfig, {mqtt, eventBus, logger})
+
+    async _publicarEvento(name: String, payload: Object, sourcePayload?: Object): Promise<Void>
+      correlation_id = sourcePayload?.correlation_id || crypto.randomUUID()
+      enriched = {correlation_id, timestamp: now().toISOString(), ...payload}
+      await eventBus.publish(name, enriched)
+
+    EVENTOS_PUBLISHES {
+      'gateway.started': {type, devices_count}
+      'gateway.stopped': {type}
+      'gateway.error': {type, error}
+      'gateway.device_found': {device_id, gateway_type, device_type, capabilities}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      (ninguno)
+    }
+  }
+}
+
+CLASE GatewayBase ABSTRACT {
+  ATRIBUTOS {
+    type: String
+    devices: Map<deviceId, DeviceEntry>
+    metrics: {devices_found: Integer}
+  }
+
+  METODOS ABSTRACT {
+    async start(): Promise<Void>
+    async stop(): Promise<Void>
+    async _discoverDevices(): Promise<Array<Object>>
+    getInfo(): Object
+  }
+}
+
+CLASE Gateway HEREDA GatewayBase {
+  ATRIBUTOS {
+    logger: Logger
+    eventBus: EventBus
+    mqtt: MQTTClient
+    config: Object
+  }
+}
+
+CLASE DeviceEntry {
+  ATRIBUTOS {
+    type: String
+    capabilities: Array<String>
+  }
+}
+```
+
+## LOG-MANAGER (v3.0.0) — Gestión de Sesiones y Logs por Módulo
+
+```
+INTERFAZ LogManagerContract {
+  getSession(session_id: String): Promise<{session, modules}>
+  getSessionModules(session_id: String): Promise<Array<String>>
+  getSessionModuleLogs(session_id: String, module_name: String): Promise<Array<LogEntry>>
+  setTrackedModules(session_id: String, modules: Array<String>): Promise<Void>
+}
+
+CLASE LogManagerModule HEREDA BaseModule IMPLEMENTA LogManagerContract {
+  ATRIBUTOS {
+    name: String = 'log-manager'
+    version: String = '3.0.0'
+    config: {logsPath, maxFileSize, retentionDays, rotateDaily, sessionsPath, coreId, trackedModules, excludedModules}
+    logStorage: LogStorage
+    logCollector: LogCollector
+    sessionLogger: SessionLogger
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    _cleanupTimer: NodeJS.Timeout|Null
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus FROM core
+      CARGA config FROM core.config['log-manager'] || DEFAULT_CONFIG
+      logStorage = new LogStorage({logsPath: config.logsPath, maxFileSize: config.maxFileSize, rotateDaily: config.rotateDaily})
+      logCollector = new LogCollector({logStorage, logger})
+      sessionLogger = new SessionLogger({sessionsPath: config.sessionsPath, coreId: config.coreId, trackedModules: config.trackedModules, excludedModules: config.excludedModules})
+      _cleanupTimer = setInterval(() => _cleanup(), 24 * 60 * 60 * 1000)
+      SI eventBus?.on: eventBus.on('log', (entry) => _handleLogEntry(entry))
+      logger.info('log-manager.loaded', {logsPath: config.logsPath, retentionDays: config.retentionDays})
+
+    async onUnload(): Promise<Void>
+      SI _cleanupTimer: clearInterval(_cleanupTimer)
+      await logStorage?.shutdown()
+      await sessionLogger?.cleanup()
+
+    async onModuleLoaded(event: Event): Promise<Void>
+      {module_name} = event.data || event
+      SI sessionLogger: await sessionLogger.registerModule(module_name)
+
+    async _handleLogEntry(entry: LogEntry): Promise<Void>
+      SI sessionLogger:
+        await sessionLogger.appendLog(entry.module, entry.level, entry.message, entry.context)
+      await logStorage.write(entry)
+
+    async _cleanup(): Promise<Void>
+      cutoff = now() - (config.retentionDays * 24 * 60 * 60 * 1000)
+      await logStorage.cleanup(cutoff)
+      await sessionLogger.cleanupOldSessions(cutoff)
+
+    async handleGetSession(data: {session_id}): Promise<Response>
+      TRY:
+        VALIDA session_id
+        session = await sessionLogger.getSession(data.session_id)
+        SI !session: RETORNA 404 RESOURCE_NOT_FOUND
+        modules = await sessionLogger.getSessionModules(data.session_id)
+        RETORNA {status: 200, data: {session, modules, count: modules.length}}
+      CATCH err:
+        RETORNA _handleHandlerError('log-manager.get_session.failed', err, 'get_session')
+
+    async handleGetSessionModules(data: {session_id}): Promise<Response>
+      TRY:
+        VALIDA session_id
+        modules = await sessionLogger.getSessionModules(data.session_id)
+        RETORNA {status: 200, data: {session_id: data.session_id, modules, count: modules.length}}
+      CATCH err:
+        RETORNA _handleHandlerError('log-manager.get_modules.failed', err, 'get_modules')
+
+    async handleGetSessionModuleLogs(data: {session_id, module_name, limit?}): Promise<Response>
+      TRY:
+        VALIDA session_id, module_name
+        limit = parseInt(data.limit) || 100
+        logs = await sessionLogger.getModuleLogs(data.session_id, data.module_name, limit)
+        SI !logs: RETORNA 404 RESOURCE_NOT_FOUND
+        RETORNA {status: 200, data: {session_id: data.session_id, module_name: data.module_name, logs, count: logs.length}}
+      CATCH err:
+        RETORNA _handleHandlerError('log-manager.get_module_logs.failed', err, 'get_module_logs')
+
+    async handleSetTrackedModules(data: {session_id, modules: Array<String>}): Promise<Response>
+      TRY:
+        VALIDA session_id, modules
+        await sessionLogger.setTrackedModules(data.session_id, data.modules)
+        metrics?.increment('log-manager.tracked_modules.updated')
+        EMITE log_manager.tracked_modules.updated {session_id, modules: data.modules}
+        RETORNA {status: 200, data: {session_id: data.session_id, tracked: data.modules.length}}
+      CATCH err:
+        RETORNA _handleHandlerError('log-manager.set_tracked.failed', err, 'set_tracked')
+
+    _handleHandlerError(logEvent: String, err: Error, kind: String): Object
+      code = err._code || 'UNKNOWN_ERROR'
+      status = code == 'INVALID_INPUT' ? 400 : code == 'RESOURCE_NOT_FOUND' ? 404 : 500
+      logger.error(logEvent, {error: err.message, kind, code})
+      metrics?.increment('log-manager.errors', {kind, code})
+      RETORNA {status, error: {code, message: err.message}}
+
+    EVENTOS_PUBLISHES {
+      'log_manager.tracked_modules.updated': {session_id, modules}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'module.loaded': onModuleLoaded
+    }
+  }
+}
+
+CLASE LogStorage {
+  ATRIBUTOS {
+    logsPath: String
+    maxFileSize: Integer
+    rotateDaily: Boolean
+    currentFile: String|Null
+    currentSize: Integer
+  }
+
+  METODOS {
+    async write(entry: LogEntry): Promise<Void>
+      SI rotateDaily Y _shouldRotate(): await _rotateFile()
+      SI currentSize >= maxFileSize: await _rotateFile()
+      AGREGA entry a currentFile
+      currentSize += entry.sizeBytes()
+
+    async cleanup(cutoff: Number): Promise<Void>
+      LISTA archivos EN logsPath
+      PARA cada archivo:
+        SI mtime < cutoff: ELIMINA archivo
+
+    async shutdown(): Promise<Void>
+      CIERRA currentFile
+      currentFile = null
+  }
+}
+
+CLASE LogCollector {
+  ATRIBUTOS {
+    logStorage: LogStorage
+    logger: Logger
+  }
+
+  METODOS {
+    async collectLogs(module_name: String, limit?: Integer): Promise<Array<LogEntry>>
+      BUSCA EN logStorage logs PARA module_name
+      RETORNA logs limitado por limit
+  }
+}
+
+CLASE SessionLogger {
+  ATRIBUTOS {
+    sessionsPath: String
+    coreId: String
+    trackedModules: Array<String>
+    excludedModules: Array<String>
+    sessions: Map<session_id, SessionData>
+  }
+
+  METODOS {
+    async getSession(session_id: String): Promise<SessionData|Null>
+      CARGA de sessionsPath/{session_id}/meta.json
+      RETORNA SessionData O null
+
+    async getSessionModules(session_id: String): Promise<Array<String>>
+      session = await getSession(session_id)
+      SI !session: RETORNA []
+      RETORNA Object.keys(session.modules)
+
+    async getModuleLogs(session_id: String, module_name: String, limit: Integer): Promise<Array<LogEntry>>
+      CARGA sessionsPath/{session_id}/logs/{module_name}.jsonl
+      PARSEA y RETORNA últimas limit líneas
+
+    async setTrackedModules(session_id: String, modules: Array<String>): Promise<Void>
+      session = await getSession(session_id)
+      session.trackedModules = modules
+      PERSISTE meta.json
+
+    async appendLog(module: String, level: String, message: String, context?: Object): Promise<Void>
+      SI excludedModules.includes(module): RETORNA
+      entry = {timestamp: now(), level, message, context}
+      APPEND a session.modules[module].log
+
+    async registerModule(module_name: String): Promise<Void>
+      SI NOT tracked: RETORNA
+      CREA módulo entry EN session.modules
+
+    async cleanupOldSessions(cutoff: Number): Promise<Void>
+      LISTA sesiones EN sessionsPath
+      PARA cada sesión:
+        SI timestamp < cutoff: ELIMINA directorio
+  }
+}
+
+CLASE LogEntry {
+  ATRIBUTOS {
+    timestamp: String (ISO)
+    level: String (debug|info|warn|error)
+    message: String
+    module: String
+    context?: Object
+  }
+}
+
+CLASE SessionData {
+  ATRIBUTOS {
+    session_id: String
+    coreId: String
+    modules: Map<module_name, {logs: Array<LogEntry>}>
+    trackedModules: Array<String>
+    created_at: String (ISO)
+    updated_at: String (ISO)
+  }
+}
+```
+
+## MERCADONA-API (v2.0.0) — Cliente HTTP de Tienda Mercadona
+
+```
+INTERFAZ MercadonaApiContract {
+  getProducts(postcode?: String, categoria?: String): Promise<{productos, total}>
+  getProductDetails(product_id: String, postcode?: String): Promise<Object>
+  getCategories(postcode?: String): Promise<Array<Categoria>>
+  searchProducts(query: String, postcode?: String): Promise<{resultados, total}>
+  getStats(): Promise<{cache_size, requests_total, errors_total, throttle_queue}>
+}
+
+CLASE MercadonaApiModule HEREDA BaseModule IMPLEMENTA MercadonaApiContract {
+  ATRIBUTOS {
+    name: String = 'mercadona-api'
+    version: String = '2.0.0'
+    config: {postcode_default, cache_ttl_hours, throttle_rps, base_url, timeout_ms, max_retries}
+    cache: Map<cacheKey, {data, expiresAt}>
+    throttle: {queue: Array<{fn, resolve, reject}>, lastCall: Number, interval: Integer}
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    internalMetrics: {requests_total, cache_hits, cache_misses, errors_total, rate_limited, timeouts}
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus FROM core
+      CARGA config FROM core.config['mercadona-api'] || DEFAULT_CONFIG
+      config.postcode_default = config.postcode_default || '30840'
+      config.throttle_rps = config.throttle_rps || 2
+      CALCULA throttle.interval = 1000 / config.throttle_rps
+      INICIA _throttleProcessor()
+      logger.info('mercadona-api.loaded', {base_url: config.base_url, throttle_rps: config.throttle_rps})
+
+    async onUnload(): Promise<Void>
+      SI _throttleProcessor: CANCELA()
+      cache.clear()
+      throttle.queue = []
+      logger.info('mercadona-api.unloaded')
+
+    _throttleProcessor(): Void
+      setInterval(() => {
+        SI throttle.queue.length > 0 Y now() - throttle.lastCall >= throttle.interval:
+          {fn, resolve, reject} = throttle.queue.shift()
+          throttle.lastCall = now()
+          fn().then(resolve).catch(reject)
+      }, 10)
+
+    async _enqueueRequest<T>(fn: () => Promise<T>): Promise<T>
+      RETORNA new Promise((resolve, reject) => {
+        throttle.queue.push({fn, resolve, reject})
+      })
+
+    async handleGetProducts(data: {postcode?, categoria?, limit?}): Promise<Response>
+      TRY:
+        postcode = data.postcode || config.postcode_default
+        VALIDA postcode format
+        categoria = data.categoria || ''
+        limit = parseInt(data.limit) || 100
+        result = await getProducts(postcode, categoria)
+        RETORNA {status: 200, data: {postcode, productos: result.productos.slice(0, limit), total: result.total}}
+      CATCH err:
+        RETORNA _handleHandlerError('mercadona-api.get_products.failed', err, 'get_products')
+
+    async handleGetProductDetails(data: {product_id, postcode?}): Promise<Response>
+      TRY:
+        VALIDA product_id
+        postcode = data.postcode || config.postcode_default
+        details = await getProductDetails(data.product_id, postcode)
+        RETORNA {status: 200, data: details}
+      CATCH err:
+        RETORNA _handleHandlerError('mercadona-api.get_details.failed', err, 'get_details')
+
+    async handleGetCategories(data: {postcode?}): Promise<Response>
+      TRY:
+        postcode = data.postcode || config.postcode_default
+        categorias = await getCategories(postcode)
+        RETORNA {status: 200, data: {postcode, categorias, total: categorias.length}}
+      CATCH err:
+        RETORNA _handleHandlerError('mercadona-api.get_categories.failed', err, 'get_categories')
+
+    async handleSearchProducts(data: {q, postcode?, limit?}): Promise<Response>
+      TRY:
+        VALIDA q obligatorio
+        postcode = data.postcode || config.postcode_default
+        limit = parseInt(data.limit) || 50
+        result = await searchProducts(data.q, postcode)
+        RETORNA {status: 200, data: {query: data.q, postcode, resultados: result.slice(0, limit), total: result.length}}
+      CATCH err:
+        RETORNA _handleHandlerError('mercadona-api.search.failed', err, 'search')
+
+    async handleGetStats(): Promise<Response>
+      RETORNA {status: 200, data: {cache_size: cache.size, requests_total: internalMetrics.requests_total, cache_hits: internalMetrics.cache_hits, cache_misses: internalMetrics.cache_misses, errors_total: internalMetrics.errors_total, rate_limited: internalMetrics.rate_limited, throttle_queue: throttle.queue.length}}
+
+    async getProducts(postcode: String, categoria: String): Promise<{productos, total}>
+      cacheKey = `products_{postcode}_{categoria}`
+      cached = _cacheGet(cacheKey)
+      SI cached: internalMetrics.cache_hits++, RETORNA cached
+      internalMetrics.cache_misses++
+      url = `{config.base_url}/products`
+      queryParams = {postcode, categoria: categoria || '*'}
+      result = await _fetchJson(url, {queryParams})
+      productos = result.data.map(p => _parseProducto(p))
+      RETORNA _cacheSet(cacheKey, {productos, total: productos.length})
+
+    async getProductDetails(product_id: String, postcode: String): Promise<Object>
+      cacheKey = `product_{product_id}_{postcode}`
+      cached = _cacheGet(cacheKey)
+      SI cached: internalMetrics.cache_hits++, RETORNA cached
+      internalMetrics.cache_misses++
+      url = `{config.base_url}/products/{product_id}`
+      result = await _fetchJson(url, {queryParams: {postcode}})
+      details = _parseProducto(result.data)
+      RETORNA _cacheSet(cacheKey, details)
+
+    async getCategories(postcode: String): Promise<Array<Categoria>>
+      cacheKey = `categories_{postcode}`
+      cached = _cacheGet(cacheKey)
+      SI cached: internalMetrics.cache_hits++, RETORNA cached
+      internalMetrics.cache_misses++
+      url = `{config.base_url}/categories`
+      result = await _fetchJson(url, {queryParams: {postcode}})
+      categorias = result.data.map(c => _parseCategoria(c))
+      RETORNA _cacheSet(cacheKey, categorias)
+
+    async searchProducts(query: String, postcode: String): Promise<Array<Object>>
+      cacheKey = `search_{query}_{postcode}`
+      cached = _cacheGet(cacheKey)
+      SI cached: internalMetrics.cache_hits++, RETORNA cached
+      internalMetrics.cache_misses++
+      url = `{config.base_url}/search`
+      result = await _fetchJson(url, {queryParams: {q: query, postcode}})
+      productos = result.data.map(p => _parseProducto(p))
+      RETORNA _cacheSet(cacheKey, productos)
+
+    async _fetchJson(url: String, options?: {queryParams?, retries?: Integer}): Promise<Object>
+      retries = options?.retries || 0
+      maxRetries = config.max_retries
+      timeout = config.timeout_ms
+      queryParams = options?.queryParams || {}
+      SI Object.keys(queryParams).length > 0:
+        queryString = new URLSearchParams(queryParams).toString()
+        url = `{url}?{queryString}`
+      TRY:
+        internalMetrics.requests_total++
+        metrics?.increment('mercadona-api.request', {endpoint: url})
+        response = await fetch(url, {timeout, signal: AbortSignal.timeout(timeout)})
+        SI response.status == 429:
+          internalMetrics.rate_limited++
+          SI retries < maxRetries:
+            backoffMs = (2 ** retries) * 1000
+            await sleep(backoffMs)
+            RETORNA _fetchJson(url, {queryParams, retries: retries + 1})
+          LANZA Error CON _code: 'RATE_LIMITED', _details: {retries_exhausted: true}
+        SI !response.ok:
+          errorMsg = `HTTP {response.status}`
+          LANZA Error CON _code: 'UPSTREAM_INVALID_RESPONSE', _details: {status: response.status}
+        data = await response.json()
+        RETORNA data
+      CATCH err:
+        internalMetrics.errors_total++
+        SI err.code == 'ABORT_ERR' O err.message.includes('timeout'):
+          metrics?.increment('mercadona-api.errors', {kind: 'timeout'})
+          LANZA Error CON _code: 'UPSTREAM_TIMEOUT', _details: {timeout_ms: timeout}
+        SI err._code:
+          metrics?.increment('mercadona-api.errors', {kind: err._code})
+          RELANZA err
+        metrics?.increment('mercadona-api.errors', {kind: 'unknown'})
+        LANZA Error CON _code: 'UPSTREAM_UNREACHABLE', _details: {original: err.message}
+
+    _parseProducto(rawData: Object): Producto
+      RETORNA {
+        id: rawData.id || rawData.product_id,
+        nombre: rawData.display_name || rawData.name,
+        precio: parseFloat(rawData.price || rawData.current_price),
+        precio_unitario: parseFloat(rawData.unit_price),
+        referencia: rawData.reference,
+        categoria: rawData.category || rawData.categories?.[0],
+        disponible: rawData.available !== false,
+        imagen: rawData.image_url,
+        marcaBlanca: rawData.is_white_label || false,
+        iva: parseFloat(rawData.tax_rate || 0.21),
+        precioInstrucciones: _parsePriceInstructions(rawData.price_instructions),
+        etiquetas: rawData.tags || []
+      }
+
+    _parseCategoria(rawData: Object): Categoria
+      RETORNA {
+        id: rawData.id,
+        nombre: rawData.name || rawData.display_name,
+        descripcion: rawData.description,
+        ruta: rawData.path || [rawData.name]
+      }
+
+    _parsePriceInstructions(instructions: Any): Object|Null
+      SI !instructions: RETORNA null
+      SI typeof instructions == 'string': PARSEA JSON
+      RETORNA {valor: instructions.value, formato: instructions.format}
+
+    _cacheGet(key: String): Any|Null
+      entry = cache.get(key)
+      SI !entry: RETORNA null
+      SI now() > entry.expiresAt:
+        cache.delete(key)
+        RETORNA null
+      RETORNA entry.data
+
+    _cacheSet<T>(key: String, data: T): T
+      expiresAt = now() + (config.cache_ttl_hours * 60 * 60 * 1000)
+      cache.set(key, {data, expiresAt})
+      SI cache.size > 1000:
+        oldestKey = Array.from(cache.entries()).sort((a, b) => a[1].expiresAt - b[1].expiresAt)[0][0]
+        cache.delete(oldestKey)
+      RETORNA data
+
+    _handleHandlerError(logEvent: String, err: Error, kind: String): Object
+      code = err._code || _classifyError(err)
+      status = code == 'INVALID_INPUT' ? 400 : code == 'RATE_LIMITED' ? 429 : code == 'UPSTREAM_TIMEOUT' ? 504 : code == 'UPSTREAM_UNREACHABLE' ? 503 : code == 'UPSTREAM_INVALID_RESPONSE' ? 502 : 500
+      logger.error(logEvent, {error: err.message, code, kind})
+      metrics?.increment('mercadona-api.errors', {code, kind})
+      RETORNA {status, error: {code, message: err.message, details: err._details}}
+
+    _classifyError(err: Error): String
+      msg = (err.message || '').toLowerCase()
+      SI msg.includes('timeout'): RETORNA 'UPSTREAM_TIMEOUT'
+      SI msg.includes('rate'): RETORNA 'RATE_LIMITED'
+      SI msg.includes('network') O msg.includes('econnrefused'): RETORNA 'UPSTREAM_UNREACHABLE'
+      SI msg.includes('json') O msg.includes('invalid response'): RETORNA 'UPSTREAM_INVALID_RESPONSE'
+      SI msg.includes('invalid') O msg.includes('required'): RETORNA 'INVALID_INPUT'
+      RETORNA 'UNKNOWN_ERROR'
+
+    EVENTOS_PUBLISHES {
+      (ninguno)
+    }
+
+    EVENTOS_SUBSCRIBES {
+      (ninguno)
+    }
+  }
+}
+
+CLASE Producto {
+  ATRIBUTOS {
+    id: String
+    nombre: String
+    precio: Number
+    precio_unitario: Number
+    referencia: String|Null
+    categoria: String|Null
+    disponible: Boolean
+    imagen: String|Null
+    marcaBlanca: Boolean
+    iva: Number
+    precioInstrucciones: Object|Null
+    etiquetas: Array<String>
+  }
+}
+
+CLASE Categoria {
+  ATRIBUTOS {
+    id: String
+    nombre: String
+    descripcion: String|Null
+    ruta: Array<String>
+  }
+}
+
+CLASE CacheEntry {
+  ATRIBUTOS {
+    data: Any
+    expiresAt: Number
+  }
+}
+```
+
+---
+
+# GRUPO B — notificador-pedidos, pase-cocina, pdf-viewer
+
+```
+INTERFAZ NotificadorPedidosContract {
+  enviarNotificacion(data: {cuenta_id, tipo, canal?, mensaje?, metadata?}): Promise<{notification_id, status}>
+  getNotificacionesCuenta(cuenta_id: String, limit?: Integer): Promise<Array<Notificacion>>
+  marcarComoLeida(notification_id: String): Promise<Void>
+  configurarCanal(data: {cuenta_id, canal, habilitado, preferencias?}): Promise<Void>
+}
+
+CLASE NotificadorPedidosModule HEREDA BaseModule IMPLEMENTA NotificadorPedidosContract {
+  ATRIBUTOS {
+    name: String = 'notificador-pedidos'
+    version: String = '3.0.0'
+    config: {canales: {telegram, whatsapp, sms, email}, retry_max, retry_backoff_ms, notification_ttl_hours}
+    notificaciones: Map<notification_id, Notificacion>
+    cuentaCanales: Map<cuenta_id, {telegram?, whatsapp?, sms?, email?}>
+    colasReintento: Map<canal, Array<{notification_id, retries_left, proxima_tentativa}>>
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    _retryTimers: Map<notification_id, NodeJS.Timeout>
+    internalMetrics: {enviadas_total, exitosas_total, fallidas_total, reintentos_total}
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus FROM core
+      CARGA config FROM core.config['notificador-pedidos'] || DEFAULT_CONFIG
+      SUSCRIBE pedido.listo, pedido.cancelado, cuenta.estado_cambiado
+      logger.info('notificador-pedidos.loaded', {canales: Object.keys(config.canales)})
+
+    async onUnload(): Promise<Void>
+      _retryTimers.values().forEach(t => clearTimeout(t))
+      _retryTimers.clear()
+      notificaciones.clear()
+      cuentaCanales.clear()
+      colasReintento.clear()
+
+    async onPedidoListo(event: Event): Promise<Void>
+      {cuenta_id, pedido_id, duracion_minutos} = event.data || event
+      await handleEnviarNotificacion({cuenta_id, tipo: 'pedido_listo', metadata: {pedido_id, duracion_minutos}})
+
+    async onPedidoCancelado(event: Event): Promise<Void>
+      {cuenta_id, pedido_id, motivo} = event.data || event
+      await handleEnviarNotificacion({cuenta_id, tipo: 'pedido_cancelado', metadata: {pedido_id, motivo}})
+
+    async onCuentaEstadoCambiado(event: Event): Promise<Void>
+      {cuenta_id, estado_anterior, estado_nuevo} = event.data || event
+      SI estado_nuevo == 'en_preparacion':
+        await handleEnviarNotificacion({cuenta_id, tipo: 'pedido_preparacion', metadata: {estado_nuevo}})
+
+    async handleEnviarNotificacion(data: {cuenta_id, tipo, canal?, mensaje?, metadata?}): Promise<Response>
+      TRY:
+        VALIDA cuenta_id, tipo
+        notification_id = crypto.randomUUID()
+        canalesConfigurables = cuentaCanales.get(data.cuenta_id) || {}
+        canalesActivos = data.canal ? [data.canal] : Object.keys(config.canales).filter(c => canalesConfigurables[c]?.habilitado)
+        SI canalesActivos.length == 0:
+          RETORNA {status: 400, error: {code: 'NO_CHANNELS_ENABLED', message: 'No active notification channels for account'}}
+        notificacion = {
+          notification_id,
+          cuenta_id: data.cuenta_id,
+          tipo: data.tipo,
+          mensaje: data.mensaje || _buildMensajeDefault(data.tipo, data.metadata),
+          canales: canalesActivos,
+          metadata: data.metadata,
+          estado: 'enviando',
+          created_at: now().toISOString(),
+          intentos: {}
+        }
+        notificaciones.set(notification_id, notificacion)
+        internalMetrics.enviadas_total++
+        EMITE notificador.notificacion_iniciada {notification_id, cuenta_id, tipo: data.tipo, canales: canalesActivos}
+        PARA cada canal EN canalesActivos:
+          await _enviarPorCanal(notification_id, canal)
+        RETORNA {status: 202, data: {notification_id, status: 'enviando', canales: canalesActivos}}
+      CATCH err:
+        RETORNA _handleHandlerError('notificador-pedidos.enviar.failed', err, 'enviar_notificacion')
+
+    async _enviarPorCanal(notification_id: String, canal: String): Promise<Void>
+      notif = notificaciones.get(notification_id)
+      SI !notif: RETORNA
+      TRY:
+        config_canal = config.canales[canal]
+        SI !config_canal: RETORNA
+        EMITE notificador.{canal}.enviar_solicitud {notification_id, cuenta_id: notif.cuenta_id, mensaje: notif.mensaje, metadata: notif.metadata}
+        _setRetryTimer(notification_id, canal, 0)
+      CATCH err:
+        logger.error('notificador-pedidos.{canal}.error', {notification_id, error: err.message})
+        notif.intentos[canal] = {status: 'error', error: err.message}
+        _checkNotificacionCompleta(notification_id)
+
+    async onCanalRespuesta(event: Event): Promise<Void>
+      {notification_id, canal, success, error} = event.data || event
+      notif = notificaciones.get(notification_id)
+      SI !notif: RETORNA
+      clearTimeout(_retryTimers.get(`{notification_id}_{canal}`))
+      _retryTimers.delete(`{notification_id}_{canal}`)
+      SI success:
+        notif.intentos[canal] = {status: 'exitoso', timestamp: now()}
+        internalMetrics.exitosas_total++
+      SINO:
+        SI !notif.intentos[canal]: notif.intentos[canal] = {retries: 0}
+        notif.intentos[canal].retries = (notif.intentos[canal].retries || 0) + 1
+        SI notif.intentos[canal].retries < config.retry_max:
+          backoff = Math.pow(2, notif.intentos[canal].retries) * config.retry_backoff_ms
+          _setRetryTimer(notification_id, canal, notif.intentos[canal].retries)
+          internalMetrics.reintentos_total++
+        SINO:
+          notif.intentos[canal] = {status: 'falló', error, intentos: config.retry_max}
+          internalMetrics.fallidas_total++
+      _checkNotificacionCompleta(notification_id)
+
+    _setRetryTimer(notification_id: String, canal: String, intento: Integer): Void
+      backoff = Math.pow(2, intento) * config.retry_backoff_ms
+      timerId = `{notification_id}_{canal}`
+      timer = setTimeout(async () => {
+        await _enviarPorCanal(notification_id, canal)
+      }, backoff)
+      _retryTimers.set(timerId, timer)
+
+    _checkNotificacionCompleta(notification_id: String): Void
+      notif = notificaciones.get(notification_id)
+      SI !notif: RETORNA
+      completada = notif.canales.every(c => notif.intentos[c])
+      SI completada:
+        exitosos = notif.canales.filter(c => notif.intentos[c].status == 'exitoso').length
+        notif.estado = exitosos > 0 ? 'enviada' : 'fallida'
+        EMITE notificador.notificacion_completada {notification_id, estado: notif.estado, exitosos, totales: notif.canales.length}
+
+    async handleGetNotificacionesCuenta(data: {cuenta_id, limit?}): Promise<Response>
+      TRY:
+        VALIDA cuenta_id
+        limit = parseInt(data.limit) || 20
+        notifs = Array.from(notificaciones.values()).filter(n => n.cuenta_id == data.cuenta_id).slice(0, limit)
+        RETORNA {status: 200, data: {cuenta_id: data.cuenta_id, notificaciones: notifs, count: notifs.length}}
+      CATCH err:
+        RETORNA _handleHandlerError('notificador-pedidos.get.failed', err, 'get_notificaciones')
+
+    async handleMarcarComoLeida(data: {notification_id}): Promise<Response>
+      TRY:
+        VALIDA notification_id
+        notif = notificaciones.get(data.notification_id)
+        SI !notif: RETORNA 404 RESOURCE_NOT_FOUND
+        notif.leida = true
+        notif.leida_at = now().toISOString()
+        EMITE notificador.notificacion_leida {notification_id: data.notification_id}
+        RETORNA {status: 200, data: {notification_id: data.notification_id, leida: true}}
+      CATCH err:
+        RETORNA _handleHandlerError('notificador-pedidos.marcar.failed', err, 'marcar_leida')
+
+    async handleConfigurarCanal(data: {cuenta_id, canal, habilitado, preferencias?}): Promise<Response>
+      TRY:
+        VALIDA cuenta_id, canal, habilitado
+        SI !config.canales[data.canal]: RETORNA 400 INVALID_INPUT
+        SI !cuentaCanales.has(data.cuenta_id):
+          cuentaCanales.set(data.cuenta_id, {})
+        config_actual = cuentaCanales.get(data.cuenta_id)
+        config_actual[data.canal] = {habilitado: data.habilitado, preferencias: data.preferencias || {}}
+        EMITE notificador.canal_configurado {cuenta_id: data.cuenta_id, canal: data.canal, habilitado: data.habilitado}
+        RETORNA {status: 200, data: {cuenta_id: data.cuenta_id, canal: data.canal, configurado: true}}
+      CATCH err:
+        RETORNA _handleHandlerError('notificador-pedidos.config.failed', err, 'configurar_canal')
+
+    _buildMensajeDefault(tipo: String, metadata?: Object): String
+      SI tipo == 'pedido_listo': RETORNA `Tu pedido está listo${metadata?.duracion_minutos ? ` ({metadata.duracion_minutos} min)` : ''}`
+      SI tipo == 'pedido_cancelado': RETORNA `Tu pedido ha sido cancelado${metadata?.motivo ? `: {metadata.motivo}` : ''}`
+      SI tipo == 'pedido_preparacion': RETORNA `Tu pedido está en preparación`
+      RETORNA `Nueva notificación`
+
+    _handleHandlerError(logEvent: String, err: Error, kind: String): Object
+      code = err._code || 'UNKNOWN_ERROR'
+      status = code == 'INVALID_INPUT' ? 400 : code == 'RESOURCE_NOT_FOUND' ? 404 : code == 'NO_CHANNELS_ENABLED' ? 400 : 500
+      logger.error(logEvent, {error: err.message, code, kind})
+      metrics?.increment('notificador-pedidos.errors', {kind, code})
+      RETORNA {status, error: {code, message: err.message}}
+
+    EVENTOS_PUBLISHES {
+      'notificador.notificacion_iniciada': {notification_id, cuenta_id, tipo, canales}
+      'notificador.{canal}.enviar_solicitud': {notification_id, cuenta_id, mensaje, metadata}
+      'notificador.notificacion_completada': {notification_id, estado, exitosos, totales}
+      'notificador.notificacion_leida': {notification_id}
+      'notificador.canal_configurado': {cuenta_id, canal, habilitado}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'pedido.listo': onPedidoListo
+      'pedido.cancelado': onPedidoCancelado
+      'cuenta.estado_cambiado': onCuentaEstadoCambiado
+      'notificador.{canal}.respuesta': onCanalRespuesta
+    }
+  }
+}
+
+CLASE Notificacion {
+  ATRIBUTOS {
+    notification_id: String
+    cuenta_id: String
+    tipo: String
+    mensaje: String
+    canales: Array<String>
+    metadata: Object|Null
+    estado: String (enviando|enviada|fallida)
+    leida: Boolean
+    leida_at: String|Null (ISO)
+    intentos: Map<canal, {status, error?, retries?, timestamp?}>
+    created_at: String (ISO)
+  }
+}
+```
+
+## PASE-COCINA (v2.0.0) — Control de Flujo Pedidos → Cocina
+
+```
+INTERFAZ PaseCocinaContract {
+  registrarPase(data: {pedido_id, numero_pase, seccion?, prioridad?}): Promise<{pase_id, numero}>
+  actualizarEstado(pase_id: String, estado: String): Promise<Void>
+  listarPasesActivos(filtro?: {seccion?, prioridad?}): Promise<Array<Pase>>
+  completarPase(pase_id: String): Promise<Void>
+  getPasesPorPedido(pedido_id: String): Promise<Array<Pase>>
+}
+
+CLASE PaseCocinaModule HEREDA BaseModule IMPLEMENTA PaseCocinaContract {
+  ATRIBUTOS {
+    name: String = 'pase-cocina'
+    version: String = '2.0.0'
+    config: {secciones: Array<String>, prioridades: Array<String>, auto_complete_timeout_ms}
+    pases: Map<pase_id, Pase>
+    pasesPorPedido: Map<pedido_id, Array<pase_id>>
+    contadorSeccion: Map<seccion, Integer>
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    _autoCompleteTimers: Map<pase_id, NodeJS.Timeout>
+    internalMetrics: {registrados_total, completados_total, cancelados_total, tiempo_promedio_ms}
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus FROM core
+      CARGA config FROM core.config['pase-cocina'] || DEFAULT_CONFIG
+      config.secciones = config.secciones || ['preparacion', 'horno', 'finalizado']
+      SUSCRIBE comandero.enviar_cocina, pedido.cancelado, cocina.item_preparado
+      logger.info('pase-cocina.loaded', {secciones: config.secciones.length})
+
+    async onUnload(): Promise<Void>
+      _autoCompleteTimers.values().forEach(t => clearTimeout(t))
+      _autoCompleteTimers.clear()
+      pases.clear()
+      pasesPorPedido.clear()
+      contadorSeccion.clear()
+
+    async onComanderoEnviarCocina(event: Event): Promise<Void>
+      {pedido_id, items, total, cuenta_id} = event.data || event
+      PARA cada item EN items:
+        await handleRegistrarPase({pedido_id, numero_pase: item.id, seccion: 'preparacion', prioridad: _determinePrioridad(total)})
+
+    async onCocinaItemPreparado(event: Event): Promise<Void>
+      {item_id, pedido_id} = event.data || event
+      pase = Array.from(pases.values()).find(p => p.pedido_id == pedido_id Y p.item_id == item_id)
+      SI pase: await handleActualizarEstado({pase_id: pase.pase_id, estado: 'preparado'})
+
+    async onPedidoCancelado(event: Event): Promise<Void>
+      {pedido_id} = event.data || event
+      pase_ids = pasesPorPedido.get(pedido_id) || []
+      PARA cada pase_id EN pase_ids:
+        pase = pases.get(pase_id)
+        SI pase Y pase.estado != 'completado':
+          pase.estado = 'cancelado'
+          clearTimeout(_autoCompleteTimers.get(pase_id))
+          _autoCompleteTimers.delete(pase_id)
+          EMITE pase_cocina.cancelado {pase_id, pedido_id}
+          internalMetrics.cancelados_total++
+
+    async handleRegistrarPase(data: {pedido_id, numero_pase, seccion?, prioridad?}): Promise<Response>
+      TRY:
+        VALIDA pedido_id, numero_pase
+        pase_id = crypto.randomUUID()
+        seccion = data.seccion || 'preparacion'
+        prioridad = data.prioridad || 'normal'
+        VALIDA seccion EN config.secciones
+        numero_pase_final = _generarNumeroPase(seccion)
+        pase = {
+          pase_id,
+          pedido_id: data.pedido_id,
+          numero_pase: numero_pase_final,
+          seccion,
+          prioridad,
+          estado: 'pendiente',
+          item_id: data.numero_pase,
+          created_at: now().toISOString(),
+          started_at: Null,
+          completed_at: Null
+        }
+        pases.set(pase_id, pase)
+        SI !pasesPorPedido.has(data.pedido_id):
+          pasesPorPedido.set(data.pedido_id, [])
+        pasesPorPedido.get(data.pedido_id).push(pase_id)
+        internalMetrics.registrados_total++
+        metrics?.increment('pase_cocina.registrado', {seccion, prioridad})
+        EMITE pase_cocina.registrado {pase_id, pedido_id: data.pedido_id, numero_pase: numero_pase_final, seccion}
+        _setAutoCompleteTimer(pase_id, config.auto_complete_timeout_ms)
+        RETORNA {status: 201, data: {pase_id, numero: numero_pase_final, seccion}}
+      CATCH err:
+        RETORNA _handleHandlerError('pase-cocina.registrar.failed', err, 'registrar')
+
+    async handleActualizarEstado(data: {pase_id, estado}): Promise<Response>
+      TRY:
+        VALIDA pase_id, estado
+        pase = pases.get(data.pase_id)
+        SI !pase: RETORNA 404 RESOURCE_NOT_FOUND
+        estado_anterior = pase.estado
+        pase.estado = data.estado
+        SI data.estado == 'en_preparacion': pase.started_at = now().toISOString()
+        SI data.estado == 'completado':
+          pase.completed_at = now().toISOString()
+          duracion = pase.completed_at - pase.created_at
+          internalMetrics.completados_total++
+          internalMetrics.tiempo_promedio_ms = (internalMetrics.tiempo_promedio_ms + duracion) / 2
+          clearTimeout(_autoCompleteTimers.get(data.pase_id))
+          _autoCompleteTimers.delete(data.pase_id)
+        EMITE pase_cocina.estado_actualizado {pase_id: data.pase_id, estado: data.estado, estado_anterior}
+        RETORNA {status: 200, data: {pase_id: data.pase_id, estado: data.estado}}
+      CATCH err:
+        RETORNA _handleHandlerError('pase-cocina.actualizar.failed', err, 'actualizar')
+
+    async handleListarPasesActivos(data: {seccion?, prioridad?}): Promise<Response>
+      TRY:
+        pases_lista = Array.from(pases.values()).filter(p => p.estado != 'completado' Y p.estado != 'cancelado')
+        SI data.seccion: FILTRA pases_lista POR seccion
+        SI data.prioridad: FILTRA pases_lista POR prioridad
+        ORDENA POR prioridad Y created_at
+        RETORNA {status: 200, data: {pases: pases_lista, total: pases_lista.length}}
+      CATCH err:
+        RETORNA _handleHandlerError('pase-cocina.listar.failed', err, 'listar')
+
+    async handleCompletarPase(data: {pase_id}): Promise<Response>
+      TRY:
+        VALIDA pase_id
+        RETORNA handleActualizarEstado({pase_id: data.pase_id, estado: 'completado'})
+      CATCH err:
+        RETORNA _handleHandlerError('pase-cocina.completar.failed', err, 'completar')
+
+    async handleGetPasesPorPedido(data: {pedido_id}): Promise<Response>
+      TRY:
+        VALIDA pedido_id
+        pase_ids = pasesPorPedido.get(data.pedido_id) || []
+        pases_lista = pase_ids.map(id => pases.get(id))
+        RETORNA {status: 200, data: {pedido_id: data.pedido_id, pases: pases_lista, total: pases_lista.length}}
+      CATCH err:
+        RETORNA _handleHandlerError('pase-cocina.get_by_pedido.failed', err, 'get_by_pedido')
+
+    _determinePrioridad(total: Number): String
+      SI total > 50: RETORNA 'alta'
+      SI total > 30: RETORNA 'media'
+      RETORNA 'normal'
+
+    _generarNumeroPase(seccion: String): String
+      SI !contadorSeccion.has(seccion): contadorSeccion.set(seccion, 0)
+      numero = contadorSeccion.get(seccion) + 1
+      contadorSeccion.set(seccion, numero)
+      prefijo = seccion.charAt(0).toUpperCase()
+      RETORNA `{prefijo}{String(numero).padStart(3, '0')}`
+
+    _setAutoCompleteTimer(pase_id: String, timeout_ms: Integer): Void
+      timer = setTimeout(() => {
+        pase = pases.get(pase_id)
+        SI pase Y pase.estado == 'en_preparacion':
+          pase.estado = 'completado'
+          pase.completed_at = now().toISOString()
+          EMITE pase_cocina.auto_completado {pase_id}
+      }, timeout_ms)
+      _autoCompleteTimers.set(pase_id, timer)
+
+    _handleHandlerError(logEvent: String, err: Error, kind: String): Object
+      code = err._code || 'UNKNOWN_ERROR'
+      status = code == 'INVALID_INPUT' ? 400 : code == 'RESOURCE_NOT_FOUND' ? 404 : 500
+      logger.error(logEvent, {error: err.message, kind})
+      metrics?.increment('pase-cocina.errors', {kind})
+      RETORNA {status, error: {code, message: err.message}}
+
+    EVENTOS_PUBLISHES {
+      'pase_cocina.registrado': {pase_id, pedido_id, numero_pase, seccion}
+      'pase_cocina.estado_actualizado': {pase_id, estado, estado_anterior}
+      'pase_cocina.cancelado': {pase_id, pedido_id}
+      'pase_cocina.auto_completado': {pase_id}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'comandero.enviar_cocina': onComanderoEnviarCocina
+      'pedido.cancelado': onPedidoCancelado
+      'cocina.item_preparado': onCocinaItemPreparado
+    }
+  }
+}
+
+CLASE Pase {
+  ATRIBUTOS {
+    pase_id: String
+    pedido_id: String
+    numero_pase: String
+    seccion: String
+    prioridad: String
+    estado: String (pendiente|en_preparacion|preparado|completado|cancelado)
+    item_id: String
+    created_at: String (ISO)
+    started_at: String|Null (ISO)
+    completed_at: String|Null (ISO)
+  }
+}
+```
+
+## PDF-VIEWER (v2.0.0) — Renderizado de PDFs Interactivo
+
+```
+INTERFAZ PDFViewerContract {
+  uploadPDF(data: {archivo, nombre?, metadata?}): Promise<{pdf_id, pages, size}>
+  renderPage(pdf_id: String, page: Integer, opciones?: {zoom?, formato?}): Promise<{image, metadatos}>
+  extractText(pdf_id: String, page?: Integer): Promise<{texto, paginas}>
+  getMetadata(pdf_id: String): Promise<Object>
+  deletePDF(pdf_id: String): Promise<Void>
+  listPDFs(limit?: Integer): Promise<Array<PDFMetadata>>
+}
+
+CLASE PDFViewerModule HEREDA BaseModule IMPLEMENTA PDFViewerContract {
+  ATRIBUTOS {
+    name: String = 'pdf-viewer'
+    version: String = '2.0.0'
+    config: {storage_path, max_file_size_mb, supported_formats, render_timeout_ms, cache_enabled, cache_ttl_hours}
+    pdfs: Map<pdf_id, PDFMetadata>
+    renderCache: Map<cacheKey, {image, expiresAt}>
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    _pdfEngine: PDFEngine
+    internalMetrics: {uploaded_total, rendered_total, extracted_total, errors_total}
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus FROM core
+      CARGA config FROM core.config['pdf-viewer'] || DEFAULT_CONFIG
+      config.storage_path = path.resolve(config.storage_path || './data/pdfs')
+      ENSURA_DIR(config.storage_path)
+      _pdfEngine = new PDFEngine({logger, timeout_ms: config.render_timeout_ms})
+      logger.info('pdf-viewer.loaded', {storage_path: config.storage_path})
+
+    async onUnload(): Promise<Void>
+      await _pdfEngine?.shutdown()
+      pdfs.clear()
+      renderCache.clear()
+
+    async handleUploadPDF(data: {archivo, nombre?, metadata?}): Promise<Response>
+      TRY:
+        VALIDA archivo obligatorio
+        VALIDA archivo.size <= config.max_file_size_mb * 1024 * 1024
+        extension = path.extname(archivo.name).toLowerCase().slice(1)
+        SI !config.supported_formats.includes(extension):
+          RETORNA 400 INVALID_INPUT
+        pdf_id = crypto.randomUUID()
+        filename = `{pdf_id}.{extension}`
+        filepath = path.join(config.storage_path, filename)
+        ESCRIBE archivo.data A filepath
+        metadata_pdf = await _pdfEngine.getMetadata(filepath)
+        pdfData = {
+          pdf_id,
+          nombre: data.nombre || archivo.name,
+          filepath,
+          tamaño_bytes: archivo.size,
+          paginas: metadata_pdf.pages,
+          titulo: metadata_pdf.title || Null,
+          autor: metadata_pdf.author || Null,
+          created_at: now().toISOString(),
+          metadata: data.metadata || {}
+        }
+        pdfs.set(pdf_id, pdfData)
+        internalMetrics.uploaded_total++
+        metrics?.increment('pdf-viewer.uploaded')
+        EMITE pdf_viewer.pdf_subido {pdf_id, nombre: data.nombre, paginas: metadata_pdf.pages}
+        RETORNA {status: 201, data: {pdf_id, pages: metadata_pdf.pages, size: archivo.size}}
+      CATCH err:
+        RETORNA _handleHandlerError('pdf-viewer.upload.failed', err, 'upload')
+
+    async handleRenderPage(data: {pdf_id, page, zoom?, formato?}): Promise<Response>
+      TRY:
+        VALIDA pdf_id, page
+        page = parseInt(data.page)
+        SI page < 1: RETORNA 400 INVALID_INPUT
+        pdfData = pdfs.get(data.pdf_id)
+        SI !pdfData: RETORNA 404 RESOURCE_NOT_FOUND
+        SI page > pdfData.paginas: RETORNA 400 INVALID_INPUT
+        zoom = parseFloat(data.zoom) || 100
+        formato = data.formato || 'png'
+        cacheKey = `{data.pdf_id}_{page}_{zoom}_{formato}`
+        cached = _getCacheEntry(cacheKey)
+        SI cached: RETORNA {status: 200, data: {image: cached, formato, page}}
+        image = await _pdfEngine.renderPage(pdfData.filepath, page, {zoom, formato})
+        SI config.cache_enabled:
+          _setCacheEntry(cacheKey, image, config.cache_ttl_hours * 60 * 60 * 1000)
+        internalMetrics.rendered_total++
+        metrics?.increment('pdf-viewer.rendered', {formato})
+        EMITE pdf_viewer.pagina_renderizada {pdf_id: data.pdf_id, page, formato}
+        RETORNA {status: 200, data: {image: image.toString('base64'), formato, page}}
+      CATCH err:
+        RETORNA _handleHandlerError('pdf-viewer.render.failed', err, 'render')
+
+    async handleExtractText(data: {pdf_id, page?}): Promise<Response>
+      TRY:
+        VALIDA pdf_id
+        pdfData = pdfs.get(data.pdf_id)
+        SI !pdfData: RETORNA 404 RESOURCE_NOT_FOUND
+        text = await _pdfEngine.extractText(pdfData.filepath, data.page)
+        internalMetrics.extracted_total++
+        metrics?.increment('pdf-viewer.extracted')
+        EMITE pdf_viewer.texto_extraido {pdf_id: data.pdf_id, paginas: data.page ? 1 : pdfData.paginas}
+        RETORNA {status: 200, data: {texto: text, paginas: data.page ? 1 : pdfData.paginas}}
+      CATCH err:
+        RETORNA _handleHandlerError('pdf-viewer.extract.failed', err, 'extract')
+
+    async handleGetMetadata(data: {pdf_id}): Promise<Response>
+      TRY:
+        VALIDA pdf_id
+        pdfData = pdfs.get(data.pdf_id)
+        SI !pdfData: RETORNA 404 RESOURCE_NOT_FOUND
+        RETORNA {status: 200, data: {pdf_id: data.pdf_id, nombre: pdfData.nombre, paginas: pdfData.paginas, tamaño: pdfData.tamaño_bytes, created_at: pdfData.created_at, titulo: pdfData.titulo, autor: pdfData.autor}}
+      CATCH err:
+        RETORNA _handleHandlerError('pdf-viewer.metadata.failed', err, 'metadata')
+
+    async handleDeletePDF(data: {pdf_id}): Promise<Response>
+      TRY:
+        VALIDA pdf_id
+        pdfData = pdfs.get(data.pdf_id)
+        SI !pdfData: RETORNA 404 RESOURCE_NOT_FOUND
+        ELIMINA pdfData.filepath SI EXISTS
+        pdfs.delete(data.pdf_id)
+        LIMPIA renderCache PARA pdf_id
+        metrics?.increment('pdf-viewer.deleted')
+        EMITE pdf_viewer.pdf_eliminado {pdf_id: data.pdf_id}
+        RETORNA {status: 200, data: {pdf_id: data.pdf_id, eliminado: true}}
+      CATCH err:
+        RETORNA _handleHandlerError('pdf-viewer.delete.failed', err, 'delete')
+
+    async handleListPDFs(data: {limit?}): Promise<Response>
+      TRY:
+        limit = parseInt(data.limit) || 50
+        lista = Array.from(pdfs.values()).slice(0, limit)
+        RETORNA {status: 200, data: {pdfs: lista, total: lista.length}}
+      CATCH err:
+        RETORNA _handleHandlerError('pdf-viewer.list.failed', err, 'list')
+
+    _getCacheEntry(key: String): Buffer|Null
+      entry = renderCache.get(key)
+      SI !entry: RETORNA null
+      SI now() > entry.expiresAt:
+        renderCache.delete(key)
+        RETORNA null
+      RETORNA entry.image
+
+    _setCacheEntry(key: String, image: Buffer, ttl_ms: Integer): Void
+      expiresAt = now() + ttl_ms
+      renderCache.set(key, {image, expiresAt})
+      SI renderCache.size > 100:
+        oldestKey = Array.from(renderCache.entries()).sort((a, b) => a[1].expiresAt - b[1].expiresAt)[0][0]
+        renderCache.delete(oldestKey)
+
+    _handleHandlerError(logEvent: String, err: Error, kind: String): Object
+      code = err._code || _classifyError(err)
+      status = code == 'INVALID_INPUT' ? 400 : code == 'RESOURCE_NOT_FOUND' ? 404 : code == 'UPSTREAM_TIMEOUT' ? 504 : 500
+      logger.error(logEvent, {error: err.message, kind, code})
+      metrics?.increment('pdf-viewer.errors', {kind, code})
+      internalMetrics.errors_total++
+      RETORNA {status, error: {code, message: err.message}}
+
+    _classifyError(err: Error): String
+      msg = (err.message || '').toLowerCase()
+      SI msg.includes('timeout'): RETORNA 'UPSTREAM_TIMEOUT'
+      SI msg.includes('invalid') O msg.includes('corrupt'): RETORNA 'INVALID_INPUT'
+      SI msg.includes('not found'): RETORNA 'RESOURCE_NOT_FOUND'
+      RETORNA 'UNKNOWN_ERROR'
+
+    EVENTOS_PUBLISHES {
+      'pdf_viewer.pdf_subido': {pdf_id, nombre, paginas}
+      'pdf_viewer.pagina_renderizada': {pdf_id, page, formato}
+      'pdf_viewer.texto_extraido': {pdf_id, paginas}
+      'pdf_viewer.pdf_eliminado': {pdf_id}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      (ninguno)
+    }
+  }
+}
+
+CLASE PDFMetadata {
+  ATRIBUTOS {
+    pdf_id: String
+    nombre: String
+    filepath: String
+    tamaño_bytes: Integer
+    paginas: Integer
+    titulo: String|Null
+    autor: String|Null
+    created_at: String (ISO)
+    metadata: Object
+  }
+}
+
+CLASE PDFEngine {
+  ATRIBUTOS {
+    logger: Logger
+    timeout_ms: Integer
+  }
+
+  METODOS {
+    async getMetadata(filepath: String): Promise<{pages, title?, author?}>
+      UTILIZA library pdf-parse O pdfjs-dist
+      EXTRAE metadatos
+      RETORNA {pages, title, author}
+
+    async renderPage(filepath: String, page: Integer, opciones: {zoom, formato}): Promise<Buffer>
+      UTILIZA pdf-render (Sharp + pdftoppm o similar)
+      RENDERIZA página CON zoom
+      RETORNA imagen EN formato PNG/JPG
+
+    async extractText(filepath: String, page?: Integer): Promise<String>
+      UTILIZA pdfjs-dist o pdf-text-extract
+      EXTRAE texto
+      RETORNA string combinado
+
+    async shutdown(): Promise<Void>
+      LIMPIA resources
+  }
+}
+```
+
+https://claude.ai/code/session_019C4pks5RDdscuKPqVdTWRF
+
+---
+
+# GRUPO C — PERIFERICOS, PLUGIN-MANAGER, PROJECT-MANAGER
+
+## PERIFERICOS (v2.0.0) — Dispositivos Hardware con State Machine
+
+```
+INTERFAZ PerifericosContract {
+  registerPeripheral(data: {peripheral_id, type, project_id, address?, config?}): Promise<{registered, peripheral_id}>
+  unregisterPeripheral(peripheral_id: String): Promise<Void>
+  sendCommand(peripheral_id: String, command: String, params?: Object): Promise<{status, result?}>
+  getStatus(peripheral_id?: String): Promise<{status, online_count, offline_count, peripherals?}>
+  listPeripherals(filters?: {type?, project_id?, status?}): Promise<Array<PeripheralInfo>>
+  configurePeripheral(peripheral_id: String, config: Object): Promise<{status, config}>
+  startMonitoring(peripheral_id: String): Promise<Void>
+  stopMonitoring(peripheral_id: String): Promise<Void>
+}
+
+CLASE PerifericosModule HEREDA BaseModule IMPLEMENTA PerifericosContract {
+  ATRIBUTOS {
+    name: String = 'perifericos'
+    version: String = '2.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    uiHandler: UIRequestHandler
+    peripherals: Map<peripheral_id, PeripheralState>
+    connections: Map<peripheral_id, PeripheralConnection>
+    _pollTimers: Map<peripheral_id, NodeJS.Timeout>
+    _reconnectTimers: Map<peripheral_id, NodeJS.Timeout>
+    config: {
+      poll_interval_ms: Integer,
+      reconnect_interval_ms: Integer,
+      reconnect_max_attempts: Integer,
+      command_timeout_ms: Integer,
+      supported_types: Array<String>
+    }
+    internalMetrics: {
+      registered_total, unregistered_total, commands_sent, commands_failed, reconnects_total, online_current
+    }
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus, uiHandler FROM context
+      CARGA config FROM context.config['perifericos']
+      config.supported_types = ['printer', 'cash_drawer', 'display', 'scale', 'card_reader', 'barcode_scanner']
+      SUSCRIBE periferico.comando.requerido, periferico.reconectarse
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      _pollTimers.forEach(timer => clearTimeout(timer))
+      _reconnectTimers.forEach(timer => clearTimeout(timer))
+      PARA CADA [, conn] EN connections:
+        SI conn.device: await conn.device.disconnect()
+      _pollTimers.clear()
+      _reconnectTimers.clear()
+      peripherals.clear()
+      connections.clear()
+      LOG module.unloaded
+
+    async handleRegisterPeripheral(data: {peripheral_id, type, project_id, address?, config?}): Promise<Response>
+      VALIDA peripheral_id, type, project_id obligatorios
+      VALIDA type EN config.supported_types
+      SI peripherals.has(peripheral_id): RETORNA 409 CONFLICT_STATE
+      state = {peripheral_id, type, project_id, address: data.address || null, config: data.config || {}, status: 'offline', last_seen: null, last_error: null, reconnect_attempts: 0, created_at: now()}
+      peripherals.set(peripheral_id, state)
+      conn = {device: null, connected: false, lastConnectAttempt: null, commandQueue: []}
+      connections.set(peripheral_id, conn)
+      internalMetrics.registered_total++
+      metrics.increment('perifericos.registered.total')
+      await _attemptConnect(peripheral_id)
+      EMITE periferico.registrado {peripheral_id, type, project_id}
+      RETORNA {status: 201, data: {registered: true, peripheral_id}}
+
+    async handleUnregisterPeripheral(data: {peripheral_id}): Promise<Response>
+      VALIDA peripheral_id obligatorio
+      VALIDA peripherals.has(peripheral_id)
+      state = peripherals.get(peripheral_id)
+      conn = connections.get(peripheral_id)
+      SI conn.device: await conn.device.disconnect()
+      _clearPollTimer(peripheral_id)
+      _clearReconnectTimer(peripheral_id)
+      peripherals.delete(peripheral_id)
+      connections.delete(peripheral_id)
+      internalMetrics.unregistered_total++
+      EMITE periferico.desregistrado {peripheral_id}
+      RETORNA {status: 200, data: {unregistered: true}}
+
+    async handleSendCommand(data: {peripheral_id, command, params?, project_id?}): Promise<Response>
+      VALIDA peripheral_id, command obligatorios
+      state = peripherals.get(peripheral_id)
+      SI !state: RETORNA 404 RESOURCE_NOT_FOUND
+      conn = connections.get(peripheral_id)
+      SI !conn.connected:
+        conn.commandQueue.push({command, params, created_at: now()})
+        RETORNA {status: 503, error: {code: 'DEVICE_OFFLINE', message: 'Dispositivo desconectado, comando encolado'}}
+      TRY:
+        result = await _executeCommand(conn.device, command, data.params, config.command_timeout_ms)
+        internalMetrics.commands_sent++
+        metrics.increment('perifericos.command.success', {type: state.type, command})
+        EMITE periferico.comando.ejecutado {peripheral_id, command, result}
+        RETORNA {status: 200, data: {status: 'executed', result}}
+      CATCH err:
+        internalMetrics.commands_failed++
+        metrics.increment('perifericos.command.failed', {type: state.type, command})
+        EMITE periferico.comando.error {peripheral_id, command, error: err.message}
+        RETORNA {status: 500, error: {code: 'COMMAND_FAILED', message: err.message}}
+
+    async handleGetStatus(data?: {peripheral_id?}): Promise<Response>
+      SI data?.peripheral_id:
+        state = peripherals.get(data.peripheral_id)
+        SI !state: RETORNA 404 RESOURCE_NOT_FOUND
+        RETORNA {status: 200, data: {peripheral_id: data.peripheral_id, type: state.type, status: state.status, last_seen: state.last_seen, last_error: state.last_error, connected: connections.get(data.peripheral_id).connected}}
+      SINO:
+        online = Array.from(peripherals.values()).filter(s => s.status == 'online').length
+        offline = Array.from(peripherals.values()).filter(s => s.status == 'offline').length
+        RETORNA {status: 200, data: {total: peripherals.size, online_count: online, offline_count: offline, status: 'operational'}}
+
+    async handleListPeripherals(data?: {type?, project_id?, status?}): Promise<Response>
+      list = []
+      PARA CADA [id, state] EN peripherals:
+        SI data?.type Y state.type != data.type: CONTINÚA
+        SI data?.project_id Y state.project_id != data.project_id: CONTINÚA
+        SI data?.status Y state.status != data.status: CONTINÚA
+        conn = connections.get(id)
+        list.push({peripheral_id: id, type: state.type, project_id: state.project_id, status: state.status, connected: conn.connected, last_seen: state.last_seen})
+      RETORNA {status: 200, data: {peripherals: list, total: list.length}}
+
+    async handleConfigurePeripheral(data: {peripheral_id, config}): Promise<Response>
+      VALIDA peripheral_id, config obligatorios
+      state = peripherals.get(peripheral_id)
+      SI !state: RETORNA 404 RESOURCE_NOT_FOUND
+      state.config = {...state.config, ...data.config}
+      EMITE periferico.configurado {peripheral_id, config: state.config}
+      RETORNA {status: 200, data: {status: 'configured', config: state.config}}
+
+    async handleStartMonitoring(data: {peripheral_id}): Promise<Response>
+      VALIDA peripheral_id obligatorio
+      VALIDA peripherals.has(peripheral_id)
+      _startPollTimer(data.peripheral_id)
+      RETORNA {status: 200, data: {monitoring: true}}
+
+    async handleStopMonitoring(data: {peripheral_id}): Promise<Response>
+      VALIDA peripheral_id obligatorio
+      _clearPollTimer(data.peripheral_id)
+      RETORNA {status: 200, data: {monitoring: false}}
+
+    async _attemptConnect(peripheral_id: String): Promise<Boolean>
+      state = peripherals.get(peripheral_id)
+      conn = connections.get(peripheral_id)
+      SI !state: RETORNA false
+      SI conn.connected: RETORNA true
+      conn.lastConnectAttempt = now()
+      TRY:
+        device = await _createDeviceConnection(state.type, state.address, state.config, config.command_timeout_ms)
+        conn.device = device
+        conn.connected = true
+        state.status = 'online'
+        state.reconnect_attempts = 0
+        _clearReconnectTimer(peripheral_id)
+        _startPollTimer(peripheral_id)
+        metrics.increment('perifericos.connected.total', {type: state.type})
+        EMITE periferico.conectado {peripheral_id, type: state.type}
+        await _flushCommandQueue(peripheral_id)
+        RETORNA true
+      CATCH err:
+        state.status = 'offline'
+        state.last_error = err.message
+        state.reconnect_attempts++
+        metrics.increment('perifericos.connection.failed', {type: state.type})
+        _scheduleReconnect(peripheral_id)
+        RETORNA false
+
+    _scheduleReconnect(peripheral_id: String): Void
+      state = peripherals.get(peripheral_id)
+      SI !state: RETORNA
+      _clearReconnectTimer(peripheral_id)
+      SI state.reconnect_attempts >= config.reconnect_max_attempts:
+        state.status = 'error'
+        EMITE periferico.error {peripheral_id, reason: 'max_reconnect_attempts'}
+        RETORNA
+      delay = config.reconnect_interval_ms * Math.pow(2, state.reconnect_attempts - 1)
+      timer = setTimeout(() => {
+        _attemptConnect(peripheral_id)
+        internalMetrics.reconnects_total++
+      }, min(delay, 60000))
+      _reconnectTimers.set(peripheral_id, timer)
+
+    _startPollTimer(peripheral_id: String): Void
+      _clearPollTimer(peripheral_id)
+      timer = setInterval(async () => {
+        state = peripherals.get(peripheral_id)
+        conn = connections.get(peripheral_id)
+        SI !conn.connected: RETORNA
+        TRY:
+          status = await _pollDevice(conn.device)
+          state.last_seen = now()
+          state.last_error = null
+        CATCH err:
+          state.last_error = err.message
+          SI err.message.includes('disconnect'):
+            conn.connected = false
+            state.status = 'offline'
+            _clearPollTimer(peripheral_id)
+            _scheduleReconnect(peripheral_id)
+      }, config.poll_interval_ms)
+      _pollTimers.set(peripheral_id, timer)
+
+    _clearPollTimer(peripheral_id: String): Void
+      timer = _pollTimers.get(peripheral_id)
+      SI timer: clearInterval(timer)
+      _pollTimers.delete(peripheral_id)
+
+    _clearReconnectTimer(peripheral_id: String): Void
+      timer = _reconnectTimers.get(peripheral_id)
+      SI timer: clearTimeout(timer)
+      _reconnectTimers.delete(peripheral_id)
+
+    async _flushCommandQueue(peripheral_id: String): Promise<Void>
+      conn = connections.get(peripheral_id)
+      SI !conn: RETORNA
+      MIENTRAS conn.commandQueue.length > 0:
+        cmd = conn.commandQueue.shift()
+        TRY:
+          result = await _executeCommand(conn.device, cmd.command, cmd.params, config.command_timeout_ms)
+          EMITE periferico.comando.ejecutado {peripheral_id, command: cmd.command, from_queue: true}
+        CATCH err:
+          LOG error 'Failed to execute queued command'
+
+    EVENTOS_SUBSCRIBES {
+      'periferico.comando.requerido': onComandoRequerido
+      'periferico.reconectarse': onReconectarse
+    }
+
+    EVENTOS_PUBLISHES {
+      'periferico.registrado': {peripheral_id, type, project_id}
+      'periferico.desregistrado': {peripheral_id}
+      'periferico.conectado': {peripheral_id, type}
+      'periferico.comando.ejecutado': {peripheral_id, command, result?, from_queue?}
+      'periferico.comando.error': {peripheral_id, command, error}
+      'periferico.configurado': {peripheral_id, config}
+      'periferico.error': {peripheral_id, reason}
+    }
+  }
+}
+
+CLASE PeripheralState {
+  ATRIBUTOS {
+    peripheral_id: String
+    type: String (printer|cash_drawer|display|scale|card_reader|barcode_scanner)
+    project_id: String
+    address: String|Null
+    config: Object
+    status: String (online|offline|error)
+    last_seen: String|Null (ISO)
+    last_error: String|Null
+    reconnect_attempts: Integer
+    created_at: String (ISO)
+  }
+}
+
+CLASE PeripheralConnection {
+  ATRIBUTOS {
+    device: Object|Null
+    connected: Boolean
+    lastConnectAttempt: String|Null (ISO)
+    commandQueue: Array<{command, params, created_at}>
+  }
+}
+```
+
+## PLUGIN-MANAGER (v2.0.0) — Carga Dinámica de Plugins npm
+
+```
+INTERFAZ PluginManagerContract {
+  listPlugins(filters?: {status?, type?}): Promise<Array<PluginInfo>>
+  installPlugin(name: String, version?: String): Promise<{installed, plugin_id}>
+  enablePlugin(plugin_id: String): Promise<{enabled}>
+  disablePlugin(plugin_id: String): Promise<{disabled}>
+  uninstallPlugin(plugin_id: String): Promise<Void>
+  getPluginStatus(plugin_id: String): Promise<{status, enabled, version}>
+  executePluginMethod(plugin_id: String, method: String, args?: Object): Promise<Any>
+}
+
+CLASE PluginManagerModule HEREDA BaseModule IMPLEMENTA PluginManagerContract {
+  ATRIBUTOS {
+    name: String = 'plugin-manager'
+    version: String = '2.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    uiHandler: UIRequestHandler
+    plugins: Map<plugin_id, PluginInstance>
+    pluginMetadata: Map<plugin_id, PluginMetadata>
+    pluginsDir: String
+    config: {
+      plugins_dir: String,
+      auto_load: Boolean,
+      sandbox_mode: Boolean,
+      max_plugin_memory_mb: Integer,
+      require_signatures: Boolean
+    }
+    internalMetrics: {
+      installed_total, enabled_total, disabled_total, execution_errors}
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus, uiHandler FROM context
+      CARGA config FROM context.config['plugin-manager']
+      pluginsDir = config.plugins_dir || './plugins'
+      ENSURA_DIR(pluginsDir)
+      SI config.auto_load: await _discoverAndLoadPlugins()
+      LOG module.loaded CON plugin_count: plugins.size
+
+    async onUnload(): Promise<Void>
+      PARA CADA [, instance] EN plugins:
+        SI instance.enabled: await _disablePlugin(instance.plugin_id)
+      plugins.clear()
+      pluginMetadata.clear()
+      LOG module.unloaded
+
+    async handleListPlugins(data?: {status?, type?}): Promise<Response>
+      list = []
+      PARA CADA [id, metadata] EN pluginMetadata:
+        SI data?.status Y metadata.status != data.status: CONTINÚA
+        SI data?.type Y metadata.type != data.type: CONTINÚA
+        instance = plugins.get(id)
+        list.push({plugin_id: id, name: metadata.name, version: metadata.version, status: metadata.status, enabled: instance?.enabled || false, installed_at: metadata.installed_at})
+      RETORNA {status: 200, data: {plugins: list, total: list.length}}
+
+    async handleInstallPlugin(data: {name, version?}): Promise<Response>
+      VALIDA data.name obligatorio
+      TRY:
+        result = await _npmInstall(data.name, data.version)
+        plugin_id = _generatePluginId(data.name, data.version)
+        SI pluginMetadata.has(plugin_id): RETORNA 409 CONFLICT_STATE
+        metadata = {plugin_id, name: data.name, version: data.version || 'latest', type: 'npm', status: 'installed', installed_at: now(), entry_point: null}
+        pluginMetadata.set(plugin_id, metadata)
+        internalMetrics.installed_total++
+        metrics.increment('plugin-manager.installed.total')
+        EMITE plugin.instalado {plugin_id, name: data.name, version: data.version}
+        RETORNA {status: 201, data: {installed: true, plugin_id}}
+      CATCH err:
+        metrics.increment('plugin-manager.install.failed')
+        RETORNA {status: 500, error: {code: 'INSTALL_FAILED', message: err.message}}
+
+    async handleEnablePlugin(data: {plugin_id}): Promise<Response>
+      VALIDA data.plugin_id obligatorio
+      metadata = pluginMetadata.get(data.plugin_id)
+      SI !metadata: RETORNA 404 RESOURCE_NOT_FOUND
+      SI metadata.status != 'installed': RETORNA 409 CONFLICT_STATE
+      TRY:
+        instance = await _loadPluginModule(data.plugin_id, metadata)
+        plugins.set(data.plugin_id, instance)
+        instance.enabled = true
+        metadata.status = 'enabled'
+        internalMetrics.enabled_total++
+        metrics.increment('plugin-manager.enabled.total')
+        EMITE plugin.habilitado {plugin_id: data.plugin_id, name: metadata.name}
+        RETORNA {status: 200, data: {enabled: true}}
+      CATCH err:
+        logger.error('plugin.enable.failed', {plugin_id: data.plugin_id, error: err.message})
+        metadata.status = 'error'
+        metrics.increment('plugin-manager.enable.failed')
+        RETORNA {status: 500, error: {code: 'ENABLE_FAILED', message: err.message}}
+
+    async handleDisablePlugin(data: {plugin_id}): Promise<Response>
+      VALIDA data.plugin_id obligatorio
+      instance = plugins.get(data.plugin_id)
+      SI !instance: RETORNA 404 RESOURCE_NOT_FOUND
+      await _disablePlugin(data.plugin_id)
+      internalMetrics.disabled_total++
+      metrics.increment('plugin-manager.disabled.total')
+      EMITE plugin.deshabilitado {plugin_id: data.plugin_id}
+      RETORNA {status: 200, data: {disabled: true}}
+
+    async handleUninstallPlugin(data: {plugin_id}): Promise<Response>
+      VALIDA data.plugin_id obligatorio
+      SI plugins.has(data.plugin_id): await _disablePlugin(data.plugin_id)
+      metadata = pluginMetadata.get(data.plugin_id)
+      SI metadata: await _npmUninstall(metadata.name)
+      plugins.delete(data.plugin_id)
+      pluginMetadata.delete(data.plugin_id)
+      EMITE plugin.desinstalado {plugin_id: data.plugin_id}
+      RETORNA {status: 200, data: {uninstalled: true}}
+
+    async handleGetPluginStatus(data: {plugin_id}): Promise<Response>
+      VALIDA data.plugin_id obligatorio
+      metadata = pluginMetadata.get(data.plugin_id)
+      SI !metadata: RETORNA 404 RESOURCE_NOT_FOUND
+      instance = plugins.get(data.plugin_id)
+      RETORNA {status: 200, data: {status: metadata.status, enabled: instance?.enabled || false, version: metadata.version}}
+
+    async handleExecutePluginMethod(data: {plugin_id, method, args?}): Promise<Response>
+      VALIDA plugin_id, method obligatorios
+      instance = plugins.get(data.plugin_id)
+      SI !instance: RETORNA 404 RESOURCE_NOT_FOUND
+      SI !instance.enabled: RETORNA 409 CONFLICT_STATE
+      TRY:
+        result = await instance.execute(data.method, data.args || {})
+        internalMetrics.execution_errors = 0
+        RETORNA {status: 200, data: {result}}
+      CATCH err:
+        internalMetrics.execution_errors++
+        metrics.increment('plugin-manager.execution.failed', {plugin_id: data.plugin_id, method: data.method})
+        RETORNA {status: 500, error: {code: 'EXECUTION_FAILED', message: err.message}}
+
+    async _discoverAndLoadPlugins(): Promise<Void>
+      entries = readdir(pluginsDir)
+      PARA CADA entry:
+        manifest = _loadManifest(join(pluginsDir, entry))
+        SI manifest:
+          plugin_id = manifest.name
+          pluginMetadata.set(plugin_id, manifest)
+
+    async _loadPluginModule(plugin_id: String, metadata: PluginMetadata): Promise<PluginInstance>
+      TRY:
+        modulePath = join(pluginsDir, metadata.name, metadata.entry_point || 'index.js')
+        Module = require(modulePath)
+        instance = new Module({eventBus, logger, metrics})
+        instance.plugin_id = plugin_id
+        instance.enabled = false
+        instance.execute = async (method, args) => {
+          SI !instance[method]: LANZA Error(`Method ${method} not found`)
+          RETORNA await instance[method](args)
+        }
+        RETORNA instance
+      CATCH err:
+        LANZA Error(`Failed to load plugin: ${err.message}`)
+
+    async _disablePlugin(plugin_id: String): Promise<Void>
+      instance = plugins.get(plugin_id)
+      SI !instance: RETORNA
+      instance.enabled = false
+      SI instance.onDisable: await instance.onDisable()
+      metadata = pluginMetadata.get(plugin_id)
+      SI metadata: metadata.status = 'installed'
+      plugins.delete(plugin_id)
+
+    async _npmInstall(name: String, version?: String): Promise<{success}>
+      cmd = `npm install ${name}${version ? '@' + version : ''} --prefix ${pluginsDir}`
+      (execSync o similar)
+      RETORNA {success: true}
+
+    async _npmUninstall(name: String): Promise<{success}>
+      cmd = `npm uninstall ${name} --prefix ${pluginsDir}`
+      RETORNA {success: true}
+
+    _loadManifest(pluginDir: String): Object|Null
+      manifestPath = join(pluginDir, 'manifest.json')
+      SI EXISTS(manifestPath):
+        RETORNA JSON.parse(readFile(manifestPath))
+      RETORNA null
+
+    _generatePluginId(name: String, version: String): String
+      RETORNA `${name}@${version || 'latest'}`.replace(/\//g, '--')
+
+    EVENTOS_PUBLISHES {
+      'plugin.instalado': {plugin_id, name, version}
+      'plugin.habilitado': {plugin_id, name}
+      'plugin.deshabilitado': {plugin_id}
+      'plugin.desinstalado': {plugin_id}
+    }
+
+    EVENTOS_SUBSCRIBES {
+    }
+  }
+}
+
+CLASE PluginInstance {
+  ATRIBUTOS {
+    plugin_id: String
+    enabled: Boolean
+    eventBus: EventBus
+    logger: Logger
+    metrics: Metrics
+    execute: Function (method, args) => Promise
+    onDisable: Function|Null
+  }
+}
+
+CLASE PluginMetadata {
+  ATRIBUTOS {
+    plugin_id: String
+    name: String
+    version: String
+    type: String (npm|local|bundled)
+    status: String (installed|enabled|disabled|error)
+    installed_at: String (ISO)
+    entry_point: String|Null
+  }
+}
+```
+
+## PROJECT-MANAGER (v2.0.0) — CRUD y Contexto de Proyectos
+
+```
+INTERFAZ ProjectManagerContract {
+  createProject(data: {name, description, type?, metadata?}): Promise<{project_id, ...}>
+  getProject(project_id: String): Promise<Project>
+  listProjects(filters?: {type?, status?}): Promise<Array<Project>>
+  updateProject(project_id: String, updates: Object): Promise<Project>
+  deleteProject(project_id: String): Promise<Void>
+  activateProject(project_id: String): Promise<{active_project_id}>
+  getActiveProject(): Promise<Project>
+}
+
+CLASE ProjectManagerModule HEREDA BaseModule IMPLEMENTA ProjectManagerContract {
+  ATRIBUTOS {
+    name: String = 'project-manager'
+    version: String = '2.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    uiHandler: UIRequestHandler
+    projects: Map<project_id, Project>
+    activeProjectId: String|Null
+    projectsDir: String
+    config: Object
+    internalMetrics: {created_total, deleted_total, activated_total, activations}
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus, uiHandler FROM context
+      projectsDir = join(cwd(), 'data/projects')
+      ENSURA_DIR(projectsDir)
+      await _loadProjects()
+      LOG module.loaded CON projects: projects.size
+
+    async onUnload(): Promise<Void>
+      await _saveProjects()
+      projects.clear()
+      activeProjectId = null
+      LOG module.unloaded
+
+    async handleCreateProject(data: {name, description, type?, metadata?}): Promise<Response>
+      VALIDA name obligatorio
+      SI projects.values().find(p => p.name == data.name): RETORNA 409 CONFLICT_STATE
+      project_id = crypto.randomUUID()
+      project = {project_id, name: data.name, description: data.description || '', type: data.type || 'general', metadata: data.metadata || {}, status: 'active', created_at: now(), updated_at: now()}
+      projectDir = join(projectsDir, project_id)
+      MKDIR(projectDir, {recursive: true})
+      projects.set(project_id, project)
+      await _saveProjects()
+      internalMetrics.created_total++
+      metrics.increment('project-manager.created.total')
+      EMITE proyecto.creado {project_id, name: data.name}
+      RETORNA {status: 201, data: project}
+
+    async handleGetProject(data: {project_id}): Promise<Response>
+      VALIDA project_id obligatorio
+      project = projects.get(data.project_id)
+      SI !project: RETORNA 404 RESOURCE_NOT_FOUND
+      RETORNA {status: 200, data: project}
+
+    async handleListProjects(data?: {type?, status?}): Promise<Response>
+      list = []
+      PARA CADA [, project] EN projects:
+        SI data?.type Y project.type != data.type: CONTINÚA
+        SI data?.status Y project.status != data.status: CONTINÚA
+        list.push(project)
+      ORDENA list POR updated_at DESC
+      RETORNA {status: 200, data: {projects: list, total: list.length}}
+
+    async handleUpdateProject(data: {project_id, updates}): Promise<Response>
+      VALIDA project_id, updates obligatorios
+      project = projects.get(data.project_id)
+      SI !project: RETORNA 404 RESOURCE_NOT_FOUND
+      MERGE(project, data.updates)
+      project.updated_at = now()
+      await _saveProjects()
+      EMITE proyecto.actualizado {project_id: data.project_id, updates: data.updates}
+      RETORNA {status: 200, data: project}
+
+    async handleDeleteProject(data: {project_id}): Promise<Response>
+      VALIDA project_id obligatorio
+      project = projects.get(data.project_id)
+      SI !project: RETORNA 404 RESOURCE_NOT_FOUND
+      SI activeProjectId == data.project_id: activeProjectId = null
+      projectDir = join(projectsDir, data.project_id)
+      SI EXISTS(projectDir): rmdir(projectDir, {recursive: true})
+      projects.delete(data.project_id)
+      await _saveProjects()
+      internalMetrics.deleted_total++
+      metrics.increment('project-manager.deleted.total')
+      EMITE proyecto.eliminado {project_id: data.project_id}
+      RETORNA {status: 200, data: {deleted: true}}
+
+    async handleActivateProject(data: {project_id}): Promise<Response>
+      VALIDA project_id obligatorio
+      project = projects.get(data.project_id)
+      SI !project: RETORNA 404 RESOURCE_NOT_FOUND
+      activeProjectId = data.project_id
+      internalMetrics.activated_total++
+      metrics.increment('project-manager.activated.total')
+      EMITE proyecto.activado {project_id: data.project_id, name: project.name}
+      RETORNA {status: 200, data: {active_project_id: data.project_id}}
+
+    async handleGetActiveProject(): Promise<Response>
+      SI !activeProjectId: RETORNA 404 RESOURCE_NOT_FOUND
+      project = projects.get(activeProjectId)
+      RETORNA {status: 200, data: project}
+
+    async _loadProjects(): Promise<Void>
+      SI NOT EXISTS(projectsDir): RETORNA
+      entries = readdir(projectsDir)
+      PARA CADA entry:
+        configPath = join(projectsDir, entry, 'project.json')
+        SI EXISTS(configPath):
+          config = JSON.parse(readFile(configPath))
+          projects.set(config.project_id, config)
+
+    async _saveProjects(): Promise<Void>
+      PARA CADA [project_id, project] EN projects:
+        projectDir = join(projectsDir, project_id)
+        MKDIR(projectDir, {recursive: true})
+        configPath = join(projectDir, 'project.json')
+        writeFile(configPath, JSON.stringify(project, null, 2))
+
+    EVENTOS_PUBLISHES {
+      'proyecto.creado': {project_id, name}
+      'proyecto.actualizado': {project_id, updates}
+      'proyecto.eliminado': {project_id}
+      'proyecto.activado': {project_id, name}
+    }
+
+    EVENTOS_SUBSCRIBES {
+    }
+  }
+}
+
+CLASE Project {
+  ATRIBUTOS {
+    project_id: String
+    name: String
+    description: String
+    type: String (general|pizzepos|tienda|otro)
+    metadata: Object
+    status: String (active|archived|deleted)
+    created_at: String (ISO)
+    updated_at: String (ISO)
+  }
+}
+```
+
+---
+
+# GRUPO D — PROMPT-MANAGER, RECETARIO-CREATIVO, SCHEDULER
+
+## PROMPT-MANAGER (v2.0.0) — Gestión Versionada de Plantillas
+
+```
+INTERFAZ PromptManagerContract {
+  createPrompt(data: {name, template, variables, category?, description?}): Promise<{prompt_id, version}>
+  getPrompt(prompt_id: String, version?: String): Promise<Prompt>
+  listPrompts(filters?: {category?, search?}): Promise<Array<Prompt>>
+  updatePrompt(prompt_id: String, updates: Object): Promise<Prompt>
+  deletePrompt(prompt_id: String): Promise<Void>
+  renderPrompt(prompt_id: String, variables: Object, version?: String): Promise<String>
+  forkPrompt(prompt_id: String, name: String): Promise<{new_prompt_id}>
+}
+
+CLASE PromptManagerModule HEREDA BaseModule IMPLEMENTA PromptManagerContract {
+  ATRIBUTOS {
+    name: String = 'prompt-manager'
+    version: String = '2.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    uiHandler: UIRequestHandler
+    prompts: Map<prompt_id, PromptVersion[]>
+    promptMetadata: Map<prompt_id, PromptMetadata>
+    promptsDir: String
+    config: Object
+    internalMetrics: {created_total, updated_total, deleted_total, rendered_total, errors}
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus, uiHandler FROM context
+      promptsDir = join(cwd(), 'data/prompts')
+      ENSURA_DIR(promptsDir)
+      await _loadPrompts()
+      LOG module.loaded CON prompts: prompts.size
+
+    async onUnload(): Promise<Void>
+      await _savePrompts()
+      prompts.clear()
+      promptMetadata.clear()
+      LOG module.unloaded
+
+    async handleCreatePrompt(data: {name, template, variables, category?, description?}): Promise<Response>
+      VALIDA name, template, variables obligatorios
+      SI promptMetadata.values().find(m => m.name == data.name): RETORNA 409 CONFLICT_STATE
+      prompt_id = crypto.randomUUID()
+      version = 1
+      prompt = {prompt_id, version, template: data.template, variables: data.variables, created_at: now(), updated_at: now()}
+      metadata = {prompt_id, name: data.name, description: data.description || '', category: data.category || 'general', versions: 1, last_rendered_at: null, created_at: now()}
+      prompts.set(prompt_id, [prompt])
+      promptMetadata.set(prompt_id, metadata)
+      await _savePrompts()
+      internalMetrics.created_total++
+      metrics.increment('prompt-manager.created.total')
+      EMITE prompt.creado {prompt_id, name: data.name, version}
+      RETORNA {status: 201, data: {prompt_id, version}}
+
+    async handleGetPrompt(data: {prompt_id, version?}): Promise<Response>
+      VALIDA prompt_id obligatorio
+      versions = prompts.get(data.prompt_id)
+      SI !versions: RETORNA 404 RESOURCE_NOT_FOUND
+      targetVersion = data.version ? parseInt(data.version) : versions.length
+      SI targetVersion < 1 O targetVersion > versions.length: RETORNA 400 INVALID_INPUT
+      prompt = versions[targetVersion - 1]
+      metadata = promptMetadata.get(data.prompt_id)
+      RETORNA {status: 200, data: {...prompt, ...{name: metadata.name, description: metadata.description}}}
+
+    async handleListPrompts(data?: {category?, search?}): Promise<Response>
+      list = []
+      PARA CADA [id, metadata] EN promptMetadata:
+        SI data?.category Y metadata.category != data.category: CONTINÚA
+        SI data?.search Y !metadata.name.toLowerCase().includes(data.search.toLowerCase()): CONTINÚA
+        versions = prompts.get(id)
+        latest = versions[versions.length - 1]
+        list.push({prompt_id: id, name: metadata.name, category: metadata.category, version: latest.version, description: metadata.description, created_at: metadata.created_at})
+      ORDENA list POR created_at DESC
+      RETORNA {status: 200, data: {prompts: list, total: list.length}}
+
+    async handleUpdatePrompt(data: {prompt_id, updates}): Promise<Response>
+      VALIDA prompt_id, updates obligatorios
+      VALIDA prompts.has(prompt_id)
+      versions = prompts.get(data.prompt_id)
+      latest = versions[versions.length - 1]
+      newVersion = {prompt_id: data.prompt_id, version: latest.version + 1, template: data.updates.template || latest.template, variables: data.updates.variables || latest.variables, created_at: now(), updated_at: now()}
+      versions.push(newVersion)
+      metadata = promptMetadata.get(data.prompt_id)
+      SI data.updates.name: metadata.name = data.updates.name
+      SI data.updates.description: metadata.description = data.updates.description
+      SI data.updates.category: metadata.category = data.updates.category
+      metadata.versions = versions.length
+      metadata.updated_at = now()
+      await _savePrompts()
+      internalMetrics.updated_total++
+      metrics.increment('prompt-manager.updated.total')
+      EMITE prompt.actualizado {prompt_id: data.prompt_id, version: newVersion.version}
+      RETORNA {status: 200, data: newVersion}
+
+    async handleDeletePrompt(data: {prompt_id}): Promise<Response>
+      VALIDA prompt_id obligatorio
+      prompts.delete(data.prompt_id)
+      promptMetadata.delete(data.prompt_id)
+      await _savePrompts()
+      internalMetrics.deleted_total++
+      metrics.increment('prompt-manager.deleted.total')
+      EMITE prompt.eliminado {prompt_id: data.prompt_id}
+      RETORNA {status: 200, data: {deleted: true}}
+
+    async handleRenderPrompt(data: {prompt_id, variables, version?}): Promise<Response>
+      VALIDA prompt_id, variables obligatorios
+      versions = prompts.get(data.prompt_id)
+      SI !versions: RETORNA 404 RESOURCE_NOT_FOUND
+      targetVersion = data.version ? parseInt(data.version) : versions.length
+      SI targetVersion < 1 O targetVersion > versions.length: RETORNA 400 INVALID_INPUT
+      prompt = versions[targetVersion - 1]
+      TRY:
+        rendered = _renderTemplate(prompt.template, data.variables)
+        metadata = promptMetadata.get(data.prompt_id)
+        metadata.last_rendered_at = now()
+        internalMetrics.rendered_total++
+        metrics.increment('prompt-manager.rendered.total')
+        EMITE prompt.renderizado {prompt_id: data.prompt_id, version: prompt.version}
+        RETORNA {status: 200, data: {rendered, prompt_id: data.prompt_id, version: prompt.version}}
+      CATCH err:
+        internalMetrics.errors++
+        metrics.increment('prompt-manager.render.failed')
+        RETORNA {status: 500, error: {code: 'RENDER_FAILED', message: err.message}}
+
+    async handleForkPrompt(data: {prompt_id, name}): Promise<Response>
+      VALIDA prompt_id, name obligatorios
+      versions = prompts.get(data.prompt_id)
+      SI !versions: RETORNA 404 RESOURCE_NOT_FOUND
+      latest = versions[versions.length - 1]
+      new_prompt_id = crypto.randomUUID()
+      newPrompt = {prompt_id: new_prompt_id, version: 1, template: latest.template, variables: latest.variables, created_at: now(), updated_at: now()}
+      newMetadata = {prompt_id: new_prompt_id, name: data.name, description: 'Forked from ' + promptMetadata.get(data.prompt_id).name, category: 'forked', versions: 1, created_at: now()}
+      prompts.set(new_prompt_id, [newPrompt])
+      promptMetadata.set(new_prompt_id, newMetadata)
+      await _savePrompts()
+      EMITE prompt.fork {prompt_id: data.prompt_id, new_prompt_id, name: data.name}
+      RETORNA {status: 201, data: {new_prompt_id, version: 1}}
+
+    _renderTemplate(template: String, variables: Object): String
+      result = template
+      PARA CADA [key, value] EN Object.entries(variables):
+        result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value))
+      SI result.includes('{{'):
+        LANZA Error('Unresolved template variables')
+      RETORNA result
+
+    async _loadPrompts(): Promise<Void>
+      SI NOT EXISTS(promptsDir): RETORNA
+      entries = readdir(promptsDir)
+      PARA CADA entry:
+        filePath = join(promptsDir, entry, 'prompt.json')
+        SI EXISTS(filePath):
+          data = JSON.parse(readFile(filePath))
+          prompts.set(data.prompt_id, data.versions)
+          promptMetadata.set(data.prompt_id, data.metadata)
+
+    async _savePrompts(): Promise<Void>
+      PARA CADA [prompt_id, versions] EN prompts:
+        metadata = promptMetadata.get(prompt_id)
+        promptDir = join(promptsDir, prompt_id)
+        MKDIR(promptDir, {recursive: true})
+        writeFile(join(promptDir, 'prompt.json'), JSON.stringify({prompt_id, versions, metadata}, null, 2))
+
+    EVENTOS_PUBLISHES {
+      'prompt.creado': {prompt_id, name, version}
+      'prompt.actualizado': {prompt_id, version}
+      'prompt.eliminado': {prompt_id}
+      'prompt.renderizado': {prompt_id, version}
+      'prompt.fork': {prompt_id, new_prompt_id, name}
+    }
+
+    EVENTOS_SUBSCRIBES {
+    }
+  }
+}
+
+CLASE Prompt {
+  ATRIBUTOS {
+    prompt_id: String
+    version: Integer
+    template: String
+    variables: Array<{name, type, required, default}>
+    created_at: String (ISO)
+    updated_at: String (ISO)
+  }
+}
+
+CLASE PromptMetadata {
+  ATRIBUTOS {
+    prompt_id: String
+    name: String
+    description: String
+    category: String
+    versions: Integer
+    last_rendered_at: String|Null (ISO)
+    created_at: String (ISO)
+    updated_at: String|Null (ISO)
+  }
+}
+
+CLASE PromptVersion {
+  ATRIBUTOS {
+    version: Integer
+    template: String
+    variables: Array
+    created_at: String (ISO)
+  }
+}
+```
+
+## RECETARIO-CREATIVO (v2.0.0) — Generación Creativa de Recetas con IA
+
+```
+INTERFAZ RecetarioCreativoContract {
+  generateReceta(data: {ingredientes: Array, restricciones?, estilos?, preferencias?}): Promise<{receta_id, nombre, ingredientes, instrucciones}>
+  listarRecetas(filters?: {estilo?, restriccion?}): Promise<Array<Receta>>
+  obtenerReceta(receta_id: String): Promise<Receta>
+  validarIngredientes(ingredientes: Array): Promise<{valido, sugerencias?}>
+  calcularNutricion(receta_id: String, porciones?: Number): Promise<{calorias, proteinas, grasas, carbohidratos}>
+  guardarReceta(receta_id: String, nombre: String): Promise<{saved}>
+  buscarPorIngrediente(ingrediente: String): Promise<Array<Receta>>
+}
+
+CLASE RecetarioCreativoModule HEREDA BaseModule IMPLEMENTA RecetarioCreativoContract {
+  ATRIBUTOS {
+    name: String = 'recetario-creativo'
+    version: String = '2.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    uiHandler: UIRequestHandler
+    aiGateway: AIGateway|Null
+    recetas: Map<receta_id, Receta>
+    ingredientesDB: Map<ingredient_id, Ingrediente>
+    config: {
+      ai_provider: String,
+      temperature: Number,
+      max_tokens: Number,
+      restrict_allergens: Boolean
+    }
+    internalMetrics: {generated_total, saved_total, ai_calls, validation_errors}
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus, uiHandler FROM context
+      CARGA config FROM context.config['recetario-creativo']
+      SI eventBus?.moduleRegistry?.get('ai-gateway'):
+        aiGateway = eventBus.moduleRegistry.get('ai-gateway')
+      await _loadIngredientes()
+      LOG module.loaded CON ai_available: !!aiGateway
+
+    async onUnload(): Promise<Void>
+      recetas.clear()
+      ingredientesDB.clear()
+      LOG module.unloaded
+
+    async handleGenerateReceta(data: {ingredientes, restricciones?, estilos?, preferencias?}): Promise<Response>
+      VALIDA ingredientes obligatorio Y array
+      valResult = await handleValidarIngredientes({ingredientes: data.ingredientes})
+      SI !valResult.data.valido: RETORNA 400 INVALID_INPUT
+      SI !aiGateway: RETORNA 503 UPSTREAM_UNREACHABLE
+      TRY:
+        receta_id = crypto.randomUUID()
+        prompt = _buildGenerationPrompt(data.ingredientes, data.restricciones, data.estilos, data.preferencias)
+        response = await aiGateway.call(config.ai_provider, 'default', [{role: 'user', content: prompt}], {temperature: config.temperature, maxTokens: config.max_tokens})
+        parsed = _parseRecetaResponse(response.content)
+        receta = {receta_id, nombre: parsed.nombre, descripcion: parsed.descripcion, ingredientes: parsed.ingredientes, instrucciones: parsed.instrucciones, restricciones: data.restricciones || [], estilos: data.estilos || [], porciones: parsed.porciones || 4, tiempo_preparacion: parsed.tiempo || 30, dificultad: parsed.dificultad || 'media', generada_at: now(), generada_por: 'ai'}
+        recetas.set(receta_id, receta)
+        internalMetrics.generated_total++
+        internalMetrics.ai_calls++
+        metrics.increment('recetario.generated.total')
+        EMITE receta.generada {receta_id, nombre: receta.nombre, ingredientes: receta.ingredientes.length}
+        RETORNA {status: 201, data: {receta_id, nombre: receta.nombre, ingredientes: receta.ingredientes, instrucciones: receta.instrucciones}}
+      CATCH err:
+        internalMetrics.ai_calls++
+        metrics.increment('recetario.generation.failed')
+        RETORNA {status: 500, error: {code: 'GENERATION_FAILED', message: err.message}}
+
+    async handleListarRecetas(data?: {estilo?, restriccion?}): Promise<Response>
+      list = []
+      PARA CADA [, receta] EN recetas:
+        SI data?.estilo Y !receta.estilos.includes(data.estilo): CONTINÚA
+        SI data?.restriccion Y !receta.restricciones.includes(data.restriccion): CONTINÚA
+        list.push({receta_id: receta.receta_id, nombre: receta.nombre, dificultad: receta.dificultad, tiempo_preparacion: receta.tiempo_preparacion})
+      ORDENA list POR receta.generada_at DESC
+      RETORNA {status: 200, data: {recetas: list, total: list.length}}
+
+    async handleObtenerReceta(data: {receta_id}): Promise<Response>
+      VALIDA receta_id obligatorio
+      receta = recetas.get(data.receta_id)
+      SI !receta: RETORNA 404 RESOURCE_NOT_FOUND
+      RETORNA {status: 200, data: receta}
+
+    async handleValidarIngredientes(data: {ingredientes}): Promise<Response>
+      VALIDA ingredientes obligatorio
+      valido = true
+      sugerencias = []
+      PARA CADA ingrediente EN data.ingredientes:
+        SI !ingredientesDB.has(ingrediente):
+          valido = false
+          similar = _findSimilarIngrediente(ingrediente)
+          SI similar:
+            sugerencias.push({ingrediente, sugerencia: similar})
+      SI config.restrict_allergens:
+        PARA CADA ingrediente EN data.ingredientes:
+          allergens = ingredientesDB.get(ingrediente)?.allergens || []
+          SI allergens.length > 0:
+            sugerencias.push({ingrediente, advertencia: 'Contiene alérgenos'})
+      internalMetrics.validation_errors += valido ? 0 : 1
+      RETORNA {status: 200, data: {valido, sugerencias}}
+
+    async handleCalcularNutricion(data: {receta_id, porciones?}): Promise<Response>
+      VALIDA receta_id obligatorio
+      receta = recetas.get(data.receta_id)
+      SI !receta: RETORNA 404 RESOURCE_NOT_FOUND
+      porciones = parseInt(data.porciones) || receta.porciones
+      totales = {calorias: 0, proteinas: 0, grasas: 0, carbohidratos: 0}
+      PARA CADA item EN receta.ingredientes:
+        nutricion = ingredientesDB.get(item.ingrediente)?.nutricion || {}
+        cantidad_factor = item.cantidad / 100
+        totales.calorias += (nutricion.calorias || 0) * cantidad_factor
+        totales.proteinas += (nutricion.proteinas || 0) * cantidad_factor
+        totales.grasas += (nutricion.grasas || 0) * cantidad_factor
+        totales.carbohidratos += (nutricion.carbohidratos || 0) * cantidad_factor
+      SI porciones != receta.porciones:
+        FACTOR = porciones / receta.porciones
+        PARA CADA [key, value] EN Object.entries(totales):
+          totales[key] = value * FACTOR
+      RETORNA {status: 200, data: {receta_id: data.receta_id, porciones, ...totales}}
+
+    async handleGuardarReceta(data: {receta_id, nombre}): Promise<Response>
+      VALIDA receta_id, nombre obligatorios
+      receta = recetas.get(data.receta_id)
+      SI !receta: RETORNA 404 RESOURCE_NOT_FOUND
+      receta.nombre = data.nombre
+      receta.guardada_at = now()
+      internalMetrics.saved_total++
+      metrics.increment('recetario.saved.total')
+      EMITE receta.guardada {receta_id: data.receta_id, nombre: data.nombre}
+      RETORNA {status: 200, data: {saved: true}}
+
+    async handleBuscarPorIngrediente(data: {ingrediente}): Promise<Response>
+      VALIDA ingrediente obligatorio
+      query = data.ingrediente.toLowerCase()
+      resultados = []
+      PARA CADA [, receta] EN recetas:
+        PARA CADA item EN receta.ingredientes:
+          SI item.ingrediente.toLowerCase().includes(query):
+            resultados.push({receta_id: receta.receta_id, nombre: receta.nombre, ingrediente: item.ingrediente})
+            BREAK
+      RETORNA {status: 200, data: {ingrediente: data.ingrediente, resultados, total: resultados.length}}
+
+    _buildGenerationPrompt(ingredientes: Array, restricciones?: Array, estilos?: Array, preferencias?: Object): String
+      prompt = `Genera una receta creativa usando los siguientes ingredientes: ${ingredientes.join(', ')}.`
+      SI restricciones?.length:
+        prompt += ` Restricciones dietéticas: ${restricciones.join(', ')}.`
+      SI estilos?.length:
+        prompt += ` Estilos culinarios: ${estilos.join(', ')}.`
+      SI preferencias:
+        SI preferencias.tiempo_maximo:
+          prompt += ` Tiempo máximo de preparación: ${preferencias.tiempo_maximo} minutos.`
+        SI preferencias.dificultad:
+          prompt += ` Nivel de dificultad deseado: ${preferencias.dificultad}.`
+      prompt += ` Responde en JSON: {nombre, descripcion, ingredientes: [{ingrediente, cantidad, unidad}], instrucciones: [pasos], porciones, tiempo, dificultad}`
+      RETORNA prompt
+
+    _parseRecetaResponse(content: String): Object
+      TRY:
+        RETORNA JSON.parse(content)
+      CATCH:
+        jsonMatch = content.match(/\{[\s\S]*\}/)
+        SI jsonMatch:
+          RETORNA JSON.parse(jsonMatch[0])
+        RETORNA {nombre: 'Receta sin nombre', ingredientes: [], instrucciones: ['Ver respuesta completa']}
+
+    _findSimilarIngrediente(ingrediente: String): String|Null
+      query = ingrediente.toLowerCase()
+      PARA CADA [, ing] EN ingredientesDB:
+        SI ing.nombre.toLowerCase().includes(query) O query.includes(ing.nombre.toLowerCase()):
+          RETORNA ing.nombre
+      RETORNA null
+
+    async _loadIngredientes(): Promise<Void>
+      (cargar desde base de datos o archivo hardcoded)
+      ingredientesDB.set('tomate', {nombre: 'tomate', nutricion: {calorias: 18, proteinas: 0.9, grasas: 0.2, carbohidratos: 3.9}, allergens: []})
+
+    EVENTOS_PUBLISHES {
+      'receta.generada': {receta_id, nombre, ingredientes}
+      'receta.guardada': {receta_id, nombre}
+    }
+
+    EVENTOS_SUBSCRIBES {
+    }
+  }
+}
+
+CLASE Receta {
+  ATRIBUTOS {
+    receta_id: String
+    nombre: String
+    descripcion: String
+    ingredientes: Array<{ingrediente, cantidad, unidad}>
+    instrucciones: Array<String>
+    restricciones: Array<String>
+    estilos: Array<String>
+    porciones: Integer
+    tiempo_preparacion: Integer (minutos)
+    dificultad: String (facil|media|dificil)
+    generada_at: String (ISO)
+    generada_por: String (ai|manual)
+    guardada_at: String|Null (ISO)
+  }
+}
+
+CLASE Ingrediente {
+  ATRIBUTOS {
+    nombre: String
+    nutricion: {calorias, proteinas, grasas, carbohidratos}
+    allergens: Array<String>
+  }
+}
+```
+
+## SCHEDULER (v2.0.0) — Jobs y Tasks Periódicas
+
+```
+INTERFAZ SchedulerContract {
+  scheduleJob(data: {name, cron, action, params?, description?}): Promise<{job_id, ...}>
+  listJobs(filters?: {status?, next_run?}): Promise<Array<Job>>
+  getJobStatus(job_id: String): Promise<{status, next_run, last_run, executions}>
+  cancelJob(job_id: String): Promise<Void>
+  executeJobNow(job_id: String): Promise<{execution_id}>
+  getJobHistory(job_id: String, limit?: Integer): Promise<Array<Execution>>
+}
+
+CLASE SchedulerModule HEREDA BaseModule IMPLEMENTA SchedulerContract {
+  ATRIBUTOS {
+    name: String = 'scheduler'
+    version: String = '2.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    uiHandler: UIRequestHandler
+    jobs: Map<job_id, ScheduledJob>
+    executions: Map<execution_id, Execution>
+    _cronJobs: Map<job_id, CronJob>
+    config: {
+      max_concurrent_jobs: Integer,
+      job_timeout_ms: Integer,
+      max_history_entries: Integer,
+      cleanup_interval_ms: Integer
+    }
+    internalMetrics: {scheduled_total, executed_total, failed_total, cancelled_total}
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus, uiHandler FROM context
+      CARGA config FROM context.config['scheduler']
+      REQUIERE cron library
+      await _loadJobs()
+      _startCleanupTimer()
+      LOG module.loaded CON jobs: jobs.size
+
+    async onUnload(): Promise<Void>
+      _cronJobs.forEach(job => job.stop())
+      _cronJobs.clear()
+      await _saveJobs()
+      jobs.clear()
+      LOG module.unloaded
+
+    async handleScheduleJob(data: {name, cron, action, params?, description?}): Promise<Response>
+      VALIDA name, cron, action obligatorios
+      VALIDA_CRON_EXPRESSION(data.cron)
+      job_id = crypto.randomUUID()
+      job = {job_id, name: data.name, cron: data.cron, action: data.action, params: data.params || {}, description: data.description || '', status: 'scheduled', created_at: now(), executions: 0, last_run: null, last_error: null, next_run: null}
+      jobs.set(job_id, job)
+      cronJob = new CronJob(data.cron, () => _executeJob(job_id), null, true)
+      _cronJobs.set(job_id, cronJob)
+      job.next_run = cronJob.nextDate().toISOString()
+      await _saveJobs()
+      internalMetrics.scheduled_total++
+      metrics.increment('scheduler.scheduled.total')
+      EMITE job.programado {job_id, name: data.name, cron: data.cron, next_run: job.next_run}
+      RETORNA {status: 201, data: {job_id, name: data.name, cron: data.cron, next_run: job.next_run}}
+
+    async handleListJobs(data?: {status?, next_run?}): Promise<Response>
+      list = []
+      PARA CADA [, job] EN jobs:
+        SI data?.status Y job.status != data.status: CONTINÚA
+        list.push({job_id: job.job_id, name: job.name, cron: job.cron, status: job.status, next_run: job.next_run, last_run: job.last_run})
+      ORDENA list POR next_run ASC
+      RETORNA {status: 200, data: {jobs: list, total: list.length}}
+
+    async handleGetJobStatus(data: {job_id}): Promise<Response>
+      VALIDA job_id obligatorio
+      job = jobs.get(data.job_id)
+      SI !job: RETORNA 404 RESOURCE_NOT_FOUND
+      recentExecutions = Array.from(executions.values()).filter(e => e.job_id == data.job_id).slice(0, 5)
+      RETORNA {status: 200, data: {job_id: data.job_id, status: job.status, next_run: job.next_run, last_run: job.last_run, executions: job.executions, recent: recentExecutions}}
+
+    async handleCancelJob(data: {job_id}): Promise<Response>
+      VALIDA job_id obligatorio
+      job = jobs.get(data.job_id)
+      SI !job: RETORNA 404 RESOURCE_NOT_FOUND
+      cronJob = _cronJobs.get(data.job_id)
+      SI cronJob: cronJob.stop()
+      _cronJobs.delete(data.job_id)
+      job.status = 'cancelled'
+      internalMetrics.cancelled_total++
+      metrics.increment('scheduler.cancelled.total')
+      EMITE job.cancelado {job_id: data.job_id}
+      RETORNA {status: 200, data: {cancelled: true}}
+
+    async handleExecuteJobNow(data: {job_id}): Promise<Response>
+      VALIDA job_id obligatorio
+      job = jobs.get(data.job_id)
+      SI !job: RETORNA 404 RESOURCE_NOT_FOUND
+      execution_id = await _executeJob(data.job_id)
+      RETORNA {status: 202, data: {execution_id, job_id: data.job_id}}
+
+    async handleGetJobHistory(data: {job_id, limit?}): Promise<Response>
+      VALIDA job_id obligatorio
+      limit = parseInt(data.limit) || 50
+      jobExecutions = Array.from(executions.values()).filter(e => e.job_id == data.job_id).sort((a, b) => b.started_at - a.started_at).slice(0, limit)
+      RETORNA {status: 200, data: {job_id: data.job_id, executions: jobExecutions, total: jobExecutions.length}}
+
+    async _executeJob(job_id: String): Promise<String>
+      job = jobs.get(job_id)
+      SI !job: RETORNA null
+      execution_id = crypto.randomUUID()
+      execution = {execution_id, job_id, status: 'running', started_at: now(), completed_at: null, result: null, error: null}
+      executions.set(execution_id, execution)
+      EMITE job.ejecutando {job_id, execution_id}
+      TRY:
+        timeout = setTimeout(() => {
+          SI execution.status == 'running':
+            execution.status = 'timeout'
+            execution.error = 'Execution timeout'
+            internalMetrics.failed_total++
+            EMITE job.timeout {job_id, execution_id}
+        }, config.job_timeout_ms)
+        result = await _performAction(job.action, job.params)
+        clearTimeout(timeout)
+        execution.status = 'completed'
+        execution.result = result
+        execution.completed_at = now()
+        job.executions++
+        job.last_run = execution.started_at
+        job.last_error = null
+        job.next_run = _cronJobs.get(job_id)?.nextDate().toISOString()
+        internalMetrics.executed_total++
+        metrics.increment('scheduler.executed.total')
+        EMITE job.ejecutado {job_id, execution_id, result}
+      CATCH err:
+        execution.status = 'failed'
+        execution.error = err.message
+        execution.completed_at = now()
+        job.last_error = err.message
+        internalMetrics.failed_total++
+        metrics.increment('scheduler.execution.failed')
+        EMITE job.error {job_id, execution_id, error: err.message}
+      SI executions.size > config.max_history_entries:
+        oldest = Array.from(executions.entries()).sort((a, b) => a[1].started_at - b[1].started_at)[0][0]
+        executions.delete(oldest)
+      RETORNA execution_id
+
+    async _performAction(action: String, params: Object): Promise<Any>
+      SI action == 'emit_event':
+        await eventBus.publish(params.event_name, params.event_data || {})
+        RETORNA {success: true}
+      SI action == 'call_handler':
+        handler = eventBus.moduleRegistry?.get(params.module)?.getHandler(params.handler_name)
+        SI handler:
+          RETORNA await handler(params.args || {})
+      SI action == 'http_request':
+        response = await fetch(params.url, {method: params.method || 'GET', body: params.body ? JSON.stringify(params.body) : null})
+        RETORNA await response.json()
+      LANZA Error(`Unknown action: ${action}`)
+
+    _validateCronExpression(expr: String): Boolean
+      TRY:
+        new CronJob(expr, () => {})
+        RETORNA true
+      CATCH:
+        RETORNA false
+
+    async _loadJobs(): Promise<Void>
+      (cargar jobs desde persistencia)
+
+    async _saveJobs(): Promise<Void>
+      (guardar jobs a persistencia)
+
+    _startCleanupTimer(): Void
+      timer = setInterval(() => {
+        cutoff = now() - (30 * 24 * 60 * 60 * 1000)
+        toDelete = []
+        PARA CADA [id, exec] EN executions:
+          SI exec.completed_at < cutoff:
+            toDelete.push(id)
+        toDelete.forEach(id => executions.delete(id))
+      }, config.cleanup_interval_ms)
+
+    EVENTOS_PUBLISHES {
+      'job.programado': {job_id, name, cron, next_run}
+      'job.ejecutando': {job_id, execution_id}
+      'job.ejecutado': {job_id, execution_id, result}
+      'job.error': {job_id, execution_id, error}
+      'job.timeout': {job_id, execution_id}
+      'job.cancelado': {job_id}
+    }
+
+    EVENTOS_SUBSCRIBES {
+    }
+  }
+}
+
+CLASE ScheduledJob {
+  ATRIBUTOS {
+    job_id: String
+    name: String
+    cron: String
+    action: String (emit_event|call_handler|http_request)
+    params: Object
+    description: String
+    status: String (scheduled|cancelled|error)
+    created_at: String (ISO)
+    executions: Integer
+    last_run: String|Null (ISO)
+    last_error: String|Null
+    next_run: String|Null (ISO)
+  }
+}
+
+CLASE Execution {
+  ATRIBUTOS {
+    execution_id: String
+    job_id: String
+    status: String (running|completed|failed|timeout)
+    started_at: String (ISO)
+    completed_at: String|Null (ISO)
+    result: Any|Null
+    error: String|Null
+  }
+}
+```
+
+---
+
+# GRUPO E — TELEGRAM-SERVICE, TEXT-EDITOR, TIENDA-API, WHATSAPP-BOT
+
+## TELEGRAM-SERVICE (v2.0.0) — Gestión de Bots Telegram
+
+```
+INTERFAZ TelegramServiceContract {
+  registerBot(data: {botName, apiToken, webhook?, description?}): Promise<{registered, botId}>
+  unregisterBot(botName: String): Promise<Void>
+  sendMessage(data: {botName, chatId, text, parseMode?, replyToMessageId?}): Promise<{messageId, sent}>
+  sendFile(data: {botName, chatId, fileType, fileName, content}): Promise<{fileId, sent}>
+  getBotInfo(botName: String): Promise<BotInfo>
+  listBots(): Promise<Array<BotInfo>>
+  handleWebhook(data: {botName, update}): Promise<Void>
+}
+
+CLASE TelegramServiceModule HEREDA BaseModule IMPLEMENTA TelegramServiceContract {
+  ATRIBUTOS {
+    name: String = 'telegram-service'
+    version: String = '2.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    uiHandler: UIRequestHandler
+    bots: Map<botName, BotConnection>
+    botConfig: Map<botName, BotConfiguration>
+    webhookUrl: String|Null
+    config: Object
+    internalMetrics: {messages_sent, messages_received, files_sent, errors, active_bots}
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus, uiHandler FROM context
+      config = context.config['telegram-service'] || {}
+      webhookUrl = config.webhook_url || null
+      await _loadBotConfig()
+      metrics.gauge('telegram.bots.active', bots.size)
+      LOG module.loaded CON bots: bots.size
+
+    async onUnload(): Promise<Void>
+      await _saveBotConfig()
+      bots.forEach(bot => _disconnectBot(bot))
+      bots.clear()
+      botConfig.clear()
+      LOG module.unloaded
+
+    async handleRegisterBot(data: {botName, apiToken, webhook?, description?}): Promise<Response>
+      VALIDA botName, apiToken obligatorios
+      SI bots.has(data.botName): RETORNA 409 CONFLICT_STATE
+      bot = {botName: data.botName, apiToken: data.apiToken, webhook: data.webhook || webhookUrl, description: data.description || '', created_at: now()}
+      bots.set(data.botName, {connection: null, lastPoll: null, isConnected: false})
+      botConfig.set(data.botName, bot)
+      SI data.webhook: await _setWebhook(data.botName, data.webhook)
+      SINO: await _startPolling(data.botName)
+      await _saveBotConfig()
+      internalMetrics.active_bots++
+      metrics.increment('telegram.bot.registered')
+      EMITE telegram.bot_registered {botName: data.botName}
+      RETORNA {status: 201, data: {registered: true, botId: data.botName}}
+
+    async handleUnregisterBot(data: {botName}): Promise<Response>
+      VALIDA botName obligatorio
+      SI NOT bots.has(data.botName): RETORNA 404 RESOURCE_NOT_FOUND
+      bot = bots.get(data.botName)
+      _disconnectBot(bot)
+      bots.delete(data.botName)
+      botConfig.delete(data.botName)
+      await _saveBotConfig()
+      internalMetrics.active_bots--
+      metrics.increment('telegram.bot.unregistered')
+      EMITE telegram.bot_unregistered {botName: data.botName}
+      RETORNA {status: 200}
+
+    async handleSendMessage(data: {botName, chatId, text, parseMode?, replyToMessageId?}): Promise<Response>
+      VALIDA botName, chatId, text obligatorios
+      bot = _getBotConnection(data.botName)
+      SI NOT bot?.isConnected: RETORNA 503 UPSTREAM_UNREACHABLE
+      response = await _apiCall(data.botName, 'sendMessage', {chat_id: data.chatId, text: data.text, parse_mode: data.parseMode || 'HTML', reply_to_message_id: data.replyToMessageId})
+      SI response.ok:
+        internalMetrics.messages_sent++
+        metrics.increment('telegram.messages.sent')
+        EMITE telegram.message_sent {botName: data.botName, chatId: data.chatId, messageId: response.result.message_id}
+        RETORNA {status: 200, data: {messageId: response.result.message_id, sent: true}}
+      SINO:
+        metrics.increment('telegram.errors', {kind: 'send_failed'})
+        RETORNA {status: 400, error: response.description}
+
+    async handleSendFile(data: {botName, chatId, fileType, fileName, content}): Promise<Response>
+      VALIDA botName, chatId, fileType, fileName, content obligatorios
+      bot = _getBotConnection(data.botName)
+      SI NOT bot?.isConnected: RETORNA 503 UPSTREAM_UNREACHABLE
+      buffer = Buffer.from(data.content, 'base64')
+      response = await _apiCallWithFile(data.botName, _methodFromFileType(data.fileType), {chat_id: data.chatId, file: buffer, filename: data.fileName})
+      SI response.ok:
+        internalMetrics.files_sent++
+        metrics.increment('telegram.files.sent')
+        fileId = response.result.file_id || (response.result.photo?.[0]?.file_id) || (response.result.document?.file_id)
+        EMITE telegram.file_sent {botName: data.botName, chatId: data.chatId, fileId}
+        RETORNA {status: 200, data: {fileId, sent: true}}
+      SINO:
+        metrics.increment('telegram.errors', {kind: 'file_failed'})
+        RETORNA {status: 400, error: response.description}
+
+    async handleGetBotInfo(data: {botName}): Promise<Response>
+      VALIDA botName obligatorio
+      cfg = botConfig.get(data.botName)
+      SI NOT cfg: RETORNA 404 RESOURCE_NOT_FOUND
+      bot = bots.get(data.botName)
+      RETORNA {status: 200, data: {...cfg, isConnected: bot?.isConnected || false}}
+
+    async handleListBots(): Promise<Response>
+      list = Array.from(botConfig.values()).map(cfg => ({botName: cfg.botName, description: cfg.description, created_at: cfg.created_at, isConnected: bots.get(cfg.botName)?.isConnected}))
+      RETORNA {status: 200, data: {bots: list, total: list.length}}
+
+    async handleWebhook(data: {botName, update}): Promise<Response>
+      VALIDA botName obligatorio
+      SI NOT botConfig.has(data.botName): RETORNA 404 RESOURCE_NOT_FOUND
+      {message, callback_query, edited_message} = data.update
+      SI message:
+        await _onMessageReceived(data.botName, message)
+      SI callback_query:
+        await _onCallbackQuery(data.botName, callback_query)
+      SI edited_message:
+        await _onMessageEdited(data.botName, edited_message)
+      RETORNA {status: 200, data: {ok: true}}
+
+    async _startPolling(botName: String): Promise<Void>
+      bot = bots.get(botName)
+      SI NOT bot: RETORNA
+      pollLoop = async () => {
+        MIENTRAS bot.isConnected:
+          TRY:
+            response = await _apiCall(botName, 'getUpdates', {offset: bot.lastPoll + 1, timeout: 30})
+            SI response.ok Y response.result.length > 0:
+              PARA CADA update EN response.result:
+                bot.lastPoll = update.update_id
+                await handleWebhook({botName, update})
+          CATCH err:
+            logger.error('telegram.poll_error', {botName, error: err.message})
+            internalMetrics.errors++
+            metrics.increment('telegram.errors', {kind: 'poll_error'})
+          ESPERA 1000ms ANTES DE REINTENTAR
+      }
+      bot.isConnected = true
+      bot.pollPromise = pollLoop()
+
+    async _setWebhook(botName: String, webhookUrl: String): Promise<Boolean>
+      response = await _apiCall(botName, 'setWebhook', {url: webhookUrl})
+      bot = bots.get(botName)
+      SI response.ok:
+        bot.isConnected = true
+        RETORNA true
+      SINO:
+        logger.warn('telegram.webhook_failed', {botName, error: response.description})
+        RETORNA false
+
+    _disconnectBot(bot: BotConnection): Void
+      bot.isConnected = false
+      SI bot.pollPromise: AWAIT bot.pollPromise CON timeout(2000)
+
+    async _onMessageReceived(botName: String, message: Object): Promise<Void>
+      internalMetrics.messages_received++
+      metrics.increment('telegram.messages.received')
+      {from, chat, text, file_id, caption} = message
+      EMITE telegram.message_received {botName, chatId: chat.id, userId: from.id, firstName: from.first_name, username: from.username, text, fileId: file_id, caption}
+
+    async _onCallbackQuery(botName: String, query: Object): Promise<Void>
+      {from, data, id} = query
+      EMITE telegram.callback_received {botName, userId: from.id, data, queryId: id}
+
+    async _onMessageEdited(botName: String, message: Object): Promise<Void>
+      {chat, message_id, text} = message
+      EMITE telegram.message_edited {botName, chatId: chat.id, messageId: message_id, text}
+
+    async _apiCall(botName: String, method: String, params: Object): Promise<Object>
+      cfg = botConfig.get(botName)
+      SI NOT cfg: RETORNA {ok: false, description: 'Bot not found'}
+      url = `https://api.telegram.org/bot{cfg.apiToken}/{method}`
+      response = await fetch(url, {method: 'POST', body: JSON.stringify(params)})
+      RETORNA await response.json()
+
+    async _apiCallWithFile(botName: String, method: String, params: Object): Promise<Object>
+      cfg = botConfig.get(botName)
+      SI NOT cfg: RETORNA {ok: false, description: 'Bot not found'}
+      url = `https://api.telegram.org/bot{cfg.apiToken}/{method}`
+      formData = new FormData()
+      formData.append('chat_id', params.chat_id)
+      formData.append(method == 'sendPhoto' ? 'photo' : 'document', params.file, params.filename)
+      response = await fetch(url, {method: 'POST', body: formData})
+      RETORNA await response.json()
+
+    _methodFromFileType(type: String): String
+      SWITCH type:
+        'photo': RETORNA 'sendPhoto'
+        'document': RETORNA 'sendDocument'
+        'audio': RETORNA 'sendAudio'
+        'video': RETORNA 'sendVideo'
+        SINO: RETORNA 'sendDocument'
+
+    async _loadBotConfig(): Promise<Void>
+      filePath = join(cwd(), 'data/telegram-config.json')
+      SI EXISTS(filePath):
+        data = JSON.parse(readFile(filePath, 'utf-8'))
+        PARA CADA [botName, cfg] EN data.bots:
+          botConfig.set(botName, cfg)
+          bots.set(botName, {connection: null, lastPoll: 0, isConnected: false})
+
+    async _saveBotConfig(): Promise<Void>
+      filePath = join(cwd(), 'data/telegram-config.json')
+      data = {_version: 1, _updated: now(), bots: Object.fromEntries(botConfig)}
+      writeFile(filePath, JSON.stringify(data, null, 2))
+
+    EVENTOS_PUBLISHES {
+      'telegram.bot_registered': {botName}
+      'telegram.bot_unregistered': {botName}
+      'telegram.message_sent': {botName, chatId, messageId}
+      'telegram.file_sent': {botName, chatId, fileId}
+      'telegram.message_received': {botName, chatId, userId, firstName, username, text, fileId?, caption?}
+      'telegram.callback_received': {botName, userId, data, queryId}
+      'telegram.message_edited': {botName, chatId, messageId, text}
+      'telegram.send_message.request': {botName, chatId, text, parseMode?}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'telegram.send_message.request': handleSendMessage
+    }
+  }
+}
+
+CLASE BotConnection {
+  ATRIBUTOS {
+    connection: Any|Null
+    lastPoll: Integer
+    isConnected: Boolean
+    pollPromise: Promise|Null
+  }
+}
+
+CLASE BotConfiguration {
+  ATRIBUTOS {
+    botName: String
+    apiToken: String
+    webhook: String|Null
+    description: String
+    created_at: String (ISO)
+  }
+}
+```
+
+## TEXT-EDITOR (v2.0.0) — Editor de Texto con Sintaxis
+
+```
+INTERFAZ TextEditorContract {
+  openFile(filePath: String): Promise<{content, encoding, language, lineCount}>
+  saveFile(data: {filePath, content, encoding?}): Promise<{saved, lineCount}>
+  getLanguage(filePath: String): Promise<String>
+  search(data: {filePath, query, caseSensitive?}): Promise<Array<SearchMatch>>
+  replace(data: {filePath, query, replacement, replaceAll?}): Promise<{replaced, newContent}>
+  getLineRange(data: {filePath, start, end}): Promise<Array<String>>
+  insertText(data: {filePath, line, column, text}): Promise<{success, newContent}>
+}
+
+CLASE TextEditorModule HEREDA BaseModule IMPLEMENTA TextEditorContract {
+  ATRIBUTOS {
+    name: String = 'text-editor'
+    version: String = '2.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    uiHandler: UIRequestHandler
+    openFiles: Map<filePath, FileSession>
+    config: Object
+    internalMetrics: {opens_total, saves_total, edits_total, errors}
+    LANGUAGE_MAP: Map<extension, language>
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus, uiHandler FROM context
+      CARGA LANGUAGE_MAP: {js: 'javascript', ts: 'typescript', py: 'python', json: 'json', md: 'markdown', html: 'html', css: 'css', etc}
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      PARA CADA [filePath, session] EN openFiles:
+        SI session.modified: INTENTA saveFile({filePath, content: session.content})
+      openFiles.clear()
+      LOG module.unloaded
+
+    async handleOpenFile(data: {filePath}): Promise<Response>
+      VALIDA filePath obligatorio
+      SI NOT EXISTS(data.filePath): RETORNA 404 RESOURCE_NOT_FOUND
+      stat = fs.statSync(data.filePath)
+      SI stat.size > 10 * 1024 * 1024: RETORNA 413 PAYLOAD_TOO_LARGE
+      content = readFile(data.filePath, 'utf-8')
+      encoding = 'utf-8'
+      language = _getLanguage(data.filePath)
+      lineCount = content.split('\n').length
+      session = {filePath: data.filePath, content, encoding, language, modified: false, lastSaved: now(), openedAt: now()}
+      openFiles.set(data.filePath, session)
+      internalMetrics.opens_total++
+      metrics.increment('text-editor.files.opened')
+      EMITE editor.file_opened {filePath: data.filePath, language, lineCount}
+      RETORNA {status: 200, data: {content, encoding, language, lineCount}}
+
+    async handleSaveFile(data: {filePath, content, encoding?}): Promise<Response>
+      VALIDA filePath, content obligatorios
+      SI NOT openFiles.has(data.filePath): RETORNA 404 RESOURCE_NOT_FOUND
+      encoding = data.encoding || 'utf-8'
+      buffer = Buffer.from(data.content, encoding)
+      writeFile(data.filePath, buffer)
+      session = openFiles.get(data.filePath)
+      session.content = data.content
+      session.modified = false
+      session.lastSaved = now()
+      lineCount = data.content.split('\n').length
+      internalMetrics.saves_total++
+      metrics.increment('text-editor.files.saved')
+      EMITE editor.file_saved {filePath: data.filePath, lineCount}
+      RETORNA {status: 200, data: {saved: true, lineCount}}
+
+    async handleGetLanguage(data: {filePath}): Promise<Response>
+      VALIDA filePath obligatorio
+      language = _getLanguage(data.filePath)
+      RETORNA {status: 200, data: {filePath: data.filePath, language}}
+
+    async handleSearch(data: {filePath, query, caseSensitive?}): Promise<Response>
+      VALIDA filePath, query obligatorios
+      SI NOT openFiles.has(data.filePath): RETORNA 404 RESOURCE_NOT_FOUND
+      session = openFiles.get(data.filePath)
+      flags = data.caseSensitive ? 'g' : 'gi'
+      regex = new RegExp(query, flags)
+      lines = session.content.split('\n')
+      matches = []
+      PARA i = 0 HASTA lines.length:
+        line = lines[i]
+        MIENTRAS match = regex.exec(line):
+          matches.push({line: i + 1, column: match.index, text: match[0]})
+      RETORNA {status: 200, data: {filePath: data.filePath, matches, count: matches.length}}
+
+    async handleReplace(data: {filePath, query, replacement, replaceAll?}): Promise<Response>
+      VALIDA filePath, query, replacement obligatorios
+      SI NOT openFiles.has(data.filePath): RETORNA 404 RESOURCE_NOT_FOUND
+      session = openFiles.get(data.filePath)
+      flags = data.replaceAll ? 'g' : ''
+      regex = new RegExp(query, flags)
+      newContent = session.content.replace(regex, data.replacement)
+      replaced = (session.content.match(regex) || []).length
+      session.content = newContent
+      session.modified = true
+      internalMetrics.edits_total++
+      metrics.increment('text-editor.replacements', {replaced})
+      EMITE editor.text_replaced {filePath: data.filePath, replaced}
+      RETORNA {status: 200, data: {replaced, newContent}}
+
+    async handleGetLineRange(data: {filePath, start, end}): Promise<Response>
+      VALIDA filePath, start, end obligatorios
+      SI NOT openFiles.has(data.filePath): RETORNA 404 RESOURCE_NOT_FOUND
+      session = openFiles.get(data.filePath)
+      lines = session.content.split('\n')
+      startLine = parseInt(data.start) - 1
+      endLine = parseInt(data.end)
+      SI startLine < 0 O endLine > lines.length: RETORNA 400 INVALID_INPUT
+      result = lines.slice(startLine, endLine)
+      RETORNA {status: 200, data: {filePath: data.filePath, lines: result, start: data.start, end: data.end}}
+
+    async handleInsertText(data: {filePath, line, column, text}): Promise<Response>
+      VALIDA filePath, line, column, text obligatorios
+      SI NOT openFiles.has(data.filePath): RETORNA 404 RESOURCE_NOT_FOUND
+      session = openFiles.get(data.filePath)
+      lines = session.content.split('\n')
+      lineIdx = parseInt(data.line) - 1
+      col = parseInt(data.column)
+      SI lineIdx < 0 O lineIdx >= lines.length: RETORNA 400 INVALID_INPUT
+      lines[lineIdx] = lines[lineIdx].slice(0, col) + data.text + lines[lineIdx].slice(col)
+      session.content = lines.join('\n')
+      session.modified = true
+      internalMetrics.edits_total++
+      metrics.increment('text-editor.insertions')
+      RETORNA {status: 200, data: {success: true, newContent: session.content}}
+
+    _getLanguage(filePath: String): String
+      ext = filePath.split('.').pop()?.toLowerCase()
+      RETORNA LANGUAGE_MAP.get(ext) || 'plaintext'
+
+    EVENTOS_PUBLISHES {
+      'editor.file_opened': {filePath, language, lineCount}
+      'editor.file_saved': {filePath, lineCount}
+      'editor.text_replaced': {filePath, replaced}
+    }
+
+    EVENTOS_SUBSCRIBES {
+    }
+  }
+}
+
+CLASE FileSession {
+  ATRIBUTOS {
+    filePath: String
+    content: String
+    encoding: String
+    language: String
+    modified: Boolean
+    lastSaved: String (ISO)
+    openedAt: String (ISO)
+  }
+}
+```
+
+## TIENDA-API (v2.0.0) — API de Operaciones de Tienda
+
+```
+INTERFAZ TiendaApiContract {
+  getStatus(project_id: String): Promise<{status, uptime, version, modules}>
+  listItems(project_id: String, filters?: Object): Promise<Array<Item>>
+  createItem(data: {project_id, name, description, price, sku, category}): Promise<Item>
+  updateItem(data: {project_id, item_id, updates}): Promise<Item>
+  deleteItem(data: {project_id, item_id}): Promise<Void>
+  searchItems(data: {project_id, query}): Promise<Array<Item>>
+  getCategories(project_id: String): Promise<Array<Category>>
+  createCategory(data: {project_id, name, description}): Promise<Category>
+}
+
+CLASE TiendaApiModule HEREDA BaseModule IMPLEMENTA TiendaApiContract {
+  ATRIBUTOS {
+    name: String = 'tienda-api'
+    version: String = '2.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    uiHandler: UIRequestHandler
+    itemsPerProject: Map<project_id, Map<item_id, Item>>
+    categoriesPerProject: Map<project_id, Map<category_id, Category>>
+    config: Object
+    internalMetrics: {items_created, items_updated, items_deleted, searches, errors}
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus, uiHandler FROM context
+      SUSCRIBE project.activated, project.deactivated
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      itemsPerProject.clear()
+      categoriesPerProject.clear()
+      LOG module.unloaded
+
+    async handleGetStatus(data: {project_id}): Promise<Response>
+      VALIDA project_id obligatorio
+      items = itemsPerProject.get(data.project_id)
+      categories = categoriesPerProject.get(data.project_id)
+      RETORNA {status: 200, data: {project_id: data.project_id, items_count: items?.size || 0, categories_count: categories?.size || 0, status: 'operational'}}
+
+    async handleListItems(data: {project_id, filters?}): Promise<Response>
+      VALIDA project_id obligatorio
+      items = itemsPerProject.get(data.project_id) || new Map()
+      list = Array.from(items.values())
+      SI data.filters?.category: FILTRA POR category
+      SI data.filters?.active: FILTRA POR active == true
+      RETORNA {status: 200, data: {project_id: data.project_id, items: list, total: list.length}}
+
+    async handleCreateItem(data: {project_id, name, description, price, sku, category}): Promise<Response>
+      VALIDA project_id, name, price, sku obligatorios
+      VALIDA UNIQUE sku EN project
+      item_id = crypto.randomUUID()
+      item = {item_id, name: data.name, description: data.description || '', price: data.price, sku: data.sku, category: data.category || 'general', active: true, created_at: now()}
+      SI NOT itemsPerProject.has(data.project_id):
+        itemsPerProject.set(data.project_id, new Map())
+      itemsPerProject.get(data.project_id).set(item_id, item)
+      internalMetrics.items_created++
+      metrics.increment('tienda.items.created')
+      EMITE tienda.item_created {project_id: data.project_id, item_id, name: data.name}
+      RETORNA {status: 201, data: item}
+
+    async handleUpdateItem(data: {project_id, item_id, updates}): Promise<Response>
+      VALIDA project_id, item_id, updates obligatorios
+      items = itemsPerProject.get(data.project_id)
+      SI NOT items?.has(data.item_id): RETORNA 404 RESOURCE_NOT_FOUND
+      item = items.get(data.item_id)
+      MERGES updates CON item
+      item.updated_at = now()
+      internalMetrics.items_updated++
+      metrics.increment('tienda.items.updated')
+      EMITE tienda.item_updated {project_id: data.project_id, item_id: data.item_id}
+      RETORNA {status: 200, data: item}
+
+    async handleDeleteItem(data: {project_id, item_id}): Promise<Response>
+      VALIDA project_id, item_id obligatorios
+      items = itemsPerProject.get(data.project_id)
+      SI NOT items?.has(data.item_id): RETORNA 404 RESOURCE_NOT_FOUND
+      items.delete(data.item_id)
+      internalMetrics.items_deleted++
+      metrics.increment('tienda.items.deleted')
+      EMITE tienda.item_deleted {project_id: data.project_id, item_id: data.item_id}
+      RETORNA {status: 200}
+
+    async handleSearchItems(data: {project_id, query}): Promise<Response>
+      VALIDA project_id, query obligatorios
+      items = itemsPerProject.get(data.project_id) || new Map()
+      list = Array.from(items.values())
+      results = list.filter(i => i.name.toLowerCase().includes(data.query.toLowerCase()) OR i.description.toLowerCase().includes(data.query.toLowerCase()))
+      internalMetrics.searches++
+      metrics.increment('tienda.searches')
+      RETORNA {status: 200, data: {project_id: data.project_id, results, count: results.length}}
+
+    async handleGetCategories(data: {project_id}): Promise<Response>
+      VALIDA project_id obligatorio
+      categories = categoriesPerProject.get(data.project_id) || new Map()
+      list = Array.from(categories.values())
+      RETORNA {status: 200, data: {project_id: data.project_id, categories: list, total: list.length}}
+
+    async handleCreateCategory(data: {project_id, name, description}): Promise<Response>
+      VALIDA project_id, name obligatorios
+      category_id = crypto.randomUUID()
+      category = {category_id, name: data.name, description: data.description || '', created_at: now()}
+      SI NOT categoriesPerProject.has(data.project_id):
+        categoriesPerProject.set(data.project_id, new Map())
+      categoriesPerProject.get(data.project_id).set(category_id, category)
+      metrics.increment('tienda.categories.created')
+      RETORNA {status: 201, data: category}
+
+    EVENTOS_SUBSCRIBES {
+      'project.activated': onProjectActivated
+      'project.deactivated': onProjectDeactivated
+    }
+
+    EVENTOS_PUBLISHES {
+      'tienda.item_created': {project_id, item_id, name}
+      'tienda.item_updated': {project_id, item_id}
+      'tienda.item_deleted': {project_id, item_id}
+    }
+  }
+}
+
+CLASE Item {
+  ATRIBUTOS {
+    item_id: String
+    name: String
+    description: String
+    price: Number
+    sku: String
+    category: String
+    active: Boolean
+    created_at: String (ISO)
+    updated_at: String|Null (ISO)
+  }
+}
+
+CLASE Category {
+  ATRIBUTOS {
+    category_id: String
+    name: String
+    description: String
+    created_at: String (ISO)
+  }
+}
+```
+
+## WHATSAPP-BOT (v2.0.0) — Integración WhatsApp
+
+```
+INTERFAZ WhatsappBotContract {
+  registerBot(data: {botName, phoneNumberId, accessToken, webhookVerifyToken?, description?}): Promise<{registered, botId}>
+  unregisterBot(botName: String): Promise<Void>
+  sendMessage(data: {botName, phoneNumber, text}): Promise<{messageId, sent}>
+  sendTemplate(data: {botName, phoneNumber, template, variables}): Promise<{messageId, sent}>
+  getBotInfo(botName: String): Promise<BotInfo>
+  listBots(): Promise<Array<BotInfo>>
+  handleWebhook(data: {botName, event}): Promise<Void>
+}
+
+CLASE WhatsappBotModule HEREDA BaseModule IMPLEMENTA WhatsappBotContract {
+  ATRIBUTOS {
+    name: String = 'whatsapp-bot'
+    version: String = '2.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    uiHandler: UIRequestHandler
+    bots: Map<botName, BotConnection>
+    botConfig: Map<botName, BotConfiguration>
+    templates: Map<botName, Map<templateId, Template>>
+    config: Object
+    internalMetrics: {messages_sent, messages_received, errors, active_bots}
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus, uiHandler FROM context
+      config = context.config['whatsapp-bot'] || {}
+      await _loadBotConfig()
+      metrics.gauge('whatsapp.bots.active', bots.size)
+      LOG module.loaded CON bots: bots.size
+
+    async onUnload(): Promise<Void>
+      await _saveBotConfig()
+      bots.forEach(bot => _disconnectBot(bot))
+      bots.clear()
+      botConfig.clear()
+      templates.clear()
+      LOG module.unloaded
+
+    async handleRegisterBot(data: {botName, phoneNumberId, accessToken, webhookVerifyToken?, description?}): Promise<Response>
+      VALIDA botName, phoneNumberId, accessToken obligatorios
+      SI bots.has(data.botName): RETORNA 409 CONFLICT_STATE
+      bot = {botName: data.botName, phoneNumberId: data.phoneNumberId, accessToken: data.accessToken, webhookVerifyToken: data.webhookVerifyToken || crypto.randomBytes(16).toString('hex'), description: data.description || '', created_at: now()}
+      bots.set(data.botName, {isConnected: true, lastMessage: null})
+      botConfig.set(data.botName, bot)
+      templates.set(data.botName, new Map())
+      await _saveBotConfig()
+      internalMetrics.active_bots++
+      metrics.increment('whatsapp.bot.registered')
+      EMITE whatsapp.bot_registered {botName: data.botName}
+      RETORNA {status: 201, data: {registered: true, botId: data.botName, webhookUrl: _buildWebhookUrl(data.botName)}}
+
+    async handleUnregisterBot(data: {botName}): Promise<Response>
+      VALIDA botName obligatorio
+      SI NOT bots.has(data.botName): RETORNA 404 RESOURCE_NOT_FOUND
+      _disconnectBot(bots.get(data.botName))
+      bots.delete(data.botName)
+      botConfig.delete(data.botName)
+      templates.delete(data.botName)
+      await _saveBotConfig()
+      internalMetrics.active_bots--
+      metrics.increment('whatsapp.bot.unregistered')
+      EMITE whatsapp.bot_unregistered {botName: data.botName}
+      RETORNA {status: 200}
+
+    async handleSendMessage(data: {botName, phoneNumber, text}): Promise<Response>
+      VALIDA botName, phoneNumber, text obligatorios
+      bot = _getBotConnection(data.botName)
+      SI NOT bot?.isConnected: RETORNA 503 UPSTREAM_UNREACHABLE
+      cfg = botConfig.get(data.botName)
+      response = await _apiCall(cfg, 'sendMessage', {messaging_product: 'whatsapp', recipient_type: 'individual', to: data.phoneNumber, type: 'text', text: {body: data.text}})
+      SI response.messages:
+        internalMetrics.messages_sent++
+        metrics.increment('whatsapp.messages.sent')
+        EMITE whatsapp.message_sent {botName: data.botName, phoneNumber: data.phoneNumber, messageId: response.messages[0].id}
+        RETORNA {status: 200, data: {messageId: response.messages[0].id, sent: true}}
+      SINO:
+        metrics.increment('whatsapp.errors', {kind: 'send_failed'})
+        RETORNA {status: 400, error: response.error?.message}
+
+    async handleSendTemplate(data: {botName, phoneNumber, template, variables}): Promise<Response>
+      VALIDA botName, phoneNumber, template obligatorios
+      bot = _getBotConnection(data.botName)
+      SI NOT bot?.isConnected: RETORNA 503 UPSTREAM_UNREACHABLE
+      cfg = botConfig.get(data.botName)
+      params = []
+      SI data.variables:
+        PARA CADA v EN data.variables:
+          params.push({type: 'text', text: String(v)})
+      response = await _apiCall(cfg, 'sendTemplate', {messaging_product: 'whatsapp', to: data.phoneNumber, type: 'template', template: {name: data.template, language: {code: 'es'}, parameters: {body: {parameters: params}}}})
+      SI response.messages:
+        internalMetrics.messages_sent++
+        metrics.increment('whatsapp.templates.sent')
+        EMITE whatsapp.template_sent {botName: data.botName, phoneNumber: data.phoneNumber, template: data.template}
+        RETORNA {status: 200, data: {messageId: response.messages[0].id, sent: true}}
+      SINO:
+        metrics.increment('whatsapp.errors', {kind: 'template_failed'})
+        RETORNA {status: 400, error: response.error?.message}
+
+    async handleGetBotInfo(data: {botName}): Promise<Response>
+      VALIDA botName obligatorio
+      cfg = botConfig.get(data.botName)
+      SI NOT cfg: RETORNA 404 RESOURCE_NOT_FOUND
+      bot = bots.get(data.botName)
+      RETORNA {status: 200, data: {...cfg, isConnected: bot?.isConnected || false}}
+
+    async handleListBots(): Promise<Response>
+      list = Array.from(botConfig.values()).map(cfg => ({botName: cfg.botName, phoneNumberId: cfg.phoneNumberId, description: cfg.description, created_at: cfg.created_at, isConnected: bots.get(cfg.botName)?.isConnected}))
+      RETORNA {status: 200, data: {bots: list, total: list.length}}
+
+    async handleWebhook(data: {botName, event}): Promise<Response>
+      VALIDA botName obligatorio
+      SI NOT botConfig.has(data.botName): RETORNA 404 RESOURCE_NOT_FOUND
+      {entry} = data.event
+      SI NOT entry OR entry.length == 0: RETORNA 200
+      PARA CADA e EN entry:
+        PARA CADA change EN e.changes:
+          {value} = change
+          SI value.messages:
+            PARA CADA msg EN value.messages:
+              await _onMessageReceived(data.botName, msg, value.contacts[0])
+      RETORNA {status: 200, data: {ok: true}}
+
+    async _onMessageReceived(botName: String, message: Object, contact: Object): Promise<Void>
+      internalMetrics.messages_received++
+      metrics.increment('whatsapp.messages.received')
+      {from, text, type, media} = message
+      bot = bots.get(botName)
+      SI bot: bot.lastMessage = now()
+      EMITE whatsapp.message_received {botName, phoneNumber: from, text: text?.body, type, media, contact: contact?.name}
+
+    async _apiCall(cfg: BotConfiguration, method: String, params: Object): Promise<Object>
+      url = `https://graph.instagram.com/v18.0/{cfg.phoneNumberId}/{method}`
+      response = await fetch(url, {method: 'POST', headers: {Authorization: `Bearer {cfg.accessToken}`, 'Content-Type': 'application/json'}, body: JSON.stringify(params)})
+      SI NOT response.ok:
+        RETORNA {error: {message: response.statusText}}
+      RETORNA await response.json()
+
+    _buildWebhookUrl(botName: String): String
+      baseUrl = config.webhook_base_url || 'https://your-domain.com'
+      RETORNA `{baseUrl}/webhooks/whatsapp/{botName}`
+
+    _disconnectBot(bot: BotConnection): Void
+      bot.isConnected = false
+
+    async _loadBotConfig(): Promise<Void>
+      filePath = join(cwd(), 'data/whatsapp-config.json')
+      SI EXISTS(filePath):
+        data = JSON.parse(readFile(filePath, 'utf-8'))
+        PARA CADA [botName, cfg] EN data.bots:
+          botConfig.set(botName, cfg)
+          bots.set(botName, {isConnected: true, lastMessage: null})
+          templates.set(botName, new Map(Object.entries(data.templates?.[botName] || {})))
+
+    async _saveBotConfig(): Promise<Void>
+      filePath = join(cwd(), 'data/whatsapp-config.json')
+      data = {_version: 1, _updated: now(), bots: Object.fromEntries(botConfig), templates: Object.fromEntries(templates)}
+      writeFile(filePath, JSON.stringify(data, null, 2))
+
+    EVENTOS_PUBLISHES {
+      'whatsapp.bot_registered': {botName}
+      'whatsapp.bot_unregistered': {botName}
+      'whatsapp.message_sent': {botName, phoneNumber, messageId}
+      'whatsapp.template_sent': {botName, phoneNumber, template}
+      'whatsapp.message_received': {botName, phoneNumber, text, type, media, contact}
+    }
+
+    EVENTOS_SUBSCRIBES {
+    }
+  }
+}
+
+CLASE BotConnection {
+  ATRIBUTOS {
+    isConnected: Boolean
+    lastMessage: String|Null (ISO)
+  }
+}
+
+CLASE BotConfiguration {
+  ATRIBUTOS {
+    botName: String
+    phoneNumberId: String
+    accessToken: String
+    webhookVerifyToken: String
+    description: String
+    created_at: String (ISO)
+  }
+}
+
+CLASE Template {
+  ATRIBUTOS {
+    template_id: String
+    name: String
+    parameters: Array<String>
+    created_at: String (ISO)
+  }
+}
+```
+
 https://claude.ai/code/session_019C4pks5RDdscuKPqVdTWRF
 

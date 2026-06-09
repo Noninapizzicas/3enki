@@ -11784,3 +11784,1231 @@ CLASE Template {
 
 https://claude.ai/code/session_019C4pks5RDdscuKPqVdTWRF
 
+
+
+---
+
+# FRONTEND — Capa de UI (SvelteKit + Svelte 5 sobre MQTT)
+
+Stack: SvelteKit 2 · Svelte 5 · TypeScript · Vite 6 · adapter-node · mqtt · marked · highlight.js. SSR deshabilitado (`ssr=false`, `prerender=false`). El frontend es un core más conectado al broker MQTT.
+
+Estructura: `src/lib/ui-core` (transporte+registro), `src/lib/stores` (40 stores), `src/lib/modules` (35 módulos lazy), `src/lib/components` (base+layout+10 grupos de dominio), `src/routes` (31 páginas, multi-tenant `[project_id]`).
+
+## UI-CORE — Contratos
+
+```
+TYPE UIZone = 'work-bar' | 'chat-config' | 'chat-tools' | 'system-bar'
+
+TYPE UIButtonAction =
+  | {type: 'panel', panelId: String}
+  | {type: 'publish', topic: String, payload?: Object}
+  | {type: 'navigate', route: String}
+  | {type: 'callback', handler: Function}
+
+TYPE PanelPosition = 'top' | 'bottom' | 'left' | 'right' | 'center'
+TYPE ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
+
+INTERFAZ UIModuleManifest {
+  id: String
+  name: String
+  version: String
+  zone: UIZone
+  button: UIModuleButton {id, icon, dynamicIcon?, label, action: UIButtonAction, order?}
+  panels?: Array<UIModulePanel {id, title, size: 'sm'|'md'|'lg', position?, resizable?, draggable?}>
+  mqtt?: {publishes: Array<String>, subscribes: Array<String>}
+}
+
+INTERFAZ ModuleContext {
+  publish(topic: String, payload: Object): Void
+  subscribe(pattern: String, handler: MessageHandler): () => Void
+  subscribeGlobal?(pattern: String, handler: MessageHandler): () => Void
+  openPanel(panelId: String): Void
+  closePanel(): Void
+  cleanup?(): Void
+}
+
+INTERFAZ UIModule {
+  manifest: UIModuleManifest
+  getIcon?(state: AppState): String
+  getBadge?(state: AppState): String|Number|Null
+  PanelComponent?: SvelteComponent<{panelId: String}>
+  onMount?(ctx: ModuleContext): Void
+  onUnmount?(): Void
+  onMessage?: Record<topic, MessageHandler>
+}
+
+INTERFAZ AppState {
+  project: Project|Null
+  provider: Provider|Null
+  model: String|Null
+  prompt: Prompt|Null
+  credentials: {valid: Boolean, providers: Array<String>}
+  conversationCount: Number
+}
+
+INTERFAZ MqttClientContract {
+  connect(config?: Partial<MqttConfig>): Promise<Void>
+  disconnect(): Void
+  publish(topic: String, payload: Any, retain?: Boolean): Void
+  subscribe(pattern: String, handler: MessageHandler): () => Void
+  onReconnect(callback: Function): () => Void
+  isConnected(): Boolean
+  setupVisibilityHandler(): Void
+  removeVisibilityHandler(): Void
+}
+```
+
+## UI-CORE — MqttClient (única frontera con el transporte)
+
+```
+CLASE MqttClient IMPLEMENTA MqttClientContract {
+  ATRIBUTOS {
+    #statusStore: Writable<ConnectionStatus>
+    #errorStore: Writable<String|Null>
+    #lastMessageStore: Writable<MqttMessage|Null>
+    status: Readable<ConnectionStatus>
+    error: Readable<String|Null>
+    lastMessage: Readable<MqttMessage|Null>
+    connected: Readable<Boolean> (derived: s === 'connected')
+    #client: MqttClientLike|Null
+    #connectionTimeout: Timeout|Null
+    #handlers: Map<topic, Set<MessageHandler>>
+    #topicSubscriptions: Map<topic, refcount: Number>
+    #hasConnectedOnce: Boolean
+    #reconnectCallbacks: Array<Function>
+    #pendingMessages: Array<{topic, payload, retain}>
+    #pendingLogs: Array<LogEntry>
+    #logFlushTimeout: Timeout|Null
+    #logCollectorEnabled: Boolean
+    #visibilityHandlerRegistered: Boolean
+    #lastVisibilityState: 'visible'|'hidden'
+    #backgroundSince: Number|Null
+    #defaultConfig: MqttConfig
+    #registerRawPublisher: (p: RawPublisher|Null) => Void
+    #logEndpoint: String
+  }
+
+  CONSTANTES {
+    MAX_PENDING_MESSAGES = 100
+    LOG_BATCH_DELAY = 500
+    LOG_BATCH_MAX_SIZE = 50
+    CONNECT_TIMEOUT_MS = 5000
+    BACKGROUND_RECHECK_MS = 30000
+  }
+
+  CONSTRUCTOR(options: {registerRawPublisher?, defaultConfig?, logEndpoint?})
+    #defaultConfig = buildDefaultConfig(options.defaultConfig)
+    #registerRawPublisher = options.registerRawPublisher ?? noop
+    #logEndpoint = options.logEndpoint ?? '/modules/log-manager/logs'
+
+  METODOS {
+    async connect(config): Promise<Void>
+      SI #client: RETORNA (ya conectado/conectando)
+      #statusStore.set('connecting')
+      #initConnection(finalConfig) EN background
+      RETORNA Promise.resolve() (no bloquea UI)
+
+    disconnect(): Void
+      #client.end(true)
+      LIMPIA #client, handlers, topicSubscriptions, reconnectCallbacks
+      #registerRawPublisher(null)
+
+    isConnected(): Boolean
+      RETORNA #client?.connected ?? false
+
+    publish(topic, payload, retain=false): Void
+      envelope = #createEnvelope(topic, payload)
+      SI !conectado:
+        SI #pendingMessages.length < MAX_PENDING_MESSAGES: ENCOLA {topic, envelope, retain}
+        SINO: DROP
+        RETORNA
+      #client.publish(topic, JSON(envelope), {qos: 1, retain})
+      #logInteraction('publish', topic, payload)
+
+    subscribe(pattern, handler): () => Void
+      {topic, isEvent} = #normalizeEventPattern(pattern)
+      effectiveHandler = isEvent ? (_t, payload) => handler(payload, payload) : handler
+      AGREGA a #handlers[topic]
+      SI refcount==0 && conectado: #client.subscribe(topic)
+      INCREMENTA refcount
+      RETORNA unsubscribe: DECREMENTA refcount; SI llega a 0: #client.unsubscribe(topic)
+
+    onReconnect(callback): () => Void
+      #reconnectCallbacks.push(callback)
+      RETORNA des-registro
+
+    setupVisibilityHandler(): Void
+      document.addEventListener('visibilitychange', #handleVisibilityChange)
+
+    removeVisibilityHandler(): Void
+      document.removeEventListener('visibilitychange', #handleVisibilityChange)
+  }
+
+  METODOS_INTERNOS {
+    async #initConnection(config): Promise<Void>
+      mqtt = await import('mqtt')  (lazy ~2MB)
+      #client = mqtt.connect(config.url, {...config.options, clientId})
+      #connectionTimeout = setTimeout(→ modo offline, CONNECT_TIMEOUT_MS)
+      #client.on('connect', → #onConnect)
+      #client.on('message', → #onMessage)
+      #client.on('error', → #onError)
+      #client.on('close', → status='disconnected')
+      #client.on('reconnect', → status='connecting')
+
+    #onConnect(config): Void
+      clearTimeout(#connectionTimeout)
+      #statusStore.set('connected')
+      #registerRawPublisher({publish: (t,m,o) => #client.publish(t,m,{qos: o?.qos ?? 1})})
+      RE-SUSCRIBE todos los #topicSubscriptions
+      #flushPendingMessages()
+      SI #hasConnectedOnce: EJECUTA #reconnectCallbacks
+      #hasConnectedOnce = true
+
+    #onMessage(topic, buffer): Void
+      payload = #parsePayload(buffer)
+      #lastMessageStore.set({topic, payload, timestamp})
+      #notifyHandlers(topic, payload)
+      #logInteraction('receive', topic, payload)
+
+    #matchTopic(pattern, topic): Boolean  (wildcards MQTT: + un nivel, # resto)
+    #notifyHandlers(topic, payload): Void  (itera handlers, match, try/catch por handler)
+
+    #normalizeEventPattern(pattern): {topic, isEvent}
+      SI pattern incluye '/': {topic: pattern, isEvent: false}
+      SI pattern incluye '.': domain.action → {topic: 'core/*/events/{domain}/{action}', isEvent: true}
+
+    #createEnvelope(topic, data): Object
+      RETORNA {event_id: uuid_v4, event_type: #extractEventType(topic), timestamp: ISO, source: {core_id: 'ui-frontend'}, data, metadata: {}}
+
+    #flushPendingMessages(): Void  (vacía cola pre-conexión con qos:1)
+    #logInteraction(action, topic, payload?): Void  (batch debounced; skip topics log/*)
+    async #flushLogs(): Promise<Void>  (POST batch a #logEndpoint; on fail: #logCollectorEnabled=false)
+
+    #handleVisibilityChange = (): Void =>  (arrow field, preserva this)
+      SI hidden: #backgroundSince = now
+      SI visible tras background > BACKGROUND_RECHECK_MS: #checkAndReconnect()
+
+    #checkAndReconnect(): Void
+      SI #client desconectado: end(true), #client=null, setTimeout(→ connect(), 500)
+  }
+}
+```
+
+## UI-CORE — Fachada Singleton (mqtt.ts)
+
+```
+SINGLETON mqtt {
+  _client = new MqttClient({registerRawPublisher: _setMqttClient})
+
+  EXPORTA_STORES { status, error, lastMessage, connected }  (readonly del singleton)
+
+  EXPORTA_API_FUNCIONAL (delega en _client) {
+    connect(config) → _client.connect(config)
+    disconnect() → _client.disconnect()
+    publish(topic, payload, retain) → _client.publish(...)
+    subscribe(pattern, handler) → _client.subscribe(...)
+    onReconnect(cb) → _client.onReconnect(cb)
+    isConnected() → _client.isConnected()
+    setupVisibilityHandler() → _client.setupVisibilityHandler()
+    removeVisibilityHandler() → _client.removeVisibilityHandler()
+  }
+}
+```
+
+## UI-CORE — Request/Response sobre MQTT (mqtt-request.ts)
+
+```
+INTERFAZ UIRequest {request_id, action, data, timestamp, source: {client_id}}
+INTERFAZ UIResponse<T> {request_id, status: Number, success: Boolean, data: T, error?: {code, message}, timestamp}
+
+CLASE MqttTimeoutError HEREDA Error {requestId, domain, action}
+CLASE MqttRequestError HEREDA Error {requestId, status, code, response}
+CLASE MqttNotConnectedError HEREDA Error {}
+
+MODULO MqttRequest {
+  ATRIBUTOS {
+    DEFAULT_TIMEOUT = 10000
+    CLIENT_ID = `ui-{base36}-{random}`
+    pendingRequests: Map<request_id, {resolve, reject, timer, unsubscribe}>
+    mqttClientRef: RawPublisher|Null
+  }
+
+  _setMqttClient(client: RawPublisher|Null): Void  (DIP: inyectado desde mqtt.ts en connect)
+  publishRaw(topic, payload): Void  (sin envelope, qos:1; throws MqttNotConnectedError)
+
+  async mqttRequest<T>(domain, action, data?, options?): Promise<UIResponse<T>>
+    timeout = options.timeout ?? DEFAULT_TIMEOUT
+    requestId = generateRequestId()
+    SI status != 'connected': await waitForConnection(8000)
+    RETORNA new Promise((resolve, reject) => {
+      responseTopic = `ui/response/{requestId}`
+      timer = setTimeout(→ reject(MqttTimeoutError), timeout)
+      unsubscribe = subscribe(responseTopic, (_t, payload) => {
+        SI payload.request_id != requestId: RETORNA
+        cleanup()
+        payload.success ? resolve(payload) : reject(MqttRequestError(payload))
+      })
+      pendingRequests.set(requestId, {...})
+      requestTopic = `ui/request/{domain}/{action}`
+      publishRaw(requestTopic, {request_id, action, data: data??{}, timestamp, source: {client_id}})
+    })
+
+  async waitForConnection(timeoutMs): Promise<Void>
+    SI isConnected(): RETORNA
+    SUSCRIBE status; resolve cuando 'connected'; reject en timeout
+
+  cancelRequest(requestId): Boolean
+  cancelAllRequests(): Void
+  getPendingCount(): Number
+
+  WRAPPERS {
+    listRequest(domain, opts) → mqttRequest(domain, 'list')
+    getRequest(domain, id, opts) → mqttRequest(domain, 'get', {id})
+    createRequest(domain, data, opts) → mqttRequest(domain, 'create', data)
+    updateRequest(domain, id, data, opts) → mqttRequest(domain, 'update', {id, ...data})
+    deleteRequest(domain, id, opts) → mqttRequest(domain, 'delete', {id})
+  }
+}
+```
+
+## UI-CORE — Registry (legacy, registro eager)
+
+```
+MODULO Registry {
+  ATRIBUTOS {
+    modulesStore: Writable<Map<id, UIModule>>
+    moduleSubscriptions: Map<id, Array<() => Void>>
+    appStateStore: Writable<AppState>
+    activePanelStore: Writable<String|Null>
+  }
+
+  createModuleContext(moduleId): ModuleContext
+    publish → publish global
+    subscribe → mqttSubscribe + registra unsub en moduleSubscriptions[moduleId]
+    openPanel/closePanel → activePanelStore
+
+  filterByZone(modules, zone): Array<UIModule>  (filtra zona, ordena por button.order)
+
+  register(module): () => Void
+    SI duplicado: WARN, RETORNA noop
+    AGREGA a modulesStore
+    ctx = createModuleContext(id); module.onMount?(ctx)
+    SUSCRIBE topics de manifest.mqtt.subscribes con onMessage[topic]
+    RETORNA () => unregister(id)
+
+  unregister(moduleId): Void
+    module.onUnmount?()
+    EJECUTA moduleSubscriptions[moduleId]; LIMPIA
+    REMUEVE de modulesStore
+
+  unregisterZone(zone): Void
+  getModule(moduleId): UIModule|undefined
+  openPanel(panelId) / closePanel(): Void
+  getPanelComponent(panelId) / getPanelConfig(panelId)  (busca en panels de manifests)
+  updateAppState(partial) / getAppState(): AppState
+
+  STORES_DERIVADOS {
+    workBarModules, chatConfigModules, chatToolsModules, systemBarModules  (filterByZone)
+    activePanel, appState, modules
+  }
+}
+```
+
+## UI-CORE — LazyRegistry (carga bajo demanda, sistema actual)
+
+```
+INTERFAZ LazyModuleDefinition {
+  id: String
+  zone: UIZone
+  order?: Number
+  loader: () => Promise<UIModule>
+  icon: String
+  label: String
+  dependencies?: Array<String>
+  routes?: Array<String>
+}
+
+INTERFAZ LoadedModule {definition, module: UIModule|Null, loading: Boolean, error: Error|Null, subscriptions: Array<() => Void>, mounted: Boolean}
+
+MODULO LazyRegistry {
+  ATRIBUTOS {
+    definitionsStore: Writable<Map<id, LazyModuleDefinition>>
+    loadedStore: Writable<Map<id, LoadedModule>>
+    appStateStore: Writable<AppState>
+    activePanelStore: Writable<String|Null>
+    activeModuleStore: Writable<String|Null>
+    currentRouteStore: Writable<String>
+  }
+
+  createScopedContext(moduleId): ModuleContext
+    scopePrefix = `ui.{moduleId}`
+    publish(topic) → prefija con scope salvo que empiece por 'ui.'
+    subscribe(pattern) → prefija con scope salvo 'ui.'/'system.'; acumula unsubs
+    subscribeGlobal(pattern) → sin scope
+    cleanup() → ejecuta todos los unsubs
+
+  defineModule(def): Void  (registra definición + entrada vacía en loadedStore)
+
+  async loadModule(moduleId): Promise<UIModule|Null>
+    SI ya cargado: RETORNA module
+    SI loading: ESPERA a que termine (subscribe a loadedStore)
+    CARGA dependencies primero (recursivo)
+    MARCA loading; module = await def.loader(); GUARDA; mide duración
+    EN error: GUARDA error, RETORNA null
+
+  async mountModule(moduleId): Promise<Boolean>
+    module = await loadModule(moduleId)
+    ctx = createScopedContext(moduleId); module.onMount?(ctx)
+    SUSCRIBE manifest.mqtt.subscribes; acumula en loaded.subscriptions
+    MARCA mounted
+
+  unmountModule(moduleId): Void
+    EJECUTA loaded.subscriptions; module.onUnmount?(); MARCA mounted=false
+
+  preloadModules(moduleIds): Void  (setTimeout → loadModule cada uno, sin montar)
+
+  setCurrentRoute(route): Void
+  routeMatches(currentRoute, manifestRoutes): Boolean  (soporta project-scoped: strip primer segmento)
+  filterDefinitionsByZone(defs, zone, currentRoute?): Array  (filtra zona + routes + order)
+
+  PANELES {
+    openPanel(panelId) / closePanel() / setActiveModule(id)
+    async getPanelComponent(panelId): carga módulos lazy con el panel; fallback loadPanelComponent(panels.ts)
+    getPanelConfig(panelId): busca en cargados; fallback getPanel(panels.ts)
+  }
+
+  APP_STATE { updateAppState(partial) / getAppState() }
+
+  STORES_DERIVADOS {
+    workBarDefinitions  (filtra por zona + ruta actual)
+    chatConfigDefinitions, chatToolsDefinitions, systemBarDefinitions  (compartidas)
+    moduleLoadState  (estado loading/loaded/mounted/error por id)
+    loadedModules, activePanel, activeModule, appState
+  }
+
+  HELPERS { getLoadedModule(id), isModuleLoaded(id), isModuleMounted(id) }
+}
+```
+
+## UI-CORE — Resolución de carta por canal (carta-canal.ts)
+
+```
+async resolverCartaIdCanal(projectId, canal?): Promise<String|Null>
+  SI !projectId || !canal || canal=='mesa': RETORNA null
+  res = await mqttRequest('tarifas', 'get', {project_id: projectId})
+  info = res.data.canales[canal]
+  RETORNA (info.es_override && info.carta_id) ? info.carta_id : null
+  EN catch: RETORNA null
+```
+
+## STORES — Patrón general
+
+```
+PATRON StoreReactivo {
+  ESTADO: writable<T>() + derived<T>() para vistas computadas
+  ACCIONES: funciones que mutan stores + publican/consultan via mqttRequest|publish
+  SUSCRIPCIONES: initXSubscriptions(): () => Void  (subscribe a topics, retorna cleanup)
+  GETTERS: getX() via get(store)
+  TIPOS: stores MQTT-based exponen <Entity>State + init + acciones CRUD + derived
+}
+
+MODULO StoresIndex {
+  REEXPORTA ui, workspace, chat, attachments, persistence, theme
+  REEXPORTA credentials, projects, conversations, menu-generator
+  REEXPORTA carta-manager, carta-design, carta-marketing, carta-impresion
+  REEXPORTA html-preview, facturas
+  (40 stores totales)
+}
+```
+
+## STORES — Persistence (localStorage)
+
+```
+INTERFAZ PersistedState {
+  workspace: {projectId, providerId, modelId, promptId}
+  ui: {workBarExpanded: Boolean, panelSizes: Record<id, {width?, height?}>, theme: 'dark'|'light'|'system'}
+  chat: {conversationId: String|Null}
+}
+
+MODULO Persistence {
+  ATRIBUTOS {STORAGE_KEY='event-core-state', DEBOUNCE_MS=500, currentState, saveTimeout}
+  loadState(): PersistedState  (merge localStorage con defaults)
+  saveState(partial?): Void  (merge + write debounced)
+  getState(): PersistedState
+  clearState(): Void
+  saveWorkspace(workspace) / saveUI(ui) / savePanelSize(id, size) / getPanelSize(id) / saveConversation(id)
+  INIT: SI browser → loadState() al importar
+}
+```
+
+## STORES — Workspace
+
+```
+MODULO Workspace {
+  STORES { activeProject, activeProvider, activeModel, activePrompt, credentialStatus }
+  DERIVADOS { activeWorkspace, workspaceConfig, hasProject, hasProvider, hasValidCredentials }
+  CONSTANTE WORKSPACES: {pos-pizzeria, desarrollo, general}
+
+  ACCIONES {
+    selectProject(project): set + updateAppState + saveWorkspace
+    clearProject(): set null + mqttRequest('project','deactivate')
+    selectProvider(provider, model): set + publish('provider/selected') + saveWorkspace
+    clearProvider() / selectPrompt(prompt) [publish 'prompt/selected'] / clearPrompt()
+    getPersistedWorkspace(): IDs desde persistence
+  }
+
+  initWorkspaceSubscriptions(): () => Void
+    subscribe('project/activated') → activeProject
+    subscribe('provider/state') → activeProvider+activeModel
+    subscribe('credential/resolved') → credentialStatus
+
+  GETTERS {getActiveProject, getActiveProvider, getActiveModel}
+}
+```
+
+## STORES — UI (paneles, workbar, notificaciones)
+
+```
+MODULO UIStore {
+  PANEL: activePanel = lazyActivePanel  (delega lazy-registry como fuente única)
+    openPanel(id) / closePanel() / isPanelOpen (derived)
+  WORKBAR: workBarExpanded (init persistencia); toggleWorkBar/expand/collapse (persiste)
+  NOTIFICACIONES {
+    INTERFAZ Notification {id, type: 'info'|'success'|'warning'|'error', message, timestamp}
+    notifications: Writable<Array>; notificationCount (derived)
+    addNotification(type, message): push + auto-remove 5s
+    removeNotification(id) / clearNotifications()
+    notifySuccess/Error/Warning/Info(message)
+  }
+}
+```
+
+## STORES — Chat (mensajería + streaming)
+
+```
+MODULO Chat {
+  STORES { messages, conversationId, isStreaming, streamingMessageId, toolStatus, agentWorking, agentWorkingName, agentWorkingStep }
+  DERIVADOS { messageCount, hasConversation, lastMessage, userMessages, assistantMessages }
+
+  getPageRoute(): String  (deriva ruta sin /[project_id]; default 'chat')
+
+  async sendMessage(content): Promise<Void>
+    VALIDA content||attachments
+    SI !activeProjectId: notifyInfo + openPanel('project'); RETORNA
+    SI !conversationId: notifyInfo + openPanel('conversations'); RETORNA
+    AGREGA userMessage (optimista); clearAttachments(); isStreaming=true
+    settings = {provider?, model?} desde workspace
+    response = await mqttRequest('conversation','send', {
+      project_id, page_id, conversation_id, context:{}, settings, prompt:null,
+      attachments: paths, intencion:null, message
+    }, {timeout: 180000})
+    SI data.conversation_id != convId: conversationId.set(nuevo) (lazy-create)
+    FAILSAFE setTimeout(180s): SI isStreaming → cierra + notifyError
+    EN catch: isStreaming=false; código PROJECT_REQUIRED→openPanel('project'); CONVERSATION_REQUIRED→clear+openPanel('conversations'); SINO notifyError
+
+  addMessage(message): Void  (usado por push MQTT)
+    SI assistant tras assistant:
+      streaming → actualiza contenido del existente
+      final → finaliza el existente con datos completos
+    SINO: append
+    actualiza streamingMessageId
+
+  endStreaming(): Void  (isStreaming=false; marca último msg no-streaming)
+  stopGeneration(): Void → endStreaming()
+  async loadConversation(id): mqttRequest('conversation','load'); mapea created_at→timestamp, in_context, manually_toggled
+  newConversation(): genera UUID local; limpia messages
+  clearMessages() / clearConversation()
+  async toggleMessageContext(messageId, inContext): update optimista + mqttRequest('conversation','toggle_context'); rollback en error
+
+  initChatSubscriptions(): () => Void
+    isActiveConversation(topic): filtra por conversationId
+    subscribe('conversation/+/message') → addMessage; apaga isStreaming si assistant final
+    subscribe('conversation/+/tool-status') → toolStatus
+    subscribe('conversation/stream/end') → finaliza último msg streaming
+
+  GETTERS {getMessages, getConversationId, getIsStreaming}
+}
+```
+
+## STORES — Catálogo MQTT-based (forma común)
+
+```
+MODULO <Dominio>Store  (projects, credentials, conversations, facturas, carta-manager, carta-design, carta-marketing, carta-impresion, menu-generator, html-preview, ...) {
+  ATRIBUTOS { <entity>Store: Writable<<Entity>State> }
+  init<Entity>Subscriptions(): () => Void  (subscribe a eventos del dominio)
+  request<Entity>State() / load<Entity>()  (mqttRequest 'list'|'get'|'load')
+  create/update/delete/activate<Entity>(...)  (mqttRequest CRUD; optimista donde aplica)
+  DERIVADOS { <entity>List, active<Entity>Id, active<Entity>Data, <entity>Loading, <entity>Error, <entity>Count }
+  TIPOS exportados: <Entity>, <Entity>State, + auxiliares
+}
+
+EJEMPLOS_DERIVADOS {
+  projects: projectsList, activeProjectId, activeProjectData, projectsLoading, hasProjects
+  conversations: conversationsList, conversationSections, activeConversation, conversationMessages,
+                 messagesInContext, contextCount, contextWindow, contextStats
+  facturas: filteredFacturas, selectedFactura, facturasActiveTab, facturasStats, facturasFilter
+  carta-manager: sortedCartas, selectedCarta, cartaLoading, cartaCount
+}
+```
+
+## MODULES — Loader (autodescubrimiento)
+
+```
+INTERFAZ ModuleManifest {id, name, version, zone: UIZone, order?, icon, label, dependencies?, critical?, heavy?, routes?}
+
+MODULO Loader {
+  ATRIBUTOS {
+    manifests = import.meta.glob('./*/manifest.json', {eager: true, import: 'default'})
+    moduleLoaders = import.meta.glob('./*/index.ts')  (lazy)
+    _definitions: Array<LazyModuleDefinition>|Null  (cache)
+  }
+
+  buildDefinitions(): Array<LazyModuleDefinition>
+    PARA cada manifest:
+      moduleDir = path sin '/manifest.json'; loaderPath = `{dir}/index.ts`
+      SI moduleLoaders[loaderPath]:
+        push {id, zone, order??99, icon, label, dependencies, routes, loader: () => moduleLoaders[loaderPath]().default}
+    ORDENA por zona, luego order
+
+  getModuleDefinitions(): cache buildDefinitions()
+  getDefinitionsByZone(zone) / getDefinition(id)
+  async loadModule(id): def.loader()
+  getCriticalModules(): manifests con critical=true
+  getHeavyModules(): manifests con heavy=true
+  getAllManifests() / debugListModules()
+}
+
+MODULO ModulesIndex {
+  async registerAllModules(): carga cada def + register() (eager, AppShell)
+  async registerModulesByZone(zone)
+  unregisterAllModules()  (cleanup HMR)
+  SI DEV: debugListModules()
+}
+```
+
+## MODULES — Panels (componentes lazy)
+
+```
+INTERFAZ PanelDef {
+  id: String
+  title: String
+  icon: String
+  size: 'sm'|'md'|'lg'
+  position?: PanelPosition
+  zone: UIZone
+  order: Number
+  showInBar?: Boolean
+  loader: () => Promise<{default: SvelteComponent}>
+}
+
+MODULO Panels {
+  ATRIBUTOS { panels: Record<id, PanelDef>, componentCache: Map<id, SvelteComponent> }
+
+  panels = {
+    chat-config: project, provider, prompts, conversations, credentials-list
+    work-bar: menu-pdf2img-panel, menu-prepare-panel, menu-ocr-panel, menu-generate-panel,
+              carta-config-panel, carta-preview-panel, carta-export-panel, carta-stats-panel,
+              recetas-panel, escandallo-panel, viabilidad-panel, facturas-panel, impresion-panel,
+              html-preview (showInBar:false)
+    chat-tools: files
+    system-bar: related-pages-panel
+  }
+
+  getPanelsByZone(zone): Array<PanelDef>  (filtra zona + showInBar!=false, ordena)
+  async loadPanelComponent(panelId): SvelteComponent|Null  (cache + loader())
+  getPanel(panelId): PanelDef|undefined
+  isPanelLoaded(panelId): Boolean
+}
+```
+
+## MODULES — Patrón de módulo
+
+```
+MODULO <module>/manifest.json  (descubierto eager)
+  {id, name, version, zone, order, icon, label, critical?, heavy?, routes?, dependencies?}
+
+MODULO <module>/index.ts  (cargado lazy)
+  export default const <name>Module: UIModule = {
+    manifest: {id, name, version, zone, button: {...}, panels?: [...], mqtt?: {publishes, subscribes}}
+    getIcon?(state): String  (icono dinámico según AppState)
+    getBadge?(state): Number|String|Null
+    PanelComponent: <Module>Panel.svelte
+    onMount?(ctx) / onUnmount?()
+    onMessage?: {topic → handler}
+  }
+
+MODULO <module>/<Module>Panel.svelte  (UI del panel)
+```
+
+## COMPONENTS — Base
+
+```
+GRUPO components/base {
+  Button, Badge, Chip, LazyButton
+  Message, MarkdownRenderer
+  Toast, ToastContainer
+  ConnectionStatus
+  FilePicker, FileViewer
+  CodeEditor, Terminal
+}
+```
+
+## COMPONENTS — Layout
+
+```
+COMPONENTE AppShell  (layout base eager: registerAllModules en onMount)
+  PROPS {showSystemBar, showWorkBar, showChatInput, showChatTools, onConnected?}
+  onMount: registerAllModules() + init{Workspace,Projects,Chat,Conversations}Subscriptions() + connect() + setupVisibilityHandler()
+  onDestroy: cleanups + disconnect() + unregisterAllModules() + removeVisibilityHandler()
+  SLOTS {work-bar, content}; FIJOS {ChatConfig, ChatInput, ChatTools, SystemBar, LazyPanel}
+
+COMPONENTE LazyShell  (bootstrap mínimo: Core+Router+Shell, módulos bajo demanda)
+  REACTIVO: setCurrentRoute($page.url.pathname)
+  onMount: defineModule(cada moduleDefinition) + init subscriptions + connect() + initProjects/Conversations/HtmlPreview + setupVisibilityHandler() + preloadModules(criticalModules) tras render
+  onDestroy: cleanups + disconnect() + removeVisibilityHandler()
+  REACTIVO: $activePanel → loadPanelComponent → render Panel
+
+COMPONENTE Shell  (página chat: AppShell + ChatArea)
+COMPONENTE ChatArea  (lista mensajes; auto-scroll; typing dots; toggle contexto)
+COMPONENTE ChatConfig  (barra config: botones chat-config)
+COMPONENTE ChatInput  (entrada + envío)
+COMPONENTE ChatTools  (barra herramientas: chat-tools)
+COMPONENTE LazyWorkBar  (íconos de workBarDefinitions; click → carga módulo)
+COMPONENTE WorkBar  (variante eager)
+COMPONENTE SystemBar  (getPanelsByZone('system-bar'); openPanel)
+COMPONENTE Panel / LazyPanel  (contenedor: posiciones top/bottom/left/right/center; spring drag; resize; ESC/backdrop cierra; PANEL_SIZES)
+}
+```
+
+## COMPONENTS — Grupos de dominio
+
+```
+GRUPOS components/<dominio> (pantallas + sub-componentes) {
+  carta: CartaScreen, CarritoPanel, CategoriaScroll, ProductoCard, ProductoDetalle
+  cocina: CocinaScreen, CocinaHeader, CocinaConfigPanel, PedidoCard, ItemLine
+  comandero: ComanderoScreen, CuentasScreen, CuentaCard(Mesa), PedidoList, PedidoItem,
+             ProductoBtn, CategoriaBtn, TipoButton, AccionBtn, BotonEspecial,
+             CobroPanel, CierreCajaPanel, VariacionesPanel, MitadMitadPanel, AlGustoPanel
+  dispositivos: DispositivosScreen, FleetTab, HealthTab, FirmwareTab, GatewaysTab,
+                ShadowTab, ImpresorasTab, DeviceStatusButton, DeviceStatusPanel
+  esp32: DevTab, FirmwareTab, FlashTab
+  recipes: RecipeInvestigationResult, RecipeVersionComparator, RecipeVersionDetail, RecipeVersionHistory
+  staff: StaffScreen, EmpleadosList, FichajeBoard, NfcCardModal
+  llevadoo: LlevadooScreen
+}
+```
+
+## ROUTES — SvelteKit (multi-tenant)
+
+```
+CONFIG +layout.ts { ssr=false, prerender=false }
+
+RUTA / (+page.svelte)
+  onMount: SI persistencia.workspace.projectId → goto(`/{id}/chat`); SINO LazyShell (selección)
+
+RUTA /[project_id] (+layout.svelte)
+  projectStore = writable({id, name, isPizzepos, loading, error}); setContext('project', projectStore)
+  URL es fuente de verdad: $page.params.project_id
+  REACTIVO: urlParam cambia → saveWorkspace({projectId}); SI conectado && difiere → activateProject(urlParam)
+  onMount: render con defaults inmediato (no bloquea MQTT) + loadProject() no-bloqueante; retry al conectar
+
+RUTA /[project_id]/<pantalla> (+page.svelte)  PATRON {
+    projectId = $activeProjectId || $page.params.project_id  (UUID real, no alias)
+    onNavigate(path) → goto(`/{urlProjectId}{path}`)
+    RENDERIZA <DominioScreen onNavigate projectId>
+  }
+
+PANTALLAS_PROYECTO {
+    chat, comandero (+[cuenta_id]), cocina, carta, carta-design, carta-digital,
+    carta-impresion, carta-manager, carta-marketing, carta-scheduler,
+    dispositivos, escandallo, facturas, ingredientes, llevadoo,
+    menu-generator, recetas, tarifas, viabilidad
+  }
+
+RUTAS_PLANAS (sin project_id): chat, comandero (+[cuenta_id]), facturas, menu-generator, staff
+```
+
+## UTILS
+
+```
+MODULO utils {
+  generateUUID(): String  (crypto.randomUUID o fallback Math.random v4)
+  perf: {
+    timers: Map<label, Number>
+    perfStart(label) / perfEnd(label): Number  (mide + logPerf)
+    logPerf(label, durationMs): POST a /modules/log-manager/logs (level info, source frontend)
+    logMsg(msg, ctx): POST telemetría; on fail → logEnabled=false
+  }
+}
+```
+
+## CONSTANTES UI
+
+```
+PROJECT_COLORS: [green, blue, purple, orange, red, yellow, cyan, pink] {id, hex, emoji}
+PROVIDER_ICONS: {openai 🤖, anthropic 🧠, deepseek 🔮, ollama 🦙, kimi 🌙}
+PANEL_SIZES: {sm '25vh', md '33vh', lg '50vh'}
+TOPICS: {
+  UI_PANEL_OPEN, UI_PANEL_CLOSE, UI_MODULE_REGISTERED
+  CONVERSATION_SEND, CONVERSATION_MESSAGE, CONVERSATION_STREAM_END, CONVERSATION_LOAD, CONVERSATION_LOADED
+  PROJECT_ACTIVATE, PROJECT_ACTIVATED, PROVIDER_SELECTED, PROVIDER_STATE, PROMPT_SELECTED, CREDENTIAL_RESOLVED
+}
+WORKSPACES: {pos-pizzeria {modules, icon 🍕}, desarrollo {💻}, general {📋}}
+```
+
+## PATRONES OOP — Frontend
+
+```
+PATRON Singleton  { USADO_EN: [mqtt.ts _client] PROPOSITO: una sola frontera de transporte }
+PATRON DependencyInjection  { USADO_EN: [MqttClient.registerRawPublisher → mqtt-request] PROPOSITO: romper ciclo, DIP }
+PATRON Observer  { USADO_EN: [stores Svelte writable/derived, #handlers por patrón] }
+PATRON Strategy  { USADO_EN: [loader/panels: loader() por módulo] PROPOSITO: carga bajo demanda }
+PATRON Factory  { USADO_EN: [createEnvelope, createModuleContext, createScopedContext] }
+PATRON Registry  { USADO_EN: [registry, lazy-registry, panels componentCache] }
+PATRON LazyLoading  { USADO_EN: [import('mqtt'), import.meta.glob index.ts, panel loaders] }
+PATRON RequestResponse  { USADO_EN: [mqtt-request: ui/request/{domain}/{action} → ui/response/{request_id}] }
+PATRON Facade  { USADO_EN: [mqtt.ts sobre MqttClient, stores/index.ts] }
+PATRON Refcount  { USADO_EN: [MqttClient.#topicSubscriptions (de)suscribe en primer/último handler] }
+PATRON ScopedEvents  { USADO_EN: [lazy-registry: ui.{module}.* por contexto] }
+PATRON OptimisticUpdate  { USADO_EN: [chat.toggleMessageContext, stores CRUD] PROPOSITO: UX inmediata + rollback }
+PATRON Debounce  { USADO_EN: [persistence.saveState 500ms, MqttClient batch-logging] }
+PATRON URLAsSourceOfTruth  { USADO_EN: [[project_id]/+layout: URL → stores] }
+```
+
+## CICLO DE VIDA — Frontend
+
+```
+ARRANQUE {
+  1. / (+page) → SI projectId persistido: goto(/{id}/chat); SINO LazyShell
+  2. LazyShell.onMount:
+       defineModule(cada definición)  (sin cargar)
+       init{Workspace,Chat,Projects,Conversations,HtmlPreview}Subscriptions()
+       connect()  (MqttClient importa mqtt lazy, conecta en background)
+       setupVisibilityHandler()
+       preloadModules(criticalModules) tras 100ms
+  3. [project_id]/+layout: URL → saveWorkspace + activateProject
+  4. Operación:
+       navegación → setCurrentRoute → workBarDefinitions filtra por ruta
+       click botón work-bar → loadModule → mountModule → onMount(scopedContext)
+       click botón barra → openPanel → getPanelComponent → loadPanelComponent (lazy + cache)
+       acción UI → mqttRequest(domain, action) → ui/request → ui/response
+       push servidor → subscribe(topic) → store.update → render reactivo
+}
+
+ENVIO_MENSAJE_CHAT {
+  1. sendMessage(content): valida proyecto+conversación → addMessage optimista → isStreaming=true
+  2. mqttRequest('conversation','send', {9 campos}, timeout 180s) → ack {conversation_id, message_id}
+  3. push MQTT conversation/{id}/message → addMessage (streaming chunk | final)
+  4. assistant final → isStreaming=false; failsafe 180s cierra si no llega
+}
+
+DESCONEXION {
+  onDestroy: cleanups subscriptions + disconnect() (end + limpia handlers/colas) + removeVisibilityHandler()
+}
+
+RESILIENCIA {
+  connect timeout 5s → modo offline
+  reconnect → re-suscribe topics + flushPendingMessages + reconnectCallbacks
+  visibilitychange: background > 30s → checkAndReconnect
+  cola pre-conexión hasta 100 mensajes (qos 1)
+  batch-logging debounced; on fail HTTP → desactiva collector
+}
+```
+
+
+---
+
+# FRONTEND ↔ BACKEND — Mapa de Referencias (puente MQTT)
+
+El puente es MQTT. Un consumidor del frontend (store, módulo lazy o pantalla) invoca `mqttRequest(domain, action, data)` → publica en `ui/request/{domain}/{action}` → el `UIRequestHandler` del módulo backend que registró `(domain, action)` responde en `ui/response/{request_id}`. Los eventos backend→frontend viajan por topics directos o `core/*/events/{domain}/{action}` y los stores los consumen vía `subscribe()`.
+
+## Contrato del enlace
+
+```
+INTERFAZ EnlaceFrontBack {
+  consumidor_front: Store|ModuloLazy|Pantalla
+  domain: String
+  acciones: Array<String>
+  transporte_request: `ui/request/{domain}/{action}` -> `ui/response/{request_id}`
+  transporte_evento?: `core/*/events/{domain}/{action}` | topic_directo
+  modulo_backend: String
+  tipo_backend: 'module' | 'blueprint' | 'provider' | 'gateway-internal'
+}
+
+CLASE RegistroDeEnlaces {
+  resolver(domain): {modulo_backend, tipo}
+  resolverInverso(modulo_backend): Array<{consumidor_front, domain}>
+  MAPA_DOMINIO_A_MODULO: Map<domain, modulo_backend>
+}
+```
+
+## SUBSISTEMA NÚCLEO / CONVERSACIÓN
+
+```
+ENLACE project {
+  consumidor_front: [stores/projects.ts, stores/workspace.ts, modules/project]
+  domain: 'project'
+  acciones: [list, get, create, update, delete, activate, deactivate, add-features]
+  modulo_backend: 'project-manager'  (domain=project)
+  eventos_in: ['project/activated' -> workspace.activeProject, 'project/list']
+  publica_front: ['project/activate']
+}
+
+ENLACE conversation {
+  consumidor_front: [stores/chat.ts, stores/conversations.ts]
+  domain: 'conversation'
+  acciones: [send, load, delete, toggle_context, update_settings, context_stats]
+  modulo_backend: 'conversacion/chat-io'  (domain=conversation)
+  colateral_backend: 'conversation-export'  (consume agent.*, db.query)
+  eventos_in: ['conversation/+/message', 'conversation/+/tool-status',
+               'conversation/+/agent_status', 'conversation/stream/end',
+               'conversation/loaded', 'chat.foco.cambiado']
+  contrato_send: {project_id, page_id, conversation_id, context, settings, prompt, attachments, intencion, message}
+}
+
+ENLACE prompt_preset {
+  consumidor_front: [stores/prompts.ts, modules/prompts]
+  domain: ['prompt', 'preset']
+  acciones_prompt: [list, get, create, update, delete]
+  acciones_preset: [list, create, delete]
+  modulo_backend: 'prompt-manager'  (domain=prompt; preset.* mismo módulo)
+}
+
+ENLACE credential {
+  consumidor_front: [stores/credentials.ts, modules/credentials]
+  domain: 'credential'
+  acciones: [list, create, update, delete, test, oauth.start, oauth.config.save,
+             oauth.config.delete, glovo.save, glovo.delete, telegram.notif.save, telegram.notif.delete]
+  modulo_backend: 'credential-manager'  (domain=credential)
+  eventos_in: ['credential/resolved' -> workspace.credentialStatus, 'credential/state', 'credential.saved']
+}
+
+ENLACE page {
+  consumidor_front: [modules/related-pages]
+  domain: 'page'
+  acciones: [related]
+  modulo_backend: 'conversacion/ai-gateway'  (_buildPageGraph: consumes + consumed_by)
+  tipo_backend: 'module'
+}
+
+ENLACE provider {
+  consumidor_front: [modules/provider, stores/workspace.ts]
+  publica_front: ['provider/selected']
+  eventos_in: ['provider/state' -> activeProvider+activeModel, 'credential/resolved']
+  modulo_backend: 'conversacion/ai-gateway' (+ credential-manager para resolución)
+}
+```
+
+## SUBSISTEMA FILESYSTEM / EDITOR
+
+```
+ENLACE fs {
+  consumidor_front: [stores/carta-design, carta-digital, carta-impresion, carta-manager,
+                     carta-marketing, carta-scheduler, carta, escandallo, recetas, tarifas;
+                     modules/carta-config, carta-preview, viabilidad]
+  domain: 'fs'
+  acciones: [read, write, list, delete]
+  modulo_backend: 'filesystem'  (domain=fs)
+}
+
+ENLACE files_editor {
+  consumidor_front: [modules/files]
+  domain: ['files', 'editor']
+  acciones_files: [list, read, create, delete, search]
+  acciones_editor: [open, save]
+  modulo_backend_files: 'filesystem'
+  modulo_backend_editor: 'text-editor'  (domain=editor)
+}
+```
+
+## SUBSISTEMA PIZZEPOS — POS
+
+```
+ENLACE comandero {
+  consumidor_front: [stores/comandero.ts, stores/cuentas.ts, stores/llevadoo.ts]
+  domain: 'comandero'
+  acciones: [get, buffers, add-item, update-item, remove-item, send-kitchen]
+  modulo_backend: 'pizzepos/comandero'  (domain=comandero)
+}
+
+ENLACE cuenta_mesa {
+  consumidor_front: [stores/cuentas.ts, components/comandero/*]
+  domain: ['cuenta', 'mesa']
+  acciones_cuenta: [list, get, create, delete, rename, stats, marcar_entregado]
+  acciones_mesa: [get, abrir, renombrar]
+  modulo_backend: 'pizzepos/cuentas'  (domain=cuenta; mesa via cuentas-canales strategy)
+}
+
+ENLACE cobro {
+  consumidor_front: [components/comandero/CobroPanel]
+  domain: 'cobro'
+  acciones: [create, confirm]
+  modulo_backend: 'pizzepos/cobros'  (domain=cobro)
+}
+
+ENLACE productos {
+  consumidor_front: [stores/comandero.ts, stores/carta.ts, components/carta/*, components/cocina/*]
+  domain: 'productos'
+  acciones: [list, pizzas, carta_completa, ingredientes, categorias]
+  modulo_backend: 'pizzepos/productos'  (domain=productos)
+}
+
+ENLACE variaciones {
+  consumidor_front: [components/comandero/VariacionesPanel]
+  domain: 'variaciones'
+  acciones: [get]
+  modulo_backend: 'pizzepos/variaciones'
+}
+
+ENLACE persistencia {
+  consumidor_front: [stores/cuentas.ts, components/comandero/CierreCajaPanel]
+  domain: 'persistencia'
+  acciones: [cuentas_activas, iniciar_dia, cierre]
+  modulo_backend: 'pizzepos/persistencia-comandero'  (domain=persistencia)
+}
+
+ENLACE tarifas {
+  consumidor_front: [stores/tarifas.ts, ui-core/carta-canal.ts]
+  domain: 'tarifas'
+  acciones: [get]
+  modulo_backend: 'pizzepos/tarifas'  (domain=tarifas)
+}
+
+ENLACE cocina {
+  consumidor_front: [stores/cocina.ts]
+  domain: 'cocina'
+  acciones: [list-active, list-station-types, register-device, prepare-item, mark-ready, metrics]
+  modulo_backend: 'pizzepos/cocina'  (domain=cocina)
+}
+
+ENLACE impresion {
+  consumidor_front: [stores/impresion.ts, modules/impresion]
+  domain: 'impresion'
+  acciones: [estado, conectar, impresoras, ticket, ticket-venta, historial, metrics]
+  modulo_backend: 'pizzepos/impresion'  (domain=impresion)
+  eventos_in: ['impresion.comanda_generada', 'impresion.error']
+}
+
+ENLACE canales_delivery {
+  consumidor_front: [stores/cuentas.ts, stores/cocina.ts, stores/llevadoo.ts]
+  domain: ['llevadoo', 'llevar', 'mesa', 'glovo']
+  acciones_llevadoo: [activos, carta_delivery, crear_pedido, marcar_recogido, cancelar, set_config_recargo]
+  acciones_llevar: [crear, entregar]
+  acciones_glovo: [aceptar, rechazar]
+  modulo_backend: 'pizzepos/cuentas-canales'  (strategies: llevadoo, llevar, mesa, glovo, telefono)
+}
+```
+
+## SUBSISTEMA CARTA / GENERACIÓN DE MENÚ
+
+```
+ENLACE menu {
+  consumidor_front: [stores/menu-generator.ts, modules/design-gallery]
+  domain: 'menu'
+  acciones: [generate, list]
+  modulo_backend: 'pizzepos/menu-generator'
+}
+
+ENLACE pdf {
+  consumidor_front: [modules/menu-pdf2img]
+  domain: 'pdf'
+  acciones: [info, render]  (+ pdf-viewer: view, metadata, list)
+  modulo_backend: ['services/providers/local/pdf', 'services/providers/local/pdf-to-png', 'pdf-viewer']
+  tipo_backend: 'provider' + 'module'
+}
+
+ENLACE ocr_imagen {
+  consumidor_front: [modules/menu-prepare, modules/menu-ocr]
+  domain: ['sharp', 'tesseract', 'google-vision', 'scribe-ocr', 'document-processor']
+  acciones: [prepare-ocr, extract, process]
+  modulo_backend: 'services/providers/local/{sharp|tesseract|google-vision|scribe-ocr|document-processor}'
+  tipo_backend: 'provider'  (registerProviderTools -> ui/request/{provider}/{function})
+}
+
+NOTA_CARTAS_BLUEPRINT {
+  modules_backend: [pizzepos/carta-design, carta-digital, carta-impresion, carta-manager,
+                    carta-marketing, carta-scheduler]
+  tipo_backend: 'blueprint'  (sin index.js; persistencia por proyecto)
+  acceso_front: domain 'fs' (stores carta-* leen/escriben data/projects/{slug} via filesystem)
+}
+```
+
+## SUBSISTEMA DISPOSITIVOS / IOT / FIRMWARE
+
+```
+ENLACE devices {
+  consumidor_front: [stores/dispositivos.ts]
+  domain: 'devices'
+  acciones: [list, register, unregister, stats]
+  modulo_backend: 'device-registry'  (domain=devices)
+}
+
+ENLACE health {
+  consumidor_front: [stores/dispositivos.ts]
+  domain: 'health'
+  acciones: [dashboard, alerts]
+  modulo_backend: 'device-health'  (domain=health)
+}
+
+ENLACE shadow {
+  consumidor_front: [stores/dispositivos.ts]
+  domain: 'shadow'
+  acciones: [get-full, set-desired]
+  modulo_backend: 'device-shadow'  (domain=shadow)
+}
+
+ENLACE firmware {
+  consumidor_front: [stores/dispositivos.ts, stores/esp32.ts]
+  domain: 'firmware'
+  acciones: [list, status, trigger-ota, rollback, device-versions]
+  modulo_backend: 'firmware-manager'  (domain=firmware)
+}
+
+ENLACE builder {
+  consumidor_front: [stores/esp32.ts]
+  domain: 'builder'
+  acciones: [list-drivers, list-boards, build, build-status]
+  modulo_backend: 'firmware-builder'  (domain=builder)
+}
+
+ENLACE flash {
+  consumidor_front: [stores/esp32.ts]
+  domain: 'flash'
+  acciones: [list-ports, start, status, cancel, history, monitor-start, monitor-stop, monitor-send]
+  modulo_backend: 'esp32-flasher'  (domain=flash)
+}
+
+ENLACE gateways {
+  consumidor_front: [stores/dispositivos.ts]
+  domain: 'gateways'
+  acciones: [list, restart, discover]
+  modulo_backend: 'gateway-manager'  (domain=gateways)
+}
+
+ENLACE perifericos {
+  consumidor_front: [stores/dispositivos.ts, stores/cocina.ts, stores/impresion.ts]
+  domain: 'perifericos'
+  acciones: [list, create, delete, status, test, discover, listar-por-capacidad]
+  modulo_backend: 'perifericos'  (domain=perifericos)
+}
+
+ENLACE certificate_authority {
+  consumidor_front: [stores/certificate-authority.ts, modules/certificate-authority]
+  domain: 'certificate-authority'
+  acciones: [issue, revoke, renew]
+  modulo_backend: 'certificate-authority'  (domain=certificate-authority)
+}
+```
+
+## SUBSISTEMA FACTURACIÓN
+
+```
+ENLACE facturas {
+  consumidor_front: [stores/facturas.ts, modules/facturas]
+  domain: 'facturas'
+  acciones: [listar, obtener, actualizar, subir, reprocesar, exportar, estadisticas, pipeline-metrics]
+  modulo_backend: 'facturas'  (domain=facturas)
+}
+
+ENLACE fuentes {
+  consumidor_front: [modules/facturas]
+  domain: 'fuentes'
+  acciones: [get-config, save-config, check-gmail]
+  modulo_backend: 'facturacion/fuentes'  (domain=fuentes)
+}
+
+ENLACE asesoria {
+  consumidor_front: [stores/facturas.ts]
+  domain: 'asesoria'
+  acciones: [historial, generar-paquete]
+  modulo_backend: 'facturacion/asesoria'  (domain=asesoria)
+}
+```
+
+## SUBSISTEMA CANALES / COMS
+
+```
+ENLACE channel {
+  consumidor_front: [stores/channels.ts]
+  domain: 'channel'
+  acciones: [list, register, update, remove]
+  modulo_backend: 'channel-manager'  (domain=channel)
+}
+```
+
+## MAPA INVERSO — Módulo backend → consumidor frontend
+
+```
+MAPA_INVERSO {
+  project-manager           <- stores/projects, stores/workspace, modules/project
+  conversacion/chat-io      <- stores/chat, stores/conversations
+  conversacion/ai-gateway   <- modules/provider, modules/related-pages
+  prompt-manager            <- stores/prompts, modules/prompts
+  credential-manager        <- stores/credentials, modules/credentials, stores/workspace
+  filesystem                <- stores/carta-*, escandallo, recetas, tarifas; modules/carta-config, carta-preview, viabilidad, files
+  text-editor               <- modules/files
+  pizzepos/comandero        <- stores/comandero, cuentas, llevadoo
+  pizzepos/cuentas          <- stores/cuentas, components/comandero
+  pizzepos/cobros           <- components/comandero/CobroPanel
+  pizzepos/productos        <- stores/comandero, carta; components/carta, cocina
+  pizzepos/variaciones      <- components/comandero/VariacionesPanel
+  pizzepos/persistencia-comandero <- stores/cuentas, components/comandero/CierreCajaPanel
+  pizzepos/tarifas          <- stores/tarifas, ui-core/carta-canal
+  pizzepos/cocina           <- stores/cocina
+  pizzepos/impresion        <- stores/impresion, modules/impresion
+  pizzepos/cuentas-canales  <- stores/cuentas, cocina, llevadoo
+  pizzepos/menu-generator   <- stores/menu-generator, modules/design-gallery
+  pdf-viewer                <- modules/menu-pdf2img
+  providers/local/{pdf,pdf-to-png,sharp,tesseract,google-vision,scribe-ocr,document-processor} <- modules/menu-pdf2img, menu-prepare, menu-ocr
+  device-registry           <- stores/dispositivos
+  device-health             <- stores/dispositivos
+  device-shadow             <- stores/dispositivos
+  firmware-manager          <- stores/dispositivos, esp32
+  firmware-builder          <- stores/esp32
+  esp32-flasher             <- stores/esp32
+  gateway-manager           <- stores/dispositivos
+  perifericos               <- stores/dispositivos, cocina, impresion
+  certificate-authority     <- stores/certificate-authority, modules/certificate-authority
+  facturas                  <- stores/facturas, modules/facturas
+  facturacion/fuentes       <- modules/facturas
+  facturacion/asesoria      <- stores/facturas
+  channel-manager           <- stores/channels
+}
+```
+
+## SIN ENLACE DIRECTO FRONT (módulos backend no consumidos por la UI analizada)
+
+```
+SIN_CONSUMIDOR_FRONT_DIRECTO {
+  admin-panel, bot-manager, bienvenida-tienda, code-executor, comandero-cliente-builder,
+  composition-manager, dashboard, database-manager, log-manager, mercadona-api, metricas,
+  mise-en-place, notas-poc, notificador-pedidos, pase-cocina, plugin-manager, scheduler,
+  security-p2p, staff-manager, system-coherence-analyzer, system-inspector,
+  telegram-service, tienda-api, whatsapp-bot,
+  conversacion/{agent-observer, ai-agent-framework, memory-*, prompt-builder},
+  pizzepos/{categorias, ingredientes, escandallo, recetas, tecnicas, pedidos, cocina-poc}
+}
+NOTA: el acceso a estos ocurre vía eventos del bus, agentes, o consumo indirecto
+      (categorias/ingredientes/escandallo/recetas se leen por fs o derivados de productos/carta).
+```
+
+## CICLO DEL ENLACE
+
+```
+REQUEST_FRONT_A_BACKEND {
+  1. consumidor.front: mqttRequest(domain, action, data, {timeout})
+  2. mqtt-request: publishRaw(`ui/request/{domain}/{action}`, {request_id, action, data, source})
+  3. UIRequestHandler(backend)._onMessage: parsea domain/action -> handler registrado
+  4. handler: ejecuta -> {status, data} -> publica `ui/response/{request_id}`
+  5. mqtt-request: match request_id -> resolve(UIResponse) | reject(MqttRequestError|Timeout)
+  6. store/componente: actualiza writable -> render reactivo
+}
+
+EVENTO_BACKEND_A_FRONT {
+  1. modulo backend: eventBus.emit(domain.action, data)
+  2. EventBus -> MQTT: `core/{coreId}/events/{domain}/{action}`
+  3. MqttClient(front).subscribe(pattern) -> #notifyHandlers -> store.update
+  4. ejemplos: project/activated, provider/state, credential/resolved,
+               conversation/+/message, impresion.comanda_generada, chat.foco.cambiado
+}
+```

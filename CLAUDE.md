@@ -4473,4 +4473,3885 @@ menu-generator ← carta-digital
 comandero ← cuentas, pedidos
 ```
 
+---
+
+# MÓDULOS — SEGURIDAD P2P, CERTIFICADOS, EXPORT
+
+## SECURITY-P2P (v2.0.0)
+
+```
+INTERFAZ SecurityP2PContract {
+  encrypt(envelope: Object, sharedSecret: Buffer): Promise<Object>
+  decrypt(encryptedEnvelope: Object, sharedSecret: Buffer): Promise<Object>
+  initiateHandshake(targetCoreId: String): Promise<String>
+  trustPeer(publicKey: String, metadata?: Object): Promise<Boolean>
+  revokePeer(publicKey: String): Promise<Boolean>
+  listTrustedPeers(): Promise<Array<Peer>>
+  getStatus(): Promise<{encryption_enabled, fingerprint, peers_count, shared_secrets}>
+}
+
+CLASE SecurityP2PModule HEREDA BaseModule IMPLEMENTA SecurityP2PContract {
+  ATRIBUTOS {
+    name: String = 'security-p2p'
+    version: String = '2.0.0'
+    keyManager: KeyManager
+    cryptoHandshake: CryptoHandshake
+    encryptionEnabled: Boolean
+    _sharedSecrets: Map<publicKey, Buffer>
+    maxSharedSecrets: Integer (default 100)
+    stats: {events_encrypted, events_decrypted, encryption_errors, decryption_errors}
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA keyManager
+      GENERA key pair X25519
+      CREA CryptoHandshake instance
+      REGISTRA hooks beforeEventPublish, afterEventReceive
+      SUSCRIBE core/+/security/handshake/request/# y response/#
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      DESREGISTRA hooks
+      DESUSCRIBE MQTT topics
+      LIMPIA _sharedSecrets
+      LIMPIA cryptoHandshake
+
+    async hookBeforeEventPublish(context: Object): Promise<Object>
+      SI !encryptionEnabled OR sin trusted peers: RETORNA context
+      OBTIENE shared secret DEL trusted peer
+      ENCRIPTA context.envelope via SecureEnvelope
+      stats.events_encrypted++
+      RETORNA {context, envelope: encrypted}
+
+    async hookAfterEventReceive(context: Object): Promise<Object>
+      SI !SecureEnvelope.isEncrypted(context.envelope): RETORNA context
+      ITERA _sharedSecrets: INTENTA decrypt
+      SI exito: stats.events_decrypted++, RETORNA decrypted
+      SI fallo en todos: stats.decryption_errors++, LOG warn
+      RETORNA context
+
+    async handleTrustPeer(input: {body: {public_key, name?, project_id?, correlation_id}}): Promise<Response>
+      VALIDA public_key
+      INVOCA keyManager.trustPeer(public_key, {name})
+      CALCULA shared secret via ECDH
+      CREA _trackSharedSecret(public_key, sharedSecret)
+      EMITE security.peer.trusted
+      RETORNA {status: 200, trusted: true, fingerprint, peer_count}
+
+    async handleRevokePeer(input: {body: {public_key, project_id?, correlation_id}}): Promise<Response>
+      VALIDA public_key
+      ELIMINA DE keyManager
+      ELIMINA DE _sharedSecrets
+      SI exito: EMITE security.peer.revoked
+      RETORNA {status: 200, revoked: true}
+
+    async handleListTrustedPeers(): Promise<Response>
+      OBTIENE peers = keyManager.listTrustedPeers()
+      RETORNA {status: 200, data: {peers[]}}
+
+    async handleStatus(): Promise<Response>
+      RETORNA {status: 200, data: {encryption_enabled, fingerprint, trusted_peers_count, shared_secrets_cached, stats}}
+
+    async handleGetPublicKey(): Promise<Response>
+      RETORNA {status: 200, data: {public_key, fingerprint}}
+
+    async onPublicKeyRequest(event: Event): Promise<Void>
+      EXTRAE request_id, correlation_id
+      EMITE security.public-key.response CON public_key, fingerprint
+
+    _trackSharedSecret(publicKey: String, sharedSecret: Buffer): Void
+      SI ya existe: ELIMINA y reanade (LRU)
+      AGREGA a _sharedSecrets
+      MIENTRAS size > maxSharedSecrets: ELIMINA oldest (eviction LRU)
+
+    EVENTOS_PUBLISHES {
+      'security.peer.trusted': {public_key, name, fingerprint}
+      'security.peer.revoked': {public_key}
+      'security.public-key.response': {request_id, correlation_id, public_key, fingerprint, has_keys}
+      'security.handshake.timeout': {target_core_id}
+      'security.handshake.failed': {peer_core_id, reason}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'security.public-key.request': onPublicKeyRequest
+      'core/+/security/handshake/request/#': cryptoHandshake.handleHandshakeRequest
+      'core/+/security/handshake/response/#': cryptoHandshake.handleHandshakeResponse
+    }
+  }
+}
+
+CLASE KeyManager {
+  ATRIBUTOS {
+    publicKey: String (X25519, base64)
+    privateKey: Buffer (secreto, nunca serializado)
+    trustedPeers: Map<publicKey, {name?, trusted_at}>
+  }
+
+  METODOS {
+    async generateKeyPair(): Promise<Void>
+      GENERA X25519 key pair
+      GUARDA public y private
+
+    trustPeer(publicKey: String, metadata?: Object): Void
+      AGREGA a trustedPeers
+
+    untrustPeer(publicKey: String): Boolean
+      ELIMINA DE trustedPeers SI existe
+
+    listTrustedPeers(): Array<{public_key, name, trusted_at}>
+      RETORNA peers array
+
+    computeSharedSecret(peerPublicKey: String): Buffer
+      ECDH: ECDH(privateKey, peerPublicKey) via crypto.diffieHellman o similar
+      RETORNA shared secret (32 bytes)
+
+    getFingerprint(): String (SHA-256 hex del public key)
+    getPublicKey(): String (base64)
+}
+
+CLASE CryptoHandshake {
+  ATRIBUTOS {
+    core: EventCore
+    keyManager: KeyManager
+    pendingHandshakes: Map<handshakeId, {target_core_id, challenge, started_at, status}>
+    handshakeTimeout: Integer (ms, default 30000)
+  }
+
+  METODOS {
+    async initiateHandshake(targetCoreId: String): Promise<String>
+      GENERA handshakeId
+      GENERA challenge (32 bytes random, base64)
+      GUARDA pending handshake
+      PUBLICA core/{targetCoreId}/security/handshake/request/{handshakeId}
+        CON {source_core_id, handshake_id, challenge, public_key, version}
+      SETEA timeout: SI no response EN 30s, EMITE security.handshake.timeout
+      RETORNA handshakeId
+
+    async handleHandshakeRequest(topic: String, message: Buffer): Promise<Void>
+      PARSEA JSON message
+      VALIDA request.source_core_id, handshake_id, challenge, public_key
+      VALIDA shouldAcceptHandshake(source_core_id) via whitelist/blacklist
+      CALCULA shared secret: ECDH(keyManager.privateKey, request.public_key)
+      MARCA peer como trusted
+      GENERA responseChallenge (32 bytes random, base64)
+      CALCULA HMAC mutuo: HMAC-SHA256(challenge_A + challenge_B + sorted_cores)
+      PUBLICA core/{source_core_id}/security/handshake/response/{handshakeId}
+        CON {source_core_id, target_core_id, original_challenge, response_challenge, hmac, public_key, version}
+      EMITE security.handshake.accepted
+
+    async handleHandshakeResponse(topic: String, message: Buffer): Promise<Void>
+      PARSEA JSON message
+      OBTIENE pending = pendingHandshakes[handshakeId]
+      SI !pending O target_core_id != response.source_core_id: RETORNA
+      CALCULA shared secret: ECDH(keyManager.privateKey, response.public_key)
+      VERIFICA HMAC mutuo: expectedHMAC == response.hmac
+      SI HMAC falla: EMITE security.handshake.failed, RETORNA
+      MARCA peer como trusted
+      ELIMINA DE pendingHandshakes
+      EMITE security.peer.trusted CON duration_ms
+
+    calculateMutualHMAC(challengeA: String, challengeB: String, sharedSecret: Buffer, coreIdA: String, coreIdB: String): String
+      sortedIds = [coreIdA, coreIdB].sort()
+      RETORNA HMAC-SHA256(challengeA + challengeB + sortedIds[0] + sortedIds[1] + 'event-core-v1')
+
+    async shouldAcceptHandshake(sourceCoreId: String): Promise<Boolean>
+      SI whitelist defined Y sourceCoreId NOT IN whitelist: RETORNA false
+      SI blacklist defined Y sourceCoreId IN blacklist: RETORNA false
+      RETORNA true
+}
+
+CLASE SecureEnvelope ESTATICO {
+  METODOS {
+    static encrypt(envelope: Object, sharedSecret: Buffer): Object
+      GENERA nonce (12 bytes random)
+      CREA cipher AES-256-GCM CON sharedSecret
+      SERIALIZA envelope a JSON
+      ENCRIPTA JSON CON nonce
+      RETORNA {_encrypted: true, _version: 1, nonce (hex), ciphertext (hex), tag (hex)}
+
+    static decrypt(encryptedEnvelope: Object, sharedSecret: Buffer): Object
+      VALIDA _encrypted, _version
+      EXTRAE nonce (hex → Buffer)
+      EXTRAE ciphertext (hex → Buffer)
+      EXTRAE tag (hex → Buffer)
+      CREA decipher AES-256-GCM CON sharedSecret + nonce
+      DESENCRIPTA ciphertext
+      VERIFICA tag
+      PARSEA JSON
+      RETORNA decrypted envelope
+
+    static isEncrypted(envelope: Object): Boolean
+      RETORNA envelope?._encrypted === true
+}
+```
+
+## CERTIFICATE-AUTHORITY (v2.0.0)
+
+```
+INTERFAZ CertificateAuthorityContract {
+  issueCertificate(data: {commonName, type, identifier, organization?, email?, validityDays?, passphrase?}): Promise<{serialNumber, certificate, privateKey, p12, fingerprint, metadata}>
+  revokeCertificate(serialNumber: String, reason?: String): Promise<{revoked, serialNumber, reason}>
+  renewCertificate(serialNumber: String, overrides?: Object): Promise<{serialNumber, certificate, metadata}>
+  verifyCertificate(certificatePem: String): Promise<{valid, serialNumber?, type?, identifier?, commonName?, error?}>
+  listCertificates(filters?: Object): Promise<Array<CertificateMetadata>>
+  getCACertificate(): Promise<String>
+  getCRL(): Promise<Array<{serialNumber, revokedAt, reason}>>
+}
+
+CLASE CertificateAuthorityModule HEREDA BaseModule IMPLEMENTA CertificateAuthorityContract {
+  ATRIBUTOS {
+    name: String = 'certificate-authority'
+    version: String = '2.0.0'
+    caManager: CAManager
+    mtlsMiddleware: MTLSMiddleware
+    _mtlsHookHandler: Function
+    stats: {certificates_issued, certificates_revoked, certificates_renewed, verification_requests}
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA CAManager CON storagePath, ca_cn, ca_org, ca_validity_days, cert_validity_days, key_size
+      INVOCA caManager.initialize()
+      INICIALIZA MTLSMiddleware CON caManager, mode, certHeader, excludePaths, allowUnauthenticated
+      SI config.mtls_enabled: REGISTRA hook beforeRequest
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      DESREGISTRA hook beforeRequest SI existe
+      LIMPIA caManager, mtlsMiddleware
+
+    async handleIssueCertificate(input: {body: {commonName, type, identifier, organization?, email?, validityDays?, passphrase?, project_id?, correlation_id}}): Promise<Response>
+      VALIDA commonName, type, identifier
+      VALIDA type EN ['client', 'device']
+      result = await caManager.issueCertificate({...})
+      stats.certificates_issued++
+      EMITE certificate.issued
+      RETORNA {status: 201, data: {serialNumber, fingerprint, metadata, certificate, hasP12}}
+
+    async handleRevokeCertificate(input: {body: {serialNumber, reason?, project_id?, correlation_id}}): Promise<Response>
+      VALIDA serialNumber
+      result = caManager.revokeCertificate(serialNumber, reason)
+      SI !result.revoked: RETORNA {status: 409, error: {code: CONFLICT_STATE, message: ...}}
+      stats.certificates_revoked++
+      EMITE certificate.revoked
+      RETORNA {status: 200, data: result}
+
+    async handleRenewCertificate(input: {body: {serialNumber, passphrase?, validityDays?, project_id?, correlation_id}}): Promise<Response>
+      VALIDA serialNumber
+      result = await caManager.renewCertificate(serialNumber, {passphrase, validityDays})
+      stats.certificates_renewed++
+      EMITE certificate.renewed
+      RETORNA {status: 200, data: {serialNumber, previousSerialNumber, fingerprint, metadata}}
+
+    async handleListCertificates(input: {query: {type?, status?, identifier?}}): Promise<Response>
+      certs = caManager.listCertificates({type, status, identifier})
+      RETORNA {status: 200, data: {certificates: certs, total: certs.length}}
+
+    async handleVerifyCertificate(input: {body: {certificate}}): Promise<Response>
+      VALIDA certificate (PEM)
+      result = caManager.verifyCertificate(certificate)
+      stats.verification_requests++
+      RETORNA {status: 200, data: result}
+
+    async handleGetCACert(): Promise<Response>
+      cert = caManager.getCACertificate()
+      RETORNA {status: 200, data: {certificate: cert, instructions: {...}}}
+
+    async handleGetCRL(): Promise<Response>
+      crl = caManager.getCRL()
+      RETORNA {status: 200, data: {revoked: crl, updated: now}}
+
+    async handleDownloadP12(input: {query: {serialNumber}}): Promise<Response>
+      p12 = caManager.getP12Bundle(serialNumber)
+      SI !p12: RETORNA {status: 404, error: {...}}
+      RETORNA {status: 200, data: {serialNumber, bundle: base64, contentType: application/x-pkcs12, filename}}
+
+    async handleGetNginxConfig(): Promise<Response>
+      config = mtlsMiddleware.getNginxConfig()
+      RETORNA {status: 200, data: {config}}
+
+    async handleStatus(): Promise<Response>
+      RETORNA {status: 200, data: {module, version, ca: caManager.getStats(), mtls: mtlsMiddleware.getStats(), stats}}
+
+    async handleHealthCheck(): Promise<Response>
+      caStats = caManager.getStats()
+      RETORNA {status: 200, data: {module, status: healthy|degraded, ca_initialized, active_certificates, expiring_soon, mtls_stats}}
+
+    EVENTOS_PUBLISHES {
+      'certificate.issued': {serialNumber, type, identifier, commonName, fingerprint}
+      'certificate.revoked': {serialNumber, reason}
+      'certificate.renewed': {oldSerialNumber, newSerialNumber}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      (ninguno — solo handlers síncronos)
+    }
+  }
+}
+
+CLASE CAManager {
+  ATRIBUTOS {
+    storagePath: String (default: data/ca)
+    caKeyPath: String
+    caCertPath: String
+    crlPath: String
+    certsPath: String
+    caKey: forge.PrivateKey (secreto)
+    caCert: forge.Certificate (X.509 auto-firmado)
+    crl: Array<{serialNumber, revokedAt, reason}>
+    config: {ca_cn, ca_org, ca_validity_days, cert_validity_days, key_size}
+  }
+
+  METODOS {
+    async initialize(): Promise<{created, loaded, serialNumber?}>
+      CREA directorios storagePath, certsPath
+      CARGA CRL DE crlPath SI existe
+      SI ca-key.pem + ca-cert.pem existen:
+        CARGA private key + certificate from PEM
+        RETORNA {created: false, loaded: true}
+      SINO:
+        INVOCA _generateCA()
+
+    _generateCA(): {created, loaded, serialNumber}
+      GENERA RSA 2048 key pair
+      CREA certificate X.509:
+        serialNumber = random hex
+        validity = [now, now + ca_validity_days]
+        subject/issuer = {CN: ca_cn, O: ca_org}
+        extensions: basicConstraints (CA=true, critical), keyUsage, subjectKeyIdentifier
+        firma auto: cert.sign(caKey, SHA-256)
+      PERSISTE ca-key.pem (mode 0o600), ca-cert.pem (mode 0o644)
+      RETORNA {created: true, loaded: true, serialNumber}
+
+    async issueCertificate(options: {commonName, type, identifier, organization?, email?, validityDays?, passphrase?}): Promise<{serialNumber, certificate, privateKey, p12, fingerprint, metadata}>
+      VALIDA commonName, identifier
+      VALIDA type EN ['client', 'device']
+      GENERA RSA 2048 key pair PARA cliente
+      CREA certificate X.509:
+        serialNumber = random hex
+        subject = {CN: commonName, OU: tipo, O: organization?, emailAddress: email?}
+        issuer = caSubject (nuestra CA)
+        validity = [now, now + validityDays]
+        extensions: basicConstraints (CA=false), keyUsage (digitalSignature, keyEncipherment), extKeyUsage (clientAuth), subjectAltName (urn:eventcore:type:identifier)
+        firma: cert.sign(caKey, SHA-256)
+      CALCULA fingerprint = SHA-256(DER).toHex().split(':')
+      metadata = {serialNumber, type, identifier, commonName, organization, email, fingerprint, issuedAt, expiresAt, status: 'active'}
+      p12 = _createP12Bundle(cert, privateKey, passphrase)
+      PERSISTE cert.pem, key.pem (0o600), metadata.json, bundle.p12
+      RETORNA {serialNumber, certificate (PEM), privateKey (PEM), p12 (Buffer), fingerprint, metadata}
+
+    revokeCertificate(serialNumber: String, reason?: String): {revoked, error?, serialNumber, reason, revokedAt?}
+      CARGA metadata.json DEL certDir
+      SI !exists: RETORNA {revoked: false, error: 'Certificate not found'}
+      SI status == 'revoked': RETORNA {revoked: false, error: 'Already revoked'}
+      ACTUALIZA metadata: status = 'revoked', revokedAt = now, revokeReason = reason
+      AGREGA a CRL: {serialNumber, revokedAt, reason}
+      PERSISTE metadata + CRL
+      ELIMINA key.pem y bundle.p12 por seguridad
+      RETORNA {revoked: true, serialNumber, reason, revokedAt}
+
+    verifyCertificate(certificatePem: String): {valid, serialNumber?, type?, identifier?, commonName?, expiresAt?, error?}
+      PARSEA certificatePem via forge
+      VALIDA firma contra caCert
+      VALIDA NOT EN CRL
+      VALIDA NOT expired
+      SI metadata.json existe:
+        SI status == 'revoked': RETORNA {valid: false, error: 'Revoked', serialNumber}
+        RETORNA {valid: true, serialNumber, type, identifier, commonName, expiresAt}
+      SINO:
+        EXTRAE info from certificate
+        RETORNA {valid: true, serialNumber, type, identifier, commonName, expiresAt}
+
+    listCertificates(filters?: {type?, status?, identifier?}): Array<CertificateMetadata>
+      LEE certsPath
+      PARA cada directorio (serialNumber):
+        CARGA metadata.json
+        RECALCULA status SI active Y now > expiresAt: MARCA expired
+        APLICA filters
+        AGREGA a lista
+      ORDENA POR issuedAt DESC
+      RETORNA lista
+
+    renewCertificate(serialNumber: String, overrides?: Object): Promise<{serialNumber, certificate, metadata, previousSerialNumber}>
+      CARGA oldMetadata
+      newCert = await issueCertificate({commonName: old, type: old, identifier: old, ...overrides})
+      revokeCertificate(serialNumber, 'superseded')
+      RETORNA {serialNumber: new, previousSerialNumber: old, ...newCert}
+
+    getP12Bundle(serialNumber: String): Buffer|Null
+      RETORNA fs.readFileSync(certsPath/{serialNumber}/bundle.p12) SI existe
+
+    getCACertificate(): String (PEM)
+    getCRL(): Array<CRL entries>
+    getStats(): {total, active, revoked, expired, by_type, expiring_soon, crl_entries, ca_initialized}
+
+    _generateSerialNumber(): String (hex, 32 chars)
+    _verifySignature(cert): Boolean (cert.verify(caCert))
+    _parseCertificateInfo(cert): {type, identifier, commonName}
+    _createP12Bundle(cert, privateKey, passphrase): Buffer (PKCS#12 real, importable en navegadores/Android/iOS)
+    _saveCRL(): Void
+  }
+}
+
+CLASE MTLSMiddleware {
+  ATRIBUTOS {
+    caManager: CAManager
+    mode: String ('native' | 'proxy', default 'proxy')
+    certHeader: String (default 'x-client-cert')
+    excludePaths: Array<String>
+    allowUnauthenticated: Boolean
+    stats: {authenticated, rejected, bypassed, errors}
+  }
+
+  METODOS {
+    async authenticate(context: {path, headers}): Promise<Object|Null>
+      SI _isExcludedPath(path): RETORNA context, stats.bypassed++
+      
+      clientCert = null
+      SI mode == 'proxy':
+        certHeader → decodeURIComponent → clientCert
+      SINO SI mode == 'native':
+        context._tlsCertificate → clientCert
+      
+      SI !clientCert:
+        SI allowUnauthenticated:
+          RETORNA {context, auth: {authenticated: false, method: 'none'}}
+        SINO:
+          stats.rejected++
+          RETORNA null (bloquea request)
+      
+      verification = caManager.verifyCertificate(clientCert)
+      SI !verification.valid:
+        stats.rejected++
+        RETORNA null
+      
+      stats.authenticated++
+      RETORNA {context, auth: {authenticated: true, method: 'mtls', type, identifier, commonName, serialNumber, expiresAt}}
+
+    getTLSOptions(): {requestCert, rejectUnauthorized, ca}
+      RETORNA opciones para tls.createServer / https.createServer CON nuestra CA
+
+    getNginxConfig(): String
+      RETORNA snippet de config nginx CON ssl_client_certificate, ssl_verify_client, proxy_set_header X-Client-Cert
+
+    getStats(): {authenticated, rejected, bypassed, errors}
+    _isExcludedPath(path): Boolean
+}
+```
+
+## CONVERSATION-EXPORT (v2.0.0)
+
+```
+INTERFAZ ConversationExportContract {
+  listSessions(projectId: String, limit?: Integer): Promise<Array<Session>>
+  getSession(projectId: String, sessionId: String, verbose?: Boolean): Promise<SessionExport>
+  getLatestSession(projectId: String, verbose?: Boolean): Promise<SessionExport>
+  getActivityBuffer(): Array<ActivityEntry>
+  healthCheck(): Promise<{module, version, token_configured, activity_buffer}>
+}
+
+CLASE ConversationExportModule HEREDA BaseModule IMPLEMENTA ConversationExportContract {
+  ATRIBUTOS {
+    name: String = 'conversation-export'
+    version: String = '2.0.0'
+    config: Object
+    token: String (auth token)
+    activityBuffer: Array<ActivityEntry> (ring buffer, max 1000)
+    pendingDbRequests: Map<requestId, {resolve, reject, timeout}>
+    pendingAgentRequests: Map<requestId, {agent_name, task, conversation_id, project_id, user_id, correlation_id, started_at}>
+    _agentExecTableEnsured: Set<projectId>
+    _subscriptions: {activity, agentFailed, agentCompleted, dbResponse, agentReq, agentRes, agentFail, invokeAgent, invokeAgentRes}
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA config, token FROM context
+      SI NO token: LOG warn 'Auth token not configured'
+      SUSCRIBE activity.logged → _bufferActivity
+      SUSCRIBE agent.failed → enriquece + buffer
+      SUSCRIBE agent.completed → enriquece + buffer
+      SUSCRIBE agent.execute.request → onAgentExecuteRequest
+      SUSCRIBE agent.execute.response → onAgentExecuteResponse
+      SUSCRIBE agent.execute.failed → onAgentExecuteFailed
+      SUSCRIBE invoke_agent → onInvokeAgentRequest (LEGACY)
+      SUSCRIBE invoke_agent.response → onInvokeAgentResponse (LEGACY)
+      SUSCRIBE db.query.response → _onDbQueryResponse
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      DESUSCRIBE todos los handlers
+      LIMPIA pendingDbRequests (reject all)
+      LIMPIA pendingAgentRequests
+      LIMPIA activityBuffer
+
+    _checkAuth(req: {query?, headers?}): Error|Null
+      SI NO token: RETORNA Error('Auth token not configured', 503)
+      provided = req.query?.token || req.headers?.['x-token'] || req.headers?.authorization?.replace(/Bearer\s+/, '')
+      SI NO provided: RETORNA Error('Missing token', 401)
+      SI provided != token: RETORNA Error('Invalid token', 403)
+      RETORNA null
+
+    async handleListSessions(req: {params: {project_id}, query: {limit?}}): Promise<Response>
+      authErr = _checkAuth(req)
+      SI authErr: RETORNA error response
+      projectId = req.params.project_id
+      SI !projectId: RETORNA 400 INVALID_INPUT
+      limit = parseInt(req.query?.limit) || 20
+      sessions = await _loadSessionsFromDB(projectId, limit)
+      RETORNA {status: 200, data: {project_id, count: sessions.length, sessions}}
+
+    async handleGetSession(req: {params: {session_id}, query: {project_id, verbose?}}): Promise<Response>
+      authErr = _checkAuth(req)
+      SI authErr: RETORNA error response
+      SI !sessionId || !projectId: RETORNA 400
+      verbose = req.query.verbose === 'true'
+      data = await _buildSessionExport(projectId, sessionId, verbose)
+      RETORNA {status: 200, data}
+
+    async handleGetLatest(req: {params: {project_id}, query: {verbose?}}): Promise<Response>
+      authErr = _checkAuth(req)
+      SI authErr: RETORNA error response
+      sessions = await _loadSessionsFromDB(projectId, 1)
+      SI !sessions: RETORNA 404 RESOURCE_NOT_FOUND
+      data = await _buildSessionExport(projectId, sessions[0].id, verbose)
+      RETORNA {status: 200, data}
+
+    async handleHealth(): Promise<Response>
+      RETORNA {status: 200, data: {module, version, token_configured, activity_buffer: length}}
+
+    _bufferActivity(entry: ActivityEntry): Void
+      activityBuffer.push(entry)
+      MIENTRAS size > 1000: ELIMINA first (FIFO)
+
+    _filterActivityBuffer(timeWindow?: {start, end}): Array<ActivityEntry>
+      SI !timeWindow: RETORNA copy de todo
+      FILTRA por timestamp DENTRO del rango
+
+    async _queryDB(projectId, query, params, correlationId): Promise<Array>
+      requestId = UUID
+      CREA promise CON timeout (default 8000ms)
+      PUBLICA db.query.request {project_id, query, params, read_only: true, request_id, correlation_id}
+      ESPERA response via pendingDbRequests
+      RETORNA rows
+
+    async _writeDB(projectId, query, params, correlationId): Promise<Array>
+      (igual a _queryDB pero read_only: false)
+
+    async _ensureAgentExecutionsTable(projectId, correlationId): Promise<Void>
+      SI projectId YA EN _agentExecTableEnsured: RETORNA
+      CREATE TABLE IF NOT EXISTS agent_executions (...)
+      CREATE INDEX IF NOT EXISTS idx_agent_exec_conv (...)
+      AGREGA projectId a _agentExecTableEnsured
+
+    async onAgentExecuteRequest(event): Void
+      pendingAgentRequests.set(requestId, {agent_name, task, conversation_id, project_id, user_id, started_at: now})
+
+    async onAgentExecuteResponse(event): Void
+      OBTIENE pending buffered
+      ASEGURA tabla via _ensureAgentExecutionsTable
+      INSERT OR REPLACE INTO agent_executions (...valores canonicos...)
+      stats.agent_executions.persisted++
+
+    async onAgentExecuteFailed(event): Void
+      (similar a response pero status='failed')
+
+    async onInvokeAgentRequest(event): Void (LEGACY)
+      (similar pero sin duplicar SI entrada canonica existe)
+
+    async onInvokeAgentResponse(event): Void (LEGACY)
+      (normaliza shape legacy al schema de agent_executions)
+
+    async _loadSessionsFromDB(projectId, limit): Promise<Array>
+      rows = await _queryDB(projectId, SELECT conversations ORDER BY updated_at DESC LIMIT ?, [limit])
+      RETORNA rows || []
+
+    async _loadMessagesFromDB(projectId, sessionId): Promise<Array>
+      rows = await _queryDB(projectId, SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at, [sessionId])
+      RETORNA rows || []
+
+    async _loadAgentExecutions(projectId, sessionId): Promise<Array>
+      rows = await _queryDB(projectId, SELECT FROM agent_executions WHERE conversation_id=? ORDER BY started_at, [sessionId])
+      PARSEA JSON fields (result, tokens, cost, error)
+      RETORNA mapped array
+
+    async _loadConversationMetadata(projectId, sessionId): Promise<Object|Null>
+      rows = await _queryDB(projectId, SELECT metadata FROM conversations WHERE id=? LIMIT 1, [sessionId])
+      PARSEA SI string
+      RETORNA metadata || null
+
+    async _loadLogsForSession(sessionId, timeWindow): Promise<Array>
+      LEE archivos EN ./data/logs/sessions
+      FILTRA por sessionId match
+      PARSEA líneas JSON
+      FILTRA por timeWindow SI provided
+      RETORNA logs
+
+    async _buildSessionExport(projectId, sessionId, verbose, correlationId): Promise<SessionExport>
+      [messages, agentExecutions, conversationMeta] = await Promise.all([
+        _loadMessagesFromDB(...),
+        _loadAgentExecutions(...),
+        _loadConversationMetadata(...)
+      ])
+      timeWindow = [first_msg.timestamp - 60s, last_msg.timestamp + 5min]
+      systemLogs = await _loadLogsForSession(sessionId, timeWindow)
+      activity = _filterActivityBuffer(timeWindow)
+      timeline = _buildTimeline(messages, systemLogs, activity, agentExecutions, verbose)
+      summary = _buildSummary(messages, timeline, agentExecutions, conversationMeta)
+      RETORNA {_format, _generated_at, project_id, session_id, conversation_state, summary, timeline, agent_executions?, messages_raw?}
+
+    _buildTimeline(messages, systemLogs, activity, agentExecutions, verbose): Array<TimelineItem>
+      items = []
+      PARA cada message: agrega {_type: 'message', ts, role, content, tokens, cost, attachments?, metadata?}
+      PARA cada activity: (SI !verbose Y type==internal: skip), agrega {_type: classified_type, ts, module, action, outcome, ctx?}
+      PARA cada agentExec: agrega {_type: 'agent_execution', ts, agent_name, task, status, duration_ms, result_summary?, error?}
+      PARA cada systemLog: (SI !verbose Y level!=error|warn: skip), agrega {_type: 'system_log', ts, level, module, event, data?}
+      ORDENA items POR ts ASC
+      RETORNA items
+
+    _buildSummary(messages, timeline, agentExecutions, conversationMeta): Summary
+      counts = {messages, user_messages, assistant_messages, tool_calls, agent_executions, agent_completed, agent_failed, errors}
+      tokens = suma de todos los tokens
+      cost = suma de todos los costs
+      RETORNA {counts, tokens, cost, conversation_state, active_agent, started_at, ended_at, duration_ms}
+
+    _classifyActivity(entry): String ('message'|'tool_call'|'tool_response'|'agent_event'|'error'|'module_action'|'internal_log')
+      (clasifica por entry.type + entry.action + entry.outcome)
+
+    EVENTOS_PUBLISHES {
+      (ninguno directo — solo publica en respuesta a requests)
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'activity.logged': _bufferActivity
+      'agent.failed': onAgentFailed
+      'agent.completed': onAgentCompleted
+      'agent.execute.request': onAgentExecuteRequest
+      'agent.execute.response': onAgentExecuteResponse
+      'agent.execute.failed': onAgentExecuteFailed
+      'invoke_agent': onInvokeAgentRequest (LEGACY)
+      'invoke_agent.response': onInvokeAgentResponse (LEGACY)
+      'db.query.response': _onDbQueryResponse
+    }
+  }
+}
+
+CLASE SessionExport {
+  ATRIBUTOS {
+    _format: String = 'conversation-export-v2'
+    _generated_at: String (ISO)
+    _hint_llm: String
+    project_id: String
+    session_id: String
+    conversation_state: String
+    summary: Summary
+    timeline: Array<TimelineItem>
+    agent_executions?: Array<AgentExecution>
+    messages_raw?: Array<Message>
+  }
+}
+
+CLASE TimelineItem {
+  ATRIBUTOS {
+    _type: String (message|tool_call|tool_response|agent_execution|system_log|agent_event|error|module_action|internal_log)
+    ts: String (ISO) | Integer (ms)
+    [específicos por tipo]
+  }
+}
+
+CLASE AgentExecution {
+  ATRIBUTOS {
+    id: String (UUID)
+    request_id: String
+    correlation_id: String
+    conversation_id: String
+    project_id: String
+    user_id: String
+    agent_name: String
+    task: String
+    status: String (success|failed)
+    provider: String|Null
+    model: String|Null
+    tokens: {input?, output?}|Null
+    cost: Number|Null
+    duration_ms: Integer|Null
+    iterations: Integer|Null
+    finish_reason: String|Null
+    result: Any|Null
+    error: Any|Null
+    started_at: Integer (ms)
+    completed_at: Integer|Null
+  }
+}
+```
+
+---
+
+# MÓDULOS — GRUPOS 1-3 (9 MÓDULOS)
+
+## ADMIN-PANEL (v2.0.0)
+
+```
+INTERFAZ AdminPanelContract {
+  getDashboard(): Promise<{modules, plugins, agents, prompts, health}>
+  getModules(): Promise<Array<ModuleInfo>>
+  getPlugins(): Promise<Array<PluginInfo>>
+  togglePlugin(name: String, enabled: Boolean): Promise<{toggled, status}>
+  createAgent(data: {name, description, system_prompt}): Promise<Agent>
+  deleteAgent(agent_id: String): Promise<Void>
+  getAgents(): Promise<Array<Agent>>
+  getPrompts(): Promise<Array<Prompt>>
+  createPrompt(data: {name, template}): Promise<Prompt>
+  updatePrompt(prompt_id: String, updates: Object): Promise<Prompt>
+  getHealth(): Promise<{status, modules, uptime}>
+}
+
+CLASE AdminPanelModule HEREDA BaseModule IMPLEMENTA AdminPanelContract {
+  ATRIBUTOS {
+    name: String = 'admin-panel'
+    version: String = '2.0.0'
+    publicPath: String
+    cache: {plugins, agents, prompts, modules}
+    core: EventCore
+    config: Object
+    coreConfig: Object
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA core, eventBus, logger, metrics
+      CARGA config del módulo
+      REFRESCA todas las caches
+      LOG module.loaded CON cache sizes
+
+    async onUnload(): Promise<Void>
+      LIMPIA caches
+      LOG module.unloaded
+
+    async handleGetDashboard(): Promise<Response>
+      RETORNA {status: 200, data: {modules_count, plugins_count, agents_count, health}}
+
+    async handleGetModules(): Promise<Response>
+      RETORNA {status: 200, data: {modules: cache.modules}}
+
+    async handleGetPlugins(): Promise<Response>
+      RETORNA {status: 200, data: {plugins: cache.plugins}}
+
+    async handleTogglePlugin(input: {body: {name, enabled}}): Promise<Response>
+      VALIDA name
+      INVOCA core.togglePlugin(name, enabled)
+      REFRESCA cache.plugins
+      EMITE admin.plugin.toggled
+      RETORNA {status: 200, data: {toggled: true}}
+
+    async handleCreateAgent(input: {body: {name, description, system_prompt}}): Promise<Response>
+      VALIDA nombre, system_prompt
+      agent = await _createAgentViaHttp(...)
+      REFRESCA cache.agents
+      EMITE admin.agent.creado
+      RETORNA {status: 201, data: agent}
+
+    async handleDeleteAgent(input: {body: {agent_id}}): Promise<Response>
+      VALIDA agent_id
+      await _deleteAgentViaHttp(agent_id)
+      REFRESCA cache.agents
+      EMITE admin.agent.eliminado
+      RETORNA {status: 200}
+
+    async handleGetHealth(): Promise<Response>
+      caché = {modules_running, plugins_enabled, agents_total, uptime_ms}
+      RETORNA {status: 200, data: caché}
+
+    async refreshAllCaches(): Promise<Void>
+      refreshPluginsCache()
+      refreshAgentsCache()
+      refreshPromptsCache()
+      refreshModulesCache()
+
+    EVENTOS_PUBLISHES {
+      'admin.plugin.toggled': {name, enabled}
+      'admin.agent.creado': {agent_id, name}
+      'admin.agent.eliminado': {agent_id}
+      'admin.prompt.creado': {prompt_id, name}
+      'admin.prompt.actualizado': {prompt_id}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'plugin.loaded': onPluginLoaded
+      'plugin.unloaded': onPluginUnloaded
+      'agent.created': onAgentCreated
+      'agent.deleted': onAgentDeleted
+    }
+  }
+}
+```
+
+## BIENVENIDA-TIENDA (v1.0.0)
+
+```
+INTERFAZ BienvenidaTiendaContract {
+  handleTelegramText(data: {botName, chatId, text}): Promise<Void>
+  handleTelegramCommand(data: {botName, chatId, command}): Promise<Void>
+  registerBot(project_id: String, botName: String, config: Object): Promise<Void>
+  unregisterBot(botName: String): Promise<Void>
+}
+
+CLASE BienvenidaTiendaModule HEREDA BaseModule IMPLEMENTA BienvenidaTiendaContract {
+  ATRIBUTOS {
+    name: String = 'bienvenida-tienda'
+    version: String = '1.0.0'
+    botsConfig: Map<botName, {project_id, pwa_url, mensaje_bienvenida, staff_chat_id}>
+    projectToBotName: Map<project_id, botName>
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus
+      SUSCRIBE project.activated, telegram.text.received, telegram.command.received
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      botsConfig.clear()
+      projectToBotName.clear()
+
+    async onProjectActivated(event: Event): Promise<Void>
+      project_id = event.project_id
+      CARGA project config
+      RESUELVE telegram botName, pwa_url, staff_chat_id
+      REGISTRA bot EN botsConfig
+      MAPEA project_id → botName
+
+    async onTelegramTextReceived(event: Event): Promise<Void>
+      data = event.data
+      await _handleIncoming(data, 'text')
+
+    async onTelegramCommandReceived(event: Event): Promise<Void>
+      command = extraer comando del mensaje
+      await _handleIncoming(data, 'command_start' | 'command_otro')
+
+    async _handleIncoming(data: Object, trigger: String): Promise<Void>
+      botName, chatId = extraer datos
+      cfg = botsConfig.get(botName)
+      SI !cfg: RETORNA (bot no registrado)
+      SI chatId == cfg.staff_chat_id: RETORNA (ignorar chat del staff)
+      PUBLICA telegram.send_message.request CON mensaje de bienvenida
+      INCREMENTA metricas
+
+    EVENTOS_PUBLISHES {
+      'telegram.send_message.request': {botName, chatId, text}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'project.activated': onProjectActivated
+      'telegram.text.received': onTelegramTextReceived
+      'telegram.command.received': onTelegramCommandReceived
+    }
+  }
+}
+```
+
+## BOT-MANAGER (v2.0.0)
+
+```
+INTERFAZ BotManagerContract {
+  registerBot(botName: String, config: Object): Promise<{registered, status}>
+  unregisterBot(botName: String): Promise<Void>
+  enableBot(botName: String): Promise<Void>
+  disableBot(botName: String): Promise<Void>
+  getBot(botName: String): Promise<BotInfo>
+  listBots(): Promise<Array<BotInfo>>
+  handleFileReceived(data: Object): Promise<Response>
+  handleMessageReceived(data: Object): Promise<Response>
+}
+
+CLASE BotManagerModule HEREDA BaseModule IMPLEMENTA BotManagerContract {
+  ATRIBUTOS {
+    name: String = 'bot-manager'
+    version: String = '2.0.0'
+    config: Object
+    registry: BotRegistry
+    downloadManager: DownloadManager
+    autoResponder: AutoResponder
+    logger: Logger
+    eventBus: EventBus
+    metrics: Metrics
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, eventBus, metrics
+      CARGA moduleConfig
+      CREA BotRegistry instance
+      CREA DownloadManager instance
+      CREA AutoResponder instance
+      LOG module.loaded CON bots_count
+
+    async onUnload(): Promise<Void>
+      registry = null
+      downloadManager = null
+      autoResponder = null
+      LOG module.unloaded
+
+    async handleRegisterBot(input: {body: {botName, config}}): Promise<Response>
+      VALIDA botName
+      registry.register(botName, config)
+      EMITE bot.registered
+      RETORNA {status: 201, data: {botName, registered: true}}
+
+    async handleUnregisterBot(input: {body: {botName}}): Promise<Response>
+      registry.unregister(botName)
+      EMITE bot.unregistered
+      RETORNA {status: 200}
+
+    async handleFileReceived(event: Event): Promise<Void>
+      botName, chatId, fileId, fileName = extraer datos
+      SI !registry.has(botName): registry.register(botName)
+      SI !registry.isEnabled(botName): RETORNA
+      storagePath = registry.getStoragePath(botName)
+      result = await downloadManager.downloadAndStore(...)
+      SI !result.success: EMITE bot.file.error
+      SINO: EMITE bot.file.stored
+
+    async handleMessageReceived(event: Event): Promise<Void>
+      botName, chatId, text = extraer datos
+      PROCESA mensaje via autoResponder
+      EMITE bot.message.received
+
+    EVENTOS_PUBLISHES {
+      'bot.registered': {botName, config}
+      'bot.unregistered': {botName}
+      'bot.file.stored': {botName, fileId, storagePath}
+      'bot.file.error': {botName, fileId, error}
+      'bot.message.received': {botName, chatId, text}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'telegram.file.received': handleFileReceived
+      'telegram.message.received': handleMessageReceived
+      'telegram.command.received': onTelegramCommandReceived
+    }
+  }
+}
+```
+
+## CHANNEL-MANAGER (v2.0.0)
+
+```
+INTERFAZ ChannelManagerContract {
+  registerChannel(data: {channel_type, external_id, project_id, purpose, label}): Promise<Channel>
+  unregisterChannel(channel_id: String): Promise<Void>
+  getChannel(channel_id: String): Promise<Channel>
+  listChannels(filters?: Object): Promise<Array<Channel>>
+  resolveChannel(channel_type: String, external_id: String): Promise<Channel>
+  updateChannel(channel_id: String, updates: Object): Promise<Channel>
+}
+
+CLASE ChannelManagerModule HEREDA BaseModule IMPLEMENTA ChannelManagerContract {
+  ATRIBUTOS {
+    name: String = 'channel-manager'
+    version: String = '2.0.0'
+    config: Object
+    cache: Map<cacheKey, Channel>
+    dbReady: Boolean
+    pendingDbRequests: Map<correlationId, {resolve, reject, timeout}>
+    logger: Logger
+    eventBus: EventBus
+    metrics: Metrics
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, eventBus, metrics, config
+      SUSCRIBE db.query.response, db.schema.init.response
+      await _initSchema()
+      await _loadCache()
+      LOG module.loaded CON cache.size
+
+    async onUnload(): Promise<Void>
+      LIMPIA pendingDbRequests CON clearTimeout
+      cache.clear()
+      LOG module.unloaded
+
+    async handleRegisterChannel(input: {body: {channel_type, external_id, project_id, purpose, label}}): Promise<Response>
+      VALIDA channel_type EN VALID_CHANNEL_TYPES
+      VALIDA external_id, project_id
+      row = INSERT INTO channels (...)
+      cache.set(_cacheKey(...), row)
+      EMITE channel.registered
+      RETORNA {status: 201, data: {channel_id, external_id}}
+
+    async handleUnregisterChannel(input: {body: {channel_id}}): Promise<Response>
+      DELETE FROM channels WHERE channel_id = ?
+      cache.delete(_cacheKey(...))
+      EMITE channel.removed
+      RETORNA {status: 200}
+
+    async handleResolveChannel(input: {query: {channel_type, external_id}}): Promise<Response>
+      VALIDA channel_type, external_id
+      cacheKey = _cacheKey(channel_type, external_id)
+      SI EN cache: RETORNA cached row
+      SINO: SELECT FROM channels, AGREGA a cache
+      EMITE channel-manager.resolve.response
+      RETORNA {status: 200, data: {channel_id, project_id, purpose}}
+
+    async _initSchema(): Promise<Void>
+      CREATE TABLE IF NOT EXISTS channels (...)
+      dbReady = true
+
+    async _loadCache(): Promise<Void>
+      rows = SELECT ALL FROM channels
+      PARA cada row: cache.set(_cacheKey(...), row)
+
+    _publishDb(eventName: String, payload: Object): Promise<Any>
+      correlation_id = UUID
+      CREA promise CON timeout
+      PUBLICA eventName CON correlation_id
+      RETORNA promise
+
+    EVENTOS_PUBLISHES {
+      'channel.registered': {channel_id, channel_type, external_id, project_id, purpose}
+      'channel.updated': {channel_id, updates}
+      'channel.removed': {channel_id}
+      'channel-manager.resolve.response': {channel_type, external_id, channel_id, project_id}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'db.query.response': onDbResponse
+      'db.schema.init.response': onDbResponse
+    }
+  }
+}
+```
+
+## CODE-EXECUTOR (v2.0.0)
+
+```
+INTERFAZ CodeExecutorContract {
+  execCommand(command: String, cwd?: String, timeout?: Integer, env?: Object): Promise<{exitCode, stdout, stderr, duration}>
+  checkCommandSafe(command: String): Promise<{safe, reason?}>
+}
+
+CLASE CodeExecutorModule HEREDA BaseModule IMPLEMENTA CodeExecutorContract {
+  ATRIBUTOS {
+    name: String = 'code-executor'
+    version: String = '2.0.0'
+    config: Object
+    blockedPatterns: Array<RegExp>
+    blockedCommands: Array<String>
+    processes: Map<processId, {process, startTime}>
+    logger: Logger
+    eventBus: EventBus
+    metrics: Metrics
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, eventBus, metrics, config
+      COMPILA blockedPatterns FROM config.blockedPatterns
+      blockedCommands = config.blockedCommands || []
+      LOG module.loaded CON maxTimeout, maxProcesses, blockedPatterns.length
+
+    async onUnload(): Promise<Void>
+      PARA CADA proceso EN processes: ENVÍA SIGTERM
+      processes.clear()
+      LOG module.unloaded CON processes_killed
+
+    async handleExecCommand(input: {command, cwd, timeout, env}): Promise<Response>
+      VALIDA command NOT empty
+      safety = _checkCommandSafe(command)
+      SI !safety.safe: RETORNA {status: 403, error: PERMISSION_DENIED}
+      execTimeout = min(timeout, config.maxTimeout)
+      execCwd = cwd || process.cwd()
+      EMITE shell.exec.start
+      metrics.increment('code-executor.exec.total')
+      startTime = now
+      result = await exec(command, {cwd, timeout, env, shell, maxBuffer})
+      duration = now - startTime
+      SI timed out: EMITE shell.error, RETORNA 504 UPSTREAM_TIMEOUT
+      SI nonzero: EMITE shell.error, RETORNA {status: 200, data: {exitCode, stdout, stderr, duration}}
+      SINO: metrics.increment('code-executor.exec.success')
+      RETORNA {status: 200, data: {exitCode: 0, stdout, stderr, duration}}
+
+    _checkCommandSafe(command: String): {safe: Boolean, reason?: String}
+      PARA CADA patrón EN blockedPatterns: SI match: RETORNA {safe: false, reason}
+      SI command EN blockedCommands: RETORNA {safe: false, reason}
+      RETORNA {safe: true}
+
+    EVENTOS_PUBLISHES {
+      'shell.exec.start': {command, cwd, timeout}
+      'shell.exec.success': {command, exitCode, duration}
+      'shell.error': {command, error_code, exitCode|timeout}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      (ninguno — solo handlers síncronos)
+    }
+  }
+}
+```
+
+## COMANDERO-CLIENTE-BUILDER (v1.0.0)
+
+```
+INTERFAZ ComanderoClienteBuilderContract {
+  buildPresentacion(project_id: String): Promise<{presentacion_id, categorias, productos}>
+  uploadProductoImagen(project_id: String, producto_id: String, image: Buffer, type: String): Promise<{imagen_url}>
+  generateBundle(project_id: String, bundle_id: String, config: Object): Promise<{html_url}>
+  getPresentacion(project_id: String): Promise<Presentacion>
+  listBundles(project_id: String): Promise<Array<Bundle>>
+}
+
+CLASE ComanderoClienteBuilderModule HEREDA BaseModule IMPLEMENTA ComanderoClienteBuilderContract {
+  ATRIBUTOS {
+    name: String = 'comandero-cliente-builder'
+    version: String = '1.0.0'
+    config: Object
+    safeUpdate: SafeUpdate
+    catalogoCachePerProject: Map<projectId, {productos, categorias}>
+    tarifasCachePerProject: Map<projectId, Object>
+    projectInfoCache: Map<projectId, {base_path}>
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, eventBus, metrics
+      CARGA moduleConfig
+      CREA SafeUpdate instance
+      SUSCRIBE catalogo.actualizado, tarifas.config.actualizada
+      PUBLICA tarifas.config.solicitada
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      catalogoCachePerProject.clear()
+      tarifasCachePerProject.clear()
+      projectInfoCache.clear()
+      safeUpdate = null
+      LOG module.unloaded
+
+    async onCatalogoActualizado(event: Event): Promise<Void>
+      project_id = event.project_id
+      productos = event.productos
+      categorias = event.categorias
+      catalogoCachePerProject.set(project_id, {productos, categorias})
+
+    async onTarifasConfigActualizada(event: Event): Promise<Void>
+      project_id = event.project_id
+      tarifasCachePerProject.set(project_id, event.config)
+
+    async handleBuildPresentacion(input: {body: {project_id}}): Promise<Response>
+      VALIDA project_id
+      presentacion_id = UUID
+      OBTIENE catalogo DEL cache
+      ORDENA productos POR categorias
+      presentacion = {_meta: {categorias_orden}, productos: {}}
+      PERSISTE presentacion.json
+      RETORNA {status: 201, data: {presentacion_id}}
+
+    async handleUploadImagen(input: {body: {project_id, producto_id, image, type}}): Promise<Response>
+      VALIDA project_id, producto_id, image, type EN VALID_IMAGE_TYPES
+      VALIDA image size <= MAX_IMAGEN_BYTES
+      ext = VALID_IMAGE_TYPES[type]
+      imagenPath = _imagenPath(project_id, producto_id, ext)
+      imagenBuffer = Buffer.from(image, 'base64')
+      PERSISTE imagenBuffer A imagenPath
+      RETORNA {status: 201, data: {imagen_url: `/storage/${project_id}/imagenes/${producto_id}.${ext}`}}
+
+    async handleGenerateBundle(input: {body: {project_id, bundle_id, config}}): Promise<Response>
+      VALIDA project_id, bundle_id
+      html = generateStaticHTML(config)
+      bundlePath = _bundleHtmlPath(project_id, bundle_id)
+      PERSISTE html A bundlePath
+      bundlesIndex = CARGA bundles.json
+      bundlesIndex.bundles.push({bundle_id, created_at})
+      PERSISTE bundlesIndex.json
+      RETORNA {status: 201, data: {html_url, bundle_id}}
+
+    EVENTOS_PUBLISHES {
+      'tarifas.config.solicitada': {}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'catalogo.actualizado': onCatalogoActualizado
+      'tarifas.config.actualizada': onTarifasConfigActualizada
+    }
+  }
+}
+```
+
+## COMPOSITION-MANAGER (v2.0.0)
+
+```
+INTERFAZ CompositionManagerContract {
+  createSystem(data: {name, description, metadata?}): Promise<System>
+  addSystemMember(system_id: String, entity_id: String): Promise<Void>
+  createLink(data: {from_entity, to_entity, type, metadata?}): Promise<Link>
+  createDependency(data: {entity_id, depends_on, type}): Promise<Dependency>
+  listSystems(filters?: Object): Promise<Array<System>>
+  getSystemMembers(system_id: String): Promise<Array<Entity>>
+  removeSystemMember(system_id: String, entity_id: String): Promise<Void>
+}
+
+CLASE CompositionManagerModule HEREDA BaseModule IMPLEMENTA CompositionManagerContract {
+  ATRIBUTOS {
+    name: String = 'composition-manager'
+    version: String = '2.0.0'
+    uiHandler: UIRequestHandler
+    config: Object
+    pendingDbRequests: Map<requestId, {resolve, reject, timeout}>
+    logger: Logger
+    eventBus: EventBus
+    metrics: Metrics
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, eventBus, metrics, uiHandler, config
+      SUSCRIBE db.query.response
+      await _initializeSchema()
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      LIMPIA pendingDbRequests CON clearTimeout
+      LOG module.unloaded
+
+    async handleCreateSystem(input: {body: {name, description, metadata}}): Promise<Response>
+      VALIDA name
+      id = UUID
+      INSERT INTO systems (id, name, description, metadata, created_at, updated_at)
+      EMITE composition.system.created
+      RETORNA {status: 201, data: {id, name}}
+
+    async handleAddSystemMember(input: {body: {system_id, entity_id}}): Promise<Response>
+      VALIDA system_id, entity_id
+      INSERT INTO system_members (system_id, entity_id)
+      EMITE composition.member.added
+      RETORNA {status: 201}
+
+    async handleCreateLink(input: {body: {from_entity, to_entity, type, metadata}}): Promise<Response>
+      VALIDA from_entity, to_entity, type EN VALID_LINK_TYPES
+      id = UUID
+      INSERT INTO project_links (id, from_entity, to_entity, type, metadata)
+      EMITE composition.link.created
+      RETORNA {status: 201, data: {id}}
+
+    async handleCreateDependency(input: {body: {entity_id, depends_on, type}}): Promise<Response>
+      VALIDA entity_id, depends_on, type EN VALID_DEP_TYPES
+      id = UUID
+      INSERT INTO project_dependencies (id, entity_id, depends_on, type)
+      EMITE composition.dependency.created
+      RETORNA {status: 201, data: {id}}
+
+    async _queryDb(query: String, params: Array, readOnly: Boolean): Promise<Array>
+      request_id = UUID
+      CREA promise CON timeout
+      PUBLICA db.query.request {request_id, query, params, read_only, project_id: 'system'}
+      RETORNA promise
+
+    async _initializeSchema(): Promise<Void>
+      CREATE TABLE IF NOT EXISTS systems (...)
+      CREATE TABLE IF NOT EXISTS system_members (...)
+      CREATE TABLE IF NOT EXISTS project_links (...)
+      CREATE TABLE IF NOT EXISTS project_dependencies (...)
+
+    EVENTOS_PUBLISHES {
+      'composition.system.created': {id, name, description}
+      'composition.member.added': {system_id, entity_id}
+      'composition.link.created': {id, from_entity, to_entity, type}
+      'composition.dependency.created': {id, entity_id, depends_on, type}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'db.query.response': onDbQueryResponse
+    }
+  }
+}
+```
+
+## CREDENTIAL-MANAGER (v2.0.0)
+
+```
+INTERFAZ CredentialManagerContract {
+  saveCredential(key: String, value: String, level?: String): Promise<Credential>
+  getCredential(key: String): Promise<Credential|Null>
+  listCredentials(filter?: String): Promise<Array<CredentialMetadata>>
+  deleteCredential(key: String): Promise<Void>
+  resolveCredential(key: String, context?: Object): Promise<String|Null>
+  getProvider(key: String): Promise<String>
+}
+
+CLASE CredentialManagerModule HEREDA BaseModule IMPLEMENTA CredentialManagerContract {
+  ATRIBUTOS {
+    name: String = 'credential-manager'
+    version: String = '2.0.0'
+    uiHandler: UIRequestHandler
+    config: Object
+    envFilePath: String
+    credentials: Map<key, value>
+    logger: Logger
+    eventBus: EventBus
+    metrics: Metrics
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, eventBus, metrics, uiHandler, config
+      RESUELVE envFilePath FROM config.envFile OR default data/.env
+      await _loadEnvFile()
+      _updateCredentialMetrics()
+      PUBLICA credential-manager.state (snapshot)
+      LOG module.loaded CON credentials_count
+
+    async onUnload(): Promise<Void>
+      credentials.clear()
+      LOG module.unloaded
+
+    async handleSaveCredential(input: {body: {key, value, level}}): Promise<Response>
+      VALIDA key, value
+      level = level || 'GLOBAL'
+      VALIDA level EN VALID_LEVELS
+      credentials.set(key, value)
+      process.env[key] = value
+      await _saveEnvFile()
+      EMITE credential.saved {key: (masked)}
+      RETORNA {status: 201, data: {key, level, provider: _getProvider(key)}}
+
+    async handleGetCredential(input: {query: {key}}): Promise<Response>
+      VALIDA key
+      value = credentials.get(key)
+      SI !value: RETORNA 404
+      RETORNA {status: 200, data: {key, masked: _maskValue(value)}}
+
+    async handleListCredentials(input: {query: {filter}}): Promise<Response>
+      filter = filter || ''
+      lista = Array.from(credentials.keys()).filter(k => k.includes(filter))
+      MAPEA a {key, provider, icon}
+      RETORNA {status: 200, data: {credentials: lista, count: lista.length}}
+
+    async handleDeleteCredential(input: {body: {key}}): Promise<Response>
+      VALIDA key
+      credentials.delete(key)
+      DELETE FROM process.env[key]
+      await _saveEnvFile()
+      EMITE credential.deleted {key}
+      RETORNA {status: 200}
+
+    async handleResolveCredential(input: {body: {key, context}}): Promise<Response>
+      VALIDA key
+      value = credentials.get(key)
+      SI !value: RETORNA 404
+      RETORNA {status: 200, data: {value, resolved: true}}
+
+    async _loadEnvFile(): Promise<Void>
+      SI !exists: CREA con header
+      SINO: CARGA líneas KEY=VALUE
+      PARA CADA línea: SI key contiene _API_KEY_: AGREGA a credentials
+
+    async _saveEnvFile(): Promise<Void>
+      tmp = escribir a temp file
+      PERSISTE ATOMICO: rename tmp → envFilePath
+
+    _getProvider(key: String): String
+      MAPEA key a provider (OPENAI, ANTHROPIC, GOOGLE, etc)
+
+    _maskValue(value: String): String
+      SI es API key: retorna primeros 4 + **** + últimos 4
+      SINO: retorna ****
+
+    _updateCredentialMetrics(): Void
+      PARA CADA credencial: increment('credential-manager.credential', {provider})
+
+    EVENTOS_PUBLISHES {
+      'credential.saved': {key, level}
+      'credential.deleted': {key}
+      'credential-manager.state': {credentials_count, by_provider}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      (ninguno)
+    }
+  }
+}
+```
+
+---
+
+# GRUPOS 4-5 PSEUDOCÓDIGO OOP
+
+## GRUPO 4
+
+### DASHBOARD (v3.0.0)
+
+```
+INTERFAZ DashboardContract {
+  handleCores(): Promise<Response>
+  handleCoreDetail(input: Object): Promise<Response>
+  handleLogs(req: Request): Promise<Response>
+  handleEvents(req: Request): Promise<Response>
+  handleMetrics(): Promise<Response>
+  handleHealth(): Promise<Response>
+}
+
+CLASE DashboardModule HEREDA BaseModule IMPLEMENTA DashboardContract {
+  ATRIBUTOS {
+    name: String = 'dashboard'
+    version: String = '3.0.0'
+    core: EventCore
+    discovery: DiscoveryManager
+    logBuffer: Array<LogEntry> (max 1000)
+    eventBuffer: Array<EventEntry> (max 1000)
+    maxBufferSize: Integer
+    sseClients: {logs: Set<Response>, events: Set<Response>}
+    _busMessageHandler: Function
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA core, discovery = null
+      CONFIGURA maxBufferSize FROM config
+      SUSCRIBE a streams (logs, events)
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      DESUSCRIBE _busMessageHandler
+      CIERRA todos SSE clients (logs + events)
+      LIMPIA buffers
+      LOG module.unloaded
+
+    async handleCores(): Promise<Response>
+      SI !discovery: RETORNA 503 UPSTREAM_UNREACHABLE
+      cores = discovery.getActiveCores()
+      RETORNA {status: 200, data: {cores[], total, timestamp}}
+
+    async handleCoreDetail(input): Promise<Response>
+      coreId = input.params.id || input.id
+      VALIDA coreId
+      SI !discovery: RETORNA 503
+      core = discovery.getActiveCores().get(coreId)
+      SI !core: RETORNA 404 RESOURCE_NOT_FOUND
+      RETORNA {status: 200, data: {core detail + uptime_human}}
+
+    async handleLogs(req): Promise<Response>
+      RETORNA {_responseType: 'sse', onConnect: (res) => {
+        sseClients.logs.add(res)
+        PARA cada log EN logBuffer.slice(-50):
+          res.write(`data: ${JSON.stringify(log)}\n\n`)
+        SI req.on: req.on('close', () => sseClients.logs.delete(res))
+      }}
+
+    async handleEvents(req): Promise<Response>
+      RETORNA {_responseType: 'sse', onConnect: (res) => {
+        sseClients.events.add(res)
+        PARA cada event EN eventBuffer.slice(-20):
+          res.write(`data: ${JSON.stringify(event)}\n\n`)
+        SI req.on: req.on('close', () => sseClients.events.delete(res))
+      }}
+
+    async handleMetrics(): Promise<Response>
+      result = {timestamp, cores: {}, aggregate: {total_cores, total_events, buffer_logs, buffer_events, sse_clients}}
+      SI discovery:
+        cores = discovery.getActiveCores()
+        PARA cada core: result.cores[coreId] = {uptime_ms, heartbeat_count, is_alive}
+      RETORNA {status: 200, data: result}
+
+    async handleHealth(): Promise<Response>
+      RETORNA {status: 200, data: {module, version, status: healthy|degraded, discovery_available, buffer_logs, buffer_events, sse_clients}}
+
+    _subscribeToStreams(): Void
+      SI !eventBus?.on: RETORNA
+      _busMessageHandler = (topic, message) => {
+        SI topic.includes('/logs/'): _addToBuffer('logs', {topic, message, timestamp})
+        SI topic.includes('/events/'): _addToBuffer('events', {topic, message, timestamp})
+      }
+      eventBus.on('message', _busMessageHandler)
+
+    _addToBuffer(bufferName: String, item: Object): Void
+      buffer = bufferName == 'logs' ? logBuffer : eventBuffer
+      buffer.push(item)
+      SI buffer.length > maxBufferSize: buffer.shift()
+      _broadcastToSSEClients(bufferName, item)
+
+    _broadcastToSSEClients(stream: String, data: Object): Void
+      clients = sseClients[stream]
+      PARA cada client EN clients:
+        INTENTA client.write(`data: ${JSON.stringify(data)}\n\n`)
+        EN catch: clients.delete(client)
+
+    setDiscovery(discovery: DiscoveryManager): Void
+      this.discovery = discovery
+
+    EVENTOS_PUBLISHES {
+      (ninguno — solo SSE streaming)
+    }
+
+    EVENTOS_SUBSCRIBES {
+      (implícito via _busMessageHandler: logs/+/# y events/+/#)
+    }
+  }
+}
+```
+
+### DATABASE-MANAGER (v3.0.0)
+
+```
+INTERFAZ DatabaseManagerContract {
+  executeQuery(projectId: String, query: String, params?: Array): Promise<Array>
+  persist(projectId: String, table: String, operation: String, data: Object): Promise<Void>
+  initSchema(projectId: String, schema: String): Promise<Void>
+  listDatabases(): Promise<Array<DatabaseInfo>>
+  deleteDatabase(projectId: String): Promise<Void>
+}
+
+CLASE DatabaseManagerModule HEREDA BaseModule IMPLEMENTA DatabaseManagerContract {
+  ATRIBUTOS {
+    name: String = 'database-manager'
+    version: String = '3.0.0'
+    config: Object
+    databases: Map<projectId, sqlite3.Database>
+    projectPaths: Map<projectId, {basePath, slug}>
+    projectsPath: String
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus, config
+      projectsPath = config.projectsPath || './data/projects'
+      ENSURA directorio projects
+      LOG database-manager.loaded
+
+    async onUnload(): Promise<Void>
+      PARA cada [projectId, db] EN databases:
+        db.close() CON error handling
+      databases.clear()
+      projectPaths.clear()
+      LOG database-manager.unloaded
+
+    async onQueryRequest(event): Promise<Void>
+      VALIDA project_id, query
+      db = await _getDatabase(project_id)
+      SI read_only: results = await _all(db, query, params)
+      SINO: SI autoSave: await _saveDatabase(project_id)
+      EMITE db.query.response CON success, results|error
+
+    async onPersistRequest(event): Promise<Void>
+      VALIDA project_id, table, operation, data
+      db = await _getDatabase(project_id)
+      SI operation == 'insert': INSERT OR REPLACE INTO table
+      SINO SI operation == 'update': UPDATE table SET ... WHERE ...
+      SINO SI operation == 'delete': DELETE FROM table WHERE ...
+      SI autoSave: await _saveDatabase(project_id)
+      EMITE db.persist.response CON success
+
+    async onSchemaInitRequest(event): Promise<Void>
+      VALIDA schema string
+      db = await _getDatabase(project_id)
+      statements = schema.split(';').filter(s => s.trim())
+      PARA cada statement: _exec(db, stmt) (ignora 'already exists')
+      await _saveDatabase(project_id)
+      EMITE db.schema.init.response + db.schema_initialized event
+
+    async handleListDatabases(): Promise<Response>
+      databases = []
+      SI projectsPath existe:
+        PARA cada directorio EN projectsPath:
+          BUSCA db.sqlite (legacy) o db/{dirName}.sqlite (nuevo)
+          databases.push({project_id, loaded, exists, size?, last_modified?, path?})
+      RETORNA {status: 200, data: {databases, total, projects_path}}
+
+    async handleExecuteQuery(req, context): Promise<Response>
+      projectId, query, params, read_only = context
+      VALIDA projectId, query
+      results = await _all(db, query, params)
+      SI !read_only && autoSave: await _saveDatabase(projectId)
+      RETORNA {status: 200, data: {project_id, results, count, duration}}
+
+    async handleGetSchema(req, context): Promise<Response>
+      VALIDA projectId
+      tables = SELECT * FROM sqlite_master WHERE type='table'
+      RETORNA {status: 200, data: {project_id, tables, table_count}}
+
+    async handleInitSchema(req, context): Promise<Response>
+      VALIDA projectId, schema
+      _exec(db, schema)
+      await _saveDatabase(projectId)
+      EMITE db.schema.initialized
+      RETORNA {status: 200}
+
+    async handleDeleteDatabase(req, context): Promise<Response>
+      VALIDA projectId
+      SI databases[projectId]: db.close() + delete
+      ELIMINA dbPath DEL filesystem
+      EMITE db.deleted
+      RETORNA {status: 200}
+
+    async handleToolQuery(args): Promise<Response>
+      VALIDA projectId, query (debe ser SELECT)
+      results = await _all(db, query, params)
+      RETORNA {status: 200, data: {projectId, results, count, duration}}
+
+    async handleToolTables(args): Promise<Response>
+      tables = SELECT name FROM sqlite_master WHERE type='table'
+      RETORNA {status: 200, data: {projectId, tables, count}}
+
+    async handleToolSchema(args): Promise<Response>
+      VALIDA projectId, tableName
+      columns = PRAGMA table_info(tableName)
+      foreignKeys = PRAGMA foreign_key_list(tableName)
+      indexes = PRAGMA index_list(tableName)
+      createStatement = SELECT sql FROM sqlite_master WHERE type='table'
+      RETORNA {status: 200, data: {projectId, tableName, columns, foreignKeys, indexes, createStatement}}
+
+    async handleToolExecute(args): Promise<Response>
+      VALIDA projectId, query (NO debe ser SELECT)
+      result = await _run(db, query, params)
+      SI autoSave: await _saveDatabase(projectId)
+      RETORNA {status: 200, data: {projectId, affectedRows, lastInsertId, duration}}
+
+    async _resolveDatabasePath(projectId): Promise<{projectDir, dbPath, isSystem}>
+      SI projectId EN {system, _prompts}: RETORNA legacy path
+      SI projectId EN cache: RETORNA cached path
+      SI systemDb existe:
+        result = SELECT base_path, name FROM projects WHERE id = projectId
+        SI result: cache + RETORNA nuevo path
+      SINO: Fallback a legacy path
+
+    async _getDatabase(projectId): Promise<sqlite3.Database>
+      SI databases[projectId]: RETORNA cached
+      {dbPath, isSystem} = await _resolveDatabasePath(projectId)
+      CREA dbDir SI NO existe
+      ABRE sqlite3.Database(dbPath)
+      CACHE + SI isNew: EMITE db.created
+      RETORNA db
+
+    async _saveDatabase(projectId): Promise<Boolean>
+      (sqlite3 nativo escribe directo — no-op preservado por API symmetry)
+      RETORNA true
+
+    EVENTOS_PUBLISHES {
+      'db.created': {project_id, created_at}
+      'db.deleted': {project_id, deleted_at}
+      'db.query.response': {request_id, project_id, success, data|error, timestamp, correlation_id?}
+      'db.schema.init.response': {request_id, project_id, success, error?, timestamp}
+      'db.query.executed': {project_id, result_count, read_only, duration, executed_at}
+      'db.schema.initialized': {project_id, initialized_at}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'db.query.request': onQueryRequest
+      'db.persist.request': onPersistRequest
+      'db.schema.init.request': onSchemaInitRequest
+    }
+  }
+}
+```
+
+### DEVICE-HEALTH (v2.0.0)
+
+```
+INTERFAZ DeviceHealthContract {
+  handleDashboard(data?: Object): Promise<Response>
+  handleDeviceHistory(data: {device_id}): Promise<Response>
+  handleAlerts(data?: {active_only?, device_id?, type?, limit?}): Promise<Response>
+}
+
+CLASE DeviceHealthModule HEREDA BaseModule IMPLEMENTA DeviceHealthContract {
+  ATRIBUTOS {
+    name: String = 'device-health'
+    version: String = '2.0.0'
+    config: {offline_threshold_min, reconnect_loop_threshold, reconnect_loop_window_min, report_interval_min, data_path}
+    deviceStates: Map<deviceId, DeviceHealthState>
+    alerts: Array<Alert> (ring buffer, max 200)
+    maxAlerts: Integer = 200
+    _offlineTimers: Map<deviceId, NodeJS.Timeout>
+    _reportTimer: NodeJS.Timeout
+    internalMetrics: {alerts_total, alerts_offline, alerts_reconnect_loop, alerts_ota_failed}
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus
+      config = core.config['device-health'] || config defaults
+      config.data_path = path.resolve(config.data_path)
+      await _loadHistory()
+      _reportTimer = setInterval(() => _publishReport(), config.report_interval_min * 60000)
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      clearInterval(_reportTimer)
+      _offlineTimers.forEach(timer => clearTimeout(timer))
+      _offlineTimers.clear()
+      await _saveHistory()
+      deviceStates.clear()
+      alerts.clear()
+      LOG module.unloaded
+
+    async onDeviceOnline(event): Promise<Void>
+      device_id, project_id, correlation_id = event.data || event
+      VALIDA device_id
+      state = _getOrCreateState(device_id)
+      SI state.is_offline && state.last_offline:
+        CALCULA offlineDuration
+        AGREGA a offline_periods
+        SI size > 50: MANTÉN últimas 50
+      state.is_offline = false
+      state.last_online = now
+      state.reconnections_24h.push(now)
+      FILTRA reconnections > 24h cutoff
+      _clearOfflineTimer(device_id)
+      DETECTA reconnect_loop: SI recent >= threshold EN window:
+        await _createAlert('reconnect_loop', device_id, project_id, {details}, {correlation_id})
+
+    async onDeviceOffline(event): Promise<Void>
+      device_id, project_id, reason, correlation_id = event.data || event
+      VALIDA device_id
+      state = _getOrCreateState(device_id)
+      state.is_offline = true
+      state.last_offline = now
+      _clearOfflineTimer(device_id)
+      thresholdMs = config.offline_threshold_min * 60000
+      timer = setTimeout(() => {
+        current = deviceStates.get(device_id)
+        SI current?.is_offline:
+          await _createAlert('offline', device_id, project_id, {details}, {correlation_id})
+      }, thresholdMs)
+      _offlineTimers.set(device_id, timer)
+
+    async onOtaFailed(event): Promise<Void>
+      device_id, project_id, type, from, to, correlation_id = event
+      VALIDA device_id
+      await _createAlert('ota_failed', device_id, project_id, {message, details}, {correlation_id})
+      state = _getOrCreateState(device_id)
+      state.ota_history.push({status: 'failed', from, to, type, timestamp})
+      SI size > 20: MANTÉN últimos 20
+
+    async onOtaCompleted(event): Promise<Void>
+      device_id, type, from, to = event
+      VALIDA device_id
+      state = _getOrCreateState(device_id)
+      state.ota_history.push({status: 'completed', from, to, type, timestamp})
+      SI size > 20: MANTÉN últimos 20
+
+    async handleDashboard(data?: Object): Promise<Response>
+      devices = []
+      now = new Date()
+      cutoff24h = now - DAY_MS
+      PARA cada [deviceId, state] EN deviceStates:
+        CALCULA totalOfflineMs (últimas 24h)
+        SI state.is_offline: AGREGA offline actual
+        uptimePct = (DAY_MS - totalOfflineMs) / DAY_MS * 100
+        reconnections = state.reconnections_24h.filter(t > cutoff24h).length
+        devices.push({device_id, is_offline, uptime_pct_24h, reconnections_24h, last_online, last_offline, consecutive_offline_min})
+      online = devices.filter(!is_offline).length
+      offline = devices.filter(is_offline).length
+      activeAlerts = alerts.filter(!resolved).length
+      RETORNA {status: 200, data: {summary, devices, recent_alerts: alerts[0:10]}}
+
+    async handleDeviceHistory(data: {device_id}): Promise<Response>
+      VALIDA device_id
+      state = deviceStates.get(device_id)
+      SI !state: RETORNA 404 RESOURCE_NOT_FOUND
+      RETORNA {status: 200, data: {device_id, is_offline, last_online, last_offline, reconnections_24h, offline_periods[-20:], ota_history, alerts[]}}
+
+    async handleAlerts(data?: Object): Promise<Response>
+      alerts = [...this.alerts]
+      SI data.active_only: FILTRA !resolved
+      SI data.device_id: FILTRA por device_id
+      SI data.type: FILTRA por type
+      limit = parseInt(data.limit) || 50
+      RETORNA {status: 200, data: {alerts[0:limit], total, active}}
+
+    async _createAlert(type: String, deviceId: String, projectId: String|Null, body: Object, sourcePayload?: Object): Promise<Void>
+      VALIDA type EN KNOWN_ALERT_TYPES
+      message, details, timestamp = body
+      alert = {type, device_id, project_id, message, details, timestamp, resolved: false}
+      alerts.unshift(alert)
+      SI alerts.length > maxAlerts: alerts.pop()
+      internalMetrics.alerts_total++
+      internalMetrics[`alerts_${type}`]++
+      LOG warn
+      await _publicarEvento(`health.alert.${type}`, {device_id, project_id, message, details, timestamp}, sourcePayload)
+
+    async _publishReport(): Promise<Void>
+      now = new Date()
+      online, offline = 0
+      PARA cada state EN deviceStates.values():
+        state.is_offline ? offline++ : online++
+      activeAlerts = alerts.filter(!resolved).length
+      metrics.gauge('health.flota.online', online)
+      metrics.gauge('health.flota.offline', offline)
+      await _publicarEvento('health.report', {total_devices, online, offline, active_alerts, timestamp})
+
+    _getOrCreateState(deviceId): DeviceHealthState
+      SI !deviceStates[deviceId]:
+        deviceStates.set(deviceId, {is_offline, last_online, last_offline, reconnections_24h, offline_periods, ota_history})
+      RETORNA deviceStates.get(deviceId)
+
+    _clearOfflineTimer(deviceId): Void
+      timer = _offlineTimers.get(deviceId)
+      SI timer: clearTimeout(timer), _offlineTimers.delete(deviceId)
+
+    async _loadHistory(): Promise<Void>
+      filePath = config.data_path + '/health-history.json'
+      INTENTA fs.readFile(filePath)
+      data = JSON.parse(raw)
+      SI data.states: PARA cada [deviceId, state]: deviceStates.set(deviceId, state)
+      SI data.alerts: this.alerts = data.alerts
+      LOG loaded_from_disk
+
+    async _saveHistory(): Promise<Void>
+      filePath = config.data_path + '/health-history.json'
+      data = {_version, _updated, states: Map→Object, alerts}
+      fs.writeFile(tmpPath, JSON.stringify(data))
+      fs.rename(tmpPath, filePath) [atomic]
+
+    EVENTOS_PUBLISHES {
+      'health.alert.offline': {device_id, project_id, message, details, timestamp}
+      'health.alert.reconnect_loop': {device_id, project_id, message, details, timestamp}
+      'health.alert.ota_failed': {device_id, project_id, message, details, timestamp}
+      'health.report': {total_devices, online, offline, active_alerts, timestamp}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'device.online': onDeviceOnline
+      'device.offline': onDeviceOffline
+      'firmware.ota_failed': onOtaFailed
+      'firmware.ota_completed': onOtaCompleted
+    }
+  }
+}
+
+CLASE DeviceHealthState {
+  ATRIBUTOS {
+    is_offline: Boolean
+    last_online: String|Null (ISO)
+    last_offline: String|Null (ISO)
+    reconnections_24h: Array<String> (ISO timestamps)
+    offline_periods: Array<{from, to, duration_ms}>
+    ota_history: Array<{status, from, to, type, timestamp}>
+  }
+}
+
+CLASE Alert {
+  ATRIBUTOS {
+    type: String (offline|reconnect_loop|ota_failed)
+    device_id: String
+    project_id: String|Null
+    message: String
+    details: Object
+    timestamp: String (ISO)
+    resolved: Boolean
+  }
+}
+```
+
+## GRUPO 5
+
+### DEVICE-REGISTRY (v2.0.0)
+
+```
+INTERFAZ DeviceRegistryContract {
+  listDevices(filters?: Object): Promise<Array<Device>>
+  getDevice(deviceId: String): Promise<Device>
+  registerDevice(data: {device_id, project_id, name, type, ...}): Promise<Device>
+  unregisterDevice(deviceId: String): Promise<Void>
+  updateDevice(deviceId: String, updates: Object): Promise<Device>
+}
+
+CLASE DeviceRegistryModule HEREDA BaseModule IMPLEMENTA DeviceRegistryContract {
+  ATRIBUTOS {
+    name: String = 'device-registry'
+    version: String = '2.0.0'
+    config: {heartbeat_timeout_ms, persist_interval_ms, data_path}
+    devices: Map<deviceId, Device>
+    _heartbeatTimers: Map<deviceId, NodeJS.Timeout>
+    _persistTimer: NodeJS.Timeout
+    _dirty: Boolean
+    _onMqttMessage: Function
+    internalMetrics: {registered_total, unregistered_total, births_total, lwts_total, online_current, offline_current}
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus
+      config = core.config['device-registry'] || defaults
+      config.data_path = path.resolve(config.data_path)
+      await _loadFromDisk()
+      MARCA todos EN offline (la realidad MQTT mandará)
+      _recalcMetrics()
+      await _startMqttListeners()
+      _persistTimer = setInterval(() => _persistIfDirty(), config.persist_interval_ms)
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      _stopMqttListeners()
+      clearInterval(_persistTimer)
+      _heartbeatTimers.forEach(timer => clearTimeout(timer))
+      _heartbeatTimers.clear()
+      await _persistToDisk()
+      devices.clear()
+      LOG module.unloaded
+
+    async _startMqttListeners(): Promise<Void>
+      mqtt = eventBus.mqtt
+      SI !mqtt?.isConnected: LOG warn, RETORNA
+      _onMqttMessage = _handleMqttMessage.bind(this)
+      mqtt.on('message', _onMqttMessage)
+      topics = ['devices/+/+/birth', 'devices/+/+/lwt', 'enki/+/status/+', 'impresion/+/status/+']
+      PARA cada topic: await mqtt.subscribe(topic)
+      LOG mqtt.subscribed
+
+    _stopMqttListeners(): Void
+      mqtt = eventBus.mqtt
+      SI mqtt && _onMqttMessage: mqtt.removeListener('message', _onMqttMessage)
+      _onMqttMessage = null
+
+    _handleMqttMessage(topic: String, payload: Buffer): Void
+      SI topic MATCH devices/{project}/{device}/birth:
+        _handleBirth(project, device, payload)
+      SINO SI topic MATCH devices/{project}/{device}/lwt:
+        _handleLwt(project, device)
+      SINO SI topic MATCH enki/{project}/status/{device}:
+        _handleStatus(project, device, payload, 'mqtt-native')
+      SINO SI topic MATCH impresion/{project}/status/{device}:
+        _handleStatus(project, device, payload, 'mqtt-native')
+
+    _handleBirth(projectId: String, deviceId: String, payload: Buffer): Void
+      data = _parsePayload(payload, 'birth')
+      SI !data: RETORNA
+      internalMetrics.births_total++
+      existing = devices.get(deviceId)
+      now = new Date().toISOString()
+      device = {device_id, project_id, name: data.name||deviceId, type: data.type||'unknown', driver, capabilities, protocol, gateway, state: 'online', firmware, metadata, last_seen: now, registered_at: existing?.registered_at || now}
+      isNew = !existing
+      devices.set(deviceId, device)
+      _dirty = true
+      _resetHeartbeat(deviceId)
+      _recalcMetrics()
+      SI isNew:
+        internalMetrics.registered_total++
+        LOG device.registered
+        _publicarEvento('device.registered', {device_id, project_id, device: sanitized, source: 'birth'})
+      _publicarEvento('device.online', {device_id, project_id, timestamp: now, source: 'birth'})
+
+    _handleLwt(projectId: String, deviceId: String): Void
+      internalMetrics.lwts_total++
+      device = devices.get(deviceId)
+      SI !device: RETORNA
+      SI device.state == 'offline': RETORNA
+      device.state = 'offline'
+      _dirty = true
+      _clearHeartbeat(deviceId)
+      _recalcMetrics()
+      LOG device.offline
+      _publicarEvento('device.offline', {device_id, project_id, reason: 'lwt', timestamp: now})
+
+    _handleStatus(projectId: String, deviceId: String, payload: Buffer, protocol: String): Void
+      data = _parsePayload(payload, 'status')
+      SI !data: RETORNA
+      existing = devices.get(deviceId)
+      now = new Date().toISOString()
+      SI !existing:
+        resolvedProject = projectId || data.project_id || 'default'
+        device = {device_id, project_id: resolvedProject, name, type, driver, capabilities, protocol, gateway, state: 'online', firmware, metadata, last_seen: now, registered_at: now}
+        devices.set(deviceId, device)
+        internalMetrics.registered_total++
+        _dirty = true
+        _resetHeartbeat(deviceId)
+        _recalcMetrics()
+        LOG device.registered (auto-discovery)
+        _publicarEvento('device.registered', {device_id, project_id, device: sanitized, source: 'status-autodiscovery'})
+      SINO:
+        _updateHeartbeat(deviceId)
+        SI existing.state == 'offline':
+          existing.state = 'online'
+          _dirty = true
+          _resetHeartbeat(deviceId)
+          _recalcMetrics()
+          _publicarEvento('device.online', {device_id, project_id, timestamp: now, source: 'status'})
+
+    _resetHeartbeat(deviceId: String): Void
+      _clearHeartbeat(deviceId)
+      timer = setTimeout(() => {
+        device = devices.get(deviceId)
+        SI device && device.state == 'online':
+          device.state = 'offline'
+          _dirty = true
+          _recalcMetrics()
+          _publicarEvento('device.offline', {device_id, project_id, reason: 'heartbeat_timeout', timestamp: now})
+      }, config.heartbeat_timeout_ms)
+      _heartbeatTimers.set(deviceId, timer)
+
+    _clearHeartbeat(deviceId: String): Void
+      timer = _heartbeatTimers.get(deviceId)
+      SI timer: clearTimeout(timer), _heartbeatTimers.delete(deviceId)
+
+    _updateHeartbeat(deviceId: String): Void
+      _resetHeartbeat(deviceId)
+
+    _recalcMetrics(): Void
+      online, offline = 0
+      PARA cada device EN devices.values():
+        device.state == 'online' ? online++ : offline++
+      internalMetrics.online_current = online
+      internalMetrics.offline_current = offline
+      metrics.gauge('devices.online', online)
+      metrics.gauge('devices.offline', offline)
+
+    async _loadFromDisk(): Promise<Void>
+      filePath = config.data_path + '/registry.json'
+      INTENTA fs.readFile(filePath)
+      data = JSON.parse(raw)
+      SI data.devices: PARA cada [deviceId, device]: devices.set(deviceId, device)
+      LOG loaded_from_disk
+
+    async _persistIfDirty(): Promise<Void>
+      SI !_dirty: RETORNA
+      await _persistToDisk()
+      _dirty = false
+
+    async _persistToDisk(): Promise<Void>
+      filePath = config.data_path + '/registry.json'
+      data = {_version, _updated, devices: Map→Object}
+      fs.writeFile(tmpPath, JSON.stringify(data))
+      fs.rename(tmpPath, filePath) [atomic]
+
+    EVENTOS_PUBLISHES {
+      'device.registered': {device_id, project_id, device, source}
+      'device.unregistered': {device_id, project_id}
+      'device.online': {device_id, project_id, timestamp, source}
+      'device.offline': {device_id, project_id, reason, timestamp}
+      'device.updated': {device_id, project_id, updates}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'device.register': onDeviceRegister (manual)
+      'device.unregister': onDeviceUnregister
+    }
+  }
+}
+
+CLASE Device {
+  ATRIBUTOS {
+    device_id: String
+    project_id: String
+    name: String
+    type: String (unknown|sensor|actuator|gateway|display)
+    driver: String|Null
+    capabilities: Array<String>
+    protocol: String (mqtt-native|http|ble|zigbee)
+    gateway: String|Null
+    state: String (online|offline)
+    firmware: Object|Null
+    metadata: Object
+    last_seen: String (ISO)
+    registered_at: String (ISO)
+  }
+}
+```
+
+### DEVICE-SHADOW (v2.0.0)
+
+```
+INTERFAZ DeviceShadowContract {
+  getReported(deviceId: String): Promise<Object>
+  getDesired(deviceId: String): Promise<Object>
+  getDelta(deviceId: String): Promise<Object>
+  setDesired(deviceId: String, projectId: String, state: Object): Promise<Void>
+}
+
+CLASE DeviceShadowModule HEREDA BaseModule IMPLEMENTA DeviceShadowContract {
+  ATRIBUTOS {
+    name: String = 'device-shadow'
+    version: String = '2.0.0'
+    config: {persist_interval_ms, data_path}
+    shadows: Map<deviceId, Shadow>
+    _persistTimer: NodeJS.Timeout
+    _dirty: Boolean
+    _onMqttMessage: Function
+    internalMetrics: {reported_updates_total, desired_updates_total, deltas_computed_total, synced_total}
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus
+      config = core.config['device-shadow'] || defaults
+      config.data_path = path.resolve(config.data_path)
+      await _loadFromDisk()
+      await _startMqttListeners()
+      _persistTimer = setInterval(() => _persistIfDirty(), config.persist_interval_ms)
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      _stopMqttListeners()
+      clearInterval(_persistTimer)
+      await _persistToDisk()
+      shadows.clear()
+      LOG module.unloaded
+
+    async _startMqttListeners(): Promise<Void>
+      mqtt = eventBus.mqtt
+      SI !mqtt?.isConnected: LOG warn, RETORNA
+      _onMqttMessage = _handleMqttMessage.bind(this)
+      mqtt.on('message', _onMqttMessage)
+      await mqtt.subscribe('devices/+/+/state/reported')
+      LOG mqtt.subscribed
+
+    _stopMqttListeners(): Void
+      mqtt = eventBus.mqtt
+      SI mqtt && _onMqttMessage: mqtt.removeListener('message', _onMqttMessage)
+      _onMqttMessage = null
+
+    _handleMqttMessage(topic: String, payload: Buffer): Void
+      SI topic NO MATCH devices/{project}/{device}/state/reported: RETORNA
+      [, projectId, deviceId] = match
+      data = _parsePayload(payload, topic)
+      SI !data: RETORNA
+      _updateReported(deviceId, projectId, data)
+
+    _updateReported(deviceId: String, projectId: String, reported: Object, correlationId?: String): Void
+      internalMetrics.reported_updates_total++
+      shadow = _getOrCreateShadow(deviceId)
+      shadow.reported = {...shadow.reported, ...reported}
+      shadow.last_reported_at = now
+      _dirty = true
+      LOG device-shadow.reported.updated
+      _publicarEvento('shadow.updated', {device_id, project_id, reported: shadow.reported, timestamp}, {correlation_id})
+      _computeAndPublishDelta(deviceId, projectId, correlationId)
+
+    _updateDesired(deviceId: String, projectId: String, desired: Object, correlationId?: String): Void
+      internalMetrics.desired_updates_total++
+      shadow = _getOrCreateShadow(deviceId)
+      shadow.desired = {...shadow.desired, ...desired}
+      shadow.last_desired_at = now
+      _dirty = true
+      mqtt = eventBus.mqtt
+      SI mqtt?.isConnected:
+        topic = `devices/${projectId}/${deviceId}/state/desired`
+        mqtt.publish(topic, JSON.stringify(shadow.desired), {qos: 1, retain: true})
+      LOG device-shadow.desired.updated
+      _computeAndPublishDelta(deviceId, projectId, correlationId)
+
+    _computeAndPublishDelta(deviceId: String, projectId: String, correlationId?: String): Void
+      shadow = shadows.get(deviceId)
+      SI !shadow: RETORNA
+      delta = _computeDelta(shadow.desired, shadow.reported)
+      hadDelta = Object.keys(shadow.delta).length > 0
+      shadow.delta = delta
+      _dirty = true
+      internalMetrics.deltas_computed_total++
+      mqtt = eventBus.mqtt
+      SI mqtt?.isConnected:
+        topic = `devices/${projectId}/${deviceId}/state/delta`
+        mqtt.publish(topic, JSON.stringify(delta), {qos: 1, retain: true})
+      SI Object.keys(delta).length > 0:
+        _publicarEvento('shadow.delta', {device_id, project_id, delta, timestamp}, {correlation_id})
+      SINO SI hadDelta:
+        internalMetrics.synced_total++
+        LOG device-shadow.synced
+        _publicarEvento('shadow.synced', {device_id, project_id, timestamp}, {correlation_id})
+
+    _computeDelta(desired: Object, reported: Object): Object
+      delta = {}
+      PARA cada [key, desiredValue] EN desired:
+        reportedValue = reported[key]
+        SI typeof desiredValue == 'object' && typeof reportedValue == 'object':
+          subDelta = {}
+          PARA cada [subKey, subVal] EN desiredValue:
+            SI JSON.stringify(subVal) != JSON.stringify(reportedValue[subKey]):
+              subDelta[subKey] = subVal
+          SI subDelta items: delta[key] = subDelta
+        SINO SI JSON.stringify(desiredValue) != JSON.stringify(reportedValue):
+          delta[key] = desiredValue
+      RETORNA delta
+
+    async onSetDesired(event): Promise<Void>
+      device_id, project_id, state, correlation_id = event.data || event
+      VALIDA device_id, state (object)
+      _updateDesired(device_id, project_id || 'default', state, correlation_id)
+
+    async handleGetReported(data): Promise<Response>
+      VALIDA device_id
+      shadow = shadows.get(device_id)
+      SI !shadow: RETORNA 404
+      RETORNA {status: 200, data: {device_id, reported, last_reported_at}}
+
+    async handleGetDesired(data): Promise<Response>
+      VALIDA device_id
+      shadow = shadows.get(device_id)
+      SI !shadow: RETORNA 404
+      RETORNA {status: 200, data: {device_id, desired, last_desired_at}}
+
+    async handleGetDelta(data): Promise<Response>
+      VALIDA device_id
+      shadow = shadows.get(device_id)
+      SI !shadow: RETORNA 404
+      RETORNA {status: 200, data: {device_id, delta, has_delta}}
+
+    _getOrCreateShadow(deviceId: String): Shadow
+      SI !shadows[deviceId]:
+        shadows.set(deviceId, {reported: {}, desired: {}, delta: {}, last_reported_at, last_desired_at})
+      RETORNA shadows.get(deviceId)
+
+    async _loadFromDisk(): Promise<Void>
+      filePath = config.data_path + '/shadows.json'
+      INTENTA fs.readFile(filePath)
+      data = JSON.parse(raw)
+      SI data.shadows: PARA cada [deviceId, shadow]: shadows.set(deviceId, shadow)
+      LOG loaded_from_disk
+
+    async _persistIfDirty(): Promise<Void>
+      SI !_dirty: RETORNA
+      await _persistToDisk()
+      _dirty = false
+
+    async _persistToDisk(): Promise<Void>
+      filePath = config.data_path + '/shadows.json'
+      data = {_version, _updated, shadows: Map→Object}
+      fs.writeFile(tmpPath, JSON.stringify(data))
+      fs.rename(tmpPath, filePath) [atomic]
+
+    EVENTOS_PUBLISHES {
+      'shadow.updated': {device_id, project_id, reported, timestamp}
+      'shadow.delta': {device_id, project_id, delta, timestamp}
+      'shadow.synced': {device_id, project_id, timestamp}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      'shadow.set_desired': onSetDesired
+      'devices/+/+/state/reported': (MQTT topic)
+    }
+  }
+}
+
+CLASE Shadow {
+  ATRIBUTOS {
+    reported: Object
+    desired: Object
+    delta: Object
+    last_reported_at: String|Null (ISO)
+    last_desired_at: String|Null (ISO)
+  }
+}
+```
+
+### ESP32-DEV (v2.0.0)
+
+```
+INTERFAZ ESP32DevContract {
+  listTemplates(filters?: {framework?, board?}): Promise<Array<Template>>
+  createProject(data: {project_name, template, board?, framework?, vars?}): Promise<Response>
+  listProjects(): Promise<Array<ProjectInfo>>
+  buildProject(projectName: String): Promise<Response>
+  cleanProject(projectName: String): Promise<Response>
+  getProjectLogs(projectName: String): Promise<String>
+}
+
+CLASE ESP32DevModule HEREDA BaseModule IMPLEMENTA ESP32DevContract {
+  ATRIBUTOS {
+    name: String = 'esp32-dev'
+    version: String = '2.0.0'
+    config: {data_path, platformio_path, build_timeout_ms, max_concurrent_builds}
+    templates: Map<templateId, Template>
+    activeBuilds: Map<projectName, {process, started_at, log}>
+    projects: Map<projectName, ProjectMetadata>
+    BOARDS: {esp32dev, esp32-s2, esp32-s3, esp32-c3, esp32-c6, esp32-p4}
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus
+      config = core.config['esp32-dev'] || defaults
+      config.data_path = path.resolve(config.data_path)
+      await _ensureDir(config.data_path)
+      await _ensureDir(config.data_path + '/projects')
+      await _loadTemplates()
+      await _loadProjects()
+      metrics.gauge('esp32.projects.count', projects.size)
+      metrics.gauge('esp32.active_builds.count', 0)
+      LOG module.loaded
+
+    async onUnload(): Promise<Void>
+      PARA cada [name, build] EN activeBuilds:
+        SI build.process && !killed: build.process.kill('SIGTERM')
+        LOG esp32.build.killed_on_unload
+      activeBuilds.clear()
+      await _saveProjects()
+      LOG module.unloaded
+
+    async handleListTemplates(data?: {framework?, board?}): Promise<Response>
+      list = []
+      PARA cada [id, tpl] EN templates:
+        SI data.framework && tpl.framework != data.framework: CONTINÚA
+        SI data.board && !tpl.boards.includes(data.board): CONTINÚA
+        list.push({id, name, description, framework, boards, category})
+      RETORNA {status: 200, data: {templates: list, total}}
+
+    async handleCreateProject(data: {project_name, template, board?, framework?, vars?}): Promise<Response>
+      VALIDA project_name (required)
+      VALIDA template (required)
+      VALIDA project_name ES slug (lowercase, hyphens)
+      SI projects[project_name]: RETORNA 409 ALREADY_EXISTS
+      tpl = templates.get(template)
+      SI !tpl: RETORNA 404 RESOURCE_NOT_FOUND (template)
+      selectedBoard = board || tpl.defaultBoard || 'esp32dev'
+      selectedFramework = framework || tpl.framework || 'arduino'
+      SI !BOARDS[selectedBoard]: RETORNA 400 (board no soportado)
+      projectDir = config.data_path + '/projects/' + project_name
+      TRY:
+        await _ensureDir(projectDir + '/src')
+        await _ensureDir(projectDir + '/include')
+        templateVars = {PROJECT_NAME, BOARD, FRAMEWORK, PLATFORM, MONITOR_SPEED, UPLOAD_SPEED, ...vars}
+        PARA cada [filePath, content] EN tpl.files:
+          rendered = _renderTemplate(content, templateVars)
+          fullPath = projectDir + '/' + filePath
+          await _ensureDir(dirname(fullPath))
+          fs.writeFile(fullPath, rendered)
+        projects[project_name] = {name, template, board: selectedBoard, framework: selectedFramework, created_at, last_build, last_build_status, path: projectDir}
+        await _saveProjects()
+        metrics.increment('esp32.project_created.total')
+        metrics.gauge('esp32.projects.count', projects.size)
+        LOG esp32.project.created
+        await eventBus.publish('esp32.project_created', {project_name, template, board: selectedBoard, framework: selectedFramework})
+        RETORNA {status: 201, data: {project_name, template, board, framework, path, files}}
+      CATCH err:
+        fs.rm(projectDir, {recursive, force}) [best-effort]
+        RETORNA error
+
+    async handleListProjects(): Promise<Response>
+      list = projects.values().map(p => ({name, template, board, framework, created_at, last_build, last_build_status}))
+      RETORNA {status: 200, data: {projects: list, total}}
+
+    async handleBuildProject(data: {project_name}): Promise<Response>
+      project_name = data.project_name
+      VALIDA project_name
+      project = projects[project_name]
+      SI !project: RETORNA 404
+      SI activeBuilds.get(project_name): RETORNA 409 (build ya en progreso)
+      SI activeBuilds.size >= config.max_concurrent_builds: RETORNA 429 (queue llena)
+      projectDir = project.path
+      LOG esp32.build.started
+      process = spawn(config.platformio_path, ['run', '-d', projectDir], {stdio: ['pipe', 'pipe', 'pipe']})
+      log = ''
+      process.stdout.on('data', (data) => { log += data })
+      process.stderr.on('data', (data) => { log += data })
+      timeout = setTimeout(() => {
+        SI !process.killed: process.kill('SIGKILL')
+        activeBuilds.delete(project_name)
+        metrics.increment('esp32.build.timeout.total')
+        LOG esp32.build.timeout
+        eventBus.publish('esp32.build_failed', {project_name, reason: 'timeout'})
+      }, config.build_timeout_ms)
+      activeBuilds.set(project_name, {process, started_at: now, log: ''})
+      process.on('exit', (code) => {
+        clearTimeout(timeout)
+        activeBuilds.delete(project_name)
+        project.last_build = now
+        project.last_build_status = code == 0 ? 'success' : 'failed'
+        _saveProjects()
+        metrics.increment('esp32.build.' + project.last_build_status + '.total')
+        LOG esp32.build.completed
+        SI code == 0:
+          eventBus.publish('esp32.build_succeeded', {project_name, duration_ms, log})
+        SINO:
+          eventBus.publish('esp32.build_failed', {project_name, exit_code: code, log})
+      })
+      RETORNA {status: 202, data: {project_name, status: 'building', started_at: now}}
+
+    async handleCleanProject(data: {project_name}): Promise<Response>
+      project_name = data.project_name
+      VALIDA project_name
+      project = projects[project_name]
+      SI !project: RETORNA 404
+      projectDir = project.path
+      buildDir = projectDir + '/.pio'
+      TRY:
+        SI buildDir existe: fs.rm(buildDir, {recursive, force})
+        metrics.increment('esp32.project_cleaned.total')
+        LOG esp32.project.cleaned
+        RETORNA {status: 200, data: {project_name, message: 'Build artifacts cleaned'}}
+      CATCH err:
+        RETORNA error
+
+    async handleGetProjectLogs(data: {project_name}): Promise<Response>
+      project_name = data.project_name
+      VALIDA project_name
+      build = activeBuilds.get(project_name)
+      SI !build: RETORNA {status: 200, data: {project_name, log: '', status: 'not_building'}}
+      RETORNA {status: 200, data: {project_name, log: build.log, status: 'building'}}
+
+    _renderTemplate(template: String, vars: Object): String
+      SUSTITUYE {{VAR_NAME}} CON vars.VAR_NAME
+      RETORNA rendered string
+
+    async _loadTemplates(): Promise<Void>
+      (built-in templates hardcoded: blink-led, mqtt-client, display, sensor, etc.)
+      templates.set(id, {name, description, framework, boards, defaultBoard, category, files: {...}})
+
+    async _loadProjects(): Promise<Void>
+      filePath = config.data_path + '/projects.json'
+      INTENTA fs.readFile(filePath)
+      data = JSON.parse(raw)
+      SI data.projects: PARA cada [name, project]: projects[name] = project
+      LOG loaded_from_disk
+
+    async _saveProjects(): Promise<Void>
+      filePath = config.data_path + '/projects.json'
+      data = {_version, _updated, projects: projects as object}
+      fs.writeFile(tmpPath, JSON.stringify(data))
+      fs.rename(tmpPath, filePath) [atomic]
+
+    EVENTOS_PUBLISHES {
+      'esp32.project_created': {project_name, template, board, framework}
+      'esp32.build_started': {project_name}
+      'esp32.build_succeeded': {project_name, duration_ms, log}
+      'esp32.build_failed': {project_name, exit_code|reason, log}
+    }
+
+    EVENTOS_SUBSCRIBES {
+      (ninguno — handlers síncronos solamente)
+    }
+  }
+}
+
+CLASE Template {
+  ATRIBUTOS {
+    id: String
+    name: String
+    description: String
+    framework: String (arduino|platformio|idf)
+    boards: Array<String>
+    defaultBoard: String
+    category: String (sensor|actuator|gateway|display)
+    files: Map<filePath, content> (platformio.ini, src/main.cpp, src/config.h, ...)
+  }
+}
+
+CLASE ProjectMetadata {
+  ATRIBUTOS {
+    name: String
+    template: String
+    board: String
+    framework: String
+    created_at: String (ISO)
+    last_build: String|Null (ISO)
+    last_build_status: String|Null (success|failed|timeout)
+    path: String
+  }
+}
+```
+
+---
+
+# LISTA MAESTRA ACTUALIZADA (48 MÓDULOS)
+
+## YA ANALIZADOS (17):
+✓ conversation-export (v2.0.0)
+✓ security-p2p (v2.0.0)
+✓ certificate-authority (v2.0.0)
+✓ admin-panel (v2.0.0)
+✓ bienvenida-tienda (v1.0.0)
+✓ bot-manager (v2.0.0)
+✓ channel-manager (v2.0.0)
+✓ code-executor (v2.0.0)
+✓ comandero-cliente-builder (v1.0.0)
+✓ composition-manager (v2.0.0)
+✓ credential-manager (v2.0.0)
+✓ dashboard (v3.0.0)
+✓ database-manager (v3.0.0)
+✓ device-health (v2.0.0)
+✓ device-registry (v2.0.0)
+✓ device-shadow (v2.0.0)
+✓ esp32-dev (v2.0.0)
+
+## POR ANALIZAR (31):
+
+GRUPO 6:
+✓ esp32-flasher (v2.0.0)
+(blueprint) facturacion
+✓ facturas (v3.0.0)
+
+GRUPO 7:
+✓ filesystem (v2.0.0)
+✓ firmware-builder (v2.0.0)
+✓ firmware-manager (v3.0.0)
+
+GRUPO 8:
+[ ] gateway-manager
+[ ] inventario
+[ ] log-manager
+
+GRUPO 9:
+[ ] mercadona-api
+[ ] metricas
+[ ] mise-en-place
+
+GRUPO 10:
+[ ] notas-poc
+[ ] notificador-pedidos
+[ ] pase-cocina
+
+GRUPO 11:
+[ ] pdf-viewer
+[ ] perifericos
+[ ] pizzepos
+
+GRUPO 12:
+[ ] plugin-manager
+[ ] project-manager
+[ ] prompt-manager
+
+GRUPO 13:
+[ ] recetario-creativo
+[ ] scheduler
+[ ] staff-manager
+
+GRUPO 14:
+[ ] system-coherence-analyzer
+[ ] system-inspector
+[ ] telegram-service
+
+GRUPO 15:
+[ ] text-editor
+[ ] tienda-api
+[ ] whatsapp-bot
+
+
+---
+
+# GRUPO 6 — PSEUDOCÓDIGO OOP
+
+## ESP32-FLASHER (v2.0.0) — Flash Firmware a ESP32
+
+```
+INTERFAZ ESP32FlasherContract {
+  listPorts(): Promise<Array<PortInfo>>
+  startFlash(data: {port, binary_path, method?, baud?, flash_mode?, flash_freq?, erase_before?, project_id?}): Promise<{flash_id, status}>
+  getFlashStatus(flash_id?: String): Promise<{flash_id?, port?, progress?, elapsed_ms?}|{active: Array}>
+  cancelFlash(flash_id: String): Promise<{status, duration_ms}>
+  startMonitor(data: {port, baud?, project_id?}): Promise<{port, status}>
+  stopMonitor(data: {port}): Promise<{port, status}>
+  sendMonitorData(data: {port, data: String}): Promise<{port, sent}>
+  getFlashHistory(limit?: Integer, port?: String): Promise<{history: Array, total}>
+  debugControl(data: {device, project, enable}): Promise<{ok, device, project, enable}>
+  debugStream(data: {device}): Promise<{lines: Array, device}>
+  serialRelay(data: {port?, device?, project?, lines: Array, project_id?}): Promise<{ok, relayed}>
+  healthCheck(): Promise<{status, module, version, active_flashes, active_monitors, history_entries}>
+}
+
+CLASE ESP32FlasherModule HEREDA BaseModule IMPLEMENTA ESP32FlasherContract {
+  ATRIBUTOS {
+    name: String = 'esp32-flasher'
+    version: String = '2.0.0'
+    config: {
+      esptool_path: String,
+      platformio_path: String,
+      default_baud: Integer,
+      flash_baud: Integer,
+      monitor_baud: Integer,
+      flash_timeout_ms: Integer,
+      serial_patterns: Array<String>,
+      max_monitor_buffer: Integer,
+      max_history: Integer
+    }
+    activeFlashes: Map<flash_id, FlashSession>
+    activeMonitors: Map<port, MonitorSession>
+    flashHistory: Array<FlashHistoryEntry>
+    lastBuild: {driver, board, binary_path, binary_size, timestamp}|Null
+    debugBuffers: Map<device_id, DebugBuffer>
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA config FROM core.config['esp32-flasher']
+      SETEA logger, metrics, eventBus FROM core
+      INICIALIZA gauges: esp32-flasher.active.count=0, esp32-flasher.monitors.count=0
+      INVOCA _startDebugListener()
+
+    async onUnload(): Promise<Void>
+      PARA cada [id, flash] EN activeFlashes:
+        SI flash.process NO killed: KILL(SIGTERM)
+      PARA cada [, monitor] EN activeMonitors:
+        SI monitor.process NO killed: KILL(SIGTERM)
+      LIMPIA _onDebugMessage listener FROM MQTT
+      LIMPIA activeFlashes, activeMonitors, debugBuffers
+      LIMPIA flashHistory, lastBuild
+
+    async handleListPorts(): Promise<Response>
+      ports = await _scanPorts()
+      metrics.gauge('esp32-flasher.ports_detected.count', ports.length)
+      RETORNA {status: 200, data: {ports, total: ports.length, last_build, active_flash[], active_monitors[]}}
+
+    async handleStart(data: {port, binary_path, method?, baud?, flash_mode?, flash_freq?, erase_before?, project_id?}): Promise<Response>
+      VALIDA port obligatorio
+      VALIDA binary_path obligatorio
+      VALIDA binary_path existe Y readable
+      VALIDA puerto NO en uso por otra flash
+      SI monitor activo EN puerto: PARA() monitor primero
+      VALIDA flashMethod EN ['esptool', 'platformio']
+      VALIDA herramienta disponible VIA _checkFlashTool()
+      VALIDA puerto formato valido (regex)
+      VALIDA puerto accesible (R+W)
+      GENERA flashId
+      flashInfo = {flash_id, port, method, binary_path, baud, project_id, started_at, log: [], progress, process}
+      SI method == 'platformio': BUSCA platformio.ini ARRIBA DE binary_path
+      AGREGA flashInfo A activeFlashes
+      EMITE flash.started
+      INVOCA _runEsptoolFlash() O _runPlatformioFlash() SEGUN method
+      RETORNA {status: 202, data: {flash_id, port, method, baud, status: 'flashing'}}
+
+    async handleStatus(data: {flash_id?}): Promise<Response>
+      SI flash_id:
+        flash = activeFlashes.get(flash_id)
+        SI flash: RETORNA {status: 200, data: {flash_id, port, method, status: 'flashing', started_at, elapsed_ms, progress, log_lines, log_tail}}
+        hist = flashHistory.find(h => h.flash_id == flash_id)
+        SI hist: RETORNA {status: 200, data: hist}
+        RETORNA 404 RESOURCE_NOT_FOUND
+      SINO:
+        active = Array.from(activeFlashes).map(([id, flash]) => {flash_id: id, port, method, status: 'flashing', started_at, progress, elapsed_ms})
+        RETORNA {status: 200, data: {active, count: active.length}}
+
+    async handleCancel(data: {flash_id}): Promise<Response>
+      VALIDA flash_id obligatorio
+      flash = activeFlashes.get(flash_id)
+      SI !flash: RETORNA 404 RESOURCE_NOT_FOUND
+      SI flash.process: KILL(SIGTERM)
+      duration = now() - flash.started_at
+      ELIMINA DE activeFlashes
+      metrics.increment('esp32-flasher.cancelled.total')
+      metrics.gauge('esp32-flasher.active.count', activeFlashes.size)
+      _addHistory({flash_id, port: flash.port, method: flash.method, binary_path, status: 'cancelled', duration_ms, timestamp})
+      EMITE flash.failed CON error: 'cancelled'
+      RETORNA {status: 200, data: {flash_id, status: 'cancelled', duration_ms}}
+
+    async handleMonitorStart(data: {port, baud?, project_id?}): Promise<Response>
+      VALIDA port obligatorio
+      VALIDA port NO activo como monitor YA
+      VALIDA port NO en uso por flash
+      monitorBaud = baud || config.monitor_baud
+      await _startMonitor(port, monitorBaud, project_id)
+      metrics.increment('esp32-flasher.monitor_started.total')
+      metrics.gauge('esp32-flasher.monitors.count', activeMonitors.size)
+      RETORNA {status: 200, data: {port, baud: monitorBaud, status: 'monitoring'}}
+
+    async handleMonitorStop(data: {port}): Promise<Response>
+      VALIDA port obligatorio
+      VALIDA port EN activeMonitors
+      await _stopMonitor(port)
+      metrics.gauge('esp32-flasher.monitors.count', activeMonitors.size)
+      RETORNA {status: 200, data: {port, status: 'stopped'}}
+
+    async handleMonitorSend(data: {port, data}): Promise<Response>
+      VALIDA port, data obligatorios
+      monitor = activeMonitors.get(port)
+      SI !monitor: RETORNA 404 RESOURCE_NOT_FOUND
+      await fs.writeFile(port, text + '\n')
+      RETORNA {status: 200, data: {port, sent: text}}
+
+    async handleHistory(data: {limit?, port?}): Promise<Response>
+      limit = parseInt(limit) || 50
+      history = flashHistory
+      SI port: FILTRA history POR port
+      RETORNA {status: 200, data: {history: history.slice(0, limit), total: history.length}}
+
+    async handleDebugControl(data: {device, project, enable}): Promise<Response>
+      VALIDA device, project obligatorios
+      VALIDA mqtt conectado
+      topic = `enki/{project}/debug/{device}/control`
+      mqtt.publish(topic, JSON.stringify({enable: !!enable}))
+      RETORNA {status: 200, data: {ok: true, device, project, enable}}
+
+    async handleDebugStream(data: {device}): Promise<Response>
+      VALIDA device obligatorio
+      buf = debugBuffers.get(device) || {lines: [], waiters: []}
+      SI buf.lines.length > 0: RETORNA {status: 200, data: {lines: buf.lines.splice(0), device}}
+      ESPERA hasta que haya lineas O timeout (30s)
+      RETORNA {status: 200, data: {lines, device}}
+
+    async handleSerialRelay(data: {port?, device?, project?, lines: Array, project_id?}): Promise<Response>
+      VALIDA lines array obligatorio
+      PARA cada line EN lines: EMITE flash.serial_output CON line, source: 'cli'
+      RETORNA {status: 200, data: {ok: true, relayed: lines.length}}
+
+    async handleHealth(): Promise<Response>
+      RETORNA {status: 200, data: {status: 'healthy', module: name, version, active_flashes: size, active_monitors: size, history_entries: length}}
+
+    _runEsptoolFlash(flashId: String, opts: {port, binary_path, baud, flash_mode, flash_freq, erase_before}): Void
+      args = ['--chip', 'auto', '--port', port, '--baud', baud]
+      SI erase_before: args.push('--before', 'default_reset', '--after', 'hard_reset')
+      args.push('write_flash', '--flash_mode', flash_mode, '--flash_freq', flash_freq, '0x10000', binary_path)
+      proc = spawn(config.esptool_path, args, {timeout: config.flash_timeout_ms})
+      flash.process = proc
+      proc.stdout.on('data'): PARSEA progress DESDE lineas, EMITE flash.progress
+      proc.stderr.on('data'): LOG lineas
+      proc.on('close'): await _onFlashComplete(flashId, exitCode, startTime)
+      proc.on('error'): await _onFlashError(flashId, err, startTime)
+
+    _runPlatformioFlash(flashId: String, opts: {port, project_dir}): Void
+      args = ['run', '-t', 'upload', '--upload-port', port]
+      proc = spawn(config.platformio_path, args, {cwd: project_dir, timeout: config.flash_timeout_ms})
+      flash.process = proc
+      proc.stdout.on('data'): PARSEA output, ACTUALIZA progress
+      proc.on('close'): await _onFlashComplete(flashId, exitCode, startTime)
+      proc.on('error'): await _onFlashError(flashId, err, startTime)
+
+    async _onFlashComplete(flashId: String, exitCode: Integer, startTime: Number): Promise<Void>
+      flash = activeFlashes.get(flashId)
+      duration = now() - startTime
+      ELIMINA DE activeFlashes
+      metrics.gauge('esp32-flasher.active.count', activeFlashes.size)
+      binarySize = fs.stat(flash.binary_path).size O 0
+      SI exitCode == 0:
+        metrics.increment('esp32-flasher.completed.total')
+        metrics.timing('esp32-flasher.duration', duration)
+        _addHistory({flash_id: flashId, port, method, binary_path, binary_size, status: 'completed', duration_ms, timestamp})
+        EMITE flash.completed CON duration_ms, binary_size
+      SINO:
+        metrics.increment('esp32-flasher.failed.total')
+        errorOutput = flash.log.slice(-20).join('\n')
+        _addHistory({flash_id: flashId, port, method, binary_path, status: 'failed', error: errorOutput, exit_code: exitCode, duration_ms, timestamp})
+        EMITE flash.failed CON error: errorOutput, exit_code, duration_ms
+
+    async _onFlashError(flashId: String, err: Error, startTime: Number): Promise<Void>
+      flash = activeFlashes.get(flashId)
+      duration = now() - startTime
+      ELIMINA DE activeFlashes
+      metrics.increment('esp32-flasher.failed.total')
+      metrics.gauge('esp32-flasher.active.count', activeFlashes.size)
+      _addHistory({flash_id: flashId, port, method, binary_path, status: 'failed', error: err.message, exit_code: -1, duration_ms, timestamp})
+      EMITE flash.failed CON error: err.message, exit_code: -1
+
+    async _startMonitor(port: String, baud: Integer, project_id: String): Promise<Void>
+      proc_stty = spawn('stty', ['-F', port, baud.toString(), 'raw', '-echo'], {timeout: 5000})
+      ESPERA cierre DE proc_stty
+      proc_cat = spawn('cat', [port])
+      buffer = []
+      monitor = {process: proc_cat, baud, project_id, buffer, started_at: now()}
+      proc_cat.stdout.on('data'): PARA cada line: AGREGA A buffer, LIMPIA SI > max, EMITE flash.serial_output
+      proc_cat.on('close'): LIMPIA DE activeMonitors
+      proc_cat.on('error'): LIMPIA DE activeMonitors, LOG error
+      activeMonitors.set(port, monitor)
+
+    async _stopMonitor(port: String): Promise<Void>
+      monitor = activeMonitors.get(port)
+      SI monitor.process: KILL(SIGTERM)
+      ELIMINA DE activeMonitors
+
+    async _scanPorts(): Promise<Array<PortInfo>>
+      ports = []
+      PARA cada pattern EN config.serial_patterns:
+        dir = dirname(pattern)
+        prefix = basename(pattern).replace('*', '')
+        PARA cada entry EN readdir(dir):
+          SI entry.startsWith(prefix):
+            portPath = join(dir, entry)
+            info = {path: portPath, name: entry, type, in_use_by}
+            SI en activeFlashes O activeMonitors: info.in_use_by = id
+            ports.push(info)
+      RETORNA ports
+
+    async _checkFlashTool(method: String): Promise<{available, error?}>
+      toolPath = method == 'platformio' ? config.platformio_path : config.esptool_path
+      INTENTA execFileSync('which', [toolPath], {timeout: 3000})
+      SI exito: RETORNA {available: true}
+      RETORNA {available: false, error: 'Tool not found'}
+
+    _findPlatformioRoot(binaryPath: String): String|Null
+      dir = dirname(binaryPath)
+      MIENTRAS dir != root:
+        SI exists(join(dir, 'platformio.ini')): RETORNA dir
+        dir = dirname(dir)
+      RETORNA null
+
+    _parseEsptoolProgress(flashId: String, lines: Array<String>): Void
+      flash = activeFlashes.get(flashId)
+      PARA cada line:
+        SI line.includes('Connecting'): progress.stage = 'connecting', percent = 5
+        SI line.includes('Chip is'): progress.stage = 'connected', percent = 10
+        SI line.includes('Erasing flash'): progress.stage = 'erasing', percent = 20
+        SI line.includes('Writing at'): progress.percent = 25 + (parsed_percent * 0.65)
+        SI line.includes('Hash of data verified'): progress.stage = 'verifying', percent = 95
+        SI line.includes('Hard resetting'): progress.stage = 'resetting', percent = 98
+        EMITE flash.progress CON stage, percent, message: line.trim()
+
+    _startDebugListener(): Void
+      mqtt = eventBus.mqtt
+      SI !mqtt: RETORNA
+      _onDebugMessage = (topic, payload) => {
+        match = topic.match(/^enki\/([^\/]+)\/debug\/([^\/]+)$/)
+        SI !match: RETORNA
+        deviceId = match[2]
+        data = JSON.parse(payload)
+        SI !data.lines: RETORNA
+        buf = debugBuffers.get(deviceId) || {lines: [], waiters: []}
+        buf.lines.push(...data.lines)
+        SI buf.lines.length > DEBUG_BUFFER_MAX_LINES: buf.lines.slice(-DEBUG_BUFFER_MAX_LINES)
+        PARA cada waiter EN buf.waiters: waiter(data.lines)
+        buf.waiters = []
+        EMITE flash.serial_output CON line: data.lines.join('\n'), device_id: deviceId
+      }
+      mqtt.on('message', _onDebugMessage)
+      mqtt.subscribe('enki/+/debug/+')
+
+    _addHistory(entry: FlashHistoryEntry): Void
+      flashHistory.unshift(entry)
+      SI flashHistory.length > config.max_history: flashHistory.length = config.max_history
+
+    _generateId(): String
+      RETORNA crypto.randomBytes(6).toString('hex')
+
+    _errorResponse(status: Integer, code: String, message: String, details?: Object): Object
+      error = {code, message}
+      SI details: error.details = details
+      RETORNA {status, error}
+
+    _classifyHandlerError(err: Error): {status, code}
+      msg = err.message.toLowerCase()
+      code = err.code
+      SI code == 'ENOENT': RETORNA {status: 404, code: 'RESOURCE_NOT_FOUND'}
+      SI msg.includes('timeout'): RETORNA {status: 504, code: 'UPSTREAM_TIMEOUT'}
+      SI msg.includes('invalid') O msg.includes('required'): RETORNA {status: 400, code: 'INVALID_INPUT'}
+      SI msg.includes('conflict') O msg.includes('already'): RETORNA {status: 409, code: 'CONFLICT_STATE'}
+      RETORNA {status: 500, code: 'UNKNOWN_ERROR'}
+
+    _handleHandlerError(logEvent: String, err: Error, kind: String): Object
+      {status, code} = _classifyHandlerError(err)
+      logger.error(logEvent, {kind, error_code: code, error_message: err.message})
+      metrics.increment('esp32-flasher.errors', {code, kind})
+      RETORNA _errorResponse(status, code, err.message)
+
+    async _publicarEvento(name: String, payload: Object, sourcePayload: Object): Promise<Object>
+      correlation_id = payload.correlation_id || sourcePayload?.correlation_id || null
+      project_id = payload.project_id || sourcePayload?.project_id || null
+      enriched = {...payload, correlation_id, timestamp: now().toISOString()}
+      SI project_id: enriched.project_id = project_id
+      await eventBus.publish(name, enriched)
+      RETORNA enriched
+
+    EVENTOS_SUBSCRIBES {
+      'firmware.build.completed': onBuildCompleted
+    }
+
+    EVENTOS_PUBLISHES {
+      'flash.started': {flash_id, port, method, binary_path, baud}
+      'flash.progress': {flash_id, stage, percent, message}
+      'flash.completed': {flash_id, port, method, binary_path, binary_size, duration_ms}
+      'flash.failed': {flash_id, port, method, error, exit_code, duration_ms}
+      'flash.serial_output': {port, line, device_id?, source?}
+    }
+  }
+}
+
+CLASE FlashSession {
+  ATRIBUTOS {
+    flash_id: String
+    port: String
+    method: String ('esptool'|'platformio')
+    binary_path: String
+    baud: Integer
+    project_id: String|Null
+    started_at: String (ISO)
+    log: Array<String>
+    progress: {stage: String, percent: Integer, message?: String}
+    process: ChildProcess|Null
+    _pioDir: String|Null (platformio only)
+  }
+}
+
+CLASE MonitorSession {
+  ATRIBUTOS {
+    process: ChildProcess
+    baud: Integer
+    project_id: String|Null
+    buffer: Array<String>
+    started_at: String (ISO)
+  }
+}
+
+CLASE FlashHistoryEntry {
+  ATRIBUTOS {
+    flash_id: String
+    port: String
+    method: String
+    binary_path: String
+    binary_size: Integer
+    status: String ('completed'|'failed'|'cancelled')
+    error: String|Null
+    exit_code: Integer|Null
+    duration_ms: Integer
+    timestamp: String (ISO)
+  }
+}
+
+CLASE DebugBuffer {
+  ATRIBUTOS {
+    lines: Array<String> (max DEBUG_BUFFER_MAX_LINES=500)
+    waiters: Array<Function> (callbacks waiting for new lines)
+  }
+}
+```
+
+## FACTURAS (v3.0.0) — Pipeline OCR + AI de Procesamiento de Facturas
+
+```
+INTERFAZ FacturasContract {
+  procesarArchivo(filePath: String, projectId: String, options?: Object): Promise<{success, facturaId?, duplicate?, error?, estructura?, metrics?}>
+  subirArchivo(data: {proyecto, archivo: {nombre, contenido}}): Promise<Response>
+  reprocesarFactura(data: {proyecto, id}): Promise<Response>
+  listarFacturas(data: {proyecto, estado?, desde?, hasta?, limit?}): Promise<Response>
+  obtenerFactura(data: {proyecto, id}): Promise<Response>
+  actualizarFactura(data: {proyecto, id, datos: Object}): Promise<Response>
+  estadisticas(data: {proyecto}): Promise<Response>
+  exportarCSV(data: {proyecto, semana?}): Promise<Response>
+  getPipelineMetrics(): Promise<Response>
+}
+
+CLASE FacturasModule HEREDA BaseModule IMPLEMENTA FacturasContract {
+  ATRIBUTOS {
+    name: String = 'facturas'
+    version: String = '3.0.0'
+    logger: Logger
+    eventBus: EventBus
+    uiHandler: UIRequestHandler
+    metrics: Metrics
+    services: ServiceExecutor
+    pipeline: InvoicePipeline
+    pipelineMetrics: PipelineMetrics
+    config: {
+      ocr: {provider, hint, languages},
+      ai: {providers: Array, temperature, maxTokens},
+      processing: {dpi, maxWidth, maxHeight, sharp},
+      timeouts: {pdfConvert, sharp, ocr, ai, db}
+    }
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, eventBus, uiHandler, metrics FROM context
+      CARGA config FROM context.moduleConfig
+      services = new ServiceExecutor(eventBus, logger)
+      pipeline = new InvoicePipeline({services, eventBus, logger, config})
+      pipelineMetrics = new PipelineMetrics(metrics, logger)
+      SUSCRIBE 'factura.entrada'
+      logger.info('module.loaded', {module: name, version, pipeline: 'v2'})
+
+    async onUnload(): Promise<Void>
+      LIMPIA services, pipeline, pipelineMetrics
+      logger.info('module.unloaded', {module: name})
+
+    async onFacturaEntrada(event: Event): Promise<Void>
+      data = _unwrap(event)
+      {projectId, filePath, source, origen} = data
+      SI !projectId O !filePath: LOG error, RETORNA
+      SI !fs.exists(filePath):
+        EMITE factura.error CON code: 'RESOURCE_NOT_FOUND'
+        RETORNA
+      EMITE factura.recibida
+      result = await _procesarArchivo(filePath, projectId, {source, origen})
+      SI result.success:
+        EMITE factura.procesada
+        SI source == 'telegram': _notifyTelegramResult(origen.botName, origen.chatId, result)
+      SINO:
+        EMITE factura.error
+
+    async handleProcesar(data: {proyecto, filePath, source?, origen?}): Promise<Response>
+      VALIDA proyecto, filePath obligatorios
+      VALIDA filePath existe
+      result = await _procesarArchivo(filePath, proyecto, {source, origen})
+      status = result.success ? 200 : (result.duplicate ? 409 : 500)
+      RETORNA {status, data: result}
+
+    async handleSubir(data: {proyecto, archivo: {nombre, contenido}, source?}): Promise<Response>
+      VALIDA proyecto, archivo.nombre, archivo.contenido obligatorios
+      storageDir = join(cwd(), 'data/projects', proyecto, 'storage', 'pendientes')
+      mkdir(storageDir, {recursive: true})
+      timestamp = now()
+      safeName = archivo.nombre.replace(/[^a-zA-Z0-9._-]/g, '_')
+      filePath = join(storageDir, `{timestamp}_{safeName}`)
+      buffer = Buffer.from(archivo.contenido, 'base64')
+      writeFile(filePath, buffer)
+      metrics.increment('facturas.subidas.total', {project_id: proyecto})
+      result = await _procesarArchivo(filePath, proyecto, {source, origen: {manual: true, nombreOriginal: archivo.nombre}})
+      status = result.success ? 201 : (result.duplicate ? 409 : 500)
+      RETORNA {status, data: result}
+
+    async handleReprocesar(data: {proyecto, id}): Promise<Response>
+      VALIDA proyecto, id obligatorios
+      factura = await services.call('local.facturas-db', 'obtener', {proyecto, id}, {timeout: config.timeouts.db})
+      SI !factura: RETORNA 404 RESOURCE_NOT_FOUND
+      SI !factura.path_original O !fs.exists(factura.path_original): RETORNA 404
+      result = await _procesarArchivo(factura.path_original, proyecto, {source: factura.source, facturaId: id})
+      RETORNA {status: result.success ? 200 : 500, data: result}
+
+    async handleListar(data: {proyecto, estado?, desde?, hasta?, limit?}): Promise<Response>
+      VALIDA proyecto obligatorio
+      result = await services.call('local.facturas-db', 'listar', {proyecto, estado, desde, hasta, limit: limit || 100}, {timeout: config.timeouts.db})
+      RETORNA {status: 200, data: result.data || result}
+
+    async handleObtener(data: {proyecto, id}): Promise<Response>
+      VALIDA proyecto, id obligatorios
+      result = await services.call('local.facturas-db', 'obtener', {proyecto, id}, {timeout: config.timeouts.db})
+      factura = result.data || result
+      SI !factura: RETORNA 404 RESOURCE_NOT_FOUND
+      RETORNA {status: 200, data: {factura}}
+
+    async handleActualizar(data: {proyecto, id, datos}): Promise<Response>
+      VALIDA proyecto, id, datos obligatorios
+      result = await services.call('local.facturas-db', 'actualizar', {proyecto, id, campos: datos}, {timeout: config.timeouts.db})
+      RETORNA {status: 200, data: result.data || result}
+
+    async handleEstadisticas(data: {proyecto}): Promise<Response>
+      VALIDA proyecto obligatorio
+      result = await services.call('local.facturas-db', 'estadisticas', {proyecto}, {timeout: config.timeouts.db})
+      stats = result.data || result
+      RETORNA {status: 200, data: {
+        total: stats.general?.total,
+        pendientes: stats.general?.pendientes,
+        procesadas: stats.general?.procesadas,
+        errores: stats.general?.errores,
+        exportadas: stats.general?.exportadas,
+        porSource: stats.porSource
+      }}
+
+    async handleExportar(data: {proyecto, semana?}): Promise<Response>
+      VALIDA proyecto obligatorio
+      result = await services.call('local.facturas-db', 'exportar', {proyecto, semana}, {timeout: config.timeouts.db})
+      exportData = result.data || result
+      csvPath = await _generarCSV(proyecto, exportData.facturas)
+      SI exportData.ids.length > 0:
+        semanaExport = exportData.semana || _calcularSemanaISO()
+        await services.call('local.facturas-db', 'marcarExportadas', {proyecto, ids: exportData.ids, semana: semanaExport})
+      contenido = readFile(csvPath, {encoding: 'base64'})
+      nombre = basename(csvPath)
+      EMITE factura.exportada
+      RETORNA {status: 200, data: {path: csvPath, nombre, contenido, mimeType: 'text/csv', total: exportData.total}}
+
+    async handlePipelineMetrics(): Promise<Response>
+      RETORNA {status: 200, data: pipelineMetrics.getDashboard()}
+
+    async handleToolProcesar(args: {projectId, filePath, source?}): Promise<Response>
+      VALIDA projectId, filePath obligatorios
+      result = await _procesarArchivo(filePath, projectId, {source: source || 'manual'})
+      RETORNA {status: result.success ? 200 : 500, data: result}
+
+    async handleToolListar(args: {projectId}): Promise<Response>
+      RETORNA handleListar({proyecto: args.projectId, ...args})
+
+    async handleToolEstadisticas(args: {projectId}): Promise<Response>
+      RETORNA handleEstadisticas({proyecto: args.projectId})
+
+    async _procesarArchivo(filePath: String, projectId: String, options?: Object): Promise<ProcessResult>
+      result = await pipeline.process(filePath, projectId, options)
+      pipelineMetrics.record(result)
+      RETORNA result
+
+    async _generarCSV(projectId: String, facturas: Array): Promise<String>
+      exportDir = join(cwd(), 'data/projects', projectId, 'storage', 'export')
+      mkdir(exportDir, {recursive: true})
+      headers = ['Fecha', 'Num_Factura', 'NIF_Emisor', 'Nombre_Emisor', 'NIF_Receptor', 'Nombre_Receptor', 'Descripcion', 'Base_Imponible', 'Tipo_IVA', 'Cuota_IVA', 'Tipo_RE', 'Cuota_RE', 'Total_Factura', 'Forma_Pago', 'Clave_Operacion']
+      BOM = '﻿'
+      csv = BOM + headers.join(';') + '\n'
+      PARA cada f EN facturas:
+        nif = f['NIF Proveedor'] || ''
+        total = parseFloat(f['Total'] || 0)
+        claveOp = (!nif O (total < 400 Y !f['NIF Receptor'])) ? 'F2' : 'F1'
+        row = [f['Fecha Factura'], f['Nº Factura'], nif, f['Proveedor'], '', '', f['Concepto'], f['Base Imponible'], f['% IVA'], f['Cuota IVA'], 0, 0, total, '', claveOp]
+        csv += row.map(v => _escapeCsv(v)).join(';') + '\n'
+      fecha = now().toISOString().slice(0, 10).replace(/-/g, '')
+      csvPath = join(exportDir, `facturas_{fecha}.csv`)
+      writeFile(csvPath, csv, 'utf-8')
+      RETORNA csvPath
+
+    _notifyTelegramResult(botName: String, chatId: String, result: Object): Void
+      text = ''
+      SI result.duplicate:
+        text = '⚠️ <b>Factura duplicada</b>\nYa existe en el sistema.'
+      SI result.success:
+        e = result.estructura || {}
+        proveedor = e.emisor?.nombre || 'Proveedor desconocido'
+        total = e.totales?.total_factura
+        numero = e.factura?.numero
+        fecha = e.factura?.fecha
+        text = `✅ <b>Factura procesada</b>\n\n📋 <b>{proveedor}</b>\n` + (numero ? `🔢 Nº: <code>{numero}</code>\n` : '') + (fecha ? `📅 {fecha}\n` : '') + (total ? `💰 {total} €\n` : '') + `\n⏱ {(result.metrics.totalDuration / 1000).toFixed(1)}s`
+      SINO:
+        text = `❌ <b>Error procesando factura</b>\n<code>{result.error || 'Error desconocido'}</code>`
+      PUBLICA telegram.send_message.request CON {request_id, botName, chatId, text, parseMode: 'HTML'}
+
+    async _publicarEvento(name: String, payload: Object, sourcePayload?: Object): Promise<Object>
+      enriched = {
+        correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
+        project_id: sourcePayload?.project_id || sourcePayload?.projectId || payload.project_id || DEFAULT_PROJECT_ID,
+        timestamp: now().toISOString(),
+        ...payload
+      }
+      await eventBus.publish(name, enriched)
+      RETORNA enriched
+
+    _escapeCsv(value: Any): String
+      str = String(value)
+      SI str.includes(';') O str.includes('"') O str.includes('\n'):
+        RETORNA '"' + str.replace(/"/g, '""') + '"'
+      RETORNA str
+
+    _calcularSemanaISO(fecha?: Date): String
+      d = new Date(fecha || now())
+      d.setHours(0, 0, 0, 0)
+      d.setDate(d.getDate() + 4 - (d.getDay() || 7))
+      yearStart = new Date(d.getFullYear(), 0, 1)
+      weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
+      RETORNA `{d.getFullYear()}-W{String(weekNo).padStart(2, '0')}`
+
+    _errorResponse(status: Integer, code: String, message: String, details?: Object): Object
+      error = {code, message}
+      SI details: error.details = details
+      RETORNA {status, error}
+
+    _handleHandlerError(logEvent: String, err: Error, kind: String): Object
+      code = err._code || _classifyHandlerError(err)
+      status = code == 'INVALID_INPUT' ? 400 : code == 'RESOURCE_NOT_FOUND' ? 404 : code == 'PERMISSION_DENIED' ? 403 : code == 'AUTHENTICATION_REQUIRED' ? 401 : code == 'ALREADY_EXISTS' ? 409 : code == 'CONFLICT_STATE' ? 409 : code == 'UPSTREAM_TIMEOUT' ? 504 : code == 'UPSTREAM_INVALID_RESPONSE' ? 502 : code == 'UPSTREAM_UNREACHABLE' ? 503 : 500
+      logger.error(logEvent, {error: err.message, code, kind})
+      metrics.increment('facturas.errors', {kind, code})
+      RETORNA _errorResponse(status, code, err.message, err._details)
+
+    _classifyHandlerError(err: Error): String
+      msg = (err.message || '').toLowerCase()
+      ecod = err.code || ''
+      SI ecod == 'ENOENT' O msg.includes('not found') O msg.includes('no encontrad'): RETORNA 'RESOURCE_NOT_FOUND'
+      SI ecod == 'EACCES' O msg.includes('permission') O msg.includes('forbidden'): RETORNA 'PERMISSION_DENIED'
+      SI ecod == 'EEXIST' O msg.includes('already exists'): RETORNA 'ALREADY_EXISTS'
+      SI msg.includes('timeout'): RETORNA 'UPSTREAM_TIMEOUT'
+      SI msg.includes('required') O msg.includes('invalid') O msg.includes('validation'): RETORNA 'INVALID_INPUT'
+      SI ecod Y ecod.startsWith('E'): RETORNA 'UNKNOWN_ERROR'
+      RETORNA 'UNKNOWN_ERROR'
+
+    _unwrap(event: Event): Object
+      RETORNA event.data || event.payload || event || {}
+
+    _logError(logEvent: String, fields: Object, kind: String, code: String): Void
+      logger.error(logEvent, {...fields, code, kind})
+      metrics.increment('facturas.errors', {kind, code})
+
+    EVENTOS_SUBSCRIBES {
+      'factura.entrada': onFacturaEntrada
+    }
+
+    EVENTOS_PUBLISHES {
+      'factura.recibida': {project_id, file_path, source}
+      'factura.procesada': {project_id, file_path, factura_id, duplicate, source}
+      'factura.error': {project_id, file_path, source, code, message}
+      'factura.exportada': {project_id, total, archivo}
+      'telegram.send_message.request': {request_id, botName, chatId, text, parseMode}
+    }
+  }
+}
+
+CLASE ProcessResult {
+  ATRIBUTOS {
+    success: Boolean
+    facturaId: String|Null
+    duplicate: Boolean
+    error: String|Null
+    estructura: Object|Null (formato canonico OCR+AI)
+    metrics: {
+      totalDuration: Integer,
+      steps: {intake, convert, prepare, ocr, ai_structure, validate, store}
+    }
+  }
+}
+```
+
+---
+
+# GRUPO 7 — PSEUDOCÓDIGO OOP
+
+## FILESYSTEM (v2.0.0) — Operaciones Scopeadas por Proyecto
+
+```
+INTERFAZ FilesystemContract {
+  listDir(path: String, recursive?: Boolean): Promise<Array<FileInfo>>
+  readFile(path: String, encoding?: String): Promise<String|Buffer>
+  writeFile(path: String, content: String|Buffer): Promise<Void>
+  deleteFile(path: String): Promise<Void>
+  mkdir(path: String): Promise<Void>
+  exists(path: String): Promise<Boolean>
+  moveFile(from: String, to: String): Promise<Void>
+  copyFile(from: String, to: String): Promise<Void>
+  appendFile(path: String, content: String): Promise<Void>
+  searchFiles(query: String, path?: String): Promise<Array<SearchResult>>
+  getStats(path: String): Promise<{size, modified, isDir}>
+  setWorkDir(path: String): Promise<Void>
+  getWorkDir(): Promise<String>
+  cleanup(path: String): Promise<{deleted, errors}>
+}
+
+CLASE FilesystemModule HEREDA BaseModule IMPLEMENTA FilesystemContract {
+  ATRIBUTOS {
+    name: String = 'filesystem'
+    version: String = '2.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    uiHandler: UIRequestHandler
+    basePath: String
+    activeProjectId: String|Null
+    activeProjectPath: String|Null
+    workingDirectory: String|Null
+    systemMode: Boolean
+    _moduleManifests: Map<moduleName, {scope, data_path}>
+    MAX_READ_SIZE: Integer (default 10MB)
+    MAX_SEARCH_RESULTS: Integer (default 100)
+  }
+
+  METODOS {
+    async onLoad(context: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus, uiHandler FROM context
+      basePath = path.join(cwd(), 'data')
+      ENSURA_DIR(basePath)
+      await _loadModuleManifests()
+      logger.info('filesystem.loaded', {basePath, manifests: _moduleManifests.size})
+
+    async onUnload(): Promise<Void>
+      activeProjectId = null
+      activeProjectPath = null
+      workingDirectory = null
+      systemMode = false
+      _moduleManifests.clear()
+      logger.info('filesystem.unloaded')
+
+    async onProjectActivated(event: Event): Promise<Void>
+      data = event.data || event
+      {project_id, base_path, name, metadata} = data
+      activeProjectId = project_id
+      SI metadata?.is_system == true:
+        systemMode = true
+        activeProjectPath = cwd()
+        workingDirectory = cwd()
+      SINO:
+        systemMode = false
+        activeProjectPath = base_path ? join(base_path, 'storage') : join(basePath, 'projects', project_id)
+        workingDirectory = activeProjectPath
+        await MKDIR_RECURSIVE(activeProjectPath)
+
+    async onProjectDeactivated(event: Event): Promise<Void>
+      activeProjectId = null
+      activeProjectPath = null
+      workingDirectory = basePath
+      systemMode = false
+
+    async handleListDir(data: {path?, recursive?}): Promise<Response>
+      resolvePath = _resolvePath(data.path || '.')
+      VALIDA_PERMISOS(resolvePath)
+      entries = await fs.readdir(resolvePath, {withFileTypes: true})
+      results = []
+      PARA cada entry EN entries:
+        info = _buildFileInfo(entry, resolvePath)
+        results.push(info)
+        SI data.recursive Y entry.isDirectory():
+          subResults = await _recursiveListDir(join(resolvePath, entry.name), MAX_SEARCH_RESULTS - results.length)
+          results.push(...subResults)
+      metrics.increment('fs.list.total')
+      EMITE fs.directory.listed CON path: resolvePath, count: results.length
+      RETORNA {status: 200, data: {path: resolvePath, entries: results, count: results.length}}
+
+    async handleReadFile(data: {path, encoding?}): Promise<Response>
+      resolvePath = _resolvePath(data.path)
+      VALIDA_PERMISOS(resolvePath)
+      VALIDA_SIZE_LIMIT(resolvePath, MAX_READ_SIZE)
+      encoding = data.encoding || 'utf-8'
+      SI _isBinaryFile(resolvePath):
+        content = await fs.readFile(resolvePath)
+        encoded = content.toString('base64')
+        metrics.increment('fs.read.total', {kind: 'binary'})
+        EMITE fs.file.read CON path: resolvePath, size: content.length
+        RETORNA {status: 200, data: {path: resolvePath, content: encoded, encoding: 'base64', size: content.length}}
+      SINO:
+        content = await fs.readFile(resolvePath, encoding)
+        metrics.increment('fs.read.total', {kind: 'text'})
+        EMITE fs.file.read CON path: resolvePath, size: content.length
+        RETORNA {status: 200, data: {path: resolvePath, content, encoding, size: content.length}}
+
+    async handleWriteFile(data: {path, content, encoding?}): Promise<Response>
+      resolvePath = _resolvePath(data.path)
+      VALIDA_PERMISOS(resolvePath)
+      VALIDA_REQUERIDOS(content)
+      encoding = data.encoding || 'utf-8'
+      SI NOT _directoryExists(dirname(resolvePath)):
+        await MKDIR_RECURSIVE(dirname(resolvePath))
+      buffer = typeof data.content == 'string' ? Buffer.from(data.content, encoding) : data.content
+      await fs.writeFile(resolvePath, buffer)
+      metrics.increment('fs.write.total')
+      EMITE fs.file.created O fs.file.updated CON path: resolvePath, size: buffer.length
+      RETORNA {status: 201, data: {path: resolvePath, size: buffer.length}}
+
+    async handleDeleteFile(data: {path}): Promise<Response>
+      resolvePath = _resolvePath(data.path)
+      VALIDA_PERMISOS(resolvePath)
+      VALIDA_EXISTE(resolvePath)
+      stat = await fs.stat(resolvePath)
+      SI stat.isDirectory():
+        await fs.rm(resolvePath, {recursive: true, force: true})
+        metrics.increment('fs.delete.total', {kind: 'directory'})
+        EMITE fs.directory.deleted CON path: resolvePath
+      SINO:
+        await fs.unlink(resolvePath)
+        metrics.increment('fs.delete.total', {kind: 'file'})
+        EMITE fs.file.deleted CON path: resolvePath
+      RETORNA {status: 200, data: {path: resolvePath, deleted: true}}
+
+    async handleMkdir(data: {path}): Promise<Response>
+      resolvePath = _resolvePath(data.path)
+      VALIDA_PERMISOS(resolvePath)
+      SI EXISTS(resolvePath):
+        RETORNA 409 CONFLICT_STATE
+      await fs.mkdir(resolvePath, {recursive: true})
+      metrics.increment('fs.mkdir.total')
+      EMITE fs.directory.created CON path: resolvePath
+      RETORNA {status: 201, data: {path: resolvePath, created: true}}
+
+    async handleExists(data: {path}): Promise<Response>
+      resolvePath = _resolvePath(data.path)
+      VALIDA_PERMISOS(resolvePath)
+      exists = EXISTS(resolvePath)
+      RETORNA {status: 200, data: {path: resolvePath, exists}}
+
+    async handleMoveFile(data: {from, to}): Promise<Response>
+      fromPath = _resolvePath(data.from)
+      toPath = _resolvePath(data.to)
+      VALIDA_PERMISOS(fromPath)
+      VALIDA_PERMISOS(toPath)
+      VALIDA_EXISTE(fromPath)
+      SI EXISTS(toPath):
+        RETORNA 409 CONFLICT_STATE
+      await fs.rename(fromPath, toPath)
+      metrics.increment('fs.move.total')
+      EMITE fs.file.moved CON from: fromPath, to: toPath
+      RETORNA {status: 200, data: {from: fromPath, to: toPath}}
+
+    async handleCopyFile(data: {from, to}): Promise<Response>
+      fromPath = _resolvePath(data.from)
+      toPath = _resolvePath(data.to)
+      VALIDA_PERMISOS(fromPath)
+      VALIDA_PERMISOS(toPath)
+      VALIDA_EXISTE(fromPath)
+      SI EXISTS(toPath):
+        RETORNA 409 CONFLICT_STATE
+      await fs.cp(fromPath, toPath, {recursive: true})
+      metrics.increment('fs.copy.total')
+      EMITE fs.file.copied CON from: fromPath, to: toPath
+      RETORNA {status: 200, data: {from: fromPath, to: toPath}}
+
+    async handleAppendFile(data: {path, content}): Promise<Response>
+      resolvePath = _resolvePath(data.path)
+      VALIDA_PERMISOS(resolvePath)
+      VALIDA_REQUERIDOS(content)
+      buffer = typeof data.content == 'string' ? Buffer.from(data.content, 'utf-8') : data.content
+      await fs.appendFile(resolvePath, buffer)
+      metrics.increment('fs.append.total')
+      EMITE fs.file.updated CON path: resolvePath
+      RETORNA {status: 200, data: {path: resolvePath, appended: true}}
+
+    async handleSearchFiles(data: {query, path?, limit?}): Promise<Response>
+      VALIDA_REQUERIDOS(query)
+      searchPath = _resolvePath(data.path || '.')
+      VALIDA_PERMISOS(searchPath)
+      limit = parseInt(data.limit) || MAX_SEARCH_RESULTS
+      results = []
+      regex = new RegExp(query, 'i')
+      await _recursiveSearch(searchPath, regex, results, limit)
+      metrics.increment('fs.search.total', {query_length: query.length})
+      RETORNA {status: 200, data: {path: searchPath, query, results, count: results.length}}
+
+    async handleGetStats(data: {path}): Promise<Response>
+      resolvePath = _resolvePath(data.path)
+      VALIDA_PERMISOS(resolvePath)
+      VALIDA_EXISTE(resolvePath)
+      stat = await fs.stat(resolvePath)
+      RETORNA {status: 200, data: {path: resolvePath, size: stat.size, modified: stat.mtime.toISOString(), isDir: stat.isDirectory()}}
+
+    async handleSetWorkDir(data: {path}): Promise<Response>
+      resolvePath = _resolvePath(data.path)
+      VALIDA_PERMISOS(resolvePath)
+      VALIDA_EXISTE(resolvePath)
+      stat = await fs.stat(resolvePath)
+      SI NOT stat.isDirectory():
+        RETORNA 400 INVALID_INPUT
+      workingDirectory = resolvePath
+      metrics.increment('fs.workdir.changed')
+      EMITE fs.workdir.changed CON path: resolvePath
+      RETORNA {status: 200, data: {workDir: resolvePath}}
+
+    async handleGetWorkDir(): Promise<Response>
+      RETORNA {status: 200, data: {workDir: workingDirectory}}
+
+    async handleCleanup(data: {path, pattern?}): Promise<Response>
+      resolvePath = _resolvePath(data.path)
+      VALIDA_PERMISOS(resolvePath)
+      VALIDA_EXISTE(resolvePath)
+      pattern = data.pattern || /\.tmp$|\.bak$|\.log$/
+      deleted = 0
+      errors = 0
+      await _recursiveCleanup(resolvePath, pattern, deleted, errors)
+      metrics.increment('fs.cleanup.total', {deleted})
+      EMITE fs.cleanup.completed CON path: resolvePath, deleted, errors
+      RETORNA {status: 200, data: {path: resolvePath, deleted, errors}}
+
+    _resolvePath(inputPath: String): String
+      SI inputPath == '@/':
+        RETORNA basePath
+      SI inputPath.startsWith('@/'):
+        RETORNA join(basePath, inputPath.slice(2))
+      SI inputPath == '~' O inputPath == '~/':
+        RETORNA activeProjectPath || workingDirectory || basePath
+      SI inputPath.startsWith('~/'):
+        base = activeProjectPath || workingDirectory || basePath
+        RETORNA join(base, inputPath.slice(2))
+      normalized = normalize(inputPath)
+      SI isAbsolute(normalized):
+        RETORNA normalized
+      RETORNA join(workingDirectory || activeProjectPath || basePath, normalized)
+
+    _validatePath(resolved: String): Boolean
+      SI NOT resolved.startsWith(activeProjectPath) Y NOT systemMode:
+        logger.warn('fs.permission.denied', {path: resolved})
+        metrics.increment('fs.errors', {kind: 'permission_denied'})
+        RETORNA false
+      relative = relative(activeProjectPath || basePath, resolved)
+      SI relative.startsWith('..'):
+        logger.warn('fs.path_traversal.detected', {path: resolved})
+        metrics.increment('fs.errors', {kind: 'path_traversal'})
+        RETORNA false
+      RETORNA true
+
+    async _loadModuleManifests(): Promise<Void>
+      INTENTA leer modules/**/module.json Y cachear {scope, data_path}
+      (implementación similar a filesystem module real)
+
+    async _publicarEvento(name: String, payload: Object): Promise<Void>
+      enriched = {...payload, project_id: activeProjectId, timestamp: now()}
+      await eventBus.publish(name, enriched)
+
+    EVENTOS_SUBSCRIBES {
+      'project.activated': onProjectActivated
+      'project.deactivated': onProjectDeactivated
+    }
+
+    EVENTOS_PUBLISHES {
+      'fs.directory.listed': {path, count}
+      'fs.file.read': {path, size}
+      'fs.file.created': {path, size}
+      'fs.file.updated': {path}
+      'fs.file.deleted': {path}
+      'fs.file.moved': {from, to}
+      'fs.file.copied': {from, to}
+      'fs.directory.created': {path}
+      'fs.directory.deleted': {path}
+      'fs.workdir.changed': {path}
+      'fs.cleanup.completed': {path, deleted, errors}
+    }
+  }
+}
+```
+
+## FIRMWARE-BUILDER (v2.0.0) — Compilación PlatformIO de Drivers ESP32
+
+```
+INTERFAZ FirmwareBuilderContract {
+  listDrivers(): Promise<Array<DriverInfo>>
+  build(driver: String, board?: String, clean?: Boolean): Promise<{buildId, status}>
+  getBuildStatus(buildId?: String): Promise<{buildId?, driver?, status?, progress?, log?}|{active: Array}>
+  listBoards(): Promise<Array<BoardInfo>>
+  getLog(buildId: String): Promise<{buildId, log: Array<String>}>
+}
+
+CLASE FirmwareBuilderModule HEREDA BaseModule IMPLEMENTA FirmwareBuilderContract {
+  ATRIBUTOS {
+    name: String = 'firmware-builder'
+    version: String = '2.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    config: {firmware_path, platformio_path, build_timeout_ms, max_concurrent_builds}
+    drivers: Map<driverId, DriverInfo>
+    activeBuilds: Map<buildId, BuildSession>
+    BOARDS: Map<boardId, {name, platform, mcu, flash, psram}>
+    MAX_LOG_LINES: Integer (default 500)
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus FROM core
+      CARGA config FROM core.config['firmware-builder']
+      VALIDAR_CONFIG()
+      await _scanDrivers()
+      metrics.gauge('firmware.drivers.count', drivers.size)
+      metrics.gauge('firmware.active_builds.count', 0)
+      logger.info('firmware-builder.loaded', {drivers: drivers.size, firmware_path: config.firmware_path})
+
+    async onUnload(): Promise<Void>
+      killed = 0
+      PARA cada [id, build] EN activeBuilds:
+        SI build.process NO killed: KILL(SIGTERM), killed++
+      activeBuilds.clear()
+      drivers.clear()
+      logger.info('firmware-builder.unloaded', {killed})
+
+    async handleListDrivers(): Promise<Response>
+      await _scanDrivers()
+      list = []
+      PARA cada [id, driver] EN drivers:
+        list.push({id, name, description, board, capabilities, has_binary, last_build, is_building: activeBuilds.has(id)})
+      RETORNA {status: 200, data: {drivers: list, total: list.length}}
+
+    async handleBuild(data: {driver, board?, clean?}): Promise<Response>
+      VALIDA driver obligatorio
+      driverInfo = drivers.get(data.driver)
+      SI !driverInfo: RETORNA 404 RESOURCE_NOT_FOUND
+      SI activeBuilds.has(data.driver): RETORNA 409 CONFLICT_STATE
+      SI activeBuilds.size >= config.max_concurrent_builds: RETORNA 429 RATE_LIMITED
+      buildId = crypto.randomBytes(6).toString('hex')
+      build = {buildId, driver: data.driver, board: data.board || driverInfo.board, clean: !!data.clean, started_at: now(), log: [], progress: 0, process: null}
+      activeBuilds.set(buildId, build)
+      metrics.gauge('firmware.active_builds.count', activeBuilds.size)
+      EMITE firmware.build_started CON buildId, driver: data.driver
+      _runBuild(buildId, driverInfo, data.board, !!data.clean)
+      RETORNA {status: 202, data: {buildId, driver: data.driver, status: 'building'}}
+
+    _runBuild(buildId: String, driver: DriverInfo, board: String, clean: Boolean): Void
+      build = activeBuilds.get(buildId)
+      args = ['run', '-d', driver.path]
+      SI clean: args.push('-t', 'clean')
+      process = spawn(config.platformio_path, args, {timeout: config.build_timeout_ms})
+      build.process = process
+      process.stdout.on('data'): build.log.push(data.toString()), _updateProgress(buildId, data.toString())
+      process.on('close'): await _onBuildComplete(buildId, exitCode)
+      process.on('error'): await _onBuildError(buildId, err)
+
+    async _onBuildComplete(buildId: String, exitCode: Integer): Promise<Void>
+      build = activeBuilds.get(buildId)
+      duration = now() - build.started_at
+      activeBuilds.delete(buildId)
+      metrics.gauge('firmware.active_builds.count', activeBuilds.size)
+      SI exitCode == 0:
+        metrics.increment('firmware.build.success')
+        driver = drivers.get(build.driver)
+        driver.last_build = now()
+        EMITE firmware.build_completed CON buildId, driver: build.driver, duration_ms: duration
+      SINO:
+        metrics.increment('firmware.build.failed')
+        errorLog = build.log.slice(-20).join('\n')
+        EMITE firmware.build_failed CON buildId, driver: build.driver, exit_code: exitCode, log: errorLog
+
+    async _onBuildError(buildId: String, err: Error): Promise<Void>
+      activeBuilds.delete(buildId)
+      metrics.increment('firmware.build.error')
+      EMITE firmware.build_failed CON buildId, error: err.message
+
+    async handleGetBuildStatus(data: {buildId?}): Promise<Response>
+      SI data.buildId:
+        build = activeBuilds.get(data.buildId)
+        SI !build: RETORNA 404 RESOURCE_NOT_FOUND
+        RETORNA {status: 200, data: {buildId: data.buildId, driver: build.driver, status: 'building', progress: build.progress, log_lines: build.log.length}}
+      SINO:
+        active = Array.from(activeBuilds).map(([id, build]) => ({buildId: id, driver: build.driver, status: 'building', progress: build.progress}))
+        RETORNA {status: 200, data: {active, count: active.length}}
+
+    async handleListBoards(): Promise<Response>
+      boards = Array.from(BOARDS.values()).map(b => ({id: b.name, name: b.name, platform: b.platform, mcu: b.mcu, flash: b.flash, psram: b.psram}))
+      RETORNA {status: 200, data: {boards, total: boards.length}}
+
+    _updateProgress(buildId: String, logLine: String): Void
+      build = activeBuilds.get(buildId)
+      SI logLine.includes('Building'):
+        build.progress = 20
+      SI logLine.includes('Compiling'):
+        build.progress = 50
+      SI logLine.includes('Linking'):
+        build.progress = 80
+      EMITE firmware.build_progress CON buildId, progress: build.progress
+
+    async _scanDrivers(): Promise<Void>
+      drivers.clear()
+      PARA cada directorio EN config.firmware_path:
+        SI exists(join(directorios, 'platformio.ini')):
+          manifest = _parsePlatformioIni(...)
+          driverId = basename(directorios)
+          drivers.set(driverId, {id: driverId, name: manifest.name, description: manifest.description, board: manifest.board, path: directorios, last_build: null})
+
+    EVENTOS_SUBSCRIBES {
+    }
+
+    EVENTOS_PUBLISHES {
+      'firmware.build_started': {buildId, driver}
+      'firmware.build_progress': {buildId, progress}
+      'firmware.build_completed': {buildId, driver, duration_ms}
+      'firmware.build_failed': {buildId, driver, exit_code?, error?, log?}
+    }
+  }
+}
+
+CLASE BuildSession {
+  ATRIBUTOS {
+    buildId: String
+    driver: String
+    board: String
+    clean: Boolean
+    started_at: String (ISO)
+    log: Array<String> (max MAX_LOG_LINES)
+    progress: Integer (0-100)
+    process: ChildProcess|Null
+  }
+}
+
+CLASE DriverInfo {
+  ATRIBUTOS {
+    id: String
+    name: String
+    description: String
+    board: String
+    path: String
+    last_build: String|Null (ISO)
+    capabilities: Array<String>
+    has_binary: Boolean
+  }
+}
+```
+
+## FIRMWARE-MANAGER (v3.0.0) — Catálogo Versionado + OTA via Shadow
+
+```
+INTERFAZ FirmwareManagerContract {
+  listCatalog(type?: String): Promise<Array<Release>>
+  registerFirmware(data: {type, version, file, sha256, changelog?}): Promise<{registered, version}>
+  triggerOta(device_id: String, type: String, version: String): Promise<{ota_id, device_id}>
+  getOtaStatus(ota_id?: String): Promise<{ota_id?, device_id?, status?}|{active: Array}>
+  rollback(device_id: String): Promise<Void>
+  getDeviceVersions(device_id: String): Promise<{device_id, current, available}>
+}
+
+CLASE FirmwareManagerModule HEREDA BaseModule IMPLEMENTA FirmwareManagerContract {
+  ATRIBUTOS {
+    name: String = 'firmware-manager'
+    version: String = '3.0.0'
+    logger: Logger
+    metrics: Metrics
+    eventBus: EventBus
+    config: {data_path, auto_check_on_register, ota_timeout_ms, ota_cleanup_interval_ms}
+    catalog: Map<type, {latest, releases: Map<version, Release>, projects}>
+    pendingOtas: Map<ota_id, OtaSession>
+    otaLog: Array<OtaLogEntry>
+    _catalogFile: String
+    _cleanupTimer: NodeJS.Timeout|Null
+  }
+
+  METODOS {
+    async onLoad(core: EventCore): Promise<Void>
+      INICIALIZA logger, metrics, eventBus FROM core
+      CARGA config FROM core.config['firmware-manager']
+      _catalogFile = join(config.data_path, 'firmware-catalog.json')
+      ENSURA_DIR(config.data_path)
+      await _loadCatalog()
+      SUSCRIBE firmware.build_completed
+      _cleanupTimer = setInterval(() => _cleanupStaleOtas(), config.ota_cleanup_interval_ms)
+      logger.info('firmware-manager.loaded', {catalog_types: catalog.size})
+
+    async onUnload(): Promise<Void>
+      SI _cleanupTimer: clearInterval(_cleanupTimer)
+      await _saveCatalog()
+      pendingOtas.clear()
+      catalog.clear()
+      logger.info('firmware-manager.unloaded')
+
+    async onBuildCompleted(event: Event): Promise<Void>
+      {buildId, driver, duration_ms} = event.data || event
+      buildArtifactPath = _resolveBuildPath(driver)
+      SI NOT EXISTS(buildArtifactPath): RETORNA
+      binary = readFile(buildArtifactPath)
+      sha256 = SHA256(binary)
+      type = driver
+      version = _extractVersionFromManifest(driver) || '1.0.0'
+      await handleRegisterFirmware({type, version, file: basename(buildArtifactPath), sha256, changelog: `Auto-registered from build ${buildId}`}, {auto: true})
+
+    async handleListCatalog(data: {type?}): Promise<Response>
+      list = []
+      PARA cada [type, entry] EN catalog:
+        SI data.type Y data.type != type: CONTINÚA
+        PARA cada [version, release] EN entry.releases:
+          list.push({type, version, file: release.file, sha256: release.sha256.slice(0, 8) + '...', size: release.size, changelog: release.changelog, created_at: release.created_at})
+      RETORNA {status: 200, data: {releases: list, total: list.length}}
+
+    async handleRegisterFirmware(data: {type, version, file, sha256, changelog?}, sourcePayload?: Object): Promise<Response>
+      VALIDA type, version, file, sha256 obligatorios
+      VALIDA_SEMVER(version)
+      VALIDA_SHA256(sha256)
+      SI NOT _fileExists(file):
+        logger.warn('firmware-manager.register.file_not_found', {file})
+        RETORNA 404 RESOURCE_NOT_FOUND
+      fileSize = _getFileSize(file)
+      release = {version, file, sha256, size: fileSize, changelog: data.changelog || '', created_at: now(), status: 'active'}
+      SI NOT catalog.has(data.type):
+        catalog.set(data.type, {latest: version, releases: new Map(), projects: {}})
+      entry = catalog.get(data.type)
+      entry.releases.set(version, release)
+      SI _compareVersions(version, entry.latest) > 0:
+        entry.latest = version
+      await _saveCatalog()
+      _addToLog({type: data.type, version, action: 'registered', timestamp: now()})
+      metrics.increment('firmware.registered.total')
+      EMITE firmware.registered CON type: data.type, version, file, sha256
+      RETORNA {status: 201, data: {registered: true, version}}
+
+    async handleTriggerOta(data: {device_id, type, version?}): Promise<Response>
+      VALIDA device_id, type obligatorios
+      targetVersion = data.version || _getLatestVersion(data.type)
+      SI NOT targetVersion: RETORNA 404 RESOURCE_NOT_FOUND
+      entry = catalog.get(data.type)
+      release = entry.releases.get(targetVersion)
+      SI NOT release: RETORNA 404
+      ota_id = crypto.randomBytes(6).toString('hex')
+      otaSession = {ota_id, device_id, type: data.type, target_version: targetVersion, status: 'initiating', started_at: now(), log: []}
+      pendingOtas.set(ota_id, otaSession)
+      metrics.increment('firmware.ota.initiated')
+      EMITE firmware.ota_requested CON ota_id, device_id, type: data.type, version: targetVersion
+      PUBLICA shadow.set_desired CON {device_id, desired: {firmware: {type: data.type, version: targetVersion}}}
+      _addToLog({action: 'ota_initiated', device_id, ota_id, target_version: targetVersion, timestamp: now()})
+      RETORNA {status: 202, data: {ota_id, device_id, status: 'initiating'}}
+
+    async onShadowUpdated(event: Event): Promise<Void>
+      {device_id, reported} = event.data || event
+      SI NOT reported?.firmware?.version: RETORNA
+      currentVersion = reported.firmware.version
+      otaSession = Array.from(pendingOtas.values()).find(o => o.device_id == device_id)
+      SI otaSession:
+        SI currentVersion == otaSession.target_version:
+          otaSession.status = 'completed'
+          pendingOtas.delete(otaSession.ota_id)
+          metrics.increment('firmware.ota.success')
+          EMITE firmware.ota_completed CON ota_id: otaSession.ota_id, device_id, version: currentVersion
+          _addToLog({action: 'ota_completed', device_id, ota_id: otaSession.ota_id, version: currentVersion, timestamp: now()})
+        SINO SI now() - otaSession.started_at > config.ota_timeout_ms:
+          otaSession.status = 'failed'
+          pendingOtas.delete(otaSession.ota_id)
+          metrics.increment('firmware.ota.timeout')
+          EMITE firmware.ota_failed CON ota_id: otaSession.ota_id, device_id, reason: 'timeout'
+
+    async handleGetOtaStatus(data: {ota_id?}): Promise<Response>
+      SI data.ota_id:
+        session = pendingOtas.get(data.ota_id)
+        SI !session: RETORNA 404 RESOURCE_NOT_FOUND
+        RETORNA {status: 200, data: {ota_id: data.ota_id, device_id: session.device_id, status: session.status, target_version: session.target_version}}
+      SINO:
+        active = Array.from(pendingOtas.values()).map(s => ({ota_id: s.ota_id, device_id: s.device_id, status: s.status}))
+        RETORNA {status: 200, data: {active, count: active.length}}
+
+    async handleRollback(data: {device_id}): Promise<Response>
+      otaSession = Array.from(pendingOtas.values()).find(o => o.device_id == data.device_id)
+      SI otaSession Y otaSession.status != 'completed':
+        pendingOtas.delete(otaSession.ota_id)
+      PUBLICA shadow.set_desired CON {device_id: data.device_id, desired: {firmware: {}}}
+      EMITE firmware.ota_rollback_requested CON device_id: data.device_id
+      RETORNA {status: 200, data: {device_id: data.device_id, rollback_requested: true}}
+
+    async handleGetDeviceVersions(data: {device_id}): Promise<Response>
+      RETORNA {status: 200, data: {device_id: data.device_id, current: 'unknown', available: Array.from(catalog.keys()).map(type => ({type, latest: _getLatestVersion(type)}))}}
+
+    _getLatestVersion(type: String): String|Null
+      entry = catalog.get(type)
+      RETORNA entry?.latest || null
+
+    _compareVersions(v1: String, v2: String): Integer
+      p1 = v1.split('.').map(x => parseInt(x))
+      p2 = v2.split('.').map(x => parseInt(x))
+      PARA i = 0 HASTA max(p1.length, p2.length):
+        cmp = (p1[i] || 0) - (p2[i] || 0)
+        SI cmp != 0: RETORNA cmp
+      RETORNA 0
+
+    async _loadCatalog(): Promise<Void>
+      SI EXISTS(_catalogFile):
+        data = JSON.parse(readFile(_catalogFile, 'utf-8'))
+        PARA cada [type, entry] EN data.catalog:
+          releases = new Map(Object.entries(entry.releases))
+          catalog.set(type, {latest: entry.latest, releases, projects: entry.projects || {}})
+
+    async _saveCatalog(): Promise<Void>
+      data = {_version: 1, _updated: now(), catalog: {}}
+      PARA cada [type, entry] EN catalog:
+        data.catalog[type] = {latest: entry.latest, releases: Object.fromEntries(entry.releases), projects: entry.projects}
+      writeFile(_catalogFile, JSON.stringify(data, null, 2))
+
+    _addToLog(entry: Object): Void
+      otaLog.unshift({...entry, timestamp: now()})
+      SI otaLog.length > 500: otaLog.length = 500
+
+    async _cleanupStaleOtas(): Promise<Void>
+      cutoff = now() - (24 * 60 * 60 * 1000)
+      toDelete = []
+      PARA cada [ota_id, session] EN pendingOtas:
+        SI session.started_at < cutoff:
+          toDelete.push(ota_id)
+      PARA cada id EN toDelete:
+        pendingOtas.delete(id)
+
+    EVENTOS_SUBSCRIBES {
+      'firmware.build_completed': onBuildCompleted
+      'shadow.updated': onShadowUpdated
+    }
+
+    EVENTOS_PUBLISHES {
+      'firmware.registered': {type, version, file, sha256}
+      'firmware.ota_requested': {ota_id, device_id, type, version}
+      'firmware.ota_completed': {ota_id, device_id, version}
+      'firmware.ota_failed': {ota_id, device_id, reason}
+      'firmware.ota_rollback_requested': {device_id}
+      'shadow.set_desired': {device_id, desired}
+    }
+  }
+}
+
+CLASE OtaSession {
+  ATRIBUTOS {
+    ota_id: String
+    device_id: String
+    type: String
+    target_version: String
+    status: String (initiating|in_progress|completed|failed)
+    started_at: String (ISO)
+    log: Array<String>
+  }
+}
+
+CLASE Release {
+  ATRIBUTOS {
+    version: String
+    file: String
+    sha256: String
+    size: Integer
+    changelog: String
+    created_at: String (ISO)
+    status: String (active|deprecated)
+  }
+}
+
+CLASE OtaLogEntry {
+  ATRIBUTOS {
+    action: String
+    device_id: String|Null
+    ota_id: String|Null
+    type: String|Null
+    version: String|Null
+    target_version: String|Null
+    reason: String|Null
+    timestamp: String (ISO)
+  }
+}
+```
+
+https://claude.ai/code/session_019C4pks5RDdscuKPqVdTWRF
 

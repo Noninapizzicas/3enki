@@ -2,9 +2,10 @@
   "_doc": "Blueprint CONCRETO del modulo recetas v1.0.0. Reemplaza completamente al modulo recetas legacy v4.0.0 (cuyo index.js queda como referencia historica). Declara las 13 operaciones del dominio en formato declarativo: contrato + pseudocodigo + reglas. El LLM ES el runtime: lee este blueprint (junto con el padre) como su contrato, sigue el pseudocodigo de cada operacion publicando eventos al bus directamente via bus.publish / bus.publishAndWait. NO existe runtime intermedio. NO existen helpers JS del dominio.",
 
   "id": "recetas",
-  "version": "blueprint-1.9.0",
+  "version": "blueprint-2.0.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
+  "_v2_changelog": "v2.0.0 (2026-06-09): MODELO CANONICO. Descompone el dominio en 3 clases (Ingrediente, Receta, Linea) como seccion gobernante 'modelo_canonico' — UNA estructura, un solo patron, para que el LLM no improvise formas distintas cada dia (raiz del churn/perdida/alucinacion segun audit del proyecto nonina). Cambios de shape: Receta gana 'tipo' (pizza|masa|salsa|base) y 'rinde' {cantidad,unidad}; 'ingredientes[]' → 'lineas[]' donde cada Linea tiene UN campo de enlace 'ref' (unifica id_ingrediente+ref_receta_id: apunta a Ingrediente del catalogo O a otra Receta). Se eliminan de la friccion porciones/dificultad/tiempo_min (el LLM ya NO los pide). coste_porcion → coste_unidad (coste_total/rinde.cantidad). disciplina_ingredientes → disciplina_lineas. campos_que_marcan_completa = {nombre,tipo,lineas}. ESTADO: modelo + shapes + disciplina LOCKED este commit; pendiente de migrar a continuacion el pseudocodigo de las operaciones, escandallo (recorre lineas/ref) y los stores frontend. modelo_canonico es la fuente de verdad de la estructura mientras tanto.",
   "_v1_9_changelog": "v1.9.0 (2026-06-09): consolida las DOS vias en recetas.json — recetas[] + ingredientes_catalogo[] como fuente UNICA de precio (la otra via). (1) shape_ingrediente_catalogado gana 'id' (slug estable, clave de enlace) y 'mercadona_producto_id' (cache del producto para refrescar precio sin re-navegar); 'unidad' acotada a kg|l|ud y precio_mercado documentado como precio por esa unidad. (2) shape_ingrediente (linea de receta) gana 'id_ingrediente' (enlace al catalogo) — mutuamente excluyente con ref_receta_id. (3) actualizar_precio: upsert keyed por id (slug derivado del nombre si no se pasa), soporta id + mercadona_producto_id; es la operacion por la que escandallo cachea precios Mercadona (una conexion por ingrediente). (4) disciplina_ingredientes: regla CATALOGO UNICA FUENTE DE PRECIO (commodity → id_ingrediente → catalogo; nada de precios sueltos en la receta). Retrocompatible: campos nuevos opcionales.",
   "_v1_8_changelog": "v1.8.0 (2026-06-09): educa al LLM en la disciplina receta↔ingrediente para que las recetas nazcan costeables y no haya que reparar el dato a posteriori. (1) shape_ingrediente gana campo opcional ref_receta_id (uuid|null): cuando un ingrediente es a su vez una preparacion mantenida como receta (masa, salsa base, semi-elaborado) se referencia por id (cantidad = nº porciones, unidad='ud') en vez de duplicar su formula como commodity — escandallo usara su coste_porcion real en vez de estimar. (2) normalizadores_que_aplica_el_llm gana bloque disciplina_ingredientes con 4 reglas: UNIDAD CANONICA (g|kg|ml|l|ud, prohibido peso embebido en unidad tipo 'bola (315g)'), NOMBRE RESOLUBLE Y UNICO (comercial/Mercadona, sin genericos como 'Queso', mismo nombre en todas las recetas), SUB-RECETA (ref_receta_id), NO DUPLICAR PREPARACIONES (listar antes de crear, reusar la masa existente). (3) garantiza añade la invariante correspondiente. Sin cambios en operaciones ni en el shape persistido fuera del campo nuevo (opcional, retrocompatible: recetas sin ref_receta_id siguen valiendo).",
   "_v1_1_changelog": "v1.1.0 (2026-05-24): anyade subscriber asincrono al evento 'escandallo.coste.calculado' via mecanismo blueprint-subscribers-asincronos (ai-gateway commit 6cb2082c). Operacion interna nueva _aplicar_coste_calculado (prefijo _ = no expuesta como cajon al LLM, solo invocada cuando llega el evento). Recetas mantiene la propiedad absoluta de pizzepos/recetas.json — escandallo NO escribe directo (paradigma event-core puro), publica el evento y recetas lo aplica. Operaciones pre-existentes (crear, listar, obtener, etc.) sin cambios.",
@@ -35,6 +36,31 @@
     "incorrecto": "publishAndWait('fs.read.request', { path: base_path + '/pizzepos/recetas.json' })  // duplica prefijo"
   },
 
+  "modelo_canonico": {
+    "_descripcion": "LA estructura. Govierna TODO el blueprint. Tres clases, un solo patron — el LLM construye SIEMPRE asi, no improvisa formas distintas cada vez. El coste es DERIVADO (lo escribe escandallo); el LLM solo estructura, no calcula coste en el chat.",
+    "clases": {
+      "Ingrediente": "atomo con precio (vive en ingredientes_catalogo[]). { id: slug, nombre: comercial unico, compra_unidad: 'kg'|'l'|'ud', precio: number por compra_unidad, fuente: 'mercadona'|'manual'|'estimado' }.",
+      "Receta": "TODO lo que se elabora: pizza | masa | salsa | base (vive en recetas[]). { id: slug, nombre, tipo, rinde: {cantidad, unidad}, lineas: Linea[] }. coste_total/coste_unidad son DERIVADOS — los escribe escandallo, el LLM NO los toca.",
+      "Linea": "une una Receta con una de sus partes. { ref: id, nombre, cantidad: number, unidad: 'g'|'ml'|'ud', notas?: string }. 'ref' apunta a un Ingrediente (catalogo) O a otra Receta (sub-receta: masa, salsa). UN solo campo de enlace para todo."
+    },
+    "resolucion_ref": "escandallo resuelve 'ref': si esta en ingredientes_catalogo → Ingrediente (usa su precio); si esta en recetas → Receta (usa su coste_unidad x cantidad). Por eso masa, salsas caseras y toppings caben TODOS en la misma forma de Linea — un solo mecanismo.",
+    "camino_directo_del_llm": [
+      "Para crear/editar una receta SOLO necesitas: nombre, tipo (pizza|masa|salsa|base) y las lineas {ref, cantidad, unidad}.",
+      "Por cada linea: si el 'que' ya existe (ingrediente o receta) usa su id en ref; si es un ingrediente nuevo, dalo de alta en el catalogo (nombre comercial unico) y usa su id.",
+      "NO preguntes porciones, dificultad ni tiempo — no son del coste. 'rinde' lo infieres: pizza={1,'ud'}; masa={nº bolas,'ud'}; salsa={peso total,'g'}.",
+      "Una salsa casera (Victorino, alioli, mostaza, trufa) es una Receta tipo='salsa', NO una nota: creala una vez y referenciala con ref desde las pizzas.",
+      "El coste no lo calculas tu en el chat: lo hace escandallo y se persiste. Tu solo estructuras."
+    ],
+    "ejemplo": {
+      "ingredientes_catalogo": [ { "id": "mozzarella", "nombre": "Mozzarella fresca", "compra_unidad": "kg", "precio": 7.2, "fuente": "mercadona" } ],
+      "recetas": [
+        { "id": "masa-nonina", "nombre": "Masa Nonina", "tipo": "masa", "rinde": { "cantidad": 8, "unidad": "ud" }, "lineas": [ { "ref": "harina", "nombre": "Harina de fuerza", "cantidad": 1000, "unidad": "g" } ] },
+        { "id": "cumbia", "nombre": "Cumbia", "tipo": "pizza", "rinde": { "cantidad": 1, "unidad": "ud" }, "lineas": [ { "ref": "masa-nonina", "nombre": "Masa Nonina", "cantidad": 1, "unidad": "ud" }, { "ref": "mozzarella", "nombre": "Mozzarella", "cantidad": 80, "unidad": "g" }, { "ref": "salsa-victorino", "nombre": "Salsa Victorino", "cantidad": 30, "unidad": "g" } ] }
+      ]
+    },
+    "_estado_migracion": "v2.0.0: modelo canonico LOCKED. Pendiente de alinear a este modelo (en commits siguientes): pseudocodigo de las operaciones (crear/actualizar/etc. aun describen el shape viejo 'ingredientes[]'), escandallo (recorre 'lineas' con 'ref'), y los stores frontend (recetas.ts/escandallo.ts leen el shape viejo). Hasta entonces, modelo_canonico es la fuente de verdad de la ESTRUCTURA; las ops migran sin romper."
+  },
+
   "estado_persistente": {
     "_descripcion": "El unico estado del modulo vive en disco como JSON en pizzepos/recetas.json del proyecto. Estructura del store.",
     "ubicacion_logica": "/pizzepos/recetas.json (relativo al base_path del proyecto)",
@@ -45,15 +71,13 @@
       "ingredientes_catalogo": "array de IngredienteCatalogado"
     },
     "shape_receta": {
-      "id":                "uuid v4 (generado por el LLM cuando crea — en esta version vale uuid alucinado del LLM; sugerencia futura: primitiva bus.newId)",
+      "id":                "slug estable (lowercase, guiones; derivado del nombre). Clave de enlace desde Linea.ref.",
       "nombre":            "string trim",
+      "tipo":              "string in {pizza, masa, salsa, base} — que clase de elaborado es",
       "descripcion":       "string | ''",
-      "ingredientes":      "array de { nombre, cantidad: number|null, unidad: string|null, notas: string, id_ingrediente: string|null, ref_receta_id: uuid|null }",
-      "_ingredientes_nota": "TRES tipos de linea: (1) ref_receta_id ≠ null → sub-receta del proyecto (masa, salsa base...): cantidad = nº de porciones, unidad='ud'; escandallo usa coste_porcion de la receta referida × cantidad. (2) id_ingrediente ≠ null → commodity enlazado a una entrada de ingredientes_catalogo (precio unico via catalogo). (3) ambos null → commodity sin enlazar: escandallo lo resuelve por nombre. ref_receta_id e id_ingrediente son mutuamente excluyentes.",
-      "instrucciones":     "array de string (pasos numerados)",
-      "porciones":         "number > 0 | null",
-      "tiempo_min":        "number >= 0 | null",
-      "dificultad":        "number 1-10 | null",
+      "rinde":             "{ cantidad: number > 0, unidad: 'ud'|'g'|'ml' } — cuanto produce. pizza={1,ud}; masa={nº bolas,ud}; salsa={peso total,g}. escandallo: coste_unidad = coste_total / rinde.cantidad.",
+      "lineas":            "array de Linea { ref, nombre, cantidad: number, unidad: 'g'|'ml'|'ud', notas?: string }. ref → id de un Ingrediente (catalogo) o de otra Receta (sub-receta).",
+      "instrucciones":     "array de string (pasos) | '' — opcional, info de cocina (no bloquea coste)",
       "categorias":        "array de string",
       "etiquetas":         "array de string",
       "fuente":            "string in {manual, importada, sugerida, agente} — default 'manual'",
@@ -62,18 +86,17 @@
       "version":           "number (1 al crear, +1 por update)",
       "history":           "array de snapshots de versiones anteriores ({ ...receta sin history, _archived_at: ISO })",
       "incompleta":        "boolean (true si campos_pendientes.length > 0)",
-      "campos_pendientes": "array — campos de {nombre, ingredientes, instrucciones, porciones} que esten vacios",
+      "campos_pendientes": "array — de {nombre, tipo, lineas} que esten vacios",
       "created_at":        "ISO 8601",
       "updated_at":        "ISO 8601",
       "_campos_escritos_por_escandallo": {
-        "_descripcion": "Campos OPCIONALES escritos por el modulo escandallo (blueprint-2.0.0) cuando se calcula y persiste el coste de esta receta. recetas blueprint NO los toca — los preserva tal cual durante mutaciones (no los borra al hacer update). Si no se ha calculado nunca, ausentes. La pagina de recetas los muestra cuando estan.",
-        "coste_total":              "number — suma de valor_calculado de ingredientes con precio (eur).",
-        "coste_porcion":            "number — coste_total / porciones, 2 decimales.",
-        "coste_actualizado_at":     "ISO 8601 — timestamp del ultimo calculo de escandallo.",
-        "postcode_usado":           "string (5 digitos) — postcode con el que se consultaron precios.",
-        "fuentes_precios":          "array de strings ⊆ {mercadona, estimado_llm, no_disponible}.",
-        "ingredientes_detalle":     "array — desglose por linea con precio_unitario, precio_unidad, precio_kg, valor_calculado, fuente, mercadona_producto_id.",
-        "ingredientes_sin_precio":  "array de strings (nombres) que no se pudieron valorar."
+        "_descripcion": "DERIVADOS. Los escribe escandallo al calcular coste; el LLM NO los toca y recetas los preserva en mutaciones. Ausentes si nunca se calculo.",
+        "coste_total":          "number — suma del valor de las lineas (eur).",
+        "coste_unidad":         "number — coste_total / rinde.cantidad, 2 decimales.",
+        "coste_actualizado_at": "ISO 8601.",
+        "fuentes_precios":      "array ⊆ {catalogo, mercadona, estimado_llm, sub_receta, no_disponible}.",
+        "lineas_detalle":       "array — desglose por linea con ref, precio_unitario, valor_calculado, fuente.",
+        "lineas_sin_precio":    "array de nombres que no se pudieron valorar."
       }
     },
     "shape_ingrediente_catalogado": {
@@ -103,12 +126,13 @@
       "Si input es string libre con saltos de linea, ; o , → split + cada item como { nombre, cantidad: null, unidad: null, notas: '', id_ingrediente: null, ref_receta_id: null }.",
       "Filtrar al final items con nombre vacio."
     ],
-    "disciplina_ingredientes": [
-      "UNIDAD CANONICA: cada ingrediente usa una unidad convertible — 'g' | 'kg' | 'ml' | 'l' | 'ud'. NUNCA metas peso o cantidad dentro de 'unidad' como texto libre (mal: unidad='bola (315g)'; bien: cantidad=315, unidad='g'). Si una medida no es convertible (hojas, pizca, al gusto) usa 'ud' con la cantidad aproximada — nunca inventes una unidad textual.",
-      "NOMBRE RESOLUBLE Y UNICO: usa el nombre comercial comun tal como se compra, especifico para que sea localizable en Mercadona. Evita genericos (mal: 'Queso'; bien: 'Mozzarella' o 'Queso cheddar'). El MISMO ingrediente lleva SIEMPRE el mismo nombre en todas las recetas — no crees variantes de un mismo producto.",
-      "SUB-RECETA (semi-elaborado): si un ingrediente es a su vez una preparacion que el proyecto mantiene como receta propia (masa, salsa base, sofrito, masa madre...), NO lo trates como commodity ni dupliques su formula como lista de ingredientes: pon ref_receta_id apuntando al id de esa receta, cantidad = nº de porciones que usa, unidad='ud'. Asi escandallo calcula su coste real (coste_porcion de la sub-receta) en vez de estimarlo.",
-      "NO DUPLICAR PREPARACIONES: antes de crear una receta-preparacion o referenciarla como sub-receta, LISTA primero las recetas del proyecto y comprueba si ya existe una equivalente (nombre normalizado). Si existe, reusala (su id). Prohibido crear 'Masa Nonina' y 'Masa napolitana' para la misma masa.",
-      "CATALOGO UNICA FUENTE DE PRECIO: un ingrediente commodity (no sub-receta) se enlaza al catalogo con id_ingrediente apuntando a una entrada de ingredientes_catalogo. ingredientes_catalogo (mismo archivo recetas.json) es la UNICA fuente de precio — se llena una sola vez desde Mercadona (operacion actualizar_precio) y de ahi beben todos los calculos. No metas precios sueltos en la receta; el precio vive en el catalogo."
+    "disciplina_lineas": [
+      "UN SOLO PATRON (modelo_canonico): cada linea de receta es { ref, nombre, cantidad, unidad }. 'ref' es el id de un Ingrediente del catalogo O de otra Receta (sub-receta). No hay otra forma — no improvises shapes distintos.",
+      "UNIDAD CANONICA: 'g' | 'ml' | 'ud'. NUNCA metas peso/cantidad dentro de 'unidad' como texto (mal: unidad='bola (315g)'; bien: cantidad=315, unidad='g'). Medida no convertible (hojas, pizca) → 'ud' con cantidad aproximada.",
+      "NOMBRE RESOLUBLE Y UNICO: nombre comercial especifico, localizable en Mercadona. Evita genericos (mal 'Queso' → 'Mozzarella'). El MISMO producto lleva SIEMPRE el mismo id+nombre en todas las recetas.",
+      "SUB-RECETA: masa, salsa casera, sofrito... son Receta tipo masa|salsa|base, NO notas ni listas embebidas. Creala una vez y referenciala con ref desde las pizzas (cantidad en su unidad de rinde). Asi escandallo usa su coste real.",
+      "NO DUPLICAR: antes de crear/referenciar, comprueba si ya existe (id/nombre normalizado) y reusala. Prohibido 'Masa Nonina' y 'Masa napolitana' para la misma masa.",
+      "CATALOGO UNICA FUENTE DE PRECIO: un ingrediente commodity es una entrada de ingredientes_catalogo; la linea lo referencia por ref. El catalogo (mismo archivo) es la UNICA fuente de precio, se llena una vez desde Mercadona. No metas precios sueltos en la receta."
     ],
     "instrucciones": [
       "Si input es array → trim cada string, filtrar vacios.",
@@ -121,7 +145,7 @@
     "fuente_precio": "Si input en {manual,scrap,api,agente} → preservar. Otro → 'manual'."
   },
 
-  "campos_que_marcan_completa": ["nombre", "ingredientes", "instrucciones", "porciones"],
+  "campos_que_marcan_completa": ["nombre", "tipo", "lineas"],
 
   "operaciones": {
 

@@ -2,9 +2,10 @@
   "_doc": "Blueprint CONCRETO del modulo recetas v1.0.0. Reemplaza completamente al modulo recetas legacy v4.0.0 (cuyo index.js queda como referencia historica). Declara las 13 operaciones del dominio en formato declarativo: contrato + pseudocodigo + reglas. El LLM ES el runtime: lee este blueprint (junto con el padre) como su contrato, sigue el pseudocodigo de cada operacion publicando eventos al bus directamente via bus.publish / bus.publishAndWait. NO existe runtime intermedio. NO existen helpers JS del dominio.",
 
   "id": "recetas",
-  "version": "blueprint-1.8.0",
+  "version": "blueprint-1.9.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
+  "_v1_9_changelog": "v1.9.0 (2026-06-09): consolida las DOS vias en recetas.json — recetas[] + ingredientes_catalogo[] como fuente UNICA de precio (la otra via). (1) shape_ingrediente_catalogado gana 'id' (slug estable, clave de enlace) y 'mercadona_producto_id' (cache del producto para refrescar precio sin re-navegar); 'unidad' acotada a kg|l|ud y precio_mercado documentado como precio por esa unidad. (2) shape_ingrediente (linea de receta) gana 'id_ingrediente' (enlace al catalogo) — mutuamente excluyente con ref_receta_id. (3) actualizar_precio: upsert keyed por id (slug derivado del nombre si no se pasa), soporta id + mercadona_producto_id; es la operacion por la que escandallo cachea precios Mercadona (una conexion por ingrediente). (4) disciplina_ingredientes: regla CATALOGO UNICA FUENTE DE PRECIO (commodity → id_ingrediente → catalogo; nada de precios sueltos en la receta). Retrocompatible: campos nuevos opcionales.",
   "_v1_8_changelog": "v1.8.0 (2026-06-09): educa al LLM en la disciplina receta↔ingrediente para que las recetas nazcan costeables y no haya que reparar el dato a posteriori. (1) shape_ingrediente gana campo opcional ref_receta_id (uuid|null): cuando un ingrediente es a su vez una preparacion mantenida como receta (masa, salsa base, semi-elaborado) se referencia por id (cantidad = nº porciones, unidad='ud') en vez de duplicar su formula como commodity — escandallo usara su coste_porcion real en vez de estimar. (2) normalizadores_que_aplica_el_llm gana bloque disciplina_ingredientes con 4 reglas: UNIDAD CANONICA (g|kg|ml|l|ud, prohibido peso embebido en unidad tipo 'bola (315g)'), NOMBRE RESOLUBLE Y UNICO (comercial/Mercadona, sin genericos como 'Queso', mismo nombre en todas las recetas), SUB-RECETA (ref_receta_id), NO DUPLICAR PREPARACIONES (listar antes de crear, reusar la masa existente). (3) garantiza añade la invariante correspondiente. Sin cambios en operaciones ni en el shape persistido fuera del campo nuevo (opcional, retrocompatible: recetas sin ref_receta_id siguen valiendo).",
   "_v1_1_changelog": "v1.1.0 (2026-05-24): anyade subscriber asincrono al evento 'escandallo.coste.calculado' via mecanismo blueprint-subscribers-asincronos (ai-gateway commit 6cb2082c). Operacion interna nueva _aplicar_coste_calculado (prefijo _ = no expuesta como cajon al LLM, solo invocada cuando llega el evento). Recetas mantiene la propiedad absoluta de pizzepos/recetas.json — escandallo NO escribe directo (paradigma event-core puro), publica el evento y recetas lo aplica. Operaciones pre-existentes (crear, listar, obtener, etc.) sin cambios.",
 
@@ -47,8 +48,8 @@
       "id":                "uuid v4 (generado por el LLM cuando crea — en esta version vale uuid alucinado del LLM; sugerencia futura: primitiva bus.newId)",
       "nombre":            "string trim",
       "descripcion":       "string | ''",
-      "ingredientes":      "array de { nombre, cantidad: number|null, unidad: string|null, notas: string, ref_receta_id: uuid|null }",
-      "_ingredientes_nota": "ref_receta_id ≠ null → la linea ES una sub-receta del proyecto (preparacion mantenida como receta propia: masa, salsa base...). cantidad = nº de porciones de esa receta, unidad='ud'. escandallo usa el coste_porcion de la receta referida × cantidad en vez de buscar precio externo. null → ingrediente commodity normal (precio via Mercadona/estimacion).",
+      "ingredientes":      "array de { nombre, cantidad: number|null, unidad: string|null, notas: string, id_ingrediente: string|null, ref_receta_id: uuid|null }",
+      "_ingredientes_nota": "TRES tipos de linea: (1) ref_receta_id ≠ null → sub-receta del proyecto (masa, salsa base...): cantidad = nº de porciones, unidad='ud'; escandallo usa coste_porcion de la receta referida × cantidad. (2) id_ingrediente ≠ null → commodity enlazado a una entrada de ingredientes_catalogo (precio unico via catalogo). (3) ambos null → commodity sin enlazar: escandallo lo resuelve por nombre. ref_receta_id e id_ingrediente son mutuamente excluyentes.",
       "instrucciones":     "array de string (pasos numerados)",
       "porciones":         "number > 0 | null",
       "tiempo_min":        "number >= 0 | null",
@@ -76,10 +77,12 @@
       }
     },
     "shape_ingrediente_catalogado": {
-      "nombre":         "string trim — clave logica (lookup case-insensitive)",
+      "id":             "string slug — clave de enlace (recetas[].ingredientes[].id_ingrediente apunta aqui). Si no se pasa al upsert, se deriva del nombre (lowercase, espacios y acentos → guiones). Estable.",
+      "nombre":         "string trim — clave logica alternativa (lookup case-insensitive si no hay id)",
       "categoria":      "string | null",
-      "unidad":         "string | null",
-      "precio_mercado": "number >= 0 (eur por unidad)",
+      "unidad":         "string ('kg' | 'l' | 'ud') — unidad en la que se expresa precio_mercado",
+      "precio_mercado": "number >= 0 — precio por la 'unidad' (por kg, por l o por ud). Fuente UNICA de precio de este ingrediente para escandallo.",
+      "mercadona_producto_id": "string | null — producto Mercadona del que salio el precio (cacheado para refrescar sin re-navegar)",
       "fuente":         "string in {manual, scrap, api, agente} — default 'manual'",
       "created_at":     "ISO 8601",
       "updated_at":     "ISO 8601"
@@ -95,16 +98,17 @@
     "_descripcion": "El LLM razona estos normalizadores mentalmente — son lenguaje natural + reglas. No son tools.",
     "nombre": "trim. Comparacion para duplicados: toLowerCase + trim.",
     "ingredientes": [
-      "Si input es array de strings → cada string es { nombre, cantidad: null, unidad: null, notas: '', ref_receta_id: null }.",
-      "Si input es array de objetos → mapear sinonimos (name→nombre, quantity→cantidad, unit→unidad, notes→notas, recipe_id/sub_receta→ref_receta_id). Default notas: '', ref_receta_id: null.",
-      "Si input es string libre con saltos de linea, ; o , → split + cada item como { nombre, cantidad: null, unidad: null, notas: '', ref_receta_id: null }.",
+      "Si input es array de strings → cada string es { nombre, cantidad: null, unidad: null, notas: '', id_ingrediente: null, ref_receta_id: null }.",
+      "Si input es array de objetos → mapear sinonimos (name→nombre, quantity→cantidad, unit→unidad, notes→notas, ingredient_id/id_cat→id_ingrediente, recipe_id/sub_receta→ref_receta_id). Default notas: '', id_ingrediente: null, ref_receta_id: null.",
+      "Si input es string libre con saltos de linea, ; o , → split + cada item como { nombre, cantidad: null, unidad: null, notas: '', id_ingrediente: null, ref_receta_id: null }.",
       "Filtrar al final items con nombre vacio."
     ],
     "disciplina_ingredientes": [
       "UNIDAD CANONICA: cada ingrediente usa una unidad convertible — 'g' | 'kg' | 'ml' | 'l' | 'ud'. NUNCA metas peso o cantidad dentro de 'unidad' como texto libre (mal: unidad='bola (315g)'; bien: cantidad=315, unidad='g'). Si una medida no es convertible (hojas, pizca, al gusto) usa 'ud' con la cantidad aproximada — nunca inventes una unidad textual.",
       "NOMBRE RESOLUBLE Y UNICO: usa el nombre comercial comun tal como se compra, especifico para que sea localizable en Mercadona. Evita genericos (mal: 'Queso'; bien: 'Mozzarella' o 'Queso cheddar'). El MISMO ingrediente lleva SIEMPRE el mismo nombre en todas las recetas — no crees variantes de un mismo producto.",
       "SUB-RECETA (semi-elaborado): si un ingrediente es a su vez una preparacion que el proyecto mantiene como receta propia (masa, salsa base, sofrito, masa madre...), NO lo trates como commodity ni dupliques su formula como lista de ingredientes: pon ref_receta_id apuntando al id de esa receta, cantidad = nº de porciones que usa, unidad='ud'. Asi escandallo calcula su coste real (coste_porcion de la sub-receta) en vez de estimarlo.",
-      "NO DUPLICAR PREPARACIONES: antes de crear una receta-preparacion o referenciarla como sub-receta, LISTA primero las recetas del proyecto y comprueba si ya existe una equivalente (nombre normalizado). Si existe, reusala (su id). Prohibido crear 'Masa Nonina' y 'Masa napolitana' para la misma masa."
+      "NO DUPLICAR PREPARACIONES: antes de crear una receta-preparacion o referenciarla como sub-receta, LISTA primero las recetas del proyecto y comprueba si ya existe una equivalente (nombre normalizado). Si existe, reusala (su id). Prohibido crear 'Masa Nonina' y 'Masa napolitana' para la misma masa.",
+      "CATALOGO UNICA FUENTE DE PRECIO: un ingrediente commodity (no sub-receta) se enlaza al catalogo con id_ingrediente apuntando a una entrada de ingredientes_catalogo. ingredientes_catalogo (mismo archivo recetas.json) es la UNICA fuente de precio — se llena una sola vez desde Mercadona (operacion actualizar_precio) y de ahi beben todos los calculos. No metas precios sueltos en la receta; el precio vive en el catalogo."
     ],
     "instrucciones": [
       "Si input es array → trim cada string, filtrar vacios.",
@@ -696,8 +700,8 @@
     },
 
     "actualizar_precio": {
-      "input": "{ project_id (req), nombre (req), precio_mercado (req, number >= 0), unidad?, categoria?, fuente? in {manual,scrap,api,agente} }",
-      "_descripcion_semantica": "Upsert sobre ingredientes_catalogo por nombre normalizado. Si no existe el ingrediente, lo crea. Si existe, actualiza precio + campos opcionales preservando los no enviados.",
+      "input": "{ project_id (req), nombre (req), precio_mercado (req, number >= 0), unidad?, categoria?, id?, mercadona_producto_id?, fuente? in {manual,scrap,api,agente} }",
+      "_descripcion_semantica": "Upsert sobre ingredientes_catalogo. Clave: input.id si viene, sino slug derivado del nombre (lowercase, espacios/acentos→guiones). Si no existe el ingrediente lo crea (con id estable); si existe actualiza precio + campos opcionales (id, mercadona_producto_id, unidad, categoria) preservando los no enviados. Es la operacion por la que escandallo cachea precios de Mercadona: una sola conexion por ingrediente, luego todos leen el catalogo.",
       "pseudocodigo": [
         "async actualizar_precio(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
@@ -710,11 +714,14 @@
         "",
         "  nombreTrim = input.nombre.trim()",
         "  lower = nombreTrim.toLowerCase()",
+        "  slug = input.id || lower.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')  // id estable derivado del nombre si no se pasa",
         "  item_canonico = {",
+        "    id: slug,",
         "    nombre: nombreTrim,",
         "    categoria: typeof input.categoria === 'string' ? input.categoria : null,",
         "    unidad:    typeof input.unidad    === 'string' ? input.unidad    : null,",
         "    precio_mercado: input.precio_mercado,",
+        "    mercadona_producto_id: typeof input.mercadona_producto_id === 'string' ? input.mercadona_producto_id : null,",
         "    fuente: ['manual','scrap','api','agente'].includes(input.fuente) ? input.fuente : 'manual',",
         "    created_at: now, updated_at: now",
         "  }",
@@ -737,7 +744,7 @@
         "  if (raw.status >= 400) return raw",
         "",
         "  store = JSON.parse(raw.content)",
-        "  item = store.ingredientes_catalogo.find(i => i.nombre.toLowerCase() === lower)",
+        "  item = store.ingredientes_catalogo.find(i => (i.id && i.id === slug) || (i.nombre && i.nombre.toLowerCase() === lower))",
         "",
         "  // Persistir via fs.edit declarativo (RFC 6902). Dos ramas segun si el item existe en el catalogo.",
         "  if (!item) {",
@@ -753,13 +760,15 @@
         "    })",
         "  } else {",
         "    // Caso B2 — UPDATE item existente. Componer item nuevo, sustituir en posicion.",
-        "    idx = store.ingredientes_catalogo.findIndex(i => i.nombre.toLowerCase() === lower)",
+        "    idx = store.ingredientes_catalogo.findIndex(i => (i.id && i.id === slug) || (i.nombre && i.nombre.toLowerCase() === lower))",
         "    item = {",
         "      ...item,",
+        "      id: item.id || slug,",
         "      precio_mercado: input.precio_mercado,",
         "      updated_at: now,",
         "      ...(typeof input.categoria === 'string' ? { categoria: input.categoria } : {}),",
         "      ...(typeof input.unidad    === 'string' ? { unidad:    input.unidad    } : {}),",
+        "      ...(typeof input.mercadona_producto_id === 'string' ? { mercadona_producto_id: input.mercadona_producto_id } : {}),",
         "      ...(['manual','scrap','api','agente'].includes(input.fuente) ? { fuente: input.fuente } : {})",
         "    }",
         "    await publishAndWait('fs.edit.request', {",

@@ -1288,7 +1288,21 @@ class AiGatewayModule extends BaseModule {
         // se sincronizara al siguiente turno. Logueamos y seguimos.
         this.logger?.warn('ai-gateway.foco.publish.failed', { error: err.message });
       }
-      return { status: 'ok', nuevo_page_id: nuevo, anterior, motivo: eventPayload.motivo };
+      return {
+        status: 'ok',
+        nuevo_page_id: nuevo,
+        anterior,
+        motivo: eventPayload.motivo,
+        // El catalogo de cajones del turno se construyo al ARRANCAR el turno con
+        // la pagina anterior. Cambiar el foco NO recarga el catalogo en caliente:
+        // los cajones de 'nuevo' recien estaran activos en el PROXIMO turno. Si el
+        // LLM intenta abrirlos ahora, _resolveCajon los busca en la pagina vieja y
+        // da 'no encontrado'. Por eso el cambio de foco CIERRA el turno (como cerrar
+        // y volver a cargar): se acaba aqui, y el siguiente turno ya trae el catalogo
+        // nuevo. Se lo decimos explicito para que no barrene hacia el error.
+        cajones_activos_en: 'proximo_turno',
+        instruccion: `Foco cambiado a '${nuevo}'. Sus cajones NO estan activos en ESTE turno — se cargan en el PROXIMO. NO intentes abrir cajones de '${nuevo}' ahora: no existen en este turno y daran 'no encontrado'. CIERRA el turno ya: dile al usuario en una frase que ya estas en '${nuevo}' y, si te pidio una accion ahi, que la repita o confirme para ejecutarla. En tu siguiente turno tendras el catalogo de '${nuevo}' disponible y podras abrir su cajon.`
+      };
     }
     const err = new Error(`nav tool desconocida: ${toolName}`);
     err.code = 'INVALID_INPUT';

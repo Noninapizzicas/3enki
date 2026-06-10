@@ -96,7 +96,7 @@
     },
     {
       "name": "chat.cambiar_foco",
-      "description": "Mueve la pagina activa de esta conversacion a otro page_id cuando la conversacion claramente cambia de dominio (ej. estabas en recetas y el usuario pregunta algo de viabilidad). Publica chat.foco.cambiado al bus para que el frontend haga goto() y la barra lateral se actualice. UNA operacion por turno — no la encadenes con cajon.abrir ni bus.publish. Devuelve { status: 'ok', nuevo_page_id }.",
+      "description": "Mueve la pagina activa de esta conversacion a otro page_id cuando la conversacion claramente cambia de dominio (ej. estabas en recetas y el usuario pregunta algo de viabilidad). Publica chat.foco.cambiado al bus para que el frontend haga goto() y la barra lateral se actualice. IMPORTANTE: cambiar el foco CIERRA el turno — los cajones del page nuevo NO estan activos en este turno (el catalogo se cargo al arrancar el turno con el page anterior), se cargan en el PROXIMO. Es como cerrar y volver a cargar: tras llamar a esta tool NO intentes cajon.abrir del page nuevo (daria 'no encontrado'); termina el turno con una frase al usuario y ejecuta la accion en el siguiente turno, que ya traera el catalogo nuevo. UNA operacion por turno. Devuelve { status, nuevo_page_id, cajones_activos_en: 'proximo_turno', instruccion }.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

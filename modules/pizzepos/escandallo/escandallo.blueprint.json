@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo escandallo v2. Hijo de subsistema-recetario.modulo-base. Calcula el coste de una receta del proyecto O de una propuesta no persistida, Y persiste el resultado en /recetas.json[r] cuando se trata de una receta existente. Invocacion on-demand — el usuario pide 'calcula costes' en el chat O el LLM principal lo invoca como parte de otro flujo (ej. crear receta). NO es reactivo (el blueprint runtime no soporta reactividad sin user request). La lectura/escritura de Mercadona la hace mercadona-api (modulo JS determinista, paradigma plugin); escandallo razona qué productos pedir y cómo mapearlos al ingrediente. Para viabilidad economica (food cost%, PVP, margen, etiquetas) el modulo viabilidad lo hace despues, leyendo los costes ya persistidos.",
   "id": "escandallo",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-3.6.0",
+  "version": "blueprint-3.7.0",
   "language": "es",
   "_v3_2_changelog": "v3.2.0 (2026-06-09): escandallo lee precios de ingredientes_catalogo (recetas v1.9.0) — la 'otra via' en recetas.json — en vez de navegar Mercadona en cada calculo. Orden de resolucion en calcular: (1) ref_receta_id→sub-receta; (2) catalogo por id_ingrediente/nombre → fuente='catalogo'; (3) Mercadona en vivo SOLO si no esta en catalogo, y el resultado se CACHEA via recetas.actualizar_precio (la 'unica conexion': una navegacion por ingrediente, luego catalogo); (4) estimacion LLM. Implementa el trabajo_pendiente 'catalogo persistente → −80% coste LLM'. Carga el catalogo al inicio via recetas.ingredientes.request; cachea al final via recetas.actualizar_precio.request (event-core puro: escandallo no escribe storage ajeno). Nuevo valor fuente 'catalogo'. Sub-receta (v3.1.0) y navegacion Mercadona (v3.0.0) intactas como fallback.",
   "_v3_1_changelog": "v3.1.0 (2026-06-09): escandallo consume ref_receta_id (sub-recetas / semi-elaborados — recetas blueprint v1.8.0). En el bucle de calcular, ANTES de la navegacion Mercadona, si ing.ref_receta_id != null el coste de esa linea es el coste_porcion de la receta referida x ing.cantidad (nº de porciones, p.ej. bolas de masa), fuente='sub_receta'. Si la sub-receta aun no tiene coste, se calcula y persiste al vuelo por recursion con guarda de ciclo (input._cadena lleva los receta_id en curso). recalcular_todas ordena topologicamente: las recetas base (sin ref_receta_id en sus ingredientes) se costean primero, asi su coste ya esta listo cuando se costea una receta que las referencia. Cura el punto roto de la masa estimada en vez de costeada (cada pizza usaba una estimacion LLM de 'Masa de pizza Nonina' en vez del coste real de la masa). Nuevo valor de fuente 'sub_receta' añadido a garantiza y a la nota de fuentes. El frontend (escandallo store) lee ingredientes_detalle generico — la linea sub_receta se muestra sin cambios (mapea a tipo 'compra').",
@@ -46,7 +46,8 @@
       "_descripcion": "Lee ingredientes_catalogo de recetas (por bus) y lo indexa por id y por nombre. Catalogo = {porId, porNombre}.",
       "pseudocodigo": [
         "_cargar_catalogo(input):",
-        "  resp = await publishAndWait('recetas.ingredientes.request', { project_id: input.project_id, request_id: uuid(), correlation_id: input.correlation_id })",
+        "  // RPC a recetas (blueprint) = turno LLM sintetico, ~20-30s → timeout_ms holgado (55s) como 3er arg, mapea al param timeout_ms de bus.publishAndWait",
+        "  resp = await publishAndWait('recetas.ingredientes.request', { project_id: input.project_id, request_id: uuid(), correlation_id: input.correlation_id }, { timeout_ms: 55000 })",
         "  items = (resp.status === 200 ? (resp.data?.ingredientes || []) : [])",
         "  RETORNA { items, porId: indexBy(items, c => c.id), porNombre: indexBy(items, c => (c.nombre||'').toLowerCase()) }"
       ],
@@ -57,7 +58,8 @@
       "_descripcion": "Lee una receta por id (por bus). Null si no existe.",
       "pseudocodigo": [
         "_cargar_receta(input, id):",
-        "  resp = await publishAndWait('recetas.obtener.request', { project_id: input.project_id, receta_id: id, request_id: uuid(), correlation_id: input.correlation_id })",
+        "  // RPC a recetas (blueprint) = turno LLM sintetico, ~20-30s → timeout_ms holgado (55s)",
+        "  resp = await publishAndWait('recetas.obtener.request', { project_id: input.project_id, receta_id: id, request_id: uuid(), correlation_id: input.correlation_id }, { timeout_ms: 55000 })",
         "  RETORNA resp.status === 200 ? (resp.data?.receta || resp.data) : null"
       ],
       "cajon": false
@@ -67,7 +69,8 @@
       "_descripcion": "Lista recetas CON sus lineas completas (incluir_lineas=true), una sola lectura.",
       "pseudocodigo": [
         "_cargar_recetas(input, estado='en_servicio'):",
-        "  resp = await publishAndWait('recetas.listar.request', { project_id: input.project_id, estado, incluir_lineas: true, limit: 1000, request_id: uuid(), correlation_id: input.correlation_id })",
+        "  // RPC a recetas (blueprint) = turno LLM sintetico, ~20-30s → timeout_ms holgado (55s)",
+        "  resp = await publishAndWait('recetas.listar.request', { project_id: input.project_id, estado, incluir_lineas: true, limit: 1000, request_id: uuid(), correlation_id: input.correlation_id }, { timeout_ms: 55000 })",
         "  RETORNA resp.status === 200 ? (resp.data?.recetas || []) : []"
       ],
       "cajon": false
@@ -272,5 +275,6 @@
   "_v3_3_changelog": "v3.3.0 (2026-06-09): migra calcular + recalcular_todas al modelo_canonico de recetas (v2.x). Recorre 'lineas' con 'ref' unico: 4a catalogo (ref/nombre en ingredientes_catalogo → precio por compra_unidad), 4b sub-receta (ref es una Receta → coste_unidad x cantidad, recursion con guarda de ciclo via _cadena), 4c Mercadona en vivo + cache al catalogo (precio/compra_unidad), 4d estimacion. Agregados: porciones→rinde.cantidad, coste_porcion→coste_unidad. Evento escandallo.coste.calculado lleva coste_unidad + lineas_detalle + lineas_sin_precio (lo que _aplicar_coste_calculado espera). recalcular_todas filtra por lineas y ordena por tipo (bases primero). PENDIENTE: frontend (stores + componentes).",
   "_doc_clase": "escandallo de recetas estructurado como CLASE EscandalloRecetas: 2 cajones publicos (calcular, recalcular_siguiente) + 8 metodos internos (cajon:false, el LLM los inlinea via usa_internas adosadas al abrir el cajon). NUCLEO: _costear (determinista, compartido). FUZZY: _precio_de_mercadona (solo en calcular). recalcular_siguiente = costea UNA receta pendiente por llamada (de una en una, reanudable).",
   "_v3_4_changelog": "v3.4.0 (2026-06-09): escandallo de recetas reescrito como CLASE EscandalloRecetas (pseudocodigo OOP). 2 cajones publicos + 8 metodos internos (cajon:false). NUCLEO DETERMINISTA _costear compartido por calcular y recalcular_todas. PRICING fuzzy (_precio_de_mercadona) aislado, solo en calcular. recalcular_todas = costearTodas: lote determinista de UNA pasada (catalogo+recetas una vez, orden topologico, sub-recetas inyectadas en el catalogo, sin navegar Mercadona) — mata el teatro del calculo mental y el 'guardado' falso. Invariantes anti-teatro en garantiza.",
-  "_v3_6_changelog": "v3.6.0 (2026-06-10): recalcular_todas (todas de un tiron) REEMPLAZADO por recalcular_siguiente (de una en una). Motivo: prueba en vivo demostro que costear 29 recetas en un turno revienta el runtime LLM — se quedo en 4 y se corto. recalcular_siguiente costea UNA receta pendiente por llamada (orden topologico: masa/salsa antes que pizza), inyecta las sub-recetas ya persistidas como atomos del catalogo, y reporta {costeada, faltan, terminado}. Reanudable: cada llamada baja 'faltan' hasta 0; si un turno se corta, la siguiente retoma sin duplicar. El bucle lo conduce el exterior (usuario en chat ahora; worker en background en el futuro — mismo primitivo, fuera del turno). Tambien depende de cajon.abrir adosando usa_internas (ai-gateway, mismo dia): sin las internas el LLM improvisaba fs.read en vez del RPC recetas.listar/ingredientes."
+  "_v3_6_changelog": "v3.6.0 (2026-06-10): recalcular_todas (todas de un tiron) REEMPLAZADO por recalcular_siguiente (de una en una). Motivo: prueba en vivo demostro que costear 29 recetas en un turno revienta el runtime LLM — se quedo en 4 y se corto. recalcular_siguiente costea UNA receta pendiente por llamada (orden topologico: masa/salsa antes que pizza), inyecta las sub-recetas ya persistidas como atomos del catalogo, y reporta {costeada, faltan, terminado}. Reanudable: cada llamada baja 'faltan' hasta 0; si un turno se corta, la siguiente retoma sin duplicar. El bucle lo conduce el exterior (usuario en chat ahora; worker en background en el futuro — mismo primitivo, fuera del turno). Tambien depende de cajon.abrir adosando usa_internas (ai-gateway, mismo dia): sin las internas el LLM improvisaba fs.read en vez del RPC recetas.listar/ingredientes.",
+  "_v3_7_changelog": "v3.7.0 (2026-06-10): los _cargar_* pasan timeout_ms=55000 a publishAndWait. Motivo: recetas responde el RPC via turno LLM sintetico (~20-30s); el default de 10s daba UPSTREAM_TIMEOUT. Depende de ai-gateway: _handleBlueprintAsyncEvent extendido a request/response (responde:true en eventos_que_escucho de recetas) — ahora recetas.listar/ingredientes/obtener.request SI responden en el bus."
 }

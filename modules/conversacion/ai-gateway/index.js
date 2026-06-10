@@ -969,6 +969,16 @@ class AiGatewayModule extends BaseModule {
         const handler_name = typeof entry === 'string'
           ? '_on_' + entry.replace(/\./g, '_')
           : entry?.handler;
+        // RPC request/response: si la entrada lleva responde:true, el evento es
+        // un <mod>.<op>.request y el turno sintetico, ademas de ejecutar el
+        // handler, publica <mod>.<op>.response correlado por request_id — asi
+        // un publishAndWait de otro blueprint recibe su respuesta. Sin esto el
+        // mecanismo es fire-and-forget (notificacion de un solo sentido).
+        const responde = (typeof entry === 'object' && entry?.responde === true);
+        const response_event = responde
+          ? (typeof entry?.response_event === 'string' && entry.response_event)
+            || (evento.endsWith('.request') ? evento.slice(0, -('.request'.length)) + '.response' : `${evento}.response`)
+          : null;
         if (typeof evento !== 'string' || !evento || typeof handler_name !== 'string' || !handler_name) {
           this.logger?.warn('ai-gateway.async-subs.entry-invalida', { page_id, entry });
           continue;
@@ -993,7 +1003,7 @@ class AiGatewayModule extends BaseModule {
               return;
             }
             this._handleBlueprintAsyncEvent({
-              page_id, handler_name, evento,
+              page_id, handler_name, evento, responde, response_event,
               event_payload: (eventEnvelope && typeof eventEnvelope === 'object' && 'data' in eventEnvelope)
                 ? eventEnvelope.data : eventEnvelope
             });
@@ -1012,7 +1022,7 @@ class AiGatewayModule extends BaseModule {
     }
   }
 
-  async _handleBlueprintAsyncEvent({ page_id, handler_name, evento, event_payload }) {
+  async _handleBlueprintAsyncEvent({ page_id, handler_name, evento, event_payload, responde = false, response_event = null }) {
     // Construir conversacion sintetica que inyecta el blueprint del subscriber
     // como system prompt y le pide al LLM ejecutar el handler con el payload.
     // El LLM ejecuta el pseudocodigo del handler igual que cualquier operacion
@@ -1026,14 +1036,28 @@ class AiGatewayModule extends BaseModule {
     // El system prompt (que se inyecta automaticamente por _executeLLM al ver
     // page_id) contiene el blueprint del subscriber. El LLM lee el handler X
     // y lo ejecuta.
-    const synthetic_message =
-      `[sistema interno — invocacion async]\n` +
-      `Has recibido el evento canonico \`${evento}\`. ` +
-      `Ejecuta el handler \`${handler_name}\` de tu blueprint siguiendo SU pseudocodigo paso a paso. ` +
-      `El payload del evento es el INPUT del handler.\n\n` +
-      `payload:\n\`\`\`json\n${JSON.stringify(event_payload || {}, null, 2)}\n\`\`\`\n\n` +
-      `IMPORTANTE: NO respondas al usuario en lenguaje natural — esta es una invocacion automatica del bus. ` +
-      `Solo ejecuta el pseudocodigo del handler y termina (los publish/publishAndWait que haga el handler son tu output efectivo).`;
+    const req_id = event_payload?.request_id || null;
+    const synthetic_message = responde
+      ? (
+        `[sistema interno — invocacion RPC por bus]\n` +
+        `Has recibido la peticion \`${evento}\`. ` +
+        `Ejecuta el handler \`${handler_name}\` de tu blueprint siguiendo SU pseudocodigo paso a paso, ` +
+        `con el payload como INPUT. El handler DEVUELVE un objeto \`{ status, data }\`.\n\n` +
+        `payload:\n\`\`\`json\n${JSON.stringify(event_payload || {}, null, 2)}\n\`\`\`\n\n` +
+        `CUANDO TERMINES, publica ese resultado como respuesta para quien espera: ` +
+        `llama bus.publish('${response_event}', { request_id: ${JSON.stringify(req_id)}, status: <ret.status>, data: <ret.data> }) ` +
+        `donde <ret> es lo que devolvio el handler. Ese publish es OBLIGATORIO — sin el, el que hizo publishAndWait se queda colgado hasta timeout. ` +
+        `NO respondas al usuario en lenguaje natural: esta es una invocacion automatica del bus.`
+      )
+      : (
+        `[sistema interno — invocacion async]\n` +
+        `Has recibido el evento canonico \`${evento}\`. ` +
+        `Ejecuta el handler \`${handler_name}\` de tu blueprint siguiendo SU pseudocodigo paso a paso. ` +
+        `El payload del evento es el INPUT del handler.\n\n` +
+        `payload:\n\`\`\`json\n${JSON.stringify(event_payload || {}, null, 2)}\n\`\`\`\n\n` +
+        `IMPORTANTE: NO respondas al usuario en lenguaje natural — esta es una invocacion automatica del bus. ` +
+        `Solo ejecuta el pseudocodigo del handler y termina (los publish/publishAndWait que haga el handler son tu output efectivo).`
+      );
 
     try {
       await this._executeLLM({

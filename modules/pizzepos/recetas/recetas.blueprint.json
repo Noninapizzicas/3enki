@@ -1,7 +1,7 @@
 {
   "_doc": "Blueprint CONCRETO del modulo recetas v1.0.0. Reemplaza completamente al modulo recetas legacy v4.0.0 (cuyo index.js queda como referencia historica). Declara las 13 operaciones del dominio en formato declarativo: contrato + pseudocodigo + reglas. El LLM ES el runtime: lee este blueprint (junto con el padre) como su contrato, sigue el pseudocodigo de cada operacion publicando eventos al bus directamente via bus.publish / bus.publishAndWait. NO existe runtime intermedio. NO existen helpers JS del dominio.",
   "id": "recetas",
-  "version": "blueprint-2.2.0",
+  "version": "blueprint-2.3.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
   "_v2_1_changelog": "v2.1.0 (2026-06-09): migra el pseudocodigo de TODAS las operaciones al modelo_canonico (paso 2). crear/actualizar construyen {tipo, rinde, lineas} (lineas con 'ref' unico; fuera porciones/tiempo/dificultad — ya no se piden). actualizar_precio + catalogo usan precio + compra_unidad (antes precio_mercado + unidad) y fuente {mercadona,manual,estimado}. _aplicar_coste_calculado aplica coste_unidad + lineas_detalle/lineas_sin_precio. listar/buscar/historial/estadisticas/analizar proyectan tipo/rinde/lineas_count y filtran por tipo (fuera filtros dificultad/tiempo/porciones). Normalizador 'ingredientes' → 'lineas' (resuelve ref por nombre); +normalizador 'rinde'. id de receta = slug del nombre. PENDIENTE: escandallo (recorrer lineas/ref) y frontend.",
@@ -105,7 +105,7 @@
         }
       ]
     },
-    "_estado_migracion": "v2.1.0: modelo canonico LOCKED + TODAS las operaciones del blueprint migradas (crear, actualizar, listar, obtener, buscar, historial, estadisticas, analizar, ingredientes, actualizar_precio, _aplicar_coste_calculado) — usan tipo/rinde/lineas/ref/precio/compra_unidad/coste_unidad. PENDIENTE: escandallo (recorrer 'lineas' con 'ref': catalogo→precio · receta→coste_unidad) y los stores frontend (recetas.ts/escandallo.ts + componentes leen el shape viejo)."
+    "_estado_migracion": "v2.3.0: modelo canonico LOCKED + TODAS las operaciones migradas (tipo/rinde/lineas/ref/precio/compra_unidad/coste_unidad). 'listar' acepta incluir_lineas=true (devuelve lineas + coste_unidad) — lo consume escandallo.recalcular_todas (CLASE EscandalloRecetas v3.4.0) para costear en una sola pasada. Stores frontend (recetas.ts/escandallo.ts) ya migrados. COMPLETO: recetas ↔ escandallo cierran el lazo sobre el modelo canonico."
   },
   "estado_persistente": {
     "_descripcion": "El unico estado del modulo vive en disco como JSON en pizzepos/recetas.json del proyecto. Estructura del store.",
@@ -313,7 +313,7 @@
       ]
     },
     "listar": {
-      "input": "{ project_id (req), estado?='en_servicio', solo_incompletas?=false, limit?=50 }",
+      "input": "{ project_id (req), estado?='en_servicio', solo_incompletas?=false, limit?=50, incluir_lineas?=false }",
       "pseudocodigo": [
         "async listar(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
@@ -333,12 +333,14 @@
         "    recetas: items.slice(0, limit).map(r => ({",
         "      receta_id: r.id, nombre: r.nombre, tipo: r.tipo, rinde: r.rinde, lineas_count: Array.isArray(r.lineas) ? r.lineas.length : 0,",
         "      incompleta: r.incompleta, campos_pendientes: r.campos_pendientes,",
-        "      estado_operativo: r.estado_operativo, version: r.version, updated_at: r.updated_at",
+        "      estado_operativo: r.estado_operativo, version: r.version, updated_at: r.updated_at,",
+        "      ...(input.incluir_lineas === true ? { lineas: Array.isArray(r.lineas) ? r.lineas : [], coste_unidad: r.coste_unidad } : {})",
         "    }))",
         "  } }"
       ],
       "reglas_clave": [
-        "Solo lee, no muta. No publica eventos."
+        "Solo lee, no muta. No publica eventos.",
+        "incluir_lineas=true devuelve 'lineas' (con ref/cantidad/unidad) + 'coste_unidad' por receta. Lo usa escandallo.recalcular_todas para costear sin pedir cada receta una a una."
       ],
       "errores_posibles": [
         "INVALID_INPUT",

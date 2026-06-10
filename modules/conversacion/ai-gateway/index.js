@@ -596,6 +596,7 @@ class AiGatewayModule extends BaseModule {
       '- Para CADA paso del pseudocodigo que diga `publishAndWait(...)` → llama bus.publishAndWait.\n' +
       '- Para CADA paso que diga `publish(...)` → llama bus.publish.\n' +
       '- Los pasos de normalizar / razonar / comparar los HACES TU mentalmente (no son tools).\n' +
+      '- Si el cajon que abriste trae `internas` (helpers privados de esa operacion), su pseudocodigo VIENE INCLUIDO en la respuesta de cajon.abrir. Ejecutalos INLINE como parte del flujo — NO intentes abrirlos como cajon aparte (no estan en el catalogo). Cuando el cuerpo diga `_helper(...)`, sigue el pseudocodigo de esa interna tal cual.\n' +
       '- Cuando termines, redacta UN mensaje al usuario describiendo lo que hiciste — no listes pasos internos.\n' +
       '- Si una primitiva del bus devuelve error con `error.code` canonico, propagalo en tu response al caller.\n' +
       '- Si dudas que cajon abrir, pregunta al usuario en lenguaje natural (no abras varios por probar).'
@@ -623,7 +624,7 @@ class AiGatewayModule extends BaseModule {
       },
       {
         name: 'cajon.abrir',
-        description: 'Abre un cajon (operacion del blueprint). Devuelve { pseudocodigo, reglas_clave, errores_posibles, input } para inyectar en este turno. El cajon SOLO permanece en tu contexto durante este turno — al siguiente tienes que abrirlo de nuevo si lo necesitas. Solo abre UN cajon por turno (regla una_operacion_por_turno del contrato).',
+        description: 'Abre un cajon (operacion del blueprint). Devuelve { pseudocodigo, reglas_clave, errores_posibles, input, internas } para inyectar en este turno. Si la operacion usa helpers privados, llegan en `internas` (cada uno con su pseudocodigo): ejecutalos INLINE, no los abras aparte. El cajon SOLO permanece en tu contexto durante este turno — al siguiente tienes que abrirlo de nuevo si lo necesitas. Solo abre UN cajon por turno (regla una_operacion_por_turno del contrato).',
         parameters: {
           type: 'object',
           additionalProperties: false,
@@ -655,6 +656,38 @@ class AiGatewayModule extends BaseModule {
       return null;
     }
     return null;
+  }
+
+  // Bundle de helpers privados de una operacion publica (modelo "blueprint =
+  // clase"): cuando el LLM abre un cajon publico, recibe ademas el pseudocodigo
+  // de las internas que ese cajon invoca, para ejecutarlas inline. Las internas
+  // NO estan en el catalogo (son cajon:false / prefijo _) y no son abribles
+  // sueltas — solo viajan adosadas a su operacion publica.
+  // Declaracion explicita via op.usa_internas: [nombre, ...] (sin deteccion por
+  // regex: el blueprint dice que privados entran). Resuelve transitivamente
+  // (una interna puede usar otra) con guarda de ciclos.
+  _bundleInternas(page_id_activo, op) {
+    const declaradas = Array.isArray(op && op.usa_internas) ? op.usa_internas : [];
+    if (declaradas.length === 0) return null;
+    const blueprintCtx = this.blueprintModules.get(page_id_activo);
+    const ops = blueprintCtx?.child?.operaciones || {};
+    const out = [];
+    const vistos = new Set();
+    const visitar = (nombre) => {
+      if (vistos.has(nombre)) return;
+      vistos.add(nombre);
+      const inner = ops[nombre];
+      if (!inner || typeof inner !== 'object') return;
+      out.push({
+        nombre,
+        input: inner.input || null,
+        pseudocodigo: inner.pseudocodigo || null,
+        reglas_clave: inner.reglas_clave || null
+      });
+      if (Array.isArray(inner.usa_internas)) inner.usa_internas.forEach(visitar);
+    };
+    declaradas.forEach(visitar);
+    return out.length > 0 ? out : null;
   }
 
   // Registra un cajon abierto en el historial de la conversacion (para ranking
@@ -711,7 +744,12 @@ class AiGatewayModule extends BaseModule {
         input: op.input || null,
         pseudocodigo: op.pseudocodigo || null,
         reglas_clave: op.reglas_clave || null,
-        errores_posibles: op.errores_posibles || null
+        errores_posibles: op.errores_posibles || null,
+        // Helpers privados de la operacion (metodos privados de la clase).
+        // Al abrir el cajon publico se entregan sus internas para que el LLM
+        // las ejecute inline — no estan en el catalogo y no son abribles aparte.
+        // Declaradas por el blueprint en op.usa_internas: [nombre, ...].
+        internas: this._bundleInternas(page_id, op)
       };
     }
     // No deberia alcanzarse — _executeToolCall solo enruta cajon.listar/cajon.abrir.

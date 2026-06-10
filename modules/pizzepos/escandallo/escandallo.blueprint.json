@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo escandallo v2. Hijo de subsistema-recetario.modulo-base. Calcula el coste de una receta del proyecto O de una propuesta no persistida, Y persiste el resultado en /recetas.json[r] cuando se trata de una receta existente. Invocacion on-demand — el usuario pide 'calcula costes' en el chat O el LLM principal lo invoca como parte de otro flujo (ej. crear receta). NO es reactivo (el blueprint runtime no soporta reactividad sin user request). La lectura/escritura de Mercadona la hace mercadona-api (modulo JS determinista, paradigma plugin); escandallo razona qué productos pedir y cómo mapearlos al ingrediente. Para viabilidad economica (food cost%, PVP, margen, etiquetas) el modulo viabilidad lo hace despues, leyendo los costes ya persistidos.",
   "id": "escandallo",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-3.5.0",
+  "version": "blueprint-3.6.0",
   "language": "es",
   "_v3_2_changelog": "v3.2.0 (2026-06-09): escandallo lee precios de ingredientes_catalogo (recetas v1.9.0) — la 'otra via' en recetas.json — en vez de navegar Mercadona en cada calculo. Orden de resolucion en calcular: (1) ref_receta_id→sub-receta; (2) catalogo por id_ingrediente/nombre → fuente='catalogo'; (3) Mercadona en vivo SOLO si no esta en catalogo, y el resultado se CACHEA via recetas.actualizar_precio (la 'unica conexion': una navegacion por ingrediente, luego catalogo); (4) estimacion LLM. Implementa el trabajo_pendiente 'catalogo persistente → −80% coste LLM'. Carga el catalogo al inicio via recetas.ingredientes.request; cachea al final via recetas.actualizar_precio.request (event-core puro: escandallo no escribe storage ajeno). Nuevo valor fuente 'catalogo'. Sub-receta (v3.1.0) y navegacion Mercadona (v3.0.0) intactas como fallback.",
   "_v3_1_changelog": "v3.1.0 (2026-06-09): escandallo consume ref_receta_id (sub-recetas / semi-elaborados — recetas blueprint v1.8.0). En el bucle de calcular, ANTES de la navegacion Mercadona, si ing.ref_receta_id != null el coste de esa linea es el coste_porcion de la receta referida x ing.cantidad (nº de porciones, p.ej. bolas de masa), fuente='sub_receta'. Si la sub-receta aun no tiene coste, se calcula y persiste al vuelo por recursion con guarda de ciclo (input._cadena lleva los receta_id en curso). recalcular_todas ordena topologicamente: las recetas base (sin ref_receta_id en sus ingredientes) se costean primero, asi su coste ya esta listo cuando se costea una receta que las referencia. Cura el punto roto de la masa estimada en vez de costeada (cada pizza usaba una estimacion LLM de 'Masa de pizza Nonina' en vez del coste real de la masa). Nuevo valor de fuente 'sub_receta' añadido a garantiza y a la nota de fuentes. El frontend (escandallo store) lee ingredientes_detalle generico — la linea sub_receta se muestra sin cambios (mapea a tipo 'compra').",
@@ -11,8 +11,8 @@
   "garantiza": [
     "El coste SIEMPRE sale de _costear() sobre datos cargados (catalogo + lineas). NUNCA de aritmetica en prosa ni 'mental'. Si no puedes ejecutar el pseudocodigo, dilo — no inventes una tabla.",
     "'guardado' solo es cierto tras _persistir() (publica escandallo.coste.calculado, que recetas aplica). Si no se publico, NO digas que esta guardado.",
-    "Costing (multiplicar y sumar, _costear) es DETERMINISTA y se usa igual en calcular y en recalcular_todas. Pricing (precio de un ingrediente nuevo, _precio_de_mercadona) es lo UNICO fuzzy y SOLO ocurre en calcular.",
-    "recalcular_todas (costearTodas) es de UN turno: carga catalogo + recetas una vez, costea por aritmetica e inyecta sub-recetas en el catalogo. NO navega Mercadona ni llama a calcular por receta.",
+    "Costing (multiplicar y sumar, _costear) es DETERMINISTA y se usa igual en calcular y en recalcular_siguiente. Pricing (precio de un ingrediente nuevo, _precio_de_mercadona) es lo UNICO fuzzy y SOLO ocurre en calcular.",
+    "recalcular_siguiente costea UNA SOLA receta por llamada (la siguiente pendiente, orden topologico) y reporta 'faltan'. DE UNA EN UNA: una receta cabe de sobra en un turno, nunca se corta. Reanudable hasta faltan=0. NO navega Mercadona ni llama a calcular por receta.",
     "Sub-receta = coste_unidad recursivo (o ya inyectado en el catalogo en el lote). Nunca se re-estima ni se re-lista su formula.",
     "Linea sin precio en catalogo (y sin pricing en lote) → lineas_sin_precio, NO suma. Honesto, no se inventa.",
     "Cada linea de lineas_detalle: { ref, nombre, cantidad, unidad, precio_unitario, valor_calculado, fuente ∈ {catalogo, sub_receta, mercadona, estimado_llm, no_disponible} }."
@@ -23,7 +23,7 @@
     "Etiqueta de viabilidad (alta/media/baja/critica) — viabilidad.",
     "Precios exactos — son orientativos. Mercadona puede haber actualizado tras el cache hit; estimaciones del LLM son ±20%.",
     "Reactividad automatica: NO se dispara solo al cambiar precios o al crear/actualizar recetas. Hay que invocarlo desde el chat (usuario o LLM principal). Limitacion del paradigma blueprint actual — los blueprints no son reactivos.",
-    "Atomicidad fuerte multi-receta: recalcular_todas recorre y persiste una a una. Si alguien edita /recetas.json en medio, la ultima receta escrita puede pisar cambios concurrentes en otras. Caso raro en single-user — aceptable hoy."
+    "Costeo masivo de un tiron: recalcular_siguiente NO costea las N de una vez (eso revienta el turno). Es de una en una, conducido externamente. El futuro 'recalcular en background' es un worker que llama recalcular_siguiente en bucle fuera del chat — mismo primitivo, otra via."
   ],
   "estado_persistente": {
     "_descripcion": "v3 event-core: escandallo NO tiene estado persistente propio. Sus calculos son derivacion publicada como evento (escandallo.coste.calculado). Quien escucha el evento (modulo recetas, subscriber asincrono declarado en SU blueprint) decide como aplicarlo a su store. Recetas mantiene la propiedad absoluta del archivo /recetas.json — escandallo respeta no_explorar_estado_ajeno.",
@@ -34,8 +34,8 @@
     "escandallo.calcular.failed",
     "escandallo.coste.calculado",
     "escandallo.coste.actualizado",
-    "escandallo.recalcular_todas.response",
-    "escandallo.recalcular_todas.failed"
+    "escandallo.recalcular_siguiente.response",
+    "escandallo.recalcular_siguiente.failed"
   ],
   "_nota_eventos_v3": "v3.0.0: escandallo.coste.calculado es el nuevo evento canonico publicado tras 'calcular' cuando persistir=true (anteriormente escandallo escribia directo /recetas.json y publicaba escandallo.coste.actualizado solo como notificacion). escandallo.coste.actualizado se mantiene en la lista por compat (consumers viejos) pero v3 NO lo publica — sera removido cuando se verifique que nadie lo escucha. El subscriber canonico de escandallo.coste.calculado es el modulo recetas via eventos_que_escucho declarado en SU blueprint (handler _aplicar_coste_calculado, ejecutado por el LLM segun mecanismo de blueprint subscribers asincronos — ver propuestas/blueprint-subscribers-asincronos.md).",
   "eventos_que_escucho": [],
@@ -196,35 +196,45 @@
         "  return { status: 200, data: { coste_total: r.coste_total, coste_unidad: r.coste_unidad, rinde: receta.rinde, lineas_detalle: r.desglose, lineas_sin_precio: r.sin_precio, fuentes_precios: r.fuentes, persistido: persistir_flag && !!input.receta_id } }"
       ]
     },
-    "recalcular_todas": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, estado? ('en_servicio') }",
+    "recalcular_siguiente": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, estado? ('en_servicio'), solo_pendientes? (true) }",
       "usa_internas": [
         "_cargar_catalogo",
         "_cargar_recetas",
         "_costear",
         "_persistir"
       ],
-      "_descripcion": "costearTodas — LOTE DETERMINISTA, UNA pasada. Carga catalogo + recetas (con lineas) una vez, ordena topologico (masa/salsa antes que pizza), costea por aritmetica e inyecta cada coste_unidad en el catalogo logico para que las que la referencian lo usen sin recursion. NO navega Mercadona (eso es pricing, fase aparte). NUNCA aritmetica mental, NUNCA llama a calcular por receta.",
+      "_descripcion": "Costea UNA SOLA receta — la siguiente pendiente — y reporta el progreso. DE UNA EN UNA a proposito: una receta entra de sobra en un turno (cargar + aritmetica + persistir), nunca se corta. Reanudable: cada llamada baja 'faltan' hasta 0. El que conduce el bucle es externo (el usuario en el chat dice 'siguiente', o en el futuro un worker en background lo llama fuera del turno). NUNCA aritmetica mental sin _costear, NUNCA navega Mercadona (eso es pricing, vive en calcular).",
       "pseudocodigo": [
-        "async recalcular_todas(input):",
+        "async recalcular_siguiente(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  solo_pendientes = (input.solo_pendientes === false) ? false : true",
         "",
         "  catalogo = _cargar_catalogo(input)",
         "  recetas = _cargar_recetas(input, input.estado || 'en_servicio').filter(r => r && Array.isArray(r.lineas) && r.lineas.length > 0)",
-        "  // orden topologico por tipo: masa/salsa/base ANTES que pizza → la sub-receta esta costeada antes de usarse",
-        "  orden = { masa: 0, salsa: 0, base: 0, pizza: 1 }",
-        "  recetas = recetas.sort((a, b) => (orden[a.tipo] != null ? orden[a.tipo] : 1) - (orden[b.tipo] != null ? orden[b.tipo] : 1))",
         "",
-        "  resumen = []",
-        "  for (receta of recetas) {",
-        "    r = _costear(input, receta, catalogo)   // DETERMINISTA. sub-recetas ya inyectadas en el catalogo",
-        "    // inyectar el coste_unidad de esta receta como atomo del catalogo (fuente 'sub_receta') → quien la referencia lo usa sin recursion",
-        "    catalogo.porId[receta.id] = { id: receta.id, nombre: receta.nombre, precio: r.coste_unidad, compra_unidad: 'ud', fuente: 'sub_receta' }",
-        "    _persistir(input, receta, r)   // EMITE el evento — sin esto NO esta guardado",
-        "    resumen.push({ receta_id: receta.id, nombre: receta.nombre, coste_unidad: r.coste_unidad, sin_precio: r.sin_precio.length })",
+        "  // inyectar sub-recetas YA costeadas (de llamadas previas) como atomos del catalogo → quien las referencia resuelve sin recursion",
+        "  for (r of recetas) if (typeof r.coste_unidad === 'number' && r.coste_unidad > 0) {",
+        "    catalogo.porId[r.id] = { id: r.id, nombre: r.nombre, precio: r.coste_unidad, compra_unidad: 'ud', fuente: 'sub_receta' }",
         "  }",
-        "  completas = resumen.filter(x => x.sin_precio === 0).length",
-        "  return { status: 200, data: { total: recetas.length, completas, con_lineas_sin_precio: recetas.length - completas, detalle: resumen } }"
+        "",
+        "  // pendientes (sin coste, salvo solo_pendientes=false → todas). Orden topologico: masa/salsa/base ANTES que pizza",
+        "  pend = recetas.filter(r => solo_pendientes ? !(typeof r.coste_unidad === 'number' && r.coste_unidad > 0) : true)",
+        "  orden = { masa: 0, salsa: 0, base: 0, pizza: 1 }",
+        "  pend = pend.sort((a, b) => (orden[a.tipo] != null ? orden[a.tipo] : 1) - (orden[b.tipo] != null ? orden[b.tipo] : 1))",
+        "",
+        "  if (pend.length === 0) return { status: 200, data: { terminado: true, faltan: 0, costeada: null, siguiente: 'completo' } }",
+        "",
+        "  receta = pend[0]   // UNA. la primera pendiente en orden topologico",
+        "  r = _costear(input, receta, catalogo)   // DETERMINISTA",
+        "  _persistir(input, receta, r)   // EMITE escandallo.coste.calculado — sin esto NO esta guardado",
+        "",
+        "  faltan = pend.length - 1",
+        "  return { status: 200, data: {",
+        "    costeada: { receta_id: receta.id, nombre: receta.nombre, coste_unidad: r.coste_unidad, lineas_sin_precio: r.sin_precio.length },",
+        "    faltan, terminado: faltan === 0,",
+        "    siguiente: faltan > 0 ? 'vuelve a llamar recalcular_siguiente para la proxima' : 'completo'",
+        "  } }"
       ]
     }
   },
@@ -260,6 +270,7 @@
     }
   ],
   "_v3_3_changelog": "v3.3.0 (2026-06-09): migra calcular + recalcular_todas al modelo_canonico de recetas (v2.x). Recorre 'lineas' con 'ref' unico: 4a catalogo (ref/nombre en ingredientes_catalogo → precio por compra_unidad), 4b sub-receta (ref es una Receta → coste_unidad x cantidad, recursion con guarda de ciclo via _cadena), 4c Mercadona en vivo + cache al catalogo (precio/compra_unidad), 4d estimacion. Agregados: porciones→rinde.cantidad, coste_porcion→coste_unidad. Evento escandallo.coste.calculado lleva coste_unidad + lineas_detalle + lineas_sin_precio (lo que _aplicar_coste_calculado espera). recalcular_todas filtra por lineas y ordena por tipo (bases primero). PENDIENTE: frontend (stores + componentes).",
-  "_doc_clase": "escandallo de recetas estructurado como CLASE EscandalloRecetas: 2 cajones publicos (calcular, recalcular_todas) + 8 metodos internos (cajon:false, el LLM los inlinea). NUCLEO: _costear (determinista, compartido). FUZZY: _precio_de_mercadona (solo en calcular). recalcular_todas = costearTodas determinista de una pasada.",
-  "_v3_4_changelog": "v3.4.0 (2026-06-09): escandallo de recetas reescrito como CLASE EscandalloRecetas (pseudocodigo OOP). 2 cajones publicos + 8 metodos internos (cajon:false). NUCLEO DETERMINISTA _costear compartido por calcular y recalcular_todas. PRICING fuzzy (_precio_de_mercadona) aislado, solo en calcular. recalcular_todas = costearTodas: lote determinista de UNA pasada (catalogo+recetas una vez, orden topologico, sub-recetas inyectadas en el catalogo, sin navegar Mercadona) — mata el teatro del calculo mental y el 'guardado' falso. Invariantes anti-teatro en garantiza."
+  "_doc_clase": "escandallo de recetas estructurado como CLASE EscandalloRecetas: 2 cajones publicos (calcular, recalcular_siguiente) + 8 metodos internos (cajon:false, el LLM los inlinea via usa_internas adosadas al abrir el cajon). NUCLEO: _costear (determinista, compartido). FUZZY: _precio_de_mercadona (solo en calcular). recalcular_siguiente = costea UNA receta pendiente por llamada (de una en una, reanudable).",
+  "_v3_4_changelog": "v3.4.0 (2026-06-09): escandallo de recetas reescrito como CLASE EscandalloRecetas (pseudocodigo OOP). 2 cajones publicos + 8 metodos internos (cajon:false). NUCLEO DETERMINISTA _costear compartido por calcular y recalcular_todas. PRICING fuzzy (_precio_de_mercadona) aislado, solo en calcular. recalcular_todas = costearTodas: lote determinista de UNA pasada (catalogo+recetas una vez, orden topologico, sub-recetas inyectadas en el catalogo, sin navegar Mercadona) — mata el teatro del calculo mental y el 'guardado' falso. Invariantes anti-teatro en garantiza.",
+  "_v3_6_changelog": "v3.6.0 (2026-06-10): recalcular_todas (todas de un tiron) REEMPLAZADO por recalcular_siguiente (de una en una). Motivo: prueba en vivo demostro que costear 29 recetas en un turno revienta el runtime LLM — se quedo en 4 y se corto. recalcular_siguiente costea UNA receta pendiente por llamada (orden topologico: masa/salsa antes que pizza), inyecta las sub-recetas ya persistidas como atomos del catalogo, y reporta {costeada, faltan, terminado}. Reanudable: cada llamada baja 'faltan' hasta 0; si un turno se corta, la siguiente retoma sin duplicar. El bucle lo conduce el exterior (usuario en chat ahora; worker en background en el futuro — mismo primitivo, fuera del turno). Tambien depende de cajon.abrir adosando usa_internas (ai-gateway, mismo dia): sin las internas el LLM improvisaba fs.read en vez del RPC recetas.listar/ingredientes."
 }

@@ -47,7 +47,7 @@
   <div class="card-content">
     <div class="cost-main">
       <span class="label">Coste por porción</span>
-      <span class="value">{formatPrice(escandallo.coste_porcion)}</span>
+      <span class="value">{formatPrice(escandallo.coste_unidad)}</span>
     </div>
 
     {#if escandallo.coste_total}

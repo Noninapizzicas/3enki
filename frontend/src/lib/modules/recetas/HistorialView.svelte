@@ -127,9 +127,9 @@
             </div>
             <div class="version-meta">
               {#if v.nombre}<span>{v.nombre}</span>{/if}
-              {#if typeof v.porciones === 'number'}<span>{v.porciones} porciones</span>{/if}
-              {#if v.dificultad != null}<span>dificultad {v.dificultad}</span>{/if}
-              <span>{v.ingredientes_count} ingrediente{v.ingredientes_count === 1 ? '' : 's'}</span>
+              {#if v.tipo}<span>{v.tipo}</span>{/if}
+              {#if v.rinde}<span>rinde {v.rinde.cantidad} {v.rinde.unidad}</span>{/if}
+              <span>{v.lineas_count} ingrediente{v.lineas_count === 1 ? '' : 's'}</span>
             </div>
             <div class="version-actions">
               <button class="vbtn" on:click={() => handleVerDiff(v.version)}>

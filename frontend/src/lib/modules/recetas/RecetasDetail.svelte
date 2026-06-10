@@ -15,8 +15,7 @@
     selectedReceta,
     recetasLoading,
     recetasError,
-    type EstadoOperativo,
-    type Dificultad
+    type EstadoOperativo
   } from '$lib/stores/recetas';
   import { prefillChatInput } from '$lib/stores/chatInputDraft';
 
@@ -46,13 +45,7 @@
     if (e === 'archivada') return '113, 113, 122';
     return '161, 161, 170';
   }
-  function dificultadRgb(d: Dificultad): string {
-    if (d === 'baja') return '34, 197, 94';
-    if (d === 'media') return '245, 158, 11';
-    if (d === 'alta') return '239, 68, 68';
-    return '161, 161, 170';
-  }
-  function formatUnidad(u: string | undefined): string {
+  function formatUnidad(u: string | null | undefined): string {
     return u ? ` ${u}` : '';
   }
 
@@ -94,10 +87,8 @@
       <span class="badge" style="background-color: rgba({estadoRgb(receta.estado_operativo)}, 0.13); color: rgb({estadoRgb(receta.estado_operativo)})">
         {estadoLabel(receta.estado_operativo)}
       </span>
-      <span class="badge" style="background-color: rgba({dificultadRgb(receta.dificultad)}, 0.13); color: rgb({dificultadRgb(receta.dificultad)})">
-        dificultad {receta.dificultad}
-      </span>
-      <span class="badge">{receta.porciones} porci{receta.porciones === 1 ? 'on' : 'ones'}</span>
+      <span class="badge">{receta.tipo}</span>
+      {#if receta.rinde}<span class="badge">rinde {receta.rinde.cantidad} {receta.rinde.unidad}</span>{/if}
       <span class="badge">v{receta.version}</span>
       {#if receta.incompleta}
         <span class="badge warn">incompleta</span>
@@ -122,28 +113,27 @@
           <span class="coste-label">Coste total</span>
           <span class="coste-value">{receta.coste_total.toFixed(2)}€</span>
         </div>
-        {#if typeof receta.coste_porcion === 'number'}
+        {#if typeof receta.coste_unidad === 'number'}
           <div class="coste-summary">
-            <span class="coste-label">Coste/porción</span>
-            <span class="coste-value">{receta.coste_porcion.toFixed(2)}€</span>
+            <span class="coste-label">Coste/{receta.rinde?.unidad ?? 'ud'}</span>
+            <span class="coste-value">{receta.coste_unidad.toFixed(2)}€</span>
           </div>
         {/if}
-        {#if receta.ingredientes_sin_precio && receta.ingredientes_sin_precio.length > 0}
-          <div class="coste-warn">⚠ Sin precio: {receta.ingredientes_sin_precio.join(', ')}</div>
+        {#if receta.lineas_sin_precio && receta.lineas_sin_precio.length > 0}
+          <div class="coste-warn">⚠ Sin precio: {receta.lineas_sin_precio.join(', ')}</div>
         {/if}
         {#if receta.fuentes_precios && receta.fuentes_precios.length > 0}
           <div class="coste-fuentes">
             Fuentes: {receta.fuentes_precios.join(' + ')}
-            {#if receta.postcode_usado} · CP {receta.postcode_usado}{/if}
             {#if receta.coste_actualizado_at} · {new Date(receta.coste_actualizado_at).toLocaleDateString()}{/if}
           </div>
         {/if}
       </div>
 
-      {#if receta.ingredientes_detalle && receta.ingredientes_detalle.length > 0}
+      {#if receta.lineas_detalle && receta.lineas_detalle.length > 0}
         <h4>Desglose</h4>
         <div class="ing-table">
-          {#each receta.ingredientes_detalle as det}
+          {#each receta.lineas_detalle as det}
             <div class="ing-row det">
               <span class="ing-name">{det.nombre}</span>
               <span class="ing-qty">{det.cantidad}{det.unidad ? ' ' + det.unidad : ''}</span>
@@ -164,24 +154,24 @@
       </p>
     {/if}
 
-    <h4>Ingredientes</h4>
-    {#if receta.ingredientes && receta.ingredientes.length > 0}
+    <h4>Líneas</h4>
+    {#if receta.lineas && receta.lineas.length > 0}
       <div class="ing-table">
-        {#each receta.ingredientes as ing}
+        {#each receta.lineas as l}
           <div class="ing-row">
-            <span class="ing-name">{ing.nombre}</span>
-            <span class="ing-qty">{ing.cantidad}{formatUnidad(ing.unidad)}</span>
+            <span class="ing-name">{l.nombre}{#if l.ref} <span class="ref-tag" title="ref: {l.ref}">↗</span>{/if}</span>
+            <span class="ing-qty">{l.cantidad ?? ''}{formatUnidad(l.unidad)}</span>
           </div>
         {/each}
       </div>
     {:else}
-      <p class="hint">Sin ingredientes definidos.</p>
+      <p class="hint">Sin líneas definidas.</p>
     {/if}
 
-    {#if receta.elaboracion && receta.elaboracion.length > 0}
+    {#if receta.instrucciones && receta.instrucciones.length > 0}
       <h4>Elaboracion</h4>
       <ol class="elaboracion">
-        {#each receta.elaboracion as paso}
+        {#each receta.instrucciones as paso}
           <li>{paso}</li>
         {/each}
       </ol>

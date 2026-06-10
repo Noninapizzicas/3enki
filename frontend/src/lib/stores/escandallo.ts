@@ -3,7 +3,7 @@
  *
  * Tras el bump de escandallo a blueprint v2.0.0 (commit b37cd7e en main),
  * los costes se persisten en cada receta dentro de /pizzepos/recetas.json (campos
- * coste_total, coste_porcion, ingredientes_detalle, ingredientes_sin_precio,
+ * coste_total, coste_unidad, lineas_detalle, lineas_sin_precio,
  * etc.). Este store agrega/sintetiza las vistas que la pagina necesita
  * leyendo ese mismo archivo — cero handler backend, mismo patron que el
  * resto del subsistema-carta tras esta rama.
@@ -37,7 +37,7 @@ export interface EscandalloReceta {
   categoria: string;
   porciones: number;
   coste_total: number;
-  coste_porcion: number;
+  coste_unidad: number;
   desglose: EscandalloDesglose[];
   precio_venta?: number;
   margen_euro?: number;
@@ -52,7 +52,7 @@ export interface RankingReceta {
   nombre: string;
   categoria?: string;
   estado_operativo?: string;
-  coste_porcion: number;
+  coste_unidad: number;
   coste_total: number;
 }
 
@@ -66,9 +66,9 @@ export interface EscandalloGlobal {
   total_recetas: number;
   total_recetas_con_coste: number;
   total_ingredientes_catalogo: number;
-  coste_porcion_medio: number;
-  coste_porcion_min: number;
-  coste_porcion_max: number;
+  coste_unidad_medio: number;
+  coste_unidad_min: number;
+  coste_unidad_max: number;
   ranking_por_coste: RankingReceta[];
   por_categoria: Record<string, { count: number; coste_medio: number }>;
   top_ingredientes_por_coste: TopIngrediente[];
@@ -88,32 +88,30 @@ export interface EscandalloState {
 // INTERNAL — shape de /pizzepos/recetas.json
 // =============================================================================
 
-interface IngredienteDetallePersisted {
+interface LineaDetallePersisted {
+  ref?: string | null;
   nombre: string;
   cantidad: number;
   unidad: string;
   precio_unitario: number | null;
   valor_calculado: number | null;
   fuente: string;
-  precio_unidad?: number | null;
-  precio_kg?: number | null;
 }
 
 interface RecetaPersisted {
   id: string;
   nombre: string;
-  porciones: number;
-  dificultad?: string;
+  tipo?: string;
+  rinde?: { cantidad: number; unidad: string } | null;
   estado_operativo?: string;
-  ingredientes?: Array<{ nombre: string; cantidad: number; unidad?: string }>;
-  // Campos escritos por escandallo v2:
+  lineas?: Array<{ ref?: string | null; nombre: string; cantidad: number; unidad?: string }>;
+  // Campos escritos por escandallo (coste):
   coste_total?: number;
-  coste_porcion?: number;
+  coste_unidad?: number;
   coste_actualizado_at?: string;
-  postcode_usado?: string;
   fuentes_precios?: string[];
-  ingredientes_detalle?: IngredienteDetallePersisted[];
-  ingredientes_sin_precio?: string[];
+  lineas_detalle?: LineaDetallePersisted[];
+  lineas_sin_precio?: string[];
 }
 
 interface RecetasStorePersisted {
@@ -154,7 +152,7 @@ async function readRecetasStore(): Promise<RecetasStorePersisted | null> {
   }
 }
 
-function detalleToDesglose(detalle: IngredienteDetallePersisted[], costeTotal: number): EscandalloDesglose[] {
+function detalleToDesglose(detalle: LineaDetallePersisted[], costeTotal: number): EscandalloDesglose[] {
   if (!Array.isArray(detalle) || costeTotal <= 0) return [];
   return detalle.map(d => {
     const valor = typeof d.valor_calculado === 'number' ? d.valor_calculado : 0;
@@ -203,19 +201,19 @@ export async function loadEscandalloReceta(recetaId: string, precioVenta?: numbe
     const data: EscandalloReceta = {
       receta_id: r.id,
       nombre: r.nombre,
-      categoria: r.estado_operativo || '',
-      porciones: r.porciones,
+      categoria: r.tipo || r.estado_operativo || '',
+      porciones: r.rinde?.cantidad ?? 1,
       coste_total: r.coste_total,
-      coste_porcion: typeof r.coste_porcion === 'number' ? r.coste_porcion : 0,
-      desglose: detalleToDesglose(r.ingredientes_detalle || [], r.coste_total)
+      coste_unidad: typeof r.coste_unidad === 'number' ? r.coste_unidad : 0,
+      desglose: detalleToDesglose(r.lineas_detalle || [], r.coste_total)
     };
 
     if (typeof precioVenta === 'number' && precioVenta > 0) {
       data.precio_venta = precioVenta;
-      data.margen_euro = precioVenta - r.coste_porcion!;
-      data.margen_porcentaje = ((precioVenta - r.coste_porcion!) / precioVenta) * 100;
-      data.food_cost_porcentaje = (r.coste_porcion! / precioVenta) * 100;
-      data.multiplicador = r.coste_porcion! > 0 ? precioVenta / r.coste_porcion! : 0;
+      data.margen_euro = precioVenta - r.coste_unidad!;
+      data.margen_porcentaje = ((precioVenta - r.coste_unidad!) / precioVenta) * 100;
+      data.food_cost_porcentaje = (r.coste_unidad! / precioVenta) * 100;
+      data.multiplicador = r.coste_unidad! > 0 ? precioVenta / r.coste_unidad! : 0;
     }
 
     escandalloStore.update(s => ({
@@ -246,7 +244,7 @@ export async function loadEscandalloGlobal(): Promise<void> {
     }
 
     const allRecetas = Array.isArray(store.recetas) ? store.recetas : [];
-    const conCoste = allRecetas.filter(r => r && typeof r.coste_total === 'number' && typeof r.coste_porcion === 'number');
+    const conCoste = allRecetas.filter(r => r && typeof r.coste_total === 'number' && typeof r.coste_unidad === 'number');
 
     if (conCoste.length === 0) {
       escandalloStore.update(s => ({
@@ -261,24 +259,24 @@ export async function loadEscandalloGlobal(): Promise<void> {
       return;
     }
 
-    // Agregados de coste_porcion
-    const costesPorcion = conCoste.map(r => r.coste_porcion as number);
+    // Agregados de coste_unidad
+    const costesPorcion = conCoste.map(r => r.coste_unidad as number);
     const sum = costesPorcion.reduce((a, b) => a + b, 0);
-    const coste_porcion_medio = sum / conCoste.length;
-    const coste_porcion_min = Math.min(...costesPorcion);
-    const coste_porcion_max = Math.max(...costesPorcion);
+    const coste_unidad_medio = sum / conCoste.length;
+    const coste_unidad_min = Math.min(...costesPorcion);
+    const coste_unidad_max = Math.max(...costesPorcion);
 
-    // Ranking por coste_porcion descendente (top 20)
+    // Ranking por coste_unidad descendente (top 20)
     const ranking_por_coste: RankingReceta[] = conCoste
       .slice()
-      .sort((a, b) => (b.coste_porcion as number) - (a.coste_porcion as number))
+      .sort((a, b) => (b.coste_unidad as number) - (a.coste_unidad as number))
       .slice(0, 20)
       .map(r => ({
         receta_id: r.id,
         nombre: r.nombre,
         categoria: r.estado_operativo || '',
         estado_operativo: r.estado_operativo,
-        coste_porcion: r.coste_porcion as number,
+        coste_unidad: r.coste_unidad as number,
         coste_total: r.coste_total as number
       }));
 
@@ -288,7 +286,7 @@ export async function loadEscandalloGlobal(): Promise<void> {
       const key = r.estado_operativo || 'sin_estado';
       if (!por_categoria[key]) por_categoria[key] = { count: 0, coste_medio: 0, suma: 0 };
       por_categoria[key].count++;
-      por_categoria[key].suma += (r.coste_porcion as number);
+      por_categoria[key].suma += (r.coste_unidad as number);
     }
     const por_categoria_final: Record<string, { count: number; coste_medio: number }> = {};
     for (const [k, v] of Object.entries(por_categoria)) {
@@ -298,7 +296,7 @@ export async function loadEscandalloGlobal(): Promise<void> {
     // Top ingredientes por coste agregado (suma de valor_calculado en todas las recetas)
     const ingAgg: Record<string, { coste_total: number; apariciones: number }> = {};
     for (const r of conCoste) {
-      const detalle = Array.isArray(r.ingredientes_detalle) ? r.ingredientes_detalle : [];
+      const detalle = Array.isArray(r.lineas_detalle) ? r.lineas_detalle : [];
       for (const d of detalle) {
         if (!d || typeof d.nombre !== 'string' || typeof d.valor_calculado !== 'number') continue;
         const k = d.nombre.toLowerCase();
@@ -323,9 +321,9 @@ export async function loadEscandalloGlobal(): Promise<void> {
       total_recetas: allRecetas.length,
       total_recetas_con_coste: conCoste.length,
       total_ingredientes_catalogo: Array.isArray(store.ingredientes_catalogo) ? store.ingredientes_catalogo.length : 0,
-      coste_porcion_medio: Math.round(coste_porcion_medio * 100) / 100,
-      coste_porcion_min: Math.round(coste_porcion_min * 100) / 100,
-      coste_porcion_max: Math.round(coste_porcion_max * 100) / 100,
+      coste_unidad_medio: Math.round(coste_unidad_medio * 100) / 100,
+      coste_unidad_min: Math.round(coste_unidad_min * 100) / 100,
+      coste_unidad_max: Math.round(coste_unidad_max * 100) / 100,
       ranking_por_coste,
       por_categoria: por_categoria_final,
       top_ingredientes_por_coste,
@@ -344,9 +342,9 @@ function emptyGlobal(): EscandalloGlobal {
     total_recetas: 0,
     total_recetas_con_coste: 0,
     total_ingredientes_catalogo: 0,
-    coste_porcion_medio: 0,
-    coste_porcion_min: 0,
-    coste_porcion_max: 0,
+    coste_unidad_medio: 0,
+    coste_unidad_min: 0,
+    coste_unidad_max: 0,
     ranking_por_coste: [],
     por_categoria: {},
     top_ingredientes_por_coste: [],

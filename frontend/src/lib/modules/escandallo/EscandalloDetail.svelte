@@ -13,8 +13,8 @@
   export let escandallo: any = null;
   export let historico: any[] = [];
 
-  $: ingredientes = escandallo?.precio_mercado_snapshot
-    ? Object.entries(escandallo.precio_mercado_snapshot)
+  $: ingredientes = (escandallo as any)?.precio_mercado_snapshot
+    ? Object.entries((escandallo as any).precio_mercado_snapshot)
         .map(([nombre, precio]: [string, any]) => ({
           nombre,
           precio,
@@ -24,7 +24,7 @@
     : [];
 
   $: fc = escandallo?.precio_venta
-    ? ((escandallo.coste_porcion / escandallo.precio_venta) * 100)
+    ? ((escandallo.coste_unidad / escandallo.precio_venta) * 100)
     : 0;
 
   $: fcStatus = getFoodCostStatus(fc);
@@ -63,7 +63,7 @@
     </div>
     <div class="summary-item">
       <span class="label">Coste por Porción</span>
-      <span class="value large">{formatPrice(escandallo?.coste_porcion)}</span>
+      <span class="value large">{formatPrice(escandallo?.coste_unidad)}</span>
     </div>
     {#if escandallo?.precio_venta}
       <div class="summary-item">
@@ -72,7 +72,7 @@
       </div>
       <div class="summary-item">
         <span class="label">Margen</span>
-        <span class="value large">{formatPrice(escandallo.precio_venta - escandallo.coste_porcion)}</span>
+        <span class="value large">{formatPrice(escandallo.precio_venta - escandallo.coste_unidad)}</span>
       </div>
     {/if}
   </div>
@@ -86,7 +86,7 @@
         <div class="fc-status">{fcStatus.text}</div>
         {#if fc > 35}
           <p class="recommendation">
-            Para 30% recomendado: {formatPrice(escandallo.coste_porcion / 0.30)}
+            Para 30% recomendado: {formatPrice(escandallo.coste_unidad / 0.30)}
           </p>
         {/if}
       </div>
@@ -118,12 +118,12 @@
       <h3>Histórico</h3>
       <div class="history-list">
         {#each historico as hist}
-          {@const diff = escandallo?.coste_porcion ? escandallo.coste_porcion - hist.coste_porcion : 0}
-          {@const pct = hist.coste_porcion ? (diff / hist.coste_porcion) * 100 : 0}
+          {@const diff = escandallo?.coste_unidad ? escandallo.coste_unidad - hist.coste_unidad : 0}
+          {@const pct = hist.coste_unidad ? (diff / hist.coste_unidad) * 100 : 0}
           <div class="history-item">
             <span class="hist-date">{formatDate(hist.calculado_at)}</span>
-            <span class="hist-cost">{formatPrice(hist.coste_porcion)}</span>
-            {#if escandallo && hist.coste_porcion !== escandallo.coste_porcion}
+            <span class="hist-cost">{formatPrice(hist.coste_unidad)}</span>
+            {#if escandallo && hist.coste_unidad !== escandallo.coste_unidad}
               <span class="hist-change" class:increase={diff > 0} class:decrease={diff < 0}>
                 {diff > 0 ? '+' : ''}{pct.toFixed(1)}%
               </span>

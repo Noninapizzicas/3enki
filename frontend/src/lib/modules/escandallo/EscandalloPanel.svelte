@@ -82,11 +82,11 @@
             <span class="kpi-label">Recetas</span>
           </div>
           <div class="kpi">
-            <span class="kpi-value">{formatPrice(global_.coste_porcion_medio)}</span>
+            <span class="kpi-value">{formatPrice(global_.coste_unidad_medio)}</span>
             <span class="kpi-label">Coste medio/porción</span>
           </div>
           <div class="kpi">
-            <span class="kpi-value">{formatPrice(global_.coste_porcion_min)} - {formatPrice(global_.coste_porcion_max)}</span>
+            <span class="kpi-value">{formatPrice(global_.coste_unidad_min)} - {formatPrice(global_.coste_unidad_max)}</span>
             <span class="kpi-label">Rango costes</span>
           </div>
         </div>
@@ -99,7 +99,7 @@
                 <span class="ranking-pos">#{i + 1}</span>
                 <span class="ranking-name">{r.nombre}</span>
                 <span class="ranking-cat">{r.categoria}</span>
-                <span class="ranking-cost">{formatPrice(r.coste_porcion)}</span>
+                <span class="ranking-cost">{formatPrice(r.coste_unidad)}</span>
               </div>
             {/each}
           </div>
@@ -150,7 +150,7 @@
             <span class="kpi-label">Coste total</span>
           </div>
           <div class="kpi highlight">
-            <span class="kpi-value">{formatPrice(receta.coste_porcion)}</span>
+            <span class="kpi-value">{formatPrice(receta.coste_unidad)}</span>
             <span class="kpi-label">Coste/porción</span>
           </div>
           {#if receta.food_cost_porcentaje !== undefined}

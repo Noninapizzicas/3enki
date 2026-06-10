@@ -21,8 +21,8 @@
   function handleBulkPrecios() {
     const lista = ingredientes
       .map(i => {
-        const precio = typeof i.precio_mercado === 'number'
-          ? ` (${i.precio_mercado.toFixed(3)}€${i.unidad ? '/' + i.unidad : ''})`
+        const precio = typeof i.precio === 'number'
+          ? ` (${i.precio.toFixed(3)}€${i.compra_unidad ? '/' + i.compra_unidad : ''})`
           : '';
         return `${i.nombre}${precio}`;
       })

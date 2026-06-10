@@ -55,7 +55,7 @@ export {
   clearError,
   type Receta,
   type RecetaResumen,
-  type RecetaIngrediente,
+  type RecetaLinea,
   type CatalogoIngrediente,
   type RecetasState
 } from '$lib/stores/recetas';

@@ -18,8 +18,8 @@
 <button class="ing-card" on:click={() => onClick(ingrediente.nombre)}>
   <div class="ing-main">
     <span class="ing-name">{ingrediente.nombre}</span>
-    {#if typeof ingrediente.precio_mercado === 'number'}
-      <span class="ing-price">{ingrediente.precio_mercado.toFixed(3)}€{formatUnidad(ingrediente.unidad)}</span>
+    {#if typeof ingrediente.precio === 'number'}
+      <span class="ing-price">{ingrediente.precio.toFixed(3)}€{formatUnidad(ingrediente.compra_unidad)}</span>
     {:else}
       <span class="ing-price no-price">sin precio</span>
     {/if}

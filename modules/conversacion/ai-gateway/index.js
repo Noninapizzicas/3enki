@@ -522,6 +522,16 @@ class AiGatewayModule extends BaseModule {
     const cajones = [];
     for (const [nombre, op] of Object.entries(ops)) {
       if (!op || typeof op !== 'object') continue;
+      // Frontera de modulo: una operacion puede ser llamable por bus
+      // (RPC <mod>.<op>.request) pero NO exponerse como cajon al LLM de su
+      // pagina. Marca "cajon": false en el blueprint para ops que son trabajo
+      // de OTRO modulo (ej. recetas.actualizar_precio/analizar = pricing/costing
+      // de escandallo): solo escandallo las invoca por el bus, el LLM de recetas
+      // no las ve. Evita que una pagina haga lo que no es su trabajo.
+      if (op.cajon === false) continue;
+      // El prefijo _ marca operaciones internas (handlers de eventos asincronos,
+      // ej. _aplicar_coste_calculado): tampoco son cajones del LLM.
+      if (nombre.startsWith('_')) continue;
       let descripcion;
       const override = typeof op.cajon_descripcion === 'string' ? op.cajon_descripcion.trim() : '';
       if (override) {

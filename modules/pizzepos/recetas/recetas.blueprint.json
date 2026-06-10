@@ -1,8 +1,7 @@
 {
   "_doc": "Blueprint CONCRETO del modulo recetas v1.0.0. Reemplaza completamente al modulo recetas legacy v4.0.0 (cuyo index.js queda como referencia historica). Declara las 13 operaciones del dominio en formato declarativo: contrato + pseudocodigo + reglas. El LLM ES el runtime: lee este blueprint (junto con el padre) como su contrato, sigue el pseudocodigo de cada operacion publicando eventos al bus directamente via bus.publish / bus.publishAndWait. NO existe runtime intermedio. NO existen helpers JS del dominio.",
-
   "id": "recetas",
-  "version": "blueprint-2.1.0",
+  "version": "blueprint-2.2.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
   "_v2_1_changelog": "v2.1.0 (2026-06-09): migra el pseudocodigo de TODAS las operaciones al modelo_canonico (paso 2). crear/actualizar construyen {tipo, rinde, lineas} (lineas con 'ref' unico; fuera porciones/tiempo/dificultad — ya no se piden). actualizar_precio + catalogo usan precio + compra_unidad (antes precio_mercado + unidad) y fuente {mercadona,manual,estimado}. _aplicar_coste_calculado aplica coste_unidad + lineas_detalle/lineas_sin_precio. listar/buscar/historial/estadisticas/analizar proyectan tipo/rinde/lineas_count y filtran por tipo (fuera filtros dificultad/tiempo/porciones). Normalizador 'ingredientes' → 'lineas' (resuelve ref por nombre); +normalizador 'rinde'. id de receta = slug del nombre. PENDIENTE: escandallo (recorrer lineas/ref) y frontend.",
@@ -10,9 +9,7 @@
   "_v1_9_changelog": "v1.9.0 (2026-06-09): consolida las DOS vias en recetas.json — recetas[] + ingredientes_catalogo[] como fuente UNICA de precio (la otra via). (1) shape_ingrediente_catalogado gana 'id' (slug estable, clave de enlace) y 'mercadona_producto_id' (cache del producto para refrescar precio sin re-navegar); 'unidad' acotada a kg|l|ud y precio_mercado documentado como precio por esa unidad. (2) shape_ingrediente (linea de receta) gana 'id_ingrediente' (enlace al catalogo) — mutuamente excluyente con ref_receta_id. (3) actualizar_precio: upsert keyed por id (slug derivado del nombre si no se pasa), soporta id + mercadona_producto_id; es la operacion por la que escandallo cachea precios Mercadona (una conexion por ingrediente). (4) disciplina_ingredientes: regla CATALOGO UNICA FUENTE DE PRECIO (commodity → id_ingrediente → catalogo; nada de precios sueltos en la receta). Retrocompatible: campos nuevos opcionales.",
   "_v1_8_changelog": "v1.8.0 (2026-06-09): educa al LLM en la disciplina receta↔ingrediente para que las recetas nazcan costeables y no haya que reparar el dato a posteriori. (1) shape_ingrediente gana campo opcional ref_receta_id (uuid|null): cuando un ingrediente es a su vez una preparacion mantenida como receta (masa, salsa base, semi-elaborado) se referencia por id (cantidad = nº porciones, unidad='ud') en vez de duplicar su formula como commodity — escandallo usara su coste_porcion real en vez de estimar. (2) normalizadores_que_aplica_el_llm gana bloque disciplina_ingredientes con 4 reglas: UNIDAD CANONICA (g|kg|ml|l|ud, prohibido peso embebido en unidad tipo 'bola (315g)'), NOMBRE RESOLUBLE Y UNICO (comercial/Mercadona, sin genericos como 'Queso', mismo nombre en todas las recetas), SUB-RECETA (ref_receta_id), NO DUPLICAR PREPARACIONES (listar antes de crear, reusar la masa existente). (3) garantiza añade la invariante correspondiente. Sin cambios en operaciones ni en el shape persistido fuera del campo nuevo (opcional, retrocompatible: recetas sin ref_receta_id siguen valiendo).",
   "_v1_1_changelog": "v1.1.0 (2026-05-24): anyade subscriber asincrono al evento 'escandallo.coste.calculado' via mecanismo blueprint-subscribers-asincronos (ai-gateway commit 6cb2082c). Operacion interna nueva _aplicar_coste_calculado (prefijo _ = no expuesta como cajon al LLM, solo invocada cuando llega el evento). Recetas mantiene la propiedad absoluta de pizzepos/recetas.json — escandallo NO escribe directo (paradigma event-core puro), publica el evento y recetas lo aplica. Operaciones pre-existentes (crear, listar, obtener, etc.) sin cambios.",
-
   "rol": "Aggregate root del subsistema-recetario. Custodio del dato canonico de cada receta y del catalogo de ingredientes del proyecto.",
-
   "garantiza": [
     "Cada receta tiene id (uuid), nombre, version (entero >=1), estado_operativo in {borrador|en_servicio|archivada}.",
     "No hay duplicados activos: dos recetas no pueden tener el mismo nombre normalizado (lowercase + trim) en estado_operativo=en_servicio simultaneamente.",
@@ -23,20 +20,17 @@
     "incompleta + campos_pendientes se recalculan en cada mutacion (crear, actualizar, revertir) — campos_pendientes son los de {nombre, ingredientes, instrucciones, porciones} vacios.",
     "Cada receta es { tipo, rinde, lineas } (modelo_canonico). Cada Linea referencia por 'ref' un Ingrediente del catalogo o otra Receta (sub-receta) — un solo patron; unidad canonica g|ml|ud; nombre comercial unico; nunca se duplica ni se re-lista una preparacion."
   ],
-
   "no_garantiza": [
     "Coste real — escandallo escucha receta.creada/actualizada y calcula via su propio pseudocodigo.",
     "Viabilidad economica — viabilidad calcula tras escandallo.",
     "Sugerencias culinarias creativas — recetario-creativo (modulo aparte) propone prototipos.",
     "Catalogo de ingredientes detallado (alergenos, origen) — solo precio + categoria + compra_unidad."
   ],
-
   "convencion_de_paths_filesystem": {
     "_descripcion": "filesystem espera paths LEADING-SLASH relativos al base_path del proyecto. NO construir paths absolutos del sistema concatenando base_path — duplica el prefijo. El project_id viaja en el payload y filesystem resuelve internamente.",
-    "correcto":   "publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+    "correcto": "publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
     "incorrecto": "publishAndWait('fs.read.request', { path: base_path + '/pizzepos/recetas.json' })  // duplica prefijo"
   },
-
   "modelo_canonico": {
     "_descripcion": "LA estructura. Govierna TODO el blueprint. Tres clases, un solo patron — el LLM construye SIEMPRE asi, no improvisa formas distintas cada vez. El coste es DERIVADO (lo escribe escandallo); el LLM solo estructura, no calcula coste en el chat.",
     "clases": {
@@ -53,71 +47,130 @@
       "El coste no lo calculas tu en el chat: lo hace escandallo y se persiste. Tu solo estructuras."
     ],
     "ejemplo": {
-      "ingredientes_catalogo": [ { "id": "mozzarella", "nombre": "Mozzarella fresca", "compra_unidad": "kg", "precio": 7.2, "fuente": "mercadona" } ],
+      "ingredientes_catalogo": [
+        {
+          "id": "mozzarella",
+          "nombre": "Mozzarella fresca",
+          "compra_unidad": "kg",
+          "precio": 7.2,
+          "fuente": "mercadona"
+        }
+      ],
       "recetas": [
-        { "id": "masa-nonina", "nombre": "Masa Nonina", "tipo": "masa", "rinde": { "cantidad": 8, "unidad": "ud" }, "lineas": [ { "ref": "harina", "nombre": "Harina de fuerza", "cantidad": 1000, "unidad": "g" } ] },
-        { "id": "cumbia", "nombre": "Cumbia", "tipo": "pizza", "rinde": { "cantidad": 1, "unidad": "ud" }, "lineas": [ { "ref": "masa-nonina", "nombre": "Masa Nonina", "cantidad": 1, "unidad": "ud" }, { "ref": "mozzarella", "nombre": "Mozzarella", "cantidad": 80, "unidad": "g" }, { "ref": "salsa-victorino", "nombre": "Salsa Victorino", "cantidad": 30, "unidad": "g" } ] }
+        {
+          "id": "masa-nonina",
+          "nombre": "Masa Nonina",
+          "tipo": "masa",
+          "rinde": {
+            "cantidad": 8,
+            "unidad": "ud"
+          },
+          "lineas": [
+            {
+              "ref": "harina",
+              "nombre": "Harina de fuerza",
+              "cantidad": 1000,
+              "unidad": "g"
+            }
+          ]
+        },
+        {
+          "id": "cumbia",
+          "nombre": "Cumbia",
+          "tipo": "pizza",
+          "rinde": {
+            "cantidad": 1,
+            "unidad": "ud"
+          },
+          "lineas": [
+            {
+              "ref": "masa-nonina",
+              "nombre": "Masa Nonina",
+              "cantidad": 1,
+              "unidad": "ud"
+            },
+            {
+              "ref": "mozzarella",
+              "nombre": "Mozzarella",
+              "cantidad": 80,
+              "unidad": "g"
+            },
+            {
+              "ref": "salsa-victorino",
+              "nombre": "Salsa Victorino",
+              "cantidad": 30,
+              "unidad": "g"
+            }
+          ]
+        }
       ]
     },
     "_estado_migracion": "v2.1.0: modelo canonico LOCKED + TODAS las operaciones del blueprint migradas (crear, actualizar, listar, obtener, buscar, historial, estadisticas, analizar, ingredientes, actualizar_precio, _aplicar_coste_calculado) — usan tipo/rinde/lineas/ref/precio/compra_unidad/coste_unidad. PENDIENTE: escandallo (recorrer 'lineas' con 'ref': catalogo→precio · receta→coste_unidad) y los stores frontend (recetas.ts/escandallo.ts + componentes leen el shape viejo)."
   },
-
   "estado_persistente": {
     "_descripcion": "El unico estado del modulo vive en disco como JSON en pizzepos/recetas.json del proyecto. Estructura del store.",
     "ubicacion_logica": "/pizzepos/recetas.json (relativo al base_path del proyecto)",
     "shape": {
-      "_version":              "string ('1.0')",
-      "_updated_at":           "ISO 8601 — se refresca en cada mutacion",
-      "recetas":               "array de Receta",
+      "_version": "string ('1.0')",
+      "_updated_at": "ISO 8601 — se refresca en cada mutacion",
+      "recetas": "array de Receta",
       "ingredientes_catalogo": "array de IngredienteCatalogado"
     },
     "shape_receta": {
-      "id":                "slug estable (lowercase, guiones; derivado del nombre). Clave de enlace desde Linea.ref.",
-      "nombre":            "string trim",
-      "tipo":              "string in {pizza, masa, salsa, base} — que clase de elaborado es",
-      "descripcion":       "string | ''",
-      "rinde":             "{ cantidad: number > 0, unidad: 'ud'|'g'|'ml' } — cuanto produce. pizza={1,ud}; masa={nº bolas,ud}; salsa={peso total,g}. escandallo: coste_unidad = coste_total / rinde.cantidad.",
-      "lineas":            "array de Linea { ref, nombre, cantidad: number, unidad: 'g'|'ml'|'ud', notas?: string }. ref → id de un Ingrediente (catalogo) o de otra Receta (sub-receta).",
-      "instrucciones":     "array de string (pasos) | '' — opcional, info de cocina (no bloquea coste)",
-      "categorias":        "array de string",
-      "etiquetas":         "array de string",
-      "fuente":            "string in {manual, importada, sugerida, agente} — default 'manual'",
-      "notas":             "string | ''",
-      "estado_operativo":  "borrador | en_servicio | archivada",
-      "version":           "number (1 al crear, +1 por update)",
-      "history":           "array de snapshots de versiones anteriores ({ ...receta sin history, _archived_at: ISO })",
-      "incompleta":        "boolean (true si campos_pendientes.length > 0)",
+      "id": "slug estable (lowercase, guiones; derivado del nombre). Clave de enlace desde Linea.ref.",
+      "nombre": "string trim",
+      "tipo": "string in {pizza, masa, salsa, base} — que clase de elaborado es",
+      "descripcion": "string | ''",
+      "rinde": "{ cantidad: number > 0, unidad: 'ud'|'g'|'ml' } — cuanto produce. pizza={1,ud}; masa={nº bolas,ud}; salsa={peso total,g}. escandallo: coste_unidad = coste_total / rinde.cantidad.",
+      "lineas": "array de Linea { ref, nombre, cantidad: number, unidad: 'g'|'ml'|'ud', notas?: string }. ref → id de un Ingrediente (catalogo) o de otra Receta (sub-receta).",
+      "instrucciones": "array de string (pasos) | '' — opcional, info de cocina (no bloquea coste)",
+      "categorias": "array de string",
+      "etiquetas": "array de string",
+      "fuente": "string in {manual, importada, sugerida, agente} — default 'manual'",
+      "notas": "string | ''",
+      "estado_operativo": "borrador | en_servicio | archivada",
+      "version": "number (1 al crear, +1 por update)",
+      "history": "array de snapshots de versiones anteriores ({ ...receta sin history, _archived_at: ISO })",
+      "incompleta": "boolean (true si campos_pendientes.length > 0)",
       "campos_pendientes": "array — de {nombre, tipo, lineas} que esten vacios",
-      "created_at":        "ISO 8601",
-      "updated_at":        "ISO 8601",
+      "created_at": "ISO 8601",
+      "updated_at": "ISO 8601",
       "_campos_escritos_por_escandallo": {
         "_descripcion": "DERIVADOS. Los escribe escandallo al calcular coste; el LLM NO los toca y recetas los preserva en mutaciones. Ausentes si nunca se calculo.",
-        "coste_total":          "number — suma del valor de las lineas (eur).",
-        "coste_unidad":         "number — coste_total / rinde.cantidad, 2 decimales.",
+        "coste_total": "number — suma del valor de las lineas (eur).",
+        "coste_unidad": "number — coste_total / rinde.cantidad, 2 decimales.",
         "coste_actualizado_at": "ISO 8601.",
-        "fuentes_precios":      "array ⊆ {catalogo, mercadona, estimado_llm, sub_receta, no_disponible}.",
-        "lineas_detalle":       "array — desglose por linea con ref, precio_unitario, valor_calculado, fuente.",
-        "lineas_sin_precio":    "array de nombres que no se pudieron valorar."
+        "fuentes_precios": "array ⊆ {catalogo, mercadona, estimado_llm, sub_receta, no_disponible}.",
+        "lineas_detalle": "array — desglose por linea con ref, precio_unitario, valor_calculado, fuente.",
+        "lineas_sin_precio": "array de nombres que no se pudieron valorar."
       }
     },
     "shape_ingrediente_catalogado": {
-      "id":             "string slug — clave de enlace (Linea.ref apunta aqui). Si no se pasa al upsert, se deriva del nombre (lowercase, espacios y acentos → guiones). Estable.",
-      "nombre":         "string trim — comercial, unico. Lookup case-insensitive si no hay id",
-      "categoria":      "string | null",
-      "compra_unidad":  "string ('kg' | 'l' | 'ud') — unidad en la que se expresa 'precio'",
-      "precio":         "number >= 0 — precio por compra_unidad (por kg, por l o por ud). Fuente UNICA de precio del ingrediente para escandallo.",
+      "id": "string slug — clave de enlace (Linea.ref apunta aqui). Si no se pasa al upsert, se deriva del nombre (lowercase, espacios y acentos → guiones). Estable.",
+      "nombre": "string trim — comercial, unico. Lookup case-insensitive si no hay id",
+      "categoria": "string | null",
+      "compra_unidad": "string ('kg' | 'l' | 'ud') — unidad en la que se expresa 'precio'",
+      "precio": "number >= 0 — precio por compra_unidad (por kg, por l o por ud). Fuente UNICA de precio del ingrediente para escandallo.",
       "mercadona_producto_id": "string | null — producto Mercadona del que salio el precio (cacheado para refrescar sin re-navegar)",
-      "fuente":         "string in {mercadona, manual, estimado} — default 'manual'",
-      "created_at":     "ISO 8601",
-      "updated_at":     "ISO 8601"
+      "fuente": "string in {mercadona, manual, estimado} — default 'manual'",
+      "created_at": "ISO 8601",
+      "updated_at": "ISO 8601"
     }
   },
-
   "fuentes_aceptadas": {
-    "receta":      ["manual", "importada", "sugerida", "agente"],
-    "precio":      ["manual", "scrap", "api", "agente"]
+    "receta": [
+      "manual",
+      "importada",
+      "sugerida",
+      "agente"
+    ],
+    "precio": [
+      "manual",
+      "scrap",
+      "api",
+      "agente"
+    ]
   },
-
   "normalizadores_que_aplica_el_llm": {
     "_descripcion": "El LLM razona estos normalizadores mentalmente — son lenguaje natural + reglas. No son tools.",
     "nombre": "trim. Comparacion para duplicados: toLowerCase + trim.",
@@ -144,11 +197,12 @@
     "fuente_receta": "Si input en {manual,importada,sugerida,agente} → preservar. Otro → 'manual'.",
     "fuente_precio": "Si input en {mercadona,manual,estimado} → preservar. Otro → 'manual'."
   },
-
-  "campos_que_marcan_completa": ["nombre", "tipo", "lineas"],
-
+  "campos_que_marcan_completa": [
+    "nombre",
+    "tipo",
+    "lineas"
+  ],
   "operaciones": {
-
     "crear": {
       "input": "{ project_id (uuid, req), user_id?, nombre (req, string trim), tipo? (in {pizza,masa,salsa,base}, default 'pizza'), lineas?, rinde?, instrucciones?, categorias?, etiquetas?, fuente?, descripcion?, notas?, correlation_id? }",
       "pseudocodigo": [
@@ -250,9 +304,14 @@
         "Estado inicial: 'borrador' si campos_pendientes.length>0, 'en_servicio' si no.",
         "publish receta.creada SOLO tras fs.write OK. Si write falla, return UPSTREAM_TIMEOUT/UNREACHABLE sin publicar."
       ],
-      "errores_posibles": ["INVALID_INPUT", "ALREADY_EXISTS", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "ALREADY_EXISTS",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "listar": {
       "input": "{ project_id (req), estado?='en_servicio', solo_incompletas?=false, limit?=50 }",
       "pseudocodigo": [
@@ -278,10 +337,16 @@
         "    }))",
         "  } }"
       ],
-      "reglas_clave": ["Solo lee, no muta. No publica eventos."],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "reglas_clave": [
+        "Solo lee, no muta. No publica eventos."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "obtener": {
       "input": "{ project_id (req), receta_id? | nombre? (al menos uno req) }",
       "pseudocodigo": [
@@ -310,10 +375,17 @@
         "  }",
         "  return { status: 200, data: { ...rest, versiones_anteriores: (r.history || []).length } }"
       ],
-      "reglas_clave": ["Solo lee. Recetas archivadas TAMBIEN se devuelven (filtrar es responsabilidad del caller)."],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "reglas_clave": [
+        "Solo lee. Recetas archivadas TAMBIEN se devuelven (filtrar es responsabilidad del caller)."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "buscar": {
       "input": "{ project_id (req), texto?, ingrediente?, tipo? (in {pizza,masa,salsa,base}), categoria?, etiqueta?, limit?=20 }",
       "pseudocodigo": [
@@ -347,10 +419,16 @@
         "    }))",
         "  } }"
       ],
-      "reglas_clave": ["Filtros AND. Solo busca entre en_servicio. Devuelve ids+resumen, no recetas completas."],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "reglas_clave": [
+        "Filtros AND. Solo busca entre en_servicio. Devuelve ids+resumen, no recetas completas."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "actualizar": {
       "input": "{ project_id (req), receta_id (req), cambios (req, objeto con campos a modificar), correlation_id? }",
       "pseudocodigo": [
@@ -440,9 +518,14 @@
         "version += 1. updated_at refrescado. Recalcular incompleta + campos_pendientes.",
         "Persistir via fs.edit con patron UPDATE compuesto: op:test + op:replace /recetas/<idx> + op:replace /_updated_at."
       ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "historial": {
       "input": "{ project_id (req), receta_id (req) }",
       "pseudocodigo": [
@@ -470,10 +553,17 @@
         "    historial: versiones",
         "  } }"
       ],
-      "reglas_clave": ["Solo lee. Devuelve resumen de cada snapshot del history."],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "reglas_clave": [
+        "Solo lee. Devuelve resumen de cada snapshot del history."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "revertir": {
       "input": "{ project_id (req), receta_id (req), target_version (req, entero >=1) }",
       "pseudocodigo": [
@@ -547,9 +637,14 @@
         "Si target_version no existe → RESOURCE_NOT_FOUND con lista de versiones disponibles.",
         "Persistir via fs.edit con patron UPDATE compuesto: op:test + op:replace /recetas/<idx> + op:replace /_updated_at."
       ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "eliminar": {
       "input": "{ project_id (req), receta_id (req), motivo?: string }",
       "_descripcion_semantica": "Eliminacion LOGICA (estado → archivada). No borra del store. Equivalente a cambiar_estado(target='archivada') pero con evento extra receta.eliminada.",
@@ -603,9 +698,14 @@
         "Si ya esta archivada → idempotente (return 'ya_estaba_archivada', sin publicar eventos).",
         "Publica DOS eventos: receta.estado.actualizada (cambio de estado) + receta.eliminada (eliminacion logica)."
       ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "cambiar_estado": {
       "input": "{ project_id (req), receta_id (req), target_estado (req in {borrador|en_servicio|archivada}), motivo?: string }",
       "pseudocodigo": [
@@ -671,9 +771,15 @@
         "Si target_estado === estado_actual → idempotente (status: 'sin_cambios', sin eventos).",
         "Si target_estado === 'archivada' → publish ADICIONAL receta.eliminada (compat semantica con eliminar)."
       ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PRECONDITION_FAILED",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "estadisticas": {
       "input": "{ project_id (req) }",
       "pseudocodigo": [
@@ -702,10 +808,16 @@
         "    ingredientes_usados_unicos: ingredientes_usados.size",
         "  } }"
       ],
-      "reglas_clave": ["Solo lee. No publica."],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "reglas_clave": [
+        "Solo lee. No publica."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "ingredientes": {
       "input": "{ project_id (req), categoria? }",
       "pseudocodigo": [
@@ -720,11 +832,19 @@
         "  if (input.categoria) arr = arr.filter(i => i.categoria === input.categoria)",
         "  return { status: 200, data: { total: arr.length, ingredientes: arr } }"
       ],
-      "reglas_clave": ["Solo lee el catalogo. Filtro opcional por categoria."],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "reglas_clave": [
+        "Solo lee el catalogo. Filtro opcional por categoria."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "actualizar_precio": {
+      "cajon": false,
+      "_frontera": "pricing = trabajo de escandallo. recetas es dueño del catalogo (por eso el upsert vive aqui), pero el LLM de recetas NO debe fijar precios. Solo escandallo la invoca por el bus (recetas.actualizar_precio.request) para cachear lo que navega de Mercadona.",
       "input": "{ project_id (req), nombre (req), precio (req, number >= 0), compra_unidad? in {kg,l,ud}, categoria?, id?, mercadona_producto_id?, fuente? in {mercadona,manual,estimado} }",
       "_descripcion_semantica": "Upsert sobre ingredientes_catalogo (clase Ingrediente del modelo_canonico). Clave: input.id si viene, sino slug derivado del nombre. Si no existe lo crea (id estable); si existe actualiza precio + campos opcionales preservando los no enviados. Es la operacion por la que escandallo cachea precios de Mercadona: una conexion por ingrediente, luego todos leen el catalogo.",
       "pseudocodigo": [
@@ -821,10 +941,16 @@
         "Lookup case-insensitive por nombre normalizado (toLowerCase).",
         "Campos opcionales no enviados PRESERVAN el valor anterior (no se sobreescriben con null)."
       ],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "analizar": {
+      "cajon": false,
+      "_frontera": "costing = trabajo de escandallo. Llamable por bus si hace falta, pero NO cajon del LLM de recetas. Para coste, recetas delega en escandallo (evento).",
       "input": "{ project_id (req), receta_id (req) }",
       "_descripcion_semantica": "Calcula el coste de una receta cruzando sus ingredientes con el catalogo de precios. NO modifica nada. Si la receta esta incompleta o si faltan precios/unidades en el catalogo, lo refleja en la response (coste_es_real=false).",
       "pseudocodigo": [
@@ -871,9 +997,15 @@
         "Si receta.incompleta → PRECONDITION_FAILED (rechaza analizar incompletas).",
         "coste_es_real=true SOLO si todos los ingredientes tienen precio + unidad compatible. Sino, coste_total=null y nota explicativa."
       ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PRECONDITION_FAILED",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "investigar_receta": {
       "input": "{ project_id (req), nombre_receta (req) }",
       "_descripcion_semantica": "Comprueba si una receta existe por nombre. Si existe la devuelve. Si no, devuelve una instruccion al LLM caller para que proponga + confirme con el usuario antes de crear. NO crea automaticamente.",
@@ -903,9 +1035,13 @@
         "Solo lee. No publica. No crea recetas automaticamente.",
         "Si no existe → devuelve instruccion textual para que el LLM caller la siga (proponer + confirmar antes de crear)."
       ],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
-
     "_aplicar_coste_calculado": {
       "_descripcion": "Operacion INTERNA — handler asincrono del evento 'escandallo.coste.calculado'. NO se expone como cajon al LLM en el chat normal (el prefijo _ es la convencion canonica para esto). Se invoca SOLO via blueprint-subscribers-asincronos cuando llega el evento. El LLM (en conversacion sintetica creada por ai-gateway) ejecuta este pseudocodigo igual que cualquier operacion.",
       "input": "{ receta_id (req), project_id (uuid, req), coste_total?, coste_unidad?, coste_actualizado_at?, fuentes_precios?, lineas_detalle?, lineas_sin_precio?, correlation_id?, timestamp? } — payload del evento 'escandallo.coste.calculado'.",
@@ -973,11 +1109,14 @@
         "version de la receta NO se bumpea aqui — los campos de coste son derivacion calculada, no edicion editorial. El bump version queda para actualizar (cuando es el usuario quien edita).",
         "Persistir via fs.edit con patron UPDATE compuesto: op:test + op:replace /recetas/<idx> + op:replace /_updated_at."
       ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UNKNOWN_ERROR"
+      ]
     }
-
   },
-
   "eventos_publicados": [
     "receta.creada",
     "receta.actualizada",
@@ -985,7 +1124,6 @@
     "receta.eliminada",
     "ingrediente.precio.actualizado"
   ],
-
   "eventos_que_escucho": [
     {
       "evento": "escandallo.coste.calculado",
@@ -993,10 +1131,10 @@
       "_descripcion": "v1.1.0: cuando escandallo termina un calculo, publica este evento con los 7 campos de coste. Recetas (dueno del store pizzepos/recetas.json) escucha y aplica los campos a la receta correspondiente. El LLM ejecuta el handler segun el mecanismo blueprint-subscribers-asincronos de ai-gateway (sin LLM en chat, conversacion sintetica con conversation_id nuevo, user_id='async-subscriber')."
     }
   ],
-
   "trabajo_pendiente": [
     "Primitiva universal del bus 'bus.newId' o 'uuid.generate.request/response' que devuelva UUIDv4 real generado por crypto.randomUUID() — para reemplazar el helper LLM-side uuid() que aluciña ids con shape regular.",
     "Schemas JSON Schema 2020-12 estrictos para los 5 eventos publicados, integrados en subsistema-recetario.contract.json + validator.",
     "Validacion estricta de catalogo en ai-gateway._executeToolCall — actualmente el LLM puede emitir cualquier nombre de tool (recetas.crear, etc.) y se publica al bus sin validar. Permite saltarse el blueprint cuando el modulo legacy sigue cargado."
-  ]
+  ],
+  "_v2_2_changelog": "v2.2.0 (2026-06-09): frontera de modulo. actualizar_precio (pricing) y analizar (costing) marcadas 'cajon': false → siguen siendo llamables por bus (RPC <mod>.<op>.request intacto, lo usa escandallo para cachear) pero DEJAN de exponerse como cajon al LLM de la pagina de recetas. Asi la pagina de recetas solo construye/gestiona recetas; pricing y costing quedan walled en escandallo. Acompaña a ai-gateway._extractCajones (ahora salta ops con cajon:false y con prefijo _). Diagnostico: el coste salia 0 porque el compañero trabajaba en la pagina de recetas y nunca invocaba escandallo (page-scoping), y ademas recetas podia hacer pricing por tener actualizar_precio como cajon — ambos cerrados."
 }

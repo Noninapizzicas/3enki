@@ -68,6 +68,11 @@ class AiGatewayModule extends BaseModule {
     // entry, se respeta el page_id que viene en cada request del chat.
     this.conversationPageFoco = new Map();
 
+    // Nervio propioceptivo: conversation_id → ts del ultimo evento de
+    // propiocepcion ya inyectado en el contexto. Asi cada turno solo ve lo
+    // NUEVO que paso en su mundo desde la ultima vez (no se re-inyecta ruido).
+    this.conversationPropioTs = new Map();
+
     // Blueprint subscribers asincronos (frente 2.4 cierre 2026-05-24):
     // event_name → [{ page_id, handler_name, unsub }]. Poblado en _wireBlueprintAsyncSubscribers
     // al arrancar leyendo eventos_que_escucho de cada blueprint hijo. Cuando llega
@@ -142,6 +147,7 @@ class AiGatewayModule extends BaseModule {
     this.pendingFsReads.clear();
     this.cajonesCatalog.clear();
     this.conversationCajones.clear();
+    this.conversationPropioTs.clear();
     this.pageGraph.clear();
     this.conversationPageFoco.clear();
     // Liberar suscripcion al evento canonico core.modules.loaded.all.
@@ -1089,6 +1095,56 @@ class AiGatewayModule extends BaseModule {
     }
   }
 
+  // Nervio propioceptivo — lado lectura.
+  // Pide a propiocepcion (reflejo JS, responde en ms) la rebanada de lo que
+  // paso en el mundo del proyecto desde desde_ts. RPC de bus con timeout corto:
+  // la consciencia no debe penalizar la latencia del turno, asi que si tarda
+  // devolvemos vacio y el turno sigue.
+  async _leerPropiocepcion(project_id, desde_ts) {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return [];
+    const request_id = crypto.randomUUID();
+    const timeoutMs = this.config.propiocepcion_timeout_ms || 3000;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve([]); }, timeoutMs);
+      try {
+        unsub = this.eventBus.subscribe('propiocepcion.leer.response', (event) => {
+          const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!data || data.request_id !== request_id) return;
+          clearTimeout(timeout);
+          if (unsub) unsub();
+          const payload = data.result || data;
+          const eventos = payload?.data?.eventos || payload?.eventos || [];
+          resolve(Array.isArray(eventos) ? eventos : []);
+        });
+        this.eventBus.publish('propiocepcion.leer', {
+          request_id, project_id, limite: 25, ...(desde_ts ? { desde_ts } : {})
+        });
+      } catch (_) {
+        clearTimeout(timeout);
+        if (unsub) unsub();
+        resolve([]);
+      }
+    });
+  }
+
+  _composePropiocepcionSection(eventos) {
+    const lineas = eventos.map(e => {
+      const tipo = e.tipo === 'reflejo' ? 'reflejo' : 'consciente';
+      return `- [${tipo}] ${e.modulo}: ${e.resumen}`;
+    }).join('\n');
+    return (
+      '# LO QUE PASO EN TU MUNDO — propiocepcion\n' +
+      'Desde tu ultimo turno, en este proyecto ocurrio esto. NO lo controlaste tu ' +
+      'paso a paso (son reflejos y ops ya ejecutadas), pero eres CONSCIENTE de que ' +
+      'paso — como sabes que tu mano se movio aunque no lo articulaste:\n' +
+      lineas + '\n' +
+      'Tratalo como hechos verificados del mundo real. Si algo ya se hizo o se ' +
+      'guardo, esta aqui. NO supongas ni declares hecho lo que no veas en esta ' +
+      'lista o no hayas ejecutado tu mismo en este turno.'
+    );
+  }
+
   _isPrimitivePrefix(prefix) {
     const PRIMITIVE = new Set([
       'fs', 'project', 'llm', 'ai', 'agent', 'credential', 'security',
@@ -1625,9 +1681,28 @@ class AiGatewayModule extends BaseModule {
           ? this._buildCajonesSystemPrompt(blueprintCtx, conversation_id, effectivePageId)
           : blueprintCtx.systemPrompt)
       : null;
-    const effectiveSystem = blueprintPrompt
+    let effectiveSystem = blueprintPrompt
       ? (system ? `${blueprintPrompt}\n\n# CONTEXTO ADICIONAL DEL CALLER\n${system}` : blueprintPrompt)
       : system;
+
+    // Nervio propioceptivo: en un turno REAL del chat sobre una pagina de
+    // proyecto, inyectamos lo que paso en el mundo de ese proyecto desde el
+    // ultimo turno — reflejos JS y ops conscientes que el LLM no controlo pero
+    // de los que debe ser consciente. Best-effort: si propiocepcion no responde
+    // rapido, el turno sigue sin bloquearse. No se inyecta en turnos sinteticos
+    // (async-subscriber / RPC responders) ni sin proyecto.
+    if (blueprintCtx && project_id && !context?.async_invocation) {
+      try {
+        const desdeTs = this.conversationPropioTs.get(conversation_id) || null;
+        const eventos = await this._leerPropiocepcion(project_id, desdeTs);
+        if (Array.isArray(eventos) && eventos.length > 0) {
+          const seccion = this._composePropiocepcionSection(eventos);
+          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
+          const ultimaTs = eventos[eventos.length - 1]?.ts;
+          if (ultimaTs) this.conversationPropioTs.set(conversation_id, ultimaTs);
+        }
+      } catch (_) { /* la consciencia es best-effort; nunca bloquea el turno */ }
+    }
 
     // Resolver attachments y mezclarlos con el último mensaje user
     const resolvedAtt = await this._resolveAttachments(project_id, attachments);

@@ -31,31 +31,36 @@ import {
 import { activeProjectId } from './projects';
 
 // =============================================================================
-// TYPES — shape canonico del blueprint recetas
+// TYPES — modelo_canonico (recetas blueprint v2.x): Receta · Linea · Ingrediente
 // =============================================================================
 
 export type EstadoOperativo = 'borrador' | 'en_servicio' | 'archivada';
-export type Dificultad = 'baja' | 'media' | 'alta';
+export type TipoReceta = 'pizza' | 'masa' | 'salsa' | 'base';
+export type Unidad = 'g' | 'ml' | 'ud';
 
-export interface RecetaIngrediente {
-  nombre: string;
+export interface Rinde {
   cantidad: number;
-  unidad?: string;
-  ingrediente_id?: string;
+  unidad: Unidad;
+}
+
+export interface RecetaLinea {
+  ref?: string | null;      // id de un Ingrediente del catalogo o de otra Receta (sub-receta)
+  nombre: string;
+  cantidad: number | null;
+  unidad?: string | null;
   notas?: string;
 }
 
-export type FuentePrecio = 'mercadona' | 'estimado_llm' | 'no_disponible';
+export type FuentePrecio = 'catalogo' | 'sub_receta' | 'mercadona' | 'estimado_llm' | 'no_disponible';
 
-export interface IngredienteDetalle {
+export interface LineaDetalle {
+  ref?: string | null;
   nombre: string;
   cantidad: number;
   unidad: string;
   precio_unitario: number | null;
   valor_calculado: number | null;
   fuente: FuentePrecio;
-  precio_unidad?: number | null;
-  precio_kg?: number | null;
   mercadona_producto_id?: string;
   mercadona_nombre?: string;
 }
@@ -63,57 +68,57 @@ export interface IngredienteDetalle {
 export interface Receta {
   id: string;
   nombre: string;
-  porciones: number;
-  dificultad: Dificultad;
+  tipo: TipoReceta;
+  rinde: Rinde | null;
   estado_operativo: EstadoOperativo;
   incompleta: boolean;
   campos_pendientes: string[];
   version: number;
   updated_at: string;
-  ingredientes: RecetaIngrediente[];
-  ingredientes_count: number;
+  lineas: RecetaLinea[];
+  lineas_count: number;
   descripcion?: string;
-  tags?: string[];
-  elaboracion?: string[];
+  instrucciones?: string[];
   notas?: string;
-  // Campos escritos por escandallo (blueprint-2.0.0). Ausentes si nunca corrio.
+  // Campos escritos por escandallo (coste). Ausentes si nunca corrio.
   coste_total?: number;
-  coste_porcion?: number;
+  coste_unidad?: number;
   coste_actualizado_at?: string;
-  postcode_usado?: string;
   fuentes_precios?: FuentePrecio[];
-  ingredientes_detalle?: IngredienteDetalle[];
-  ingredientes_sin_precio?: string[];
-  // Snapshots de versiones anteriores (escritos por recetas.actualizar/revertir del blueprint).
+  lineas_detalle?: LineaDetalle[];
+  lineas_sin_precio?: string[];
+  // Snapshots de versiones anteriores (recetas.actualizar/revertir).
   history?: RecetaVersionSnapshot[];
 }
 
 export interface RecetaResumen {
   id: string;
   nombre: string;
-  porciones: number;
-  dificultad: Dificultad;
+  tipo: TipoReceta;
+  rinde: Rinde | null;
   estado_operativo: EstadoOperativo;
   incompleta: boolean;
   campos_pendientes: string[];
   version: number;
   updated_at: string;
-  ingredientes_count: number;
+  lineas_count: number;
   // Surface del coste persistido (si escandallo ya corrio).
   coste_total?: number;
-  coste_porcion?: number;
+  coste_unidad?: number;
   coste_actualizado_at?: string;
   fuentes_precios?: FuentePrecio[];
-  // Flag derivado: true si hay ingredientes_sin_precio. UI puede mostrar asterisco.
+  // Flag derivado: true si hay lineas_sin_precio. UI puede mostrar asterisco.
   coste_incompleto?: boolean;
 }
 
 export interface CatalogoIngrediente {
+  id?: string;
   nombre: string;
-  unidad?: string;
-  precio_mercado?: number;
-  alergenos?: string[];
-  proveedor?: string;
+  compra_unidad?: string;        // 'kg' | 'l' | 'ud'
+  precio?: number;               // por compra_unidad
+  categoria?: string;
+  mercadona_producto_id?: string;
+  fuente?: string;
   updated_at?: string;
 }
 
@@ -195,20 +200,20 @@ async function readRecetasStore(): Promise<RecetasStore | null> {
 }
 
 function summarize(r: Receta): RecetaResumen {
-  const sinPrecio = Array.isArray(r.ingredientes_sin_precio) ? r.ingredientes_sin_precio : [];
+  const sinPrecio = Array.isArray(r.lineas_sin_precio) ? r.lineas_sin_precio : [];
   return {
     id: r.id,
     nombre: r.nombre,
-    porciones: r.porciones,
-    dificultad: r.dificultad,
+    tipo: r.tipo,
+    rinde: r.rinde ?? null,
     estado_operativo: r.estado_operativo,
     incompleta: r.incompleta === true,
     campos_pendientes: Array.isArray(r.campos_pendientes) ? r.campos_pendientes : [],
     version: r.version,
     updated_at: r.updated_at,
-    ingredientes_count: Array.isArray(r.ingredientes) ? r.ingredientes.length : 0,
+    lineas_count: Array.isArray(r.lineas) ? r.lineas.length : 0,
     coste_total: typeof r.coste_total === 'number' ? r.coste_total : undefined,
-    coste_porcion: typeof r.coste_porcion === 'number' ? r.coste_porcion : undefined,
+    coste_unidad: typeof r.coste_unidad === 'number' ? r.coste_unidad : undefined,
     coste_actualizado_at: r.coste_actualizado_at,
     fuentes_precios: r.fuentes_precios,
     coste_incompleto: sinPrecio.length > 0
@@ -273,7 +278,7 @@ export async function getReceta(id: string): Promise<Receta | null> {
 
     const enriched: Receta = {
       ...receta,
-      ingredientes_count: Array.isArray(receta.ingredientes) ? receta.ingredientes.length : 0
+      lineas_count: Array.isArray(receta.lineas) ? receta.lineas.length : 0
     };
 
     recetasStore.update(s => ({
@@ -343,9 +348,10 @@ export async function loadStats(): Promise<void> {
         por_estado[r.estado_operativo]++;
       }
       if (r.incompleta) incompletas++;
-      if (Array.isArray(r.ingredientes)) {
-        for (const ing of r.ingredientes) {
-          if (ing && typeof ing.nombre === 'string') usados.add(ing.nombre.toLowerCase());
+      if (Array.isArray(r.lineas)) {
+        for (const l of r.lineas) {
+          const k = l && (l.ref || l.nombre);
+          if (typeof k === 'string') usados.add(k.toLowerCase());
         }
       }
     }
@@ -382,10 +388,10 @@ export interface RecetaVersionSnapshot {
   version: number;
   _archived_at?: string;
   nombre?: string;
-  porciones?: number | null;
-  dificultad?: number | null;
-  ingredientes?: RecetaIngrediente[];
-  elaboracion?: string[];
+  tipo?: TipoReceta;
+  rinde?: Rinde | null;
+  lineas?: RecetaLinea[];
+  instrucciones?: string[];
   notas?: string;
   [key: string]: unknown;
 }
@@ -394,9 +400,9 @@ export interface RecetaHistorialEntry {
   version: number;
   archived_at?: string;
   nombre?: string;
-  porciones?: number | null;
-  dificultad?: number | null;
-  ingredientes_count: number;
+  tipo?: TipoReceta;
+  rinde?: Rinde | null;
+  lineas_count: number;
 }
 
 export interface RecetaHistorialResult {
@@ -424,9 +430,9 @@ export async function loadHistorial(recetaId: string): Promise<RecetaHistorialRe
     version: h.version,
     archived_at: h._archived_at,
     nombre: h.nombre,
-    porciones: h.porciones,
-    dificultad: h.dificultad,
-    ingredientes_count: Array.isArray(h.ingredientes) ? h.ingredientes.length : 0
+    tipo: h.tipo,
+    rinde: h.rinde ?? null,
+    lineas_count: Array.isArray(h.lineas) ? h.lineas.length : 0
   }));
 
   return {

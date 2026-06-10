@@ -15,7 +15,7 @@
 
   function handleActualizarPrecio() {
     if (!ingrediente) return;
-    const unidad = ingrediente.unidad || 'unidad';
+    const unidad = ingrediente.compra_unidad || 'unidad';
     prefillChatInput(`Actualiza el precio del ingrediente "${ingrediente.nombre}" a <precio>€/${unidad}.`);
   }
 </script>
@@ -30,8 +30,8 @@
 
     <div class="field">
       <span class="field-label">Precio de mercado</span>
-      {#if typeof ingrediente.precio_mercado === 'number'}
-        <span class="field-value price">{ingrediente.precio_mercado.toFixed(3)}€{ingrediente.unidad ? ' / ' + ingrediente.unidad : ''}</span>
+      {#if typeof ingrediente.precio === 'number'}
+        <span class="field-value price">{ingrediente.precio.toFixed(3)}€{ingrediente.compra_unidad ? ' / ' + ingrediente.compra_unidad : ''}</span>
       {:else}
         <span class="field-value muted">sin precio</span>
       {/if}

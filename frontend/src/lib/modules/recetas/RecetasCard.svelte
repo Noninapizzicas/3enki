@@ -6,7 +6,7 @@
    * canonica del frontend.contract: cero hex 6-digit fuera de paleta).
    */
 
-  import type { RecetaResumen, EstadoOperativo, Dificultad } from '$lib/stores/recetas';
+  import type { RecetaResumen, EstadoOperativo, TipoReceta } from '$lib/stores/recetas';
 
   export let receta: RecetaResumen;
   export let onClick: (id: string) => void;
@@ -25,11 +25,17 @@
     return '161, 161, 170';
   }
 
-  function dificultadRgb(d: Dificultad): string {
-    if (d === 'baja') return '34, 197, 94';
-    if (d === 'media') return '245, 158, 11';
-    if (d === 'alta') return '239, 68, 68';
+  function tipoRgb(t: TipoReceta): string {
+    if (t === 'pizza') return '239, 68, 68';
+    if (t === 'masa') return '245, 158, 11';
+    if (t === 'salsa') return '168, 85, 247';
+    if (t === 'base') return '59, 130, 246';
     return '161, 161, 170';
+  }
+
+  function rindeLabel(r: RecetaResumen): string {
+    if (!r.rinde) return '';
+    return `rinde ${r.rinde.cantidad} ${r.rinde.unidad}`;
   }
 </script>
 
@@ -46,19 +52,19 @@
     <span class="badge" style="background-color: rgba({estadoRgb(receta.estado_operativo)}, 0.13); color: rgb({estadoRgb(receta.estado_operativo)})">
       {estadoLabel(receta.estado_operativo)}
     </span>
-    <span class="badge" style="background-color: rgba({dificultadRgb(receta.dificultad)}, 0.13); color: rgb({dificultadRgb(receta.dificultad)})">
-      dificultad {receta.dificultad}
+    <span class="badge" style="background-color: rgba({tipoRgb(receta.tipo)}, 0.13); color: rgb({tipoRgb(receta.tipo)})">
+      {receta.tipo}
     </span>
     {#if receta.incompleta}
       <span class="badge warn">incompleta</span>
     {/if}
   </div>
   <div class="card-meta">
-    <span>{receta.ingredientes_count} ingrediente{receta.ingredientes_count !== 1 ? 's' : ''}</span>
-    <span>{receta.porciones} porci{receta.porciones === 1 ? 'on' : 'ones'}</span>
-    {#if typeof receta.coste_porcion === 'number'}
+    <span>{receta.lineas_count} ingrediente{receta.lineas_count !== 1 ? 's' : ''}</span>
+    {#if receta.rinde}<span>{rindeLabel(receta)}</span>{/if}
+    {#if typeof receta.coste_unidad === 'number'}
       <span class="card-coste">
-        {receta.coste_porcion.toFixed(2)}€/porc{#if receta.coste_incompleto}<span class="coste-asterisco" title="Coste parcial — hay ingredientes sin precio">*</span>{/if}
+        {receta.coste_unidad.toFixed(2)}€/{receta.rinde?.unidad ?? 'ud'}{#if receta.coste_incompleto}<span class="coste-asterisco" title="Coste parcial — hay líneas sin precio">*</span>{/if}
       </span>
     {/if}
   </div>

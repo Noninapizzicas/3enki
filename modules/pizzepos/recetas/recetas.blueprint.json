@@ -105,7 +105,7 @@
         }
       ]
     },
-    "_estado_migracion": "v2.3.0: modelo canonico LOCKED + TODAS las operaciones migradas (tipo/rinde/lineas/ref/precio/compra_unidad/coste_unidad). 'listar' acepta incluir_lineas=true (devuelve lineas + coste_unidad) — lo consume escandallo.recalcular_todas (CLASE EscandalloRecetas v3.4.0) para costear en una sola pasada. Stores frontend (recetas.ts/escandallo.ts) ya migrados. COMPLETO: recetas ↔ escandallo cierran el lazo sobre el modelo canonico."
+    "_estado_migracion": "v2.3.0: modelo canonico LOCKED + TODAS las operaciones migradas (tipo/rinde/lineas/ref/precio/compra_unidad/coste_unidad). 'listar' acepta incluir_lineas=true (devuelve lineas + coste_unidad) — lo consume escandallo.recalcular_siguiente (CLASE EscandalloRecetas) para costear de una en una, reanudable. Stores frontend (recetas.ts/escandallo.ts) ya migrados. COMPLETO: recetas ↔ escandallo cierran el lazo sobre el modelo canonico."
   },
   "estado_persistente": {
     "_descripcion": "El unico estado del modulo vive en disco como JSON en pizzepos/recetas.json del proyecto. Estructura del store.",
@@ -340,7 +340,7 @@
       ],
       "reglas_clave": [
         "Solo lee, no muta. No publica eventos.",
-        "incluir_lineas=true devuelve 'lineas' (con ref/cantidad/unidad) + 'coste_unidad' por receta. Lo usa escandallo.recalcular_todas para costear sin pedir cada receta una a una."
+        "incluir_lineas=true devuelve 'lineas' (con ref/cantidad/unidad) + 'coste_unidad' por receta. Lo usa escandallo.recalcular_siguiente para elegir la siguiente pendiente y costearla sin pedir cada receta por separado."
       ],
       "errores_posibles": [
         "INVALID_INPUT",

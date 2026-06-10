@@ -1,7 +1,7 @@
 {
   "_doc": "Blueprint CONCRETO del modulo recetas v1.0.0. Reemplaza completamente al modulo recetas legacy v4.0.0 (cuyo index.js queda como referencia historica). Declara las 13 operaciones del dominio en formato declarativo: contrato + pseudocodigo + reglas. El LLM ES el runtime: lee este blueprint (junto con el padre) como su contrato, sigue el pseudocodigo de cada operacion publicando eventos al bus directamente via bus.publish / bus.publishAndWait. NO existe runtime intermedio. NO existen helpers JS del dominio.",
   "id": "recetas",
-  "version": "blueprint-2.3.0",
+  "version": "blueprint-2.4.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
   "_v2_1_changelog": "v2.1.0 (2026-06-09): migra el pseudocodigo de TODAS las operaciones al modelo_canonico (paso 2). crear/actualizar construyen {tipo, rinde, lineas} (lineas con 'ref' unico; fuera porciones/tiempo/dificultad — ya no se piden). actualizar_precio + catalogo usan precio + compra_unidad (antes precio_mercado + unidad) y fuente {mercadona,manual,estimado}. _aplicar_coste_calculado aplica coste_unidad + lineas_detalle/lineas_sin_precio. listar/buscar/historial/estadisticas/analizar proyectan tipo/rinde/lineas_count y filtran por tipo (fuera filtros dificultad/tiempo/porciones). Normalizador 'ingredientes' → 'lineas' (resuelve ref por nombre); +normalizador 'rinde'. id de receta = slug del nombre. PENDIENTE: escandallo (recorrer lineas/ref) y frontend.",
@@ -1131,6 +1131,24 @@
       "evento": "escandallo.coste.calculado",
       "handler": "_aplicar_coste_calculado",
       "_descripcion": "v1.1.0: cuando escandallo termina un calculo, publica este evento con los 7 campos de coste. Recetas (dueno del store pizzepos/recetas.json) escucha y aplica los campos a la receta correspondiente. El LLM ejecuta el handler segun el mecanismo blueprint-subscribers-asincronos de ai-gateway (sin LLM en chat, conversacion sintetica con conversation_id nuevo, user_id='async-subscriber')."
+    },
+    {
+      "evento": "recetas.listar.request",
+      "handler": "listar",
+      "responde": true,
+      "_descripcion": "RPC bus: escandallo (y otros blueprints) piden el listado con publishAndWait. El turno sintetico ejecuta listar y publica recetas.listar.response correlado por request_id. incluir_lineas=true en el payload devuelve lineas+coste_unidad."
+    },
+    {
+      "evento": "recetas.ingredientes.request",
+      "handler": "ingredientes",
+      "responde": true,
+      "_descripcion": "RPC bus: devuelve el ingredientes_catalogo (precio/compra_unidad) para que escandallo costee. Publica recetas.ingredientes.response."
+    },
+    {
+      "evento": "recetas.obtener.request",
+      "handler": "obtener",
+      "responde": true,
+      "_descripcion": "RPC bus: una receta por id. Publica recetas.obtener.response."
     }
   ],
   "trabajo_pendiente": [

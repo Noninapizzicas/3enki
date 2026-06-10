@@ -1,0 +1,101 @@
+{
+  "name": "propiocepcion",
+  "version": "1.0.0",
+  "description": "Capa de propiocepcion del sistema. Reflejo JS siempre-encendido que captura del bus el historial de eventos de los modulos vinculados por proyecto (recetario) — tanto lo consciente (ops dirigidas por el LLM) como lo reflejo (ejecuciones JS) — y lo persiste por proyecto. Es la copia eferente: deja constancia de lo que paso en el mundo del modulo para que el LLM pueda ser consciente de ello (el nervio que inyecta esa constancia en el contexto del turno es la segunda mitad, en ai-gateway). Mata el teatro: el LLM ve lo que de verdad ocurrio en vez de suponerlo.",
+  "author": "Event Core Team",
+  "language": "es",
+
+  "publishes": [
+    {
+      "event": "propiocepcion.registrado",
+      "description": "Emitido tras capturar y bufferizar un evento del scope. Diagnostico/observabilidad, no de dominio."
+    }
+  ],
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el buffer del proyecto desde disco al activarse."
+    },
+    {
+      "event": "project.deactivated",
+      "handler": "onProjectDeactivated",
+      "description": "Flush a disco del buffer del proyecto."
+    },
+    {
+      "event": "fs.read.response",
+      "handler": "onFsReadResponse",
+      "description": "Respuesta del fs reflex al restaurar el buffer (correlado por request_id)."
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "propiocepcion",
+      "action": "leer",
+      "handler": "handleLeer",
+      "description": "Devuelve la rebanada reciente del historial de un proyecto. Lo consume el nervio (inyeccion en contexto) y la UI/auditoria."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "propiocepcion.leer",
+      "description": "Lee lo que ha pasado recientemente en el mundo del proyecto (eventos conscientes y reflejos de los modulos vinculados). Usalo para saber que ocurrio sin haberlo controlado tu.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." },
+          "limite": { "type": "number", "description": "Maximo de eventos a devolver (default 30)." },
+          "desde_ts": { "type": "string", "description": "ISO opcional: solo eventos posteriores." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "handleLeer",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    }
+  ],
+
+  "dependencies": ["filesystem"],
+
+  "config": {
+    "enabled": true,
+    "scope_modulos": [
+      "recetas", "escandallo", "carta-design", "carta-digital", "carta-manager",
+      "carta-marketing", "carta-scheduler", "tecnicas", "viabilidad",
+      "menu-generator", "productos", "categorias", "ingredientes", "tarifas"
+    ],
+    "modulos_blueprint": [
+      "recetas", "escandallo", "carta-design", "carta-digital", "carta-manager",
+      "carta-marketing", "carta-scheduler", "tecnicas", "viabilidad",
+      "menu-generator", "system-coherence-analyzer"
+    ],
+    "buffer_max": 200,
+    "flush_interval_ms": 8000,
+    "archivo_path": "/_propiocepcion.json",
+    "persistence": {
+      "pattern": "json-file-per-project",
+      "restart_resilient": true,
+      "concurrency": "single-writer",
+      "lost_on_restart": ["bufferVolatilNoFlusheado"]
+    }
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "propiocepcion.capturado.total",
+        "propiocepcion.flush.total",
+        "propiocepcion.errors.total"
+      ],
+      "gauges": [
+        "propiocepcion.proyectos.activos",
+        "propiocepcion.buffer.size"
+      ]
+    }
+  }
+}

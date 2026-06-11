@@ -34,7 +34,7 @@
   import ChatConfig from './ChatConfig.svelte';
   import ChatInput from './ChatInput.svelte';
   import ChatTools from './ChatTools.svelte';
-  import SystemBar from './SystemBar.svelte';
+  import PageNavStrip from './PageNavStrip.svelte';
   import Panel from './Panel.svelte';
   import LazyWorkBar from './LazyWorkBar.svelte';
   import { ToastContainer } from '$lib/components/base';
@@ -147,8 +147,8 @@
     </div>
   </main>
 
-  <!-- System Bar (floating right) -->
-  <SystemBar />
+  <!-- Right rail: navegación de páginas + paneles de sistema (sustituye SystemBar) -->
+  <PageNavStrip />
 
   <!-- Toast notifications -->
   <ToastContainer />

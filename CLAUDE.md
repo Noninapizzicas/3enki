@@ -1152,15 +1152,11 @@ UI_REQUEST_TIPICO {
 
 ---
 
-# Capa de Propiocepción — Reflejo + Consciencia (sesión 2026-06-11)
+# Capa de Propiocepción — Reflejo + Consciencia
 
-> El sistema nervioso del LLM. Los módulos JS son **reflejos**: actúan solos,
-> deterministas, sin que el LLM los controle paso a paso. Pero el LLM debe ser
-> **consciente** de que actuaron — como el humano sabe que retiró la mano del
-> fuego aunque no lo decidiera. La propiocepción es la mitad que faltaba: una
-> **copia eferente** (qué pasó queda registrado) + un **nervio** (esa constancia
-> entra en el contexto del turno). Mata el teatro: el LLM ve lo que de verdad
-> ocurrió en vez de suponerlo ("guardado" falso → imposible).
+> Copia eferente (los eventos de dominio quedan registrados por proyecto) +
+> nervio (la rebanada nueva se inyecta en el contexto del turno). El LLM trata lo
+> registrado como hecho verificado; no afirma lo que no esté ahí.
 
 ## Modelo (tres piezas, una idea)
 
@@ -1272,20 +1268,17 @@ CONSCIENCIA_SE_ENTERA {
   1. arranca un turno REAL del chat en una página de proyecto
   2. NervioPropioceptivo._leerPropiocepcion(project_id, desde_ultimo_turno)
   3. inyecta la rebanada nueva en el system prompt (contexto silencioso)
-  4. el LLM trata lo listado como hecho verificado — no supone, no miente
+  4. el LLM trata lo listado como hecho verificado
 }
 ```
 
 ---
 
-# Patrón Módulo Híbrido — Reflejo (JS) + Blueprint (LLM) (sesión 2026-06-11)
+# Patrón Módulo Híbrido — Reflejo (JS) + Blueprint (LLM)
 
-> Lo determinista quiere código (rápido, barato, fiable, una sola respuesta
-> correcta); lo fuzzy quiere LLM (elige, interpreta, genera). Un módulo tiene de
-> las dos. El patrón híbrido parte cada módulo en sus dos mitades sin elegir una.
-> **recetas es el primer caso** (su reflejo de lecturas mató 250-370K tokens por
-> escandallo); el patrón se repite en los demás. Es la forma de "cada módulo =
-> núcleo JS reflejo + LLM para lo fuzzy".
+> Cada módulo = mitad REFLEJO (index.js, JS determinista: lecturas/CRUD/aritmética,
+> sirve RPCs del bus) + mitad FUZZY (blueprint, cajones que el LLM ejecuta). El
+> loader carga ambos cuando blueprint_driven:true + existe index.js.
 
 ## Modelo
 
@@ -1336,10 +1329,7 @@ ABSTRACT CLASE ModuloHibrido HEREDA BaseModule {     // ── la mitad REFLEJO 
 }
 ```
 
-## Estandarización (base + gate) — sesión 2026-06-11
-
-> Con dos casos en la mano (recetas, escandallo · regla de tres), la fontanería se
-> destila en una base concreta y la regla anti-colisión en un gate automático.
+## Estandarización (base + gate)
 
 ```
 modules/_shared/modulo-hibrido-reflejo.js  →  ABSTRACT CLASE ModuloHibridoReflejo
@@ -1379,9 +1369,9 @@ recetas (PRIMER caso · module 2.0.0 · blueprint 2.6.0) {
 escandallo (SEGUNDO caso · module 2.0.0 · blueprint 3.8.0) {
   REFLEJO index.js : recalcular_siguiente · costear   (_costear aritmética pura)
   BLUEPRINT        : calcular (Mercadona / _precio_de_mercadona)   ;  cajón recalcular delega al reflejo
-  resultado VIVO   : turno de chat de ~300K tokens / 20-30s → 42K / 7.9s ; la cadena de costeo ~120ms JS
+  medido           : turno de chat 300K/20-30s → 42K/7.9s ; cadena de costeo ~120ms JS
 }
-PENDIENTE (mismo patrón, ya trivial con la base + gate) {
+PENDIENTE (mismo patrón) {
   productos · categorias · ingredientes · tarifas : sus lecturas/CRUD → reflejo
 }
 ```
@@ -2691,11 +2681,9 @@ ABSTRACT CLASE ProviderClient {
 }
 ```
 
-## CONVERSACION - AI-GATEWAY v2 — Cajones-internas · RPC blueprints · Nervio · Foco (sesión 2026-06-11)
+## CONVERSACION - AI-GATEWAY v2 — Cajones-internas · RPC blueprints · Nervio · Foco
 
-> Ampliaciones a la `CLASE AIGateway` de arriba. El LLM es el único intérprete
-> del pseudocódigo; estos métodos amplían CÓMO se le sirve el contexto y CÓMO un
-> blueprint contesta a otro, sin meter lógica de dominio en JS.
+> Métodos nuevos sobre la `CLASE AIGateway`.
 
 ```
 CLASE AIGateway (ampliación) {
@@ -2726,7 +2714,7 @@ CLASE AIGateway (ampliación) {
         el prompt sintético instruye: "publica <evento sin .request>.response con
         { request_id, status, data }" → el publishAndWait del caller resuelve
       SINO: fire-and-forget (notificación de un sentido)
-    // Coste: cada RPC es un TURNO LLM del módulo destino (lento + caro). Ver trabajo_pendiente.
+    // Cada RPC = un turno LLM del módulo destino. Resuelto vía reflejo (ver Patrón Módulo Híbrido).
 
     // ── 3. NERVIO PROPIOCEPTIVO (ver sección Capa de Propiocepción)
     async _leerPropiocepcion(project_id, desde_ts): RPC a propiocepcion.leer (3s, best-effort)
@@ -2738,7 +2726,7 @@ CLASE AIGateway (ampliación) {
     // cambiar el foco no lo recarga en caliente. Por eso devuelve:
     //   { status, nuevo_page_id, cajones_activos_en: 'proximo_turno', instruccion }
     // instrucción: "NO abras cajones del page nuevo en este turno; cierra y ejecuta en el siguiente".
-    // Como cerrar y volver a cargar — cura el "no encuentro los cajones" tras cambiar de página.
+    // El catálogo de cajones del turno se fija al arrancar; el cambio de foco recarga en el siguiente.
 
     // ── 5. max_tokens con SUELO
     chatOptions.max_tokens = Math.max(settings?.max_tokens || 0, 4096)   // floor, no default
@@ -2769,9 +2757,9 @@ CLASE AIGateway (ampliación) {
     }
   },
   "reflejo_determinista_lecturas_recetas": {
-    "estado": "RESUELTO (sesión 2026-06-11) — ver Patrón Módulo Híbrido.",
-    "resumen": "recetas pasó a HÍBRIDO (module 2.0.0, blueprint 2.5.0, index.js reflejo). Las lecturas (listar/ingredientes/obtener.request) ya NO son turnos LLM sintéticos: las sirve el reflejo JS (lee recetas.json + proyecta, en ms). Mismo contrato de bus. Esperado: un escandallo de ~300K → ~30K tokens. El loader gana soporte de blueprint híbrido (retrocompatible).",
-    "siguiente": "aplicar el mismo Patrón Módulo Híbrido a escandallo (_costear determinista → reflejo; _precio_de_mercadona fuzzy) y a productos/categorias/ingredientes/tarifas."
+    "estado": "RESUELTO — ver Patrón Módulo Híbrido.",
+    "resumen": "recetas (module 2.0.0/blueprint 2.6.0) y escandallo (2.0.0/3.8.0) son híbridos: lecturas+persist (recetas) y costeo (escandallo) los sirve el reflejo JS. Mismo contrato de bus. Medido: turno de escandallo 300K→42K tokens.",
+    "siguiente": "mismo patrón a productos/categorias/ingredientes/tarifas."
   },
   "frontend_relacionado": "CLASE PageNavStrip (rail derecho de navegación entre páginas del recetario; tap → goto directo, sin chat.cambiar_foco) sustituye a SystemBar en AppShell/LazyShell. Ver sección Frontend."
 }
@@ -12800,7 +12788,7 @@ COMPONENTE ChatTools  (barra herramientas: chat-tools)
 COMPONENTE LazyWorkBar  (íconos de workBarDefinitions; click → carga módulo)
 COMPONENTE WorkBar  (variante eager)
 COMPONENTE SystemBar  (getPanelsByZone('system-bar'); openPanel) — SUSTITUIDO por PageNavStrip en AppShell/LazyShell
-COMPONENTE PageNavStrip  (rail derecho de navegación entre páginas del recetario; lista FIJA de pages con icono propio; la activa destacada; tap → goto(/{project}/{page}) directo, sin chat.cambiar_foco ni LLM; sustituye a SystemBar) [sesión 2026-06-11]
+COMPONENTE PageNavStrip  (rail derecho; lista FIJA de pages con icono propio; activa destacada; tap → goto(/{project}/{page}) directo; sustituye a SystemBar)
 COMPONENTE Panel / LazyPanel  (contenedor: posiciones top/bottom/left/right/center; spring drag; resize; ESC/backdrop cierra; PANEL_SIZES)
 }
 ```

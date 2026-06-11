@@ -12,7 +12,8 @@
   "subscribes": [
     { "event": "recetas.listar.request", "handler": "onListarRequest", "description": "Reflejo JS: lista recetas (proyeccion) sin turno LLM." },
     { "event": "recetas.ingredientes.request", "handler": "onIngredientesRequest", "description": "Reflejo JS: catalogo de ingredientes." },
-    { "event": "recetas.obtener.request", "handler": "onObtenerRequest", "description": "Reflejo JS: una receta por id/nombre." }
+    { "event": "recetas.obtener.request", "handler": "onObtenerRequest", "description": "Reflejo JS: una receta por id/nombre." },
+    { "event": "escandallo.coste.calculado", "handler": "onCosteCalculado", "description": "Reflejo JS (persist write): aplica el coste al store. Antes era un turno LLM sintetico por cada coste." }
   ],
   "config": {
     "persistence": {

@@ -79,6 +79,42 @@ class RecetasReflejo extends BaseModule {
     this._responder('recetas.obtener.response', d.request_id, result);
   }
 
+  // Persist WRITE (reflejo): aplica el coste que publica escandallo al store.
+  // Fire-and-forget (no .response). Determinista — escribe los 7 campos de coste
+  // en la receta + _updated_at. Réplica de _aplicar_coste_calculado del blueprint;
+  // antes era un turno LLM sintético por cada coste, ahora es código.
+  async onCosteCalculado(event) {
+    const d = event?.data || event || {};
+    if (!d.project_id || !d.receta_id) return;
+    try {
+      const store = await this._leerStore(d.project_id);
+      if (!store) return;
+      const idx = (store.recetas || []).findIndex(r => r.id === d.receta_id);
+      if (idx < 0) return;
+      const r = store.recetas[idx];
+      const aplicados = [];
+      for (const campo of ['coste_total', 'coste_unidad', 'coste_actualizado_at', 'fuentes_precios', 'lineas_detalle', 'lineas_sin_precio']) {
+        if (d[campo] !== undefined && d[campo] !== null) { r[campo] = d[campo]; aplicados.push(campo); }
+      }
+      if (aplicados.length === 0) return;
+      const now = new Date().toISOString();
+      await this._fsEdit(d.project_id, [
+        { op: 'test', path: `/recetas/${idx}/id`, value: d.receta_id },
+        { op: 'replace', path: `/recetas/${idx}`, value: r },
+        { op: 'replace', path: '/_updated_at', value: now }
+      ]);
+      this.eventBus.publish('receta.actualizada', {
+        receta_id: r.id, nombre: r.nombre, version: r.version,
+        campos_actualizados: aplicados, origen: 'escandallo.coste.calculado',
+        correlation_id: d.correlation_id || null, timestamp: now
+      });
+      this.metrics?.increment('recetas.reflejo.served', { op: 'aplicar_coste' });
+    } catch (err) {
+      this.logger?.error('recetas.reflejo.aplicar_coste.failed', { error: err.message });
+      this.metrics?.increment('recetas.reflejo.errors', { op: 'aplicar_coste' });
+    }
+  }
+
   // =============================================================
   // Proyecciones (réplica fiel del pseudocódigo del blueprint)
   // =============================================================
@@ -177,6 +213,26 @@ class RecetasReflejo extends BaseModule {
 
   _responder(evento, request_id, result) {
     this.eventBus.publish(evento, { request_id, ...result });
+  }
+
+  // Edita el store via el reflejo fs (RFC 6902 patches). Espera la confirmación.
+  async _fsEdit(project_id, patches) {
+    const request_id = crypto.randomUUID();
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, 5000);
+      try {
+        unsub = this.eventBus.subscribe('fs.edit.response', (event) => {
+          const d = event?.data || event;
+          if (!d || d.request_id !== request_id) return;
+          clearTimeout(timeout); if (unsub) unsub();
+          resolve(d);
+        });
+        this.eventBus.publish('fs.edit.request', { request_id, project_id, path: STORE_PATH, patches });
+      } catch (_) {
+        clearTimeout(timeout); if (unsub) unsub(); resolve(null);
+      }
+    });
   }
 
   async _guard(kind, fn) {

@@ -1,7 +1,7 @@
 {
   "_doc": "Blueprint CONCRETO del modulo recetas v1.0.0. Reemplaza completamente al modulo recetas legacy v4.0.0 (cuyo index.js queda como referencia historica). Declara las 13 operaciones del dominio en formato declarativo: contrato + pseudocodigo + reglas. El LLM ES el runtime: lee este blueprint (junto con el padre) como su contrato, sigue el pseudocodigo de cada operacion publicando eventos al bus directamente via bus.publish / bus.publishAndWait. NO existe runtime intermedio. NO existen helpers JS del dominio.",
   "id": "recetas",
-  "version": "blueprint-2.5.0",
+  "version": "blueprint-2.6.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
   "_v2_1_changelog": "v2.1.0 (2026-06-09): migra el pseudocodigo de TODAS las operaciones al modelo_canonico (paso 2). crear/actualizar construyen {tipo, rinde, lineas} (lineas con 'ref' unico; fuera porciones/tiempo/dificultad — ya no se piden). actualizar_precio + catalogo usan precio + compra_unidad (antes precio_mercado + unidad) y fuente {mercadona,manual,estimado}. _aplicar_coste_calculado aplica coste_unidad + lineas_detalle/lineas_sin_precio. listar/buscar/historial/estadisticas/analizar proyectan tipo/rinde/lineas_count y filtran por tipo (fuera filtros dificultad/tiempo/porciones). Normalizador 'ingredientes' → 'lineas' (resuelve ref por nombre); +normalizador 'rinde'. id de receta = slug del nombre. PENDIENTE: escandallo (recorrer lineas/ref) y frontend.",
@@ -1126,18 +1126,13 @@
     "receta.eliminada",
     "ingrediente.precio.actualizado"
   ],
-  "eventos_que_escucho": [
-    {
-      "evento": "escandallo.coste.calculado",
-      "handler": "_aplicar_coste_calculado",
-      "_descripcion": "v1.1.0: cuando escandallo termina un calculo, publica este evento con los 7 campos de coste. Recetas (dueno del store pizzepos/recetas.json) escucha y aplica los campos a la receta correspondiente. El LLM ejecuta el handler segun el mecanismo blueprint-subscribers-asincronos de ai-gateway (sin LLM en chat, conversacion sintetica con conversation_id nuevo, user_id='async-subscriber')."
-    }
-  ],
+  "eventos_que_escucho": [],
   "trabajo_pendiente": [
     "Primitiva universal del bus 'bus.newId' o 'uuid.generate.request/response' que devuelva UUIDv4 real generado por crypto.randomUUID() — para reemplazar el helper LLM-side uuid() que aluciña ids con shape regular.",
     "Schemas JSON Schema 2020-12 estrictos para los 5 eventos publicados, integrados en subsistema-recetario.contract.json + validator.",
     "Validacion estricta de catalogo en ai-gateway._executeToolCall — actualmente el LLM puede emitir cualquier nombre de tool (recetas.crear, etc.) y se publica al bus sin validar. Permite saltarse el blueprint cuando el modulo legacy sigue cargado."
   ],
   "_v2_2_changelog": "v2.2.0 (2026-06-09): frontera de modulo. actualizar_precio (pricing) y analizar (costing) marcadas 'cajon': false → siguen siendo llamables por bus (RPC <mod>.<op>.request intacto, lo usa escandallo para cachear) pero DEJAN de exponerse como cajon al LLM de la pagina de recetas. Asi la pagina de recetas solo construye/gestiona recetas; pricing y costing quedan walled en escandallo. Acompaña a ai-gateway._extractCajones (ahora salta ops con cajon:false y con prefijo _). Diagnostico: el coste salia 0 porque el compañero trabajaba en la pagina de recetas y nunca invocaba escandallo (page-scoping), y ademas recetas podia hacer pricing por tener actualizar_precio como cajon — ambos cerrados.",
-  "_v2_5_changelog": "v2.5.0 (2026-06-11): recetas pasa a HIBRIDO. Las lecturas por RPC (listar/ingredientes/obtener.request) ya NO se sirven con turno LLM sintetico (se quitan de eventos_que_escucho con responde:true) — las sirve el reflejo JS index.js, determinista e instantaneo. Mata el coste de 250-370K tokens por escandallo. Los cajones listar/obtener/ingredientes siguen para el LLM en la pagina de recetas."
+  "_v2_5_changelog": "v2.5.0 (2026-06-11): recetas pasa a HIBRIDO. Las lecturas por RPC (listar/ingredientes/obtener.request) ya NO se sirven con turno LLM sintetico (se quitan de eventos_que_escucho con responde:true) — las sirve el reflejo JS index.js, determinista e instantaneo. Mata el coste de 250-370K tokens por escandallo. Los cajones listar/obtener/ingredientes siguen para el LLM en la pagina de recetas.",
+  "_v2_6_changelog": "v2.6.0 (2026-06-11): el persist (_aplicar_coste_calculado, write de coste al store) pasa al REFLEJO JS (index.js onCosteCalculado). Ya no es un turno LLM sintetico por cada escandallo.coste.calculado. eventos_que_escucho queda vacio. Completa la mitad determinista de recetas: lecturas + persist en codigo."
 }

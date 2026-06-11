@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "marca.schema.json",
+  "title": "Identidad de marca del negocio",
+  "_doc": "Estructura CANÓNICA de /pizzepos/marca.json — la identidad raíz del negocio, BASE compartida de la que beben todos los módulos (cartas, canales, copy). No es campo libre: jerarquía por secciones, cada una con dueño. Se rellena de a poco (mínimo: esencia.nombre) y crece añadiendo campos/secciones SIN romper a los lectores (cada uno lee lo suyo). Dueño del fichero: carta-marketing (lo sirve su reflejo via get_perfil). Validable.",
+  "type": "object",
+  "required": ["_version", "esencia"],
+  "additionalProperties": true,
+  "properties": {
+    "_version": { "type": "string", "description": "Versión del esquema. Permite crecer sin romper lectores." },
+    "_updated_at": { "type": "string", "format": "date-time" },
+    "onboarding_completado": { "type": "boolean", "description": "true cuando la esencia está definida; el resto sigue creciendo." },
+
+    "esencia": {
+      "type": "object",
+      "description": "El ADN. Dueño: onboarding (carta-marketing). MÍNIMO para arrancar: nombre.",
+      "required": ["nombre"],
+      "additionalProperties": true,
+      "properties": {
+        "nombre": { "type": "string", "description": "Nombre del negocio/marca." },
+        "lema": { "type": "string" },
+        "proposito": { "type": "string", "description": "Para qué existe, en una frase." },
+        "valores": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "voz": {
+      "type": "object",
+      "description": "Cómo HABLA. Dueño: onboarding. La bebe TODO copy (posts, carta, notificaciones).",
+      "additionalProperties": true,
+      "properties": {
+        "tono": { "type": "array", "items": { "type": "string" } },
+        "registro": { "type": "string" },
+        "referencias": { "type": "array", "items": { "type": "string" }, "description": "Inspiraciones (p.ej. poetas, marcas)." },
+        "si": { "type": "array", "items": { "type": "string" }, "description": "Lo que SÍ hace la voz." },
+        "no": { "type": "array", "items": { "type": "string" }, "description": "Lo que NO hace." }
+      }
+    },
+
+    "publico": {
+      "type": "object",
+      "description": "A QUIÉN. Dueño: onboarding.",
+      "additionalProperties": true,
+      "properties": {
+        "quien": { "type": "string" },
+        "actitud": { "type": "string" }
+      }
+    },
+
+    "visual": {
+      "type": "object",
+      "description": "Cómo se VE. Dueño: carta-design. La bebe toda carta/post/canal.",
+      "additionalProperties": true,
+      "properties": {
+        "colores": { "type": "object", "additionalProperties": { "type": "string" }, "description": "rol → hex (principal, acento, fondo...)." },
+        "tipografias": { "type": "object", "additionalProperties": { "type": "string" }, "description": "rol → familia (titulo, texto...)." },
+        "estilo": { "type": "string", "description": "Dirección visual en una frase." },
+        "logo": { "type": "string", "description": "Ruta al logo en el storage del proyecto." }
+      }
+    },
+
+    "negocio": {
+      "type": "object",
+      "description": "CONTEXTO. Dueño: onboarding.",
+      "additionalProperties": true,
+      "properties": {
+        "tipo_cocina": { "type": "string" },
+        "local": { "type": "object", "additionalProperties": true },
+        "redes": { "type": "object", "additionalProperties": { "type": "string" }, "description": "red → handle/url (instagram, facebook, web...)." }
+      }
+    }
+  }
+}

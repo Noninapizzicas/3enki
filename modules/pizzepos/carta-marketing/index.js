@@ -17,12 +17,30 @@ const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
 const STORE_PATH = '/pizzepos/marca.json';
 
-function perfilVacio() {
+// Estructura CANÓNICA de la identidad (ver _schemas/marca/marca.schema.json).
+// Secciones con dueño; se rellenan de a poco. Mínimo para arrancar: esencia.nombre.
+function identidadVacia() {
   return {
-    _version: '1.0', _updated_at: new Date().toISOString(),
-    nombre_marca: '', tono_voz: '', valores: [], publico_objetivo: '',
-    idiomas: ['es'], onboarding_completado: false
+    _version: '1.0',
+    _updated_at: new Date().toISOString(),
+    onboarding_completado: false,
+    esencia: { nombre: '', lema: '', proposito: '', valores: [] },   // ADN — onboarding
+    voz: { tono: [], registro: '', referencias: [], si: [], no: [] },// cómo habla — onboarding
+    publico: { quien: '', actitud: '' },                             // a quién — onboarding
+    visual: { colores: {}, tipografias: {}, estilo: '', logo: '' },  // cómo se ve — carta-design
+    negocio: { tipo_cocina: '', local: {}, redes: {} }               // contexto — onboarding
   };
+}
+
+// Deep-merge: objetos se funden recursivamente; arrays/escalares reemplazan.
+// Así un update parcial de una sección NO pisa el resto de la identidad.
+function deepMerge(base, parche) {
+  if (parche === null || typeof parche !== 'object' || Array.isArray(parche)) return parche;
+  const out = (base && typeof base === 'object' && !Array.isArray(base)) ? { ...base } : {};
+  for (const k of Object.keys(parche)) {
+    out[k] = deepMerge(out[k], parche[k]);
+  }
+  return out;
 }
 
 class CartaMarketingReflejo extends ModuloHibridoReflejo {
@@ -41,48 +59,33 @@ class CartaMarketingReflejo extends ModuloHibridoReflejo {
   async _getPerfil(input) {
     if (!input.project_id) return this._invalid('project_id');
     const store = await this._leerJson(input.project_id, STORE_PATH);
-    if (store === null) return { status: 200, data: perfilVacio() };
-    return { status: 200, data: store };
+    // Devuelve siempre la estructura completa (secciones vacías si falta).
+    return { status: 200, data: store === null ? identidadVacia() : deepMerge(identidadVacia(), store) };
   }
 
+  // Update por SECCIÓN: campos es un parche parcial de la identidad
+  // (p.ej. { esencia: { nombre, valores }, visual: { colores } }). Deep-merge
+  // sobre lo que ya hay → se rellena de a poco sin pisar el resto. Reescritura
+  // atómica del fichero (single-writer, store pequeño).
   async _updatePerfil(input) {
-    if (!input.project_id || !input.campos || typeof input.campos !== 'object' || Object.keys(input.campos).length === 0) {
+    if (!input.project_id || !input.campos || typeof input.campos !== 'object' || Array.isArray(input.campos) || Object.keys(input.campos).length === 0) {
       return this._invalid('campos');
     }
-    const now = new Date().toISOString();
-    const store = await this._leerJson(input.project_id, STORE_PATH);
-
-    // Rama A — no existe: fs.write atómico del store inicial con los campos.
-    if (store === null) {
-      const perfil = perfilVacio();
-      for (const campo of Object.keys(input.campos)) {
-        if (input.campos[campo] !== undefined) perfil[campo] = input.campos[campo];
-      }
-      perfil._updated_at = now;
-      const w = await this._rpc('fs.write.request', {
-        project_id: input.project_id, path: STORE_PATH,
-        content: JSON.stringify(perfil, null, 2), encoding: 'utf-8', atomic: true
-      });
-      if (w && w.status >= 400) return w;
-      this._emitirActualizado(input, Object.keys(input.campos));
-      return { status: 200, data: perfil };
+    const base = (await this._leerJson(input.project_id, STORE_PATH)) || identidadVacia();
+    const merged = deepMerge(base, input.campos);
+    merged._version = merged._version || '1.0';
+    merged._updated_at = new Date().toISOString();
+    // onboarding_completado: lo marca explícito el caller; si no, se infiere de la esencia.
+    if (input.campos.onboarding_completado === undefined && merged.esencia && merged.esencia.nombre) {
+      // no forzamos a true — solo dejamos lo que venga; la esencia mínima existe.
     }
-
-    // Rama B — existe: fs.edit declarativo (un replace por campo + _updated_at).
-    const perfil = store;
-    const patches = [];
-    for (const campo of Object.keys(input.campos)) {
-      if (input.campos[campo] !== undefined) {
-        patches.push({ op: 'replace', path: '/' + campo, value: input.campos[campo] });
-        perfil[campo] = input.campos[campo];
-      }
-    }
-    patches.push({ op: 'replace', path: '/_updated_at', value: now });
-    perfil._updated_at = now;
-    const ed = await this._editarJson(input.project_id, STORE_PATH, patches);
-    if (ed && ed.status >= 400) return ed;
+    const w = await this._rpc('fs.write.request', {
+      project_id: input.project_id, path: STORE_PATH,
+      content: JSON.stringify(merged, null, 2), encoding: 'utf-8', atomic: true
+    });
+    if (w && w.status >= 400) return w;
     this._emitirActualizado(input, Object.keys(input.campos));
-    return { status: 200, data: perfil };
+    return { status: 200, data: merged };
   }
 
   _emitirActualizado(input, campos_modificados) {

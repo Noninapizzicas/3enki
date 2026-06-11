@@ -1390,7 +1390,8 @@ PENDIENTE (mismo patrón) {
 ```
 DIRECTORIO POR PROYECTO  (data/projects/{slug}/storage/)
   pizzepos/
-    recetas.json               recetas        (recetas + ingredientes_catalogo)
+    recetas.json               recetas        (BASE: recetas + ingredientes_catalogo)
+    marca.json                  carta-marketing (BASE: perfil de marca)
     cartas/<carta_id>.json      carta-manager
     carta-design/...            carta-design   (diseños HTML + perfiles de estilo)
     carta-digital/config.json   carta-digital
@@ -1398,9 +1399,26 @@ DIRECTORIO POR PROYECTO  (data/projects/{slug}/storage/)
     carta-scheduler/reglas.json carta-scheduler
     tecnicas/...                tecnicas
     viabilidad/...              viabilidad
-  config/
-    marca.json                  carta-marketing (perfil de marca = config del proyecto)
 ```
+
+### Bases compartidas (de las que beben todos)
+
+> Algunos stores no son privados de su módulo — son FUENTES que cualquier otro
+> lee. Viven planos bajo /pizzepos/ (no en subdir), los sirve el reflejo de su
+> dueño, y el resto bebe via su RPC (no fs.read directo: cada uno entra por la
+> puerta del dueño). El "cómo bebe" cada uno es suyo; el "de dónde" es fijo.
+
+```
+BASE              dueño            store                 puerta (RPC) para beber
+recetas+catálogo  recetas       /pizzepos/recetas.json  recetas.{listar,obtener,ingredientes}.request
+perfil de marca   carta-marketing /pizzepos/marca.json   carta-marketing.get_perfil.request
+
+  ejemplos de quién bebe:
+    escandallo, viabilidad  ← recetas+catálogo  (costear, evaluar)
+    carta-design (colores), menu-generator (tono), carta-digital  ← perfil de marca
+  el onboarding RELLENA la base de marca (update_perfil); luego diseño/carta se basan en ella.
+```
+
 
 ```
 REPARTO POR MÓDULO  (✓ = ya híbrido)

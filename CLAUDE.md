@@ -1278,6 +1278,91 @@ CONSCIENCIA_SE_ENTERA {
 
 ---
 
+# Patrón Módulo Híbrido — Reflejo (JS) + Blueprint (LLM) (sesión 2026-06-11)
+
+> Lo determinista quiere código (rápido, barato, fiable, una sola respuesta
+> correcta); lo fuzzy quiere LLM (elige, interpreta, genera). Un módulo tiene de
+> las dos. El patrón híbrido parte cada módulo en sus dos mitades sin elegir una.
+> **recetas es el primer caso** (su reflejo de lecturas mató 250-370K tokens por
+> escandallo); el patrón se repite en los demás. Es la forma de "cada módulo =
+> núcleo JS reflejo + LLM para lo fuzzy".
+
+## Modelo
+
+```
+// Un módulo híbrido vive en una carpeta con DOS piezas:
+//   <mod>.blueprint.json   ← mitad FUZZY: pseudocódigo que el LLM ejecuta (cajones)
+//   index.js               ← mitad REFLEJO: JS determinista, sirve RPCs del bus
+// El loader carga ambos (blueprint_driven:true + index.js existe = híbrido) y
+// CONSERVA blueprint_driven:true → ai-gateway sigue dando el blueprint al LLM.
+// Retrocompatible: un blueprint sin index.js sigue el camino puro de siempre.
+
+ABSTRACT CLASE ModuloHibrido HEREDA BaseModule {     // ── la mitad REFLEJO (JS)
+  ATRIBUTOS { name, eventBus, logger, metrics }
+  METODOS {
+    onLoad(context): los handlers se cablean via manifest.subscribes
+
+    // Un handler por cada op DETERMINISTA expuesta como RPC del bus.
+    // Patrón fijo: recibe request → proyecta → publica la response correlada.
+    async on<Op>Request(event):
+      { request_id, ...input } ← event.data
+      result ← _<op>(input)                  // { status, data }
+      publish('<mod>.<op>.response', { request_id, ...result })   // publishAndWait resuelve
+
+    // La proyección determinista — réplica FIEL del contrato del blueprint.
+    // Una sola respuesta correcta: lectura/CRUD/aritmética sobre el store.
+    _<op>(input): { status, data }
+
+    _leerStore(project_id): lee su fichero vía el reflejo fs (JS↔JS, milisegundos)
+  }
+}
+
+// ── la mitad FUZZY (NO es JS): <mod>.blueprint.json
+//   - cajones para lo que necesita inteligencia (crear desde intención,
+//     investigar, editar, navegar Mercadona).
+//   - NO declara responde:true para las ops que ya sirve el reflejo
+//     (evita doble responder y el turno LLM sintético caro).
+//   - sí mantiene eventos_que_escucho fire-and-forget (ej. aplicar un evento).
+```
+
+## Criterio de reparto (qué mitad)
+
+```json
+{
+  "va_al_reflejo_JS": "determinista, UNA respuesta correcta computable: lecturas, CRUD, validación, aritmética, persistencia, y TODO lo que otros módulos le piden por RPC de bus (no debe costar un turno LLM).",
+  "va_al_blueprint_LLM": "fuzzy: interpretar la intención del usuario, generar (recetas/menús desde foto o texto), navegar servicios externos con ambigüedad (matching ingrediente↔Mercadona), decidir.",
+  "regla": "si la op tiene UNA respuesta correcta computable → reflejo. Si necesita elegir/interpretar → blueprint.",
+  "consciencia": "el reflejo emite sus eventos de dominio; la propiocepción los capta → el LLM queda CONSCIENTE de lo que el reflejo hizo sin haberlo controlado (ver Capa de Propiocepción)."
+}
+```
+
+## Receta para volver híbrido otro módulo
+
+```
+1. Identifica sus ops DETERMINISTAS (lecturas/CRUD) y las que otros le piden por RPC.
+2. Crea index.js (ModuloHibrido): un on<Op>Request por cada una, proyección FIEL al contrato.
+3. module.json: subscribes mapeando <mod>.<op>.request → on<Op>Request (+ sube version).
+4. blueprint: quita responde:true de esas ops (el reflejo las sirve); deja los cajones
+   para el LLM en su página + los subscribers fire-and-forget que de verdad necesite.
+5. El loader (híbrido) carga ambos sin tocar nada más.
+```
+
+## Instancias
+
+```
+recetas (PRIMER caso · module 2.0.0 · blueprint 2.5.0) {
+  REFLEJO index.js : listar · ingredientes · obtener   (lecturas de recetas.json)
+  BLUEPRINT        : crear · editar · investigar_receta · ...   (cajones, fuzzy)
+  resultado        : lectura por RPC de ~20-30s/300K-tokens → milisegundos/determinista
+}
+PENDIENTE (mismo patrón) {
+  escandallo  : _costear ya es determinista → reflejo ; _precio_de_mercadona se queda fuzzy
+  productos · categorias · ingredientes · tarifas : sus lecturas/CRUD → reflejo
+}
+```
+
+---
+
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
 
 Análisis OOP exhaustivo de 25 módulos pizzepos + blueprint drivers. Pseudocódigo puro, sin comentarios.
@@ -2658,8 +2743,10 @@ CLASE AIGateway (ampliación) {
       "eventos_que_escucho": "+ {listar, ingredientes, obtener}.request con responde:true (RPC de bus)."
     }
   },
-  "trabajo_pendiente_critico": {
-    "reflejo_determinista_lecturas_recetas": "Hoy cada lectura de recetas (listar/ingredientes/obtener) que hace escandallo es un TURNO LLM sintético que arrastra el blueprint de recetas (~18K tokens) + lee recetas.json. Medido en vivo: un escandallo cuesta 250-370K tokens (vs ~30K si fuera determinista). FIX: dar a recetas un núcleo JS que sirva SUS lecturas como reflejo (mismo contrato de bus, publishAndWait sigue respondiendo; solo cambia que detrás hay código en vez de un turno LLM). Es la idea del reflejo aplicada: lo determinista lo sirve código, el LLM se queda para elegir."
+  "reflejo_determinista_lecturas_recetas": {
+    "estado": "RESUELTO (sesión 2026-06-11) — ver Patrón Módulo Híbrido.",
+    "resumen": "recetas pasó a HÍBRIDO (module 2.0.0, blueprint 2.5.0, index.js reflejo). Las lecturas (listar/ingredientes/obtener.request) ya NO son turnos LLM sintéticos: las sirve el reflejo JS (lee recetas.json + proyecta, en ms). Mismo contrato de bus. Esperado: un escandallo de ~300K → ~30K tokens. El loader gana soporte de blueprint híbrido (retrocompatible).",
+    "siguiente": "aplicar el mismo Patrón Módulo Híbrido a escandallo (_costear determinista → reflejo; _precio_de_mercadona fuzzy) y a productos/categorias/ingredientes/tarifas."
   },
   "frontend_relacionado": "CLASE PageNavStrip (rail derecho de navegación entre páginas del recetario; tap → goto directo, sin chat.cambiar_foco) sustituye a SystemBar en AppShell/LazyShell. Ver sección Frontend."
 }

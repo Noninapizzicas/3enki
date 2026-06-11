@@ -36,7 +36,7 @@
   import { registerAllModules, unregisterAllModules } from '$lib/modules';
   import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
 
-  import SystemBar from './SystemBar.svelte';
+  import PageNavStrip from './PageNavStrip.svelte';
   import ChatConfig from './ChatConfig.svelte';
   import ChatInput from './ChatInput.svelte';
   import ChatTools from './ChatTools.svelte';
@@ -165,9 +165,10 @@
     <SetupRequiredPanel />
   </main>
 
-  <!-- System Bar (floating right) -->
+  <!-- Right rail: navegación de páginas (contextual) + paneles de sistema.
+       Sustituye a SystemBar: el rail incluye sus paneles en la seccion inferior. -->
   {#if showSystemBar}
-    <SystemBar />
+    <PageNavStrip />
   {/if}
 
   <!-- Toast notifications -->

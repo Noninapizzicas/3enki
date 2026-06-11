@@ -1371,6 +1371,10 @@ escandallo (SEGUNDO caso · module 2.0.0 · blueprint 3.8.0) {
   BLUEPRINT        : calcular (Mercadona / _precio_de_mercadona)   ;  cajón recalcular delega al reflejo
   medido           : turno de chat 300K/20-30s → 42K/7.9s ; cadena de costeo ~120ms JS
 }
+carta-marketing (TERCER caso · module 2.0.0 · blueprint 1.3.0) {
+  REFLEJO index.js : get_perfil · update_perfil   (CRUD de /config/marca.json + evento)
+  BLUEPRINT        : completar_onboarding (agente marketing-onboarding, fuzzy) ; cajones perfil delegan
+}
 PENDIENTE (mismo patrón) {
   productos · categorias · ingredientes · tarifas : sus lecturas/CRUD → reflejo
 }
@@ -2727,6 +2731,8 @@ CLASE AIGateway (ampliación) {
     //   { status, nuevo_page_id, cajones_activos_en: 'proximo_turno', instruccion }
     // instrucción: "NO abras cajones del page nuevo en este turno; cierra y ejecuta en el siguiente".
     // El catálogo de cajones del turno se fija al arrancar; el cambio de foco recarga en el siguiente.
+    // El foco pegajoso se CONSUME tras un turno (el inmediato al cambio); después manda el page_id
+    // del frontend → un foco viejo no secuestra la página cuando el usuario navega por la UI.
 
     // ── 5. max_tokens con SUELO
     chatOptions.max_tokens = Math.max(settings?.max_tokens || 0, 4096)   // floor, no default

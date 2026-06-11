@@ -1419,6 +1419,36 @@ perfil de marca   carta-marketing /pizzepos/marca.json   carta-marketing.get_per
   el onboarding RELLENA la base de marca (update_perfil); luego diseño/carta se basan en ella.
 ```
 
+### Identidad de marca — estructura canónica (marca.json)
+
+> NO es campo libre. Jerarquía por secciones, cada una con DUEÑO, todos leen.
+> Se rellena de a poco (mínimo esencia.nombre) y crece sin romper lectores.
+> Esquema validable: arquitectura/decisiones/_schemas/marca/marca.schema.json.
+
+```
+CLASE Identidad {                         // /pizzepos/marca.json — base, dueño carta-marketing
+  _version · _updated_at · onboarding_completado
+  esencia : { nombre(req) · lema · proposito · valores[] }        // ADN     — dueño onboarding
+  voz     : { tono[] · registro · referencias[] · si[] · no[] }   // habla   — dueño onboarding
+  publico : { quien · actitud }                                   // a quién — dueño onboarding
+  visual  : { colores{} · tipografias{} · estilo · logo }         // se ve   — dueño carta-design
+  negocio : { tipo_cocina · local{} · redes{} }                   // contexto— dueño onboarding
+}
+
+GOBIERNO {
+  escribe : la sección la rellena su dueño via carta-marketing.update_perfil({ <seccion>: {...} })
+            update_perfil hace DEEP-MERGE por sección → un parche parcial no pisa el resto
+  lee     : TODOS via carta-marketing.get_perfil.request (devuelve la estructura completa)
+}
+
+CRECIMIENTO {
+  corto : esencia + voz + visual            (lo que onboarding + carta-design ya sacan)
+  medio : negocio (redes/canales) · publico afinado
+  largo : secciones nuevas (campañas · calendario · métricas) SIN tocar las existentes
+          — _version permite evolucionar; cada lector lee solo su sección
+}
+```
+
 
 ```
 REPARTO POR MÓDULO  (✓ = ya híbrido)

@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo carta-marketing. Hijo de subsistema-recetario.modulo-base. Equipo de marketing silencioso del proyecto: gestiona perfil de marca + dispara agentes especializados (marketing-copywriter, marketing-strategist, marketing-brand-keeper, marketing-onboarding) cuando el usuario o un evento upstream lo justifica. 4 operaciones (get_perfil, update_perfil, completar_onboarding, actividad).",
   "id": "carta-marketing",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.4.0",
+  "version": "blueprint-1.5.0",
   "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.3. correlation_id obligatorio en los 3 publishes --garantizado con uuid() via correlation_id_efectivo si input no trae. NO cambia paths (ya canonicos). NO modifica operaciones funcionales ni delegacion a agentes.",
   "language": "es",
   "rol": "Gestor del perfil de marca del proyecto + orquestador de agentes de marketing. NO genera copy ni estrategia — eso lo hacen marketing-copywriter / strategist / brand-keeper. El blueprint persiste perfil y consulta actividad reciente de los agentes.",
@@ -20,9 +20,10 @@
   ],
   "estado_persistente": {
     "paths_relativos": {
-      "perfil_marca": "/pizzepos/marca.json"
+      "identidad": "/pizzepos/marca.json"
     },
-    "shape_perfil": "{ _version, _updated_at, nombre_marca, lema?, tono_voz, valores: [...], publico_objetivo, diferenciacion, restricciones?, idiomas: [...], onboarding_completado: boolean }"
+    "shape_perfil": "Identidad por SECCIONES (ver _schemas/marca/marca.schema.json): { _version, _updated_at, onboarding_completado, esencia{nombre(req),lema,proposito,valores[]}, voz{tono[],registro,referencias[],si[],no[]}, publico{quien,actitud}, visual{colores{},tipografias{},estilo,logo}, negocio{tipo_cocina,local{},redes{}} }. Mínimo: esencia.nombre. Se rellena de a poco (deep-merge por seccion). Dueños: esencia/voz/publico/negocio=onboarding, visual=carta-design. Todos leen via get_perfil.",
+    "esquema": "arquitectura/decisiones/_schemas/marca/marca.schema.json"
   },
   "eventos_publicados": [
     "marketing.get_perfil.response",
@@ -159,5 +160,6 @@
     }
   ],
   "_v1_3_changelog": "v1.3.0 (2026-06-11): carta-marketing pasa a HIBRIDO (3er caso del patron). get_perfil/update_perfil (CRUD determinista del perfil de marca) los sirve el reflejo JS (index.js); estos cajones pasan a delegadores finos. completar_onboarding (agente marketing-onboarding, fuzzy) se queda en el blueprint. Mata el teatro del onboarding: el LLM persiste de verdad via update_perfil en vez de rolear que un agente lo registra.",
-  "_v1_4_changelog": "v1.4.0 (2026-06-11): el perfil de marca pasa de /config/marca.json a /pizzepos/marca.json — sigue la convencion del grupo pizzepos y se reconoce como BASE COMPARTIDA (como recetas.json): cualquier modulo bebe de ella via carta-marketing.get_perfil.request (servida por el reflejo). carta-design (colores), menu-generator (tono), etc. se basan en ella."
+  "_v1_4_changelog": "v1.4.0 (2026-06-11): el perfil de marca pasa de /config/marca.json a /pizzepos/marca.json — sigue la convencion del grupo pizzepos y se reconoce como BASE COMPARTIDA (como recetas.json): cualquier modulo bebe de ella via carta-marketing.get_perfil.request (servida por el reflejo). carta-design (colores), menu-generator (tono), etc. se basan en ella.",
+  "_v1_5_changelog": "v1.5.0 (2026-06-11): la identidad de marca pasa a estructura CANONICA por secciones (esencia/voz/publico/visual/negocio), con esquema validable (marca.schema.json). update_perfil acepta parches parciales por seccion (deep-merge) → se rellena de a poco sin pisar. Base solida y extensible: nuevas secciones/campos sin romper lectores. Sustituye el shape plano (nombre_marca/tono_voz/...) — no habia datos que migrar."
 }

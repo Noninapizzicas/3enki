@@ -1152,6 +1152,132 @@ UI_REQUEST_TIPICO {
 
 ---
 
+# Capa de Propiocepción — Reflejo + Consciencia (sesión 2026-06-11)
+
+> El sistema nervioso del LLM. Los módulos JS son **reflejos**: actúan solos,
+> deterministas, sin que el LLM los controle paso a paso. Pero el LLM debe ser
+> **consciente** de que actuaron — como el humano sabe que retiró la mano del
+> fuego aunque no lo decidiera. La propiocepción es la mitad que faltaba: una
+> **copia eferente** (qué pasó queda registrado) + un **nervio** (esa constancia
+> entra en el contexto del turno). Mata el teatro: el LLM ve lo que de verdad
+> ocurrió en vez de suponerlo ("guardado" falso → imposible).
+
+## Modelo (tres piezas, una idea)
+
+```
+INTERFAZ CapaPropioceptiva {
+  // escritura (copia eferente): lo que pasó queda registrado
+  capturar(evento: BusEvent): Void
+  leer(project_id: String, desde_ts?: String, limite?: Integer): Array<Registro>
+  // lectura (nervio): la consciencia se entera
+  inyectarEnTurno(project_id: String, conversation_id: String): SeccionContexto|Null
+}
+
+CLASE PropiocepcionModule HEREDA BaseModule {        // ── EL REFLEJO QUE OBSERVA
+  ATRIBUTOS {
+    name = 'propiocepcion'
+    buffers: Map<project_id, RingBuffer<Registro>>   // bounded (buffer_max=200)
+    dirty: Set<project_id>
+    scope: Set<modulo>                                // qué módulos son "su mundo" (recetario)
+    blueprint: Set<modulo>                            // cuáles son consciente vs reflejo
+    pendingFsReads: Map<request_id, {project_id}>
+    _onBusMessage: Function                           // mqtt.on('message') — bus crudo
+    _flushTimer: Timeout
+    config: { scope_modulos, modulos_blueprint, buffer_max, flush_interval_ms, archivo_path }
+  }
+  METODOS {
+    onLoad(core):
+      _startBusCapture()                              // mqtt.on('message') → _capturar
+      _flushTimer = setInterval(_flushDirty, flush_interval_ms)
+
+    _capturar(topic, message):
+      env ← _parseEnvelope(message)
+      dominio ← env.event_type.split('.')[0]
+      SI dominio NO EN scope: RETORNA                 // solo su mundo (filtro por proyecto)
+      project_id ← env.data.project_id ; SI falta: RETORNA
+      registro ← {
+        ts, modulo: dominio,
+        tipo: blueprint.has(dominio) ? 'consciente' : 'reflejo',
+        evento: env.event_type,
+        resumen: _resumen(evento, data),              // frase humana: "costeó samba → 1.45€/ud"
+        datos_clave, correlation_id
+      }
+      buffers[project_id].push(registro)              // ring bounded
+      dirty.add(project_id)
+
+    async _flushDirty():
+      PARA project_id EN dirty:
+        publish('fs.write.request', { project_id, path: '/_propiocepcion.json',
+                 content: { _version, _updated, eventos: buffer } })   // reflejo sobre el reflejo fs
+
+    onProjectActivated(event): restaura buffer desde disco (fs.read.request)
+    handleLeer(data): RETORNA buffer[project_id].slice(desde_ts, limite)   // lo consume el nervio
+  }
+  EVENTOS_SUBSCRIBES { '(bus crudo: mqtt.on message)', 'project.activated', 'fs.read.response' }
+  EVENTOS_PUBLISHES  { 'fs.write.request', 'fs.read.request' }   // se apoya en el reflejo fs
+}
+
+CLASE NervioPropioceptivo {                          // ── EL NERVIO (vive en AIGateway)
+  ATRIBUTOS {
+    conversationPropioTs: Map<conversation_id, ts>   // "desde tu último turno": solo lo NUEVO
+  }
+  METODOS {
+    async _leerPropiocepcion(project_id, desde_ts):
+      RPC de bus → propiocepcion.leer (reflejo JS, responde en ms)
+      timeout corto (3s) ; SI tarda → []             // best-effort, NUNCA bloquea el turno
+
+    _composePropiocepcionSection(eventos): SeccionContexto
+      // "# LO QUE PASO EN TU MUNDO — propiocepcion (contexto SILENCIOSO)"
+      // USALO EN SILENCIO: para no suponer. NO lo recites ni enumeres al usuario
+      // salvo que pregunte. Es memoria de fondo, no parte de tu respuesta.
+
+    // engancha en _executeLLM, SOLO en turno REAL (no sintético) con proyecto:
+    inyectar(effectiveSystem, project_id, conversation_id, context):
+      SI context.async_invocation: RETORNA           // los turnos sintéticos no tienen consciencia
+      eventos ← _leerPropiocepcion(project_id, conversationPropioTs.get(conv))   // limite 10
+      SI eventos: effectiveSystem += seccion ; conversationPropioTs.set(conv, ultimaTs)
+  }
+}
+
+CLASE Registro {
+  ATRIBUTOS { ts, modulo, tipo ∈ {consciente, reflejo}, evento, resumen, datos_clave, correlation_id }
+}
+```
+
+## Contrato
+
+```json
+{
+  "garantiza": [
+    "El reflejo (JS) actúa solo; el LLM no lo controla, pero queda CONSCIENTE de que pasó.",
+    "El 'guardado' falso se vuelve imposible: o el hecho está en la propiocepción, o el LLM no lo afirma.",
+    "Best-effort: la consciencia nunca bloquea ni encarece el turno (timeout 3s, inyección bounded a 10).",
+    "Memoria por proyecto (los blueprints están vinculados por proyecto vía el grafo de cajones).",
+    "consciente = evento de un módulo blueprint (lo produjo un turno LLM); reflejo = ejecución JS."
+  ],
+  "asimetria_eventos": "El mecanismo de eventos del bus es de UN SENTIDO. Vale para notificar (fire-and-forget) y para que el nervio LEA. NO sirve para que un blueprint conteste un RPC síncrono sin el bridge de turno sintético (ver AI-Gateway v2)."
+}
+```
+
+## Ciclo
+
+```
+REFLEJO_ACTUA {
+  1. un módulo JS (o un turno LLM) publica un evento de dominio al bus
+  2. PropiocepcionModule (suscrito al bus crudo) lo capta SI su dominio ∈ scope
+  3. lo resume en una frase humana y lo apila en el ring del proyecto
+  4. flush periódico → /_propiocepcion.json (vía el reflejo fs)
+}
+CONSCIENCIA_SE_ENTERA {
+  1. arranca un turno REAL del chat en una página de proyecto
+  2. NervioPropioceptivo._leerPropiocepcion(project_id, desde_ultimo_turno)
+  3. inyecta la rebanada nueva en el system prompt (contexto silencioso)
+  4. el LLM trata lo listado como hecho verificado — no supone, no miente
+}
+```
+
+---
+
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
 
 Análisis OOP exhaustivo de 25 módulos pizzepos + blueprint drivers. Pseudocódigo puro, sin comentarios.
@@ -2454,6 +2580,92 @@ ABSTRACT CLASE ProviderClient {
   ABSTRACT validateApiKey(): Promise<Boolean>
 }
 ```
+
+## CONVERSACION - AI-GATEWAY v2 — Cajones-internas · RPC blueprints · Nervio · Foco (sesión 2026-06-11)
+
+> Ampliaciones a la `CLASE AIGateway` de arriba. El LLM es el único intérprete
+> del pseudocódigo; estos métodos amplían CÓMO se le sirve el contexto y CÓMO un
+> blueprint contesta a otro, sin meter lógica de dominio en JS.
+
+```
+CLASE AIGateway (ampliación) {
+  ATRIBUTOS_NUEVOS {
+    conversationPropioTs: Map<conversation_id, ts>    // nervio (ver Capa de Propiocepción)
+  }
+
+  METODOS_NUEVOS {
+
+    // ── 1. CAJONES con INTERNAS (blueprint = clase: métodos públicos + privados)
+    // El cajón público, al abrirse, trae adosados sus helpers privados. Sin esto
+    // el LLM veía `_helper(...)` referenciado pero sin cuerpo → improvisaba.
+    _bundleInternas(page_id, op): Array<{nombre, pseudocodigo, input, reglas_clave}>|Null
+      declaradas ← op.usa_internas || []              // declaración EXPLÍCITA, sin regex
+      RESUELVE transitivamente (guarda de ciclos) cada interna desde operaciones[]
+      RETORNA out                                     // viajan SOLO adosadas a su op pública
+    // cajon.abrir(nombre) ahora devuelve { pseudocodigo, reglas_clave, errores, input, internas }
+    // Regla en el prompt: "las internas vienen incluidas; ejecútalas inline, NO las abras aparte".
+    // Las internas (cajon:false / prefijo _) siguen FUERA del catálogo y no son abribles sueltas.
+
+    // ── 2. RPC request/response ENTRE BLUEPRINTS (publishAndWait responde)
+    // El mecanismo async-subscriber (turno sintético) extendido a request/response.
+    // eventos_que_escucho acepta { evento, handler, responde: true }.
+    async _handleBlueprintAsyncEvent({ page_id, handler_name, evento, event_payload,
+                                        responde, response_event }):
+      conv sintética (user_id='async-subscriber'); ejecuta el handler con el payload
+      SI responde:
+        el prompt sintético instruye: "publica <evento sin .request>.response con
+        { request_id, status, data }" → el publishAndWait del caller resuelve
+      SINO: fire-and-forget (notificación de un sentido)
+    // Coste: cada RPC es un TURNO LLM del módulo destino (lento + caro). Ver trabajo_pendiente.
+
+    // ── 3. NERVIO PROPIOCEPTIVO (ver sección Capa de Propiocepción)
+    async _leerPropiocepcion(project_id, desde_ts): RPC a propiocepcion.leer (3s, best-effort)
+    _composePropiocepcionSection(eventos): sección de contexto SILENCIOSO
+    // _executeLLM inyecta la rebanada nueva en effectiveSystem SOLO en turno real con proyecto.
+
+    // ── 4. chat.cambiar_foco CIERRA EL TURNO
+    // El catálogo de cajones se construye al ARRANCAR el turno con la página anterior;
+    // cambiar el foco no lo recarga en caliente. Por eso devuelve:
+    //   { status, nuevo_page_id, cajones_activos_en: 'proximo_turno', instruccion }
+    // instrucción: "NO abras cajones del page nuevo en este turno; cierra y ejecuta en el siguiente".
+    // Como cerrar y volver a cargar — cura el "no encuentro los cajones" tras cambiar de página.
+
+    // ── 5. max_tokens con SUELO
+    chatOptions.max_tokens = Math.max(settings?.max_tokens || 0, 4096)   // floor, no default
+    // Sube también las conversaciones existentes (que tienen 2000 guardado).
+  }
+}
+```
+
+```json
+{
+  "convenciones_blueprint_nuevas": {
+    "usa_internas": "Array<nombre> en una op PÚBLICA: sus helpers privados (cajon:false/_) que cajon.abrir adosa. Resolución transitiva.",
+    "eventos_que_escucho[].responde": "true → la op contesta el RPC de bus publicando <evento sin .request>.response con {request_id, status, data}.",
+    "cajon:false": "op llamable por bus (RPC) pero NO expuesta como cajón al LLM de su página (frontera de módulo)."
+  },
+  "blueprints_actualizados": {
+    "escandallo → CLASE EscandalloRecetas (blueprint-3.7.0)": {
+      "cajones_publicos": ["calcular", "recalcular_siguiente"],
+      "internos_cajon_false": ["_cargar_catalogo", "_cargar_receta", "_cargar_recetas", "_convertir", "_resolver_linea", "_costear", "_precio_de_mercadona", "_persistir"],
+      "_costear": "núcleo DETERMINISTA (aritmética sobre catálogo+lineas, guarda de ciclos). El coste SIEMPRE sale de aquí, nunca de prosa.",
+      "_precio_de_mercadona": "lo ÚNICO fuzzy; solo en calcular.",
+      "recalcular_siguiente": "costea UNA receta pendiente por llamada (de una en una, orden topológico masa/salsa→pizza, reanudable hasta faltan=0). Reemplaza al viejo recalcular_todas (que reventaba el turno al intentar las N de golpe).",
+      "_cargar_*": "publishAndWait('recetas.{ingredientes,listar,obtener}.request', {...}, {timeout_ms: 55000})  // el responder es un turno LLM"
+    },
+    "recetas (blueprint-2.4.0)": {
+      "listar": "acepta incluir_lineas=true → devuelve lineas + coste_unidad.",
+      "eventos_que_escucho": "+ {listar, ingredientes, obtener}.request con responde:true (RPC de bus)."
+    }
+  },
+  "trabajo_pendiente_critico": {
+    "reflejo_determinista_lecturas_recetas": "Hoy cada lectura de recetas (listar/ingredientes/obtener) que hace escandallo es un TURNO LLM sintético que arrastra el blueprint de recetas (~18K tokens) + lee recetas.json. Medido en vivo: un escandallo cuesta 250-370K tokens (vs ~30K si fuera determinista). FIX: dar a recetas un núcleo JS que sirva SUS lecturas como reflejo (mismo contrato de bus, publishAndWait sigue respondiendo; solo cambia que detrás hay código en vez de un turno LLM). Es la idea del reflejo aplicada: lo determinista lo sirve código, el LLM se queda para elegir."
+  },
+  "frontend_relacionado": "CLASE PageNavStrip (rail derecho de navegación entre páginas del recetario; tap → goto directo, sin chat.cambiar_foco) sustituye a SystemBar en AppShell/LazyShell. Ver sección Frontend."
+}
+```
+
+---
 
 ## CONVERSACION - CHAT-IO
 
@@ -12475,7 +12687,8 @@ COMPONENTE ChatInput  (entrada + envío)
 COMPONENTE ChatTools  (barra herramientas: chat-tools)
 COMPONENTE LazyWorkBar  (íconos de workBarDefinitions; click → carga módulo)
 COMPONENTE WorkBar  (variante eager)
-COMPONENTE SystemBar  (getPanelsByZone('system-bar'); openPanel)
+COMPONENTE SystemBar  (getPanelsByZone('system-bar'); openPanel) — SUSTITUIDO por PageNavStrip en AppShell/LazyShell
+COMPONENTE PageNavStrip  (rail derecho de navegación entre páginas del recetario; lista FIJA de pages con icono propio; la activa destacada; tap → goto(/{project}/{page}) directo, sin chat.cambiar_foco ni LLM; sustituye a SystemBar) [sesión 2026-06-11]
 COMPONENTE Panel / LazyPanel  (contenedor: posiciones top/bottom/left/right/center; spring drag; resize; ESC/backdrop cierra; PANEL_SIZES)
 }
 ```

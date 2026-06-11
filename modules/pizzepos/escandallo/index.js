@@ -1,76 +1,38 @@
 /**
- * escandallo — REFLEJO JS (mitad determinista del módulo híbrido).
+ * escandallo — REFLEJO JS (mitad determinista del módulo híbrido). Segundo caso
+ * del Patrón Módulo Híbrido. El blueprint sirve lo FUZZY (calcular con Mercadona
+ * via _precio_de_mercadona); este reflejo sirve el COSTEO determinista (_costear
+ * es aritmética pura) en el bus, sin turno LLM. Lee datos via el reflejo de
+ * recetas (JS↔JS, ms); persiste publicando escandallo.coste.calculado, que el
+ * reflejo de recetas aplica al store. El bucle de costeo: sin LLM.
  *
- * Segundo caso del Patrón Módulo Híbrido (recetas fue el primero). El blueprint
- * sirve lo FUZZY (calcular con navegación Mercadona via _precio_de_mercadona);
- * este index.js sirve lo DETERMINISTA: el COSTEO. _costear es pura aritmética
- * sobre catálogo + lineas — una sola respuesta correcta → reflejo.
- *
- * Sirve en el bus:
- *   escandallo.recalcular_siguiente.request → costea UNA receta pendiente
- *     (orden topológico masa/salsa→pizza), persiste, reporta progreso. 100% JS.
- *   escandallo.costear.request → coste determinista de una receta desde el
- *     catálogo actual (sin Mercadona). Lo usa calcular (blueprint) para delegar
- *     la aritmética, y cualquiera que quiera el coste sin pricing fuzzy.
- *
- * Lee catálogo + recetas via el REFLEJO de recetas (recetas.*.request, JS↔JS,
- * milisegundos). Persiste publicando escandallo.coste.calculado, que el reflejo
- * de recetas aplica al store (también determinista). El bucle entero: sin LLM.
- *
- * El blueprint mantiene calcular (fuzzy) + _precio_de_mercadona, y su cajón
- * recalcular_siguiente pasa a ser un delegador fino a este reflejo.
+ * Extiende ModuloHibridoReflejo (la base con toda la fontanería): aquí solo van
+ * los handlers de una línea + la lógica de costeo.
  */
 
 'use strict';
 
-const crypto = require('crypto');
-const BaseModule = require('../../_shared/base-module');
+const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
 const ORDEN_TIPO = { masa: 0, salsa: 0, base: 0, pizza: 1 };
 
-class EscandalloReflejo extends BaseModule {
+class EscandalloReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'escandallo';
-    this.version = 'reflejo-1.0.0';
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
+    this.version = 'reflejo-1.1.0';
   }
 
-  async onLoad(context) {
-    this.logger = context.logger;
-    this.eventBus = context.eventBus;
-    this.metrics = context.metrics;
-    this.logger.info('escandallo.reflejo.loaded', { module: this.name, version: this.version });
+  // ── handlers RPC (una línea) ──
+  onRecalcularSiguienteRequest(e) {
+    return this._atender(e, 'recalcular_siguiente', 'escandallo.recalcular_siguiente.response', d => this._recalcularSiguiente(d));
+  }
+  onCostearRequest(e) {
+    return this._atender(e, 'costear', 'escandallo.costear.response', d => this._costearReceta(d));
   }
 
-  async onUnload() {
-    this.logger?.info('escandallo.reflejo.unloaded', { module: this.name });
-  }
+  // ── ops deterministas ──
 
-  // =============================================================
-  // Bus handlers
-  // =============================================================
-
-  async onRecalcularSiguienteRequest(event) {
-    const d = event?.data || event || {};
-    const result = await this._guard('recalcular_siguiente', () => this._recalcularSiguiente(d));
-    this.eventBus.publish('escandallo.recalcular_siguiente.response', { request_id: d.request_id, ...result });
-  }
-
-  async onCostearRequest(event) {
-    const d = event?.data || event || {};
-    const result = await this._guard('costear', () => this._costearReceta(d));
-    this.eventBus.publish('escandallo.costear.response', { request_id: d.request_id, ...result });
-  }
-
-  // =============================================================
-  // Ops deterministas
-  // =============================================================
-
-  // Costea UNA receta pendiente (la siguiente, orden topológico) y persiste.
-  // Réplica fiel de recalcular_siguiente del blueprint, en JS.
   async _recalcularSiguiente(input) {
     if (!input.project_id) return this._invalid('project_id');
     const soloPendientes = input.solo_pendientes !== false;
@@ -79,7 +41,6 @@ class EscandalloReflejo extends BaseModule {
     let recetas = (await this._cargarRecetas(input, input.estado || 'en_servicio'))
       .filter(r => r && Array.isArray(r.lineas) && r.lineas.length > 0);
 
-    // inyectar sub-recetas YA costeadas como átomos del catálogo
     for (const r of recetas) {
       if (typeof r.coste_unidad === 'number' && r.coste_unidad > 0) {
         catalogo.porId[r.id] = { id: r.id, nombre: r.nombre, precio: r.coste_unidad, compra_unidad: 'ud', fuente: 'sub_receta' };
@@ -108,7 +69,6 @@ class EscandalloReflejo extends BaseModule {
     };
   }
 
-  // Coste determinista de una receta desde el catálogo (sin Mercadona).
   async _costearReceta(input) {
     if (!input.project_id) return this._invalid('project_id');
     if (!input.receta_id && !(Array.isArray(input.lineas) && input.lineas.length > 0 && input.rinde && input.rinde.cantidad > 0)) {
@@ -118,7 +78,7 @@ class EscandalloReflejo extends BaseModule {
     const receta = input.receta_id
       ? await this._cargarReceta(input, input.receta_id)
       : { id: null, lineas: input.lineas, rinde: input.rinde };
-    if (!receta) return { status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: 'receta no encontrada', details: { entity_type: 'recipe', id: input.receta_id } } };
+    if (!receta) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'receta no encontrada', { entity_type: 'recipe', id: input.receta_id });
 
     const r = await this._costear(input, receta, catalogo, []);
     if ((input.persistir !== undefined ? input.persistir : !!input.receta_id) && input.receta_id) {
@@ -133,9 +93,7 @@ class EscandalloReflejo extends BaseModule {
     };
   }
 
-  // =============================================================
-  // Núcleo determinista — _costear (réplica fiel del pseudocódigo)
-  // =============================================================
+  // ── núcleo determinista _costear (réplica fiel del pseudocódigo) ──
 
   async _costear(input, receta, catalogo, cadena = []) {
     if (receta.id && cadena.includes(receta.id)) {
@@ -189,9 +147,7 @@ class EscandalloReflejo extends BaseModule {
     });
   }
 
-  // =============================================================
-  // Carga de datos — via el REFLEJO de recetas (JS↔JS, ms)
-  // =============================================================
+  // ── carga de datos via el reflejo de recetas (JS↔JS, ms) ──
 
   async _cargarCatalogo(input) {
     const resp = await this._rpc('recetas.ingredientes.request', { project_id: input.project_id, correlation_id: input.correlation_id });
@@ -209,52 +165,6 @@ class EscandalloReflejo extends BaseModule {
   async _cargarReceta(input, id) {
     const resp = await this._rpc('recetas.obtener.request', { project_id: input.project_id, receta_id: id, correlation_id: input.correlation_id });
     return (resp && resp.status === 200) ? (resp.data?.receta || resp.data) : null;
-  }
-
-  // =============================================================
-  // Privados
-  // =============================================================
-
-  // publishAndWait al bus (al reflejo de recetas / fs). request_id correlado.
-  async _rpc(evento, payload) {
-    const request_id = crypto.randomUUID();
-    const responseEvent = evento.replace(/\.request$/, '.response');
-    return new Promise((resolve) => {
-      let unsub = null;
-      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, 8000);
-      try {
-        unsub = this.eventBus.subscribe(responseEvent, (event) => {
-          const d = event?.data || event;
-          if (!d || d.request_id !== request_id) return;
-          clearTimeout(timeout); if (unsub) unsub();
-          resolve(d);
-        });
-        this.eventBus.publish(evento, { request_id, ...payload });
-      } catch (_) {
-        clearTimeout(timeout); if (unsub) unsub(); resolve(null);
-      }
-    });
-  }
-
-  _round(x, n) {
-    const f = Math.pow(10, n);
-    return Math.round(x * f) / f;
-  }
-
-  async _guard(kind, fn) {
-    try {
-      const r = await fn();
-      this.metrics?.increment('escandallo.reflejo.served', { op: kind });
-      return r;
-    } catch (err) {
-      this.logger?.error('escandallo.reflejo.failed', { kind, error: err.message });
-      this.metrics?.increment('escandallo.reflejo.errors', { op: kind });
-      return { status: 500, error: { code: 'UNKNOWN_ERROR', message: err.message } };
-    }
-  }
-
-  _invalid(field) {
-    return { status: 400, error: { code: 'INVALID_INPUT', message: `${field} requerido`, details: { field } } };
   }
 }
 

@@ -1336,27 +1336,52 @@ ABSTRACT CLASE ModuloHibrido HEREDA BaseModule {     // ── la mitad REFLEJO 
 }
 ```
 
+## Estandarización (base + gate) — sesión 2026-06-11
+
+> Con dos casos en la mano (recetas, escandallo · regla de tres), la fontanería se
+> destila en una base concreta y la regla anti-colisión en un gate automático.
+
+```
+modules/_shared/modulo-hibrido-reflejo.js  →  ABSTRACT CLASE ModuloHibridoReflejo
+  da: onLoad/onUnload, _rpc(evento, payload) [publishAndWait genérico al bus],
+      _atender(event, op, responseEvent, fn) [guard + proyección + response],
+      _leerJson / _editarJson(project_id, path) [store vía fs reflejo],
+      _invalid(field), _round(x,n).
+  → cada nuevo reflejo: extiende la base, escribe SOLO sus proyecciones (~40 líneas).
+
+scripts/validate-hibridos.js  →  GATE (para validate:ci). Invariantes:
+  1. ANTI-COLISIÓN: un evento NO está a la vez en module.json.subscribes (reflejo)
+     y en blueprint.eventos_que_escucho (turno LLM) → si no, responden los dos.
+  2. los subscribes[].handler existen como método de la clase del reflejo.
+```
+
 ## Receta para volver híbrido otro módulo
 
 ```
+0. Extiende ModuloHibridoReflejo (la base te da toda la fontanería del bus).
 1. Identifica sus ops DETERMINISTAS (lecturas/CRUD) y las que otros le piden por RPC.
-2. Crea index.js (ModuloHibrido): un on<Op>Request por cada una, proyección FIEL al contrato.
+2. index.js: un on<Op>Request de UNA línea por op (delega a _atender) + las proyecciones _<op>.
 3. module.json: subscribes mapeando <mod>.<op>.request → on<Op>Request (+ sube version).
 4. blueprint: quita responde:true de esas ops (el reflejo las sirve); deja los cajones
    para el LLM en su página + los subscribers fire-and-forget que de verdad necesite.
 5. El loader (híbrido) carga ambos sin tocar nada más.
+6. node scripts/validate-hibridos.js → PASS (sin colisión, handlers existen).
 ```
 
 ## Instancias
 
 ```
-recetas (PRIMER caso · module 2.0.0 · blueprint 2.5.0) {
-  REFLEJO index.js : listar · ingredientes · obtener   (lecturas de recetas.json)
+recetas (PRIMER caso · module 2.0.0 · blueprint 2.6.0) {
+  REFLEJO index.js : listar · ingredientes · obtener (lecturas) + onCosteCalculado (persist write)
   BLUEPRINT        : crear · editar · investigar_receta · ...   (cajones, fuzzy)
   resultado        : lectura por RPC de ~20-30s/300K-tokens → milisegundos/determinista
 }
-PENDIENTE (mismo patrón) {
-  escandallo  : _costear ya es determinista → reflejo ; _precio_de_mercadona se queda fuzzy
+escandallo (SEGUNDO caso · module 2.0.0 · blueprint 3.8.0) {
+  REFLEJO index.js : recalcular_siguiente · costear   (_costear aritmética pura)
+  BLUEPRINT        : calcular (Mercadona / _precio_de_mercadona)   ;  cajón recalcular delega al reflejo
+  resultado VIVO   : turno de chat de ~300K tokens / 20-30s → 42K / 7.9s ; la cadena de costeo ~120ms JS
+}
+PENDIENTE (mismo patrón, ya trivial con la base + gate) {
   productos · categorias · ingredientes · tarifas : sus lecturas/CRUD → reflejo
 }
 ```

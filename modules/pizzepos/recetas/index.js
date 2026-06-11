@@ -1,123 +1,32 @@
 /**
- * recetas — REFLEJO JS (mitad determinista del módulo híbrido).
+ * recetas — REFLEJO JS (mitad determinista del módulo híbrido). Primer caso del
+ * Patrón Módulo Híbrido. El blueprint sirve lo FUZZY (crear/investigar/editar via
+ * LLM); este reflejo sirve las LECTURAS deterministas + el persist del coste, en
+ * el bus, sin turno LLM. Réplica fiel de la proyección del blueprint.
  *
- * recetas es un módulo HÍBRIDO: el blueprint (recetas.blueprint.json) sirve lo
- * FUZZY via LLM (crear desde intención, investigar_receta, editar...), y este
- * index.js sirve lo DETERMINISTA como reflejo — las LECTURAS de recetas.json.
- *
- * Por qué existe: cada lectura que pedía escandallo (recetas.listar/ingredientes/
- * obtener.request) se servía con un TURNO LLM sintético que arrastraba el
- * blueprint de recetas (~18K tokens) + leía el fichero. Medido en vivo: un
- * escandallo costaba 250-370K tokens. Servidas por este reflejo (lee el fichero
- * y proyecta, en milisegundos), el mismo contrato de bus responde igual pero
- * sin LLM: el coste cae ~10x y es instantáneo.
- *
- * Contrato idéntico al blueprint: <op> recibe el request, responde
- * recetas.<op>.response con { request_id, status, data } correlado. La proyección
- * replica EXACTAMENTE la del pseudocódigo (listar/ingredientes/obtener).
- *
- * El blueprint deja de declarar esas 3 en eventos_que_escucho con responde:true
- * (ya no hay turno sintético). Sus cajones listar/obtener/ingredientes siguen
- * existiendo para el LLM cuando está en la página de recetas.
+ * Extiende ModuloHibridoReflejo (la base con toda la fontanería): aquí solo van
+ * los handlers de una línea + las proyecciones.
  */
 
 'use strict';
 
-const crypto = require('crypto');
-const BaseModule = require('../../_shared/base-module');
+const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
 const STORE_PATH = '/pizzepos/recetas.json';
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-class RecetasReflejo extends BaseModule {
+class RecetasReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'recetas';
-    this.version = 'reflejo-1.0.0';
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
+    this.version = 'reflejo-1.1.0';
   }
 
-  // =============================================================
-  // Lifecycle
-  // =============================================================
+  // ── handlers RPC (una línea: delegan a _atender de la base) ──
+  onListarRequest(e) { return this._atender(e, 'listar', 'recetas.listar.response', d => this._listar(d)); }
+  onIngredientesRequest(e) { return this._atender(e, 'ingredientes', 'recetas.ingredientes.response', d => this._ingredientes(d)); }
+  onObtenerRequest(e) { return this._atender(e, 'obtener', 'recetas.obtener.response', d => this._obtener(d)); }
 
-  async onLoad(context) {
-    this.logger = context.logger;
-    this.eventBus = context.eventBus;
-    this.metrics = context.metrics;
-    // Las suscripciones a recetas.{listar,ingredientes,obtener}.request las
-    // wirea el loader desde manifest.subscribes a estos handlers.
-    this.logger.info('recetas.reflejo.loaded', { module: this.name, version: this.version });
-  }
-
-  async onUnload() {
-    // Las suscripciones de manifest.subscribes las limpia el loader (_eventUnsubs).
-    this.logger?.info('recetas.reflejo.unloaded', { module: this.name });
-  }
-
-  // =============================================================
-  // Bus handlers — sirven las lecturas deterministas (reflejo, sin LLM)
-  // =============================================================
-
-  async onListarRequest(event) {
-    const d = event?.data || event || {};
-    const result = await this._guard('listar', () => this._listar(d));
-    this._responder('recetas.listar.response', d.request_id, result);
-  }
-
-  async onIngredientesRequest(event) {
-    const d = event?.data || event || {};
-    const result = await this._guard('ingredientes', () => this._ingredientes(d));
-    this._responder('recetas.ingredientes.response', d.request_id, result);
-  }
-
-  async onObtenerRequest(event) {
-    const d = event?.data || event || {};
-    const result = await this._guard('obtener', () => this._obtener(d));
-    this._responder('recetas.obtener.response', d.request_id, result);
-  }
-
-  // Persist WRITE (reflejo): aplica el coste que publica escandallo al store.
-  // Fire-and-forget (no .response). Determinista — escribe los 7 campos de coste
-  // en la receta + _updated_at. Réplica de _aplicar_coste_calculado del blueprint;
-  // antes era un turno LLM sintético por cada coste, ahora es código.
-  async onCosteCalculado(event) {
-    const d = event?.data || event || {};
-    if (!d.project_id || !d.receta_id) return;
-    try {
-      const store = await this._leerStore(d.project_id);
-      if (!store) return;
-      const idx = (store.recetas || []).findIndex(r => r.id === d.receta_id);
-      if (idx < 0) return;
-      const r = store.recetas[idx];
-      const aplicados = [];
-      for (const campo of ['coste_total', 'coste_unidad', 'coste_actualizado_at', 'fuentes_precios', 'lineas_detalle', 'lineas_sin_precio']) {
-        if (d[campo] !== undefined && d[campo] !== null) { r[campo] = d[campo]; aplicados.push(campo); }
-      }
-      if (aplicados.length === 0) return;
-      const now = new Date().toISOString();
-      await this._fsEdit(d.project_id, [
-        { op: 'test', path: `/recetas/${idx}/id`, value: d.receta_id },
-        { op: 'replace', path: `/recetas/${idx}`, value: r },
-        { op: 'replace', path: '/_updated_at', value: now }
-      ]);
-      this.eventBus.publish('receta.actualizada', {
-        receta_id: r.id, nombre: r.nombre, version: r.version,
-        campos_actualizados: aplicados, origen: 'escandallo.coste.calculado',
-        correlation_id: d.correlation_id || null, timestamp: now
-      });
-      this.metrics?.increment('recetas.reflejo.served', { op: 'aplicar_coste' });
-    } catch (err) {
-      this.logger?.error('recetas.reflejo.aplicar_coste.failed', { error: err.message });
-      this.metrics?.increment('recetas.reflejo.errors', { op: 'aplicar_coste' });
-    }
-  }
-
-  // =============================================================
-  // Proyecciones (réplica fiel del pseudocódigo del blueprint)
-  // =============================================================
+  // ── proyecciones deterministas (réplica fiel del pseudocódigo) ──
 
   async _listar(input) {
     if (!input.project_id) return this._invalid('project_id');
@@ -125,7 +34,7 @@ class RecetasReflejo extends BaseModule {
     if (!['borrador', 'en_servicio', 'archivada'].includes(estado)) return this._invalid('estado');
     const limit = (typeof input.limit === 'number' && input.limit > 0) ? input.limit : 50;
 
-    const store = await this._leerStore(input.project_id);
+    const store = await this._leerJson(input.project_id, STORE_PATH);
     if (store === null) return { status: 200, data: { total: 0, recetas: [] } };
 
     let items = (store.recetas || []).filter(r => r.estado_operativo === estado);
@@ -150,7 +59,7 @@ class RecetasReflejo extends BaseModule {
 
   async _ingredientes(input) {
     if (!input.project_id) return this._invalid('project_id');
-    const store = await this._leerStore(input.project_id);
+    const store = await this._leerJson(input.project_id, STORE_PATH);
     if (store === null) return { status: 200, data: { total: 0, ingredientes: [] } };
     let arr = store.ingredientes_catalogo || [];
     if (input.categoria) arr = arr.filter(i => i.categoria === input.categoria);
@@ -160,17 +69,16 @@ class RecetasReflejo extends BaseModule {
   async _obtener(input) {
     if (!input.project_id) return this._invalid('project_id');
     if (!input.receta_id && !input.nombre) return this._invalid('receta_id|nombre');
-    const store = await this._leerStore(input.project_id);
+    const store = await this._leerJson(input.project_id, STORE_PATH);
     if (store === null) {
-      return { status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: 'recetas.json no existe', details: { entity_type: 'recipe' } } };
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'recetas.json no existe', { entity_type: 'recipe' });
     }
     const ref = input.receta_id || input.nombre;
     const norm = String(ref).toLowerCase().trim();
-    // robusto: por id (slug o uuid) y, si no, por nombre normalizado.
     const r = (store.recetas || []).find(x => x.id === ref)
       || (store.recetas || []).find(x => String(x.nombre || '').toLowerCase().trim() === norm);
     if (!r) {
-      return { status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: 'receta no encontrada', details: { entity_type: 'recipe', entity_ref: ref } } };
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'receta no encontrada', { entity_type: 'recipe', entity_ref: ref });
     }
     const rest = {};
     for (const campo of Object.keys(r)) {
@@ -179,76 +87,38 @@ class RecetasReflejo extends BaseModule {
     return { status: 200, data: { ...rest, versiones_anteriores: (r.history || []).length } };
   }
 
-  // =============================================================
-  // Privados
-  // =============================================================
-
-  // Lee /pizzepos/recetas.json via el reflejo fs (bus). Devuelve el store
-  // parseado, o null si 404 / error. RPC JS↔JS: milisegundos.
-  async _leerStore(project_id) {
-    const request_id = crypto.randomUUID();
-    const resp = await new Promise((resolve) => {
-      let unsub = null;
-      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, 5000);
-      try {
-        unsub = this.eventBus.subscribe('fs.read.response', (event) => {
-          const d = event?.data || event;
-          if (!d || d.request_id !== request_id) return;
-          clearTimeout(timeout);
-          if (unsub) unsub();
-          resolve(d);
-        });
-        this.eventBus.publish('fs.read.request', {
-          request_id, project_id, path: STORE_PATH, encoding: 'utf-8'
-        });
-      } catch (_) {
-        clearTimeout(timeout);
-        if (unsub) unsub();
-        resolve(null);
-      }
-    });
-    if (!resp || resp.status === 404 || !resp.content) return null;
-    try { return JSON.parse(resp.content); } catch (_) { return null; }
-  }
-
-  _responder(evento, request_id, result) {
-    this.eventBus.publish(evento, { request_id, ...result });
-  }
-
-  // Edita el store via el reflejo fs (RFC 6902 patches). Espera la confirmación.
-  async _fsEdit(project_id, patches) {
-    const request_id = crypto.randomUUID();
-    return new Promise((resolve) => {
-      let unsub = null;
-      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, 5000);
-      try {
-        unsub = this.eventBus.subscribe('fs.edit.response', (event) => {
-          const d = event?.data || event;
-          if (!d || d.request_id !== request_id) return;
-          clearTimeout(timeout); if (unsub) unsub();
-          resolve(d);
-        });
-        this.eventBus.publish('fs.edit.request', { request_id, project_id, path: STORE_PATH, patches });
-      } catch (_) {
-        clearTimeout(timeout); if (unsub) unsub(); resolve(null);
-      }
-    });
-  }
-
-  async _guard(kind, fn) {
+  // ── persist WRITE (fire-and-forget): aplica el coste de escandallo al store.
+  //    Antes era un turno LLM sintético por cada coste; ahora es código. ──
+  async onCosteCalculado(event) {
+    const d = (event && event.data) || event || {};
+    if (!d.project_id || !d.receta_id) return;
     try {
-      const r = await fn();
-      this.metrics?.increment('recetas.reflejo.served', { op: kind });
-      return r;
+      const store = await this._leerJson(d.project_id, STORE_PATH);
+      if (!store) return;
+      const idx = (store.recetas || []).findIndex(r => r.id === d.receta_id);
+      if (idx < 0) return;
+      const r = store.recetas[idx];
+      const aplicados = [];
+      for (const campo of ['coste_total', 'coste_unidad', 'coste_actualizado_at', 'fuentes_precios', 'lineas_detalle', 'lineas_sin_precio']) {
+        if (d[campo] !== undefined && d[campo] !== null) { r[campo] = d[campo]; aplicados.push(campo); }
+      }
+      if (aplicados.length === 0) return;
+      const now = new Date().toISOString();
+      await this._editarJson(d.project_id, STORE_PATH, [
+        { op: 'test', path: `/recetas/${idx}/id`, value: d.receta_id },
+        { op: 'replace', path: `/recetas/${idx}`, value: r },
+        { op: 'replace', path: '/_updated_at', value: now }
+      ]);
+      this.eventBus.publish('receta.actualizada', {
+        receta_id: r.id, nombre: r.nombre, version: r.version,
+        campos_actualizados: aplicados, origen: 'escandallo.coste.calculado',
+        correlation_id: d.correlation_id || null, timestamp: now
+      });
+      this.metrics?.increment('recetas.reflejo.served', { op: 'aplicar_coste' });
     } catch (err) {
-      this.logger?.error('recetas.reflejo.failed', { kind, error: err.message });
-      this.metrics?.increment('recetas.reflejo.errors', { op: kind });
-      return { status: 500, error: { code: 'UNKNOWN_ERROR', message: err.message } };
+      this.logger?.error('recetas.reflejo.aplicar_coste.failed', { error: err.message });
+      this.metrics?.increment('recetas.reflejo.errors', { op: 'aplicar_coste' });
     }
-  }
-
-  _invalid(field) {
-    return { status: 400, error: { code: 'INVALID_INPUT', message: `${field} requerido`, details: { field } } };
   }
 }
 

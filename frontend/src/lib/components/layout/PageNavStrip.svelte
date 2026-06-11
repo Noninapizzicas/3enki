@@ -62,51 +62,69 @@
 </script>
 
 <nav class="page-nav-strip" aria-label="Navegación de páginas">
-  {#if currentPage}
-    <button class="pn-btn current" title={labelFor(currentPage)} disabled>
-      <span class="ic" aria-hidden="true">{iconFor(currentPage)}</span>
-    </button>
-  {/if}
-
-  {#each related as pid (pid)}
-    <button class="pn-btn" on:click={() => navigate(pid)} title={`Ir a ${labelFor(pid)}`}>
-      <span class="ic" aria-hidden="true">{iconFor(pid)}</span>
-    </button>
-  {/each}
-
-  {#if systemPanels.length > 0}
-    <div class="divider" aria-hidden="true"></div>
-    {#each systemPanels as panel (panel.id)}
-      <button class="pn-btn sys" on:click={() => openPanel(panel.id)} title={panel.title}>
-        <span class="ic" aria-hidden="true">{panel.icon}</span>
+  <!-- Grupo superior: páginas (activa + vecinas) -->
+  <div class="group top">
+    {#if currentPage}
+      <button class="pn-btn current" title={labelFor(currentPage)} disabled>
+        <span class="ic" aria-hidden="true">{iconFor(currentPage)}</span>
+      </button>
+    {/if}
+    {#each related as pid (pid)}
+      <button class="pn-btn" on:click={() => navigate(pid)} title={`Ir a ${labelFor(pid)}`}>
+        <span class="ic" aria-hidden="true">{iconFor(pid)}</span>
       </button>
     {/each}
+  </div>
+
+  <!-- Grupo inferior: paneles de sistema -->
+  {#if systemPanels.length > 0}
+    <div class="group bottom">
+      {#each systemPanels as panel (panel.id)}
+        <button class="pn-btn sys" on:click={() => openPanel(panel.id)} title={panel.title}>
+          <span class="ic" aria-hidden="true">{panel.icon}</span>
+        </button>
+      {/each}
+    </div>
   {/if}
 </nav>
 
 <style>
+  /* Rail de alto completo: el contenedor no captura clics (el medio queda
+     transparente y deja pasar al chat); solo los dos grupos son interactivos.
+     justify-content: space-between → grupo de páginas pegado arriba, grupo de
+     sistema pegado abajo, usando todo el borde derecho. */
   .page-nav-strip {
     position: fixed;
     right: 0;
-    top: 50%;
-    transform: translateY(-50%);
+    top: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 3.8rem 0.3rem 7rem;
+    box-sizing: border-box;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .group {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.25rem;
     padding: 0.4rem 0.3rem;
-    max-height: 84vh;
-    overflow-y: auto;
-    overflow-x: hidden;
+    pointer-events: auto;
     background: var(--color-system-bar-bg, rgba(0, 0, 0, 0.55));
-    border-left: 1px solid var(--color-border, #2a2a30);
+    border: 1px solid var(--color-border, #2a2a30);
+    border-right: none;
     border-top-left-radius: 0.6rem;
     border-bottom-left-radius: 0.6rem;
     backdrop-filter: blur(8px);
-    z-index: 100;
     scrollbar-width: none;
   }
-  .page-nav-strip::-webkit-scrollbar { display: none; }
+  .group::-webkit-scrollbar { display: none; }
+  .group.top { max-height: 56vh; overflow-y: auto; overflow-x: hidden; }
 
   .pn-btn {
     width: 2.2rem;
@@ -138,12 +156,4 @@
 
   .pn-btn.sys { opacity: 0.72; }
   .pn-btn.sys:hover { opacity: 1; }
-
-  .divider {
-    width: 1.4rem;
-    height: 1px;
-    background: var(--color-border, #2a2a30);
-    margin: 0.15rem 0;
-    flex-shrink: 0;
-  }
 </style>

@@ -14,25 +14,27 @@
    */
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { getDefinition } from '$lib/modules/definitions';
 
-  // Lista fija de páginas del rail (en orden). Recetario completo.
-  const PAGES = [
-    'recetas', 'escandallo', 'viabilidad', 'carta-manager', 'menu-generator',
-    'carta-design', 'carta-digital', 'carta-marketing', 'carta-scheduler',
-    'ingredientes', 'tarifas'
+  // Lista fija de páginas del rail, con icono y etiqueta propios (no dependemos
+  // del manifest: así ninguna sale con la flecha de fallback). En orden.
+  const PAGES: { id: string; icon: string; label: string }[] = [
+    { id: 'recetas',         icon: '📖', label: 'Recetas' },
+    { id: 'escandallo',      icon: '📊', label: 'Escandallo' },
+    { id: 'viabilidad',      icon: '📈', label: 'Viabilidad' },
+    { id: 'carta-manager',   icon: '🗂️', label: 'Carta manager' },
+    { id: 'menu-generator',  icon: '✨', label: 'Menú generator' },
+    { id: 'carta-design',    icon: '🎨', label: 'Carta diseño' },
+    { id: 'carta-digital',   icon: '📱', label: 'Carta digital' },
+    { id: 'carta-marketing', icon: '📣', label: 'Carta marketing' },
+    { id: 'carta-scheduler', icon: '📅', label: 'Programación' },
+    { id: 'ingredientes',    icon: '🥬', label: 'Ingredientes' },
+    { id: 'tarifas',         icon: '🏷️', label: 'Tarifas' }
   ];
 
   $: segs = $page.url.pathname.split('/').filter(Boolean);
   $: project = segs[0] ?? '';
   $: currentPage = segs[1] ?? '';
 
-  function iconFor(pid: string): string {
-    return getDefinition(pid)?.icon ?? '→';
-  }
-  function labelFor(pid: string): string {
-    return getDefinition(pid)?.label ?? pid;
-  }
   function navigate(pid: string) {
     if (!pid || pid === currentPage) return;
     goto(project ? `/${project}/${pid}` : `/${pid}`);
@@ -40,15 +42,15 @@
 </script>
 
 <nav class="page-nav-strip" aria-label="Navegación de páginas">
-  {#each PAGES as pid (pid)}
+  {#each PAGES as p (p.id)}
     <button
       class="pn-btn"
-      class:current={pid === currentPage}
-      on:click={() => navigate(pid)}
-      disabled={pid === currentPage}
-      title={pid === currentPage ? labelFor(pid) : `Ir a ${labelFor(pid)}`}
+      class:current={p.id === currentPage}
+      on:click={() => navigate(p.id)}
+      disabled={p.id === currentPage}
+      title={p.id === currentPage ? p.label : `Ir a ${p.label}`}
     >
-      <span class="ic" aria-hidden="true">{iconFor(pid)}</span>
+      <span class="ic" aria-hidden="true">{p.icon}</span>
     </button>
   {/each}
 </nav>

@@ -2,12 +2,12 @@
   "_doc": "Blueprint del modulo carta-marketing. Hijo de subsistema-recetario.modulo-base. Equipo de marketing silencioso del proyecto: gestiona perfil de marca + dispara agentes especializados (marketing-copywriter, marketing-strategist, marketing-brand-keeper, marketing-onboarding) cuando el usuario o un evento upstream lo justifica. 4 operaciones (get_perfil, update_perfil, completar_onboarding, actividad).",
   "id": "carta-marketing",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.3.0",
+  "version": "blueprint-1.4.0",
   "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.3. correlation_id obligatorio en los 3 publishes --garantizado con uuid() via correlation_id_efectivo si input no trae. NO cambia paths (ya canonicos). NO modifica operaciones funcionales ni delegacion a agentes.",
   "language": "es",
   "rol": "Gestor del perfil de marca del proyecto + orquestador de agentes de marketing. NO genera copy ni estrategia — eso lo hacen marketing-copywriter / strategist / brand-keeper. El blueprint persiste perfil y consulta actividad reciente de los agentes.",
   "garantiza": [
-    "perfil de marca persistido en /storage/config/marca.json del proyecto.",
+    "perfil de marca persistido en /storage/pizzepos/marca.json del proyecto.",
     "get_perfil devuelve el perfil o un default vacio si no existe (no error).",
     "update_perfil hace merge de campos sobre el perfil persistido.",
     "completar_onboarding delega al agente marketing-onboarding via agent.execute.request para guiar al usuario en la creacion inicial del perfil.",
@@ -20,7 +20,7 @@
   ],
   "estado_persistente": {
     "paths_relativos": {
-      "perfil_marca": "/config/marca.json"
+      "perfil_marca": "/pizzepos/marca.json"
     },
     "shape_perfil": "{ _version, _updated_at, nombre_marca, lema?, tono_voz, valores: [...], publico_objetivo, diferenciacion, restricciones?, idiomas: [...], onboarding_completado: boolean }"
   },
@@ -52,7 +52,7 @@
         "UPSTREAM_TIMEOUT",
         "UPSTREAM_UNREACHABLE"
       ],
-      "_descripcion": "DELEGA al reflejo JS (index.js). Lee /config/marca.json. Determinista, sin turno LLM."
+      "_descripcion": "DELEGA al reflejo JS (index.js). Lee /pizzepos/marca.json. Determinista, sin turno LLM."
     },
     "update_perfil": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, campos (req — object con nombre_marca?, lema?, tono_voz?, valores?, publico_objetivo?, diferenciacion?, restricciones?, idiomas?) }",
@@ -68,7 +68,7 @@
         "UPSTREAM_TIMEOUT",
         "UPSTREAM_UNREACHABLE"
       ],
-      "_descripcion": "DELEGA al reflejo JS (index.js). Escribe los campos en /config/marca.json y emite marketing.perfil.actualizado. Determinista, sin turno LLM. El LLM (en la descubierta fuzzy) reune los campos y los persiste llamando aqui — asi cada dato queda GUARDADO de verdad, no roleado."
+      "_descripcion": "DELEGA al reflejo JS (index.js). Escribe los campos en /pizzepos/marca.json y emite marketing.perfil.actualizado. Determinista, sin turno LLM. El LLM (en la descubierta fuzzy) reune los campos y los persiste llamando aqui — asi cada dato queda GUARDADO de verdad, no roleado."
     },
     "completar_onboarding": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, datos_iniciales? (opcional — kickoff con info ya conocida) }",
@@ -91,12 +91,12 @@
         "  now = nowISO()",
         "  perfil_propuesto._updated_at = now",
         "  // Leer el archivo para saber si existe (determina rama A vs B).",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/config/marca.json' })",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/marca.json' })",
         "  // Rama A — archivo NO existe: fs.write atomico con el perfil completo propuesto por el agente.",
         "  if (raw.status === 404) {",
         "    if (!perfil_propuesto._version) perfil_propuesto._version = '1.0'",
         "    write_resp = await publishAndWait('fs.write.request', {",
-        "      project_id: input.project_id, path: '/config/marca.json',",
+        "      project_id: input.project_id, path: '/pizzepos/marca.json',",
         "      content: JSON.stringify(perfil_propuesto, null, 2), encoding: 'utf-8', atomic: true",
         "    })",
         "    if (write_resp.status >= 400) return write_resp",
@@ -111,7 +111,7 @@
         "    }",
         "    edit_resp = await publishAndWait('fs.edit.request', {",
         "      project_id: input.project_id,",
-        "      path: '/config/marca.json',",
+        "      path: '/pizzepos/marca.json',",
         "      patches: patches",
         "    })",
         "    if (edit_resp.status >= 400) return edit_resp",
@@ -158,5 +158,6 @@
       "descripcion": "Legacy escuchaba carta.actualizada para disparar agentes automaticamente. Blueprint no reactivo; los agentes se invocan a demanda."
     }
   ],
-  "_v1_3_changelog": "v1.3.0 (2026-06-11): carta-marketing pasa a HIBRIDO (3er caso del patron). get_perfil/update_perfil (CRUD determinista del perfil de marca) los sirve el reflejo JS (index.js); estos cajones pasan a delegadores finos. completar_onboarding (agente marketing-onboarding, fuzzy) se queda en el blueprint. Mata el teatro del onboarding: el LLM persiste de verdad via update_perfil en vez de rolear que un agente lo registra."
+  "_v1_3_changelog": "v1.3.0 (2026-06-11): carta-marketing pasa a HIBRIDO (3er caso del patron). get_perfil/update_perfil (CRUD determinista del perfil de marca) los sirve el reflejo JS (index.js); estos cajones pasan a delegadores finos. completar_onboarding (agente marketing-onboarding, fuzzy) se queda en el blueprint. Mata el teatro del onboarding: el LLM persiste de verdad via update_perfil en vez de rolear que un agente lo registra.",
+  "_v1_4_changelog": "v1.4.0 (2026-06-11): el perfil de marca pasa de /config/marca.json a /pizzepos/marca.json — sigue la convencion del grupo pizzepos y se reconoce como BASE COMPARTIDA (como recetas.json): cualquier modulo bebe de ella via carta-marketing.get_perfil.request (servida por el reflejo). carta-design (colores), menu-generator (tono), etc. se basan en ella."
 }

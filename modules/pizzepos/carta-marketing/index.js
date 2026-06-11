@@ -2,7 +2,7 @@
  * carta-marketing — REFLEJO JS (mitad determinista del módulo híbrido). Tercer
  * caso del Patrón Módulo Híbrido. El blueprint sirve lo FUZZY (completar_onboarding
  * = entrevista de descubrimiento de marca via el agente marketing-onboarding);
- * este reflejo sirve el CRUD determinista del perfil de marca (/config/marca.json):
+ * este reflejo sirve el CRUD determinista del perfil de marca (/pizzepos/marca.json):
  * leer y escribir campos. Réplica fiel de get_perfil/update_perfil del blueprint.
  *
  * Mata el teatro del onboarding: antes, sin poder abrir la op real, el LLM roleaba
@@ -15,7 +15,7 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-const STORE_PATH = '/config/marca.json';
+const STORE_PATH = '/pizzepos/marca.json';
 
 function perfilVacio() {
   return {

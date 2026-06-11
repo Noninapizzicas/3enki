@@ -300,25 +300,38 @@ class ModuleLoader {
       // system prompt + invocando bus.publish/bus.publishAndWait. Aqui solo lo
       // registramos para que ai-gateway lo descubra al arrancar.
       if (manifest.blueprint_driven === true) {
-        this.loadedModules.set(moduleName, {
-          manifest,
-          instance: null,
-          path: modulePath,
-          loadedAt: Date.now(),
-          blueprint_driven: true
-        });
+        const hybridIndexPath = path.join(modulePath, 'index.js');
+        const hasHybridIndex = fs.existsSync(hybridIndexPath);
         if (this.logger) {
           this.logger.info('module.loaded.blueprint', {
             module: moduleName,
             version: manifest.version,
             blueprint_path: manifest.blueprint_path,
-            target_page_id: manifest.target_page_id
+            target_page_id: manifest.target_page_id,
+            hybrid: hasHybridIndex
           });
         }
         if (this.metrics) {
           this.metrics.increment('modules.loaded.blueprint');
         }
-        return null;
+        // Blueprint PURO: declarativo, sin instancia. ai-gateway lo sirve via LLM.
+        if (!hasHybridIndex) {
+          this.loadedModules.set(moduleName, {
+            manifest,
+            instance: null,
+            path: modulePath,
+            loadedAt: Date.now(),
+            blueprint_driven: true
+          });
+          return null;
+        }
+        // Blueprint HIBRIDO: ademas del blueprint (que el LLM ejecuta via
+        // ai-gateway), carga su index.js como REFLEJO JS — sirve sus ops
+        // deterministas en el bus (ej. recetas.listar.request) SIN un turno LLM
+        // sintetico. Cae al camino de carga normal; el loadedModules.set final
+        // conserva blueprint_driven:true (ai-gateway lo sigue viendo como
+        // blueprint por manifest.blueprint_driven). Retrocompatible: los
+        // blueprints sin index.js siguen el camino puro de arriba.
       }
 
       // Cargar el módulo
@@ -378,13 +391,16 @@ class ModuleLoader {
         throw loadError;
       }
 
-      // Guardar módulo cargado
+      // Guardar módulo cargado. blueprint_driven se conserva para el caso
+      // hibrido (blueprint + index.js): ai-gateway lo sigue tratando como
+      // pagina blueprint, y ademas su reflejo JS queda activo.
       this.loadedModules.set(moduleName, {
         manifest,
         instance,
         path: modulePath,
         loadedAt: Date.now(),
-        _eventUnsubs: eventUnsubs
+        _eventUnsubs: eventUnsubs,
+        blueprint_driven: manifest.blueprint_driven === true
       });
 
       // Registrar en ModuleRegistry si está disponible

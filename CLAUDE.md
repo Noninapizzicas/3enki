@@ -1380,6 +1380,51 @@ PENDIENTE (mismo patrón) {
 }
 ```
 
+## Política del grupo pizzepos (aplicación del patrón a todos los blueprints)
+
+> Los 11 blueprints de pizzepos comparten estructura de directorio por proyecto y
+> casi todos persisten. Política única: determinista → REFLEJO, fuzzy → BLUEPRINT.
+> El grupo es dominantemente CRUD/aritmética, así que el reflejo manda y el
+> blueprint queda para la chispa fuzzy (generar, interpretar, delegar a agente).
+
+```
+DIRECTORIO POR PROYECTO  (data/projects/{slug}/storage/)
+  pizzepos/
+    recetas.json               recetas        (recetas + ingredientes_catalogo)
+    cartas/<carta_id>.json      carta-manager
+    carta-design/...            carta-design   (diseños HTML + perfiles de estilo)
+    carta-digital/config.json   carta-digital
+    carta-impresion/<c>.html    carta-impresion
+    carta-scheduler/reglas.json carta-scheduler
+    tecnicas/...                tecnicas
+    viabilidad/...              viabilidad
+  config/
+    marca.json                  carta-marketing (perfil de marca = config del proyecto)
+```
+
+```
+REPARTO POR MÓDULO  (✓ = ya híbrido)
+  módulo            REFLEJO (determinista → index.js)               BLUEPRINT (fuzzy)
+  recetas        ✓  crear/listar/obtener/buscar/CRUD + persist      investigar_receta, crear-desde-intención
+  escandallo     ✓  recalcular_siguiente/costear (_costear)         calcular (Mercadona/_precio_de_mercadona)
+  carta-marketing✓  get_perfil/update_perfil                        completar_onboarding (agente)
+  carta-manager     save/get/list/delete/add/remove/update_product  —   (CRUD puro)
+  carta-digital     get/update_config · get/set carta_publica       —
+  carta-scheduler   crear/listar/eliminar_regla · detectar_conflictos —
+  viabilidad        evaluar (aritmética) · obtener/listar/descartar —   (paralelo a escandallo)
+  carta-impresion   get/save_html · generar (templating)            — (generar→blueprint si fuera LLM)
+  carta-design      load_carta/save/profiles/gallery (CRUD)         generar-diseño-desde-estilo (si aplica)
+  tecnicas          codificar/obtener/listar/actualizar/parametros  —
+  menu-generator    —   (sin store propio)                          generar (carta desde texto/foto)  ← casi todo fuzzy
+```
+
+```
+ORDEN DE MIGRACIÓN  (cada uno: receta de 5 pasos del patrón + gate)
+  1. CRUD puros (trivial, máximo retorno): carta-manager · carta-digital · carta-scheduler · viabilidad
+  2. mixtos (reflejo CRUD + chispa fuzzy): carta-design · carta-impresion · tecnicas
+  3. menu-generator: se queda blueprint (generación fuzzy); no necesita reflejo
+```
+
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)

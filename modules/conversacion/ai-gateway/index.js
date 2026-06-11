@@ -1689,6 +1689,14 @@ class AiGatewayModule extends BaseModule {
     // LLM lo vuelva a cambiar.
     const focoPersistido = this.conversationPageFoco.get(conversation_id);
     const effectivePageId = focoPersistido || page_id;
+    // El foco pegajoso de chat.cambiar_foco vale para ESTE turno (el inmediato
+    // tras el cambio, mientras el frontend sincroniza el goto) y SE CONSUME. A
+    // partir de aqui manda el page_id del frontend — asi un foco viejo no
+    // secuestra la pagina cuando el usuario navega por la UI (desajuste
+    // cajones↔pagina). Si el LLM vuelve a cambiar_foco, se re-fija.
+    if (focoPersistido && !context?.async_invocation) {
+      this.conversationPageFoco.delete(conversation_id);
+    }
     const blueprintCtx = effectivePageId ? this.blueprintModules.get(effectivePageId) : null;
     const blueprintPrompt = blueprintCtx
       ? (blueprintCtx.cajonesEnabled

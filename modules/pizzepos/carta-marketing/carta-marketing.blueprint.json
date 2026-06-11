@@ -1,14 +1,11 @@
 {
   "_doc": "Blueprint del modulo carta-marketing. Hijo de subsistema-recetario.modulo-base. Equipo de marketing silencioso del proyecto: gestiona perfil de marca + dispara agentes especializados (marketing-copywriter, marketing-strategist, marketing-brand-keeper, marketing-onboarding) cuando el usuario o un evento upstream lo justifica. 4 operaciones (get_perfil, update_perfil, completar_onboarding, actividad).",
-
   "id": "carta-marketing",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.2.0",
+  "version": "blueprint-1.3.0",
   "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.3. correlation_id obligatorio en los 3 publishes --garantizado con uuid() via correlation_id_efectivo si input no trae. NO cambia paths (ya canonicos). NO modifica operaciones funcionales ni delegacion a agentes.",
   "language": "es",
-
   "rol": "Gestor del perfil de marca del proyecto + orquestador de agentes de marketing. NO genera copy ni estrategia — eso lo hacen marketing-copywriter / strategist / brand-keeper. El blueprint persiste perfil y consulta actividad reciente de los agentes.",
-
   "garantiza": [
     "perfil de marca persistido en /storage/config/marca.json del proyecto.",
     "get_perfil devuelve el perfil o un default vacio si no existe (no error).",
@@ -16,99 +13,63 @@
     "completar_onboarding delega al agente marketing-onboarding via agent.execute.request para guiar al usuario en la creacion inicial del perfil.",
     "actividad devuelve un resumen reciente de las invocaciones a agentes de marketing (lectura del log de agentes — TRABAJO_PENDIENTE: hoy es snapshot fijo, falta integracion con agent-observer)."
   ],
-
   "no_garantiza": [
     "Generacion de copy o estrategia — esos son los agentes.",
     "Onboarding interactivo — el agente marketing-onboarding maneja la conversacion.",
     "Reaccion automatica a carta.actualizada — el blueprint no es reactivo; el agente o el LLM principal disparan cuando aplica."
   ],
-
   "estado_persistente": {
     "paths_relativos": {
       "perfil_marca": "/config/marca.json"
     },
     "shape_perfil": "{ _version, _updated_at, nombre_marca, lema?, tono_voz, valores: [...], publico_objetivo, diferenciacion, restricciones?, idiomas: [...], onboarding_completado: boolean }"
   },
-
   "eventos_publicados": [
-    "marketing.get_perfil.response", "marketing.get_perfil.failed",
-    "marketing.update_perfil.response", "marketing.update_perfil.failed",
-    "marketing.completar_onboarding.response", "marketing.completar_onboarding.failed",
-    "marketing.actividad.response", "marketing.actividad.failed",
-    "marketing.perfil.actualizado", "marketing.onboarding.completado"
+    "marketing.get_perfil.response",
+    "marketing.get_perfil.failed",
+    "marketing.update_perfil.response",
+    "marketing.update_perfil.failed",
+    "marketing.completar_onboarding.response",
+    "marketing.completar_onboarding.failed",
+    "marketing.actividad.response",
+    "marketing.actividad.failed",
+    "marketing.perfil.actualizado",
+    "marketing.onboarding.completado"
   ],
-
   "eventos_que_escucho": [],
-
   "operaciones": {
     "get_perfil": {
       "input": "{ project_id (req), request_id (req), correlation_id? }",
       "pseudocodigo": [
         "async get_perfil(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/config/marca.json' })",
-        "  if (raw.status === 404) {",
-        "    return { status: 200, data: { _version: '1.0', _updated_at: nowISO(), nombre_marca: '', tono_voz: '', valores: [], publico_objetivo: '', idiomas: ['es'], onboarding_completado: false } }",
-        "  }",
-        "  if (raw.status >= 400) return raw",
-        "  return { status: 200, data: JSON.parse(raw.content) }"
+        "  // DELEGADO al reflejo JS (determinista).",
+        "  resp = await publishAndWait('carta-marketing.get_perfil.request', { project_id: input.project_id, correlation_id: input.correlation_id }, { timeout_ms: 10000 })",
+        "  RETORNA resp"
       ],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_descripcion": "DELEGA al reflejo JS (index.js). Lee /config/marca.json. Determinista, sin turno LLM."
     },
-
     "update_perfil": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, campos (req — object con nombre_marca?, lema?, tono_voz?, valores?, publico_objetivo?, diferenciacion?, restricciones?, idiomas?) }",
       "pseudocodigo": [
         "async update_perfil(input):",
-        "  if (!input.project_id || !input.campos || Object.keys(input.campos).length === 0) return INVALID_INPUT",
-        "  correlation_id_efectivo = input.correlation_id || uuid()",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/config/marca.json' })",
-        "  now = nowISO()",
-        "",
-        "  // Rama A — archivo NO existe: fs.write atomico del store inicial con los campos aplicados.",
-        "  if (raw.status === 404) {",
-        "    perfil_inicial = { _version: '1.0', _updated_at: now, nombre_marca: '', tono_voz: '', valores: [], publico_objetivo: '', idiomas: ['es'], onboarding_completado: false }",
-        "    for (campo in input.campos) {",
-        "      if (input.campos[campo] !== undefined) perfil_inicial[campo] = input.campos[campo]",
-        "    }",
-        "    perfil_inicial._updated_at = now",
-        "    write_resp = await publishAndWait('fs.write.request', {",
-        "      project_id: input.project_id, path: '/config/marca.json',",
-        "      content: JSON.stringify(perfil_inicial, null, 2), encoding: 'utf-8', atomic: true",
-        "    })",
-        "    if (write_resp.status >= 400) return write_resp",
-        "    await publish('marketing.perfil.actualizado', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
-        "    return { status: 200, data: perfil_inicial }",
-        "  }",
-        "",
-        "  if (raw.status >= 400) return raw",
-        "  perfil = JSON.parse(raw.content)",
-        "",
-        "  // Rama B — archivo existe: fs.edit declarativo (RFC 6902). Patron UPDATE 1-campo.",
-        "  // Un op:replace por cada campo en input.campos + op:replace /_updated_at.",
-        "  // El LLM NO compone el archivo entero — declara los patches, filesystem aplica.",
-        "  patches = []",
-        "  for (campo in input.campos) {",
-        "    if (input.campos[campo] !== undefined) {",
-        "      patches.push({ op: 'replace', path: '/' + campo, value: input.campos[campo] })",
-        "      perfil[campo] = input.campos[campo]",
-        "    }",
-        "  }",
-        "  patches.push({ op: 'replace', path: '/_updated_at', value: now })",
-        "  perfil._updated_at = now",
-        "  edit_resp = await publishAndWait('fs.edit.request', {",
-        "    project_id: input.project_id,",
-        "    path: '/config/marca.json',",
-        "    patches: patches",
-        "  })",
-        "  if (edit_resp.status >= 400) return edit_resp",
-        "",
-        "  await publish('marketing.perfil.actualizado', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
-        "  return { status: 200, data: perfil }"
+        "  if (!input.project_id || !input.campos) return INVALID_INPUT { field: 'campos' }",
+        "  // DELEGADO al reflejo JS: escribe de verdad y emite el evento (mata el teatro).",
+        "  resp = await publishAndWait('carta-marketing.update_perfil.request', { project_id: input.project_id, campos: input.campos, correlation_id: input.correlation_id }, { timeout_ms: 10000 })",
+        "  RETORNA resp"
       ],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_descripcion": "DELEGA al reflejo JS (index.js). Escribe los campos en /config/marca.json y emite marketing.perfil.actualizado. Determinista, sin turno LLM. El LLM (en la descubierta fuzzy) reune los campos y los persiste llamando aqui — asi cada dato queda GUARDADO de verdad, no roleado."
     },
-
     "completar_onboarding": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, datos_iniciales? (opcional — kickoff con info ya conocida) }",
       "pseudocodigo": [
@@ -158,10 +119,15 @@
         "  await publish('marketing.onboarding.completado', { project_id: input.project_id, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
         "  return { status: 200, data: perfil_propuesto }"
       ],
-      "reglas_clave": ["Delegacion al agente onboarding. El agente devuelve perfil propuesto, se persiste con onboarding_completado:true."],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "reglas_clave": [
+        "Delegacion al agente onboarding. El agente devuelve perfil propuesto, se persiste con onboarding_completado:true."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ]
     },
-
     "actividad": {
       "input": "{ project_id (req), request_id (req), correlation_id?, ventana_dias? (default 7) }",
       "pseudocodigo": [
@@ -172,11 +138,14 @@
         "  // hacer publishAndWait('agent-observer.consultar.request', {scope: 'marketing', ventana_dias, ...}).",
         "  return { status: 200, data: { ventana_dias: input.ventana_dias || 7, invocaciones: [], nota: 'agent-observer integracion pendiente — actividad temporalmente vacia' } }"
       ],
-      "reglas_clave": ["Operacion stub hasta integrar agent-observer."],
-      "errores_posibles": ["INVALID_INPUT"]
+      "reglas_clave": [
+        "Operacion stub hasta integrar agent-observer."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT"
+      ]
     }
   },
-
   "trabajo_pendiente": [
     {
       "id": "integracion_agent_observer",
@@ -188,5 +157,6 @@
       "estado": "abierto",
       "descripcion": "Legacy escuchaba carta.actualizada para disparar agentes automaticamente. Blueprint no reactivo; los agentes se invocan a demanda."
     }
-  ]
+  ],
+  "_v1_3_changelog": "v1.3.0 (2026-06-11): carta-marketing pasa a HIBRIDO (3er caso del patron). get_perfil/update_perfil (CRUD determinista del perfil de marca) los sirve el reflejo JS (index.js); estos cajones pasan a delegadores finos. completar_onboarding (agente marketing-onboarding, fuzzy) se queda en el blueprint. Mata el teatro del onboarding: el LLM persiste de verdad via update_perfil en vez de rolear que un agente lo registra."
 }

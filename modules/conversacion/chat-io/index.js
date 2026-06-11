@@ -81,7 +81,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_context ON messages(conversation_id, in_
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUUID = (s) => typeof s === 'string' && UUID_REGEX.test(s);
-const defaultSettings = () => ({ context_window: 20, temperature: 0.7, max_tokens: 2000 });
+const defaultSettings = () => ({ context_window: 20, temperature: 0.7, max_tokens: 4096 });
 const DB_TIMEOUT_MS = 10000;
 
 class ChatIoModule extends BaseModule {

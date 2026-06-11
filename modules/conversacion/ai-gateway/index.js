@@ -1118,7 +1118,7 @@ class AiGatewayModule extends BaseModule {
           resolve(Array.isArray(eventos) ? eventos : []);
         });
         this.eventBus.publish('propiocepcion.leer', {
-          request_id, project_id, limite: 25, ...(desde_ts ? { desde_ts } : {})
+          request_id, project_id, limite: 10, ...(desde_ts ? { desde_ts } : {})
         });
       } catch (_) {
         clearTimeout(timeout);
@@ -1134,14 +1134,14 @@ class AiGatewayModule extends BaseModule {
       return `- [${tipo}] ${e.modulo}: ${e.resumen}`;
     }).join('\n');
     return (
-      '# LO QUE PASO EN TU MUNDO — propiocepcion\n' +
-      'Desde tu ultimo turno, en este proyecto ocurrio esto. NO lo controlaste tu ' +
-      'paso a paso (son reflejos y ops ya ejecutadas), pero eres CONSCIENTE de que ' +
-      'paso — como sabes que tu mano se movio aunque no lo articulaste:\n' +
+      '# LO QUE PASO EN TU MUNDO — propiocepcion (contexto SILENCIOSO)\n' +
+      'Desde tu ultimo turno ocurrio esto en el proyecto (reflejos y ops ya ' +
+      'ejecutadas que no controlaste, pero de los que eres consciente):\n' +
       lineas + '\n' +
-      'Tratalo como hechos verificados del mundo real. Si algo ya se hizo o se ' +
-      'guardo, esta aqui. NO supongas ni declares hecho lo que no veas en esta ' +
-      'lista o no hayas ejecutado tu mismo en este turno.'
+      'USALO EN SILENCIO. Es solo para que NO supongas: si algo ya se hizo o se ' +
+      'guardo, esta aqui. NO lo recites, NO lo enumeres ni lo repitas al usuario ' +
+      'salvo que pregunte explicitamente que ha pasado. Responde corto y al grano ' +
+      'a lo que el usuario pide; esta lista es memoria de fondo, no parte de tu respuesta.'
     );
   }
 
@@ -1729,7 +1729,11 @@ class AiGatewayModule extends BaseModule {
 
     const chatOptions = {
       temperature: settings?.temperature ?? 0.7,
-      max_tokens: settings?.max_tokens ?? 2000,
+      // Suelo de 4096: las paginas blueprint (recetario) generan respuestas
+      // largas (crear receta + estructura + preguntas) que se cortaban con el
+      // viejo tope de 2000. Floor en vez de default para subir tambien las
+      // conversaciones existentes (que tienen 2000 guardado en su settings).
+      max_tokens: Math.max(Number(settings?.max_tokens) || 0, 4096),
       tools: translatedTools,
       projectId: project_id,
       conversationId: conversation_id,

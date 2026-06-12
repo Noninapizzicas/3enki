@@ -61,6 +61,7 @@ class CartaMarketingReflejo extends ModuloHibridoReflejo {
   onGetPerfilRequest(e) { return this._atender(e, 'get_perfil', 'carta-marketing.get_perfil.response', d => this._getPerfil(d)); }
   onUpdatePerfilRequest(e) { return this._atender(e, 'update_perfil', 'carta-marketing.update_perfil.response', d => this._updatePerfil(d)); }
   onGenerarCopyRequest(e) { return this._atender(e, 'generar_copy', 'carta-marketing.generar_copy.response', d => this._generarCopy(d)); }
+  onAvanzarOnboardingRequest(e) { return this._atender(e, 'avanzar_onboarding', 'carta-marketing.avanzar_onboarding.response', d => this._avanzarOnboarding(d)); }
 
   // ── proyecciones deterministas (réplica fiel del pseudocódigo) ──
 
@@ -188,6 +189,74 @@ class CartaMarketingReflejo extends ModuloHibridoReflejo {
     const b = s.indexOf('{'), e = s.lastIndexOf('}');
     if (b >= 0 && e > b) s = s.slice(b, e + 1);
     try { return JSON.parse(s); } catch (_) { return null; }
+  }
+
+  // ── ONBOARDING INTERACTIVO (perspectiva C, por turno) ──
+  // El agente NO lee ni escribe: el reflejo HIDRATA el perfil (LEE con _getPerfil) y
+  // PERSISTE lo que el agente decide (ESCRIBE con _updatePerfil). Un turno por llamada:
+  // la página dispara avanzar_onboarding con el mensaje del usuario, el reflejo guarda
+  // y devuelve la siguiente pregunta. mensaje vacío/null = arranque (primera pregunta).
+  async _avanzarOnboarding(input) {
+    if (!input.project_id) return this._invalid('project_id');
+
+    // 1. LEER — el perfil actual, in-process (la misma proyección determinista).
+    const perfilResp = await this._getPerfil({ project_id: input.project_id });
+    const perfil = (perfilResp && perfilResp.data) || {};
+
+    // 2. AGENTE — función pura {perfil, mensaje} → {persistir, pregunta, completado}. Sin tools.
+    const ag = await this._rpc('agent.execute.request', {
+      agent_name: 'marketing-onboarding',
+      task: 'Conduce un turno de la entrevista de marca con el CONTEXTO ENTREGADO. Devuelve solo el JSON del entregable {persistir, pregunta, completado}.',
+      context: {
+        project_id: input.project_id,
+        perfil,
+        mensaje: input.mensaje != null ? String(input.mensaje) : null,
+        datos_iniciales: input.datos_iniciales || null
+      },
+      correlation_id: input.correlation_id
+    }, { timeout_ms: 120000 });
+    if (ag && ag.status >= 400) return ag;
+    const out = this._parseEntregable(ag);
+    if (!out || typeof out.pregunta !== 'string' || !out.pregunta.trim()) {
+      return this._errorResponse(502, 'UPSTREAM_INVALID_RESPONSE', 'el onboarding no devolvió pregunta');
+    }
+
+    // 3. ESCRIBIR — el reflejo persiste el parche que decidió el agente (deep-merge por sección).
+    const persistir = (out.persistir && typeof out.persistir === 'object' && !Array.isArray(out.persistir)) ? out.persistir : {};
+    const completado = out.completado === true;
+    let persistido = [];
+    if (Object.keys(persistir).length > 0) {
+      const w = await this._updatePerfil({ project_id: input.project_id, campos: persistir, correlation_id: input.correlation_id });
+      if (w && w.status >= 400) return w;
+      persistido = Object.keys(persistir);
+    }
+    if (completado) {
+      await this._updatePerfil({ project_id: input.project_id, campos: { onboarding_completado: true }, correlation_id: input.correlation_id });
+    }
+
+    // 4. EMITIR — la propiocepción lo capta.
+    const now = new Date().toISOString();
+    this.eventBus.publish('marketing.onboarding.avanzado', {
+      project_id: input.project_id, persistido, completado,
+      correlation_id: input.correlation_id || null, timestamp: now
+    });
+    if (completado) {
+      this.eventBus.publish('marketing.onboarding.completado', {
+        project_id: input.project_id, correlation_id: input.correlation_id || null, timestamp: now
+      });
+    }
+
+    return {
+      status: 200,
+      data: {
+        pregunta: out.pregunta.trim(),
+        completado,
+        persistido,
+        instruccion: completado
+          ? 'Onboarding terminado: la identidad queda definida y guardada.'
+          : 'Muestra la pregunta al usuario. En su próxima respuesta, vuelve a llamar avanzar_onboarding con su mensaje.'
+      }
+    };
   }
 }
 

@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo carta-marketing. Hijo de subsistema-recetario.modulo-base. Equipo de marketing silencioso del proyecto: gestiona perfil de marca + dispara agentes especializados (marketing-copywriter, marketing-strategist, marketing-brand-keeper, marketing-onboarding) cuando el usuario o un evento upstream lo justifica. 4 operaciones (get_perfil, update_perfil, completar_onboarding, actividad).",
   "id": "carta-marketing",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.6.0",
+  "version": "blueprint-1.7.0",
   "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.3. correlation_id obligatorio en los 3 publishes --garantizado con uuid() via correlation_id_efectivo si input no trae. NO cambia paths (ya canonicos). NO modifica operaciones funcionales ni delegacion a agentes.",
   "language": "es",
   "rol": "Gestor del perfil de marca del proyecto + orquestador de agentes de marketing. NO genera copy ni estrategia — eso lo hacen marketing-copywriter / strategist / brand-keeper. El blueprint persiste perfil y consulta actividad reciente de los agentes.",
@@ -35,6 +35,7 @@
     "marketing.actividad.response",
     "marketing.actividad.failed",
     "marketing.perfil.actualizado",
+    "marketing.onboarding.avanzado",
     "marketing.onboarding.completado",
     "marketing.copy.generado"
   ],
@@ -77,58 +78,45 @@
       "pseudocodigo": [
         "async completar_onboarding(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  correlation_id_efectivo = input.correlation_id || uuid()",
-        "  // Delegar al agente marketing-onboarding.",
-        "  agent_resp = await publishAndWait('agent.execute.request', {",
-        "    request_id: uuid(), correlation_id: input.correlation_id,",
-        "    agent_name: 'marketing-onboarding',",
-        "    task: 'Guiar al usuario en la creacion del perfil de marca completo',",
-        "    context: { project_id: input.project_id, datos_iniciales: input.datos_iniciales || null }",
-        "  })",
-        "  if (agent_resp.status >= 400) return agent_resp",
-        "  // El agente devuelve el perfil completo en agent_resp.result.content (JSON string) o estructurado.",
-        "  perfil_propuesto = typeof agent_resp.result?.content === 'string' ? JSON.parse(agent_resp.result.content) : agent_resp.result?.content",
-        "  if (!perfil_propuesto) return INVALID_INPUT { hint: 'agente no devolvio perfil' }",
-        "  perfil_propuesto.onboarding_completado = true",
-        "  now = nowISO()",
-        "  perfil_propuesto._updated_at = now",
-        "  // Leer el archivo para saber si existe (determina rama A vs B).",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/marca.json' })",
-        "  // Rama A — archivo NO existe: fs.write atomico con el perfil completo propuesto por el agente.",
-        "  if (raw.status === 404) {",
-        "    if (!perfil_propuesto._version) perfil_propuesto._version = '1.0'",
-        "    write_resp = await publishAndWait('fs.write.request', {",
-        "      project_id: input.project_id, path: '/pizzepos/marca.json',",
-        "      content: JSON.stringify(perfil_propuesto, null, 2), encoding: 'utf-8', atomic: true",
-        "    })",
-        "    if (write_resp.status >= 400) return write_resp",
-        "  } else if (raw.status >= 400) {",
-        "    return raw",
-        "  } else {",
-        "    // Rama B — archivo existe: fs.edit declarativo (RFC 6902). Un op:replace por campo del perfil propuesto.",
-        "    // El LLM NO compone el archivo entero — declara los patches, filesystem aplica.",
-        "    patches = []",
-        "    for (campo in perfil_propuesto) {",
-        "      patches.push({ op: 'replace', path: '/' + campo, value: perfil_propuesto[campo] })",
-        "    }",
-        "    edit_resp = await publishAndWait('fs.edit.request', {",
-        "      project_id: input.project_id,",
-        "      path: '/pizzepos/marca.json',",
-        "      patches: patches",
-        "    })",
-        "    if (edit_resp.status >= 400) return edit_resp",
-        "  }",
-        "  await publish('marketing.onboarding.completado', { project_id: input.project_id, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
-        "  return { status: 200, data: perfil_propuesto }"
+        "  // KICKOFF de la entrevista (perspectiva-C). Delega al reflejo el PRIMER turno",
+        "  // (mensaje=null): el reflejo lee el perfil, el agente saluda y hace la 1a pregunta.",
+        "  resp = await publishAndWait('carta-marketing.avanzar_onboarding.request', { project_id: input.project_id, mensaje: null, datos_iniciales: input.datos_iniciales || null, correlation_id: input.correlation_id }, { timeout_ms: 130000 })",
+        "  RETORNA resp   // { pregunta, completado:false, instruccion }"
       ],
       "reglas_clave": [
-        "Delegacion al agente onboarding. El agente devuelve perfil propuesto, se persiste con onboarding_completado:true."
+        "Solo arranca. La entrevista avanza turno a turno via avanzar_onboarding (la pagina la conduce con cada respuesta del usuario).",
+        "No persiste ni recompone nada: el reflejo lee y escribe; el agente solo decide."
       ],
       "errores_posibles": [
         "INVALID_INPUT",
         "UPSTREAM_TIMEOUT",
+        "UPSTREAM_INVALID_RESPONSE",
         "UPSTREAM_UNREACHABLE"
       ]
+    },
+    "avanzar_onboarding": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, mensaje? (lo que el usuario acaba de decir; null/ausente = arranque), datos_iniciales? }",
+      "pseudocodigo": [
+        "async avanzar_onboarding(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  // UN TURNO de la entrevista (perspectiva-C). DELEGADO al reflejo JS:",
+        "  //   LEE el perfil (get_perfil) -> invoca al agente marketing-onboarding SIN tools",
+        "  //   {perfil, mensaje} -> {persistir, pregunta, completado} -> ESCRIBE el parche via",
+        "  //   update_perfil (deep-merge en marca.json). El agente NO lee ni guarda.",
+        "  resp = await publishAndWait('carta-marketing.avanzar_onboarding.request', { project_id: input.project_id, mensaje: input.mensaje, datos_iniciales: input.datos_iniciales, correlation_id: input.correlation_id }, { timeout_ms: 130000 })",
+        "  RETORNA resp   // { pregunta, completado, persistido, instruccion }"
+      ],
+      "reglas_clave": [
+        "La PAGINA conduce el bucle: mientras completado=false, en cada respuesta del usuario vuelve a abrir este cajon con su mensaje. Cuando completado=true, la identidad queda definida y guardada.",
+        "El agente decide {persistir, pregunta, completado}; el reflejo lee (get_perfil) y escribe (update_perfil). Patron AGENTE-PERSPECTIVA-C: el agente no toca herramientas (tools:[])."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_INVALID_RESPONSE",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_descripcion": "DELEGA al reflejo JS (index.js). Un turno de la entrevista de marca. Emite marketing.onboarding.avanzado (y marketing.onboarding.completado al cerrar)."
     },
     "generar_copy": {
       "input": "{ project_id (req), request_id (req), correlation_id?, carta_id?, productos (req SI se piden descripciones — array de { producto_id, nombre, ingredientes? }), pedir? (array de 'descripciones'|'preambulo'|'promos'; default los tres) }",
@@ -187,5 +175,6 @@
   "_v1_3_changelog": "v1.3.0 (2026-06-11): carta-marketing pasa a HIBRIDO (3er caso del patron). get_perfil/update_perfil (CRUD determinista del perfil de marca) los sirve el reflejo JS (index.js); estos cajones pasan a delegadores finos. completar_onboarding (agente marketing-onboarding, fuzzy) se queda en el blueprint. Mata el teatro del onboarding: el LLM persiste de verdad via update_perfil en vez de rolear que un agente lo registra.",
   "_v1_4_changelog": "v1.4.0 (2026-06-11): el perfil de marca pasa de /config/marca.json a /pizzepos/marca.json — sigue la convencion del grupo pizzepos y se reconoce como BASE COMPARTIDA (como recetas.json): cualquier modulo bebe de ella via carta-marketing.get_perfil.request (servida por el reflejo). carta-design (colores), menu-generator (tono), etc. se basan en ella.",
   "_v1_5_changelog": "v1.5.0 (2026-06-11): la identidad de marca pasa a estructura CANONICA por secciones (esencia/voz/publico/visual/negocio), con esquema validable (marca.schema.json). update_perfil acepta parches parciales por seccion (deep-merge) → se rellena de a poco sin pisar. Base solida y extensible: nuevas secciones/campos sin romper lectores. Sustituye el shape plano (nombre_marca/tono_voz/...) — no habia datos que migrar.",
-  "_v1_6_changelog": "v1.6.0 (2026-06-12): nuevo cajon generar_copy — PRIMER caso del patron AGENTE-PERSPECTIVA-C. El reflejo HIDRATA la voz de marca y PERSISTE el entregable; el agente marketing-copywriter (ahora tools:[]) solo TRANSFORMA {perfil,productos} -> {descripciones}. Resuelve la raiz auditada (deepseek emite tool-calls como texto, no ejecutan -> salida vacia): si el agente no toca herramientas, el tool-use roto no importa. Determinismo (cargar/guardar) en JS, fuzzy (escribir) en el agente. Emite marketing.copy.generado."
+  "_v1_6_changelog": "v1.6.0 (2026-06-12): nuevo cajon generar_copy — PRIMER caso del patron AGENTE-PERSPECTIVA-C. El reflejo HIDRATA la voz de marca y PERSISTE el entregable; el agente marketing-copywriter (ahora tools:[]) solo TRANSFORMA {perfil,productos} -> {descripciones}. Resuelve la raiz auditada (deepseek emite tool-calls como texto, no ejecutan -> salida vacia): si el agente no toca herramientas, el tool-use roto no importa. Determinismo (cargar/guardar) en JS, fuzzy (escribir) en el agente. Emite marketing.copy.generado.",
+  "_v1_7_changelog": "v1.7.0 (2026-06-12): onboarding a perspectiva-C INTERACTIVA (skill agente-perspectiva-c). Nuevo cajon avanzar_onboarding = un turno de la entrevista: el reflejo LEE el perfil (get_perfil) e invoca al agente marketing-onboarding SIN tools {perfil,mensaje} -> {persistir,pregunta,completado}, y ESCRIBE el parche via update_perfil (deep-merge). completar_onboarding pasa de launcher (que recomponia el fichero entero con fs.write/fs.edit) a simple KICKOFF (primer turno, mensaje=null). La pagina conduce el bucle llamando avanzar_onboarding con cada respuesta. Mata el teatro: el agente ya no llama update_perfil como tool-call que no ejecutaba bajo deepseek; ahora el reflejo persiste de verdad. Emite marketing.onboarding.avanzado."
 }

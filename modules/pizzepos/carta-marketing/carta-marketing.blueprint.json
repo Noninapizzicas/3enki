@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo carta-marketing. Hijo de subsistema-recetario.modulo-base. Identidad de marca del proyecto, SIN agentes. El LLM de PAGINA conduce la entrevista de marca (completar_onboarding) y redacta el copy (generar_copy); el REFLEJO (index.js) persiste (update_perfil, guardar_copy). 4 operaciones: get_perfil, update_perfil, completar_onboarding, generar_copy.",
   "id": "carta-marketing",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.8.0",
+  "version": "blueprint-1.9.0",
   "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.3. correlation_id obligatorio en los 3 publishes --garantizado con uuid() via correlation_id_efectivo si input no trae. NO cambia paths (ya canonicos). NO modifica operaciones funcionales ni delegacion a agentes.",
   "language": "es",
   "rol": "Identidad de marca del proyecto. SIN agentes: el LLM de PAGINA (este blueprint) conduce la entrevista de marca y redacta el copy en la voz de marca; el REFLEJO (index.js) persiste (perfil + copy). Dos capas: fuzzy en el LLM de pagina, determinista en JS.",
@@ -20,7 +20,7 @@
     "paths_relativos": {
       "identidad": "/pizzepos/marca.json"
     },
-    "shape_perfil": "Identidad por SECCIONES (ver _schemas/marca/marca.schema.json): { _version, _updated_at, onboarding_completado, esencia{nombre(req),lema,proposito,valores[]}, voz{tono[],registro,referencias[],si[],no[]}, publico{quien,actitud}, visual{colores{},tipografias{},estilo,logo}, negocio{tipo_cocina,local{},redes{}} }. Mínimo: esencia.nombre. Se rellena de a poco (deep-merge por seccion). Dueños: esencia/voz/publico/negocio=onboarding, visual=carta-design. Todos leen via get_perfil.",
+    "shape_perfil": "Identidad por SECCIONES (ver _schemas/marca/marca.schema.json): { _version, _updated_at, onboarding_completado, esencia{nombre(req),lema,proposito,valores[]}, voz{tono[],registro,referencias[],si[],no[]}, publico{quien,actitud}, visual{colores{},tipografias{},estilo,logo}, negocio{tipo_cocina,local{},redes{}} }. Mínimo: esencia.nombre. Se rellena de a poco (deep-merge por seccion). Dueños: esencia/voz/publico/negocio + el INICIAL de visual (logo/colores/diseno) = onboarding; carta-design REFINA visual (produce la paleta/tipografias finales y los disenos). Todos leen via get_perfil.",
     "esquema": "arquitectura/decisiones/_schemas/marca/marca.schema.json"
   },
   "eventos_publicados": [
@@ -73,22 +73,30 @@
     "completar_onboarding": {
       "input": "{ project_id (req), request_id (req), correlation_id?, datos_iniciales? }",
       "pseudocodigo": [
-        "async completar_onboarding(input):   // LO CONDUCE EL LLM DE PAGINA, turno a turno. NO hay agente.",
+        "async completar_onboarding(input):   // ENTREVISTA COMPLETA DE MARCA. La conduce el LLM de PAGINA, turno a turno. NO hay agente.",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  // 1. Lee el estado actual para no repreguntar lo ya relleno.",
+        "  // 1. LEER el estado actual para no repreguntar lo ya relleno.",
         "  perfil = await publishAndWait('carta-marketing.get_perfil.request', { project_id: input.project_id })",
-        "  // 2. Entrevista de marca: UNA pregunta por turno, lenguaje de comerciante. Orden de prioridad:",
-        "  //    esencia.nombre -> voz.tono+registro -> publico.quien -> esencia.valores/proposito -> negocio.tipo_cocina.",
-        "  // 3. Tras CADA respuesta del usuario, PERSISTE lo que dijo en su SECCION (el reflejo escribe de verdad):",
+        "  // 2. ENTREVISTA por fases. UNA pregunta por turno, lenguaje de comerciante, calida. Recorre TODAS las fases:",
+        "  //    A. MARCA       -> esencia.nombre (imprescindible) -> esencia.lema -> esencia.proposito -> esencia.valores[]",
+        "  //    B. PERSONALIDAD-> voz.tono[] (2-3 adjetivos: cercana, gamberra, elegante...) -> voz.registro (tu/usted, formal/desenfadada) -> voz.no[] (lo que NUNCA hace)",
+        "  //    C. PUBLICO     -> publico.quien -> publico.actitud",
+        "  //    D. IMAGEN/VISUAL:",
+        "  //         logo   -> '¿tienes logo? subelo o dime donde esta'. Si lo aporta, registra visual.logo con su referencia/ruta.",
+        "  //         colores-> '¿que colores son los tuyos?' -> visual.colores { principal: '#hex|nombre', acento, fondo... }. Si describio el logo, propon colores coherentes y CONFIRMA antes de guardar.",
+        "  //         diseno -> '¿como te imaginas tu carta: minimalista, rustica, moderna, elegante?' -> visual.estilo (frase) + visual.tipografias si lo menciona.",
+        "  //    E. NEGOCIO     -> negocio.tipo_cocina -> negocio.local { ciudad?, barrio? } -> negocio.redes { instagram?, web? }",
+        "  // 3. Tras CADA respuesta, PERSISTE en su SECCION (el reflejo escribe de verdad):",
         "  //    await publishAndWait('carta-marketing.update_perfil.request', { project_id, campos: { <seccion>: { ... } } })",
-        "  //    Ej: 'se llama La Toscana' -> campos: { esencia: { nombre: 'La Toscana' } }. Confirma con el dato real.",
-        "  // 4. Cuando esencia.nombre + voz + publico existan: update_perfil({ campos: { onboarding_completado: true } }) y cierra felicitando.",
+        "  //    Ej: 'se llama La Toscana' -> { esencia: { nombre: 'La Toscana' } } ; 'rojo y crema' -> { visual: { colores: { principal: 'rojo', acento: 'crema' } } }.",
+        "  // 4. Cuando esencia.nombre + voz + publico existan: update_perfil({ campos: { onboarding_completado: true } }). Sigue ofreciendo afinar imagen/visual y negocio (no bloquea el cierre).",
         "  RETORNA { siguiente_pregunta }   // o el cierre cuando completado"
       ],
       "reglas_clave": [
-        "Lo conduce el LLM de PAGINA (sin agente). Una pregunta por turno; tras cada respuesta, update_perfil con el parche en su seccion.",
-        "PROHIBIDO INVENTAR: persiste SOLO lo que el usuario dijo, textual (jamas el nombre ni una ciudad). Cada dato en su seccion, nunca campo plano en la raiz.",
-        "Cierra con onboarding_completado:true cuando haya esencia.nombre + voz + publico. El resto crece despues, no bloquea."
+        "Cubre la identidad COMPLETA: marca + personalidad + publico + imagen(logo/colores/diseno) + negocio. Una pregunta por turno; tras cada respuesta, update_perfil con el parche en su seccion.",
+        "PROHIBIDO INVENTAR: persiste SOLO lo que el usuario dijo, textual (jamas el nombre, un color, ni una ciudad que no haya dicho). Cada dato en su seccion, nunca campo plano en la raiz.",
+        "IMAGEN: registra visual.logo con la referencia que aporte el usuario. Los colores/diseno se PREGUNTAN (o se proponen desde el logo y se CONFIRMAN). NOTA: extraer la paleta automaticamente desde la imagen del logo es capacidad aparte (pipeline de imagen) — pendiente; por ahora se pregunta/confirma.",
+        "Cierra con onboarding_completado:true cuando haya esencia.nombre + voz + publico. Imagen y negocio se siguen afinando despues, no bloquean."
       ],
       "errores_posibles": [
         "INVALID_INPUT",
@@ -157,5 +165,6 @@
   "_v1_5_changelog": "v1.5.0 (2026-06-11): la identidad de marca pasa a estructura CANONICA por secciones (esencia/voz/publico/visual/negocio), con esquema validable (marca.schema.json). update_perfil acepta parches parciales por seccion (deep-merge) → se rellena de a poco sin pisar. Base solida y extensible: nuevas secciones/campos sin romper lectores. Sustituye el shape plano (nombre_marca/tono_voz/...) — no habia datos que migrar.",
   "_v1_6_changelog": "v1.6.0 (2026-06-12): nuevo cajon generar_copy — PRIMER caso del patron AGENTE-PERSPECTIVA-C. El reflejo HIDRATA la voz de marca y PERSISTE el entregable; el agente marketing-copywriter (ahora tools:[]) solo TRANSFORMA {perfil,productos} -> {descripciones}. Resuelve la raiz auditada (deepseek emite tool-calls como texto, no ejecutan -> salida vacia): si el agente no toca herramientas, el tool-use roto no importa. Determinismo (cargar/guardar) en JS, fuzzy (escribir) en el agente. Emite marketing.copy.generado.",
   "_v1_7_changelog": "v1.7.0 (2026-06-12): onboarding a perspectiva-C INTERACTIVA (skill agente-perspectiva-c). Nuevo cajon avanzar_onboarding = un turno de la entrevista: el reflejo LEE el perfil (get_perfil) e invoca al agente marketing-onboarding SIN tools {perfil,mensaje} -> {persistir,pregunta,completado}, y ESCRIBE el parche via update_perfil (deep-merge). completar_onboarding pasa de launcher (que recomponia el fichero entero con fs.write/fs.edit) a simple KICKOFF (primer turno, mensaje=null). La pagina conduce el bucle llamando avanzar_onboarding con cada respuesta. Mata el teatro: el agente ya no llama update_perfil como tool-call que no ejecutaba bajo deepseek; ahora el reflejo persiste de verdad. Emite marketing.onboarding.avanzado.",
-  "_v1_8_changelog": "v1.8.0 (2026-06-12): SIN capa de agentes. Se quita la dependencia de los agentes marketing-onboarding/copywriter (aparcados). Modelo de DOS capas: el LLM de PAGINA (este blueprint) conduce la entrevista y redacta el copy; el REFLEJO (index.js) solo persiste. (1) completar_onboarding deja de delegar en el agente: el LLM de pagina entrevista turno a turno y persiste cada respuesta via update_perfil (PROHIBIDO inventar). (2) avanzar_onboarding ELIMINADO (era el cajon que invocaba al agente por turno). (3) generar_copy deja de invocar al agente: el LLM de pagina redacta el copy en la voz de marca y lo guarda via el nuevo guardar_copy (reflejo, solo persiste). Quita la fragilidad del segundo LLM (sub-agente ciego al hilo, bucle discrecional) y el tool-use roto: un solo cerebro por turno (el de pagina, que ya tiene el hilo) + JS determinista."
+  "_v1_8_changelog": "v1.8.0 (2026-06-12): SIN capa de agentes. Se quita la dependencia de los agentes marketing-onboarding/copywriter (aparcados). Modelo de DOS capas: el LLM de PAGINA (este blueprint) conduce la entrevista y redacta el copy; el REFLEJO (index.js) solo persiste. (1) completar_onboarding deja de delegar en el agente: el LLM de pagina entrevista turno a turno y persiste cada respuesta via update_perfil (PROHIBIDO inventar). (2) avanzar_onboarding ELIMINADO (era el cajon que invocaba al agente por turno). (3) generar_copy deja de invocar al agente: el LLM de pagina redacta el copy en la voz de marca y lo guarda via el nuevo guardar_copy (reflejo, solo persiste). Quita la fragilidad del segundo LLM (sub-agente ciego al hilo, bucle discrecional) y el tool-use roto: un solo cerebro por turno (el de pagina, que ya tiene el hilo) + JS determinista.",
+  "_v1_9_changelog": "v1.9.0 (2026-06-12): onboarding COMPLETO. completar_onboarding deja de cubrir solo esencia/voz/publico: ahora la entrevista recorre TODAS las fases — A.MARCA (nombre/lema/proposito/valores), B.PERSONALIDAD (voz.tono/registro/no), C.PUBLICO, D.IMAGEN/VISUAL (logo + colores + diseno/estilo), E.NEGOCIO (cocina/local/redes) — y persiste cada dato en su seccion via update_perfil. La seccion visual pasa a tener dueno COMPARTIDO: el onboarding capta el inicial (logo/colores/diseno que diga el comerciante), carta-design lo REFINA. Nota: extraer la paleta automaticamente desde la imagen del logo es capacidad aparte (pipeline de imagen, pendiente); por ahora se pregunta/confirma. onboarding_completado sigue cerrando con esencia.nombre+voz+publico (imagen/negocio se afinan despues, no bloquean)."
 }

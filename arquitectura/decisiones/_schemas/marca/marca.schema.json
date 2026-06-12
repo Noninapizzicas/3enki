@@ -49,7 +49,7 @@
 
     "visual": {
       "type": "object",
-      "description": "Cómo se VE. Dueño: carta-design. La bebe toda carta/post/canal.",
+      "description": "Cómo se VE. Dueño COMPARTIDO: el onboarding capta el inicial (logo/colores/diseño que diga el comerciante); carta-design lo REFINA (paleta/tipografías finales, diseños). La bebe toda carta/post/canal.",
       "additionalProperties": true,
       "properties": {
         "colores": { "type": "object", "additionalProperties": { "type": "string" }, "description": "rol → hex (principal, acento, fondo...)." },

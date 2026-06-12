@@ -131,7 +131,7 @@
       ]
     },
     "generar_copy": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id?, productos (req — array de { producto_id, nombre, ingredientes? } a describir) }",
+      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id?, productos (req SI se piden descripciones — array de { producto_id, nombre, ingredientes? }), pedir? (array de 'descripciones'|'preambulo'|'promos'; default los tres) }",
       "pseudocodigo": [
         "async generar_copy(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
@@ -152,7 +152,7 @@
         "UPSTREAM_INVALID_RESPONSE",
         "UPSTREAM_UNREACHABLE"
       ],
-      "_descripcion": "DELEGA al reflejo JS (index.js). Genera descripciones de carta en la voz de marca via el agente copywriter (sin tools) y las persiste. Emite marketing.copy.generado."
+      "_descripcion": "DELEGA al reflejo JS (index.js). Genera copy de carta (descripciones por producto + preámbulo de cabecera + promos) en la voz de marca via el agente copywriter (sin tools) y lo persiste en /pizzepos/carta-marketing/copy.json. Emite marketing.copy.generado."
     },
     "actividad": {
       "input": "{ project_id (req), request_id (req), correlation_id?, ventana_dias? (default 7) }",

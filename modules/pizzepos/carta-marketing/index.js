@@ -111,7 +111,10 @@ class CartaMarketingReflejo extends ModuloHibridoReflejo {
   //   1. HIDRATAR (determinista)  2. AGENTE (fuzzy puro)  3. PERSISTIR  4. EMITIR
   async _generarCopy(input) {
     if (!input.project_id) return this._invalid('project_id');
-    if (!Array.isArray(input.productos) || input.productos.length === 0) return this._invalid('productos');
+    const pedir = (Array.isArray(input.pedir) && input.pedir.length) ? input.pedir : ['descripciones', 'preambulo', 'promos'];
+    const quiereDesc = pedir.includes('descripciones');
+    // productos solo es obligatorio si se piden descripciones (preámbulo/promos salen del perfil).
+    if (quiereDesc && (!Array.isArray(input.productos) || input.productos.length === 0)) return this._invalid('productos');
 
     // 1. HIDRATAR — la voz de marca, con un RPC determinista al propio reflejo.
     const perfilResp = await this._rpc('carta-marketing.get_perfil.request', {
@@ -119,30 +122,43 @@ class CartaMarketingReflejo extends ModuloHibridoReflejo {
     });
     const perfil = (perfilResp && perfilResp.data) || {};
 
-    // 2. AGENTE — función pura {perfil, productos} → {descripciones}. Sin tools.
+    // 2. AGENTE — función pura {perfil, productos, pedir} → {descripciones, preambulo, promos}. Sin tools.
     const ag = await this._rpc('agent.execute.request', {
       agent_name: 'marketing-copywriter',
-      task: 'Escribe el copy de carta para los productos del CONTEXTO ENTREGADO, en la voz de marca. Devuelve solo el JSON del entregable.',
-      context: { project_id: input.project_id, perfil, productos: input.productos },
+      task: 'Escribe el copy de carta (lo que pida context.pedir) en la voz de marca del CONTEXTO ENTREGADO. Devuelve solo el JSON del entregable.',
+      context: { project_id: input.project_id, perfil, productos: input.productos || [], pedir },
       correlation_id: input.correlation_id
     }, { timeout_ms: 120000 });
     if (ag && ag.status >= 400) return ag;
     const out = this._parseEntregable(ag);
-    if (!out || !Array.isArray(out.descripciones) || out.descripciones.length === 0) {
-      return this._errorResponse(502, 'UPSTREAM_INVALID_RESPONSE', 'el copywriter no devolvió descripciones');
+    const tieneDesc = out && Array.isArray(out.descripciones) && out.descripciones.length > 0;
+    const tienePre = out && typeof out.preambulo === 'string' && out.preambulo.trim();
+    const tienePromos = out && Array.isArray(out.promos) && out.promos.length > 0;
+    if (!out || (!tieneDesc && !tienePre && !tienePromos)) {
+      return this._errorResponse(502, 'UPSTREAM_INVALID_RESPONSE', 'el copywriter no devolvió copy');
     }
 
-    // 3. PERSISTIR — store propio del módulo, merge por producto_id (determinista).
+    // 3. PERSISTIR — store propio del módulo (determinista). Descripciones por producto_id;
+    //    preámbulo y promos a nivel de carta.
     const store = (await this._leerJson(input.project_id, COPY_PATH)) || { _version: '1.0', descripciones: {} };
+    if (!store.descripciones) store.descripciones = {};
     const now = new Date().toISOString();
-    let guardados = 0;
-    for (const d of out.descripciones) {
-      if (!d || !d.producto_id) continue;
-      store.descripciones[d.producto_id] = {
-        nombre: d.nombre || null, texto: d.texto || '',
-        emoji: d.emoji || null, tags: Array.isArray(d.tags) ? d.tags : [], _at: now
-      };
-      guardados++;
+    let guardadas = 0;
+    if (tieneDesc) {
+      for (const d of out.descripciones) {
+        if (!d || !d.producto_id) continue;
+        store.descripciones[d.producto_id] = {
+          nombre: d.nombre || null, texto: d.texto || '',
+          emoji: d.emoji || null, tags: Array.isArray(d.tags) ? d.tags : [], _at: now
+        };
+        guardadas++;
+      }
+    }
+    if (tienePre) store.preambulo = { texto: out.preambulo.trim(), _at: now };
+    if (tienePromos) {
+      store.promos = out.promos
+        .filter(p => p && (p.titulo || p.texto))
+        .map(p => ({ titulo: p.titulo || null, texto: p.texto || '' }));
     }
     store._updated_at = now;
     const w = await this._rpc('fs.write.request', {
@@ -152,11 +168,12 @@ class CartaMarketingReflejo extends ModuloHibridoReflejo {
     if (w && w.status >= 400) return w;
 
     // 4. EMITIR — la propiocepción lo capta; la carta puede consumir el copy.
+    const generado = { descripciones: guardadas, preambulo: tienePre ? 1 : 0, promos: tienePromos ? store.promos.length : 0 };
     this.eventBus.publish('marketing.copy.generado', {
-      project_id: input.project_id, carta_id: input.carta_id || null, count: guardados,
+      project_id: input.project_id, carta_id: input.carta_id || null, generado,
       correlation_id: input.correlation_id || null, timestamp: now
     });
-    return { status: 200, data: { descripciones: out.descripciones, guardados } };
+    return { status: 200, data: { descripciones: tieneDesc ? out.descripciones : [], preambulo: tienePre ? out.preambulo.trim() : null, promos: tienePromos ? store.promos : [], generado } };
   }
 
   // Extrae el entregable JSON del agente, tolerante a fences ```json y a texto alrededor.

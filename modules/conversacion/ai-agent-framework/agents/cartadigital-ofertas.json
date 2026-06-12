@@ -3,7 +3,7 @@
   "name": "cartadigital-ofertas",
   "description": "Gestiona ofertas y combos para la carta pública: crear, activar, desactivar, validar fechas. Sugiere ofertas basándose en la carta y el perfil del proyecto.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/cartadigital-ofertas-system.md",
   "tools": [
     "carta.get",

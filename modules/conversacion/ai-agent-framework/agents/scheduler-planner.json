@@ -3,7 +3,7 @@
   "name": "scheduler-planner",
   "description": "Conversa con el usuario para programar cambios de carta. Interpreta lenguaje natural ('los lunes carta del día'), propone reglas, detecta conflictos y pregunta al usuario cuando hay dudas.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/scheduler-planner-system.md",
   "tools": [
     "carta.list",

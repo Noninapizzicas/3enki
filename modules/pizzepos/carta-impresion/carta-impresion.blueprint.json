@@ -1,22 +1,22 @@
 {
-  "_doc": "Blueprint del modulo carta-impresion. Hijo de subsistema-recetario.modulo-base. Genera versiones imprimibles de cartas en HTML print-ready. 3 operaciones (get, generar, save_html). La generacion HTML real la hace un agente impresion-architect/builder — este blueprint solo gestiona archivos.",
+  "_doc": "Blueprint del modulo carta-impresion. Hijo de subsistema-recetario.modulo-base. Genera versiones imprimibles de cartas en HTML print-ready. 3 operaciones (get, generar, save_html). SIN agentes: el LLM de PAGINA genera el HTML (operacion generar, espinazo CONTRATO->LEER->PENSAR->GUARDAR->EMITIR); el blueprint gestiona los archivos.",
 
   "id": "carta-impresion",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.2.0",
+  "version": "blueprint-1.3.0",
   "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.2. Path canonico /storage/pizzepos/carta-impresion/ en las 3 operaciones (get, generar, save_html) reemplazando /cartas-impresion/ pelado. correlation_id obligatorio en payload de carta.impresion.lista --garantizado con uuid() si el input no lo trae. eventos_que_escucho:[] preservado (A1 modelo no-reactivo).",
+  "_v1_3_changelog": "v1.3.0 (2026-06-12): SIN agentes (estandar blueprint-coherente). generar deja de delegar en el agente impresor (impresion-architect/builder, aparcados): el LLM de PAGINA genera el HTML print-ready directamente (fase PENSAR del espinazo CONTRATO->LEER(carta.get)->PENSAR(LLM redacta HTML)->GUARDAR(fs.write)->EMITIR). PROHIBIDO inventar productos/precios. Quita el input.agente. save_html y get sin cambios.",
   "language": "es",
 
-  "rol": "Gestor de archivos HTML imprimibles. Carga template + datos via agente generador, persiste resultado. Agentes (impresion-architect, impresion-builder) son quienes deciden layout y producen el HTML real.",
+  "rol": "Gestor de cartas imprimibles en HTML. SIN agentes: el LLM de PAGINA genera el HTML print-ready (operacion generar); el blueprint persiste y sirve los archivos (get, save_html).",
 
   "garantiza": [
     "get devuelve HTML+meta de una carta impresa ya generada.",
-    "generar delega a un agente impresor via agent.execute.request, luego persiste el HTML devuelto.",
-    "save_html persiste HTML+meta tal cual (utilizado por el agente impresor o por scripts externos)."
+    "generar: el LLM de pagina genera el HTML print-ready de la carta y el blueprint lo persiste (HTML + meta).",
+    "save_html persiste HTML+meta tal cual (util cuando el HTML viene de scripts externos)."
   ],
 
   "no_garantiza": [
-    "Layout/diseno — eso lo hace el agente.",
     "Render PDF — el HTML es print-ready (CSS @media print); el render PDF queda al cliente (browser print)."
   ],
 
@@ -55,32 +55,28 @@
     },
 
     "generar": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), template? (default 'base'), agente? (default 'impresion-architect') }",
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), template? (default 'base') }",
       "pseudocodigo": [
-        "async generar(input):",
+        "async generar(input):   // LO REDACTA EL LLM DE PAGINA. Sin agente.",
+        "  // 1. CONTRATO",
         "  if (!input.project_id || !input.carta_id) return INVALID_INPUT",
-        "  // 1. Cargar carta de carta-manager.",
+        "  // 2. LEER — carga la carta de carta-manager.",
         "  carta_resp = await publishAndWait('carta.get.request', { project_id: input.project_id, carta_id: input.carta_id, request_id: uuid(), correlation_id: input.correlation_id })",
         "  if (carta_resp.status >= 400) return carta_resp",
         "",
-        "  // 2. Delegar al agente impresor.",
-        "  agente = input.agente || 'impresion-architect'",
-        "  agent_resp = await publishAndWait('agent.execute.request', {",
-        "    request_id: uuid(), correlation_id: input.correlation_id,",
-        "    agent_name: agente,",
-        "    task: 'Generar HTML print-ready de la carta',",
-        "    context: { project_id: input.project_id, carta: carta_resp.data, template: input.template || 'base' }",
-        "  })",
-        "  if (agent_resp.status >= 400 || !agent_resp.result?.content) return agent_resp.status >= 400 ? agent_resp : INVALID_INPUT { hint: 'agente no devolvio HTML' }",
-        "",
-        "  html = agent_resp.result.content",
-        "  // 3. Persistir HTML y meta.",
+        "  // 3. PENSAR — el LLM de PAGINA genera el HTML print-ready (sin agente).",
+        "  //    Maqueta carta_resp.data en HTML imprimible con el template (input.template||'base'):",
+        "  //    secciones, categorias, productos con su nombre/precio/descripcion, listo para imprimir.",
+        "  //    PROHIBIDO INVENTAR productos/precios: usa SOLO lo que trae la carta.",
+        "  html = <HTML print-ready que redacta el LLM de pagina a partir de carta_resp.data + template>",
+        "  generado_por = 'llm-pagina'",
+        "  // 4. GUARDAR — persistir HTML y meta.",
         "  //    El HTML es contenido de texto plano (no JSON) — JSON Patch no aplica.",
         "  //    fs.write es el unico mecanismo valido para archivos de texto no-JSON.",
         "  //    El meta.json sigue el patron canonico APPEND/REPLACE dual-branch:",
         "  //    Rama A (404) — archivo no existe: fs.write atomico del meta inicial.",
         "  //    Rama B (existe) — archivo existe: fs.edit declarativo (RFC 6902) reemplaza campos.",
-        "  meta = { carta_id: input.carta_id, template: input.template || 'base', generado_at: nowISO(), generado_por: agente, size_bytes: html.length }",
+        "  meta = { carta_id: input.carta_id, template: input.template || 'base', generado_at: nowISO(), generado_por: generado_por, size_bytes: html.length }",
         "  now = nowISO()",
         "  html_resp = await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/pizzepos/carta-impresion/' + input.carta_id + '.html', content: html, encoding: 'utf-8', atomic: true })",
         "  if (html_resp.status >= 400) return html_resp",
@@ -109,7 +105,7 @@
         "  await publish('carta.impresion.lista', { project_id: input.project_id, carta_id: input.carta_id, template: meta.template, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
         "  return { status: 201, data: { html, meta } }"
       ],
-      "reglas_clave": ["Delegacion al agente impresor (default impresion-architect).", "Si el agente no devuelve content, error INVALID_INPUT.", "Persiste HTML + meta companion."],
+      "reglas_clave": ["El LLM de PAGINA genera el HTML print-ready (sin agente); el blueprint persiste HTML + meta.", "PROHIBIDO INVENTAR productos/precios: solo lo que trae la carta.", "Espinazo: CONTRATO -> LEER(carta.get) -> PENSAR(LLM redacta HTML) -> GUARDAR(fs.write) -> EMITIR(carta.impresion.lista)."],
       "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
     },
 

@@ -3,7 +3,7 @@
   "name": "scheduler-dispatcher",
   "description": "Cuando un cambio de carta programado se dispara, avisa al usuario con detalles claros y espera confirmación. No aplica nada automáticamente — siempre pregunta.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/scheduler-dispatcher-system.md",
   "tools": [
     "carta-scheduler.proximos_cambios",

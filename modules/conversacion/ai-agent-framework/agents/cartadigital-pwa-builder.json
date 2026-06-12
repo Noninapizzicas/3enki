@@ -3,7 +3,7 @@
   "name": "cartadigital-pwa-builder",
   "description": "Genera el export PWA de la carta pública: HTML autónomo + service worker + manifest. Desplegable en GitHub Pages, Netlify, o cualquier hosting estático.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/cartadigital-pwa-builder-system.md",
   "tools": [
     "cartadigital.get_carta_publica",

@@ -3,7 +3,7 @@
   "name": "tarifas-creator",
   "description": "Crea variantes de carta para canales de venta: duplica carta base, ajusta precios, filtra productos, renombra, y registra la variante en tarifas",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/tarifas-creator-system.md",
   "tools": [
     "carta.get",

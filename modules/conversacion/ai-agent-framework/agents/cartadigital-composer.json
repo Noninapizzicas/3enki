@@ -3,7 +3,7 @@
   "name": "cartadigital-composer",
   "description": "Compone la carta pública final uniendo datos de carta-manager, marketing y config de branding. Genera el paquete listo para servir o exportar como PWA.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/cartadigital-composer-system.md",
   "tools": [
     "carta.get",

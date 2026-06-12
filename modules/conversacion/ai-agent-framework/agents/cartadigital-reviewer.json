@@ -3,7 +3,7 @@
   "name": "cartadigital-reviewer",
   "description": "Revisa que la carta pública está completa y lista para el cliente: imágenes, descripciones, alérgenos, precios, información de ingredientes. Reporta lo que falta.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/cartadigital-reviewer-system.md",
   "tools": [
     "carta.get",

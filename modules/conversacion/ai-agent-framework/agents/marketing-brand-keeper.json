@@ -3,7 +3,7 @@
   "name": "marketing-brand-keeper",
   "description": "Guardián de la marca. Revisa cada carta para asegurar coherencia: tono, estilo, lenguaje, que todo sea consistente con el perfil del proyecto. Es el último en tocar la carta.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/marketing-brand-keeper-system.md",
   "tools": [
     "carta.get",

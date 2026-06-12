@@ -3,7 +3,7 @@
   "name": "impresion-builder",
   "description": "Genera HTML+CSS print-ready de alta calidad para cartas de restaurante según el guión del architect y el perfil de marca del proyecto. Produce cartas imprimibles con personalidad.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/impresion-builder-system.md",
   "tools": [
     "carta.get",

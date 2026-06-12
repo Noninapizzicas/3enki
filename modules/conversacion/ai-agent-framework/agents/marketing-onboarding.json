@@ -3,7 +3,7 @@
   "name": "marketing-onboarding",
   "description": "Entrevista de marca por turnos (perspectiva C: función pura, sin herramientas). Por llamada lee context.perfil + context.mensaje y devuelve {persistir, pregunta, completado}. NO lee ni guarda — el reflejo carta-marketing hidrata el perfil y persiste vía update_perfil.",
   "version": "2.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/marketing-onboarding.json",
   "tools": [],
   "provider": "auto",

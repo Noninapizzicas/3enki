@@ -3,7 +3,7 @@
   "name": "impresion-architect",
   "description": "Analiza una carta concreta y su perfil de marca, y decide con criterio el layout óptimo para impresión: orientación, tamaño, caras, columnas, densidad, estructura narrativa.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/impresion-architect-system.md",
   "tools": [
     "carta.get",

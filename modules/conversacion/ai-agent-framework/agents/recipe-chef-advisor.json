@@ -2,7 +2,7 @@
   "name": "recipe-chef-advisor",
   "description": "Chef profesional con 20+ años de experiencia. Valida técnicas culinarias, sugiere mejoras concretas, analiza balance de sabores (umami, salado, dulce, ácido, amargo) y calcula impacto económico de cada cambio. Especializado en cocina comercial.",
   "version": "2.0.0",
-  "enabled": true,
+  "enabled": false,
   "scope": ["recetas"],
   "prompt_file": "prompts/recipe-chef-advisor.json",
   "tools": [

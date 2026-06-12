@@ -1,7 +1,7 @@
 {
   "_doc": "Manifest del modulo carta-marketing — HIBRIDO (blueprint + reflejo JS), tercer caso del Patron Modulo Hibrido. El blueprint sirve lo FUZZY (completar_onboarding = descubrimiento de marca via el agente marketing-onboarding). El index.js es el REFLEJO JS que sirve el CRUD determinista del perfil de marca (/pizzepos/marca.json): get_perfil, update_perfil. Mata el teatro del onboarding: update_perfil escribe de verdad + emite marketing.perfil.actualizado (la propiocepcion lo capta). Persistencia: marca.json del proyecto.",
   "name": "carta-marketing",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "subscribes": [
     {
       "event": "carta-marketing.get_perfil.request",
@@ -12,8 +12,14 @@
       "event": "carta-marketing.update_perfil.request",
       "handler": "onUpdatePerfilRequest",
       "description": "Reflejo JS: escribe campos del perfil + emite marketing.perfil.actualizado."
+    },
+    {
+      "event": "carta-marketing.generar_copy.request",
+      "handler": "onGenerarCopyRequest",
+      "description": "Reflejo JS (orquestacion perspectiva C): hidrata perfil, invoca al agente marketing-copywriter SIN tools (context inyectado), persiste el copy en /pizzepos/carta-marketing/copy.json + emite marketing.copy.generado."
     }
   ],
+  "_v2_2_changelog": "v2.2.0 (2026-06-12): primer caso del patron AGENTE-PERSPECTIVA-C. generar_copy: el reflejo hidrata {perfil,productos} y persiste el entregable; el agente marketing-copywriter pasa a tools:[] (funcion pura, sin tool-use). Resuelve la raiz del fallo auditado (deepseek emite tool-calls como texto, no ejecutan -> salida vacia): si el agente no toca herramientas, no importa. El determinismo (cargar/guardar) vive en JS; lo fuzzy (escribir copy) en el agente.",
   "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.3. Un solo cambio: correlation_id obligatorio en los 3 publishes canonicos (marketing.perfil.actualizado x2 en update_perfil + marketing.onboarding.completado x1 en completar_onboarding) --garantizado con uuid() si el input no lo trae (D10/P9 del contrato). Cero cambio de paths (ya canonicos /storage/config/marca.json desde v1.1.0). eventos_que_escucho:[] preservado (A1 modelo no-reactivo). NO declara requires_consumer (ningun consumer real --leccion TP1).",
   "description": "Modulo carta-marketing en modo blueprint-driven. Perfil de marca del proyecto + orquestador de agentes de marketing (copywriter, strategist, brand-keeper, onboarding).",
   "language": "es",

@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo carta-marketing. Hijo de subsistema-recetario.modulo-base. Equipo de marketing silencioso del proyecto: gestiona perfil de marca + dispara agentes especializados (marketing-copywriter, marketing-strategist, marketing-brand-keeper, marketing-onboarding) cuando el usuario o un evento upstream lo justifica. 4 operaciones (get_perfil, update_perfil, completar_onboarding, actividad).",
   "id": "carta-marketing",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.5.0",
+  "version": "blueprint-1.6.0",
   "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.3. correlation_id obligatorio en los 3 publishes --garantizado con uuid() via correlation_id_efectivo si input no trae. NO cambia paths (ya canonicos). NO modifica operaciones funcionales ni delegacion a agentes.",
   "language": "es",
   "rol": "Gestor del perfil de marca del proyecto + orquestador de agentes de marketing. NO genera copy ni estrategia — eso lo hacen marketing-copywriter / strategist / brand-keeper. El blueprint persiste perfil y consulta actividad reciente de los agentes.",
@@ -35,7 +35,8 @@
     "marketing.actividad.response",
     "marketing.actividad.failed",
     "marketing.perfil.actualizado",
-    "marketing.onboarding.completado"
+    "marketing.onboarding.completado",
+    "marketing.copy.generado"
   ],
   "eventos_que_escucho": [],
   "operaciones": {
@@ -129,6 +130,30 @@
         "UPSTREAM_UNREACHABLE"
       ]
     },
+    "generar_copy": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id?, productos (req — array de { producto_id, nombre, ingredientes? } a describir) }",
+      "pseudocodigo": [
+        "async generar_copy(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!Array.isArray(input.productos) || input.productos.length === 0) return INVALID_INPUT { field: 'productos' }",
+        "  // DELEGADO al reflejo JS (orquestacion perspectiva C). El reflejo HIDRATA la voz",
+        "  // de marca, invoca al agente marketing-copywriter SIN herramientas (datos inyectados),",
+        "  // recoge el entregable JSON y lo PERSISTE en /pizzepos/carta-marketing/copy.json.",
+        "  resp = await publishAndWait('carta-marketing.generar_copy.request', { project_id: input.project_id, carta_id: input.carta_id, productos: input.productos, correlation_id: input.correlation_id }, { timeout_ms: 130000 })",
+        "  RETORNA resp"
+      ],
+      "reglas_clave": [
+        "El cajon NO escribe el copy: lo escribe el agente (fuzzy) y lo persiste el reflejo (determinista). Patron AGENTE-PERSPECTIVA-C: el reflejo hidrata y guarda, el agente solo transforma datos -> copy.",
+        "El agente no toca herramientas (tools:[]) -> el tool-use roto del provider no le afecta."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_INVALID_RESPONSE",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_descripcion": "DELEGA al reflejo JS (index.js). Genera descripciones de carta en la voz de marca via el agente copywriter (sin tools) y las persiste. Emite marketing.copy.generado."
+    },
     "actividad": {
       "input": "{ project_id (req), request_id (req), correlation_id?, ventana_dias? (default 7) }",
       "pseudocodigo": [
@@ -161,5 +186,6 @@
   ],
   "_v1_3_changelog": "v1.3.0 (2026-06-11): carta-marketing pasa a HIBRIDO (3er caso del patron). get_perfil/update_perfil (CRUD determinista del perfil de marca) los sirve el reflejo JS (index.js); estos cajones pasan a delegadores finos. completar_onboarding (agente marketing-onboarding, fuzzy) se queda en el blueprint. Mata el teatro del onboarding: el LLM persiste de verdad via update_perfil en vez de rolear que un agente lo registra.",
   "_v1_4_changelog": "v1.4.0 (2026-06-11): el perfil de marca pasa de /config/marca.json a /pizzepos/marca.json — sigue la convencion del grupo pizzepos y se reconoce como BASE COMPARTIDA (como recetas.json): cualquier modulo bebe de ella via carta-marketing.get_perfil.request (servida por el reflejo). carta-design (colores), menu-generator (tono), etc. se basan en ella.",
-  "_v1_5_changelog": "v1.5.0 (2026-06-11): la identidad de marca pasa a estructura CANONICA por secciones (esencia/voz/publico/visual/negocio), con esquema validable (marca.schema.json). update_perfil acepta parches parciales por seccion (deep-merge) → se rellena de a poco sin pisar. Base solida y extensible: nuevas secciones/campos sin romper lectores. Sustituye el shape plano (nombre_marca/tono_voz/...) — no habia datos que migrar."
+  "_v1_5_changelog": "v1.5.0 (2026-06-11): la identidad de marca pasa a estructura CANONICA por secciones (esencia/voz/publico/visual/negocio), con esquema validable (marca.schema.json). update_perfil acepta parches parciales por seccion (deep-merge) → se rellena de a poco sin pisar. Base solida y extensible: nuevas secciones/campos sin romper lectores. Sustituye el shape plano (nombre_marca/tono_voz/...) — no habia datos que migrar.",
+  "_v1_6_changelog": "v1.6.0 (2026-06-12): nuevo cajon generar_copy — PRIMER caso del patron AGENTE-PERSPECTIVA-C. El reflejo HIDRATA la voz de marca y PERSISTE el entregable; el agente marketing-copywriter (ahora tools:[]) solo TRANSFORMA {perfil,productos} -> {descripciones}. Resuelve la raiz auditada (deepseek emite tool-calls como texto, no ejecutan -> salida vacia): si el agente no toca herramientas, el tool-use roto no importa. Determinismo (cargar/guardar) en JS, fuzzy (escribir) en el agente. Emite marketing.copy.generado."
 }

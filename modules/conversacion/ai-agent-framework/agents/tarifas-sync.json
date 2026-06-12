@@ -3,7 +3,7 @@
   "name": "tarifas-sync",
   "description": "Cuando la carta base cambia, evalúa cada variante derivada y decide cómo propagar el cambio: añadir/quitar productos, ajustar precios según las reglas de la variante",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/tarifas-sync-system.md",
   "tools": [
     "carta.get",

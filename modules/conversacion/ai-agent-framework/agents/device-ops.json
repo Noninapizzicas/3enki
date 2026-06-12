@@ -44,7 +44,7 @@
   ],
   "context_enabled": true,
   "context_window": 30,
-  "enabled": true,
+  "enabled": false,
   "timeout_ms": 120000,
   "max_retries": 2,
   "metadata": {

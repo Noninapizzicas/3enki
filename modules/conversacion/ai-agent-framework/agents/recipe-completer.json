@@ -2,7 +2,7 @@
   "name": "recipe-completer",
   "description": "Detecta recetas marcadas como incompleta=true y conversa con el usuario para rellenar los campos pendientes (porciones, instrucciones, ingredientes, etc.) sin obligarle. Pregunta una sola cosa por turno y guarda los avances con recetas.actualizar.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "scope": ["recetas"],
   "prompt_file": "prompts/recipe-completer.json",
   "tools": [

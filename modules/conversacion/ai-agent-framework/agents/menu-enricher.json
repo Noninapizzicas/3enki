@@ -3,7 +3,7 @@
   "name": "menu-enricher",
   "description": "Enriquece productos de carta con descripciones atractivas, emojis, tags, clasificación de ingredientes y sugerencias de alérgenos",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/menu-enricher-system.md",
   "tools": [
     "carta.get",

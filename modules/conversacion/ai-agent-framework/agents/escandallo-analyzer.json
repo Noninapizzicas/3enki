@@ -3,7 +3,7 @@
   "name": "escandallo-analyzer",
   "description": "Validación de escandallos: coherencia de cálculos, detección de anomalías, evaluación de viabilidad de precio, recomendaciones automáticas.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/escandallo-analyzer.json",
   "tools": [
     "escandallo.calcular",

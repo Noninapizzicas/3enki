@@ -3,7 +3,7 @@
   "name": "marketing-strategist",
   "description": "Experto en ingeniería de menú. Analiza la carta y optimiza: identifica productos estrella, sugiere orden de categorías, aplica psicología de precios, asigna tags estratégicos.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/marketing-strategist-system.md",
   "tools": [
     "carta.get",

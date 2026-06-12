@@ -3,7 +3,7 @@
   "name": "marketing-copywriter",
   "description": "Copywriter gastronómico (perspectiva C: función pura sin herramientas). Recibe {perfil, productos} hidratados en el contexto y devuelve {descripciones} en la voz de marca. No carga ni guarda — el reflejo carta-marketing hidrata y persiste.",
   "version": "2.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/marketing-copywriter-system.md",
   "tools": [],
   "provider": "auto",

@@ -3,7 +3,7 @@
   "name": "menu-validator",
   "description": "Valida coherencia y calidad de una carta estructurada: precios razonables, categorías lógicas, ingredientes completos, duplicados",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/menu-validator-system.md",
   "tools": [
     "carta.get",

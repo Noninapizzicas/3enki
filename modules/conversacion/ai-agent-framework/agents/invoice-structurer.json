@@ -3,7 +3,7 @@
   "name": "invoice-structurer",
   "description": "Extrae datos estructurados de texto OCR de facturas españolas. Especializado en formatos fiscales ES (IVA, CIF/NIF, libro registro).",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/invoice-structurer-system.md",
   "provider": "deepseek",
   "model": "deepseek-chat",

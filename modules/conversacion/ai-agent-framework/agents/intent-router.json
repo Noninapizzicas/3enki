@@ -3,7 +3,7 @@
   "name": "intent-router",
   "description": "Agente principal del chat. Traduce lo que dice el usuario a eventos del dominio, los publica, espera respuestas, y redacta la respuesta al usuario. Es la ÚNICA puerta de entrada del chat conversacional.",
   "version": "1.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/intent-router.json",
   "tools": [
     "publish_event",

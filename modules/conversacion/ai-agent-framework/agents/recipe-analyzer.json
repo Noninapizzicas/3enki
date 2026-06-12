@@ -2,7 +2,7 @@
   "name": "recipe-analyzer",
   "description": "Análisis profundo de una receta del proyecto: cruza ingredientes con catálogo de precios, calcula coste total y por porción, evalúa viabilidad, detecta alérgenos. Usa tools del módulo recetas v2.",
   "version": "2.0.0",
-  "enabled": true,
+  "enabled": false,
   "scope": ["recetas"],
   "prompt_file": "prompts/recipe-analyzer.json",
   "tools": [

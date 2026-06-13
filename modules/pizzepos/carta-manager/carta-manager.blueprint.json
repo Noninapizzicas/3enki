@@ -1,20 +1,16 @@
 {
   "_doc": "Blueprint del modulo carta-manager. Hijo de subsistema-recetario.modulo-base (reutilizado por simplicidad — su modelo de ejecucion, primitivas del bus y manejo de errores aplican identico). Aggregate root del subsistema-carta: CRUD de cartas + manipulacion de productos/categorias dentro de carta + versionado con history archivado + busqueda + stats + restore. Persistencia multi-archivo: data/projects/{slug}/storage/pizzepos/cartas/<id>.json + storage/pizzepos/cartas/.versions/<id>/<timestamp>.json para snapshots.",
-
   "id": "carta-manager",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.5.0",
+  "version": "1.6.0",
   "_v1_5_changelog": "v1.5.0 (2026-06-13): anyade _modelo_oop (CLASE CartaManager) — aggregate root, store actual+versiones, las 15 ops agrupadas (entrada event-driven / lectura / raiz / mutacion estructurada) + helper comun _mutar que captura el patron repetido en las 5 mutaciones (read->snapshot->fs.edit->version++->evento). Prep para HIBRIDAR: todo es CRUD/versionado determinista -> pasa a REFLEJO JS (index.js), mismo contrato de bus carta.<op>.request (los carta-* no se enteran). Regla de dominio reafirmada: anyadir/editar productos de una carta = carta-manager (add_product/update_product); menu-generator solo NACE la base. Coger producto de recetas -> carta = leer recetas.obtener + escribir carta-manager.add_product (recetas es fuente, carta-manager es el writer).",
   "_v1_4_changelog": "v1.4.0 (aterrizaje subsistema-catalogo, D2): añadida operacion 'clonar' (carta_base_id + nuevo_nombre -> carta INDEPENDIENTE nueva). Es el paso 1 de 'carta por canal': el LLM clona la base, la manipula (update_prices/add_product/remove_product) segun instrucciones NL, y tarifas la asigna a un canal. carta-manager solo PRODUCE; la asignacion canal<->carta es de tarifas. Cambio ADITIVO (op nueva, no toca las 14 existentes). El shape que persiste es ahora carta-pizzepos v2 (ingredientes con id+familia) pero save persiste cualquier shape literal -> sin break. Pendiente (futuro): extender update_prices con target por categoria/familia + factor (hoy es per-producto absoluto).",
   "language": "es",
   "_v1_1_changelog": "v1.1.0 (2026-05-25): anyade subscriber asincrono al evento 'carta.creada' via mecanismo blueprint-subscribers-asincronos (mismo wiring que recetas usa para escandallo.coste.calculado — frente 2.4). Operacion interna nueva _on_carta_creada (prefijo _ = no expuesta como cajon al LLM, solo invocada cuando llega el evento). Delega a save sin duplicar logica. Origen: audit runtime Fase 7b de la migracion menu-generator (decision 5.3 refactorizada de RPC a fire-and-forget). Operaciones pre-existentes (save, get, list, delete, etc.) sin cambios.",
   "_v1_2_changelog": "v1.2.0 (2026-05-28): migra todas las escrituras de la carta principal de fs.write.request a fs.edit.request (RFC 6902 JSON Patch). Elimina la composicion mental del LLM al escribir las cartas — filesystem aplica los patches deterministicamente. Las escrituras de snapshots a /cartas/versions/ (archivos nuevos con timestamp) permanecen como fs.write.request porque fs.edit no puede crear archivos nuevos. Patrones aplicados: UPDATE 1-campo en delete (estado+version+updated_at puntuales), UPDATE compuesto en add_product/remove_product/update_product/update_prices/add_category (replace array + meta puntuales), APPEND PURO en add_category (op:add /categorias/-), root-replace dual-branch en save y restore (fs.write si archivo nuevo, fs.edit op:replace '' si existente). Anti-patron ...spread eliminado en add_product (reemplazado por construccion campo a campo).",
   "_v1_3_changelog": "v1.3.0 (2026-06-01): aplica contrato subsistema-carta v1.0.0. Path canonico /storage/pizzepos/cartas/ en TODOS los publishAndWait fs.* (snapshots a /storage/pizzepos/cartas/.versions/). Shape de carta.actualizada/editada/borrada lleva la carta entera en campo 'carta' del payload. correlation_id obligatorio en payloads de los 3 eventos canonicos publicados (save/restore -> carta.actualizada; add_product/remove_product/update_product/add_category/update_prices -> carta.editada; delete -> carta.borrada): si el input no lo trae, se genera con uuid() (correlation_id_efectivo). Auto-promocion en save: si tarifas.config esta vacio (general=null Y todos canales=null), publish('tarifas.set_general', {...}) fire-and-forget tras persistir. eventos_publicados_que_requieren_consumer en raiz: ['carta.actualizada', 'carta.editada', 'carta.borrada'].",
-
   "rol": "Aggregate root del subsistema-carta. Custodio del dato canonico de cada carta del proyecto. CRUD + versionado + manipulacion estructurada de productos y categorias dentro de cada carta. Otros modulos del subsistema (carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler) leen cartas via carta-manager pero NUNCA escriben al store directamente.",
-
   "_modelo_oop": "CLASE CartaManager {  // AGGREGATE ROOT de /pizzepos/cartas/. TODO determinista (CRUD+versionado) -> candidato REFLEJO JS, no turno LLM.\n  STORE_ACTUAL  = /pizzepos/cartas/<id>.json\n  STORE_VERSION = /pizzepos/cartas/.versions/<id>/<ts>.json\n  // ENTRADA event-driven:\n  _on_carta_creada(evento) -> delega a save        // menu-generator publica carta.creada\n  // LECTURA (no muta):\n  get(carta_id) · list(filtros) · search(query,tipo) · stats() · versions(carta_id)\n  // RAIZ (snapshot + version):\n  save(carta)            -> si existe: snapshot+version++ ; persiste ; EMITE carta.actualizada ; auto-promo tarifas si config vacio\n  restore(carta_id,ver)  -> snapshot actual -> restaura version -> version++ ; EMITE carta.actualizada\n  clonar(base_id,nombre) -> copia INDEPENDIENTE id nuevo ; EMITE carta.actualizada\n  delete(carta_id)       -> soft-delete (estado=archivada) + version++ ; EMITE carta.borrada\n  // MUTACION ESTRUCTURADA (todas via el helper _mutar):\n  add_product · remove_product · update_product · add_category · update_prices  -> EMITE carta.editada\n  // HELPER comun (DRY del patron repetido en las 5 mutaciones):\n  _mutar(carta_id, aplicar(carta)->patches) : read -> snapshot(.versions) -> aplicar -> fs.edit(patches) -> version++ + updated_at -> return carta\n  INVARIANTES {\n    cada mutacion: snapshot ANTES de sobrescribir (audit trail) + meta.version++ + evento canonico.\n    otros carta-* LEEN via carta.<op>.request ; NUNCA escriben al store (carta-manager es el unico writer).\n    write nuevo = fs.write atomico ; write sobre existente = fs.edit (RFC6902, sin componer el fichero entero).\n  }\n}",
-
   "garantiza": [
     "Cada carta tiene meta.id (uuid), meta.nombre, meta.version (entero >=1), meta.created_at, meta.updated_at.",
     "Estructura de la carta: { meta, categorias:[{id, nombre, orden}], productos:[{id, nombre, descripcion, precio, categoria_id, etiquetas?, alergenos?}] }.",
@@ -23,7 +19,6 @@
     "Cada mutacion publica el evento canonico correspondiente: carta.actualizada (save), carta.editada (productos/categorias), carta.borrada (delete).",
     "Restore puede recuperar cualquier version del history."
   ],
-
   "no_garantiza": [
     "Composicion visual / branding — eso lo hace carta-design (blueprint hermano).",
     "Publicacion en PWA — eso lo hace carta-digital.",
@@ -32,7 +27,6 @@
     "Activacion por franja horaria — eso lo hace carta-scheduler.",
     "Validacion semantica de precios coherentes con coste — eso lo hace viabilidad."
   ],
-
   "estado_persistente": {
     "_descripcion": "Multi-archivo. Una carta por archivo. Versiones en subdirectorio paralelo.",
     "paths_relativos": {
@@ -50,624 +44,358 @@
         "created_at": "ISO 8601",
         "updated_at": "ISO 8601"
       },
-      "categorias": [{ "id": "uuid", "nombre": "string", "orden": "integer", "descripcion": "string|null" }],
-      "productos":  [{ "id": "uuid", "nombre": "string", "descripcion": "string|null", "precio": "number >= 0", "categoria_id": "uuid", "etiquetas": "array string", "alergenos": "array string", "disponible": "boolean" }]
+      "categorias": [
+        {
+          "id": "uuid",
+          "nombre": "string",
+          "orden": "integer",
+          "descripcion": "string|null"
+        }
+      ],
+      "productos": [
+        {
+          "id": "uuid",
+          "nombre": "string",
+          "descripcion": "string|null",
+          "precio": "number >= 0",
+          "categoria_id": "uuid",
+          "etiquetas": "array string",
+          "alergenos": "array string",
+          "disponible": "boolean"
+        }
+      ]
     }
   },
-
   "eventos_publicados": [
-    "carta.save.response", "carta.save.failed",
-    "carta.get.response", "carta.get.failed",
-    "carta.list.response", "carta.list.failed",
-    "carta.delete.response", "carta.delete.failed",
-    "carta.add_product.response", "carta.add_product.failed",
-    "carta.remove_product.response", "carta.remove_product.failed",
-    "carta.update_product.response", "carta.update_product.failed",
-    "carta.add_category.response", "carta.add_category.failed",
-    "carta.update_prices.response", "carta.update_prices.failed",
-    "carta.search.response", "carta.search.failed",
-    "carta.stats.response", "carta.stats.failed",
-    "carta.versions.response", "carta.versions.failed",
-    "carta.restore.response", "carta.restore.failed",
-    "carta.actualizada", "carta.editada", "carta.borrada"
+    "carta.save.response",
+    "carta.save.failed",
+    "carta.get.response",
+    "carta.get.failed",
+    "carta.list.response",
+    "carta.list.failed",
+    "carta.delete.response",
+    "carta.delete.failed",
+    "carta.add_product.response",
+    "carta.add_product.failed",
+    "carta.remove_product.response",
+    "carta.remove_product.failed",
+    "carta.update_product.response",
+    "carta.update_product.failed",
+    "carta.add_category.response",
+    "carta.add_category.failed",
+    "carta.update_prices.response",
+    "carta.update_prices.failed",
+    "carta.search.response",
+    "carta.search.failed",
+    "carta.stats.response",
+    "carta.stats.failed",
+    "carta.versions.response",
+    "carta.versions.failed",
+    "carta.restore.response",
+    "carta.restore.failed",
+    "carta.actualizada",
+    "carta.editada",
+    "carta.borrada",
+    "carta.clonar.response",
+    "carta.clonar.failed",
+    "tarifas.set_general"
   ],
-
   "eventos_publicados_que_requieren_consumer": [
     "carta.actualizada",
     "carta.editada",
-    "carta.borrada"
+    "carta.borrada",
+    "tarifas.set_general"
   ],
-
-  "eventos_que_escucho": [
-    {
-      "evento": "carta.creada",
-      "handler": "_on_carta_creada",
-      "_descripcion": "v1.1.0 (2026-05-25): Wireado via blueprint-subscribers-asincronos canonico (frente 2.4). Cuando menu-generator termina de generar una carta, publica 'carta.creada' fire-and-forget. carta-manager (dueno del store /cartas/) escucha y aplica el save internamente. El LLM ejecuta el handler en conversacion sintetica creada por ai-gateway — sin RPC sync blueprint->blueprint (que NO esta wireado). Mismo mecanismo que recetas usa para escandallo.coste.calculado."
-    }
-  ],
-
+  "eventos_que_escucho": [],
   "operaciones": {
-
-    "_on_carta_creada": {
-      "_descripcion": "Operacion INTERNA — handler asincrono del evento 'carta.creada' publicado por menu-generator (u otros generadores futuros). NO se expone como cajon al LLM en el chat normal (prefijo _ canonico). Se invoca SOLO via blueprint-subscribers-asincronos cuando llega el evento. Delega en this.save(...) para evitar duplicar logica de persistencia.",
-      "input": "{ project_id (req), correlation_id?, request_id?, user_id?, carta (req — shape carta-pizzepos), motivo? } — payload del evento.",
-      "pseudocodigo": [
-        "async _on_carta_creada(input):",
-        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  if (!input.carta?.meta?.nombre) return INVALID_INPUT { field: 'carta.meta.nombre' }",
-        "",
-        "  // Delegar a la operacion canonica save — misma logica, sin duplicacion.",
-        "  // save publicara carta.actualizada cuando termine (eventual consistency desde",
-        "  // la perspectiva del publisher original).",
-        "  return await this.save({",
-        "    project_id: input.project_id,",
-        "    request_id: input.request_id || uuid(),",
-        "    correlation_id: input.correlation_id || null,",
-        "    user_id: input.user_id || 'async-subscriber',",
-        "    carta: input.carta,",
-        "    motivo: input.motivo || 'generada por menu-generator (async)'",
-        "  })"
-      ],
-      "reglas_clave": [
-        "Es handler de evento (fire-and-forget desde el publisher). NO devuelves response al caller original; tu output efectivo es la persistencia que hace save + el evento carta.actualizada que publica al terminar.",
-        "Caller externo no puede 'preguntar al usuario' por campos faltantes — si nombre o carta inutil, la propagacion del error de save sera el unico feedback (el menu-generator que origino el evento ya respondio 202 al usuario; el error se ve en logs y en menu.generation.failed que carta-manager NO publica — eso es problema del publisher upstream).",
-        "NO duplicar logica con save — delega via this.save(...) (igual que recetas._aplicar_coste_calculado no duplica logica de fs.write)."
-      ],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_INVALID_RESPONSE", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"]
-    },
-
     "save": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta (req — objeto completo con meta + categorias + productos), motivo? }",
       "pseudocodigo": [
         "async save(input):",
-        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  if (!input.carta?.meta?.nombre) return INVALID_INPUT { field: 'carta.meta.nombre' }",
-        "",
-        "  carta_id = input.carta.meta.id || uuid()",
-        "  path_actual = '/pizzepos/cartas/' + carta_id + '.json'",
-        "",
-        "  // Si la carta ya existe, snapshot a versions/ antes de sobrescribir.",
-        "  raw_prev = await publishAndWait('fs.read.request', { project_id: input.project_id, path: path_actual })",
-        "  if (raw_prev.status === 200) {",
-        "    prev = JSON.parse(raw_prev.content)",
-        "    ts = nowISO().replace(/[:.]/g, '-')",
-        "    await publishAndWait('fs.write.request', {",
-        "      project_id: input.project_id,",
-        "      path: '/pizzepos/cartas/.versions/' + carta_id + '/' + ts + '.json',",
-        "      content: JSON.stringify(prev, null, 2), encoding: 'utf-8', atomic: true",
-        "    })",
-        "    input.carta.meta.version = (prev.meta?.version || 1) + 1",
-        "    input.carta.meta.created_at = prev.meta?.created_at || nowISO()",
-        "  } else {",
-        "    input.carta.meta.version = 1",
-        "    input.carta.meta.created_at = nowISO()",
-        "  }",
-        "  input.carta.meta.id = carta_id",
-        "  input.carta.meta.updated_at = nowISO()",
-        "  if (!input.carta.meta.estado) input.carta.meta.estado = 'borrador'",
-        "",
-        "  // Persistir la carta.",
-        "  //   Rama A — carta NO existia (nueva): fs.write atomico del archivo inicial.",
-        "  //   Rama B — carta EXISTIA (snapshot ya hecho arriba): fs.edit root-replace declarativo.",
-        "  //   Sin composicion mental: el LLM pasa el objeto ya construido, filesystem aplica.",
-        "  if (raw_prev.status !== 200) {",
-        "    write_resp = await publishAndWait('fs.write.request', {",
-        "      project_id: input.project_id, path: path_actual,",
-        "      content: JSON.stringify(input.carta, null, 2), encoding: 'utf-8', atomic: true",
-        "    })",
-        "    if (write_resp.status >= 400) return write_resp",
-        "  } else {",
-        "    edit_resp = await publishAndWait('fs.edit.request', {",
-        "      project_id: input.project_id, path: path_actual,",
-        "      patches: [",
-        "        { op: 'replace', path: '', value: input.carta }",
-        "      ]",
-        "    })",
-        "    if (edit_resp.status >= 400) return edit_resp",
-        "  }",
-        "",
-        "  // correlation_id obligatorio en el evento de dominio: si el input no lo trae, generar uno.",
-        "  correlation_id_efectivo = input.correlation_id || uuid()",
-        "  await publish('carta.actualizada', {",
-        "    project_id: input.project_id,",
-        "    user_id: input.user_id || 'system',",
-        "    carta: input.carta,",
-        "    motivo: input.motivo || null,",
-        "    correlation_id: correlation_id_efectivo,",
-        "    timestamp: nowISO()",
-        "  })",
-        "",
-        "  // Auto-promocion primera carta: si tarifas.config esta vacio, esta carta se vuelve la general.",
-        "  // Fire-and-forget --la carta queda persistida igual si esto falla.",
-        "  try {",
-        "    raw_tarifas = await publishAndWait('fs.read.request', {",
-        "      project_id: input.project_id,",
-        "      path: '/config/tarifas.json'",
-        "    })",
-        "    promocionar = false",
-        "    if (raw_tarifas.status === 404) {",
-        "      // tarifas.json no existe --proyecto recien montado, promocionar",
-        "      promocionar = true",
-        "    } else if (raw_tarifas.status === 200) {",
-        "      config_data = JSON.parse(raw_tarifas.content)",
-        "      general_vacio = config_data.general === null || config_data.general === undefined",
-        "      canales = config_data.canales || {}",
-        "      algun_canal_asignado = false",
-        "      for (const canal_key of ['mesa', 'telefono', 'llevar', 'glovo', 'whatsapp', 'llevadoo']) {",
-        "        if (canales[canal_key] !== null && canales[canal_key] !== undefined) {",
-        "          algun_canal_asignado = true",
-        "        }",
-        "      }",
-        "      if (general_vacio && algun_canal_asignado === false) {",
-        "        promocionar = true",
-        "      }",
-        "    }",
-        "    if (promocionar === true) {",
-        "      await publish('tarifas.set_general', {",
-        "        project_id: input.project_id,",
-        "        carta_id: carta_id,",
-        "        correlation_id: correlation_id_efectivo,",
-        "        request_id: uuid(),",
-        "        timestamp: nowISO()",
-        "      })",
-        "    }",
-        "  } catch (err) {",
-        "    // Auto-promocion no es critica --la carta se persistio. Continuar sin fallar el save.",
-        "    // El log estructural lo emite ai-gateway por defecto cuando el try captura.",
-        "  }",
-        "",
-        "  return { status: 200, data: input.carta }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.save.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "reglas_clave": ["Snapshot a versions/ ANTES de sobrescribir (fs.write.request — archivo nuevo).", "Carta nueva: fs.write.request atomico. Carta existente: fs.edit.request root-replace (sin composicion mental).", "version bumpea +1 por cada save sobre carta existente.", "estado default = 'borrador' si no se pasa."],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+      "reglas_clave": [
+        "Snapshot a versions/ ANTES de sobrescribir (fs.write.request — archivo nuevo).",
+        "Carta nueva: fs.write.request atomico. Carta existente: fs.edit.request root-replace (sin composicion mental).",
+        "version bumpea +1 por cada save sobre carta existente.",
+        "estado default = 'borrador' si no se pasa."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UPSTREAM_INVALID_RESPONSE"
+      ],
+      "_delega_en": "carta.save.request (REFLEJO JS — index.js)"
     },
-
     "get": {
       "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req) }",
       "pseudocodigo": [
         "async get(input):",
-        "  if (!input.project_id || !input.carta_id) return INVALID_INPUT",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json' })",
-        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta', id: input.carta_id }",
-        "  if (raw.status >= 400) return raw",
-        "  return { status: 200, data: JSON.parse(raw.content) }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.get.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.get.request (REFLEJO JS — index.js)"
     },
-
     "list": {
       "input": "{ project_id (req), request_id (req), correlation_id?, estado? (borrador|activa|archivada|todos, default 'todos'), tag? }",
       "pseudocodigo": [
         "async list(input):",
-        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  files = await publishAndWait('fs.list.request', { project_id: input.project_id, path: '/pizzepos/cartas/', extension: 'json' })",
-        "  if (files.status === 404) return { status: 200, data: [] }",
-        "  if (files.status >= 400) return files",
-        "",
-        "  resultados = []",
-        "  for (file of files.data || []) {",
-        "    if (file.startsWith('.versions/')) continue  // ignorar history",
-        "    raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + file })",
-        "    if (raw.status !== 200) continue",
-        "    carta = JSON.parse(raw.content)",
-        "    if (input.estado && input.estado !== 'todos' && carta.meta.estado !== input.estado) continue",
-        "    if (input.tag && !(Array.isArray(carta.meta.tags) && carta.meta.tags.includes(input.tag))) continue",
-        "    resultados.push({",
-        "      id: carta.meta.id, nombre: carta.meta.nombre, descripcion: carta.meta.descripcion,",
-        "      version: carta.meta.version, estado: carta.meta.estado, tags: carta.meta.tags,",
-        "      productos_count: carta.productos?.length || 0, categorias_count: carta.categorias?.length || 0,",
-        "      updated_at: carta.meta.updated_at",
-        "    })",
-        "  }",
-        "  resultados.sort((a,b) => b.updated_at.localeCompare(a.updated_at))",
-        "  await publish('carta.listada', { project_id: input.project_id, count: resultados.length, correlation_id: input.correlation_id, timestamp: nowISO() })",
-        "  return { status: 200, data: resultados }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.list.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "reglas_clave": ["Salida ligera: meta + counts, sin productos/categorias completos.", "Ignora directorio versions/.", "Orden por updated_at desc."],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "reglas_clave": [
+        "Salida ligera: meta + counts, sin productos/categorias completos.",
+        "Ignora directorio versions/.",
+        "Orden por updated_at desc."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.list.request (REFLEJO JS — index.js)"
     },
-
     "delete": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), motivo? }",
       "pseudocodigo": [
         "async delete(input):",
-        "  if (!input.project_id || !input.carta_id) return INVALID_INPUT",
-        "  // Soft delete: leer, marcar estado='archivada', save (con snapshot).",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json' })",
-        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta', id: input.carta_id }",
-        "  if (raw.status >= 400) return raw",
-        "  carta = JSON.parse(raw.content)",
-        "  // Snapshot del estado actual ANTES de archivar (archivo nuevo con timestamp).",
-        "  ts = nowISO().replace(/[:.]/g, '-')",
-        "  await publishAndWait('fs.write.request', {",
-        "    project_id: input.project_id,",
-        "    path: '/pizzepos/cartas/.versions/' + input.carta_id + '/' + ts + '.json',",
-        "    content: raw.content, encoding: 'utf-8', atomic: true",
-        "  })",
-        "  // Persistir via fs.edit declarativo (RFC 6902). Patron UPDATE 1-campo:",
-        "  // - op:replace de los 3 campos puntuales. No componer el archivo entero.",
-        "  now = nowISO()",
-        "  version_nueva = (carta.meta.version || 1) + 1",
-        "  edit_resp = await publishAndWait('fs.edit.request', {",
-        "    project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json',",
-        "    patches: [",
-        "      { op: 'replace', path: '/meta/estado',      value: 'archivada' },",
-        "      { op: 'replace', path: '/meta/version',     value: version_nueva },",
-        "      { op: 'replace', path: '/meta/updated_at',  value: now }",
-        "    ]",
-        "  })",
-        "  if (edit_resp.status >= 400) return edit_resp",
-        "  // Actualizar carta en memoria con los nuevos valores antes de embeder en el payload.",
-        "  carta.meta.estado = 'archivada'",
-        "  carta.meta.version = version_nueva",
-        "  carta.meta.updated_at = now",
-        "  correlation_id_efectivo = input.correlation_id || uuid()",
-        "  await publish('carta.borrada', { project_id: input.project_id, carta: carta, motivo: input.motivo || null, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
-        "  return { status: 200, data: { carta_id: input.carta_id, estado: 'archivada' } }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.delete.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "reglas_clave": ["Soft delete — estado='archivada'. No se borra del filesystem (audit trail)."],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "reglas_clave": [
+        "Soft delete — estado='archivada'. No se borra del filesystem (audit trail)."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.delete.request (REFLEJO JS — index.js)"
     },
-
     "add_product": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), producto (req — {nombre, precio, categoria_id, descripcion?, etiquetas?, alergenos?, disponible?}) }",
       "pseudocodigo": [
         "async add_product(input):",
-        "  if (!input.project_id || !input.carta_id) return INVALID_INPUT",
-        "  if (!input.producto?.nombre) return INVALID_INPUT { field: 'producto.nombre' }",
-        "  if (typeof input.producto.precio !== 'number' || input.producto.precio < 0) return INVALID_INPUT { field: 'producto.precio' }",
-        "  if (!input.producto.categoria_id) return INVALID_INPUT { field: 'producto.categoria_id' }",
-        "",
-        "  // Cargar carta + snapshot + insertar + persistir.",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json' })",
-        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta', id: input.carta_id }",
-        "  carta = JSON.parse(raw.content)",
-        "  if (!carta.categorias?.some(c => c.id === input.producto.categoria_id)) return PRECONDITION_FAILED { hint: 'categoria_id no existe en la carta' }",
-        "",
-        "  producto_nuevo = { id: uuid(), nombre: input.producto.nombre, precio: input.producto.precio, categoria_id: input.producto.categoria_id, descripcion: input.producto.descripcion || '', etiquetas: input.producto.etiquetas || [], alergenos: input.producto.alergenos || [], disponible: input.producto.disponible !== undefined ? input.producto.disponible : true }",
-        "  carta.productos = carta.productos || []",
-        "  carta.productos.push(producto_nuevo)",
-        "  // Snapshot del estado actual ANTES de modificar (archivo nuevo con timestamp).",
-        "  ts = nowISO().replace(/[:.]/g, '-')",
-        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/pizzepos/cartas/.versions/' + input.carta_id + '/' + ts + '.json', content: raw.content, encoding: 'utf-8', atomic: true })",
-        "  // Persistir via fs.edit declarativo (RFC 6902). Patron UPDATE compuesto:",
-        "  // - op:replace del array productos completo (con el nuevo al final).",
-        "  // - op:replace de meta.version y meta.updated_at puntuales.",
-        "  // No componer el archivo entero — filesystem aplica los patches.",
-        "  now = nowISO()",
-        "  version_nueva = (carta.meta.version || 1) + 1",
-        "  edit_resp = await publishAndWait('fs.edit.request', {",
-        "    project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json',",
-        "    patches: [",
-        "      { op: 'replace', path: '/productos',        value: carta.productos },",
-        "      { op: 'replace', path: '/meta/version',     value: version_nueva },",
-        "      { op: 'replace', path: '/meta/updated_at',  value: now }",
-        "    ]",
-        "  })",
-        "  if (edit_resp.status >= 400) return edit_resp",
-        "  carta.meta.version = version_nueva",
-        "  carta.meta.updated_at = now",
-        "  correlation_id_efectivo = input.correlation_id || uuid()",
-        "  await publish('carta.editada', { project_id: input.project_id, carta: carta, operacion: 'add_product', correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
-        "  return { status: 201, data: { producto: producto_nuevo, carta_version: carta.meta.version } }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.add_product.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "reglas_clave": ["categoria_id debe existir en la carta.", "producto.id se genera nuevo.", "snapshot+bump version (audit trail)."],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "reglas_clave": [
+        "categoria_id debe existir en la carta.",
+        "producto.id se genera nuevo.",
+        "snapshot+bump version (audit trail)."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PRECONDITION_FAILED",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.add_product.request (REFLEJO JS — index.js)"
     },
-
     "remove_product": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), producto_id (req) }",
       "pseudocodigo": [
         "async remove_product(input):",
-        "  if (!input.project_id || !input.carta_id || !input.producto_id) return INVALID_INPUT",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json' })",
-        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta', id: input.carta_id }",
-        "  carta = JSON.parse(raw.content)",
-        "  idx = (carta.productos || []).findIndex(p => p.id === input.producto_id)",
-        "  if (idx < 0) return RESOURCE_NOT_FOUND { entity_type: 'producto', id: input.producto_id }",
-        "  // Snapshot del estado actual ANTES de modificar (archivo nuevo con timestamp).",
-        "  ts = nowISO().replace(/[:.]/g, '-')",
-        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/pizzepos/cartas/.versions/' + input.carta_id + '/' + ts + '.json', content: raw.content, encoding: 'utf-8', atomic: true })",
-        "  // Persistir via fs.edit declarativo (RFC 6902). Patron UPDATE compuesto:",
-        "  // - op:remove elimina el producto en la posicion idx del array.",
-        "  // - op:replace de meta.version y meta.updated_at puntuales.",
-        "  // No componer el archivo entero — filesystem aplica los patches.",
-        "  now = nowISO()",
-        "  version_nueva = (carta.meta.version || 1) + 1",
-        "  edit_resp = await publishAndWait('fs.edit.request', {",
-        "    project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json',",
-        "    patches: [",
-        "      { op: 'remove',  path: '/productos/' + idx },",
-        "      { op: 'replace', path: '/meta/version',    value: version_nueva },",
-        "      { op: 'replace', path: '/meta/updated_at', value: now }",
-        "    ]",
-        "  })",
-        "  if (edit_resp.status >= 400) return edit_resp",
-        "  carta.meta.version = version_nueva",
-        "  carta.meta.updated_at = now",
-        "  correlation_id_efectivo = input.correlation_id || uuid()",
-        "  await publish('carta.editada', { project_id: input.project_id, carta: carta, operacion: 'remove_product', correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
-        "  return { status: 200, data: { producto_id: input.producto_id, carta_version: carta.meta.version } }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.remove_product.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.remove_product.request (REFLEJO JS — index.js)"
     },
-
     "update_product": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), producto_id (req), campos (req — {nombre?, precio?, categoria_id?, descripcion?, etiquetas?, alergenos?, disponible?}) }",
       "pseudocodigo": [
         "async update_product(input):",
-        "  if (!input.project_id || !input.carta_id || !input.producto_id) return INVALID_INPUT",
-        "  if (!input.campos || Object.keys(input.campos).length === 0) return INVALID_INPUT { field: 'campos' }",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json' })",
-        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta', id: input.carta_id }",
-        "  carta = JSON.parse(raw.content)",
-        "  prod = (carta.productos || []).find(p => p.id === input.producto_id)",
-        "  if (!prod) return RESOURCE_NOT_FOUND { entity_type: 'producto', id: input.producto_id }",
-        "  if (input.campos.categoria_id && !carta.categorias.some(c => c.id === input.campos.categoria_id)) return PRECONDITION_FAILED { hint: 'categoria_id destino no existe' }",
-        "  campos_permitidos = ['nombre','precio','categoria_id','descripcion','etiquetas','alergenos','disponible']",
-        "  for (const k of campos_permitidos) {",
-        "    if (input.campos[k] !== undefined) prod[k] = input.campos[k]",
-        "  }",
-        "  // Snapshot del estado actual ANTES de modificar (archivo nuevo con timestamp).",
-        "  ts = nowISO().replace(/[:.]/g, '-')",
-        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/pizzepos/cartas/.versions/' + input.carta_id + '/' + ts + '.json', content: raw.content, encoding: 'utf-8', atomic: true })",
-        "  // Persistir via fs.edit declarativo (RFC 6902). Patron UPDATE compuesto:",
-        "  // - Buscar indice del producto en el array para hacer op:replace puntual.",
-        "  // - op:replace del producto en posicion prod_idx (con los campos modificados).",
-        "  // - op:replace de meta.version y meta.updated_at puntuales.",
-        "  // No componer el archivo entero — filesystem aplica los patches.",
-        "  prod_idx = carta.productos.findIndex(p => p.id === input.producto_id)",
-        "  now = nowISO()",
-        "  version_nueva = (carta.meta.version || 1) + 1",
-        "  edit_resp = await publishAndWait('fs.edit.request', {",
-        "    project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json',",
-        "    patches: [",
-        "      { op: 'replace', path: '/productos/' + prod_idx, value: prod },",
-        "      { op: 'replace', path: '/meta/version',          value: version_nueva },",
-        "      { op: 'replace', path: '/meta/updated_at',       value: now }",
-        "    ]",
-        "  })",
-        "  if (edit_resp.status >= 400) return edit_resp",
-        "  carta.meta.version = version_nueva",
-        "  carta.meta.updated_at = now",
-        "  correlation_id_efectivo = input.correlation_id || uuid()",
-        "  await publish('carta.editada', { project_id: input.project_id, carta: carta, operacion: 'update_product', correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
-        "  return { status: 200, data: { producto: prod, carta_version: carta.meta.version } }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.update_product.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PRECONDITION_FAILED",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.update_product.request (REFLEJO JS — index.js)"
     },
-
     "add_category": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), categoria (req — {nombre, descripcion?, orden?}) }",
       "pseudocodigo": [
         "async add_category(input):",
-        "  if (!input.project_id || !input.carta_id) return INVALID_INPUT",
-        "  if (!input.categoria?.nombre) return INVALID_INPUT { field: 'categoria.nombre' }",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json' })",
-        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta', id: input.carta_id }",
-        "  carta = JSON.parse(raw.content)",
-        "  carta.categorias = carta.categorias || []",
-        "  nombre_norm = input.categoria.nombre.toLowerCase().trim()",
-        "  if (carta.categorias.some(c => c.nombre.toLowerCase().trim() === nombre_norm)) return ALREADY_EXISTS { entity_type: 'categoria', nombre: input.categoria.nombre }",
-        "  cat_nueva = { id: uuid(), nombre: input.categoria.nombre.trim(), descripcion: input.categoria.descripcion || null, orden: typeof input.categoria.orden === 'number' ? input.categoria.orden : carta.categorias.length }",
-        "  carta.categorias.push(cat_nueva)",
-        "  // Snapshot del estado actual ANTES de modificar (archivo nuevo con timestamp).",
-        "  ts = nowISO().replace(/[:.]/g, '-')",
-        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/pizzepos/cartas/.versions/' + input.carta_id + '/' + ts + '.json', content: raw.content, encoding: 'utf-8', atomic: true })",
-        "  // Persistir via fs.edit declarativo (RFC 6902). Patron APPEND PURO sobre /categorias:",
-        "  // - op:add /categorias/- para appender la categoria nueva al array.",
-        "  // - op:replace de meta.version y meta.updated_at puntuales.",
-        "  // No componer el archivo entero — filesystem aplica los patches.",
-        "  now = nowISO()",
-        "  version_nueva = (carta.meta.version || 1) + 1",
-        "  edit_resp = await publishAndWait('fs.edit.request', {",
-        "    project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json',",
-        "    patches: [",
-        "      { op: 'add',     path: '/categorias/-',    value: cat_nueva },",
-        "      { op: 'replace', path: '/meta/version',    value: version_nueva },",
-        "      { op: 'replace', path: '/meta/updated_at', value: now }",
-        "    ]",
-        "  })",
-        "  if (edit_resp.status >= 400) return edit_resp",
-        "  carta.meta.version = version_nueva",
-        "  carta.meta.updated_at = now",
-        "  correlation_id_efectivo = input.correlation_id || uuid()",
-        "  await publish('carta.editada', { project_id: input.project_id, carta: carta, operacion: 'add_category', correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
-        "  return { status: 201, data: { categoria: cat_nueva, carta_version: carta.meta.version } }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.add_category.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "ALREADY_EXISTS", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "ALREADY_EXISTS",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.add_category.request (REFLEJO JS — index.js)"
     },
-
     "update_prices": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), updates (req — array de {producto_id, precio_nuevo}) }",
       "pseudocodigo": [
         "async update_prices(input):",
-        "  if (!input.project_id || !input.carta_id) return INVALID_INPUT",
-        "  if (!Array.isArray(input.updates) || input.updates.length === 0) return INVALID_INPUT { field: 'updates' }",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json' })",
-        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta', id: input.carta_id }",
-        "  carta = JSON.parse(raw.content)",
-        "  aplicados = [], errores = []",
-        "  for (u of input.updates) {",
-        "    if (typeof u.precio_nuevo !== 'number' || u.precio_nuevo < 0) { errores.push({ producto_id: u.producto_id, error: 'precio_invalido' }); continue }",
-        "    prod = carta.productos?.find(p => p.id === u.producto_id)",
-        "    if (!prod) { errores.push({ producto_id: u.producto_id, error: 'no_existe' }); continue }",
-        "    aplicados.push({ producto_id: u.producto_id, precio_antes: prod.precio, precio_despues: u.precio_nuevo })",
-        "    prod.precio = u.precio_nuevo",
-        "  }",
-        "  if (aplicados.length === 0) return PRECONDITION_FAILED { hint: 'ningun update aplicado', errores }",
-        "  // Snapshot del estado actual ANTES de modificar (archivo nuevo con timestamp).",
-        "  ts = nowISO().replace(/[:.]/g, '-')",
-        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/pizzepos/cartas/.versions/' + input.carta_id + '/' + ts + '.json', content: raw.content, encoding: 'utf-8', atomic: true })",
-        "  // Persistir via fs.edit declarativo (RFC 6902). Patron UPDATE compuesto:",
-        "  // - op:replace del array productos completo (con los precios ya actualizados en memoria).",
-        "  // - op:replace de meta.version y meta.updated_at puntuales.",
-        "  // No componer el archivo entero — filesystem aplica los patches.",
-        "  now = nowISO()",
-        "  version_nueva = (carta.meta.version || 1) + 1",
-        "  edit_resp = await publishAndWait('fs.edit.request', {",
-        "    project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json',",
-        "    patches: [",
-        "      { op: 'replace', path: '/productos',        value: carta.productos },",
-        "      { op: 'replace', path: '/meta/version',     value: version_nueva },",
-        "      { op: 'replace', path: '/meta/updated_at',  value: now }",
-        "    ]",
-        "  })",
-        "  if (edit_resp.status >= 400) return edit_resp",
-        "  carta.meta.version = version_nueva",
-        "  carta.meta.updated_at = now",
-        "  correlation_id_efectivo = input.correlation_id || uuid()",
-        "  await publish('carta.editada', { project_id: input.project_id, carta: carta, operacion: 'update_prices', correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
-        "  return { status: 200, data: { aplicados, errores, carta_version: carta.meta.version } }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.update_prices.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "reglas_clave": ["Update masivo: aplica los validos, reporta errores por producto. Si NINGUNO valido, PRECONDITION_FAILED."],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "reglas_clave": [
+        "Update masivo: aplica los validos, reporta errores por producto. Si NINGUNO valido, PRECONDITION_FAILED."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PRECONDITION_FAILED",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.update_prices.request (REFLEJO JS — index.js)"
     },
-
     "clonar": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_base_id (req), nuevo_nombre (req) }",
       "pseudocodigo": [
         "async clonar(input):",
-        "  // D2 subsistema-catalogo: deriva una carta INDEPENDIENTE a partir de otra (base) — paso 1 de 'carta por canal'.",
-        "  // Tras clonar, el LLM manipula la copia (update_prices / add_product / remove_product) segun instrucciones NL,",
-        "  // y tarifas asigna canal -> carta_id. carta-manager solo PRODUCE la carta; la asignacion es de tarifas.",
-        "  if (!input.project_id || !input.carta_base_id) return INVALID_INPUT { field: 'carta_base_id' }",
-        "  if (!input.nuevo_nombre || input.nuevo_nombre.trim() === '') return INVALID_INPUT { field: 'nuevo_nombre' }",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_base_id + '.json' })",
-        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta', id: input.carta_base_id }",
-        "  base = JSON.parse(raw.content)",
-        "  nueva = deepCopy(base)",
-        "  nueva.meta.id = 'carta_' + slug(input.nuevo_nombre)",
-        "  nueva.meta.nombre = input.nuevo_nombre",
-        "  nueva.meta.version = 1",
-        "  nueva.meta.created_at = nowISO()",
-        "  nueva.meta.updated_at = nowISO()",
-        "  if (nueva.meta.id === base.meta.id) return CONFLICT_STATE { hint: 'nuevo_nombre genera el mismo id que la base' }",
-        "  exists = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + nueva.meta.id + '.json' })",
-        "  if (exists.status === 200) return CONFLICT_STATE { entity_type: 'carta', id: nueva.meta.id, hint: 'ya existe una carta con ese id' }",
-        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + nueva.meta.id + '.json', content: JSON.stringify(nueva) })",
-        "  correlation_id_efectivo = input.correlation_id || uuid()",
-        "  await publish('carta.actualizada', { project_id: input.project_id, carta: nueva, operacion: 'clonar', origen: base.meta.id, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
-        "  return { status: 201, data: { carta_id: nueva.meta.id, origen: base.meta.id, nombre: nueva.meta.nombre } }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.clonar.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "reglas_clave": ["Produce una carta INDEPENDIENTE (no overlay declarativo). El LLM la manipula despues; tarifas la asigna a un canal. carta-manager solo produce.", "Falla con CONFLICT_STATE si el id derivado ya existe — NO sobrescribe."],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "reglas_clave": [
+        "Produce una carta INDEPENDIENTE (no overlay declarativo). El LLM la manipula despues; tarifas la asigna a un canal. carta-manager solo produce.",
+        "Falla con CONFLICT_STATE si el id derivado ya existe — NO sobrescribe."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "CONFLICT_STATE",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.clonar.request (REFLEJO JS — index.js)"
     },
-
     "search": {
       "input": "{ project_id (req), request_id (req), correlation_id?, query (req — string), tipo? ('producto'|'carta'|'todos', default 'todos') }",
       "pseudocodigo": [
         "async search(input):",
-        "  if (!input.project_id || !input.query) return INVALID_INPUT",
-        "  q = input.query.toLowerCase().trim()",
-        "  files = await publishAndWait('fs.list.request', { project_id: input.project_id, path: '/pizzepos/cartas/', extension: 'json' })",
-        "  if (files.status === 404) return { status: 200, data: { cartas: [], productos: [] } }",
-        "  if (files.status >= 400) return files",
-        "",
-        "  cartas_match = [], productos_match = []",
-        "  for (file of files.data || []) {",
-        "    if (file.startsWith('.versions/')) continue",
-        "    raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + file })",
-        "    if (raw.status !== 200) continue",
-        "    carta = JSON.parse(raw.content)",
-        "    if ((input.tipo === 'todos' || input.tipo === 'carta') && carta.meta.nombre.toLowerCase().includes(q)) {",
-        "      cartas_match.push({ id: carta.meta.id, nombre: carta.meta.nombre, estado: carta.meta.estado })",
-        "    }",
-        "    if (input.tipo === 'todos' || input.tipo === 'producto') {",
-        "      for (p of carta.productos || []) {",
-        "        if (p.nombre.toLowerCase().includes(q) || (p.descripcion || '').toLowerCase().includes(q)) {",
-        "          productos_match.push({ producto_id: p.id, nombre: p.nombre, precio: p.precio, carta_id: carta.meta.id, carta_nombre: carta.meta.nombre })",
-        "        }",
-        "      }",
-        "    }",
-        "  }",
-        "  return { status: 200, data: { cartas: cartas_match, productos: productos_match } }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.search.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.search.request (REFLEJO JS — index.js)"
     },
-
     "stats": {
       "input": "{ project_id (req), request_id (req), correlation_id? }",
       "pseudocodigo": [
         "async stats(input):",
-        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  files = await publishAndWait('fs.list.request', { project_id: input.project_id, path: '/pizzepos/cartas/', extension: 'json' })",
-        "  if (files.status === 404) return { status: 200, data: { total: 0, por_estado: {}, total_productos: 0 } }",
-        "  if (files.status >= 400) return files",
-        "  total = 0, por_estado = {}, total_productos = 0",
-        "  for (file of files.data || []) {",
-        "    if (file.startsWith('.versions/')) continue",
-        "    raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + file })",
-        "    if (raw.status !== 200) continue",
-        "    carta = JSON.parse(raw.content)",
-        "    total += 1",
-        "    e = carta.meta.estado || 'sin_estado'",
-        "    por_estado[e] = (por_estado[e] || 0) + 1",
-        "    total_productos += (carta.productos || []).length",
-        "  }",
-        "  return { status: 200, data: { total, por_estado, total_productos } }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.stats.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.stats.request (REFLEJO JS — index.js)"
     },
-
     "versions": {
       "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req) }",
       "pseudocodigo": [
         "async versions(input):",
-        "  if (!input.project_id || !input.carta_id) return INVALID_INPUT",
-        "  files = await publishAndWait('fs.list.request', { project_id: input.project_id, path: '/pizzepos/cartas/.versions/' + input.carta_id + '/', extension: 'json' })",
-        "  if (files.status === 404) return { status: 200, data: [] }",
-        "  if (files.status >= 400) return files",
-        "  versiones = (files.data || []).map(f => ({ timestamp: f.replace('.json',''), filename: f }))",
-        "  versiones.sort((a,b) => b.timestamp.localeCompare(a.timestamp))",
-        "  return { status: 200, data: versiones }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.versions.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "reglas_clave": ["Solo metadata (timestamp + filename) — payload ligero. Para contenido, restore o get tras restore."],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "reglas_clave": [
+        "Solo metadata (timestamp + filename) — payload ligero. Para contenido, restore o get tras restore."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.versions.request (REFLEJO JS — index.js)"
     },
-
     "restore": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), version_filename (req — del listado de versions) }",
       "pseudocodigo": [
         "async restore(input):",
-        "  if (!input.project_id || !input.carta_id || !input.version_filename) return INVALID_INPUT",
-        "  raw_ver = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/.versions/' + input.carta_id + '/' + input.version_filename })",
-        "  if (raw_ver.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'version' }",
-        "  if (raw_ver.status >= 400) return raw_ver",
-        "  carta_restaurada = JSON.parse(raw_ver.content)",
-        "  // Snapshot del estado actual ANTES de restaurar (archivo nuevo con timestamp).",
-        "  raw_actual = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json' })",
-        "  if (raw_actual.status === 200) {",
-        "    ts = nowISO().replace(/[:.]/g, '-')",
-        "    await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/pizzepos/cartas/.versions/' + input.carta_id + '/' + ts + '-pre-restore.json', content: raw_actual.content, encoding: 'utf-8', atomic: true })",
-        "    carta_restaurada.meta.version = (JSON.parse(raw_actual.content).meta.version || 0) + 1",
-        "  }",
-        "  carta_restaurada.meta.updated_at = nowISO()",
-        "  // Persistir la carta restaurada.",
-        "  //   Rama A — carta NO existia (raro pero posible): fs.write atomico.",
-        "  //   Rama B — carta EXISTIA (snapshot ya hecho arriba): fs.edit root-replace declarativo.",
-        "  //   Sin composicion mental: el LLM pasa el objeto ya construido, filesystem aplica.",
-        "  if (raw_actual.status !== 200) {",
-        "    write_resp = await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json', content: JSON.stringify(carta_restaurada, null, 2), encoding: 'utf-8', atomic: true })",
-        "    if (write_resp.status >= 400) return write_resp",
-        "  } else {",
-        "    edit_resp = await publishAndWait('fs.edit.request', {",
-        "      project_id: input.project_id, path: '/pizzepos/cartas/' + input.carta_id + '.json',",
-        "      patches: [",
-        "        { op: 'replace', path: '', value: carta_restaurada }",
-        "      ]",
-        "    })",
-        "    if (edit_resp.status >= 400) return edit_resp",
-        "  }",
-        "  correlation_id_efectivo = input.correlation_id || uuid()",
-        "  await publish('carta.actualizada', { project_id: input.project_id, carta: carta_restaurada, motivo: 'restore:' + input.version_filename, correlation_id: correlation_id_efectivo, timestamp: nowISO() })",
-        "  return { status: 200, data: carta_restaurada }"
+        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
+        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
+        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
+        "  resp = await publishAndWait('carta.restore.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
       ],
-      "reglas_clave": ["Snapshot del estado actual ANTES de restaurar (fs.write.request — archivo nuevo).", "Carta existente: fs.edit.request root-replace. Carta inexistente (raro): fs.write.request atomico.", "Bumps version (no recupera el version original — el restore es UNA actualizacion mas)."],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "reglas_clave": [
+        "Snapshot del estado actual ANTES de restaurar (fs.write.request — archivo nuevo).",
+        "Carta existente: fs.edit.request root-replace. Carta inexistente (raro): fs.write.request atomico.",
+        "Bumps version (no recupera el version original — el restore es UNA actualizacion mas)."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.restore.request (REFLEJO JS — index.js)"
     }
   },
-
   "trabajo_pendiente": [
     {
       "id": "schemas_oficiales_carta",
@@ -679,5 +407,6 @@
       "estado": "abierto",
       "descripcion": "Hoy carta-manager extiende subsistema-recetario.modulo-base por reuso pragmatico (su modelo de ejecucion aplica identico). Cuando el subsistema-carta tenga particularidades propias (estado_operativo distinto, transiciones distintas), crear subsistema-carta.modulo-base.blueprint.json y migrar los 6 hijos."
     }
-  ]
+  ],
+  "_v1_6_changelog": "v1.6.0 (2026-06-13): HIBRIDADO. Las 15 ops (todas deterministas) pasan al REFLEJO JS (index.js, CartaManagerReflejo extends ModuloHibridoReflejo) — CRUD+versionado+manipulacion de productos/categorias servidos en el bus (carta.<op>.request) sin turno LLM. Cada cajon queda como DELEGADOR FINO: el LLM de la pagina interpreta lenguaje natural -> publishAndWait('carta.<op>.request') -> el reflejo ejecuta y persiste. La op interna _on_carta_creada se elimina del blueprint (la sirve el reflejo onCartaCreada via module.json.subscribes); por eso 'carta.creada' SALE de eventos_que_escucho (regla anti-colision: un evento no puede estar en module.json.subscribes y en blueprint.eventos_que_escucho a la vez). El pseudocodigo previo (la danza fs completa) queda capturado fielmente en el reflejo JS."
 }

@@ -1371,9 +1371,10 @@ escandallo (SEGUNDO caso · module 2.0.0 · blueprint 3.8.0) {
   BLUEPRINT        : calcular (Mercadona / _precio_de_mercadona)   ;  cajón recalcular delega al reflejo
   medido           : turno de chat 300K/20-30s → 42K/7.9s ; cadena de costeo ~120ms JS
 }
-carta-marketing (TERCER caso · module 2.0.0 · blueprint 1.3.0) {
-  REFLEJO index.js : get_perfil · update_perfil   (CRUD de /config/marca.json + evento)
-  BLUEPRINT        : completar_onboarding (agente marketing-onboarding, fuzzy) ; cajones perfil delegan
+carta-marketing (TERCER caso · module 2.4.0 · blueprint 1.10.0 · SIN agente) {
+  REFLEJO index.js : get_perfil · update_perfil (deep-merge /pizzepos/marca.json) · guardar_copy (/pizzepos/carta-marketing/copy.json) + eventos
+  BLUEPRINT        : completar_onboarding (entrevista 5 fases, LLM de página) · generar_copy (LLM de página redacta) ; cajones delegan al reflejo
+  capa_agentes     : APARCADA (enabled:false). El LLM de página hace lo fuzzy; el reflejo persiste. NO hay agent.execute.
 }
 PENDIENTE (mismo patrón) {
   productos · categorias · ingredientes · tarifas : sus lecturas/CRUD → reflejo
@@ -1382,16 +1383,23 @@ PENDIENTE (mismo patrón) {
 
 ## Política del grupo pizzepos (aplicación del patrón a todos los blueprints)
 
-> Los 11 blueprints de pizzepos comparten estructura de directorio por proyecto y
-> casi todos persisten. Política única: determinista → REFLEJO, fuzzy → BLUEPRINT.
-> El grupo es dominantemente CRUD/aritmética, así que el reflejo manda y el
-> blueprint queda para la chispa fuzzy (generar, interpretar, delegar a agente).
+```
+POLITICA {
+  determinista → REFLEJO (JS, index.js)
+  fuzzy        → BLUEPRINT (lo ejecuta el LLM de PAGINA, NO un agente)
+  capa_agentes : APARCADA (enabled:false) — ver estandar blueprint-coherente
+  blueprint_op : espinazo CONTRATO → LEER(reflejo) → PENSAR(LLM pagina) → GUARDAR(reflejo) → EMITIR
+}
+```
 
 ```
 DIRECTORIO POR PROYECTO  (data/projects/{slug}/storage/)
   pizzepos/
     recetas.json               recetas        (BASE: recetas + ingredientes_catalogo)
-    marca.json                  carta-marketing (BASE: perfil de marca)
+    marca.json                  carta-marketing (BASE: identidad de marca · sin binarios)
+    carta-marketing/
+      copy.json                 carta-marketing (copy: descripciones/preambulo/promos)
+      assets/logo.<ext>         carta-marketing (FICHERO del logo · visual.logo guarda la RUTA, no base64)
     cartas/<carta_id>.json      carta-manager
     carta-design/...            carta-design   (diseños HTML + perfiles de estilo)
     carta-digital/config.json   carta-digital
@@ -1431,7 +1439,7 @@ CLASE Identidad {                         // /pizzepos/marca.json — base, due�
   esencia : { nombre(req) · lema · proposito · valores[] }        // ADN     — dueño onboarding
   voz     : { tono[] · registro · referencias[] · si[] · no[] }   // habla   — dueño onboarding
   publico : { quien · actitud }                                   // a quién — dueño onboarding
-  visual  : { colores{} · tipografias{} · estilo · logo }         // se ve   — dueño carta-design
+  visual  : { colores{} · tipografias{} · estilo · logo }         // se ve   — dueño COMPARTIDO: onboarding (inicial) + carta-design (refina)
   negocio : { tipo_cocina · local{} · redes{} }                   // contexto— dueño onboarding
 }
 
@@ -1455,12 +1463,12 @@ REPARTO POR MÓDULO  (✓ = ya híbrido)
   módulo            REFLEJO (determinista → index.js)               BLUEPRINT (fuzzy)
   recetas        ✓  crear/listar/obtener/buscar/CRUD + persist      investigar_receta, crear-desde-intención
   escandallo     ✓  recalcular_siguiente/costear (_costear)         calcular (Mercadona/_precio_de_mercadona)
-  carta-marketing✓  get_perfil/update_perfil                        completar_onboarding (agente)
+  carta-marketing✓  get_perfil/update_perfil/guardar_copy           completar_onboarding + generar_copy (LLM pagina, SIN agente)
   carta-manager     save/get/list/delete/add/remove/update_product  —   (CRUD puro)
   carta-digital     get/update_config · get/set carta_publica       —
   carta-scheduler   crear/listar/eliminar_regla · detectar_conflictos —
   viabilidad        evaluar (aritmética) · obtener/listar/descartar —   (paralelo a escandallo)
-  carta-impresion   get/save_html · generar (templating)            — (generar→blueprint si fuera LLM)
+  carta-impresion✓  get/save_html (blueprint)                       generar (LLM pagina redacta HTML, SIN agente)
   carta-design      load_carta/save/profiles/gallery (CRUD)         generar-diseño-desde-estilo (si aplica)
   tecnicas          codificar/obtener/listar/actualizar/parametros  —
   menu-generator    —   (sin store propio)                          generar (carta desde texto/foto)  ← casi todo fuzzy
@@ -1471,6 +1479,32 @@ ORDEN DE MIGRACIÓN  (cada uno: receta de 5 pasos del patrón + gate)
   1. CRUD puros (trivial, máximo retorno): carta-manager · carta-digital · carta-scheduler · viabilidad
   2. mixtos (reflejo CRUD + chispa fuzzy): carta-design · carta-impresion · tecnicas
   3. menu-generator: se queda blueprint (generación fuzzy); no necesita reflejo
+```
+
+## Estándar blueprint-coherente — capa de agentes APARCADA
+
+```
+ESTADO_CAPA_AGENTES {
+  todos los agentes (modules/conversacion/ai-agent-framework/agents/*) : enabled=false (29, aparcados)
+  motivo : tool-use roto bajo deepseek (tool-calls como texto, no ejecutan) → 25/29 nunca hicieron trabajo real
+  framework : sigue cargado (recuperable). Reactivar = otra decision ("lo otro").
+}
+
+ESPINAZO de toda operacion de blueprint (5 fases SIEMPRE) {
+  CONTRATO : input tipado + precondiciones (guards)
+  LEER     : publishAndWait('<mod>.<lectura>.request')         // REFLEJO (JS determinista)
+  PENSAR   : el LLM de PAGINA redacta/decide/interpreta         // fuzzy — NO un agente
+  GUARDAR  : publishAndWait('<mod>.<persist>.request')          // REFLEJO (JS determinista)
+  EMITIR   : publish('<dominio>.<algo>') + RETORNA salida tipada
+  invariantes : el LLM NUNCA toca fs; entra por el reflejo. PROHIBIDO inventar (solo lo que LEER trajo).
+}
+
+RECONVERSION aplicada (blueprints que invocaban agent.execute) {
+  carta-marketing : onboarding (completar_onboarding, entrevista LLM pagina) + copy (generar_copy → guardar_copy reflejo)
+  carta-impresion : generar (LLM pagina redacta HTML; sin agente impresor)
+  resto del flujo : recetas/escandallo/viabilidad/menu-generator/tarifas/carta-scheduler/carta-digital → ya eran sin-agente
+}
+// skill: .claude/skills/blueprint-coherente/SKILL.md
 ```
 
 ---

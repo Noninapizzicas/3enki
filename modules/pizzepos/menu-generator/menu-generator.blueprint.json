@@ -2,13 +2,16 @@
   "_doc": "Blueprint CONCRETO del modulo menu-generator v8.0.0. Reemplaza completamente al modulo legacy JS v7.0.0 (cuyo index.js queda archivado en _legacy/ via Fase 5 de la migracion). Generador puro: recibe input (texto pegado/dictado o JSON estructurado) y produce una carta con shape canonico carta-pizzepos (ver arquitectura/decisiones/_schemas/menu-generator/carta-pizzepos.schema.json). Persiste la carta via publishAndWait('carta-manager.save.request', ...) — menu-generator NO toca filesystem (paradigma event-core puro: cada modulo es dueno de su dominio; carta-manager es dueno de /cartas/). Origen de la migracion: arquitectura/decisiones/propuestas/migracion-menu-generator-blueprint.md (4 decisiones cerradas en _arranque-menu-generator-blueprint.md).",
 
   "id": "menu-generator",
-  "version": "blueprint-9.0.0",
+  "version": "blueprint-9.1.0",
+  "_v9_1_changelog": "v9.1.0 (2026-06-13): MISION aclarada + INTERFAZ ABIERTA. (1) menu-generator contempla material de CUALQUIER formato (imagen/pdf/documento/json/texto) — entrada abierta y agnostica. (2) NO transforma formatos: la lectura del no-legible (OCR/pdf->texto) la hace un transformador/provider EXTERNO (PENDIENTE: modulo OCR no existe aun); menu-generator estructura desde el contenido legible. Sustituye el encuadre v8 ('OCR eliminado, imagen/pdf fuera de scope') por 'interfaz abierta, transformacion delegada'. (3) generar.input + material? ; nuevo paso 1b LEER (delega al transformador si no-legible). (4) anyadido _modelo OOP. Capa de agentes APARCADA (el LLM del blueprint absorbe la estructuracion; agente menu-structurer archivado). Sin agent.execute.",
   "_v9_changelog": "v9.0.0 (aterrizaje subsistema-catalogo): SEMILLA ENRIQUECIDA. La operacion 'generar' ahora asigna en ORIGEN, por cada ingrediente, id canonico (slug del nombre normalizado) + familia (queso/verdura/carne/salsa/...). Output pasa a shape carta-pizzepos v2: productos[].ingredientes[] = { id, nombre, emoji?, familia } (antes { nombre, emoji? }). Razon (D1 subsistema-catalogo): enlace producto<->ingrediente<->familia por id robusto desde el origen, mata el slugify en runtime de productos/ingredientes. Termino 'familia' canonico (glosario v1.2.0; 'grupo' deprecado). Schema actualizado: arquitectura/decisiones/_schemas/menu-generator/carta-pizzepos.schema.json.",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
   "_v8_changelog": "v8.1.0 (2026-05-25): refactor persistencia event-core puro tras audit runtime Fase 7b. Cambio en operacion 'generar' paso 5: publishAndWait('carta-manager.save.request', ...) RPC sync -> publish('carta.creada', ...) fire-and-forget. Razon: el wiring RPC blueprint->blueprint NO esta operacional en ai-gateway (solo existe _wireBlueprintAsyncSubscribers para fire-and-forget); el patron canonico verificado runtime es el de frente 2.4 (escandallo.coste.calculado -> recetas via eventos_que_escucho). carta-manager se extiende con eventos_que_escucho: 'carta.creada' + handler interno _on_carta_creada en commit emparejado. Response del modulo pasa de 200/Created a 202/Accepted — la generacion termino pero la persistencia es eventual. Frontend que necesite confirmacion se suscribe a carta.actualizada filtrando por correlation_id.\n\nv8.0.0 (2026-05-25): migracion JS legacy v7.0.0 -> blueprint puro. Cambios estructurales: (1) Pipeline OCR (pdfjs/sharp/google-vision) ELIMINADO entero — no funcionaba en produccion (decision 4.4 del doc maestro). (2) Agente menu-structurer ARCHIVADO — el LLM principal del blueprint absorbe la estructuracion + transformacion en una sola pasada (decision 4.2). (3) Persistencia via carta-manager.save.request — menu-generator NO escribe filesystem (decision 5.3 = A). [Refactorizado a fire-and-forget en v8.1 — ver arriba.] (4) Subscribe a carta.generar.solicitada preservado via mecanismo blueprint-subscribers-asincronos canonico (decision 5.4 = A). (5) Tool canonica generar (sin cambio del nombre publico — decision 4.3). (6) target_page_id 'menu-generator' preservado. Cierra el bloqueo OCR del contrato modulos-blueprint-driven v1.1.0 (Fase 6 bumpea a v1.2.0 quitando la nota).",
 
-  "rol": "Generador puro de cartas estructuradas para pizzepos. Recibe input (texto pegado/dictado en lenguaje libre, o JSON ya estructurado importado de otra herramienta) y produce una carta JSON conforme al shape canonico carta-pizzepos. La persistencia la dispara delegando en carta-manager (event-core puro: cada modulo dueno de su dominio). NO hace OCR — si el input es archivo PDF/imagen, eso queda fuera del scope v8 (horizontal futuro si vuelve a hacer falta).",
+  "rol": "Generador puro de cartas estructuradas para pizzepos. INTERFAZ DE ENTRADA ABIERTA y agnostica de formato: contempla material de cualquier tipo (imagen, pdf, documento, json, texto) — recibe lo que venga y produce la BASE de una carta (shape canonico carta-pizzepos). NO transforma formatos: si el material no es legible (imagen/pdf), la lectura la hace un transformador/provider externo (PENDIENTE: modulo OCR no disponible aun) que devuelve texto; menu-generator estructura desde el contenido ya legible. La persistencia la delega en carta-manager (event-core puro: cada modulo dueno de su dominio).",
+
+  "_modelo": "CLASE MenuGeneratorBlueprint { ENTRADA_ABIERTA { acepta: imagen|pdf|documento|json|texto|<lo_que_venga> ; NO_hace: transformar_formatos ; si_no_legible(imagen/pdf): delega al transformador externo -> texto [PENDIENTE: OCR] ; si_legible(texto/json): directo } ; MISION { de CUALQUIER material -> estructurar -> BASE de carta (carta-pizzepos) } ; generar(input): CONTRATO -> LEER(si material no-legible, delega al transformador) -> PENSAR(estructura: categorias/productos/ingredientes/ids) -> validar(completa) -> GUARDAR(publish carta.creada -> carta-manager) -> EMITIR(menu.generation.*) }",
 
   "garantiza": [
     "Output canonico con shape carta-pizzepos: { meta: {id, nombre, generado_desde, created_at}, categorias[], productos[] } validable contra arquitectura/decisiones/_schemas/menu-generator/carta-pizzepos.schema.json.",
@@ -22,7 +25,7 @@
   ],
 
   "no_garantiza": [
-    "OCR: input PDF/imagen NO esta soportado en v8. El alcance es texto pegado/dictado o JSON ya estructurado (decision 4.1 del doc maestro). Si vuelve a hacer falta, sera horizontal futuro con modulos JS dedicados (pdf-extractor, ocr-vision).",
+    "Transformacion de formato: menu-generator NO lee ni transforma imagen/pdf por su cuenta. Su interfaz CONTEMPLA cualquier material (entrada abierta), pero la lectura del no-legible (OCR / pdf->texto) es de un transformador/provider externo (PENDIENTE: el modulo OCR no existe aun). menu-generator estructura desde el contenido ya legible (texto/json, o texto que devuelva el transformador). No se ata a un formato de entrada.",
     "Persistencia directa: menu-generator NO escribe /cartas/<id>.json. Eso es competencia de carta-manager. Si carta-manager.save falla, menu-generator devuelve el error pero no intenta persistir por su cuenta.",
     "Validacion estricta del shape de productos vs catalogo POS: menu-generator produce el shape canonico carta-pizzepos.schema.json. Si algun consumer del POS espera campos adicionales o transformacion, eso es responsabilidad del consumer (no del generador).",
     "Razonamiento sobre precios: si el input no incluye precio explicito de un producto, menu-generator pone precio: 0 con marcador implicito de 'no_detectado'. NO inventa precios.",
@@ -35,9 +38,10 @@
   },
 
   "fuentes_aceptadas": {
-    "_descripcion": "Tipos de input que el LLM acepta y normaliza al shape canonico carta-pizzepos.",
-    "texto": "string en lenguaje libre — el usuario pega/dicta la carta (lista de productos con precios, descripciones, categorias informales). El LLM estructura.",
-    "json_estructurado": "objeto JSON que YA tiene shape carta-pizzepos (o equivalente cercano). El LLM solo valida y normaliza al shape canonico. Util para importar desde otra herramienta o export previo."
+    "_descripcion": "ENTRADA ABIERTA, agnostica de formato. menu-generator contempla cualquier material; NO transforma formatos (la lectura del no-legible la hace un transformador externo).",
+    "material": "cualquier formato (imagen | pdf | documento | ref a fichero subido). Si NO es legible como texto, se DELEGA al transformador/provider externo (PENDIENTE: modulo OCR no existe aun) que devuelve texto. menu-generator no lo lee por su cuenta.",
+    "texto": "string en lenguaje libre — el usuario pega/dicta la carta. El LLM estructura. Legible directo.",
+    "json_estructurado": "objeto JSON que YA tiene shape carta-pizzepos (o cercano). El LLM valida y normaliza. Legible directo."
   },
 
   "normalizadores_que_aplica_el_llm": [
@@ -62,13 +66,21 @@
 
     "generar": {
       "_descripcion": "Operacion principal del modulo. Genera una carta estructurada desde input (texto o JSON) y la persiste via carta-manager.save. Cajon visible al LLM en page=menu-generator.",
-      "input": "{ project_id (uuid, req), nombre (string req, OBLIGATORIO — el LLM lo pregunta antes si no viene), texto? (string en lenguaje libre, alternativa a json), json? (objeto carta-pizzepos parcial o completo, alternativa a texto), correlation_id?, request_id (uuid, req — el LLM lo genera con uuid()) }",
+      "input": "{ project_id (uuid, req), nombre (string req, OBLIGATORIO — el LLM lo pregunta antes si no viene), material? (cualquier formato — imagen/pdf/documento/ref a fichero subido; entrada abierta. Si no es legible, se delega al transformador externo que devuelve texto — PENDIENTE OCR), texto? (string en lenguaje libre, alternativa), json? (objeto carta-pizzepos parcial o completo, alternativa), correlation_id?, request_id (uuid, req — el LLM lo genera con uuid()) }",
       "pseudocodigo": [
         "async generar(input):",
         "  // 1. Validacion minima",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
         "  if (!input.nombre || input.nombre.trim() === '') return INVALID_INPUT { field: 'nombre', hint: 'pregunta al usuario como se llama la carta antes de invocar' }",
-        "  if (!input.texto && !input.json) return INVALID_INPUT { hint: 'pasar texto (lenguaje libre) O json (carta ya estructurada)' }",
+        "  if (!input.texto && !input.json && !input.material) return INVALID_INPUT { hint: 'pasar material (cualquier formato), texto, o json' }",
+        "",
+        "  // 1b. LEER — interfaz ABIERTA, agnostica de formato. menu-generator NO transforma:",
+        "  //     - input.texto | input.json -> ya legible, directo.",
+        "  //     - input.material legible como texto -> usalo como texto.",
+        "  //     - input.material NO legible (imagen/pdf) -> DELEGA al transformador externo (no lo hace el):",
+        "  //         legible = await publishAndWait('<transformador>.extraer.request', { material: input.material })   // PENDIENTE: modulo OCR no existe aun",
+        "  //         si no hay transformador disponible -> return UPSTREAM_UNREACHABLE { hint: 'lectura de imagen/pdf pendiente del modulo OCR' }",
+        "  //     contenido = texto/json legible (de input directo o devuelto por el transformador). El resto del pipeline trabaja sobre 'contenido'.",
         "",
         "  // 2. Notificar inicio del pipeline al frontend (evento canonico preservado del v7)",
         "  await publish('menu.generation.progress', {",

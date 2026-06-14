@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo carta-manager. Hijo de subsistema-recetario.modulo-base (reutilizado por simplicidad — su modelo de ejecucion, primitivas del bus y manejo de errores aplican identico). Aggregate root del subsistema-carta: CRUD de cartas + manipulacion de productos/categorias dentro de carta + versionado con history archivado + busqueda + stats + restore. Persistencia multi-archivo: data/projects/{slug}/storage/pizzepos/cartas/<id>.json + storage/pizzepos/cartas/.versions/<id>/<timestamp>.json para snapshots.",
   "id": "carta-manager",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "_v1_5_changelog": "v1.5.0 (2026-06-13): anyade _modelo_oop (CLASE CartaManager) — aggregate root, store actual+versiones, las 15 ops agrupadas (entrada event-driven / lectura / raiz / mutacion estructurada) + helper comun _mutar que captura el patron repetido en las 5 mutaciones (read->snapshot->fs.edit->version++->evento). Prep para HIBRIDAR: todo es CRUD/versionado determinista -> pasa a REFLEJO JS (index.js), mismo contrato de bus carta.<op>.request (los carta-* no se enteran). Regla de dominio reafirmada: anyadir/editar productos de una carta = carta-manager (add_product/update_product); menu-generator solo NACE la base. Coger producto de recetas -> carta = leer recetas.obtener + escribir carta-manager.add_product (recetas es fuente, carta-manager es el writer).",
   "_v1_4_changelog": "v1.4.0 (aterrizaje subsistema-catalogo, D2): añadida operacion 'clonar' (carta_base_id + nuevo_nombre -> carta INDEPENDIENTE nueva). Es el paso 1 de 'carta por canal': el LLM clona la base, la manipula (update_prices/add_product/remove_product) segun instrucciones NL, y tarifas la asigna a un canal. carta-manager solo PRODUCE; la asignacion canal<->carta es de tarifas. Cambio ADITIVO (op nueva, no toca las 14 existentes). El shape que persiste es ahora carta-pizzepos v2 (ingredientes con id+familia) pero save persiste cualquier shape literal -> sin break. Pendiente (futuro): extender update_prices con target por categoria/familia + factor (hoy es per-producto absoluto).",
   "language": "es",
@@ -219,48 +219,6 @@
       ],
       "_delega_en": "carta.add_product.request (REFLEJO JS — index.js)"
     },
-    "add_from_receta": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), receta_id (req — receta a traer), categoria_id (req — categoria DESTINO en la carta), precio? (number; si no, 0 — NUNCA inventar) }",
-      "_descripcion": "NACE un producto de carta desde una receta. LEE la receta (reflejo) y PERSISTE via add_product (reflejo), pero la clasificacion base-vs-topping la PIENSAS TU (el LLM), plato a plato. No es mecanica: es criterio.",
-      "pseudocodigo": [
-        "async add_from_receta(input):",
-        "  // CONTRATO",
-        "  if (!input.project_id || !input.carta_id || !input.receta_id || !input.categoria_id) return INVALID_INPUT",
-        "",
-        "  // LEER (reflejo recetas, ms): trae la receta con sus lineas",
-        "  r = await publishAndWait('recetas.obtener.request', { project_id: input.project_id, receta_id: input.receta_id }, { timeout_ms: 8000 })",
-        "  if (!r || r.status !== 200 || !r.data) return RESOURCE_NOT_FOUND { entity: 'receta', id: input.receta_id }",
-        "  receta = r.data        // { nombre, lineas: [{ nombre, categoria, cantidad, ... }], ... }",
-        "",
-        "  // PENSAR (TU, el LLM — esto NO es mecanico, es CRITERIO). Para CADA linea, preguntate:",
-        "  //   1) ¿Es la BASE del producto? = aquello que el producto ES; sin ello deja de ser ese plato.",
-        "  //         la masa de una pizza · el pollo de un pollo asado · el pan de un bocadillo.",
-        "  //         La base NO es una variacion: el cliente no la quita. -> FUERA de ingredientes.",
-        "  //   2) ¿O es un TOPPING? = algo que va encima/dentro y que el cliente podria anadir o quitar.",
-        "  //         tomate, queso, anchoas, bacon, cebolla... -> ENTRA como ingrediente (variacion).",
-        "  //   Juzga plato a plato (no por familia: el bacon de una hamburguesa es topping; el pollo del",
-        "  //   pollo asado es base, aunque ambos sean 'carne'). Una sola pregunta por linea: base o topping.",
-        "  ingredientes = [ por cada linea que JUZGUES topping: { nombre: linea.nombre, familia: linea.categoria } ]",
-        "  //   (no calcules id ni valides familia: el reflejo add_product normaliza id=slug(nombre) y familia.)",
-        "",
-        "  // GUARDAR (reflejo): persiste con id determinista. El precio NO se inventa.",
-        "  resp = await publishAndWait('carta.add_product.request', {",
-        "    project_id: input.project_id, carta_id: input.carta_id, request_id: uuid(),",
-        "    correlation_id: input.correlation_id, user_id: input.user_id,",
-        "    producto: { nombre: receta.nombre, precio: (typeof input.precio === 'number' ? input.precio : 0),",
-        "                categoria_id: input.categoria_id, ingredientes }",
-        "  }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data: { producto, carta_version } }"
-      ],
-      "reglas_clave": [
-        "la clasificacion base-vs-topping la decides TU (LLM) razonando, NO una regla cableada. Preguntate por linea: base o topping.",
-        "BASE = lo que el producto ES (masa/pollo/pan): no es variacion, va FUERA de ingredientes.",
-        "TOPPING = lo que el cliente puede anadir/quitar: ENTRA como ingrediente. El tomate/salsa son toppings.",
-        "juzga plato a plato, NO por familia (el bacon=topping, el pollo del pollo asado=base, ambos 'carne').",
-        "add_product (reflejo) pone id determinista, normaliza ingredientes (id=slug(nombre), familia), 409 si ya existe.",
-        "precio NO se inventa: lo pasa el caller (0 hasta fijarlo)."
-      ]
-    },
     "remove_product": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), producto_id (req) }",
       "pseudocodigo": [
@@ -467,5 +425,6 @@
   "_v1_7_changelog": "v1.7.0 (2026-06-14): FASE 2 identidad determinista (rediseño subsistema-carta). add_product genera id DETERMINISTA slug(categoria_id)+'_'+slug(nombre) (no UUID) -> el mismo producto es el mismo id SIEMPRE, se acabaron las 3 copias de TEXAS; 409 ALREADY_EXISTS si ya existe. add_category genera id = slug(nombre) y dedup por id. add_product/update_product ACEPTAN y persisten 'ingredientes' en forma canonica {id, nombre, emoji?, familia} (antes add_product los descartaba -> productos sin ingredientes). Implementado en el REFLEJO (index.js reflejo-1.1.0); los cajones siguen delegando.",
   "_v1_8_changelog": "v1.8.0 (2026-06-14): op add_from_receta — NACE un producto de carta desde una receta. Cierra recetas->carta: el reflejo LEE recetas.obtener, mapea lineas->ingredientes (toppings=variaciones; masa/salsa=subproducto base, EXCLUIDOS) y delega a add_product. Asi el producto entra con sus variaciones reales y se respeta la regla subproducto vs topping.",
   "_v1_9_changelog": "v1.9.0 (2026-06-14): add_from_receta excluye SOLO la masa (base). La salsa/tomate son toppings (correccion de dominio). Antes excluia masa+salsa.",
-  "_v1_10_changelog": "v1.10.0 (2026-06-14): add_from_receta deja de ser delegador al reflejo: la clasificacion base-vs-topping es CRITERIO (fuzzy), la hace el LLM razonando plato a plato (auto-preguntas: base o topping). El reflejo solo LEE (recetas.obtener) y PERSISTE (add_product). No se generaliza por familia ni flag: el LLM juzga caso a caso. Revierte el hardcode masa/salsa de v1.8/1.9."
+  "_v1_10_changelog": "v1.10.0 (2026-06-14): add_from_receta deja de ser delegador al reflejo: la clasificacion base-vs-topping es CRITERIO (fuzzy), la hace el LLM razonando plato a plato (auto-preguntas: base o topping). El reflejo solo LEE (recetas.obtener) y PERSISTE (add_product). No se generaliza por familia ni flag: el LLM juzga caso a caso. Revierte el hardcode masa/salsa de v1.8/1.9.",
+  "_v1_11_changelog": "v1.11.0 (2026-06-14): quita el cajon add_from_receta — se MUDA a menu-generator.preparar. El que prepara (menu-generator) es quien orquesta (lee carta.get + recetas.obtener, prepara, escribe carta.add_product) en UNA vuelta LLM contra REFLEJOS. carta-manager se queda en lo suyo: SIRVE get y add_product (reflejo), no orquesta ni clasifica. Cierra el lio base/topping (v1.8-1.10) por la raiz: la clasificacion no existe; el toque vive en menu-generator siguiendo el patron de la carta."
 }

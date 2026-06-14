@@ -234,15 +234,15 @@ async function testAsync(desc, fn) {
   const recetaPizza = {
     nombre: 'pizza bachata', tipo: 'pizza',
     lineas: [
-      { id: 'linea-masa', nombre: 'Masa de pizza', cantidad: 1, unidad: 'ud', categoria: 'masa' },        // SUBPRODUCTO → fuera
-      { id: 'linea-tomate', nombre: 'Tomate frito casero', cantidad: 60, unidad: 'g', categoria: 'salsa' }, // SUBPRODUCTO → fuera
+      { id: 'linea-masa', nombre: 'Masa de pizza', cantidad: 1, unidad: 'ud', categoria: 'masa' },        // BASE → fuera
+      { id: 'linea-tomate', nombre: 'Tomate frito casero', cantidad: 60, unidad: 'g', categoria: 'salsa' }, // topping (salsa SÍ entra)
       { id: 'linea-alcaparras', nombre: 'Alcaparras', cantidad: 30, unidad: 'g', categoria: 'verdura' },    // topping
       { id: 'linea-anchoas', nombre: 'Anchoas', cantidad: 8.5, unidad: 'ud', categoria: 'pescado' },        // topping
       { id: 'linea-mozzarella', nombre: 'Queso mozzarella', cantidad: 100, unidad: 'g', categoria: 'queso' }// topping
     ]
   };
 
-  await testAsync('add_from_receta: mapea líneas a ingredientes, EXCLUYE masa/salsa, id determinista', async () => {
+  await testAsync('add_from_receta: mapea líneas a ingredientes, EXCLUYE solo la masa (tomate=topping), id determinista', async () => {
     const carta = cartaInicial();
     carta.categorias.push({ id: 'pizzicas', nombre: 'Pizzicas', orden: 1 });
     const store = { [CARTA_PATH]: JSON.stringify(carta) };
@@ -252,11 +252,12 @@ async function testAsync(desc, fn) {
     const prod = r.data.producto;
     assert.strictEqual(prod.id, 'pizzicas_pizza_bachata');   // id determinista (FASE 2)
     assert.strictEqual(prod.precio, 10.5);
-    // 3 toppings (masa + salsa excluidos)
-    assert.strictEqual(prod.ingredientes.length, 3);
+    // 4 toppings: tomate(salsa) + alcaparras + anchoas + mozzarella ; solo la masa fuera
+    assert.strictEqual(prod.ingredientes.length, 4);
     const nombres = prod.ingredientes.map(i => i.nombre);
-    assert.ok(!nombres.includes('Masa de pizza') && !nombres.includes('Tomate frito casero'), 'subproductos fuera');
-    assert.deepStrictEqual(prod.ingredientes.map(i => i.familia).sort(), ['pescado', 'queso', 'verdura']);
+    assert.ok(!nombres.includes('Masa de pizza'), 'la masa (base) fuera');
+    assert.ok(nombres.includes('Tomate frito casero'), 'el tomate (salsa) SÍ es topping');
+    assert.deepStrictEqual(prod.ingredientes.map(i => i.familia).sort(), ['pescado', 'queso', 'salsa', 'verdura']);
     assert.strictEqual(prod.ingredientes.find(i => i.nombre === 'Queso mozzarella').id, 'queso_mozzarella');
   });
 

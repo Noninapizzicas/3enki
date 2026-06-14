@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo carta-manager. Hijo de subsistema-recetario.modulo-base (reutilizado por simplicidad — su modelo de ejecucion, primitivas del bus y manejo de errores aplican identico). Aggregate root del subsistema-carta: CRUD de cartas + manipulacion de productos/categorias dentro de carta + versionado con history archivado + busqueda + stats + restore. Persistencia multi-archivo: data/projects/{slug}/storage/pizzepos/cartas/<id>.json + storage/pizzepos/cartas/.versions/<id>/<timestamp>.json para snapshots.",
   "id": "carta-manager",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "_v1_5_changelog": "v1.5.0 (2026-06-13): anyade _modelo_oop (CLASE CartaManager) — aggregate root, store actual+versiones, las 15 ops agrupadas (entrada event-driven / lectura / raiz / mutacion estructurada) + helper comun _mutar que captura el patron repetido en las 5 mutaciones (read->snapshot->fs.edit->version++->evento). Prep para HIBRIDAR: todo es CRUD/versionado determinista -> pasa a REFLEJO JS (index.js), mismo contrato de bus carta.<op>.request (los carta-* no se enteran). Regla de dominio reafirmada: anyadir/editar productos de una carta = carta-manager (add_product/update_product); menu-generator solo NACE la base. Coger producto de recetas -> carta = leer recetas.obtener + escribir carta-manager.add_product (recetas es fuente, carta-manager es el writer).",
   "_v1_4_changelog": "v1.4.0 (aterrizaje subsistema-catalogo, D2): añadida operacion 'clonar' (carta_base_id + nuevo_nombre -> carta INDEPENDIENTE nueva). Es el paso 1 de 'carta por canal': el LLM clona la base, la manipula (update_prices/add_product/remove_product) segun instrucciones NL, y tarifas la asigna a un canal. carta-manager solo PRODUCE; la asignacion canal<->carta es de tarifas. Cambio ADITIVO (op nueva, no toca las 14 existentes). El shape que persiste es ahora carta-pizzepos v2 (ingredientes con id+familia) pero save persiste cualquier shape literal -> sin break. Pendiente (futuro): extender update_prices con target por categoria/familia + factor (hoy es per-producto absoluto).",
   "language": "es",
@@ -223,7 +223,7 @@
     },
     "add_from_receta": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), receta_id (req — id de la receta a traer), categoria_id (req — categoria DESTINO en la carta), precio? (number; si no, 0 — NUNCA inventar) }",
-      "_descripcion": "NACE un producto de carta desde una receta. Cierra el flujo recetas->carta: el reflejo LEE la receta (recetas.obtener), mapea sus lineas a ingredientes (toppings = variaciones del cliente; las lineas categoria masa/salsa son SUBPRODUCTO BASE y se EXCLUYEN), y delega a add_product (id determinista). Asi el producto entra con sus variaciones reales. Regla de dominio: la masa y la salsa base no son variaciones (no se quitan).",
+      "_descripcion": "NACE un producto de carta desde una receta. El reflejo LEE la receta (recetas.obtener), mapea sus lineas a ingredientes (toppings = variaciones; SOLO la masa, base, se EXCLUYE) y delega a add_product (id determinista). El tomate/salsa son toppings. Regla: la masa es la base (no se quita); el resto, variaciones.",
       "pseudocodigo": [
         "async add_from_receta(input):",
         "  // HIBRIDO: lo hace el REFLEJO JS (lee receta, filtra subproductos, mapea ingredientes, add_product determinista).",
@@ -234,8 +234,8 @@
       "_delega_en": "carta.add_from_receta.request (REFLEJO JS — index.js)",
       "reglas_clave": [
         "el reflejo LEE recetas.obtener.request(receta_id) y mapea receta.lineas -> producto.ingredientes.",
-        "EXCLUYE lineas de categoria masa/salsa (subproducto base; no son variaciones del cliente).",
-        "el resto (verdura/queso/carne/pescado/...) entran como ingredientes; familia = categoria de la linea; id = slug(nombre).",
+        "EXCLUYE solo las lineas categoria 'masa' (la BASE; no se quita). El tomate/salsa SÍ son toppings.",
+        "los toppings (salsa/verdura/queso/carne/pescado/...) entran como ingredientes; familia = categoria de la linea; id = slug(nombre).",
         "delega a add_product -> id determinista slug(categoria_id)+'_'+slug(nombre), 409 si ya existe.",
         "precio NO se inventa: lo pasa el caller (0 hasta fijarlo con update_prices)."
       ]
@@ -444,5 +444,6 @@
   ],
   "_v1_6_changelog": "v1.6.0 (2026-06-13): HIBRIDADO. Las 15 ops (todas deterministas) pasan al REFLEJO JS (index.js, CartaManagerReflejo extends ModuloHibridoReflejo) — CRUD+versionado+manipulacion de productos/categorias servidos en el bus (carta.<op>.request) sin turno LLM. Cada cajon queda como DELEGADOR FINO: el LLM de la pagina interpreta lenguaje natural -> publishAndWait('carta.<op>.request') -> el reflejo ejecuta y persiste. La op interna _on_carta_creada se elimina del blueprint (la sirve el reflejo onCartaCreada via module.json.subscribes); por eso 'carta.creada' SALE de eventos_que_escucho (regla anti-colision: un evento no puede estar en module.json.subscribes y en blueprint.eventos_que_escucho a la vez). El pseudocodigo previo (la danza fs completa) queda capturado fielmente en el reflejo JS.",
   "_v1_7_changelog": "v1.7.0 (2026-06-14): FASE 2 identidad determinista (rediseño subsistema-carta). add_product genera id DETERMINISTA slug(categoria_id)+'_'+slug(nombre) (no UUID) -> el mismo producto es el mismo id SIEMPRE, se acabaron las 3 copias de TEXAS; 409 ALREADY_EXISTS si ya existe. add_category genera id = slug(nombre) y dedup por id. add_product/update_product ACEPTAN y persisten 'ingredientes' en forma canonica {id, nombre, emoji?, familia} (antes add_product los descartaba -> productos sin ingredientes). Implementado en el REFLEJO (index.js reflejo-1.1.0); los cajones siguen delegando.",
-  "_v1_8_changelog": "v1.8.0 (2026-06-14): op add_from_receta — NACE un producto de carta desde una receta. Cierra recetas->carta: el reflejo LEE recetas.obtener, mapea lineas->ingredientes (toppings=variaciones; masa/salsa=subproducto base, EXCLUIDOS) y delega a add_product. Asi el producto entra con sus variaciones reales y se respeta la regla subproducto vs topping."
+  "_v1_8_changelog": "v1.8.0 (2026-06-14): op add_from_receta — NACE un producto de carta desde una receta. Cierra recetas->carta: el reflejo LEE recetas.obtener, mapea lineas->ingredientes (toppings=variaciones; masa/salsa=subproducto base, EXCLUIDOS) y delega a add_product. Asi el producto entra con sus variaciones reales y se respeta la regla subproducto vs topping.",
+  "_v1_9_changelog": "v1.9.0 (2026-06-14): add_from_receta excluye SOLO la masa (base). La salsa/tomate son toppings (correccion de dominio). Antes excluia masa+salsa."
 }

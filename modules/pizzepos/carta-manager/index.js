@@ -25,15 +25,15 @@ const tsSafe = () => nowISO().replace(/[:.]/g, '-');
 const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 // Familias canónicas de ingrediente (las que agrupa escandallo/mise-en-place). Default: 'otro'.
 const FAMILIAS = new Set(['queso', 'verdura', 'carne', 'salsa', 'pescado', 'fruta', 'extra', 'condimento', 'otro']);
-// Categorías de línea que son SUBPRODUCTO BASE (no variación del cliente): no se "quitan" de un producto.
-// La masa y la salsa base son el cimiento; los toppings (verdura/queso/carne/...) sí son variaciones.
-const SUBPRODUCTO_CATEGORIAS = new Set(['masa', 'salsa']);
+// Categoría de línea que es BASE (no variación del cliente): la masa, que no se "quita".
+// El resto —incluida la salsa/tomate— SÍ son toppings (variaciones). Conjunto, por si crece.
+const SUBPRODUCTO_CATEGORIAS = new Set(['masa']);
 
 class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.4.0';
+    this.version = 'reflejo-1.5.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -372,8 +372,8 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     return r.data;   // { nombre, lineas, tipo, ... }
   }
 
-  // Líneas de receta → ingredientes de carta (variaciones). EXCLUYE subproductos base
-  // (categoria masa/salsa: el cimiento, no se quita); el resto son toppings modificables.
+  // Líneas de receta → ingredientes de carta (variaciones). EXCLUYE solo la BASE
+  // (categoria masa: no se quita). El resto —salsa/tomate incluidos— son toppings.
   // familia = categoria de la línea (validada contra el set canónico; default 'otro').
   _lineasToIngredientes(lineas) {
     if (!Array.isArray(lineas)) return [];

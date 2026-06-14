@@ -146,7 +146,7 @@ async function listJsonFiles(dir: string): Promise<FsListItem[]> {
   const listRes = await mqttRequest<{ items: FsListItem[] }>('fs', 'list', { path: dir });
   const items = Array.isArray(listRes.data?.items) ? listRes.data.items : [];
   return items.filter(
-    (it) => it.type === 'file' && it.extension === 'json' && !it.name.startsWith('.')
+    (it) => it.type === 'file' && it.name.endsWith('.json') && !it.name.startsWith('.')
   );
 }
 

@@ -56,7 +56,7 @@ function applyPatch(obj, patches) {
 }
 
 // Bus fs-backed: responde fs.read/edit/write y mantiene el store coherente.
-function makeBus(store) {
+function makeBus(store, recetas = {}) {
   const handlers = new Map();
   const published = [];
   const emit = (event, payload) => {
@@ -93,14 +93,19 @@ function makeBus(store) {
           .filter(p => p.startsWith(prefix) && p.endsWith('.json') && !p.slice(prefix.length).includes('/'))
           .map(p => ({ name: p.slice(prefix.length), type: 'file' }));
         emit('fs.list.response', { request_id: payload.request_id, path: payload.path, files, items: files, count: files.length });
+      } else if (event === 'recetas.obtener.request') {
+        const receta = recetas[payload.receta_id] || null;
+        emit('recetas.obtener.response', receta
+          ? { request_id: payload.request_id, status: 200, data: receta }
+          : { request_id: payload.request_id, status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: 'receta no existe' } });
       }
     }
   };
 }
 
-function makeReflejo(store) {
+function makeReflejo(store, recetas = {}) {
   const m = new CartaManagerReflejo();
-  const bus = makeBus(store);
+  const bus = makeBus(store, recetas);
   m.onLoad({ logger: { debug(){}, info(){}, warn(){}, error(){} }, eventBus: bus, metrics: { increment(){} } });
   return { m, bus };
 }
@@ -222,6 +227,54 @@ async function testAsync(desc, fn) {
     await m.onCartaCreada({ data: { project_id: 'proj-nonina', carta: entrante } });
     // ambiguo (2 activas, 0 en_servicio) → no pisa ninguna, crea con el id entrante
     assert.ok(store['/pizzepos/cartas/carta_nueva.json'], 'con varias activas no fuerza, respeta el id entrante');
+  });
+
+  // ── add_from_receta: NACE producto desde receta (toppings=variaciones; masa/salsa fuera) ──
+
+  const recetaPizza = {
+    nombre: 'pizza bachata', tipo: 'pizza',
+    lineas: [
+      { id: 'linea-masa', nombre: 'Masa de pizza', cantidad: 1, unidad: 'ud', categoria: 'masa' },        // SUBPRODUCTO → fuera
+      { id: 'linea-tomate', nombre: 'Tomate frito casero', cantidad: 60, unidad: 'g', categoria: 'salsa' }, // SUBPRODUCTO → fuera
+      { id: 'linea-alcaparras', nombre: 'Alcaparras', cantidad: 30, unidad: 'g', categoria: 'verdura' },    // topping
+      { id: 'linea-anchoas', nombre: 'Anchoas', cantidad: 8.5, unidad: 'ud', categoria: 'pescado' },        // topping
+      { id: 'linea-mozzarella', nombre: 'Queso mozzarella', cantidad: 100, unidad: 'g', categoria: 'queso' }// topping
+    ]
+  };
+
+  await testAsync('add_from_receta: mapea líneas a ingredientes, EXCLUYE masa/salsa, id determinista', async () => {
+    const carta = cartaInicial();
+    carta.categorias.push({ id: 'pizzicas', nombre: 'Pizzicas', orden: 1 });
+    const store = { [CARTA_PATH]: JSON.stringify(carta) };
+    const { m } = makeReflejo(store, { 'pizza-bachata': recetaPizza });
+    const r = await m._addFromReceta({ ...base, receta_id: 'pizza-bachata', categoria_id: 'pizzicas', precio: 10.5 });
+    assert.strictEqual(r.status, 201);
+    const prod = r.data.producto;
+    assert.strictEqual(prod.id, 'pizzicas_pizza_bachata');   // id determinista (FASE 2)
+    assert.strictEqual(prod.precio, 10.5);
+    // 3 toppings (masa + salsa excluidos)
+    assert.strictEqual(prod.ingredientes.length, 3);
+    const nombres = prod.ingredientes.map(i => i.nombre);
+    assert.ok(!nombres.includes('Masa de pizza') && !nombres.includes('Tomate frito casero'), 'subproductos fuera');
+    assert.deepStrictEqual(prod.ingredientes.map(i => i.familia).sort(), ['pescado', 'queso', 'verdura']);
+    assert.strictEqual(prod.ingredientes.find(i => i.nombre === 'Queso mozzarella').id, 'queso_mozzarella');
+  });
+
+  await testAsync('add_from_receta con precio omitido → 0 (NUNCA inventa precio)', async () => {
+    const carta = cartaInicial();
+    carta.categorias.push({ id: 'pizzicas', nombre: 'Pizzicas', orden: 1 });
+    const store = { [CARTA_PATH]: JSON.stringify(carta) };
+    const { m } = makeReflejo(store, { 'pizza-bachata': recetaPizza });
+    const r = await m._addFromReceta({ ...base, receta_id: 'pizza-bachata', categoria_id: 'pizzicas' });
+    assert.strictEqual(r.status, 201);
+    assert.strictEqual(r.data.producto.precio, 0);
+  });
+
+  await testAsync('add_from_receta con receta inexistente → 404', async () => {
+    const store = { [CARTA_PATH]: JSON.stringify(cartaInicial()) };
+    const { m } = makeReflejo(store, {});
+    const r = await m._addFromReceta({ ...base, receta_id: 'fantasma', categoria_id: 'hamburguesas' });
+    assert.strictEqual(r.status, 404);
   });
 
   console.log('\nTodos los tests pasaron.');

@@ -1,7 +1,7 @@
 {
   "_doc": "Manifest del modulo carta-marketing — HIBRIDO (blueprint + reflejo JS), tercer caso del Patron Modulo Hibrido. El blueprint sirve lo FUZZY (completar_onboarding = descubrimiento de marca via el agente marketing-onboarding). El index.js es el REFLEJO JS que sirve el CRUD determinista del perfil de marca (/pizzepos/marca.json): get_perfil, update_perfil. Mata el teatro del onboarding: update_perfil escribe de verdad + emite marketing.perfil.actualizado (la propiocepcion lo capta). Persistencia: marca.json del proyecto.",
   "name": "carta-marketing",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "subscribes": [
     {
       "event": "carta-marketing.get_perfil.request",
@@ -17,6 +17,20 @@
       "event": "carta-marketing.guardar_copy.request",
       "handler": "onGuardarCopyRequest",
       "description": "Reflejo JS: persiste el copy que redacto el LLM de pagina (descripciones/preambulo/promos) en /pizzepos/carta-marketing/copy.json + emite marketing.copy.generado. El reflejo no redacta, solo guarda."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "carta-marketing",
+      "action": "get_perfil",
+      "handler": "handleGetPerfil",
+      "description": "Frontend: lee el perfil de marca canonico (/pizzepos/marca.json) por la puerta del dueno."
+    },
+    {
+      "domain": "carta-marketing",
+      "action": "update_perfil",
+      "handler": "handleUpdatePerfil",
+      "description": "Frontend: actualiza el perfil (deep-merge por seccion, no pisa)."
     }
   ],
   "_v2_4_changelog": "v2.4.0 (2026-06-12): SIN capa de agentes. Se quita la orquestacion de agentes (copywriter/onboarding). Modelo de dos capas: el LLM de PAGINA (blueprint) redacta el copy y conduce la entrevista; el REFLEJO solo persiste. generar_copy (que invocaba al agente) -> guardar_copy (persiste lo que el LLM de pagina genero). avanzar_onboarding (que invocaba al agente) ELIMINADO: el LLM de pagina conduce el onboarding y persiste cada respuesta via update_perfil. Marketing-* agentes aparcados (enabled:false).",
@@ -37,5 +51,6 @@
       "concurrency": "single-writer"
     }
   },
-  "cajones_enabled": true
+  "cajones_enabled": true,
+  "_v2_5_nota": "v2.5.0 (2026-06-14): expone get_perfil/update_perfil como ui_handlers para que el FRONTEND entre por la puerta del dueno (antes leia /config/marca.json por fs directo -> divergencia con el onboarding que escribe /pizzepos/marca.json). El panel de marketing pasa a ver el perfil canonico; update con deep-merge (no pisa secciones)."
 }

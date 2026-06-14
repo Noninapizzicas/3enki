@@ -1,15 +1,25 @@
 /**
- * Módulo Productos v2.3
- * Catálogo de productos - Actualizado desde menús generados por IA
- * Alineado con patrones event-core: uiHandler, event envelope, cleanup
- * Multi-tenant: cada proyecto tiene su propio catálogo
- * Persiste cambios a disco en cartas JSON
+ * Módulo Productos — PROYECTOR SIN ESTADO sobre carta-manager.
  *
- * Emite: producto.creado, producto.actualizado, producto.eliminado, catalogo.actualizado
- * Consume: carta.actualizada, carta.editada, carta.borrada, tarifas.config.actualizada (v4.0.0 subsistema-carta)
+ * Rediseño FASE 1 (subsistema-carta → productos). productos deja de tener store propio.
+ * La CARTA (carta-manager) es la ÚNICA fuente de verdad. productos PROYECTA la carta
+ * activa del proyecto a formato POS al vuelo (carta.get.request → reflejo, milisegundos).
+ * No hay copia que acumule (adiós a los 29 fantasmas), no hay leak cross-project (cada
+ * lectura es de LA carta de ESE proyecto; sin "primer proyecto con datos"), no hay stale
+ * (siempre la carta del momento).
+ *
+ *   catalogo == proyectar(carta_activa)   — SIEMPRE, por construcción.
+ *
+ * Antes: productosPerProject + catalogo_activo.json + syncCatalogo (merge incremental que
+ * derivaba) + loadCartaFromProject (unión de TODAS las cartas). Todo eliminado.
+ *
+ * REQUIERE carta-manager híbrido (reflejo) desplegado: sirve carta.get/list.request en ms.
+ * Antes productos cacheaba porque leer la carta costaba un turno LLM; ya no.
+ *
+ * Emite : catalogo.actualizado (SEÑAL de refresco — el comandero re-pull y proyecta fresco).
+ * Consume: carta.actualizada/editada/borrada, tarifas.config.actualizada, project.activated.
  */
 
-const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 
@@ -18,65 +28,24 @@ class ProductosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'productos';
-    this.version = '4.0.0';
+    this.version = '5.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
     this.config = {};
 
-    // Estado en memoria - por proyecto
-    this.productosPerProject = new Map(); // project_id -> Map<producto_id, producto>
-    this.categoriasPerProject = new Map(); // project_id -> Map<categoria_id, categoria>
-    this.menusPendientes = new Map(); // menu_id -> { project_id, productos_draft } (legacy: ya no se popula en v4; lo leen health/stats)
-    // v4.0.0 (subsistema-carta): cache del mapping canal->carta_id por proyecto desde tarifas.config.actualizada.
-    // Postura C: solo cachea. NO expone tool de resolucion --los consumers (comandero/pedidos) hacen RESOLVER_CARTA.
-    this.mappingCanalesPerProject = new Map(); // project_id -> { general, mesa, telefono, llevar, glovo, whatsapp, llevadoo }
+    // mapping canal->carta_id por proyecto (de tarifas.config.actualizada). Resuelve QUÉ carta
+    // es la activa por canal/general. ÚNICO estado que productos conserva.
+    this.mappingCanalesPerProject = new Map();
 
-    // Rutas de storage por proyecto (project_id -> base_path/storage/pizzepos)
+    // base_path por proyecto (cache; lo puebla project.activated / project.get.response).
     this.storageSection = 'pizzepos';
     this.projectPaths = new Map();
     this.pendingProjectRequests = new Map();
   }
 
-  // Helpers para obtener/crear maps por proyecto
-  getProductos(projectId) {
-    if (!this.productosPerProject.has(projectId)) {
-      this.productosPerProject.set(projectId, new Map());
-    }
-    return this.productosPerProject.get(projectId);
-  }
-
-  getCategorias(projectId) {
-    if (!this.categoriasPerProject.has(projectId)) {
-      this.categoriasPerProject.set(projectId, new Map());
-    }
-    return this.categoriasPerProject.get(projectId);
-  }
-
-  /**
-   * Resuelve un project_id al proyecto activo con datos.
-   * Si el project_id dado tiene productos cargados, lo usa.
-   * Si no, busca el primer proyecto que sí tenga datos.
-   * Esto permite que el frontend envíe aliases ("a") sin romper nada.
-   */
-  resolveToActiveProject(projectId) {
-    // Si este proyecto ya tiene datos, usarlo
-    if (this.productosPerProject.has(projectId) && this.productosPerProject.get(projectId).size > 0) {
-      return projectId;
-    }
-    // Buscar el primer proyecto con productos cargados
-    for (const [pid, prods] of this.productosPerProject) {
-      if (prods.size > 0) {
-        this.logger.debug('productos.resolve_fallback', { requested: projectId, resolved: pid });
-        return pid;
-      }
-    }
-    // No hay datos en ningún proyecto, devolver el original
-    return projectId;
-  }
-
   // ==========================================
-  // Helpers POC2
+  // Helpers de respuesta / evento
   // ==========================================
 
   _errorResponse(status, code, message, details) {
@@ -98,11 +67,7 @@ class ProductosModule extends BaseModule {
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
     const { status, code } = this._classifyHandlerError(err);
-    this.logger?.error?.(logEvent, {
-      kind,
-      error_code: code,
-      error_message: err?.message || String(err)
-    });
+    this.logger?.error?.(logEvent, { kind, error_code: code, error_message: err?.message || String(err) });
     this.metrics?.increment?.('productos.errors', { code, kind });
     return this._errorResponse(status, code, err?.message || 'Error interno');
   }
@@ -112,20 +77,136 @@ class ProductosModule extends BaseModule {
       payload?.correlation_id ||
       sourcePayload?.correlation_id ||
       sourcePayload?.metadata?.correlationId ||
+      sourcePayload?.data?.correlation_id ||
       null;
     const project_id =
       payload?.project_id ??
       sourcePayload?.project_id ??
       sourcePayload?.data?.project_id ??
       null;
-    const enriched = {
-      ...payload,
-      correlation_id,
-      timestamp: payload?.timestamp || new Date().toISOString()
-    };
+    const enriched = { ...payload, correlation_id, timestamp: payload?.timestamp || new Date().toISOString() };
     if (project_id !== null && project_id !== undefined) enriched.project_id = project_id;
     await this.eventBus.publish(name, enriched);
     return enriched;
+  }
+
+  // ==========================================
+  // RPC al bus — publica <ev>.request y espera <ev>.response por request_id.
+  // Best-effort: si no llega en timeout_ms, resuelve null (no cuelga el handler).
+  // ==========================================
+  async _rpc(evento, payload = {}, { timeout_ms = 5000 } = {}) {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    const responseEvent = evento.endsWith('.request')
+      ? evento.slice(0, -('.request'.length)) + '.response'
+      : `${evento}.response`;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeout_ms);
+      try {
+        unsub = this.eventBus.subscribe(responseEvent, (event) => {
+          const d = event?.data || event;
+          if (!d || d.request_id !== request_id) return;
+          clearTimeout(timeout);
+          if (unsub) unsub();
+          resolve(d);
+        });
+        this.eventBus.publish(evento, { request_id, ...payload });
+      } catch (_) {
+        clearTimeout(timeout);
+        if (unsub) unsub();
+        resolve(null);
+      }
+    });
+  }
+
+  // ==========================================
+  // Resolución de la carta activa (canal → tarifas → general → en_servicio)
+  // ==========================================
+
+  async _resolverCartaActiva(project_id, canal, carta_id) {
+    if (carta_id) return carta_id;                              // el caller ya resolvió (carta de canal)
+    const map = this.mappingCanalesPerProject.get(project_id) || {};
+    if (canal && map[canal]) return map[canal];                 // override de canal
+    if (map.general) return map.general;                        // general (de tarifas)
+    return this._cartaEnServicio(project_id);                   // fallback robusto: pregunta a carta-manager
+  }
+
+  async _cartaEnServicio(project_id) {
+    const r = await this._rpc('carta.list.request', { project_id }, { timeout_ms: 5000 });
+    if (!r || r.status !== 200 || !Array.isArray(r.data)) return null;
+    const list = r.data;
+    const enServicio = list.find(c => c.estado === 'en_servicio');
+    if (enServicio) return enServicio.id;
+    const activa = list.find(c => c.estado !== 'archivada');
+    return (activa || list[0])?.id || null;
+  }
+
+  // La carta DEL MOMENTO, fuente única (vía carta-manager reflejo). null si no hay.
+  async _cartaActiva(project_id, canal, carta_id) {
+    const cid = await this._resolverCartaActiva(project_id, canal, carta_id);
+    if (!cid) return null;
+    const r = await this._rpc('carta.get.request', { project_id, carta_id: cid }, { timeout_ms: 5000 });
+    if (!r || r.status !== 200 || !r.data) return null;
+    return r.data;
+  }
+
+  // ==========================================
+  // Proyección carta → POS (función pura, sin guardar)
+  // ==========================================
+
+  _proyectar(carta) {
+    const cats = Array.isArray(carta?.categorias) ? carta.categorias : [];
+    const categorias = cats
+      .filter(c => c.activa !== false)
+      .sort((a, b) => (a.orden || 0) - (b.orden || 0))
+      .map(c => ({ ...c, activa: true }));
+
+    // estaciones por categoría (para herencia al producto)
+    const catEst = {};
+    for (const c of cats) {
+      if (c.estaciones) { catEst[c.id] = c.estaciones; if (c.nombre) catEst[c.nombre] = c.estaciones; }
+    }
+
+    const productos = (Array.isArray(carta?.productos) ? carta.productos : [])
+      .filter(p => p.activo !== false)
+      .map(p => this._proyectarProducto(p, catEst));
+
+    return { categorias, productos };
+  }
+
+  // Un producto de la carta → forma POS. Tolera el drift categoria/categoria_id e ingredientes/_base.
+  _proyectarProducto(p, catEst) {
+    const categoria_id = p.categoria_id || p.categoria || null;
+    const prod = {
+      id: p.id,
+      nombre: p.nombre,
+      precio: (p.precio ?? p.precio_base ?? 0),
+      categoria: p.categoria || p.categoria_id || null,
+      categoria_id,
+      activo: p.activo !== false
+    };
+    if (p.tipo) prod.tipo = p.tipo;
+    if (p.descripcion) prod.descripcion = p.descripcion;
+    if (p.imagen) prod.imagen = p.imagen;
+    if (Array.isArray(p.alergenos)) prod.alergenos = p.alergenos;
+    if (Array.isArray(p.etiquetas)) prod.etiquetas = p.etiquetas;
+    if (p.disponible !== undefined) prod.disponible = p.disponible;
+
+    if (Array.isArray(p.ingredientes_base) && p.ingredientes_base.length) {
+      prod.ingredientes_base = p.ingredientes_base;
+    } else if (Array.isArray(p.ingredientes) && p.ingredientes.length) {
+      prod.ingredientes_base = p.ingredientes.map(ing => {
+        const r = { id: ing.id || `ing_${this.slugify(ing.nombre)}`, nombre: ing.nombre, emoji: ing.emoji || '' };
+        if (ing.familia) r.familia = ing.familia;
+        if (ing.tipo) r.tipo = ing.tipo;
+        if (ing.precio_extra != null) r.precio_extra = ing.precio_extra;
+        return r;
+      });
+    }
+
+    if (!prod.estaciones && categoria_id && catEst[categoria_id]) prod.estaciones = catEst[categoria_id];
+    return prod;
   }
 
   // ==========================================
@@ -138,24 +219,11 @@ class ProductosModule extends BaseModule {
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
     this.config = core.config || {};
-
-    this.logger.info('module.loading', { module: this.name, version: this.version });
-
-    // Event subscriptions y tools[] (incluyendo registro en uiHandler) son
-    // auto-wireados desde module.json por el loader. tools.contract v1.2:
-    // una declaracion, tres destinos.
-
-    this.logger.info('module.loaded', { module: this.name, version: this.version });
+    this.logger.info('module.loaded', { module: this.name, version: this.version, mode: 'proyector-sin-estado' });
   }
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
-
-    // El loader desregistra automaticamente bus subs y uiHandler entries de tools[]
-    // via unregisterToolsForAI. Aqui solo limpiamos estado del modulo.
-    this.productosPerProject.clear();
-    this.categoriasPerProject.clear();
-    this.menusPendientes.clear();
     this.mappingCanalesPerProject.clear();
     this.projectPaths.clear();
     for (const [, pending] of this.pendingProjectRequests) {
@@ -163,55 +231,35 @@ class ProductosModule extends BaseModule {
       pending.reject(new Error('Module unloading'));
     }
     this.pendingProjectRequests.clear();
-
     this.logger.info('module.unloaded', { module: this.name });
   }
 
   // ==========================================
-  // Project Path Resolution
+  // Project path resolution (cache base_path; wired)
   // ==========================================
 
   async onProjectActivated(event) {
     const data = event.data || event;
     const { project_id, base_path } = data;
-    if (project_id && base_path) {
-      this.projectPaths.set(project_id, path.join(base_path, 'storage', this.storageSection));
+    if (!project_id) return;
+    if (base_path) this.projectPaths.set(project_id, path.join(base_path, 'storage', this.storageSection));
 
-      // Auto-load cartas from disk so productos/categorias are available immediately
-      try {
-        const result = await this.loadCartaFromProject(project_id);
-        this.logger.info('productos.auto_loaded', { project_id, ...result });
+    const correlation_id = event?.metadata?.correlationId || crypto.randomUUID();
+    // Hidratar el mapping canal->carta_id pidiendo snapshot a tarifas (fire-and-forget).
+    try {
+      await this.eventBus.publish('tarifas.config.solicitada', {
+        project_id, tipo: 'snapshot', correlation_id, timestamp: new Date().toISOString()
+      });
+    } catch (err) {
+      this.logger.warn('tarifas.config.solicitada.publish_failed', { project_id, error: err?.message });
+    }
 
-        // Emitir catalogo.actualizado para que comandero (y otros) llenen su cache
-        if (result.productos > 0) {
-          const productos = Array.from(this.getProductos(project_id).values())
-            .filter(p => p.activo !== false)
-            .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null, estaciones: p.estaciones || null }));
-
-          await this._publicarEvento('catalogo.actualizado', {
-            project_id,
-            productos,
-            source: 'disk_load'
-          }, event);
-        }
-      } catch (err) {
-        this.logger.warn('productos.auto_load.failed', { project_id, error: err.message });
-      }
-
-      // v4.0.0 (subsistema-carta): solicitar snapshot inicial de tarifas para hidratar el mapping canal->carta_id.
-      // Fire-and-forget --si tarifas no responde, el mapping queda vacio y se hidratara cuando tarifas publique
-      // tarifas.config.actualizada por cambio.
-      const correlation_id = event?.metadata?.correlationId || crypto.randomUUID();
-      try {
-        await this.eventBus.publish('tarifas.config.solicitada', {
-          project_id,
-          tipo: 'snapshot',
-          correlation_id,
-          timestamp: new Date().toISOString()
-        });
-      } catch (err) {
-        this.logger.warn('tarifas.config.solicitada.publish_failed', { project_id, error: err?.message });
-      }
+    // Warm del comandero: proyectar la carta activa y emitir catalogo.actualizado. Sin store.
+    try {
+      const carta = await this._cartaActiva(project_id);
+      if (carta) await this._emitCatalogo(project_id, carta, 'project_activated', event);
+    } catch (err) {
+      this.logger.warn('productos.activate.project_failed', { project_id, error: err.message });
     }
   }
 
@@ -231,228 +279,91 @@ class ProductosModule extends BaseModule {
     }
   }
 
-  /**
-   * Resolve the storage path for a project.
-   * Uses cached path from project.activated, or requests from project-manager.
-   */
   async resolveStoragePath(projectId) {
-    if (this.projectPaths.has(projectId)) {
-      return this.projectPaths.get(projectId);
-    }
-
-    // Request project info from project-manager
+    if (this.projectPaths.has(projectId)) return this.projectPaths.get(projectId);
     const requestId = crypto.randomUUID();
-
     const project = await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingProjectRequests.delete(requestId);
         reject(new Error(`Project path resolve timeout: ${projectId}`));
       }, 5000);
-
       this.pendingProjectRequests.set(requestId, { resolve, reject, timeout });
-
-      this.eventBus.publish('project.get.request', {
-        request_id: requestId, project_id: projectId
-      }).catch(err => {
+      this.eventBus.publish('project.get.request', { request_id: requestId, project_id: projectId }).catch(err => {
         clearTimeout(timeout);
         this.pendingProjectRequests.delete(requestId);
         reject(err);
       });
     });
-
     return this.projectPaths.get(projectId) || path.join(project.base_path, 'storage', this.storageSection);
   }
 
   // ==========================================
-  // Event Handlers
+  // Eventos de carta — SEÑAL de refresco (no hay store que sincronizar)
   // ==========================================
 
-  // v4.0.0 (subsistema-carta): handlers onMenuGenerado y onMenuValidado ELIMINADOS (zona 1 = drift).
-  // Auditoria F0 confirmo que solo productos los consumia (sin terceros). El catalogo se sincroniza
-  // ahora SOLO desde zona 3: carta.actualizada/editada (onCartaGenerada), carta.borrada (onCartaBorrada)
-  // y tarifas.config.actualizada (onTarifasConfigActualizada). menusPendientes queda vestigial (lo leen
-  // health/stats; siempre 0 al no poblarse).
+  // Emite catalogo.actualizado con la proyección lite (el comandero re-pull carta_completa).
+  async _emitCatalogo(project_id, carta, source, sourceEvent) {
+    const { productos } = this._proyectar(carta);
+    await this._publicarEvento('catalogo.actualizado', {
+      project_id,
+      menu_id: carta?.meta?.id || null,
+      source,
+      productos: productos.map(p => ({
+        id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null, estaciones: p.estaciones || null
+      }))
+    }, sourceEvent);
+    this.metrics?.increment?.('catalogo.actualizado.total');
+  }
 
-
-  // ==========================================
-  // carta.generada auto-sync
-  // ==========================================
-
-  /**
-   * Recibe carta.generada del menu-generator (cambios incrementales:
-   * precios, productos, ingredientes) y sincroniza directamente al catálogo.
-   * Esto cierra la brecha: antes solo toolExportToPOS propagaba cambios.
-   */
+  // carta.actualizada / carta.editada — la carta entera viene en el payload: la proyectamos
+  // y emitimos la señal. Sin tocar disco, sin acumular.
   async onCartaGenerada(event) {
-    // v4.0.0 (subsistema-carta): el payload canonico de carta.actualizada/editada es
-    //   { project_id, carta: <envelope meta+categorias+productos>, correlation_id, ... }.
-    // Compat: si event.data ya ES la carta (shape antiguo con meta al root), se usa tal cual.
     const data = event?.data || event?.payload || event;
     const carta = data?.carta || data;
     if (!carta?.meta?.id || !carta?.productos) {
       this.logger.debug('carta.evento.ignored', { reason: 'no carta.meta.id or carta.productos' });
       return;
     }
-
     const project_id = data?.project_id || carta.project_id;
-    if (!project_id) {
-      this.logger.warn('carta.evento.no_project', { carta_id: carta.meta.id });
-      return;
-    }
-
-    const correlationId = event?.metadata?.correlationId || crypto.randomUUID();
-    const start_time = Date.now();
-
-    this.logger.info('carta.generada.received', {
-      carta_id: carta.meta.id,
-      project_id,
-      productos_count: carta.productos.length,
-      categorias_count: carta.categorias?.length || 0,
-      correlation_id: correlationId
-    });
-
+    if (!project_id) { this.logger.warn('carta.evento.no_project', { carta_id: carta.meta.id }); return; }
     try {
-      // Transformar carta RAW a formato POS (ingredientes → ingredientes_base con IDs)
-      const productos = carta.productos.map(p => {
-        const prod = {
-          id: p.id,
-          nombre: p.nombre,
-          categoria: p.categoria,
-          precio: p.precio,
-          activo: true
-        };
-        if (p.ingredientes_base) {
-          prod.ingredientes_base = p.ingredientes_base;
-        } else if (p.ingredientes && p.ingredientes.length > 0) {
-          prod.ingredientes_base = p.ingredientes.map(ing => ({
-            id: ing.id || `ing_${this.slugify(ing.nombre)}`,
-            nombre: ing.nombre,
-            emoji: ing.emoji || '',
-            precio_extra: ing.precio_extra ?? 0,
-            grupo: p.categoria || 'otro'
-          }));
-        }
-        if (p.imagen) prod.imagen = p.imagen;
-        if (p.descripcion) prod.descripcion = p.descripcion;
-        return prod;
-      });
-
-      const categorias = (carta.categorias || []).map(c => ({
-        ...c,
-        activa: true
-      }));
-
-      // Sincronizar directamente al catálogo en memoria
-      const stats = await this.syncCatalogo(project_id, carta.meta.id, productos, categorias, correlationId);
-
-      // Publicar catalogo.actualizado para que comandero refresque su cache
-      await this.publishCatalogoActualizado(project_id, carta.meta.id, stats, Date.now() - start_time, correlationId);
-
-      // Persistir a disco
-      await this.persistCatalog(project_id);
-
-      this.logger.info('carta.generada.synced', {
-        carta_id: carta.meta.id,
-        project_id,
-        estadisticas: stats,
-        correlation_id: correlationId,
-        duration: Date.now() - start_time
-      });
-    } catch (error) {
-      this.logger.error('carta.generada.sync_error', {
-        carta_id: carta.meta.id,
-        project_id,
-        error: error.message,
-        correlation_id: correlationId
-      });
+      await this._emitCatalogo(project_id, carta, 'carta_change', event);
+      this.logger.info('carta.evento.proyectado', { carta_id: carta.meta.id, project_id, productos: carta.productos.length });
+    } catch (err) {
+      this.logger.error('carta.evento.error', { carta_id: carta.meta.id, project_id, error: err.message });
     }
   }
 
-  // ==========================================
-  // carta.borrada — soft-delete (subsistema-carta zona 3)
-  // ==========================================
-
-  /**
-   * Recibe carta.borrada (carta archivada por carta-manager.delete).
-   * Payload canonico: { project_id, carta: <envelope con meta.estado='archivada'>, correlation_id, motivo? }.
-   * El consumer saca los productos de esa carta de su catalogo activo (los marca activo:false).
-   * No borra del disco --la carta sigue consultable por carta.get (soft-delete, contrato subsistema-carta).
-   */
+  // carta.borrada — la borrada deja de ser la activa: re-proyectamos la que quede (si queda).
   async onCartaBorrada(event) {
     const data = event?.data || event?.payload || event;
     const carta = data?.carta || data;
-    if (!carta?.meta?.id) {
-      this.logger.debug('carta.borrada.ignored', { reason: 'no carta.meta.id' });
-      return;
-    }
+    if (!carta?.meta?.id) { this.logger.debug('carta.borrada.ignored', { reason: 'no carta.meta.id' }); return; }
     const project_id = data?.project_id || carta.project_id;
-    if (!project_id) {
-      this.logger.warn('carta.borrada.no_project', { carta_id: carta.meta.id });
-      return;
-    }
-    const correlationId = event?.metadata?.correlationId || data?.correlation_id || crypto.randomUUID();
-    const start_time = Date.now();
-
+    if (!project_id) { this.logger.warn('carta.borrada.no_project', { carta_id: carta.meta.id }); return; }
     try {
-      const productosMap = this.getProductos(project_id);
-      const ids = Array.isArray(carta.productos) ? carta.productos.map(p => p.id) : [];
-      let desactivados = 0;
-      for (const id of ids) {
-        const prod = productosMap.get(id);
-        if (prod && prod.activo !== false) {
-          prod.activo = false;
-          prod.updated_at = new Date().toISOString();
-          productosMap.set(id, prod);
-          desactivados++;
-          await this.publishProductoActualizado(project_id, id, { activo: false }, correlationId);
-        }
+      const activa = await this._cartaActiva(project_id);
+      if (activa) {
+        await this._emitCatalogo(project_id, activa, 'carta_borrada', event);
+      } else {
+        await this._publicarEvento('catalogo.actualizado', {
+          project_id, menu_id: carta.meta.id, source: 'carta_borrada', productos: []
+        }, event);
+        this.metrics?.increment?.('catalogo.actualizado.total');
       }
-
-      if (desactivados > 0) {
-        await this.persistCatalog(project_id);
-        const stats = { productos_desactivados: desactivados };
-        await this.publishCatalogoActualizado(project_id, carta.meta.id, stats, Date.now() - start_time, correlationId);
-      }
-
-      this.logger.info('carta.borrada.applied', {
-        carta_id: carta.meta.id,
-        project_id,
-        productos_desactivados: desactivados,
-        correlation_id: correlationId,
-        duration: Date.now() - start_time
-      });
-    } catch (error) {
-      this.logger.error('carta.borrada.error', {
-        carta_id: carta.meta.id,
-        project_id,
-        error: error.message,
-        correlation_id: correlationId
-      });
+      this.logger.info('carta.borrada.aplicada', { carta_id: carta.meta.id, project_id });
+    } catch (err) {
+      this.logger.error('carta.borrada.error', { carta_id: carta.meta.id, project_id, error: err.message });
     }
   }
 
-  // ==========================================
-  // tarifas.config.actualizada — cache mapping canal->carta_id (subsistema-carta)
-  // ==========================================
-
-  /**
-   * Recibe tarifas.config.actualizada (snapshot del estado de tarifas).
-   * Payload canonico: { project_id, tipo, config: { general, canales: {...}, variantes }, correlation_id }.
-   * Postura C: productos solo cachea el mapping canal->carta_id en memoria. NO expone tool de resolucion
-   * --los consumers (comandero/pedidos) hacen RESOLVER_CARTA por su cuenta e invocan productos.list({carta_id}).
-   */
+  // tarifas.config.actualizada — cachea el mapping canal->carta_id (resolución de carta activa).
   async onTarifasConfigActualizada(event) {
     const data = event?.data || event?.payload || event;
     const project_id = data?.project_id;
-    if (!project_id) {
-      this.logger.debug('tarifas.config.actualizada.no_project_id', {});
-      return;
-    }
+    if (!project_id) { this.logger.debug('tarifas.config.actualizada.no_project_id', {}); return; }
     const config = data?.config;
-    if (!config) {
-      this.logger.debug('tarifas.config.actualizada.no_config', { project_id });
-      return;
-    }
+    if (!config) { this.logger.debug('tarifas.config.actualizada.no_config', { project_id }); return; }
     const correlation_id = event?.metadata?.correlationId || data?.correlation_id || crypto.randomUUID();
     const canales = config.canales || {};
     const mapping = {
@@ -472,808 +383,298 @@ class ProductosModule extends BaseModule {
       canales_con_override: Object.keys(mapping).filter(k => k !== 'general' && mapping[k] !== null),
       correlation_id
     });
-    // No emite publish propio --productos solo cachea internamente.
   }
 
   // ==========================================
-  // UI Handlers (MQTT Request/Response)
+  // UI Handlers — todos proyectan la carta activa (sin store, sin leak)
   // ==========================================
 
-  async handleListProductos(data) {
-    const start_time = Date.now();
-    const { project_id: raw_pid, categoria, categoria_id, activo } = data || {};
-
-    if (!raw_pid) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
-    }
-
-    const project_id = this.resolveToActiveProject(raw_pid);
-
-    // Intentar cargar desde archivo si no hay productos en memoria
-    const productosMap = this.getProductos(project_id);
-    if (productosMap.size === 0) {
-      await this.loadCartaFromProject(project_id);
-    }
-
-    let productos = Array.from(this.getProductos(project_id).values());
-
-    // Filtrar por categoria (nombre o id)
-    if (categoria) {
-      productos = productos.filter(p => p.categoria === categoria);
-    }
-    if (categoria_id) {
-      productos = productos.filter(p => p.categoria_id === categoria_id || p.categoria === categoria_id);
-    }
-
-    if (activo !== undefined) {
-      const activoBoolean = activo === 'true' || activo === true;
-      productos = productos.filter(p => p.activo === activoBoolean);
-    }
-
-    productos.sort((a, b) => {
-      if (a.categoria !== b.categoria) {
-        return (a.categoria || '').localeCompare(b.categoria || '');
-      }
-      return (a.nombre || '').localeCompare(b.nombre || '');
-    });
-
-    this.metrics?.timing?.('producto.list.duration', Date.now() - start_time);
-
-    return {
-      status: 200,
-      data: { project_id, productos, total: productos.length }
-    };
-  }
-
-  async handleGetProducto(data) {
-    const { project_id: raw_pid, id } = data || {};
-
-    if (!raw_pid) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
-    }
-
-    const project_id = this.resolveToActiveProject(raw_pid);
-    const producto = this.getProductos(project_id).get(id);
-
-    if (!producto) {
-      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Producto no encontrado', { id: data?.id });
-    }
-
-    return { status: 200, data: producto };
-  }
-
-  async handleSearchProductos(data) {
-    const start_time = Date.now();
-    const { project_id: raw_pid, q } = data || {};
-
-    if (!raw_pid) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
-    }
-
-    if (!q) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'Parametro q requerido', { field: 'q' });
-    }
-
-    const project_id = this.resolveToActiveProject(raw_pid);
-    const searchTerm = q.toLowerCase();
-    const resultados = Array.from(this.getProductos(project_id).values())
-      .filter(p =>
-        p.activo &&
-        ((p.nombre || '').toLowerCase().includes(searchTerm) ||
-         (p.descripcion && p.descripcion.toLowerCase().includes(searchTerm)))
-      );
-
-    this.metrics?.timing?.('producto.search.duration', Date.now() - start_time);
-
-    return {
-      status: 200,
-      data: { project_id, resultados, total: resultados.length, query: q }
-    };
-  }
-
-  async handleListCategorias(data) {
-    const { project_id: raw_pid } = data || {};
-
-    if (!raw_pid) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
-    }
-
-    const project_id = this.resolveToActiveProject(raw_pid);
-
-    // Intentar cargar desde archivo si no hay categorías en memoria
-    const categoriasMap = this.getCategorias(project_id);
-    if (categoriasMap.size === 0) {
-      await this.loadCartaFromProject(project_id);
-    }
-
-    const categorias = Array.from(this.getCategorias(project_id).values())
-      .sort((a, b) => (a.orden || 0) - (b.orden || 0));
-
-    const categoriasConConteo = categorias.map(cat => ({
-      ...cat,
-      productos_count: Array.from(this.getProductos(project_id).values())
-        .filter(p => (p.categoria === cat.nombre || p.categoria_id === cat.id) && p.activo !== false).length
-    }));
-
-    return {
-      status: 200,
-      data: { project_id, categorias: categoriasConConteo, total: categorias.length }
-    };
-  }
-
-  /**
-   * Delega al módulo ingredientes (fuente única de ingredientes).
-   * Mantiene el endpoint productos/ingredientes por compatibilidad con el frontend.
-   */
-  async handleListIngredientes(data) {
-    const { project_id: raw_pid, tipo, grupo } = data || {};
-
-    if (!raw_pid) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
-    }
-
-    const result = await this.uiHandler.handle('ingredientes', 'list', { tipo, grupo });
-    return result;
-  }
-
-  // v2 D3 (subsistema-catalogo): lee los productos de UNA carta concreta por id (carta de canal),
-  // SIN tocar el catálogo activo general. Devuelve el mismo shape POS (con .precio mapeado de precio_base).
-  // Devuelve null si la carta no existe o falla → el caller cae al catálogo activo (fallback seguro).
-  async _readCartaProductos(project_id, carta_id) {
+  async handleCartaCompleta(data) {
     try {
-      const storagePath = await this.resolveStoragePath(project_id);
-      const cartaPath = path.join(storagePath, 'cartas', `${carta_id}.json`);
-      const carta = JSON.parse(await fs.readFile(cartaPath, 'utf8'));
-      return (carta.productos || []).map(p => ({
-        id: p.id,
-        nombre: p.nombre,
-        categoria: p.categoria,
-        categoria_id: p.categoria_id || p.categoria,
-        precio: (p.precio ?? p.precio_base ?? 0),
-        tipo: p.tipo || null,
-        activo: p.activo !== false,
-        ingredientes_base: p.ingredientes_base || p.ingredientes || []
+      const { project_id, canal, carta_id } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      const carta = await this._cartaActiva(project_id, canal, carta_id);
+      if (!carta) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'No hay carta activa para el proyecto', { project_id });
+
+      const { categorias, productos } = this._proyectar(carta);
+      const productosOut = productos.map(p => ({
+        ...p,
+        tiene_variaciones: Array.isArray(p.ingredientes_base) && p.ingredientes_base.length > 0
       }));
-    } catch (err) {
-      if (err.code !== 'ENOENT') {
-        this.logger.warn('productos.read_carta_by_id.failed', { project_id, carta_id, error: err.message });
-      }
-      return null;
-    }
-  }
 
-  async handleListPizzas(data) {
-    const { project_id: raw_pid, carta_id } = data || {};
-
-    if (!raw_pid) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
-    }
-
-    const project_id = this.resolveToActiveProject(raw_pid);
-
-    // v2 D3: si llega carta_id (carta de canal), servir ESA carta; si no o si no existe, catálogo activo (fallback).
-    let source = carta_id ? await this._readCartaProductos(project_id, carta_id) : null;
-    if (!source) {
-      const productosMap = this.getProductos(project_id);
-      if (productosMap.size === 0) {
-        await this.loadCartaFromProject(project_id);
-      }
-      source = Array.from(this.getProductos(project_id).values());
-    }
-
-    const pizzas = source
-      .filter(p =>
-        p.activo !== false && (
-          (p.categoria && p.categoria.toLowerCase().startsWith('pizz')) ||
-          (p.categoria_id && p.categoria_id.toLowerCase().startsWith('pizz')) ||
-          p.tipo === 'pizza'
-        )
-      )
-      .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
-
-    this.logger.debug('productos.pizzas.list', {
-      project_id, raw_pid, total: pizzas.length, carta_id: carta_id || null
-    });
-
-    return {
-      status: 200,
-      data: { project_id, pizzas, total: pizzas.length, carta_id: carta_id || null }
-    };
-  }
-
-  async handleUpdateProducto(data) {
-    const { project_id, id, ...updates } = data || {};
-
-    if (!project_id) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
-    }
-
-    const productosMap = this.getProductos(project_id);
-    const producto = productosMap.get(id);
-    if (!producto) {
-      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Producto no encontrado', { id: data?.id });
-    }
-
-    const cambios = {};
-    Object.keys(updates).forEach(key => {
-      if (updates[key] !== producto[key]) {
-        cambios[key] = { anterior: producto[key], nuevo: updates[key] };
-        producto[key] = updates[key];
-      }
-    });
-
-    producto.updated_at = new Date().toISOString();
-    productosMap.set(id, producto);
-
-    this.metrics?.increment?.('producto.actualizado.total');
-
-    await this.publishProductoActualizado(project_id, id, cambios);
-
-    // Persist to disk
-    await this.persistCatalog(project_id);
-
-    this.logger.info('producto.actualizado', {
-      project_id,
-      producto_id: id,
-      cambios_count: Object.keys(cambios).length
-    });
-
-    return { status: 200, data: producto };
-  }
-
-  async handleDeleteProducto(data) {
-    const { project_id, id } = data || {};
-
-    if (!project_id) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
-    }
-
-    const productosMap = this.getProductos(project_id);
-    const producto = productosMap.get(id);
-    if (!producto) {
-      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Producto no encontrado', { id: data?.id });
-    }
-
-    productosMap.delete(id);
-
-    this.metrics?.increment?.('producto.eliminado.total');
-    this.metrics?.gauge?.('producto.activos.count', productosMap.size);
-
-    await this.publishProductoEliminado(project_id, id, 'manual');
-
-    // Persist to disk
-    await this.persistCatalog(project_id);
-
-    this.logger.info('producto.eliminado', { project_id, producto_id: id });
-
-    return {
-      status: 200,
-      data: { message: 'Producto eliminado', project_id, producto_id: id }
-    };
-  }
-
-  async handleGetStats(data) {
-    const { project_id } = data || {};
-
-    if (!project_id) {
-      // Stats globales de todos los proyectos
-      let totalProductos = 0;
-      let totalCategorias = 0;
-
-      for (const [, productos] of this.productosPerProject) {
-        totalProductos += productos.size;
-      }
-      for (const [, categorias] of this.categoriasPerProject) {
-        totalCategorias += categorias.size;
-      }
+      let ingredientes = [];
+      try {
+        const ingResult = await this.uiHandler.handle('ingredientes', 'list', { project_id });
+        if (ingResult?.status === 200 && ingResult?.data?.ingredientes) ingredientes = ingResult.data.ingredientes;
+      } catch (_) { /* ingredientes best-effort */ }
 
       return {
         status: 200,
         data: {
-          proyectos_cargados: this.productosPerProject.size,
-          total_productos: totalProductos,
-          total_categorias: totalCategorias,
-          menus_pendientes_validacion: this.menusPendientes.size
+          project_id,
+          carta_id: carta?.meta?.id || carta_id || null,
+          categorias,
+          productos: productosOut,
+          ingredientes,
+          total_categorias: categorias.length,
+          total_productos: productosOut.length,
+          total_ingredientes: ingredientes.length
         }
       };
+    } catch (err) {
+      return this._handleHandlerError('productos.carta_completa.error', err, 'carta_completa');
     }
+  }
 
-    const productosMap = this.getProductos(project_id);
-    const categoriasMap = this.getCategorias(project_id);
+  async handleListProductos(data) {
+    try {
+      const start_time = Date.now();
+      const { project_id, categoria, categoria_id, activo, canal, carta_id } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
 
-    const productosPorCategoria = {};
-    const productosActivos = Array.from(productosMap.values()).filter(p => p.activo !== false);
+      const carta = await this._cartaActiva(project_id, canal, carta_id);
+      let productos = carta ? this._proyectar(carta).productos : [];
 
-    productosActivos.forEach(p => {
-      const cat = p.categoria || 'Sin categoría';
-      productosPorCategoria[cat] = (productosPorCategoria[cat] || 0) + 1;
-    });
-
-    const productosConAlergenos = productosActivos.filter(p => p.alergenos && p.alergenos.length > 0).length;
-
-    return {
-      status: 200,
-      data: {
-        project_id,
-        total_productos: productosMap.size,
-        productos_activos: productosActivos.length,
-        productos_inactivos: productosMap.size - productosActivos.length,
-        total_categorias: categoriasMap.size,
-        productos_por_categoria: productosPorCategoria,
-        productos_con_alergenos: productosConAlergenos,
-        menus_pendientes_validacion: this.menusPendientes.size
+      if (categoria) productos = productos.filter(p => p.categoria === categoria);
+      if (categoria_id) productos = productos.filter(p => p.categoria_id === categoria_id || p.categoria === categoria_id);
+      if (activo !== undefined) {
+        const activoBoolean = activo === 'true' || activo === true;
+        productos = productos.filter(p => (p.activo !== false) === activoBoolean);
       }
-    };
+
+      productos.sort((a, b) =>
+        a.categoria !== b.categoria
+          ? (a.categoria || '').localeCompare(b.categoria || '')
+          : (a.nombre || '').localeCompare(b.nombre || ''));
+
+      this.metrics?.timing?.('producto.list.duration', Date.now() - start_time);
+      return { status: 200, data: { project_id, productos, total: productos.length } };
+    } catch (err) {
+      return this._handleHandlerError('productos.list.error', err, 'list');
+    }
+  }
+
+  async handleGetProducto(data) {
+    try {
+      const { project_id, id, canal, carta_id } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
+      const carta = await this._cartaActiva(project_id, canal, carta_id);
+      const producto = carta ? this._proyectar(carta).productos.find(p => p.id === id) : null;
+      if (!producto) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Producto no encontrado', { id });
+      return { status: 200, data: producto };
+    } catch (err) {
+      return this._handleHandlerError('productos.get.error', err, 'get');
+    }
+  }
+
+  async handleSearchProductos(data) {
+    try {
+      const start_time = Date.now();
+      const { project_id, q, canal, carta_id } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      if (!q) return this._errorResponse(400, 'INVALID_INPUT', 'Parametro q requerido', { field: 'q' });
+
+      const carta = await this._cartaActiva(project_id, canal, carta_id);
+      const searchTerm = q.toLowerCase();
+      const resultados = (carta ? this._proyectar(carta).productos : []).filter(p =>
+        p.activo !== false &&
+        ((p.nombre || '').toLowerCase().includes(searchTerm) ||
+         (p.descripcion && p.descripcion.toLowerCase().includes(searchTerm)))
+      );
+
+      this.metrics?.timing?.('producto.search.duration', Date.now() - start_time);
+      return { status: 200, data: { project_id, resultados, total: resultados.length, query: q } };
+    } catch (err) {
+      return this._handleHandlerError('productos.search.error', err, 'search');
+    }
+  }
+
+  async handleListCategorias(data) {
+    try {
+      const { project_id, canal, carta_id } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      const carta = await this._cartaActiva(project_id, canal, carta_id);
+      if (!carta) return { status: 200, data: { project_id, categorias: [], total: 0 } };
+
+      const { categorias, productos } = this._proyectar(carta);
+      const categoriasConConteo = categorias.map(cat => ({
+        ...cat,
+        productos_count: productos.filter(p => (p.categoria === cat.nombre || p.categoria_id === cat.id) && p.activo !== false).length
+      }));
+      return { status: 200, data: { project_id, categorias: categoriasConConteo, total: categorias.length } };
+    } catch (err) {
+      return this._handleHandlerError('productos.categorias.error', err, 'categorias');
+    }
+  }
+
+  async handleListIngredientes(data) {
+    try {
+      const { project_id, tipo, grupo } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      return await this.uiHandler.handle('ingredientes', 'list', { project_id, tipo, grupo });
+    } catch (err) {
+      return this._handleHandlerError('productos.ingredientes.error', err, 'ingredientes');
+    }
+  }
+
+  async handleListPizzas(data) {
+    try {
+      const { project_id, canal, carta_id } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      const carta = await this._cartaActiva(project_id, canal, carta_id);
+      const productos = carta ? this._proyectar(carta).productos : [];
+      const pizzas = productos
+        .filter(p =>
+          p.activo !== false && (
+            (p.categoria && p.categoria.toLowerCase().startsWith('pizz')) ||
+            (p.categoria_id && p.categoria_id.toLowerCase().startsWith('pizz')) ||
+            p.tipo === 'pizza'
+          ))
+        .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+      return { status: 200, data: { project_id, pizzas, total: pizzas.length, carta_id: carta_id || carta?.meta?.id || null } };
+    } catch (err) {
+      return this._handleHandlerError('productos.pizzas.error', err, 'pizzas');
+    }
+  }
+
+  // Mutaciones → delegan a carta-manager (la carta es la fuente de verdad; productos no escribe).
+  async handleUpdateProducto(data) {
+    try {
+      const { project_id, id, carta_id, canal, ...updates } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
+      const cid = await this._resolverCartaActiva(project_id, canal, carta_id);
+      if (!cid) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'No hay carta activa para el proyecto', { project_id });
+      const r = await this._rpc('carta.update_product.request',
+        { project_id, carta_id: cid, producto_id: id, campos: updates }, { timeout_ms: 8000 });
+      if (!r) return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'carta-manager no responde');
+      return r;
+    } catch (err) {
+      return this._handleHandlerError('productos.update.error', err, 'update');
+    }
+  }
+
+  async handleDeleteProducto(data) {
+    try {
+      const { project_id, id, carta_id, canal } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
+      const cid = await this._resolverCartaActiva(project_id, canal, carta_id);
+      if (!cid) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'No hay carta activa para el proyecto', { project_id });
+      const r = await this._rpc('carta.remove_product.request',
+        { project_id, carta_id: cid, producto_id: id }, { timeout_ms: 8000 });
+      if (!r) return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'carta-manager no responde');
+      return r;
+    } catch (err) {
+      return this._handleHandlerError('productos.delete.error', err, 'delete');
+    }
+  }
+
+  async handleGetStats(data) {
+    try {
+      const { project_id } = data || {};
+      if (!project_id) {
+        return {
+          status: 200,
+          data: {
+            mode: 'proyector-sin-estado',
+            mensaje: 'productos no mantiene store; proyecta la carta activa por proyecto',
+            proyectos_con_mapping: this.mappingCanalesPerProject.size
+          }
+        };
+      }
+      const carta = await this._cartaActiva(project_id);
+      if (!carta) {
+        return { status: 200, data: { project_id, total_productos: 0, total_categorias: 0, productos_por_categoria: {} } };
+      }
+      const { categorias, productos } = this._proyectar(carta);
+      const productosPorCategoria = {};
+      for (const p of productos) {
+        const cat = p.categoria || 'Sin categoría';
+        productosPorCategoria[cat] = (productosPorCategoria[cat] || 0) + 1;
+      }
+      const productosConAlergenos = productos.filter(p => Array.isArray(p.alergenos) && p.alergenos.length > 0).length;
+      return {
+        status: 200,
+        data: {
+          project_id,
+          carta_id: carta?.meta?.id || null,
+          total_productos: productos.length,
+          productos_activos: productos.length,
+          total_categorias: categorias.length,
+          productos_por_categoria: productosPorCategoria,
+          productos_con_alergenos: productosConAlergenos
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('productos.stats.error', err, 'stats');
+    }
   }
 
   async handleHealthCheck() {
-    let totalProductos = 0;
-    let totalCategorias = 0;
-
-    for (const [, productos] of this.productosPerProject) {
-      totalProductos += productos.size;
-    }
-    for (const [, categorias] of this.categoriasPerProject) {
-      totalCategorias += categorias.size;
-    }
-
     return {
       status: 200,
       data: {
         status: 'healthy',
         module: this.name,
         version: this.version,
-        catalogo: {
-          proyectos: this.productosPerProject.size,
-          productos: totalProductos,
-          categorias: totalCategorias,
-          menus_pendientes: this.menusPendientes.size
-        }
+        mode: 'proyector-sin-estado',
+        proyectos_con_mapping: this.mappingCanalesPerProject.size
       }
     };
   }
 
   async handleGetMetrics() {
-    let totalProductos = 0;
-    let totalCategorias = 0;
-
-    for (const [, productos] of this.productosPerProject) {
-      totalProductos += productos.size;
-    }
-    for (const [, categorias] of this.categoriasPerProject) {
-      totalCategorias += categorias.size;
-    }
-
     return {
       status: 200,
       data: {
         counters: {
-          'producto.creado.total': this.metrics?.getCounter?.('producto.creado.total') || 0,
-          'producto.actualizado.total': this.metrics?.getCounter?.('producto.actualizado.total') || 0,
-          'producto.eliminado.total': this.metrics?.getCounter?.('producto.eliminado.total') || 0,
           'catalogo.actualizado.total': this.metrics?.getCounter?.('catalogo.actualizado.total') || 0
         },
         gauges: {
-          'proyectos.count': this.productosPerProject.size,
-          'producto.activos.count': totalProductos,
-          'categorias.count': totalCategorias
+          'proyectos.con_mapping': this.mappingCanalesPerProject.size
         }
       }
     };
   }
 
-  /**
-   * Carga la carta desde archivo del proyecto
-   */
+  // Re-proyecta la carta activa y reemite catalogo.actualizado (refresco bajo demanda).
   async handleLoadCarta(data) {
-    const { project_id } = data || {};
-
-    if (!project_id) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
-    }
-
     try {
-      const start_time = Date.now();
-      const result = await this.loadCartaFromProject(project_id);
-      const stats = {
-        productos_nuevos: result.productos,
-        productos_actualizados: 0,
-        productos_desactivados: 0,
-        categorias_nuevas: result.categorias
-      };
-      await this.publishCatalogoActualizado(project_id, 'load_carta', stats, Date.now() - start_time, data?.correlation_id);
+      const { project_id } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      const carta = await this._cartaActiva(project_id);
+      if (!carta) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'No hay carta activa para el proyecto', { project_id });
+      await this._emitCatalogo(project_id, carta, 'load_carta', { data });
+      const { categorias, productos } = this._proyectar(carta);
       return {
         status: 200,
         data: {
           project_id,
-          productos: result.productos,
-          categorias: result.categorias,
-          message: 'Carta cargada exitosamente'
+          carta_id: carta?.meta?.id || null,
+          productos: productos.length,
+          categorias: categorias.length,
+          message: 'Catálogo re-proyectado desde la carta activa'
         }
       };
-    } catch (error) {
-      this.logger.error('productos.load_carta.error', {
-        project_id,
-        error: error.message
-      });
-      return this._handleHandlerError('productos.load_carta.error', error);
-    }
-  }
-
-  /**
-   * Devuelve la carta COMPLETA (categorías + productos + ingredientes) de golpe.
-   * NO requiere project_id — busca el primer proyecto que tenga datos cargados.
-   * Si se pasa project_id, lo usa; si no, usa el primero disponible.
-   * Pensado para que el comandero cargue todo de un solo golpe.
-   */
-  async handleCartaCompleta(data) {
-    let projectId = data?.project_id;
-
-    // Si no hay project_id o no tiene datos, buscar el primer proyecto con datos
-    if (!projectId || !this.productosPerProject.has(projectId) || this.productosPerProject.get(projectId).size === 0) {
-      for (const [pid, prods] of this.productosPerProject) {
-        if (prods.size > 0) {
-          projectId = pid;
-          break;
-        }
-      }
-    }
-
-    if (!projectId) {
-      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'No hay carta cargada en ningun proyecto');
-    }
-
-    const categoriasMap = this.categoriasPerProject.get(projectId) || new Map();
-    const productosMap = this.productosPerProject.get(projectId) || new Map();
-
-    const categorias = Array.from(categoriasMap.values())
-      .filter(c => c.activa !== false)
-      .sort((a, b) => (a.orden || 0) - (b.orden || 0));
-
-    const productos = Array.from(productosMap.values())
-      .filter(p => p.activo !== false)
-      .map(p => ({
-        ...p,
-        tiene_variaciones: (p.ingredientes && p.ingredientes.length > 0) ||
-                           (p.ingredientes_base && p.ingredientes_base.length > 0)
-      }));
-
-    // Ingredientes: pedir al módulo ingredientes (fuente única)
-    let ingredientes = [];
-    const ingResult = await this.uiHandler.handle('ingredientes', 'list', {});
-    if (ingResult?.status === 200 && ingResult?.data?.ingredientes) {
-      ingredientes = ingResult.data.ingredientes;
-    }
-
-    return {
-      status: 200,
-      data: {
-        project_id: projectId,
-        categorias,
-        productos,
-        ingredientes,
-        total_categorias: categorias.length,
-        total_productos: productos.length,
-        total_ingredientes: ingredientes.length
-      }
-    };
-  }
-
-  // ==========================================
-  // Event Publishers
-  // ==========================================
-
-  async publishProductoCreado(project_id, producto, correlation_id) {
-    await this._publicarEvento('producto.creado', {
-      project_id,
-      id: producto.id,
-      producto_id: producto.id,
-      nombre: producto.nombre,
-      emoji: producto.emoji,
-      categoria: producto.categoria,
-      precio: producto.precio,
-      ingredientes_base: producto.ingredientes_base,
-      alergenos: producto.alergenos,
-      menu_source_id: producto.menu_source_id,
-      created_at: producto.created_at
-    }, { correlation_id });
-  }
-
-  async publishProductoActualizado(project_id, producto_id, cambios, correlation_id) {
-    const producto = this.getProductos(project_id).get(producto_id);
-    await this._publicarEvento('producto.actualizado', {
-      project_id,
-      id: producto_id,
-      producto_id,
-      nombre: producto?.nombre || producto_id,
-      precio: producto?.precio,
-      cambios,
-      updated_at: new Date().toISOString()
-    }, { correlation_id });
-  }
-
-  async publishProductoEliminado(project_id, producto_id, motivo, correlation_id) {
-    await this._publicarEvento('producto.eliminado', {
-      project_id,
-      producto_id,
-      motivo
-    }, { correlation_id });
-  }
-
-  async publishCatalogoActualizado(project_id, menu_id, estadisticas, sync_duration, correlation_id) {
-    const productos = Array.from(this.getProductos(project_id).values())
-      .filter(p => p.activo !== false)
-      .map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null, estaciones: p.estaciones || null }));
-
-    await this._publicarEvento('catalogo.actualizado', {
-      project_id,
-      menu_id,
-      estadisticas,
-      sync_duration,
-      productos
-    }, { correlation_id });
-  }
-
-  // ==========================================
-  // Helper Methods
-  // ==========================================
-
-  /**
-   * Persiste el catálogo actual a disco como carta JSON.
-   * Guarda productos y categorías en {storagePath}/productos/catalogo_activo.json (namespace propio, v4.0.0)
-   */
-  async persistCatalog(project_id) {
-    let storagePath;
-    try {
-      storagePath = await this.resolveStoragePath(project_id);
     } catch (err) {
-      this.logger.warn('productos.persist.path_failed', { project_id, error: err.message });
-      return;
-    }
-
-    // v4.0.0 (subsistema-carta): productos escribe su catalogo en su PROPIO namespace.
-    // Solo carta-manager escribe a /storage/pizzepos/cartas/ (contrato D1).
-    const productosDir = path.join(storagePath, 'productos');
-    const catalogPath = path.join(productosDir, 'catalogo_activo.json');
-
-    try {
-      await fs.mkdir(productosDir, { recursive: true });
-
-      const productosMap = this.getProductos(project_id);
-      const categoriasMap = this.getCategorias(project_id);
-
-      const catalog = {
-        meta: {
-          id: 'catalogo_activo',
-          nombre: 'Catálogo Activo',
-          updated_at: new Date().toISOString()
-        },
-        categorias: Array.from(categoriasMap.values()),
-        productos: Array.from(productosMap.values())
-      };
-
-      await fs.writeFile(catalogPath, JSON.stringify(catalog, null, 2), 'utf-8');
-
-      this.logger.info('productos.persisted', {
-        project_id,
-        productos: catalog.productos.length,
-        categorias: catalog.categorias.length,
-        path: catalogPath
-      });
-    } catch (err) {
-      this.logger.error('productos.persist.failed', {
-        project_id,
-        error: err.message
-      });
+      return this._handleHandlerError('productos.load_carta.error', err, 'load_carta');
     }
   }
 
-  async syncCatalogo(project_id, menu_id, productos, categorias, correlation_id) {
-    const stats = {
-      productos_nuevos: 0,
-      productos_actualizados: 0,
-      productos_desactivados: 0,
-      categorias_nuevas: 0
-    };
+  // ==========================================
+  // Helper
+  // ==========================================
 
-    const categoriasMap = this.getCategorias(project_id);
-    const productosMap = this.getProductos(project_id);
-
-    for (const cat of categorias) {
-      if (!categoriasMap.has(cat.id)) {
-        categoriasMap.set(cat.id, { ...cat, activa: true });
-        stats.categorias_nuevas++;
-      }
-    }
-
-    const productosExistentes = new Set(productosMap.keys());
-
-    for (const prod of productos) {
-      const productoExistente = productosMap.get(prod.id);
-
-      if (productoExistente) {
-        const productoActualizado = {
-          ...productoExistente,
-          ...prod,
-          activo: true,
-          menu_source_id: menu_id,
-          updated_at: new Date().toISOString()
-        };
-        productosMap.set(prod.id, productoActualizado);
-        stats.productos_actualizados++;
-
-        await this.publishProductoActualizado(project_id, prod.id, { menu_source_id: menu_id }, correlation_id);
-
-      } else {
-        const nuevoProducto = {
-          ...prod,
-          activo: true,
-          menu_source_id: menu_id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-        productosMap.set(prod.id, nuevoProducto);
-        stats.productos_nuevos++;
-
-        this.metrics?.increment?.('producto.creado.total');
-        await this.publishProductoCreado(project_id, nuevoProducto, correlation_id);
-      }
-
-      productosExistentes.delete(prod.id);
-    }
-
-    for (const prod_id of productosExistentes) {
-      const producto = productosMap.get(prod_id);
-      if (producto && producto.activo) {
-        producto.activo = false;
-        producto.updated_at = new Date().toISOString();
-        productosMap.set(prod_id, producto);
-        stats.productos_desactivados++;
-
-        await this.publishProductoActualizado(project_id, prod_id, { activo: false }, correlation_id);
-      }
-    }
-
-    return stats;
-  }
-
-  /**
-   * Carga carta desde el sistema de archivos del proyecto
-   * Resuelve base_path via project-manager (no asume UUID como directorio)
-   */
-  async loadCartaFromProject(project_id) {
-    let storagePath;
-    try {
-      storagePath = await this.resolveStoragePath(project_id);
-    } catch (err) {
-      this.logger.warn('productos.resolve_path.failed', { project_id, error: err.message });
-      return { productos: 0, categorias: 0 };
-    }
-    const cartasDir = path.join(storagePath, 'cartas');
-
-    const result = {
-      productos: 0,
-      categorias: 0
-    };
-
-    try {
-      // Cargar cartas
-      try {
-        const files = await fs.readdir(cartasDir);
-        const jsonFiles = files.filter(f => f.endsWith('.json'));
-
-        for (const file of jsonFiles) {
-          const cartaPath = path.join(cartasDir, file);
-          const cartaData = await fs.readFile(cartaPath, 'utf8');
-          const carta = JSON.parse(cartaData);
-
-          // Cargar categorías de la carta
-          if (carta.categorias) {
-            const categoriasMap = this.getCategorias(project_id);
-            for (const cat of carta.categorias) {
-              categoriasMap.set(cat.id, { ...cat, activa: true });
-              result.categorias++;
-            }
-          }
-
-          // Cargar productos de la carta (normalizar RAW → POS si falta ingredientes_base)
-          if (carta.productos) {
-            // Construir mapa de estaciones por categoría para herencia
-            const catEstacionesMap = {};
-            if (carta.categorias) {
-              for (const cat of carta.categorias) {
-                if (cat.estaciones) catEstacionesMap[cat.id] = cat.estaciones;
-              }
-            }
-
-            const productosMap = this.getProductos(project_id);
-            for (const prod of carta.productos) {
-              this.normalizeProductoPOS(prod);
-              // Heredar estaciones de la categoría si el producto no define las suyas
-              if (!prod.estaciones && prod.categoria && catEstacionesMap[prod.categoria]) {
-                prod.estaciones = catEstacionesMap[prod.categoria];
-              }
-              productosMap.set(prod.id, {
-                ...prod,
-                activo: true,
-                carta_source: carta.meta?.id || file.replace('.json', ''),
-                loaded_at: new Date().toISOString()
-              });
-              result.productos++;
-            }
-          }
-        }
-      } catch (e) {
-        // No hay directorio de cartas
-        this.logger.debug('productos.no_cartas_dir', { project_id, path: cartasDir });
-      }
-
-      this.logger.info('productos.carta_loaded', {
-        project_id,
-        productos: result.productos,
-        categorias: result.categorias
-      });
-
-      // v4.0.0 (subsistema-carta): re-emit de menu.generado eliminado (zona 1 = drift).
-      // categorias se popula via carta.actualizada/editada (zona 3), no via menu.generado.
-
-      return result;
-    } catch (error) {
-      this.logger.warn('productos.load_carta.error', {
-        project_id,
-        error: error.message
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Slugify — misma lógica que menu-generator para generar IDs deterministas
-   */
+  // Slugify — misma lógica que menu-generator para IDs deterministas de ingrediente.
   slugify(text) {
     if (!text) return 'sin_nombre';
     return text.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '')
       || 'sin_nombre';
-  }
-
-  /**
-   * Normaliza un producto RAW de carta (ingredientes sin ID)
-   * al formato POS (ingredientes_base con IDs).
-   * Conserva tipo y precio_extra si vienen del menu-generator.
-   * Si ya tiene ingredientes_base, no toca nada.
-   */
-  normalizeProductoPOS(prod) {
-    if (prod.ingredientes_base) return prod;
-    if (!prod.ingredientes || prod.ingredientes.length === 0) return prod;
-
-    prod.ingredientes_base = prod.ingredientes.map(ing => {
-      const result = {
-        id: ing.id || `ing_${this.slugify(ing.nombre)}`,
-        nombre: ing.nombre,
-        emoji: ing.emoji || ''
-      };
-      if (ing.tipo) result.tipo = ing.tipo;
-      if (ing.precio_extra != null) result.precio_extra = ing.precio_extra;
-      return result;
-    });
-
-    return prod;
-  }
-
-  applyCorrections(productos, correcciones) {
-    const productosMap = new Map(productos.map(p => [p.id, p]));
-
-    correcciones.forEach(corr => {
-      const producto = productosMap.get(corr.producto_id);
-      if (producto && corr.campo) {
-        producto[corr.campo] = corr.valor_nuevo;
-      }
-    });
-
-    return Array.from(productosMap.values());
   }
 }
 

@@ -1,17 +1,18 @@
 {
   "name": "productos",
-  "version": "4.0.0",
-  "_v4_0_changelog": "v4.0.0 (2026-06-01): aplica TP3 del contrato subsistema-carta v1.0.0. Cambios: (a) verificacion --onCartaGenerada ya esperaba carta entera, no requirio cambio; (b) anyade subscribe a tarifas.config.actualizada + handler onTarifasConfigActualizada que cachea mapping canal->carta_id en memoria (postura C, no expone tool de resolucion); (c) elimina subscribes a menu.generado y menu.validado y handlers asociados, mas re-emit interno de menu.generado (auditoria F0: solo productos los consumia, sin terceros); (d) config.persistence.paths cambia a {project.base_path}/storage/pizzepos/productos/catalogo_activo.json (su propio namespace, NO /storage/pizzepos/cartas/ que es de carta-manager); (e) propaga correlation_id en todos los publishes tomando del evento origen o generando con crypto.randomUUID().",
-  "description": "Catalogo de productos pizzepos multi-tenant. Cada proyecto tiene su propio catalogo, sincronizado desde cartas (carta.actualizada/editada/borrada). Lee el dato canonico de cartas desde {project.base_path}/storage/pizzepos/cartas/ (propiedad de carta-manager) y persiste su catalogo activo en su propio namespace {project.base_path}/storage/pizzepos/productos/. Emite producto.{creado,actualizado,eliminado} y catalogo.actualizado para que comandero/pedidos refresquen su cache.",
+  "version": "5.0.0",
+  "_v5_0_changelog": "v5.0.0 (2026-06-14): REDISEÑO — productos pasa de STORE a PROYECTOR SIN ESTADO sobre carta-manager. La carta es la UNICA fuente de verdad; productos proyecta la carta activa del proyecto a formato POS al vuelo via carta.get.request (reflejo, ms). ELIMINADO: productosPerProject + categoriasPerProject (store en memoria), catalogo_activo.json (persistencia), syncCatalogo (merge incremental que derivaba -> 29 fantasmas), loadCartaFromProject (union de TODAS las cartas del dir), resolveToActiveProject + el fallback inline de carta_completa (leak cross-project). AHORA: catalogo == proyectar(carta_activa) SIEMPRE -> sin acumulacion, sin fantasmas, sin stale, sin leak (cada lectura es de LA carta de ESE proyecto). Resolucion de carta activa: carta_id explicito -> tarifas(canal) -> tarifas(general) -> carta.list en_servicio. Mutaciones (update/delete producto) DELEGAN a carta-manager (carta.update_product/remove_product.request). REQUIERE carta-manager hibrido (reflejo) desplegado. NOTA: ya NO emite producto.{creado,actualizado,eliminado} (eran artefactos del sync de store); el consumer canonico es carta.actualizada/editada (la carta) + catalogo.actualizado (señal de refresco). v4.0.0 (2026-06-01): TP3 subsistema-carta (tarifas mapping + elimina menu.generado).",
+  "description": "Catalogo de productos pizzepos multi-tenant. PROYECTOR SIN ESTADO: no guarda copia; proyecta la carta activa del proyecto (carta-manager, fuente unica) a formato POS al vuelo via carta.get.request. Lee la carta por su DUEÑO (carta-manager RPC), no por fs directo. Emite catalogo.actualizado como señal de refresco para que comandero/pedidos re-pull. Mutaciones delegan a carta-manager.",
   "author": "Pizzepos Team",
   "language": "es",
   "main": "index.js",
   "events": {
     "publishes": [
-      { "event": "producto.creado",       "description": "Nuevo producto creado desde menu generado o carta. project_id top-level + correlation_id + timestamp." },
-      { "event": "producto.actualizado",  "description": "Producto actualizado (precio, ingredientes, activo). project_id top-level + correlation_id + timestamp." },
-      { "event": "producto.eliminado",    "description": "Producto eliminado del catalogo. project_id top-level + correlation_id + timestamp." },
-      { "event": "catalogo.actualizado",  "description": "Catalogo completo actualizado desde carta. Consumido por pedidos/comandero para refrescar cache. project_id top-level + correlation_id + timestamp." },
+      { "event": "catalogo.actualizado",  "description": "SEÑAL de refresco: la carta activa del proyecto cambio (o se activo el proyecto). Lleva la proyeccion lite. Consumido por comandero/pedidos para re-pull carta_completa. project_id top-level + correlation_id + timestamp." },
+      { "event": "carta.get.request",     "description": "RPC a carta-manager (reflejo): pide la carta activa para proyectarla. Correlacionado por request_id." },
+      { "event": "carta.list.request",    "description": "RPC a carta-manager (reflejo): resuelve la carta en_servicio cuando tarifas no fija general. Correlacionado por request_id." },
+      { "event": "carta.update_product.request", "description": "RPC a carta-manager: delega la edicion de un producto (productos no escribe; la carta es la fuente)." },
+      { "event": "carta.remove_product.request", "description": "RPC a carta-manager: delega el borrado de un producto." },
       { "event": "project.get.request",   "description": "Request a project-manager para resolver base_path. Correlacionado por request_id." },
       { "event": "tarifas.config.solicitada", "description": "Solicita snapshot de tarifas en onProjectActivated para hidratar el mapping canal->carta_id. Fire-and-forget." }
     ],
@@ -216,21 +217,18 @@
       "errores_conocidos": ["RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
     }
   ],
-  "dependencies": ["project-manager", "ingredientes"],
+  "dependencies": ["project-manager", "ingredientes", "carta-manager"],
   "tracing": {
     "propaga_correlation_id": true
   },
   "config": {
     "persistence": {
-      "type": "json-file-per-project",
-      "owner": "ProductosModule (Map productosPerProject + Map categoriasPerProject + Map menusPendientes)",
-      "paths": [
-        "{project.base_path}/storage/pizzepos/productos/catalogo_activo.json (write atomic on update/delete)"
-      ],
-      "_nota_lectura_cartas": "Productos LEE el dato canonico de cartas desde {project.base_path}/storage/pizzepos/cartas/ (propiedad de carta-manager) via fs.read.request, pero NO lo declara aqui porque config.persistence.paths describe solo lo que productos POSEE/ESCRIBE.",
+      "type": "none",
+      "owner": "ProductosModule — PROYECTOR SIN ESTADO: no posee ni escribe ningun fichero.",
+      "paths": [],
+      "_nota_fuente_de_verdad": "La carta (carta-manager, /storage/pizzepos/cartas/) es la UNICA fuente. productos la LEE via carta.get.request (RPC al dueño, NO fs directo) y la proyecta a POS al vuelo. El unico estado en memoria es mappingCanalesPerProject (canal->carta_id, de tarifas), reconstruible desde tarifas.config.actualizada.",
       "restart_resilient": true,
-      "concurrency": "single-writer-per-project",
-      "lost_on_restart": ["menusPendientes", "pendingProjectRequests"]
+      "lost_on_restart": ["mappingCanalesPerProject", "pendingProjectRequests"]
     }
   },
   "observability": {

@@ -246,17 +246,15 @@ export type { Carta, CartaResumen, CartaMeta, Categoria, Producto, Ingrediente, 
 export {
   cartaDesignStore,
   loadCartaForDesign,
-  loadProfiles,
   loadGallery,
   initCartaDesignSubscriptions,
-  designProfiles,
   designGallery,
   designLoading,
   designError,
   cartaLoaded,
   cartaResumen
 } from './carta-design';
-export type { DesignProfile, DesignMeta, CartaDesignState, CartaResumen } from './carta-design';
+export type { DesignMeta, CartaDesignState, CartaResumen } from './carta-design';
 
 // Carta Marketing Store
 export {

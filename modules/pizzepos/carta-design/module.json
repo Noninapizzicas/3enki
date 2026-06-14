@@ -1,23 +1,21 @@
 {
-  "_doc": "Manifest del modulo carta-design — HIBRIDO (blueprint + reflejo JS). El reflejo (index.js) sirve las 6 ops DETERMINISTAS de gestion de archivos en el bus (design.<op>.request): load_carta (LEE la carta por carta.get RPC), save (guarda el HTML), profiles/save_profile/delete_profile (CRUD de estilos), gallery (lista designs). Lo FUZZY —entrevista + diseno creativo del HTML— lo hace el LLM de PAGINA (el equipo de agentes R0-R8 del context.json esta APARCADO). 5 profiles built-in en design-profiles/ (NO modificables, leidos local). Custom profiles + designs en data/projects/{slug}/carta-design/. El loader carga ambos (blueprint_driven + index.js = hibrido).",
+  "_doc": "Manifest del modulo carta-design — HIBRIDO (blueprint + reflejo JS). El reflejo (index.js) sirve las 4 ops DETERMINISTAS en el bus (design.<op>.request): contexto_diseno (HIDRATA carta+marca en 1 RPC), load_carta (solo la carta), save (guarda el HTML), gallery (lista los disenos/eventos guardados). Lo FUZZY —entrevista + composicion del HTML— lo hace el LLM de PAGINA (sin agente). La IDENTIDAD del diseno sale de la MARCA (carta-marketing): colores, tipografias, logo, voz. NO hay biblioteca de profiles/plantillas. Disenos guardados en data/projects/{slug}/pizzepos/carta-design/designs/.",
   "name": "carta-design",
-  "version": "2.1.0",
-  "_v2_1_nota": "v2.1.0 (2026-06-14): carta-design BEBE de carta-marketing. Nueva op del reflejo design.contexto_diseno: HIDRATA en una RPC {carta, marca, profiles} para que el diseno siembre colores/tipografias/logo/voz desde marca.json (capturado en el onboarding) en vez de re-preguntarlos. Marca por la PUERTA del dueno (carta-marketing.get_perfil), best-effort. El LLM de pagina llama contexto_diseno al inicio en lugar de load_carta.",
-  "_v2_0_nota": "v2.0.0 (2026-06-14): HIBRIDADO. Las 6 ops (file management deterministas) pasan al REFLEJO JS (index.js, CartaDesignReflejo extends ModuloHibridoReflejo) — servidas en el bus (design.<op>.request) sin turno LLM. Lee el contrato fs real (normaliza). Built-in profiles leidos local. Los cajones del blueprint quedan como delegadores; la entrevista + diseno del HTML siguen en el LLM de pagina (sin agente). v1.1.0: blueprint-driven puro.",
-  "description": "Modulo carta-design HIBRIDO: reflejo JS sirve las 6 ops deterministas (gestion de designs HTML y profiles de estilo) en el bus; el LLM de pagina hace lo creativo (entrevista + diseno del HTML, SIN agente) y llama al reflejo para load_carta/save. Estudio de diseno de cartas impresas.",
+  "version": "3.0.0",
+  "_v3_0_nota": "v3.0.0 (2026-06-14): SE QUITA LA CAPA DE PROFILES. Fuera las ops design.profiles/save_profile/delete_profile, los 5 profiles built-in (design-profiles/ archivado) y la biblioteca de estilos. La identidad del diseno la da la MARCA (carta-marketing.get_perfil): colores/tipografias/logo/voz. Un solo origen, sin plantillas enlatadas. contexto_diseno pasa a devolver {carta, marca} (sin profiles). Engranaje arreglado: load_carta y el camino de error de contexto_diseno devuelven {status,data} fresco (antes propagaban la respuesta de carta.get verbatim -> arrastraba su request_id -> timeout). Quedan 4 ops: contexto_diseno, load_carta, save, gallery.",
+  "_v2_1_nota": "v2.1.0 (2026-06-14): carta-design BEBE de carta-marketing (design.contexto_diseno). [Reemplazado en v3.0.0: profiles eliminados.]",
+  "_v2_0_nota": "v2.0.0 (2026-06-14): HIBRIDADO. Las ops de gestion de archivos pasan al REFLEJO JS (index.js, CartaDesignReflejo extends ModuloHibridoReflejo) — servidas en el bus sin turno LLM.",
+  "description": "Modulo carta-design HIBRIDO: el reflejo JS sirve 4 ops deterministas (contexto_diseno/load_carta/save/gallery) en el bus; el LLM de pagina hace lo creativo (entrevista + composicion del HTML, SIN agente) bebiendo la identidad de la MARCA. Estudio de diseno de cartas impresas.",
   "language": "es",
   "blueprint_driven": true,
   "blueprint_path": "carta-design.blueprint.json",
   "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
   "target_page_id": "carta-design",
   "subscribes": [
-    { "event": "design.contexto_diseno.request", "handler": "onContextoDisenoRequest", "description": "Reflejo JS: HIDRATA todo para disenar en una RPC — carta (carta.get) + marca (carta-marketing.get_perfil, best-effort) + profiles. carta-design BEBE la identidad del onboarding, no la re-pregunta." },
-    { "event": "design.load_carta.request", "handler": "onLoadCartaRequest", "description": "Reflejo JS: trae la carta a disenar (carta.get RPC, por la puerta de carta-manager)." },
+    { "event": "design.contexto_diseno.request", "handler": "onContextoDisenoRequest", "description": "Reflejo JS: HIDRATA para disenar en una RPC — carta (carta.get) + marca (carta-marketing.get_perfil, best-effort). La identidad del diseno sale de la marca." },
+    { "event": "design.load_carta.request", "handler": "onLoadCartaRequest", "description": "Reflejo JS: trae solo la carta a disenar (carta.get RPC, por la puerta de carta-manager)." },
     { "event": "design.save.request", "handler": "onSaveRequest", "description": "Reflejo JS: guarda el HTML del diseno + meta companion; emite carta.html.generada." },
-    { "event": "design.profiles.request", "handler": "onProfilesRequest", "description": "Reflejo JS: lista profiles built-in (local) + custom (proyecto, sin soft-deleted)." },
-    { "event": "design.save_profile.request", "handler": "onSaveProfileRequest", "description": "Reflejo JS: guarda un profile custom (id=slug, no colisiona con built-in)." },
-    { "event": "design.delete_profile.request", "handler": "onDeleteProfileRequest", "description": "Reflejo JS: soft-delete de un profile custom (activo:false; built-in protegido)." },
-    { "event": "design.gallery.request", "handler": "onGalleryRequest", "description": "Reflejo JS: lista los designs guardados (filtrable por carta_id)." }
+    { "event": "design.gallery.request", "handler": "onGalleryRequest", "description": "Reflejo JS: lista los disenos/eventos guardados (filtrable por carta_id)." }
   ],
   "config": {
     "persistence": {

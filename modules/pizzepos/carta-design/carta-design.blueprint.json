@@ -1,37 +1,33 @@
 {
-  "_doc": "Blueprint del modulo carta-design. Hijo de subsistema-recetario.modulo-base. Estudio de diseno de cartas impresas. 6 operaciones de gestion de designs (HTML generados) y profiles (estilos reusables). La generacion HTML real la hace un agente — este modulo solo carga/guarda/lista archivos.",
+  "_doc": "Blueprint del modulo carta-design. Hijo de subsistema-recetario.modulo-base. Estudio de diseno de cartas impresas. 4 operaciones deterministas (las sirve el REFLEJO JS): contexto_diseno (HIDRATA carta+marca), load_carta (solo la carta), save (guarda el HTML), gallery (lista lo guardado). La identidad del diseno sale de la MARCA (carta-marketing): colores, tipografias, logo, voz — NO hay biblioteca de profiles. La composicion del HTML la hace el LLM de pagina (SIN agente).",
   "id": "carta-design",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "1.3.0",
-  "_v1_3_changelog": "v1.3.0 (2026-06-14): carta-design BEBE de carta-marketing. Nuevo cajon contexto_diseno: el LLM de pagina lo llama AL INICIO y recibe en una sola RPC {carta, marca, profiles}. La marca (colores/tipografias/logo/voz, capturada en el onboarding) SIEMBRA el diseno; el LLM no re-pregunta identidad que ya existe. Marca por la PUERTA del dueno (carta-marketing.get_perfil), best-effort. load_carta se mantiene para flujos que solo quieran la carta.",
-  "_v1_2_changelog": "v1.2.0 (2026-06-14): HIBRIDADO. Las 6 ops (file management) pasan al REFLEJO JS; los cajones quedan como delegadores finos (publishAndWait design.<op>.request). El diseno del HTML lo sigue haciendo el LLM de pagina (SIN agente). Quita la promesa de 'lo hace un agente' del rol: el equipo R0-R8 esta APARCADO.",
+  "version": "2.0.0",
+  "_v2_0_changelog": "v2.0.0 (2026-06-14): SE QUITA LA CAPA DE PROFILES. Fuera los cajones profiles/save_profile/delete_profile y los 5 profiles built-in (archivados). La identidad del diseno la da la MARCA (carta-marketing.get_perfil): colores/tipografias/logo/voz. Un solo origen, sin plantillas. contexto_diseno devuelve {carta, marca}. Engranaje arreglado: load_carta y el error de contexto_diseno devuelven {status,data} fresco (no propagan la respuesta de carta.get verbatim). Quedan 4 cajones.",
+  "_v1_3_changelog": "v1.3.0 (2026-06-14): carta-design BEBE de carta-marketing (nuevo cajon contexto_diseno). [Profiles retirados en v2.0.0.]",
+  "_v1_2_changelog": "v1.2.0 (2026-06-14): HIBRIDADO. Las ops (file management) pasan al REFLEJO JS; los cajones quedan como delegadores finos.",
   "language": "es",
-  "rol": "Estudio de diseno de cartas impresas (HIBRIDO). El REFLEJO (index.js) gestiona los archivos y HIDRATA el contexto de diseno: contexto_diseno trae carta (carta.get) + marca (carta-marketing.get_perfil) + profiles en una RPC; ademas guarda el HTML del diseno y CRUD de la biblioteca de profiles. Lo CREATIVO —entrevista + diseno del HTML— lo hace el LLM de PAGINA (SIN agente: el equipo R0-R8 del context.json esta APARCADO; lo emula la pagina siguiendo el proceso), que SIEMBRA la identidad desde la marca en vez de re-preguntarla.",
+  "rol": "Estudio de diseno de cartas impresas (HIBRIDO). El REFLEJO (index.js) HIDRATA y persiste: contexto_diseno trae carta (carta.get) + marca (carta-marketing.get_perfil) en una RPC; load_carta trae solo la carta; save guarda el HTML; gallery lista lo guardado. Lo CREATIVO —entrevista + composicion del HTML— lo hace el LLM de PAGINA (SIN agente: el equipo R0-R10 del context.json describe el PROCESO, no corre como agentes). La identidad (colores/tipografias/logo/voz) SALE DE LA MARCA; el LLM no la re-pregunta, la bebe.",
   "bebe_de": {
     "carta-manager": "carta.get.request — la carta base con productos/categorias/precios a disenar (FUENTE, por contexto_diseno y load_carta).",
-    "carta-marketing": "carta-marketing.get_perfil.request — el perfil de marca (visual:{colores,tipografias,estilo,logo} + esencia/voz/publico) capturado en el onboarding. SIEMBRA el diseno. Best-effort (si no responde, se disena solo con profiles)."
+    "carta-marketing": "carta-marketing.get_perfil.request — el perfil de marca (visual:{colores,tipografias,estilo,logo} + esencia/voz/publico/negocio) capturado en el onboarding. ES la identidad del diseno (no hay profiles). Best-effort: si no responde, marca:null y la pagina rellena/pregunta lo que falte."
   },
   "garantiza": [
-    "contexto_diseno HIDRATA en una RPC {carta, marca, profiles}: el LLM de pagina recibe TODO lo que necesita para disenar y bebe la identidad de marca sin re-preguntarla.",
-    "load_carta delega a carta-manager.get y devuelve la carta lista para diseno.",
-    "save persiste HTML+metadata en /storage/pizzepos/carta-design/designs/<carta_id>__<timestamp>.html del proyecto.",
-    "profiles lista profiles built-in (del modulo) + custom (del proyecto). Cada profile es JSON con tipografia, colores, estructura.",
-    "save_profile guarda profile custom en /storage/pizzepos/carta-design/profiles/ del proyecto.",
-    "delete_profile borra profile custom. PROTEGIDO contra built-in.",
-    "gallery lista designs HTML guardados con metadata."
+    "contexto_diseno HIDRATA en una RPC {carta, marca}: el LLM recibe la carta a disenar y la identidad de marca, y bebe colores/tipografias/logo/voz sin re-preguntarlos.",
+    "load_carta delega a carta-manager.get y devuelve la carta lista para diseno (objeto fresco {status,data}).",
+    "save persiste HTML+metadata en /pizzepos/carta-design/designs/<carta_id>__<timestamp>.html del proyecto y emite carta.html.generada.",
+    "gallery lista los disenos/eventos guardados (HTML + meta), filtrable por carta_id.",
+    "La identidad del diseno sale de la marca; NO hay biblioteca de profiles/plantillas."
   ],
   "no_garantiza": [
-    "Generacion HTML — eso lo hace el agente disenador (cartadigital-composer o equivalente).",
-    "Modificacion built-in profiles — protegidos por diseno."
+    "Composicion del HTML — la hace el LLM de pagina siguiendo el proceso del context.json (sin agente).",
+    "Biblioteca de estilos/profiles — retirada en v2.0.0 (la identidad la da la marca)."
   ],
   "estado_persistente": {
     "paths_relativos_proyecto": {
-      "designs": "/pizzepos/carta-design/designs/<carta_id>__<timestamp>.html (+ companion .json con meta)",
-      "profiles_custom": "/pizzepos/carta-design/profiles/<profile_id>.json"
+      "designs": "/pizzepos/carta-design/designs/<carta_id>__<timestamp>.html (+ companion .json con meta)"
     },
-    "paths_modulo_built_in": "modules/pizzepos/carta-design/design-profiles/*.json (5 profiles incluidos: elegant-minimal, modern-bold, rock-bold, rustic-italian, seasonal-fresh). NO modificables.",
-    "shape_profile": "{ id, nombre, tipo: 'built-in'|'custom', descripcion, tipografia: {familia_titulo, familia_cuerpo, ...}, colores: {primario, secundario, fondo, ...}, estructura: {densidad, secciones, decoraciones, ...} }",
-    "shape_design_meta": "{ carta_id, profile_id, generado_at, generado_por, filename, size_bytes }"
+    "shape_design_meta": "{ carta_id, nombre, generado_at, generado_por, filename, size_bytes }"
   },
   "eventos_publicados": [
     "design.contexto_diseno.response",
@@ -40,12 +36,6 @@
     "design.load_carta.failed",
     "design.save.response",
     "design.save.failed",
-    "design.profiles.response",
-    "design.profiles.failed",
-    "design.save_profile.response",
-    "design.save_profile.failed",
-    "design.delete_profile.response",
-    "design.delete_profile.failed",
     "design.gallery.response",
     "design.gallery.failed",
     "carta.html.generada"
@@ -57,168 +47,64 @@
       "pseudocodigo": [
         "async contexto_diseno(input):",
         "  // LEER del espinazo de diseno. HIBRIDO: lo sirve el REFLEJO JS (index.js) en una RPC.",
-        "  // Devuelve { carta, marca, profiles }. El LLM de pagina lo llama AL INICIO y SIEMBRA",
-        "  // el diseno con marca.visual {colores,tipografias,estilo,logo} + marca.esencia/voz —",
-        "  // NO re-pregunta la identidad que el onboarding ya capturo. Marca best-effort (null si",
-        "  // carta-marketing no responde: se disena con los profiles).",
+        "  // Devuelve { carta, marca }. El LLM de pagina lo llama AL INICIO y SIEMBRA el diseno",
+        "  // con marca.visual {colores,tipografias,estilo,logo} + marca.esencia/voz — NO re-pregunta",
+        "  // la identidad que el onboarding ya capturo. Marca best-effort (null si carta-marketing no responde).",
         "  resp = await publishAndWait('design.contexto_diseno.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
         "  return resp"
       ],
       "reglas_clave": [
-        "carta por carta.get (carta-manager, FUENTE). marca por carta-marketing.get_perfil (DUENO). profiles built-in+custom.",
-        "Si marca viene con visual.colores/tipografias/logo → el diseno los USA como base; los profiles solo afinan el estilo.",
-        "Si marca es null o sus secciones estan vacias → preguntar SOLO lo que falte (no lo que la marca ya trae)."
+        "carta por carta.get (carta-manager, FUENTE). marca por carta-marketing.get_perfil (DUENO).",
+        "Si marca trae visual.colores/tipografias/logo -> el diseno los USA (es la identidad, no una sugerencia).",
+        "Si marca es null o sus secciones de negocio (dir/tel/horario) estan vacias -> preguntar SOLO lo que falte y persistirlo via carta-marketing.update_perfil (marca.negocio.local)."
       ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
       "_delega_en": "design.contexto_diseno.request (REFLEJO JS — index.js)"
     },
     "load_carta": {
       "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req) }",
       "pseudocodigo": [
         "async load_carta(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (gestion de archivos) la hace el REFLEJO JS (index.js).",
-        "  // Este cajon DELEGA. Lo CREATIVO (entrevista + diseno del HTML) lo hace el LLM de pagina, que usa",
-        "  // load_carta (LEER la carta) y save (GUARDAR el HTML) — esos dos los sirve este mismo reflejo.",
+        "  // Trae SOLO la carta (sin marca). Delegacion fina al reflejo, que entra por carta.get.",
         "  resp = await publishAndWait('design.load_carta.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
         "  return resp"
       ],
-      "reglas_clave": [
-        "Delegacion pura a carta-manager.get. No transforma."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
+      "reglas_clave": ["Delegacion a carta-manager.get. No transforma."],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
       "_delega_en": "design.load_carta.request (REFLEJO JS — index.js)"
     },
     "save": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), profile_id (req), html (req — string), generado_por? }",
+      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req), html (req — string), nombre?, generado_por? }",
       "pseudocodigo": [
         "async save(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (gestion de archivos) la hace el REFLEJO JS (index.js).",
-        "  // Este cajon DELEGA. Lo CREATIVO (entrevista + diseno del HTML) lo hace el LLM de pagina, que usa",
-        "  // load_carta (LEER la carta) y save (GUARDAR el HTML) — esos dos los sirve este mismo reflejo.",
+        "  // GUARDAR el HTML que el LLM de pagina compuso + meta companion. El reflejo emite carta.html.generada.",
         "  resp = await publishAndWait('design.save.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
         "  return resp"
       ],
       "reglas_clave": [
         "Guarda HTML + companion .json con meta.",
-        "filename: <carta_id>__<timestamp>.html — formato unico."
+        "filename: <carta_id>__<timestamp>.html — formato unico (permite varios disenos/eventos de la misma carta)."
       ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
       "_delega_en": "design.save.request (REFLEJO JS — index.js)"
-    },
-    "profiles": {
-      "input": "{ project_id (req), request_id (req), correlation_id? }",
-      "pseudocodigo": [
-        "async profiles(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (gestion de archivos) la hace el REFLEJO JS (index.js).",
-        "  // Este cajon DELEGA. Lo CREATIVO (entrevista + diseno del HTML) lo hace el LLM de pagina, que usa",
-        "  // load_carta (LEER la carta) y save (GUARDAR el HTML) — esos dos los sirve este mismo reflejo.",
-        "  resp = await publishAndWait('design.profiles.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp"
-      ],
-      "reglas_clave": [
-        "5 built-in son conocidos por nombre (elegant-minimal, modern-bold, rock-bold, rustic-italian, seasonal-fresh).",
-        "Custom se descubren listando el directorio del proyecto.",
-        "Built-in se leen via fs.read con project_id='__module__' (convencion para paths relativos al repo, NO al proyecto) — TRABAJO_PENDIENTE: filesystem debe soportar este modo."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "design.profiles.request (REFLEJO JS — index.js)"
-    },
-    "save_profile": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, nombre (req), descripcion?, tipografia?, colores?, estructura? }",
-      "pseudocodigo": [
-        "async save_profile(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (gestion de archivos) la hace el REFLEJO JS (index.js).",
-        "  // Este cajon DELEGA. Lo CREATIVO (entrevista + diseno del HTML) lo hace el LLM de pagina, que usa",
-        "  // load_carta (LEER la carta) y save (GUARDAR el HTML) — esos dos los sirve este mismo reflejo.",
-        "  resp = await publishAndWait('design.save_profile.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp"
-      ],
-      "reglas_clave": [
-        "ID derivado del nombre via slug.",
-        "Colision con built-in → CONFLICT_STATE."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "CONFLICT_STATE",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "design.save_profile.request (REFLEJO JS — index.js)"
-    },
-    "delete_profile": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, profile_id (req) }",
-      "pseudocodigo": [
-        "async delete_profile(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (gestion de archivos) la hace el REFLEJO JS (index.js).",
-        "  // Este cajon DELEGA. Lo CREATIVO (entrevista + diseno del HTML) lo hace el LLM de pagina, que usa",
-        "  // load_carta (LEER la carta) y save (GUARDAR el HTML) — esos dos los sirve este mismo reflejo.",
-        "  resp = await publishAndWait('design.delete_profile.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp"
-      ],
-      "reglas_clave": [
-        "Soft delete: marca activo:false (no hay fs.delete primitiva canonica todavia).",
-        "Built-in protegidos → PERMISSION_DENIED."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "PERMISSION_DENIED",
-        "RESOURCE_NOT_FOUND",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "design.delete_profile.request (REFLEJO JS — index.js)"
     },
     "gallery": {
       "input": "{ project_id (req), request_id (req), correlation_id?, carta_id? (filtra) }",
       "pseudocodigo": [
         "async gallery(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (gestion de archivos) la hace el REFLEJO JS (index.js).",
-        "  // Este cajon DELEGA. Lo CREATIVO (entrevista + diseno del HTML) lo hace el LLM de pagina, que usa",
-        "  // load_carta (LEER la carta) y save (GUARDAR el HTML) — esos dos los sirve este mismo reflejo.",
+        "  // Lista los disenos/eventos guardados (HTML + meta). Delegacion fina al reflejo.",
         "  resp = await publishAndWait('design.gallery.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
         "  return resp"
       ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
       "_delega_en": "design.gallery.request (REFLEJO JS — index.js)"
     }
   },
   "trabajo_pendiente": [
     {
-      "id": "fs_primitiva_para_paths_del_modulo",
+      "id": "campos_negocio_en_marca",
       "estado": "abierto",
-      "descripcion": "El blueprint necesita leer profiles built-in que viven en modules/pizzepos/carta-design/design-profiles/ (paths del repo, no del proyecto). Usamos la convencion project_id='__module__' como sugerencia, pero filesystem aun no lo soporta. Alternativa temporal: incluir los 5 profiles JSON inline en el blueprint padre del subsistema-carta. O extender filesystem con primitiva module.read.request."
-    },
-    {
-      "id": "fs_delete_primitiva",
-      "estado": "abierto",
-      "descripcion": "delete_profile hace soft delete (marca activo:false) porque no existe fs.delete.request canonica. Cuando exista, hacer hard delete real."
-    },
-    {
-      "id": "subscriber_carta_actualizada",
-      "estado": "abierto",
-      "descripcion": "El legacy se subscribia a carta.actualizada. El blueprint no es reactivo. El LLM en page=carta-design verifica fechas de gallery al entrar."
+      "descripcion": "dir/telefono/horario del negocio viven en marca.negocio.local. Si faltan, el LLM de pagina los pregunta y los persiste via carta-marketing.update_perfil. Confirmar que el onboarding los recoge para que el diseno no tenga que preguntarlos."
     }
   ]
 }

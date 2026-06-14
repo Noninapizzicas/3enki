@@ -229,53 +229,9 @@ async function testAsync(desc, fn) {
     assert.ok(store['/pizzepos/cartas/carta_nueva.json'], 'con varias activas no fuerza, respeta el id entrante');
   });
 
-  // ── add_from_receta: NACE producto desde receta (toppings=variaciones; masa/salsa fuera) ──
-
-  const recetaPizza = {
-    nombre: 'pizza bachata', tipo: 'pizza',
-    lineas: [
-      { id: 'linea-masa', nombre: 'Masa de pizza', cantidad: 1, unidad: 'ud', categoria: 'masa' },        // SUBPRODUCTO → fuera
-      { id: 'linea-tomate', nombre: 'Tomate frito casero', cantidad: 60, unidad: 'g', categoria: 'salsa' }, // SUBPRODUCTO → fuera
-      { id: 'linea-alcaparras', nombre: 'Alcaparras', cantidad: 30, unidad: 'g', categoria: 'verdura' },    // topping
-      { id: 'linea-anchoas', nombre: 'Anchoas', cantidad: 8.5, unidad: 'ud', categoria: 'pescado' },        // topping
-      { id: 'linea-mozzarella', nombre: 'Queso mozzarella', cantidad: 100, unidad: 'g', categoria: 'queso' }// topping
-    ]
-  };
-
-  await testAsync('add_from_receta: mapea líneas a ingredientes, EXCLUYE masa/salsa, id determinista', async () => {
-    const carta = cartaInicial();
-    carta.categorias.push({ id: 'pizzicas', nombre: 'Pizzicas', orden: 1 });
-    const store = { [CARTA_PATH]: JSON.stringify(carta) };
-    const { m } = makeReflejo(store, { 'pizza-bachata': recetaPizza });
-    const r = await m._addFromReceta({ ...base, receta_id: 'pizza-bachata', categoria_id: 'pizzicas', precio: 10.5 });
-    assert.strictEqual(r.status, 201);
-    const prod = r.data.producto;
-    assert.strictEqual(prod.id, 'pizzicas_pizza_bachata');   // id determinista (FASE 2)
-    assert.strictEqual(prod.precio, 10.5);
-    // 3 toppings (masa + salsa excluidos)
-    assert.strictEqual(prod.ingredientes.length, 3);
-    const nombres = prod.ingredientes.map(i => i.nombre);
-    assert.ok(!nombres.includes('Masa de pizza') && !nombres.includes('Tomate frito casero'), 'subproductos fuera');
-    assert.deepStrictEqual(prod.ingredientes.map(i => i.familia).sort(), ['pescado', 'queso', 'verdura']);
-    assert.strictEqual(prod.ingredientes.find(i => i.nombre === 'Queso mozzarella').id, 'queso_mozzarella');
-  });
-
-  await testAsync('add_from_receta con precio omitido → 0 (NUNCA inventa precio)', async () => {
-    const carta = cartaInicial();
-    carta.categorias.push({ id: 'pizzicas', nombre: 'Pizzicas', orden: 1 });
-    const store = { [CARTA_PATH]: JSON.stringify(carta) };
-    const { m } = makeReflejo(store, { 'pizza-bachata': recetaPizza });
-    const r = await m._addFromReceta({ ...base, receta_id: 'pizza-bachata', categoria_id: 'pizzicas' });
-    assert.strictEqual(r.status, 201);
-    assert.strictEqual(r.data.producto.precio, 0);
-  });
-
-  await testAsync('add_from_receta con receta inexistente → 404', async () => {
-    const store = { [CARTA_PATH]: JSON.stringify(cartaInicial()) };
-    const { m } = makeReflejo(store, {});
-    const r = await m._addFromReceta({ ...base, receta_id: 'fantasma', categoria_id: 'hamburguesas' });
-    assert.strictEqual(r.status, 404);
-  });
+  // Nota: add_from_receta NO se prueba aquí — ya no es op del reflejo. La clasificación
+  // base-vs-topping es criterio del LLM (blueprint), no lógica determinista. El reflejo
+  // solo persiste vía add_product (probado arriba, ingredientes que le pasen).
 
   console.log('\nTodos los tests pasaron.');
 })().catch(e => { console.error(e); process.exit(1); });

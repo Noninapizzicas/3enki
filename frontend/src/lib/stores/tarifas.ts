@@ -168,7 +168,7 @@ export async function loadCartasDisponibles(): Promise<void> {
     const listRes = await mqttRequest<{ items: FsListItem[] }>('fs', 'list', { path: CARTAS_DIR });
     const items = Array.isArray(listRes.data?.items) ? listRes.data.items : [];
     const archivos = items.filter(
-      (it) => it.type === 'file' && it.extension === 'json' && !it.name.startsWith('.')
+      (it) => it.type === 'file' && it.name.endsWith('.json') && !it.name.startsWith('.')
     );
     const lecturas = await Promise.all(
       archivos.map(async (it) => {

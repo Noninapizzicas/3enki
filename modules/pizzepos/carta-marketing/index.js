@@ -56,6 +56,13 @@ class CartaMarketingReflejo extends ModuloHibridoReflejo {
   onUpdatePerfilRequest(e) { return this._atender(e, 'update_perfil', 'carta-marketing.update_perfil.response', d => this._updatePerfil(d)); }
   onGuardarCopyRequest(e) { return this._atender(e, 'guardar_copy', 'carta-marketing.guardar_copy.response', d => this._guardarCopy(d)); }
 
+  // ── ui_handlers: el FRONTEND entra por la PUERTA del dueño (ui/request/carta-marketing/<op>).
+  // Mismos métodos deterministas (devuelven {status,data}); get_perfil lee el canónico
+  // /pizzepos/marca.json, update_perfil hace deep-merge (no pisa secciones). Asi el panel
+  // deja de leer fs directo a un path viejo (/config/marca.json).
+  handleGetPerfil(data) { return this._getPerfil(data || {}); }
+  handleUpdatePerfil(data) { return this._updatePerfil(data || {}); }
+
   // ── proyecciones deterministas ──
 
   async _getPerfil(input) {

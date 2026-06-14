@@ -52,7 +52,6 @@ export interface MarketingState {
   error: string | null;
 }
 
-const PERFIL_PATH = '/config/marca.json';
 
 const DEFAULT_PERFIL: PerfilMarca = {
   _version: '1.0',
@@ -82,23 +81,21 @@ export const marketingStore = writable<MarketingState>(initial);
 // PRIMITIVAS — fs.read / fs.write directos
 // =============================================================================
 
+// El perfil de marca lo sirve carta-marketing (dueño de /pizzepos/marca.json). Entramos por
+// SU PUERTA (ui/request/carta-marketing/<op>), no por fs directo al path viejo /config/marca.json:
+// get_perfil devuelve el canónico; update_perfil hace deep-merge (no pisa secciones).
+function projectId(): string | undefined {
+  return getActiveProject()?.id;
+}
+
 async function readPerfil(): Promise<PerfilMarca | null> {
   try {
-    const res = await mqttRequest<{ content: string }>('fs', 'read', { path: PERFIL_PATH });
-    const content = res.data?.content;
-    if (typeof content !== 'string') return null;
-    return JSON.parse(content) as PerfilMarca;
+    const res = await mqttRequest<PerfilMarca>('carta-marketing', 'get_perfil', { project_id: projectId() });
+    return (res.data as PerfilMarca) ?? null;
   } catch (err) {
     if (err instanceof MqttRequestError && err.code === 'RESOURCE_NOT_FOUND') return null;
     throw err;
   }
-}
-
-async function writePerfil(perfil: PerfilMarca): Promise<void> {
-  await mqttRequest('fs', 'write', {
-    path: PERFIL_PATH,
-    content: JSON.stringify(perfil, null, 2)
-  });
 }
 
 // =============================================================================
@@ -140,22 +137,16 @@ export async function loadActividad(): Promise<void> {
 export async function updatePerfil(campos: Partial<PerfilMarca>): Promise<boolean> {
   marketingStore.update(s => ({ ...s, saving: true, error: null }));
   try {
-    // Read current (con fallback si no existe)
-    const current = (await readPerfil()) ?? { ...DEFAULT_PERFIL };
-
-    // Merge: solo campos definidos sobreescriben
-    const next: PerfilMarca = { ...current };
-    for (const [k, v] of Object.entries(campos)) {
-      if (v !== undefined) (next as Record<string, unknown>)[k] = v;
-    }
-    next._updated_at = new Date().toISOString();
-
-    // Write atomic
-    await writePerfil(next);
+    // Por la puerta del dueño: update_perfil hace deep-merge sobre /pizzepos/marca.json
+    // (no pisa las secciones esencia/voz/... que rellena el onboarding). Devuelve el perfil ya fusionado.
+    const res = await mqttRequest<PerfilMarca>('carta-marketing', 'update_perfil', {
+      project_id: projectId(), campos
+    });
+    const next = (res.data as PerfilMarca) ?? null;
 
     marketingStore.update(s => ({
       ...s,
-      perfil: next,
+      perfil: next ?? s.perfil,
       saving: false
     }));
     return true;

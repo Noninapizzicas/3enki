@@ -1447,6 +1447,9 @@ perfil de marca   carta-marketing /pizzepos/marca.json   carta-marketing.get_per
     menu-generator (preparar) ← recetas+catálogo  (trae la receta para preparar el producto e inyectarlo en la carta)
     carta-design (colores), menu-generator (tono), carta-digital  ← perfil de marca
   el onboarding RELLENA la base de marca (update_perfil); luego diseño/carta se basan en ella.
+  carta-design BEBE marca via su reflejo (design.contexto_diseno HIDRATA {carta, marca, profiles}
+    en 1 RPC): marca.visual {colores,tipografias,logo} + esencia/voz SIEMBRAN el diseño; el LLM
+    de página NO re-pregunta lo que el onboarding ya capturó. Marca best-effort (null → solo profiles).
 
 FLUJO recetas → carta (NO es fs.read; cada uno entra por la puerta del dueño):
   menu-generator.preparar : LEE recetas.obtener (FUENTE) + carta.get (BASE) → PREPARA (toque, 1 vuelta LLM)
@@ -1497,7 +1500,7 @@ REPARTO POR MÓDULO  (✓ = ya híbrido)
   carta-scheduler   crear/listar/eliminar_regla · detectar_conflictos —
   viabilidad        evaluar (aritmética) · obtener/listar/descartar —   (paralelo a escandallo)
   carta-impresion✓  get/save_html (blueprint)                       generar (LLM pagina redacta HTML, SIN agente)
-  carta-design      load_carta/save/profiles/gallery (CRUD)         generar-diseño-desde-estilo (si aplica)
+  carta-design   ✓  contexto_diseno (HIDRATA carta+marca+profiles)·load_carta/save/profiles/gallery  diseño HTML (LLM página SIEMBRA desde marca)
   tecnicas          codificar/obtener/listar/actualizar/parametros  —
   menu-generator    —   (sin store propio · solo blueprint)         generar (carta desde texto/foto) · preparar (añade recetas a carta, contra base)
 ```

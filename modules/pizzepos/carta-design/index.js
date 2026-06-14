@@ -33,10 +33,11 @@ class CartaDesignReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-design';
-    this.version = 'reflejo-1.0.0';
+    this.version = 'reflejo-1.1.0';
   }
 
   // ── handlers RPC (una línea) ──
+  onContextoDisenoRequest(e) { return this._atender(e, 'contexto_diseno', 'design.contexto_diseno.response', d => this._contextoDiseno(d)); }
   onLoadCartaRequest(e) { return this._atender(e, 'load_carta', 'design.load_carta.response', d => this._loadCarta(d)); }
   onSaveRequest(e) { return this._atender(e, 'save', 'design.save.response', d => this._save(d)); }
   onProfilesRequest(e) { return this._atender(e, 'profiles', 'design.profiles.response', d => this._profiles(d)); }
@@ -92,6 +93,29 @@ class CartaDesignReflejo extends ModuloHibridoReflejo {
   // =============================================================
   // ops
   // =============================================================
+
+  // LEER TODO para diseñar, en UNA RPC: la carta (carta-manager) + la marca (carta-marketing)
+  // + los profiles. El REFLEJO HIDRATA; el LLM de página TRANSFORMA (compone el HTML). Mata la
+  // redundancia: el diseño BEBE la identidad que el onboarding ya capturó (colores/logo/voz),
+  // no la re-pregunta. La marca es best-effort: si carta-marketing no responde, se diseña igual
+  // (marca:null) apoyándose solo en los profiles.
+  async _contextoDiseno(input) {
+    if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
+    const cartaResp = await this._rpc('carta.get.request',
+      { project_id: input.project_id, carta_id: input.carta_id, correlation_id: input.correlation_id }, { timeout_ms: 8000 });
+    if (!cartaResp) return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'carta-manager no responde');
+    if (cartaResp.status >= 400) return cartaResp;   // propaga 404 carta inexistente, etc.
+    // marca: por la PUERTA del dueño (carta-marketing.get_perfil), no fs directo a marca.json.
+    const marcaResp = await this._rpc('carta-marketing.get_perfil.request',
+      { project_id: input.project_id, correlation_id: input.correlation_id }, { timeout_ms: 6000 });
+    const marca = (marcaResp && marcaResp.status === 200) ? marcaResp.data : null;
+    const profilesResp = await this._profiles({ project_id: input.project_id });
+    return { status: 200, data: {
+      carta: cartaResp.data,
+      marca,                                       // {esencia, voz, publico, visual:{colores,tipografias,estilo,logo}, negocio} | null
+      profiles: (profilesResp && profilesResp.data) || []
+    } };
+  }
 
   // LEER: la carta a diseñar, por la PUERTA de carta-manager (RPC, no fs directo).
   async _loadCarta(input) {

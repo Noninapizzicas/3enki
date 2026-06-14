@@ -2,11 +2,17 @@
   "_doc": "Blueprint del modulo carta-design. Hijo de subsistema-recetario.modulo-base. Estudio de diseno de cartas impresas. 6 operaciones de gestion de designs (HTML generados) y profiles (estilos reusables). La generacion HTML real la hace un agente — este modulo solo carga/guarda/lista archivos.",
   "id": "carta-design",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "1.2.0",
+  "version": "1.3.0",
+  "_v1_3_changelog": "v1.3.0 (2026-06-14): carta-design BEBE de carta-marketing. Nuevo cajon contexto_diseno: el LLM de pagina lo llama AL INICIO y recibe en una sola RPC {carta, marca, profiles}. La marca (colores/tipografias/logo/voz, capturada en el onboarding) SIEMBRA el diseno; el LLM no re-pregunta identidad que ya existe. Marca por la PUERTA del dueno (carta-marketing.get_perfil), best-effort. load_carta se mantiene para flujos que solo quieran la carta.",
   "_v1_2_changelog": "v1.2.0 (2026-06-14): HIBRIDADO. Las 6 ops (file management) pasan al REFLEJO JS; los cajones quedan como delegadores finos (publishAndWait design.<op>.request). El diseno del HTML lo sigue haciendo el LLM de pagina (SIN agente). Quita la promesa de 'lo hace un agente' del rol: el equipo R0-R8 esta APARCADO.",
   "language": "es",
-  "rol": "Estudio de diseno de cartas impresas (HIBRIDO). El REFLEJO (index.js) gestiona los archivos: carga la carta a disenar (carta.get, por la puerta de carta-manager), guarda el HTML del diseno, y CRUD de la biblioteca de profiles (estilos). Lo CREATIVO —entrevista + diseno del HTML— lo hace el LLM de PAGINA (SIN agente: el equipo R0-R8 del context.json esta APARCADO; lo emula la pagina siguiendo el proceso).",
+  "rol": "Estudio de diseno de cartas impresas (HIBRIDO). El REFLEJO (index.js) gestiona los archivos y HIDRATA el contexto de diseno: contexto_diseno trae carta (carta.get) + marca (carta-marketing.get_perfil) + profiles en una RPC; ademas guarda el HTML del diseno y CRUD de la biblioteca de profiles. Lo CREATIVO —entrevista + diseno del HTML— lo hace el LLM de PAGINA (SIN agente: el equipo R0-R8 del context.json esta APARCADO; lo emula la pagina siguiendo el proceso), que SIEMBRA la identidad desde la marca en vez de re-preguntarla.",
+  "bebe_de": {
+    "carta-manager": "carta.get.request — la carta base con productos/categorias/precios a disenar (FUENTE, por contexto_diseno y load_carta).",
+    "carta-marketing": "carta-marketing.get_perfil.request — el perfil de marca (visual:{colores,tipografias,estilo,logo} + esencia/voz/publico) capturado en el onboarding. SIEMBRA el diseno. Best-effort (si no responde, se disena solo con profiles)."
+  },
   "garantiza": [
+    "contexto_diseno HIDRATA en una RPC {carta, marca, profiles}: el LLM de pagina recibe TODO lo que necesita para disenar y bebe la identidad de marca sin re-preguntarla.",
     "load_carta delega a carta-manager.get y devuelve la carta lista para diseno.",
     "save persiste HTML+metadata en /storage/pizzepos/carta-design/designs/<carta_id>__<timestamp>.html del proyecto.",
     "profiles lista profiles built-in (del modulo) + custom (del proyecto). Cada profile es JSON con tipografia, colores, estructura.",
@@ -28,6 +34,8 @@
     "shape_design_meta": "{ carta_id, profile_id, generado_at, generado_por, filename, size_bytes }"
   },
   "eventos_publicados": [
+    "design.contexto_diseno.response",
+    "design.contexto_diseno.failed",
     "design.load_carta.response",
     "design.load_carta.failed",
     "design.save.response",
@@ -44,6 +52,31 @@
   ],
   "eventos_que_escucho": [],
   "operaciones": {
+    "contexto_diseno": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req) }",
+      "pseudocodigo": [
+        "async contexto_diseno(input):",
+        "  // LEER del espinazo de diseno. HIBRIDO: lo sirve el REFLEJO JS (index.js) en una RPC.",
+        "  // Devuelve { carta, marca, profiles }. El LLM de pagina lo llama AL INICIO y SIEMBRA",
+        "  // el diseno con marca.visual {colores,tipografias,estilo,logo} + marca.esencia/voz —",
+        "  // NO re-pregunta la identidad que el onboarding ya capturo. Marca best-effort (null si",
+        "  // carta-marketing no responde: se disena con los profiles).",
+        "  resp = await publishAndWait('design.contexto_diseno.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp"
+      ],
+      "reglas_clave": [
+        "carta por carta.get (carta-manager, FUENTE). marca por carta-marketing.get_perfil (DUENO). profiles built-in+custom.",
+        "Si marca viene con visual.colores/tipografias/logo → el diseno los USA como base; los profiles solo afinan el estilo.",
+        "Si marca es null o sus secciones estan vacias → preguntar SOLO lo que falte (no lo que la marca ya trae)."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "design.contexto_diseno.request (REFLEJO JS — index.js)"
+    },
     "load_carta": {
       "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req) }",
       "pseudocodigo": [

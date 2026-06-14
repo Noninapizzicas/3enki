@@ -1,8 +1,9 @@
 {
   "_type": "module_context",
   "_module": "pizzepos/carta-design",
-  "_version": "3.1.0",
+  "_version": "3.2.0",
   "_capa_agentes": "APARCADA. El 'sistema_multi_rol' y el 'pipeline' (R0-R8) describen el PROCESO creativo, pero NO corren como agentes (capa de agentes enabled:false, estandar blueprint-coherente). Lo ejecuta el LLM de PAGINA siguiendo este proceso. v3.1: las tools (design.*) las sirve ahora el REFLEJO JS (carta-design hibrido v2.0.0), no un agente — load_carta/save/profiles/gallery responden en ms.",
+  "_v3_2": "v3.2 (2026-06-14): carta-design BEBE de carta-marketing. El arranque pasa de design.load_carta a design.contexto_diseno, que trae {carta, marca, profiles} en una RPC. La MARCA (colores/tipografias/logo/voz/esencia, capturada en el onboarding) SIEMBRA el diseno: R2/R3/R4 parten de la identidad real y NO la re-preguntan. Solo se pregunta lo que la marca no trae.",
   "filosofia": {
     "principio": "Cada carta es un proyecto creativo único. No hay plantillas. No hay atajos. Hay un equipo de profesionales que trabaja para un cliente real.",
     "diferenciador": "Lo que nos distingue no es la tecnología, es el proceso: primero entendemos, luego creamos. Cada rol aporta una palabra, un color, una idea que marca la diferencia.",
@@ -43,24 +44,26 @@
         "nombre": "Brand Strategist",
         "fase": "entrevista",
         "producto": "Manifiesto de marca: personalidad, tono, valores, eslogan",
-        "preguntas_clave": [
-          "Si tu restaurante fuera una persona, ¿cómo sería?",
-          "¿Tienes colores corporativos o logo?",
-          "¿Tienes eslogan?",
-          "¿Qué emoción quieres que sienta el cliente al leer la carta?"
+        "bebe_de_marca": "La marca (contexto_diseno.marca) YA trae esencia {nombre, lema, proposito, valores}, voz {tono, registro}, publico y visual {colores, tipografias, estilo, logo} del onboarding. PARTE de ahi. NO re-preguntes lo que la marca ya define.",
+        "preguntas_clave_SOLO_SI_FALTAN": [
+          "(si marca.esencia.lema vacio) ¿Tienes eslogan?",
+          "(si marca.visual.colores vacio) ¿Tienes colores corporativos o logo?",
+          "(si marca.voz.tono vacio) ¿Qué emoción quieres que sienta el cliente al leer la carta?"
         ]
       },
       {
         "id": "R3",
         "nombre": "Director de Arte",
         "fase": "equipo_creativo",
-        "producto": "Dirección visual: paleta cromática (hex), estilo gráfico, composición, atmósfera"
+        "producto": "Dirección visual: paleta cromática (hex), estilo gráfico, composición, atmósfera",
+        "bebe_de_marca": "Si marca.visual.colores trae hex → ESA es la paleta base (no inventes otra). El profile elegido solo afina matices/decoración. Si marca.visual.colores vacio → deriva la paleta del estilo del profile + la voz de marca."
       },
       {
         "id": "R4",
         "nombre": "Tipógrafo",
         "fase": "equipo_creativo",
-        "producto": "Sistema tipográfico: familias (heading, body, accent, price), tamaños, pesos, interlineado"
+        "producto": "Sistema tipográfico: familias (heading, body, accent, price), tamaños, pesos, interlineado",
+        "bebe_de_marca": "Si marca.visual.tipografias trae familias → USALAS. Si vacio → toma las del profile elegido."
       },
       {
         "id": "R5",
@@ -152,24 +155,27 @@
     ]
   },
   "workflow_ejecucion": [
-    "1. Llamar design.load_carta para obtener la carta con productos",
-    "2. Iniciar entrevista (fase 1) preguntando solo lo que falta",
-    "3. Ejecutar equipo creativo (fase 2) con briefing + datos de carta",
+    "1. Llamar design.contexto_diseno → {carta (productos/precios), marca (identidad del onboarding), profiles}",
+    "2. Iniciar entrevista (fase 1) preguntando SOLO lo que la marca y la carta no traen ya",
+    "3. Ejecutar equipo creativo (fase 2): SIEMBRA visual+tono desde marca; el profile afina",
     "4. Presentar resumen de decisiones al usuario y pedir validación",
     "5. Ensamblar guión maestro (fase 3)",
     "6. Generar HTML+CSS (fase 4) y llamar design.save"
   ],
   "reglas_de_oro": [
-    "SIEMPRE incluir: nombre del restaurante, teléfono, dirección, horarios",
-    "SIEMPRE incluir TODOS los productos — no omitir ni uno",
-    "SIEMPRE preguntar antes de asumir — una pregunta por turno",
-    "NUNCA usar datos inventados — si falta un dato, preguntar o usar [PENDIENTE]",
-    "Presentar decisiones al usuario ANTES de producir HTML"
+    "ARRANCA con design.contexto_diseno — trae carta + marca + profiles de una vez.",
+    "BEBE la marca: colores, tipografías, logo, eslogan y voz salen de marca.* — NO los re-preguntes ni los inventes si ya están.",
+    "Pregunta SOLO lo que falte: secciones de marca vacías o datos de negocio ausentes.",
+    "SIEMPRE incluir: nombre del restaurante, teléfono, dirección, horarios (de marca.negocio/esencia o preguntados).",
+    "SIEMPRE incluir TODOS los productos — no omitir ni uno.",
+    "NUNCA usar datos inventados — si falta un dato, preguntar o usar [PENDIENTE].",
+    "Presentar decisiones al usuario ANTES de producir HTML."
   ],
   "tools_disponibles": {
-    "design.load_carta": "LLAMAR AL INICIO. Carga la carta con productos, categorías, precios, ingredientes.",
-    "design.save": "LLAMAR AL FINAL. Guarda HTML y abre preview. Params: carta_id, html, nombre.",
-    "design.profiles": "Lista perfiles de estilo de referencia.",
+    "design.contexto_diseno": "LLAMAR AL INICIO. Trae en una RPC {carta, marca, profiles}. La marca SIEMBRA el diseño (colores/tipografías/logo/voz del onboarding). Params: project_id, carta_id.",
+    "design.load_carta": "Alternativa: solo la carta (sin marca). Úsalo si ya tienes la marca de otro turno.",
+    "design.save": "LLAMAR AL FINAL. Guarda HTML y abre preview. Params: carta_id, profile_id, html.",
+    "design.profiles": "Lista perfiles de estilo de referencia (built-in + custom).",
     "design.gallery": "Lista diseños previos generados."
   }
 }

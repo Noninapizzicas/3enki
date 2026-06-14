@@ -47,6 +47,9 @@
   $: saving = $marketingSaving;
   $: error = $marketingError;
   $: completado = $onboardingCompletado;
+  // Hay contenido real si el comerciante ya dio algo (aunque no cerrara el onboarding).
+  // El empty-state solo cuando NO hay nada — no esconder lo ya rellenado.
+  $: hasContent = !!(p && (p.nombre_marca || p.tono_voz || p.publico_objetivo || (p.valores && p.valores.length > 0)));
 
   onMount(() => loadPerfil());
 
@@ -102,7 +105,7 @@
     </div>
   {:else if !p}
     <div class="state-msg">Sin perfil</div>
-  {:else if !completado}
+  {:else if !completado && !hasContent}
     <div class="onboarding-prompt">
       <div class="empty-icon">💬</div>
       <p><strong>Todavía no te conocemos</strong></p>

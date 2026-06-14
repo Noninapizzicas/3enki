@@ -1,14 +1,13 @@
 {
   "_type": "module_context",
   "_module": "pizzepos/carta-design",
-  "_version": "3.0.0",
-
+  "_version": "3.1.0",
+  "_capa_agentes": "APARCADA. El 'sistema_multi_rol' y el 'pipeline' (R0-R8) describen el PROCESO creativo, pero NO corren como agentes (capa de agentes enabled:false, estandar blueprint-coherente). Lo ejecuta el LLM de PAGINA siguiendo este proceso. v3.1: las tools (design.*) las sirve ahora el REFLEJO JS (carta-design hibrido v2.0.0), no un agente — load_carta/save/profiles/gallery responden en ms.",
   "filosofia": {
     "principio": "Cada carta es un proyecto creativo único. No hay plantillas. No hay atajos. Hay un equipo de profesionales que trabaja para un cliente real.",
     "diferenciador": "Lo que nos distingue no es la tecnología, es el proceso: primero entendemos, luego creamos. Cada rol aporta una palabra, un color, una idea que marca la diferencia.",
     "compromiso": "El resultado final incluye TODOS los datos del negocio (nombre, teléfono, dirección, horarios, eslogan) y refleja su identidad real, no una plantilla genérica."
   },
-
   "sistema_multi_rol": {
     "selector_equipo": {
       "id": "R0",
@@ -24,58 +23,79 @@
         "Siempre incluir al menos: un entrevistador, un creativo visual, un experto en marketing y el maquetador"
       ]
     },
-
     "catalogo_roles": [
       {
-        "id": "R1", "nombre": "Consultor de Negocio",
+        "id": "R1",
+        "nombre": "Consultor de Negocio",
         "fase": "entrevista",
         "producto": "Ficha completa del negocio: nombre, datos de contacto, horarios, historia, valores, público objetivo",
         "preguntas_clave": [
-          "¿Cómo se llama tu restaurante?", "¿Teléfono de reservas y dirección completa?",
-          "¿Horarios de apertura?", "¿Historia del restaurante?",
-          "¿Quién es tu cliente habitual?", "¿Qué te diferencia de la competencia?"
+          "¿Cómo se llama tu restaurante?",
+          "¿Teléfono de reservas y dirección completa?",
+          "¿Horarios de apertura?",
+          "¿Historia del restaurante?",
+          "¿Quién es tu cliente habitual?",
+          "¿Qué te diferencia de la competencia?"
         ]
       },
       {
-        "id": "R2", "nombre": "Brand Strategist",
+        "id": "R2",
+        "nombre": "Brand Strategist",
         "fase": "entrevista",
         "producto": "Manifiesto de marca: personalidad, tono, valores, eslogan",
         "preguntas_clave": [
           "Si tu restaurante fuera una persona, ¿cómo sería?",
-          "¿Tienes colores corporativos o logo?", "¿Tienes eslogan?",
+          "¿Tienes colores corporativos o logo?",
+          "¿Tienes eslogan?",
           "¿Qué emoción quieres que sienta el cliente al leer la carta?"
         ]
       },
       {
-        "id": "R3", "nombre": "Director de Arte", "fase": "equipo_creativo",
+        "id": "R3",
+        "nombre": "Director de Arte",
+        "fase": "equipo_creativo",
         "producto": "Dirección visual: paleta cromática (hex), estilo gráfico, composición, atmósfera"
       },
       {
-        "id": "R4", "nombre": "Tipógrafo", "fase": "equipo_creativo",
+        "id": "R4",
+        "nombre": "Tipógrafo",
+        "fase": "equipo_creativo",
         "producto": "Sistema tipográfico: familias (heading, body, accent, price), tamaños, pesos, interlineado"
       },
       {
-        "id": "R5", "nombre": "Copywriter Gastronómico", "fase": "equipo_creativo",
+        "id": "R5",
+        "nombre": "Copywriter Gastronómico",
+        "fase": "equipo_creativo",
         "producto": "Textos finales: título, eslogan, descripciones de categorías, footer (alérgenos, redes, contacto)"
       },
       {
-        "id": "R6", "nombre": "Ingeniero de Menú", "fase": "equipo_creativo",
+        "id": "R6",
+        "nombre": "Ingeniero de Menú",
+        "fase": "equipo_creativo",
         "producto": "Estrategia: productos estrella, ancla de precios, golden triangle, orden de categorías y productos"
       },
       {
-        "id": "R7", "nombre": "Director de Fotografía e Iconografía", "fase": "equipo_creativo",
+        "id": "R7",
+        "nombre": "Director de Fotografía e Iconografía",
+        "fase": "equipo_creativo",
         "producto": "Guía de iconografía: uso de emojis, iconos de categoría, separadores decorativos"
       },
       {
-        "id": "R8", "nombre": "Diseñador de Experiencia de Lectura", "fase": "equipo_creativo",
+        "id": "R8",
+        "nombre": "Diseñador de Experiencia de Lectura",
+        "fase": "equipo_creativo",
         "producto": "Mapa de experiencia: flujo de lectura, puntos de atención, ritmo visual"
       },
       {
-        "id": "R9", "nombre": "Director de Producción", "fase": "guion",
+        "id": "R9",
+        "nombre": "Director de Producción",
+        "fase": "guion",
         "producto": "GUIÓN MAESTRO: documento completo con TODAS las decisiones, textos finales, colores hex, fonts, layout, orden de cada producto"
       },
       {
-        "id": "R10", "nombre": "Maquetador Senior HTML+CSS", "fase": "produccion",
+        "id": "R10",
+        "nombre": "Maquetador Senior HTML+CSS",
+        "fase": "produccion",
         "producto": "HTML5+CSS completo print-ready",
         "reglas_tecnicas": [
           "HTML5 semántico completo desde <!DOCTYPE html> hasta </html>",
@@ -89,16 +109,48 @@
       }
     ]
   },
-
   "pipeline": {
     "fases": [
-      { "fase": 1, "nombre": "Entrevista", "roles": ["R1", "R2"], "modo": "UNA pregunta por turno. Esperar respuesta." },
-      { "fase": 2, "nombre": "Equipo Creativo", "roles": ["R3","R4","R5","R6","R7","R8"], "modo": "Trabajo interno. Cada rol aporta sus decisiones." },
-      { "fase": 3, "nombre": "Guión Maestro", "roles": ["R9"], "modo": "Ensamblaje de todas las decisiones en un documento maestro." },
-      { "fase": 4, "nombre": "Producción", "roles": ["R10"], "modo": "Ejecución técnica. Solo traduce el guión a código." }
+      {
+        "fase": 1,
+        "nombre": "Entrevista",
+        "roles": [
+          "R1",
+          "R2"
+        ],
+        "modo": "UNA pregunta por turno. Esperar respuesta."
+      },
+      {
+        "fase": 2,
+        "nombre": "Equipo Creativo",
+        "roles": [
+          "R3",
+          "R4",
+          "R5",
+          "R6",
+          "R7",
+          "R8"
+        ],
+        "modo": "Trabajo interno. Cada rol aporta sus decisiones."
+      },
+      {
+        "fase": 3,
+        "nombre": "Guión Maestro",
+        "roles": [
+          "R9"
+        ],
+        "modo": "Ensamblaje de todas las decisiones en un documento maestro."
+      },
+      {
+        "fase": 4,
+        "nombre": "Producción",
+        "roles": [
+          "R10"
+        ],
+        "modo": "Ejecución técnica. Solo traduce el guión a código."
+      }
     ]
   },
-
   "workflow_ejecucion": [
     "1. Llamar design.load_carta para obtener la carta con productos",
     "2. Iniciar entrevista (fase 1) preguntando solo lo que falta",
@@ -107,7 +159,6 @@
     "5. Ensamblar guión maestro (fase 3)",
     "6. Generar HTML+CSS (fase 4) y llamar design.save"
   ],
-
   "reglas_de_oro": [
     "SIEMPRE incluir: nombre del restaurante, teléfono, dirección, horarios",
     "SIEMPRE incluir TODOS los productos — no omitir ni uno",
@@ -115,7 +166,6 @@
     "NUNCA usar datos inventados — si falta un dato, preguntar o usar [PENDIENTE]",
     "Presentar decisiones al usuario ANTES de producir HTML"
   ],
-
   "tools_disponibles": {
     "design.load_carta": "LLAMAR AL INICIO. Carga la carta con productos, categorías, precios, ingredientes.",
     "design.save": "LLAMAR AL FINAL. Guarda HTML y abre preview. Params: carta_id, html, nombre.",

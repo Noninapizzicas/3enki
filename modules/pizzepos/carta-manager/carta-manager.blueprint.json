@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo carta-manager. Hijo de subsistema-recetario.modulo-base (reutilizado por simplicidad — su modelo de ejecucion, primitivas del bus y manejo de errores aplican identico). Aggregate root del subsistema-carta: CRUD de cartas + manipulacion de productos/categorias dentro de carta + versionado con history archivado + busqueda + stats + restore. Persistencia multi-archivo: data/projects/{slug}/storage/pizzepos/cartas/<id>.json + storage/pizzepos/cartas/.versions/<id>/<timestamp>.json para snapshots.",
   "id": "carta-manager",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "_v1_5_changelog": "v1.5.0 (2026-06-13): anyade _modelo_oop (CLASE CartaManager) — aggregate root, store actual+versiones, las 15 ops agrupadas (entrada event-driven / lectura / raiz / mutacion estructurada) + helper comun _mutar que captura el patron repetido en las 5 mutaciones (read->snapshot->fs.edit->version++->evento). Prep para HIBRIDAR: todo es CRUD/versionado determinista -> pasa a REFLEJO JS (index.js), mismo contrato de bus carta.<op>.request (los carta-* no se enteran). Regla de dominio reafirmada: anyadir/editar productos de una carta = carta-manager (add_product/update_product); menu-generator solo NACE la base. Coger producto de recetas -> carta = leer recetas.obtener + escribir carta-manager.add_product (recetas es fuente, carta-manager es el writer).",
   "_v1_4_changelog": "v1.4.0 (aterrizaje subsistema-catalogo, D2): añadida operacion 'clonar' (carta_base_id + nuevo_nombre -> carta INDEPENDIENTE nueva). Es el paso 1 de 'carta por canal': el LLM clona la base, la manipula (update_prices/add_product/remove_product) segun instrucciones NL, y tarifas la asigna a un canal. carta-manager solo PRODUCE; la asignacion canal<->carta es de tarifas. Cambio ADITIVO (op nueva, no toca las 14 existentes). El shape que persiste es ahora carta-pizzepos v2 (ingredientes con id+familia) pero save persiste cualquier shape literal -> sin break. Pendiente (futuro): extender update_prices con target por categoria/familia + factor (hoy es per-producto absoluto).",
   "language": "es",
@@ -194,7 +194,7 @@
       "_delega_en": "carta.delete.request (REFLEJO JS — index.js)"
     },
     "add_product": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), producto (req — {nombre, precio, categoria_id, descripcion?, etiquetas?, alergenos?, disponible?}) }",
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), producto (req — {nombre, precio, categoria_id, descripcion?, etiquetas?, alergenos?, disponible?, ingredientes?:[{id?, nombre, emoji?, familia?}]}) }",
       "pseudocodigo": [
         "async add_product(input):",
         "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
@@ -205,7 +205,9 @@
       ],
       "reglas_clave": [
         "categoria_id debe existir en la carta.",
-        "producto.id se genera nuevo.",
+        "producto.id DETERMINISTA = slug(categoria_id)+'_'+slug(nombre). Mismo producto -> mismo id SIEMPRE (idempotencia, sin duplicados).",
+        "si ya existe un producto con ese id -> 409 ALREADY_EXISTS (no duplica).",
+        "ingredientes se normalizan a forma canonica {id, nombre, emoji?, familia}; familia validada (default 'otro'); id de ingrediente = slug(nombre) si no viene.",
         "snapshot+bump version (audit trail)."
       ],
       "errores_posibles": [
@@ -236,7 +238,7 @@
       "_delega_en": "carta.remove_product.request (REFLEJO JS — index.js)"
     },
     "update_product": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), producto_id (req), campos (req — {nombre?, precio?, categoria_id?, descripcion?, etiquetas?, alergenos?, disponible?}) }",
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), producto_id (req), campos (req — {nombre?, precio?, categoria_id?, descripcion?, etiquetas?, alergenos?, disponible?, ingredientes?:[{id?, nombre, emoji?, familia?}]}) }",
       "pseudocodigo": [
         "async update_product(input):",
         "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
@@ -252,7 +254,13 @@
         "UPSTREAM_TIMEOUT",
         "UPSTREAM_UNREACHABLE"
       ],
-      "_delega_en": "carta.update_product.request (REFLEJO JS — index.js)"
+      "_delega_en": "carta.update_product.request (REFLEJO JS — index.js)",
+      "reglas_clave": [
+        "el id del producto NO cambia aunque se renombre (identidad estable, integridad referencial).",
+        "categoria_id destino debe existir si se cambia.",
+        "ingredientes (si vienen) se normalizan a forma canonica {id, nombre, emoji?, familia}.",
+        "snapshot+bump version."
+      ]
     },
     "add_category": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), categoria (req — {nombre, descripcion?, orden?}) }",
@@ -271,7 +279,12 @@
         "UPSTREAM_TIMEOUT",
         "UPSTREAM_UNREACHABLE"
       ],
-      "_delega_en": "carta.add_category.request (REFLEJO JS — index.js)"
+      "_delega_en": "carta.add_category.request (REFLEJO JS — index.js)",
+      "reglas_clave": [
+        "categoria.id DETERMINISTA = slug(nombre). 'Hamburguesas' -> 'hamburguesas' SIEMPRE.",
+        "dedup por id: si ya existe esa categoria -> 409 ALREADY_EXISTS.",
+        "snapshot+bump version."
+      ]
     },
     "update_prices": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), updates (req — array de {producto_id, precio_nuevo}) }",
@@ -408,5 +421,6 @@
       "descripcion": "Hoy carta-manager extiende subsistema-recetario.modulo-base por reuso pragmatico (su modelo de ejecucion aplica identico). Cuando el subsistema-carta tenga particularidades propias (estado_operativo distinto, transiciones distintas), crear subsistema-carta.modulo-base.blueprint.json y migrar los 6 hijos."
     }
   ],
-  "_v1_6_changelog": "v1.6.0 (2026-06-13): HIBRIDADO. Las 15 ops (todas deterministas) pasan al REFLEJO JS (index.js, CartaManagerReflejo extends ModuloHibridoReflejo) — CRUD+versionado+manipulacion de productos/categorias servidos en el bus (carta.<op>.request) sin turno LLM. Cada cajon queda como DELEGADOR FINO: el LLM de la pagina interpreta lenguaje natural -> publishAndWait('carta.<op>.request') -> el reflejo ejecuta y persiste. La op interna _on_carta_creada se elimina del blueprint (la sirve el reflejo onCartaCreada via module.json.subscribes); por eso 'carta.creada' SALE de eventos_que_escucho (regla anti-colision: un evento no puede estar en module.json.subscribes y en blueprint.eventos_que_escucho a la vez). El pseudocodigo previo (la danza fs completa) queda capturado fielmente en el reflejo JS."
+  "_v1_6_changelog": "v1.6.0 (2026-06-13): HIBRIDADO. Las 15 ops (todas deterministas) pasan al REFLEJO JS (index.js, CartaManagerReflejo extends ModuloHibridoReflejo) — CRUD+versionado+manipulacion de productos/categorias servidos en el bus (carta.<op>.request) sin turno LLM. Cada cajon queda como DELEGADOR FINO: el LLM de la pagina interpreta lenguaje natural -> publishAndWait('carta.<op>.request') -> el reflejo ejecuta y persiste. La op interna _on_carta_creada se elimina del blueprint (la sirve el reflejo onCartaCreada via module.json.subscribes); por eso 'carta.creada' SALE de eventos_que_escucho (regla anti-colision: un evento no puede estar en module.json.subscribes y en blueprint.eventos_que_escucho a la vez). El pseudocodigo previo (la danza fs completa) queda capturado fielmente en el reflejo JS.",
+  "_v1_7_changelog": "v1.7.0 (2026-06-14): FASE 2 identidad determinista (rediseño subsistema-carta). add_product genera id DETERMINISTA slug(categoria_id)+'_'+slug(nombre) (no UUID) -> el mismo producto es el mismo id SIEMPRE, se acabaron las 3 copias de TEXAS; 409 ALREADY_EXISTS si ya existe. add_category genera id = slug(nombre) y dedup por id. add_product/update_product ACEPTAN y persisten 'ingredientes' en forma canonica {id, nombre, emoji?, familia} (antes add_product los descartaba -> productos sin ingredientes). Implementado en el REFLEJO (index.js reflejo-1.1.0); los cajones siguen delegando."
 }

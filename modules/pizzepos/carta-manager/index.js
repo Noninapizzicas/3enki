@@ -23,12 +23,14 @@ const versionPath = (id, ts) => DIR + '.versions/' + id + '/' + ts + '.json';
 const nowISO = () => new Date().toISOString();
 const tsSafe = () => nowISO().replace(/[:.]/g, '-');
 const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+// Familias canónicas de ingrediente (las que agrupa escandallo/mise-en-place). Default: 'otro'.
+const FAMILIAS = new Set(['queso', 'verdura', 'carne', 'salsa', 'pescado', 'fruta', 'extra', 'condimento', 'otro']);
 
 class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.0.0';
+    this.version = 'reflejo-1.1.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -290,16 +292,35 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   // =============================================================
   // MUTACION ESTRUCTURADA (via _mutar)
   // =============================================================
+  // Ingredientes a la forma CANÓNICA {id, nombre, emoji?, familia}. id determinista (slug),
+  // familia validada contra el set canónico (default 'otro'). Misma ley que menu-generator.
+  _normalizarIngredientes(lista) {
+    if (!Array.isArray(lista)) return [];
+    return lista.filter(ing => ing && ing.nombre).map(ing => {
+      const out = { id: ing.id || slug(ing.nombre), nombre: String(ing.nombre), familia: FAMILIAS.has(ing.familia) ? ing.familia : 'otro' };
+      if (ing.emoji) out.emoji = ing.emoji;
+      return out;
+    });
+  }
+
   async _addProduct(input) {
     if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
     const p = input.producto || {};
     if (!p.nombre) return this._invalid('producto.nombre');
     if (typeof p.precio !== 'number' || p.precio < 0) return this._invalid('producto.precio');
     if (!p.categoria_id) return this._invalid('producto.categoria_id');
+    // id DETERMINISTA: mismo (categoria, nombre) → mismo id SIEMPRE. Idempotencia, sin duplicados.
+    const id = slug(p.categoria_id) + '_' + slug(p.nombre);
     let nuevo;
     return this._mutar(input, 'add_product', (carta) => {
       if (!(carta.categorias || []).some(c => c.id === p.categoria_id)) return { error: this._errorResponse(412, 'PRECONDITION_FAILED', 'categoria_id no existe en la carta') };
-      nuevo = { id: crypto.randomUUID(), nombre: p.nombre, precio: p.precio, categoria_id: p.categoria_id, descripcion: p.descripcion || '', etiquetas: p.etiquetas || [], alergenos: p.alergenos || [], disponible: p.disponible !== undefined ? p.disponible : true };
+      if ((carta.productos || []).some(x => x.id === id)) return { error: this._errorResponse(409, 'ALREADY_EXISTS', 'el producto ya existe en la carta', { entity_type: 'producto', id }) };
+      nuevo = {
+        id, nombre: p.nombre, precio: p.precio, categoria_id: p.categoria_id,
+        descripcion: p.descripcion || '', etiquetas: p.etiquetas || [], alergenos: p.alergenos || [],
+        disponible: p.disponible !== undefined ? p.disponible : true,
+        ingredientes: this._normalizarIngredientes(p.ingredientes)
+      };
       carta.productos = (carta.productos || []).concat([nuevo]);
       return { status: 201, patches: [{ op: 'replace', path: '/productos', value: carta.productos }], data: (c) => ({ producto: nuevo, carta_version: c.meta.version }) };
     });
@@ -324,6 +345,8 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
       if (input.campos.categoria_id && !(carta.categorias || []).some(c => c.id === input.campos.categoria_id)) return { error: this._errorResponse(412, 'PRECONDITION_FAILED', 'categoria_id destino no existe') };
       const prod = carta.productos[idx];
       for (const k of permitidos) if (input.campos[k] !== undefined) prod[k] = input.campos[k];
+      // ingredientes a forma canónica (el id del producto NO cambia: identidad estable aunque se renombre).
+      if (input.campos.ingredientes !== undefined) prod.ingredientes = this._normalizarIngredientes(input.campos.ingredientes);
       return { patches: [{ op: 'replace', path: '/productos/' + idx, value: prod }], data: (c) => ({ producto: prod, carta_version: c.meta.version }) };
     });
   }
@@ -332,12 +355,14 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
     const cat = input.categoria || {};
     if (!cat.nombre) return this._invalid('categoria.nombre');
+    // id DETERMINISTA: slug del nombre. "Hamburguesas" → "hamburguesas" SIEMPRE (dedup por id).
+    const id = slug(cat.nombre);
+    if (!id) return this._invalid('categoria.nombre');
     let nueva;
     return this._mutar(input, 'add_category', (carta) => {
       carta.categorias = carta.categorias || [];
-      const norm = String(cat.nombre).toLowerCase().trim();
-      if (carta.categorias.some(c => String(c.nombre).toLowerCase().trim() === norm)) return { error: this._errorResponse(409, 'ALREADY_EXISTS', 'categoria ya existe', { entity_type: 'categoria', nombre: cat.nombre }) };
-      nueva = { id: crypto.randomUUID(), nombre: String(cat.nombre).trim(), descripcion: cat.descripcion || null, orden: typeof cat.orden === 'number' ? cat.orden : carta.categorias.length };
+      if (carta.categorias.some(c => c.id === id)) return { error: this._errorResponse(409, 'ALREADY_EXISTS', 'categoria ya existe', { entity_type: 'categoria', id }) };
+      nueva = { id, nombre: String(cat.nombre).trim(), descripcion: cat.descripcion || null, orden: typeof cat.orden === 'number' ? cat.orden : carta.categorias.length };
       return { status: 201, patches: [{ op: 'add', path: '/categorias/-', value: nueva }], data: (c) => ({ categoria: nueva, carta_version: c.meta.version }) };
     });
   }

@@ -74,6 +74,7 @@ export interface CartaDesignState {
 
 const PROFILES_DIR = '/pizzepos/carta-design/profiles';
 const DESIGNS_DIR = '/pizzepos/carta-design/designs';
+const CARTAS_DIR = '/pizzepos/cartas';   // CUSTODIO: carta-manager. Path canonico (no /cartas/ a secas).
 
 // =============================================================================
 // BUILT-IN PROFILES (5 — lista cerrada del subsistema-carta)
@@ -186,14 +187,41 @@ async function listDirOrEmpty(path: string): Promise<FsListItem[]> {
 // ACTIONS
 // =============================================================================
 
+// La carta en disco trae productos[]/categorias[], no un campo `resumen`. Lo derivamos
+// para alimentar los hints de layout del panel (totales + rango de precios + por categoria).
+function resumenFromCarta(carta: { productos?: unknown[]; categorias?: unknown[] }): CartaResumen | null {
+  const productos = Array.isArray(carta.productos) ? (carta.productos as Array<Record<string, unknown>>) : [];
+  const categorias = Array.isArray(carta.categorias) ? (carta.categorias as Array<Record<string, unknown>>) : [];
+  if (productos.length === 0 && categorias.length === 0) return null;
+  const precios = productos.map(p => Number(p.precio)).filter(n => Number.isFinite(n));
+  const catStats = categorias.map(c => {
+    const prods = productos.filter(p => p.categoria_id === c.id);
+    const ps = prods.map(p => Number(p.precio)).filter(n => Number.isFinite(n));
+    return {
+      id: String(c.id ?? ''),
+      nombre: String(c.nombre ?? c.id ?? ''),
+      productos_count: prods.length,
+      precio_min: ps.length ? Math.min(...ps) : 0,
+      precio_max: ps.length ? Math.max(...ps) : 0
+    };
+  });
+  return {
+    total_productos: productos.length,
+    total_categorias: categorias.length,
+    precio_min: precios.length ? Math.min(...precios) : 0,
+    precio_max: precios.length ? Math.max(...precios) : 0,
+    categorias_stats: catStats
+  };
+}
+
 export async function loadCartaForDesign(cartaId: string): Promise<boolean> {
   cartaDesignStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const carta = await readJsonOrNull<{ id?: string; nombre?: string; resumen?: CartaResumen; meta?: { id?: string; nombre?: string } }>(`/cartas/${cartaId}.json`);
+    const carta = await readJsonOrNull<{ id?: string; nombre?: string; resumen?: CartaResumen; meta?: { id?: string; nombre?: string }; productos?: unknown[]; categorias?: unknown[] }>(`${CARTAS_DIR}/${cartaId}.json`);
     if (!carta) {
       cartaDesignStore.update(s => ({
-        ...s, loading: false, error: `Carta ${cartaId} no encontrada en /cartas/`
+        ...s, loading: false, error: `Carta ${cartaId} no encontrada en ${CARTAS_DIR}/`
       }));
       return false;
     }
@@ -202,7 +230,7 @@ export async function loadCartaForDesign(cartaId: string): Promise<boolean> {
       ...s,
       cartaId: carta.meta?.id || carta.id || cartaId,
       cartaNombre: carta.meta?.nombre || carta.nombre || cartaId,
-      resumen: carta.resumen || null,
+      resumen: carta.resumen || resumenFromCarta(carta),
       cartaLoaded: true,
       loading: false
     }));
@@ -219,7 +247,7 @@ export async function loadCartaForDesign(cartaId: string): Promise<boolean> {
 export async function loadProfiles(): Promise<void> {
   try {
     const items = await listDirOrEmpty(PROFILES_DIR);
-    const jsonFiles = items.filter(i => i.type === 'file' && i.extension === '.json');
+    const jsonFiles = items.filter(i => i.type === 'file' && i.name.endsWith('.json'));
 
     const customProfiles: DesignProfile[] = [];
     for (const f of jsonFiles) {
@@ -239,7 +267,7 @@ export async function loadProfiles(): Promise<void> {
 export async function loadGallery(cartaId: string): Promise<void> {
   try {
     const items = await listDirOrEmpty(DESIGNS_DIR);
-    const metaFiles = items.filter(i => i.type === 'file' && i.extension === '.json');
+    const metaFiles = items.filter(i => i.type === 'file' && i.name.endsWith('.json'));
 
     const designs: DesignMeta[] = [];
     for (const f of metaFiles) {

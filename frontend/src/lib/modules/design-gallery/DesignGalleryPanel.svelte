@@ -9,7 +9,6 @@
    * Consumidor READ-ONLY — no modifica datos de carta.
    */
   import { onMount, onDestroy } from 'svelte';
-  import { page } from '$app/stores';
   import {
     cartaDesignStore,
     loadCartaForDesign,
@@ -22,32 +21,34 @@
     cartaResumen,
     clearDesignError
   } from '$lib/stores/carta-design';
-  import { mqttRequest } from '$lib/ui-core/mqtt-request';
+  // La carta base la sirve carta-manager (CUSTODIO de /pizzepos/cartas/). Bebemos de SU
+  // store, no de menu.list (dueño viejo) ni filtrando estado='generada' (vocabulario que
+  // ya no existe: carta-manager usa borrador/en_servicio/archivada).
+  import { sortedCartas, loadCartas, cartasLoading } from '$lib/stores/carta-manager';
 
   export let panelId: string = '';
 
   let cleanup: (() => void) | null = null;
-  let cartas: Array<{ id: string; nombre: string; productos?: number; categorias?: number }> = [];
-  let loadingCartas = true;
+
+  // Cartas diseñables = todas las no archivadas, mapeadas a la forma del panel.
+  $: cartas = $sortedCartas
+    .filter((c: any) => c.estado !== 'archivada')
+    .map((c: any) => ({
+      id: c.id,
+      nombre: c.nombre,
+      productos: Array.isArray(c.productos) ? c.productos.length : undefined,
+      categorias: Array.isArray(c.categorias) ? c.categorias.length : undefined
+    }));
+  $: loadingCartas = $cartasLoading;
 
   onMount(async () => {
     cleanup = initCartaDesignSubscriptions();
-    await loadCartasList();
+    await loadCartas();
   });
 
   onDestroy(() => {
     cleanup?.();
   });
-
-  async function loadCartasList() {
-    loadingCartas = true;
-    try {
-      const projectId = $page.params.project_id;
-      const res = await mqttRequest<any>('menu', 'list', { project_id: projectId });
-      cartas = (res.data?.cartas || []).filter((c: any) => c.estado === 'generada');
-    } catch {}
-    loadingCartas = false;
-  }
 
   async function selectCarta(cartaId: string) {
     await loadCartaForDesign(cartaId);

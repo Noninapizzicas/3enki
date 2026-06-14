@@ -30,7 +30,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.1.0';
+    this.version = 'reflejo-1.2.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -48,8 +48,37 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   onStatsRequest(e) { return this._atender(e, 'stats', 'carta.stats.response', d => this._stats(d)); }
   onVersionsRequest(e) { return this._atender(e, 'versions', 'carta.versions.response', d => this._versions(d)); }
   onRestoreRequest(e) { return this._atender(e, 'restore', 'carta.restore.response', d => this._restore(d)); }
-  // entrada event-driven (fire-and-forget desde menu-generator)
-  onCartaCreada(e) { const d = (e && e.data) || e || {}; return this._save({ project_id: d.project_id, correlation_id: d.correlation_id, user_id: d.user_id || 'async-subscriber', carta: d.carta, motivo: d.motivo || 'generada por menu-generator (async)' }); }
+  // entrada event-driven (fire-and-forget desde menu-generator).
+  // IDENTIDAD (FASE 3): una carta general por proyecto. Si ya existe la carta general,
+  // REUSA su id para SOBREESCRIBIRLA (snapshot+version++), no spawnear un fichero nuevo.
+  // Red de seguridad determinista: no depende de que el LLM de menu-generator haga el LEER.
+  async onCartaCreada(e) {
+    const d = (e && e.data) || e || {};
+    const carta = d.carta;
+    if (carta && carta.meta) {
+      const idGeneral = await this._idCartaGeneral(d.project_id);
+      if (idGeneral && idGeneral !== carta.meta.id) carta.meta.id = idGeneral;   // mapea a la general existente
+    }
+    return this._save({ project_id: d.project_id, correlation_id: d.correlation_id, user_id: d.user_id || 'async-subscriber', carta, motivo: d.motivo || 'generada por menu-generator (async)' });
+  }
+
+  // Resuelve el id de la carta GENERAL del proyecto, SOLO cuando es inequívoco:
+  // la en_servicio; o, si no hay, la única no archivada. Con 0 o varias activas → null
+  // (no fuerza: deja que el id entrante mande, para no pisar una carta de canal).
+  async _idCartaGeneral(project_id) {
+    const files = await this._listFiles(project_id);
+    if (!files || files.length === 0) return null;
+    const metas = [];
+    for (const file of files) {
+      const raw = await this._read(project_id, DIR + file);
+      if (!raw || raw.status !== 200) continue;
+      try { metas.push(JSON.parse(raw.content).meta || {}); } catch (_) { /* ilegible: ignora */ }
+    }
+    const enServicio = metas.find(m => m.estado === 'en_servicio');
+    if (enServicio) return enServicio.id;
+    const activas = metas.filter(m => m.estado !== 'archivada');
+    return activas.length === 1 ? activas[0].id : null;
+  }
 
   // =============================================================
   // helpers de fs (sobre _rpc del bus)

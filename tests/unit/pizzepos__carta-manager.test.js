@@ -86,7 +86,11 @@ function makeBus(store) {
         store[payload.path] = JSON.stringify(next, null, 2);
         emit('fs.edit.response', { request_id: payload.request_id, status: 200 });
       } else if (event === 'fs.list.request') {
-        emit('fs.list.response', { request_id: payload.request_id, status: 200, data: [] });
+        const prefix = payload.path.endsWith('/') ? payload.path : payload.path + '/';
+        const data = Object.keys(store)
+          .filter(p => p.startsWith(prefix) && p.endsWith('.json') && !p.slice(prefix.length).includes('/'))
+          .map(p => p.slice(prefix.length));
+        emit('fs.list.response', { request_id: payload.request_id, status: 200, data });
       }
     }
   };
@@ -106,7 +110,7 @@ async function testAsync(desc, fn) {
 }
 
 (async () => {
-  console.log('pizzepos__carta-manager — reflejo FASE 2 (identidad determinista)\n');
+  console.log('pizzepos__carta-manager — reflejo FASE 2+3 (identidad determinista)\n');
 
   await testAsync('add_product: id DETERMINISTA slug(cat)_slug(nombre) + ingredientes canónicos', async () => {
     const store = { [CARTA_PATH]: JSON.stringify(cartaInicial()) };
@@ -177,6 +181,45 @@ async function testAsync(desc, fn) {
     assert.strictEqual(r.data.producto.nombre, 'TEXAS DELUXE');
     assert.strictEqual(r.data.producto.ingredientes[0].id, 'queso');
     assert.strictEqual(r.data.producto.ingredientes[0].familia, 'queso');
+  });
+
+  // ── FASE 3: identidad de carta (onCartaCreada reusa la carta general existente) ──
+
+  await testAsync('onCartaCreada con carta general en_servicio existente → REUSA su id (sobreescribe, no spawnea)', async () => {
+    const existente = cartaInicial();
+    existente.meta.estado = 'en_servicio';   // la general
+    const store = { [CARTA_PATH]: JSON.stringify(existente) };
+    const { m } = makeReflejo(store);
+    // menu-generator manda una carta con OTRO id (nombre distinto)
+    const entrante = { meta: { id: 'carta_bella', nombre: 'Carta Bella' }, categorias: [{ id: 'x', nombre: 'X', orden: 0 }], productos: [] };
+    await m.onCartaCreada({ data: { project_id: 'proj-nonina', carta: entrante } });
+    // NO se creó carta_bella.json; se sobreescribió carta_nonina.json
+    assert.ok(!store['/pizzepos/cartas/carta_bella.json'], 'no debe crear fichero nuevo');
+    const guardada = JSON.parse(store[CARTA_PATH]);
+    assert.strictEqual(guardada.meta.id, 'carta_nonina');   // id reusado
+    assert.strictEqual(guardada.meta.nombre, 'Carta Bella'); // contenido nuevo
+  });
+
+  await testAsync('onCartaCreada sin cartas previas → crea con el id entrante (primera vez)', async () => {
+    const store = {};
+    const { m } = makeReflejo(store);
+    const entrante = { meta: { id: 'carta_nonina', nombre: 'Nonina' }, categorias: [{ id: 'x', nombre: 'X', orden: 0 }], productos: [] };
+    await m.onCartaCreada({ data: { project_id: 'proj-nonina', carta: entrante } });
+    assert.ok(store['/pizzepos/cartas/carta_nonina.json'], 'crea la primera carta con su id');
+  });
+
+  await testAsync('onCartaCreada con varias cartas activas (ambiguo) → NO fuerza id (deja el entrante)', async () => {
+    const a = cartaInicial(); a.meta.id = 'carta_a';
+    const b = cartaInicial(); b.meta.id = 'carta_b';
+    const store = {
+      '/pizzepos/cartas/carta_a.json': JSON.stringify(a),   // ambas borrador (ninguna en_servicio)
+      '/pizzepos/cartas/carta_b.json': JSON.stringify(b)
+    };
+    const { m } = makeReflejo(store);
+    const entrante = { meta: { id: 'carta_nueva', nombre: 'Nueva' }, categorias: [{ id: 'x', nombre: 'X', orden: 0 }], productos: [] };
+    await m.onCartaCreada({ data: { project_id: 'proj-nonina', carta: entrante } });
+    // ambiguo (2 activas, 0 en_servicio) → no pisa ninguna, crea con el id entrante
+    assert.ok(store['/pizzepos/cartas/carta_nueva.json'], 'con varias activas no fuerza, respeta el id entrante');
   });
 
   console.log('\nTodos los tests pasaron.');

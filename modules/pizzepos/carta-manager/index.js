@@ -25,12 +25,15 @@ const tsSafe = () => nowISO().replace(/[:.]/g, '-');
 const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 // Familias canónicas de ingrediente (las que agrupa escandallo/mise-en-place). Default: 'otro'.
 const FAMILIAS = new Set(['queso', 'verdura', 'carne', 'salsa', 'pescado', 'fruta', 'extra', 'condimento', 'otro']);
+// Categorías de línea que son SUBPRODUCTO BASE (no variación del cliente): no se "quitan" de un producto.
+// La masa y la salsa base son el cimiento; los toppings (verdura/queso/carne/...) sí son variaciones.
+const SUBPRODUCTO_CATEGORIAS = new Set(['masa', 'salsa']);
 
 class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.3.0';
+    this.version = 'reflejo-1.4.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -39,6 +42,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   onListRequest(e) { return this._atender(e, 'list', 'carta.list.response', d => this._list(d)); }
   onDeleteRequest(e) { return this._atender(e, 'delete', 'carta.delete.response', d => this._delete(d)); }
   onAddProductRequest(e) { return this._atender(e, 'add_product', 'carta.add_product.response', d => this._addProduct(d)); }
+  onAddFromRecetaRequest(e) { return this._atender(e, 'add_from_receta', 'carta.add_from_receta.response', d => this._addFromReceta(d)); }
   onRemoveProductRequest(e) { return this._atender(e, 'remove_product', 'carta.remove_product.response', d => this._removeProduct(d)); }
   onUpdateProductRequest(e) { return this._atender(e, 'update_product', 'carta.update_product.response', d => this._updateProduct(d)); }
   onAddCategoryRequest(e) { return this._atender(e, 'add_category', 'carta.add_category.response', d => this._addCategory(d)); }
@@ -358,6 +362,45 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
       const out = { id: ing.id || slug(ing.nombre), nombre: String(ing.nombre), familia: FAMILIAS.has(ing.familia) ? ing.familia : 'otro' };
       if (ing.emoji) out.emoji = ing.emoji;
       return out;
+    });
+  }
+
+  // Lee una receta por su dueño (recetas reflejo, ms). null si no existe / no responde.
+  async _recetaObtener(project_id, receta_id) {
+    const r = await this._rpc('recetas.obtener.request', { project_id, receta_id }, { timeout_ms: 8000 });
+    if (!r || r.status !== 200 || !r.data) return null;
+    return r.data;   // { nombre, lineas, tipo, ... }
+  }
+
+  // Líneas de receta → ingredientes de carta (variaciones). EXCLUYE subproductos base
+  // (categoria masa/salsa: el cimiento, no se quita); el resto son toppings modificables.
+  // familia = categoria de la línea (validada contra el set canónico; default 'otro').
+  _lineasToIngredientes(lineas) {
+    if (!Array.isArray(lineas)) return [];
+    return lineas
+      .filter(l => l && l.nombre && !SUBPRODUCTO_CATEGORIAS.has(String(l.categoria || '').toLowerCase()))
+      .map(l => ({ id: slug(l.nombre), nombre: String(l.nombre), familia: FAMILIAS.has(l.categoria) ? l.categoria : 'otro' }));
+  }
+
+  // Añade a la carta un producto NACIDO de una receta: LEE la receta, mapea sus líneas a
+  // ingredientes (toppings = variaciones; masa/salsa = base, fuera) y delega a add_product
+  // (id determinista FASE 2). El precio NO se inventa: lo pone el caller (0 hasta fijarlo).
+  async _addFromReceta(input) {
+    if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
+    if (!input.receta_id) return this._invalid('receta_id');
+    if (!input.categoria_id) return this._invalid('categoria_id');
+    const receta = await this._recetaObtener(input.project_id, input.receta_id);
+    if (!receta || !receta.nombre) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'receta no existe o sin nombre', { entity_type: 'receta', id: input.receta_id });
+    const ingredientes = this._lineasToIngredientes(receta.lineas);
+    return this._addProduct({
+      project_id: input.project_id, carta_id: input.carta_id,
+      correlation_id: input.correlation_id, user_id: input.user_id,
+      producto: {
+        nombre: receta.nombre,
+        precio: typeof input.precio === 'number' ? input.precio : 0,   // NUNCA inventar precio
+        categoria_id: input.categoria_id,
+        ingredientes
+      }
     });
   }
 

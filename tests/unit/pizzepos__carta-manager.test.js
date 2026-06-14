@@ -70,27 +70,29 @@ function makeBus(store) {
       handlers.get(event).add(fn);
       return () => handlers.get(event)?.delete(fn);
     },
+    // Emite los shapes REALES de filesystem: éxito → {request_id, ...data} SIN status;
+    // error → {request_id, error:{code,message}} SIN status. (Mockear la realidad, no la suposición.)
     async publish(event, payload) {
       published.push([event, payload]);
       if (event === 'fs.read.request') {
         const content = store[payload.path];
         emit('fs.read.response', content != null
-          ? { request_id: payload.request_id, status: 200, content }
-          : { request_id: payload.request_id, status: 404 });
+          ? { request_id: payload.request_id, path: payload.path, content }
+          : { request_id: payload.request_id, error: { code: 'RESOURCE_NOT_FOUND', message: 'File not found' } });
       } else if (event === 'fs.write.request') {
         store[payload.path] = payload.content;
-        emit('fs.write.response', { request_id: payload.request_id, status: 200 });
+        emit('fs.write.response', { request_id: payload.request_id, path: payload.path });
       } else if (event === 'fs.edit.request') {
-        const cur = JSON.parse(store[payload.path] || '{}');
-        const next = applyPatch(cur, payload.patches);
-        store[payload.path] = JSON.stringify(next, null, 2);
-        emit('fs.edit.response', { request_id: payload.request_id, status: 200 });
+        if (store[payload.path] == null) { emit('fs.edit.response', { request_id: payload.request_id, error: { code: 'RESOURCE_NOT_FOUND', message: 'File not found' } }); return; }
+        const cur = JSON.parse(store[payload.path]);
+        store[payload.path] = JSON.stringify(applyPatch(cur, payload.patches), null, 2);
+        emit('fs.edit.response', { request_id: payload.request_id, path: payload.path });
       } else if (event === 'fs.list.request') {
         const prefix = payload.path.endsWith('/') ? payload.path : payload.path + '/';
-        const data = Object.keys(store)
+        const files = Object.keys(store)
           .filter(p => p.startsWith(prefix) && p.endsWith('.json') && !p.slice(prefix.length).includes('/'))
-          .map(p => p.slice(prefix.length));
-        emit('fs.list.response', { request_id: payload.request_id, status: 200, data });
+          .map(p => ({ name: p.slice(prefix.length), type: 'file' }));
+        emit('fs.list.response', { request_id: payload.request_id, path: payload.path, files, items: files, count: files.length });
       }
     }
   };

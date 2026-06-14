@@ -30,7 +30,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.2.0';
+    this.version = 'reflejo-1.3.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -82,15 +82,43 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
 
   // =============================================================
   // helpers de fs (sobre _rpc del bus)
+  // Contrato real de filesystem: éxito → {request_id, ...data} SIN status (read trae
+  // content; list trae files/items); error → {request_id, error:{code,message}} SIN status.
+  // Estos helpers NORMALIZAN a {status, content?/error?} para el resto del reflejo.
   // =============================================================
-  async _read(project_id, path) { return this._rpc('fs.read.request', { project_id, path }); }
+  async _read(project_id, path) {
+    const r = await this._rpc('fs.read.request', { project_id, path });
+    if (!r) return { status: 503 };
+    if (r.error) return { status: r.error.code === 'RESOURCE_NOT_FOUND' ? 404 : 502, error: r.error };
+    if (typeof r.content === 'string') return { status: 200, content: r.content };
+    return { status: 404 };
+  }
   async _write(project_id, path, obj) {
     const content = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
-    return this._rpc('fs.write.request', { project_id, path, content, encoding: 'utf-8', atomic: true });
+    const r = await this._rpc('fs.write.request', { project_id, path, content, encoding: 'utf-8', atomic: true });
+    if (!r) return { status: 503 };
+    if (r.error) return { status: 502, error: r.error };
+    return { status: 200 };
   }
-  async _edit(project_id, path, patches) { return this._rpc('fs.edit.request', { project_id, path, patches }); }
+  async _edit(project_id, path, patches) {
+    const r = await this._rpc('fs.edit.request', { project_id, path, patches });
+    if (!r) return { status: 503 };
+    if (r.error) return { status: r.error.code === 'RESOURCE_NOT_FOUND' ? 404 : 502, error: r.error };
+    return { status: 200 };
+  }
   async _snapshot(project_id, carta_id, rawContent, sufijo) {
     return this._write(project_id, versionPath(carta_id, tsSafe() + (sufijo || '')), rawContent);
+  }
+
+  // Nombres de fichero (.json, sin .versions) en un dir. Lee files/items (objetos {name}) — NO data.
+  async _listFilesIn(project_id, dir) {
+    const r = await this._rpc('fs.list.request', { project_id, path: dir });
+    if (!r) return null;
+    if (r.error) return r.error.code === 'RESOURCE_NOT_FOUND' ? [] : null;
+    const entries = r.files || r.items || [];
+    return entries
+      .map(x => (typeof x === 'string' ? x : x && x.name))
+      .filter(name => name && name.endsWith('.json') && !name.startsWith('.versions'));
   }
 
   // Mutacion versionada (DRY de add/remove/update/add_category/update_prices):
@@ -136,10 +164,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   }
 
   async _listFiles(project_id) {
-    const f = await this._rpc('fs.list.request', { project_id, path: DIR, extension: 'json' });
-    if (f && f.status === 404) return [];
-    if (!f || f.status >= 400) return null;
-    return (f.data || []).filter(x => !String(x).startsWith('.versions/'));
+    return this._listFilesIn(project_id, DIR);
   }
 
   async _eachCarta(project_id, fn) {
@@ -195,10 +220,14 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
 
   async _versions(input) {
     if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
-    const f = await this._rpc('fs.list.request', { project_id: input.project_id, path: DIR + '.versions/' + input.carta_id + '/', extension: 'json' });
-    if (f && f.status === 404) return { status: 200, data: [] };
-    if (!f || f.status >= 400) return f || this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'fs no responde');
-    const v = (f.data || []).map(x => ({ timestamp: String(x).replace('.json', ''), filename: x }));
+    const r = await this._rpc('fs.list.request', { project_id: input.project_id, path: DIR + '.versions/' + input.carta_id + '/' });
+    if (!r) return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'fs no responde');
+    if (r.error) return r.error.code === 'RESOURCE_NOT_FOUND' ? { status: 200, data: [] } : this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'fs no responde');
+    const entries = r.files || r.items || [];
+    const v = entries
+      .map(x => (typeof x === 'string' ? x : x && x.name))
+      .filter(name => name && name.endsWith('.json'))
+      .map(name => ({ timestamp: name.replace('.json', ''), filename: name }));
     v.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
     return { status: 200, data: v };
   }

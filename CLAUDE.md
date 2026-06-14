@@ -1376,8 +1376,29 @@ carta-marketing (TERCER caso · module 2.4.0 · blueprint 1.10.0 · SIN agente) 
   BLUEPRINT        : completar_onboarding (entrevista 5 fases, LLM de página) · generar_copy (LLM de página redacta) ; cajones delegan al reflejo
   capa_agentes     : APARCADA (enabled:false). El LLM de página hace lo fuzzy; el reflejo persiste. NO hay agent.execute.
 }
+carta-manager (CUARTO caso · AGGREGATE ROOT · module 2.3.0 · blueprint 1.11.0 · reflejo 1.6.0) {
+  REFLEJO index.js : las 15 ops DETERMINISTAS — save · get · list · delete · add_product · remove_product ·
+                     update_product · add_category · update_prices · clonar · search · stats · versions ·
+                     restore + onCartaCreada (entrada event-driven de menu-generator). Custodio único de
+                     /pizzepos/cartas/<id>.json (+ .versions/). Helper _mutar (read→snapshot→fs.edit→version++→carta.editada).
+  BLUEPRINT        : cajones = DELEGADORES finos (el LLM de página traduce lenguaje natural → publishAndWait('carta.<op>.request')).
+  IDENTIDAD        : add_product → id determinista slug(categoria_id)+'_'+slug(nombre) (409 si existe) + persiste ingredientes
+                     {id,nombre,emoji?,familia}. add_category → id=slug(nombre). onCartaCreada REUSA la carta general existente
+                     (una carta por proyecto, no spawnea ficheros).
+  CONTRATO_FS      : lee el shape REAL de filesystem (éxito={...data} sin status / error={error}); normaliza en _read/_write/_edit/_listFiles.
+  resultado        : lectura/escritura de carta por RPC en ms; el comandero (vía productos proyector) ve siempre la carta actual.
+}
+SUBSISTEMA-CARTA — flujo recetas → carta (3 módulos, cada uno lo suyo) {
+  recetas         : FUENTE   — da la receta por su puerta (recetas.obtener.request, reflejo). No cambia.
+  menu-generator  : PREPARA + ORQUESTA — op preparar (blueprint 9.4.0): UNA vuelta LLM que LEE carta.get + recetas.obtener
+                    (reflejos), da su TOQUE (prepara el producto pizzepos-ready SIGUIENDO la carta base: TODOS los ingredientes,
+                    sin clasificar base/topping; consistencia de ids/familias/categorías), y GUARDA via carta.add_product (reflejo).
+                    'generar CON base'. Todas las llamadas blueprint→REFLEJO → NUNCA blueprint→blueprint.
+  carta-manager   : CUSTODIO — sirve carta.get (la base) + carta.add_product (persiste). No orquesta, no clasifica.
+  regla           : el que PIENSA (menu-generator) orquesta y solo habla con reflejos; cero fronteras LLM↔LLM.
+}
 PENDIENTE (mismo patrón) {
-  productos · categorias · ingredientes · tarifas : sus lecturas/CRUD → reflejo
+  categorias · ingredientes · tarifas · viabilidad : sus lecturas/CRUD → reflejo
 }
 ```
 
@@ -1423,8 +1444,14 @@ perfil de marca   carta-marketing /pizzepos/marca.json   carta-marketing.get_per
 
   ejemplos de quién bebe:
     escandallo, viabilidad  ← recetas+catálogo  (costear, evaluar)
+    menu-generator (preparar) ← recetas+catálogo  (trae la receta para preparar el producto e inyectarlo en la carta)
     carta-design (colores), menu-generator (tono), carta-digital  ← perfil de marca
   el onboarding RELLENA la base de marca (update_perfil); luego diseño/carta se basan en ella.
+
+FLUJO recetas → carta (NO es fs.read; cada uno entra por la puerta del dueño):
+  menu-generator.preparar : LEE recetas.obtener (FUENTE) + carta.get (BASE) → PREPARA (toque, 1 vuelta LLM)
+                            → carta.add_product (carta-manager CUSTODIO persiste). Todo blueprint→REFLEJO.
+  carta-manager NO lee recetas.json; productos NO lee cartas/ por fs — todos por RPC del dueño.
 ```
 
 ### Identidad de marca — estructura canónica (marca.json)
@@ -1464,21 +1491,23 @@ REPARTO POR MÓDULO  (✓ = ya híbrido)
   recetas        ✓  crear/listar/obtener/buscar/CRUD + persist      investigar_receta, crear-desde-intención
   escandallo     ✓  recalcular_siguiente/costear (_costear)         calcular (Mercadona/_precio_de_mercadona)
   carta-marketing✓  get_perfil/update_perfil/guardar_copy           completar_onboarding + generar_copy (LLM pagina, SIN agente)
-  carta-manager     save/get/list/delete/add/remove/update_product  —   (CRUD puro)
+  carta-manager  ✓  las 15 ops (save/get/list/delete/add_product/...)  cajones = delegadores finos al reflejo (AGGREGATE ROOT)
+  productos      ✓  PROYECTOR sin estado (proyecta carta activa)    —   (sin store; lee carta-manager por RPC)
   carta-digital     get/update_config · get/set carta_publica       —
   carta-scheduler   crear/listar/eliminar_regla · detectar_conflictos —
   viabilidad        evaluar (aritmética) · obtener/listar/descartar —   (paralelo a escandallo)
   carta-impresion✓  get/save_html (blueprint)                       generar (LLM pagina redacta HTML, SIN agente)
   carta-design      load_carta/save/profiles/gallery (CRUD)         generar-diseño-desde-estilo (si aplica)
   tecnicas          codificar/obtener/listar/actualizar/parametros  —
-  menu-generator    —   (sin store propio)                          generar (carta desde texto/foto)  ← casi todo fuzzy
+  menu-generator    —   (sin store propio · solo blueprint)         generar (carta desde texto/foto) · preparar (añade recetas a carta, contra base)
 ```
 
 ```
 ORDEN DE MIGRACIÓN  (cada uno: receta de 5 pasos del patrón + gate)
-  1. CRUD puros (trivial, máximo retorno): carta-manager · carta-digital · carta-scheduler · viabilidad
+  HECHO: carta-manager ✓ (aggregate root) · productos ✓ (PROYECTOR, no store — lee la carta por RPC)
+  1. CRUD puros (trivial, máximo retorno): carta-digital · carta-scheduler · viabilidad
   2. mixtos (reflejo CRUD + chispa fuzzy): carta-design · carta-impresion · tecnicas
-  3. menu-generator: se queda blueprint (generación fuzzy); no necesita reflejo
+  3. menu-generator: se queda blueprint (generación fuzzy) + op preparar (orquesta recetas→carta contra reflejos); no necesita reflejo propio
 ```
 
 ## Estándar blueprint-coherente — capa de agentes APARCADA
@@ -1956,55 +1985,62 @@ CLASE Device {
 }
 ```
 
-### 5. PRODUCTOS (v4.0.0) — Catálogo Multi-Tenant
+### 5. PRODUCTOS (v5.0.0) — PROYECTOR SIN ESTADO sobre carta-manager
 
 ```
 CLASE ProductosModule HEREDA BaseModule {
+  // REDISEÑO v5.0.0: productos YA NO tiene store. La CARTA (carta-manager) es la ÚNICA
+  // fuente de verdad. productos PROYECTA la carta activa del proyecto a formato POS al
+  // vuelo (carta.get.request → reflejo, ms). catalogo == proyectar(carta_activa) SIEMPRE.
+  // Mata por construcción: acumulación de fantasmas, leak cross-project, stale.
+  // ELIMINADO: productosPerProject + catalogo_activo.json + syncCatalogo (merge que
+  // derivaba) + loadCartaFromProject (unión de TODAS las cartas) + resolveToActiveProject.
+  // REQUIERE carta-manager híbrido (reflejo) desplegado.
   ATRIBUTOS {
     name: String = 'productos'
-    version: String = '4.0.0'
-    productosPerProject: Map<project_id, Map<producto_id, Producto>>
-    categoriasPerProject: Map<project_id, Map<categoria_id, Categoria>>
-    mappingCanalesPerProject: Map<project_id, {general?, mesa?, llevar?, glovo?}>
-    projectPaths: Map<project_id, String>
+    version: String = '5.0.0'
+    mappingCanalesPerProject: Map<project_id, {general, canales}>   // ÚNICO estado (de tarifas): qué carta es la activa
+    // SIN productosPerProject · SIN categoriasPerProject · SIN catalogo_activo
   }
 
   METODOS {
-    async onLoad(core: EventCore): Promise<Void>
-      SUSCRIBE A project.activated, carta.actualizada, tarifas.config.actualizada
+    async _resolverCartaActiva(project_id, canal?, carta_id?): String|Null
+      SI carta_id: RETORNA carta_id                         // el caller ya resolvió (carta de canal)
+      SI canal Y mapping[canal]: RETORNA mapping[canal]     // override de canal (tarifas)
+      SI mapping.general: RETORNA mapping.general
+      RETORNA _cartaEnServicio(project_id)                  // fallback: carta.list → en_servicio
 
-    async handleListProductos(data: {project_id, categoria?, activo?}): Promise<Response>
-      project_id = resolveToActiveProject(project_id)
-      productos = getProductos(project_id)
-      FILTRA CON filters
-      ORDENA POR categoria + nombre
-      RETORNA {status: 200, data: {productos, total}}
+    async _cartaActiva(project_id, canal?, carta_id?): Carta|Null
+      cid = _resolverCartaActiva(...)
+      RETORNA publishAndWait('carta.get.request', {project_id, carta_id: cid}).data   // REFLEJO carta-manager
 
-    async handleSearchProductos(data: {project_id, q}): Promise<Response>
-      BUSQUEDA full-text EN nombre/descripcion
-      FILTRA solo productos.activo == true
-      RETORNA {status: 200, data: {resultados}}
+    _proyectar(carta): {categorias, productos}              // función PURA carta→POS, sin guardar
+      // normaliza el drift categoria/categoria_id e ingredientes/ingredientes_base; herencia de estaciones
 
-    async onCartaGenerada(event: Event): Promise<Void>
-      project_id = event.project_id
-      carta = event.carta_entera (embebida EN payload)
-      SINCRONIZA productos Y categorias DEL proyecto DESDE carta
-      PERSISTE catalogo_activo.json por proyecto
-      PUBLICA catalogo.actualizado (para comandero/pedidos refresh cache)
+    async handleCartaCompleta(data): Response               // lo que pide el comandero
+      carta = _cartaActiva(project_id, canal?, carta_id?)
+      SI !carta: RETORNA 404 (proyecto sin carta = comandero VACÍO; NO hereda otro proyecto)
+      RETORNA proyectar(carta) + ingredientes (de módulo ingredientes)
+
+    handleListProductos · handleListCategorias · handleListPizzas · handleGetProducto · handleSearchProductos
+      // TODOS sobre _cartaActiva + _proyectar. project_id REQUERIDO. Sin store, sin leak.
+
+    handleUpdateProducto · handleDeleteProducto             // DELEGAN a carta-manager (la carta es el writer)
+      → publishAndWait('carta.update_product.request' | 'carta.remove_product.request')
+
+    onCartaGenerada(carta.actualizada/editada) · onCartaBorrada
+      → SEÑAL: re-emite catalogo.actualizado (el comandero re-pull y proyecta fresco). NO sincroniza store.
 
     EVENTOS_PUBLISHES {
-      'producto.creado': {project_id, producto_id, nombre, precio, categoria}
-      'producto.actualizado': {project_id, producto_id, cambios}
-      'producto.eliminado': {project_id, producto_id}
-      'catalogo.actualizado': {project_id, productos, categorias}
+      'catalogo.actualizado': {project_id, productos (lite), source}   // SEÑAL de refresco
+      'carta.get.request' · 'carta.list.request' · 'carta.update_product.request' · 'carta.remove_product.request'  // RPC a carta-manager
     }
 
     EVENTOS_SUBSCRIBES {
-      'carta.actualizada': onCartaGenerada
-      'carta.editada': onCartaGenerada
-      'carta.borrada': onCartaBorrada
-      'tarifas.config.actualizada': onTarifasConfigActualizada
-      'project.activated': onProjectActivated
+      'carta.actualizada' / 'carta.editada': onCartaGenerada (señal)
+      'carta.borrada': onCartaBorrada (señal)
+      'tarifas.config.actualizada': onTarifasConfigActualizada (mapping canal→carta)
+      'project.activated': onProjectActivated (warm: proyecta y emite catalogo.actualizado)
     }
   }
 }

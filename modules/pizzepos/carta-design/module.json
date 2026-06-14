@@ -1,13 +1,22 @@
 {
-  "_doc": "Manifest del modulo carta-design. Blueprint-driven. 6 operaciones de gestion de designs (HTML) y profiles (estilos). NO genera HTML — eso lo hace un agente. 5 profiles built-in en design-profiles/ (NO modificables). Custom profiles + designs en data/projects/{slug}/carta-design/.",
+  "_doc": "Manifest del modulo carta-design — HIBRIDO (blueprint + reflejo JS). El reflejo (index.js) sirve las 6 ops DETERMINISTAS de gestion de archivos en el bus (design.<op>.request): load_carta (LEE la carta por carta.get RPC), save (guarda el HTML), profiles/save_profile/delete_profile (CRUD de estilos), gallery (lista designs). Lo FUZZY —entrevista + diseno creativo del HTML— lo hace el LLM de PAGINA (el equipo de agentes R0-R8 del context.json esta APARCADO). 5 profiles built-in en design-profiles/ (NO modificables, leidos local). Custom profiles + designs en data/projects/{slug}/carta-design/. El loader carga ambos (blueprint_driven + index.js = hibrido).",
   "name": "carta-design",
-  "version": "1.1.0",
-  "description": "Modulo carta-design en modo blueprint-driven. Estudio de diseno de cartas impresas. Gestiona archivos: cargar carta para disenar, guardar HTML generado, biblioteca de profiles reutilizables (built-in + custom).",
+  "version": "2.0.0",
+  "_v2_0_nota": "v2.0.0 (2026-06-14): HIBRIDADO. Las 6 ops (file management deterministas) pasan al REFLEJO JS (index.js, CartaDesignReflejo extends ModuloHibridoReflejo) — servidas en el bus (design.<op>.request) sin turno LLM. Lee el contrato fs real (normaliza). Built-in profiles leidos local. Los cajones del blueprint quedan como delegadores; la entrevista + diseno del HTML siguen en el LLM de pagina (sin agente). v1.1.0: blueprint-driven puro.",
+  "description": "Modulo carta-design HIBRIDO: reflejo JS sirve las 6 ops deterministas (gestion de designs HTML y profiles de estilo) en el bus; el LLM de pagina hace lo creativo (entrevista + diseno del HTML, SIN agente) y llama al reflejo para load_carta/save. Estudio de diseno de cartas impresas.",
   "language": "es",
   "blueprint_driven": true,
   "blueprint_path": "carta-design.blueprint.json",
   "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
   "target_page_id": "carta-design",
+  "subscribes": [
+    { "event": "design.load_carta.request", "handler": "onLoadCartaRequest", "description": "Reflejo JS: trae la carta a disenar (carta.get RPC, por la puerta de carta-manager)." },
+    { "event": "design.save.request", "handler": "onSaveRequest", "description": "Reflejo JS: guarda el HTML del diseno + meta companion; emite carta.html.generada." },
+    { "event": "design.profiles.request", "handler": "onProfilesRequest", "description": "Reflejo JS: lista profiles built-in (local) + custom (proyecto, sin soft-deleted)." },
+    { "event": "design.save_profile.request", "handler": "onSaveProfileRequest", "description": "Reflejo JS: guarda un profile custom (id=slug, no colisiona con built-in)." },
+    { "event": "design.delete_profile.request", "handler": "onDeleteProfileRequest", "description": "Reflejo JS: soft-delete de un profile custom (activo:false; built-in protegido)." },
+    { "event": "design.gallery.request", "handler": "onGalleryRequest", "description": "Reflejo JS: lista los designs guardados (filtrable por carta_id)." }
+  ],
   "config": {
     "persistence": {
       "scope": "project",

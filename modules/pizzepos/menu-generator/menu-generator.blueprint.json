@@ -1,7 +1,7 @@
 {
   "_doc": "Blueprint CONCRETO del modulo menu-generator v8.0.0. Reemplaza completamente al modulo legacy JS v7.0.0 (cuyo index.js queda archivado en _legacy/ via Fase 5 de la migracion). Generador puro: recibe input (texto pegado/dictado o JSON estructurado) y produce una carta con shape canonico carta-pizzepos (ver arquitectura/decisiones/_schemas/menu-generator/carta-pizzepos.schema.json). Persiste la carta via publishAndWait('carta-manager.save.request', ...) — menu-generator NO toca filesystem (paradigma event-core puro: cada modulo es dueno de su dominio; carta-manager es dueno de /cartas/). Origen de la migracion: arquitectura/decisiones/propuestas/migracion-menu-generator-blueprint.md (4 decisiones cerradas en _arranque-menu-generator-blueprint.md).",
   "id": "menu-generator",
-  "version": "blueprint-9.3.0",
+  "version": "blueprint-9.4.0",
   "_v9_2_changelog": "v9.2.0 (2026-06-13): COMETIDOS inline en el pseudocodigo (antes en prosa aparte 'ver normalizadores' → el LLM los ignoraba). Diagnostico (carta real generada en nonina): el LLM omitio el enriquecimiento de ingredientes (salio {nombre,emoji} sin id/familia), no prefijo el producto.id por categoria (salio 'texas' no 'hamburguesas_texas'), e invento created_at (fecha futura). Causa: cometidos en seccion de prosa separada + plantilla de salida vaga (<TU extraes...>) + nowISO() que el LLM no ejecuta. Fix: paso 3 reescrito IMPERATIVO con reglas R1-R5 inline + EJEMPLO de la forma EXACTA por producto (id con prefijo, ingredientes con id+familia). created_at OMITIDO (lo sella carta-manager; el LLM no inventa fecha). reglas_clave reforzadas con los 3 cometidos.",
   "_v9_1_changelog": "v9.1.0 (2026-06-13): MISION aclarada + INTERFAZ ABIERTA. (1) menu-generator contempla material de CUALQUIER formato (imagen/pdf/documento/json/texto) — entrada abierta y agnostica. (2) NO transforma formatos: la lectura del no-legible (OCR/pdf->texto) la hace un transformador/provider EXTERNO (PENDIENTE: modulo OCR no existe aun); menu-generator estructura desde el contenido legible. Sustituye el encuadre v8 ('OCR eliminado, imagen/pdf fuera de scope') por 'interfaz abierta, transformacion delegada'. (3) generar.input + material? ; nuevo paso 1b LEER (delega al transformador si no-legible). (4) anyadido _modelo OOP. Capa de agentes APARCADA (el LLM del blueprint absorbe la estructuracion; agente menu-structurer archivado). Sin agent.execute.",
   "_v9_changelog": "v9.0.0 (aterrizaje subsistema-catalogo): SEMILLA ENRIQUECIDA. La operacion 'generar' ahora asigna en ORIGEN, por cada ingrediente, id canonico (slug del nombre normalizado) + familia (queso/verdura/carne/salsa/...). Output pasa a shape carta-pizzepos v2: productos[].ingredientes[] = { id, nombre, emoji?, familia } (antes { nombre, emoji? }). Razon (D1 subsistema-catalogo): enlace producto<->ingrediente<->familia por id robusto desde el origen, mata el slugify en runtime de productos/ingredientes. Termino 'familia' canonico (glosario v1.2.0; 'grupo' deprecado). Schema actualizado: arquitectura/decisiones/_schemas/menu-generator/carta-pizzepos.schema.json.",
@@ -177,6 +177,70 @@
         "UNKNOWN_ERROR"
       ]
     },
+    "preparar": {
+      "_descripcion": "Anyade a una carta EXISTENTE productos preparados desde recetas (1 o N). menu-generator orquesta en UNA sola vuelta LLM: lee la carta base (el patron) y la(s) receta(s) por REFLEJOS, da su TOQUE (prepara consistente con la base, con TODOS los ingredientes), y persiste via carta.add_product (reflejo). Es 'generar CON base' — la version de generar para ANYADIR, no NACER. Sin LLM->LLM: todas las llamadas son blueprint->reflejo.",
+      "input": "{ project_id (uuid, req), carta_id (req — carta destino = la BASE/patron), receta_ids (Array<str>, req — 1..N), categoria_id? (categoria destino; si no, se elige de la base), precio? (number; si no, 0), request_id (uuid, req), correlation_id? }",
+      "pseudocodigo": [
+        "async preparar(input):",
+        "  // CONTRATO",
+        "  if (!input.project_id || !input.carta_id) return INVALID_INPUT { campo: 'carta_id' }",
+        "  if (!Array.isArray(input.receta_ids) || input.receta_ids.length === 0) return INVALID_INPUT { campo: 'receta_ids' }",
+        "",
+        "  // LEER 1 — la CARTA BASE (el patron a seguir). REFLEJO carta-manager, ms.",
+        "  base = await publishAndWait('carta.get.request', { project_id: input.project_id, carta_id: input.carta_id }, { timeout_ms: 8000 })",
+        "  if (!base || base.status !== 200) return RESOURCE_NOT_FOUND { entity: 'carta', id: input.carta_id }",
+        "  carta_base = base.data        // { meta, categorias:[{id,nombre}], productos:[{...,ingredientes:[{id,nombre,familia}]}] }",
+        "",
+        "  // LEER 2 — la(s) RECETA(s) por su puerta. REFLEJO recetas, ms. Da igual 1 que N.",
+        "  recetas = []",
+        "  for (rid of input.receta_ids) {",
+        "    r = await publishAndWait('recetas.obtener.request', { project_id: input.project_id, receta_id: rid }, { timeout_ms: 8000 })",
+        "    if (r?.status === 200 && r.data) recetas.push(r.data)   // { nombre, tipo, lineas:[{nombre, categoria, ...}] }",
+        "  }",
+        "  if (recetas.length === 0) return RESOURCE_NOT_FOUND { entity: 'receta', ids: input.receta_ids }",
+        "",
+        "  // PENSAR — EL TOQUE (TU, el LLM). Prepara cada receta como PRODUCTO pizzepos-ready SIGUIENDO carta_base:",
+        "  //   a) ingredientes = TODAS las lineas de la receta (la BASE del plato INCLUIDA — la masa entra, como el pan",
+        "  //        brioche entra en la hamburguesa). NO filtres, NO clasifiques base/topping.",
+        "  //        forma de cada uno: { nombre: linea.nombre, familia: linea.categoria }  (add_product pone id=slug(nombre), valida familia)",
+        "  //   b) CONSISTENCIA con la base: usa las MISMAS convenciones que ya hay en carta_base.productos",
+        "  //        (mismo nombre/familia para el mismo ingrediente; no inventes una variante de algo que ya existe).",
+        "  //   c) categoria_id destino: input.categoria_id si viene; si no, ELIGE una categoria EXISTENTE de carta_base",
+        "  //        coherente con receta.tipo (tipo 'pizza' -> la categoria de pizzas que ya exista). Si ninguna encaja,",
+        "  //        creala antes con carta.add_category.request — NO metas el producto en una categoria inexistente (add_product da 412).",
+        "  //   d) precio: input.precio si viene; si no, 0. NUNCA inventes precio.",
+        "  productos = recetas.map(r => ({",
+        "    nombre: r.nombre,",
+        "    precio: (typeof input.precio === 'number' ? input.precio : 0),",
+        "    categoria_id: <la categoria que juzgues por (b)/(c)>,",
+        "    ingredientes: r.lineas.map(l => ({ nombre: l.nombre, familia: l.categoria }))",
+        "  }))",
+        "",
+        "  // GUARDAR — a REFLEJO carta-manager (persiste con id determinista, 409 si ya existe). 1 o N.",
+        "  anyadidos = 0 ; ya_estaban = 0",
+        "  for (p of productos) {",
+        "    resp = await publishAndWait('carta.add_product.request', { project_id: input.project_id, carta_id: input.carta_id, producto: p }, { timeout_ms: 15000 })",
+        "    if (resp?.status === 201) anyadidos++",
+        "    else if (resp?.error?.code === 'ALREADY_EXISTS') ya_estaban++",
+        "  }",
+        "",
+        "  // EMITIR / responder",
+        "  return { status: 200, data: { anyadidos, ya_estaban, total: productos.length } }"
+      ],
+      "reglas_clave": [
+        "UNA sola vuelta LLM (esta). Llamadas TODAS blueprint->REFLEJO (carta.get, recetas.obtener, carta.add_product) — ms. NUNCA blueprint->blueprint.",
+        "ingredientes = TODAS las lineas de la receta (la base del plato incluida); NO se filtra ni se clasifica base/topping.",
+        "el TOQUE = seguir el patron de carta_base: mismas convenciones de ingrediente/familia/categoria que lo que ya hay.",
+        "la categoria destino debe EXISTIR (input.categoria_id o una de carta_base); si no, carta.add_category primero.",
+        "precio NUNCA se inventa (input.precio o 0); carta-manager pone el id determinista.",
+        "1 o N recetas: el mismo flujo (preparar = generar CON base)."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT (carta_id/receta_ids)",
+        "RESOURCE_NOT_FOUND (carta o recetas)",
+        "UPSTREAM_TIMEOUT (reflejo no responde)"
+      ]
+    },
     "_on_carta_generar_solicitada": {
       "_descripcion": "Operacion INTERNA — handler asincrono del evento 'carta.generar.solicitada'. NO se expone como cajon al LLM en el chat normal (prefijo _ canonico). Se invoca SOLO via blueprint-subscribers-asincronos cuando llega el evento. El LLM (en conversacion sintetica creada por ai-gateway) ejecuta este pseudocodigo igual que cualquier operacion. Patron canonizado en arquitectura/decisiones/propuestas/blueprint-subscribers-asincronos.md.",
       "input": "{ request_id, project_id (req), nombre (req), texto?, json?, correlation_id? } — payload del evento carta.generar.solicitada (caller externo: carta-scheduler u otros emisores).",
@@ -242,7 +306,10 @@
     "carta.generar.iniciada",
     "carta.generar.fallida",
     "carta.list.request",
-    "carta.creada"
+    "carta.creada",
+    "carta.get.request",
+    "recetas.obtener.request",
+    "carta.add_product.request"
   ],
   "_nota_eventos_v8": "v8.1.0 anyade 'carta.creada' (evento de dominio fire-and-forget que dispara persistencia en carta-manager — patron frente 2.4). v8.0 preserva los 4 eventos canonicos del v7 legacy (menu.generation.progress, menu.generation.failed, carta.generar.iniciada, carta.generar.fallida) — son consumidos por frontend/src/lib/stores/menu-generator.ts para UI feedback. NO se publica 'agent.execute.request' (v7 lo emitia para invocar al agente menu-structurer; v8 absorbe la estructuracion en el blueprint principal, agente archivado por decision 4.2). El evento canonico 'la carta esta persistida' es carta.actualizada publicado por carta-manager (operacion save) tras procesar carta.creada. Caller que necesite saber 'cuando termine' se subscribe a carta.actualizada filtrado por correlation_id.",
   "eventos_que_escucho": [
@@ -269,5 +336,6 @@
       "descripcion": "Si tras auditoria de compat (trabajo_pendiente anterior) algunos eventos del v7 ya no se publican y nadie los espera, depurar del eventos_publicados[] del v8. Hoy se preservan los 4 por defensa."
     }
   ],
-  "_v9_3_changelog": "v9.3.0 (2026-06-14): FASE 3 identidad de carta (rediseño subsistema-carta). generar LEE la carta existente del proyecto (carta.list.request al reflejo) y REUSA su id en meta.id -> una regeneracion SOBREESCRIBE la carta general (snapshot+version++ en carta-manager), no crea un fichero nuevo cada vez (se acabo carta_nonina/carta_bella/carta_carta_nonina). Solo la 1a generacion crea id determinista 'carta_'+slug(nombre). Doble red: carta-manager.onCartaCreada (reflejo 1.2.0) reasigna el id a la carta general existente aunque el LLM se salte el LEER. Cierra el rediseño junto a FASE 1 (productos proyector) y FASE 2 (id de producto determinista)."
+  "_v9_3_changelog": "v9.3.0 (2026-06-14): FASE 3 identidad de carta (rediseño subsistema-carta). generar LEE la carta existente del proyecto (carta.list.request al reflejo) y REUSA su id en meta.id -> una regeneracion SOBREESCRIBE la carta general (snapshot+version++ en carta-manager), no crea un fichero nuevo cada vez (se acabo carta_nonina/carta_bella/carta_carta_nonina). Solo la 1a generacion crea id determinista 'carta_'+slug(nombre). Doble red: carta-manager.onCartaCreada (reflejo 1.2.0) reasigna el id a la carta general existente aunque el LLM se salte el LEER. Cierra el rediseño junto a FASE 1 (productos proyector) y FASE 2 (id de producto determinista).",
+  "_v9_4_changelog": "v9.4.0 (2026-06-14): op preparar — anyadir productos de recetas a una carta EXISTENTE. menu-generator orquesta en UNA vuelta LLM: lee carta base + recetas por REFLEJOS, da su toque (prepara consistente con la base, TODOS los ingredientes, sin clasificar base/topping), y persiste via carta.add_product (reflejo). 'generar CON base'. Resuelve el cabo LLM->LLM: el que piensa orquesta y solo habla con reflejos. Sustituye al add_from_receta que estaba mal puesto en carta-manager."
 }

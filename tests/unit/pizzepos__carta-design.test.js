@@ -1,9 +1,10 @@
 /**
- * Tests unitarios — pizzepos__carta-design (reflejo HIBRIDO).
+ * Tests unitarios — pizzepos__carta-design (reflejo HIBRIDO, v3.0.0).
  *
- * El reflejo sirve las 6 ops de file management. El mock del bus es fs-backed con el
- * contrato REAL de filesystem (éxito={...data} sin status; error={error}). load_carta
- * delega a carta.get. Los built-in profiles se leen de verdad de design-profiles/.
+ * El reflejo sirve 4 ops: contexto_diseno (carta+marca), load_carta (carta), save, gallery.
+ * NO hay profiles (la identidad sale de la marca). El mock del bus es fs-backed con el
+ * contrato REAL de filesystem (éxito={...data} sin status; error={error}) y responde a
+ * carta.get (carta-manager) y carta-marketing.get_perfil (marca).
  *
  * Ejecutar: node tests/unit/pizzepos__carta-design.test.js
  */
@@ -13,23 +14,8 @@
 const assert = require('assert');
 const CartaDesignReflejo = require('../../modules/pizzepos/carta-design/index.js');
 
-// Aplicador mínimo de JSON Patch (los ops que emite el reflejo: test, replace, add).
-function applyPatch(obj, patches) {
-  for (const p of patches) {
-    const parts = p.path.split('/').slice(1);
-    if (p.op === 'test') {
-      let o = obj; for (const k of parts) o = o?.[k];
-      if (JSON.stringify(o) !== JSON.stringify(p.value)) throw new Error('test patch failed');
-    } else if (p.op === 'replace' || p.op === 'add') {
-      let o = obj; for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]];
-      o[parts[parts.length - 1]] = p.value;
-    }
-  }
-  return obj;
-}
-
-// Bus fs-backed con shapes REALES. fixtures.carta = carta para carta.get.
-function makeBus(store, carta) {
+// Bus fs-backed con shapes REALES. carta → carta.get; marca → carta-marketing.get_perfil.
+function makeBus(store, carta, marca) {
   const handlers = new Map();
   const published = [];
   const emit = (event, payload) => {
@@ -50,6 +36,10 @@ function makeBus(store, carta) {
         emit('carta.get.response', carta
           ? { request_id: rid, status: 200, data: carta }
           : { request_id: rid, status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: 'no existe' } });
+      } else if (event === 'carta-marketing.get_perfil.request') {
+        emit('carta-marketing.get_perfil.response', marca
+          ? { request_id: rid, status: 200, data: marca }
+          : { request_id: rid, status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: 'sin marca' } });
       } else if (event === 'fs.read.request') {
         const content = store[payload.path];
         emit('fs.read.response', content != null
@@ -58,12 +48,6 @@ function makeBus(store, carta) {
       } else if (event === 'fs.write.request') {
         store[payload.path] = payload.content;
         emit('fs.write.response', { request_id: rid, path: payload.path });
-      } else if (event === 'fs.edit.request') {
-        if (store[payload.path] == null) { emit('fs.edit.response', { request_id: rid, error: { code: 'RESOURCE_NOT_FOUND' } }); return; }
-        try {
-          store[payload.path] = JSON.stringify(applyPatch(JSON.parse(store[payload.path]), payload.patches), null, 2);
-          emit('fs.edit.response', { request_id: rid, path: payload.path });
-        } catch (e) { emit('fs.edit.response', { request_id: rid, error: { code: 'CONFLICT_STATE', message: e.message } }); }
       } else if (event === 'fs.list.request') {
         const prefix = payload.path.endsWith('/') ? payload.path : payload.path + '/';
         const files = Object.keys(store)
@@ -75,9 +59,9 @@ function makeBus(store, carta) {
   };
 }
 
-function makeReflejo(store = {}, carta = null) {
+function makeReflejo(store = {}, carta = null, marca = null) {
   const m = new CartaDesignReflejo();
-  const bus = makeBus(store, carta);
+  const bus = makeBus(store, carta, marca);
   m.onLoad({ logger: { debug(){}, info(){}, warn(){}, error(){} }, eventBus: bus, metrics: { increment(){} } });
   return { m, bus, store };
 }
@@ -89,9 +73,9 @@ async function testAsync(desc, fn) {
 }
 
 (async () => {
-  console.log('pizzepos__carta-design — reflejo híbrido\n');
+  console.log('pizzepos__carta-design — reflejo híbrido v3.0.0\n');
 
-  await testAsync('load_carta delega a carta.get (por la puerta de carta-manager)', async () => {
+  await testAsync('load_carta delega a carta.get y devuelve objeto fresco {status,data}', async () => {
     const carta = { meta: { id: 'carta_1', nombre: 'X' }, productos: [{ id: 'p1' }] };
     const { m, bus } = makeReflejo({}, carta);
     const r = await m._loadCarta({ ...base, carta_id: 'carta_1' });
@@ -100,12 +84,53 @@ async function testAsync(desc, fn) {
     assert.ok(bus.published.some(([e]) => e === 'carta.get.request'));
   });
 
+  // REGRESIÓN del bug del engranaje: la response NO debe heredar el request_id interno de
+  // carta.get. _loadCarta devuelve {status,data} fresco → _atender la correla al request_id
+  // EXTERNO (design.load_carta). Antes hacía `return r` y el id interno pisaba al externo → timeout.
+  await testAsync('load_carta: la response se correla al request_id EXTERNO (no al de carta.get)', async () => {
+    const { m, bus } = makeReflejo({}, { meta: { id: 'carta_1' } });
+    await m.onLoadCartaRequest({ data: { request_id: 'OUTER-123', project_id: 'proj-1', carta_id: 'carta_1' } });
+    const resp = bus.published.find(([e]) => e === 'design.load_carta.response');
+    assert.ok(resp, 'publica design.load_carta.response');
+    assert.strictEqual(resp[1].request_id, 'OUTER-123', 'correlada al request_id externo');
+    assert.strictEqual(resp[1].status, 200);
+  });
+
+  await testAsync('contexto_diseno: HIDRATA {carta, marca} y NO trae profiles', async () => {
+    const carta = { meta: { id: 'carta_1' }, productos: [{ id: 'p1' }] };
+    const marca = { esencia: { nombre: 'No ni ná' }, visual: { colores: { primario: '#4ade80' } } };
+    const { m } = makeReflejo({}, carta, marca);
+    const r = await m._contextoDiseno({ ...base, carta_id: 'carta_1' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.carta.meta.id, 'carta_1');
+    assert.strictEqual(r.data.marca.esencia.nombre, 'No ni ná');
+    assert.ok(!('profiles' in r.data), 'sin campo profiles');
+  });
+
+  await testAsync('contexto_diseno: marca best-effort → null si carta-marketing no la tiene', async () => {
+    const carta = { meta: { id: 'carta_1' } };
+    const { m } = makeReflejo({}, carta, null);   // sin marca
+    const r = await m._contextoDiseno({ ...base, carta_id: 'carta_1' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.marca, null);
+    assert.ok(r.data.carta, 'la carta sí viene');
+  });
+
+  await testAsync('contexto_diseno: carta inexistente → propaga el error correlado (sin colgar)', async () => {
+    const { m, bus } = makeReflejo({}, null);   // carta.get → 404
+    await m.onContextoDisenoRequest({ data: { request_id: 'OUT-9', project_id: 'proj-1', carta_id: 'fantasma' } });
+    const resp = bus.published.find(([e]) => e === 'design.contexto_diseno.response');
+    assert.ok(resp, 'publica response');
+    assert.strictEqual(resp[1].request_id, 'OUT-9');
+    assert.strictEqual(resp[1].status, 404);
+  });
+
   await testAsync('save: escribe html + meta y emite carta.html.generada', async () => {
     const { m, bus, store } = makeReflejo();
-    const r = await m._save({ ...base, carta_id: 'carta_1', profile_id: 'modern-bold', html: '<html>hola</html>', generado_por: 'pagina' });
+    const r = await m._save({ ...base, carta_id: 'carta_1', html: '<html>hola</html>', nombre: 'San Valentín', generado_por: 'pagina' });
     assert.strictEqual(r.status, 201);
     assert.strictEqual(r.data.carta_id, 'carta_1');
-    // hay un .html y un .json companion en el store
+    assert.strictEqual(r.data.nombre, 'San Valentín');
     const keys = Object.keys(store);
     assert.ok(keys.some(k => k.endsWith('.html')), 'guarda el html');
     assert.ok(keys.some(k => k.endsWith('.json')), 'guarda el meta');
@@ -116,65 +141,6 @@ async function testAsync(desc, fn) {
     const { m } = makeReflejo();
     const r = await m._save({ ...base, carta_id: 'carta_1' });
     assert.strictEqual(r.status, 400);
-  });
-
-  await testAsync('profiles: devuelve los 5 built-in (leídos del módulo) + custom', async () => {
-    const custom = { id: 'mi-estilo', nombre: 'Mi Estilo', tipo: 'custom', activo: true };
-    const store = { '/pizzepos/carta-design/profiles/mi-estilo.json': JSON.stringify(custom) };
-    const { m } = makeReflejo(store);
-    const r = await m._profiles({ ...base });
-    assert.strictEqual(r.status, 200);
-    const builtIn = r.data.filter(p => p.tipo === 'built-in');
-    const cust = r.data.filter(p => p.tipo === 'custom');
-    assert.strictEqual(builtIn.length, 5, 'los 5 built-in');
-    assert.strictEqual(cust.length, 1, 'el custom');
-    assert.ok(builtIn.some(p => p.id === 'modern-bold'));
-  });
-
-  await testAsync('profiles: filtra los custom soft-deleted (activo:false)', async () => {
-    const store = {
-      '/pizzepos/carta-design/profiles/vivo.json': JSON.stringify({ id: 'vivo', nombre: 'Vivo', activo: true }),
-      '/pizzepos/carta-design/profiles/muerto.json': JSON.stringify({ id: 'muerto', nombre: 'Muerto', activo: false })
-    };
-    const { m } = makeReflejo(store);
-    const r = await m._profiles({ ...base });
-    const ids = r.data.filter(p => p.tipo === 'custom').map(p => p.id);
-    assert.ok(ids.includes('vivo') && !ids.includes('muerto'));
-  });
-
-  await testAsync('save_profile: id = slug(nombre), guarda activo:true', async () => {
-    const { m, store } = makeReflejo();
-    const r = await m._saveProfile({ ...base, nombre: 'Mi Estilo Rústico' });
-    assert.strictEqual(r.status, 201);
-    assert.strictEqual(r.data.id, 'mi-estilo-rustico');
-    assert.strictEqual(r.data.activo, true);
-    assert.ok(store['/pizzepos/carta-design/profiles/mi-estilo-rustico.json']);
-  });
-
-  await testAsync('save_profile que colisiona con built-in → 409', async () => {
-    const { m } = makeReflejo();
-    const r = await m._saveProfile({ ...base, nombre: 'Modern Bold' });   // slug → modern-bold (built-in)
-    assert.strictEqual(r.status, 409);
-  });
-
-  await testAsync('delete_profile built-in → 403 PERMISSION_DENIED', async () => {
-    const { m } = makeReflejo();
-    const r = await m._deleteProfile({ ...base, profile_id: 'modern-bold' });
-    assert.strictEqual(r.status, 403);
-  });
-
-  await testAsync('delete_profile custom → soft-delete (activo:false)', async () => {
-    const store = { '/pizzepos/carta-design/profiles/mio.json': JSON.stringify({ id: 'mio', nombre: 'Mio', activo: true }) };
-    const { m } = makeReflejo(store);
-    const r = await m._deleteProfile({ ...base, profile_id: 'mio' });
-    assert.strictEqual(r.status, 200);
-    assert.strictEqual(JSON.parse(store['/pizzepos/carta-design/profiles/mio.json']).activo, false);
-  });
-
-  await testAsync('delete_profile inexistente → 404', async () => {
-    const { m } = makeReflejo();
-    const r = await m._deleteProfile({ ...base, profile_id: 'fantasma' });
-    assert.strictEqual(r.status, 404);
   });
 
   await testAsync('gallery: lista designs y filtra por carta_id', async () => {

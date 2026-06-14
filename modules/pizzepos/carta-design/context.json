@@ -1,9 +1,9 @@
 {
   "_type": "module_context",
   "_module": "pizzepos/carta-design",
-  "_version": "3.2.0",
-  "_capa_agentes": "APARCADA. El 'sistema_multi_rol' y el 'pipeline' (R0-R8) describen el PROCESO creativo, pero NO corren como agentes (capa de agentes enabled:false, estandar blueprint-coherente). Lo ejecuta el LLM de PAGINA siguiendo este proceso. v3.1: las tools (design.*) las sirve ahora el REFLEJO JS (carta-design hibrido v2.0.0), no un agente — load_carta/save/profiles/gallery responden en ms.",
-  "_v3_2": "v3.2 (2026-06-14): carta-design BEBE de carta-marketing. El arranque pasa de design.load_carta a design.contexto_diseno, que trae {carta, marca, profiles} en una RPC. La MARCA (colores/tipografias/logo/voz/esencia, capturada en el onboarding) SIEMBRA el diseno: R2/R3/R4 parten de la identidad real y NO la re-preguntan. Solo se pregunta lo que la marca no trae.",
+  "_version": "4.0.0",
+  "_capa_agentes": "APARCADA. El 'sistema_multi_rol' y el 'pipeline' (R0-R10) describen el PROCESO creativo, pero NO corren como agentes (capa de agentes enabled:false, estandar blueprint-coherente). Lo ejecuta el LLM de PAGINA siguiendo este proceso. Las 4 ops (design.contexto_diseno/load_carta/save/gallery) las sirve el REFLEJO JS, no un agente — responden en ms.",
+  "_v4_0": "v4.0 (2026-06-14): SE QUITA LA CAPA DE PROFILES. No hay biblioteca de estilos ni plantillas. La IDENTIDAD del diseno (paleta, tipografias, logo, voz) sale UNICAMENTE de la MARCA (carta-marketing.get_perfil, capturada en el onboarding). contexto_diseno devuelve {carta, marca}. R3/R4 toman colores y tipografias de marca.visual; si faltan, los derivan de la voz/esencia (NO de un profile). Lo que la marca no traiga (dir/tel/horario) se pregunta y se persiste en marca.negocio.local via carta-marketing.update_perfil.",
   "filosofia": {
     "principio": "Cada carta es un proyecto creativo único. No hay plantillas. No hay atajos. Hay un equipo de profesionales que trabaja para un cliente real.",
     "diferenciador": "Lo que nos distingue no es la tecnología, es el proceso: primero entendemos, luego creamos. Cada rol aporta una palabra, un color, una idea que marca la diferencia.",
@@ -56,14 +56,14 @@
         "nombre": "Director de Arte",
         "fase": "equipo_creativo",
         "producto": "Dirección visual: paleta cromática (hex), estilo gráfico, composición, atmósfera",
-        "bebe_de_marca": "Si marca.visual.colores trae hex → ESA es la paleta base (no inventes otra). El profile elegido solo afina matices/decoración. Si marca.visual.colores vacio → deriva la paleta del estilo del profile + la voz de marca."
+        "bebe_de_marca": "Si marca.visual.colores trae hex → ESA es la paleta (no inventes otra). Si marca.visual.colores vacio → deriva la paleta de la voz/esencia de marca + el tipo de cocina/negocio (NO hay profiles que elegir)."
       },
       {
         "id": "R4",
         "nombre": "Tipógrafo",
         "fase": "equipo_creativo",
         "producto": "Sistema tipográfico: familias (heading, body, accent, price), tamaños, pesos, interlineado",
-        "bebe_de_marca": "Si marca.visual.tipografias trae familias → USALAS. Si vacio → toma las del profile elegido."
+        "bebe_de_marca": "Si marca.visual.tipografias trae familias → USALAS. Si vacio → elige familias acordes a la voz/estilo de marca."
       },
       {
         "id": "R5",
@@ -155,15 +155,15 @@
     ]
   },
   "workflow_ejecucion": [
-    "1. Llamar design.contexto_diseno → {carta (productos/precios), marca (identidad del onboarding), profiles}",
+    "1. Llamar design.contexto_diseno → {carta (productos/precios), marca (identidad del onboarding)}",
     "2. Iniciar entrevista (fase 1) preguntando SOLO lo que la marca y la carta no traen ya",
-    "3. Ejecutar equipo creativo (fase 2): SIEMBRA visual+tono desde marca; el profile afina",
+    "3. Ejecutar equipo creativo (fase 2): SIEMBRA paleta+tipografias+tono DESDE LA MARCA (es la identidad, no una sugerencia)",
     "4. Presentar resumen de decisiones al usuario y pedir validación",
     "5. Ensamblar guión maestro (fase 3)",
     "6. Generar HTML+CSS (fase 4) y llamar design.save"
   ],
   "reglas_de_oro": [
-    "ARRANCA con design.contexto_diseno — trae carta + marca + profiles de una vez.",
+    "ARRANCA con design.contexto_diseno — trae carta + marca de una vez.",
     "BEBE la marca: colores, tipografías, logo, eslogan y voz salen de marca.* — NO los re-preguntes ni los inventes si ya están.",
     "Pregunta SOLO lo que falte: secciones de marca vacías o datos de negocio ausentes.",
     "SIEMPRE incluir: nombre del restaurante, teléfono, dirección, horarios (de marca.negocio/esencia o preguntados).",
@@ -172,10 +172,9 @@
     "Presentar decisiones al usuario ANTES de producir HTML."
   ],
   "tools_disponibles": {
-    "design.contexto_diseno": "LLAMAR AL INICIO. Trae en una RPC {carta, marca, profiles}. La marca SIEMBRA el diseño (colores/tipografías/logo/voz del onboarding). Params: project_id, carta_id.",
+    "design.contexto_diseno": "LLAMAR AL INICIO. Trae en una RPC {carta, marca}. La marca ES la identidad del diseño (colores/tipografías/logo/voz del onboarding). Params: project_id, carta_id.",
     "design.load_carta": "Alternativa: solo la carta (sin marca). Úsalo si ya tienes la marca de otro turno.",
-    "design.save": "LLAMAR AL FINAL. Guarda HTML y abre preview. Params: carta_id, profile_id, html.",
-    "design.profiles": "Lista perfiles de estilo de referencia (built-in + custom).",
-    "design.gallery": "Lista diseños previos generados."
+    "design.save": "LLAMAR AL FINAL. Guarda el HTML (y queda en la galería). Params: carta_id, html, nombre?.",
+    "design.gallery": "Lista los diseños/eventos guardados (filtrable por carta_id)."
   }
 }

@@ -1,0 +1,27 @@
+{
+  "_doc": "Modulo contenido — base de ENRIQUECIMIENTO AUDIOVISUAL por producto (HIBRIDO). Base COMPARTIDA: la beben los canales de PRESENTACION (carta-digital, carta-design); el POS NO la toca (pizzepos sigue lean, sin imagenes en su carta). El reflejo (index.js, ContenidoReflejo) sirve el CRUD determinista en el bus (contenido.<op>.request). HOY imagenes; la estructura reserva descripcion/audio/video/interaccion para anadir sin reestructurar (op set = deep-merge generico). Las imagenes son ficheros en /pizzepos/contenido/imagenes/; el store /pizzepos/contenido.json guarda solo la referencia.",
+  "name": "contenido",
+  "version": "1.0.0",
+  "_v1_0_nota": "v1.0.0 (2026-06-15): base de enriquecimiento audiovisual. Sienta la estructura completa (imagenes·descripcion·audio·video·interaccion por producto) pero IMPLEMENTA solo imagenes (add_imagen/quitar_imagen/get) + la puerta extensible (set, deep-merge) para el resto. Reflejo hibrido modelado sobre carta-marketing (base unica + deep-merge).",
+  "description": "Base de enriquecimiento audiovisual por producto. Reflejo JS sirve get/add_imagen/quitar_imagen/set en el bus. Base compartida que beben los canales de presentacion (digital, impresion); el POS no la usa.",
+  "language": "es",
+  "blueprint_driven": true,
+  "blueprint_path": "contenido.blueprint.json",
+  "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
+  "target_page_id": "contenido",
+  "cajones_enabled": true,
+  "subscribes": [
+    { "event": "contenido.get.request", "handler": "onGetRequest", "description": "Reflejo JS: lee el enriquecimiento de un producto (o de todos)." },
+    { "event": "contenido.add_imagen.request", "handler": "onAddImagenRequest", "description": "Reflejo JS: anade una imagen (escribe el fichero base64 + guarda la referencia; primera = principal)." },
+    { "event": "contenido.quitar_imagen.request", "handler": "onQuitarImagenRequest", "description": "Reflejo JS: quita una imagen (referencia + fichero); promueve principal si hace falta." },
+    { "event": "contenido.set.request", "handler": "onSetRequest", "description": "Reflejo JS: puerta extensible — deep-merge de un parche (descripcion/audio/video/interaccion) sin op nueva." }
+  ],
+  "config": {
+    "persistence": {
+      "scope": "project",
+      "data_path": "pizzepos/contenido",
+      "pattern": "single-json-per-project + ficheros de imagen",
+      "concurrency": "single-writer"
+    }
+  }
+}

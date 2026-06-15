@@ -1440,6 +1440,10 @@ DIRECTORIO POR PROYECTO  (data/projects/{slug}/storage/)
 BASE              dueño            store                 puerta (RPC) para beber
 recetas+catálogo  recetas       /pizzepos/recetas.json  recetas.{listar,obtener,ingredientes}.request
 perfil de marca   carta-marketing /pizzepos/marca.json   carta-marketing.get_perfil.request
+contenido AV      contenido     /pizzepos/contenido.json contenido.{get,add_imagen,quitar_imagen,set}.request
+   (enriquecimiento audiovisual por producto: imagenes·descripcion·audio·video·interaccion.
+    HOY imagenes; resto reservado. La beben los canales de PRESENTACIÓN (carta-digital, carta-design);
+    el POS NO la toca → pizzepos sigue lean, sin imágenes en su carta. Imágenes = ficheros; el json apunta.)
 
   ejemplos de quién bebe:
     escandallo, viabilidad  ← recetas+catálogo  (costear, evaluar)

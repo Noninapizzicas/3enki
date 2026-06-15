@@ -1,0 +1,74 @@
+{
+  "_doc": "Blueprint del modulo contenido (HIBRIDO). Base de ENRIQUECIMIENTO AUDIOVISUAL por producto. Las ops las SIRVE el REFLEJO JS (index.js); los cajones de aqui son DELEGADORES finos. Base COMPARTIDA: la beben los canales de PRESENTACION (carta-digital, carta-design); el POS NO. HOY imagenes; la estructura reserva el resto (descripcion/audio/video/interaccion) para crecer sin reestructurar.",
+  "id": "contenido",
+  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+  "version": "blueprint-1.0.0",
+  "language": "es",
+  "rol": "Custodio del enriquecimiento audiovisual por producto. El REFLEJO (index.js) sirve el CRUD: get (lee), add_imagen/quitar_imagen (gestiona la lista de imagenes-fichero), set (puerta extensible deep-merge para descripcion/audio/video/interaccion). El POS no lo usa; lo beben los canales de presentacion.",
+  "bebe_de": {},
+  "lo_beben": {
+    "carta-digital": "la carta publica rica (imagenes/descripcion/media por producto).",
+    "carta-design": "el diseno impreso puede usar imagenes/descripcion del producto."
+  },
+  "garantiza": [
+    "Estructura canonica por producto: { imagenes:[{id,url,alt,principal}], descripcion, audio:[], video:[], interaccion:{} }. HOY solo se rellena imagenes; el resto esta reservado.",
+    "Las imagenes son FICHEROS en /pizzepos/contenido/imagenes/<product_id>__<id>.<ext>; el store /pizzepos/contenido.json guarda solo la referencia (url) + metadatos.",
+    "add_imagen escribe el fichero (base64) y guarda la referencia; la primera imagen de un producto es principal por defecto; principal:true reasigna.",
+    "quitar_imagen borra referencia + fichero; si era la principal y quedan, promueve la primera.",
+    "set hace deep-merge de un parche en el producto (la PUERTA para anadir descripcion/audio/video/interaccion sin op nueva).",
+    "El POS (comandero/productos) NO lee esta base — pizzepos sigue lean, sin imagenes en su carta.",
+    "Cada cambio publica contenido.actualizado (para que los canales de presentacion refresquen)."
+  ],
+  "no_garantiza": [
+    "Subida de ficheros desde el navegador con validacion de tamano/tipo — eso lo hace el frontend antes de llamar add_imagen (o se anade despues).",
+    "audio/video/interaccion REALES — la estructura esta, el contenido se anade cuando toque (no_inventes_datos)."
+  ],
+  "estado_persistente": {
+    "paths_relativos": {
+      "store": "/pizzepos/contenido.json",
+      "imagenes": "/pizzepos/contenido/imagenes/<product_id>__<imagen_id>.<ext>"
+    },
+    "shape": "{ _version, _updated_at, productos: { <product_id>: { imagenes: [{id,url,alt,principal}], descripcion, audio: [], video: [], interaccion: {} } } }"
+  },
+  "eventos_publicados": [
+    "contenido.get.response", "contenido.get.failed",
+    "contenido.add_imagen.response", "contenido.add_imagen.failed",
+    "contenido.quitar_imagen.response", "contenido.quitar_imagen.failed",
+    "contenido.set.response", "contenido.set.failed",
+    "contenido.actualizado"
+  ],
+  "eventos_que_escucho": [],
+  "operaciones": {
+    "get": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, product_id? (si falta, devuelve TODOS) }",
+      "pseudocodigo": ["async get(input):", "  resp = await publishAndWait('contenido.get.request', { ...input, request_id: uuid() }, { timeout_ms: 10000 })", "  return resp"],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_UNREACHABLE"],
+      "_delega_en": "contenido.get.request (REFLEJO JS)"
+    },
+    "add_imagen": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, product_id (req), content (req — base64 del fichero), ext (req — 'jpg'|'png'|'webp'...), alt?, principal? }",
+      "pseudocodigo": ["async add_imagen(input):", "  resp = await publishAndWait('contenido.add_imagen.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })", "  return resp"],
+      "reglas_clave": ["La primera imagen es principal por defecto.", "El fichero se escribe en /pizzepos/contenido/imagenes/; el store guarda la url."],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_UNREACHABLE"],
+      "_delega_en": "contenido.add_imagen.request (REFLEJO JS)"
+    },
+    "quitar_imagen": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, product_id (req), imagen_id (req) }",
+      "pseudocodigo": ["async quitar_imagen(input):", "  resp = await publishAndWait('contenido.quitar_imagen.request', { ...input, request_id: uuid() }, { timeout_ms: 10000 })", "  return resp"],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_UNREACHABLE"],
+      "_delega_en": "contenido.quitar_imagen.request (REFLEJO JS)"
+    },
+    "set": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, product_id (req), parche (req — objeto: descripcion/audio/video/interaccion...) }",
+      "pseudocodigo": ["async set(input):", "  // PUERTA EXTENSIBLE: deep-merge. Para anadir descripcion/audio/video/interaccion sin op nueva.", "  resp = await publishAndWait('contenido.set.request', { ...input, request_id: uuid() }, { timeout_ms: 10000 })", "  return resp"],
+      "reglas_clave": ["Deep-merge: un parche parcial no pisa el resto.", "Las imagenes (lista) van por add_imagen/quitar_imagen, no por aqui."],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_UNREACHABLE"],
+      "_delega_en": "contenido.set.request (REFLEJO JS)"
+    }
+  },
+  "trabajo_pendiente": [
+    { "id": "audio_video_interaccion", "estado": "reservado", "descripcion": "La estructura ya reserva audio[]/video[]/interaccion{}. Se rellenan cuando toque via set (o ops dedicadas como add_audio si conviene). HOY solo imagenes." },
+    { "id": "frontend_subida_imagenes", "estado": "abierto", "descripcion": "UI para subir imagenes (file picker -> base64 -> contenido.add_imagen) en el panel de carta-digital o productos. Pieza siguiente." },
+    { "id": "validacion_tamano_tipo", "estado": "abierto", "descripcion": "Limitar tamano/tipo de imagen (el frontend valida antes; el reflejo podria reforzar)." }
+  ]
+}

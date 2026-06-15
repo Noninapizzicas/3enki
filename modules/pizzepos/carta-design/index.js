@@ -110,6 +110,7 @@ class CartaDesignReflejo extends ModuloHibridoReflejo {
     if (w1.status >= 400) return w1;
     const meta = {
       carta_id: input.carta_id, nombre: input.nombre || null,
+      formato: input.formato || null,   // p.ej. 'A4 apaisado · doble cara · 3 col' — estructura, no estilo
       generado_at: nowISO(), generado_por: input.generado_por || 'unknown',
       filename, size_bytes: input.html.length
     };

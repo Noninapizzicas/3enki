@@ -9,6 +9,24 @@
     "diferenciador": "Lo que nos distingue no es la tecnología, es el proceso: primero entendemos, luego creamos. Cada rol aporta una palabra, un color, una idea que marca la diferencia.",
     "compromiso": "El resultado final incluye TODOS los datos del negocio (nombre, teléfono, dirección, horarios, eslogan) y refleja su identidad real, no una plantilla genérica."
   },
+  "maquetacion": {
+    "_principio": "El ESTILO (colores, tipografías, voz, logo) lo pone la MARCA. La MAQUETA solo fija la ESTRUCTURA física del impreso. Son cosas distintas: la identidad es de carta-marketing; el formato es estructural y se elige por caso.",
+    "ejes": {
+      "tamano": ["A5", "A4", "A3"],
+      "orientacion": ["vertical", "apaisado"],
+      "disposicion": ["una cara", "doble cara", "diptico", "triptico"],
+      "columnas": [2, 3, 4]
+    },
+    "default": "Si el usuario no especifica formato: A4 · vertical · una cara · columnas las que decida el LLM segun cuantos productos haya (mas productos -> mas columnas). El usuario manda cuando lo pide ('hazla A3 diptico a 4 columnas').",
+    "como_componer": [
+      "@page con size explicito segun tamano+orientacion (p.ej. 'size: A4 landscape' para A4 apaisado).",
+      "-webkit-print-color-adjust: exact en * para que los fondos/colores se impriman.",
+      "Columnas via grid-template-columns o column-count segun 'columnas'. break-inside: avoid en cada producto y cada categoria (que no se parta a mitad).",
+      "doble cara = 2 paginas @page (cara 1 / cara 2 de la MISMA hoja); reparte categorias entre ambas. diptico = 2 paneles plegables; triptico = 3 paneles. una cara = una pagina.",
+      "TODOS los productos, sin omitir ni inventar. Precios en formato espanol (coma decimal). Si un producto no tiene precio, '—' (no inventarlo)."
+    ],
+    "nota": "NO hay ficheros de plantilla: la maqueta sale de COMBINAR estos ejes con la identidad de la marca. carta-design absorbe asi la maquetacion de impresion (carta-impresion queda obsoleto)."
+  },
   "sistema_multi_rol": {
     "selector_equipo": {
       "id": "R0",
@@ -171,12 +189,13 @@
     "SIEMPRE incluir: nombre del restaurante, teléfono, dirección, horarios (de marca.negocio/esencia o preguntados).",
     "SIEMPRE incluir TODOS los productos — no omitir ni uno.",
     "NUNCA usar datos inventados — si falta un dato, preguntar o usar [PENDIENTE].",
+    "MAQUETA segun el formato pedido (ver seccion 'maquetacion'): tamano (A5/A4/A3) · orientacion (vertical/apaisado) · disposicion (una cara/doble cara/diptico/triptico) · columnas (2/3/4). Si no lo piden: A4 vertical una cara, columnas las que decida el contenido. El ESTILO es de la marca; el FORMATO es estructural.",
     "Presentar decisiones al usuario ANTES de producir HTML."
   ],
   "tools_disponibles": {
     "design.contexto_diseno": "LLAMAR AL INICIO. Trae en una RPC {carta, marca}. La marca ES la identidad del diseño (colores/tipografías/logo/voz del onboarding). Params: project_id, carta_id.",
     "design.load_carta": "Alternativa: solo la carta (sin marca). Úsalo si ya tienes la marca de otro turno.",
-    "design.save": "LLAMAR AL FINAL. Guarda el HTML (y queda en la galería). Params: carta_id, html, nombre?.",
+    "design.save": "LLAMAR AL FINAL. Guarda el HTML (y queda en la galería). Params: carta_id, html, nombre?, formato? (p.ej. 'A4 apaisado · doble cara · 3 col' — se registra en el meta).",
     "design.gallery": "Lista los diseños/eventos guardados (filtrable por carta_id)."
   }
 }

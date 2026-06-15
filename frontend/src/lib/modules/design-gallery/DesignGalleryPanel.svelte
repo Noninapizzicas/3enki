@@ -128,7 +128,7 @@
             <div class="design-card">
               <div class="design-info">
                 <span class="design-name">{design.nombre || design.filename}</span>
-                <span class="design-meta">{formatDate(design.generado_at || design.created_at || '')} · {formatSize(design.size_bytes)}</span>
+                <span class="design-meta">{design.formato ? design.formato + ' · ' : ''}{formatDate(design.generado_at || design.created_at || '')} · {formatSize(design.size_bytes)}</span>
               </div>
             </div>
           {/each}

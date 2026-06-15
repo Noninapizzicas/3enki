@@ -24,6 +24,7 @@ import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request';
 export interface DesignMeta {
   carta_id: string;
   nombre: string | null;
+  formato?: string | null;   // estructura de la maqueta, p.ej. 'A4 apaisado · doble cara · 3 col'
   filename: string;
   size_bytes: number;
   created_at?: string;

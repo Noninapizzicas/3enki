@@ -12706,6 +12706,28 @@ MODULO StoresIndex {
 }
 ```
 
+## NERVIO DEL FRONTEND — lo que el usuario ESTÁ VIENDO (hermano de la propiocepción)
+
+```
+IDEA  propiocepción cuenta al LLM lo que PASÓ (eventos) · este le cuenta lo que SE VE (pantalla).
+      El conducto ya existía VIVO (chat-io → prompt-builder → system prompt); el único corte
+      era el origen: el frontend mandaba context:{} vacío. Se enchufó el origen, no se tendió nada.
+
+stores/vista-actual.ts  : vistaActual (writable) + setVista/clearVista/getVista. La fuente.
+stores/vista-bridge.ts  : PUENTE CENTRAL y aditivo (no toca paneles). derived([page, ...stores de
+                          selección]) → setVista según la ruta. Extender una página = un `case`.
+                          Cubre: recetas(selectedReceta) · facturas(selectedFactura) ·
+                          dispositivos(selectedDevice) · carta-design(cartaDesignStore.cartaId) ·
+                          comandero(cuenta_id de la URL) · carta(categoriaActiva) · llevadoo(vista).
+                          Arranca/limpia en LazyShell.onMount (initVistaBridge).
+chat.sendMessage        : manda getVista() en el campo `context` bajo { vista_frontend: ... }.
+prompt-builder._buildSystemPrompt : saca vista_frontend del runtime y le da SECCIÓN con marco
+                          "# LO QUE EL USUARIO ESTÁ VIENDO (contexto silencioso)" — el LLM no
+                          pregunta lo que ya está en pantalla; NO lo recita salvo que pregunten.
+GARANTÍA  best-effort: vista vacía si la página no tiene selección (el page_id ya viaja aparte).
+          Nunca rompe el turno ni la UI.
+```
+
 ## STORES — Persistence (localStorage)
 
 ```

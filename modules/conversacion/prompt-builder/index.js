@@ -261,13 +261,27 @@ class PromptBuilderModule extends BaseModule {
       sections.push(promptText);
     }
 
+    // El nervio del frontend (lo que el usuario VE) viaja en context.vista_frontend.
+    // Lo sacamos del blob de runtime y le damos su propia sección con marco, como la
+    // propiocepción: contexto silencioso para no preguntar lo que ya está en pantalla.
+    const { vista_frontend, ...restContext } = context || {};
     const runtime = {
       project_id,
       conversation_id,
       page_id,
-      ...(context && Object.keys(context).length > 0 ? context : {})
+      ...(restContext && Object.keys(restContext).length > 0 ? restContext : {})
     };
     sections.push('CONTEXTO ACTIVO:\n' + JSON.stringify(runtime, null, 2));
+
+    if (vista_frontend && Object.keys(vista_frontend).length > 0) {
+      sections.push(
+        '# LO QUE EL USUARIO ESTÁ VIENDO (contexto silencioso)\n' +
+        'Esto es lo que el usuario tiene EN PANTALLA ahora mismo. Úsalo para NO preguntar lo que ' +
+        'ya está a la vista (qué carta/receta/cuenta/dispositivo tiene abierto). NO lo recites ni ' +
+        'lo enumeres salvo que pregunte.\n' +
+        JSON.stringify(vista_frontend, null, 2)
+      );
+    }
 
     return sections.join('\n\n---\n\n');
   }

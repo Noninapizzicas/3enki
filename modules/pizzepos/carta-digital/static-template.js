@@ -19,7 +19,10 @@ function generateStaticHTML(carta, config, options = {}) {
     ai_endpoint = config.ai_endpoint || '',
     ai_provider = config.ai_provider || 'auto',
     ai_chat_path = config.ai_chat_path || '/modules/ai-gateway/chat',
-    chat_enabled = config.chat_enabled !== false && !!ai_endpoint
+    chat_enabled = config.chat_enabled !== false && !!ai_endpoint,
+    // Endpoint de pedido online (tienda-api). Si está → la PWA hace POST (escenario
+    // ALOJADO: VPS+dominio). Si NO → checkout por WhatsApp (escenario PWA suelta).
+    pedido_endpoint = config.pedido_endpoint || ''
   } = options;
 
   const colorPrimario = tema.color_primario || '#f59e0b';
@@ -79,7 +82,7 @@ function generateStaticHTML(carta, config, options = {}) {
   const dataJSON = JSON.stringify({ categorias, productos, ofertas, resenas, resenas_avg: resenasAvg, resenas_total: resenasTotal, alergenos_leyenda: alergenosLeyenda });
   const configJSON = JSON.stringify({
     nombre_negocio, moneda, whatsapp_telefono, mensaje_header,
-    ai_endpoint, ai_provider, ai_chat_path, chat_enabled
+    ai_endpoint, ai_provider, ai_chat_path, chat_enabled, pedido_endpoint
   });
 
   // Build system prompt for AI assistant with full menu context + upselling
@@ -284,6 +287,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .btn-share{background:#222;color:var(--text);flex:.5;padding:12px;border:none;border-radius:10px;font-size:.8rem;font-weight:700;cursor:pointer}
 .btn-share:active{background:#333}
 .btn-wa{background:var(--whatsapp);color:#fff;flex:1;padding:12px;border:none;border-radius:10px;font-size:.8rem;font-weight:700;cursor:pointer}
+.btn-wa:disabled{opacity:.6;cursor:not-allowed}
+.cart-nombre{width:100%;box-sizing:border-box;margin:8px 0;padding:10px 12px;border:1px solid #333;border-radius:10px;background:#111;color:var(--text);font-size:.85rem}
+.cart-nombre:focus{outline:none;border-color:var(--primary)}
+.pedido-ok{text-align:center;padding:24px 16px}
+.pedido-ok-check{font-size:2.5rem;line-height:1}
+.pedido-ok h3{margin:12px 0 4px;font-size:1.1rem}
+.pedido-ok p{color:var(--text-mid,#888);font-size:.85rem;margin:0 0 12px}
+.pedido-codigo{font-size:1.8rem;font-weight:800;letter-spacing:4px;color:var(--primary);background:#111;border:2px dashed var(--primary);border-radius:12px;padding:14px;margin:0 auto 16px;display:inline-block}
 .btn-wa:active{background:#1da851}
 .empty{text-align:center;padding:40px 20px;color:#555}
 .empty-ico{font-size:2.5rem;display:block;margin-bottom:8px}
@@ -955,11 +966,20 @@ function updateCart() {
 
   const footer = document.getElementById('cart-footer');
   footer.style.display = 'block';
+  // Mode-aware: ALOJADO (pedido_endpoint) → pedir online + código de recogida.
+  // SUELTA → WhatsApp. Si hay ambos, los dos (el cliente elige; no excluir).
+  const onlineBtn = CONFIG.pedido_endpoint
+    ? '<button class="btn-wa" id="btn-pedir" onclick="pedirOnline()">Pedir para recoger</button>'
+    : '';
   const waBtn = CONFIG.whatsapp_telefono
-    ? '<button class="btn-wa" onclick="sendWhatsApp()">WhatsApp</button>'
-    : '<button class="btn-share" onclick="shareOrder()">' + T.share + '</button>';
+    ? '<button class="' + (CONFIG.pedido_endpoint ? 'btn-share' : 'btn-wa') + '" onclick="sendWhatsApp()">WhatsApp</button>'
+    : (CONFIG.pedido_endpoint ? '' : '<button class="btn-share" onclick="shareOrder()">' + T.share + '</button>');
+  const nombreInput = CONFIG.pedido_endpoint
+    ? '<input id="cliente-nombre" class="cart-nombre" type="text" placeholder="Tu nombre (opcional)" aria-label="Tu nombre" autocomplete="name">'
+    : '';
   footer.innerHTML = '<div class="total-row"><span class="total-label">' + T.total + '</span><span class="total-amount">' + fmt(total) + '</span></div>' +
-    '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button><button class="btn-share" onclick="shareOrder()">' + T.share + '</button>' + waBtn + '</div>';
+    nombreInput +
+    '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button>' + onlineBtn + waBtn + '</div>';
 }
 
 function changeQty(cid, delta) {
@@ -1000,6 +1020,53 @@ function sendWhatsApp() {
   saveLastOrder();
   trackEvent('order_sent', null, { items: cart.length, total: total });
   window.open('https://wa.me/' + CONFIG.whatsapp_telefono + '?text=' + encodeURIComponent(msg), '_blank');
+}
+
+// Pedido ONLINE (escenario alojado): POST a tienda-api → pedido.crear-tienda → código de recogida.
+async function pedirOnline() {
+  if (cart.length === 0 || !CONFIG.pedido_endpoint) return;
+  var total = cart.reduce(function(s, i){ return s + i.precio * i.qty; }, 0);
+  var nombreEl = document.getElementById('cliente-nombre');
+  var nombre = nombreEl && nombreEl.value ? nombreEl.value.trim() : '';
+  var body = {
+    items: cart.map(function(i){ return { cantidad: i.qty, descripcion: i.nombre + (i.detalle ? ' [' + i.detalle + ']' : '') }; }),
+    total_centimos: Math.round(total * 100)
+  };
+  if (nombre) body.nombre_cliente = nombre;
+  var btn = document.getElementById('btn-pedir');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+  try {
+    var r = await fetch(CONFIG.pedido_endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    var data = await r.json().catch(function(){ return null; });
+    var codigo = data && data.data && data.data.codigo_recogida;
+    if (r.ok && codigo) {
+      saveLastOrder();
+      trackEvent('order_sent', null, { items: cart.length, total: total, canal: 'web' });
+      mostrarConfirmacion(codigo);
+      cart = []; updateCart();
+    } else {
+      throw new Error((data && data.error && data.error.message) || ('HTTP ' + r.status));
+    }
+  } catch (e) {
+    alert('No se pudo enviar el pedido.' + (CONFIG.whatsapp_telefono ? ' Prueba por WhatsApp.' : ' Inténtalo de nuevo en un momento.'));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Pedir para recoger'; }
+  }
+}
+
+// Confirmación accesible: muestra el código de recogida (pickup + confirmación, sin pago).
+function mostrarConfirmacion(codigo) {
+  var el = document.getElementById('cart-items');
+  var footer = document.getElementById('cart-footer');
+  if (footer) footer.style.display = 'none';
+  if (el) {
+    el.innerHTML = '<div class="pedido-ok" role="status" aria-live="polite">' +
+      '<div class="pedido-ok-check">✅</div>' +
+      '<h3>¡Pedido confirmado!</h3>' +
+      '<p>Enséñalo al recogerlo. Tu código de recogida:</p>' +
+      '<div class="pedido-codigo">' + esc(codigo) + '</div>' +
+      '<button class="btn-wa" onclick="toggleCart()">Cerrar</button></div>';
+  }
 }
 
 function shareOrder() {

@@ -40,6 +40,9 @@ const moneda = getArg('moneda', '€');
 const argNombre = getArg('nombre', '');
 const argWhatsapp = getArg('whatsapp', '');
 const argColor = getArg('color', '');
+// Endpoint de pedido online (escenario ALOJADO: VPS+dominio). Vacío → PWA suelta (WhatsApp).
+// p.ej. --pedido-endpoint https://midominio.com/tienda/pedido/<slug>
+const argPedidoEndpoint = getArg('pedido-endpoint', '');
 
 // storageRoot: raíz desde la que se resuelven las urls de contenido (/pizzepos/...).
 // project mode → data/projects/<slug>/storage ; legacy → storage
@@ -100,11 +103,15 @@ const colorTexto = colores.texto || '#e5e5e5';
 const whatsapp = argWhatsapp || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || '';
 const logoEmoji = (typeof b.logo === 'string' && b.logo.length <= 4) ? b.logo : '\u{1F355}';
 
+// pedido_endpoint: flag CLI o opciones del canal (config.opciones_visualizacion.pedido_endpoint).
+const pedidoEndpoint = argPedidoEndpoint || (config.opciones_visualizacion && config.opciones_visualizacion.pedido_endpoint) || '';
+
 const tplConfig = {
   nombre_negocio: nombre,
   moneda,
   whatsapp_telefono: whatsapp,
   mensaje_header: '¡Hola! Quiero pedir:',
+  pedido_endpoint: pedidoEndpoint,
   tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colorTexto, logo_emoji: logoEmoji }
 };
 

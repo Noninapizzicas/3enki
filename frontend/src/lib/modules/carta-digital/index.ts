@@ -43,15 +43,15 @@ export { default as CartaCompuestaZone } from './CartaCompuestaZone.svelte';
 
 // Store exports
 export {
+  cartaPublica,
   cartaDigitalConfig,
-  ultimaActualizacionCartaUpstream,
   cartaDigitalLoading,
   cartaDigitalError,
-  estaCartaCompuestaDesfasada,
+  loadCartaPublica,
   loadCartaDigitalConfig,
+  updateCartaDigitalConfig,
   initCartaDigitalSubscriptions,
+  type CartaPublica,
   type CartaDigitalConfig,
-  type BrandingConfig,
-  type ContactoConfig,
-  type CartaCompuesta
+  type BrandingProyectado
 } from '$lib/stores/carta-digital';

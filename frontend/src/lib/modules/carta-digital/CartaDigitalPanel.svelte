@@ -8,6 +8,7 @@
   import OpcionesZone from './OpcionesZone.svelte';
   import CartaCompuestaZone from './CartaCompuestaZone.svelte';
   import {
+    loadCartaPublica,
     loadCartaDigitalConfig,
     initCartaDigitalSubscriptions,
     cartaDigitalLoading,
@@ -17,6 +18,7 @@
   let cleanupSubs: (() => void) | null = null;
 
   onMount(() => {
+    loadCartaPublica();
     loadCartaDigitalConfig();
     cleanupSubs = initCartaDigitalSubscriptions();
   });

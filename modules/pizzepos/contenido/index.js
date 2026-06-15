@@ -53,6 +53,12 @@ class ContenidoReflejo extends ModuloHibridoReflejo {
   onQuitarImagenRequest(e) { return this._atender(e, 'quitar_imagen', 'contenido.quitar_imagen.response', d => this._quitarImagen(d)); }
   onSetRequest(e) { return this._atender(e, 'set', 'contenido.set.response', d => this._set(d)); }
 
+  // ── ui_handlers (el FRONTEND entra por la puerta; mismos métodos deterministas) ──
+  handleGet(data) { return this._get(data || {}); }
+  handleAddImagen(data) { return this._addImagen(data || {}); }
+  handleQuitarImagen(data) { return this._quitarImagen(data || {}); }
+  handleSet(data) { return this._set(data || {}); }
+
   // ── fs helpers (contrato real: éxito={content}/{...}; error={error}) ──
   async _read(project_id, p) {
     const r = await this._rpc('fs.read.request', { project_id, path: p });

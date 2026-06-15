@@ -3,7 +3,7 @@
    * ViabilidadPanel — lista de expedientes de evaluacion de viabilidad
    * por receta.
    *
-   * Lectura directa de /viabilidad.json del proyecto activo via fs.read
+   * Lectura directa de /pizzepos/viabilidad.json del proyecto activo via fs.read
    * (patron lecturas-frontend-via-fs-read). El blueprint del modulo
    * viabilidad persiste un expediente por cada evaluacion ejecutada (audit
    * trail). Este panel muestra esa lista; las evaluaciones nuevas las
@@ -17,7 +17,7 @@
 
   export let panelId: string = '';
 
-  const VIABILIDAD_PATH = '/viabilidad.json';
+  const VIABILIDAD_PATH = '/pizzepos/viabilidad.json';
 
   let activeView: 'browser' | 'detail' = 'browser';
   let selectedViabilidad: any = null;

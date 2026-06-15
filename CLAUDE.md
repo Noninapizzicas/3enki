@@ -1499,8 +1499,8 @@ REPARTO POR MÓDULO  (✓ = ya híbrido)
   productos      ✓  PROYECTOR sin estado (proyecta carta activa)    —   (sin store; lee carta-manager por RPC)
   carta-digital     get/update_config · get/set carta_publica       —
   carta-scheduler   crear/listar/eliminar_regla · detectar_conflictos —
-  viabilidad        evaluar (aritmética) · obtener/listar/descartar —   (paralelo a escandallo)
-  carta-impresion✓  get/save_html (blueprint)                       generar (LLM pagina redacta HTML, SIN agente)
+  viabilidad     ✓  evaluar (delega escandallo.costear+normaliza·reglas food cost·caminos por regla) · obtener/listar/descartar  —  (paralelo a escandallo)
+  carta-impresion   get/save_html (blueprint puro, AÚN no híbrido)   generar (LLM pagina redacta HTML, SIN agente)
   carta-design   ✓  contexto_diseno (HIDRATA carta+marca)·load_carta·save·gallery (sin profiles)  diseño HTML (LLM página SIEMBRA desde marca)
   tecnicas          codificar/obtener/listar/actualizar/parametros  —
   menu-generator    —   (sin store propio · solo blueprint)         generar (carta desde texto/foto) · preparar (añade recetas a carta, contra base)
@@ -1509,8 +1509,8 @@ REPARTO POR MÓDULO  (✓ = ya híbrido)
 ```
 ORDEN DE MIGRACIÓN  (cada uno: receta de 5 pasos del patrón + gate)
   HECHO: carta-manager ✓ (aggregate root) · productos ✓ (PROYECTOR, no store — lee la carta por RPC)
-  1. CRUD puros (trivial, máximo retorno): carta-digital · carta-scheduler · viabilidad
-  2. mixtos (reflejo CRUD + chispa fuzzy): carta-design · carta-impresion · tecnicas
+  1. CRUD puros (trivial, máximo retorno): viabilidad ✓ · carta-digital · carta-scheduler
+  2. mixtos (reflejo CRUD + chispa fuzzy): carta-design ✓ · carta-impresion · tecnicas
   3. menu-generator: se queda blueprint (generación fuzzy) + op preparar (orquesta recetas→carta contra reflejos); no necesita reflejo propio
 ```
 

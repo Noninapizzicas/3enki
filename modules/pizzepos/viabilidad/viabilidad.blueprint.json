@@ -1,68 +1,40 @@
 {
-  "_doc": "Blueprint del modulo viabilidad. Hijo de subsistema-recetario.modulo-base. Evaluador previo: dado una receta o propuesta, invoca escandallo para el coste y aplica reglas de food cost para emitir veredicto economico (viable | viable_con_advertencias | no_viable_economicamente | sin_pvp_objetivo). Persiste expediente por evaluacion como audit trail (el chef quiere recordar 'evalue X con PVP Y y no salia rentable'). Ademas del veredicto, genera caminos ligeros (la brujula del comerciante): 0-3 puntos de entrada accionables { titulo, prompt } cuando hay palanca real, [] si sale redondo (no_inventes_datos); el frontend los renderiza como tarjetas que lanzan el chat via prefillChatInput. Decisiones cualitativas (diferenciacion comercial, estilo, encaje en carta) NO son del modulo — las desarrolla el LLM principal en el chat tras leer el veredicto y tocar un camino.",
+  "_doc": "Blueprint del modulo viabilidad (HIBRIDO). Hijo de subsistema-recetario.modulo-base. Evaluador economico previo: dado una receta o propuesta + PVP objetivo, emite veredicto economico canonico (viable | viable_con_advertencias | no_viable_economicamente | sin_pvp_objetivo) por reglas de food cost, y persiste un expediente por evaluacion (audit trail). Las 4 ops las SIRVE el REFLEJO JS (index.js); los cajones de aqui son DELEGADORES finos (publishAndWait viabilidad.<op>.request). El reflejo delega el coste a escandallo.costear (cadena reflejo->reflejo). Las decisiones cualitativas (diferenciacion, encaje en carta) NO son del modulo — las desarrolla el LLM principal en el chat tras leer el veredicto y tocar un camino.",
 
   "id": "viabilidad",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.2.0",
+  "version": "blueprint-2.0.0",
+  "_v2_0_changelog": "v2.0.0 (2026-06-15): HIBRIDADO. Las 4 ops (evaluar/obtener/listar/descartar) pasan al REFLEJO JS; los cajones quedan como delegadores finos. El reflejo delega el coste a escandallo.costear (REFLEJO determinista) y normaliza su modelo canonico; NO usa escandallo.calcular (cajon fuzzy). Los caminos se generan por regla (stubs ligeros). La aritmetica de veredicto, las reglas de food cost y la persistencia dual-branch viven ahora en JS. El contrato de bus no cambia.",
   "language": "es",
 
-  "rol": "Evaluador economico previo del subsistema-recetario. Combina coste de escandallo + PVP objetivo (o PVP sugerido si no se pasa) para emitir veredicto. Persiste expediente por evaluacion en viabilidad.json del proyecto.",
+  "rol": "Evaluador economico previo del subsistema-recetario (HIBRIDO). El REFLEJO (index.js) hace todo lo determinista: delega el coste a escandallo.costear, aplica las reglas de food cost, emite el veredicto, genera los caminos por regla y persiste el expediente en viabilidad.json. Los cajones de la pagina delegan al reflejo. Lo cualitativo (desarrollar un camino, decidir encaje comercial) lo razona el LLM principal en el chat.",
+
+  "bebe_de": {
+    "escandallo": "escandallo.costear.request — el coste determinista (modelo canonico coste_unidad/lineas/rinde, que el reflejo normaliza a coste_porcion/ingredientes/porciones). NO escandallo.calcular (cajon fuzzy Mercadona).",
+    "recetas": "recetas.obtener.request — el nombre de la receta cuando se evalua por receta_id sin nombre (no inventarlo)."
+  },
 
   "garantiza": [
-    "Cada evaluacion produce expediente persistido en viabilidad.json con id, fecha, input (receta_id o propuesta), coste, PVP, food_cost_pct, veredicto, advertencias, caminos.",
-    "Cada evaluacion produce 0-3 caminos { titulo, prompt } (la brujula del comerciante): puntos de entrada accionables que el frontend renderiza como tarjetas->chat. Enum abierto en contenido (el LLM los redacta por caso), [] si el producto sale redondo (no_inventes_datos). Los caminos viven SOLO en el expediente persistido, NO en el evento de dominio.",
+    "Cada evaluacion produce un expediente persistido en /pizzepos/viabilidad.json con id, fecha, input (receta_id o propuesta), calculo, PVP, food_cost_pct, veredicto, advertencias, caminos.",
     "Veredicto canonico del enum: viable | viable_con_advertencias | no_viable_economicamente | sin_pvp_objetivo.",
-    "Reglas de food cost (sobre PVP sin IVA): <25% → viable; 25-35% → viable_con_advertencias (margen razonable); 35-45% → viable_con_advertencias (margen apretado, alerta_margen_critico); >=45% → no_viable_economicamente.",
-    "Si no se pasa PVP objetivo, el blueprint calcula pvp_sugerido para food cost objetivo (default 30%) y emite veredicto 'sin_pvp_objetivo' indicando que el veredicto es orientativo.",
-    "Cada evaluacion publica viabilidad.evaluacion.completada (evento de dominio canonico, shape del schema oficial additionalProperties:false) con correlation_id + project_id + user_id + expediente_id + nombre_idea + veredicto + coste_total + coste_por_porcion + coste_es_real + food_cost_pct + precio_venta_objetivo + ingredientes_sin_precio + advertencias. receta_id/pvp_efectivo/margen_porcion NO van en el evento — viven en el expediente persistido.",
-    "Descartar un expediente publica viabilidad.evaluacion.descartada y marca estado='descartado' con motivo opcional. NO se borra del archivo (audit trail).",
-    "Persistencia declarativa via fs.edit.request (RFC 6902 JSON Patch) — el blueprint declara los patches; filesystem aplica deterministicamente sin composicion mental del LLM. Patron canonico aplicado: APPEND PURO (op:add) en evaluar, UPDATE 1-campo (op:test + op:replace puntuales) en descartar. Rama dual en evaluar (fs.write inicial si 404, fs.edit si existe)."
+    "Reglas de food cost (sobre PVP sin IVA): <25% viable; 25-35% viable_con_advertencias; 35-45% viable_con_advertencias + alerta_margen_critico; >=45% no_viable_economicamente.",
+    "Si no se pasa PVP objetivo, se calcula pvp_sugerido para food cost objetivo (default 30%) y el veredicto es 'sin_pvp_objetivo' (orientativo).",
+    "Cada evaluacion produce 0-3 caminos { titulo, prompt } (la brujula del comerciante), generados por REGLA desde el veredicto/advertencias; [] si el producto sale redondo. Viven SOLO en el expediente, NO en el evento de dominio.",
+    "evaluar publica viabilidad.evaluacion.completada y descartar publica viabilidad.evaluacion.descartada (shape canonico del schema oficial, additionalProperties:false).",
+    "Descartar es soft-delete (estado='descartado') — NO se borra del archivo (audit trail). Doble descarte -> CONFLICT_STATE.",
+    "Persistencia via fs (reflejo): dual-branch fs.write inicial si 404, fs.edit append/update si existe."
   ],
 
   "no_garantiza": [
-    "Coste real preciso — depende de escandallo y mercadona-api (precios orientativos).",
-    "Veredicto cualitativo (diferenciacion en mercado, encaje en carta) — eso lo razona el LLM principal en el chat.",
-    "Re-evaluacion automatica cuando los precios suben — un expediente es snapshot del momento. Si se quiere re-evaluar, se invoca evaluar de nuevo.",
-    "Umbrales de food cost universales — los defaults (25/35/45) son razonables en hosteleria espanola pero pueden ajustarse por proyecto en el futuro (trabajo_pendiente)."
+    "Coste real preciso — sale de escandallo.costear (catalogo cacheado, orientativo).",
+    "Veredicto cualitativo (diferenciacion, encaje en carta) — lo razona el LLM principal en el chat.",
+    "Re-evaluacion automatica cuando los precios suben — un expediente es snapshot del momento."
   ],
 
   "estado_persistente": {
-    "_descripcion": "Archivo unico por proyecto con la lista de expedientes de evaluacion.",
+    "_descripcion": "Archivo unico por proyecto con la lista de expedientes. Lo escribe el REFLEJO.",
     "path_relativo": "/pizzepos/viabilidad.json",
-    "shape": {
-      "_version": "1.0",
-      "_updated_at": "ISO 8601",
-      "expedientes": [
-        {
-          "id": "uuid",
-          "fecha_evaluacion": "ISO 8601",
-          "estado": "activo|descartado",
-          "motivo_descarte": "string|null",
-          "fecha_descarte": "ISO 8601|null",
-          "input": {
-            "receta_id": "uuid|null (si era propuesta)",
-            "nombre": "string (snapshot del nombre)",
-            "porciones": "number",
-            "ingredientes": "array (snapshot de ingredientes evaluados)",
-            "pvp_objetivo": "number|null"
-          },
-          "calculo": {
-            "coste_total": "number",
-            "coste_porcion": "number",
-            "ingredientes_detalle": "array (de escandallo)",
-            "ingredientes_sin_precio": "array",
-            "postcode_usado": "string"
-          },
-          "pvp_efectivo": "number (el pvp_objetivo o el sugerido)",
-          "pvp_sugerido": "number (si no habia pvp_objetivo, este es el calculado para food cost 30%)",
-          "food_cost_pct": "number 0-100",
-          "margen_porcion": "number",
-          "veredicto": "viable|viable_con_advertencias|no_viable_economicamente|sin_pvp_objetivo",
-          "advertencias": "array de strings (alerta_margen_critico, ingredientes_sin_precio, etc.)",
-          "caminos": "array 0-3 de { titulo: string, prompt: string } (la brujula del comerciante; [] si el producto sale redondo). Enum abierto en contenido: el LLM los redacta al evaluar, el frontend los renderiza como tarjetas->chat."
-        }
-      ]
-    }
+    "shape": "{ _version, _updated_at, expedientes: [ { id, fecha_evaluacion, estado: activo|descartado, motivo_descarte, fecha_descarte, input: {receta_id, nombre, porciones, ingredientes, pvp_objetivo}, calculo: {coste_total, coste_porcion, ingredientes_detalle, ingredientes_sin_precio, postcode_usado}, pvp_efectivo, pvp_sugerido, food_cost_pct, margen_porcion, veredicto, advertencias, caminos: [{titulo, prompt}] } ] }"
   },
 
   "eventos_publicados": [
@@ -82,311 +54,73 @@
 
   "operaciones": {
     "evaluar": {
-      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, user_id?, receta_id? (uuid, alternativa a ingredientes+porciones), nombre? (string, requerido si propuesta), ingredientes? (array {nombre, cantidad, unidad}, alternativa a receta_id), porciones? (number > 0, requerido si propuesta), pvp_objetivo? (number > 0, opcional), food_cost_objetivo_pct? (number 0-100, default 30) }",
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, receta_id? (alternativa a ingredientes+porciones), nombre? (req si propuesta), ingredientes? (array {nombre,cantidad,unidad}), porciones? (req si propuesta), pvp_objetivo? (>0, opcional), food_cost_objetivo_pct? (default 30) }",
       "pseudocodigo": [
         "async evaluar(input):",
-        "  // 1. Validacion minima.",
-        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  if (!input.receta_id && (!Array.isArray(input.ingredientes) || !input.porciones || !input.nombre)) {",
-        "    return INVALID_INPUT { hint: 'pasar receta_id O { nombre, ingredientes, porciones }' }",
-        "  }",
-        "  if (input.pvp_objetivo !== undefined && input.pvp_objetivo <= 0) {",
-        "    return INVALID_INPUT { field: 'pvp_objetivo', hint: 'debe ser > 0 si se pasa' }",
-        "  }",
-        "  food_cost_obj = (input.food_cost_objetivo_pct >= 1 && input.food_cost_objetivo_pct < 100) ? input.food_cost_objetivo_pct : 30",
-        "",
-        "  // 2. Obtener coste via escandallo (TU delegas, no calculas el mismo).",
-        "  escandallo_input = input.receta_id",
-        "    ? { project_id: input.project_id, receta_id: input.receta_id }",
-        "    : { project_id: input.project_id, ingredientes: input.ingredientes, porciones: input.porciones }",
-        "  esc_resp = await publishAndWait('escandallo.calcular.request', {",
-        "    ...escandallo_input, request_id: uuid(), correlation_id: input.correlation_id",
-        "  })",
-        "  if (esc_resp.status >= 400) return esc_resp  // propagar tal cual",
-        "  calculo = esc_resp.data  // { coste_total, coste_porcion, porciones, ingredientes_detalle, ingredientes_sin_precio, postcode_usado, fecha_calculo }",
-        "",
-        "  // 2b. Resolver nombre_idea. Si vino por receta_id sin nombre, pedirlo a recetas (NO inventarlo).",
-        "  //     escandallo NO devuelve el nombre de la receta — recetas.obtener.request es la fuente canonica.",
-        "  nombre_idea = input.nombre",
-        "  if (!nombre_idea && input.receta_id) {",
-        "    rec_resp = await publishAndWait('recetas.obtener.request', {",
-        "      project_id: input.project_id, receta_id: input.receta_id,",
-        "      request_id: uuid(), correlation_id: input.correlation_id",
-        "    })",
-        "    if (rec_resp.status >= 400) return rec_resp",
-        "    nombre_idea = rec_resp.data.nombre",
-        "  }",
-        "",
-        "  // 3. Resolver pvp_efectivo + pvp_sugerido + food_cost_pct.",
-        "  pvp_sugerido = calculo.coste_porcion > 0 ? round(calculo.coste_porcion / (food_cost_obj / 100), 2) : null",
-        "  if (input.pvp_objetivo) {",
-        "    pvp_efectivo = input.pvp_objetivo",
-        "    food_cost_pct = round((calculo.coste_porcion / pvp_efectivo) * 100, 1)",
-        "  } else {",
-        "    pvp_efectivo = pvp_sugerido  // operativo para el calculo, no decisional",
-        "    food_cost_pct = food_cost_obj  // por construccion",
-        "  }",
-        "  margen_porcion = round(pvp_efectivo - calculo.coste_porcion, 2)",
-        "",
-        "  // 4. Veredicto canonico.",
-        "  advertencias = []",
-        "  if (calculo.ingredientes_sin_precio.length > 0) {",
-        "    advertencias.push('ingredientes_sin_precio: ' + calculo.ingredientes_sin_precio.join(', '))",
-        "  }",
-        "  veredicto = null",
-        "  if (!input.pvp_objetivo) {",
-        "    veredicto = 'sin_pvp_objetivo'",
-        "    advertencias.push('veredicto_orientativo: se uso pvp_sugerido al ' + food_cost_obj + '% food cost')",
-        "  } else if (food_cost_pct < 25) {",
-        "    veredicto = 'viable'",
-        "  } else if (food_cost_pct < 35) {",
-        "    veredicto = 'viable_con_advertencias'",
-        "  } else if (food_cost_pct < 45) {",
-        "    veredicto = 'viable_con_advertencias'",
-        "    advertencias.push('alerta_margen_critico: food cost ' + food_cost_pct + '% por encima de 35%')",
-        "  } else {",
-        "    veredicto = 'no_viable_economicamente'",
-        "  }",
-        "",
-        "  // 4b. Generar caminos (la brujula del comerciante). Stubs ligeros, NO analisis pesado.",
-        "  //     Regla 0-3: si hay una palanca que merezca la pena para ESTE caso, proponla como camino.",
-        "  //     Si sale redondo y no hay nada que tocar, caminos = [] (no_inventes_datos: NO rellenar por rellenar).",
-        "  //     Palancas tipicas que orientan (NO es un enum cerrado, TU decides por el caso concreto):",
-        "  //       food_cost_pct alto o alerta_margen_critico -> camino para subir pvp o recortar coste.",
-        "  //       ingredientes_sin_precio presentes -> camino para completar precios y reafinar el veredicto.",
-        "  //       veredicto sin_pvp_objetivo -> camino para fijar un pvp y obtener veredicto firme.",
-        "  //       no_viable_economicamente -> camino para replantear formato/porcion o descartar con criterio.",
-        "  //     El desarrollo cualitativo NO se hace aqui: vive en el chat cuando el comerciante toca la tarjeta.",
-        "  //     Cada camino = { titulo (corto y accionable), prompt (la consulta lista para lanzar al chat) }.",
-        "  //     El prompt incluye nombre_idea, coste_por_porcion y pvp_efectivo mas la consulta concreta del camino,",
-        "  //     para que el chat arranque con contexto sin que el comerciante reescriba los datos.",
-        "  caminos = <TU propones 0-3 caminos { titulo, prompt } segun veredicto, food_cost_pct, margen_porcion y advertencias; [] si el producto sale redondo>",
-        "",
-        "  // 5. Construir expediente.",
-        "  expediente = {",
-        "    id: uuid(),",
-        "    fecha_evaluacion: nowISO(),",
-        "    estado: 'activo',",
-        "    motivo_descarte: null,",
-        "    fecha_descarte: null,",
-        "    input: {",
-        "      receta_id: input.receta_id || null,",
-        "      nombre: nombre_idea,",
-        "      porciones: calculo.porciones,",
-        "      ingredientes: <ingredientes evaluados — snapshot>,",
-        "      pvp_objetivo: input.pvp_objetivo || null",
-        "    },",
-        "    calculo: {",
-        "      coste_total: calculo.coste_total,",
-        "      coste_porcion: calculo.coste_porcion,",
-        "      ingredientes_detalle: calculo.ingredientes_detalle,",
-        "      ingredientes_sin_precio: calculo.ingredientes_sin_precio,",
-        "      postcode_usado: calculo.postcode_usado",
-        "    },",
-        "    pvp_efectivo: pvp_efectivo,",
-        "    pvp_sugerido: pvp_sugerido,",
-        "    food_cost_pct: food_cost_pct,",
-        "    margen_porcion: margen_porcion,",
-        "    veredicto: veredicto,",
-        "    advertencias: advertencias,",
-        "    caminos: caminos",
-        "  }",
-        "",
-        "  // 6. Persistir el expediente.",
-        "  //    Rama A — archivo NO existe: fs.write atomico del store inicial con el primer expediente.",
-        "  //    Rama B — archivo existe: fs.edit op:add /expedientes/- (declarativo, sin composicion mental).",
-        "  //    Patron canonico: branch por 404 evita el bug 'edit-en-archivo-inexistente'.",
-        "  now = nowISO()",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/viabilidad.json' })",
-        "  if (raw.status === 404) {",
-        "    store_inicial = { _version: '1.0', _updated_at: now, expedientes: [expediente] }",
-        "    write_resp = await publishAndWait('fs.write.request', {",
-        "      project_id: input.project_id, path: '/pizzepos/viabilidad.json',",
-        "      content: JSON.stringify(store_inicial, null, 2), encoding: 'utf-8', atomic: true",
-        "    })",
-        "    if (write_resp.status >= 400) return write_resp",
-        "  } else if (raw.status >= 400) {",
-        "    return raw",
-        "  } else {",
-        "    edit_resp = await publishAndWait('fs.edit.request', {",
-        "      project_id: input.project_id, path: '/pizzepos/viabilidad.json',",
-        "      patches: [",
-        "        { op: 'add',     path: '/expedientes/-', value: expediente },",
-        "        { op: 'replace', path: '/_updated_at',   value: now }",
-        "      ]",
-        "    })",
-        "    if (edit_resp.status >= 400) return edit_resp",
-        "  }",
-        "",
-        "  // 7. Publicar evento de dominio + response al caller.",
-        "  //    Shape canonico del schema oficial viabilidad.evaluacion.completada (additionalProperties:false).",
-        "  //    NO incluir receta_id/pvp_efectivo/margen_porcion — viven en el expediente persistido, no en el evento.",
-        "  await publish('viabilidad.evaluacion.completada', {",
-        "    correlation_id: input.correlation_id,",
-        "    project_id: input.project_id,",
-        "    user_id: input.user_id,",
-        "    expediente_id: expediente.id,",
-        "    nombre_idea: expediente.input.nombre,",
-        "    veredicto: veredicto,",
-        "    coste_total: calculo.coste_total,",
-        "    coste_por_porcion: calculo.coste_porcion,",
-        "    coste_es_real: calculo.ingredientes_sin_precio.length === 0,",
-        "    food_cost_pct: input.pvp_objetivo ? food_cost_pct : null,",
-        "    precio_venta_objetivo: input.pvp_objetivo || null,",
-        "    ingredientes_sin_precio: calculo.ingredientes_sin_precio,",
-        "    advertencias: advertencias,",
-        "    timestamp: nowISO()",
-        "  })",
-        "  return { status: 201, data: expediente }"
+        "  // HIBRIDO: lo ejecuta el REFLEJO JS (index.js). El reflejo delega el coste a",
+        "  // escandallo.costear, aplica reglas de food cost, genera caminos por regla, persiste",
+        "  // el expediente y emite viabilidad.evaluacion.completada. Este cajon DELEGA.",
+        "  resp = await publishAndWait('viabilidad.evaluar.request', { ...input, request_id: uuid() }, { timeout_ms: 30000 })",
+        "  return resp"
       ],
       "reglas_clave": [
-        "Coste lo provee escandallo via publishAndWait — viabilidad NO lo calcula el mismo.",
-        "Veredicto del enum cerrado — NO inventar etiquetas nuevas.",
-        "Umbrales canonicos: <25 viable, 25-35 viable_con_advertencias, 35-45 viable_con_advertencias+alerta, >=45 no_viable.",
-        "Si no hay pvp_objetivo, el veredicto es 'sin_pvp_objetivo' (informativo) y se calcula pvp_sugerido para food cost objetivo.",
-        "advertencias acumula motivos legibles — ingredientes_sin_precio se hereda de escandallo.",
-        "expediente.input.ingredientes es snapshot — preserva los datos del momento aunque la receta cambie despues.",
-        "caminos: 0-3, enum abierto en contenido (sin tipo/prioridad/impacto fijos), [] si no hay palanca real (no_inventes_datos). El prompt de cada camino incluye nombre_idea, coste_por_porcion y pvp_efectivo + la consulta concreta, para que el chat arranque con contexto.",
-        "caminos viven SOLO en el expediente persistido — el evento viabilidad.evaluacion.completada NO los incluye (sigue canonico)."
+        "Pasar receta_id O { nombre, ingredientes, porciones }.",
+        "El veredicto y los umbrales (25/35/45) son del reflejo — NO inventar etiquetas.",
+        "Los caminos llegan en el expediente; el frontend los renderiza como tarjetas->chat."
       ],
-      "errores_posibles": [
-        "INVALID_INPUT — project_id ausente, o ni receta_id ni propuesta completa, o pvp_objetivo <= 0.",
-        "RESOURCE_NOT_FOUND — receta_id no existe (heredado de escandallo→recetas).",
-        "PRECONDITION_FAILED — receta sin ingredientes (heredado de escandallo).",
-        "UPSTREAM_TIMEOUT / UPSTREAM_UNREACHABLE / UPSTREAM_INVALID_RESPONSE — upstream (escandallo, fs, recetas) no responde correctamente."
-      ]
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
+      "_delega_en": "viabilidad.evaluar.request (REFLEJO JS — index.js)"
     },
-
     "obtener": {
-      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, expediente_id (uuid, req) }",
+      "input": "{ project_id (req), request_id (req), correlation_id?, expediente_id (req) }",
       "pseudocodigo": [
         "async obtener(input):",
-        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  if (!input.expediente_id) return INVALID_INPUT { field: 'expediente_id' }",
-        "",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/viabilidad.json' })",
-        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'expediente' }",
-        "  if (raw.status >= 400) return raw",
-        "  store = JSON.parse(raw.content)",
-        "  expediente = store.expedientes.find(e => e.id === input.expediente_id)",
-        "  if (!expediente) return RESOURCE_NOT_FOUND { entity_type: 'expediente', id: input.expediente_id }",
-        "  return { status: 200, data: expediente }"
+        "  resp = await publishAndWait('viabilidad.obtener.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp"
       ],
-      "reglas_clave": [
-        "Lectura pura — no muta el store.",
-        "Devuelve expediente tanto activo como descartado."
-      ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "reglas_clave": ["Lectura pura. Devuelve expediente activo o descartado."],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
+      "_delega_en": "viabilidad.obtener.request (REFLEJO JS — index.js)"
     },
-
     "listar": {
-      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, estado? ('activo'|'descartado'|'todos', default 'activo'), veredicto? (filtra por veredicto canonico), receta_id? (filtra evaluaciones de una receta concreta) }",
+      "input": "{ project_id (req), request_id (req), correlation_id?, estado? (activo|descartado|todos, default activo), veredicto?, receta_id? }",
       "pseudocodigo": [
         "async listar(input):",
-        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/viabilidad.json' })",
-        "  if (raw.status === 404) return { status: 200, data: [] }  // sin expedientes aun",
-        "  if (raw.status >= 400) return raw",
-        "  store = JSON.parse(raw.content)",
-        "",
-        "  estado_filtro = input.estado || 'activo'",
-        "  resultados = store.expedientes",
-        "  if (estado_filtro !== 'todos') resultados = resultados.filter(e => e.estado === estado_filtro)",
-        "  if (input.veredicto) resultados = resultados.filter(e => e.veredicto === input.veredicto)",
-        "  if (input.receta_id) resultados = resultados.filter(e => e.input.receta_id === input.receta_id)",
-        "",
-        "  // Ordenar por fecha_evaluacion descendente (mas recientes primero).",
-        "  resultados.sort((a, b) => b.fecha_evaluacion.localeCompare(a.fecha_evaluacion))",
-        "",
-        "  return { status: 200, data: resultados }"
+        "  resp = await publishAndWait('viabilidad.listar.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp"
       ],
-      "reglas_clave": [
-        "Lectura pura.",
-        "Default estado='activo' (oculta descartados salvo que se pidan explicitamente).",
-        "Sin paginacion v1 — el catalogo de evaluaciones por proyecto es del orden de docenas."
-      ],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+      "reglas_clave": ["Lectura pura. Default estado='activo'. Orden por fecha desc."],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
+      "_delega_en": "viabilidad.listar.request (REFLEJO JS — index.js)"
     },
-
     "descartar": {
-      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, user_id?, expediente_id (uuid, req), motivo? (string, opcional pero recomendado) }",
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, expediente_id (req), motivo? }",
       "pseudocodigo": [
         "async descartar(input):",
-        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  if (!input.expediente_id) return INVALID_INPUT { field: 'expediente_id' }",
-        "",
-        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/viabilidad.json' })",
-        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'expediente' }",
-        "  if (raw.status >= 400) return raw",
-        "  store = JSON.parse(raw.content)",
-        "  idx = store.expedientes.findIndex(e => e.id === input.expediente_id)",
-        "  if (idx < 0) return RESOURCE_NOT_FOUND { entity_type: 'expediente', id: input.expediente_id }",
-        "",
-        "  expediente = store.expedientes[idx]",
-        "  if (expediente.estado === 'descartado') {",
-        "    return CONFLICT_STATE { hint: 'expediente ya descartado' }",
-        "  }",
-        "",
-        "  // Persistir via fs.edit declarativo (RFC 6902). Patron UPDATE 1-campo:",
-        "  // - op:test guarda race contra reordenamiento del array.",
-        "  // - op:replace de los 3 campos puntuales del descarte. No componer archivo entero.",
-        "  motivo_descarte = input.motivo || 'descartado por el usuario'",
-        "  fecha_descarte = nowISO()",
-        "  edit_resp = await publishAndWait('fs.edit.request', {",
-        "    project_id: input.project_id, path: '/pizzepos/viabilidad.json',",
-        "    patches: [",
-        "      { op: 'test',    path: `/expedientes/${idx}/id`,              value: input.expediente_id },",
-        "      { op: 'replace', path: `/expedientes/${idx}/estado`,          value: 'descartado' },",
-        "      { op: 'replace', path: `/expedientes/${idx}/motivo_descarte`, value: motivo_descarte },",
-        "      { op: 'replace', path: `/expedientes/${idx}/fecha_descarte`,  value: fecha_descarte },",
-        "      { op: 'replace', path: '/_updated_at',                        value: fecha_descarte }",
-        "    ]",
-        "  })",
-        "  if (edit_resp.status >= 400) return edit_resp",
-        "",
-        "  // Construir el expediente devuelto al caller con los 3 campos aplicados (vista local).",
-        "  expediente.estado = 'descartado'",
-        "  expediente.motivo_descarte = motivo_descarte",
-        "  expediente.fecha_descarte = fecha_descarte",
-        "",
-        "  // Shape canonico del schema oficial viabilidad.evaluacion.descartada (additionalProperties:false).",
-        "  await publish('viabilidad.evaluacion.descartada', {",
-        "    correlation_id: input.correlation_id,",
-        "    project_id: input.project_id,",
-        "    user_id: input.user_id,",
-        "    expediente_id: expediente.id,",
-        "    nombre_idea: expediente.input.nombre,",
-        "    motivo: expediente.motivo_descarte,",
-        "    veredicto_economico: expediente.veredicto,",
-        "    timestamp: nowISO()",
-        "  })",
-        "  return { status: 200, data: expediente }"
+        "  resp = await publishAndWait('viabilidad.descartar.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp"
       ],
-      "reglas_clave": [
-        "Soft delete — el expediente sigue accesible (history).",
-        "Doble descarte → CONFLICT_STATE (no idempotente, es transicion controlada).",
-        "Motivo opcional pero recomendado — mejora trazabilidad del por que."
-      ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "reglas_clave": ["Soft delete (estado='descartado'). Doble descarte -> CONFLICT_STATE. Motivo recomendado."],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
+      "_delega_en": "viabilidad.descartar.request (REFLEJO JS — index.js)"
     }
   },
 
   "trabajo_pendiente": [
     {
+      "id": "frontend_path_drift",
+      "estado": "abierto",
+      "descripcion": "El panel del frontend (ViabilidadPanel.svelte) lee '/viabilidad.json' pero el canonico es '/pizzepos/viabilidad.json'. Alinear el path del frontend al canonico para que el panel muestre lo que el reflejo escribe."
+    },
+    {
       "id": "umbrales_food_cost_por_proyecto",
       "estado": "abierto",
-      "descripcion": "Hoy los umbrales (25/35/45) son hardcoded en el blueprint. Hosteleria espanola estandar. Algunos proyectos (alta cocina, pizzeria gourmet) pueden tener objetivos distintos. Cuando aparezca el caso, mover los umbrales a configuracion por proyecto (project.metadata o un archivo viabilidad-config.json)."
+      "descripcion": "Umbrales (25/35/45) hardcoded en el reflejo. Algunos proyectos (alta cocina) pueden querer otros. Mover a config por proyecto cuando aparezca el caso."
     },
     {
-      "id": "re_evaluar_expediente_existente",
+      "id": "coste_fresco_vs_cacheado",
       "estado": "abierto",
-      "descripcion": "Operacion 'evaluar' siempre crea expediente nuevo aunque sea la misma receta. No hay 'volver a evaluar con precios actuales'. Si se quiere, se invoca evaluar otra vez y queda historial paralelo. Posible v2: viabilidad.reevaluar(expediente_id) que reusa el input original con precios frescos."
-    },
-    {
-      "id": "operacion_simular_precio_o_ingrediente_impacto",
-      "estado": "abierto",
-      "descripcion": "Las operaciones simular.precio e ingrediente.impacto del legacy escandallo encajan mejor en viabilidad. Pendientes hasta tener demanda real."
+      "descripcion": "El reflejo usa escandallo.costear (catalogo cacheado, ms). Si se quiere coste con precios Mercadona frescos, habria que ofrecer una via que dispare escandallo.calcular (turno LLM) bajo demanda explicita."
     }
   ]
 }

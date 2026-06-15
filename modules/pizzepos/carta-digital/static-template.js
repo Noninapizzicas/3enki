@@ -32,20 +32,31 @@ function generateStaticHTML(carta, config, options = {}) {
     id: c.id, nombre: c.nombre, orden: c.orden, icon: c.icon || null
   }));
 
-  const productos = (carta.productos || []).map(p => ({
-    id: p.id,
-    nombre: p.nombre,
-    categoria: p.categoria,
-    precio: p.precio,
-    descripcion: p.descripcion || null,
-    emoji: p.emoji || null,
-    tags: p.tags || [],
-    imagen: p.imagen || null,
-    ingredientes: (p.ingredientes || []).map(i => ({
-      nombre: i.nombre, emoji: i.emoji || null, tipo: i.tipo || null,
-      precio_extra: i.precio_extra ?? null
-    }))
-  }));
+  const imgs = Array.isArray(carta.productos) ? carta.productos : [];
+  const productos = imgs.map(p => {
+    const principal = Array.isArray(p.imagenes) ? (p.imagenes.find(im => im.principal) || p.imagenes[0]) : null;
+    return {
+      id: p.id,
+      nombre: p.nombre,
+      categoria: p.categoria,
+      precio: p.precio,
+      descripcion: p.descripcion || null,
+      emoji: p.emoji || null,
+      tags: p.tags || [],
+      imagen: p.imagen || null,
+      // Texto alternativo accesible (WCAG 1.1.1): el alt que puso el usuario en
+      // contenido, o el nombre del producto como fallback.
+      imagen_alt: (principal && principal.alt) ? principal.alt : (p.nombre || ''),
+      // Alérgenos canónicos (1169/2011) ya normalizados por la proyección.
+      alergenos: Array.isArray(p.alergenos) ? p.alergenos : [],
+      ingredientes: (p.ingredientes || []).map(i => ({
+        nombre: i.nombre, emoji: i.emoji || null, tipo: i.tipo || null,
+        precio_extra: i.precio_extra ?? null
+      }))
+    };
+  });
+  // Leyenda de alérgenos presentes (id/nombre/emoji), de la proyección.
+  const alergenosLeyenda = Array.isArray(carta.alergenos_leyenda) ? carta.alergenos_leyenda : [];
 
   const ofertas = (carta.ofertas || []).filter(o => o.activa !== false).map(o => ({
     id: o.id,
@@ -65,7 +76,7 @@ function generateStaticHTML(carta, config, options = {}) {
   const resenasAvg = carta.resenas_avg || 0;
   const resenasTotal = carta.resenas_total || 0;
 
-  const dataJSON = JSON.stringify({ categorias, productos, ofertas, resenas, resenas_avg: resenasAvg, resenas_total: resenasTotal });
+  const dataJSON = JSON.stringify({ categorias, productos, ofertas, resenas, resenas_avg: resenasAvg, resenas_total: resenasTotal, alergenos_leyenda: alergenosLeyenda });
   const configJSON = JSON.stringify({
     nombre_negocio, moneda, whatsapp_telefono, mensaje_header,
     ai_endpoint, ai_provider, ai_chat_path, chat_enabled
@@ -138,7 +149,7 @@ function generateStaticHTML(carta, config, options = {}) {
 <html lang="${lang}">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="${colorFondo}">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -221,6 +232,16 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .section-title{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:0 0 8px}
 .ing-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
 .ing-chip{display:flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid #2a2a2a;border-radius:20px;background:#1a1a1a;font-size:.75rem;color:#bbb}
+/* Alérgenos (1169/2011) */
+.card-alerg{font-size:.95rem;letter-spacing:2px;margin-top:4px;line-height:1}
+.alerg-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.alerg-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid #6b4a00;border-radius:20px;background:#241c08;font-size:.78rem;color:#f5d99a}
+.alerg-aviso{font-size:.72rem;color:var(--text-mid,#888);margin:6px 0 0;line-height:1.4}
+/* Accesibilidad (WCAG 2.1 AA) */
+.skip-link{position:absolute;left:-9999px;top:0;z-index:1000;background:var(--primary,#f59e0b);color:#000;padding:10px 16px;border-radius:0 0 8px 0;font-weight:600}
+.skip-link:focus{left:0}
+:focus-visible{outline:3px solid var(--primary,#f59e0b);outline-offset:2px}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 .ing-chip.queso{border-color:rgba(250,204,21,.25)}.ing-chip.carne{border-color:rgba(239,68,68,.2)}.ing-chip.verdura{border-color:rgba(34,197,94,.2)}.ing-chip.marisco{border-color:rgba(59,130,246,.2)}
 .detail-footer{display:flex;gap:10px;padding:16px 20px;border-top:1px solid #222;background:var(--bg-surface)}
 .btn{flex:1;padding:14px;border:none;border-radius:12px;font-size:.9rem;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
@@ -389,6 +410,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 </style>
 </head>
 <body>
+<a href="#contenido" class="skip-link">Saltar al contenido</a>
 <!-- Header -->
 <header class="header">
   <div class="brand">
@@ -398,7 +420,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 </header>
 
 <!-- Categories -->
-<div class="cats" id="cats"></div>
+<nav class="cats" id="cats" aria-label="Categorías"></nav>
 
 <!-- Ofertas -->
 <div class="ofertas-section" id="ofertas-section" style="display:none">
@@ -409,8 +431,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 </div>
 
 <!-- Grid -->
-<main class="content">
-  <div class="grid" id="grid"></div>
+<main class="content" id="contenido">
+  <div class="grid" id="grid" role="list" aria-label="Productos"></div>
 </main>
 
 <!-- Reseñas section -->
@@ -449,7 +471,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 </div>
 
 <!-- Cart FAB -->
-<button class="fab" id="fab" onclick="toggleCart()">
+<button class="fab" id="fab" onclick="toggleCart()" aria-label="Ver carrito">
   <span class="fab-count" id="fab-count">0</span>
   <span class="fab-total" id="fab-total">0.00${escapeHtml(moneda)}</span>
 </button>
@@ -479,7 +501,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
   <div class="cart" onclick="event.stopPropagation()">
     <header class="cart-header">
       <span class="cart-title" id="cart-title">Tu pedido</span>
-      <button class="close-btn" onclick="toggleCart()">✕</button>
+      <button class="close-btn" onclick="toggleCart()" aria-label="Cerrar carrito">✕</button>
     </header>
     <div class="cart-items" id="cart-items"></div>
     <div class="cart-footer" id="cart-footer" style="display:none"></div>
@@ -487,7 +509,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 </div>
 
 <!-- Chat widget -->
-<button class="chat-fab" id="chat-fab" onclick="toggleChat()" title="Asistente">💬</button>
+<button class="chat-fab" id="chat-fab" onclick="toggleChat()" title="Asistente" aria-label="Abrir asistente">💬</button>
 <div class="chat-overlay" id="chat-overlay" onclick="toggleChat()">
   <div class="chat-panel" onclick="event.stopPropagation()">
     <div class="chat-head">
@@ -498,14 +520,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
           <span class="chat-head-status" id="chat-status">En línea</span>
         </div>
       </div>
-      <button class="close-btn" onclick="toggleChat()">✕</button>
+      <button class="close-btn" onclick="toggleChat()" aria-label="Cerrar asistente">✕</button>
     </div>
     <div class="chat-msgs" id="chat-msgs"></div>
     <div class="chat-quick" id="chat-quick"></div>
     <div class="chat-input-row">
-      <button class="chat-btn chat-btn-mic" id="chat-mic" onclick="toggleVoice()" title="Hablar">🎤</button>
+      <button class="chat-btn chat-btn-mic" id="chat-mic" onclick="toggleVoice()" title="Hablar" aria-label="Hablar por voz">🎤</button>
       <textarea class="chat-input" id="chat-input" rows="1" placeholder="Escribe tu mensaje..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"></textarea>
-      <button class="chat-btn chat-btn-send" id="chat-send" onclick="sendChat()" title="Enviar">➤</button>
+      <button class="chat-btn chat-btn-send" id="chat-send" onclick="sendChat()" title="Enviar" aria-label="Enviar mensaje">➤</button>
     </div>
   </div>
 </div>
@@ -601,6 +623,20 @@ function applyTranslations() {
 // Helpers
 function fmt(p) { return p.toFixed(2) + ' ' + MONEDA; }
 function esc(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
+
+// Alérgenos (1169/2011): mapa id→{nombre,emoji} desde la leyenda de la proyección.
+var ALERG = {};
+(DATA.alergenos_leyenda || []).forEach(function(a){ ALERG[a.id] = a; });
+function alergNombres(ids) {
+  return (ids || []).map(function(id){ return (ALERG[id] && ALERG[id].nombre) || id; });
+}
+// Chips compactos (emoji) para la tarjeta, con nombre accesible para lector de pantalla.
+function alergChipsCompact(ids) {
+  if (!ids || !ids.length) return '';
+  var emojis = ids.map(function(id){ return (ALERG[id] && ALERG[id].emoji) || '⚠️'; }).join(' ');
+  var label = 'Alérgenos: ' + alergNombres(ids).join(', ');
+  return '<div class="card-alerg" role="img" aria-label="' + esc(label) + '" title="' + esc(label) + '">' + emojis + '</div>';
+}
 
 // Ofertas
 function renderOfertas() {
@@ -723,8 +759,8 @@ function renderGrid() {
     if (tags.includes('nuevo')) badgesHtml += '<span class="badge nuevo">Nuevo</span>';
 
     const visual = p.imagen
-      ? '<img src="' + esc(p.imagen) + '" alt="' + esc(p.nombre) + '" class="card-img" loading="lazy">'
-      : '<span class="card-ph">' + (p.emoji || '${logoEmoji}') + '</span>';
+      ? '<img src="' + esc(p.imagen) + '" alt="' + esc(p.imagen_alt || p.nombre) + '" class="card-img" loading="lazy">'
+      : '<span class="card-ph" role="img" aria-label="' + esc(p.nombre) + '">' + (p.emoji || '${logoEmoji}') + '</span>';
 
     const desc = p.descripcion
       ? '<span class="card-desc">' + esc(p.descripcion) + '</span>'
@@ -732,9 +768,9 @@ function renderGrid() {
 
     html += '<div class="card" onclick="showDetail(\\'' + p.id + '\\')">' +
       '<div class="card-visual">' + visual + (badgesHtml ? '<div class="badges">' + badgesHtml + '</div>' : '') + '</div>' +
-      '<div class="card-body"><span class="card-nombre">' + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '</span>' + desc + '</div>' +
+      '<div class="card-body"><span class="card-nombre">' + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '</span>' + desc + alergChipsCompact(p.alergenos) + '</div>' +
       '<div class="card-footer"><span class="card-precio">' + fmt(p.precio) + '</span>' +
-      '<button class="card-add" onclick="event.stopPropagation();addToCart(\\'' + p.id + '\\')" title="Añadir">+</button></div></div>';
+      '<button class="card-add" onclick="event.stopPropagation();addToCart(\\'' + p.id + '\\')" aria-label="Añadir ' + esc(p.nombre) + '" title="Añadir">+</button></div></div>';
   }
   el.innerHTML = html;
 }
@@ -748,9 +784,9 @@ function showDetail(id) {
 
   const visualEl = document.getElementById('detail-visual');
   visualEl.innerHTML = (p.imagen
-    ? '<img src="' + esc(p.imagen) + '" alt="' + esc(p.nombre) + '" style="width:100%;height:100%;object-fit:cover">'
-    : '<span class="detail-ph">' + (p.emoji || '${logoEmoji}') + '</span>')
-    + '<button class="close-btn" onclick="closeDetail()">✕</button>';
+    ? '<img src="' + esc(p.imagen) + '" alt="' + esc(p.imagen_alt || p.nombre) + '" style="width:100%;height:100%;object-fit:cover">'
+    : '<span class="detail-ph" role="img" aria-label="' + esc(p.nombre) + '">' + (p.emoji || '${logoEmoji}') + '</span>')
+    + '<button class="close-btn" onclick="closeDetail()" aria-label="Cerrar">✕</button>';
 
   const tags = p.tags || [];
   const TAG_COLORS = {vegano:'#22c55e',vegetariano:'#4ade80',picante:'#ef4444',popular:'${colorPrimario}',nuevo:'#3b82f6',premium:'#a855f7',especial:'#ec4899',clasico:'#6b7280'};
@@ -765,11 +801,23 @@ function showDetail(id) {
     ingsHtml += '<span class="ing-chip' + cls + '">' + (i.emoji ? '<span style="font-size:.85rem">' + i.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(i.nombre) + '</span></span>';
   }
 
+  // Declaración de alérgenos por NOMBRE (1169/2011 — el texto es lo legalmente exigible).
+  let alergHtml = '';
+  if (p.alergenos && p.alergenos.length) {
+    let chips = '';
+    for (const id of p.alergenos) {
+      const a = ALERG[id] || { nombre: id, emoji: '⚠️' };
+      chips += '<span class="alerg-chip">' + a.emoji + ' ' + esc(a.nombre) + '</span>';
+    }
+    alergHtml = '<h3 class="section-title">Alérgenos</h3><div class="alerg-list">' + chips + '</div>';
+  }
+
   document.getElementById('detail-content').innerHTML =
     '<div class="detail-header"><h2 class="detail-nombre">' + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '</h2><span class="detail-precio">' + fmt(p.precio) + '</span></div>' +
     (tagsHtml ? '<div class="detail-tags">' + tagsHtml + '</div>' : '') +
     (p.descripcion ? '<p class="detail-desc">' + esc(p.descripcion) + '</p>' : '') +
-    (ingsHtml ? '<h3 class="section-title">Ingredientes</h3><div class="ing-list">' + ingsHtml + '</div>' : '');
+    (ingsHtml ? '<h3 class="section-title">Ingredientes</h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
+    alergHtml;
 
   document.getElementById('detail-footer').innerHTML =
     '<button class="btn btn-primary" onclick="addToCart(\\'' + p.id + '\\');closeDetail()">' + T.add + ' ' + fmt(p.precio) + '</button>';

@@ -72,20 +72,28 @@ class MediaGeneratorModule extends BaseModule {
     });
   }
 
+  // Suscriptor de bus: ejecuta y PUBLICA la response (estilo evento).
   async _onGenerar(event) {
     const d = event?.data || event;
-    const request_id = d?.request_id;
-    const responder = (status, body) => {
-      try {
-        this.eventBus.publish('media.generar.response', {
-          request_id, status,
-          correlation_id: d?.correlation_id || crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-          ...body
-        });
-      } catch (_) {}
-    };
+    const r = await this._generar(d);
+    try {
+      this.eventBus.publish('media.generar.response', {
+        request_id: d?.request_id,
+        correlation_id: d?.correlation_id || crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        ...r
+      });
+    } catch (_) {}
+  }
 
+  // ui_handler: ejecuta y DEVUELVE {status, data|error} (probeable + invocable del frontend).
+  async handleGenerar(data) {
+    return this._generar(data || {});
+  }
+
+  // Núcleo compartido: RETORNA {status, data} | {status, error}.
+  async _generar(d) {
+    const responder = (status, body) => ({ status, ...body });
     try {
       // 1. CONTRATO
       if (!d?.tipo || !d?.prompt) {

@@ -12,6 +12,9 @@
   "eventos_que_escucho": [
     "media.generar.request"
   ],
+  "ui_handlers": [
+    { "domain": "media", "action": "generar", "handler": "handleGenerar" }
+  ],
   "tools_http": [
     {
       "name": "motor.imagen.google",

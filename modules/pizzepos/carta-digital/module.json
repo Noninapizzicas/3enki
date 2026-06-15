@@ -1,14 +1,34 @@
 {
   "_doc": "Modulo carta-digital — PROYECTOR del canal DIGITAL (JS clasico, gemelo de productos). NO compone ni guarda snapshots: proyecta la carta publica AL VUELO bebiendo de tarifas (que carta para el canal 'digital') + carta-manager (la carta) + carta-marketing (branding) + contenido (imagenes/descripcion por producto). Lo unico que posee: el config del canal (dominio_publico + opciones de PWA) en /pizzepos/carta-digital/config.json. El cf-worker/PWA sirve la proyeccion. Reemplaza la composicion por agentes (aparcados) del v1.x.",
   "name": "carta-digital",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "_v2_0_nota": "v2.0.0 (2026-06-15): REESCRITO como PROYECTOR (pieza 3 del subsistema digital). Antes era blueprint-puro que asumia agentes muertos (cartadigital-composer/ofertas/reviewer) para componer y duplicaba branding/productos en su config. Ahora: JS clasico que CACHEA el mapping canal->carta de tarifas y PROYECTA al vuelo {branding (de marca), categorias, productos (de carta-manager) con imagen/descripcion (de contenido), dominio, opciones}. Config encoge a dominio+opciones (sin branding, sin carta_compuesta de record -> nunca se queda viejo). Blueprint/context/prompt (LLM-runtime con agentes) archivados. NOTA: el frontend (4 zonas) se adapta a la proyeccion en la pieza 3b.",
   "description": "Proyector del canal digital: proyecta la carta publica al vuelo (tarifas+carta-manager+marca+contenido). Sirve get_carta_publica + get_config/update_config (config del canal). El POS no lo usa.",
   "language": "es",
+  "blueprint_driven": true,
+  "blueprint_path": "carta-digital.blueprint.json",
+  "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
+  "cajones_enabled": true,
+  "_v2_1_nota": "v2.1.0 (2026-06-15): HÍBRIDO. El index.js sigue siendo PROYECTOR (JS), pero ahora carta-digital tiene su BLUEPRINT (carta-digital.blueprint.json) con los cajones FUZZY de la página: el roster de especialistas (copywriter/marketing/director de arte/curador) que enriquece contenido + publicar. Antes ese trabajo estaba mal ubicado en contenido (huérfano: sin página). Corrige el hallazgo de auditoría nonina 2026-06-15. target_page_id = 'carta-digital' (default).",
   "ui_handlers": [
-    { "domain": "cartadigital", "action": "get_carta_publica", "handler": "handleGetCartaPublica", "description": "Proyecta la carta publica al vuelo (branding de marca + carta de carta-manager + imagenes de contenido)." },
-    { "domain": "cartadigital", "action": "get_config", "handler": "handleGetConfig", "description": "Lee el config del canal (dominio_publico + opciones_visualizacion)." },
-    { "domain": "cartadigital", "action": "update_config", "handler": "handleUpdateConfig", "description": "Actualiza el config del canal (solo dominio/opciones; branding/productos NO se guardan aqui, se beben)." }
+    {
+      "domain": "cartadigital",
+      "action": "get_carta_publica",
+      "handler": "handleGetCartaPublica",
+      "description": "Proyecta la carta publica al vuelo (branding de marca + carta de carta-manager + imagenes de contenido)."
+    },
+    {
+      "domain": "cartadigital",
+      "action": "get_config",
+      "handler": "handleGetConfig",
+      "description": "Lee el config del canal (dominio_publico + opciones_visualizacion)."
+    },
+    {
+      "domain": "cartadigital",
+      "action": "update_config",
+      "handler": "handleUpdateConfig",
+      "description": "Actualiza el config del canal (solo dominio/opciones; branding/productos NO se guardan aqui, se beben)."
+    }
   ],
   "config": {
     "persistence": {

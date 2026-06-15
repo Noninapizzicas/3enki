@@ -1,27 +1,60 @@
 {
   "_doc": "Modulo contenido — base de ENRIQUECIMIENTO AUDIOVISUAL por producto (HIBRIDO). Base COMPARTIDA: la beben los canales de PRESENTACION (carta-digital, carta-design); el POS NO la toca (pizzepos sigue lean, sin imagenes en su carta). El reflejo (index.js, ContenidoReflejo) sirve el CRUD determinista en el bus (contenido.<op>.request). HOY imagenes; la estructura reserva descripcion/audio/video/interaccion para anadir sin reestructurar (op set = deep-merge generico). Las imagenes son ficheros en /pizzepos/contenido/imagenes/; el store /pizzepos/contenido.json guarda solo la referencia.",
   "name": "contenido",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "_v1_1_nota": "v1.1.0 (2026-06-15): expone get/add_imagen/quitar_imagen/set como ui_handlers para que el FRONTEND suba/gestione imagenes por la puerta (mismos metodos deterministas que el bus).",
   "_v1_0_nota": "v1.0.0 (2026-06-15): base de enriquecimiento audiovisual. Sienta la estructura completa (imagenes·descripcion·audio·video·interaccion por producto) pero IMPLEMENTA solo imagenes (add_imagen/quitar_imagen/get) + la puerta extensible (set, deep-merge) para el resto. Reflejo hibrido modelado sobre carta-marketing (base unica + deep-merge).",
   "description": "Base de enriquecimiento audiovisual por producto. Reflejo JS sirve get/add_imagen/quitar_imagen/set en el bus. Base compartida que beben los canales de presentacion (digital, impresion); el POS no la usa.",
   "language": "es",
-  "blueprint_driven": true,
-  "blueprint_path": "contenido.blueprint.json",
-  "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
-  "target_page_id": "contenido",
-  "cajones_enabled": true,
+  "blueprint_driven": false,
+  "_v1_2_nota": "v1.2.0 (2026-06-15): contenido vuelve a REFLEJO PURO (almacén). Los cajones FUZZY (copywriter/director de arte/curador) que vivían aquí estaban mal ubicados — son trabajo de PÁGINA, y contenido no tiene página. Se mueven al blueprint de carta-digital (donde vive el ContenidoPanel). contenido solo sirve el CRUD determinista en el bus (contenido.<op>.request) + ui_handlers. blueprint_driven=false: módulo normal con index.js + subscribes. Hallazgo de auditoría nonina 2026-06-15.",
   "subscribes": [
-    { "event": "contenido.get.request", "handler": "onGetRequest", "description": "Reflejo JS: lee el enriquecimiento de un producto (o de todos)." },
-    { "event": "contenido.add_imagen.request", "handler": "onAddImagenRequest", "description": "Reflejo JS: anade una imagen (escribe el fichero base64 + guarda la referencia; primera = principal)." },
-    { "event": "contenido.quitar_imagen.request", "handler": "onQuitarImagenRequest", "description": "Reflejo JS: quita una imagen (referencia + fichero); promueve principal si hace falta." },
-    { "event": "contenido.set.request", "handler": "onSetRequest", "description": "Reflejo JS: puerta extensible — deep-merge de un parche (descripcion/audio/video/interaccion) sin op nueva." }
+    {
+      "event": "contenido.get.request",
+      "handler": "onGetRequest",
+      "description": "Reflejo JS: lee el enriquecimiento de un producto (o de todos)."
+    },
+    {
+      "event": "contenido.add_imagen.request",
+      "handler": "onAddImagenRequest",
+      "description": "Reflejo JS: anade una imagen (escribe el fichero base64 + guarda la referencia; primera = principal)."
+    },
+    {
+      "event": "contenido.quitar_imagen.request",
+      "handler": "onQuitarImagenRequest",
+      "description": "Reflejo JS: quita una imagen (referencia + fichero); promueve principal si hace falta."
+    },
+    {
+      "event": "contenido.set.request",
+      "handler": "onSetRequest",
+      "description": "Reflejo JS: puerta extensible — deep-merge de un parche (descripcion/audio/video/interaccion) sin op nueva."
+    }
   ],
   "ui_handlers": [
-    { "domain": "contenido", "action": "get", "handler": "handleGet", "description": "Frontend: lee el enriquecimiento de un producto (o todos)." },
-    { "domain": "contenido", "action": "add_imagen", "handler": "handleAddImagen", "description": "Frontend: sube una imagen (base64) a un producto." },
-    { "domain": "contenido", "action": "quitar_imagen", "handler": "handleQuitarImagen", "description": "Frontend: quita una imagen de un producto." },
-    { "domain": "contenido", "action": "set", "handler": "handleSet", "description": "Frontend: deep-merge de un parche (descripcion/audio/...)." }
+    {
+      "domain": "contenido",
+      "action": "get",
+      "handler": "handleGet",
+      "description": "Frontend: lee el enriquecimiento de un producto (o todos)."
+    },
+    {
+      "domain": "contenido",
+      "action": "add_imagen",
+      "handler": "handleAddImagen",
+      "description": "Frontend: sube una imagen (base64) a un producto."
+    },
+    {
+      "domain": "contenido",
+      "action": "quitar_imagen",
+      "handler": "handleQuitarImagen",
+      "description": "Frontend: quita una imagen de un producto."
+    },
+    {
+      "domain": "contenido",
+      "action": "set",
+      "handler": "handleSet",
+      "description": "Frontend: deep-merge de un parche (descripcion/audio/...)."
+    }
   ],
   "config": {
     "persistence": {

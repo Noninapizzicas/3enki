@@ -1310,11 +1310,17 @@ class ModuleLoader {
         }
 
         const errCode = loader._mapHttpStatusToCanonCode(response.status);
-        const errMessage = (parsed && typeof parsed === 'object' && parsed.message)
-          ? String(parsed.message)
+        // Extrae el mensaje del upstream: shape plano (parsed.message) o anidado
+        // REST/Google (parsed.error.message). Si nada, cae al status HTTP.
+        const upstreamMsg = (parsed && typeof parsed === 'object')
+          ? (parsed.message || parsed.error?.message || parsed.error?.status || (typeof parsed.error === 'string' ? parsed.error : null))
+          : (typeof parsed === 'string' ? parsed.slice(0, 300) : null);
+        const errMessage = upstreamMsg
+          ? String(upstreamMsg)
           : `HTTP ${response.status} ${response.statusText || ''}`.trim();
         return loader._httpErrorResponse(response.status, errCode, errMessage, {
-          upstream_status: response.status
+          upstream_status: response.status,
+          upstream_body: (parsed && typeof parsed === 'object') ? parsed : undefined
         });
       } catch (err) {
         return loader._httpErrorResponse(500, 'UNKNOWN_ERROR',

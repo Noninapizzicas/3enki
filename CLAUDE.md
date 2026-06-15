@@ -2298,7 +2298,8 @@ CLASE TarifasConfig {
   ATRIBUTOS {
     project_id: String
     general: String|Null (carta_id por default)
-    canales: {mesa?, llevar?, telefono?, whatsapp?, glovo?, llevadoo?}: String (carta_id)
+    canales: {mesa?, llevar?, telefono?, whatsapp?, glovo?, llevadoo?, digital?}: String (carta_id)
+    // digital = canal de la carta PÚBLICA online (lo proyecta carta-digital, gemelo de productos)
   }
 }
 ```

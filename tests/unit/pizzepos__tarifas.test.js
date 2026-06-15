@@ -136,7 +136,7 @@ function publishedOf(mocks, name) {
     const r = await m.toolAssign({ canal: 'bogus', carta_id: 'c1', project_id: 'p1' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.deepStrictEqual(r.error.details.valid_values, ['mesa', 'llevar', 'telefono', 'whatsapp', 'glovo', 'llevadoo']);
+    assert.deepStrictEqual(r.error.details.valid_values, ['mesa', 'llevar', 'telefono', 'whatsapp', 'glovo', 'llevadoo', 'digital']);
     await m.onUnload();
   });
 

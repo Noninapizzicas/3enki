@@ -15,7 +15,7 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const BaseModule = require('../../_shared/base-module');
-const CANALES_VALIDOS = ['mesa', 'llevar', 'telefono', 'whatsapp', 'glovo', 'llevadoo'];
+const CANALES_VALIDOS = ['mesa', 'llevar', 'telefono', 'whatsapp', 'glovo', 'llevadoo', 'digital'];
 
 class TarifasModule extends BaseModule {
   constructor() {

@@ -38,7 +38,7 @@ const TARIFAS_PATH = '/pizzepos/tarifas.json';
 const CARTAS_DIR = '/pizzepos/cartas/';
 
 /** Enum cerrado de canales (decision D4). Orden de render canonico. */
-export const CANALES_CANONICOS = ['mesa', 'telefono', 'llevar', 'glovo', 'whatsapp', 'llevadoo'] as const;
+export const CANALES_CANONICOS = ['mesa', 'telefono', 'llevar', 'glovo', 'whatsapp', 'llevadoo', 'digital'] as const;
 
 type Canal = (typeof CANALES_CANONICOS)[number];
 
@@ -106,7 +106,8 @@ const canalesVacios = (): Record<Canal, string | null> => ({
   llevar: null,
   glovo: null,
   whatsapp: null,
-  llevadoo: null
+  llevadoo: null,
+  digital: null
 });
 
 // =============================================================================

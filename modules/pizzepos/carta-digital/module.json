@@ -1,26 +1,26 @@
 {
-  "_doc": "Manifest del modulo carta-digital. NO tiene index.js (blueprint-driven). 4 operaciones (get_config, update_config, get_carta_publica, set_carta_compuesta). Persistencia: carta-digital.json del proyecto. Composicion real (PWA build, ofertas, copy) delegada a agentes via agent.execute.request. El directorio incluye artefactos NO blueprint (cf-worker/, export-cli.js, static-template.js, context.json, prompt.json) que son tooling de deploy de la PWA publica y coexisten con el blueprint sin conflicto.",
+  "_doc": "Modulo carta-digital — PROYECTOR del canal DIGITAL (JS clasico, gemelo de productos). NO compone ni guarda snapshots: proyecta la carta publica AL VUELO bebiendo de tarifas (que carta para el canal 'digital') + carta-manager (la carta) + carta-marketing (branding) + contenido (imagenes/descripcion por producto). Lo unico que posee: el config del canal (dominio_publico + opciones de PWA) en /pizzepos/carta-digital/config.json. El cf-worker/PWA sirve la proyeccion. Reemplaza la composicion por agentes (aparcados) del v1.x.",
   "name": "carta-digital",
-  "version": "1.1.0",
-  "description": "Modulo carta-digital en modo blueprint-driven. Backoffice de la carta publica: branding del proyecto + carta compuesta lista para servir al cliente.",
+  "version": "2.0.0",
+  "_v2_0_nota": "v2.0.0 (2026-06-15): REESCRITO como PROYECTOR (pieza 3 del subsistema digital). Antes era blueprint-puro que asumia agentes muertos (cartadigital-composer/ofertas/reviewer) para componer y duplicaba branding/productos en su config. Ahora: JS clasico que CACHEA el mapping canal->carta de tarifas y PROYECTA al vuelo {branding (de marca), categorias, productos (de carta-manager) con imagen/descripcion (de contenido), dominio, opciones}. Config encoge a dominio+opciones (sin branding, sin carta_compuesta de record -> nunca se queda viejo). Blueprint/context/prompt (LLM-runtime con agentes) archivados. NOTA: el frontend (4 zonas) se adapta a la proyeccion en la pieza 3b.",
+  "description": "Proyector del canal digital: proyecta la carta publica al vuelo (tarifas+carta-manager+marca+contenido). Sirve get_carta_publica + get_config/update_config (config del canal). El POS no lo usa.",
   "language": "es",
-  "blueprint_driven": true,
-  "blueprint_path": "carta-digital.blueprint.json",
-  "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
-  "target_page_id": "carta-digital",
+  "ui_handlers": [
+    { "domain": "cartadigital", "action": "get_carta_publica", "handler": "handleGetCartaPublica", "description": "Proyecta la carta publica al vuelo (branding de marca + carta de carta-manager + imagenes de contenido)." },
+    { "domain": "cartadigital", "action": "get_config", "handler": "handleGetConfig", "description": "Lee el config del canal (dominio_publico + opciones_visualizacion)." },
+    { "domain": "cartadigital", "action": "update_config", "handler": "handleUpdateConfig", "description": "Actualiza el config del canal (solo dominio/opciones; branding/productos NO se guardan aqui, se beben)." }
+  ],
   "config": {
     "persistence": {
       "scope": "project",
       "data_path": "pizzepos/carta-digital",
-      "pattern": "json-file-per-project",
+      "pattern": "single-json-per-project",
       "concurrency": "single-writer"
     },
     "artefactos_deploy_extras": [
       "cf-worker/ — Cloudflare Worker que sirve la carta publica al cliente final",
-      "export-cli.js — CLI para exportar carta compuesta a deploy",
-      "static-template.js — template HTML de la PWA",
-      "context.json, prompt.json — contexto LLM legacy (revisable)"
+      "export-cli.js — CLI para exportar la proyeccion a deploy",
+      "static-template.js — template HTML de la PWA"
     ]
-  },
-  "cajones_enabled": true
+  }
 }

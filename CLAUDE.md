@@ -1500,7 +1500,7 @@ REPARTO POR MÓDULO  (✓ = ya híbrido)
   carta-marketing✓  get_perfil/update_perfil/guardar_copy           completar_onboarding + generar_copy (LLM pagina, SIN agente)
   carta-manager  ✓  las 15 ops (save/get/list/delete/add_product/...)  cajones = delegadores finos al reflejo (AGGREGATE ROOT)
   productos      ✓  PROYECTOR sin estado (proyecta carta activa)    —   (sin store; lee carta-manager por RPC)
-  carta-digital     get/update_config · get/set carta_publica       —
+  carta-digital  ✓  PROYECTOR canal digital: get_carta_publica (proyecta al vuelo bebiendo tarifas+carta-manager+marca+contenido) · get/update_config (solo canal)   —   (JS clasico, gemelo de productos)
   carta-scheduler   crear/listar/eliminar_regla · detectar_conflictos —
   viabilidad     ✓  evaluar (delega escandallo.costear+normaliza·reglas food cost·caminos por regla) · obtener/listar/descartar  —  (paralelo a escandallo)
   carta-impresion   RETIRADO (2026-06-15, archivado) — carta-design absorbió la maquetación de impresión

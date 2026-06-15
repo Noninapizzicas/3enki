@@ -21,6 +21,7 @@
 
 const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+const { ALERGENOS, normalizar: normAlergenos } = require('../../_shared/alergenos');
 
 const DESIGNS_DIR = '/pizzepos/carta-design/designs/';
 const nowISO = () => new Date().toISOString();
@@ -83,9 +84,16 @@ class CartaDesignReflejo extends ModuloHibridoReflejo {
     const marcaResp = await this._rpc('carta-marketing.get_perfil.request',
       { project_id: input.project_id, correlation_id: input.correlation_id }, { timeout_ms: 6000 });
     const marca = (marcaResp && marcaResp.status === 200) ? marcaResp.data : null;
+    // Alérgenos (1169/2011): normaliza los códigos de cada producto al canon y adjunta
+    // el catálogo (id→nombre→emoji) para que el diseño IMPRESO los declare por su nombre.
+    const carta = cartaResp.data || {};
+    if (Array.isArray(carta.productos)) {
+      carta.productos = carta.productos.map(p => ({ ...p, alergenos: normAlergenos(p.alergenos) }));
+    }
     return { status: 200, data: {
-      carta: cartaResp.data,
-      marca   // {esencia, voz, publico, visual:{colores,tipografias,estilo,logo}, negocio} | null
+      carta,
+      marca,              // {esencia, voz, publico, visual:{colores,tipografias,estilo,logo}, negocio} | null
+      alergenos_catalogo: ALERGENOS   // los 14 del Anexo II (id, nombre, emoji) para declarar por nombre
     } };
   }
 

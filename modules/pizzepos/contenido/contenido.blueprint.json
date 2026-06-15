@@ -2,12 +2,15 @@
   "_doc": "Blueprint del modulo contenido (HIBRIDO). Base de ENRIQUECIMIENTO AUDIOVISUAL por producto. Las ops las SIRVE el REFLEJO JS (index.js); los cajones de aqui son DELEGADORES finos. Base COMPARTIDA: la beben los canales de PRESENTACION (carta-digital, carta-design); el POS NO. HOY imagenes; la estructura reserva el resto (descripcion/audio/video/interaccion) para crecer sin reestructurar.",
   "id": "contenido",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.1.0",
+  "version": "blueprint-1.2.0",
   "_v1_1_changelog": "v1.1.0 (2026-06-15): explicita la mitad LLM. El reflejo PERSISTE (nombra canonico, guarda referencia); el LLM de pagina RESUELVE (a que producto va cada imagen + el alt). Nuevo cajon vincular_imagen (espinazo LEER carta -> PENSAR resolver producto+alt -> GUARDAR add_imagen). bebe_de: carta-manager (los productos para vincular).",
+  "_v1_2_changelog": "v1.2.0 (2026-06-15): ROSTER DE ESPECIALISTAS — el LLM de pagina encarna al especialista que el usuario elija (brief_especialista) para enriquecer el producto. Primer especialista: COPYWRITER (cajon redactar_descripcion). Espinazo LEER {producto (carta) + voz (marca)} -> PENSAR como el copywriter EN la voz de marca -> GUARDAR contenido.set {descripcion}. bebe_de: + carta-marketing (la voz). Las dimensiones audio/musica/imagen-IA esperan su motor (provider) para sus especialistas.",
   "language": "es",
-  "rol": "Custodio del enriquecimiento audiovisual por producto (HIBRIDO). El REFLEJO (index.js) PERSISTE de forma determinista: nombra el fichero canonico (<product_id>__<id>.<ext> — la basura del nombre original NO se persiste), guarda la referencia y sirve el CRUD (get/add_imagen/quitar_imagen/set). El LLM de PAGINA hace lo FUZZY: VINCULAR cada imagen a su producto (de la intencion del usuario / nombre original) y redactar el alt. El POS no lo usa; lo beben los canales de presentacion.",
+  "rol": "Custodio del enriquecimiento audiovisual por producto (HIBRIDO). El REFLEJO (index.js) PERSISTE de forma determinista: nombra el fichero canonico (<product_id>__<id>.<ext> — la basura del nombre original NO se persiste), guarda la referencia y sirve el CRUD (get/add_imagen/quitar_imagen/set). El LLM de PAGINA hace lo FUZZY: VINCULAR cada imagen a su producto, redactar el alt, y ENCARNAR al ESPECIALISTA que el usuario elija (copywriter/marketing/...) para enriquecer el producto (descripcion hoy; audio/musica cuando haya motor). El POS no lo usa; lo beben los canales de presentacion.",
   "bebe_de": {
-    "carta-manager": "carta.get/list — los productos del proyecto, para que el LLM sepa a quien vincular cada imagen (no inventar product_id)."
+    "carta-manager": "carta.get/list — los productos del proyecto (nombre, ingredientes), para vincular imagenes y para que los especialistas trabajen FIEL (sin inventar ingredientes).",
+    "carta-marketing": "carta-marketing.get_perfil — la identidad de marca (esencia/voz/publico/visual). El copywriter escribe EN la voz; el disenador grafico pinta EN la linea visual. El brief la matiza, no la sustituye.",
+    "media-generator": "media.generar — el LIDER GENERADOR (provider-agnostico). El disenador grafico le pide la imagen (tipo:imagen, prompt); el lider la renderiza con el motor configurado."
   },
   "lo_beben": {
     "carta-digital": "la carta publica rica (imagenes/descripcion/media por producto).",
@@ -95,11 +98,87 @@
       "reglas_clave": ["Deep-merge: un parche parcial no pisa el resto.", "Las imagenes (lista) van por add_imagen/quitar_imagen, no por aqui."],
       "errores_posibles": ["INVALID_INPUT", "UPSTREAM_UNREACHABLE"],
       "_delega_en": "contenido.set.request (REFLEJO JS)"
+    },
+    "redactar_descripcion": {
+      "_es_fuzzy": true,
+      "_especialista": "COPYWRITER — primer miembro del roster. El LLM de pagina lo ENCARNA. El usuario puede concretar al que quiera via brief_especialista ('copywriter gastronomico ironico', 'tono Michelin', 'cercano de barrio'...).",
+      "input": "{ project_id (req), request_id (req), correlation_id?, product_id (req), brief_especialista? (la persona/tono a encarnar; default: copywriter apetecible en la voz de marca), carta_id? }",
+      "pseudocodigo": [
+        "async redactar_descripcion(input):",
+        "  // CAJON FUZZY — el LLM de PAGINA encarna al COPYWRITER (sin agente). Redacta la descripcion",
+        "  // del producto EN la voz de marca y DELEGA la persistencia al reflejo (set). Espinazo 5 fases:",
+        "  // 1. CONTRATO",
+        "  if (!input.project_id || !input.product_id) return INVALID_INPUT",
+        "  // 2. LEER — el producto (fidelidad) + la voz de marca (identidad) + lo que ya hay.",
+        "  carta    = await publishAndWait('carta.get.request', { project_id, carta_id?: input.carta_id })   // nombre + ingredientes del producto",
+        "  perfil   = await publishAndWait('carta-marketing.get_perfil.request', { project_id })             // marca.esencia + marca.voz + marca.publico (best-effort)",
+        "  actual   = await publishAndWait('contenido.get.request', { project_id, product_id: input.product_id })  // descripcion previa (para mejorar, no pisar a ciegas)",
+        "  producto = <el LLM localiza input.product_id en carta.productos>; if (!producto) return RESOURCE_NOT_FOUND",
+        "  // 3. PENSAR — el LLM, COMO el especialista del brief, EN la voz de marca:",
+        "  //    redacta una descripcion apetecible y FIEL (solo lo que el producto trae: nombre+ingredientes).",
+        "  descripcion = <el copywriter la escribe: 1-2 frases, apetecible, en la voz de marca, sin inventar>",
+        "  // 4. GUARDAR — por la PUERTA extensible del reflejo (deep-merge: solo toca descripcion).",
+        "  resp = await publishAndWait('contenido.set.request', { project_id, product_id: input.product_id, parche: { descripcion }, request_id: uuid() })",
+        "  // 5. (el reflejo ya emite contenido.actualizado -> la carta-digital/PWA re-proyecta con la nueva descripcion)",
+        "  return resp"
+      ],
+      "reglas_clave": [
+        "NO INVENTAR: la descripcion solo afirma lo que el producto trae (nombre + ingredientes de carta-manager). Nada de alergenos, origenes o premios que no consten.",
+        "EN LA VOZ DE MARCA: usa marca.voz (tono/registro/si/no) de carta-marketing.get_perfil. El brief_especialista MATIZA esa voz, no la sustituye. Si no hay marca, tono neutro apetecible y sugiere completar la marca en marketing.",
+        "BREVE: 1-2 frases. Apetecible, no floritura vacia. Coherente con el publico (marca.publico).",
+        "UNA POR LLAMADA (como vincular_imagen). Para varios productos, repetir o bucle de pagina.",
+        "El COSTE va al precio del plato, no a la descripcion: no menciones precio aqui (lo pone la carta)."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
+      "_nota": "NO esta en module.json.subscribes: lo ejecuta el LLM de pagina, no el reflejo. El reflejo solo sirve set (la persistencia). Anti-colision OK: redactar_descripcion (fuzzy) != contenido.set.request (reflejo)."
+    },
+    "generar_imagen": {
+      "_es_fuzzy": true,
+      "_especialista": "DISENADOR GRAFICO / FOTOGRAFO GASTRONOMICO — el LLM lo ENCARNA. brief_especialista concreta el estilo (cenital fondo oscuro, luz natural, bodegon rustico...).",
+      "input": "{ project_id (req), request_id (req), correlation_id?, product_id (req), brief_especialista?, opciones? (size/estilo para el motor), carta_id? }",
+      "pseudocodigo": [
+        "async generar_imagen(input):",
+        "  // CAJON FUZZY — el LLM ENCARNA al disenador grafico: redacta el PROMPT visual, pide el",
+        "  // asset al LIDER (media.generar, provider-agnostico) y delega la persistencia al reflejo.",
+        "  // 1. CONTRATO",
+        "  if (!input.project_id || !input.product_id) return INVALID_INPUT",
+        "  // 2. LEER — el producto (que es, ingredientes) + la identidad visual de marca.",
+        "  carta  = await publishAndWait('carta.get.request', { project_id, carta_id?: input.carta_id })",
+        "  perfil = await publishAndWait('carta-marketing.get_perfil.request', { project_id })   // marca.visual {colores, estilo} (best-effort)",
+        "  producto = <el LLM localiza input.product_id en carta.productos>; if (!producto) return RESOURCE_NOT_FOUND",
+        "  // 3. PENSAR — el disenador redacta el PROMPT de imagen: el PLATO REAL (nombre+ingredientes),",
+        "  //    fotografia gastronomica apetecible, EN la linea visual de marca (paleta/estilo). NO inventa ingredientes.",
+        "  prompt = <p.ej. 'Fotografia cenital de {producto.nombre}: {ingredientes_reales}, estilo {marca.visual.estilo}, paleta {marca.colores}, fondo apetecible, luz natural, alta resolucion'>",
+        "  // 4. GENERAR — pide el asset al LIDER. Puede tardar (motor externo); timeout amplio.",
+        "  gen = await publishAndWait('media.generar.request', { tipo: 'imagen', prompt, opciones: input.opciones || {} }, { timeout_ms: 95000 })",
+        "  if (!gen || gen.status >= 400) return <PROPAGA el error del lider tal cual: NO_MOTOR | PERMISSION_DENIED | UPSTREAM_* — NO finjas una imagen>",
+        "  // 5. GUARDAR — la foto generada (base64) va al reflejo, que la nombra canonica y persiste la referencia.",
+        "  alt = <el LLM redacta el alt accesible del plato (WCAG 1.1.1)>",
+        "  resp = await publishAndWait('contenido.add_imagen.request', { project_id, product_id: input.product_id, content: gen.data.asset_base64, ext: gen.data.ext, alt, request_id: uuid() })",
+        "  // 6. (el reflejo emite contenido.actualizado -> la PWA/proyeccion re-proyecta con la foto)",
+        "  return resp"
+      ],
+      "reglas_clave": [
+        "El PROMPT describe el PLATO REAL (nombre + ingredientes de carta-manager): no inventes ingredientes ni emplatados que no consten.",
+        "EN LA LINEA VISUAL DE MARCA: usa marca.visual (paleta/estilo) de get_perfil; brief_especialista matiza el estilo fotografico.",
+        "El asset lo produce el LIDER (media.generar), NO el LLM. Si NO_MOTOR o PERMISSION_DENIED, dilo claro (falta motor/credencial OPENAI_API_KEY) — no finjas una imagen.",
+        "El reflejo nombra el fichero canonico; el LLM aporta el ALT (accesibilidad), no el nombre de fichero.",
+        "UNA por llamada. La primera imagen de un producto es principal por defecto (lo decide el reflejo)."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "NO_MOTOR", "PERMISSION_DENIED", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
+      "_nota": "NO esta en module.json.subscribes: lo ejecuta el LLM de pagina. ENCADENA el LIDER (media.generar) + el REFLEJO (add_imagen). Anti-colision OK (cajon fuzzy != reflejo)."
     }
   },
+  "roster_especialistas": {
+    "_doc": "Cada dimension de contenido la enriquece un ESPECIALISTA (LLM de pagina con brief). El usuario concreta al que quiera. La descripcion ya tiene el suyo (copywriter); las demas esperan su MOTOR de generacion (provider) porque producen ASSETS reales, no texto.",
+    "copywriter": { "dimension": "descripcion", "cajon": "redactar_descripcion", "estado": "ACTIVO", "motor": "ninguno (solo texto — el LLM basta)" },
+    "disenador_grafico": { "dimension": "imagenes", "cajon": "generar_imagen (AI) + vincular_imagen/add_imagen (subida)", "estado": "ACTIVO (cajon)", "motor": "media-generator (LIDER) — tipo imagen. REQUIERE motor+credencial (OPENAI_API_KEY) para disparar; sin ella el cajon devuelve PERMISSION_DENIED claro. La subida manual sigue disponible sin motor." },
+    "sound_designer": { "dimension": "audio/musica", "cajon": "(reservado)", "estado": "ESPERA MOTOR", "motor": "necesita provider TTS/music-gen + credencial (no existe). El LLM produciria el guion/brief; el motor lo renderiza." }
+  },
   "trabajo_pendiente": [
-    { "id": "audio_video_interaccion", "estado": "reservado", "descripcion": "La estructura ya reserva audio[]/video[]/interaccion{}. Se rellenan cuando toque via set (o ops dedicadas como add_audio si conviene). HOY solo imagenes." },
-    { "id": "frontend_subida_imagenes", "estado": "abierto", "descripcion": "UI para subir imagenes (file picker -> base64 -> contenido.add_imagen) en el panel de carta-digital o productos. Pieza siguiente." },
+    { "id": "descripcion_copywriter", "estado": "HECHO", "descripcion": "Cajon redactar_descripcion (v1.2.0): el copywriter redacta la descripcion por producto en la voz de marca y la persiste via set. La proyeccion/PWA ya la muestra." },
+    { "id": "audio_musica_motor", "estado": "espera_motor", "descripcion": "audio[]/musica necesitan un PROVIDER de generacion (TTS/music-gen) + credencial antes de tener su especialista. La estructura (set) ya los reserva." },
+    { "id": "imagen_ia_cableada", "estado": "HECHO (falta credencial)", "descripcion": "Cajon generar_imagen: el disenador grafico redacta el prompt -> media.generar (LIDER) -> add_imagen. Cableado de punta a punta. Para DISPARAR de verdad falta la credencial OPENAI_API_KEY (o apuntar el motor a otro backend); sin ella el cajon devuelve PERMISSION_DENIED claro. La subida manual sigue sin motor." },
     { "id": "validacion_tamano_tipo", "estado": "abierto", "descripcion": "Limitar tamano/tipo de imagen (el frontend valida antes; el reflejo podria reforzar)." }
   ]
 }

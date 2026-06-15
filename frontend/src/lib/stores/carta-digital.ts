@@ -29,12 +29,20 @@ export interface BrandingProyectado {
   negocio?: Record<string, unknown>;
 }
 
+export interface AlergenoLeyenda {
+  id: string;
+  nombre: string;
+  emoji: string;
+  orden?: number;
+}
+
 export interface CartaPublica {
   branding: BrandingProyectado | null;
   dominio_publico: string | null;
   opciones: Record<string, unknown>;
   categorias: any[];
   productos: any[];
+  alergenos_leyenda?: AlergenoLeyenda[];
   generado_at?: string;
 }
 

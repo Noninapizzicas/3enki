@@ -6,7 +6,7 @@
   "zone": "work-bar",
   "order": 6,
   "routes": [
-    "/carta1"
+    "/carta-digital"
   ],
   "icon": "📱",
   "label": "Carta digital"

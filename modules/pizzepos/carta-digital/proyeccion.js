@@ -1,5 +1,7 @@
 'use strict';
 
+const { normalizar: normAlergenos, etiquetar: etiquetarAlergenos } = require('../../_shared/alergenos');
+
 /**
  * Proyección PURA de la carta pública — la misma forma para los dos consumidores:
  *   - el REFLEJO (index.js) trae carta/marca/contenido/config por RPC del bus y llama aquí.
@@ -24,10 +26,14 @@ function proyectarCartaPublica(carta, marca, contenido, config) {
     .filter(c => c.activa !== false)
     .sort((a, b) => (a.orden || 0) - (b.orden || 0));
 
+  const presentes = new Set();
   const productos = (Array.isArray(carta.productos) ? carta.productos : []).map(p => {
     const c = cont[p.id] || {};
     const imgs = Array.isArray(c.imagenes) ? c.imagenes : [];
     const principal = imgs.find(im => im.principal) || imgs[0] || null;
+    // Alérgenos CANÓNICOS (1169/2011): normaliza el código legacy → 14 del Anexo II.
+    const alergenos = normAlergenos(p.alergenos);
+    for (const a of alergenos) presentes.add(a);
     return {
       id: p.id,
       nombre: p.nombre,
@@ -37,9 +43,12 @@ function proyectarCartaPublica(carta, marca, contenido, config) {
       descripcion: c.descripcion || p.descripcion || '',
       imagen: principal ? principal.url : null,
       imagenes: imgs,
-      ingredientes: Array.isArray(p.ingredientes) ? p.ingredientes : (p.ingredientes_base || [])
+      ingredientes: Array.isArray(p.ingredientes) ? p.ingredientes : (p.ingredientes_base || []),
+      alergenos
     };
   });
+  // Leyenda: solo los alérgenos que aparecen en la carta, en orden del Anexo II (id/nombre/emoji).
+  const alergenos_leyenda = etiquetarAlergenos([...presentes]);
 
   const branding = marca ? {
     nombre: marca.esencia?.nombre || null,
@@ -57,6 +66,7 @@ function proyectarCartaPublica(carta, marca, contenido, config) {
     opciones: cfg.opciones_visualizacion || {},
     categorias,
     productos,
+    alergenos_leyenda,
     generado_at: new Date().toISOString()
   };
 }

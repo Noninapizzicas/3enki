@@ -31,7 +31,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["gluten", "lactosa", "huevo", "pescado", "marisco", "frutos_secos", "soja", "apio", "mostaza", "sesamo", "sulfitos", "altramuces"]
+            "enum": ["gluten", "crustaceos", "huevo", "pescado", "cacahuetes", "soja", "lacteos", "frutos_cascara", "apio", "mostaza", "sesamo", "sulfitos", "altramuces", "moluscos"]
           }
         },
         "disponible": {

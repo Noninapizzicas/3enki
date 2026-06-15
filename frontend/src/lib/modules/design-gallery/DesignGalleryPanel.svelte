@@ -21,7 +21,8 @@
     cartaResumen,
     clearDesignError,
     loadDesignHtml,
-    deleteDesign
+    deleteDesign,
+    markDesignOficial
   } from '$lib/stores/carta-design';
   import type { DesignMeta } from '$lib/stores/carta-design';
   // La carta base la sirve carta-manager (CUSTODIO de /pizzepos/cartas/). Bebemos de SU
@@ -112,6 +113,18 @@
     await deleteDesign(d.filename);
     busy = null;
   }
+
+  async function marcarOficial(d: DesignMeta) {
+    const cid = $cartaDesignStore.cartaId;
+    if (!cid) return;
+    busy = d.filename;
+    await markDesignOficial(cid, d.filename);
+    busy = null;
+  }
+
+  // Es el oficial de la carta seleccionada.
+  $: esOficial = (d: DesignMeta) =>
+    !!$cartaDesignStore.cartaId && $cartaDesignStore.oficial[$cartaDesignStore.cartaId] === d.filename;
 </script>
 
 <div class="panel">
@@ -169,12 +182,13 @@
       {:else}
         <div class="gallery">
           {#each $designGallery as design}
-            <div class="design-card">
+            <div class="design-card" class:oficial={esOficial(design)}>
               <div class="design-info">
-                <span class="design-name">{design.nombre || design.filename}</span>
+                <span class="design-name">{esOficial(design) ? '⭐ ' : ''}{design.nombre || design.filename}{esOficial(design) ? ' · OFICIAL' : ''}</span>
                 <span class="design-meta">{design.formato ? design.formato + ' · ' : ''}{formatDate(design.generado_at || design.created_at || '')} · {formatSize(design.size_bytes)}</span>
               </div>
               <div class="design-actions">
+                <button title={esOficial(design) ? 'Es la oficial' : 'Marcar como oficial'} disabled={busy === design.filename || esOficial(design)} on:click={() => marcarOficial(design)}>{esOficial(design) ? '⭐' : '☆'}</button>
                 <button title="Ver" disabled={busy === design.filename} on:click={() => verDesign(design)}>👁️</button>
                 <button title="Imprimir" disabled={busy === design.filename} on:click={() => imprimirDesign(design)}>🖨️</button>
                 <button title="Descargar" disabled={busy === design.filename} on:click={() => descargarDesign(design)}>⬇️</button>
@@ -287,6 +301,12 @@
     border-radius: 6px;
     font-size: 0.8rem;
   }
+
+  .design-card.oficial {
+    border: 1px solid var(--color-accent, #eab308);
+    box-shadow: inset 2px 0 0 var(--color-accent, #eab308);
+  }
+  .design-card.oficial .design-name { color: var(--color-accent, #eab308); font-weight: 600; }
 
   .design-actions { display: flex; gap: 4px; flex-shrink: 0; }
   .design-actions button {

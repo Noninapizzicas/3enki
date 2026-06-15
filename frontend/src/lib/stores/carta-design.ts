@@ -51,11 +51,13 @@ export interface CartaDesignState {
   resumen: CartaResumen | null;
   cartaLoaded: boolean;
   designs: DesignMeta[];
+  oficial: Record<string, string>;   // carta_id → filename del diseño OFICIAL (el que se imprime/publica)
   loading: boolean;
   error: string | null;
 }
 
 const DESIGNS_DIR = '/pizzepos/carta-design/designs';
+const OFICIAL_PATH = `${DESIGNS_DIR}/_oficial.json`;   // puntero { carta_id → filename oficial }
 const CARTAS_DIR = '/pizzepos/cartas';   // CUSTODIO: carta-manager. Path canonico.
 
 // =============================================================================
@@ -68,6 +70,7 @@ const initialState: CartaDesignState = {
   resumen: null,
   cartaLoaded: false,
   designs: [],
+  oficial: {},
   loading: false,
   error: null
 };
@@ -171,7 +174,8 @@ export async function loadCartaForDesign(cartaId: string): Promise<boolean> {
 export async function loadGallery(cartaId: string): Promise<void> {
   try {
     const items = await listDirOrEmpty(DESIGNS_DIR);
-    const metaFiles = items.filter(i => i.type === 'file' && i.name.endsWith('.json'));
+    // .json de diseño = meta; se excluyen los ficheros internos (p.ej. _oficial.json).
+    const metaFiles = items.filter(i => i.type === 'file' && i.name.endsWith('.json') && !i.name.startsWith('_'));
 
     const designs: DesignMeta[] = [];
     for (const f of metaFiles) {
@@ -185,9 +189,26 @@ export async function loadGallery(cartaId: string): Promise<void> {
       )
     );
 
-    cartaDesignStore.update(s => ({ ...s, designs }));
+    // Puntero de oficiales { carta_id → filename }.
+    const oficial = (await readJsonOrNull<Record<string, string>>(OFICIAL_PATH)) || {};
+
+    cartaDesignStore.update(s => ({ ...s, designs, oficial }));
   } catch (err) {
     console.error('[CartaDesign] loadGallery failed:', err);
+  }
+}
+
+// Marca un diseño como el OFICIAL de su carta (el que se imprime/publica). Una por carta.
+export async function markDesignOficial(cartaId: string, filename: string): Promise<boolean> {
+  try {
+    const oficial = (await readJsonOrNull<Record<string, string>>(OFICIAL_PATH)) || {};
+    oficial[cartaId] = filename;
+    await mqttRequest('fs', 'write', { path: OFICIAL_PATH, content: JSON.stringify(oficial, null, 2) });
+    cartaDesignStore.update(s => ({ ...s, oficial }));
+    return true;
+  } catch (err) {
+    cartaDesignStore.update(s => ({ ...s, error: (err as Error).message || 'No se pudo marcar la oficial' }));
+    return false;
   }
 }
 
@@ -208,7 +229,12 @@ export async function deleteDesign(filename: string): Promise<boolean> {
   try {
     await mqttRequest('fs', 'delete', { path: `${DESIGNS_DIR}/${filename}` });
     try { await mqttRequest('fs', 'delete', { path: `${DESIGNS_DIR}/${metaName}` }); } catch { /* meta puede no existir */ }
-    cartaDesignStore.update(s => ({ ...s, designs: s.designs.filter(d => d.filename !== filename) }));
+    // Si era el oficial de alguna carta, limpiar el puntero (no dejarlo apuntando a un muerto).
+    const oficial = (await readJsonOrNull<Record<string, string>>(OFICIAL_PATH)) || {};
+    let cambiado = false;
+    for (const k of Object.keys(oficial)) { if (oficial[k] === filename) { delete oficial[k]; cambiado = true; } }
+    if (cambiado) { try { await mqttRequest('fs', 'write', { path: OFICIAL_PATH, content: JSON.stringify(oficial, null, 2) }); } catch { /* best-effort */ } }
+    cartaDesignStore.update(s => ({ ...s, designs: s.designs.filter(d => d.filename !== filename), oficial }));
     return true;
   } catch (err) {
     cartaDesignStore.update(s => ({ ...s, error: (err as Error).message || 'No se pudo borrar el diseño' }));

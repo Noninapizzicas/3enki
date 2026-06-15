@@ -31,6 +31,6 @@
   "integrations": {
     "listens_to": ["project.activated", "carta.actualizada", "tarifas.config.actualizada"],
     "depends_on": ["carta-manager", "carta-marketing", "tarifas"],
-    "complementa": ["carta-impresion", "carta-design"]
+    "complementa": ["carta-design"]
   }
 }

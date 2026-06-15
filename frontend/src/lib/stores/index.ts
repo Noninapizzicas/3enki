@@ -272,20 +272,7 @@ export {
 } from './carta-marketing';
 export type { PerfilMarca, MarketingActividad, MarketingState } from './carta-marketing';
 
-// Carta Impresion Store
-export {
-  impresionStore,
-  loadImpresion,
-  generarImpresion,
-  selectCarta as selectCartaImpresion,
-  clearError as clearImpresionError,
-  initImpresionSubscriptions,
-  selectedImpresion,
-  impresionLoading,
-  impresionError,
-  generatingCartas
-} from './carta-impresion';
-export type { ImpresionMeta, ImpresionItem, ImpresionState } from './carta-impresion';
+// (Carta Impresion retirado v2026-06-15 — carta-design absorbe la maquetación de impresión)
 
 // HTML Preview Store
 export {

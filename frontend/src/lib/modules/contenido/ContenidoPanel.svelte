@@ -21,6 +21,15 @@
     );
   }
 
+  // Convoca al DISEÑADOR GRÁFICO (cajón generar_imagen): redacta el prompt visual y pide
+  // la foto al líder generador. Requiere motor+credencial (si no, devuelve error claro).
+  function convocarDisenador(prod: any) {
+    prefillChatInput(
+      `Como diseñador gráfico, genera una imagen del producto "${prod.nombre}" (id: ${prod.id}) en la línea visual de la marca. ` +
+      `[opcional: concreta el estilo fotográfico — p.ej. "cenital fondo oscuro" o "bodegón rústico con luz natural"]`
+    );
+  }
+
   onMount(() => {
     loadCartaPublica();
     cleanup = initCartaDigitalSubscriptions();
@@ -65,8 +74,9 @@
             <span class="nombre">{prod.nombre}</span>
             <div class="acciones-prod">
               <button class="copy-btn" title="Redactar descripción (copywriter)" on:click={() => convocarCopywriter(prod)}>✍️ Descripción</button>
+              <button class="copy-btn" title="Generar imagen (diseñador gráfico)" on:click={() => convocarDisenador(prod)}>🎨 Imagen IA</button>
               <label class="subir">
-                + Imagen
+                + Subir
                 <input type="file" accept="image/*" on:change={(e) => onFile(prod.id, e)} disabled={$contenidoBusy === prod.id} />
               </label>
             </div>

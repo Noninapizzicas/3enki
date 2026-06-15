@@ -163,6 +163,7 @@
     "6. Generar HTML+CSS (fase 4) y llamar design.save"
   ],
   "reglas_de_oro": [
+    "GUARDA SIEMPRE con design.save (que persiste en el path canónico /pizzepos/carta-design/designs/ con su meta y lo deja visible en la galería). NUNCA escribas el HTML con fs.write a un path inventado (ni en la raíz, ni con nombre propio) — eso esparce los diseños fuera de la galería y los pierde.",
     "Si CONTEXTO ACTIVO.vista_frontend.carta_id está presente, ESA es la carta que el usuario tiene en pantalla → úsala sin preguntar cuál (nervio del frontend).",
     "ARRANCA con design.contexto_diseno — trae carta + marca de una vez.",
     "BEBE la marca: colores, tipografías, logo, eslogan y voz salen de marca.* — NO los re-preguntes ni los inventes si ya están.",

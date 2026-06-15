@@ -1500,7 +1500,7 @@ REPARTO POR MÓDULO  (✓ = ya híbrido)
   carta-scheduler   crear/listar/eliminar_regla · detectar_conflictos —
   viabilidad     ✓  evaluar (delega escandallo.costear+normaliza·reglas food cost·caminos por regla) · obtener/listar/descartar  —  (paralelo a escandallo)
   carta-impresion   RETIRADO (2026-06-15, archivado) — carta-design absorbió la maquetación de impresión
-  carta-design   ✓  contexto_diseno (HIDRATA carta+marca)·load_carta·save·gallery (sin profiles)  diseño HTML (LLM página SIEMBRA desde marca) + MAQUETACIÓN (A5/A4/A3·orient·plegado·2-4col) + galería gestión (ver/descargar/imprimir/borrar)
+  carta-design   ✓  contexto_diseno (HIDRATA carta+marca)·load_carta·save·gallery (sin profiles)  diseño HTML (LLM página SIEMBRA desde marca) + MAQUETACIÓN (A5/A4/A3·orient·plegado·2-4col) + galería gestión (ver/descargar/imprimir/borrar/marcar-oficial)
   tecnicas          codificar/obtener/listar/actualizar/parametros  —
   menu-generator    —   (sin store propio · solo blueprint)         generar (carta desde texto/foto) · preparar (añade recetas a carta, contra base)
 ```

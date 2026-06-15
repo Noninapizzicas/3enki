@@ -1,0 +1,10 @@
+{
+  "id": "contenido",
+  "name": "Imágenes",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 7,
+  "routes": ["/carta-digital"],
+  "icon": "🖼️",
+  "label": "Imágenes"
+}

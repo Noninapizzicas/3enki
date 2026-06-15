@@ -10,9 +10,10 @@
  * edita aquí es el config del canal: dominio_publico + opciones de PWA (update_config).
  */
 
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
 import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request';
+import { activeProjectId } from './projects';
 
 // =============================================================================
 // TYPES
@@ -62,7 +63,8 @@ export async function loadCartaPublica(): Promise<void> {
   cartaDigitalLoading.set(true);
   cartaDigitalError.set(null);
   try {
-    const res = await mqttRequest<CartaPublica>('cartadigital', 'get_carta_publica');
+    const project_id = get(activeProjectId);
+    const res = await mqttRequest<CartaPublica>('cartadigital', 'get_carta_publica', { project_id });
     cartaPublica.set((res.data as CartaPublica) ?? null);
   } catch (err) {
     if (err instanceof MqttRequestError && err.code === 'RESOURCE_NOT_FOUND') {
@@ -78,7 +80,8 @@ export async function loadCartaPublica(): Promise<void> {
 /** Config del canal (dominio + opciones de PWA) — lo único que se edita aquí. */
 export async function loadCartaDigitalConfig(): Promise<void> {
   try {
-    const res = await mqttRequest<CartaDigitalConfig>('cartadigital', 'get_config');
+    const project_id = get(activeProjectId);
+    const res = await mqttRequest<CartaDigitalConfig>('cartadigital', 'get_config', { project_id });
     cartaDigitalConfig.set((res.data as CartaDigitalConfig) ?? { _version: '1.0', opciones_visualizacion: {} });
   } catch (err) {
     if (err instanceof MqttRequestError && err.code === 'RESOURCE_NOT_FOUND') {
@@ -92,7 +95,8 @@ export async function loadCartaDigitalConfig(): Promise<void> {
 /** Actualiza el config del canal (solo dominio/opciones; el branding se edita en marketing). */
 export async function updateCartaDigitalConfig(campos: Partial<CartaDigitalConfig>): Promise<boolean> {
   try {
-    await mqttRequest('cartadigital', 'update_config', { campos });
+    const project_id = get(activeProjectId);
+    await mqttRequest('cartadigital', 'update_config', { project_id, campos });
     await loadCartaDigitalConfig();
     return true;
   } catch (err) {

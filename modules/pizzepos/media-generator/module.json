@@ -1,0 +1,58 @@
+{
+  "name": "media-generator",
+  "version": "1.0.0",
+  "description": "El LÍDER GENERADOR: puerto provider-agnóstico media.generar (request→response) que enruta por TIPO (imagen/audio/musica) al MOTOR concreto configurado. El motor real es un tools_http (el loader resuelve credencial + fetch + response_path). El especialista LLM (diseñador gráfico, sound designer) redacta el prompt y pide al puerto; el líder lo renderiza con el motor que esté puesto. Cambiar de motor = cambiar config, no el especialista. Degradable: tipo sin motor → NO_MOTOR (sin reventar). Motor de imagen por defecto: OpenAI Images (credencial OPENAI_API_KEY); swappable a SD/local cambiando el tools_http + motores.imagen.tool.",
+  "author": "pizzepos",
+  "language": "javascript",
+  "main": "index.js",
+  "horizonte": "infra de generación de assets para el roster de especialistas de contenido",
+  "eventos_publicados": [
+    "media.generar.response"
+  ],
+  "eventos_que_escucho": [
+    "media.generar.request"
+  ],
+  "tools_http": [
+    {
+      "name": "motor.imagen.openai",
+      "description": "Genera una imagen (PNG, base64) desde un prompt. Motor por defecto del tipo 'imagen' del líder generador. OpenAI Images API.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string", "description": "Descripción visual de la imagen a generar." },
+          "model": { "type": "string", "description": "Modelo de imagen (dall-e-3 | gpt-image-1...)." },
+          "size": { "type": "string", "description": "Tamaño (1024x1024, 1024x1792, 1792x1024)." }
+        },
+        "required": ["prompt"]
+      },
+      "http": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/images/generations",
+        "auth_type": "bearer",
+        "credential_id": "OPENAI_API_KEY",
+        "body_template": {
+          "model": "{{model}}",
+          "prompt": "{{prompt}}",
+          "size": "{{size}}",
+          "n": 1,
+          "response_format": "b64_json"
+        },
+        "response_path": "data.0.b64_json",
+        "timeout_ms": 90000
+      }
+    }
+  ],
+  "config": {
+    "motores": {
+      "imagen": {
+        "tool": "motor.imagen.openai",
+        "defaults": { "model": "dall-e-3", "size": "1024x1024" },
+        "ext": "png",
+        "asset_es_url": false
+      }
+    }
+  },
+  "dependencies": {
+    "credential-manager": "para resolver OPENAI_API_KEY (auth del motor)"
+  }
+}

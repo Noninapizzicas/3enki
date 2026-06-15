@@ -1,0 +1,146 @@
+{
+  "_doc": "Blueprint de carta-digital (HÍBRIDO: proyector JS + esta mitad LLM). Es el ESTUDIO de la carta digital cara-cliente. Sin agentes: los ESPECIALISTAS (copywriter, marketing, director de arte, curador visual) son PERSONAS que el LLM de la página ENCARNA, guiado por estos cajones. El blueprint NUNCA toca fs: lee por la puerta de los dueños (carta-manager, carta-marketing, contenido) y persiste por el reflejo de contenido. El píxel/audio lo produce el LÍDER (media.generar), nunca el LLM.",
+  "id": "carta-digital",
+  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+  "version": "blueprint-1.0.0",
+  "_v1_0_changelog": "v1.0.0 (2026-06-15): nace el blueprint de carta-digital. Recoge el trabajo FUZZY de la página (enriquecimiento por especialistas) que antes estaba mal ubicado en contenido (huérfano: contenido no tiene página). carta-digital es la página donde vive el ContenidoPanel y los botones ✍️/🎨, así que aquí cargan los cajones. contenido queda como REFLEJO PURO (almacén). Hallazgo de auditoría nonina 2026-06-15.",
+  "language": "es",
+  "rol": "Estudio de la carta DIGITAL (PWA cara-cliente). El proyector (index.js, JS) LEE y proyecta la carta pública (get_carta_publica) + sirve la config del canal. Esta mitad LLM ENRIQUECE cada producto encarnando a los especialistas (copywriter/marketing/director de arte/curador) y delega TODA persistencia al reflejo de contenido. El POS no lo usa; es el canal de presentación online.",
+  "roster_especialistas": {
+    "_doc": "Cada cajón fuzzy lo ejecuta el LLM ENCARNANDO una persona. brief_especialista la concreta ('tono irónico de barrio', 'registro Michelin'). La persona MATIZA la voz de marca, no la sustituye.",
+    "copywriter":      { "cajon": "redactar_descripcion", "produce": "descripción del plato en la voz de marca", "motor": "ninguno (texto)" },
+    "marketing":       { "cajon": "redactar_gancho",      "produce": "reclamo/etiqueta corta (promo, 'el más pedido', etc.)", "motor": "ninguno (texto)" },
+    "director_de_arte":{ "cajon": "generar_imagen",       "produce": "prompt visual → foto del plato", "motor": "media.generar (LÍDER)" },
+    "curador_visual":  { "cajon": "vincular_imagen",      "produce": "a qué producto va una imagen subida + su alt", "motor": "ninguno (matching)" },
+    "sound_designer":  { "cajon": "(reservado)",          "produce": "audio/música ambiente", "motor": "media.generar (falta motor audio)" }
+  },
+  "bebe_de": {
+    "carta-manager":   "carta.get — el producto a enriquecer (nombre, ingredientes). Para trabajar FIEL, sin inventar.",
+    "carta-marketing": "carta-marketing.get_perfil — la identidad de marca (voz + visual). El especialista escribe/pinta EN ella.",
+    "contenido":       "contenido.get/set/add_imagen — el ALMACÉN (reflejo). LEE el estado actual; PERSISTE por su puerta.",
+    "media-generator": "media.generar — el LÍDER (provider-agnóstico). El director de arte le pide la imagen; el líder la renderiza."
+  },
+  "eventos_publicados": [
+    "carta-digital.redactar_descripcion.response", "carta-digital.redactar_gancho.response",
+    "carta-digital.generar_imagen.response", "carta-digital.vincular_imagen.response",
+    "carta-digital.publicar.response"
+  ],
+  "eventos_que_escucho": [],
+  "invariantes": [
+    "El LLM NUNCA toca fs: entra por la puerta del reflejo dueño (carta.get / get_perfil / contenido.*).",
+    "NO INVENTA: solo afirma lo que LEER trajo (nombre + ingredientes reales). Nada de alérgenos/orígenes/premios no constatados.",
+    "EN LA MARCA: usa marca.voz (texto) y marca.visual (imagen). El brief matiza, no sustituye.",
+    "El asset (píxel/audio) lo produce el LÍDER (media.generar), NO el LLM. Si el líder no da asset (NO_MOTOR/PERMISSION_DENIED), PROPAGA el error — NO finjas una imagen ni afirmes éxito sin evento.",
+    "UNA unidad por llamada (un producto, una imagen). Para varios, repetir o bucle de página."
+  ],
+  "operaciones": {
+    "redactar_descripcion": {
+      "_es_fuzzy": true,
+      "_especialista": "COPYWRITER",
+      "input": "{ project_id (req), product_id (req), brief_especialista?, carta_id? }",
+      "pseudocodigo": [
+        "async redactar_descripcion(in):",
+        "  // 1. CONTRATO",
+        "  if (!in.project_id || !in.product_id) return INVALID_INPUT",
+        "  // 2. LEER (puertas — nunca fs)",
+        "  carta    = await publishAndWait('carta.get.request', { project_id: in.project_id, carta_id: in.carta_id })",
+        "  perfil   = await publishAndWait('carta-marketing.get_perfil.request', { project_id: in.project_id })   // best-effort",
+        "  actual   = await publishAndWait('contenido.get.request', { project_id: in.project_id, product_id: in.product_id })",
+        "  producto = localizar(in.product_id, carta.productos); if (!producto) return RESOURCE_NOT_FOUND",
+        "  // 3. PENSAR — COPYWRITER(brief) en perfil.voz, sin inventar, 1-2 frases",
+        "  descripcion = <el LLM la redacta>",
+        "  // 4. GUARDAR (reflejo) — EMITIR (contenido.actualizado) lo hace el reflejo",
+        "  return await publishAndWait('contenido.set.request', { project_id: in.project_id, product_id: in.product_id, parche: { descripcion } })"
+      ],
+      "reglas_clave": [
+        "EN la voz de marca (marca.voz: tono/registro/si/no). Si no hay marca, tono neutro apetecible + sugiere completar marca.",
+        "NO inventar: solo nombre + ingredientes reales del producto. Sin precio (lo pone la carta).",
+        "Breve: 1-2 frases apetecibles, coherentes con marca.publico."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+    "redactar_gancho": {
+      "_es_fuzzy": true,
+      "_especialista": "MARKETING",
+      "input": "{ project_id (req), product_id (req), brief_especialista?, carta_id? }",
+      "pseudocodigo": [
+        "async redactar_gancho(in):",
+        "  if (!in.project_id || !in.product_id) return INVALID_INPUT",
+        "  carta  = await publishAndWait('carta.get.request', { project_id: in.project_id, carta_id: in.carta_id })",
+        "  perfil = await publishAndWait('carta-marketing.get_perfil.request', { project_id: in.project_id })",
+        "  producto = localizar(in.product_id, carta.productos); if (!producto) return RESOURCE_NOT_FOUND",
+        "  // PENSAR — MARKETING: un reclamo CORTO (etiqueta/promo), en la voz, sin prometer lo que no hay",
+        "  gancho = <el LLM lo redacta: 2-5 palabras, p.ej. 'El más pedido' / 'Receta de la casa'>",
+        "  // GUARDAR — va al campo interaccion/etiqueta del contenido (puerta extensible set)",
+        "  return await publishAndWait('contenido.set.request', { project_id: in.project_id, product_id: in.product_id, parche: { interaccion: { gancho } } })"
+      ],
+      "reglas_clave": [
+        "MUY corto (etiqueta, no párrafo). En la voz de marca.",
+        "NO prometas lo que no consta (ni 'sin gluten' ni 'el mejor' sin base). Honesto."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_UNREACHABLE"]
+    },
+    "generar_imagen": {
+      "_es_fuzzy": true,
+      "_especialista": "DIRECTOR_DE_ARTE",
+      "input": "{ project_id (req), product_id (req), brief_especialista?, opciones?, carta_id? }",
+      "pseudocodigo": [
+        "async generar_imagen(in):",
+        "  if (!in.project_id || !in.product_id) return INVALID_INPUT",
+        "  carta  = await publishAndWait('carta.get.request', { project_id: in.project_id, carta_id: in.carta_id })",
+        "  perfil = await publishAndWait('carta-marketing.get_perfil.request', { project_id: in.project_id })",
+        "  producto = localizar(in.product_id, carta.productos); if (!producto) return RESOURCE_NOT_FOUND",
+        "  // PENSAR — DIRECTOR DE ARTE: redacta el PROMPT visual (plato real + marca.visual), sin inventar",
+        "  prompt = <p.ej. 'Fotografía cenital de {producto.nombre}: {ingredientes_reales}, estilo {marca.visual.estilo}, paleta {marca.visual.colores}, luz natural, apetecible'>",
+        "  // GENERAR — el LÍDER (provider-agnóstico). Propaga su error TAL CUAL.",
+        "  gen = await publishAndWait('media.generar.request', { tipo: 'imagen', prompt, opciones: in.opciones || {} }, { timeout_ms: 95000 })",
+        "  if (!gen || gen.status >= 400) return gen.error   // NO_MOTOR | PERMISSION_DENIED | UPSTREAM_* — NO finjas imagen",
+        "  // GUARDAR — el reflejo nombra canónico; el LLM aporta el alt accesible",
+        "  alt = <el LLM redacta el alt del plato>",
+        "  return await publishAndWait('contenido.add_imagen.request', { project_id: in.project_id, product_id: in.product_id, content: gen.data.asset_base64, ext: gen.data.ext, alt })"
+      ],
+      "reglas_clave": [
+        "El PROMPT describe el PLATO REAL (nombre + ingredientes de carta-manager). No inventes emplatados ni ingredientes.",
+        "EN la línea visual de marca (marca.visual: paleta/estilo). brief matiza el estilo fotográfico.",
+        "El asset lo da el LÍDER, NO el LLM. Si NO_MOTOR/PERMISSION_DENIED: dilo claro (falta motor/credencial), no finjas.",
+        "El reflejo nombra el fichero canónico; el LLM aporta el ALT (accesibilidad 1.1.1), no el nombre de fichero."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "NO_MOTOR", "PERMISSION_DENIED", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+    "vincular_imagen": {
+      "_es_fuzzy": true,
+      "_especialista": "CURADOR_VISUAL",
+      "input": "{ project_id (req), content (req, base64), ext (req), pista? (nombre original o lo que dijo el usuario), carta_id? }",
+      "pseudocodigo": [
+        "async vincular_imagen(in):",
+        "  if (!in.project_id || !in.content || !in.ext) return INVALID_INPUT",
+        "  carta = await publishAndWait('carta.get.request', { project_id: in.project_id, carta_id: in.carta_id })",
+        "  // PENSAR — CURADOR: resuelve a QUÉ producto va (matching pista↔productos) + redacta el alt",
+        "  { product_id } = <el LLM lo resuelve>; if (!product_id) return PREGUNTAR_AL_USUARIO   // no_inventes",
+        "  alt = <el LLM lo redacta>",
+        "  // GUARDAR — delega al reflejo (nombra canónico, persiste referencia)",
+        "  return await publishAndWait('contenido.add_imagen.request', { project_id: in.project_id, product_id, content: in.content, ext: in.ext, alt })"
+      ],
+      "reglas_clave": [
+        "NO inventes product_id: resuélvelo contra los productos reales; si no hay match claro, PREGUNTA.",
+        "El renombrado del fichero es del reflejo (canónico), no del LLM. El LLM aporta el alt (display)."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+    "publicar": {
+      "_es_fuzzy": false,
+      "_nota": "HOY no hay deploy automático desde el chat: la PWA se exporta con carta-digital/export-cli.js (offline) o se sirve por el proyector get_carta_publica. NO finjas un despliegue. Explica al usuario el estado real y, si pide, lista los pasos del export-cli. (Pieza de deploy frontend = pendiente.)",
+      "input": "{ project_id (req) }",
+      "pseudocodigo": [
+        "async publicar(in):",
+        "  // Sin op de deploy viva. Informa con honestidad (no_silent_failures a nivel UX):",
+        "  return { status: 200, data: { aviso: 'La carta pública ya se proyecta en vivo (get_carta_publica). El bundle estático se genera con export-cli (offline); el deploy automático desde el chat está pendiente.' } }"
+      ],
+      "errores_posibles": ["INVALID_INPUT"]
+    }
+  },
+  "trabajo_pendiente": [
+    { "id": "deploy_frontend", "estado": "abierto", "descripcion": "Op real de publicación desde el chat (generateStaticHTML server-side → bundle → cf-worker/Pages). Hoy es CLI offline." },
+    { "id": "sound_designer", "estado": "espera_motor", "descripcion": "Cajón generar_audio cuando media-generator tenga motor de audio (TTS/music). La estructura de contenido ya reserva audio[]." }
+  ]
+}

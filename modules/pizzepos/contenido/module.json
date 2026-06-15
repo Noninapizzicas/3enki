@@ -6,12 +6,8 @@
   "_v1_0_nota": "v1.0.0 (2026-06-15): base de enriquecimiento audiovisual. Sienta la estructura completa (imagenes·descripcion·audio·video·interaccion por producto) pero IMPLEMENTA solo imagenes (add_imagen/quitar_imagen/get) + la puerta extensible (set, deep-merge) para el resto. Reflejo hibrido modelado sobre carta-marketing (base unica + deep-merge).",
   "description": "Base de enriquecimiento audiovisual por producto. Reflejo JS sirve get/add_imagen/quitar_imagen/set en el bus. Base compartida que beben los canales de presentacion (digital, impresion); el POS no la usa.",
   "language": "es",
-  "blueprint_driven": true,
-  "blueprint_path": "contenido.blueprint.json",
-  "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
-  "target_page_id": "carta-digital",
-  "_target_page_nota": "v1.2.0 (2026-06-15): target_page_id = 'carta-digital' (NO 'contenido'). El ContenidoPanel (botones ✍️ copywriter / 🎨 diseñador) vive en /carta-digital, que es PROYECTOR puro (sin blueprint propio). Apuntando aquí, el LLM de la página carta-digital recibe los cajones de enriquecimiento (redactar_descripcion, generar_imagen, vincular_imagen, set). Sin esto los cajones eran HUÉRFANOS: no existe ruta /contenido, así que ningún chat los cargaba (hallazgo de auditoría nonina 2026-06-15). carta-digital no es blueprint_driven → sin colisión de page_id.",
-  "cajones_enabled": true,
+  "blueprint_driven": false,
+  "_v1_2_nota": "v1.2.0 (2026-06-15): contenido vuelve a REFLEJO PURO (almacén). Los cajones FUZZY (copywriter/director de arte/curador) que vivían aquí estaban mal ubicados — son trabajo de PÁGINA, y contenido no tiene página. Se mueven al blueprint de carta-digital (donde vive el ContenidoPanel). contenido solo sirve el CRUD determinista en el bus (contenido.<op>.request) + ui_handlers. blueprint_driven=false: módulo normal con index.js + subscribes. Hallazgo de auditoría nonina 2026-06-15.",
   "subscribes": [
     {
       "event": "contenido.get.request",

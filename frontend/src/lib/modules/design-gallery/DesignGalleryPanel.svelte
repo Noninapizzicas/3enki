@@ -25,9 +25,8 @@
   // store, no de menu.list (dueño viejo) ni filtrando estado='generada' (vocabulario que
   // ya no existe: carta-manager usa borrador/en_servicio/archivada).
   import { sortedCartas, loadCartas, cartasLoading } from '$lib/stores/carta-manager';
-  // Nervio del frontend: reportamos al chat qué carta está viendo el usuario.
-  import { get } from 'svelte/store';
-  import { setVista, clearVista } from '$lib/stores/vista-actual';
+  // El nervio del frontend (qué carta ve el usuario) lo cubre vista-bridge de forma
+  // central, leyendo cartaDesignStore.cartaId — el panel no necesita reportar nada.
 
   export let panelId: string = '';
 
@@ -51,15 +50,11 @@
 
   onDestroy(() => {
     cleanup?.();
-    clearVista();   // al salir de carta-design, el chat deja de "ver" esta carta
   });
 
   async function selectCarta(cartaId: string) {
     await loadCartaForDesign(cartaId);
     await loadGallery(cartaId);
-    // El chat ahora sabe qué carta está en pantalla (sin tener que preguntarlo).
-    const s = get(cartaDesignStore);
-    setVista({ page: 'carta-design', carta_id: s.cartaId, carta_nombre: s.cartaNombre });
   }
 
   function formatDate(iso: string): string {

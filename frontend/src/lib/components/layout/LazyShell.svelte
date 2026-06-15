@@ -23,6 +23,7 @@
   } from '$lib/ui-core/lazy-registry';
   import { closePanel } from '$lib/stores/ui';
   import { initWorkspaceSubscriptions, initChatSubscriptions, initProjectsSubscriptions, initConversations, initHtmlPreviewSubscriptions } from '$lib/stores';
+  import { initVistaBridge } from '$lib/stores/vista-bridge';
   import { moduleDefinitions, criticalModules } from '$lib/modules/definitions';
   import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
 
@@ -44,6 +45,7 @@
   let cleanupProjects: (() => void) | null = null;
   let cleanupConversations: (() => void) | null = null;
   let cleanupHtmlPreview: (() => void) | null = null;
+  let cleanupVista: (() => void) | null = null;
   let panelComponent: any = null;
 
   onMount(async () => {
@@ -80,6 +82,10 @@
     // 3d-extra. Panel HTML preview (cartas de impresión y otros módulos)
     cleanupHtmlPreview = initHtmlPreviewSubscriptions();
 
+    // 3d-bis. Nervio del frontend: refleja la selección de la página en la vista
+    // que el chat manda al LLM (qué carta/receta/factura/dispositivo está viendo).
+    cleanupVista = initVistaBridge();
+
     // 3d. Registrar handler de visibilidad (HyperOS/MIUI fix)
     setupVisibilityHandler();
 
@@ -102,6 +108,7 @@
     if (cleanupProjects) cleanupProjects();
     if (cleanupConversations) cleanupConversations();
     if (cleanupHtmlPreview) cleanupHtmlPreview();
+    if (cleanupVista) cleanupVista();
 
     // Desconectar MQTT
     disconnect();

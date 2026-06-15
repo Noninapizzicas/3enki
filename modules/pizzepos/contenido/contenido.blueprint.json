@@ -2,10 +2,13 @@
   "_doc": "Blueprint del modulo contenido (HIBRIDO). Base de ENRIQUECIMIENTO AUDIOVISUAL por producto. Las ops las SIRVE el REFLEJO JS (index.js); los cajones de aqui son DELEGADORES finos. Base COMPARTIDA: la beben los canales de PRESENTACION (carta-digital, carta-design); el POS NO. HOY imagenes; la estructura reserva el resto (descripcion/audio/video/interaccion) para crecer sin reestructurar.",
   "id": "contenido",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.0.0",
+  "version": "blueprint-1.1.0",
+  "_v1_1_changelog": "v1.1.0 (2026-06-15): explicita la mitad LLM. El reflejo PERSISTE (nombra canonico, guarda referencia); el LLM de pagina RESUELVE (a que producto va cada imagen + el alt). Nuevo cajon vincular_imagen (espinazo LEER carta -> PENSAR resolver producto+alt -> GUARDAR add_imagen). bebe_de: carta-manager (los productos para vincular).",
   "language": "es",
-  "rol": "Custodio del enriquecimiento audiovisual por producto. El REFLEJO (index.js) sirve el CRUD: get (lee), add_imagen/quitar_imagen (gestiona la lista de imagenes-fichero), set (puerta extensible deep-merge para descripcion/audio/video/interaccion). El POS no lo usa; lo beben los canales de presentacion.",
-  "bebe_de": {},
+  "rol": "Custodio del enriquecimiento audiovisual por producto (HIBRIDO). El REFLEJO (index.js) PERSISTE de forma determinista: nombra el fichero canonico (<product_id>__<id>.<ext> — la basura del nombre original NO se persiste), guarda la referencia y sirve el CRUD (get/add_imagen/quitar_imagen/set). El LLM de PAGINA hace lo FUZZY: VINCULAR cada imagen a su producto (de la intencion del usuario / nombre original) y redactar el alt. El POS no lo usa; lo beben los canales de presentacion.",
+  "bebe_de": {
+    "carta-manager": "carta.get/list — los productos del proyecto, para que el LLM sepa a quien vincular cada imagen (no inventar product_id)."
+  },
   "lo_beben": {
     "carta-digital": "la carta publica rica (imagenes/descripcion/media por producto).",
     "carta-design": "el diseno impreso puede usar imagenes/descripcion del producto."
@@ -48,9 +51,37 @@
     "add_imagen": {
       "input": "{ project_id (req), request_id (req), correlation_id?, product_id (req), content (req — base64 del fichero), ext (req — 'jpg'|'png'|'webp'...), alt?, principal? }",
       "pseudocodigo": ["async add_imagen(input):", "  resp = await publishAndWait('contenido.add_imagen.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })", "  return resp"],
-      "reglas_clave": ["La primera imagen es principal por defecto.", "El fichero se escribe en /pizzepos/contenido/imagenes/; el store guarda la url."],
+      "reglas_clave": ["La primera imagen es principal por defecto.", "El fichero se escribe en /pizzepos/contenido/imagenes/; el store guarda la url.", "Esta op DELEGA al reflejo: se usa cuando el product_id YA se conoce. Si hay que RESOLVERLO, usar vincular_imagen."],
       "errores_posibles": ["INVALID_INPUT", "UPSTREAM_UNREACHABLE"],
       "_delega_en": "contenido.add_imagen.request (REFLEJO JS)"
+    },
+    "vincular_imagen": {
+      "_es_fuzzy": true,
+      "input": "{ project_id (req), request_id (req), correlation_id?, content (req — base64), ext (req), pista? (nombre original del fichero o lo que dijo el usuario, p.ej. 'esta es la Samba' / 'pizza_atun.jpg') }",
+      "pseudocodigo": [
+        "async vincular_imagen(input):",
+        "  // CAJON FUZZY — lo ejecuta el LLM de PAGINA (sin agente). Resuelve A QUE producto va la",
+        "  // imagen y le da un alt, luego DELEGA la persistencia al reflejo (add_imagen).",
+        "  // 1. CONTRATO",
+        "  if (!input.project_id || !input.content || !input.ext) return INVALID_INPUT",
+        "  // 2. LEER — los productos del proyecto (carta-manager), para no inventar product_id.",
+        "  carta = await publishAndWait('carta.get.request' | 'carta.list.request', { project_id, ... })   // o usar la carta del contexto de pagina",
+        "  // 3. PENSAR — el LLM resuelve product_id (matching pista/intencion <-> productos de la carta)",
+        "  //    + redacta un alt descriptivo. Si NO hay match claro, PREGUNTA al usuario (no_inventes_datos).",
+        "  product_id = <el LLM lo resuelve de la pista contra la carta>",
+        "  alt = <el LLM lo redacta>",
+        "  // 4. GUARDAR — delega al reflejo, que nombra canonico y persiste la referencia.",
+        "  resp = await publishAndWait('contenido.add_imagen.request', { project_id, product_id, content: input.content, ext: input.ext, alt, request_id: uuid() })",
+        "  // 5. (el reflejo ya emite contenido.actualizado)",
+        "  return resp"
+      ],
+      "reglas_clave": [
+        "El LLM NO inventa product_id: lo resuelve contra los productos reales de carta-manager; si no hay match, pregunta.",
+        "El renombrado del fichero NO es del LLM — lo hace el reflejo (canonico). El LLM aporta el alt (display), no el nombre de fichero.",
+        "Para varias imagenes sueltas, repetir vincular_imagen por cada una (o un bucle de pagina)."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
+      "_nota": "NO esta en module.json.subscribes: lo ejecuta el LLM de pagina, no el reflejo. El reflejo solo sirve add_imagen (la persistencia)."
     },
     "quitar_imagen": {
       "input": "{ project_id (req), request_id (req), correlation_id?, product_id (req), imagen_id (req) }",

@@ -1,52 +1,51 @@
 <script lang="ts">
   /**
-   * IdentidadZone - branding + contacto fusionados (D2). Solo lectura + prefill (Postura B).
+   * IdentidadZone — branding + negocio, BEBIDOS de la marca (proyección). Solo lectura.
+   * El branding se edita en MARKETING, no aquí. El dominio público sí es del canal.
    */
-  import { cartaDigitalConfig } from '$lib/stores/carta-digital';
-  import { prefillChatInput } from '$lib/stores/chatInputDraft';
+  import { cartaPublica, cartaDigitalConfig } from '$lib/stores/carta-digital';
 
-  function editarBranding() {
-    prefillChatInput('Cambia el branding de la carta digital: [describe cambios: nombre, lema, colores, logo, fuente].');
-  }
-  function editarContacto() {
-    prefillChatInput('Actualiza los datos de contacto de la carta digital: [telefono, email, web, redes].');
-  }
+  $: branding = $cartaPublica?.branding ?? null;
+  $: negocio = (branding?.negocio ?? {}) as Record<string, any>;
+  $: local = (negocio.local ?? {}) as Record<string, any>;
+  $: redes = (negocio.redes ?? {}) as Record<string, any>;
+  const tieneKeys = (o: Record<string, unknown> | undefined | null) => !!o && Object.keys(o).length > 0;
 </script>
 
 <section class="zona-identidad">
   <h2>Identidad del local</h2>
-  <p class="hint">Datos que el cliente final ve en la carta pública.</p>
+  <p class="hint">Lo que el cliente ve. El branding viene de la <strong>marca</strong> — se edita en marketing.</p>
 
-  {#if $cartaDigitalConfig}
+  {#if branding}
     <div class="subseccion">
-      <h3>Branding</h3>
+      <h3>Branding (de la marca)</h3>
       <dl>
-        {#if $cartaDigitalConfig.branding?.nombre}<dt>Nombre</dt><dd>{$cartaDigitalConfig.branding.nombre}</dd>{/if}
-        {#if $cartaDigitalConfig.branding?.lema}<dt>Lema</dt><dd>{$cartaDigitalConfig.branding.lema}</dd>{/if}
-        {#if $cartaDigitalConfig.branding?.colores}<dt>Colores</dt><dd><pre>{JSON.stringify($cartaDigitalConfig.branding.colores, null, 2)}</pre></dd>{/if}
-        {#if $cartaDigitalConfig.branding?.logo_url}<dt>Logo</dt><dd><img src={$cartaDigitalConfig.branding.logo_url} alt="logo" /></dd>{/if}
-        {#if $cartaDigitalConfig.branding?.fuente}<dt>Fuente</dt><dd>{$cartaDigitalConfig.branding.fuente}</dd>{/if}
+        {#if branding.nombre}<dt>Nombre</dt><dd>{branding.nombre}</dd>{/if}
+        {#if branding.lema}<dt>Lema</dt><dd>{branding.lema}</dd>{/if}
+        {#if tieneKeys(branding.colores)}<dt>Colores</dt><dd><pre>{JSON.stringify(branding.colores, null, 2)}</pre></dd>{/if}
+        {#if branding.logo}<dt>Logo</dt><dd><img src={branding.logo} alt="logo" /></dd>{/if}
+        {#if tieneKeys(branding.tipografias)}<dt>Tipografías</dt><dd><pre>{JSON.stringify(branding.tipografias, null, 2)}</pre></dd>{/if}
       </dl>
-      <button on:click={editarBranding}>Editar branding</button>
     </div>
 
-    <div class="subseccion">
-      <h3>Contacto</h3>
-      <dl>
-        {#if $cartaDigitalConfig.contacto?.telefono}<dt>Teléfono</dt><dd>{$cartaDigitalConfig.contacto.telefono}</dd>{/if}
-        {#if $cartaDigitalConfig.contacto?.email}<dt>Email</dt><dd>{$cartaDigitalConfig.contacto.email}</dd>{/if}
-        {#if $cartaDigitalConfig.contacto?.web}<dt>Web</dt><dd>{$cartaDigitalConfig.contacto.web}</dd>{/if}
-        {#if $cartaDigitalConfig.contacto?.redes}<dt>Redes</dt><dd><pre>{JSON.stringify($cartaDigitalConfig.contacto.redes, null, 2)}</pre></dd>{/if}
-      </dl>
-      <button on:click={editarContacto}>Editar contacto</button>
-    </div>
-
-    {#if $cartaDigitalConfig.dominio_publico}
+    {#if tieneKeys(local) || tieneKeys(redes)}
       <div class="subseccion">
-        <h3>Dominio público</h3>
-        <a href={$cartaDigitalConfig.dominio_publico} target="_blank" rel="noopener">{$cartaDigitalConfig.dominio_publico}</a>
+        <h3>Negocio</h3>
+        <dl>
+          {#each Object.entries(local) as [k, v]}<dt>{k}</dt><dd>{typeof v === 'object' ? JSON.stringify(v) : v}</dd>{/each}
+          {#if tieneKeys(redes)}<dt>Redes</dt><dd><pre>{JSON.stringify(redes, null, 2)}</pre></dd>{/if}
+        </dl>
       </div>
     {/if}
+  {:else}
+    <p class="hint">Sin marca definida todavía — complétala en marketing.</p>
+  {/if}
+
+  {#if $cartaDigitalConfig?.dominio_publico}
+    <div class="subseccion">
+      <h3>Dominio público</h3>
+      <a href={$cartaDigitalConfig.dominio_publico} target="_blank" rel="noopener">{$cartaDigitalConfig.dominio_publico}</a>
+    </div>
   {/if}
 </section>
 
@@ -88,8 +87,5 @@
   }
   img {
     max-height: 50px;
-  }
-  button {
-    cursor: pointer;
   }
 </style>

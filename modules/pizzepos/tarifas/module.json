@@ -1,6 +1,6 @@
 {
   "name": "tarifas",
-  "version": "3.1.1",
+  "version": "3.2.0",
   "_v3_1_1_changelog": "v3.1.1 (2026-06-01): aplica TP4 del contrato subsistema-carta v1.0.0. Declaracion explicita en events.publishes.tarifas.config.actualizada.description de que correlation_id es OBLIGATORIO en el payload, alineado con P9/D10 del contrato (correlation_id obligatorio en los 5 eventos canonicos del subsistema). Cero cambio en runtime --el helper centralizado de publishes (index.js lineas ~76-91) ya construye correlation_id en todos los publishes desde antes. Bump patch porque el comportamiento no cambia; solo se afina la documentacion.",
   "description": "Asignacion carta+canal + registro de variantes pizzepos. Cada canal tiene su carta con precios finales escritos. Sin calculos en runtime, sin duplicacion (tarifas-creator y tarifas-sync agentes lo hacen). Publica tarifas.config.actualizada con el snapshot completo del proyecto en cada cambio; suscribe tarifas.config.solicitada para que otros modulos hidraten su cache sin acoplamiento directo.",
   "author": "Pizzepos Team",
@@ -82,7 +82,7 @@
     },
     {
       "name": "tarifas.assign",
-      "description": "Asigna una carta a un canal. Si carta_id es null, el canal vuelve a usar la general. Canales: mesa, llevar, telefono, whatsapp, glovo, llevadoo.",
+      "description": "Asigna una carta a un canal. Si carta_id es null, el canal vuelve a usar la general. Canales: mesa, llevar, telefono, whatsapp, glovo, llevadoo, digital (canal de la carta publica online).",
       "handler": "toolAssign",
       "parameters": {
         "type": "object",
@@ -95,7 +95,8 @@
               "telefono",
               "whatsapp",
               "glovo",
-              "llevadoo"
+              "llevadoo",
+              "digital"
             ],
             "description": "Canal de venta"
           },

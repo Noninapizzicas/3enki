@@ -1440,6 +1440,10 @@ DIRECTORIO POR PROYECTO  (data/projects/{slug}/storage/)
 BASE              dueño            store                 puerta (RPC) para beber
 recetas+catálogo  recetas       /pizzepos/recetas.json  recetas.{listar,obtener,ingredientes}.request
 perfil de marca   carta-marketing /pizzepos/marca.json   carta-marketing.get_perfil.request
+contenido AV      contenido     /pizzepos/contenido.json contenido.{get,add_imagen,quitar_imagen,set}.request
+   (enriquecimiento audiovisual por producto: imagenes·descripcion·audio·video·interaccion.
+    HOY imagenes; resto reservado. La beben los canales de PRESENTACIÓN (carta-digital, carta-design);
+    el POS NO la toca → pizzepos sigue lean, sin imágenes en su carta. Imágenes = ficheros; el json apunta.)
 
   ejemplos de quién bebe:
     escandallo, viabilidad  ← recetas+catálogo  (costear, evaluar)
@@ -1496,7 +1500,7 @@ REPARTO POR MÓDULO  (✓ = ya híbrido)
   carta-marketing✓  get_perfil/update_perfil/guardar_copy           completar_onboarding + generar_copy (LLM pagina, SIN agente)
   carta-manager  ✓  las 15 ops (save/get/list/delete/add_product/...)  cajones = delegadores finos al reflejo (AGGREGATE ROOT)
   productos      ✓  PROYECTOR sin estado (proyecta carta activa)    —   (sin store; lee carta-manager por RPC)
-  carta-digital     get/update_config · get/set carta_publica       —
+  carta-digital  ✓  PROYECTOR canal digital: get_carta_publica (proyecta al vuelo bebiendo tarifas+carta-manager+marca+contenido) · get/update_config (solo canal)   —   (JS clasico, gemelo de productos)
   carta-scheduler   crear/listar/eliminar_regla · detectar_conflictos —
   viabilidad     ✓  evaluar (delega escandallo.costear+normaliza·reglas food cost·caminos por regla) · obtener/listar/descartar  —  (paralelo a escandallo)
   carta-impresion   RETIRADO (2026-06-15, archivado) — carta-design absorbió la maquetación de impresión
@@ -2294,7 +2298,8 @@ CLASE TarifasConfig {
   ATRIBUTOS {
     project_id: String
     general: String|Null (carta_id por default)
-    canales: {mesa?, llevar?, telefono?, whatsapp?, glovo?, llevadoo?}: String (carta_id)
+    canales: {mesa?, llevar?, telefono?, whatsapp?, glovo?, llevadoo?, digital?}: String (carta_id)
+    // digital = canal de la carta PÚBLICA online (lo proyecta carta-digital, gemelo de productos)
   }
 }
 ```

@@ -33,7 +33,10 @@ class MediaGeneratorModule extends BaseModule {
     this.logger = core.logger;
     this.eventBus = core.eventBus;
     this.metrics = core.metrics;
-    this.config = (core.config && core.config['media-generator']) || {};
+    // Config: global override (core.config['media-generator']) o la del module.json
+    // (core.moduleConfig, que el loader inyecta desde manifest.config). Antes solo leía
+    // la global y se perdía motores.imagen del manifest → NO_MOTOR aunque estuviera puesto.
+    this.config = (core.config && core.config['media-generator']) || core.moduleConfig || {};
     // motores: { <tipo>: { tool, defaults?, ext?, asset_es_url?, asset_field? } }
     this.motores = this.config.motores || {};
 
@@ -42,7 +45,7 @@ class MediaGeneratorModule extends BaseModule {
 
     this.logger?.info('module.loaded', {
       module: this.name, version: this.version,
-      motores: Object.keys(this.motores), tipos_listos: Object.keys(this.motores).filter(t => this.motores[t]?.tool)
+      motores: Object.keys(this.motores), tipos_listos: Object.keys(this.motores).filter(t => this.motores[t]?.tool || this.motores[t]?.kind)
     });
   }
 

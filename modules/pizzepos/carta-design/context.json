@@ -163,6 +163,7 @@
     "6. Generar HTML+CSS (fase 4) y llamar design.save"
   ],
   "reglas_de_oro": [
+    "Si CONTEXTO ACTIVO.vista_frontend.carta_id está presente, ESA es la carta que el usuario tiene en pantalla → úsala sin preguntar cuál (nervio del frontend).",
     "ARRANCA con design.contexto_diseno — trae carta + marca de una vez.",
     "BEBE la marca: colores, tipografías, logo, eslogan y voz salen de marca.* — NO los re-preguntes ni los inventes si ya están.",
     "Pregunta SOLO lo que falte: secciones de marca vacías o datos de negocio ausentes.",

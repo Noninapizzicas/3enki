@@ -18,6 +18,7 @@ import { attachments, clearAttachments } from './attachments';
 import { activeProjectId } from './projects';
 import { activeProvider, activeModel } from './workspace';
 import { notifyError, notifyInfo } from './ui';
+import { getVista } from './vista-actual';
 import { generateUUID } from '$lib/utils';
 
 /**
@@ -148,7 +149,10 @@ export async function sendMessage(content: string): Promise<void> {
       project_id: currentProjectId,
       page_id: getPageRoute(),
       conversation_id: convId,
-      context: {},
+      // Nervio del frontend: lo que el usuario ESTÁ VIENDO ahora. El backend lo
+      // inyecta en el system prompt (prompt-builder → "CONTEXTO ACTIVO"). Vacío si
+      // la página no reporta vista. Bajo `vista_frontend` para que el LLM lo reconozca.
+      context: ((v) => (Object.keys(v).length > 0 ? { vista_frontend: v } : {}))(getVista()),
       settings,
       prompt: null,
       attachments: currentAttachments.map(a => a.path),

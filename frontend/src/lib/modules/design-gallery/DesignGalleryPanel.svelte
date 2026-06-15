@@ -25,6 +25,9 @@
   // store, no de menu.list (dueño viejo) ni filtrando estado='generada' (vocabulario que
   // ya no existe: carta-manager usa borrador/en_servicio/archivada).
   import { sortedCartas, loadCartas, cartasLoading } from '$lib/stores/carta-manager';
+  // Nervio del frontend: reportamos al chat qué carta está viendo el usuario.
+  import { get } from 'svelte/store';
+  import { setVista, clearVista } from '$lib/stores/vista-actual';
 
   export let panelId: string = '';
 
@@ -48,11 +51,15 @@
 
   onDestroy(() => {
     cleanup?.();
+    clearVista();   // al salir de carta-design, el chat deja de "ver" esta carta
   });
 
   async function selectCarta(cartaId: string) {
     await loadCartaForDesign(cartaId);
     await loadGallery(cartaId);
+    // El chat ahora sabe qué carta está en pantalla (sin tener que preguntarlo).
+    const s = get(cartaDesignStore);
+    setVista({ page: 'carta-design', carta_id: s.cartaId, carta_nombre: s.cartaNombre });
   }
 
   function formatDate(iso: string): string {
@@ -125,12 +132,9 @@
           {#each $designGallery as design}
             <div class="design-card">
               <div class="design-info">
-                <span class="design-name">{design.nombre}</span>
-                <span class="design-meta">{formatDate(design.created_at)} · {formatSize(design.size_bytes)}</span>
+                <span class="design-name">{design.nombre || design.filename}</span>
+                <span class="design-meta">{formatDate(design.generado_at || design.created_at || '')} · {formatSize(design.size_bytes)}</span>
               </div>
-              {#if design.profile_id}
-                <span class="design-profile">{design.profile_id}</span>
-              {/if}
             </div>
           {/each}
         </div>

@@ -21,7 +21,7 @@ const path   = require('path');
 const Ajv    = require('ajv/dist/2020');
 const addFormats = require('ajv-formats');
 
-const MercadonaApiModule = require('../../modules/mercadona-api/index.js');
+const MercadonaApiModule = require('../../modules/pizzepos/mercadona-api/index.js');
 
 const SCHEMAS_DIR = path.resolve(__dirname, '../../arquitectura/decisiones/_schemas/mercadona-api');
 

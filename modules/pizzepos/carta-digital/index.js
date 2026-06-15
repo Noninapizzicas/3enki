@@ -18,6 +18,7 @@
 
 const crypto = require('crypto');
 const BaseModule = require('../../_shared/base-module');
+const { proyectarCartaPublica } = require('./proyeccion');
 
 const CONFIG_PATH = '/pizzepos/carta-digital/config.json';
 
@@ -147,42 +148,7 @@ class CartaDigitalModule extends BaseModule {
     ]);
     if (!carta) return this._err(404, 'RESOURCE_NOT_FOUND', 'el canal digital no tiene carta asignada (revisa tarifas) ni hay carta en servicio');
 
-    const cont = contenido || {};
-    const categorias = (Array.isArray(carta.categorias) ? carta.categorias : [])
-      .filter(c => c.activa !== false)
-      .sort((a, b) => (a.orden || 0) - (b.orden || 0));
-    const productos = (Array.isArray(carta.productos) ? carta.productos : []).map(p => {
-      const c = cont[p.id] || {};
-      const imgs = Array.isArray(c.imagenes) ? c.imagenes : [];
-      const principal = imgs.find(im => im.principal) || imgs[0] || null;
-      return {
-        id: p.id, nombre: p.nombre,
-        precio: (p.precio ?? p.precio_base ?? 0),
-        categoria: p.categoria || p.categoria_id || null,
-        categoria_id: p.categoria_id || p.categoria || null,
-        descripcion: c.descripcion || p.descripcion || '',
-        imagen: principal ? principal.url : null,
-        imagenes: imgs,
-        ingredientes: Array.isArray(p.ingredientes) ? p.ingredientes : (p.ingredientes_base || [])
-      };
-    });
-    const branding = marca ? {
-      nombre: marca.esencia?.nombre || null,
-      lema: marca.esencia?.lema || null,
-      colores: marca.visual?.colores || {},
-      tipografias: marca.visual?.tipografias || {},
-      logo: marca.visual?.logo || null,
-      voz: marca.voz || {},
-      negocio: marca.negocio || {}
-    } : null;
-
-    return { status: 200, data: {
-      branding,
-      dominio_publico: config.dominio_publico || null,
-      opciones: config.opciones_visualizacion || {},
-      categorias, productos,
-      generado_at: new Date().toISOString()
-    } };
+    return { status: 200, data: proyectarCartaPublica(carta, marca, contenido, config) };
   }
 
   // ── handlers (ui_handlers) ──

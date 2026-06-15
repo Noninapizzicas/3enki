@@ -16,7 +16,7 @@
 
 'use strict';
 
-const BaseModule = require('../_shared/base-module');
+const BaseModule = require('../../_shared/base-module');
 
 class MercadonaApiModule extends BaseModule {
   constructor() {

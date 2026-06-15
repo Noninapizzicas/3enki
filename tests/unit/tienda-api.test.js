@@ -8,7 +8,7 @@
 
 const assert = require('assert');
 
-const TiendaApiModule = require('../../modules/tienda-api/index.js');
+const TiendaApiModule = require('../../modules/pizzepos/tienda-api/index.js');
 
 function makeMocks() {
   const logs = [], published = [], metricsCalls = [];

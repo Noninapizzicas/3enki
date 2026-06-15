@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
 
-const BaseModule = require('../_shared/base-module');
+const BaseModule = require('../../_shared/base-module');
 
 /**
  * notificador-pedidos

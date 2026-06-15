@@ -127,10 +127,11 @@ async function testAsync(desc, fn) {
 
   await testAsync('save: escribe html + meta y emite carta.html.generada', async () => {
     const { m, bus, store } = makeReflejo();
-    const r = await m._save({ ...base, carta_id: 'carta_1', html: '<html>hola</html>', nombre: 'San Valentín', generado_por: 'pagina' });
+    const r = await m._save({ ...base, carta_id: 'carta_1', html: '<html>hola</html>', nombre: 'San Valentín', formato: 'A4 apaisado · doble cara · 3 col', generado_por: 'pagina' });
     assert.strictEqual(r.status, 201);
     assert.strictEqual(r.data.carta_id, 'carta_1');
     assert.strictEqual(r.data.nombre, 'San Valentín');
+    assert.strictEqual(r.data.formato, 'A4 apaisado · doble cara · 3 col');
     const keys = Object.keys(store);
     assert.ok(keys.some(k => k.endsWith('.html')), 'guarda el html');
     assert.ok(keys.some(k => k.endsWith('.json')), 'guarda el meta');

@@ -24,6 +24,7 @@ import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request';
 export interface DesignMeta {
   carta_id: string;
   nombre: string | null;
+  formato?: string | null;   // estructura de la maqueta, p.ej. 'A4 apaisado · doble cara · 3 col'
   filename: string;
   size_bytes: number;
   created_at?: string;
@@ -187,6 +188,31 @@ export async function loadGallery(cartaId: string): Promise<void> {
     cartaDesignStore.update(s => ({ ...s, designs }));
   } catch (err) {
     console.error('[CartaDesign] loadGallery failed:', err);
+  }
+}
+
+// Lee el HTML de un diseño guardado (para ver / descargar / imprimir).
+export async function loadDesignHtml(filename: string): Promise<string | null> {
+  try {
+    const res = await mqttRequest<{ content: string }>('fs', 'read', { path: `${DESIGNS_DIR}/${filename}` });
+    return typeof res.data?.content === 'string' ? res.data.content : null;
+  } catch (err) {
+    cartaDesignStore.update(s => ({ ...s, error: (err as Error).message || 'No se pudo cargar el diseño' }));
+    return null;
+  }
+}
+
+// Borra un diseño (su HTML + el meta companion). Patrón fs directo, igual que la lectura.
+export async function deleteDesign(filename: string): Promise<boolean> {
+  const metaName = filename.replace(/\.html$/, '.json');
+  try {
+    await mqttRequest('fs', 'delete', { path: `${DESIGNS_DIR}/${filename}` });
+    try { await mqttRequest('fs', 'delete', { path: `${DESIGNS_DIR}/${metaName}` }); } catch { /* meta puede no existir */ }
+    cartaDesignStore.update(s => ({ ...s, designs: s.designs.filter(d => d.filename !== filename) }));
+    return true;
+  } catch (err) {
+    cartaDesignStore.update(s => ({ ...s, error: (err as Error).message || 'No se pudo borrar el diseño' }));
+    return false;
   }
 }
 

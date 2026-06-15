@@ -2,7 +2,8 @@
   "_doc": "Blueprint del modulo carta-design. Hijo de subsistema-recetario.modulo-base. Estudio de diseno de cartas impresas. 4 operaciones deterministas (las sirve el REFLEJO JS): contexto_diseno (HIDRATA carta+marca), load_carta (solo la carta), save (guarda el HTML), gallery (lista lo guardado). La identidad del diseno sale de la MARCA (carta-marketing): colores, tipografias, logo, voz — NO hay biblioteca de profiles. La composicion del HTML la hace el LLM de pagina (SIN agente).",
   "id": "carta-design",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "2.0.0",
+  "version": "2.1.0",
+  "_v2_1_changelog": "v2.1.0 (2026-06-15): carta-design ABSORBE LA MAQUETACION DE IMPRESION (carta-impresion queda obsoleto). El estilo lo pone la MARCA; el FORMATO es estructural y se elige por 4 ejes: tamano (A5/A4/A3) · orientacion (vertical/apaisado) · disposicion (una cara/doble cara/diptico/triptico) · columnas (2/3/4). NO hay ficheros de plantilla: la maqueta sale de combinar los ejes (ver context.json seccion 'maquetacion'). save acepta 'formato?' (string descriptivo) y lo registra en el meta.",
   "_v2_0_changelog": "v2.0.0 (2026-06-14): SE QUITA LA CAPA DE PROFILES. Fuera los cajones profiles/save_profile/delete_profile y los 5 profiles built-in (archivados). La identidad del diseno la da la MARCA (carta-marketing.get_perfil): colores/tipografias/logo/voz. Un solo origen, sin plantillas. contexto_diseno devuelve {carta, marca}. Engranaje arreglado: load_carta y el error de contexto_diseno devuelven {status,data} fresco (no propagan la respuesta de carta.get verbatim). Quedan 4 cajones.",
   "_v1_3_changelog": "v1.3.0 (2026-06-14): carta-design BEBE de carta-marketing (nuevo cajon contexto_diseno). [Profiles retirados en v2.0.0.]",
   "_v1_2_changelog": "v1.2.0 (2026-06-14): HIBRIDADO. Las ops (file management) pasan al REFLEJO JS; los cajones quedan como delegadores finos.",
@@ -27,7 +28,7 @@
     "paths_relativos_proyecto": {
       "designs": "/pizzepos/carta-design/designs/<carta_id>__<timestamp>.html (+ companion .json con meta)"
     },
-    "shape_design_meta": "{ carta_id, nombre, generado_at, generado_por, filename, size_bytes }"
+    "shape_design_meta": "{ carta_id, nombre, formato, generado_at, generado_por, filename, size_bytes }"
   },
   "eventos_publicados": [
     "design.contexto_diseno.response",
@@ -74,7 +75,7 @@
       "_delega_en": "design.load_carta.request (REFLEJO JS — index.js)"
     },
     "save": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req), html (req — string), nombre?, generado_por? }",
+      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req), html (req — string), nombre?, formato? (string descriptivo de la maqueta, p.ej. 'A4 apaisado · doble cara · 3 col'), generado_por? }",
       "pseudocodigo": [
         "async save(input):",
         "  // GUARDAR el HTML que el LLM de pagina compuso + meta companion. El reflejo emite carta.html.generada.",

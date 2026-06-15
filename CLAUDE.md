@@ -1424,7 +1424,6 @@ DIRECTORIO POR PROYECTO  (data/projects/{slug}/storage/)
     cartas/<carta_id>.json      carta-manager
     carta-design/...            carta-design   (diseños HTML + perfiles de estilo)
     carta-digital/config.json   carta-digital
-    carta-impresion/<c>.html    carta-impresion
     carta-scheduler/reglas.json carta-scheduler
     tecnicas/...                tecnicas
     viabilidad/...              viabilidad
@@ -1500,8 +1499,8 @@ REPARTO POR MÓDULO  (✓ = ya híbrido)
   carta-digital     get/update_config · get/set carta_publica       —
   carta-scheduler   crear/listar/eliminar_regla · detectar_conflictos —
   viabilidad     ✓  evaluar (delega escandallo.costear+normaliza·reglas food cost·caminos por regla) · obtener/listar/descartar  —  (paralelo a escandallo)
-  carta-impresion   get/save_html (blueprint puro, AÚN no híbrido)   generar (LLM pagina redacta HTML, SIN agente)
-  carta-design   ✓  contexto_diseno (HIDRATA carta+marca)·load_carta·save·gallery (sin profiles)  diseño HTML (LLM página SIEMBRA desde marca)
+  carta-impresion   RETIRADO (2026-06-15, archivado) — carta-design absorbió la maquetación de impresión
+  carta-design   ✓  contexto_diseno (HIDRATA carta+marca)·load_carta·save·gallery (sin profiles)  diseño HTML (LLM página SIEMBRA desde marca) + MAQUETACIÓN (A5/A4/A3·orient·plegado·2-4col) + galería gestión (ver/descargar/imprimir/borrar)
   tecnicas          codificar/obtener/listar/actualizar/parametros  —
   menu-generator    —   (sin store propio · solo blueprint)         generar (carta desde texto/foto) · preparar (añade recetas a carta, contra base)
 ```
@@ -1510,7 +1509,7 @@ REPARTO POR MÓDULO  (✓ = ya híbrido)
 ORDEN DE MIGRACIÓN  (cada uno: receta de 5 pasos del patrón + gate)
   HECHO: carta-manager ✓ (aggregate root) · productos ✓ (PROYECTOR, no store — lee la carta por RPC)
   1. CRUD puros (trivial, máximo retorno): viabilidad ✓ · carta-digital · carta-scheduler
-  2. mixtos (reflejo CRUD + chispa fuzzy): carta-design ✓ · carta-impresion · tecnicas
+  2. mixtos (reflejo CRUD + chispa fuzzy): carta-design ✓ (absorbió maquetación) · tecnicas   [carta-impresion RETIRADO]
   3. menu-generator: se queda blueprint (generación fuzzy) + op preparar (orquesta recetas→carta contra reflejos); no necesita reflejo propio
 ```
 
@@ -1534,7 +1533,7 @@ ESPINAZO de toda operacion de blueprint (5 fases SIEMPRE) {
 
 RECONVERSION aplicada (blueprints que invocaban agent.execute) {
   carta-marketing : onboarding (completar_onboarding, entrevista LLM pagina) + copy (generar_copy → guardar_copy reflejo)
-  carta-impresion : generar (LLM pagina redacta HTML; sin agente impresor)
+  carta-impresion : RETIRADO — su maquetacion vive ahora en carta-design
   resto del flujo : recetas/escandallo/viabilidad/menu-generator/tarifas/carta-scheduler/carta-digital → ya eran sin-agente
 }
 // skill: .claude/skills/blueprint-coherente/SKILL.md
@@ -12700,7 +12699,7 @@ PATRON StoreReactivo {
 MODULO StoresIndex {
   REEXPORTA ui, workspace, chat, attachments, persistence, theme
   REEXPORTA credentials, projects, conversations, menu-generator
-  REEXPORTA carta-manager, carta-design, carta-marketing, carta-impresion
+  REEXPORTA carta-manager, carta-design, carta-marketing
   REEXPORTA html-preview, facturas
   (40 stores totales)
 }
@@ -12840,7 +12839,7 @@ MODULO Chat {
 ## STORES — Catálogo MQTT-based (forma común)
 
 ```
-MODULO <Dominio>Store  (projects, credentials, conversations, facturas, carta-manager, carta-design, carta-marketing, carta-impresion, menu-generator, html-preview, ...) {
+MODULO <Dominio>Store  (projects, credentials, conversations, facturas, carta-manager, carta-design, carta-marketing, menu-generator, html-preview, ...) {
   ATRIBUTOS { <entity>Store: Writable<<Entity>State> }
   init<Entity>Subscriptions(): () => Void  (subscribe a eventos del dominio)
   request<Entity>State() / load<Entity>()  (mqttRequest 'list'|'get'|'load')
@@ -13028,7 +13027,7 @@ RUTA /[project_id]/<pantalla> (+page.svelte)  PATRON {
 
 PANTALLAS_PROYECTO {
     chat, comandero (+[cuenta_id]), cocina, carta, carta-design, carta-digital,
-    carta-impresion, carta-manager, carta-marketing, carta-scheduler,
+    carta-manager, carta-marketing, carta-scheduler,
     dispositivos, escandallo, facturas, ingredientes, llevadoo,
     menu-generator, recetas, tarifas, viabilidad
   }
@@ -13211,7 +13210,7 @@ ENLACE provider {
 
 ```
 ENLACE fs {
-  consumidor_front: [stores/carta-design, carta-digital, carta-impresion, carta-manager,
+  consumidor_front: [stores/carta-design, carta-digital, carta-manager,
                      carta-marketing, carta-scheduler, carta, escandallo, recetas, tarifas;
                      modules/carta-config, carta-preview, viabilidad]
   domain: 'fs'
@@ -13334,7 +13333,7 @@ ENLACE ocr_imagen {
 }
 
 NOTA_CARTAS_BLUEPRINT {
-  modules_backend: [pizzepos/carta-design, carta-digital, carta-impresion, carta-manager,
+  modules_backend: [pizzepos/carta-design, carta-digital, carta-manager,
                     carta-marketing, carta-scheduler]
   tipo_backend: 'blueprint'  (sin index.js; persistencia por proyecto)
   acceso_front: domain 'fs' (stores carta-* leen/escriben data/projects/{slug} via filesystem)

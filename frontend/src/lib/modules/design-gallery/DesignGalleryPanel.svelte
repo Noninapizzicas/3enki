@@ -19,8 +19,11 @@
     designError,
     cartaLoaded,
     cartaResumen,
-    clearDesignError
+    clearDesignError,
+    loadDesignHtml,
+    deleteDesign
   } from '$lib/stores/carta-design';
+  import type { DesignMeta } from '$lib/stores/carta-design';
   // La carta base la sirve carta-manager (CUSTODIO de /pizzepos/cartas/). Bebemos de SU
   // store, no de menu.list (dueño viejo) ni filtrando estado='generada' (vocabulario que
   // ya no existe: carta-manager usa borrador/en_servicio/archivada).
@@ -67,6 +70,47 @@
 
   function formatSize(bytes: number): string {
     return (bytes / 1024).toFixed(0) + ' KB';
+  }
+
+  // ── acciones por diseño: ver · descargar · imprimir · borrar ──
+  let busy: string | null = null;   // filename en proceso
+
+  async function verDesign(d: DesignMeta) {
+    busy = d.filename;
+    const html = await loadDesignHtml(d.filename);
+    busy = null;
+    if (!html) return;
+    const win = window.open('', '_blank');
+    if (win) { win.document.open(); win.document.write(html); win.document.close(); }
+  }
+
+  async function imprimirDesign(d: DesignMeta) {
+    busy = d.filename;
+    const html = await loadDesignHtml(d.filename);
+    busy = null;
+    if (!html) return;
+    const win = window.open('', '_blank');
+    if (win) { win.document.open(); win.document.write(html); win.document.close(); setTimeout(() => win.print(), 400); }
+  }
+
+  async function descargarDesign(d: DesignMeta) {
+    busy = d.filename;
+    const html = await loadDesignHtml(d.filename);
+    busy = null;
+    if (!html) return;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = d.filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function borrarDesign(d: DesignMeta) {
+    if (!confirm(`¿Borrar el diseño "${d.nombre || d.filename}"? No se puede deshacer.`)) return;
+    busy = d.filename;
+    await deleteDesign(d.filename);
+    busy = null;
   }
 </script>
 
@@ -128,7 +172,13 @@
             <div class="design-card">
               <div class="design-info">
                 <span class="design-name">{design.nombre || design.filename}</span>
-                <span class="design-meta">{formatDate(design.generado_at || design.created_at || '')} · {formatSize(design.size_bytes)}</span>
+                <span class="design-meta">{design.formato ? design.formato + ' · ' : ''}{formatDate(design.generado_at || design.created_at || '')} · {formatSize(design.size_bytes)}</span>
+              </div>
+              <div class="design-actions">
+                <button title="Ver" disabled={busy === design.filename} on:click={() => verDesign(design)}>👁️</button>
+                <button title="Imprimir" disabled={busy === design.filename} on:click={() => imprimirDesign(design)}>🖨️</button>
+                <button title="Descargar" disabled={busy === design.filename} on:click={() => descargarDesign(design)}>⬇️</button>
+                <button title="Borrar" class="danger" disabled={busy === design.filename} on:click={() => borrarDesign(design)}>🗑️</button>
               </div>
             </div>
           {/each}
@@ -237,6 +287,20 @@
     border-radius: 6px;
     font-size: 0.8rem;
   }
+
+  .design-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .design-actions button {
+    background: transparent;
+    border: 1px solid var(--color-border, #333);
+    border-radius: 5px;
+    padding: 3px 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+  }
+  .design-actions button:hover:not(:disabled) { background: var(--color-surface-3, #2c2c2c); }
+  .design-actions button:disabled { opacity: 0.4; cursor: default; }
+  .design-actions button.danger:hover:not(:disabled) { background: #5a1f1f; border-color: #a33; }
 
   .design-info {
     display: flex;

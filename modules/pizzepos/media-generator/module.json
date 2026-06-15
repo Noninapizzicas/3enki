@@ -69,10 +69,11 @@
   "config": {
     "motores": {
       "imagen": {
-        "tool": "motor.imagen.google",
-        "defaults": {},
+        "kind": "gemini-image",
+        "provider": "GOOGLE",
+        "model": "gemini-2.0-flash-preview-image-generation",
         "ext": "png",
-        "asset_es_url": false
+        "timeout_ms": 90000
       }
     }
   },

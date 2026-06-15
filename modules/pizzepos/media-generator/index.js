@@ -92,12 +92,29 @@ class MediaGeneratorModule extends BaseModule {
         return responder(400, { error: { code: 'INVALID_INPUT', message: 'tipo y prompt requeridos' } });
       }
       const motor = this.motores[d.tipo];
-      if (!motor || !motor.tool) {
+      if (!motor || (!motor.tool && motor.kind !== 'gemini-image')) {
         return responder(503, { error: { code: 'NO_MOTOR',
-          message: `sin motor configurado para tipo '${d.tipo}'. Configúralo en media-generator.motores.${d.tipo} (tool de un tools_http) + su credencial.` } });
+          message: `sin motor configurado para tipo '${d.tipo}'. Configúralo en media-generator.motores.${d.tipo} (tool de un tools_http, o kind 'gemini-image') + su credencial.` } });
       }
 
-      // 2. ENRUTAR — prompt + defaults del motor + opciones del especialista.
+      // 2a. MOTOR DIRECTO — gemini-image: media-generator resuelve la credencial y hace el
+      //     fetch él mismo (control + captura de error completo + extracción multi-part).
+      if (motor.kind === 'gemini-image') {
+        this.metrics?.increment?.('media.generar.total', { tipo: d.tipo, motor: 'gemini-image' });
+        const r = await this._motorGeminiImage(d.prompt, d.opciones || {}, motor);
+        if (r.error) {
+          this.metrics?.increment?.('media.generar.failed', { tipo: d.tipo, kind: r.error.code });
+          return responder(r.status || 502, { error: r.error });
+        }
+        this.metrics?.increment?.('media.generar.ok', { tipo: d.tipo, motor: 'gemini-image' });
+        return responder(200, { data: {
+          tipo: d.tipo, asset_base64: r.asset_base64, url: null,
+          ext: motor.ext || 'png',
+          meta: { motor: motor.kind + ':' + (motor.model || ''), prompt: d.prompt, opciones: d.opciones || {}, generado_at: new Date().toISOString() }
+        } });
+      }
+
+      // 2b. ENRUTAR a tools_http — prompt + defaults del motor + opciones del especialista.
       const args = { prompt: d.prompt, ...(motor.defaults || {}), ...(d.opciones || {}) };
       this.metrics?.increment?.('media.generar.total', { tipo: d.tipo, motor: motor.tool });
       const resp = await this._rpc(`${motor.tool}.request`, args, { timeout_ms: motor.timeout_ms || 90000 });
@@ -137,6 +154,65 @@ class MediaGeneratorModule extends BaseModule {
       this.logger?.error('media-generator.generar.failed', { error: err.message });
       return responder(500, { error: { code: 'UNKNOWN_ERROR', message: err.message } });
     }
+  }
+
+  // Resuelve la API key de un provider por el bus (mismo contrato que el loader:
+  // credential.resolve.request {provider} → credential.resolve.response {api_key}).
+  async _resolveCred(provider) {
+    const r = await this._rpc('credential.resolve.request', { provider }, { timeout_ms: 6000 });
+    if (!r) return { error: 'credential.resolve timeout' };
+    if (r.success === false || !r.api_key) return { error: r.error || `sin credencial para provider '${provider}'` };
+    return { api_key: r.api_key };
+  }
+
+  // Motor DIRECTO: Google Gemini image generation (generateContent). Compatible con keys
+  // de AI Studio. Resuelve la key, hace el fetch, captura el error COMPLETO de Google y
+  // extrae el primer part con inlineData (la imagen va en candidates[].content.parts[]).
+  async _motorGeminiImage(prompt, opciones, motor) {
+    const provider = motor.provider || 'GOOGLE';
+    const cred = await this._resolveCred(provider);
+    if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${provider}': ${cred.error}` } };
+
+    const model = motor.model || 'gemini-2.0-flash-preview-image-generation';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cred.api_key)}`;
+    const body = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
+    };
+
+    let resp, text;
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), motor.timeout_ms || 90000);
+      resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
+      clearTimeout(tid);
+      text = await resp.text();
+    } catch (err) {
+      if (err.name === 'AbortError') return { status: 504, error: { code: 'UPSTREAM_TIMEOUT', message: 'Gemini no respondió a tiempo' } };
+      return { status: 502, error: { code: 'UPSTREAM_UNREACHABLE', message: `red Gemini: ${err.message}` } };
+    }
+
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch (_) { parsed = null; }
+
+    if (!resp.ok) {
+      // Surface el error REAL de Google (anidado en error.message).
+      const gMsg = parsed?.error?.message || parsed?.error?.status || (text || '').slice(0, 300) || `HTTP ${resp.status}`;
+      this.logger?.warn('media-generator.gemini.http_error', { status: resp.status, model, message: gMsg });
+      const code = resp.status === 400 ? 'INVALID_INPUT' : resp.status === 401 || resp.status === 403 ? 'PERMISSION_DENIED' : resp.status === 404 ? 'RESOURCE_NOT_FOUND' : resp.status === 429 ? 'RATE_LIMITED' : 'UPSTREAM_INVALID_RESPONSE';
+      return { status: resp.status, error: { code, message: `Gemini ${resp.status}: ${gMsg}` } };
+    }
+
+    // Extraer la imagen: el primer part con inlineData.data (base64) entre los candidatos.
+    const parts = parsed?.candidates?.[0]?.content?.parts || [];
+    const imgPart = parts.find(p => p?.inlineData?.data || p?.inline_data?.data);
+    const data = imgPart?.inlineData?.data || imgPart?.inline_data?.data || null;
+    if (!data) {
+      const txt = parts.find(p => p?.text)?.text;
+      this.logger?.warn('media-generator.gemini.sin_imagen', { model, text_devuelto: (txt || '').slice(0, 200) });
+      return { status: 502, error: { code: 'UPSTREAM_INVALID_RESPONSE', message: `Gemini no devolvió imagen${txt ? ' (devolvió texto: ' + txt.slice(0, 120) + ')' : ''}` } };
+    }
+    return { asset_base64: data };
   }
 }
 

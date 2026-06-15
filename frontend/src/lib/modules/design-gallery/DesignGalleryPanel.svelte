@@ -73,10 +73,23 @@
     return (bytes / 1024).toFixed(0) + ' KB';
   }
 
-  // ── acciones por diseño: ver · descargar · imprimir · borrar ──
-  let busy: string | null = null;   // filename en proceso
+  // ── acciones por diseño: preview · abrir · descargar · imprimir · borrar ──
+  let busy: string | null = null;        // filename en proceso
+  let previewFile: string | null = null; // diseño con preview inline abierto
+  let previewHtml = '';
 
-  async function verDesign(d: DesignMeta) {
+  // Preview inline (iframe srcdoc, sandbox sin scripts — el HTML del diseño no usa JS).
+  async function togglePreview(d: DesignMeta) {
+    if (previewFile === d.filename) { previewFile = null; previewHtml = ''; return; }
+    busy = d.filename;
+    const html = await loadDesignHtml(d.filename);
+    busy = null;
+    if (!html) return;
+    previewHtml = html;
+    previewFile = d.filename;
+  }
+
+  async function abrirEnPestana(d: DesignMeta) {
     busy = d.filename;
     const html = await loadDesignHtml(d.filename);
     busy = null;
@@ -112,6 +125,7 @@
     busy = d.filename;
     await deleteDesign(d.filename);
     busy = null;
+    if (previewFile === d.filename) { previewFile = null; previewHtml = ''; }
   }
 
   async function marcarOficial(d: DesignMeta) {
@@ -182,18 +196,26 @@
       {:else}
         <div class="gallery">
           {#each $designGallery as design}
-            <div class="design-card" class:oficial={esOficial(design)}>
-              <div class="design-info">
-                <span class="design-name">{esOficial(design) ? '⭐ ' : ''}{design.nombre || design.filename}{esOficial(design) ? ' · OFICIAL' : ''}</span>
-                <span class="design-meta">{design.formato ? design.formato + ' · ' : ''}{formatDate(design.generado_at || design.created_at || '')} · {formatSize(design.size_bytes)}</span>
+            <div class="design-card" class:oficial={esOficial(design)} class:abierto={previewFile === design.filename}>
+              <div class="design-row">
+                <div class="design-info">
+                  <span class="design-name">{esOficial(design) ? '⭐ ' : ''}{design.nombre || design.filename}{esOficial(design) ? ' · OFICIAL' : ''}</span>
+                  <span class="design-meta">{design.formato ? design.formato + ' · ' : ''}{formatDate(design.generado_at || design.created_at || '')} · {formatSize(design.size_bytes)}</span>
+                </div>
+                <div class="design-actions">
+                  <button title={esOficial(design) ? 'Es la oficial' : 'Marcar como oficial'} disabled={busy === design.filename || esOficial(design)} on:click={() => marcarOficial(design)}>{esOficial(design) ? '⭐' : '☆'}</button>
+                  <button title={previewFile === design.filename ? 'Ocultar preview' : 'Vista previa'} class:active={previewFile === design.filename} disabled={busy === design.filename} on:click={() => togglePreview(design)}>👁️</button>
+                  <button title="Abrir en pestaña" disabled={busy === design.filename} on:click={() => abrirEnPestana(design)}>↗</button>
+                  <button title="Imprimir" disabled={busy === design.filename} on:click={() => imprimirDesign(design)}>🖨️</button>
+                  <button title="Descargar" disabled={busy === design.filename} on:click={() => descargarDesign(design)}>⬇️</button>
+                  <button title="Borrar" class="danger" disabled={busy === design.filename} on:click={() => borrarDesign(design)}>🗑️</button>
+                </div>
               </div>
-              <div class="design-actions">
-                <button title={esOficial(design) ? 'Es la oficial' : 'Marcar como oficial'} disabled={busy === design.filename || esOficial(design)} on:click={() => marcarOficial(design)}>{esOficial(design) ? '⭐' : '☆'}</button>
-                <button title="Ver" disabled={busy === design.filename} on:click={() => verDesign(design)}>👁️</button>
-                <button title="Imprimir" disabled={busy === design.filename} on:click={() => imprimirDesign(design)}>🖨️</button>
-                <button title="Descargar" disabled={busy === design.filename} on:click={() => descargarDesign(design)}>⬇️</button>
-                <button title="Borrar" class="danger" disabled={busy === design.filename} on:click={() => borrarDesign(design)}>🗑️</button>
-              </div>
+              {#if previewFile === design.filename}
+                <div class="design-preview">
+                  <iframe title={'Vista previa de ' + (design.nombre || design.filename)} srcdoc={previewHtml} sandbox=""></iframe>
+                </div>
+              {/if}
             </div>
           {/each}
         </div>
@@ -203,7 +225,7 @@
 
   <!-- Error -->
   {#if $designError}
-    <div class="error" on:click={clearDesignError}>{$designError}</div>
+    <button class="error" type="button" on:click={clearDesignError} title="Descartar">{$designError}</button>
   {/if}
 </div>
 
@@ -294,12 +316,18 @@
 
   .design-card {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 10px;
+    flex-direction: column;
     background: var(--color-surface-2, #222);
     border-radius: 6px;
     font-size: 0.8rem;
+    overflow: hidden;
+  }
+  .design-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
   }
 
   .design-card.oficial {
@@ -307,6 +335,18 @@
     box-shadow: inset 2px 0 0 var(--color-accent, #eab308);
   }
   .design-card.oficial .design-name { color: var(--color-accent, #eab308); font-weight: 600; }
+  .design-actions button.active { border-color: var(--color-primary, #f59e0b); background: rgba(245, 158, 11, 0.12); }
+
+  .design-preview {
+    border-top: 1px solid var(--color-border, #333);
+    background: #fff;
+  }
+  .design-preview iframe {
+    width: 100%;
+    height: 420px;
+    border: none;
+    display: block;
+  }
 
   .design-actions { display: flex; gap: 4px; flex-shrink: 0; }
   .design-actions button {
@@ -332,6 +372,9 @@
   .design-meta { font-size: 0.65rem; color: var(--color-text-muted, #666); }
 
   .error {
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
     padding: 8px;
     background: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.3);

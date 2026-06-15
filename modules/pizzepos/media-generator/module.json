@@ -28,7 +28,7 @@
         "url": "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict",
         "auth_type": "api_key_query",
         "auth_query_param_name": "key",
-        "credential_id": "GOOGLE_API_KEY_GLOBAL",
+        "credential_id": "GOOGLE",
         "body_template": {
           "instances": [ { "prompt": "{{prompt}}" } ],
           "parameters": { "sampleCount": 1 }
@@ -53,7 +53,7 @@
         "method": "POST",
         "url": "https://api.openai.com/v1/images/generations",
         "auth_type": "bearer",
-        "credential_id": "OPENAI_API_KEY",
+        "credential_id": "OPENAI",
         "body_template": {
           "model": "{{model}}",
           "prompt": "{{prompt}}",

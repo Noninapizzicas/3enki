@@ -12,12 +12,23 @@
   $: carta = $cartaPublica;
   $: categorias = carta?.categorias ?? [];
   $: productos = carta?.productos ?? [];
+  // Mapa id→{nombre,emoji} de la leyenda de alérgenos de la proyección.
+  $: alergMap = Object.fromEntries((carta?.alergenos_leyenda ?? []).map((a: any) => [a.id, a]));
 
   function productosDe(cat: any) {
     return productos.filter((p: any) => p.categoria_id === cat.id || p.categoria === cat.nombre || p.categoria === cat.id);
   }
   function toggleProducto(id: string) {
     expandedProducto = expandedProducto === id ? null : id;
+  }
+  function ingNombre(i: any): string {
+    return typeof i === 'string' ? i : (i?.nombre ?? '');
+  }
+  function alergInfo(id: string): { nombre: string; emoji: string } {
+    return alergMap[id] || { nombre: id, emoji: '⚠️' };
+  }
+  function precio(p: any): string {
+    return p.precio != null ? Number(p.precio).toFixed(2).replace('.', ',') + ' €' : '—';
   }
   function publicar() {
     prefillChatInput('Publica la carta digital: genera el bundle de la PWA con la carta pública actual y despliégalo a /shop/<slug>.');
@@ -33,98 +44,132 @@
       <p class="hint">Asigna una carta al canal <strong>digital</strong> en tarifas (o ten una carta en servicio).</p>
     </div>
   {:else}
-    <p class="meta">Proyectada al vuelo {carta.generado_at ? '· ' + carta.generado_at : ''}</p>
+    <p class="meta">Proyectada al vuelo{carta.generado_at ? ' · ' + new Date(carta.generado_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</p>
 
     {#each categorias as cat}
       <div class="categoria-bloque">
         <h3>{cat.nombre || cat.id}</h3>
-        <table>
-          <thead>
-            <tr><th></th><th>Nombre</th><th>Precio</th><th>Descripción</th><th></th></tr>
-          </thead>
-          <tbody>
-            {#each productosDe(cat) as prod}
-              <tr class="fila-producto" on:click={() => toggleProducto(prod.id)}>
-                <td class="thumb">{#if prod.imagen}<img src={prod.imagen} alt={prod.nombre} />{:else}—{/if}</td>
-                <td>{prod.nombre}</td>
-                <td>{prod.precio ?? '—'}</td>
-                <td>{(prod.descripcion || '').slice(0, 60)}{(prod.descripcion || '').length > 60 ? '…' : ''}</td>
-                <td>{expandedProducto === prod.id ? '▾' : '▸'}</td>
-              </tr>
+        <div class="productos">
+          {#each productosDe(cat) as prod}
+            <div class="producto" class:abierto={expandedProducto === prod.id}>
+              <button class="fila" on:click={() => toggleProducto(prod.id)} aria-expanded={expandedProducto === prod.id}>
+                <span class="p-thumb">
+                  {#if prod.imagen}<img src={prod.imagen} alt={prod.nombre} />{:else}<span class="p-ph">🍽️</span>{/if}
+                </span>
+                <span class="p-nombre">{prod.nombre}</span>
+                {#if (prod.alergenos ?? []).length}
+                  <span class="p-alerg" title="Alérgenos">{prod.alergenos.map((id: string) => alergInfo(id).emoji).join(' ')}</span>
+                {/if}
+                <span class="p-precio">{precio(prod)}</span>
+                <span class="caret">{expandedProducto === prod.id ? '▾' : '▸'}</span>
+              </button>
+
               {#if expandedProducto === prod.id}
-                <tr class="detalle-producto">
-                  <td colspan="5"><pre>{JSON.stringify(prod, null, 2)}</pre></td>
-                </tr>
+                <div class="detalle">
+                  {#if prod.descripcion}<p class="d-desc">{prod.descripcion}</p>{/if}
+                  {#if (prod.ingredientes ?? []).length}
+                    <div class="d-bloque">
+                      <span class="d-label">Ingredientes</span>
+                      <div class="chips">
+                        {#each prod.ingredientes as i}<span class="chip">{ingNombre(i)}</span>{/each}
+                      </div>
+                    </div>
+                  {/if}
+                  {#if (prod.alergenos ?? []).length}
+                    <div class="d-bloque">
+                      <span class="d-label">Alérgenos</span>
+                      <div class="chips">
+                        {#each prod.alergenos as id}
+                          <span class="chip alerg">{alergInfo(id).emoji} {alergInfo(id).nombre}</span>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                </div>
               {/if}
-            {/each}
-          </tbody>
-        </table>
+            </div>
+          {/each}
+        </div>
       </div>
     {/each}
 
     <div class="acciones">
-      <button on:click={publicar}>Publicar a la PWA</button>
+      <button class="btn-publicar" on:click={publicar}>Publicar a la PWA</button>
     </div>
   {/if}
 </section>
 
 <style>
   .zona-carta-publica {
-    border: 1px solid #ddd;
+    border: 1px solid var(--color-border, #333);
     border-radius: 8px;
     padding: 1rem 1.25rem;
+    background: var(--color-surface, #1a1a1a);
+    color: var(--color-text, #e5e5e5);
   }
-  .empty-state {
-    color: #666;
-    text-align: center;
-    padding: 1.5rem;
-  }
-  .hint {
-    color: #888;
-    font-size: 0.85rem;
-  }
-  .meta {
-    color: #999;
-    font-size: 0.8rem;
-    margin: 0 0 1rem;
-  }
-  .categoria-bloque {
-    margin-bottom: 1rem;
-  }
+  h2 { font-size: 1rem; margin: 0 0 0.25rem; }
+  .empty-state { color: var(--color-text-muted, #888); text-align: center; padding: 1.5rem; }
+  .hint { color: var(--color-text-muted, #888); font-size: 0.85rem; }
+  .meta { color: var(--color-text-muted, #666); font-size: 0.78rem; margin: 0 0 1rem; }
+  .categoria-bloque { margin-bottom: 1rem; }
   .categoria-bloque h3 {
     margin: 0 0 0.5rem;
-    font-size: 1rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted, #888);
   }
-  table {
+  .productos { display: flex; flex-direction: column; gap: 4px; }
+  .producto { background: var(--color-surface-2, #222); border-radius: 8px; overflow: hidden; }
+  .producto.abierto { outline: 1px solid var(--color-border, #333); }
+  .fila {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     width: 100%;
-    border-collapse: collapse;
+    padding: 8px 10px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text, #e5e5e5);
+    text-align: left;
     font-size: 0.85rem;
   }
-  th, td {
-    text-align: left;
-    padding: 0.35rem 0.5rem;
-    border-bottom: 1px solid #eee;
+  .fila:hover { background: var(--color-surface-3, #2c2c2c); }
+  .p-thumb { width: 36px; height: 36px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .p-thumb img { width: 36px; height: 36px; object-fit: cover; border-radius: 6px; }
+  .p-ph { font-size: 1.1rem; opacity: 0.5; }
+  .p-nombre { font-weight: 600; flex: 1; min-width: 0; }
+  .p-alerg { font-size: 0.85rem; letter-spacing: 1px; opacity: 0.9; }
+  .p-precio { font-weight: 700; color: var(--color-primary, #f59e0b); white-space: nowrap; }
+  .caret { color: var(--color-text-muted, #888); }
+  .detalle { padding: 0 10px 10px 56px; display: flex; flex-direction: column; gap: 8px; }
+  .d-desc { margin: 0; font-size: 0.8rem; color: var(--color-text-muted, #aaa); }
+  .d-bloque { display: flex; flex-direction: column; gap: 4px; }
+  .d-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-text-muted, #888); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip {
+    font-size: 0.72rem;
+    padding: 3px 8px;
+    background: var(--color-surface-3, #2c2c2c);
+    border-radius: 20px;
+    color: var(--color-text, #ddd);
   }
-  .thumb { width: 40px; }
-  .thumb img { max-height: 32px; max-width: 40px; border-radius: 4px; }
-  .fila-producto {
+  .chip.alerg {
+    background: #241c08;
+    border: 1px solid #6b4a00;
+    color: #f5d99a;
+  }
+  .acciones { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+  .btn-publicar {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    background: var(--color-primary, #f59e0b);
+    color: #000;
+    font-weight: 700;
+    font-size: 0.82rem;
     cursor: pointer;
   }
-  .fila-producto:hover {
-    background: #eeeeee;
-  }
-  .detalle-producto pre {
-    margin: 0;
-    font-size: 0.78rem;
-    white-space: pre-wrap;
-  }
-  .acciones {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    margin-top: 1rem;
-  }
-  button {
-    cursor: pointer;
-  }
+  .btn-publicar:hover { filter: brightness(1.1); }
 </style>

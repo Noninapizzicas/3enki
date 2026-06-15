@@ -48,14 +48,16 @@
     padding: 1rem;
   }
   .error-banner {
-    background: #fee;
-    color: #b00;
-    border: 1px solid #fcc;
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
     border-radius: 6px;
     padding: 0.75rem 1rem;
+    font-size: 0.85rem;
   }
   .loading {
-    color: #666;
+    color: var(--color-text-muted, #888);
     padding: 1rem;
+    font-size: 0.85rem;
   }
 </style>

@@ -330,13 +330,6 @@
 
   .design-name { font-weight: 600; color: var(--color-text, #e5e5e5); }
   .design-meta { font-size: 0.65rem; color: var(--color-text-muted, #666); }
-  .design-profile {
-    font-size: 0.6rem;
-    padding: 2px 6px;
-    background: rgba(245, 158, 11, 0.15);
-    color: #f59e0b;
-    border-radius: 3px;
-  }
 
   .error {
     padding: 8px;

@@ -125,7 +125,8 @@
           "break-inside: avoid en categorías y productos",
           "NUNCA usar JavaScript ni imágenes externas",
           "Precios en formato español: coma decimal (11,50)",
-          "TODOS los productos deben aparecer — no omitir ninguno"
+          "TODOS los productos deben aparecer — no omitir ninguno",
+          "ALÉRGENOS OBLIGATORIOS (Reglamento UE 1169/2011 / RD 126/2015): cada producto con alergenos[] DEBE declararlos visiblemente por su NOMBRE (no solo iconos). Usa alergenos_catalogo (id→nombre→emoji) de contexto_diseno para traducir los ids. Añade una LEYENDA de los alérgenos presentes en la carta. El texto es lo legalmente exigible; el icono es ayuda. Si un producto no tiene alergenos[] declarados, NO inventes — añade la nota legal 'Consulta al personal sobre alérgenos'."
         ]
       }
     ]
@@ -188,12 +189,13 @@
     "Pregunta SOLO lo que falte: secciones de marca vacías o datos de negocio ausentes.",
     "SIEMPRE incluir: nombre del restaurante, teléfono, dirección, horarios (de marca.negocio/esencia o preguntados).",
     "SIEMPRE incluir TODOS los productos — no omitir ni uno.",
+    "SIEMPRE declarar ALÉRGENOS por su nombre en cada producto que los tenga + leyenda (Reglamento UE 1169/2011 — obligatorio en carta impresa). Es requisito legal, no opcional.",
     "NUNCA usar datos inventados — si falta un dato, preguntar o usar [PENDIENTE].",
     "MAQUETA segun el formato pedido (ver seccion 'maquetacion'): tamano (A5/A4/A3) · orientacion (vertical/apaisado) · disposicion (una cara/doble cara/diptico/triptico) · columnas (2/3/4). Si no lo piden: A4 vertical una cara, columnas las que decida el contenido. El ESTILO es de la marca; el FORMATO es estructural.",
     "Presentar decisiones al usuario ANTES de producir HTML."
   ],
   "tools_disponibles": {
-    "design.contexto_diseno": "LLAMAR AL INICIO. Trae en una RPC {carta, marca}. La marca ES la identidad del diseño (colores/tipografías/logo/voz del onboarding). Params: project_id, carta_id.",
+    "design.contexto_diseno": "LLAMAR AL INICIO. Trae en una RPC {carta, marca, alergenos_catalogo}. La marca ES la identidad del diseño (colores/tipografías/logo/voz del onboarding). alergenos_catalogo = los 14 del Anexo II (id→nombre→emoji) para declarar alérgenos por nombre. Los alergenos[] de cada producto vienen ya normalizados al canon. Params: project_id, carta_id.",
     "design.load_carta": "Alternativa: solo la carta (sin marca). Úsalo si ya tienes la marca de otro turno.",
     "design.save": "LLAMAR AL FINAL. Guarda el HTML (y queda en la galería). Params: carta_id, html, nombre?, formato? (p.ej. 'A4 apaisado · doble cara · 3 col' — se registra en el meta).",
     "design.gallery": "Lista los diseños/eventos guardados (filtrable por carta_id)."

@@ -24,7 +24,8 @@
       { "event": "producto.creado",          "handler": "onProductoActualizado",   "description": "Producto creado — actualizar cache." },
       { "event": "producto.actualizado",     "handler": "onProductoActualizado",   "description": "Producto actualizado — actualizar cache." },
       { "event": "caja.cerrada",             "handler": "onCajaCerrada",           "description": "Cierre de caja — limpiar pedidos del dia." },
-      { "event": "dia.iniciado",             "handler": "onDiaIniciado",           "description": "Nuevo dia — limpiar pedidos stale." }
+      { "event": "dia.iniciado",             "handler": "onDiaIniciado",           "description": "Nuevo dia — limpiar pedidos stale." },
+      { "event": "pago.confirmado",          "handler": "onPagoConfirmado",        "description": "Pago online confirmado (pasarela) — marcar el pedido pagado y liberarlo." }
     ]
   },
   "ui_handlers": [

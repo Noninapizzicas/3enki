@@ -11,6 +11,7 @@
     "copywriter":      { "cajon": "redactar_descripcion", "produce": "descripción del plato en la voz de marca", "motor": "ninguno (texto)" },
     "marketing":       { "cajon": "redactar_gancho",      "produce": "reclamo/etiqueta corta (promo, 'el más pedido', etc.)", "motor": "ninguno (texto)" },
     "director_de_arte":{ "cajon": "generar_imagen",       "produce": "prompt visual → foto del plato", "motor": "media.generar (LÍDER)" },
+    "disenador_web":   { "cajon": "disenar_carta_digital", "produce": "el LOOK inmersivo del proyecto (tema_css + card_template)", "motor": "ninguno (HTML/CSS)" },
     "curador_visual":  { "cajon": "vincular_imagen",      "produce": "a qué producto va una imagen subida + su alt", "motor": "ninguno (matching)" },
     "sound_designer":  { "cajon": "(reservado)",          "produce": "audio/música ambiente", "motor": "media.generar (falta motor audio)" }
   },
@@ -126,6 +127,37 @@
         "El renombrado del fichero es del reflejo (canónico), no del LLM. El LLM aporta el alt (display)."
       ],
       "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+    "disenar_carta_digital": {
+      "_es_fuzzy": true,
+      "_especialista": "DISEÑADOR WEB",
+      "_doc": "Enki COMPONE el look inmersivo de la carta digital de ESTE proyecto (como carta-design compone el impreso). El RUNTIME (carrito/pedido/chat) es fijo y compartido; aquí solo se diseña la ESTÉTICA. Se acopla al runtime por el CONTRATO de slots.",
+      "input": "{ project_id (req), brief_estilo?, carta_id? }",
+      "pseudocodigo": [
+        "async disenar_carta_digital(in):",
+        "  // 1. CONTRATO",
+        "  if (!in.project_id) return INVALID_INPUT",
+        "  // 2. LEER — para que el diseño respire con la marca + el contenido real",
+        "  carta     = await publishAndWait('carta.get.request', { project_id: in.project_id, carta_id: in.carta_id })",
+        "  marca     = await publishAndWait('carta-marketing.get_perfil.request', { project_id: in.project_id })",
+        "  contenido = await publishAndWait('contenido.get.request', { project_id: in.project_id })",
+        "  // 3. PENSAR — el DISEÑADOR WEB compone, EN la identidad de marca (marca.visual + voz):",
+        "  //    tema_css   = CSS inmersivo (paleta/tipografía de marca, foto-hero, ritmo relajado). Sobreescribe la semilla.",
+        "  //    card_template = HTML de UN producto, CUMPLIENDO el contrato de slots (ver reglas_clave).",
+        "  tema_css      = <el LLM lo compone>",
+        "  card_template = <el LLM lo compone, con los placeholders + data-accion>",
+        "  // 4. GUARDAR — el proyector VALIDA el contrato antes de persistir (422 si faltan hooks)",
+        "  return await publishAndWait('cartadigital.guardar_diseno.request', { project_id: in.project_id, diseno: { tema_css, card_template } })",
+        "  // 5. (el proyector emite cartadigital.diseno.actualizada → el export/PWA usa el nuevo look)"
+      ],
+      "reglas_clave": [
+        "CONTRATO DE SLOTS (obligatorio en card_template): placeholders {{id}} {{nombre}} {{precio}} {{visual}} {{descripcion}} {{gancho}} {{alergenos}} {{ingredientes}} {{add_label}}. El runtime los rellena (no los inventes ni los quites).",
+        "HOOKS de interacción (obligatorios): el elemento raíz lleva data-producto-id=\"{{id}}\" data-accion=\"detalle\"; el botón de añadir lleva data-accion=\"add\" data-producto-id=\"{{id}}\". El runtime delega los clics por ahí — NO uses onclick ni nombres de función.",
+        "El runtime PRE-RENDERIZA {{visual}} (img o placeholder), {{gancho}} (badge) y {{alergenos}} (chips): mételos como vienen, dales sitio en el layout.",
+        "EN la identidad de marca: tema_css usa marca.visual (paleta/tipografía). Inmersivo: foto grande, descripción delante, aire. NO toques el runtime (carrito/pedido/chat) — solo el look.",
+        "NO JavaScript en el card_template (el runtime lo aporta). Solo HTML + clases. El CSS va en tema_css."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "INVALID_DESIGN", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
     },
     "publicar": {
       "_es_fuzzy": false,

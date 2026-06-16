@@ -1,0 +1,34 @@
+{
+  "name": "pago-gateway",
+  "version": "1.0.0",
+  "description": "El LÍDER DE PAGO: puerto provider-agnóstico pago.iniciar (request→response) que enruta a la PASARELA configurada (semilla: Stripe Checkout) y, al confirmarse el pago por webhook firmado, emite pago.confirmado. El dinero vive en la pasarela; aquí solo se inicia la sesión y se verifica la confirmación. Degradable: sin pasarela → NO_PASARELA. Swappable a Redsys/PayPal cambiando pasarela.kind + adapter. Capa OPCIONAL: si el proyecto no tiene pasarela, el pedido sigue el flujo de recogida (pickup) sin pago online (no excluir).",
+  "author": "pizzepos",
+  "language": "javascript",
+  "main": "index.js",
+  "horizonte": "infra de pago online para el carrito de la carta digital",
+  "eventos_publicados": [
+    "pago.iniciar.response",
+    "pago.confirmado"
+  ],
+  "eventos_que_escucho": [
+    "pago.iniciar.request"
+  ],
+  "ui_handlers": [
+    { "domain": "pago", "action": "iniciar", "handler": "handlePagoIniciar", "description": "Inicia el pago de un pedido en la pasarela configurada → devuelve checkout_url." }
+  ],
+  "http": [
+    { "method": "POST", "path": "/pago/webhook/:project", "handler": "handleWebhook", "raw_body": true, "description": "Webhook firmado de la pasarela (Stripe). Verifica la firma → emite pago.confirmado." }
+  ],
+  "config": {
+    "pasarela": {
+      "kind": "stripe-checkout",
+      "provider": "STRIPE",
+      "moneda": "eur",
+      "webhook_secret": null,
+      "return_url": null
+    }
+  },
+  "dependencies": {
+    "credential-manager": "para resolver la credencial de la pasarela (STRIPE secret key)"
+  }
+}

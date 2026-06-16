@@ -83,6 +83,8 @@ if (!carta) {
 const marca = readJson(path.join(pizzeposDir, 'marca.json'), null);
 const contenido = readJson(path.join(pizzeposDir, 'contenido.json'), {});
 const config = readJson(path.join(pizzeposDir, 'carta-digital', 'config.json'), {});
+// DISEÑO que compuso Enki (card_template + tema_css). Ausente → semilla inmersiva.
+const diseno = readJson(path.join(pizzeposDir, 'carta-digital', 'diseno.json'), {});
 
 // ── PROYECCIÓN (misma forma que sirve el reflejo) ──
 const proy = proyectarCartaPublica(carta, marca, contenido, config);
@@ -111,6 +113,7 @@ const tplConfig = {
   moneda,
   whatsapp_telefono: whatsapp,
   mensaje_header: '¡Hola! Quiero pedir:',
+  pago_online: !!(config.opciones_visualizacion && config.opciones_visualizacion.pago_online),
   pedido_endpoint: pedidoEndpoint,
   tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colorTexto, logo_emoji: logoEmoji }
 };
@@ -120,8 +123,12 @@ console.log(`  WhatsApp:   ${whatsapp || '(no configurado)'}`);
 console.log(`  Output:     ${outputDir}`);
 console.log('');
 
-// ── generar (la plantilla recibe la carta YA proyectada) ──
-const html = generateStaticHTML({ categorias: proy.categorias, productos: proy.productos }, tplConfig);
+// ── generar (la plantilla recibe la carta YA proyectada + el diseño de Enki) ──
+const html = generateStaticHTML(
+  { categorias: proy.categorias, productos: proy.productos, alergenos_leyenda: proy.alergenos_leyenda },
+  tplConfig,
+  { diseno }
+);
 const sw = generateServiceWorker(nombre);
 const manifest = generateManifest(nombre, colorPrimario, colorFondo);
 

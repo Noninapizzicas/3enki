@@ -21,6 +21,7 @@ const BaseModule = require('../../_shared/base-module');
 const { proyectarCartaPublica } = require('./proyeccion');
 
 const CONFIG_PATH = '/pizzepos/carta-digital/config.json';
+const DISENO_PATH = '/pizzepos/carta-digital/diseno.json';   // el look que compone Enki, por proyecto
 
 class CartaDigitalModule extends BaseModule {
   constructor() {
@@ -47,6 +48,8 @@ class CartaDigitalModule extends BaseModule {
     sub('contenido.actualizado', e => this._reemitir(e));
     sub('marketing.perfil.actualizado', e => this._reemitir(e));
     sub('project.activated', e => this._onProjectActivated(e));
+    // RPC de bus: el cajón diseñar_carta_digital persiste el diseño por aquí.
+    sub('cartadigital.guardar_diseno.request', e => this._onGuardarDisenoRequest(e));
 
     try { await this.eventBus.publish('tarifas.config.solicitada', { correlation_id: crypto.randomUUID() }); } catch (_) {}
     this.logger?.info('module.loaded', { module: this.name, version: this.version, mode: 'proyector-canal-digital' });
@@ -138,6 +141,49 @@ class CartaDigitalModule extends BaseModule {
     if (!r) return { status: 503 };
     if (r.error) return { status: 502, error: r.error };
     return { status: 200 };
+  }
+
+  // ── diseño del canal (el LOOK que compone Enki) ──
+  async _leerDiseno(project_id) {
+    const r = await this._rpc('fs.read.request', { project_id, path: DISENO_PATH });
+    if (!r || r.error || typeof r.content !== 'string') return { card_template: null, tema_css: null };
+    try { return JSON.parse(r.content); } catch (_) { return { card_template: null, tema_css: null }; }
+  }
+  async _guardarDiseno(project_id, diseno) {
+    const payload = {
+      card_template: typeof diseno.card_template === 'string' ? diseno.card_template : null,
+      tema_css: typeof diseno.tema_css === 'string' ? diseno.tema_css : null,
+      detalle_template: typeof diseno.detalle_template === 'string' ? diseno.detalle_template : null,
+      layout: (diseno.layout && typeof diseno.layout === 'object') ? diseno.layout : null,
+      generado_at: new Date().toISOString()
+    };
+    const w = await this._rpc('fs.write.request', { project_id, path: DISENO_PATH, content: JSON.stringify(payload, null, 2), encoding: 'utf-8', atomic: true });
+    if (!w) return { status: 503, error: { code: 'UPSTREAM_UNREACHABLE', message: 'fs no responde' } };
+    if (w.error) return { status: 502, error: w.error };
+    this.eventBus.publish('cartadigital.diseno.actualizada', { project_id, correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString() });
+    return { status: 200, data: payload };
+  }
+
+  // RPC de bus para el cajón: valida el CONTRATO de slots antes de guardar.
+  async _onGuardarDisenoRequest(event) {
+    const d = event?.data || event;
+    const request_id = d?.request_id;
+    const responder = (status, body) => { try { this.eventBus.publish('cartadigital.guardar_diseno.response', { request_id, status, ...body }); } catch (_) {} };
+    try {
+      if (!d?.project_id || !d?.diseno || typeof d.diseno !== 'object') return responder(400, { error: { code: 'INVALID_INPUT', message: 'project_id y diseno requeridos' } });
+      const tpl = d.diseno.card_template;
+      if (typeof tpl !== 'string' || !tpl.includes('{{id}}') || !tpl.includes('data-accion') || !tpl.includes('{{nombre}}')) {
+        return responder(422, { error: { code: 'INVALID_DESIGN', message: 'card_template debe incluir los hooks del contrato: {{id}}, {{nombre}} y data-accion (detalle|add)' } });
+      }
+      const r = await this._guardarDiseno(d.project_id, d.diseno);
+      return responder(r.status, r.status >= 400 ? { error: r.error } : { data: r.data });
+    } catch (err) {
+      return responder(500, { error: { code: 'UNKNOWN_ERROR', message: err.message } });
+    }
+  }
+  async handleGetDiseno(data) {
+    if (!data?.project_id) return this._err(400, 'INVALID_INPUT', 'project_id requerido');
+    return { status: 200, data: await this._leerDiseno(data.project_id) };
   }
 
   // ── PROYECCIÓN de la carta pública (al vuelo) ──

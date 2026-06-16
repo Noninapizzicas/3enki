@@ -41,6 +41,7 @@ function proyectarCartaPublica(carta, marca, contenido, config) {
       categoria: p.categoria || p.categoria_id || null,
       categoria_id: p.categoria_id || p.categoria || null,
       descripcion: c.descripcion || p.descripcion || '',
+      gancho: (c.interaccion && c.interaccion.gancho) || null,   // reclamo del marketing (etiqueta corta)
       imagen: principal ? principal.url : null,
       imagenes: imgs,
       ingredientes: Array.isArray(p.ingredientes) ? p.ingredientes : (p.ingredientes_base || []),

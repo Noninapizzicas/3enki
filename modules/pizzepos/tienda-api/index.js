@@ -113,6 +113,25 @@ class TiendaApiModule extends BaseModule {
   // Bus API (handlers de eventos)
   // ==========================================
 
+  // RPC de bus para iniciar el pago (líder pago-gateway).
+  async _rpc(evento, payload = {}, { timeout_ms = 15000 } = {}) {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    const responseEvent = evento.endsWith('.request') ? evento.slice(0, -8) + '.response' : `${evento}.response`;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const t = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeout_ms);
+      try {
+        unsub = this.eventBus.subscribe(responseEvent, (ev) => {
+          const dd = ev?.data || ev;
+          if (!dd || dd.request_id !== request_id) return;
+          clearTimeout(t); if (unsub) unsub(); resolve(dd);
+        });
+        this.eventBus.publish(evento, { request_id, ...payload });
+      } catch (_) { clearTimeout(t); if (unsub) unsub(); resolve(null); }
+    });
+  }
+
   async onPedidoCrearTiendaResponse(event) {
     const data = event?.data || event || {};
     const request_id = data.request_id;
@@ -159,14 +178,30 @@ class TiendaApiModule extends BaseModule {
       pedido_id: result.pedido_id,
       codigo_recogida: result.codigo_recogida
     }, { correlation_id: pending.correlation_id });
-    this._respondToClient(pending, 201, {
-      status: 201,
-      data: {
-        pedido_id: result.pedido_id,
-        codigo_recogida: result.codigo_recogida,
-        correlation_id: pending.correlation_id
+    const respData = {
+      pedido_id: result.pedido_id,
+      codigo_recogida: result.codigo_recogida,
+      correlation_id: pending.correlation_id
+    };
+
+    // Pago online opcional: inicia el pago en la pasarela → devuelve checkout_url.
+    // Si no hay pasarela (NO_PASARELA) o falla, el pedido YA está creado (recogida) — no se pierde.
+    if (pending.pago_online) {
+      const pago = await this._rpc('pago.iniciar.request', {
+        pedido_id: result.pedido_id, project_id: pending.project_slug,
+        monto_centimos: pending.total_centimos, concepto: 'Pedido ' + (result.codigo_recogida || ''),
+        return_url: pending.return_url || ''
+      }, { timeout_ms: 20000 });
+      if (pago && pago.status === 200 && pago.data?.checkout_url) {
+        respData.checkout_url = pago.data.checkout_url;
+        respData.pago_session_id = pago.data.session_id;
+      } else {
+        respData.pago_error = (pago && pago.error) ? pago.error.code : 'PAGO_NO_DISPONIBLE';
+        this.logger.warn('tienda-api.pago.no_iniciado', { pedido_id: result.pedido_id, error: respData.pago_error });
       }
-    });
+    }
+
+    this._respondToClient(pending, 201, { status: 201, data: respData });
   }
 
   // ==========================================
@@ -221,7 +256,12 @@ class TiendaApiModule extends BaseModule {
         res,
         timeoutHandle,
         started_at: Date.now(),
-        correlation_id
+        correlation_id,
+        // Pago online opcional: si pago_online, tras crear el pedido se inicia el pago
+        // en la pasarela y se devuelve checkout_url (en vez de solo código de recogida).
+        pago_online: normalized.pago_online === true,
+        return_url: typeof normalized.return_url === 'string' ? normalized.return_url : '',
+        total_centimos: normalized.total_centimos
       });
 
       // Auto-wire de tools (tools.contract v1.2): el loader auto-subscribe el handler

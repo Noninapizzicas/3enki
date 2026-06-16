@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "description": "Transporte WhatsApp SELF-HOSTED via open-wa (@open-wa/wa-automate). Corre dentro del sistema (in-process con el bus). Puente: open-wa onMessage -> whatsapp.entrante; whatsapp.enviar.request -> client.sendText. Una sesion por proyecto (login QR una vez, persistida en data/openwa/<session>). NO oficial (ToS): riesgo de baneo a nivel protocolo -> usar numero DEDICADO, volumen conversacional. Dependencia @open-wa/wa-automate en optionalDependencies (lazy-require; si falta, el modulo carga inerte y lo avisa). Necesita Chromium en el host. Sustituye/aparca al transporte Meta Cloud API y a las notificaciones Telegram para la vertical tienda PWA.",
   "language": "es",
+  "ui_handlers": [
+    { "domain": "whatsapp", "action": "estado", "handler": "handleEstado", "description": "Estado de la sesion de un proyecto (sin_sesion|esperando_qr|conectado|caida) + el QR vigente (data-uri) si esta esperando vinculo. Lo pide el panel WhatsApp al abrir." },
+    { "domain": "whatsapp", "action": "vincular", "handler": "handleVincular", "description": "Arranca/rearranca la sesion del proyecto -> dispara el QR (llega por whatsapp.qr + queda cacheado para handleEstado)." },
+    { "domain": "whatsapp", "action": "desvincular", "handler": "handleDesvincular", "description": "Cierra la sesion (logout) y limpia." }
+  ],
   "config": {
     "data_path": "./data/openwa",
     "headless": true,

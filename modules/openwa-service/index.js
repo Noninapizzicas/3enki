@@ -27,8 +27,16 @@ class OpenwaServiceModule extends BaseModule {
     this.name = 'openwa-service';
     this.version = '1.0.0';
     this.clients = new Map();   // project_slug -> open-wa client
+    this.estados = new Map();    // project_slug -> 'sin_sesion'|'esperando_qr'|'conectado'|'caida'
+    this.qrs = new Map();        // project_slug -> data-uri del QR vigente (mientras esperando_qr)
     this._subs = [];
     this._wa = null;            // @open-wa/wa-automate (lazy)
+  }
+
+  _setEstado(project_slug, estado) {
+    this.estados.set(project_slug, estado);
+    if (estado === 'conectado' || estado === 'sin_sesion') this.qrs.delete(project_slug);
+    try { this.eventBus.publish('whatsapp.estado', { project_slug, estado, ts: Date.now() }); } catch (_) {}
   }
 
   async onLoad(core) {
@@ -76,9 +84,10 @@ class OpenwaServiceModule extends BaseModule {
 
   async _iniciarSesion(s) {
     const wa = this._lazyWa();
-    if (!wa) return;
+    if (!wa) { this._setEstado(s.project_slug, 'sin_sesion'); return; }
     const project_slug = s.project_slug;
     const sessionId = s.session_id || project_slug;
+    this._setEstado(project_slug, 'esperando_qr');
     const create = wa.create || (wa.default && wa.default.create) || wa.default;
 
     const client = await create({
@@ -95,12 +104,15 @@ class OpenwaServiceModule extends BaseModule {
       chromiumArgs: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
       // Algunos builds aceptan qrCallback en la config; si no, open-wa loguea el QR igual.
       qrCallback: (qr) => {
-        this.logger?.warn('openwa.qr', { project: project_slug, hint: 'escanea el QR (data-uri en el evento whatsapp.qr)' });
+        this.logger?.warn('openwa.qr', { project: project_slug, hint: 'escanea el QR desde el panel WhatsApp (o el data-uri del evento whatsapp.qr)' });
+        this.qrs.set(project_slug, qr);                 // cacheado para que el panel lo pida al abrir
+        this._setEstado(project_slug, 'esperando_qr');
         try { this.eventBus.publish('whatsapp.qr', { project_slug, qr, ts: Date.now() }); } catch (_) {}
       }
     });
 
     this.clients.set(project_slug, client);
+    this._setEstado(project_slug, 'conectado');         // create() resuelve tras escanear + autenticar
 
     // Recepción 1:1 (los pedidos llegan en chat directo, no en grupos).
     client.onMessage(async (message) => {
@@ -126,13 +138,52 @@ class OpenwaServiceModule extends BaseModule {
       client.onStateChanged?.((state) => {
         this.logger?.info('openwa.state', { project: project_slug, state });
         if (['CONFLICT', 'UNLAUNCHED'].includes(state)) { try { client.forceRefocus?.(); } catch (_) {} }
+        if (state === 'CONNECTED') this._setEstado(project_slug, 'conectado');
         if (state === 'UNPAIRED') {
+          this._setEstado(project_slug, 'caida');
           try { this.eventBus.publish('whatsapp.sesion.caida', { project_slug, state, ts: Date.now() }); } catch (_) {}
         }
       });
     } catch (_) {}
 
     this.logger?.info('openwa.session.ready', { project: project_slug, sessionId });
+  }
+
+  // ── ui_handlers (para el panel WhatsApp del frontend) ──
+
+  // Estado de la sesión de un proyecto (+ el QR vigente si está esperando vínculo).
+  async handleEstado(data) {
+    const project_slug = data?.project_slug;
+    if (!project_slug) return { status: 400, error: { code: 'INVALID_INPUT', message: 'project_slug requerido' } };
+    const estado = this.estados.get(project_slug) || 'sin_sesion';
+    const out = { estado, dependencia_ok: !!this._lazyWa() };
+    if (estado === 'esperando_qr' && this.qrs.has(project_slug)) out.qr = this.qrs.get(project_slug);
+    return { status: 200, data: out };
+  }
+
+  // Vincular / re-vincular: arranca (o rearranca) la sesión → dispara el QR.
+  async handleVincular(data) {
+    const project_slug = data?.project_slug;
+    if (!project_slug) return { status: 400, error: { code: 'INVALID_INPUT', message: 'project_slug requerido' } };
+    if (!this._lazyWa()) {
+      return { status: 503, error: { code: 'UPSTREAM_UNREACHABLE', message: 'open-wa no instalado en el host (npm i @open-wa/wa-automate)' } };
+    }
+    const actual = this.clients.get(project_slug);
+    if (actual) { try { await actual.kill?.(); } catch (_) {} this.clients.delete(project_slug); }
+    this._iniciarSesion({ project_slug }).catch(err =>
+      this.logger?.error('openwa.vincular.failed', { project: project_slug, error: err.message }));
+    return { status: 202, data: { estado: 'esperando_qr', mensaje: 'Escanea el QR que aparecerá en el panel.' } };
+  }
+
+  // Desvincular: cierra la sesión (logout) y limpia.
+  async handleDesvincular(data) {
+    const project_slug = data?.project_slug;
+    if (!project_slug) return { status: 400, error: { code: 'INVALID_INPUT', message: 'project_slug requerido' } };
+    const client = this.clients.get(project_slug);
+    if (client) { try { await client.logout?.(); } catch (_) {} try { await client.kill?.(); } catch (_) {} }
+    this.clients.delete(project_slug);
+    this._setEstado(project_slug, 'sin_sesion');
+    return { status: 200, data: { estado: 'sin_sesion' } };
   }
 
   async _onEnviar(event) {

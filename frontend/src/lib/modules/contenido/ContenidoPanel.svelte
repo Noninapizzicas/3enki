@@ -30,6 +30,13 @@
     );
   }
 
+  // Convoca al MARKETING (cajón redactar_gancho): un reclamo corto (etiqueta) para el producto.
+  function convocarMarketing(prod: any) {
+    prefillChatInput(
+      `Como marketing, redacta un gancho corto (etiqueta de 2-5 palabras) para el producto "${prod.nombre}" (id: ${prod.id}) en la voz de marca.`
+    );
+  }
+
   onMount(() => {
     loadCartaPublica();
     cleanup = initCartaDigitalSubscriptions();
@@ -74,6 +81,7 @@
             <span class="nombre">{prod.nombre}</span>
             <div class="acciones-prod">
               <button class="copy-btn" title="Redactar descripción (copywriter)" on:click={() => convocarCopywriter(prod)}>✍️ Descripción</button>
+              <button class="copy-btn" title="Gancho (marketing)" on:click={() => convocarMarketing(prod)}>📣 Gancho</button>
               <button class="copy-btn" title="Generar imagen (diseñador gráfico)" on:click={() => convocarDisenador(prod)}>🎨 Imagen IA</button>
               <label class="subir">
                 + Subir
@@ -81,6 +89,7 @@
               </label>
             </div>
           </div>
+          {#if prod.gancho}<span class="gancho">📣 {prod.gancho}</span>{/if}
           {#if prod.descripcion}
             <p class="descripcion">{prod.descripcion}</p>
           {:else}
@@ -116,6 +125,7 @@
   .acciones-prod { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
   .copy-btn { cursor: pointer; font-size: 0.75rem; border: 1px solid var(--color-border, #333); border-radius: 6px; padding: 2px 8px; background: var(--color-surface-2, #222); color: var(--color-text, #e5e5e5); }
   .copy-btn:hover { border-color: var(--color-primary, #f59e0b); }
+  .gancho { display: inline-block; margin: 0 0 0.4rem; font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 20px; background: rgba(245,158,11,0.15); color: var(--color-primary, #f59e0b); }
   .descripcion { margin: 0 0 0.5rem; font-size: 0.8rem; color: var(--color-text-muted, #aaa); line-height: 1.35; }
   .descripcion.vacia { font-style: italic; color: var(--color-text-muted, #666); }
   .subir { cursor: pointer; font-size: 0.75rem; border: 1px solid var(--color-border, #333); border-radius: 6px; padding: 2px 8px; background: var(--color-surface-2, #222); color: var(--color-text, #e5e5e5); }

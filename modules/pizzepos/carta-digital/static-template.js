@@ -52,6 +52,7 @@ function generateStaticHTML(carta, config, options = {}) {
       imagen_alt: (principal && principal.alt) ? principal.alt : (p.nombre || ''),
       // Alérgenos canónicos (1169/2011) ya normalizados por la proyección.
       alergenos: Array.isArray(p.alergenos) ? p.alergenos : [],
+      gancho: p.gancho || null,   // reclamo del marketing (etiqueta corta)
       ingredientes: (p.ingredientes || []).map(i => ({
         nombre: i.nombre, emoji: i.emoji || null, tipo: i.tipo || null,
         precio_extra: i.precio_extra ?? null
@@ -203,6 +204,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .card-ph{display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:linear-gradient(135deg,#1a1a1a,#222);font-size:2.5rem;opacity:.6}
 .badges{position:absolute;top:6px;left:6px;display:flex;gap:4px}
 .badge{padding:2px 6px;border-radius:4px;background:rgba(34,197,94,.85);color:#fff;font-size:.5rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.badge.gancho{background:var(--primary);text-transform:none;letter-spacing:0;font-size:.55rem}
 .badge.popular{background:var(--primary)}
 .badge.picante{background:var(--danger)}
 .badge.premium{background:#a855f7}
@@ -762,6 +764,7 @@ function renderGrid() {
     const preview = ings.slice(0, 5).map(i => i.emoji || i.nombre.slice(0, 8)).join(' ') + (ings.length > 5 ? ' ...' : '');
     const tags = p.tags || [];
     let badgesHtml = '';
+    if (p.gancho) badgesHtml += '<span class="badge gancho">' + esc(p.gancho) + '</span>';   // reclamo del marketing
     if (tags.includes('vegano')) badgesHtml += '<span class="badge">Vegano</span>';
     else if (tags.includes('vegetariano')) badgesHtml += '<span class="badge">Vegetariano</span>';
     if (tags.includes('popular')) badgesHtml += '<span class="badge popular">Popular</span>';

@@ -149,6 +149,13 @@ fi
 mkdir -p /etc/caddy /var/log/caddy
 chown caddy:caddy /var/log/caddy 2>/dev/null || true
 
+# Dir público de las PWAs por proyecto (/shop/<slug>). DEBE existir antes de arrancar
+# enki.service: con ProtectSystem=strict, systemd solo monta rw los ReadWritePaths que
+# existen. project-manager (en el servicio) crea aquí los symlinks al activar cada proyecto.
+# Caddy (handle_path /shop/*) lo sirve. www-data (usuario del servicio) debe poder escribir.
+mkdir -p /opt/enki/public/shop
+chown -R www-data:www-data /opt/enki/public 2>/dev/null || true
+
 if [ "$MODE" = "domain" ]; then
     log "Configurando Caddy para ${DOMAIN} (HTTPS)..."
     # Sustituir dominio hardcoded del template por el real
@@ -228,7 +235,7 @@ Environment=CONVERSATION_EXPORT_TOKEN=nonina
 # Seguridad
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/opt/enki/data /opt/enki/modules
+ReadWritePaths=/opt/enki/data /opt/enki/modules /opt/enki/public
 
 [Install]
 WantedBy=multi-user.target

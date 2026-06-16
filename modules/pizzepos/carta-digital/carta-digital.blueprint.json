@@ -161,12 +161,20 @@
     },
     "publicar": {
       "_es_fuzzy": false,
-      "_nota": "HOY no hay deploy automático desde el chat: la PWA se exporta con carta-digital/export-cli.js (offline) o se sirve por el proyector get_carta_publica. NO finjas un despliegue. Explica al usuario el estado real y, si pide, lista los pasos del export-cli. (Pieza de deploy frontend = pendiente.)",
-      "input": "{ project_id (req) }",
+      "_doc": "DOS CAMINOS (no excluir): (1) ALOJADA — la carta está VIVA al vuelo en /shop/<slug> (la sirve el proyector; siempre fresca, cada cambio se ve al instante; pedido+chat in-app). (2) SIN ALOJAMIENTO — export estático con carta-digital/export-cli.js para subir a cualquier hosting; pedido y asistente por WhatsApp. NO finjas un despliegue: confirma la URL viva o explica el export.",
+      "input": "{ project_id (req), slug? }",
       "pseudocodigo": [
         "async publicar(in):",
-        "  // Sin op de deploy viva. Informa con honestidad (no_silent_failures a nivel UX):",
-        "  return { status: 200, data: { aviso: 'La carta pública ya se proyecta en vivo (get_carta_publica). El bundle estático se genera con export-cli (offline); el deploy automático desde el chat está pendiente.' } }"
+        "  // No hace deploy: la carta YA está viva. Confirma la URL (camino ALOJADO) + opción export.",
+        "  slug = in.slug || <slug del proyecto>",
+        "  return { status: 200, data: {",
+        "    alojada_url: '/shop/' + slug,   // viva al vuelo, siempre fresca",
+        "    aviso: 'Tu carta ya está VIVA en /shop/' + slug + ' (se sirve al vuelo: cada descripción/imagen aparece al instante). Para una PWA suelta sin backend, usa export-cli (pedido y asistente por WhatsApp).'",
+        "  } }"
+      ],
+      "reglas_clave": [
+        "NO finjas deploy. La carta alojada está viva en /shop/<slug> por construcción (el proyector la sirve).",
+        "Si el usuario quiere la PWA SUELTA (sin backend), indícale el export-cli (carta-digital/export-cli.js) — ahí pedido y asistente van por WhatsApp."
       ],
       "errores_posibles": ["INVALID_INPUT"]
     }

@@ -36,6 +36,9 @@
       "description": "Lee el diseno (card_template + tema_css) que compuso Enki para el proyecto."
     }
   ],
+  "apis": [
+    { "method": "GET", "path": "/shop/:slug", "handler": "handleServeShop", "description": "Sirve la PWA de la carta digital de un proyecto AL VUELO (proyeccion + diseno de Enki + runtime). Siempre fresca — no hay bundle que caduca. Escenario ALOJADO; la PWA suelta (export-cli) es el otro camino." }
+  ],
   "config": {
     "persistence": {
       "scope": "project",

@@ -193,11 +193,17 @@ class CartaDigitalModule extends BaseModule {
     return { status: 200, data: await this._leerDiseno(data.project_id) };
   }
 
-  // Resuelve project_id → slug (para la URL /shop/<slug>). project.get trae slug; fallback al name.
-  async _slugDeProject(project_id) {
-    const r = await this._rpc('project.get.request', { project_id }, { timeout_ms: 6000 });
-    const p = (r && (r.data || r)) || {};
-    return p.slug || (p.name ? slugify(p.name) : null) || String(project_id).slice(0, 8);
+  // Info del proyecto (existe + activo + slug). El fs ESCRIBE en el proyecto ACTIVO e
+  // IGNORA el project_id del payload (filesystem._busDispatch lo descarta). Por eso publicar
+  // EXIGE que el objetivo esté activo: si no, escribiría en otro proyecto en silencio.
+  // slug = slugify(name), igual que project-manager para el symlink /opt/enki/public/shop/<slug>.
+  async _proyectoInfo(project_id) {
+    const r = await this._rpc('project.list.request', {}, { timeout_ms: 6000 });
+    const arr = (r && (r.data?.projects || r.data)) || [];
+    const p = Array.isArray(arr) ? arr.find(x => (x.project_id || x.id) === project_id) : null;
+    if (!p) return null;
+    const name = p.name || '';
+    return { name, is_active: p.is_active === true || p.is_active === 1 || p.isActive === true, slug: name ? slugify(name) : String(project_id).slice(0, 8) };
   }
 
   // ── PUBLICAR: deploy real desde el chat. Genera el bundle estático y lo escribe en
@@ -207,15 +213,24 @@ class CartaDigitalModule extends BaseModule {
   async _publicarBundle(project_id, slugHint) {
     if (!project_id) return this._err(400, 'INVALID_INPUT', 'project_id requerido');
 
+    // GUARD anti-escritura-cross-project: el fs escribe en el proyecto ACTIVO. Si el objetivo
+    // no está activo, el bundle iría a otro proyecto en silencio → fallar claro (no_silent_failures).
+    const info = await this._proyectoInfo(project_id);
+    if (!info) return this._err(404, 'RESOURCE_NOT_FOUND', `proyecto ${project_id} no encontrado`);
+    if (!info.is_active) {
+      return this._err(412, 'PRECONDITION_FAILED',
+        `el proyecto «${info.name || project_id}» no está activo; el filesystem escribe en el proyecto activo, así que publicar sin activarlo escribiría el bundle en otro. Actívalo antes de publicar.`);
+    }
+    const slug = slugHint || info.slug;
+
     const proy = await this._proyectarPublica(project_id);
     if (proy.status !== 200) return proy;   // 404 sin carta / 503 fuentes caídas — propaga
 
     const data = proy.data;
     const b = data.branding || {};
     const colores = b.colores || {};
-    const [diseno, config, slug] = await Promise.all([
-      this._leerDiseno(project_id), this._leerConfig(project_id),
-      slugHint ? Promise.resolve(slugHint) : this._slugDeProject(project_id)
+    const [diseno, config] = await Promise.all([
+      this._leerDiseno(project_id), this._leerConfig(project_id)
     ]);
     const op = config.opciones_visualizacion || {};
 

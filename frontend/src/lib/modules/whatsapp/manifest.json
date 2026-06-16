@@ -1,0 +1,10 @@
+{
+  "id": "whatsapp",
+  "name": "WhatsApp",
+  "description": "Vincular el WhatsApp del negocio (open-wa) escaneando un QR desde la app",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 9,
+  "icon": "💬",
+  "label": "WhatsApp"
+}

@@ -50,6 +50,7 @@ rsync -a --delete \
     --exclude='.git' \
     --exclude='deployment' \
     --exclude='data' \
+    --exclude='public' \
     "${REPO_DIR}/" "${INSTALL_DIR}/"
 
 # Dependencias backend
@@ -85,14 +86,30 @@ else
     warn "Event Core no arrancó. Revisar: journalctl -u enki -f"
 fi
 
-# Caddy: solo reiniciar si cambió el Caddyfile
-if ! diff -q "${REPO_DIR}/deployment/caddy/Caddyfile.vps" /etc/caddy/Caddyfile &>/dev/null; then
-    log "Caddyfile cambió → actualizando Caddy..."
-    cp "${REPO_DIR}/deployment/caddy/Caddyfile.vps" /etc/caddy/Caddyfile
-    caddy fmt --overwrite /etc/caddy/Caddyfile
-    systemctl restart caddy
+# Caddy: regenerar desde el template SUSTITUYENDO el dominio del Caddyfile vivo.
+# El template (Caddyfile.vps) trae pizzepos.es; cada VPS tiene su propio dominio
+# (vps-setup.sh lo sustituye al instalar). Comparar el template crudo contra el
+# vivo clobberaría el dominio → detectamos el dominio vivo y sustituimos igual.
+# Así un `git pull` que añada bloques (p.ej. /shop/*) llega a CUALQUIER dominio.
+LIVE_DOMAIN=""
+if [ -f /etc/caddy/Caddyfile ]; then
+    LIVE_DOMAIN="$(grep -oE '^[A-Za-z0-9.-]+ \{' /etc/caddy/Caddyfile | head -1 | sed 's/ {//')"
+fi
+if [ -z "$LIVE_DOMAIN" ]; then
+    warn "No pude detectar el dominio del Caddyfile vivo → NO toco Caddy (evito clobber)"
 else
-    log "Caddy sin cambios (no se reinicia)"
+    TMP_CADDY="$(mktemp)"
+    sed -e "s/pizzepos\.es/${LIVE_DOMAIN}/g" -e "s/pizzepos\.log/${LIVE_DOMAIN}.log/g" \
+        "${REPO_DIR}/deployment/caddy/Caddyfile.vps" > "$TMP_CADDY"
+    caddy fmt --overwrite "$TMP_CADDY" 2>/dev/null || true
+    if ! diff -q "$TMP_CADDY" /etc/caddy/Caddyfile &>/dev/null; then
+        log "Caddyfile cambió (dominio ${LIVE_DOMAIN}) → actualizando Caddy..."
+        cp "$TMP_CADDY" /etc/caddy/Caddyfile
+        systemctl reload caddy || systemctl restart caddy
+    else
+        log "Caddy sin cambios (no se reinicia)"
+    fi
+    rm -f "$TMP_CADDY"
 fi
 
 echo ""

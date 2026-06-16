@@ -52,6 +52,11 @@
         "event": "pedido.crear-tienda.response",
         "handler": "onPedidoCrearTiendaResponse",
         "description": "Respuesta canonica auto-wireada de la tool pedido.crear-tienda (tools.contract v1.2). Solo procesamos error path — success lo trata onPedidoCreado con shape mas rico. Avisa al cliente si pedidos rechazo el shape (INVALID_INPUT, CONFLICT_STATE, etc)."
+      },
+      {
+        "event": "cocina.pedido_listo",
+        "handler": "onCocinaPedidoListo",
+        "description": "Cocina marco el pedido listo. Si es un pedido de tienda nuestro (lookup por pedido_id en pedidosListos), avisa al CLIENTE por WhatsApp que pase a recoger. Los del POS no estan en el mapa -> se ignoran."
       }
     ]
   },

@@ -552,6 +552,75 @@ class PedidosModule extends BaseModule {
     }
   }
 
+  // ENTREGA (pieza 3, flujo A): el dependiente confirma la recogida. Canal-agnóstico:
+  // se puede llamar desde la pantalla de cocina/comandero o desde una respuesta del staff.
+  // Verifica la palabra clave (anti-fraude) → recogido_y_cobrado (efectivo) → emite pedido.recogido.
+  async handleConfirmarRecogida(data) {
+    try {
+      const { codigo_recogida, palabra_clave, correlation_id } = data || {};
+      if (!codigo_recogida || typeof codigo_recogida !== 'string') {
+        return this._errorResponse(400, 'INVALID_INPUT', 'codigo_recogida es requerido', { field: 'codigo_recogida' });
+      }
+      // localizar el pedido de tienda por su código (único)
+      let pedido = null;
+      for (const p of this.pedidos.values()) {
+        if (p.tipo === 'tienda' && p.codigo_recogida === codigo_recogida) { pedido = p; break; }
+      }
+      if (!pedido) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'no hay ningún pedido con ese código', { codigo_recogida });
+      }
+      if (pedido.estado === 'recogido_y_cobrado') {
+        return this._errorResponse(409, 'CONFLICT_STATE', 'el pedido ya fue recogido y cobrado', { estado: pedido.estado });
+      }
+      // caducidad on-read: si pasó expira_at, márcalo expirado y no permitas recogida
+      if (pedido.estado === 'expirado' ||
+          (pedido.expira_at && Date.now() > new Date(pedido.expira_at).getTime())) {
+        if (pedido.estado !== 'expirado') {
+          pedido.estado = 'expirado';
+          pedido.updated_at = new Date().toISOString();
+          await this._publicarEvento('pedido.expirado',
+            { pedido_id: pedido.id, project_id: pedido.project_id, codigo_recogida }, { correlation_id });
+        }
+        return this._errorResponse(409, 'CONFLICT_STATE', 'el pedido caducó (expira_at superado)', { estado: 'expirado' });
+      }
+      if (pedido.estado !== 'pendiente_recogida') {
+        return this._errorResponse(409, 'CONFLICT_STATE', `estado no recogible: ${pedido.estado}`, { estado: pedido.estado });
+      }
+      // anti-fraude: si el pedido lleva palabra clave, debe coincidir (la da el cliente al recoger)
+      if (pedido.palabra_clave) {
+        const dada = typeof palabra_clave === 'string' ? palabra_clave.trim().toLowerCase() : '';
+        if (dada !== pedido.palabra_clave) {
+          this.metrics?.increment?.('pedidos.recogida.palabra_clave_fallo', { project: pedido.project_slug });
+          return this._errorResponse(403, 'PERMISSION_DENIED', 'palabra clave incorrecta', {});
+        }
+      }
+      // cerrar: recogido + cobrado en efectivo
+      const recogido_at = new Date().toISOString();
+      pedido.estado = 'recogido_y_cobrado';
+      pedido.recogido_at = recogido_at;
+      pedido.cobro = { metodo: 'efectivo', monto_centimos: pedido.total_centimos, cobrado_at: recogido_at };
+      pedido.updated_at = recogido_at;
+
+      this.metrics?.increment?.('pedidos.tienda.recogido', { project: pedido.project_slug });
+      await this._publicarEvento('pedido.recogido', {
+        pedido_id: pedido.id,
+        project_id: pedido.project_id,
+        codigo_recogida,
+        total_centimos: pedido.total_centimos,
+        metodo_pago: 'efectivo',
+        recogido_at
+      }, { correlation_id });
+
+      this.logger.info('pedidos.tienda.recogido', {
+        pedido_id: pedido.id, project_slug: pedido.project_slug, total_centimos: pedido.total_centimos
+      });
+
+      return { status: 200, data: { pedido_id: pedido.id, estado: pedido.estado, total_centimos: pedido.total_centimos, metodo_pago: 'efectivo' } };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.confirmar_recogida.error', err);
+    }
+  }
+
   async handleListPedidos(data) {
     try {
       const { cuenta_id, estado } = data || {};

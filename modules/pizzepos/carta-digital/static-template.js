@@ -570,7 +570,7 @@ ${disenoCss}
 </div>
 
 <!-- Chat widget -->
-<button class="chat-fab" id="chat-fab" onclick="toggleChat()" title="Asistente" aria-label="Abrir asistente">💬</button>
+<button class="chat-fab" id="chat-fab" onclick="asistente()" title="Asistente" aria-label="Abrir asistente">💬</button>
 <div class="chat-overlay" id="chat-overlay" onclick="toggleChat()">
   <div class="chat-panel" onclick="event.stopPropagation()">
     <div class="chat-head">
@@ -1194,18 +1194,29 @@ let isRecording = false;
 let recognition = null;
 let speechSynth = window.speechSynthesis || null;
 
-// Show chat FAB only if AI is configured
+// El asistente (Enki). ALOJADO → chat in-app. SUELTO (sin backend) → por WhatsApp.
 function initChat() {
-  if (!chatReady) return;
-  document.getElementById('chat-fab').classList.add('show');
-  // Quick suggestion buttons
-  const quickEl = document.getElementById('chat-quick');
-  const suggestions = [T.q1, T.q2, T.q3, T.q4];
-  quickEl.innerHTML = suggestions.map(function(s) {
-    return '<button onclick="sendQuick(this,\\'' + s.replace(/'/g, "\\\\'") + '\\')">' + s + '</button>';
-  }).join('');
-  // Welcome message
-  addBotMsg(T.chat_welcome.replace('{name}', CONFIG.nombre_negocio));
+  if (chatReady) {
+    document.getElementById('chat-fab').classList.add('show');
+    const quickEl = document.getElementById('chat-quick');
+    const suggestions = [T.q1, T.q2, T.q3, T.q4];
+    quickEl.innerHTML = suggestions.map(function(s) {
+      return '<button onclick="sendQuick(this,\\'' + s.replace(/'/g, "\\\\'") + '\\')">' + s + '</button>';
+    }).join('');
+    addBotMsg(T.chat_welcome.replace('{name}', CONFIG.nombre_negocio));
+  } else if (CONFIG.whatsapp_telefono) {
+    // PWA suelta sin backend: el asistente se habla por WhatsApp (whatsapp-bot → Enki).
+    document.getElementById('chat-fab').classList.add('show');
+  }
+}
+
+// Dispatcher del FAB del asistente: in-app o WhatsApp según el escenario.
+function asistente() {
+  if (chatReady) { toggleChat(); return; }
+  if (CONFIG.whatsapp_telefono) {
+    var msg = 'Hola, quiero preguntar sobre la carta de ' + CONFIG.nombre_negocio;
+    window.open('https://wa.me/' + CONFIG.whatsapp_telefono + '?text=' + encodeURIComponent(msg), '_blank');
+  }
 }
 
 function toggleChat() {

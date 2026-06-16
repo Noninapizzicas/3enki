@@ -508,6 +508,11 @@ class PedidosModule extends BaseModule {
 
       await this._publishPedidoCreado(pedido, { correlation_id });
 
+      // Flujo A (pago a recoger): el pedido entra YA en cocina y hace el recorrido completo.
+      // Flujo B (Stripe): mover esta llamada a onPagoConfirmado (cocina tras pago confirmado).
+      pedido.enviado_cocina_at = new Date().toISOString();
+      await this._enviarTiendaACocina(pedido, { correlation_id });
+
       this.logger.info('pedidos.tienda.creado', {
         pedido_id,
         project_slug,
@@ -983,6 +988,30 @@ class PedidosModule extends BaseModule {
       items_count: pedido.items.length,
       notas_generales: pedido.notas_generales,
       enviado_at: pedido.enviado_cocina_at
+    }, sourcePayload);
+  }
+
+  // Envía un pedido de TIENDA (plano, sin cuenta_id, items con `descripcion`) a cocina,
+  // adaptando el shape al contrato de cocina (que espera item.nombre + cuenta_id como clave).
+  // Flujo A (pago a recoger): se llama al crear. Flujo B (Stripe): se llamará tras pago.confirmado.
+  async _enviarTiendaACocina(pedido, sourcePayload) {
+    await this._publicarEvento('pedido.enviado_cocina', {
+      pedido_id: pedido.id,
+      cuenta_id: pedido.id,                         // clave sintética: tienda no tiene cuenta
+      canal: 'tienda',
+      canal_origen: pedido.canal_origen || null,
+      ref_display: `🛍 ${pedido.codigo_recogida || pedido.id.slice(0, 6)}`,
+      project_id: pedido.project_id || pedido.project_slug || null,
+      items: (pedido.items || []).map(it => ({
+        item_id: it.item_id,
+        producto_id: it.producto_id || null,
+        nombre: it.descripcion,                     // tienda usa `descripcion` como nombre legible
+        cantidad: it.cantidad
+      })),
+      items_count: (pedido.items || []).length,
+      notas_generales: pedido.notas_generales || null,
+      enviado_at: pedido.enviado_cocina_at || new Date().toISOString(),
+      metadata: { tipo: 'tienda', codigo_recogida: pedido.codigo_recogida || null, cliente_telefono: pedido.cliente_telefono || null }
     }, sourcePayload);
   }
 

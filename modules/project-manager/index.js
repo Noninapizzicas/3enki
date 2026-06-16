@@ -549,6 +549,12 @@ class ProjectManagerModule extends BaseModule {
     }, { correlation_id });
     this.metrics?.increment('project-manager.activated');
 
+    // Auto-heal de symlinks: rehace los symlinks de las features instaladas (idempotente).
+    // Un deploy con `rsync --delete` que tocara /opt/enki/public borraría /shop/<slug>; al
+    // activar el proyecto se recrea solo. Nunca rompe la activación (best-effort).
+    this._ensureFeatureSymlinks(project).catch(err =>
+      this.logger?.warn('project-manager.ensure_symlinks.failed', { project_id: realId, error: err.message }));
+
     return project;
   }
 
@@ -1458,6 +1464,46 @@ class ProjectManagerModule extends BaseModule {
    * @param projectDef Contenido del blueprint feature.
    * @param projectSlug Slug del proyecto. Sustituye {{slug}}. null si no definido.
    */
+  // Aplica los symlinks de un feature blueprint (mkdir parent → unlink previo → symlink).
+  // Idempotente. source es relativo al base_path; target absoluto. Ambos admiten {{slug}}.
+  async _applySymlinks(basePath, symlinks, slug, featureId) {
+    if (!Array.isArray(symlinks)) return;
+    const sub = (s) => (slug !== null && typeof s === 'string') ? s.replace(/\{\{slug\}\}/g, slug) : s;
+    for (const link of symlinks) {
+      if (!link || typeof link.source !== 'string' || typeof link.target !== 'string') continue;
+      const sourceAbs = path.join(basePath, sub(link.source));
+      const targetAbs = sub(link.target);
+      try {
+        await fs.promises.mkdir(path.dirname(targetAbs), { recursive: true });
+        try { await fs.promises.unlink(targetAbs); } catch (_) { /* no existe previo */ }
+        await fs.promises.symlink(sourceAbs, targetAbs);
+      } catch (err) {
+        this.logger.warn('project-manager.symlink_failed', {
+          feature: featureId, source: sourceAbs, target: targetAbs, error: err.message
+        });
+        this.metrics?.increment('project-manager.errors', { kind: 'symlink' });
+      }
+    }
+  }
+
+  // Rehace los symlinks de TODAS las features instaladas del proyecto. Se llama al activar
+  // → cualquier symlink perdido (p.ej. /opt/enki/public/shop/<slug> tras un deploy que tocó
+  // public/) se restaura solo, para cualquier proyecto, sin pasos manuales.
+  async _ensureFeatureSymlinks(project) {
+    const features = (project && project.metadata && project.metadata.features) || [];
+    if (!Array.isArray(features) || features.length === 0 || !project.base_path) return;
+    const slug = (project.name && this._slugify(project.name)) || null;
+    const bpDir = path.join(process.cwd(), 'blueprints', 'project-types');
+    for (const featureId of features) {
+      try {
+        const bp = JSON.parse(await fs.promises.readFile(path.join(bpDir, `${featureId}.json`), 'utf-8'));
+        if (Array.isArray(bp.symlinks) && bp.symlinks.length) {
+          await this._applySymlinks(project.base_path, bp.symlinks, slug, featureId);
+        }
+      } catch (_) { /* feature sin blueprint o sin symlinks → ignorar */ }
+    }
+  }
+
   async _initializeFromBlueprint(basePath, featureId, projectDef, projectSlug = null) {
     // Helper canonico: sustituye {{slug}} por projectSlug (NO por featureId).
     // El bug previo (sustituir por featureId) producia paths con literal 'tienda' en lugar
@@ -1559,23 +1605,7 @@ class ProjectManagerModule extends BaseModule {
     //    Target absoluto puede usar {{slug}}. Source es relativo al base_path.
     //    Crea el dir parent del target si no existe. Si el symlink ya existe, lo
     //    reemplaza (idempotente).
-    if (Array.isArray(projectDef.symlinks)) {
-      for (const link of projectDef.symlinks) {
-        if (!link || typeof link.source !== 'string' || typeof link.target !== 'string') continue;
-        const sourceAbs = path.join(basePath, substituteSlug(link.source));
-        const targetAbs = substituteSlug(link.target);
-        try {
-          await fs.promises.mkdir(path.dirname(targetAbs), { recursive: true });
-          try { await fs.promises.unlink(targetAbs); } catch (_) { /* no existe previo */ }
-          await fs.promises.symlink(sourceAbs, targetAbs);
-        } catch (err) {
-          this.logger.warn('project-manager.blueprint.symlink_failed', {
-            feature: featureId, source: sourceAbs, target: targetAbs, error: err.message
-          });
-          this.metrics?.increment('project-manager.errors', { kind: 'blueprint_symlink' });
-        }
-      }
-    }
+    await this._applySymlinks(basePath, projectDef.symlinks, projectSlug, featureId);
 
     // 6. Verify_after (nuevo v1.0). Post-condition: paths que deben existir tras aplicar.
     //    Si falta alguno, lanza error — el caller lo captura como warning de feature.

@@ -161,26 +161,30 @@
     },
     "publicar": {
       "_es_fuzzy": false,
-      "_doc": "DOS CAMINOS (no excluir): (1) ALOJADA — la carta está VIVA al vuelo en /shop/<slug> (la sirve el proyector; siempre fresca, cada cambio se ve al instante; pedido+chat in-app). (2) SIN ALOJAMIENTO — export estático con carta-digital/export-cli.js para subir a cualquier hosting; pedido y asistente por WhatsApp. NO finjas un despliegue: confirma la URL viva o explica el export.",
+      "_doc": "DEPLOY REAL (delega al reflejo). DOS CAMINOS (no excluir): (1) ALOJADA — el reflejo genera el bundle estático (proyección + diseño) y lo ESCRIBE en storage/tienda/bundle/; Caddy lo sirve en /shop/<slug> por el symlink que crea project-manager al activar la feature `tienda`. ES ESTÁTICO, no al vuelo: cada cambio (descripción/imagen/diseño) requiere VOLVER A publicar. (2) SIN ALOJAMIENTO — export estático con carta-digital/export-cli.js para subir a cualquier hosting; pedido y asistente por WhatsApp. NO finjas el deploy: reporta lo que devuelve el reflejo (incluido el aviso sobre la feature `tienda`).",
       "input": "{ project_id (req), slug? }",
       "pseudocodigo": [
         "async publicar(in):",
-        "  // No hace deploy: la carta YA está viva. Confirma la URL (camino ALOJADO) + opción export.",
-        "  slug = in.slug || <slug del proyecto>",
-        "  return { status: 200, data: {",
-        "    alojada_url: '/shop/' + slug,   // viva al vuelo, siempre fresca",
-        "    aviso: 'Tu carta ya está VIVA en /shop/' + slug + ' (se sirve al vuelo: cada descripción/imagen aparece al instante). Para una PWA suelta sin backend, usa export-cli (pedido y asistente por WhatsApp).'",
-        "  } }"
+        "  // 1. CONTRATO",
+        "  if (!in.project_id) return INVALID_INPUT",
+        "  // 2. DEPLOY — el REFLEJO proyecta + aplica diseño + generateStaticHTML + escribe el bundle.",
+        "  //    Propaga su error TAL CUAL (404 sin carta, 502/503 fs). NO finjas éxito sin respuesta.",
+        "  r = await publishAndWait('cartadigital.publicar.request', { project_id: in.project_id, slug: in.slug })",
+        "  if (!r || r.status >= 400) return r?.error || UPSTREAM_UNREACHABLE",
+        "  // 3. REPORTAR — la URL + el aviso del reflejo (estático, feature tienda). Tal cual.",
+        "  return { status: 200, data: r.data }   // { alojada_url, bundle_dir, productos, imagenes_copiadas, aviso }"
       ],
       "reglas_clave": [
-        "NO finjas deploy. La carta alojada está viva en /shop/<slug> por construcción (el proyector la sirve).",
+        "El DEPLOY lo hace el REFLEJO (escribe el bundle estático). El LLM NO escribe fs; solo delega y reporta.",
+        "NO digas 'al vuelo': es ESTÁTICO. Transmite el aviso del reflejo (cada cambio requiere republicar; si /shop/<slug> da 404, hay que activar la feature `tienda`).",
         "Si el usuario quiere la PWA SUELTA (sin backend), indícale el export-cli (carta-digital/export-cli.js) — ahí pedido y asistente van por WhatsApp."
       ],
-      "errores_posibles": ["INVALID_INPUT"]
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE", "UPSTREAM_UNREACHABLE"]
     }
   },
   "trabajo_pendiente": [
-    { "id": "deploy_frontend", "estado": "abierto", "descripcion": "Op real de publicación desde el chat (generateStaticHTML server-side → bundle → cf-worker/Pages). Hoy es CLI offline." },
+    { "id": "deploy_frontend", "estado": "resuelto", "descripcion": "v2.2.0: publicar() es deploy real (reflejo cartadigital.publicar) → escribe el bundle en storage/tienda/bundle/, Caddy lo sirve estático en /shop/<slug> por el symlink de project-manager. Hallazgo Caddyfile 2026-06-16: /shop/* NO pasa por el gateway (handle_path estático), por eso la ruta on-demand era código muerto." },
+    { "id": "feature_tienda_auto", "estado": "abierto", "descripcion": "publicar() escribe el bundle aunque la feature `tienda` no esté activa (no hay symlink → 404). Mejora: que publicar detecte/active la feature `tienda` (project.add-features) para crear el symlink automáticamente." },
     { "id": "sound_designer", "estado": "espera_motor", "descripcion": "Cajón generar_audio cuando media-generator tenga motor de audio (TTS/music). La estructura de contenido ya reserva audio[]." }
   ]
 }

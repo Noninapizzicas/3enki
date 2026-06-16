@@ -28,6 +28,12 @@
       "action": "update_config",
       "handler": "handleUpdateConfig",
       "description": "Actualiza el config del canal (solo dominio/opciones; branding/productos NO se guardan aqui, se beben)."
+    },
+    {
+      "domain": "cartadigital",
+      "action": "get_diseno",
+      "handler": "handleGetDiseno",
+      "description": "Lee el diseno (card_template + tema_css) que compuso Enki para el proyecto."
     }
   ],
   "config": {

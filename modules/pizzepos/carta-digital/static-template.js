@@ -6,7 +6,27 @@
  * No backend or network connection needed.
  *
  * Output: Single HTML file deployable to GitHub Pages, Netlify, etc.
+ *
+ * DISEÑO POR PROYECTO: el RUNTIME (carrito/pedido/chat) es fijo y compartido; el LOOK
+ * (card_template + tema_css) lo compone ENKI por proyecto (cajón diseñar_carta_digital)
+ * y se inyecta via options.diseno. Se acoplan por el CONTRATO de slots: el card_template
+ * trae placeholders {{...}} + data-accion (detalle|add) + data-producto-id; el runtime
+ * rellena los slots y delega los clics por data-accion. Sin diseño → semilla inmersiva.
  */
+
+// Semilla inmersiva: card foto-hero, descripción delante, gancho acento. Es lo que el
+// diseñador web produce por defecto; Enki la reemplaza por la suya por proyecto.
+const DEFAULT_CARD_TEMPLATE = [
+  '<article class="dish" data-producto-id="{{id}}" data-accion="detalle">',
+  '  <div class="dish-photo">{{visual}}<div class="dish-badges">{{gancho}}{{badges}}</div></div>',
+  '  <div class="dish-body">',
+  '    <div class="dish-head"><h3 class="dish-name">{{nombre}}</h3><span class="dish-price">{{precio}}</span></div>',
+  '    <p class="dish-desc">{{descripcion}}</p>',
+  '    {{alergenos}}',
+  '    <button class="dish-add" data-accion="add" data-producto-id="{{id}}" aria-label="{{add_label}}">Añadir</button>',
+  '  </div>',
+  '</article>'
+].join('\n');
 
 function generateStaticHTML(carta, config, options = {}) {
   const {
@@ -24,6 +44,12 @@ function generateStaticHTML(carta, config, options = {}) {
     // ALOJADO: VPS+dominio). Si NO → checkout por WhatsApp (escenario PWA suelta).
     pedido_endpoint = config.pedido_endpoint || ''
   } = options;
+
+  // DISEÑO por proyecto (lo compone Enki): card_template + tema_css. Si no hay → semilla.
+  const diseno = options.diseno || config.diseno || {};
+  const cardTemplate = (diseno && typeof diseno.card_template === 'string' && diseno.card_template.trim())
+    ? diseno.card_template : DEFAULT_CARD_TEMPLATE;
+  const disenoCss = (diseno && typeof diseno.tema_css === 'string') ? diseno.tema_css : '';
 
   const colorPrimario = tema.color_primario || '#f59e0b';
   const colorFondo = tema.color_fondo || '#0a0a0a';
@@ -420,6 +446,26 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
   .cart-overlay.open{align-items:center}.cart{border-radius:20px}
   .chat-overlay.open{align-items:center}.chat-panel{border-radius:20px;height:70vh}
 }
+/* ── Carta INMERSIVA (semilla) — navegación relajada, foto-hero, descripción delante ── */
+.content{max-width:760px;margin:0 auto}
+.grid{display:grid;grid-template-columns:1fr;gap:22px}
+@media(min-width:720px){.grid{grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:26px}}
+.dish{display:flex;flex-direction:column;background:var(--bg-card);border:1px solid var(--border);border-radius:18px;overflow:hidden;cursor:pointer;transition:transform .12s,border-color .15s;-webkit-tap-highlight-color:transparent}
+.dish:active{transform:scale(.99)}
+.dish-photo{position:relative;width:100%;aspect-ratio:16/10;background:#1a1a1a;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.dish-photo img{width:100%;height:100%;object-fit:cover}
+.dish-photo .ph{font-size:3rem;opacity:.5}
+.dish-badges{position:absolute;top:10px;left:10px;display:flex;gap:5px;flex-wrap:wrap}
+.dish-body{padding:16px 16px 18px;display:flex;flex-direction:column;gap:9px}
+.dish-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.dish-name{margin:0;font-size:1.15rem;font-weight:700;line-height:1.2}
+.dish-price{font-size:1.2rem;font-weight:800;color:var(--primary);white-space:nowrap;font-variant-numeric:tabular-nums}
+.dish-desc{margin:0;font-size:.9rem;color:var(--text-mid);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.dish-desc:empty{display:none}
+.dish-add{align-self:flex-start;margin-top:2px;padding:9px 20px;border:none;border-radius:22px;background:var(--primary);color:#000;font-weight:700;font-size:.85rem;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.dish-add:active{filter:brightness(1.1)}
+/* ── tema por proyecto (lo compone Enki; sobreescribe la semilla) ── */
+${disenoCss}
 </style>
 </head>
 <body>
@@ -549,6 +595,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 // Data — embedded at build time
 const DATA = ${dataJSON};
 const CONFIG = ${configJSON};
+const CARD_TEMPLATE = ${JSON.stringify(cardTemplate)};
 const MONEDA = '${escapeHtml(moneda)}';
 
 // i18n — auto-detect language
@@ -753,40 +800,52 @@ function selectCat(id) {
 }
 
 // Grid
+// Rellena el CARD_TEMPLATE (diseño por proyecto o semilla) con los slots del producto.
+// El runtime pre-renderiza lo dinámico (visual, badges, alérgenos); el template arregla el look.
+function fillCard(p) {
+  const ings = p.ingredientes || [];
+  const preview = ings.slice(0, 5).map(i => i.emoji || (i.nombre || '').slice(0, 8)).join(' ') + (ings.length > 5 ? ' …' : '');
+  const tags = p.tags || [];
+  let badges = '';
+  if (tags.includes('vegano')) badges += '<span class="badge">Vegano</span>';
+  else if (tags.includes('vegetariano')) badges += '<span class="badge">Vegetariano</span>';
+  if (tags.includes('popular')) badges += '<span class="badge popular">Popular</span>';
+  if (tags.includes('picante')) badges += '<span class="badge picante">Picante</span>';
+  if (tags.includes('premium')) badges += '<span class="badge premium">Premium</span>';
+  if (tags.includes('nuevo')) badges += '<span class="badge nuevo">Nuevo</span>';
+  const visual = p.imagen
+    ? '<img src="' + esc(p.imagen) + '" alt="' + esc(p.imagen_alt || p.nombre) + '" loading="lazy">'
+    : '<span class="ph" role="img" aria-label="' + esc(p.nombre) + '">' + (p.emoji || '${logoEmoji}') + '</span>';
+  const slots = {
+    id: esc(p.id),
+    nombre: (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre),
+    precio: fmt(p.precio),
+    visual: visual,
+    gancho: p.gancho ? '<span class="badge gancho">' + esc(p.gancho) + '</span>' : '',
+    badges: badges,
+    descripcion: p.descripcion ? esc(p.descripcion) : esc(preview),
+    alergenos: alergChipsCompact(p.alergenos),
+    ingredientes: esc(preview),
+    add_label: 'Añadir ' + esc(p.nombre)
+  };
+  return CARD_TEMPLATE.replace(/\\{\\{(\\w+)\\}\\}/g, function (m, k) { return (k in slots) ? slots[k] : ''; });
+}
+
 function renderGrid() {
   const prods = catActiva ? DATA.productos.filter(p => p.categoria === catActiva) : DATA.productos;
   const el = document.getElementById('grid');
   if (prods.length === 0) { el.innerHTML = '<div style="text-align:center;padding:60px;color:#666;grid-column:1/-1">' + T.no_products + '</div>'; return; }
-
-  let html = '';
-  for (const p of prods) {
-    const ings = p.ingredientes || [];
-    const preview = ings.slice(0, 5).map(i => i.emoji || i.nombre.slice(0, 8)).join(' ') + (ings.length > 5 ? ' ...' : '');
-    const tags = p.tags || [];
-    let badgesHtml = '';
-    if (p.gancho) badgesHtml += '<span class="badge gancho">' + esc(p.gancho) + '</span>';   // reclamo del marketing
-    if (tags.includes('vegano')) badgesHtml += '<span class="badge">Vegano</span>';
-    else if (tags.includes('vegetariano')) badgesHtml += '<span class="badge">Vegetariano</span>';
-    if (tags.includes('popular')) badgesHtml += '<span class="badge popular">Popular</span>';
-    if (tags.includes('picante')) badgesHtml += '<span class="badge picante">Picante</span>';
-    if (tags.includes('premium')) badgesHtml += '<span class="badge premium">Premium</span>';
-    if (tags.includes('nuevo')) badgesHtml += '<span class="badge nuevo">Nuevo</span>';
-
-    const visual = p.imagen
-      ? '<img src="' + esc(p.imagen) + '" alt="' + esc(p.imagen_alt || p.nombre) + '" class="card-img" loading="lazy">'
-      : '<span class="card-ph" role="img" aria-label="' + esc(p.nombre) + '">' + (p.emoji || '${logoEmoji}') + '</span>';
-
-    const desc = p.descripcion
-      ? '<span class="card-desc">' + esc(p.descripcion) + '</span>'
-      : (preview ? '<span class="card-ings">' + esc(preview) + '</span>' : '');
-
-    html += '<div class="card" onclick="showDetail(\\'' + p.id + '\\')">' +
-      '<div class="card-visual">' + visual + (badgesHtml ? '<div class="badges">' + badgesHtml + '</div>' : '') + '</div>' +
-      '<div class="card-body"><span class="card-nombre">' + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '</span>' + desc + alergChipsCompact(p.alergenos) + '</div>' +
-      '<div class="card-footer"><span class="card-precio">' + fmt(p.precio) + '</span>' +
-      '<button class="card-add" onclick="event.stopPropagation();addToCart(\\'' + p.id + '\\')" aria-label="Añadir ' + esc(p.nombre) + '" title="Añadir">+</button></div></div>';
+  el.innerHTML = prods.map(fillCard).join('');
+  if (!el._delegado) {
+    // Delegación por data-accion: el diseño NO necesita saber nombres de función.
+    el.addEventListener('click', function (e) {
+      const add = e.target.closest('[data-accion="add"]');
+      if (add) { e.stopPropagation(); addToCart(add.getAttribute('data-producto-id')); return; }
+      const det = e.target.closest('[data-accion="detalle"]');
+      if (det) { showDetail(det.getAttribute('data-producto-id')); }
+    });
+    el._delegado = true;
   }
-  el.innerHTML = html;
 }
 
 // Detail

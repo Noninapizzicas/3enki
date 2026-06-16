@@ -202,15 +202,16 @@ class CartaDigitalModule extends BaseModule {
     return pid;
   }
 
-  // HTTP: sirve la PWA de la carta AL VUELO (proyección + diseño de Enki + runtime). Siempre fresca.
-  async handleServeShop(req, res) {
+  // HTTP (gateway): sirve la PWA AL VUELO. El gateway pasa (requestObj, ctx) y usa el
+  // RETORNO — convención {_html, _contentType} para HTML; {status, body, headers} para errores.
+  async handleServeShop(req) {
     const slug = (req && req.params && req.params.slug) || '';
-    const enviar = (status, body) => { try { res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' }); res.end(body); } catch (_) {} return { status }; };
+    const err = (status, msg) => ({ status, body: '<!doctype html><meta charset=utf-8><h1>' + msg + '</h1>', headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     try {
       const project_id = await this._resolverSlug(slug);
-      if (!project_id) return enviar(404, '<!doctype html><meta charset=utf-8><h1>Carta no encontrada</h1>');
+      if (!project_id) return err(404, 'Carta no encontrada');
       const proy = await this._proyectarPublica(project_id);
-      if (proy.status !== 200) return enviar(proy.status === 404 ? 404 : 503, '<!doctype html><meta charset=utf-8><h1>' + (proy.error?.message || 'Carta no disponible') + '</h1>');
+      if (proy.status !== 200) return err(proy.status === 404 ? 404 : 503, proy.error?.message || 'Carta no disponible');
       const data = proy.data;
       const b = data.branding || {};
       const colores = b.colores || {};
@@ -221,7 +222,7 @@ class CartaDigitalModule extends BaseModule {
         nombre_negocio: b.nombre || 'Carta',
         moneda: op.moneda || '€',
         whatsapp_telefono: b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || '',
-        pedido_endpoint: op.pedido_endpoint || '',   // alojada: si está, pedido online a tienda-api
+        pedido_endpoint: op.pedido_endpoint || '',
         tema: { color_primario: colores.primario || colores.principal || colores.acento || '#f59e0b', color_fondo: colores.fondo || '#0a0a0a', color_texto: colores.texto || '#e5e5e5' }
       };
       const html = generateStaticHTML(
@@ -230,10 +231,10 @@ class CartaDigitalModule extends BaseModule {
         { diseno }
       );
       this.metrics?.increment?.('cartadigital.shop.served', { project: slug });
-      return enviar(200, html);
-    } catch (err) {
-      this.logger?.error('carta-digital.shop.failed', { slug, error: err.message });
-      return enviar(500, '<!doctype html><meta charset=utf-8><h1>Error</h1>');
+      return { _html: html, _contentType: 'text/html; charset=utf-8' };
+    } catch (e) {
+      this.logger?.error('carta-digital.shop.failed', { slug, error: e.message });
+      return err(500, 'Error');
     }
   }
 

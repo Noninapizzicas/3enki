@@ -260,7 +260,7 @@ class CartaDigitalModule extends BaseModule {
     const colorFondo = colores.fondo || '#0a0a0a';
     const logoEmoji = (typeof b.logo === 'string' && b.logo.length <= 4) ? b.logo : '\u{1F355}';
     const tplConfig = {
-      nombre_negocio: b.nombre || 'Carta',
+      nombre_negocio: b.nombre || this.activos.get(project_id)?.name || 'Carta',
       moneda: op.moneda || '€',
       whatsapp_telefono: b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || '',
       pago_online: !!op.pago_online,

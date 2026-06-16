@@ -85,13 +85,14 @@ class OpenwaServiceModule extends BaseModule {
       sessionId,
       sessionDataPath: path.join(this.dataDir, sessionId),
       headless: this.headless,
-      useChrome: true,
-      executablePath: this.chromePath,
+      executablePath: this.chromePath,   // undefined → usa el Chromium que trae open-wa
       multiDevice: true,
       qrTimeout: 0,
       authTimeout: 0,
       disableSpins: true,
       qrLogSkip: false,            // loguea el QR en consola para escanearlo una vez
+      // Flags imprescindibles en servidor (sin pantalla, usuario de servicio sin user-namespaces).
+      chromiumArgs: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
       // Algunos builds aceptan qrCallback en la config; si no, open-wa loguea el QR igual.
       qrCallback: (qr) => {
         this.logger?.warn('openwa.qr', { project: project_slug, hint: 'escanea el QR (data-uri en el evento whatsapp.qr)' });

@@ -42,7 +42,9 @@ function generateStaticHTML(carta, config, options = {}) {
     chat_enabled = config.chat_enabled !== false && !!ai_endpoint,
     // Endpoint de pedido online (tienda-api). Si está → la PWA hace POST (escenario
     // ALOJADO: VPS+dominio). Si NO → checkout por WhatsApp (escenario PWA suelta).
-    pedido_endpoint = config.pedido_endpoint || ''
+    pedido_endpoint = config.pedido_endpoint || '',
+    // Pago online: si el proyecto tiene pasarela, ofrece "Pagar ahora" (además de recoger).
+    pago_online = config.pago_online === true
   } = options;
 
   // DISEÑO por proyecto (lo compone Enki): card_template + tema_css. Si no hay → semilla.
@@ -109,7 +111,7 @@ function generateStaticHTML(carta, config, options = {}) {
   const dataJSON = JSON.stringify({ categorias, productos, ofertas, resenas, resenas_avg: resenasAvg, resenas_total: resenasTotal, alergenos_leyenda: alergenosLeyenda });
   const configJSON = JSON.stringify({
     nombre_negocio, moneda, whatsapp_telefono, mensaje_header,
-    ai_endpoint, ai_provider, ai_chat_path, chat_enabled, pedido_endpoint
+    ai_endpoint, ai_provider, ai_chat_path, chat_enabled, pedido_endpoint, pago_online
   });
 
   // Build system prompt for AI assistant with full menu context + upselling
@@ -1030,8 +1032,12 @@ function updateCart() {
   footer.style.display = 'block';
   // Mode-aware: ALOJADO (pedido_endpoint) → pedir online + código de recogida.
   // SUELTA → WhatsApp. Si hay ambos, los dos (el cliente elige; no excluir).
+  // Pagar ahora (pasarela) — solo si el proyecto tiene pago online. No excluye: la recogida sigue.
+  const pagarBtn = (CONFIG.pedido_endpoint && CONFIG.pago_online)
+    ? '<button class="btn-wa" id="btn-pagar" onclick="pagarAhora()">💳 Pagar ahora</button>'
+    : '';
   const onlineBtn = CONFIG.pedido_endpoint
-    ? '<button class="btn-wa" id="btn-pedir" onclick="pedirOnline()">Pedir para recoger</button>'
+    ? '<button class="' + (CONFIG.pago_online ? 'btn-share' : 'btn-wa') + '" id="btn-pedir" onclick="pedirOnline()">Pedir y pagar al recoger</button>'
     : '';
   const waBtn = CONFIG.whatsapp_telefono
     ? '<button class="' + (CONFIG.pedido_endpoint ? 'btn-share' : 'btn-wa') + '" onclick="sendWhatsApp()">WhatsApp</button>'
@@ -1041,7 +1047,7 @@ function updateCart() {
     : '';
   footer.innerHTML = '<div class="total-row"><span class="total-label">' + T.total + '</span><span class="total-amount">' + fmt(total) + '</span></div>' +
     nombreInput +
-    '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button>' + onlineBtn + waBtn + '</div>';
+    '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button>' + pagarBtn + onlineBtn + waBtn + '</div>';
 }
 
 function changeQty(cid, delta) {
@@ -1082,6 +1088,43 @@ function sendWhatsApp() {
   saveLastOrder();
   trackEvent('order_sent', null, { items: cart.length, total: total });
   window.open('https://wa.me/' + CONFIG.whatsapp_telefono + '?text=' + encodeURIComponent(msg), '_blank');
+}
+
+// Pagar AHORA (pasarela): POST con pago_online → tienda-api crea el pedido + inicia el pago
+// → checkout_url; la PWA redirige a la pasarela. Si no hay pasarela, el pedido ya quedó (recogida).
+async function pagarAhora() {
+  if (cart.length === 0 || !CONFIG.pedido_endpoint) return;
+  var total = cart.reduce(function(s, i){ return s + i.precio * i.qty; }, 0);
+  var nombreEl = document.getElementById('cliente-nombre');
+  var nombre = nombreEl && nombreEl.value ? nombreEl.value.trim() : '';
+  var body = {
+    items: cart.map(function(i){ return { cantidad: i.qty, descripcion: i.nombre + (i.detalle ? ' [' + i.detalle + ']' : '') }; }),
+    total_centimos: Math.round(total * 100),
+    pago_online: true,
+    return_url: location.origin + location.pathname
+  };
+  if (nombre) body.nombre_cliente = nombre;
+  var btn = document.getElementById('btn-pagar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Conectando…'; }
+  try {
+    var r = await fetch(CONFIG.pedido_endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    var data = await r.json().catch(function(){ return null; });
+    var url = data && data.data && data.data.checkout_url;
+    if (r.ok && url) {
+      saveLastOrder();
+      trackEvent('order_sent', null, { items: cart.length, total: total, canal: 'web-pago' });
+      window.location.href = url;   // → pasarela (Stripe)
+      return;
+    }
+    // Sin pasarela: el pedido SÍ se creó (recogida). Mostramos el código.
+    var codigo = data && data.data && data.data.codigo_recogida;
+    if (r.ok && codigo) { mostrarConfirmacion(codigo); cart = []; updateCart(); return; }
+    throw new Error((data && data.error && data.error.message) || ('HTTP ' + r.status));
+  } catch (e) {
+    alert('No se pudo iniciar el pago.' + (CONFIG.whatsapp_telefono ? ' Prueba por WhatsApp.' : ' Inténtalo de nuevo.'));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💳 Pagar ahora'; }
+  }
 }
 
 // Pedido ONLINE (escenario alojado): POST a tienda-api → pedido.crear-tienda → código de recogida.

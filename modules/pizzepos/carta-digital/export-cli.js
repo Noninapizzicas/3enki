@@ -113,6 +113,7 @@ const tplConfig = {
   moneda,
   whatsapp_telefono: whatsapp,
   mensaje_header: '¡Hola! Quiero pedir:',
+  pago_online: !!(config.opciones_visualizacion && config.opciones_visualizacion.pago_online),
   pedido_endpoint: pedidoEndpoint,
   tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colorTexto, logo_emoji: logoEmoji }
 };

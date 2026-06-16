@@ -1,0 +1,22 @@
+{
+  "name": "openwa-service",
+  "version": "1.0.0",
+  "description": "Transporte WhatsApp SELF-HOSTED via open-wa (@open-wa/wa-automate). Corre dentro del sistema (in-process con el bus). Puente: open-wa onMessage -> whatsapp.entrante; whatsapp.enviar.request -> client.sendText. Una sesion por proyecto (login QR una vez, persistida en data/openwa/<session>). NO oficial (ToS): riesgo de baneo a nivel protocolo -> usar numero DEDICADO, volumen conversacional. Dependencia @open-wa/wa-automate en optionalDependencies (lazy-require; si falta, el modulo carga inerte y lo avisa). Necesita Chromium en el host. Sustituye/aparca al transporte Meta Cloud API y a las notificaciones Telegram para la vertical tienda PWA.",
+  "language": "es",
+  "config": {
+    "data_path": "./data/openwa",
+    "headless": true,
+    "chrome_path": null,
+    "sessions": [],
+    "_sessions_doc": "Array de { project_slug, session_id?, number? }. Una entrada por proyecto/numero. El primer arranque loguea un QR (evento whatsapp.qr) para escanear UNA vez con el movil del numero dedicado."
+  },
+  "events": {
+    "publishes": [
+      { "event": "whatsapp.entrante", "description": "Mensaje 1:1 entrante. { project_slug, from, body, message_id, ts }. Lo consume whatsapp-bot (parsea pedido)." },
+      { "event": "whatsapp.enviar.response", "description": "Resultado del envio correlado por request_id. { request_id, ok, error? }." },
+      { "event": "whatsapp.qr", "description": "QR de login para escanear una vez. { project_slug, qr (data-uri), ts }." },
+      { "event": "whatsapp.sesion.caida", "description": "La sesion se deslogueo (UNPAIRED) -> hay que re-escanear. { project_slug, state, ts }." }
+    ],
+    "subscribes": []
+  }
+}

@@ -65,7 +65,11 @@ class WhatsappBotModule extends BaseModule {
     const moduleJson = JSON.parse(await fs.readFile(path.join(__dirname, 'module.json'), 'utf8'));
     this.config = moduleJson.config || {};
 
-    this.logger.info('module.loading', { module: this.name, version: this.version });
+    // Transporte: 'openwa' (self-hosted, vía openwa-service por el bus) | 'meta' (Cloud API directa).
+    // Default openwa: whatsapp-bot queda AGNÓSTICO al transporte (envía/recibe por eventos del bus).
+    this.transport = this.config.transport || 'openwa';
+
+    this.logger.info('module.loading', { module: this.name, version: this.version, transport: this.transport });
 
     this.metaClient = new MetaCloudClient({
       apiBase: this.config.meta_api_base,
@@ -157,6 +161,24 @@ class WhatsappBotModule extends BaseModule {
     const msg = `¡Tu pedido ya está listo! 🎉 Puedes pasar a recogerlo.${cod} Al recoger te preguntaremos tu palabra clave y pagas en efectivo.${display}`;
     await this._enviarMensajeSeguro(ref.project_slug, ref.from, msg);
     this.metrics?.increment('whatsapp-bot.pedido.listo_notificado', { project: ref.project_slug });
+  }
+
+  // Mensaje entrante por el transporte del bus (openwa-service). Equivalente al webhook de Meta,
+  // pero agnóstico: reusa el mismo despacho de pedidos. { project_slug, from, body, message_id }.
+  async onWhatsappEntrante(event) {
+    const d = event?.data || event;
+    const from = d?.from;
+    if (!from) return;
+    const project_slug = d.project_slug || d.project || null;
+    const msg = {
+      phone_number_id: null,
+      from,
+      message_type: 'text',
+      message_id: d.message_id || null,
+      text: (d.body != null ? d.body : (d.text || ''))
+    };
+    this.metrics?.increment?.('whatsapp-bot.message.received', { transport: 'openwa' });
+    await this._despacharEntrante(project_slug, msg);
   }
 
   async onPedidoCrearTiendaResponse(event) {
@@ -536,6 +558,18 @@ class WhatsappBotModule extends BaseModule {
 
   async _enviarMensajeSeguro(project_slug, to, text) {
     try {
+      // Transporte open-wa (self-hosted): delega al bus → openwa-service hace el sendText.
+      if (this.transport === 'openwa') {
+        await this.eventBus.publish('whatsapp.enviar.request', {
+          request_id: crypto.randomUUID(), project_slug, to, text
+        });
+        this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, transport: 'openwa' });
+        await this._publicarEvento('whatsapp.mensaje.enviado', {
+          project_slug, to: this._maskPhoneNumber(to), kind: 'auto', transport: 'openwa'
+        });
+        return;
+      }
+      // Transporte meta (Cloud API directa) — parcado por defecto.
       const meta = this.projectsByMeta.get(project_slug);
       if (!meta?.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
         this.logger.warn('whatsapp-bot.envio.proyecto_no_operativo', { project_slug });

@@ -7,8 +7,10 @@
     "data_path": "./data/openwa",
     "headless": true,
     "chrome_path": null,
-    "sessions": [],
-    "_sessions_doc": "Array de { project_slug, session_id?, number? }. Una entrada por proyecto/numero. El primer arranque loguea un QR (evento whatsapp.qr) para escanear UNA vez con el movil del numero dedicado."
+    "sessions": [
+      { "project_slug": "nonina" }
+    ],
+    "_sessions_doc": "Array de { project_slug, session_id?, number? }. Una entrada por proyecto/numero. El primer arranque loguea un QR (evento whatsapp.qr) para escanear UNA vez con el movil del numero dedicado. Anadir proyecto = anadir entrada aqui (hasta el refinamiento de arranque automatico por feature)."
   },
   "events": {
     "publishes": [

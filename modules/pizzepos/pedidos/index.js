@@ -173,6 +173,31 @@ class PedidosModule extends BaseModule {
     }
   }
 
+  // Capa de pago anticipado (opcional): el líder de pago confirmó el pago online de un
+  // pedido tienda → marcar pagado y liberarlo. Idempotente (el webhook puede repetir).
+  async onPagoConfirmado(event) {
+    const d = event?.data || event?.payload || event;
+    const pedido_id = d?.pedido_id;
+    if (!pedido_id) return;
+    const pedido = this.pedidos.get(pedido_id);
+    if (!pedido) { this.logger?.warn('pedidos.pago_confirmado.no_encontrado', { pedido_id }); return; }
+    if (pedido.pago && pedido.pago.estado === 'pagado') return;   // idempotencia
+    pedido.pago = {
+      estado: 'pagado',
+      session_id: d.session_id || null,
+      pasarela: d.pasarela || null,
+      monto_centimos: (d.monto_centimos !== undefined ? d.monto_centimos : null),
+      confirmado_at: new Date().toISOString()
+    };
+    pedido.updated_at = new Date().toISOString();
+    this.metrics?.increment?.('pedidos.pagado.total', { pasarela: d.pasarela || 'desconocida' });
+    this.logger?.info('pedidos.pagado', { pedido_id, pasarela: d.pasarela });
+    await this._publicarEvento('pedido.pagado', {
+      pedido_id, project_id: pedido.project_id || d.project_id || null,
+      session_id: d.session_id || null, total: pedido.total
+    }, d);
+  }
+
   async onCajaCerrada(event) {
     const before = this.pedidos.size;
     // Solo limpiar pedidos tipo='pos' — los pedidos tipo='tienda' NO estan atados

@@ -35,6 +35,11 @@ class CartaDigitalModule extends BaseModule {
     this.version = '2.0.0';
     // ÚNICO estado: el mapping canal→carta_id por proyecto (de tarifas.config.actualizada).
     this.mappingCanalesPerProject = new Map();
+    // Proyectos activos vistos por project.activated (project_id → {name, slug}) + el ÚLTIMO
+    // activado, que es DONDE escribe el filesystem (fs scopea por el último project.activated).
+    // El guard de publicar compara contra esto — sin RPC frágil a project-manager.
+    this.activos = new Map();
+    this.ultimoActivo = null;
     this._subs = [];
   }
 
@@ -53,6 +58,7 @@ class CartaDigitalModule extends BaseModule {
     sub('contenido.actualizado', e => this._reemitir(e));
     sub('marketing.perfil.actualizado', e => this._reemitir(e));
     sub('project.activated', e => this._onProjectActivated(e));
+    sub('project.deactivated', e => this._onProjectDeactivated(e));
     // RPC de bus: el cajón diseñar_carta_digital persiste el diseño por aquí.
     sub('cartadigital.guardar_diseno.request', e => this._onGuardarDisenoRequest(e));
     // RPC de bus: el cajón publicar genera el bundle estático (deploy real desde el chat).
@@ -96,7 +102,19 @@ class CartaDigitalModule extends BaseModule {
   }
   _onProjectActivated(event) {
     const d = event?.data || event;
-    if (d?.project_id) this.eventBus.publish('tarifas.config.solicitada', { project_id: d.project_id, correlation_id: crypto.randomUUID() });
+    if (!d?.project_id) return;
+    // Rastrea el activo + su slug (el evento trae name, igual que lo recibe filesystem).
+    // slug = slugify(name), como project-manager para el symlink /opt/enki/public/shop/<slug>.
+    const name = d.name || '';
+    this.activos.set(d.project_id, { name, slug: name ? slugify(name) : String(d.project_id).slice(0, 8) });
+    this.ultimoActivo = d.project_id;
+    this.eventBus.publish('tarifas.config.solicitada', { project_id: d.project_id, correlation_id: crypto.randomUUID() });
+  }
+  _onProjectDeactivated(event) {
+    const d = event?.data || event;
+    if (!d?.project_id) return;
+    this.activos.delete(d.project_id);
+    if (this.ultimoActivo === d.project_id) this.ultimoActivo = null;
   }
   // señal de refresco para la PWA/frontend cuando cambia cualquier fuente.
   _reemitir(event) {
@@ -193,18 +211,6 @@ class CartaDigitalModule extends BaseModule {
     return { status: 200, data: await this._leerDiseno(data.project_id) };
   }
 
-  // Info del proyecto (existe + activo + slug). El fs ESCRIBE en el proyecto ACTIVO e
-  // IGNORA el project_id del payload (filesystem._busDispatch lo descarta). Por eso publicar
-  // EXIGE que el objetivo esté activo: si no, escribiría en otro proyecto en silencio.
-  // slug = slugify(name), igual que project-manager para el symlink /opt/enki/public/shop/<slug>.
-  async _proyectoInfo(project_id) {
-    const r = await this._rpc('project.list.request', {}, { timeout_ms: 6000 });
-    const arr = (r && (r.data?.projects || r.data)) || [];
-    const p = Array.isArray(arr) ? arr.find(x => (x.project_id || x.id) === project_id) : null;
-    if (!p) return null;
-    const name = p.name || '';
-    return { name, is_active: p.is_active === true || p.is_active === 1 || p.isActive === true, slug: name ? slugify(name) : String(project_id).slice(0, 8) };
-  }
 
   // ── PUBLICAR: deploy real desde el chat. Genera el bundle estático y lo escribe en
   // storage/tienda/bundle/ (que project-manager symlinka a /opt/enki/public/shop/<slug>/
@@ -213,15 +219,16 @@ class CartaDigitalModule extends BaseModule {
   async _publicarBundle(project_id, slugHint) {
     if (!project_id) return this._err(400, 'INVALID_INPUT', 'project_id requerido');
 
-    // GUARD anti-escritura-cross-project: el fs escribe en el proyecto ACTIVO. Si el objetivo
-    // no está activo, el bundle iría a otro proyecto en silencio → fallar claro (no_silent_failures).
-    const info = await this._proyectoInfo(project_id);
-    if (!info) return this._err(404, 'RESOURCE_NOT_FOUND', `proyecto ${project_id} no encontrado`);
-    if (!info.is_active) {
+    // GUARD anti-escritura-cross-project: el fs escribe en el ÚLTIMO proyecto activado
+    // (filesystem._busDispatch descarta el project_id del payload). Si el objetivo no es
+    // ese, el bundle iría a otro proyecto en silencio → fallar claro (no_silent_failures).
+    // ultimoActivo se rastrea por project.activated (event-driven, sin RPC frágil).
+    if (this.ultimoActivo && project_id !== this.ultimoActivo) {
+      const nomActivo = this.activos.get(this.ultimoActivo)?.name || this.ultimoActivo;
       return this._err(412, 'PRECONDITION_FAILED',
-        `el proyecto «${info.name || project_id}» no está activo; el filesystem escribe en el proyecto activo, así que publicar sin activarlo escribiría el bundle en otro. Actívalo antes de publicar.`);
+        `el filesystem escribe en el proyecto activo («${nomActivo}»), no en el objetivo (${project_id}). Activa el proyecto objetivo antes de publicar para no escribir su carta en otro.`);
     }
-    const slug = slugHint || info.slug;
+    const slug = slugHint || this.activos.get(project_id)?.slug || String(project_id).slice(0, 8);
 
     const proy = await this._proyectarPublica(project_id);
     if (proy.status !== 200) return proy;   // 404 sin carta / 503 fuentes caídas — propaga

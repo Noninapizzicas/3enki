@@ -19,10 +19,14 @@
 const crypto = require('crypto');
 const BaseModule = require('../../_shared/base-module');
 const { proyectarCartaPublica } = require('./proyeccion');
-const { generateStaticHTML } = require('./static-template');
+const { generateStaticHTML, generateServiceWorker, generateManifest, generateIcon, slugify } = require('./static-template');
 
 const CONFIG_PATH = '/pizzepos/carta-digital/config.json';
 const DISENO_PATH = '/pizzepos/carta-digital/diseno.json';   // el look que compone Enki, por proyecto
+// Bundle estático servido por Caddy en /shop/<slug>. project-manager symlinka
+// /opt/enki/public/shop/<slug> → <proyecto>/storage/tienda/bundle/ al activar la feature `tienda`.
+// Publicar = escribir aquí; Caddy lo sirve por el symlink (sin reload, sin tocar Caddyfile).
+const BUNDLE_DIR = '/tienda/bundle';
 
 class CartaDigitalModule extends BaseModule {
   constructor() {
@@ -51,6 +55,8 @@ class CartaDigitalModule extends BaseModule {
     sub('project.activated', e => this._onProjectActivated(e));
     // RPC de bus: el cajón diseñar_carta_digital persiste el diseño por aquí.
     sub('cartadigital.guardar_diseno.request', e => this._onGuardarDisenoRequest(e));
+    // RPC de bus: el cajón publicar genera el bundle estático (deploy real desde el chat).
+    sub('cartadigital.publicar.request', e => this._onPublicarRequest(e));
 
     try { await this.eventBus.publish('tarifas.config.solicitada', { correlation_id: crypto.randomUUID() }); } catch (_) {}
     this.logger?.info('module.loaded', { module: this.name, version: this.version, mode: 'proyector-canal-digital' });
@@ -187,54 +193,114 @@ class CartaDigitalModule extends BaseModule {
     return { status: 200, data: await this._leerDiseno(data.project_id) };
   }
 
-  // Resuelve slug → project_id (project.list es cara; cachear).
-  async _resolverSlug(slug) {
-    if (!slug) return null;
-    if (!this._slugCache) this._slugCache = new Map();
-    if (this._slugCache.has(slug)) return this._slugCache.get(slug);
-    const r = await this._rpc('project.list.request', {}, { timeout_ms: 6000 });
-    const projects = (r && (r.data?.projects || r.data)) || [];
-    const s = String(slug).toLowerCase();
-    const p = Array.isArray(projects) ? projects.find(x =>
-      x.slug === slug || (x.name && String(x.name).toLowerCase() === s) || x.project_id === slug || x.id === slug) : null;
-    const pid = p ? (p.project_id || p.id) : null;
-    if (pid) this._slugCache.set(slug, pid);
-    return pid;
+  // Resuelve project_id → slug (para la URL /shop/<slug>). project.get trae slug; fallback al name.
+  async _slugDeProject(project_id) {
+    const r = await this._rpc('project.get.request', { project_id }, { timeout_ms: 6000 });
+    const p = (r && (r.data || r)) || {};
+    return p.slug || (p.name ? slugify(p.name) : null) || String(project_id).slice(0, 8);
   }
 
-  // HTTP: sirve la PWA de la carta AL VUELO (proyección + diseño de Enki + runtime). Siempre fresca.
-  async handleServeShop(req, res) {
-    const slug = (req && req.params && req.params.slug) || '';
-    const enviar = (status, body) => { try { res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' }); res.end(body); } catch (_) {} return { status }; };
-    try {
-      const project_id = await this._resolverSlug(slug);
-      if (!project_id) return enviar(404, '<!doctype html><meta charset=utf-8><h1>Carta no encontrada</h1>');
-      const proy = await this._proyectarPublica(project_id);
-      if (proy.status !== 200) return enviar(proy.status === 404 ? 404 : 503, '<!doctype html><meta charset=utf-8><h1>' + (proy.error?.message || 'Carta no disponible') + '</h1>');
-      const data = proy.data;
-      const b = data.branding || {};
-      const colores = b.colores || {};
-      const diseno = await this._leerDiseno(project_id);
-      const config = await this._leerConfig(project_id);
-      const op = config.opciones_visualizacion || {};
-      const tplConfig = {
-        nombre_negocio: b.nombre || 'Carta',
-        moneda: op.moneda || '€',
-        whatsapp_telefono: b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || '',
-        pedido_endpoint: op.pedido_endpoint || '',   // alojada: si está, pedido online a tienda-api
-        tema: { color_primario: colores.primario || colores.principal || colores.acento || '#f59e0b', color_fondo: colores.fondo || '#0a0a0a', color_texto: colores.texto || '#e5e5e5' }
-      };
-      const html = generateStaticHTML(
-        { categorias: data.categorias, productos: data.productos, alergenos_leyenda: data.alergenos_leyenda },
-        tplConfig,
-        { diseno }
-      );
-      this.metrics?.increment?.('cartadigital.shop.served', { project: slug });
-      return enviar(200, html);
-    } catch (err) {
-      this.logger?.error('carta-digital.shop.failed', { slug, error: err.message });
-      return enviar(500, '<!doctype html><meta charset=utf-8><h1>Error</h1>');
+  // ── PUBLICAR: deploy real desde el chat. Genera el bundle estático y lo escribe en
+  // storage/tienda/bundle/ (que project-manager symlinka a /opt/enki/public/shop/<slug>/
+  // al activar la feature `tienda`). Caddy lo sirve estático — sin reload, sin tocar Caddyfile.
+  // NO es servido al vuelo por el gateway: /shop/* es handle_path estático en Caddy.
+  async _publicarBundle(project_id, slugHint) {
+    if (!project_id) return this._err(400, 'INVALID_INPUT', 'project_id requerido');
+
+    const proy = await this._proyectarPublica(project_id);
+    if (proy.status !== 200) return proy;   // 404 sin carta / 503 fuentes caídas — propaga
+
+    const data = proy.data;
+    const b = data.branding || {};
+    const colores = b.colores || {};
+    const [diseno, config, slug] = await Promise.all([
+      this._leerDiseno(project_id), this._leerConfig(project_id),
+      slugHint ? Promise.resolve(slugHint) : this._slugDeProject(project_id)
+    ]);
+    const op = config.opciones_visualizacion || {};
+
+    // Imágenes: copiar las locales al bundle (img/<basename>) y reescribir la url a relativa,
+    // para que la PWA estática las sirva desde /shop/<slug>/img/... (fs.copy = binario seguro, JS↔JS).
+    let imagenesCopiadas = 0;
+    const productos = [];
+    for (const p of (data.productos || [])) {
+      const prod = { ...p };
+      if (prod.imagen && typeof prod.imagen === 'string' && !/^https?:\/\//.test(prod.imagen)) {
+        const base = prod.imagen.split('/').pop();
+        const dest = `${BUNDLE_DIR}/img/${base}`;
+        const cp = await this._rpc('fs.copy.request', { project_id, from: prod.imagen, to: dest });
+        if (cp && !cp.error) { prod.imagen = `img/${base}`; imagenesCopiadas++; }
+      }
+      productos.push(prod);
     }
+
+    const colorPrimario = colores.primario || colores.principal || colores.acento || '#f59e0b';
+    const colorFondo = colores.fondo || '#0a0a0a';
+    const logoEmoji = (typeof b.logo === 'string' && b.logo.length <= 4) ? b.logo : '\u{1F355}';
+    const tplConfig = {
+      nombre_negocio: b.nombre || 'Carta',
+      moneda: op.moneda || '€',
+      whatsapp_telefono: b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || '',
+      pago_online: !!op.pago_online,
+      pedido_endpoint: op.pedido_endpoint || '',
+      tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colores.texto || '#e5e5e5', logo_emoji: logoEmoji }
+    };
+
+    const html = generateStaticHTML(
+      { categorias: data.categorias, productos, alergenos_leyenda: data.alergenos_leyenda },
+      tplConfig, { diseno }
+    );
+
+    // Escribir el bundle (fs.write hace mkdir -p del dir). Si la feature `tienda` no está
+    // activa el symlink no existe y /shop/<slug> dará 404 — lo avisa el aviso, no se finge.
+    const files = [
+      [`${BUNDLE_DIR}/index.html`, html],
+      [`${BUNDLE_DIR}/sw.js`, generateServiceWorker(tplConfig.nombre_negocio)],
+      [`${BUNDLE_DIR}/manifest.json`, generateManifest(tplConfig.nombre_negocio, colorPrimario, colorFondo)],
+      [`${BUNDLE_DIR}/icon-192.svg`, generateIcon(192, logoEmoji, colorPrimario, colorFondo)],
+      [`${BUNDLE_DIR}/icon-512.svg`, generateIcon(512, logoEmoji, colorPrimario, colorFondo)]
+    ];
+    for (const [pth, content] of files) {
+      const w = await this._rpc('fs.write.request', { project_id, path: pth, content, encoding: 'utf-8', atomic: true });
+      if (!w || w.error) {
+        return this._err(w ? 502 : 503, w ? 'UPSTREAM_INVALID_RESPONSE' : 'UPSTREAM_UNREACHABLE',
+          `no se pudo escribir ${pth}: ${w?.error?.message || 'fs no responde'}`);
+      }
+    }
+
+    this.eventBus.publish('cartadigital.publicado', {
+      project_id, slug, productos: productos.length, imagenes: imagenesCopiadas,
+      correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+    });
+    this.metrics?.increment?.('cartadigital.publicado', { project: slug });
+
+    return { status: 200, data: {
+      alojada_url: `/shop/${slug}`,
+      bundle_dir: 'storage/tienda/bundle',
+      productos: productos.length,
+      imagenes_copiadas: imagenesCopiadas,
+      aviso: `Bundle escrito. Si la feature \`tienda\` está activa en el proyecto, ya se ve en /shop/${slug} (Caddy lo sirve estático por el symlink). Si da 404, activa la feature \`tienda\` (crea el symlink /opt/enki/public/shop/${slug}). Cada cambio requiere volver a publicar — es estático, no al vuelo.`
+    } };
+  }
+
+  // RPC de bus para el cajón `publicar`.
+  async _onPublicarRequest(event) {
+    const d = event?.data || event;
+    const request_id = d?.request_id;
+    const responder = (status, body) => { try { this.eventBus.publish('cartadigital.publicar.response', { request_id, status, ...body }); } catch (_) {} };
+    try {
+      const r = await this._publicarBundle(d?.project_id, d?.slug);
+      return responder(r.status, r.status >= 400 ? { error: r.error } : { data: r.data });
+    } catch (err) {
+      this.logger?.error('carta-digital.publicar.failed', { error: err.message });
+      return responder(500, { error: { code: 'UNKNOWN_ERROR', message: err.message } });
+    }
+  }
+
+  // ui_handler: publicar desde el frontend/LLM.
+  async handlePublicar(data) {
+    try { return await this._publicarBundle(data?.project_id, data?.slug); }
+    catch (err) { this.logger?.error('carta-digital.publicar.failed', { error: err.message }); return this._err(500, 'UNKNOWN_ERROR', err.message); }
   }
 
   // ── PROYECCIÓN de la carta pública (al vuelo) ──

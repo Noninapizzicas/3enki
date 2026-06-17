@@ -39,6 +39,7 @@
     { "domain": "pedido", "action": "complete",     "handler": "handleCompletarPedido", "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "pedido", "action": "cancel",       "handler": "handleCancelarPedido",  "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "pedido", "action": "total",        "handler": "handleCalcularTotal",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "pedido", "action": "confirmar-recogida", "handler": "handleConfirmarRecogida", "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "pedido", "action": "health",       "handler": "handleHealthCheck",     "type": "workspace_module", "zone": "barra_modulos" }
   ],
   "tools": [

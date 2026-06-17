@@ -52,6 +52,16 @@
         "event": "pedido.crear-tienda.response",
         "handler": "onPedidoCrearTiendaResponse",
         "description": "Respuesta canonica auto-wireada de la tool pedido.crear-tienda (tools.contract v1.2). Solo procesamos error path — success lo trata onPedidoCreado con shape mas rico. Avisa al cliente si pedidos rechazo el shape (INVALID_INPUT, CONFLICT_STATE, etc)."
+      },
+      {
+        "event": "cocina.pedido_listo",
+        "handler": "onCocinaPedidoListo",
+        "description": "Cocina marco el pedido listo. Si es un pedido de tienda nuestro (lookup por pedido_id en pedidosListos), avisa al CLIENTE por WhatsApp que pase a recoger. Los del POS no estan en el mapa -> se ignoran."
+      },
+      {
+        "event": "whatsapp.entrante",
+        "handler": "onWhatsappEntrante",
+        "description": "Mensaje entrante por el transporte del bus (openwa-service, self-hosted). Equivalente al webhook de Meta pero agnostico: reusa _despacharEntrante (parsea pedido / responde con el link de la PWA). { project_slug, from, body, message_id }."
       }
     ]
   },
@@ -125,6 +135,8 @@
   ],
 
   "config": {
+    "transport": "openwa",
+    "_transport_doc": "openwa (self-hosted via openwa-service por el bus) | meta (Cloud API directa, parcado). Con openwa, el envio publica whatsapp.enviar.request y la recepcion escucha whatsapp.entrante.",
     "meta_api_version": "v21.0",
     "meta_api_base": "https://graph.facebook.com",
     "http_timeout_ms": 8000,

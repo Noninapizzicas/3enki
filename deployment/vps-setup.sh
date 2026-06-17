@@ -63,6 +63,19 @@ log "Actualizando sistema..."
 apt-get update -qq
 apt-get install -y -qq curl git build-essential rsync > /dev/null
 
+# ---- 1b. Librerías para Chromium headless (transporte WhatsApp open-wa) ----
+# open-wa conduce un Chromium sin pantalla; el binario lo trae @open-wa/wa-automate
+# (puppeteer) al hacer npm install, pero necesita estas librerías del sistema para
+# arrancar. Best-effort: si algún paquete cambió de nombre entre versiones de Ubuntu,
+# no abortamos el deploy (open-wa quedaría inerte y lo avisa por log).
+log "Instalando librerías de Chromium (para open-wa)..."
+apt-get install -y -qq \
+    ca-certificates fonts-liberation libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
+    libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+    libgbm1 libpango-1.0-0 libcairo2 libasound2 libatspi2.0-0 libx11-6 libxcb1 \
+    libxext6 libxi6 libglib2.0-0 > /dev/null 2>&1 \
+    || warn "Algunas libs de Chromium no se instalaron (posible renombrado por versión de Ubuntu); open-wa lo avisará si falta alguna."
+
 # ---- 2. Node.js ----
 if command -v node &> /dev/null && node -v | grep -q "v${NODE_VERSION}"; then
     log "Node.js $(node -v) ya instalado"
@@ -236,6 +249,9 @@ Environment=CONVERSATION_EXPORT_TOKEN=nonina
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=/opt/enki/data /opt/enki/modules /opt/enki/public
+# PrivateTmp da un /tmp privado y escribible: Chromium (open-wa) lo necesita
+# (con ProtectSystem=strict el /tmp del sistema queda de solo-lectura).
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target

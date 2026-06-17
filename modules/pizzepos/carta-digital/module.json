@@ -38,6 +38,12 @@
     },
     {
       "domain": "cartadigital",
+      "action": "preview",
+      "handler": "handlePreview",
+      "description": "PREVIEW del PWA SIN DOMINIO: genera el generateStaticHTML real (variante suelta, checkout WhatsApp) y devuelve { html } para meterlo en un iframe. No escribe nada — preview fiel de lo que ve el cliente."
+    },
+    {
+      "domain": "cartadigital",
       "action": "publicar",
       "handler": "handlePublicar",
       "description": "DEPLOY real: genera el bundle estatico (proyeccion + diseno de Enki) y lo escribe en storage/tienda/bundle/. Caddy lo sirve en /shop/<slug> por el symlink que crea project-manager al activar la feature `tienda`. Estatico, no al vuelo: cada cambio requiere republicar."

@@ -341,6 +341,45 @@ class CartaDigitalModule extends BaseModule {
     try { return await this._proyectarPublica(data?.project_id); }
     catch (err) { this.logger?.error('carta-digital.get_carta_publica.failed', { error: err.message }); return this._err(500, 'UNKNOWN_ERROR', err.message); }
   }
+
+  // PREVIEW del PWA SIN DOMINIO: genera el HTML real (variante SUELTA → checkout WhatsApp,
+  // sin pedido_endpoint) y lo DEVUELVE (no escribe nada). El frontend lo mete en un iframe.
+  // Mismo generateStaticHTML que ve el cliente → preview fiel, no maqueta.
+  async handlePreview(data) {
+    try {
+      const project_id = data?.project_id;
+      if (!project_id) return this._err(400, 'INVALID_INPUT', 'project_id requerido');
+      const proy = await this._proyectarPublica(project_id);
+      if (proy.status !== 200) return proy;            // 404 sin carta / 503 fuentes — propaga
+      const d = proy.data;
+      const b = d.branding || {};
+      const colores = b.colores || {};
+      const [diseno, config] = await Promise.all([this._leerDiseno(project_id), this._leerConfig(project_id)]);
+      const op = config.opciones_visualizacion || {};
+      const tplConfig = {                              // espejo del de publicar, pero suelta
+        nombre_negocio: b.nombre || this.activos.get(project_id)?.name || 'Carta',
+        moneda: op.moneda || '€',
+        whatsapp_telefono: b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || '',
+        mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
+        pago_online: !!op.pago_online,
+        pedido_endpoint: '',                           // SUELTA: checkout WhatsApp (no online)
+        tema: {
+          color_primario: colores.primario || colores.principal || colores.acento || '#f59e0b',
+          color_fondo: colores.fondo || '#0a0a0a',
+          color_texto: colores.texto || '#e5e5e5',
+          logo_emoji: (typeof b.logo === 'string' && b.logo.length <= 4) ? b.logo : '\u{1F355}'
+        }
+      };
+      const html = generateStaticHTML(
+        { categorias: d.categorias, productos: d.productos, alergenos_leyenda: d.alergenos_leyenda },
+        tplConfig, { diseno }
+      );
+      return { status: 200, data: { html, productos: d.productos.length } };
+    } catch (err) {
+      this.logger?.error('carta-digital.preview.failed', { error: err.message });
+      return this._err(500, 'UNKNOWN_ERROR', err.message);
+    }
+  }
   async handleGetConfig(data) {
     if (!data?.project_id) return this._err(400, 'INVALID_INPUT', 'project_id requerido');
     return { status: 200, data: await this._leerConfig(data.project_id) };

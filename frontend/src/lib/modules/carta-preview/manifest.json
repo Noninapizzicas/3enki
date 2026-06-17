@@ -1,0 +1,10 @@
+{
+  "id": "carta-preview",
+  "name": "Preview PWA",
+  "description": "Vista previa del PWA sin dominio (carta pública del cliente) — móvil/escritorio",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 6,
+  "icon": "👁",
+  "label": "Preview"
+}

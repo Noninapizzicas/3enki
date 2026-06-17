@@ -48,6 +48,21 @@ class OpenwaServiceModule extends BaseModule {
     this._wa = null;            // @open-wa/wa-automate (lazy)
   }
 
+  // Borra los perfiles temporales que open-wa deja al arrancar (_IGNORE_<session>).
+  // Son temporales: una sesión a medias deja uno colgado y el siguiente intento se atasca.
+  // NO toca la sesión vinculada real (data.json etc.) → un vínculo bueno se conserva.
+  _limpiarTemp(sessionId) {
+    try {
+      const base = path.join(this.dataDir, sessionId);
+      if (!fs.existsSync(base)) return;
+      for (const name of fs.readdirSync(base)) {
+        if (name.startsWith('_IGNORE_')) {
+          try { fs.rmSync(path.join(base, name), { recursive: true, force: true }); } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+
   _setEstado(project_slug, estado) {
     this.estados.set(project_slug, estado);
     if (estado === 'conectado' || estado === 'sin_sesion') this.qrs.delete(project_slug);
@@ -104,6 +119,7 @@ class OpenwaServiceModule extends BaseModule {
     if (!wa) { this._setEstado(s.project_slug, 'sin_sesion'); return; }
     const project_slug = s.project_slug;
     const sessionId = s.session_id || project_slug;
+    this._limpiarTemp(sessionId);                 // quita perfiles temporales colgados (_IGNORE_*)
     this._setEstado(project_slug, 'esperando_qr');
     const create = wa.create || (wa.default && wa.default.create) || wa.default;
 

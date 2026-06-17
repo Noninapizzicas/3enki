@@ -102,7 +102,10 @@ const colores = b.colores || {};
 const colorPrimario = argColor || colores.primario || colores.principal || colores.acento || '#f59e0b';
 const colorFondo = colores.fondo || '#0a0a0a';
 const colorTexto = colores.texto || '#e5e5e5';
-const whatsapp = argWhatsapp || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || '';
+// WhatsApp de pedidos: flag CLI → config del canal (op.whatsapp_telefono) → marca. Misma
+// prioridad que el backend (preview/publicar) → la suelta sale con el nº que configuraste.
+const opc = config.opciones_visualizacion || {};
+const whatsapp = argWhatsapp || opc.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || '';
 const logoEmoji = (typeof b.logo === 'string' && b.logo.length <= 4) ? b.logo : '\u{1F355}';
 
 // pedido_endpoint: flag CLI o opciones del canal (config.opciones_visualizacion.pedido_endpoint).
@@ -110,10 +113,10 @@ const pedidoEndpoint = argPedidoEndpoint || (config.opciones_visualizacion && co
 
 const tplConfig = {
   nombre_negocio: nombre,
-  moneda,
+  moneda: opc.moneda || moneda,
   whatsapp_telefono: whatsapp,
-  mensaje_header: '¡Hola! Quiero pedir:',
-  pago_online: !!(config.opciones_visualizacion && config.opciones_visualizacion.pago_online),
+  mensaje_header: opc.mensaje_pedido || '¡Hola! Quiero pedir:',
+  pago_online: !!opc.pago_online,
   pedido_endpoint: pedidoEndpoint,
   tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colorTexto, logo_emoji: logoEmoji }
 };

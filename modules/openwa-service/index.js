@@ -17,9 +17,24 @@
 
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const BaseModule = require('../_shared/base-module');
+
+// Navegadores del sistema donde open-wa puede apoyarse (evita el lío del Chromium de
+// puppeteer descargado en el HOME de otro usuario: el servicio corre como www-data).
+const CHROME_CANDIDATES = [
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium-browser',
+  '/usr/bin/chromium',
+  '/snap/bin/chromium'
+];
+function detectarChrome() {
+  for (const p of CHROME_CANDIDATES) { try { if (fs.existsSync(p)) return p; } catch (_) {} }
+  return undefined;   // sin navegador del sistema → open-wa usará su Chromium bundled (si está)
+}
 
 class OpenwaServiceModule extends BaseModule {
   constructor() {
@@ -48,7 +63,9 @@ class OpenwaServiceModule extends BaseModule {
     this.sessionsCfg = Array.isArray(this.config.sessions) ? this.config.sessions : [];
     this.dataDir = path.resolve(this.config.data_path || './data/openwa');
     this.headless = this.config.headless !== false;
-    this.chromePath = this.config.chrome_path || process.env.CHROME_BIN || undefined;
+    this.chromePath = this.config.chrome_path || process.env.CHROME_BIN || detectarChrome();
+    if (this.chromePath) this.logger?.info('openwa.chrome.detectado', { path: this.chromePath });
+    else this.logger?.warn('openwa.chrome.no_detectado', { hint: 'instala google-chrome-stable o chromium; open-wa intentará su Chromium bundled' });
 
     // Envío: cualquier módulo publica whatsapp.enviar.request → lo despachamos por open-wa.
     try { this._subs.push(this.eventBus.subscribe('whatsapp.enviar.request', e => this._onEnviar(e))); } catch (_) {}

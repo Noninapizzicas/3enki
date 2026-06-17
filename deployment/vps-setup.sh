@@ -86,6 +86,22 @@ for _pkg in $CHROMIUM_LIBS; do
 done
 log "Chromium: ${_chromium_ok} libs instaladas.${_chromium_missing:+ (no aplicables a esta versión:${_chromium_missing} )}"
 
+# Navegador para open-wa: Google Chrome stable (.deb real, trae sus deps). openwa-service
+# lo auto-detecta en /usr/bin/google-chrome-stable. Evita el lío del Chromium de puppeteer
+# descargado en el HOME de root (sudo npm install) mientras el servicio corre como www-data.
+if command -v google-chrome-stable > /dev/null 2>&1; then
+    log "Google Chrome ya instalado: $(google-chrome-stable --version 2>/dev/null)"
+else
+    log "Instalando Google Chrome (para open-wa)..."
+    if wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+       && apt-get install -y -qq /tmp/google-chrome.deb > /dev/null 2>&1; then
+        rm -f /tmp/google-chrome.deb
+        log "Google Chrome instalado: $(google-chrome-stable --version 2>/dev/null || echo ok)"
+    else
+        warn "No se pudo instalar Google Chrome; open-wa intentará su Chromium bundled. Instálalo a mano si el navegador no arranca."
+    fi
+fi
+
 # ---- 2. Node.js ----
 if command -v node &> /dev/null && node -v | grep -q "v${NODE_VERSION}"; then
     log "Node.js $(node -v) ya instalado"

@@ -66,15 +66,25 @@ apt-get install -y -qq curl git build-essential rsync > /dev/null
 # ---- 1b. Librerías para Chromium headless (transporte WhatsApp open-wa) ----
 # open-wa conduce un Chromium sin pantalla; el binario lo trae @open-wa/wa-automate
 # (puppeteer) al hacer npm install, pero necesita estas librerías del sistema para
-# arrancar. Best-effort: si algún paquete cambió de nombre entre versiones de Ubuntu,
-# no abortamos el deploy (open-wa quedaría inerte y lo avisa por log).
+# arrancar. Las instalamos UNA A UNA: 'apt-get install pkg1 pkg2 ...' es todo-o-nada
+# (si un nombre no existe, no instala NINGUNO). Incluimos los nombres viejos Y los
+# 't64' de Ubuntu 24.04: cada VPS instala los que apliquen, los demás se ignoran.
 log "Instalando librerías de Chromium (para open-wa)..."
-apt-get install -y -qq \
-    ca-certificates fonts-liberation libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
-    libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
-    libgbm1 libpango-1.0-0 libcairo2 libasound2 libatspi2.0-0 libx11-6 libxcb1 \
-    libxext6 libxi6 libglib2.0-0 > /dev/null 2>&1 \
-    || warn "Algunas libs de Chromium no se instalaron (posible renombrado por versión de Ubuntu); open-wa lo avisará si falta alguna."
+CHROMIUM_LIBS="ca-certificates fonts-liberation libnss3 libnspr4 \
+  libatk1.0-0 libatk1.0-0t64 libatk-bridge2.0-0 libatk-bridge2.0-0t64 \
+  libcups2 libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+  libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 \
+  libasound2 libasound2t64 libatspi2.0-0 libatspi2.0-0t64 \
+  libx11-6 libxcb1 libxext6 libxi6 libglib2.0-0 libglib2.0-0t64 libxrender1"
+_chromium_ok=0; _chromium_missing=""
+for _pkg in $CHROMIUM_LIBS; do
+  if apt-get install -y -qq "$_pkg" > /dev/null 2>&1; then
+    _chromium_ok=$((_chromium_ok + 1))
+  else
+    _chromium_missing="$_chromium_missing $_pkg"
+  fi
+done
+log "Chromium: ${_chromium_ok} libs instaladas.${_chromium_missing:+ (no aplicables a esta versión:${_chromium_missing} )}"
 
 # ---- 2. Node.js ----
 if command -v node &> /dev/null && node -v | grep -q "v${NODE_VERSION}"; then

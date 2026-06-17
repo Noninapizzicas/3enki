@@ -72,4 +72,17 @@ function proyectarCartaPublica(carta, marca, contenido, config) {
   };
 }
 
-module.exports = { proyectarCartaPublica };
+module.exports = { proyectarCartaPublica, normalizarTelefono };
+
+/**
+ * Normaliza un teléfono para wa.me: solo dígitos, sin '+', sin '00' internacional.
+ * Si queda un número español nacional (9 dígitos) sin prefijo, le antepone '34'
+ * (mercado objetivo España). Un número que ya trae prefijo país se respeta.
+ *   "684 06 22 24" → "34684062224" ; "+34 684062224" → "34684062224" ; "0044..." → "44..."
+ */
+function normalizarTelefono(num) {
+  let d = String(num || '').replace(/[^0-9]/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.length === 9) d = '34' + d;
+  return d;
+}

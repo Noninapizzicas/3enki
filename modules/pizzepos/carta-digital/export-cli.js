@@ -23,7 +23,7 @@
 const fs = require('fs');
 const path = require('path');
 const { generateStaticHTML, generateServiceWorker, generateManifest, generateIcon, slugify } = require('./static-template');
-const { proyectarCartaPublica } = require('./proyeccion');
+const { proyectarCartaPublica, normalizarTelefono } = require('./proyeccion');
 
 // ── args ──
 const args = process.argv.slice(2);
@@ -114,7 +114,7 @@ const pedidoEndpoint = argPedidoEndpoint || (config.opciones_visualizacion && co
 const tplConfig = {
   nombre_negocio: nombre,
   moneda: opc.moneda || moneda,
-  whatsapp_telefono: whatsapp,
+  whatsapp_telefono: normalizarTelefono(whatsapp),
   mensaje_header: opc.mensaje_pedido || '¡Hola! Quiero pedir:',
   pago_online: !!opc.pago_online,
   pedido_endpoint: pedidoEndpoint,

@@ -195,6 +195,10 @@ chown caddy:caddy /var/log/caddy 2>/dev/null || true
 mkdir -p /opt/enki/public/shop
 chown -R www-data:www-data /opt/enki/public 2>/dev/null || true
 
+# HOME escribible para Chrome (open-wa). Debe existir y ser de www-data antes de arrancar.
+mkdir -p /opt/enki/data/chrome-home
+chown -R www-data:www-data /opt/enki/data/chrome-home 2>/dev/null || true
+
 if [ "$MODE" = "domain" ]; then
     log "Configurando Caddy para ${DOMAIN} (HTTPS)..."
     # Sustituir dominio hardcoded del template por el real
@@ -270,6 +274,10 @@ Environment=EVENT_CORE_PORT=3000
 Environment=EVENT_CORE_BROKER_PORT=1883
 Environment=EVENT_CORE_LOG_LEVEL=info
 Environment=CONVERSATION_EXPORT_TOKEN=nonina
+# HOME escribible para Chrome (open-wa): su HOME real (/var/www, de www-data) queda
+# de solo-lectura con ProtectSystem=strict, y Chrome necesita escribir config/caché/
+# crashpad. Apuntamos HOME a un dir bajo data/ (sí escribible vía ReadWritePaths).
+Environment=HOME=/opt/enki/data/chrome-home
 
 # Seguridad
 NoNewPrivileges=true

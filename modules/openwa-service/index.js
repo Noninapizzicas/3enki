@@ -118,7 +118,10 @@ class OpenwaServiceModule extends BaseModule {
       disableSpins: true,
       qrLogSkip: false,            // loguea el QR en consola para escanearlo una vez
       // Flags imprescindibles en servidor (sin pantalla, usuario de servicio sin user-namespaces).
-      chromiumArgs: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+      chromiumArgs: [
+        '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu',
+        '--no-first-run', '--no-default-browser-check', '--disable-crash-reporter', '--disable-crashpad'
+      ],
       // Algunos builds aceptan qrCallback en la config; si no, open-wa loguea el QR igual.
       qrCallback: (qr) => {
         this.logger?.warn('openwa.qr', { project: project_slug, hint: 'escanea el QR desde el panel WhatsApp (o el data-uri del evento whatsapp.qr)' });

@@ -111,7 +111,8 @@ class OpenwaServiceModule extends BaseModule {
       sessionId,
       sessionDataPath: path.join(this.dataDir, sessionId),
       headless: this.headless,
-      executablePath: this.chromePath,   // undefined → usa el Chromium que trae open-wa
+      useChrome: true,                   // open-wa lo recomienda con Chrome real (multi-device estable)
+      executablePath: this.chromePath,   // /usr/bin/google-chrome-stable (auto-detectado)
       multiDevice: true,
       qrTimeout: 0,
       authTimeout: 0,

@@ -53,6 +53,7 @@ class PedidosModule extends BaseModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
+    this.moduleRegistry = core.moduleRegistry;   // para crear cuentas vía cuentas.handleCreateCuenta
     this.config = core.config || null;
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
@@ -513,12 +514,16 @@ class PedidosModule extends BaseModule {
       this.metrics?.gauge?.('pedidos.activos.count', this.pedidos.size);
       this.metrics?.timing?.('pedidos.create_tienda.duration', Date.now() - start_time);
 
-      await this._publishPedidoCreado(pedido, { correlation_id });
-
-      // Flujo A (pago a recoger): el pedido entra YA en cocina y hace el recorrido completo.
-      // Flujo B (Stripe): mover esta llamada a onPagoConfirmado (cocina tras pago confirmado).
+      // Crea una CUENTA operativa en comandero (editable + cobrable en cualquier
+      // método) con el pedido inyectado. cuentas emite comandero.enviar_cocina → el
+      // pedido entra en cocina por la ruta normal, atado al cuenta_id real. Fallback:
+      // si cuentas no está disponible, envío directo a cocina (no romper el flujo).
       pedido.enviado_cocina_at = new Date().toISOString();
-      await this._enviarTiendaACocina(pedido, { correlation_id });
+      await this._crearCuentaTienda(pedido, { correlation_id });
+
+      // pedido.creado DESPUÉS de crear la cuenta → ya lleva cuenta_id (lo usa el
+      // whatsapp-bot para confirmar al cliente y para avisarle "ven a recoger".
+      await this._publishPedidoCreado(pedido, { correlation_id });
 
       this.logger.info('pedidos.tienda.creado', {
         pedido_id,
@@ -1070,6 +1075,62 @@ class PedidosModule extends BaseModule {
   // Envía un pedido de TIENDA (plano, sin cuenta_id, items con `descripcion`) a cocina,
   // adaptando el shape al contrato de cocina (que espera item.nombre + cuenta_id como clave).
   // Flujo A (pago a recoger): se llama al crear. Flujo B (Stripe): se llamará tras pago.confirmado.
+  // Crea una cuenta POS operativa desde un pedido de tienda, delegando en
+  // cuentas.handleCreateCuenta (mismo patrón que cuentas-canales para delivery).
+  // El pedido_inicial hace que cuentas emita comandero.enviar_cocina → cocina por
+  // la ruta normal. Si cuentas no está disponible o falla, cae al envío directo.
+  async _crearCuentaTienda(pedido, sourcePayload) {
+    const cuentas = this.moduleRegistry?.get('cuentas')?.instance;
+    if (!cuentas || typeof cuentas.handleCreateCuenta !== 'function') {
+      this.logger.warn('pedidos.tienda.cuentas_no_disponible', { pedido_id: pedido.id });
+      await this._enviarTiendaACocina(pedido, sourcePayload);
+      return null;
+    }
+
+    const items = (pedido.items || []).map(it => ({
+      cantidad: it.cantidad,
+      nombre: it.descripcion,
+      descripcion: it.descripcion,
+      producto_id: it.producto_id || null,
+      precio: Number.isInteger(it.precio_unitario_centimos) ? it.precio_unitario_centimos / 100 : undefined
+    }));
+
+    const data = {
+      project_id: pedido.project_id || pedido.project_slug,
+      tipo: 'llevar',                              // pedido de tienda = recogida (takeaway)
+      nombre: pedido.cliente_nombre || null,
+      total: pedido.total,
+      metadata: {
+        origen: 'tienda',
+        canal_origen: pedido.canal_origen || null,
+        codigo_recogida: pedido.codigo_recogida || null,
+        cliente_telefono: pedido.cliente_telefono || null,
+        pedido_tienda_id: pedido.id
+      },
+      pedido_inicial: { items, total: pedido.total, notas_generales: pedido.notas_generales || null },
+      correlation_id: sourcePayload?.correlation_id || null
+    };
+
+    try {
+      const result = await cuentas.handleCreateCuenta(data);
+      if (!result || result.status >= 400) {
+        this.logger.error('pedidos.tienda.cuenta_create_failed', { pedido_id: pedido.id, status: result?.status, error: result?.error });
+        await this._enviarTiendaACocina(pedido, sourcePayload);
+        return null;
+      }
+      pedido.cuenta_id = result.data.id;            // ata el pedido tienda a la cuenta operativa
+      this.metrics?.increment?.('pedidos.tienda.cuenta_creada', { project: pedido.project_slug });
+      this.logger.info('pedidos.tienda.cuenta_creada', {
+        pedido_id: pedido.id, cuenta_id: result.data.id, ref_display: result.data.ref_display
+      });
+      return result.data;
+    } catch (err) {
+      this.logger.error('pedidos.tienda.cuenta_create_error', { pedido_id: pedido.id, error: err.message });
+      await this._enviarTiendaACocina(pedido, sourcePayload);
+      return null;
+    }
+  }
+
   async _enviarTiendaACocina(pedido, sourcePayload) {
     await this._publicarEvento('pedido.enviado_cocina', {
       pedido_id: pedido.id,

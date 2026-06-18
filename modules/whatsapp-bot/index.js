@@ -32,12 +32,18 @@ class WhatsappBotModule extends BaseModule {
     this.maxPedidosListos = 500;
   }
 
-  _trackPedidoListo(pedido_id, project_slug, from, codigo_recogida) {
-    if (!pedido_id) return;
-    if (this.pedidosListos.has(pedido_id)) this.pedidosListos.delete(pedido_id);
-    this.pedidosListos.set(pedido_id, { project_slug, from, codigo_recogida });
-    while (this.pedidosListos.size > this.maxPedidosListos) {
-      this.pedidosListos.delete(this.pedidosListos.keys().next().value);
+  // Registra el pedido bajo varias claves (pedido_id de tienda + cuenta_id): cocina
+  // marca listo el ticket de la cuenta, cuyo cuenta_id viaja en cocina.pedido_listo
+  // y cuyo pedido_id difiere del de tienda. Cualquiera de las dos localiza al cliente.
+  _trackPedidoListo(keys, project_slug, from, codigo_recogida) {
+    const ref = { project_slug, from, codigo_recogida };
+    for (const k of (Array.isArray(keys) ? keys : [keys])) {
+      if (!k) continue;
+      if (this.pedidosListos.has(k)) this.pedidosListos.delete(k);
+      this.pedidosListos.set(k, ref);
+      while (this.pedidosListos.size > this.maxPedidosListos) {
+        this.pedidosListos.delete(this.pedidosListos.keys().next().value);
+      }
     }
   }
 
@@ -142,7 +148,8 @@ class WhatsappBotModule extends BaseModule {
     await this._confirmarPedidoCliente(pending, data);
     await this._notificarStaff(pending, data);
     // Recordar quién es el cliente para avisarle cuando cocina lo marque listo.
-    this._trackPedidoListo(data.pedido_id, pending.project_slug, pending.from, data.codigo_recogida);
+    // Clave por pedido_id (tienda) y por cuenta_id (la cuenta operativa de comandero).
+    this._trackPedidoListo([data.pedido_id, data.cuenta_id], pending.project_slug, pending.from, data.codigo_recogida);
   }
 
   // Cocina marcó el pedido listo → avisa al CLIENTE por WhatsApp ("ven a recoger").
@@ -150,11 +157,13 @@ class WhatsappBotModule extends BaseModule {
   // los del POS no están en el mapa → se ignoran.
   async onCocinaPedidoListo(event) {
     const data = event?.data || event;
+    const cuenta_id = data?.cuenta_id;
     const pedido_id = data?.pedido_id;
-    if (!pedido_id) return;
-    const ref = this.pedidosListos.get(pedido_id);
+    const ref = (cuenta_id && this.pedidosListos.get(cuenta_id))
+             || (pedido_id && this.pedidosListos.get(pedido_id));
     if (!ref) return;                          // no es un pedido de tienda nuestro
-    this.pedidosListos.delete(pedido_id);
+    if (cuenta_id) this.pedidosListos.delete(cuenta_id);
+    if (pedido_id) this.pedidosListos.delete(pedido_id);
     const meta = this.projectsByMeta.get(ref.project_slug);
     const display = meta?.display_number ? `\nNumero del negocio: ${meta.display_number}` : '';
     const cod = ref.codigo_recogida ? ` Codigo: ${ref.codigo_recogida}.` : '';

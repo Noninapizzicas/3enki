@@ -49,6 +49,7 @@ class CartaDigitalModule extends BaseModule {
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
     this.config = core.config || {};
+    this.moduleRegistry = core.moduleRegistry;   // para leer el catálogo de ingredientes por instancia (patrón cuentas-canales→cuentas)
 
     const sub = (ev, fn) => { try { this._subs.push(this.eventBus.subscribe(ev, fn)); } catch (_) {} };
     sub('tarifas.config.actualizada', e => this._onTarifas(e));
@@ -92,6 +93,30 @@ class CartaDigitalModule extends BaseModule {
         this.eventBus.publish(evento, { request_id, ...payload });
       } catch (_) { clearTimeout(timeout); if (unsub) unsub(); resolve(null); }
     });
+  }
+
+  // ── catálogo de ingredientes del proyecto activo (para "añadir" en la PWA) ──
+  // Lee la instancia de `ingredientes` (patrón cuentas-canales→cuentas). GATE de negocio:
+  // SOLO extras con precio_extra>0 — un extra sin precio NO se ofrece (no se regalan toppings).
+  // Con todo a 0 el catálogo viaja vacío → la sección "añadir" no aparece (degrada a solo-quitar).
+  // Soft-fail total → [] (nunca rompe la publicación).
+  async _catalogoIngredientes() {
+    try {
+      const inst = this.moduleRegistry?.get('ingredientes')?.instance;
+      if (!inst?.handleListIngredientes) return [];
+      const r = await inst.handleListIngredientes({});
+      const arr = (r && r.data && r.data.ingredientes) || [];
+      return arr
+        .filter(i => i && i.disponible !== false && Number(i.precio_extra) > 0)
+        .map(i => ({
+          id: i.id,
+          nombre: i.nombre,
+          emoji: i.emoji || '',
+          tipo: (i.familia || i.tipo || 'otro'),
+          grupos: Array.isArray(i.grupos) ? i.grupos : (i.grupo ? [i.grupo] : []),
+          precio_extra: Number(i.precio_extra) || 0
+        }));
+    } catch (_) { return []; }
   }
 
   // ── cache del mapping canal→carta (de tarifas) ──
@@ -270,8 +295,9 @@ class CartaDigitalModule extends BaseModule {
       tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colores.texto || '#e5e5e5', logo_emoji: logoEmoji }
     };
 
+    const catalogo_ingredientes = await this._catalogoIngredientes();
     const html = generateStaticHTML(
-      { categorias: data.categorias, productos, alergenos_leyenda: data.alergenos_leyenda },
+      { categorias: data.categorias, productos, alergenos_leyenda: data.alergenos_leyenda, catalogo_ingredientes },
       tplConfig, { diseno }
     );
 
@@ -373,8 +399,9 @@ class CartaDigitalModule extends BaseModule {
           logo_emoji: (typeof b.logo === 'string' && b.logo.length <= 4) ? b.logo : '\u{1F355}'
         }
       };
+      const catalogo_ingredientes = await this._catalogoIngredientes();
       const html = generateStaticHTML(
-        { categorias: d.categorias, productos: d.productos, alergenos_leyenda: d.alergenos_leyenda },
+        { categorias: d.categorias, productos: d.productos, alergenos_leyenda: d.alergenos_leyenda, catalogo_ingredientes },
         tplConfig, { diseno }
       );
       return { status: 200, data: { html, productos: d.productos.length } };

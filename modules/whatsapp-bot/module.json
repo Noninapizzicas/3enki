@@ -39,6 +39,11 @@
         "description": "Detecta alta de credencial META_WHATSAPP* y rehidrata el mapping de proyectos activos."
       },
       {
+        "event": "credential.updated",
+        "handler": "onCredentialSaved",
+        "description": "Igual que credential.saved pero en re-guardado (token rotado). Mismo payload {provider, level, identifier} → rehidrata el proyecto."
+      },
+      {
         "event": "credential.deleted",
         "handler": "onCredentialDeleted",
         "description": "Detecta baja de credencial META_WHATSAPP* y marca el proyecto como no operativo."

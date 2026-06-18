@@ -472,7 +472,12 @@ class WhatsappBotModule extends BaseModule {
 
   async _registrarPedido(project_slug, msg, parsed) {
     const request_id = crypto.randomUUID();
-    const items = parsed.items.map(it => ({ cantidad: it.cantidad, descripcion: it.descripcion }));
+    const items = parsed.items.map(it => ({
+      cantidad: it.cantidad,
+      descripcion: it.descripcion,
+      precio_unitario_centimos: Number.isInteger(it.precio_unitario_centimos) ? it.precio_unitario_centimos : undefined,
+      precio_total_centimos: Number.isInteger(it.precio_total_centimos) ? it.precio_total_centimos : undefined
+    }));
     const timeoutMs = this.config?.pedido_wait_timeout_ms || 12000;
 
     const timeoutHandle = setTimeout(() => {

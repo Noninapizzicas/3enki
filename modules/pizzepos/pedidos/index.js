@@ -1075,55 +1075,92 @@ class PedidosModule extends BaseModule {
   // Envía un pedido de TIENDA (plano, sin cuenta_id, items con `descripcion`) a cocina,
   // adaptando el shape al contrato de cocina (que espera item.nombre + cuenta_id como clave).
   // Flujo A (pago a recoger): se llama al crear. Flujo B (Stripe): se llamará tras pago.confirmado.
-  // Crea una cuenta POS operativa desde un pedido de tienda, delegando en
-  // cuentas.handleCreateCuenta (mismo patrón que cuentas-canales para delivery).
-  // El pedido_inicial hace que cuentas emita comandero.enviar_cocina → cocina por
-  // la ruta normal. Si cuentas no está disponible o falla, cae al envío directo.
+  _slugItem(desc) {
+    return String(desc || 'item').toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'item';
+  }
+
+  // Crea una cuenta POS operativa desde un pedido de tienda y la alimenta por el
+  // FLUJO REAL del comandero (no se reinventa nada, todo eventos):
+  //   cuentas.handleCreateCuenta  → cuenta vacía
+  //   comandero.handleAddItem (×N) → comandero.item_agregado → cuentas suma el total
+  //                                  (el cobro lee ESE total del buffer)
+  //   comandero.handleEnviarCocina → comandero.enviar_cocina → bridge → cocina
+  // Mismo patrón de delegación por instancia que cuentas-canales. Si falta algún
+  // módulo o algo falla, cae al envío directo a cocina (no romper).
   async _crearCuentaTienda(pedido, sourcePayload) {
-    const cuentas = this.moduleRegistry?.get('cuentas')?.instance;
-    if (!cuentas || typeof cuentas.handleCreateCuenta !== 'function') {
-      this.logger.warn('pedidos.tienda.cuentas_no_disponible', { pedido_id: pedido.id });
+    const cuentas   = this.moduleRegistry?.get('cuentas')?.instance;
+    const comandero = this.moduleRegistry?.get('comandero')?.instance;
+    if (!cuentas?.handleCreateCuenta || !comandero?.handleAddItem || !comandero?.handleEnviarCocina) {
+      this.logger.warn('pedidos.tienda.modulos_no_disponibles', {
+        pedido_id: pedido.id, cuentas: !!cuentas, comandero: !!comandero
+      });
       await this._enviarTiendaACocina(pedido, sourcePayload);
       return null;
     }
 
-    const items = (pedido.items || []).map(it => ({
-      cantidad: it.cantidad,
-      nombre: it.descripcion,
-      descripcion: it.descripcion,
-      producto_id: it.producto_id || null,
-      precio: Number.isInteger(it.precio_unitario_centimos) ? it.precio_unitario_centimos / 100 : undefined
-    }));
-
-    const data = {
-      project_id: pedido.project_id || pedido.project_slug,
-      tipo: 'llevar',                              // pedido de tienda = recogida (takeaway)
-      nombre: pedido.cliente_nombre || null,
-      total: pedido.total,
-      metadata: {
-        origen: 'tienda',
-        canal_origen: pedido.canal_origen || null,
-        codigo_recogida: pedido.codigo_recogida || null,
-        cliente_telefono: pedido.cliente_telefono || null,
-        pedido_tienda_id: pedido.id
-      },
-      pedido_inicial: { items, total: pedido.total, notas_generales: pedido.notas_generales || null },
-      correlation_id: sourcePayload?.correlation_id || null
-    };
+    const project_id = pedido.project_id || pedido.project_slug;
+    const correlation_id = sourcePayload?.correlation_id || null;
 
     try {
-      const result = await cuentas.handleCreateCuenta(data);
-      if (!result || result.status >= 400) {
-        this.logger.error('pedidos.tienda.cuenta_create_failed', { pedido_id: pedido.id, status: result?.status, error: result?.error });
+      // 1) Cuenta operativa SIN pedido_inicial (ese atajo salta el buffer del comandero).
+      const cuentaRes = await cuentas.handleCreateCuenta({
+        project_id,
+        tipo: 'llevar',                            // pedido de tienda = recogida (takeaway)
+        nombre: pedido.cliente_nombre || null,
+        metadata: {
+          origen: 'tienda',
+          canal_origen: pedido.canal_origen || null,
+          codigo_recogida: pedido.codigo_recogida || null,
+          cliente_telefono: pedido.cliente_telefono || null,
+          pedido_tienda_id: pedido.id
+        },
+        correlation_id
+      });
+      if (!cuentaRes || cuentaRes.status >= 400) {
+        this.logger.error('pedidos.tienda.cuenta_create_failed', { pedido_id: pedido.id, status: cuentaRes?.status });
         await this._enviarTiendaACocina(pedido, sourcePayload);
         return null;
       }
-      pedido.cuenta_id = result.data.id;            // ata el pedido tienda a la cuenta operativa
+      const cuenta_id = cuentaRes.data.id;
+      pedido.cuenta_id = cuenta_id;
+
+      // 2) Cargar items en el buffer del comandero (precio por unidad del pedido).
+      //    Si algún item no trae precio, una línea agregada con el total → el cobro
+      //    nunca queda en 0. precio_canal_resuelto:true → comandero confía el precio.
+      const conPrecio = pedido.items.length > 0 &&
+        pedido.items.every(it => Number.isInteger(it.precio_unitario_centimos));
+      if (conPrecio) {
+        for (const it of pedido.items) {
+          await comandero.handleAddItem({
+            cuenta_id, project_id,
+            producto_id: it.producto_id || `tienda:${this._slugItem(it.descripcion)}`,
+            nombre: it.descripcion,
+            precio: it.precio_unitario_centimos / 100,
+            cantidad: it.cantidad,
+            precio_canal_resuelto: true
+          });
+        }
+      } else {
+        await comandero.handleAddItem({
+          cuenta_id, project_id,
+          producto_id: 'tienda:pedido',
+          nombre: `Pedido tienda${pedido.cliente_nombre ? ' · ' + pedido.cliente_nombre : ''}`,
+          precio: pedido.total,
+          cantidad: 1,
+          precio_canal_resuelto: true
+        });
+      }
+
+      // 3) Enviar a cocina por el flujo normal del comandero.
+      await comandero.handleEnviarCocina({ cuenta_id });
+
       this.metrics?.increment?.('pedidos.tienda.cuenta_creada', { project: pedido.project_slug });
       this.logger.info('pedidos.tienda.cuenta_creada', {
-        pedido_id: pedido.id, cuenta_id: result.data.id, ref_display: result.data.ref_display
+        pedido_id: pedido.id, cuenta_id, ref_display: cuentaRes.data.ref_display,
+        items: pedido.items.length, con_precio: conPrecio
       });
-      return result.data;
+      return cuentaRes.data;
     } catch (err) {
       this.logger.error('pedidos.tienda.cuenta_create_error', { pedido_id: pedido.id, error: err.message });
       await this._enviarTiendaACocina(pedido, sourcePayload);

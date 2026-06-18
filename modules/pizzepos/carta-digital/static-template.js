@@ -1098,7 +1098,7 @@ function buildOrderMsg() {
   for (var idx = 0; idx < cart.length; idx++) {
     var item = cart[idx];
     var desc = item.nombre + (item.detalle ? ' [' + item.detalle + ']' : '');
-    msg += '- ' + item.qty + ' x ' + desc + '\\n';
+    msg += '- ' + item.qty + ' x ' + desc + ' (' + _pedEur(item.precio * item.qty) + ')\\n';
   }
   var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
   msg += 'Total: ' + _pedEur(total) + '\\n';

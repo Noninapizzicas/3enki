@@ -34,6 +34,9 @@ function generateStaticHTML(carta, config, options = {}) {
     moneda = config.moneda || '€',
     whatsapp_telefono = config.whatsapp_telefono || '',
     mensaje_header = config.mensaje_header || '¡Hola! Quiero pedir:',
+    // Slug del proyecto: se hornea para que el mensaje wa.me lleve la cabecera
+    // canónica "PEDIDO <slug>-<NONCE>" que el whatsapp-bot (parser) entiende.
+    project_slug = config.project_slug || '',
     tema = config.tema || {},
     lang = 'es',
     ai_endpoint = config.ai_endpoint || '',
@@ -110,7 +113,7 @@ function generateStaticHTML(carta, config, options = {}) {
 
   const dataJSON = JSON.stringify({ categorias, productos, ofertas, resenas, resenas_avg: resenasAvg, resenas_total: resenasTotal, alergenos_leyenda: alergenosLeyenda });
   const configJSON = JSON.stringify({
-    nombre_negocio, moneda, whatsapp_telefono, mensaje_header,
+    nombre_negocio, moneda, whatsapp_telefono, mensaje_header, project_slug,
     ai_endpoint, ai_provider, ai_chat_path, chat_enabled, pedido_endpoint, pago_online
   });
 
@@ -1068,16 +1071,38 @@ function toggleCart() {
   document.getElementById('cart-overlay').classList.toggle('open');
 }
 
+// Nonce 4 chars sin caracteres ambiguos (no O,0,1,I) — idempotencia del pedido.
+function _pedNonce() {
+  var ch = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', s = '';
+  for (var k = 0; k < 4; k++) s += ch.charAt(Math.floor(Math.random() * ch.length));
+  return s;
+}
+// Palabra clave de recogida: 3 letras minúsculas. El cliente la lee de su propio
+// chat y se la dice al dependiente al recoger (el staff NO la recibe → anti-fraude).
+function _pedPalabra() {
+  var v = 'abcdefghijklmnopqrstuvwxyz', s = '';
+  for (var k = 0; k < 3; k++) s += v.charAt(Math.floor(Math.random() * v.length));
+  return s;
+}
+function _pedEur(n) { return Number(n).toFixed(2).replace('.', ',') + ' EUR'; }
+
+// Mensaje wa.me en FORMATO CANÓNICO que el whatsapp-bot (parser) entiende:
+//   PEDIDO <slug>-<NONCE4>
+//   - <cant> x <descripcion>
+//   Total: <X,XX> EUR
+//   Palabra clave: <abc>
 function buildOrderMsg() {
   if (cart.length === 0) return '';
-  let msg = CONFIG.mensaje_header + '\\n\\n';
-  for (const item of cart) {
-    msg += item.qty + 'x ' + item.nombre + ' (' + fmt(item.precio * item.qty) + ')';
-    if (item.detalle) msg += ' [' + item.detalle + ']';
-    msg += '\\n';
+  if (!CONFIG.project_slug) return '';        // sin slug no se puede formar el pedido canónico
+  var msg = 'PEDIDO ' + CONFIG.project_slug + '-' + _pedNonce() + '\\n';
+  for (var idx = 0; idx < cart.length; idx++) {
+    var item = cart[idx];
+    var desc = item.nombre + (item.detalle ? ' [' + item.detalle + ']' : '');
+    msg += '- ' + item.qty + ' x ' + desc + '\\n';
   }
-  const total = cart.reduce((s, i) => s + i.precio * i.qty, 0);
-  msg += '\\nTotal: ' + fmt(total);
+  var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
+  msg += 'Total: ' + _pedEur(total) + '\\n';
+  msg += 'Palabra clave: ' + _pedPalabra();
   return msg;
 }
 

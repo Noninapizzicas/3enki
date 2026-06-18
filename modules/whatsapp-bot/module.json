@@ -135,7 +135,7 @@
   ],
 
   "config": {
-    "transport": "openwa",
+    "transport": "meta",
     "_transport_doc": "openwa (self-hosted via openwa-service por el bus) | meta (Cloud API directa, parcado). Con openwa, el envio publica whatsapp.enviar.request y la recepcion escucha whatsapp.entrante.",
     "meta_api_version": "v21.0",
     "meta_api_base": "https://graph.facebook.com",

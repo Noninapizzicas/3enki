@@ -204,78 +204,68 @@ class WhatsappBotModule extends BaseModule {
   // HTTP API
   // ==========================================
 
-  async handleWebhookVerify(req, res) {
+  // HTTP del gateway: el handler recibe un CONTEXTO ({params, query, body, headers}) y
+  // DEVUELVE { status, body, headers } (NO hay `res` estilo Express). El gateway serializa.
+  async handleWebhookVerify(req) {
+    const json = (status, obj) => ({ status, body: JSON.stringify(obj), headers: { 'Content-Type': 'application/json' } });
     try {
       const project_slug = req.params?.project;
       const mode = req.query?.['hub.mode'];
       const provided = req.query?.['hub.verify_token'];
       const challenge = req.query?.['hub.challenge'];
 
-      if (!project_slug) {
-        return res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'project param required' } });
-      }
-      if (mode !== 'subscribe') {
-        return res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'hub.mode must be subscribe' } });
-      }
+      if (!project_slug) return json(400, { error: { code: 'INVALID_INPUT', message: 'project param required' } });
+      if (mode !== 'subscribe') return json(400, { error: { code: 'INVALID_INPUT', message: 'hub.mode must be subscribe' } });
       const expected = process.env[this._envVerifyKey(project_slug)];
       if (!expected) {
         this.logger.warn('whatsapp-bot.webhook.verify.no_credential', { project_slug });
-        return res.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: 'verify_token not configured for project' } });
+        return json(404, { error: { code: 'RESOURCE_NOT_FOUND', message: 'verify_token not configured for project' } });
       }
       if (provided !== expected) {
         this.logger.warn('whatsapp-bot.webhook.verify.token_mismatch', { project_slug });
-        return res.status(403).json({ error: { code: 'PERMISSION_DENIED', message: 'verify_token mismatch' } });
+        return json(403, { error: { code: 'PERMISSION_DENIED', message: 'verify_token mismatch' } });
       }
       this.logger.info('whatsapp-bot.webhook.verified', { project_slug });
       this.metrics?.increment('whatsapp-bot.webhook.verified', { project: project_slug });
-      res.status(200).type('text/plain').send(String(challenge || ''));
+      // Meta espera el hub.challenge en texto plano.
+      return { status: 200, body: String(challenge || ''), headers: { 'Content-Type': 'text/plain' } };
     } catch (err) {
       this.logger.error('whatsapp-bot.webhook.verify.error', { error: err.message });
-      res.status(500).json({ error: { code: 'UNKNOWN_ERROR', message: 'verify failed' } });
+      return json(500, { error: { code: 'UNKNOWN_ERROR', message: 'verify failed' } });
     }
   }
 
-  async handleWebhookEvent(req, res) {
+  async handleWebhookEvent(req) {
     const project_slug = req.params?.project;
-    // Ack rapido a Meta (Meta requiere 200 en <5s o reintenta).
-    res.status(200).send('EVENT_RECEIVED');
-
+    // Procesa cada mensaje SIN bloquear el 200 (Meta exige respuesta rápida; el gateway
+    // espera el retorno, así que disparamos el procesado fire-and-forget y devolvemos ya).
     try {
       const messages = parseWebhookEvent(req.body);
-      if (messages.length === 0) return;
       for (const msg of messages) {
-        try {
-          if (msg.phone_number_id) {
-            const expectedSlug = this.projectByPhoneId.get(msg.phone_number_id);
-            if (expectedSlug && expectedSlug !== project_slug) {
-              this.logger.warn('whatsapp-bot.webhook.project_mismatch', {
-                path_project: project_slug,
-                phone_id_project: expectedSlug,
-                phone_number_id: msg.phone_number_id
-              });
-              continue;
-            }
-          }
-          await this._publicarEvento('whatsapp.mensaje.recibido', {
-            project_slug,
-            phone_number_id: msg.phone_number_id,
-            from: msg.from,
-            message_type: msg.message_type,
-            message_id: msg.message_id,
-            has_text: !!msg.text
-          });
-          await this._despacharEntrante(project_slug, msg);
-        } catch (innerErr) {
-          this.logger.error('whatsapp-bot.webhook.message.error', {
-            error: innerErr.message,
-            project_slug,
-            message_id: msg.message_id
-          });
-        }
+        this._procesarMensajeMeta(project_slug, msg).catch(innerErr =>
+          this.logger.error('whatsapp-bot.webhook.message.error', { error: innerErr.message, project_slug, message_id: msg.message_id }));
       }
     } catch (err) {
       this.logger.error('whatsapp-bot.webhook.event.error', { error: err.message, project_slug });
     }
+    return { status: 200, body: 'EVENT_RECEIVED', headers: { 'Content-Type': 'text/plain' } };
+  }
+
+  async _procesarMensajeMeta(project_slug, msg) {
+    if (msg.phone_number_id) {
+      const expectedSlug = this.projectByPhoneId.get(msg.phone_number_id);
+      if (expectedSlug && expectedSlug !== project_slug) {
+        this.logger.warn('whatsapp-bot.webhook.project_mismatch', {
+          path_project: project_slug, phone_id_project: expectedSlug, phone_number_id: msg.phone_number_id
+        });
+        return;
+      }
+    }
+    await this._publicarEvento('whatsapp.mensaje.recibido', {
+      project_slug, phone_number_id: msg.phone_number_id, from: msg.from,
+      message_type: msg.message_type, message_id: msg.message_id, has_text: !!msg.text
+    });
+    await this._despacharEntrante(project_slug, msg);
   }
 
   async handleHealthCheck(req, res) {

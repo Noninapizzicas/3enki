@@ -264,6 +264,7 @@ class CartaDigitalModule extends BaseModule {
       moneda: op.moneda || '€',
       whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
       mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
+      project_slug: slug,
       pago_online: !!op.pago_online,
       pedido_endpoint: op.pedido_endpoint || '',
       tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colores.texto || '#e5e5e5', logo_emoji: logoEmoji }
@@ -362,6 +363,7 @@ class CartaDigitalModule extends BaseModule {
         moneda: op.moneda || '€',
         whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
         mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
+        project_slug: this.activos.get(project_id)?.slug || String(project_id).slice(0, 8),
         pago_online: !!op.pago_online,
         pedido_endpoint: '',                           // SUELTA: checkout WhatsApp (no online)
         tema: {

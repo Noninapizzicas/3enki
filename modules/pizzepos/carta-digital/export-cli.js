@@ -116,6 +116,7 @@ const tplConfig = {
   moneda: opc.moneda || moneda,
   whatsapp_telefono: normalizarTelefono(whatsapp),
   mensaje_header: opc.mensaje_pedido || '¡Hola! Quiero pedir:',
+  project_slug: project || slugify(nombre),
   pago_online: !!opc.pago_online,
   pedido_endpoint: pedidoEndpoint,
   tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colorTexto, logo_emoji: logoEmoji }

@@ -23,7 +23,7 @@ class WhatsappBotModule extends BaseModule {
     this.projectsByMeta = new Map();
     // phone_number_id -> project_slug (reverse mapping)
     this.projectByPhoneId = new Map();
-    // request_id -> { project_slug, from, message_id, items, total_centimos, palabra_clave, timeoutHandle, created_at }
+    // request_id -> { project_slug, from, message_id, items, total_centimos, cliente_nombre, timeoutHandle, created_at }
     this.pendingPedidos = new Map();
     // pedido_id -> { project_slug, from, codigo_recogida } — para avisar al cliente cuando
     // cocina marque el pedido listo (cocina.pedido_listo NO arrastra el cliente_telefono).
@@ -32,12 +32,18 @@ class WhatsappBotModule extends BaseModule {
     this.maxPedidosListos = 500;
   }
 
-  _trackPedidoListo(pedido_id, project_slug, from, codigo_recogida) {
-    if (!pedido_id) return;
-    if (this.pedidosListos.has(pedido_id)) this.pedidosListos.delete(pedido_id);
-    this.pedidosListos.set(pedido_id, { project_slug, from, codigo_recogida });
-    while (this.pedidosListos.size > this.maxPedidosListos) {
-      this.pedidosListos.delete(this.pedidosListos.keys().next().value);
+  // Registra el pedido bajo varias claves (pedido_id de tienda + cuenta_id): cocina
+  // marca listo el ticket de la cuenta, cuyo cuenta_id viaja en cocina.pedido_listo
+  // y cuyo pedido_id difiere del de tienda. Cualquiera de las dos localiza al cliente.
+  _trackPedidoListo(keys, project_slug, from, codigo_recogida) {
+    const ref = { project_slug, from, codigo_recogida };
+    for (const k of (Array.isArray(keys) ? keys : [keys])) {
+      if (!k) continue;
+      if (this.pedidosListos.has(k)) this.pedidosListos.delete(k);
+      this.pedidosListos.set(k, ref);
+      while (this.pedidosListos.size > this.maxPedidosListos) {
+        this.pedidosListos.delete(this.pedidosListos.keys().next().value);
+      }
     }
   }
 
@@ -142,7 +148,8 @@ class WhatsappBotModule extends BaseModule {
     await this._confirmarPedidoCliente(pending, data);
     await this._notificarStaff(pending, data);
     // Recordar quién es el cliente para avisarle cuando cocina lo marque listo.
-    this._trackPedidoListo(data.pedido_id, pending.project_slug, pending.from, data.codigo_recogida);
+    // Clave por pedido_id (tienda) y por cuenta_id (la cuenta operativa de comandero).
+    this._trackPedidoListo([data.pedido_id, data.cuenta_id], pending.project_slug, pending.from, data.codigo_recogida);
   }
 
   // Cocina marcó el pedido listo → avisa al CLIENTE por WhatsApp ("ven a recoger").
@@ -150,11 +157,13 @@ class WhatsappBotModule extends BaseModule {
   // los del POS no están en el mapa → se ignoran.
   async onCocinaPedidoListo(event) {
     const data = event?.data || event;
+    const cuenta_id = data?.cuenta_id;
     const pedido_id = data?.pedido_id;
-    if (!pedido_id) return;
-    const ref = this.pedidosListos.get(pedido_id);
+    const ref = (cuenta_id && this.pedidosListos.get(cuenta_id))
+             || (pedido_id && this.pedidosListos.get(pedido_id));
     if (!ref) return;                          // no es un pedido de tienda nuestro
-    this.pedidosListos.delete(pedido_id);
+    if (cuenta_id) this.pedidosListos.delete(cuenta_id);
+    if (pedido_id) this.pedidosListos.delete(pedido_id);
     const meta = this.projectsByMeta.get(ref.project_slug);
     const display = meta?.display_number ? `\nNumero del negocio: ${meta.display_number}` : '';
     const cod = ref.codigo_recogida ? ` Codigo: ${ref.codigo_recogida}.` : '';
@@ -486,7 +495,7 @@ class WhatsappBotModule extends BaseModule {
       message_id: msg.message_id,
       items,
       total_centimos: parsed.total_centimos,
-      palabra_clave: parsed.palabra_clave,
+      cliente_nombre: parsed.cliente_nombre,
       mayor_edad_confirmado: parsed.mayor_edad_confirmado,
       timeoutHandle,
       created_at: Date.now()
@@ -503,7 +512,7 @@ class WhatsappBotModule extends BaseModule {
       total_centimos: parsed.total_centimos,
       canal_origen: 'whatsapp',
       cliente_telefono: msg.from,
-      palabra_clave: parsed.palabra_clave,
+      cliente_nombre: parsed.cliente_nombre,
       mayor_edad_confirmado: parsed.mayor_edad_confirmado
     });
     this.metrics?.increment('whatsapp-bot.pedido.solicitado', { project: project_slug });
@@ -520,7 +529,8 @@ class WhatsappBotModule extends BaseModule {
   async _confirmarPedidoCliente(pending, pedido) {
     const meta = this.projectsByMeta.get(pending.project_slug);
     const display = meta?.display_number ? `\nNumero del negocio: ${meta.display_number}` : '';
-    const msg = `Pedido recibido. Codigo: ${pedido.codigo_recogida}. Pasa a recoger y paga en efectivo. Al recoger te preguntaremos tu palabra clave.${display}`;
+    const aNombre = pending.cliente_nombre ? ` a nombre de ${pending.cliente_nombre}` : '';
+    const msg = `Pedido recibido${aNombre}. Codigo: ${pedido.codigo_recogida}. Pasa a recoger y paga en efectivo.${display}`;
     await this._enviarMensajeSeguro(pending.project_slug, pending.from, msg);
   }
 
@@ -532,15 +542,14 @@ class WhatsappBotModule extends BaseModule {
     }
     const itemsTxt = pending.items.map(it => `- ${it.cantidad} x ${it.descripcion}`).join('\n');
     const totalEur = (pending.total_centimos / 100).toFixed(2).replace('.', ',');
-    // ANTI-FRAUDE: NO incluir palabra_clave aqui. El dependiente la pregunta al
-    // cliente al recoger, sin haberla leido antes. mayor_edad SI viaja (es
-    // metadata operativa, no anti-fraude; util para que el staff sepa que el
-    // cliente paso el gate en la PWA — pero el dependiente sigue exigiendo DNI
-    // en presencial si la regulacion lo manda).
+    // El nombre SI viaja al staff: es la etiqueta humana del pedido (lo cantan al
+    // recoger), no un secreto. El telefono va enmascarado (dato operativo). mayor_edad
+    // viaja si el proyecto activo el gate en la PWA.
     const lines = [
       `Pedido nuevo - ${pending.project_slug.toUpperCase()}`,
       `Codigo: ${pedido.codigo_recogida}`,
-      `Cliente: ${this._maskPhoneNumber(pending.from)}`
+      `A nombre de: ${pending.cliente_nombre || '(sin nombre)'}`,
+      `Tel: ${this._maskPhoneNumber(pending.from)}`
     ];
     if (pending.mayor_edad_confirmado === true) {
       lines.push('Mayor 18: confirmado en PWA');

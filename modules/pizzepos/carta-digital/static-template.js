@@ -92,6 +92,8 @@ function generateStaticHTML(carta, config, options = {}) {
   });
   // Leyenda de alérgenos presentes (id/nombre/emoji), de la proyección.
   const alergenosLeyenda = Array.isArray(carta.alergenos_leyenda) ? carta.alergenos_leyenda : [];
+  // Catálogo de extras añadibles (ya viene gateado a precio_extra>0 desde index.js).
+  const catalogoIngredientes = Array.isArray(carta.catalogo_ingredientes) ? carta.catalogo_ingredientes : [];
 
   const ofertas = (carta.ofertas || []).filter(o => o.activa !== false).map(o => ({
     id: o.id,
@@ -111,7 +113,7 @@ function generateStaticHTML(carta, config, options = {}) {
   const resenasAvg = carta.resenas_avg || 0;
   const resenasTotal = carta.resenas_total || 0;
 
-  const dataJSON = JSON.stringify({ categorias, productos, ofertas, resenas, resenas_avg: resenasAvg, resenas_total: resenasTotal, alergenos_leyenda: alergenosLeyenda });
+  const dataJSON = JSON.stringify({ categorias, productos, ofertas, resenas, resenas_avg: resenasAvg, resenas_total: resenasTotal, alergenos_leyenda: alergenosLeyenda, catalogo_ingredientes: catalogoIngredientes });
   const configJSON = JSON.stringify({
     nombre_negocio, moneda, whatsapp_telefono, mensaje_header, project_slug,
     ai_endpoint, ai_provider, ai_chat_path, chat_enabled, pedido_endpoint, pago_online
@@ -281,6 +283,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .ing-chip.queso{border-color:rgba(250,204,21,.25)}.ing-chip.carne{border-color:rgba(239,68,68,.2)}.ing-chip.verdura{border-color:rgba(34,197,94,.2)}.ing-chip.marisco{border-color:rgba(59,130,246,.2)}
 .ing-removable{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s}
 .ing-chip.removed{border-color:#ef4444;background:rgba(239,68,68,.15);color:#ef4444;text-decoration:line-through}
+.ing-add{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s}
+.ing-chip.added{border-color:#22c55e;background:rgba(34,197,94,.15);color:#22c55e}
+.ing-add-price{font-size:.65rem;color:#888;margin-left:2px}.ing-chip.added .ing-add-price{color:#22c55e}
 .detail-footer{display:flex;gap:10px;padding:16px 20px;border-top:1px solid #222;background:var(--bg-surface)}
 .btn{flex:1;padding:14px;border:none;border-radius:12px;font-size:.9rem;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .btn-primary{background:var(--primary);color:#000}.btn-primary:active{filter:brightness(.85)}
@@ -622,6 +627,8 @@ let cart = [];
 let cartId = 0;
 let detailProd = null;
 let quitarSel = new Set();   // índices de ingredientes que el cliente quita en el detalle
+let anadirSel = new Map();   // id → extra que el cliente añade (del catálogo gateado a precio>0)
+let detailExtrasById = {};   // lookup id → extra del producto abierto
 
 // localStorage keys
 var LS_CART = 'carta_cart_' + (CONFIG.nombre_negocio || 'default').replace(/\\s/g, '_');
@@ -861,6 +868,8 @@ function showDetail(id) {
   detailProd = DATA.productos.find(p => p.id === id);
   if (!detailProd) return;
   quitarSel = new Set();   // cada apertura empieza limpia (sin quitados heredados)
+  anadirSel = new Map();
+  detailExtrasById = {};
   trackEvent('product_view', id);
   const p = detailProd;
 
@@ -887,6 +896,33 @@ function showDetail(id) {
     ingsHtml += '<button type="button" class="ing-chip ing-removable' + cls + '" data-ing-idx="' + idx + '" onclick="toggleQuitar(' + idx + ', this)">' + (i.emoji ? '<span style="font-size:.85rem">' + i.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(i.nombre) + '</span></button>';
   }
 
+  // Extras AÑADIBLES (1b): del catálogo (ya gateado a precio>0), mismo grupo que el producto,
+  // que NO sean ya base. Agrupados por tipo. Espeja la mitad "añadir" del VariacionesPanel.
+  const baseIds = {};
+  for (const bi of (p.ingredientes || [])) { if (bi.id) baseIds[bi.id] = 1; }
+  const grpKeys = [p.categoria_id, (p.categoria || '').toLowerCase()].filter(Boolean);
+  const extras = (DATA.catalogo_ingredientes || []).filter(function(ing) {
+    if (!ing || baseIds[ing.id]) return false;
+    const g = ing.grupos || [];
+    if (g.length && grpKeys.length) {
+      let ok = false;
+      for (let k = 0; k < g.length; k++) { if (grpKeys.indexOf(String(g[k]).toLowerCase()) >= 0) { ok = true; break; } }
+      if (!ok) return false;
+    }
+    return true;
+  });
+  let extrasHtml = '';
+  if (extras.length) {
+    const byTipo = {};
+    for (const e of extras) { detailExtrasById[e.id] = e; const t = e.tipo || 'otro'; (byTipo[t] = byTipo[t] || []).push(e); }
+    for (const t of Object.keys(byTipo)) {
+      const cls = t ? ' ' + t : '';
+      for (const e of byTipo[t]) {
+        extrasHtml += '<button type="button" class="ing-chip ing-add' + cls + '" onclick="toggleAnadir(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
+      }
+    }
+  }
+
   // Declaración de alérgenos por NOMBRE (1169/2011 — el texto es lo legalmente exigible).
   let alergHtml = '';
   if (p.alergenos && p.alergenos.length) {
@@ -903,10 +939,10 @@ function showDetail(id) {
     (tagsHtml ? '<div class="detail-tags">' + tagsHtml + '</div>' : '') +
     (p.descripcion ? '<p class="detail-desc">' + esc(p.descripcion) + '</p>' : '') +
     (ingsHtml ? '<h3 class="section-title">Ingredientes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· toca para quitar</span></h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
+    (extrasHtml ? '<h3 class="section-title">Añadir extras</h3><div class="ing-list">' + extrasHtml + '</div>' : '') +
     alergHtml;
 
-  document.getElementById('detail-footer').innerHTML =
-    '<button class="btn btn-primary" onclick="addDetailToCart()">' + T.add + ' ' + fmt(p.precio) + '</button>';
+  renderDetailFooter();
 
   document.getElementById('detail-overlay').classList.add('open');
 }
@@ -916,10 +952,30 @@ function closeDetail() {
   detailProd = null;
 }
 
-// Detalle → carrito: arma la personalización (hoy "sin X") y delega en addToCart.
+// Detalle → carrito: arma la personalización (sin X · con Y) y delega en addToCart.
+function detailTotal() {
+  if (!detailProd) return 0;
+  let extra = 0;
+  anadirSel.forEach(function(e) { extra += Number(e.precio_extra) || 0; });
+  return detailProd.precio + extra;
+}
+
+function renderDetailFooter() {
+  document.getElementById('detail-footer').innerHTML =
+    '<button class="btn btn-primary" onclick="addDetailToCart()">' + T.add + ' ' + fmt(detailTotal()) + '</button>';
+}
+
 function toggleQuitar(idx, btn) {
   if (quitarSel.has(idx)) { quitarSel.delete(idx); btn.classList.remove('removed'); }
   else { quitarSel.add(idx); btn.classList.add('removed'); }
+}
+
+function toggleAnadir(id, btn) {
+  const e = detailExtrasById[id];
+  if (!e) return;
+  if (anadirSel.has(id)) { anadirSel.delete(id); btn.classList.remove('added'); }
+  else { anadirSel.set(id, e); btn.classList.add('added'); }
+  renderDetailFooter();   // el precio cambia con cada extra
 }
 
 function addDetailToCart() {
@@ -928,8 +984,14 @@ function addDetailToCart() {
   const ings = p.ingredientes || [];
   const quitados = [];
   quitarSel.forEach(function(idx) { if (ings[idx]) quitados.push(ings[idx].nombre); });
-  const detalle = quitados.length ? 'sin ' + quitados.join(', ') : null;
-  addToCart(p.id, { detalle: detalle });
+  const anadidos = [];
+  let extra = 0;
+  anadirSel.forEach(function(e) { anadidos.push(e.nombre); extra += Number(e.precio_extra) || 0; });
+  const partes = [];
+  if (quitados.length) partes.push('sin ' + quitados.join(', '));
+  if (anadidos.length) partes.push('con ' + anadidos.join(', '));
+  const detalle = partes.length ? partes.join(' · ') : null;
+  addToCart(p.id, { detalle: detalle, precio: p.precio + extra });
   closeDetail();
 }
 
@@ -938,7 +1000,8 @@ function addToCart(id, opts) {
   const p = DATA.productos.find(x => x.id === id);
   if (!p) return;
   opts = opts || {};
-  cart.push({ _id: ++cartId, id: p.id, nombre: p.nombre, precio: p.precio, qty: 1, detalle: opts.detalle || null });
+  const precio = (opts.precio != null) ? opts.precio : p.precio;
+  cart.push({ _id: ++cartId, id: p.id, nombre: p.nombre, precio: precio, qty: 1, detalle: opts.detalle || null });
   trackEvent('add_to_cart', id, opts.detalle ? { custom: true } : undefined);
   updateCart();
   showUpsell(p);

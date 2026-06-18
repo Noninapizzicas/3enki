@@ -395,15 +395,24 @@ class WhatsappBotModule extends BaseModule {
 
   async _readProjectConfig(slug) {
     const dir = this.config?.projects_dir || 'data/projects';
-    const file = path.join(dir, slug, 'config', 'project.json');
-    try {
-      const raw = await fs.readFile(file, 'utf8');
-      return JSON.parse(raw);
-    } catch (err) {
-      if (err.code === 'ENOENT') return null;
-      this.logger.warn('whatsapp-bot.project_config.read_error', { slug, error: err.message });
-      return null;
+    // El fichero canonico de config por proyecto es config/config.json (bloques de
+    // feature: pizzepos, tienda, whatsapp...). Se admite config/project.json como
+    // fallback (layouts antiguos / integraciones que lo escriban aparte).
+    const candidatos = [
+      path.join(dir, slug, 'config', 'config.json'),
+      path.join(dir, slug, 'config', 'project.json')
+    ];
+    for (const file of candidatos) {
+      try {
+        const raw = await fs.readFile(file, 'utf8');
+        return JSON.parse(raw);
+      } catch (err) {
+        if (err.code === 'ENOENT') continue;
+        this.logger.warn('whatsapp-bot.project_config.read_error', { slug, file, error: err.message });
+        return null;
+      }
     }
+    return null;
   }
 
   _proyectoOperativo(slug) {

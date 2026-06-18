@@ -5,12 +5,18 @@
    * mensaje de pedido. Guarda con update_config → luego Refrescas el Preview y lo ves.
    * (Branding —nombre/logo— se edita en marketing; funcionalidades toggles: Paso 2b.)
    */
-  import { cartaDigitalConfig, updateCartaDigitalConfig } from '$lib/stores/carta-digital';
+  import { cartaDigitalConfig, updateCartaDigitalConfig, publicarCartaDigital } from '$lib/stores/carta-digital';
 
   let expanded = false;
   let saving = false;
   let saved = false;
   let dirty = false;
+
+  // publicar
+  let publishing = false;
+  let pubUrl = '';
+  let pubAviso = '';
+  let pubError = '';
 
   // campos editables
   let whatsapp = '';
@@ -38,6 +44,18 @@
     } as any);
     saving = false; saved = ok; dirty = false;
     if (ok) setTimeout(() => (saved = false), 2500);
+  }
+
+  async function publicar() {
+    publishing = true; pubError = ''; pubUrl = ''; pubAviso = '';
+    const r = await publicarCartaDigital();
+    publishing = false;
+    if (r.ok) {
+      pubUrl = r.data?.alojada_url || '';
+      pubAviso = r.data?.aviso || '';
+    } else {
+      pubError = r.error || 'No se pudo publicar';
+    }
   }
 </script>
 
@@ -70,7 +88,19 @@
       <button class="btn-guardar" on:click={guardar} disabled={saving}>
         {saving ? 'Guardando…' : 'Guardar configuración'}
       </button>
-      {#if saved}<span class="ok">✓ Guardado — refresca el Preview para verlo</span>{/if}
+      {#if saved}<span class="ok">✓ Guardado — pulsa Publicar para que el cliente lo vea</span>{/if}
+
+      <div class="publicar">
+        <span class="lbl-pub">Publicar al cliente <small>(regenera /shop con lo que has guardado)</small></span>
+        <button class="btn-publicar" on:click={publicar} disabled={publishing}>
+          {publishing ? 'Publicando…' : '🚀 Publicar / Republicar'}
+        </button>
+        {#if pubUrl}
+          <span class="ok">✓ Publicado en <code>{pubUrl}</code></span>
+          {#if pubAviso}<span class="pub-aviso">{pubAviso}</span>{/if}
+        {/if}
+        {#if pubError}<span class="pub-err">{pubError}</span>{/if}
+      </div>
     </div>
   {/if}
 </section>
@@ -92,4 +122,12 @@
   .btn-guardar { margin-top: 0.2rem; padding: 0.55rem 0.75rem; background: var(--color-primary, #f59e0b); border: none; border-radius: 8px; color: #1a1205; font-size: 0.82rem; font-weight: 700; cursor: pointer; width: fit-content; }
   .btn-guardar:disabled { opacity: 0.5; cursor: default; }
   .ok { font-size: 0.72rem; color: #25d366; }
+  .publicar { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem; padding-top: 0.75rem; border-top: 1px solid var(--color-border, #333); }
+  .lbl-pub { font-size: 0.72rem; color: var(--color-text-muted, #9aa0a6); }
+  .lbl-pub small { opacity: 0.7; }
+  .btn-publicar { padding: 0.55rem 0.75rem; background: #1f6feb; border: none; border-radius: 8px; color: #fff; font-size: 0.82rem; font-weight: 700; cursor: pointer; width: fit-content; }
+  .btn-publicar:disabled { opacity: 0.5; cursor: default; }
+  .pub-aviso { font-size: 0.68rem; color: var(--color-text-muted, #9aa0a6); line-height: 1.4; }
+  .pub-err { font-size: 0.72rem; color: #ff8a8a; background: #3a1212; padding: 0.4rem 0.5rem; border-radius: 8px; }
+  code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; font-size: 0.7rem; }
 </style>

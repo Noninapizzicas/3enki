@@ -408,12 +408,18 @@ class PedidosModule extends BaseModule {
         total_centimos,
         canal_origen,
         cliente_telefono,
+        cliente_nombre,
         palabra_clave,
         mayor_edad_confirmado,
         expira_horas,
         notas_generales,
         correlation_id
       } = data || {};
+      // Etiqueta humana del pedido (la canta el dependiente al recoger). Texto
+      // libre normalizado; no es secreto ni identificador unico (eso es el codigo).
+      const cliente_nombre_norm = typeof cliente_nombre === 'string'
+        ? cliente_nombre.trim().replace(/\s+/g, ' ').slice(0, 60)
+        : null;
 
       if (!project_slug || typeof project_slug !== 'string') {
         this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
@@ -483,6 +489,7 @@ class PedidosModule extends BaseModule {
         total: total_centimos / 100,
         codigo_recogida,
         palabra_clave: palabra_clave || null,
+        cliente_nombre: cliente_nombre_norm || null,
         cliente_telefono: cliente_telefono || null,
         // Decision 6.2 = C: configurable por proyecto. Si la PWA mostro gate
         // y el cliente lo paso, este flag llega como true. Si el proyecto no
@@ -1069,7 +1076,8 @@ class PedidosModule extends BaseModule {
       cuenta_id: pedido.id,                         // clave sintética: tienda no tiene cuenta
       canal: 'tienda',
       canal_origen: pedido.canal_origen || null,
-      ref_display: `🛍 ${pedido.codigo_recogida || pedido.id.slice(0, 6)}`,
+      // Etiqueta para cocina: nombre del cliente si lo dio, si no el código.
+      ref_display: `🛍 ${pedido.cliente_nombre || pedido.codigo_recogida || pedido.id.slice(0, 6)}`,
       project_id: pedido.project_id || pedido.project_slug || null,
       items: (pedido.items || []).map(it => ({
         item_id: it.item_id,
@@ -1080,7 +1088,7 @@ class PedidosModule extends BaseModule {
       items_count: (pedido.items || []).length,
       notas_generales: pedido.notas_generales || null,
       enviado_at: pedido.enviado_cocina_at || new Date().toISOString(),
-      metadata: { tipo: 'tienda', codigo_recogida: pedido.codigo_recogida || null, cliente_telefono: pedido.cliente_telefono || null }
+      metadata: { tipo: 'tienda', codigo_recogida: pedido.codigo_recogida || null, cliente_nombre: pedido.cliente_nombre || null, cliente_telefono: pedido.cliente_telefono || null }
     }, sourcePayload);
   }
 

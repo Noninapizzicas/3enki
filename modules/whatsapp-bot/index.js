@@ -23,7 +23,7 @@ class WhatsappBotModule extends BaseModule {
     this.projectsByMeta = new Map();
     // phone_number_id -> project_slug (reverse mapping)
     this.projectByPhoneId = new Map();
-    // request_id -> { project_slug, from, message_id, items, total_centimos, palabra_clave, timeoutHandle, created_at }
+    // request_id -> { project_slug, from, message_id, items, total_centimos, cliente_nombre, timeoutHandle, created_at }
     this.pendingPedidos = new Map();
     // pedido_id -> { project_slug, from, codigo_recogida } — para avisar al cliente cuando
     // cocina marque el pedido listo (cocina.pedido_listo NO arrastra el cliente_telefono).
@@ -486,7 +486,7 @@ class WhatsappBotModule extends BaseModule {
       message_id: msg.message_id,
       items,
       total_centimos: parsed.total_centimos,
-      palabra_clave: parsed.palabra_clave,
+      cliente_nombre: parsed.cliente_nombre,
       mayor_edad_confirmado: parsed.mayor_edad_confirmado,
       timeoutHandle,
       created_at: Date.now()
@@ -503,7 +503,7 @@ class WhatsappBotModule extends BaseModule {
       total_centimos: parsed.total_centimos,
       canal_origen: 'whatsapp',
       cliente_telefono: msg.from,
-      palabra_clave: parsed.palabra_clave,
+      cliente_nombre: parsed.cliente_nombre,
       mayor_edad_confirmado: parsed.mayor_edad_confirmado
     });
     this.metrics?.increment('whatsapp-bot.pedido.solicitado', { project: project_slug });
@@ -520,7 +520,8 @@ class WhatsappBotModule extends BaseModule {
   async _confirmarPedidoCliente(pending, pedido) {
     const meta = this.projectsByMeta.get(pending.project_slug);
     const display = meta?.display_number ? `\nNumero del negocio: ${meta.display_number}` : '';
-    const msg = `Pedido recibido. Codigo: ${pedido.codigo_recogida}. Pasa a recoger y paga en efectivo. Al recoger te preguntaremos tu palabra clave.${display}`;
+    const aNombre = pending.cliente_nombre ? ` a nombre de ${pending.cliente_nombre}` : '';
+    const msg = `Pedido recibido${aNombre}. Codigo: ${pedido.codigo_recogida}. Pasa a recoger y paga en efectivo.${display}`;
     await this._enviarMensajeSeguro(pending.project_slug, pending.from, msg);
   }
 
@@ -532,15 +533,14 @@ class WhatsappBotModule extends BaseModule {
     }
     const itemsTxt = pending.items.map(it => `- ${it.cantidad} x ${it.descripcion}`).join('\n');
     const totalEur = (pending.total_centimos / 100).toFixed(2).replace('.', ',');
-    // ANTI-FRAUDE: NO incluir palabra_clave aqui. El dependiente la pregunta al
-    // cliente al recoger, sin haberla leido antes. mayor_edad SI viaja (es
-    // metadata operativa, no anti-fraude; util para que el staff sepa que el
-    // cliente paso el gate en la PWA — pero el dependiente sigue exigiendo DNI
-    // en presencial si la regulacion lo manda).
+    // El nombre SI viaja al staff: es la etiqueta humana del pedido (lo cantan al
+    // recoger), no un secreto. El telefono va enmascarado (dato operativo). mayor_edad
+    // viaja si el proyecto activo el gate en la PWA.
     const lines = [
       `Pedido nuevo - ${pending.project_slug.toUpperCase()}`,
       `Codigo: ${pedido.codigo_recogida}`,
-      `Cliente: ${this._maskPhoneNumber(pending.from)}`
+      `A nombre de: ${pending.cliente_nombre || '(sin nombre)'}`,
+      `Tel: ${this._maskPhoneNumber(pending.from)}`
     ];
     if (pending.mayor_edad_confirmado === true) {
       lines.push('Mayor 18: confirmado en PWA');

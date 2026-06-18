@@ -1045,8 +1045,8 @@ function updateCart() {
   const waBtn = CONFIG.whatsapp_telefono
     ? '<button class="' + (CONFIG.pedido_endpoint ? 'btn-share' : 'btn-wa') + '" onclick="sendWhatsApp()">WhatsApp</button>'
     : (CONFIG.pedido_endpoint ? '' : '<button class="btn-share" onclick="shareOrder()">' + T.share + '</button>');
-  const nombreInput = CONFIG.pedido_endpoint
-    ? '<input id="cliente-nombre" class="cart-nombre" type="text" placeholder="Tu nombre (opcional)" aria-label="Tu nombre" autocomplete="name">'
+  const nombreInput = (CONFIG.whatsapp_telefono || CONFIG.pedido_endpoint)
+    ? '<input id="cliente-nombre" class="cart-nombre" type="text" placeholder="¿A nombre de? (obligatorio)" aria-label="A nombre de" autocomplete="name" required>'
     : '';
   footer.innerHTML = '<div class="total-row"><span class="total-label">' + T.total + '</span><span class="total-amount">' + fmt(total) + '</span></div>' +
     nombreInput +
@@ -1077,23 +1077,23 @@ function _pedNonce() {
   for (var k = 0; k < 4; k++) s += ch.charAt(Math.floor(Math.random() * ch.length));
   return s;
 }
-// Palabra clave de recogida: 3 letras minúsculas. El cliente la lee de su propio
-// chat y se la dice al dependiente al recoger (el staff NO la recibe → anti-fraude).
-function _pedPalabra() {
-  var v = 'abcdefghijklmnopqrstuvwxyz', s = '';
-  for (var k = 0; k < 3; k++) s += v.charAt(Math.floor(Math.random() * v.length));
-  return s;
-}
 function _pedEur(n) { return Number(n).toFixed(2).replace('.', ',') + ' EUR'; }
+// Nombre que el cliente escribió en el carrito (etiqueta humana del pedido).
+function _pedNombre() {
+  var nm = document.getElementById('cliente-nombre');
+  return nm && nm.value ? nm.value.trim().replace(/\\s+/g, ' ').slice(0, 60) : '';
+}
 
 // Mensaje wa.me en FORMATO CANÓNICO que el whatsapp-bot (parser) entiende:
 //   PEDIDO <slug>-<NONCE4>
 //   - <cant> x <descripcion>
 //   Total: <X,XX> EUR
-//   Palabra clave: <abc>
+//   Nombre: <nombre del cliente>
 function buildOrderMsg() {
   if (cart.length === 0) return '';
   if (!CONFIG.project_slug) return '';        // sin slug no se puede formar el pedido canónico
+  var nombre = _pedNombre();
+  if (!nombre) return '';                     // sin nombre no se forma (sendWhatsApp avisa)
   var msg = 'PEDIDO ' + CONFIG.project_slug + '-' + _pedNonce() + '\\n';
   for (var idx = 0; idx < cart.length; idx++) {
     var item = cart[idx];
@@ -1102,11 +1102,17 @@ function buildOrderMsg() {
   }
   var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
   msg += 'Total: ' + _pedEur(total) + '\\n';
-  msg += 'Palabra clave: ' + _pedPalabra();
+  msg += 'Nombre: ' + nombre;
   return msg;
 }
 
 function sendWhatsApp() {
+  if (!_pedNombre()) {
+    var nm = document.getElementById('cliente-nombre');
+    if (nm) { nm.focus(); nm.style.borderColor = '#ff5252'; }
+    alert('Escribe a nombre de quién es el pedido.');
+    return;
+  }
   const msg = buildOrderMsg();
   if (!msg) return;
   var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);

@@ -8,7 +8,7 @@ Formato canonico del mensaje wa.me que la PWA tienda genera:
   - <cant> x <descripcion>
   ...
   Total: <importe>
-  Palabra clave: <3 chars>
+  Nombre: <nombre del cliente>
 
 Ejemplo:
 
@@ -16,19 +16,20 @@ Ejemplo:
   - 2 x Cloud Nine 50ml Menta
   - 1 x Vampire Vape 30ml Tabaco
   Total: 38,00 EUR
-  Palabra clave: rojo
+  Nombre: Juan Ortiz
 
 Reglas:
   - Project slug en kebab-case ASCII.
   - Nonce 4 chars [A-Z0-9] sin O ni 0 ni 1 ni I (no ambiguos).
   - Items: una linea cada uno, cantidad entera positiva, separador " x ".
   - Total en formato "Total: X,XX EUR" o "Total: X.XX EUR" (coma o punto).
-  - Palabra clave exactamente 3 chars [a-z] minusculas.
+  - Nombre: texto libre 2..60 chars — etiqueta humana del pedido (lo canta el
+    dependiente al recoger). NO es secreto (el anti-fraude lo da el nº de WhatsApp
+    + codigo de recogida).
 `.trim();
 
 const NONCE_PATTERN = /^[A-HJ-NP-Z2-9]{4}$/;
 const PROJECT_PATTERN = /^[a-z][a-z0-9-]{1,30}$/;
-const PALABRA_CLAVE_PATTERN = /^[a-z]{3}$/;
 
 function _normalizar(text) {
   if (typeof text !== 'string') return '';
@@ -88,13 +89,12 @@ function parsearPedido(textoBruto) {
   if (total_centimos === null) return { ok: false, kind: 'total_invalido', project_slug, raw: matchTotal[1] };
   i++;
 
-  if (i >= lineas.length) return { ok: false, kind: 'falta_palabra_clave', project_slug };
-  const matchPalabra = lineas[i].match(/^Palabra clave:\s*([a-z]+)$/i);
-  if (!matchPalabra) return { ok: false, kind: 'falta_palabra_clave', project_slug };
-  const palabra_clave = matchPalabra[1].toLowerCase();
-  if (!PALABRA_CLAVE_PATTERN.test(palabra_clave)) {
-    return { ok: false, kind: 'palabra_clave_invalida', project_slug };
-  }
+  if (i >= lineas.length) return { ok: false, kind: 'falta_nombre', project_slug };
+  const matchNombre = lineas[i].match(/^Nombre:\s*(.+)$/i);
+  if (!matchNombre) return { ok: false, kind: 'falta_nombre', project_slug };
+  // Etiqueta humana, no secreto: texto libre normalizado (colapsa espacios, recorta a 60).
+  const cliente_nombre = matchNombre[1].trim().replace(/\s+/g, ' ').slice(0, 60);
+  if (cliente_nombre.length < 2) return { ok: false, kind: 'nombre_invalido', project_slug };
   i++;
 
   // Linea OPCIONAL: 'Mayor 18: si' (presente solo si el proyecto activa
@@ -116,7 +116,7 @@ function parsearPedido(textoBruto) {
     nonce,
     items,
     total_centimos,
-    palabra_clave,
+    cliente_nombre,
     mayor_edad_confirmado
   };
 }

@@ -113,6 +113,21 @@ export async function updateCartaDigitalConfig(campos: Partial<CartaDigitalConfi
   }
 }
 
+/**
+ * Publica/republica el bundle estático del PWA (cartadigital.publicar). Regenera el
+ * /shop/<slug> con el config actual. Devuelve { ok, data?: { alojada_url, aviso, ... }, error? }.
+ */
+export async function publicarCartaDigital(): Promise<{ ok: boolean; data?: any; error?: string }> {
+  try {
+    const project_id = get(activeProjectId);
+    const res = await mqttRequest<any>('cartadigital', 'publicar', { project_id });
+    return { ok: true, data: res.data };
+  } catch (err: any) {
+    const msg = err?.response?.error?.message || (err instanceof Error ? err.message : 'No se pudo publicar');
+    return { ok: false, error: msg };
+  }
+}
+
 // =============================================================================
 // SUBSCRIPTIONS
 // =============================================================================

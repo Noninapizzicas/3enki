@@ -286,6 +286,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .ing-add{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s}
 .ing-chip.added{border-color:#22c55e;background:rgba(34,197,94,.15);color:#22c55e}
 .ing-add-price{font-size:.65rem;color:#888;margin-left:2px}.ing-chip.added .ing-add-price{color:#22c55e}
+.dish-special{cursor:pointer;border:1px dashed var(--primary);background:rgba(245,158,11,.06)}
+.mitad-slots{display:flex;align-items:center;gap:8px;margin:12px 0}
+.mitad-slot{flex:1;padding:10px;border:2px solid #2a2a2a;border-radius:10px;background:#1a1a1a;color:#ccc;font:inherit;cursor:pointer;font-size:.8rem;text-align:center}
+.mitad-slot-active{border-color:var(--primary);color:#fff}
+.mitad-plus{color:#666;font-weight:800;font-size:1.1rem}
 .detail-footer{display:flex;gap:10px;padding:16px 20px;border-top:1px solid #222;background:var(--bg-surface)}
 .btn{flex:1;padding:14px;border:none;border-radius:12px;font-size:.9rem;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .btn-primary{background:var(--primary);color:#000}.btn-primary:active{filter:brightness(.85)}
@@ -629,6 +634,9 @@ let detailProd = null;
 let quitarSel = new Set();   // índices de ingredientes que el cliente quita en el detalle
 let anadirSel = new Map();   // id → extra que el cliente añade (del catálogo gateado a precio>0)
 let detailExtrasById = {};   // lookup id → extra del producto abierto
+// Mitad y mitad + Al gusto (adaptan MitadMitadPanel / AlGustoPanel del comandero)
+let mitadCat = null, mitadIzq = null, mitadDer = null, mitadLado = 'izq';
+let alGustoCat = null, alGustoBase = 0;
 
 // localStorage keys
 var LS_CART = 'carta_cart_' + (CONFIG.nombre_negocio || 'default').replace(/\\s/g, '_');
@@ -849,8 +857,14 @@ function fillCard(p) {
 function renderGrid() {
   const prods = catActiva ? DATA.productos.filter(p => p.categoria === catActiva) : DATA.productos;
   const el = document.getElementById('grid');
-  if (prods.length === 0) { el.innerHTML = '<div style="text-align:center;padding:60px;color:#666;grid-column:1/-1">' + T.no_products + '</div>'; return; }
-  el.innerHTML = prods.map(fillCard).join('');
+  // Entradas Mitad/Al gusto: solo en categorías "pizza" (por nombre) y si los datos las soportan.
+  let head = '';
+  if (catActiva && isPizzaCat(catActiva)) {
+    if (pizzasOf(catActiva).length >= 2) head += specialCard('½', 'Mitad y mitad', 'Combina dos medias pizzas', 'showMitad(\\'' + catActiva + '\\')');
+    if (extrasForGroup(catGrpKeys(catActiva), {}).length) head += specialCard('🍕', 'Crea tu pizza', 'Elige tus ingredientes', 'showAlGusto(\\'' + catActiva + '\\')');
+  }
+  if (prods.length === 0 && !head) { el.innerHTML = '<div style="text-align:center;padding:60px;color:#666;grid-column:1/-1">' + T.no_products + '</div>'; return; }
+  el.innerHTML = head + prods.map(fillCard).join('');
   if (!el._delegado) {
     // Delegación por data-accion: el diseño NO necesita saber nombres de función.
     el.addEventListener('click', function (e) {
@@ -950,6 +964,8 @@ function showDetail(id) {
 function closeDetail() {
   document.getElementById('detail-overlay').classList.remove('open');
   detailProd = null;
+  mitadCat = null; mitadIzq = null; mitadDer = null; mitadLado = 'izq';
+  alGustoCat = null; alGustoBase = 0;
 }
 
 // Detalle → carrito: arma la personalización (sin X · con Y) y delega en addToCart.
@@ -1005,6 +1021,138 @@ function addToCart(id, opts) {
   trackEvent('add_to_cart', id, opts.detalle ? { custom: true } : undefined);
   updateCart();
   showUpsell(p);
+}
+
+// ─── Mitad y mitad + Al gusto (adaptan MitadMitadPanel / AlGustoPanel del comandero) ───
+// Familia "pizza": detección por nombre/id de categoría (lo que el negocio controla en la carta).
+function isPizzaCat(catId) {
+  const c = DATA.categorias.find(x => x.id === catId);
+  if (!c) return false;
+  return ((c.nombre || '') + ' ' + (c.id || '')).toLowerCase().indexOf('pizza') >= 0;
+}
+function pizzasOf(catId) { return DATA.productos.filter(p => p.categoria === catId); }
+function catGrpKeys(catId) {
+  const c = DATA.categorias.find(x => x.id === catId);
+  return [catId, (c && c.nombre) || ''].filter(Boolean).map(s => String(s).toLowerCase());
+}
+function extrasForGroup(grpKeys, excludeIds) {
+  excludeIds = excludeIds || {};
+  return (DATA.catalogo_ingredientes || []).filter(function (ing) {
+    if (!ing || excludeIds[ing.id]) return false;
+    const g = ing.grupos || [];
+    if (g.length && grpKeys.length) {
+      let ok = false;
+      for (let k = 0; k < g.length; k++) { if (grpKeys.indexOf(String(g[k]).toLowerCase()) >= 0) { ok = true; break; } }
+      if (!ok) return false;
+    }
+    return true;
+  });
+}
+function specialCard(emoji, title, sub, onclickJs) {
+  return '<article class="dish dish-special" onclick="' + onclickJs + '">' +
+    '<div class="dish-photo"><span class="detail-ph" style="font-size:2.4rem">' + emoji + '</span></div>' +
+    '<div class="dish-body"><div class="dish-head"><h3 class="dish-name">' + title + '</h3></div>' +
+    '<p class="dish-desc">' + sub + '</p></div></article>';
+}
+
+// Mitad: eliges dos medias; precio = el mayor (igual que MitadMitadPanel).
+function showMitad(catId) {
+  mitadCat = catId; mitadIzq = null; mitadDer = null; mitadLado = 'izq';
+  document.getElementById('detail-visual').innerHTML = '<span class="detail-ph">½+½</span><button class="close-btn" onclick="closeDetail()" aria-label="Cerrar">✕</button>';
+  renderMitad();
+  document.getElementById('detail-overlay').classList.add('open');
+}
+function mitadSlot(lado, pizza) {
+  const active = mitadLado === lado ? ' mitad-slot-active' : '';
+  const label = pizza ? (pizza.emoji ? pizza.emoji + ' ' : '') + esc(pizza.nombre) : (lado === 'izq' ? 'Primera mitad' : 'Segunda mitad');
+  return '<button type="button" class="mitad-slot' + active + '" onclick="mitadFocus(\\'' + lado + '\\')">½ ' + label + '</button>';
+}
+function renderMitad() {
+  const pizzas = pizzasOf(mitadCat);
+  let grid = '<div class="ing-list" style="margin-top:12px">';
+  for (const p of pizzas) {
+    grid += '<button type="button" class="ing-chip ing-removable" onclick="pickMitad(\\'' + p.id + '\\')">' + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '<span class="ing-add-price">' + fmt(p.precio) + '</span></button>';
+  }
+  grid += '</div>';
+  document.getElementById('detail-content').innerHTML =
+    '<div class="detail-header"><h2 class="detail-nombre">½+½ Mitad y mitad</h2></div>' +
+    '<p class="detail-desc">' + (mitadLado === 'izq' ? 'Elige la primera mitad' : 'Elige la segunda mitad') + '</p>' +
+    '<div class="mitad-slots">' + mitadSlot('izq', mitadIzq) + '<span class="mitad-plus">+</span>' + mitadSlot('der', mitadDer) + '</div>' +
+    grid;
+  renderMitadFooter();
+}
+function mitadFocus(lado) { mitadLado = lado; renderMitad(); }
+function pickMitad(pid) {
+  const p = DATA.productos.find(x => x.id === pid);
+  if (!p) return;
+  if (mitadLado === 'izq') { mitadIzq = p; mitadLado = 'der'; } else { mitadDer = p; }
+  renderMitad();
+}
+function mitadTotal() {
+  if (mitadIzq && mitadDer) return Math.max(mitadIzq.precio, mitadDer.precio);
+  return (mitadIzq || mitadDer || { precio: 0 }).precio;
+}
+function renderMitadFooter() {
+  const ready = mitadIzq && mitadDer;
+  document.getElementById('detail-footer').innerHTML = ready
+    ? '<button class="btn btn-primary" onclick="addMitadToCart()">' + T.add + ' ' + fmt(mitadTotal()) + '</button>'
+    : '<button class="btn btn-primary" disabled style="opacity:.5">Elige las dos mitades</button>';
+}
+function addMitadToCart() {
+  if (!(mitadIzq && mitadDer)) return;
+  cart.push({ _id: ++cartId, id: 'mitad_' + mitadIzq.id + '_' + mitadDer.id, nombre: '½ ' + mitadIzq.nombre + ' + ½ ' + mitadDer.nombre, precio: mitadTotal(), qty: 1, detalle: null });
+  trackEvent('add_to_cart', null, { tipo: 'mitad' });
+  updateCart();
+  closeDetail();
+}
+
+// Al gusto: base (la pizza más barata de la familia) + extras del catálogo (gateado a precio>0).
+function showAlGusto(catId) {
+  alGustoCat = catId;
+  detailProd = null; quitarSel = new Set(); anadirSel = new Map(); detailExtrasById = {};
+  const pz = pizzasOf(catId);
+  alGustoBase = pz.length ? Math.min.apply(null, pz.map(p => p.precio)) : 0;
+  document.getElementById('detail-visual').innerHTML = '<span class="detail-ph">🍕</span><button class="close-btn" onclick="closeDetail()" aria-label="Cerrar">✕</button>';
+  const extras = extrasForGroup(catGrpKeys(catId), {});
+  let extrasHtml = '';
+  const byTipo = {};
+  for (const e of extras) { detailExtrasById[e.id] = e; const t = e.tipo || 'otro'; (byTipo[t] = byTipo[t] || []).push(e); }
+  for (const t of Object.keys(byTipo)) {
+    const cls = t ? ' ' + t : '';
+    for (const e of byTipo[t]) {
+      extrasHtml += '<button type="button" class="ing-chip ing-add' + cls + '" onclick="toggleAnadirAG(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
+    }
+  }
+  document.getElementById('detail-content').innerHTML =
+    '<div class="detail-header"><h2 class="detail-nombre">🍕 Crea tu pizza</h2><span class="detail-precio">desde ' + fmt(alGustoBase) + '</span></div>' +
+    (extrasHtml ? '<h3 class="section-title">Ingredientes</h3><div class="ing-list">' + extrasHtml + '</div>' : '<p class="detail-desc">No hay ingredientes disponibles.</p>');
+  renderAlGustoFooter();
+  document.getElementById('detail-overlay').classList.add('open');
+}
+function alGustoTotal() {
+  let x = alGustoBase;
+  anadirSel.forEach(function (e) { x += Number(e.precio_extra) || 0; });
+  return x;
+}
+function renderAlGustoFooter() {
+  document.getElementById('detail-footer').innerHTML =
+    '<button class="btn btn-primary" onclick="addAlGustoToCart()">' + T.add + ' ' + fmt(alGustoTotal()) + '</button>';
+}
+function toggleAnadirAG(id, btn) {
+  const e = detailExtrasById[id];
+  if (!e) return;
+  if (anadirSel.has(id)) { anadirSel.delete(id); btn.classList.remove('added'); }
+  else { anadirSel.set(id, e); btn.classList.add('added'); }
+  renderAlGustoFooter();
+}
+function addAlGustoToCart() {
+  const anadidos = [];
+  let extra = 0;
+  anadirSel.forEach(function (e) { anadidos.push(e.nombre); extra += Number(e.precio_extra) || 0; });
+  cart.push({ _id: ++cartId, id: 'algusto_' + cartId, nombre: 'Pizza al gusto', precio: alGustoBase + extra, qty: 1, detalle: anadidos.length ? 'con ' + anadidos.join(', ') : null });
+  trackEvent('add_to_cart', null, { tipo: 'al_gusto' });
+  updateCart();
+  closeDetail();
 }
 
 // ─── Upsell Engine ───

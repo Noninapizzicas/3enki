@@ -166,8 +166,7 @@ class WhatsappBotModule extends BaseModule {
     if (pedido_id) this.pedidosListos.delete(pedido_id);
     const meta = this.projectsByMeta.get(ref.project_slug);
     const display = meta?.display_number ? `\nNumero del negocio: ${meta.display_number}` : '';
-    const cod = ref.codigo_recogida ? ` Codigo: ${ref.codigo_recogida}.` : '';
-    const msg = `¡Tu pedido ya está listo! 🎉 Puedes pasar a recogerlo.${cod} Al recoger te preguntaremos tu palabra clave y pagas en efectivo.${display}`;
+    const msg = `¡Tu pedido ya está listo! 🎉 Puedes pasar a recogerlo y pagas al recoger.${display}`;
     await this._enviarMensajeSeguro(ref.project_slug, ref.from, msg);
     this.metrics?.increment('whatsapp-bot.pedido.listo_notificado', { project: ref.project_slug });
   }
@@ -473,7 +472,12 @@ class WhatsappBotModule extends BaseModule {
 
   async _registrarPedido(project_slug, msg, parsed) {
     const request_id = crypto.randomUUID();
-    const items = parsed.items.map(it => ({ cantidad: it.cantidad, descripcion: it.descripcion }));
+    const items = parsed.items.map(it => ({
+      cantidad: it.cantidad,
+      descripcion: it.descripcion,
+      precio_unitario_centimos: Number.isInteger(it.precio_unitario_centimos) ? it.precio_unitario_centimos : undefined,
+      precio_total_centimos: Number.isInteger(it.precio_total_centimos) ? it.precio_total_centimos : undefined
+    }));
     const timeoutMs = this.config?.pedido_wait_timeout_ms || 12000;
 
     const timeoutHandle = setTimeout(() => {
@@ -530,7 +534,7 @@ class WhatsappBotModule extends BaseModule {
     const meta = this.projectsByMeta.get(pending.project_slug);
     const display = meta?.display_number ? `\nNumero del negocio: ${meta.display_number}` : '';
     const aNombre = pending.cliente_nombre ? ` a nombre de ${pending.cliente_nombre}` : '';
-    const msg = `Pedido recibido${aNombre}. Codigo: ${pedido.codigo_recogida}. Pasa a recoger y paga en efectivo.${display}`;
+    const msg = `Pedido recibido${aNombre}. Pasa a recoger y paga al recoger.${display}`;
     await this._enviarMensajeSeguro(pending.project_slug, pending.from, msg);
   }
 
@@ -547,7 +551,6 @@ class WhatsappBotModule extends BaseModule {
     // viaja si el proyecto activo el gate en la PWA.
     const lines = [
       `Pedido nuevo - ${pending.project_slug.toUpperCase()}`,
-      `Codigo: ${pedido.codigo_recogida}`,
       `A nombre de: ${pending.cliente_nombre || '(sin nombre)'}`,
       `Tel: ${this._maskPhoneNumber(pending.from)}`
     ];

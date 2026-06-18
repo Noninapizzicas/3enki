@@ -71,13 +71,23 @@ function parsearPedido(textoBruto) {
   let i = 1;
   while (i < lineas.length && lineas[i].startsWith('- ')) {
     const cuerpo = lineas[i].slice(2).trim();
-    const m = cuerpo.match(/^(\d+)\s+x\s+(.{1,200})$/i);
+    // "1 x DAKOTA"  |  "2 x DAKOTA [sin cebolla] (29,00 EUR)" — precio de LÍNEA opcional
+    // entre paréntesis al final (precio_ud * cantidad). La descripción es no-greedy.
+    const m = cuerpo.match(/^(\d+)\s+x\s+(.+?)(?:\s*\(\s*([\d.,]+)\s*(?:€|EUR)?\s*\))?\s*$/i);
     if (!m) return { ok: false, kind: 'item_invalido', project_slug, linea: lineas[i] };
     const cantidad = Number(m[1]);
     if (!Number.isInteger(cantidad) || cantidad <= 0 || cantidad > 999) {
       return { ok: false, kind: 'cantidad_invalida', project_slug, linea: lineas[i] };
     }
-    items.push({ cantidad, descripcion: m[2].trim() });
+    const item = { cantidad, descripcion: m[2].trim() };
+    if (m[3]) {
+      const precioLinea = _parsearImporteEur(m[3]);          // precio de la línea (ud * cantidad)
+      if (precioLinea !== null) {
+        item.precio_total_centimos = precioLinea;
+        item.precio_unitario_centimos = Math.round(precioLinea / cantidad);
+      }
+    }
+    items.push(item);
     i++;
   }
   if (items.length === 0) return { ok: false, kind: 'sin_items', project_slug };

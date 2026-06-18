@@ -279,6 +279,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 :focus-visible{outline:3px solid var(--primary,#f59e0b);outline-offset:2px}
 @media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 .ing-chip.queso{border-color:rgba(250,204,21,.25)}.ing-chip.carne{border-color:rgba(239,68,68,.2)}.ing-chip.verdura{border-color:rgba(34,197,94,.2)}.ing-chip.marisco{border-color:rgba(59,130,246,.2)}
+.ing-removable{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s}
+.ing-chip.removed{border-color:#ef4444;background:rgba(239,68,68,.15);color:#ef4444;text-decoration:line-through}
 .detail-footer{display:flex;gap:10px;padding:16px 20px;border-top:1px solid #222;background:var(--bg-surface)}
 .btn{flex:1;padding:14px;border:none;border-radius:12px;font-size:.9rem;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .btn-primary{background:var(--primary);color:#000}.btn-primary:active{filter:brightness(.85)}
@@ -619,6 +621,7 @@ let catActiva = DATA.categorias.length > 0 ? DATA.categorias[0].id : null;
 let cart = [];
 let cartId = 0;
 let detailProd = null;
+let quitarSel = new Set();   // índices de ingredientes que el cliente quita en el detalle
 
 // localStorage keys
 var LS_CART = 'carta_cart_' + (CONFIG.nombre_negocio || 'default').replace(/\\s/g, '_');
@@ -857,6 +860,7 @@ function renderGrid() {
 function showDetail(id) {
   detailProd = DATA.productos.find(p => p.id === id);
   if (!detailProd) return;
+  quitarSel = new Set();   // cada apertura empieza limpia (sin quitados heredados)
   trackEvent('product_view', id);
   const p = detailProd;
 
@@ -873,10 +877,14 @@ function showDetail(id) {
     if (TAG_COLORS[t]) tagsHtml += '<span class="detail-tag" style="background:' + TAG_COLORS[t] + '">' + t + '</span>';
   }
 
+  // Ingredientes TOCABLES: pulsar uno lo marca como "quitar" (rojo, tachado). Adaptado del
+  // VariacionesPanel del comandero — aquí solo la mitad "quitar" (la base del producto ya viaja).
+  const ings = p.ingredientes || [];
   let ingsHtml = '';
-  for (const i of (p.ingredientes || [])) {
+  for (let idx = 0; idx < ings.length; idx++) {
+    const i = ings[idx];
     const cls = i.tipo ? ' ' + i.tipo : '';
-    ingsHtml += '<span class="ing-chip' + cls + '">' + (i.emoji ? '<span style="font-size:.85rem">' + i.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(i.nombre) + '</span></span>';
+    ingsHtml += '<button type="button" class="ing-chip ing-removable' + cls + '" data-ing-idx="' + idx + '" onclick="toggleQuitar(' + idx + ', this)">' + (i.emoji ? '<span style="font-size:.85rem">' + i.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(i.nombre) + '</span></button>';
   }
 
   // Declaración de alérgenos por NOMBRE (1169/2011 — el texto es lo legalmente exigible).
@@ -894,11 +902,11 @@ function showDetail(id) {
     '<div class="detail-header"><h2 class="detail-nombre">' + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '</h2><span class="detail-precio">' + fmt(p.precio) + '</span></div>' +
     (tagsHtml ? '<div class="detail-tags">' + tagsHtml + '</div>' : '') +
     (p.descripcion ? '<p class="detail-desc">' + esc(p.descripcion) + '</p>' : '') +
-    (ingsHtml ? '<h3 class="section-title">Ingredientes</h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
+    (ingsHtml ? '<h3 class="section-title">Ingredientes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· toca para quitar</span></h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
     alergHtml;
 
   document.getElementById('detail-footer').innerHTML =
-    '<button class="btn btn-primary" onclick="addToCart(\\'' + p.id + '\\');closeDetail()">' + T.add + ' ' + fmt(p.precio) + '</button>';
+    '<button class="btn btn-primary" onclick="addDetailToCart()">' + T.add + ' ' + fmt(p.precio) + '</button>';
 
   document.getElementById('detail-overlay').classList.add('open');
 }
@@ -908,12 +916,30 @@ function closeDetail() {
   detailProd = null;
 }
 
+// Detalle → carrito: arma la personalización (hoy "sin X") y delega en addToCart.
+function toggleQuitar(idx, btn) {
+  if (quitarSel.has(idx)) { quitarSel.delete(idx); btn.classList.remove('removed'); }
+  else { quitarSel.add(idx); btn.classList.add('removed'); }
+}
+
+function addDetailToCart() {
+  if (!detailProd) return;
+  const p = detailProd;
+  const ings = p.ingredientes || [];
+  const quitados = [];
+  quitarSel.forEach(function(idx) { if (ings[idx]) quitados.push(ings[idx].nombre); });
+  const detalle = quitados.length ? 'sin ' + quitados.join(', ') : null;
+  addToCart(p.id, { detalle: detalle });
+  closeDetail();
+}
+
 // Cart
-function addToCart(id) {
+function addToCart(id, opts) {
   const p = DATA.productos.find(x => x.id === id);
   if (!p) return;
-  cart.push({ _id: ++cartId, id: p.id, nombre: p.nombre, precio: p.precio, qty: 1 });
-  trackEvent('add_to_cart', id);
+  opts = opts || {};
+  cart.push({ _id: ++cartId, id: p.id, nombre: p.nombre, precio: p.precio, qty: 1, detalle: opts.detalle || null });
+  trackEvent('add_to_cart', id, opts.detalle ? { custom: true } : undefined);
   updateCart();
   showUpsell(p);
 }

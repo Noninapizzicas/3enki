@@ -30,7 +30,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.8.0';
+    this.version = 'reflejo-1.9.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -41,6 +41,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   onAddProductRequest(e) { return this._atender(e, 'add_product', 'carta.add_product.response', d => this._addProduct(d)); }
   onRemoveProductRequest(e) { return this._atender(e, 'remove_product', 'carta.remove_product.response', d => this._removeProduct(d)); }
   onUpdateProductRequest(e) { return this._atender(e, 'update_product', 'carta.update_product.response', d => this._updateProduct(d)); }
+  onUpdateProductsRequest(e) { return this._atender(e, 'update_products', 'carta.update_products.response', d => this._updateProducts(d)); }
   onAddCategoryRequest(e) { return this._atender(e, 'add_category', 'carta.add_category.response', d => this._addCategory(d)); }
   onUpdatePricesRequest(e) { return this._atender(e, 'update_prices', 'carta.update_prices.response', d => this._updatePrices(d)); }
   onClonarRequest(e) { return this._atender(e, 'clonar', 'carta.clonar.response', d => this._clonar(d)); }
@@ -425,23 +426,54 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     });
   }
 
+  // Aplica los campos de la abstracción del producto (las 6 W) a un prod IN-PLACE.
+  // Todo lo intrínseco es actualizable SALVO el id (identidad estable aunque se renombre).
+  // Devuelve {error} si la categoria destino no existe; null si OK. Compartido por
+  // update_product (uno) y update_products (lote) — DRY, sin drift.
+  _aplicarCamposProducto(prod, campos, carta) {
+    if (campos.categoria_id && !(carta.categorias || []).some(c => c.id === campos.categoria_id)) {
+      return this._errorResponse(412, 'PRECONDITION_FAILED', 'categoria_id destino no existe');
+    }
+    const permitidos = ['nombre', 'precio', 'categoria_id', 'descripcion', 'etiquetas', 'alergenos', 'disponible', 'tipo', 'emoji', 'estaciones'];
+    for (const k of permitidos) if (campos[k] !== undefined) prod[k] = campos[k];
+    if (campos.ingredientes !== undefined) prod.ingredientes = this._normalizarIngredientes(campos.ingredientes);
+    if (campos.ingredientes_base !== undefined) prod.ingredientes_base = this._normalizarIngredientes(campos.ingredientes_base);
+    if (campos.dietas !== undefined) { const dn = this._normalizarDietas(campos.dietas); if (dn) prod.dietas = dn; }
+    return null;
+  }
+
   async _updateProduct(input) {
     if (!input.project_id || !input.carta_id || !input.producto_id) return this._invalid('producto_id');
     if (!input.campos || typeof input.campos !== 'object' || Object.keys(input.campos).length === 0) return this._invalid('campos');
-    // Abstracción del producto (las 6 W): todo lo intrínseco es actualizable salvo el id
-    // (identidad estable aunque se renombre). ingredientes/ingredientes_base/dietas se
-    // normalizan; el resto son escalares/arrays pasados tal cual.
-    const permitidos = ['nombre', 'precio', 'categoria_id', 'descripcion', 'etiquetas', 'alergenos', 'disponible', 'tipo', 'emoji', 'estaciones'];
     return this._mutar(input, 'update_product', (carta) => {
       const idx = (carta.productos || []).findIndex(p => p.id === input.producto_id);
       if (idx < 0) return { error: this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'producto no existe', { entity_type: 'producto', id: input.producto_id }) };
-      if (input.campos.categoria_id && !(carta.categorias || []).some(c => c.id === input.campos.categoria_id)) return { error: this._errorResponse(412, 'PRECONDITION_FAILED', 'categoria_id destino no existe') };
-      const prod = carta.productos[idx];
-      for (const k of permitidos) if (input.campos[k] !== undefined) prod[k] = input.campos[k];
-      if (input.campos.ingredientes !== undefined) prod.ingredientes = this._normalizarIngredientes(input.campos.ingredientes);
-      if (input.campos.ingredientes_base !== undefined) prod.ingredientes_base = this._normalizarIngredientes(input.campos.ingredientes_base);
-      if (input.campos.dietas !== undefined) { const dn = this._normalizarDietas(input.campos.dietas); if (dn) prod.dietas = dn; }
-      return { patches: [{ op: 'replace', path: '/productos/' + idx, value: prod }], data: (c) => ({ producto: prod, carta_version: c.meta.version }) };
+      const err = this._aplicarCamposProducto(carta.productos[idx], input.campos, carta);
+      if (err) return { error: err };
+      return { patches: [{ op: 'replace', path: '/productos/' + idx, value: carta.productos[idx] }], data: (c) => ({ producto: carta.productos[idx], carta_version: c.meta.version }) };
+    });
+  }
+
+  // update_products — LOTE: enriquece N productos en UN solo _mutar (un snapshot, una
+  // version), en vez de N update_product (N versiones). Pareja del troceo a la entrada
+  // (TecnicaDeOrganizacion). Modelado sobre update_prices: aplica todo, reemplaza /productos
+  // una vez. Reporta {actualizados, errores} — los productos inexistentes no abortan el lote.
+  async _updateProducts(input) {
+    if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
+    if (!Array.isArray(input.updates) || input.updates.length === 0) return this._invalid('updates');
+    const actualizados = [], errores = [];
+    return this._mutar(input, 'update_products', (carta) => {
+      for (const u of input.updates) {
+        const producto_id = u && u.producto_id;
+        const campos = (u && u.campos) || {};
+        const idx = (carta.productos || []).findIndex(p => p.id === producto_id);
+        if (idx < 0) { errores.push({ producto_id, error: 'no_existe' }); continue; }
+        const err = this._aplicarCamposProducto(carta.productos[idx], campos, carta);
+        if (err) { errores.push({ producto_id, error: 'categoria_no_existe' }); continue; }
+        actualizados.push(producto_id);
+      }
+      if (actualizados.length === 0) return { error: this._errorResponse(412, 'PRECONDITION_FAILED', 'ningun update aplicado', { errores }) };
+      return { patches: [{ op: 'replace', path: '/productos', value: carta.productos }], data: (c) => ({ actualizados, errores, carta_version: c.meta.version }) };
     });
   }
 

@@ -269,6 +269,7 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
   }
 
   // Reglas de variación canónicas (las lee el módulo variaciones). null si la fuente no trae nada.
+  // Incluye extras_sugeridos[{ingrediente_id, precio_extra?}] — la curaduría de extras por producto.
   _normalizarVariaciones(v) {
     if (!v || typeof v !== 'object') return null;
     const out = {};
@@ -277,6 +278,11 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
     const max = (typeof v.max_ingredientes_extra === 'number') ? v.max_ingredientes_extra
       : (typeof v.max_extras === 'number' ? v.max_extras : undefined);
     if (max !== undefined) out.max_ingredientes_extra = max;
+    if (Array.isArray(v.extras_sugeridos)) {
+      out.extras_sugeridos = v.extras_sugeridos
+        .filter(e => e && e.ingrediente_id)
+        .map(e => (typeof e.precio_extra === 'number' ? { ingrediente_id: e.ingrediente_id, precio_extra: e.precio_extra } : { ingrediente_id: e.ingrediente_id }));
+    }
     return Object.keys(out).length ? out : null;
   }
 

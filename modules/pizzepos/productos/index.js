@@ -28,7 +28,7 @@ class ProductosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'productos';
-    this.version = '5.0.0';
+    this.version = '5.1.0';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -208,6 +208,37 @@ class ProductosModule extends BaseModule {
 
     if (!prod.estaciones && categoria_id && catEst[categoria_id]) prod.estaciones = catEst[categoria_id];
     return prod;
+  }
+
+  // Catálogo de ingredientes PROYECTADO desde la carta (productos v5: catalogo == proyectar(carta_activa)).
+  // Es lo que enciende el AlGustoPanel del comandero ("AÑADIR INGREDIENTES", agrupado por familia).
+  // Union de los ingredientes de TODOS los productos (ingredientes_base o, si no, ingredientes — la carta
+  // los trae bajo cualquiera de las dos claves), dedup por id (mismo id que usa _proyectarProducto, para
+  // que AlGusto pueda restar lo que el producto ya lleva). Sin store en-memoria que se vacíe al reiniciar.
+  _proyectarCatalogoIngredientes(carta) {
+    const productos = Array.isArray(carta?.productos) ? carta.productos : [];
+    const byId = new Map();
+    for (const p of productos) {
+      const lista = (Array.isArray(p.ingredientes_base) && p.ingredientes_base.length)
+        ? p.ingredientes_base
+        : (Array.isArray(p.ingredientes) ? p.ingredientes : []);
+      for (const ing of lista) {
+        if (!ing || (!ing.id && !ing.nombre)) continue;
+        const id = ing.id || `ing_${this.slugify(ing.nombre)}`;
+        if (byId.has(id)) continue;                                  // primero gana
+        const familia = ing.familia || ing.tipo || 'otro';
+        byId.set(id, {
+          id,
+          nombre: ing.nombre || id,
+          emoji: ing.emoji || '',
+          familia,
+          tipo: ing.tipo || familia,                                 // AlGusto agrupa por familia||tipo
+          precio_extra: (typeof ing.precio_extra === 'number' ? ing.precio_extra : 0),
+          disponible: ing.disponible !== false
+        });
+      }
+    }
+    return Array.from(byId.values()).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
   }
 
   // ==========================================
@@ -403,11 +434,8 @@ class ProductosModule extends BaseModule {
         tiene_variaciones: Array.isArray(p.ingredientes_base) && p.ingredientes_base.length > 0
       }));
 
-      let ingredientes = [];
-      try {
-        const ingResult = await this.uiHandler.handle('ingredientes', 'list', { project_id });
-        if (ingResult?.status === 200 && ingResult?.data?.ingredientes) ingredientes = ingResult.data.ingredientes;
-      } catch (_) { /* ingredientes best-effort */ }
+      // Catálogo PROYECTADO desde esta misma carta (consistente con productos v5; no depende del store en-memoria).
+      const ingredientes = this._proyectarCatalogoIngredientes(carta);
 
       return {
         status: 200,
@@ -511,9 +539,14 @@ class ProductosModule extends BaseModule {
 
   async handleListIngredientes(data) {
     try {
-      const { project_id, tipo, grupo } = data || {};
+      const { project_id, canal, carta_id, tipo } = data || {};
       if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
-      return await this.uiHandler.handle('ingredientes', 'list', { project_id, tipo, grupo });
+      // PROYECTADO desde la carta activa (no un store en-memoria que se vacía). El AlGustoPanel lo agrupa por familia.
+      const carta = await this._cartaActiva(project_id, canal, carta_id);
+      if (!carta) return { status: 200, data: { project_id, carta_id: carta_id || null, ingredientes: [], total: 0 } };
+      let ingredientes = this._proyectarCatalogoIngredientes(carta);
+      if (tipo) ingredientes = ingredientes.filter(i => i.familia === tipo || i.tipo === tipo);
+      return { status: 200, data: { project_id, carta_id: carta?.meta?.id || carta_id || null, ingredientes, total: ingredientes.length } };
     } catch (err) {
       return this._handleHandlerError('productos.ingredientes.error', err, 'ingredientes');
     }

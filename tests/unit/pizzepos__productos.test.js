@@ -122,7 +122,7 @@ const publishedOf = (mocks, name) => mocks.eventBus.published.filter(p => p[0] =
     const mocks = makeMocks();
     const m = await instantiate(mocks);
     assert.strictEqual(m.name, 'productos');
-    assert.strictEqual(m.version, '5.0.0');
+    assert.strictEqual(m.version, '5.1.0');
     assert.strictEqual(m.productosPerProject, undefined);   // store ELIMINADO
     assert.strictEqual(m.mappingCanalesPerProject.size, 0);
     await m.onUnload();
@@ -158,8 +158,35 @@ const publishedOf = (mocks, name) => mocks.eventBus.published.filter(p => p[0] =
     assert.strictEqual(texas.ingredientes_base.length, 2);
     assert.strictEqual(texas.ingredientes_base[0].familia, 'otro');
     assert.strictEqual(texas.tiene_variaciones, true);
-    // ingredientes (fuente única) inyectados
-    assert.deepStrictEqual(r.data.ingredientes, [{ id: 'tomate' }]);
+    // catálogo de ingredientes PROYECTADO desde la carta (no de un store en-memoria):
+    // unión de los ingredientes de los productos, dedup por id, ordenado por nombre.
+    const ids = r.data.ingredientes.map(i => i.id).sort();
+    assert.deepStrictEqual(ids, ['bacon', 'masa', 'pan_brioche']);
+    const bacon = r.data.ingredientes.find(i => i.id === 'bacon');
+    assert.strictEqual(bacon.familia, 'carne');     // lo que AlGustoPanel agrupa
+    assert.strictEqual(bacon.disponible, true);
+  });
+
+  await testAsync('catálogo de ingredientes se PROYECTA aunque los productos usen la clave "ingredientes" (bug nonina)', async () => {
+    // La carta de nonina traía los componentes bajo `ingredientes` (no `ingredientes_base`) -> el
+    // módulo ingredientes (que extraía de ingredientes_base) daba catálogo VACÍO. El proyector lee ambas.
+    const m = await instantiate(makeMocks(fxNonina));
+    const r = await m.handleListIngredientes({ project_id: 'proj-nonina' });
+    assert.strictEqual(r.status, 200);
+    assert.ok(r.data.ingredientes.length >= 3, 'el catálogo NO está vacío');
+    // agrupable por familia (lo que necesita el AlGustoPanel)
+    const familias = new Set(r.data.ingredientes.map(i => i.familia));
+    assert.ok(familias.has('carne'));
+    // filtro por tipo/familia
+    const soloCarne = await m.handleListIngredientes({ project_id: 'proj-nonina', tipo: 'carne' });
+    assert.ok(soloCarne.data.ingredientes.every(i => i.familia === 'carne' || i.tipo === 'carne'));
+  });
+
+  await testAsync('catálogo de ingredientes vacío si el proyecto no tiene carta (sin leak)', async () => {
+    const m = await instantiate(makeMocks(fxNonina));
+    const r = await m.handleListIngredientes({ project_id: 'proj-vacio' });
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(r.data.ingredientes, []);
   });
 
   await testAsync('SIN ACUMULACIÓN: dos llamadas → mismo resultado (proyección pura)', async () => {

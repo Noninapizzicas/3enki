@@ -30,7 +30,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.6.0';
+    this.version = 'reflejo-1.7.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -244,11 +244,26 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
 
     const prevRaw = await this._read(input.project_id, path);
     const existe = prevRaw && prevRaw.status === 200;
+    const conservado = {};
     if (existe) {
       await this._snapshot(input.project_id, carta_id, prevRaw.content);
       let prev = {}; try { prev = JSON.parse(prevRaw.content); } catch (_) {}
       carta.meta.version = ((prev.meta && prev.meta.version) || 1) + 1;
       carta.meta.created_at = (prev.meta && prev.meta.created_at) || nowISO();
+      // GUARDADO CONSERVADOR: una carta CONSERVA su contenido. Este save reemplaza lo
+      // que TRAE; lo que no trae, lo MANTIENE. Una escritura sin productos sobre una
+      // carta que sí los tiene conserva los suyos — la carta no pierde contenido por una
+      // escritura que no lo aporta. (Para vaciar de verdad: remove_product, que es explícito.)
+      if (!(Array.isArray(carta.productos) && carta.productos.length) && Array.isArray(prev.productos) && prev.productos.length) {
+        carta.productos = prev.productos; conservado.productos = prev.productos.length;
+      }
+      if (!(Array.isArray(carta.categorias) && carta.categorias.length) && Array.isArray(prev.categorias) && prev.categorias.length) {
+        carta.categorias = prev.categorias; conservado.categorias = prev.categorias.length;
+      }
+      if (conservado.productos || conservado.categorias) {
+        this.logger?.info('carta-manager.save.conservado', { carta_id, ...conservado });
+        this.metrics?.increment('carta-manager.reflejo.conservado', { op: 'save' });
+      }
     } else {
       carta.meta.version = 1;
       carta.meta.created_at = nowISO();
@@ -263,9 +278,10 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     if (w && w.status >= 400) return w;
 
     const cid = input.correlation_id || crypto.randomUUID();
-    this.eventBus.publish('carta.actualizada', { project_id: input.project_id, user_id: input.user_id || 'system', carta, motivo: input.motivo || null, correlation_id: cid, timestamp: nowISO() });
+    const tieneConservado = !!(conservado.productos || conservado.categorias);
+    this.eventBus.publish('carta.actualizada', { project_id: input.project_id, user_id: input.user_id || 'system', carta, motivo: input.motivo || null, ...(tieneConservado ? { conservado } : {}), correlation_id: cid, timestamp: nowISO() });
     await this._autoPromoTarifas(input.project_id, carta_id, cid);
-    return { status: 200, data: carta };
+    return { status: 200, data: carta, ...(tieneConservado ? { conservado } : {}) };
   }
 
   // Auto-promocion primera carta: si tarifas.config vacio, esta carta pasa a general. Fire-and-forget.

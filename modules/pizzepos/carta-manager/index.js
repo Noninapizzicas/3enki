@@ -30,7 +30,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.7.0';
+    this.version = 'reflejo-1.8.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -366,15 +366,25 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   // =============================================================
   // MUTACION ESTRUCTURADA (via _mutar)
   // =============================================================
-  // Ingredientes a la forma CANÓNICA {id, nombre, emoji?, familia}. id determinista (slug),
-  // familia validada contra el set canónico (default 'otro'). Misma ley que menu-generator.
+  // Ingredientes a la forma CANÓNICA {id, nombre, emoji?, familia, precio_extra?}. id determinista
+  // (slug), familia validada contra el set canónico (default 'otro'), precio_extra preservado (lo
+  // necesita variaciones para cobrar extras). Misma ley que menu-generator.
   _normalizarIngredientes(lista) {
     if (!Array.isArray(lista)) return [];
     return lista.filter(ing => ing && ing.nombre).map(ing => {
       const out = { id: ing.id || slug(ing.nombre), nombre: String(ing.nombre), familia: FAMILIAS.has(ing.familia) ? ing.familia : 'otro' };
       if (ing.emoji) out.emoji = ing.emoji;
+      if (typeof ing.precio_extra === 'number') out.precio_extra = ing.precio_extra;
       return out;
     });
+  }
+
+  // Aptitudes dietéticas a forma canónica: objeto de booleanos. undefined si no es objeto.
+  _normalizarDietas(d) {
+    if (!d || typeof d !== 'object' || Array.isArray(d)) return undefined;
+    const out = {};
+    for (const k of Object.keys(d)) out[k] = !!d[k];
+    return Object.keys(out).length ? out : undefined;
   }
 
   async _addProduct(input) {
@@ -395,6 +405,12 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
         disponible: p.disponible !== undefined ? p.disponible : true,
         ingredientes: this._normalizarIngredientes(p.ingredientes)
       };
+      // abstracción del producto (las 6 W): campos intrínsecos opcionales, solo si vienen.
+      if (p.tipo) nuevo.tipo = String(p.tipo);
+      if (p.emoji) nuevo.emoji = String(p.emoji);
+      if (Array.isArray(p.estaciones) && p.estaciones.length) nuevo.estaciones = p.estaciones;
+      if (Array.isArray(p.ingredientes_base) && p.ingredientes_base.length) nuevo.ingredientes_base = this._normalizarIngredientes(p.ingredientes_base);
+      const dnAdd = this._normalizarDietas(p.dietas); if (dnAdd) nuevo.dietas = dnAdd;
       carta.productos = (carta.productos || []).concat([nuevo]);
       return { status: 201, patches: [{ op: 'replace', path: '/productos', value: carta.productos }], data: (c) => ({ producto: nuevo, carta_version: c.meta.version }) };
     });
@@ -412,15 +428,19 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   async _updateProduct(input) {
     if (!input.project_id || !input.carta_id || !input.producto_id) return this._invalid('producto_id');
     if (!input.campos || typeof input.campos !== 'object' || Object.keys(input.campos).length === 0) return this._invalid('campos');
-    const permitidos = ['nombre', 'precio', 'categoria_id', 'descripcion', 'etiquetas', 'alergenos', 'disponible'];
+    // Abstracción del producto (las 6 W): todo lo intrínseco es actualizable salvo el id
+    // (identidad estable aunque se renombre). ingredientes/ingredientes_base/dietas se
+    // normalizan; el resto son escalares/arrays pasados tal cual.
+    const permitidos = ['nombre', 'precio', 'categoria_id', 'descripcion', 'etiquetas', 'alergenos', 'disponible', 'tipo', 'emoji', 'estaciones'];
     return this._mutar(input, 'update_product', (carta) => {
       const idx = (carta.productos || []).findIndex(p => p.id === input.producto_id);
       if (idx < 0) return { error: this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'producto no existe', { entity_type: 'producto', id: input.producto_id }) };
       if (input.campos.categoria_id && !(carta.categorias || []).some(c => c.id === input.campos.categoria_id)) return { error: this._errorResponse(412, 'PRECONDITION_FAILED', 'categoria_id destino no existe') };
       const prod = carta.productos[idx];
       for (const k of permitidos) if (input.campos[k] !== undefined) prod[k] = input.campos[k];
-      // ingredientes a forma canónica (el id del producto NO cambia: identidad estable aunque se renombre).
       if (input.campos.ingredientes !== undefined) prod.ingredientes = this._normalizarIngredientes(input.campos.ingredientes);
+      if (input.campos.ingredientes_base !== undefined) prod.ingredientes_base = this._normalizarIngredientes(input.campos.ingredientes_base);
+      if (input.campos.dietas !== undefined) { const dn = this._normalizarDietas(input.campos.dietas); if (dn) prod.dietas = dn; }
       return { patches: [{ op: 'replace', path: '/productos/' + idx, value: prod }], data: (c) => ({ producto: prod, carta_version: c.meta.version }) };
     });
   }

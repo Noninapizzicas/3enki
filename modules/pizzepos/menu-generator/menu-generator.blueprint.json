@@ -90,14 +90,11 @@
         "  productos = (await publishAndWait('carta.get.request', { project_id: input.project_id, carta_id }, { timeout_ms: 8000 })).data.productos",
         "  informe = { alergenos_marcados: 0, avisos: [], inconsistencias: [] }",
         "  for (lote of trocear(productos, 7)):                       // TecnicaDeOrganizacion.PorTamanoFijo(7)",
-        "    for (p of lote):",
-        "      enriquecido = aplicar_6W(p)                            // {alergenos, dietas, descripcion, etiquetas, emoji?}",
-        "      await publishAndWait('carta.update_product.request', {  // VERIFICADO; el reflejo versiona",
-        "        project_id: input.project_id, carta_id, producto_id: p.id,",
-        "        campos: { alergenos: enriquecido.alergenos, dietas: enriquecido.dietas, etiquetas: enriquecido.etiquetas, descripcion: enriquecido.descripcion, emoji: enriquecido.emoji }",
-        "      }, { timeout_ms: 15000 })",
-        "      informe.alergenos_marcados += enriquecido.alergenos.length > 0 ? 1 : 0",
-        "    // [optimizacion pendiente: carta.actualizar_lote (batch) para no versionar 1 vez por producto]",
+        "    updates = lote.map(p => ({ producto_id: p.id, campos: aplicar_6W(p) }))   // 6 W: {alergenos, dietas, etiquetas, descripcion, emoji?, ...}",
+        "    await publishAndWait('carta.update_products.request', {    // LOTE: UN _mutar = UNA version por lote; VERIFICADO",
+        "      project_id: input.project_id, carta_id, updates",
+        "    }, { timeout_ms: 20000 })",
+        "    informe.alergenos_marcados += updates.filter(u => (u.campos.alergenos || []).length > 0).length",
         "",
         "  // 3) HIGIENE (W5/limpieza semantica) -> avisos al informe (no muta datos).",
         "  informe.avisos += detectar_casi_duplicados(productos) + nomenclatura_inconsistente(productos)",
@@ -197,7 +194,7 @@
     "carta.generar.fallida",
     "menu.import.request",
     "carta.get.request",
-    "carta.update_product.request",
+    "carta.update_products.request",
     "carta.add_product.request",
     "carta.add_category.request",
     "recetas.obtener.request"
@@ -224,8 +221,8 @@
     },
     {
       "id": "persist_enriquecimiento_por_lote",
-      "estado": "abierto",
-      "descripcion": "El enriquecimiento por lotes usa carta.update_product por producto (1 _mutar/version cada uno -> churn). carta-manager.update_product hoy acepta {nombre,precio,categoria_id,descripcion,etiquetas,alergenos,disponible}; FALTAN 'dietas' e 'ingredientes_base' en su lista de campos permitidos. Pendiente en carta-manager: (a) aceptar dietas/ingredientes_base; (b) un carta.actualizar_lote (batch) que enriquezca N productos con UN snapshot+version. Ademas: guardia anti-wipe en carta-manager (rechazar save/import vacio sobre carta con productos)."
+      "estado": "resuelto",
+      "descripcion": "RESUELTO (carta-manager 2.4.0 / reflejo 1.9.0): (a) add/update_product aceptan la abstraccion COMPLETA del producto (las 6 W: + tipo, emoji, estaciones, ingredientes_base con precio_extra, dietas; _normalizarIngredientes preserva precio_extra). (b) op carta.update_products (LOTE): enriquece N productos en UN _mutar (una version) en vez de N — pareja del troceo a la entrada, modelada sobre update_prices. (c) guardado conservador en _save (la carta no pierde productos por una escritura que no los aporta). El bucle de generar usa ya carta.update_products por lote."
     },
     {
       "id": "validar_runtime_end_to_end",

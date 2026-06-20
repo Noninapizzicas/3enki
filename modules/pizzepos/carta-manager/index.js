@@ -388,6 +388,25 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     return Object.keys(out).length ? out : undefined;
   }
 
+  // Reglas de variación a forma canónica (las lee el módulo variaciones): permite_quitar[],
+  // permite_anadir bool, max_ingredientes_extra, extras_sugeridos[{ingrediente_id, precio_extra?}].
+  // undefined si no aporta nada.
+  _normalizarVariaciones(v) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+    const out = {};
+    if (Array.isArray(v.permite_quitar)) out.permite_quitar = v.permite_quitar;
+    if (v.permite_anadir !== undefined) out.permite_anadir = !!v.permite_anadir;
+    const max = (typeof v.max_ingredientes_extra === 'number') ? v.max_ingredientes_extra
+      : (typeof v.max_extras === 'number' ? v.max_extras : undefined);
+    if (max !== undefined) out.max_ingredientes_extra = max;
+    if (Array.isArray(v.extras_sugeridos)) {
+      out.extras_sugeridos = v.extras_sugeridos
+        .filter(e => e && e.ingrediente_id)
+        .map(e => (typeof e.precio_extra === 'number' ? { ingrediente_id: e.ingrediente_id, precio_extra: e.precio_extra } : { ingrediente_id: e.ingrediente_id }));
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+
   async _addProduct(input) {
     if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
     const p = input.producto || {};
@@ -412,6 +431,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
       if (Array.isArray(p.estaciones) && p.estaciones.length) nuevo.estaciones = p.estaciones;
       if (Array.isArray(p.ingredientes_base) && p.ingredientes_base.length) nuevo.ingredientes_base = this._normalizarIngredientes(p.ingredientes_base);
       const dnAdd = this._normalizarDietas(p.dietas); if (dnAdd) nuevo.dietas = dnAdd;
+      const vnAdd = this._normalizarVariaciones(p.variaciones); if (vnAdd) nuevo.variaciones = vnAdd;
       carta.productos = (carta.productos || []).concat([nuevo]);
       return { status: 201, patches: [{ op: 'replace', path: '/productos', value: carta.productos }], data: (c) => ({ producto: nuevo, carta_version: c.meta.version }) };
     });
@@ -439,6 +459,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     if (campos.ingredientes !== undefined) prod.ingredientes = this._normalizarIngredientes(campos.ingredientes);
     if (campos.ingredientes_base !== undefined) prod.ingredientes_base = this._normalizarIngredientes(campos.ingredientes_base);
     if (campos.dietas !== undefined) { const dn = this._normalizarDietas(campos.dietas); if (dn) prod.dietas = dn; }
+    if (campos.variaciones !== undefined) { const vn = this._normalizarVariaciones(campos.variaciones); if (vn) prod.variaciones = vn; }
     return null;
   }
 

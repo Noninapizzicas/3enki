@@ -42,6 +42,10 @@ function makeMocks(opts = {}) {
         }
         return { status: 200, data: { disponible: true } };
       }
+      if (domain === 'productos' && action === 'carta_completa') {
+        if (opts.cartaCompletaError) return { status: 503, error: { code: 'UPSTREAM_UNREACHABLE', message: 'productos down' } };
+        return { status: 200, data: { productos: opts.cartaCompletaProductos || [] } };
+      }
       return { status: 200, data: {} };
     }
   };
@@ -95,7 +99,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'variaciones');
-    assert.strictEqual(m.version, '4.0.0');
+    assert.strictEqual(m.version, '4.2.0');
     assert.strictEqual(m.configuraciones.size, 0);
     await m.onUnload();
   });
@@ -279,6 +283,40 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  await testAsync('onProjectActivated WARM configura desde productos.carta_completa', async () => {
+    const mocks = makeMocks({
+      cartaCompletaProductos: [
+        { id: 'hamburguesas_texas', categoria_id: 'hamburguesas', precio: 15.5,
+          variaciones: { permite_quitar: ['bacon'], permite_anadir: true, max_ingredientes_extra: 3,
+                         extras_sugeridos: [{ ingrediente_id: 'queso', precio_extra: 1 }] },
+          ingredientes_base: [{ id: 'bacon' }, { id: 'queso' }] },
+        { id: 'pizzas_margarita', categoria_id: 'pizzas', precio: 9 }   // sin variaciones → defaults
+      ]
+    });
+    const { module: m } = await instantiate(mocks);
+    await m.onProjectActivated({ data: { project_id: 'proj-nonina', correlation_id: 'cid-warm' } });
+    assert.strictEqual(m.configuraciones.size, 2);
+    const texas = m.configuraciones.get('hamburguesas_texas');
+    assert.strictEqual(texas.permite_anadir, true);
+    assert.strictEqual(texas.max_ingredientes_extra, 3);
+    assert.deepStrictEqual(texas.extras_sugeridos, [{ ingrediente_id: 'queso', precio_extra: 1 }]);
+    assert.deepStrictEqual(texas.ingredientes_base, ['bacon', 'queso']);
+    const marga = m.configuraciones.get('pizzas_margarita');
+    assert.strictEqual(marga.permite_anadir, false);             // default sin variaciones
+    assert.strictEqual(marga.max_ingredientes_extra, 5);          // default
+    // pidió la carta al reflejo de productos
+    assert.ok(mocks.uiHandled.some(([d, a]) => d === 'productos' && a === 'carta_completa'));
+    await m.onUnload();
+  });
+
+  await testAsync('onProjectActivated WARM es best-effort si productos no responde', async () => {
+    const mocks = makeMocks({ cartaCompletaError: true });
+    const { module: m } = await instantiate(mocks);
+    await m.onProjectActivated({ data: { project_id: 'proj-nonina' } });
+    assert.strictEqual(m.configuraciones.size, 0);                // no rompe; queda vacío
+    await m.onUnload();
+  });
+
   await testAsync('onComanderoItemAgregado con variacion valida emite variacion.validada', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
@@ -328,7 +366,7 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks);
     const r = await m.handleHealthCheck();
     assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.version, '4.0.0');
+    assert.strictEqual(r.data.version, '4.2.0');
     await m.onUnload();
   });
 

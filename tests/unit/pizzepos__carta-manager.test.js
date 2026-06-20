@@ -190,6 +190,60 @@ async function testAsync(desc, fn) {
     assert.strictEqual(r.data.producto.ingredientes[0].familia, 'queso');
   });
 
+  await testAsync('add_product: persiste variaciones canónicas (permite_quitar/anadir/max/extras_sugeridos)', async () => {
+    const store = { [CARTA_PATH]: JSON.stringify(cartaInicial()) };
+    const { m } = makeReflejo(store);
+    const r = await m._addProduct({
+      ...base,
+      producto: {
+        nombre: 'TEXAS', precio: 15.5, categoria_id: 'hamburguesas',
+        variaciones: {
+          permite_quitar: ['bacon'], permite_anadir: true, max_extras: 3,
+          extras_sugeridos: [
+            { ingrediente_id: 'queso', precio_extra: 1.2 },
+            { ingrediente_id: 'cebolla' },          // sin precio
+            { precio_extra: 5 }                       // sin id → se descarta
+          ]
+        }
+      }
+    });
+    assert.strictEqual(r.status, 201);
+    const v = r.data.producto.variaciones;
+    assert.deepStrictEqual(v.permite_quitar, ['bacon']);
+    assert.strictEqual(v.permite_anadir, true);
+    assert.strictEqual(v.max_ingredientes_extra, 3);          // max_extras → max_ingredientes_extra
+    assert.strictEqual(v.extras_sugeridos.length, 2);          // el sin-id descartado
+    assert.deepStrictEqual(v.extras_sugeridos[0], { ingrediente_id: 'queso', precio_extra: 1.2 });
+    assert.deepStrictEqual(v.extras_sugeridos[1], { ingrediente_id: 'cebolla' });
+  });
+
+  await testAsync('update_products (lote): aplica variaciones a N productos en UNA versión', async () => {
+    const carta = cartaInicial();
+    carta.productos.push(
+      { id: 'hamburguesas_texas', nombre: 'TEXAS', precio: 15.5, categoria_id: 'hamburguesas', ingredientes: [] },
+      { id: 'hamburguesas_classic', nombre: 'CLASSIC', precio: 12, categoria_id: 'hamburguesas', ingredientes: [] }
+    );
+    const store = { [CARTA_PATH]: JSON.stringify(carta) };
+    const { m } = makeReflejo(store);
+    const r = await m._updateProducts({
+      ...base,
+      updates: [
+        { producto_id: 'hamburguesas_texas',   campos: { variaciones: { permite_anadir: true, extras_sugeridos: [{ ingrediente_id: 'queso', precio_extra: 1 }] } } },
+        { producto_id: 'hamburguesas_classic', campos: { variaciones: { permite_quitar: ['cebolla'], max_ingredientes_extra: 2 } } }
+      ]
+    });
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(r.data.actualizados, ['hamburguesas_texas', 'hamburguesas_classic']);
+    const guardada = JSON.parse(store[CARTA_PATH]);
+    assert.strictEqual(guardada.meta.version, 2);              // UNA sola versión para el lote
+    const texas = guardada.productos.find(p => p.id === 'hamburguesas_texas');
+    const classic = guardada.productos.find(p => p.id === 'hamburguesas_classic');
+    assert.strictEqual(texas.variaciones.permite_anadir, true);
+    assert.deepStrictEqual(texas.variaciones.extras_sugeridos, [{ ingrediente_id: 'queso', precio_extra: 1 }]);
+    assert.deepStrictEqual(classic.variaciones.permite_quitar, ['cebolla']);
+    assert.strictEqual(classic.variaciones.max_ingredientes_extra, 2);
+  });
+
   // ── FASE 3: identidad de carta (onCartaCreada reusa la carta general existente) ──
 
   await testAsync('onCartaCreada con carta general en_servicio existente → REUSA su id (sobreescribe, no spawnea)', async () => {

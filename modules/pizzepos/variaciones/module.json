@@ -1,7 +1,8 @@
 {
   "name": "variaciones",
-  "version": "4.1.0",
-  "_v4_1_nota": "v4.1.0 (2026-06-20): variaciones se configura desde la CARTA (carta.actualizada/editada), no desde el muerto 'producto.creado' (que en la arquitectura carta-based no lo emite NADIE — variaciones quedaba huerfana y no se podia quitar/anadir en ninguna pizza). Mismo patron que ingredientes: el dato vive en la carta, el consumidor la lee. _configurar() unifica la logica; producto.creado se conserva por compat. PENDIENTE: warm en project.activated (hoy in-memory, lost_on_restart) para repoblar tras reinicio sin esperar una edicion de carta.",
+  "version": "4.2.0",
+  "_v4_2_nota": "v4.2.0 (2026-06-20): WARM en project.activated (cierra el PENDIENTE de v4.1). variaciones vive en memoria (lost_on_restart); sin warm esperaba a la 1a edicion de carta para repoblarse tras un arranque en seco. Ahora onProjectActivated pide la carta activa proyectada al reflejo de productos (uiHandler.handle('productos','carta_completa') — productos resuelve cual es la activa y la proyecta con su campo `variaciones`, anadido a _proyectarProducto) y configura TODOS sus productos. La carta sigue siendo la fuente; aqui solo se lee. Best-effort: si productos no responde, la 1a edicion repobla igual.",
+  "_v4_1_nota": "v4.1.0 (2026-06-20): variaciones se configura desde la CARTA (carta.actualizada/editada), no desde el muerto 'producto.creado' (que en la arquitectura carta-based no lo emite NADIE — variaciones quedaba huerfana y no se podia quitar/anadir en ninguna pizza). Mismo patron que ingredientes: el dato vive en la carta, el consumidor la lee. _configurar() unifica la logica; producto.creado se conserva por compat.",
   "description": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{validada,rechazada}.",
   "author": "Pizzepos Team",
   "language": "es",
@@ -12,6 +13,7 @@
       { "event": "variacion.rechazada", "description": "Variacion rechazada (no permitida o ingrediente no disponible). project_id top-level + correlation_id + timestamp." }
     ],
     "subscribes": [
+      { "event": "project.activated",        "handler": "onProjectActivated",       "description": "WARM tras (re)arranque en seco: pide la carta activa al reflejo de productos (uiHandler.handle('productos','carta_completa')) y configura las variaciones de TODOS sus productos, sin esperar a la 1a edicion de carta." },
       { "event": "carta.actualizada",       "handler": "onCartaActualizada",       "description": "La carta cambio (save/restore/clonar de carta-manager) — configura variaciones de TODOS sus productos. Fuente del flujo nuevo (reemplaza a producto.creado)." },
       { "event": "carta.editada",            "handler": "onCartaActualizada",       "description": "La carta se edito (add/remove/update_product/s de carta-manager) — reconfigura variaciones de sus productos." },
       { "event": "producto.creado",          "handler": "onProductoCreado",         "description": "LEGACY: producto creado (hoy nadie lo emite; se conserva por compat)." },
@@ -95,7 +97,8 @@
       "type": "in-memory",
       "owner": "VariacionesModule (Map configuraciones por producto_id)",
       "filesystem_read": [],
-      "restart_resilient": false,
+      "restart_resilient": true,
+      "_restart_resilient_nota": "El estado se pierde al reiniciar (Map en memoria) pero se RECUPERA solo en el siguiente project.activated (warm via productos.carta_completa) — no requiere una edicion de carta. La carta (carta-manager) es la fuente persistente real.",
       "concurrency": "single-instance",
       "lost_on_restart": ["configuraciones"]
     }

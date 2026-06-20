@@ -88,17 +88,34 @@ test('module.json: NO declara dependencies nativas (pdfjs/sharp/google-vision el
 
 test('blueprint: id, version, extends correctos', () => {
   assert.strictEqual(blueprint.id, 'menu-generator');
-  assert.strictEqual(blueprint.version, 'blueprint-10.0.0');
+  assert.strictEqual(blueprint.version, 'blueprint-10.1.0');
   assert.strictEqual(blueprint.extends_blueprint_abstract, 'subsistema-recetario.modulo-base');
   assert.strictEqual(blueprint.language, 'es');
 });
 
-test('blueprint: declara 3 operaciones (generar + preparar + _on_carta_generar_solicitada)', () => {
+test('blueprint: declara 4 operaciones (generar + enriquecer + preparar + _on_carta_generar_solicitada)', () => {
   const ops = Object.keys(blueprint.operaciones || {});
   assert.deepStrictEqual(
     ops.sort(),
-    ['_on_carta_generar_solicitada', 'generar', 'preparar']
+    ['_on_carta_generar_solicitada', 'enriquecer', 'generar', 'preparar']
   );
+});
+
+test('blueprint: operacion enriquecer es cajon de primer nivel (input + pseudocodigo + lotes + 6W)', () => {
+  const enr = blueprint.operaciones.enriquecer;
+  assert.ok(enr, 'falta operacion enriquecer');
+  assert.ok(typeof enr.input === 'string' && /carta_id\?/.test(enr.input), 'enriquecer acepta carta_id opcional (resuelve la general si falta)');
+  assert.ok(Array.isArray(enr.pseudocodigo) && enr.pseudocodigo.length > 0);
+  const pc = enr.pseudocodigo.join('\n');
+  assert.ok(/carta\.get\.request/.test(pc), 'enriquecer LEE los productos via carta.get');
+  assert.ok(/carta\.update_products\.request/.test(pc), 'enriquecer PERSISTE via carta.update_products en lotes');
+  assert.ok(/trocear/.test(pc), 'enriquecer trocea en lotes (reanudable)');
+  assert.ok(Array.isArray(enr.errores_posibles) && enr.errores_posibles.includes('INVALID_INPUT'));
+});
+
+test('blueprint: generar DELEGA el enriquecimiento en enriquecer (DRY, generar = SUELO + enriquecer)', () => {
+  const pc = blueprint.operaciones.generar.pseudocodigo.join('\n');
+  assert.ok(/this\.enriquecer\(/.test(pc), 'generar debe delegar en this.enriquecer tras poner el suelo');
 });
 
 test('blueprint: v10 declara las 6 W del producto (abstraccion universal)', () => {

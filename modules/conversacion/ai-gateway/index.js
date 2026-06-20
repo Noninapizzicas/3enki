@@ -1532,6 +1532,10 @@ class AiGatewayModule extends BaseModule {
       project_id:     payload.project_id     ?? ctx.project_id     ?? null,
       user_id:        payload.user_id        ?? ctx.user_id        ?? 'system',
       correlation_id: payload.correlation_id ?? ctx.correlation_id ?? ctx.conversation_id ?? null,
+      // attachments es contexto de turno de primera clase (paths fs del storage del proyecto,
+      // que el usuario eligio con el FilePicker). Se inyecta como project_id para que un reflejo
+      // pueda leer el material por su puerta (fs.read) sin que el LLM lo re-emita.
+      attachments:    payload.attachments    ?? ctx.attachments    ?? null,
       timestamp:      payload.timestamp      ?? new Date().toISOString(),
       ...payload
     };

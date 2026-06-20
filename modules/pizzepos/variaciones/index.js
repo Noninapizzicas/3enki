@@ -106,11 +106,13 @@ class VariacionesModule extends BaseModule {
   // ==========================================
 
   async subscribeToEvents() {
+    await this.eventBus.subscribe('carta.actualizada', this.onCartaActualizada.bind(this));
+    await this.eventBus.subscribe('carta.editada', this.onCartaActualizada.bind(this));
     await this.eventBus.subscribe('producto.creado', this.onProductoCreado.bind(this));
     await this.eventBus.subscribe('comandero.item_agregado', this.onComanderoItemAgregado.bind(this));
 
     this.logger.info('variaciones.events.subscribed', {
-      events: ['producto.creado', 'comandero.item_agregado']
+      events: ['carta.actualizada', 'carta.editada', 'producto.creado', 'comandero.item_agregado']
     });
   }
 
@@ -118,43 +120,58 @@ class VariacionesModule extends BaseModule {
   // Event Handlers
   // ==========================================
 
-  async onProductoCreado(event) {
-    const eventData = event?.data || event?.payload || event;
-    const correlationId = event?.metadata?.correlationId;
-    const { producto_id, variaciones, ingredientes_base, precio, categoria } = eventData;
-
-    if (!variaciones) {
-      return;
-    }
-
-    this.logger.info('producto.creado.received', {
-      producto_id,
-      categoria,
-      correlation_id: correlationId
-    });
-
-    const config = {
+  // Configura (o reconfigura) un producto desde su forma de carta. Fuente ÚNICA de la
+  // lógica; la usan onCartaActualizada (flujo nuevo) y onProductoCreado (legacy).
+  _configurar(producto_id, { categoria, precio, variaciones, ingredientes_base, ingredientes }) {
+    if (!producto_id) return;
+    const v = variaciones || {};
+    this.configuraciones.set(producto_id, {
       producto_id,
       grupo: categoria || 'otro',
       precio_base: precio,
-      permite_quitar: variaciones.permite_quitar || [],
-      permite_anadir: variaciones.permite_anadir || false,
-      extras_sugeridos: variaciones.extras_sugeridos || [],
-      max_ingredientes_extra: variaciones.max_ingredientes_extra || 5,
-      ingredientes_base: (ingredientes_base || []).map(i => i.id)
-    };
-
-    this.configuraciones.set(producto_id, config);
-
-    this.metrics.gauge('variacion.productos_configurados.count', this.configuraciones.size);
-
-    this.logger.info('variacion.configurada', {
-      producto_id,
-      grupo: config.grupo,
-      permite_quitar: config.permite_quitar.length,
-      extras_sugeridos: config.extras_sugeridos.length,
-      correlation_id: correlationId
+      permite_quitar: v.permite_quitar || [],
+      permite_anadir: v.permite_anadir || false,
+      extras_sugeridos: v.extras_sugeridos || [],
+      max_ingredientes_extra: v.max_ingredientes_extra || 5,
+      ingredientes_base: (ingredientes_base || ingredientes || [])
+        .map(i => (typeof i === 'string' ? i : i && i.id)).filter(Boolean)
     });
+  }
+
+  // Flujo NUEVO: configura las variaciones de TODOS los productos de la carta. La CARTA
+  // es la fuente (carta.actualizada/editada de carta-manager). Reemplaza al muerto
+  // 'producto.creado', que en la arquitectura carta-based no lo emite nadie — variaciones
+  // se quedó huérfana y por eso no se podía quitar/añadir en ninguna pizza.
+  async onCartaActualizada(event) {
+    const d = event?.data || event?.payload || event;
+    const carta = d?.carta;
+    if (!carta || !Array.isArray(carta.productos)) return;
+    for (const p of carta.productos) {
+      if (!p || !p.id) continue;
+      this._configurar(p.id, {
+        categoria: p.categoria_id || p.categoria,
+        precio: p.precio,
+        variaciones: p.variaciones,
+        ingredientes_base: p.ingredientes_base,
+        ingredientes: p.ingredientes
+      });
+    }
+    this.metrics?.gauge?.('variacion.productos_configurados.count', this.configuraciones.size);
+    this.logger?.info?.('variaciones.carta.configurada', {
+      carta_id: carta.meta?.id,
+      productos: carta.productos.length,
+      correlation_id: d?.correlation_id
+    });
+  }
+
+  // Legacy: emisor 'producto.creado' (hoy nadie lo emite; se conserva por compat).
+  async onProductoCreado(event) {
+    const eventData = event?.data || event?.payload || event;
+    const { producto_id, variaciones, ingredientes_base, precio, categoria } = eventData;
+    if (!variaciones) return;
+    this._configurar(producto_id, { categoria, precio, variaciones, ingredientes_base });
+    this.metrics.gauge('variacion.productos_configurados.count', this.configuraciones.size);
+    this.logger.info('variacion.configurada', { producto_id, correlation_id: event?.metadata?.correlationId });
   }
 
   async onComanderoItemAgregado(event) {

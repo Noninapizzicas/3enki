@@ -67,12 +67,15 @@ test('module.json: target_page_id preservado del v7 legacy', () => {
   assert.strictEqual(manifest.target_page_id, 'menu-generator');
 });
 
-test('module.json: version bumped a 8.0.0', () => {
-  assert.strictEqual(manifest.version, '8.0.0');
+test('module.json: version bumped a 8.1.0 (hibrido)', () => {
+  assert.strictEqual(manifest.version, '8.1.0');
 });
 
-test('module.json: NO declara main (blueprint-driven no tiene index.js activo)', () => {
-  assert.strictEqual(manifest.main, undefined);
+test('module.json: HIBRIDO — declara subscribes con el handler del reflejo (menu.import.request)', () => {
+  const subs = manifest.subscribes || [];
+  const imp = subs.find(s => s.event === 'menu.import.request');
+  assert.ok(imp, 'module.json debe declarar el subscribe menu.import.request del reflejo');
+  assert.strictEqual(imp.handler, 'onImportRequest');
 });
 
 test('module.json: NO declara dependencies nativas (pdfjs/sharp/google-vision eliminadas del manifest)', () => {
@@ -85,17 +88,24 @@ test('module.json: NO declara dependencies nativas (pdfjs/sharp/google-vision el
 
 test('blueprint: id, version, extends correctos', () => {
   assert.strictEqual(blueprint.id, 'menu-generator');
-  assert.strictEqual(blueprint.version, 'blueprint-9.0.0');
+  assert.strictEqual(blueprint.version, 'blueprint-10.0.0');
   assert.strictEqual(blueprint.extends_blueprint_abstract, 'subsistema-recetario.modulo-base');
   assert.strictEqual(blueprint.language, 'es');
 });
 
-test('blueprint: declara exactamente 2 operaciones (generar + _on_carta_generar_solicitada)', () => {
+test('blueprint: declara 3 operaciones (generar + preparar + _on_carta_generar_solicitada)', () => {
   const ops = Object.keys(blueprint.operaciones || {});
   assert.deepStrictEqual(
     ops.sort(),
-    ['_on_carta_generar_solicitada', 'generar']
+    ['_on_carta_generar_solicitada', 'generar', 'preparar']
   );
+});
+
+test('blueprint: v10 declara las 6 W del producto (abstraccion universal)', () => {
+  const pc = blueprint.preguntas_clave || {};
+  const ws = Object.keys(pc).filter(k => /^W[1-6]_/.test(k));
+  assert.strictEqual(ws.length, 6, 'deben estar las 6 W');
+  assert.ok(pc.regla_de_hierro && /inventar/i.test(pc.regla_de_hierro), 'falta la regla de hierro (no inventar hechos)');
 });
 
 test('blueprint: operacion generar tiene input + pseudocodigo + errores_posibles', () => {
@@ -251,23 +261,30 @@ test('schema: ingrediente con emoji valida (ayuda visual del POS comandero)', ()
 // Group 4: integracion blueprint -> persistencia event-core
 // --------------------------------------------------
 
-test('integracion: pseudocodigo de generar publica carta.creada fire-and-forget (decision 5.3 refactor v8.1)', () => {
+test('integracion: v10 generar usa persistencia VERIFICADA via reflejo (menu.import + carta.update_product), NO el viejo carta.creada', () => {
   const pseudo = blueprint.operaciones.generar.pseudocodigo.join('\n');
   assert.ok(
-    pseudo.includes("carta.creada"),
-    'generar debe publicar carta.creada (evento de dominio) — carta-manager lo escucha via eventos_que_escucho y persiste internamente'
+    pseudo.includes('menu.import.request'),
+    'generar debe poner el SUELO via el reflejo (menu.import.request)'
   );
   assert.ok(
-    !pseudo.includes("publishAndWait('carta-manager.save.request'") &&
-    !pseudo.includes('publishAndWait(\'carta-manager.save.request\''),
-    'NO debe usar publishAndWait("carta-manager.save.request", ...) — wiring RPC blueprint->blueprint NO operacional en ai-gateway. Patron canonico: publish fire-and-forget + consumer declara eventos_que_escucho (frente 2.4)'
+    pseudo.includes('publishAndWait'),
+    'la persistencia debe ser VERIFICADA (publishAndWait), no fire-and-forget'
+  );
+  assert.ok(
+    !pseudo.includes('carta.creada'),
+    'v10 RETIRA carta.creada fire-and-forget (era la causa del wipe: publicar carta vacia borraba la carta)'
   );
 });
 
-test('integracion: blueprint declara carta.creada en eventos_publicados', () => {
+test('integracion: v10 NO declara carta.creada en eventos_publicados (persistencia verificada, no eventual)', () => {
   assert.ok(
-    blueprint.eventos_publicados.includes('carta.creada'),
-    'eventos_publicados debe incluir carta.creada (canonico v8.1)'
+    !blueprint.eventos_publicados.includes('carta.creada'),
+    'v10 no usa carta.creada — la persistencia es verificada via RPC al reflejo'
+  );
+  assert.ok(
+    blueprint.eventos_publicados.includes('menu.import.request'),
+    'eventos_publicados debe incluir menu.import.request (el suelo del reflejo)'
   );
 });
 

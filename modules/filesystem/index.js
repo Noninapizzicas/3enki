@@ -63,7 +63,7 @@ class FilesystemModule extends BaseModule {
   constructor() {
     super();
     this.name = 'filesystem';
-    this.version = '2.0.0';
+    this.version = '2.1.0';
     this.basePath = path.join(process.cwd(), 'data');
     this.uiHandler = null;
 
@@ -71,6 +71,15 @@ class FilesystemModule extends BaseModule {
     this.activeProjectPath = null;
     this.workingDirectory = null;
     this.systemMode = false;
+
+    // Multi-tenant REAL: el project_id de CADA petición manda sobre el "proyecto activo"
+    // global. projectPaths mapea project_id -> su storage path (se puebla en
+    // onProjectActivated). validatePath, si la petición trae project_id conocido,
+    // resuelve contra ESE root, no contra activeProjectPath. El "proyecto activo" queda
+    // como fallback para callers que no pasan project_id (retrocompat). Cierra la causa
+    // del leak cross-project: dos peticiones a project_id distintos NO se pisan aunque
+    // cambie el activo. (Antes: todo se resolvía contra activeProjectPath -> ruleta.)
+    this.projectPaths = new Map();
 
     // TP4 — cache de manifests de modulos persistentes. Indexado por module.name.
     // Cada entry: { scope: 'project'|'system', data_path: '<namespace>' }. Lo carga
@@ -179,6 +188,7 @@ class FilesystemModule extends BaseModule {
       this.systemMode = true;
       this.activeProjectPath = process.cwd();
       this.workingDirectory = process.cwd();
+      if (project_id) this.projectPaths.set(project_id, { path: process.cwd(), system: true });
       this.logger.info('filesystem.project.activated.system_mode', {
         project_id, project_name: name, system_root: process.cwd()
       });
@@ -194,6 +204,10 @@ class FilesystemModule extends BaseModule {
         project_id, fallback_path: this.activeProjectPath
       });
     }
+
+    // Recuerda el root de ESTE proyecto para que sus peticiones (project_id) resuelvan
+    // contra él aunque luego se active otro. La base del multi-tenant real.
+    if (project_id) this.projectPaths.set(project_id, { path: this.activeProjectPath, system: false });
 
     this.workingDirectory = this.activeProjectPath;
     try {
@@ -262,7 +276,7 @@ class FilesystemModule extends BaseModule {
     const { request_id, correlation_id, path: p } = data;
     const cid = correlation_id || crypto.randomUUID();
     try {
-      const safePath = this.validatePath(p, { sourceModule: data?._source_module });
+      const safePath = this.validatePath(p, { sourceModule: data?._source_module, project_id: data?.project_id });
       const stats = await fs.stat(safePath);
       await this._publicarEvento('fs.exists.response', {
         request_id, exists: true, path: p,
@@ -370,6 +384,9 @@ class FilesystemModule extends BaseModule {
     // scope=system. Si event.source.module esta y matchea un manifest cacheado,
     // validatePath usa data_path + scope declarados. Si no, fallback project.
     args._source_module = event?.source?.module;
+    // Multi-tenant real: el project_id de la peticion decide contra que proyecto se
+    // resuelve el path (no el "proyecto activo" global). validatePath lo usa.
+    args.project_id = data.project_id;
     return this._busDispatchWithData(event, op, responseEvent, args);
   }
 
@@ -405,9 +422,23 @@ class FilesystemModule extends BaseModule {
   // Path security (preserva validatePath publica para compat)
   // ==========================================
 
+  // Root de almacenamiento del proyecto de la PETICIÓN (multi-tenant real). null si el
+  // project_id no se conoce todavía (proyecto nunca activado) o es system -> el caller
+  // cae al activeProjectPath (retrocompat). Resuelve la causa raíz: el "proyecto activo"
+  // global no debe decidir contra qué proyecto se lee/escribe; lo decide el project_id.
+  _projectRootFor(projectId) {
+    if (!projectId) return null;
+    const entry = this.projectPaths.get(projectId);
+    if (!entry || entry.system) return null;   // system projects siguen el flujo systemMode
+    return entry.path;
+  }
+
   validatePath(userPath, options = {}) {
     const inputPath = userPath || '/';
     let resolved;
+    // El project_id de la petición MANDA sobre el proyecto activo global. Si no viene
+    // (o no se conoce), fallback al activeProjectPath de siempre.
+    const projectRoot = (options.project_id && this._projectRootFor(options.project_id)) || this.activeProjectPath;
 
     // Defensa contra paths absolutos del sistema. Antes de esta defensa, un caller
     // que construia path = base_path + '/archivo.json' (ej: '/opt/enki/data/projects/p1/recetas.json')
@@ -470,15 +501,18 @@ class FilesystemModule extends BaseModule {
       const relativePart = inputPath === '@' ? '' : inputPath.slice(2);
       const normalized = path.normalize(relativePart).replace(/^\/+/, '');
       resolved = path.resolve(this.basePath, normalized);
-    } else if (this.activeProjectPath) {
+    } else if (projectRoot) {
       if (inputPath.startsWith('/')) {
         const normalized = path.normalize(inputPath).replace(/^\/+/, '');
-        resolved = path.resolve(this.activeProjectPath, normalized);
+        resolved = path.resolve(projectRoot, normalized);
       } else if (inputPath === '~' || inputPath.startsWith('~/')) {
         const relativePart = inputPath === '~' ? '' : inputPath.slice(2);
-        resolved = path.resolve(this.activeProjectPath, relativePart);
+        resolved = path.resolve(projectRoot, relativePart);
       } else {
-        const workDir = this.workingDirectory || this.basePath;
+        // path relativo "a secas" → workingDirectory solo si resolvemos contra el proyecto
+        // activo; si la petición fija otro project_id, su root es la referencia.
+        const sameAsActive = projectRoot === this.activeProjectPath;
+        const workDir = (sameAsActive && this.workingDirectory) || projectRoot;
         resolved = path.resolve(workDir, inputPath);
       }
     } else {
@@ -521,7 +555,7 @@ class FilesystemModule extends BaseModule {
   async handleList(data) {
     try {
       const dirPath = data?.path || '/';
-      const safePath = this.validatePath(dirPath, { sourceModule: data?._source_module });
+      const safePath = this.validatePath(dirPath, { sourceModule: data?._source_module, project_id: data?.project_id });
 
       let stats;
       try { stats = await fs.stat(safePath); }
@@ -581,7 +615,7 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
-      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module });
+      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module, project_id: data?.project_id });
 
       let stats;
       try { stats = await fs.stat(safePath); }
@@ -645,7 +679,7 @@ class FilesystemModule extends BaseModule {
           { kind: 'domain', field: 'content' });
       }
 
-      const safePath = this.validatePath(filePath, { sourceModule: data?._source_module });
+      const safePath = this.validatePath(filePath, { sourceModule: data?._source_module, project_id: data?.project_id });
       await fs.mkdir(path.dirname(safePath), { recursive: true });
 
       let isNew = false;
@@ -741,7 +775,7 @@ class FilesystemModule extends BaseModule {
           { kind: 'domain', field: 'patches' });
       }
 
-      const safePath = this.validatePath(filePath, { sourceModule: data?._source_module });
+      const safePath = this.validatePath(filePath, { sourceModule: data?._source_module, project_id: data?.project_id });
 
       let currentContent;
       try { currentContent = await fs.readFile(safePath, 'utf-8'); }
@@ -1163,7 +1197,7 @@ class FilesystemModule extends BaseModule {
           { kind: 'protected_path' });
       }
 
-      const safePath = this.validatePath(filePath, { sourceModule: data?._source_module });
+      const safePath = this.validatePath(filePath, { sourceModule: data?._source_module, project_id: data?.project_id });
       let stats;
       try { stats = await fs.stat(safePath); }
       catch (e) {
@@ -1200,7 +1234,7 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
-      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module });
+      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module, project_id: data?.project_id });
       await fs.mkdir(safePath, { recursive: true });
 
       await this._publicarEvento('fs.directory.created', { path: data.path });
@@ -1218,8 +1252,8 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'from and to are required',
           { kind: 'domain', field: 'from|to' });
       }
-      const safeFrom = this.validatePath(data.from, { sourceModule: data?._source_module });
-      const safeTo   = this.validatePath(data.to, { sourceModule: data?._source_module });
+      const safeFrom = this.validatePath(data.from, { sourceModule: data?._source_module, project_id: data?.project_id });
+      const safeTo   = this.validatePath(data.to, { sourceModule: data?._source_module, project_id: data?.project_id });
       try { await fs.stat(safeFrom); }
       catch (e) {
         if (e.code === 'ENOENT') {
@@ -1244,8 +1278,8 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'from and to are required',
           { kind: 'domain', field: 'from|to' });
       }
-      const safeFrom = this.validatePath(data.from, { sourceModule: data?._source_module });
-      const safeTo   = this.validatePath(data.to, { sourceModule: data?._source_module });
+      const safeFrom = this.validatePath(data.from, { sourceModule: data?._source_module, project_id: data?.project_id });
+      const safeTo   = this.validatePath(data.to, { sourceModule: data?._source_module, project_id: data?.project_id });
       let stats;
       try { stats = await fs.stat(safeFrom); }
       catch (e) {
@@ -1275,7 +1309,7 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'query is required',
           { kind: 'domain', field: 'query' });
       }
-      const basePath = this.validatePath(data.path || '/', { sourceModule: data?._source_module });
+      const basePath = this.validatePath(data.path || '/', { sourceModule: data?._source_module, project_id: data?.project_id });
       const searchContent = data.content === true;
       const query = data.query.toLowerCase();
       const results = [];
@@ -1303,7 +1337,7 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
-      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module });
+      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module, project_id: data?.project_id });
       let stats;
       try { stats = await fs.stat(safePath); }
       catch (e) {
@@ -1339,7 +1373,7 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'content is required',
           { kind: 'domain', field: 'content' });
       }
-      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module });
+      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module, project_id: data?.project_id });
       await fs.mkdir(path.dirname(safePath), { recursive: true });
       await fs.appendFile(safePath, data.content, data.encoding || 'utf-8');
       const stats = await fs.stat(safePath);
@@ -1360,7 +1394,7 @@ class FilesystemModule extends BaseModule {
       const maxAgeHours = data?.max_age_hours || 24;
       const dryRun = data?.dry_run === true;
 
-      const safePath = this.validatePath(cleanupPath, { sourceModule: data?._source_module });
+      const safePath = this.validatePath(cleanupPath, { sourceModule: data?._source_module, project_id: data?.project_id });
       try {
         const stats = await fs.stat(safePath);
         if (!stats.isDirectory()) {
@@ -1399,7 +1433,7 @@ class FilesystemModule extends BaseModule {
   async handleStats(data) {
     try {
       const statsPath = data?.path || '/';
-      const safePath = this.validatePath(statsPath, { sourceModule: data?._source_module });
+      const safePath = this.validatePath(statsPath, { sourceModule: data?._source_module, project_id: data?.project_id });
 
       try {
         const dirStats = await fs.stat(safePath);
@@ -1448,7 +1482,7 @@ class FilesystemModule extends BaseModule {
   async handleSetWorkDir(data) {
     try {
       const requestedPath = data?.path || '/';
-      const safePath = this.validatePath(requestedPath, { sourceModule: data?._source_module });
+      const safePath = this.validatePath(requestedPath, { sourceModule: data?._source_module, project_id: data?.project_id });
       const stats = await fs.stat(safePath);
       if (!stats.isDirectory()) {
         return this._errorResponse(400, 'INVALID_INPUT', 'Path is not a directory',

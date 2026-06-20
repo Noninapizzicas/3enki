@@ -1,7 +1,8 @@
 {
   "name": "filesystem",
-  "version": "2.0.0",
-  "description": "Operaciones de filesystem para todo el sistema. Acceso scopeado por proyecto activo (storage/ subdir) + system mode (Sistema project = root). 14 ui_handlers + 14 tools del LLM + 14 bus handlers fs.*.request/response + 3 spanish handlers. v2.0.0: 5 helpers POC2, todos los handlers shape canonico { status, data | error: { code, message, details? } }, _publicarEvento canonical correlation_id + timestamp.",
+  "version": "2.1.0",
+  "_v2_1_nota": "v2.1.0 (2026-06-20): MULTI-TENANT REAL — el path se resuelve contra el proyecto de la PETICIÓN (project_id), no contra el 'proyecto activo' global. Antes todo fs.*.request se resolvía contra activeProjectPath (lo que fijaba el último project.activated), así que dos peticiones a project_id distintos se pisaban y un listado/borrado caía en el proyecto que estuviera activo en ese instante (ruleta + leak cross-project). Ahora: projectPaths{project_id→storage} se puebla en onProjectActivated; validatePath resuelve contra _projectRootFor(req.project_id) y solo cae a activeProjectPath si la petición no trae project_id (retrocompat total). _busDispatch propaga project_id a todos los handlers. El propio código ya prometía esto (mensaje de error: 'filesystem resuelve internamente con el project_id del payload') — ahora lo cumple.",
+  "description": "Operaciones de filesystem para todo el sistema. Acceso scopeado por el project_id de la PETICIÓN (multi-tenant real; storage/ subdir) con fallback a proyecto activo + system mode (Sistema project = root). 14 ui_handlers + 14 tools del LLM + 14 bus handlers fs.*.request/response + 3 spanish handlers. v2.0.0: 5 helpers POC2, todos los handlers shape canonico { status, data | error: { code, message, details? } }, _publicarEvento canonical correlation_id + timestamp.",
   "author": "Event Core Team",
   "language": "en",
   "main": "index.js",

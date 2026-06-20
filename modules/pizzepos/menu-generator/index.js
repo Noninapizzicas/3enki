@@ -148,18 +148,27 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
     return 'carta_' + slug(nombre);
   }
 
-  // PROYECCIÓN determinista origen -> carta-pizzepos. Mapea drift de campos
-  // (categoria->categoria_id, tipo/grupo->familia). NO inventa: omite lo inválido.
+  // PROYECCIÓN determinista origen -> carta-pizzepos. MÁXIMA INFORMACIÓN por
+  // producto: preserva TODO lo que la fuente trae (ingredientes_base con
+  // precio_extra -> variaciones/mitad; estaciones -> cocina; tipo/descripcion/
+  // alergenos/etiquetas/disponible/variaciones). Mapea drift (categoria->
+  // categoria_id, tipo/grupo->familia). NO inventa: campo ausente = ausente, no fabricado.
   _proyectar(fuente, nombre, carta_id) {
     const catsIn = Array.isArray(fuente.categorias) ? fuente.categorias : [];
     const prodsIn = Array.isArray(fuente.productos) ? fuente.productos : [];
 
     const categorias = catsIn
-      .map((c, i) => ({
-        id: slug(c && (c.id || c.nombre)),
-        nombre: String((c && (c.nombre || c.id)) || ''),
-        orden: (c && typeof c.orden === 'number') ? c.orden : i + 1,
-      }))
+      .map((c, i) => {
+        const cat = {
+          id: slug(c && (c.id || c.nombre)),
+          nombre: String((c && (c.nombre || c.id)) || ''),
+          orden: (c && typeof c.orden === 'number') ? c.orden : i + 1,
+        };
+        // estaciones viven en la categoría; el producto las hereda (proyector productos).
+        if (c && Array.isArray(c.estaciones) && c.estaciones.length) cat.estaciones = c.estaciones;
+        if (c && c.activa !== undefined) cat.activa = !!c.activa;
+        return cat;
+      })
       .filter(c => c.id);
     const idsCat = new Set(categorias.map(c => c.id));
 
@@ -170,15 +179,38 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
       if (!catId || !idsCat.has(catId)) continue;     // sin categoría válida -> se omite (no inventar)
       const nombreP = String(p.nombre || '').trim();
       if (!nombreP) continue;
-      productos.push({
+
+      // La familia REAL vive en la lista simple (campo 'tipo'); el 'grupo' de
+      // ingredientes_base es el grupo del catálogo, NO la familia. Mapa nombre->familia
+      // desde la lista simple, para hidratar la base (que no trae familia).
+      const famByName = this._mapaFamilias(p.ingredientes);
+
+      const prod = {
         id: catId + '_' + slug(nombreP),               // id determinista CON prefijo de categoría
         nombre: nombreP,
-        precio: (typeof p.precio === 'number' && p.precio >= 0) ? p.precio : 0,
+        precio: (typeof p.precio === 'number' && p.precio >= 0)
+          ? p.precio
+          : (typeof p.precio_base === 'number' && p.precio_base >= 0 ? p.precio_base : 0),
         categoria_id: catId,
-        descripcion: String(p.descripcion || ''),
-        disponible: p.disponible !== undefined ? !!p.disponible : true,
-        ingredientes: this._normalizarIngredientes(p.ingredientes),
-      });
+        ingredientes: this._normalizarIngredientes(p.ingredientes, famByName),
+      };
+
+      // ── máxima info: SOLO lo que la fuente trae (iron rule: no fabricar) ──
+      // ingredientes_base (CRÍTICO): lista rica con precio_extra -> variaciones + mitad-mitad.
+      const base = this._normalizarIngredientes(p.ingredientes_base, famByName);
+      if (base.length) prod.ingredientes_base = base;
+      // reglas de variación (quitar/añadir/máx extras).
+      const variaciones = this._normalizarVariaciones(p.variaciones);
+      if (variaciones) prod.variaciones = variaciones;
+      // routing de cocina (si no, se hereda de la categoría en el proyector).
+      if (Array.isArray(p.estaciones) && p.estaciones.length) prod.estaciones = p.estaciones;
+      if (p.tipo) prod.tipo = String(p.tipo);
+      if (p.descripcion) prod.descripcion = String(p.descripcion);
+      if (Array.isArray(p.alergenos) && p.alergenos.length) prod.alergenos = p.alergenos;
+      if (Array.isArray(p.etiquetas) && p.etiquetas.length) prod.etiquetas = p.etiquetas;
+      if (p.disponible !== undefined) prod.disponible = !!p.disponible;
+
+      productos.push(prod);
     }
 
     return {
@@ -188,17 +220,45 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
     };
   }
 
-  _normalizarIngredientes(lista) {
+  // Mapa nombre(slug) -> familia, derivado de la lista simple (campo 'tipo'/'familia').
+  // Solo entradas con familia resuelta (≠ 'otro'), para hidratar ingredientes_base.
+  _mapaFamilias(lista) {
+    const m = new Map();
+    if (!Array.isArray(lista)) return m;
+    for (const i of lista) {
+      if (!i || !i.nombre) continue;
+      const f = this._familia(i.familia || i.tipo);   // 'grupo' NO es familia
+      if (f !== 'otro') m.set(slug(i.nombre), f);
+    }
+    return m;
+  }
+
+  // Normaliza una lista de ingredientes a forma canónica, PRESERVANDO precio_extra
+  // (lo necesita variaciones para cobrar extras). La familia sale de familia/tipo
+  // (NUNCA de 'grupo'); si no la trae, se hidrata por nombre desde famByName.
+  _normalizarIngredientes(lista, famByName) {
     if (!Array.isArray(lista)) return [];
     return lista.filter(i => i && i.nombre).map(i => {
-      const out = {
-        id: i.id || slug(i.nombre),
-        nombre: String(i.nombre),
-        familia: this._familia(i.familia || i.tipo || i.grupo),
-      };
+      const key = slug(i.nombre);
+      let familia = this._familia(i.familia || i.tipo);
+      if (familia === 'otro' && famByName && famByName.has(key)) familia = famByName.get(key);
+      const out = { id: i.id || key, nombre: String(i.nombre), familia };
       if (i.emoji) out.emoji = i.emoji;
+      if (typeof i.precio_extra === 'number') out.precio_extra = i.precio_extra;
       return out;
     });
+  }
+
+  // Reglas de variación canónicas (las lee el módulo variaciones). null si la fuente no trae nada.
+  _normalizarVariaciones(v) {
+    if (!v || typeof v !== 'object') return null;
+    const out = {};
+    if (Array.isArray(v.permite_quitar)) out.permite_quitar = v.permite_quitar;
+    if (v.permite_anadir !== undefined) out.permite_anadir = !!v.permite_anadir;
+    const max = (typeof v.max_ingredientes_extra === 'number') ? v.max_ingredientes_extra
+      : (typeof v.max_extras === 'number' ? v.max_extras : undefined);
+    if (max !== undefined) out.max_ingredientes_extra = max;
+    return Object.keys(out).length ? out : null;
   }
 
   _familia(v) {

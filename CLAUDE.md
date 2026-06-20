@@ -259,6 +259,14 @@ VALUE_OBJECT Variable {
   carga() : Number                            // cuánto sostiene el problema
 }
 
+VALUE_OBJECT Tension {                          // lo que emana el Objetivo sobre el Problema
+  objetivo  : Objetivo
+  vector()  : Direccion                         // hacia dónde tira (el resultado deseado)
+  choca(v: Variable): Boolean                   // ¿v se interpone en el camino al objetivo?
+  impactoDe(v: Variable): Number                // cuánto acerca/aleja tocar v
+  fraccionBloqueadaPor(v: Variable): Number     // 0..1 del objetivo que v deja inalcanzable
+}
+
 ABSTRACT CLASE Lente {                         // Strategy
   mirar(ambito: Ambito, objetivo: Objetivo): Array<Variable>
 }
@@ -269,22 +277,50 @@ CLASE LenteNatural HEREDA Lente {              // la naturaleza: lo fácil y có
 }
 
 CLASE LentePorObjetivo HEREDA Lente {          // el salto deliberado
-  extractores : Array<ExtractorDeVariable>     // uno por rol no-obvio
-  mirar(ambito, objetivo):
-    tension ← objetivo.generaTension()
-    ocultas ← []
-    PARA ext EN extractores:
-        ocultas.añadir( ext.extraer(ambito, tension) )            // tira de lo incómodo
-    RETORNA ocultas.filtrar(v → objetivo.selecciona(v))           // el imán recorta el ruido
+  extRestriccion  : ExtractorRestriccion
+  extPalanca      : ExtractorPalanca
+  extSegundoOrden : ExtractorSegundoOrden
+  mirar(ambito, objetivo):                     // ORDEN: el efecto de 2º orden depende de las palancas
+    tension     ← objetivo.generaTension()
+    restriccion ← extRestriccion.extraer(ambito, tension)
+    palancas    ← extPalanca.extraer(ambito, tension)
+    extSegundoOrden.palancas ← palancas                           // el efecto nace de palancas REALES
+    efectos     ← extSegundoOrden.extraer(ambito, tension)
+    RETORNA [restriccion, palancas, efectos].aplanar()
+             .filtrar(v → objetivo.selecciona(v))                 // el imán recorta el ruido
 }
 
-INTERFAZ ExtractorDeVariable {                 // Strategy por rol
-  rol: Rol
-  extraer(ambito: Ambito, tension: Tension): Array<Variable>
+ABSTRACT CLASE ExtractorDeVariable {           // Template Method (esqueleto) + Strategy (por rol)
+  rol         : Rol                            // fijo por subclase
+  presupuesto : Number                         // top-K — coste energético acotado
+  extraer(ambito, tension):                    // ESQUELETO — NO se sobreescribe
+    halladas ← []
+    PARA v EN ambito.variablesCandidatas():
+        SI v.esObvia: CONTINUAR                 // lo obvio ya lo coge LenteNatural
+        SI cumpleCriterio(v, tension):
+            v.rol ← this.rol ; v.carga ← calcularCarga(v, tension)
+            halladas.añadir(v)
+    RETORNA halladas.ordenarPorCargaDesc().tomar(presupuesto)
+  ABSTRACTO cumpleCriterio(v: Variable, tension: Tension): Boolean   // la PREGUNTA del rol
+  ABSTRACTO calcularCarga (v: Variable, tension: Tension): Number    // cuánto sostiene
 }
-CLASE ExtractorRestriccion   IMPLEMENTA ExtractorDeVariable  // qué BLOQUEA de verdad
-CLASE ExtractorPalanca       IMPLEMENTA ExtractorDeVariable  // qué MUEVE el resultado
-CLASE ExtractorSegundoOrden  IMPLEMENTA ExtractorDeVariable  // qué pasa DESPUÉS
+
+CLASE ExtractorRestriccion HEREDA ExtractorDeVariable {   // qué BLOQUEA de verdad
+  rol = RESTRICCION
+  cumpleCriterio(v, tension): RETORNA tension.choca(v) Y v.enCaminoCritico(tension.vector())
+  calcularCarga (v, tension): RETORNA tension.fraccionBloqueadaPor(v)   // 1.0 = objetivo inalcanzable
+}
+CLASE ExtractorPalanca HEREDA ExtractorDeVariable {       // qué MUEVE el resultado, y barato
+  rol = PALANCA
+  cumpleCriterio(v, tension): RETORNA tension.impactoDe(v) > 0 Y v.costeDeTocar() < UMBRAL_COSTE
+  calcularCarga (v, tension): RETORNA tension.impactoDe(v) / max(v.costeDeTocar(), ε)   // ratio impacto/coste
+}
+CLASE ExtractorSegundoOrden HEREDA ExtractorDeVariable {  // qué pasa DESPUÉS
+  rol = EFECTO_SEGUNDO_ORDEN
+  palancas : Array<Variable>                   // INYECTADAS por mirar() — el efecto nace de moverlas
+  cumpleCriterio(v, tension): RETORNA NO tension.choca(v) Y v.esConsecuenciaDe(palancas)
+  calcularCarga (v, tension): RETORNA v.magnitudFutura() * v.probabilidad()   // riesgo/beneficio diferido
+}
 
 CLASE AnalistaProfundo IMPLEMENTA Analista {
   lente : Lente                                // inyectada (DI) — LentePorObjetivo en prod
@@ -325,10 +361,10 @@ INTERFAZ Analista
         ├─ lente: Lente                         (Strategy)
         │     ├─ LenteNatural        → visión cerrada (default biológico)
         │     └─ LentePorObjetivo    → visión abierta (override)
-        │           └─ extractores: Array<ExtractorDeVariable>  (Strategy × rol)
-        │                 ├─ ExtractorRestriccion
-        │                 ├─ ExtractorPalanca
-        │                 └─ ExtractorSegundoOrden
+        │           └─ extractores (Template Method: extraer() fijo; huecos cumpleCriterio/calcularCarga por rol)
+        │                 ├─ ExtractorRestriccion   (qué bloquea)
+        │                 ├─ ExtractorPalanca        (qué mueve, barato)
+        │                 └─ ExtractorSegundoOrden   (qué pasa después — consume las palancas)
         └─ bus: EventBus                         (Observer — emite al bus)
 
 VALUE_OBJECTS  Objetivo · Problema · Variable · Tension
@@ -337,6 +373,7 @@ PRODUCTO  Diagnostico        =  Factory + guarda de invariante (esEsteril → re
 
 PATRONES
   Strategy      → Lente (Natural↔PorObjetivo) y Extractores (un rol, un extractor)
+  TemplateMethod→ ExtractorDeVariable.extraer (esqueleto fijo; cumpleCriterio/calcularCarga por rol)
   Specification → Objetivo.selecciona(): el filtro que recorta el ruido a lo que carga
   Factory       → Diagnostico (construye el resultado fértil)
   Observer      → emisión 'analisis.profundo.completado' al EventBus

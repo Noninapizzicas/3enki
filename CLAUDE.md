@@ -257,14 +257,22 @@ VALUE_OBJECT Variable {
   esObvia : Boolean                           // ¿aparece sola, a coste cero?
   rol     : Rol
   carga() : Number                            // cuánto sostiene el problema
+
+  // ── firmas POSITIVAS: lo que vuelve a v de su rol (afirman, no descartan)
+  sostieneElCamino(vector: Direccion): Boolean
+    RETORNA this.alineadaCon(vector) Y this.cargaEstructural() > 0   // está en el camino y otras se apoyan en ella
+  rendimiento(tension: Tension): Number
+    RETORNA tension.impactoDe(this) / max(this.esfuerzoDeTocar(), ε) // avance liberado por unidad de esfuerzo
+  naceDe(palancas: Array<Variable>): Boolean
+    RETORNA palancas.alguna(p → this.respondeA(p))                   // su estado se mueve cuando mueves p
+  // alineadaCon · cargaEstructural · esfuerzoDeTocar · respondeA = percepciones ATÓMICAS del analista (el modelo descansa aquí)
 }
 
 VALUE_OBJECT Tension {                          // lo que emana el Objetivo sobre el Problema
   objetivo  : Objetivo
   vector()  : Direccion                         // hacia dónde tira (el resultado deseado)
-  choca(v: Variable): Boolean                   // ¿v se interpone en el camino al objetivo?
-  impactoDe(v: Variable): Number                // cuánto acerca/aleja tocar v
-  fraccionBloqueadaPor(v: Variable): Number     // 0..1 del objetivo que v deja inalcanzable
+  impactoDe(v: Variable): Number                // cuánto ACERCA al objetivo tocar v
+  fraccionLiberadaPor(v: Variable): Number      // 0..1 del objetivo que se ABRE al resolver v
 }
 
 ABSTRACT CLASE Lente {                         // Strategy
@@ -305,21 +313,21 @@ ABSTRACT CLASE ExtractorDeVariable {           // Template Method (esqueleto) + 
   ABSTRACTO calcularCarga (v: Variable, tension: Tension): Number    // cuánto sostiene
 }
 
-CLASE ExtractorRestriccion HEREDA ExtractorDeVariable {   // qué BLOQUEA de verdad
+CLASE ExtractorRestriccion HEREDA ExtractorDeVariable {   // lo que SOSTIENE el camino (liberar = abrir)
   rol = RESTRICCION
-  cumpleCriterio(v, tension): RETORNA tension.choca(v) Y v.enCaminoCritico(tension.vector())
-  calcularCarga (v, tension): RETORNA tension.fraccionBloqueadaPor(v)   // 1.0 = objetivo inalcanzable
+  cumpleCriterio(v, tension): RETORNA v.sostieneElCamino(tension.vector())
+  calcularCarga (v, tension): RETORNA tension.fraccionLiberadaPor(v)   // 1.0 = resolver v ABRE todo el objetivo
 }
-CLASE ExtractorPalanca HEREDA ExtractorDeVariable {       // qué MUEVE el resultado, y barato
+CLASE ExtractorPalanca HEREDA ExtractorDeVariable {       // lo que MUEVE mucho por lo que toca
   rol = PALANCA
-  cumpleCriterio(v, tension): RETORNA tension.impactoDe(v) > 0 Y v.costeDeTocar() < UMBRAL_COSTE
-  calcularCarga (v, tension): RETORNA tension.impactoDe(v) / max(v.costeDeTocar(), ε)   // ratio impacto/coste
+  cumpleCriterio(v, tension): RETORNA v.rendimiento(tension) >= UMBRAL_RENDIMIENTO
+  calcularCarga (v, tension): RETORNA v.rendimiento(tension)   // avance liberado por unidad de esfuerzo
 }
-CLASE ExtractorSegundoOrden HEREDA ExtractorDeVariable {  // qué pasa DESPUÉS
+CLASE ExtractorSegundoOrden HEREDA ExtractorDeVariable {  // lo que DESPIERTA al mover las palancas
   rol = EFECTO_SEGUNDO_ORDEN
   palancas : Array<Variable>                   // INYECTADAS por mirar() — el efecto nace de moverlas
-  cumpleCriterio(v, tension): RETORNA NO tension.choca(v) Y v.esConsecuenciaDe(palancas)
-  calcularCarga (v, tension): RETORNA v.magnitudFutura() * v.probabilidad()   // riesgo/beneficio diferido
+  cumpleCriterio(v, tension): RETORNA v.naceDe(palancas)
+  calcularCarga (v, tension): RETORNA v.magnitudFutura() * v.probabilidad()   // peso del efecto diferido
 }
 
 CLASE AnalistaProfundo IMPLEMENTA Analista {
@@ -362,9 +370,9 @@ INTERFAZ Analista
         │     ├─ LenteNatural        → visión cerrada (default biológico)
         │     └─ LentePorObjetivo    → visión abierta (override)
         │           └─ extractores (Template Method: extraer() fijo; huecos cumpleCriterio/calcularCarga por rol)
-        │                 ├─ ExtractorRestriccion   (qué bloquea)
-        │                 ├─ ExtractorPalanca        (qué mueve, barato)
-        │                 └─ ExtractorSegundoOrden   (qué pasa después — consume las palancas)
+        │                 ├─ ExtractorRestriccion   (sostiene el camino)
+        │                 ├─ ExtractorPalanca        (mueve mucho por lo que toca)
+        │                 └─ ExtractorSegundoOrden   (despierta tras mover las palancas)
         └─ bus: EventBus                         (Observer — emite al bus)
 
 VALUE_OBJECTS  Objetivo · Problema · Variable · Tension

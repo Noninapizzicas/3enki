@@ -6,11 +6,14 @@
  * (carta-manager la persistía y BORRABA lo que había) o troceaba a mano y
  * cantaba "✅ completas" sin que el bus lo respaldara (alucinación de guardado).
  *
- * Este reflejo importa POR REFERENCIA: el LLM solo dice "importa el JSON que
- * pegué" (cero tokens de producto). El reflejo LEE el último mensaje del usuario
- * con un JSON de carta (db.query), lo PROYECTA al shape canónico carta-pizzepos
- * (determinista, réplica de la ley de carta-manager) y lo GUARDA con UNA sola
- * carta.save (atómica, versionada) — VERIFICADA por el response correlado.
+ * Este reflejo importa POR REFERENCIA: el LLM solo dice "importa el adjunto"
+ * (cero tokens de producto). El reflejo LEE el fichero adjunto por su puerta
+ * (fs.read — el adjunto es un path real del storage del proyecto que el usuario
+ * eligió con el FilePicker; ai-gateway inyecta attachments en el payload del bus,
+ * como project_id), lo PROYECTA al shape canónico carta-pizzepos (determinista,
+ * réplica de la ley de carta-manager) y lo GUARDA con UNA sola carta.save
+ * (atómica, versionada) — VERIFICADA por el response correlado. Idiomático: como
+ * todos los reflejos, opera sobre fs + project_id; NO toca la conversación.
  *
  * Lo determinista (leer/proyectar/guardar) vive aquí; el blueprint conserva lo
  * fuzzy (clasificar ruta, estructurar texto libre dictado). El loader carga
@@ -50,14 +53,19 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
   async _import(input) {
     if (!input.project_id) return this._invalid('project_id');
     if (!input.nombre || !String(input.nombre).trim()) return this._invalid('nombre');
-    if (!input.conversation_id) return this._invalid('conversation_id');
+    const rutas = this._rutasFuente(input);
+    if (rutas.length === 0) {
+      return this._errorResponse(400, 'INVALID_INPUT',
+        'falta la fuente: adjunta el fichero JSON de la carta',
+        { hint: 'el usuario adjunta el JSON (attachments[].path o material_path)' });
+    }
 
-    // LEER por referencia: el JSON de carta más reciente en los mensajes del usuario.
-    const fuente = await this._localizarFuente(input.project_id, input.conversation_id);
+    // LEER por su puerta: fs.read del adjunto (path real del storage del proyecto).
+    const fuente = await this._cargarFuente(input.project_id, rutas);
     if (!fuente) {
       return this._errorResponse(404, 'RESOURCE_NOT_FOUND',
-        'no encontré un JSON de carta en los últimos mensajes del usuario',
-        { hint: 'pide al usuario que pegue el JSON con productos/categorías' });
+        'no pude leer un JSON de carta (con productos/categorías) del adjunto',
+        { rutas });
     }
 
     // IDENTIDAD (FASE 3): reusa la carta general del proyecto; si no, id determinista.
@@ -91,16 +99,27 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
     };
   }
 
-  // ── LEER por referencia: busca en los últimos mensajes de usuario el JSON de carta ──
-  async _localizarFuente(project_id, conversation_id) {
-    const resp = await this._rpc('db.query.request', {
-      project_id, read_only: true,
-      query: "SELECT content FROM messages WHERE conversation_id = ? AND role = 'user' ORDER BY created_at DESC LIMIT 12",
-      params: [conversation_id],
-    }, { timeout_ms: 8000 });
-    const rows = (resp && resp.data) || [];
-    for (const row of rows) {
-      const obj = this._extraerJson(String((row && row.content) || ''));
+  // Rutas candidatas de la fuente: material_path explícito + adjuntos legibles (no imagen).
+  // El adjunto es un path real del storage del proyecto (lo inyecta ai-gateway en el payload).
+  _rutasFuente(input) {
+    const out = [];
+    if (typeof input.material_path === 'string' && input.material_path) out.push(input.material_path);
+    if (typeof input.material_ref === 'string' && input.material_ref) out.push(input.material_ref);
+    const att = Array.isArray(input.attachments) ? input.attachments : [];
+    for (const a of att) {
+      const p = (typeof a === 'string') ? a : (a && a.path);
+      if (p && !/\.(jpg|jpeg|png|webp|gif)$/i.test(p)) out.push(p);   // ficheros legibles, no imágenes
+    }
+    return out;
+  }
+
+  // ── LEER por su puerta: fs.read de cada ruta hasta dar con un JSON de carta válido ──
+  async _cargarFuente(project_id, rutas) {
+    for (const path of rutas) {
+      const r = await this._rpc('fs.read.request', { project_id, path, encoding: 'utf-8' });
+      if (!r || r.error || typeof r.content !== 'string') continue;
+      let obj = null;
+      try { obj = JSON.parse(r.content); } catch (_) { obj = this._extraerJson(r.content); }
       if (obj && Array.isArray(obj.productos) && obj.productos.length > 0) return obj;
     }
     return null;

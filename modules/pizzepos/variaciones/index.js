@@ -14,7 +14,7 @@ class VariacionesModule extends BaseModule {
   constructor() {
     super();
     this.name = 'variaciones';
-    this.version = '4.0.0';
+    this.version = '4.2.0';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -106,13 +106,14 @@ class VariacionesModule extends BaseModule {
   // ==========================================
 
   async subscribeToEvents() {
+    await this.eventBus.subscribe('project.activated', this.onProjectActivated.bind(this));
     await this.eventBus.subscribe('carta.actualizada', this.onCartaActualizada.bind(this));
     await this.eventBus.subscribe('carta.editada', this.onCartaActualizada.bind(this));
     await this.eventBus.subscribe('producto.creado', this.onProductoCreado.bind(this));
     await this.eventBus.subscribe('comandero.item_agregado', this.onComanderoItemAgregado.bind(this));
 
     this.logger.info('variaciones.events.subscribed', {
-      events: ['carta.actualizada', 'carta.editada', 'producto.creado', 'comandero.item_agregado']
+      events: ['project.activated', 'carta.actualizada', 'carta.editada', 'producto.creado', 'comandero.item_agregado']
     });
   }
 
@@ -162,6 +163,39 @@ class VariacionesModule extends BaseModule {
       productos: carta.productos.length,
       correlation_id: d?.correlation_id
     });
+  }
+
+  // Warm tras un (re)arranque en seco: variaciones vive en memoria (lost_on_restart) y
+  // sin esto esperaría a la 1ª edición de carta para repoblarse. Al activarse un proyecto
+  // pide la carta activa YA proyectada al reflejo de productos (uiHandler.handle, síncrono;
+  // productos resuelve qué carta es la activa y la proyecta con su campo `variaciones`) y
+  // configura TODOS sus productos. La carta sigue siendo la fuente; aquí solo se lee.
+  async onProjectActivated(event) {
+    const d = event?.data || event?.payload || event;
+    const project_id = d?.project_id;
+    if (!project_id || !this.uiHandler) return;
+    try {
+      const res = await this.uiHandler.handle('productos', 'carta_completa', { project_id });
+      const productos = res?.data?.productos;
+      if (!Array.isArray(productos)) return;
+      for (const p of productos) {
+        if (!p || !p.id) continue;
+        this._configurar(p.id, {
+          categoria: p.categoria_id || p.categoria,
+          precio: p.precio,
+          variaciones: p.variaciones,
+          ingredientes_base: p.ingredientes_base,
+          ingredientes: p.ingredientes
+        });
+      }
+      this.metrics?.gauge?.('variacion.productos_configurados.count', this.configuraciones.size);
+      this.logger?.info?.('variaciones.warm.project_activated', {
+        project_id, productos: productos.length, correlation_id: d?.correlation_id
+      });
+    } catch (err) {
+      // Warm best-effort: si productos aún no responde, la 1ª edición de carta repobla igual.
+      this.logger?.warn?.('variaciones.warm.failed', { project_id, error: err?.message });
+    }
   }
 
   // Legacy: emisor 'producto.creado' (hoy nadie lo emite; se conserva por compat).

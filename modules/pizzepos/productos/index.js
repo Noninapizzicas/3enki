@@ -192,6 +192,7 @@ class ProductosModule extends BaseModule {
     if (Array.isArray(p.alergenos)) prod.alergenos = p.alergenos;
     if (Array.isArray(p.etiquetas)) prod.etiquetas = p.etiquetas;
     if (p.disponible !== undefined) prod.disponible = p.disponible;
+    if (p.variaciones && typeof p.variaciones === 'object') prod.variaciones = p.variaciones;
 
     if (Array.isArray(p.ingredientes_base) && p.ingredientes_base.length) {
       prod.ingredientes_base = p.ingredientes_base;

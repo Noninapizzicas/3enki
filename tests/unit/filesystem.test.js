@@ -503,6 +503,42 @@ function publishedOf(mocks, name) {
     await cleanup(tmpDir);
   });
 
+  await testAsync('MULTI-TENANT: el project_id de la petición manda sobre el proyecto activo', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+
+    const dirA = path.join(tmpDir, 'projects', 'A');
+    const dirB = path.join(tmpDir, 'projects', 'B');
+    fsSync.mkdirSync(dirA, { recursive: true });
+    fsSync.mkdirSync(dirB, { recursive: true });
+    // Activo A, luego B → B queda como "proyecto activo" global.
+    await m.onProjectActivated({ data: { project_id: 'A', base_path: dirA, name: 'A' } });
+    await m.onProjectActivated({ data: { project_id: 'B', base_path: dirB, name: 'B' } });
+    assert.strictEqual(m.activeProjectId, 'B');
+
+    // Escribo con project_id A AUNQUE el activo es B → debe caer en el storage de A.
+    const w = await m.handleWrite({ path: '/f.txt', content: 'soy-A', project_id: 'A' });
+    assert.strictEqual(w.status, 201);
+    // En disco: el fichero está en A, NO en B (esto es lo que antes se pisaba).
+    assert.ok(fsSync.existsSync(path.join(dirA, 'storage', 'f.txt')), 'el fichero está en A');
+    assert.ok(!fsSync.existsSync(path.join(dirB, 'storage', 'f.txt')), 'NO está en B (el activo)');
+
+    // Leo con project_id A → lo encuentra; con B → 404 (aislamiento real).
+    const rA = await m.handleRead({ path: '/f.txt', project_id: 'A' });
+    assert.strictEqual(rA.status, 200);
+    assert.strictEqual(rA.data.content, 'soy-A');
+    const rB = await m.handleRead({ path: '/f.txt', project_id: 'B' });
+    assert.strictEqual(rB.status, 404);
+
+    // Sin project_id → fallback al proyecto activo (B), retrocompat.
+    const wActive = await m.handleWrite({ path: '/g.txt', content: 'activo' });
+    assert.strictEqual(wActive.status, 201);
+    assert.ok(fsSync.existsSync(path.join(dirB, 'storage', 'g.txt')), 'sin project_id usa el activo (B)');
+
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
   await testAsync('handleSetWorkDir cambia working directory + publica fs.workdir.changed', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);

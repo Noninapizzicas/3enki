@@ -12,16 +12,18 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
   import { resolverCartaIdCanal } from '$lib/ui-core/carta-canal';
+  import VariacionesPanel from './VariacionesPanel.svelte';
 
   export let visible: boolean = true;
   export let projectId: string = '';
   export let canal: string | null = null;
+  export let catalogoIngredientes: any[] = [];   // reutiliza el mismo catálogo que VariacionesPanel
 
   const dispatch = createEventDispatcher<{
     close: void;
     confirm: {
-      pizza_izquierda: Pizza;
-      pizza_derecha: Pizza;
+      pizza_izquierda: Pizza & { quitar?: string[]; anadir?: any[] };
+      pizza_derecha: Pizza & { quitar?: string[]; anadir?: any[] };
       precio_final: number;
       nombre_compuesto: string;
       precio_canal_resuelto: boolean;
@@ -48,17 +50,24 @@
   let pizzaDerecha: Pizza | null = null;
   let seleccionandoLado: 'izquierda' | 'derecha' = 'izquierda';
 
+  // Variaciones por mitad — REUTILIZA VariacionesPanel. null = mitad sin personalizar.
+  // extras = sobreprecio de esa mitad (precio_total del panel − precio base de la pizza).
+  type VarMitad = { quitar: string[]; anadir: any[]; extras: number };
+  let varIzquierda: VarMitad | null = null;
+  let varDerecha: VarMitad | null = null;
+  let varTarget: 'izquierda' | 'derecha' | null = null;   // qué mitad se está personalizando
+
   // Cálculos
-  $: precioFinal = calcularPrecio(pizzaIzquierda, pizzaDerecha);
+  $: precioFinal = calcularPrecio(pizzaIzquierda, pizzaDerecha, varIzquierda, varDerecha);
   $: nombreCompuesto = generarNombre(pizzaIzquierda, pizzaDerecha);
   $: seleccionCompleta = pizzaIzquierda !== null && pizzaDerecha !== null;
 
-  function calcularPrecio(izq: Pizza | null, der: Pizza | null): number {
+  function calcularPrecio(izq: Pizza | null, der: Pizza | null, vIzq: VarMitad | null, vDer: VarMitad | null): number {
     if (!izq && !der) return 0;
-    if (!izq) return der!.precio;
-    if (!der) return izq.precio;
-    // Precio = el mayor de las dos
-    return Math.max(izq.precio, der.precio);
+    // Base: el mayor de las dos (pagas por la más cara).
+    const base = !izq ? der!.precio : !der ? izq.precio : Math.max(izq.precio, der.precio);
+    // Política A: + extras COMPLETOS de cada mitad (un extra cuesta su precio entero, sea media o entera).
+    return base + (vIzq?.extras || 0) + (vDer?.extras || 0);
   }
 
   function generarNombre(izq: Pizza | null, der: Pizza | null): string {
@@ -101,29 +110,55 @@
   function selectPizza(pizza: Pizza) {
     if (seleccionandoLado === 'izquierda') {
       pizzaIzquierda = pizza;
+      varIzquierda = null;            // otra pizza → su personalización anterior ya no vale
       // Auto-cambiar a derecha si izquierda ya está seleccionada
       seleccionandoLado = 'derecha';
     } else {
       pizzaDerecha = pizza;
+      varDerecha = null;
     }
   }
 
   function clearLado(lado: 'izquierda' | 'derecha') {
     if (lado === 'izquierda') {
       pizzaIzquierda = null;
+      varIzquierda = null;
       seleccionandoLado = 'izquierda';
     } else {
       pizzaDerecha = null;
+      varDerecha = null;
       seleccionandoLado = 'derecha';
     }
   }
 
+  // Abre el VariacionesPanel (el MISMO del comandero) para una mitad concreta.
+  function personalizar(lado: 'izquierda' | 'derecha') {
+    if (lado === 'izquierda' && !pizzaIzquierda) return;
+    if (lado === 'derecha' && !pizzaDerecha) return;
+    varTarget = lado;
+  }
+
+  function onVarConfirm(e: CustomEvent<{ ingredientes_quitar: string[]; ingredientes_anadir: any[]; precio_total: number }>) {
+    const d = e.detail;
+    const pizza = varTarget === 'izquierda' ? pizzaIzquierda : pizzaDerecha;
+    const extras = Math.max(0, (d.precio_total || 0) - (pizza?.precio || 0));   // solo el sobreprecio
+    const v: VarMitad = { quitar: d.ingredientes_quitar || [], anadir: d.ingredientes_anadir || [], extras };
+    if (varTarget === 'izquierda') varIzquierda = v; else varDerecha = v;
+    varTarget = null;
+  }
+
+  function onVarClose() { varTarget = null; }
+
   function handleConfirm() {
     if (!pizzaIzquierda || !pizzaDerecha) return;
 
+    // Cada mitad viaja con sus variaciones (quitar/añadir) si las tiene → cocina las ve.
+    const conVar = (pizza: Pizza, v: VarMitad | null) =>
+      v ? { ...pizza, quitar: v.quitar, anadir: v.anadir } : pizza;
+
     dispatch('confirm', {
-      pizza_izquierda: pizzaIzquierda,
-      pizza_derecha: pizzaDerecha,
+      pizza_izquierda: conVar(pizzaIzquierda, varIzquierda),
+      pizza_derecha: conVar(pizzaDerecha, varDerecha),
       precio_final: precioFinal,
       nombre_compuesto: nombreCompuesto,
       precio_canal_resuelto: precioCanalResuelto
@@ -200,6 +235,24 @@
           </button>
         </div>
 
+        <!-- Personalizar cada mitad (reutiliza VariacionesPanel) -->
+        {#if pizzaIzquierda || pizzaDerecha}
+          <div class="custom-row">
+            {#if pizzaIzquierda}
+              <button class="custom-btn izq" class:done={varIzquierda} on:click={() => personalizar('izquierda')}>
+                {varIzquierda ? '✅' : '✏️'} ½ izq
+                {#if varIzquierda && varIzquierda.extras > 0}<span class="custom-extra">+{formatPrecio(varIzquierda.extras)}</span>{/if}
+              </button>
+            {/if}
+            {#if pizzaDerecha}
+              <button class="custom-btn der" class:done={varDerecha} on:click={() => personalizar('derecha')}>
+                {varDerecha ? '✅' : '✏️'} ½ der
+                {#if varDerecha && varDerecha.extras > 0}<span class="custom-extra">+{formatPrecio(varDerecha.extras)}</span>{/if}
+              </button>
+            {/if}
+          </div>
+        {/if}
+
         <!-- Precio -->
         <div class="precio-preview">
           <span class="precio-label">💰 Precio:</span>
@@ -274,6 +327,18 @@
       </footer>
     </div>
   </div>
+
+  <!-- Personalización de una mitad: el MISMO VariacionesPanel del comandero, encima -->
+  {#if varTarget}
+    <VariacionesPanel
+      producto={varTarget === 'izquierda' ? pizzaIzquierda : pizzaDerecha}
+      visible={true}
+      {projectId}
+      {catalogoIngredientes}
+      on:close={onVarClose}
+      on:confirm={onVarConfirm}
+    />
+  {/if}
 {/if}
 
 <style>
@@ -468,6 +533,46 @@
   .precio-valor {
     font-size: 1.2rem;
     font-weight: 800;
+    color: #22c55e;
+  }
+
+  /* Fila de personalización por mitad */
+  .custom-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .custom-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 8px;
+    border: 1px dashed #444;
+    border-radius: 8px;
+    background: #1a1a1a;
+    color: #aaa;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .custom-btn.izq:hover { border-color: #8b5cf6; color: #fff; }
+  .custom-btn.der:hover { border-color: #f59e0b; color: #fff; }
+
+  .custom-btn.done {
+    border-style: solid;
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+  }
+
+  .custom-extra {
+    font-size: 0.7rem;
+    font-weight: 700;
     color: #22c55e;
   }
 

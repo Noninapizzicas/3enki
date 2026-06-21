@@ -288,9 +288,16 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .ing-add-price{font-size:.65rem;color:#888;margin-left:2px}.ing-chip.added .ing-add-price{color:#22c55e}
 .dish-special{cursor:pointer;border:1px dashed var(--primary);background:rgba(245,158,11,.06)}
 .mitad-slots{display:flex;align-items:center;gap:8px;margin:12px 0}
-.mitad-slot{flex:1;padding:10px;border:2px solid #2a2a2a;border-radius:10px;background:#1a1a1a;color:#ccc;font:inherit;cursor:pointer;font-size:.8rem;text-align:center}
+.mitad-slot{flex:1;padding:10px;border:2px solid #2a2a2a;border-radius:10px;background:#1a1a1a;color:#ccc;font:inherit;cursor:pointer;font-size:.8rem;text-align:center;display:flex;flex-direction:column;gap:2px;align-items:center}
 .mitad-slot-active{border-color:var(--primary);color:#fff}
+.mitad-slot-mods{font-size:.62rem;color:var(--success);line-height:1.2}
 .mitad-plus{color:#666;font-weight:800;font-size:1.1rem}
+/* Botón partido para elegir mitad (espeja ProductoBtn del comandero): cuerpo = tal cual, ✏️ = personalizar */
+.mitad-pick{display:inline-flex;align-items:stretch;border:1px solid #2a2a2a;border-radius:20px;overflow:hidden;background:#1a1a1a}
+.mitad-pick-main{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:none;background:transparent;color:#bbb;font:inherit;font-size:.75rem;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mitad-pick-main:active{background:rgba(245,158,11,.12)}
+.mitad-pick-var{border:none;border-left:1px solid #2a2a2a;background:transparent;color:var(--primary);font-size:.85rem;padding:0 9px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mitad-pick-var:active{background:rgba(245,158,11,.18)}
 .detail-footer{display:flex;gap:10px;padding:16px 20px;border-top:1px solid #222;background:var(--bg-surface)}
 .btn{flex:1;padding:14px;border:none;border-radius:12px;font-size:.9rem;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .btn-primary{background:var(--primary);color:#000}.btn-primary:active{filter:brightness(.85)}
@@ -636,6 +643,10 @@ let anadirSel = new Map();   // id → extra que el cliente añade (del catálog
 let detailExtrasById = {};   // lookup id → extra del producto abierto
 // Mitad y mitad + Al gusto (adaptan MitadMitadPanel / AlGustoPanel del comandero)
 let mitadCat = null, mitadIzq = null, mitadDer = null, mitadLado = 'izq';
+// Variaciones por mitad (espeja varIzquierda/varDerecha del MitadMitadPanel del comandero).
+// { quitar:[nombres], anadir:[{id,nombre,precio_extra}], extras } | null = mitad sin personalizar.
+let mitadVarIzq = null, mitadVarDer = null;
+let mitadVarLado = null, mitadVarPizza = null;   // lado/pizza en edición de variaciones
 let alGustoCat = null, alGustoBase = 0;
 
 // localStorage keys
@@ -965,6 +976,7 @@ function closeDetail() {
   document.getElementById('detail-overlay').classList.remove('open');
   detailProd = null;
   mitadCat = null; mitadIzq = null; mitadDer = null; mitadLado = 'izq';
+  mitadVarIzq = null; mitadVarDer = null; mitadVarLado = null; mitadVarPizza = null;
   alGustoCat = null; alGustoBase = 0;
 }
 
@@ -991,7 +1003,9 @@ function toggleAnadir(id, btn) {
   if (!e) return;
   if (anadirSel.has(id)) { anadirSel.delete(id); btn.classList.remove('added'); }
   else { anadirSel.set(id, e); btn.classList.add('added'); }
-  renderDetailFooter();   // el precio cambia con cada extra
+  // El precio cambia con cada extra. Mismo toggle en dos contextos: detalle normal y
+  // personalización de una mitad — cada uno repinta SU footer (no se pisan).
+  if (mitadVarLado) renderMitadVarFooter(); else renderDetailFooter();
 }
 
 function addDetailToCart() {
@@ -1058,20 +1072,38 @@ function specialCard(emoji, title, sub, onclickJs) {
 // Mitad: eliges dos medias; precio = el mayor (igual que MitadMitadPanel).
 function showMitad(catId) {
   mitadCat = catId; mitadIzq = null; mitadDer = null; mitadLado = 'izq';
+  mitadVarIzq = null; mitadVarDer = null; mitadVarLado = null; mitadVarPizza = null;
   document.getElementById('detail-visual').innerHTML = '<span class="detail-ph">½+½</span><button class="close-btn" onclick="closeDetail()" aria-label="Cerrar">✕</button>';
   renderMitad();
   document.getElementById('detail-overlay').classList.add('open');
 }
+// Texto compacto de las variaciones de una mitad: "(sin X, + Y)" — espeja PedidoItem.formatMitad.
+function mitadModsTxt(v) {
+  if (!v) return '';
+  var mods = [];
+  (v.quitar || []).forEach(function (n) { mods.push('sin ' + n); });
+  (v.anadir || []).forEach(function (a) { mods.push('+ ' + (a.nombre || a)); });
+  return mods.length ? ' (' + mods.join(', ') + ')' : '';
+}
 function mitadSlot(lado, pizza) {
   const active = mitadLado === lado ? ' mitad-slot-active' : '';
+  const v = lado === 'izq' ? mitadVarIzq : mitadVarDer;
+  // Slot lleno → toca para personalizar esa mitad ; vacío → toca para enfocarla.
+  const onclick = pizza ? 'editMitadVar(\\'' + lado + '\\')' : 'mitadFocus(\\'' + lado + '\\')';
   const label = pizza ? (pizza.emoji ? pizza.emoji + ' ' : '') + esc(pizza.nombre) : (lado === 'izq' ? 'Primera mitad' : 'Segunda mitad');
-  return '<button type="button" class="mitad-slot' + active + '" onclick="mitadFocus(\\'' + lado + '\\')">½ ' + label + '</button>';
+  const mods = pizza ? '<span class="mitad-slot-mods">' + esc(mitadModsTxt(v)) + (v ? '' : ' · toca para personalizar') + '</span>' : '';
+  return '<button type="button" class="mitad-slot' + active + '" onclick="' + onclick + '">½ ' + label + mods + '</button>';
 }
 function renderMitad() {
   const pizzas = pizzasOf(mitadCat);
   let grid = '<div class="ing-list" style="margin-top:12px">';
   for (const p of pizzas) {
-    grid += '<button type="button" class="ing-chip ing-removable" onclick="pickMitad(\\'' + p.id + '\\')">' + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '<span class="ing-add-price">' + fmt(p.precio) + '</span></button>';
+    // Botón partido (como ProductoBtn del comandero): zona íntegra = mitad tal cual,
+    // zona "✏️" = mitad + variaciones de ESTA mitad, en un gesto.
+    grid += '<span class="mitad-pick">' +
+      '<button type="button" class="mitad-pick-main" onclick="pickMitad(\\'' + p.id + '\\', false)">' + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '<span class="ing-add-price">' + fmt(p.precio) + '</span></button>' +
+      '<button type="button" class="mitad-pick-var" onclick="pickMitad(\\'' + p.id + '\\', true)" title="Elegir y personalizar" aria-label="Elegir y personalizar ' + esc(p.nombre) + '">✏️</button>' +
+      '</span>';
   }
   grid += '</div>';
   document.getElementById('detail-content').innerHTML =
@@ -1082,14 +1114,87 @@ function renderMitad() {
   renderMitadFooter();
 }
 function mitadFocus(lado) { mitadLado = lado; renderMitad(); }
-function pickMitad(pid) {
+function pickMitad(pid, conVar) {
   const p = DATA.productos.find(x => x.id === pid);
   if (!p) return;
-  if (mitadLado === 'izq') { mitadIzq = p; mitadLado = 'der'; } else { mitadDer = p; }
+  const lado = mitadLado;   // el lado que recibe ANTES de avanzar (como elegirPizza del comandero)
+  if (mitadLado === 'izq') { mitadIzq = p; mitadVarIzq = null; mitadLado = 'der'; }
+  else { mitadDer = p; mitadVarDer = null; }
+  if (conVar) showMitadVar(lado, p);
+  else renderMitad();
+}
+// Personalizar una mitad: reusa la maquinaria de showDetail (toggleQuitar/toggleAnadir sobre
+// quitarSel/anadirSel) pero scopeada a la pizza de esa mitad. Espeja VariacionesPanel.
+function showMitadVar(lado, pizza) {
+  mitadVarLado = lado; mitadVarPizza = pizza;
+  const v = lado === 'izq' ? mitadVarIzq : mitadVarDer;
+  quitarSel = new Set(); anadirSel = new Map(); detailExtrasById = {};
+  // Restaura selección previa si esta mitad ya estaba personalizada.
+  const ings = pizza.ingredientes || [];
+  if (v) {
+    for (let i = 0; i < ings.length; i++) { if ((v.quitar || []).indexOf(ings[i].nombre) >= 0) quitarSel.add(i); }
+  }
+  let ingsHtml = '';
+  for (let idx = 0; idx < ings.length; idx++) {
+    const i = ings[idx];
+    const cls = i.tipo ? ' ' + i.tipo : '';
+    const rm = quitarSel.has(idx) ? ' removed' : '';
+    ingsHtml += '<button type="button" class="ing-chip ing-removable' + cls + rm + '" onclick="toggleQuitar(' + idx + ', this)">' + (i.emoji ? '<span style="font-size:.85rem">' + i.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(i.nombre) + '</span></button>';
+  }
+  const grpKeys = [pizza.categoria_id, (pizza.categoria || '').toLowerCase()].filter(Boolean);
+  const extras = extrasForGroup(grpKeys, {});
+  let extrasHtml = '';
+  if (extras.length) {
+    const byTipo = {};
+    for (const e of extras) { detailExtrasById[e.id] = e; const t = e.tipo || 'otro'; (byTipo[t] = byTipo[t] || []).push(e); }
+    if (v) { (v.anadir || []).forEach(function (a) { if (a.id && detailExtrasById[a.id]) anadirSel.set(a.id, detailExtrasById[a.id]); }); }
+    for (const t of Object.keys(byTipo)) {
+      const cls = t ? ' ' + t : '';
+      for (const e of byTipo[t]) {
+        const ad = anadirSel.has(e.id) ? ' added' : '';
+        extrasHtml += '<button type="button" class="ing-chip ing-add' + cls + ad + '" onclick="toggleAnadir(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
+      }
+    }
+  }
+  document.getElementById('detail-content').innerHTML =
+    '<div class="detail-header"><h2 class="detail-nombre">' + (pizza.emoji ? pizza.emoji + ' ' : '') + '½ ' + esc(pizza.nombre) + '</h2></div>' +
+    '<p class="detail-desc">Personaliza esta mitad' + (lado === 'izq' ? ' (izquierda)' : ' (derecha)') + '</p>' +
+    (ingsHtml ? '<h3 class="section-title">Ingredientes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· toca para quitar</span></h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
+    (extrasHtml ? '<h3 class="section-title">Añadir extras</h3><div class="ing-list">' + extrasHtml + '</div>' : '');
+  renderMitadVarFooter();
+}
+function mitadVarExtras() {
+  let x = 0; anadirSel.forEach(function (e) { x += Number(e.precio_extra) || 0; }); return x;
+}
+function renderMitadVarFooter() {
+  const x = mitadVarExtras();
+  document.getElementById('detail-footer').innerHTML =
+    '<button class="btn btn-secondary" onclick="confirmMitadVar()">↩ Volver</button>' +
+    '<button class="btn btn-primary" onclick="confirmMitadVar()">Aplicar' + (x > 0 ? ' +' + fmt(x) : '') + '</button>';
+}
+function editMitadVar(lado) {
+  const p = lado === 'izq' ? mitadIzq : mitadDer;
+  if (p) showMitadVar(lado, p);
+}
+function confirmMitadVar() {
+  const p = mitadVarPizza; if (!p) { renderMitad(); return; }
+  const ings = p.ingredientes || [];
+  const quitar = []; quitarSel.forEach(function (idx) { if (ings[idx]) quitar.push(ings[idx].nombre); });
+  const anadir = []; let extras = 0;
+  anadirSel.forEach(function (e) { anadir.push({ id: e.id, nombre: e.nombre, precio_extra: Number(e.precio_extra) || 0 }); extras += Number(e.precio_extra) || 0; });
+  const v = (quitar.length || anadir.length) ? { quitar: quitar, anadir: anadir, extras: extras } : null;
+  if (mitadVarLado === 'izq') mitadVarIzq = v; else mitadVarDer = v;
+  mitadVarLado = null; mitadVarPizza = null;
+  // limpia el scratch para no contaminar el showDetail normal
+  quitarSel = new Set(); anadirSel = new Map(); detailExtrasById = {};
   renderMitad();
 }
 function mitadTotal() {
-  if (mitadIzq && mitadDer) return Math.max(mitadIzq.precio, mitadDer.precio);
+  // Política (= comandero): base = mayor de las dos + extras COMPLETOS de cada mitad.
+  if (mitadIzq && mitadDer) {
+    return Math.max(mitadIzq.precio, mitadDer.precio) +
+      (mitadVarIzq ? mitadVarIzq.extras : 0) + (mitadVarDer ? mitadVarDer.extras : 0);
+  }
   return (mitadIzq || mitadDer || { precio: 0 }).precio;
 }
 function renderMitadFooter() {
@@ -1100,8 +1205,22 @@ function renderMitadFooter() {
 }
 function addMitadToCart() {
   if (!(mitadIzq && mitadDer)) return;
-  cart.push({ _id: ++cartId, id: 'mitad_' + mitadIzq.id + '_' + mitadDer.id, nombre: '½ ' + mitadIzq.nombre + ' + ½ ' + mitadDer.nombre, precio: mitadTotal(), qty: 1, detalle: null });
-  trackEvent('add_to_cart', null, { tipo: 'mitad' });
+  // Nombre + detalle por mitad: "½ Bachata (sin anchoas, + bacon) + ½ Tropical (+ ajo)".
+  const izqTxt = '½ ' + mitadIzq.nombre + mitadModsTxt(mitadVarIzq);
+  const derTxt = '½ ' + mitadDer.nombre + mitadModsTxt(mitadVarDer);
+  const mods = (mitadModsTxt(mitadVarIzq) || mitadModsTxt(mitadVarDer)) ? (izqTxt + ' + ' + derTxt) : null;
+  cart.push({
+    _id: ++cartId,
+    id: 'mitad_' + mitadIzq.id + '_' + mitadDer.id,
+    nombre: '½ ' + mitadIzq.nombre + ' + ½ ' + mitadDer.nombre,
+    precio: mitadTotal(), qty: 1,
+    detalle: mods,
+    // Estructura por mitad (para el intake de autoservicio → cocina, igual que el comandero).
+    tipo: 'mitad_mitad',
+    pizza_izquierda: { id: mitadIzq.id, nombre: mitadIzq.nombre, precio: mitadIzq.precio, quitar: mitadVarIzq ? mitadVarIzq.quitar : [], anadir: mitadVarIzq ? mitadVarIzq.anadir : [] },
+    pizza_derecha: { id: mitadDer.id, nombre: mitadDer.nombre, precio: mitadDer.precio, quitar: mitadVarDer ? mitadVarDer.quitar : [], anadir: mitadVarDer ? mitadVarDer.anadir : [] }
+  });
+  trackEvent('add_to_cart', null, { tipo: 'mitad', custom: !!mods });
   updateCart();
   closeDetail();
 }

@@ -57,3 +57,13 @@ test('carta-digital/template — el item del carrito viaja estructurado para aut
   assert.ok(html.includes('pizza_izquierda: { id: mitadIzq.id'), 'pizza_izquierda con quitar/anadir');
   assert.ok(html.includes('pizza_derecha: { id: mitadDer.id'), 'pizza_derecha con quitar/anadir');
 });
+
+test('carta-digital/template — PODA v2.4: sin ofertas/reseñas/track (la proyección no los da)', () => {
+  const html = htmlDe();
+  // La PWA es ESPEJO FIEL de la proyección: nada de UI alimentada por vacío.
+  for (const huerfano of ['renderOfertas', 'addOfertaToCart', 'DATA.ofertas', 'ofertas-section',
+    'renderResenas', 'submitReview', 'DATA.resenas', 'resenas-section',
+    'trackEvent', '/modules/carta-digital/track', '/modules/carta-digital/resenas']) {
+    assert.ok(!html.includes(huerfano), 'no debe quedar rastro de: ' + huerfano);
+  }
+});

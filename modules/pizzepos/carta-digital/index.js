@@ -32,7 +32,7 @@ class CartaDigitalModule extends BaseModule {
   constructor() {
     super();
     this.name = 'carta-digital';
-    this.version = '2.3.0';
+    this.version = '2.4.0';
     // ÚNICO estado: el mapping canal→carta_id por proyecto (de tarifas.config.actualizada).
     this.mappingCanalesPerProject = new Map();
     // Proyectos activos vistos por project.activated (project_id → {name, slug}) + el ÚLTIMO

@@ -95,25 +95,7 @@ function generateStaticHTML(carta, config, options = {}) {
   // Catálogo de extras añadibles (ya viene gateado a precio_extra>0 desde index.js).
   const catalogoIngredientes = Array.isArray(carta.catalogo_ingredientes) ? carta.catalogo_ingredientes : [];
 
-  const ofertas = (carta.ofertas || []).filter(o => o.activa !== false).map(o => ({
-    id: o.id,
-    nombre: o.nombre,
-    descripcion: o.descripcion || '',
-    tipo: o.tipo || 'combo',
-    productos: o.productos || [],
-    precio_oferta: o.precio_oferta,
-    emoji: o.emoji || '🔥',
-    imagen: o.imagen || null
-  }));
-
-  const resenas = (carta.resenas || []).map(r => ({
-    id: r.id, nombre: r.nombre, rating: r.rating, comentario: r.comentario || '',
-    created_at: r.created_at
-  }));
-  const resenasAvg = carta.resenas_avg || 0;
-  const resenasTotal = carta.resenas_total || 0;
-
-  const dataJSON = JSON.stringify({ categorias, productos, ofertas, resenas, resenas_avg: resenasAvg, resenas_total: resenasTotal, alergenos_leyenda: alergenosLeyenda, catalogo_ingredientes: catalogoIngredientes });
+  const dataJSON = JSON.stringify({ categorias, productos, alergenos_leyenda: alergenosLeyenda, catalogo_ingredientes: catalogoIngredientes });
   const configJSON = JSON.stringify({
     nombre_negocio, moneda, whatsapp_telefono, mensaje_header, project_slug,
     ai_endpoint, ai_provider, ai_chat_path, chat_enabled, pedido_endpoint, pago_online
@@ -174,12 +156,7 @@ function generateStaticHTML(carta, config, options = {}) {
     `- Si no sabes algo, di que el cliente puede contactar por WhatsApp\n` +
     `- NO inventes productos que no están en el menú\n` +
     upsellRules + `\n` +
-    `MENÚ DE ${nombre_negocio.toUpperCase()}:\n${menuResumen}` +
-    (ofertas.length > 0
-      ? `\n\nOFERTAS Y COMBOS ACTIVOS:\n` + ofertas.map(o =>
-          `- ${o.emoji} ${o.nombre}: ${o.precio_oferta.toFixed(2)}${moneda} (${o.descripcion || o.tipo})`
-        ).join('\n') + `\n- IMPORTANTE: Promociona las ofertas activamente, son la mejor opción para el cliente`
-      : '')
+    `MENÚ DE ${nombre_negocio.toUpperCase()}:\n${menuResumen}`
   );
 
   return `<!DOCTYPE html>
@@ -353,60 +330,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .btn-repeat{margin-top:12px;padding:10px 20px;border:1px solid var(--primary);border-radius:10px;background:rgba(245,158,11,.1);color:var(--primary);font-size:.8rem;font-weight:600;cursor:pointer;transition:background .15s}
 .btn-repeat:active{background:rgba(245,158,11,.25)}
 
-/* Reseñas section */
-.resenas-section{padding:0 16px 12px}
-.resenas-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.resenas-summary{display:flex;align-items:center;gap:8px}
-.resenas-avg{font-size:1.4rem;font-weight:800;color:var(--primary)}
-.resenas-stars-static{color:#f59e0b;font-size:.85rem;letter-spacing:1px}
-.resenas-count{font-size:.7rem;color:var(--text-dim)}
-.resenas-btn{padding:6px 14px;border:1px solid var(--primary);border-radius:8px;background:transparent;color:var(--primary);font-size:.7rem;font-weight:600;cursor:pointer}
-.resenas-btn:active{background:rgba(245,158,11,.15)}
-.resenas-scroll{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;-webkit-overflow-scrolling:touch}
-.resenas-scroll::-webkit-scrollbar{display:none}
-.resena-card{flex-shrink:0;width:220px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:12px 14px}
-.resena-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.resena-nombre{font-size:.75rem;font-weight:700;color:#fff}
-.resena-stars{color:#f59e0b;font-size:.7rem}
-.resena-text{font-size:.72rem;color:var(--text-mid);line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.resena-date{font-size:.6rem;color:var(--text-dim);margin-top:6px}
-.resena-form-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:1300;opacity:0;pointer-events:none;transition:opacity .2s}
-.resena-form-overlay.open{opacity:1;pointer-events:auto}
-.resena-form{background:var(--bg-surface);border-radius:16px;padding:24px;width:90%;max-width:360px}
-.resena-form h3{margin:0 0 16px;font-size:1rem;color:#fff}
-.resena-form input,.resena-form textarea{width:100%;padding:10px 12px;border:1px solid #333;border-radius:8px;background:#1a1a1a;color:var(--text);font-size:.85rem;margin-bottom:10px;box-sizing:border-box;font-family:inherit}
-.resena-form textarea{resize:none;height:70px}
-.resena-form input::placeholder,.resena-form textarea::placeholder{color:#555}
-.resena-stars-input{display:flex;gap:6px;margin-bottom:12px;font-size:1.5rem;cursor:pointer}
-.resena-stars-input span{color:#333;transition:color .1s}
-.resena-stars-input span.active{color:#f59e0b}
-.resena-form-actions{display:flex;gap:8px;justify-content:flex-end}
-.resena-form-actions button{padding:8px 18px;border:none;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer}
-.resena-cancel{background:#333;color:#fff}
-.resena-submit{background:var(--primary);color:#000}
-.resena-submit:disabled{opacity:.4;cursor:default}
-@media(max-width:400px){.resena-card{width:190px}}
-
-/* Ofertas section */
-.ofertas-section{padding:0 16px 8px}
-.ofertas-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.ofertas-title{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--primary);display:flex;align-items:center;gap:6px}
-.ofertas-scroll{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}
-.ofertas-scroll::-webkit-scrollbar{display:none}
-.oferta-card{flex-shrink:0;width:260px;background:linear-gradient(135deg,#1a1200 0%,#1a1a1a 100%);border:1px solid rgba(245,158,11,.25);border-radius:14px;overflow:hidden;cursor:pointer;transition:transform .15s,border-color .15s;-webkit-tap-highlight-color:transparent;position:relative}
-.oferta-card:active{transform:scale(.97)}
-.oferta-badge{position:absolute;top:8px;right:8px;padding:3px 8px;border-radius:6px;background:var(--danger);color:#fff;font-size:.55rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;z-index:2}
-.oferta-body{padding:12px 14px}
-.oferta-emoji{font-size:1.8rem;margin-bottom:4px;display:block}
-.oferta-nombre{font-size:.9rem;font-weight:800;color:#fff;line-height:1.2;margin-bottom:3px}
-.oferta-desc{font-size:.7rem;color:var(--text-mid);line-height:1.3;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.oferta-items{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
-.oferta-item-chip{padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.06);font-size:.6rem;color:var(--text-dim);border:1px solid rgba(255,255,255,.08)}
-.oferta-pricing{display:flex;align-items:baseline;gap:8px}
-.oferta-price-old{font-size:.75rem;color:var(--text-dim);text-decoration:line-through}
-.oferta-price-new{font-size:1.05rem;font-weight:800;color:var(--primary)}
-.oferta-save{font-size:.6rem;font-weight:700;color:var(--success);background:rgba(34,197,94,.1);padding:2px 6px;border-radius:4px}
-@media(max-width:400px){.oferta-card{width:230px}.ofertas-section{padding:0 10px 8px}}
 
 /* Upsell toast */
 .upsell-toast{position:fixed;bottom:104px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:12px 16px;display:flex;align-items:center;gap:12px;z-index:60;box-shadow:0 8px 32px rgba(0,0,0,.5);max-width:calc(100% - 32px);width:360px;transition:transform .3s ease-out,opacity .3s;opacity:0;pointer-events:none}
@@ -505,53 +428,10 @@ ${disenoCss}
 <!-- Categories -->
 <nav class="cats" id="cats" aria-label="Categorías"></nav>
 
-<!-- Ofertas -->
-<div class="ofertas-section" id="ofertas-section" style="display:none">
-  <div class="ofertas-header">
-    <span class="ofertas-title" id="ofertas-title">🔥 Ofertas</span>
-  </div>
-  <div class="ofertas-scroll" id="ofertas-scroll"></div>
-</div>
-
 <!-- Grid -->
 <main class="content" id="contenido">
   <div class="grid" id="grid" role="list" aria-label="Productos"></div>
 </main>
-
-<!-- Reseñas section -->
-<div class="resenas-section" id="resenas-section">
-  <div class="resenas-header">
-    <div class="resenas-summary">
-      <span class="resenas-avg" id="resenas-avg"></span>
-      <div>
-        <div class="resenas-stars-static" id="resenas-stars"></div>
-        <span class="resenas-count" id="resenas-count"></span>
-      </div>
-    </div>
-    <button class="resenas-btn" id="resenas-btn" onclick="openReviewForm()"></button>
-  </div>
-  <div class="resenas-scroll" id="resenas-scroll"></div>
-</div>
-
-<!-- Review form overlay -->
-<div class="resena-form-overlay" id="review-overlay" onclick="closeReviewForm()">
-  <div class="resena-form" onclick="event.stopPropagation()">
-    <h3 id="review-form-title"></h3>
-    <div class="resena-stars-input" id="review-stars">
-      <span onclick="setReviewRating(1)">★</span>
-      <span onclick="setReviewRating(2)">★</span>
-      <span onclick="setReviewRating(3)">★</span>
-      <span onclick="setReviewRating(4)">★</span>
-      <span onclick="setReviewRating(5)">★</span>
-    </div>
-    <input type="text" id="review-name" maxlength="50" oninput="checkReviewReady()">
-    <textarea id="review-comment" maxlength="500"></textarea>
-    <div class="resena-form-actions">
-      <button class="resena-cancel" onclick="closeReviewForm()"></button>
-      <button class="resena-submit" id="review-submit" onclick="submitReview()" disabled></button>
-    </div>
-  </div>
-</div>
 
 <!-- Cart FAB -->
 <button class="fab" id="fab" onclick="toggleCart()" aria-label="Ver carrito">
@@ -688,28 +568,12 @@ function repeatLastOrder() {
     var item = last[i];
     cart.push({ _id: ++cartId, id: item.id, nombre: item.nombre, precio: item.precio, qty: item.qty || 1, detalle: item.detalle || null, es_oferta: item.es_oferta || false });
   }
-  trackEvent('add_to_cart', null, { tipo: 'repeat_order', items: last.length });
   updateCart();
-}
-
-// Tracking — funnel analytics
-var trackSessionId = 'ses_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-function trackEvent(event, productId, extra) {
-  var payload = { event: event, session_id: trackSessionId };
-  if (productId) payload.product_id = productId;
-  if (extra) payload.data = extra;
-  var url = (CONFIG.ai_endpoint || '') + '/modules/carta-digital/track';
-  if (navigator.sendBeacon) {
-    navigator.sendBeacon(url, JSON.stringify(payload));
-  } else {
-    fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), keepalive: true }).catch(function(){});
-  }
 }
 
 // i18n — apply translations to static DOM elements
 function applyTranslations() {
   var ct = document.getElementById('cart-title'); if (ct) ct.textContent = T.cart_title;
-  var ot = document.getElementById('ofertas-title'); if (ot) ot.textContent = '🔥 ' + T.offers;
   var ci = document.getElementById('chat-input'); if (ci) ci.placeholder = T.chat_placeholder;
   var ua = document.getElementById('upsell-add'); if (ua) ua.textContent = T.add_upsell;
 }
@@ -730,90 +594,6 @@ function alergChipsCompact(ids) {
   var emojis = ids.map(function(id){ return (ALERG[id] && ALERG[id].emoji) || '⚠️'; }).join(' ');
   var label = 'Alérgenos: ' + alergNombres(ids).join(', ');
   return '<div class="card-alerg" role="img" aria-label="' + esc(label) + '" title="' + esc(label) + '">' + emojis + '</div>';
-}
-
-// Ofertas
-function renderOfertas() {
-  var ofertas = DATA.ofertas || [];
-  if (ofertas.length === 0) return;
-
-  document.getElementById('ofertas-section').style.display = 'block';
-  var el = document.getElementById('ofertas-scroll');
-  var html = '';
-
-  for (var i = 0; i < ofertas.length; i++) {
-    var o = ofertas[i];
-    // Calculate original price from products
-    var precioOriginal = 0;
-    var itemNames = [];
-    for (var j = 0; j < o.productos.length; j++) {
-      var op = o.productos[j];
-      var prod = DATA.productos.find(function(p) { return p.id === op.id; });
-      if (prod) {
-        precioOriginal += prod.precio * (op.qty || 1);
-        var name = prod.emoji ? prod.emoji + ' ' + prod.nombre : prod.nombre;
-        itemNames.push((op.qty > 1 ? op.qty + 'x ' : '') + name);
-      }
-    }
-    var ahorro = precioOriginal > o.precio_oferta ? precioOriginal - o.precio_oferta : 0;
-
-    var badgeText = o.tipo === '2x1' ? '2x1' : o.tipo === 'descuento' ? T.offer : T.combo;
-
-    html += '<div class="oferta-card" onclick="addOfertaToCart(\\'' + o.id + '\\')">';
-    html += '<span class="oferta-badge">' + badgeText + '</span>';
-    html += '<div class="oferta-body">';
-    html += '<span class="oferta-emoji">' + (o.emoji || '🔥') + '</span>';
-    html += '<div class="oferta-nombre">' + esc(o.nombre) + '</div>';
-    if (o.descripcion) html += '<div class="oferta-desc">' + esc(o.descripcion) + '</div>';
-    html += '<div class="oferta-items">';
-    for (var k = 0; k < itemNames.length; k++) {
-      html += '<span class="oferta-item-chip">' + esc(itemNames[k]) + '</span>';
-    }
-    html += '</div>';
-    html += '<div class="oferta-pricing">';
-    if (precioOriginal > o.precio_oferta) {
-      html += '<span class="oferta-price-old">' + fmt(precioOriginal) + '</span>';
-    }
-    html += '<span class="oferta-price-new">' + fmt(o.precio_oferta) + '</span>';
-    if (ahorro > 0) {
-      html += '<span class="oferta-save">-' + fmt(ahorro) + '</span>';
-    }
-    html += '</div></div></div>';
-  }
-
-  el.innerHTML = html;
-}
-
-function addOfertaToCart(ofertaId) {
-  var oferta = (DATA.ofertas || []).find(function(o) { return o.id === ofertaId; });
-  if (!oferta) return;
-
-  // Add all products from the oferta as a single grouped entry
-  var nombres = [];
-  var totalOriginal = 0;
-
-  for (var i = 0; i < oferta.productos.length; i++) {
-    var op = oferta.productos[i];
-    var prod = DATA.productos.find(function(p) { return p.id === op.id; });
-    if (prod) {
-      var qty = op.qty || 1;
-      totalOriginal += prod.precio * qty;
-      nombres.push((qty > 1 ? qty + 'x ' : '') + prod.nombre);
-    }
-  }
-
-  // Add as single cart item with oferta price
-  cart.push({
-    _id: ++cartId,
-    id: oferta.id,
-    nombre: (oferta.emoji || '🔥') + ' ' + oferta.nombre,
-    precio: oferta.precio_oferta,
-    qty: 1,
-    es_oferta: true,
-    detalle: nombres.join(' + ')
-  });
-  trackEvent('add_to_cart', oferta.id, { tipo: 'oferta' });
-  updateCart();
 }
 
 // Categories
@@ -895,7 +675,6 @@ function showDetail(id) {
   quitarSel = new Set();   // cada apertura empieza limpia (sin quitados heredados)
   anadirSel = new Map();
   detailExtrasById = {};
-  trackEvent('product_view', id);
   const p = detailProd;
 
   const visualEl = document.getElementById('detail-visual');
@@ -1032,7 +811,6 @@ function addToCart(id, opts) {
   opts = opts || {};
   const precio = (opts.precio != null) ? opts.precio : p.precio;
   cart.push({ _id: ++cartId, id: p.id, nombre: p.nombre, precio: precio, qty: 1, detalle: opts.detalle || null });
-  trackEvent('add_to_cart', id, opts.detalle ? { custom: true } : undefined);
   updateCart();
   showUpsell(p);
 }
@@ -1220,7 +998,6 @@ function addMitadToCart() {
     pizza_izquierda: { id: mitadIzq.id, nombre: mitadIzq.nombre, precio: mitadIzq.precio, quitar: mitadVarIzq ? mitadVarIzq.quitar : [], anadir: mitadVarIzq ? mitadVarIzq.anadir : [] },
     pizza_derecha: { id: mitadDer.id, nombre: mitadDer.nombre, precio: mitadDer.precio, quitar: mitadVarDer ? mitadVarDer.quitar : [], anadir: mitadVarDer ? mitadVarDer.anadir : [] }
   });
-  trackEvent('add_to_cart', null, { tipo: 'mitad', custom: !!mods });
   updateCart();
   closeDetail();
 }
@@ -1269,7 +1046,6 @@ function addAlGustoToCart() {
   let extra = 0;
   anadirSel.forEach(function (e) { anadidos.push(e.nombre); extra += Number(e.precio_extra) || 0; });
   cart.push({ _id: ++cartId, id: 'algusto_' + cartId, nombre: 'Pizza al gusto', precio: alGustoBase + extra, qty: 1, detalle: anadidos.length ? 'con ' + anadidos.join(', ') : null });
-  trackEvent('add_to_cart', null, { tipo: 'al_gusto' });
   updateCart();
   closeDetail();
 }
@@ -1473,7 +1249,6 @@ function sendWhatsApp() {
   if (!msg) return;
   var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
   saveLastOrder();
-  trackEvent('order_sent', null, { items: cart.length, total: total });
   window.open('https://wa.me/' + CONFIG.whatsapp_telefono + '?text=' + encodeURIComponent(msg), '_blank');
 }
 
@@ -1499,7 +1274,6 @@ async function pagarAhora() {
     var url = data && data.data && data.data.checkout_url;
     if (r.ok && url) {
       saveLastOrder();
-      trackEvent('order_sent', null, { items: cart.length, total: total, canal: 'web-pago' });
       window.location.href = url;   // → pasarela (Stripe)
       return;
     }
@@ -1533,7 +1307,6 @@ async function pedirOnline() {
     var codigo = data && data.data && data.data.codigo_recogida;
     if (r.ok && codigo) {
       saveLastOrder();
-      trackEvent('order_sent', null, { items: cart.length, total: total, canal: 'web' });
       mostrarConfirmacion(codigo);
       cart = []; updateCart();
     } else {
@@ -1610,7 +1383,6 @@ function toggleChat() {
   chatOpen = !chatOpen;
   document.getElementById('chat-overlay').classList.toggle('open', chatOpen);
   if (chatOpen) {
-    trackEvent('chat_open');
     setTimeout(function() { document.getElementById('chat-input').focus(); }, 300);
   }
 }
@@ -1876,153 +1648,13 @@ function speakText(text) {
   speechSynth.speak(utt);
 }
 
-// Reseñas
-var LS_REVIEW = 'carta_reviewed_' + (CONFIG.nombre_negocio || 'default').replace(/\\s/g, '_');
-var reviewRating = 0;
-
-function starsHtml(rating, max) {
-  var html = '';
-  for (var i = 1; i <= (max || 5); i++) {
-    html += i <= rating ? '★' : '☆';
-  }
-  return html;
-}
-
-function renderResenas() {
-  var resenas = DATA.resenas || [];
-  var avg = DATA.resenas_avg || 0;
-  var total = DATA.resenas_total || 0;
-
-  // Even if no reviews yet, show the section so users can write one
-  document.getElementById('resenas-avg').textContent = avg > 0 ? avg.toFixed(1) : '—';
-  document.getElementById('resenas-stars').textContent = avg > 0 ? starsHtml(Math.round(avg)) : '☆☆☆☆☆';
-  document.getElementById('resenas-count').textContent = total + ' ' + T.reviews_label;
-  document.getElementById('resenas-btn').textContent = '✍ ' + T.write_review;
-
-  var el = document.getElementById('resenas-scroll');
-  if (resenas.length === 0) {
-    el.innerHTML = '<div style="color:#666;font-size:.75rem;padding:8px">' + T.write_review + '</div>';
-    return;
-  }
-
-  var html = '';
-  for (var i = 0; i < resenas.length; i++) {
-    var r = resenas[i];
-    var dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString() : '';
-    html += '<div class="resena-card">';
-    html += '<div class="resena-top"><span class="resena-nombre">' + esc(r.nombre) + '</span>';
-    html += '<span class="resena-stars">' + starsHtml(r.rating) + '</span></div>';
-    if (r.comentario) html += '<div class="resena-text">' + esc(r.comentario) + '</div>';
-    html += '<div class="resena-date">' + dateStr + '</div>';
-    html += '</div>';
-  }
-  el.innerHTML = html;
-}
-
-function openReviewForm() {
-  // Check if already reviewed
-  try {
-    if (localStorage.getItem(LS_REVIEW)) {
-      alert(T.review_exists);
-      return;
-    }
-  } catch(e) {}
-
-  reviewRating = 0;
-  updateStarsInput();
-  document.getElementById('review-name').value = '';
-  document.getElementById('review-comment').value = '';
-  document.getElementById('review-name').placeholder = T.your_name;
-  document.getElementById('review-comment').placeholder = T.your_comment;
-  document.getElementById('review-form-title').textContent = T.write_review;
-  document.getElementById('review-overlay').querySelector('.resena-cancel').textContent = T.cancel;
-  document.getElementById('review-submit').textContent = T.send_review;
-  document.getElementById('review-submit').disabled = true;
-  document.getElementById('review-overlay').classList.add('open');
-}
-
-function closeReviewForm() {
-  document.getElementById('review-overlay').classList.remove('open');
-}
-
-function setReviewRating(n) {
-  reviewRating = n;
-  updateStarsInput();
-  checkReviewReady();
-}
-
-function updateStarsInput() {
-  var stars = document.getElementById('review-stars').children;
-  for (var i = 0; i < stars.length; i++) {
-    stars[i].classList.toggle('active', i < reviewRating);
-  }
-}
-
-function checkReviewReady() {
-  var name = document.getElementById('review-name').value.trim();
-  document.getElementById('review-submit').disabled = !(reviewRating > 0 && name.length > 0);
-}
-
-function submitReview() {
-  var name = document.getElementById('review-name').value.trim();
-  var comment = document.getElementById('review-comment').value.trim();
-  if (!name || reviewRating < 1) return;
-
-  document.getElementById('review-submit').disabled = true;
-
-  var payload = {
-    session_id: trackSessionId,
-    nombre: name,
-    rating: reviewRating,
-    comentario: comment || ''
-  };
-
-  var url = (CONFIG.ai_endpoint || '') + '/modules/carta-digital/resenas';
-
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
-  .then(function(res) { return res.json(); })
-  .then(function(json) {
-    closeReviewForm();
-    // Save to localStorage to prevent duplicates
-    try { localStorage.setItem(LS_REVIEW, '1'); } catch(e) {}
-
-    // Add to local data and re-render
-    DATA.resenas.unshift({
-      id: json.data ? json.data.id : 'local',
-      nombre: name,
-      rating: reviewRating,
-      comentario: comment,
-      created_at: new Date().toISOString()
-    });
-    DATA.resenas_total = (DATA.resenas_total || 0) + 1;
-    // Recalculate average
-    var sum = 0;
-    for (var i = 0; i < DATA.resenas.length; i++) sum += DATA.resenas[i].rating;
-    DATA.resenas_avg = parseFloat((sum / DATA.resenas.length).toFixed(1));
-    renderResenas();
-    trackEvent('review_submit', null, { rating: reviewRating });
-
-    alert(T.review_thanks);
-  })
-  .catch(function() {
-    document.getElementById('review-submit').disabled = false;
-  });
-}
-
 // Init
 applyTranslations();
 initChat();
 initVoice();
-renderOfertas();
 renderCats();
 renderGrid();
-renderResenas();
 updateCart();
-trackEvent('page_view');
 
 // PWA: register SW if available
 if ('serviceWorker' in navigator) {

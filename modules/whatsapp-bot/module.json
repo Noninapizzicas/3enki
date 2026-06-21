@@ -1,6 +1,7 @@
 {
   "name": "whatsapp-bot",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "_v1_1_nota": "v1.1.0 (2026-06-21): RE-TASADO server-side (autoservicio Fase 1, rebanada B.2). El bot mantiene un SNAPSHOT de precios por proyecto hidratado VIA EVENTO (project.activated tiende slug<->project_id por basename(base_path); catalogo.actualizado/tarifas.config.actualizada refrescan el snapshot re-pulleando productos.carta_completa del canal 'digital' EN PROCESO, patron carta-digital->ingredientes). Cuando llega un pedido con el payload por ids (#P1 del parser), el bot RE-TASA con _shared/pedido-tasador (precio del cliente IGNORADO; politica comandero normal/al_gusto/mitad). El total y los precios que se cobran salen SIEMPRE del servidor; la estructura (tipo/mitades/variaciones) viaja a cocina. Pedido legacy de solo-texto (sin #P1) -> camino antiguo (confia en el texto, con warn). Cold-start sin snapshot -> pide reintentar (no_silent_failures).",
   "description": "Bot escueto multi-proyecto sobre WhatsApp Cloud API (Meta). Maquina de estados pequena: webhook recibe mensaje, parser detecta si es saludo o pedido formateado de la PWA tienda; si es pedido publica pedido.crear.request a pedidos y notifica al staff via telegram-service; si es saludo responde con el link de la PWA del proyecto. Multi-proyecto: mapping phone_number_id -> project_slug construido al onLoad escaneando data/projects/*/config/project.json. Credenciales (token Cloud API + verify_token del webhook) resueltas via credential-manager (providers META_WHATSAPP y META_WHATSAPP_VERIFY_TOKEN). Reusa telegram-service para notificacion al staff y pedidos para creacion canonica.",
   "author": "Event Core Team",
   "language": "es",
@@ -67,6 +68,21 @@
         "event": "whatsapp.entrante",
         "handler": "onWhatsappEntrante",
         "description": "Mensaje entrante por el transporte del bus (openwa-service, self-hosted). Equivalente al webhook de Meta pero agnostico: reusa _despacharEntrante (parsea pedido / responde con el link de la PWA). { project_slug, from, body, message_id }."
+      },
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated",
+        "description": "Tiende el puente slug<->project_id (slug = basename(base_path)) y calienta el snapshot de precios del proyecto. Necesario para el re-tasado: los eventos de carta van por project_id (UUID) y el bot trabaja en slug."
+      },
+      {
+        "event": "catalogo.actualizado",
+        "handler": "onCatalogoActualizado",
+        "description": "La carta cambio (senal de productos) -> refresca el snapshot de precios del proyecto (re-pull carta_completa canal digital, en proceso). Asi el re-tasado usa SIEMPRE los mismos precios que la PWA, frescos via evento."
+      },
+      {
+        "event": "tarifas.config.actualizada",
+        "handler": "onCatalogoActualizado",
+        "description": "La tarifa (mapping canal->carta) cambio -> mismo refresco del snapshot de precios. Reusa onCatalogoActualizado (solo necesita project_id)."
       }
     ]
   },

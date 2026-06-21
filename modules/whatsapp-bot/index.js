@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const BaseModule = require('../_shared/base-module');
 const { parsearPedido } = require('./services/pedido-parser');
 const { MetaCloudClient, parseWebhookEvent } = require('./services/meta-cloud-client');
+const { tasarPedido } = require('../_shared/pedido-tasador');
 
 const ENV_TOKEN_PATTERN = /^META_WHATSAPP_API_KEY_PROJECT_(.+)$/;
 const ENV_VERIFY_PATTERN = /^META_WHATSAPP_VERIFY_TOKEN_API_KEY_PROJECT_(.+)$/;
@@ -30,6 +31,15 @@ class WhatsappBotModule extends BaseModule {
     // Bounded (LRU simple) para no fugar memoria.
     this.pedidosListos = new Map();
     this.maxPedidosListos = 500;
+
+    // ── Re-tasado server-side (seguridad). El bot mantiene un SNAPSHOT de precios por
+    // proyecto, hidratado VÍA EVENTO (catalogo.actualizado / project.activated): cuando
+    // cambia la carta o la tarifa, el bot re-pull la carta y refresca el snapshot. Así el
+    // re-tasado al llegar el pedido es instantáneo y con los MISMOS precios que la PWA.
+    this.cartaSnap = new Map();     // project_id(UUID) -> { productos, ingredientes_catalogo, at }
+    this.pidPorSlug = new Map();    // slug -> project_id (puente, de project.activated: basename(base_path))
+    this.slugPorPid = new Map();    // project_id -> slug
+    this.moduleRegistry = null;     // acceso in-process a `productos` (patrón carta-digital→ingredientes)
   }
 
   // Registra el pedido bajo varias claves (pedido_id de tienda + cuenta_id): cocina
@@ -45,6 +55,73 @@ class WhatsappBotModule extends BaseModule {
         this.pedidosListos.delete(this.pedidosListos.keys().next().value);
       }
     }
+  }
+
+  // ── Snapshot de precios por proyecto (hidratado VÍA EVENTO) ──────────────────
+  // project.activated: tiende el puente slug↔project_id (slug = basename(base_path),
+  // como lo crea project-manager) y calienta el snapshot de la carta.
+  async onProjectActivated(event) {
+    const d = event?.data || event;
+    const project_id = d?.project_id;
+    if (!project_id) return;
+    const slug = d.base_path ? path.basename(String(d.base_path)) : (d.slug || null);
+    if (slug) {
+      this.pidPorSlug.set(slug, project_id);
+      this.slugPorPid.set(project_id, slug);
+    }
+    await this._refrescarCarta(project_id);
+  }
+
+  // catalogo.actualizado / tarifas.config.actualizada: la carta o la tarifa cambió →
+  // refresca el snapshot de ESE proyecto (re-pull de la carta del canal digital).
+  async onCatalogoActualizado(event) {
+    const d = event?.data || event;
+    const project_id = d?.project_id;
+    if (!project_id) return;
+    await this._refrescarCarta(project_id);
+  }
+
+  // Re-pull de la carta del canal 'digital' a `productos` EN PROCESO (mismo patrón que
+  // carta-digital→ingredientes). Cachea { productos(precio), ingredientes_catalogo(precio_extra) }:
+  // justo lo que tasarPedido necesita. Soft-fail: si productos no está, deja el snapshot como esté.
+  async _refrescarCarta(project_id) {
+    try {
+      const inst = this.moduleRegistry?.get('productos')?.instance;
+      if (!inst?.handleCartaCompleta) return;
+      const r = await inst.handleCartaCompleta({ project_id, canal: 'digital' });
+      if (r?.status !== 200 || !r.data) return;
+      this.cartaSnap.set(project_id, {
+        productos: Array.isArray(r.data.productos) ? r.data.productos : [],
+        ingredientes_catalogo: Array.isArray(r.data.ingredientes) ? r.data.ingredientes : [],
+        at: Date.now()
+      });
+      this.logger?.info?.('whatsapp-bot.carta.snapshot', {
+        project_id, productos: r.data.productos?.length || 0, ingredientes: r.data.ingredientes?.length || 0
+      });
+    } catch (err) {
+      this.logger?.warn?.('whatsapp-bot.carta.snapshot.failed', { project_id, error: err.message });
+    }
+  }
+
+  // slug → project_id (UUID). Lo tiende project.activated; si falta, intenta resolver en
+  // proceso por project-manager (cold-start). null si no se puede (→ el bot pedirá reintentar).
+  _resolverProjectId(slug) {
+    if (this.pidPorSlug.has(slug)) return this.pidPorSlug.get(slug);
+    try {
+      const pm = this.moduleRegistry?.get('project-manager')?.instance;
+      const store = pm?.projectsStore;
+      if (store && typeof store.values === 'function') {
+        for (const p of store.values()) {
+          const s = p?.slug || (p?.name ? pm._slugify?.(p.name) : null);
+          if (s === slug && p?.project_id) {
+            this.pidPorSlug.set(slug, p.project_id);
+            this.slugPorPid.set(p.project_id, slug);
+            return p.project_id;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   // ==========================================
@@ -67,6 +144,7 @@ class WhatsappBotModule extends BaseModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
+    this.moduleRegistry = core.moduleRegistry;   // para re-pull de la carta a `productos` en proceso
 
     const moduleJson = JSON.parse(await fs.readFile(path.join(__dirname, 'module.json'), 'utf8'));
     this.config = moduleJson.config || {};
@@ -461,7 +539,14 @@ class WhatsappBotModule extends BaseModule {
         total_centimos: parsed.total_centimos,
         message_id: msg.message_id
       });
-      await this._registrarPedido(project_slug, msg, parsed);
+      // Camino SEGURO: si la PWA mandó el payload por ids (#P1), RE-TASAMOS contra la carta
+      // (el precio del texto se ignora). Sin #P1 (texto legacy) → camino antiguo (confía en el texto).
+      if (parsed.estructura) {
+        await this._registrarPedidoSeguro(project_slug, msg, parsed);
+      } else {
+        this.logger.warn('whatsapp-bot.pedido.sin_estructura', { project_slug, motivo: 'sin #P1 → no re-tasable, se confía en el texto' });
+        await this._registrarPedido(project_slug, msg, parsed);
+      }
     } else {
       const meta = this.projectsByMeta.get(project_slug);
       const pwa = meta?.pwa_url || 'el catalogo del negocio';
@@ -520,6 +605,81 @@ class WhatsappBotModule extends BaseModule {
       mayor_edad_confirmado: parsed.mayor_edad_confirmado
     });
     this.metrics?.increment('whatsapp-bot.pedido.solicitado', { project: project_slug });
+  }
+
+  // Camino SEGURO: el pedido trae el payload por ids (#P1). RE-TASAMOS contra el snapshot
+  // de la carta (precio del cliente IGNORADO). El total y los precios que se cobran salen
+  // SIEMPRE del servidor. La estructura (tipo, mitades, variaciones) viaja hacia cocina.
+  async _registrarPedidoSeguro(project_slug, msg, parsed) {
+    const project_id = this._resolverProjectId(project_slug);
+    if (!project_id) {
+      this.logger.warn('whatsapp-bot.pedido.sin_project_id', { project_slug });
+      await this._enviarMensajeSeguro(project_slug, msg.from,
+        'Estamos cargando el catalogo. Reintenta tu pedido en unos segundos, por favor.');
+      return;
+    }
+    let snap = this.cartaSnap.get(project_id);
+    if (!snap) { await this._refrescarCarta(project_id); snap = this.cartaSnap.get(project_id); }
+    if (!snap) {
+      this.metrics?.increment('whatsapp-bot.pedido.sin_carta', { project: project_slug });
+      await this._enviarMensajeSeguro(project_slug, msg.from,
+        'Estamos cargando el catalogo. Reintenta tu pedido en unos segundos, por favor.');
+      return;
+    }
+
+    const tasado = tasarPedido(parsed.estructura.items, {
+      productos: snap.productos, ingredientes_catalogo: snap.ingredientes_catalogo
+    });
+    if (!tasado.ok) {
+      this.metrics?.increment('whatsapp-bot.pedido.retasado_fallo', { project: project_slug });
+      this.logger.warn('whatsapp-bot.pedido.retasado_fallo', { project_slug, errores: tasado.errores });
+      await this._enviarMensajeSeguro(project_slug, msg.from,
+        'No pudimos confirmar algun producto de tu pedido (puede haber cambiado la carta). Vuelve a la PWA y reenvialo, por favor.');
+      return;
+    }
+
+    // Items canónicos para pedidos, con PRECIOS DEL SERVIDOR + estructura para cocina.
+    const items = tasado.items.map(it => ({
+      cantidad: it.cantidad,
+      descripcion: it.descripcion,
+      producto_id: it.producto_id || null,
+      precio_unitario_centimos: it.precio_unitario_centimos,
+      precio_total_centimos: it.precio_total_centimos,
+      tipo: it.tipo,
+      ...(it.variaciones ? { variaciones: it.variaciones } : {}),
+      ...(it.pizza_izquierda ? { pizza_izquierda: it.pizza_izquierda } : {}),
+      ...(it.pizza_derecha ? { pizza_derecha: it.pizza_derecha } : {})
+    }));
+    const total_centimos = tasado.total_centimos;
+    const request_id = crypto.randomUUID();
+    const timeoutMs = this.config?.pedido_wait_timeout_ms || 12000;
+
+    const timeoutHandle = setTimeout(() => {
+      const pending = this._consumePending(request_id);
+      if (!pending) return;
+      this.logger.warn('whatsapp-bot.pedido.timeout', { project_slug, from: this._maskPhoneNumber(msg.from), request_id });
+      this.metrics?.increment('whatsapp-bot.pedido.timeout', { project: project_slug });
+      this._enviarMensajeSeguro(project_slug, msg.from,
+        'No pudimos procesar tu pedido a tiempo. Vuelve a la PWA e intentalo de nuevo.');
+    }, timeoutMs);
+
+    this.pendingPedidos.set(request_id, {
+      project_slug, from: msg.from, message_id: msg.message_id,
+      items, total_centimos, cliente_nombre: parsed.cliente_nombre,
+      mayor_edad_confirmado: parsed.mayor_edad_confirmado, timeoutHandle, created_at: Date.now()
+    });
+
+    await this.eventBus.publish('pedido.crear-tienda', {
+      request_id, correlation_id: request_id, project_slug,
+      items, total_centimos, canal_origen: 'whatsapp',
+      cliente_telefono: msg.from, cliente_nombre: parsed.cliente_nombre,
+      mayor_edad_confirmado: parsed.mayor_edad_confirmado
+    });
+    this.metrics?.increment('whatsapp-bot.pedido.solicitado', { project: project_slug, retasado: 'si' });
+    this.logger.info('whatsapp-bot.pedido.retasado', {
+      project_slug, items: items.length, total_centimos,
+      total_cliente: parsed.total_centimos, coincide: parsed.total_centimos === total_centimos
+    });
   }
 
   _consumePending(request_id) {

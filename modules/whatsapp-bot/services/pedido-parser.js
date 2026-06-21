@@ -31,6 +31,27 @@ Reglas:
 const NONCE_PATTERN = /^[A-HJ-NP-Z2-9]{4}$/;
 const PROJECT_PATTERN = /^[a-z][a-z0-9-]{1,30}$/;
 
+// Línea AUTORITATIVA opcional que añade la PWA al final del mensaje:
+//   #P1 <base64url(JSON)>     JSON = { v:1, items:[ <item estructurado por ids> ] }
+// Lleva el pedido CODIFICADO POR IDS (producto_id + ingredientes_id), nunca por precio.
+// El bot la usa para RE-TASAR contra la carta real (seguridad). Las líneas humanas
+// ("- 1 x ...") son para que el cliente vea su pedido y para retro-compat del parser.
+function _decodificarEstructura(text) {
+  if (typeof text !== 'string') return null;
+  const linea = text.split('\n').map(l => l.trim()).find(l => /^#P1\s+\S+$/.test(l));
+  if (!linea) return null;
+  const b64url = linea.replace(/^#P1\s+/, '').trim();
+  try {
+    const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+    const json = Buffer.from(b64, 'base64').toString('utf8');
+    const payload = JSON.parse(json);
+    if (!payload || payload.v !== 1 || !Array.isArray(payload.items) || payload.items.length === 0) return null;
+    return { items: payload.items };
+  } catch (_) {
+    return null;   // payload corrupto → el bot cae al texto legacy o pide reenviar
+  }
+}
+
 function _normalizar(text) {
   if (typeof text !== 'string') return '';
   return text
@@ -127,11 +148,15 @@ function parsearPedido(textoBruto) {
     items,
     total_centimos,
     cliente_nombre,
-    mayor_edad_confirmado
+    mayor_edad_confirmado,
+    // Payload autoritativo por ids (si la PWA lo añadió) → el bot re-tasa con él.
+    // null = pedido legacy de solo-texto (el bot no puede re-tasar; cae al precio del texto).
+    estructura: _decodificarEstructura(text)
   };
 }
 
 module.exports = {
   parsearPedido,
+  _decodificarEstructura,
   FORMATO_PEDIDO_DOC
 };

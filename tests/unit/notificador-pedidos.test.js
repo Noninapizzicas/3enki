@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const NotificadorPedidos = require('../../modules/notificador-pedidos');
+const NotificadorPedidos = require('../../modules/pizzepos/notificador-pedidos');
 
 // ==========================================
 // Test harness mínimo
@@ -162,26 +162,6 @@ test('onPedidoCreado con canal_origen=web resuelve proyecto via bus y publica te
     assert.ok(sendMsg.data.text.includes('2 x Vape Menta'));
     assert.ok(sendMsg.data.text.includes('Total: 29.80'));
     assert.ok(sendMsg.data.text.includes('2026-05-29'));
-  } finally { fix.cleanup(); }
-});
-
-test('onPedidoCreado anti-fraude: NO incluye palabra_clave en el mensaje al staff', async () => {
-  const fix = setupProjectFs('vapers', { chatId: 555 });
-  try {
-    const { m, mock } = await makeInstance({
-      projectAutoResponse: { success: true, project: { id: 'p-1', slug: 'vapers', base_path: fix.basePath } }
-    });
-    await m.onPedidoCreado({
-      data: {
-        pedido_id: 'ped-1', project_id: 'p-1', canal_origen: 'web',
-        codigo_recogida: 'XYZ', items: [], total_centimos: 0,
-        palabra_clave: 'sec'
-      }
-    });
-    const sendMsg = mock.published.find(p => p.eventType === 'telegram.send_message.request');
-    assert.ok(sendMsg);
-    assert.ok(!sendMsg.data.text.includes('sec'), 'palabra_clave NO debe estar en el texto');
-    assert.ok(!sendMsg.data.text.toLowerCase().includes('palabra'), 'la palabra "palabra" no debe aparecer');
   } finally { fix.cleanup(); }
 });
 

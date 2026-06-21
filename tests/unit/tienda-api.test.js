@@ -181,16 +181,6 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
     await m.onUnload();
   });
 
-  await testAsync('POST con palabra_clave inválida (4 chars) devuelve 400', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-    const { res, state } = makeRes();
-    await m.handlePedidoPost({ params: { project: 'vapers' }, body: validBody({ palabra_clave: 'abcd' }) }, res);
-    assert.strictEqual(state.status, 400);
-    assert.strictEqual(state.body.error.details.field, 'palabra_clave');
-    await m.onUnload();
-  });
-
   await testAsync('POST con mayor_edad_confirmado tipo erróneo devuelve 400', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
@@ -403,7 +393,6 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
       total_centimos: 100,
       cliente_telefono: '34600000000',
       nombre_cliente: 'Juan',
-      palabra_clave: 'abc',
       mayor_edad_confirmado: true,
       expira_horas: 24,
       notas_generales: 'sin notas'

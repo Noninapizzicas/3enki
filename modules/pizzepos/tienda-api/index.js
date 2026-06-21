@@ -49,11 +49,6 @@ class TiendaApiModule extends BaseModule {
     if (body.nombre_cliente != null && typeof body.nombre_cliente !== 'string') {
       return { ok: false, error: { code: 'INVALID_INPUT', message: 'nombre_cliente must be a string', details: { kind: 'invalid_format', field: 'nombre_cliente' } } };
     }
-    if (body.palabra_clave != null) {
-      if (typeof body.palabra_clave !== 'string' || !/^[a-z]{3}$/.test(body.palabra_clave)) {
-        return { ok: false, error: { code: 'INVALID_INPUT', message: 'palabra_clave must match /^[a-z]{3}$/', details: { kind: 'invalid_format', field: 'palabra_clave' } } };
-      }
-    }
     if (body.mayor_edad_confirmado != null && typeof body.mayor_edad_confirmado !== 'boolean') {
       return { ok: false, error: { code: 'INVALID_INPUT', message: 'mayor_edad_confirmado must be boolean or null', details: { kind: 'invalid_format', field: 'mayor_edad_confirmado' } } };
     }
@@ -275,7 +270,6 @@ class TiendaApiModule extends BaseModule {
         canal_origen: 'web',
         cliente_telefono: normalized.cliente_telefono,
         nombre_cliente: normalized.nombre_cliente,
-        palabra_clave: normalized.palabra_clave,
         mayor_edad_confirmado: normalized.mayor_edad_confirmado,
         expira_horas: normalized.expira_horas,
         notas_generales: normalized.notas_generales

@@ -223,8 +223,8 @@ class NotificadorPedidosModule extends BaseModule {
    * Mensaje al staff. Estructura clara legible en Telegram (sin markdown
    * pesado por compat con escapes complicados).
    *
-   * Anti-fraude: NO incluye palabra_clave. El dependiente la pregunta al
-   * cliente al recoger sin haberla leido antes.
+   * Anti-fraude: el ancla es el codigo_recogida; el dependiente lo verifica
+   * (y canta el nombre del cliente) al recoger.
    */
   _formatPedidoMessage(config, pedido) {
     const slug = (config.project_slug || pedido.project_slug || 'pedido').toUpperCase();

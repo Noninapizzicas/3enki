@@ -5,7 +5,7 @@
  *   - tipo: 'pos'    — flujo clasico POS pizzeria con cuenta_id (cuentas-canales),
  *                      items en pasos separados, enviado a cocina, etc.
  *   - tipo: 'tienda' — flujo plano vertical tienda PWA: cuenta_id null, todos los
- *                      items de una, codigo_recogida + palabra_clave anti-fraude,
+ *                      items de una, codigo_recogida (ancla anti-fraude),
  *                      estado pendiente_recogida -> recogido_y_cobrado / expirado.
  *
  * Maps internos:
@@ -410,7 +410,6 @@ class PedidosModule extends BaseModule {
         canal_origen,
         cliente_telefono,
         cliente_nombre,
-        palabra_clave,
         mayor_edad_confirmado,
         expira_horas,
         notas_generales,
@@ -438,13 +437,6 @@ class PedidosModule extends BaseModule {
         this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
         return this._errorResponse(400, 'INVALID_INPUT', "canal_origen debe ser 'whatsapp' | 'web' | 'manual'", { field: 'canal_origen' });
       }
-      if (palabra_clave !== undefined && palabra_clave !== null) {
-        if (typeof palabra_clave !== 'string' || !/^[a-z]{3}$/.test(palabra_clave)) {
-          this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
-          return this._errorResponse(400, 'INVALID_INPUT', 'palabra_clave debe ser 3 chars [a-z]', { field: 'palabra_clave' });
-        }
-      }
-
       // Construir items canonicos del shape tienda. Items vienen del parser
       // (modules/whatsapp-bot/services/pedido-parser.js) o de la PWA directamente.
       const items_tienda = [];
@@ -489,7 +481,6 @@ class PedidosModule extends BaseModule {
         total_centimos,
         total: total_centimos / 100,
         codigo_recogida,
-        palabra_clave: palabra_clave || null,
         cliente_nombre: cliente_nombre_norm || null,
         cliente_telefono: cliente_telefono || null,
         // Decision 6.2 = C: configurable por proyecto. Si la PWA mostro gate
@@ -566,10 +557,10 @@ class PedidosModule extends BaseModule {
 
   // ENTREGA (pieza 3, flujo A): el dependiente confirma la recogida. Canal-agnóstico:
   // se puede llamar desde la pantalla de cocina/comandero o desde una respuesta del staff.
-  // Verifica la palabra clave (anti-fraude) → recogido_y_cobrado (efectivo) → emite pedido.recogido.
+  // Localiza por codigo_recogida (el ancla anti-fraude) → recogido_y_cobrado (efectivo) → emite pedido.recogido.
   async handleConfirmarRecogida(data) {
     try {
-      const { codigo_recogida, palabra_clave, correlation_id } = data || {};
+      const { codigo_recogida, correlation_id } = data || {};
       if (!codigo_recogida || typeof codigo_recogida !== 'string') {
         return this._errorResponse(400, 'INVALID_INPUT', 'codigo_recogida es requerido', { field: 'codigo_recogida' });
       }
@@ -597,14 +588,6 @@ class PedidosModule extends BaseModule {
       }
       if (pedido.estado !== 'pendiente_recogida') {
         return this._errorResponse(409, 'CONFLICT_STATE', `estado no recogible: ${pedido.estado}`, { estado: pedido.estado });
-      }
-      // anti-fraude: si el pedido lleva palabra clave, debe coincidir (la da el cliente al recoger)
-      if (pedido.palabra_clave) {
-        const dada = typeof palabra_clave === 'string' ? palabra_clave.trim().toLowerCase() : '';
-        if (dada !== pedido.palabra_clave) {
-          this.metrics?.increment?.('pedidos.recogida.palabra_clave_fallo', { project: pedido.project_slug });
-          return this._errorResponse(403, 'PERMISSION_DENIED', 'palabra clave incorrecta', {});
-        }
       }
       // cerrar: recogido + cobrado en efectivo
       const recogido_at = new Date().toISOString();
@@ -988,7 +971,7 @@ class PedidosModule extends BaseModule {
       created_at: pedido.created_at
     };
     // Campos del shape tienda (solo presentes cuando tipo='tienda').
-    // cliente_telefono y palabra_clave NO se incluyen aqui (anti-fraude + RGPD-cero):
+    // cliente_telefono NO se incluye aqui (anti-fraude + RGPD-cero):
     // viven solo en el shape persistido y se desechan al cerrar/expirar el pedido.
     if (pedido.tipo) payload.tipo = pedido.tipo;
     if (pedido.canal_origen) payload.canal_origen = pedido.canal_origen;

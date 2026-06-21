@@ -1,216 +1,120 @@
 {
-  "_doc": "Blueprint del modulo menu-generator v10.0.0 — ESTRUCTURADOR-ENRIQUECEDOR de catalogo (HIBRIDO: blueprint + reflejo index.js). Da forma y enriquece lo que el producto ES por si mismo, y lo entrega limpio. Lo DETERMINISTA (estructurar el suelo: ids/familia/ingredientes_base, persistir, versionar, guardia) lo hace el REFLEJO (index.js) en JS de ms. Lo FUZZY (clasificar la entrada, ENRIQUECER lo intrinseco por las 6 W: alergenos+normativa, dietas, descripcion, etiquetas, emoji; e higiene semantica) lo hace el LLM de pagina. El reparto vive en reparto_sustrato. Generico de proposito: el motor pregunta las 6 W del producto; valen para pizza, movil, libro o calcetin. Persistencia DELEGADA en carta-manager (event-core puro). Reemplaza v9.4.0 (que pedia al LLM emitir la carta entera en una respuesta -> no cabia -> mandaba vacio o troceaba y alucinaba; ver auditoria nonina y _v10_changelog).",
+  "_doc": "Blueprint del modulo menu-generator v11.0.0 — GENERADOR DE CATALOGO (HIBRIDO: blueprint + reflejo index.js). Recupera el ALMA de la v7 (un generador limpio: pide el nombre, toma CUALQUIER input, produce una carta estructurada, y NO la persiste el — delega en el custodio) y la expresa en el patron blueprint-coherente (CONTRATO -> LEER -> PENSAR -> GUARDAR -> EMITIR), SIN agentes. El blueprint es una CLASE GENERICA (no sabe que esto es comida: pregunta lo universal del producto). Lo DETERMINISTA (estructurar un catalogo ya formado, persistir) lo hace el REFLEJO (index.js, menu.import.request). Lo FUZZY (clasificar la ruta, estructurar texto libre dictado) lo hace el LLM de pagina. Reemplaza v10.1.0 (estructurador-ENRIQUECEDOR de 4 operaciones); v11 adelgaza a 2 (generar + handler async) volviendo al alcance de la v7: las 6 W de enriquecimiento (enriquecer) y recetas->carta (preparar) salen del modulo. Persistencia DELEGADA en carta-manager (event-core puro).",
   "id": "menu-generator",
-  "version": "blueprint-10.1.0",
+  "version": "blueprint-11.0.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
 
-  "rol": "Estructurador-enriquecedor de catalogo. De CUALQUIER material (json/texto, e imagen/pdf via transformador externo PENDIENTE) produce la BASE de una carta y la ENRIQUECE con lo intrinseco al producto. Su definicion exacta y a la vez generica: 'da forma y enriquece lo que el producto ES por si mismo, y lo entrega limpio'. Nada de analisis con datos externos, nada de operacion, nada de presentacion rica, nada de persistir — eso son otros modulos. La persistencia la delega en carta-manager.",
+  "rol": "Generador de catalogo. De CUALQUIER material (json/texto/dictado legible) produce un catalogo ESTRUCTURADO y limpio, y lo entrega al custodio. Su definicion exacta y a la vez generica: 'de cualquier material en bruto, da forma a lo que ES y lo entrega limpio, sin guardarlo el'. Nada de analisis con datos externos, nada de enriquecimiento (alergenos/dietas), nada de operacion, nada de presentacion, nada de persistir — eso son otros modulos. La persistencia la delega en carta-manager.",
 
-  "_modelo": "CLASE MotorEstructuradorEnriquecedor { COLABORADORES { reflejo(menu.import = SUELO determinista) ; carta-manager(persistir) ; TecnicaDeOrganizacion(trocear) } ; MISION { de cualquier material -> ESTRUCTURAR(suelo) -> ENRIQUECER(intrinseco, 6 W) -> LIMPIAR -> entregar } ; procesar(material, identidad): CONTRATO -> SUELO(reflejo) -> ENRIQUECER por las 6 W en LOTES(reanudable) -> persistir lote VERIFICADO(reflejo) -> EMITIR(carta + informe) } . La abstraccion NO es un perfil de dominio: son las PREGUNTAS CLAVE universales (ver preguntas_clave). El motor no sabe que esto es comida; sabe preguntar bien y el LLM contesta segun lo que tenga delante.",
+  "_modelo": "CLASE GeneradorDeCatalogo { COLABORADORES { reflejo(menu.import = ESTRUCTURA determinista de catalogo ya formado) ; carta-manager(CUSTODIO unico: carta.save) } ; MISION { de CUALQUIER material -> ESTRUCTURAR(shape canonico) -> entregar limpio, SIN persistir el } ; generar(material, nombre): CONTRATO -> CLASIFICAR ruta -> (CATALOGO: reflejo estructura+persiste | TEXTO_LIBRE: LLM estructura, reflejo del custodio persiste) -> EMITIR } . La abstraccion NO es un perfil de dominio (pizza): son las PREGUNTAS UNIVERSALES del producto (ver preguntas_universales). El motor no sabe que esto es comida; sabe preguntar bien y el LLM/material contesta segun lo que tenga delante.",
 
-  "preguntas_clave": {
-    "_descripcion": "Las 6 W del PRODUCTO — universales, como las 5W1H del periodismo. El LLM las contesta para CADA producto; la respuesta sale del dominio que sea (pizza/movil/libro). NO hay '¿cuando?' ni '¿donde?' a proposito: eso es operacion/canal, de OTRO modulo (coherente con la frontera de responsabilidad). modo: DETERMINISTA=lo resuelve el suelo del reflejo · FUZZY=lo razona el LLM · MIXTO=suelo + LLM para el hueco.",
-    "W1_que_es": { "salida": "tipo · categoria_id · id", "modo": "DETERMINISTA", "quien": "reflejo" },
-    "W2_de_que_esta_hecho": { "salida": "ingredientes{id,nombre,emoji,familia} · ingredientes_base{...,precio_extra}", "modo": "MIXTO", "quien": "reflejo (suelo) + LLM (familia rara)" },
-    "W3_que_implica": { "salida": "alergenos[] (NORMATIVA: deduce el alergeno de cada ingrediente; razona el implicito — una pizza lleva base de trigo -> gluten aunque no se liste la harina)", "modo": "MIXTO", "quien": "_shared/alergenos.js (suelo) + LLM (el resto)" },
-    "W4_para_quien_o_que": { "salida": "dietas{vegano,vegetariano,sin_gluten,sin_lactosa,...} (deducidas de la composicion)", "modo": "FUZZY", "quien": "LLM" },
-    "W5_en_que_se_distingue": { "salida": "descripcion (apetitosa, diferencia productos parecidos) · etiquetas[] (picante si lleva guindilla, etc.)", "modo": "FUZZY", "quien": "LLM" },
-    "W6_como_se_reconoce": { "salida": "emoji (si falta) · nombre normalizado", "modo": "MIXTO", "quien": "reflejo (slug) + LLM (emoji)" },
-    "regla_de_hierro": "NUNCA inventar hechos. El LLM DEDUCE lo intrinseco de la composicion (alergeno de un ingrediente, dieta), pero no fabrica datos que no se siguen del producto (precio, un ingrediente que no esta). Campo sin base -> ausente o vacio, no inventado."
+  "preguntas_universales": {
+    "_descripcion": "Las preguntas del PRODUCTO — universales, valen para pizza, movil o libro. El material (o el LLM al estructurar texto) las contesta para CADA producto. modo: DETERMINISTA=lo resuelve el reflejo (estructura) · FUZZY=lo razona el LLM (estructurar texto dictado).",
+    "que_es": { "salida": "tipo? · categoria_id · id", "modo": "DETERMINISTA (reflejo) | FUZZY (texto libre)" },
+    "de_que_esta_hecho": { "salida": "ingredientes{id,nombre,emoji?,familia} · ingredientes_base{...,precio_extra?}", "modo": "DETERMINISTA (reflejo) | FUZZY (texto libre)" },
+    "como_se_llama": { "salida": "nombre normalizado", "modo": "DETERMINISTA (slug)" },
+    "a_que_categoria": { "salida": "categoria_id (de las categorias del propio catalogo)", "modo": "DETERMINISTA | FUZZY" },
+    "regla_de_hierro": "NUNCA inventar hechos. Lo que el material/texto NO trae = ausente o vacio, no fabricado. precio ausente -> 0. ingrediente no nombrado -> no existe. El enriquecimiento (deducir alergeno/dieta) NO es de este modulo (v11 lo saco)."
   },
 
   "reparto_sustrato": {
     "reflejo_js_determinista": [
-      "ESTRUCTURAR el suelo: parsear el material, shape canonico, ids con prefijo, familia por tabla, ingredientes_base con precio_extra, precio.",
-      "PERSISTIR: carta.save (base) / carta.update_product (enriquecimiento), con snapshot+version++ y guardia anti-wipe (carta-manager).",
-      "Suelo de las W MIXTAS: slug (W1/W6), FAMILIAS (W2), alergenos.js conocidos (W3)."
+      "ESTRUCTURAR un catalogo YA FORMADO (json): parsear, shape canonico carta-pizzepos, ids con prefijo de categoria, familia por tabla, ingredientes_base con precio_extra, precio. Lee la fuente POR REFERENCIA (fs.read del adjunto), cero re-emision de tokens.",
+      "PERSISTIR el catalogo del reflejo: carta.save (atomica, versionada, VERIFICADA) — delegado en carta-manager."
     ],
     "blueprint_llm_fuzzy": [
-      "CLASIFICAR la entrada (catalogo estructurado vs texto libre dictado).",
-      "ENRIQUECER lo intrinseco que el suelo no alcanza: W3 alergenos del ingrediente nuevo + el implicito, W4 dietas, W5 descripcion/etiquetas, W6 emoji.",
-      "HIGIENE semantica: detectar casi-duplicados, nomenclatura inconsistente, avisos (-> informe).",
-      "ORGANIZAR el trabajo en LOTES si es grande (de N en N, reanudable — patron escandallo.recalcular_siguiente)."
+      "CLASIFICAR la entrada (catalogo estructurado json vs texto libre dictado) — la unica decision fuzzy de entrada.",
+      "ESTRUCTURAR texto libre dictado a shape carta-pizzepos cuando NO es un catalogo ya formado (PROHIBIDO INVENTAR: solo lo que el texto dice)."
     ]
   },
 
   "garantiza": [
-    "Output canonico carta-pizzepos: { meta:{id,nombre,generado_desde}, categorias[], productos[] }. El reflejo sella created_at/version al persistir; el LLM NUNCA inventa fecha.",
+    "Output canonico carta-pizzepos: { meta:{id,nombre,generado_desde}, categorias[], productos[] }. El reflejo/custodio sella created_at/version al persistir; el LLM NUNCA inventa fecha.",
     "nombre es el unico campo verdaderamente obligatorio: si falta, INVALID_INPUT { field:'nombre' } y se pregunta al usuario ANTES de invocar.",
-    "El SUELO (estructura determinista) lo pone el reflejo via menu.import.request — el LLM NO re-emite ids/familia/ingredientes_base (eso era la causa del bug v9: emitir 38 productos en una respuesta no cabia).",
-    "El ENRIQUECIMIENTO (6 W) lo razona el LLM EN LOTES y se persiste lote a lote VERIFICADO (response correlado). Imposible 'guardado falso': lo que el LLM dice 'enriquecido' tiene su .response que lo respalda, o no esta.",
-    "Persistencia DELEGADA en carta-manager: menu-generator NO escribe /cartas/. Si carta-manager falla, devuelve el error; no persiste por su cuenta.",
+    "Split anti-bug-v9: el catalogo GRANDE viaja como JSON -> lo estructura el REFLEJO (no re-emite los productos). El dictado PEQUENO viaja como texto -> lo estructura el LLM (cabe en un turno). El LLM nunca tiene que emitir un catalogo entero.",
+    "Persistencia DELEGADA en carta-manager: menu-generator NO escribe /cartas/. CATALOGO via reflejo (menu.import -> carta.save). TEXTO_LIBRE via carta.save.request del custodio. Ambas VERIFICADAS (publishAndWait) -> imposible 'guardado falso'.",
     "Eventos de progreso del v7 preservados (menu.generation.progress/failed, carta.generar.iniciada/fallida) — contrato con frontend/src/lib/stores/menu-generator.ts.",
-    "IDENTIDAD (FASE 3): una carta general por proyecto. El reflejo reusa el id existente (en_servicio/unica no archivada) o crea 'carta_'+slug(nombre) la 1a vez; una regeneracion SOBREESCRIBE, no spawnea fichero nuevo."
+    "IDENTIDAD: una carta general por proyecto. El reflejo reusa el id existente (en_servicio/unica no archivada) o crea 'carta_'+slug(nombre) la 1a vez; una regeneracion SOBREESCRIBE, no spawnea fichero nuevo."
   ],
 
   "no_garantiza": [
-    "Transformacion de formato: no lee imagen/pdf por su cuenta. La entrada CONTEMPLA cualquier material, pero la lectura del no-legible la hace un transformador/provider externo (PENDIENTE: modulo OCR no existe). Estructura desde texto/json legible.",
-    "Analisis con datos externos: coste/margen/pricing (-> escandallo/viabilidad), idoneidad por canal/tarifa (-> tarifas), menu-engineering con ventas (-> comandero). menu-generator PREPARA el terreno, no los suplanta.",
-    "Presentacion rica: imagenes/diseno viven en contenido/carta-design/carta-digital. La carta del POS va lean.",
-    "Operacion/cocina: tiempos, pase, routing de estacion (-> cocina/pase-cocina).",
-    "Inventar precios o ingredientes: si el input no lo trae, precio 0 / campo ausente. El LLM DEDUCE lo intrinseco (alergeno, dieta), no FABRICA hechos."
+    "Enriquecimiento (alergenos/normativa, dietas, descripcion, etiquetas, emoji): SALE del modulo en v11. Si hace falta, es otra operacion/otro modulo. menu-generator solo da FORMA a lo que el material trae.",
+    "Recetas -> carta (preparar): SALE del modulo en v11. Esa orquestacion vive donde corresponda (carta-manager u otro).",
+    "Transformacion de formato: no lee imagen/pdf por su cuenta (OCR eliminado en v8, decision 4.4). Estructura desde texto/json legible; el no-legible lo transforma un provider externo (PENDIENTE).",
+    "Analisis con datos externos: coste/margen (-> escandallo/viabilidad), canal/tarifa (-> tarifas), menu-engineering (-> comandero).",
+    "Presentacion rica (imagenes/diseno -> contenido/carta-design/carta-digital) ni operacion/cocina.",
+    "Inventar precios o ingredientes: si el input no lo trae, precio 0 / campo ausente (regla de hierro)."
   ],
 
   "operaciones": {
     "generar": {
-      "_descripcion": "Operacion principal. De un material (catalogo json o texto dictado) produce la carta: SUELO determinista (reflejo) + ENRIQUECIMIENTO por las 6 W (LLM, en lotes). Cajon visible en page=menu-generator.",
-      "input": "{ project_id (uuid, req), nombre (string req — el LLM lo pregunta antes si no viene), material? (ref a fichero/adjunto), texto? (lenguaje libre), json? (catalogo), correlation_id?, request_id (uuid, req) }",
+      "_descripcion": "Operacion principal (la unica de cajon). De un material (catalogo json o texto dictado) produce la carta estructurada y la entrega al custodio. CATALOGO -> reflejo (determinista). TEXTO_LIBRE -> LLM estructura + carta.save del custodio. Cajon visible en page=menu-generator.",
+      "input": "{ project_id (uuid, req), nombre (string req — el LLM lo pregunta antes si no viene), material? (ref a fichero/adjunto), texto? (lenguaje libre dictado), json? (catalogo ya formado), correlation_id?, request_id (uuid, req) }",
       "pseudocodigo": [
         "async generar(input):",
-        "  // CONTRATO",
+        "  // 1. CONTRATO",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
         "  if (!input.nombre || !input.nombre.trim()) return INVALID_INPUT { field: 'nombre', hint: 'pregunta al usuario como se llama la carta ANTES de invocar' }",
         "  if (!input.material && !input.texto && !input.json) return INVALID_INPUT { hint: 'pasa material (adjunto), texto o json' }",
         "",
-        "  // CLASIFICAR RUTA — la unica decision fuzzy de entrada.",
-        "  ruta = (input.json || material/texto con shape de catalogo) ? 'CATALOGO' : 'TEXTO_LIBRE'",
+        "  // CLASIFICAR RUTA — la UNICA decision fuzzy de entrada.",
+        "  ruta = (input.json || material/texto con shape de catalogo ya formado) ? 'CATALOGO' : 'TEXTO_LIBRE'",
+        "  await publish('menu.generation.progress', { project_id: input.project_id, nombre: input.nombre, step: 'structuring', message: 'Estructurando...', correlation_id: input.correlation_id })",
         "",
-        "  await publish('menu.generation.progress', { project_id, nombre: input.nombre, step: 'structuring', message: 'Estructurando...', correlation_id: input.correlation_id })",
-        "",
-        "  // 1) SUELO — estructura DETERMINISTA, la pone el REFLEJO (no el LLM). Lee por",
-        "  //    referencia, proyecta shape canonico (ids con prefijo, familia, ingredientes_base",
-        "  //    con precio_extra, precio) y persiste la base VERIFICADA. UNA llamada, ms.",
-        "  //    [CABLE pendiente: como referencia el reflejo la fuente (material_ref). Ver trabajo_pendiente.]",
-        "  base = await publishAndWait('menu.import.request', { project_id: input.project_id, nombre: input.nombre, material_ref: input.material }, { timeout_ms: 30000 })",
-        "  if (!base || base.status >= 400) {",
-        "    await publish('menu.generation.failed', { project_id, nombre: input.nombre, step: 'structuring', error: base?.error || { code: 'UPSTREAM_INVALID_RESPONSE' }, correlation_id: input.correlation_id })",
-        "    return base?.error || UPSTREAM_INVALID_RESPONSE { hint: 'el material no tiene productos/categorias' }",
+        "  if (ruta == 'CATALOGO') {",
+        "    // 2+4. LEER+GUARDAR — el catalogo YA esta formado -> lo estructura y persiste el REFLEJO (ms,",
+        "    //    sin re-emitir productos). Lee la fuente por referencia (fs.read del adjunto).",
+        "    base = await publishAndWait('menu.import.request', { project_id: input.project_id, nombre: input.nombre, material_ref: input.material }, { timeout_ms: 30000 })",
+        "    if (!base || base.status >= 400) {",
+        "      await publish('menu.generation.failed', { project_id: input.project_id, nombre: input.nombre, step: 'structuring', error: base?.error || { code: 'UPSTREAM_INVALID_RESPONSE' }, correlation_id: input.correlation_id })",
+        "      return base?.error || UPSTREAM_INVALID_RESPONSE { hint: 'el material no tiene productos/categorias' }",
+        "    }",
+        "    // 5. EMITIR",
+        "    return { status: 200, data: { carta_id: base.data.carta_id, productos: base.data.productos }, message: 'Carta \"' + input.nombre + '\" estructurada (' + base.data.productos + ' productos).' }",
         "  }",
-        "  carta_id = base.data.carta_id ; total = base.data.productos",
         "",
-        "  // 2) ENRIQUECER — delega en la operacion enriquecer() (misma logica 6 W en LOTES,",
-        "  //    persistida VERIFICADA lote a lote). generar = SUELO(reflejo) + enriquecer(LLM).",
-        "  enr = await this.enriquecer({ project_id: input.project_id, carta_id, solo_faltantes: false, correlation_id: input.correlation_id, request_id: uuid() })",
-        "  informe = enr.data?.informe || { alergenos_marcados: 0, avisos: [] }",
-        "",
-        "  // 3) EMITIR — el informe es el VALOR que el dueño no saca solo.",
-        "  return { status: 200, data: { carta_id, productos: total, informe }, message: 'Carta \"' + input.nombre + '\" estructurada y enriquecida (' + total + ' productos).' }"
+        "  // TEXTO_LIBRE:",
+        "  // 3. PENSAR — lo FUZZY: TU (LLM de pagina) estructuras el texto dictado a shape carta-pizzepos.",
+        "  //    REGLA DE HIERRO: solo lo que el texto dice. precio ausente -> 0. ingrediente no nombrado -> no existe.",
+        "  //    forma: { meta:{ id: 'carta_'+slug(nombre), nombre, generado_desde:'texto' }, categorias:[{id,nombre,orden}], productos:[{id: catId+'_'+slug(nombre), nombre, precio, categoria_id, ingredientes:[{id,nombre,familia}]}] }",
+        "  carta = estructurar(input.texto, input.nombre)",
+        "  if (carta.categorias.length == 0 || carta.productos.length == 0) {",
+        "    await publish('menu.generation.failed', { project_id: input.project_id, nombre: input.nombre, step: 'structuring', error: { code: 'INVALID_INPUT', message: 'no se detectaron productos/categorias en el texto' }, correlation_id: input.correlation_id })",
+        "    return INVALID_INPUT { hint: 'el texto no tiene productos/categorias detectables' }",
+        "  }",
+        "  // 4. GUARDAR — SIEMPRE por el reflejo del CUSTODIO. El LLM NO toca fs.",
+        "  resp = await publishAndWait('carta.save.request', { project_id: input.project_id, carta, user_id: 'menu-generator', motivo: 'generar desde texto', correlation_id: input.correlation_id }, { timeout_ms: 15000 })",
+        "  if (!resp || resp.status >= 400) {",
+        "    await publish('menu.generation.failed', { project_id: input.project_id, nombre: input.nombre, step: 'structuring', error: resp?.error || { code: 'UPSTREAM_UNREACHABLE' }, correlation_id: input.correlation_id })",
+        "    return resp?.error || UPSTREAM_UNREACHABLE { hint: 'carta-manager no responde' }",
+        "  }",
+        "  // 5. EMITIR",
+        "  return { status: 200, data: { carta_id: carta.meta.id, productos: carta.productos.length }, message: 'Carta \"' + input.nombre + '\" estructurada (' + carta.productos.length + ' productos).' }"
       ],
       "reglas_clave": [
-        "El SUELO lo pone el reflejo (menu.import.request): el LLM NO re-emite ids/familia/ingredientes_base. Esa re-emision era el bug v9 (no cabia 38 productos en una respuesta).",
-        "generar = SUELO(reflejo) + enriquecer(LLM). El ENRIQUECIMIENTO se delega en la operacion enriquecer (misma logica, reutilizable sobre cualquier carta ya estructurada).",
-        "6 W por producto: W3 alergenos+normativa (incluido el implicito: pizza->gluten), W4 dietas, W5 descripcion/etiquetas, W6 emoji. NO inventar hechos (regla de hierro).",
-        "Persistencia DELEGADA: solo carta-manager escribe. menu-generator no toca fs.",
-        "IDENTIDAD FASE 3: el reflejo reusa el id de la carta general; una regeneracion sobreescribe."
+        "CLASIFICAR ruta es la unica decision fuzzy de entrada. CATALOGO (json/catalogo ya formado) -> REFLEJO. TEXTO_LIBRE (dictado) -> LLM estructura.",
+        "El catalogo grande NUNCA lo emite el LLM: viaja como JSON y lo estructura el reflejo (esa re-emision era el bug v9).",
+        "REGLA DE HIERRO: estructurando texto, NO inventar (precio 0 si no se dice; ingrediente no nombrado no existe). Sin enriquecimiento (v11 lo saco).",
+        "Persistencia DELEGADA y VERIFICADA: CATALOGO via menu.import (reflejo) ; TEXTO_LIBRE via carta.save.request (custodio). publishAndWait en ambas -> imposible guardado falso.",
+        "IDENTIDAD: el reflejo reusa el id de la carta general; una regeneracion sobreescribe (no spawnea fichero)."
       ],
       "errores_posibles": ["INVALID_INPUT", "UPSTREAM_INVALID_RESPONSE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
     },
 
-    "enriquecer": {
-      "_descripcion": "La OTRA mitad de la identidad del modulo ('...y enriquece lo que el producto ES'), invocable POR SI SOLA sobre una carta que YA existe (suelo ya puesto). Lee sus productos y AÑADE lo intrinseco por las 6 W (W3 alergenos+normativa, W4 dietas, W5 descripcion+etiquetas, W6 emoji, + variaciones si aplica), EN LOTES, persistido VERIFICADO lote a lote. NO necesita material ni el cable de fuente: los productos ya estan en la carta — por eso esquiva limpio el cable_fuente_reflejo. Cajon visible en page=menu-generator. generar() delega aqui tras poner el suelo; pero tambien resuelve el caso comun 'tengo una carta cruda importada, enriquecela'.",
-      "input": "{ project_id (uuid, req), carta_id? (si falta, resuelve la carta general: en_servicio, o la unica no archivada, via carta.list), solo_faltantes? (bool, default true — solo lo que aun no tiene la W; re-invocar continua donde lo dejo), lote? (int, default 7), correlation_id?, request_id (uuid, req) }",
-      "pseudocodigo": [
-        "async enriquecer(input):",
-        "  // CONTRATO",
-        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "",
-        "  // RESOLVER la carta: explicita, o la general del proyecto (en_servicio > no archivada).",
-        "  carta_id = input.carta_id",
-        "  if (!carta_id) {",
-        "    lista = await publishAndWait('carta.list.request', { project_id: input.project_id }, { timeout_ms: 8000 })",
-        "    cartas = (lista?.data?.cartas) || []",
-        "    carta_id = (cartas.find(c => c.estado === 'en_servicio') || cartas.find(c => c.estado !== 'archivada') || {}).id",
-        "    if (!carta_id) return RESOURCE_NOT_FOUND { entity: 'carta', hint: 'el proyecto no tiene carta; crea una con generar' }",
-        "  }",
-        "",
-        "  // LEER los productos YA estructurados (suelo puesto). REFLEJO carta-manager, ms.",
-        "  base = await publishAndWait('carta.get.request', { project_id: input.project_id, carta_id }, { timeout_ms: 8000 })",
-        "  if (!base || base.status !== 200) return RESOURCE_NOT_FOUND { entity: 'carta', id: carta_id }",
-        "  productos = base.data.productos || []",
-        "  pendientes = (input.solo_faltantes === false) ? productos : productos.filter(p => le_falta_alguna_W(p))   // reanudable e idempotente",
-        "  if (pendientes.length === 0) return { status: 200, data: { carta_id, enriquecidos: 0, total: productos.length }, message: 'La carta ya esta enriquecida.' }",
-        "",
-        "  await publish('menu.generation.progress', { project_id: input.project_id, step: 'enriching', message: 'Enriqueciendo ' + pendientes.length + ' productos...', correlation_id: input.correlation_id })",
-        "",
-        "  // ENRIQUECER — TU trabajo (el LLM). Las 6 W por producto, EN LOTES (un catalogo grande NO",
-        "  //   cabe en una respuesta). AÑADES lo intrinseco que el suelo no alcanza:",
-        "  //     W3 alergenos (NORMATIVA: alergeno de cada ingrediente + el IMPLICITO; pizza -> gluten de la base)",
-        "  //     W4 dietas (vegano/vegetariano/sin_gluten/sin_lactosa de la composicion)",
-        "  //     W5 descripcion (apetitosa, diferencia los parecidos) + etiquetas (picante si guindilla...)",
-        "  //     W6 emoji que falte ; + variaciones (permite_anadir/quitar/extras_sugeridos) si el producto lo admite",
-        "  //   REGLA DE HIERRO: deduce de la composicion; NO inventes hechos (precio, un ingrediente que no esta).",
-        "  informe = { enriquecidos: 0, alergenos_marcados: 0, avisos: [] }",
-        "  for (lote of trocear(pendientes, input.lote || 7)):                  // TecnicaDeOrganizacion.PorTamanoFijo",
-        "    updates = lote.map(p => ({ producto_id: p.id, campos: aplicar_6W(p) }))   // {alergenos, dietas, etiquetas, descripcion, emoji?, variaciones?}",
-        "    resp = await publishAndWait('carta.update_products.request', {     // LOTE: UN _mutar = UNA version por lote; VERIFICADO",
-        "      project_id: input.project_id, carta_id, updates",
-        "    }, { timeout_ms: 20000 })",
-        "    if (resp?.status === 200) { informe.enriquecidos += (resp.data?.actualizados || []).length ; informe.alergenos_marcados += updates.filter(u => (u.campos.alergenos || []).length > 0).length }",
-        "",
-        "  // HIGIENE (W5 / limpieza semantica) -> avisos al informe (no muta datos).",
-        "  informe.avisos += detectar_casi_duplicados(productos) + nomenclatura_inconsistente(productos)",
-        "  return { status: 200, data: { carta_id, enriquecidos: informe.enriquecidos, total: productos.length, informe }, message: 'Enriquecidos ' + informe.enriquecidos + ' de ' + productos.length + ' productos.' }"
-      ],
-      "reglas_clave": [
-        "NO necesita material ni cable de fuente: los productos YA estan en la carta (suelo puesto). Esquiva limpio el cable_fuente_reflejo para cartas ya estructuradas (p.ej. una importada cruda).",
-        "EN LOTES (de N en N, reanudable). solo_faltantes=true por defecto: re-invocar CONTINUA donde lo dejo (idempotente, patron escandallo.recalcular_siguiente).",
-        "6 W por producto: W3 alergenos+normativa (incl. implicito pizza->gluten), W4 dietas, W5 descripcion/etiquetas, W6 emoji, + variaciones si aplica. NO inventar (regla de hierro).",
-        "Persistencia VERIFICADA lote a lote (publishAndWait a carta.update_products): imposible 'guardado falso'.",
-        "generar() delega aqui tras el SUELO; tambien invocable sola — 'enriquece la carta X' es una orden de primer nivel, no algo que el LLM tenga que adivinar."
-      ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_INVALID_RESPONSE", "UNKNOWN_ERROR"]
-    },
-
-    "preparar": {
-      "_descripcion": "Anyade a una carta EXISTENTE productos preparados desde recetas (1 o N). UNA vuelta LLM: lee la carta base (patron) y la(s) receta(s) por REFLEJOS, da su TOQUE (consistente con la base, TODOS los ingredientes), y persiste via carta.add_product (reflejo). 'generar CON base'. Todas las llamadas blueprint->reflejo, NUNCA blueprint->blueprint.",
-      "input": "{ project_id (uuid, req), carta_id (req — carta destino/patron), receta_ids (Array<str>, req — 1..N), categoria_id? (si no, se elige de la base), precio? (si no, 0), request_id (uuid, req), correlation_id? }",
-      "pseudocodigo": [
-        "async preparar(input):",
-        "  if (!input.project_id || !input.carta_id) return INVALID_INPUT { campo: 'carta_id' }",
-        "  if (!Array.isArray(input.receta_ids) || input.receta_ids.length === 0) return INVALID_INPUT { campo: 'receta_ids' }",
-        "",
-        "  // LEER 1 — la CARTA BASE (el patron). REFLEJO carta-manager, ms.",
-        "  base = await publishAndWait('carta.get.request', { project_id: input.project_id, carta_id: input.carta_id }, { timeout_ms: 8000 })",
-        "  if (!base || base.status !== 200) return RESOURCE_NOT_FOUND { entity: 'carta', id: input.carta_id }",
-        "  carta_base = base.data",
-        "",
-        "  // LEER 2 — la(s) RECETA(s) por su puerta. REFLEJO recetas, ms.",
-        "  recetas = []",
-        "  for (rid of input.receta_ids) {",
-        "    r = await publishAndWait('recetas.obtener.request', { project_id: input.project_id, receta_id: rid }, { timeout_ms: 8000 })",
-        "    if (r?.status === 200 && r.data) recetas.push(r.data)",
-        "  }",
-        "  if (recetas.length === 0) return RESOURCE_NOT_FOUND { entity: 'receta', ids: input.receta_ids }",
-        "",
-        "  // PENSAR — EL TOQUE (TU). Cada receta -> PRODUCTO pizzepos-ready SIGUIENDO carta_base:",
-        "  //   a) ingredientes = TODAS las lineas de la receta (la base del plato incluida). NO clasifiques base/topping.",
-        "  //        forma: { nombre: linea.nombre, familia: linea.categoria }  (add_product pone id=slug, valida familia)",
-        "  //   b) consistencia con carta_base (mismo nombre/familia para el mismo ingrediente).",
-        "  //   c) categoria destino: input.categoria_id o una EXISTENTE de carta_base coherente con receta.tipo;",
-        "  //        si ninguna encaja, carta.add_category PRIMERO (add_product da 412 si la categoria no existe).",
-        "  //   d) precio: input.precio o 0. NUNCA inventes precio.",
-        "  productos = recetas.map(r => ({ nombre: r.nombre, precio: (typeof input.precio === 'number' ? input.precio : 0), categoria_id: <la que juzgues por b/c>, ingredientes: r.lineas.map(l => ({ nombre: l.nombre, familia: l.categoria })) }))",
-        "",
-        "  // GUARDAR — REFLEJO carta-manager (id determinista, 409 si ya existe).",
-        "  anyadidos = 0 ; ya_estaban = 0",
-        "  for (p of productos) {",
-        "    resp = await publishAndWait('carta.add_product.request', { project_id: input.project_id, carta_id: input.carta_id, producto: p }, { timeout_ms: 15000 })",
-        "    if (resp?.status === 201) anyadidos++ ; else if (resp?.error?.code === 'ALREADY_EXISTS') ya_estaban++",
-        "  }",
-        "  return { status: 200, data: { anyadidos, ya_estaban, total: productos.length } }"
-      ],
-      "reglas_clave": [
-        "UNA vuelta LLM. Llamadas TODAS blueprint->REFLEJO (carta.get, recetas.obtener, carta.add_product). NUNCA blueprint->blueprint.",
-        "ingredientes = TODAS las lineas de la receta (base incluida); NO se clasifica base/topping.",
-        "el TOQUE = seguir el patron de carta_base (mismas convenciones).",
-        "la categoria destino debe EXISTIR (input.categoria_id o una de carta_base); si no, carta.add_category primero.",
-        "precio NUNCA se inventa (input.precio o 0)."
-      ],
-      "errores_posibles": ["INVALID_INPUT (carta_id/receta_ids)", "RESOURCE_NOT_FOUND (carta o recetas)", "UPSTREAM_TIMEOUT"]
-    },
-
     "_on_carta_generar_solicitada": {
-      "_descripcion": "Operacion INTERNA — handler asincrono del evento 'carta.generar.solicitada' (prefijo _ canonico, NO cajon en chat). Se invoca via blueprint-subscribers-asincronos. El LLM lo ejecuta en conversacion sintetica creada por ai-gateway.",
-      "input": "{ request_id, project_id (req), nombre (req), texto?, json?, material?, correlation_id? } — payload del evento (caller externo: carta-scheduler u otros).",
+      "_descripcion": "Operacion INTERNA — handler asincrono del evento 'carta.generar.solicitada' (prefijo _ canonico, NO cajon en chat). Preserva el subscribe de la v7. Se invoca via blueprint-subscribers-asincronos; el LLM lo ejecuta en conversacion sintetica creada por ai-gateway. Caller externo: carta-scheduler u otros.",
+      "input": "{ request_id, project_id (req), nombre (req), texto?, json?, material?, correlation_id? } — payload del evento.",
       "pseudocodigo": [
         "async _on_carta_generar_solicitada(input):",
+        "  // 1. CONTRATO (el caller externo no puede preguntar al usuario)",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
         "  if (!input.nombre) {",
         "    await publish('carta.generar.fallida', { request_id: input.request_id, project_id: input.project_id, error: { code: 'INVALID_INPUT', message: 'nombre requerido' }, correlation_id: input.correlation_id })",
-        "    return INVALID_INPUT { field: 'nombre' }   // caller externo no puede preguntar al usuario",
+        "    return INVALID_INPUT { field: 'nombre' }",
         "  }",
         "  await publish('carta.generar.iniciada', { request_id: input.request_id, project_id: input.project_id, nombre: input.nombre, message: 'Generando carta \"' + input.nombre + '\".', correlation_id: input.correlation_id })",
+        "  // DELEGA en generar (NO duplica logica)",
         "  resp = await this.generar({ project_id: input.project_id, nombre: input.nombre, texto: input.texto, json: input.json, material: input.material, correlation_id: input.correlation_id, request_id: uuid() })",
         "  if (resp.status >= 400) {",
         "    await publish('carta.generar.fallida', { request_id: input.request_id, project_id: input.project_id, nombre: input.nombre, error: resp.error, correlation_id: input.correlation_id })",
@@ -218,7 +122,7 @@
         "  return resp   // el evento 'persistida' es carta.actualizada (lo publica carta-manager); el caller se subscribe por correlation_id"
       ],
       "reglas_clave": [
-        "Handler de evento (fire-and-forget desde el publisher). Tu output efectivo son los publish de carta.generar.{iniciada,fallida} + la persistencia via generar.",
+        "Handler de evento (fire-and-forget desde el publisher). Tu output efectivo son los publish carta.generar.{iniciada,fallida} + la persistencia via generar.",
         "Caller externo no puede preguntar al usuario: si falta nombre, publish fallida y termina.",
         "NO duplicar logica con generar — delega via this.generar(...).",
         "NO es cajon en el chat normal (prefijo _)."
@@ -233,48 +137,18 @@
     "carta.generar.iniciada",
     "carta.generar.fallida",
     "menu.import.request",
-    "carta.get.request",
-    "carta.list.request",
-    "carta.update_products.request",
-    "carta.add_product.request",
-    "carta.add_category.request",
-    "recetas.obtener.request"
+    "carta.save.request"
   ],
-  "_nota_eventos": "menu.generation.* y carta.generar.* son el contrato con frontend/src/lib/stores/menu-generator.ts (UI feedback) — preservados del v7. menu.import.request es el SUELO (reflejo de menu-generator). carta.* son RPCs al reflejo carta-manager. v10 retira el 'carta.creada' fire-and-forget del v8/v9: la persistencia ahora es VERIFICADA (publishAndWait al reflejo), no eventual — eso mata el 'guardado falso'.",
+  "_nota_eventos": "menu.generation.* y carta.generar.* son el contrato con frontend/src/lib/stores/menu-generator.ts (UI feedback) — preservados del v7. menu.import.request es el SUELO determinista (reflejo de menu-generator, ruta CATALOGO). carta.save.request es el RPC al reflejo carta-manager (ruta TEXTO_LIBRE + el reflejo lo usa internamente). Persistencia VERIFICADA (publishAndWait) en ambas rutas -> no hay 'guardado falso'.",
 
   "eventos_que_escucho": [
     {
       "evento": "carta.generar.solicitada",
       "handler": "_on_carta_generar_solicitada",
-      "_descripcion": "Preserva el subscribe del v7 via blueprint-subscribers-asincronos. El LLM ejecuta el handler en conversacion sintetica cuando llega el evento. API abierta por si carta-scheduler u otros emisores lo usan."
+      "_descripcion": "Preserva el subscribe de la v7 via blueprint-subscribers-asincronos. El LLM ejecuta el handler en conversacion sintetica cuando llega el evento. API abierta por si carta-scheduler u otros emisores lo usan."
     }
   ],
 
-  "_historia": "v8.0.0 (2026-05): migracion JS legacy v7 -> blueprint puro. OCR eliminado (decision 4.4), agente menu-structurer archivado (4.2), persistencia via carta-manager (5.3=A), subscribe async preservado (5.4=A). v8.1.0: persistencia a fire-and-forget (publish carta.creada) porque el wiring RPC blueprint->blueprint NO estaba operacional. v9.0.0: semilla enriquecida (ingredientes con id+familia). v9.1.0: interfaz de entrada abierta + transformacion delegada. v9.2.0: R1-R5 inline (la prosa separada el LLM la ignoraba). v9.3.0: FASE 3 identidad (reusar id de carta general). v9.4.0: op preparar (recetas->carta). Diagnostico que motiva v10: ver _v10_changelog.",
-
-  "_v10_1_changelog": "v10.1.0 (2026-06-20): + operacion ENRIQUECER de primer nivel (cajon). DIAGNOSTICO (uso real en nonina, page menu-generator): el enriquecimiento solo vivia DENTRO de generar como una fase; al pedir 'enriquecer' sobre una carta YA existente el LLM no tenia cajon que abrir -> improvisaba y preguntaba al usuario que significa enriquecer. FIX: extraer la 2a mitad de la identidad del modulo ('...y enriquece lo que el producto ES') a una operacion enriquecer(project_id, carta_id?, solo_faltantes?) invocable sola: lee los productos ya estructurados (carta.get) y aplica las 6 W en LOTES, persistido VERIFICADO (carta.update_products). generar() ahora DELEGA en enriquecer tras poner el suelo (generar = SUELO + enriquecer). Beneficio extra: enriquecer NO usa el cable de fuente (los productos ya estan en la carta) -> esquiva el cable_fuente_reflejo abierto para el caso 'tengo una carta cruda, enriquecela' (justo el paso de rellenar los 44 de nonina). + carta.list.request a eventos_publicados (resolver la carta general cuando no se pasa carta_id).",
-  "_v10_changelog": "v10.0.0 (2026-06-20): REDISEÑO HIBRIDO tras auditoria runtime en nonina (convs f1bcab38/22/23). DIAGNOSTICO: el blueprint v9 pedia al LLM EMITIR la carta entera (38+ productos enriquecidos) en una respuesta. No cabia -> el LLM (a) publicaba carta.creada VACIA y carta-manager BORRABA la carta (wipe, carta_nonina v72 prods=0), o (b) troceaba a mano e imprimia JSON en el chat cantando '31 completas ✅' con la carta vacia (alucinacion de guardado). CAUSA RAIZ (confesada por el LLM): 'el payload es demasiado grande para una tool call'. FIX: reparto hibrido. (1) El SUELO determinista (estructurar: ids/familia/ingredientes_base/precio, persistir, versionar, guardia anti-wipe) pasa al REFLEJO index.js (nuevo) — el LLM NO re-emite eso. (2) Las R1-R5 / normalizadores / campos_que_marcan_completa SALEN del blueprint (ahora viven en el reflejo, JS). (3) El LLM se queda con lo SUYO: ENRIQUECER lo intrinseco por las 6 W (alergenos+normativa, dietas, descripcion, etiquetas, emoji) — EN LOTES (reanudable, patron escandallo.recalcular_siguiente), persistido VERIFICADO lote a lote (publishAndWait), nunca fire-and-forget -> imposible el 'guardado falso'. (4) Abstraccion generica: el motor pregunta las 6 W del producto (universales, no un perfil pizza); valen para cualquier catalogo. (5) Persistencia v8/v9 (carta.creada fire-and-forget) retirada por persistencia verificada. Apoyos: _shared/tecnica-organizacion.js (troceo) + reflejo menu-generator/index.js (suelo + max info: preserva ingredientes_base con precio_extra para variaciones/mitad). Auditoria y diseño: sesion claude/lee-claude-md-8srv3w.",
-
-  "trabajo_pendiente": [
-    {
-      "id": "cable_fuente_reflejo",
-      "estado": "abierto",
-      "descripcion": "menu.import.request necesita REFERENCIAR la fuente que el reflejo leera por su cuenta (sin que el LLM re-emita el JSON). Decidido (sesion): via FILESYSTEM (adjunto), como todos los reflejos (fs.read), NO via conversation_id/db.query (ningun otro reflejo toca la conversacion). Falta fijar la convencion de RUTA del adjunto en el VPS (no visible en clone local). Hasta cerrarlo, material_ref queda como campo nombrado en el contrato. El reflejo index.js hoy lee por db.query (provisional) — migrar a fs.read(material_path) al cerrar la ruta."
-    },
-    {
-      "id": "persist_enriquecimiento_por_lote",
-      "estado": "resuelto",
-      "descripcion": "RESUELTO (carta-manager 2.4.0 / reflejo 1.9.0): (a) add/update_product aceptan la abstraccion COMPLETA del producto (las 6 W: + tipo, emoji, estaciones, ingredientes_base con precio_extra, dietas; _normalizarIngredientes preserva precio_extra). (b) op carta.update_products (LOTE): enriquece N productos en UN _mutar (una version) en vez de N — pareja del troceo a la entrada, modelada sobre update_prices. (c) guardado conservador en _save (la carta no pierde productos por una escritura que no los aporta). El bucle de generar usa ya carta.update_products por lote."
-    },
-    {
-      "id": "validar_runtime_end_to_end",
-      "estado": "diferido",
-      "descripcion": "Audit runtime contra VPS: usuario genera carta desde catalogo en page=menu-generator -> reflejo pone el suelo -> LLM enriquece por lotes -> carta-manager persiste verificado -> UI del POS muestra productos con alergenos/dietas/emoji. Reemplaza el smoke artificial. Re-ejecutar cuando el VPS este sano y el modulo desplegado."
-    },
-    {
-      "id": "verificar_compat_frontend_menu_generator",
-      "estado": "pendiente",
-      "descripcion": "frontend/src/lib/stores/menu-generator.ts consume menu.generation.*. v10 los preserva. Confirmar que no depende de algun campo que v10 no emita igual."
-    }
-  ]
+  "_historia": "v7 (legacy JS monolito): pipeline OCR (pdfjs->sharp->google-vision) + agente menu-structurer. v8.0.0: migracion a blueprint puro (OCR eliminado dec 4.4, agente archivado dec 4.2, persistencia via carta-manager). v9.x: semilla enriquecida + interfaz abierta + FASE 3 identidad + op preparar. v10.0.0: REDISEÑO HIBRIDO (SUELO determinista al reflejo index.js; el LLM dejo de emitir la carta entera — bug v9). v10.1.0: op enriquecer de primer nivel (6 W).",
+  "_v11_changelog": "v11.0.0 (2026-06-21): ADELGAZAMIENTO al alma de la v7. Peticion: simplificar manteniendo el formato hibrido (blueprint + reflejo JS) y la abstraccion generica como clase. DIAGNOSTICO: la v10 crecio a 4 operaciones (generar/enriquecer/preparar/_on_carta_generar_solicitada) que solapaban responsabilidades y se alejaban del 'sentimiento y resultado' de la v7 (un generador limpio: pide nombre, toma cualquier input, da una carta estructurada, no la guarda el). FIX: (1) el blueprint se modela como CLASE GENERICA GeneradorDeCatalogo (preguntas universales del producto, no un perfil pizza). (2) Se adelgaza a 2 operaciones: generar (cajon) + _on_carta_generar_solicitada (subscribe v7). (3) SALEN del modulo: enriquecer (6 W: alergenos/dietas/descripcion/etiquetas/emoji) y preparar (recetas->carta) — eran crecimiento v10, no el alcance v7. (4) generar conserva el split anti-bug-v9: CATALOGO json -> reflejo (no re-emite) ; TEXTO_LIBRE dictado -> LLM estructura + carta.save del custodio. (5) Persistencia DELEGADA y VERIFICADA en ambas rutas. El reflejo index.js (menu.import) queda intacto: sigue sirviendo la ruta CATALOGO. Sesion: claude/lee-claude-md-5ynlmf."
 }

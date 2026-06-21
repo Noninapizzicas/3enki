@@ -67,8 +67,8 @@ test('module.json: target_page_id preservado del v7 legacy', () => {
   assert.strictEqual(manifest.target_page_id, 'menu-generator');
 });
 
-test('module.json: version bumped a 8.1.0 (hibrido)', () => {
-  assert.strictEqual(manifest.version, '8.1.0');
+test('module.json: version bumped a 11.0.0 (hibrido, adelgazado al alma v7)', () => {
+  assert.strictEqual(manifest.version, '11.0.0');
 });
 
 test('module.json: HIBRIDO — declara subscribes con el handler del reflejo (menu.import.request)', () => {
@@ -88,41 +88,29 @@ test('module.json: NO declara dependencies nativas (pdfjs/sharp/google-vision el
 
 test('blueprint: id, version, extends correctos', () => {
   assert.strictEqual(blueprint.id, 'menu-generator');
-  assert.strictEqual(blueprint.version, 'blueprint-10.1.0');
+  assert.strictEqual(blueprint.version, 'blueprint-11.0.0');
   assert.strictEqual(blueprint.extends_blueprint_abstract, 'subsistema-recetario.modulo-base');
   assert.strictEqual(blueprint.language, 'es');
 });
 
-test('blueprint: declara 4 operaciones (generar + enriquecer + preparar + _on_carta_generar_solicitada)', () => {
+test('blueprint: declara 2 operaciones (generar + _on_carta_generar_solicitada) — adelgazado v11', () => {
   const ops = Object.keys(blueprint.operaciones || {});
   assert.deepStrictEqual(
     ops.sort(),
-    ['_on_carta_generar_solicitada', 'enriquecer', 'generar', 'preparar']
+    ['_on_carta_generar_solicitada', 'generar']
   );
 });
 
-test('blueprint: operacion enriquecer es cajon de primer nivel (input + pseudocodigo + lotes + 6W)', () => {
-  const enr = blueprint.operaciones.enriquecer;
-  assert.ok(enr, 'falta operacion enriquecer');
-  assert.ok(typeof enr.input === 'string' && /carta_id\?/.test(enr.input), 'enriquecer acepta carta_id opcional (resuelve la general si falta)');
-  assert.ok(Array.isArray(enr.pseudocodigo) && enr.pseudocodigo.length > 0);
-  const pc = enr.pseudocodigo.join('\n');
-  assert.ok(/carta\.get\.request/.test(pc), 'enriquecer LEE los productos via carta.get');
-  assert.ok(/carta\.update_products\.request/.test(pc), 'enriquecer PERSISTE via carta.update_products en lotes');
-  assert.ok(/trocear/.test(pc), 'enriquecer trocea en lotes (reanudable)');
-  assert.ok(Array.isArray(enr.errores_posibles) && enr.errores_posibles.includes('INVALID_INPUT'));
+test('blueprint: v11 RETIRA enriquecer y preparar (salen del alcance del modulo)', () => {
+  assert.ok(!blueprint.operaciones.enriquecer, 'enriquecer (6 W) sale del modulo en v11');
+  assert.ok(!blueprint.operaciones.preparar, 'preparar (recetas->carta) sale del modulo en v11');
 });
 
-test('blueprint: generar DELEGA el enriquecimiento en enriquecer (DRY, generar = SUELO + enriquecer)', () => {
-  const pc = blueprint.operaciones.generar.pseudocodigo.join('\n');
-  assert.ok(/this\.enriquecer\(/.test(pc), 'generar debe delegar en this.enriquecer tras poner el suelo');
-});
-
-test('blueprint: v10 declara las 6 W del producto (abstraccion universal)', () => {
-  const pc = blueprint.preguntas_clave || {};
-  const ws = Object.keys(pc).filter(k => /^W[1-6]_/.test(k));
-  assert.strictEqual(ws.length, 6, 'deben estar las 6 W');
-  assert.ok(pc.regla_de_hierro && /inventar/i.test(pc.regla_de_hierro), 'falta la regla de hierro (no inventar hechos)');
+test('blueprint: v11 declara preguntas_universales del producto (abstraccion generica, no perfil pizza)', () => {
+  const pu = blueprint.preguntas_universales || {};
+  const claves = Object.keys(pu).filter(k => !k.startsWith('_') && k !== 'regla_de_hierro');
+  assert.ok(claves.length >= 3, 'deben estar las preguntas universales del producto');
+  assert.ok(pu.regla_de_hierro && /inventar/i.test(pu.regla_de_hierro), 'falta la regla de hierro (no inventar hechos)');
 });
 
 test('blueprint: operacion generar tiene input + pseudocodigo + errores_posibles', () => {
@@ -278,11 +266,15 @@ test('schema: ingrediente con emoji valida (ayuda visual del POS comandero)', ()
 // Group 4: integracion blueprint -> persistencia event-core
 // --------------------------------------------------
 
-test('integracion: v10 generar usa persistencia VERIFICADA via reflejo (menu.import + carta.update_product), NO el viejo carta.creada', () => {
+test('integracion: v11 generar persiste VERIFICADO en ambas rutas (CATALOGO: menu.import · TEXTO_LIBRE: carta.save), NO carta.creada', () => {
   const pseudo = blueprint.operaciones.generar.pseudocodigo.join('\n');
   assert.ok(
     pseudo.includes('menu.import.request'),
-    'generar debe poner el SUELO via el reflejo (menu.import.request)'
+    'ruta CATALOGO: generar estructura+persiste via el reflejo (menu.import.request)'
+  );
+  assert.ok(
+    pseudo.includes('carta.save.request'),
+    'ruta TEXTO_LIBRE: el LLM estructura y persiste via el custodio (carta.save.request)'
   );
   assert.ok(
     pseudo.includes('publishAndWait'),
@@ -290,18 +282,22 @@ test('integracion: v10 generar usa persistencia VERIFICADA via reflejo (menu.imp
   );
   assert.ok(
     !pseudo.includes('carta.creada'),
-    'v10 RETIRA carta.creada fire-and-forget (era la causa del wipe: publicar carta vacia borraba la carta)'
+    'NO carta.creada fire-and-forget (era la causa del wipe: publicar carta vacia borraba la carta)'
   );
 });
 
-test('integracion: v10 NO declara carta.creada en eventos_publicados (persistencia verificada, no eventual)', () => {
+test('integracion: v11 NO declara carta.creada en eventos_publicados (persistencia verificada, no eventual)', () => {
   assert.ok(
     !blueprint.eventos_publicados.includes('carta.creada'),
-    'v10 no usa carta.creada — la persistencia es verificada via RPC al reflejo'
+    'v11 no usa carta.creada — la persistencia es verificada via RPC al reflejo/custodio'
   );
   assert.ok(
     blueprint.eventos_publicados.includes('menu.import.request'),
-    'eventos_publicados debe incluir menu.import.request (el suelo del reflejo)'
+    'eventos_publicados debe incluir menu.import.request (ruta CATALOGO del reflejo)'
+  );
+  assert.ok(
+    blueprint.eventos_publicados.includes('carta.save.request'),
+    'eventos_publicados debe incluir carta.save.request (ruta TEXTO_LIBRE del custodio)'
   );
 });
 

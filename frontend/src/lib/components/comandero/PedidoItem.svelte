@@ -59,6 +59,17 @@
     || item.notas
     || item.tipo === 'mitad_mitad'
     || item.tipo === 'al_gusto';
+
+  // "½ Bachata (sin anchoas, + bacon)" — nombre de la mitad + sus variaciones (si las tiene).
+  function formatMitad(half: any): string {
+    if (!half) return '';
+    let s = `½ ${half.nombre}`;
+    const mods: string[] = [];
+    if (Array.isArray(half.quitar)) for (const n of half.quitar) mods.push(`sin ${typeof n === 'string' ? n : n?.nombre}`);
+    if (Array.isArray(half.anadir)) for (const n of half.anadir) mods.push(`+ ${typeof n === 'string' ? n : n?.nombre}`);
+    if (mods.length) s += ` (${mods.filter(Boolean).join(', ')})`;
+    return s;
+  }
 </script>
 
 <div
@@ -103,7 +114,7 @@
     <div class="row-detail">
       {#if item.tipo === 'mitad_mitad' && item.pizza_izquierda && item.pizza_derecha}
         <span class="detail-line mitad-detail">
-          {item.pizza_izquierda.nombre} | {item.pizza_derecha.nombre}
+          {formatMitad(item.pizza_izquierda)} | {formatMitad(item.pizza_derecha)}
         </span>
       {/if}
 

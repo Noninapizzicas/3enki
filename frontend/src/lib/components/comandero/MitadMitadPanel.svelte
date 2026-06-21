@@ -13,6 +13,7 @@
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
   import { resolverCartaIdCanal } from '$lib/ui-core/carta-canal';
   import VariacionesPanel from './VariacionesPanel.svelte';
+  import ProductoBtn from './ProductoBtn.svelte';
 
   export let visible: boolean = true;
   export let projectId: string = '';
@@ -131,12 +132,16 @@
     }
   }
 
-  // Abre el VariacionesPanel (el MISMO del comandero) para una mitad concreta.
-  function personalizar(lado: 'izquierda' | 'derecha') {
-    if (lado === 'izquierda' && !pizzaIzquierda) return;
-    if (lado === 'derecha' && !pizzaDerecha) return;
-    varTarget = lado;
+  // Botón partido (como comandero): elegir la pizza de una mitad en UN gesto.
+  //   zona íntegra → la pizza tal cual ;  zona "+/-" → la pizza + abre variaciones de esa mitad.
+  function elegirPizza(pizza: Pizza, conVariaciones: boolean) {
+    const lado = seleccionandoLado;   // el lado que recibe (ANTES de que selectPizza avance)
+    selectPizza(pizza);
+    if (conVariaciones) varTarget = lado;
   }
+
+  // El ProductoBtn pinta el split solo si tiene_variaciones; toda pizza puede personalizarse.
+  const asBtn = (p: any) => ({ ...p, tiene_variaciones: true });
 
   function onVarConfirm(e: CustomEvent<{ ingredientes_quitar: string[]; ingredientes_anadir: any[]; precio_total: number }>) {
     const d = e.detail;
@@ -235,24 +240,6 @@
           </button>
         </div>
 
-        <!-- Personalizar cada mitad (reutiliza VariacionesPanel) -->
-        {#if pizzaIzquierda || pizzaDerecha}
-          <div class="custom-row">
-            {#if pizzaIzquierda}
-              <button class="custom-btn izq" class:done={varIzquierda} on:click={() => personalizar('izquierda')}>
-                {varIzquierda ? '✅' : '✏️'} ½ izq
-                {#if varIzquierda && varIzquierda.extras > 0}<span class="custom-extra">+{formatPrecio(varIzquierda.extras)}</span>{/if}
-              </button>
-            {/if}
-            {#if pizzaDerecha}
-              <button class="custom-btn der" class:done={varDerecha} on:click={() => personalizar('derecha')}>
-                {varDerecha ? '✅' : '✏️'} ½ der
-                {#if varDerecha && varDerecha.extras > 0}<span class="custom-extra">+{formatPrecio(varDerecha.extras)}</span>{/if}
-              </button>
-            {/if}
-          </div>
-        {/if}
-
         <!-- Precio -->
         <div class="precio-preview">
           <span class="precio-label">💰 Precio:</span>
@@ -289,24 +276,13 @@
         {:else}
           <div class="pizzas-grid">
             {#each pizzas as pizza}
-              {@const isSelectedIzq = pizzaIzquierda?.id === pizza.id}
-              {@const isSelectedDer = pizzaDerecha?.id === pizza.id}
-              <button
-                class="pizza-btn"
-                class:selected-izq={isSelectedIzq}
-                class:selected-der={isSelectedDer}
-                on:click={() => selectPizza(pizza)}
-              >
-                <span class="pizza-emoji">{pizza.emoji || '🍕'}</span>
-                <span class="pizza-nombre">{pizza.nombre}</span>
-                <span class="pizza-precio">{formatPrecio(pizza.precio)}</span>
-                {#if isSelectedIzq}
-                  <span class="pizza-badge izq">👈</span>
-                {/if}
-                {#if isSelectedDer}
-                  <span class="pizza-badge der">👉</span>
-                {/if}
-              </button>
+              <!-- Botón partido (mismo ProductoBtn del comandero): zona íntegra = pizza tal cual,
+                   zona "+/-" = pizza + variaciones de esta mitad, en un gesto. -->
+              <ProductoBtn
+                producto={asBtn(pizza)}
+                on:add={() => elegirPizza(pizza, false)}
+                on:variaciones={() => elegirPizza(pizza, true)}
+              />
             {/each}
           </div>
         {/if}
@@ -536,46 +512,6 @@
     color: #22c55e;
   }
 
-  /* Fila de personalización por mitad */
-  .custom-row {
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
-  }
-
-  .custom-btn {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 9px 8px;
-    border: 1px dashed #444;
-    border-radius: 8px;
-    background: #1a1a1a;
-    color: #aaa;
-    font-size: 0.78rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .custom-btn.izq:hover { border-color: #8b5cf6; color: #fff; }
-  .custom-btn.der:hover { border-color: #f59e0b; color: #fff; }
-
-  .custom-btn.done {
-    border-style: solid;
-    border-color: #22c55e;
-    background: rgba(34, 197, 94, 0.1);
-    color: #22c55e;
-  }
-
-  .custom-extra {
-    font-size: 0.7rem;
-    font-weight: 700;
-    color: #22c55e;
-  }
-
   /* Lado selector */
   .lado-selector {
     display: flex;
@@ -628,86 +564,11 @@
     color: #ef4444;
   }
 
-  /* Pizzas grid */
+  /* Pizzas grid — cada celda es un ProductoBtn (split, como comandero) */
   .pizzas-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 10px;
-  }
-
-  .pizza-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    padding: 14px 10px;
-    border: 2px solid #333;
-    border-radius: 12px;
-    background: #1a1a1a;
-    color: #ccc;
-    cursor: pointer;
-    transition: all 0.15s;
-    position: relative;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .pizza-btn:hover {
-    border-color: #555;
-    background: #222;
-  }
-
-  .pizza-btn.selected-izq {
-    border-color: #8b5cf6;
-    background: rgba(139, 92, 246, 0.15);
-  }
-
-  .pizza-btn.selected-der {
-    border-color: #f59e0b;
-    background: rgba(245, 158, 11, 0.15);
-  }
-
-  .pizza-btn.selected-izq.selected-der {
-    border-color: #22c55e;
-    background: rgba(34, 197, 94, 0.15);
-  }
-
-  .pizza-emoji {
-    font-size: 1.8rem;
-  }
-
-  .pizza-nombre {
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-align: center;
-    line-height: 1.2;
-  }
-
-  .pizza-precio {
-    font-size: 0.7rem;
-    color: #22c55e;
-    font-weight: 700;
-  }
-
-  .pizza-badge {
-    position: absolute;
-    top: 6px;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    font-size: 0.7rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .pizza-badge.izq {
-    left: 6px;
-    background: #8b5cf6;
-  }
-
-  .pizza-badge.der {
-    right: 6px;
-    background: #f59e0b;
   }
 
   /* Footer */
@@ -758,14 +619,6 @@
     .pizzas-grid {
       grid-template-columns: repeat(2, 1fr);
       gap: 8px;
-    }
-
-    .pizza-btn {
-      padding: 10px 8px;
-    }
-
-    .pizza-emoji {
-      font-size: 1.5rem;
     }
 
     .mitad {

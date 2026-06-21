@@ -34,7 +34,7 @@ class ComanderoModule extends BaseModule {
   constructor() {
     super();
     this.name    = 'comandero';
-    this.version = '3.1.0';
+    this.version = '3.3.0';
     this.validator = null;
 
     this.pedidos              = new Map();
@@ -100,12 +100,22 @@ class ComanderoModule extends BaseModule {
       properties: {
         cuenta_id:   { type: 'string', minLength: 1 },
         producto_id: { type: 'string', minLength: 1 },
+        project_id:  { type: 'string' },
         nombre:      { type: 'string' },
         precio:      { type: 'number', minimum: 0 },
         cantidad:    { type: 'integer', minimum: 1 },
         notas:       { type: 'string' },
+        categoria:   { type: 'string' },
         tipo:        { type: 'string', enum: ['mitad_mitad', 'al_gusto'] },
-        variaciones: { type: 'array' }
+        // variaciones: objeto nuevo { ingredientes_quitar, ingredientes_anadir } O array legacy.
+        variaciones: { type: ['array', 'object'] },
+        // mitad y mitad: cada mitad = { id, nombre, ingredientes_base, quitar?, anadir? }.
+        pizza_izquierda: { type: 'object' },
+        pizza_derecha:   { type: 'object' },
+        // al gusto / catálogo del item
+        ingredientes:      { type: 'array' },
+        ingredientes_base: { type: 'array' },
+        precio_canal_resuelto: { type: 'boolean' }
       }
     });
 

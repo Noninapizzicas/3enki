@@ -109,7 +109,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'comandero');
-    assert.strictEqual(m.version, '3.1.0');
+    assert.strictEqual(m.version, '3.3.0');
     assert.strictEqual(m.pedidos.size, 0);
     assert.strictEqual(m.productosCache.size, 0);
     await m.onUnload();

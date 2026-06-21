@@ -34,7 +34,7 @@ class PedidosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'pedidos';
-    this.version = '3.1.0';
+    this.version = '3.2.0';
 
     this.pedidos = new Map();
     this.pedidosPorCuenta = new Map();
@@ -458,7 +458,14 @@ class PedidosModule extends BaseModule {
           descripcion,
           producto_id: raw.producto_id || null,
           precio_unitario_centimos: Number.isInteger(raw.precio_unitario_centimos) ? raw.precio_unitario_centimos : null,
-          precio_total_centimos: Number.isInteger(raw.precio_total_centimos) ? raw.precio_total_centimos : null
+          precio_total_centimos: Number.isInteger(raw.precio_total_centimos) ? raw.precio_total_centimos : null,
+          // Estructura para cocina (la pinta el ItemLine como el POS). El bot la re-tasó y la
+          // mandó; aquí solo la dejamos pasar hacia el comandero → enviar_cocina → cocina.
+          // `tipo` solo si es mitad/al_gusto (el comandero lo valida con ese enum; normal NO lo lleva).
+          ...((raw.tipo === 'mitad_mitad' || raw.tipo === 'al_gusto') ? { tipo: raw.tipo } : {}),
+          ...(raw.variaciones ? { variaciones: raw.variaciones } : {}),
+          ...(raw.pizza_izquierda ? { pizza_izquierda: raw.pizza_izquierda } : {}),
+          ...(raw.pizza_derecha ? { pizza_derecha: raw.pizza_derecha } : {})
         });
       }
 
@@ -1121,7 +1128,13 @@ class PedidosModule extends BaseModule {
             nombre: it.descripcion,
             precio: it.precio_unitario_centimos / 100,
             cantidad: it.cantidad,
-            precio_canal_resuelto: true
+            precio_canal_resuelto: true,
+            // Estructura → el comandero la guarda y la reenvía en enviar_cocina → cocina la pinta.
+            // `tipo` solo mitad/al_gusto (enum del comandero); normal va solo con `variaciones`.
+            ...((it.tipo === 'mitad_mitad' || it.tipo === 'al_gusto') ? { tipo: it.tipo } : {}),
+            ...(it.variaciones ? { variaciones: it.variaciones } : {}),
+            ...(it.pizza_izquierda ? { pizza_izquierda: it.pizza_izquierda } : {}),
+            ...(it.pizza_derecha ? { pizza_derecha: it.pizza_derecha } : {})
           });
         }
       } else {

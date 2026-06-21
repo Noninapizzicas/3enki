@@ -32,7 +32,7 @@ class CartaDigitalModule extends BaseModule {
   constructor() {
     super();
     this.name = 'carta-digital';
-    this.version = '2.3.0';
+    this.version = '2.5.0';
     // ÚNICO estado: el mapping canal→carta_id por proyecto (de tarifas.config.actualizada).
     this.mappingCanalesPerProject = new Map();
     // Proyectos activos vistos por project.activated (project_id → {name, slug}) + el ÚLTIMO
@@ -284,6 +284,10 @@ class CartaDigitalModule extends BaseModule {
     const colorPrimario = colores.primario || colores.principal || colores.acento || '#f59e0b';
     const colorFondo = colores.fondo || '#0a0a0a';
     const logoEmoji = (typeof b.logo === 'string' && b.logo.length <= 4) ? b.logo : '\u{1F355}';
+    // NOTA: el ALOJADO NO setea ai_endpoint a propósito → el chat IA sale OFF (autoservicio
+    // puro: carta+carrito+pedido→cocina). El cerebro del chat es el cf-worker del escenario
+    // SUELTO (export-cli + cf-worker/deploy.js); el core no sirve HTTP-SSE de chat. No cablear
+    // aquí un endpoint de chat sin tener un worker detrás (sería apuntar a un fantasma).
     const tplConfig = {
       nombre_negocio: b.nombre || this.activos.get(project_id)?.name || 'Carta',
       moneda: op.moneda || '€',

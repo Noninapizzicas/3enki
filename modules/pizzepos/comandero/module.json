@@ -1,6 +1,7 @@
 {
   "name": "comandero",
-  "version": "3.2.0",
+  "version": "3.3.0",
+  "_v3_3_nota": "v3.3.0 (2026-06-21): FIX propagacion de variaciones. El schema de add-item declaraba variaciones:{type:'array'} pero el frontend manda el formato nuevo OBJETO { ingredientes_quitar, ingredientes_anadir } -> AJV lo rechazaba y el item personalizado nunca se anadia. Ahora variaciones acepta array|object, y se declaran pizza_izquierda/derecha (mitad con quitar/anadir por mitad), ingredientes, ingredientes_base, precio_canal_resuelto. (El display de las variaciones por mitad — comandero PedidoItem + cocina ItemLine — se arregla en frontend.)",
   "description": "Buffer de pedido por cuenta del POS — items, variaciones, envio a cocina. Persistencia transitoria atomica. Resolucion precio-por-canal via cache local hidratado por tarifas.config.actualizada (sin acceso directo a otros modulos). Las 4 operaciones principales se exponen como tools del LLM (agregar/eliminar/enviar/obtener) compartiendo los mismos handlers que los ui_handlers del frontend.",
   "author": "Pizzepos Team",
   "language": "es",

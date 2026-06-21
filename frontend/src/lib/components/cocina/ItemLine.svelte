@@ -60,12 +60,15 @@
   // Helpers para extraer datos con formatos flexibles
   // ——————————————————————————————————————————
 
-  function parsePizzaHalf(half: string | PizzaHalf | undefined | null): { nombre: string; ingredientes: string[] } | null {
+  function parsePizzaHalf(half: string | PizzaHalf | undefined | null): { nombre: string; ingredientes: string[]; quitar: string[]; anadir: string[] } | null {
     if (!half) return null;
-    if (typeof half === 'string') return { nombre: half, ingredientes: [] };
+    if (typeof half === 'string') return { nombre: half, ingredientes: [], quitar: [], anadir: [] };
+    const names = (arr: any): string[] => Array.isArray(arr) ? arr.map((n: any) => typeof n === 'string' ? n : n?.nombre).filter(Boolean) : [];
     return {
       nombre: half.nombre || '???',
-      ingredientes: half.ingredientes_base || []
+      ingredientes: half.ingredientes_base || [],
+      quitar: names((half as any).quitar),   // variaciones de ESTA mitad (sin X)
+      anadir: names((half as any).anadir)    // (+ Y)
     };
   }
 
@@ -190,6 +193,12 @@
                     {/each}
                   </ul>
                 {/if}
+                {#if pizzaIzq.quitar.length || pizzaIzq.anadir.length}
+                  <ul class="mitad-ing-list mitad-mods">
+                    {#each pizzaIzq.quitar as n}<li class="mitad-mod mod-quitar">SIN {n.toUpperCase()}</li>{/each}
+                    {#each pizzaIzq.anadir as n}<li class="mitad-mod mod-anadir">+ {n.toUpperCase()}</li>{/each}
+                  </ul>
+                {/if}
               </div>
             {/if}
             {#if pizzaDer}
@@ -201,6 +210,12 @@
                     {#each pizzaDer.ingredientes as ing}
                       <li class="mitad-ing-item">{ing}</li>
                     {/each}
+                  </ul>
+                {/if}
+                {#if pizzaDer.quitar.length || pizzaDer.anadir.length}
+                  <ul class="mitad-ing-list mitad-mods">
+                    {#each pizzaDer.quitar as n}<li class="mitad-mod mod-quitar">SIN {n.toUpperCase()}</li>{/each}
+                    {#each pizzaDer.anadir as n}<li class="mitad-mod mod-anadir">+ {n.toUpperCase()}</li>{/each}
                   </ul>
                 {/if}
               </div>
@@ -572,6 +587,17 @@
     content: '- ';
     color: #7c3aed;
   }
+
+  /* Variaciones de UNA mitad (sin X / + Y) */
+  .mitad-mods { padding-left: 24px; margin-top: 2px; }
+  .mitad-mod {
+    font-size: 1.2rem;
+    font-weight: 800;
+    line-height: 1.3;
+    list-style: none;
+  }
+  .mitad-mod.mod-quitar { color: #f87171; }
+  .mitad-mod.mod-anadir { color: #4ade80; }
 
   /* ——— AL GUSTO — lista vertical ——— */
   .algusto-section {

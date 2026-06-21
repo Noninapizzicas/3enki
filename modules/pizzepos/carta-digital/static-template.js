@@ -533,7 +533,7 @@ let mitadCat = null, mitadIzq = null, mitadDer = null, mitadLado = 'izq';
 // { quitar:[nombres], anadir:[{id,nombre,precio_extra}], extras } | null = mitad sin personalizar.
 let mitadVarIzq = null, mitadVarDer = null;
 let mitadVarLado = null, mitadVarPizza = null;   // lado/pizza en edición de variaciones
-let alGustoCat = null, alGustoBase = 0;
+let alGustoCat = null, alGustoBase = 0, alGustoBaseId = null;
 
 // localStorage keys
 var LS_CART = 'carta_cart_' + (CONFIG.nombre_negocio || 'default').replace(/\\s/g, '_');
@@ -762,7 +762,7 @@ function closeDetail() {
   detailProd = null;
   mitadCat = null; mitadIzq = null; mitadDer = null; mitadLado = 'izq';
   mitadVarIzq = null; mitadVarDer = null; mitadVarLado = null; mitadVarPizza = null;
-  alGustoCat = null; alGustoBase = 0;
+  alGustoCat = null; alGustoBase = 0; alGustoBaseId = null;
 }
 
 // Detalle → carrito: arma la personalización (sin X · con Y) y delega en addToCart.
@@ -806,7 +806,10 @@ function addDetailToCart() {
   if (quitados.length) partes.push('sin ' + quitados.join(', '));
   if (anadidos.length) partes.push('con ' + anadidos.join(', '));
   const detalle = partes.length ? partes.join(' · ') : null;
-  addToCart(p.id, { detalle: detalle, precio: p.precio + extra });
+  // anadir POR IDS (lo que re-tasa el bot); quitar por NOMBRE (gratis, solo nota de cocina).
+  const anadirIds = Array.from(anadirSel.keys());
+  const estructura = { producto_id: p.id, tipo: 'normal', quitar: quitados, anadir: anadirIds };
+  addToCart(p.id, { detalle: detalle, precio: p.precio + extra, estructura: estructura });
   closeDetail();
 }
 
@@ -816,7 +819,9 @@ function addToCart(id, opts) {
   if (!p) return;
   opts = opts || {};
   const precio = (opts.precio != null) ? opts.precio : p.precio;
-  cart.push({ _id: ++cartId, id: p.id, nombre: p.nombre, precio: precio, qty: 1, detalle: opts.detalle || null });
+  // estructura = la forma POR IDS para el payload #P1 (el bot la re-tasa). Por defecto, normal.
+  const estructura = opts.estructura || { producto_id: p.id, tipo: 'normal' };
+  cart.push({ _id: ++cartId, id: p.id, nombre: p.nombre, precio: precio, qty: 1, detalle: opts.detalle || null, estructura: estructura });
   updateCart();
   showUpsell(p);
 }
@@ -993,6 +998,8 @@ function addMitadToCart() {
   const izqTxt = '½ ' + mitadIzq.nombre + mitadModsTxt(mitadVarIzq);
   const derTxt = '½ ' + mitadDer.nombre + mitadModsTxt(mitadVarDer);
   const mods = (mitadModsTxt(mitadVarIzq) || mitadModsTxt(mitadVarDer)) ? (izqTxt + ' + ' + derTxt) : null;
+  // anadir POR IDS para el payload #P1 (el bot re-tasa con ellos).
+  const idsDe = function (v) { return (v && Array.isArray(v.anadir)) ? v.anadir.map(function (a) { return a.id; }).filter(Boolean) : []; };
   cart.push({
     _id: ++cartId,
     id: 'mitad_' + mitadIzq.id + '_' + mitadDer.id,
@@ -1002,7 +1009,13 @@ function addMitadToCart() {
     // Estructura por mitad (para el intake de autoservicio → cocina, igual que el comandero).
     tipo: 'mitad_mitad',
     pizza_izquierda: { id: mitadIzq.id, nombre: mitadIzq.nombre, precio: mitadIzq.precio, quitar: mitadVarIzq ? mitadVarIzq.quitar : [], anadir: mitadVarIzq ? mitadVarIzq.anadir : [] },
-    pizza_derecha: { id: mitadDer.id, nombre: mitadDer.nombre, precio: mitadDer.precio, quitar: mitadVarDer ? mitadVarDer.quitar : [], anadir: mitadVarDer ? mitadVarDer.anadir : [] }
+    pizza_derecha: { id: mitadDer.id, nombre: mitadDer.nombre, precio: mitadDer.precio, quitar: mitadVarDer ? mitadVarDer.quitar : [], anadir: mitadVarDer ? mitadVarDer.anadir : [] },
+    // estructura por ids (anadir como ids) — lo que viaja en #P1 y re-tasa el bot.
+    estructura: {
+      tipo: 'mitad_mitad',
+      pizza_izquierda: { id: mitadIzq.id, quitar: mitadVarIzq ? mitadVarIzq.quitar : [], anadir: idsDe(mitadVarIzq) },
+      pizza_derecha: { id: mitadDer.id, quitar: mitadVarDer ? mitadVarDer.quitar : [], anadir: idsDe(mitadVarDer) }
+    }
   });
   updateCart();
   closeDetail();
@@ -1013,7 +1026,11 @@ function showAlGusto(catId) {
   alGustoCat = catId;
   detailProd = null; quitarSel = new Set(); anadirSel = new Map(); detailExtrasById = {};
   const pz = pizzasOf(catId);
-  alGustoBase = pz.length ? Math.min.apply(null, pz.map(p => p.precio)) : 0;
+  // base = la pizza más barata de la familia; guardamos su ID para que el bot re-tase al_gusto.
+  let base = null;
+  for (const p of pz) { if (!base || p.precio < base.precio) base = p; }
+  alGustoBase = base ? base.precio : 0;
+  alGustoBaseId = base ? base.id : null;
   document.getElementById('detail-visual').innerHTML = '<span class="detail-ph">🍕</span><button class="close-btn" onclick="closeDetail()" aria-label="Cerrar">✕</button>';
   const extras = extrasForGroup(catGrpKeys(catId), {});
   let extrasHtml = '';
@@ -1051,7 +1068,14 @@ function addAlGustoToCart() {
   const anadidos = [];
   let extra = 0;
   anadirSel.forEach(function (e) { anadidos.push(e.nombre); extra += Number(e.precio_extra) || 0; });
-  cart.push({ _id: ++cartId, id: 'algusto_' + cartId, nombre: 'Pizza al gusto', precio: alGustoBase + extra, qty: 1, detalle: anadidos.length ? 'con ' + anadidos.join(', ') : null });
+  const anadirIds = Array.from(anadirSel.keys());
+  cart.push({
+    _id: ++cartId, id: 'algusto_' + cartId, nombre: 'Pizza al gusto',
+    precio: alGustoBase + extra, qty: 1,
+    detalle: anadidos.length ? 'con ' + anadidos.join(', ') : null,
+    // estructura por ids: el bot re-tasa base(precio de alGustoBaseId) + Σ extras.
+    estructura: { tipo: 'al_gusto', producto_id: alGustoBaseId, base_id: alGustoBaseId, anadir: anadirIds }
+  });
   updateCart();
   closeDetail();
 }
@@ -1222,11 +1246,33 @@ function _pedNombre() {
   return nm && nm.value ? nm.value.trim().replace(/\\s+/g, ' ').slice(0, 60) : '';
 }
 
+// Pedido CODIFICADO POR IDS (lo autoritativo). El bot lo re-tasa contra la carta; los
+// precios del texto humano son SOLO para que el cliente vea su pedido. Cada item lleva su
+// estructura (normal/al_gusto/mitad) + cantidad. Nombres solo en 'quitar' (gratis, nota cocina).
+function buildOrderItems() {
+  return cart.map(function (it) {
+    var e = it.estructura || { producto_id: it.id, tipo: 'normal' };
+    var out = { cantidad: it.qty };
+    for (var k in e) { if (Object.prototype.hasOwnProperty.call(e, k)) out[k] = e[k]; }
+    return out;
+  });
+}
+// '#P1 <base64url(JSON)>' — utf8-safe (acentos en 'quitar'). El parser del bot lo decodifica.
+function buildP1Line() {
+  try {
+    var json = JSON.stringify({ v: 1, items: buildOrderItems() });
+    var b64 = btoa(unescape(encodeURIComponent(json)));
+    var b64url = b64.replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+    return '#P1 ' + b64url;
+  } catch (e) { return ''; }
+}
+
 // Mensaje wa.me en FORMATO CANÓNICO que el whatsapp-bot (parser) entiende:
 //   PEDIDO <slug>-<NONCE4>
 //   - <cant> x <descripcion>
 //   Total: <X,XX> EUR
 //   Nombre: <nombre del cliente>
+//   #P1 <base64url>   ← AUTORITATIVO (ids); el bot re-tasa con esto, ignora los precios del texto
 function buildOrderMsg() {
   if (cart.length === 0) return '';
   if (!CONFIG.project_slug) return '';        // sin slug no se puede formar el pedido canónico
@@ -1241,6 +1287,8 @@ function buildOrderMsg() {
   var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
   msg += 'Total: ' + _pedEur(total) + '\\n';
   msg += 'Nombre: ' + nombre;
+  var p1 = buildP1Line();
+  if (p1) msg += '\\n' + p1;
   return msg;
 }
 

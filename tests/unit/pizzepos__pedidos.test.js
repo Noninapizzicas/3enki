@@ -97,7 +97,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'pedidos');
-    assert.strictEqual(m.version, '3.1.0');
+    assert.strictEqual(m.version, '3.2.0');
     assert.strictEqual(m.pedidos.size, 0);
     assert.strictEqual(m.pedidosPorCuenta.size, 0);
     assert.strictEqual(m.pedidosPorProject.size, 0);
@@ -340,7 +340,7 @@ function publishedOf(mocks, name) {
     const r = await m.handleHealthCheck();
     assert.ok(isCanonicalSuccess(r));
     assert.strictEqual(r.data.status, 'healthy');
-    assert.strictEqual(r.data.version, '3.1.0');
+    assert.strictEqual(r.data.version, '3.2.0');
     await m.onUnload();
   });
 
@@ -420,7 +420,6 @@ function publishedOf(mocks, name) {
       total_centimos: 3800,
       canal_origen: 'whatsapp',
       cliente_telefono: '34600000000',
-      palabra_clave: 'roj',
       expira_horas: 48,
       correlation_id: 'corr-test-1',
       ...overrides
@@ -459,7 +458,7 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('tienda · pedido.creado NO publica palabra_clave ni cliente_telefono (anti-fraude + RGPD)', async () => {
+  await testAsync('tienda · pedido.creado NO publica cliente_telefono (anti-fraude + RGPD)', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleCreatePedidoTienda(validInputTienda());
@@ -471,11 +470,9 @@ function publishedOf(mocks, name) {
     assert.strictEqual(evs[0].canal_origen, 'whatsapp');
     assert.strictEqual(evs[0].project_slug, 'vapers');
     assert.strictEqual(evs[0].correlation_id, 'corr-test-1');
-    assert.strictEqual(evs[0].palabra_clave, undefined, 'palabra_clave NO debe viajar en el evento');
     assert.strictEqual(evs[0].cliente_telefono, undefined, 'cliente_telefono NO debe viajar en el evento');
-    // Pero SI se persisten en el shape interno (para que el dependiente las verifique al recoger)
+    // El telefono SI se persiste en el shape interno (transitorio, se desecha al cerrar/expirar)
     const pedido = m.pedidos.get(r.data.pedido_id);
-    assert.strictEqual(pedido.palabra_clave, 'roj');
     assert.strictEqual(pedido.cliente_telefono, '34600000000');
     await m.onUnload();
   });
@@ -521,15 +518,6 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('tienda · palabra_clave 4 chars devuelve 400 INVALID_INPUT', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-    const r = await m.handleCreatePedidoTienda(validInputTienda({ palabra_clave: 'rojo' }));
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.error.code, 'INVALID_INPUT');
-    assert.strictEqual(r.error.details.field, 'palabra_clave');
-    await m.onUnload();
-  });
 
   await testAsync('tienda · item.cantidad 0 devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();

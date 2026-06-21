@@ -413,13 +413,18 @@
   }>) {
     const { pizza_izquierda, pizza_derecha, precio_final, nombre_compuesto, precio_canal_resuelto } = e.detail;
 
-    // Incluir ingredientes_base de cada mitad para que cocina vea qué lleva
+    // Incluir ingredientes_base de cada mitad para que cocina vea qué lleva +
+    // las variaciones de esa mitad (quitar/añadir) si el cliente la personalizó.
     const extractBase = (pizza: any) => ({
       id: pizza.id,
       nombre: pizza.nombre,
       ingredientes_base: (pizza.ingredientes_base || pizza.ingredientes || [])
         .map((i: any) => typeof i === 'string' ? i : i.nombre)
-        .filter(Boolean)
+        .filter(Boolean),
+      ...(Array.isArray(pizza.quitar) && pizza.quitar.length ? { quitar: pizza.quitar } : {}),
+      ...(Array.isArray(pizza.anadir) && pizza.anadir.length
+        ? { anadir: pizza.anadir.map((a: any) => a?.nombre || a).filter(Boolean) }
+        : {})
     });
 
     addItem(pizza_izquierda.id, 1, [], {
@@ -790,6 +795,7 @@
       visible={showMitadMitad}
       {projectId}
       canal={canalActivo}
+      catalogoIngredientes={$ingredientesStore}
       on:close={handleMitadMitadClose}
       on:confirm={handleMitadMitadConfirm}
     />

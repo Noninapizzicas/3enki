@@ -39,9 +39,15 @@ function generateStaticHTML(carta, config, options = {}) {
     project_slug = config.project_slug || '',
     tema = config.tema || {},
     lang = 'es',
+    // CHAT IA — el cerebro es el cf-worker (Cloudflare + DeepSeek), del escenario SUELTO
+    // (export-cli + cf-worker/deploy.js). El worker hornea el SYSTEM_PROMPT y la API key
+    // server-side; la PWA solo le hace POST <ai_endpoint>/chat con SSE. NO hay cerebro en
+    // el core: ai-gateway habla MQTT (turnos), no sirve HTTP-SSE para clientes anónimos.
+    // El chat se enciende SOLO si se configura ai_endpoint = URL del worker. En ALOJADO
+    // (publicar → /shop/<slug>) no se setea → chat OFF por diseño (autoservicio puro).
     ai_endpoint = config.ai_endpoint || '',
     ai_provider = config.ai_provider || 'auto',
-    ai_chat_path = config.ai_chat_path || '/modules/ai-gateway/chat',
+    ai_chat_path = config.ai_chat_path || '/chat',
     chat_enabled = config.chat_enabled !== false && !!ai_endpoint,
     // Endpoint de pedido online (tienda-api). Si está → la PWA hace POST (escenario
     // ALOJADO: VPS+dominio). Si NO → checkout por WhatsApp (escenario PWA suelta).
@@ -1477,7 +1483,7 @@ function sendMessage(text) {
     aiMsgs.push({ role: history[i].role, content: history[i].content });
   }
 
-  var endpoint = CONFIG.ai_endpoint + (CONFIG.ai_chat_path || '/modules/ai-gateway/chat');
+  var endpoint = CONFIG.ai_endpoint + (CONFIG.ai_chat_path || '/chat');   // cerebro = cf-worker (suelto)
 
   fetch(endpoint, {
     method: 'POST',

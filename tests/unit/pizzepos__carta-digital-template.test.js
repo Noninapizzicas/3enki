@@ -58,6 +58,22 @@ test('carta-digital/template — el item del carrito viaja estructurado para aut
   assert.ok(html.includes('pizza_derecha: { id: mitadDer.id'), 'pizza_derecha con quitar/anadir');
 });
 
+test('carta-digital/template — PODA v2.5: cerebro del chat = cf-worker, sin fantasma /modules/ai-gateway/chat', () => {
+  const html = htmlDe();
+  // El path fantasma del core (que nadie sirve) no debe aparecer en ningún bundle.
+  assert.ok(!html.includes('modules/ai-gateway/chat'), 'no debe quedar el endpoint fantasma');
+  // ALOJADO (sin ai_endpoint) → chat OFF por diseño (autoservicio puro).
+  assert.ok(html.includes('"chat_enabled":false'), 'ALOJADO ship sin chat (chat_enabled=false)');
+  // SUELTO (con worker) → chat ON, cerebro = cf-worker.
+  const suelto = generateStaticHTML(
+    { categorias: [], productos: [], catalogo_ingredientes: [], alergenos_leyenda: [] },
+    { nombre_negocio: 'N', moneda: '€' },
+    { ai_endpoint: 'https://x.workers.dev' }
+  );
+  assert.ok(suelto.includes('"chat_enabled":true'), 'SUELTO con worker → chat ON');
+  assert.ok(suelto.includes("|| '/chat'"), 'default del path del cerebro = /chat (cf-worker)');
+});
+
 test('carta-digital/template — PODA v2.4: sin ofertas/reseñas/track (la proyección no los da)', () => {
   const html = htmlDe();
   // La PWA es ESPEJO FIEL de la proyección: nada de UI alimentada por vacío.

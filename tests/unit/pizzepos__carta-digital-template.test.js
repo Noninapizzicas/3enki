@@ -74,6 +74,25 @@ test('carta-digital/template — PODA v2.5: cerebro del chat = cf-worker, sin fa
   assert.ok(suelto.includes("|| '/chat'"), 'default del path del cerebro = /chat (cf-worker)');
 });
 
+test('carta-digital/template — extras AGRUPADOS por familia (mismo sistema que el comandero)', () => {
+  const html = htmlDe();
+  // El helper compartido y el config de familias (orden/label/emoji = VariacionesPanel.tipoConfig).
+  assert.ok(html.includes('function renderExtrasAgrupados('), 'helper de agrupado presente');
+  assert.ok(html.includes('const FAM_CONFIG = {'), 'config de familias presente');
+  assert.ok(html.includes("ing-group-head"), 'markup de cabecera de grupo presente');
+  assert.ok(html.includes(".ing-group-head{"), 'CSS de cabecera de grupo presente');
+  // Etiquetas canónicas (mismas que el comandero) y orden por familia.
+  for (const label of ['Queso', 'Verdura', 'Carne y Embutido', 'Pescado/Marisco', 'Salsa']) {
+    assert.ok(html.includes("label: '" + label + "'"), 'familia ' + label + ' en el config');
+  }
+  assert.ok(html.includes('famInfo(a).orden - famInfo(b).orden'), 'familias ordenadas por orden canónico');
+  // Los tres flujos (normal/mitad/al-gusto) usan el MISMO helper (DRY, no reinventar).
+  assert.ok(html.includes("renderExtrasAgrupados(extras, anadirSel, 'toggleAnadir')"), 'detalle + mitad usan el helper');
+  assert.ok(html.includes("renderExtrasAgrupados(extras, anadirSel, 'toggleAnadirAG')"), 'al-gusto usa el helper');
+  // Ya NO hay lista plana de extras sin cabecera (el doble wrapper .ing-list se quitó).
+  assert.ok(!html.includes('Añadir extras</h3><div class="ing-list">'), 'sin lista plana sin agrupar');
+});
+
 test('carta-digital/template — PODA v2.4: sin ofertas/reseñas/track (la proyección no los da)', () => {
   const html = htmlDe();
   // La PWA es ESPEJO FIEL de la proyección: nada de UI alimentada por vacío.

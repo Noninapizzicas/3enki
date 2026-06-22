@@ -371,5 +371,28 @@ function publishedOf(mocks, name) {
     assert.strictEqual(manifest.observability?.tracing?.propaga_correlation_id, true);
   });
 
+  // execute_code slice 2: code.orquestar como 3a primitiva, gobernada por flag.
+  await testAsync('_getBlueprintUniversalTools expone code.orquestar SOLO con blueprint_orquestar_enabled', async () => {
+    const m = AiGatewayModule.prototype._getBlueprintUniversalTools;
+    const off = m.call({ config: { blueprint_orquestar_enabled: false } }).map(t => t.name);
+    const on = m.call({ config: { blueprint_orquestar_enabled: true } }).map(t => t.name);
+    const def = m.call({ config: {} }).map(t => t.name);
+    for (const set of [off, on, def]) {
+      assert.ok(set.includes('bus.publish') && set.includes('bus.publishAndWait'),
+        'bus.publish + bus.publishAndWait siempre presentes');
+    }
+    assert.ok(!off.includes('code.orquestar'), 'OFF: no se ofrece code.orquestar');
+    assert.ok(!def.includes('code.orquestar'), 'default (sin flag): no se ofrece (rollout cauto)');
+    assert.ok(on.includes('code.orquestar'), 'ON: se ofrece code.orquestar');
+  });
+
+  await testAsync('module.json arranca con blueprint_orquestar_enabled=false (rollout cauto)', async () => {
+    const fs = require('fs');
+    const path = require('path');
+    const manifest = JSON.parse(fs.readFileSync(
+      path.resolve(__dirname, '../../modules/conversacion/ai-gateway/module.json'), 'utf8'));
+    assert.strictEqual(manifest.config?.blueprint_orquestar_enabled, false);
+  });
+
   console.log('\nTodos los tests pasaron.');
 })();

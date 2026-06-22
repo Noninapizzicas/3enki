@@ -148,6 +148,19 @@ test('carta-digital/template — ALOJADO emite <base> para resolver assets sin b
   assert.ok(!suelto.includes('<base href'), 'SUELTO no lleva <base> (sirve en la raíz)');
 });
 
+test('carta-digital/template — imagen con fallback onerror a la raíz /shop/ (robusto al symlink)', () => {
+  const carta = { categorias: [], productos: [], catalogo_ingredientes: [], alergenos_leyenda: [] };
+  const alojado = generateStaticHTML(carta, { nombre_negocio: 'N', moneda: '€', base_href: '/shop/nonina/' }, {});
+  // ALOJADO: la ruta canónica resuelve por <base> a /shop/<slug>/img/...; si 404 (symlink en raíz),
+  // onerror cae a /shop/img/... (donde quedan). IMG_FB_BASE = padre de base_href = '/shop/'.
+  assert.ok(alojado.includes('const IMG_FB_BASE = "/shop/"'), 'fallback base = /shop/');
+  assert.ok(alojado.includes('function imgFb(imagen)'), 'helper de fallback presente');
+  assert.ok(alojado.includes("esc(p.imagen) + '\"' + imgFb(p.imagen)"), 'la card usa el fallback');
+  // SUELTO (raíz del dominio): sin /shop → IMG_FB_BASE vacío, sin onerror.
+  const suelto = generateStaticHTML(carta, { nombre_negocio: 'N', moneda: '€' }, {});
+  assert.ok(suelto.includes('const IMG_FB_BASE = ""'), 'SUELTO sin fallback /shop');
+});
+
 test('carta-digital/template — PODA v2.4: sin ofertas/reseñas/track (la proyección no los da)', () => {
   const html = htmlDe();
   // La PWA es ESPEJO FIEL de la proyección: nada de UI alimentada por vacío.

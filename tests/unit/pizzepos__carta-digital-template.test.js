@@ -74,6 +74,19 @@ test('carta-digital/template — PODA v2.5: cerebro del chat = cf-worker, sin fa
   assert.ok(suelto.includes("|| '/chat'"), 'default del path del cerebro = /chat (cf-worker)');
 });
 
+test('carta-digital/template — mitad/al-gusto: criterio robusto (raíz "pizz" + componible), no "pizza" literal', () => {
+  const html = htmlDe();
+  // El bug: "Pizzicas" no contenía la subcadena "pizza" → no salían las tarjetas. Ahora raíz "pizz".
+  assert.ok(html.includes("indexOf('pizz')"), 'detección por raíz pizz (Pizzas/Pizzicas/Pizze)');
+  assert.ok(!html.includes("indexOf('pizza')"), 'no queda el heurístico frágil "pizza" literal');
+  // Señal data-driven (como el comandero): categoría componible = productos con ingredientes.
+  assert.ok(html.includes('Array.isArray(p.ingredientes) && p.ingredientes.length > 0'), 'fallback componible');
+  // Las dos entradas siguen cableadas en el grid (mitad ≥2, al-gusto si hay extras del grupo).
+  assert.ok(html.includes("specialCard('½', 'Mitad y mitad'"), 'tarjeta Mitad y mitad');
+  assert.ok(html.includes("specialCard('🍕', 'Crea tu pizza'"), 'tarjeta Crea tu pizza (al gusto)');
+  assert.ok(html.includes('showMitad(') && html.includes('showAlGusto('), 'entradas mitad/al-gusto presentes');
+});
+
 test('carta-digital/template — extras AGRUPADOS por familia (mismo sistema que el comandero)', () => {
   const html = htmlDe();
   // El helper compartido y el config de familias (orden/label/emoji = VariacionesPanel.tipoConfig).

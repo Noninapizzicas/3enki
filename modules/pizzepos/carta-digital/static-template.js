@@ -855,11 +855,19 @@ function addToCart(id, opts) {
 }
 
 // ─── Mitad y mitad + Al gusto (adaptan MitadMitadPanel / AlGustoPanel del comandero) ───
-// Familia "pizza": detección por nombre/id de categoría (lo que el negocio controla en la carta).
+// Familia "pizza" = categoría COMPONIBLE (admite mitad/al-gusto). Dos señales, ninguna
+// frágil al nombre exacto (el bug previo: "Pizzicas" no contenía "pizza"):
+//   1) la raíz "pizz" en nombre/id (Pizzas · Pizzicas · Pizze · Pizza…).
+//   2) data-driven, como el comandero: sus productos llevan ingredientes (son componibles);
+//      las bebidas (sin ingredientes) quedan fuera. Los sub-gates (≥2 productos para mitad,
+//      extras del grupo para al-gusto) acotan el resto.
 function isPizzaCat(catId) {
   const c = DATA.categorias.find(x => x.id === catId);
   if (!c) return false;
-  return ((c.nombre || '') + ' ' + (c.id || '')).toLowerCase().indexOf('pizza') >= 0;
+  if (((c.nombre || '') + ' ' + (c.id || '')).toLowerCase().indexOf('pizz') >= 0) return true;
+  return DATA.productos.some(function (p) {
+    return p.categoria === catId && Array.isArray(p.ingredientes) && p.ingredientes.length > 0;
+  });
 }
 function pizzasOf(catId) { return DATA.productos.filter(p => p.categoria === catId); }
 function catGrpKeys(catId) {

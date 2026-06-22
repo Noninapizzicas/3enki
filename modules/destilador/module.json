@@ -2,6 +2,8 @@
   "name": "destilador",
   "version": "0.3.0",
   "blueprint_driven": true,
+  "blueprint_path": "destilador.blueprint.json",
+  "target_page_id": "destilador",
   "description": "El lazo de aprendizaje del sistema (Minero + Cola+Publicador + Auto-mejora). HIBRIDO: el reflejo (JS) mina el bus y sella/publica skills; el blueprint (LLM) redacta la skill desde los registros. PASO 1 (Minero): agrupa eventos del scope por correlation_id en trazas, las reduce a una FIRMA y, cuando una firma se repite >= umbral, emite aprendizaje.candidata.detectada. PASO 2 (Cola+Publicador): el blueprint redacta un SKILL.md desde los registros y lo ENCOLA; la skill NO se publica sola — un humano la aprueba (handleAprobar) y solo entonces se escribe en .claude/skills/ (anti-wipe). PASO 3 (Auto-mejora): la senal skill.aplicada etiqueta la traza de su resolucion; si una skill, tras aplicarse, lleva a fallo recurrente (tasa de fallo sobre ventana deslizante >= umbral), emite aprendizaje.revision.requerida con las trazas fallidas — vuelve por la misma guardia humana. Histeresis: si la skill se recupera, la revision se des-arma. El Minero capitaliza el acierto; la auto-mejora capitaliza el fallo.",
   "author": "Event Core Team",
   "language": "es",

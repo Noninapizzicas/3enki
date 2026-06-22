@@ -23,6 +23,7 @@
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+const { derivarOpciones } = require('../../_shared/derivar-opciones');
 
 const slug = (s) => String(s || '')
   .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -43,7 +44,7 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'menu-generator';
-    this.version = 'reflejo-1.0.0';
+    this.version = 'reflejo-1.1.0';
   }
 
   // ── handler RPC (una línea: delega a _atender de la base) ──
@@ -230,6 +231,23 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
       if (p.disponible !== undefined) prod.disponible = !!p.disponible;
 
       productos.push(prod);
+    }
+
+    // Subsistema Opciones: cada producto NACE con sus opciones (QUITAR sus ingredientes +
+    // ELEGIR_VARIOS la paleta de su categoría: unión de los ingredientes de esa categoría menos
+    // lo propio). El comandero/carta-digital las pintan por modo; variaciones ya no deriva al vuelo.
+    const paletas = new Map();
+    for (const prod of productos) {
+      if (!paletas.has(prod.categoria_id)) paletas.set(prod.categoria_id, new Map());
+      const m = paletas.get(prod.categoria_id);
+      for (const ing of (prod.ingredientes || [])) {
+        if (ing && ing.id && !m.has(ing.id)) m.set(ing.id, ing);
+      }
+    }
+    for (const prod of productos) {
+      const paleta = [...(paletas.get(prod.categoria_id) || new Map()).values()];
+      const ops = derivarOpciones(prod, paleta);
+      if (ops.length) prod.opciones = ops;
     }
 
     return {

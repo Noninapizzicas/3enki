@@ -10,6 +10,9 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const Destilador = require('../../modules/destilador');
 
 // ==========================================
@@ -153,6 +156,112 @@ test('handleListarClusters valida project_id', async () => {
   const res = await mod.handleListarClusters({});
   assert.strictEqual(res.status, 400);
   assert.strictEqual(res.error.code, 'INVALID_INPUT');
+  await mod.onUnload();
+});
+
+// ── Paso 2: cola + publicador ──
+
+const SKILL_OK = '# Costear receta\n\n## Cuando usar\nAl pedir el coste.\n\n## Pasos\n- lee la receta\n- costea las lineas\n';
+
+test('_encolar rechaza skill esteril (sin pasos)', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoMinero(bus);
+  const res = mod._encolar({ project_id: P, nombre_skill: 'x', contenido_md: 'solo un titulo' });
+  assert.strictEqual(res.status, 422);
+  assert.strictEqual(res.error.code, 'SKILL_ESTERIL');
+  assert.strictEqual(mod.cola.size, 0);
+  await mod.onUnload();
+});
+
+test('_encolar acepta skill fertil y emite candidata.encolada', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoMinero(bus);
+  const res = mod._encolar({ project_id: P, nombre_skill: 'Costear Receta', contenido_md: SKILL_OK, ocurrencias: 3 });
+  assert.strictEqual(res.status, 200);
+  assert.ok(res.data.candidata_id);
+  assert.strictEqual(mod.cola.size, 1);
+  const cand = mod.cola.get(res.data.candidata_id);
+  assert.strictEqual(cand.nombre_skill, 'costear-receta'); // slug
+  assert.strictEqual(cand.estado, 'pendiente');
+  assert.ok(bus.published.some(p => p.event === 'aprendizaje.candidata.encolada'));
+  await mod.onUnload();
+});
+
+test('handleAprobar escribe la skill en disco y emite skill.creada', async () => {
+  const bus = fakeBus();
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-'));
+  const mod = await nuevoMinero(bus, { skills_path: tmp });
+  const enc = mod._encolar({ project_id: P, nombre_skill: 'costear-receta', contenido_md: SKILL_OK });
+  const res = await mod.handleAprobar({ candidata_id: enc.data.candidata_id });
+  assert.strictEqual(res.status, 201);
+  const destino = path.join(tmp, 'costear-receta', 'SKILL.md');
+  assert.ok(fs.existsSync(destino), 'el SKILL.md debe existir');
+  const escrito = fs.readFileSync(destino, 'utf-8');
+  assert.ok(escrito.startsWith('---'), 'debe llevar frontmatter');
+  assert.ok(escrito.includes('## Pasos'));
+  assert.ok(bus.published.some(p => p.event === 'aprendizaje.skill.creada'));
+  assert.strictEqual(mod.cola.get(enc.data.candidata_id).estado, 'aprobada');
+  fs.rmSync(tmp, { recursive: true, force: true });
+  await mod.onUnload();
+});
+
+test('handleAprobar NO pisa una skill existente (anti-wipe)', async () => {
+  const bus = fakeBus();
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-'));
+  // pre-existe la skill con contenido propio
+  fs.mkdirSync(path.join(tmp, 'costear-receta'), { recursive: true });
+  const previo = '--- ya existo, no me pises ---';
+  fs.writeFileSync(path.join(tmp, 'costear-receta', 'SKILL.md'), previo);
+  const mod = await nuevoMinero(bus, { skills_path: tmp });
+  const enc = mod._encolar({ project_id: P, nombre_skill: 'costear-receta', contenido_md: SKILL_OK });
+  const res = await mod.handleAprobar({ candidata_id: enc.data.candidata_id });
+  assert.strictEqual(res.status, 409);
+  assert.strictEqual(res.error.code, 'CONFLICT_STATE');
+  assert.strictEqual(fs.readFileSync(path.join(tmp, 'costear-receta', 'SKILL.md'), 'utf-8'), previo,
+    'el contenido previo NO se debe tocar');
+  assert.strictEqual(mod.cola.get(enc.data.candidata_id).estado, 'conflicto');
+  fs.rmSync(tmp, { recursive: true, force: true });
+  await mod.onUnload();
+});
+
+test('handleAprobar 404 si la candidata no existe', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoMinero(bus);
+  const res = await mod.handleAprobar({ candidata_id: 'noexiste' });
+  assert.strictEqual(res.status, 404);
+  await mod.onUnload();
+});
+
+test('_leerRegistros filtra propiocepcion por los grupos de la traza', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoMinero(bus);
+  // stub del RPC a propiocepcion.leer
+  mod._rpc = async (evento) => {
+    if (evento === 'propiocepcion.leer.request') {
+      return { data: { eventos: [
+        { correlation_id: 'aaa', resumen: 'costeo r1' },
+        { correlation_id: 'bbb', resumen: 'otra cosa' },
+        { correlation_id: 'ccc', resumen: 'costeo r2' }
+      ] } };
+    }
+    return null;
+  };
+  const res = await mod._leerRegistros({ project_id: P, grupos: ['corr:aaa', 'corr:ccc'] });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.data.total, 2);
+  assert.deepStrictEqual(res.data.registros.map(r => r.correlation_id), ['aaa', 'ccc']);
+  await mod.onUnload();
+});
+
+test('handleListarCandidatas devuelve solo las pendientes del proyecto', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoMinero(bus);
+  mod._encolar({ project_id: P, nombre_skill: 'a', contenido_md: SKILL_OK });
+  const enc2 = mod._encolar({ project_id: P, nombre_skill: 'b', contenido_md: SKILL_OK });
+  await mod.handleRechazar({ candidata_id: enc2.data.candidata_id });
+  const res = await mod.handleListarCandidatas({ project_id: P });
+  assert.strictEqual(res.data.total, 1, 'solo la pendiente (la rechazada no cuenta)');
+  assert.strictEqual(res.data.candidatas[0].nombre_skill, 'a');
   await mod.onUnload();
 });
 

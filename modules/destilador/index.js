@@ -22,24 +22,31 @@
 'use strict';
 
 const crypto = require('crypto');
-const BaseModule = require('../_shared/base-module');
+const fs = require('fs');
+const path = require('path');
+const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
-class DestiladorModule extends BaseModule {
+class DestiladorModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'destilador';
-    this.version = '0.1.0';
+    this.version = '0.2.0';
 
     // Inyectados en onLoad
     this.config = null;
 
-    // Estado runtime
+    // Estado runtime — facultad MINERO (paso 1)
     this.trazas = new Map();      // groupKey -> { project_id, pasos:[], firstTs, lastTs }
     this.clusters = new Map();    // `${project}::${firma}` -> Cluster
     this.dirty = new Set();       // project_ids con clusters sin flushear
     this.pendingFsReads = new Map();
     this._onBusMessage = null;
     this._flushTimer = null;
+
+    // Estado runtime — facultad COLA+PUBLICADOR (paso 2)
+    this.cola = new Map();        // candidata_id -> Candidata
+    this.colaPath = '/_destilador/cola.json';
+    this.skillsPath = null;       // repo .claude/skills (global, no project storage)
 
     // Derivados de config (rellenos en onLoad)
     this.scope = new Set();
@@ -66,6 +73,9 @@ class DestiladorModule extends BaseModule {
     this.ventanaMs = Number(this.config.ventana_traza_ms) || 60000;
     this.maxTrazas = Number(this.config.max_trazas_abiertas) || 500;
     this.archivoPath = this.config.archivo_path || '/_destilador/clusters.json';
+    this.colaPath = this.config.cola_path || '/_destilador/cola.json';
+    // Las skills son GLOBALES (repo .claude/skills), no storage de proyecto.
+    this.skillsPath = path.resolve(this.config.skills_path || path.join(process.cwd(), '.claude', 'skills'));
 
     this._startBusCapture();
 
@@ -88,6 +98,7 @@ class DestiladorModule extends BaseModule {
     this.pendingFsReads.clear();
     this.trazas.clear();
     this.clusters.clear();
+    this.cola.clear();
     this.dirty.clear();
     this.logger.info('destilador.unloaded', { module: this.name });
   }
@@ -275,13 +286,19 @@ class DestiladorModule extends BaseModule {
     const projectId = data.project_id;
     if (!projectId) return;
     // si ya tenemos clusters de este proyecto en memoria, no recargamos
-    for (const c of this.clusters.values()) if (c.project_id === projectId) return;
+    let yaCargado = false;
+    for (const c of this.clusters.values()) if (c.project_id === projectId) { yaCargado = true; break; }
+    if (!yaCargado) this._pedirLectura(projectId, this.archivoPath, 'clusters');
+    this._pedirLectura(projectId, this.colaPath, 'cola');
+  }
+
+  _pedirLectura(projectId, filePath, kind) {
     try {
       const request_id = crypto.randomUUID();
       const timeout = setTimeout(() => this.pendingFsReads.delete(request_id), 8000);
-      this.pendingFsReads.set(request_id, { project_id: projectId, timeout });
+      this.pendingFsReads.set(request_id, { project_id: projectId, kind, timeout });
       this.eventBus.publish('fs.read.request', {
-        project_id: projectId, path: this.archivoPath, request_id, encoding: 'utf-8'
+        project_id: projectId, path: filePath, request_id, encoding: 'utf-8'
       });
     } catch (_) { /* arranca vacio */ }
   }
@@ -295,14 +312,203 @@ class DestiladorModule extends BaseModule {
     if (payload.status !== 200 || !payload.content) return;
     try {
       const parsed = JSON.parse(payload.content);
-      for (const c of parsed.clusters || []) {
-        const key = `${c.project_id}::${c.firma}`;
-        if (!this.clusters.has(key)) this.clusters.set(key, c);
+      if (pending.kind === 'cola') {
+        for (const c of parsed.candidatas || []) {
+          if (!this.cola.has(c.candidata_id)) this.cola.set(c.candidata_id, c);
+        }
+        this.logger.info('destilador.cola.restored', {
+          project_id: pending.project_id, candidatas: (parsed.candidatas || []).length
+        });
+      } else {
+        for (const c of parsed.clusters || []) {
+          const key = `${c.project_id}::${c.firma}`;
+          if (!this.clusters.has(key)) this.clusters.set(key, c);
+        }
+        this.logger.info('destilador.restored', {
+          project_id: pending.project_id, clusters: (parsed.clusters || []).length
+        });
       }
-      this.logger.info('destilador.restored', {
-        project_id: pending.project_id, clusters: (parsed.clusters || []).length
-      });
     } catch (_) { /* corrupto -> ignora */ }
+  }
+
+  // =============================================================
+  // Facultad COLA+PUBLICADOR (paso 2) — REFLEJO determinista.
+  // El blueprint (LLM) redacta la skill; el reflejo la sella y la publica.
+  // =============================================================
+
+  // ── RPC del bus: el blueprint hidrata los registros de la traza ──
+  onLeerRegistrosRequest(e) {
+    return this._atender(e, 'leer_registros', 'destilador.leer_registros.response',
+      d => this._leerRegistros(d));
+  }
+
+  async _leerRegistros(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    const resp = await this._rpc('propiocepcion.leer.request',
+      { project_id: input.project_id, limite: 200 });
+    const eventos = resp?.data?.eventos || resp?.eventos || [];
+    // grupos vienen como 'corr:xxx' | 'solo:xxx' -> extrae el id correlable
+    const corrs = new Set(
+      (input.grupos || input.correlation_ids || [])
+        .map(g => String(g).replace(/^(corr:|solo:)/, '')));
+    const registros = corrs.size > 0
+      ? eventos.filter(r => corrs.has(r.correlation_id))
+      : eventos;
+    return { status: 200, data: { total: registros.length, registros } };
+  }
+
+  // ── RPC del bus: el blueprint encola la skill que redacto (NO la publica) ──
+  onEncolarCandidataRequest(e) {
+    return this._atender(e, 'encolar_candidata', 'destilador.encolar_candidata.response',
+      d => this._encolar(d));
+  }
+
+  _encolar(input) {
+    if (!input.nombre_skill || !input.contenido_md) {
+      return this._invalid('nombre_skill|contenido_md');
+    }
+    if (!this._tienePasos(input.contenido_md)) {            // Guard: no_esteril
+      this.metrics?.increment('destilador.candidata.rechazada', { motivo: 'esteril' });
+      return this._errorResponse(422, 'SKILL_ESTERIL',
+        'la skill no tiene pasos accionables', { kind: 'no_esteril' });
+    }
+    const cand = {
+      candidata_id: crypto.randomUUID(),
+      firma: input.firma || null,
+      nombre_skill: this._slug(input.nombre_skill),
+      project_id: input.project_id || null,
+      contenido_md: input.contenido_md,
+      registros_fuente: input.correlation_ids || input.grupos || [],
+      ocurrencias: input.ocurrencias || null,
+      estado: 'pendiente',
+      created_at: new Date().toISOString()
+    };
+    this.cola.set(cand.candidata_id, cand);
+    this._persistirCola(cand.project_id);
+    try {
+      this.eventBus.publish('aprendizaje.candidata.encolada', {
+        candidata_id: cand.candidata_id, nombre_skill: cand.nombre_skill,
+        project_id: cand.project_id, ocurrencias: cand.ocurrencias,
+        correlation_id: crypto.randomUUID(), timestamp: cand.created_at
+      });
+    } catch (_) { /* observabilidad best-effort */ }
+    this.metrics?.increment('destilador.candidata.encolada.total');
+    return { status: 200, data: { candidata_id: cand.candidata_id } };
+  }
+
+  // ── GUARDIA HUMANA: aprobar publica la skill (anti-wipe + write verificado) ──
+  async handleAprobar(data) {
+    try {
+      const { candidata_id } = data || {};
+      if (!candidata_id) return this._invalid('candidata_id');
+      const cand = this.cola.get(candidata_id);
+      if (!cand) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'candidata no encontrada',
+          { entity_type: 'candidata', entity_ref: candidata_id });
+      }
+      const dir = path.join(this.skillsPath, cand.nombre_skill);
+      const destino = path.join(dir, 'SKILL.md');
+      if (fs.existsSync(destino)) {                          // ANTI-WIPE: no pisar
+        cand.estado = 'conflicto';
+        this._persistirCola(cand.project_id);
+        this.metrics?.increment('destilador.aprobar.conflicto');
+        return this._errorResponse(409, 'CONFLICT_STATE', 'ya existe una skill con ese nombre',
+          { kind: 'anti_wipe', nombre_skill: cand.nombre_skill, destino });
+      }
+      const contenido = this._conFrontmatter(cand);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(destino, contenido, 'utf-8');
+      const verif = fs.readFileSync(destino, 'utf-8');       // write verificado
+      if (verif !== contenido) {
+        return this._errorResponse(500, 'UNKNOWN_ERROR', 'verificacion de escritura fallida', {});
+      }
+      cand.estado = 'aprobada';
+      this._persistirCola(cand.project_id);
+      try {
+        this.eventBus.publish('aprendizaje.skill.creada', {
+          nombre_skill: cand.nombre_skill, candidata_id, project_id: cand.project_id,
+          destino, correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+        });
+      } catch (_) { /* best-effort */ }
+      this.metrics?.increment('destilador.skill.creada.total');
+      this.logger.info('destilador.skill.creada', { nombre_skill: cand.nombre_skill, destino });
+      return { status: 201, data: { nombre_skill: cand.nombre_skill, destino } };
+    } catch (err) {
+      return this._handleHandlerError('destilador.aprobar.failed', err, 'aprobar');
+    }
+  }
+
+  async handleRechazar(data) {
+    try {
+      const { candidata_id } = data || {};
+      if (!candidata_id) return this._invalid('candidata_id');
+      const cand = this.cola.get(candidata_id);
+      if (!cand) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'candidata no encontrada',
+          { entity_type: 'candidata', entity_ref: candidata_id });
+      }
+      cand.estado = 'rechazada';
+      this._persistirCola(cand.project_id);
+      this.metrics?.increment('destilador.candidata.rechazada', { motivo: 'humano' });
+      return { status: 200, data: { candidata_id, estado: 'rechazada' } };
+    } catch (err) {
+      return this._handleHandlerError('destilador.rechazar.failed', err, 'rechazar');
+    }
+  }
+
+  async handleListarCandidatas(data) {
+    try {
+      const { project_id } = data || {};
+      if (!project_id) return this._invalid('project_id');
+      const estado = data.estado || 'pendiente';
+      const candidatas = Array.from(this.cola.values())
+        .filter(c => c.project_id === project_id && c.estado === estado)
+        .map(c => ({
+          candidata_id: c.candidata_id, nombre_skill: c.nombre_skill, firma: c.firma,
+          ocurrencias: c.ocurrencias, estado: c.estado, created_at: c.created_at,
+          preview: String(c.contenido_md || '').slice(0, 280)
+        }));
+      return { status: 200, data: { project_id, estado, total: candidatas.length, candidatas } };
+    } catch (err) {
+      return this._handleHandlerError('destilador.listar_candidatas.failed', err, 'listar_candidatas');
+    }
+  }
+
+  _persistirCola(projectId) {
+    if (!projectId) return;
+    try {
+      const candidatas = Array.from(this.cola.values()).filter(c => c.project_id === projectId);
+      const content = JSON.stringify(
+        { _version: 1, _updated: new Date().toISOString(), candidatas }, null, 0);
+      this.eventBus.publish('fs.write.request', {
+        project_id: projectId, path: this.colaPath, content, request_id: crypto.randomUUID()
+      });
+    } catch (_) {
+      this.metrics?.increment('destilador.errors.total', { kind: 'cola_flush' });
+    }
+  }
+
+  // Una skill es fertil si tiene >=2 lineas y al menos un PASO accionable
+  // (bullet o numerado). Un heading suelto no es un paso: no basta para sellar.
+  _tienePasos(md) {
+    const lineas = String(md || '').split('\n').map(l => l.trim()).filter(Boolean);
+    if (lineas.length < 2) return false;
+    return lineas.some(l => /^([-*]|\d+\.)\s+\S/.test(l));
+  }
+
+  _slug(s) {
+    return String(s).toLowerCase().trim()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64) || 'skill';
+  }
+
+  // Si el contenido no trae frontmatter YAML, se lo antepone (name/description).
+  _conFrontmatter(cand) {
+    const md = String(cand.contenido_md || '');
+    if (/^---\s*\n/.test(md)) return md;
+    const desc = (md.split('\n').find(l => l.trim().length > 0) || cand.nombre_skill)
+      .replace(/^#+\s*/, '').slice(0, 200);
+    return `---\nname: ${cand.nombre_skill}\ndescription: ${desc}\n---\n\n${md}`;
   }
 
   // =============================================================

@@ -87,6 +87,18 @@ test('carta-digital/template — mitad/al-gusto: criterio robusto (raíz "pizz" 
   assert.ok(html.includes('showMitad(') && html.includes('showAlGusto('), 'entradas mitad/al-gusto presentes');
 });
 
+test('carta-digital/template — un ingrediente BASE no se ofrece como extra (exclusión robusta id/nombre)', () => {
+  const html = htmlDe();
+  // El bug: la base se excluía solo por id; al no casar el id del catálogo, Mozzarella/Champiñón
+  // (ya en la pizza) se ofrecían como extra. Ahora exclusión por id O nombre normalizado.
+  assert.ok(html.includes('function baseExcludeSet('), 'helper de exclusión de base presente');
+  assert.ok(html.includes('function norm('), 'normalizador presente');
+  assert.ok(html.includes('extrasForGroup(grpKeys, baseExcludeSet(p))'), 'detalle normal excluye su base');
+  assert.ok(html.includes('extrasForGroup(grpKeys, baseExcludeSet(pizza))'), 'mitad excluye la base de esa media');
+  assert.ok(html.includes('excludeSet.has(norm(ing.id)) || excludeSet.has(norm(ing.nombre))'), 'casa por id O nombre');
+  assert.ok(!html.includes('baseIds[ing.id]'), 'no queda la exclusión frágil solo-por-id');
+});
+
 test('carta-digital/template — extras AGRUPADOS por familia (mismo sistema que el comandero)', () => {
   const html = htmlDe();
   // El helper compartido y el config de familias (orden/label/emoji = VariacionesPanel.tipoConfig).

@@ -592,6 +592,21 @@ function applyTranslations() {
 function fmt(p) { return p.toFixed(2) + ' ' + MONEDA; }
 function esc(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
 
+// Normaliza para comparar ingredientes sin depender del id exacto (acentos/caja/espacios).
+function norm(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim(); }
+// Conjunto de exclusión = ids + nombres normalizados de los ingredientes BASE de un producto.
+// Robusto al desajuste de id entre la carta (base) y el catálogo de extras (mismo tipo de bug
+// que "pizza"): un ingrediente ya en el producto NO se ofrece como extra (lo espeja el comandero).
+function baseExcludeSet(p) {
+  const s = new Set();
+  for (const bi of ((p && p.ingredientes) || [])) {
+    if (!bi) continue;
+    if (bi.id) s.add(norm(bi.id));
+    if (bi.nombre) s.add(norm(bi.nombre));
+  }
+  return s;
+}
+
 // Familias de extra — MISMO sistema que el comandero (VariacionesPanel.tipoConfig):
 // orden visual + etiqueta + emoji. La familia llega en ing.tipo (= familia de la proyección).
 const FAM_CONFIG = {
@@ -745,20 +760,9 @@ function showDetail(id) {
   }
 
   // Extras AÑADIBLES (1b): del catálogo (ya gateado a precio>0), mismo grupo que el producto,
-  // que NO sean ya base. Agrupados por tipo. Espeja la mitad "añadir" del VariacionesPanel.
-  const baseIds = {};
-  for (const bi of (p.ingredientes || [])) { if (bi.id) baseIds[bi.id] = 1; }
+  // que NO sean ya base (exclusión por id O nombre, robusta). Espeja "añadir" del VariacionesPanel.
   const grpKeys = [p.categoria_id, (p.categoria || '').toLowerCase()].filter(Boolean);
-  const extras = (DATA.catalogo_ingredientes || []).filter(function(ing) {
-    if (!ing || baseIds[ing.id]) return false;
-    const g = ing.grupos || [];
-    if (g.length && grpKeys.length) {
-      let ok = false;
-      for (let k = 0; k < g.length; k++) { if (grpKeys.indexOf(String(g[k]).toLowerCase()) >= 0) { ok = true; break; } }
-      if (!ok) return false;
-    }
-    return true;
-  });
+  const extras = extrasForGroup(grpKeys, baseExcludeSet(p));
   const extrasHtml = extras.length ? renderExtrasAgrupados(extras, anadirSel, 'toggleAnadir') : '';
 
   // Declaración de alérgenos por NOMBRE (1169/2011 — el texto es lo legalmente exigible).
@@ -874,10 +878,13 @@ function catGrpKeys(catId) {
   const c = DATA.categorias.find(x => x.id === catId);
   return [catId, (c && c.nombre) || ''].filter(Boolean).map(s => String(s).toLowerCase());
 }
-function extrasForGroup(grpKeys, excludeIds) {
-  excludeIds = excludeIds || {};
+// excludeSet: Set de tokens normalizados (id y/o nombre) a excluir (los base del producto).
+// Acepta {} (sin .has) como "sin exclusión" para los call sites que no excluyen (al-gusto/gate).
+function extrasForGroup(grpKeys, excludeSet) {
+  const hasExcl = excludeSet && typeof excludeSet.has === 'function' && excludeSet.size;
   return (DATA.catalogo_ingredientes || []).filter(function (ing) {
-    if (!ing || excludeIds[ing.id]) return false;
+    if (!ing) return false;
+    if (hasExcl && (excludeSet.has(norm(ing.id)) || excludeSet.has(norm(ing.nombre)))) return false;
     const g = ing.grupos || [];
     if (g.length && grpKeys.length) {
       let ok = false;
@@ -967,7 +974,7 @@ function showMitadVar(lado, pizza) {
     ingsHtml += '<button type="button" class="ing-chip ing-removable' + cls + rm + '" onclick="toggleQuitar(' + idx + ', this)">' + (i.emoji ? '<span style="font-size:.85rem">' + i.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(i.nombre) + '</span></button>';
   }
   const grpKeys = [pizza.categoria_id, (pizza.categoria || '').toLowerCase()].filter(Boolean);
-  const extras = extrasForGroup(grpKeys, {});
+  const extras = extrasForGroup(grpKeys, baseExcludeSet(pizza));
   let extrasHtml = '';
   if (extras.length) {
     for (const e of extras) detailExtrasById[e.id] = e;

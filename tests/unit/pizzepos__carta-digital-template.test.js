@@ -36,6 +36,20 @@ test('carta-digital/template — botón partido por mitad (espeja ProductoBtn de
   assert.ok(html.includes('mitad-pick-var'), 'CSS/markup del botón partido presente');
 });
 
+test('carta-digital/template — pantalla de mitad espeja el layout del comandero (MitadMitadPanel)', () => {
+  const html = htmlDe();
+  // Dos cajas IZQUIERDA/DERECHA con divisor ➕, caja de precio, selector de lado y grid 2-col.
+  assert.ok(html.includes('mitad-preview') && html.includes('mitad-box'), 'cajas de las dos mitades');
+  assert.ok(html.includes('mitad-div'), 'divisor ➕ entre las mitades');
+  assert.ok(html.includes('mitad-precio'), 'caja de precio (como el comandero)');
+  assert.ok(html.includes('Seleccionar izquierda') && html.includes('Seleccionar derecha'), 'selector de lado activo');
+  assert.ok(html.includes('grid-template-columns:repeat(2,1fr)') && html.includes('mitad-grid'), 'grid 2-col de pizzas');
+  // Llenar una mitad = ✕ para vaciarla (mitadClear), no editar in-situ.
+  assert.ok(html.includes('function mitadClear('), 'una caja llena se vacía con ✕');
+  assert.ok(!html.includes('function editMitadVar('), 'sin el editor in-situ huérfano del layout viejo');
+  assert.ok(!html.includes('mitad-slots'), 'sin el layout viejo de tabs');
+});
+
 test('carta-digital/template — variaciones por mitad reusan la maquinaria quitar/añadir', () => {
   const html = htmlDe();
   assert.ok(html.includes('function showMitadVar(lado, pizza)'), 'sub-pantalla de personalización por mitad');

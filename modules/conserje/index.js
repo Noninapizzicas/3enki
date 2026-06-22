@@ -52,6 +52,7 @@ class ConserjeModule extends BaseModule {
     this.activo = false;                 // OFF por defecto (lo gobierna el interruptor)
     this.estados = new Map();            // project_id -> { usadas:Set, intentadas:Set }
     this.cooldown = new Map();           // `${project}::${capacidad}` -> ts
+    this.pendientes = new Map();         // project_id -> empujon (lo lee el nervio, una vez)
     this.dirty = new Set();
     this._onBusMessage = null;
     this._tickTimer = null;
@@ -88,6 +89,7 @@ class ConserjeModule extends BaseModule {
     this._tickTimer = null;
     this.estados.clear();
     this.cooldown.clear();
+    this.pendientes.clear();
     this.dirty.clear();
     this.logger?.info('conserje.unloaded', { module: this.name });
   }
@@ -166,10 +168,11 @@ class ConserjeModule extends BaseModule {
     const mensaje = item.tipo === 'desbloqueo'
       ? `Veo que buscas ${item.ofrece}, pero aún está sin montar. ¿Lo completamos? Es rápido.`
       : `¿Sabías que puedes tener ${item.ofrece}? Si quieres, lo arrancamos.`;
+    const empujon = { tipo: item.tipo, recurso: item.id, mensaje, accion_sugerida: item.entrada };
+    this.pendientes.set(projectId, empujon);   // el nervio lo leerá y consumirá (una vez)
     try {
       this.eventBus.publish('conserje.empujon', {
-        project_id: projectId, tipo: item.tipo, recurso: item.id,
-        mensaje, accion_sugerida: item.entrada,
+        project_id: projectId, ...empujon,
         correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
       });
       this.metrics?.increment('conserje.empujon.total', { tipo: item.tipo, recurso: item.id });
@@ -177,6 +180,15 @@ class ConserjeModule extends BaseModule {
     } catch (_) {
       this.metrics?.increment('conserje.errors.total', { kind: 'emit' });
     }
+  }
+
+  // ── el NERVIO lee el empujón pendiente (y lo CONSUME: se ofrece una vez) ──
+  async handleEmpujonPendiente(data) {
+    const project_id = data && (data.project_id || data.projectId);
+    if (!project_id) return { status: 200, data: { empujon: null } };
+    const empujon = this.pendientes.get(project_id) || null;
+    if (empujon) this.pendientes.delete(project_id);   // consume-on-read
+    return { status: 200, data: { empujon } };
   }
 
   // ── UI: ver la brecha de un proyecto (visibilidad / debug) ──

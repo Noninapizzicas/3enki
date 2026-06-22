@@ -27,6 +27,12 @@
   "ui_handlers": [
     {
       "domain": "conserje",
+      "action": "empujon_pendiente",
+      "handler": "handleEmpujonPendiente",
+      "description": "Devuelve (y CONSUME) el empujón pendiente de un proyecto. Lo lee el nervio en ai-gateway para ofrecerlo en el chat una vez."
+    },
+    {
+      "domain": "conserje",
       "action": "brecha",
       "handler": "handleBrecha",
       "description": "La brecha (OFRECE vs USA) de un proyecto: usadas, intentadas y el ranking de oportunidades. Visibilidad/debug."
@@ -40,6 +46,20 @@
   ],
 
   "tools": [
+    {
+      "name": "conserje.empujon_pendiente",
+      "description": "Devuelve y consume el empujón pendiente de un proyecto (el siguiente paso a ofrecer al comerciante). Lo lee el nervio del chat.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "handleEmpujonPendiente",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
     {
       "name": "conserje.brecha",
       "description": "Muestra qué capacidades del sistema le faltan por aprovechar a un proyecto (OFRECE vs USA), ordenadas por oportunidad.",

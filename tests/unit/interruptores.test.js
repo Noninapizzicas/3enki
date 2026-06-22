@@ -137,6 +137,39 @@ test('conserje respeta el cooldown (no agobia)', async () => {
   await mod.onUnload();
 });
 
+test('conserje: el empujón pendiente se lee UNA vez (consume-on-read, para el nervio)', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoConserje(bus);
+  mod.onInterruptorCambiado({ data: { id: 'conserje', enabled: true } });
+  bus.inject('carta-marketing.get_perfil.response', { project_id: 'P', onboarding_completado: false });
+  mod._tick();
+  // primera lectura: trae el empujón
+  const r1 = await mod.handleEmpujonPendiente({ project_id: 'P' });
+  assert.ok(r1.data.empujon, 'la primera lectura trae el empujón');
+  assert.strictEqual(r1.data.empujon.recurso, 'marca');
+  // segunda lectura: ya consumido -> null (se ofrece una sola vez)
+  const r2 = await mod.handleEmpujonPendiente({ project_id: 'P' });
+  assert.strictEqual(r2.data.empujon, null, 'consume-on-read: no se repite');
+  await mod.onUnload();
+});
+
+test('conserje: sin proyecto, empujon_pendiente devuelve null sin romper', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoConserje(bus);
+  const r = await mod.handleEmpujonPendiente({});
+  assert.strictEqual(r.data.empujon, null);
+  await mod.onUnload();
+});
+
+test('ai-gateway expone el nervio del conserje (_leerEmpujon + _composeEmpujonSection)', async () => {
+  const A = require('../../modules/conversacion/ai-gateway/index.js');
+  assert.strictEqual(typeof A.prototype._leerEmpujon, 'function');
+  assert.strictEqual(typeof A.prototype._composeEmpujonSection, 'function');
+  const sec = A.prototype._composeEmpujonSection({ mensaje: 'completa tu marca' });
+  assert.ok(/conserje/i.test(sec) && /completa tu marca/.test(sec));
+  assert.ok(/una vez|UNA vez/i.test(sec), 'instruye ofrecer una sola vez');
+});
+
 test('conserje: marca rellenada -> usada, sale de la brecha', async () => {
   const bus = fakeBus();
   const mod = await nuevoConserje(bus);

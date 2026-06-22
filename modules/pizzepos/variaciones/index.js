@@ -14,7 +14,7 @@ class VariacionesModule extends BaseModule {
   constructor() {
     super();
     this.name = 'variaciones';
-    this.version = '4.2.0';
+    this.version = '4.3.0';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -131,7 +131,9 @@ class VariacionesModule extends BaseModule {
       grupo: categoria || 'otro',
       precio_base: precio,
       permite_quitar: v.permite_quitar || [],
-      permite_anadir: v.permite_anadir || false,
+      // Por defecto SÍ se puede añadir (salvo que la carta lo niegue explícitamente). Una carta
+      // sin reglas de variación no debe bloquear "sumar" — el panel lo ocultaba con el viejo `|| false`.
+      permite_anadir: v.permite_anadir !== false,
       extras_sugeridos: v.extras_sugeridos || [],
       max_ingredientes_extra: v.max_ingredientes_extra || 5,
       ingredientes_base: (ingredientes_base || ingredientes || [])

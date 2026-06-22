@@ -1,6 +1,7 @@
 {
   "name": "variaciones",
-  "version": "4.2.0",
+  "version": "4.4.0",
+  "_v4_4_nota": "v4.4.0 (2026-06-22): adopta la OPERATIVA del subsistema Opciones (banco de pruebas; el nombre del modulo se queda). _configurar guarda producto.opciones — las de la carta, o DERIVADAS via _shared/derivar-opciones (QUITAR=ingredientes propios + ELEGIR_VARIOS=paleta de su categoria). handleGet devuelve `opciones` + precio_base_centimos (ADITIVO: no rompe el panel actual que aun lee permite_anadir/etc). Nueva op `evaluar` (handleEvaluarOpciones): valida+precia server-side con _shared/motor-opciones (gemelo del tasador).",
   "_v4_2_nota": "v4.2.0 (2026-06-20): WARM en project.activated (cierra el PENDIENTE de v4.1). variaciones vive en memoria (lost_on_restart); sin warm esperaba a la 1a edicion de carta para repoblarse tras un arranque en seco. Ahora onProjectActivated pide la carta activa proyectada al reflejo de productos (uiHandler.handle('productos','carta_completa') — productos resuelve cual es la activa y la proyecta con su campo `variaciones`, anadido a _proyectarProducto) y configura TODOS sus productos. La carta sigue siendo la fuente; aqui solo se lee. Best-effort: si productos no responde, la 1a edicion repobla igual.",
   "_v4_1_nota": "v4.1.0 (2026-06-20): variaciones se configura desde la CARTA (carta.actualizada/editada), no desde el muerto 'producto.creado' (que en la arquitectura carta-based no lo emite NADIE — variaciones quedaba huerfana y no se podia quitar/anadir en ninguna pizza). Mismo patron que ingredientes: el dato vive en la carta, el consumidor la lee. _configurar() unifica la logica; producto.creado se conserva por compat.",
   "description": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{validada,rechazada}.",
@@ -25,7 +26,8 @@
     { "domain": "variaciones", "action": "validar",         "handler": "handleValidarVariacion",       "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "variaciones", "action": "calcular_precio", "handler": "handleCalcularPrecio",         "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "variaciones", "action": "health",          "handler": "handleHealthCheck",            "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "variaciones", "action": "metrics",         "handler": "handleGetMetrics",             "type": "workspace_module", "zone": "barra_modulos" }
+    { "domain": "variaciones", "action": "metrics",         "handler": "handleGetMetrics",             "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "variaciones", "action": "evaluar",         "handler": "handleEvaluarOpciones",        "type": "workspace_module", "zone": "barra_modulos" }
   ],
   "tools": [
     {

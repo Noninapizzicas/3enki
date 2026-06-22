@@ -30,7 +30,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.9.0';
+    this.version = 'reflejo-1.11.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -44,6 +44,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   onUpdateProductsRequest(e) { return this._atender(e, 'update_products', 'carta.update_products.response', d => this._updateProducts(d)); }
   onAddCategoryRequest(e) { return this._atender(e, 'add_category', 'carta.add_category.response', d => this._addCategory(d)); }
   onUpdatePricesRequest(e) { return this._atender(e, 'update_prices', 'carta.update_prices.response', d => this._updatePrices(d)); }
+  onUpdateExtrasRequest(e) { return this._atender(e, 'update_extras', 'carta.update_extras.response', d => this._updateExtras(d)); }
   onClonarRequest(e) { return this._atender(e, 'clonar', 'carta.clonar.response', d => this._clonar(d)); }
   onSearchRequest(e) { return this._atender(e, 'search', 'carta.search.response', d => this._search(d)); }
   onStatsRequest(e) { return this._atender(e, 'stats', 'carta.stats.response', d => this._stats(d)); }
@@ -525,6 +526,36 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
         if (!prod) { errores.push({ producto_id: u.producto_id, error: 'no_existe' }); continue; }
         aplicados.push({ producto_id: u.producto_id, precio_antes: prod.precio, precio_despues: u.precio_nuevo });
         prod.precio = u.precio_nuevo;
+      }
+      if (aplicados.length === 0) return { error: this._errorResponse(412, 'PRECONDITION_FAILED', 'ningun update aplicado', { errores }) };
+      return { patches: [{ op: 'replace', path: '/productos', value: carta.productos }], data: (c) => ({ aplicados, errores, carta_version: c.meta.version }) };
+    });
+    return res;
+  }
+
+  // update_extras — el cambio de precio de EXTRA de un ingrediente vive aquí (el custodio),
+  // no en un fichero suelto. Fija precio_extra (€) por ingrediente_id en TODAS sus apariciones
+  // (ingredientes + ingredientes_base de cada producto) → la paleta ELEGIR_VARIOS y la proyección
+  // de carta-digital lo reflejan coherente. menu-generator pone el de SALIDA (0,50€); aquí se CAMBIA.
+  async _updateExtras(input) {
+    if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
+    if (!Array.isArray(input.updates) || input.updates.length === 0) return this._invalid('updates');
+    const aplicados = [], errores = [];
+    const res = await this._mutar(input, 'update_extras', (carta) => {
+      for (const u of input.updates) {
+        if (!u.ingrediente_id) { errores.push({ ingrediente_id: u.ingrediente_id, error: 'ingrediente_id_invalido' }); continue; }
+        if (typeof u.precio_extra_nuevo !== 'number' || u.precio_extra_nuevo < 0) { errores.push({ ingrediente_id: u.ingrediente_id, error: 'precio_invalido' }); continue; }
+        let tocados = 0;
+        for (const prod of (carta.productos || [])) {
+          for (const lista of [prod.ingredientes, prod.ingredientes_base]) {
+            if (!Array.isArray(lista)) continue;
+            for (const ing of lista) {
+              if (ing && ing.id === u.ingrediente_id) { ing.precio_extra = u.precio_extra_nuevo; tocados++; }
+            }
+          }
+        }
+        if (tocados === 0) errores.push({ ingrediente_id: u.ingrediente_id, error: 'no_existe' });
+        else aplicados.push({ ingrediente_id: u.ingrediente_id, precio_extra: u.precio_extra_nuevo, ocurrencias: tocados });
       }
       if (aplicados.length === 0) return { error: this._errorResponse(412, 'PRECONDITION_FAILED', 'ningun update aplicado', { errores }) };
       return { patches: [{ op: 'replace', path: '/productos', value: carta.productos }], data: (c) => ({ aplicados, errores, carta_version: c.meta.version }) };

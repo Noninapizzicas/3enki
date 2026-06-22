@@ -56,12 +56,19 @@ test('producto sin ingredientes (Agua) → sin opciones', () => {
   assert.strictEqual(agua.opciones, undefined);
 });
 
-test('round-trip: las opciones que nacen validan/precian con el motor', () => {
+test('extra estándar: cada extra nace a 0,50€ (delta 50 céntimos)', () => {
+  const carta = proyectar();
+  const bat = carta.productos.find(p => p.id === 'pizzicas_batucada');
+  const anadir = bat.opciones.find(o => o.modo === 'ELEGIR_VARIOS');
+  assert.ok(anadir.valores.every(v => v.delta_precio_centimos === 50), 'todos los extras a 0,50€');
+});
+
+test('round-trip: +bacon = 1050 + 50 (extra estándar) = 1100', () => {
   const carta = proyectar();
   const bat = carta.productos.find(p => p.id === 'pizzicas_batucada');
   const r = evaluarProducto({ precio_base_centimos: 1050, opciones: bat.opciones }, { anadir: ['bacon'] });
   assert.strictEqual(r.valida, true);
-  assert.strictEqual(r.precio_final_centimos, 1050);   // precio_extra 0 hasta que se fijen
+  assert.strictEqual(r.precio_final_centimos, 1100);
 });
 
 // ── runner ──

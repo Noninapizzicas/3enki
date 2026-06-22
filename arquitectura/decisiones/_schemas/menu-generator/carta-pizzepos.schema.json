@@ -115,6 +115,11 @@
                   "type": "string",
                   "minLength": 1,
                   "description": "Familia del ingrediente (queso, verdura, carne, salsa, pescado, fruta, extra, condimento, otro), asignada EN ORIGEN por menu-generator. v2 (semilla enriquecida). ingredientes es la autoridad (puede corregirla). Término canónico 'familia' (glosario v1.2.0; sinónimo histórico 'grupo' deprecado)."
+                },
+                "precio_extra": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Sobreprecio del ingrediente al añadirse como EXTRA (€). menu-generator pone un estándar (0,50) si la fuente no lo trae; 0 = gratis. Lo lee la proyección de productos (carta-digital) y derivar-opciones (modo ELEGIR_VARIOS → comandero). En el rol BASE del producto no se cobra."
                 }
               }
             },

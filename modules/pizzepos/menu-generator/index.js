@@ -40,6 +40,11 @@ const FAMILIA_ALIAS = {
   salsas: 'salsa', frutas: 'fruta', extras: 'extra', condimentos: 'condimento',
 };
 
+// € de extra estándar que menu-generator pone a CADA ingrediente sin precio propio.
+// Fluye a los dos canales: derivar-opciones (ELEGIR_VARIOS → comandero) y la proyección de
+// productos (precio_extra → carta-digital). 0 explícito en la fuente = gratis (se respeta).
+const PRECIO_EXTRA_ESTANDAR = 0.5;
+
 class MenuGeneratorReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
@@ -281,7 +286,8 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
       if (familia === 'otro' && famByName && famByName.has(key)) familia = famByName.get(key);
       const out = { id: i.id || key, nombre: String(i.nombre), familia };
       if (i.emoji) out.emoji = i.emoji;
-      if (typeof i.precio_extra === 'number') out.precio_extra = i.precio_extra;
+      // Extra estándar (0,50€) si la fuente no trae precio propio; el explícito (incl. 0) se respeta.
+      out.precio_extra = (typeof i.precio_extra === 'number') ? i.precio_extra : PRECIO_EXTRA_ESTANDAR;
       return out;
     });
   }

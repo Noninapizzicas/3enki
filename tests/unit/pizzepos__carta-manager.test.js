@@ -283,6 +283,49 @@ async function testAsync(desc, fn) {
     assert.ok(store['/pizzepos/cartas/carta_nueva.json'], 'con varias activas no fuerza, respeta el id entrante');
   });
 
+  // ── v2.6.0: update_extras (el cambio de precio de extra vive en el custodio) ──
+
+  await testAsync('update_extras: fija precio_extra de un ingrediente en TODAS sus apariciones', async () => {
+    const carta = cartaInicial();
+    carta.productos.push(
+      { id: 'hamburguesas_texas', nombre: 'TEXAS', precio: 15.5, categoria_id: 'hamburguesas',
+        ingredientes: [{ id: 'queso', nombre: 'Queso', familia: 'queso', precio_extra: 0.5 }, { id: 'bacon', nombre: 'Bacon', familia: 'carne', precio_extra: 0.5 }] },
+      { id: 'hamburguesas_classic', nombre: 'CLASSIC', precio: 12, categoria_id: 'hamburguesas',
+        ingredientes: [{ id: 'queso', nombre: 'Queso', familia: 'queso', precio_extra: 0.5 }],
+        ingredientes_base: [{ id: 'queso', nombre: 'Queso', familia: 'queso', precio_extra: 0.5 }] }
+    );
+    const store = { [CARTA_PATH]: JSON.stringify(carta) };
+    const { m } = makeReflejo(store);
+    const r = await m._updateExtras({ ...base, updates: [{ ingrediente_id: 'queso', precio_extra_nuevo: 1.2 }] });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.aplicados[0].ocurrencias, 3);   // 2 en ingredientes + 1 en ingredientes_base
+    const guardada = JSON.parse(store[CARTA_PATH]);
+    const texas = guardada.productos.find(p => p.id === 'hamburguesas_texas');
+    const classic = guardada.productos.find(p => p.id === 'hamburguesas_classic');
+    assert.strictEqual(texas.ingredientes.find(i => i.id === 'queso').precio_extra, 1.2);
+    assert.strictEqual(texas.ingredientes.find(i => i.id === 'bacon').precio_extra, 0.5);   // intacto
+    assert.strictEqual(classic.ingredientes[0].precio_extra, 1.2);
+    assert.strictEqual(classic.ingredientes_base[0].precio_extra, 1.2);
+  });
+
+  await testAsync('update_extras: ingrediente inexistente → 412 (ningun update aplicado)', async () => {
+    const carta = cartaInicial();
+    carta.productos.push({ id: 'hamburguesas_texas', nombre: 'TEXAS', precio: 15.5, categoria_id: 'hamburguesas', ingredientes: [{ id: 'queso', nombre: 'Queso', familia: 'queso' }] });
+    const store = { [CARTA_PATH]: JSON.stringify(carta) };
+    const { m } = makeReflejo(store);
+    const r = await m._updateExtras({ ...base, updates: [{ ingrediente_id: 'fantasma', precio_extra_nuevo: 1 }] });
+    assert.strictEqual(r.status, 412);
+  });
+
+  await testAsync('update_extras: precio negativo → error por update (no aplica)', async () => {
+    const carta = cartaInicial();
+    carta.productos.push({ id: 'hamburguesas_texas', nombre: 'TEXAS', precio: 15.5, categoria_id: 'hamburguesas', ingredientes: [{ id: 'queso', nombre: 'Queso', familia: 'queso' }] });
+    const store = { [CARTA_PATH]: JSON.stringify(carta) };
+    const { m } = makeReflejo(store);
+    const r = await m._updateExtras({ ...base, updates: [{ ingrediente_id: 'queso', precio_extra_nuevo: -1 }] });
+    assert.strictEqual(r.status, 412);
+  });
+
   // Nota: add_from_receta NO se prueba aquí — ya no es op del reflejo. La clasificación
   // base-vs-topping es criterio del LLM (blueprint), no lógica determinista. El reflejo
   // solo persiste vía add_product (probado arriba, ingredientes que le pasen).

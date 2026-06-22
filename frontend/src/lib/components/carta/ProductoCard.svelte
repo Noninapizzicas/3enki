@@ -10,6 +10,7 @@
   import { createEventDispatcher } from 'svelte';
   import type { Producto } from '$lib/stores/carta';
   import { storageImg } from '$lib/ui-core/storage-image';
+  import { activeProjectId } from '$lib/stores/projects';
 
   export let producto: Producto;
 
@@ -67,7 +68,7 @@
   <!-- Imagen / Placeholder -->
   <div class="card-visual">
     {#if producto.imagen}
-      <img use:storageImg={producto.imagen} alt={producto.nombre} class="card-img" />
+      <img use:storageImg={{ path: producto.imagen, project: $activeProjectId }} alt={producto.nombre} class="card-img" />
     {:else}
       <div class="card-placeholder">
         <span class="placeholder-emoji">{producto.emoji || '🍕'}</span>

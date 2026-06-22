@@ -24,50 +24,82 @@ function mimeOf(path: string): string {
 
 /**
  * Resuelve una ruta de storage de proyecto a un src mostrable (data: URI vía fs.read base64).
- * Las urls http(s)/data/blob se devuelven tal cual (no son de storage). Cachea por path.
+ * Las urls http(s)/data/blob se devuelven tal cual (no son de storage). Cachea por path+proyecto.
+ * project: el proyecto DUEÑO de la imagen (multi-tenant) — sin él, el servidor usa el activo.
  */
-export async function storageImageSrc(path: string): Promise<string> {
+export async function storageImageSrc(path: string, project?: string): Promise<string> {
   if (!path) return '';
   if (/^(https?:|data:|blob:)/.test(path)) return path;
-  const hit = cache.get(path);
+  const key = (project ? project + '::' : '') + path;
+  const hit = cache.get(key);
   if (hit) return hit;
-  const pending = inflight.get(path);
+  const pending = inflight.get(key);
   if (pending) return pending;
   const job = (async () => {
-    const res = await mqttRequest<{ content: string; encoding: string }>('fs', 'read', { path });
+    const payload: Record<string, unknown> = project ? { path, project_id: project } : { path };
+    const res = await mqttRequest<{ content: string; encoding: string }>('fs', 'read', payload);
     const content = res?.data?.content;
     if (!content) throw new Error('imagen sin contenido');
     const src = res.data.encoding === 'base64'
       ? `data:${mimeOf(path)};base64,${content}`
       : path;
-    cache.set(path, src);
+    cache.set(key, src);
     return src;
   })();
-  inflight.set(path, job);
+  inflight.set(key, job);
   try {
     return await job;
   } finally {
-    inflight.delete(path);
+    inflight.delete(key);
   }
 }
 
+/** URL HTTP que sirve el fichero del storage del proyecto (cacheable por el navegador). */
+function httpUrl(path: string, project?: string): string {
+  return '/modules/filesystem/file?path=' + encodeURIComponent(path) +
+    (project ? '&project=' + encodeURIComponent(project) : '');
+}
+
+type StorageImgParam = string | { path?: string | null; project?: string | null };
+function normParam(param: StorageImgParam): { path: string; project?: string } {
+  if (typeof param === 'string') return { path: param };
+  return { path: param?.path || '', project: param?.project || undefined };
+}
+
 /**
- * Acción Svelte: <img use:storageImg={path} alt=... class=...>. Carga la imagen de storage como
- * data: URI y la asigna al nodo cuando está lista. Si falla, deja que el onerror/placeholder del
- * componente actúe. Reacciona a cambios de path.
+ * Acción Svelte: <img use:storageImg={{ path, project }} alt=... class=...>. Muestra una imagen que
+ * vive en el storage del proyecto DUEÑO (multi-tenant). Acepta también una string (solo path) →
+ * el servidor cae al proyecto activo. Estrategia robusta al rollout:
+ *   1) src = ruta HTTP servida por filesystem (cacheable, ligera) con ?project=<id>.
+ *   2) si esa ruta falla (core sin el endpoint todavía), onerror → data: URI vía fs.read (MQTT).
+ * Reacciona a cambios de path o de proyecto.
  */
-export function storageImg(node: HTMLImageElement, path: string) {
-  let current = '';
-  const apply = (p: string) => {
-    current = p;
+export function storageImg(node: HTMLImageElement, param: StorageImgParam) {
+  let curPath = '';
+  let curProj: string | undefined;
+  const apply = (p: string, proj?: string) => {
+    curPath = p;
+    curProj = proj;
+    node.onerror = null;
     if (!p) { node.removeAttribute('src'); return; }
-    storageImageSrc(p)
-      .then((src) => { if (current === p && src) node.src = src; })
-      .catch(() => { if (current === p) node.dispatchEvent(new Event('error')); });
+    if (/^(https?:|data:|blob:)/.test(p)) { node.src = p; return; }
+    let triedFallback = false;
+    node.onerror = () => {
+      if (triedFallback || curPath !== p || curProj !== proj) return;
+      triedFallback = true;
+      storageImageSrc(p, proj)
+        .then((src) => { if (curPath === p && curProj === proj && src) node.src = src; })
+        .catch(() => { /* sin imagen: queda el alt/placeholder */ });
+    };
+    node.src = httpUrl(p, proj);
   };
-  apply(path);
+  const init = normParam(param);
+  apply(init.path, init.project);
   return {
-    update(p: string) { if (p !== current) apply(p); },
-    destroy() { current = ''; }
+    update(np: StorageImgParam) {
+      const { path, project } = normParam(np);
+      if (path !== curPath || project !== curProj) apply(path, project);
+    },
+    destroy() { curPath = ''; node.onerror = null; }
   };
 }

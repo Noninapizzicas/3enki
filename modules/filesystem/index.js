@@ -609,6 +609,43 @@ class FilesystemModule extends BaseModule {
     }
   }
 
+  // HTTP: sirve un fichero IMAGEN del storage del proyecto (binario + content-type), para que el
+  // frontend muestre imágenes de producto (/pizzepos/contenido/imagenes/...) sin inlinear base64.
+  // Ruta: GET /modules/filesystem/file?path=<ruta>&project=<id>. SEGURIDAD: solo extensiones de
+  // imagen (no expone JSON ni datos sensibles del proyecto); validatePath aplica el guard de
+  // traversal + raíz del proyecto. Devuelve body+headers (la caché del gateway está OFF por
+  // defecto, así que no hay riesgo de cachear una respuesta sin `data`).
+  async handleServeFile(req) {
+    const IMG = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', avif: 'image/avif', bmp: 'image/bmp' };
+    try {
+      const q = (req && req.query) || {};
+      const reqPath = q.path;
+      if (!reqPath || typeof reqPath !== 'string') {
+        return { status: 400, data: { error: { code: 'INVALID_INPUT', message: 'path requerido' } } };
+      }
+      const ext = (reqPath.split('.').pop() || '').toLowerCase();
+      if (!IMG[ext]) {
+        return { status: 403, data: { error: { code: 'PERMISSION_DENIED', message: 'solo se sirven imágenes' } } };
+      }
+      const safePath = this.validatePath(reqPath, { project_id: q.project });   // guard traversal + raíz proyecto
+      const stat = await fs.stat(safePath);
+      if (!stat.isFile()) {
+        return { status: 404, data: { error: { code: 'RESOURCE_NOT_FOUND', message: 'no es un fichero' } } };
+      }
+      if (stat.size > MAX_READ_SIZE) {
+        return { status: 413, data: { error: { code: 'PAYLOAD_TOO_LARGE', message: 'fichero demasiado grande' } } };
+      }
+      const buf = await fs.readFile(safePath);
+      this.metrics?.increment('filesystem.serve.total', { ext });
+      return { status: 200, body: buf, headers: { 'Content-Type': IMG[ext], 'Cache-Control': 'public, max-age=300', 'Content-Length': String(buf.length) } };
+    } catch (err) {
+      const code = err._code || (err.code === 'ENOENT' ? 'RESOURCE_NOT_FOUND' : 'UNKNOWN_ERROR');
+      const status = code === 'RESOURCE_NOT_FOUND' ? 404 : code === 'INVALID_INPUT' ? 400 : code === 'PERMISSION_DENIED' ? 403 : 500;
+      this.metrics?.increment('filesystem.errors', { kind: 'serve', code });
+      return { status, data: { error: { code, message: err.message } } };
+    }
+  }
+
   async handleRead(data) {
     try {
       if (!data?.path) {

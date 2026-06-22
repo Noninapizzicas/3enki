@@ -465,5 +465,63 @@ function isCanonicalError(result) {
     await cleanup(envFile);
   });
 
+  // ==========================================
+  // Group: invariante PROJECT-ONLY (providers por-tenant, p.ej. WhatsApp)
+  // ==========================================
+
+  await testAsync('META_WHATSAPP a nivel GLOBAL → 400 (provider por-proyecto, solo PROJECT)', async () => {
+    const mocks = makeMocks();
+    const { module: m, envFile } = await instantiate(mocks);
+    const result = await m.handleUICreate({ provider: 'META_WHATSAPP', level: 'GLOBAL', api_key: 'tok' });
+    assert.strictEqual(result.status, 400);
+    assert.strictEqual(result.error.code, 'INVALID_INPUT');
+    assert.strictEqual(result.error.details.field, 'level');
+    assert.strictEqual(result.error.details.allowed_level, 'PROJECT');
+    await m.onUnload();
+    await cleanup(envFile);
+  });
+
+  await testAsync('META_WHATSAPP a nivel CLIENT/CUSTOM también rechazado (solo PROJECT)', async () => {
+    const mocks = makeMocks();
+    const { module: m, envFile } = await instantiate(mocks);
+    const rC = await m.handleUICreate({ provider: 'META_WHATSAPP', level: 'CLIENT', identifier: 'c1', api_key: 'tok' });
+    assert.strictEqual(rC.status, 400);
+    const rU = await m.handleUICreate({ provider: 'META_WHATSAPP', level: 'CUSTOM', identifier: 'x', api_key: 'tok' });
+    assert.strictEqual(rU.status, 400);
+    await m.onUnload();
+    await cleanup(envFile);
+  });
+
+  await testAsync('META_WHATSAPP a nivel PROJECT con identifier=slug → 201 key correcta', async () => {
+    const mocks = makeMocks();
+    const { module: m, envFile } = await instantiate(mocks);
+    const result = await m.handleUICreate({ provider: 'META_WHATSAPP', level: 'PROJECT', identifier: 'nonina', api_key: 'tok-nonina' });
+    assert.strictEqual(result.status, 201);
+    assert.strictEqual(result.data.key, 'META_WHATSAPP_API_KEY_PROJECT_nonina');   // = lo que lee el bot
+    await m.onUnload();
+    await cleanup(envFile);
+  });
+
+  await testAsync('resolve project-only: SOLO PROJECT, sin caída a GLOBAL/legacy (aislamiento)', async () => {
+    const mocks = makeMocks();
+    const { module: m, envFile } = await instantiate(mocks);
+    // El de nonina existe a nivel PROJECT; alguien coló además uno GLOBAL a mano en el store.
+    m.credentials.set('META_WHATSAPP_API_KEY_PROJECT_nonina', 'tok-nonina');
+    m.credentials.set('META_WHATSAPP_API_KEY_GLOBAL', 'tok-global-prohibido');
+    // nonina resuelve su propio token PROJECT
+    const rN = m._resolveCredential('META_WHATSAPP', { projectId: 'nonina' });
+    assert.strictEqual(rN.found, true);
+    assert.strictEqual(rN.resolvedFrom, 'PROJECT');
+    assert.strictEqual(rN.apiKey, 'tok-nonina');
+    // OTRO proyecto sin su PROJECT key → NO encuentra (no cae al global, ni al legacy)
+    const rOtro = m._resolveCredential('META_WHATSAPP', { projectId: 'otra-tienda' });
+    assert.strictEqual(rOtro.found, false, 'no debe usar el token global de otra tienda');
+    // y sin projectId tampoco resuelve a global
+    const rSin = m._resolveCredential('META_WHATSAPP', {});
+    assert.strictEqual(rSin.found, false);
+    await m.onUnload();
+    await cleanup(envFile);
+  });
+
   console.log('\ncredential-manager: todos los tests pasaron ✓');
 })().catch(err => { console.error(err); process.exit(1); });

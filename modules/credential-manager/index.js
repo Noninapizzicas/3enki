@@ -54,11 +54,16 @@ const PROVIDER_ICONS = {
 
 const VALID_LEVELS = ['GLOBAL', 'PROJECT', 'CLIENT', 'CUSTOM', 'BOT'];
 
+// Providers cuyo secreto es POR PROYECTO (multi-tenant): cada tienda tiene su propio número/token
+// y su propio webhook → NUNCA pueden ser globales (un token global mezclaría negocios). Se exige
+// nivel PROJECT al guardar y la resolución NO cae a GLOBAL/legacy para ellos (aislamiento real).
+const PROJECT_ONLY_PROVIDERS = new Set(['META_WHATSAPP', 'META_WHATSAPP_VERIFY_TOKEN']);
+
 class CredentialManagerModule extends BaseModule {
   constructor() {
     super();
     this.name    = 'credential-manager';
-    this.version = '2.0.0';
+    this.version = '2.1.0';
     this.uiHandler = null;
     this.config    = null;
 
@@ -665,15 +670,18 @@ class CredentialManagerModule extends BaseModule {
 
   _resolveCredential(provider, { customId, clientId, projectId } = {}) {
     const attempts = [];
+    // Provider por-proyecto: SOLO resuelve a nivel PROJECT. No baja a CUSTOM/CLIENT/GLOBAL/legacy,
+    // aunque alguien hubiera colado una clave global a mano en el .env → no se puede usar cross-tenant.
+    const projectOnly = PROJECT_ONLY_PROVIDERS.has(String(provider).toUpperCase());
 
-    if (customId) {
+    if (!projectOnly && customId) {
       const k = this._buildKey(provider, 'CUSTOM', customId);
       attempts.push(k);
       if (this.credentials.has(k)) {
         return { found: true, apiKey: this.credentials.get(k), key: k, resolvedFrom: 'CUSTOM', identifier: customId, attempts };
       }
     }
-    if (clientId) {
+    if (!projectOnly && clientId) {
       const k = this._buildKey(provider, 'CLIENT', clientId);
       attempts.push(k);
       if (this.credentials.has(k)) {
@@ -686,6 +694,9 @@ class CredentialManagerModule extends BaseModule {
       if (this.credentials.has(k)) {
         return { found: true, apiKey: this.credentials.get(k), key: k, resolvedFrom: 'PROJECT', identifier: projectId, attempts };
       }
+    }
+    if (projectOnly) {
+      return { found: false, attempts };   // sin caída a global: el aislamiento es el invariante
     }
     const globalK = this._buildKey(provider, 'GLOBAL');
     attempts.push(globalK);
@@ -756,6 +767,14 @@ class CredentialManagerModule extends BaseModule {
     }
     if (!api_key) {
       throw Object.assign(new Error('API key is required'), { _code: 'INVALID_INPUT', _details: { kind: 'domain', field: 'api_key' } });
+    }
+    // Invariante por-proyecto: estos providers SOLO se guardan a nivel PROJECT (con identifier=slug).
+    // Bloquea GLOBAL/CLIENT/CUSTOM/BOT → imposible un token de WhatsApp compartido entre tiendas.
+    if (PROJECT_ONLY_PROVIDERS.has(String(provider).toUpperCase()) && level !== 'PROJECT') {
+      throw Object.assign(
+        new Error(`Provider ${provider} es por-proyecto: solo se permite nivel PROJECT (recibido: ${level})`),
+        { _code: 'INVALID_INPUT', _details: { kind: 'domain', field: 'level', provider, allowed_level: 'PROJECT' } }
+      );
     }
   }
 

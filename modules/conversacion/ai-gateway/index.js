@@ -1313,7 +1313,7 @@ class AiGatewayModule extends BaseModule {
   // expuesto al LLM cuando el page_id activo es un modulo blueprint-driven.
   // No estan disponibles cuando se opera con tools polyfunctional clasicas.
   _getBlueprintUniversalTools() {
-    return [
+    const tools = [
       {
         name: 'bus.publish',
         description: 'Publica un evento al bus sin esperar respuesta. Util para eventos de dominio (ej. receta.creada) y para el evento de respuesta canonica al caller (<modulo>.<operacion>.response). El payload debe incluir los campos canonicos del subsistema (project_id, user_id, correlation_id, timestamp, request_id cuando aplique).',
@@ -1363,6 +1363,35 @@ class AiGatewayModule extends BaseModule {
         }
       }
     ];
+    // 3a primitiva OPCIONAL: code.orquestar (execute_code). Off por defecto —
+    // se ofrece al LLM solo si config.blueprint_orquestar_enabled === true. La
+    // ejecucion la gobierna ademas el kill switch de code-executor. Cura "una
+    // operacion por turno": un cajon cuyo pseudocodigo tiene un BUCLE de
+    // publishAndWait se ejecuta en 1 vez en vez de N turnos.
+    if (this.config?.blueprint_orquestar_enabled === true) {
+      tools.push({
+        name: 'code.orquestar',
+        description: 'Ejecuta un script JS que itera/ramifica sobre el bus (bus.publish, bus.publishAndWait) en UNA sola ejecucion. USALO SOLO cuando el pseudocodigo del cajon tenga un BUCLE o varias llamadas encadenadas al bus (ej. costear N recetas, procesar una lista) — en vez de hacer N tool-calls. Para una sola llamada usa bus.publishAndWait directamente. Sandbox: el codigo solo puede tocar el bus (sin fs/red/process). Devuelve { resultado, logs }.',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            codigo: {
+              type: 'string',
+              description: 'Cuerpo JS async. Dentro: await bus.publishAndWait(event, payload, {timeout_ms}) y bus.publish(event, payload). project_id y correlation_id se inyectan solos en cada evento. Usa return para devolver el resultado.'
+            },
+            timeout_ms: {
+              type: 'integer',
+              minimum: 100,
+              maximum: 60000,
+              description: 'Timeout total en ms. Default 30000.'
+            }
+          },
+          required: ['codigo']
+        }
+      });
+    }
+    return tools;
   }
 
   /**
@@ -1645,7 +1674,11 @@ class AiGatewayModule extends BaseModule {
     //   - decisiones_arquitectonicas.tool_invocacion_canonica_por_bus
     //   - prohibido.tool_invocacion_directa_via_toolsRegistry_handler
     const request_id = crypto.randomUUID();
-    const timeoutMs = toolName === 'invoke_agent' ? 150000 : (this.config.tool_timeout_ms || 15000);
+    // code.orquestar puede durar hasta su timeout interno (max 60s) -> el
+    // dispatch debe esperar mas que el default de 15s o lo cortaria antes.
+    const timeoutMs = toolName === 'invoke_agent' ? 150000
+      : toolName === 'code.orquestar' ? 65000
+      : (this.config.tool_timeout_ms || 15000);
     return new Promise((resolve, reject) => {
       let unsub = null;
       const timeout = setTimeout(() => {

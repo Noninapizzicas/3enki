@@ -1,6 +1,6 @@
 {
   "name": "code-executor",
-  "version": "2.0.0",
+  "version": "2.2.0",
   "description": "Shell command and script execution for AI with security controls",
   "author": "Event Core Team",
   "language": "en",
@@ -45,7 +45,11 @@
       "description": "Ejecuta un comando shell. Retorna stdout, stderr y exitCode. Timeout por defecto: 30s.",
       "handler": "handleToolExec",
       "confirmation": true,
-      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UPSTREAM_TIMEOUT"],
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "PERMISSION_DENIED",
+        "UPSTREAM_TIMEOUT"
+      ],
       "parameters": {
         "type": "object",
         "properties": {
@@ -76,7 +80,12 @@
       "description": "Ejecuta un archivo de script (bash, python, node). Detecta intérprete automáticamente.",
       "handler": "handleToolScript",
       "confirmation": true,
-      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT"],
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "PERMISSION_DENIED",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT"
+      ],
       "parameters": {
         "type": "object",
         "properties": {
@@ -111,7 +120,11 @@
       "description": "Inicia un proceso en segundo plano (ej: servidor dev). Retorna PID para control.",
       "handler": "handleToolBackground",
       "confirmation": true,
-      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "RATE_LIMITED"],
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "PERMISSION_DENIED",
+        "RATE_LIMITED"
+      ],
       "parameters": {
         "type": "object",
         "properties": {
@@ -137,7 +150,10 @@
       "name": "shell.kill",
       "description": "Detiene un proceso en segundo plano por PID o nombre.",
       "handler": "handleToolKill",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"],
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND"
+      ],
       "parameters": {
         "type": "object",
         "properties": {
@@ -160,6 +176,63 @@
       "parameters": {
         "type": "object",
         "properties": {}
+      }
+    },
+    {
+      "name": "code.orquestar",
+      "description": "Ejecuta un script JS cuya UNICA capacidad es el bus de eventos (bus.publish, bus.publishAndWait). Cura la regla \"una operacion por turno\": en vez de N tool-calls fragiles, escribe UN script que itera/ramifica sobre el bus y se ejecuta determinista. Sandbox capability-based: sin require/process/fs/red. Devuelve { resultado, logs }. Doble timeout corta runaway.",
+      "handler": "handleToolOrquestar",
+      "confirmation": true,
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "EXEC_FAILED",
+        "CAPABILITY_DISABLED"
+      ],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "description": "Cuerpo JS async. Puede usar await bus.publishAndWait(topic,data,{timeout_ms}) y bus.publish(topic,data). Usa return para devolver el resultado."
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Proyecto (se inyecta en cada evento del bus)."
+          },
+          "correlation_id": {
+            "type": "string",
+            "description": "Correlacion (se inyecta y propaga). Opcional."
+          },
+          "timeout_ms": {
+            "type": "number",
+            "description": "Timeout total en ms (default 30000, max 60000)."
+          }
+        },
+        "required": [
+          "codigo"
+        ]
+      }
+    },
+    {
+      "name": "code.orquestar_set",
+      "description": "Interruptor on/off de la orquestacion (execute_code) en caliente, sin reinicio. El kill switch: si code.orquestar se porta mal en produccion, ponlo a false y deja de ejecutarse al instante. Para apagarlo de forma persistente, ademas pon config.orquestarEnabled=false.",
+      "handler": "handleToolOrquestarSet",
+      "confirmation": true,
+      "errores_conocidos": [
+        "INVALID_INPUT"
+      ],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "true=activar, false=apagar la orquestacion."
+          }
+        },
+        "required": [
+          "enabled"
+        ]
       }
     }
   ],
@@ -191,7 +264,10 @@
       "wget.*\\|.*sh"
     ],
     "shell": "/bin/sh",
-    "projectsPath": "./data/projects"
+    "projectsPath": "./data/projects",
+    "orquestarTimeout": 30000,
+    "orquestarMaxTimeout": 60000,
+    "orquestarEnabled": true
   },
   "observability": {
     "logging": {

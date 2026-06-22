@@ -1,0 +1,115 @@
+{
+  "_doc": "Mitad FUZZY del destilador (el lazo de aprendizaje). El reflejo (index.js) mina el bus y detecta patrones de resolucion recurrentes (emite aprendizaje.candidata.detectada); este blueprint los CONVIERTE EN SKILL. Una sola operacion fuzzy: redactar un SKILL.md desde los registros reales de la traza. Lo determinista (leer registros, encolar, sellar, anti-wipe) lo sirve el reflejo. El blueprint solo PIENSA: mira que tienen en comun las N resoluciones repetidas y escribe las instrucciones reutilizables. PROHIBIDO inventar: solo lo que los registros muestran. La skill NO se publica sola — queda en cola hasta que un humano la aprueba (destilador.aprobar, reflejo).",
+  "id": "destilador",
+  "version": "blueprint-0.2.0",
+  "language": "es",
+
+  "rol": "Destilador de skills. Cuando un patron de resolucion se repite lo bastante (lo detecta el reflejo Minero), recibe la senal, lee los registros reales de esas resoluciones (propiocepcion via el reflejo), y redacta un SKILL.md que captura COMO se resolvio: cuando aplica (trigger), los pasos, el contrato de entrada/salida. No ejecuta nada del dominio; solo redacta y encola. La guardia humana decide si la skill se publica.",
+
+  "garantiza": [
+    "la skill redactada describe SOLO lo que los registros muestran (cero invencion)",
+    "el SKILL.md sale con pasos accionables (si no, el reflejo lo rechaza como esteril)",
+    "la skill queda ENCOLADA, nunca escrita directa: la escritura la hace el humano via destilador.aprobar",
+    "una sola vuelta LLM por candidata (turno sintetico fire-and-forget, no encarece el chat real)"
+  ],
+
+  "no_garantiza": [
+    "que la skill sea buena — eso lo juzga el humano en la aprobacion",
+    "deduplicacion semantica de skills (el anti-wipe es por nombre, no por contenido)"
+  ],
+
+  "estado_persistente": {
+    "_descripcion": "El blueprint no persiste nada propio. La cola de candidatas la guarda el reflejo en /_destilador/cola.json. Las skills aprobadas viven en .claude/skills/.",
+    "evento_de_salida": "aprendizaje.candidata.encolada (lo emite el reflejo tras encolar)"
+  },
+
+  "eventos_publicados": [
+    {
+      "event": "destilador.leer_registros.request",
+      "description": "RPC al reflejo: trae los registros de propiocepcion de la traza."
+    },
+    {
+      "event": "destilador.encolar_candidata.request",
+      "description": "RPC al reflejo: encola la skill redactada (el reflejo aplica el guard no_esteril)."
+    }
+  ],
+
+  "eventos_que_escucho": [
+    {
+      "evento": "aprendizaje.candidata.detectada",
+      "handler": "destilar",
+      "responde": false,
+      "description": "Fire-and-forget: una firma cruzo el umbral. Dispara la redaccion de la skill en un turno sintetico (no espera respuesta nadie)."
+    }
+  ],
+
+  "operaciones": {
+    "destilar": {
+      "cajon": true,
+      "_espinazo": "CONTRATO -> LEER(reflejo) -> PENSAR(redactar) -> GUARDAR(reflejo) -> EMITIR",
+      "input": {
+        "firma": "string — id del patron",
+        "project_id": "string",
+        "secuencia": "Array<string> — la secuencia de dominio.op del patron",
+        "grupos": "Array<string> — correlation ids de las trazas que formaron el patron",
+        "ocurrencias": "number"
+      },
+      "pseudocodigo": [
+        "// CONTRATO: llega la senal del Minero. Guard: si falta project_id o grupos, no hay con que redactar -> termina.",
+        "SI !project_id O (grupos||[]).length === 0: FIN (nada que destilar)",
+        "",
+        "// LEER: hidrata los registros reales de esas resoluciones (resumenes humanos de propiocepcion).",
+        "regs <- publishAndWait('destilador.leer_registros.request', { project_id, grupos }, { timeout_ms: 8000 })",
+        "registros <- regs?.data?.registros || []",
+        "SI registros.length === 0: FIN (sin evidencia no se inventa una skill)",
+        "",
+        "// PENSAR: observa QUE tienen en comun las N resoluciones (la secuencia + los resumenes) y",
+        "// redacta un SKILL.md reutilizable. SOLO lo que los registros muestran.",
+        "nombre_skill <- slug corto que nombre el patron (ej. costear-receta-desde-catalogo)",
+        "contenido_md <- redacta un SKILL.md con estas secciones:",
+        "  titulo (# ...) humano del patron",
+        "  ## Cuando usar — el trigger observado (que pide el usuario / que evento arranca la secuencia)",
+        "  ## Pasos — lista accionable derivada de la secuencia y los resumenes (1 paso por op relevante)",
+        "  ## Contrato — entrada/salida que se repite en los registros",
+        "REGLA: no anyadas pasos que no aparezcan en los registros. Si la evidencia es pobre, redacta menos, no inventes.",
+        "",
+        "// GUARDAR: encola (el reflejo valida no_esteril y persiste). No se escribe la skill aqui.",
+        "res <- publishAndWait('destilador.encolar_candidata.request',",
+        "        { firma, nombre_skill, contenido_md, project_id, ocurrencias, correlation_ids: grupos }, { timeout_ms: 8000 })",
+        "",
+        "// EMITIR: el reflejo ya publico aprendizaje.candidata.encolada. Fin del turno sintetico.",
+        "SI res?.status === 'rechazada' O res?.error: LOG 'skill esteril o invalida, no encolada'",
+        "RETORNA { candidata_id: res?.data?.candidata_id || null }"
+      ],
+      "reglas_clave": [
+        "redacta SOLO desde los registros (cero invencion)",
+        "el SKILL.md debe traer pasos accionables (bullets/numerados) o el reflejo lo rechaza",
+        "no escribas la skill: encolala. La escritura es del humano (destilador.aprobar)."
+      ],
+      "errores": ["sin registros -> no redacta", "encolar rechazado (esteril) -> log y fin"]
+    }
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "auto-mejora-deteccion",
+      "estado": "implementado (reflejo v0.3.0)",
+      "descripcion": "Paso 3: el reflejo etiqueta la traza con skill.aplicada, mide la tasa de fallo sobre ventana deslizante y emite aprendizaje.revision.requerida (con trazas_fallidas) al cruzar el umbral. Histeresis si la skill se recupera."
+    },
+    {
+      "id": "auto-mejora-senal",
+      "estado": "pendiente (cableado externo)",
+      "descripcion": "ai-gateway debe emitir skill.aplicada {skill, project_id, correlation_id} cuando el LLM usa una skill. Sin esa senal la deteccion del paso 3 no recibe entrada."
+    },
+    {
+      "id": "auto-mejora-reredaccion",
+      "estado": "pendiente",
+      "descripcion": "Op revisar (blueprint): escucha aprendizaje.revision.requerida, lee las trazas_fallidas (leer_registros) y RE-redacta la skill -> encola como candidata (vuelve por la guardia humana, anti-wipe sobre la version vieja)."
+    },
+    {
+      "id": "formato-portable",
+      "estado": "idea",
+      "descripcion": "Emitir el SKILL.md en formato agentskills.io para que las skills sean compartibles (Skills Hub)."
+    }
+  ]
+}

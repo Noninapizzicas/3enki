@@ -7,6 +7,7 @@ const fsSync = require('fs');
 const crypto = require('crypto');
 
 const BaseModule = require('../_shared/base-module');
+const { ejecutarOrquestacion } = require('../_shared/orquestador-sandbox');
 class CodeExecutorModule extends BaseModule {
   constructor() {
     super();
@@ -27,12 +28,17 @@ class CodeExecutorModule extends BaseModule {
     this.metrics = core.metrics;
     this.config = core.moduleConfig || {};
     this.blockedPatterns = (this.config.blockedPatterns || []).map(p => new RegExp(p, 'i'));
+    // Interruptor on/off de la orquestacion (execute_code). Config = default
+    // persistente; el toggle en caliente (code.orquestar_set) lo sobreescribe en
+    // runtime sin reinicio — el kill switch si en produccion se porta mal.
+    this.orquestarEnabled = this.config.orquestarEnabled !== false;
 
     this.logger.info('code-executor.loaded', {
       max_timeout: this.config.maxTimeout,
       max_processes: this.config.maxProcesses,
       blocked_commands: this.config.blockedCommands?.length || 0,
-      blocked_patterns: this.blockedPatterns.length
+      blocked_patterns: this.blockedPatterns.length,
+      orquestar_enabled: this.orquestarEnabled
     });
   }
 
@@ -57,6 +63,49 @@ class CodeExecutorModule extends BaseModule {
   // ==========================================
   // Tool handlers
   // ==========================================
+
+  // ==========================================
+  // Orquestacion: ejecuta JS del LLM cuya UNICA capacidad es el bus (sandbox
+  // capability-based). Cura "una operacion por turno": el LLM escribe un script
+  // que itera sobre bus.publish/publishAndWait, en 1 ejecucion en vez de N
+  // tool-calls fragiles. Ver modules/_shared/orquestador-sandbox.js.
+  // ==========================================
+  // Interruptor on/off en caliente. {enabled:boolean} -> estado. El kill switch.
+  async handleToolOrquestarSet(args) {
+    const enabled = !!(args && args.enabled);
+    this.orquestarEnabled = enabled;
+    this.logger?.warn('code-executor.orquestar.toggled', { enabled });
+    this.metrics?.increment('code-executor.orquestar.toggled', 1, { enabled: String(enabled) });
+    return { status: 200, data: { orquestar_enabled: enabled } };
+  }
+
+  async handleToolOrquestar(args) {
+    if (!this.orquestarEnabled) {
+      this.metrics?.increment('code-executor.orquestar.blocked');
+      return this._errorResponse(403, 'CAPABILITY_DISABLED',
+        'la orquestacion (execute_code) esta desactivada', { capability: 'code.orquestar' });
+    }
+    const { codigo, project_id, correlation_id, timeout_ms } = args || {};
+    const maxT = Number(this.config?.orquestarMaxTimeout) || 60000;
+    const t = Math.min(Number(timeout_ms) || Number(this.config?.orquestarTimeout) || 30000, maxT);
+    try {
+      const out = await ejecutarOrquestacion(codigo, {
+        eventBus: this.eventBus, project_id, correlation_id, timeout_ms: t
+      });
+      this.metrics?.increment('code-executor.orquestar.success');
+      // serializa en la frontera: el resultado viene cross-realm del vm.
+      let resultado = out.resultado;
+      try { resultado = JSON.parse(JSON.stringify(resultado === undefined ? null : resultado)); }
+      catch (_) { resultado = String(resultado); }
+      return { status: 200, data: { resultado, logs: out.logs } };
+    } catch (err) {
+      const code = err && err._code;
+      if (code === 'INVALID_INPUT') return this._errorResponse(400, 'INVALID_INPUT', err.message, { field: 'codigo' });
+      if (code === 'UPSTREAM_TIMEOUT') return this._errorResponse(504, 'UPSTREAM_TIMEOUT', err.message, { logs: err._logs || [] });
+      this.metrics?.increment('code-executor.orquestar.failed');
+      return this._errorResponse(500, 'EXEC_FAILED', err && err.message ? err.message : 'error en orquestacion', { logs: (err && err._logs) || [] });
+    }
+  }
 
   async handleToolExec(args, opts) {
     const { command, cwd, timeout, env } = args || {};

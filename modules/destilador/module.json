@@ -1,14 +1,29 @@
 {
   "name": "destilador",
-  "version": "0.1.0",
-  "description": "El MINERO del lazo de aprendizaje (paso 1, solo reflejo). Hermano de propiocepcion: escucha el bus crudo pero no guarda QUE paso, sino que detecta CUANDO un patron de resolucion se REPITE. Agrupa los eventos del scope por correlation_id en trazas (la cadena causal de una resolucion), las reduce a una FIRMA (la secuencia normalizada de dominio.op, sin ids ni verbos de transporte) y cuenta cuantas trazas distintas comparten esa firma. Cuando una firma cruza el umbral de recurrencia, emite 'aprendizaje.candidata.detectada' — la senal que en el paso 2 disparara al blueprint a redactar una skill. Paso 1 = solo mineria: sin blueprint, sin cola, sin escribir skills. Objetivo: observar (listar_clusters) si las firmas que emergen son patrones de verdad antes de cablear la redaccion automatica.",
+  "version": "0.3.0",
+  "blueprint_driven": true,
+  "blueprint_path": "destilador.blueprint.json",
+  "target_page_id": "destilador",
+  "description": "El lazo de aprendizaje del sistema (Minero + Cola+Publicador + Auto-mejora). HIBRIDO: el reflejo (JS) mina el bus y sella/publica skills; el blueprint (LLM) redacta la skill desde los registros. PASO 1 (Minero): agrupa eventos del scope por correlation_id en trazas, las reduce a una FIRMA y, cuando una firma se repite >= umbral, emite aprendizaje.candidata.detectada. PASO 2 (Cola+Publicador): el blueprint redacta un SKILL.md desde los registros y lo ENCOLA; la skill NO se publica sola — un humano la aprueba (handleAprobar) y solo entonces se escribe en .claude/skills/ (anti-wipe). PASO 3 (Auto-mejora): la senal skill.aplicada etiqueta la traza de su resolucion; si una skill, tras aplicarse, lleva a fallo recurrente (tasa de fallo sobre ventana deslizante >= umbral), emite aprendizaje.revision.requerida con las trazas fallidas — vuelve por la misma guardia humana. Histeresis: si la skill se recupera, la revision se des-arma. El Minero capitaliza el acierto; la auto-mejora capitaliza el fallo.",
   "author": "Event Core Team",
   "language": "es",
 
   "publishes": [
     {
       "event": "aprendizaje.candidata.detectada",
-      "description": "Emitido cuando una firma (patron de resolucion) cruza el umbral de recurrencia. Lleva {firma, project_id, secuencia, ocurrencias, grupos}. En el paso 1 es solo senal/observabilidad; en el paso 2 lo escuchara el blueprint del destilador para redactar la skill candidata."
+      "description": "Minero: una firma (patron de resolucion) cruzo el umbral de recurrencia. {firma, project_id, secuencia, ocurrencias, grupos}. La escucha el blueprint para redactar la skill."
+    },
+    {
+      "event": "aprendizaje.candidata.encolada",
+      "description": "Reflejo: la skill redactada por el blueprint quedo en la cola, pendiente de aprobacion humana. {candidata_id, nombre_skill, project_id, ocurrencias}."
+    },
+    {
+      "event": "aprendizaje.skill.creada",
+      "description": "Reflejo: un humano aprobo la candidata y la skill se escribio en .claude/skills/. {nombre_skill, candidata_id, project_id, destino}."
+    },
+    {
+      "event": "aprendizaje.revision.requerida",
+      "description": "Auto-mejora (paso 3): una skill lleva a fallo recurrente tras aplicarse. {skill, project_id, tasa_fallo, muestras, trazas_fallidas, motivo}. Vuelve por la guardia humana para re-redactar o descartar."
     }
   ],
 
@@ -16,12 +31,22 @@
     {
       "event": "project.activated",
       "handler": "onProjectActivated",
-      "description": "Restaura los clusters del proyecto desde disco al activarse."
+      "description": "Restaura clusters y cola del proyecto desde disco al activarse."
     },
     {
       "event": "fs.read.response",
       "handler": "onFsReadResponse",
-      "description": "Respuesta del fs reflex al restaurar clusters (correlado por request_id)."
+      "description": "Respuesta del fs reflex al restaurar clusters/cola (correlado por request_id + kind)."
+    },
+    {
+      "event": "destilador.leer_registros.request",
+      "handler": "onLeerRegistrosRequest",
+      "description": "Reflejo (RPC del bus): hidrata los registros de propiocepcion de una traza, para que el blueprint redacte la skill."
+    },
+    {
+      "event": "destilador.encolar_candidata.request",
+      "handler": "onEncolarCandidataRequest",
+      "description": "Reflejo (RPC del bus): el blueprint encola la skill que redacto. Guard no_esteril: una skill sin pasos accionables se rechaza."
     }
   ],
 
@@ -30,20 +55,44 @@
       "domain": "destilador",
       "action": "listar_clusters",
       "handler": "handleListarClusters",
-      "description": "Devuelve las firmas detectadas de un proyecto con su recurrencia y secuencia. El ojo humano del paso 1: ver que patrones emergen."
+      "description": "Las firmas (patrones de resolucion) detectadas de un proyecto, con su recurrencia. El ojo del paso 1."
+    },
+    {
+      "domain": "destilador",
+      "action": "listar_candidatas",
+      "handler": "handleListarCandidatas",
+      "description": "Las skills candidatas pendientes de aprobacion de un proyecto. El ojo del paso 2."
+    },
+    {
+      "domain": "destilador",
+      "action": "aprobar",
+      "handler": "handleAprobar",
+      "description": "GUARDIA HUMANA: aprueba una candidata -> escribe la skill en .claude/skills/ (anti-wipe). {candidata_id}."
+    },
+    {
+      "domain": "destilador",
+      "action": "rechazar",
+      "handler": "handleRechazar",
+      "description": "Descarta una candidata sin escribir nada. {candidata_id}."
+    },
+    {
+      "domain": "destilador",
+      "action": "listar_salud_skills",
+      "handler": "handleListarSaludSkills",
+      "description": "Salud de las skills aplicadas en un proyecto: tasa de fallo sobre la ventana y si estan en revision. El ojo del paso 3."
     },
     {
       "domain": "destilador",
       "action": "health",
       "handler": "handleHealthCheck",
-      "description": "Estado del minero: trazas abiertas, clusters, si esta capturando el bus."
+      "description": "Estado del destilador: trazas abiertas, clusters, cola, si captura el bus."
     }
   ],
 
   "tools": [
     {
       "name": "destilador.listar_clusters",
-      "description": "Lista los patrones de resolucion recurrentes detectados en un proyecto (la secuencia de ops y cuantas veces se ha repetido). Usalo para ver que se esta aprendiendo del comportamiento del sistema.",
+      "description": "Lista los patrones de resolucion recurrentes detectados en un proyecto (secuencia de ops + cuantas veces se repitio). Ver que esta aprendiendo el sistema.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -55,10 +104,68 @@
       },
       "handler": "handleListarClusters",
       "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "destilador.listar_candidatas",
+      "description": "Lista las skills candidatas pendientes de aprobacion de un proyecto (las que redacto el blueprint y esperan visto bueno humano).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." },
+          "estado": { "type": "string", "description": "pendiente (default) | aprobada | rechazada | conflicto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "handleListarCandidatas",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "destilador.aprobar",
+      "description": "Aprueba una skill candidata: la escribe en .claude/skills/ (no pisa una existente). Es la guardia humana del lazo de aprendizaje.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "candidata_id": { "type": "string", "minLength": 1, "description": "Id de la candidata a aprobar." }
+        },
+        "required": ["candidata_id"]
+      },
+      "handler": "handleAprobar",
+      "confirmation": true,
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "destilador.rechazar",
+      "description": "Descarta una skill candidata sin escribir nada.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "candidata_id": { "type": "string", "minLength": 1, "description": "Id de la candidata a descartar." }
+        },
+        "required": ["candidata_id"]
+      },
+      "handler": "handleRechazar",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "destilador.listar_salud_skills",
+      "description": "Salud de las skills de un proyecto: cuantas veces se aplicaron, su tasa de fallo y si estan marcadas para revision. Ver que skills estan fallando.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "handleListarSaludSkills",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
     }
   ],
 
-  "dependencies": ["filesystem"],
+  "dependencies": ["filesystem", "propiocepcion"],
 
   "config": {
     "enabled": true,
@@ -73,6 +180,11 @@
     "max_trazas_abiertas": 500,
     "flush_interval_ms": 10000,
     "archivo_path": "/_destilador/clusters.json",
+    "cola_path": "/_destilador/cola.json",
+    "salud_path": "/_destilador/skills_salud.json",
+    "skills_path": ".claude/skills",
+    "ventana_desenlaces": 10,
+    "umbral_fallo": { "tasa": 0.5, "min_muestras": 3 },
     "persistence": {
       "pattern": "json-file-per-project",
       "restart_resilient": true,
@@ -89,6 +201,13 @@
         "destilador.capturado.total",
         "destilador.traza.cerrada.total",
         "destilador.candidata.detectada.total",
+        "destilador.candidata.encolada.total",
+        "destilador.candidata.rechazada",
+        "destilador.skill.creada.total",
+        "destilador.aprobar.conflicto",
+        "destilador.skill.desenlace",
+        "destilador.skill.sin_correlacion",
+        "destilador.revision.requerida.total",
         "destilador.flush.total",
         "destilador.errors.total"
       ],

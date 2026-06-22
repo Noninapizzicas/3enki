@@ -107,11 +107,14 @@ class CartaDigitalModule extends BaseModule {
   async _catalogoIngredientes(project_id, canal) {
     try {
       const inst = this.moduleRegistry?.get('productos')?.instance;
-      if (!inst?.handleListIngredientes) return [];
+      if (!inst?.handleListIngredientes) return { catalogo: [], sin_precio: 0 };
       const r = await inst.handleListIngredientes({ project_id, canal: canal || 'digital' });
       const arr = (r && r.data && r.data.ingredientes) || [];
-      return arr
-        .filter(i => i && i.disponible !== false && Number(i.precio_extra) > 0)
+      const disponibles = arr.filter(i => i && i.disponible !== false);
+      // GATE de negocio: la carta pública NO ofrece extras a 0€ (no precio cero). Los que no tienen
+      // precio NO se muestran al cliente, pero se CUENTAN (sin_precio) para avisar al dueño.
+      const catalogo = disponibles
+        .filter(i => Number(i.precio_extra) > 0)
         .map(i => ({
           id: i.id,
           nombre: i.nombre,
@@ -120,7 +123,8 @@ class CartaDigitalModule extends BaseModule {
           grupos: Array.isArray(i.grupos) ? i.grupos : (i.grupo ? [i.grupo] : []),
           precio_extra: Number(i.precio_extra) || 0
         }));
-    } catch (_) { return []; }
+      return { catalogo, sin_precio: disponibles.length - catalogo.length };
+    } catch (_) { return { catalogo: [], sin_precio: 0 }; }
   }
 
   // ── cache del mapping canal→carta (de tarifas) ──
@@ -303,7 +307,7 @@ class CartaDigitalModule extends BaseModule {
       tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colores.texto || '#e5e5e5', logo_emoji: logoEmoji }
     };
 
-    const catalogo_ingredientes = await this._catalogoIngredientes(project_id, 'digital');
+    const { catalogo: catalogo_ingredientes, sin_precio: extrasSinPrecio } = await this._catalogoIngredientes(project_id, 'digital');
     const html = generateStaticHTML(
       { categorias: data.categorias, productos, alergenos_leyenda: data.alergenos_leyenda, catalogo_ingredientes },
       tplConfig, { diseno }
@@ -337,6 +341,8 @@ class CartaDigitalModule extends BaseModule {
       bundle_dir: 'storage/tienda/bundle',
       productos: productos.length,
       imagenes_copiadas: imagenesCopiadas,
+      extras_sin_precio: extrasSinPrecio,
+      ...(extrasSinPrecio > 0 ? { aviso_extras: `${extrasSinPrecio} ingredientes extra sin precio — NO se ofrecen en la carta pública. Ponles precio para activarlos como extras.` } : {}),
       aviso: `Bundle escrito. Si la feature \`tienda\` está activa en el proyecto, ya se ve en /shop/${slug} (Caddy lo sirve estático por el symlink). Si da 404, activa la feature \`tienda\` (crea el symlink /opt/enki/public/shop/${slug}). Cada cambio requiere volver a publicar — es estático, no al vuelo.`
     } };
   }
@@ -407,12 +413,13 @@ class CartaDigitalModule extends BaseModule {
           logo_emoji: (typeof b.logo === 'string' && b.logo.length <= 4) ? b.logo : '\u{1F355}'
         }
       };
-      const catalogo_ingredientes = await this._catalogoIngredientes(project_id, 'digital');
+      const { catalogo: catalogo_ingredientes, sin_precio: extrasSinPrecio } = await this._catalogoIngredientes(project_id, 'digital');
       const html = generateStaticHTML(
         { categorias: d.categorias, productos: d.productos, alergenos_leyenda: d.alergenos_leyenda, catalogo_ingredientes },
         tplConfig, { diseno }
       );
-      return { status: 200, data: { html, productos: d.productos.length } };
+      return { status: 200, data: { html, productos: d.productos.length, extras_sin_precio: extrasSinPrecio,
+        ...(extrasSinPrecio > 0 ? { aviso_extras: `${extrasSinPrecio} ingredientes extra sin precio — no se ofrecen en la carta pública.` } : {}) } };
     } catch (err) {
       this.logger?.error('carta-digital.preview.failed', { error: err.message });
       return this._err(500, 'UNKNOWN_ERROR', err.message);

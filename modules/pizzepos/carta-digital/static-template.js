@@ -37,6 +37,10 @@ function generateStaticHTML(carta, config, options = {}) {
     // Slug del proyecto: se hornea para que el mensaje wa.me lleve la cabecera
     // canónica "PEDIDO <slug>-<NONCE>" que el whatsapp-bot (parser) entiende.
     project_slug = config.project_slug || '',
+    // Base href absoluta del bundle (ALOJADO: '/shop/<slug>/'). Resuelve los assets relativos
+    // (img/·manifest·sw·iconos) aunque se abra la URL SIN barra final (/shop/<slug> → si no,
+    // el navegador resolvería img/ contra /shop/ y daría 404). SUELTO (raíz) no la setea.
+    base_href = config.base_href || '',
     tema = config.tema || {},
     lang = 'es',
     // CHAT IA — el cerebro es el cf-worker (Cloudflare + DeepSeek), del escenario SUELTO
@@ -170,7 +174,7 @@ function generateStaticHTML(carta, config, options = {}) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="${colorFondo}">
+${base_href ? '<base href="' + escapeHtml(base_href) + '">\n' : ''}<meta name="theme-color" content="${colorFondo}">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>${nombre_negocio} — Carta Digital</title>

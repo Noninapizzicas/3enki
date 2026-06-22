@@ -137,6 +137,17 @@ test('carta-digital/template — extras AGRUPADOS por familia (mismo sistema que
   assert.ok(!html.includes('Añadir extras</h3><div class="ing-list">'), 'sin lista plana sin agrupar');
 });
 
+test('carta-digital/template — ALOJADO emite <base> para resolver assets sin barra final (404 img)', () => {
+  const carta = { categorias: [], productos: [], catalogo_ingredientes: [], alergenos_leyenda: [] };
+  // ALOJADO (Caddy /shop/<slug>/): con base_href, img/·manifest·sw·iconos resuelven aunque la
+  // URL se abra sin barra final (/shop/<slug>) — antes daba 404 /shop/img/... (sin slug).
+  const alojado = generateStaticHTML(carta, { nombre_negocio: 'N', moneda: '€', base_href: '/shop/nonina/' }, {});
+  assert.ok(alojado.includes('<base href="/shop/nonina/">'), 'ALOJADO lleva <base> con /shop/<slug>/');
+  // SUELTO (raíz del dominio): NO setea base_href → sin <base>, relativo desde la raíz.
+  const suelto = generateStaticHTML(carta, { nombre_negocio: 'N', moneda: '€' }, {});
+  assert.ok(!suelto.includes('<base href'), 'SUELTO no lleva <base> (sirve en la raíz)');
+});
+
 test('carta-digital/template — PODA v2.4: sin ofertas/reseñas/track (la proyección no los da)', () => {
   const html = htmlDe();
   // La PWA es ESPEJO FIEL de la proyección: nada de UI alimentada por vacío.

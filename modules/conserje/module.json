@@ -21,6 +21,11 @@
       "event": "interruptor.cambiado",
       "handler": "onInterruptorCambiado",
       "description": "Reacciona al on/off del panel (id='conserje') en caliente, sin reinicio."
+    },
+    {
+      "event": "interruptor.solicitar_registro",
+      "handler": "onSolicitarRegistro",
+      "description": "interruptores pide registro al cargar -> re-registra su botón (cura la carrera de arranque)."
     }
   ],
 

@@ -42,6 +42,11 @@ class InterruptoresModule extends BaseModule {
     for (const t of (this.config.toggles_base || [])) this._upsert(t, false);
     this._cargarEstados();
 
+    // Anuncio: pide a las features que (re)registren su botón. Cura la carrera de
+    // arranque — si una feature cargó ANTES que este registro y su registrar
+    // fire-and-forget se perdió, este broadcast la hace re-registrarse.
+    try { this.eventBus.publish('interruptor.solicitar_registro', {}); } catch (_) { /* best-effort */ }
+
     this.logger?.info('interruptores.loaded', { module: this.name, version: this.version, toggles: this.toggles.size });
   }
 

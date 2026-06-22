@@ -9,6 +9,10 @@
     {
       "event": "interruptor.cambiado",
       "description": "Un interruptor cambió de estado. {id, enabled}. Lo escucha el modulo dueño del interruptor para activarse/desactivarse en caliente."
+    },
+    {
+      "event": "interruptor.solicitar_registro",
+      "description": "Al cargar, pide a todas las features que (re)registren su botón. Cura la carrera de arranque (registrar fire-and-forget perdido si interruptores aún no se había suscrito)."
     }
   ],
 

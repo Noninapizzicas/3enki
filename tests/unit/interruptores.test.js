@@ -94,6 +94,23 @@ test('conserje registra su botón en el panel al cargar', async () => {
   await mod.onUnload();
 });
 
+test('carrera de arranque: interruptores pide registro y conserje responde', async () => {
+  // Simula el orden malo: conserje cargó ANTES, su registrar se "perdió".
+  const bus = fakeBus();
+  const tmp = path.join(os.tmpdir(), 'int-' + Date.now() + '-race.json');
+  const conserje = await nuevoConserje(bus);          // publica registrar al vacío
+  const inter = new Interruptores();
+  // cableado que en producción hace el loader (subscribes de cada module.json):
+  bus.subscribe('interruptor.solicitar_registro', () => conserje.onSolicitarRegistro());
+  bus.subscribe('interruptor.registrar', (e) => inter.onRegistrar(e));
+  await inter.onLoad({ logger: noop, metrics: noopM, eventBus: bus, moduleConfig: { estados_path: tmp } });
+  // al cargar, interruptores emite solicitar_registro -> conserje re-registra -> aparece
+  const res = await inter.handleListar();
+  assert.ok(res.data.toggles.some(t => t.id === 'conserje'), 'el botón conserje aparece tras la solicitud');
+  fs.rmSync(tmp, { force: true });
+  await conserje.onUnload(); await inter.onUnload();
+});
+
 test('conserje deriva INTENCIÓN: marca tocada vacía -> intentada', async () => {
   const bus = fakeBus();
   const mod = await nuevoConserje(bus);

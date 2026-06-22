@@ -67,14 +67,7 @@ class ConserjeModule extends BaseModule {
     this.activo = this.config.enabled_default === true;   // por defecto false
     this.cooldownMs = Number(this.config.cooldown_h ? this.config.cooldown_h * 3600000 : null) || 24 * 60 * 60 * 1000;
 
-    // registra su botón en el panel central de interruptores
-    try {
-      this.eventBus.publish('interruptor.registrar', {
-        id: 'conserje', label: 'Conserje (empujones al comerciante)', grupo: 'aprendizaje',
-        descripcion: 'Sugiere al comerciante el siguiente paso según lo que ofrece el sistema y lo que ya usa.',
-        default: false
-      });
-    } catch (_) { /* el registro puede no estar aún; se re-registra al recargar */ }
+    this._registrarBoton();   // por si interruptores ya cargó
 
     this._startBusCapture();
     const tickMs = Number(this.config.tick_ms) || 15000;
@@ -92,6 +85,23 @@ class ConserjeModule extends BaseModule {
     this.pendientes.clear();
     this.dirty.clear();
     this.logger?.info('conserje.unloaded', { module: this.name });
+  }
+
+  // registra su botón en el panel central. Idempotente: se llama al cargar y
+  // cada vez que interruptores pide registro (cura la carrera de arranque).
+  _registrarBoton() {
+    try {
+      this.eventBus.publish('interruptor.registrar', {
+        id: 'conserje', label: 'Conserje (empujones al comerciante)', grupo: 'aprendizaje',
+        descripcion: 'Sugiere al comerciante el siguiente paso según lo que ofrece el sistema y lo que ya usa.',
+        default: false
+      });
+    } catch (_) { /* best-effort */ }
+  }
+
+  // interruptores (re)cargó y pide a todos que se registren -> respondemos.
+  onSolicitarRegistro() {
+    this._registrarBoton();
   }
 
   // ── on/off en caliente desde el panel ──

@@ -51,23 +51,38 @@ export async function storageImageSrc(path: string): Promise<string> {
   }
 }
 
+/** URL HTTP que sirve el fichero del storage del proyecto activo (cacheable por el navegador). */
+function httpUrl(path: string): string {
+  return '/modules/filesystem/file?path=' + encodeURIComponent(path);
+}
+
 /**
- * Acción Svelte: <img use:storageImg={path} alt=... class=...>. Carga la imagen de storage como
- * data: URI y la asigna al nodo cuando está lista. Si falla, deja que el onerror/placeholder del
- * componente actúe. Reacciona a cambios de path.
+ * Acción Svelte: <img use:storageImg={path} alt=... class=...>. Muestra una imagen que vive en el
+ * storage del proyecto. Estrategia robusta al rollout:
+ *   1) src = ruta HTTP servida por filesystem (cacheable, ligera).
+ *   2) si esa ruta falla (core sin el endpoint todavía), onerror → data: URI vía fs.read (MQTT).
+ * Las urls http/data/blob se usan tal cual. Reacciona a cambios de path.
  */
 export function storageImg(node: HTMLImageElement, path: string) {
   let current = '';
   const apply = (p: string) => {
     current = p;
+    node.onerror = null;
     if (!p) { node.removeAttribute('src'); return; }
-    storageImageSrc(p)
-      .then((src) => { if (current === p && src) node.src = src; })
-      .catch(() => { if (current === p) node.dispatchEvent(new Event('error')); });
+    if (/^(https?:|data:|blob:)/.test(p)) { node.src = p; return; }
+    let triedFallback = false;
+    node.onerror = () => {
+      if (triedFallback || current !== p) return;
+      triedFallback = true;
+      storageImageSrc(p)
+        .then((src) => { if (current === p && src) node.src = src; })
+        .catch(() => { /* sin imagen: queda el alt/placeholder */ });
+    };
+    node.src = httpUrl(p);
   };
   apply(path);
   return {
     update(p: string) { if (p !== current) apply(p); },
-    destroy() { current = ''; }
+    destroy() { current = ''; node.onerror = null; }
   };
 }

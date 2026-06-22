@@ -722,5 +722,47 @@ function publishedOf(mocks, name) {
     await cleanup(tmpDir);
   });
 
+  // ── handleServeFile (HTTP: sirve imágenes del storage) ──
+
+  await testAsync('handleServeFile sin path → 400 INVALID_INPUT (shape gateway: data.error)', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r = await m.handleServeFile({ query: {} });
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.data.error.code, 'INVALID_INPUT');
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
+  await testAsync('handleServeFile a NO-imagen (json) → 403 (no expone datos del proyecto)', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r = await m.handleServeFile({ query: { path: '/pizzepos/recetas.json' } });
+    assert.strictEqual(r.status, 403);
+    assert.strictEqual(r.data.error.code, 'PERMISSION_DENIED');
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
+  await testAsync('handleServeFile round-trip: write png base64 → sirve body Buffer + content-type', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const png1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    await m.handleWrite({ path: '/img/p1.png', content: png1x1, encoding: 'base64' });
+    const r = await m.handleServeFile({ query: { path: '/img/p1.png' } });
+    assert.strictEqual(r.status, 200);
+    assert.ok(Buffer.isBuffer(r.body), 'el body es un Buffer (binario)');
+    assert.strictEqual(r.headers['Content-Type'], 'image/png');
+    assert.strictEqual(r.body.toString('base64'), png1x1, 'los bytes coinciden con el original');
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
+  await testAsync('handleServeFile imagen inexistente → 404 RESOURCE_NOT_FOUND', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r = await m.handleServeFile({ query: { path: '/img/falta.jpg' } });
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(r.data.error.code, 'RESOURCE_NOT_FOUND');
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
   console.log('\nTodos los tests pasaron.');
 })();

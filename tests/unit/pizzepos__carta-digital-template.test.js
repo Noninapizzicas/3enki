@@ -36,6 +36,20 @@ test('carta-digital/template — botón partido por mitad (espeja ProductoBtn de
   assert.ok(html.includes('mitad-pick-var'), 'CSS/markup del botón partido presente');
 });
 
+test('carta-digital/template — pantalla de mitad espeja el layout del comandero (MitadMitadPanel)', () => {
+  const html = htmlDe();
+  // Dos cajas IZQUIERDA/DERECHA con divisor ➕, caja de precio, selector de lado y grid 2-col.
+  assert.ok(html.includes('mitad-preview') && html.includes('mitad-box'), 'cajas de las dos mitades');
+  assert.ok(html.includes('mitad-div'), 'divisor ➕ entre las mitades');
+  assert.ok(html.includes('mitad-precio'), 'caja de precio (como el comandero)');
+  assert.ok(html.includes('Seleccionar izquierda') && html.includes('Seleccionar derecha'), 'selector de lado activo');
+  assert.ok(html.includes('grid-template-columns:repeat(2,1fr)') && html.includes('mitad-grid'), 'grid 2-col de pizzas');
+  // Llenar una mitad = ✕ para vaciarla (mitadClear), no editar in-situ.
+  assert.ok(html.includes('function mitadClear('), 'una caja llena se vacía con ✕');
+  assert.ok(!html.includes('function editMitadVar('), 'sin el editor in-situ huérfano del layout viejo');
+  assert.ok(!html.includes('mitad-slots'), 'sin el layout viejo de tabs');
+});
+
 test('carta-digital/template — variaciones por mitad reusan la maquinaria quitar/añadir', () => {
   const html = htmlDe();
   assert.ok(html.includes('function showMitadVar(lado, pizza)'), 'sub-pantalla de personalización por mitad');
@@ -87,6 +101,18 @@ test('carta-digital/template — mitad/al-gusto: criterio robusto (raíz "pizz" 
   assert.ok(html.includes('showMitad(') && html.includes('showAlGusto('), 'entradas mitad/al-gusto presentes');
 });
 
+test('carta-digital/template — un ingrediente BASE no se ofrece como extra (exclusión robusta id/nombre)', () => {
+  const html = htmlDe();
+  // El bug: la base se excluía solo por id; al no casar el id del catálogo, Mozzarella/Champiñón
+  // (ya en la pizza) se ofrecían como extra. Ahora exclusión por id O nombre normalizado.
+  assert.ok(html.includes('function baseExcludeSet('), 'helper de exclusión de base presente');
+  assert.ok(html.includes('function norm('), 'normalizador presente');
+  assert.ok(html.includes('extrasForGroup(grpKeys, baseExcludeSet(p))'), 'detalle normal excluye su base');
+  assert.ok(html.includes('extrasForGroup(grpKeys, baseExcludeSet(pizza))'), 'mitad excluye la base de esa media');
+  assert.ok(html.includes('excludeSet.has(norm(ing.id)) || excludeSet.has(norm(ing.nombre))'), 'casa por id O nombre');
+  assert.ok(!html.includes('baseIds[ing.id]'), 'no queda la exclusión frágil solo-por-id');
+});
+
 test('carta-digital/template — extras AGRUPADOS por familia (mismo sistema que el comandero)', () => {
   const html = htmlDe();
   // El helper compartido y el config de familias (orden/label/emoji = VariacionesPanel.tipoConfig).
@@ -99,6 +125,11 @@ test('carta-digital/template — extras AGRUPADOS por familia (mismo sistema que
     assert.ok(html.includes("label: '" + label + "'"), 'familia ' + label + ' en el config');
   }
   assert.ok(html.includes('famInfo(a).orden - famInfo(b).orden'), 'familias ordenadas por orden canónico');
+  // Visual del comandero (.tipo-section): barra de color por familia + cabecera con su color.
+  assert.ok(html.includes("color: '#facc15'") && html.includes("color: '#22c55e'"), 'colores de familia (= tipoConfig)');
+  assert.ok(html.includes('style="--fam:'), 'el helper inyecta el color de la familia por grupo');
+  assert.ok(html.includes('border-left:3px solid var(--fam'), 'barra de color a la izquierda del grupo');
+  assert.ok(html.includes('.ing-group .ing-add.added{border-color:var(--fam)'), 'añadido toma el color de la familia');
   // Los tres flujos (normal/mitad/al-gusto) usan el MISMO helper (DRY, no reinventar).
   assert.ok(html.includes("renderExtrasAgrupados(extras, anadirSel, 'toggleAnadir')"), 'detalle + mitad usan el helper');
   assert.ok(html.includes("renderExtrasAgrupados(extras, anadirSel, 'toggleAnadirAG')"), 'al-gusto usa el helper');

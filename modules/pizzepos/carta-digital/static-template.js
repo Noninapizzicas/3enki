@@ -251,12 +251,18 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .detail-tag{padding:3px 8px;border-radius:4px;color:#fff;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .detail-desc{font-size:.85rem;color:#aaa;line-height:1.5;margin:0 0 16px}
 .section-title{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:0 0 8px}
-.ing-group{margin-bottom:12px}
-.ing-group-head{display:flex;align-items:center;gap:6px;font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:#888;margin:0 0 6px}
-.ing-group-count{color:#555;font-weight:400}
+/* Grupo por familia (espeja .tipo-section del comandero VariacionesPanel): barra de color a la
+   izquierda + cabecera con el color de la familia (var --fam la pone el helper por grupo). */
+.ing-group{margin-bottom:14px;border-left:3px solid var(--fam,#444);padding-left:12px}
+.ing-group-head{display:flex;align-items:center;gap:6px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--fam,#888);margin:0 0 8px}
+.ing-group-count{color:#666;font-weight:400}
 .ing-group .ing-list{margin-bottom:0}
-.ing-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
-.ing-chip{display:flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid #2a2a2a;border-radius:20px;background:#1a1a1a;font-size:.75rem;color:#bbb}
+.ing-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+/* Botón de ingrediente: tamaño del comandero (.chip → padding 8px 12px) en vez de píldora fina. */
+.ing-chip{display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #2a2a2a;border-radius:12px;background:#1a1a1a;font-size:.8rem;color:#ccc}
+/* En un grupo, el chip de añadir hereda el color de la familia (borde tenue + estado added). */
+.ing-group .ing-add{border-color:color-mix(in srgb,var(--fam) 28%,#2a2a2a)}
+.ing-group .ing-add.added{border-color:var(--fam);background:color-mix(in srgb,var(--fam) 16%,transparent);color:var(--fam)}
 /* Alérgenos (1169/2011) */
 .card-alerg{font-size:.95rem;letter-spacing:2px;margin-top:4px;line-height:1}
 .alerg-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
@@ -274,17 +280,34 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .ing-chip.added{border-color:#22c55e;background:rgba(34,197,94,.15);color:#22c55e}
 .ing-add-price{font-size:.65rem;color:#888;margin-left:2px}.ing-chip.added .ing-add-price{color:#22c55e}
 .dish-special{cursor:pointer;border:1px dashed var(--primary);background:rgba(245,158,11,.06)}
-.mitad-slots{display:flex;align-items:center;gap:8px;margin:12px 0}
-.mitad-slot{flex:1;padding:10px;border:2px solid #2a2a2a;border-radius:10px;background:#1a1a1a;color:#ccc;font:inherit;cursor:pointer;font-size:.8rem;text-align:center;display:flex;flex-direction:column;gap:2px;align-items:center}
-.mitad-slot-active{border-color:var(--primary);color:#fff}
-.mitad-slot-mods{font-size:.62rem;color:var(--success);line-height:1.2}
-.mitad-plus{color:#666;font-weight:800;font-size:1.1rem}
-/* Botón partido para elegir mitad (espeja ProductoBtn del comandero): cuerpo = tal cual, ✏️ = personalizar */
-.mitad-pick{display:inline-flex;align-items:stretch;border:1px solid #2a2a2a;border-radius:20px;overflow:hidden;background:#1a1a1a}
-.mitad-pick-main{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:none;background:transparent;color:#bbb;font:inherit;font-size:.75rem;cursor:pointer;-webkit-tap-highlight-color:transparent}
+/* Preview de las dos mitades (espeja .pizza-preview del MitadMitadPanel del comandero) */
+.mitad-preview{display:flex;align-items:stretch;justify-content:center;gap:8px;margin:12px 0}
+.mitad-box{flex:1;max-width:150px;min-height:84px;padding:14px 10px;border:2px dashed #444;border-radius:12px;background:#1a1a1a;color:#777;font:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;position:relative;-webkit-tap-highlight-color:transparent;transition:all .15s}
+.mitad-box.active{border-style:solid;border-color:#8b5cf6;background:rgba(139,92,246,.1);color:#cbb6ff}
+.mitad-box.selected{border-style:solid;border-color:#22c55e;background:rgba(34,197,94,.1);color:#fff}
+.mitad-box-emoji{font-size:1.8rem;line-height:1}
+.mitad-box-ph{font-size:1.4rem;opacity:.6}
+.mitad-box-nombre{font-size:.78rem;font-weight:600;text-align:center;line-height:1.2}
+.mitad-box-label{font-size:.66rem;text-transform:uppercase;letter-spacing:.5px}
+.mitad-box-mods{font-size:.6rem;color:#22c55e;line-height:1.2;text-align:center}
+.mitad-box-clear{position:absolute;top:6px;right:6px;width:18px;height:18px;background:#ef4444;border-radius:50%;font-size:.6rem;display:flex;align-items:center;justify-content:center;color:#fff}
+.mitad-div{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#8b5cf6;font-size:1rem}
+.mitad-div-line{width:2px;height:18px;background:#444}
+.mitad-precio{display:flex;align-items:center;justify-content:center;gap:6px;margin:12px 0;padding:10px;background:rgba(34,197,94,.1);border-radius:8px;font-size:.85rem;color:#888}
+.mitad-precio strong{font-size:1.15rem;font-weight:800;color:#22c55e}
+/* Selector de lado activo (espeja .lado-selector del comandero) */
+.mitad-lados{display:flex;gap:8px;margin:12px 0}
+.mitad-lado{flex:1;padding:10px;border:1px solid #333;border-radius:8px;background:#222;color:#888;font:inherit;font-size:.75rem;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .15s}
+.mitad-lado.active{background:rgba(139,92,246,.2);border-color:#8b5cf6;color:#b69bff}
+/* Grid 2-col de botones partidos (espeja .pizzas-grid del comandero) */
+.mitad-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:4px}
+.mitad-pick{display:flex;align-items:stretch;border:1px solid #2a2a2a;border-radius:12px;overflow:hidden;background:#1a1a1a}
+.mitad-pick-main{flex:1;display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px;padding:10px 12px;border:none;background:transparent;color:#ccc;font:inherit;font-size:.8rem;cursor:pointer;text-align:left;-webkit-tap-highlight-color:transparent}
+.mitad-pick-name{font-weight:600}
 .mitad-pick-main:active{background:rgba(245,158,11,.12)}
-.mitad-pick-var{border:none;border-left:1px solid #2a2a2a;background:transparent;color:var(--primary);font-size:.85rem;padding:0 9px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mitad-pick-var{border:none;border-left:1px solid #2a2a2a;background:transparent;color:var(--primary);font-size:1rem;padding:0 12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .mitad-pick-var:active{background:rgba(245,158,11,.18)}
+@media (max-width:400px){.mitad-box{max-width:120px;padding:12px 8px;min-height:76px}.mitad-box-emoji{font-size:1.5rem}}
 .detail-footer{display:flex;gap:10px;padding:16px 20px;border-top:1px solid #222;background:var(--bg-surface)}
 .btn{flex:1;padding:14px;border:none;border-radius:12px;font-size:.9rem;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .btn-primary{background:var(--primary);color:#000}.btn-primary:active{filter:brightness(.85)}
@@ -592,16 +615,31 @@ function applyTranslations() {
 function fmt(p) { return p.toFixed(2) + ' ' + MONEDA; }
 function esc(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
 
+// Normaliza para comparar ingredientes sin depender del id exacto (acentos/caja/espacios).
+function norm(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim(); }
+// Conjunto de exclusión = ids + nombres normalizados de los ingredientes BASE de un producto.
+// Robusto al desajuste de id entre la carta (base) y el catálogo de extras (mismo tipo de bug
+// que "pizza"): un ingrediente ya en el producto NO se ofrece como extra (lo espeja el comandero).
+function baseExcludeSet(p) {
+  const s = new Set();
+  for (const bi of ((p && p.ingredientes) || [])) {
+    if (!bi) continue;
+    if (bi.id) s.add(norm(bi.id));
+    if (bi.nombre) s.add(norm(bi.nombre));
+  }
+  return s;
+}
+
 // Familias de extra — MISMO sistema que el comandero (VariacionesPanel.tipoConfig):
 // orden visual + etiqueta + emoji. La familia llega en ing.tipo (= familia de la proyección).
 const FAM_CONFIG = {
-  queso:   { emoji: '🧀', label: 'Queso',            orden: 1 },
-  verdura: { emoji: '🥬', label: 'Verdura',          orden: 2 },
-  carne:   { emoji: '🍖', label: 'Carne y Embutido', orden: 3 },
-  marisco: { emoji: '🐟', label: 'Pescado/Marisco',  orden: 4 },
-  salsa:   { emoji: '🍅', label: 'Salsa',            orden: 5 },
-  masa:    { emoji: '🫓', label: 'Masa/Base',        orden: 6 },
-  otro:    { emoji: '📦', label: 'Otro',             orden: 9 }
+  queso:   { emoji: '🧀', label: 'Queso',            orden: 1, color: '#facc15' },
+  verdura: { emoji: '🥬', label: 'Verdura',          orden: 2, color: '#22c55e' },
+  carne:   { emoji: '🍖', label: 'Carne y Embutido', orden: 3, color: '#ef4444' },
+  marisco: { emoji: '🐟', label: 'Pescado/Marisco',  orden: 4, color: '#3b82f6' },
+  salsa:   { emoji: '🍅', label: 'Salsa',            orden: 5, color: '#f59e0b' },
+  masa:    { emoji: '🫓', label: 'Masa/Base',        orden: 6, color: '#a78bfa' },
+  otro:    { emoji: '📦', label: 'Otro',             orden: 9, color: '#888888' }
 };
 function famInfo(t) { return FAM_CONFIG[t] || FAM_CONFIG.otro; }
 // Pinta los extras AGRUPADOS por familia, ordenados, con cabecera por grupo (mismo sistema
@@ -616,7 +654,7 @@ function renderExtrasAgrupados(extras, selSet, fn) {
     const info = famInfo(t);
     const lista = byTipo[t].slice().sort(function(a, b) { return String(a.nombre).localeCompare(String(b.nombre)); });
     const cls = t ? ' ' + t : '';
-    html += '<div class="ing-group"><div class="ing-group-head"><span>' + info.emoji + '</span><span>' + info.label + '</span><span class="ing-group-count">(' + lista.length + ')</span></div><div class="ing-list">';
+    html += '<div class="ing-group" style="--fam:' + info.color + '"><div class="ing-group-head"><span>' + info.emoji + '</span><span>' + info.label + '</span><span class="ing-group-count">(' + lista.length + ')</span></div><div class="ing-list">';
     for (const e of lista) {
       const ad = (selSet && selSet.has(e.id)) ? ' added' : '';
       html += '<button type="button" class="ing-chip ing-add' + cls + ad + '" onclick="' + handler + '(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
@@ -745,20 +783,9 @@ function showDetail(id) {
   }
 
   // Extras AÑADIBLES (1b): del catálogo (ya gateado a precio>0), mismo grupo que el producto,
-  // que NO sean ya base. Agrupados por tipo. Espeja la mitad "añadir" del VariacionesPanel.
-  const baseIds = {};
-  for (const bi of (p.ingredientes || [])) { if (bi.id) baseIds[bi.id] = 1; }
+  // que NO sean ya base (exclusión por id O nombre, robusta). Espeja "añadir" del VariacionesPanel.
   const grpKeys = [p.categoria_id, (p.categoria || '').toLowerCase()].filter(Boolean);
-  const extras = (DATA.catalogo_ingredientes || []).filter(function(ing) {
-    if (!ing || baseIds[ing.id]) return false;
-    const g = ing.grupos || [];
-    if (g.length && grpKeys.length) {
-      let ok = false;
-      for (let k = 0; k < g.length; k++) { if (grpKeys.indexOf(String(g[k]).toLowerCase()) >= 0) { ok = true; break; } }
-      if (!ok) return false;
-    }
-    return true;
-  });
+  const extras = extrasForGroup(grpKeys, baseExcludeSet(p));
   const extrasHtml = extras.length ? renderExtrasAgrupados(extras, anadirSel, 'toggleAnadir') : '';
 
   // Declaración de alérgenos por NOMBRE (1169/2011 — el texto es lo legalmente exigible).
@@ -874,10 +901,13 @@ function catGrpKeys(catId) {
   const c = DATA.categorias.find(x => x.id === catId);
   return [catId, (c && c.nombre) || ''].filter(Boolean).map(s => String(s).toLowerCase());
 }
-function extrasForGroup(grpKeys, excludeIds) {
-  excludeIds = excludeIds || {};
+// excludeSet: Set de tokens normalizados (id y/o nombre) a excluir (los base del producto).
+// Acepta {} (sin .has) como "sin exclusión" para los call sites que no excluyen (al-gusto/gate).
+function extrasForGroup(grpKeys, excludeSet) {
+  const hasExcl = excludeSet && typeof excludeSet.has === 'function' && excludeSet.size;
   return (DATA.catalogo_ingredientes || []).filter(function (ing) {
-    if (!ing || excludeIds[ing.id]) return false;
+    if (!ing) return false;
+    if (hasExcl && (excludeSet.has(norm(ing.id)) || excludeSet.has(norm(ing.nombre)))) return false;
     const g = ing.grupos || [];
     if (g.length && grpKeys.length) {
       let ok = false;
@@ -910,35 +940,55 @@ function mitadModsTxt(v) {
   (v.anadir || []).forEach(function (a) { mods.push('+ ' + (a.nombre || a)); });
   return mods.length ? ' (' + mods.join(', ') + ')' : '';
 }
+// Caja de una mitad (espeja .mitad del MitadMitadPanel del comandero): vacía = placeholder +
+// label (punteada, morada si es el lado activo); llena = emoji + nombre (+ mods) + ✕ para vaciar.
 function mitadSlot(lado, pizza) {
-  const active = mitadLado === lado ? ' mitad-slot-active' : '';
+  const ph = lado === 'izq' ? '👈' : '👉';
+  const lbl = lado === 'izq' ? 'Izquierda' : 'Derecha';
   const v = lado === 'izq' ? mitadVarIzq : mitadVarDer;
-  // Slot lleno → toca para personalizar esa mitad ; vacío → toca para enfocarla.
-  const onclick = pizza ? 'editMitadVar(\\'' + lado + '\\')' : 'mitadFocus(\\'' + lado + '\\')';
-  const label = pizza ? (pizza.emoji ? pizza.emoji + ' ' : '') + esc(pizza.nombre) : (lado === 'izq' ? 'Primera mitad' : 'Segunda mitad');
-  const mods = pizza ? '<span class="mitad-slot-mods">' + esc(mitadModsTxt(v)) + (v ? '' : ' · toca para personalizar') + '</span>' : '';
-  return '<button type="button" class="mitad-slot' + active + '" onclick="' + onclick + '">½ ' + label + mods + '</button>';
+  if (pizza) {
+    const mods = mitadModsTxt(v);
+    return '<button type="button" class="mitad-box selected" onclick="mitadClear(\\'' + lado + '\\')" aria-label="Quitar ' + esc(pizza.nombre) + '">' +
+      '<span class="mitad-box-emoji">' + (pizza.emoji || '🍕') + '</span>' +
+      '<span class="mitad-box-nombre">' + esc(pizza.nombre) + '</span>' +
+      (mods ? '<span class="mitad-box-mods">' + esc(mods) + '</span>' : '') +
+      '<span class="mitad-box-clear">✕</span></button>';
+  }
+  const active = mitadLado === lado ? ' active' : '';
+  return '<button type="button" class="mitad-box' + active + '" onclick="mitadFocus(\\'' + lado + '\\')">' +
+    '<span class="mitad-box-ph">' + ph + '</span><span class="mitad-box-label">' + lbl + '</span></button>';
 }
 function renderMitad() {
   const pizzas = pizzasOf(mitadCat);
-  let grid = '<div class="ing-list" style="margin-top:12px">';
+  // Grid 2-col de botones partidos (como el .pizzas-grid del comandero): cuerpo = mitad tal cual,
+  // zona "✏️" = mitad + variaciones de ESA mitad, en un gesto.
+  let grid = '<div class="mitad-grid">';
   for (const p of pizzas) {
-    // Botón partido (como ProductoBtn del comandero): zona íntegra = mitad tal cual,
-    // zona "✏️" = mitad + variaciones de ESTA mitad, en un gesto.
     grid += '<span class="mitad-pick">' +
-      '<button type="button" class="mitad-pick-main" onclick="pickMitad(\\'' + p.id + '\\', false)">' + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '<span class="ing-add-price">' + fmt(p.precio) + '</span></button>' +
+      '<button type="button" class="mitad-pick-main" onclick="pickMitad(\\'' + p.id + '\\', false)">' + (p.emoji ? p.emoji + ' ' : '') + '<span class="mitad-pick-name">' + esc(p.nombre) + '</span><span class="ing-add-price">' + fmt(p.precio) + '</span></button>' +
       '<button type="button" class="mitad-pick-var" onclick="pickMitad(\\'' + p.id + '\\', true)" title="Elegir y personalizar" aria-label="Elegir y personalizar ' + esc(p.nombre) + '">✏️</button>' +
       '</span>';
   }
   grid += '</div>';
+  // Preview (dos cajas + divisor ➕) · caja de precio · selector de lado · grid. Espeja el comandero.
+  const preview = '<div class="mitad-preview">' + mitadSlot('izq', mitadIzq) +
+    '<span class="mitad-div"><span class="mitad-div-line"></span>➕<span class="mitad-div-line"></span></span>' +
+    mitadSlot('der', mitadDer) + '</div>';
+  const precioBox = '<div class="mitad-precio">💰 Precio: <strong>' + fmt(mitadTotal()) + '</strong></div>';
+  const ladoSel = '<div class="mitad-lados">' +
+    '<button type="button" class="mitad-lado' + (mitadLado === 'izq' ? ' active' : '') + '" onclick="mitadFocus(\\'izq\\')">👈 Seleccionar izquierda</button>' +
+    '<button type="button" class="mitad-lado' + (mitadLado === 'der' ? ' active' : '') + '" onclick="mitadFocus(\\'der\\')">👉 Seleccionar derecha</button></div>';
   document.getElementById('detail-content').innerHTML =
     '<div class="detail-header"><h2 class="detail-nombre">½+½ Mitad y mitad</h2></div>' +
-    '<p class="detail-desc">' + (mitadLado === 'izq' ? 'Elige la primera mitad' : 'Elige la segunda mitad') + '</p>' +
-    '<div class="mitad-slots">' + mitadSlot('izq', mitadIzq) + '<span class="mitad-plus">+</span>' + mitadSlot('der', mitadDer) + '</div>' +
-    grid;
+    preview + precioBox + ladoSel + grid;
   renderMitadFooter();
 }
 function mitadFocus(lado) { mitadLado = lado; renderMitad(); }
+function mitadClear(lado) {
+  if (lado === 'izq') { mitadIzq = null; mitadVarIzq = null; mitadLado = 'izq'; }
+  else { mitadDer = null; mitadVarDer = null; mitadLado = 'der'; }
+  renderMitad();
+}
 function pickMitad(pid, conVar) {
   const p = DATA.productos.find(x => x.id === pid);
   if (!p) return;
@@ -967,7 +1017,7 @@ function showMitadVar(lado, pizza) {
     ingsHtml += '<button type="button" class="ing-chip ing-removable' + cls + rm + '" onclick="toggleQuitar(' + idx + ', this)">' + (i.emoji ? '<span style="font-size:.85rem">' + i.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(i.nombre) + '</span></button>';
   }
   const grpKeys = [pizza.categoria_id, (pizza.categoria || '').toLowerCase()].filter(Boolean);
-  const extras = extrasForGroup(grpKeys, {});
+  const extras = extrasForGroup(grpKeys, baseExcludeSet(pizza));
   let extrasHtml = '';
   if (extras.length) {
     for (const e of extras) detailExtrasById[e.id] = e;
@@ -989,10 +1039,6 @@ function renderMitadVarFooter() {
   document.getElementById('detail-footer').innerHTML =
     '<button class="btn btn-secondary" onclick="confirmMitadVar()">↩ Volver</button>' +
     '<button class="btn btn-primary" onclick="confirmMitadVar()">Aplicar' + (x > 0 ? ' +' + fmt(x) : '') + '</button>';
-}
-function editMitadVar(lado) {
-  const p = lado === 'izq' ? mitadIzq : mitadDer;
-  if (p) showMitadVar(lado, p);
 }
 function confirmMitadVar() {
   const p = mitadVarPizza; if (!p) { renderMitad(); return; }

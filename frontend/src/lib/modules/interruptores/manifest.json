@@ -1,0 +1,10 @@
+{
+  "id": "interruptores",
+  "name": "Interruptores",
+  "description": "Panel central de on/off del sistema (features y kill switches).",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 99,
+  "icon": "🎛️",
+  "label": "Interruptores"
+}

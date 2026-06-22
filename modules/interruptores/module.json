@@ -1,0 +1,90 @@
+{
+  "name": "interruptores",
+  "version": "1.0.0",
+  "description": "Registro central de on/off del sistema (el panel de control). Un solo sitio para todos los botones: cada feature registra su interruptor al cargar (interruptor.registrar); el panel de la barra lateral los pinta; al pulsarlos, interruptor.cambiado avisa al dueño para que reaccione en caliente sin reinicio. Estado global persistido en data/interruptores.json (el estado tocado por el humano manda sobre el default).",
+  "author": "Event Core Team",
+  "language": "es",
+
+  "publishes": [
+    {
+      "event": "interruptor.cambiado",
+      "description": "Un interruptor cambió de estado. {id, enabled}. Lo escucha el modulo dueño del interruptor para activarse/desactivarse en caliente."
+    }
+  ],
+
+  "subscribes": [
+    {
+      "event": "interruptor.registrar",
+      "handler": "onRegistrar",
+      "description": "Una feature anuncia su botón {id, label, descripcion, grupo, default}. El estado persistido manda sobre el default."
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "interruptores",
+      "action": "listar",
+      "handler": "handleListar",
+      "description": "Todos los interruptores con su estado. Lo consume el panel de la barra lateral."
+    },
+    {
+      "domain": "interruptores",
+      "action": "set",
+      "handler": "handleSet",
+      "description": "Pulsa un interruptor. {id, enabled} -> persiste + emite interruptor.cambiado."
+    },
+    {
+      "domain": "interruptores",
+      "action": "health",
+      "handler": "handleHealthCheck",
+      "description": "Estado del registro."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "interruptores.listar",
+      "description": "Lista todos los interruptores on/off del sistema con su estado actual.",
+      "parameters": { "type": "object", "additionalProperties": false, "properties": {} },
+      "handler": "handleListar",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "interruptores.set",
+      "description": "Enciende o apaga un interruptor del sistema en caliente. Avisa al modulo dueño para que reaccione al instante.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "description": "Id del interruptor (ej. 'conserje', 'code.orquestar')." },
+          "enabled": { "type": "boolean", "description": "true=encender, false=apagar." }
+        },
+        "required": ["id", "enabled"]
+      },
+      "handler": "handleSet",
+      "confirmation": true,
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    }
+  ],
+
+  "dependencies": [],
+
+  "config": {
+    "enabled": true,
+    "estados_path": "data/interruptores.json",
+    "toggles_base": []
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "interruptores.registrado.total",
+        "interruptores.cambiado.total",
+        "interruptores.errors.total"
+      ],
+      "gauges": []
+    }
+  }
+}

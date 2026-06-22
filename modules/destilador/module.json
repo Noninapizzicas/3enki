@@ -1,8 +1,8 @@
 {
   "name": "destilador",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "blueprint_driven": true,
-  "description": "El lazo de aprendizaje del sistema (Minero + Cola+Publicador). HIBRIDO: el reflejo (JS) mina el bus y sella/publica skills; el blueprint (LLM) redacta la skill desde los registros. PASO 1 (Minero): escucha el bus crudo, agrupa eventos del scope por correlation_id en trazas, las reduce a una FIRMA (secuencia normalizada de dominio.op) y, cuando una firma se repite >= umbral, emite aprendizaje.candidata.detectada. PASO 2 (Cola+Publicador): el blueprint escucha esa senal, lee los registros de la traza (propiocepcion), redacta un SKILL.md y lo ENCOLA via el reflejo; la skill NO se publica sola — un humano la aprueba (handleAprobar) y solo entonces se escribe en .claude/skills/ (anti-wipe: no pisa una skill existente). Determinista de punta a punta en el reflejo; lo unico fuzzy (redactar) vive en el blueprint.",
+  "description": "El lazo de aprendizaje del sistema (Minero + Cola+Publicador + Auto-mejora). HIBRIDO: el reflejo (JS) mina el bus y sella/publica skills; el blueprint (LLM) redacta la skill desde los registros. PASO 1 (Minero): agrupa eventos del scope por correlation_id en trazas, las reduce a una FIRMA y, cuando una firma se repite >= umbral, emite aprendizaje.candidata.detectada. PASO 2 (Cola+Publicador): el blueprint redacta un SKILL.md desde los registros y lo ENCOLA; la skill NO se publica sola — un humano la aprueba (handleAprobar) y solo entonces se escribe en .claude/skills/ (anti-wipe). PASO 3 (Auto-mejora): la senal skill.aplicada etiqueta la traza de su resolucion; si una skill, tras aplicarse, lleva a fallo recurrente (tasa de fallo sobre ventana deslizante >= umbral), emite aprendizaje.revision.requerida con las trazas fallidas — vuelve por la misma guardia humana. Histeresis: si la skill se recupera, la revision se des-arma. El Minero capitaliza el acierto; la auto-mejora capitaliza el fallo.",
   "author": "Event Core Team",
   "language": "es",
 
@@ -18,6 +18,10 @@
     {
       "event": "aprendizaje.skill.creada",
       "description": "Reflejo: un humano aprobo la candidata y la skill se escribio en .claude/skills/. {nombre_skill, candidata_id, project_id, destino}."
+    },
+    {
+      "event": "aprendizaje.revision.requerida",
+      "description": "Auto-mejora (paso 3): una skill lleva a fallo recurrente tras aplicarse. {skill, project_id, tasa_fallo, muestras, trazas_fallidas, motivo}. Vuelve por la guardia humana para re-redactar o descartar."
     }
   ],
 
@@ -68,6 +72,12 @@
       "action": "rechazar",
       "handler": "handleRechazar",
       "description": "Descarta una candidata sin escribir nada. {candidata_id}."
+    },
+    {
+      "domain": "destilador",
+      "action": "listar_salud_skills",
+      "handler": "handleListarSaludSkills",
+      "description": "Salud de las skills aplicadas en un proyecto: tasa de fallo sobre la ventana y si estan en revision. El ojo del paso 3."
     },
     {
       "domain": "destilador",
@@ -136,6 +146,20 @@
       },
       "handler": "handleRechazar",
       "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "destilador.listar_salud_skills",
+      "description": "Salud de las skills de un proyecto: cuantas veces se aplicaron, su tasa de fallo y si estan marcadas para revision. Ver que skills estan fallando.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "handleListarSaludSkills",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
     }
   ],
 
@@ -155,7 +179,10 @@
     "flush_interval_ms": 10000,
     "archivo_path": "/_destilador/clusters.json",
     "cola_path": "/_destilador/cola.json",
+    "salud_path": "/_destilador/skills_salud.json",
     "skills_path": ".claude/skills",
+    "ventana_desenlaces": 10,
+    "umbral_fallo": { "tasa": 0.5, "min_muestras": 3 },
     "persistence": {
       "pattern": "json-file-per-project",
       "restart_resilient": true,
@@ -176,6 +203,9 @@
         "destilador.candidata.rechazada",
         "destilador.skill.creada.total",
         "destilador.aprobar.conflicto",
+        "destilador.skill.desenlace",
+        "destilador.skill.sin_correlacion",
+        "destilador.revision.requerida.total",
         "destilador.flush.total",
         "destilador.errors.total"
       ],

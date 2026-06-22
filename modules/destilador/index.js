@@ -48,6 +48,13 @@ class DestiladorModule extends ModuloHibridoReflejo {
     this.colaPath = '/_destilador/cola.json';
     this.skillsPath = null;       // repo .claude/skills (global, no project storage)
 
+    // Estado runtime — facultad AUTO-MEJORA (paso 3)
+    this.skillStats = new Map();  // `${project}::${skill}` -> { ventana:[], revision_emitida }
+    this.saludPath = '/_destilador/skills_salud.json';
+    this.ventanaDesenlaces = 10;  // ultimos N desenlaces por skill
+    this.umbralTasa = 0.5;        // fail_rate >= esto -> revision
+    this.minMuestras = 3;         // no juzgar con menos de N aplicaciones
+
     // Derivados de config (rellenos en onLoad)
     this.scope = new Set();
     this.umbral = 3;
@@ -76,6 +83,11 @@ class DestiladorModule extends ModuloHibridoReflejo {
     this.colaPath = this.config.cola_path || '/_destilador/cola.json';
     // Las skills son GLOBALES (repo .claude/skills), no storage de proyecto.
     this.skillsPath = path.resolve(this.config.skills_path || path.join(process.cwd(), '.claude', 'skills'));
+    this.saludPath = this.config.salud_path || '/_destilador/skills_salud.json';
+    this.ventanaDesenlaces = Number(this.config.ventana_desenlaces) || 10;
+    const uf = this.config.umbral_fallo || {};
+    this.umbralTasa = Number(uf.tasa) || 0.5;
+    this.minMuestras = Number(uf.min_muestras) || 3;
 
     this._startBusCapture();
 
@@ -99,6 +111,7 @@ class DestiladorModule extends ModuloHibridoReflejo {
     this.trazas.clear();
     this.clusters.clear();
     this.cola.clear();
+    this.skillStats.clear();
     this.dirty.clear();
     this.logger.info('destilador.unloaded', { module: this.name });
   }
@@ -134,10 +147,18 @@ class DestiladorModule extends ModuloHibridoReflejo {
     if (!env) return;
     const eventType = env.event_type || this._eventTypeFromTopic(topic);
     if (!eventType) return;
+    const data = env.data || {};
+
+    // ── facultad AUTO-MEJORA (paso 3): la senal de que una skill entro en juego.
+    // No es un paso de firma — es metadato que ETIQUETA la traza de su resolucion.
+    if (eventType === 'skill.aplicada') {
+      this._etiquetarSkill(data, env);
+      return;
+    }
+
     const domain = String(eventType).split('.')[0];
     if (!this.scope.has(domain)) return;            // solo el mundo del scope
 
-    const data = env.data || {};
     const projectId = data.project_id || data.projectId || null;
     if (!projectId) return;                         // patrones por proyecto
 
@@ -148,19 +169,39 @@ class DestiladorModule extends ModuloHibridoReflejo {
     const groupKey = correlationId ? `corr:${correlationId}` : `solo:${eventId}`;
     const norm = this._normalizarEvento(eventType);
 
-    let traza = this.trazas.get(groupKey);
-    if (!traza) {
-      traza = { project_id: projectId, pasos: [], firstTs: Date.now(), lastTs: Date.now() };
-      this.trazas.set(groupKey, traza);
-      if (this.trazas.size > this.maxTrazas) this._evictTrazaMasVieja();
-    }
+    const traza = this._getOrCreateTraza(groupKey, projectId);
     // dedup de pasos consecutivos identicos (ruido de re-emisiones)
     if (traza.pasos[traza.pasos.length - 1] !== norm) traza.pasos.push(norm);
     traza.lastTs = Date.now();
+    // un fallo dentro de la traza marca su desenlace (paso 3)
+    if (/\.(failed|error)$/.test(eventType)) traza.fallo = true;
 
     this.metrics?.increment('destilador.capturado.total', { modulo: domain });
     // La traza la cierra la INACTIVIDAD (la ventana en _tick), no el sufijo del
     // evento: un .response intermedio (una lectura RPC) no es fin de resolucion.
+  }
+
+  _getOrCreateTraza(groupKey, projectId) {
+    let traza = this.trazas.get(groupKey);
+    if (!traza) {
+      traza = { project_id: projectId, pasos: [], skills: null, fallo: false,
+                firstTs: Date.now(), lastTs: Date.now() };
+      this.trazas.set(groupKey, traza);
+      if (this.trazas.size > this.maxTrazas) this._evictTrazaMasVieja();
+    }
+    return traza;
+  }
+
+  _etiquetarSkill(data, env) {
+    const correlationId = data.correlation_id || env?.metadata?.correlation_id || null;
+    const projectId = data.project_id || data.projectId || null;
+    if (!correlationId || !data.skill || !projectId) {
+      this.metrics?.increment('destilador.skill.sin_correlacion');
+      return;
+    }
+    const traza = this._getOrCreateTraza(`corr:${correlationId}`, projectId);
+    (traza.skills || (traza.skills = new Set())).add(String(data.skill));
+    traza.lastTs = Date.now();
   }
 
   // dominio.op.response -> dominio.op  (quita verbo de transporte + minuscula)
@@ -195,6 +236,11 @@ class DestiladorModule extends ModuloHibridoReflejo {
     const traza = this.trazas.get(groupKey);
     if (!traza) return;
     this.trazas.delete(groupKey);
+
+    // facultad AUTO-MEJORA (paso 3): evalua las skills aplicadas en esta traza
+    // ANTES del filtro de firma — una traza con skill puede no llegar a minPasos.
+    this._evaluarSkills(traza, groupKey);
+
     if (traza.pasos.length < this.minPasos) return; // demasiado corta para ser patron
 
     const firma = this._firmar(traza.pasos);
@@ -249,6 +295,97 @@ class DestiladorModule extends ModuloHibridoReflejo {
   }
 
   // =============================================================
+  // Facultad AUTO-MEJORA (paso 3) — capitaliza el FALLO recurrente.
+  // El Minero capitaliza el acierto (firma recurrente); esto capitaliza el
+  // fallo: una skill que, tras aplicarse, lleva a fallo demasiadas veces se
+  // marca para re-redaccion (vuelve por la misma guardia humana del paso 2).
+  // =============================================================
+
+  _evaluarSkills(traza, groupKey) {
+    if (!traza.skills || traza.skills.size === 0) return;
+    const desenlace = traza.fallo ? 'fail' : 'ok';
+    const corr = String(groupKey || '').replace(/^(corr:|solo:)/, '');
+    for (const skill of traza.skills) {
+      const key = `${traza.project_id}::${skill}`;
+      let st = this.skillStats.get(key);
+      if (!st) { st = { project_id: traza.project_id, skill, ventana: [], trazas_fallidas: [], revision_emitida: false }; this.skillStats.set(key, st); }
+      st.ventana.push(desenlace);
+      while (st.ventana.length > this.ventanaDesenlaces) st.ventana.shift();
+      if (desenlace === 'fail' && corr) {
+        st.trazas_fallidas.push(corr);
+        while (st.trazas_fallidas.length > this.ventanaDesenlaces) st.trazas_fallidas.shift();
+      }
+
+      const fails = st.ventana.filter(d => d === 'fail').length;
+      const tasa = fails / st.ventana.length;
+      this.metrics?.increment('destilador.skill.desenlace', { desenlace });
+
+      if (st.ventana.length >= this.minMuestras && tasa >= this.umbralTasa) {
+        if (!st.revision_emitida) {
+          st.revision_emitida = true;
+          this._emitirRevision(skill, traza.project_id, tasa, st);
+        }
+      } else if (st.revision_emitida && tasa < this.umbralTasa) {
+        st.revision_emitida = false;            // histeresis: la skill se recupero
+      }
+      this.dirty.add(traza.project_id);
+    }
+    this._persistirSalud(traza.project_id);
+  }
+
+  _emitirRevision(skill, projectId, tasa, st) {
+    const fails = st.ventana.filter(d => d === 'fail').length;
+    try {
+      this.eventBus.publish('aprendizaje.revision.requerida', {
+        skill, project_id: projectId, tasa_fallo: this._round(tasa, 2),
+        muestras: st.ventana.length,
+        trazas_fallidas: (st.trazas_fallidas || []).slice(),
+        motivo: `${fails} de ${st.ventana.length} aplicaciones fallaron`,
+        correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+      });
+      this.metrics?.increment('destilador.revision.requerida.total');
+      this.logger.info('destilador.revision.requerida', { skill, project_id: projectId, tasa_fallo: this._round(tasa, 2) });
+    } catch (err) {
+      this.metrics?.increment('destilador.errors.total', { kind: 'revision_emit' });
+    }
+  }
+
+  _persistirSalud(projectId) {
+    if (!projectId) return;
+    try {
+      const skills = Array.from(this.skillStats.values()).filter(s => s.project_id === projectId);
+      const content = JSON.stringify(
+        { _version: 1, _updated: new Date().toISOString(), skills }, null, 0);
+      this.eventBus.publish('fs.write.request', {
+        project_id: projectId, path: this.saludPath, content, request_id: crypto.randomUUID()
+      });
+    } catch (_) {
+      this.metrics?.increment('destilador.errors.total', { kind: 'salud_flush' });
+    }
+  }
+
+  async handleListarSaludSkills(data) {
+    try {
+      const { project_id } = data || {};
+      if (!project_id) return this._invalid('project_id');
+      const skills = Array.from(this.skillStats.values())
+        .filter(s => s.project_id === project_id)
+        .map(s => {
+          const fails = s.ventana.filter(d => d === 'fail').length;
+          return {
+            skill: s.skill, muestras: s.ventana.length, fallos: fails,
+            tasa_fallo: s.ventana.length ? this._round(fails / s.ventana.length, 2) : 0,
+            en_revision: s.revision_emitida
+          };
+        })
+        .sort((a, b) => b.tasa_fallo - a.tasa_fallo);
+      return { status: 200, data: { project_id, total: skills.length, skills } };
+    } catch (err) {
+      return this._handleHandlerError('destilador.listar_salud_skills.failed', err, 'listar_salud_skills');
+    }
+  }
+
+  // =============================================================
   // Persistencia (se apoya en el reflejo fs, como propiocepcion)
   // =============================================================
 
@@ -290,6 +427,7 @@ class DestiladorModule extends ModuloHibridoReflejo {
     for (const c of this.clusters.values()) if (c.project_id === projectId) { yaCargado = true; break; }
     if (!yaCargado) this._pedirLectura(projectId, this.archivoPath, 'clusters');
     this._pedirLectura(projectId, this.colaPath, 'cola');
+    this._pedirLectura(projectId, this.saludPath, 'salud');
   }
 
   _pedirLectura(projectId, filePath, kind) {
@@ -318,6 +456,14 @@ class DestiladorModule extends ModuloHibridoReflejo {
         }
         this.logger.info('destilador.cola.restored', {
           project_id: pending.project_id, candidatas: (parsed.candidatas || []).length
+        });
+      } else if (pending.kind === 'salud') {
+        for (const s of parsed.skills || []) {
+          const key = `${s.project_id}::${s.skill}`;
+          if (!this.skillStats.has(key)) this.skillStats.set(key, s);
+        }
+        this.logger.info('destilador.salud.restored', {
+          project_id: pending.project_id, skills: (parsed.skills || []).length
         });
       } else {
         for (const c of parsed.clusters || []) {

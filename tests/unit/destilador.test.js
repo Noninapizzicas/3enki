@@ -265,6 +265,82 @@ test('handleListarCandidatas devuelve solo las pendientes del proyecto', async (
   await mod.onUnload();
 });
 
+// ── Paso 3: auto-mejora (skill.aplicada + desenlace) ──
+
+// Inyecta una resolucion: skill.aplicada + una op de dominio (ok o fail), misma corr.
+function resolucionConSkill(bus, { corr, skill, fallo }) {
+  bus.inject('skill.aplicada', { project_id: P, correlation_id: corr, skill });
+  const ev = fallo ? 'escandallo.calcular.failed' : 'escandallo.calcular.response';
+  bus.inject(ev, { project_id: P, correlation_id: corr, coste_unidad: 1 });
+}
+
+test('una skill que falla >= umbral emite revision.requerida con las trazas fallidas', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoMinero(bus, { umbral_fallo: { tasa: 0.5, min_muestras: 3 } });
+  // 3 aplicaciones, 2 fallan (tasa 0.66 >= 0.5, muestras 3)
+  resolucionConSkill(bus, { corr: 's1', skill: 'costear-receta', fallo: true });
+  resolucionConSkill(bus, { corr: 's2', skill: 'costear-receta', fallo: false });
+  resolucionConSkill(bus, { corr: 's3', skill: 'costear-receta', fallo: true });
+  await new Promise(r => setTimeout(r, 80));
+  mod._tick();
+
+  const revs = bus.published.filter(p => p.event === 'aprendizaje.revision.requerida');
+  assert.strictEqual(revs.length, 1, 'debe emitir 1 revision');
+  assert.strictEqual(revs[0].data.skill, 'costear-receta');
+  assert.ok(revs[0].data.tasa_fallo >= 0.5);
+  assert.deepStrictEqual(revs[0].data.trazas_fallidas.sort(), ['s1', 's3']);
+  await mod.onUnload();
+});
+
+test('una skill que aplica bien NO emite revision', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoMinero(bus, { umbral_fallo: { tasa: 0.5, min_muestras: 3 } });
+  for (let i = 0; i < 5; i++) resolucionConSkill(bus, { corr: 'ok' + i, skill: 'buena', fallo: false });
+  await new Promise(r => setTimeout(r, 80));
+  mod._tick();
+  assert.strictEqual(bus.published.filter(p => p.event === 'aprendizaje.revision.requerida').length, 0);
+  const salud = await mod.handleListarSaludSkills({ project_id: P });
+  assert.strictEqual(salud.data.skills[0].tasa_fallo, 0);
+  await mod.onUnload();
+});
+
+test('no juzga con menos de min_muestras', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoMinero(bus, { umbral_fallo: { tasa: 0.5, min_muestras: 3 } });
+  resolucionConSkill(bus, { corr: 'p1', skill: 'pocas', fallo: true });
+  resolucionConSkill(bus, { corr: 'p2', skill: 'pocas', fallo: true }); // 2 fallos, pero < 3 muestras
+  await new Promise(r => setTimeout(r, 80));
+  mod._tick();
+  assert.strictEqual(bus.published.filter(p => p.event === 'aprendizaje.revision.requerida').length, 0,
+    'con 2 muestras no se juzga aunque la tasa sea 1.0');
+  await mod.onUnload();
+});
+
+test('histeresis: una skill marcada que se recupera des-arma la revision', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoMinero(bus, { umbral_fallo: { tasa: 0.5, min_muestras: 3 }, ventana_desenlaces: 4 });
+  // arranca mal: 3 fallos seguidos -> revision
+  for (let i = 0; i < 3; i++) resolucionConSkill(bus, { corr: 'f' + i, skill: 'recupera', fallo: true });
+  await new Promise(r => setTimeout(r, 60)); mod._tick();
+  const key = `${P}::recupera`;
+  assert.strictEqual(mod.skillStats.get(key).revision_emitida, true);
+  // luego acierta: con ventana 4, varios ok bajan la tasa < 0.5
+  for (let i = 0; i < 5; i++) resolucionConSkill(bus, { corr: 'r' + i, skill: 'recupera', fallo: false });
+  await new Promise(r => setTimeout(r, 60)); mod._tick();
+  assert.strictEqual(mod.skillStats.get(key).revision_emitida, false, 'se des-arma al recuperarse');
+  await mod.onUnload();
+});
+
+test('skill.aplicada sin correlation_id no rompe ni cuenta', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoMinero(bus);
+  bus.inject('skill.aplicada', { project_id: P, skill: 'huerfana' }); // sin correlation_id
+  await new Promise(r => setTimeout(r, 60)); mod._tick();
+  const salud = await mod.handleListarSaludSkills({ project_id: P });
+  assert.strictEqual(salud.data.total, 0, 'sin correlation_id no se forma salud de skill');
+  await mod.onUnload();
+});
+
 // ==========================================
 // Runner
 // ==========================================

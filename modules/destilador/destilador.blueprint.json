@@ -92,9 +92,19 @@
 
   "trabajo_pendiente": [
     {
-      "id": "auto-mejora",
-      "estado": "disenado",
-      "descripcion": "Paso 3: detectar skills que tras aplicarse llevan a fallo recurrente (via *.failed en propiocepcion) y emitir aprendizaje.revision.requerida -> re-redactar por esta misma op. Requiere la senal skill.aplicada en el bus."
+      "id": "auto-mejora-deteccion",
+      "estado": "implementado (reflejo v0.3.0)",
+      "descripcion": "Paso 3: el reflejo etiqueta la traza con skill.aplicada, mide la tasa de fallo sobre ventana deslizante y emite aprendizaje.revision.requerida (con trazas_fallidas) al cruzar el umbral. Histeresis si la skill se recupera."
+    },
+    {
+      "id": "auto-mejora-senal",
+      "estado": "pendiente (cableado externo)",
+      "descripcion": "ai-gateway debe emitir skill.aplicada {skill, project_id, correlation_id} cuando el LLM usa una skill. Sin esa senal la deteccion del paso 3 no recibe entrada."
+    },
+    {
+      "id": "auto-mejora-reredaccion",
+      "estado": "pendiente",
+      "descripcion": "Op revisar (blueprint): escucha aprendizaje.revision.requerida, lee las trazas_fallidas (leer_registros) y RE-redacta la skill -> encola como candidata (vuelve por la guardia humana, anti-wipe sobre la version vieja)."
     },
     {
       "id": "formato-portable",

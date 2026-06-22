@@ -23,6 +23,7 @@
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+const { derivarOpciones } = require('../../_shared/derivar-opciones');
 
 const slug = (s) => String(s || '')
   .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -39,11 +40,16 @@ const FAMILIA_ALIAS = {
   salsas: 'salsa', frutas: 'fruta', extras: 'extra', condimentos: 'condimento',
 };
 
+// € de extra estándar que menu-generator pone a CADA ingrediente sin precio propio.
+// Fluye a los dos canales: derivar-opciones (ELEGIR_VARIOS → comandero) y la proyección de
+// productos (precio_extra → carta-digital). 0 explícito en la fuente = gratis (se respeta).
+const PRECIO_EXTRA_ESTANDAR = 0.5;
+
 class MenuGeneratorReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'menu-generator';
-    this.version = 'reflejo-1.0.0';
+    this.version = 'reflejo-1.1.0';
   }
 
   // ── handler RPC (una línea: delega a _atender de la base) ──
@@ -232,6 +238,23 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
       productos.push(prod);
     }
 
+    // Subsistema Opciones: cada producto NACE con sus opciones (QUITAR sus ingredientes +
+    // ELEGIR_VARIOS la paleta de su categoría: unión de los ingredientes de esa categoría menos
+    // lo propio). El comandero/carta-digital las pintan por modo; variaciones ya no deriva al vuelo.
+    const paletas = new Map();
+    for (const prod of productos) {
+      if (!paletas.has(prod.categoria_id)) paletas.set(prod.categoria_id, new Map());
+      const m = paletas.get(prod.categoria_id);
+      for (const ing of (prod.ingredientes || [])) {
+        if (ing && ing.id && !m.has(ing.id)) m.set(ing.id, ing);
+      }
+    }
+    for (const prod of productos) {
+      const paleta = [...(paletas.get(prod.categoria_id) || new Map()).values()];
+      const ops = derivarOpciones(prod, paleta);
+      if (ops.length) prod.opciones = ops;
+    }
+
     return {
       meta: { id: carta_id, nombre: String(nombre).trim(), generado_desde: 'json' },
       categorias,
@@ -263,7 +286,8 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
       if (familia === 'otro' && famByName && famByName.has(key)) familia = famByName.get(key);
       const out = { id: i.id || key, nombre: String(i.nombre), familia };
       if (i.emoji) out.emoji = i.emoji;
-      if (typeof i.precio_extra === 'number') out.precio_extra = i.precio_extra;
+      // Extra estándar (0,50€) si la fuente no trae precio propio; el explícito (incl. 0) se respeta.
+      out.precio_extra = (typeof i.precio_extra === 'number') ? i.precio_extra : PRECIO_EXTRA_ESTANDAR;
       return out;
     });
   }

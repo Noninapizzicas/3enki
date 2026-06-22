@@ -9,12 +9,36 @@
  */
 
 const BaseModule = require('../../_shared/base-module');
+const { derivarOpciones } = require('../../_shared/derivar-opciones');
+const { evaluarProducto } = require('../../_shared/motor-opciones');
+
+// Paleta de ingredientes "para sumar" por categoría: unión de los ingredientes de los productos de
+// esa categoría (con su precio_extra si la carta lo trae). Alimenta el modo ELEGIR_VARIOS al derivar.
+function _paletasPorCategoria(carta) {
+  const porCat = new Map();
+  const productos = (carta && Array.isArray(carta.productos)) ? carta.productos : [];
+  for (const p of productos) {
+    const cat = p && (p.categoria_id || p.categoria);
+    if (!cat) continue;
+    if (!porCat.has(cat)) porCat.set(cat, new Map());
+    const m = porCat.get(cat);
+    const lista = (Array.isArray(p.ingredientes_base) && p.ingredientes_base.length)
+      ? p.ingredientes_base : (Array.isArray(p.ingredientes) ? p.ingredientes : []);
+    for (const ing of lista) {
+      if (!ing || !ing.id || m.has(ing.id)) continue;
+      m.set(ing.id, { id: ing.id, nombre: ing.nombre, emoji: ing.emoji, familia: ing.familia, precio_extra: ing.precio_extra, disponible: ing.disponible });
+    }
+  }
+  const out = new Map();
+  for (const [cat, m] of porCat) out.set(cat, [...m.values()]);
+  return out;
+}
 
 class VariacionesModule extends BaseModule {
   constructor() {
     super();
     this.name = 'variaciones';
-    this.version = '4.2.0';
+    this.version = '4.4.0';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -123,19 +147,28 @@ class VariacionesModule extends BaseModule {
 
   // Configura (o reconfigura) un producto desde su forma de carta. Fuente ÚNICA de la
   // lógica; la usan onCartaActualizada (flujo nuevo) y onProductoCreado (legacy).
-  _configurar(producto_id, { categoria, precio, variaciones, ingredientes_base, ingredientes }) {
+  _configurar(producto_id, { categoria, precio, variaciones, ingredientes_base, ingredientes, opciones, paleta }) {
     if (!producto_id) return;
     const v = variaciones || {};
+    const max = v.max_ingredientes_extra || 10;
+    // Subsistema Opciones: usa las opciones que trae la carta; si no, las DERIVA (QUITAR los propios +
+    // ELEGIR_VARIOS la paleta de su categoría). El frontend pinta por modo; el motor valida/precia.
+    const ops = (Array.isArray(opciones) && opciones.length)
+      ? opciones
+      : derivarOpciones({ ingredientes: ingredientes_base || ingredientes || [] }, paleta || [], { maxExtras: max });
     this.configuraciones.set(producto_id, {
       producto_id,
       grupo: categoria || 'otro',
       precio_base: precio,
+      precio_base_centimos: Math.round((Number(precio) || 0) * 100),
       permite_quitar: v.permite_quitar || [],
-      permite_anadir: v.permite_anadir || false,
+      // Por defecto SÍ se puede añadir (salvo que la carta lo niegue explícitamente).
+      permite_anadir: v.permite_anadir !== false,
       extras_sugeridos: v.extras_sugeridos || [],
       max_ingredientes_extra: v.max_ingredientes_extra || 5,
       ingredientes_base: (ingredientes_base || ingredientes || [])
-        .map(i => (typeof i === 'string' ? i : i && i.id)).filter(Boolean)
+        .map(i => (typeof i === 'string' ? i : i && i.id)).filter(Boolean),
+      opciones: ops
     });
   }
 
@@ -147,6 +180,7 @@ class VariacionesModule extends BaseModule {
     const d = event?.data || event?.payload || event;
     const carta = d?.carta;
     if (!carta || !Array.isArray(carta.productos)) return;
+    const paletas = _paletasPorCategoria(carta);
     for (const p of carta.productos) {
       if (!p || !p.id) continue;
       this._configurar(p.id, {
@@ -154,7 +188,9 @@ class VariacionesModule extends BaseModule {
         precio: p.precio,
         variaciones: p.variaciones,
         ingredientes_base: p.ingredientes_base,
-        ingredientes: p.ingredientes
+        ingredientes: p.ingredientes,
+        opciones: p.opciones,
+        paleta: paletas.get(p.categoria_id || p.categoria) || []
       });
     }
     this.metrics?.gauge?.('variacion.productos_configurados.count', this.configuraciones.size);
@@ -178,6 +214,7 @@ class VariacionesModule extends BaseModule {
       const res = await this.uiHandler.handle('productos', 'carta_completa', { project_id });
       const productos = res?.data?.productos;
       if (!Array.isArray(productos)) return;
+      const paletas = _paletasPorCategoria({ productos });
       for (const p of productos) {
         if (!p || !p.id) continue;
         this._configurar(p.id, {
@@ -185,7 +222,9 @@ class VariacionesModule extends BaseModule {
           precio: p.precio,
           variaciones: p.variaciones,
           ingredientes_base: p.ingredientes_base,
-          ingredientes: p.ingredientes
+          ingredientes: p.ingredientes,
+          opciones: p.opciones,
+          paleta: paletas.get(p.categoria_id || p.categoria) || []
         });
       }
       this.metrics?.gauge?.('variacion.productos_configurados.count', this.configuraciones.size);
@@ -260,7 +299,9 @@ class VariacionesModule extends BaseModule {
         permite_quitar: config.permite_quitar,
         permite_anadir: config.permite_anadir,
         extras_sugeridos: config.extras_sugeridos,
-        max_ingredientes_extra: config.max_ingredientes_extra
+        max_ingredientes_extra: config.max_ingredientes_extra,
+        precio_base_centimos: config.precio_base_centimos,
+        opciones: config.opciones || []
       }
     };
   }
@@ -319,6 +360,20 @@ class VariacionesModule extends BaseModule {
         precio_total: precio_base + precio_extras
       }
     };
+  }
+
+  // Subsistema Opciones: valida + precia una selección server-side con el motor genérico
+  // (gemelo del pedido-tasador: el cliente manda valor_ids por opción, el precio lo pone el motor).
+  async handleEvaluarOpciones(data) {
+    const { producto_id, selecciones } = data || {};
+    if (!producto_id) return this._errorResponse(400, 'INVALID_INPUT', 'producto_id requerido', { field: 'producto_id' });
+    const config = this.configuraciones.get(producto_id);
+    if (!config) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Producto no configurado', { producto_id });
+    const r = evaluarProducto(
+      { precio_base_centimos: config.precio_base_centimos || 0, opciones: config.opciones || [] },
+      selecciones || {}
+    );
+    return { status: r.valida ? 200 : 400, data: { producto_id, ...r } };
   }
 
   async handleHealthCheck() {

@@ -115,12 +115,52 @@
                   "type": "string",
                   "minLength": 1,
                   "description": "Familia del ingrediente (queso, verdura, carne, salsa, pescado, fruta, extra, condimento, otro), asignada EN ORIGEN por menu-generator. v2 (semilla enriquecida). ingredientes es la autoridad (puede corregirla). Término canónico 'familia' (glosario v1.2.0; sinónimo histórico 'grupo' deprecado)."
+                },
+                "precio_extra": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Sobreprecio del ingrediente al añadirse como EXTRA (€). menu-generator pone un estándar (0,50) si la fuente no lo trae; 0 = gratis. Lo lee la proyección de productos (carta-digital) y derivar-opciones (modo ELEGIR_VARIOS → comandero). En el rol BASE del producto no se cobra."
                 }
               }
             },
             "description": "Lista de ingredientes BASE del producto. Shape canónico del POS pizzepos — el comandero los muestra agrupados por familia con emojis (caso testigo: producto 'Blues' de Pizzicas con QUESO/VERDURA/CARNE Y EMBUTIDO). v2: cada ingrediente lleva id canónico + familia asignados en origen."
+          },
+          "opciones": {
+            "type": "array",
+            "description": "Configuración del producto (subsistema Opciones). OPCIONAL y aditivo: un producto sin opciones funciona igual (el reflejo/variaciones las deriva de ingredientes). Cada Opcion es una dimensión de elección con su modo.",
+            "items": { "$ref": "#/$defs/Opcion" }
           }
         }
+      }
+    }
+  },
+
+  "$defs": {
+    "Opcion": {
+      "type": "object",
+      "required": ["id", "etiqueta", "modo", "valores"],
+      "additionalProperties": false,
+      "properties": {
+        "id":        { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "etiqueta":  { "type": "string", "minLength": 1 },
+        "modo":      { "enum": ["ELEGIR_UNO", "ELEGIR_VARIOS", "QUITAR"] },
+        "requerido": { "type": "boolean", "default": false },
+        "min":       { "type": "integer", "minimum": 0, "default": 0 },
+        "max":       { "type": "integer", "minimum": 1 },
+        "valores":   { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/Valor" } }
+      }
+    },
+    "Valor": {
+      "type": "object",
+      "required": ["id", "etiqueta", "delta_precio_centimos"],
+      "additionalProperties": false,
+      "properties": {
+        "id":                    { "type": "string", "minLength": 1 },
+        "etiqueta":              { "type": "string", "minLength": 1 },
+        "emoji":                 { "type": "string" },
+        "ref":                   { "type": "string" },
+        "delta_precio_centimos": { "type": "integer" },
+        "disponible":            { "type": "boolean", "default": true }
       }
     }
   },

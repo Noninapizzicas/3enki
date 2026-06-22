@@ -114,55 +114,72 @@
     error = null;
 
     try {
-      // Ingredientes base del producto
-      ingredientesBase = producto.ingredientes_base || producto.ingredientes || [];
-      const baseIds = new Set(ingredientesBase.map(i => i.id));
-
-      // Grupo = categoría del producto
-      grupo = producto.categoria || '';
-
-      // Config variaciones del backend (soft-fail)
+      // Config del backend — ahora trae `opciones` (subsistema Opciones). Soft-fail.
       const varRes = await mqttRequest('variaciones', 'get', { producto_id: producto.id }).catch(() => null);
       const varData = varRes?.data;
-      if (varData) {
-        permiteQuitar = varData.permite_quitar || [];
-        permiteAnadir = varData.permite_anadir !== false;
-        maxExtras = varData.max_ingredientes_extra || 10;
-        if (varData.grupo) grupo = varData.grupo;
-      } else {
-        permiteAnadir = true;
-        maxExtras = 10;
-      }
+      const opciones: any[] | null = Array.isArray(varData?.opciones) ? varData.opciones : null;
 
-      // Si no tenemos permiteQuitar, asumir que todos los base se pueden quitar
-      if (permiteQuitar.length === 0 && ingredientesBase.length > 0) {
+      let disponibles: any[] = [];
+
+      if (opciones) {
+        // ── RENDER POR MODO (Opciones): el dato manda (incluido [] = nada que quitar/añadir). ──
+        const quitarOp = opciones.find((o: any) => o.modo === 'QUITAR');
+        const addOps = opciones.filter((o: any) => o.modo === 'ELEGIR_VARIOS');
+
+        ingredientesBase = (quitarOp?.valores || []).map((v: any) => ({ id: v.id, nombre: v.etiqueta, emoji: v.emoji }));
         permiteQuitar = ingredientesBase.map(i => i.id);
-      }
+        permiteAnadir = addOps.length > 0;
+        maxExtras = addOps.reduce((mx: number, o: any) => Math.max(mx, Number.isInteger(o.max) ? o.max : 10), 0) || 10;
 
-      // Filtrar catálogo: solo ingredientes del mismo GRUPO, excluyendo los base
-      const disponibles = catalogoIngredientes
-        .filter((ing: any) => {
-          // Filtrar por grupo
-          if (grupo && ing.grupos && ing.grupos.length > 0) {
-            if (!ing.grupos.includes(grupo)) return false;
+        // familia sólo para colorear: lookup en el catálogo proyectado (presentación); si no, 'otro'.
+        const famById = new Map<string, string>((catalogoIngredientes || []).map((c: any) => [c.id, (c.familia || c.tipo || 'otro')]));
+        const baseIds = new Set(ingredientesBase.map(i => i.id));
+        for (const op of addOps) {
+          for (const v of (op.valores || [])) {
+            if (v.disponible === false || baseIds.has(v.id)) continue;
+            disponibles.push({
+              id: v.id,
+              nombre: v.etiqueta,
+              emoji: v.emoji,
+              precio_extra: (Number(v.delta_precio_centimos) || 0) / 100,   // céntimos → euros (el panel cobra en €)
+              tipo: String(famById.get(v.id) || famById.get(v.ref) || 'otro').toLowerCase(),
+              disponible: true
+            });
           }
-          // Excluir los que ya son base del producto
-          if (baseIds.has(ing.id)) return false;
-          // Solo disponibles/activos
-          if (ing.disponible === false || ing.activo === false) return false;
-          return true;
-        })
-        .map((ing: any) => ({
-          id: ing.id,
-          nombre: ing.nombre,
-          emoji: ing.emoji,
-          precio_extra: ing.precio_extra || 0,
-          // D3/rebanada 7: agrupar por FAMILIA canónica (semilla v2 + #322). El tipoConfig de
-          // este panel ya usa vocabulario de familia (queso/verdura/carne/marisco/salsa/masa).
-          // Fallback a tipo y luego 'otro' para ingredientes v1 sin familia (cero regresión).
-          tipo: (ing.familia || ing.tipo || 'otro').toLowerCase(),
-          disponible: true
-        }));
+        }
+      } else {
+        // ── LEGACY: backend sin `opciones` (warm aún no llegó) → catálogo proyectado (compat). ──
+        ingredientesBase = producto.ingredientes_base || producto.ingredientes || [];
+        const baseIds = new Set(ingredientesBase.map(i => i.id));
+        grupo = producto.categoria || '';
+        if (varData) {
+          permiteQuitar = varData.permite_quitar || [];
+          permiteAnadir = varData.permite_anadir !== false;
+          maxExtras = varData.max_ingredientes_extra || 10;
+          if (varData.grupo) grupo = varData.grupo;
+        } else {
+          permiteAnadir = true;
+          maxExtras = 10;
+        }
+        if (permiteQuitar.length === 0 && ingredientesBase.length > 0) {
+          permiteQuitar = ingredientesBase.map(i => i.id);
+        }
+        disponibles = (catalogoIngredientes || [])
+          .filter((ing: any) => {
+            if (grupo && ing.grupos && ing.grupos.length > 0 && !ing.grupos.includes(grupo)) return false;
+            if (baseIds.has(ing.id)) return false;
+            if (ing.disponible === false || ing.activo === false) return false;
+            return true;
+          })
+          .map((ing: any) => ({
+            id: ing.id,
+            nombre: ing.nombre,
+            emoji: ing.emoji,
+            precio_extra: ing.precio_extra || 0,
+            tipo: (ing.familia || ing.tipo || 'otro').toLowerCase(),
+            disponible: true
+          }));
+      }
 
       // Agrupar por tipo
       ingredientesPorTipo = new Map();

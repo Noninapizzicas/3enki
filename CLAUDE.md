@@ -14077,23 +14077,7 @@ TESTS {
 
 # AVANZADILLA — Subsistema `Opciones` (configuración universal de producto)
 
-> **NO IMPLEMENTAR AÚN.** Esto es NORTE en papel, no código. Se construye **cuando pizzepos esté
-> terminado y funcionando**. Se escribe ahora para no perder la abstracción concretada en sesión
-> (claude/lee-claude-md-5ynlmf) y para que el primer ladrillo, llegado el día, ya tenga contrato y clases.
->
-> **Tesis.** Lo que en hostelería es `variaciones` (quitar/sumar ingredientes) es solo *una instancia*
-> de algo universal: **la configuración de un producto**. La abstracción no es "variaciones" (vocabulario
-> de comida) — es **`Opciones`**, válida para pizza, pantalón o móvil. El dato se describe a sí mismo
-> (lleva su `modo`); por eso la **vista** y el **motor** se vuelven genéricos: no hay "intérprete de
-> dominio", hay un dato autodescriptivo que vista y motor obedecen. `variaciones` deja de ser un módulo
-> de dominio → se des-hostelderiza en un **MotorDeOpciones genérico** alimentado con datos de modo
-> `QUITAR`+`ELEGIR_VARIOS`. El módulo de moda (futuro) usaría el mismo motor con modo `ELEGIR_UNO`.
->
-> **Origen del problema (por qué nace).** El trabajo de `menu-generator` (productor del catálogo) NO lo
-> define menu-generator — lo define la UNIÓN de los contratos de quien bebe de él (Opciones, alérgenos,
-> precio_extra…). Hoy el schema canónico de la carta es producer-céntrico (`additionalProperties:false`
-> PROHÍBE esos campos) y no hay canal para que un consumidor declare lo que necesita → menu-generator
-> produce una carta a la que le falta lo que sus consumidores piden. La cura es contrato-dirigido-por-consumidor.
+> NO IMPLEMENTAR · gate: pizzepos cerrado. El nombre `variaciones` se queda; lo que migra es la operativa (contrato + clases de abajo). Banco: `modules/_shared/motor-opciones.js` · `tests/unit/shared__motor-opciones.test.js`.
 
 ## Contrato genérico (JSON Schema) — `producto.opciones`
 
@@ -14130,10 +14114,7 @@ TESTS {
 }
 ```
 
-> Dinero en **céntimos enteros** de punta a punta (coherente con `pedido-tasador`). `Valor.ref` enlaza el
-> recurso subyacente (el ingrediente, el color) sin acoplarse a él.
-
-## Modelo OOP — Value Objects + servicios (pseudocódigo tipado)
+## Clases (pseudocódigo tipado)
 
 ```
 ENUM Modo        { ELEGIR_UNO, ELEGIR_VARIOS, QUITAR }
@@ -14209,48 +14190,4 @@ CLASE VistaDeOpciones {                          // frontend — pinta cualquier
         MULTI_ADITIVO   : pintarChipsConPrecio(o.valores)   // Quesos +0,50
         LISTA_TACHABLE  : pintarTachables(o.valores)        // Sin: cebolla…
 }
-```
-
-## Patrones (GoF) + mapeo de dominios
-
-```
-PATRONES
-  Strategy        → ReglaModo por modo (validar/preciar/control). El núcleo.
-  Specification   → guardas de validación (requerido · min/max · pertenencia · disponible), componibles.
-  Factory Method  → control(): TipoControl → el control de UI desde el modo.
-  Composite       → MotorDeOpciones.evaluarProducto agrega N Opciones en un precio/validez.
-  ValueObject     → Opcion · Valor · Seleccion · Resultado (inmutables).
-  DI constructor  → MotorDeOpciones recibe el Map de reglas (testeable, extensible).
-
-MISMO MODELO, DOS DOMINIOS
-  Pizza Batucada                              Pantalón
-    QUITAR        : sin tomate/queso (Δ 0)      QUITAR        : sin forro (Δ 0)
-    ELEGIR_VARIOS : +quesos/carnes (Δ +0,50)    ELEGIR_VARIOS : bordar iniciales (Δ +3)
-    ELEGIR_UNO    : tamaño (mediana/familiar)    ELEGIR_UNO(req): talla S·M·L · color negro/azul
-  → hostelería usa QUITAR+ELEGIR_VARIOS · moda usa ELEGIR_UNO. Misma estructura, distinta mezcla de modos.
-```
-
-## Dónde encaja en el bus (event-driven) — cuando se construya
-
-```
-PRODUCE   menu-generator → llena producto.opciones SEGÚN el contrato (determinista: modo/ids por el
-                           reflejo; fuzzy: qué extras sugerir por el LLM). = el "enriquecer" guiado por contrato.
-LLEVA     carta-manager transporta producto.opciones ; productos lo PROYECTA al canal.
-PINTA     VistaDeOpciones(producto.opciones) — comandero y carta-digital, el MISMO componente.
-COBRA     MotorDeOpciones.evaluarProducto ; SE RE-EVALÚA server-side al añadir al pedido (anti-trampa,
-          igual que pedido-tasador: el cliente manda valorIds, el precio lo pone el motor desde delta_precio).
-INVARIANTE  el cliente solo aporta valorIds ; el precio SIEMPRE lo recalcula el motor desde el contrato.
-```
-
-## Pasos (orden inteligente, NO ahora — gate: pizzepos cerrado y funcionando)
-
-```
-0. (HOY) este norte en papel — hecho.
-1. contrato-dirigido-por-consumidor: meter producto.opciones (genérico, 3 modos) en el schema canónico de
-   la carta, con x-consumido-por / x-llenado-por ; quitar additionalProperties:false donde toque.
-2. MotorDeOpciones genérico (validar+preciar por modo) — des-hostelderizar el actual `variaciones`.
-3. VistaDeOpciones genérica (un componente, render por modo) — colapsa VariacionesPanel/AlGusto/configurador.
-4. menu-generator vuelve a LLENAR opciones (devolver la parte de enriquecer que el contrato exige).
-5. re-tasado server-side por el motor (anti-trampa), gemelo del pedido-tasador.
-```
 ```

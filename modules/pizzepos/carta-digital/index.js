@@ -302,6 +302,10 @@ class CartaDigitalModule extends BaseModule {
       whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
       mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
       project_slug: slug,
+      // Caddy sirve el bundle en /shop/<slug>/. La <base> hace que img/·manifest·sw·iconos
+      // resuelvan bien aunque se abra la URL sin barra final (/shop/<slug>) → evita el 404 de
+      // /shop/img/... (sin slug). El SUELTO (export-cli, raíz del dominio) NO setea base_href.
+      base_href: `/shop/${slug}/`,
       pago_online: !!op.pago_online,
       pedido_endpoint: op.pedido_endpoint || '',
       tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colores.texto || '#e5e5e5', logo_emoji: logoEmoji }

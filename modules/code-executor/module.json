@@ -1,6 +1,6 @@
 {
   "name": "code-executor",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Shell command and script execution for AI with security controls",
   "author": "Event Core Team",
   "language": "en",
@@ -186,7 +186,8 @@
       "errores_conocidos": [
         "INVALID_INPUT",
         "UPSTREAM_TIMEOUT",
-        "EXEC_FAILED"
+        "EXEC_FAILED",
+        "CAPABILITY_DISABLED"
       ],
       "parameters": {
         "type": "object",
@@ -210,6 +211,27 @@
         },
         "required": [
           "codigo"
+        ]
+      }
+    },
+    {
+      "name": "code.orquestar_set",
+      "description": "Interruptor on/off de la orquestacion (execute_code) en caliente, sin reinicio. El kill switch: si code.orquestar se porta mal en produccion, ponlo a false y deja de ejecutarse al instante. Para apagarlo de forma persistente, ademas pon config.orquestarEnabled=false.",
+      "handler": "handleToolOrquestarSet",
+      "confirmation": true,
+      "errores_conocidos": [
+        "INVALID_INPUT"
+      ],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "true=activar, false=apagar la orquestacion."
+          }
+        },
+        "required": [
+          "enabled"
         ]
       }
     }
@@ -244,7 +266,8 @@
     "shell": "/bin/sh",
     "projectsPath": "./data/projects",
     "orquestarTimeout": 30000,
-    "orquestarMaxTimeout": 60000
+    "orquestarMaxTimeout": 60000,
+    "orquestarEnabled": true
   },
   "observability": {
     "logging": {

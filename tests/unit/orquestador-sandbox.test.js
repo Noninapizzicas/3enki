@@ -132,6 +132,33 @@ test('error en runtime del codigo -> EXEC_FAILED con logs', async () => {
   assert.ok((err._logs || []).includes('antes'), 'los logs previos al error se conservan');
 });
 
+// ── Interruptor on/off (kill switch) via code-executor ──
+test('code.orquestar respeta el interruptor on/off (config + toggle en caliente)', async () => {
+  const CodeExecutor = require('../../modules/code-executor');
+  const bus = { publish: () => {}, subscribe: () => () => {} };
+  const noop = { info() {}, warn() {}, error() {} };
+
+  // default ON
+  const mod = new CodeExecutor();
+  await mod.onLoad({ logger: noop, metrics: { increment() {} }, eventBus: bus, moduleConfig: {} });
+  assert.strictEqual((await mod.handleToolOrquestar({ codigo: 'return 1;' })).status, 200);
+
+  // toggle OFF en caliente -> bloquea
+  await mod.handleToolOrquestarSet({ enabled: false });
+  const off = await mod.handleToolOrquestar({ codigo: 'return 1;' });
+  assert.strictEqual(off.status, 403);
+  assert.strictEqual(off.error.code, 'CAPABILITY_DISABLED');
+
+  // toggle ON -> ejecuta de nuevo
+  await mod.handleToolOrquestarSet({ enabled: true });
+  assert.strictEqual((await mod.handleToolOrquestar({ codigo: 'return 1;' })).status, 200);
+
+  // config OFF persistente -> arranca bloqueado
+  const mod2 = new CodeExecutor();
+  await mod2.onLoad({ logger: noop, metrics: { increment() {} }, eventBus: bus, moduleConfig: { orquestarEnabled: false } });
+  assert.strictEqual((await mod2.handleToolOrquestar({ codigo: 'return 1;' })).status, 403);
+});
+
 (async () => {
   let passed = 0, failed = 0;
   for (const { name, fn } of tests) {

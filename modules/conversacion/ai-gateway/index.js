@@ -1145,6 +1145,45 @@ class AiGatewayModule extends BaseModule {
     );
   }
 
+  // Nervio del CONSERJE: pide (y consume) el empujon pendiente del proyecto. Es el
+  // siguiente paso que el sistema le ofrece al comerciante. Best-effort, timeout
+  // corto: nunca penaliza el turno. Devuelve el empujon o null.
+  async _leerEmpujon(project_id) {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    const timeoutMs = this.config.conserje_timeout_ms || 2000;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeoutMs);
+      try {
+        unsub = this.eventBus.subscribe('conserje.empujon_pendiente.response', (event) => {
+          const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!data || data.request_id !== request_id) return;
+          clearTimeout(timeout);
+          if (unsub) unsub();
+          const payload = data.result || data;
+          resolve(payload?.data?.empujon || payload?.empujon || null);
+        });
+        this.eventBus.publish('conserje.empujon_pendiente', { request_id, project_id });
+      } catch (_) {
+        clearTimeout(timeout);
+        if (unsub) unsub();
+        resolve(null);
+      }
+    });
+  }
+
+  _composeEmpujonSection(empujon) {
+    return (
+      '# UN EMPUJON PARA EL COMERCIANTE — conserje (ofrecelo UNA vez, natural)\n' +
+      'El sistema detecto el siguiente paso que le abriria camino: ' + empujon.mensaje + '\n' +
+      'Si encaja de forma natural en la conversacion, OFRECESELO en positivo, con tus ' +
+      'palabras, UNA sola vez — como quien sugiere, no como quien insiste. Si el usuario ' +
+      'esta a otra cosa o ya lo ignoro, DEJALO; no lo repitas. No menciones que es una ' +
+      'sugerencia automatica.'
+    );
+  }
+
   _isPrimitivePrefix(prefix) {
     const PRIMITIVE = new Set([
       'fs', 'project', 'llm', 'ai', 'agent', 'credential', 'security',
@@ -1761,6 +1800,21 @@ class AiGatewayModule extends BaseModule {
           if (ultimaTs) this.conversationPropioTs.set(conversation_id, ultimaTs);
         }
       } catch (_) { /* la consciencia es best-effort; nunca bloquea el turno */ }
+    }
+
+    // Nervio del conserje: en un turno REAL con proyecto, si hay un empujon
+    // pendiente (el conserje lo emitio porque detecto una brecha con intencion),
+    // lo inyectamos para que el chat lo ofrezca natural, UNA vez. Consume-on-read:
+    // el conserje lo borra al leerlo. Si el conserje esta apagado no hay nada
+    // pendiente -> no se inyecta. Best-effort: nunca bloquea el turno.
+    if (blueprintCtx && project_id && !context?.async_invocation) {
+      try {
+        const empujon = await this._leerEmpujon(project_id);
+        if (empujon && empujon.mensaje) {
+          const seccion = this._composeEmpujonSection(empujon);
+          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
+        }
+      } catch (_) { /* el empujon es best-effort; nunca bloquea el turno */ }
     }
 
     // Resolver attachments y mezclarlos con el último mensaje user

@@ -1,0 +1,99 @@
+{
+  "name": "conserje",
+  "version": "0.1.0",
+  "description": "Abre el camino al comerciante. Cruza lo que el sistema OFRECE (LibroDeCapacidades) con lo que el comerciante USA (derivado del bus en vivo) y, cuando hay una brecha con intención, le ofrece el siguiente paso en POSITIVO (no señala la carencia). Sin sondas hardcodeadas: lee el grafo de capacidades + el uso real. La señal de oro es la intención — lo que el comerciante alarga la mano a tocar pero está vacío. Apagado por defecto; su on/off vive en el panel central de interruptores (botón 'conserje'), reacciona en caliente. Cooldown por capacidad para no agobiar.",
+  "author": "Event Core Team",
+  "language": "es",
+
+  "publishes": [
+    {
+      "event": "interruptor.registrar",
+      "description": "Registra su botón on/off en el panel central al cargar."
+    },
+    {
+      "event": "conserje.empujon",
+      "description": "Ofrece al comerciante el siguiente paso. {project_id, tipo, recurso, mensaje, accion_sugerida}. Lo surfacea el chat (vía el nervio) de forma natural, una vez."
+    }
+  ],
+
+  "subscribes": [
+    {
+      "event": "interruptor.cambiado",
+      "handler": "onInterruptorCambiado",
+      "description": "Reacciona al on/off del panel (id='conserje') en caliente, sin reinicio."
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "conserje",
+      "action": "empujon_pendiente",
+      "handler": "handleEmpujonPendiente",
+      "description": "Devuelve (y CONSUME) el empujón pendiente de un proyecto. Lo lee el nervio en ai-gateway para ofrecerlo en el chat una vez."
+    },
+    {
+      "domain": "conserje",
+      "action": "brecha",
+      "handler": "handleBrecha",
+      "description": "La brecha (OFRECE vs USA) de un proyecto: usadas, intentadas y el ranking de oportunidades. Visibilidad/debug."
+    },
+    {
+      "domain": "conserje",
+      "action": "health",
+      "handler": "handleHealthCheck",
+      "description": "Estado del conserje (activo, proyectos observados)."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "conserje.empujon_pendiente",
+      "description": "Devuelve y consume el empujón pendiente de un proyecto (el siguiente paso a ofrecer al comerciante). Lo lee el nervio del chat.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "handleEmpujonPendiente",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "conserje.brecha",
+      "description": "Muestra qué capacidades del sistema le faltan por aprovechar a un proyecto (OFRECE vs USA), ordenadas por oportunidad.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "handleBrecha",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    }
+  ],
+
+  "dependencies": ["interruptores"],
+
+  "config": {
+    "enabled": true,
+    "enabled_default": false,
+    "tick_ms": 15000,
+    "cooldown_h": 24
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "conserje.empujon.total",
+        "conserje.errors.total"
+      ],
+      "gauges": []
+    }
+  }
+}

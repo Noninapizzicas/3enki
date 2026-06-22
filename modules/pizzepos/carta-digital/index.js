@@ -96,15 +96,19 @@ class CartaDigitalModule extends BaseModule {
   }
 
   // ── catálogo de ingredientes del proyecto activo (para "añadir" en la PWA) ──
-  // Lee la instancia de `ingredientes` (patrón cuentas-canales→cuentas). GATE de negocio:
-  // SOLO extras con precio_extra>0 — un extra sin precio NO se ofrece (no se regalan toppings).
-  // Con todo a 0 el catálogo viaja vacío → la sección "añadir" no aparece (degrada a solo-quitar).
+  // FUENTE ÚNICA: la PROYECCIÓN de la carta activa (productos.handleListIngredientes), la MISMA
+  // que usa el comandero (AlGustoPanel). Coherente con productos v5.1.0 (catalogo == proyectar
+  // (carta_activa)): el comandero ya dejó de leer el módulo `ingredientes` (store en-memoria que
+  // en nonina estaba VACÍO); la carta-digital termina aquí esa migración → los dos canales beben
+  // de la carta, ninguno depende de ingredientes.json (que aparece/desaparece). canal='digital'
+  // para proyectar la carta del canal público. GATE de negocio: SOLO extras con precio_extra>0
+  // (no se regalan toppings); con todo a 0 el catálogo viaja vacío → "añadir" degrada a solo-quitar.
   // Soft-fail total → [] (nunca rompe la publicación).
-  async _catalogoIngredientes() {
+  async _catalogoIngredientes(project_id, canal) {
     try {
-      const inst = this.moduleRegistry?.get('ingredientes')?.instance;
+      const inst = this.moduleRegistry?.get('productos')?.instance;
       if (!inst?.handleListIngredientes) return [];
-      const r = await inst.handleListIngredientes({});
+      const r = await inst.handleListIngredientes({ project_id, canal: canal || 'digital' });
       const arr = (r && r.data && r.data.ingredientes) || [];
       return arr
         .filter(i => i && i.disponible !== false && Number(i.precio_extra) > 0)
@@ -299,7 +303,7 @@ class CartaDigitalModule extends BaseModule {
       tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colores.texto || '#e5e5e5', logo_emoji: logoEmoji }
     };
 
-    const catalogo_ingredientes = await this._catalogoIngredientes();
+    const catalogo_ingredientes = await this._catalogoIngredientes(project_id, 'digital');
     const html = generateStaticHTML(
       { categorias: data.categorias, productos, alergenos_leyenda: data.alergenos_leyenda, catalogo_ingredientes },
       tplConfig, { diseno }
@@ -403,7 +407,7 @@ class CartaDigitalModule extends BaseModule {
           logo_emoji: (typeof b.logo === 'string' && b.logo.length <= 4) ? b.logo : '\u{1F355}'
         }
       };
-      const catalogo_ingredientes = await this._catalogoIngredientes();
+      const catalogo_ingredientes = await this._catalogoIngredientes(project_id, 'digital');
       const html = generateStaticHTML(
         { categorias: d.categorias, productos: d.productos, alergenos_leyenda: d.alergenos_leyenda, catalogo_ingredientes },
         tplConfig, { diseno }

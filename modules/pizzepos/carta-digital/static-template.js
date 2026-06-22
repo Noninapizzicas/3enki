@@ -251,6 +251,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .detail-tag{padding:3px 8px;border-radius:4px;color:#fff;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .detail-desc{font-size:.85rem;color:#aaa;line-height:1.5;margin:0 0 16px}
 .section-title{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:0 0 8px}
+.ing-group{margin-bottom:12px}
+.ing-group-head{display:flex;align-items:center;gap:6px;font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:#888;margin:0 0 6px}
+.ing-group-count{color:#555;font-weight:400}
+.ing-group .ing-list{margin-bottom:0}
 .ing-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
 .ing-chip{display:flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid #2a2a2a;border-radius:20px;background:#1a1a1a;font-size:.75rem;color:#bbb}
 /* Alérgenos (1169/2011) */
@@ -588,6 +592,40 @@ function applyTranslations() {
 function fmt(p) { return p.toFixed(2) + ' ' + MONEDA; }
 function esc(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
 
+// Familias de extra — MISMO sistema que el comandero (VariacionesPanel.tipoConfig):
+// orden visual + etiqueta + emoji. La familia llega en ing.tipo (= familia de la proyección).
+const FAM_CONFIG = {
+  queso:   { emoji: '🧀', label: 'Queso',            orden: 1 },
+  verdura: { emoji: '🥬', label: 'Verdura',          orden: 2 },
+  carne:   { emoji: '🍖', label: 'Carne y Embutido', orden: 3 },
+  marisco: { emoji: '🐟', label: 'Pescado/Marisco',  orden: 4 },
+  salsa:   { emoji: '🍅', label: 'Salsa',            orden: 5 },
+  masa:    { emoji: '🫓', label: 'Masa/Base',        orden: 6 },
+  otro:    { emoji: '📦', label: 'Otro',             orden: 9 }
+};
+function famInfo(t) { return FAM_CONFIG[t] || FAM_CONFIG.otro; }
+// Pinta los extras AGRUPADOS por familia, ordenados, con cabecera por grupo (mismo sistema
+// que el comandero). Puebla detailExtrasById. selSet marca los ya añadidos; fn = handler onclick.
+function renderExtrasAgrupados(extras, selSet, fn) {
+  const handler = fn || 'toggleAnadir';
+  const byTipo = {};
+  for (const e of extras) { detailExtrasById[e.id] = e; const t = e.tipo || 'otro'; (byTipo[t] = byTipo[t] || []).push(e); }
+  const tipos = Object.keys(byTipo).sort(function(a, b) { return famInfo(a).orden - famInfo(b).orden; });
+  let html = '';
+  for (const t of tipos) {
+    const info = famInfo(t);
+    const lista = byTipo[t].slice().sort(function(a, b) { return String(a.nombre).localeCompare(String(b.nombre)); });
+    const cls = t ? ' ' + t : '';
+    html += '<div class="ing-group"><div class="ing-group-head"><span>' + info.emoji + '</span><span>' + info.label + '</span><span class="ing-group-count">(' + lista.length + ')</span></div><div class="ing-list">';
+    for (const e of lista) {
+      const ad = (selSet && selSet.has(e.id)) ? ' added' : '';
+      html += '<button type="button" class="ing-chip ing-add' + cls + ad + '" onclick="' + handler + '(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
+    }
+    html += '</div></div>';
+  }
+  return html;
+}
+
 // Alérgenos (1169/2011): mapa id→{nombre,emoji} desde la leyenda de la proyección.
 var ALERG = {};
 (DATA.alergenos_leyenda || []).forEach(function(a){ ALERG[a.id] = a; });
@@ -721,17 +759,7 @@ function showDetail(id) {
     }
     return true;
   });
-  let extrasHtml = '';
-  if (extras.length) {
-    const byTipo = {};
-    for (const e of extras) { detailExtrasById[e.id] = e; const t = e.tipo || 'otro'; (byTipo[t] = byTipo[t] || []).push(e); }
-    for (const t of Object.keys(byTipo)) {
-      const cls = t ? ' ' + t : '';
-      for (const e of byTipo[t]) {
-        extrasHtml += '<button type="button" class="ing-chip ing-add' + cls + '" onclick="toggleAnadir(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
-      }
-    }
-  }
+  const extrasHtml = extras.length ? renderExtrasAgrupados(extras, anadirSel, 'toggleAnadir') : '';
 
   // Declaración de alérgenos por NOMBRE (1169/2011 — el texto es lo legalmente exigible).
   let alergHtml = '';
@@ -749,7 +777,7 @@ function showDetail(id) {
     (tagsHtml ? '<div class="detail-tags">' + tagsHtml + '</div>' : '') +
     (p.descripcion ? '<p class="detail-desc">' + esc(p.descripcion) + '</p>' : '') +
     (ingsHtml ? '<h3 class="section-title">Ingredientes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· toca para quitar</span></h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
-    (extrasHtml ? '<h3 class="section-title">Añadir extras</h3><div class="ing-list">' + extrasHtml + '</div>' : '') +
+    (extrasHtml ? '<h3 class="section-title">Añadir extras</h3>' + extrasHtml : '') +
     alergHtml;
 
   renderDetailFooter();
@@ -934,22 +962,15 @@ function showMitadVar(lado, pizza) {
   const extras = extrasForGroup(grpKeys, {});
   let extrasHtml = '';
   if (extras.length) {
-    const byTipo = {};
-    for (const e of extras) { detailExtrasById[e.id] = e; const t = e.tipo || 'otro'; (byTipo[t] = byTipo[t] || []).push(e); }
+    for (const e of extras) detailExtrasById[e.id] = e;
     if (v) { (v.anadir || []).forEach(function (a) { if (a.id && detailExtrasById[a.id]) anadirSel.set(a.id, detailExtrasById[a.id]); }); }
-    for (const t of Object.keys(byTipo)) {
-      const cls = t ? ' ' + t : '';
-      for (const e of byTipo[t]) {
-        const ad = anadirSel.has(e.id) ? ' added' : '';
-        extrasHtml += '<button type="button" class="ing-chip ing-add' + cls + ad + '" onclick="toggleAnadir(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
-      }
-    }
+    extrasHtml = renderExtrasAgrupados(extras, anadirSel, 'toggleAnadir');
   }
   document.getElementById('detail-content').innerHTML =
     '<div class="detail-header"><h2 class="detail-nombre">' + (pizza.emoji ? pizza.emoji + ' ' : '') + '½ ' + esc(pizza.nombre) + '</h2></div>' +
     '<p class="detail-desc">Personaliza esta mitad' + (lado === 'izq' ? ' (izquierda)' : ' (derecha)') + '</p>' +
     (ingsHtml ? '<h3 class="section-title">Ingredientes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· toca para quitar</span></h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
-    (extrasHtml ? '<h3 class="section-title">Añadir extras</h3><div class="ing-list">' + extrasHtml + '</div>' : '');
+    (extrasHtml ? '<h3 class="section-title">Añadir extras</h3>' + extrasHtml : '');
   renderMitadVarFooter();
 }
 function mitadVarExtras() {
@@ -1033,18 +1054,10 @@ function showAlGusto(catId) {
   alGustoBaseId = base ? base.id : null;
   document.getElementById('detail-visual').innerHTML = '<span class="detail-ph">🍕</span><button class="close-btn" onclick="closeDetail()" aria-label="Cerrar">✕</button>';
   const extras = extrasForGroup(catGrpKeys(catId), {});
-  let extrasHtml = '';
-  const byTipo = {};
-  for (const e of extras) { detailExtrasById[e.id] = e; const t = e.tipo || 'otro'; (byTipo[t] = byTipo[t] || []).push(e); }
-  for (const t of Object.keys(byTipo)) {
-    const cls = t ? ' ' + t : '';
-    for (const e of byTipo[t]) {
-      extrasHtml += '<button type="button" class="ing-chip ing-add' + cls + '" onclick="toggleAnadirAG(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
-    }
-  }
+  const extrasHtml = extras.length ? renderExtrasAgrupados(extras, anadirSel, 'toggleAnadirAG') : '';
   document.getElementById('detail-content').innerHTML =
     '<div class="detail-header"><h2 class="detail-nombre">🍕 Crea tu pizza</h2><span class="detail-precio">desde ' + fmt(alGustoBase) + '</span></div>' +
-    (extrasHtml ? '<h3 class="section-title">Ingredientes</h3><div class="ing-list">' + extrasHtml + '</div>' : '<p class="detail-desc">No hay ingredientes disponibles.</p>');
+    (extrasHtml ? '<h3 class="section-title">Ingredientes</h3>' + extrasHtml : '<p class="detail-desc">No hay ingredientes disponibles.</p>');
   renderAlGustoFooter();
   document.getElementById('detail-overlay').classList.add('open');
 }

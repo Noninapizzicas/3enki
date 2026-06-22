@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo carta-manager. Hijo de subsistema-recetario.modulo-base (reutilizado por simplicidad — su modelo de ejecucion, primitivas del bus y manejo de errores aplican identico). Aggregate root del subsistema-carta: CRUD de cartas + manipulacion de productos/categorias dentro de carta + versionado con history archivado + busqueda + stats + restore. Persistencia multi-archivo: data/projects/{slug}/storage/pizzepos/cartas/<id>.json + storage/pizzepos/cartas/.versions/<id>/<timestamp>.json para snapshots.",
   "id": "carta-manager",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "_v1_5_changelog": "v1.5.0 (2026-06-13): anyade _modelo_oop (CLASE CartaManager) — aggregate root, store actual+versiones, las 15 ops agrupadas (entrada event-driven / lectura / raiz / mutacion estructurada) + helper comun _mutar que captura el patron repetido en las 5 mutaciones (read->snapshot->fs.edit->version++->evento). Prep para HIBRIDAR: todo es CRUD/versionado determinista -> pasa a REFLEJO JS (index.js), mismo contrato de bus carta.<op>.request (los carta-* no se enteran). Regla de dominio reafirmada: anyadir/editar productos de una carta = carta-manager (add_product/update_product); menu-generator solo NACE la base. Coger producto de recetas -> carta = leer recetas.obtener + escribir carta-manager.add_product (recetas es fuente, carta-manager es el writer).",
   "_v1_4_changelog": "v1.4.0 (aterrizaje subsistema-catalogo, D2): añadida operacion 'clonar' (carta_base_id + nuevo_nombre -> carta INDEPENDIENTE nueva). Es el paso 1 de 'carta por canal': el LLM clona la base, la manipula (update_prices/add_product/remove_product) segun instrucciones NL, y tarifas la asigna a un canal. carta-manager solo PRODUCE; la asignacion canal<->carta es de tarifas. Cambio ADITIVO (op nueva, no toca las 14 existentes). El shape que persiste es ahora carta-pizzepos v2 (ingredientes con id+familia) pero save persiste cualquier shape literal -> sin break. Pendiente (futuro): extender update_prices con target por categoria/familia + factor (hoy es per-producto absoluto).",
   "language": "es",
@@ -308,6 +308,30 @@
       ],
       "_delega_en": "carta.update_prices.request (REFLEJO JS — index.js)"
     },
+    "update_extras": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), updates (req — array de {ingrediente_id, precio_extra_nuevo}) }",
+      "pseudocodigo": [
+        "async update_extras(input):",
+        "  // HIBRIDO: el REFLEJO JS (index.js) hace el cambio determinista (fija precio_extra del",
+        "  // ingrediente en TODAS sus apariciones, versionado). Este cajon SOLO traduce la intencion del",
+        "  // usuario ('sube el queso a 0,80', 'extras gratis') a los args y DELEGA. NUNCA toca fs.",
+        "  // El precio del extra vive en la CARTA (no en un fichero suelto): el custodio lo cambia.",
+        "  resp = await publishAndWait('carta.update_extras.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data: { aplicados:[{ingrediente_id, precio_extra, ocurrencias}], errores } }"
+      ],
+      "reglas_clave": [
+        "precio_extra_nuevo en EUROS (>= 0). 0 = extra gratis. Cambia TODAS las apariciones del ingrediente_id.",
+        "Update masivo: aplica los validos, reporta errores por ingrediente. Si NINGUNO valido, PRECONDITION_FAILED."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PRECONDITION_FAILED",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.update_extras.request (REFLEJO JS — index.js)"
+    },
     "clonar": {
       "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_base_id (req), nuevo_nombre (req) }",
       "pseudocodigo": [
@@ -426,5 +450,6 @@
   "_v1_8_changelog": "v1.8.0 (2026-06-14): op add_from_receta — NACE un producto de carta desde una receta. Cierra recetas->carta: el reflejo LEE recetas.obtener, mapea lineas->ingredientes (toppings=variaciones; masa/salsa=subproducto base, EXCLUIDOS) y delega a add_product. Asi el producto entra con sus variaciones reales y se respeta la regla subproducto vs topping.",
   "_v1_9_changelog": "v1.9.0 (2026-06-14): add_from_receta excluye SOLO la masa (base). La salsa/tomate son toppings (correccion de dominio). Antes excluia masa+salsa.",
   "_v1_10_changelog": "v1.10.0 (2026-06-14): add_from_receta deja de ser delegador al reflejo: la clasificacion base-vs-topping es CRITERIO (fuzzy), la hace el LLM razonando plato a plato (auto-preguntas: base o topping). El reflejo solo LEE (recetas.obtener) y PERSISTE (add_product). No se generaliza por familia ni flag: el LLM juzga caso a caso. Revierte el hardcode masa/salsa de v1.8/1.9.",
-  "_v1_11_changelog": "v1.11.0 (2026-06-14): quita el cajon add_from_receta — se MUDA a menu-generator.preparar. El que prepara (menu-generator) es quien orquesta (lee carta.get + recetas.obtener, prepara, escribe carta.add_product) en UNA vuelta LLM contra REFLEJOS. carta-manager se queda en lo suyo: SIRVE get y add_product (reflejo), no orquesta ni clasifica. Cierra el lio base/topping (v1.8-1.10) por la raiz: la clasificacion no existe; el toque vive en menu-generator siguiendo el patron de la carta."
+  "_v1_11_changelog": "v1.11.0 (2026-06-14): quita el cajon add_from_receta — se MUDA a menu-generator.preparar. El que prepara (menu-generator) es quien orquesta (lee carta.get + recetas.obtener, prepara, escribe carta.add_product) en UNA vuelta LLM contra REFLEJOS. carta-manager se queda en lo suyo: SIRVE get y add_product (reflejo), no orquesta ni clasifica. Cierra el lio base/topping (v1.8-1.10) por la raiz: la clasificacion no existe; el toque vive en menu-generator siguiendo el patron de la carta.",
+  "_v1_12_changelog": "v1.12.0 (2026-06-22): + cajon update_extras (delegador fino). El LLM de pagina traduce 'sube el precio de los extras'/'queso a 0,80'/'extras gratis' -> publishAndWait('carta.update_extras.request'). El CAMBIO de precio del extra vive en el custodio (carta-manager), no en un fichero suelto. Cierra el caso real: pedir a la pagina cambiar precios de ingredientes ya no choca con 'no existe el fichero'."
 }

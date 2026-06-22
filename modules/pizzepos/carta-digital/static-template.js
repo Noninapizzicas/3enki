@@ -251,12 +251,18 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .detail-tag{padding:3px 8px;border-radius:4px;color:#fff;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .detail-desc{font-size:.85rem;color:#aaa;line-height:1.5;margin:0 0 16px}
 .section-title{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:0 0 8px}
-.ing-group{margin-bottom:12px}
-.ing-group-head{display:flex;align-items:center;gap:6px;font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:#888;margin:0 0 6px}
-.ing-group-count{color:#555;font-weight:400}
+/* Grupo por familia (espeja .tipo-section del comandero VariacionesPanel): barra de color a la
+   izquierda + cabecera con el color de la familia (var --fam la pone el helper por grupo). */
+.ing-group{margin-bottom:14px;border-left:3px solid var(--fam,#444);padding-left:12px}
+.ing-group-head{display:flex;align-items:center;gap:6px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--fam,#888);margin:0 0 8px}
+.ing-group-count{color:#666;font-weight:400}
 .ing-group .ing-list{margin-bottom:0}
-.ing-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
-.ing-chip{display:flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid #2a2a2a;border-radius:20px;background:#1a1a1a;font-size:.75rem;color:#bbb}
+.ing-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+/* Botón de ingrediente: tamaño del comandero (.chip → padding 8px 12px) en vez de píldora fina. */
+.ing-chip{display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #2a2a2a;border-radius:12px;background:#1a1a1a;font-size:.8rem;color:#ccc}
+/* En un grupo, el chip de añadir hereda el color de la familia (borde tenue + estado added). */
+.ing-group .ing-add{border-color:color-mix(in srgb,var(--fam) 28%,#2a2a2a)}
+.ing-group .ing-add.added{border-color:var(--fam);background:color-mix(in srgb,var(--fam) 16%,transparent);color:var(--fam)}
 /* Alérgenos (1169/2011) */
 .card-alerg{font-size:.95rem;letter-spacing:2px;margin-top:4px;line-height:1}
 .alerg-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
@@ -280,10 +286,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .mitad-slot-mods{font-size:.62rem;color:var(--success);line-height:1.2}
 .mitad-plus{color:#666;font-weight:800;font-size:1.1rem}
 /* Botón partido para elegir mitad (espeja ProductoBtn del comandero): cuerpo = tal cual, ✏️ = personalizar */
-.mitad-pick{display:inline-flex;align-items:stretch;border:1px solid #2a2a2a;border-radius:20px;overflow:hidden;background:#1a1a1a}
-.mitad-pick-main{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:none;background:transparent;color:#bbb;font:inherit;font-size:.75rem;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mitad-pick{display:inline-flex;align-items:stretch;border:1px solid #2a2a2a;border-radius:12px;overflow:hidden;background:#1a1a1a}
+.mitad-pick-main{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:none;background:transparent;color:#ccc;font:inherit;font-size:.8rem;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .mitad-pick-main:active{background:rgba(245,158,11,.12)}
-.mitad-pick-var{border:none;border-left:1px solid #2a2a2a;background:transparent;color:var(--primary);font-size:.85rem;padding:0 9px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mitad-pick-var{border:none;border-left:1px solid #2a2a2a;background:transparent;color:var(--primary);font-size:1rem;padding:0 12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .mitad-pick-var:active{background:rgba(245,158,11,.18)}
 .detail-footer{display:flex;gap:10px;padding:16px 20px;border-top:1px solid #222;background:var(--bg-surface)}
 .btn{flex:1;padding:14px;border:none;border-radius:12px;font-size:.9rem;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
@@ -610,13 +616,13 @@ function baseExcludeSet(p) {
 // Familias de extra — MISMO sistema que el comandero (VariacionesPanel.tipoConfig):
 // orden visual + etiqueta + emoji. La familia llega en ing.tipo (= familia de la proyección).
 const FAM_CONFIG = {
-  queso:   { emoji: '🧀', label: 'Queso',            orden: 1 },
-  verdura: { emoji: '🥬', label: 'Verdura',          orden: 2 },
-  carne:   { emoji: '🍖', label: 'Carne y Embutido', orden: 3 },
-  marisco: { emoji: '🐟', label: 'Pescado/Marisco',  orden: 4 },
-  salsa:   { emoji: '🍅', label: 'Salsa',            orden: 5 },
-  masa:    { emoji: '🫓', label: 'Masa/Base',        orden: 6 },
-  otro:    { emoji: '📦', label: 'Otro',             orden: 9 }
+  queso:   { emoji: '🧀', label: 'Queso',            orden: 1, color: '#facc15' },
+  verdura: { emoji: '🥬', label: 'Verdura',          orden: 2, color: '#22c55e' },
+  carne:   { emoji: '🍖', label: 'Carne y Embutido', orden: 3, color: '#ef4444' },
+  marisco: { emoji: '🐟', label: 'Pescado/Marisco',  orden: 4, color: '#3b82f6' },
+  salsa:   { emoji: '🍅', label: 'Salsa',            orden: 5, color: '#f59e0b' },
+  masa:    { emoji: '🫓', label: 'Masa/Base',        orden: 6, color: '#a78bfa' },
+  otro:    { emoji: '📦', label: 'Otro',             orden: 9, color: '#888888' }
 };
 function famInfo(t) { return FAM_CONFIG[t] || FAM_CONFIG.otro; }
 // Pinta los extras AGRUPADOS por familia, ordenados, con cabecera por grupo (mismo sistema
@@ -631,7 +637,7 @@ function renderExtrasAgrupados(extras, selSet, fn) {
     const info = famInfo(t);
     const lista = byTipo[t].slice().sort(function(a, b) { return String(a.nombre).localeCompare(String(b.nombre)); });
     const cls = t ? ' ' + t : '';
-    html += '<div class="ing-group"><div class="ing-group-head"><span>' + info.emoji + '</span><span>' + info.label + '</span><span class="ing-group-count">(' + lista.length + ')</span></div><div class="ing-list">';
+    html += '<div class="ing-group" style="--fam:' + info.color + '"><div class="ing-group-head"><span>' + info.emoji + '</span><span>' + info.label + '</span><span class="ing-group-count">(' + lista.length + ')</span></div><div class="ing-list">';
     for (const e of lista) {
       const ad = (selSet && selSet.has(e.id)) ? ' added' : '';
       html += '<button type="button" class="ing-chip ing-add' + cls + ad + '" onclick="' + handler + '(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';

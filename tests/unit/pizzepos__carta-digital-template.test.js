@@ -111,6 +111,11 @@ test('carta-digital/template — extras AGRUPADOS por familia (mismo sistema que
     assert.ok(html.includes("label: '" + label + "'"), 'familia ' + label + ' en el config');
   }
   assert.ok(html.includes('famInfo(a).orden - famInfo(b).orden'), 'familias ordenadas por orden canónico');
+  // Visual del comandero (.tipo-section): barra de color por familia + cabecera con su color.
+  assert.ok(html.includes("color: '#facc15'") && html.includes("color: '#22c55e'"), 'colores de familia (= tipoConfig)');
+  assert.ok(html.includes('style="--fam:'), 'el helper inyecta el color de la familia por grupo');
+  assert.ok(html.includes('border-left:3px solid var(--fam'), 'barra de color a la izquierda del grupo');
+  assert.ok(html.includes('.ing-group .ing-add.added{border-color:var(--fam)'), 'añadido toma el color de la familia');
   // Los tres flujos (normal/mitad/al-gusto) usan el MISMO helper (DRY, no reinventar).
   assert.ok(html.includes("renderExtrasAgrupados(extras, anadirSel, 'toggleAnadir')"), 'detalle + mitad usan el helper');
   assert.ok(html.includes("renderExtrasAgrupados(extras, anadirSel, 'toggleAnadirAG')"), 'al-gusto usa el helper');

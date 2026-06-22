@@ -87,6 +87,18 @@ async function nuevoConserje(bus) {
   return mod;
 }
 
+// El comerciante "toca" su marca: el .request lleva project_id; el .response
+// (correlado por request_id) lleva el estado. Réplica de la forma real del bus.
+let _reqSeq = 0;
+function tocarMarca(bus, { project_id = 'P', lleno = false } = {}) {
+  const request_id = 'req-' + (++_reqSeq);
+  bus.inject('carta-marketing.get_perfil.request', { project_id, request_id });
+  const data = lleno
+    ? { onboarding_completado: true, esencia: { nombre: 'Nonina' } }
+    : { onboarding_completado: false };
+  bus.inject('carta-marketing.get_perfil.response', { request_id, status: 200, data });
+}
+
 test('conserje registra su botón en el panel al cargar', async () => {
   const bus = fakeBus();
   const mod = await nuevoConserje(bus);
@@ -114,7 +126,7 @@ test('carrera de arranque: interruptores pide registro y conserje responde', asy
 test('conserje deriva INTENCIÓN: marca tocada vacía -> intentada', async () => {
   const bus = fakeBus();
   const mod = await nuevoConserje(bus);
-  bus.inject('carta-marketing.get_perfil.response', { project_id: 'P', onboarding_completado: false });
+  tocarMarca(bus);
   const est = mod.estados.get('P');
   assert.ok(est.intentadas.has('marca'), 'la toca vacía -> intención');
   assert.ok(!est.usadas.has('marca'));
@@ -124,14 +136,14 @@ test('conserje deriva INTENCIÓN: marca tocada vacía -> intentada', async () =>
 test('conserje APAGADO no empuja; ENCENDIDO empuja el desbloqueo de marca', async () => {
   const bus = fakeBus();
   const mod = await nuevoConserje(bus);
-  bus.inject('carta-marketing.get_perfil.response', { project_id: 'P', onboarding_completado: false });
+  tocarMarca(bus);
 
   // apagado por defecto -> tick no emite
   mod._tick();
   assert.strictEqual(bus.published.filter(p => p.event === 'conserje.empujon').length, 0);
 
   // el panel lo enciende en caliente
-  bus.inject('carta-marketing.get_perfil.response', { project_id: 'P', onboarding_completado: false }); // re-dirty
+  tocarMarca(bus); // re-dirty
   mod.onInterruptorCambiado({ data: { id: 'conserje', enabled: true } });
   mod._tick();
   const emp = bus.published.filter(p => p.event === 'conserje.empujon');
@@ -146,9 +158,9 @@ test('conserje respeta el cooldown (no agobia)', async () => {
   const bus = fakeBus();
   const mod = await nuevoConserje(bus);
   mod.onInterruptorCambiado({ data: { id: 'conserje', enabled: true } });
-  bus.inject('carta-marketing.get_perfil.response', { project_id: 'P', onboarding_completado: false });
+  tocarMarca(bus);
   mod._tick();
-  bus.inject('carta-marketing.get_perfil.response', { project_id: 'P', onboarding_completado: false });
+  tocarMarca(bus);
   mod._tick();
   assert.strictEqual(bus.published.filter(p => p.event === 'conserje.empujon').length, 1, 'cooldown: solo 1 empujón');
   await mod.onUnload();
@@ -158,7 +170,7 @@ test('conserje: el empujón pendiente se lee UNA vez (consume-on-read, para el n
   const bus = fakeBus();
   const mod = await nuevoConserje(bus);
   mod.onInterruptorCambiado({ data: { id: 'conserje', enabled: true } });
-  bus.inject('carta-marketing.get_perfil.response', { project_id: 'P', onboarding_completado: false });
+  tocarMarca(bus);
   mod._tick();
   // primera lectura: trae el empujón
   const r1 = await mod.handleEmpujonPendiente({ project_id: 'P' });
@@ -190,7 +202,7 @@ test('ai-gateway expone el nervio del conserje (_leerEmpujon + _composeEmpujonSe
 test('conserje: marca rellenada -> usada, sale de la brecha', async () => {
   const bus = fakeBus();
   const mod = await nuevoConserje(bus);
-  bus.inject('carta-marketing.get_perfil.response', { project_id: 'P', onboarding_completado: true, esencia: { nombre: 'Nonina' } });
+  tocarMarca(bus, { lleno: true });
   const est = mod.estados.get('P');
   assert.ok(est.usadas.has('marca'));
   assert.ok(!est.intentadas.has('marca'));

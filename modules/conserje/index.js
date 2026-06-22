@@ -20,9 +20,19 @@ const crypto = require('crypto');
 const BaseModule = require('../_shared/base-module');
 const { LibroDeCapacidades, PIZZEPOS_CAPACIDADES } = require('../_shared/libro-capacidades');
 
-// Cómo el bus delata el USO de una capacidad. lleno(data) = ¿entrega valor ya?
-// Si el evento llega pero lleno=false -> el comerciante la INTENTA (la toca vacía).
-const SEÑALES = {
+// Cómo el bus delata el USO de una capacidad. El project_id viaja en el .request;
+// el estado (lleno/vacío) en el .response — que NO lleva project_id. Por eso se
+// correla request->response por request_id.
+//   SEÑAL_REQUEST: <evento>.request -> capacidad (da el project_id)
+//   SEÑAL_RESPONSE: <evento>.response -> { capacidad, lleno(data) } (da el estado)
+//   SEÑAL_EVENTO: evento de dominio autocontenido (project_id + significado juntos)
+const SEÑAL_REQUEST = {
+  'carta-marketing.get_perfil.request': 'marca',
+  'recetas.listar.request': 'recetas',
+  'carta.get.request': 'carta',
+  'carta.list.request': 'carta'
+};
+const SEÑAL_RESPONSE = {
   'carta-marketing.get_perfil.response': {
     capacidad: 'marca',
     lleno: d => !!(d && (d.onboarding_completado || (d.esencia && d.esencia.nombre) || d.nombre))
@@ -31,7 +41,6 @@ const SEÑALES = {
     capacidad: 'recetas',
     lleno: d => !!(d && ((d.total || 0) > 0 || (Array.isArray(d.recetas) && d.recetas.length > 0)))
   },
-  'escandallo.coste.calculado': { capacidad: 'escandallo', lleno: () => true },
   'carta.get.response': {
     capacidad: 'carta',
     lleno: d => !!(d && ((Array.isArray(d.productos) && d.productos.length > 0) || d.carta_id))
@@ -40,6 +49,9 @@ const SEÑALES = {
     capacidad: 'carta',
     lleno: d => !!(d && ((d.total || 0) > 0 || (Array.isArray(d.cartas) && d.cartas.length > 0)))
   }
+};
+const SEÑAL_EVENTO = {
+  'escandallo.coste.calculado': { capacidad: 'escandallo', lleno: () => true }
 };
 
 class ConserjeModule extends BaseModule {
@@ -53,6 +65,8 @@ class ConserjeModule extends BaseModule {
     this.estados = new Map();            // project_id -> { usadas:Set, intentadas:Set }
     this.cooldown = new Map();           // `${project}::${capacidad}` -> ts
     this.pendientes = new Map();         // project_id -> empujon (lo lee el nervio, una vez)
+    this.pendingReq = new Map();         // request_id -> { project_id, capacidad } (correla req->resp)
+    this.maxPendingReq = 500;
     this.dirty = new Set();
     this._onBusMessage = null;
     this._tickTimer = null;
@@ -83,6 +97,7 @@ class ConserjeModule extends BaseModule {
     this.estados.clear();
     this.cooldown.clear();
     this.pendientes.clear();
+    this.pendingReq.clear();
     this.dirty.clear();
     this.logger?.info('conserje.unloaded', { module: this.name });
   }
@@ -135,18 +150,48 @@ class ConserjeModule extends BaseModule {
     const env = this._parseEnvelope(message);
     if (!env) return;
     const eventType = env.event_type || this._eventTypeFromTopic(topic);
-    const señal = SEÑALES[eventType];
-    if (!señal) return;
+    if (!eventType) return;
     const data = env.data || {};
-    const projectId = data.project_id || data.projectId || null;
-    if (!projectId) return;
 
+    // .request -> recuerda qué proyecto+capacidad por request_id (el response no lo lleva)
+    const capReq = SEÑAL_REQUEST[eventType];
+    if (capReq) {
+      const projectId = data.project_id || data.projectId || null;
+      if (projectId && data.request_id) {
+        this.pendingReq.set(data.request_id, { project_id: projectId, capacidad: capReq });
+        while (this.pendingReq.size > this.maxPendingReq) {
+          this.pendingReq.delete(this.pendingReq.keys().next().value);  // evict el más viejo
+        }
+      }
+      return;
+    }
+
+    // .response -> resuelve el proyecto por request_id y evalúa el estado
+    const señalResp = SEÑAL_RESPONSE[eventType];
+    if (señalResp) {
+      const pend = data.request_id ? this.pendingReq.get(data.request_id) : null;
+      if (!pend) return;
+      this.pendingReq.delete(data.request_id);
+      const inner = (data && typeof data.data === 'object' && data.data) ? data.data : data;  // response envuelve en .data
+      this._actualizar(pend.project_id, señalResp.capacidad, señalResp.lleno(inner));
+      return;
+    }
+
+    // evento de dominio autocontenido (project_id + significado juntos)
+    const señalEv = SEÑAL_EVENTO[eventType];
+    if (señalEv) {
+      const projectId = data.project_id || data.projectId || null;
+      if (projectId) this._actualizar(projectId, señalEv.capacidad, señalEv.lleno(data));
+    }
+  }
+
+  _actualizar(projectId, capacidad, lleno) {
     const est = this._estado(projectId);
-    if (señal.lleno(data)) {                  // entrega valor -> usada
-      est.usadas.add(señal.capacidad);
-      est.intentadas.delete(señal.capacidad);
-    } else if (!est.usadas.has(señal.capacidad)) {  // la toca vacía -> intentada (intención)
-      est.intentadas.add(señal.capacidad);
+    if (lleno) {                                   // entrega valor -> usada
+      est.usadas.add(capacidad);
+      est.intentadas.delete(capacidad);
+    } else if (!est.usadas.has(capacidad)) {       // la toca vacía -> intentada (intención)
+      est.intentadas.add(capacidad);
     }
     this.dirty.add(projectId);
   }

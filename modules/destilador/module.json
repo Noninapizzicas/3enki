@@ -1,0 +1,98 @@
+{
+  "name": "destilador",
+  "version": "0.1.0",
+  "description": "El MINERO del lazo de aprendizaje (paso 1, solo reflejo). Hermano de propiocepcion: escucha el bus crudo pero no guarda QUE paso, sino que detecta CUANDO un patron de resolucion se REPITE. Agrupa los eventos del scope por correlation_id en trazas (la cadena causal de una resolucion), las reduce a una FIRMA (la secuencia normalizada de dominio.op, sin ids ni verbos de transporte) y cuenta cuantas trazas distintas comparten esa firma. Cuando una firma cruza el umbral de recurrencia, emite 'aprendizaje.candidata.detectada' — la senal que en el paso 2 disparara al blueprint a redactar una skill. Paso 1 = solo mineria: sin blueprint, sin cola, sin escribir skills. Objetivo: observar (listar_clusters) si las firmas que emergen son patrones de verdad antes de cablear la redaccion automatica.",
+  "author": "Event Core Team",
+  "language": "es",
+
+  "publishes": [
+    {
+      "event": "aprendizaje.candidata.detectada",
+      "description": "Emitido cuando una firma (patron de resolucion) cruza el umbral de recurrencia. Lleva {firma, project_id, secuencia, ocurrencias, grupos}. En el paso 1 es solo senal/observabilidad; en el paso 2 lo escuchara el blueprint del destilador para redactar la skill candidata."
+    }
+  ],
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura los clusters del proyecto desde disco al activarse."
+    },
+    {
+      "event": "fs.read.response",
+      "handler": "onFsReadResponse",
+      "description": "Respuesta del fs reflex al restaurar clusters (correlado por request_id)."
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "destilador",
+      "action": "listar_clusters",
+      "handler": "handleListarClusters",
+      "description": "Devuelve las firmas detectadas de un proyecto con su recurrencia y secuencia. El ojo humano del paso 1: ver que patrones emergen."
+    },
+    {
+      "domain": "destilador",
+      "action": "health",
+      "handler": "handleHealthCheck",
+      "description": "Estado del minero: trazas abiertas, clusters, si esta capturando el bus."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "destilador.listar_clusters",
+      "description": "Lista los patrones de resolucion recurrentes detectados en un proyecto (la secuencia de ops y cuantas veces se ha repetido). Usalo para ver que se esta aprendiendo del comportamiento del sistema.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." },
+          "min_ocurrencias": { "type": "number", "description": "Solo firmas con al menos N ocurrencias (default 1)." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "handleListarClusters",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    }
+  ],
+
+  "dependencies": ["filesystem"],
+
+  "config": {
+    "enabled": true,
+    "scope_modulos": [
+      "recetas", "escandallo", "carta-design", "carta-digital", "carta-manager",
+      "carta-marketing", "carta-scheduler", "tecnicas", "viabilidad",
+      "menu-generator", "productos", "categorias", "ingredientes", "tarifas"
+    ],
+    "umbral_recurrencia": 3,
+    "min_pasos": 1,
+    "ventana_traza_ms": 60000,
+    "max_trazas_abiertas": 500,
+    "flush_interval_ms": 10000,
+    "archivo_path": "/_destilador/clusters.json",
+    "persistence": {
+      "pattern": "json-file-per-project",
+      "restart_resilient": true,
+      "concurrency": "single-writer",
+      "lost_on_restart": ["trazasAbiertasNoCerradas"]
+    }
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "destilador.capturado.total",
+        "destilador.traza.cerrada.total",
+        "destilador.candidata.detectada.total",
+        "destilador.flush.total",
+        "destilador.errors.total"
+      ],
+      "gauges": []
+    }
+  }
+}

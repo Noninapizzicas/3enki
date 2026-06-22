@@ -418,8 +418,12 @@ class CartaDigitalModule extends BaseModule {
         }
       };
       const { catalogo: catalogo_ingredientes, sin_precio: extrasSinPrecio } = await this._catalogoIngredientes(project_id, 'digital');
+      // El preview va a un <iframe srcdoc> sin copia de assets: las imágenes de storage
+      // (/pizzepos/contenido/imagenes/...) no tienen URL servible → se INLINEAN como data: URI
+      // para que se vean (en publicar NO: ahí se copian a img/, más ligero y cacheable).
+      const productosInline = await this._inlineImagenes(project_id, d.productos);
       const html = generateStaticHTML(
-        { categorias: d.categorias, productos: d.productos, alergenos_leyenda: d.alergenos_leyenda, catalogo_ingredientes },
+        { categorias: d.categorias, productos: productosInline, alergenos_leyenda: d.alergenos_leyenda, catalogo_ingredientes },
         tplConfig, { diseno }
       );
       return { status: 200, data: { html, productos: d.productos.length, extras_sin_precio: extrasSinPrecio,
@@ -428,6 +432,31 @@ class CartaDigitalModule extends BaseModule {
       this.logger?.error('carta-digital.preview.failed', { error: err.message });
       return this._err(500, 'UNKNOWN_ERROR', err.message);
     }
+  }
+
+  // Inlinea las imágenes de producto (de storage) como data: URI — SOLO para el preview en
+  // iframe srcdoc, que no tiene copia de assets ni ruta HTTP para /pizzepos/contenido/imagenes/.
+  // Best-effort: si una imagen no se puede leer, se deja sin imagen (placeholder), nunca 404.
+  async _inlineImagenes(project_id, productos) {
+    const MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', avif: 'image/avif', bmp: 'image/bmp' };
+    const out = [];
+    for (const p of (productos || [])) {
+      const prod = { ...p };
+      const im = prod.imagen;
+      if (im && typeof im === 'string' && !/^(https?:|data:)/.test(im)) {
+        try {
+          const r = await this._rpc('fs.read.request', { project_id, path: im });
+          if (r && !r.error && typeof r.content === 'string' && r.content) {
+            const ext = (im.split('.').pop() || '').toLowerCase();
+            prod.imagen = `data:${MIME[ext] || 'image/jpeg'};base64,${r.content}`;
+          } else {
+            prod.imagen = null;
+          }
+        } catch (_) { prod.imagen = null; }
+      }
+      out.push(prod);
+    }
+    return out;
   }
   async handleGetConfig(data) {
     if (!data?.project_id) return this._err(400, 'INVALID_INPUT', 'project_id requerido');

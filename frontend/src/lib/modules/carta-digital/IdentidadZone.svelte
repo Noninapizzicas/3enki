@@ -4,6 +4,8 @@
    * El branding se edita en MARKETING, no aquí. El dominio público sí es del canal.
    */
   import { cartaPublica, cartaDigitalConfig } from '$lib/stores/carta-digital';
+  import { storageImg } from '$lib/ui-core/storage-image';
+  import { activeProjectId } from '$lib/stores/projects';
 
   $: branding = $cartaPublica?.branding ?? null;
   $: negocio = (branding?.negocio ?? {}) as Record<string, any>;
@@ -25,7 +27,7 @@
   {#if branding}
     {#if branding.logo || branding.nombre || branding.lema}
       <div class="cabecera-marca">
-        {#if branding.logo}<img class="logo" src={branding.logo} alt="Logo del local" />{/if}
+        {#if branding.logo}<img class="logo" use:storageImg={{ path: branding.logo, project: $activeProjectId }} alt="Logo del local" />{/if}
         <div>
           {#if branding.nombre}<div class="marca-nombre">{branding.nombre}</div>{/if}
           {#if branding.lema}<div class="marca-lema">{branding.lema}</div>{/if}

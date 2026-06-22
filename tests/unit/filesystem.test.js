@@ -764,5 +764,27 @@ function publishedOf(mocks, name) {
     await m.onUnload(); await cleanup(tmpDir);
   });
 
+  await testAsync('handleServeFile MULTI-TENANT: sirve la imagen del project del param, no la del activo', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const dirA = path.join(tmpDir, 'projects', 'A');
+    const dirB = path.join(tmpDir, 'projects', 'B');
+    fsSync.mkdirSync(dirA, { recursive: true });
+    fsSync.mkdirSync(dirB, { recursive: true });
+    await m.onProjectActivated({ data: { project_id: 'A', base_path: dirA, name: 'A' } });
+    await m.onProjectActivated({ data: { project_id: 'B', base_path: dirB, name: 'B' } });  // B queda activo
+    const imgA = 'QUFB';  // 'AAA' base64 — bytes distintos por proyecto (no hace falta PNG real)
+    const imgB = 'QkJC';  // 'BBB'
+    await m.handleWrite({ path: '/img/x.png', content: imgA, encoding: 'base64', project_id: 'A' });
+    await m.handleWrite({ path: '/img/x.png', content: imgB, encoding: 'base64', project_id: 'B' });
+    // Pido el de A explícitamente AUNQUE el activo es B → debe servir el de A (aislamiento real).
+    const rA = await m.handleServeFile({ query: { path: '/img/x.png', project: 'A' } });
+    assert.strictEqual(rA.status, 200);
+    assert.strictEqual(rA.body.toString('base64'), imgA, 'sirve la imagen de A, no la del activo (B)');
+    const rB = await m.handleServeFile({ query: { path: '/img/x.png', project: 'B' } });
+    assert.strictEqual(rB.body.toString('base64'), imgB);
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
   console.log('\nTodos los tests pasaron.');
 })();

@@ -9,6 +9,7 @@
   import { subirImagen, quitarImagen, contenidoBusy, contenidoError } from '$lib/stores/contenido';
   import { prefillChatInput } from '$lib/stores/chatInputDraft';
   import { storageImg } from '$lib/ui-core/storage-image';
+  import { activeProjectId } from '$lib/stores/projects';
 
   let cleanup: (() => void) | null = null;
   $: productos = $cartaPublica?.productos ?? [];
@@ -99,7 +100,7 @@
           <div class="miniaturas">
             {#each (prod.imagenes || []) as img}
               <div class="mini" class:principal={img.principal}>
-                <img use:storageImg={img.url} alt={img.alt || prod.nombre} />
+                <img use:storageImg={{ path: img.url, project: $activeProjectId }} alt={img.alt || prod.nombre} />
                 {#if img.principal}<span class="badge">★</span>{/if}
                 <button class="quitar" title="Quitar" on:click={() => onQuitar(prod.id, img.id)} disabled={$contenidoBusy === prod.id}>×</button>
               </div>

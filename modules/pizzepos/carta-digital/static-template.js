@@ -538,6 +538,10 @@ const DATA = ${dataJSON};
 const CONFIG = ${configJSON};
 const CARD_TEMPLATE = ${JSON.stringify(cardTemplate)};
 const MONEDA = '${escapeHtml(moneda)}';
+// Fallback de imágenes (ALOJADO): si la ruta canónica (base /shop/<slug>/img/...) da 404 —
+// p.ej. por symlink servido en raíz, donde los ficheros quedan en /shop/img/... — el onerror cae
+// a la raíz del área shop. Vacío en SUELTO (sin /shop). Padre de base_href: '/shop/<slug>/' → '/shop/'.
+const IMG_FB_BASE = ${JSON.stringify(base_href ? base_href.replace(/[^/]+\/$/, '') : '')};
 
 // i18n — auto-detect language
 var TRANSLATIONS = {
@@ -618,6 +622,13 @@ function applyTranslations() {
 // Helpers
 function fmt(p) { return p.toFixed(2) + ' ' + MONEDA; }
 function esc(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
+// onerror de la imagen de producto: si la ruta canónica (resuelta por <base> a /shop/<slug>/img/)
+// da 404, cae a la raíz del área shop (/shop/img/...) donde quedan si el symlink sirve en raíz.
+function imgFb(imagen) {
+  return (IMG_FB_BASE && typeof imagen === 'string' && imagen.indexOf('img/') === 0)
+    ? ' onerror="this.onerror=null;this.src=\\'' + (IMG_FB_BASE + imagen) + '\\'"'
+    : '';
+}
 
 // Normaliza para comparar ingredientes sin depender del id exacto (acentos/caja/espacios).
 function norm(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim(); }
@@ -714,7 +725,7 @@ function fillCard(p) {
   if (tags.includes('premium')) badges += '<span class="badge premium">Premium</span>';
   if (tags.includes('nuevo')) badges += '<span class="badge nuevo">Nuevo</span>';
   const visual = p.imagen
-    ? '<img src="' + esc(p.imagen) + '" alt="' + esc(p.imagen_alt || p.nombre) + '" loading="lazy">'
+    ? '<img src="' + esc(p.imagen) + '"' + imgFb(p.imagen) + ' alt="' + esc(p.imagen_alt || p.nombre) + '" loading="lazy">'
     : '<span class="ph" role="img" aria-label="' + esc(p.nombre) + '">' + (p.emoji || '${logoEmoji}') + '</span>';
   const slots = {
     id: esc(p.id),
@@ -765,7 +776,7 @@ function showDetail(id) {
 
   const visualEl = document.getElementById('detail-visual');
   visualEl.innerHTML = (p.imagen
-    ? '<img src="' + esc(p.imagen) + '" alt="' + esc(p.imagen_alt || p.nombre) + '" style="width:100%;height:100%;object-fit:cover">'
+    ? '<img src="' + esc(p.imagen) + '"' + imgFb(p.imagen) + ' alt="' + esc(p.imagen_alt || p.nombre) + '" style="width:100%;height:100%;object-fit:cover">'
     : '<span class="detail-ph" role="img" aria-label="' + esc(p.nombre) + '">' + (p.emoji || '${logoEmoji}') + '</span>')
     + '<button class="close-btn" onclick="closeDetail()" aria-label="Cerrar">✕</button>';
 

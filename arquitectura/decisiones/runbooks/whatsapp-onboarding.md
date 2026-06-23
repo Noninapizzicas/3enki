@@ -101,8 +101,17 @@ El bot construye el mapping `phone_number_id → <slug>` desde aquí. **Re-activ
 - **El token del panel caduca a 24 h** → usa SIEMPRE el de System User (A.3) para producción.
 - **Ventana de 24 h**: con `sendText` solo puedes escribir al cliente dentro de las 24 h desde su
   último mensaje. Para outbound fuera de ventana (p. ej. "ven a recoger" si pasó >24 h) hace falta
-  **`sendTemplate`** con plantilla aprobada por Meta → hoy **diferido** (no implementado). En el
-  flujo feliz (el cliente acaba de escribir) `sendText` basta.
+  **`sendTemplate`** con plantilla aprobada por Meta → **ya implementado** (whatsapp-bot v1.2.0):
+  - Tool `whatsapp.enviar_plantilla` `{ project_slug, to, template, language?, body_params[] }`
+    para cualquier plantilla aprobada (notificaciones outbound, recordatorios).
+  - El aviso "ven a recoger" usa la plantilla si el proyecto la configura en `config.json`
+    bloque `whatsapp.template_listo` (forma corta `"pedido_listo"` o larga
+    `{ "name": "pedido_listo", "language": "es", "body_params": ["{codigo}"] }`, tokens
+    `{codigo}`/`{nombre}`/`{negocio}`). Sin plantilla configurada, el aviso va como texto
+    (solo llega dentro de la ventana de 24 h). En el flujo feliz (el cliente acaba de escribir)
+    `sendText` basta; la plantilla es el seguro para el pickup tardío.
+  - Requisito Meta: la plantilla debe estar **aprobada** en el WABA (Business Manager →
+    WhatsApp Manager → Message Templates) antes de poder enviarla.
 - **Aislamiento multi-tienda**: las credenciales son project-only por invariante (credential-manager
   v2.1.0). Un token global no se puede guardar ni resolver para estos providers.
 - **Transporte**: `config.transport = "meta"` (Cloud API oficial, el definitivo). `openwa`

@@ -1,6 +1,6 @@
 {
   "name": "conserje",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Abre el camino al comerciante. Cruza lo que el sistema OFRECE (LibroDeCapacidades) con lo que el comerciante USA (derivado del bus en vivo) y, cuando hay una brecha con intención, le ofrece el siguiente paso en POSITIVO (no señala la carencia). Sin sondas hardcodeadas: lee el grafo de capacidades + el uso real. La señal de oro es la intención — lo que el comerciante alarga la mano a tocar pero está vacío. Apagado por defecto; su on/off vive en el panel central de interruptores (botón 'conserje'), reacciona en caliente. Cooldown por capacidad para no agobiar.",
   "author": "Event Core Team",
   "language": "es",
@@ -8,11 +8,15 @@
   "publishes": [
     {
       "event": "interruptor.registrar",
-      "description": "Registra su botón on/off en el panel central al cargar."
+      "description": "Registra sus botones on/off en el panel central al cargar: 'conserje' (empujones por brecha) y 'conserje-rutas' (replay sugerente de rutas aprendidas)."
     },
     {
       "event": "conserje.empujon",
-      "description": "Ofrece al comerciante el siguiente paso. {project_id, tipo, recurso, mensaje, accion_sugerida}. Lo surfacea el chat (vía el nervio) de forma natural, una vez."
+      "description": "Ofrece al comerciante el siguiente paso. {project_id, tipo, recurso, mensaje, accion_sugerida, ruta?}. tipo='ruta' lleva la continuacion aprendida. Lo surfacea el chat (vía el nervio) de forma natural, una vez."
+    },
+    {
+      "event": "destilador.ruta.request",
+      "description": "REPLAY: pregunta al destilador, desde la ultima capacidad tocada, que ruta aprendida suele seguir (RPC; la response la consume el _rpc interno). Solo si el interruptor 'conserje-rutas' esta ON."
     }
   ],
 
@@ -20,12 +24,12 @@
     {
       "event": "interruptor.cambiado",
       "handler": "onInterruptorCambiado",
-      "description": "Reacciona al on/off del panel (id='conserje') en caliente, sin reinicio."
+      "description": "Reacciona en caliente al on/off del panel: id='conserje' (empujones por brecha) y id='conserje-rutas' (replay de rutas aprendidas), sin reinicio."
     },
     {
       "event": "interruptor.solicitar_registro",
       "handler": "onSolicitarRegistro",
-      "description": "interruptores pide registro al cargar -> re-registra su botón (cura la carrera de arranque)."
+      "description": "interruptores pide registro al cargar -> re-registra sus botones (conserje + conserje-rutas; cura la carrera de arranque)."
     }
   ],
 
@@ -86,6 +90,8 @@
   "config": {
     "enabled": true,
     "enabled_default": false,
+    "rutas_enabled_default": false,
+    "umbral_ruta": 3,
     "tick_ms": 15000,
     "cooldown_h": 24
   },

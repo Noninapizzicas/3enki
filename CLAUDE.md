@@ -1862,6 +1862,177 @@ RECONVERSION aplicada (blueprints que invocaban agent.execute) {
 
 ---
 
+# Sistema Nervioso de Aprendizaje — Destilador · Conserje · Interruptores
+
+> El cerebro vivo del sistema: percibe (propiocepción), aprende (destilador), ofrece (conserje),
+> y se gobierna por interruptores. Obsidian es la versión disecada de esto; aquí late. No es un
+> órgano nuevo — son facultades que conectan los órganos que ya existen (bus, propiocepción, fs).
+
+## Mapa neuronal (la metáfora, anclada a piezas reales)
+
+```
+neurona            = página/blueprint (un nodo que dispara)
+sinapsis           = arista del grafo de eventos (publica → escucha)
+disparo            = evento del bus (publish → MQTT propaga la activación)
+plasticidad (Hebb) = destilador: rutas que se repiten → sella el atajo (skill)
+nervios            = propiocepción (lo que pasó) + vista-bridge (lo que se ve)
+control inhibitorio= interruptores (apagar una vía en caliente)
+sinapsis latente   = evento 'dangling' (publica-sin-oyente / oye-sin-emisor) = mención-sin-enlazar
+autorretrato       = graph/ (force-layout · god nodes · subsistemas · dangling) — el cerebro viéndose
+```
+
+## DESTILADOR (module 0.5.0 · blueprint 0.3.0) — el lazo de aprendizaje
+
+```
+HÍBRIDO  reflejo (JS) mina el bus + sirve/sella skills · blueprint (LLM) redacta la skill.
+FACULTADES {
+  MINERO (paso 1)      agrupa eventos por correlation_id en TRAZAS → reduce a FIRMA (secuencia
+                       dominio.op) → firma recurrente (>= umbral) → aprendizaje.candidata.detectada
+  COLA+GUARDIA (paso 2) el blueprint redacta el SKILL.md desde los registros REALES (cero invención);
+                       queda en cola → un humano aprueba (destilador.aprobar) → escribe en
+                       .claude/skills/ con ANTI-WIPE (no pisa skill existente → 409 conflicto)
+  AUTO-MEJORA (paso 3)  skill.aplicada etiqueta la traza → mide tasa de fallo (ventana deslizante)
+                       → aprendizaje.revision.requerida al cruzar umbral (histéresis si se recupera)
+  REPLAY (lado lectura) destilador.ruta {project_id, desde} → trayectorias aprendidas que ARRANCAN
+                       en 'desde', con su CONTINUACION (lo que suele venir después), rank por ocurrencias.
+                       Inspirado en ReasoningBank (ruflo): capturar Y RE-EJECUTAR. Match por prefijo
+                       DETERMINISTA (cero embeddings) — el upgrade semántico (HNSW) es para después.
+}
+
+SKILL.md ENRIQUECIDA (blueprint 0.3.0 · lengua materna, prosa racionada) {
+  ## Cuándo usar  trigger como CONDICIÓN        ## Contrato   JSON in/out
+  ## Mecanismo    PSEUDOCÓDIGO OOP (el grueso)  ## Pasos      bullets accionables (OBLIGATORIA: guard no_esteril)
+  ## Filosofía    OPCIONAL — prosa 1-2 líneas SOLO si hay trade-off que el Mecanismo no captura;
+                  si el mecanismo basta, la sección NO existe (P0: la prosa que no protege un porqué se disuelve)
+}
+
+NERVIO CERRADO (reflejo 0.6.0)  el lazo Hebbiano se cierra INTERNAMENTE: en _evaluarSkills, si la
+   firma de la traza coincide con la de una skill APROBADA (cola estado='aprobada'), cuenta como
+   APLICADA y su desenlace (ok/fail, ya detectado vía traza.fallo) alimenta la ventana del paso 3.
+   El destilador SIENTE sus skills sin emisor externo. (_etiquetarSkill sigue como receptor para
+   señales skill.aplicada externas, si algún día llegan — vía bus crudo, sub-declarado en el grafo.)
+```
+
+## CONSERJE (module 0.2.0) — el ofrecedor proactivo (en POSITIVO)
+
+```
+Cruza lo que el sistema OFRECE (LibroDeCapacidades) con lo que el comerciante USA (derivado del bus)
+y ofrece el siguiente paso EN POSITIVO (no señala la carencia). La señal de oro es la INTENCIÓN —
+lo que el comerciante alarga la mano a tocar pero está vacío (= una mención-sin-enlazar accionada).
+
+DOS FACULTADES, DOS INTERRUPTORES INDEPENDIENTES {
+  BRECHA  (switch 'conserje')        OFRECE vs USA → "te falta montar X, ¿lo completamos?"
+  RUTAS   (switch 'conserje-rutas')  REPLAY SUGERENTE: tras un paso, pregunta destilador.ruta
+                                     "desde aquí, ¿por dónde se suele ir?" → ofrece la continuación
+                                     aprendida ("después de recetas: escandallo → carta. ¿Sigo?").
+                                     Ofrece, NO impone · una vez · cooldown · solo rutas probadas (>=umbral).
+}
+PRIORIDAD  la brecha gana el tick: la ruta no pisa un empujón pendiente.
+El nervio (ai-gateway) lee conserje.empujon_pendiente y lo surfacea en el chat, consume-on-read.
+```
+
+## INTERRUPTORES (module 1.1.0) — el panel central de on/off
+
+```
+REGISTRO CENTRAL de todos los botones del sistema. Cada feature registra el suyo al cargar
+(interruptor.registrar {id, label, grupo, default}); el panel lo pinta; al pulsarlo,
+interruptor.cambiado avisa al dueño para reaccionar EN CALIENTE (sin reinicio).
+Estado global persistido (data/interruptores.json): lo tocado por el humano MANDA sobre el default.
+
+SYNC AL CARGAR (v1.1.0)  onRegistrar, tras el upsert, EMITE interruptor.cambiado si el estado
+   persistido difiere del default anunciado → el 'off' (u 'on') del humano SOBREVIVE al reinicio.
+   Solo emite en divergencia (sin ruido). Beneficia a todos los dueños.
+
+BOTONES VIVOS (grupo 'aprendizaje') {
+  destilador        ON por defecto (preserva el lazo corriendo) · OFF = no mina (cero captura);
+                    ver/aprobar/consultar-rutas SIGUE disponible (apagar es no APRENDER, no dejar de consultar)
+  conserje          OFF por defecto · empujones por brecha
+  conserje-rutas    OFF por defecto · replay sugerente de rutas aprendidas (independiente del anterior)
+}
+PATRÓN  para añadir un on/off: campo this.activoX=false → publish('interruptor.registrar',{id,...,default})
+        en onLoad → onInterruptorCambiado filtra por id y setea this.activoX → gatea la facultad.
+```
+
+## Topics / eventos del subsistema
+
+```
+aprendizaje.candidata.detectada / .encolada / skill.creada / revision.requerida   (destilador)
+destilador.ruta.request → .response   (REPLAY lado lectura; lo consume el conserje y el LLM/tool)
+destilador.leer_registros.request / encolar_candidata.request   (RPC internos del lazo)
+conserje.empujon                      (ofrecimiento; tipo ∈ {desbloqueo, descubrimiento, ruta})
+interruptor.registrar / interruptor.cambiado   (panel central; cambiado avisa al dueño en caliente)
+skill.aplicada                        (RECEPTOR en destilador; emisor PENDIENTE — nervio suelto)
+```
+
+---
+
+# Portal — Enki como servidor MCP (puerta guardada hacia agentes externos)
+
+> "Agent = Model + Harness". Enki YA tiene la superficie (215 tools en toolsRegistry +
+> getToolsForAI/executeTool). El Portal añade la PUERTA guardada para que un agente externo
+> (Claude Code, Cursor) la use vía MCP — sin tocar el core. El poder no es nuevo; lo nuevo es el GUARD.
+
+## Arquitectura (el bridge no toca el core; habla por el bus)
+
+```
+agente externo ──MCP(stdio)──► mcp/enki-mcp-server.js ──MQTT(ui/request/portal/*)──► modules/portal ──► executeTool()
+                                  (bridge VANILLA, sin SDK)                            (el GUARD vive AQUÍ)
+  MCP tools/list → ui/request/portal/list_tools   ·   MCP tools/call → ui/request/portal/call
+```
+
+## modules/portal (reflejo 0.1.0) — la superficie GUARDADA
+
+```
+list_tools  catálogo filtrado por el guard (lo que el cliente externo PUEDE ver)
+call        invoca una tool tras el guard → moduleLoader.executeTool → audita
+health      estado (activo, mode, scope, project_id, allowlist)
+
+GUARD (lo único nuevo; el poder ya existía) {
+  INTERRUPTOR 'portal-mcp'  grupo 'sistema' · OFF por defecto · kill-switch en caliente
+                            OFF = puerta CERRADA → list_tools vacío + call 503 (PORTAL_CERRADO)
+  SCOPE  project|system     default project: NO sale del project_id (inyecta/valida) ni toca
+                            tools de sistema (db·module·interruptor·plugin·code·security·…)
+  MODE   read|write         default read: no expone ni ejecuta MUTACIONES (verbos crear/editar/
+                            borrar/enviar/… o confirmation:true)
+  ALLOWLIST  opcional       si se define, SOLO esas tools (manda sobre scope y mode)
+  CONFIRMACION              tool con confirmation:true exige confirmado:true (409 si falta)
+  AUDIT  portal.invocado    cada acceso → la propiocepción lo capta (ningún acto-puerta invisible)
+}
+```
+
+## El bridge (mcp/enki-mcp-server.js) + arranque
+
+```
+JSON-RPC 2.0 por stdio (delimitado por \n) · logs SOLO a stderr (stdout es el canal MCP).
+El guard vive en el módulo → el bridge es TONTO (initialize · tools/list · tools/call → portal).
+ENV: ENKI_BROKER_URL (mqtt://localhost:1883) · ENKI_PROJECT (scope) · ENKI_PORTAL_TIMEOUT (8000)
+REGISTRO:  claude mcp add enki -- node /ruta/2enki/mcp/enki-mcp-server.js
+ENCENDER:  interruptor 'portal-mcp' ON (panel o interruptores.set) — nace OFF (aparcado)
+```
+
+## Orden de apertura (el riesgo se abre de a poco)
+
+```
+NACE   scope=project · mode=read · interruptor OFF
+SUBE   read→write (mutar UN proyecto)  ANTES QUE  project→system (operar el cerebro entero)
+LUEGO  la PUERTA-DIOS MQTT (scope system: module.reload, db cross-project, interruptores) reusa
+       ESTE MISMO guard ya rodado — no se rehace la seguridad, se hereda probada.
+```
+
+> Filosofía: la puerta cerrada protege un estado nombrable —*el sistema no se opera sin llave
+> (interruptor), sin testigo (audit) ni freno (scope/mode)*— por eso es un Mandato, no miedo.
+
+## Topics / eventos
+
+```
+ui/request/portal/list_tools · ui/request/portal/call · ui/request/portal/health  (entrada del bridge)
+interruptor.registrar {id:'portal-mcp', grupo:'sistema', default:OFF}              (registra su botón)
+interruptor.cambiado → onInterruptorCambiado (id='portal-mcp')                     (on/off en caliente)
+portal.invocado {tool, ok, duracion_ms, scope, mode, error}                        (AUDIT → propiocepción)
+```
+
+---
+
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
 
 Análisis OOP exhaustivo de 25 módulos pizzepos + blueprint drivers. Pseudocódigo puro, sin comentarios.

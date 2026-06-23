@@ -30,7 +30,7 @@ class DestiladorModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'destilador';
-    this.version = '0.4.0';
+    this.version = '0.6.0';
 
     // Inyectados en onLoad
     this.config = null;
@@ -260,13 +260,13 @@ class DestiladorModule extends ModuloHibridoReflejo {
     if (!traza) return;
     this.trazas.delete(groupKey);
 
+    const firma = this._firmar(traza.pasos);
     // facultad AUTO-MEJORA (paso 3): evalua las skills aplicadas en esta traza
     // ANTES del filtro de firma — una traza con skill puede no llegar a minPasos.
-    this._evaluarSkills(traza, groupKey);
+    this._evaluarSkills(traza, groupKey, firma);
 
     if (traza.pasos.length < this.minPasos) return; // demasiado corta para ser patron
 
-    const firma = this._firmar(traza.pasos);
     const clusterKey = `${traza.project_id}::${firma}`;
     let cluster = this.clusters.get(clusterKey);
     if (!cluster) {
@@ -324,7 +324,17 @@ class DestiladorModule extends ModuloHibridoReflejo {
   // marca para re-redaccion (vuelve por la misma guardia humana del paso 2).
   // =============================================================
 
-  _evaluarSkills(traza, groupKey) {
+  _evaluarSkills(traza, groupKey, firma) {
+    // SELF-TAG (cierra el nervio skill.aplicada INTERNAMENTE): si la firma de esta traza coincide
+    // con la de una skill APROBADA, cuenta como APLICADA. El destilador SIENTE sus skills sin
+    // depender de un emisor externo. (_etiquetarSkill sigue ahí para señales externas, si llegan.)
+    if (firma) {
+      for (const cand of this.cola.values()) {
+        if (cand && cand.estado === 'aprobada' && cand.firma === firma && cand.nombre_skill) {
+          (traza.skills || (traza.skills = new Set())).add(cand.nombre_skill);
+        }
+      }
+    }
     if (!traza.skills || traza.skills.size === 0) return;
     const desenlace = traza.fallo ? 'fail' : 'ok';
     const corr = String(groupKey || '').replace(/^(corr:|solo:)/, '');
@@ -526,6 +536,21 @@ class DestiladorModule extends ModuloHibridoReflejo {
     return { status: 200, data: { total: registros.length, registros } };
   }
 
+  // ── RPC del bus: REPLAY (lado lectura) — dado DONDE estas, devuelve las
+  // trayectorias aprendidas que arrancan ahi (cluster.secuencia ya guardada).
+  // NO gateado por 'activo': leer rutas aprendidas funciona aunque el aprendizaje
+  // este OFF (como listar_clusters — apagar es no APRENDER, no dejar de consultar).
+  onRutaRequest(e) {
+    return this._atender(e, 'ruta', 'destilador.ruta.response', d => this._ruta(d));
+  }
+
+  _ruta(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    const limite = Number(input.limite) > 0 ? Number(input.limite) : 5;
+    const rutas = this._rutasDesde(input.project_id, input.desde, limite);
+    return { status: 200, data: { total: rutas.length, rutas } };
+  }
+
   // ── RPC del bus: el blueprint encola la skill que redacto (NO la publica) ──
   onEncolarCandidataRequest(e) {
     return this._atender(e, 'encolar_candidata', 'destilador.encolar_candidata.response',
@@ -705,6 +730,22 @@ class DestiladorModule extends ModuloHibridoReflejo {
     }
   }
 
+  // REPLAY (visibilidad): desde donde estas, que rutas aprendidas continuan. El ojo del lado lectura.
+  async handleRuta(data) {
+    try {
+      const { project_id } = data || {};
+      if (!project_id || typeof project_id !== 'string') {
+        return this._errorResponse(400, 'INVALID_INPUT', 'project_id requerido (string)',
+          { field: 'project_id', entity_type: 'project' });
+      }
+      const limite = Number(data.limite) > 0 ? Number(data.limite) : 5;
+      const rutas = this._rutasDesde(project_id, data.desde, limite);
+      return { status: 200, data: { project_id, desde: data.desde ?? null, total: rutas.length, rutas } };
+    } catch (err) {
+      return this._handleHandlerError('destilador.ruta.failed', err, 'ruta');
+    }
+  }
+
   async handleHealthCheck() {
     return {
       status: 200,
@@ -722,6 +763,46 @@ class DestiladorModule extends ModuloHibridoReflejo {
   // =============================================================
   // Privados
   // =============================================================
+
+  // REPLAY — el corazon: clusters del proyecto cuya secuencia ARRANCA por 'desde',
+  // rankeados por ocurrencias (cuan probada esta la ruta). La 'continuacion' es el
+  // replay: los pasos que vienen DESPUES de donde estas.
+  _rutasDesde(project_id, desde, limite) {
+    const prefijo = Array.isArray(desde)
+      ? desde.map(s => String(s))
+      : (desde != null && desde !== '' ? [String(desde)] : []);
+    const matches = [];
+    for (const c of this._clustersDeProyecto(project_id)) {
+      const cont = this._continuacion(c.secuencia, prefijo);
+      if (cont === null) continue;                       // no arranca por 'desde'
+      matches.push({
+        firma: c.firma, secuencia: c.secuencia, continuacion: cont,
+        ocurrencias: c.ocurrencias, ultima_ts: c.ultima_ts
+      });
+    }
+    matches.sort((a, b) => b.ocurrencias - a.ocurrencias);
+    return Number(limite) > 0 ? matches.slice(0, Number(limite)) : matches;
+  }
+
+  // Devuelve la continuacion (pasos tras 'prefijo') o null si la secuencia no arranca por el.
+  //   prefijo []                     -> la ruta entera (sin 'desde': todas las rutas del proyecto)
+  //   prefijo ['recetas']            -> entrada por DOMINIO/pagina: match si secuencia[0] es de ese dominio
+  //   prefijo ['recetas.obtener',..] -> match EXACTO del comienzo de la secuencia
+  _continuacion(secuencia, prefijo) {
+    if (!Array.isArray(secuencia)) return null;
+    if (prefijo.length === 0) return secuencia.slice();
+    if (prefijo.length === 1 && !prefijo[0].includes('.')) {
+      const dom = prefijo[0];
+      const s0 = String(secuencia[0] || '');
+      if (s0 === dom || s0.startsWith(dom + '.')) return secuencia.slice(1);
+      return null;
+    }
+    if (secuencia.length < prefijo.length) return null;
+    for (let i = 0; i < prefijo.length; i++) {
+      if (String(secuencia[i]) !== prefijo[i]) return null;
+    }
+    return secuencia.slice(prefijo.length);
+  }
 
   _parseEnvelope(message) {
     if (!message) return null;

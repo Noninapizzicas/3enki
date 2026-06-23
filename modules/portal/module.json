@@ -1,0 +1,67 @@
+{
+  "name": "portal",
+  "version": "0.1.0",
+  "description": "La PUERTA de Enki hacia agentes externos (MCP) y operadores. Superficie de capacidades GUARDADA sobre getToolsForAI()+executeTool(): un cliente externo (Claude Code/Cursor) habla con esta puerta vía el bridge MCP (mcp/enki-mcp-server.js) sobre ui/request/portal/*. El poder no es nuevo (215 tools ya existen); lo nuevo es el GUARD: interruptor 'portal-mcp' (OFF=puerta cerrada), scope project|system, mode read|write, allowlist opcional, confirmación para mutaciones, y AUDIT (portal.invocado → propiocepción). Nace scoped-a-proyecto, modo lectura, apagado.",
+  "author": "Event Core Team",
+  "language": "es",
+
+  "publishes": [
+    {
+      "event": "interruptor.registrar",
+      "description": "Registra su botón on/off 'portal-mcp' (grupo 'sistema', default OFF) en el panel central al cargar."
+    },
+    {
+      "event": "portal.invocado",
+      "description": "AUDIT: cada acceso externo a una tool vía el portal. {tool, ok, duracion_ms, scope, mode, error}. La capta la propiocepción — ningún acto-puerta es invisible."
+    }
+  ],
+
+  "subscribes": [
+    {
+      "event": "interruptor.cambiado",
+      "handler": "onInterruptorCambiado",
+      "description": "Reacciona al on/off del panel (id='portal-mcp') en caliente, sin reinicio. OFF cierra la puerta: list_tools devuelve vacío y call responde 503."
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "portal",
+      "action": "list_tools",
+      "handler": "handleListTools",
+      "description": "Catálogo GUARDADO de tools que el cliente externo puede ver (filtrado por scope/mode/allowlist). Lo consume el bridge MCP como tools/list."
+    },
+    {
+      "domain": "portal",
+      "action": "call",
+      "handler": "handleCall",
+      "description": "Invoca una tool a través del guard. {tool, args, project_id?, confirmado?}. Lo consume el bridge MCP como tools/call."
+    },
+    {
+      "domain": "portal",
+      "action": "health",
+      "handler": "handleHealthCheck",
+      "description": "Estado del portal: activo, mode, scope, project_id, allowlist."
+    }
+  ],
+
+  "dependencies": ["interruptores"],
+
+  "config": {
+    "enabled": true,
+    "portal_enabled_default": false,
+    "mode": "read",
+    "scope": "project",
+    "project_id": null,
+    "allowlist": []
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": ["portal.invocado.total"],
+      "gauges": []
+    }
+  }
+}

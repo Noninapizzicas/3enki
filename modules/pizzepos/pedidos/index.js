@@ -5,8 +5,8 @@
  *   - tipo: 'pos'    — flujo clasico POS pizzeria con cuenta_id (cuentas-canales),
  *                      items en pasos separados, enviado a cocina, etc.
  *   - tipo: 'tienda' — flujo plano vertical tienda PWA: cuenta_id null, todos los
- *                      items de una, codigo_recogida (ancla anti-fraude),
- *                      estado pendiente_recogida -> recogido_y_cobrado / expirado.
+ *                      items de una, cliente_nombre (ANCLA de recogida que el cliente
+ *                      introduce), estado pendiente_recogida -> recogido_y_cobrado / expirado.
  *
  * Maps internos:
  *   - this.pedidos = Map<pedido_id, pedido>             (todos los tipos)
@@ -415,8 +415,8 @@ class PedidosModule extends BaseModule {
         notas_generales,
         correlation_id
       } = data || {};
-      // Etiqueta humana del pedido (la canta el dependiente al recoger). Texto
-      // libre normalizado; no es secreto ni identificador unico (eso es el codigo).
+      // Nombre del pedido = ANCLA de recogida (el dependiente lo pide al recoger).
+      // Texto libre normalizado. No es secreto; es lo que identifica el pedido en barra.
       const cliente_nombre_norm = typeof cliente_nombre === 'string'
         ? cliente_nombre.trim().replace(/\s+/g, ' ').slice(0, 60)
         : null;
@@ -436,6 +436,11 @@ class PedidosModule extends BaseModule {
       if (!canal_origen || !['whatsapp', 'web', 'manual'].includes(canal_origen)) {
         this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
         return this._errorResponse(400, 'INVALID_INPUT', "canal_origen debe ser 'whatsapp' | 'web' | 'manual'", { field: 'canal_origen' });
+      }
+      // El nombre es el ANCLA de recogida (sustituye al codigo_recogida) → obligatorio.
+      if (!cliente_nombre_norm || cliente_nombre_norm.length < 2) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'cliente_nombre es requerido (ancla de recogida)', { field: 'cliente_nombre' });
       }
       // Construir items canonicos del shape tienda. Items vienen del parser
       // (modules/whatsapp-bot/services/pedido-parser.js) o de la PWA directamente.
@@ -469,7 +474,6 @@ class PedidosModule extends BaseModule {
         });
       }
 
-      const codigo_recogida = this._generarCodigoRecogidaUnico();
       const horas = Number.isInteger(expira_horas) && expira_horas > 0 ? expira_horas : 24;
       const expira_at = new Date(Date.now() + horas * 3600_000).toISOString();
       const pedido_id = crypto.randomUUID();
@@ -487,8 +491,7 @@ class PedidosModule extends BaseModule {
         estado: 'pendiente_recogida',
         total_centimos,
         total: total_centimos / 100,
-        codigo_recogida,
-        cliente_nombre: cliente_nombre_norm || null,
+        cliente_nombre: cliente_nombre_norm,
         cliente_telefono: cliente_telefono || null,
         // Decision 6.2 = C: configurable por proyecto. Si la PWA mostro gate
         // y el cliente lo paso, este flag llega como true. Si el proyecto no
@@ -528,7 +531,7 @@ class PedidosModule extends BaseModule {
         project_slug,
         items_count: items_tienda.length,
         total_centimos,
-        codigo_recogida,
+        cliente_nombre: cliente_nombre_norm,
         canal_origen,
         duration: Date.now() - start_time
       });
@@ -537,7 +540,7 @@ class PedidosModule extends BaseModule {
         status: 201,
         data: {
           pedido_id,
-          codigo_recogida,
+          cliente_nombre: cliente_nombre_norm,
           expira_at,
           estado: pedido.estado,
           total_centimos,
@@ -549,36 +552,49 @@ class PedidosModule extends BaseModule {
     }
   }
 
-  async handleGenerarCodigoRecogida(data) {
-    try {
-      const longitud = Number.isInteger(data?.longitud) ? data.longitud : 6;
-      if (longitud < 4 || longitud > 8) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'longitud debe estar en [4, 8]', { field: 'longitud' });
-      }
-      const codigo = this._generarCodigoRecogida(longitud);
-      return { status: 200, data: { codigo_recogida: codigo } };
-    } catch (err) {
-      return this._handleHandlerError('pedidos.generar_codigo.error', err);
-    }
-  }
-
   // ENTREGA (pieza 3, flujo A): el dependiente confirma la recogida. Canal-agnóstico:
   // se puede llamar desde la pantalla de cocina/comandero o desde una respuesta del staff.
-  // Localiza por codigo_recogida (el ancla anti-fraude) → recogido_y_cobrado (efectivo) → emite pedido.recogido.
+  // Localiza por cliente_nombre (el ANCLA: el nombre que el cliente introdujo). Si hay varios
+  // pedidos pendientes con el mismo nombre, el dependiente desambigua con pedido_id.
+  // → recogido_y_cobrado (efectivo) → emite pedido.recogido.
   async handleConfirmarRecogida(data) {
     try {
-      const { codigo_recogida, correlation_id } = data || {};
-      if (!codigo_recogida || typeof codigo_recogida !== 'string') {
-        return this._errorResponse(400, 'INVALID_INPUT', 'codigo_recogida es requerido', { field: 'codigo_recogida' });
+      const { cliente_nombre, pedido_id, correlation_id } = data || {};
+      const nombre_norm = typeof cliente_nombre === 'string'
+        ? cliente_nombre.trim().replace(/\s+/g, ' ').toLowerCase()
+        : '';
+      if (!nombre_norm && !pedido_id) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'cliente_nombre (o pedido_id) es requerido', { field: 'cliente_nombre' });
       }
-      // localizar el pedido de tienda por su código (único)
-      let pedido = null;
+
+      // candidatos: pedidos de tienda. Por pedido_id directo, o por nombre normalizado.
+      const candidatos = [];
       for (const p of this.pedidos.values()) {
-        if (p.tipo === 'tienda' && p.codigo_recogida === codigo_recogida) { pedido = p; break; }
+        if (p.tipo !== 'tienda') continue;
+        if (pedido_id) {
+          if (p.id === pedido_id) { candidatos.push(p); break; }
+          continue;
+        }
+        const pn = typeof p.cliente_nombre === 'string'
+          ? p.cliente_nombre.trim().replace(/\s+/g, ' ').toLowerCase() : '';
+        if (pn && pn === nombre_norm) candidatos.push(p);
       }
-      if (!pedido) {
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'no hay ningún pedido con ese código', { codigo_recogida });
+      if (candidatos.length === 0) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'no hay ningún pedido de tienda a ese nombre', { cliente_nombre: cliente_nombre || null, pedido_id: pedido_id || null });
       }
+
+      // Si hay varios PENDIENTES con el mismo nombre y no se dio pedido_id → desambiguar.
+      if (!pedido_id) {
+        const pendientes = candidatos.filter(p => p.estado === 'pendiente_recogida');
+        if (pendientes.length > 1) {
+          return this._errorResponse(409, 'CONFLICT_STATE', 'varios pedidos a ese nombre: indica pedido_id', {
+            cliente_nombre,
+            candidatos: pendientes.map(p => ({ pedido_id: p.id, total_centimos: p.total_centimos, created_at: p.created_at }))
+          });
+        }
+      }
+      const pedido = candidatos.find(p => p.estado === 'pendiente_recogida') || candidatos[0];
+
       if (pedido.estado === 'recogido_y_cobrado') {
         return this._errorResponse(409, 'CONFLICT_STATE', 'el pedido ya fue recogido y cobrado', { estado: pedido.estado });
       }
@@ -589,7 +605,7 @@ class PedidosModule extends BaseModule {
           pedido.estado = 'expirado';
           pedido.updated_at = new Date().toISOString();
           await this._publicarEvento('pedido.expirado',
-            { pedido_id: pedido.id, project_id: pedido.project_id, codigo_recogida }, { correlation_id });
+            { pedido_id: pedido.id, project_id: pedido.project_id, cliente_nombre: pedido.cliente_nombre || null }, { correlation_id });
         }
         return this._errorResponse(409, 'CONFLICT_STATE', 'el pedido caducó (expira_at superado)', { estado: 'expirado' });
       }
@@ -607,7 +623,7 @@ class PedidosModule extends BaseModule {
       await this._publicarEvento('pedido.recogido', {
         pedido_id: pedido.id,
         project_id: pedido.project_id,
-        codigo_recogida,
+        cliente_nombre: pedido.cliente_nombre || null,
         total_centimos: pedido.total_centimos,
         metodo_pago: 'efectivo',
         recogido_at
@@ -982,7 +998,7 @@ class PedidosModule extends BaseModule {
     // viven solo en el shape persistido y se desechan al cerrar/expirar el pedido.
     if (pedido.tipo) payload.tipo = pedido.tipo;
     if (pedido.canal_origen) payload.canal_origen = pedido.canal_origen;
-    if (pedido.codigo_recogida) payload.codigo_recogida = pedido.codigo_recogida;
+    if (pedido.cliente_nombre) payload.cliente_nombre = pedido.cliente_nombre;
     if (pedido.expira_at) payload.expira_at = pedido.expira_at;
     if (pedido.project_slug) payload.project_slug = pedido.project_slug;
     if (pedido.total_centimos !== undefined && pedido.total_centimos !== null) {
@@ -1101,7 +1117,7 @@ class PedidosModule extends BaseModule {
         metadata: {
           origen: 'tienda',
           canal_origen: pedido.canal_origen || null,
-          codigo_recogida: pedido.codigo_recogida || null,
+          cliente_nombre: pedido.cliente_nombre || null,
           cliente_telefono: pedido.cliente_telefono || null,
           pedido_tienda_id: pedido.id
         },
@@ -1170,8 +1186,8 @@ class PedidosModule extends BaseModule {
       cuenta_id: pedido.id,                         // clave sintética: tienda no tiene cuenta
       canal: 'tienda',
       canal_origen: pedido.canal_origen || null,
-      // Etiqueta para cocina: nombre del cliente si lo dio, si no el código.
-      ref_display: `🛍 ${pedido.cliente_nombre || pedido.codigo_recogida || pedido.id.slice(0, 6)}`,
+      // Etiqueta para cocina: el nombre del cliente (ancla de recogida); fallback al id corto.
+      ref_display: `🛍 ${pedido.cliente_nombre || pedido.id.slice(0, 6)}`,
       project_id: pedido.project_id || pedido.project_slug || null,
       items: (pedido.items || []).map(it => ({
         item_id: it.item_id,
@@ -1182,7 +1198,7 @@ class PedidosModule extends BaseModule {
       items_count: (pedido.items || []).length,
       notas_generales: pedido.notas_generales || null,
       enviado_at: pedido.enviado_cocina_at || new Date().toISOString(),
-      metadata: { tipo: 'tienda', codigo_recogida: pedido.codigo_recogida || null, cliente_nombre: pedido.cliente_nombre || null, cliente_telefono: pedido.cliente_telefono || null }
+      metadata: { tipo: 'tienda', cliente_nombre: pedido.cliente_nombre || null, cliente_telefono: pedido.cliente_telefono || null }
     }, sourcePayload);
   }
 
@@ -1287,30 +1303,6 @@ class PedidosModule extends BaseModule {
     return null;
   }
 
-  // Alfabeto 30 chars sin ambiguos (sin 0, O, 1, I, L). 30^6 = 729M combinaciones.
-  _generarCodigoRecogida(longitud = 6) {
-    const alfabeto = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-    const bytes = crypto.randomBytes(longitud);
-    let out = '';
-    for (let i = 0; i < longitud; i++) {
-      out += alfabeto[bytes[i] % alfabeto.length];
-    }
-    return out;
-  }
-
-  _generarCodigoRecogidaUnico(longitud = 6, maxIntentos = 16) {
-    for (let intento = 0; intento < maxIntentos; intento++) {
-      const codigo = this._generarCodigoRecogida(longitud);
-      let colision = false;
-      for (const p of this.pedidos.values()) {
-        if (p.codigo_recogida === codigo) { colision = true; break; }
-      }
-      if (!colision) return codigo;
-    }
-    const err = new Error(`No se pudo generar codigo_recogida unico tras ${maxIntentos} intentos`);
-    err._code = 'CONFLICT_STATE';
-    throw err;
-  }
 }
 
 module.exports = PedidosModule;

@@ -243,11 +243,11 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
     const { res, state } = makeRes();
     await m.handlePedidoPost({ params: { project: 'vapers' }, body: validBody() }, res);
     const request_id = publishedOf(mocks, 'pedido.crear-tienda')[0].request_id;
-    await m.onPedidoCrearTiendaResponse({ data: { request_id, result: { pedido_id: 'ped-abc-123', codigo_recogida: 'xyz' } } });
+    await m.onPedidoCrearTiendaResponse({ data: { request_id, result: { pedido_id: 'ped-abc-123', cliente_nombre: 'Juan' } } });
     assert.strictEqual(state.status, 201);
     assert.strictEqual(state.body.status, 201);
     assert.strictEqual(state.body.data.pedido_id, 'ped-abc-123');
-    assert.strictEqual(state.body.data.codigo_recogida, 'xyz');
+    assert.strictEqual(state.body.data.cliente_nombre, 'Juan');
     assert.ok(state.body.data.correlation_id, 'correlation_id devuelto al cliente');
     assert.strictEqual(m.pendingRequests.size, 0, 'pending limpiado tras response');
     const completados = publishedOf(mocks, 'tienda.pedido.completado');

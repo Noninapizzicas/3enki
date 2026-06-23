@@ -21,7 +21,7 @@
       {
         "event": "whatsapp.pedido.detectado",
         "description": "El parser identifico un pedido bien formado en el mensaje entrante. NO requiere consumer en v1 (informativo, audit).",
-        "payload": "{ project_slug, from, items[], total_centimos, palabra_clave, message_id, correlation_id }"
+        "payload": "{ project_slug, from, items[], total_centimos, message_id, correlation_id }"
       },
       {
         "event": "whatsapp.mensaje.enviado",
@@ -199,7 +199,7 @@
   "config": {
     "transport": "meta",
     "_transport_doc": "openwa (self-hosted via openwa-service por el bus) | meta (Cloud API directa, parcado). Con openwa, el envio publica whatsapp.enviar.request y la recepcion escucha whatsapp.entrante.",
-    "_template_listo_doc": "Opcional, por proyecto en data/projects/<slug>/config/config.json bloque whatsapp.template_listo: nombre de plantilla aprobada para el aviso 'ven a recoger' (necesaria si pasan >24h). Forma corta: \"template_listo\": \"pedido_listo\". Forma larga: { \"name\": \"pedido_listo\", \"language\": \"es\", \"body_params\": [\"{codigo}\"] } — tokens {codigo}/{nombre}/{negocio}. Sin ella, el aviso va como texto (solo llega dentro de la ventana de 24h).",
+    "_template_listo_doc": "Opcional, por proyecto en data/projects/<slug>/config/config.json bloque whatsapp.template_listo: nombre de plantilla aprobada para el aviso 'ven a recoger' (necesaria si pasan >24h). Forma corta: \"template_listo\": \"pedido_listo\". Forma larga: { \"name\": \"pedido_listo\", \"language\": \"es\", \"body_params\": [\"{nombre}\"] } — tokens {nombre}/{negocio} (el codigo_recogida fue retirado; el ancla es el nombre del cliente). Sin ella, el aviso va como texto (solo llega dentro de la ventana de 24h).",
     "meta_api_version": "v21.0",
     "meta_api_base": "https://graph.facebook.com",
     "http_timeout_ms": 8000,

@@ -21,7 +21,7 @@
     },
 
     "pedido_creado": {
-      "_doc": "Shape ampliado en v3.1.0 para soportar pedidos tipo='tienda' (vertical tienda PWA): cuenta_id puede ser null, canal puede ser null, campos opcionales codigo_recogida + canal_origen + expira_at + total_centimos + project_slug. cuenta_id sale de required.",
+      "_doc": "Shape ampliado en v3.1.0 para soportar pedidos tipo='tienda' (vertical tienda PWA): cuenta_id puede ser null, canal puede ser null, campos opcionales cliente_nombre (ancla de recogida, v3.3.0) + canal_origen + expira_at + total_centimos + project_slug. cuenta_id sale de required.",
       "allOf": [
         {"$ref": "#/definitions/event_envelope"},
         {
@@ -36,7 +36,7 @@
                 "canal": {"type": ["string", "null"]},
                 "tipo": {"type": "string", "enum": ["pos", "tienda"]},
                 "canal_origen": {"type": "string", "enum": ["whatsapp", "web", "manual"]},
-                "codigo_recogida": {"type": "string", "pattern": "^[A-HJ-NP-Z2-9]{4,8}$"},
+                "cliente_nombre": {"type": ["string", "null"]},
                 "expira_at": {"type": "string", "format": "date-time"},
                 "total_centimos": {"type": "integer", "minimum": 0},
                 "mayor_edad_confirmado": {"type": ["boolean", "null"]},

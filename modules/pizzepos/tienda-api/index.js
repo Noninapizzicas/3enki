@@ -171,11 +171,11 @@ class TiendaApiModule extends BaseModule {
     await this._publicarEvento('tienda.pedido.completado', {
       project_slug: pending.project_slug,
       pedido_id: result.pedido_id,
-      codigo_recogida: result.codigo_recogida
+      cliente_nombre: result.cliente_nombre
     }, { correlation_id: pending.correlation_id });
     const respData = {
       pedido_id: result.pedido_id,
-      codigo_recogida: result.codigo_recogida,
+      cliente_nombre: result.cliente_nombre,
       correlation_id: pending.correlation_id
     };
 
@@ -184,7 +184,7 @@ class TiendaApiModule extends BaseModule {
     if (pending.pago_online) {
       const pago = await this._rpc('pago.iniciar.request', {
         pedido_id: result.pedido_id, project_id: pending.project_slug,
-        monto_centimos: pending.total_centimos, concepto: 'Pedido ' + (result.codigo_recogida || ''),
+        monto_centimos: pending.total_centimos, concepto: 'Pedido ' + (result.cliente_nombre || ''),
         return_url: pending.return_url || ''
       }, { timeout_ms: 20000 });
       if (pago && pago.status === 200 && pago.data?.checkout_url) {
@@ -253,7 +253,7 @@ class TiendaApiModule extends BaseModule {
         started_at: Date.now(),
         correlation_id,
         // Pago online opcional: si pago_online, tras crear el pedido se inicia el pago
-        // en la pasarela y se devuelve checkout_url (en vez de solo código de recogida).
+        // en la pasarela y se devuelve checkout_url (en vez de solo la confirmación por nombre).
         pago_online: normalized.pago_online === true,
         return_url: typeof normalized.return_url === 'string' ? normalized.return_url : '',
         total_centimos: normalized.total_centimos
@@ -269,7 +269,7 @@ class TiendaApiModule extends BaseModule {
         total_centimos: normalized.total_centimos,
         canal_origen: 'web',
         cliente_telefono: normalized.cliente_telefono,
-        nombre_cliente: normalized.nombre_cliente,
+        cliente_nombre: normalized.nombre_cliente,
         mayor_edad_confirmado: normalized.mayor_edad_confirmado,
         expira_horas: normalized.expira_horas,
         notas_generales: normalized.notas_generales

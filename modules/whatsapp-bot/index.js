@@ -26,7 +26,7 @@ class WhatsappBotModule extends BaseModule {
     this.projectByPhoneId = new Map();
     // request_id -> { project_slug, from, message_id, items, total_centimos, cliente_nombre, timeoutHandle, created_at }
     this.pendingPedidos = new Map();
-    // pedido_id -> { project_slug, from, codigo_recogida } — para avisar al cliente cuando
+    // pedido_id -> { project_slug, from, cliente_nombre } — para avisar al cliente cuando
     // cocina marque el pedido listo (cocina.pedido_listo NO arrastra el cliente_telefono).
     // Bounded (LRU simple) para no fugar memoria.
     this.pedidosListos = new Map();
@@ -45,8 +45,8 @@ class WhatsappBotModule extends BaseModule {
   // Registra el pedido bajo varias claves (pedido_id de tienda + cuenta_id): cocina
   // marca listo el ticket de la cuenta, cuyo cuenta_id viaja en cocina.pedido_listo
   // y cuyo pedido_id difiere del de tienda. Cualquiera de las dos localiza al cliente.
-  _trackPedidoListo(keys, project_slug, from, codigo_recogida) {
-    const ref = { project_slug, from, codigo_recogida };
+  _trackPedidoListo(keys, project_slug, from, cliente_nombre) {
+    const ref = { project_slug, from, cliente_nombre };
     for (const k of (Array.isArray(keys) ? keys : [keys])) {
       if (!k) continue;
       if (this.pedidosListos.has(k)) this.pedidosListos.delete(k);
@@ -246,7 +246,7 @@ class WhatsappBotModule extends BaseModule {
       pedido_id: data.pedido_id,
       project_slug: pending.project_slug,
       from: this._maskPhoneNumber(pending.from),
-      codigo_recogida: data.codigo_recogida
+      cliente_nombre: pending.cliente_nombre || null
     });
     this.metrics?.increment('whatsapp-bot.pedido.confirmado', { project: pending.project_slug });
 
@@ -254,7 +254,7 @@ class WhatsappBotModule extends BaseModule {
     await this._notificarStaff(pending, data);
     // Recordar quién es el cliente para avisarle cuando cocina lo marque listo.
     // Clave por pedido_id (tienda) y por cuenta_id (la cuenta operativa de comandero).
-    this._trackPedidoListo([data.pedido_id, data.cuenta_id], pending.project_slug, pending.from, data.codigo_recogida);
+    this._trackPedidoListo([data.pedido_id, data.cuenta_id], pending.project_slug, pending.from, pending.cliente_nombre);
   }
 
   // Cocina marcó el pedido listo → avisa al CLIENTE por WhatsApp ("ven a recoger").
@@ -277,7 +277,7 @@ class WhatsappBotModule extends BaseModule {
     // fuera de ventana). Si no, caemos a texto (solo llega si el cliente escribio en las ultimas 24h).
     if (meta?.template_listo) {
       const enviada = await this._enviarPlantillaSegura(ref.project_slug, ref.from, meta.template_listo, {
-        codigo: ref.codigo_recogida, negocio: meta?.display_number || ''
+        nombre: ref.cliente_nombre || '', negocio: meta?.display_number || ''
       });
       if (enviada) {
         this.metrics?.increment('whatsapp-bot.pedido.listo_notificado', { project: ref.project_slug, via: 'template' });

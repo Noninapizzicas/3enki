@@ -49,9 +49,23 @@ ENKI_BROKER_URL=mqtt://localhost:1883 ENKI_PROJECT=<project_id> \
 
 | Variable | Default | Qué |
 |---|---|---|
-| `ENKI_BROKER_URL` | `mqtt://localhost:1883` | broker MQTT de Enki |
+| `ENKI_BROKER_URL` | `mqtt://localhost:1883` | broker MQTT de Enki (`mqtt://`, `ws://` o `wss://`) |
 | `ENKI_PROJECT` | (ninguno) | `project_id` que se inyecta en cada call (el portal lo re-valida) |
 | `ENKI_PORTAL_TIMEOUT` | `8000` | ms de espera por respuesta del portal |
+
+## Dos caminos de conexión
+
+```
+A) Claude Code EN el VPS (cero exposición):
+   ssh al VPS → claude mcp add enki -- node /opt/enki/mcp/enki-mcp-server.js
+   (el bridge habla con localhost:1883)
+
+B) Claude Code REMOTO (tu portátil) vía wss — SIN exponer puertos:
+   el broker embebido tiene WebSocket en 9001; Caddy ya rutea wss://<dominio>/mqtt → :9001.
+   ENKI_BROKER_URL=wss://enki-ai.online/mqtt ENKI_PROJECT=<id> \
+     claude mcp add enki -- node /ruta/local/mcp/enki-mcp-server.js
+   (mqtt.js habla wss nativo; Caddy/Let's Encrypt pone el TLS. Verificado: ws+path /mqtt conecta.)
+```
 
 ## Smoke-test en vivo (con Enki corriendo)
 

@@ -161,8 +161,21 @@ const DEFAULT_PROVIDERS: ProviderOption[] = [
   { id: 'KIMI', name: 'Kimi (Moonshot)', icon: '🌙' },
   { id: 'GOOGLE', name: 'Google Cloud', icon: '☁️' },
   { id: 'GMAIL', name: 'Gmail', icon: '📧' },
-  { id: 'GLOVO', name: 'Glovo', icon: '🛵' }
+  { id: 'GLOVO', name: 'Glovo', icon: '🛵' },
+  { id: 'META_WHATSAPP', name: 'WhatsApp (token)', icon: '💬' },
+  { id: 'META_WHATSAPP_VERIFY_TOKEN', name: 'WhatsApp (verify)', icon: '🪝' }
 ];
+
+/**
+ * Providers cuyo secreto es POR PROYECTO (multi-tenant): cada tienda tiene su propio
+ * número/token/webhook → el backend (credential-manager v2.1.0) RECHAZA guardarlos a
+ * cualquier nivel != PROJECT. El formulario los fuerza a PROJECT para no chocar con
+ * el invariante. Espejo de PROJECT_ONLY_PROVIDERS en modules/credential-manager/index.js.
+ */
+export const PROJECT_ONLY_PROVIDERS = new Set<string>([
+  'META_WHATSAPP',
+  'META_WHATSAPP_VERIFY_TOKEN'
+]);
 
 const DEFAULT_LEVELS: LevelOption[] = [
   { id: 'GLOBAL', name: 'Global', icon: '🟢', requiresIdentifier: false },

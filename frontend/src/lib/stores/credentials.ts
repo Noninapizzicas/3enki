@@ -229,17 +229,42 @@ export async function loadCredentials(): Promise<void> {
   try {
     const response = await mqttRequest<ListResponse>('credential', 'list');
 
+    // El backend (credential-manager._getUIState) devuelve `credentials` como un ARRAY
+    // PLANO [{key, provider, level, identifier, preview}], no agrupado por nivel. Si no se
+    // agrupa, la Lista (que lee credentials.GLOBAL/PROJECT/...) sale SIEMPRE vacía.
+    // Aquí lo agrupamos (tolerando también el shape ya-agrupado por compatibilidad).
+    const rawCreds: any = response.data.credentials;
+    const grouped: CredentialsState['credentials'] = { GLOBAL: [], PROJECT: [], CLIENT: [], CUSTOM: [] };
+    if (Array.isArray(rawCreds)) {
+      for (const c of rawCreds) {
+        if (grouped[c.level as keyof CredentialsState['credentials']]) {
+          grouped[c.level as keyof CredentialsState['credentials']].push(c);
+        } else {
+          // Niveles fuera de los 4 grupos (p.ej. BOT) → se muestran junto a CUSTOM.
+          grouped.CUSTOM.push(c);
+        }
+      }
+    } else if (rawCreds && typeof rawCreds === 'object') {
+      grouped.GLOBAL = rawCreds.GLOBAL || [];
+      grouped.PROJECT = rawCreds.PROJECT || [];
+      grouped.CLIENT = rawCreds.CLIENT || [];
+      grouped.CUSTOM = rawCreds.CUSTOM || [];
+    }
+    const total = (response.data as any).total ??
+      (grouped.GLOBAL.length + grouped.PROJECT.length + grouped.CLIENT.length + grouped.CUSTOM.length);
+    const byLevel = {
+      GLOBAL: grouped.GLOBAL.length,
+      PROJECT: grouped.PROJECT.length,
+      CLIENT: grouped.CLIENT.length,
+      CUSTOM: grouped.CUSTOM.length
+    };
+
     credentialsStore.update(s => ({
       ...s,
       providers: response.data.providers?.length > 0 ? response.data.providers : DEFAULT_PROVIDERS,
       levels: response.data.levels?.length > 0 ? response.data.levels : DEFAULT_LEVELS,
-      credentials: {
-        GLOBAL: response.data.credentials?.GLOBAL || [],
-        PROJECT: response.data.credentials?.PROJECT || [],
-        CLIENT: response.data.credentials?.CLIENT || [],
-        CUSTOM: response.data.credentials?.CUSTOM || []
-      },
-      stats: response.data.stats || { total: 0, byLevel: {} },
+      credentials: grouped,
+      stats: (response.data as any).stats || { total, byLevel },
       oauthConfigs: response.data.oauthConfigs || [],
       glovoConfigs: response.data.glovoConfigs || [],
       telegramNotifConfigs: (response.data as any).telegramNotifConfigs || [],
@@ -247,7 +272,7 @@ export async function loadCredentials(): Promise<void> {
       error: null
     }));
 
-    console.log('[Credentials] Loaded:', response.data.stats?.total || 0, 'credentials');
+    console.log('[Credentials] Loaded:', total, 'credentials');
   } catch (error) {
     const errorMessage = getErrorMessage(error);
     credentialsStore.update(s => ({ ...s, loading: false, error: errorMessage }));

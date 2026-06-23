@@ -1277,7 +1277,7 @@ function updateCart() {
 
   const footer = document.getElementById('cart-footer');
   footer.style.display = 'block';
-  // Mode-aware: ALOJADO (pedido_endpoint) → pedir online + código de recogida.
+  // Mode-aware: ALOJADO (pedido_endpoint) → pedir online + recogida por nombre.
   // SUELTA → WhatsApp. Si hay ambos, los dos (el cliente elige; no excluir).
   // Pagar ahora (pasarela) — solo si el proyecto tiene pago online. No excluye: la recogida sigue.
   const pagarBtn = (CONFIG.pedido_endpoint && CONFIG.pago_online)
@@ -1392,16 +1392,21 @@ function sendWhatsApp() {
 // → checkout_url; la PWA redirige a la pasarela. Si no hay pasarela, el pedido ya quedó (recogida).
 async function pagarAhora() {
   if (cart.length === 0 || !CONFIG.pedido_endpoint) return;
+  var nombre = _pedNombre();
+  if (!nombre) {
+    var nmp = document.getElementById('cliente-nombre');
+    if (nmp) { nmp.focus(); nmp.style.borderColor = '#ff5252'; }
+    alert('Escribe a nombre de quién es el pedido.');
+    return;
+  }
   var total = cart.reduce(function(s, i){ return s + i.precio * i.qty; }, 0);
-  var nombreEl = document.getElementById('cliente-nombre');
-  var nombre = nombreEl && nombreEl.value ? nombreEl.value.trim() : '';
   var body = {
     items: cart.map(function(i){ return { cantidad: i.qty, descripcion: i.nombre + (i.detalle ? ' [' + i.detalle + ']' : '') }; }),
     total_centimos: Math.round(total * 100),
+    nombre_cliente: nombre,
     pago_online: true,
     return_url: location.origin + location.pathname
   };
-  if (nombre) body.nombre_cliente = nombre;
   var btn = document.getElementById('btn-pagar');
   if (btn) { btn.disabled = true; btn.textContent = 'Conectando…'; }
   try {
@@ -1413,9 +1418,8 @@ async function pagarAhora() {
       window.location.href = url;   // → pasarela (Stripe)
       return;
     }
-    // Sin pasarela: el pedido SÍ se creó (recogida). Mostramos el código.
-    var codigo = data && data.data && data.data.codigo_recogida;
-    if (r.ok && codigo) { mostrarConfirmacion(codigo); cart = []; updateCart(); return; }
+    // Sin pasarela: el pedido SÍ se creó (recogida). Confirmamos por nombre.
+    if (r.ok && data && data.data && data.data.pedido_id) { mostrarConfirmacion(nombre); cart = []; updateCart(); return; }
     throw new Error((data && data.error && data.error.message) || ('HTTP ' + r.status));
   } catch (e) {
     alert('No se pudo iniciar el pago.' + (CONFIG.whatsapp_telefono ? ' Prueba por WhatsApp.' : ' Inténtalo de nuevo.'));
@@ -1424,26 +1428,31 @@ async function pagarAhora() {
   }
 }
 
-// Pedido ONLINE (escenario alojado): POST a tienda-api → pedido.crear-tienda → código de recogida.
+// Pedido ONLINE (escenario alojado): POST a tienda-api → pedido.crear-tienda. El ANCLA de
+// recogida es el NOMBRE del cliente (obligatorio); el dependiente lo pide al recoger.
 async function pedirOnline() {
   if (cart.length === 0 || !CONFIG.pedido_endpoint) return;
+  var nombre = _pedNombre();
+  if (!nombre) {
+    var nmo = document.getElementById('cliente-nombre');
+    if (nmo) { nmo.focus(); nmo.style.borderColor = '#ff5252'; }
+    alert('Escribe a nombre de quién es el pedido.');
+    return;
+  }
   var total = cart.reduce(function(s, i){ return s + i.precio * i.qty; }, 0);
-  var nombreEl = document.getElementById('cliente-nombre');
-  var nombre = nombreEl && nombreEl.value ? nombreEl.value.trim() : '';
   var body = {
     items: cart.map(function(i){ return { cantidad: i.qty, descripcion: i.nombre + (i.detalle ? ' [' + i.detalle + ']' : '') }; }),
-    total_centimos: Math.round(total * 100)
+    total_centimos: Math.round(total * 100),
+    nombre_cliente: nombre
   };
-  if (nombre) body.nombre_cliente = nombre;
   var btn = document.getElementById('btn-pedir');
   if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
   try {
     var r = await fetch(CONFIG.pedido_endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     var data = await r.json().catch(function(){ return null; });
-    var codigo = data && data.data && data.data.codigo_recogida;
-    if (r.ok && codigo) {
+    if (r.ok && data && data.data && data.data.pedido_id) {
       saveLastOrder();
-      mostrarConfirmacion(codigo);
+      mostrarConfirmacion(nombre);
       cart = []; updateCart();
     } else {
       throw new Error((data && data.error && data.error.message) || ('HTTP ' + r.status));
@@ -1455,8 +1464,8 @@ async function pedirOnline() {
   }
 }
 
-// Confirmación accesible: muestra el código de recogida (pickup + confirmación, sin pago).
-function mostrarConfirmacion(codigo) {
+// Confirmación accesible: el ancla de recogida es el NOMBRE (el dependiente lo pide al recoger).
+function mostrarConfirmacion(nombre) {
   var el = document.getElementById('cart-items');
   var footer = document.getElementById('cart-footer');
   if (footer) footer.style.display = 'none';
@@ -1464,8 +1473,8 @@ function mostrarConfirmacion(codigo) {
     el.innerHTML = '<div class="pedido-ok" role="status" aria-live="polite">' +
       '<div class="pedido-ok-check">✅</div>' +
       '<h3>¡Pedido confirmado!</h3>' +
-      '<p>Enséñalo al recogerlo. Tu código de recogida:</p>' +
-      '<div class="pedido-codigo">' + esc(codigo) + '</div>' +
+      '<p>Cuando lo recojas, di tu nombre:</p>' +
+      '<div class="pedido-codigo">' + esc(nombre) + '</div>' +
       '<button class="btn-wa" onclick="toggleCart()">Cerrar</button></div>';
   }
 }

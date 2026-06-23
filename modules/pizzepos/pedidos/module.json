@@ -1,8 +1,9 @@
 {
   "name": "pedidos",
-  "version": "3.2.0",
-  "description": "Gestion completa de pedidos pizzepos. Dos tipos: tipo='pos' (flujo POS pizzeria con cuenta_id de cuentas-canales, items en pasos separados, enviado a cocina) y tipo='tienda' (vertical tienda PWA: plano sin cuenta_id, todos los items de una, codigo_recogida (ancla anti-fraude), estado pendiente_recogida). Recibe POS del comandero (bridge comandero.enviar_cocina) o UI handler. Recibe tienda via tool pedido.crear-tienda (auto-wire). Persiste en memoria con restauracion desde cuentas_activas.json al arrancar (delegacion a persistencia-comandero; aplica solo a tipo pos en v3.1.0). Cache de productos invalidada por catalogo.actualizado y producto.{creado,actualizado}.",
-  "_v3_2_nota": "v3.2.0 (2026-06-21): autoservicio Fase 1 rebanada D — la estructura del pedido de tienda (tipo mitad_mitad/al_gusto + pizza_izquierda/derecha + variaciones) viaja hasta cocina. Antes se caia en DOS puntos: items_tienda (solo cantidad/descripcion/producto_id/precio) y el bridge _crearCuentaTienda→comandero.handleAddItem (solo nombre/precio/cantidad). Ahora ambos dejan pasar la estructura; el comandero ya la guarda y la reenvia en enviar_cocina, y cocina (ItemLine) la pinta como el POS. `tipo` se forwardea solo si es mitad_mitad/al_gusto (enum del comandero); normal va con `variaciones`. Tambien: poda palabra_clave de la descripcion del modulo (ancla = codigo_recogida + nombre).",
+  "version": "3.3.0",
+  "_v3_3_nota": "v3.3.0 (2026-06-23): se RETIRA codigo_recogida del flujo de tienda. El ANCLA de recogida pasa a ser cliente_nombre (el nombre que el cliente introduce en la PWA/WhatsApp, ahora OBLIGATORIO en pedido.crear-tienda). handleConfirmarRecogida localiza por cliente_nombre (con desambiguacion por pedido_id si varios pendientes comparten nombre). Eliminados: la generacion de codigo (_generarCodigoRecogida[Unico]) y la tool pedido.generar_codigo_recogida. Los eventos pedido.creado/recogido/expirado y la cuenta operativa llevan cliente_nombre en lugar de codigo_recogida.",
+  "description": "Gestion completa de pedidos pizzepos. Dos tipos: tipo='pos' (flujo POS pizzeria con cuenta_id de cuentas-canales, items en pasos separados, enviado a cocina) y tipo='tienda' (vertical tienda PWA: plano sin cuenta_id, todos los items de una, cliente_nombre como ANCLA de recogida, estado pendiente_recogida). Recibe POS del comandero (bridge comandero.enviar_cocina) o UI handler. Recibe tienda via tool pedido.crear-tienda (auto-wire). Persiste en memoria con restauracion desde cuentas_activas.json al arrancar (delegacion a persistencia-comandero; aplica solo a tipo pos en v3.1.0). Cache de productos invalidada por catalogo.actualizado y producto.{creado,actualizado}.",
+  "_v3_2_nota": "v3.2.0 (2026-06-21): autoservicio Fase 1 rebanada D — la estructura del pedido de tienda (tipo mitad_mitad/al_gusto + pizza_izquierda/derecha + variaciones) viaja hasta cocina. Antes se caia en DOS puntos: items_tienda (solo cantidad/descripcion/producto_id/precio) y el bridge _crearCuentaTienda→comandero.handleAddItem (solo nombre/precio/cantidad). Ahora ambos dejan pasar la estructura; el comandero ya la guarda y la reenvia en enviar_cocina, y cocina (ItemLine) la pinta como el POS. `tipo` se forwardea solo si es mitad_mitad/al_gusto (enum del comandero); normal va con `variaciones`.",
   "author": "Pizzepos Team",
   "language": "es",
   "main": "index.js",
@@ -202,7 +203,7 @@
     },
     {
       "name": "pedido.crear-tienda",
-      "description": "Crea un pedido plano de tienda PWA (tipo='tienda'). Sin cuenta_id, todos los items de una, estado inicial pendiente_recogida. Genera codigo_recogida unico de 6 chars sin ambiguos. Persiste palabra_clave anti-fraude y cliente_telefono transitorio solo mientras el pedido vive. Publica pedido.creado con correlation_id propagado.",
+      "description": "Crea un pedido plano de tienda PWA (tipo='tienda'). Sin cuenta_id, todos los items de una, estado inicial pendiente_recogida. El ANCLA de recogida es cliente_nombre (el nombre que el cliente introduce, OBLIGATORIO): el dependiente lo pide al recoger; ya no hay codigo_recogida. cliente_telefono transitorio solo mientras el pedido vive. Publica pedido.creado con correlation_id propagado.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -225,29 +226,17 @@
           },
           "total_centimos":   { "type": "integer", "minimum": 0, "description": "Total del pedido en centimos." },
           "canal_origen":     { "type": "string", "enum": ["whatsapp", "web", "manual"], "description": "Canal por el que llego el pedido." },
+          "cliente_nombre":        { "type": "string", "minLength": 2, "maxLength": 60, "description": "Nombre que el cliente introduce. ANCLA de recogida (el dependiente lo pide al recoger). OBLIGATORIO." },
           "cliente_telefono":      { "type": "string", "description": "Numero del cliente en E.164 sin + (ej: 34600000000). Transitorio, se desecha al cerrar el pedido. Opcional." },
-          "palabra_clave":         { "type": "string", "pattern": "^[a-z]{3}$", "description": "Palabra clave anti-fraude (3 chars [a-z]). Opcional." },
           "mayor_edad_confirmado": { "type": "boolean", "description": "Flag opcional: el cliente confirmo mayoria de edad en la PWA (gate del proyecto si activa verificacion_edad). null si el proyecto no requiere verificacion. NO sustituye verificacion fisica del DNI al recoger." },
           "expira_horas":          { "type": "integer", "minimum": 1, "maximum": 720, "description": "Horas hasta que la reserva expira. Default 24h." },
           "notas_generales":  { "type": "string", "description": "Notas generales del pedido. Opcional." },
           "correlation_id":   { "type": "string", "description": "Correlation id propagado del originador." }
         },
-        "required": ["project_slug", "items", "total_centimos", "canal_origen"]
+        "required": ["project_slug", "items", "total_centimos", "canal_origen", "cliente_nombre"]
       },
       "handler": "handleCreatePedidoTienda",
       "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "UNKNOWN_ERROR"]
-    },
-    {
-      "name": "pedido.generar_codigo_recogida",
-      "description": "Genera un codigo de recogida alfanumerico unico (sin ambiguos 0/O/1/I/L). Util para flujos que necesiten un codigo sin crear pedido aun. NO verifica unicidad contra los pedidos en memoria (eso lo hace pedido.crear-tienda). Longitud configurable 4-8 chars, default 6.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "longitud": { "type": "integer", "minimum": 4, "maximum": 8, "description": "Longitud del codigo (default 6)." }
-        }
-      },
-      "handler": "handleGenerarCodigoRecogida",
-      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
     }
   ],
   "dependencies": [],

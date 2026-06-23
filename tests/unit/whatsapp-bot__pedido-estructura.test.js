@@ -2,9 +2,9 @@
  * Tests del payload autoritativo #P1 (pedido codificado por ids) del parser de WhatsApp.
  * Es lo que el bot decodifica para RE-TASAR (seguridad) en vez de creerse el texto editable.
  *
- * NOTA: tests/unit/whatsapp-bot.test.js está OBSOLETO (espera 'palabra_clave', el parser ya
- * usa 'Nombre:'/'cliente_nombre'); falla desde antes de esta tanda. Este archivo es nuevo y
- * acotado al contrato #P1.
+ * NOTA: tests/unit/whatsapp-bot.test.js fue modernizado (2026-06-23): usa 'Nombre:'/'cliente_nombre'
+ * y el contrato de gateway { status, body, headers }. Este archivo es complementario y acotado
+ * al contrato #P1.
  */
 'use strict';
 

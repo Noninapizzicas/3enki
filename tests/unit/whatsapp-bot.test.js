@@ -7,7 +7,7 @@
  *  - Los handlers HTTP del gateway DEVUELVEN { status, body, headers } (no hay `res` estilo
  *    Express). handleHealthCheck mantiene modo dual (con/sin res).
  *  - El pedido de la PWA se cierra con "Nombre: <cliente>" (la palabra_clave fue retirada;
- *    el ancla anti-fraude es el codigo_recogida + el numero de WhatsApp).
+ *    el ANCLA de recogida es el nombre del cliente — el codigo_recogida tambien fue retirado).
  *  - sendTemplate (plantillas Meta) = unica via de outbound fuera de la ventana de 24h.
  */
 
@@ -40,7 +40,7 @@ function setupTmpCwd() {
         display_number: '+34600000000',
         webhook_path: '/whatsapp/webhook/vapers',
         pwa_url: 'https://tienda.example/vapers',
-        template_listo: { name: 'pedido_listo', language: 'es', body_params: ['{codigo}'] }
+        template_listo: { name: 'pedido_listo', language: 'es', body_params: ['{nombre}'] }
       },
       telegram: { botName: 'staffbot', chatId: '12345' }
     })
@@ -171,7 +171,7 @@ function jsonBody(r) { return JSON.parse(r.body); }
     assert.ok(!m.projectByPhoneId.has('<PENDIENTE>'), 'placeholders no se indexan');
     // La plantilla "listo" se normaliza a { name, language, body_params }.
     assert.strictEqual(m.projectsByMeta.get('vapers').template_listo.name, 'pedido_listo');
-    assert.deepStrictEqual(m.projectsByMeta.get('vapers').template_listo.body_params, ['{codigo}']);
+    assert.deepStrictEqual(m.projectsByMeta.get('vapers').template_listo.body_params, ['{nombre}']);
     await m.onUnload();
   });
 
@@ -426,7 +426,7 @@ function jsonBody(r) { return JSON.parse(r.body); }
         correlation_id: request_id,
         pedido_id: 'ped-xyz',
         cuenta_id: 'cuenta-xyz',
-        codigo_recogida: 'A3F2K9',
+        cliente_nombre: 'Juan Ortiz',
         expira_at: '2026-05-28T00:00:00.000Z'
       }
     });
@@ -507,7 +507,7 @@ function jsonBody(r) { return JSON.parse(r.body); }
     const request_id = await disparaPedidoYObtenRequestId(m);
     fakeClient.calls.length = 0;
     // Response auto-wire success: { request_id, result } sin error
-    await m.onPedidoCrearTiendaResponse({ data: { request_id, result: { pedido_id: 'p', codigo_recogida: 'X' } } });
+    await m.onPedidoCrearTiendaResponse({ data: { request_id, result: { pedido_id: 'p', cliente_nombre: 'Ana' } } });
     assert.strictEqual(fakeClient.calls.length, 0, 'no debe enviar nada — success lo trata onPedidoCreado');
     assert.strictEqual(m.pendingPedidos.size, 1, 'pending sigue vivo para onPedidoCreado');
     delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
@@ -690,7 +690,7 @@ function jsonBody(r) { return JSON.parse(r.body); }
     const [request_id] = [...m.pendingPedidos.keys()];
     mocks.published.length = 0;
     await m.onPedidoCreado({
-      data: { tipo: 'tienda', correlation_id: request_id, pedido_id: 'p1', codigo_recogida: 'ABC123', expira_at: '2026-05-28T00:00:00.000Z' }
+      data: { tipo: 'tienda', correlation_id: request_id, pedido_id: 'p1', cliente_nombre: 'Juan Ortiz', expira_at: '2026-05-28T00:00:00.000Z' }
     });
     const tg = publishedOf(mocks, 'telegram.send_message.request');
     assert.strictEqual(tg.length, 1);
@@ -830,12 +830,12 @@ function jsonBody(r) { return JSON.parse(r.body); }
     const fakeClient = makeFakeMetaClient('ok');
     process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
     const { module: m } = await instantiate(mocks, { fakeMetaClient: fakeClient });
-    m._trackPedidoListo(['ped-1', 'cuenta-1'], 'vapers', '34699999999', 'A3F2K9');
+    m._trackPedidoListo(['ped-1', 'cuenta-1'], 'vapers', '34699999999', 'Juan Ortiz');
     await m.onCocinaPedidoListo({ data: { cuenta_id: 'cuenta-1', pedido_id: 'ped-1' } });
-    // Plantilla enviada con el codigo de recogida resuelto; sin fallback a texto.
+    // Plantilla enviada con el NOMBRE del cliente resuelto; sin fallback a texto.
     assert.strictEqual(fakeClient.templateCalls.length, 1);
     assert.strictEqual(fakeClient.templateCalls[0].template, 'pedido_listo');
-    assert.deepStrictEqual(fakeClient.templateCalls[0].bodyParams, ['A3F2K9']);
+    assert.deepStrictEqual(fakeClient.templateCalls[0].bodyParams, ['Juan Ortiz']);
     assert.strictEqual(fakeClient.calls.length, 0, 'no debe caer a texto si la plantilla funciona');
     delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
     await m.onUnload();
@@ -847,7 +847,7 @@ function jsonBody(r) { return JSON.parse(r.body); }
     process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
     const { module: m } = await instantiate(mocks, { fakeMetaClient: fakeClient });
     m.projectsByMeta.get('vapers').template_listo = null;   // proyecto sin plantilla
-    m._trackPedidoListo(['ped-2', 'cuenta-2'], 'vapers', '34699999999', 'B7K2');
+    m._trackPedidoListo(['ped-2', 'cuenta-2'], 'vapers', '34699999999', 'Ana');
     await m.onCocinaPedidoListo({ data: { cuenta_id: 'cuenta-2', pedido_id: 'ped-2' } });
     assert.strictEqual(fakeClient.templateCalls.length, 0);
     assert.strictEqual(fakeClient.calls.length, 1, 'fallback a texto');

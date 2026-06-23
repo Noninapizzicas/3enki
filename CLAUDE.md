@@ -13867,7 +13867,7 @@ EVENTO_BACKEND_A_FRONT {
   "seguridad": {
     "principio": "el cliente solo aporta IDS (producto_id + ingredientes_id); el precio SIEMPRE lo recalcula el servidor.",
     "ataque_cerrado": "editar el texto de WhatsApp (p.ej. 'Total: 1€') NO sirve: el bot re-tasa por ids. Editar items = pide y paga ESO (no es fraude).",
-    "ancla_recogida": "codigo_recogida (único, server-side) + nombre del cliente. palabra_clave RETIRADA (redundante)."
+    "ancla_recogida": "cliente_nombre (el nombre que el cliente introduce, obligatorio). codigo_recogida RETIRADO (v3.3.0) y palabra_clave RETIRADA — el dependiente pide el nombre al recoger."
   },
   "pago": { "ahora": "a la recogida (efectivo)", "fase_2": "link Stripe (pago.iniciar ya esbozado en tienda-api)" },
   "aviso_recogida": "cocina.pedido_listo → whatsapp-bot avisa al cliente 'ven a recoger' (ya cableado para origen-whatsapp).",
@@ -14001,9 +14001,12 @@ CLASE WhatsappBotModule HEREDA BaseModule {  // ── el INSIDER que re-tasa
 // GUARDA: `tipo` solo se forwardea si es 'mitad_mitad'|'al_gusto' (enum del comandero);
 //         los normales viajan con `variaciones` (sin tipo) para no romper la validación AJV.
 //
-// PODA palabra_clave (v3.2.0): retirada de pedidos (crear-tienda + handleConfirmarRecogida) y de
-//   tienda-api (validación). El ancla anti-fraude es el codigo_recogida; el dependiente lo
-//   verifica y canta el nombre del cliente al recoger. (también fuera de notificador-pedidos.)
+// PODA palabra_clave (v3.2.0) y codigo_recogida (v3.3.0): retiradas de pedidos (crear-tienda +
+//   handleConfirmarRecogida), tienda-api, carta-digital (PWA), notificador-pedidos y whatsapp-bot.
+//   El ANCLA de recogida pasa a ser el NOMBRE que el cliente introduce (obligatorio en
+//   pedido.crear-tienda). handleConfirmarRecogida localiza por cliente_nombre (case-insensitive)
+//   y desambigua con pedido_id si varios pendientes comparten nombre. El dependiente pide el
+//   nombre al recoger; cocina/staff lo ven como ref_display.
 ```
 
 ## CLASE carta-digital (PWA) — emite el pedido por ids (#P1) + paridad comandero
@@ -14032,9 +14035,9 @@ AUTOSERVICIO_COMPLETO {
   4. bot recibe (su nº = identidad veraz) → parsea → estructura (#P1)
   5. bot RE-TASA contra cartaSnap[pid] (fresco por evento) → precios del SERVIDOR
   6. bot publish('pedido.crear-tienda', items re-tasados + estructura) → pedidos
-  7. pedidos crea pedido tienda (codigo_recogida) → _crearCuentaTienda → comandero.enviar_cocina
+  7. pedidos crea pedido tienda (ancla = cliente_nombre) → _crearCuentaTienda → comandero.enviar_cocina
   8. cocina pinta la comanda ESTRUCTURADA (mitades como el POS) ; estado pendiente_recogida
-  9. bot responde al cliente: total real + código de recogida
+  9. bot responde al cliente a nombre de <cliente> (pasa a recoger, paga al recoger)
   10. cocina.pedido_listo → bot avisa 'ven a recoger' ; pago a la recogida (efectivo)
 }
 

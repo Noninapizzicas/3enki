@@ -144,7 +144,7 @@ test('onPedidoCreado con canal_origen=web resuelve proyecto via bus y publica te
         project_id: 'p-1',
         project_slug: 'vapers',
         canal_origen: 'web',
-        codigo_recogida: 'ABC123',
+        cliente_nombre: 'Juan Ortiz',
         items: [{ cantidad: 2, descripcion: 'Vape Menta', precio_total_centimos: 2980 }],
         total_centimos: 2980,
         mayor_edad_confirmado: true,
@@ -157,7 +157,7 @@ test('onPedidoCreado con canal_origen=web resuelve proyecto via bus y publica te
     assert.strictEqual(sendMsg.data.chatId, 555);
     assert.strictEqual(sendMsg.data.botName, 'vapers_bot');
     assert.ok(sendMsg.data.text.includes('VAPERS'));
-    assert.ok(sendMsg.data.text.includes('ABC123'));
+    assert.ok(sendMsg.data.text.includes('A nombre de: Juan Ortiz'));
     assert.ok(sendMsg.data.text.includes('Mayor 18: confirmado en PWA'));
     assert.ok(sendMsg.data.text.includes('2 x Vape Menta'));
     assert.ok(sendMsg.data.text.includes('Total: 29.80'));
@@ -240,7 +240,7 @@ test('onPedidoCreado propaga correlation_id del source event al telegram.send_me
       projectAutoResponse: { success: true, project: { id: 'p-1', slug: 'vapers', base_path: fix.basePath } }
     });
     await m.onPedidoCreado({
-      data: { pedido_id: 'p', project_id: 'p-1', canal_origen: 'web', codigo_recogida: 'X', items: [], total_centimos: 0 },
+      data: { pedido_id: 'p', project_id: 'p-1', canal_origen: 'web', cliente_nombre: 'Ana', items: [], total_centimos: 0 },
       metadata: { correlation_id: 'corr-abc-123' }
     });
     const sendMsg = mock.published.find(p => p.eventType === 'telegram.send_message.request');
@@ -255,7 +255,7 @@ test('onPedidoCreado respeta notificaciones.canales custom del project.json', as
     const { m, mock } = await makeInstance({
       projectAutoResponse: { success: true, project: { id: 'p-1', slug: 'vapers', base_path: fix.basePath } }
     });
-    await m.onPedidoCreado({ data: { pedido_id: 'p', project_id: 'p-1', canal_origen: 'web', codigo_recogida: 'X', items: [], total_centimos: 0 } });
+    await m.onPedidoCreado({ data: { pedido_id: 'p', project_id: 'p-1', canal_origen: 'web', cliente_nombre: 'Ana', items: [], total_centimos: 0 } });
     // En v1 solo se publica telegram (discord queda para v2).
     const sendMsgs = mock.published.filter(p => p.eventType === 'telegram.send_message.request');
     assert.strictEqual(sendMsgs.length, 1, 'solo telegram en v1');
@@ -277,7 +277,7 @@ test('_formatPedidoMessage con items vacios muestra "(pedido sin items)"', () =>
   const m = new NotificadorPedidos();
   const text = m._formatPedidoMessage(
     { project_slug: 'vapers' },
-    { codigo_recogida: 'X', items: [], total_centimos: 0 }
+    { cliente_nombre: 'Ana', items: [], total_centimos: 0 }
   );
   assert.ok(text.includes('(pedido sin items)'));
 });

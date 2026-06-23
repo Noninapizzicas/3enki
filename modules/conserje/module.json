@@ -25,6 +25,11 @@
       "event": "interruptor.cambiado",
       "handler": "onInterruptorCambiado",
       "description": "Reacciona en caliente al on/off del panel: id='conserje' (empujones por brecha) y id='conserje-rutas' (replay de rutas aprendidas), sin reinicio."
+    },
+    {
+      "event": "interruptor.solicitar_registro",
+      "handler": "onSolicitarRegistro",
+      "description": "interruptores pide registro al cargar -> re-registra sus botones (conserje + conserje-rutas; cura la carrera de arranque)."
     }
   ],
 

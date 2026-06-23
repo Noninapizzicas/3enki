@@ -41,6 +41,7 @@
     oauthConfigs,
     glovoConfigs,
     telegramNotifConfigs,
+    PROJECT_ONLY_PROVIDERS,
     type ServiceType
   } from '$lib/stores/credentials';
   import {
@@ -181,6 +182,8 @@
 
   // Form validation
   $: isGlovoSelected = newForm.provider === 'GLOVO';
+  // Providers por-proyecto (WhatsApp): el backend solo acepta nivel PROJECT → el form lo fuerza.
+  $: isProjectOnly = PROJECT_ONLY_PROVIDERS.has(newForm.provider);
   $: selectedLevel = levels.find(l => l.id === (isGlovoSelected ? glovoForm.level : newForm.level));
   $: requiresIdentifier = selectedLevel?.requiresIdentifier ?? false;
   $: canSaveNew = isGlovoSelected
@@ -269,6 +272,18 @@
   // ==========================================================================
   // HANDLERS - NUEVO
   // ==========================================================================
+
+  // Selección de provider en el form "Nuevo". Para providers por-proyecto (WhatsApp)
+  // fuerza nivel PROJECT, porque el backend rechaza cualquier otro nivel (invariante
+  // credential-manager v2.1.0). El identificador (el slug del proyecto) lo escribe el
+  // usuario: se materializa como META_WHATSAPP_API_KEY_PROJECT_<slug>, que es lo que lee el bot.
+  function selectProvider(id: string) {
+    newForm.provider = id;
+    clearTestResult();
+    if (PROJECT_ONLY_PROVIDERS.has(id)) {
+      newForm.level = 'PROJECT';
+    }
+  }
 
   async function handleTestNew() {
     if (!newForm.apiKey || !newForm.provider) return;
@@ -1449,7 +1464,7 @@
                   type="button"
                   class="provider-btn"
                   class:active={newForm.provider === p.id}
-                  on:click={() => { newForm.provider = p.id; clearTestResult(); }}
+                  on:click={() => selectProvider(p.id)}
                 >
                   <span class="provider-icon">{p.icon}</span>
                   <span class="provider-name">{p.name}</span>
@@ -1605,19 +1620,26 @@
             <!-- Level -->
             <fieldset class="field">
               <legend class="label">Nivel</legend>
-              <div class="levels-grid" role="group">
-                {#each aiLevels as l (l.id)}
-                  <button
-                    type="button"
-                    class="level-btn"
-                    class:active={newForm.level === l.id}
-                    on:click={() => { newForm.level = l.id; newForm.identifier = ''; }}
-                  >
-                    <span>{l.icon}</span>
-                    <span>{l.name}</span>
-                  </button>
-                {/each}
-              </div>
+              {#if isProjectOnly}
+                <div class="info-box">
+                  <strong>🔵 Proyecto (obligatorio)</strong>
+                  <p>Las credenciales de WhatsApp son por tienda: cada proyecto tiene su propio número, token y webhook. No pueden ser globales. El identificador es el <strong>slug del proyecto</strong> (ej: <code>nonina</code>).</p>
+                </div>
+              {:else}
+                <div class="levels-grid" role="group">
+                  {#each aiLevels as l (l.id)}
+                    <button
+                      type="button"
+                      class="level-btn"
+                      class:active={newForm.level === l.id}
+                      on:click={() => { newForm.level = l.id; newForm.identifier = ''; }}
+                    >
+                      <span>{l.icon}</span>
+                      <span>{l.name}</span>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
             </fieldset>
 
             <!-- Identifier -->
@@ -1628,7 +1650,7 @@
                   id="new-identifier"
                   type="text"
                   class="input"
-                  placeholder={newForm.level === 'PROJECT' ? 'proyecto-123' : newForm.level === 'CLIENT' ? 'cliente-abc' : 'custom-id'}
+                  placeholder={isProjectOnly ? 'nonina (slug del proyecto)' : newForm.level === 'PROJECT' ? 'proyecto-123' : newForm.level === 'CLIENT' ? 'cliente-abc' : 'custom-id'}
                   bind:value={newForm.identifier}
                 />
               </div>

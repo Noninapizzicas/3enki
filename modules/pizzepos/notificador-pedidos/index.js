@@ -223,14 +223,13 @@ class NotificadorPedidosModule extends BaseModule {
    * Mensaje al staff. Estructura clara legible en Telegram (sin markdown
    * pesado por compat con escapes complicados).
    *
-   * Anti-fraude: el ancla es el codigo_recogida; el dependiente lo verifica
-   * (y canta el nombre del cliente) al recoger.
+   * Ancla de recogida: el NOMBRE del cliente (el dependiente lo pide y lo canta al recoger).
    */
   _formatPedidoMessage(config, pedido) {
     const slug = (config.project_slug || pedido.project_slug || 'pedido').toUpperCase();
     const lines = [
       `Pedido nuevo - ${slug}`,
-      `Codigo: ${pedido.codigo_recogida || '(sin codigo)'}`
+      `A nombre de: ${pedido.cliente_nombre || '(sin nombre)'}`
     ];
     if (pedido.mayor_edad_confirmado === true) {
       lines.push('Mayor 18: confirmado en PWA');

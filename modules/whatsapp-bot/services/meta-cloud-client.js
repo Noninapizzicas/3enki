@@ -17,14 +17,48 @@ class MetaCloudClient {
     if (!to) throw _err('INVALID_INPUT', 'to is required');
     if (!text) throw _err('INVALID_INPUT', 'text is required');
 
-    const url = `${this.apiBase}/${this.apiVersion}/${encodeURIComponent(phoneNumberId)}/messages`;
-    const body = {
+    return this._postMessage(phoneNumberId, accessToken, {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to,
       type: 'text',
       text: { body: text, preview_url: false }
-    };
+    });
+  }
+
+  // Mensaje de PLANTILLA (template). Es la UNICA forma de escribir al cliente FUERA de la
+  // ventana de 24h (re-engagement). La plantilla debe estar aprobada por Meta. `bodyParams`
+  // rellena las variables {{1}},{{2}}... del cuerpo en orden; `components` permite pasar la
+  // estructura completa de Meta (header/body/button) cuando se necesita algo mas que el cuerpo.
+  async sendTemplate({ phoneNumberId, accessToken, to, template, languageCode = 'es', bodyParams, components }) {
+    if (!phoneNumberId) throw _err('INVALID_INPUT', 'phoneNumberId is required');
+    if (!accessToken) throw _err('AUTHENTICATION_REQUIRED', 'accessToken is required');
+    if (!to) throw _err('INVALID_INPUT', 'to is required');
+    if (!template) throw _err('INVALID_INPUT', 'template (name) is required');
+
+    const tpl = { name: template, language: { code: languageCode } };
+    let comps = components;
+    if (!comps && Array.isArray(bodyParams) && bodyParams.length > 0) {
+      comps = [{
+        type: 'body',
+        parameters: bodyParams.map(p => ({ type: 'text', text: String(p) }))
+      }];
+    }
+    if (Array.isArray(comps) && comps.length > 0) tpl.components = comps;
+
+    return this._postMessage(phoneNumberId, accessToken, {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'template',
+      template: tpl
+    });
+  }
+
+  // POST /{phone_number_id}/messages compartido por sendText/sendTemplate: fetch con timeout,
+  // mapeo de status HTTP a codigos canonicos, y extraccion de messages[0].id.
+  async _postMessage(phoneNumberId, accessToken, body) {
+    const url = `${this.apiBase}/${this.apiVersion}/${encodeURIComponent(phoneNumberId)}/messages`;
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);

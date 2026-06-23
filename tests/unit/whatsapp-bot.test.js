@@ -1,7 +1,14 @@
 /**
- * Tests unitarios — whatsapp-bot (POC2).
+ * Tests unitarios — whatsapp-bot.
  *
  * Ejecutar: node tests/unit/whatsapp-bot.test.js
+ *
+ * Contrato vigente (post-refactor):
+ *  - Los handlers HTTP del gateway DEVUELVEN { status, body, headers } (no hay `res` estilo
+ *    Express). handleHealthCheck mantiene modo dual (con/sin res).
+ *  - El pedido de la PWA se cierra con "Nombre: <cliente>" (la palabra_clave fue retirada;
+ *    el ANCLA de recogida es el nombre del cliente — el codigo_recogida tambien fue retirado).
+ *  - sendTemplate (plantillas Meta) = unica via de outbound fuera de la ventana de 24h.
  */
 
 'use strict';
@@ -13,7 +20,7 @@ const path = require('path');
 
 const WhatsappBotModule = require('../../modules/whatsapp-bot/index.js');
 const { parsearPedido } = require('../../modules/whatsapp-bot/services/pedido-parser');
-const { parseWebhookEvent } = require('../../modules/whatsapp-bot/services/meta-cloud-client');
+const { MetaCloudClient, parseWebhookEvent } = require('../../modules/whatsapp-bot/services/meta-cloud-client');
 
 let TMP_ROOT, ORIG_CWD, ORIG_ENV_TOKEN, ORIG_ENV_VERIFY;
 
@@ -21,7 +28,7 @@ function setupTmpCwd() {
   ORIG_CWD = process.cwd();
   TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'wabot-test-'));
   process.chdir(TMP_ROOT);
-  // Crear estructura de proyecto vapers con whatsapp_config completo
+  // Proyecto vapers con whatsapp completo + plantilla de aviso "listo" configurada.
   fs.mkdirSync(path.join(TMP_ROOT, 'data', 'projects', 'vapers', 'config'), { recursive: true });
   fs.writeFileSync(
     path.join(TMP_ROOT, 'data', 'projects', 'vapers', 'config', 'project.json'),
@@ -32,7 +39,8 @@ function setupTmpCwd() {
         phone_number_id: 'phone-vapers-123',
         display_number: '+34600000000',
         webhook_path: '/whatsapp/webhook/vapers',
-        pwa_url: 'https://tienda.example/vapers'
+        pwa_url: 'https://tienda.example/vapers',
+        template_listo: { name: 'pedido_listo', language: 'es', body_params: ['{nombre}'] }
       },
       telegram: { botName: 'staffbot', chatId: '12345' }
     })
@@ -97,9 +105,10 @@ async function instantiate(mocks, opts = {}) {
 }
 
 function makeFakeMetaClient(behavior = 'ok') {
-  const calls = [];
+  const calls = [], templateCalls = [];
   const client = {
     calls,
+    templateCalls,
     sendText: async (args) => {
       calls.push(args);
       if (behavior === 'rate_limited') {
@@ -112,20 +121,16 @@ function makeFakeMetaClient(behavior = 'ok') {
         const err = new Error('timeout'); err._code = 'UPSTREAM_TIMEOUT'; throw err;
       }
       return { messageId: 'wamid.MOCK_' + (calls.length) };
+    },
+    sendTemplate: async (args) => {
+      templateCalls.push(args);
+      if (behavior === 'tpl_fail') {
+        const err = new Error('tpl bad'); err._code = 'UPSTREAM_INVALID_RESPONSE'; throw err;
+      }
+      return { messageId: 'wamid.TPL_' + (templateCalls.length) };
     }
   };
   return client;
-}
-
-function makeRes() {
-  const state = { status: null, body: null, type: null };
-  const res = {
-    status(s) { state.status = s; return res; },
-    json(b)   { state.body = b; return res; },
-    type(t)   { state.type = t; return res; },
-    send(b)   { state.body = b; return res; }
-  };
-  return { res, state };
 }
 
 async function testAsync(description, fn) {
@@ -143,10 +148,12 @@ function isCanonicalSuccess(r) {
 function publishedOf(mocks, name) {
   return mocks.published.filter(p => p[0] === name).map(p => p[1]);
 }
+// Body de error de los handlers de webhook: { status, body: JSON-string, headers }
+function jsonBody(r) { return JSON.parse(r.body); }
 
 (async () => {
   setupTmpCwd();
-  console.log('whatsapp-bot — POC2\n');
+  console.log('whatsapp-bot\n');
 
   // ===========================================================
   // Group 1: Lifecycle
@@ -156,12 +163,15 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'whatsapp-bot');
-    assert.strictEqual(m.version, '1.0.0');
+    assert.strictEqual(m.version, '1.2.0');
     assert.ok(m.projectsByMeta.has('vapers'));
     assert.ok(m.projectsByMeta.has('panaderia'));
     assert.ok(!m.projectsByMeta.has('_ejemplo'), 'proyectos _ deben ignorarse');
     assert.strictEqual(m.projectByPhoneId.get('phone-vapers-123'), 'vapers');
     assert.ok(!m.projectByPhoneId.has('<PENDIENTE>'), 'placeholders no se indexan');
+    // La plantilla "listo" se normaliza a { name, language, body_params }.
+    assert.strictEqual(m.projectsByMeta.get('vapers').template_listo.name, 'pedido_listo');
+    assert.deepStrictEqual(m.projectsByMeta.get('vapers').template_listo.body_params, ['{nombre}']);
     await m.onUnload();
   });
 
@@ -190,20 +200,20 @@ function publishedOf(mocks, name) {
 
   // ===========================================================
   // Group 2: Webhook verify (GET /whatsapp/webhook/:project)
+  // Contrato gateway: el handler DEVUELVE { status, body, headers }.
   // ===========================================================
 
   await testAsync('webhook.verify success devuelve challenge en texto plano', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     process.env.META_WHATSAPP_VERIFY_TOKEN_API_KEY_PROJECT_vapers = 'secret-verify';
-    const { res, state } = makeRes();
-    await m.handleWebhookVerify({
+    const r = await m.handleWebhookVerify({
       params: { project: 'vapers' },
       query: { 'hub.mode': 'subscribe', 'hub.verify_token': 'secret-verify', 'hub.challenge': '12345' }
-    }, res);
-    assert.strictEqual(state.status, 200);
-    assert.strictEqual(state.type, 'text/plain');
-    assert.strictEqual(state.body, '12345');
+    });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.headers['Content-Type'], 'text/plain');
+    assert.strictEqual(r.body, '12345');
     delete process.env.META_WHATSAPP_VERIFY_TOKEN_API_KEY_PROJECT_vapers;
     await m.onUnload();
   });
@@ -212,13 +222,12 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     delete process.env.META_WHATSAPP_VERIFY_TOKEN_API_KEY_PROJECT_vapers;
-    const { res, state } = makeRes();
-    await m.handleWebhookVerify({
+    const r = await m.handleWebhookVerify({
       params: { project: 'vapers' },
       query: { 'hub.mode': 'subscribe', 'hub.verify_token': 'cualquiera', 'hub.challenge': 'x' }
-    }, res);
-    assert.strictEqual(state.status, 404);
-    assert.strictEqual(state.body.error.code, 'RESOURCE_NOT_FOUND');
+    });
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(jsonBody(r).error.code, 'RESOURCE_NOT_FOUND');
     await m.onUnload();
   });
 
@@ -226,13 +235,12 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     process.env.META_WHATSAPP_VERIFY_TOKEN_API_KEY_PROJECT_vapers = 'el-bueno';
-    const { res, state } = makeRes();
-    await m.handleWebhookVerify({
+    const r = await m.handleWebhookVerify({
       params: { project: 'vapers' },
       query: { 'hub.mode': 'subscribe', 'hub.verify_token': 'el-malo', 'hub.challenge': 'x' }
-    }, res);
-    assert.strictEqual(state.status, 403);
-    assert.strictEqual(state.body.error.code, 'PERMISSION_DENIED');
+    });
+    assert.strictEqual(r.status, 403);
+    assert.strictEqual(jsonBody(r).error.code, 'PERMISSION_DENIED');
     delete process.env.META_WHATSAPP_VERIFY_TOKEN_API_KEY_PROJECT_vapers;
     await m.onUnload();
   });
@@ -240,13 +248,12 @@ function publishedOf(mocks, name) {
   await testAsync('webhook.verify con hub.mode != subscribe devuelve 400', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const { res, state } = makeRes();
-    await m.handleWebhookVerify({
+    const r = await m.handleWebhookVerify({
       params: { project: 'vapers' },
       query: { 'hub.mode': 'unsubscribe', 'hub.verify_token': 'x', 'hub.challenge': 'x' }
-    }, res);
-    assert.strictEqual(state.status, 400);
-    assert.strictEqual(state.body.error.code, 'INVALID_INPUT');
+    });
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(jsonBody(r).error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -277,10 +284,9 @@ function publishedOf(mocks, name) {
     const fakeClient = makeFakeMetaClient('ok');
     process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
     const { module: m } = await instantiate(mocks, { fakeMetaClient: fakeClient });
-    const { res, state } = makeRes();
-    await m.handleWebhookEvent({ params: { project: 'vapers' }, body: makeMetaPayload() }, res);
-    assert.strictEqual(state.status, 200);
-    assert.strictEqual(state.body, 'EVENT_RECEIVED');
+    const r = await m.handleWebhookEvent({ params: { project: 'vapers' }, body: makeMetaPayload() });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body, 'EVENT_RECEIVED');
     delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
     await m.onUnload();
   });
@@ -290,8 +296,7 @@ function publishedOf(mocks, name) {
     const fakeClient = makeFakeMetaClient('ok');
     process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
     const { module: m } = await instantiate(mocks, { fakeMetaClient: fakeClient });
-    const { res } = makeRes();
-    await m.handleWebhookEvent({ params: { project: 'vapers' }, body: makeMetaPayload({ text: 'hola buenas' }) }, res);
+    await m.handleWebhookEvent({ params: { project: 'vapers' }, body: makeMetaPayload({ text: 'hola buenas' }) });
     // Da tiempo a procesar asincrono
     await new Promise(r => setImmediate(r));
     const recibidos = publishedOf(mocks, 'whatsapp.mensaje.recibido');
@@ -314,11 +319,10 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks, { fakeMetaClient: fakeClient });
     // Forzar otro proyecto en el mapping
     m.projectByPhoneId.set('phone-otro-555', 'panaderia');
-    const { res } = makeRes();
     await m.handleWebhookEvent({
       params: { project: 'vapers' },
       body: makeMetaPayload({ phoneId: 'phone-otro-555' })
-    }, res);
+    });
     await new Promise(r => setImmediate(r));
     assert.strictEqual(publishedOf(mocks, 'whatsapp.mensaje.recibido').length, 0);
     assert.strictEqual(fakeClient.calls.length, 0);
@@ -328,6 +332,7 @@ function publishedOf(mocks, name) {
 
   // ===========================================================
   // Group 4: Maquina de estados (despacho saludo vs pedido)
+  // El pedido cierra con "Nombre:" (palabra_clave retirada).
   // ===========================================================
 
   const PEDIDO_VALIDO = [
@@ -335,7 +340,7 @@ function publishedOf(mocks, name) {
     '- 2 x Cloud Nine 50ml Menta',
     '- 1 x Vampire Vape 30ml Tabaco',
     'Total: 38,00 EUR',
-    'Palabra clave: roj'
+    'Nombre: Juan Ortiz'
   ].join('\n');
 
   await testAsync('despacho · pedido valido publica whatsapp.pedido.detectado + pedido.crear-tienda', async () => {
@@ -355,7 +360,7 @@ function publishedOf(mocks, name) {
     assert.strictEqual(reqs[0].project_slug, 'vapers');
     assert.strictEqual(reqs[0].canal_origen, 'whatsapp');
     assert.strictEqual(reqs[0].cliente_telefono, '34699999999');
-    assert.strictEqual(reqs[0].palabra_clave, 'roj');
+    assert.strictEqual(reqs[0].cliente_nombre, 'Juan Ortiz');
     assert.strictEqual(reqs[0].total_centimos, 3800);
     assert.strictEqual(reqs[0].items.length, 2);
     assert.ok(reqs[0].request_id);
@@ -406,7 +411,7 @@ function publishedOf(mocks, name) {
     return request_id;
   }
 
-  await testAsync('onPedidoCreado correlacionado confirma cliente + notifica staff', async () => {
+  await testAsync('onPedidoCreado correlacionado confirma cliente (por nombre) + notifica staff', async () => {
     const mocks = makeMocks();
     const fakeClient = makeFakeMetaClient('ok');
     process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
@@ -420,26 +425,29 @@ function publishedOf(mocks, name) {
         tipo: 'tienda',
         correlation_id: request_id,
         pedido_id: 'ped-xyz',
-        codigo_recogida: 'A3F2K9',
+        cuenta_id: 'cuenta-xyz',
+        cliente_nombre: 'Juan Ortiz',
         expira_at: '2026-05-28T00:00:00.000Z'
       }
     });
 
-    // Confirmacion al cliente
+    // Confirmacion al cliente: lleva su NOMBRE (etiqueta humana del pedido).
     assert.strictEqual(fakeClient.calls.length, 1);
     assert.strictEqual(fakeClient.calls[0].to, '34699999999');
-    assert.ok(fakeClient.calls[0].text.includes('A3F2K9'));
-    assert.ok(fakeClient.calls[0].text.toLowerCase().includes('palabra clave'),
-      'mensaje al cliente debe avisar de que le preguntaran palabra clave');
+    assert.ok(fakeClient.calls[0].text.includes('Juan Ortiz'), 'el cliente ve su nombre');
+    assert.ok(fakeClient.calls[0].text.toLowerCase().includes('recoger'));
 
-    // Notificacion al staff via telegram-service
+    // Notificacion al staff via telegram-service.
     const tg = publishedOf(mocks, 'telegram.send_message.request');
     assert.strictEqual(tg.length, 1);
     assert.strictEqual(tg[0].botName, 'staffbot');
     assert.strictEqual(tg[0].chatId, 12345);
-    assert.ok(tg[0].text.includes('A3F2K9'));
-    assert.ok(!tg[0].text.includes('roj'), 'NO debe incluir palabra_clave (anti-fraude)');
+    assert.ok(tg[0].text.includes('Juan Ortiz'), 'el staff ve el nombre del pedido');
     assert.ok(!tg[0].text.includes('34699999999'), 'NO debe incluir el numero completo (PII)');
+
+    // El cliente queda registrado para el aviso "listo" (por pedido_id y por cuenta_id).
+    assert.ok(m.pedidosListos.has('ped-xyz'));
+    assert.ok(m.pedidosListos.has('cuenta-xyz'));
 
     // Pending consumido
     assert.strictEqual(m.pendingPedidos.size, 0);
@@ -499,7 +507,7 @@ function publishedOf(mocks, name) {
     const request_id = await disparaPedidoYObtenRequestId(m);
     fakeClient.calls.length = 0;
     // Response auto-wire success: { request_id, result } sin error
-    await m.onPedidoCrearTiendaResponse({ data: { request_id, result: { pedido_id: 'p', codigo_recogida: 'X' } } });
+    await m.onPedidoCrearTiendaResponse({ data: { request_id, result: { pedido_id: 'p', cliente_nombre: 'Ana' } } });
     assert.strictEqual(fakeClient.calls.length, 0, 'no debe enviar nada — success lo trata onPedidoCreado');
     assert.strictEqual(m.pendingPedidos.size, 1, 'pending sigue vivo para onPedidoCreado');
     delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
@@ -507,7 +515,7 @@ function publishedOf(mocks, name) {
   });
 
   // ===========================================================
-  // Group 6: Tool whatsapp.enviar
+  // Group 6: Tool whatsapp.enviar (texto)
   // ===========================================================
 
   await testAsync('tool.enviar · success devuelve message_id + publica mensaje.enviado', async () => {
@@ -602,7 +610,7 @@ function publishedOf(mocks, name) {
   // Group 8: Parser de pedido (servicio puro)
   // ===========================================================
 
-  await testAsync('parser · pedido valido devuelve ok=true con items y palabra_clave', async () => {
+  await testAsync('parser · pedido valido devuelve ok=true con items y cliente_nombre', async () => {
     const r = parsearPedido(PEDIDO_VALIDO);
     assert.strictEqual(r.ok, true);
     assert.strictEqual(r.project_slug, 'vapers');
@@ -610,20 +618,20 @@ function publishedOf(mocks, name) {
     assert.strictEqual(r.items.length, 2);
     assert.strictEqual(r.items[0].cantidad, 2);
     assert.strictEqual(r.total_centimos, 3800);
-    assert.strictEqual(r.palabra_clave, 'roj');
+    assert.strictEqual(r.cliente_nombre, 'Juan Ortiz');
   });
 
   await testAsync('parser · sin header PEDIDO no es pedido (ok=false, kind=no_es_pedido)', async () => {
-    const r = parsearPedido('hola que tal\n- 2 x algo\nTotal: 5,00 EUR');
+    const r = parsearPedido('hola que tal\n- 2 x algo\nTotal: 5,00 EUR\nNombre: Ana');
     assert.strictEqual(r.ok, false);
     assert.strictEqual(r.kind, 'no_es_pedido');
   });
 
-  await testAsync('parser · linea de palabra clave ausente devuelve kind=falta_palabra_clave', async () => {
-    const txt = ['PEDIDO vapers-A3F2', '- 1 x cosa', 'Total: 5,00 EUR', 'otra cosa que no es palabra clave'].join('\n');
+  await testAsync('parser · linea Nombre ausente devuelve kind=falta_nombre', async () => {
+    const txt = ['PEDIDO vapers-A3F2', '- 1 x cosa', 'Total: 5,00 EUR', 'otra cosa que no es nombre'].join('\n');
     const r = parsearPedido(txt);
     assert.strictEqual(r.ok, false);
-    assert.strictEqual(r.kind, 'falta_palabra_clave');
+    assert.strictEqual(r.kind, 'falta_nombre');
   });
 
   await testAsync('parser · pedido demasiado corto (3 lineas) devuelve no_es_pedido', async () => {
@@ -633,7 +641,7 @@ function publishedOf(mocks, name) {
   });
 
   await testAsync('parser · total con punto decimal tambien valido', async () => {
-    const txt = ['PEDIDO vapers-A3F2', '- 1 x cosa', 'Total: 5.50 EUR', 'Palabra clave: abc'].join('\n');
+    const txt = ['PEDIDO vapers-A3F2', '- 1 x cosa', 'Total: 5.50 EUR', 'Nombre: Ana'].join('\n');
     const r = parsearPedido(txt);
     assert.strictEqual(r.ok, true);
     assert.strictEqual(r.total_centimos, 550);
@@ -682,7 +690,7 @@ function publishedOf(mocks, name) {
     const [request_id] = [...m.pendingPedidos.keys()];
     mocks.published.length = 0;
     await m.onPedidoCreado({
-      data: { tipo: 'tienda', correlation_id: request_id, pedido_id: 'p1', codigo_recogida: 'ABC123', expira_at: '2026-05-28T00:00:00.000Z' }
+      data: { tipo: 'tienda', correlation_id: request_id, pedido_id: 'p1', cliente_nombre: 'Juan Ortiz', expira_at: '2026-05-28T00:00:00.000Z' }
     });
     const tg = publishedOf(mocks, 'telegram.send_message.request');
     assert.strictEqual(tg.length, 1);
@@ -692,7 +700,7 @@ function publishedOf(mocks, name) {
   });
 
   await testAsync('parser · nonce con caracteres ambiguos rechazado', async () => {
-    const txt = ['PEDIDO vapers-O0I1', '- 1 x cosa', 'Total: 5,00 EUR', 'Palabra clave: abc'].join('\n');
+    const txt = ['PEDIDO vapers-O0I1', '- 1 x cosa', 'Total: 5,00 EUR', 'Nombre: Ana'].join('\n');
     const r = parsearPedido(txt);
     assert.strictEqual(r.ok, false);
   });
@@ -715,6 +723,149 @@ function publishedOf(mocks, name) {
     assert.deepStrictEqual(parseWebhookEvent({ object: 'whatsapp_business_account' }), []);
     assert.deepStrictEqual(parseWebhookEvent(null), []);
     assert.deepStrictEqual(parseWebhookEvent({}), []);
+  });
+
+  // ===========================================================
+  // Group 10: Plantillas Meta (sendTemplate) — outbound fuera de la ventana de 24h
+  // ===========================================================
+
+  await testAsync('client.sendTemplate · construye body type=template con components desde bodyParams', async () => {
+    const captured = {};
+    const fakeFetch = async (url, opts) => {
+      captured.url = url; captured.body = JSON.parse(opts.body);
+      return { status: 200, json: async () => ({ messages: [{ id: 'wamid.TPL' }] }) };
+    };
+    const client = new MetaCloudClient({ fetchImpl: fakeFetch });
+    const r = await client.sendTemplate({
+      phoneNumberId: 'pn-1', accessToken: 'tok', to: '34600000000',
+      template: 'pedido_listo', languageCode: 'es', bodyParams: ['A3F2K9']
+    });
+    assert.strictEqual(r.messageId, 'wamid.TPL');
+    assert.ok(captured.url.includes('/pn-1/messages'));
+    assert.strictEqual(captured.body.type, 'template');
+    assert.strictEqual(captured.body.template.name, 'pedido_listo');
+    assert.strictEqual(captured.body.template.language.code, 'es');
+    assert.deepStrictEqual(captured.body.template.components, [
+      { type: 'body', parameters: [{ type: 'text', text: 'A3F2K9' }] }
+    ]);
+  });
+
+  await testAsync('client.sendTemplate · sin bodyParams no incluye components', async () => {
+    const captured = {};
+    const fakeFetch = async (_url, opts) => {
+      captured.body = JSON.parse(opts.body);
+      return { status: 200, json: async () => ({ messages: [{ id: 'wamid.X' }] }) };
+    };
+    const client = new MetaCloudClient({ fetchImpl: fakeFetch });
+    await client.sendTemplate({ phoneNumberId: 'pn', accessToken: 'tok', to: '34600', template: 'hello' });
+    assert.ok(!('components' in captured.body.template), 'sin variables → sin components');
+    assert.strictEqual(captured.body.template.language.code, 'es', 'language por defecto es');
+  });
+
+  await testAsync('client.sendTemplate · sin template (nombre) lanza INVALID_INPUT sin llamar a fetch', async () => {
+    let fetched = false;
+    const client = new MetaCloudClient({ fetchImpl: async () => { fetched = true; return { status: 200, json: async () => ({}) }; } });
+    await assert.rejects(
+      () => client.sendTemplate({ phoneNumberId: 'pn', accessToken: 'tok', to: '34600' }),
+      (e) => e._code === 'INVALID_INPUT'
+    );
+    assert.strictEqual(fetched, false);
+  });
+
+  await testAsync('tool.enviar_plantilla · success llama sendTemplate + publica mensaje.enviado kind=template', async () => {
+    const mocks = makeMocks();
+    const fakeClient = makeFakeMetaClient('ok');
+    process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
+    const { module: m } = await instantiate(mocks, { fakeMetaClient: fakeClient });
+    const r = await m.handleToolEnviarPlantilla({
+      project_slug: 'vapers', to: '34611111111', template: 'pedido_listo', language: 'es', body_params: ['A3F2K9']
+    });
+    assert.ok(isCanonicalSuccess(r), JSON.stringify(r));
+    assert.strictEqual(r.data.kind, 'template');
+    assert.strictEqual(fakeClient.templateCalls.length, 1);
+    assert.strictEqual(fakeClient.templateCalls[0].template, 'pedido_listo');
+    assert.deepStrictEqual(fakeClient.templateCalls[0].bodyParams, ['A3F2K9']);
+    const evs = publishedOf(mocks, 'whatsapp.mensaje.enviado');
+    assert.strictEqual(evs.length, 1);
+    assert.strictEqual(evs[0].kind, 'template');
+    delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
+    await m.onUnload();
+  });
+
+  await testAsync('tool.enviar_plantilla · sin template devuelve 400', async () => {
+    const mocks = makeMocks();
+    process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
+    const { module: m } = await instantiate(mocks, { fakeMetaClient: makeFakeMetaClient('ok') });
+    const r = await m.handleToolEnviarPlantilla({ project_slug: 'vapers', to: '34611111111' });
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
+    assert.strictEqual(r.error.details.field, 'template');
+    delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
+    await m.onUnload();
+  });
+
+  await testAsync('tool.enviar_plantilla · proyecto pendiente devuelve 404', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks, { fakeMetaClient: makeFakeMetaClient('ok') });
+    const r = await m.handleToolEnviarPlantilla({ project_slug: 'panaderia', to: '34611111111', template: 'x' });
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
+    await m.onUnload();
+  });
+
+  await testAsync('tool.enviar_plantilla · sin credencial env devuelve 401', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks, { fakeMetaClient: makeFakeMetaClient('ok') });
+    delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
+    const r = await m.handleToolEnviarPlantilla({ project_slug: 'vapers', to: '34611111111', template: 'pedido_listo' });
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 401);
+    assert.strictEqual(r.error.code, 'AUTHENTICATION_REQUIRED');
+    await m.onUnload();
+  });
+
+  await testAsync('onCocinaPedidoListo · con template_listo configurada usa PLANTILLA (cubre >24h)', async () => {
+    const mocks = makeMocks();
+    const fakeClient = makeFakeMetaClient('ok');
+    process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
+    const { module: m } = await instantiate(mocks, { fakeMetaClient: fakeClient });
+    m._trackPedidoListo(['ped-1', 'cuenta-1'], 'vapers', '34699999999', 'Juan Ortiz');
+    await m.onCocinaPedidoListo({ data: { cuenta_id: 'cuenta-1', pedido_id: 'ped-1' } });
+    // Plantilla enviada con el NOMBRE del cliente resuelto; sin fallback a texto.
+    assert.strictEqual(fakeClient.templateCalls.length, 1);
+    assert.strictEqual(fakeClient.templateCalls[0].template, 'pedido_listo');
+    assert.deepStrictEqual(fakeClient.templateCalls[0].bodyParams, ['Juan Ortiz']);
+    assert.strictEqual(fakeClient.calls.length, 0, 'no debe caer a texto si la plantilla funciona');
+    delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
+    await m.onUnload();
+  });
+
+  await testAsync('onCocinaPedidoListo · sin template_listo cae a texto (ventana 24h)', async () => {
+    const mocks = makeMocks();
+    const fakeClient = makeFakeMetaClient('ok');
+    process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
+    const { module: m } = await instantiate(mocks, { fakeMetaClient: fakeClient });
+    m.projectsByMeta.get('vapers').template_listo = null;   // proyecto sin plantilla
+    m._trackPedidoListo(['ped-2', 'cuenta-2'], 'vapers', '34699999999', 'Ana');
+    await m.onCocinaPedidoListo({ data: { cuenta_id: 'cuenta-2', pedido_id: 'ped-2' } });
+    assert.strictEqual(fakeClient.templateCalls.length, 0);
+    assert.strictEqual(fakeClient.calls.length, 1, 'fallback a texto');
+    assert.ok(fakeClient.calls[0].text.toLowerCase().includes('recoger'));
+    delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
+    await m.onUnload();
+  });
+
+  await testAsync('onCocinaPedidoListo · pedido ajeno (no nuestro) se ignora', async () => {
+    const mocks = makeMocks();
+    const fakeClient = makeFakeMetaClient('ok');
+    process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
+    const { module: m } = await instantiate(mocks, { fakeMetaClient: fakeClient });
+    await m.onCocinaPedidoListo({ data: { cuenta_id: 'pos-cuenta-999', pedido_id: 'pos-ped-999' } });
+    assert.strictEqual(fakeClient.templateCalls.length, 0);
+    assert.strictEqual(fakeClient.calls.length, 0);
+    delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
+    await m.onUnload();
   });
 
   teardownTmpCwd();

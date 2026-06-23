@@ -121,5 +121,23 @@ const marcaFix = { esencia: { nombre: 'No ni ná', lema: 'Obvio' }, visual: { co
     assert.ok(bus.published.some(([e]) => e === 'cartadigital.config.actualizada'));
   });
 
+  await testAsync('_inlineImagenes: ruta de storage → data: URI (best-effort, sin 404)', async () => {
+    const { m } = await makeModulo({ carta: cartaFix, marca: marcaFix });
+    m._rpc = async (ev, payload) => {
+      if (ev === 'fs.read.request' && payload.path === '/pizzepos/contenido/imagenes/p1__abc.jpg') return { content: 'QUJD' }; // 'ABC'
+      return { error: { code: 'RESOURCE_NOT_FOUND' } };
+    };
+    const out = await m._inlineImagenes(PROJ, [
+      { id: 'p1', imagen: '/pizzepos/contenido/imagenes/p1__abc.jpg' },
+      { id: 'p2', imagen: '/pizzepos/contenido/imagenes/falta.jpg' },
+      { id: 'p3', imagen: 'https://ext/x.png' },
+      { id: 'p4' }
+    ]);
+    assert.strictEqual(out[0].imagen, 'data:image/jpeg;base64,QUJD'); // inlineada
+    assert.strictEqual(out[1].imagen, null);                          // ilegible → placeholder, no 404
+    assert.strictEqual(out[2].imagen, 'https://ext/x.png');           // externa intacta
+    assert.strictEqual(out[3].imagen, undefined);                     // sin imagen, intacto
+  });
+
   console.log('\nTodos los tests pasaron.');
 })().catch(e => { console.error(e); process.exit(1); });

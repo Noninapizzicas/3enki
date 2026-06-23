@@ -6,6 +6,8 @@
    */
   import { cartaPublica } from '$lib/stores/carta-digital';
   import { prefillChatInput } from '$lib/stores/chatInputDraft';
+  import { storageImg } from '$lib/ui-core/storage-image';
+  import { activeProjectId } from '$lib/stores/projects';
 
   let expandedProducto: string | null = null;
 
@@ -54,7 +56,7 @@
             <div class="producto" class:abierto={expandedProducto === prod.id}>
               <button class="fila" on:click={() => toggleProducto(prod.id)} aria-expanded={expandedProducto === prod.id}>
                 <span class="p-thumb">
-                  {#if prod.imagen}<img src={prod.imagen} alt={prod.nombre} />{:else}<span class="p-ph">🍽️</span>{/if}
+                  {#if prod.imagen}<img use:storageImg={{ path: prod.imagen, project: $activeProjectId }} alt={prod.nombre} />{:else}<span class="p-ph">🍽️</span>{/if}
                 </span>
                 <span class="p-nombre">{prod.nombre}</span>
                 {#if (prod.alergenos ?? []).length}

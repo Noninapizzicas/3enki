@@ -19,7 +19,7 @@
       {
         "event": "tienda.pedido.completado",
         "description": "El bus respondio con exito al pedido.crear-tienda y se devolvio confirmacion al cliente HTTP. Informativo.",
-        "payload": "{ project_slug, pedido_id, codigo_recogida?, correlation_id }"
+        "payload": "{ project_slug, pedido_id, cliente_nombre?, correlation_id }"
       },
       {
         "event": "tienda.pedido.fallido",
@@ -40,7 +40,7 @@
     {
       "event": "pedido.crear-tienda",
       "consumer_esperado": "modules/pizzepos/pedidos",
-      "razon": "Handoff principal del flujo: cuando el cliente final envia un pedido desde la PWA, este modulo invoca la tool pedido.crear-tienda (auto-wire bus de tools.contract v1.2) para que pedidos lo persista plano (tipo: 'tienda', sin cuenta_id) y devuelva pedido_id + codigo_recogida via la response correlacionada. Misma tool que invoca whatsapp-bot — solo cambia el canal_origen ('web' vs 'whatsapp')."
+      "razon": "Handoff principal del flujo: cuando el cliente final envia un pedido desde la PWA, este modulo invoca la tool pedido.crear-tienda (auto-wire bus de tools.contract v1.2) para que pedidos lo persista plano (tipo: 'tienda', sin cuenta_id) y devuelva pedido_id + cliente_nombre via la response correlacionada. El cliente_nombre es el ANCLA de recogida (obligatorio). Misma tool que invoca whatsapp-bot — solo cambia el canal_origen ('web' vs 'whatsapp')."
     }
   ],
 
@@ -49,7 +49,7 @@
       "method": "POST",
       "path": "/tienda/pedido/:project",
       "handler": "handlePedidoPost",
-      "description": "Recibe pedido del cliente final desde la PWA. Body con shape de pedido.crear-tienda menos project_slug (viene del path) y menos canal_origen (lo fija a 'web' el modulo). Valida AJV strict, emite pedido.crear-tienda al bus con request_id, espera response correlacionada (tool_timeout_ms del config) y devuelve { pedido_id, codigo_recogida } o error canonico."
+      "description": "Recibe pedido del cliente final desde la PWA. Body con shape de pedido.crear-tienda menos project_slug (viene del path) y menos canal_origen (lo fija a 'web' el modulo). nombre_cliente OBLIGATORIO (ancla de recogida) → se mapea a cliente_nombre. Valida AJV strict, emite pedido.crear-tienda al bus con request_id, espera response correlacionada (tool_timeout_ms del config) y devuelve { pedido_id, cliente_nombre } o error canonico."
     },
     {
       "method": "OPTIONS",

@@ -420,20 +420,22 @@ function publishedOf(mocks, name) {
       total_centimos: 3800,
       canal_origen: 'whatsapp',
       cliente_telefono: '34600000000',
+      cliente_nombre: 'Juan Ortiz',
       expira_horas: 48,
       correlation_id: 'corr-test-1',
       ...overrides
     };
   }
 
-  await testAsync('tienda · success crea pedido pendiente_recogida con codigo de 6 chars', async () => {
+  await testAsync('tienda · success crea pedido pendiente_recogida con cliente_nombre (ancla)', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleCreatePedidoTienda(validInputTienda());
     assert.ok(isCanonicalSuccess(r), `shape: ${JSON.stringify(r)}`);
     assert.strictEqual(r.status, 201);
     assert.ok(r.data.pedido_id);
-    assert.match(r.data.codigo_recogida, /^[A-HJ-NP-Z2-9]{6}$/);
+    assert.strictEqual(r.data.cliente_nombre, 'Juan Ortiz');
+    assert.strictEqual(r.data.codigo_recogida, undefined, 'el codigo_recogida fue retirado');
     assert.strictEqual(r.data.estado, 'pendiente_recogida');
     assert.strictEqual(r.data.total_centimos, 3800);
     assert.strictEqual(r.data.tipo, 'tienda');
@@ -465,7 +467,8 @@ function publishedOf(mocks, name) {
     const evs = publishedOf(mocks, 'pedido.creado');
     assert.strictEqual(evs.length, 1);
     assert.strictEqual(evs[0].tipo, 'tienda');
-    assert.strictEqual(evs[0].codigo_recogida, r.data.codigo_recogida);
+    assert.strictEqual(evs[0].cliente_nombre, 'Juan Ortiz');
+    assert.strictEqual(evs[0].codigo_recogida, undefined, 'el codigo_recogida fue retirado');
     assert.strictEqual(evs[0].cuenta_id, null);
     assert.strictEqual(evs[0].canal_origen, 'whatsapp');
     assert.strictEqual(evs[0].project_slug, 'vapers');
@@ -541,17 +544,14 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('tienda · codigo_recogida es unico vs pedidos existentes', async () => {
+  await testAsync('tienda · sin cliente_nombre devuelve 400 (ancla de recogida obligatoria)', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const codigos = new Set();
-    for (let i = 0; i < 20; i++) {
-      const r = await m.handleCreatePedidoTienda(validInputTienda());
-      assert.ok(isCanonicalSuccess(r));
-      assert.ok(!codigos.has(r.data.codigo_recogida), `colision en intento ${i}: ${r.data.codigo_recogida}`);
-      codigos.add(r.data.codigo_recogida);
-    }
-    assert.strictEqual(m.pedidos.size, 20);
+    const r = await m.handleCreatePedidoTienda(validInputTienda({ cliente_nombre: undefined }));
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
+    assert.strictEqual(r.error.details.field, 'cliente_nombre');
     await m.onUnload();
   });
 
@@ -571,30 +571,57 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('pedido.generar_codigo_recogida · devuelve codigo 6 chars sin ambiguos', async () => {
+  await testAsync('confirmar_recogida · por nombre (case-insensitive) cierra recogido_y_cobrado', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r = await m.handleGenerarCodigoRecogida({});
-    assert.ok(isCanonicalSuccess(r));
-    assert.match(r.data.codigo_recogida, /^[A-HJ-NP-Z2-9]{6}$/);
+    const r = await m.handleCreatePedidoTienda(validInputTienda());
+    const cr = await m.handleConfirmarRecogida({ cliente_nombre: '  juan   ORTIZ ' });
+    assert.ok(isCanonicalSuccess(cr), JSON.stringify(cr));
+    assert.strictEqual(cr.data.estado, 'recogido_y_cobrado');
+    assert.strictEqual(cr.data.metodo_pago, 'efectivo');
+    assert.strictEqual(cr.data.pedido_id, r.data.pedido_id);
+    const evs = publishedOf(mocks, 'pedido.recogido');
+    assert.strictEqual(evs.length, 1);
+    assert.strictEqual(evs[0].cliente_nombre, 'Juan Ortiz');
+    assert.strictEqual(evs[0].codigo_recogida, undefined, 'el codigo_recogida fue retirado');
     await m.onUnload();
   });
 
-  await testAsync('pedido.generar_codigo_recogida · longitud 8 personalizada', async () => {
+  await testAsync('confirmar_recogida · nombre inexistente devuelve 404', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r = await m.handleGenerarCodigoRecogida({ longitud: 8 });
-    assert.ok(isCanonicalSuccess(r));
-    assert.match(r.data.codigo_recogida, /^[A-HJ-NP-Z2-9]{8}$/);
+    await m.handleCreatePedidoTienda(validInputTienda());
+    const cr = await m.handleConfirmarRecogida({ cliente_nombre: 'Nadie' });
+    assert.ok(isCanonicalError(cr));
+    assert.strictEqual(cr.status, 404);
+    assert.strictEqual(cr.error.code, 'RESOURCE_NOT_FOUND');
     await m.onUnload();
   });
 
-  await testAsync('pedido.generar_codigo_recogida · longitud 3 fuera de rango devuelve 400', async () => {
+  await testAsync('confirmar_recogida · varios pedidos al mismo nombre exigen pedido_id (409 + candidatos)', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r = await m.handleGenerarCodigoRecogida({ longitud: 3 });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.error.code, 'INVALID_INPUT');
+    const r1 = await m.handleCreatePedidoTienda(validInputTienda());
+    await m.handleCreatePedidoTienda(validInputTienda());
+    const amb = await m.handleConfirmarRecogida({ cliente_nombre: 'Juan Ortiz' });
+    assert.ok(isCanonicalError(amb));
+    assert.strictEqual(amb.status, 409);
+    assert.strictEqual(amb.error.code, 'CONFLICT_STATE');
+    assert.strictEqual(amb.error.details.candidatos.length, 2);
+    // Desambiguar con pedido_id
+    const ok = await m.handleConfirmarRecogida({ cliente_nombre: 'Juan Ortiz', pedido_id: r1.data.pedido_id });
+    assert.ok(isCanonicalSuccess(ok));
+    assert.strictEqual(ok.data.pedido_id, r1.data.pedido_id);
+    await m.onUnload();
+  });
+
+  await testAsync('confirmar_recogida · sin nombre ni pedido_id devuelve 400', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const cr = await m.handleConfirmarRecogida({});
+    assert.ok(isCanonicalError(cr));
+    assert.strictEqual(cr.status, 400);
+    assert.strictEqual(cr.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 

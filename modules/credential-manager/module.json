@@ -1,7 +1,8 @@
 {
   "name": "credential-manager",
-  "version": "2.0.0",
-  "description": "Core canónico: CRUD de credenciales API + resolución cascada (CUSTOM → CLIENT → PROJECT → GLOBAL) + cache .env atómico. Tras descomposición 2026-05-04: NO incluye test de credenciales (módulo credential-tester pendiente), NO incluye OAuth flow (credential-oauth pendiente), NO incluye configs vendor multi-campo Glovo/Telegram (credential-vendor-* pendientes). Ver arquitectura/migracion/notas/credential-manager-descomposicion.md.",
+  "version": "2.1.0",
+  "_v2_1_nota": "v2.1.0 (2026-06-22): invariante PROJECT-ONLY para providers por-tenant. PROJECT_ONLY_PROVIDERS (META_WHATSAPP, META_WHATSAPP_VERIFY_TOKEN): cada tienda tiene su propio número/token/webhook → NUNCA pueden ser globales. _validateProviderLevelKey rechaza guardarlos a cualquier nivel != PROJECT; _resolveCredential resuelve SOLO a nivel PROJECT (sin caída a GLOBAL/legacy), así que aunque alguien colara una clave global a mano, no se puede usar cross-tenant. La base genérica (5 niveles + cascada) sigue intacta para el resto de providers.",
+  "description": "Core canónico: CRUD de credenciales API + resolución cascada (CUSTOM → CLIENT → PROJECT → GLOBAL) + cache .env atómico. Providers por-tenant (PROJECT_ONLY_PROVIDERS) quedan forzados a nivel PROJECT (sin global) para aislamiento multi-proyecto. Tras descomposición 2026-05-04: NO incluye test de credenciales (módulo credential-tester pendiente), NO incluye OAuth flow (credential-oauth pendiente), NO incluye configs vendor multi-campo Glovo/Telegram (credential-vendor-* pendientes). Ver arquitectura/migracion/notas/credential-manager-descomposicion.md.",
   "author": "Event Core Team",
   "language": "en",
   "main": "index.js",

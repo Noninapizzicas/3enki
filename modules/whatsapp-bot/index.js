@@ -16,7 +16,7 @@ class WhatsappBotModule extends BaseModule {
   constructor() {
     super();
     this.name = 'whatsapp-bot';
-    this.version = '1.0.0';
+    this.version = '1.2.0';
 
     this.config = null;
     this.metaClient = null;
@@ -26,7 +26,7 @@ class WhatsappBotModule extends BaseModule {
     this.projectByPhoneId = new Map();
     // request_id -> { project_slug, from, message_id, items, total_centimos, cliente_nombre, timeoutHandle, created_at }
     this.pendingPedidos = new Map();
-    // pedido_id -> { project_slug, from, codigo_recogida } — para avisar al cliente cuando
+    // pedido_id -> { project_slug, from, cliente_nombre } — para avisar al cliente cuando
     // cocina marque el pedido listo (cocina.pedido_listo NO arrastra el cliente_telefono).
     // Bounded (LRU simple) para no fugar memoria.
     this.pedidosListos = new Map();
@@ -45,8 +45,8 @@ class WhatsappBotModule extends BaseModule {
   // Registra el pedido bajo varias claves (pedido_id de tienda + cuenta_id): cocina
   // marca listo el ticket de la cuenta, cuyo cuenta_id viaja en cocina.pedido_listo
   // y cuyo pedido_id difiere del de tienda. Cualquiera de las dos localiza al cliente.
-  _trackPedidoListo(keys, project_slug, from, codigo_recogida) {
-    const ref = { project_slug, from, codigo_recogida };
+  _trackPedidoListo(keys, project_slug, from, cliente_nombre) {
+    const ref = { project_slug, from, cliente_nombre };
     for (const k of (Array.isArray(keys) ? keys : [keys])) {
       if (!k) continue;
       if (this.pedidosListos.has(k)) this.pedidosListos.delete(k);
@@ -136,6 +136,33 @@ class WhatsappBotModule extends BaseModule {
   _envTokenKey(slug)  { return `META_WHATSAPP_API_KEY_PROJECT_${slug}`; }
   _envVerifyKey(slug) { return `META_WHATSAPP_VERIFY_TOKEN_API_KEY_PROJECT_${slug}`; }
 
+  // Normaliza la config de plantilla del proyecto a { name, language, body_params } o null.
+  // Admite forma corta (string = solo el nombre) o larga ({ name, language?, body_params? }).
+  // body_params son placeholders con tokens {codigo}/{nombre}/{negocio} que se rellenan al enviar.
+  _normalizarTemplate(raw) {
+    if (!raw) return null;
+    if (typeof raw === 'string') return { name: raw, language: 'es', body_params: [] };
+    if (typeof raw === 'object' && raw.name) {
+      return {
+        name: String(raw.name),
+        language: raw.language || 'es',
+        body_params: Array.isArray(raw.body_params) ? raw.body_params : []
+      };
+    }
+    return null;
+  }
+
+  // Rellena los body_params de una plantilla con el contexto del aviso (codigo/nombre/negocio).
+  _renderTemplateParams(params, ctx) {
+    const dict = {
+      codigo: ctx?.codigo != null ? String(ctx.codigo) : '',
+      nombre: ctx?.nombre != null ? String(ctx.nombre) : '',
+      negocio: ctx?.negocio != null ? String(ctx.negocio) : ''
+    };
+    return (params || []).map(p =>
+      String(p).replace(/\{(codigo|nombre|negocio)\}/g, (_m, k) => dict[k] ?? ''));
+  }
+
   // ==========================================
   // Lifecycle
   // ==========================================
@@ -219,7 +246,7 @@ class WhatsappBotModule extends BaseModule {
       pedido_id: data.pedido_id,
       project_slug: pending.project_slug,
       from: this._maskPhoneNumber(pending.from),
-      codigo_recogida: data.codigo_recogida
+      cliente_nombre: pending.cliente_nombre || null
     });
     this.metrics?.increment('whatsapp-bot.pedido.confirmado', { project: pending.project_slug });
 
@@ -227,7 +254,7 @@ class WhatsappBotModule extends BaseModule {
     await this._notificarStaff(pending, data);
     // Recordar quién es el cliente para avisarle cuando cocina lo marque listo.
     // Clave por pedido_id (tienda) y por cuenta_id (la cuenta operativa de comandero).
-    this._trackPedidoListo([data.pedido_id, data.cuenta_id], pending.project_slug, pending.from, data.codigo_recogida);
+    this._trackPedidoListo([data.pedido_id, data.cuenta_id], pending.project_slug, pending.from, pending.cliente_nombre);
   }
 
   // Cocina marcó el pedido listo → avisa al CLIENTE por WhatsApp ("ven a recoger").
@@ -243,10 +270,24 @@ class WhatsappBotModule extends BaseModule {
     if (cuenta_id) this.pedidosListos.delete(cuenta_id);
     if (pedido_id) this.pedidosListos.delete(pedido_id);
     const meta = this.projectsByMeta.get(ref.project_slug);
+
+    // Aviso "ven a recoger": puede llegar HORAS despues del pedido. Si han pasado >24h desde
+    // el ultimo mensaje del cliente, Meta solo deja escribir con PLANTILLA. Si el proyecto tiene
+    // una plantilla aprobada configurada (whatsapp.template_listo), la usamos (funciona dentro y
+    // fuera de ventana). Si no, caemos a texto (solo llega si el cliente escribio en las ultimas 24h).
+    if (meta?.template_listo) {
+      const enviada = await this._enviarPlantillaSegura(ref.project_slug, ref.from, meta.template_listo, {
+        nombre: ref.cliente_nombre || '', negocio: meta?.display_number || ''
+      });
+      if (enviada) {
+        this.metrics?.increment('whatsapp-bot.pedido.listo_notificado', { project: ref.project_slug, via: 'template' });
+        return;
+      }
+    }
     const display = meta?.display_number ? `\nNumero del negocio: ${meta.display_number}` : '';
     const msg = `¡Tu pedido ya está listo! 🎉 Puedes pasar a recogerlo y pagas al recoger.${display}`;
     await this._enviarMensajeSeguro(ref.project_slug, ref.from, msg);
-    this.metrics?.increment('whatsapp-bot.pedido.listo_notificado', { project: ref.project_slug });
+    this.metrics?.increment('whatsapp-bot.pedido.listo_notificado', { project: ref.project_slug, via: 'text' });
   }
 
   // Mensaje entrante por el transporte del bus (openwa-service). Equivalente al webhook de Meta,
@@ -432,6 +473,54 @@ class WhatsappBotModule extends BaseModule {
     }
   }
 
+  // Enviar una PLANTILLA aprobada por Meta. Es la unica via para escribir al cliente fuera
+  // de la ventana de 24h (notificaciones outbound v2, recordatorios, "ven a recoger" tardio).
+  // El caller aporta el nombre de la plantilla aprobada + sus variables (body_params en orden).
+  async handleToolEnviarPlantilla(data) {
+    const project_slug = data?.project_slug;
+    const to = data?.to;
+    const template = data?.template;
+    try {
+      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
+      if (!to || typeof to !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'to requerido (E.164 sin +)', { field: 'to' });
+      if (!template || typeof template !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'template (nombre aprobado) requerido', { field: 'template' });
+      const bodyParams = Array.isArray(data?.body_params) ? data.body_params : [];
+      const languageCode = data?.language || 'es';
+
+      const meta = this.projectsByMeta.get(project_slug);
+      if (!meta || !meta.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_slug}' no configurado o con datos pendientes`, { project_slug });
+      }
+      const token = process.env[this._envTokenKey(project_slug)];
+      if (!token) {
+        return this._errorResponse(401, 'AUTHENTICATION_REQUIRED', `Credencial META_WHATSAPP no disponible para '${project_slug}'`, { project_slug });
+      }
+
+      const { messageId } = await this.metaClient.sendTemplate({
+        phoneNumberId: meta.phone_number_id,
+        accessToken: token,
+        to,
+        template,
+        languageCode,
+        bodyParams
+      });
+
+      this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, kind: 'template' });
+      await this._publicarEvento('whatsapp.mensaje.enviado', {
+        project_slug, to: this._maskPhoneNumber(to), message_id: messageId, kind: 'template'
+      });
+
+      return { status: 200, data: { message_id: messageId, project_slug, kind: 'template' } };
+    } catch (err) {
+      this.metrics?.increment('whatsapp-bot.message.failed', { project: project_slug, kind: 'template' });
+      await this._publicarEvento('whatsapp.envio.fallido', {
+        project_slug, to: this._maskPhoneNumber(to),
+        error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
+      });
+      return this._handleHandlerError('whatsapp-bot.tool.enviar_plantilla.error', err, 'tool');
+    }
+  }
+
   // ==========================================
   // Dominio protegido (mapping, despacho, helpers)
   // ==========================================
@@ -471,7 +560,11 @@ class WhatsappBotModule extends BaseModule {
       webhook_path: cfg.whatsapp.webhook_path || `/whatsapp/webhook/${slug}`,
       pwa_url: cfg.whatsapp.pwa_url || null,
       telegram_chat_id: cfg.telegram?.chatId || null,
-      telegram_bot_name: cfg.telegram?.botName || null
+      telegram_bot_name: cfg.telegram?.botName || null,
+      // Plantilla aprobada por Meta para el aviso "ven a recoger". Es lo UNICO que llega al
+      // cliente FUERA de la ventana de 24h (re-engagement). Opcional: sin ella, el aviso se
+      // envia como texto (solo funciona si el cliente escribio en las ultimas 24h).
+      template_listo: this._normalizarTemplate(cfg.whatsapp.template_listo)
     };
     this.projectsByMeta.set(slug, meta);
     if (meta.phone_number_id && !String(meta.phone_number_id).startsWith('<PENDIENTE')) {
@@ -778,6 +871,51 @@ class WhatsappBotModule extends BaseModule {
         error_code: err._code || 'UNKNOWN_ERROR',
         error_message: err.message
       });
+    }
+  }
+
+  // Envia una plantilla aprobada por Meta (re-engagement fuera de la ventana de 24h).
+  // Solo aplica al transporte 'meta' (openwa es una sesion WA real, sin restriccion de
+  // ventana). Devuelve true si se envio, false si no se pudo (sin credencial/config o error).
+  async _enviarPlantillaSegura(project_slug, to, tpl, ctx) {
+    if (this.transport !== 'meta') return false;
+    if (!tpl || !tpl.name) return false;
+    try {
+      const meta = this.projectsByMeta.get(project_slug);
+      if (!meta?.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
+        this.logger.warn('whatsapp-bot.plantilla.proyecto_no_operativo', { project_slug });
+        return false;
+      }
+      const token = process.env[this._envTokenKey(project_slug)];
+      if (!token) {
+        this.logger.warn('whatsapp-bot.plantilla.sin_credencial', { project_slug });
+        return false;
+      }
+      const bodyParams = this._renderTemplateParams(tpl.body_params, ctx);
+      const { messageId } = await this.metaClient.sendTemplate({
+        phoneNumberId: meta.phone_number_id,
+        accessToken: token,
+        to,
+        template: tpl.name,
+        languageCode: tpl.language || 'es',
+        bodyParams
+      });
+      this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, kind: 'template' });
+      await this._publicarEvento('whatsapp.mensaje.enviado', {
+        project_slug, to: this._maskPhoneNumber(to), message_id: messageId, kind: 'template'
+      });
+      return true;
+    } catch (err) {
+      this.logger.error('whatsapp-bot.plantilla.fallido', {
+        project_slug, to: this._maskPhoneNumber(to),
+        error: err.message, error_code: err._code || 'UNKNOWN_ERROR'
+      });
+      this.metrics?.increment('whatsapp-bot.message.failed', { project: project_slug, kind: 'template' });
+      await this._publicarEvento('whatsapp.envio.fallido', {
+        project_slug, to: this._maskPhoneNumber(to),
+        error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
+      });
+      return false;
     }
   }
 }

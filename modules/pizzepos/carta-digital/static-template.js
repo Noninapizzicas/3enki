@@ -283,7 +283,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .ing-add{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s}
 .ing-chip.added{border-color:#22c55e;background:rgba(34,197,94,.15);color:#22c55e}
 .ing-add-price{font-size:.65rem;color:#888;margin-left:2px}.ing-chip.added .ing-add-price{color:#22c55e}
-.dish-special{cursor:pointer;border:1px dashed var(--primary);background:rgba(245,158,11,.06)}
+/* Atajos componibles (mitad / crea tu pizza): pills compactas ancladas arriba del grid */
+.special-bar{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;margin:0 0 6px}
+.special-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 15px;border:1.5px solid var(--primary);border-radius:999px;background:rgba(245,158,11,.12);background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);font:inherit;font-size:.82rem;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s,background .15s}
+.special-btn:active{transform:scale(.95);background:color-mix(in srgb,var(--primary) 26%,transparent)}
+.special-btn-ico{display:inline-flex;line-height:0}
 /* Preview de las dos mitades (espeja .pizza-preview del MitadMitadPanel del comandero) */
 .mitad-preview{display:flex;align-items:stretch;justify-content:center;gap:8px;margin:12px 0}
 .mitad-box{flex:1;max-width:150px;min-height:84px;padding:14px 10px;border:2px dashed #444;border-radius:12px;background:#1a1a1a;color:#777;font:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;position:relative;-webkit-tap-highlight-color:transparent;transition:all .15s}
@@ -748,8 +752,10 @@ function renderGrid() {
   // Entradas Mitad/Al gusto: solo en categorías "pizza" (por nombre) y si los datos las soportan.
   let head = '';
   if (catActiva && isPizzaCat(catActiva)) {
-    if (pizzasOf(catActiva).length >= 2) head += specialCard('½', 'Mitad y mitad', 'Combina dos medias pizzas', 'showMitad(\\'' + catActiva + '\\')');
-    if (extrasForGroup(catGrpKeys(catActiva), {}).length) head += specialCard('🍕', 'Crea tu pizza', 'Elige tus ingredientes', 'showAlGusto(\\'' + catActiva + '\\')');
+    let _sb = '';
+    if (pizzasOf(catActiva).length >= 2) _sb += specialBtn('mitad', 'Mitad y mitad', 'showMitad(\\'' + catActiva + '\\')');
+    if (extrasForGroup(catGrpKeys(catActiva), {}).length) _sb += specialBtn('pizza', 'Crea tu pizza', 'showAlGusto(\\'' + catActiva + '\\')');
+    if (_sb) head = '<div class="special-bar">' + _sb + '</div>';
   }
   if (prods.length === 0 && !head) { el.innerHTML = '<div style="text-align:center;padding:60px;color:#666;grid-column:1/-1">' + T.no_products + '</div>'; return; }
   el.innerHTML = head + prods.map(fillCard).join('');
@@ -932,11 +938,15 @@ function extrasForGroup(grpKeys, excludeSet) {
     return true;
   });
 }
-function specialCard(emoji, title, sub, onclickJs) {
-  return '<article class="dish dish-special" onclick="' + onclickJs + '">' +
-    '<div class="dish-photo"><span class="detail-ph" style="font-size:2.4rem">' + emoji + '</span></div>' +
-    '<div class="dish-body"><div class="dish-head"><h3 class="dish-name">' + title + '</h3></div>' +
-    '<p class="dish-desc">' + sub + '</p></div></article>';
+function specialBtn(kind, title, onclickJs) {
+  // Dibujos identificativos (heredan el color de marca via currentColor).
+  var ICO = {
+    mitad: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>',
+    pizza: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+  };
+  return '<button type="button" class="special-btn" onclick="' + onclickJs + '">' +
+    '<span class="special-btn-ico">' + (ICO[kind] || '') + '</span>' +
+    '<span>' + title + '</span></button>';
 }
 
 // Mitad: eliges dos medias; precio = el mayor (igual que MitadMitadPanel).

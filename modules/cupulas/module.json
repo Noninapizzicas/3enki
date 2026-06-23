@@ -1,8 +1,8 @@
 {
-  "_doc": "cupulas — un Obsidian para el sistema, pero donde la PROSA es minima y la BASE es pseudocodigo + OOP + codigo por lenguaje. El modulo es un REFLEJO JS (determinista) que custodia una boveda de notas navegables (ficheros .md/.json en storage/cupulas/<cupula>/<nota>.<ext>) agrupadas en CUPULAS TEMATICAS, cada una con su lenguaje (oop|pseudo|js|python|rust|go|skill). Un _index.json mantiene el catalogo y los ENLACES entre notas (wikilinks) -> el grafo. El LLM REUTILIZA el material: tira de cupulas.contexto (bundle de codigo listo para reusar), cupulas.buscar y cupulas.grafo, y le da sentido y utilidad real. Cada nota: frontmatter (descriptor) + 1 linea de resumen + un bloque de codigo. El cuerpo manda; la prosa se raciona (resumen truncado).",
+  "_doc": "cupulas — un Obsidian invertido: PROSA minima, el cuerpo es pseudocodigo + OOP. Reflejo JS (determinista) que custodia una boveda de notas navegables (ficheros .md/.json en storage/cupulas/<cupula>/<nota>.<ext>) agrupadas en CUPULAS TEMATICAS por TIPO DE PRIMITIVA del sistema: cupula de skill, de agentes, de handler, de blueprints, de clases — y los que vengan (el eje es ABIERTO, no rigido: 'para no ser muy determinista'). El lenguaje (oop/js/python/...) es metadato OPCIONAL de cada nota, no el eje. Un _index.json mantiene catalogo + ENLACES (wikilinks -> grafo). El LLM REUTILIZA el material: tira de cupulas.contexto (bundle listo para reusar), buscar y grafo, y lo autora via crear_cupula/add_nota. Cada nota: frontmatter (descriptor) + 1 linea de resumen + el cuerpo (codigo/pseudocodigo). El cuerpo manda; la prosa se raciona.",
   "name": "cupulas",
   "version": "1.0.0",
-  "description": "Boveda de capacidades estilo Obsidian con prosa minima: cupulas tematicas (oop/pseudo/js/python/rust/go/skill) de notas-codigo enlazadas (grafo). Reflejo JS determinista; el LLM reutiliza el material via cupulas.contexto/buscar/grafo y lo autora via cupulas.crear_cupula/add_nota. Vault = ficheros navegables + _index.json.",
+  "description": "Boveda estilo Obsidian con prosa minima. Cupulas tematicas por TIPO DE PRIMITIVA (skill/agente/handler/blueprint/clase/...) de notas-codigo enlazadas (grafo). Reflejo JS; el LLM reutiliza via cupulas.contexto/buscar/grafo y autora via crear_cupula/add_nota. Vault = ficheros navegables + _index.json. Eje abierto (tipo es string libre); lenguaje es metadato opcional.",
   "author": "Event Core Team",
   "language": "es",
   "config": {
@@ -15,17 +15,17 @@
   },
   "publishes": [
     { "event": "cupulas.cupula_creada", "description": "Una cupula tematica fue creada." },
-    { "event": "cupulas.nota_creada", "description": "Una nota-codigo fue anadida a una cupula." }
+    { "event": "cupulas.nota_creada", "description": "Una nota fue anadida a una cupula." }
   ],
   "subscribes": [
-    { "event": "cupulas.crear_cupula.request", "handler": "onCrearCupulaRequest", "description": "Reflejo: crea una cupula tematica." },
-    { "event": "cupulas.add_nota.request", "handler": "onAddNotaRequest", "description": "Reflejo: anade una nota-codigo (escribe fichero + indexa enlaces)." },
-    { "event": "cupulas.get_nota.request", "handler": "onGetNotaRequest", "description": "Reflejo: devuelve una nota con su cuerpo (codigo) verbatim." },
+    { "event": "cupulas.crear_cupula.request", "handler": "onCrearCupulaRequest", "description": "Reflejo: crea una cupula tematica de un tipo." },
+    { "event": "cupulas.add_nota.request", "handler": "onAddNotaRequest", "description": "Reflejo: anade una nota (escribe fichero + indexa enlaces)." },
+    { "event": "cupulas.get_nota.request", "handler": "onGetNotaRequest", "description": "Reflejo: devuelve una nota con su cuerpo verbatim." },
     { "event": "cupulas.listar_cupulas.request", "handler": "onListarCupulasRequest", "description": "Reflejo: catalogo de cupulas." },
     { "event": "cupulas.listar_notas.request", "handler": "onListarNotasRequest", "description": "Reflejo: notas de una cupula (sin cuerpo)." },
-    { "event": "cupulas.buscar.request", "handler": "onBuscarRequest", "description": "Reflejo: busqueda en el indice (titulo/resumen/kind/cupula)." },
+    { "event": "cupulas.buscar.request", "handler": "onBuscarRequest", "description": "Reflejo: busqueda en el indice (titulo/resumen/tipo/cupula)." },
     { "event": "cupulas.grafo.request", "handler": "onGrafoRequest", "description": "Reflejo: nodos+aristas (enlaces entre notas)." },
-    { "event": "cupulas.contexto.request", "handler": "onContextoRequest", "description": "Reflejo: bundle de material listo para que el LLM lo reutilice." }
+    { "event": "cupulas.contexto.request", "handler": "onContextoRequest", "description": "Reflejo: bundle de material para que el LLM lo reutilice." }
   ],
   "ui_handlers": [
     { "domain": "cupulas", "action": "crear_cupula", "handler": "handleCrearCupula" },
@@ -40,7 +40,7 @@
   "tools": [
     {
       "name": "cupulas.contexto",
-      "description": "Trae material reutilizable de la boveda: el cuerpo (pseudocodigo/OOP/codigo) de las notas de una cupula, o de unos ids, o de una busqueda. Usalo para REUTILIZAR patrones existentes en vez de reinventarlos.",
+      "description": "Trae material reutilizable de la boveda: el cuerpo (pseudocodigo/OOP/codigo) de las notas de una cupula, de unos ids, o de una busqueda. Usalo para REUTILIZAR piezas (skills/agentes/handlers/blueprints/clases) en vez de reinventarlas.",
       "parameters": {
         "type": "object", "additionalProperties": false,
         "properties": {
@@ -57,7 +57,7 @@
     },
     {
       "name": "cupulas.buscar",
-      "description": "Busca notas-codigo y cupulas por titulo/resumen/lenguaje/tema. Devuelve metadatos (sin cuerpo); luego tira de cupulas.contexto o get_nota.",
+      "description": "Busca notas y cupulas por titulo/resumen/tipo/tema. Devuelve metadatos (sin cuerpo); luego tira de cupulas.contexto o get_nota.",
       "parameters": {
         "type": "object", "additionalProperties": false,
         "properties": {
@@ -71,7 +71,7 @@
     },
     {
       "name": "cupulas.grafo",
-      "description": "Devuelve el grafo de la boveda (nodos=notas, aristas=enlaces). Opcionalmente acotado a una cupula. Es el mapa para navegar el material.",
+      "description": "Grafo de la boveda (nodos=notas, aristas=enlaces). Opcionalmente acotado a una cupula. El mapa para navegar el material.",
       "parameters": {
         "type": "object", "additionalProperties": false,
         "properties": {
@@ -85,7 +85,7 @@
     },
     {
       "name": "cupulas.get_nota",
-      "description": "Devuelve una nota con su cuerpo (codigo/pseudocodigo) verbatim, sus enlaces y su lenguaje.",
+      "description": "Devuelve una nota con su cuerpo (codigo/pseudocodigo) verbatim, su tipo, lenguaje y enlaces.",
       "parameters": {
         "type": "object", "additionalProperties": false,
         "properties": {
@@ -99,12 +99,12 @@
     },
     {
       "name": "cupulas.listar_cupulas",
-      "description": "Lista las cupulas tematicas de la boveda con su lenguaje y cuantas notas tienen.",
+      "description": "Lista las cupulas tematicas con su tipo de primitiva y cuantas notas tienen. Filtrable por tipo.",
       "parameters": {
         "type": "object", "additionalProperties": false,
         "properties": {
           "project_id": { "type": "string", "minLength": 1 },
-          "lenguaje": { "type": "string", "enum": ["oop", "pseudo", "js", "python", "rust", "go", "skill"] }
+          "tipo": { "type": "string", "description": "filtra por tipo de primitiva (skill, agente, handler, blueprint, clase, ...)." }
         },
         "required": ["project_id"]
       },
@@ -113,32 +113,33 @@
     },
     {
       "name": "cupulas.crear_cupula",
-      "description": "Crea una cupula tematica nueva con su lenguaje (oop/pseudo/js/python/rust/go/skill). El tema da el id.",
+      "description": "Crea una cupula tematica de un TIPO de primitiva: skill, agente, handler, blueprint, clase — o el que necesites (campo abierto). El tema da el id.",
       "parameters": {
         "type": "object", "additionalProperties": false,
         "properties": {
           "project_id": { "type": "string", "minLength": 1 },
           "tema": { "type": "string", "minLength": 1, "description": "Nombre tematico; genera el id (slug)." },
-          "lenguaje": { "type": "string", "enum": ["oop", "pseudo", "js", "python", "rust", "go", "skill"] },
+          "tipo": { "type": "string", "minLength": 1, "description": "Tipo de primitiva. Conocidos: skill, agente, handler, blueprint, clase. Campo ABIERTO: admite otros." },
           "descripcion": { "type": "string", "description": "Prosa MINIMA (se trunca)." }
         },
-        "required": ["project_id", "tema", "lenguaje"]
+        "required": ["project_id", "tema", "tipo"]
       },
       "handler": "handleCrearCupula",
       "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "UNKNOWN_ERROR"]
     },
     {
       "name": "cupulas.add_nota",
-      "description": "Anade una nota-codigo a una cupula. El CUERPO (contenido) es la base: pseudocodigo/OOP/codigo. La prosa (resumen) se raciona. enlaces = ids de otras notas (wikilinks -> grafo).",
+      "description": "Anade una nota a una cupula. El CUERPO (contenido) es la base: pseudocodigo/OOP. La prosa (resumen) se raciona. enlaces = ids de otras notas (wikilinks -> grafo). lenguaje es metadato OPCIONAL.",
       "parameters": {
         "type": "object", "additionalProperties": false,
         "properties": {
           "project_id": { "type": "string", "minLength": 1 },
           "cupula": { "type": "string", "minLength": 1 },
           "titulo": { "type": "string", "minLength": 1 },
-          "contenido": { "type": "string", "minLength": 1, "description": "El codigo/pseudocodigo/OOP. La BASE de la nota." },
+          "contenido": { "type": "string", "minLength": 1, "description": "El cuerpo: pseudocodigo/OOP/codigo. La BASE de la nota." },
           "id": { "type": "string", "description": "id opcional; por defecto = slug(titulo)." },
-          "kind": { "type": "string", "enum": ["oop", "pseudo", "js", "python", "rust", "go", "skill"], "description": "Lenguaje del cuerpo; default = el de la cupula." },
+          "tipo": { "type": "string", "description": "tipo de primitiva; default = el de la cupula." },
+          "lenguaje": { "type": "string", "description": "OPCIONAL: oop, js, python, rust, go, pseudo, ... (solo metadato y resaltado)." },
           "resumen": { "type": "string", "description": "1 linea, prosa minima (se trunca a 200)." },
           "enlaces": { "type": "array", "items": { "type": "string" }, "description": "ids de notas relacionadas." },
           "formato": { "type": "string", "enum": ["md", "json"], "description": "default md (navegable en Obsidian)." }

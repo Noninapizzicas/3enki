@@ -1,6 +1,6 @@
 {
   "name": "destilador",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "blueprint_driven": true,
   "blueprint_path": "destilador.blueprint.json",
   "target_page_id": "destilador",
@@ -28,6 +28,10 @@
     {
       "event": "interruptor.registrar",
       "description": "Registra su boton on/off en el panel central al cargar (id='destilador', grupo='aprendizaje', default ON salvo config.enabled:false)."
+    },
+    {
+      "event": "destilador.ruta.response",
+      "description": "REPLAY (lado lectura): responde con las trayectorias aprendidas que arrancan en 'desde'. {request_id, status, data:{rutas:[{firma, secuencia, continuacion, ocurrencias}]}}. La consume quien pregunta 'desde aqui, por donde se suele ir' (ej. conserje)."
     }
   ],
 
@@ -56,6 +60,11 @@
       "event": "interruptor.cambiado",
       "handler": "onInterruptorCambiado",
       "description": "Reacciona al on/off del panel central (id='destilador') en caliente, sin reinicio. OFF detiene la mineria (cero captura); ver/aprobar lo ya recogido sigue disponible."
+    },
+    {
+      "event": "destilador.ruta.request",
+      "handler": "onRutaRequest",
+      "description": "REPLAY (RPC del bus): dado {project_id, desde} devuelve las trayectorias aprendidas que arrancan en 'desde' (cluster.secuencia), rankeadas por ocurrencias. NO gateado por on/off: leer rutas funciona aunque el aprendizaje este apagado."
     }
   ],
 
@@ -65,6 +74,12 @@
       "action": "listar_clusters",
       "handler": "handleListarClusters",
       "description": "Las firmas (patrones de resolucion) detectadas de un proyecto, con su recurrencia. El ojo del paso 1."
+    },
+    {
+      "domain": "destilador",
+      "action": "ruta",
+      "handler": "handleRuta",
+      "description": "REPLAY: dado {project_id, desde?} devuelve las trayectorias aprendidas que arrancan ahi, con su continuacion. El ojo del lado lectura."
     },
     {
       "domain": "destilador",
@@ -112,6 +127,22 @@
         "required": ["project_id"]
       },
       "handler": "handleListarClusters",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "destilador.ruta",
+      "description": "REPLAY: desde donde estas (project_id + desde opcional: una pagina/dominio o un prefijo de pasos), devuelve las rutas aprendidas que continuan, rankeadas por cuantas veces se repitieron. La 'continuacion' es lo que suele venir despues.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." },
+          "desde": { "description": "Donde estas: una pagina/dominio (ej. 'recetas') o un array de pasos normalizados (ej. ['recetas.obtener']). Vacio = todas las rutas del proyecto." },
+          "limite": { "type": "number", "description": "Cuantas rutas devolver (default 5)." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "handleRuta",
       "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
     },
     {

@@ -1,6 +1,6 @@
 {
   "name": "interruptores",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Registro central de on/off del sistema (el panel de control). Un solo sitio para todos los botones: cada feature registra su interruptor al cargar (interruptor.registrar); el panel de la barra lateral los pinta; al pulsarlos, interruptor.cambiado avisa al dueño para que reaccione en caliente sin reinicio. Estado global persistido en data/interruptores.json (el estado tocado por el humano manda sobre el default).",
   "author": "Event Core Team",
   "language": "es",

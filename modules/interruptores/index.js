@@ -56,7 +56,19 @@ class InterruptoresModule extends BaseModule {
     if (!d.id) return;
     this._upsert(d, false);          // no pisa el estado ya persistido/tocado
     this.metrics?.increment('interruptores.registrado.total');
-    this.logger?.info('interruptores.registrado', { id: d.id, estado: this.toggles.get(d.id)?.estado });
+    const estado = this.toggles.get(d.id)?.estado;
+    this.logger?.info('interruptores.registrado', { id: d.id, estado });
+    // Sincroniza al dueño SOLO si el estado persistido difiere del default que anuncia:
+    // el modulo arranca en su default; si el humano lo cambio antes, hay que avisarle en
+    // caliente para que el 'off' (o 'on') sobreviva al reinicio. Mismo evento que handleSet.
+    if (typeof estado === 'boolean' && estado !== (d.default === true)) {
+      try {
+        this.eventBus.publish('interruptor.cambiado', {
+          id: d.id, enabled: estado, correlation_id: require('crypto').randomUUID(), timestamp: new Date().toISOString()
+        });
+      } catch (_) { /* best-effort */ }
+      this.logger?.info('interruptores.sincronizado', { id: d.id, estado });
+    }
   }
 
   _upsert(t, overrideEstado) {

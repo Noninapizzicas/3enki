@@ -30,10 +30,14 @@ class DestiladorModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'destilador';
-    this.version = '0.2.0';
+    this.version = '0.4.0';
 
     // Inyectados en onLoad
     this.config = null;
+
+    // Interruptor on/off (panel central). El lazo de aprendizaje solo MINA si activo.
+    // Default real se fija en onLoad (ON salvo config.enabled:false); el panel manda en caliente.
+    this.activo = false;
 
     // Estado runtime — facultad MINERO (paso 1)
     this.trazas = new Map();      // groupKey -> { project_id, pasos:[], firstTs, lastTs }
@@ -89,6 +93,17 @@ class DestiladorModule extends ModuloHibridoReflejo {
     this.umbralTasa = Number(uf.tasa) || 0.5;
     this.minMuestras = Number(uf.min_muestras) || 3;
 
+    // Interruptor: ON salvo que la config lo apague. El estado persistido del panel
+    // manda en caliente vía interruptor.cambiado (el dueño reacciona sin reinicio).
+    this.activo = this.config.enabled !== false;
+    try {
+      this.eventBus.publish('interruptor.registrar', {
+        id: 'destilador', label: 'Destilador (lazo de aprendizaje)', grupo: 'aprendizaje',
+        descripcion: 'Mina el bus, detecta patrones de resolucion recurrentes y redacta skills candidatas. OFF = no aprende (cero captura); ver/aprobar lo ya recogido sigue disponible.',
+        default: this.activo
+      });
+    } catch (_) { /* el registro puede no estar aun; se re-registra al recargar */ }
+
     this._startBusCapture();
 
     const flushMs = Number(this.config.flush_interval_ms) || 10000;
@@ -142,7 +157,15 @@ class DestiladorModule extends ModuloHibridoReflejo {
     this._onBusMessage = null;
   }
 
+  onInterruptorCambiado(event) {
+    const d = (event && event.data) || event || {};
+    if (d.id !== 'destilador') return;
+    this.activo = !!d.enabled;
+    this.logger?.warn('destilador.toggled', { activo: this.activo });
+  }
+
   _capturar(topic, message) {
+    if (!this.activo) return;                         // OFF: no mina (cero captura, no-op puro)
     const env = this._parseEnvelope(message);
     if (!env) return;
     const eventType = env.event_type || this._eventTypeFromTopic(topic);
@@ -687,6 +710,7 @@ class DestiladorModule extends ModuloHibridoReflejo {
       status: 200,
       data: {
         module: this.name, version: this.version,
+        activo: this.activo,
         capturando: !!this._onBusMessage,
         trazas_abiertas: this.trazas.size,
         clusters: this.clusters.size,

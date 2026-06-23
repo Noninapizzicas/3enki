@@ -1,6 +1,6 @@
 {
   "name": "destilador",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "blueprint_driven": true,
   "blueprint_path": "destilador.blueprint.json",
   "target_page_id": "destilador",
@@ -24,6 +24,10 @@
     {
       "event": "aprendizaje.revision.requerida",
       "description": "Auto-mejora (paso 3): una skill lleva a fallo recurrente tras aplicarse. {skill, project_id, tasa_fallo, muestras, trazas_fallidas, motivo}. Vuelve por la guardia humana para re-redactar o descartar."
+    },
+    {
+      "event": "interruptor.registrar",
+      "description": "Registra su boton on/off en el panel central al cargar (id='destilador', grupo='aprendizaje', default ON salvo config.enabled:false)."
     }
   ],
 
@@ -47,6 +51,11 @@
       "event": "destilador.encolar_candidata.request",
       "handler": "onEncolarCandidataRequest",
       "description": "Reflejo (RPC del bus): el blueprint encola la skill que redacto. Guard no_esteril: una skill sin pasos accionables se rechaza."
+    },
+    {
+      "event": "interruptor.cambiado",
+      "handler": "onInterruptorCambiado",
+      "description": "Reacciona al on/off del panel central (id='destilador') en caliente, sin reinicio. OFF detiene la mineria (cero captura); ver/aprobar lo ya recogido sigue disponible."
     }
   ],
 

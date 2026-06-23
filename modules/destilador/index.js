@@ -30,7 +30,7 @@ class DestiladorModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'destilador';
-    this.version = '0.4.0';
+    this.version = '0.6.0';
 
     // Inyectados en onLoad
     this.config = null;
@@ -260,13 +260,13 @@ class DestiladorModule extends ModuloHibridoReflejo {
     if (!traza) return;
     this.trazas.delete(groupKey);
 
+    const firma = this._firmar(traza.pasos);
     // facultad AUTO-MEJORA (paso 3): evalua las skills aplicadas en esta traza
     // ANTES del filtro de firma — una traza con skill puede no llegar a minPasos.
-    this._evaluarSkills(traza, groupKey);
+    this._evaluarSkills(traza, groupKey, firma);
 
     if (traza.pasos.length < this.minPasos) return; // demasiado corta para ser patron
 
-    const firma = this._firmar(traza.pasos);
     const clusterKey = `${traza.project_id}::${firma}`;
     let cluster = this.clusters.get(clusterKey);
     if (!cluster) {
@@ -324,7 +324,17 @@ class DestiladorModule extends ModuloHibridoReflejo {
   // marca para re-redaccion (vuelve por la misma guardia humana del paso 2).
   // =============================================================
 
-  _evaluarSkills(traza, groupKey) {
+  _evaluarSkills(traza, groupKey, firma) {
+    // SELF-TAG (cierra el nervio skill.aplicada INTERNAMENTE): si la firma de esta traza coincide
+    // con la de una skill APROBADA, cuenta como APLICADA. El destilador SIENTE sus skills sin
+    // depender de un emisor externo. (_etiquetarSkill sigue ahí para señales externas, si llegan.)
+    if (firma) {
+      for (const cand of this.cola.values()) {
+        if (cand && cand.estado === 'aprobada' && cand.firma === firma && cand.nombre_skill) {
+          (traza.skills || (traza.skills = new Set())).add(cand.nombre_skill);
+        }
+      }
+    }
     if (!traza.skills || traza.skills.size === 0) return;
     const desenlace = traza.fallo ? 'fail' : 'ok';
     const corr = String(groupKey || '').replace(/^(corr:|solo:)/, '');

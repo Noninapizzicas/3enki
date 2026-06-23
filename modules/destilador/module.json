@@ -1,6 +1,6 @@
 {
   "name": "destilador",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "blueprint_driven": true,
   "blueprint_path": "destilador.blueprint.json",
   "target_page_id": "destilador",

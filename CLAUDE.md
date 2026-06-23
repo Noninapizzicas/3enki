@@ -1906,10 +1906,11 @@ SKILL.md ENRIQUECIDA (blueprint 0.3.0 · lengua materna, prosa racionada) {
                   si el mecanismo basta, la sección NO existe (P0: la prosa que no protege un porqué se disuelve)
 }
 
-NERVIO SUELTO (honesto)  skill.aplicada tiene RECEPTOR (_etiquetarSkill) pero NO emisor declarado:
-   el destilador lo capta por bus crudo, así que ni aparece en el grafo (sub-declarado). El paso 3
-   espera esa señal. Candidato natural a cerrarlo INTERNO: auto-etiquetar por coincidencia de firma
-   contra el registro de skills + el desenlace que ya detecta (traza.fallo). (PENDIENTE.)
+NERVIO CERRADO (reflejo 0.6.0)  el lazo Hebbiano se cierra INTERNAMENTE: en _evaluarSkills, si la
+   firma de la traza coincide con la de una skill APROBADA (cola estado='aprobada'), cuenta como
+   APLICADA y su desenlace (ok/fail, ya detectado vía traza.fallo) alimenta la ventana del paso 3.
+   El destilador SIENTE sus skills sin emisor externo. (_etiquetarSkill sigue como receptor para
+   señales skill.aplicada externas, si algún día llegan — vía bus crudo, sub-declarado en el grafo.)
 ```
 
 ## CONSERJE (module 0.2.0) — el ofrecedor proactivo (en POSITIVO)

@@ -103,8 +103,8 @@
     },
     {
       "id": "auto-mejora-senal",
-      "estado": "pendiente (cableado externo)",
-      "descripcion": "ai-gateway debe emitir skill.aplicada {skill, project_id, correlation_id} cuando el LLM usa una skill. Sin esa senal la deteccion del paso 3 no recibe entrada."
+      "estado": "RESUELTO (interno, self-tag por firma · reflejo 0.6.0)",
+      "descripcion": "El destilador se AUTO-ETIQUETA: en _evaluarSkills, si la firma de la traza coincide con la de una skill APROBADA (cola, estado='aprobada'), cuenta como aplicada y su desenlace (ok/fail, ya detectado) alimenta la ventana del paso 3 — sin depender de un emisor externo. _etiquetarSkill sigue ahi para senales skill.aplicada externas si algun dia llegan."
     },
     {
       "id": "auto-mejora-reredaccion",

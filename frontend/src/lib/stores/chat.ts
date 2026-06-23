@@ -16,7 +16,8 @@ import type { Message, Attachment } from '$lib/ui-core';
 import { openPanel } from '$lib/ui-core/registry';
 import { attachments, clearAttachments } from './attachments';
 import { activeProjectId } from './projects';
-import { activeProvider, activeModel } from './workspace';
+import { activeProvider, activeModel, selectProvider } from './workspace';
+import { providers } from './credentials';
 import { notifyError, notifyInfo } from './ui';
 import { getVista } from './vista-actual';
 import { generateUUID } from '$lib/utils';
@@ -318,6 +319,19 @@ export async function loadConversation(id: string): Promise<void> {
         manually_toggled: m.manually_toggled === true || m.manually_toggled === 1
       }));
       messages.set(mapped);
+    }
+    // Per-chat sticky model: si la conversacion tiene provider/model guardado,
+    // hidratamos el selector del workspace para que al abrir ESTE chat se use SU
+    // modelo (no el global). Las conversaciones sin modelo persistido no tocan el
+    // selector → siguen con el default por priority. Reconstruye el Provider
+    // (objeto) desde la lista disponible; si no esta, usa un objeto minimo.
+    const conv = response?.data?.conversation;
+    if (conv?.provider) {
+      const opt = get(providers).find((p) => p.id === conv.provider);
+      selectProvider(
+        opt ? { ...opt, models: [] } : { id: conv.provider, name: conv.provider, icon: '', models: [] },
+        conv.model || ''
+      );
     }
   } catch (error) {
     console.error('[chat] Error loading conversation:', error);

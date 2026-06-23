@@ -125,7 +125,7 @@
     "providers": {
       "deepseek": {
         "enabled": true,
-        "priority": 1,
+        "priority": 8,
         "api_base": "https://api.deepseek.com/v1",
         "default_model": "deepseek-chat",
         "models": [
@@ -203,7 +203,7 @@
       },
       "kimi": {
         "enabled": true,
-        "priority": 8,
+        "priority": 1,
         "api_base": "https://api.moonshot.ai",
         "default_model": "kimi-k2.6",
         "models": [

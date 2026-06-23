@@ -227,5 +227,73 @@ async function testAsync(description, fn) {
     }
   });
 
+  // Group 3 — GUARDA ANTI-FANTASMA (el sistema detecta su propio "guardado falso")
+
+  const toolsRecetas = [{ name: 'recetas.crear', description: 'crea', parameters: { type: 'object' } }];
+
+  await testAsync('GUARDA: afirma persistencia + iterations<=1 + 0 tools ejecutadas + habia tools → chat.fantasma_sospechado', async () => {
+    const mocks = makeMocks();
+    const m = instantiate(mocks, { execute: {
+      content: '✅ Pizza Indie registrada y guardada correctamente',
+      tool_calls_executed: [], iterations: 1,
+      tokens: { input: 10, output: 20, total: 30 }, model: 'deepseek-chat', provider: 'deepseek', finish_reason: 'stop'
+    }});
+    await m.onChatPromptReady({
+      correlation_id: 'corr-f', conversation_id: 'conv-f', project_id: 'proj-f', user_id: 'u',
+      channel: 'web', channel_context: {}, message_id: 'm-f', system_prompt: 'x',
+      messages: [{ role: 'user', content: 'guarda la pizza' }], timestamp: '2026-06-23T22:00:00.000Z',
+      page_id: 'recetas', tools_disponibles: toolsRecetas
+    });
+    const ev = mocks.published.find(p => p[0] === 'chat.fantasma_sospechado');
+    assert.ok(ev, 'debe emitir chat.fantasma_sospechado');
+    assert.strictEqual(ev[1].provider, 'deepseek');
+    assert.strictEqual(ev[1].project_id, 'proj-f');
+    assert.strictEqual(ev[1].page_id, 'recetas');
+    assert.ok(/persistencia/i.test(ev[1].motivo));
+    assert.ok(mocks.published.find(p => p[0] === 'ai.chat.response'), 'el turno NO se bloquea: ai.chat.response igual sale');
+  });
+
+  await testAsync('GUARDA: turno que SI ejecutó herramienta (iterations>1) → NO fantasma', async () => {
+    const mocks = makeMocks();
+    const m = instantiate(mocks, { execute: {
+      content: '✅ Pizza Indie registrada y guardada', tool_calls_executed: [], iterations: 5,
+      tokens: { input: 10, output: 20, total: 30 }, model: 'kimi-k2.6', provider: 'kimi', finish_reason: 'stop'
+    }});
+    await m.onChatPromptReady({
+      correlation_id: 'corr-ok', conversation_id: 'conv-ok', project_id: 'proj-ok', user_id: 'u',
+      channel: 'web', channel_context: {}, message_id: 'm-ok', system_prompt: 'x',
+      messages: [{ role: 'user', content: 'guarda' }], timestamp: '2026-06-23T22:00:00.000Z',
+      page_id: 'recetas', tools_disponibles: toolsRecetas
+    });
+    assert.ok(!mocks.published.find(p => p[0] === 'chat.fantasma_sospechado'), 'NO fantasma cuando ejecutó (it>1)');
+  });
+
+  await testAsync('GUARDA: turno sin afirmar persistencia → NO fantasma aunque iterations=1', async () => {
+    const mocks = makeMocks();
+    const m = instantiate(mocks);  // execute default: content 'hola humano', it=1, sin tools
+    await m.onChatPromptReady({
+      correlation_id: 'corr-n', conversation_id: 'conv-n', project_id: 'proj-n', user_id: 'u',
+      channel: 'web', channel_context: {}, message_id: 'm-n', system_prompt: 'x',
+      messages: [{ role: 'user', content: '¿qué tal?' }], timestamp: '2026-06-23T22:00:00.000Z',
+      page_id: 'recetas', tools_disponibles: toolsRecetas
+    });
+    assert.ok(!mocks.published.find(p => p[0] === 'chat.fantasma_sospechado'), 'NO fantasma si no afirma guardado');
+  });
+
+  await testAsync('GUARDA: afirma persistencia pero NO habia tools en la pagina → NO fantasma', async () => {
+    const mocks = makeMocks();
+    const m = instantiate(mocks, { execute: {
+      content: '✅ guardado', tool_calls_executed: [], iterations: 1,
+      tokens: { input: 5, output: 5, total: 10 }, model: 'deepseek-chat', provider: 'deepseek', finish_reason: 'stop'
+    }});
+    await m.onChatPromptReady({
+      correlation_id: 'corr-nt', conversation_id: 'conv-nt', project_id: 'proj-nt', user_id: 'u',
+      channel: 'web', channel_context: {}, message_id: 'm-nt', system_prompt: 'x',
+      messages: [{ role: 'user', content: 'ok' }], timestamp: '2026-06-23T22:00:00.000Z',
+      page_id: 'chat'  // sin tools_disponibles → _getTools() stub devuelve []
+    });
+    assert.ok(!mocks.published.find(p => p[0] === 'chat.fantasma_sospechado'), 'sin tools no se puede afirmar fantasma');
+  });
+
   console.log('\nai-gateway: todos los tests pasaron ✓');
 })().catch(err => { console.error(err); process.exit(1); });

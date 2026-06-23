@@ -1,6 +1,6 @@
 {
   "name": "portal",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "La PUERTA de Enki hacia agentes externos (MCP) y operadores. Superficie de capacidades GUARDADA sobre getToolsForAI()+executeTool(): un cliente externo (Claude Code/Cursor) habla con esta puerta vía el bridge MCP (mcp/enki-mcp-server.js) sobre ui/request/portal/*. El poder no es nuevo (215 tools ya existen); lo nuevo es el GUARD: interruptor 'portal-mcp' (OFF=puerta cerrada), scope project|system, mode read|write, allowlist opcional, confirmación para mutaciones, y AUDIT (portal.invocado → propiocepción). Nace scoped-a-proyecto, modo lectura, apagado.",
   "author": "Event Core Team",
   "language": "es",
@@ -8,7 +8,7 @@
   "publishes": [
     {
       "event": "interruptor.registrar",
-      "description": "Registra su botón on/off 'portal-mcp' (grupo 'sistema', default OFF) en el panel central al cargar."
+      "description": "Registra DOS botones en el panel (grupo 'sistema', default OFF): 'portal-mcp' (abre/cierra la puerta) y 'portal-mcp-write' (read↔write — OFF solo lee, ON permite operar)."
     },
     {
       "event": "portal.invocado",
@@ -20,7 +20,7 @@
     {
       "event": "interruptor.cambiado",
       "handler": "onInterruptorCambiado",
-      "description": "Reacciona al on/off del panel (id='portal-mcp') en caliente, sin reinicio. OFF cierra la puerta: list_tools devuelve vacío y call responde 503."
+      "description": "Reacciona en caliente al panel: id='portal-mcp' (abre/cierra: OFF→list vacío + call 503) e id='portal-mcp-write' (read↔write: OFF no expone/ejecuta mutaciones)."
     }
   ],
 

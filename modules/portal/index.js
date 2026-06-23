@@ -36,11 +36,12 @@ class PortalModule extends BaseModule {
   constructor() {
     super();
     this.name = 'portal';
-    this.version = '0.1.0';
+    this.version = '0.2.0';
     this.config = null;
     this.moduleLoader = null;
-    this.activo = false;          // interruptor 'portal-mcp' — OFF por defecto (aparcado)
-    this.mode = 'read';           // 'read' | 'write'
+    this.activo = false;          // interruptor 'portal-mcp' — OFF por defecto (puerta cerrada)
+    this.activoWrite = false;     // interruptor 'portal-mcp-write' — OFF por defecto (solo lectura)
+    this.mode = 'read';           // derivado: 'write' si activoWrite, si no 'read'
     this.scope = 'project';       // 'project' | 'system'
     this.projectId = null;        // scope=project: el único proyecto permitido
     this.allowlist = null;        // Array<string> | null (null = sin lista explícita)
@@ -54,7 +55,8 @@ class PortalModule extends BaseModule {
     this.config = context.moduleConfig || {};
 
     this.activo = this.config.portal_enabled_default === true;   // por defecto false
-    this.mode = this.config.mode === 'write' ? 'write' : 'read';
+    this.activoWrite = this.config.mode === 'write';             // por defecto false (read)
+    this.mode = this.activoWrite ? 'write' : 'read';
     this.scope = this.config.scope === 'system' ? 'system' : 'project';
     this.projectId = this.config.project_id || null;
     this.allowlist = Array.isArray(this.config.allowlist) && this.config.allowlist.length
@@ -63,8 +65,13 @@ class PortalModule extends BaseModule {
     try {
       this.eventBus.publish('interruptor.registrar', {
         id: 'portal-mcp', label: 'Portal MCP (puerta de entrada externa)', grupo: 'sistema',
-        descripcion: 'Expone las capacidades de Enki a agentes externos (Claude Code/Cursor) vía MCP. OFF = puerta cerrada. Nace scoped-a-proyecto, modo lectura.',
+        descripcion: 'Expone las capacidades de Enki a agentes externos (Claude Code/Cursor) vía MCP. OFF = puerta cerrada. Nace scoped-a-proyecto.',
         default: this.activo
+      });
+      this.eventBus.publish('interruptor.registrar', {
+        id: 'portal-mcp-write', label: 'Portal MCP · escritura', grupo: 'sistema',
+        descripcion: 'OFF = el portal solo LEE (no expone ni ejecuta mutaciones). ON = permite OPERAR (crear/editar/borrar) dentro del scope. Independiente de portal-mcp.',
+        default: this.activoWrite
       });
     } catch (_) { /* el panel puede no estar aún; se re-registra al recargar */ }
 
@@ -80,9 +87,14 @@ class PortalModule extends BaseModule {
 
   onInterruptorCambiado(event) {
     const d = (event && event.data) || event || {};
-    if (d.id !== 'portal-mcp') return;
-    this.activo = !!d.enabled;
-    this.logger?.warn('portal.toggled', { activo: this.activo });
+    if (d.id === 'portal-mcp') {
+      this.activo = !!d.enabled;
+      this.logger?.warn('portal.toggled', { activo: this.activo });
+    } else if (d.id === 'portal-mcp-write') {
+      this.activoWrite = !!d.enabled;
+      this.mode = this.activoWrite ? 'write' : 'read';   // el guard lee this.mode
+      this.logger?.warn('portal.write.toggled', { mode: this.mode });
+    }
   }
 
   // ── ¿esta tool pasa el guard de SCOPE/MODE/ALLOWLIST? ──
@@ -143,6 +155,12 @@ class PortalModule extends BaseModule {
         argv.project_id = project_id;
       }
 
+      // ENDURECIDO: una MUTACIÓN en scope=project no se ejecuta sin project_id resuelto
+      // (nunca se muta "global" por descuido). Las lecturas sí pueden ir sin proyecto.
+      if (this.scope === 'project' && this._esEscritura({ name: tool, confirmation: def.confirmation }) && !argv.project_id) {
+        return this._errorResponse(400, 'INVALID_INPUT', `mutación '${tool}' requiere project_id en scope=project`, { kind: 'write_sin_proyecto' });
+      }
+
       // confirmación: las mutaciones que la exigen requieren flag explícito
       if (def.confirmation === true && confirmado !== true) {
         return this._errorResponse(409, 'NEEDS_CONFIRMATION', `la tool ${tool} requiere confirmación (confirmado:true)`, { kind: 'confirmation' });
@@ -163,7 +181,7 @@ class PortalModule extends BaseModule {
       status: 200,
       data: {
         module: this.name, version: this.version,
-        activo: this.activo, mode: this.mode, scope: this.scope,
+        activo: this.activo, write: this.activoWrite, mode: this.mode, scope: this.scope,
         project_id: this.projectId, allowlist: this.allowlist ? Array.from(this.allowlist) : null
       }
     };

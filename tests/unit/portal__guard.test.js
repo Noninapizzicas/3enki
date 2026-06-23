@@ -91,7 +91,7 @@ test('scope project: project_id ajeno -> 403 (no sale de su casa)', async () => 
 });
 
 test('allowlist manda: solo esas tools, aunque sean de escritura', async () => {
-  const p = nuevoPortal({ allowlist: new Set(['recetas.crear']) });
+  const p = nuevoPortal({ allowlist: new Set(['recetas.crear']), projectId: 'p1' });
   const names = (await p.handleListTools()).data.tools.map(t => t.name);
   assert.deepStrictEqual(names, ['recetas.crear']);
   const r = await p.handleCall({ tool: 'recetas.crear' });
@@ -101,7 +101,7 @@ test('allowlist manda: solo esas tools, aunque sean de escritura', async () => {
 });
 
 test('confirmación: tool confirmation:true sin confirmado -> 409; con confirmado -> ejecuta', async () => {
-  const p = nuevoPortal({ allowlist: new Set(['cobro.confirm']) });
+  const p = nuevoPortal({ allowlist: new Set(['cobro.confirm']), projectId: 'p1' });
   const sin = await p.handleCall({ tool: 'cobro.confirm' });
   assert.strictEqual(sin.status, 409);
   const con = await p.handleCall({ tool: 'cobro.confirm', confirmado: true });
@@ -112,6 +112,31 @@ test('tool inexistente -> 404', async () => {
   const p = nuevoPortal();
   const r = await p.handleCall({ tool: 'no.existe' });
   assert.strictEqual(r.status, 404);
+});
+
+test('mode write: las mutaciones se exponen y ejecutan (con project_id)', async () => {
+  const p = nuevoPortal({ mode: 'write', projectId: 'p1' });
+  const names = (await p.handleListTools()).data.tools.map(t => t.name);
+  assert.ok(names.includes('recetas.crear'), 'en write, la mutación aparece en el catálogo');
+  const r = await p.handleCall({ tool: 'recetas.crear', args: { nombre: 'x' } });
+  assert.strictEqual(r.status, 200);
+});
+
+test('interruptor portal-mcp-write ON -> mode pasa a write en caliente', () => {
+  const p = nuevoPortal();
+  assert.strictEqual(p.mode, 'read');
+  p.onInterruptorCambiado({ data: { id: 'portal-mcp-write', enabled: true } });
+  assert.strictEqual(p.mode, 'write');
+  p.onInterruptorCambiado({ data: { id: 'portal-mcp-write', enabled: false } });
+  assert.strictEqual(p.mode, 'read');
+});
+
+test('ENDURECIDO: mutación en scope=project SIN project_id -> 400 (no muta global)', async () => {
+  const p = nuevoPortal({ mode: 'write', projectId: null });   // sin proyecto fijado
+  const r = await p.handleCall({ tool: 'recetas.crear', args: { nombre: 'x' } });  // sin project_id
+  assert.strictEqual(r.status, 400);
+  const ok = await p.handleCall({ tool: 'recetas.crear', args: { nombre: 'x' }, project_id: 'p1' });
+  assert.strictEqual(ok.status, 200);   // con project_id, pasa
 });
 
 // ── runner (async) ──

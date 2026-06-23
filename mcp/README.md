@@ -53,6 +53,18 @@ ENKI_BROKER_URL=mqtt://localhost:1883 ENKI_PROJECT=<project_id> \
 | `ENKI_PROJECT` | (ninguno) | `project_id` que se inyecta en cada call (el portal lo re-valida) |
 | `ENKI_PORTAL_TIMEOUT` | `8000` | ms de espera por respuesta del portal |
 
+## Smoke-test en vivo (con Enki corriendo)
+
+Verifica el camino completo de punta a punta — enciende `portal-mcp`, comprueba el portal por
+MQTT (health · list_tools · una call de lectura), y arranca el bridge real para el handshake MCP
+por stdio (initialize + tools/list):
+
+```bash
+ENKI_BROKER_URL=mqtt://localhost:1883 ENKI_PROJECT=<project_id> node mcp/smoke.js
+```
+
+Reporta `N ok · M fallos` y sale 0 si todo late. Requiere deps instaladas (`mqtt`) y Enki arrancado.
+
 ## Probar a mano (sin Claude Code)
 
 ```bash

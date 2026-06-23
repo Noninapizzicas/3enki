@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2enki · Grafo de eventos</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#30363d;
+    --txt:#e6edf3; --dim:#8b949e; --accent:#58a6ff;
+    --pizzepos:#f0883e; --conversacion:#a371f7; --facturacion:#3fb950;
+    --core:#58a6ff; --otro:#db61a2;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font:13px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
+  #app{display:flex;height:100%}
+  canvas{display:block;cursor:grab}
+  canvas:active{cursor:grabbing}
+  /* Sidebar */
+  #side{width:320px;flex:0 0 320px;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;height:100%}
+  #side h1{font-size:15px;margin:0;padding:16px 16px 4px;letter-spacing:.3px}
+  #side h1 small{display:block;color:var(--dim);font-weight:400;font-size:11px;margin-top:2px}
+  .pad{padding:10px 16px}
+  input[type=search]{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    border-radius:7px;padding:8px 10px;outline:none;font-size:13px}
+  input[type=search]:focus{border-color:var(--accent)}
+  .legend{display:flex;flex-direction:column;gap:2px}
+  .leg{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;user-select:none}
+  .leg:hover{background:var(--panel2)}
+  .leg.off{opacity:.34}
+  .dot{width:11px;height:11px;border-radius:50%;flex:0 0 11px}
+  .leg .n{margin-left:auto;color:var(--dim);font-variant-numeric:tabular-nums}
+  .sec{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--dim);padding:14px 16px 4px}
+  #detail{flex:1;overflow:auto;border-top:1px solid var(--line);padding:14px 16px}
+  #detail .empty{color:var(--dim)}
+  #detail h2{font-size:15px;margin:0 0 2px}
+  #detail .tag{display:inline-block;font-size:11px;color:var(--dim);background:var(--panel2);
+    border:1px solid var(--line);border-radius:20px;padding:1px 9px;margin:3px 4px 3px 0}
+  #detail .desc{color:var(--dim);margin:8px 0 12px}
+  #detail .grp{margin:12px 0}
+  #detail .grp h3{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);margin:0 0 6px}
+  #detail .ev{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+    padding:2px 0;color:var(--txt);word-break:break-all}
+  #detail .ev.pub{color:var(--pizzepos)}
+  #detail .ev.sub{color:var(--core)}
+  .lnk{color:var(--accent);cursor:pointer}
+  .lnk:hover{text-decoration:underline}
+  /* Toolbar over canvas */
+  #stage{position:relative;flex:1;min-width:0}
+  #stats{position:absolute;left:14px;top:12px;color:var(--dim);font-size:11.5px;
+    background:rgba(13,17,23,.7);padding:6px 10px;border-radius:8px;border:1px solid var(--line);
+    pointer-events:none;font-variant-numeric:tabular-nums}
+  #ctrls{position:absolute;right:14px;top:12px;display:flex;gap:6px}
+  #ctrls button{background:var(--panel);border:1px solid var(--line);color:var(--txt);
+    border-radius:7px;padding:6px 11px;cursor:pointer;font-size:12px}
+  #ctrls button:hover{border-color:var(--accent)}
+  #tip{position:absolute;pointer-events:none;background:var(--panel2);border:1px solid var(--line);
+    border-radius:7px;padding:6px 9px;font-size:11.5px;max-width:300px;display:none;z-index:5;
+    box-shadow:0 6px 24px rgba(0,0,0,.4)}
+  #tip b{color:var(--accent)}
+  #foot{position:absolute;left:14px;bottom:10px;color:var(--dim);font-size:10.5px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <h1>2enki · grafo de eventos<small id="sub"></small></h1>
+    <div class="pad"><input id="q" type="search" placeholder="Buscar módulo o evento…" autocomplete="off"></div>
+    <div class="sec">Subsistemas <span style="text-transform:none;letter-spacing:0">· click para filtrar</span></div>
+    <div class="legend pad" id="legend"></div>
+    <div id="detail"><p class="empty">Pasa el ratón o haz click en un nodo para ver sus eventos. Arrastra para reorganizar; rueda para zoom.</p></div>
+  </aside>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="stats"></div>
+    <div id="ctrls">
+      <button id="bReset">Reencuadrar</button>
+      <button id="bLabels">Etiquetas: auto</button>
+      <button id="bFreeze">Pausar</button>
+    </div>
+    <div id="tip"></div>
+    <div id="foot">Nodo = módulo · arista dirigida = evento (publica → escucha) · tamaño = grado de eventos</div>
+  </div>
+</div>
+<script src="graph-data.js"></script>
+<script>
+const G = window.GRAPH;
+const COLORS = { pizzepos:'#f0883e', conversacion:'#a371f7', facturacion:'#3fb950', core:'#58a6ff', otro:'#db61a2' };
+const colorOf = s => COLORS[s] || COLORS.otro;
+
+document.getElementById('sub').textContent =
+  `${G._meta.modules} módulos · ${G._meta.events} eventos · ${G._meta.edges} aristas`;
+
+// ---- model ----
+const byId = new Map();
+const W0 = 1200, H0 = 800;
+G.nodes.forEach((n,i)=>{
+  const a = (i/G.nodes.length)*Math.PI*2, r = 260+Math.random()*120;
+  n.x = W0/2 + Math.cos(a)*r; n.y = H0/2 + Math.sin(a)*r;
+  n.vx = 0; n.vy = 0;
+  n.deg = (n.in||0)+(n.out||0);
+  n.rad = 5 + Math.sqrt(n.deg)*2.4;
+  byId.set(n.id, n);
+});
+const links = G.edges.filter(e=>byId.has(e.source)&&byId.has(e.target))
+  .map(e=>({s:byId.get(e.source), t:byId.get(e.target), w:e.weight, events:e.events}));
+
+const active = new Set(G._meta.subsystems);
+let query = '';
+const visible = n => active.has(n.subsystem) && (!query || matchNode(n));
+function matchNode(n){
+  const q=query.toLowerCase();
+  if(n.id.toLowerCase().includes(q)) return true;
+  return n.publishes.concat(n.subscribes).some(e=>e.toLowerCase().includes(q));
+}
+
+// ---- canvas / camera ----
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let DPR = Math.min(devicePixelRatio||1, 2);
+let cam = {x:0, y:0, k:1};
+function resize(){
+  const s = document.getElementById('stage').getBoundingClientRect();
+  cv.width = s.width*DPR; cv.height = s.height*DPR; cv.style.width=s.width+'px'; cv.style.height=s.height+'px';
+}
+window.addEventListener('resize', resize); resize();
+function fit(){
+  const vs = G.nodes.filter(visible); if(!vs.length) return;
+  let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+  vs.forEach(n=>{minX=Math.min(minX,n.x);minY=Math.min(minY,n.y);maxX=Math.max(maxX,n.x);maxY=Math.max(maxY,n.y);});
+  const w=cv.width/DPR, h=cv.height/DPR, pad=80;
+  const k=Math.min((w-pad*2)/(maxX-minX||1),(h-pad*2)/(maxY-minY||1), 2);
+  cam.k=k; cam.x=w/2-((minX+maxX)/2)*k; cam.y=h/2-((minY+maxY)/2)*k;
+}
+const toScreen = n => ({x:n.x*cam.k+cam.x, y:n.y*cam.k+cam.y});
+const toWorld = (sx,sy) => ({x:(sx-cam.x)/cam.k, y:(sy-cam.y)/cam.k});
+
+// ---- force sim ----
+let frozen=false, alpha=1;
+function tick(){
+  if(frozen) return;
+  const vs = G.nodes.filter(n=>active.has(n.subsystem));
+  // repulsion (O(n^2), n~85 fine)
+  for(let i=0;i<vs.length;i++){
+    const a=vs[i];
+    for(let j=i+1;j<vs.length;j++){
+      const b=vs[j];
+      let dx=a.x-b.x, dy=a.y-b.y, d2=dx*dx+dy*dy||0.01;
+      const f=2600/d2; const d=Math.sqrt(d2);
+      const ux=dx/d, uy=dy/d;
+      a.vx+=ux*f; a.vy+=uy*f; b.vx-=ux*f; b.vy-=uy*f;
+    }
+  }
+  // springs
+  for(const l of links){
+    if(!active.has(l.s.subsystem)||!active.has(l.t.subsystem)) continue;
+    let dx=l.t.x-l.s.x, dy=l.t.y-l.s.y, d=Math.sqrt(dx*dx+dy*dy)||0.01;
+    const target=90+ (l.s.rad+l.t.rad); const f=(d-target)*0.012;
+    const ux=dx/d, uy=dy/d;
+    l.s.vx+=ux*f; l.s.vy+=uy*f; l.t.vx-=ux*f; l.t.vy-=uy*f;
+  }
+  // gravity to center + integrate
+  const cx=W0/2, cy=H0/2;
+  for(const n of vs){
+    n.vx+=(cx-n.x)*0.0016; n.vy+=(cy-n.y)*0.0016;
+    if(n===dragNode) continue;
+    n.vx*=0.86; n.vy*=0.86;
+    n.x+=n.vx*alpha; n.y+=n.vy*alpha;
+  }
+  alpha*=0.997; if(alpha<0.15) alpha=0.15;
+}
+
+// ---- render ----
+let hoverNode=null, selNode=null, labelMode='auto';
+function draw(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  // edges
+  ctx.lineWidth=1;
+  for(const l of links){
+    if(!visible(l.s) && !visible(l.t)) continue;
+    const dim = query && !(matchNode(l.s)||matchNode(l.t));
+    const sel = selNode && (l.s===selNode||l.t===selNode);
+    const a=toScreen(l.s), b=toScreen(l.t);
+    ctx.strokeStyle = sel ? 'rgba(88,166,255,.85)' : dim ? 'rgba(110,118,129,.06)' : 'rgba(139,148,158,.20)';
+    ctx.lineWidth = sel ? 1.8 : 1;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y);
+    // slight curve
+    const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+    ctx.quadraticCurveTo(mx,my,b.x,b.y); ctx.stroke();
+    // arrowhead near target
+    if(sel || (!dim && cam.k>0.55)){
+      const ang=Math.atan2(b.y-a.y,b.x-a.x);
+      const tr=l.t.rad*cam.k+3;
+      const ax=b.x-Math.cos(ang)*tr, ay=b.y-Math.sin(ang)*tr;
+      ctx.fillStyle=ctx.strokeStyle;
+      ctx.beginPath();
+      ctx.moveTo(ax,ay);
+      ctx.lineTo(ax-Math.cos(ang-0.4)*6, ay-Math.sin(ang-0.4)*6);
+      ctx.lineTo(ax-Math.cos(ang+0.4)*6, ay-Math.sin(ang+0.4)*6);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  // nodes
+  for(const n of G.nodes){
+    if(!active.has(n.subsystem)) continue;
+    const p=toScreen(n), r=n.rad*cam.k;
+    const dim = query && !matchNode(n);
+    const isSel = n===selNode, isHov=n===hoverNode;
+    ctx.globalAlpha = dim ? 0.18 : 1;
+    ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
+    ctx.fillStyle = colorOf(n.subsystem); ctx.fill();
+    if(isSel||isHov){ ctx.lineWidth=2; ctx.strokeStyle='#fff'; ctx.stroke(); }
+    else if(n.blueprint_driven){ ctx.lineWidth=1.4; ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.setLineDash([2,2]); ctx.stroke(); ctx.setLineDash([]); }
+    ctx.globalAlpha=1;
+    // labels
+    const showLabel = labelMode==='all' || isSel || isHov ||
+      (labelMode==='auto' && (n.deg>=8 || (query && matchNode(n))) && cam.k>0.5);
+    if(showLabel && !dim){
+      ctx.font = (isSel||isHov?'600 ':'')+ '11px ui-sans-serif,system-ui';
+      const tw=ctx.measureText(n.id).width;
+      ctx.fillStyle='rgba(13,17,23,.72)';
+      ctx.fillRect(p.x+r+4, p.y-8, tw+8, 16);
+      ctx.fillStyle = isSel||isHov ? '#fff' : '#c9d1d9';
+      ctx.fillText(n.id, p.x+r+8, p.y+4);
+    }
+  }
+  document.getElementById('stats').textContent =
+    `${G.nodes.filter(visible).length}/${G.nodes.length} módulos visibles · zoom ${(cam.k).toFixed(2)}×`;
+}
+function loop(){ tick(); draw(); requestAnimationFrame(loop); }
+
+// ---- interaction ----
+let dragNode=null, panning=false, last={x:0,y:0};
+function pick(sx,sy){
+  let best=null,bd=1e9;
+  for(const n of G.nodes){
+    if(!visible(n)) continue;
+    const p=toScreen(n), r=n.rad*cam.k+4;
+    const d=(p.x-sx)**2+(p.y-sy)**2;
+    if(d<r*r && d<bd){bd=d;best=n;}
+  }
+  return best;
+}
+cv.addEventListener('mousedown',e=>{
+  const n=pick(e.offsetX,e.offsetY);
+  if(n){ dragNode=n; selNode=n; renderDetail(n); }
+  else { panning=true; }
+  last={x:e.offsetX,y:e.offsetY};
+});
+window.addEventListener('mousemove',e=>{
+  const r=cv.getBoundingClientRect();
+  const sx=e.clientX-r.left, sy=e.clientY-r.top;
+  if(dragNode){
+    const w=toWorld(sx,sy); dragNode.x=w.x; dragNode.y=w.y; dragNode.vx=dragNode.vy=0; alpha=Math.max(alpha,.5);
+  } else if(panning){
+    cam.x+=sx-last.x; cam.y+=sy-last.y; last={x:sx,y:sy};
+  } else {
+    const n=pick(sx,sy); hoverNode=n; showTip(n,e.clientX,e.clientY);
+  }
+});
+window.addEventListener('mouseup',()=>{dragNode=null;panning=false;});
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const f=e.deltaY<0?1.12:0.89;
+  const w=toWorld(e.offsetX,e.offsetY);
+  cam.k=Math.max(0.2,Math.min(4,cam.k*f));
+  const w2=toWorld(e.offsetX,e.offsetY);
+  cam.x+=(w2.x-w.x)*cam.k; cam.y+=(w2.y-w.y)*cam.k;
+},{passive:false});
+
+const tip=document.getElementById('tip');
+function showTip(n,cx,cy){
+  if(!n){tip.style.display='none';return;}
+  tip.style.display='block';
+  tip.innerHTML=`<b>${n.id}</b> · ${n.subsystem}${n.version?' v'+n.version:''}<br>`+
+    `publica ${n.publishes.length} · escucha ${n.subscribes.length} · grado ${n.deg}`;
+  tip.style.left=(cx+14)+'px'; tip.style.top=(cy+14)+'px';
+}
+
+// ---- detail panel ----
+function renderDetail(n){
+  const d=document.getElementById('detail');
+  if(!n){ d.innerHTML='<p class="empty">Sin selección.</p>'; return; }
+  const evList = (arr,cls)=> arr.length
+    ? arr.map(e=>`<div class="ev ${cls}">${e}</div>`).join('')
+    : '<div class="ev" style="color:var(--dim)">—</div>';
+  const tools = n.tools.length ? `<div class="grp"><h3>Tools LLM (${n.tools.length})</h3>${n.tools.map(t=>`<div class="ev">${t}</div>`).join('')}</div>` : '';
+  d.innerHTML=`
+    <h2 style="color:${colorOf(n.subsystem)}">${n.id}</h2>
+    <div>
+      <span class="tag">${n.subsystem}</span>
+      ${n.version?`<span class="tag">v${n.version}</span>`:''}
+      ${n.blueprint_driven?'<span class="tag">blueprint</span>':''}
+      ${n.ui_handlers?`<span class="tag">${n.ui_handlers} ui</span>`:''}
+      <span class="tag">grado ${n.deg}</span>
+    </div>
+    <div class="desc">${n.description||'Sin descripción.'}</div>
+    <div class="grp"><h3>Publica (${n.publishes.length}) →</h3>${evList(n.publishes,'pub')}</div>
+    <div class="grp"><h3>← Escucha (${n.subscribes.length})</h3>${evList(n.subscribes,'sub')}</div>
+    ${tools}`;
+}
+
+// ---- legend ----
+const legend=document.getElementById('legend');
+const counts={}; G.nodes.forEach(n=>counts[n.subsystem]=(counts[n.subsystem]||0)+1);
+G._meta.subsystems.forEach(s=>{
+  const el=document.createElement('div'); el.className='leg'; el.dataset.s=s;
+  el.innerHTML=`<span class="dot" style="background:${colorOf(s)}"></span>${s}<span class="n">${counts[s]||0}</span>`;
+  el.onclick=()=>{ active.has(s)?active.delete(s):active.add(s); el.classList.toggle('off',!active.has(s)); alpha=.6; };
+  legend.appendChild(el);
+});
+
+// ---- search ----
+document.getElementById('q').addEventListener('input',e=>{ query=e.target.value.trim(); });
+
+// ---- buttons ----
+document.getElementById('bReset').onclick=()=>{ alpha=1; fit(); };
+document.getElementById('bFreeze').onclick=e=>{ frozen=!frozen; e.target.textContent=frozen?'Reanudar':'Pausar'; };
+document.getElementById('bLabels').onclick=e=>{
+  labelMode = labelMode==='auto'?'all':labelMode==='all'?'none':'auto';
+  e.target.textContent='Etiquetas: '+({auto:'auto',all:'todas',none:'off'}[labelMode]);
+};
+
+// warm up then fit
+for(let i=0;i<120;i++) tick();
+fit();
+loop();
+</script>
+</body>
+</html>

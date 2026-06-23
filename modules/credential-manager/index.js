@@ -49,7 +49,9 @@ const PROVIDER_ICONS = {
   GMAIL: '📧',
   GLOVO: '🛵',
   CLOUDFLARE: '🟧',
-  TELEGRAM: '✈️'
+  TELEGRAM: '✈️',
+  META_WHATSAPP: '💬',
+  META_WHATSAPP_VERIFY_TOKEN: '🪝'
 };
 
 const VALID_LEVELS = ['GLOBAL', 'PROJECT', 'CLIENT', 'CUSTOM', 'BOT'];

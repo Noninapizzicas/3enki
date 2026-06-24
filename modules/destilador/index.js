@@ -22,8 +22,6 @@
 'use strict';
 
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
 class DestiladorModule extends ModuloHibridoReflejo {
@@ -50,7 +48,6 @@ class DestiladorModule extends ModuloHibridoReflejo {
     // Estado runtime — facultad COLA+PUBLICADOR (paso 2)
     this.cola = new Map();        // candidata_id -> Candidata
     this.colaPath = '/_destilador/cola.json';
-    this.skillsPath = null;       // repo .claude/skills (global, no project storage)
 
     // Estado runtime — facultad AUTO-MEJORA (paso 3)
     this.skillStats = new Map();  // `${project}::${skill}` -> { ventana:[], revision_emitida }
@@ -85,8 +82,8 @@ class DestiladorModule extends ModuloHibridoReflejo {
     this.maxTrazas = Number(this.config.max_trazas_abiertas) || 500;
     this.archivoPath = this.config.archivo_path || '/_destilador/clusters.json';
     this.colaPath = this.config.cola_path || '/_destilador/cola.json';
-    // Las skills son GLOBALES (repo .claude/skills), no storage de proyecto.
-    this.skillsPath = path.resolve(this.config.skills_path || path.join(process.cwd(), '.claude', 'skills'));
+    // Las skills se SELLAN en cúpulas (memoria de Enki, por proyecto), no en
+    // .claude/skills (memoria de Claude Code). Ver handleAprobar.
     this.saludPath = this.config.salud_path || '/_destilador/skills_salud.json';
     this.ventanaDesenlaces = Number(this.config.ventana_desenlaces) || 10;
     const uf = this.config.umbral_fallo || {};
@@ -590,7 +587,12 @@ class DestiladorModule extends ModuloHibridoReflejo {
     return { status: 200, data: { candidata_id: cand.candidata_id } };
   }
 
-  // ── GUARDIA HUMANA: aprobar publica la skill (anti-wipe + write verificado) ──
+  // ── GUARDIA HUMANA: aprobar SELLA la skill en CÚPULAS (la memoria de Enki),
+  //    NO en .claude/skills (la memoria de Claude Code). Son dos mundos paralelos:
+  //    el destilador es un órgano de Enki, así que su sello vive en Enki. El lazo
+  //    "3× → patrón → sello → reuso" se cierra entero dentro del sistema: detecta,
+  //    sella la nota en una cúpula, y el LLM-de-página la reutiliza vía
+  //    cupulas.contexto. Anti-wipe (no pisa una nota ya sellada). ──
   async handleAprobar(data) {
     try {
       const { candidata_id } = data || {};
@@ -600,36 +602,69 @@ class DestiladorModule extends ModuloHibridoReflejo {
         return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'candidata no encontrada',
           { entity_type: 'candidata', entity_ref: candidata_id });
       }
-      const dir = path.join(this.skillsPath, cand.nombre_skill);
-      const destino = path.join(dir, 'SKILL.md');
-      if (fs.existsSync(destino)) {                          // ANTI-WIPE: no pisar
+      if (!cand.project_id) {
+        return this._errorResponse(400, 'INVALID_INPUT',
+          'la candidata no tiene project_id; cúpulas es la memoria POR PROYECTO de Enki',
+          { kind: 'sin_proyecto' });
+      }
+
+      const CUPULA = 'skills-destiladas';
+      const contenido = this._conFrontmatter(cand);
+
+      // 1. asegurar la cúpula de skills destiladas (idempotente: 409 = ya existe, ok)
+      await this._rpc('cupulas.crear_cupula.request', {
+        project_id: cand.project_id, tema: 'Skills destiladas', tipo: 'skill',
+        descripcion: 'Atajos que el destilador selló desde patrones recurrentes del runtime de Enki.'
+      });
+
+      // 2. ANTI-WIPE: no pisar una nota ya sellada con ese nombre
+      const previa = await this._rpc('cupulas.get_nota.request', {
+        project_id: cand.project_id, nota_id: cand.nombre_skill
+      });
+      if (previa && previa.status === 200) {
         cand.estado = 'conflicto';
         this._persistirCola(cand.project_id);
         this.metrics?.increment('destilador.aprobar.conflicto');
-        return this._errorResponse(409, 'CONFLICT_STATE', 'ya existe una skill con ese nombre',
-          { kind: 'anti_wipe', nombre_skill: cand.nombre_skill, destino });
+        return this._errorResponse(409, 'CONFLICT_STATE', 'ya existe una skill sellada con ese nombre',
+          { kind: 'anti_wipe', nombre_skill: cand.nombre_skill, cupula: CUPULA });
       }
-      const contenido = this._conFrontmatter(cand);
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(destino, contenido, 'utf-8');
-      const verif = fs.readFileSync(destino, 'utf-8');       // write verificado
-      if (verif !== contenido) {
-        return this._errorResponse(500, 'UNKNOWN_ERROR', 'verificacion de escritura fallida', {});
+
+      // 3. SELLAR la nota en cúpulas (Mundo Enki). El cuerpo (pseudocódigo/OOP) es la base.
+      const add = await this._rpc('cupulas.add_nota.request', {
+        project_id: cand.project_id, cupula: CUPULA,
+        titulo: cand.nombre_skill, id: cand.nombre_skill,
+        contenido, tipo: 'skill', lenguaje: 'pseudo',
+        resumen: this._resumenDe(cand), enlaces: []
+      });
+      if (!add || (typeof add.status === 'number' && add.status >= 400)) {
+        return this._errorResponse(502, 'UPSTREAM_INVALID_RESPONSE',
+          'cúpulas no pudo sellar la nota', { cupula: CUPULA, respuesta: add && add.status });
       }
+      const destino = (add.data && add.data.path) || `${CUPULA}/${cand.nombre_skill}`;
+
       cand.estado = 'aprobada';
       this._persistirCola(cand.project_id);
       try {
         this.eventBus.publish('aprendizaje.skill.creada', {
           nombre_skill: cand.nombre_skill, candidata_id, project_id: cand.project_id,
-          destino, correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+          cupula: CUPULA, nota_id: cand.nombre_skill, destino,
+          correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
         });
       } catch (_) { /* best-effort */ }
       this.metrics?.increment('destilador.skill.creada.total');
-      this.logger.info('destilador.skill.creada', { nombre_skill: cand.nombre_skill, destino });
-      return { status: 201, data: { nombre_skill: cand.nombre_skill, destino } };
+      this.logger.info('destilador.skill.sellada_en_cupula',
+        { nombre_skill: cand.nombre_skill, cupula: CUPULA, project_id: cand.project_id });
+      return { status: 201, data: { nombre_skill: cand.nombre_skill, cupula: CUPULA, nota_id: cand.nombre_skill, destino } };
     } catch (err) {
       return this._handleHandlerError('destilador.aprobar.failed', err, 'aprobar');
     }
+  }
+
+  // resumen (1 línea, prosa mínima) para la cabecera de la nota sellada.
+  _resumenDe(cand) {
+    const md = String(cand.contenido_md || '');
+    const linea = md.split('\n').find(l => l.trim() && !/^---/.test(l)) || cand.nombre_skill;
+    return linea.replace(/^#+\s*/, '').replace(/^>\s*/, '').trim().slice(0, 200);
   }
 
   async handleRechazar(data) {

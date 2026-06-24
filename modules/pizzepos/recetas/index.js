@@ -117,6 +117,32 @@ class RecetasReflejo extends ModuloHibridoReflejo {
     }).filter(l => l.nombre);
   }
 
+  // ── FIRMA DE SUSTANTIVO — el ESQUELETO de la receta, no su contenido. La
+  //    observación de deriva monta sobre el trabajo que _crear ya hace (los 5
+  //    puntos en una pasada): aquí salen semántica/intención. Determinista y
+  //    transparente; léxico a propósito (brittle) — captura LA FORMA: ¿lleva
+  //    masa? ¿base? ¿queso? ¿cuántos toppings? Es el dial plasticidad/rigidez:
+  //    grueso, para que "pizza sin masa ×3" salte como deriva y "pepperoni en
+  //    vez de jamón" NO. Generaliza luego vía catálogo/familias o LLM.
+  _rolDeLinea(l) {
+    const t = `${l.ref || ''} ${l.nombre || ''}`.toLowerCase();
+    if (/masa/.test(t)) return 'masa';
+    if (/tomate|salsa|ali.?oli|ajo.?trufa|pesto|crema|nata/.test(t)) return 'base';
+    if (/queso|mozzar|mozarela|parmesano|grana|burrata|azul/.test(t)) return 'queso';
+    return 'topping';
+  }
+
+  _formaDe(receta) {
+    const roles = (receta.lineas || []).map(l => this._rolDeLinea(l));
+    return {
+      tipo: receta.tipo,
+      tiene_masa: roles.includes('masa'),
+      tiene_base: roles.includes('base'),
+      tiene_queso: roles.includes('queso'),
+      n_toppings: roles.filter(r => r === 'topping').length
+    };
+  }
+
   async _crear(input) {
     if (!input.project_id) return this._invalid('project_id');
     if (!input.nombre || !String(input.nombre).trim()) return this._invalid('nombre');
@@ -198,6 +224,7 @@ class RecetasReflejo extends ModuloHibridoReflejo {
 
     this.eventBus.publish('receta.creada', {
       receta_id: id, nombre, version: 1, estado_operativo: receta.estado_operativo,
+      firma: this._formaDe(receta),   // el ESQUELETO — observable de deriva (gemelo-de-sustantivos)
       ...(incompleta ? { incompleta: true, campos_pendientes } : {}),
       correlation_id: input.correlation_id || null, timestamp: now
     });

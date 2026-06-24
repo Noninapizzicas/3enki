@@ -115,6 +115,34 @@ test('lineas se normalizan: cantidad→Number, unidad default g, ref desde nombr
   assert.deepStrictEqual(linea, { ref: 'mozzarella', nombre: 'Mozzarella', cantidad: 100, unidad: 'g' });
 });
 
+test('firma: _formaDe captura el ESQUELETO (no el contenido) y viaja en receta.creada', async () => {
+  const m = nuevoReflejo(storeCon([]));
+  await m._crear({ project_id: 'p', nombre: 'Bossa Nova', tipo: 'pizza', lineas: [
+    { nombre: 'Masa Napolitana', ref: 'masa-napolitana', cantidad: 315, unidad: 'ud' },
+    { nombre: 'Tomate frito', cantidad: 50 },
+    { nombre: 'Mozzarella', cantidad: 100 },
+    { nombre: 'Champiñones', cantidad: 30 },
+    { nombre: 'Pepperoni', cantidad: 50 }
+  ] });
+  const firma = emitida(m)[1].firma;
+  assert.deepStrictEqual(firma, { tipo: 'pizza', tiene_masa: true, tiene_base: true, tiene_queso: true, n_toppings: 2 });
+});
+
+test('firma: la deriva de Hip Hop (sin masa) es OBSERVABLE en la firma — tiene_masa:false', async () => {
+  const m = nuevoReflejo(storeCon([]));
+  await m._crear({ project_id: 'p', nombre: 'Hip Hop', tipo: 'pizza', lineas: [
+    { nombre: 'Tomate frito', cantidad: 60 },
+    { nombre: 'Carne picada', cantidad: 50 },
+    { nombre: 'Pepperoni', cantidad: 50 },
+    { nombre: 'Mozzarella', cantidad: 100 }
+  ] });
+  const firma = emitida(m)[1].firma;
+  assert.strictEqual(firma.tiene_masa, false, 'el esqueleto delata que falta la masa base (la deriva que rompió la Hip Hop)');
+  assert.strictEqual(firma.tiene_base, true);
+  assert.strictEqual(firma.tiene_queso, true);
+  assert.strictEqual(firma.n_toppings, 2);   // carne picada + pepperoni
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

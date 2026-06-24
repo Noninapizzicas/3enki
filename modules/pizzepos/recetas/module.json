@@ -1,7 +1,7 @@
 {
   "_doc": "Manifest del modulo recetas — HIBRIDO (blueprint + reflejo JS). El blueprint (recetas.blueprint.json) sirve lo FUZZY via LLM/cajones (crear desde intencion, investigar, editar). El index.js es el REFLEJO JS que sirve las LECTURAS deterministas en el bus (recetas.listar/ingredientes/obtener.request) sin un turno LLM — replicando exacto la proyeccion del blueprint. Motivo: cada lectura por RPC costaba un turno sintetico con el blueprint de recetas (~18K tokens); un escandallo llegaba a 250-370K tokens. Servidas por el reflejo: ~10x menos coste e instantaneo. El loader carga ambos (blueprint_driven + index.js = hibrido). Activable via page_id='recetas'. PILOTO cajones-context-partitioning + PILOTO modulo hibrido.",
   "name": "recetas",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Modulo recetas HIBRIDO: blueprint-driven (cajones) para lo fuzzy + reflejo JS (index.js) para las lecturas deterministas servidas en el bus. El LLM ve un CATALOGO de las operaciones (cajon.listar/abrir) en su pagina; las lecturas que otros modulos piden por RPC (recetas.{listar,ingredientes,obtener}.request) las contesta el reflejo, no un turno LLM.",
   "language": "es",
   "blueprint_driven": true,
@@ -13,6 +13,7 @@
     { "event": "recetas.listar.request", "handler": "onListarRequest", "description": "Reflejo JS: lista recetas (proyeccion) sin turno LLM." },
     { "event": "recetas.ingredientes.request", "handler": "onIngredientesRequest", "description": "Reflejo JS: catalogo de ingredientes." },
     { "event": "recetas.obtener.request", "handler": "onObtenerRequest", "description": "Reflejo JS: una receta por id/nombre." },
+    { "event": "recetas.crear.request", "handler": "onCrearRequest", "description": "Reflejo JS (persist write): da de alta una receta YA normalizada (el blueprint interpreta el lenguaje natural y delega aqui el GUARDAR). id slug + dedup + persist atomico + VERIFICA que aterrizo antes de emitir receta.creada — mata los fantasmas de guardado del LLM." },
     { "event": "escandallo.coste.calculado", "handler": "onCosteCalculado", "description": "Reflejo JS (persist write): aplica el coste al store. Antes era un turno LLM sintetico por cada coste." }
   ],
   "config": {

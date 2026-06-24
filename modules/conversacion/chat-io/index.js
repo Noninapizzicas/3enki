@@ -181,6 +181,8 @@ class ChatIoModule extends BaseModule {
       { table: 'conversations', column: 'context_window',   def: 'INTEGER DEFAULT 20' },
       { table: 'conversations', column: 'temperature',      def: 'REAL DEFAULT 0.7' },
       { table: 'conversations', column: 'max_tokens',       def: 'INTEGER DEFAULT 2000' },
+      { table: 'conversations', column: 'provider',         def: 'TEXT' },
+      { table: 'conversations', column: 'model',            def: 'TEXT' },
       { table: 'messages',      column: 'in_context',       def: 'INTEGER DEFAULT 1' },
       { table: 'messages',      column: 'manually_toggled', def: 'INTEGER DEFAULT 0' },
       { table: 'messages',      column: 'tokens',           def: 'INTEGER' },
@@ -316,7 +318,7 @@ class ChatIoModule extends BaseModule {
       await this._requireExistingConversation(project_id, conversation_id);
 
       const convRows = await this._db(project_id,
-        'SELECT context_window, temperature, max_tokens FROM conversations WHERE id = ?',
+        'SELECT context_window, temperature, max_tokens, provider, model FROM conversations WHERE id = ?',
         [conversation_id], true
       );
       const dbSettings = convRows[0] || defaultSettings();
@@ -327,6 +329,24 @@ class ChatIoModule extends BaseModule {
 
       const message_id = crypto.randomUUID();
       const now = Date.now();
+
+      // Persistencia del modelo POR CONVERSACION: si el envio trae provider/model
+      // explicitos (la UI lo eligio), se PEGAN a la conversacion para que los
+      // turnos siguientes los reusen aunque el workspace del frontend se reinicie.
+      // Sin esto, el provider se re-resolvia por priority cada turno (deepseek
+      // ganaba siempre) y la eleccion de la UI no viajaba. Solo escribe cuando
+      // viene explicito → no pisa el fallback por priority de las conversaciones
+      // que no eligieron modelo.
+      {
+        const ds = data?.settings || {};
+        const sets = [], params = [];
+        if (ds.provider !== undefined) { sets.push('provider = ?'); params.push(ds.provider || null); }
+        if (ds.model !== undefined)    { sets.push('model = ?');    params.push(ds.model || null); }
+        if (sets.length) {
+          params.push(conversation_id);
+          await this._db(project_id, `UPDATE conversations SET ${sets.join(', ')} WHERE id = ?`, params);
+        }
+      }
       await this._db(project_id,
         `INSERT INTO messages (id, conversation_id, role, content, created_at)
          VALUES (?, ?, 'user', ?, ?)`,
@@ -365,7 +385,7 @@ class ChatIoModule extends BaseModule {
 
   async handleCreate(data) {
     try {
-      const { project_id, title, context_window, temperature, max_tokens, prompt_id } = data || {};
+      const { project_id, title, context_window, temperature, max_tokens, prompt_id, provider, model } = data || {};
       this._requireProject(project_id);
       await this._ensureSchema(project_id);
 
@@ -379,9 +399,9 @@ class ChatIoModule extends BaseModule {
 
       await this._db(project_id,
         `INSERT INTO conversations
-          (id, project_id, title, context_window, temperature, max_tokens, prompt_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, project_id, finalTitle, finalCw, finalT, finalMt, prompt_id || null, now, now]
+          (id, project_id, title, context_window, temperature, max_tokens, prompt_id, provider, model, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, project_id, finalTitle, finalCw, finalT, finalMt, prompt_id || null, provider || null, model || null, now, now]
       );
 
       this.knownConversations.set(id, project_id);
@@ -390,7 +410,7 @@ class ChatIoModule extends BaseModule {
       const conversation = this._serializeConversation({
         id, project_id, title: finalTitle,
         context_window: finalCw, temperature: finalT, max_tokens: finalMt,
-        prompt_id: prompt_id || null,
+        prompt_id: prompt_id || null, provider: provider || null, model: model || null,
         created_at: now, updated_at: now,
         message_count: 0
       });
@@ -477,7 +497,7 @@ class ChatIoModule extends BaseModule {
 
   async handleUpdateSettings(data) {
     try {
-      const { project_id, conversation_id, context_window, temperature, max_tokens, prompt_id, title } = data || {};
+      const { project_id, conversation_id, context_window, temperature, max_tokens, prompt_id, title, provider, model } = data || {};
       this._requireProject(project_id);
       this._requireConversation(conversation_id);
       await this._ensureSchema(project_id);
@@ -490,6 +510,8 @@ class ChatIoModule extends BaseModule {
       if (max_tokens !== undefined)     { sets.push('max_tokens = ?');     params.push(max_tokens); }
       if (prompt_id !== undefined)      { sets.push('prompt_id = ?');      params.push(prompt_id); }
       if (title !== undefined)          { sets.push('title = ?');          params.push(title); }
+      if (provider !== undefined)       { sets.push('provider = ?');       params.push(provider || null); }
+      if (model !== undefined)          { sets.push('model = ?');          params.push(model || null); }
       if (sets.length === 0) {
         return { status: 200, data: { updated: false, changed: 0 } };
       }

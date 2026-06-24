@@ -2050,6 +2050,38 @@ class AiGatewayModule extends BaseModule {
       });
       providerAttempted = llmResult.provider || null;
 
+      // GUARDA ANTI-FANTASMA — el sistema detecta su propio "guardado falso".
+      // Firma observada (deepseek, 2026-06-23): el turno AFIRMA persistencia
+      // ("✅ guardada/registrada") pero termino con iterations<=1 y CERO
+      // herramientas ejecutadas → narro la accion en vez de hacerla. Cuando
+      // habia herramientas disponibles en la pagina, eso es un fantasma. No
+      // bloquea el turno (avisar, no confiar): emite senal + metrica + log para
+      // que sea visible (la propiocepcion y el operador lo ven). El arreglo de
+      // raiz es el modelo (kimi/gemini ejecutan) y/o mover el persist al reflejo.
+      try {
+        const sinHerramienta = (Number(llmResult.iterations) || 1) <= 1
+          && (!Array.isArray(llmResult.tool_calls_executed) || llmResult.tool_calls_executed.length === 0);
+        const afirmaPersistencia = /(?:✅|guardad|registrad|creada|creado|añadid|anadid|actualizad|guard[eé]|registr[eé])/i
+          .test(llmResult.content || '');
+        const habiaHerramientas = Array.isArray(tools) && tools.length > 0;
+        if (sinHerramienta && afirmaPersistencia && habiaHerramientas) {
+          this.metrics?.increment('ai-gateway.fantasma_sospechado', { provider: llmResult.provider || 'unknown', page: page_id || 'chat' });
+          this.logger?.warn('ai-gateway.fantasma_sospechado', {
+            conversation_id, project_id, page_id, provider: llmResult.provider, model: llmResult.model,
+            iterations: llmResult.iterations, extracto: (llmResult.content || '').slice(0, 120)
+          });
+          await this.eventBus.publish('chat.fantasma_sospechado', {
+            correlation_id: correlation_id || crypto.randomUUID(),
+            project_id, conversation_id, page_id: page_id || 'chat',
+            provider: llmResult.provider || 'unknown', model: llmResult.model || 'unknown',
+            iterations: llmResult.iterations || 1,
+            motivo: 'turno afirma persistencia sin ejecutar ninguna herramienta',
+            extracto: (llmResult.content || '').slice(0, 200),
+            timestamp: new Date().toISOString()
+          });
+        }
+      } catch (_) { /* best-effort: la guarda NUNCA rompe el turno */ }
+
       const payload = {
         correlation_id:       correlation_id || crypto.randomUUID(),
         conversation_id,

@@ -1,13 +1,12 @@
 {
   "name": "destilador",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "blueprint_driven": true,
   "blueprint_path": "destilador.blueprint.json",
   "target_page_id": "destilador",
-  "description": "El lazo de aprendizaje del sistema (Minero + Cola+Publicador + Auto-mejora). HIBRIDO: el reflejo (JS) mina el bus y sella/publica skills; el blueprint (LLM) redacta la skill desde los registros. PASO 1 (Minero): agrupa eventos del scope por correlation_id en trazas, las reduce a una FIRMA y, cuando una firma se repite >= umbral, emite aprendizaje.candidata.detectada. PASO 2 (Cola+Publicador): el blueprint redacta un SKILL.md desde los registros y lo ENCOLA; la skill NO se publica sola — un humano la aprueba (handleAprobar) y solo entonces se escribe en .claude/skills/ (anti-wipe). PASO 3 (Auto-mejora): la senal skill.aplicada etiqueta la traza de su resolucion; si una skill, tras aplicarse, lleva a fallo recurrente (tasa de fallo sobre ventana deslizante >= umbral), emite aprendizaje.revision.requerida con las trazas fallidas — vuelve por la misma guardia humana. Histeresis: si la skill se recupera, la revision se des-arma. El Minero capitaliza el acierto; la auto-mejora capitaliza el fallo.",
+  "description": "El lazo de aprendizaje del sistema (Minero + Cola+Publicador + Auto-mejora). HIBRIDO: el reflejo (JS) mina el bus y sella/publica skills; el blueprint (LLM) redacta la skill desde los registros. PASO 1 (Minero): agrupa eventos del scope por correlation_id en trazas, las reduce a una FIRMA y, cuando una firma se repite >= umbral, emite aprendizaje.candidata.detectada. PASO 2 (Cola+Publicador): el blueprint redacta un SKILL.md desde los registros y lo ENCOLA; la skill NO se publica sola — un humano la aprueba (handleAprobar) y solo entonces se SELLA en CUPULAS — la memoria de Enki (Mundo B), NO en .claude/skills (Mundo Claude Code, Mundo A): el destilador es un organo de Enki, su sello vive en Enki. Anti-wipe. PASO 3 (Auto-mejora): la senal skill.aplicada etiqueta la traza de su resolucion; si una skill, tras aplicarse, lleva a fallo recurrente (tasa de fallo sobre ventana deslizante >= umbral), emite aprendizaje.revision.requerida con las trazas fallidas — vuelve por la misma guardia humana. Histeresis: si la skill se recupera, la revision se des-arma. El Minero capitaliza el acierto; la auto-mejora capitaliza el fallo.",
   "author": "Event Core Team",
   "language": "es",
-
   "publishes": [
     {
       "event": "aprendizaje.candidata.detectada",
@@ -19,7 +18,7 @@
     },
     {
       "event": "aprendizaje.skill.creada",
-      "description": "Reflejo: un humano aprobo la candidata y la skill se escribio en .claude/skills/. {nombre_skill, candidata_id, project_id, destino}."
+      "description": "Reflejo: un humano aprobo la candidata y la skill se SELLO como nota en la cupula 'skills-destiladas' (memoria de Enki). {nombre_skill, candidata_id, project_id, cupula, nota_id, destino}."
     },
     {
       "event": "aprendizaje.revision.requerida",
@@ -34,7 +33,6 @@
       "description": "REPLAY (lado lectura): responde con las trayectorias aprendidas que arrancan en 'desde'. {request_id, status, data:{rutas:[{firma, secuencia, continuacion, ocurrencias}]}}. La consume quien pregunta 'desde aqui, por donde se suele ir' (ej. conserje)."
     }
   ],
-
   "subscribes": [
     {
       "event": "project.activated",
@@ -67,7 +65,6 @@
       "description": "REPLAY (RPC del bus): dado {project_id, desde} devuelve las trayectorias aprendidas que arrancan en 'desde' (cluster.secuencia), rankeadas por ocurrencias. NO gateado por on/off: leer rutas funciona aunque el aprendizaje este apagado."
     }
   ],
-
   "ui_handlers": [
     {
       "domain": "destilador",
@@ -91,7 +88,7 @@
       "domain": "destilador",
       "action": "aprobar",
       "handler": "handleAprobar",
-      "description": "GUARDIA HUMANA: aprueba una candidata -> escribe la skill en .claude/skills/ (anti-wipe). {candidata_id}."
+      "description": "GUARDIA HUMANA: aprueba una candidata -> SELLA la skill como nota en cupulas (cupula 'skills-destiladas', anti-wipe), NO en .claude/skills. {candidata_id}."
     },
     {
       "domain": "destilador",
@@ -112,7 +109,6 @@
       "description": "Estado del destilador: trazas abiertas, clusters, cola, si captura el bus."
     }
   ],
-
   "tools": [
     {
       "name": "destilador.listar_clusters",
@@ -121,13 +117,25 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." },
-          "min_ocurrencias": { "type": "number", "description": "Solo firmas con al menos N ocurrencias (default 1)." }
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Proyecto."
+          },
+          "min_ocurrencias": {
+            "type": "number",
+            "description": "Solo firmas con al menos N ocurrencias (default 1)."
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       },
       "handler": "handleListarClusters",
-      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "destilador.ruta",
@@ -136,14 +144,28 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." },
-          "desde": { "description": "Donde estas: una pagina/dominio (ej. 'recetas') o un array de pasos normalizados (ej. ['recetas.obtener']). Vacio = todas las rutas del proyecto." },
-          "limite": { "type": "number", "description": "Cuantas rutas devolver (default 5)." }
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Proyecto."
+          },
+          "desde": {
+            "description": "Donde estas: una pagina/dominio (ej. 'recetas') o un array de pasos normalizados (ej. ['recetas.obtener']). Vacio = todas las rutas del proyecto."
+          },
+          "limite": {
+            "type": "number",
+            "description": "Cuantas rutas devolver (default 5)."
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       },
       "handler": "handleRuta",
-      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "destilador.listar_candidatas",
@@ -152,28 +174,51 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." },
-          "estado": { "type": "string", "description": "pendiente (default) | aprobada | rechazada | conflicto." }
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Proyecto."
+          },
+          "estado": {
+            "type": "string",
+            "description": "pendiente (default) | aprobada | rechazada | conflicto."
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       },
       "handler": "handleListarCandidatas",
-      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "destilador.aprobar",
-      "description": "Aprueba una skill candidata: la escribe en .claude/skills/ (no pisa una existente). Es la guardia humana del lazo de aprendizaje.",
+      "description": "Aprueba una skill candidata: la SELLA como nota en cupulas (memoria de Enki, cupula 'skills-destiladas'; no pisa una existente). Es la guardia humana del lazo de aprendizaje.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "candidata_id": { "type": "string", "minLength": 1, "description": "Id de la candidata a aprobar." }
+          "candidata_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Id de la candidata a aprobar."
+          }
         },
-        "required": ["candidata_id"]
+        "required": [
+          "candidata_id"
+        ]
       },
       "handler": "handleAprobar",
       "confirmation": true,
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "CONFLICT_STATE",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "destilador.rechazar",
@@ -182,12 +227,22 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "candidata_id": { "type": "string", "minLength": 1, "description": "Id de la candidata a descartar." }
+          "candidata_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Id de la candidata a descartar."
+          }
         },
-        "required": ["candidata_id"]
+        "required": [
+          "candidata_id"
+        ]
       },
       "handler": "handleRechazar",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "destilador.listar_salud_skills",
@@ -196,23 +251,45 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto." }
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Proyecto."
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       },
       "handler": "handleListarSaludSkills",
-      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
+      ]
     }
   ],
-
-  "dependencies": ["filesystem", "propiocepcion"],
-
+  "dependencies": [
+    "filesystem",
+    "propiocepcion",
+    "cupulas"
+  ],
   "config": {
     "enabled": true,
     "scope_modulos": [
-      "recetas", "escandallo", "carta-design", "carta-digital", "carta-manager",
-      "carta-marketing", "carta-scheduler", "tecnicas", "viabilidad",
-      "menu-generator", "productos", "categorias", "ingredientes", "tarifas"
+      "recetas",
+      "escandallo",
+      "carta-design",
+      "carta-digital",
+      "carta-manager",
+      "carta-marketing",
+      "carta-scheduler",
+      "tecnicas",
+      "viabilidad",
+      "menu-generator",
+      "productos",
+      "categorias",
+      "ingredientes",
+      "tarifas"
     ],
     "umbral_recurrencia": 3,
     "min_pasos": 1,
@@ -222,19 +299,25 @@
     "archivo_path": "/_destilador/clusters.json",
     "cola_path": "/_destilador/cola.json",
     "salud_path": "/_destilador/skills_salud.json",
-    "skills_path": ".claude/skills",
     "ventana_desenlaces": 10,
-    "umbral_fallo": { "tasa": 0.5, "min_muestras": 3 },
+    "umbral_fallo": {
+      "tasa": 0.5,
+      "min_muestras": 3
+    },
     "persistence": {
       "pattern": "json-file-per-project",
       "restart_resilient": true,
       "concurrency": "single-writer",
-      "lost_on_restart": ["trazasAbiertasNoCerradas"]
+      "lost_on_restart": [
+        "trazasAbiertasNoCerradas"
+      ]
     }
   },
-
   "observability": {
-    "logging": { "level": "info", "structured": true },
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
     "metrics": {
       "enabled": true,
       "counters": [

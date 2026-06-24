@@ -187,40 +187,58 @@ test('_encolar acepta skill fertil y emite candidata.encolada', async () => {
   await mod.onUnload();
 });
 
-test('handleAprobar escribe la skill en disco y emite skill.creada', async () => {
+test('handleAprobar SELLA la skill en cúpulas (Mundo Enki), NO en .claude/skills, y emite skill.creada', async () => {
   const bus = fakeBus();
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-'));
-  const mod = await nuevoMinero(bus, { skills_path: tmp });
+  const mod = await nuevoMinero(bus);
+  const llamadas = [];
+  mod._rpc = async (evento, payload) => {
+    llamadas.push({ evento, payload });
+    if (evento === 'cupulas.crear_cupula.request') return { status: 201, data: { cupula_id: 'skills-destiladas' } };
+    if (evento === 'cupulas.get_nota.request') return { status: 404 };   // no hay nota previa
+    if (evento === 'cupulas.add_nota.request') return { status: 201, data: { nota_id: payload.titulo, path: '/cupulas/skills-destiladas/costear-receta.md' } };
+    return null;
+  };
   const enc = mod._encolar({ project_id: P, nombre_skill: 'costear-receta', contenido_md: SKILL_OK });
   const res = await mod.handleAprobar({ candidata_id: enc.data.candidata_id });
   assert.strictEqual(res.status, 201);
-  const destino = path.join(tmp, 'costear-receta', 'SKILL.md');
-  assert.ok(fs.existsSync(destino), 'el SKILL.md debe existir');
-  const escrito = fs.readFileSync(destino, 'utf-8');
-  assert.ok(escrito.startsWith('---'), 'debe llevar frontmatter');
-  assert.ok(escrito.includes('## Pasos'));
+  assert.strictEqual(res.data.cupula, 'skills-destiladas');
+  const add = llamadas.find(l => l.evento === 'cupulas.add_nota.request');
+  assert.ok(add, 'sella vía cupulas.add_nota (Mundo Enki)');
+  assert.strictEqual(add.payload.tipo, 'skill');
+  assert.strictEqual(add.payload.project_id, P);
+  assert.ok(add.payload.contenido.includes('## Pasos'), 'el cuerpo sellado lleva los pasos accionables');
+  assert.ok(!llamadas.some(l => /\.claude\/skills/.test(JSON.stringify(l.payload || {}))), 'NO toca .claude/skills (Mundo A)');
   assert.ok(bus.published.some(p => p.event === 'aprendizaje.skill.creada'));
   assert.strictEqual(mod.cola.get(enc.data.candidata_id).estado, 'aprobada');
-  fs.rmSync(tmp, { recursive: true, force: true });
   await mod.onUnload();
 });
 
-test('handleAprobar NO pisa una skill existente (anti-wipe)', async () => {
+test('handleAprobar NO pisa una nota ya sellada (anti-wipe vía get_nota)', async () => {
   const bus = fakeBus();
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-'));
-  // pre-existe la skill con contenido propio
-  fs.mkdirSync(path.join(tmp, 'costear-receta'), { recursive: true });
-  const previo = '--- ya existo, no me pises ---';
-  fs.writeFileSync(path.join(tmp, 'costear-receta', 'SKILL.md'), previo);
-  const mod = await nuevoMinero(bus, { skills_path: tmp });
+  const mod = await nuevoMinero(bus);
+  let addLlamado = false;
+  mod._rpc = async (evento) => {
+    if (evento === 'cupulas.crear_cupula.request') return { status: 409 };          // la cúpula ya existe
+    if (evento === 'cupulas.get_nota.request') return { status: 200, data: { id: 'costear-receta' } };  // YA sellada
+    if (evento === 'cupulas.add_nota.request') { addLlamado = true; return { status: 201 }; }
+    return null;
+  };
   const enc = mod._encolar({ project_id: P, nombre_skill: 'costear-receta', contenido_md: SKILL_OK });
   const res = await mod.handleAprobar({ candidata_id: enc.data.candidata_id });
   assert.strictEqual(res.status, 409);
   assert.strictEqual(res.error.code, 'CONFLICT_STATE');
-  assert.strictEqual(fs.readFileSync(path.join(tmp, 'costear-receta', 'SKILL.md'), 'utf-8'), previo,
-    'el contenido previo NO se debe tocar');
+  assert.strictEqual(addLlamado, false, 'no debe sellar si la nota ya existe');
   assert.strictEqual(mod.cola.get(enc.data.candidata_id).estado, 'conflicto');
-  fs.rmSync(tmp, { recursive: true, force: true });
+  await mod.onUnload();
+});
+
+test('handleAprobar 400 si la candidata no tiene project_id (cúpulas es por proyecto)', async () => {
+  const bus = fakeBus();
+  const mod = await nuevoMinero(bus);
+  mod._rpc = async () => ({ status: 201 });
+  const enc = mod._encolar({ nombre_skill: 'sin-proyecto', contenido_md: SKILL_OK });  // sin project_id
+  const res = await mod.handleAprobar({ candidata_id: enc.data.candidata_id });
+  assert.strictEqual(res.status, 400);
   await mod.onUnload();
 });
 

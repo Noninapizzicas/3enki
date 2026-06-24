@@ -18,13 +18,14 @@ class RecetasReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'recetas';
-    this.version = 'reflejo-1.1.0';
+    this.version = 'reflejo-1.2.0';
   }
 
   // ── handlers RPC (una línea: delegan a _atender de la base) ──
   onListarRequest(e) { return this._atender(e, 'listar', 'recetas.listar.response', d => this._listar(d)); }
   onIngredientesRequest(e) { return this._atender(e, 'ingredientes', 'recetas.ingredientes.response', d => this._ingredientes(d)); }
   onObtenerRequest(e) { return this._atender(e, 'obtener', 'recetas.obtener.response', d => this._obtener(d)); }
+  onCrearRequest(e) { return this._atender(e, 'crear', 'recetas.crear.response', d => this._crear(d)); }
 
   // ── proyecciones deterministas (réplica fiel del pseudocódigo) ──
 
@@ -85,6 +86,126 @@ class RecetasReflejo extends ModuloHibridoReflejo {
       if (campo !== 'history') rest[campo] = r[campo];
     }
     return { status: 200, data: { ...rest, versiones_anteriores: (r.history || []).length } };
+  }
+
+  // ── ALTA determinista (REFLEJO). El blueprint NORMALIZA lenguaje natural →
+  //    lineas[] estructuradas (lo fuzzy) y delega aquí el GUARDAR. Antes el alta
+  //    era 100% del LLM: el mismo turno decidía escribir Y afirmar éxito → 3
+  //    fantasmas medidos (2026-06-23: chillout, flamenco, hip-hop) + K-Pop, que
+  //    EJECUTÓ pero la escritura no aterrizó (fs inestable). Aquí: id slug estable,
+  //    dedup, persist atómico, y VERIFICA que la receta esté en el archivo antes
+  //    de emitir receta.creada — si no aterrizó, error explícito, nunca fantasma. ──
+  _slug(s) {
+    return String(s || '').toLowerCase().trim()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')   // acentos → ascii
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'receta';
+  }
+
+  _normalizarLineas(lineas) {
+    if (!Array.isArray(lineas)) return [];
+    const U = new Set(['g', 'ml', 'ud']);
+    return lineas.map(l => {
+      const nombre = String(l.nombre || l.ref || '').trim();
+      const out = {
+        ref: l.ref ? String(l.ref) : this._slug(nombre),
+        nombre,
+        cantidad: Number(l.cantidad) || 0,
+        unidad: U.has(l.unidad) ? l.unidad : 'g'
+      };
+      if (l.notas) out.notas = String(l.notas);
+      return out;
+    }).filter(l => l.nombre);
+  }
+
+  async _crear(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.nombre || !String(input.nombre).trim()) return this._invalid('nombre');
+    const nombre = String(input.nombre).trim();
+    const norm = nombre.toLowerCase();
+
+    const store = await this._leerJson(input.project_id, STORE_PATH);
+    const existe = store !== null;
+    const recetas = (existe && Array.isArray(store.recetas)) ? store.recetas : [];
+
+    // dedup: no duplicado activo (nombre normalizado + en_servicio)
+    const dup = recetas.find(r => String(r.nombre || '').toLowerCase().trim() === norm && r.estado_operativo === 'en_servicio');
+    if (dup) return this._errorResponse(409, 'ALREADY_EXISTS', `ya existe una receta activa "${nombre}"`, { entity_type: 'recipe', existing_id: dup.id });
+
+    // id slug estable; sufijo -N si choca con cualquiera (activa o no)
+    let id = this._slug(nombre);
+    if (recetas.some(r => r.id === id)) { let n = 2; while (recetas.some(r => r.id === `${id}-${n}`)) n++; id = `${id}-${n}`; }
+
+    const tipo = ['pizza', 'masa', 'salsa', 'base'].includes(input.tipo) ? input.tipo : 'pizza';
+    const lineas = this._normalizarLineas(input.lineas);
+    const rinde = (input.rinde && Number(input.rinde.cantidad) > 0)
+      ? { cantidad: Number(input.rinde.cantidad), unidad: String(input.rinde.unidad || 'ud') }
+      : (tipo === 'pizza' ? { cantidad: 1, unidad: 'ud' } : null);
+    const now = new Date().toISOString();
+
+    // completitud (campos mínimos: nombre, tipo, lineas no vacío)
+    const campos_pendientes = [];
+    if (lineas.length === 0) campos_pendientes.push('lineas');
+    const incompleta = campos_pendientes.length > 0;
+
+    const receta = {
+      id, nombre, tipo,
+      descripcion: input.descripcion ? String(input.descripcion) : '',
+      rinde, lineas,
+      instrucciones: Array.isArray(input.instrucciones) ? input.instrucciones.map(String)
+        : (input.instrucciones ? [String(input.instrucciones)] : []),
+      categorias: Array.isArray(input.categorias) ? input.categorias.map(String) : [],
+      etiquetas: Array.isArray(input.etiquetas) ? input.etiquetas.map(String) : [],
+      fuente: ['manual', 'importada', 'sugerida', 'agente'].includes(input.fuente) ? input.fuente : 'manual',
+      notas: input.notas ? String(input.notas) : '',
+      estado_operativo: incompleta ? 'borrador' : 'en_servicio',
+      version: 1, history: [], incompleta, campos_pendientes,
+      created_at: now, updated_at: now
+    };
+
+    // persistir — rama A (archivo no existe): fs.write atómico del store inicial.
+    // rama B (existe): fs.edit declarativo (RFC 6902) op:add — NO compone el
+    // archivo entero (cierra el bug 'salmorejo perdido' de raíz).
+    if (!existe) {
+      const store_inicial = { _version: '1.0', _updated_at: now, recetas: [receta], ingredientes_catalogo: [] };
+      const w = await this._rpc('fs.write.request', {
+        project_id: input.project_id, path: STORE_PATH,
+        content: JSON.stringify(store_inicial, null, 2), encoding: 'utf-8', atomic: true
+      });
+      if (!w || (typeof w.status === 'number' && w.status >= 400)) {
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'fs.write falló al crear el store de recetas', { op: 'write' });
+      }
+    } else {
+      const e = await this._editarJson(input.project_id, STORE_PATH, [
+        { op: 'add', path: '/recetas/-', value: receta },
+        { op: 'replace', path: '/_updated_at', value: now }
+      ]);
+      if (!e || (typeof e.status === 'number' && e.status >= 400)) {
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'fs.edit falló al añadir la receta', { op: 'edit' });
+      }
+    }
+
+    // VERIFICAR que aterrizó (la causa K-Pop: el turno ejecutó pero el fs no
+    // persistió). Releemos y confirmamos. Solo emitimos receta.creada si la
+    // receta está REALMENTE en el archivo → nunca un éxito fantasma.
+    const check = await this._leerJson(input.project_id, STORE_PATH);
+    const landed = check && Array.isArray(check.recetas) && check.recetas.some(r => r.id === id);
+    if (!landed) {
+      this.metrics?.increment('recetas.reflejo.errors', { op: 'crear_no_landed' });
+      this.logger?.error('recetas.reflejo.crear.no_landed', { project_id: input.project_id, receta_id: id });
+      return this._errorResponse(503, 'UPSTREAM_UNREACHABLE',
+        'la receta no se confirmó en el archivo tras escribir (filesystem inestable) — NO guardada', { op: 'verify', receta_id: id });
+    }
+
+    this.eventBus.publish('receta.creada', {
+      receta_id: id, nombre, version: 1, estado_operativo: receta.estado_operativo,
+      ...(incompleta ? { incompleta: true, campos_pendientes } : {}),
+      correlation_id: input.correlation_id || null, timestamp: now
+    });
+
+    return {
+      status: 201,
+      data: { receta_id: id, nombre, tipo, estado_operativo: receta.estado_operativo, incompleta, campos_pendientes, lineas_count: lineas.length }
+    };
   }
 
   // ── persist WRITE (fire-and-forget): aplica el coste de escandallo al store.

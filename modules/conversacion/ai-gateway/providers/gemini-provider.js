@@ -207,8 +207,9 @@ class GeminiProvider extends BaseProvider {
       'x-goog-api-key': this.apiKey
     };
 
-    // Gemini endpoint: /models/{model}:generateContent
-    const endpoint = `/models/${model}:generateContent`;
+    // Gemini endpoint RELATIVO (sin barra inicial): asi new URL(endpoint, api_base)
+    // conserva el /v1beta del api_base. Con barra inicial lo borraba -> 404 en todo.
+    const endpoint = `models/${model}:generateContent`;
 
     this.logger.info('gemini.chat.request', {
       model,
@@ -300,8 +301,8 @@ class GeminiProvider extends BaseProvider {
       'x-goog-api-key': this.apiKey
     };
 
-    // Streaming endpoint: /models/{model}:streamGenerateContent?alt=sse
-    const endpoint = `/models/${model}:streamGenerateContent?alt=sse`;
+    // Streaming endpoint RELATIVO (sin barra inicial → conserva /v1beta del api_base)
+    const endpoint = `models/${model}:streamGenerateContent?alt=sse`;
 
     return new Promise((resolve, reject) => {
       let buffer = '';
@@ -378,8 +379,8 @@ class GeminiProvider extends BaseProvider {
       throw new Error('generateEmbedding requires non-empty string');
     }
 
-    const model = options.model || 'embedding-001';
-    const endpoint = `/models/${model}:embedContent`;
+    const model = options.model || 'text-embedding-004';
+    const endpoint = `models/${model}:embedContent`;
     const headers = { 'x-goog-api-key': this.apiKey };
     const body = {
       model: `models/${model}`,

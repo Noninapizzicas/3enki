@@ -171,7 +171,7 @@
       "gemini": {
         "enabled": true,
         "priority": 5,
-        "api_base": "https://generativelanguage.googleapis.com/v1beta",
+        "api_base": "https://generativelanguage.googleapis.com/v1beta/",
         "default_model": "gemini-2.5-flash",
         "models": [
           "gemini-2.5-flash",

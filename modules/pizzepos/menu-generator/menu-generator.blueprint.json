@@ -1,7 +1,7 @@
 {
   "_doc": "Blueprint del modulo menu-generator v11.0.0 — GENERADOR DE CATALOGO (HIBRIDO: blueprint + reflejo index.js). Recupera el ALMA de la v7 (un generador limpio: pide el nombre, toma CUALQUIER input, produce una carta estructurada, y NO la persiste el — delega en el custodio) y la expresa en el patron blueprint-coherente (CONTRATO -> LEER -> PENSAR -> GUARDAR -> EMITIR), SIN agentes. El blueprint es una CLASE GENERICA (no sabe que esto es comida: pregunta lo universal del producto). Lo DETERMINISTA (estructurar un catalogo ya formado, persistir) lo hace el REFLEJO (index.js, menu.import.request). Lo FUZZY (clasificar la ruta, estructurar texto libre dictado) lo hace el LLM de pagina. Reemplaza v10.1.0 (estructurador-ENRIQUECEDOR de 4 operaciones); v11 adelgaza a 2 (generar + handler async) volviendo al alcance de la v7: las 6 W de enriquecimiento (enriquecer) y recetas->carta (preparar) salen del modulo. Persistencia DELEGADA en carta-manager (event-core puro).",
   "id": "menu-generator",
-  "version": "blueprint-11.0.0",
+  "version": "blueprint-11.1.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
 
@@ -16,6 +16,17 @@
     "como_se_llama": { "salida": "nombre normalizado", "modo": "DETERMINISTA (slug)" },
     "a_que_categoria": { "salida": "categoria_id (de las categorias del propio catalogo)", "modo": "DETERMINISTA | FUZZY" },
     "regla_de_hierro": "NUNCA inventar hechos. Lo que el material/texto NO trae = ausente o vacio, no fabricado. precio ausente -> 0. ingrediente no nombrado -> no existe. El enriquecimiento (deducir alergeno/dieta) NO es de este modulo (v11 lo saco)."
+  },
+
+  "enfoque_de_la_tarea": {
+    "_descripcion": "El alma del modulo NO es una via JS por caso: ante 'generame la carta', TU (LLM de pagina) ABRES LA LENTE (objetivo afilado, ver persona: AnalistaProfundo) y te haces las preguntas que enfocan bien la tarea ANTES de estructurar. La carta sale rica porque la enfocaste bien, no porque un reflejo la rellene. La regla de hierro sigue: los HECHOS solo los que el material trae o el usuario responde; lo PRESENTABLE (emoji, familia) lo aporta tu criterio — eso no es inventar un hecho.",
+    "preguntas_que_te_haces": [
+      "QUE leo y QUE produzco: el material puede NO ser una carta. recetas.json = { recetas[], ingredientes_catalogo[] CON precios }; mi salida es una CARTA que consume el comandero. Transformo recetas -> carta, no copio.",
+      "QUIEN la usa y que necesita: el comandero COBRA extras -> cada ingrediente modificable necesita su precio_extra. El cliente ELIGE -> opciones de quitar/anadir. La cocina ENRUTA -> familia/estacion. Una carta sin eso esta coja para operar.",
+      "DONDE estan los datos que enriquecen: si la fuente trae precios (ingredientes_catalogo de recetas.json) los USO — no los invento ni los dejo mudos. Si un HECHO falta (un precio que nadie dio), lo PREGUNTO al usuario antes de cerrar.",
+      "QUE aporto yo como criterio (no es inventar un hecho): la FAMILIA canonica de cada ingrediente (queso/verdura/carne/salsa/pescado/fruta/extra/condimento) y un EMOJI representativo por producto/ingrediente. Eso es presentacion — es mi trabajo, no fabricar datos."
+    ],
+    "mandato": "Entrega una carta RICA porque la enfocaste: precios reales de donde esten (ingredientes_catalogo si la fuente es recetas), familia y emoji de tu criterio, y lo que NO sepas lo preguntas al usuario. Nunca inventes un precio."
   },
 
   "reparto_sustrato": {
@@ -74,11 +85,17 @@
         "    return { status: 200, data: { carta_id: base.data.carta_id, productos: base.data.productos }, message: 'Carta \"' + input.nombre + '\" estructurada (' + base.data.productos + ' productos).' }",
         "  }",
         "",
-        "  // TEXTO_LIBRE:",
-        "  // 3. PENSAR — lo FUZZY: TU (LLM de pagina) estructuras el texto dictado a shape carta-pizzepos.",
-        "  //    REGLA DE HIERRO: solo lo que el texto dice. precio ausente -> 0. ingrediente no nombrado -> no existe.",
-        "  //    forma: { meta:{ id: 'carta_'+slug(nombre), nombre, generado_desde:'texto' }, categorias:[{id,nombre,orden}], productos:[{id: catId+'_'+slug(nombre), nombre, precio, categoria_id, ingredientes:[{id,nombre,familia}]}] }",
-        "  carta = estructurar(input.texto, input.nombre)",
+        "  // TEXTO_LIBRE (incluye recetas.json u otro material que NO es una carta ya formada):",
+        "  // 3a. ENFOCA — abre la lente (ver enfoque_de_la_tarea): hazte las 4 preguntas. En concreto,",
+        "  //     si el material es recetas.json, LEE su ingredientes_catalogo: de ahi salen los precios",
+        "  //     REALES de cada ingrediente (precio_extra) — usalos, no pongas 0 ni inventes. Lo que",
+        "  //     ningun dato te de y sea un HECHO (un precio que falta), PREGUNTALO al usuario antes de cerrar.",
+        "  // 3b. PENSAR — lo FUZZY: estructuras a shape carta-pizzepos RICO. Hechos: solo los del material",
+        "  //     o lo que el usuario responda. Presentacion (familia canonica + emoji): tu criterio.",
+        "  //    forma: { meta:{ id: 'carta_'+slug(nombre), nombre, generado_desde:'texto' }, categorias:[{id,nombre,orden}],",
+        "  //            productos:[{ id: catId+'_'+slug(nombre), nombre, precio, categoria_id, emoji,",
+        "  //              ingredientes:[{ id, nombre, familia(canonica), emoji, precio_extra(real de ingredientes_catalogo) }] }] }",
+        "  carta = estructurar(input.texto, input.nombre)   // enfocada: rica de origen, precios reales, familia+emoji de tu criterio",
         "  if (carta.categorias.length == 0 || carta.productos.length == 0) {",
         "    await publish('menu.generation.failed', { project_id: input.project_id, nombre: input.nombre, step: 'structuring', error: { code: 'INVALID_INPUT', message: 'no se detectaron productos/categorias en el texto' }, correlation_id: input.correlation_id })",
         "    return INVALID_INPUT { hint: 'el texto no tiene productos/categorias detectables' }",
@@ -93,7 +110,8 @@
         "  return { status: 200, data: { carta_id: carta.meta.id, productos: carta.productos.length }, message: 'Carta \"' + input.nombre + '\" estructurada (' + carta.productos.length + ' productos).' }"
       ],
       "reglas_clave": [
-        "CLASIFICAR ruta es la unica decision fuzzy de entrada. CATALOGO (json/catalogo ya formado) -> REFLEJO. TEXTO_LIBRE (dictado) -> LLM estructura.",
+        "ENFOCA antes de estructurar (enfoque_de_la_tarea): la carta sale RICA porque te haces las preguntas (que necesita el comandero, donde estan los precios, que familia/emoji), no porque un reflejo la rellene. Si la fuente es recetas.json, los precios reales viven en ingredientes_catalogo; un hecho que falte se PREGUNTA, nunca se inventa.",
+        "CLASIFICAR ruta es la unica decision fuzzy de entrada. CATALOGO (carta json YA formada) -> REFLEJO. TEXTO_LIBRE (dictado, o recetas.json que NO es una carta) -> TU la enfocas y estructuras.",
         "El catalogo grande NUNCA lo emite el LLM: viaja como JSON y lo estructura el reflejo (esa re-emision era el bug v9).",
         "REGLA DE HIERRO: estructurando texto, NO inventar (precio 0 si no se dice; ingrediente no nombrado no existe). Sin enriquecimiento (v11 lo saco).",
         "Persistencia DELEGADA y VERIFICADA: CATALOGO via menu.import (reflejo) ; TEXTO_LIBRE via carta.save.request (custodio). publishAndWait en ambas -> imposible guardado falso.",
@@ -150,5 +168,6 @@
   ],
 
   "_historia": "v7 (legacy JS monolito): pipeline OCR (pdfjs->sharp->google-vision) + agente menu-structurer. v8.0.0: migracion a blueprint puro (OCR eliminado dec 4.4, agente archivado dec 4.2, persistencia via carta-manager). v9.x: semilla enriquecida + interfaz abierta + FASE 3 identidad + op preparar. v10.0.0: REDISEÑO HIBRIDO (SUELO determinista al reflejo index.js; el LLM dejo de emitir la carta entera — bug v9). v10.1.0: op enriquecer de primer nivel (6 W).",
+  "_v11_1_changelog": "v11.1.0 (2026-06-25): EL LLM ENFOCA, no un reflejo rellena. DIAGNOSTICO (carta 2 real, conv nonina): se pidio 'genera la carta desde recetas.json'; recetas.json NO es una carta (es { recetas, ingredientes_catalogo }) -> ruta TEXTO_LIBRE -> el LLM la estructuro a mano PLANA: sin precio_extra (los precios estaban EN ingredientes_catalogo, no los leyo), sin familia canonica (dejo salsas/lacteos/aceites crudas), sin emoji, sin opciones. La carta quedo coja para operar (el comandero no puede cobrar extras). FALLO DE ENFOQUE, no falta de via JS. La tentacion era restaurar un 'preparar' determinista (recetas->carta en reflejo) — RECHAZADO por el humano: 'si todo se hace determinista no terminamos, y es un fallo en el enfoque con la IA; el LLM se hace las preguntas que lo enfoquen'. FIX (sin determinismo nuevo): se anade el bloque 'enfoque_de_la_tarea' (la Lente de Analisis Profundo de la persona: objetivo afilado) — 4 preguntas que el LLM se hace ANTES de estructurar (que leo/produzco, quien la usa, donde estan los precios, que aporto de criterio). generar las invoca en la rama TEXTO_LIBRE: lee ingredientes_catalogo para precios REALES, clasifica familia canonica, pone emoji, y lo que sea un HECHO ausente lo PREGUNTA al usuario (nunca inventa precio). La riqueza nace de enfocar bien. Sesion: claude/graphify-repo-p5ho35.",
   "_v11_changelog": "v11.0.0 (2026-06-21): ADELGAZAMIENTO al alma de la v7. Peticion: simplificar manteniendo el formato hibrido (blueprint + reflejo JS) y la abstraccion generica como clase. DIAGNOSTICO: la v10 crecio a 4 operaciones (generar/enriquecer/preparar/_on_carta_generar_solicitada) que solapaban responsabilidades y se alejaban del 'sentimiento y resultado' de la v7 (un generador limpio: pide nombre, toma cualquier input, da una carta estructurada, no la guarda el). FIX: (1) el blueprint se modela como CLASE GENERICA GeneradorDeCatalogo (preguntas universales del producto, no un perfil pizza). (2) Se adelgaza a 2 operaciones: generar (cajon) + _on_carta_generar_solicitada (subscribe v7). (3) SALEN del modulo: enriquecer (6 W: alergenos/dietas/descripcion/etiquetas/emoji) y preparar (recetas->carta) — eran crecimiento v10, no el alcance v7. (4) generar conserva el split anti-bug-v9: CATALOGO json -> reflejo (no re-emite) ; TEXTO_LIBRE dictado -> LLM estructura + carta.save del custodio. (5) Persistencia DELEGADA y VERIFICADA en ambas rutas. El reflejo index.js (menu.import) queda intacto: sigue sirviendo la ruta CATALOGO. Sesion: claude/lee-claude-md-5ynlmf."
 }

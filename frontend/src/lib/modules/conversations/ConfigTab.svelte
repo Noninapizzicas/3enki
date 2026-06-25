@@ -189,14 +189,26 @@
     }
   }
 
-  // Provider options
-  const providers = [
-    { value: '', label: 'Auto (default)' },
-    { value: 'deepseek', label: 'DeepSeek' },
-    { value: 'openai', label: 'OpenAI' },
-    { value: 'anthropic', label: 'Anthropic' },
-    { value: 'ollama', label: 'Ollama (local)' }
+  // Provider + modelos (cada provider trae sus modelos; el modelo se elige según el provider)
+  const providerOptions = [
+    { value: '',          label: 'Auto (por defecto)',     models: [] },
+    { value: 'gemini',    label: 'Google Gemini 💎',       models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
+    { value: 'kimi',      label: 'Kimi (Moonshot) 🌙',     models: ['kimi-k2.6', 'kimi-k2.5', 'kimi-k2-thinking', 'moonshot-v1-128k'] },
+    { value: 'deepseek',  label: 'DeepSeek 🔮',            models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'] },
+    { value: 'openai',    label: 'OpenAI 🤖',              models: ['gpt-4o', 'gpt-4o-mini'] },
+    { value: 'anthropic', label: 'Anthropic 🧠',           models: ['claude-sonnet-4-6', 'claude-opus-4-8'] },
+    { value: 'groq',      label: 'Groq ⚡',                models: ['llama-3.3-70b-versatile'] },
+    { value: 'ollama',    label: 'Ollama (local) 🦙',      models: ['llama2'] }
   ];
+
+  // modelos del provider elegido
+  $: modelOptions = providerOptions.find(p => p.value === form.provider)?.models ?? [];
+
+  // al cambiar de provider, si el modelo actual no es suyo, vuelve a "por defecto"
+  function onProviderChange() {
+    const models = providerOptions.find(p => p.value === form.provider)?.models ?? [];
+    if (!models.includes(form.model)) form.model = '';
+  }
 </script>
 
 <div class="config-tab">
@@ -217,8 +229,8 @@
     <div class="row">
       <div class="field">
         <label class="label" for="config-provider">Provider</label>
-        <select id="config-provider" class="input" bind:value={form.provider}>
-          {#each providers as p}
+        <select id="config-provider" class="input" bind:value={form.provider} on:change={onProviderChange}>
+          {#each providerOptions as p}
             <option value={p.value}>{p.label}</option>
           {/each}
         </select>
@@ -226,13 +238,15 @@
 
       <div class="field">
         <label class="label" for="config-model">Modelo</label>
-        <input
-          id="config-model"
-          type="text"
-          class="input"
-          placeholder="ej: deepseek-chat"
-          bind:value={form.model}
-        />
+        <select id="config-model" class="input" bind:value={form.model} disabled={modelOptions.length === 0}>
+          <option value="">{form.provider ? '(modelo por defecto)' : 'Auto'}</option>
+          {#each modelOptions as m}
+            <option value={m}>{m}</option>
+          {/each}
+          {#if form.model && !modelOptions.includes(form.model)}
+            <option value={form.model}>{form.model} (actual)</option>
+          {/if}
+        </select>
       </div>
     </div>
 

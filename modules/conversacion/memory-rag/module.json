@@ -65,7 +65,7 @@
     "min_similarity": 0.6,
     "snippet_max_chars": 400,
     "embedding_provider": "gemini",
-    "embedding_model": "text-embedding-004",
+    "embedding_model": "gemini-embedding-001",
     "skip_messages_shorter_than": 8,
     "max_index_size_per_project": 10000,
     "embedding_timeout_ms": 30000,

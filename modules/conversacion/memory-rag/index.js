@@ -297,7 +297,7 @@ class MemoryRagModule extends BaseModule {
         content,
         settings: {
           provider: this.config.embedding_provider || 'gemini',
-          model: this.config.embedding_model || 'text-embedding-004'
+          model: this.config.embedding_model || 'gemini-embedding-001'
         },
         source: source || 'memory-rag',
         timestamp: new Date().toISOString()

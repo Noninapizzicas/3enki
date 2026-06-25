@@ -28,6 +28,7 @@ const ClaudeCliProvider = require('./providers/claude-cli-provider');
 const KimiProvider      = require('./providers/kimi-provider');
 
 const BaseModule = require('../../_shared/base-module');
+const Sintonizador = require('../../_shared/sintonizador');
 class AiGatewayModule extends BaseModule {
   constructor() {
     super();
@@ -72,6 +73,7 @@ class AiGatewayModule extends BaseModule {
     // propiocepcion ya inyectado en el contexto. Asi cada turno solo ve lo
     // NUEVO que paso en su mundo desde la ultima vez (no se re-inyecta ruido).
     this.conversationPropioTs = new Map();
+    this.sintonizador = new Sintonizador();   // la lente que alinea al LLM con el sesgo del humano cada turno
 
     // Blueprint subscribers asincronos (frente 2.4 cierre 2026-05-24):
     // event_name → [{ page_id, handler_name, unsub }]. Poblado en _wireBlueprintAsyncSubscribers
@@ -1782,6 +1784,16 @@ class AiGatewayModule extends BaseModule {
     let effectiveSystem = blueprintPrompt
       ? (system ? `${blueprintPrompt}\n\n# CONTEXTO ADICIONAL DEL CALLER\n${system}` : blueprintPrompt)
       : system;
+
+    // Sintonía: en un turno REAL del chat (hay un humano al otro lado), inyectamos la
+    // lente que alinea al LLM con el sesgo de quien le habla — mirar desde dónde mira él
+    // ANTES de responder. Va al frente porque enmarca todo el turno. Constante y pura
+    // (sin lecturas async): no puede bloquear ni romper el turno. No en turnos sinteticos
+    // (async-subscriber / RPC responders): ahi no hay nadie a quien sintonizar.
+    if (!context?.async_invocation) {
+      const lente = this.sintonizador.seccion();
+      effectiveSystem = effectiveSystem ? `${lente}\n\n${effectiveSystem}` : lente;
+    }
 
     // Nervio propioceptivo: en un turno REAL del chat sobre una pagina de
     // proyecto, inyectamos lo que paso en el mundo de ese proyecto desde el

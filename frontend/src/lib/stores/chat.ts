@@ -332,6 +332,20 @@ export async function loadConversation(id: string): Promise<void> {
         opt ? { ...opt, models: [] } : { id: conv.provider, name: conv.provider, icon: '', models: [] },
         conv.model || ''
       );
+    } else {
+      // Auto (sin provider explícito): el icono dice la VERDAD leyendo el modelo que
+      // REALMENTE corrió en el último turno (metadata del último mensaje del asistente).
+      const raw = response?.data?.messages || [];
+      const lastAsst = [...raw].reverse().find((m: any) => m.role === 'assistant');
+      let md: any = lastAsst?.metadata;
+      if (typeof md === 'string') { try { md = JSON.parse(md); } catch { md = null; } }
+      if (md?.provider) {
+        const opt = get(providers).find((p) => p.id === md.provider);
+        selectProvider(
+          opt ? { ...opt, models: [] } : { id: md.provider, name: md.provider, icon: '', models: [] },
+          md.model || ''
+        );
+      }
     }
   } catch (error) {
     console.error('[chat] Error loading conversation:', error);

@@ -226,8 +226,11 @@ export const PROVIDER_ICONS: Record<string, string> = {
   openai:    '🤖',
   anthropic: '🧠',
   deepseek:  '🔮',
+  gemini:    '💎',
+  groq:      '⚡',
   ollama:    '🦙',
   kimi:      '🌙',
+  'claude-cli': '🖥️',
 };
 
 export const PANEL_SIZES = {

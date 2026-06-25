@@ -158,11 +158,29 @@ class GeminiProvider extends BaseProvider {
       return {
         name: fn.name,
         description: fn.description || '',
-        parameters: fn.parameters || { type: 'object', properties: {} }
+        parameters: this._sanitizeSchema(fn.parameters || { type: 'object', properties: {} })
       };
     });
 
     return [{ functionDeclarations }];
+  }
+
+  /**
+   * El esquema de function-calling de Gemini es un SUBCONJUNTO de OpenAPI: rechaza
+   * campos válidos en JSON Schema (additionalProperties, $schema, $ref, definitions…)
+   * con HTTP 400 INVALID_ARGUMENT. OpenAI/Anthropic/deepseek los aceptan; Gemini no.
+   * Los limpiamos recursivamente (properties, items, anyOf/oneOf/allOf) antes de enviar.
+   */
+  _sanitizeSchema(node) {
+    if (Array.isArray(node)) return node.map(n => this._sanitizeSchema(n));
+    if (!node || typeof node !== 'object') return node;
+    const DENY = new Set(['additionalProperties', '$schema', '$id', '$ref', 'definitions', 'patternProperties']);
+    const out = {};
+    for (const [k, v] of Object.entries(node)) {
+      if (DENY.has(k)) continue;
+      out[k] = this._sanitizeSchema(v);
+    }
+    return out;
   }
 
   /**

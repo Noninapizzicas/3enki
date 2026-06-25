@@ -17,6 +17,7 @@
  * Consume: cobro.procesado (+ eventos específicos de cada canal)
  */
 
+const crypto = require('crypto');
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
 
@@ -271,6 +272,105 @@ class CuentasCanalesModule extends BaseModule {
         }))
       }
     };
+  }
+
+  // ==========================================
+  // Webhook HTTP de Glovo (push de pedidos en tiempo real)
+  // ==========================================
+  //
+  // Ruta publica (Caddy reescribe /glovo/* → /modules/cuentas-canales/glovo/*):
+  //   POST https://<dominio>/glovo/webhook/:project
+  //
+  // Auth: token estatico del Vendor Portal de Glovo, en cabecera. No requiere
+  // raw body (el core no lo expone) → no HMAC. La firma RSA (Glovo-Signature)
+  // queda para una fase 2 que añada captura de raw body al gateway.
+
+  /**
+   * Compara el token de la cabecera con el GLOVO_WEBHOOK_TOKEN configurado.
+   * Cerrado por defecto: sin token configurado → rechaza. Timing-safe.
+   * @private
+   */
+  _checkGlovoToken(headers = {}) {
+    const expected = process.env.GLOVO_WEBHOOK_TOKEN
+      || process.env.GLOVO_WEBHOOK_TOKEN_GLOBAL
+      || this.config?.glovo?.webhook_token
+      || '';
+    if (!expected) return false; // sin secreto → puerta cerrada
+
+    const headerName = (this.config?.glovo?.webhook_token_header || 'authorization').toLowerCase();
+    let provided = headers[headerName]
+      || headers['glovo-token']
+      || headers['x-glovo-token']
+      || '';
+    if (typeof provided !== 'string') provided = String(provided || '');
+    if (provided.toLowerCase().startsWith('bearer ')) provided = provided.slice(7);
+    if (!provided) return false;
+
+    try {
+      const a = Buffer.from(provided);
+      const b = Buffer.from(String(expected));
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** @private */
+  _respondWebhook(res, status, body) {
+    if (res && typeof res.status === 'function' && !res.headersSent) {
+      try { return res.status(status).json({ status, ...body }); } catch (_) { /* fallthrough */ }
+    }
+    return { status, ...body };
+  }
+
+  /**
+   * Webhook de Glovo. Valida el token, extrae el order_id y delega en la
+   * strategy glovo (que trae el detalle via API y crea la cuenta).
+   *
+   * Codigos: 401 token invalido · 400 sin order_id · 200 aceptado (incluye
+   * duplicado, idempotente) · 5xx error → Glovo reintenta con backoff.
+   */
+  async handleGlovoWebhook(req, res) {
+    const headers = req?.headers || {};
+    const project_id = req?.params?.project || null;
+    const body = req?.body || {};
+
+    if (!this._checkGlovoToken(headers)) {
+      this.logger?.warn?.('glovo.webhook.token_invalido', { project_id });
+      this.metrics?.increment?.('cuentas-canales.errors', { code: 'AUTHENTICATION_REQUIRED', kind: 'glovo_webhook' });
+      return this._respondWebhook(res, 401, { error: { code: 'AUTHENTICATION_REQUIRED', message: 'token de webhook invalido' } });
+    }
+
+    const orderId = body.order_id || body.orderId || body.id || null;
+    if (!orderId) {
+      return this._respondWebhook(res, 400, { error: { code: 'INVALID_INPUT', message: 'order_id requerido' } });
+    }
+
+    try {
+      const result = await this.strategies.glovo.handleWebhookEntrante({
+        glovo_order_id: orderId,
+        project_id,
+        rawOrder: body
+      });
+
+      // Idempotencia: 409 (ya existe) cuenta como aceptado → 200 (Glovo no reintenta).
+      const dup = result?.status === 409;
+      const ok = dup || (result?.status >= 200 && result?.status < 300);
+
+      this.logger?.info?.('glovo.webhook.recibido', {
+        glovo_order_id: orderId, project_id, status: result?.status, duplicate: dup
+      });
+      this.metrics?.increment?.('glovo.webhook.recibido', { resultado: ok ? 'ok' : 'fail' });
+
+      if (ok) return this._respondWebhook(res, 200, { received: true, duplicate: dup });
+
+      // Error de mapeo/negocio → 502 para que Glovo reintente.
+      return this._respondWebhook(res, 502, { error: result?.error || { code: 'UNKNOWN_ERROR', message: 'pedido no procesado' } });
+    } catch (err) {
+      this.logger?.error?.('glovo.webhook.error', { glovo_order_id: orderId, project_id, error: err.message });
+      this.metrics?.increment?.('cuentas-canales.errors', { code: 'UNKNOWN_ERROR', kind: 'glovo_webhook' });
+      return this._respondWebhook(res, 500, { error: { code: 'UNKNOWN_ERROR', message: 'error interno' } });
+    }
   }
 
   // ==========================================

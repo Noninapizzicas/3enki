@@ -776,6 +776,126 @@ class GlovoStrategy {
   }
 
   // ==========================================
+  // Webhook entrante (push de Glovo)
+  // ==========================================
+
+  /**
+   * Punto de entrada del webhook de Glovo (push en tiempo real).
+   * Lo invoca cuentas-canales.handleGlovoWebhook tras validar el token.
+   *
+   * Flujo: traer el detalle AUTORITATIVO via la API de Glovo (get_order) →
+   * fallback al cuerpo del webhook si la API no responde → delegar en el
+   * flujo ya existente (handleRecibirPedido: crea cuenta + manda a cocina).
+   *
+   * @param {object} p - { glovo_order_id, project_id, rawOrder }
+   * @returns {Promise<{status, data?, error?}>}
+   */
+  async handleWebhookEntrante({ glovo_order_id, project_id, rawOrder } = {}) {
+    if (!glovo_order_id) {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: 'glovo_order_id requerido' } };
+    }
+
+    // 1. Detalle autoritativo desde la API de Glovo (autenticidad + datos completos).
+    let order = await this.getOrderFromAPI(glovo_order_id);
+
+    // 2. Fallback: el cuerpo del webhook (p.ej. staging sin OAuth configurado).
+    if (!order) {
+      order = this._normalizeWebhookBody(rawOrder, glovo_order_id);
+    }
+
+    if (!order || !order.glovo_order_id) {
+      return { status: 422, error: { code: 'INVALID_INPUT', message: 'Pedido Glovo sin order_id resoluble' } };
+    }
+
+    // 3. Reusa el flujo existente. tiempo_estimado NO se propaga: normalizeOrder
+    //    lo trae como timestamp ISO y el schema exige minutos → handleRecibirPedido
+    //    aplica su default (45) sin romper la validacion AJV.
+    return await this.handleRecibirPedido({
+      project_id,
+      glovo_order_id: order.glovo_order_id,
+      items: order.items,
+      total: order.total,
+      cliente_nombre: order.cliente_nombre,
+      direccion_entrega: order.direccion_entrega,
+      notas: order.notas
+    });
+  }
+
+  /**
+   * Trae el detalle de un pedido desde la API de Glovo via el provider
+   * local.glovo (mismo patron request/response del bus que pollNuevosPedidos).
+   * Devuelve el pedido normalizado o null si la API no responde.
+   */
+  async getOrderFromAPI(orderId) {
+    if (!orderId) return null;
+    try {
+      return await new Promise((resolve, reject) => {
+        const correlationId = `glovo-getorder-${orderId}-${Date.now()}`;
+        const responseEvent = 'local.glovo.get_order.response';
+        let timeout;
+
+        const handler = (event) => {
+          const data = event?.data || event?.payload || event;
+          if (data?.correlationId === correlationId || event?.metadata?.correlationId === correlationId) {
+            clearTimeout(timeout);
+            this.modulo.eventBus.unsubscribe(responseEvent, handler);
+            if (data?.success === false || data?.error) {
+              reject(new Error(data.error || 'Glovo get_order error'));
+            } else {
+              resolve(data?.data?.order || data?.order || null);
+            }
+          }
+        };
+
+        this.modulo.eventBus.subscribe(responseEvent, handler);
+
+        timeout = setTimeout(() => {
+          this.modulo.eventBus.unsubscribe(responseEvent, handler);
+          reject(new Error('Glovo get_order: timeout'));
+        }, 15000);
+
+        this.modulo.eventBus.publish('local.glovo.get_order.request', {
+          order_id: orderId
+        }, { correlationId });
+      });
+    } catch (err) {
+      this.modulo?.logger?.warn('glovo.webhook.get_order.error', { order_id: orderId, error: err.message });
+      return null;
+    }
+  }
+
+  /**
+   * Normaliza el cuerpo crudo del webhook al shape que espera handleRecibirPedido.
+   * Tolerante a variantes de nombres (igual que provider.normalizeOrder). Solo
+   * se usa como FALLBACK cuando get_order no responde.
+   */
+  _normalizeWebhookBody(raw, fallbackId) {
+    if (!raw || typeof raw !== 'object') return null;
+    const id = raw.order_id || raw.orderId || raw.id || fallbackId;
+    if (!id) return null;
+
+    const rawItems = Array.isArray(raw.products) ? raw.products
+      : Array.isArray(raw.items) ? raw.items : [];
+
+    return {
+      glovo_order_id: id,
+      items: rawItems.map(p => ({
+        nombre: p.name || p.nombre || 'Producto Glovo',
+        cantidad: p.quantity || p.cantidad || 1,
+        precio: p.price || p.precio || 0,
+        notas: p.comments || p.notas || ''
+      })),
+      total: raw.total_price || raw.totalPrice || raw.total || 0,
+      cliente_nombre: raw.customer?.name || raw.customerName || null,
+      direccion_entrega: raw.delivery_address?.label
+        || raw.delivery_address?.raw_address
+        || raw.deliveryAddress?.label
+        || '',
+      notas: raw.special_requirements || raw.customerComments || raw.comments || ''
+    };
+  }
+
+  // ==========================================
   // Polling — llamado por scheduler o manualmente
   // ==========================================
 

@@ -397,7 +397,7 @@ class GeminiProvider extends BaseProvider {
       throw new Error('generateEmbedding requires non-empty string');
     }
 
-    const model = options.model || 'text-embedding-004';
+    const model = options.model || 'gemini-embedding-001';
     const endpoint = `models/${model}:embedContent`;
     const headers = { 'x-goog-api-key': this.apiKey };
     const body = {

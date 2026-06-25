@@ -1,6 +1,6 @@
 {
   "name": "cuentas-canales",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "description": "Sistema unificado de canales de venta pizzepos con patron Strategy: mesa, telefono, llevar, glovo, whatsapp, llevadoo. Cada strategy registra ui_handlers especificos del canal y se subscribe a sus eventos. El modulo base orquesta cobro.procesado → detectarCanal → strategy.onCobroProcesado, gestiona reseteo diario de contadores y emite cuenta.{creada,cerrada} canonicos.",
   "author": "Pizzepos Team",
   "language": "es",
@@ -158,6 +158,14 @@
       }
     ]
   },
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/glovo/webhook/:project",
+      "handler": "handleGlovoWebhook",
+      "description": "Webhook de Glovo (Partner API, order dispatch). Caddy reescribe /glovo/* → /modules/cuentas-canales/glovo/*. Valida el token estatico del Vendor Portal (cabecera, GLOVO_WEBHOOK_TOKEN), trae el detalle autoritativo via local.glovo.get_order y delega en strategies.glovo.handleRecibirPedido (crea cuenta + manda a cocina). Responde 200 (idempotente ante duplicados) o 5xx para que Glovo reintente con backoff."
+    }
+  ],
   "strategies": {
     "mesa": {
       "description": "Servicio en mesa — mesas dinámicas, nombre libre, métricas de tiempo",
@@ -261,7 +269,9 @@
     },
     "glovo": {
       "api_key": "",
-      "store_id": ""
+      "store_id": "",
+      "webhook_token_header": "authorization",
+      "_webhook_token_nota": "El secreto del webhook NO va aqui: se resuelve de GLOVO_WEBHOOK_TOKEN (credential-manager / .env). Esta clave solo dice en que cabecera viene el token que envia Glovo."
     },
     "display": {
       "max_numeros_mostrar": 10

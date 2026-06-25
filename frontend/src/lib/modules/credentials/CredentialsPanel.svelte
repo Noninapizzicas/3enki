@@ -120,9 +120,11 @@
     clientSecret: ''
   };
 
-  // Form state for Glovo credentials
+  // Form state for Glovo credentials.
+  // Glovo es POR PROYECTO (multi-tenant): el backend (credential-manager v2.2.0)
+  // solo acepta nivel PROJECT con identifier=slug → el form arranca en PROJECT.
   let glovoForm = {
-    level: 'GLOBAL',
+    level: 'PROJECT',
     identifier: '',
     clientId: '',
     clientSecret: '',
@@ -312,7 +314,7 @@
           glovoForm.clientSecret,
           glovoForm.chainId
         );
-        glovoForm = { level: 'GLOBAL', identifier: '', clientId: '', clientSecret: '', chainId: '' };
+        glovoForm = { level: 'PROJECT', identifier: '', clientId: '', clientSecret: '', chainId: '' };
         setActiveTab('lista');
       } catch (err) {
         error = err instanceof Error ? err.message : 'Error al guardar credenciales Glovo';
@@ -365,7 +367,7 @@
       identifier: '',
       apiKey: ''
     };
-    glovoForm = { level: 'GLOBAL', identifier: '', clientId: '', clientSecret: '', chainId: '' };
+    glovoForm = { level: 'PROJECT', identifier: '', clientId: '', clientSecret: '', chainId: '' };
     clearTestResult();
     error = null;
     setActiveTab('lista');

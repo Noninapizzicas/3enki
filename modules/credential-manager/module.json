@@ -1,6 +1,7 @@
 {
   "name": "credential-manager",
-  "version": "2.1.0",
+  "version": "2.2.0",
+  "_v2_2_nota": "v2.2.0 (2026-06-25): reintegrado el vendor Glovo (multi-campo) POR PROYECTO. El modulo credential-vendor-glovo planeado quedaba pendiente y bloqueaba el alta de Glovo. Glovo es multi-tenant: varios proyectos, cada uno con client_id+client_secret+chain_id (+webhook_token opcional), SOLO nivel PROJECT (GLOVO_CLIENT_ID/SECRET/CHAIN_ID/WEBHOOK_TOKEN en PROJECT_ONLY_PROVIDERS). Handlers credential/glovo.{save,delete} + glovoConfigs en el estado. Cada campo se persiste como GLOVO_<CAMPO>_API_KEY_PROJECT_<slug>, que es lo que leen el provider local.glovo y el webhook de cuentas-canales (por proyecto, sincrono).",
   "_v2_1_nota": "v2.1.0 (2026-06-22): invariante PROJECT-ONLY para providers por-tenant. PROJECT_ONLY_PROVIDERS (META_WHATSAPP, META_WHATSAPP_VERIFY_TOKEN): cada tienda tiene su propio número/token/webhook → NUNCA pueden ser globales. _validateProviderLevelKey rechaza guardarlos a cualquier nivel != PROJECT; _resolveCredential resuelve SOLO a nivel PROJECT (sin caída a GLOBAL/legacy), así que aunque alguien colara una clave global a mano, no se puede usar cross-tenant. La base genérica (5 niveles + cascada) sigue intacta para el resto de providers.",
   "description": "Core canónico: CRUD de credenciales API + resolución cascada (CUSTOM → CLIENT → PROJECT → GLOBAL) + cache .env atómico. Providers por-tenant (PROJECT_ONLY_PROVIDERS) quedan forzados a nivel PROJECT (sin global) para aislamiento multi-proyecto. Tras descomposición 2026-05-04: NO incluye test de credenciales (módulo credential-tester pendiente), NO incluye OAuth flow (credential-oauth pendiente), NO incluye configs vendor multi-campo Glovo/Telegram (credential-vendor-* pendientes). Ver arquitectura/migracion/notas/credential-manager-descomposicion.md.",
   "author": "Event Core Team",
@@ -75,7 +76,9 @@
     { "domain": "credential", "action": "get",    "handler": "handleUIGet" },
     { "domain": "credential", "action": "create", "handler": "handleUICreate" },
     { "domain": "credential", "action": "update", "handler": "handleUIUpdate" },
-    { "domain": "credential", "action": "delete", "handler": "handleUIDelete" }
+    { "domain": "credential", "action": "delete", "handler": "handleUIDelete" },
+    { "domain": "credential", "action": "glovo.save",   "handler": "handleGlovoSave" },
+    { "domain": "credential", "action": "glovo.delete", "handler": "handleGlovoDelete" }
   ],
 
   "tools": [

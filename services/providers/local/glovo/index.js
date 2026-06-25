@@ -42,9 +42,9 @@ module.exports = {
   name: 'local.glovo',
   description: 'Integración con Glovo Partner API v2 (OAuth2)',
 
-  // Token cache
-  _token: null,
-  _tokenExpiresAt: 0,
+  // Token cache POR PROYECTO: cada proyecto/tienda tiene sus propias credenciales
+  // OAuth (client_id/secret) → su propio token. Map<cacheKey, {token, expiresAt}>.
+  _tokenCache: new Map(),
 
   functions: {
     poll_orders: {
@@ -91,20 +91,32 @@ module.exports = {
   // Credenciales
   // ==========================================
 
-  resolveCredentials() {
-    const clientId = process.env.GLOVO_CLIENT_ID
+  /**
+   * Resuelve las credenciales POR PROYECTO. Primero la clave con nombre por
+   * proyecto que escribe el credential-manager (GLOVO_<CAMPO>_API_KEY_PROJECT_<slug>),
+   * luego el .env plano como fallback (single-tenant / compat).
+   */
+  resolveCredentials(projectId = null) {
+    const perProject = (field) => projectId
+      ? process.env[`${field}_API_KEY_PROJECT_${projectId}`]
+      : undefined;
+
+    const clientId = perProject('GLOVO_CLIENT_ID')
+      || process.env.GLOVO_CLIENT_ID
       || process.env.GLOVO_CLIENT_ID_GLOBAL;
-    const clientSecret = process.env.GLOVO_CLIENT_SECRET
+    const clientSecret = perProject('GLOVO_CLIENT_SECRET')
+      || process.env.GLOVO_CLIENT_SECRET
       || process.env.GLOVO_CLIENT_SECRET_GLOBAL;
-    const chainId = process.env.GLOVO_CHAIN_ID
+    const chainId = perProject('GLOVO_CHAIN_ID')
+      || process.env.GLOVO_CHAIN_ID
       || process.env.GLOVO_CHAIN_ID_GLOBAL;
     const env = process.env.GLOVO_ENV || 'production';
 
     if (!clientId || !clientSecret) {
-      throw new Error('GLOVO_CLIENT_ID y GLOVO_CLIENT_SECRET requeridos. Configurar via credential-manager o .env');
+      throw new Error(`GLOVO_CLIENT_ID y GLOVO_CLIENT_SECRET requeridos${projectId ? ` para el proyecto "${projectId}"` : ''}. Configurar via credential-manager (Glovo, nivel PROJECT) o .env`);
     }
     if (!chainId) {
-      throw new Error('GLOVO_CHAIN_ID requerido. Configurar via credential-manager o .env');
+      throw new Error(`GLOVO_CHAIN_ID requerido${projectId ? ` para el proyecto "${projectId}"` : ''}. Configurar via credential-manager o .env`);
     }
 
     return { clientId, clientSecret, chainId, env };
@@ -114,13 +126,15 @@ module.exports = {
   // OAuth2 Token
   // ==========================================
 
-  async getToken() {
-    // Usar token en cache si aún es válido (con 5 min de margen)
-    if (this._token && Date.now() < this._tokenExpiresAt - 300000) {
-      return this._token;
+  async getToken(projectId = null) {
+    const cacheKey = projectId || '_default';
+    // Usar token en cache (por proyecto) si aún es válido (con 5 min de margen)
+    const cached = this._tokenCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt - 300000) {
+      return cached.token;
     }
 
-    const { clientId, clientSecret, env } = this.resolveCredentials();
+    const { clientId, clientSecret, env } = this.resolveCredentials(projectId);
     const host = API_HOSTS[env] || API_HOSTS.production;
 
     const body = JSON.stringify({
@@ -165,20 +179,22 @@ module.exports = {
       req.end();
     });
 
-    this._token = result.access_token;
     // expires_in es en segundos (default 7200 = 2h)
-    this._tokenExpiresAt = Date.now() + (result.expires_in || 7200) * 1000;
+    this._tokenCache.set(cacheKey, {
+      token: result.access_token,
+      expiresAt: Date.now() + (result.expires_in || 7200) * 1000
+    });
 
-    return this._token;
+    return result.access_token;
   },
 
   // ==========================================
   // HTTP Client (autenticado)
   // ==========================================
 
-  async request(method, path, body = null) {
-    const { chainId, env } = this.resolveCredentials();
-    const token = await this.getToken();
+  async request(method, path, body = null, projectId = null) {
+    const { chainId, env } = this.resolveCredentials(projectId);
+    const token = await this.getToken(projectId);
     const host = API_HOSTS[env] || API_HOSTS.production;
 
     // Reemplazar {chainId} en el path
@@ -205,10 +221,9 @@ module.exports = {
         let data = '';
         res.on('data', chunk => { data += chunk; });
         res.on('end', () => {
-          // 401 = token expirado, invalidar cache
+          // 401 = token expirado, invalidar cache de ESTE proyecto
           if (res.statusCode === 401) {
-            this._token = null;
-            this._tokenExpiresAt = 0;
+            this._tokenCache.delete(projectId || '_default');
           }
 
           try {
@@ -254,13 +269,13 @@ module.exports = {
    *   DELIVERED        — entregado
    *   CANCELLED        — cancelado
    */
-  async poll_orders({ status = 'RECEIVED', minutes_back = 30 } = {}) {
+  async poll_orders({ status = 'RECEIVED', minutes_back = 30, project_id = null } = {}) {
     // Rango de tiempo para buscar pedidos
     const end = new Date().toISOString();
     const start = new Date(Date.now() - minutes_back * 60 * 1000).toISOString();
 
     const queryParams = `?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
-    const res = await this.request('GET', `/v2/chains/{chainId}/orders${queryParams}`);
+    const res = await this.request('GET', `/v2/chains/{chainId}/orders${queryParams}`, null, project_id);
 
     const allOrders = res.data?.orders || res.data?.results || res.data || [];
     const orders = Array.isArray(allOrders) ? allOrders : [];
@@ -282,10 +297,10 @@ module.exports = {
   /**
    * Detalle de un pedido específico
    */
-  async get_order({ order_id } = {}) {
+  async get_order({ order_id, project_id = null } = {}) {
     if (!order_id) throw new Error('order_id es requerido');
 
-    const res = await this.request('GET', `/v2/chains/{chainId}/orders/${order_id}`);
+    const res = await this.request('GET', `/v2/chains/{chainId}/orders/${order_id}`, null, project_id);
     return {
       order: this.normalizeOrder(res.data)
     };
@@ -295,7 +310,7 @@ module.exports = {
    * Aceptar un pedido
    * Requiere accepted_for (ISO timestamp de cuándo estará listo)
    */
-  async accept_order({ order_id, preparation_minutes = 20 } = {}) {
+  async accept_order({ order_id, preparation_minutes = 20, project_id = null } = {}) {
     if (!order_id) throw new Error('order_id es requerido');
 
     const acceptedFor = new Date(Date.now() + preparation_minutes * 60 * 1000).toISOString();
@@ -304,7 +319,7 @@ module.exports = {
       order_id,
       status: 'ACCEPTED',
       accepted_for: acceptedFor
-    });
+    }, project_id);
 
     return { accepted: true, order_id, accepted_for: acceptedFor };
   },
@@ -312,14 +327,14 @@ module.exports = {
   /**
    * Rechazar/cancelar un pedido
    */
-  async reject_order({ order_id, reason = 'STORE_CLOSED' } = {}) {
+  async reject_order({ order_id, reason = 'STORE_CLOSED', project_id = null } = {}) {
     if (!order_id) throw new Error('order_id es requerido');
 
     await this.request('PUT', `/v2/chains/{chainId}/orders/${order_id}`, {
       order_id,
       status: 'CANCELLED',
       cancel_reason: reason
-    });
+    }, project_id);
 
     return { rejected: true, order_id, reason };
   },
@@ -327,13 +342,13 @@ module.exports = {
   /**
    * Marcar pedido como listo para recogida por rider
    */
-  async mark_ready({ order_id } = {}) {
+  async mark_ready({ order_id, project_id = null } = {}) {
     if (!order_id) throw new Error('order_id es requerido');
 
     await this.request('PUT', `/v2/chains/{chainId}/orders/${order_id}`, {
       order_id,
       status: 'READY_FOR_PICKUP'
-    });
+    }, project_id);
 
     return { ready: true, order_id };
   },
@@ -388,7 +403,6 @@ module.exports = {
    * Cleanup — invalidar token
    */
   async cleanup() {
-    this._token = null;
-    this._tokenExpiresAt = 0;
+    this._tokenCache.clear();
   }
 };

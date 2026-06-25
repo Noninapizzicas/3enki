@@ -85,6 +85,22 @@ const TOKEN = 'tok-secreto-glovo-123';
     assert.strictEqual(m._checkGlovoToken({ authorization: 'corto' }), false);
   });
 
+  await test('_checkGlovoToken resuelve el token POR PROYECTO y aísla entre tiendas', () => {
+    delete process.env.GLOVO_WEBHOOK_TOKEN;
+    delete process.env.GLOVO_WEBHOOK_TOKEN_GLOBAL;
+    process.env.GLOVO_WEBHOOK_TOKEN_API_KEY_PROJECT_nonina = 'tok-nonina';
+    process.env.GLOVO_WEBHOOK_TOKEN_API_KEY_PROJECT_otra = 'tok-otra';
+    const m = makeModulo();
+    assert.strictEqual(m._checkGlovoToken({ authorization: 'tok-nonina' }, 'nonina'), true);
+    assert.strictEqual(m._checkGlovoToken({ authorization: 'tok-otra' }, 'otra'), true);
+    // el token de una tienda NO vale para otra
+    assert.strictEqual(m._checkGlovoToken({ authorization: 'tok-nonina' }, 'otra'), false);
+    // proyecto sin token configurado → cerrado
+    assert.strictEqual(m._checkGlovoToken({ authorization: 'tok-nonina' }, 'sin-config'), false);
+    delete process.env.GLOVO_WEBHOOK_TOKEN_API_KEY_PROJECT_nonina;
+    delete process.env.GLOVO_WEBHOOK_TOKEN_API_KEY_PROJECT_otra;
+  });
+
   // ── handleGlovoWebhook ───────────────────────────────────────────
   await test('handleGlovoWebhook → 401 si el token es invalido (no llama a la strategy)', async () => {
     process.env.GLOVO_WEBHOOK_TOKEN = TOKEN;

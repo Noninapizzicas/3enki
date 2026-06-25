@@ -290,8 +290,14 @@ class CuentasCanalesModule extends BaseModule {
    * Cerrado por defecto: sin token configurado → rechaza. Timing-safe.
    * @private
    */
-  _checkGlovoToken(headers = {}) {
-    const expected = process.env.GLOVO_WEBHOOK_TOKEN
+  _checkGlovoToken(headers = {}, projectId = null) {
+    // Token POR PROYECTO primero (lo escribe credential-manager: Glovo nivel
+    // PROJECT → GLOVO_WEBHOOK_TOKEN_API_KEY_PROJECT_<slug>); luego fallback plano.
+    const perProject = projectId
+      ? process.env[`GLOVO_WEBHOOK_TOKEN_API_KEY_PROJECT_${projectId}`]
+      : undefined;
+    const expected = perProject
+      || process.env.GLOVO_WEBHOOK_TOKEN
       || process.env.GLOVO_WEBHOOK_TOKEN_GLOBAL
       || this.config?.glovo?.webhook_token
       || '';
@@ -335,7 +341,7 @@ class CuentasCanalesModule extends BaseModule {
     const project_id = req?.params?.project || null;
     const body = req?.body || {};
 
-    if (!this._checkGlovoToken(headers)) {
+    if (!this._checkGlovoToken(headers, project_id)) {
       this.logger?.warn?.('glovo.webhook.token_invalido', { project_id });
       this.metrics?.increment?.('cuentas-canales.errors', { code: 'AUTHENTICATION_REQUIRED', kind: 'glovo_webhook' });
       return this._respondWebhook(res, 401, { error: { code: 'AUTHENTICATION_REQUIRED', message: 'token de webhook invalido' } });

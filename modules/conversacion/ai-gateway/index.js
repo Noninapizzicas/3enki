@@ -2004,6 +2004,14 @@ class AiGatewayModule extends BaseModule {
       const toolMessages = provider.formatToolResults?.(toolResults) || toolResults.map(tr => ({
         role: 'tool',
         tool_call_id: tr.tool_call_id,
+        // name = el NOMBRE REAL de la funcion (bus.publishAndWait, cajon.abrir, ...).
+        // Los modelos estilo OpenAI (deepseek/kimi/openai) correlacionan la respuesta
+        // por tool_call_id y no lo necesitan; GEMINI correlaciona por NOMBRE de funcion
+        // (functionResponse.name debe casar con la functionCall). Sin este name, el
+        // provider de gemini caia al tool_call_id sintetico ('gemini-<ts>-<i>'), que NO
+        // casa con ninguna funcion declarada -> gemini quedaba CIEGO al resultado de su
+        // propia herramienta y rellenaba con teatro ('guardado', 'el modulo no responde').
+        name: tr.name,
         content: tr.status === 'error' ? formatErr(tr.error) : JSON.stringify(tr.result)
       }));
       workingMessages.push(...toolMessages);

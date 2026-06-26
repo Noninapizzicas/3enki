@@ -2,7 +2,8 @@
   "_doc": "Blueprint del modulo carta-design. Hijo de subsistema-recetario.modulo-base. Estudio de diseno de cartas impresas. 4 operaciones deterministas (las sirve el REFLEJO JS): contexto_diseno (HIDRATA carta+marca), load_carta (solo la carta), save (guarda el HTML), gallery (lista lo guardado). La identidad del diseno sale de la MARCA (carta-marketing): colores, tipografias, logo, voz — NO hay biblioteca de profiles. La composicion del HTML la hace el LLM de pagina (SIN agente).",
   "id": "carta-design",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "2.2.0",
+  "version": "2.3.0",
+  "_v2_3_changelog": "v2.3.0 (2026-06-26): FIX 'la entrevista del disenador se evapora'. contexto_diseno era LEER-only y la persistencia del negocio vivia en PROSA (reglas_clave), no como paso GUARDAR -> ante una marca VACIA el LLM de diseno improvisaba el onboarding entero y no persistia nada (ademas sin el envoltorio 'campos' que update_perfil exige). Ahora: (1) desenvuelve .data del contexto; (2) GUARD de onboarding incompleto (sin marca/esencia.nombre/voz.tono) -> NO entrevista la identidad (no es su dominio ni puede persistirla), la surfacea y ofrece chat.cambiar_foco a carta-marketing; (3) paso GUARDAR explicito del unico dato que SI capta (negocio.local dir/tel/horario) via update_perfil({ campos:{ negocio:{ local }}}). Cierra trabajo_pendiente campos_negocio_en_marca.",
   "_temperatura_doc": "Pagina CREATIVA: compone el HTML del diseno encarnando la marca (colores/tipografias/voz) -> caliente. ai-gateway la usa como default del turno (override humano gana; cae al parent 0.4 si se quitara). El REFLEJO hidrata/persiste; la chispa visual es del LLM de pagina.",
   "temperatura": 0.8,
   "_v2_1_changelog": "v2.1.0 (2026-06-15): carta-design ABSORBE LA MAQUETACION DE IMPRESION (carta-impresion queda obsoleto). El estilo lo pone la MARCA; el FORMATO es estructural y se elige por 4 ejes: tamano (A5/A4/A3) · orientacion (vertical/apaisado) · disposicion (una cara/doble cara/diptico/triptico) · columnas (2/3/4). NO hay ficheros de plantilla: la maqueta sale de combinar los ejes (ver context.json seccion 'maquetacion'). save acepta 'formato?' (string descriptivo) y lo registra en el meta.",
@@ -49,17 +50,30 @@
       "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req) }",
       "pseudocodigo": [
         "async contexto_diseno(input):",
-        "  // LEER del espinazo de diseno. HIBRIDO: lo sirve el REFLEJO JS (index.js) en una RPC.",
-        "  // Devuelve { carta, marca }. El LLM de pagina lo llama AL INICIO y SIEMBRA el diseno",
-        "  // con marca.visual {colores,tipografias,estilo,logo} + marca.esencia/voz — NO re-pregunta",
-        "  // la identidad que el onboarding ya capturo. Marca best-effort (null si carta-marketing no responde).",
-        "  resp = await publishAndWait('design.contexto_diseno.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp"
+        "  // LEER del espinazo de diseno (REFLEJO JS, 1 RPC). Devuelve el ENVOLTORIO { status, data:{ carta, marca } }.",
+        "  resp  = await publishAndWait('design.contexto_diseno.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  ctx   = resp.data            // .data: el contenido. carta = ctx.carta ; marca = ctx.marca (best-effort, null si carta-marketing no respondio)",
+        "  marca = ctx.marca",
+        "  // GUARD onboarding incompleto: si NO hay marca, o le falta la identidad (esencia.nombre / voz.tono vacios),",
+        "  //   el diseno NO tiene de que beber Y NO es su trabajo capturarla — design no tiene GUARDAR de identidad,",
+        "  //   asi que si la entrevistas tu aqui se PIERDE. NO improvises la entrevista de marca.",
+        "  //   Dilo claro y OFRECE completar el onboarding en su casa (chat.cambiar_foco a 'carta-marketing'),",
+        "  //   donde completar_onboarding la captura y persiste bien (claves anidadas esencia/voz/visual/negocio).",
+        "  if (!marca OR vacio(marca.esencia?.nombre) OR vacio(marca.voz?.tono)):",
+        "    return { necesita_onboarding: true, mensaje: 'Tu marca esta sin completar; sin ella el diseno no tiene identidad de la que beber. Completamos el onboarding primero? (te llevo a marketing)' }",
+        "  // 2. SIEMBRA el diseno con marca.visual {colores,tipografias,estilo,logo} + esencia/voz. NO re-preguntes la identidad: la BEBES.",
+        "  // 3. UNICO dato que el diseno SI rellena: negocio del local (dir/tel/horario) para el pie de carta.",
+        "  //    Si faltan en marca.negocio?.local -> preguntalos y PERSISTELOS de verdad (paso GUARDAR, envoltorio 'campos'):",
+        "  if (faltan dir/tel/horario en marca.negocio?.local):",
+        "    pregunta SOLO lo que falte ; w = await publishAndWait('carta-marketing.update_perfil.request', { project_id: input.project_id, campos: { negocio: { local: { direccion?, telefono?, horario? } } }, correlation_id: input.correlation_id }, { timeout_ms: 10000 })",
+        "    if (w.status >= 400): dilo (NO finjas guardado) ; sino: marca.negocio.local = w.data.negocio.local   // .data tras guardar",
+        "  return { carta: ctx.carta, marca }"
       ],
       "reglas_clave": [
-        "carta por carta.get (carta-manager, FUENTE). marca por carta-marketing.get_perfil (DUENO).",
+        "carta por carta.get (carta-manager, FUENTE). marca por carta-marketing.get_perfil (DUENO). Lee el resultado por .data (resp.data.carta / resp.data.marca).",
         "Si marca trae visual.colores/tipografias/logo -> el diseno los USA (es la identidad, no una sugerencia).",
-        "Si marca es null o sus secciones de negocio (dir/tel/horario) estan vacias -> preguntar SOLO lo que falte y persistirlo via carta-marketing.update_perfil (marca.negocio.local)."
+        "ONBOARDING INCOMPLETO (sin marca, o sin esencia.nombre / voz.tono): el diseno NO entrevista la identidad — no puede persistirla (no es su dominio) y se perderia. La surfacea y OFRECE completar el onboarding (chat.cambiar_foco a 'carta-marketing'). NUNCA improvises tu la entrevista de marca aqui.",
+        "UNICO dato que el diseno SI captura: negocio.local (dir/tel/horario) para el pie. GUARDALO de VERDAD via carta-marketing.update_perfil con el ENVOLTORIO { campos: { negocio: { local: {...} } } } — sin 'campos' el reflejo responde INVALID_INPUT y se pierde. Comprueba w.status; lee w.data."
       ],
       "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
       "_delega_en": "design.contexto_diseno.request (REFLEJO JS — index.js)"
@@ -106,8 +120,8 @@
   "trabajo_pendiente": [
     {
       "id": "campos_negocio_en_marca",
-      "estado": "abierto",
-      "descripcion": "dir/telefono/horario del negocio viven en marca.negocio.local. Si faltan, el LLM de pagina los pregunta y los persiste via carta-marketing.update_perfil. Confirmar que el onboarding los recoge para que el diseno no tenga que preguntarlos."
+      "estado": "resuelto",
+      "descripcion": "RESUELTO v2.3.0: contexto_diseno ahora tiene paso GUARDAR explicito del negocio.local (dir/tel/horario) via carta-marketing.update_perfil con el envoltorio { campos: { negocio: { local: {...} } } }, y un GUARD de onboarding incompleto (sin marca/esencia/voz) que deriva al onboarding de carta-marketing en vez de improvisar una entrevista que el diseno no puede persistir."
     }
   ]
 }

@@ -1,8 +1,10 @@
 {
   "_doc": "Blueprint del modulo menu-generator v11.0.0 — GENERADOR DE CATALOGO (HIBRIDO: blueprint + reflejo index.js). Recupera el ALMA de la v7 (un generador limpio: pide el nombre, toma CUALQUIER input, produce una carta estructurada, y NO la persiste el — delega en el custodio) y la expresa en el patron blueprint-coherente (CONTRATO -> LEER -> PENSAR -> GUARDAR -> EMITIR), SIN agentes. El blueprint es una CLASE GENERICA (no sabe que esto es comida: pregunta lo universal del producto). Lo DETERMINISTA (estructurar un catalogo ya formado, persistir) lo hace el REFLEJO (index.js, menu.import.request). Lo FUZZY (clasificar la ruta, estructurar texto libre dictado) lo hace el LLM de pagina. Reemplaza v10.1.0 (estructurador-ENRIQUECEDOR de 4 operaciones); v11 adelgaza a 2 (generar + handler async) volviendo al alcance de la v7: las 6 W de enriquecimiento (enriquecer) y recetas->carta (preparar) salen del modulo. Persistencia DELEGADA en carta-manager (event-core puro).",
   "id": "menu-generator",
-  "version": "blueprint-11.1.0",
+  "version": "blueprint-11.2.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+  "_temperatura_doc": "Pagina FIEL: estructura material en bruto sin inventar (PROHIBIDO inventar: solo lo que el input trajo) -> templada-fria. ai-gateway la usa como default del turno (settings.temperature del humano gana; fallback global 0.7). Baja la alucinacion de productos al dar forma; deja algo de criterio para emoji/familia.",
+  "temperatura": 0.4,
   "language": "es",
 
   "rol": "Generador de catalogo. De CUALQUIER material (json/texto/dictado legible) produce un catalogo ESTRUCTURADO y limpio, y lo entrega al custodio. Su definicion exacta y a la vez generica: 'de cualquier material en bruto, da forma a lo que ES y lo entrega limpio, sin guardarlo el'. Nada de analisis con datos externos, nada de enriquecimiento (alergenos/dietas), nada de operacion, nada de presentacion, nada de persistir — eso son otros modulos. La persistencia la delega en carta-manager.",

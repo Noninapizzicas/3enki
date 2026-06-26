@@ -3,7 +3,9 @@
 
   "id": "viabilidad",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-2.0.0",
+  "version": "blueprint-2.1.0",
+  "_temperatura_doc": "Pagina EXACTA: veredicto economico por reglas de food cost -> fria. ai-gateway la usa como default del turno (settings.temperature del humano gana; fallback global 0.7). El veredicto y la aritmetica viven en el REFLEJO; esto solo enfria lo poco fuzzy que quede.",
+  "temperatura": 0.2,
   "_v2_0_changelog": "v2.0.0 (2026-06-15): HIBRIDADO. Las 4 ops (evaluar/obtener/listar/descartar) pasan al REFLEJO JS; los cajones quedan como delegadores finos. El reflejo delega el coste a escandallo.costear (REFLEJO determinista) y normaliza su modelo canonico; NO usa escandallo.calcular (cajon fuzzy). Los caminos se generan por regla (stubs ligeros). La aritmetica de veredicto, las reglas de food cost y la persistencia dual-branch viven ahora en JS. El contrato de bus no cambia.",
   "language": "es",
 

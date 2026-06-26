@@ -1839,7 +1839,12 @@ class AiGatewayModule extends BaseModule {
       : null;
 
     const chatOptions = {
-      temperature: settings?.temperature ?? 0.7,
+      // Temperatura por PRECEDENCIA: el override humano de este turno
+      // (settings.temperature, efimero) > la temperatura DECLARADA de la pagina
+      // (blueprint.temperatura: su naturaleza — copy creativo caliente, costeo
+      // exacto frio) > el fallback global 0.7. Asi la tarea elige su temperatura
+      // sin que el humano tenga que acordarse en cada mensaje.
+      temperature: settings?.temperature ?? blueprintCtx?.child?.temperatura ?? 0.7,
       // Suelo de 4096: las paginas blueprint (recetario) generan respuestas
       // largas (crear receta + estructura + preguntas) que se cortaban con el
       // viejo tope de 2000. Floor en vez de default para subir tambien las

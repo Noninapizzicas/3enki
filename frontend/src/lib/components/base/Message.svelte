@@ -13,6 +13,7 @@
 
   import { createEventDispatcher } from 'svelte';
   import type { Message, Attachment } from '$lib/ui-core';
+  import { PROVIDER_ICONS } from '$lib/ui-core';
   import Chip from './Chip.svelte';
   import MarkdownRenderer from './MarkdownRenderer.svelte';
   import RecipeInvestigationResult from '../recipes/RecipeInvestigationResult.svelte';
@@ -33,14 +34,22 @@
     });
   }
 
-  // Icono por rol
-  function getRoleIcon(role: Message['role']): string {
-    const icons = {
-      user: '👤',
-      assistant: '🤖',
-      system: '⚙️'
-    };
-    return icons[role] || '💬';
+  // Provider que escribió el mensaje (de la metadata; puede venir como string JSON).
+  function providerOf(m: Message): string | null {
+    let md: any = m.metadata;
+    if (typeof md === 'string') { try { md = JSON.parse(md); } catch { md = null; } }
+    return md?.provider || null;
+  }
+
+  // Icono por rol — para el asistente, el icono del MODELO que lo escribió (no un 🤖 fijo),
+  // así de un vistazo sabes con qué modelo hablas. Fallback 🤖 si no hay provider o no mapea.
+  function getRoleIcon(m: Message): string {
+    if (m.role === 'assistant') {
+      const prov = providerOf(m);
+      return (prov && PROVIDER_ICONS[prov]) || '🤖';
+    }
+    const icons: Record<string, string> = { user: '👤', system: '⚙️' };
+    return icons[m.role] || '💬';
   }
 
   function handleToggleContext() {
@@ -48,7 +57,7 @@
     dispatch('toggleContext', { id: message.id, inContext: newValue });
   }
 
-  $: roleIcon = getRoleIcon(message.role);
+  $: roleIcon = getRoleIcon(message);
   $: formattedTime = formatTime(message.timestamp);
   $: hasAttachments = message.attachments && message.attachments.length > 0;
   $: inContext = message.in_context !== false; // Default true si undefined

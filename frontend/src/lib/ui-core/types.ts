@@ -176,6 +176,9 @@ export interface Message {
   timestamp: string;
   attachments?: Attachment[];
   streaming?: boolean;
+  // Metadata del turno (provider/model/tokens/...). Puede llegar como objeto o
+  // como string JSON desde el backend; el icono del mensaje lee metadata.provider.
+  metadata?: Record<string, any> | string | null;
   // Context management
   in_context?: boolean;
   manually_toggled?: boolean;

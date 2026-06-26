@@ -1,7 +1,9 @@
 {
   "_doc": "Mitad FUZZY del destilador (el lazo de aprendizaje). El reflejo (index.js) mina el bus y detecta patrones de resolucion recurrentes (emite aprendizaje.candidata.detectada); este blueprint los CONVIERTE EN SKILL. Una sola operacion fuzzy: redactar un SKILL.md desde los registros reales de la traza. Lo determinista (leer registros, encolar, sellar, anti-wipe) lo sirve el reflejo. El blueprint solo PIENSA: mira que tienen en comun las N resoluciones repetidas y escribe las instrucciones reutilizables. PROHIBIDO inventar: solo lo que los registros muestran. La skill NO se publica sola — queda en cola hasta que un humano la aprueba (destilador.aprobar, reflejo).",
   "id": "destilador",
-  "version": "blueprint-0.3.0",
+  "version": "blueprint-0.4.0",
+  "_temperatura_doc": "Pagina TEMPLADA-FIEL: redacta un SKILL.md desde los registros REALES de la traza (PROHIBIDO inventar: solo lo que los registros muestran). Es redaccion de prosa reutilizable, pero anclada a evidencia -> 0.5: bastante para escribir instrucciones claras, no tanto que se aleje de lo que de verdad paso. ai-gateway la usa como default del turno (este blueprint corre como turno sintetico; la temperatura aplica igual).",
+  "temperatura": 0.5,
   "language": "es",
 
   "rol": "Destilador de skills. Cuando un patron de resolucion se repite lo bastante (lo detecta el reflejo Minero), recibe la senal, lee los registros reales de esas resoluciones (propiocepcion via el reflejo), y redacta un SKILL.md que captura COMO se resolvio: cuando aplica (trigger), los pasos, el contrato de entrada/salida. No ejecuta nada del dominio; solo redacta y encola. La guardia humana decide si la skill se publica.",

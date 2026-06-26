@@ -6,7 +6,8 @@
  * En _executeLLM, chatOptions.temperature se resuelve:
  *   settings.temperature (override humano, efimero)
  *     ?? blueprintCtx.child.temperatura (naturaleza DECLARADA de la pagina)
- *       ?? 0.7 (fallback global)
+ *       ?? blueprintCtx.parent.temperatura (default del SUBSISTEMA)
+ *         ?? 0.7 (fallback global)
  *
  * Asi la pagina creativa (carta-marketing 0.85) corre caliente y la exacta
  * (escandallo 0.2) fria SIN que el humano lo pida; y un override por mensaje
@@ -20,7 +21,7 @@
 const assert = require('assert');
 const AiGatewayModule = require('../../modules/conversacion/ai-gateway/index.js');
 
-function instantiate({ pageTemp } = {}) {
+function instantiate({ pageTemp, parentTemp } = {}) {
   const captured = { temperature: undefined };
   const provider = {
     withRetry: async (fn) => fn(),
@@ -42,13 +43,16 @@ function instantiate({ pageTemp } = {}) {
   m._injectAttachmentsInMessages = (msgs) => msgs;
 
   m.conversationPageFoco = new Map();
-  // Pagina 'pag': si pageTemp es undefined, el blueprint existe pero NO declara
-  // temperatura -> debe caer al fallback. Si es null, la pagina no esta en el mapa.
+  // Pagina 'pag': si pageTemp es undefined, el blueprint existe pero la CHILD NO
+  // declara temperatura -> cae al padre (parentTemp) o al fallback. Si pageTemp es
+  // null, la pagina no esta en el mapa (sin blueprint).
   m.blueprintModules = new Map();
   if (pageTemp !== null) {
     const child = {};
     if (pageTemp !== undefined) child.temperatura = pageTemp;
-    m.blueprintModules.set('pag', { child, cajonesEnabled: false, systemPrompt: 'SP' });
+    const parent = {};
+    if (parentTemp !== undefined) parent.temperatura = parentTemp;
+    m.blueprintModules.set('pag', { child, parent, cajonesEnabled: false, systemPrompt: 'SP' });
   }
 
   return { m, captured };
@@ -91,8 +95,20 @@ test('override humano 0 es respetado (no se confunde con ausente)', async () => 
   assert.strictEqual(captured.temperature, 0, '0 es un valor valido, no debe caer al default');
 });
 
-test('pagina sin temperatura declarada -> fallback 0.7', async () => {
-  const { m, captured } = instantiate({ pageTemp: undefined }); // blueprint existe, sin campo
+test('child sin temperatura -> cae al default del SUBSISTEMA (parent)', async () => {
+  const { m, captured } = instantiate({ pageTemp: undefined, parentTemp: 0.4 });
+  await runTurn(m, { pageId: 'pag', settings: {} });
+  assert.strictEqual(captured.temperature, 0.4, 'sin child.temperatura, manda parent.temperatura');
+});
+
+test('child gana al parent cuando ambos declaran', async () => {
+  const { m, captured } = instantiate({ pageTemp: 0.85, parentTemp: 0.4 });
+  await runTurn(m, { pageId: 'pag', settings: {} });
+  assert.strictEqual(captured.temperature, 0.85, 'la pagina afina el default del subsistema');
+});
+
+test('ni child ni parent declaran -> fallback 0.7', async () => {
+  const { m, captured } = instantiate({ pageTemp: undefined, parentTemp: undefined });
   await runTurn(m, { pageId: 'pag', settings: {} });
   assert.strictEqual(captured.temperature, 0.7);
 });

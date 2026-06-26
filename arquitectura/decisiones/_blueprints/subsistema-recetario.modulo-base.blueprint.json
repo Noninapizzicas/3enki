@@ -2,7 +2,9 @@
   "_doc": "Blueprint ABSTRACTO del subsistema-recetario (tambien reutilizado por la linea carta-manager/scheduler/digital/design/impresion/marketing por compatibilidad de modelo). Captura lo comun a todos los modulos blueprint-driven que dependen de este padre. Cada modulo concreto extiende este declarando solo su delta. El LLM lee la jerarquia (padre + hijo) como su system prompt — el blueprint ES el modulo, no hay codigo JS auxiliar. Tambien declara la disciplina_del_llm_runtime: reglas operativas que el LLM debe respetar al ejecutar cualquier hijo (evita perderse, distraerse, inventar datos).",
 
   "id": "subsistema-recetario.modulo-base",
-  "version": "blueprint-0.7.0",
+  "version": "blueprint-0.8.0",
+  "_temperatura_doc": "Default de temperatura del SUBSISTEMA (lo lee ai-gateway como parent.temperatura, por debajo de la child.temperatura de cada pagina y del override humano). 0.4 = templado-fiel: el subsistema es custodio de datos (CRUD/versionado/normalizacion), donde inventar es el enemigo; las paginas creativas (marketing/design/digital) suben, las exactas (escandallo/viabilidad) bajan. Una pagina hija que no declare temperatura cae aqui antes que al 0.7 global.",
+  "temperatura": 0.4,
   "abstract": true,
 
   "rol_generico": "Modulo del subsistema-recetario (o subsistema-carta, mismo padre) — encapsula una responsabilidad acotada del dominio como blueprint declarativo. El LLM es el runtime que lo ejecuta publicando eventos al bus directamente.",

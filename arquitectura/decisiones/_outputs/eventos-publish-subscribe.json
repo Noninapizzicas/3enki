@@ -7,7 +7,7 @@
     "generado_por": "arquitectura/decisiones/_validators/blueprint-eventos-conscientes.validate.js",
     "notas": "Catalogo curado de eventos del bus indexado por nombre. Incluye publishers (blueprints con publish/publishAndWait en su pseudocodigo + module.json.events.publishes[]) y subscribers (blueprints con eventos_que_escucho[] + module.json.events.subscribes[]). El validador lo regenera cada vez. NO editar a mano."
   },
-  "total_eventos": 423,
+  "total_eventos": 451,
   "eventos": {
     "*.actualizado": {
       "publishers": [],
@@ -137,16 +137,7 @@
       ]
     },
     "agent.execute.request": {
-      "publishers": [
-        {
-          "source": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        }
-      ],
+      "publishers": [],
       "subscribers": [
         {
           "source": "modules/conversacion/agent-observer/module.json",
@@ -196,6 +187,15 @@
         {
           "source": "modules/prompt-manager/module.json",
           "handler": "onAIRequestStarted"
+        }
+      ]
+    },
+    "aprendizaje.candidata.detectada": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/destilador/destilador.blueprint.json",
+          "handler": "destilar"
         }
       ]
     },
@@ -404,6 +404,37 @@
         }
       ]
     },
+    "carta-marketing.get_perfil.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta-marketing.guardar_copy.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta-marketing.update_perfil.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
     "carta-scheduler.cambio.aplicado": {
       "publishers": [
         {
@@ -440,13 +471,17 @@
       ],
       "subscribers": []
     },
-    "carta.actualizada": {
+    "carta.activar.request": {
       "publishers": [
         {
           "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         }
       ],
+      "subscribers": []
+    },
+    "carta.actualizada": {
+      "publishers": [],
       "subscribers": [
         {
           "source": "modules/pizzepos/categorias/module.json",
@@ -463,16 +498,33 @@
         {
           "source": "modules/pizzepos/productos/module.json",
           "handler": "onCartaGenerada"
+        },
+        {
+          "source": "modules/pizzepos/variaciones/module.json",
+          "handler": "onCartaActualizada"
         }
       ]
     },
-    "carta.borrada": {
+    "carta.add_category.request": {
       "publishers": [
         {
           "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         }
       ],
+      "subscribers": []
+    },
+    "carta.add_product.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.borrada": {
+      "publishers": [],
       "subscribers": [
         {
           "source": "modules/pizzepos/productos/module.json",
@@ -480,31 +532,34 @@
         }
       ]
     },
-    "carta.creada": {
+    "carta.clonar.request": {
       "publishers": [
         {
-          "source": "modules/pizzepos/menu-generator/menu-generator.blueprint.json",
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         }
       ],
-      "subscribers": [
+      "subscribers": []
+    },
+    "carta.delete.request": {
+      "publishers": [
         {
           "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
-          "handler": "_on_carta_creada"
+          "ref": "operaciones.pseudocodigo"
         }
-      ]
+      ],
+      "subscribers": []
     },
     "carta.editada": {
-      "publishers": [
-        {
-          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        }
-      ],
+      "publishers": [],
       "subscribers": [
         {
           "source": "modules/pizzepos/productos/module.json",
           "handler": "onCartaGenerada"
+        },
+        {
+          "source": "modules/pizzepos/variaciones/module.json",
+          "handler": "onCartaActualizada"
         }
       ]
     },
@@ -538,35 +593,55 @@
     "carta.get.request": {
       "publishers": [
         {
-          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         },
         {
-          "source": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
           "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "ref": "module.json.events.publishes"
         }
       ],
       "subscribers": []
     },
-    "carta.html.generada": {
+    "carta.list.request": {
       "publishers": [
         {
-          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
           "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "ref": "module.json.events.publishes"
         }
       ],
       "subscribers": []
     },
-    "carta.impresion.lista": {
+    "carta.remove_product.request": {
       "publishers": [
         {
-          "source": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
           "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "ref": "module.json.events.publishes"
         }
       ],
       "subscribers": []
     },
-    "carta.listada": {
+    "carta.restore.request": {
       "publishers": [
         {
           "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
@@ -575,7 +650,78 @@
       ],
       "subscribers": []
     },
-    "cartadigital.carta_publica.actualizada": {
+    "carta.save.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/menu-generator/menu-generator.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.search.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.stats.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.update_extras.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.update_prices.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.update_product.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
+          "source": "modules/pizzepos/productos/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "carta.versions.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "cartadigital.guardar_diseno.request": {
       "publishers": [
         {
           "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
@@ -584,7 +730,7 @@
       ],
       "subscribers": []
     },
-    "cartadigital.config.actualizada": {
+    "cartadigital.publicar.request": {
       "publishers": [
         {
           "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
@@ -602,10 +748,6 @@
       ],
       "subscribers": [
         {
-          "source": "modules/comandero-cliente-builder/module.json",
-          "handler": "onCatalogoActualizado"
-        },
-        {
           "source": "modules/pizzepos/comandero/module.json",
           "handler": "onCatalogoActualizado"
         },
@@ -616,6 +758,10 @@
         {
           "source": "modules/pizzepos/persistencia-comandero/module.json",
           "handler": "onEvento"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onCatalogoActualizado"
         }
       ]
     },
@@ -947,35 +1093,12 @@
         {
           "source": "modules/pizzepos/persistencia-comandero/module.json",
           "handler": "onEvento"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onCocinaPedidoListo"
         }
       ]
-    },
-    "comandero-cliente.bundle.fallido": {
-      "publishers": [
-        {
-          "source": "modules/comandero-cliente-builder/module.json",
-          "ref": "module.json.events.publishes"
-        }
-      ],
-      "subscribers": []
-    },
-    "comandero-cliente.bundle.generado": {
-      "publishers": [
-        {
-          "source": "modules/comandero-cliente-builder/module.json",
-          "ref": "module.json.events.publishes"
-        }
-      ],
-      "subscribers": []
-    },
-    "comandero-cliente.presentacion.actualizada": {
-      "publishers": [
-        {
-          "source": "modules/comandero-cliente-builder/module.json",
-          "ref": "module.json.events.publishes"
-        }
-      ],
-      "subscribers": []
     },
     "comandero.enviar_cocina": {
       "publishers": [
@@ -1084,6 +1207,33 @@
           "handler": "onCompositionResponse"
         }
       ]
+    },
+    "contenido.add_imagen.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "contenido.get.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "contenido.set.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
     },
     "core/+/errors/#": {
       "publishers": [],
@@ -1297,6 +1447,10 @@
       "subscribers": [
         {
           "source": "modules/conversacion/ai-gateway-poc/module.json",
+          "handler": "onCredentialSaved"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
           "handler": "onCredentialSaved"
         }
       ]
@@ -1594,6 +1748,60 @@
       ],
       "subscribers": []
     },
+    "design.contexto_diseno.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "design.gallery.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "design.load_carta.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "design.save.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "destilador.encolar_candidata.request": {
+      "publishers": [
+        {
+          "source": "modules/destilador/destilador.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "destilador.leer_registros.request": {
+      "publishers": [
+        {
+          "source": "modules/destilador/destilador.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
     "device.offline": {
       "publishers": [
         {
@@ -1868,15 +2076,6 @@
       ],
       "subscribers": []
     },
-    "escandallo.calcular.request": {
-      "publishers": [
-        {
-          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        }
-      ],
-      "subscribers": []
-    },
     "escandallo.coste.calculado": {
       "publishers": [
         {
@@ -1884,12 +2083,16 @@
           "ref": "operaciones.pseudocodigo"
         }
       ],
-      "subscribers": [
+      "subscribers": []
+    },
+    "escandallo.recalcular_siguiente.request": {
+      "publishers": [
         {
-          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
-          "handler": "_aplicar_coste_calculado"
+          "source": "modules/pizzepos/escandallo/escandallo.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
         }
-      ]
+      ],
+      "subscribers": []
     },
     "esp32.build_completed": {
       "publishers": [
@@ -2175,26 +2378,6 @@
     "fs.edit.request": {
       "publishers": [
         {
-          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
           "source": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         },
@@ -2204,10 +2387,6 @@
         },
         {
           "source": "modules/pizzepos/tecnicas/tecnicas.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         }
       ],
@@ -2291,16 +2470,7 @@
       "subscribers": []
     },
     "fs.list.request": {
-      "publishers": [
-        {
-          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        }
-      ],
+      "publishers": [],
       "subscribers": [
         {
           "source": "modules/filesystem/module.json",
@@ -2356,26 +2526,6 @@
     "fs.read.request": {
       "publishers": [
         {
-          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
           "source": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         },
@@ -2385,10 +2535,6 @@
         },
         {
           "source": "modules/pizzepos/tecnicas/tecnicas.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         }
       ],
@@ -2487,26 +2633,6 @@
     "fs.write.request": {
       "publishers": [
         {
-          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
           "source": "modules/pizzepos/carta-scheduler/carta-scheduler.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         },
@@ -2516,10 +2642,6 @@
         },
         {
           "source": "modules/pizzepos/tecnicas/tecnicas.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         }
       ],
@@ -2876,19 +2998,10 @@
       ],
       "subscribers": []
     },
-    "marketing.onboarding.completado": {
+    "media.generar.request": {
       "publishers": [
         {
-          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        }
-      ],
-      "subscribers": []
-    },
-    "marketing.perfil.actualizado": {
-      "publishers": [
-        {
-          "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+          "source": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         }
       ],
@@ -2912,6 +3025,15 @@
       ],
       "subscribers": []
     },
+    "menu.import.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/menu-generator/menu-generator.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
     "mercadona.categorias.listar.request": {
       "publishers": [
         {
@@ -2921,7 +3043,7 @@
       ],
       "subscribers": [
         {
-          "source": "modules/mercadona-api/module.json",
+          "source": "modules/pizzepos/mercadona-api/module.json",
           "handler": "onCategoriasListar"
         }
       ]
@@ -2929,7 +3051,7 @@
     "mercadona.precio.obtenido": {
       "publishers": [
         {
-          "source": "modules/mercadona-api/module.json",
+          "source": "modules/pizzepos/mercadona-api/module.json",
           "ref": "module.json.events.publishes"
         }
       ],
@@ -2944,7 +3066,7 @@
       ],
       "subscribers": [
         {
-          "source": "modules/mercadona-api/module.json",
+          "source": "modules/pizzepos/mercadona-api/module.json",
           "handler": "onProductoObtener"
         }
       ]
@@ -3033,6 +3155,15 @@
         }
       ],
       "subscribers": []
+    },
+    "pago.confirmado": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/pizzepos/pedidos/module.json",
+          "handler": "onPagoConfirmado"
+        }
+      ]
     },
     "pase.ficha.creada": {
       "publishers": [
@@ -3231,12 +3362,12 @@
       ],
       "subscribers": [
         {
-          "source": "modules/notificador-pedidos/module.json",
-          "handler": "onPedidoCreado"
-        },
-        {
           "source": "modules/pizzepos/cuentas-canales/module.json",
           "handler": "MesaStrategy.onPedidoCreado"
+        },
+        {
+          "source": "modules/pizzepos/notificador-pedidos/module.json",
+          "handler": "onPedidoCreado"
         },
         {
           "source": "modules/pizzepos/persistencia-comandero/module.json",
@@ -3252,7 +3383,7 @@
       "publishers": [],
       "subscribers": [
         {
-          "source": "modules/tienda-api/module.json",
+          "source": "modules/pizzepos/tienda-api/module.json",
           "handler": "onPedidoCrearTiendaResponse"
         },
         {
@@ -3623,17 +3754,8 @@
       ]
     },
     "producto.actualizado": {
-      "publishers": [
-        {
-          "source": "modules/pizzepos/productos/module.json",
-          "ref": "module.json.events.publishes"
-        }
-      ],
+      "publishers": [],
       "subscribers": [
-        {
-          "source": "modules/comandero-cliente-builder/module.json",
-          "handler": "onProductoActualizado"
-        },
         {
           "source": "modules/pizzepos/comandero/module.json",
           "handler": "onProductoActualizado"
@@ -3645,17 +3767,8 @@
       ]
     },
     "producto.creado": {
-      "publishers": [
-        {
-          "source": "modules/pizzepos/productos/module.json",
-          "ref": "module.json.events.publishes"
-        }
-      ],
+      "publishers": [],
       "subscribers": [
-        {
-          "source": "modules/comandero-cliente-builder/module.json",
-          "handler": "onProductoCreado"
-        },
         {
           "source": "modules/pizzepos/comandero/module.json",
           "handler": "onProductoActualizado"
@@ -3671,20 +3784,6 @@
         {
           "source": "modules/pizzepos/variaciones/module.json",
           "handler": "onProductoCreado"
-        }
-      ]
-    },
-    "producto.eliminado": {
-      "publishers": [
-        {
-          "source": "modules/pizzepos/productos/module.json",
-          "ref": "module.json.events.publishes"
-        }
-      ],
-      "subscribers": [
-        {
-          "source": "modules/comandero-cliente-builder/module.json",
-          "handler": "onProductoEliminado"
         }
       ]
     },
@@ -3706,19 +3805,7 @@
       ],
       "subscribers": [
         {
-          "source": "modules/bienvenida-tienda/module.json",
-          "handler": "onProjectActivated"
-        },
-        {
-          "source": "modules/comandero-cliente-builder/module.json",
-          "handler": "onProjectActivated"
-        },
-        {
           "source": "modules/filesystem/module.json",
-          "handler": "onProjectActivated"
-        },
-        {
-          "source": "modules/mercadona-api/module.json",
           "handler": "onProjectActivated"
         },
         {
@@ -3730,7 +3817,15 @@
           "handler": "onProjectActivated"
         },
         {
+          "source": "modules/pizzepos/bienvenida-tienda/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
           "source": "modules/pizzepos/ingredientes/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
+          "source": "modules/pizzepos/mercadona-api/module.json",
           "handler": "onProjectActivated"
         },
         {
@@ -3742,7 +3837,15 @@
           "handler": "onProjectActivated"
         },
         {
+          "source": "modules/pizzepos/variaciones/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
           "source": "modules/recetario-creativo/module.json",
+          "handler": "onProjectActivated"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
           "handler": "onProjectActivated"
         }
       ]
@@ -3796,7 +3899,7 @@
           "handler": "onProjectDeactivated"
         },
         {
-          "source": "modules/mercadona-api/module.json",
+          "source": "modules/pizzepos/mercadona-api/module.json",
           "handler": "onProjectDeactivated"
         },
         {
@@ -3989,15 +4092,6 @@
       ],
       "subscribers": []
     },
-    "receta.creada": {
-      "publishers": [
-        {
-          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        }
-      ],
-      "subscribers": []
-    },
     "receta.eliminada": {
       "publishers": [
         {
@@ -4016,6 +4110,33 @@
       ],
       "subscribers": []
     },
+    "recetas.actualizar_precio.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/escandallo/escandallo.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "recetas.crear.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/recetas/recetas.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "recetas.ingredientes.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/escandallo/escandallo.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
     "recetas.listar.request": {
       "publishers": [
         {
@@ -4029,10 +4150,6 @@
       "publishers": [
         {
           "source": "modules/pizzepos/escandallo/escandallo.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        },
-        {
-          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         }
       ],
@@ -4332,16 +4449,16 @@
       ],
       "subscribers": [
         {
-          "source": "modules/comandero-cliente-builder/module.json",
-          "handler": "onTarifasConfigActualizada"
-        },
-        {
           "source": "modules/pizzepos/comandero/module.json",
           "handler": "onTarifasConfigActualizada"
         },
         {
           "source": "modules/pizzepos/productos/module.json",
           "handler": "onTarifasConfigActualizada"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onCatalogoActualizado"
         }
       ]
     },
@@ -4362,15 +4479,6 @@
           "handler": "onConfigSolicitada"
         }
       ]
-    },
-    "tarifas.set_general": {
-      "publishers": [
-        {
-          "source": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
-          "ref": "operaciones.pseudocodigo"
-        }
-      ],
-      "subscribers": []
     },
     "tecnica.actualizada": {
       "publishers": [
@@ -4472,12 +4580,12 @@
       ],
       "subscribers": [
         {
-          "source": "modules/bienvenida-tienda/module.json",
-          "handler": "onTelegramCommandReceived"
-        },
-        {
           "source": "modules/bot-manager/module.json",
           "handler": "onCommandReceived"
+        },
+        {
+          "source": "modules/pizzepos/bienvenida-tienda/module.json",
+          "handler": "onTelegramCommandReceived"
         }
       ]
     },
@@ -4675,12 +4783,12 @@
       ],
       "subscribers": [
         {
-          "source": "modules/bienvenida-tienda/module.json",
-          "handler": "onTelegramTextReceived"
-        },
-        {
           "source": "modules/bot-manager/module.json",
           "handler": "onTextReceived"
+        },
+        {
+          "source": "modules/pizzepos/bienvenida-tienda/module.json",
+          "handler": "onTelegramTextReceived"
         }
       ]
     },
@@ -4715,7 +4823,7 @@
     "tienda.pedido.completado": {
       "publishers": [
         {
-          "source": "modules/tienda-api/module.json",
+          "source": "modules/pizzepos/tienda-api/module.json",
           "ref": "module.json.events.publishes"
         }
       ],
@@ -4724,7 +4832,7 @@
     "tienda.pedido.fallido": {
       "publishers": [
         {
-          "source": "modules/tienda-api/module.json",
+          "source": "modules/pizzepos/tienda-api/module.json",
           "ref": "module.json.events.publishes"
         }
       ],
@@ -4733,7 +4841,7 @@
     "tienda.pedido.recibido": {
       "publishers": [
         {
-          "source": "modules/tienda-api/module.json",
+          "source": "modules/pizzepos/tienda-api/module.json",
           "ref": "module.json.events.publishes"
         }
       ],
@@ -4776,7 +4884,7 @@
         }
       ]
     },
-    "viabilidad.evaluacion.completada": {
+    "viabilidad.descartar.request": {
       "publishers": [
         {
           "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
@@ -4785,11 +4893,52 @@
       ],
       "subscribers": []
     },
-    "viabilidad.evaluacion.descartada": {
+    "viabilidad.evaluar.request": {
       "publishers": [
         {
           "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
           "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "viabilidad.listar.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "viabilidad.obtener.request": {
+      "publishers": [
+        {
+          "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.entrante": {
+      "publishers": [
+        {
+          "source": "modules/openwa-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onWhatsappEntrante"
+        }
+      ]
+    },
+    "whatsapp.enviar.response": {
+      "publishers": [
+        {
+          "source": "modules/openwa-service/module.json",
+          "ref": "module.json.events.publishes"
         }
       ],
       "subscribers": []
@@ -4843,6 +4992,24 @@
       "publishers": [
         {
           "source": "modules/pizzepos/cuentas-canales/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.qr": {
+      "publishers": [
+        {
+          "source": "modules/openwa-service/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.sesion.caida": {
+      "publishers": [
+        {
+          "source": "modules/openwa-service/module.json",
           "ref": "module.json.events.publishes"
         }
       ],

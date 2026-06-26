@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo carta-manager. Hijo de subsistema-recetario.modulo-base (reutilizado por simplicidad — su modelo de ejecucion, primitivas del bus y manejo de errores aplican identico). Aggregate root del subsistema-carta: CRUD de cartas + manipulacion de productos/categorias dentro de carta + versionado con history archivado + busqueda + stats + restore. Persistencia multi-archivo: data/projects/{slug}/storage/pizzepos/cartas/<id>.json + storage/pizzepos/cartas/.versions/<id>/<timestamp>.json para snapshots.",
   "id": "carta-manager",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "_v1_5_changelog": "v1.5.0 (2026-06-13): anyade _modelo_oop (CLASE CartaManager) — aggregate root, store actual+versiones, las 15 ops agrupadas (entrada event-driven / lectura / raiz / mutacion estructurada) + helper comun _mutar que captura el patron repetido en las 5 mutaciones (read->snapshot->fs.edit->version++->evento). Prep para HIBRIDAR: todo es CRUD/versionado determinista -> pasa a REFLEJO JS (index.js), mismo contrato de bus carta.<op>.request (los carta-* no se enteran). Regla de dominio reafirmada: anyadir/editar productos de una carta = carta-manager (add_product/update_product); menu-generator solo NACE la base. Coger producto de recetas -> carta = leer recetas.obtener + escribir carta-manager.add_product (recetas es fuente, carta-manager es el writer).",
   "_v1_4_changelog": "v1.4.0 (aterrizaje subsistema-catalogo, D2): añadida operacion 'clonar' (carta_base_id + nuevo_nombre -> carta INDEPENDIENTE nueva). Es el paso 1 de 'carta por canal': el LLM clona la base, la manipula (update_prices/add_product/remove_product) segun instrucciones NL, y tarifas la asigna a un canal. carta-manager solo PRODUCE; la asignacion canal<->carta es de tarifas. Cambio ADITIVO (op nueva, no toca las 14 existentes). El shape que persiste es ahora carta-pizzepos v2 (ingredientes con id+familia) pero save persiste cualquier shape literal -> sin break. Pendiente (futuro): extender update_prices con target por categoria/familia + factor (hoy es per-producto absoluto).",
   "language": "es",
@@ -431,6 +431,28 @@
         "UPSTREAM_UNREACHABLE"
       ],
       "_delega_en": "carta.restore.request (REFLEJO JS — index.js)"
+    },
+    "activar": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req) }",
+      "pseudocodigo": [
+        "async activar(input):",
+        "  // HIBRIDO: traduce 'activa / pon en servicio la carta X' a los args y DELEGA en el reflejo.",
+        "  // El reflejo pone estado=en_servicio con un patch de UN campo (NO reescribe la carta entera),",
+        "  // baja a borrador cualquier OTRA activa, y emite carta.actualizada. NUNCA toques fs ni el estado tu.",
+        "  resp = await publishAndWait('carta.activar.request', { project_id: input.project_id, carta_id: input.carta_id, correlation_id: input.correlation_id, request_id: uuid() }, { timeout_ms: 15000 })",
+        "  return resp   // { status, data: { carta_id, estado: 'en_servicio' } }"
+      ],
+      "reglas_clave": [
+        "Activar = poner UNA carta en_servicio. El reflejo garantiza una sola activa (baja las otras a borrador) y emite carta.actualizada -> comandero/POS la recogen.",
+        "Un BORRADOR se activa directamente; NO hace falta 'guardar la carta entera' (eso arriesga perder productos)."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "carta.activar.request (REFLEJO JS — index.js)"
     }
   },
   "trabajo_pendiente": [

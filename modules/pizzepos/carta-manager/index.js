@@ -30,7 +30,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.11.0';
+    this.version = 'reflejo-1.12.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -50,6 +50,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   onStatsRequest(e) { return this._atender(e, 'stats', 'carta.stats.response', d => this._stats(d)); }
   onVersionsRequest(e) { return this._atender(e, 'versions', 'carta.versions.response', d => this._versions(d)); }
   onRestoreRequest(e) { return this._atender(e, 'restore', 'carta.restore.response', d => this._restore(d)); }
+  onActivarRequest(e) { return this._atender(e, 'activar', 'carta.activar.response', d => this._activar(d)); }
   // entrada event-driven (fire-and-forget desde menu-generator).
   // IDENTIDAD (FASE 3): una carta general por proyecto. Si ya existe la carta general,
   // REUSA su id para SOBREESCRIBIRLA (snapshot+version++), no spawnear un fichero nuevo.
@@ -363,6 +364,39 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     const g = await this._get(input);
     if (g && g.status === 200) this.eventBus.publish('carta.borrada', { project_id: input.project_id, carta: g.data, motivo: input.motivo || null, correlation_id: input.correlation_id || crypto.randomUUID(), timestamp: nowISO() });
     return { status: 200, data: { carta_id: input.carta_id, estado: 'archivada' } };
+  }
+
+  // Activa una carta: estado -> 'en_servicio' con un patch de UN solo campo (via _mutar:
+  // snapshot + version++ + carta.editada) — sin reescribir la carta entera, así no hay
+  // riesgo de perder productos en el guardado. Garantiza UNA sola carta en servicio: baja
+  // a borrador cualquier OTRA activa (si hubiera dos, _cartaEnServicio devolvería null y el
+  // POS se quedaría sin carta). Emite carta.actualizada para que comandero/POS recojan la
+  // activa nueva (los proyectores ya escuchan además carta.editada del _mutar).
+  async _activar(input) {
+    if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
+    const res = await this._mutar(input, 'activar', () => ({
+      patches: [{ op: 'replace', path: '/meta/estado', value: 'en_servicio' }],
+      data: () => ({ carta_id: input.carta_id, estado: 'en_servicio' })
+    }));
+    if (!res || res.status >= 400) return res;
+    // exactamente una en servicio: degrada las OTRAS activas a borrador
+    const otras = await this._eachCarta(input.project_id, (c) =>
+      (c.meta && c.meta.estado === 'en_servicio' && c.meta.id !== input.carta_id) ? c.meta.id : undefined
+    );
+    for (const id of (otras || [])) {
+      await this._mutar({ project_id: input.project_id, carta_id: id, correlation_id: input.correlation_id }, 'desactivar', () => ({
+        patches: [{ op: 'replace', path: '/meta/estado', value: 'borrador' }],
+        data: () => ({ carta_id: id, estado: 'borrador' })
+      }));
+    }
+    const g = await this._get(input);
+    if (g && g.status === 200) {
+      this.eventBus.publish('carta.actualizada', {
+        project_id: input.project_id, carta: g.data, motivo: 'activar', operacion: 'activar',
+        correlation_id: input.correlation_id || crypto.randomUUID(), timestamp: nowISO()
+      });
+    }
+    return { status: 200, data: { carta_id: input.carta_id, estado: 'en_servicio' } };
   }
 
   // =============================================================

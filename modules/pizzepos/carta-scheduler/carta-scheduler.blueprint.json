@@ -3,7 +3,9 @@
 
   "id": "carta-scheduler",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.2.0",
+  "version": "blueprint-1.3.0",
+  "_temperatura_doc": "Pagina FRIA: reglas (cron + canal + carta_id), deteccion de conflictos, calculo de proximos cambios -> exacta, con guardrail de confirmacion humana. Inventar aqui es peligroso (programa cambios de carta reales). ai-gateway la usa como default del turno.",
+  "temperatura": 0.3,
   "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica subsistema-carta v1.0.4. Paths canonicos /storage/pizzepos/carta-scheduler/reglas.json + pendientes.json en las 7 operaciones reemplazando /storage/pizzepos/carta-scheduler/reglas.json + /storage/pizzepos/carta-scheduler/pendientes.json pelados. correlation_id_efectivo obligatorio en los 4 publishes canonicos de dominio existentes (regla.creada, regla.eliminada, cambio.aplicado, cambio.rechazado). eventos_que_escucho:[] preservado (A1).",
   "language": "es",
 

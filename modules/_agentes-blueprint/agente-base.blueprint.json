@@ -2,7 +2,9 @@
   "_doc": "Blueprint padre ABSTRACTO del que heredan todos los agentes-blueprint del sistema Enki. Captura lo invariante del modelo agente: modelo de ejecucion (LLM-runtime), contexto inyectado (system prompt + eventos), primitivas universales del bus, tools universales, manejo de errores y naming canonico de eventos. Los hijos solo declaran su delta especifico (rol, operacion_canonica, dominios_consultados, eventos_que_invoca, llm_settings, pseudocodigo). No tiene operaciones propias — los hijos las heredan via el modelo de ejecucion. Documento autoritativo: arquitectura/decisiones/_contratos/agente-blueprint.contract.json.",
 
   "id": "agente-base",
-  "version": "blueprint-0.1.0",
+  "version": "blueprint-0.2.0",
+  "_temperatura_doc": "Default de temperatura de la FAMILIA de agentes (lo lee ai-gateway como parent.temperatura cuando un agente corre por el page path, por debajo de la child.temperatura del agente y del override humano). 0.4 = analitico-fiel: los agentes leen y juzgan, no inventan. Distinto de llm_settings (mecanismo del framework de agentes APARCADO); este campo gobierna el turno via ai-gateway.",
+  "temperatura": 0.4,
   "language": "es",
   "creada": "2026-05-28",
 

@@ -1,6 +1,7 @@
 {
   "name": "ai-gateway",
-  "version": "2.1.0",
+  "version": "2.2.0",
+  "_v2_2_nota": "v2.2.0: la precedencia de temperatura cae tambien al blueprint PADRE — settings.temperature ?? child.temperatura ?? parent.temperatura ?? 0.7. Un subsistema fija su tono por defecto (recetario 0.4 custodio-fiel, agentes 0.4 analitico) y cada pagina lo afina; una pagina que no declara temperatura ya no salta al 0.7 global sino al default de su subsistema. Temperaturas declaradas en ~12 blueprints por naturaleza (creativo caliente / exacto frio / fiel templado). Test: ai-gateway__temperatura-precedencia (7/7).",
   "_v2_1_nota": "v2.1.0: temperatura del turno por PRECEDENCIA en _executeLLM — settings.temperature (override humano, efimero) ?? blueprintCtx.child.temperatura (naturaleza declarada de la pagina: copy creativo caliente, costeo exacto frio) ?? 0.7 (fallback). Una pagina elige su temperatura sin que el humano lo pida en cada mensaje; el override por mensaje gana cuando hace falta. Test: ai-gateway__temperatura-precedencia.",
   "description": "Ejecutor del LLM. Tres entry points (chat / generic / embedding) sobre el mismo agentic loop con providers fallback + tools + credentials event-driven. v2.0.0: split llm.complete.response/failed (par success/failure), helpers POC2 transferibles, _publicarEvento canonico (correlation_id propagado), _classifyExecutionError auxiliar del dominio.",
   "author": "Event Core Team",

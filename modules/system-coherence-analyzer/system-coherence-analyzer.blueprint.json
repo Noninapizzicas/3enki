@@ -2,7 +2,9 @@
   "_doc": "Blueprint del agente system-coherence-analyzer. Hijo de agente-base. Su rol: dado un aspecto del sistema (persistencia, errores, blueprint pseudocodigo, etc.), escanea los archivos relevantes del repo (modulos, blueprints, contratos), identifica patrones consistentes vs divergentes, anti-patrones implicitos no validados por reglas mecanicas, y drift implicito. Produce reporte estructurado. Stateless. Sin persistencia propia. Sin operaciones de escritura.",
 
   "id": "system-coherence-analyzer",
-  "version": "blueprint-0.1.0",
+  "version": "blueprint-0.2.0",
+  "_temperatura_doc": "Pagina ANALITICA: escanea el repo y juzga coherencia vs drift. Frio-templado (0.35): el reporte debe anclarse en lo que los archivos REALMENTE muestran (no inventar anti-patrones), pero detectar patrones divergentes pide algo de amplitud de mirada. Por debajo cae al parent agente-base (0.4) y luego al 0.7 global.",
+  "temperatura": 0.35,
   "language": "es",
   "extends_blueprint_abstract": "agente-base",
   "blueprint_parent_path": "modules/_agentes-blueprint/agente-base.blueprint.json",

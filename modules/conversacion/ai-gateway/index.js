@@ -1839,12 +1839,18 @@ class AiGatewayModule extends BaseModule {
       : null;
 
     const chatOptions = {
-      // Temperatura por PRECEDENCIA: el override humano de este turno
-      // (settings.temperature, efimero) > la temperatura DECLARADA de la pagina
-      // (blueprint.temperatura: su naturaleza — copy creativo caliente, costeo
-      // exacto frio) > el fallback global 0.7. Asi la tarea elige su temperatura
-      // sin que el humano tenga que acordarse en cada mensaje.
-      temperature: settings?.temperature ?? blueprintCtx?.child?.temperatura ?? 0.7,
+      // Temperatura por PRECEDENCIA (de mas fuerte a mas debil):
+      //   1. settings.temperature  — override humano de este turno (efimero)
+      //   2. child.temperatura     — naturaleza DECLARADA de la pagina
+      //   3. parent.temperatura    — default del SUBSISTEMA (el padre del blueprint)
+      //   4. 0.7                   — fallback global
+      // Asi una pagina creativa corre caliente y una exacta fria sin que el
+      // humano lo pida; un subsistema fija su tono por defecto y cada pagina lo
+      // afina; y el override por mensaje gana cuando hace falta.
+      temperature: settings?.temperature
+        ?? blueprintCtx?.child?.temperatura
+        ?? blueprintCtx?.parent?.temperatura
+        ?? 0.7,
       // Suelo de 4096: las paginas blueprint (recetario) generan respuestas
       // largas (crear receta + estructura + preguntas) que se cortaban con el
       // viejo tope de 2000. Floor en vez de default para subir tambien las

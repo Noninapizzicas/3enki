@@ -3,7 +3,9 @@
 
   "id": "tecnicas",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.1.1",
+  "version": "blueprint-1.2.0",
+  "_temperatura_doc": "Pagina FRIA: custodio del catalogo de tecnicas con sus parametros tecnicos (temperaturas, tiempos, ratios) — 'sin razonamiento de dominio mas alla de normalizar inputs y prevenir duplicados'. Los parametros son DATOS exactos; inventar aqui corrompe el catalogo. ai-gateway la usa como default del turno.",
+  "temperatura": 0.3,
   "language": "es",
 
   "rol": "Aggregate root del catalogo de tecnicas culinarias del proyecto. Custodio del dato canonico de cada tecnica con sus parametros tecnicos. Sin razonamiento de dominio mas alla de normalizar inputs en lenguaje natural y prevenir duplicados.",

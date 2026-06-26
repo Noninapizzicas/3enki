@@ -229,7 +229,9 @@ export function addMessage(message: Message): void {
           { ...lastMsg, content: message.content, streaming: true }
         ];
       } else {
-        // Mensaje final (sin streaming): finalizar el mensaje existente con datos completos
+        // Mensaje final (sin streaming): finalizar el mensaje existente con datos completos.
+        // El push final trae la metadata (provider/model) que los chunks de streaming
+        // no llevaban -> la fijamos aqui para que el icono refleje el modelo en vivo.
         return [
           ...msgs.slice(0, lastIdx),
           {
@@ -237,6 +239,7 @@ export function addMessage(message: Message): void {
             id: message.id || lastMsg.id,
             content: message.content || lastMsg.content,
             timestamp: message.timestamp || lastMsg.timestamp,
+            metadata: message.metadata || lastMsg.metadata,
             streaming: false
           }
         ];
@@ -460,7 +463,11 @@ export function initChatSubscriptions(): () => void {
       content: data.content,
       timestamp: data.timestamp || new Date().toISOString(),
       streaming: data.streaming,
-      attachments: data.attachments
+      attachments: data.attachments,
+      // El push del backend trae metadata.provider (modelo que respondio): la
+      // pasamos para que el icono del mensaje sea el del modelo en VIVO, sin
+      // esperar a refrescar la pagina (que es lo unico que re-leia metadata).
+      metadata: data.metadata
     });
 
     // El push del assistant marca el final del turno: el indicador de

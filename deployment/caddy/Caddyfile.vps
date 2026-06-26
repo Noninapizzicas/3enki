@@ -52,6 +52,17 @@ pizzepos.es {
 		reverse_proxy localhost:3000
 	}
 
+	# Glovo — webhook de pedidos (Partner API, order dispatch).
+	# Ruta pública limpia que reescribe al módulo interno cuentas-canales,
+	# mismo patrón que `/tienda/*` → tienda-api (no filtra el nombre del módulo).
+	#   Glovo registra: https://pizzepos.es/glovo/webhook/<project>
+	#   → reescribe a /modules/cuentas-canales/glovo/webhook/<project> (localhost:3000)
+	# El handler valida el token estático (cabecera) antes de procesar.
+	handle /glovo/* {
+		rewrite * /modules/cuentas-canales{path}
+		reverse_proxy localhost:3000
+	}
+
 	# (NUEVO subsistema-tienda v1.0.0) — PWA pública por proyecto en `/shop/<slug>`.
 	# Sirve archivos estáticos desde /opt/enki/public/shop/<slug>/ donde cada
 	# subdirectorio es un symlink creado por project-manager al activar la

@@ -2,7 +2,8 @@
   "_doc": "Blueprint del modulo carta-marketing. Hijo de subsistema-recetario.modulo-base. Identidad de marca del proyecto, SIN agentes. El LLM de PAGINA conduce la entrevista de marca (completar_onboarding) y redacta el copy (generar_copy); el REFLEJO (index.js) persiste (update_perfil, guardar_copy). 4 operaciones: get_perfil, update_perfil, completar_onboarding, generar_copy.",
   "id": "carta-marketing",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.13.0",
+  "version": "blueprint-1.14.0",
+  "_v1_14_changelog": "v1.14.0 (2026-06-26): update_perfil.input documentaba claves PLANAS legacy (nombre_marca/tono_voz/diferenciacion/...) cuando el esquema canonico (marca.schema.json) y todos los lectores (get_perfil, carta-design, carta-digital) usan el ANIDADO (esencia/voz/publico/visual/negocio). Un caller que siguiera el doc escribia donde nadie lee -> marca 'vacia' permanente. Alineado el doc al anidado. completar_onboarding ya escribia anidado (no cambia).",
   "_v1_13_changelog": "v1.13.0 (2026-06-26): FIX raiz de 'no tienes ninguna carta creada' / 'el modulo de cartas no responde' con cartas existentes. bus.publishAndWait DEVUELVE SIEMPRE { request_id, status, data }; generar_copy desenvolvia .data de forma INCONSISTENTE (carta.get leia c.data.productos OK, pero carta.list iteraba 'cartas' pelado -> recorria el envoltorio, 0 metas -> falso negativo; get_perfil leia 'perfil' pelado). Ahora lee SIEMPRE por .data (perfil.data, lista.data, c.data) y ENHEBRA el carta_id resuelto en el bucle hasta guardar_copy (antes usaba input.carta_id, que viene vacio -> el copy se guardaba con carta_id:null, desligado).",
   "_temperatura_doc": "Pagina CREATIVA: redacta copy en voz de marca -> caliente. ai-gateway la usa como default de temperatura del turno (settings.temperature del humano gana por encima; fallback global 0.7).",
   "temperatura": 0.85,
@@ -72,7 +73,7 @@
       "_descripcion": "DELEGA al reflejo JS (index.js). Lee /pizzepos/marca.json. Determinista, sin turno LLM."
     },
     "update_perfil": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, campos (req — object con nombre_marca?, lema?, tono_voz?, valores?, publico_objetivo?, diferenciacion?, restricciones?, idiomas?) }",
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, campos (req — parche por SECCION del esquema ANIDADO canonico (marca.schema.json): { esencia?: { nombre, lema, proposito, valores[] }, voz?: { tono[], registro, no[] }, publico?: { quien, actitud }, visual?: { colores{}, tipografias{}, estilo, logo }, negocio?: { tipo_cocina, local{ direccion?, telefono?, horario?, ciudad?, barrio? }, redes{} }, onboarding_completado? }. Deep-merge por seccion. NO uses claves planas legacy (nombre_marca/tono_voz/...) — los lectores leen las anidadas.) }",
       "pseudocodigo": [
         "async update_perfil(input):",
         "  if (!input.project_id || !input.campos) return INVALID_INPUT { field: 'campos' }",

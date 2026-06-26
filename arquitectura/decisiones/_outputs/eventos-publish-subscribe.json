@@ -429,6 +429,10 @@
     "carta-marketing.update_perfil.request": {
       "publishers": [
         {
+          "source": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+          "ref": "operaciones.pseudocodigo"
+        },
+        {
           "source": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
           "ref": "operaciones.pseudocodigo"
         }

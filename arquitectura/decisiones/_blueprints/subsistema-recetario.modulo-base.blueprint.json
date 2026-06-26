@@ -2,7 +2,8 @@
   "_doc": "Blueprint ABSTRACTO del subsistema-recetario (tambien reutilizado por la linea carta-manager/scheduler/digital/design/impresion/marketing por compatibilidad de modelo). Captura lo comun a todos los modulos blueprint-driven que dependen de este padre. Cada modulo concreto extiende este declarando solo su delta. El LLM lee la jerarquia (padre + hijo) como su system prompt — el blueprint ES el modulo, no hay codigo JS auxiliar. Tambien declara la disciplina_del_llm_runtime: reglas operativas que el LLM debe respetar al ejecutar cualquier hijo (evita perderse, distraerse, inventar datos).",
 
   "id": "subsistema-recetario.modulo-base",
-  "version": "blueprint-0.8.0",
+  "version": "blueprint-0.9.0",
+  "_v0_9_changelog": "v0.9.0 (2026-06-26): + disciplina 8b_lee_el_resultado_por_data — invariante de que publishAndWait devuelve { request_id, status, data } y se lee SIEMPRE por .data. Cura de raiz la clase de fallo 'no hay nada' con datos existentes (carta-marketing generar_copy iteraba el envoltorio en vez de .data). Lo declara el PADRE una vez para todos los hijos en vez de vivir en cada linea de pseudocodigo.",
   "_temperatura_doc": "Default de temperatura del SUBSISTEMA (lo lee ai-gateway como parent.temperatura, por debajo de la child.temperatura de cada pagina y del override humano). 0.4 = templado-fiel: el subsistema es custodio de datos (CRUD/versionado/normalizacion), donde inventar es el enemigo; las paginas creativas (marketing/design/digital) suben, las exactas (escandallo/viabilidad) bajan. Una pagina hija que no declare temperatura cae aqui antes que al 0.7 global.",
   "temperatura": 0.4,
   "abstract": true,
@@ -55,6 +56,12 @@
     "8_correlacion_request_id": {
       "principio": "Cada publishAndWait que TU hagas usa un request_id NUEVO generado con uuid(). NO reutilizas el request_id del caller. El correlation_id SI se propaga del caller en cada evento que emitas.",
       "anti_patron": "Reutilizar el request_id del caller en publishAndWait downstream — confunde la correlacion del bus."
+    },
+
+    "8b_lee_el_resultado_por_su_envoltorio": {
+      "principio": "publishAndWait DEVUELVE un envoltorio, NUNCA el contenido pelado. Lee SIEMPRE por el campo correcto del envoltorio segun el tipo de RPC: (a) RPC de DOMINIO '<dominio>.<op>.request' (carta.*, recetas.*, contenido.*, viabilidad.*, escandallo.*, carta-marketing.*, media.*, ...) -> { request_id, status, data } -> el contenido esta en .data (r.data, r.data.productos, para cada x de r.data); (b) fs.read.request -> { status, content } -> el texto esta en .content (JSON.parse(r.content)); (c) fs.list.request -> { files: [...] } -> los nombres en .files; (d) fs.edit/fs.write -> { status } (sin payload). Comprueba r.status antes de usar el contenido.",
+      "anti_patron": "Leer o iterar el resultado PELADO: 'para cada meta de cartas' cuando cartas=publishAndWait('carta.list.request') recorre {request_id,status,data} (3 claves) y encuentra 0 metas -> falso negativo ('no hay nada') con datos existentes. O 'perfil.voz' cuando el dominio devuelve la voz en perfil.data.voz. UNA lectura inconsistente (una linea con .data y la de al lado sin el) convierte el turno en una loteria de muestreo que se magnifica en confabulacion ('el modulo no responde').",
+      "ejemplo": "lista = await publishAndWait('carta.list.request', {project_id})   // dominio -> { status, data:[metas] }\\n      para cada meta de LISTA.DATA: ...   // .data, no 'lista'\\n      c = await publishAndWait('carta.get.request', {...})   // dominio -> { status, data:{meta,productos} } -> C.DATA.productos\\n      raw = await publishAndWait('fs.read.request', {path})   // fs -> { status, content } -> JSON.parse(RAW.CONTENT)"
     },
 
     "9_response_unico_por_invocacion": {

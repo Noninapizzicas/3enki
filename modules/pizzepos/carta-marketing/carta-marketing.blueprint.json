@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo carta-marketing. Hijo de subsistema-recetario.modulo-base. Identidad de marca del proyecto, SIN agentes. El LLM de PAGINA conduce la entrevista de marca (completar_onboarding) y redacta el copy (generar_copy); el REFLEJO (index.js) persiste (update_perfil, guardar_copy). 4 operaciones: get_perfil, update_perfil, completar_onboarding, generar_copy.",
   "id": "carta-marketing",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.10.0",
+  "version": "blueprint-1.11.0",
   "_v1_2_changelog": "v1.2.0 (2026-06-01): aplica contrato subsistema-carta v1.0.3. correlation_id obligatorio en los 3 publishes --garantizado con uuid() via correlation_id_efectivo si input no trae. NO cambia paths (ya canonicos). NO modifica operaciones funcionales ni delegacion a agentes.",
   "language": "es",
   "rol": "Identidad de marca del proyecto. SIN agentes: el LLM de PAGINA (este blueprint) conduce la entrevista de marca y redacta el copy en la voz de marca; el REFLEJO (index.js) persiste (perfil + copy). Dos capas: fuzzy en el LLM de pagina, determinista en JS.",
@@ -126,6 +126,18 @@
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
         "  // 1. Lee la voz de marca.",
         "  perfil = await publishAndWait('carta-marketing.get_perfil.request', { project_id: input.project_id })",
+        "  // 1.5. LEER los productos. Si te dieron input.productos CON ingredientes, usalos.",
+        "  //      Si solo tienes un id/nombre (p.ej. 'Hip Hop' / 'pizzas_hip-hop'), BUSCALO en el",
+        "  //      proyecto: LISTA TODAS las cartas — incluidos BORRADORES — y lee la que lo contenga.",
+        "  //      Un borrador es una carta VALIDA para redactar su copy (es la carta en preparacion).",
+        "  if (algun producto te llega sin ingredientes):",
+        "    cartas = await publishAndWait('carta.list.request', { project_id: input.project_id })   // TODAS, incl. estado='borrador'",
+        "    para cada meta de cartas (empieza por las no archivadas):",
+        "      c = await publishAndWait('carta.get.request', { project_id: input.project_id, carta_id: meta.id })",
+        "      si c.data.productos contiene tu producto (por id o nombre): coge sus ingredientes y fija carta_id = meta.id ; corta",
+        "  // INVARIANTE: NUNCA afirmes 'no tienes ninguna carta creada' sin haber mirado carta.list.",
+        "  //   Si la unica carta esta en borrador, USALA y redacta; como mucho sugiere activarla DESPUES.",
+        "  //   Solo si carta.list vuelve REALMENTE vacia ofreces crear una.",
         "  // 2. REDACTA tu (LLM) el copy en esa voz: una descripcion por producto (+ emoji + tags),",
         "  //    un preambulo de cabecera, y unas promos. Solo lo que pida input.pedir (o los tres).",
         "  //    PROHIBIDO INVENTAR ingredientes/precios/ofertas: describe lo que hay en los productos.",
@@ -135,7 +147,9 @@
       ],
       "reglas_clave": [
         "El LLM de PAGINA redacta el copy en la voz de marca; el reflejo SOLO lo persiste (guardar_copy). No hay agente.",
-        "PROHIBIDO inventar datos del producto (ingredientes, precios, premios) ni ofertas/descuentos concretos."
+        "PROHIBIDO inventar datos del producto (ingredientes, precios, premios) ni ofertas/descuentos concretos.",
+        "Para conseguir los ingredientes de un producto del que solo tienes id/nombre: LISTA TODAS las cartas (carta.list.request — incluye BORRADORES) y lee la que lo contenga (carta.get.request). Un borrador es una carta valida para su copy.",
+        "NUNCA digas que no hay ninguna carta sin haber mirado carta.list. Si la unica esta en borrador, usala; ofrecer crear una solo si carta.list vuelve de verdad vacia."
       ],
       "errores_posibles": [
         "INVALID_INPUT",
@@ -181,5 +195,6 @@
   "_v1_7_changelog": "v1.7.0 (2026-06-12): onboarding a perspectiva-C INTERACTIVA (skill agente-perspectiva-c). Nuevo cajon avanzar_onboarding = un turno de la entrevista: el reflejo LEE el perfil (get_perfil) e invoca al agente marketing-onboarding SIN tools {perfil,mensaje} -> {persistir,pregunta,completado}, y ESCRIBE el parche via update_perfil (deep-merge). completar_onboarding pasa de launcher (que recomponia el fichero entero con fs.write/fs.edit) a simple KICKOFF (primer turno, mensaje=null). La pagina conduce el bucle llamando avanzar_onboarding con cada respuesta. Mata el teatro: el agente ya no llama update_perfil como tool-call que no ejecutaba bajo deepseek; ahora el reflejo persiste de verdad. Emite marketing.onboarding.avanzado.",
   "_v1_8_changelog": "v1.8.0 (2026-06-12): SIN capa de agentes. Se quita la dependencia de los agentes marketing-onboarding/copywriter (aparcados). Modelo de DOS capas: el LLM de PAGINA (este blueprint) conduce la entrevista y redacta el copy; el REFLEJO (index.js) solo persiste. (1) completar_onboarding deja de delegar en el agente: el LLM de pagina entrevista turno a turno y persiste cada respuesta via update_perfil (PROHIBIDO inventar). (2) avanzar_onboarding ELIMINADO (era el cajon que invocaba al agente por turno). (3) generar_copy deja de invocar al agente: el LLM de pagina redacta el copy en la voz de marca y lo guarda via el nuevo guardar_copy (reflejo, solo persiste). Quita la fragilidad del segundo LLM (sub-agente ciego al hilo, bucle discrecional) y el tool-use roto: un solo cerebro por turno (el de pagina, que ya tiene el hilo) + JS determinista.",
   "_v1_9_changelog": "v1.9.0 (2026-06-12): onboarding COMPLETO. completar_onboarding deja de cubrir solo esencia/voz/publico: ahora la entrevista recorre TODAS las fases — A.MARCA (nombre/lema/proposito/valores), B.PERSONALIDAD (voz.tono/registro/no), C.PUBLICO, D.IMAGEN/VISUAL (logo + colores + diseno/estilo), E.NEGOCIO (cocina/local/redes) — y persiste cada dato en su seccion via update_perfil. La seccion visual pasa a tener dueno COMPARTIDO: el onboarding capta el inicial (logo/colores/diseno que diga el comerciante), carta-design lo REFINA. Nota: extraer la paleta automaticamente desde la imagen del logo es capacidad aparte (pipeline de imagen, pendiente); por ahora se pregunta/confirma. onboarding_completado sigue cerrando con esencia.nombre+voz+publico (imagen/negocio se afinan despues, no bloquean).",
-  "_v1_10_changelog": "v1.10.0 (2026-06-12): ESTRUCTURA DE GUARDADO documentada y anti-duplicacion. estado_persistente.estructura_de_guardado fija el sitio de cada salida: marca.json (BASE, identidad), carta-marketing/copy.json (copy), carta-marketing/assets/logo.<ext> (FICHERO del logo; visual.logo guarda la RUTA, nunca base64), y los futuros posts.json/promociones.json/estrategia.json. Reglas anti_duplicacion: marca SOLO en /pizzepos/marca.json (el viejo /config/marca.json es huerfano de la migracion v1.4, nadie lo lee, pendiente limpiar en disco); el logo es UN fichero; un tipo de salida = un fichero de nombre fijo (sin copias por timestamp). El onboarding ya escribe el logo como fichero y guarda su ruta."
+  "_v1_10_changelog": "v1.10.0 (2026-06-12): ESTRUCTURA DE GUARDADO documentada y anti-duplicacion. estado_persistente.estructura_de_guardado fija el sitio de cada salida: marca.json (BASE, identidad), carta-marketing/copy.json (copy), carta-marketing/assets/logo.<ext> (FICHERO del logo; visual.logo guarda la RUTA, nunca base64), y los futuros posts.json/promociones.json/estrategia.json. Reglas anti_duplicacion: marca SOLO en /pizzepos/marca.json (el viejo /config/marca.json es huerfano de la migracion v1.4, nadie lo lee, pendiente limpiar en disco); el logo es UN fichero; un tipo de salida = un fichero de nombre fijo (sin copias por timestamp). El onboarding ya escribe el logo como fichero y guarda su ruta.",
+  "_v1_11_changelog": "v1.11.0 (2026-06-26): generar_copy NO niega cartas en borrador. Caso real (nonina, gemini-2.5-pro): se pidio el copy de Hip Hop (pizzas_hip-hop) por id; el LLM fue a buscar sus ingredientes, solo miro cartas ACTIVAS, y dijo \"no tienes ninguna carta creada\" — FALSO: existia Carta 4 (borrador, 15 productos, Hip Hop con 6 ingredientes). FIX: paso LEER explicito — si un producto llega sin ingredientes, LISTA carta.list (TODAS, incl. borrador) + carta.get de la que lo contenga; INVARIANTE: nunca afirmar que no hay carta sin mirar carta.list; un borrador es valido para redactar su copy. Solo si carta.list vuelve vacia se ofrece crear una."
 }

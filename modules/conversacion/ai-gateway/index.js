@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DeepSeekProvider  = require('./providers/deepseek-provider');
+const DeepSeekAnthropicProvider = require('./providers/deepseek-anthropic-provider');
 const AnthropicProvider = require('./providers/anthropic-provider');
 const OpenAIProvider    = require('./providers/openai-provider');
 const GroqProvider      = require('./providers/groq-provider');
@@ -228,6 +229,7 @@ class AiGatewayModule extends BaseModule {
   async _initializeProviders() {
     const classes = {
       deepseek: DeepSeekProvider,
+      'deepseek-anthropic': DeepSeekAnthropicProvider,
       anthropic: AnthropicProvider,
       openai: OpenAIProvider,
       groq: GroqProvider,

@@ -1238,7 +1238,7 @@ class AiGatewayModule extends BaseModule {
   // Nervio de MEMORIA (profile): tira los hechos acumulados del usuario (memoria
   // entre conversaciones). PULL — sustituye al push. Best-effort, timeout corto.
   // Devuelve array de facts (no vacio) o null.
-  async _leerPerfil(project_id, user_id) {
+  async _leerPerfil(project_id, user_id, query) {
     if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
     const request_id = crypto.randomUUID();
     const timeoutMs = this.config.memoria_timeout_ms || 2000;
@@ -1255,7 +1255,8 @@ class AiGatewayModule extends BaseModule {
           const facts = payload?.data?.facts || payload?.facts || null;
           resolve(Array.isArray(facts) && facts.length > 0 ? facts : null);
         });
-        this.eventBus.publish('memory.profile.leer', { request_id, project_id, user_id });
+        // query = mensaje actual → profile devuelve los facts top-K pertinentes (no los 200)
+        this.eventBus.publish('memory.profile.leer', { request_id, project_id, user_id, query: query || '' });
       } catch (_) {
         clearTimeout(timeout);
         if (unsub) unsub();
@@ -1999,7 +2000,10 @@ class AiGatewayModule extends BaseModule {
     // PULL best-effort. No requiere conversation_id (es a nivel de usuario).
     if (project_id && user_id && !context?.async_invocation) {
       try {
-        const facts = await this._leerPerfil(project_id, user_id);
+        // el mensaje actual (ultimo de messages) gobierna el top-K de facts pertinentes
+        const ultimoMsg = Array.isArray(messages) && messages.length
+          ? messages[messages.length - 1]?.content : '';
+        const facts = await this._leerPerfil(project_id, user_id, typeof ultimoMsg === 'string' ? ultimoMsg : '');
         if (facts) {
           const seccion = this._composePerfilSection(facts);
           effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;

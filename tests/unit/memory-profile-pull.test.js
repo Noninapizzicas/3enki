@@ -65,6 +65,36 @@ test('onLeerRequest publica memory.profile.leer.response correlado', async () =>
   assert.deepStrictEqual(resp.payload.data.facts, ['el usuario prefiere food cost bajo']);
 });
 
+test('top-K: con <= cap facts los devuelve todos (sin recortar)', async () => {
+  const { m } = nuevoProfile([{ fact: 'el usuario es vegano' }, { fact: 'el usuario se llama Nonina' }]);
+  m.config = { facts_in_prompt: 12 };
+  const res = await m.handleLeer({ project_id: 'p1', user_id: 'u1', query: 'cualquier cosa' });
+  assert.strictEqual(res.data.count, 2);
+});
+
+test('top-K: con > cap facts elige los PERTINENTES al mensaje (solapamiento)', async () => {
+  const facts = [
+    { fact: 'al usuario le gusta el futbol' },
+    { fact: 'el usuario trabaja en marketing' },
+    { fact: 'al usuario le encanta la pizza margarita' }
+  ];
+  const { m } = nuevoProfile(facts);
+  m.config = { facts_in_prompt: 1 }; // fuerza el recorte a 1
+  const res = await m.handleLeer({ project_id: 'p1', user_id: 'u1', query: '¿calorias de la pizza margarita?' });
+  assert.strictEqual(res.data.count, 1);
+  assert.ok(/margarita/.test(res.data.facts[0]), `eligió el irrelevante: ${res.data.facts[0]}`);
+  assert.strictEqual(res.data.total, 3, 'reporta el total guardado');
+});
+
+test('top-K: sin solapamiento, desempata por recencia (el más nuevo)', async () => {
+  const facts = [{ fact: 'dato viejo uno' }, { fact: 'dato viejo dos' }, { fact: 'dato nuevo tres' }];
+  const { m } = nuevoProfile(facts); // rows en orden ASC → el último es el más reciente
+  m.config = { facts_in_prompt: 1 };
+  const res = await m.handleLeer({ project_id: 'p1', user_id: 'u1', query: 'hola' });
+  assert.strictEqual(res.data.count, 1);
+  assert.ok(/nuevo tres/.test(res.data.facts[0]), `no eligió el más reciente: ${res.data.facts[0]}`);
+});
+
 test('ai-gateway: _composePerfilSection es silenciosa y lista los facts', () => {
   const g = new AiGateway();
   const s = g._composePerfilSection(['el usuario es vegano', 'el usuario se llama Nonina']);

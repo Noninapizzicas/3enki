@@ -1,6 +1,7 @@
 {
   "name": "memory-user-profile",
-  "version": "2.1.0",
+  "version": "2.2.0",
+  "_v2_2_nota": "v2.2.0: top-K por relevancia. En vez de volcar los 200 facts cada turno (dump-all), handleLeer recibe el mensaje actual (query) y devuelve los `facts_in_prompt` (12) mas PERTINENTES por solapamiento de palabras, con recencia como desempate. Determinista, sin embeddings ni red (filosofia reflejo). Baja la meseta de peso por mensaje sin perder los facts que importan. Sin query o con <=12 facts: devuelve todos / los mas recientes.",
   "_v2_1_nota": "v2.1.0: entrega por PULL (slice 2/3). El push (chat.context.enriched) perdía la carrera contra chat.prompt.ready. Ahora ai-gateway TIRA los facts en _executeLLM vía memory.profile.leer -> .response (patrón propiocepción). Extracción y persistencia de hechos sin cambios; solo cómo aterriza. Push conservado inerte. (Pendiente: gating por relevancia top-K en vez de dump-all, ver análisis.)",
   "description": "Memoria modular del companero. Acumula hechos sobre el usuario extraidos via heuristicas regex (es) de cada chat.message.saved y los inyecta en cada chat.prompt.ready via chat.context.enriched (priority 100). Primer modulo de memoria modular del subsistema — demuestra que añadir memorias futuras (memory-rag, memory-long-term, memory-project-knowledge) no requiere tocar prompt-builder.",
   "author": "Event Core Team",
@@ -51,6 +52,7 @@
     "enabled": true,
     "priority_in_prompt": 100,
     "max_facts_per_user": 200,
+    "facts_in_prompt": 12,
     "min_fact_length": 4,
     "db_timeout_ms": 10000,
     "persistence": {

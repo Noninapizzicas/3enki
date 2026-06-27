@@ -1,71 +1,59 @@
 /**
- * vista-bridge — refleja en vistaActual la SELECCIÓN de la página activa.
+ * vista-bridge — escritor ÚNICO de vistaActual.
  *
- * Central y ADITIVO: no toca ningún panel. Mira la ruta (SvelteKit `page`) + el store
- * de selección de esa página (o el propio param de la URL) y compone la vista que el
- * chat manda al LLM en `context`. Al cambiar de página la vista se recompone sola.
+ * Observa la ruta (SvelteKit `page`) + los stores registrados y recompone la
+ * vista de la página activa desde el registro (vista-registry). Sustituye al
+ * antiguo switch monolítico: cada página aporta su descriptor; el bridge solo
+ * orquesta.
  *
- * Extender a otra página = añadir un `case`. Si una página no tiene selección, la vista
- * queda vacía (el `page_id` ya viaja aparte; la vista carga solo el EXTRA: qué hay elegido).
+ * Leak-safe por construcción: solo compone la entry de la ruta actual, así que
+ * la selección de una página no puede filtrarse a la vista de otra; y recompone
+ * en cada cambio de ruta, de modo que una vista vieja no se acumula (no hace
+ * falta que las páginas "limpien" — eso mató a clearVista).
  *
- * Best-effort: si un campo no existe, queda undefined — nunca rompe el turno ni la UI.
+ * Best-effort: ruta sin descriptor → vista vacía (seguro, nunca info errónea).
+ * El chat solo vive en páginas project-scoped (/[project_id]/<page>/<sub?>),
+ * por eso route = parts[1].
  */
-
-import { derived } from 'svelte/store';
+import { get } from 'svelte/store';
 import { page } from '$app/stores';
-import { setVista, type Vista } from './vista-actual';
-import { selectedReceta } from './recetas';
-import { selectedFactura } from './facturas';
-import { selectedDevice } from './dispositivos';
-import { cartaDesignStore } from './carta-design';
-import { categoriaActiva as cartaCategoria } from './carta';
-import { vistaActiva as llevadooVista, categoriaActiva as llevadooCategoria } from './llevadoo';
-
-const vistaSrc = derived(
-  [page, selectedReceta, selectedFactura, selectedDevice, cartaDesignStore, cartaCategoria, llevadooVista, llevadooCategoria],
-  ([$page, $receta, $factura, $device, $design, $cartaCat, $llevVista, $llevCat]): Vista => {
-    // /[project_id]/<page>/<sub?>...  → parts[1]=page, parts[2]=sub (p.ej. cuenta_id)
-    const parts = ($page?.url?.pathname || '').split('/').filter(Boolean);
-    const route = parts[1] || '';
-    const sub = parts[2] || null;
-    switch (route) {
-      case 'recetas':
-        return $receta ? { page: route, receta_id: $receta.id, receta_nombre: $receta.nombre } : {};
-      case 'facturas':
-        return $factura ? { page: route, factura_id: $factura.id } : {};
-      case 'dispositivos':
-        return $device ? { page: route, device_id: $device.device_id } : {};
-      case 'carta-design':
-        return $design?.cartaId
-          ? { page: route, carta_id: $design.cartaId, carta_nombre: $design.cartaNombre }
-          : {};
-      case 'comandero':
-        // La cuenta abierta viene en la URL: /comandero/<cuenta_id>.
-        return sub ? { page: route, cuenta_id: sub } : { page: route };
-      case 'carta':
-        return $cartaCat ? { page: route, categoria_activa: $cartaCat } : {};
-      case 'llevadoo':
-        return ($llevVista || $llevCat)
-          ? { page: route, vista: $llevVista ?? undefined, categoria_activa: $llevCat ?? undefined }
-          : {};
-      default:
-        return {};
-    }
-  }
-);
+import { setVista } from './vista-actual';
+import { getEntry, allStores, onRegistryChange } from './vista-registry';
+import './vista-registrations'; // side-effect: dispara los registrarVista de cada página
 
 let started = false;
-let unsub: (() => void) | null = null;
+const unsubs: Array<() => void> = [];
+
+function recompute(): void {
+  const parts = (get(page)?.url?.pathname || '').split('/').filter(Boolean);
+  const route = parts[1] || '';
+  const sub = parts[2] || null;
+  const entry = getEntry(route);
+  if (!entry) {
+    setVista({});
+    return;
+  }
+  setVista(entry.compose(entry.stores.map((s) => get(s)), { route, sub }));
+}
+
+function wire(): void {
+  // (re)suscribe: page + todos los stores registrados. Re-llamado cuando una
+  // página lazy registra su descriptor (onRegistryChange).
+  while (unsubs.length) unsubs.pop()!();
+  unsubs.push(page.subscribe(recompute));
+  for (const s of allStores()) unsubs.push(s.subscribe(recompute));
+}
 
 /** Arranca el puente (en LazyShell.onMount). Idempotente. */
 export function initVistaBridge(): () => void {
   if (started) return () => {};
   started = true;
-  unsub = vistaSrc.subscribe((v) => setVista(v));
+  wire();
+  const offReg = onRegistryChange(wire);
   return () => {
     started = false;
-    unsub?.();
-    unsub = null;
+    offReg();
+    while (unsubs.length) unsubs.pop()!();
     setVista({});
   };
 }

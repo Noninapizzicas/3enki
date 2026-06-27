@@ -2,15 +2,16 @@
  * vista-actual — lo que el usuario está VIENDO en el frontend ahora mismo.
  *
  * Hermano del nervio propioceptivo: la propiocepción le cuenta al LLM lo que PASÓ
- * (eventos de dominio); esto le cuenta lo que SE VE (estado de la página). Las
- * páginas/paneles lo rellenan (setVista) al seleccionar/abrir algo; el chat
- * (sendMessage) lo lee y lo manda en el campo `context` de conversation.send. El
- * backend ya lo inyecta en el system prompt (prompt-builder → "CONTEXTO ACTIVO"),
- * así que no hace falta tocar el bus: solo enchufar el origen.
+ * (eventos de dominio); esto le cuenta lo que SE VE (ids + nombres de lo que tiene
+ * seleccionado/abierto). El chat (sendMessage) lo lee con getVista() y lo manda en
+ * `context.vista_frontend`; el backend lo inyecta en el system prompt
+ * (prompt-builder → "LO QUE EL USUARIO ESTÁ VIENDO").
  *
- * Contrato: cada página REEMPLAZA su vista (setVista) al entrar/seleccionar y la
- * LIMPIA (clearVista) al salir, para que una vista vieja no se filtre cuando el
- * usuario navega a otra página.
+ * Un solo ESCRITOR: vista-bridge (compositor central), que recompone esta store
+ * desde el registro (vista-registry) en cada cambio de ruta/selección. Las páginas
+ * NO tocan esta store — solo mantienen su propio store de selección y registran su
+ * descriptor. El "limpiado" al salir lo hace el bridge recomponiendo (ruta sin
+ * entry → {}), por eso no hay clearVista: una vista vieja no puede acumularse.
  */
 
 import { writable, get } from 'svelte/store';
@@ -19,17 +20,12 @@ export type Vista = Record<string, unknown>;
 
 export const vistaActual = writable<Vista>({});
 
-/** Reemplaza la vista actual (cada página es dueña de la suya). */
+/** Reemplaza la vista actual. Único caller legítimo: vista-bridge. */
 export function setVista(vista: Vista): void {
   vistaActual.set(vista || {});
 }
 
-/** Limpia la vista (al salir de la página). */
-export function clearVista(): void {
-  vistaActual.set({});
-}
-
-/** Lectura puntual (la usa chat.sendMessage). */
+/** Lectura puntual de la vista (la usa chat.sendMessage). */
 export function getVista(): Vista {
   return get(vistaActual);
 }

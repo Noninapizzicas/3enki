@@ -1,6 +1,7 @@
 {
   "name": "ai-gateway",
-  "version": "2.11.0",
+  "version": "2.12.0",
+  "_v2_12_nota": "v2.12.0: deepseek pasa a DEFAULT (priority 8 -> 1; rotación limpia: kimi 1->2 y el resto +1, sin colisiones). Habilitado por la migración v2.11 (modelos vivos) + la confirmación de que su tool-use es completo y correcto (correlaciona por tool_call_id). Motivo: encaje estructural — los system prompts de cajones son enormes y se repiten turno a turno, y el KV cache automático de deepseek tumba el input ~-98% en los hits (deepseek-v4-flash es además el provider más barato). El humano sigue pudiendo elegir cualquier provider por conversación; esto solo cambia el AUTO-seleccionado cuando no se pide ninguno. La etiqueta 'tool-use roto' que lo tenía en priority 8 estaba caduca (misma historia que gemini). Verificación en vivo del loop de cajones: pendiente de smoke read-only.",
   "_v2_11_nota": "v2.11.0: MIGRACIÓN deepseek a modelos vivos. DeepSeek discontinúa los nombres `deepseek-chat` y `deepseek-coder` el 2026-07-24 15:59 UTC; el provider los tenía como default_model y como literal en la rama de visión -> el 24/07 deepseek se habría caído entero. Config: default_model `deepseek-chat` -> `deepseek-v4-flash` (= lo que deepseek-chat era, modo no-thinking); models list pasa a [v4-flash, v4-pro, reasoner]. Provider: nuevo resolveModel() normaliza nombres legacy GUARDADOS (deepseek-chat/coder -> default_model) para que una conversación vieja no se caiga, y colapsa el literal muerto de visión (v4-flash unifica texto+visión; antes ambos caían a deepseek-chat = no-op). El tool-use de deepseek es completo y correcto (correlaciona por tool_call_id, sin el bug de nombre de gemini): la etiqueta 'tool-use roto' que lo dejó en priority 8 estaba caduca — la PRIORIDAD no se toca aquí (es decisión de operación). deepseek-reasoner se conserva mientras viva (único camino thinking documentado). Test: deepseek__resolve-model.",
   "_v2_10_nota": "v2.10.0: guarda en caliente para cajones. Al abrir un cajon, si su pseudocodigo llama a un helper interno _xxx(...) que existe como operacion del blueprint pero no viaja en `internas` (usa_internas incompleto), se loguea ai-gateway.cajon.internas_no_declaradas + metrica. No auto-incluye (respeta la declaracion explicita): enciende una luz para corregir el blueprint, convirtiendo una omision silenciosa en señal visible. Test: ai-gateway-cajones (guarda internas).",
   "_v2_9_nota": "v2.9.0: el pull de profile pasa el mensaje actual (ultimo de messages) como query → memory-user-profile devuelve los facts top-K pertinentes en vez de los 200 (baja la meseta de peso por turno). Cambio en _leerPerfil(.,.,query) + payload memory.profile.leer.query.",
@@ -151,7 +152,7 @@
     "providers": {
       "deepseek": {
         "enabled": true,
-        "priority": 8,
+        "priority": 1,
         "api_base": "https://api.deepseek.com/v1",
         "default_model": "deepseek-v4-flash",
         "models": [
@@ -162,7 +163,7 @@
       },
       "anthropic": {
         "enabled": true,
-        "priority": 2,
+        "priority": 3,
         "api_base": "https://api.anthropic.com",
         "default_model": "claude-sonnet-4-6",
         "models": [
@@ -174,7 +175,7 @@
       },
       "openai": {
         "enabled": true,
-        "priority": 3,
+        "priority": 4,
         "api_base": "https://api.openai.com/v1",
         "default_model": "gpt-4o-mini",
         "models": [
@@ -185,7 +186,7 @@
       },
       "groq": {
         "enabled": true,
-        "priority": 4,
+        "priority": 5,
         "api_base": "https://api.groq.com/openai/v1",
         "default_model": "llama-3.3-70b-versatile",
         "models": [
@@ -196,7 +197,7 @@
       },
       "gemini": {
         "enabled": true,
-        "priority": 5,
+        "priority": 6,
         "api_base": "https://generativelanguage.googleapis.com/v1beta/",
         "default_model": "gemini-2.5-flash",
         "models": [
@@ -206,7 +207,7 @@
       },
       "ollama": {
         "enabled": true,
-        "priority": 6,
+        "priority": 7,
         "api_base": "http://localhost:11434/api",
         "default_model": "llama2",
         "models": [
@@ -218,7 +219,7 @@
       },
       "claude-cli": {
         "enabled": true,
-        "priority": 7,
+        "priority": 8,
         "cli_path": "claude",
         "default_model": "sonnet",
         "models": [
@@ -229,7 +230,7 @@
       },
       "kimi": {
         "enabled": true,
-        "priority": 1,
+        "priority": 2,
         "api_base": "https://api.moonshot.ai",
         "default_model": "kimi-k2.6",
         "models": [

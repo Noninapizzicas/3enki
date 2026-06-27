@@ -54,6 +54,10 @@ class MemoryRagModule extends BaseModule {
     this.pendingEmbeddings = new Map();
     this.schemaReady = new Set();
     this.vectorCache = new Map();
+    // Stash del embedding del ultimo mensaje por conversacion. El pull (handleBuscar)
+    // reutiliza este vector para buscar SIN re-embeber en el turno (cero latencia
+    // de red en el camino del prompt). conversation_id -> { vector, message_id, ts }.
+    this.lastQuery = new Map();
   }
 
   async onLoad(context) {
@@ -83,6 +87,7 @@ class MemoryRagModule extends BaseModule {
     this.pendingEmbeddings.clear();
     this.schemaReady.clear();
     this.vectorCache.clear();
+    this.lastQuery.clear();
     this.logger?.info?.('memory-rag.unloaded', {});
   }
 
@@ -154,17 +159,14 @@ class MemoryRagModule extends BaseModule {
       await this._ensureCacheLoaded(project_id);
 
       const embedding = await this._requestEmbedding({
-        correlation_id, project_id, user_id, content: user_message, source: 'memory-rag.query'
+        correlation_id, project_id, user_id, content: user_message, source: 'memory-rag.index'
       });
       if (!embedding) return;
 
-      const candidates = this._getCacheBucket(project_id, user_id);
-      const topK = this._search(
-        embedding.vector,
-        candidates,
-        this.config.top_k || DEFAULT_TOP_K,
-        this.config.min_similarity || DEFAULT_MIN_SIMILARITY
-      );
+      // Stash del vector para el PULL (handleBuscar reusa este embedding → cero
+      // re-embedding en el turno). La BUSQUEDA se hace al pull, no aqui: el push
+      // perdia la carrera contra chat.prompt.ready.
+      this.lastQuery.set(conversation_id, { vector: embedding.vector, message_id, ts: Date.now() });
 
       await this._persistMessage(project_id, {
         id: crypto.randomUUID(),
@@ -175,27 +177,55 @@ class MemoryRagModule extends BaseModule {
       });
 
       this.metrics?.increment?.('memory-rag.indexed', { role: 'user' });
-
-      if (topK.length === 0) {
-        this.logger.debug('memory-rag.search.no_match', {
-          conversation_id, candidates: candidates.length
-        });
-        return;
-      }
-
-      this.metrics?.increment?.('memory-rag.context.enriched');
-      const snippet = this._formatSnippets(topK, this.config.snippet_max_chars || DEFAULT_SNIPPET_MAX_CHARS);
-      await this._publicarEvento('chat.context.enriched', {
-        conversation_id,
-        message_id,
-        source: 'memory-rag',
-        context_addition: `Mensajes previos relevantes (memoria semantica):\n${snippet}`,
-        priority: this.config.priority_in_prompt || DEFAULT_PRIORITY,
-        metadata: { matches: topK.length, max_similarity: topK[0].similarity }
-      }, { correlation_id, project_id });
     } catch (err) {
       this._handleHandlerError('memory-rag.message_saved.error', err);
     }
+  }
+
+  // ============================================================
+  // Lectura PULL — el nervio de ai-gateway la tira al construir el turno.
+  // Reusa el embedding stashed del ultimo mensaje (sin re-embeber): busca top-K
+  // en el cache de vectores del (project, user), excluyendo el propio mensaje.
+  // best-effort: si el embedding aun no esta listo (stash vacio) → sin matches.
+  // ============================================================
+
+  async handleBuscar(data) {
+    try {
+      const { project_id, user_id, conversation_id } = data || {};
+      if (!project_id || !user_id || !conversation_id) {
+        return this._errorResponse(400, 'INVALID_INPUT',
+          'project_id, user_id, conversation_id requeridos', { field: 'conversation_id' });
+      }
+      const stash = this.lastQuery.get(conversation_id);
+      if (!stash || !Array.isArray(stash.vector)) {
+        return { status: 200, data: { matches: 0, snippet: '' } };
+      }
+      await this._ensureSchema(project_id);
+      await this._ensureCacheLoaded(project_id);
+      const candidates = this._getCacheBucket(project_id, user_id)
+        .filter(c => c.message_id !== stash.message_id); // no matchearse a si mismo
+      const topK = this._search(
+        stash.vector, candidates,
+        this.config.top_k || DEFAULT_TOP_K,
+        this.config.min_similarity || DEFAULT_MIN_SIMILARITY
+      );
+      if (topK.length === 0) return { status: 200, data: { matches: 0, snippet: '' } };
+      const snippet = this._formatSnippets(topK, this.config.snippet_max_chars || DEFAULT_SNIPPET_MAX_CHARS);
+      return { status: 200, data: { matches: topK.length, snippet, max_similarity: topK[0].similarity } };
+    } catch (err) {
+      return this._handleHandlerError('memory-rag.buscar.failed', err, 'buscar');
+    }
+  }
+
+  // Responder de bus: memory.rag.buscar {request_id,...} -> memory.rag.buscar.response.
+  async onBuscarRequest(event) {
+    const data = event?.data || event;
+    const request_id = data?.request_id;
+    let res;
+    try { res = await this.handleBuscar(data); }
+    catch (err) { res = this._handleHandlerError('memory-rag.buscar.failed', err, 'buscar'); }
+    try { await this.eventBus.publish('memory.rag.buscar.response', { request_id, ...res }); }
+    catch (_) { /* best-effort */ }
   }
 
   async onAiChatResponse(event) {

@@ -1274,6 +1274,45 @@ class AiGatewayModule extends BaseModule {
     );
   }
 
+  // Nervio de MEMORIA (rag): tira los fragmentos del historico semanticamente
+  // afines al mensaje actual. El reflejo reusa el embedding stashed (sin re-embeber)
+  // → cero latencia de red aqui. PULL best-effort: si el embedding aun no esta listo
+  // o no hay match, devuelve null y el turno sigue. Devuelve el snippet o null.
+  async _leerRag(project_id, user_id, conversation_id) {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    const timeoutMs = this.config.memoria_timeout_ms || 2000;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeoutMs);
+      try {
+        unsub = this.eventBus.subscribe('memory.rag.buscar.response', (event) => {
+          const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!data || data.request_id !== request_id) return;
+          clearTimeout(timeout);
+          if (unsub) unsub();
+          const payload = data.result || data;
+          const snippet = payload?.data?.snippet || payload?.snippet || '';
+          resolve(snippet && snippet.trim() ? snippet : null);
+        });
+        this.eventBus.publish('memory.rag.buscar', { request_id, project_id, user_id, conversation_id });
+      } catch (_) {
+        clearTimeout(timeout);
+        if (unsub) unsub();
+        resolve(null);
+      }
+    });
+  }
+
+  _composeRagSection(snippet) {
+    return (
+      '# MENSAJES PREVIOS RELEVANTES — memoria semantica (contexto SILENCIOSO)\n' +
+      'Fragmentos del historico afines a lo que el usuario plantea ahora:\n' +
+      snippet + '\n' +
+      'USALO EN SILENCIO como recuerdo de apoyo. Puede no venir a cuento; si no encaja, ignoralo. NO lo recites.'
+    );
+  }
+
   // Nervio del CONSERJE: pide (y consume) el empujon pendiente del proyecto. Es el
   // siguiente paso que el sistema le ofrece al comerciante. Best-effort, timeout
   // corto: nunca penaliza el turno. Devuelve el empujon o null.
@@ -1963,6 +2002,18 @@ class AiGatewayModule extends BaseModule {
         const facts = await this._leerPerfil(project_id, user_id);
         if (facts) {
           const seccion = this._composePerfilSection(facts);
+          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
+        }
+      } catch (_) { /* memoria best-effort; nunca bloquea el turno */ }
+    }
+
+    // Nervio de MEMORIA (rag): fragmentos del historico afines al mensaje actual.
+    // PULL best-effort, reusa el embedding stashed (sin re-embeber en el turno).
+    if (project_id && user_id && conversation_id && !context?.async_invocation) {
+      try {
+        const snippet = await this._leerRag(project_id, user_id, conversation_id);
+        if (snippet) {
+          const seccion = this._composeRagSection(snippet);
           effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
         }
       } catch (_) { /* memoria best-effort; nunca bloquea el turno */ }

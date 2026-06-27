@@ -735,6 +735,25 @@ class AiGatewayModule extends BaseModule {
     return out.length > 0 ? out : null;
   }
 
+  // Observabilidad: avisa cuando el pseudocodigo de un cajon llama a un helper
+  // `_xxx(...)` que EXISTE como operacion del blueprint pero no viaja en `internas`
+  // (usa_internas incompleto). Solo loguea — respeta la declaracion explicita, no
+  // auto-incluye. best-effort: nunca rompe cajon.abrir.
+  _avisarInternasNoDeclaradas(page_id, nombre, op, internas) {
+    try {
+      const pseudo = typeof op?.pseudocodigo === 'string' ? op.pseudocodigo : '';
+      if (!pseudo) return;
+      const ops = this.blueprintModules.get(page_id)?.child?.operaciones || {};
+      const entregadas = new Set((internas || []).map(i => i.nombre));
+      const referidas = new Set(pseudo.match(/_[a-z0-9_]+(?=\s*\()/gi) || []);
+      const faltan = [...referidas].filter(r => ops[r] && !entregadas.has(r) && r !== nombre);
+      if (faltan.length > 0) {
+        this.logger?.warn?.('ai-gateway.cajon.internas_no_declaradas', { page_id, cajon: nombre, faltan });
+        this.metrics?.increment?.('ai-gateway.cajon.internas_faltan', { page_id });
+      }
+    } catch (_) { /* observabilidad best-effort, nunca rompe cajon.abrir */ }
+  }
+
   // Registra un cajon abierto en el historial de la conversacion (para ranking
   // por recencia en turnos futuros). FIFO con limite CAJONES_HISTORY_MAX.
   _trackCajonOpened(conversation_id, nombre) {
@@ -784,6 +803,13 @@ class AiGatewayModule extends BaseModule {
       }
       this._trackCajonOpened(ctx.conversation_id, resolved.nombre);
       const op = resolved.op;
+      const internas = this._bundleInternas(page_id, op);
+      // Guarda en caliente: si el pseudocodigo llama a un helper interno que
+      // EXISTE como operacion del blueprint pero NO viene en `internas` (el autor
+      // olvido declararlo en usa_internas), el LLM veria `_helper(...)` sin cuerpo
+      // e improvisaria. No lo arreglamos en silencio (la declaracion es explicita
+      // por diseño): encendemos una luz para que se vea y se corrija el blueprint.
+      this._avisarInternasNoDeclaradas(page_id, resolved.nombre, op, internas);
       return {
         nombre: resolved.nombre,
         input: op.input || null,
@@ -794,7 +820,7 @@ class AiGatewayModule extends BaseModule {
         // Al abrir el cajon publico se entregan sus internas para que el LLM
         // las ejecute inline — no estan en el catalogo y no son abribles aparte.
         // Declaradas por el blueprint en op.usa_internas: [nombre, ...].
-        internas: this._bundleInternas(page_id, op)
+        internas
       };
     }
     // No deberia alcanzarse — _executeToolCall solo enruta cajon.listar/cajon.abrir.

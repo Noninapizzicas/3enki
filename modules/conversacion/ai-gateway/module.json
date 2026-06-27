@@ -1,6 +1,7 @@
 {
   "name": "ai-gateway",
-  "version": "2.9.0",
+  "version": "2.10.0",
+  "_v2_10_nota": "v2.10.0: guarda en caliente para cajones. Al abrir un cajon, si su pseudocodigo llama a un helper interno _xxx(...) que existe como operacion del blueprint pero no viaja en `internas` (usa_internas incompleto), se loguea ai-gateway.cajon.internas_no_declaradas + metrica. No auto-incluye (respeta la declaracion explicita): enciende una luz para corregir el blueprint, convirtiendo una omision silenciosa en señal visible. Test: ai-gateway-cajones (guarda internas).",
   "_v2_9_nota": "v2.9.0: el pull de profile pasa el mensaje actual (ultimo de messages) como query → memory-user-profile devuelve los facts top-K pertinentes en vez de los 200 (baja la meseta de peso por turno). Cambio en _leerPerfil(.,.,query) + payload memory.profile.leer.query.",
   "_v2_8_nota": "v2.8.0: nervio de MEMORIA (rag) por PULL (slice 3/3 — completa el subsistema). _executeLLM tira fragmentos semanticos vía memory.rag.buscar -> .response; el reflejo rag reusa el embedding stashed del ultimo mensaje (sin re-embeber → cero latencia de red en el turno), best-effort. Las TRES memorias (summary 2.6, profile 2.7, rag 2.8) aterrizan ahora por pull, cerrando la carrera de fan-out diagnosticada. Orden de inyeccion: propio → summary → profile → rag → conserje. Test: memory-rag-pull.",
   "_v2_7_nota": "v2.7.0: nervio de MEMORIA (profile) por PULL (slice 2/3). _executeLLM tira los facts del usuario vía memory.profile.leer -> .response y los inyecta como sección silenciosa (best-effort, sin requerir conversation_id). Junto con summary (2.6.0) cierra la carrera de fan-out para 2 de las 3 memorias. Falta rag (slice 3). Test: memory-profile-pull.",

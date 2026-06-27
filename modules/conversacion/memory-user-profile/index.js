@@ -159,6 +159,42 @@ class MemoryUserProfileModule extends BaseModule {
   }
 
   // ============================================================
+  // Lectura PULL — el nervio de ai-gateway la tira al construir el turno.
+  // Sustituye al push (chat.context.enriched) que perdia la carrera. Devuelve
+  // los facts acumulados del user_id (acotado a max_facts_per_user).
+  // ============================================================
+
+  async handleLeer(data) {
+    try {
+      const { project_id, user_id } = data || {};
+      if (!project_id || !user_id) {
+        return this._errorResponse(400, 'INVALID_INPUT',
+          'project_id y user_id requeridos', { field: 'user_id' });
+      }
+      await this._ensureSchema(project_id);
+      const limit = this.config.max_facts_per_user || DEFAULT_MAX_FACTS;
+      const rows = await this._db(project_id,
+        `SELECT fact FROM user_profile_facts WHERE user_id = ? ORDER BY created_at ASC LIMIT ?`,
+        [user_id, limit], true);
+      const facts = (rows || []).map(r => r.fact);
+      return { status: 200, data: { user_id, facts, count: facts.length } };
+    } catch (err) {
+      return this._handleHandlerError('memory-user-profile.leer.failed', err, 'leer');
+    }
+  }
+
+  // Responder de bus: memory.profile.leer {request_id,...} -> memory.profile.leer.response.
+  async onLeerRequest(event) {
+    const data = event?.data || event;
+    const request_id = data?.request_id;
+    let res;
+    try { res = await this.handleLeer(data); }
+    catch (err) { res = this._handleHandlerError('memory-user-profile.leer.failed', err, 'leer'); }
+    try { await this.eventBus.publish('memory.profile.leer.response', { request_id, ...res }); }
+    catch (_) { /* best-effort */ }
+  }
+
+  // ============================================================
   // HTTP / UI API — sin endpoints (modulo solo bus)
   // ============================================================
 

@@ -1235,6 +1235,45 @@ class AiGatewayModule extends BaseModule {
     );
   }
 
+  // Nervio de MEMORIA (profile): tira los hechos acumulados del usuario (memoria
+  // entre conversaciones). PULL — sustituye al push. Best-effort, timeout corto.
+  // Devuelve array de facts (no vacio) o null.
+  async _leerPerfil(project_id, user_id) {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    const timeoutMs = this.config.memoria_timeout_ms || 2000;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeoutMs);
+      try {
+        unsub = this.eventBus.subscribe('memory.profile.leer.response', (event) => {
+          const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!data || data.request_id !== request_id) return;
+          clearTimeout(timeout);
+          if (unsub) unsub();
+          const payload = data.result || data;
+          const facts = payload?.data?.facts || payload?.facts || null;
+          resolve(Array.isArray(facts) && facts.length > 0 ? facts : null);
+        });
+        this.eventBus.publish('memory.profile.leer', { request_id, project_id, user_id });
+      } catch (_) {
+        clearTimeout(timeout);
+        if (unsub) unsub();
+        resolve(null);
+      }
+    });
+  }
+
+  _composePerfilSection(facts) {
+    const lista = facts.map(f => `- ${f}`).join('\n');
+    return (
+      '# LO QUE SABEMOS DEL USUARIO — memoria (contexto SILENCIOSO)\n' +
+      'Hechos acumulados sobre quien te habla (memoria entre conversaciones):\n' +
+      lista + '\n' +
+      'USALO EN SILENCIO para personalizar y NO repreguntar lo que ya sabes. NO lo recites.'
+    );
+  }
+
   // Nervio del CONSERJE: pide (y consume) el empujon pendiente del proyecto. Es el
   // siguiente paso que el sistema le ofrece al comerciante. Best-effort, timeout
   // corto: nunca penaliza el turno. Devuelve el empujon o null.
@@ -1912,6 +1951,18 @@ class AiGatewayModule extends BaseModule {
         const resumen = await this._leerResumen(project_id, conversation_id);
         if (resumen) {
           const seccion = this._composeResumenSection(resumen);
+          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
+        }
+      } catch (_) { /* memoria best-effort; nunca bloquea el turno */ }
+    }
+
+    // Nervio de MEMORIA (profile): hechos del usuario, memoria entre conversaciones.
+    // PULL best-effort. No requiere conversation_id (es a nivel de usuario).
+    if (project_id && user_id && !context?.async_invocation) {
+      try {
+        const facts = await this._leerPerfil(project_id, user_id);
+        if (facts) {
+          const seccion = this._composePerfilSection(facts);
           effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
         }
       } catch (_) { /* memoria best-effort; nunca bloquea el turno */ }

@@ -1197,6 +1197,44 @@ class AiGatewayModule extends BaseModule {
     );
   }
 
+  // Nervio de MEMORIA (summary): tira el resumen narrativo persistido de la
+  // conversacion. Sustituye al push (chat.context.enriched) que perdia la carrera
+  // contra chat.prompt.ready. Best-effort, timeout corto: nunca penaliza el turno.
+  // Devuelve el resumen (string) o null.
+  async _leerResumen(project_id, conversation_id) {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    const timeoutMs = this.config.memoria_timeout_ms || 2000;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeoutMs);
+      try {
+        unsub = this.eventBus.subscribe('memory.summary.leer.response', (event) => {
+          const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!data || data.request_id !== request_id) return;
+          clearTimeout(timeout);
+          if (unsub) unsub();
+          const payload = data.result || data;
+          resolve(payload?.data?.summary || payload?.summary || null);
+        });
+        this.eventBus.publish('memory.summary.leer', { request_id, project_id, conversation_id });
+      } catch (_) {
+        clearTimeout(timeout);
+        if (unsub) unsub();
+        resolve(null);
+      }
+    });
+  }
+
+  _composeResumenSection(summary) {
+    return (
+      '# RESUMEN DE LA CONVERSACION — memoria (contexto SILENCIOSO)\n' +
+      'Lo esencial de lo hablado hasta ahora (incluye tramos que el historial reciente ya no trae):\n' +
+      summary + '\n' +
+      'USALO EN SILENCIO para no perder el hilo ni repreguntar lo ya dicho. NO lo recites al usuario.'
+    );
+  }
+
   // Nervio del CONSERJE: pide (y consume) el empujon pendiente del proyecto. Es el
   // siguiente paso que el sistema le ofrece al comerciante. Best-effort, timeout
   // corto: nunca penaliza el turno. Devuelve el empujon o null.
@@ -1863,6 +1901,20 @@ class AiGatewayModule extends BaseModule {
           if (ultimaTs) this.conversationPropioTs.set(conversation_id, ultimaTs);
         }
       } catch (_) { /* la consciencia es best-effort; nunca bloquea el turno */ }
+    }
+
+    // Nervio de MEMORIA (summary): en un turno REAL con proyecto y conversacion,
+    // tiramos el resumen narrativo persistido (lo que el FIFO ya recorto del
+    // historial). PULL — sustituye al push que perdia la carrera. Best-effort:
+    // si no hay resumen (conversacion corta) o tarda, el turno sigue igual.
+    if (project_id && conversation_id && !context?.async_invocation) {
+      try {
+        const resumen = await this._leerResumen(project_id, conversation_id);
+        if (resumen) {
+          const seccion = this._composeResumenSection(resumen);
+          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
+        }
+      } catch (_) { /* memoria best-effort; nunca bloquea el turno */ }
     }
 
     // Nervio del conserje: en un turno REAL con proyecto, si hay un empujon

@@ -201,6 +201,46 @@ class MemoryConversationSummaryModule extends BaseModule {
   }
 
   // ============================================================
+  // Lectura PULL — el nervio de ai-gateway la tira al construir el turno.
+  // Sustituye al push (chat.context.enriched) que perdia la carrera contra
+  // chat.prompt.ready. Lectura pura del summary persistido (puede ser null).
+  // ============================================================
+
+  async handleLeer(data) {
+    try {
+      const { project_id, conversation_id } = data || {};
+      if (!project_id || !conversation_id) {
+        return this._errorResponse(400, 'INVALID_INPUT',
+          'project_id y conversation_id requeridos', { field: 'conversation_id' });
+      }
+      await this._ensureSchema(project_id);
+      const row = await this._loadSummary(project_id, conversation_id);
+      return {
+        status: 200,
+        data: { conversation_id, summary: row?.summary || null, updated_at: row?.updated_at || null }
+      };
+    } catch (err) {
+      return this._handleHandlerError('memory-conversation-summary.leer.failed', err, 'leer');
+    }
+  }
+
+  // Responder de bus: recibe memory.summary.leer {request_id,...} y publica
+  // memory.summary.leer.response {request_id, status, data}. best-effort.
+  async onLeerRequest(event) {
+    const data = event?.data || event;
+    const request_id = data?.request_id;
+    let res;
+    try {
+      res = await this.handleLeer(data);
+    } catch (err) {
+      res = this._handleHandlerError('memory-conversation-summary.leer.failed', err, 'leer');
+    }
+    try {
+      await this.eventBus.publish('memory.summary.leer.response', { request_id, ...res });
+    } catch (_) { /* best-effort */ }
+  }
+
+  // ============================================================
   // Internals
   // ============================================================
 

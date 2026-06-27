@@ -18,7 +18,6 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const DeepSeekProvider  = require('./providers/deepseek-provider');
 const DeepSeekAnthropicProvider = require('./providers/deepseek-anthropic-provider');
 const AnthropicProvider = require('./providers/anthropic-provider');
 const OpenAIProvider    = require('./providers/openai-provider');
@@ -228,7 +227,6 @@ class AiGatewayModule extends BaseModule {
 
   async _initializeProviders() {
     const classes = {
-      deepseek: DeepSeekProvider,
       'deepseek-anthropic': DeepSeekAnthropicProvider,
       anthropic: AnthropicProvider,
       openai: OpenAIProvider,
@@ -253,7 +251,15 @@ class AiGatewayModule extends BaseModule {
     }
   }
 
+  // Alias de retrocompat: el provider OpenAI-compat 'deepseek' se retiró (v2.16.0);
+  // una conversación con 'deepseek' GUARDADO resuelve al nativo 'deepseek-anthropic'
+  // (mismo idioma) en vez de fallar con "provider no disponible".
+  _normalizeProviderName(name) {
+    return name === 'deepseek' ? 'deepseek-anthropic' : name;
+  }
+
   async _selectProvider(requestedName, projectId) {
+    requestedName = this._normalizeProviderName(requestedName);
     if (requestedName && requestedName !== 'auto') {
       const p = this.providers.get(requestedName);
       if (!p) throw new Error(`Provider '${requestedName}' no disponible`);

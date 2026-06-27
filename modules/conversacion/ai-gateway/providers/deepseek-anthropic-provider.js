@@ -83,6 +83,29 @@ class DeepSeekAnthropicProvider extends AnthropicProvider {
   makeStreamRequest(method, path, data = null, headers = {}, onChunk, onEnd, onError) {
     return super.makeStreamRequest(method, this._anthropicPath(path), data, headers, onChunk, onEnd, onError);
   }
+
+  /**
+   * Coerce de modelo: una conversación GUARDADA con un nombre que el endpoint /anthropic
+   * NO acepta (legacy deepseek-chat/coder/reasoner del retirado provider OpenAI-compat, o
+   * cualquier modelo de otro provider) cae al default_model en vez de fallar. Se respetan
+   * los modelos propios (config.models: v4-flash/v4-pro) y los alias claude-* (que el
+   * endpoint mapea a v4-pro/v4-flash). Evita romper conversaciones tras retirar el OpenAI-compat.
+   */
+  _coerceModel(options = {}) {
+    const m = options.model;
+    if (m && !this.config.models.includes(m) && !/^claude-/.test(m)) {
+      return { ...options, model: this.config.default_model };
+    }
+    return options;
+  }
+
+  async chatCompletion(messages, options = {}) {
+    return super.chatCompletion(messages, this._coerceModel(options));
+  }
+
+  async chatCompletionStream(messages, options = {}) {
+    return super.chatCompletionStream(messages, this._coerceModel(options));
+  }
 }
 
 module.exports = DeepSeekAnthropicProvider;

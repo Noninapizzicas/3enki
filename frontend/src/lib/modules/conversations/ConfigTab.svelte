@@ -61,12 +61,22 @@
     ? $conversationsStore.conversations.find(c => c.id === conversationId)
     : null;
 
-  // Sync form with conversation when editing
+  // Sync form with conversation when editing.
+  // Normaliza la config GUARDADA del provider deepseek retirado (OpenAI-compat) al nativo,
+  // espejo de las redes del backend (_normalizeProviderName + _coerceModel): así una
+  // conversación vieja con provider 'deepseek' + model 'deepseek-chat' se ve bien en los
+  // dropdowns (DeepSeek + deepseek-v4-flash) en vez de quedar en blanco.
   $: if (editingConversation && !isNewConversation) {
+    const provRaw = editingConversation.provider || '';
+    const prov = provRaw === 'deepseek' ? 'deepseek-anthropic' : provRaw;
+    let mdl = editingConversation.model || '';
+    if (prov === 'deepseek-anthropic' && ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'].includes(mdl)) {
+      mdl = 'deepseek-v4-flash';
+    }
     form = {
       title: editingConversation.title || '',
-      provider: editingConversation.provider || '',
-      model: editingConversation.model || '',
+      provider: prov,
+      model: mdl,
       temperature: editingConversation.temperature ?? 0.7,
       max_tokens: editingConversation.max_tokens ?? 2000,
       context_window: editingConversation.context_window ?? 20,

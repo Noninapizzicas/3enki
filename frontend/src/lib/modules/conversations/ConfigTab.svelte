@@ -61,12 +61,22 @@
     ? $conversationsStore.conversations.find(c => c.id === conversationId)
     : null;
 
-  // Sync form with conversation when editing
+  // Sync form with conversation when editing.
+  // Normaliza la config GUARDADA del provider deepseek retirado (OpenAI-compat) al nativo,
+  // espejo de las redes del backend (_normalizeProviderName + _coerceModel): así una
+  // conversación vieja con provider 'deepseek' + model 'deepseek-chat' se ve bien en los
+  // dropdowns (DeepSeek + deepseek-v4-flash) en vez de quedar en blanco.
   $: if (editingConversation && !isNewConversation) {
+    const provRaw = editingConversation.provider || '';
+    const prov = provRaw === 'deepseek' ? 'deepseek-anthropic' : provRaw;
+    let mdl = editingConversation.model || '';
+    if (prov === 'deepseek-anthropic' && ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'].includes(mdl)) {
+      mdl = 'deepseek-v4-flash';
+    }
     form = {
       title: editingConversation.title || '',
-      provider: editingConversation.provider || '',
-      model: editingConversation.model || '',
+      provider: prov,
+      model: mdl,
       temperature: editingConversation.temperature ?? 0.7,
       max_tokens: editingConversation.max_tokens ?? 2000,
       context_window: editingConversation.context_window ?? 20,
@@ -190,15 +200,17 @@
   }
 
   // Provider + modelos (cada provider trae sus modelos; el modelo se elige según el provider)
+  // Espejo de ai-gateway/module.json config.providers. Auto = el default por prioridad (DeepSeek).
   const providerOptions = [
-    { value: '',          label: 'Auto (por defecto)',     models: [] },
-    { value: 'gemini',    label: 'Google Gemini 💎',       models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
-    { value: 'kimi',      label: 'Kimi (Moonshot) 🌙',     models: ['kimi-k2.6', 'kimi-k2.5', 'kimi-k2-thinking', 'moonshot-v1-128k'] },
-    { value: 'deepseek',  label: 'DeepSeek 🔮',            models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'] },
-    { value: 'openai',    label: 'OpenAI 🤖',              models: ['gpt-4o', 'gpt-4o-mini'] },
-    { value: 'anthropic', label: 'Anthropic 🧠',           models: ['claude-sonnet-4-6', 'claude-opus-4-8'] },
-    { value: 'groq',      label: 'Groq ⚡',                models: ['llama-3.3-70b-versatile'] },
-    { value: 'ollama',    label: 'Ollama (local) 🦙',      models: ['llama2'] }
+    { value: '',                  label: 'Auto (por defecto)',  models: [] },
+    { value: 'deepseek-anthropic', label: 'DeepSeek 🔮',        models: ['deepseek-v4-flash', 'deepseek-v4-pro'] },
+    { value: 'kimi',              label: 'Kimi (Moonshot) 🌙',  models: ['kimi-k2.6', 'kimi-k2.5', 'kimi-k2-thinking', 'moonshot-v1-128k'] },
+    { value: 'anthropic',         label: 'Anthropic 🧠',        models: ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-3-5-haiku-20241022'] },
+    { value: 'openai',            label: 'OpenAI 🤖',           models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
+    { value: 'groq',              label: 'Groq ⚡',             models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'] },
+    { value: 'gemini',            label: 'Google Gemini 💎',    models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
+    { value: 'ollama',            label: 'Ollama (local) 🦙',   models: ['llama2', 'codellama', 'mistral', 'mixtral'] },
+    { value: 'claude-cli',        label: 'Claude Code (1M) 🟣', models: ['sonnet', 'opus', 'haiku'] }
   ];
 
   // modelos del provider elegido

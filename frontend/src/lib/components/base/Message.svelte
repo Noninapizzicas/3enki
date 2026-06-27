@@ -46,7 +46,10 @@
   function getRoleIcon(m: Message): string {
     if (m.role === 'assistant') {
       const prov = providerOf(m);
-      return (prov && PROVIDER_ICONS[prov]) || '🤖';
+      if (!prov) return '🤖';
+      // exacto -> por prefijo antes del primer '-' (deepseek-anthropic -> deepseek) -> fallback.
+      // Así un id de provider variante no cae al 🤖 genérico por faltar una clave.
+      return PROVIDER_ICONS[prov] || PROVIDER_ICONS[prov.split('-')[0]] || '🤖';
     }
     const icons: Record<string, string> = { user: '👤', system: '⚙️' };
     return icons[m.role] || '💬';

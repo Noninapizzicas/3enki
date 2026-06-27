@@ -223,7 +223,7 @@ Tomate, BBQ, nata, pollo, quesos, cebolla, bacon"
             bind:value={provider}
           >
             <option value="auto">Automatico (recomendado)</option>
-            <option value="deepseek">DeepSeek</option>
+            <option value="deepseek-anthropic">DeepSeek</option>
             <option value="anthropic">Anthropic (Claude)</option>
             <option value="openai">OpenAI (GPT)</option>
           </select>

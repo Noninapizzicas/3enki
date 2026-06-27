@@ -1,6 +1,7 @@
 {
   "name": "memory-rag",
-  "version": "2.0.0",
+  "version": "2.1.0",
+  "_v2_1_nota": "v2.1.0: entrega por PULL (slice 3/3). onMessageSaved deja de buscar+empujar (el push perdía la carrera): ahora solo INDEXA y deja el embedding en un stash por conversación. La búsqueda top-K se hace al PULL (handleBuscar), reusando ese vector → cero re-embedding y cero latencia de red en el turno; best-effort (si el embedding aún no está, sin matches). ai-gateway tira vía memory.rag.buscar -> .response. Test: memory-rag-pull.",
   "description": "Memoria modular semantica del companero. Indexa cada mensaje del chat (user + assistant) en un vector store por proyecto, y en cada chat.message.saved hace busqueda semantica top-K en el historico para enriquecer el system prompt via chat.context.enriched (priority 500). Asi, cuando el FIFO recorta el principio, los snippets relevantes del pasado siguen disponibles para el companero. Aislamiento por (project_id, user_id) obligatorio.",
   "author": "Event Core Team",
   "language": "es",
@@ -8,9 +9,8 @@
   "events": {
     "publishes": [
       {
-        "event": "chat.context.enriched",
-        "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.context.enriched.schema.json",
-        "description": "Aporta los snippets semanticamente relevantes del historico (priority 500 — RAG, mas alta que perfil 100/summary 200, menor que especulativa 1000+). Lleva correlation_id heredado + project_id top-level + timestamp."
+        "event": "memory.rag.buscar.response",
+        "description": "Respuesta al pull del nervio (ai-gateway): { request_id, status, data: { matches, snippet } }. Busqueda semantica top-K reusando el embedding stashed del ultimo mensaje."
       },
       {
         "event": "embedding.generate.request",
@@ -24,10 +24,15 @@
     ],
     "subscribes": [
       {
+        "event": "memory.rag.buscar",
+        "handler": "onBuscarRequest",
+        "description": "PULL del nervio de ai-gateway: busca top-K semantico reusando el embedding stashed del ultimo mensaje (sin re-embeber). Reemplaza el push que perdia la carrera."
+      },
+      {
         "event": "chat.message.saved",
         "handler": "onMessageSaved",
         "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
-        "description": "Cada mensaje del usuario: indexa (genera embedding y persiste) + consulta (busca top-K en historico, publica chat.context.enriched)."
+        "description": "Cada mensaje del usuario: INDEXA (genera embedding + persiste) y deja el vector en stash para el pull. Ya NO busca ni empuja aqui."
       },
       {
         "event": "ai.chat.response",

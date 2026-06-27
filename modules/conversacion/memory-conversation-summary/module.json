@@ -1,6 +1,7 @@
 {
   "name": "memory-conversation-summary",
-  "version": "2.0.0",
+  "version": "2.1.0",
+  "_v2_1_nota": "v2.1.0: entrega por PULL. El push (chat.context.enriched) perdía la carrera contra chat.prompt.ready (prompt-builder construye síncrono al chat.message.saved, antes de que la memoria publique). Ahora ai-gateway TIRA el resumen en _executeLLM vía memory.summary.leer -> .response (patrón propiocepción). La generación del resumen no cambia; solo cambia cómo aterriza. El push se conserva inerte (retirable).",
   "description": "Memoria modular del companero. Genera resumenes LLM de los tramos de conversacion que el FIFO va a recortar, y los inyecta en chat.prompt.ready via chat.context.enriched (priority 200). Sin esto, cuando una conversacion se hace larga y FIFO recorta el principio, el companero pierde la esencia del historico — con esto, el viaje sostiene memoria narrativa.",
   "author": "Event Core Team",
   "language": "es",
@@ -20,9 +21,18 @@
         "event": "llm.complete.request",
         "request_schema_ref": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.request.schema.json",
         "description": "Request a ai-gateway para generar el resumen narrativo. Correlacionado por request_id."
+      },
+      {
+        "event": "memory.summary.leer.response",
+        "description": "Respuesta al pull del nervio (ai-gateway): { request_id, status, data: { summary } }. Lectura pura del resumen persistido."
       }
     ],
     "subscribes": [
+      {
+        "event": "memory.summary.leer",
+        "handler": "onLeerRequest",
+        "description": "PULL del nervio de ai-gateway al construir el turno: devuelve el resumen persistido de la conversacion (o null). Reemplaza el push que perdia la carrera."
+      },
       {
         "event": "chat.message.saved",
         "handler": "onMessageSaved",

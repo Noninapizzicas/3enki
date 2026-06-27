@@ -48,6 +48,7 @@ const DEFAULT_DB_TIMEOUT_MS = 10000;
 const DEFAULT_PRIORITY = 100;
 const DEFAULT_MAX_FACTS = 200;
 const DEFAULT_MIN_FACT_LENGTH = 4;
+const DEFAULT_FACTS_IN_PROMPT = 12;   // top-K: cuántos facts entran en el turno (no cuántos se guardan)
 
 class MemoryUserProfileModule extends BaseModule {
   constructor() {
@@ -156,6 +157,71 @@ class MemoryUserProfileModule extends BaseModule {
     this.pendingDb.delete(request_id);
     if (payload.error) pending.reject(new Error(payload.error));
     else pending.resolve(payload.data ?? payload.rows ?? []);
+  }
+
+  // ============================================================
+  // Lectura PULL — el nervio de ai-gateway la tira al construir el turno.
+  // Sustituye al push (chat.context.enriched) que perdia la carrera. Devuelve
+  // los facts acumulados del user_id (acotado a max_facts_per_user).
+  // ============================================================
+
+  async handleLeer(data) {
+    try {
+      const { project_id, user_id } = data || {};
+      if (!project_id || !user_id) {
+        return this._errorResponse(400, 'INVALID_INPUT',
+          'project_id y user_id requeridos', { field: 'user_id' });
+      }
+      await this._ensureSchema(project_id);
+      const limit = this.config.max_facts_per_user || DEFAULT_MAX_FACTS;
+      const rows = await this._db(project_id,
+        `SELECT fact FROM user_profile_facts WHERE user_id = ? ORDER BY created_at ASC LIMIT ?`,
+        [user_id, limit], true);
+      const facts = (rows || []).map(r => r.fact);
+      // top-K: no se vuelcan los 200; se eligen los `cap` mas PERTINENTES al mensaje
+      // (solapamiento de palabras), con la recencia como desempate. Sin query (o con
+      // <= cap facts) se devuelven todos / los mas recientes. Acota la meseta de peso
+      // sin perder los facts que de verdad importan a este turno.
+      const chosen = this._rankFacts(facts, data.query);
+      return { status: 200, data: { user_id, facts: chosen, count: chosen.length, total: facts.length } };
+    } catch (err) {
+      return this._handleHandlerError('memory-user-profile.leer.failed', err, 'leer');
+    }
+  }
+
+  // Elige los `cap` facts mas relevantes al mensaje. score = solapamiento de
+  // palabras (>=4 letras, sin acentos); desempate por recencia (rows vienen
+  // ASC, indice mayor = mas reciente). Determinista, sin embeddings ni red.
+  _rankFacts(facts, query) {
+    const cap = this.config.facts_in_prompt || DEFAULT_FACTS_IN_PROMPT;
+    if (facts.length <= cap) return facts;
+    const q = this._tokens(query);
+    const scored = facts.map((fact, i) => {
+      const ft = this._tokens(fact);
+      let score = 0;
+      for (const t of q) if (ft.has(t)) score++;
+      return { fact, score, recency: i };
+    });
+    scored.sort((a, b) => (b.score - a.score) || (b.recency - a.recency));
+    return scored.slice(0, cap).map(s => s.fact);
+  }
+
+  _tokens(s) {
+    return new Set(
+      String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .split(/[^a-z0-9]+/).filter(w => w.length >= 4)
+    );
+  }
+
+  // Responder de bus: memory.profile.leer {request_id,...} -> memory.profile.leer.response.
+  async onLeerRequest(event) {
+    const data = event?.data || event;
+    const request_id = data?.request_id;
+    let res;
+    try { res = await this.handleLeer(data); }
+    catch (err) { res = this._handleHandlerError('memory-user-profile.leer.failed', err, 'leer'); }
+    try { await this.eventBus.publish('memory.profile.leer.response', { request_id, ...res }); }
+    catch (_) { /* best-effort */ }
   }
 
   // ============================================================

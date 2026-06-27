@@ -1,6 +1,7 @@
 {
   "name": "ai-gateway",
-  "version": "2.13.0",
+  "version": "2.14.0",
+  "_v2_14_nota": "v2.14.0: deepseek-anthropic ('mismo idioma') PROMOVIDO a DEFAULT (priority 1; deepseek OpenAI-compat baja a 2 como fallback de visión/razonamiento + red; resto +1). default_model baja de v4-pro a v4-flash (barato + probado). Decisión respaldada por MEDICIÓN EN VIVO contra api.deepseek.com (probe via portal/shell.exec en el VPS): (1) CACHE — el endpoint /anthropic SÍ cachea pese a ignorar cache_control (el cache automático de contexto aplica igual): 2ª llamada con prefijo de 22K tokens -> cache_read_input_tokens=22016 (-99.9% input), idéntico al OpenAI-compat; el cache es por cuenta y se comparte entre endpoints. Mi caveat previo ('mismo idioma puede perder el -98%') quedó REFUTADO por el dato. (2) TOOL_USE — smoke con tool_choice:auto devolvió content blocks ['thinking','tool_use'], stop_reason tool_use, tool_use{name:get_weather,input:{ciudad:Madrid}}: ejecuta ESTRUCTURADO nativo, el fantasma 'tool-calls como texto' no existe en este path, y v4-flash trae thinking gratis. Ambos gates pasados con datos, no a fe. v4-pro queda seleccionable. Requiere reload del módulo para tomar efecto.",
   "_v2_13_nota": "v2.13.0: 'MISMO IDIOMA' — deepseek puede hablar el protocolo NATIVO de Anthropic (tool_use estructurado), el mismo que el provider anthropic (Claude), en vez del dialecto OpenAI-compat que exige traducción de nombres y correlación por tool_call_id (y que históricamente emitía tool-calls como texto -> aparcó los agentes). Nuevo provider deepseek-anthropic = subclase de AnthropicProvider (reusa translateTools/convertMessages/parsing tool_use SIN overrides de protocolo): solo cambian endpoint (api.deepseek.com/anthropic), credencial (reusa la de 'deepseek') y modelos (v4-pro/v4-flash). Compat verificada contra la doc: x-api-key soportado, anthropic-version ignorado, cache_control ignorado (la inyección de caching no rompe), tool_use/tool_result/tool_choice soportados. AÑADIDO ENABLED pero priority 9 (NO auto-default): seleccionable explícitamente, pendiente de (a) smoke en vivo del loop de cajones y (b) medir economía — el endpoint /anthropic ignora cache_control, así que el KV-cache automático (-98% input) del path OpenAI-compat PUEDE no aplicar aquí, y v4-pro es más caro que v4-flash. La promoción a default es decisión informada tras smoke+coste. Test: deepseek-anthropic__provider.",
   "_v2_12_nota": "v2.12.0: deepseek pasa a DEFAULT (priority 8 -> 1; rotación limpia: kimi 1->2 y el resto +1, sin colisiones). Habilitado por la migración v2.11 (modelos vivos) + la confirmación de que su tool-use es completo y correcto (correlaciona por tool_call_id). Motivo: encaje estructural — los system prompts de cajones son enormes y se repiten turno a turno, y el KV cache automático de deepseek tumba el input ~-98% en los hits (deepseek-v4-flash es además el provider más barato). El humano sigue pudiendo elegir cualquier provider por conversación; esto solo cambia el AUTO-seleccionado cuando no se pide ninguno. La etiqueta 'tool-use roto' que lo tenía en priority 8 estaba caduca (misma historia que gemini). Verificación en vivo del loop de cajones: pendiente de smoke read-only.",
   "_v2_11_nota": "v2.11.0: MIGRACIÓN deepseek a modelos vivos. DeepSeek discontinúa los nombres `deepseek-chat` y `deepseek-coder` el 2026-07-24 15:59 UTC; el provider los tenía como default_model y como literal en la rama de visión -> el 24/07 deepseek se habría caído entero. Config: default_model `deepseek-chat` -> `deepseek-v4-flash` (= lo que deepseek-chat era, modo no-thinking); models list pasa a [v4-flash, v4-pro, reasoner]. Provider: nuevo resolveModel() normaliza nombres legacy GUARDADOS (deepseek-chat/coder -> default_model) para que una conversación vieja no se caiga, y colapsa el literal muerto de visión (v4-flash unifica texto+visión; antes ambos caían a deepseek-chat = no-op). El tool-use de deepseek es completo y correcto (correlaciona por tool_call_id, sin el bug de nombre de gemini): la etiqueta 'tool-use roto' que lo dejó en priority 8 estaba caduca — la PRIORIDAD no se toca aquí (es decisión de operación). deepseek-reasoner se conserva mientras viva (único camino thinking documentado). Test: deepseek__resolve-model.",
@@ -151,9 +152,19 @@
   "dependencies": ["interruptores"],
   "config": {
     "providers": {
-      "deepseek": {
+      "deepseek-anthropic": {
         "enabled": true,
         "priority": 1,
+        "api_base": "https://api.deepseek.com/anthropic",
+        "default_model": "deepseek-v4-flash",
+        "models": [
+          "deepseek-v4-flash",
+          "deepseek-v4-pro"
+        ]
+      },
+      "deepseek": {
+        "enabled": true,
+        "priority": 2,
         "api_base": "https://api.deepseek.com/v1",
         "default_model": "deepseek-v4-flash",
         "models": [
@@ -162,19 +173,9 @@
           "deepseek-reasoner"
         ]
       },
-      "deepseek-anthropic": {
-        "enabled": true,
-        "priority": 9,
-        "api_base": "https://api.deepseek.com/anthropic",
-        "default_model": "deepseek-v4-pro",
-        "models": [
-          "deepseek-v4-pro",
-          "deepseek-v4-flash"
-        ]
-      },
       "anthropic": {
         "enabled": true,
-        "priority": 3,
+        "priority": 4,
         "api_base": "https://api.anthropic.com",
         "default_model": "claude-sonnet-4-6",
         "models": [
@@ -186,7 +187,7 @@
       },
       "openai": {
         "enabled": true,
-        "priority": 4,
+        "priority": 5,
         "api_base": "https://api.openai.com/v1",
         "default_model": "gpt-4o-mini",
         "models": [
@@ -197,7 +198,7 @@
       },
       "groq": {
         "enabled": true,
-        "priority": 5,
+        "priority": 6,
         "api_base": "https://api.groq.com/openai/v1",
         "default_model": "llama-3.3-70b-versatile",
         "models": [
@@ -208,7 +209,7 @@
       },
       "gemini": {
         "enabled": true,
-        "priority": 6,
+        "priority": 7,
         "api_base": "https://generativelanguage.googleapis.com/v1beta/",
         "default_model": "gemini-2.5-flash",
         "models": [
@@ -218,7 +219,7 @@
       },
       "ollama": {
         "enabled": true,
-        "priority": 7,
+        "priority": 8,
         "api_base": "http://localhost:11434/api",
         "default_model": "llama2",
         "models": [
@@ -230,7 +231,7 @@
       },
       "claude-cli": {
         "enabled": true,
-        "priority": 8,
+        "priority": 9,
         "cli_path": "claude",
         "default_model": "sonnet",
         "models": [
@@ -241,7 +242,7 @@
       },
       "kimi": {
         "enabled": true,
-        "priority": 2,
+        "priority": 3,
         "api_base": "https://api.moonshot.ai",
         "default_model": "kimi-k2.6",
         "models": [

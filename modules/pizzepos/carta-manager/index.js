@@ -328,6 +328,9 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
       carta.meta.version = ((actual.meta && actual.meta.version) || 0) + 1;
     }
     carta.meta.updated_at = nowISO();
+    // Mismo gate que _save: una versión legacy restaurada sale operable (familia + precio_extra),
+    // nunca devuelve una carta coja al comandero. Solo añade defaults; no altera datos reales.
+    this._normalizarCartaProductos(carta);
     let w;
     if (!existe) w = await this._write(input.project_id, cartaPath(input.carta_id), carta);
     else w = await this._edit(input.project_id, cartaPath(input.carta_id), [{ op: 'replace', path: '', value: carta }]);

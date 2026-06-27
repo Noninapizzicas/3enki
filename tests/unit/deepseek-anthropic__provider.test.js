@@ -104,6 +104,30 @@ test('usa el header x-api-key heredado (soportado por el endpoint /anthropic)', 
   assert.strictEqual(p.apiVersion, '2023-06-01', 'hereda anthropic-version (ignorada por deepseek, inocua)');
 });
 
+test('_coerceModel: modelo propio (v4-flash/v4-pro) se respeta', () => {
+  const p = new DeepSeekAnthropicProvider(CFG, LOG, null);
+  assert.strictEqual(p._coerceModel({ model: 'deepseek-v4-flash' }).model, 'deepseek-v4-flash');
+  assert.strictEqual(p._coerceModel({ model: 'deepseek-v4-pro' }).model, 'deepseek-v4-pro');
+});
+
+test('_coerceModel: alias claude-* se respeta (el endpoint los mapea)', () => {
+  const p = new DeepSeekAnthropicProvider(CFG, LOG, null);
+  assert.strictEqual(p._coerceModel({ model: 'claude-sonnet-4-6' }).model, 'claude-sonnet-4-6');
+});
+
+test('_coerceModel: legacy del retirado OpenAI-compat (deepseek-chat/reasoner) -> default_model', () => {
+  const p = new DeepSeekAnthropicProvider(CFG, LOG, null);
+  // el endpoint /anthropic no acepta estos nombres -> caen a v4-flash (no rompen conversaciones viejas)
+  assert.strictEqual(p._coerceModel({ model: 'deepseek-chat' }).model, 'deepseek-v4-flash');
+  assert.strictEqual(p._coerceModel({ model: 'deepseek-reasoner' }).model, 'deepseek-v4-flash');
+  assert.strictEqual(p._coerceModel({ model: 'deepseek-coder' }).model, 'deepseek-v4-flash');
+});
+
+test('_coerceModel: sin modelo no toca nada (deja que el default actue aguas abajo)', () => {
+  const p = new DeepSeekAnthropicProvider(CFG, LOG, null);
+  assert.strictEqual(p._coerceModel({}).model, undefined);
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

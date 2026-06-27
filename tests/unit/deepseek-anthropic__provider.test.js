@@ -20,9 +20,9 @@ const DeepSeekAnthropicProvider = require('../../modules/conversacion/ai-gateway
 
 const CFG = {
   enabled: true,
-  api_base: 'https://api.deepseek.com/anthropic',
-  default_model: 'deepseek-v4-pro',
-  models: ['deepseek-v4-pro', 'deepseek-v4-flash']
+  api_base: 'https://api.deepseek.com',
+  default_model: 'deepseek-v4-flash',
+  models: ['deepseek-v4-flash', 'deepseek-v4-pro']
 };
 const LOG = { debug(){}, info(){}, warn(){}, error(){} };
 
@@ -48,9 +48,32 @@ test('identidad propia pero credencial redirigida a deepseek', () => {
   assert.strictEqual(p.credentialName, 'deepseek', 'reusa la API key de deepseek, no una nueva');
 });
 
-test('endpoint apunta al compat de Anthropic de deepseek', () => {
+test('api_base es SOLO el host (sin /anthropic): el path absoluto descartaría el segmento', () => {
   const p = new DeepSeekAnthropicProvider(CFG, LOG, null);
-  assert.strictEqual(p.config.api_base, 'https://api.deepseek.com/anthropic');
+  // new URL("/v1/messages", "https://api.deepseek.com/anthropic") perdería /anthropic -> 404.
+  assert.strictEqual(p.config.api_base, 'https://api.deepseek.com');
+  assert.ok(!/\/anthropic$/.test(p.config.api_base), 'el api_base NO debe terminar en /anthropic');
+});
+
+test('_anthropicPath antepone /anthropic al path absoluto del AnthropicProvider (fix del 404)', () => {
+  const p = new DeepSeekAnthropicProvider(CFG, LOG, null);
+  assert.strictEqual(p._anthropicPath('/v1/messages'), '/anthropic/v1/messages');
+  // y new URL con base=host produce la URL correcta del endpoint compat
+  assert.strictEqual(new (require('url').URL)(p._anthropicPath('/v1/messages'), p.config.api_base).href,
+    'https://api.deepseek.com/anthropic/v1/messages');
+});
+
+test('_anthropicPath es idempotente (no duplica /anthropic)', () => {
+  const p = new DeepSeekAnthropicProvider(CFG, LOG, null);
+  assert.strictEqual(p._anthropicPath('/anthropic/v1/messages'), '/anthropic/v1/messages');
+});
+
+test('makeRequest/makeStreamRequest están overrideados en la subclase (no son los de base)', () => {
+  const p = new DeepSeekAnthropicProvider(CFG, LOG, null);
+  assert.notStrictEqual(p.makeRequest, AnthropicProvider.prototype.makeRequest,
+    'makeRequest debe estar overrideado para anteponer /anthropic');
+  assert.notStrictEqual(p.makeStreamRequest, AnthropicProvider.prototype.makeStreamRequest,
+    'makeStreamRequest debe estar overrideado para anteponer /anthropic');
 });
 
 test('refreshApiKey resuelve la credencial bajo "deepseek" (no bajo this.name)', async () => {

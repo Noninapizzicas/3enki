@@ -63,6 +63,26 @@ class DeepSeekAnthropicProvider extends AnthropicProvider {
   refreshApiKeyFromEnv() {
     this.apiKey = process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY_GLOBAL || null;
   }
+
+  /**
+   * El endpoint compatible vive bajo /anthropic (api.deepseek.com/anthropic/v1/messages).
+   * AnthropicProvider llama a makeRequest/makeStreamRequest con path ABSOLUTO '/v1/messages';
+   * `new URL(path, api_base)` DESCARTA el segmento de path del base cuando el path es absoluto,
+   * así que un api_base con '/anthropic' perdería ese prefijo y la petición caería en
+   * api.deepseek.com/v1/messages -> 404. Por eso api_base NO lleva '/anthropic' (es solo el host)
+   * y lo anteponemos aquí al path. Verificado en vivo: sin esto, 404; con esto, tool_use OK.
+   */
+  _anthropicPath(path) {
+    return (typeof path === 'string' && path.startsWith('/anthropic')) ? path : '/anthropic' + path;
+  }
+
+  async makeRequest(method, path, data = null, headers = {}) {
+    return super.makeRequest(method, this._anthropicPath(path), data, headers);
+  }
+
+  makeStreamRequest(method, path, data = null, headers = {}, onChunk, onEnd, onError) {
+    return super.makeStreamRequest(method, this._anthropicPath(path), data, headers, onChunk, onEnd, onError);
+  }
 }
 
 module.exports = DeepSeekAnthropicProvider;

@@ -1140,12 +1140,12 @@ class AiGatewayModule extends BaseModule {
   // la consciencia no debe penalizar la latencia del turno, asi que si tarda
   // devolvemos vacio y el turno sigue.
   async _leerPropiocepcion(project_id, desde_ts) {
-    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return [];
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return { eventos: [], total: 0 };
     const request_id = crypto.randomUUID();
     const timeoutMs = this.config.propiocepcion_timeout_ms || 3000;
     return new Promise((resolve) => {
       let unsub = null;
-      const timeout = setTimeout(() => { if (unsub) unsub(); resolve([]); }, timeoutMs);
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve({ eventos: [], total: 0 }); }, timeoutMs);
       try {
         unsub = this.eventBus.subscribe('propiocepcion.leer.response', (event) => {
           const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
@@ -1154,7 +1154,13 @@ class AiGatewayModule extends BaseModule {
           if (unsub) unsub();
           const payload = data.result || data;
           const eventos = payload?.data?.eventos || payload?.eventos || [];
-          resolve(Array.isArray(eventos) ? eventos : []);
+          // total = nuevos-desde-el-cursor (handleLeer lo cuenta tras filtrar por
+          // desde_ts, ANTES del slice). Si total > eventos.length, el nervio
+          // mostro solo los mas recientes y elidio los mas viejos del lote:
+          // _composePropiocepcionSection lo declara para no fingir lista completa.
+          const arr = Array.isArray(eventos) ? eventos : [];
+          const total = payload?.data?.total ?? payload?.total ?? arr.length;
+          resolve({ eventos: arr, total });
         });
         this.eventBus.publish('propiocepcion.leer', {
           request_id, project_id, limite: 10, ...(desde_ts ? { desde_ts } : {})
@@ -1162,21 +1168,28 @@ class AiGatewayModule extends BaseModule {
       } catch (_) {
         clearTimeout(timeout);
         if (unsub) unsub();
-        resolve([]);
+        resolve({ eventos: [], total: 0 });
       }
     });
   }
 
-  _composePropiocepcionSection(eventos) {
+  _composePropiocepcionSection(eventos, total) {
     const lineas = eventos.map(e => {
       const tipo = e.tipo === 'reflejo' ? 'reflejo' : 'consciente';
       return `- [${tipo}] ${e.modulo}: ${e.resumen}`;
     }).join('\n');
+    // No fingir lista completa: si hubo mas eventos nuevos que los mostrados,
+    // declara cuantos quedaron fuera (los mas viejos del lote). El humano puede
+    // pedir el resto via la tool propiocepcion.leer (sin limite estrecho).
+    const elididos = Number.isFinite(total) ? total - eventos.length : 0;
+    const masViejos = elididos > 0
+      ? `\n(+${elididos} evento(s) anterior(es) no mostrado(s) — si hacen falta, consulta propiocepcion.leer)`
+      : '';
     return (
       '# LO QUE PASO EN TU MUNDO — propiocepcion (contexto SILENCIOSO)\n' +
       'Desde tu ultimo turno ocurrio esto en el proyecto (reflejos y ops ya ' +
       'ejecutadas que no controlaste, pero de los que eres consciente):\n' +
-      lineas + '\n' +
+      lineas + masViejos + '\n' +
       'USALO EN SILENCIO. Es solo para que NO supongas: si algo ya se hizo o se ' +
       'guardo, esta aqui. NO lo recites, NO lo enumeres ni lo repitas al usuario ' +
       'salvo que pregunte explicitamente que ha pasado. Responde corto y al grano ' +
@@ -1842,9 +1855,9 @@ class AiGatewayModule extends BaseModule {
     if (blueprintCtx && project_id && !context?.async_invocation) {
       try {
         const desdeTs = this.conversationPropioTs.get(conversation_id) || null;
-        const eventos = await this._leerPropiocepcion(project_id, desdeTs);
+        const { eventos, total } = await this._leerPropiocepcion(project_id, desdeTs);
         if (Array.isArray(eventos) && eventos.length > 0) {
-          const seccion = this._composePropiocepcionSection(eventos);
+          const seccion = this._composePropiocepcionSection(eventos, total);
           effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
           const ultimaTs = eventos[eventos.length - 1]?.ts;
           if (ultimaTs) this.conversationPropioTs.set(conversation_id, ultimaTs);

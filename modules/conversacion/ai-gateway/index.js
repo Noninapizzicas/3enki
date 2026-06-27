@@ -2094,11 +2094,14 @@ class AiGatewayModule extends BaseModule {
         ?? blueprintCtx?.child?.temperatura
         ?? blueprintCtx?.parent?.temperatura
         ?? 0.7,
-      // Suelo de 4096: las paginas blueprint (recetario) generan respuestas
-      // largas (crear receta + estructura + preguntas) que se cortaban con el
-      // viejo tope de 2000. Floor en vez de default para subir tambien las
-      // conversaciones existentes (que tienen 2000 guardado en su settings).
-      max_tokens: Math.max(Number(settings?.max_tokens) || 0, 4096),
+      // Suelo de 8192 (subido de 4096 el 2026-06-27): los turnos OPERATIVOS pesados
+      // (construir una carta, escribir el contenido de un fichero) meten payloads grandes
+      // en UNA tool_call; 4096 tokens (~16KB) los cortaba a media -> JSON incompleto ->
+      // la herramienta fallaba (finish_reason 'length', verificado en DB nonina/1nonina).
+      // 8192 dobla el margen (~32KB). Verificado: deepseek-v4-flash acepta hasta 64K de
+      // salida. Es FLOOR (sube tambien las conversaciones viejas con 2000/4096 guardado);
+      // no encarece el chat normal (el modelo para en 'stop', max_tokens es tope no objetivo).
+      max_tokens: Math.max(Number(settings?.max_tokens) || 0, 8192),
       tools: translatedTools,
       projectId: project_id,
       conversationId: conversation_id,

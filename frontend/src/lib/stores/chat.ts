@@ -12,6 +12,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { goto } from '$app/navigation';
 import { publish, subscribe, mqttRequest } from '$lib/ui-core';
+import { onReconnect } from '$lib/ui-core/mqtt';
 import type { Message, Attachment } from '$lib/ui-core';
 import { openPanel } from '$lib/ui-core/registry';
 import { attachments, clearAttachments } from './attachments';
@@ -476,6 +477,16 @@ export function initChatSubscriptions(): () => void {
       isStreaming.set(false);
       streamingMessageId.set(null);
     }
+  }));
+
+  // Reconexión: recupera mensajes perdidos durante un blip del websocket (típico en
+  // móvil: pantalla bloqueada, app en fondo). El push del assistant NO es retenido,
+  // así que si la conexión cae justo cuando chat-io lo publica, se pierde y solo
+  // reaparecía al REFRESCAR la página. Al reconectar re-leemos la conversación activa
+  // de la DB (donde sí quedó persistida) → la respuesta aparece sola. Espeja cocina.ts.
+  unsubs.push(onReconnect(() => {
+    const convId = get(conversationId);
+    if (convId) loadConversation(convId);
   }));
 
   // Tool status — filtrar por conversación activa

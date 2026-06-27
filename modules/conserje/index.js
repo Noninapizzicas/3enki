@@ -51,14 +51,19 @@ const SEÑAL_RESPONSE = {
   }
 };
 const SEÑAL_EVENTO = {
-  'escandallo.coste.calculado': { capacidad: 'escandallo', lleno: () => true }
+  'escandallo.coste.calculado': { capacidad: 'escandallo', lleno: () => true },
+  // diseno/digital: sin esta señal su estado `usada` no se observaba nunca y el
+  // conserje los ofrecía cada cooldown PARA SIEMPRE, incluso ya construidos.
+  // Ambos eventos son autocontenidos (llevan project_id) y significan "hecho".
+  'carta.html.generada':        { capacidad: 'diseno',  lleno: () => true },  // un diseño guardado existe
+  'cartadigital.publicado':     { capacidad: 'digital', lleno: () => true }   // la carta pública está publicada
 };
 
 class ConserjeModule extends BaseModule {
   constructor() {
     super();
     this.name = 'conserje';
-    this.version = '0.2.0';
+    this.version = '0.3.0';
     this.config = null;
     this.libro = new LibroDeCapacidades(PIZZEPOS_CAPACIDADES);
     this.activo = false;                 // OFF por defecto (lo gobierna el interruptor 'conserje')

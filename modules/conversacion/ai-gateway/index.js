@@ -74,6 +74,7 @@ class AiGatewayModule extends BaseModule {
     // NUEVO que paso en su mundo desde la ultima vez (no se re-inyecta ruido).
     this.conversationPropioTs = new Map();
     this.sintonizador = new Sintonizador();   // la lente que alinea al LLM con el sesgo del humano cada turno
+    this.sintoniaActiva = true;                // ON por defecto; su on/off vive en el panel central (interruptor 'sintonizador'), reacciona en caliente
 
     // Blueprint subscribers asincronos (frente 2.4 cierre 2026-05-24):
     // event_name → [{ page_id, handler_name, unsub }]. Poblado en _wireBlueprintAsyncSubscribers
@@ -133,6 +134,11 @@ class AiGatewayModule extends BaseModule {
       );
     }
 
+    // Registra el botón on/off de la sintonía en el panel central de
+    // interruptores. Idempotente (se re-registra ante solicitar_registro);
+    // el estado persistido del panel manda sobre el default vía cambiado.
+    this._registrarBotonSintonia();
+
     this.logger.info('ai-gateway.loaded', {
       providers: this.providers.size,
       blueprints: this.blueprintModules.size,
@@ -182,6 +188,37 @@ class AiGatewayModule extends BaseModule {
       });
     }
     this.asyncSubscriptions.clear();
+  }
+
+  // ============================================================
+  // Interruptor de la sintonía (panel central)
+  // ============================================================
+
+  // Registra el botón 'sintonizador' en el panel central. Idempotente: se
+  // llama al cargar y cada vez que interruptores pide registro (cura la
+  // carrera de arranque, como el conserje). best-effort.
+  _registrarBotonSintonia() {
+    try {
+      this.eventBus.publish('interruptor.registrar', {
+        id: 'sintonizador', label: 'Sintonía (alinearse con quien habla)', grupo: 'chat',
+        descripcion: 'Antes de responder, mira desde dónde mira el humano (su verbo: resolver/explorar/desahogar/jugar...) y suelta el reflejo propio si choca. Lente silenciosa, se inyecta en cada turno real del chat.',
+        default: true
+      });
+    } catch (_) { /* best-effort */ }
+  }
+
+  // interruptores (re)cargó y pide a todos que se registren -> respondemos.
+  onSolicitarRegistro() {
+    this._registrarBotonSintonia();
+  }
+
+  // on/off en caliente desde el panel, sin reinicio.
+  onInterruptorCambiado(event) {
+    const d = (event && event.data) || event || {};
+    if (d.id === 'sintonizador') {
+      this.sintoniaActiva = !!d.enabled;
+      this.logger?.warn('ai-gateway.sintonia.toggled', { activo: this.sintoniaActiva });
+    }
   }
 
   // ============================================================
@@ -1790,7 +1827,8 @@ class AiGatewayModule extends BaseModule {
     // ANTES de responder. Va al frente porque enmarca todo el turno. Constante y pura
     // (sin lecturas async): no puede bloquear ni romper el turno. No en turnos sinteticos
     // (async-subscriber / RPC responders): ahi no hay nadie a quien sintonizar.
-    if (!context?.async_invocation) {
+    // Gateada por el interruptor 'sintonizador' (panel central): si esta OFF, no se inyecta.
+    if (!context?.async_invocation && this.sintoniaActiva) {
       const lente = this.sintonizador.seccion();
       effectiveSystem = effectiveSystem ? `${lente}\n\n${effectiveSystem}` : lente;
     }

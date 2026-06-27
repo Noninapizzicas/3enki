@@ -15,17 +15,17 @@
 
   export let panelId: string;
 
-  // Espejo de ai-gateway/module.json providers
-  // Fuente de verdad: modules/ai-gateway/module.json config.providers
+  // Espejo de ai-gateway/module.json providers (ORDEN = prioridad; el 1º es el default).
+  // Fuente de verdad: modules/conversacion/ai-gateway/module.json config.providers
   const providers: Provider[] = [
-    { id: 'claude-cli', name: 'Claude Code 4.6 (1M)', icon: '🟣', models: ['sonnet', 'opus', 'haiku'] },
-    { id: 'deepseek', name: 'DeepSeek', icon: '🔮', models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'] },
-    { id: 'anthropic', name: 'Anthropic (API)', icon: '🧠', models: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'] },
+    { id: 'deepseek-anthropic', name: 'DeepSeek', icon: '🔮', models: ['deepseek-v4-flash', 'deepseek-v4-pro'] },
+    { id: 'kimi', name: 'Kimi (Moonshot)', icon: '🌙', models: ['kimi-k2.6', 'kimi-k2.5', 'kimi-k2-thinking', 'moonshot-v1-128k'] },
+    { id: 'anthropic', name: 'Anthropic (API)', icon: '🧠', models: ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-3-5-haiku-20241022'] },
     { id: 'openai', name: 'OpenAI', icon: '🤖', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
     { id: 'groq', name: 'Groq', icon: '⚡', models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'] },
     { id: 'gemini', name: 'Google Gemini', icon: '💎', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
     { id: 'ollama', name: 'Ollama (Local)', icon: '🦙', models: ['llama2', 'codellama', 'mistral', 'mixtral'] },
-    { id: 'kimi', name: 'Kimi (Moonshot)', icon: '🌙', models: ['kimi-k2.6', 'kimi-k2.5', 'kimi-k2-thinking', 'moonshot-v1-128k'] },
+    { id: 'claude-cli', name: 'Claude Code (1M)', icon: '🟣', models: ['sonnet', 'opus', 'haiku'] },
   ];
 
   let selectedProvider: Provider | null = $activeProvider || providers[0];

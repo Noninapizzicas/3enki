@@ -228,6 +228,7 @@ export const PROJECT_COLORS = [
 export const PROVIDER_ICONS: Record<string, string> = {
   openai:    '🤖',
   anthropic: '🧠',
+  'deepseek-anthropic': '🔮',
   deepseek:  '🔮',
   gemini:    '💎',
   groq:      '⚡',

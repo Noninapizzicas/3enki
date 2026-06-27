@@ -1,8 +1,8 @@
 {
   "$schema": "../../../schemas/provider-manifest.schema.json",
   "name": "local.glovo",
-  "version": "1.1.0",
-  "description": "Integración con Glovo Partner API v2 — OAuth2, polling de pedidos, aceptar/rechazar, marcar listo",
+  "version": "1.2.0",
+  "description": "Integración con Glovo Partner API v2 — OAuth2 POR PROYECTO, polling/webhook de pedidos, aceptar/rechazar, marcar listo. Cada función acepta project_id opcional: resuelve credenciales (client_id/secret/chain) de GLOVO_*_API_KEY_PROJECT_<slug> (credential-manager, nivel PROJECT) con fallback al .env plano, y cachea el token OAuth por proyecto.",
   "type": "provider",
   "requires": {
     "credentials": [

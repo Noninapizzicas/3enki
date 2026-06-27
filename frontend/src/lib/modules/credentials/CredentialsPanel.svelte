@@ -120,13 +120,16 @@
     clientSecret: ''
   };
 
-  // Form state for Glovo credentials
+  // Form state for Glovo credentials.
+  // Glovo es POR PROYECTO (multi-tenant): el backend (credential-manager v2.2.0)
+  // solo acepta nivel PROJECT con identifier=slug → el form arranca en PROJECT.
   let glovoForm = {
-    level: 'GLOBAL',
+    level: 'PROJECT',
     identifier: '',
     clientId: '',
     clientSecret: '',
-    chainId: ''
+    chainId: '',
+    webhookToken: ''
   };
 
   // OAuth authorize form
@@ -310,9 +313,10 @@
           glovoRequiresId ? glovoForm.identifier : null,
           glovoForm.clientId,
           glovoForm.clientSecret,
-          glovoForm.chainId
+          glovoForm.chainId,
+          glovoForm.webhookToken || null
         );
-        glovoForm = { level: 'GLOBAL', identifier: '', clientId: '', clientSecret: '', chainId: '' };
+        glovoForm = { level: 'PROJECT', identifier: '', clientId: '', clientSecret: '', chainId: '', webhookToken: '' };
         setActiveTab('lista');
       } catch (err) {
         error = err instanceof Error ? err.message : 'Error al guardar credenciales Glovo';
@@ -365,7 +369,7 @@
       identifier: '',
       apiKey: ''
     };
-    glovoForm = { level: 'GLOBAL', identifier: '', clientId: '', clientSecret: '', chainId: '' };
+    glovoForm = { level: 'PROJECT', identifier: '', clientId: '', clientSecret: '', chainId: '', webhookToken: '' };
     clearTestResult();
     error = null;
     setActiveTab('lista');
@@ -1565,6 +1569,18 @@
               />
             </div>
 
+            <!-- Webhook Token (opcional) -->
+            <div class="field">
+              <label class="label" for="glovo-webhook-token">Token de webhook <span class="opt">(opcional)</span></label>
+              <input
+                id="glovo-webhook-token"
+                type={showPassword ? 'text' : 'password'}
+                class="input"
+                placeholder="Token estático del Vendor Portal (autentica el webhook de pedidos)"
+                bind:value={glovoForm.webhookToken}
+              />
+            </div>
+
             <!-- Glovo configs existentes -->
             {#if $glovoConfigs.length > 0}
               <div class="field">
@@ -1575,6 +1591,9 @@
                       <span class="cred-icon">🛵</span>
                       <span>{gc.level}{gc.identifier ? ` (${gc.identifier})` : ''}</span>
                       <span class="cred-preview">{gc.clientIdPreview}</span>
+                      {#if gc.hasWebhookToken}
+                        <span title="Token de webhook configurado">🪝</span>
+                      {/if}
                       {#if gc.configured}
                         <span title="Configurado">✅</span>
                       {:else}

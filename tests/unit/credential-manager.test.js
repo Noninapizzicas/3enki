@@ -523,5 +523,111 @@ function isCanonicalError(result) {
     await cleanup(envFile);
   });
 
+  // ==========================================
+  // Group: vendor Glovo (multi-campo, POR PROYECTO, multi-tenant)
+  // ==========================================
+
+  const limpiarGlovoEnv = (slug) => {
+    for (const f of ['GLOVO_CLIENT_ID', 'GLOVO_CLIENT_SECRET', 'GLOVO_CHAIN_ID', 'GLOVO_WEBHOOK_TOKEN']) {
+      delete process.env[`${f}_API_KEY_PROJECT_${slug}`];
+    }
+  };
+
+  await testAsync('glovo.save a nivel GLOBAL → 400 (Glovo es por-proyecto)', async () => {
+    const mocks = makeMocks();
+    const { module: m, envFile } = await instantiate(mocks);
+    const r = await m.handleGlovoSave({ level: 'GLOBAL', client_id: 'c', client_secret: 's', chain_id: 'ch' });
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.error.details.allowed_level, 'PROJECT');
+    await m.onUnload(); await cleanup(envFile);
+  });
+
+  await testAsync('glovo.save sin identifier → 400', async () => {
+    const mocks = makeMocks();
+    const { module: m, envFile } = await instantiate(mocks);
+    const r = await m.handleGlovoSave({ level: 'PROJECT', client_id: 'c', client_secret: 's', chain_id: 'ch' });
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.error.details.field, 'identifier');
+    await m.onUnload(); await cleanup(envFile);
+  });
+
+  await testAsync('glovo.save sin client_id/secret/chain → 400', async () => {
+    const mocks = makeMocks();
+    const { module: m, envFile } = await instantiate(mocks);
+    const r = await m.handleGlovoSave({ level: 'PROJECT', identifier: 'nonina', client_id: 'c' });
+    assert.strictEqual(r.status, 400);
+    await m.onUnload(); await cleanup(envFile);
+  });
+
+  await testAsync('glovo.save PROJECT → 201 + claves por-proyecto en process.env', async () => {
+    const mocks = makeMocks();
+    const { module: m, envFile } = await instantiate(mocks);
+    const r = await m.handleGlovoSave({
+      level: 'PROJECT', identifier: 'nonina',
+      client_id: 'cid-nonina', client_secret: 'sec-nonina', chain_id: 'chain-nonina', webhook_token: 'wh-nonina'
+    });
+    assert.strictEqual(r.status, 201);
+    // Lo que leen el provider local.glovo y el webhook:
+    assert.strictEqual(process.env.GLOVO_CLIENT_ID_API_KEY_PROJECT_nonina, 'cid-nonina');
+    assert.strictEqual(process.env.GLOVO_CLIENT_SECRET_API_KEY_PROJECT_nonina, 'sec-nonina');
+    assert.strictEqual(process.env.GLOVO_CHAIN_ID_API_KEY_PROJECT_nonina, 'chain-nonina');
+    assert.strictEqual(process.env.GLOVO_WEBHOOK_TOKEN_API_KEY_PROJECT_nonina, 'wh-nonina');
+    limpiarGlovoEnv('nonina');
+    await m.onUnload(); await cleanup(envFile);
+  });
+
+  await testAsync('VARIOS proyectos con Glovo, aislados (cada uno sus credenciales)', async () => {
+    const mocks = makeMocks();
+    const { module: m, envFile } = await instantiate(mocks);
+    await m.handleGlovoSave({ level: 'PROJECT', identifier: 'nonina', client_id: 'cid-A', client_secret: 'sec-A', chain_id: 'ch-A' });
+    await m.handleGlovoSave({ level: 'PROJECT', identifier: 'otra-tienda', client_id: 'cid-B', client_secret: 'sec-B', chain_id: 'ch-B' });
+
+    // Resolucion por field-provider, project-only, sin cruce entre tiendas
+    const rA = m._resolveCredential('GLOVO_CLIENT_ID', { projectId: 'nonina' });
+    assert.strictEqual(rA.found, true);
+    assert.strictEqual(rA.apiKey, 'cid-A');
+    assert.strictEqual(rA.resolvedFrom, 'PROJECT');
+    const rB = m._resolveCredential('GLOVO_CLIENT_ID', { projectId: 'otra-tienda' });
+    assert.strictEqual(rB.apiKey, 'cid-B');
+    // Un proyecto sin Glovo no hereda el de otro (aislamiento)
+    const rC = m._resolveCredential('GLOVO_CLIENT_ID', { projectId: 'sin-glovo' });
+    assert.strictEqual(rC.found, false);
+
+    limpiarGlovoEnv('nonina'); limpiarGlovoEnv('otra-tienda');
+    await m.onUnload(); await cleanup(envFile);
+  });
+
+  await testAsync('glovoConfigs en el estado: agrupado por proyecto, sin exponer secretos', async () => {
+    const mocks = makeMocks();
+    const { module: m, envFile } = await instantiate(mocks);
+    await m.handleGlovoSave({ level: 'PROJECT', identifier: 'nonina', client_id: 'cid-largo-nonina', client_secret: 'sec', chain_id: 'chain-123', webhook_token: 'wh' });
+    const state = m._getUIState();
+    assert.ok(Array.isArray(state.glovoConfigs));
+    const cfg = state.glovoConfigs.find(c => c.identifier === 'nonina');
+    assert.ok(cfg);
+    assert.strictEqual(cfg.level, 'PROJECT');
+    assert.strictEqual(cfg.hasSecret, true);
+    assert.strictEqual(cfg.hasWebhookToken, true);
+    assert.strictEqual(cfg.chainId, 'chain-123');
+    assert.strictEqual(cfg.configured, true);
+    assert.ok(!cfg.clientIdPreview.includes('cid-largo-nonina'.slice(0, 4)) || cfg.clientIdPreview.startsWith('*'), 'client_id enmascarado');
+    limpiarGlovoEnv('nonina');
+    await m.onUnload(); await cleanup(envFile);
+  });
+
+  await testAsync('glovo.delete borra los campos del proyecto; segundo delete → 404', async () => {
+    const mocks = makeMocks();
+    const { module: m, envFile } = await instantiate(mocks);
+    await m.handleGlovoSave({ level: 'PROJECT', identifier: 'nonina', client_id: 'c', client_secret: 's', chain_id: 'ch' });
+    const d1 = await m.handleGlovoDelete({ level: 'PROJECT', identifier: 'nonina' });
+    assert.strictEqual(d1.status, 200);
+    assert.ok(d1.data.deleted >= 3);
+    assert.strictEqual(process.env.GLOVO_CLIENT_ID_API_KEY_PROJECT_nonina, undefined);
+    const d2 = await m.handleGlovoDelete({ level: 'PROJECT', identifier: 'nonina' });
+    assert.strictEqual(d2.status, 404);
+    limpiarGlovoEnv('nonina');
+    await m.onUnload(); await cleanup(envFile);
+  });
+
   console.log('\ncredential-manager: todos los tests pasaron ✓');
 })().catch(err => { console.error(err); process.exit(1); });

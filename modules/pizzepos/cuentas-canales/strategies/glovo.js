@@ -204,6 +204,7 @@ class GlovoStrategy {
 
       const pedido = {
         cuenta_id,
+        project_id: data.project_id || null,
         ref_display: cuenta.ref_display || null,
         glovo_order_id,
         numero_pedido,
@@ -755,6 +756,7 @@ class GlovoStrategy {
 
         this.modulo.eventBus.publish(`local.glovo.${providerAction}.request`, {
           order_id: orderId,
+          project_id: pedido.project_id || null,
           ...(action === 'reject' && pedido.motivo_rechazo && { reason: pedido.motivo_rechazo })
         }, { correlationId });
       });
@@ -796,7 +798,7 @@ class GlovoStrategy {
     }
 
     // 1. Detalle autoritativo desde la API de Glovo (autenticidad + datos completos).
-    let order = await this.getOrderFromAPI(glovo_order_id);
+    let order = await this.getOrderFromAPI(glovo_order_id, project_id);
 
     // 2. Fallback: el cuerpo del webhook (p.ej. staging sin OAuth configurado).
     if (!order) {
@@ -826,7 +828,7 @@ class GlovoStrategy {
    * local.glovo (mismo patron request/response del bus que pollNuevosPedidos).
    * Devuelve el pedido normalizado o null si la API no responde.
    */
-  async getOrderFromAPI(orderId) {
+  async getOrderFromAPI(orderId, projectId = null) {
     if (!orderId) return null;
     try {
       return await new Promise((resolve, reject) => {
@@ -855,7 +857,8 @@ class GlovoStrategy {
         }, 15000);
 
         this.modulo.eventBus.publish('local.glovo.get_order.request', {
-          order_id: orderId
+          order_id: orderId,
+          project_id: projectId
         }, { correlationId });
       });
     } catch (err) {

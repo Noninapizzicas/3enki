@@ -60,6 +60,7 @@ export interface GlovoConfig {
   clientIdPreview: string;
   hasSecret: boolean;
   chainId: string;
+  hasWebhookToken?: boolean;
   configured: boolean;
 }
 
@@ -500,14 +501,15 @@ export async function deleteOAuthConfig(accountId: string): Promise<void> {
 }
 
 /**
- * Guarda configuración Glovo (Client ID + Client Secret + Chain ID)
+ * Guarda configuración Glovo (Client ID + Client Secret + Chain ID + webhook token opcional)
  */
 export async function saveGlovoConfig(
   level: string,
   identifier: string | null,
   clientId: string,
   clientSecret: string,
-  chainId: string
+  chainId: string,
+  webhookToken: string | null = null
 ): Promise<any> {
   credentialsStore.update(s => ({ ...s, loading: true, error: null }));
 
@@ -517,7 +519,8 @@ export async function saveGlovoConfig(
       identifier,
       client_id: clientId,
       client_secret: clientSecret,
-      chain_id: chainId
+      chain_id: chainId,
+      ...(webhookToken ? { webhook_token: webhookToken } : {})
     });
 
     // Recargar lista para tener estado actualizado

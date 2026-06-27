@@ -48,6 +48,10 @@ const PROVIDER_ICONS = {
   KIMI: '🌙',
   GMAIL: '📧',
   GLOVO: '🛵',
+  GLOVO_CLIENT_ID: '🛵',
+  GLOVO_CLIENT_SECRET: '🛵',
+  GLOVO_CHAIN_ID: '🛵',
+  GLOVO_WEBHOOK_TOKEN: '🪝',
   CLOUDFLARE: '🟧',
   TELEGRAM: '✈️',
   META_WHATSAPP: '💬',
@@ -56,10 +60,18 @@ const PROVIDER_ICONS = {
 
 const VALID_LEVELS = ['GLOBAL', 'PROJECT', 'CLIENT', 'CUSTOM', 'BOT'];
 
+// Campos del vendor Glovo (multi-campo). Cada campo se persiste como su propio
+// "provider" — igual que META_WHATSAPP + META_WHATSAPP_VERIFY_TOKEN — bajo la
+// clave canonica <CAMPO>_API_KEY_PROJECT_<slug>. El consumidor (provider
+// local.glovo + webhook de cuentas-canales) lee ese env directamente por
+// proyecto (sincrono), sin bus. Ver handleGlovoSave / _getGlovoConfigs.
+const GLOVO_FIELDS = ['GLOVO_CLIENT_ID', 'GLOVO_CLIENT_SECRET', 'GLOVO_CHAIN_ID', 'GLOVO_WEBHOOK_TOKEN'];
+
 // Providers cuyo secreto es POR PROYECTO (multi-tenant): cada tienda tiene su propio número/token
 // y su propio webhook → NUNCA pueden ser globales (un token global mezclaría negocios). Se exige
 // nivel PROJECT al guardar y la resolución NO cae a GLOBAL/legacy para ellos (aislamiento real).
-const PROJECT_ONLY_PROVIDERS = new Set(['META_WHATSAPP', 'META_WHATSAPP_VERIFY_TOKEN']);
+// Glovo entra aquí: varios proyectos, cada uno con sus credenciales de Glovo, aislados.
+const PROJECT_ONLY_PROVIDERS = new Set(['META_WHATSAPP', 'META_WHATSAPP_VERIFY_TOKEN', ...GLOVO_FIELDS]);
 
 class CredentialManagerModule extends BaseModule {
   constructor() {
@@ -610,6 +622,106 @@ class CredentialManagerModule extends BaseModule {
   }
 
   // ==========================================
+  // Vendor Glovo (multi-campo, POR PROYECTO)
+  // ==========================================
+  //
+  // Reintegrado en el core (el modulo credential-vendor-glovo planeado quedaba
+  // pendiente y bloqueaba el alta de Glovo). Glovo es multi-tenant: cada
+  // proyecto/tienda tiene SUS credenciales (client_id, client_secret, chain_id
+  // y, opcional, webhook_token) → SOLO nivel PROJECT, sin caída a global. Cada
+  // campo se persiste como GLOVO_<CAMPO>_API_KEY_PROJECT_<slug> (mismo esquema
+  // que el resto), que es lo que leen el provider local.glovo y el webhook.
+
+  /**
+   * Guarda la config Glovo de UN proyecto (client_id + client_secret + chain_id
+   * [+ webhook_token opcional]). Invariante: solo PROJECT con identifier=slug.
+   * UI: credential/glovo.save. Payload: { level, identifier, client_id,
+   * client_secret, chain_id, webhook_token? }.
+   */
+  async handleGlovoSave(data) {
+    try {
+      const { level, identifier, client_id, client_secret, chain_id, webhook_token } = data || {};
+
+      if (level && level !== 'PROJECT') {
+        return this._errorResponse(400, 'INVALID_INPUT', 'Glovo es por-proyecto: solo nivel PROJECT', { kind: 'domain', field: 'level', allowed_level: 'PROJECT' });
+      }
+      if (!identifier) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'identifier (slug del proyecto) requerido', { kind: 'domain', field: 'identifier' });
+      }
+      if (!client_id || !client_secret || !chain_id) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'client_id, client_secret y chain_id son requeridos', { kind: 'domain', field: 'client_id|client_secret|chain_id' });
+      }
+
+      const fields = {
+        GLOVO_CLIENT_ID: client_id,
+        GLOVO_CLIENT_SECRET: client_secret,
+        GLOVO_CHAIN_ID: chain_id
+      };
+      if (webhook_token) fields.GLOVO_WEBHOOK_TOKEN = webhook_token;
+
+      let existed = false;
+      for (const [provider, value] of Object.entries(fields)) {
+        const key = this._buildKey(provider, 'PROJECT', identifier);
+        if (this.credentials.has(key)) existed = true;
+        this.credentials.set(key, value);
+        process.env[key] = value;
+      }
+      await this._saveEnvFile();
+      this._updateCredentialMetrics();
+
+      await this._publicarEvento(existed ? 'credential.updated' : 'credential.saved', {
+        provider: 'GLOVO', level: 'PROJECT', identifier,
+        key: this._buildKey('GLOVO_CLIENT_ID', 'PROJECT', identifier)
+      });
+      this.metrics?.increment('credential-manager.created', { provider: 'GLOVO', level: 'PROJECT' });
+      await this._publishState();
+
+      return { status: existed ? 200 : 201, data: { provider: 'GLOVO', level: 'PROJECT', identifier, created: !existed } };
+    } catch (err) {
+      return this._handleHandlerError('credential-manager.glovo.save.failed', err, 'glovo_save');
+    }
+  }
+
+  /**
+   * Elimina la config Glovo de un proyecto (borra los 4 campos).
+   * UI: credential/glovo.delete. Payload: { level, identifier }.
+   */
+  async handleGlovoDelete(data) {
+    try {
+      const { level, identifier } = data || {};
+      if (level && level !== 'PROJECT') {
+        return this._errorResponse(400, 'INVALID_INPUT', 'Glovo es por-proyecto: solo nivel PROJECT', { kind: 'domain', field: 'level', allowed_level: 'PROJECT' });
+      }
+      if (!identifier) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'identifier (slug del proyecto) requerido', { kind: 'domain', field: 'identifier' });
+      }
+
+      let deleted = 0;
+      for (const provider of GLOVO_FIELDS) {
+        const key = this._buildKey(provider, 'PROJECT', identifier);
+        if (this.credentials.has(key)) {
+          this.credentials.delete(key);
+          delete process.env[key];
+          deleted++;
+        }
+      }
+      if (deleted === 0) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'No hay config Glovo para ese proyecto', { entity_type: 'glovo_config', entity_id: identifier });
+      }
+      await this._saveEnvFile();
+      this._updateCredentialMetrics();
+
+      await this._publicarEvento('credential.deleted', { provider: 'GLOVO', level: 'PROJECT', identifier });
+      this.metrics?.increment('credential-manager.deleted');
+      await this._publishState();
+
+      return { status: 200, data: { provider: 'GLOVO', level: 'PROJECT', identifier, deleted } };
+    } catch (err) {
+      return this._handleHandlerError('credential-manager.glovo.delete.failed', err, 'glovo_delete');
+    }
+  }
+
+  // ==========================================
   // AI Tools
   // ==========================================
 
@@ -656,8 +768,41 @@ class CredentialManagerModule extends BaseModule {
     return {
       credentials,
       total: credentials.length,
+      glovoConfigs: this._getGlovoConfigs(),
       env_file: this.envFilePath
     };
+  }
+
+  /**
+   * Vista agrupada del vendor Glovo (multi-campo) por proyecto. Agrupa las
+   * claves GLOVO_*_API_KEY_PROJECT_<slug> por identifier. NO expone secretos:
+   * client_id enmascarado, secret/webhook solo como booleano, chain_id en claro
+   * (no es secreto). Lo consume el frontend (response.data.glovoConfigs).
+   * @private
+   */
+  _getGlovoConfigs() {
+    const byProject = new Map();
+    for (const [key, value] of this.credentials.entries()) {
+      const parsed = this._parseKey(key);
+      if (!parsed || parsed.level !== 'PROJECT' || !GLOVO_FIELDS.includes(parsed.provider)) continue;
+      const id = parsed.identifier;
+      if (!byProject.has(id)) byProject.set(id, {});
+      byProject.get(id)[parsed.provider] = value;
+    }
+    const configs = [];
+    for (const [identifier, f] of byProject.entries()) {
+      const clientId = f.GLOVO_CLIENT_ID || '';
+      configs.push({
+        level: 'PROJECT',
+        identifier,
+        clientIdPreview: clientId ? this._maskApiKey(clientId) : '',
+        hasSecret: !!f.GLOVO_CLIENT_SECRET,
+        chainId: f.GLOVO_CHAIN_ID || '',
+        hasWebhookToken: !!f.GLOVO_WEBHOOK_TOKEN,
+        configured: !!(clientId && f.GLOVO_CLIENT_SECRET && f.GLOVO_CHAIN_ID)
+      });
+    }
+    return configs;
   }
 
   async _publishState(correlation_id = null) {

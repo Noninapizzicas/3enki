@@ -1,6 +1,7 @@
 {
   "name": "conserje",
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "_v0_3_nota": "v0.3.0: cierra el nag perpetuo de diseno/digital. Su estado `usada` no se observaba (el mapa de señales solo cubría marca/recetas/carta/escandallo), así que una vez desbloqueados se ofrecían cada cooldown para siempre, ya construidos. Añadidas dos SEÑAL_EVENTO autocontenidas: carta.html.generada -> diseno usada; cartadigital.publicado -> digital usada. Sin tocar otros módulos ni el wiring (oído por el bus crudo). Test: conserje__senales-usada (5/5).",
   "description": "Abre el camino al comerciante. Cruza lo que el sistema OFRECE (LibroDeCapacidades) con lo que el comerciante USA (derivado del bus en vivo) y, cuando hay una brecha con intención, le ofrece el siguiente paso en POSITIVO (no señala la carencia). Sin sondas hardcodeadas: lee el grafo de capacidades + el uso real. La señal de oro es la intención — lo que el comerciante alarga la mano a tocar pero está vacío. Apagado por defecto; su on/off vive en el panel central de interruptores (botón 'conserje'), reacciona en caliente. Cooldown por capacidad para no agobiar.",
   "author": "Event Core Team",
   "language": "es",

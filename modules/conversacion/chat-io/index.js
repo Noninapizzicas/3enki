@@ -456,6 +456,7 @@ class ChatIoModule extends BaseModule {
 
       const convRows = await this._db(project_id,
         `SELECT c.id, c.project_id, c.title, c.context_window, c.temperature, c.max_tokens, c.prompt_id,
+                c.provider, c.model,
                 c.created_at, c.updated_at,
                 (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
          FROM conversations c WHERE c.id = ?`,

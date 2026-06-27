@@ -309,6 +309,21 @@ async function createConversation(m, opts = {}) {
     await m.onUnload();
   });
 
+  await testAsync('handleLoad DEVUELVE provider/model (el frontend honra el modelo guardado, no el ultimo que corrio)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await m.handleCreate({ project_id: VALID_PROJECT, title: 'L', provider: 'gemini', model: 'gemini-2.5-pro' });
+    const list = await m.handleList({ project_id: VALID_PROJECT });
+    const cid = list.data.conversations.find(c => c.title === 'L').id;
+    const r = await m.handleLoad({ project_id: VALID_PROJECT, conversation_id: cid });
+    assert.strictEqual(r.status, 200);
+    // Sin provider/model aqui, chat.ts caia al branch 'ultimo modelo que corrio' (trinquete
+    // hacia kimi) en vez de honrar la eleccion guardada del usuario.
+    assert.strictEqual(r.data.conversation.provider, 'gemini', 'handleLoad debe traer el provider guardado');
+    assert.strictEqual(r.data.conversation.model, 'gemini-2.5-pro', 'handleLoad debe traer el model guardado');
+    await m.onUnload();
+  });
+
   await testAsync('handleLoad devuelve conversation + messages[]', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);

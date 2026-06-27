@@ -280,6 +280,35 @@ async function createConversation(m, opts = {}) {
     await m.onUnload();
   });
 
+  await testAsync('handleList DEVUELVE provider/model (el selector del ConfigTab los recupera al reabrir)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    // El usuario eligio gemini en la conversacion -> handleCreate lo persiste.
+    await m.handleCreate({ project_id: VALID_PROJECT, title: 'con-modelo', provider: 'gemini', model: 'gemini-2.5-pro' });
+    const r = await m.handleList({ project_id: VALID_PROJECT });
+    assert.strictEqual(r.status, 200);
+    const conv = r.data.conversations.find(c => c.title === 'con-modelo');
+    assert.ok(conv, 'la conversacion esta en la lista');
+    // Antes la query de handleList no seleccionaba provider/model -> llegaban undefined
+    // -> el ConfigTab volvia a "Auto" al reabrir y el turno caia a kimi por prioridad.
+    assert.strictEqual(conv.provider, 'gemini', 'la lista debe traer el provider guardado');
+    assert.strictEqual(conv.model, 'gemini-2.5-pro', 'la lista debe traer el model guardado');
+    await m.onUnload();
+  });
+
+  await testAsync('handleUpdateSettings persiste provider/model y la lista los refleja', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const cid = await createConversation(m, { title: 'cambia-modelo' });
+    // Cambiar de provider a mitad de conversacion (lo que hace el ConfigTab al guardar).
+    await m.handleUpdateSettings({ project_id: VALID_PROJECT, conversation_id: cid, provider: 'kimi', model: 'kimi-k2.6' });
+    const r = await m.handleList({ project_id: VALID_PROJECT });
+    const conv = r.data.conversations.find(c => c.id === cid);
+    assert.strictEqual(conv.provider, 'kimi');
+    assert.strictEqual(conv.model, 'kimi-k2.6');
+    await m.onUnload();
+  });
+
   await testAsync('handleLoad devuelve conversation + messages[]', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);

@@ -217,9 +217,10 @@ export async function createConversation(
   conversationsStore.update(s => ({ ...s, loading: true, error: null }));
 
   // Contrato del backend (chat-io.handleCreate):
-  //   { project_id, title, context_window, temperature, max_tokens, prompt_id }
-  // El backend NO conoce system_prompt/model/provider — se eligen por defecto
-  // o se actualizan después con conversation/update_settings.
+  //   { project_id, title, context_window, temperature, max_tokens, prompt_id, provider, model }
+  // provider/model SI los persiste handleCreate (INSERT) — antes el frontend no los
+  // mandaba (la conversacion nacia sin modelo -> el backend caia a prioridad = kimi
+  // aunque el usuario hubiera elegido otro). system_prompt no tiene columna; va aparte.
   const createData = typeof config === 'string'
     ? { project_id: projId, title: config }
     : {
@@ -227,7 +228,9 @@ export async function createConversation(
         title: config?.title || 'Nueva conversación',
         context_window: config?.context_window,
         temperature: config?.temperature,
-        max_tokens: config?.max_tokens
+        max_tokens: config?.max_tokens,
+        provider: config?.provider ?? null,
+        model: config?.model ?? null
       };
 
   try {
@@ -246,7 +249,9 @@ export async function createConversation(
       message_count: 0,
       context_window: createData.context_window || 20,
       temperature: createData.temperature ?? 0.7,
-      max_tokens: createData.max_tokens || 2000
+      max_tokens: createData.max_tokens || 2000,
+      provider: (createData as any).provider ?? null,
+      model: (createData as any).model ?? null
     } as Conversation;
 
     conversationsStore.update(s => ({
@@ -288,6 +293,11 @@ export async function updateConversation(
     if (updates.context_window !== undefined) settingsToUpdate.context_window = updates.context_window;
     if (updates.temperature !== undefined) settingsToUpdate.temperature = updates.temperature;
     if (updates.max_tokens !== undefined) settingsToUpdate.max_tokens = updates.max_tokens;
+    // provider/model SI los persiste handleUpdateSettings — antes el frontend NO los
+    // mandaba, asi que cambiar el modelo en el ConfigTab no llegaba al backend (al
+    // reabrir, el selector volvia a "Auto" y el turno caia a kimi por prioridad).
+    if (updates.provider !== undefined) settingsToUpdate.provider = updates.provider;
+    if (updates.model !== undefined) settingsToUpdate.model = updates.model;
 
     await mqttRequest('conversation', 'update_settings', settingsToUpdate);
 

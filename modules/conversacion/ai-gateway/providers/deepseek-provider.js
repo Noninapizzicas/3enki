@@ -4,12 +4,20 @@ const BaseProvider = require('./base-provider');
  * DeepSeek Provider
  *
  * Implementación del proveedor DeepSeek (https://api.deepseek.com)
- * Priority: 1 (primera opción por costo/performance)
+ * Priority: configurada en module.json (hoy 8). El tool-use es completo y correcto
+ *   (correlaciona por tool_call_id, formato OpenAI) — la promoción es decisión de operación.
  *
- * Soporta:
- * - deepseek-chat: modelo estándar
- * - deepseek-reasoner: modo razonamiento (chain-of-thought visible)
- *   Activar con options.reasoning = true o model = 'deepseek-reasoner'
+ * Modelos vivos:
+ * - deepseek-v4-flash: modelo estándar (no-thinking). default_model.
+ * - deepseek-v4-pro:   más capaz.
+ * - deepseek-reasoner: modo razonamiento (chain-of-thought visible).
+ *   Activar con options.reasoning = true o model = 'deepseek-reasoner'.
+ *
+ * MIGRACIÓN (DeepSeek discontinúa los nombres legacy el 2026-07-24 15:59 UTC):
+ *   deepseek-chat  = v4-flash modo NO-thinking  -> se normaliza a default_model (resolveModel).
+ *   deepseek-coder = retirado                    -> se normaliza a default_model.
+ *   deepseek-reasoner sigue siendo el único camino thinking documentado hoy; se conserva
+ *   hasta que la doc del v4-flash exponga el parámetro de thinking en el body.
  */
 class DeepSeekProvider extends BaseProvider {
   constructor(config, logger, credentialResolver) {
@@ -89,6 +97,30 @@ class DeepSeekProvider extends BaseProvider {
   }
 
   /**
+   * Resuelve el nombre de modelo a enviar a la API, normalizando los nombres legacy.
+   *
+   * DeepSeek discontinúa `deepseek-chat` y `deepseek-coder` el 2026-07-24. Una conversación
+   * con uno de esos nombres GUARDADO no debe caerse: lo mapeamos al modelo vivo (default_model,
+   * = v4-flash modo no-thinking, que es lo que `deepseek-chat` era). El razonamiento sigue por
+   * `deepseek-reasoner` mientras viva (único camino thinking documentado hoy).
+   *
+   * @param {{model?: string, reasoning?: boolean}} options
+   * @returns {string} nombre de modelo vivo
+   */
+  resolveModel(options = {}) {
+    let requested = options.model;
+    // Legacy -> vivo (no-thinking). Cae a default_model.
+    if (requested === 'deepseek-chat' || requested === 'deepseek-coder') {
+      requested = null;
+    }
+    // Razonamiento explícito sin modelo concreto.
+    if (!requested && options.reasoning === true) {
+      return 'deepseek-reasoner';
+    }
+    return requested || this.config.default_model;
+  }
+
+  /**
    * Chat completion
    */
   async chatCompletion(messages, options = {}) {
@@ -96,11 +128,12 @@ class DeepSeekProvider extends BaseProvider {
       throw new Error('DeepSeek provider not available (check API key)');
     }
 
-    // Check for vision content and select appropriate model
+    // Check for vision content (afecta max_tokens/temperature, no la selección de modelo:
+    // v4-flash unifica texto y visión, antes ambos caían a deepseek-chat)
     const hasImages = this.hasVisionContent(messages);
-    // Reasoning mode: explicit model or options.reasoning flag
-    const useReasoning = options.reasoning === true || options.model === 'deepseek-reasoner';
-    const model = options.model || (useReasoning ? 'deepseek-reasoner' : (hasImages ? 'deepseek-chat' : this.config.default_model));
+    // Resuelve el modelo normalizando nombres legacy (deepseek-chat/coder -> v4-flash)
+    const model = this.resolveModel(options);
+    const useReasoning = model === 'deepseek-reasoner';
 
     // Convert messages for vision if needed
     const processedMessages = hasImages ? this.convertMessagesForVision(messages) : messages;
@@ -296,7 +329,7 @@ class DeepSeekProvider extends BaseProvider {
       throw new Error('DeepSeek provider not available (check API key)');
     }
 
-    const model = options.model || this.config.default_model;
+    const model = this.resolveModel(options); // normaliza legacy (deepseek-chat/coder -> vivo)
 
     // Estimate input tokens for cost calc
     const messagesText = messages.map(m => m.content).join(' ');

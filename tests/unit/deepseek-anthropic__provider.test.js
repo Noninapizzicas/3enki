@@ -128,6 +128,57 @@ test('_coerceModel: sin modelo no toca nada (deja que el default actue aguas aba
   assert.strictEqual(p._coerceModel({}).model, undefined);
 });
 
+test('convertMessages: N tool_result consecutivos → UN solo user (no orphan tool_use)', () => {
+  const p = new AnthropicProvider(CFG, LOG, null);
+  const msgs = [
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: 'hola' },
+    { role: 'assistant', content: '', tool_calls: [
+      { id: 'call_A', type: 'function', function: { name: 'bus_publishAndWait', arguments: '{}' } },
+      { id: 'call_B', type: 'function', function: { name: 'cajon_abrir', arguments: '{}' } }
+    ] },
+    { role: 'tool', tool_call_id: 'call_A', content: 'resA' },
+    { role: 'tool', tool_call_id: 'call_B', content: 'resB' }
+  ];
+  const { messages } = p.convertMessages(msgs);
+  // assistant con 2 tool_use seguido de UN user con 2 tool_result (no dos users)
+  const asst = messages.find(m => m.role === 'assistant' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool_use'));
+  assert.ok(asst, 'debe haber un assistant con tool_use');
+  const ids = asst.content.filter(c => c.type === 'tool_use').map(c => c.id);
+  assert.deepStrictEqual(ids, ['call_A', 'call_B']);
+  const idx = messages.indexOf(asst);
+  const next = messages[idx + 1];
+  assert.strictEqual(next.role, 'user', 'el siguiente debe ser UN user');
+  const resultIds = next.content.filter(c => c.type === 'tool_result').map(c => c.tool_use_id);
+  assert.deepStrictEqual(resultIds, ['call_A', 'call_B'], 'AMBOS tool_result en el mismo user');
+  // no debe haber un SEGUNDO user de solo tool_result inmediatamente después
+  const after = messages[idx + 2];
+  assert.ok(!after || !(after.role === 'user' && Array.isArray(after.content) && after.content.every(c => c.type === 'tool_result')),
+    'no debe quedar un user de tool_result suelto');
+});
+
+test('convertMessages: un solo tool_result sigue siendo un user (sin regresión)', () => {
+  const p = new AnthropicProvider(CFG, LOG, null);
+  const { messages } = p.convertMessages([
+    { role: 'assistant', content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'x', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 'c1', content: 'r1' }
+  ]);
+  const user = messages.find(m => m.role === 'user');
+  assert.strictEqual(user.content.length, 1);
+  assert.strictEqual(user.content[0].tool_use_id, 'c1');
+});
+
+test('convertMessages: no fusiona a través de un turno normal (user de texto entre medias)', () => {
+  const p = new AnthropicProvider(CFG, LOG, null);
+  const { messages } = p.convertMessages([
+    { role: 'tool', tool_call_id: 'a', content: 'ra' },
+    { role: 'user', content: 'texto normal' },
+    { role: 'tool', tool_call_id: 'b', content: 'rb' }
+  ]);
+  const toolResultUsers = messages.filter(m => m.role === 'user' && Array.isArray(m.content) && m.content.every(c => c.type === 'tool_result'));
+  assert.strictEqual(toolResultUsers.length, 2, 'separados por un user de texto → NO se fusionan');
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

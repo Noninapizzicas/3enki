@@ -2,7 +2,8 @@
   "_doc": "Blueprint de carta-digital (HÍBRIDO: proyector JS + esta mitad LLM). Es el ESTUDIO de la carta digital cara-cliente. Sin agentes: los ESPECIALISTAS (copywriter, marketing, director de arte, curador visual) son PERSONAS que el LLM de la página ENCARNA, guiado por estos cajones. El blueprint NUNCA toca fs: lee por la puerta de los dueños (carta-manager, carta-marketing, contenido) y persiste por el reflejo de contenido. El píxel/audio lo produce el LÍDER (media.generar), nunca el LLM.",
   "id": "carta-digital",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-1.2.0",
+  "version": "blueprint-1.3.0",
+  "_v1_3_changelog": "v1.3.0 (skill blueprint-agentico): EL FRENO completo en disenar_carta_digital. El proyector ya validaba el card_template al guardar, pero el contrato estaba incompleto (solo {{id}}/{{nombre}}/data-accion). Ahora _checkDiseno exige el nucleo funcional+legal: {{id}} {{nombre}} {{precio}} {{alergenos}} {{add_label}} + hooks data-accion detalle/add + sin JS inline. disenar_carta_digital pasa el diseno por cartadigital.validar.request en bucle (max 3, reprompt con el slot/hook que falta) ANTES de guardar; guardar RE-VALIDA como gate inquebrantable (422). Mata el diseno 'listo' sin precio (carta rota), sin alergenos (ilegal 1169/2011) o sin boton de pedir.",
   "_v1_2_changelog": "v1.2.0 (2026-06-26): FIX mismo bug de desenvuelto que carta-marketing generar_copy. Los especialistas (redactar_descripcion/redactar_gancho/generar_imagen) hacian localizar(product_id, carta.productos) con carta PELADO (carta.get devuelve { status, data:{ productos } }) -> nunca encontraban el producto -> RESOURCE_NOT_FOUND. Ahora carta.data.productos y perfil.data.voz / perfil.data.visual / marca.data.visual. El invariante general vive ahora en el padre (disciplina 8b_lee_el_resultado_por_su_envoltorio).",
   "_temperatura_doc": "Pagina CREATIVA cara-cliente: el LLM ENCARNA a copywriter/marketing/director de arte para enriquecer cada producto (descripcion, gancho, diseno) -> caliente. Un pelin menos que carta-marketing (0.85) porque enriquece productos concretos, no inventa la marca. ai-gateway la usa como default del turno.",
   "temperatura": 0.75,
@@ -149,18 +150,29 @@
         "  //    card_template = HTML de UN producto, CUMPLIENDO el contrato de slots (ver reglas_clave).",
         "  tema_css      = <el LLM lo compone>",
         "  card_template = <el LLM lo compone, con los placeholders + data-accion>",
-        "  // 4. GUARDAR — el proyector VALIDA el contrato antes de persistir (422 si faltan hooks)",
+        "  // 4. VALIDAR — EL FRENO (skill blueprint-agentico): el proyector juzga el card_template contra el",
+        "  //    contrato de slots. Sin precio = carta rota; sin alergenos = ILEGAL (1169/2011); sin boton = no se pide.",
+        "  intento = 0",
+        "  repeat:",
+        "    v = await publishAndWait('cartadigital.validar.request', { project_id: in.project_id, diseno: { tema_css, card_template } }, { timeout_ms: 8000 })",
+        "    if (v.data.valid) break",
+        "    intento += 1",
+        "    card_template = <re-componer anadiendo SOLO lo que v.data.errors senala: slots faltan (p.ej. {{precio}}, {{alergenos}}), hooks data-accion>",
+        "  until (intento >= 3)",
+        "  if (!v.data.valid) return UPSTREAM_INVALID_RESPONSE { message: 'el diseno no cumple el contrato de slots tras 3 intentos', hint: v.data.errors }",
+        "  // 5. GUARDAR — el proyector RE-VALIDA (gate inquebrantable) y persiste (422 si no cumple).",
         "  return await publishAndWait('cartadigital.guardar_diseno.request', { project_id: in.project_id, diseno: { tema_css, card_template } })",
-        "  // 5. (el proyector emite cartadigital.diseno.actualizada → el export/PWA usa el nuevo look)"
+        "  // 6. (el proyector emite cartadigital.diseno.actualizada → el export/PWA usa el nuevo look)"
       ],
       "reglas_clave": [
         "CONTRATO DE SLOTS (obligatorio en card_template): placeholders {{id}} {{nombre}} {{precio}} {{visual}} {{descripcion}} {{gancho}} {{alergenos}} {{ingredientes}} {{add_label}}. El runtime los rellena (no los inventes ni los quites).",
         "HOOKS de interacción (obligatorios): el elemento raíz lleva data-producto-id=\"{{id}}\" data-accion=\"detalle\"; el botón de añadir lleva data-accion=\"add\" data-producto-id=\"{{id}}\". El runtime delega los clics por ahí — NO uses onclick ni nombres de función.",
         "El runtime PRE-RENDERIZA {{visual}} (img o placeholder), {{gancho}} (badge) y {{alergenos}} (chips): mételos como vienen, dales sitio en el layout.",
         "EN la identidad de marca: tema_css usa marca.visual (paleta/tipografía). Inmersivo: foto grande, descripción delante, aire. NO toques el runtime (carrito/pedido/chat) — solo el look.",
-        "NO JavaScript en el card_template (el runtime lo aporta). Solo HTML + clases. El CSS va en tema_css."
+        "NO JavaScript en el card_template (el runtime lo aporta). Solo HTML + clases. El CSS va en tema_css.",
+        "FRENO: el card_template pasa por cartadigital.validar.request antes de guardar (loop max 3, corrige el slot/hook que el error senala). Nucleo OBLIGATORIO funcional+legal: {{id}} {{nombre}} {{precio}} {{alergenos}} {{add_label}} + hooks data-accion detalle/add. guardar RE-VALIDA como gate. Sin precio = carta rota; sin alergenos = ilegal."
       ],
-      "errores_posibles": ["INVALID_INPUT", "INVALID_DESIGN", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_INVALID_RESPONSE", "INVALID_DESIGN", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
     },
     "publicar": {
       "_es_fuzzy": false,

@@ -1,25 +1,53 @@
 {
   "id": "menu-generator",
-  "version": "blueprint-12.0.0",
+  "version": "blueprint-12.1.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
   "temperatura": 0.4,
 
   "modelo_oop": {
-    "CLASE": "GeneradorDeCatalogo",
-    "MISION": "material -> ESTRUCTURAR(shape carta-pizzepos) -> entregar al custodio. NO persiste el.",
-    "COLABORADORES": {
-      "reflejo": "menu.import (JS determinista: estructura catalogo YA formado leido por fichero, sin re-emision)",
-      "custodio": "carta-manager (carta.save: atomica, versionada, VERIFICADA via publishAndWait)"
+    "INTERFAZ": "GeneradorDeCarta { generar(in: GenerarInput): Resultado }",
+
+    "CLASE GeneradorDeCatalogo IMPLEMENTA GeneradorDeCarta": {
+      "ATRIBUTOS": {
+        "reflejo": "Reflejo            // colaborador determinista (menu.import)",
+        "custodio": "Custodio          // carta-manager (carta.save) — dueno de /cartas/",
+        "bus": "EventBus              // Observer: progreso/fallo"
+      },
+      "METODOS": [
+        "generar(in: GenerarInput): Resultado",
+        "clasificar(in: GenerarInput): EstrategiaDeRuta   // la UNICA decision fuzzy",
+        "estructurar(texto: str): Carta                   // FUZZY, enfocado (solo en TEXTO_LIBRE)",
+        "_on_carta_generar_solicitada(ev): Resultado      // Command: handler de evento async"
+      ]
     },
-    "METODOS": ["generar(in): Resultado", "_on_carta_generar_solicitada(ev): Resultado"],
-    "INVARIANTES": [
-      "REGLA_DE_HIERRO: solo hechos del material o del usuario. precio ausente -> 0. ingrediente no nombrado -> no existe.",
-      "NO_REEMISION: el LLM NUNCA emite un catalogo formado. Formado => fichero => reflejo.",
-      "NO_CASCARA: no se persiste una carta que perdio productos/ingredientes vs la fuente.",
-      "NO_PISAR: regeneracion guarda BORRADOR; no auto-activa (no machaca la carta en servicio sin verificar).",
-      "PERSISTENCIA_DELEGADA: menu-generator NO escribe /cartas/. CATALOGO->menu.import ; TEXTO_LIBRE->carta.save."
-    ]
+
+    "INTERFAZ EstrategiaDeRuta": "{ dar_forma_y_entregar(in: GenerarInput): Resultado }   // Strategy",
+    "CLASE RutaCatalogoFichero IMPLEMENTA EstrategiaDeRuta": "in.material es fichero -> reflejo.import(material_ref) -> Resultado",
+    "CLASE RutaCatalogoInline  IMPLEMENTA EstrategiaDeRuta": "catalogo formado inline -> bus.fs_write(verbatim) -> reflejo.import(ref) -> Resultado",
+    "CLASE RutaTextoLibre      IMPLEMENTA EstrategiaDeRuta": "dictado/recetas -> estructurar(enfocado) -> custodio.save(carta, estado:borrador) -> Resultado",
+
+    "CLASE Reflejo (JS determinista)": "{ import(material_ref: path): {carta_id, productos:int}   // estructura el catalogo formado integro, sin re-emitir tokens }",
+    "CLASE Custodio (carta-manager)": "{ save(carta: Carta): Carta   // atomico, versionado, VERIFICADO (publishAndWait) }",
+
+    "VALUE_OBJECTS": "GenerarInput · Carta · Categoria · Producto · Ingrediente · Ruta · Resultado   (firmas en `contrato`)",
+
+    "MANDATOS (Specification — un Resultado valido los satisface)": [
+      "FIDELIDAD: cada dato de la carta procede del material o de una respuesta del usuario (precio ausente nace 0; un ingrediente nace solo si la fuente lo nombra).",
+      "VIA_FICHERO: el catalogo formado viaja por fichero al reflejo, que lo estructura determinista de una sola vez.",
+      "COMPLETITUD: toda carta persistida nace completa — cada producto conserva los ingredientes que la fuente trajo.",
+      "BORRADOR_PRIMERO: la regeneracion nace borrador; el humano la promueve a servicio cuando la verifica.",
+      "CUSTODIO: la carta se entrega a carta-manager (menu.import o carta.save); el reflejo es el dueno de /cartas/."
+    ],
+
+    "PATRONES": {
+      "Strategy": "EstrategiaDeRuta (CatalogoFichero | CatalogoInline | TextoLibre); clasificar() elige la estrategia — el unico punto fuzzy.",
+      "Delegation": "persistencia delegada al Custodio; menu-generator no escribe /cartas/.",
+      "Factory": "Carta = producto que el generador construye y entrega (no lo persiste el).",
+      "Observer": "publish al EventBus (menu.generation.* / carta.generar.*).",
+      "Command": "_on_carta_generar_solicitada = handler de evento (fire-and-forget desde carta-scheduler u otros).",
+      "Specification/Guard": "los MANDATOS son las guardas que el motor sostiene (cara de enforcement en el pseudocodigo)."
+    }
   },
 
   "contrato": {
@@ -37,7 +65,7 @@
     "entrada": "cajon generar (page=menu-generator) | evento carta.generar.solicitada",
     "rpc": ["menu.import.request -> .response (reflejo)", "fs.write.request -> .response (stage inline)", "carta.save.request -> .response (custodio)"],
     "salida": ["menu.generation.progress", "menu.generation.failed", "carta.generar.iniciada", "carta.generar.fallida"],
-    "qos": "publishAndWait (request/response correlado) en toda persistencia -> imposible 'guardado falso'"
+    "qos": "publishAndWait (request/response correlado) en toda persistencia -> la persistencia se confirma"
   },
 
   "operaciones": {
@@ -46,7 +74,7 @@
       "input": "GenerarInput (ver contrato)",
       "pseudocodigo": [
         "async generar(in):",
-        "  // 1. CONTRATO",
+        "  // 1. CONTRATO (guardas = enforcement)",
         "  si !in.project_id            -> return INVALID_INPUT{field:'project_id'}",
         "  si !in.nombre?.trim()        -> return INVALID_INPUT{field:'nombre', hint:'preguntalo al usuario ANTES de invocar'}",
         "  si !(in.material||in.texto||in.json) -> return INVALID_INPUT{hint:'pasa material|texto|json'}",
@@ -55,10 +83,10 @@
         "  // 2. CLASIFICAR ruta (UNICA decision fuzzy)",
         "  formado = esCatalogoFormado(in.json || in.material || in.texto)   // tiene categorias[] y productos[]",
         "",
-        "  // 3a. CATALOGO formado -> REFLEJO determinista (NO lo estructuras tu, NO lo re-emites)",
+        "  // 3a. VIA_FICHERO: un catalogo formado lo entrega el REFLEJO integro (el reflejo lo estructura; tu solo lo encaminas)",
         "  si formado:",
         "    si in.material: ref = in.material                              // ya es fichero (adjunto)",
-        "    sino:                                                          // formado pero INLINE -> stage 1 vez, verbatim",
+        "    sino:                                                          // formado pero inline -> escribelo TAL CUAL a fichero, una vez",
         "      ref = '/pizzepos/imports/'+slug(in.nombre)+'.json'",
         "      w = publishAndWait('fs.write.request', {project_id, path:ref, content: <el JSON formado TAL CUAL>}, 15000)",
         "      si !w || w.status>=400 -> publish('menu.generation.failed',{...}) ; return w?.error || UPSTREAM_UNREACHABLE",
@@ -66,28 +94,28 @@
         "    si !base || base.status>=400 -> publish('menu.generation.failed',{...,error:base?.error}) ; return base?.error || UPSTREAM_INVALID_RESPONSE",
         "    return {status:200, data:{carta_id:base.data.carta_id, productos:base.data.productos}, message:'Carta importada (BORRADOR). Revisala y activala.'}",
         "",
-        "  // 3b. TEXTO_LIBRE (dictado, o recetas.json que NO es carta) -> TU estructuras, ENFOCADO",
+        "  // 3b. TEXTO_LIBRE (dictado, o recetas.json que aun no es carta) -> TU le das forma, ENFOCADO",
         "  // FOCO (hazte estas 4 preguntas ANTES de estructurar):",
-        "  //   QUE leo/produzco: recetas.json={recetas,ingredientes_catalogo} -> TRANSFORMO a carta, no copio.",
-        "  //   QUIEN la usa: el comandero COBRA extras -> cada ingrediente necesita precio_extra; cocina enruta -> familia.",
-        "  //   DONDE estan los precios: si la fuente trae ingredientes_catalogo, USA esos precios; HECHO ausente -> PREGUNTA.",
-        "  //   QUE aporto: familia canonica + emoji (presentacion, NO es inventar un hecho).",
-        "  carta = estructurar(in.texto)   // forma=Carta del contrato; precio ausente->0; ingrediente no nombrado->no existe",
-        "  // GUARDA NO_CASCARA",
+        "  //   QUE leo/produzco: recetas.json={recetas,ingredientes_catalogo} -> TRANSFORMO a carta.",
+        "  //   QUIEN la usa: el comandero cobra extras -> cada ingrediente lleva precio_extra; la cocina enruta -> familia.",
+        "  //   DONDE estan los precios: si la fuente trae ingredientes_catalogo, USA esos precios; un hecho que falte, PREGUNTALO.",
+        "  //   QUE aporto: familia canonica + emoji (presentacion, de mi criterio).",
+        "  carta = estructurar(in.texto)   // forma=Carta del contrato; FIDELIDAD: precio ausente nace 0; ingrediente nace solo si la fuente lo nombra",
+        "  // COMPLETITUD (guarda = enforcement)",
         "  si carta.categorias.length==0 || carta.productos.length==0 -> publish('menu.generation.failed',{...}) ; return INVALID_INPUT{hint:'sin productos/categorias detectables'}",
-        "  si algun producto que en la fuente tenia ingredientes quedo con ingredientes=[] -> return INVALID_INPUT{hint:'se perdieron ingredientes; reintenta'}",
-        "  // 4. GUARDAR (custodio). NO_PISAR: borrador, sin auto-activar.",
+        "  si un producto que la fuente daba CON ingredientes quedo con ingredientes=[] -> return INVALID_INPUT{hint:'faltan ingredientes; reintenta'}",
+        "  // 4. CUSTODIO + BORRADOR_PRIMERO: entrega al custodio en borrador (el humano la activa tras revisar)",
         "  resp = publishAndWait('carta.save.request', {project_id, carta, user_id:'menu-generator', motivo:'generar desde texto', correlation_id}, 15000)",
         "  si !resp || resp.status>=400 -> publish('menu.generation.failed',{...,error:resp?.error}) ; return resp?.error || UPSTREAM_UNREACHABLE",
         "  return {status:200, data:{carta_id:carta.meta.id, productos:carta.productos.length}, message:'Carta estructurada (BORRADOR). Revisala y activala.'}"
       ],
       "reglas_clave": [
-        "FORMADO => FICHERO => REFLEJO. Catalogo ya formado NUNCA lo estructuras ni re-emites: si llega inline, lo escribes TAL CUAL a un fichero (fs.write, una vez) y lo pasas a menu.import. Asi evitas el bug v9 (re-emision en cadena larga).",
-        "CLASIFICAR es la unica decision fuzzy. Formado={categorias[],productos[]} -> reflejo. Dictado/recetas.json -> TU estructuras.",
-        "ENFOCA antes de estructurar texto: precios reales de ingredientes_catalogo; familia canonica + emoji de tu criterio; HECHO ausente -> PREGUNTA, nunca inventes.",
-        "NO_CASCARA: no guardes una carta con 0 productos, ni un producto que en la fuente tenia ingredientes y quedo vacio.",
-        "NO_PISAR: guarda BORRADOR y deja que el usuario active. Una regeneracion no machaca la carta en servicio.",
-        "PERSISTENCIA delegada y VERIFICADA (publishAndWait): CATALOGO->menu.import ; TEXTO_LIBRE->carta.save. El LLM no toca fs salvo el stage del paso 3a."
+        "FORMADO => FICHERO => REFLEJO: un catalogo ya formado se escribe TAL CUAL a fichero (fs.write, una vez) y se entrega a menu.import, que lo estructura integro de una sola vez.",
+        "CLASIFICAR es la unica decision fuzzy: formado={categorias[],productos[]} -> reflejo ; dictado/recetas.json -> TU le das forma.",
+        "ENFOCA antes de estructurar texto: toma los precios reales de ingredientes_catalogo, aporta familia canonica + emoji de tu criterio, y PREGUNTA al usuario cualquier hecho que falte.",
+        "COMPLETITUD: entrega una carta con productos, y cada producto con los ingredientes que la fuente trajo.",
+        "BORRADOR_PRIMERO: guarda en borrador y deja que el humano la active tras revisarla.",
+        "CUSTODIO + VERIFICADO: entrega via menu.import (CATALOGO) o carta.save (TEXTO_LIBRE), ambas con publishAndWait (la persistencia se confirma)."
       ],
       "errores_posibles": ["INVALID_INPUT", "UPSTREAM_INVALID_RESPONSE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
     },
@@ -100,14 +128,14 @@
         "  si !in.project_id -> return INVALID_INPUT{field:'project_id'}",
         "  si !in.nombre -> publish('carta.generar.fallida',{request_id, project_id, error:{code:'INVALID_INPUT',message:'nombre requerido'}, correlation_id}) ; return INVALID_INPUT{field:'nombre'}",
         "  publish('carta.generar.iniciada', {request_id, project_id, nombre, correlation_id})",
-        "  resp = this.generar({project_id, nombre, texto:in.texto, json:in.json, material:in.material, correlation_id, request_id:uuid()})  // DELEGA, no duplica",
+        "  resp = this.generar({project_id, nombre, texto:in.texto, json:in.json, material:in.material, correlation_id, request_id:uuid()})  // una sola fuente de logica",
         "  si resp.status>=400 -> publish('carta.generar.fallida', {request_id, project_id, nombre, error:resp.error, correlation_id})",
         "  return resp   // persistida = carta.actualizada (la emite carta-manager); el caller correla por correlation_id"
       ],
       "reglas_clave": [
-        "Caller externo NO puede preguntar al usuario: si falta nombre -> publish fallida y termina.",
-        "DELEGA en generar (this.generar) — no dupliques logica.",
-        "Tu output efectivo son los publish carta.generar.{iniciada,fallida} + la persistencia via generar."
+        "Ante un caller externo (sin usuario al que preguntar): si falta el nombre, publica carta.generar.fallida y cierra.",
+        "DELEGA en generar (this.generar): una sola fuente de logica.",
+        "Tu salida efectiva son los publish carta.generar.{iniciada,fallida} + la persistencia via generar."
       ],
       "errores_posibles": ["INVALID_INPUT", "UPSTREAM_INVALID_RESPONSE", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"]
     }
@@ -127,7 +155,7 @@
     { "evento": "carta.generar.solicitada", "handler": "_on_carta_generar_solicitada" }
   ],
 
-  "filosofia": "Un catalogo ya formado es un HECHO completo: pasarlo por el LLM solo puede degradarlo (re-emision, perdida, alucinacion). El unico trabajo fuzzy real es estructurar lo NO formado (dictado/recetas). De ahi la regla dura: formado => fichero => reflejo; el LLM solo piensa donde hay que pensar.",
+  "filosofia": "Un catalogo ya formado es un hecho completo: el reflejo lo preserva integro. El trabajo fuzzy real es dar forma a lo aun no formado (dictado, recetas). De ahi el camino: formado -> fichero -> reflejo; el LLM piensa donde de verdad hay que pensar.",
 
-  "_changelog": "v12.0.0 (2026-06-28): REESCRITURA en lengua materna (OOP+contrato+pseudo; prosa solo en filosofia). Sustancia movida DENTRO de generar (cajones_enabled: la prosa de nivel superior no se inyecta en runtime; el enfoque_de_la_tarea de v11.1 quedaba como referencia colgada). 3 arreglos a fallos vistos en vivo (conv nonina, carta1): (1) RUTA CATALOGO_INLINE: catalogo formado pegado inline se stagea a fichero (fs.write) y va al reflejo -> ya no cae a TEXTO_LIBRE ni re-emite (era el bug que rompia con tool_use huerfano). (2) GUARDA NO_CASCARA: no persistir carta con 0 productos ni producto que perdio sus ingredientes (se guardaban cascaras y se cantaba exito). (3) NO_PISAR: guardar BORRADOR sin auto-activar (una regeneracion parcial machacaba la carta en servicio). Reemplaza v11.2.0."
+  "_changelog": "v12.1.0 (2026-06-28): alineacion con la cabecera (Persona Rectora). (1) EXPRESION EN POSITIVO (P0): v12.0.0 declaraba invariantes como prohibiciones (NO_REEMISION/NO_CASCARA/NO_PISAR, NUNCA/no) — el anti-patron que P0 disuelve. Reescritas como MANDATOS (FIDELIDAD, VIA_FICHERO, COMPLETITUD, BORRADOR_PRIMERO, CUSTODIO) nombrando el estado que protegen; reglas_clave/filosofia en positivo; las guardas del pseudocodigo quedan como cara de ENFORCEMENT (la cabecera lo permite). (2) MODELO OOP REAL (pilar OOP): modelo_oop pasa de un sketch plano a INTERFAZ + CLASE con ATRIBUTOS/METODOS tipados + Strategy de Ruta (CatalogoFichero|CatalogoInline|TextoLibre) + colaboradores Reflejo/Custodio + VALUE_OBJECTS + PATRONES (Strategy/Delegation/Factory/Observer/Command/Specification). Sin cambio de comportamiento. v12.0.0 (2026-06-28): reescritura en lengua materna + 3 fixes (CATALOGO_INLINE via fichero, COMPLETITUD, BORRADOR_PRIMERO) sobre fallos vistos en vivo (conv nonina, carta1)."
 }

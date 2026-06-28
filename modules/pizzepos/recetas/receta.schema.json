@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "receta.canonica.schema.json",
+  "title": "Receta canónica (modelo_canonico del blueprint)",
+  "_doc": "EL CONTRATO de la forma de una Receta. Sirve a las DOS caras (skill blueprint-agentico): las 'description' INSTRUYEN al PENSAR del LLM (qué generar, semántica, rangos); type/enum/required/exclusiveMinimum son la LEY que ejecuta VALIDAR (recetas.validar.request, AJV). Valida la FORMA, no la completitud: 'lineas' puede venir VACÍA (borrador legítimo — el reflejo marca incompleta); pero CADA línea presente debe estar bien formada (nombre resoluble, cantidad>0, unidad canónica). Así el freno mata la línea hueca (cantidad:0 / nombre vacío) sin prohibir el borrador. draft-07 (sin 2020) a propósito: no arrastra ajv/dist/2020.",
+  "type": "object",
+  "required": ["nombre", "tipo", "lineas"],
+  "additionalProperties": true,
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Nombre comercial de la receta, trim. Único por proyecto entre las activas (el reflejo deduplica por nombre normalizado)."
+    },
+    "tipo": {
+      "type": "string",
+      "enum": ["pizza", "masa", "salsa", "base"],
+      "description": "Clase de la Receta. TODO lo que se elabora es una Receta: la pizza final, pero también la masa, la salsa casera o una base — cada una tipo propio y referenciable por 'ref' desde otras (sub-receta)."
+    },
+    "rinde": {
+      "type": ["object", "null"],
+      "description": "Cuánto produce la receta. Inferir si falta: pizza={1,'ud'}; masa={nº bolas,'ud'}; salsa={peso total,'g'}.",
+      "required": ["cantidad", "unidad"],
+      "additionalProperties": false,
+      "properties": {
+        "cantidad": { "type": "number", "exclusiveMinimum": 0, "description": "Cantidad que rinde, > 0." },
+        "unidad": { "type": "string", "enum": ["ud", "g", "ml"], "description": "Unidad canónica del rinde." }
+      }
+    },
+    "lineas": {
+      "type": "array",
+      "description": "Los componentes de la receta. PUEDE venir vacía (borrador): el reflejo lo marca incompleta, es legítimo. Pero CADA línea presente debe estar bien formada — aquí está el freno contra la línea hueca.",
+      "items": {
+        "type": "object",
+        "required": ["ref", "nombre", "cantidad", "unidad"],
+        "additionalProperties": false,
+        "description": "Une la Receta con una de sus partes. UN solo patrón para todo: 'ref' apunta a un Ingrediente del catálogo O a otra Receta (sub-receta).",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "id (slug) del Ingrediente del catálogo o de otra Receta. El MISMO componente lleva SIEMPRE el mismo ref en todas las recetas."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Nombre comercial específico y resoluble (localizable en Mercadona). Evita genéricos ('Queso' → 'Mozzarella')."
+          },
+          "cantidad": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Cantidad del componente, > 0. Una línea de 0 no tiene sentido — si no sabes la cantidad, no inventes la línea."
+          },
+          "unidad": {
+            "type": "string",
+            "enum": ["g", "ml", "ud"],
+            "description": "Unidad canónica. NUNCA metas el peso dentro de 'unidad' como texto (mal: 'bola (315g)'; bien: cantidad=315, unidad='g'). No convertible (hojas, pizca) → 'ud' con cantidad aproximada."
+          },
+          "notas": {
+            "type": "string",
+            "description": "Nota libre opcional de la línea."
+          }
+        }
+      }
+    },
+    "instrucciones": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Pasos de elaboración (opcional). Cada paso una cadena."
+    },
+    "categorias": { "type": "array", "items": { "type": "string" } },
+    "etiquetas": { "type": "array", "items": { "type": "string" } },
+    "fuente": {
+      "type": "string",
+      "enum": ["manual", "importada", "sugerida", "agente"],
+      "description": "Origen de la receta."
+    },
+    "descripcion": { "type": "string" },
+    "notas": { "type": "string" }
+  }
+}

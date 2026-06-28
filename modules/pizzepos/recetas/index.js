@@ -10,15 +10,19 @@
 
 'use strict';
 
+const path = require('path');
+const Ajv = require('ajv');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
 const STORE_PATH = '/pizzepos/recetas.json';
+const SCHEMA_PATH = path.join(__dirname, 'receta.schema.json');
 
 class RecetasReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'recetas';
-    this.version = 'reflejo-1.2.0';
+    this.version = 'reflejo-1.3.0';
+    this._validarReceta = null; // validador AJV compilado (lazy, cacheado)
   }
 
   // ── handlers RPC (una línea: delegan a _atender de la base) ──
@@ -26,6 +30,7 @@ class RecetasReflejo extends ModuloHibridoReflejo {
   onIngredientesRequest(e) { return this._atender(e, 'ingredientes', 'recetas.ingredientes.response', d => this._ingredientes(d)); }
   onObtenerRequest(e) { return this._atender(e, 'obtener', 'recetas.obtener.response', d => this._obtener(d)); }
   onCrearRequest(e) { return this._atender(e, 'crear', 'recetas.crear.response', d => this._crear(d)); }
+  onValidarRequest(e) { return this._atender(e, 'validar', 'recetas.validar.response', d => this._validar(d)); }
 
   // ── proyecciones deterministas (réplica fiel del pseudocódigo) ──
 
@@ -86,6 +91,40 @@ class RecetasReflejo extends ModuloHibridoReflejo {
       if (campo !== 'history') rest[campo] = r[campo];
     }
     return { status: 200, data: { ...rest, versiones_anteriores: (r.history || []).length } };
+  }
+
+  // ── EL FRENO (skill blueprint-agentico). Valida la 'receta' que el LLM dio
+  //    forma contra el contrato (receta.schema.json) ANTES de que se persista.
+  //    Función pura: ni lee ni escribe el store — solo juzga la FORMA. Devuelve
+  //    siempre 200 (la validación tuvo éxito); el veredicto va en data.valid, y
+  //    los errores con su path para que el blueprint re-PIENSE solo lo roto.
+  //    Determinista: la misma receta da el mismo veredicto, sin turno LLM. ──
+  _validador() {
+    if (!this._validarReceta) {
+      const schema = require(SCHEMA_PATH);
+      const ajv = new Ajv({ allErrors: true, strict: false });
+      this._validarReceta = ajv.compile(schema);
+    }
+    return this._validarReceta;
+  }
+
+  async _validar(input) {
+    const receta = input.receta || input.obra;
+    if (!receta || typeof receta !== 'object' || Array.isArray(receta)) return this._invalid('receta');
+    const validate = this._validador();
+    const ok = validate(receta);
+    if (ok) {
+      this.metrics?.increment('recetas.reflejo.served', { op: 'validar', veredicto: 'valida' });
+      return { status: 200, data: { valid: true, errors: [] } };
+    }
+    const errors = (validate.errors || []).map(e => {
+      const p = e.instancePath || '(raíz)';
+      const extra = e.params && e.params.allowedValues ? ` (permitido: ${e.params.allowedValues.join(', ')})`
+        : (e.params && e.params.missingProperty ? `: ${e.params.missingProperty}` : '');
+      return { path: e.instancePath || '/', keyword: e.keyword, message: `${p} ${e.message}${extra}`.trim() };
+    });
+    this.metrics?.increment('recetas.reflejo.served', { op: 'validar', veredicto: 'invalida' });
+    return { status: 200, data: { valid: false, errors } };
   }
 
   // ── ALTA determinista (REFLEJO). El blueprint NORMALIZA lenguaje natural →

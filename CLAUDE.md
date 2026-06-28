@@ -1860,6 +1860,56 @@ RECONVERSION aplicada (blueprints que invocaban agent.execute) {
 // skill: .claude/skills/blueprint-coherente/SKILL.md
 ```
 
+## Estándar blueprint-agentico — el FRENO (VALIDAR) para ops que dan forma
+
+> Un blueprint NO es un documento que el LLM lee: es el PROGRAMA de un agente. ai-gateway es el
+> runtime universal — da MARCO (system prompt) + TOOLS (bus.*) + LOOP (maxIterations) gratis al
+> cablear el manifest. Tú escribes la POLÍTICA. blueprint-coherente (5 fases) basta para ops sin
+> riesgo de salida rota; cuando una op DA FORMA (genera/compone) y puede romper, se le añade el
+> FRENO: una VALIDACIÓN contra el contrato antes de persistir. Sin freno, el agente da forma rota
+> y la canta como éxito (caso carta1: 10 productos sin ingredientes, "✅ creada"). Con él: la salida
+> pasa por la ley del contrato; si no pasa, reintenta con el error de campo, y si agota, FALLA HONESTO.
+
+```
+ESPINAZO de 6 fases (= blueprint-coherente + VALIDAR) {
+  CONTRATO : input tipado + precondiciones (guards)
+  LEER     : publishAndWait('<mod>.<lectura>.request')              // REFLEJO (hidrata)
+  PENSAR   : el LLM de PAGINA da forma / decide / interpreta         // fuzzy
+  VALIDAR  : el FRENO — repeat { v = publishAndWait('<mod>.validar.request', {obra})
+             ; if v.valid break ; re-PENSAR corrigiendo SOLO v.errors[].path } until 3
+             ; if !valid → UPSTREAM_INVALID_RESPONSE { hint: errors }  // jamás basura
+  GUARDAR  : publishAndWait('<mod>.<persist>.request')              // REFLEJO (verificado)
+  EMITIR   : publish('<dominio>.<algo>') + RETORNA salida tipada
+}
+
+REPARTO   PENSAR = LLM (elegir/interpretar/dar forma) · LEER/VALIDAR/GUARDAR = REFLEJO (una respuesta correcta).
+CONTRATO  un solo artefacto sirve a dos caras: description INSTRUYE al PENSAR · type/enum/if-then es la LEY que ejecuta VALIDAR.
+GATE      el reflejo PUEDE re-validar en GUARDAR (gate inquebrantable) aunque el LLM se salte el loop.
+P0        las reglas se declaran como MANDATOS (FIDELIDAD/COMPLETITUD/VERIFICADO/DELEGADO), no como prohibiciones.
+
+LA TRIADA (elige por la tarea) {
+  blueprint-coherente   → 5 fases, sin validar      — ops sin riesgo de salida rota
+  blueprint-agentico    → 6 fases (+VALIDAR, freno)  — ops que dan forma y pueden romper
+  agente-perspectiva-c  → el PENSAR como función-pura (tools:[], reflejo hidrata/persiste) — lo más fiable
+}
+
+APLICADO {
+  recetas (module 2.2.0 · blueprint 2.9.0 · reflejo 1.3.0) {
+    contrato : modules/pizzepos/recetas/receta.schema.json (modelo_canonico, draft-07)
+    freno    : recetas.validar.request (AJV, función pura) — mata la línea hueca (cantidad:0 / nombre vacío)
+               SIN prohibir el borrador (lineas vacías = borrador legítimo). crear al espinazo de 6 fases;
+               actualizar recibe el freno antes de su fs.edit. Pendiente: actualizar a DELEGADO puro.
+  }
+  carta-design (module 3.2.0 · blueprint 2.4.0 · reflejo 2.1.0) {
+    salida freeform (HTML) → el contrato NO es un schema, es REPRESENTAR la carta.
+    freno    : design.validar.request (_checkDiseno) compara el HTML contra la carta REAL (carta.get,
+               no lo que el LLM afirme): HTML no trivial + COMPLETITUD (cada producto aparece) +
+               ALERGENOS declarados (Reg. UE 1169/2011). save RE-VALIDA como gate → 422 si no representa.
+  }
+}
+// skill: .claude/skills/blueprint-agentico/SKILL.md
+```
+
 ---
 
 # Sistema Nervioso de Aprendizaje — Destilador · Conserje · Interruptores

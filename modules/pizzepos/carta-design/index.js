@@ -31,7 +31,7 @@ class CartaDesignReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-design';
-    this.version = 'reflejo-2.0.0';
+    this.version = 'reflejo-2.1.0';
   }
 
   // ── handlers RPC (una línea) ──
@@ -39,6 +39,7 @@ class CartaDesignReflejo extends ModuloHibridoReflejo {
   onLoadCartaRequest(e) { return this._atender(e, 'load_carta', 'design.load_carta.response', d => this._loadCarta(d)); }
   onSaveRequest(e) { return this._atender(e, 'save', 'design.save.response', d => this._save(d)); }
   onGalleryRequest(e) { return this._atender(e, 'gallery', 'design.gallery.response', d => this._gallery(d)); }
+  onValidarRequest(e) { return this._atender(e, 'validar', 'design.validar.response', d => this._validar(d)); }
 
   // =============================================================
   // helpers de fs — contrato REAL (éxito={...data} sin status; error={error}). Normaliza.
@@ -106,10 +107,62 @@ class CartaDesignReflejo extends ModuloHibridoReflejo {
     return { status: r.status, data: r.data, error: r.error };   // objeto FRESCO (sin el request_id de carta.get)
   }
 
+  // ── EL FRENO (skill blueprint-agentico). Un diseño de carta no se valida con un
+  //    JSON Schema (es HTML freeform): su contrato es REPRESENTAR la carta. _checkDiseno
+  //    compara el HTML contra la carta REAL (carta.get, la fuente) — no contra lo que el
+  //    LLM afirme — y exige: (1) HTML no trivial, (2) COMPLETITUD/FIDELIDAD: cada producto
+  //    de la carta aparece en el diseño, (3) ALÉRGENOS: si hay productos con alérgenos, el
+  //    diseño los declara (Reg. UE 1169/2011). Mata el diseño que se deja productos fuera
+  //    y lo canta como hecho. Léxico a propósito (substring): captura la omisión real. ──
+  async _checkDiseno(project_id, carta_id, html) {
+    const cartaResp = await this._rpc('carta.get.request', { project_id, carta_id }, { timeout_ms: 8000 });
+    if (!cartaResp) return { upstream: true };
+    if (cartaResp.status >= 400) return { notFound: true, status: cartaResp.status };
+    const carta = cartaResp.data || {};
+    const productos = Array.isArray(carta.productos) ? carta.productos : [];
+    const h = String(html || '');
+    const hLower = h.toLowerCase();
+    const errors = [];
+    if (h.trim().length < 200) {
+      errors.push({ code: 'HTML_TRIVIAL', message: 'el HTML es demasiado corto para ser una carta' });
+    }
+    const faltan = productos
+      .filter(p => p && p.nombre && !hLower.includes(String(p.nombre).toLowerCase()))
+      .map(p => p.nombre);
+    if (faltan.length) {
+      errors.push({ code: 'PRODUCTOS_FALTAN', message: `${faltan.length}/${productos.length} productos del menú no aparecen en el diseño`, faltan: faltan.slice(0, 20) });
+    }
+    const conAlerg = productos.some(p => Array.isArray(p.alergenos) && p.alergenos.length > 0);
+    if (conAlerg) {
+      const declara = /al[eé]rgen/.test(hLower)
+        || ALERGENOS.some(a => hLower.includes(String(a.nombre).toLowerCase()) || (a.emoji && h.includes(a.emoji)));
+      if (!declara) errors.push({ code: 'ALERGENOS_SIN_DECLARAR', message: 'hay productos con alérgenos y el diseño no los declara (Reg. UE 1169/2011)' });
+    }
+    return { ok: errors.length === 0, errors, productos_total: productos.length, faltan };
+  }
+
+  async _validar(input) {
+    if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
+    if (!input.html || typeof input.html !== 'string') return this._invalid('html');
+    const c = await this._checkDiseno(input.project_id, input.carta_id, input.html);
+    if (c.upstream) return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'carta-manager no responde (no se pudo validar)');
+    if (c.notFound) return this._errorResponse(c.status, 'RESOURCE_NOT_FOUND', 'carta no encontrada', { entity_type: 'carta', entity_ref: input.carta_id });
+    this.metrics?.increment('carta-design.reflejo.served', { op: 'validar', veredicto: c.ok ? 'valido' : 'invalido' });
+    return { status: 200, data: { valid: c.ok, errors: c.errors, productos_total: c.productos_total, productos_faltan: c.faltan.length } };
+  }
+
   // GUARDAR: el HTML que el LLM de página diseñó + meta companion. Emite carta.html.generada.
   async _save(input) {
     if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
     if (!input.html || typeof input.html !== 'string') return this._invalid('html');
+
+    // FRENO inquebrantable: el diseño se guarda cuando REPRESENTA la carta, no por confianza.
+    // save RE-VALIDA contra la carta real; si faltan productos o alérgenos → NO se persiste.
+    const chk = await this._checkDiseno(input.project_id, input.carta_id, input.html);
+    if (chk.upstream) return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'carta-manager no responde (no se pudo validar antes de guardar)');
+    if (chk.notFound) return this._errorResponse(chk.status, 'RESOURCE_NOT_FOUND', 'carta no encontrada', { entity_type: 'carta', entity_ref: input.carta_id });
+    if (!chk.ok) return this._errorResponse(422, 'UPSTREAM_INVALID_RESPONSE', 'el diseño no representa la carta (faltan productos o alérgenos) — NO guardado', { errors: chk.errors });
+
     const filename = input.carta_id + '__' + tsSafe() + '.html';
     const pathHtml = DESIGNS_DIR + filename;
     const pathMeta = DESIGNS_DIR + filename.replace(/\.html$/, '.json');

@@ -32,7 +32,7 @@ class CartaDigitalModule extends BaseModule {
   constructor() {
     super();
     this.name = 'carta-digital';
-    this.version = '2.6.0';
+    this.version = '2.7.0';
     // ÚNICO estado: el mapping canal→carta_id por proyecto (de tarifas.config.actualizada).
     this.mappingCanalesPerProject = new Map();
     // Proyectos activos vistos por project.activated (project_id → {name, slug}) + el ÚLTIMO
@@ -60,8 +60,10 @@ class CartaDigitalModule extends BaseModule {
     sub('marketing.perfil.actualizado', e => this._reemitir(e));
     sub('project.activated', e => this._onProjectActivated(e));
     sub('project.deactivated', e => this._onProjectDeactivated(e));
-    // RPC de bus: el cajón diseñar_carta_digital persiste el diseño por aquí.
+    // RPC de bus: el cajón diseñar_carta_digital persiste el diseño por aquí (RE-VALIDA como gate).
     sub('cartadigital.guardar_diseno.request', e => this._onGuardarDisenoRequest(e));
+    // RPC de bus (FRENO, skill blueprint-agentico): valida el diseño contra el contrato de slots.
+    sub('cartadigital.validar.request', e => this._onValidarRequest(e));
     // RPC de bus: el cajón publicar genera el bundle estático (deploy real desde el chat).
     sub('cartadigital.publicar.request', e => this._onPublicarRequest(e));
 
@@ -222,17 +224,51 @@ class CartaDigitalModule extends BaseModule {
     return { status: 200, data: payload };
   }
 
-  // RPC de bus para el cajón: valida el CONTRATO de slots antes de guardar.
+  // ── EL FRENO (skill blueprint-agentico). El card_template del diseño tiene un CONTRATO
+  //    DE SLOTS explícito: el runtime rellena {{id}} {{nombre}} {{precio}} {{alergenos}}
+  //    {{add_label}} y delega los clics por data-accion="detalle"/"add". Si el LLM se deja
+  //    un slot, ese campo NO renderiza nunca — un diseño "listo" pero sin precio (carta rota)
+  //    o sin alérgenos (ILEGAL, Reg. UE 1169/2011), o sin botón de pedir. El freno exige el
+  //    núcleo funcional+legal del contrato; los slots de enriquecimiento (visual/descripcion/
+  //    gancho/badges) son opcionales. Función pura: no lee ni escribe. ──
+  _checkDiseno(diseno) {
+    const errors = [];
+    const tpl = (diseno && typeof diseno.card_template === 'string') ? diseno.card_template : null;
+    if (!tpl) { errors.push({ code: 'CARD_TEMPLATE_AUSENTE', message: 'card_template debe ser un string con los slots del contrato' }); return { ok: false, errors }; }
+    const SLOTS_REQ = ['{{id}}', '{{nombre}}', '{{precio}}', '{{alergenos}}', '{{add_label}}'];
+    const faltan = SLOTS_REQ.filter(s => !tpl.includes(s));
+    if (faltan.length) errors.push({ code: 'SLOTS_FALTAN', message: `card_template no incluye slots obligatorios: ${faltan.join(' ')}`, faltan });
+    if (!/data-accion\s*=\s*["']?detalle/.test(tpl)) errors.push({ code: 'HOOK_DETALLE_AUSENTE', message: 'falta el hook data-accion="detalle" (tap → ficha del producto)' });
+    if (!/data-accion\s*=\s*["']?add(?![_a-z])/.test(tpl)) errors.push({ code: 'HOOK_ADD_AUSENTE', message: 'falta el hook data-accion="add" (añadir al carrito)' });
+    if (/onclick=|<script/i.test(tpl)) errors.push({ code: 'JS_EN_TEMPLATE', message: 'el card_template no debe traer JS (onclick/<script>): el runtime delega por data-accion' });
+    return { ok: errors.length === 0, errors };
+  }
+
+  // RPC de bus (FRENO explícito): el cajón diseñar lo llama en bucle antes de guardar.
+  async _onValidarRequest(event) {
+    const d = event?.data || event;
+    const request_id = d?.request_id;
+    const responder = (status, body) => { try { this.eventBus.publish('cartadigital.validar.response', { request_id, status, ...body }); } catch (_) {} };
+    try {
+      const diseno = (d && d.diseno && typeof d.diseno === 'object') ? d.diseno : d;
+      if (!diseno || typeof diseno !== 'object') return responder(400, { error: { code: 'INVALID_INPUT', message: 'diseno requerido' } });
+      const c = this._checkDiseno(diseno);
+      this.metrics?.increment?.('carta-digital.validar', { veredicto: c.ok ? 'valido' : 'invalido' });
+      return responder(200, { data: { valid: c.ok, errors: c.errors } });
+    } catch (err) {
+      return responder(500, { error: { code: 'UNKNOWN_ERROR', message: err.message } });
+    }
+  }
+
+  // RPC de bus para el cajón: RE-VALIDA el CONTRATO de slots (gate inquebrantable) antes de guardar.
   async _onGuardarDisenoRequest(event) {
     const d = event?.data || event;
     const request_id = d?.request_id;
     const responder = (status, body) => { try { this.eventBus.publish('cartadigital.guardar_diseno.response', { request_id, status, ...body }); } catch (_) {} };
     try {
       if (!d?.project_id || !d?.diseno || typeof d.diseno !== 'object') return responder(400, { error: { code: 'INVALID_INPUT', message: 'project_id y diseno requeridos' } });
-      const tpl = d.diseno.card_template;
-      if (typeof tpl !== 'string' || !tpl.includes('{{id}}') || !tpl.includes('data-accion') || !tpl.includes('{{nombre}}')) {
-        return responder(422, { error: { code: 'INVALID_DESIGN', message: 'card_template debe incluir los hooks del contrato: {{id}}, {{nombre}} y data-accion (detalle|add)' } });
-      }
+      const c = this._checkDiseno(d.diseno);
+      if (!c.ok) return responder(422, { error: { code: 'INVALID_DESIGN', message: 'el card_template no cumple el contrato de slots', details: { errors: c.errors } } });
       const r = await this._guardarDiseno(d.project_id, d.diseno);
       return responder(r.status, r.status >= 400 ? { error: r.error } : { data: r.data });
     } catch (err) {

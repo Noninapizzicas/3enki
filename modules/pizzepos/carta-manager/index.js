@@ -33,7 +33,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.13.0';
+    this.version = 'reflejo-1.14.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -54,6 +54,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   onVersionsRequest(e) { return this._atender(e, 'versions', 'carta.versions.response', d => this._versions(d)); }
   onRestoreRequest(e) { return this._atender(e, 'restore', 'carta.restore.response', d => this._restore(d)); }
   onActivarRequest(e) { return this._atender(e, 'activar', 'carta.activar.response', d => this._activar(d)); }
+  onValidarRequest(e) { return this._atender(e, 'validar', 'carta.validar.response', d => this._validar(d)); }
   // entrada event-driven (fire-and-forget desde menu-generator).
   // IDENTIDAD (FASE 3): una carta general por proyecto. Si ya existe la carta general,
   // REUSA su id para SOBREESCRIBIRLA (snapshot+version++), no spawnear un fichero nuevo.
@@ -441,6 +442,50 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
         p.ingredientes_base = this._normalizarIngredientes(p.ingredientes_base);
       }
     }
+  }
+
+  // =============================================================
+  // EL FRENO (skill blueprint-agentico). menu-generator DA FORMA a la carta (lo fuzzy) y la
+  // entrega al custodio. _checkCarta valida la ESTRUCTURA contra el contrato de carta-pizzepos
+  // ANTES de persistir — el agujero carta1 (productos huecos cantados como "✅ creada"): carta
+  // sin categorías/productos, producto sin nombre, precio no numérico, categoria_id colgando,
+  // ingrediente sin nombre / familia no canónica / precio_extra no numérico. NO exige completitud
+  // de borrador (precio 0 e ingredientes vacíos son borrador legítimo — bebida sin extras); valida
+  // que lo que HAY esté bien formado. La FIDELIDAD (no perder los ingredientes que traía la fuente)
+  // la guarda menu-generator en su PENSAR: solo él conoce la fuente. Función pura: no lee ni escribe.
+  _checkCarta(carta) {
+    const finite = (x) => typeof x === 'number' && Number.isFinite(x);
+    const errors = [];
+    if (!carta || typeof carta !== 'object' || Array.isArray(carta)) { errors.push({ code: 'CARTA_AUSENTE', message: 'carta debe ser un objeto' }); return { ok: false, errors }; }
+    const cats = Array.isArray(carta.categorias) ? carta.categorias : [];
+    const prods = Array.isArray(carta.productos) ? carta.productos : [];
+    if (cats.length === 0) errors.push({ code: 'SIN_CATEGORIAS', message: 'la carta no tiene categorías' });
+    if (prods.length === 0) errors.push({ code: 'SIN_PRODUCTOS', message: 'la carta no tiene productos' });
+    const catIds = new Set(cats.map(c => c && (c.id || c.categoria_id)).filter(Boolean));
+    for (let i = 0; i < prods.length; i++) {
+      const p = prods[i] || {};
+      const ref = p.nombre || `#${i}`;
+      if (!p.nombre || !String(p.nombre).trim()) errors.push({ code: 'PRODUCTO_SIN_NOMBRE', path: `/productos/${i}`, message: `producto ${i}: sin nombre` });
+      if (!finite(p.precio) || p.precio < 0) errors.push({ code: 'PRECIO_INVALIDO', path: `/productos/${i}`, message: `${ref}: precio debe ser un número >= 0` });
+      const cid = p.categoria_id || p.categoria;
+      if (!cid) errors.push({ code: 'PRODUCTO_SIN_CATEGORIA', path: `/productos/${i}`, message: `${ref}: sin categoria_id` });
+      else if (catIds.size && !catIds.has(cid)) errors.push({ code: 'CATEGORIA_DANGLING', path: `/productos/${i}`, message: `${ref}: categoria_id '${cid}' no existe en categorias[]` });
+      const ings = Array.isArray(p.ingredientes_base) ? p.ingredientes_base : (Array.isArray(p.ingredientes) ? p.ingredientes : []);
+      for (let j = 0; j < ings.length; j++) {
+        const ing = ings[j] || {};
+        if (!ing.nombre || !String(ing.nombre).trim()) errors.push({ code: 'INGREDIENTE_SIN_NOMBRE', path: `/productos/${i}/ingredientes/${j}`, message: `${ref}: ingrediente ${j} sin nombre` });
+        if (ing.familia !== undefined && !FAMILIAS.has(ing.familia)) errors.push({ code: 'FAMILIA_DESCONOCIDA', path: `/productos/${i}/ingredientes/${j}`, message: `${ref}: familia '${ing.familia}' no canónica` });
+        if (ing.precio_extra !== undefined && !finite(ing.precio_extra)) errors.push({ code: 'PRECIO_EXTRA_INVALIDO', path: `/productos/${i}/ingredientes/${j}`, message: `${ref}: precio_extra no es número` });
+      }
+    }
+    return { ok: errors.length === 0, errors };
+  }
+
+  async _validar(input) {
+    const carta = ('carta' in input) ? input.carta : input;
+    const c = this._checkCarta(carta);
+    this.metrics?.increment?.('carta-manager.reflejo.served', { op: 'validar', veredicto: c.ok ? 'valido' : 'invalido' });
+    return { status: 200, data: { valid: c.ok, errors: c.errors, productos: Array.isArray(carta?.productos) ? carta.productos.length : 0 } };
   }
 
   // Aptitudes dietéticas a forma canónica: objeto de booleanos. undefined si no es objeto.

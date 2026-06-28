@@ -1,8 +1,14 @@
 {
   "_doc": "Manifest del modulo carta-marketing — HIBRIDO (blueprint + reflejo JS), tercer caso del Patron Modulo Hibrido. El blueprint sirve lo FUZZY (completar_onboarding = descubrimiento de marca via el agente marketing-onboarding). El index.js es el REFLEJO JS que sirve el CRUD determinista del perfil de marca (/pizzepos/marca.json): get_perfil, update_perfil. Mata el teatro del onboarding: update_perfil escribe de verdad + emite marketing.perfil.actualizado (la propiocepcion lo capta). Persistencia: marca.json del proyecto.",
   "name": "carta-marketing",
-  "version": "2.5.0",
+  "version": "2.6.0",
+  "_v2_6_nota": "v2.6.0 (skill blueprint-agentico): EL FRENO de la marca. La marca SÍ tiene contrato mecánico (marca.schema.json) — el copy NO (es texto libre, su contrato es la VOZ, irreducible al PENSAR). Nuevo responder carta-marketing.validar.request (onValidarRequest/_checkMarca, AJV) + GATE en update_perfil: valida la marca RESULTANTE del deep-merge contra el schema ANTES de escribir; un parche que la rompe (voz como string, esencia.nombre como número) -> 422, NO persiste. Mata la marca rota que beberian carta-design/copy/canales. Reflejo 2.1.0.",
   "subscribes": [
+    {
+      "event": "carta-marketing.validar.request",
+      "handler": "onValidarRequest",
+      "description": "Reflejo JS (FRENO, skill blueprint-agentico): valida una marca contra marca.schema.json (AJV, funcion pura). update_perfil ademas RE-VALIDA el merge como gate. El copy no tiene freno mecanico (texto libre)."
+    },
     {
       "event": "carta-marketing.get_perfil.request",
       "handler": "onGetPerfilRequest",

@@ -228,7 +228,29 @@ class AnthropicProvider extends BaseProvider {
       return { role, content: m.content || '' };
     });
 
-    return { system, messages: anthropicMessages };
+    // COALESCE: cuando un turno assistant trae N tool_use (tool-use paralelo /
+    // cadena de cajones), el gateway empuja N mensajes role:'tool' separados →
+    // aquí cada uno mapea a un user distinto. Anthropic exige que TODOS los
+    // tool_result de ese turno vayan en el ÚNICO user inmediatamente siguiente;
+    // si van en users separados, el primero deja los demás tool_use sin
+    // tool_result → 400 "tool_use ids found without tool_result blocks
+    // immediately after". Fusionamos users consecutivos de SOLO tool_result.
+    const isPureToolResult = (msg) =>
+      msg && msg.role === 'user' && Array.isArray(msg.content) && msg.content.length > 0
+      && msg.content.every(c => c && c.type === 'tool_result');
+    const coalesced = [];
+    for (const msg of anthropicMessages) {
+      const prev = coalesced[coalesced.length - 1];
+      if (isPureToolResult(msg) && isPureToolResult(prev)) {
+        prev.content.push(...msg.content);
+      } else if (isPureToolResult(msg)) {
+        coalesced.push({ role: 'user', content: [...msg.content] });  // clon: no mutar el original al fusionar después
+      } else {
+        coalesced.push(msg);
+      }
+    }
+
+    return { system, messages: coalesced };
   }
 
   /**

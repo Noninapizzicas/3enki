@@ -1,7 +1,8 @@
 {
   "_doc": "Manifest del modulo escandallo — HIBRIDO (blueprint + reflejo JS), segundo caso del Patron Modulo Hibrido. El blueprint sirve lo FUZZY via LLM (calcular con navegacion Mercadona via _precio_de_mercadona). El index.js es el REFLEJO JS que sirve el COSTEO determinista: escandallo.recalcular_siguiente.request (costea la siguiente pendiente, orden topologico, persiste) y escandallo.costear.request (coste de una receta desde catalogo). _costear es aritmetica pura → reflejo. Lee catalogo+recetas via el reflejo de recetas (JS↔JS, ms). El bucle de costeo queda sin turnos LLM. Activable via page_id='escandallo'.",
   "name": "escandallo",
-  "version": "2.0.0",
+  "version": "2.1.0",
+  "_v2_1_nota": "v2.1.0 (skill blueprint-agentico): EL FRENO. Nuevo responder escandallo.validar.request (onValidarRequest/_checkCosteo): un escandallo no se valida con schema de forma, su contrato es PROCEDENCIA + COHERENCIA. Rechaza el precio INVENTADO por el LLM (fuente 'estimado_llm' -> PRECIO_INVENTADO): lo que Mercadona no tiene es sin_precio honesto, no un numero inventado. Comprueba la aritmetica (valor=cantidad×precio, coste_total=Σlineas, coste_unidad=coste_total/rinde) -> caza el total fabricado. El blueprint valida el costeo ANTES de persistir; _precio_de_mercadona deja de estimar (Mercadona-o-sin_precio).",
   "description": "Modulo escandallo HIBRIDO: blueprint (cajones) para lo fuzzy (calcular con Mercadona) + reflejo JS (index.js) para el costeo determinista servido en el bus (recalcular_siguiente, costear). Lo deterministico lo sirve codigo; el LLM se queda para el pricing fuzzy.",
   "language": "es",
   "blueprint_driven": true,
@@ -11,6 +12,7 @@
   "cajones_enabled": true,
   "subscribes": [
     { "event": "escandallo.recalcular_siguiente.request", "handler": "onRecalcularSiguienteRequest", "description": "Reflejo JS: costea la siguiente receta pendiente (determinista) y persiste." },
-    { "event": "escandallo.costear.request", "handler": "onCostearRequest", "description": "Reflejo JS: coste determinista de una receta desde el catalogo." }
+    { "event": "escandallo.costear.request", "handler": "onCostearRequest", "description": "Reflejo JS: coste determinista de una receta desde el catalogo." },
+    { "event": "escandallo.validar.request", "handler": "onValidarRequest", "description": "Reflejo JS (FRENO, skill blueprint-agentico): valida el costeo por PROCEDENCIA + COHERENCIA. Rechaza el precio inventado (estimado_llm -> PRECIO_INVENTADO) y la aritmetica incoherente (TOTAL_INCOHERENTE/VALOR_INCOHERENTE). Funcion pura: devuelve {valid, errors, precios_estimados, lineas_costeadas} para que el blueprint resuelva por la API o deje sin_precio." }
   ]
 }

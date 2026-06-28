@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo escandallo v2. Hijo de subsistema-recetario.modulo-base. Calcula el coste de una receta del proyecto O de una propuesta no persistida, Y persiste el resultado en /recetas.json[r] cuando se trata de una receta existente. Invocacion on-demand — el usuario pide 'calcula costes' en el chat O el LLM principal lo invoca como parte de otro flujo (ej. crear receta). NO es reactivo (el blueprint runtime no soporta reactividad sin user request). La lectura/escritura de Mercadona la hace mercadona-api (modulo JS determinista, paradigma plugin); escandallo razona qué productos pedir y cómo mapearlos al ingrediente. Para viabilidad economica (food cost%, PVP, margen, etiquetas) el modulo viabilidad lo hace despues, leyendo los costes ya persistidos.",
   "id": "escandallo",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-3.9.0",
+  "version": "blueprint-3.10.0",
   "_temperatura_doc": "Pagina EXACTA: razona costes/mapeos a ingrediente -> fria, minimiza alucinacion. ai-gateway la usa como default del turno (settings.temperature del humano gana; fallback global 0.7). Lo aritmetico ya vive en el REFLEJO (temperatura irrelevante alli); esto baja la chispa de la parte fuzzy (mapear producto Mercadona).",
   "temperatura": 0.2,
   "language": "es",
@@ -135,25 +135,32 @@
       "input": "{ project_id, correlation_id?, postcode? }, linea",
       "_descripcion": "FUZZY — lo UNICO no determinista. Navega Mercadona por linea.nombre (categorias→producto→detalle), devuelve un Ingrediente {precio, compra_unidad, fuente:'mercadona'} y lo CACHEA al catalogo (recetas.actualizar_precio). Si no casa, estimacion marcada o null. SOLO se usa desde calcular().",
       "pseudocodigo": [
-        "_precio_de_mercadona(input, linea):",
+        "_precio_de_mercadona(input, linea):  // SOLO el MATCH es tuyo; el PRECIO es de la API.",
         "  postcode = input.postcode || '30840'",
         "  cats = await publishAndWait('mercadona.categorias.listar.request', { postcode, request_id: uuid(), project_id: input.project_id, correlation_id: input.correlation_id })",
-        "  cat_id = <TU eliges la categoria que mejor case con linea.nombre>",
+        "  cat_id = <TU eliges la categoria que mejor case con linea.nombre>   // FUZZY: el match",
         "  prod = null",
         "  SI cat_id:",
         "    det = await publishAndWait('mercadona.categorias.listar.request', { parent_id: cat_id, postcode, request_id: uuid(), project_id: input.project_id, correlation_id: input.correlation_id })",
-        "    prod = <TU eliges el producto que mejor case con linea.nombre>",
+        "    prod = <TU eliges el producto que mejor case con linea.nombre>     // FUZZY: el match",
         "  SI prod:",
         "    pr = await publishAndWait('mercadona.producto.obtener.request', { producto_id: prod.producto_id, postcode, request_id: uuid(), project_id: input.project_id, correlation_id: input.correlation_id })",
         "    SI pr.status === 200:",
-        "      precio = (pr.data.precio_kg != null) ? pr.data.precio_kg : pr.data.precio_unidad",
+        "      precio = (pr.data.precio_kg != null) ? pr.data.precio_kg : pr.data.precio_unidad   // el PRECIO sale de la API, NO de ti",
         "      compra_unidad = (pr.data.precio_kg != null) ? 'kg' : 'ud'",
-        "      await publishAndWait('recetas.actualizar_precio.request', { project_id: input.project_id, nombre: linea.nombre, precio, compra_unidad, mercadona_producto_id: pr.data.producto_id, fuente: 'mercadona', request_id: uuid(), correlation_id: input.correlation_id })   // cachea",
+        "      await publishAndWait('recetas.actualizar_precio.request', { project_id: input.project_id, nombre: linea.nombre, precio, compra_unidad, mercadona_producto_id: pr.data.producto_id, fuente: 'mercadona', request_id: uuid(), correlation_id: input.correlation_id })   // cachea con la fuente REAL",
         "      RETORNA { nombre: linea.nombre, precio, compra_unidad, fuente: 'mercadona' }",
-        "  precio_est = <TU estimas precio por la unidad de linea, o null>",
-        "  RETORNA precio_est != null ? { nombre: linea.nombre, precio: precio_est, compra_unidad: (['ml','l'].includes(linea.unidad)?'l':(linea.unidad==='ud'?'ud':'kg')), fuente: 'estimado_llm' } : null"
+        "  // FIDELIDAD: si Mercadona no tiene el producto, la linea se queda SIN PRECIO (honesto). NO inventes",
+        "  //   un numero — un precio inventado (estimado_llm) NO es un coste de fiar y el freno lo rechaza.",
+        "  //   Lo que no sabes, no lo afirmas: el costeo lo marcara en lineas_sin_precio.",
+        "  RETORNA null"
       ],
-      "cajon": false
+      "cajon": false,
+      "reglas_clave": [
+        "Lo TUYO es el MATCH (que categoria, que producto de Mercadona case con el ingrediente). Es lo unico fuzzy.",
+        "El PRECIO lo da la API (mercadona.producto.obtener), no tu. Se cachea con fuente:'mercadona' + mercadona_producto_id (trazable).",
+        "Sin match en Mercadona -> RETORNA null: la linea se queda sin_precio (honesto). PROHIBIDO inventar un precio (estimado_llm): el freno lo rechaza."
+      ]
     },
     "_persistir": {
       "input": "{ project_id, correlation_id? }, receta, r",
@@ -177,28 +184,57 @@
       ],
       "_descripcion": "Coste de UN producto. Aqui SI entra el pricing fuzzy (precio_de_mercadona) para rellenar lo que falte en catalogo; luego costea determinista.",
       "pseudocodigo": [
-        "async calcular(input):",
+        "async calcular(input):  // AGENTE: el MATCH con Mercadona es lo fuzzy; el costeo y el freno son del reflejo.",
+        "  // 1. CONTRATO",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
         "  if (!input.receta_id && !(Array.isArray(input.lineas) && input.lineas.length > 0 && input.rinde && input.rinde.cantidad > 0)) return INVALID_INPUT { hint: 'pasar receta_id O { lineas, rinde }' }",
         "  persistir_flag = input.persistir !== undefined ? input.persistir : !!input.receta_id",
         "",
+        "  // 2. LEER (REFLEJO): catalogo de precios + la receta a costear.",
         "  catalogo = _cargar_catalogo(input)",
         "  receta = input.receta_id ? _cargar_receta(input, input.receta_id) : { id: null, lineas: input.lineas, rinde: input.rinde }",
         "  if (!receta) return RESOURCE_NOT_FOUND { entity_type: 'recipe', id: input.receta_id }",
         "",
-        "  // PRICING (fuzzy, SOLO aqui): para cada linea que no resuelva por catalogo/sub-receta, navega Mercadona y cachea.",
+        "  // 3. PENSAR (lo UNICO fuzzy, SOLO el MATCH): para cada commodity sin precio, navega Mercadona",
+        "  //    (API REAL) y elige la categoria+producto que mejor case. El PRECIO sale de la API, no de ti.",
+        "  //    FIDELIDAD: lo que Mercadona NO tiene se queda SIN PRECIO (honesto) — NUNCA inventes un numero.",
         "  for (linea of (receta.lineas || [])) {",
         "    res = _resolver_linea(input, linea, catalogo, [])",
-        "    if (res.precio_u == null && !linea.ref) {   // commodity sin precio → buscar (las sub-receta sin coste se resuelven recursivo en _costear)",
-        "      ing = _precio_de_mercadona(input, linea)",
+        "    if (res.precio_u == null && !linea.ref) {",
+        "      ing = _precio_de_mercadona(input, linea)   // {nombre, precio, compra_unidad, fuente:'mercadona'} | null",
         "      if (ing) { catalogo.items.push(ing); catalogo.porNombre[(ing.nombre||'').toLowerCase()] = ing }",
         "    }",
         "  }",
         "",
-        "  // COSTING (determinista) sobre el catalogo ya completo.",
+        "  // 4. COSTEAR (DETERMINISTA): aritmetica pura sobre el catalogo ya enriquecido. No la haces tu de cabeza.",
         "  r = _costear(input, receta, catalogo)",
+        "",
+        "  // 5. VALIDAR — EL FRENO (REFLEJO): procedencia + coherencia. No persistas un coste con precios",
+        "  //    INVENTADOS (estimado_llm) ni un total que no cuadre. El costeo se da por bueno por la ley, no por ti.",
+        "  v = await publishAndWait('escandallo.validar.request', { costeo: { coste_total: r.coste_total, coste_unidad: r.coste_unidad, rinde: receta.rinde, lineas_detalle: r.desglose, lineas_sin_precio: r.sin_precio, fuentes_precios: r.fuentes }, request_id: uuid() }, { timeout_ms: 8000 })",
+        "  if (!v.data.valid) {",
+        "    // PRECIO_INVENTADO -> re-resuelve ese ingrediente por la API (otro match) o dejalo sin_precio (NO inventes), y re-costea.",
+        "    // TOTAL/VALOR_INCOHERENTE -> el costeo determinista no cuadra (no deberia pasar si _costear es del reflejo): falla honesto.",
+        "    return UPSTREAM_INVALID_RESPONSE { message: 'el costeo no es de fiar (precio inventado o aritmetica incoherente)', hint: v.data.errors }",
+        "  }",
+        "",
+        "  // 6. GUARDAR (REFLEJO, evento) + EMITIR salida tipada. Si quedaron lineas sin_precio, DILO (no las escondas).",
         "  if (persistir_flag && input.receta_id) _persistir(input, receta, r)",
-        "  return { status: 200, data: { coste_total: r.coste_total, coste_unidad: r.coste_unidad, rinde: receta.rinde, lineas_detalle: r.desglose, lineas_sin_precio: r.sin_precio, fuentes_precios: r.fuentes, persistido: persistir_flag && !!input.receta_id } }"
+        "  return { status: 200, data: { coste_total: r.coste_total, coste_unidad: r.coste_unidad, rinde: receta.rinde, lineas_detalle: r.desglose, lineas_sin_precio: r.sin_precio, fuentes_precios: r.fuentes, precios_estimados: v.data.precios_estimados, persistido: persistir_flag && !!input.receta_id } }"
+      ],
+      "reglas_clave": [
+        "REPARTO: lo UNICO fuzzy es el MATCH ingrediente↔Mercadona (que categoria, que producto). El PRECIO lo da la API; el COSTEO (aritmetica) es determinista; el FRENO es del reflejo.",
+        "FIDELIDAD: el precio sale de Mercadona (API real) o del catalogo. Lo que Mercadona no tiene se queda SIN PRECIO — NUNCA inventes un numero (eso es estimado_llm y el freno lo rechaza con PRECIO_INVENTADO).",
+        "FRENO: el costeo pasa por escandallo.validar.request antes de persistir. Si valid=false (precio inventado o aritmetica incoherente) NO se persiste: re-resuelve por la API o deja sin_precio, o falla honesto (UPSTREAM_INVALID_RESPONSE).",
+        "TRANSPARENCIA: si quedan lineas_sin_precio o precios_estimados, DILO al usuario — un coste con huecos no se canta como completo."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_INVALID_RESPONSE",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
       ]
     },
     "recalcular_siguiente": {
@@ -249,5 +285,6 @@
   "_v3_4_changelog": "v3.4.0 (2026-06-09): escandallo de recetas reescrito como CLASE EscandalloRecetas (pseudocodigo OOP). 2 cajones publicos + 8 metodos internos (cajon:false). NUCLEO DETERMINISTA _costear compartido por calcular y recalcular_todas. PRICING fuzzy (_precio_de_mercadona) aislado, solo en calcular. recalcular_todas = costearTodas: lote determinista de UNA pasada (catalogo+recetas una vez, orden topologico, sub-recetas inyectadas en el catalogo, sin navegar Mercadona) — mata el teatro del calculo mental y el 'guardado' falso. Invariantes anti-teatro en garantiza.",
   "_v3_6_changelog": "v3.6.0 (2026-06-10): recalcular_todas (todas de un tiron) REEMPLAZADO por recalcular_siguiente (de una en una). Motivo: prueba en vivo demostro que costear 29 recetas en un turno revienta el runtime LLM — se quedo en 4 y se corto. recalcular_siguiente costea UNA receta pendiente por llamada (orden topologico: masa/salsa antes que pizza), inyecta las sub-recetas ya persistidas como atomos del catalogo, y reporta {costeada, faltan, terminado}. Reanudable: cada llamada baja 'faltan' hasta 0; si un turno se corta, la siguiente retoma sin duplicar. El bucle lo conduce el exterior (usuario en chat ahora; worker en background en el futuro — mismo primitivo, fuera del turno). Tambien depende de cajon.abrir adosando usa_internas (ai-gateway, mismo dia): sin las internas el LLM improvisaba fs.read en vez del RPC recetas.listar/ingredientes.",
   "_v3_7_changelog": "v3.7.0 (2026-06-10): los _cargar_* pasan timeout_ms=55000 a publishAndWait. Motivo: recetas responde el RPC via turno LLM sintetico (~20-30s); el default de 10s daba UPSTREAM_TIMEOUT. Depende de ai-gateway: _handleBlueprintAsyncEvent extendido a request/response (responde:true en eventos_que_escucho de recetas) — ahora recetas.listar/ingredientes/obtener.request SI responden en el bus.",
-  "_v3_8_changelog": "v3.8.0 (2026-06-11): escandallo pasa a HIBRIDO (2o caso del patron). El COSTEO determinista (recalcular_siguiente, _costear) lo sirve el reflejo JS (index.js). El cajon recalcular_siguiente se convierte en delegador fino: dispara escandallo.recalcular_siguiente.request y reporta. calcular se queda en el blueprint (fuzzy: _precio_de_mercadona / Mercadona). Medido: el bucle de costeo deja de costar turnos LLM."
+  "_v3_8_changelog": "v3.8.0 (2026-06-11): escandallo pasa a HIBRIDO (2o caso del patron). El COSTEO determinista (recalcular_siguiente, _costear) lo sirve el reflejo JS (index.js). El cajon recalcular_siguiente se convierte en delegador fino: dispara escandallo.recalcular_siguiente.request y reporta. calcular se queda en el blueprint (fuzzy: _precio_de_mercadona / Mercadona). Medido: el bucle de costeo deja de costar turnos LLM.",
+  "_v3_10_changelog": "v3.10.0 (skill blueprint-agentico): EL FRENO + matar la estimacion. 'calcular' al espinazo de 6 fases CONTRATO->LEER->PENSAR(solo el MATCH Mercadona)->COSTEAR(determinista)->VALIDAR->GUARDAR/EMITIR. Nuevo escandallo.validar.request (reflejo _checkCosteo): valida PROCEDENCIA (cada precio trazable a mercadona/catalogo/sub_receta/manual) + COHERENCIA (valor=cantidad×precio, coste_total=Σlineas, coste_unidad=coste/rinde). El precio que el LLM INVENTABA (fuente 'estimado_llm') ahora se RECHAZA (PRECIO_INVENTADO): _precio_de_mercadona deja de estimar y RETORNA null -> la linea queda sin_precio (honesto). El coste se valida antes de persistir; si no es de fiar, no se persiste. Asi el coste que mueve el precio de venta sale SIEMPRE de la API real o del catalogo, nunca de un numero inventado cantado como '✅ costeado'."
 }

@@ -25,12 +25,15 @@ const tsSafe = () => nowISO().replace(/[:.]/g, '-');
 const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 // Familias canónicas de ingrediente (las que agrupa escandallo/mise-en-place). Default: 'otro'.
 const FAMILIAS = new Set(['queso', 'verdura', 'carne', 'salsa', 'pescado', 'fruta', 'extra', 'condimento', 'otro']);
+// € de extra estándar si la fuente no trae precio propio (misma ley que menu-generator). El comandero
+// lo necesita para cobrar extras (ELEGIR_VARIOS); 0 explícito = gratis (se respeta).
+const PRECIO_EXTRA_ESTANDAR = 0.5;
 
 class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.12.0';
+    this.version = 'reflejo-1.13.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -275,6 +278,11 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     carta.meta.updated_at = nowISO();
     if (!carta.meta.estado) carta.meta.estado = 'borrador';
 
+    // GATE: normaliza los ingredientes de todos los productos (familia + precio_extra) ANTES de
+    // persistir. Una carta del turno LLM (ruta TEXTO_LIBRE) que llegue plana sale operable; la rica
+    // del reflejo pasa intacta (precio_extra explícito se respeta). Un solo punto protege al comandero.
+    this._normalizarCartaProductos(carta);
+
     let w;
     if (!existe) w = await this._write(input.project_id, path, carta);
     else w = await this._edit(input.project_id, path, [{ op: 'replace', path: '', value: carta }]);
@@ -320,6 +328,9 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
       carta.meta.version = ((actual.meta && actual.meta.version) || 0) + 1;
     }
     carta.meta.updated_at = nowISO();
+    // Mismo gate que _save: una versión legacy restaurada sale operable (familia + precio_extra),
+    // nunca devuelve una carta coja al comandero. Solo añade defaults; no altera datos reales.
+    this._normalizarCartaProductos(carta);
     let w;
     if (!existe) w = await this._write(input.project_id, cartaPath(input.carta_id), carta);
     else w = await this._edit(input.project_id, cartaPath(input.carta_id), [{ op: 'replace', path: '', value: carta }]);
@@ -410,9 +421,26 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     return lista.filter(ing => ing && ing.nombre).map(ing => {
       const out = { id: ing.id || slug(ing.nombre), nombre: String(ing.nombre), familia: FAMILIAS.has(ing.familia) ? ing.familia : 'otro' };
       if (ing.emoji) out.emoji = ing.emoji;
-      if (typeof ing.precio_extra === 'number') out.precio_extra = ing.precio_extra;
+      // Extra estándar si la fuente no trae precio propio; el explícito (incl. 0) se respeta.
+      // Sin esto el comandero no puede cobrar extras (ELEGIR_VARIOS quedaba a 0).
+      out.precio_extra = (typeof ing.precio_extra === 'number') ? ing.precio_extra : PRECIO_EXTRA_ESTANDAR;
       return out;
     });
+  }
+
+  // Normaliza los ingredientes (base + ingredientes_base) de TODOS los productos de una carta a la
+  // forma canónica con familia + precio_extra. Es el GATE de _save: da igual si la carta entró rica
+  // (reflejo de menu-generator) o coja (turno LLM TEXTO_LIBRE) — sale siempre operable para el
+  // comandero. Solo toca las dos listas de ingredientes; el resto del producto se preserva intacto.
+  _normalizarCartaProductos(carta) {
+    if (!carta || !Array.isArray(carta.productos)) return;
+    for (const p of carta.productos) {
+      if (!p || typeof p !== 'object') continue;
+      if (Array.isArray(p.ingredientes)) p.ingredientes = this._normalizarIngredientes(p.ingredientes);
+      if (Array.isArray(p.ingredientes_base) && p.ingredientes_base.length) {
+        p.ingredientes_base = this._normalizarIngredientes(p.ingredientes_base);
+      }
+    }
   }
 
   // Aptitudes dietéticas a forma canónica: objeto de booleanos. undefined si no es objeto.

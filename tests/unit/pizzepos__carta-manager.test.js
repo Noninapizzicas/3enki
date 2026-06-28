@@ -330,5 +330,32 @@ async function testAsync(desc, fn) {
   // base-vs-topping es criterio del LLM (blueprint), no lógica determinista. El reflejo
   // solo persiste vía add_product (probado arriba, ingredientes que le pasen).
 
+  await testAsync('_save GATE: carta coja (LLM) sale operable — familia + precio_extra normalizados', async () => {
+    const store = {};
+    const { m } = makeReflejo(store);
+    // Carta como la produciría el turno LLM por la ruta TEXTO_LIBRE: ingredientes PLANOS,
+    // sin familia, sin precio_extra (el caso que dejaba al comandero sin cobrar extras).
+    const cojaCarta = {
+      meta: { id: 'carta_nonina', nombre: 'Nonina', generado_desde: 'texto' },
+      categorias: [{ id: 'pizzas', nombre: 'Pizzas', orden: 1 }],
+      productos: [{
+        id: 'pizzas_margarita', nombre: 'Margarita', precio: 9, categoria_id: 'pizzas',
+        ingredientes: [
+          { nombre: 'Mozzarella' },                          // sin id, sin familia, sin precio_extra
+          { nombre: 'Tomate', familia: 'salsa', precio_extra: 0 },  // explícito 0 → se respeta (gratis)
+          { nombre: 'Bacon', familia: 'inventada' }           // familia inválida → 'otro'
+        ]
+      }]
+    };
+    const r = await m._save({ project_id: 'proj-nonina', carta: cojaCarta });
+    assert.strictEqual(r.status, 200);
+    const ing = JSON.parse(store['/pizzepos/cartas/carta_nonina.json']).productos[0].ingredientes;
+    assert.strictEqual(ing[0].id, 'mozzarella');             // id derivado del nombre
+    assert.strictEqual(ing[0].familia, 'otro');              // familia default
+    assert.strictEqual(ing[0].precio_extra, 0.5);            // default estándar → cobrable
+    assert.strictEqual(ing[1].precio_extra, 0);              // explícito 0 respetado (gratis)
+    assert.strictEqual(ing[2].familia, 'otro');              // familia inválida normalizada
+  });
+
   console.log('\nTodos los tests pasaron.');
 })().catch(e => { console.error(e); process.exit(1); });

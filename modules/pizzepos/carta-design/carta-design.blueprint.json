@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo carta-design. Hijo de subsistema-recetario.modulo-base. Estudio de diseno de cartas impresas. 4 operaciones deterministas (las sirve el REFLEJO JS): contexto_diseno (HIDRATA carta+marca), load_carta (solo la carta), save (guarda el HTML), gallery (lista lo guardado). La identidad del diseno sale de la MARCA (carta-marketing): colores, tipografias, logo, voz — NO hay biblioteca de profiles. La composicion del HTML la hace el LLM de pagina (SIN agente).",
   "id": "carta-design",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "_v2_3_changelog": "v2.3.0 (2026-06-26): FIX 'la entrevista del disenador se evapora'. contexto_diseno era LEER-only y la persistencia del negocio vivia en PROSA (reglas_clave), no como paso GUARDAR -> ante una marca VACIA el LLM de diseno improvisaba el onboarding entero y no persistia nada (ademas sin el envoltorio 'campos' que update_perfil exige). Ahora: (1) desenvuelve .data del contexto; (2) GUARD de onboarding incompleto (sin marca/esencia.nombre/voz.tono) -> NO entrevista la identidad (no es su dominio ni puede persistirla), la surfacea y ofrece chat.cambiar_foco a carta-marketing; (3) paso GUARDAR explicito del unico dato que SI capta (negocio.local dir/tel/horario) via update_perfil({ campos:{ negocio:{ local }}}). Cierra trabajo_pendiente campos_negocio_en_marca.",
   "_temperatura_doc": "Pagina CREATIVA: compone el HTML del diseno encarnando la marca (colores/tipografias/voz) -> caliente. ai-gateway la usa como default del turno (override humano gana; cae al parent 0.4 si se quitara). El REFLEJO hidrata/persiste; la chispa visual es del LLM de pagina.",
   "temperatura": 0.8,
@@ -21,7 +21,8 @@
     "load_carta delega a carta-manager.get y devuelve la carta lista para diseno (objeto fresco {status,data}).",
     "save persiste HTML+metadata en /pizzepos/carta-design/designs/<carta_id>__<timestamp>.html del proyecto y emite carta.html.generada.",
     "gallery lista los disenos/eventos guardados (HTML + meta), filtrable por carta_id.",
-    "La identidad del diseno sale de la marca; NO hay biblioteca de profiles/plantillas."
+    "La identidad del diseno sale de la marca; NO hay biblioteca de profiles/plantillas.",
+    "FRENO (validar + gate en save): el diseno se guarda cuando REPRESENTA la carta — todos los productos presentes y alergenos declarados (1169/2011), comprobado contra carta.get. El diseno que se deja productos fuera no se persiste ni se canta como hecho."
   ],
   "no_garantiza": [
     "Composicion del HTML — la hace el LLM de pagina siguiendo el proceso del context.json (sin agente).",
@@ -75,7 +76,12 @@
         "ONBOARDING INCOMPLETO (sin marca, o sin esencia.nombre / voz.tono): el diseno NO entrevista la identidad — no puede persistirla (no es su dominio) y se perderia. La surfacea y OFRECE completar el onboarding (chat.cambiar_foco a 'carta-marketing'). NUNCA improvises tu la entrevista de marca aqui.",
         "UNICO dato que el diseno SI captura: negocio.local (dir/tel/horario) para el pie. GUARDALO de VERDAD via carta-marketing.update_perfil con el ENVOLTORIO { campos: { negocio: { local: {...} } } } — sin 'campos' el reflejo responde INVALID_INPUT y se pierde. Comprueba w.status; lee w.data."
       ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
       "_delega_en": "design.contexto_diseno.request (REFLEJO JS — index.js)"
     },
     "load_carta": {
@@ -86,23 +92,38 @@
         "  resp = await publishAndWait('design.load_carta.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
         "  return resp"
       ],
-      "reglas_clave": ["Delegacion a carta-manager.get. No transforma."],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
+      "reglas_clave": [
+        "Delegacion a carta-manager.get. No transforma."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
       "_delega_en": "design.load_carta.request (REFLEJO JS — index.js)"
     },
     "save": {
       "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req), html (req — string), nombre?, formato? (string descriptivo de la maqueta, p.ej. 'A4 apaisado · doble cara · 3 col'), generado_por? }",
       "pseudocodigo": [
         "async save(input):",
-        "  // GUARDAR el HTML que el LLM de pagina compuso + meta companion. El reflejo emite carta.html.generada.",
+        "  // GUARDAR del espinazo (skill blueprint-agentico). El reflejo RE-VALIDA (gate inquebrantable)",
+        "  //   contra la carta REAL antes de escribir: si el HTML no la representa (faltan productos /",
+        "  //   alergenos), NO se guarda. Solo si pasa: persiste HTML+meta y emite carta.html.generada.",
         "  resp = await publishAndWait('design.save.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
         "  return resp"
       ],
       "reglas_clave": [
         "Guarda HTML + companion .json con meta.",
-        "filename: <carta_id>__<timestamp>.html — formato unico (permite varios disenos/eventos de la misma carta)."
+        "filename: <carta_id>__<timestamp>.html — formato unico (permite varios disenos/eventos de la misma carta).",
+        "FRENO: save RE-VALIDA contra la carta REAL antes de escribir. 201 = guardado y verificado (representa la carta) · 422 = el diseno no la representa (errors.faltan) => NO guardado, vuelve a validar/re-componer. PROHIBIDO afirmar 'guardado' que el reflejo no confirmo."
       ],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
+      "errores_posibles": [
+        "UPSTREAM_INVALID_RESPONSE",
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
       "_delega_en": "design.save.request (REFLEJO JS — index.js)"
     },
     "gallery": {
@@ -113,8 +134,37 @@
         "  resp = await publishAndWait('design.gallery.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
         "  return resp"
       ],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
       "_delega_en": "design.gallery.request (REFLEJO JS — index.js)"
+    },
+    "validar": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req), html (req — string, el diseño que compusiste) }",
+      "pseudocodigo": [
+        "async validar(input):",
+        "  // FRENO (skill blueprint-agentico) — VALIDAR del espinazo. El reflejo juzga si tu HTML",
+        "  //   REPRESENTA la carta, comparando contra la carta REAL (carta.get), NO contra lo que tu",
+        "  //   afirmes: exige HTML no trivial + COMPLETITUD (cada producto aparece) + ALERGENOS",
+        "  //   declarados (Reg. UE 1169/2011). Funcion pura: no guarda nada.",
+        "  resp = await publishAndWait('design.validar.request', { ...input, request_id: uuid() }, { timeout_ms: 10000 })",
+        "  // resp.data = { valid, errors[{code, message, faltan?}], productos_total, productos_faltan }",
+        "  return resp"
+      ],
+      "reglas_clave": [
+        "LLAMA a validar ANTES de save, en bucle: si valid=false, RE-COMPON el HTML — anade los productos de errors[].faltan y, si falta, la leyenda de alergenos — y vuelve a validar (max 3 intentos).",
+        "El freno compara contra la carta REAL (carta.get): no puedes declarar completo lo que no esta. Corrige SOLO lo que errors te senala.",
+        "Si tras 3 intentos sigue invalido, dilo claro (no guardes a medias): el diseno no representa la carta todavia."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE"
+      ],
+      "_delega_en": "design.validar.request (REFLEJO JS — index.js, _checkDiseno)"
     }
   },
   "trabajo_pendiente": [
@@ -123,5 +173,6 @@
       "estado": "resuelto",
       "descripcion": "RESUELTO v2.3.0: contexto_diseno ahora tiene paso GUARDAR explicito del negocio.local (dir/tel/horario) via carta-marketing.update_perfil con el envoltorio { campos: { negocio: { local: {...} } } }, y un GUARD de onboarding incompleto (sin marca/esencia/voz) que deriva al onboarding de carta-marketing en vez de improvisar una entrevista que el diseno no puede persistir."
     }
-  ]
+  ],
+  "_v2_4_changelog": "v2.4.0 (skill blueprint-agentico): EL FRENO. Un diseno de carta no se valida con JSON Schema (es HTML freeform): su contrato es REPRESENTAR la carta. Nuevo cajon 'validar' (VALIDAR del espinazo) -> design.validar.request (reflejo _checkDiseno): compara el HTML contra la carta REAL (carta.get) y exige HTML no trivial + COMPLETITUD (cada producto aparece) + ALERGENOS declarados (Reg. UE 1169/2011); devuelve {valid, errors[{code,message,faltan}]} para re-componer solo lo que falta (loop max 3). 'save' RE-VALIDA como gate inquebrantable: si el diseno no representa la carta -> 422 y NO persiste. Espinazo: contexto_diseno(LEER) -> [LLM compone HTML](PENSAR) -> validar(VALIDAR loop) -> save(GUARDAR, re-valida) -> carta.html.generada(EMITIR). Mata el diseno que se deja productos fuera y lo canta como hecho (clase carta1)."
 }

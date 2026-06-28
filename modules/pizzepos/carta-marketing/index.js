@@ -13,9 +13,12 @@
 
 'use strict';
 
+const path = require('path');
+const Ajv = require('ajv');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
 const STORE_PATH = '/pizzepos/marca.json';
+const MARCA_SCHEMA_PATH = path.join(__dirname, '../../../arquitectura/decisiones/_schemas/marca/marca.schema.json');
 const COPY_PATH = '/pizzepos/carta-marketing/copy.json';   // store del copy (por producto_id + preámbulo + promos)
 
 // Estructura CANÓNICA de la identidad (ver _schemas/marca/marca.schema.json).
@@ -48,13 +51,15 @@ class CartaMarketingReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-marketing';
-    this.version = 'reflejo-2.0.0';
+    this.version = 'reflejo-2.1.0';
+    this._validarMarca = null; // validador AJV compilado (lazy, cacheado)
   }
 
   // ── handlers RPC (una línea) ──
   onGetPerfilRequest(e) { return this._atender(e, 'get_perfil', 'carta-marketing.get_perfil.response', d => this._getPerfil(d)); }
   onUpdatePerfilRequest(e) { return this._atender(e, 'update_perfil', 'carta-marketing.update_perfil.response', d => this._updatePerfil(d)); }
   onGuardarCopyRequest(e) { return this._atender(e, 'guardar_copy', 'carta-marketing.guardar_copy.response', d => this._guardarCopy(d)); }
+  onValidarRequest(e) { return this._atender(e, 'validar', 'carta-marketing.validar.response', d => this._validar(d)); }
 
   // ── ui_handlers: el FRONTEND entra por la PUERTA del dueño (ui/request/carta-marketing/<op>).
   // Mismos métodos deterministas (devuelven {status,data}); get_perfil lee el canónico
@@ -76,6 +81,39 @@ class CartaMarketingReflejo extends ModuloHibridoReflejo {
   // (p.ej. { esencia: { nombre, valores }, visual: { colores } }). Deep-merge
   // sobre lo que ya hay → se rellena de a poco sin pisar el resto. Reescritura
   // atómica del fichero (single-writer, store pequeño).
+  // ── EL FRENO (skill blueprint-agentico). La marca SÍ tiene contrato mecánico
+  //    (marca.schema.json): _checkMarca valida la estructura contra él (esencia.nombre string,
+  //    voz.tono array, colores objeto…). El onboarding produce el parche (lo fuzzy) y el reflejo
+  //    valida la marca RESULTANTE del merge ANTES de persistir — mata la marca rota (voz como
+  //    string, valores como texto) que luego leerían carta-design/copy. Función pura. (El COPY
+  //    es texto libre: su contrato es la VOZ, irreducible al PENSAR — no hay freno mecánico ahí.) ──
+  _validador() {
+    if (!this._validarMarca) {
+      const schema = require(MARCA_SCHEMA_PATH);
+      const ajv = new Ajv({ allErrors: true, strict: false, logger: false });
+      this._validarMarca = ajv.compile(schema);
+    }
+    return this._validarMarca;
+  }
+
+  _checkMarca(marca) {
+    if (!marca || typeof marca !== 'object' || Array.isArray(marca)) return { ok: false, errors: [{ code: 'MARCA_AUSENTE', message: 'marca debe ser un objeto' }] };
+    const validate = this._validador();
+    if (validate(marca)) return { ok: true, errors: [] };
+    const errors = (validate.errors || []).map(e => ({
+      path: e.instancePath || '/', keyword: e.keyword,
+      message: `${e.instancePath || '(raíz)'} ${e.message}`.trim()
+    }));
+    return { ok: false, errors };
+  }
+
+  async _validar(input) {
+    const marca = ('marca' in input) ? input.marca : input;
+    const c = this._checkMarca(marca);
+    this.metrics?.increment?.('carta-marketing.reflejo.served', { op: 'validar', veredicto: c.ok ? 'valido' : 'invalido' });
+    return { status: 200, data: { valid: c.ok, errors: c.errors } };
+  }
+
   async _updatePerfil(input) {
     if (!input.project_id || !input.campos || typeof input.campos !== 'object' || Array.isArray(input.campos) || Object.keys(input.campos).length === 0) {
       return this._invalid('campos');
@@ -84,6 +122,10 @@ class CartaMarketingReflejo extends ModuloHibridoReflejo {
     const merged = deepMerge(base, input.campos);
     merged._version = merged._version || '1.0';
     merged._updated_at = new Date().toISOString();
+    // FRENO: la marca RESULTANTE debe cumplir el contrato. Un parche que la rompe (voz como
+    // string, esencia.nombre como número) NO se persiste — la base la beben todos los módulos.
+    const chk = this._checkMarca(merged);
+    if (!chk.ok) return this._errorResponse(422, 'UPSTREAM_INVALID_RESPONSE', 'el cambio deja la marca fuera del contrato — NO guardado', { errors: chk.errors });
     const w = await this._rpc('fs.write.request', {
       project_id: input.project_id, path: STORE_PATH,
       content: JSON.stringify(merged, null, 2), encoding: 'utf-8', atomic: true

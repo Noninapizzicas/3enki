@@ -20,7 +20,7 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'escandallo';
-    this.version = 'reflejo-1.1.0';
+    this.version = 'reflejo-1.2.0';
   }
 
   // ── handlers RPC (una línea) ──
@@ -29,6 +29,9 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
   }
   onCostearRequest(e) {
     return this._atender(e, 'costear', 'escandallo.costear.response', d => this._costearReceta(d));
+  }
+  onValidarRequest(e) {
+    return this._atender(e, 'validar', 'escandallo.validar.response', d => this._validar(d));
   }
 
   // ── ops deterministas ──
@@ -91,6 +94,69 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
         lineas_detalle: r.desglose, lineas_sin_precio: r.sin_precio, fuentes_precios: r.fuentes
       }
     };
+  }
+
+  // ── EL FRENO (skill blueprint-agentico). Un escandallo no se valida con un schema de
+  //    forma: su contrato es PROCEDENCIA + COHERENCIA. (1) cada precio es trazable a una
+  //    fuente real (mercadona / catalogo / sub_receta / manual) — el precio que el LLM
+  //    INVENTA (fuente 'estimado_llm') NO es un coste de fiar: lo que Mercadona no tiene es
+  //    sin_precio (honesto), no un número inventado. (2) la aritmética cuadra: cada línea
+  //    valor=cantidad×precio, coste_total=Σlíneas, coste_unidad=coste_total/rinde — caza el
+  //    total fabricado. Función pura: no lee ni escribe. Determinista. ──
+  _checkCosteo(costeo) {
+    const finite = x => typeof x === 'number' && Number.isFinite(x);
+    const FUENTES_TRAZABLES = new Set(['mercadona', 'catalogo', 'sub_receta', 'manual']);
+    const desglose = Array.isArray(costeo.lineas_detalle) ? costeo.lineas_detalle
+      : (Array.isArray(costeo.desglose) ? costeo.desglose : []);
+    const ct = costeo.coste_total, cu = costeo.coste_unidad, rinde = costeo.rinde;
+    const errors = [];
+    const precios_estimados = [];
+    let suma = 0;
+
+    for (let i = 0; i < desglose.length; i++) {
+      const l = desglose[i] || {};
+      const precio = l.precio_unitario, cant = l.cantidad, val = l.valor_calculado;
+      if (!finite(precio) || precio < 0) {
+        errors.push({ code: 'PRECIO_NO_FINITO', path: `/lineas/${i}`, message: `${l.nombre || '(línea)'}: precio_unitario inválido` });
+      }
+      if (finite(precio) && finite(cant)) {
+        const esperado = this._round(cant * precio, 2);
+        if (finite(val) && Math.abs(val - esperado) > 0.011) {
+          errors.push({ code: 'VALOR_INCOHERENTE', path: `/lineas/${i}`, message: `${l.nombre || '(línea)'}: valor_calculado ${val} ≠ cantidad×precio ${esperado}` });
+        }
+        suma += finite(val) ? val : esperado;
+      }
+      if (l.fuente === 'estimado_llm') precios_estimados.push(l.nombre);
+      else if (l.fuente && !FUENTES_TRAZABLES.has(l.fuente)) {
+        errors.push({ code: 'FUENTE_DESCONOCIDA', path: `/lineas/${i}`, message: `${l.nombre || '(línea)'}: fuente '${l.fuente}' no reconocida` });
+      }
+    }
+
+    // FIDELIDAD-MERCADONA: el precio inventado por el LLM no se persiste como coste de fiar.
+    if (precios_estimados.length) {
+      errors.push({ code: 'PRECIO_INVENTADO', message: `${precios_estimados.length} precio(s) estimados por el LLM (no de Mercadona ni catálogo): usa la API o déjalos sin_precio`, lineas: precios_estimados.slice(0, 20) });
+    }
+
+    if (desglose.length > 0) {
+      if (!finite(ct) || ct < 0) errors.push({ code: 'COSTE_NO_FINITO', message: 'coste_total no es un número >= 0' });
+      else {
+        const sumaR = this._round(suma, 2);
+        if (Math.abs(sumaR - ct) > 0.011) errors.push({ code: 'TOTAL_INCOHERENTE', message: `coste_total ${ct} ≠ suma de líneas ${sumaR}` });
+        if (rinde && finite(rinde.cantidad) && rinde.cantidad > 0 && finite(cu)) {
+          const cuEsp = this._round(ct / rinde.cantidad, 2);
+          if (Math.abs(cuEsp - cu) > 0.011) errors.push({ code: 'COSTE_UNIDAD_INCOHERENTE', message: `coste_unidad ${cu} ≠ coste_total/rinde ${cuEsp}` });
+        }
+      }
+    }
+    return { ok: errors.length === 0, errors, precios_estimados, lineas_costeadas: desglose.length };
+  }
+
+  async _validar(input) {
+    const costeo = ('costeo' in input) ? input.costeo : (('resultado' in input) ? input.resultado : input);
+    if (!costeo || typeof costeo !== 'object' || Array.isArray(costeo)) return this._invalid('costeo');
+    const c = this._checkCosteo(costeo);
+    this.metrics?.increment('escandallo.reflejo.served', { op: 'validar', veredicto: c.ok ? 'valido' : 'invalido' });
+    return { status: 200, data: { valid: c.ok, errors: c.errors, precios_estimados: c.precios_estimados, lineas_costeadas: c.lineas_costeadas } };
   }
 
   // ── núcleo determinista _costear (réplica fiel del pseudocódigo) ──

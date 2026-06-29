@@ -1,7 +1,8 @@
 {
   "_doc": "Manifest del CUENCO de lentes (lentes-diseno) — REFLEJO PURO. Cúpula invertida que RECOGE N packs auto-descubiertos (packs/<dominio>/_pack.json) y los sirve por UNA puerta. Cada pack = un ÓRGANO con su ADN: MEMORIA (.md, lo que sabe) + MOTOR (motor.js opcional, lo que hace) + QUÍMICO (frecuencia opcional, su ritmo) + EVENTO (lo público). Soltar un pack = soltar un órgano; el cuenco no se reescribe. Packs vivos: diseño (8 lentes, solo memoria), copy (5 lentes, solo memoria), negocio (3 lentes + MOTOR food-cost despierto + QUÍMICO pulso). Selección híbrida: tarea->rutas (reflejo) o nombres (LLM).",
   "name": "lentes-diseno",
-  "version": "2.0.0",
+  "version": "2.1.0",
+  "_v2_1_nota": "v2.1.0 (2026-06-29): GRAFO de órganos (cúpula Obsidian, capa 3). _construirGrafo teje el SUSTRATO declarado (nodos=lentes; aristas co-ruta*2 + co-dominio; cero embeddings) y la capa APRENDIDA crece sola: cada obtener con >=2 lentes refuerza la arista (co-uso) y emite lente.co_uso (señal pública para que el destilador le de durabilidad). Nueva puerta lentes.vecinas.request {desde,k,dominio?} -> vecinas por peso (declarado+aprendido); aquí emerge lo CROSS-DOMINIO que la tabla plana no declara. La tabla `rutas` se queda como suelo determinista. Volátil por ahora (en memoria); la durabilidad es el siguiente escalón (destilador).",
   "_v2_0_nota": "v2.0.0 (2026-06-29): PROMOVIDO a CUENCO (Teoría del Órgano). _cargarCatalogo (un dir) -> _descubrirPacks (packs/*/). Las 8 lentes de diseño pasan a packs/diseño/. Nuevos packs copy (marketing->carta-marketing) y negocio (finanzas->escandallo/viabilidad) con MOTOR despierto (food_cost/pvp_objetivo/salud_margenes) + QUÍMICO (pulso cada 7d -> evento negocio.pulso). Nueva puerta lentes.motor.request. lentes.obtener/listar ganan `dominio?` (ciñe al órgano). El nervio de ai-gateway no cambia su contrato (lente_default puede llevar {dominio,tarea}).",
   "description": "Cuenco de lentes: reflejo puro que auto-descubre packs de conocimiento (packs/<dominio>/) y los sirve por el bus. Base compartida que cualquier página bebe (diseño/copy/negocio). Anatomía de órgano: memoria + motor + químico + evento.",
   "author": "Event Core Team",
@@ -9,6 +10,7 @@
   "main": "index.js",
   "publishes": [
     { "event": "lente.registrar",        "description": "Al cargar, cada pack anuncia su nacimiento {dominio, cuando_usar, lentes, tiene_motor, tiene_quimico}. Impulso de auto-descubrimiento (cúpula invertida)." },
+    { "event": "lente.co_uso",           "description": "Un obtener trajo >=2 lentes juntas (co-uso real). {lentes:[nombres]}. Refuerza la arista del grafo; señal pública para que el destilador teja durabilidad." },
     { "event": "negocio.pulso",          "description": "QUÍMICO del pack negocio: late cada 7d (op pulso) y secreta su latido. La hormona que prueba que la facultad química respira." },
     { "event": "lentes.listar.response",  "description": "Catalogo barato: { packs, lentes:[{nombre, dominio, cuando_usar}], rutas }. Lo lee el LLM para ELEGIR." },
     { "event": "lentes.obtener.response", "description": "Las lentes pedidas con su .md COMPLETO: { lentes:[{nombre, dominio, cuando_usar, contenido}] }." },
@@ -17,7 +19,9 @@
   "subscribes": [
     { "event": "lentes.listar.request",  "handler": "onListarRequest",  "description": "Reflejo: catálogo barato (nombre+dominio+cuando_usar) + rutas + packs. Filtrable por `dominio`. Lo lee el LLM para ELEGIR." },
     { "event": "lentes.obtener.request", "handler": "onObtenerRequest", "description": "Reflejo: entrega los .md COMPLETOS de las lentes pedidas. Selección híbrida: `tarea`->rutas (determinista) y/o `nombres` (elección del LLM), opcionalmente ceñido a `dominio`." },
-    { "event": "lentes.motor.request",   "handler": "onMotorRequest",   "description": "Reflejo: flexiona el MOTOR de un pack (facultad despierta). {dominio, op, args} -> {resultado}. Hoy: negocio.{food_cost,pvp_objetivo,salud_margenes,pulso} (aritmética food-cost determinista, céntimos)." }
+    { "event": "lentes.motor.request",   "handler": "onMotorRequest",   "description": "Reflejo: flexiona el MOTOR de un pack (facultad despierta). {dominio, op, args} -> {resultado}. Hoy: negocio.{food_cost,pvp_objetivo,salud_margenes,pulso} (aritmética food-cost determinista, céntimos)." },
+    { "event": "lentes.vecinas.request",  "handler": "onVecinasRequest", "description": "Reflejo (GRAFO): vecinas de una lente por peso (declarado+aprendido). {desde, k?, dominio?} -> {vecinas:[{nombre,dominio,peso,declarado,aprendido}]}. Para sugerir/expandir; aquí aflora lo cross-dominio aprendido por co-uso." },
+    { "event": "lente.co_uso",            "handler": "onCoUso",          "description": "Reflejo (GRAFO): registra un co-uso externo {lentes:[nombres]} y refuerza la arista aprendida. El cuenco también se auto-alimenta desde su propio obtener." }
   ],
   "config": {
     "persistence": {

@@ -112,8 +112,12 @@ Tres capas distintas, cada una ya sembrada en Enki:
   vecindad, los huecos afloran como `dangling` (mención-sin-enlazar), y el
   **destilador** teje los enlaces por co-uso. *"Obsidian es la versión disecada; aquí
   late"*: Obsidian tiene nodos y enlaces pero su grafo está QUIETO; Enki tiene la
-  misma anatomía **+ el evento viajando** → late. Paga al escalar (50+ nodos); con
-  pocos, sobra. Ya sembrado: `graph/` (autorretrato), eventos `dangling`, `destilador`.
+  misma anatomía **+ el evento viajando** → late. **Encendido el SUSTRATO** (ver §10):
+  nodos + aristas declaradas + la capa que aprende del co-uso. La razón de encenderlo
+  YA y no "a 50 nodos": el valor son las **aristas aprendidas**, y diferir tira la
+  señal de los primeros packs de tráfico — el sustrato debe plantarse antes para que
+  **componga**. Lo que sí queda diferido (sin datos no afina): la vecindad **semántica**
+  (HNSW/embeddings). Ya sembrado además: `graph/` (autorretrato), eventos `dangling`.
 
 **Regla de decisión — un módulo cuenco (A) vs un módulo por dominio (B):**
 ```
@@ -320,17 +324,54 @@ GOBIERNO + HOMEOSTASIS (las dos inhibiciones)
 
 RAÍZ
 ✓ propiocepcion             la copia eferente (§9) — ya existía; homeostasis y grafo beben de ella
+
+GRAFO (cúpula Obsidian — sustrato encendido, §10)
+✓ grafo de órganos (cuenco) nodos=lentes; aristas DECLARADAS (co-ruta·co-dominio) tejidas al cargar
+✓ lentes.vecinas.request    navega por vecindad (peso declarado+aprendido); aflora lo cross-dominio
+✓ capa que APRENDE          cada obtener de ≥2 lentes refuerza la arista (co-uso) + emite lente.co_uso
 ```
 
 ```
-TESTS  lentes-diseno__servir (15) · lentes-diseno__anatomia (3: nacimiento/químico/motor) ·
+TESTS  lentes-diseno__servir (15) · lentes-diseno__anatomia (3) · lentes-diseno__grafo (9) ·
        ai-gateway__nervio-lentes (5) · homeostasis__bucle (10) — verde.
 ```
 
-## Lo que queda al escalar (no antes — paga con nodos)
+## 10. La cúpula Obsidian — encender el sustrato, dejar que lo aprendido crezca
+
+El error que casi cometo: *"esperar a 50 nodos"*. Eso protegía al ingeniero (de
+construir algo "prematuro"), no al sistema → se disuelve. El umbral honesto no es
+**cuántos** nodos, sino **cuándo la selección se vuelve cross-dominio** — y eso es
+con el 2º pack. Dos capas a ritmos distintos:
 
 ```
-· cúpula Obsidian (§4.3)    cuando haya 50+ órganos: selección por vecindad en el grafo, no por tabla plana
+SUSTRATO  (nodos + aristas DECLARADAS)   barato · determinista · se construye        → AHORA
+APRENDIDO (aristas por CO-USO + peso)     crece SOLO con el tráfico · no se construye  → empieza ya, compone
+SEMÁNTICO (vecindad por embeddings/HNSW)  necesita datos para afinar                   → diferido (honesto)
+```
+
+**Por qué el sustrato va AHORA y no es "esperar":** diferirlo tira la señal de
+aprendizaje de los primeros packs de tráfico. El destilador arrancaría de cero
+justo cuando ya hay mucho que tejer. Plantarlo hoy lo hace **componer**: cada turno
+desde el día 1 deja arista. Es plantar la raíz antes de la cosecha.
+
+**Lo que el grafo da que la tabla plana NO podía:** la tabla `rutas` es siloed por
+pack — ninguna entrada cruza dominios. El grafo sí: una arista **aprendida** une
+diseño↔copy↔negocio aunque ninguna tabla lo declare. *"Diseña la carta con voz de
+marca y precio rentable"* recorre tres órganos por vecindad emergente.
+
+**La tabla plana se queda como SUELO.** No se tira: es el fallback determinista
+cuando el grafo aún no aprendió. Suelo (reflejo) + vecindad (grafo) conviven.
+
+**Honestidad de lo volátil:** hoy lo aprendido vive en memoria (ligero). La
+durabilidad —que sobreviva al reinicio— es el siguiente escalón, y su dueño natural
+es el **destilador** (ya teje co-uso para skills; `lente.co_uso` es su materia
+prima). No se afirma aprendizaje durable que aún no existe.
+
+## Lo que queda (cada uno a su ritmo, no "todo al escalar")
+
+```
+· durabilidad del grafo     el destilador persiste lo aprendido (lente.co_uso ya emitido, listo para tejer)
+· vecindad semántica        HNSW/embeddings cuando haya tráfico que afine (sin datos no es inteligencia)
 · más packs                 ingeniería/legal/soporte… sueltas la carpeta, nace el órgano (cero reescritura)
-· efector más fino          hoy inhibe el órgano; mañana una facultad concreta (motor/químico) por separado
+· efector más fino          hoy la homeostasis inhibe el órgano; mañana una facultad concreta por separado
 ```

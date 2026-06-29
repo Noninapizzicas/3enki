@@ -109,7 +109,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'comandero');
-    assert.strictEqual(m.version, '3.3.0');
+    assert.strictEqual(m.version, '3.4.0');
     assert.strictEqual(m.pedidos.size, 0);
     assert.strictEqual(m.productosCache.size, 0);
     await m.onUnload();
@@ -530,6 +530,42 @@ function publishedOf(mocks, name) {
     assert.strictEqual(r.status, 409);
     const metric = mocks.metricsCalls.find(c => c[1] === 'comandero.errors');
     assert.ok(metric);
+    await m.onUnload();
+  });
+
+  // ==========================================
+  // Group: Guarda contra lineas mudas (v3.4.0)
+  // ==========================================
+
+  await testAsync('add-item SIN nombre ni producto_id -> 400 y NO entra al buffer (linea fantasma)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleAddItem({ cuenta_id: 'c1', precio: 11, cantidad: 1 });
+    assert.ok(isCanonicalError(r), 'debe ser error canonico');
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
+    // No se creo linea fantasma en el buffer
+    const buf = m.pedidos.get('c1');
+    assert.ok(!buf || buf.items.length === 0, 'el buffer no debe tener items mudos');
+    await m.onUnload();
+  });
+
+  await testAsync('add-item con producto_id pero sin nombre -> OK (usa producto_id como nombre)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleAddItem({ cuenta_id: 'c1', producto_id: 'pizza_x', precio: 11, cantidad: 1 });
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.item.nombre, 'pizza_x');
+    await m.onUnload();
+  });
+
+  await testAsync('add-item con nombre -> OK (camino feliz intacto)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleAddItem({ cuenta_id: 'c1', producto_id: 'p1', nombre: 'Bachata', precio: 11, cantidad: 1 });
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.item.nombre, 'Bachata');
+    assert.strictEqual(m.pedidos.get('c1').items.length, 1);
     await m.onUnload();
   });
 

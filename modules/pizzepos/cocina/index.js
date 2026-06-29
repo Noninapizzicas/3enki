@@ -55,7 +55,7 @@ class CocinaModule extends BaseModule {
   constructor() {
     super();
     this.name = 'cocina';
-    this.version = '3.2.0';
+    this.version = '3.3.0';
     this.uiHandler = null;
     this.validator = null;
     this.config = null;
@@ -389,13 +389,29 @@ class CocinaModule extends BaseModule {
       const nombre_cuenta = ref_display || this.cuentaNombres.get(cuenta_id) || metadata?.nombre || null;
       if (cuenta_id && ref_display) this.cuentaNombres.set(cuenta_id, ref_display);
 
+      // RED DE SALIDA (defensa en profundidad): una linea sin nombre no es accionable en cocina
+      // (es la "fila fantasma" del autoservicio). Se descarta PERO con rastro — nunca en silencio
+      // (no_silent_failures): si un emisor manda un item mudo, queda el warn para cazarlo. El gate
+      // fuerte es el comandero (rechaza en la puerta); esto garantiza que el cocinero nunca la vea.
+      const itemsCocina = [];
+      for (const it of (items || [])) {
+        const ci = this._buildCocinaItem(it);
+        if (!ci.nombre) {
+          this.logger.warn('cocina.item.sin_nombre_descartado', {
+            pedido_id, cuenta_id, producto_id: it?.producto_id || null
+          });
+          continue;
+        }
+        itemsCocina.push(ci);
+      }
+
       const pedidoCocina = {
         pedido_id,
         cuenta_id,
         nombre_cuenta,
         ref_display: nombre_cuenta,
         canal: canal || null,
-        items: (items || []).map(item => this._buildCocinaItem(item)),
+        items: itemsCocina,
         estado: 'activo',
         project_id: project_id || null,
         notas_generales: notas_generales || '',

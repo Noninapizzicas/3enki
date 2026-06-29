@@ -34,7 +34,7 @@ class ComanderoModule extends BaseModule {
   constructor() {
     super();
     this.name    = 'comandero';
-    this.version = '3.3.0';
+    this.version = '3.4.0';
     this.validator = null;
 
     this.pedidos              = new Map();
@@ -317,6 +317,15 @@ class ComanderoModule extends BaseModule {
       const itemNombre   = nombre || cached?.nombre || producto_id;
       const precioBase   = precio ?? cached?.precio ?? 0;
       const itemCantidad = cantidad || 1;
+
+      // GUARDA (invariante de borde): toda linea de cocina nombra su producto. Sin nombre NI
+      // producto_id el item seria MUDO -> la "linea vacia" del autoservicio. Se rechaza en la
+      // puerta en vez de empujar un fantasma al buffer (no_silent_failures). Defensa en
+      // profundidad: aunque un emisor viejo (p.ej. _inyectarPedidoInicial de delivery) lo intente.
+      if (!itemNombre) {
+        this._logError('comandero.ui.add_item.sin_nombre', { cuenta_id }, 'ui_add_item', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'El item necesita nombre o producto_id (linea sin nombre no permitida)', { field: 'nombre' });
+      }
 
       if (!cached && precio === undefined) {
         this.logger.warn('comandero.producto.not_in_cache', { producto_id });

@@ -46,14 +46,21 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'lentes-diseno';
-    this.version = '2.0.0';
+    this.version = '2.1.0';
     this._packs = new Map();    // dominio → { cuando_usar, lentes:Map<nombre,{cuando_usar,contenido}>, rutas, motor?, quimico? }
     this._timers = [];          // timers del químico (uno por pack que secreta)
+    // ── GRAFO de órganos (cúpula Obsidian, capa 3). Sustrato barato + capa que
+    //    crece con el tráfico. nodos = lentes; aristas DECLARADAS (co-ruta/co-dominio)
+    //    + APRENDIDAS (co-uso). La selección puede navegar por vecindad, no solo tabla.
+    this._nodos = new Map();    // nombre → { dominio, cuando_usar, tags:Set<tarea> }
+    this._declarado = new Map();// "a|b" (ordenado) → peso declarado (estructura)
+    this._aprendido = new Map();// "a|b" → peso aprendido (co-uso real; volátil, lo durará el destilador)
   }
 
   async onLoad(context) {
     await super.onLoad(context);
     this._descubrirPacks();
+    this._construirGrafo();     // teje las aristas DECLARADAS (sustrato; lo aprendido crece con el uso)
     this._anunciarPacks();      // EVENTO lente.registrar por pack (auto-descubrimiento = impulso)
     this._secretarQuimicos();   // arranca los químicos (hormonas a su cadencia)
     this.logger?.info('lentes-diseno.loaded', {
@@ -61,7 +68,8 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
       packs: this._packs.size,
       lentes: [...this._packs.values()].reduce((a, p) => a + p.lentes.size, 0),
       motores: [...this._packs.values()].filter(p => p.motor).length,
-      quimicos: this._timers.length
+      quimicos: this._timers.length,
+      nodos: this._nodos.size, aristas: this._declarado.size
     });
   }
 
@@ -69,6 +77,7 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
     for (const t of this._timers) { try { clearInterval(t); } catch (_) { /* */ } }
     this._timers = [];
     this._packs.clear();
+    this._nodos.clear(); this._declarado.clear(); this._aprendido.clear();
     await super.onUnload();
   }
 
@@ -118,6 +127,82 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
     }
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  //  GRAFO de órganos (cúpula Obsidian) — sustrato declarado + capa que aprende
+  // ════════════════════════════════════════════════════════════════════════
+
+  _arKey(a, b) { return a < b ? `${a}|${b}` : `${b}|${a}`; }
+
+  // SUSTRATO: nodos = lentes; tags = las rutas en las que participa (señal DECLARADA,
+  // determinista, cero embeddings). Arista declarada = tags compartidos*2 + mismo dominio.
+  _construirGrafo() {
+    this._nodos.clear(); this._declarado.clear();
+    // 1. nodos + tags (de las rutas del propio pack)
+    for (const [dominio, pack] of this._packs) {
+      const tagsDe = new Map();   // nombre → Set<tarea>
+      for (const [tarea, ns] of Object.entries(pack.rutas)) {
+        for (const n of ns) { if (!tagsDe.has(n)) tagsDe.set(n, new Set()); tagsDe.get(n).add(tarea); }
+      }
+      for (const nombre of pack.lentes.keys()) {
+        this._nodos.set(nombre, {
+          dominio, cuando_usar: pack.lentes.get(nombre).cuando_usar,
+          tags: tagsDe.get(nombre) || new Set()
+        });
+      }
+    }
+    // 2. aristas declaradas (todos los pares; el peso 0 no se guarda)
+    const nombres = [...this._nodos.keys()];
+    for (let i = 0; i < nombres.length; i++) {
+      for (let j = i + 1; j < nombres.length; j++) {
+        const A = this._nodos.get(nombres[i]), B = this._nodos.get(nombres[j]);
+        let peso = 0;
+        for (const t of A.tags) if (B.tags.has(t)) peso += 2;        // co-ruta = usado junto (declarado fuerte)
+        if (A.dominio === B.dominio) peso += 1;                       // co-dominio (vecindad débil)
+        if (peso > 0) this._declarado.set(this._arKey(nombres[i], nombres[j]), peso);
+      }
+    }
+  }
+
+  // APRENDIDO: cada co-uso real (un obtener que trajo ≥2 lentes) refuerza la arista.
+  // Volátil por ahora (vive en memoria, ligera); la durabilidad la dará el destilador.
+  _coUso(nombres) {
+    const ns = [...new Set(nombres)].filter(n => this._nodos.has(n));
+    if (ns.length < 2) return;
+    for (let i = 0; i < ns.length; i++)
+      for (let j = i + 1; j < ns.length; j++) {
+        const k = this._arKey(ns[i], ns[j]);
+        this._aprendido.set(k, (this._aprendido.get(k) || 0) + 1);
+      }
+  }
+
+  _peso(a, b) {
+    const k = this._arKey(a, b);
+    return (this._declarado.get(k) || 0) + (this._aprendido.get(k) || 0);
+  }
+
+  // VECINDAD: dado un nodo, los más cercanos por peso (declarado+aprendido).
+  // Aquí emerge lo CROSS-DOMINIO: una arista aprendida puede unir diseño↔copy↔negocio
+  // aunque ninguna tabla plana lo declare.
+  _vecinas(desde, k = 5, dominioFiltro = null) {
+    if (!this._nodos.has(desde)) {
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `lente desconocida: ${desde}`, { lentes: [...this._nodos.keys()] });
+    }
+    const vec = [];
+    for (const otro of this._nodos.keys()) {
+      if (otro === desde) continue;
+      const nodo = this._nodos.get(otro);
+      if (dominioFiltro && nodo.dominio !== dominioFiltro) continue;
+      const peso = this._peso(desde, otro);
+      if (peso > 0) vec.push({
+        nombre: otro, dominio: nodo.dominio, cuando_usar: nodo.cuando_usar,
+        peso, declarado: this._declarado.get(this._arKey(desde, otro)) || 0,
+        aprendido: this._aprendido.get(this._arKey(desde, otro)) || 0
+      });
+    }
+    vec.sort((a, b) => b.peso - a.peso || a.nombre.localeCompare(b.nombre));
+    return { status: 200, data: { desde, vecinas: vec.slice(0, Math.max(1, k | 0)) } };
+  }
+
   // ── ANUNCIA: cada pack emite su EVENTO de nacimiento (impulso, no escaneo muerto) ──
   _anunciarPacks() {
     if (!this.eventBus?.publish) return;
@@ -156,6 +241,9 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
   onListarRequest(e)  { return this._atender(e, 'listar',  'lentes.listar.response',  d => this._listar(d)); }
   onObtenerRequest(e) { return this._atender(e, 'obtener', 'lentes.obtener.response', d => this._obtener(d)); }
   onMotorRequest(e)   { return this._atender(e, 'motor',   'lentes.motor.response',   d => this._motor(d)); }
+  onVecinasRequest(e) { return this._atender(e, 'vecinas', 'lentes.vecinas.response', d => this._vecinas(d?.desde, d?.k, d?.dominio)); }
+  // co-uso externo (p.ej. el destilador o el conserje observan un uso conjunto)
+  onCoUso(e) { const d = (e && e.data) || e || {}; if (Array.isArray(d.lentes)) this._coUso(d.lentes); }
 
   // ── proyección: catálogo barato (nombre + dominio + cuando_usar) + rutas ──
   _listar(d) {
@@ -230,6 +318,15 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
       return this._errorResponse(404, 'RESOURCE_NOT_FOUND',
         `ninguna lente válida en la petición: ${desconocidas.join(', ')}`,
         { desconocidas, lentes_validas: validas });
+    }
+
+    // APRENDIZAJE: todo obtener con ≥2 lentes ES una observación de co-uso. Refuerza
+    // la arista en caliente (sustrato que crece con el tráfico propio) y emite la
+    // señal pública para quien quiera tejer durabilidad (destilador). Auto-alimentado.
+    if (lentes.length >= 2) {
+      const nombres = lentes.map(l => l.nombre);
+      this._coUso(nombres);
+      try { this.eventBus?.publish?.('lente.co_uso', { lentes: nombres, timestamp: new Date().toISOString() }); } catch (_) { /* best-effort */ }
     }
 
     return { status: 200, data: { lentes, ...(desconocidas.length ? { desconocidas } : {}) } };

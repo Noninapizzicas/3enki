@@ -625,7 +625,7 @@ function applyTranslations() {
 
 // Helpers
 function fmt(p) { return p.toFixed(2) + ' ' + MONEDA; }
-function esc(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
+function esc(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 // onerror de la imagen de producto: si la ruta canónica (resuelta por <base> a /shop/<slug>/img/)
 // da 404, cae a la raíz del área shop (/shop/img/...) donde quedan si el symlink sirve en raíz.
 function imgFb(imagen) {

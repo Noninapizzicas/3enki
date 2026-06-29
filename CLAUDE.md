@@ -1823,7 +1823,7 @@ REPARTO POR MÓDULO  (✓ = ya híbrido)
   carta-impresion   RETIRADO (2026-06-15, archivado) — carta-design absorbió la maquetación de impresión
   carta-design   ✓  contexto_diseno (HIDRATA carta+marca)·load_carta·save·gallery (sin profiles)  diseño HTML (LLM página SIEMBRA desde marca) + MAQUETACIÓN (A5/A4/A3·orient·plegado·2-4col) + galería gestión (ver/descargar/imprimir/borrar/marcar-oficial)
   tecnicas          codificar/obtener/listar/actualizar/parametros  —
-  menu-generator    —   (sin store propio · solo blueprint)         generar (carta desde texto/foto) · preparar (añade recetas a carta, contra base)
+  menu-generator    —   (sin store propio · solo blueprint)         generar (carta desde texto/foto; valida contra carta.validar antes de carta.save — ver FRENO)
 ```
 
 ```
@@ -1831,7 +1831,7 @@ ORDEN DE MIGRACIÓN  (cada uno: receta de 5 pasos del patrón + gate)
   HECHO: carta-manager ✓ (aggregate root) · productos ✓ (PROYECTOR, no store — lee la carta por RPC)
   1. CRUD puros (trivial, máximo retorno): viabilidad ✓ · carta-digital · carta-scheduler
   2. mixtos (reflejo CRUD + chispa fuzzy): carta-design ✓ (absorbió maquetación) · tecnicas   [carta-impresion RETIRADO]
-  3. menu-generator: se queda blueprint (generación fuzzy) + op preparar (orquesta recetas→carta contra reflejos); no necesita reflejo propio
+  3. menu-generator: se queda blueprint (generación fuzzy) — orquesta contra reflejos; no necesita reflejo propio. Custodio = carta-manager (sirve carta.validar, el FRENO)
 ```
 
 ## Estándar blueprint-coherente — capa de agentes APARCADA
@@ -1893,18 +1893,52 @@ LA TRIADA (elige por la tarea) {
   agente-perspectiva-c  → el PENSAR como función-pura (tools:[], reflejo hidrata/persiste) — lo más fiable
 }
 
-APLICADO {
+EL FRENO TIENE UNA NATURALEZA POR MÓDULO (lección del recorrido) {
+  el contrato NO es siempre un JSON Schema: es "qué hace que la salida de ESTE agente sea de fiar",
+  y eso cambia con el dominio. El freno va donde hay una LEY computable; donde la salida es
+  irreducible (la voz del copy) el único guardián honesto es el PENSAR — forzar un validador sería teatro.
+}
+
+APLICADO (los 6 que dan forma del subsistema-carta) {
   recetas (module 2.2.0 · blueprint 2.9.0 · reflejo 1.3.0) {
-    contrato : modules/pizzepos/recetas/receta.schema.json (modelo_canonico, draft-07)
-    freno    : recetas.validar.request (AJV, función pura) — mata la línea hueca (cantidad:0 / nombre vacío)
-               SIN prohibir el borrador (lineas vacías = borrador legítimo). crear al espinazo de 6 fases;
-               actualizar recibe el freno antes de su fs.edit. Pendiente: actualizar a DELEGADO puro.
+    contrato : modules/pizzepos/recetas/receta.schema.json (modelo_canonico, draft-07) — forma.
+    freno    : recetas.validar.request (AJV) — mata la línea hueca (cantidad:0 / nombre vacío) SIN prohibir
+               el borrador (lineas vacías = legítimo). crear al espinazo de 6 fases; actualizar recibe el
+               freno antes de su fs.edit. Pendiente: actualizar a DELEGADO puro.
   }
   carta-design (module 3.2.0 · blueprint 2.4.0 · reflejo 2.1.0) {
-    salida freeform (HTML) → el contrato NO es un schema, es REPRESENTAR la carta.
-    freno    : design.validar.request (_checkDiseno) compara el HTML contra la carta REAL (carta.get,
-               no lo que el LLM afirme): HTML no trivial + COMPLETITUD (cada producto aparece) +
-               ALERGENOS declarados (Reg. UE 1169/2011). save RE-VALIDA como gate → 422 si no representa.
+    contrato : REPRESENTAR la carta (salida freeform HTML, no schema).
+    freno    : design.validar.request (_checkDiseno) compara el HTML contra la carta REAL (carta.get):
+               HTML no trivial + COMPLETITUD (cada producto aparece) + ALERGENOS (Reg. UE 1169/2011).
+               save RE-VALIDA como gate → 422 si no representa.
+  }
+  escandallo (module 2.1.0 · blueprint 3.10.0 · reflejo 1.2.0) {
+    contrato : PROCEDENCIA + COHERENCIA (el coste fija el precio de venta).
+    freno    : escandallo.validar.request (_checkCosteo) — rechaza el precio INVENTADO (fuente
+               'estimado_llm' → PRECIO_INVENTADO) y la aritmética incoherente (coste_total=Σlíneas).
+               _precio_de_mercadona deja de estimar: el PRECIO sale de la API real o queda sin_precio.
+  }
+  carta-digital (module 2.18.0 · blueprint 1.3.0 · reflejo 2.7.0) {
+    contrato : el CARD_TEMPLATE cumple el contrato de slots.
+    freno    : cartadigital.validar.request (_checkDiseno) — núcleo funcional+legal {{id}} {{nombre}}
+               {{precio}} {{alergenos}} {{add_label}} + hooks data-accion detalle/add. guardar RE-VALIDA
+               como gate (422). (El freno ya existía pero incompleto: faltaban precio y alérgenos.)
+  }
+  menu-generator (blueprint 12.2.0) + carta-manager CUSTODIO (module 2.8.0 · reflejo 1.14.0) {
+    contrato : ESTRUCTURA de la carta (caso ORIGEN — carta1). menu-generator orquesta, no tiene store.
+    freno    : carta.validar.request (carta-manager _checkCarta) — carta con productos, producto con
+               nombre+precio+categoria_id existente, ingrediente con nombre/familia/precio_extra.
+               generar valida en bucle ANTES de carta.save. Antes la guarda vivía SOLO en el pseudocódigo
+               del LLM (auto-chequeo = lo que falló en carta1). La FIDELIDAD (no perder los ingredientes
+               de la fuente) se queda en el PENSAR: solo el LLM conoce la fuente.
+  }
+  carta-marketing (module 2.6.0 · blueprint 1.15.0 · reflejo 2.1.0) {
+    MARCA  : contrato = marca.schema.json. carta-marketing.validar.request (_checkMarca, AJV) + GATE en
+             update_perfil (valida el merge antes de escribir → 422 si lo rompe). Seguro: identidadVacia()
+             ya es schema-válida.
+    COPY   : texto libre → su contrato es la VOZ, irreducible a un schema. NO hay freno mecánico; la
+             fidelidad ('no inventar') se queda como MANDATO del PENSAR. El hallazgo: no toda op que da
+             forma tiene contrato computable.
   }
 }
 // skill: .claude/skills/blueprint-agentico/SKILL.md

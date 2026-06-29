@@ -142,7 +142,7 @@ function makePedidoEvent(overrides = {}) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'cocina');
-    assert.strictEqual(m.version, '3.2.0');
+    assert.strictEqual(m.version, '3.3.0');
     assert.strictEqual(m.pedidosActivos.size, 0);
     assert.strictEqual(m.devices.size, 0);
     assert.strictEqual(m.historial.length, 0);
@@ -461,7 +461,7 @@ function makePedidoEvent(overrides = {}) {
     assert.ok(isCanonicalSuccess(r));
     assert.strictEqual(r.data.status, 'healthy');
     assert.strictEqual(r.data.module, 'cocina');
-    assert.strictEqual(r.data.version, '3.2.0');
+    assert.strictEqual(r.data.version, '3.3.0');
     await m.onUnload();
   });
 
@@ -554,6 +554,46 @@ function makePedidoEvent(overrides = {}) {
     assert.strictEqual(m._detectCanalFromCuentaId('W_9'), 'whatsapp');
     assert.strictEqual(m._detectCanalFromCuentaId('algo-raro'), null);
     assert.strictEqual(m._detectCanalFromCuentaId(null), null);
+    await m.onUnload();
+  });
+
+  // ==========================================
+  // Group: Red de salida contra lineas fantasma (v3.3.0)
+  // ==========================================
+
+  await testAsync('onPedidoEnviadoCocina DESCARTA items sin nombre (no entra fila fantasma)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    mocks.logs.length = 0;
+    await m.onPedidoEnviadoCocina(makePedidoEvent({
+      pedido_id: 'p-ghost',
+      items: [
+        { item_id: 'a', producto_id: 'pizza', nombre: 'Bachata', cantidad: 1 },
+        { item_id: 'b', producto_id: null, cantidad: 1 },                 // MUDO (sin nombre)
+        { item_id: 'c', producto_id: 'pizza2', nombre: 'Country', cantidad: 1 }
+      ]
+    }));
+    const card = m.pedidosActivos.get('p-ghost');
+    assert.ok(card, 'la tarjeta existe');
+    assert.strictEqual(card.items.length, 2, 'solo las 2 lineas con nombre, la muda se descarta');
+    assert.deepStrictEqual(card.items.map(i => i.nombre), ['Bachata', 'Country']);
+    // No en silencio: deja rastro del descarte
+    const warn = mocks.logs.find(l => l[0] === 'warn' && l[1] === 'cocina.item.sin_nombre_descartado');
+    assert.ok(warn, 'debe registrar warn cocina.item.sin_nombre_descartado');
+    await m.onUnload();
+  });
+
+  await testAsync('onPedidoEnviadoCocina con todos nombrados -> pasan todos (camino feliz)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await m.onPedidoEnviadoCocina(makePedidoEvent({
+      pedido_id: 'p-ok',
+      items: [
+        { item_id: 'a', producto_id: 'p1', nombre: 'A', cantidad: 1 },
+        { item_id: 'b', producto_id: 'p2', nombre: 'B', cantidad: 1 }
+      ]
+    }));
+    assert.strictEqual(m.pedidosActivos.get('p-ok').items.length, 2);
     await m.onUnload();
   });
 

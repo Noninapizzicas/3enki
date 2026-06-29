@@ -1,6 +1,7 @@
 {
   "name": "comandero",
-  "version": "3.3.0",
+  "version": "3.4.0",
+  "_v3_4_nota": "v3.4.0 (2026-06-29): GUARDA contra lineas mudas en handleAddItem. itemNombre = nombre || cached?.nombre || producto_id podia quedar undefined y AUN ASI se empujaba el item -> la 'linea vacia' que aparecia en cocina por el camino de autoservicio. Ahora si !itemNombre se rechaza con 400 INVALID_INPUT (no entra al buffer). Invariante de borde 'toda linea de cocina nombra su producto' = defensa en profundidad: aunque un emisor (p.ej. _inyectarPedidoInicial de delivery, o un deploy viejo) mande un item sin nombre ni producto_id, no se cuela un fantasma. Pareja: cocina v3.3.0 (red de salida que descarta-con-log lineas sin nombre).",
   "_v3_3_nota": "v3.3.0 (2026-06-21): FIX propagacion de variaciones. El schema de add-item declaraba variaciones:{type:'array'} pero el frontend manda el formato nuevo OBJETO { ingredientes_quitar, ingredientes_anadir } -> AJV lo rechazaba y el item personalizado nunca se anadia. Ahora variaciones acepta array|object, y se declaran pizza_izquierda/derecha (mitad con quitar/anadir por mitad), ingredientes, ingredientes_base, precio_canal_resuelto. (El display de las variaciones por mitad — comandero PedidoItem + cocina ItemLine — se arregla en frontend.)",
   "description": "Buffer de pedido por cuenta del POS — items, variaciones, envio a cocina. Persistencia transitoria atomica. Resolucion precio-por-canal via cache local hidratado por tarifas.config.actualizada (sin acceso directo a otros modulos). Las 4 operaciones principales se exponen como tools del LLM (agregar/eliminar/enviar/obtener) compartiendo los mismos handlers que los ui_handlers del frontend.",
   "author": "Pizzepos Team",

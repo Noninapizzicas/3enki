@@ -32,7 +32,10 @@ class CartaDigitalModule extends BaseModule {
   constructor() {
     super();
     this.name = 'carta-digital';
-    this.version = '2.7.0';
+    // Versión DERIVADA del manifest (fuente única) → la constante no puede volver a divergir
+    // del module.json (antes quedó clavada en 2.7.0 mientras el módulo iba por 2.19.0, y la
+    // observabilidad/propiocepción mentían sobre qué versión corre).
+    this.version = require('./module.json').version;
     // ÚNICO estado: el mapping canal→carta_id por proyecto (de tarifas.config.actualizada).
     this.mappingCanalesPerProject = new Map();
     // Proyectos activos vistos por project.activated (project_id → {name, slug}) + el ÚLTIMO

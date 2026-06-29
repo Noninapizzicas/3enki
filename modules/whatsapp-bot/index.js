@@ -420,6 +420,111 @@ class WhatsappBotModule extends BaseModule {
   }
 
   // ==========================================
+  // UI handlers — config de conexión del proyecto (datos NO secretos)
+  // ==========================================
+  // El bloque `whatsapp` del config del proyecto (phone_number_id, waba_id, número,
+  // webhook, pwa) NO son secretos → no van en el credential-manager. Antes había que
+  // editar el JSON a mano; estos handlers lo dan de alta desde la app.
+
+  async handleGetConfig(data) {
+    try {
+      const project_slug = (data && (data.project_slug || data.project)) || null;
+      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
+      const cfg = (await this._readProjectConfig(project_slug)) || {};
+      const w = cfg.whatsapp || {};
+      return {
+        status: 200,
+        data: {
+          project_slug,
+          whatsapp: {
+            waba_id: w.waba_id || '',
+            phone_number_id: w.phone_number_id || '',
+            display_number: w.display_number || '',
+            webhook_path: w.webhook_path || `/whatsapp/webhook/${project_slug}`,
+            pwa_url: w.pwa_url || ''
+          },
+          has_token: !!process.env[this._envTokenKey(project_slug)],
+          has_verify: !!process.env[this._envVerifyKey(project_slug)],
+          operativo: this._proyectoOperativo(project_slug),
+          // Ruta del webhook para pegar en Meta (el frontend antepone el origin del dominio).
+          webhook_path_publico: `/modules/whatsapp-bot/whatsapp/webhook/${project_slug}`
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('whatsapp-bot.config.get.error', err, 'ui');
+    }
+  }
+
+  async handleSetConfig(data) {
+    const project_slug = (data && (data.project_slug || data.project)) || null;
+    try {
+      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
+      const phone_number_id = data?.phone_number_id != null ? String(data.phone_number_id).trim() : '';
+      const waba_id = data?.waba_id != null ? String(data.waba_id).trim() : '';
+      const display_number = data?.display_number != null ? String(data.display_number).trim() : '';
+      if (!phone_number_id) return this._errorResponse(400, 'INVALID_INPUT', 'phone_number_id requerido', { field: 'phone_number_id' });
+      if (!waba_id) return this._errorResponse(400, 'INVALID_INPUT', 'waba_id requerido', { field: 'waba_id' });
+      if (!display_number) return this._errorResponse(400, 'INVALID_INPUT', 'display_number requerido', { field: 'display_number' });
+
+      const whatsapp = {
+        waba_id,
+        phone_number_id,
+        display_number,
+        webhook_path: `/whatsapp/webhook/${project_slug}`,
+        pwa_url: data?.pwa_url ? String(data.pwa_url).trim() : `https://enki-ai.online/shop/${project_slug}`
+      };
+      // template_listo es opcional; si lo mandan, lo preservamos tal cual (string u objeto).
+      if (data?.template_listo) whatsapp.template_listo = data.template_listo;
+
+      await this._writeProjectConfig(project_slug, { whatsapp });
+      await this._refrescarProyecto(project_slug);   // rehidrata el mapeo en caliente (sin reinicio)
+
+      const operativo = this._proyectoOperativo(project_slug);
+      this.logger.info('whatsapp-bot.config.set', { project_slug, operativo });
+      this.metrics?.increment?.('whatsapp-bot.config.set', { project: project_slug });
+      return {
+        status: 200,
+        data: {
+          project_slug,
+          whatsapp,
+          operativo,
+          has_token: !!process.env[this._envTokenKey(project_slug)],
+          has_verify: !!process.env[this._envVerifyKey(project_slug)]
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('whatsapp-bot.config.set.error', err, 'ui');
+    }
+  }
+
+  // Escribe (merge) un bloque en el config del proyecto, en el MISMO fichero que lee
+  // _readProjectConfig (config/config.json con precedencia, project.json como fallback),
+  // preservando el resto de bloques (telegram, gmail, …). Atómico (tmp + rename).
+  async _writeProjectConfig(slug, merge) {
+    const dir = this.config?.projects_dir || 'data/projects';
+    const configDir = path.join(dir, slug, 'config');
+    const candidatos = [
+      path.join(configDir, 'config.json'),
+      path.join(configDir, 'project.json')
+    ];
+    let file = null;
+    for (const f of candidatos) {
+      try { await fs.access(f); file = f; break; } catch (_) { /* no existe */ }
+    }
+    if (!file) file = candidatos[0];   // ninguno existe → crea config.json
+
+    let obj = {};
+    try { obj = JSON.parse(await fs.readFile(file, 'utf8')); } catch (_) { obj = {}; }
+    Object.assign(obj, merge);   // merge superficial: pone/reemplaza el bloque, conserva el resto
+
+    await fs.mkdir(configDir, { recursive: true });
+    const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
+    await fs.writeFile(tmp, JSON.stringify(obj, null, 2));
+    await fs.rename(tmp, file);
+    this.logger.info('whatsapp-bot.project_config.written', { slug, file, blocks: Object.keys(merge) });
+  }
+
+  // ==========================================
   // Tool handlers (canonical {status, data|error})
   // ==========================================
 

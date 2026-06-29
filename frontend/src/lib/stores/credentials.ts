@@ -43,7 +43,7 @@ export interface LevelOption {
   requiresIdentifier: boolean;
 }
 
-export type ServiceType = 'providers' | 'telegram' | 'canales';
+export type ServiceType = 'providers' | 'telegram' | 'canales' | 'whatsapp';
 
 export interface OAuthConfig {
   accountId: string;
@@ -670,6 +670,51 @@ export function initCredentials(): () => void {
 
   // Retornar cleanup (no-op por ahora)
   return () => {};
+}
+
+// =============================================================================
+// WHATSAPP — config de conexión del proyecto (datos NO secretos, vía whatsapp-bot)
+// =============================================================================
+
+export interface WhatsappConfig {
+  project_slug: string;
+  whatsapp: {
+    waba_id: string;
+    phone_number_id: string;
+    display_number: string;
+    webhook_path: string;
+    pwa_url: string;
+  };
+  has_token: boolean;
+  has_verify: boolean;
+  operativo: boolean;
+  webhook_path_publico: string;
+}
+
+/** Estado actual de la config WhatsApp del proyecto consultado (null si no cargada). */
+export const whatsappConfigStore = writable<WhatsappConfig | null>(null);
+
+/** Lee el bloque whatsapp del proyecto (no secretos) + flags de operatividad. */
+export async function loadWhatsappConfig(slug: string): Promise<WhatsappConfig | null> {
+  if (!slug) return null;
+  try {
+    const r = await mqttRequest<WhatsappConfig>('whatsapp', 'get_config', { project_slug: slug });
+    whatsappConfigStore.set(r.data);
+    return r.data;
+  } catch (e) {
+    whatsappConfigStore.set(null);
+    return null;
+  }
+}
+
+/** Guarda el bloque whatsapp del proyecto y rehidrata el bot en caliente. */
+export async function saveWhatsappConfig(
+  slug: string,
+  data: { phone_number_id: string; waba_id: string; display_number: string; pwa_url?: string }
+): Promise<WhatsappConfig> {
+  const r = await mqttRequest<WhatsappConfig>('whatsapp', 'set_config', { project_slug: slug, ...data });
+  whatsappConfigStore.set(r.data);
+  return r.data;
 }
 
 // =============================================================================

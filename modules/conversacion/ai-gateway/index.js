@@ -73,6 +73,10 @@ class AiGatewayModule extends BaseModule {
     // propiocepcion ya inyectado en el contexto. Asi cada turno solo ve lo
     // NUEVO que paso en su mundo desde la ultima vez (no se re-inyecta ruido).
     this.conversationPropioTs = new Map();
+    // Nervio de lentes: `${conversation_id}::${spec}` ya empujados. La lente de la
+    // pagina se inyecta UNA vez por conversacion (la primera vuelta de diseño);
+    // luego vive en el historial. Push determinista, no depende de que el LLM la pida.
+    this.conversationLenteEnviada = new Set();
     this.sintonizador = new Sintonizador();   // la lente que alinea al LLM con el sesgo del humano cada turno
     this.sintoniaActiva = true;                // ON por defecto; su on/off vive en el panel central (interruptor 'sintonizador'), reacciona en caliente
 
@@ -156,6 +160,7 @@ class AiGatewayModule extends BaseModule {
     this.cajonesCatalog.clear();
     this.conversationCajones.clear();
     this.conversationPropioTs.clear();
+    this.conversationLenteEnviada.clear();
     this.pageGraph.clear();
     this.conversationPageFoco.clear();
     // Liberar suscripcion al evento canonico core.modules.loaded.all.
@@ -1387,6 +1392,43 @@ class AiGatewayModule extends BaseModule {
     );
   }
 
+  // Nervio de LENTES de diseño — lado lectura. Tira la lente por defecto de la
+  // página (lentes-diseno, base compartida) por RPC del bus. Best-effort: si no
+  // responde en timeout, devuelve [] y el turno sigue sin bloquearse.
+  async _leerLente(spec) {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish || !spec) return [];
+    const request_id = crypto.randomUUID();
+    const timeoutMs = this.config.lentes_timeout_ms || 3000;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve([]); }, timeoutMs);
+      try {
+        unsub = this.eventBus.subscribe('lentes.obtener.response', (event) => {
+          const d = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!d || d.request_id !== request_id) return;
+          clearTimeout(timeout); if (unsub) unsub();
+          const payload = d.data || d;
+          resolve(Array.isArray(payload?.lentes) ? payload.lentes : []);
+        });
+        this.eventBus.publish('lentes.obtener.request', { request_id, ...spec });
+      } catch (_) { clearTimeout(timeout); if (unsub) unsub(); resolve([]); }
+    });
+  }
+
+  _composeLenteSection(lentes) {
+    const cuerpos = lentes
+      .map(l => `## LENTE: ${l.nombre}${l.cuando_usar ? ' — ' + l.cuando_usar : ''}\n${l.contenido}`)
+      .join('\n\n');
+    return (
+      '# LENTE DE DISEÑO (contexto silencioso · ADÓPTALA al componer)\n' +
+      'Esta es la lente de diseño de esta página. Diseña ENCARNÁNDOLA: sus reglas ' +
+      '(tokens/jerarquía/motion/marca) MANDAN sobre tu reflejo por defecto, para que el ' +
+      'resultado no sea genérico. NO la recites; aplícala. Si la tarea pide otra cosa ' +
+      '(movimiento, fotos de producto…), pide la lente que toque con lentes.obtener.\n\n' +
+      cuerpos
+    );
+  }
+
   _isPrimitivePrefix(prefix) {
     const PRIMITIVE = new Set([
       'fs', 'project', 'llm', 'ai', 'agent', 'credential', 'security',
@@ -2070,6 +2112,28 @@ class AiGatewayModule extends BaseModule {
           effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
         }
       } catch (_) { /* el empujon es best-effort; nunca bloquea el turno */ }
+    }
+
+    // Nervio de LENTES de diseño: si la página declara una lente por defecto
+    // (manifest.lente_default), la EMPUJAMOS en el system prompt — push determinista,
+    // NO depende de que el LLM la pida (eso es el pull del blueprint, refinamiento).
+    // Esta es la entrega event-driven: un turno de diseño dispara la inyección. UNA vez
+    // por conversación (la primera vuelta; luego vive en el historial). Best-effort.
+    if (blueprintCtx && !context?.async_invocation) {
+      const spec = blueprintCtx.manifest?.lente_default || blueprintCtx.child?.lente_default || null;
+      if (spec && typeof spec === 'object') {
+        const key = `${conversation_id}::${JSON.stringify(spec)}`;
+        if (!this.conversationLenteEnviada.has(key)) {
+          try {
+            const lentes = await this._leerLente(spec);
+            if (Array.isArray(lentes) && lentes.length > 0) {
+              const seccion = this._composeLenteSection(lentes);
+              effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
+              this.conversationLenteEnviada.add(key);
+            }
+          } catch (_) { /* la lente es best-effort; nunca bloquea el turno */ }
+        }
+      }
     }
 
     // Resolver attachments y mezclarlos con el último mensaje user

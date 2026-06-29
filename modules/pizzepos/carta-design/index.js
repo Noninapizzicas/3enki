@@ -141,6 +141,23 @@ class CartaDesignReflejo extends ModuloHibridoReflejo {
     return { ok: errors.length === 0, errors, productos_total: productos.length, faltan };
   }
 
+  // ── 2º FRENO (render real). El estructural mira que estén los productos; éste
+  //    mira que el HTML NO SALGA ROTO, pidiéndoselo al órgano verificador-visual
+  //    (abre Chromium y comprueba overflow/JS/blanco/imágenes). BEST-EFFORT por
+  //    diseño: solo BLOQUEA si el verificador pudo MIRAR de verdad y el render está
+  //    roto (verificado && !ok). Si no hay verificador, o no hay navegador en el
+  //    host (verificado:false), o no responde → se deja pasar (el freno estructural
+  //    ya guardó). Así protege donde hay ojos sin volverse dependencia dura.
+  async _checkRender(html, etiqueta) {
+    const r = await this._rpc('render.verificar.request', { html, etiqueta }, { timeout_ms: 20000 });
+    if (!r) return { bloquear: false, razon: 'verificador_no_responde' };
+    const d = r.data || r;
+    if (d.verificado === true && d.ok === false) {
+      return { bloquear: true, motivos: d.motivos || [], metricas: d.metricas || null };
+    }
+    return { bloquear: false, razon: d.verificado === false ? 'sin_navegador' : 'ok' };
+  }
+
   async _validar(input) {
     if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
     if (!input.html || typeof input.html !== 'string') return this._invalid('html');
@@ -162,6 +179,13 @@ class CartaDesignReflejo extends ModuloHibridoReflejo {
     if (chk.upstream) return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'carta-manager no responde (no se pudo validar antes de guardar)');
     if (chk.notFound) return this._errorResponse(chk.status, 'RESOURCE_NOT_FOUND', 'carta no encontrada', { entity_type: 'carta', entity_ref: input.carta_id });
     if (!chk.ok) return this._errorResponse(422, 'UPSTREAM_INVALID_RESPONSE', 'el diseño no representa la carta (faltan productos o alérgenos) — NO guardado', { errors: chk.errors });
+
+    // 2º FRENO: el render no debe salir roto (best-effort; solo bloquea si hubo ojos).
+    const rnd = await this._checkRender(input.html, input.carta_id);
+    if (rnd.bloquear) {
+      this.metrics?.increment('carta-design.reflejo.served', { op: 'save', veredicto: 'render_roto' });
+      return this._errorResponse(422, 'UPSTREAM_INVALID_RESPONSE', 'el diseño RENDERIZA roto (overflow/JS/blanco/imágenes) — NO guardado', { motivos: rnd.motivos });
+    }
 
     const filename = input.carta_id + '__' + tsSafe() + '.html';
     const pathHtml = DESIGNS_DIR + filename;

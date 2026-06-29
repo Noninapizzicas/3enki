@@ -48,6 +48,9 @@ function makeBus(store, carta, marca) {
       } else if (event === 'fs.write.request') {
         store[payload.path] = payload.content;
         emit('fs.write.response', { request_id: rid, path: payload.path });
+      } else if (event === 'render.verificar.request') {
+        // 2º freno (verificador-visual): en test, simulamos "miró y está sano".
+        emit('render.verificar.response', { request_id: rid, status: 200, data: { ok: true, verificado: true, motivos: [] } });
       } else if (event === 'fs.list.request') {
         const prefix = payload.path.endsWith('/') ? payload.path : payload.path + '/';
         const files = Object.keys(store)
@@ -126,8 +129,11 @@ async function testAsync(desc, fn) {
   });
 
   await testAsync('save: escribe html + meta y emite carta.html.generada', async () => {
-    const { m, bus, store } = makeReflejo();
-    const r = await m._save({ ...base, carta_id: 'carta_1', html: '<html>hola</html>', nombre: 'San Valentín', formato: 'A4 apaisado · doble cara · 3 col', generado_por: 'pagina' });
+    // carta real + html que la REPRESENTA → pasa el freno estructural (productos) y el de render (mock sano).
+    const carta = { meta: { id: 'carta_1' }, productos: [{ nombre: 'Margarita', alergenos: [] }] };
+    const html = '<html><body>' + 'x'.repeat(220) + ' Margarita 8€</body></html>';
+    const { m, bus, store } = makeReflejo({}, carta);
+    const r = await m._save({ ...base, carta_id: 'carta_1', html, nombre: 'San Valentín', formato: 'A4 apaisado · doble cara · 3 col', generado_por: 'pagina' });
     assert.strictEqual(r.status, 201);
     assert.strictEqual(r.data.carta_id, 'carta_1');
     assert.strictEqual(r.data.nombre, 'San Valentín');

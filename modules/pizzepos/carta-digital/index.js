@@ -353,6 +353,17 @@ class CartaDigitalModule extends BaseModule {
       tplConfig, { diseno }
     );
 
+    // 2º FRENO (render real): no DESPLEGAR un bundle que renderiza roto. Se lo pide al
+    // órgano verificador-visual (abre Chromium y mira). BEST-EFFORT: solo bloquea si
+    // pudo MIRAR de verdad (verificado && !ok). Sin órgano, sin navegador en el host
+    // o sin respuesta → se publica igual (no se vuelve dependencia dura del deploy).
+    const rnd = await this._rpc('render.verificar.request', { html, etiqueta: slug }, { timeout_ms: 20000 });
+    const rd = rnd && (rnd.data || rnd);
+    if (rd && rd.verificado === true && rd.ok === false) {
+      this.metrics?.increment?.('cartadigital.publicar.render_roto', { project: slug });
+      return this._err(422, 'UPSTREAM_INVALID_RESPONSE', `la carta digital RENDERIZA rota (${(rd.motivos || []).join(', ')}) — NO publicada`);
+    }
+
     // Escribir el bundle (fs.write hace mkdir -p del dir). Si la feature `tienda` no está
     // activa el symlink no existe y /shop/<slug> dará 404 — lo avisa el aviso, no se finge.
     const files = [

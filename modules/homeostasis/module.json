@@ -1,0 +1,63 @@
+{
+  "_doc": "homeostasis — el termostato del cuerpo (Teoría del Órgano). Bucle de realimentación negativa: SENSOR (señales de peligro del bus) -> COMPARADOR (umbral + histéresis: sano->inflamación->fiebre->apoptosis) -> EFECTOR (interruptor.set inhibe la facultad desbocada) -> ENFRIAMIENTO (recupera con histéresis). Respuesta GRADUADA (no salta a matar), AUTOINMUNE-CONSERVADORA (solo inhibe lo gobernable, nunca órganos vitales), con TESTIGO (toda transición se canta al bus, sin actos invisibles). NACE OFF (registra su interruptor 'homeostasis' en false): dormida solo SIENTE y TESTIFICA; el humano despierta el efector.",
+  "name": "homeostasis",
+  "version": "1.0.0",
+  "description": "El termostato del sistema: siente las señales de peligro (fantasma, *.failed, health.alert, revisión de skills), sube la temperatura de la fuente y, si cruza el umbral de fiebre, INHIBE esa facultad en caliente (interruptor.set) — soltándola al enfriarse. Respuesta graduada, conservadora, con testigo. Nace inhibida.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "publishes": [
+    { "event": "homeostasis.alerta",     "description": "TESTIGO: una fuente cambió de estado clínico {fuente, estado, previo, temp, señal}. Se emite en cada transición (sano/inflamación/fiebre)." },
+    { "event": "homeostasis.accion",      "description": "TESTIGO: el efector actuó {fuente, accion:'inhibir', motivo}. Solo cuando está despierta y la fuente es gobernable." },
+    { "event": "homeostasis.recuperado",  "description": "TESTIGO: una fuente inhibida se enfrió y fue soltada {fuente, temp}." },
+    { "event": "homeostasis.apoptosis",   "description": "TESTIGO fuerte: la fuente cruzó el umbral extremo {fuente, temp, recomendacion}. CONSERVADORA: no mata sola; deja el corte a la voluntad (humano)." },
+    { "event": "interruptor.set",         "description": "EFECTOR: inhibe (enabled:false) o suelta (enabled:true) la facultad desbocada, con `motivo` como testigo. Lo recibe interruptores." },
+    { "event": "interruptor.registrar",   "description": "Registra su propio interruptor 'homeostasis' (grupo sistema, default OFF — nace inhibida)." }
+  ],
+  "subscribes": [
+    { "event": "chat.fantasma_sospechado",        "handler": "onFantasma",            "description": "SENSOR: el LLM afirmó algo no respaldado por la propiocepción (anti-fantasma). Peso alto." },
+    { "event": "aprendizaje.revision.requerida",  "handler": "onRevisionRequerida",   "description": "SENSOR: una skill destilada degradó su tasa de éxito. Peso alto." },
+    { "event": "health.alert.offline",            "handler": "onHealthAlert",         "description": "SENSOR: dispositivo caído (device-health)." },
+    { "event": "health.alert.reconnect_loop",     "handler": "onHealthAlert",         "description": "SENSOR: dispositivo en bucle de reconexión." },
+    { "event": "health.alert.ota_failed",         "handler": "onHealthAlert",         "description": "SENSOR: OTA fallida." },
+    { "event": "interruptor.registrar",           "handler": "onInterruptorRegistrado","description": "Aprende qué facultades son GOBERNABLES (solo esas puede inhibir)." },
+    { "event": "interruptor.cambiado",            "handler": "onInterruptorCambiado", "description": "El humano despierta/duerme el EFECTOR (id='homeostasis') en caliente." },
+    { "event": "interruptor.solicitar_registro",  "handler": "onSolicitarRegistro",   "description": "Re-registra su interruptor (cura la carrera de arranque con interruptores)." }
+  ],
+  "ui_handlers": [
+    { "domain": "homeostasis", "action": "estado", "handler": "handleEstado",      "description": "Cuadro clínico actual: temperatura/estado por fuente, inhibidos, gobernables, umbrales." },
+    { "domain": "homeostasis", "action": "health", "handler": "handleHealthCheck", "description": "Estado del órgano." }
+  ],
+  "tools": [
+    {
+      "name": "homeostasis.estado",
+      "description": "Cuadro clínico del sistema: qué facultades están 'calientes' (inflamación/fiebre), cuáles inhibidas, y los umbrales. Lo lee el humano para entender qué está regulando el cuerpo.",
+      "parameters": { "type": "object", "additionalProperties": false, "properties": {} },
+      "handler": "handleEstado",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    }
+  ],
+  "dependencies": ["interruptores"],
+  "config": {
+    "enabled": true,
+    "umbral_inflamacion": 2,
+    "umbral_fiebre": 4,
+    "umbral_apoptosis": 8,
+    "enfriamiento": 1,
+    "histeresis": 1,
+    "tick_ms": 60000,
+    "pesos": { "fantasma": 2, "revision": 2, "failed": 1, "health": 1 }
+  },
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "homeostasis.percibido.total",
+        "homeostasis.inhibido.total",
+        "homeostasis.apoptosis.total"
+      ],
+      "gauges": []
+    }
+  }
+}

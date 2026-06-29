@@ -58,5 +58,7 @@
     }
   },
   "cajones_enabled": true,
+  "_lente_default_doc": "Lente que ai-gateway EMPUJA (nervio) en cada conversacion de marketing — entrega event-driven del OFICIO de redactar. dominio 'copy' rutea (tarea 'copy') a content-creator+growth-hacker del cuenco lentes-diseno (pack copy).",
+  "lente_default": { "dominio": "copy", "tarea": "copy" },
   "_v2_5_nota": "v2.5.0 (2026-06-14): expone get_perfil/update_perfil como ui_handlers para que el FRONTEND entre por la puerta del dueno (antes leia /config/marca.json por fs directo -> divergencia con el onboarding que escribe /pizzepos/marca.json). El panel de marketing pasa a ver el perfil canonico; update con deep-merge (no pisa secciones)."
 }

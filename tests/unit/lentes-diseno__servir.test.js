@@ -26,17 +26,30 @@ async function run() {
   const m = new LentesDiseno();
   await m.onLoad(ctx);
 
-  // 1. carga las 8
-  t('carga las 8 lentes', () => assert.strictEqual(m._lentes.size, 8));
+  const cuentaDiseno = () => m._packs.get('diseño')?.lentes.size || 0;
 
-  // 2. listar: catálogo barato (nombre + cuando_usar) + rutas, SIN contenido
+  // 1. el cuenco descubre 3 packs (diseño/copy/negocio); diseño trae sus 8 lentes
+  t('cuenco descubre packs/* (diseño con 8 lentes)', () => {
+    assert.ok(m._packs.size >= 3, '>=3 packs auto-descubiertos');
+    assert.strictEqual(cuentaDiseno(), 8);
+  });
+
+  // 2. listar: catálogo barato (nombre + dominio + cuando_usar) + rutas, SIN contenido
   const list = m._listar();
-  t('listar → 200 con 8 lentes + rutas', () => {
+  t('listar → 200 con todas las lentes + rutas + packs', () => {
     assert.strictEqual(list.status, 200);
-    assert.strictEqual(list.data.lentes.length, 8);
-    assert.ok(list.data.lentes.every(l => l.nombre && l.cuando_usar));
+    assert.ok(list.data.lentes.length >= 8, 'listar trae todas las lentes de todos los packs');
+    assert.ok(list.data.lentes.every(l => l.nombre && l.cuando_usar && l.dominio));
     assert.ok(list.data.lentes.every(l => !('contenido' in l)), 'listar NO trae contenido (lazy)');
     assert.ok(list.data.rutas && list.data.rutas.tema);
+    assert.ok(Array.isArray(list.data.packs) && list.data.packs.find(p => p.dominio === 'diseño'));
+  });
+
+  // 2b. listar ceñido por dominio → solo ese órgano
+  t('listar({dominio:diseño}) → solo las 8 de diseño', () => {
+    const r = m._listar({ dominio: 'diseño' });
+    assert.strictEqual(r.data.lentes.length, 8);
+    assert.ok(r.data.lentes.every(l => l.dominio === 'diseño'));
   });
 
   // 3. RUTEO DETERMINISTA (mitad reflejo): tarea 'tema' → ux-architect + brand-guardian
@@ -89,8 +102,32 @@ async function run() {
     assert.deepStrictEqual(r.data.desconocidas, ['no-existe']);
   });
 
+  // 8. el MOTOR despierto del pack negocio (facultad izquierda, determinista)
+  t('motor negocio.food_cost computa % y veredicto (céntimos)', () => {
+    const r = m._motor({ dominio: 'negocio', op: 'food_cost', args: { coste_centimos: 120, pvp_centimos: 400 } });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.resultado.food_cost_pct, 30);
+    assert.strictEqual(r.data.resultado.margen_centimos, 280);
+    assert.strictEqual(r.data.resultado.veredicto, 'sano');
+  });
+  t('motor pvp_objetivo da el precio para un food-cost objetivo', () => {
+    const r = m._motor({ dominio: 'negocio', op: 'pvp_objetivo', args: { coste_centimos: 100, food_cost_objetivo_pct: 25 } });
+    assert.strictEqual(r.data.resultado.pvp_centimos, 400);
+  });
+  t('motor dormido (pack diseño sin motor) → 409 CONFLICT_STATE', () => {
+    const r = m._motor({ dominio: 'diseño', op: 'food_cost', args: {} });
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(r.error.code, 'CONFLICT_STATE');
+  });
+  t('obtener({dominio:negocio, tarea:coste}) ciñe al órgano negocio', () => {
+    const r = m._obtener({ dominio: 'negocio', tarea: 'coste' });
+    assert.strictEqual(r.status, 200);
+    assert.ok(r.data.lentes.every(l => l.dominio === 'negocio'));
+    assert.ok(r.data.lentes.find(l => l.nombre === 'financial-analyst'));
+  });
+
   await m.onUnload();
-  t('onUnload limpia el estado', () => assert.strictEqual(m._lentes.size, 0));
+  t('onUnload limpia el estado', () => assert.strictEqual(m._packs.size, 0));
 
   console.log(`[lentes-diseno__servir] ${fail === 0 ? 'OK' : 'FAIL'} ${pass}/${pass + fail}`);
   process.exit(fail === 0 ? 0 : 1);

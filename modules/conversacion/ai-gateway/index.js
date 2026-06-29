@@ -1417,14 +1417,18 @@ class AiGatewayModule extends BaseModule {
 
   _composeLenteSection(lentes) {
     const cuerpos = lentes
-      .map(l => `## LENTE: ${l.nombre}${l.cuando_usar ? ' — ' + l.cuando_usar : ''}\n${l.contenido}`)
+      .map(l => `## LENTE: ${l.nombre}${l.dominio ? ' [' + l.dominio + ']' : ''}${l.cuando_usar ? ' — ' + l.cuando_usar : ''}\n${l.contenido}`)
       .join('\n\n');
+    // dominio-aware: la cabecera nombra el oficio que toca (diseño/copy/negocio…),
+    // no se asume siempre diseño (el cuenco sirve N packs por la misma puerta).
+    const dominios = [...new Set(lentes.map(l => l.dominio).filter(Boolean))];
+    const etiqueta = dominios.length ? dominios.join(' · ').toUpperCase() : 'OFICIO';
     return (
-      '# LENTE DE DISEÑO (contexto silencioso · ADÓPTALA al componer)\n' +
-      'Esta es la lente de diseño de esta página. Diseña ENCARNÁNDOLA: sus reglas ' +
-      '(tokens/jerarquía/motion/marca) MANDAN sobre tu reflejo por defecto, para que el ' +
-      'resultado no sea genérico. NO la recites; aplícala. Si la tarea pide otra cosa ' +
-      '(movimiento, fotos de producto…), pide la lente que toque con lentes.obtener.\n\n' +
+      `# LENTE DE ${etiqueta} (contexto silencioso · ADÓPTALA al componer)\n` +
+      'Esta es la lente de esta página: el oficio con el que debes trabajar. ENCÁRNALA — ' +
+      'sus reglas MANDAN sobre tu reflejo por defecto, para que el resultado no sea genérico. ' +
+      'NO la recites; aplícala. Si la tarea pide otro oficio, pide la lente que toque con ' +
+      'lentes.obtener ({dominio, tarea} ó {nombres}).\n\n' +
       cuerpos
     );
   }

@@ -1,24 +1,29 @@
 {
-  "_doc": "lentes-diseno — base compartida del sistema: las 8 lentes de diseño (agentes de agency-agents/design, COMPLETOS). Reflejo PURO (sin blueprint): no decide, SIRVE conocimiento por el bus. Cualquier página que diseñe (carta-design/carta-digital/menu-generator/carta-marketing) bebe por su puerta, como marca/recetas. NO usa la capa de agentes aparcada (agent.execute): el LLM de página transforma; el reflejo entrega los .md íntegros. Selección HÍBRIDA: tarea→rutas (reflejo determinista) y/o nombres (elección fuzzy del LLM leyendo cuando_usar). Lazy: listar barato, obtener trae el .md completo solo de lo pedido.",
+  "_doc": "Manifest del CUENCO de lentes (lentes-diseno) — REFLEJO PURO. Cúpula invertida que RECOGE N packs auto-descubiertos (packs/<dominio>/_pack.json) y los sirve por UNA puerta. Cada pack = un ÓRGANO con su ADN: MEMORIA (.md, lo que sabe) + MOTOR (motor.js opcional, lo que hace) + QUÍMICO (frecuencia opcional, su ritmo) + EVENTO (lo público). Soltar un pack = soltar un órgano; el cuenco no se reescribe. Packs vivos: diseño (8 lentes, solo memoria), copy (5 lentes, solo memoria), negocio (3 lentes + MOTOR food-cost despierto + QUÍMICO pulso). Selección híbrida: tarea->rutas (reflejo) o nombres (LLM).",
   "name": "lentes-diseno",
-  "version": "1.0.0",
-  "description": "Base compartida del sistema: sirve las 8 lentes de diseño (tokens/CSS, componentes, marca, motion, narrativa, usabilidad, prompts de imagen, visuales inclusivos) por RPC del bus para que cualquier pagina de diseno las consulte. Reflejo puro, seleccion hibrida (tarea->rutas determinista + nombres del LLM).",
+  "version": "2.0.0",
+  "_v2_0_nota": "v2.0.0 (2026-06-29): PROMOVIDO a CUENCO (Teoría del Órgano). _cargarCatalogo (un dir) -> _descubrirPacks (packs/*/). Las 8 lentes de diseño pasan a packs/diseño/. Nuevos packs copy (marketing->carta-marketing) y negocio (finanzas->escandallo/viabilidad) con MOTOR despierto (food_cost/pvp_objetivo/salud_margenes) + QUÍMICO (pulso cada 7d -> evento negocio.pulso). Nueva puerta lentes.motor.request. lentes.obtener/listar ganan `dominio?` (ciñe al órgano). El nervio de ai-gateway no cambia su contrato (lente_default puede llevar {dominio,tarea}).",
+  "description": "Cuenco de lentes: reflejo puro que auto-descubre packs de conocimiento (packs/<dominio>/) y los sirve por el bus. Base compartida que cualquier página bebe (diseño/copy/negocio). Anatomía de órgano: memoria + motor + químico + evento.",
   "author": "Event Core Team",
   "language": "es",
   "main": "index.js",
   "publishes": [
-    { "event": "lentes.listar.response",  "description": "Catalogo barato: { lentes: [{nombre, cuando_usar}], rutas }. Lo lee el LLM para ELEGIR." },
-    { "event": "lentes.obtener.response", "description": "Las lentes pedidas con su .md COMPLETO: { lentes: [{nombre, cuando_usar, contenido}] }." }
+    { "event": "lente.registrar",        "description": "Al cargar, cada pack anuncia su nacimiento {dominio, cuando_usar, lentes, tiene_motor, tiene_quimico}. Impulso de auto-descubrimiento (cúpula invertida)." },
+    { "event": "negocio.pulso",          "description": "QUÍMICO del pack negocio: late cada 7d (op pulso) y secreta su latido. La hormona que prueba que la facultad química respira." },
+    { "event": "lentes.listar.response",  "description": "Catalogo barato: { packs, lentes:[{nombre, dominio, cuando_usar}], rutas }. Lo lee el LLM para ELEGIR." },
+    { "event": "lentes.obtener.response", "description": "Las lentes pedidas con su .md COMPLETO: { lentes:[{nombre, dominio, cuando_usar, contenido}] }." },
+    { "event": "lentes.motor.response",   "description": "El resultado de flexionar un motor de pack: { dominio, op, resultado }." }
   ],
   "subscribes": [
-    { "event": "lentes.listar.request",  "handler": "onListarRequest",  "description": "Devuelve el catalogo (nombre + cuando_usar) + la tabla de rutas tarea->lentes." },
-    { "event": "lentes.obtener.request", "handler": "onObtenerRequest", "description": "Resuelve la seleccion hibrida (tarea->rutas y/o nombres) y entrega los .md completos." }
+    { "event": "lentes.listar.request",  "handler": "onListarRequest",  "description": "Reflejo: catálogo barato (nombre+dominio+cuando_usar) + rutas + packs. Filtrable por `dominio`. Lo lee el LLM para ELEGIR." },
+    { "event": "lentes.obtener.request", "handler": "onObtenerRequest", "description": "Reflejo: entrega los .md COMPLETOS de las lentes pedidas. Selección híbrida: `tarea`->rutas (determinista) y/o `nombres` (elección del LLM), opcionalmente ceñido a `dominio`." },
+    { "event": "lentes.motor.request",   "handler": "onMotorRequest",   "description": "Reflejo: flexiona el MOTOR de un pack (facultad despierta). {dominio, op, args} -> {resultado}. Hoy: negocio.{food_cost,pvp_objetivo,salud_margenes,pulso} (aritmética food-cost determinista, céntimos)." }
   ],
   "config": {
     "persistence": {
       "scope": "module",
-      "pattern": "static-md-pack",
-      "_nota": "Sin store de proyecto: posee los 8 .md en lentes/ (parte del codigo). Conocimiento, no datos de usuario."
+      "pattern": "static-pack-cuenco",
+      "_nota": "Sin store de proyecto: posee los packs en packs/ (parte del codigo). Conocimiento, no datos de usuario."
     }
   }
 }

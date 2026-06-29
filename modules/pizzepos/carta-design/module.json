@@ -30,5 +30,5 @@
   },
   "cajones_enabled": true,
   "_lente_default_doc": "Lente de diseño por defecto que ai-gateway EMPUJA (nervio) en cada conversacion de esta pagina — entrega event-driven, no depende de que el LLM la pida. 'tema' rutea a ux-architect+brand-guardian (lentes-diseno).",
-  "lente_default": { "tarea": "tema" }
+  "lente_default": { "dominio": "diseño", "tarea": "tema" }
 }

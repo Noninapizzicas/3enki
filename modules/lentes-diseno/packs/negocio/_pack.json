@@ -1,0 +1,31 @@
+{
+  "_doc": "ADN del pack 'negocio' — el PRIMER órgano con TODA la anatomía despierta: memoria (lentes de finanzas) + MOTOR (motor.js, food-cost determinista, hemisferio izquierdo) + QUÍMICO (late 'pulso' a su cadencia y lo secreta como evento) + EVENTO (lo público). Lo beben escandallo/viabilidad. Demuestra que motor/químico no son teoría: el órgano completo respira.",
+  "dominio": "negocio",
+  "cuando_usar": "food-cost, márgenes, viabilidad, precio objetivo, salud económica de la carta, decisiones de rentabilidad",
+  "memoria": {
+    "lentes": {
+      "financial-analyst":     { "archivo": "negocio-financial-analyst.md",     "cuando_usar": "leer márgenes, food-cost, rentabilidad por producto, qué sube/baja el resultado" },
+      "fpa-analyst":           { "archivo": "negocio-fpa-analyst.md",           "cuando_usar": "proyecciones, escenarios, viabilidad, planificar precios y volumen" },
+      "bookkeeper-controller": { "archivo": "negocio-bookkeeper-controller.md", "cuando_usar": "control de costes, cuadre, disciplina de números, no engañarse con el dinero" }
+    },
+    "rutas": {
+      "coste":      ["financial-analyst", "bookkeeper-controller"],
+      "margen":     ["financial-analyst"],
+      "viabilidad": ["fpa-analyst", "financial-analyst"],
+      "precio":     ["financial-analyst", "fpa-analyst"]
+    }
+  },
+  "motor": {
+    "hook": "./motor.js",
+    "ops": ["food_cost", "pvp_objetivo", "salud_margenes", "pulso"]
+  },
+  "quimico": {
+    "cada": "7d",
+    "op": "pulso",
+    "evento": "negocio.pulso"
+  },
+  "evento": {
+    "emite":   ["lente.registrar", "negocio.pulso"],
+    "escucha": ["lentes.obtener.request", "lentes.listar.request", "lentes.motor.request"]
+  }
+}

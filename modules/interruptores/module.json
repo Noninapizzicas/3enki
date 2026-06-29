@@ -1,7 +1,8 @@
 {
   "name": "interruptores",
-  "version": "1.1.0",
-  "description": "Registro central de on/off del sistema (el panel de control). Un solo sitio para todos los botones: cada feature registra su interruptor al cargar (interruptor.registrar); el panel de la barra lateral los pinta; al pulsarlos, interruptor.cambiado avisa al dueño para que reaccione en caliente sin reinicio. Estado global persistido en data/interruptores.json (el estado tocado por el humano manda sobre el default).",
+  "version": "1.2.0",
+  "_v1_2_nota": "v1.2.0 (2026-06-29): canal del EFECTOR. Nuevo subscribe interruptor.set -> onSetRequest: un órgano (la homeostasis) puede inhibir una facultad por el bus, mismo camino que la UI (persiste + emite interruptor.cambiado con `motivo` como testigo). Cierra el bucle sensor->comparador->efector de la homeostasis.",
+  "description": "Registro central de on/off del sistema (el panel de control). Un solo sitio para todos los botones: cada feature registra su interruptor al cargar (interruptor.registrar); el panel de la barra lateral los pinta; al pulsarlos, interruptor.cambiado avisa al dueño para que reaccione en caliente sin reinicio. Estado global persistido en data/interruptores.json (el estado tocado por el humano manda sobre el default). La homeostasis inhibe por interruptor.set (canal del efector).",
   "author": "Event Core Team",
   "language": "es",
 
@@ -21,6 +22,11 @@
       "event": "interruptor.registrar",
       "handler": "onRegistrar",
       "description": "Una feature anuncia su botón {id, label, descripcion, grupo, default}. El estado persistido manda sobre el default."
+    },
+    {
+      "event": "interruptor.set",
+      "handler": "onSetRequest",
+      "description": "Canal del EFECTOR: un órgano (p.ej. homeostasis) pulsa un interruptor por el bus {id, enabled, motivo?}. Mismo camino que la UI: persiste + emite interruptor.cambiado (con motivo como testigo)."
     }
   ],
 

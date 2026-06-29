@@ -201,18 +201,136 @@ patrón anuncio/solicitud (`solicitar_registro` cura el orden de carga). El cuer
 
 ---
 
-## Estado actual (lo ya vivo en `main`)
+## 7. El nacimiento — el handshake del órgano nuevo
+
+Un órgano no "se enchufa": **nace y anuncia**. El orden de carga no se puede
+garantizar (el cuenco puede cargar antes o después que su consumidor), así que el
+nacimiento es un **handshake de dos sentidos**, no un escaneo:
 
 ```
-✓ lentes-diseno (módulo)        PRIMER ÓRGANO entero: MEMORIA (8 .md) + EVENTO (lentes.listar/obtener)
-                                · selección híbrida (reflejo rutea / LLM elige) · reflejo puro
-✓ nervio de lentes (ai-gateway) la ENTREGA event-driven: un turno de diseño EMPUJA la lente
-✓ acoples carta-design/carta-digital  consumen la lente (suelo por nervio + refinamiento por pull)
-✓ interruptores                 el GOBIERNO (control inhibitorio) — ya existía
+ANUNCIO     el órgano emite su EVENTO de nacimiento al cargar        (lente.registrar / interruptor.registrar)
+SOLICITUD   el cuenco/registro, al cargar, PIDE re-anuncio           (interruptor.solicitar_registro)
+            → cura la carrera: quien llegó tarde re-anuncia y entra
 ```
 
-## Siguiente paso natural (cuando llegue el 2º dominio: copy)
+Ya implementado ×2 con la misma forma: `interruptores` (`solicitar_registro` →
+las features re-registran su botón) y el cuenco (`lente.registrar` por pack). El
+cuerpo no asume orden: **pregunta y escucha.** Es la cúpula invertida en el tiempo.
 
-Promover `lentes-diseno → lentes` (el cuenco): `_cargarCatalogo` escanea `packs/*/`
-en vez de un dir. Soltar `packs/copy/` = nuevo órgano. El nervio NO cambia
-(`lente_default` gana `{dominio}`). No se reescribe nada: se generaliza un loader.
+---
+
+## 8. La homeostasis — el termostato (auto-inhibición con realimentación negativa)
+
+El gobierno (§6) es inhibición **deliberada** (el humano apaga). La homeostasis es
+inhibición **automática**: el cuerpo se regula solo cuando una facultad se desboca.
+Es el bucle clásico de realimentación negativa, hecho órgano (`homeostasis`):
+
+```
+SENSOR       señales de peligro del bus      (chat.fantasma_sospechado · *.failed · health.alert.* · aprendizaje.revision.requerida)
+   ↓ _percibir(fuente, peso)                 sube la "temperatura" de la fuente
+COMPARADOR   umbral + histéresis             sano → inflamación → fiebre → apoptosis
+   ↓ _efector(fuente, estado)
+EFECTOR      interruptor.set                 inhibe la facultad desbocada EN CALIENTE (reusa el gobierno)
+   ↓
+ENFRIAMIENTO la temperatura baja sola        recupera (suelta la facultad) con histéresis
+```
+
+**Respuesta GRADUADA — el cuerpo no salta a matar.** Como la fiebre real: primero
+vigila, luego sube, y solo en el extremo se rinde la célula:
+```
+inflamación  → solo TESTIGO (homeostasis.alerta). Observa, no actúa.
+fiebre       → INHIBE la facultad (si es gobernable) + testigo.
+apoptosis    → CONSERVADORA: NO mata sola. Lo canta fortísimo (homeostasis.apoptosis)
+               y deja el corte último a la VOLUNTAD (el humano). El reflejo bajo la voluntad.
+```
+
+**Autoinmune-conservadora — más vale no actuar que devorar lo sano.** Solo inhibe
+facultades que **declararon interruptor gobernable** y **nunca** un órgano vital
+(bus, propiocepción, la propia homeostasis, el gobierno, fs, ai-gateway…). Una
+respuesta inmune que ataca al cuerpo es peor que la infección.
+
+**Testigo — sin actos invisibles.** Toda transición emite su evento al bus
+(`alerta`/`accion`/`recuperado`/`apoptosis`). La propiocepción y el log lo ven
+**siempre**: no hay auto-inhibición a oscuras. Quien se regula, lo declara.
+
+**Nace inhibida — prudencia anatómica (como §6).** Registra su interruptor
+`homeostasis` en **OFF**. Dormida, su MOTOR (el efector) no actúa, pero su SENSOR
+sigue **sintiendo y testificando** → observabilidad sin riesgo desde el minuto 1.
+El humano despierta el efector cuando confía en sus umbrales. *(apaga el motor →
+sigue sintiendo pero deja de actuar — §6, granularidad por facultad.)*
+
+```
+SANO         temp < umbral_inflamación
+INFLAMACIÓN  umbral_inflamación ≤ temp < umbral_fiebre   → testigo
+FIEBRE       umbral_fiebre ≤ temp < umbral_apoptosis      → inhibe (si despierta + gobernable)
+APOPTOSIS    temp ≥ umbral_apoptosis                      → canta + deja el corte a la voluntad
+recuperación temp < (umbral_fiebre − histéresis)          → suelta la facultad inhibida
+```
+
+---
+
+## 9. La propiocepción — la raíz de las raíces (copia eferente)
+
+Todo lo de arriba descansa en una sola capacidad: **el cuerpo siente sus propios
+impulsos.** Cuando un órgano dispara un EVENTO, queda una **copia eferente** — el
+cuerpo guarda registro de que actuó. De ahí nace todo:
+
+```
+sin propiocepción   el cuerpo actúa pero no SABE que actuó      → puede mentir ("lo guardé") sin haberlo hecho
+con propiocepción   cada impulso deja copia → el cuerpo lo SABE → mentir se vuelve IMPOSIBLE (anti-fantasma)
+```
+
+Es la **raíz** porque alimenta a las tres capas de regulación:
+```
+GOBIERNO      necesita saber qué facultades existen y disparan        ← propiocepción las siente
+HOMEOSTASIS   su SENSOR ES la propiocepción del peligro               ← sin sentir, no hay termostato
+GRAFO         el destilador teje enlaces VIENDO los eventos co-ocurrir ← sin copia, no hay autorretrato
+```
+
+Distingue lo **consciente** (un evento que produjo un turno LLM) del **reflejo**
+(una ejecución JS determinista) — el cuerpo sabe **quién** movió cada cosa. Ya
+implementado: el módulo `propiocepcion` (copia eferente por proyecto) + el nervio
+que inyecta la rebanada nueva en el turno. La homeostasis y el grafo **beben de
+ella**; ella no bebe de nadie. Es el suelo.
+
+---
+
+## Estado actual (lo ya vivo, implementado en esta tanda)
+
+```
+CUENCO + PACKS (la anatomía completa, auto-descubierta)
+✓ lentes-diseno → CUENCO    _descubrirPacks() escanea packs/<dominio>/_pack.json (cúpula invertida)
+✓ pack diseño               MEMORIA sola (8 lentes) — hemisferio derecho, motor dormido
+✓ pack copy                 MEMORIA sola (5 lentes marketing) — para carta-marketing
+✓ pack negocio              ÓRGANO COMPLETO: MEMORIA (3 lentes) + MOTOR despierto (food_cost/pvp_objetivo/
+                            salud_margenes, céntimos) + QUÍMICO (pulso cada 7d → evento negocio.pulso)
+✓ puerta lentes.motor.request   flexiona el motor de un pack (la facultad izquierda)
+✓ EVENTO de nacimiento      cada pack emite lente.registrar al cargar (handshake §7)
+
+NERVIO (entrega event-driven del oficio)
+✓ ai-gateway _leerLente/_composeLenteSection   dominio-aware (DISEÑO/COPY/NEGOCIO), push 1×/conversación
+✓ lente_default por página  carta-design/carta-digital {tarea:tema} · carta-marketing {dominio:copy} ·
+                            escandallo {dominio:negocio,tarea:coste} · viabilidad {dominio:negocio,tarea:viabilidad}
+
+GOBIERNO + HOMEOSTASIS (las dos inhibiciones)
+✓ interruptores             el GOBIERNO (inhibición deliberada) + canal del EFECTOR (interruptor.set por bus)
+✓ homeostasis (módulo)      el TERMOSTATO (inhibición automática): sensor→comparador→efector→enfriamiento,
+                            graduada, autoinmune-conservadora, con testigo, NACE OFF. Sus 4 sensores
+                            tienen emisor vivo (fantasma/revisión/health/*.failed) → no es subscriber muerto
+
+RAÍZ
+✓ propiocepcion             la copia eferente (§9) — ya existía; homeostasis y grafo beben de ella
+```
+
+```
+TESTS  lentes-diseno__servir (15) · lentes-diseno__anatomia (3: nacimiento/químico/motor) ·
+       ai-gateway__nervio-lentes (5) · homeostasis__bucle (10) — verde.
+```
+
+## Lo que queda al escalar (no antes — paga con nodos)
+
+```
+· cúpula Obsidian (§4.3)    cuando haya 50+ órganos: selección por vecindad en el grafo, no por tabla plana
+· más packs                 ingeniería/legal/soporte… sueltas la carpeta, nace el órgano (cero reescritura)
+· efector más fino          hoy inhibe el órgano; mañana una facultad concreta (motor/químico) por separado
+```

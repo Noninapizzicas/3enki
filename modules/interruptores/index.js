@@ -97,6 +97,15 @@ class InterruptoresModule extends BaseModule {
     return { status: 200, data: { total: toggles.length, toggles } };
   }
 
+  // ── EVENTO: un órgano pulsa un interruptor por el bus (canal del EFECTOR).
+  // Mismo camino que la UI (handleSet): persiste + emite interruptor.cambiado.
+  // Así la homeostasis puede inhibir una facultad sin pasar por la UI humana.
+  onSetRequest(event) {
+    const d = (event && event.data) || event || {};
+    if (!d.id) return;
+    return this.handleSet({ id: d.id, enabled: !!d.enabled, motivo: d.motivo });
+  }
+
   // ── UI: pulsar uno -> persiste + avisa al dueño ──
   async handleSet(data) {
     try {
@@ -112,9 +121,9 @@ class InterruptoresModule extends BaseModule {
       }
       this._guardarEstados();
       try {
-        this.eventBus.publish('interruptor.cambiado', {
-          id, enabled, correlation_id: require('crypto').randomUUID(), timestamp: new Date().toISOString()
-        });
+        const evt = { id, enabled, correlation_id: require('crypto').randomUUID(), timestamp: new Date().toISOString() };
+        if (data && data.motivo) evt.motivo = data.motivo;   // testigo: por qué (p.ej. homeostasis)
+        this.eventBus.publish('interruptor.cambiado', evt);
       } catch (_) { /* best-effort */ }
       this.metrics?.increment('interruptores.cambiado.total', { id });
       this.logger?.warn('interruptores.cambiado', { id, enabled });

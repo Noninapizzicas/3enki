@@ -1,0 +1,26 @@
+{
+  "_doc": "ADN del pack 'copy' — lentes de VOZ/redacción para carta-marketing (onboarding + generar_copy). ANATOMÍA: memoria sola (conocimiento de copywriting), motor DORMIDO. La identidad de marca la pone carta-marketing; estas lentes dan el OFICIO de redactar.",
+  "dominio": "copy",
+  "cuando_usar": "redacción de copy, voz de marca, descripciones de producto, tono, claims, llamadas a la acción, redes sociales, SEO de carta/web",
+  "memoria": {
+    "lentes": {
+      "content-creator":        { "archivo": "copy-content-creator.md",         "cuando_usar": "redactar descripciones, claims, microcopy, estructura de un texto que vende sin sonar a venta" },
+      "social-media-strategist":{ "archivo": "copy-social-media-strategist.md",  "cuando_usar": "tono y formato para redes, adaptar la voz al canal, calendario de contenido" },
+      "growth-hacker":          { "archivo": "copy-growth-hacker.md",            "cuando_usar": "ganchos, promociones, palancas de conversión, qué texto mueve a actuar" },
+      "instagram-curator":      { "archivo": "copy-instagram-curator.md",        "cuando_usar": "estética visual+texto para feed, captions, coherencia de la cuenta" },
+      "seo-specialist":         { "archivo": "copy-seo-specialist.md",           "cuando_usar": "que el texto de la carta/web sea encontrable, keywords naturales, descripciones que posicionan" }
+    },
+    "rutas": {
+      "copy":        ["content-creator", "growth-hacker"],
+      "descripcion": ["content-creator"],
+      "voz":         ["content-creator", "social-media-strategist"],
+      "promo":       ["growth-hacker"],
+      "redes":       ["social-media-strategist", "instagram-curator"],
+      "seo":         ["seo-specialist"]
+    }
+  },
+  "evento": {
+    "emite":   ["lente.registrar"],
+    "escucha": ["lentes.obtener.request", "lentes.listar.request"]
+  }
+}

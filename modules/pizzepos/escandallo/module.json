@@ -10,6 +10,8 @@
   "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
   "target_page_id": "escandallo",
   "cajones_enabled": true,
+  "_lente_default_doc": "Lente que ai-gateway EMPUJA (nervio) en cada conversacion de escandallo — el OFICIO de leer food-cost/margenes. dominio 'negocio' (tarea 'coste') rutea a financial-analyst+bookkeeper-controller del cuenco (pack negocio, que ademas tiene MOTOR food_cost determinista por lentes.motor.request).",
+  "lente_default": { "dominio": "negocio", "tarea": "coste" },
   "subscribes": [
     { "event": "escandallo.recalcular_siguiente.request", "handler": "onRecalcularSiguienteRequest", "description": "Reflejo JS: costea la siguiente receta pendiente (determinista) y persiste." },
     { "event": "escandallo.costear.request", "handler": "onCostearRequest", "description": "Reflejo JS: coste determinista de una receta desde el catalogo." },

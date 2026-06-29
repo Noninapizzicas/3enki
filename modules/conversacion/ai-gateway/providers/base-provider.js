@@ -143,6 +143,11 @@ class BaseProvider {
       };
 
       const req = httpModule.request(options, (res) => {
+        // UTF-8 multibyte (emojis 🍖 de 4 bytes) puede caer partido entre dos
+        // chunks de red; `body += chunkBuffer` decodifica cada mitad por
+        // separado y produce `��`. setEncoding deja que el StringDecoder de Node
+        // junte los bytes a través de la frontera del chunk antes de decodificar.
+        res.setEncoding('utf8');
         let body = '';
 
         res.on('data', (chunk) => {
@@ -204,6 +209,7 @@ class BaseProvider {
     const req = httpModule.request(options, (res) => {
       // Reject non-2xx responses immediately instead of parsing as SSE
       if (res.statusCode >= 400) {
+        res.setEncoding('utf8'); // mismo motivo: bytes multibyte intactos entre chunks
         let body = '';
         res.on('data', (chunk) => { body += chunk; });
         res.on('end', () => {

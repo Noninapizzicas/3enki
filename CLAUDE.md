@@ -14092,7 +14092,8 @@ EVENTO_BACKEND_A_FRONT {
   },
   "pago": { "ahora": "a la recogida (efectivo)", "fase_2": "link Stripe (pago.iniciar ya esbozado en tienda-api)" },
   "aviso_recogida": "cocina.pedido_listo → whatsapp-bot avisa al cliente 'ven a recoger' (ya cableado para origen-whatsapp).",
-  "transporte_alojamiento": "tienda-api (POST público /tienda/pedido) APARCADO — el camino vivo es WhatsApp+bot (sin puertas)."
+  "transporte_alojamiento": "tienda-api (POST público /tienda/pedido) APARCADO — el camino vivo es WhatsApp+bot (sin puertas).",
+  "estado": "OPERATIVO end-to-end (nonina, enki-ai.online) — webhook real de Meta entrante verificado; alta de conexión por UI (whatsapp.set_config); ver sección 'WhatsApp Cloud API — OPERATIVO'."
 }
 ```
 
@@ -14205,6 +14206,60 @@ CLASE WhatsappBotModule HEREDA BaseModule {  // ── el INSIDER que re-tasa
 //   _decodificarEstructura: localiza la línea '#P1 <base64url>', decodifica → { v:1, items }. Corrupto → null.
 ```
 
+## WhatsApp Cloud API — OPERATIVO end-to-end (v1.3.0) · webhook real de Meta + alta por UI
+
+> Estado: VIVO en producción (enki-ai.online, proyecto nonina). El transporte real es el
+> webhook de Meta (graph.facebook.com), no el bus agnóstico. La PUERTA es el verify_token;
+> el dato no-secreto de conexión (phone_number_id, waba_id…) se da de alta desde la APP, sin
+> editar ficheros. El secreto (token, verify_token) sigue en el credential-manager.
+
+```
+WEBHOOK REAL (Meta Cloud API · services/meta-cloud-client.js + index.js) {
+  GET  /modules/whatsapp-bot/whatsapp/webhook/:project  → handleWebhookVerify
+       espera hub.mode=subscribe · hub.verify_token · hub.challenge ; resuelve verify_token vía
+       credential-manager (provider META_WHATSAPP_VERIFY_TOKEN, level PROJECT, identifier=:project)
+       → responde hub.challenge en TEXTO PLANO si coincide (403 si no).
+  POST /modules/whatsapp-bot/whatsapp/webhook/:project  → handleWebhookEvent
+       parseWebhookEvent(body) → mensajes ; valida phone_number_id del payload == el del proyecto
+       (whatsapp-bot.webhook.project_mismatch si no) → _despacharEntrante (= ruta del bus agnóstico).
+  cliente: token en META_WHATSAPP_API_KEY_PROJECT_<slug> ; sendText/sendTemplate comparten _postMessage.
+
+  DOBLE SUSCRIPCIÓN EN META (las dos hacen falta; el campo NO basta):
+    1. campo 'messages' suscrito (nivel de CAMPO, en la config del webhook de la app).
+    2. WABA suscrita a la app (nivel de CUENTA): POST /v21.0/<waba_id>/subscribed_apps
+       → {"success":true}. Sin esto, el "hola" no llega al VPS (journalctl solo ve /health).
+}
+
+ALTA DE LA CONEXIÓN DESDE LA APP (sin tocar JSON · v1.3.0) {
+  CONTRATO  el dato no-secreto vive en data/projects/<slug>/config/config.json (precedencia) o
+            project.json (fallback), bloque `whatsapp` { phone_number_id, waba_id, display_number,
+            webhook_path, pwa_url, template_listo? }. El secreto NO entra aquí (va al .env).
+  ui whatsapp.get_config {slug} → bloque whatsapp + has_token + has_verify + operativo +
+            webhook_path_publico (/modules/whatsapp-bot/whatsapp/webhook/<slug>).  [handleGetConfig]
+  ui whatsapp.set_config {slug, phone_number_id, waba_id, display_number, pwa_url?} →
+            valida ids → _writeProjectConfig (merge atómico tmp+rename, preserva otros bloques) →
+            _refrescarProyecto (recarga en caliente) → operativo.  [handleSetConfig]
+  FRONTEND  modules/credentials/CredentialsPanel.svelte: 4ª pestaña 💬 WhatsApp con form
+            (phone_number_id/waba_id/display_number/pwa_url) + estado + webhook para pegar en Meta.
+            stores/credentials.ts: whatsappConfigStore + loadWhatsappConfig/saveWhatsappConfig.
+}
+
+FIX lista de credenciales (la causa real de "no muestra nada") {
+  el backend (_getUIState) devuelve `credentials` como ARRAY PLANO [{key,provider,level,...}].
+  el frontend leía credentials.GLOBAL/PROJECT/… → siempre vacío. loadCredentials ahora AGRUPA el
+  array por level (level desconocido → CUSTOM) y deriva total. WhatsApp en el catálogo:
+  META_WHATSAPP (💬) + META_WHATSAPP_VERIFY_TOKEN (🪝) en PROJECT_ONLY_PROVIDERS (fuerza level
+  PROJECT en el form; key = <PROVIDER>_API_KEY_PROJECT_<slug>).
+}
+
+sendTemplate (Meta plantillas · salientes >24h) {
+  meta-cloud-client.sendTemplate(to, name, lang, components?) → { type:'template', template:{...} }.
+  uso: avisos fuera de la ventana de 24h (requiere plantilla APROBADA en Meta). El aviso de
+  'pedido listo' (cocina.pedido_listo) usa plantilla {nombre} si template_listo está configurada;
+  dentro de la ventana, texto libre.
+}
+```
+
 ## pedidos (v3.2.0) — la estructura del pedido de tienda VIAJA a cocina
 
 ```
@@ -14250,6 +14305,8 @@ CLASE WhatsappBotModule HEREDA BaseModule {  // ── el INSIDER que re-tasa
 
 ```
 AUTOSERVICIO_COMPLETO {
+  0. Meta entrega el mensaje al webhook real (POST /modules/whatsapp-bot/whatsapp/webhook/<slug>)
+     — requiere campo 'messages' suscrito + WABA suscrita a la app (subscribed_apps)
   1. cliente escribe al WhatsApp → bot responde con el link de la PWA (greeter)
   2. cliente arma el carrito en la PWA (fotos, mitad, al_gusto, variaciones)
   3. PWA pre-rellena el wa.me con el pedido CANÓNICO + #P1 (por ids) ; cliente pulsa enviar
@@ -14284,10 +14341,13 @@ EVENTOS {
 }
 PIEZAS {
   modules/_shared/pedido-tasador.js              (función pura: tasarPedido — re-tasado seguridad)
-  modules/whatsapp-bot (1.1.0)                   (snapshot vía evento + #P1 + re-tasado)
+  modules/whatsapp-bot (1.3.0)                   (webhook Meta REAL + alta por UI + snapshot + #P1 + re-tasado + sendTemplate)
+  modules/whatsapp-bot/services/meta-cloud-client.js (Meta Cloud API: sendText/sendTemplate/_postMessage/parseWebhookEvent)
   modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura)
-  modules/pizzepos/carta-digital (2.6.0)         (PWA emite #P1 + paridad mitad)
-  modules/pizzepos/pedidos (3.2.0)               (estructura tienda → cocina ; poda palabra_clave)
+  modules/pizzepos/carta-digital (2.17.0)        (PWA emite #P1 + paridad mitad + nombre obligatorio)
+  modules/pizzepos/pedidos (3.3.0)               (estructura tienda → cocina ; ancla = cliente_nombre)
+  modules/credential-manager (2.1.0)             (META_WHATSAPP[_VERIFY_TOKEN] en catálogo + PROJECT_ONLY)
+  frontend credentials (CredentialsPanel + stores) (4ª pestaña 💬 WhatsApp · fix agrupado de la lista)
   cocina (_buildCocinaItem → ItemLine)           (YA pintaba la estructura, del comandero)
 }
 TESTS {

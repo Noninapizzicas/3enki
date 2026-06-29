@@ -2,7 +2,8 @@
   "_doc": "Blueprint del modulo carta-design. Hijo de subsistema-recetario.modulo-base. Estudio de diseno de cartas impresas. 4 operaciones deterministas (las sirve el REFLEJO JS): contexto_diseno (HIDRATA carta+marca), load_carta (solo la carta), save (guarda el HTML), gallery (lista lo guardado). La identidad del diseno sale de la MARCA (carta-marketing): colores, tipografias, logo, voz — NO hay biblioteca de profiles. La composicion del HTML la hace el LLM de pagina (SIN agente).",
   "id": "carta-design",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "2.4.0",
+  "version": "2.5.0",
+  "_v2_5_changelog": "v2.5.0 (2026-06-29): ACOPLE de lentes-diseno (base compartida del sistema). contexto_diseno consulta lentes.obtener.request (seleccion HIBRIDA: tarea->rutas determinista o nombres elegidos por el LLM) y devuelve `lentes` -> el LLM ADOPTA la lente que toca (tokens/jerarquia/motion/marca) al componer el HTML, en vez de improvisar 'slop' generico. Las 8 lentes (agency-agents/design, COMPLETAS) las sirve el modulo lentes-diseno por el bus; cualquier pagina de diseno bebe de la misma puerta.",
   "_v2_3_changelog": "v2.3.0 (2026-06-26): FIX 'la entrevista del disenador se evapora'. contexto_diseno era LEER-only y la persistencia del negocio vivia en PROSA (reglas_clave), no como paso GUARDAR -> ante una marca VACIA el LLM de diseno improvisaba el onboarding entero y no persistia nada (ademas sin el envoltorio 'campos' que update_perfil exige). Ahora: (1) desenvuelve .data del contexto; (2) GUARD de onboarding incompleto (sin marca/esencia.nombre/voz.tono) -> NO entrevista la identidad (no es su dominio ni puede persistirla), la surfacea y ofrece chat.cambiar_foco a carta-marketing; (3) paso GUARDAR explicito del unico dato que SI capta (negocio.local dir/tel/horario) via update_perfil({ campos:{ negocio:{ local }}}). Cierra trabajo_pendiente campos_negocio_en_marca.",
   "_temperatura_doc": "Pagina CREATIVA: compone el HTML del diseno encarnando la marca (colores/tipografias/voz) -> caliente. ai-gateway la usa como default del turno (override humano gana; cae al parent 0.4 si se quitara). El REFLEJO hidrata/persiste; la chispa visual es del LLM de pagina.",
   "temperatura": 0.8,
@@ -63,12 +64,17 @@
         "  if (!marca OR vacio(marca.esencia?.nombre) OR vacio(marca.voz?.tono)):",
         "    return { necesita_onboarding: true, mensaje: 'Tu marca esta sin completar; sin ella el diseno no tiene identidad de la que beber. Completamos el onboarding primero? (te llevo a marketing)' }",
         "  // 2. SIEMBRA el diseno con marca.visual {colores,tipografias,estilo,logo} + esencia/voz. NO re-preguntes la identidad: la BEBES.",
+        "  // 2b. LENTES DE DISENO (base compartida del sistema · seleccion HIBRIDA): arma el diseno con la lente que toca, no con tu default generico.",
+        "  //     Elige por TAREA: tema/color/tipografia -> tarea 'tema' ; movimiento/vida -> 'motion' ; componentes/tarjetas -> 'componentes' ; fotos de producto -> 'imagen'. O por NOMBRE (lentes.listar.request da el catalogo con cuando_usar).",
+        "  lentesResp = await publishAndWait('lentes.obtener.request', { tarea: <segun la peticion del usuario>, nombres: [<si eliges a mano>], request_id: uuid() }, { timeout_ms: 8000 })",
+        "  lentes = lentesResp?.data?.lentes || []   // cada una: { nombre, cuando_usar, contenido (el .md COMPLETO) }. Best-effort: si no responde, lentes=[] y sigues con tu default.",
+        "  // ADOPTA esas lentes al componer el HTML: sus reglas (tokens/jerarquia/motion/marca) MANDAN sobre tu reflejo por defecto.",
         "  // 3. UNICO dato que el diseno SI rellena: negocio del local (dir/tel/horario) para el pie de carta.",
         "  //    Si faltan en marca.negocio?.local -> preguntalos y PERSISTELOS de verdad (paso GUARDAR, envoltorio 'campos'):",
         "  if (faltan dir/tel/horario en marca.negocio?.local):",
         "    pregunta SOLO lo que falte ; w = await publishAndWait('carta-marketing.update_perfil.request', { project_id: input.project_id, campos: { negocio: { local: { direccion?, telefono?, horario? } } }, correlation_id: input.correlation_id }, { timeout_ms: 10000 })",
         "    if (w.status >= 400): dilo (NO finjas guardado) ; sino: marca.negocio.local = w.data.negocio.local   // .data tras guardar",
-        "  return { carta: ctx.carta, marca }"
+        "  return { carta: ctx.carta, marca, lentes }"
       ],
       "reglas_clave": [
         "carta por carta.get (carta-manager, FUENTE). marca por carta-marketing.get_perfil (DUENO). Lee el resultado por .data (resp.data.carta / resp.data.marca).",

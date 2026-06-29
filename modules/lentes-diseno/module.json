@@ -1,0 +1,24 @@
+{
+  "_doc": "lentes-diseno — base compartida del sistema: las 8 lentes de diseño (agentes de agency-agents/design, COMPLETOS). Reflejo PURO (sin blueprint): no decide, SIRVE conocimiento por el bus. Cualquier página que diseñe (carta-design/carta-digital/menu-generator/carta-marketing) bebe por su puerta, como marca/recetas. NO usa la capa de agentes aparcada (agent.execute): el LLM de página transforma; el reflejo entrega los .md íntegros. Selección HÍBRIDA: tarea→rutas (reflejo determinista) y/o nombres (elección fuzzy del LLM leyendo cuando_usar). Lazy: listar barato, obtener trae el .md completo solo de lo pedido.",
+  "name": "lentes-diseno",
+  "version": "1.0.0",
+  "description": "Base compartida del sistema: sirve las 8 lentes de diseño (tokens/CSS, componentes, marca, motion, narrativa, usabilidad, prompts de imagen, visuales inclusivos) por RPC del bus para que cualquier pagina de diseno las consulte. Reflejo puro, seleccion hibrida (tarea->rutas determinista + nombres del LLM).",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "publishes": [
+    { "event": "lentes.listar.response",  "description": "Catalogo barato: { lentes: [{nombre, cuando_usar}], rutas }. Lo lee el LLM para ELEGIR." },
+    { "event": "lentes.obtener.response", "description": "Las lentes pedidas con su .md COMPLETO: { lentes: [{nombre, cuando_usar, contenido}] }." }
+  ],
+  "subscribes": [
+    { "event": "lentes.listar.request",  "handler": "onListarRequest",  "description": "Devuelve el catalogo (nombre + cuando_usar) + la tabla de rutas tarea->lentes." },
+    { "event": "lentes.obtener.request", "handler": "onObtenerRequest", "description": "Resuelve la seleccion hibrida (tarea->rutas y/o nombres) y entrega los .md completos." }
+  ],
+  "config": {
+    "persistence": {
+      "scope": "module",
+      "pattern": "static-md-pack",
+      "_nota": "Sin store de proyecto: posee los 8 .md en lentes/ (parte del codigo). Conocimiento, no datos de usuario."
+    }
+  }
+}

@@ -14677,6 +14677,8 @@ GRAFO (Obsidian §10) nodos=lentes; aristas DECLARADAS (co-ruta*2 + co-dominio) 
 NERVIO             ai-gateway _leerLente/_composeLenteSection (dominio-aware). Páginas declaran lente_default:
                    carta-design/digital {diseño,tema} · carta-marketing {copy} · escandallo/viabilidad {negocio}.
 TESTS              servir 15 · anatomia 3 · grafo 9 · nervio-lentes 5
+SKILL              .claude/skills/montar-pack-lentes/ — recetario para onboardear un agente/skill externo
+                   como pack (GUARD: una lente solo entra si hay PÁGINA que la beba; si no, se cosecha).
 ```
 
 ## HOMEOSTASIS — modules/homeostasis (1.0.0) — el termostato (auto-inhibición)

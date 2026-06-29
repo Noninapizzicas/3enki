@@ -1,6 +1,7 @@
 {
   "name": "whatsapp-bot",
-  "version": "1.2.0",
+  "version": "1.3.0",
+  "_v1_3_nota": "v1.3.0 (2026-06-23): config de conexion del proyecto DESDE LA APP (sin editar JSON a mano). UI handlers whatsapp.get_config / whatsapp.set_config: leen/escriben el bloque `whatsapp` (phone_number_id, waba_id, display_number, webhook_path derivado, pwa_url) del config del proyecto — datos NO secretos, por eso no van en el credential-manager. _writeProjectConfig hace merge en el MISMO fichero que lee _readProjectConfig (config.json con precedencia, project.json fallback), preservando telegram/gmail/etc, atomico (tmp+rename), y rehidrata el mapeo en caliente via _refrescarProyecto (sin reinicio). Devuelve `operativo` (config+token presentes).",
   "_v1_2_nota": "v1.2.0 (2026-06-23): PLANTILLAS Meta (sendTemplate). Cierra el gap de outbound FUERA de la ventana de 24h: el unico modo de escribir al cliente pasadas 24h desde su ultimo mensaje es una plantilla aprobada por Meta. MetaCloudClient.sendTemplate (refactor compartido con sendText via _postMessage). Nueva tool whatsapp.enviar_plantilla (project_slug, to, template, language?, body_params[]). El aviso 'ven a recoger' (onCocinaPedidoListo) prefiere la plantilla configurada (whatsapp.template_listo en project config) con fallback a texto; body_params admite tokens {codigo}/{nombre}/{negocio}. Solo aplica al transporte 'meta' (openwa es sesion WA real, sin ventana).",
   "_v1_1_nota": "v1.1.0 (2026-06-21): RE-TASADO server-side (autoservicio Fase 1, rebanada B.2). El bot mantiene un SNAPSHOT de precios por proyecto hidratado VIA EVENTO (project.activated tiende slug<->project_id por basename(base_path); catalogo.actualizado/tarifas.config.actualizada refrescan el snapshot re-pulleando productos.carta_completa del canal 'digital' EN PROCESO, patron carta-digital->ingredientes). Cuando llega un pedido con el payload por ids (#P1 del parser), el bot RE-TASA con _shared/pedido-tasador (precio del cliente IGNORADO; politica comandero normal/al_gusto/mitad). El total y los precios que se cobran salen SIEMPRE del servidor; la estructura (tipo/mitades/variaciones) viaja a cocina. Pedido legacy de solo-texto (sin #P1) -> camino antiguo (confia en el texto, con warn). Cold-start sin snapshot -> pide reintentar (no_silent_failures).",
   "description": "Bot escueto multi-proyecto sobre WhatsApp Cloud API (Meta). Maquina de estados pequena: webhook recibe mensaje, parser detecta si es saludo o pedido formateado de la PWA tienda; si es pedido publica pedido.crear.request a pedidos y notifica al staff via telegram-service; si es saludo responde con el link de la PWA del proyecto. Multi-proyecto: mapping phone_number_id -> project_slug construido al onLoad escaneando data/projects/*/config/project.json. Credenciales (token Cloud API + verify_token del webhook) resueltas via credential-manager (providers META_WHATSAPP y META_WHATSAPP_VERIFY_TOKEN). Reusa telegram-service para notificacion al staff y pedidos para creacion canonica.",
@@ -194,6 +195,11 @@
         "required": ["project_slug", "to", "template"]
       }
     }
+  ],
+
+  "ui_handlers": [
+    { "domain": "whatsapp", "action": "get_config", "handler": "handleGetConfig" },
+    { "domain": "whatsapp", "action": "set_config", "handler": "handleSetConfig" }
   ],
 
   "config": {

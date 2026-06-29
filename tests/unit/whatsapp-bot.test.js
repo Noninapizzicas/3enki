@@ -868,6 +868,74 @@ function jsonBody(r) { return JSON.parse(r.body); }
     await m.onUnload();
   });
 
+  // ===========================================================
+  // Group 11: Config de conexión del proyecto (UI handlers, v1.3.0)
+  // ===========================================================
+
+  await testAsync('config.get · devuelve el bloque whatsapp + flags', async () => {
+    const mocks = makeMocks();
+    process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleGetConfig({ project_slug: 'vapers' });
+    assert.ok(isCanonicalSuccess(r), JSON.stringify(r));
+    assert.strictEqual(r.data.whatsapp.phone_number_id, 'phone-vapers-123');
+    assert.strictEqual(r.data.has_token, true);
+    assert.strictEqual(r.data.operativo, true);
+    assert.ok(r.data.webhook_path_publico.includes('/whatsapp/webhook/vapers'));
+    delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
+    await m.onUnload();
+  });
+
+  await testAsync('config.set · escribe el bloque, preserva telegram y rehidrata el mapeo en caliente', async () => {
+    const mocks = makeMocks();
+    process.env.META_WHATSAPP_API_KEY_PROJECT_vapers = 'tok-test';
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleSetConfig({
+      project_slug: 'vapers',
+      phone_number_id: '999888777',
+      waba_id: 'waba-999',
+      display_number: '+34600111222'
+    });
+    assert.ok(isCanonicalSuccess(r), JSON.stringify(r));
+    assert.strictEqual(r.data.operativo, true);
+    // mapeo actualizado SIN reinicio
+    assert.strictEqual(m.projectsByMeta.get('vapers').phone_number_id, '999888777');
+    assert.strictEqual(m.projectByPhoneId.get('999888777'), 'vapers');
+    // fichero en disco: whatsapp nuevo + webhook derivado + telegram preservado
+    const file = path.join(TMP_ROOT, 'data', 'projects', 'vapers', 'config', 'project.json');
+    const onDisk = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.strictEqual(onDisk.whatsapp.phone_number_id, '999888777');
+    assert.strictEqual(onDisk.whatsapp.webhook_path, '/whatsapp/webhook/vapers');
+    assert.strictEqual(onDisk.telegram.botName, 'staffbot', 'telegram debe preservarse');
+    delete process.env.META_WHATSAPP_API_KEY_PROJECT_vapers;
+    await m.onUnload();
+  });
+
+  await testAsync('config.set · sin phone_number_id devuelve 400', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleSetConfig({ project_slug: 'vapers', waba_id: 'w', display_number: '+34' });
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
+    assert.strictEqual(r.error.details.field, 'phone_number_id');
+    await m.onUnload();
+  });
+
+  await testAsync('config.set · sin token queda NO operativo (config sí, falta credencial)', async () => {
+    const mocks = makeMocks();
+    delete process.env.META_WHATSAPP_API_KEY_PROJECT_panaderia;
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleSetConfig({
+      project_slug: 'panaderia', phone_number_id: '111222', waba_id: 'w', display_number: '+34600'
+    });
+    assert.ok(isCanonicalSuccess(r), JSON.stringify(r));
+    assert.strictEqual(r.data.has_token, false);
+    assert.strictEqual(r.data.operativo, false, 'sin token no es operativo');
+    // pero la config quedó escrita y el mapeo conoce el número
+    assert.strictEqual(m.projectsByMeta.get('panaderia').phone_number_id, '111222');
+    await m.onUnload();
+  });
+
   teardownTmpCwd();
   console.log('\nTodos los tests pasaron.');
 })().catch(e => {

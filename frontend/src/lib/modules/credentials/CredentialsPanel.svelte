@@ -42,6 +42,9 @@
     glovoConfigs,
     telegramNotifConfigs,
     PROJECT_ONLY_PROVIDERS,
+    whatsappConfigStore,
+    loadWhatsappConfig,
+    saveWhatsappConfig,
     type ServiceType
   } from '$lib/stores/credentials';
   import {
@@ -757,6 +760,68 @@
   }
 
   // ==========================================================================
+  // HANDLERS - WHATSAPP (config de conexión del proyecto, datos no secretos)
+  // ==========================================================================
+
+  let waForm = { slug: '', phone_number_id: '', waba_id: '', display_number: '', pwa_url: '' };
+  let waSaving = false;
+  let waLoading = false;
+  let waError: string | null = null;
+  let waSlugPrefilled = false;
+
+  // Sugerencia de slug: el identificador de la credencial META_WHATSAPP ya guardada.
+  $: waSuggestedSlug = $projectCredentials.find(c => c.provider === 'META_WHATSAPP')?.identifier || '';
+
+  // Al entrar en la pestaña WhatsApp, prefijar el slug (una vez) con la sugerencia.
+  $: if (activeServiceValue === 'whatsapp' && !waSlugPrefilled && waSuggestedSlug && !waForm.slug) {
+    waForm.slug = waSuggestedSlug;
+    waSlugPrefilled = true;
+  }
+
+  async function waLoad() {
+    if (!waForm.slug) { waError = 'Escribe el slug del proyecto'; return; }
+    waLoading = true;
+    waError = null;
+    try {
+      const c = await loadWhatsappConfig(waForm.slug.trim());
+      if (c) {
+        waForm = {
+          slug: waForm.slug.trim(),
+          phone_number_id: c.whatsapp.phone_number_id || '',
+          waba_id: c.whatsapp.waba_id || '',
+          display_number: c.whatsapp.display_number || '',
+          pwa_url: c.whatsapp.pwa_url || ''
+        };
+      }
+    } catch (err) {
+      waError = err instanceof Error ? err.message : 'No se pudo cargar la config';
+    } finally {
+      waLoading = false;
+    }
+  }
+
+  async function waSave() {
+    if (!waForm.slug || !waForm.phone_number_id || !waForm.waba_id || !waForm.display_number) {
+      waError = 'Rellena slug, phone_number_id, waba_id y número';
+      return;
+    }
+    waSaving = true;
+    waError = null;
+    try {
+      await saveWhatsappConfig(waForm.slug.trim(), {
+        phone_number_id: waForm.phone_number_id.trim(),
+        waba_id: waForm.waba_id.trim(),
+        display_number: waForm.display_number.trim(),
+        pwa_url: waForm.pwa_url.trim() || undefined
+      });
+    } catch (err) {
+      waError = err instanceof Error ? err.message : 'No se pudo guardar la config';
+    } finally {
+      waSaving = false;
+    }
+  }
+
+  // ==========================================================================
   // HELPERS
   // ==========================================================================
 
@@ -812,6 +877,13 @@
         <span class="service-badge">{$channelCount}</span>
       {/if}
     </button>
+    <button
+      class="service-tab"
+      class:active={activeServiceValue === 'whatsapp'}
+      on:click={() => handleServiceChange('whatsapp')}
+    >
+      💬 WhatsApp
+    </button>
   </div>
 
   <!-- Header with tabs -->
@@ -861,9 +933,70 @@
   <!-- Content -->
   <div class="panel-content">
     <!-- ================================================================== -->
+    <!-- SERVICIO: WHATSAPP (config de conexión del proyecto) -->
+    <!-- ================================================================== -->
+    {#if activeServiceValue === 'whatsapp'}
+      <div class="form">
+        <div class="info-box">
+          <strong>Conexión WhatsApp (Meta) del proyecto</strong>
+          <p>Datos NO secretos de Meta para conectar el número de la tienda. El <em>token</em> y el <em>verify token</em> se guardan aparte, en <strong>Providers</strong> (💬/🪝). Al guardar, el bot queda operativo en caliente (sin reiniciar).</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="wa-slug">Proyecto (slug)</label>
+          <div class="input-with-action">
+            <input id="wa-slug" type="text" class="input" placeholder="nonina" bind:value={waForm.slug} />
+            <button type="button" class="btn secondary small" on:click={waLoad} disabled={waLoading || !waForm.slug}>
+              {waLoading ? '⏳...' : 'Cargar'}
+            </button>
+          </div>
+          <span class="field-hint">El mismo slug que usaste en las credenciales (ej: nonina). Pulsa "Cargar" para ver la config actual.</span>
+        </div>
+
+        <div class="field">
+          <label class="label" for="wa-phone">phone_number_id</label>
+          <input id="wa-phone" type="text" class="input" placeholder="1228238363699933" bind:value={waForm.phone_number_id} />
+        </div>
+        <div class="field">
+          <label class="label" for="wa-waba">waba_id (WhatsApp Business Account ID)</label>
+          <input id="wa-waba" type="text" class="input" placeholder="1665881344630296" bind:value={waForm.waba_id} />
+        </div>
+        <div class="field">
+          <label class="label" for="wa-num">Número visible</label>
+          <input id="wa-num" type="text" class="input" placeholder="+34614797511" bind:value={waForm.display_number} />
+        </div>
+        <div class="field">
+          <label class="label" for="wa-pwa">URL de la PWA (opcional)</label>
+          <input id="wa-pwa" type="text" class="input" placeholder="https://enki-ai.online/shop/nonina" bind:value={waForm.pwa_url} />
+          <span class="field-hint">Link del catálogo que el bot envía al cliente. Si lo dejas vacío, usa /shop/&lt;slug&gt;.</span>
+        </div>
+
+        {#if $whatsappConfigStore}
+          <div class="info-box">
+            <strong>Estado: {$whatsappConfigStore.operativo ? '✅ Operativo' : '⚠️ Incompleto'}</strong>
+            <ul>
+              <li>Token (META_WHATSAPP): {$whatsappConfigStore.has_token ? '✅ presente' : '❌ falta — guárdalo en Providers'}</li>
+              <li>Verify token: {$whatsappConfigStore.has_verify ? '✅ presente' : '❌ falta — guárdalo en Providers'}</li>
+            </ul>
+            <p>Webhook para pegar en Meta: <code>{$whatsappConfigStore.webhook_path_publico}</code></p>
+          </div>
+        {/if}
+
+        {#if waError}
+          <div class="error-msg">{waError}</div>
+        {/if}
+
+        <div class="actions">
+          <button class="btn primary" on:click={waSave} disabled={waSaving}>
+            {waSaving ? '⏳...' : '💾 Guardar conexión'}
+          </button>
+        </div>
+      </div>
+
+    <!-- ================================================================== -->
     <!-- TAB: LISTA -->
     <!-- ================================================================== -->
-    {#if activeTab === 'lista'}
+    {:else if activeTab === 'lista'}
       {#if loading}
         <div class="loading">
           <span class="loading-icon">⏳</span>

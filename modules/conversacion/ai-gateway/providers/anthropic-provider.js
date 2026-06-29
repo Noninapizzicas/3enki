@@ -458,6 +458,9 @@ class AnthropicProvider extends BaseProvider {
     };
 
     return new Promise((resolve, reject) => {
+      // StringDecoder junta los bytes UTF-8 multibyte partidos entre chunks SSE
+      // (un emoji 🍖 de 4 bytes a caballo de dos chunks daba `��`).
+      const decoder = new (require('string_decoder').StringDecoder)('utf8');
       let buffer = '';
       let fullContent = '';
 
@@ -467,7 +470,7 @@ class AnthropicProvider extends BaseProvider {
         requestData,
         headers,
         (chunk) => {
-          buffer += chunk.toString();
+          buffer += decoder.write(chunk);
           const lines = buffer.split('\n');
           buffer = lines.pop();
 

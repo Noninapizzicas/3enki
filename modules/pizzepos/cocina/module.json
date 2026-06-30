@@ -1,6 +1,7 @@
 {
   "name": "cocina",
-  "version": "3.3.0",
+  "version": "3.4.0",
+  "_v3_4_nota": "v3.4.0 (2026-06-30): TERMINADO directo (botón rojo de la pantalla). prepare-item acepta done:true → marca el item LISTO desde cualquier estado (pendiente o preparando) en un solo paso, cierra la fase abierta, publica cocina.item_preparado y cierra el pedido si todos listos. Soporta el rediseño de interacción del frontend: tocar el producto solo despliega/pliega el detalle (ya NO avanza estado → no más terminados accidentales); terminar es un acto explícito por el botón rojo. Schema prepare-item +done:boolean.",
   "_v3_3_nota": "v3.3.0 (2026-06-29): RED DE SALIDA contra lineas fantasma. onPedidoEnviadoCocina descarta los items sin nombre (no accionables = la 'fila vacia' que aparecia por el camino de autoservicio) PERO con logger.warn cocina.item.sin_nombre_descartado — nunca en silencio (no_silent_failures), para cazar al emisor. Defensa en profundidad junto al gate fuerte del comandero v3.4.0 (que rechaza la linea muda en la puerta). El camino feliz no cambia: los items con nombre pasan igual.",
   "description": "Display de cocina en tiempo real - Sistema de preparacion de pedidos. Sistema de pases multi-estacion (general, horno) + multi-device con colores. Snapshot persistente atomico. Publica periferico.display para pantallas externas.",
   "author": "Pizzepos Team",

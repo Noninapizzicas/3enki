@@ -142,7 +142,7 @@ function makePedidoEvent(overrides = {}) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'cocina');
-    assert.strictEqual(m.version, '3.3.0');
+    assert.strictEqual(m.version, '3.4.0');
     assert.strictEqual(m.pedidosActivos.size, 0);
     assert.strictEqual(m.devices.size, 0);
     assert.strictEqual(m.historial.length, 0);
@@ -299,6 +299,51 @@ function makePedidoEvent(overrides = {}) {
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 409);
     assert.strictEqual(r.error.code, 'CONFLICT_STATE');
+    flushSnapshotTimer(m);
+    await m.onUnload();
+  });
+
+  await testAsync('done:true marca TERMINADO directo desde pendiente (un toque, botón rojo)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await m.onPedidoEnviadoCocina(makePedidoEvent({
+      pedido_id: 'p-done',
+      items: [
+        { item_id: 'a', producto_id: 'pizza', nombre: 'Batucada', cantidad: 1 },
+        { item_id: 'b', producto_id: 'pizza2', nombre: 'Country', cantidad: 1 }
+      ]
+    }));
+    flushSnapshotTimer(m);
+
+    // Item 'a' en PENDIENTE → done:true salta directo a listo (sin pasar por preparando)
+    const r = await m.handlePrepararItem({ item_id: 'a', done: true });
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.item.estado, 'listo');
+    assert.strictEqual(r.data.pedido_completo, false, 'aún queda Country pendiente');
+    assert.ok(publishedOf(mocks, 'cocina.item_preparado').length === 1);
+    assert.ok(publishedOf(mocks, 'cocina.item_preparando').length === 0, 'no pasa por preparando');
+
+    // Terminar el segundo → cierra el pedido
+    const r2 = await m.handlePrepararItem({ item_id: 'b', done: true });
+    assert.strictEqual(r2.data.item.estado, 'listo');
+    assert.strictEqual(r2.data.pedido_completo, true);
+    assert.ok(publishedOf(mocks, 'cocina.pedido_listo').length === 1);
+
+    flushSnapshotTimer(m);
+    await m.onUnload();
+  });
+
+  await testAsync('done:true sobre item preparando también lo termina', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.pedidosActivos.set('p-prep', {
+      pedido_id: 'p-prep', cuenta_id: 'c-prep',
+      items: [{ item_id: 'i-prep', estado: 'preparando', pase: 0, nombre: 'X', cantidad: 1,
+                fases: [{ estacion: null, inicio: new Date().toISOString(), fin: null }] }]
+    });
+    const r = await m.handlePrepararItem({ item_id: 'i-prep', done: true });
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.item.estado, 'listo');
     flushSnapshotTimer(m);
     await m.onUnload();
   });
@@ -461,7 +506,7 @@ function makePedidoEvent(overrides = {}) {
     assert.ok(isCanonicalSuccess(r));
     assert.strictEqual(r.data.status, 'healthy');
     assert.strictEqual(r.data.module, 'cocina');
-    assert.strictEqual(r.data.version, '3.3.0');
+    assert.strictEqual(r.data.version, '3.4.0');
     await m.onUnload();
   });
 

@@ -19,14 +19,21 @@
   export let item: ItemCocina;
   export let justCompleted: boolean = false;
 
+  // Despliegue por defecto: PLEGADO (lista compacta y escaneable). Tocar el producto
+  // despliega/pliega la receta. Pon true si prefieres ver los ingredientes sin tocar.
+  const EXPAND_POR_DEFECTO = false;
+
   const dispatch = createEventDispatcher<{
-    'tap': { item_id: string };
+    'done': { item_id: string };
   }>();
 
   $: color = ESTADO_ITEM_COLORS[item.estado];
   $: isListo = item.estado === 'listo';
   $: isPreparando = item.estado === 'preparando';
-  $: expanded = isPreparando;
+
+  // Expandido = estado LOCAL controlado por el tap (ya NO atado a 'preparando').
+  // Tocar el producto solo despliega/pliega — no cambia su estado (no más terminados accidentales).
+  let expanded = EXPAND_POR_DEFECTO;
 
   // Multi-device: show who is preparing this item
   $: deviceColor = item.device_color || null;
@@ -122,22 +129,26 @@
   }
 
   function handleTap() {
-    if (!isListo) {
-      dispatch('tap', { item_id: item.item_id });
-    }
+    // Tocar = desplegar/plegar el detalle. LOCAL, sin cambiar el estado del item.
+    expanded = !expanded;
+  }
+
+  function handleDone(e: MouseEvent) {
+    // Botón rojo = dar por TERMINADA la elaboración. Acto explícito.
+    e.stopPropagation();
+    if (!isListo) dispatch('done', { item_id: item.item_id });
   }
 </script>
 
-<button
+<div
   class="item-line"
   class:listo={isListo}
   class:preparando={isPreparando}
   class:expanded
   class:just-completed={justCompleted}
   style="--item-color: {color}"
-  on:click={handleTap}
-  disabled={isListo}
 >
+  <button class="item-tap" on:click={handleTap} aria-expanded={expanded} aria-label="Ver detalle de {item.nombre}">
   <div class="item-state">
     {#if isListo}
       <span class="check">&#10003;</span>
@@ -282,34 +293,83 @@
       </div>
     {/if}
   </div>
-</button>
+  </button>
+
+  {#if !isListo}
+    <button
+      class="btn-terminar"
+      on:click={handleDone}
+      title="Terminar elaboración"
+      aria-label="Terminar {item.nombre}"
+    >
+      <span class="terminar-icon">&#10003;</span>
+    </button>
+  {/if}
+</div>
 
 <style>
   /* ===== BASE ITEM LINE ===== */
   .item-line {
     display: flex;
-    align-items: flex-start;
-    gap: 12px;
+    align-items: stretch;
     width: 100%;
     min-height: 60px;
-    padding: 10px 14px;
-    border: none;
     border-left: 4px solid var(--item-color);
     background: transparent;
     color: #f8fafc;
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.2s, padding 0.2s, border-left-width 0.2s;
-    -webkit-tap-highlight-color: transparent;
+    transition: background 0.2s, border-left-width 0.2s;
   }
 
-  .item-line:not(.listo):active {
+  /* Zona táctil: tocar despliega/pliega el detalle (no cambia estado) */
+  .item-tap {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 14px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: padding 0.2s;
+  }
+
+  .item-tap:active {
     background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* Botón rojo: dar por TERMINADA la elaboración (acto explícito) */
+  .btn-terminar {
+    flex-shrink: 0;
+    align-self: stretch;
+    width: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-left: 1px solid rgba(0, 0, 0, 0.25);
+    background: #dc2626;
+    color: #fff;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s;
+  }
+
+  .btn-terminar:active {
+    background: #991b1b;
+  }
+
+  .terminar-icon {
+    font-size: 1.8rem;
+    font-weight: 900;
+    line-height: 1;
   }
 
   .item-line.listo {
     opacity: 0.4;
-    cursor: default;
   }
 
   .item-line.listo .item-main {
@@ -342,10 +402,13 @@
 
   /* ===== EXPANDED STATE (preparando) — exagerado ===== */
   .item-line.expanded {
-    padding: 24px 24px 28px;
     border-left-width: 8px;
     background: rgba(234, 179, 8, 0.15);
     box-shadow: inset 0 0 40px rgba(234, 179, 8, 0.06);
+  }
+
+  .item-line.expanded .item-tap {
+    padding: 24px 24px 28px;
   }
 
   .item-line.expanded .item-state {
@@ -744,7 +807,10 @@
   /* ===== Mobile Compact ===== */
   @media (max-width: 600px) {
     /* Base item line — compact */
-    .item-line { min-height: 38px; padding: 5px 10px; gap: 8px; }
+    .item-line { min-height: 38px; }
+    .item-tap { padding: 5px 10px; gap: 8px; }
+    .btn-terminar { width: 48px; }
+    .terminar-icon { font-size: 1.4rem; }
     .item-state { width: 22px; height: 22px; margin-top: 1px; }
     .check { font-size: 1rem; }
     .fire { font-size: 0.9rem; }
@@ -763,8 +829,9 @@
     .compact-nota { font-size: 0.7rem; }
     .compact-nota-label { font-size: 0.6rem; }
 
-    /* Expanded state (preparando) — still prominent but fits mobile */
-    .item-line.expanded { padding: 10px 12px 12px; border-left-width: 5px; }
+    /* Expanded state — still prominent but fits mobile */
+    .item-line.expanded { border-left-width: 5px; }
+    .item-line.expanded .item-tap { padding: 10px 12px 12px; }
     .item-line.expanded .item-state { width: 32px; height: 32px; }
     .item-line.expanded .fire { font-size: 1.3rem; }
     .item-line.expanded .qty { font-size: 1.6rem; }

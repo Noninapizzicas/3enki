@@ -55,7 +55,7 @@ class CocinaModule extends BaseModule {
   constructor() {
     super();
     this.name = 'cocina';
-    this.version = '3.3.0';
+    this.version = '3.4.0';
     this.uiHandler = null;
     this.validator = null;
     this.config = null;
@@ -265,7 +265,8 @@ class CocinaModule extends BaseModule {
       required: ['item_id'],
       properties: {
         item_id: { type: 'string', minLength: 1 },
-        device_id: { type: 'string' }
+        device_id: { type: 'string' },
+        done: { type: 'boolean' }
       }
     });
 
@@ -576,6 +577,30 @@ class CocinaModule extends BaseModule {
       if (!itemEncontrado.fases) itemEncontrado.fases = [];
       const estacion = device?.estacion || device?.nombre || null;
       const tipoEstacion = device?.tipo_estacion || 'general';
+
+      // Botón rojo de cocina (terminado directo): un toque marca el item LISTO desde
+      // cualquier estado (pendiente o preparando), saltando el pase intermedio. El tap en
+      // la tarjeta ahora solo despliega/pliega el detalle; terminar es un acto explícito.
+      if (data.done === true) {
+        const faseAbierta = itemEncontrado.fases.find(f => !f.fin);
+        if (faseAbierta) {
+          faseAbierta.fin = now;
+          faseAbierta.duracion_seg = Math.round((new Date(now) - new Date(faseAbierta.inicio)) / 1000);
+        }
+        itemEncontrado.estado = 'listo';
+        itemEncontrado.preparado_at = now;
+        this.metrics?.increment?.('cocina.item_preparado.total', { via: 'terminado_directo' });
+        await this._publishItemPreparado(pedidoEncontrado, itemEncontrado, estacion);
+
+        const completo = pedidoEncontrado.items.every(i => i.estado === 'listo');
+        if (completo) await this._marcarPedidoListo(pedidoEncontrado);
+
+        this.logger.info('cocina.item.terminado_directo', {
+          pedido_id: pedidoEncontrado.pedido_id, item_id, pedido_completo: completo
+        });
+        if (!completo) this._saveSnapshotDebounced();
+        return { status: 200, data: { item: itemEncontrado, pedido_completo: completo } };
+      }
 
       // Tap 1: pendiente -> preparando
       if (itemEncontrado.estado === 'pendiente') {

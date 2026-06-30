@@ -359,6 +359,60 @@ export async function prepararItem(itemId: string): Promise<boolean> {
 }
 
 /**
+ * Marca UN item como TERMINADO (listo) directamente — el botón rojo de la tarjeta.
+ * Salta el estado intermedio 'preparando': desde pendiente o preparando → listo en un toque.
+ * Optimista + rollback, igual que prepararItem; el backend (prepare-item con done:true)
+ * cierra la fase, publica cocina.item_preparado y cierra el pedido si todos quedan listos.
+ */
+export async function terminarItem(itemId: string): Promise<boolean> {
+  const state = get(cocinaStore);
+
+  let pedidoIdx = -1;
+  let itemIdx = -1;
+  let estadoAnterior: EstadoItem = 'pendiente';
+
+  for (let pi = 0; pi < state.pedidos.length; pi++) {
+    const ii = state.pedidos[pi].items.findIndex(i => i.item_id === itemId);
+    if (ii !== -1) {
+      pedidoIdx = pi;
+      itemIdx = ii;
+      estadoAnterior = state.pedidos[pi].items[ii].estado;
+      break;
+    }
+  }
+
+  if (pedidoIdx === -1 || estadoAnterior === 'listo') return false;
+
+  // Optimistic: listo directo
+  cocinaStore.update(s => {
+    const pedidos = [...s.pedidos];
+    const pedido = { ...pedidos[pedidoIdx], items: [...pedidos[pedidoIdx].items] };
+    pedido.items[itemIdx] = { ...pedido.items[itemIdx], estado: 'listo' as EstadoItem };
+    pedidos[pedidoIdx] = pedido;
+    return { ...s, pedidos };
+  });
+
+  try {
+    const state2 = get(cocinaStore);
+    const payload: any = { item_id: itemId, done: true };
+    if (state2.myDeviceId) payload.device_id = state2.myDeviceId;
+    await mqttRequest<any>('cocina', 'prepare-item', payload);
+    return true;
+  } catch {
+    cocinaStore.update(s => {
+      const pedidos = [...s.pedidos];
+      if (pedidos[pedidoIdx]) {
+        const pedido = { ...pedidos[pedidoIdx], items: [...pedidos[pedidoIdx].items] };
+        pedido.items[itemIdx] = { ...pedido.items[itemIdx], estado: estadoAnterior };
+        pedidos[pedidoIdx] = pedido;
+      }
+      return { ...s, pedidos };
+    });
+    return false;
+  }
+}
+
+/**
  * Marca todos los items de un pedido como listo de golpe
  */
 export async function marcarListo(pedidoId: string): Promise<boolean> {

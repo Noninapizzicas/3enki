@@ -34,7 +34,7 @@ class PedidosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'pedidos';
-    this.version = '3.2.0';
+    this.version = require('./module.json').version;   // fuente única (antes 3.2.0 clavado divergía del manifest)
 
     this.pedidos = new Map();
     this.pedidosPorCuenta = new Map();
@@ -469,6 +469,7 @@ class PedidosModule extends BaseModule {
           // `tipo` solo si es mitad/al_gusto (el comandero lo valida con ese enum; normal NO lo lleva).
           ...((raw.tipo === 'mitad_mitad' || raw.tipo === 'al_gusto') ? { tipo: raw.tipo } : {}),
           ...(raw.variaciones ? { variaciones: raw.variaciones } : {}),
+          ...(Array.isArray(raw.ingredientes_base) ? { ingredientes_base: raw.ingredientes_base } : {}),
           ...(raw.pizza_izquierda ? { pizza_izquierda: raw.pizza_izquierda } : {}),
           ...(raw.pizza_derecha ? { pizza_derecha: raw.pizza_derecha } : {})
         });
@@ -1149,6 +1150,7 @@ class PedidosModule extends BaseModule {
             // `tipo` solo mitad/al_gusto (enum del comandero); normal va solo con `variaciones`.
             ...((it.tipo === 'mitad_mitad' || it.tipo === 'al_gusto') ? { tipo: it.tipo } : {}),
             ...(it.variaciones ? { variaciones: it.variaciones } : {}),
+            ...(Array.isArray(it.ingredientes_base) ? { ingredientes_base: it.ingredientes_base } : {}),
             ...(it.pizza_izquierda ? { pizza_izquierda: it.pizza_izquierda } : {}),
             ...(it.pizza_derecha ? { pizza_derecha: it.pizza_derecha } : {})
           });

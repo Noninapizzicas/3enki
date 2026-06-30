@@ -103,3 +103,31 @@ test('mixto — varias líneas suman el total correcto', () => {
   assert.equal(r.ok, true);
   assert.equal(r.total_centimos, 1900 + 880);
 });
+
+// ── ingredientes_base: lo que cocina pinta para saber qué lleva el plato ──
+test('ingredientes_base — normal lleva los ingredientes del plato (de objetos → nombres)', () => {
+  const carta = { productos: [{ id: 'bachata', nombre: 'Bachata', precio: 9.5, ingredientes: [{ nombre: 'Mozzarella' }, { nombre: 'Tomate' }] }], ingredientes_catalogo: [] };
+  const r = tasarPedido([{ producto_id: 'bachata', cantidad: 1, tipo: 'normal' }], carta);
+  assert.deepEqual(r.items[0].ingredientes_base, ['Mozzarella', 'Tomate']);
+});
+
+test('ingredientes_base — acepta ingredientes_base ya como strings', () => {
+  const carta = { productos: [{ id: 'bachata', nombre: 'Bachata', precio: 9.5, ingredientes_base: ['Mozzarella', 'Tomate'] }], ingredientes_catalogo: [] };
+  const r = tasarPedido([{ producto_id: 'bachata', cantidad: 1, tipo: 'normal' }], carta);
+  assert.deepEqual(r.items[0].ingredientes_base, ['Mozzarella', 'Tomate']);
+});
+
+test('ingredientes_base — mitad: cada mitad lleva los suyos (cocina pinta ambas)', () => {
+  const carta = { productos: [
+    { id: 'bachata', nombre: 'Bachata', precio: 9.5, ingredientes: [{ nombre: 'Mozzarella' }] },
+    { id: 'tropical', nombre: 'Tropical', precio: 11, ingredientes: [{ nombre: 'Piña' }, { nombre: 'Jamón' }] }
+  ], ingredientes_catalogo: [] };
+  const r = tasarPedido([{ cantidad: 1, tipo: 'mitad_mitad', pizza_izquierda: { id: 'bachata' }, pizza_derecha: { id: 'tropical' } }], carta);
+  assert.deepEqual(r.items[0].pizza_izquierda.ingredientes_base, ['Mozzarella']);
+  assert.deepEqual(r.items[0].pizza_derecha.ingredientes_base, ['Piña', 'Jamón']);
+});
+
+test('ingredientes_base — producto sin ingredientes: el campo no aparece (no rompe el camino feliz)', () => {
+  const r = tasarPedido([{ producto_id: 'bachata', cantidad: 1, tipo: 'normal' }], CARTA);
+  assert.equal('ingredientes_base' in r.items[0], false);
+});

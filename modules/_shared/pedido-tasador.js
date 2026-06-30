@@ -57,6 +57,15 @@ function _extras(anadirIds, ing, avisos) {
   return { centimos, nombres };
 }
 
+// Ingredientes base del producto, como NOMBRES (strings) — lo que cocina (ItemLine) pinta para
+// que el cocinero sepa qué lleva el plato. La carta los trae bajo ingredientes_base o ingredientes,
+// y cada uno puede ser string u objeto {nombre}. Normaliza a strings; vacío si no hay.
+function _nombresBase(p) {
+  const arr = (Array.isArray(p?.ingredientes_base) && p.ingredientes_base.length) ? p.ingredientes_base
+            : (Array.isArray(p?.ingredientes) ? p.ingredientes : []);
+  return arr.map(x => (typeof x === 'string' ? x : (x && x.nombre) || '')).filter(Boolean);
+}
+
 function _quitarNombres(quitar) {
   return (Array.isArray(quitar) ? quitar : [])
     .map(q => (typeof q === 'object' && q ? (q.nombre || q.id) : q))
@@ -112,8 +121,10 @@ function tasarPedido(items, carta) {
       linea.producto_id = `mitad_${izq.id}_${der.id}`;
       linea.nombre = `½ ${izq.nombre} + ½ ${der.nombre}`;
       linea.descripcion = `½ ${izq.nombre}${_modsTxt(qIzq, exIzq.nombres)} + ½ ${der.nombre}${_modsTxt(qDer, exDer.nombres)}`;
-      linea.pizza_izquierda = { id: String(izq.id), nombre: izq.nombre, quitar: qIzq, anadir: exIzq.nombres };
-      linea.pizza_derecha = { id: String(der.id), nombre: der.nombre, quitar: qDer, anadir: exDer.nombres };
+      const baseIzq = _nombresBase(izq);
+      const baseDer = _nombresBase(der);
+      linea.pizza_izquierda = { id: String(izq.id), nombre: izq.nombre, ...(baseIzq.length ? { ingredientes_base: baseIzq } : {}), quitar: qIzq, anadir: exIzq.nombres };
+      linea.pizza_derecha = { id: String(der.id), nombre: der.nombre, ...(baseDer.length ? { ingredientes_base: baseDer } : {}), quitar: qDer, anadir: exDer.nombres };
       linea.precio_unitario_centimos = unit;
     } else {
       // normal | al_gusto — base = el producto elegido (al_gusto puede traer base_id explícito)
@@ -127,6 +138,8 @@ function tasarPedido(items, carta) {
       linea.nombre = tipo === 'al_gusto' ? `${p.nombre} al gusto` : p.nombre;
       linea.descripcion = linea.nombre + _modsTxt(q, ex.nombres);
       linea.variaciones = { ingredientes_quitar: q, ingredientes_anadir: ex.nombres };
+      const base = _nombresBase(p);
+      if (base.length) linea.ingredientes_base = base;   // cocina pinta los ingredientes del plato
       linea.precio_unitario_centimos = unit;
     }
 

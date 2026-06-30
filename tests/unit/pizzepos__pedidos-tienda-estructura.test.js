@@ -82,3 +82,33 @@ test('D — al_gusto forwardea tipo al_gusto', async () => {
   });
   assert.equal(addItemCalls[0].tipo, 'al_gusto');
 });
+
+test('ingredientes_base — normal: el plato llega a comandero con sus ingredientes (cocina los pinta)', async () => {
+  const { m, addItemCalls } = await instanciarConBridge();
+  await m.handleCreatePedidoTienda({
+    project_slug: 'nonina', canal_origen: 'whatsapp', total_centimos: 950,
+    cliente_nombre: 'Leo', cliente_telefono: '34600000000',
+    items: [{
+      cantidad: 1, descripcion: 'Bachata', producto_id: 'bachata',
+      precio_unitario_centimos: 950, precio_total_centimos: 950,
+      ingredientes_base: ['Mozzarella', 'Tomate', 'Anchoas']
+    }]
+  });
+  assert.deepEqual(addItemCalls[0].ingredientes_base, ['Mozzarella', 'Tomate', 'Anchoas']);
+});
+
+test('ingredientes_base — mitad: cada mitad llega con los suyos dentro de pizza_*', async () => {
+  const { m, addItemCalls } = await instanciarConBridge();
+  await m.handleCreatePedidoTienda({
+    project_slug: 'nonina', canal_origen: 'whatsapp', total_centimos: 1180,
+    cliente_nombre: 'Mar', cliente_telefono: '34600000000',
+    items: [{
+      cantidad: 1, descripcion: '½ Bachata + ½ Tropical', producto_id: 'mitad_bachata_tropical',
+      precio_unitario_centimos: 1180, precio_total_centimos: 1180, tipo: 'mitad_mitad',
+      pizza_izquierda: { id: 'bachata', nombre: 'Bachata', ingredientes_base: ['Mozzarella'], quitar: [], anadir: [] },
+      pizza_derecha: { id: 'tropical', nombre: 'Tropical', ingredientes_base: ['Piña', 'Jamón'], quitar: [], anadir: [] }
+    }]
+  });
+  assert.deepEqual(addItemCalls[0].pizza_izquierda.ingredientes_base, ['Mozzarella']);
+  assert.deepEqual(addItemCalls[0].pizza_derecha.ingredientes_base, ['Piña', 'Jamón']);
+});

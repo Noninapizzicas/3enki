@@ -16,7 +16,7 @@ class WhatsappBotModule extends BaseModule {
   constructor() {
     super();
     this.name = 'whatsapp-bot';
-    this.version = '1.2.0';
+    this.version = require('./module.json').version;   // fuente única (antes 1.2.0 clavado divergía del manifest)
 
     this.config = null;
     this.metaClient = null;
@@ -845,6 +845,7 @@ class WhatsappBotModule extends BaseModule {
       precio_total_centimos: it.precio_total_centimos,
       tipo: it.tipo,
       ...(it.variaciones ? { variaciones: it.variaciones } : {}),
+      ...(it.ingredientes_base ? { ingredientes_base: it.ingredientes_base } : {}),
       ...(it.pizza_izquierda ? { pizza_izquierda: it.pizza_izquierda } : {}),
       ...(it.pizza_derecha ? { pizza_derecha: it.pizza_derecha } : {})
     }));

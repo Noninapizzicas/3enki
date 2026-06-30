@@ -10,7 +10,8 @@ class TiendaApiModule extends BaseModule {
   constructor() {
     super();
     this.name = 'tienda-api';
-    this.version = '1.0.0';
+    // Version-derive: única fuente de verdad = module.json (evita drift const↔manifest).
+    this.version = require('./module.json').version;
 
     this.config = null;
     // request_id -> { project_slug, res, timeoutHandle, started_at, correlation_id }
@@ -59,6 +60,13 @@ class TiendaApiModule extends BaseModule {
     }
     if (body.notas_generales != null && typeof body.notas_generales !== 'string') {
       return { ok: false, error: { code: 'INVALID_INPUT', message: 'notas_generales must be a string', details: { kind: 'invalid_format', field: 'notas_generales' } } };
+    }
+    // CANAL elegido en la PWA (modo de consumo). Opcional; si falta, pedidos cae a 'llevar'.
+    if (body.modo_consumo != null && !['mesa', 'recoger', 'llevar'].includes(body.modo_consumo)) {
+      return { ok: false, error: { code: 'INVALID_INPUT', message: "modo_consumo must be 'mesa' | 'recoger' | 'llevar'", details: { kind: 'invalid_format', field: 'modo_consumo' } } };
+    }
+    if (body.hora_recogida != null && typeof body.hora_recogida !== 'string') {
+      return { ok: false, error: { code: 'INVALID_INPUT', message: 'hora_recogida must be a string', details: { kind: 'invalid_format', field: 'hora_recogida' } } };
     }
     return { ok: true, normalized: body };
   }
@@ -270,6 +278,8 @@ class TiendaApiModule extends BaseModule {
         canal_origen: 'web',
         cliente_telefono: normalized.cliente_telefono,
         cliente_nombre: normalized.nombre_cliente,
+        modo_consumo: normalized.modo_consumo,
+        hora_recogida: normalized.hora_recogida,
         mayor_edad_confirmado: normalized.mayor_edad_confirmado,
         expira_horas: normalized.expira_horas,
         notas_generales: normalized.notas_generales

@@ -1,6 +1,6 @@
 {
   "name": "tienda-api",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Canal HTTP de pedidos web — recibe POST desde la PWA generada por carta-digital/static-template y emite pedido.crear-tienda al bus. Tipo modulo_de_canal del contrato extensibilidad-modular, simetrico a whatsapp-bot pero para canal web. Stateless: ningun pedido persiste aqui — pizzepos/pedidos es el dueno del estado. Multi-proyecto: el project_slug llega como path param y se propaga al bus tal cual. CORS permisivo origin:* por diseno (PWA en subdominio del proyecto, API en dominio principal del sistema). Validacion AJV strict del body contra el shape canonico de pedido.crear-tienda (mismo schema que pizzepos/pedidos espera). Sin tools del LLM en v1 (YAGNI), sin auth de cliente (mismo nivel que WhatsApp), sin rate-limiting (downstream pedidos es el ultimo filtro). Patron heredado de whatsapp-bot/handleWebhookEvent.",
   "author": "Event Core Team",
   "language": "es",

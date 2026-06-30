@@ -800,6 +800,8 @@ class WhatsappBotModule extends BaseModule {
       canal_origen: 'whatsapp',
       cliente_telefono: msg.from,
       cliente_nombre: parsed.cliente_nombre,
+      modo_consumo: parsed.modo_consumo || null,
+      hora_recogida: parsed.hora_recogida || null,
       mayor_edad_confirmado: parsed.mayor_edad_confirmado
     });
     this.metrics?.increment('whatsapp-bot.pedido.solicitado', { project: project_slug });
@@ -872,6 +874,8 @@ class WhatsappBotModule extends BaseModule {
       request_id, correlation_id: request_id, project_slug,
       items, total_centimos, canal_origen: 'whatsapp',
       cliente_telefono: msg.from, cliente_nombre: parsed.cliente_nombre,
+      modo_consumo: parsed.modo_consumo || null,
+      hora_recogida: parsed.hora_recogida || null,
       mayor_edad_confirmado: parsed.mayor_edad_confirmado
     });
     this.metrics?.increment('whatsapp-bot.pedido.solicitado', { project: project_slug, retasado: 'si' });

@@ -23,6 +23,13 @@
 
   $: color = TIPO_COLORS[cuenta.tipo] || '#3b82f6';
   $: icon = TIPO_ICONS[cuenta.tipo] || '\uD83C\uDFE0';
+
+  // CANAL elegido por el cliente (mesa | recoger | llevar). El `tipo` coarse del store
+  // colapsa recoger\u2192local, as\u00ED que el modo se muestra aparte con su propio icono.
+  const MODO_ICONS: Record<string, string> = {
+    mesa: '\uD83C\uDF7D', recoger: '\uD83D\uDECD', llevar: '\uD83E\uDD61'
+  };
+  $: modoIcon = cuenta.modo_consumo ? (MODO_ICONS[cuenta.modo_consumo] || '') : '';
   $: isGlovo = cuenta.tipo === 'glovo';
   $: isLlevadoo = cuenta.tipo === 'llevadoo';
   $: glovoListo = isGlovo && cuenta.estado === 'listo';
@@ -174,6 +181,9 @@
     {:else}
       <span class="tipo-icon">{icon}</span>
     {/if}
+    {#if modoIcon}
+      <span class="modo-badge" title={cuenta.modo_consumo}>{modoIcon}</span>
+    {/if}
     {#if !isLlevadoo}
       <span class="pago-pill" class:pagado={cuenta.pagado}>
         {cuenta.pagado ? '\uD83D\uDCB0' : '\u274C'}
@@ -319,6 +329,12 @@
 
   .tipo-icon {
     font-size: 0.85rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .modo-badge {
+    font-size: 0.8rem;
     line-height: 1;
     flex-shrink: 0;
   }

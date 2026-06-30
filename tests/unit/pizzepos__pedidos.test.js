@@ -97,7 +97,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'pedidos');
-    assert.strictEqual(m.version, '3.4.0');
+    assert.strictEqual(m.version, '3.5.0');
     assert.strictEqual(m.pedidos.size, 0);
     assert.strictEqual(m.pedidosPorCuenta.size, 0);
     assert.strictEqual(m.pedidosPorProject.size, 0);
@@ -340,7 +340,7 @@ function publishedOf(mocks, name) {
     const r = await m.handleHealthCheck();
     assert.ok(isCanonicalSuccess(r));
     assert.strictEqual(r.data.status, 'healthy');
-    assert.strictEqual(r.data.version, '3.4.0');
+    assert.strictEqual(r.data.version, '3.5.0');
     await m.onUnload();
   });
 

@@ -15,7 +15,7 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import type { PedidoCocina } from '$lib/stores/cocina';
   import {
-    extractRef, elapsed, prepararItem, marcarListo,
+    extractRef, elapsed, terminarItem, marcarListo,
     confirmarGlovo, rechazarGlovo, isGlovoConfirmado,
     itemPassesFilter, itemMatchesStation
   } from '$lib/stores/cocina';
@@ -101,22 +101,21 @@
     marcarListo(pedido.pedido_id);
   }
 
-  function handleItemTap(e: CustomEvent<{ item_id: string }>) {
+  function handleItemDone(e: CustomEvent<{ item_id: string }>) {
     if (pendienteConfirmacion) return;
     const itemId = e.detail.item_id;
     const item = pedido.items.find(i => i.item_id === itemId);
+    if (!item || item.estado === 'listo') return;
 
-    // Horno: si el item está preparando, al tocar se completa → flash verde 10s
-    if (tipoEstacion === 'horno' && item?.estado === 'preparando') {
-      completedItemIds.add(itemId);
-      completedItemIds = completedItemIds; // trigger reactivity
-      setTimeout(() => {
-        completedItemIds.delete(itemId);
-        completedItemIds = completedItemIds;
-      }, 10000);
-    }
+    // Flash verde 10s al terminar (feedback de "hecho" antes de atenuarse)
+    completedItemIds.add(itemId);
+    completedItemIds = completedItemIds; // trigger reactivity
+    setTimeout(() => {
+      completedItemIds.delete(itemId);
+      completedItemIds = completedItemIds;
+    }, 10000);
 
-    prepararItem(itemId);
+    terminarItem(itemId);
   }
 
   async function handleConfirmarGlovo() {
@@ -221,7 +220,7 @@
       <div class="card-items-split">
         <div class="split-mine">
           {#each myItems as item (item.item_id)}
-            <ItemLine {item} justCompleted={completedItemIds.has(item.item_id)} on:tap={handleItemTap} />
+            <ItemLine {item} justCompleted={completedItemIds.has(item.item_id)} on:done={handleItemDone} />
           {/each}
           {#if myItems.length === 0}
             <p class="split-empty">Sin items de tu estación</p>
@@ -241,7 +240,7 @@
       <!-- No filters: single column -->
       <div class="card-items">
         {#each pedido.items as item (item.item_id)}
-          <ItemLine {item} justCompleted={completedItemIds.has(item.item_id)} on:tap={handleItemTap} />
+          <ItemLine {item} justCompleted={completedItemIds.has(item.item_id)} on:done={handleItemDone} />
         {/each}
       </div>
     {/if}

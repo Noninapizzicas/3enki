@@ -48,6 +48,8 @@ export interface Cuenta {
   created_at: string;
   updated_at: string;
   itemsDetalle?: ItemDetalle[];
+  /** CANAL elegido por el cliente: mesa | recoger | llevar (lo eligió en la PWA). */
+  modo_consumo?: string;
   /** Hora estimada de recogida (ISO string o HH:MM) */
   hora_recogida?: string;
   /** Tiempo estimado en minutos para preparación */
@@ -445,6 +447,7 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
           created_at: cp.created_at,
           updated_at: cp.updated_at,
           itemsDetalle: itemsDetalle.length > 0 ? itemsDetalle : undefined,
+          modo_consumo: cp.datos_especificos?.modo_consumo || existingCuenta?.modo_consumo,
           hora_recogida: cp.datos_especificos?.hora_recogida || existingCuenta?.hora_recogida,
           tiempo_estimado: cp.datos_especificos?.tiempo_estimado || existingCuenta?.tiempo_estimado
         };

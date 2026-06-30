@@ -46,7 +46,13 @@ function _decodificarEstructura(text) {
     const json = Buffer.from(b64, 'base64').toString('utf8');
     const payload = JSON.parse(json);
     if (!payload || payload.v !== 1 || !Array.isArray(payload.items) || payload.items.length === 0) return null;
-    return { items: payload.items };
+    // CANAL (modo de consumo) + hora pactada, autoritativos por venir en el #P1 (no en
+    // el texto editable). Opcionales: si la PWA no los puso, quedan null.
+    const modo_consumo = ['mesa', 'recoger', 'llevar'].includes(payload.modo_consumo) ? payload.modo_consumo : null;
+    const hora_recogida = (modo_consumo === 'recoger' && typeof payload.hora_recogida === 'string' && payload.hora_recogida.trim())
+      ? payload.hora_recogida.trim().slice(0, 20)
+      : null;
+    return { items: payload.items, modo_consumo, hora_recogida };
   } catch (_) {
     return null;   // payload corrupto → el bot cae al texto legacy o pide reenviar
   }
@@ -140,6 +146,10 @@ function parsearPedido(textoBruto) {
     }
   }
 
+  // Payload autoritativo por ids (si la PWA lo añadió) → el bot re-tasa con él.
+  // null = pedido legacy de solo-texto (el bot no puede re-tasar; cae al precio del texto).
+  const estructura = _decodificarEstructura(text);
+
   return {
     ok: true,
     kind: 'pedido',
@@ -149,9 +159,10 @@ function parsearPedido(textoBruto) {
     total_centimos,
     cliente_nombre,
     mayor_edad_confirmado,
-    // Payload autoritativo por ids (si la PWA lo añadió) → el bot re-tasa con él.
-    // null = pedido legacy de solo-texto (el bot no puede re-tasar; cae al precio del texto).
-    estructura: _decodificarEstructura(text)
+    // CANAL elegido en la PWA (mesa | recoger | llevar) + hora pactada, leídos del #P1.
+    modo_consumo: estructura?.modo_consumo || null,
+    hora_recogida: estructura?.hora_recogida || null,
+    estructura
   };
 }
 

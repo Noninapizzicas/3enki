@@ -360,6 +360,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .btn-wa:disabled{opacity:.6;cursor:not-allowed}
 .cart-nombre{width:100%;box-sizing:border-box;margin:8px 0;padding:10px 12px;border:1px solid #333;border-radius:10px;background:#111;color:var(--text);font-size:.85rem}
 .cart-nombre:focus{outline:none;border-color:var(--primary)}
+.cart-modo{display:flex;gap:6px;margin:8px 0}
+.modo-btn{flex:1;padding:9px 4px;border:1px solid #333;border-radius:10px;background:#111;color:var(--text);font-size:.8rem;font-weight:600;cursor:pointer}
+.modo-btn.active{border-color:var(--primary);background:var(--primary);color:#000}
 .pedido-ok{text-align:center;padding:24px 16px}
 .pedido-ok-check{font-size:2.5rem;line-height:1}
 .pedido-ok h3{margin:12px 0 4px;font-size:1.1rem}
@@ -1302,8 +1305,19 @@ function updateCart() {
   const nombreInput = (CONFIG.whatsapp_telefono || CONFIG.pedido_endpoint)
     ? '<input id="cliente-nombre" class="cart-nombre" type="text" placeholder="¿A nombre de? (obligatorio)" aria-label="A nombre de" autocomplete="name" required>'
     : '';
+  // CANAL (modo de consumo): el cliente elige cómo consume, igual que pone su nombre.
+  // mesa = en sala · recoger = pasa a por él (con hora) · llevar = se lo lleva ya.
+  // El campo de hora solo aparece para 'recoger'. Estado en _modoConsumo (persiste el re-render).
+  const modoSel = (CONFIG.whatsapp_telefono || CONFIG.pedido_endpoint)
+    ? '<div class="cart-modo" role="group" aria-label="Modo de consumo">' +
+        '<button type="button" class="modo-btn' + (_modoConsumo === 'mesa' ? ' active' : '') + '" data-modo="mesa" onclick="setModo(\\'mesa\\')">🍽 Mesa</button>' +
+        '<button type="button" class="modo-btn' + (_modoConsumo === 'recoger' ? ' active' : '') + '" data-modo="recoger" onclick="setModo(\\'recoger\\')">🛍 Recoger</button>' +
+        '<button type="button" class="modo-btn' + (_modoConsumo === 'llevar' ? ' active' : '') + '" data-modo="llevar" onclick="setModo(\\'llevar\\')">🥡 Llevar</button>' +
+      '</div>' +
+      '<input id="cliente-hora" class="cart-nombre" type="time" aria-label="Hora de recogida" style="display:' + (_modoConsumo === 'recoger' ? 'block' : 'none') + '">'
+    : '';
   footer.innerHTML = '<div class="total-row"><span class="total-label">' + T.total + '</span><span class="total-amount">' + fmt(total) + '</span></div>' +
-    nombreInput +
+    nombreInput + modoSel +
     '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button>' + pagarBtn + onlineBtn + waBtn + '</div>';
 }
 
@@ -1337,6 +1351,24 @@ function _pedNombre() {
   var nm = document.getElementById('cliente-nombre');
   return nm && nm.value ? nm.value.trim().replace(/\\s+/g, ' ').slice(0, 60) : '';
 }
+// CANAL elegido (modo de consumo). Estado vivo que sobrevive al re-render del footer.
+var _modoConsumo = 'recoger';
+function setModo(m) {
+  if (m !== 'mesa' && m !== 'recoger' && m !== 'llevar') return;
+  _modoConsumo = m;
+  var btns = document.querySelectorAll('.modo-btn');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('active', btns[i].getAttribute('data-modo') === m);
+  }
+  var h = document.getElementById('cliente-hora');
+  if (h) h.style.display = (m === 'recoger') ? 'block' : 'none';
+}
+function _pedModo() { return _modoConsumo || 'recoger'; }
+// Hora pactada — solo tiene sentido en 'recoger'. "HH:MM" del input time.
+function _pedHora() {
+  var h = document.getElementById('cliente-hora');
+  return (_pedModo() === 'recoger' && h && h.value) ? h.value : '';
+}
 
 // Pedido CODIFICADO POR IDS (lo autoritativo). El bot lo re-tasa contra la carta; los
 // precios del texto humano son SOLO para que el cliente vea su pedido. Cada item lleva su
@@ -1352,7 +1384,10 @@ function buildOrderItems() {
 // '#P1 <base64url(JSON)>' — utf8-safe (acentos en 'quitar'). El parser del bot lo decodifica.
 function buildP1Line() {
   try {
-    var json = JSON.stringify({ v: 1, items: buildOrderItems() });
+    var payload = { v: 1, items: buildOrderItems() };
+    var modo = _pedModo(); if (modo) payload.modo_consumo = modo;
+    var hora = _pedHora(); if (hora) payload.hora_recogida = hora;
+    var json = JSON.stringify(payload);
     var b64 = btoa(unescape(encodeURIComponent(json)));
     var b64url = b64.replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
     return '#P1 ' + b64url;
@@ -1414,6 +1449,8 @@ async function pagarAhora() {
     items: cart.map(function(i){ return { cantidad: i.qty, descripcion: i.nombre + (i.detalle ? ' [' + i.detalle + ']' : '') }; }),
     total_centimos: Math.round(total * 100),
     nombre_cliente: nombre,
+    modo_consumo: _pedModo(),
+    hora_recogida: _pedHora() || null,
     pago_online: true,
     return_url: location.origin + location.pathname
   };
@@ -1453,7 +1490,9 @@ async function pedirOnline() {
   var body = {
     items: cart.map(function(i){ return { cantidad: i.qty, descripcion: i.nombre + (i.detalle ? ' [' + i.detalle + ']' : '') }; }),
     total_centimos: Math.round(total * 100),
-    nombre_cliente: nombre
+    nombre_cliente: nombre,
+    modo_consumo: _pedModo(),
+    hora_recogida: _pedHora() || null
   };
   var btn = document.getElementById('btn-pedir');
   if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }

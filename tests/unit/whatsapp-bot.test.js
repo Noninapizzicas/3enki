@@ -163,7 +163,7 @@ function jsonBody(r) { return JSON.parse(r.body); }
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'whatsapp-bot');
-    assert.strictEqual(m.version, '1.4.0');
+    assert.strictEqual(m.version, '1.5.0');
     assert.ok(m.projectsByMeta.has('vapers'));
     assert.ok(m.projectsByMeta.has('panaderia'));
     assert.ok(!m.projectsByMeta.has('_ejemplo'), 'proyectos _ deben ignorarse');

@@ -410,6 +410,8 @@ class PedidosModule extends BaseModule {
         canal_origen,
         cliente_telefono,
         cliente_nombre,
+        modo_consumo,
+        hora_recogida,
         mayor_edad_confirmado,
         expira_horas,
         notas_generales,
@@ -419,6 +421,19 @@ class PedidosModule extends BaseModule {
       // Texto libre normalizado. No es secreto; es lo que identifica el pedido en barra.
       const cliente_nombre_norm = typeof cliente_nombre === 'string'
         ? cliente_nombre.trim().replace(/\s+/g, ' ').slice(0, 60)
+        : null;
+
+      // MODO DE CONSUMO (el CANAL, lo que marca el ritmo): mesa | recoger | llevar.
+      // Es lo que el cliente elige en la PWA junto al nombre. Opcional: si no llega
+      // (caller legacy), 'llevar' preserva el comportamiento previo (tienda = takeaway).
+      const MODOS_CONSUMO = ['mesa', 'recoger', 'llevar'];
+      const modo_consumo_norm = MODOS_CONSUMO.includes(modo_consumo) ? modo_consumo : 'llevar';
+      // HORA pactada (solo aplica a 'recoger'). Texto libre tipo "20:30" o ISO; la
+      // agenda (pieza futura) la leerá para inyectar al turno X min antes. Hoy solo
+      // viaja y se muestra; el FIFO no se altera.
+      const hora_recogida_norm = (modo_consumo_norm === 'recoger'
+        && typeof hora_recogida === 'string' && hora_recogida.trim())
+        ? hora_recogida.trim().slice(0, 20)
         : null;
 
       if (!project_slug || typeof project_slug !== 'string') {
@@ -494,6 +509,8 @@ class PedidosModule extends BaseModule {
         total: total_centimos / 100,
         cliente_nombre: cliente_nombre_norm,
         cliente_telefono: cliente_telefono || null,
+        modo_consumo: modo_consumo_norm,
+        hora_recogida: hora_recogida_norm,
         // Decision 6.2 = C: configurable por proyecto. Si la PWA mostro gate
         // y el cliente lo paso, este flag llega como true. Si el proyecto no
         // activa verificacion, llega null (sin info — no aplica).
@@ -542,6 +559,8 @@ class PedidosModule extends BaseModule {
         data: {
           pedido_id,
           cliente_nombre: cliente_nombre_norm,
+          modo_consumo: modo_consumo_norm,
+          hora_recogida: hora_recogida_norm,
           expira_at,
           estado: pedido.estado,
           total_centimos,
@@ -1113,11 +1132,13 @@ class PedidosModule extends BaseModule {
       // 1) Cuenta operativa SIN pedido_inicial (ese atajo salta el buffer del comandero).
       const cuentaRes = await cuentas.handleCreateCuenta({
         project_id,
-        tipo: 'llevar',                            // pedido de tienda = recogida (takeaway)
+        tipo: pedido.modo_consumo || 'llevar',     // CANAL: mesa | recoger | llevar (lo eligió el cliente)
         nombre: pedido.cliente_nombre || null,
         metadata: {
           origen: 'tienda',
           canal_origen: pedido.canal_origen || null,
+          modo_consumo: pedido.modo_consumo || null,
+          hora_recogida: pedido.hora_recogida || null,
           cliente_nombre: pedido.cliente_nombre || null,
           cliente_telefono: pedido.cliente_telefono || null,
           pedido_tienda_id: pedido.id
@@ -1200,7 +1221,7 @@ class PedidosModule extends BaseModule {
       items_count: (pedido.items || []).length,
       notas_generales: pedido.notas_generales || null,
       enviado_at: pedido.enviado_cocina_at || new Date().toISOString(),
-      metadata: { tipo: 'tienda', cliente_nombre: pedido.cliente_nombre || null, cliente_telefono: pedido.cliente_telefono || null }
+      metadata: { tipo: 'tienda', modo_consumo: pedido.modo_consumo || null, hora_recogida: pedido.hora_recogida || null, cliente_nombre: pedido.cliente_nombre || null, cliente_telefono: pedido.cliente_telefono || null }
     }, sourcePayload);
   }
 

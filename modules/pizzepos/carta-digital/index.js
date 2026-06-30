@@ -360,7 +360,18 @@ class CartaDigitalModule extends BaseModule {
     // órgano verificador-visual (abre Chromium y mira). BEST-EFFORT: solo bloquea si
     // pudo MIRAR de verdad (verificado && !ok). Sin órgano, sin navegador en el host
     // o sin respuesta → se publica igual (no se vuelve dependencia dura del deploy).
-    const rnd = await this._rpc('render.verificar.request', { html, etiqueta: slug }, { timeout_ms: 20000 });
+    //
+    // OJO: el verificador renderiza el HTML SUELTO (Chromium headless, about:blank, SIN
+    // servidor). El bundle usa `<img src="img/...">` relativo a /shop/<slug>/ — que ahí NO
+    // se puede bajar → naturalWidth=0 → 'imagenes_rotas' = FALSO POSITIVO que tumbaba todo
+    // publish con imágenes. Para verificar le damos un HTML con las imágenes INLINE (data:
+    // URI, como el preview): así MIRA los píxeles reales. El bundle escrito sigue con `img/`.
+    const productosVerif = await this._inlineImagenes(project_id, data.productos);
+    const htmlVerif = generateStaticHTML(
+      { categorias: data.categorias, productos: productosVerif, alergenos_leyenda: data.alergenos_leyenda, catalogo_ingredientes },
+      tplConfig, { diseno }
+    );
+    const rnd = await this._rpc('render.verificar.request', { html: htmlVerif, etiqueta: slug }, { timeout_ms: 20000 });
     const rd = rnd && (rnd.data || rnd);
     if (rd && rd.verificado === true && rd.ok === false) {
       this.metrics?.increment?.('cartadigital.publicar.render_roto', { project: slug });

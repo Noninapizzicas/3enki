@@ -120,7 +120,9 @@ export async function updateCartaDigitalConfig(campos: Partial<CartaDigitalConfi
 export async function publicarCartaDigital(): Promise<{ ok: boolean; data?: any; error?: string }> {
   try {
     const project_id = get(activeProjectId);
-    const res = await mqttRequest<any>('cartadigital', 'publicar', { project_id });
+    // Publicar es pesado (copia N imágenes al bundle + verifica el render + escribe ficheros):
+    // el default de 10s se queda corto y el botón daba "Request timeout". Le damos 60s.
+    const res = await mqttRequest<any>('cartadigital', 'publicar', { project_id }, { timeout: 60000 });
     return { ok: true, data: res.data };
   } catch (err: any) {
     const msg = err?.response?.error?.message || (err instanceof Error ? err.message : 'No se pudo publicar');

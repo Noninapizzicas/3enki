@@ -364,9 +364,16 @@ class CartaDigitalModule extends BaseModule {
     // OJO: el verificador renderiza el HTML SUELTO (Chromium headless, about:blank, SIN
     // servidor). El bundle usa `<img src="img/...">` relativo a /shop/<slug>/ — que ahí NO
     // se puede bajar → naturalWidth=0 → 'imagenes_rotas' = FALSO POSITIVO que tumbaba todo
-    // publish con imágenes. Para verificar le damos un HTML con las imágenes INLINE (data:
-    // URI, como el preview): así MIRA los píxeles reales. El bundle escrito sigue con `img/`.
-    const productosVerif = await this._inlineImagenes(project_id, data.productos);
+    // publish con imágenes. Para verificar NO inlineamos las imágenes REALES (43×~400KB =
+    // HTML de ~23MB → render de ~30s y el botón del frontend corta a 10s): basta un
+    // placeholder 1×1. El verificador comprueba layout/overflow/blank/console SIN falso
+    // 'imagenes_rotas' y SIN payload pesado. La integridad de copia la da `imagenesCopiadas`.
+    const PLACEHOLDER_IMG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    const productosVerif = (data.productos || []).map(p => {
+      const im = p.imagen;
+      const local = im && typeof im === 'string' && !/^https?:\/\//.test(im);
+      return local ? { ...p, imagen: PLACEHOLDER_IMG } : { ...p };
+    });
     const htmlVerif = generateStaticHTML(
       { categorias: data.categorias, productos: productosVerif, alergenos_leyenda: data.alergenos_leyenda, catalogo_ingredientes },
       tplConfig, { diseno }

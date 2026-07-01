@@ -173,7 +173,8 @@
     "test:prisma__proyector": "node tests/unit/prisma__proyector.test.js",
     "test:prisma__adaptador": "node tests/unit/prisma__adaptador.test.js",
     "test:prisma__arquetipos": "node tests/unit/prisma__arquetipos.test.js",
-    "test:prisma__opciones": "node tests/unit/prisma__opciones.test.js"
+    "test:prisma__opciones": "node tests/unit/prisma__opciones.test.js",
+    "test:prisma__boss": "node tests/unit/prisma__boss.test.js"
   },
   "keywords": [
     "event-driven",

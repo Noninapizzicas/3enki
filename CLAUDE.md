@@ -14861,6 +14861,20 @@ CLASE PrismaOpcionesReflejo HEREDA ModuloHibridoReflejo {   // ENVUELVE el banco
 }
 ```
 
+## boss (module 0.1.0 · reflejo 0.1.0) — el orquestador ✓
+
+```
+CLASE PrismaBossReflejo HEREDA ModuloHibridoReflejo {   // el CEREBRO; el enforcement lo consume aparte
+  TESIS  un comercio NO se declara pizzería/peluquería: su identidad EMERGE de sus productos.
+  NÚCLEO PURO  _arquetiposDelCatalogo(catalogo) → arquetipos presentes ;
+               _organosDe(arqIds, defs) → unión de organos ; _plan(catalogo, defs) → {arquetipos, organos, por_arquetipo, total}
+  ORGANOS semilla: comestible→[carta,cocina] · servicio→[agenda] · uso_temporal→[agenda,retorno,fianza] · pieza→[stock]
+  OPS (RPC boss.{plan,estado}.request → .response): calcula sobre el catálogo activo (producto-manager) + arquetipos (semilla+custom aprobados)
+  SEÑAL  catalogo.{actualizado,editado,borrado} + project.activated → boss.plan.actualizado (un producto nuevo puede encender un órgano nuevo)
+  CEREBRO≠ENFORCEMENT  BOSS señala qué órganos necesita el comercio; cargar páginas/packs/blueprints o gatear interruptores lo hace quien escuche el plan.
+}
+```
+
 ## Topics / eventos
 
 ```
@@ -14874,13 +14888,15 @@ vista.actualizada                        (proyector → consumidor/escaparate; c
 arquetipos.{listar,obtener,clasificar,proponer,aprobar}.request → .response   (registro abierto)
 arquetipo.{propuesto,aprobado}           (IA propone · humano aprueba — anti-wipe, la semilla intocable)
 opciones.evaluar.request → .response     (valida + precia la selección del cliente; céntimos; aparta LIBRE)
+boss.{plan,estado}.request → .response   (comercio → arquetipos presentes → unión de órganos)
+boss.plan.actualizado                    (el plan del comercio cambió — lo consume el enforcement: cargar órganos)
 ```
 
 ## Estado
 
 ```
-✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5)
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5)
 ✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones)
-◑ adaptador.blueprint (PENSAR fuzzy: foto/texto → crudo, propone arquetipo, delega al reflejo) montado; verificación real = ai-gateway vivo
-[ ] FASE 2 resto: escaparate (carta-digital) · coste (escandallo) · cablear reflejo adaptador → arquetipos custom · BOSS orquestador
+◑ adaptador.blueprint (PENSAR fuzzy) montado; verificación real = ai-gateway vivo
+[ ] FASE 2 resto: escaparate (carta-digital) · coste (escandallo) · cablear reflejo adaptador → arquetipos custom · BOSS enforcement (cargar los órganos del plan)
 ```

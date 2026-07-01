@@ -38,7 +38,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'cosecha';
-    this.version = '0.2.0';
+    this.version = '0.3.0';
     // nombre → { nombre, descripcion, fuente, dominio, tags:[], contenido }
     this._skills = new Map();
   }
@@ -120,6 +120,25 @@ class CosechaModule extends ModuloHibridoReflejo {
   async onListarRequest(event)   { return this._atender(event, 'listar',   'cosecha.listar.response',   () => this._listar()); }
   async onStatsRequest(event)    { return this._atender(event, 'stats',    'cosecha.stats.response',    () => this._stats()); }
   async onImportarRequest(event) { return this._atender(event, 'importar', 'cosecha.importar.response', (d) => this._importar(d)); }
+
+  // ── el NERVIO del destilador: cuando SELLA una skill en una cúpula (memoria por
+  // proyecto), la cantera la ABSORBE a la biblioteca global. Fire-and-forget: el cuerpo
+  // viaja en el evento (contenido_md), sin re-consultar cúpulas. Sumar, no restar. ──
+  async onSkillDestilada(event) {
+    const d = (event && event.data) || event || {};
+    const nombre = d.nombre_skill;
+    const contenido = d.contenido_md;
+    if (!nombre || !contenido) {
+      this.logger?.warn('cosecha.destilada.incompleta', { nombre: nombre || null });
+      return;
+    }
+    const r = this._importar({ fuente: 'destilador', skills: [
+      { nombre, contenido, descripcion: d.descripcion || '', dominio: 'skill', tags: [] }
+    ]});
+    this.logger?.info('cosecha.absorbe_destilada', {
+      nombre, project_id: d.project_id, ok: r.status === 200 && r.data.importadas === 1
+    });
+  }
 
   // ── proyecciones deterministas (una respuesta correcta computable) ──
 

@@ -14828,6 +14828,23 @@ CLASE PrismaAdaptadorReflejo HEREDA ModuloHibridoReflejo {   // blueprint-agenti
 }
 ```
 
+## arquetipos (module 0.1.0 · reflejo 0.1.0) — registro ABIERTO ✓
+
+```
+_shared/arquetipos-semilla  SEMILLA (comestible·servicio·uso_temporal·pieza) + clasificar(ejes,naturalezas,extra)
+                            FUENTE ÚNICA del clasificador POR LA FORMA (la usan adaptador y arquetipos, sin drift).
+CLASE PrismaArquetiposReflejo HEREDA ModuloHibridoReflejo {
+  ARQUETIPO = forma {ejes+naturalezas} + defaults {sub_formas, modelo_precio, organos que enciende}
+  REGISTRO  semilla (código, intocable) + custom (store /prisma/arquetipos.json, estado propuesto|aprobado)
+  OPS (RPC arquetipos.<op>.request → .response):
+     listar · obtener · clasificar(custom aprobados con PRIORIDAD sobre semilla) · proponer · aprobar
+  ABIERTO   proponer = la IA registra uno nuevo cuando algo no encaja (estado 'propuesto') ;
+            aprobar = el humano lo cierra (estado 'aprobado' → entra a clasificar). ANTI-WIPE: la semilla es
+            intocable (409); un id aprobado no se pisa. Mismo patrón que el destilador con las skills.
+  EVENTOS_PUBLISHES { arquetipo.propuesto · arquetipo.aprobado + arquetipos.<op>.response }
+}
+```
+
 ## Topics / eventos
 
 ```
@@ -14837,12 +14854,14 @@ producto.adaptado                        (adaptador → producto-manager; upsert
 catalogo.{actualizado,editado,borrado}   (producto-manager → proyector; señal de refresco)
 vista.{completa,productos,producto,buscar}.request → .response   (proyector; lectura proyectada)
 vista.actualizada                        (proyector → consumidor/escaparate; consume-on-read del refresco)
+arquetipos.{listar,obtener,clasificar,proponer,aprobar}.request → .response   (registro abierto)
+arquetipo.{propuesto,aprobado}           (IA propone · humano aprueba — anti-wipe, la semilla intocable)
 ```
 
 ## Estado
 
 ```
-✓ prisma.md · producto-manager (freno, test 13/13) · proyector (test 4/4) · adaptador mitad reflejo (test 9/9)
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador mitad reflejo (9/9) · arquetipos registro abierto (4/4)
+✓ _shared/arquetipos-semilla — clasificador POR LA FORMA, fuente única (adaptador + arquetipos)
 ◑ adaptador  blueprint LLM (PENSAR fuzzy: foto/texto libre → estructura) — pdte; el reflejo (clasificar·marcar·VALIDAR) ya está
-[ ] arquetipos (registro ABIERTO: semilla comestible·pieza·servicio·uso_temporal + propuestos por IA, aprobación anti-wipe)
 ```

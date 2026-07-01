@@ -20,6 +20,7 @@
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+const { clasificar } = require('../../_shared/arquetipos-semilla');
 
 const TIEMPO  = new Set(['ninguno', 'instante', 'cita', 'intervalo_que_cobra']);
 const CICLO   = new Set(['de_ida', 'con_retorno']);
@@ -38,11 +39,8 @@ class PrismaAdaptadorReflejo extends ModuloHibridoReflejo {
   // ── PENSAR (determinista v0.1.0): crudo estructurado → ProductoUniversal ──
   // Clasifica el arquetipo por la FORMA (ejes+naturalezas), no por la superficie.
   _clasificarArquetipo(ejes, naturalezas, arquetipoDado) {
-    if (arquetipoDado) return arquetipoDado;                                  // el crudo ya lo trae
-    if (ejes.ciclo === 'con_retorno') return 'uso_temporal';                  // alquiler/leasing/préstamo
-    if (ejes.tiempo === 'cita' || naturalezas.stock === 'capacidad_temporal') return 'servicio';
-    if (naturalezas.stock === 'ingredientes' || naturalezas.precio === 'por_peso') return 'comestible';
-    return 'pieza';                                                           // bien manufacturado por defecto
+    // clasificador POR LA FORMA — fuente única en _shared/arquetipos-semilla (mismo que usa el registro).
+    return arquetipoDado || clasificar(ejes, naturalezas);
   }
 
   // Marca lo privado como ABIERTO (no se inventa): coste y stock siempre; agenda si hay tiempo;

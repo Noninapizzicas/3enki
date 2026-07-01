@@ -177,7 +177,8 @@
     "test:prisma__boss": "node tests/unit/prisma__boss.test.js",
     "test:prisma__coste": "node tests/unit/prisma__coste.test.js",
     "test:prisma__escaparate": "node tests/unit/prisma__escaparate.test.js",
-    "test:prisma__carrito": "node tests/unit/prisma__carrito.test.js"
+    "test:prisma__carrito": "node tests/unit/prisma__carrito.test.js",
+    "test:prisma__cobro": "node tests/unit/prisma__cobro.test.js"
   },
   "keywords": [
     "event-driven",

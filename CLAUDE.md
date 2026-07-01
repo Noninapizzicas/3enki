@@ -14771,7 +14771,7 @@ COPIAR+GENERALIZAR (llevan la forma del producto) → modules/prisma/
 REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credential-manager · project-manager ·
   database-manager · interruptores · propiocepcion · conserje · destilador · homeostasis · lentes-diseno · verificador-visual · portal
 POS UNIVERSAL (la espina de venta SÍ es reutilizable; copiar+generalizar → prisma, como carta-manager):
-  comandero → carrito ✓ (buffer, tasa con opciones, céntimos, sin cocina) · cobros → cobro [ ] (pago: cualquiera cobra) ·
+  comandero → carrito ✓ (buffer, tasa con opciones, céntimos, sin cocina) · cobros → cobro ✓ (pago: efectivo/tarjeta/bizum/transf/mixto, cambio) ·
   cuentas → cuenta/ticket [ ] (abrir→añadir→cobrar→cerrar) · impresion → ticket [ ] (recibo) · persistencia-comandero → cierre de caja [ ]
 HOSTELERÍA (órgano del arquetipo; encender solo si el comercio es de hostelería):
   cocina · pase-cocina + los ganchos de cocina del comandero (enviar_cocina/estaciones) · cuentas-canales (delivery)
@@ -14918,6 +14918,18 @@ CLASE PrismaCarritoReflejo HEREDA ModuloHibridoReflejo {   // copiado de comande
 }
 ```
 
+## cobro (module 0.1.0 · reflejo 0.1.0) — pago universal ✓ (POS · v0.1)
+
+```
+CLASE PrismaCobroReflejo HEREDA ModuloHibridoReflejo {   // copiado de cobros, en céntimos, sin llevadoo/cajón
+  OPS (RPC cobro.<op>.request → .response): crear · confirmar · reembolsar · get · list · metodos
+  crear   total del carrito (carrito.get) o monto_centimos inline. Métodos: efectivo(cambio)·tarjeta·bizum·transferencia·mixto(split cuadra el total).
+  CICLO   pendiente → completado (confirmar) → reembolsado. Idempotencia: un cobro activo por cuenta.
+  DINERO  CÉNTIMOS. EVENTOS cobro.iniciado/procesado/reembolsado (mismo dominio que cobros; una cuenta prisma no la conoce pizzepos).
+  v0.1    en memoria · sin link_pago/qr (integraciones externas = follow-up).
+}
+```
+
 ## Topics / eventos
 
 ```
@@ -14938,6 +14950,8 @@ escaparate.publico.request → .response   (cara cliente: catálogo → vista p�
 escaparate.actualizado                   (escaparate → PWA/consumidor; consume-on-read del refresco)
 carrito.{get,add_item,remove_item,update_item,vaciar,list}.request → .response   (buffer de venta; tasa con opciones)
 carrito.{item_agregado,item_eliminado,item_actualizado,vaciado}   (mutaciones del carrito)
+cobro.{crear,confirmar,reembolsar,get,list,metodos}.request → .response   (pago del carrito, céntimos)
+cobro.{iniciado,procesado,reembolsado}   (ciclo del cobro)
 ```
 
 ## Estado
@@ -14946,8 +14960,8 @@ carrito.{item_agregado,item_eliminado,item_actualizado,vaciado}   (mutaciones de
 ✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (5/5) · escaparate (5/5, núcleo)
 ✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones)
 ✓ project-type blueprints/project-types/prisma.json — comercio universal INSTANCIABLE
-✓ carrito (6/6) — POS: buffer de venta universal (de comandero, tasa con opciones, sin cocina)
+✓ carrito (6/6) · cobro (7/7) — POS: buffer de venta + pago universal (de comandero/cobros, sin cocina) · lazo mínimo carrito→cobro
 ◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA — se verifican corriendo el Enki
-[ ] POS resto (copiar+generalizar de pizzepos): cobro (de cobros) · cuenta/ticket (de cuentas) · impresion→ticket · cierre de caja
+[ ] POS resto (copiar+generalizar de pizzepos): cuenta/ticket (de cuentas) · impresion→ticket · cierre de caja (de persistencia-comandero)
 [ ] wiring: adaptador reflejo → arquetipos custom · BOSS enforcement (cargar órganos del plan) · persistir pvp/coste + carrito
 ```

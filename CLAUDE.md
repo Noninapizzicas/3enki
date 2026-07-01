@@ -14765,7 +14765,7 @@ CLASIFICADOR: arquetipo por la FORMA (ejes+naturalezas), NO por la superficie (c
 ```
 COPIAR+GENERALIZAR (llevan la forma del producto) → modules/prisma/
   carta-manager   → producto-manager   custodio del ProductoUniversal              ✓ HECHO
-  menu-generator  → adaptador          crudo → 5 huecos + clasifica arquetipo      [ ]
+  menu-generator  → adaptador          crudo → 5 huecos + clasifica arquetipo      ◑ MITAD REFLEJO (falta blueprint LLM)
   productos       → proyector          ProductoUniversal → vista destino            ✓ HECHO
   (fase 2) carta-digital → escaparate · variaciones+_shared/motor-opciones → opciones
 REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credential-manager · project-manager ·
@@ -14811,11 +14811,29 @@ CLASE PrismaProyectorReflejo HEREDA ModuloHibridoReflejo {   // gemelo de pizzep
 }
 ```
 
+## adaptador (module 0.1.0 · reflejo 0.1.0) — crudo → ProductoUniversal ◑ (mitad reflejo)
+
+```
+CLASE PrismaAdaptadorReflejo HEREDA ModuloHibridoReflejo {   // blueprint-agentico 6 fases; v0.1.0 = mitad reflejo
+  ESPINAZO  CONTRATO {crudo,project_id,catalogo_id?} → LEER[pdte] → PENSAR → VALIDAR → GUARDAR → EMITIR
+  PENSAR (determinista v0.1.0)  crudo estructurado → 5 huecos ; _clasificarArquetipo POR LA FORMA:
+     ciclo=con_retorno→uso_temporal · tiempo=cita|stock=capacidad_temporal→servicio ·
+     stock=ingredientes|precio=por_peso→comestible · resto→pieza
+  _preguntasAbiertas  coste+stock (privados) + agenda(tiempo≠ninguno) + tarifa(precio rango/tiempo)
+                      → madurez necesita_aclaracion_comerciante (no inventa: MARCA lo que no sabe)
+  VALIDAR  catalogo.validar.request → _checkProducto (freno de producto-manager); !valid → 422 FALLA HONESTO
+  GUARDAR  publish producto.adaptado (producto-manager: onProductoAdaptado, upsert)
+  MITAD FUZZY [pendiente]  adaptador.blueprint.json — el LLM descompone foto/texto libre → estructura;
+                           entonces PENSAR pasa al LLM y esto (clasificar·marcar·VALIDAR) se queda reflejo.
+}
+```
+
 ## Topics / eventos
 
 ```
 catalogo.{save,get,list,delete,add_product,remove_product,update_product,add_category,validar,activar,clonar,search,stats,versions,restore}.request → .response
-producto.adaptado                        (adaptador → producto-manager; upsert)   [emisor PENDIENTE = adaptador]
+adaptador.adaptar.request → .response    (crudo → ProductoUniversal; PENSAR + VALIDAR(freno) + GUARDAR)
+producto.adaptado                        (adaptador → producto-manager; upsert idempotente)
 catalogo.{actualizado,editado,borrado}   (producto-manager → proyector; señal de refresco)
 vista.{completa,productos,producto,buscar}.request → .response   (proyector; lectura proyectada)
 vista.actualizada                        (proyector → consumidor/escaparate; consume-on-read del refresco)
@@ -14824,7 +14842,7 @@ vista.actualizada                        (proyector → consumidor/escaparate; c
 ## Estado
 
 ```
-✓ prisma.md (propuesta, 6 casos) · producto-manager (custodio + freno, test 13/13) · proyector (sin estado, test 4/4)
-[ ] adaptador  (menu-generator → descompone 5 huecos + clasifica arquetipo, emite producto.adaptado)
+✓ prisma.md · producto-manager (freno, test 13/13) · proyector (test 4/4) · adaptador mitad reflejo (test 9/9)
+◑ adaptador  blueprint LLM (PENSAR fuzzy: foto/texto libre → estructura) — pdte; el reflejo (clasificar·marcar·VALIDAR) ya está
 [ ] arquetipos (registro ABIERTO: semilla comestible·pieza·servicio·uso_temporal + propuestos por IA, aprobación anti-wipe)
 ```

@@ -170,7 +170,8 @@
     "test:pizzepos__carta-manager": "node tests/unit/pizzepos__carta-manager.test.js",
     "test:pizzepos__carta-design": "node tests/unit/pizzepos__carta-design.test.js",
     "test:prisma__producto-manager": "node tests/unit/prisma__producto-manager.test.js",
-    "test:prisma__proyector": "node tests/unit/prisma__proyector.test.js"
+    "test:prisma__proyector": "node tests/unit/prisma__proyector.test.js",
+    "test:prisma__adaptador": "node tests/unit/prisma__adaptador.test.js"
   },
   "keywords": [
     "event-driven",

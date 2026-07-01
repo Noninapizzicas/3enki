@@ -14767,7 +14767,7 @@ COPIAR+GENERALIZAR (llevan la forma del producto) → modules/prisma/
   carta-manager   → producto-manager   custodio del ProductoUniversal              ✓ HECHO
   menu-generator  → adaptador          crudo → 5 huecos + clasifica arquetipo      ✓ HECHO (híbrido: reflejo determinista + blueprint LLM)
   productos       → proyector          ProductoUniversal → vista destino            ✓ HECHO
-  (fase 2) carta-digital → escaparate · variaciones+_shared/motor-opciones → opciones
+  (fase 2) variaciones+_shared/motor-opciones → opciones  ✓ HECHO · carta-digital → escaparate [ ]
 REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credential-manager · project-manager ·
   database-manager · interruptores · propiocepcion · conserje · destilador · homeostasis · lentes-diseno · verificador-visual · portal
 DEJAR ARQUETIPO (órganos de "hostelería con mesas"; NO al core; se encienden solo si el comercio los pide):
@@ -14847,6 +14847,20 @@ CLASE PrismaArquetiposReflejo HEREDA ModuloHibridoReflejo {
 }
 ```
 
+## opciones (module 0.1.0 · reflejo 0.1.0) — valida + precia la selección ✓
+
+```
+CLASE PrismaOpcionesReflejo HEREDA ModuloHibridoReflejo {   // ENVUELVE el banco _shared/motor-opciones (puro, céntimos)
+  ENTRADA  opciones.evaluar.request { producto | catalogo_id+producto_id, selecciones } → .response
+  _aProductoMotor  ProductoUniversal → forma del banco: delta_precio(€) → delta_precio_centimos ;
+                   aparta las LIBRE (personalizacion_libre) a `libres` (texto del cliente, sin cardinalidad/precio).
+  _baseCentimos    precio_base_centimos · o atributo 'precio'(€) · o 0 (desconocido → base_resuelto:false, pregunta_abierta)
+  SALIDA   { valida, errores, precio_final_centimos, precio_final_eur, libres, base_resuelto }
+  REUSA    evaluarProducto (banco): Strategy por modo (ELEGIR_UNO/ELEGIR_VARIOS/QUITAR) + Composite. Céntimos enteros.
+  GENERALIZA pizzepos/variaciones (validar) + pedido-tasador (preciar) a cualquier arquetipo.
+}
+```
+
 ## Topics / eventos
 
 ```
@@ -14859,12 +14873,14 @@ vista.{completa,productos,producto,buscar}.request → .response   (proyector; l
 vista.actualizada                        (proyector → consumidor/escaparate; consume-on-read del refresco)
 arquetipos.{listar,obtener,clasificar,proponer,aprobar}.request → .response   (registro abierto)
 arquetipo.{propuesto,aprobado}           (IA propone · humano aprueba — anti-wipe, la semilla intocable)
+opciones.evaluar.request → .response     (valida + precia la selección del cliente; céntimos; aparta LIBRE)
 ```
 
 ## Estado
 
 ```
-✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO reflejo+blueprint (9/9) · arquetipos (4/4)
-✓ _shared/arquetipos-semilla — clasificador POR LA FORMA, fuente única (adaptador + arquetipos)
-◑ adaptador.blueprint (PENSAR fuzzy: foto/texto → crudo, propone arquetipo, delega al reflejo) montado; verificación real = correrlo en el ai-gateway vivo
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5)
+✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones)
+◑ adaptador.blueprint (PENSAR fuzzy: foto/texto → crudo, propone arquetipo, delega al reflejo) montado; verificación real = ai-gateway vivo
+[ ] FASE 2 resto: escaparate (carta-digital) · coste (escandallo) · cablear reflejo adaptador → arquetipos custom · BOSS orquestador
 ```

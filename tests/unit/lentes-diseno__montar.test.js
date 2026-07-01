@@ -106,6 +106,57 @@ test('idempotente por nombre: re-montar pisa el cuerpo, no duplica', async () =>
   limpiar();
 });
 
+test('desmontar: quita una lente crecida, la saca de rutas y borra su .md', async () => {
+  limpiar();
+  const m = await makeCargado();
+  m._montar({ dominio: 'diseño', nombre: 'quitable', cuando_usar: 'x', tarea: 'tema', contenido: '# c' });
+  assert.ok(m._packs.get('diseño').lentes.has('quitable'));
+  const r = m._desmontar({ dominio: 'diseño', nombre: 'quitable' });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.desmontada, true);
+  assert.ok(!m._packs.get('diseño').lentes.has('quitable'), 'ya no está montada');
+  assert.ok(!(m._packs.get('diseño').rutas['tema'] || []).includes('quitable'), 'fuera de la ruta');
+  assert.ok(!fs.existsSync(path.join(DATA_ROOT, 'packs', 'diseño', 'quitable.md')), 'el .md se borró');
+  limpiar();
+});
+
+test('desmontar deja la SEMILLA intacta', async () => {
+  limpiar();
+  const m = await makeCargado();
+  m._montar({ dominio: 'diseño', nombre: 'quitable', cuando_usar: 'x', contenido: '# c' });
+  m._desmontar({ dominio: 'diseño', nombre: 'quitable' });
+  assert.ok(m._packs.get('diseño').lentes.has('ux-architect') && m._packs.get('diseño').lentes.has('brand-guardian'), 'semilla intacta');
+  limpiar();
+});
+
+test('desmontar una lente SEMILLA -> 404 (el código no se desmonta)', async () => {
+  limpiar();
+  const m = await makeCargado();
+  const r = m._desmontar({ dominio: 'diseño', nombre: 'ux-architect' });
+  assert.strictEqual(r.status, 404);
+  assert.ok(m._packs.get('diseño').lentes.has('ux-architect'), 'la semilla sigue');
+  limpiar();
+});
+
+test('desmontar en dominio sin overlay crecido -> 404', async () => {
+  limpiar();
+  const m = await makeCargado();
+  assert.strictEqual(m._desmontar({ dominio: 'diseño', nombre: 'nada' }).status, 404);
+  limpiar();
+});
+
+test('desmontar una de dos: la otra crecida sobrevive (overlay persiste)', async () => {
+  limpiar();
+  const m = await makeCargado();
+  m._montar({ dominio: 'diseño', nombre: 'a', cuando_usar: 'x', contenido: '# a' });
+  m._montar({ dominio: 'diseño', nombre: 'b', cuando_usar: 'x', contenido: '# b' });
+  m._desmontar({ dominio: 'diseño', nombre: 'a' });
+  assert.ok(!m._packs.get('diseño').lentes.has('a'));
+  assert.ok(m._packs.get('diseño').lentes.has('b'), 'la otra crecida sigue');
+  assert.ok(fs.existsSync(path.join(DATA_ROOT, 'packs', 'diseño', '_pack.json')), 'el overlay persiste');
+  limpiar();
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

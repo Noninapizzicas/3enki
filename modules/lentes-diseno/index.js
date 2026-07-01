@@ -51,7 +51,7 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'lentes-diseno';
-    this.version = '2.2.0';
+    this.version = '2.3.0';
     this._packs = new Map();    // dominio → { cuando_usar, lentes:Map<nombre,{cuando_usar,contenido}>, rutas, motor?, quimico? }
     this._timers = [];          // timers del químico (uno por pack que secreta)
     // ── GRAFO de órganos (cúpula Obsidian, capa 3). Sustrato barato + capa que
@@ -278,6 +278,7 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
   onMotorRequest(e)   { return this._atender(e, 'motor',   'lentes.motor.response',   d => this._motor(d)); }
   onVecinasRequest(e) { return this._atender(e, 'vecinas', 'lentes.vecinas.response', d => this._vecinas(d?.desde, d?.k, d?.dominio)); }
   onMontarRequest(e)  { return this._atender(e, 'montar',  'lentes.montar.response',  d => this._montar(d)); }
+  onDesmontarRequest(e){ return this._atender(e, 'desmontar', 'lentes.desmontar.response', d => this._desmontar(d)); }
   // co-uso externo (p.ej. el destilador o el conserje observan un uso conjunto)
   onCoUso(e) { const d = (e && e.data) || e || {}; if (Array.isArray(d.lentes)) this._coUso(d.lentes); }
 
@@ -444,6 +445,55 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
     this.metrics?.increment?.('lentes-diseno.montadas.total', { dominio });
 
     return { status: 200, data: { dominio, nombre, tarea: tareaNorm, montada: true, total_lentes: pack.lentes.size } };
+  }
+
+  // ── DESMONTAR: la reversibilidad de montar. Quita una lente CRECIDA del overlay de un
+  // dominio (su .md + su entrada + sus rutas) y re-descubre. La semilla (código) es
+  // intocable: no vive en el overlay data/, así que pedir desmontarla → 404. ──
+  _desmontar({ dominio, nombre } = {}) {
+    if (!dominio || typeof dominio !== 'string') return this._invalid('dominio');
+    if (!nombre || typeof nombre !== 'string') return this._invalid('nombre');
+    const packDir = path.join(PACKS_DATA_DIR, dominio);
+    const adnPath = path.join(packDir, '_pack.json');
+    let adn;
+    try { adn = JSON.parse(fs.readFileSync(adnPath, 'utf-8')); }
+    catch (_) {
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `no hay lentes crecidas en '${dominio}'`, { dominio });
+    }
+    const meta = adn.memoria?.lentes?.[nombre];
+    if (!meta) {
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND',
+        `'${nombre}' no es una lente crecida en '${dominio}' (la semilla no se desmonta)`, { dominio, nombre });
+    }
+
+    try { fs.rmSync(path.join(packDir, meta.archivo), { force: true }); } catch (_) { /* .md ya ausente = ok */ }
+    delete adn.memoria.lentes[nombre];
+    for (const [t, ns] of Object.entries(adn.memoria.rutas || {})) {
+      const i = ns.indexOf(nombre);
+      if (i >= 0) ns.splice(i, 1);
+      if (ns.length === 0) delete adn.memoria.rutas[t];
+    }
+    const vacio = Object.keys(adn.memoria.lentes || {}).length === 0
+      && Object.keys(adn.memoria.rutas || {}).length === 0;
+    try {
+      if (vacio) fs.rmSync(packDir, { recursive: true, force: true });
+      else fs.writeFileSync(adnPath, JSON.stringify(adn, null, 2), 'utf-8');
+    } catch (err) {
+      return this._errorResponse(500, 'UNKNOWN_ERROR', `no se pudo desmontar: ${err.message}`, { dominio, nombre });
+    }
+
+    this._descubrirPacks();
+    this._construirGrafo();
+    const pack = this._packs.get(dominio);
+    try {
+      this.eventBus?.publish?.('lente.registrar', {
+        dominio, cuando_usar: pack?.cuando_usar || '',
+        lentes: pack ? [...pack.lentes.keys()] : [], tiene_motor: !!pack?.motor, tiene_quimico: !!pack?.quimico
+      });
+    } catch (_) { /* best-effort */ }
+    this.metrics?.increment?.('lentes-diseno.desmontadas.total', { dominio });
+
+    return { status: 200, data: { dominio, nombre, desmontada: true, total_lentes: pack ? pack.lentes.size : 0 } };
   }
 
   _slug(s) {

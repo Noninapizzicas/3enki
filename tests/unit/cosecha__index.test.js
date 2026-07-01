@@ -151,6 +151,33 @@ test('importar: fuente/skills inválidos -> INVALID_INPUT; skill sin contenido -
   limpiar();
 });
 
+test('olvidar: borra una skill crecida, re-indexa y quita el dir', async () => {
+  limpiar();
+  const m = await makeCargado();
+  m._importar({ fuente: FUENTE_TEST, skills: [{ nombre: 'temporal', contenido: '# c' }] });
+  const antes = m._skills.size;
+  assert.ok(m._skills.has('temporal'));
+  const r = m._olvidar({ nombre: 'temporal' });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.olvidada, true);
+  assert.strictEqual(m._skills.size, antes - 1, 'la cantera decrece');
+  assert.ok(!m._skills.has('temporal'), 'ya no es descubrible');
+  assert.ok(!fs.existsSync(path.join(FUENTE_TEST_DIR, 'temporal')), 'el dir se borró');
+  limpiar();
+});
+
+test('olvidar la SEMILLA -> 409 (intocable en caliente)', async () => {
+  const m = await makeCargado();
+  const r = m._olvidar({ nombre: 'deep-research' });   // vive en el código, no en data/
+  assert.strictEqual(r.status, 409);
+  assert.ok(m._skills.has('deep-research'), 'la semilla sigue ahí');
+});
+
+test('olvidar skill inexistente -> 404', async () => {
+  const m = await makeCargado();
+  assert.strictEqual(m._olvidar({ nombre: 'no-existe' }).status, 404);
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

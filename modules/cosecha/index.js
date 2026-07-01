@@ -38,7 +38,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'cosecha';
-    this.version = '0.5.0';
+    this.version = '0.6.0';
     // nombre → { nombre, descripcion, fuente, dominio, tags:[], contenido }
     this._skills = new Map();
   }
@@ -125,6 +125,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   async onStatsRequest(event)    { return this._atender(event, 'stats',    'cosecha.stats.response',    () => this._stats()); }
   async onImportarRequest(event) { return this._atender(event, 'importar', 'cosecha.importar.response', (d) => this._importar(d)); }
   async onPromoverRequest(event) { return this._atender(event, 'promover', 'cosecha.promover.response', (d) => this._promover(d)); }
+  async onOlvidarRequest(event)  { return this._atender(event, 'olvidar',  'cosecha.olvidar.response',  (d) => this._olvidar(d)); }
 
   // ── el NERVIO del destilador: cuando SELLA una skill en una cúpula (memoria por
   // proyecto), la cantera la ABSORBE a la biblioteca global. Fire-and-forget: el cuerpo
@@ -255,6 +256,26 @@ class CosechaModule extends ModuloHibridoReflejo {
     }
     this.metrics?.increment('cosecha.promovidas.total', { dominio: dominioFinal });
     return { status: 200, data: { nombre, dominio: dominioFinal, promovida: true, montaje: resp.data || null } };
+  }
+
+  // olvidar: la reversibilidad de importar. Borra una skill CRECIDA (en data/) y re-indexa.
+  // La semilla (en el código) es intocable: no vive en data/, así que pedir olvidarla → 409.
+  _olvidar({ nombre } = {}) {
+    if (!nombre || typeof nombre !== 'string') return this._invalid('nombre');
+    const skill = this._skills.get(nombre);
+    if (!skill) {
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `skill desconocida en la cantera: ${nombre}`, { faltan: [nombre] });
+    }
+    const dir = path.join(CANTERA_DATA_DIR, this._slug(skill.fuente), this._slug(nombre));
+    if (!fs.existsSync(dir)) {
+      return this._errorResponse(409, 'CONFLICT_STATE',
+        `'${nombre}' es semilla (vive en el código): no se olvida en caliente`, { fuente: skill.fuente });
+    }
+    try { fs.rmSync(dir, { recursive: true, force: true }); }
+    catch (err) { return this._errorResponse(500, 'UNKNOWN_ERROR', `no se pudo olvidar: ${err.message}`, { nombre }); }
+    this._descubrir();   // re-indexa (semilla + crecido restante)
+    this.metrics?.increment('cosecha.olvidadas.total', { fuente: this._slug(skill.fuente) });
+    return { status: 200, data: { nombre, olvidada: true, total: this._skills.size } };
   }
 
   // serializa una skill a SKILL.md (frontmatter + markdown). Reversible por _parse.

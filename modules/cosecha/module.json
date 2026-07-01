@@ -1,7 +1,8 @@
 {
   "_doc": "Manifest de la COSECHA (cantera) — REFLEJO PURO. Hermano del cuenco (lentes-diseno) en la Teoría del Órgano, cara ADITIVA: el cuenco sostiene las lentes ACTIVAS (inyectadas por turno cuando una página las bebe); la cosecha sostiene TODA la abundancia (skills de cualquier fuente: importadas de ECC/VoltAgent o nacidas del destilador), buscable pero NO inyectada. La cúpula queda viva porque la cantera absorbe lo demás. Sumar, no restar: la abundancia bien alojada es MUNICIÓN del conserje (ofrecer en positivo), no ruido. Las skills viven en cantera/<fuente>/<skill>/SKILL.md (formato Agent Skills de Anthropic).",
   "name": "cosecha",
-  "version": "0.5.0",
+  "version": "0.6.0",
+  "_v0_6_nota": "v0.6.0: REVERSIBILIDAD — cosecha.olvidar (par de importar). Borra una skill CRECIDA (data/) y re-indexa. La semilla (código) es intocable: no vive en data/, así que olvidarla → 409. Cierra el ciclo de vida de la cantera: importar ↔ olvidar (y su hermano en el cuenco: montar ↔ desmontar). La abundancia se vuelve reversible en caliente sin tocar el VPS a mano. Test: cosecha__index (+olvidar).",
   "_v0_5_nota": "v0.5.0: HOGAR declarado — una skill puede decir dónde vivir como lente (lente_dominio + lente_tarea en su frontmatter). _parse los lee, _serializar/_importar los persisten, _buscar los expone en el catálogo. cosecha.promover ahora DEFAULTEA dominio/tarea desde ese hogar: basta `cosecha.promover:<nombre>` y sabe dónde montar. Habilita la oferta proactiva del conserje (v0.5.0): si la skill declara hogar, ofrece PROMOVER (activar como lente) en vez de solo OBTENER (leer). Test: cosecha__promover (+hogar).",
   "_v0_4_nota": "v0.4.0: cosecha.promover — el puente cantera→cuenco (cierra el lazo). Toma una skill de la abundancia y la entrega al cuenco (lentes.montar.request) para que la MONTE como lente ACTIVA de un dominio; el nervio de ai-gateway la inyecta por turno en las páginas que beban ese dominio. NO toca ai-gateway: el nervio ya inyecta lo que el pack sirve. La guarda no-colgantes (dominio debe existir como pack, bebido por página) vive en el cuenco y se propaga. Lazo completo: aprende (destilador) → aloja (cantera) → ofrece (conserje) → activa por demanda (promover). Test: cosecha__promover.",
   "_v0_3_nota": "v0.3.0: NERVIO del destilador → cantera. Cuando el destilador SELLA una skill en una cúpula (aprendizaje.skill.creada, memoria POR PROYECTO), la cantera la ABSORBE a la biblioteca global. El cuerpo viaja en el evento (contenido_md + descripcion, enriquecido en destilador), así que es fire-and-forget puro: sin re-consultar cúpulas, sin dependencia. El lazo se cierra: lo que el runtime aprende (destilador) queda buscable/ofrecible (conserje) sin tocar nada más. Test: cosecha__destilador-bridge.",
@@ -18,6 +19,7 @@
     { "event": "cosecha.stats.response",   "description": "Recuento: { total, por_fuente, fuentes }." },
     { "event": "cosecha.importar.response","description": "Resultado del volcado: { fuente, importadas, rechazadas:[{nombre,motivo}], total }. total = tamaño de la cantera tras re-indexar." },
     { "event": "cosecha.promover.response","description": "Resultado de promover una skill a lente activa: { nombre, dominio, promovida, montaje } o el error propagado del cuenco (409 colgante)." },
+    { "event": "cosecha.olvidar.response", "description": "Resultado de olvidar una skill crecida: { nombre, olvidada, total }. La semilla no se olvida (409)." },
     { "event": "lentes.montar.request",    "description": "RPC SALIENTE: promover entrega el cuerpo de la skill al cuenco (lentes-diseno) para que la monte como lente del dominio. La response la consume el _rpc interno." }
   ],
   "subscribes": [
@@ -27,7 +29,8 @@
     { "event": "cosecha.stats.request",   "handler": "onStatsRequest",   "description": "Reflejo: recuento por fuente." },
     { "event": "cosecha.importar.request","handler": "onImportarRequest","description": "PUERTA DE SUMAR: cualquier fuente (destilador, ECC, un .md suelto) vuelca skills { fuente, skills:[{nombre,contenido,descripcion?,dominio?,tags?}] }. Escribe cada una como SKILL.md en data/cosecha/cantera/<fuente>/<slug>/ y re-indexa. Idempotente por nombre." },
     { "event": "aprendizaje.skill.creada","handler": "onSkillDestilada","description": "NERVIO destilador→cantera (fire-and-forget): cuando el destilador sella una skill en una cúpula, la cantera la absorbe a la biblioteca global usando el cuerpo que viaja en el evento (contenido_md). Sin response, sin re-consultar cúpulas." },
-    { "event": "cosecha.promover.request","handler": "onPromoverRequest","description": "PUENTE cantera→cuenco: promueve una skill de la cantera a lente ACTIVA. {nombre, dominio, tarea?, cuando_usar?} → lee la skill y llama a lentes.montar. Propaga la guarda no-colgantes del cuenco (409 si el dominio no existe)." }
+    { "event": "cosecha.promover.request","handler": "onPromoverRequest","description": "PUENTE cantera→cuenco: promueve una skill de la cantera a lente ACTIVA. {nombre, dominio, tarea?, cuando_usar?} → lee la skill y llama a lentes.montar. Propaga la guarda no-colgantes del cuenco (409 si el dominio no existe)." },
+    { "event": "cosecha.olvidar.request", "handler": "onOlvidarRequest", "description": "REVERSIBILIDAD (par de importar): olvida una skill CRECIDA. {nombre} → borra su dir en data/cosecha/cantera/ y re-indexa. La semilla no se olvida (409)." }
   ],
   "config": {
     "persistence": {

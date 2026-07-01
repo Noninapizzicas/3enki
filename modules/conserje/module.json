@@ -1,6 +1,7 @@
 {
   "name": "conserje",
-  "version": "0.3.0",
+  "version": "0.4.0",
+  "_v0_4_nota": "v0.4.0: TERCERA FACULTAD — CANTERA. Tras un paso, mina la cosecha (cosecha.buscar por la última capacidad tocada) y ofrece en positivo la skill pertinente ('hay una skill de X en la cantera, ¿la montamos?'). Convierte la abundancia guardada en munición de empujones (la cara aditiva de la Teoría del Órgano: tener skills = poder ofrecer el siguiente paso). Demand-driven: si la cantera no tiene skill pertinente, NO ofrece (no spamea). Nuevo interruptor 'conserje-cantera' (grupo aprendizaje, OFF por defecto, independiente de los otros dos). Prioridad menor que brecha/rutas (no pisa empujón pendiente). empujon tipo='skill' con accion_sugerida 'cosecha.obtener:<nombre>'. Test: conserje__cantera.",
   "_v0_3_nota": "v0.3.0: cierra el nag perpetuo de diseno/digital. Su estado `usada` no se observaba (el mapa de señales solo cubría marca/recetas/carta/escandallo), así que una vez desbloqueados se ofrecían cada cooldown para siempre, ya construidos. Añadidas dos SEÑAL_EVENTO autocontenidas: carta.html.generada -> diseno usada; cartadigital.publicado -> digital usada. Sin tocar otros módulos ni el wiring (oído por el bus crudo). Test: conserje__senales-usada (5/5).",
   "description": "Abre el camino al comerciante. Cruza lo que el sistema OFRECE (LibroDeCapacidades) con lo que el comerciante USA (derivado del bus en vivo) y, cuando hay una brecha con intención, le ofrece el siguiente paso en POSITIVO (no señala la carencia). Sin sondas hardcodeadas: lee el grafo de capacidades + el uso real. La señal de oro es la intención — lo que el comerciante alarga la mano a tocar pero está vacío. Apagado por defecto; su on/off vive en el panel central de interruptores (botón 'conserje'), reacciona en caliente. Cooldown por capacidad para no agobiar.",
   "author": "Event Core Team",
@@ -9,11 +10,15 @@
   "publishes": [
     {
       "event": "interruptor.registrar",
-      "description": "Registra sus botones on/off en el panel central al cargar: 'conserje' (empujones por brecha) y 'conserje-rutas' (replay sugerente de rutas aprendidas)."
+      "description": "Registra sus botones on/off en el panel central al cargar: 'conserje' (empujones por brecha), 'conserje-rutas' (replay sugerente de rutas aprendidas) y 'conserje-cantera' (ofrece skills pertinentes de la cosecha)."
     },
     {
       "event": "conserje.empujon",
-      "description": "Ofrece al comerciante el siguiente paso. {project_id, tipo, recurso, mensaje, accion_sugerida, ruta?}. tipo='ruta' lleva la continuacion aprendida. Lo surfacea el chat (vía el nervio) de forma natural, una vez."
+      "description": "Ofrece al comerciante el siguiente paso. {project_id, tipo, recurso, mensaje, accion_sugerida, ruta?}. tipo='ruta' lleva la continuacion aprendida; tipo='skill' ofrece una skill de la cantera (accion_sugerida='cosecha.obtener:<nombre>'). Lo surfacea el chat (vía el nervio) de forma natural, una vez."
+    },
+    {
+      "event": "cosecha.buscar.request",
+      "description": "CANTERA: mina la cosecha por la última capacidad tocada para ofrecer la skill pertinente (RPC; la response la consume el _rpc interno). Solo si el interruptor 'conserje-cantera' está ON."
     },
     {
       "event": "destilador.ruta.request",
@@ -92,6 +97,7 @@
     "enabled": true,
     "enabled_default": false,
     "rutas_enabled_default": false,
+    "cantera_enabled_default": false,
     "umbral_ruta": 3,
     "tick_ms": 15000,
     "cooldown_h": 24

@@ -239,11 +239,12 @@ Aplicando el propio principio de Prisma al doc:
 ## 8. Estado de implementación (v0.1 — 2026-07-01)
 
 Construida entera la columna determinista en `modules/prisma/` (copiar+generalizar de
-pizzepos, cero pizzepos tocado), **85/85 tests**:
+pizzepos, cero pizzepos tocado), **89/89 tests**:
 
 - **producto-manager** (custodio del ProductoUniversal + freno) · **proyector** (vista interna) ·
   **escaparate** (vista pública, poda lo no ofrecido) · **opciones** (precia la selección) ·
-  **coste** (coste→margen→pvp) · **arquetipos** (registro abierto + anti-wipe) ·
+  **coste** (coste→margen→pvp, y `aplicar` escribe el pvp en el producto + cierra su pregunta de coste) ·
+  **arquetipos** (registro abierto + anti-wipe) ·
   **adaptador** (híbrido: reflejo determinista + blueprint LLM) · **boss** (orquestador comercio→órganos) ·
   **enforcement** (efector: consume `boss.plan.actualizado` → `interruptor.set` enciende los órganos;
   additivo-seguro, no apaga solo).
@@ -264,12 +265,12 @@ vertical = project-type `prisma` (no toca pizzepos). Siguen abiertas: ingesta (f
 rango-valoración (hoy → `consultar` en escaparate + pregunta_abierta `tarifa`).
 
 Falta (todo requiere el Enki vivo o wiring de bus): verificar en vivo el blueprint del adaptador y el
-bundle HTML/PWA del escaparate; cablear el reflejo del adaptador a los arquetipos custom por RPC;
-persistir el pvp de coste en el producto (cerrar la pregunta_abierta de coste); dar DUEÑO a los órganos
-previstos (agenda/retorno/fianza/stock = módulos follow-up que reaccionen a su `interruptor.cambiado`).
+bundle HTML/PWA del escaparate; cablear el reflejo del adaptador a los arquetipos custom por RPC; dar
+DUEÑO a los órganos previstos (agenda/retorno/fianza/stock = módulos follow-up que reaccionen a su
+`interruptor.cambiado`).
 
 ## Veredicto de madurez
 
-**Columna determinista + POS + enforcement COMPLETOS y probados (85/85). El lazo CEREBRO→acción cierra
-(BOSS→enforcement→interruptores). Lista para verificación en vivo + wiring de integración. El vertical es
-instanciable (project-type `prisma`).**
+**Columna determinista + POS + enforcement + coste→producto COMPLETOS y probados (89/89). Cierran los dos
+lazos: CEREBRO→acción (BOSS→enforcement→interruptores) y cara-comerciante (coste→producto). Lista para
+verificación en vivo + wiring de integración. El vertical es instanciable (project-type `prisma`).**

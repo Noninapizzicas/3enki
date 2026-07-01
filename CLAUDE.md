@@ -14901,15 +14901,18 @@ _shared/organos-recetario.js  (PURO)  KNOWN_ORGANOS {carta(nativo:escaparate) ·
   interruptorDe(o)='organo-'+o · metaDe(o) · diffPlan(deseados,aplicados)→{encender,innecesarios}.
 ```
 
-## coste (module 0.1.0 · reflejo 0.1.0) — cara comerciante: coste → margen → pvp ✓
+## coste (module 0.2.0 · reflejo 0.2.0) — cara comerciante: coste → margen → pvp ✓
 
 ```
 CLASE PrismaCosteReflejo HEREDA ModuloHibridoReflejo {   // generaliza escandallo(Σ coste)+viabilidad(food cost→pvp), en céntimos
   ENTRADA  coste.costear.request { componentes[{coste_centimos,cantidad?}], coste_extra_centimos?, food_cost_objetivo?, pvp_centimos? }
   _costear  coste_total = Σ(coste×cantidad)+extra ; food_cost_objetivo(0..1] → pvp_sugerido = coste/objetivo ;
             pvp dado → food_cost_real=coste/pvp · margen=(pvp-coste)/pvp · margen_centimos
-  NO INVENTA  los componentes de coste los pone el COMERCIANTE (respuesta a las preguntas_abiertas de coste). Puro, sin store.
-  FOLLOW-UP  persistir pvp en el producto (precio_base) + marcar la pregunta_abierta de coste como respondida.
+  NO INVENTA  los componentes de coste los pone el COMERCIANTE (respuesta a las preguntas_abiertas de coste). _costear puro, sin store.
+  APLICAR  coste.aplicar.request → espinazo LEER→calcula→GUARDA→EMITE (blueprint-agentico determinista):
+           LEE catalogo.get → resuelve pvp (pvp_centimos o pvp_sugerido) → _planAplicar (PURO) fija
+           precio_base_centimos, marca la pregunta_abierta de coste 'respondida' y sube madurez a 'listo'
+           si ya no falta ninguna → GUARDA catalogo.update_product → EMITE coste.aplicado. Cierra el lazo coste→producto.
 }
 ```
 
@@ -14991,6 +14994,7 @@ enforcement.estado.request → .response   (qué órganos hay aplicados a este p
 interruptor.set {id:'organo-<x>',enabled,motivo}   (enforcement → panel central: enciende el órgano)
 boss.organo.encendido / boss.organo.innecesario    (testigo del efector: encendió / lo dejó sobrando sin apagar)
 coste.costear.request → .response        (cara comerciante: coste → margen → pvp; los costes los pone el comerciante)
+coste.aplicar.request → .response · coste.aplicado   (escribe el pvp en el producto + cierra la pregunta_abierta de coste)
 escaparate.publico.request → .response   (cara cliente: catálogo → vista pública, poda lo no ofrecido)
 escaparate.actualizado                   (escaparate → PWA/consumidor; consume-on-read del refresco)
 carrito.{get,add_item,remove_item,update_item,vaciar,list}.request → .response   (buffer de venta; tasa con opciones)
@@ -15005,11 +15009,12 @@ cierre.{cerrar_caja,estado}.request → .response · caja.cerrada   (cuadre del 
 ## Estado
 
 ```
-✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (5/5) · escaparate (5/5, núcleo)
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (9/9, con aplicar→producto) · escaparate (5/5, núcleo)
 ✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones) · _shared/organos-recetario (órgano→interruptor, diff PURO) · _shared/pos-persistencia (snapshot fs por proyecto)
 ✓ project-type blueprints/project-types/prisma.json — comercio universal INSTANCIABLE
 ✓ POS COMPLETO + PERSISTENTE — carrito (7/7) · cobro (8/8) · cuenta (6/6) · ticket (3/3) · cierre (4/4): catálogo→carrito→cuenta→cobro→ticket→cierre (sin cocina). Estado vivo persistido por proyecto (/prisma/pos/*.json), restaura en project.activated.
 ✓ BOSS ENFORCEMENT — enforcement (7/7): boss.plan.actualizado → interruptor.set enciende los órganos del comercio (additivo-seguro, no apaga solo). Lazo CEREBRO→acción cerrado.
 ◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · el interruptor de cada órgano espera un dueño que lo beba (agenda/stock/… = módulos follow-up; cocina la reacciona pizzepos) — se verifican corriendo el Enki
-[ ] wiring/en vivo: adaptador reflejo → arquetipos custom · persistir pvp/coste en el producto (cerrar la pregunta_abierta de coste) · módulos dueños de los órganos previstos (agenda/retorno/fianza/stock)
+✓ COSTE→PRODUCTO — coste.aplicar escribe el pvp en el producto (precio_base_centimos) + cierra la pregunta_abierta de coste (madurez→listo). Lazo cara-comerciante cerrado.
+[ ] wiring/en vivo: adaptador reflejo → arquetipos custom · módulos dueños de los órganos previstos (agenda/retorno/fianza/stock)
 ```

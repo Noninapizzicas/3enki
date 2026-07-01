@@ -31,7 +31,12 @@ const fs = require('fs');
 const path = require('path');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
+// El cuenco vive en DOS raíces: la SEMILLA curada (packs en el código, versionada) y
+// lo CRECIDO en caliente por lentes.montar (en data/, persistente, fuera de git). Se
+// escanean ambas; lo crecido AÑADE lentes/rutas al pack semilla de su dominio (nunca
+// pisa motor/quimico/cuando_usar). Simetría con la cantera (cosecha: seed + data).
 const PACKS_DIR = path.join(__dirname, 'packs');
+const PACKS_DATA_DIR = path.join(process.cwd(), 'data', 'lentes-diseno', 'packs');
 
 // "7d" / "12h" / "30m" / "45s" → ms. null si no parsea (químico ausente).
 function _parseCada(s) {
@@ -46,7 +51,7 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'lentes-diseno';
-    this.version = '2.1.0';
+    this.version = '2.2.0';
     this._packs = new Map();    // dominio → { cuando_usar, lentes:Map<nombre,{cuando_usar,contenido}>, rutas, motor?, quimico? }
     this._timers = [];          // timers del químico (uno por pack que secreta)
     // ── GRAFO de órganos (cúpula Obsidian, capa 3). Sustrato barato + capa que
@@ -82,20 +87,37 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
   }
 
   // ── la cúpula invertida: RECOGE packs/<dominio>/_pack.json (no dirige, recoge) ──
+  // Escanea SEMILLA (código) primero y luego CRECIDO (data): lo crecido MERGEA en el
+  // pack semilla de su dominio (añade lentes + extiende rutas); no crea dominios nuevos.
   _descubrirPacks() {
+    this._packs.clear();
+    this._scanPacks(PACKS_DIR, true);        // semilla: crea packs
+    this._scanPacks(PACKS_DATA_DIR, false);  // crecido: solo mergea en dominios existentes
+  }
+
+  _scanPacks(baseDir, allowNew) {
     let dirs;
-    try { dirs = fs.readdirSync(PACKS_DIR, { withFileTypes: true }); }
-    catch (err) { this.logger?.error('lentes-diseno.packs.missing', { error: err.message }); return; }
+    try { dirs = fs.readdirSync(baseDir, { withFileTypes: true }); }
+    catch (err) {
+      if (baseDir === PACKS_DIR) this.logger?.error('lentes-diseno.packs.missing', { error: err.message });
+      return;  // data/ ausente (aún sin montajes) = sin ruido
+    }
 
     for (const d of dirs) {
       if (!d.isDirectory()) continue;
-      const packDir = path.join(PACKS_DIR, d.name);
+      const packDir = path.join(baseDir, d.name);
       const adnPath = path.join(packDir, '_pack.json');
       let adn;
       try { adn = JSON.parse(fs.readFileSync(adnPath, 'utf-8')); }
       catch (err) { this.logger?.warn('lentes-diseno.pack.sin_adn', { dir: d.name, error: err.message }); continue; }
 
       const dominio = adn.dominio || d.name;
+      // GUARDA no-colgantes: lo crecido solo extiende un dominio que YA existe (bebido por página).
+      if (!allowNew && !this._packs.has(dominio)) {
+        this.logger?.warn('lentes-diseno.crecido.dominio_huerfano', { dominio });
+        continue;
+      }
+
       const lentes = new Map();
       // MEMORIA: carga el .md íntegro de cada lente (vive dentro del órgano).
       for (const [nombre, meta] of Object.entries(adn.memoria?.lentes || {})) {
@@ -104,8 +126,21 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
         catch (err) { this.logger?.warn('lentes-diseno.lente.missing', { dominio, nombre, archivo: meta.archivo, error: err.message }); continue; }
         lentes.set(nombre, { cuando_usar: meta.cuando_usar || '', contenido });
       }
+      const rutas = adn.memoria?.rutas || {};
 
-      // MOTOR: facultad despierta si el pack la trae; dormida si no.
+      // MERGE: si el dominio ya existe (semilla), lo crecido AÑADE — nunca pisa
+      // motor/quimico/cuando_usar de la semilla; solo suma lentes y extiende rutas.
+      if (this._packs.has(dominio)) {
+        const ex = this._packs.get(dominio);
+        for (const [nombre, l] of lentes) ex.lentes.set(nombre, l);
+        for (const [tarea, ns] of Object.entries(rutas)) {
+          const cur = ex.rutas[tarea] || (ex.rutas[tarea] = []);
+          for (const n of ns) if (!cur.includes(n)) cur.push(n);
+        }
+        continue;
+      }
+
+      // MOTOR: facultad despierta si el pack la trae; dormida si no. (Solo semilla.)
       let motor = null;
       if (adn.motor?.hook) {
         try {
@@ -120,7 +155,7 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
 
       this._packs.set(dominio, {
         cuando_usar: adn.cuando_usar || '',
-        lentes, rutas: adn.memoria?.rutas || {},
+        lentes, rutas,
         motor,
         quimico: adn.quimico || null
       });
@@ -242,6 +277,7 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
   onObtenerRequest(e) { return this._atender(e, 'obtener', 'lentes.obtener.response', d => this._obtener(d)); }
   onMotorRequest(e)   { return this._atender(e, 'motor',   'lentes.motor.response',   d => this._motor(d)); }
   onVecinasRequest(e) { return this._atender(e, 'vecinas', 'lentes.vecinas.response', d => this._vecinas(d?.desde, d?.k, d?.dominio)); }
+  onMontarRequest(e)  { return this._atender(e, 'montar',  'lentes.montar.response',  d => this._montar(d)); }
   // co-uso externo (p.ej. el destilador o el conserje observan un uso conjunto)
   onCoUso(e) { const d = (e && e.data) || e || {}; if (Array.isArray(d.lentes)) this._coUso(d.lentes); }
 
@@ -352,6 +388,67 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
     } catch (err) {
       return this._errorResponse(400, 'INVALID_INPUT', err.message, { dominio, op });
     }
+  }
+
+  // ── MONTAR: la puerta de escritura del cuenco (crecible en caliente). Una skill
+  // promovida desde la cantera ENTRA como lente activa en el pack de su dominio y, si
+  // trae `tarea`, en esa ruta (para que el ruteo determinista la alcance). Persiste en
+  // data/ (overlay ADN + .md) y re-descubre. GUARDA: no colgantes — el dominio debe
+  // existir como pack (bebido por una página); no se inventan dominios muertos. ──
+  _montar({ dominio, nombre, contenido, cuando_usar = '', tarea } = {}) {
+    if (!dominio || typeof dominio !== 'string') return this._invalid('dominio');
+    if (!nombre || typeof nombre !== 'string') return this._invalid('nombre');
+    if (!contenido || typeof contenido !== 'string') return this._invalid('contenido');
+    if (!this._packs.has(dominio)) {
+      return this._errorResponse(409, 'CONFLICT_STATE',
+        `dominio sin pack: no se montan colgantes en '${dominio}'`,
+        { dominios_validos: [...this._packs.keys()] });
+    }
+
+    const archivo = `${this._slug(nombre)}.md`;
+    const packDir = path.join(PACKS_DATA_DIR, dominio);   // dir por dominio raw (fs UTF-8 ok)
+    const adnPath = path.join(packDir, '_pack.json');
+
+    // overlay ADN del lado crecido (se lee-o-inicia; idempotente por nombre).
+    let adn;
+    try { adn = JSON.parse(fs.readFileSync(adnPath, 'utf-8')); }
+    catch (_) { adn = { dominio, memoria: { lentes: {}, rutas: {} } }; }
+    adn.memoria = adn.memoria || {};
+    adn.memoria.lentes = adn.memoria.lentes || {};
+    adn.memoria.rutas = adn.memoria.rutas || {};
+    adn.memoria.lentes[nombre] = { archivo, cuando_usar };
+    let tareaNorm = null;
+    if (tarea) {
+      tareaNorm = String(tarea).toLowerCase();
+      const arr = adn.memoria.rutas[tareaNorm] || (adn.memoria.rutas[tareaNorm] = []);
+      if (!arr.includes(nombre)) arr.push(nombre);
+    }
+
+    try {
+      fs.mkdirSync(packDir, { recursive: true });
+      fs.writeFileSync(path.join(packDir, archivo), String(contenido).trim() + '\n', 'utf-8');
+      fs.writeFileSync(adnPath, JSON.stringify(adn, null, 2), 'utf-8');
+    } catch (err) {
+      return this._errorResponse(500, 'UNKNOWN_ERROR', `no se pudo montar la lente: ${err.message}`, { dominio, nombre });
+    }
+
+    this._descubrirPacks();   // re-indexa (semilla + crecido) → la lente ya es activa
+    this._construirGrafo();
+    const pack = this._packs.get(dominio);
+    try {
+      this.eventBus?.publish?.('lente.registrar', {
+        dominio, cuando_usar: pack.cuando_usar,
+        lentes: [...pack.lentes.keys()], tiene_motor: !!pack.motor, tiene_quimico: !!pack.quimico
+      });
+    } catch (_) { /* best-effort */ }
+    this.metrics?.increment?.('lentes-diseno.montadas.total', { dominio });
+
+    return { status: 200, data: { dominio, nombre, tarea: tareaNorm, montada: true, total_lentes: pack.lentes.size } };
+  }
+
+  _slug(s) {
+    return String(s).toLowerCase().trim()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'x';
   }
 }
 

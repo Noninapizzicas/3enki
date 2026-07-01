@@ -38,7 +38,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'cosecha';
-    this.version = '0.3.0';
+    this.version = '0.4.0';
     // nombre → { nombre, descripcion, fuente, dominio, tags:[], contenido }
     this._skills = new Map();
   }
@@ -120,6 +120,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   async onListarRequest(event)   { return this._atender(event, 'listar',   'cosecha.listar.response',   () => this._listar()); }
   async onStatsRequest(event)    { return this._atender(event, 'stats',    'cosecha.stats.response',    () => this._stats()); }
   async onImportarRequest(event) { return this._atender(event, 'importar', 'cosecha.importar.response', (d) => this._importar(d)); }
+  async onPromoverRequest(event) { return this._atender(event, 'promover', 'cosecha.promover.response', (d) => this._promover(d)); }
 
   // ── el NERVIO del destilador: cuando SELLA una skill en una cúpula (memoria por
   // proyecto), la cantera la ABSORBE a la biblioteca global. Fire-and-forget: el cuerpo
@@ -214,6 +215,33 @@ class CosechaModule extends ModuloHibridoReflejo {
     this._descubrir();  // re-indexa (semilla + crecido)
     this.metrics?.increment('cosecha.importadas.total', { fuente: fuenteSlug });
     return { status: 200, data: { fuente, importadas, rechazadas, total: this._skills.size } };
+  }
+
+  // promover: el PUENTE cantera → cuenco. Toma una skill de la abundancia y se la
+  // entrega al cuenco (lentes-diseno) para que la MONTE como lente activa del dominio;
+  // el nervio de ai-gateway la inyectará por turno en las páginas que beban ese dominio.
+  // El cuenco pone la guarda no-colgantes (409 si el dominio no existe); aquí se propaga.
+  async _promover({ nombre, dominio, tarea, cuando_usar } = {}) {
+    if (!nombre || typeof nombre !== 'string') return this._invalid('nombre');
+    if (!dominio || typeof dominio !== 'string') return this._invalid('dominio');
+    const skill = this._skills.get(nombre);
+    if (!skill) {
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `skill desconocida en la cantera: ${nombre}`, { faltan: [nombre] });
+    }
+    const resp = await this._rpc('lentes.montar.request', {
+      dominio, nombre, contenido: skill.contenido,
+      cuando_usar: cuando_usar || skill.descripcion || '',
+      tarea
+    });
+    if (!resp) {
+      return this._errorResponse(504, 'UPSTREAM_TIMEOUT', 'el cuenco (lentes-diseno) no respondió al montaje', { dominio, nombre });
+    }
+    if (typeof resp.status === 'number' && resp.status >= 400) {
+      // propaga el veredicto del cuenco tal cual (p.ej. 409 colgante).
+      return { status: resp.status, error: resp.error || { code: 'UPSTREAM_INVALID_RESPONSE', message: 'el cuenco rechazó el montaje' } };
+    }
+    this.metrics?.increment('cosecha.promovidas.total', { dominio });
+    return { status: 200, data: { nombre, dominio, promovida: true, montaje: resp.data || null } };
   }
 
   // serializa una skill a SKILL.md (frontmatter + markdown). Reversible por _parse.

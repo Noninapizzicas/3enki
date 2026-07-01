@@ -22,6 +22,7 @@
 const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
+const ical = require('../../_shared/ical');
 
 const nowISO = () => new Date().toISOString();
 const DOW = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];   // getUTCDay(): 0=domingo · L,M(artes),X(miércoles),J,V,S
@@ -33,7 +34,7 @@ class PrismaCalendarioReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'calendario';
-    this.version = 'reflejo-0.1.0';
+    this.version = 'reflejo-0.2.0';
     this.dispPorProyecto = new Map();   // project_id → Disponibilidad
     this.resPorProyecto = new Map();    // project_id → Array<Reserva>
     this._persist = new PosPersistencia({
@@ -57,6 +58,8 @@ class PrismaCalendarioReflejo extends ModuloHibridoReflejo {
   onCancelarRequest(e)          { return this._atender(e, 'cancelar', 'calendario.cancelar.response', d => this._cancelar(d)); }
   onDevolverRequest(e)          { return this._atender(e, 'devolver', 'calendario.devolver.response', d => this._devolver(d)); }
   onListReservasRequest(e)      { return this._atender(e, 'list_reservas', 'calendario.list_reservas.response', d => this._listReservas(d)); }
+  // ── BORDE iCal: feed .ics de las reservas (para el móvil del dueño) ──
+  onFeedIcsRequest(e)           { return this._atender(e, 'feed_ics', 'calendario.feed_ics.response', d => this._feedIcs(d)); }
 
   // ============================================================= helpers de estado
   _disp(project_id) {
@@ -244,6 +247,25 @@ class PrismaCalendarioReflejo extends ModuloHibridoReflejo {
     if (input.desde) { const d = this._min(input.desde); out = out.filter(r => this._min(r.inicio) >= d); }
     if (input.hasta) { const h = this._min(input.hasta); out = out.filter(r => this._min(r.inicio) <= h); }
     return { status: 200, data: { reservas: out, total: out.length } };
+  }
+
+  // reservas → texto .ics suscribible. Cita/alquiler; canceladas/devueltas van con su STATUS.
+  // Feed de reservas (lo que el dueño quiere ver en el móvil); los días cerrados = follow-up.
+  _feedIcs(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    const disp = this._disp(input.project_id);
+    const etiqueta = (tipo) => { const t = (disp.recurso_tipos || []).find(x => x.id === tipo); return t ? t.etiqueta : tipo; };
+    const events = this._reservas(input.project_id).map(r => ({
+      uid: `${r.id}@prisma-calendario`,
+      start: r.inicio,
+      end: r.fin || undefined,
+      allDay: !/T\d/.test(r.inicio),            // fecha sin hora (alquiler por días) → evento de día completo
+      summary: r.cliente ? `${etiqueta(r.recurso_tipo)} · ${r.cliente}` : etiqueta(r.recurso_tipo),
+      description: r.origen ? `origen: ${r.origen}` : undefined,
+      status: r.estado === 'cancelada' ? 'CANCELLED' : (r.estado === 'no_show' ? 'CANCELLED' : 'CONFIRMED')
+    }));
+    const ics = ical.toIcs({ name: 'Agenda', nowIso: input._now, events });
+    return { status: 200, data: { content_type: 'text/calendar; charset=utf-8', filename: 'agenda.ics', ics } };
   }
 }
 

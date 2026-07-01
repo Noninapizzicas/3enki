@@ -183,7 +183,8 @@
     "test:prisma__ticket": "node tests/unit/prisma__ticket.test.js",
     "test:prisma__cierre": "node tests/unit/prisma__cierre.test.js",
     "test:prisma__enforcement": "node tests/unit/prisma__enforcement.test.js",
-    "test:prisma__calendario": "node tests/unit/prisma__calendario.test.js"
+    "test:prisma__calendario": "node tests/unit/prisma__calendario.test.js",
+    "test:shared__ical": "node tests/unit/shared__ical.test.js"
   },
   "keywords": [
     "event-driven",

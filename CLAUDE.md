@@ -14975,7 +14975,7 @@ _shared/pos-persistencia.js  (composición)  snapshot(project_id)/hidratar(proje
   el helper escribe /prisma/pos/<mod>.json (fs.write atómico, debounced) y restaura en project.activated. Sin project_id → solo memoria (honesto).
 ```
 
-## calendario (module 0.1.0 · reflejo 0.1.0) — BASE COMPARTIDA del tiempo (órgano `agenda`) ✓ (motor v0.1; iCal v0.2)
+## calendario (module 0.2.0 · reflejo 0.2.0) — BASE COMPARTIDA del tiempo (órgano `agenda`) ✓ (motor + feed .ics)
 
 ```
 CLASE PrismaCalendarioReflejo HEREDA ModuloHibridoReflejo {   // base compartida (como marca/recetas) · product-AGNÓSTICO
@@ -14987,9 +14987,12 @@ CLASE PrismaCalendarioReflejo HEREDA ModuloHibridoReflejo {   // base compartida
     get_disponibilidad · set_disponibilidad(deep-merge) · bloquear_dia(excepción cerrada = "día que no trabajo") ·
     huecos({recurso_tipo,desde,hasta,duracion_min} → troceo back-to-back, capacidad−solapadas) ·
     reservar (guarda _hayHueco: cita exige horario+fin · intervalo solo capacidad; 409 SIN_HUECO/412 FUERA_DE_HORARIO/404 RECURSO_DESCONOCIDO) ·
-    cancelar (libera) · devolver (alquiler: cierra el intervalo abierto) · list_reservas
+    cancelar (libera) · devolver (alquiler: cierra el intervalo abierto) · list_reservas ·
+    feed_ics (BORDE: reservas → texto .ics RFC 5545 suscribible desde el móvil del dueño, vía _shared/ical)
   MOTOR PURO  _ventanasAbiertas(horario−excepciones ∩ [desde,hasta]) · _huecos · _hayHueco · _solapa. Reloj de pared naïve,
-              comparado determinista vía Date.UTC de componentes (sin deriva de zona). tz/DST real + .ics = v0.2 (luxon/rrule/ical-generator).
+              comparado determinista vía Date.UTC de componentes (sin deriva de zona).
+  BORDE iCal  _shared/ical (serializador RFC 5545 PROPIO, sin deps): horas en tiempo FLOTANTE (reloj de pared) · DTSTAMP UTC ·
+              plegado 75 octetos · escape. Falta última milla: exponer el .ics como GET suscribible (webcal). tz/DST (TZID+VTIMEZONE, luxon) + import .ics/CalDAV = follow-up.
   PRODUCT-AGNÓSTICO  la duración/recurso los aporta el CONSUMIDOR (agenda-citas/alquiler), no el calendario.
   PERSISTE  por proyecto (pos-persistencia, /prisma/calendario/estado.json: disponibilidad + reservas). Siempre cargado (base, no gateado).
 }
@@ -15029,7 +15032,7 @@ cobro.{iniciado,procesado,reembolsado}   (ciclo del cobro)
 cuenta.{crear,get,list,cerrar}.request → .response · cuenta.{creada,cerrada}   (ticket)
 ticket.formatear.request → .response · ticket.generado   (recibo)
 cierre.{cerrar_caja,estado}.request → .response · caja.cerrada   (cuadre del día)
-calendario.{get_disponibilidad,set_disponibilidad,bloquear_dia,huecos,reservar,cancelar,devolver,list_reservas}.request → .response   (base del tiempo)
+calendario.{get_disponibilidad,set_disponibilidad,bloquear_dia,huecos,reservar,cancelar,devolver,list_reservas,feed_ics}.request → .response   (base del tiempo + feed .ics)
 calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta}   (señales del calendario)
 ```
 
@@ -15042,7 +15045,7 @@ calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta} 
 ✓ POS COMPLETO + PERSISTENTE — carrito (7/7) · cobro (8/8) · cuenta (6/6) · ticket (3/3) · cierre (4/4): catálogo→carrito→cuenta→cobro→ticket→cierre (sin cocina). Estado vivo persistido por proyecto (/prisma/pos/*.json), restaura en project.activated.
 ✓ BOSS ENFORCEMENT — enforcement (7/7): boss.plan.actualizado → interruptor.set enciende los órganos del comercio (additivo-seguro, no apaga solo). Lazo CEREBRO→acción cerrado.
 ✓ COSTE→PRODUCTO — coste.aplicar escribe el pvp en el producto (precio_base_centimos) + cierra la pregunta_abierta de coste (madurez→listo). Lazo cara-comerciante cerrado.
-✓ ÓRGANO AGENDA (base) — calendario.md (propuesta) + calendario (9/9): base compartida del tiempo (disponibilidad+capacidad+reservas+huecos), motor determinista, un motor para cita y alquiler, persistente. El organo-agenda ya tiene BASE (falta el consumidor que lo gatee).
-◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · calendario bordes iCal (feed .ics + import CalDAV) + tz/DST (luxon) · los interruptores organo-* esperan dueño (cocina la reacciona pizzepos) — se verifican corriendo el Enki
+✓ ÓRGANO AGENDA (base + feed .ics) — calendario.md (propuesta) + calendario (11/11) + _shared/ical (6/6): base compartida del tiempo (disponibilidad+capacidad+reservas+huecos), motor determinista, un motor para cita y alquiler, persistente, y feed .ics (RFC 5545, serializador propio) para el móvil del dueño. El organo-agenda ya tiene BASE (falta el consumidor que lo gatee).
+◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · calendario: última milla del .ics (GET suscribible/webcal) + import .ics/CalDAV + tz/DST (luxon) · los interruptores organo-* esperan dueño (cocina la reacciona pizzepos) — se verifican corriendo el Enki
 [ ] wiring/en vivo: adaptador reflejo → arquetipos custom · CONSUMIDORES del calendario (agenda-citas gateado por organo-agenda · alquiler · staff-turnos) · dueños de retorno/fianza/stock
 ```

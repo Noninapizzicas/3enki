@@ -95,9 +95,12 @@ consumidores (follow-up)                  agenda-citas (gateado por organo-agend
 ## Estado
 
 ```
-✓ v0.1 CONSTRUIDO — modules/prisma/calendario (reflejo 0.1.0, 9/9 tests): disponibilidad
+✓ v0.1 CONSTRUIDO — modules/prisma/calendario (reflejo 0.1.0): disponibilidad
   (get/set/bloquear_dia) + huecos (motor puro, capacidad − solapadas) + reservas
   (reservar/cancelar/devolver/list, guarda cita↔intervalo) + persistencia por proyecto.
-◑ v0.2 (bordes) — feed .ics (ical-generator) · import .ics/CalDAV del dueño · tz/DST (luxon).
+✓ v0.2 FEED .ics — op feed_ics (reflejo 0.2.0) + _shared/ical (serializador RFC 5545 PROPIO,
+  sin deps, 6/6 tests): reservas → texto .ics, horas en tiempo flotante (reloj de pared).
+◑ v0.2 resto — última milla: exponer el .ics como GET suscribible (webcal) · import .ics/CalDAV
+  del dueño (días cerrado) · tz/DST correcto (TZID+VTIMEZONE, luxon).
 [ ] CONSUMIDORES — agenda-citas (gateado por organo-agenda) · alquiler · staff-turnos.
 ```

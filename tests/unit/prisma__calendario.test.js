@@ -99,4 +99,26 @@ test('persistencia: snapshot/hidratar restaura disponibilidad + reservas', () =>
   A._persist.detener(); B._persist.detener();
 });
 
+test('feed .ics: una reserva → un VEVENT con sus horas; cancelada lleva STATUS:CANCELLED', () => {
+  const C = conSilla(2);
+  const a = C._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T09:00`, fin: `${DIA}T10:00`, cliente: 'Ana' });
+  C._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T10:00`, fin: `${DIA}T11:00`, cliente: 'Leo' });
+  C._cancelar({ project_id: 'p', reserva_id: a.data.id });
+  const r = C._feedIcs({ project_id: 'p', _now: '2026-07-01T00:00:00.000Z' });
+  assert.equal(r.status, 200);
+  assert.ok(r.data.content_type.startsWith('text/calendar'));
+  assert.equal((r.data.ics.match(/BEGIN:VEVENT/g) || []).length, 2);
+  assert.ok(r.data.ics.includes('DTSTART:20260706T100000'));   // la cita de Leo
+  assert.ok(r.data.ics.includes('STATUS:CANCELLED'));          // la de Ana, cancelada
+  assert.ok(r.data.ics.includes('SUMMARY:silla · Leo'));   // etiqueta cae al id si no se da
+});
+
+test('feed .ics: alquiler por días (fecha sin hora) → evento de día completo', () => {
+  const C = new PrismaCalendarioReflejo();
+  C._setDisp({ project_id: 'p', recurso_tipos: [{ id: 'maquina', etiqueta: 'Máquina', capacidad: 1 }], horario: HOR_0911 });
+  C._reservar({ project_id: 'p', recurso_tipo: 'maquina', inicio: DIA, grano: 'intervalo' });
+  const r = C._feedIcs({ project_id: 'p', _now: '2026-07-01T00:00:00.000Z' });
+  assert.ok(r.data.ics.includes('DTSTART;VALUE=DATE:20260706'));
+});
+
 console.log('prisma__calendario: asserts definidos');

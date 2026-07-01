@@ -14719,3 +14719,95 @@ pizzepos = VERTICAL 1 (no el producto). DESPUÉS: comercio local = vertical 2 (m
 REGLA   una lente solo entra cuando hay PÁGINA que la beba. Hasta entonces se COSECHAN candidatos, no se montan colgantes.
 COSECHA v2: VoltAgent/08-business-product (assumption-mapping·product-manager·business-analyst·customer-success·growth·legal).
 ```
+
+---
+
+# PRISMA — Vertical universal de comercio (producto de 5 huecos · modules/prisma/)
+
+> Vertical 2 del rumbo (comercio local/universal): producto NO pizza-shaped, molde universal.
+> Propuesta: arquitectura/decisiones/propuestas/prisma.md (6 casos trabajados). Nace 2026-07-01. En construcción.
+
+## Modelo — ProductoUniversal (contrato)
+
+```json
+{
+  "esquema": "producto-universal-v1",
+  "principio": "lo objetivo lo descompone la IA; lo privado se marca ABIERTO (no se inventa)",
+  "identidad": { "que_es": "String", "trabajo_que_resuelve": "String" },
+  "arquetipo": "comestible|pieza|servicio|uso_temporal|... (ABIERTO; la IA propone, humano aprueba = anti-wipe)",
+  "restricciones": [{ "tipo": "compatibilidad|factibilidad|verdad_obligatoria|periodo|retorno", "regla": "String", "no_negociable": "Bool" }],
+  "contrato": {
+    "atributos_saber": [{ "nombre": "String", "valor?": "Any", "derivado?": "Bool", "eje?": "precio|alergenos" }],
+    "opciones": [{ "id": "String", "etiqueta": "String",
+                   "sub_forma": "variante|modificacion|añadido|personalizacion_libre",
+                   "modo": "ELEGIR_UNO|ELEGIR_VARIOS|QUITAR|LIBRE",
+                   "valores": [{ "id": "String", "etiqueta": "String", "delta_precio": "Int", "disponible": "Bool" }] }],
+    "estados": ["ciclo de vida del producto"]
+  },
+  "ejes": { "tiempo": "ninguno|instante|cita|intervalo_que_cobra", "estado_de_partida": "false|String", "ciclo": "de_ida|con_retorno" },
+  "naturalezas": { "stock": "unidades|ingredientes|capacidad_temporal|activo_reutilizable", "precio": "por_unidad|por_peso|por_tiempo|rango_valoracion" },
+  "no_objetivos": ["String"],
+  "preguntas_abiertas": [{ "campo": "coste|stock|tarifa|agenda", "para": "comerciante", "porque": "privado|no_computable", "respondida?": "Bool" }],
+  "madurez": "listo|necesita_aclaracion_comerciante|necesita_revision"
+}
+```
+
+```
+VERDAD_OBLIGATORIA (alérgenos·etiqueta energética·seguridad) = clase aparte: no se alinea, se dice fiel. universal (4/5 casos).
+SUB_FORMA domina según arquetipo:  pizza=modificacion · TV=variante+añadido · tarta=+personalizacion_libre.
+EJES se encienden por producto:    agenda (no-inmediato) · estado_de_partida (servicios) · retorno (alquiler/leasing).
+NATURALEZA stock/precio varía:     ingredientes·unidades·capacidad_temporal·activo_reutilizable / unidad·peso·tiempo·rango_valoracion.
+CLASIFICADOR: arquetipo por la FORMA (ejes+naturalezas), NO por la superficie (corte y masaje = servicio por forma).
+```
+
+## Reparto pizzepos → prisma (copiar · reusar · dejar-arquetipo)
+
+```
+COPIAR+GENERALIZAR (llevan la forma del producto) → modules/prisma/
+  carta-manager   → producto-manager   custodio del ProductoUniversal              ✓ HECHO
+  menu-generator  → adaptador          crudo → 5 huecos + clasifica arquetipo      [ ]
+  productos       → proyector          ProductoUniversal → vista destino            [ ]
+  (fase 2) carta-digital → escaparate · variaciones+_shared/motor-opciones → opciones
+REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credential-manager · project-manager ·
+  database-manager · interruptores · propiocepcion · conserje · destilador · homeostasis · lentes-diseno · verificador-visual · portal
+DEJAR ARQUETIPO (órganos de "hostelería con mesas"; NO al core; se encienden solo si el comercio los pide):
+  comandero · cuentas · cobros · cocina · pase-cocina · pedidos · persistencia-comandero · impresion · cuentas-canales
+BOSS orquesta: un comercio = conjunto de arquetipos de sus productos; enciende packs+páginas+blueprints de esos arquetipos.
+```
+
+## producto-manager (module 0.1.0 · reflejo 0.1.0) — aggregate root ✓
+
+```
+CLASE ProductoManagerReflejo HEREDA ModuloHibridoReflejo {   // copiado de carta-manager, generalizado (pizza → 5 huecos)
+  STORE    /prisma/catalogo/<id>.json (+ .versions/<id>/<ts>.json)   single-writer
+  AGREGADO catalogo { meta{id,nombre,version,estado,created_at,updated_at}, categorias[], productos[ProductoUniversal] }
+  _mutar   read → snapshot → aplicar → fs.edit → version++ → catalogo.editado   (mismo patrón que carta-manager)
+  OPS (RPC catalogo.<op>.request → .response):
+    save · get · list · delete(soft=archivado) · add_product · remove_product · update_product(merge+renormaliza) ·
+    add_category · activar(exactamente 1 en_servicio) · clonar · search · stats(por arquetipo/madurez) · versions · restore · validar
+  FRENO    _checkProducto: identidad.que_es + arquetipo + nombre presentes · opciones sub_forma/modo canónicos · madurez canónica.
+           NO exige completitud (borrador con preguntas_abiertas = legítimo → "no inventar"). _checkCatalogo: por-producto + CATEGORIA_DANGLING.
+  NORMALIZA _normalizarProducto: rellena los 5 huecos con defaults sanos, canonicaliza opciones/ejes/naturalezas.
+            id determinista slug(categoria_id)+'_'+slug(nombre). NO inventa contenido (vacío = borrador legítimo).
+  ENTRADA  onProductoAdaptado (fire-and-forget del adaptador): upsert idempotente por id en el catálogo general del proyecto.
+  EVENTOS_PUBLISHES { catalogo.actualizado · catalogo.editado · catalogo.borrado + catalogo.<op>.response }
+  EVENTOS_SUBSCRIBES { catalogo.<op>.request (15) · producto.adaptado }
+}
+```
+
+## Topics / eventos
+
+```
+catalogo.{save,get,list,delete,add_product,remove_product,update_product,add_category,validar,activar,clonar,search,stats,versions,restore}.request → .response
+producto.adaptado                        (adaptador → producto-manager; upsert)   [emisor PENDIENTE = adaptador]
+catalogo.{actualizado,editado,borrado}   (los futuros proyector/escaparate escuchan el refresco)
+```
+
+## Estado
+
+```
+✓ prisma.md (propuesta, 6 casos) · producto-manager (custodio + freno) · test prisma__producto-manager 13/13
+[ ] adaptador  (menu-generator → descompone 5 huecos + clasifica arquetipo, emite producto.adaptado)
+[ ] proyector  (productos → proyecta ProductoUniversal a la vista destino)
+[ ] arquetipos (registro ABIERTO: semilla comestible·pieza·servicio·uso_temporal + propuestos por IA, aprobación anti-wipe)
+```

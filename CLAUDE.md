@@ -14766,7 +14766,7 @@ CLASIFICADOR: arquetipo por la FORMA (ejes+naturalezas), NO por la superficie (c
 COPIAR+GENERALIZAR (llevan la forma del producto) → modules/prisma/
   carta-manager   → producto-manager   custodio del ProductoUniversal              ✓ HECHO
   menu-generator  → adaptador          crudo → 5 huecos + clasifica arquetipo      [ ]
-  productos       → proyector          ProductoUniversal → vista destino            [ ]
+  productos       → proyector          ProductoUniversal → vista destino            ✓ HECHO
   (fase 2) carta-digital → escaparate · variaciones+_shared/motor-opciones → opciones
 REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credential-manager · project-manager ·
   database-manager · interruptores · propiocepcion · conserje · destilador · homeostasis · lentes-diseno · verificador-visual · portal
@@ -14795,19 +14795,36 @@ CLASE ProductoManagerReflejo HEREDA ModuloHibridoReflejo {   // copiado de carta
 }
 ```
 
+## proyector (module 0.1.0 · reflejo 0.1.0) — proyector sin estado ✓
+
+```
+CLASE PrismaProyectorReflejo HEREDA ModuloHibridoReflejo {   // gemelo de pizzepos/productos, generalizado
+  SIN STORE  vista == proyectar(catalogo_activo) SIEMPRE. Lee via catalogo.get/list.request (producto-manager).
+  _proyectar(catalogo) PURO → { categorias(orden), productos[vista] }
+  _proyectarProducto → aplana el ProductoUniversal a la vista de consumo:
+    { id, nombre, que_es, arquetipo, categoria_id, atributos, opciones(con disponible), estados,
+      verdades_obligatorias (restricciones tipo=verdad_obligatoria → alérgenos/etiqueta/seguridad),
+      ejes, naturalezas, madurez, listo_para_vender(=madurez 'listo'), requiere_tiempo(=eje tiempo≠ninguno) }
+  OPS (RPC vista.<op>.request → .response): completa · productos(filtro categoria/arquetipo) · producto · buscar
+  SEÑAL  catalogo.{actualizado,editado,borrado} → re-emite vista.actualizada (lite). project.activated → warm.
+  DOMAIN 'vista.*' propio para no pisar catalogo.* (que posee producto-manager, el único writer).
+}
+```
+
 ## Topics / eventos
 
 ```
 catalogo.{save,get,list,delete,add_product,remove_product,update_product,add_category,validar,activar,clonar,search,stats,versions,restore}.request → .response
 producto.adaptado                        (adaptador → producto-manager; upsert)   [emisor PENDIENTE = adaptador]
-catalogo.{actualizado,editado,borrado}   (los futuros proyector/escaparate escuchan el refresco)
+catalogo.{actualizado,editado,borrado}   (producto-manager → proyector; señal de refresco)
+vista.{completa,productos,producto,buscar}.request → .response   (proyector; lectura proyectada)
+vista.actualizada                        (proyector → consumidor/escaparate; consume-on-read del refresco)
 ```
 
 ## Estado
 
 ```
-✓ prisma.md (propuesta, 6 casos) · producto-manager (custodio + freno) · test prisma__producto-manager 13/13
+✓ prisma.md (propuesta, 6 casos) · producto-manager (custodio + freno, test 13/13) · proyector (sin estado, test 4/4)
 [ ] adaptador  (menu-generator → descompone 5 huecos + clasifica arquetipo, emite producto.adaptado)
-[ ] proyector  (productos → proyecta ProductoUniversal a la vista destino)
 [ ] arquetipos (registro ABIERTO: semilla comestible·pieza·servicio·uso_temporal + propuestos por IA, aprobación anti-wipe)
 ```

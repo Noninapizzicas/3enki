@@ -1,0 +1,18 @@
+{
+  "_doc": "Manifest de prisma/proyector — REFLEJO JS SIN ESTADO (gemelo de pizzepos/productos, generalizado). Proyecta el ProductoUniversal del catalogo activo a una VISTA de consumo al vuelo (vista == proyectar(catalogo_activo) SIEMPRE). No tiene store: lee via catalogo.get/list.request (producto-manager) y proyecta. Domain propio 'vista.*' para no colisionar con catalogo.* (que posee producto-manager, el writer). Reacciona a catalogo.{actualizado,editado,borrado} re-emitiendo la senal vista.actualizada (sin sincronizar nada). Ver arquitectura/decisiones/propuestas/prisma.md.",
+  "name": "proyector",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): copiado del patron de productos v5 (proyector sin estado). _proyectar(catalogo) es funcion PURA: aplana el ProductoUniversal a la vista (que_es, precio, opciones con disponible, verdades_obligatorias extraidas de restricciones, ejes/naturalezas para que la vista sepa si necesita widget de agenda/tiempo). Sin el equipaje de canales/tarifas de pizza (se anyade cuando un arquetipo lo pida). Reflejo 0.1.0.",
+  "description": "Proyector sin estado de Prisma: ProductoUniversal (catalogo activo) -> vista de consumo, al vuelo. Gemelo generalizado de pizzepos/productos.",
+  "language": "es",
+  "subscribes": [
+    { "event": "vista.completa.request", "handler": "onVistaCompletaRequest", "description": "Reflejo JS: proyecta el catalogo activo entero (categorias + productos vista + verdades_obligatorias)." },
+    { "event": "vista.productos.request", "handler": "onVistaProductosRequest", "description": "Reflejo JS: lista de productos proyectados (filtros categoria/arquetipo)." },
+    { "event": "vista.producto.request", "handler": "onVistaProductoRequest", "description": "Reflejo JS: un producto proyectado por id." },
+    { "event": "vista.buscar.request", "handler": "onVistaBuscarRequest", "description": "Reflejo JS: busca productos por query en el catalogo activo." },
+    { "event": "catalogo.actualizado", "handler": "onCatalogoActualizado", "description": "Reflejo JS (senal): el catalogo cambio; re-emite vista.actualizada (proyeccion lite). Sin store que sincronizar." },
+    { "event": "catalogo.editado", "handler": "onCatalogoActualizado", "description": "Reflejo JS (senal): idem, para las mutaciones estructuradas (_mutar de producto-manager)." },
+    { "event": "catalogo.borrado", "handler": "onCatalogoBorrado", "description": "Reflejo JS (senal): el catalogo borrado deja de ser el activo; re-proyecta el que quede (o vista vacia)." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS (warm): proyecta el catalogo activo y emite vista.actualizada al arrancar el proyecto." }
+  ]
+}

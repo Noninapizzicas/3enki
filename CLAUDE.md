@@ -14722,6 +14722,120 @@ COSECHA v2: VoltAgent/08-business-product (assumption-mapping·product-manager·
 
 ---
 
+# CANTERA — la abundancia alojada (hermano ADITIVO del cuenco · vivo en main, 2026-07-01)
+
+> La *Teoría del Órgano* prometió cosechar skills; esto es la realidad construida. El CUENCO
+> (lentes-diseno) sostiene las lentes ACTIVAS (inyectadas por turno). La CANTERA (cosecha) sostiene
+> TODA la abundancia — skills de cualquier fuente (destilador, ECC/VoltAgent, un .md suelto) —
+> buscable pero NO inyectada. La cúpula queda VIVA porque la cantera absorbe lo demás. **Sumar, no
+> restar:** la abundancia bien alojada no es ruido, es MUNICIÓN (el conserje ofrece; find-skills
+> ensambla). Módulos: `modules/cosecha/` (0.6.0) · `modules/find-skills/` (0.1.0) · cuenco 2.3.0.
+
+## El órgano cosecha/CANTERA (reflejo puro)
+
+```json
+{
+  "esquema": "cantera-v1",
+  "vive_en": "DOS raíces — SEMILLA cantera/<fuente>/<skill>/SKILL.md (código, versionada) +
+              CRECIDO data/cosecha/cantera/ (en caliente, persistente). Lo crecido gana en colisión.",
+  "skill": { "nombre", "descripcion", "fuente", "dominio", "tags[]", "lente_dominio?", "lente_tarea?", "contenido" },
+  "puertas": {
+    "buscar":   "{query?,dominio?,tarea?,limite?} → catálogo BARATO rankeado (sin contenido) — evita la dilución de selección",
+    "obtener":  "{nombres[]} → el SKILL.md COMPLETO (lo caro, bajo demanda)",
+    "listar · stats": "catálogo entero · recuento por fuente",
+    "importar": "{fuente, skills[]} → escribe cada SKILL.md en data/ y re-indexa (crece en caliente). Idempotente por nombre",
+    "olvidar":  "{nombre} → borra la skill CRECIDA y re-indexa"
+  }
+}
+```
+
+```
+MANDATO semilla_intocable : lo curado en el código es la base; olvidar/desmontar operan SOLO sobre
+                            lo crecido (data/). Pedir olvidar una semilla → 409 (no vive en data/, por construcción).
+MANDATO hogar_declarado   : una skill puede decir dónde vivir como lente (lente_dominio + lente_tarea
+                            en su frontmatter) → promover lo defaultea; el conserje la ofrece para ACTIVAR.
+NERVIO destilador→cantera : onSkillDestilada absorbe `aprendizaje.skill.creada` (fire-and-forget). El
+                            destilador enriquece el evento con contenido_md+descripcion → la cantera aloja
+                            SIN re-consultar cúpulas. Lo que el runtime aprende queda buscable/ofrecible.
+```
+
+## Ciclo de vida — sumar y poder retirar, en caliente
+
+```
+importar ↔ olvidar                       (cantera)
+promover → lentes.montar ↔ desmontar     (cuenco)
+
+promover (cosecha 0.6.0)  el PUENTE cantera→cuenco: lee la skill y la entrega a lentes.montar para que
+                          la MONTE como lente activa del dominio. Defaultea dominio/tarea desde el HOGAR
+                          de la skill (basta `cosecha.promover:<nombre>`). Propaga el veredicto del cuenco.
+montar (cuenco 2.3.0)     PUERTA DE ESCRITURA del cuenco (mismo patrón semilla+crecido): _descubrirPacks
+                          escanea packs/ (código) + data/lentes-diseno/packs/ (crecido) y MERGEA en el pack
+                          semilla del dominio (añade lentes + extiende rutas; nunca pisa motor/quimico).
+                          GUARDA no-colgantes: dominio sin pack (no bebido por página) → 409.
+desmontar                 reversa de montar: quita la lente crecida del overlay; la semilla no se desmonta (404).
+NO TOCA ai-gateway        el nervio de lentes ya inyecta lo que el pack sirve para el lente_default de la
+                          página; promover solo mete la skill en el pack → se inyecta sin cambiar el nervio.
+```
+
+## conserje-cantera — la 3ª facultad (ofrece ACTIVAR)
+
+```
+INTERRUPTOR 'conserje-cantera' (grupo aprendizaje, OFF por defecto, independiente de brecha/rutas)
+Tras un paso, mina la cosecha por la última capacidad tocada (cosecha.buscar) y ofrece la skill pertinente:
+  · si la skill declara HOGAR (lente_dominio) → accion_sugerida `cosecha.promover:<nombre>` ("¿la activamos?")
+  · si no                                     → `cosecha.obtener:<nombre>` ("¿la leemos?")
+Demand-driven (sin skill pertinente, no spamea) · cooldown · prioridad menor que brecha/rutas.
+El nervio (ai-gateway) surfacea el empujón en el chat una vez, natural.
+```
+
+## find-skills — el planificador GOAL-DRIVEN (gemelo del conserje-cantera)
+
+> El conserje ofrece 1 skill por lo que TOCASTE (reactivo). find-skills ensambla el SET por lo que
+> QUIERES (proactivo). Declaras un proyecto → descompone → busca en la cantera → propone/ensambla el set.
+> blueprint-agentico. Cero infra nueva: reutiliza cosecha.buscar/listar/promover. `modules/find-skills/`.
+
+```
+ESPINAZO (6 fases)  CONTRATO → PENSAR·1 descomponer → LEER cosecha.buscar → PENSAR·2 elegir/HUECO
+                    → PENSAR·3 criticar (loop-until-dry) → VALIDAR (reflejo) → GUARDAR promover → EMITIR
+REPARTO   LLM (blueprint): descomponer·elegir·criticar   ·   REFLEJO (index): _validar·_ensamblar
+
+FRENO HÍBRIDO de completitud (el corazón — cada mitad su naturaleza):
+  REFLEJO (find_skills.validar) — la LEY computable:
+    no_silent_drops (ninguna capacidad se cae callada) · no_alucinadas (la skill EXISTE, contra
+    cosecha.listar) · cobertura = |capacidades con skill| / |capacidades|
+  LLM (criticar) — lo IRREDUCIBLE: "¿qué capacidad NECESARIA no está nombrada?"
+  → el reflejo no juzga si la descomposición fue completa (fuzzy); el LLM no es de fiar para "existe"
+    (determinista). MANDATO P0: el plan nace FÉRTIL — nombra los HUECOS, no los esconde. Un hueco es
+    QUÉ COSECHAR después → find-skills hace crecer la cantera con propósito (cierra el lazo).
+GRADUALIDAD  modo proponer por defecto (no promueve) → ensamblar cuando se confíe (como el Portal read→write).
+```
+
+## El lazo entero + topics
+
+```
+aprende (destilador) → aloja (cantera) → OFRECE ACTIVAR (conserje-cantera) → lente viva (cuenco)
+                                       ↘ ENSAMBLA por proyecto (find-skills) ↗
+EVENTOS {
+  cosecha.{buscar,obtener,listar,stats,importar,promover,olvidar}.request → .response
+  aprendizaje.skill.creada                     (destilador → cantera absorbe; lleva contenido_md)
+  lentes.{montar,desmontar}.request → .response  (cuenco crecible + reversible)
+  conserje.empujon {tipo:'skill', accion_sugerida:'cosecha.promover|obtener:<n>'}
+  find_skills.{validar,ensamblar}.request → .response · find_skills.plan.listo  (huecos = demanda)
+}
+INSTANCIAS  semilla: deep-research·agentic-engineering (ECC) · verificar-en-vivo (enki) ·
+            vercel-carta-craft (Vercel Web Interface Guidelines destiladas al oficio de CARTA,
+            hogar diseño/tema — VERIFICADA en vivo: promovida, la lente entró en un turno real de
+            carta-digital y moldeó el diseño con tabular-nums/APCA/nbsp; round-trip reversible sin residuo).
+TESTS  cosecha__index · cosecha__promover · cosecha__destilador-bridge · conserje__cantera ·
+       lentes-diseno__montar · find-skills__index. Gate híbridos 11/0.
+```
+
+> **Trade-off vivo.** find-skills sobre ~4 skills hoy es un juguete; el mecanismo se construye ahora y
+> PAGA a medida que la cantera crece. La semántica del catálogo es determinista (cero embeddings); la
+> descomposición LLM tapa ese hueco por ahora — el upgrade HNSW queda para cuando el catálogo lo pida.
+
+---
+
 # PRISMA — Vertical universal de comercio (producto de 5 huecos · modules/prisma/)
 
 > Vertical 2 del rumbo (comercio local/universal): producto NO pizza-shaped, molde universal.

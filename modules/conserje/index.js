@@ -68,6 +68,7 @@ class ConserjeModule extends BaseModule {
     this.libro = new LibroDeCapacidades(PIZZEPOS_CAPACIDADES);
     this.activo = false;                 // OFF por defecto (lo gobierna el interruptor 'conserje')
     this.activoRutas = false;            // OFF por defecto — interruptor 'conserje-rutas' (replay sugerente)
+    this.activoCantera = false;          // OFF por defecto — interruptor 'conserje-cantera' (ofrece skills de la cosecha)
     this.umbralRuta = 3;                 // solo ofrece rutas aprendidas >= N veces
     this.estados = new Map();            // project_id -> { usadas:Set, intentadas:Set }
     this.cooldown = new Map();           // `${project}::${capacidad}` -> ts
@@ -87,6 +88,7 @@ class ConserjeModule extends BaseModule {
     this.config = context.moduleConfig || {};
     this.activo = this.config.enabled_default === true;   // por defecto false
     this.activoRutas = this.config.rutas_enabled_default === true;   // por defecto false (aparcado)
+    this.activoCantera = this.config.cantera_enabled_default === true;   // por defecto false
     this.umbralRuta = Number(this.config.umbral_ruta) || 3;
     this.cooldownMs = Number(this.config.cooldown_h ? this.config.cooldown_h * 3600000 : null) || 24 * 60 * 60 * 1000;
 
@@ -126,6 +128,11 @@ class ConserjeModule extends BaseModule {
         descripcion: 'Tras un paso, ofrece la ruta que el destilador aprendió que suele seguir (replay sugerente). Independiente del conserje base.',
         default: false
       });
+      this.eventBus.publish('interruptor.registrar', {
+        id: 'conserje-cantera', label: 'Conserje · skills de la cantera', grupo: 'aprendizaje',
+        descripcion: 'Tras un paso, mina la cosecha (cantera de skills) y ofrece en positivo la skill pertinente a lo que el comerciante está haciendo. Convierte la abundancia guardada en munición de empujones. Independiente de los otros dos.',
+        default: false
+      });
     } catch (_) { /* best-effort */ }
   }
 
@@ -143,6 +150,9 @@ class ConserjeModule extends BaseModule {
     } else if (d.id === 'conserje-rutas') {
       this.activoRutas = !!d.enabled;
       this.logger?.warn('conserje.rutas.toggled', { activoRutas: this.activoRutas });
+    } else if (d.id === 'conserje-cantera') {
+      this.activoCantera = !!d.enabled;
+      this.logger?.warn('conserje.cantera.toggled', { activoCantera: this.activoCantera });
     }
   }
 
@@ -229,6 +239,43 @@ class ConserjeModule extends BaseModule {
     this.dirty.clear();
     if (this.activo) this._tickBrecha(proyectos);              // empujón por brecha (OFRECE vs USA)
     if (this.activoRutas) await this._tickRutas(proyectos);    // empujón por ruta aprendida (replay sugerente)
+    if (this.activoCantera) await this._tickCantera(proyectos);// empujón por skill de la cantera (la abundancia como munición)
+  }
+
+  // ── CANTERA: mina la cosecha por lo que el comerciante está haciendo y ofrece la skill ──
+  // Aquí la abundancia guardada se vuelve GANANCIA: tener skills = poder ofrecer el
+  // siguiente paso. Demand-driven: si la cantera no tiene skill pertinente, NO ofrece
+  // (no spamea). Prioridad menor que brecha/rutas (no pisa un empujón pendiente).
+  async _tickCantera(proyectos) {
+    for (const projectId of proyectos) {
+      if (this.pendientes.has(projectId)) continue;            // brecha/rutas tienen prioridad este tick
+      const est = this.estados.get(projectId);
+      if (!est || !est.ultimaCapacidad) continue;
+      let resp = null;
+      try {
+        resp = await this._rpc('cosecha.buscar.request',
+          { query: est.ultimaCapacidad, tarea: est.ultimaCapacidad, limite: 1 }, { timeout_ms: 3000 });
+      } catch (_) { this.metrics?.increment('conserje.errors.total', { kind: 'rpc_cosecha' }); continue; }
+      const skill = resp && resp.data && Array.isArray(resp.data.skills) ? resp.data.skills[0] : null;
+      if (!skill || !skill.nombre) continue;                   // sin skill pertinente -> no ofrece
+      const key = `${projectId}::skill::${skill.nombre}`;
+      if (Date.now() - (this.cooldown.get(key) || 0) < this.cooldownMs) continue;  // no agobiar
+      this.cooldown.set(key, Date.now());
+      this._emitirEmpujonSkill(projectId, skill);
+    }
+  }
+
+  _emitirEmpujonSkill(projectId, skill) {
+    const mensaje = `Para lo que estás haciendo hay una skill en la cantera: "${skill.nombre}" — ${skill.descripcion}. ¿La montamos?`;
+    const empujon = { tipo: 'skill', recurso: skill.nombre, mensaje, accion_sugerida: `cosecha.obtener:${skill.nombre}` };
+    this.pendientes.set(projectId, empujon);   // el nervio lo leerá y consumirá (una vez)
+    try {
+      this.eventBus.publish('conserje.empujon', {
+        project_id: projectId, ...empujon,
+        correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+      });
+      this.metrics?.increment('conserje.empujon.total', { tipo: 'skill', recurso: skill.nombre });
+    } catch (_) { /* best-effort */ }
   }
 
   _tickBrecha(proyectos) {

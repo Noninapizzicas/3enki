@@ -648,6 +648,9 @@ class DestiladorModule extends ModuloHibridoReflejo {
         this.eventBus.publish('aprendizaje.skill.creada', {
           nombre_skill: cand.nombre_skill, candidata_id, project_id: cand.project_id,
           cupula: CUPULA, nota_id: cand.nombre_skill, destino,
+          // el CUERPO viaja en el evento para que la cantera (cosecha) lo absorba sin
+          // re-consultar cúpulas: el destilador SELLA por proyecto, la cantera lo aloja global.
+          contenido_md: cand.contenido_md, descripcion: this._resumenDe(cand),
           correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
         });
       } catch (_) { /* best-effort */ }

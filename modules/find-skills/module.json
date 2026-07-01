@@ -1,0 +1,35 @@
+{
+  "_doc": "Manifest de find-skills — el planificador goal-driven de proyecto. Gemelo del conserje-cantera: el conserje ofrece 1 skill por lo que TOCASTE (reactivo); find-skills ensambla el SET por lo que QUIERES (proactivo). Sigue blueprint-agentico (6 fases). La mitad FUZZY (find-skills.blueprint.json) descompone el proyecto en capacidades, busca en la cantera (cosecha.buscar) y elige, con un CRÍTICO de completitud. La mitad REFLEJO (index.js) pone las dos piezas deterministas: find_skills.validar (el freno computable: no_silent_drops · no_alucinadas · cobertura) y find_skills.ensamblar (promover el set vía cosecha.promover). El freno es HÍBRIDO: lo computable (¿existe la skill?) al reflejo, lo irreducible (¿está completo el plan?) al crítico LLM. Cero infra nueva: reutiliza cosecha.buscar/listar/promover. Ver arquitectura/decisiones/propuestas/find-skills.md.",
+  "name": "find-skills",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): nace el planificador. REFLEJO: _validar (freno computable de completitud contra cosecha.listar) + _ensamblar (promover el set vía cosecha.promover). BLUEPRINT: op planificar (descomponer/elegir/criticar + delegaciones). El loader carga ambos (blueprint_driven + index.js = híbrido). Los huecos que nombra son señal de demanda para el destilador/import (hace crecer la cantera con propósito). Modo proponer por defecto (no promueve); ensamblar cuando se confíe. Test: find-skills__index.",
+  "description": "Planificador de proyecto: declaras qué quieres construir y ensambla el set de skills de la cantera, con un freno de completitud que garantiza cobertura (no skills sueltas) y nombra los huecos honestamente. blueprint-agentico; reflejo (validar+ensamblar) + blueprint (descomponer+elegir+criticar).",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "blueprint_driven": true,
+  "blueprint_path": "find-skills.blueprint.json",
+  "target_page_id": "find-skills",
+  "cajones_enabled": true,
+
+  "publishes": [
+    { "event": "find_skills.validar.response",   "description": "Veredicto del freno computable: { valido, cobertura, cubiertas, total, huecos, drops, alucinadas }. valido = sin drops ni alucinadas; los huecos NO invalidan (son honestos)." },
+    { "event": "find_skills.ensamblar.response", "description": "Resultado de promover el set: { promovidas:[nombres], fallidas:[{nombre,motivo}], total }." },
+    { "event": "find_skills.plan.listo",         "description": "EMITE el plan cerrado: { proyecto, cobertura, huecos, promovidas, project_id }. Los huecos son demanda para cosechar." }
+  ],
+
+  "subscribes": [
+    { "event": "find_skills.validar.request",   "handler": "onValidarRequest",   "description": "Reflejo (FRENO computable): dado {proyecto, capacidades, elegidas} → {valido, cobertura, huecos, drops, alucinadas}. Caza skills alucinadas contra cosecha.listar y capacidades caídas calladas. Lo invoca el blueprint en la fase VALIDAR." },
+    { "event": "find_skills.ensamblar.request", "handler": "onEnsamblarRequest", "description": "Reflejo (GUARDAR): promueve cada skill del set vía cosecha.promover (el dominio/tarea salen del hogar de cada skill). Lo invoca el blueprint en modo ensamblar." }
+  ],
+
+  "dependencies": ["cosecha"],
+
+  "config": {
+    "persistence": {
+      "scope": "module",
+      "pattern": "stateless-planner",
+      "_nota": "Sin store: orquesta la cantera (cosecha) y el cuenco (vía cosecha.promover). No posee datos propios."
+    }
+  }
+}

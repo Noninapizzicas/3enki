@@ -63,7 +63,7 @@ class ConserjeModule extends BaseModule {
   constructor() {
     super();
     this.name = 'conserje';
-    this.version = '0.3.0';
+    this.version = '0.5.0';
     this.config = null;
     this.libro = new LibroDeCapacidades(PIZZEPOS_CAPACIDADES);
     this.activo = false;                 // OFF por defecto (lo gobierna el interruptor 'conserje')
@@ -266,8 +266,17 @@ class ConserjeModule extends BaseModule {
   }
 
   _emitirEmpujonSkill(projectId, skill) {
-    const mensaje = `Para lo que estás haciendo hay una skill en la cantera: "${skill.nombre}" — ${skill.descripcion}. ¿La montamos?`;
-    const empujon = { tipo: 'skill', recurso: skill.nombre, mensaje, accion_sugerida: `cosecha.obtener:${skill.nombre}` };
+    // Si la skill declara HOGAR (lente_dominio), ofrece PROMOVER (activarla como lente que
+    // el LLM encarna en esa página) en vez de solo OBTENER (leerla). promover resuelve el
+    // dominio/tarea desde la propia skill, así basta el nombre en la acción.
+    const promovible = !!skill.lente_dominio;
+    const mensaje = promovible
+      ? `Para lo que estás haciendo hay una skill que encaja como lente de "${skill.lente_dominio}": "${skill.nombre}" — ${skill.descripcion}. ¿La activamos?`
+      : `Para lo que estás haciendo hay una skill en la cantera: "${skill.nombre}" — ${skill.descripcion}. ¿La montamos?`;
+    const empujon = {
+      tipo: 'skill', recurso: skill.nombre, mensaje,
+      accion_sugerida: promovible ? `cosecha.promover:${skill.nombre}` : `cosecha.obtener:${skill.nombre}`
+    };
     this.pendientes.set(projectId, empujon);   // el nervio lo leerá y consumirá (una vez)
     try {
       this.eventBus.publish('conserje.empujon', {

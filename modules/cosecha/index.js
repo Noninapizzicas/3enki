@@ -38,7 +38,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'cosecha';
-    this.version = '0.3.0';
+    this.version = '0.5.0';
     // nombre → { nombre, descripcion, fuente, dominio, tags:[], contenido }
     this._skills = new Map();
   }
@@ -108,6 +108,10 @@ class CosechaModule extends ModuloHibridoReflejo {
       fuente: fm.fuente || fm.origin || fuenteDefault,
       dominio: fm.dominio || fm.domain || '',
       tags: Array.isArray(fm.tags) ? fm.tags : (fm.tags ? [fm.tags] : []),
+      // HOGAR declarado: si la skill dice dónde vivir como lente, promover lo usa por
+      // defecto y el conserje la ofrece para ACTIVAR (no solo leer). Opcional.
+      lente_dominio: fm.lente_dominio || '',
+      lente_tarea: fm.lente_tarea || '',
       contenido: contenido.trim()
     };
   }
@@ -120,6 +124,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   async onListarRequest(event)   { return this._atender(event, 'listar',   'cosecha.listar.response',   () => this._listar()); }
   async onStatsRequest(event)    { return this._atender(event, 'stats',    'cosecha.stats.response',    () => this._stats()); }
   async onImportarRequest(event) { return this._atender(event, 'importar', 'cosecha.importar.response', (d) => this._importar(d)); }
+  async onPromoverRequest(event) { return this._atender(event, 'promover', 'cosecha.promover.response', (d) => this._promover(d)); }
 
   // ── el NERVIO del destilador: cuando SELLA una skill en una cúpula (memoria por
   // proyecto), la cantera la ABSORBE a la biblioteca global. Fire-and-forget: el cuerpo
@@ -160,7 +165,10 @@ class CosechaModule extends ModuloHibridoReflejo {
     scored.sort((a, b) => b.score - a.score);
     const lim = Math.max(1, Number(limite) || 10);
     const skills = scored.slice(0, lim).map(({ s }) => ({
-      nombre: s.nombre, descripcion: s.descripcion, fuente: s.fuente, dominio: s.dominio, tags: s.tags
+      nombre: s.nombre, descripcion: s.descripcion, fuente: s.fuente, dominio: s.dominio, tags: s.tags,
+      // el HOGAR viaja en el catálogo: el conserje distingue promover (activar) de obtener (leer).
+      ...(s.lente_dominio ? { lente_dominio: s.lente_dominio } : {}),
+      ...(s.lente_tarea ? { lente_tarea: s.lente_tarea } : {})
     }));
     return { status: 200, data: { skills, total: scored.length } };
   }
@@ -216,8 +224,41 @@ class CosechaModule extends ModuloHibridoReflejo {
     return { status: 200, data: { fuente, importadas, rechazadas, total: this._skills.size } };
   }
 
+  // promover: el PUENTE cantera → cuenco. Toma una skill de la abundancia y se la
+  // entrega al cuenco (lentes-diseno) para que la MONTE como lente activa del dominio;
+  // el nervio de ai-gateway la inyectará por turno en las páginas que beban ese dominio.
+  // El cuenco pone la guarda no-colgantes (409 si el dominio no existe); aquí se propaga.
+  async _promover({ nombre, dominio, tarea, cuando_usar } = {}) {
+    if (!nombre || typeof nombre !== 'string') return this._invalid('nombre');
+    const skill = this._skills.get(nombre);
+    if (!skill) {
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `skill desconocida en la cantera: ${nombre}`, { faltan: [nombre] });
+    }
+    // el dominio/tarea pueden venir del caller o del HOGAR declarado por la skill.
+    // Así el conserje ofrece `cosecha.promover:<nombre>` a secas y promover sabe dónde.
+    const dominioFinal = (dominio && String(dominio)) || skill.lente_dominio;
+    const tareaFinal = tarea !== undefined ? tarea : (skill.lente_tarea || undefined);
+    if (!dominioFinal) {
+      return this._errorResponse(400, 'INVALID_INPUT', 'falta `dominio` (ni en el parámetro ni declarado por la skill)', { field: 'dominio' });
+    }
+    const resp = await this._rpc('lentes.montar.request', {
+      dominio: dominioFinal, nombre, contenido: skill.contenido,
+      cuando_usar: cuando_usar || skill.descripcion || '',
+      tarea: tareaFinal
+    });
+    if (!resp) {
+      return this._errorResponse(504, 'UPSTREAM_TIMEOUT', 'el cuenco (lentes-diseno) no respondió al montaje', { dominio: dominioFinal, nombre });
+    }
+    if (typeof resp.status === 'number' && resp.status >= 400) {
+      // propaga el veredicto del cuenco tal cual (p.ej. 409 colgante).
+      return { status: resp.status, error: resp.error || { code: 'UPSTREAM_INVALID_RESPONSE', message: 'el cuenco rechazó el montaje' } };
+    }
+    this.metrics?.increment('cosecha.promovidas.total', { dominio: dominioFinal });
+    return { status: 200, data: { nombre, dominio: dominioFinal, promovida: true, montaje: resp.data || null } };
+  }
+
   // serializa una skill a SKILL.md (frontmatter + markdown). Reversible por _parse.
-  _serializar({ nombre, descripcion = '', fuente = '', dominio = '', tags = [], contenido = '' }) {
+  _serializar({ nombre, descripcion = '', fuente = '', dominio = '', tags = [], lente_dominio = '', lente_tarea = '', contenido = '' }) {
     const tagsStr = Array.isArray(tags) ? `[${tags.join(', ')}]` : String(tags || '');
     const fm = [
       '---',
@@ -226,6 +267,8 @@ class CosechaModule extends ModuloHibridoReflejo {
       `fuente: ${fuente}`,
       `dominio: ${dominio}`,
       `tags: ${tagsStr}`,
+      ...(lente_dominio ? [`lente_dominio: ${lente_dominio}`] : []),   // hogar declarado (opcional)
+      ...(lente_tarea ? [`lente_tarea: ${lente_tarea}`] : []),
       '---',
       ''
     ].join('\n');

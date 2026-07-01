@@ -113,6 +113,21 @@ test('importar: vuelca una skill, la escribe en data/ y la re-indexa (buscable)'
   limpiar();
 });
 
+test('importar con HOGAR: persiste lente_dominio/lente_tarea y buscar los expone', async () => {
+  limpiar();
+  const m = await makeCargado();
+  m._importar({ fuente: FUENTE_TEST, skills: [
+    { nombre: 'con-hogar', contenido: '# c', descripcion: 'un oficio', lente_dominio: 'diseño', lente_tarea: 'tema' }
+  ]});
+  const s = m._skills.get('con-hogar');
+  assert.strictEqual(s.lente_dominio, 'diseño', 'hogar persistido y re-leído');
+  assert.strictEqual(s.lente_tarea, 'tema');
+  const { data } = m._buscar({ query: 'con-hogar' });
+  const row = data.skills.find(x => x.nombre === 'con-hogar');
+  assert.strictEqual(row.lente_dominio, 'diseño', 'el catálogo expone el hogar (para el conserje)');
+  limpiar();
+});
+
 test('importar: idempotente por nombre (re-importar pisa, no duplica)', async () => {
   limpiar();
   const m = await makeCargado();

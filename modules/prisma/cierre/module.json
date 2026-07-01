@@ -1,0 +1,13 @@
+{
+  "_doc": "Manifest de prisma/cierre — REFLEJO JS: el CIERRE DE CAJA / cuadre del día (generalizado de pizzepos/persistencia-comandero). Acumula los cobros completados (cobro.procesado) y produce el cuadre: total + desglose por método de pago + nº de ventas. Universal (cualquier comercio con caja). v0.1 en memoria. Ver arquitectura/decisiones/propuestas/prisma.md.",
+  "name": "cierre",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): onCobroProcesado acumula la venta; op cerrar_caja → cuadre {total_centimos, por_metodo, num_ventas} + reset; op estado (acumulado actual). _cuadre puro. En memoria. Reflejo 0.1.0.",
+  "description": "Cierre de caja universal de Prisma: cuadre del día (total + por método). Copiado de persistencia-comandero, la parte del cuadre.",
+  "language": "es",
+  "subscribes": [
+    { "event": "cierre.cerrar_caja.request", "handler": "onCerrarCajaRequest", "description": "Reflejo JS: produce el cuadre del día (total + por método + nº ventas) y resetea." },
+    { "event": "cierre.estado.request", "handler": "onEstadoRequest", "description": "Reflejo JS: el acumulado actual (sin cerrar)." },
+    { "event": "cobro.procesado", "handler": "onCobroProcesado", "description": "Reflejo JS (señal): un cobro se completó → acumula la venta para el cuadre." }
+  ]
+}

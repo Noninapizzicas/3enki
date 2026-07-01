@@ -178,7 +178,10 @@
     "test:prisma__coste": "node tests/unit/prisma__coste.test.js",
     "test:prisma__escaparate": "node tests/unit/prisma__escaparate.test.js",
     "test:prisma__carrito": "node tests/unit/prisma__carrito.test.js",
-    "test:prisma__cobro": "node tests/unit/prisma__cobro.test.js"
+    "test:prisma__cobro": "node tests/unit/prisma__cobro.test.js",
+    "test:prisma__cuenta": "node tests/unit/prisma__cuenta.test.js",
+    "test:prisma__ticket": "node tests/unit/prisma__ticket.test.js",
+    "test:prisma__cierre": "node tests/unit/prisma__cierre.test.js"
   },
   "keywords": [
     "event-driven",

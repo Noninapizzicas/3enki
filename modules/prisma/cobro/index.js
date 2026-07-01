@@ -99,7 +99,7 @@ class PrismaCobroReflejo extends ModuloHibridoReflejo {
     cobro.estado = 'completado';
     cobro.referencia_pago = input.referencia_pago || `REF_${crypto.randomUUID().slice(0, 8)}`;
     cobro.completado_at = nowISO();
-    this.eventBus?.publish('cobro.procesado', { cobro_id: cobro.id, cuenta_id: cobro.cuenta_id, monto_total_centimos: cobro.monto_total_centimos, referencia_pago: cobro.referencia_pago, project_id: input.project_id, timestamp: nowISO() });
+    this.eventBus?.publish('cobro.procesado', { cobro_id: cobro.id, cuenta_id: cobro.cuenta_id, monto_total_centimos: cobro.monto_total_centimos, metodo_pago: cobro.metodo_pago, referencia_pago: cobro.referencia_pago, project_id: input.project_id, timestamp: nowISO() });
     return { status: 200, data: cobro };
   }
 

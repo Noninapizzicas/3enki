@@ -14772,7 +14772,7 @@ REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credent
   database-manager · interruptores · propiocepcion · conserje · destilador · homeostasis · lentes-diseno · verificador-visual · portal
 POS UNIVERSAL (la espina de venta SÍ es reutilizable; copiar+generalizar → prisma, como carta-manager):
   comandero → carrito ✓ (buffer, tasa con opciones, céntimos, sin cocina) · cobros → cobro ✓ (pago: efectivo/tarjeta/bizum/transf/mixto, cambio) ·
-  cuentas → cuenta/ticket [ ] (abrir→añadir→cobrar→cerrar) · impresion → ticket [ ] (recibo) · persistencia-comandero → cierre de caja [ ]
+  cuentas → cuenta/ticket ✓ (ciclo abierta→cobrada→cerrada) · impresion → ticket ✓ (recibo) · persistencia-comandero → cierre de caja ✓ (cuadre)
 HOSTELERÍA (órgano del arquetipo; encender solo si el comercio es de hostelería):
   cocina · pase-cocina + los ganchos de cocina del comandero (enviar_cocina/estaciones) · cuentas-canales (delivery)
 BOSS orquesta: un comercio = conjunto de arquetipos de sus productos; enciende packs+páginas+blueprints de esos arquetipos.
@@ -14930,6 +14930,22 @@ CLASE PrismaCobroReflejo HEREDA ModuloHibridoReflejo {   // copiado de cobros, e
 }
 ```
 
+## cuenta · ticket · cierre (module 0.1.0 · reflejo 0.1.0) — POS tail ✓ (v0.1)
+
+```
+CLASE PrismaCuentaReflejo   // ticket/cuenta (de cuentas, SIN estados de cocina)
+  ciclo abierta → cobrada → cerrada. OPS cuenta.{crear,get,list,cerrar}.request. onCobroProcesado → pagada+total.
+  ref_display generado (T-001…). Ata carrito↔cobro bajo un ticket. En memoria.
+
+CLASE PrismaTicketReflejo   // recibo (de impresion, solo el ticket, SIN comanda de cocina)
+  OP ticket.formatear.request { items, total?, comercio?, ref_display?, ancho? } → { texto, total_centimos, ancho }.
+  _formatearTicket PURO (líneas item/subtotal €, TOTAL). Emite ticket.generado. Impresora física = follow-up.
+
+CLASE PrismaCierreReflejo   // cuadre de caja (de persistencia-comandero, la parte del cuadre)
+  onCobroProcesado acumula la venta. OPS cierre.{cerrar_caja,estado}.request. _cuadre PURO → {total, por_metodo, num_ventas}.
+  cerrar_caja resetea el día + emite caja.cerrada.
+```
+
 ## Topics / eventos
 
 ```
@@ -14952,6 +14968,9 @@ carrito.{get,add_item,remove_item,update_item,vaciar,list}.request → .response
 carrito.{item_agregado,item_eliminado,item_actualizado,vaciado}   (mutaciones del carrito)
 cobro.{crear,confirmar,reembolsar,get,list,metodos}.request → .response   (pago del carrito, céntimos)
 cobro.{iniciado,procesado,reembolsado}   (ciclo del cobro)
+cuenta.{crear,get,list,cerrar}.request → .response · cuenta.{creada,cerrada}   (ticket)
+ticket.formatear.request → .response · ticket.generado   (recibo)
+cierre.{cerrar_caja,estado}.request → .response · caja.cerrada   (cuadre del día)
 ```
 
 ## Estado
@@ -14960,8 +14979,7 @@ cobro.{iniciado,procesado,reembolsado}   (ciclo del cobro)
 ✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (5/5) · escaparate (5/5, núcleo)
 ✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones)
 ✓ project-type blueprints/project-types/prisma.json — comercio universal INSTANCIABLE
-✓ carrito (6/6) · cobro (7/7) — POS: buffer de venta + pago universal (de comandero/cobros, sin cocina) · lazo mínimo carrito→cobro
+✓ POS COMPLETO — carrito (6/6) · cobro (7/7) · cuenta (5/5) · ticket (3/3) · cierre (3/3): catálogo→carrito→cuenta→cobro→ticket→cierre (sin cocina)
 ◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA — se verifican corriendo el Enki
-[ ] POS resto (copiar+generalizar de pizzepos): cuenta/ticket (de cuentas) · impresion→ticket · cierre de caja (de persistencia-comandero)
-[ ] wiring: adaptador reflejo → arquetipos custom · BOSS enforcement (cargar órganos del plan) · persistir pvp/coste + carrito
+[ ] wiring/en vivo: adaptador reflejo → arquetipos custom · BOSS enforcement (cargar órganos del plan) · persistencias (carrito/cobro/cuenta) · encender cocina/pase-cocina para hostelería
 ```

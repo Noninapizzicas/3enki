@@ -1,0 +1,11 @@
+{
+  "_doc": "Manifest de prisma/ticket — REFLEJO JS: el RECIBO (generalizado de pizzepos/impresion). Formatea un ticket de venta en texto (ancho 32/58mm por defecto) desde los ítems del carrito + el total, en céntimos → €. Sin la 'comanda' de cocina (eso es hostelería). Emite ticket.generado; el envío a impresora física es best-effort/follow-up. Función de formateo PURA. Ver arquitectura/decisiones/propuestas/prisma.md.",
+  "name": "ticket",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): op formatear {items, total_centimos?, comercio?, ref_display?, ancho?} → { texto, total_centimos, ancho }. _formatearTicket puro (líneas item/subtotal + TOTAL). Solo recibo, sin comanda de cocina. Reflejo 0.1.0.",
+  "description": "Recibo/ticket universal de Prisma: formatea la venta (ítems + total) en texto imprimible. Copiado de impresion, solo la parte de recibo.",
+  "language": "es",
+  "subscribes": [
+    { "event": "ticket.formatear.request", "handler": "onFormatearRequest", "description": "Reflejo JS: ítems + total → recibo en texto; emite ticket.generado." }
+  ]
+}

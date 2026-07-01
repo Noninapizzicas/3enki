@@ -175,7 +175,8 @@
     "test:prisma__arquetipos": "node tests/unit/prisma__arquetipos.test.js",
     "test:prisma__opciones": "node tests/unit/prisma__opciones.test.js",
     "test:prisma__boss": "node tests/unit/prisma__boss.test.js",
-    "test:prisma__coste": "node tests/unit/prisma__coste.test.js"
+    "test:prisma__coste": "node tests/unit/prisma__coste.test.js",
+    "test:prisma__escaparate": "node tests/unit/prisma__escaparate.test.js"
   },
   "keywords": [
     "event-driven",

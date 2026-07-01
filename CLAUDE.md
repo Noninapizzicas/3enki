@@ -14767,7 +14767,7 @@ COPIAR+GENERALIZAR (llevan la forma del producto) → modules/prisma/
   carta-manager   → producto-manager   custodio del ProductoUniversal              ✓ HECHO
   menu-generator  → adaptador          crudo → 5 huecos + clasifica arquetipo      ✓ HECHO (híbrido: reflejo determinista + blueprint LLM)
   productos       → proyector          ProductoUniversal → vista destino            ✓ HECHO
-  (fase 2) opciones ✓ (motor-opciones) · coste ✓ (escandallo+viabilidad, genérico) · escaparate [ ] (carta-digital)
+  (fase 2) opciones ✓ · coste ✓ · escaparate ✓ (de carta-digital · núcleo público; bundle HTML/PWA follow-up en vivo)
 REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credential-manager · project-manager ·
   database-manager · interruptores · propiocepcion · conserje · destilador · homeostasis · lentes-diseno · verificador-visual · portal
 DEJAR ARQUETIPO (órganos de "hostelería con mesas"; NO al core; se encienden solo si el comercio los pide):
@@ -14887,6 +14887,21 @@ CLASE PrismaCosteReflejo HEREDA ModuloHibridoReflejo {   // generaliza escandall
 }
 ```
 
+## escaparate (module 0.1.0 · reflejo 0.1.0) — cara cliente pública ✓ (núcleo; HTML follow-up)
+
+```
+CLASE PrismaEscaparateReflejo HEREDA ModuloHibridoReflejo {   // gemelo generalizado de carta-digital, sin estado
+  DIFERENCIA con proyector: el escaparate es PÚBLICO → PODA lo que el comerciante no ofrece.
+  _proyectarPublico(catalogo) PURO → { categorias(orden), productos[público] }
+  _productoPublico → { id, nombre, descripcion(=que_es), precio (fijo € | 'consultar' si rango_valoracion/desconocido),
+     opciones (SOLO valores disponible:true; opción sin valores ofrecibles se cae; LIBRE se conserva),
+     avisos_obligatorios (restricciones verdad_obligatoria), requiere_cita (eje tiempo≠ninguno) }
+  OPS (RPC escaparate.publico.request → .response): proyecta el catálogo activo a la vista del cliente.
+  SEÑAL  catalogo.{actualizado,editado,borrado} → escaparate.actualizado.
+  FOLLOW-UP (en vivo)  generar el bundle HTML/PWA (como carta-digital static-template) + branding desde marca.
+}
+```
+
 ## Topics / eventos
 
 ```
@@ -14903,13 +14918,15 @@ opciones.evaluar.request → .response     (valida + precia la selección del cl
 boss.{plan,estado}.request → .response   (comercio → arquetipos presentes → unión de órganos)
 boss.plan.actualizado                    (el plan del comercio cambió — lo consume el enforcement: cargar órganos)
 coste.costear.request → .response        (cara comerciante: coste → margen → pvp; los costes los pone el comerciante)
+escaparate.publico.request → .response   (cara cliente: catálogo → vista pública, poda lo no ofrecido)
+escaparate.actualizado                   (escaparate → PWA/consumidor; consume-on-read del refresco)
 ```
 
 ## Estado
 
 ```
-✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (5/5)
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (5/5) · escaparate (5/5, núcleo)
 ✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones)
-◑ adaptador.blueprint (PENSAR fuzzy) montado; verificación real = ai-gateway vivo
-[ ] FASE 2 resto: escaparate (carta-digital) · cablear reflejo adaptador → arquetipos custom · BOSS enforcement (cargar órganos del plan) · persistir pvp/coste en el producto
+◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA — se verifican corriendo el Enki
+[ ] wiring: adaptador reflejo → arquetipos custom · BOSS enforcement (cargar órganos del plan) · persistir pvp/coste en el producto
 ```

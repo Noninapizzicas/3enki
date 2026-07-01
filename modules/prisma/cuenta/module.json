@@ -1,0 +1,17 @@
+{
+  "_doc": "Manifest de prisma/cuenta — REFLEJO JS: el TICKET/cuenta (envoltorio del flujo de venta, generalizado de pizzepos/cuentas). Ata carrito↔cobro bajo un ticket con su ciclo: abierta → cobrada → cerrada. Estados GENÉRICOS (sin en_preparacion/listo/entregado de hostelería — esos los añade el órgano cocina). Reacciona a cobro.procesado para marcar la cuenta pagada. v0.1 en memoria. Ver arquitectura/decisiones/propuestas/prisma.md.",
+  "name": "cuenta",
+  "version": "0.2.0",
+  "_v0_2_0_nota": "v0.2.0 (2026-07-01): PERSISTENCIA por proyecto vía _shared/pos-persistencia (snapshot fs por project_id, debounced; guarda también el seq de ref_display). Restaura en project.activated; vuelca en onUnload. Reflejo 0.2.0.",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): ticket con ciclo abierta→cobrada→cerrada. Ops crear/get/list/cerrar. onCobroProcesado marca pagada + total. ref_display generado (T-001…). Sin estados de cocina. En memoria. Reflejo 0.1.0.",
+  "description": "Ticket/cuenta universal de Prisma: abre → (carrito) → cobra → cierra. Copiado de cuentas, sin los estados de hostelería.",
+  "language": "es",
+  "subscribes": [
+    { "event": "cuenta.crear.request", "handler": "onCrearRequest", "description": "Reflejo JS: abre una cuenta/ticket (idempotente por cuenta_id si se pasa)." },
+    { "event": "cuenta.get.request", "handler": "onGetRequest", "description": "Reflejo JS: una cuenta por id." },
+    { "event": "cuenta.list.request", "handler": "onListRequest", "description": "Reflejo JS: cuentas (filtro estado)." },
+    { "event": "cuenta.cerrar.request", "handler": "onCerrarRequest", "description": "Reflejo JS: cierra una cuenta (estado cerrada)." },
+    { "event": "cobro.procesado", "handler": "onCobroProcesado", "description": "Reflejo JS (señal): un cobro se completó → marca la cuenta pagada + total + estado cobrada." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura las cuentas persistidas de ese proyecto desde /prisma/pos/cuenta.json." }
+  ]
+}

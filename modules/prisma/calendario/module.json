@@ -1,0 +1,19 @@
+{
+  "_doc": "Manifest de prisma/calendario — REFLEJO JS: la BASE COMPARTIDA del tiempo (órgano `agenda`). Dos capas: DISPONIBILIDAD (la oferta de tiempo — privada del comerciante, onboarding como el coste: horario + capacidad por recurso_tipo + excepciones 'día cerrado') + RESERVAS (el consumo — el POS del tiempo). Motor de huecos NUESTRO (aritmética determinista): hueco = capacidad − reservas_solapadas; una reserva solo entra en disponibilidad con hueco>0. Un motor, dos granos: cita (minutos·de_ida·fin fijo) e intervalo (días·con_retorno·fin abierto→devolver). Product-AGNÓSTICO: la duración/recurso los aporta el CONSUMIDOR (agenda-citas/alquiler), no el calendario (como carta-manager no conoce recetas). Los bordes iCal (feed .ics + import CalDAV) y el tz/DST correcto (luxon) son v0.2. Ver arquitectura/decisiones/propuestas/calendario.md.",
+  "name": "calendario",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): disponibilidad (get/set/bloquear_dia) + huecos (motor puro _ventanasAbiertas/_huecos, back-to-back por ventana, capacidad − solapadas) + reservas (reservar/cancelar/devolver/list) con guarda _hayHueco (cita exige horario; intervalo solo capacidad). Persistencia por proyecto (pos-persistencia, /prisma/calendario/estado.json). Reloj de pared naïve, comparado determinista vía Date.UTC de componentes (sin deriva de zona). Bordes iCal + tz/DST = v0.2. Reflejo 0.1.0.",
+  "description": "Base compartida del tiempo de Prisma (órgano agenda): disponibilidad + capacidad + reservas + huecos, en un motor determinista para cita y alquiler. Product-agnóstico; los consumidores beben por RPC.",
+  "language": "es",
+  "subscribes": [
+    { "event": "calendario.get_disponibilidad.request", "handler": "onGetDisponibilidadRequest", "description": "Reflejo JS: la disponibilidad del comercio (recurso_tipos + horario + excepciones + tz)." },
+    { "event": "calendario.set_disponibilidad.request", "handler": "onSetDisponibilidadRequest", "description": "Reflejo JS: fija/mergea la disponibilidad (onboarding del comerciante)." },
+    { "event": "calendario.bloquear_dia.request", "handler": "onBloquearDiaRequest", "description": "Reflejo JS: día (o rango) que NO se trabaja → excepción cerrada." },
+    { "event": "calendario.huecos.request", "handler": "onHuecosRequest", "description": "Reflejo JS: {recurso_tipo, desde, hasta, duracion_min} → huecos libres (capacidad − reservas solapadas), troceo back-to-back por ventana." },
+    { "event": "calendario.reservar.request", "handler": "onReservarRequest", "description": "Reflejo JS: crea una reserva si cae en disponibilidad con hueco>0 (cita: exige horario+fin; intervalo: solo capacidad, fin abierto). 409 SIN_HUECO / 412 FUERA_DE_HORARIO / 404 RECURSO_DESCONOCIDO." },
+    { "event": "calendario.cancelar.request", "handler": "onCancelarRequest", "description": "Reflejo JS: cancela una reserva (libera el hueco)." },
+    { "event": "calendario.devolver.request", "handler": "onDevolverRequest", "description": "Reflejo JS: alquiler con_retorno — cierra el intervalo abierto (libera la unidad)." },
+    { "event": "calendario.list_reservas.request", "handler": "onListReservasRequest", "description": "Reflejo JS: reservas (filtros recurso_tipo/estado/desde/hasta)." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura la disponibilidad + reservas persistidas de ese proyecto desde /prisma/calendario/estado.json." }
+  ]
+}

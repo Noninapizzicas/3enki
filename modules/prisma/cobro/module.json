@@ -1,0 +1,18 @@
+{
+  "_doc": "Manifest de prisma/cobro — REFLEJO JS: el PAGO universal (copiado y generalizado de pizzepos/cobros). Cobra el total de un carrito: efectivo (con cambio), tarjeta, bizum, transferencia, mixto (split). Ciclo pendiente → completado → reembolsado. CAMBIO vs cobros: dinero en CÉNTIMOS (coherente con carrito/opciones); toma el total del carrito (carrito.get) o inline; sin llevadoo/cajón/link/qr (integraciones externas = follow-up). Cierra el lazo mínimo de venta: carrito → cobro. v0.1 en memoria. Ver arquitectura/decisiones/propuestas/prisma.md.",
+  "name": "cobro",
+  "version": "0.2.0",
+  "_v0_2_0_nota": "v0.2.0 (2026-07-01): PERSISTENCIA por proyecto vía _shared/pos-persistencia (snapshot fs por project_id, debounced). El cobro guarda su project_id; restaura en project.activated; vuelca en onUnload. Reflejo 0.2.0.",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): ops crear/confirmar/reembolsar/get/list/metodos. crear toma monto_centimos inline o del carrito (carrito.get). Métodos: efectivo(cambio)·tarjeta·bizum·transferencia·mixto(split cuadra el total). Idempotencia: un cobro activo por cuenta. Eventos cobro.iniciado/procesado/reembolsado (mismo dominio que cobros; una cuenta prisma no la conoce pizzepos). CÉNTIMOS. En memoria. Reflejo 0.1.0.",
+  "description": "Pago universal de Prisma (cobro): cobra el carrito (efectivo/tarjeta/bizum/transferencia/mixto), en céntimos. Copiado de cobros, sin lo específico de pizzepos.",
+  "language": "es",
+  "subscribes": [
+    { "event": "cobro.crear.request", "handler": "onCrearRequest", "description": "Reflejo JS: inicia un cobro por el total del carrito (o monto_centimos inline); calcula cambio (efectivo) o valida el split (mixto)." },
+    { "event": "cobro.confirmar.request", "handler": "onConfirmarRequest", "description": "Reflejo JS: pendiente/procesando → completado; emite cobro.procesado." },
+    { "event": "cobro.reembolsar.request", "handler": "onReembolsarRequest", "description": "Reflejo JS: completado → reembolsado; emite cobro.reembolsado." },
+    { "event": "cobro.get.request", "handler": "onGetRequest", "description": "Reflejo JS: un cobro por id." },
+    { "event": "cobro.list.request", "handler": "onListRequest", "description": "Reflejo JS: cobros (filtros estado/cuenta)." },
+    { "event": "cobro.metodos.request", "handler": "onMetodosRequest", "description": "Reflejo JS: métodos de pago disponibles." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura los cobros persistidos de ese proyecto desde /prisma/pos/cobro.json." }
+  ]
+}

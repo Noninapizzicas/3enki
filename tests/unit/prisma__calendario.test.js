@@ -1,0 +1,102 @@
+/**
+ * Tests de prisma/calendario — la base compartida del tiempo. El motor (ventanas,
+ * huecos, capacidad, guardas de reserva) es determinista y se prueba sin bus.
+ */
+'use strict';
+
+const { test } = require('node:test');
+const assert = require('node:assert');
+const PrismaCalendarioReflejo = require('../../modules/prisma/calendario/index.js');
+
+// horario abierto todos los días 09:00–11:00 (para no depender del día de la semana).
+const HOR_0911 = { L: [['09:00', '11:00']], M: [['09:00', '11:00']], X: [['09:00', '11:00']], J: [['09:00', '11:00']], V: [['09:00', '11:00']], S: [['09:00', '11:00']], D: [['09:00', '11:00']] };
+const DIA = '2026-07-06';
+const desde = `${DIA}T00:00`, hasta = `${DIA}T23:59`;
+
+function conSilla(capacidad = 2) {
+  const C = new PrismaCalendarioReflejo();
+  C._setDisp({ project_id: 'p', recurso_tipos: [{ id: 'silla', capacidad }], horario: HOR_0911 });
+  return C;
+}
+
+test('huecos: trocea la ventana por duración y muestra capacidad libre', () => {
+  const C = conSilla(2);
+  const r = C._huecosOp({ project_id: 'p', recurso_tipo: 'silla', desde, hasta, duracion_min: 60 });
+  assert.equal(r.data.huecos.length, 2);                 // 09–10 y 10–11
+  assert.equal(r.data.huecos[0].inicio, `${DIA}T09:00`);
+  assert.equal(r.data.huecos[0].libres, 2);
+});
+
+test('una reserva ocupa UNA unidad de capacidad; el resto del hueco sigue libre', () => {
+  const C = conSilla(2);
+  const res = C._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T09:00`, fin: `${DIA}T10:00` });
+  assert.equal(res.status, 201);
+  const h = C._huecosOp({ project_id: 'p', recurso_tipo: 'silla', desde, hasta, duracion_min: 60 });
+  const nueve = h.data.huecos.find(x => x.inicio === `${DIA}T09:00`);
+  assert.equal(nueve.libres, 1);                         // capacidad 2 − 1 reserva
+});
+
+test('capacidad agotada → 409 SIN_HUECO', () => {
+  const C = conSilla(1);
+  C._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T09:00`, fin: `${DIA}T10:00` });
+  const dup = C._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T09:00`, fin: `${DIA}T10:00` });
+  assert.equal(dup.status, 409);
+  assert.equal(dup.error.code, 'SIN_HUECO');
+});
+
+test('cita fuera de horario → 412 FUERA_DE_HORARIO', () => {
+  const C = conSilla(2);
+  const r = C._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T12:00`, fin: `${DIA}T13:00` });
+  assert.equal(r.status, 412);
+  assert.equal(r.error.code, 'FUERA_DE_HORARIO');
+});
+
+test('recurso desconocido → 404 RECURSO_DESCONOCIDO', () => {
+  const C = conSilla(2);
+  const r = C._reservar({ project_id: 'p', recurso_tipo: 'box', inicio: `${DIA}T09:00`, fin: `${DIA}T10:00` });
+  assert.equal(r.status, 404);
+  assert.equal(r.error.code, 'RECURSO_DESCONOCIDO');
+});
+
+test('bloquear un día → ese día sin huecos', () => {
+  const C = conSilla(2);
+  C._bloquearDia({ project_id: 'p', fecha: DIA, motivo: 'festivo' });
+  const r = C._huecosOp({ project_id: 'p', recurso_tipo: 'silla', desde, hasta, duracion_min: 60 });
+  assert.equal(r.data.huecos.length, 0);
+});
+
+test('alquiler (intervalo): fin abierto ocupa; devolver lo libera', () => {
+  const C = new PrismaCalendarioReflejo();
+  C._setDisp({ project_id: 'p', recurso_tipos: [{ id: 'maquina', capacidad: 1 }], horario: HOR_0911 });
+  const a = C._reservar({ project_id: 'p', recurso_tipo: 'maquina', inicio: DIA, grano: 'intervalo' });   // sin horario ni fin
+  assert.equal(a.status, 201);
+  assert.equal(a.data.fin, null);
+  const b = C._reservar({ project_id: 'p', recurso_tipo: 'maquina', inicio: DIA, grano: 'intervalo' });
+  assert.equal(b.status, 409);                            // única unidad ocupada
+  const dev = C._devolver({ project_id: 'p', reserva_id: a.data.id, fin: '2026-07-08' });
+  assert.equal(dev.data.estado, 'devuelta');
+  const c = C._reservar({ project_id: 'p', recurso_tipo: 'maquina', inicio: '2026-07-09', grano: 'intervalo' });
+  assert.equal(c.status, 201);                            // liberada
+});
+
+test('cancelar libera el hueco', () => {
+  const C = conSilla(1);
+  const res = C._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T09:00`, fin: `${DIA}T10:00` });
+  C._cancelar({ project_id: 'p', reserva_id: res.data.id });
+  const otra = C._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T09:00`, fin: `${DIA}T10:00` });
+  assert.equal(otra.status, 201);
+});
+
+test('persistencia: snapshot/hidratar restaura disponibilidad + reservas', () => {
+  const A = conSilla(2);
+  A._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T09:00`, fin: `${DIA}T10:00` });
+  const snap = A._persist._snapshot('p');
+  assert.equal(snap.reservas.length, 1);
+  const B = new PrismaCalendarioReflejo();
+  B._persist._hidratar('p', snap);
+  assert.equal(B._getDisp({ project_id: 'p' }).data.recurso_tipos[0].capacidad, 2);
+  assert.equal(B._listReservas({ project_id: 'p' }).data.total, 1);
+  A._persist.detener(); B._persist.detener();
+});
+
+console.log('prisma__calendario: asserts definidos');

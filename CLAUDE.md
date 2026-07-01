@@ -14770,8 +14770,11 @@ COPIAR+GENERALIZAR (llevan la forma del producto) → modules/prisma/
   (fase 2) opciones ✓ · coste ✓ · escaparate ✓ (de carta-digital · núcleo público; bundle HTML/PWA follow-up en vivo)
 REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credential-manager · project-manager ·
   database-manager · interruptores · propiocepcion · conserje · destilador · homeostasis · lentes-diseno · verificador-visual · portal
-DEJAR ARQUETIPO (órganos de "hostelería con mesas"; NO al core; se encienden solo si el comercio los pide):
-  comandero · cuentas · cobros · cocina · pase-cocina · pedidos · persistencia-comandero · impresion · cuentas-canales
+POS UNIVERSAL (la espina de venta SÍ es reutilizable; copiar+generalizar → prisma, como carta-manager):
+  comandero → carrito ✓ (buffer, tasa con opciones, céntimos, sin cocina) · cobros → cobro ✓ (pago: efectivo/tarjeta/bizum/transf/mixto, cambio) ·
+  cuentas → cuenta/ticket ✓ (ciclo abierta→cobrada→cerrada) · impresion → ticket ✓ (recibo) · persistencia-comandero → cierre de caja ✓ (cuadre)
+HOSTELERÍA (órgano del arquetipo; encender solo si el comercio es de hostelería):
+  cocina · pase-cocina + los ganchos de cocina del comandero (enviar_cocina/estaciones) · cuentas-canales (delivery)
 BOSS orquesta: un comercio = conjunto de arquetipos de sus productos; enciende packs+páginas+blueprints de esos arquetipos.
 ```
 
@@ -14871,19 +14874,45 @@ CLASE PrismaBossReflejo HEREDA ModuloHibridoReflejo {   // el CEREBRO; el enforc
   ORGANOS semilla: comestible→[carta,cocina] · servicio→[agenda] · uso_temporal→[agenda,retorno,fianza] · pieza→[stock]
   OPS (RPC boss.{plan,estado}.request → .response): calcula sobre el catálogo activo (producto-manager) + arquetipos (semilla+custom aprobados)
   SEÑAL  catalogo.{actualizado,editado,borrado} + project.activated → boss.plan.actualizado (un producto nuevo puede encender un órgano nuevo)
-  CEREBRO≠ENFORCEMENT  BOSS señala qué órganos necesita el comercio; cargar páginas/packs/blueprints o gatear interruptores lo hace quien escuche el plan.
+  CEREBRO≠ENFORCEMENT  BOSS señala qué órganos necesita el comercio; encender los interruptores de esos órganos lo hace prisma/enforcement (abajo).
 }
 ```
 
-## coste (module 0.1.0 · reflejo 0.1.0) — cara comerciante: coste → margen → pvp ✓
+## enforcement (module 0.1.0 · reflejo 0.1.0) — el EFECTOR del BOSS ✓
+
+```
+CLASE PrismaEnforcementReflejo HEREDA ModuloHibridoReflejo {   // cierra el lazo CEREBRO→acción
+  CONSUME  boss.plan.actualizado {project_id, organos} → _aplicar: por cada órgano necesario
+           interruptor.set {id:'organo-<x>', enabled:true, motivo:'boss:<project>'} (canal universal;
+           el dueño del órgano lo reacciona en caliente, patrón interruptor.registrar/cambiado).
+  PURO     _plan(project_id, deseados) = organos-recetario.diffPlan(deseados, aplicados[project]) → {encender, innecesarios}
+  ADDITIVO edge-triggered por proyecto (idempotente: interruptores solo emite cambiado en divergencia).
+  NO APAGA solo  un órgano que sobra recibe solo TESTIGO boss.organo.innecesario — la voluntad de
+           apagar es humana (como la apoptosis de la homeostasis: canta, no mata).
+  SIN FALLO MUDO  registra el interruptor de cada órgano al vuelo (custom de arquetipos incluidos)
+           → nunca hay un órgano necesario sin canal de encendido.
+  onLoad   registra organo-<id> por cada órgano de la SEMILLA (grupo 'prisma-organos', default OFF).
+  RPC      enforcement.estado.request {project_id} → {aplicados, organos_conocidos, registrados}.
+  NOTA multi-proyecto  el interruptor es GLOBAL (panel único); 'necesario por este comercio' ⊆
+           'capacidad disponible en este Enki'. El estado APLICADO se lleva por proyecto (diff/testigo).
+}
+_shared/organos-recetario.js  (PURO)  KNOWN_ORGANOS {carta(nativo:escaparate) · cocina(hosteleria) ·
+  agenda/retorno/fianza/stock(previsto)} · ORGANOS_SEMILLA (unión de arquetipos-semilla, sin drift) ·
+  interruptorDe(o)='organo-'+o · metaDe(o) · diffPlan(deseados,aplicados)→{encender,innecesarios}.
+```
+
+## coste (module 0.2.0 · reflejo 0.2.0) — cara comerciante: coste → margen → pvp ✓
 
 ```
 CLASE PrismaCosteReflejo HEREDA ModuloHibridoReflejo {   // generaliza escandallo(Σ coste)+viabilidad(food cost→pvp), en céntimos
   ENTRADA  coste.costear.request { componentes[{coste_centimos,cantidad?}], coste_extra_centimos?, food_cost_objetivo?, pvp_centimos? }
   _costear  coste_total = Σ(coste×cantidad)+extra ; food_cost_objetivo(0..1] → pvp_sugerido = coste/objetivo ;
             pvp dado → food_cost_real=coste/pvp · margen=(pvp-coste)/pvp · margen_centimos
-  NO INVENTA  los componentes de coste los pone el COMERCIANTE (respuesta a las preguntas_abiertas de coste). Puro, sin store.
-  FOLLOW-UP  persistir pvp en el producto (precio_base) + marcar la pregunta_abierta de coste como respondida.
+  NO INVENTA  los componentes de coste los pone el COMERCIANTE (respuesta a las preguntas_abiertas de coste). _costear puro, sin store.
+  APLICAR  coste.aplicar.request → espinazo LEER→calcula→GUARDA→EMITE (blueprint-agentico determinista):
+           LEE catalogo.get → resuelve pvp (pvp_centimos o pvp_sugerido) → _planAplicar (PURO) fija
+           precio_base_centimos, marca la pregunta_abierta de coste 'respondida' y sube madurez a 'listo'
+           si ya no falta ninguna → GUARDA catalogo.update_product → EMITE coste.aplicado. Cierra el lazo coste→producto.
 }
 ```
 
@@ -14902,6 +14931,75 @@ CLASE PrismaEscaparateReflejo HEREDA ModuloHibridoReflejo {   // gemelo generali
 }
 ```
 
+## carrito (module 0.2.0 · reflejo 0.2.0) — buffer de venta universal ✓ (POS · persistente)
+
+```
+CLASE PrismaCarritoReflejo HEREDA ModuloHibridoReflejo {   // copiado de comandero, SIN los ganchos de cocina
+  BUFFER  Map<cuenta_id, {items, total_centimos, project_id}>. Entrada del flujo de venta: carrito → (cuenta) → cobro.
+  OPS (RPC carrito.<op>.request → .response): get · add_item · remove_item · update_item(0→quita) · vaciar · list
+  TASADO  add_item tasa cada ítem con opciones.evaluar (producto+selección → precio_final_centimos) · o precio_unitario_centimos inline
+  ÍTEM    { id, producto_id, nombre, cantidad, selecciones, precio_unitario_centimos, subtotal_centimos, libres?, notas }
+  DINERO  CÉNTIMOS (coherente con opciones/coste/tasador). SIN enviar_cocina (órgano del arquetipo hostelería).
+  PERSISTE via _shared/pos-persistencia (snapshot fs por project_id, debounced; restaura en project.activated; vuelca en onUnload).
+}
+```
+
+## cobro (module 0.2.0 · reflejo 0.2.0) — pago universal ✓ (POS · persistente)
+
+```
+CLASE PrismaCobroReflejo HEREDA ModuloHibridoReflejo {   // copiado de cobros, en céntimos, sin llevadoo/cajón
+  OPS (RPC cobro.<op>.request → .response): crear · confirmar · reembolsar · get · list · metodos
+  crear   total del carrito (carrito.get) o monto_centimos inline. Métodos: efectivo(cambio)·tarjeta·bizum·transferencia·mixto(split cuadra el total).
+  CICLO   pendiente → completado (confirmar) → reembolsado. Idempotencia: un cobro activo por cuenta.
+  DINERO  CÉNTIMOS. EVENTOS cobro.iniciado/procesado/reembolsado (mismo dominio que cobros; una cuenta prisma no la conoce pizzepos).
+  PERSISTE por project_id (pos-persistencia). Sin link_pago/qr (integraciones externas = follow-up).
+}
+```
+
+## cuenta · ticket · cierre (module 0.2/0.1 · reflejo 0.2/0.1) — POS tail ✓ (persistente salvo ticket)
+
+```
+CLASE PrismaCuentaReflejo   // ticket/cuenta (de cuentas, SIN estados de cocina)   [module/reflejo 0.2.0]
+  ciclo abierta → cobrada → cerrada. OPS cuenta.{crear,get,list,cerrar}.request. onCobroProcesado → pagada+total.
+  ref_display generado (T-001…). Ata carrito↔cobro bajo un ticket. PERSISTE por project_id (+seq de ref_display).
+
+CLASE PrismaTicketReflejo   // recibo (de impresion, solo el ticket, SIN comanda de cocina)   [SIN estado → sin persistencia]
+  OP ticket.formatear.request { items, total?, comercio?, ref_display?, ancho? } → { texto, total_centimos, ancho }.
+  _formatearTicket PURO (líneas item/subtotal €, TOTAL). Emite ticket.generado. Impresora física = follow-up.
+
+CLASE PrismaCierreReflejo   // cuadre de caja (de persistencia-comandero, la parte del cuadre)   [module/reflejo 0.2.0]
+  onCobroProcesado acumula la venta (con project_id). OPS cierre.{cerrar_caja,estado}.request. _cuadre PURO → {total, por_metodo, num_ventas}.
+  cerrar_caja resetea el día (global) + emite caja.cerrada. PERSISTE las ventas del día por project_id (dedup por cobro_id al restaurar).
+
+_shared/pos-persistencia.js  (composición)  snapshot(project_id)/hidratar(project_id,data) los pone cada reflejo (map↔obj);
+  el helper escribe /prisma/pos/<mod>.json (fs.write atómico, debounced) y restaura en project.activated. Sin project_id → solo memoria (honesto).
+```
+
+## calendario (module 0.1.0 · reflejo 0.1.0) — BASE COMPARTIDA del tiempo (órgano `agenda`) ✓ (motor v0.1; iCal v0.2)
+
+```
+CLASE PrismaCalendarioReflejo HEREDA ModuloHibridoReflejo {   // base compartida (como marca/recetas) · product-AGNÓSTICO
+  DOS CAPAS  DISPONIBILIDAD (oferta de tiempo — privada, onboarding como el coste) + RESERVAS (consumo — el POS del tiempo)
+  INVARIANTE  hueco(recurso_tipo,[t]) = capacidad − reservas_solapadas ; reserva ⊂ disponibilidad ∧ hueco>0
+  UN MOTOR 2 GRANOS  cita(minutos·de_ida·fin fijo·libera al pasar la hora) · intervalo(días·con_retorno·fin abierto→devolver)
+  DISPONIBILIDAD  { recurso_tipos:[{id,etiqueta,capacidad}], horario:{L..D:[[hh:mm,hh:mm]]}, excepciones:[{fecha|desde+hasta,abierto:false}], tz }
+  OPS (RPC calendario.<op>.request → .response):
+    get_disponibilidad · set_disponibilidad(deep-merge) · bloquear_dia(excepción cerrada = "día que no trabajo") ·
+    huecos({recurso_tipo,desde,hasta,duracion_min} → troceo back-to-back, capacidad−solapadas) ·
+    reservar (guarda _hayHueco: cita exige horario+fin · intervalo solo capacidad; 409 SIN_HUECO/412 FUERA_DE_HORARIO/404 RECURSO_DESCONOCIDO) ·
+    cancelar (libera) · devolver (alquiler: cierra el intervalo abierto) · list_reservas
+  MOTOR PURO  _ventanasAbiertas(horario−excepciones ∩ [desde,hasta]) · _huecos · _hayHueco · _solapa. Reloj de pared naïve,
+              comparado determinista vía Date.UTC de componentes (sin deriva de zona). tz/DST real + .ics = v0.2 (luxon/rrule/ical-generator).
+  PRODUCT-AGNÓSTICO  la duración/recurso los aporta el CONSUMIDOR (agenda-citas/alquiler), no el calendario.
+  PERSISTE  por proyecto (pos-persistencia, /prisma/calendario/estado.json: disponibilidad + reservas). Siempre cargado (base, no gateado).
+}
+CONSUMIDORES (follow-up, cada uno a su interés — beben por RPC) {
+  agenda-citas  producto(duración+recurso vía proyector) → huecos → reservar → cobro   (gateado por organo-agenda)
+  alquiler      unidad(recurso, con_retorno) → reservar(fin=null) → devolver           (mismo motor, grano días)
+  staff-turnos  turnos = reservas de tipo 'empleado' sobre la capacidad · scheduler-promos = ventanas (ya vive carta-scheduler)
+}
+```
+
 ## Topics / eventos
 
 ```
@@ -14916,18 +15014,35 @@ arquetipos.{listar,obtener,clasificar,proponer,aprobar}.request → .response   
 arquetipo.{propuesto,aprobado}           (IA propone · humano aprueba — anti-wipe, la semilla intocable)
 opciones.evaluar.request → .response     (valida + precia la selección del cliente; céntimos; aparta LIBRE)
 boss.{plan,estado}.request → .response   (comercio → arquetipos presentes → unión de órganos)
-boss.plan.actualizado                    (el plan del comercio cambió — lo consume el enforcement: cargar órganos)
+boss.plan.actualizado                    (el plan del comercio cambió — lo consume prisma/enforcement)
+enforcement.estado.request → .response   (qué órganos hay aplicados a este proyecto)
+interruptor.set {id:'organo-<x>',enabled,motivo}   (enforcement → panel central: enciende el órgano)
+boss.organo.encendido / boss.organo.innecesario    (testigo del efector: encendió / lo dejó sobrando sin apagar)
 coste.costear.request → .response        (cara comerciante: coste → margen → pvp; los costes los pone el comerciante)
+coste.aplicar.request → .response · coste.aplicado   (escribe el pvp en el producto + cierra la pregunta_abierta de coste)
 escaparate.publico.request → .response   (cara cliente: catálogo → vista pública, poda lo no ofrecido)
 escaparate.actualizado                   (escaparate → PWA/consumidor; consume-on-read del refresco)
+carrito.{get,add_item,remove_item,update_item,vaciar,list}.request → .response   (buffer de venta; tasa con opciones)
+carrito.{item_agregado,item_eliminado,item_actualizado,vaciado}   (mutaciones del carrito)
+cobro.{crear,confirmar,reembolsar,get,list,metodos}.request → .response   (pago del carrito, céntimos)
+cobro.{iniciado,procesado,reembolsado}   (ciclo del cobro)
+cuenta.{crear,get,list,cerrar}.request → .response · cuenta.{creada,cerrada}   (ticket)
+ticket.formatear.request → .response · ticket.generado   (recibo)
+cierre.{cerrar_caja,estado}.request → .response · caja.cerrada   (cuadre del día)
+calendario.{get_disponibilidad,set_disponibilidad,bloquear_dia,huecos,reservar,cancelar,devolver,list_reservas}.request → .response   (base del tiempo)
+calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta}   (señales del calendario)
 ```
 
 ## Estado
 
 ```
-✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (5/5) · escaparate (5/5, núcleo)
-✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones)
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (9/9, con aplicar→producto) · escaparate (5/5, núcleo)
+✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones) · _shared/organos-recetario (órgano→interruptor, diff PURO) · _shared/pos-persistencia (snapshot fs por proyecto)
 ✓ project-type blueprints/project-types/prisma.json — comercio universal INSTANCIABLE
-◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA — se verifican corriendo el Enki
-[ ] wiring: adaptador reflejo → arquetipos custom · BOSS enforcement (cargar órganos del plan) · persistir pvp/coste en el producto
+✓ POS COMPLETO + PERSISTENTE — carrito (7/7) · cobro (8/8) · cuenta (6/6) · ticket (3/3) · cierre (4/4): catálogo→carrito→cuenta→cobro→ticket→cierre (sin cocina). Estado vivo persistido por proyecto (/prisma/pos/*.json), restaura en project.activated.
+✓ BOSS ENFORCEMENT — enforcement (7/7): boss.plan.actualizado → interruptor.set enciende los órganos del comercio (additivo-seguro, no apaga solo). Lazo CEREBRO→acción cerrado.
+✓ COSTE→PRODUCTO — coste.aplicar escribe el pvp en el producto (precio_base_centimos) + cierra la pregunta_abierta de coste (madurez→listo). Lazo cara-comerciante cerrado.
+✓ ÓRGANO AGENDA (base) — calendario.md (propuesta) + calendario (9/9): base compartida del tiempo (disponibilidad+capacidad+reservas+huecos), motor determinista, un motor para cita y alquiler, persistente. El organo-agenda ya tiene BASE (falta el consumidor que lo gatee).
+◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · calendario bordes iCal (feed .ics + import CalDAV) + tz/DST (luxon) · los interruptores organo-* esperan dueño (cocina la reacciona pizzepos) — se verifican corriendo el Enki
+[ ] wiring/en vivo: adaptador reflejo → arquetipos custom · CONSUMIDORES del calendario (agenda-citas gateado por organo-agenda · alquiler · staff-turnos) · dueños de retorno/fianza/stock
 ```

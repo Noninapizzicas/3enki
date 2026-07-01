@@ -43,4 +43,68 @@ test('sin objetivo ni pvp → solo el coste total', () => {
   assert.equal(r.data.margen, undefined);
 });
 
+// ── aplicar: escribe el pvp en el producto + cierra la pregunta de coste ──
+
+test('_planAplicar: marca la pregunta de coste respondida y sube madurez a listo', () => {
+  const prod = { id: 'p1', madurez: 'necesita_aclaracion_comerciante', preguntas_abiertas: [{ campo: 'coste', respondida: false }] };
+  const { campos, resumen } = C._planAplicar(prod, 600, 2000);
+  assert.equal(campos.precio_base_centimos, 2000);
+  assert.equal(campos.preguntas_abiertas[0].respondida, true);
+  assert.equal(campos.madurez, 'listo');          // no faltaba ninguna otra
+  assert.equal(resumen.margen, 0.70);
+  assert.equal(resumen.todas_respondidas, true);
+});
+
+test('_planAplicar: si queda otra pregunta abierta, la madurez NO sube a listo', () => {
+  const prod = { id: 'p1', madurez: 'necesita_aclaracion_comerciante', preguntas_abiertas: [{ campo: 'coste', respondida: false }, { campo: 'stock', respondida: false }] };
+  const { campos, resumen } = C._planAplicar(prod, 600, 2000);
+  assert.equal(campos.preguntas_abiertas[0].respondida, true);
+  assert.equal(campos.preguntas_abiertas[1].respondida, false);   // stock sigue abierta
+  assert.equal(campos.madurez, undefined);        // no toca la madurez
+  assert.equal(resumen.todas_respondidas, false);
+});
+
+test('_aplicar (e2e con bus falso): LEE el producto, escribe precio y cierra la pregunta', async () => {
+  const productos = [{ id: 'p1', madurez: 'necesita_aclaracion_comerciante', preguntas_abiertas: [{ campo: 'coste', respondida: false }] }];
+  const bus = fakeCatalogoBus(productos);
+  const K = new PrismaCosteReflejo();
+  K.eventBus = bus;
+  const r = await K._aplicar({ project_id: 'pr', catalogo_id: 'cat', producto_id: 'p1', componentes: [{ coste_centimos: 600 }], food_cost_objetivo: 0.30 });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.pvp_centimos, 2000);          // 6€ al 30% → 20€
+  assert.equal(productos[0].precio_base_centimos, 2000);      // escrito en el producto
+  assert.equal(productos[0].preguntas_abiertas[0].respondida, true);
+  assert.equal(productos[0].madurez, 'listo');
+  assert.ok(bus.published.some(x => x.ev === 'coste.aplicado'));
+});
+
+test('_aplicar sin pvp ni food_cost → no inventa precio (400)', async () => {
+  const K = new PrismaCosteReflejo();
+  K.eventBus = fakeCatalogoBus([{ id: 'p1', preguntas_abiertas: [] }]);
+  const r = await K._aplicar({ project_id: 'pr', catalogo_id: 'cat', producto_id: 'p1', componentes: [{ coste_centimos: 600 }] });
+  assert.equal(r.status, 400);
+});
+
+// bus falso que responde a catalogo.get.request y catalogo.update_product.request.
+// El EventBus real entrega al handler un envelope { data: <payload> }; lo replicamos.
+function fakeCatalogoBus(productos) {
+  const handlers = {};
+  const bus = {
+    published: [],
+    subscribe(ev, h) { (handlers[ev] = handlers[ev] || []).push(h); return () => { handlers[ev] = (handlers[ev] || []).filter(x => x !== h); }; },
+    publish(ev, data) {
+      bus.published.push({ ev, data });
+      const emit = (rev, payload) => setImmediate(() => (handlers[rev] || []).forEach(h => h({ data: payload })));
+      if (ev === 'catalogo.get.request') {
+        emit('catalogo.get.response', { request_id: data.request_id, status: 200, data: { productos } });
+      } else if (ev === 'catalogo.update_product.request') {
+        const p = productos.find(x => x.id === data.producto_id);
+        if (p) Object.assign(p, data.campos);
+        emit('catalogo.update_product.response', { request_id: data.request_id, status: 200, data: { producto: p } });
+      }
+    }
+  };
+  return bus;
+}
+
 console.log('prisma__coste: asserts definidos');

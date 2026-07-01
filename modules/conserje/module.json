@@ -1,6 +1,7 @@
 {
   "name": "conserje",
-  "version": "0.4.0",
+  "version": "0.5.0",
+  "_v0_5_nota": "v0.5.0: la cantera ahora ofrece ACTIVAR, no solo leer. Si la skill pertinente declara HOGAR (lente_dominio), el empujón sugiere `cosecha.promover:<nombre>` (montarla como lente que el LLM encarna en esa página) en vez de `cosecha.obtener:<nombre>` (solo leerla). promover resuelve dominio/tarea desde la propia skill, así el conserje ofrece a secas. Cierra el arco: abundancia (cantera) → oferta de activación (conserje) → lente viva (cuenco), sin adivinar el destino. Test: conserje__cantera (+promover).",
   "_v0_4_nota": "v0.4.0: TERCERA FACULTAD — CANTERA. Tras un paso, mina la cosecha (cosecha.buscar por la última capacidad tocada) y ofrece en positivo la skill pertinente ('hay una skill de X en la cantera, ¿la montamos?'). Convierte la abundancia guardada en munición de empujones (la cara aditiva de la Teoría del Órgano: tener skills = poder ofrecer el siguiente paso). Demand-driven: si la cantera no tiene skill pertinente, NO ofrece (no spamea). Nuevo interruptor 'conserje-cantera' (grupo aprendizaje, OFF por defecto, independiente de los otros dos). Prioridad menor que brecha/rutas (no pisa empujón pendiente). empujon tipo='skill' con accion_sugerida 'cosecha.obtener:<nombre>'. Test: conserje__cantera.",
   "_v0_3_nota": "v0.3.0: cierra el nag perpetuo de diseno/digital. Su estado `usada` no se observaba (el mapa de señales solo cubría marca/recetas/carta/escandallo), así que una vez desbloqueados se ofrecían cada cooldown para siempre, ya construidos. Añadidas dos SEÑAL_EVENTO autocontenidas: carta.html.generada -> diseno usada; cartadigital.publicado -> digital usada. Sin tocar otros módulos ni el wiring (oído por el bus crudo). Test: conserje__senales-usada (5/5).",
   "description": "Abre el camino al comerciante. Cruza lo que el sistema OFRECE (LibroDeCapacidades) con lo que el comerciante USA (derivado del bus en vivo) y, cuando hay una brecha con intención, le ofrece el siguiente paso en POSITIVO (no señala la carencia). Sin sondas hardcodeadas: lee el grafo de capacidades + el uso real. La señal de oro es la intención — lo que el comerciante alarga la mano a tocar pero está vacío. Apagado por defecto; su on/off vive en el panel central de interruptores (botón 'conserje'), reacciona en caliente. Cooldown por capacidad para no agobiar.",
@@ -14,7 +15,7 @@
     },
     {
       "event": "conserje.empujon",
-      "description": "Ofrece al comerciante el siguiente paso. {project_id, tipo, recurso, mensaje, accion_sugerida, ruta?}. tipo='ruta' lleva la continuacion aprendida; tipo='skill' ofrece una skill de la cantera (accion_sugerida='cosecha.obtener:<nombre>'). Lo surfacea el chat (vía el nervio) de forma natural, una vez."
+      "description": "Ofrece al comerciante el siguiente paso. {project_id, tipo, recurso, mensaje, accion_sugerida, ruta?}. tipo='ruta' lleva la continuacion aprendida; tipo='skill' ofrece una skill de la cantera — si la skill declara HOGAR (lente_dominio) sugiere 'cosecha.promover:<nombre>' (activarla como lente), si no 'cosecha.obtener:<nombre>' (leerla). Lo surfacea el chat (vía el nervio) de forma natural, una vez."
     },
     {
       "event": "cosecha.buscar.request",

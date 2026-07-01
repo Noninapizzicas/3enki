@@ -45,6 +45,18 @@ test('ofrece la skill pertinente que la cosecha devuelve', async () => {
   assert.ok(m.pendientes.get('proj1'), 'deja el empujón pendiente para el nervio');
 });
 
+test('si la skill declara HOGAR (lente_dominio) ofrece PROMOVER, no solo obtener', async () => {
+  const m = make();
+  m._rpc = async () => ({ data: { skills: [{ nombre: 'design-persona', descripcion: 'un oficio de diseño', lente_dominio: 'diseño', lente_tarea: 'tema' }] } });
+  estado(m, 'proj1', 'diseño');
+  await m._tickCantera(['proj1']);
+  const emp = m._publicados.find(p => p.ev === 'conserje.empujon');
+  assert.ok(emp, 'debe ofrecer');
+  assert.strictEqual(emp.payload.accion_sugerida, 'cosecha.promover:design-persona', 'ofrece ACTIVAR');
+  assert.ok(/activamos|lente/i.test(emp.payload.mensaje), 'el mensaje invita a activar como lente');
+  assert.strictEqual(m.pendientes.get('proj1').accion_sugerida, 'cosecha.promover:design-persona');
+});
+
 test('sin skill pertinente -> NO ofrece (no spamea)', async () => {
   const m = make();
   m._rpc = async () => ({ data: { skills: [] } });

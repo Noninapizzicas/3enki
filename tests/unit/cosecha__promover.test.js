@@ -72,11 +72,40 @@ test('cuenco mudo (timeout) -> 504', async () => {
   assert.strictEqual(r.status, 504);
 });
 
-test('inválidos: sin nombre/dominio -> 400', async () => {
+test('sin nombre -> 400', async () => {
   const m = await makeCargado();
   m._rpc = async () => ({ status: 200, data: {} });
   assert.strictEqual((await m._promover({ dominio: 'diseño' })).status, 400);
-  assert.strictEqual((await m._promover({ nombre: 'deep-research' })).status, 400);
+});
+
+test('defaultea dominio/tarea desde el HOGAR declarado por la skill', async () => {
+  const m = await makeCargado();
+  m._skills.set('con-hogar', { nombre: 'con-hogar', descripcion: 'un oficio', contenido: '# c', dominio: '', tags: [], lente_dominio: 'diseño', lente_tarea: 'tema' });
+  let payload = null;
+  m._rpc = async (ev, p) => { payload = p; return { status: 200, data: {} }; };
+  const r = await m._promover({ nombre: 'con-hogar' });   // sin dominio/tarea: los toma del hogar
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(payload.dominio, 'diseño', 'dominio del hogar');
+  assert.strictEqual(payload.tarea, 'tema', 'tarea del hogar');
+  assert.strictEqual(r.data.dominio, 'diseño');
+});
+
+test('el param dominio/tarea pisa el hogar de la skill', async () => {
+  const m = await makeCargado();
+  m._skills.set('con-hogar', { nombre: 'con-hogar', descripcion: 'd', contenido: '# c', dominio: '', tags: [], lente_dominio: 'diseño', lente_tarea: 'tema' });
+  let payload = null;
+  m._rpc = async (ev, p) => { payload = p; return { status: 200, data: {} }; };
+  await m._promover({ nombre: 'con-hogar', dominio: 'copy', tarea: 'copy' });
+  assert.strictEqual(payload.dominio, 'copy');
+  assert.strictEqual(payload.tarea, 'copy');
+});
+
+test('sin dominio param ni hogar declarado -> 400 (no adivina)', async () => {
+  const m = await makeCargado();
+  m._skills.set('sin-hogar', { nombre: 'sin-hogar', descripcion: 'd', contenido: '# c', dominio: '', tags: [], lente_dominio: '', lente_tarea: '' });
+  m._rpc = async () => ({ status: 200, data: {} });
+  const r = await m._promover({ nombre: 'sin-hogar' });
+  assert.strictEqual(r.status, 400);
 });
 
 (async () => {

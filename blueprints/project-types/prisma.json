@@ -1,0 +1,22 @@
+{
+  "id": "prisma",
+  "label": "Prisma",
+  "icon": "🔷",
+  "description": "Comercio universal — cualquier producto, cualquier arquetipo",
+  "dependencies": [],
+  "directories": [
+    "storage/prisma",
+    "storage/prisma/catalogo"
+  ],
+  "config": {
+    "prisma": {
+      "enabled": true
+    }
+  },
+  "initialFiles": {
+    "storage/prisma/arquetipos.json": {
+      "_version": 1,
+      "arquetipos": []
+    }
+  }
+}

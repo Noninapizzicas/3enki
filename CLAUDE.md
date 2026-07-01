@@ -14725,7 +14725,7 @@ COSECHA v2: VoltAgent/08-business-product (assumption-mapping·product-manager·
 # PRISMA — Vertical universal de comercio (producto de 5 huecos · modules/prisma/)
 
 > Vertical 2 del rumbo (comercio local/universal): producto NO pizza-shaped, molde universal.
-> Propuesta: arquitectura/decisiones/propuestas/prisma.md (6 casos trabajados). Nace 2026-07-01. En construcción.
+> Propuesta: arquitectura/decisiones/propuestas/prisma.md (6 casos trabajados). Nace 2026-07-01. Columna determinista v0.1 COMPLETA (8 módulos · 50/50); verificación en vivo + wiring pendientes.
 
 ## Modelo — ProductoUniversal (contrato)
 
@@ -14927,6 +14927,7 @@ escaparate.actualizado                   (escaparate → PWA/consumidor; consume
 ```
 ✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (5/5) · escaparate (5/5, núcleo)
 ✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones)
+✓ project-type blueprints/project-types/prisma.json — comercio universal INSTANCIABLE
 ◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA — se verifican corriendo el Enki
 [ ] wiring: adaptador reflejo → arquetipos custom · BOSS enforcement (cargar órganos del plan) · persistir pvp/coste en el producto
 ```

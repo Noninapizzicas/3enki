@@ -236,7 +236,28 @@ Aplicando el propio principio de Prisma al doc:
 - **Primer vertical.** ¿Sobre qué comercio real se estrena Prisma sin tocar el POS
   vivo (pizzepos está cerrado por gate)?
 
-## Veredicto de madurez de esta propuesta
+## 8. Estado de implementación (v0.1 — 2026-07-01)
 
-**Modelo listo para primer boceto de implementación; necesita decidir semilla de
-arquetipos + primer vertical antes de tocar código.**
+Construida entera la columna determinista en `modules/prisma/` (copiar+generalizar de
+pizzepos, cero pizzepos tocado), **50/50 tests**:
+
+- **producto-manager** (custodio del ProductoUniversal + freno) · **proyector** (vista interna) ·
+  **escaparate** (vista pública, poda lo no ofrecido) · **opciones** (precia la selección) ·
+  **coste** (coste→margen→pvp) · **arquetipos** (registro abierto + anti-wipe) ·
+  **adaptador** (híbrido: reflejo determinista + blueprint LLM) · **boss** (orquestador comercio→órganos).
+- `_shared/arquetipos-semilla` (clasificador por la forma) · `_shared/motor-opciones` (banco, envuelto).
+- project-type `blueprints/project-types/prisma.json` → un comercio universal es **instanciable**.
+
+Preguntas del §7, resueltas: semilla = 4 a mano (comestible·pieza·servicio·uso_temporal) + IA propone;
+aprobación de arquetipo = anti-wipe en `prisma/arquetipos` (proponer→aprobar, semilla intocable); primer
+vertical = project-type `prisma` (no toca pizzepos). Siguen abiertas: ingesta (foto/Excel) y precio
+rango-valoración (hoy → `consultar` en escaparate + pregunta_abierta `tarifa`).
+
+Falta (todo requiere el Enki vivo o wiring de bus): verificar en vivo el blueprint del adaptador y el
+bundle HTML/PWA del escaparate; cablear el reflejo del adaptador a los arquetipos custom por RPC;
+BOSS enforcement (cargar de verdad los órganos del plan); persistir el pvp de coste en el producto.
+
+## Veredicto de madurez
+
+**Columna determinista COMPLETA y probada (50/50). Lista para verificación en vivo + wiring de
+integración. El vertical es instanciable (project-type `prisma`).**

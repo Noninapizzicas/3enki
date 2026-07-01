@@ -14767,7 +14767,7 @@ COPIAR+GENERALIZAR (llevan la forma del producto) → modules/prisma/
   carta-manager   → producto-manager   custodio del ProductoUniversal              ✓ HECHO
   menu-generator  → adaptador          crudo → 5 huecos + clasifica arquetipo      ✓ HECHO (híbrido: reflejo determinista + blueprint LLM)
   productos       → proyector          ProductoUniversal → vista destino            ✓ HECHO
-  (fase 2) variaciones+_shared/motor-opciones → opciones  ✓ HECHO · carta-digital → escaparate [ ]
+  (fase 2) opciones ✓ (motor-opciones) · coste ✓ (escandallo+viabilidad, genérico) · escaparate [ ] (carta-digital)
 REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credential-manager · project-manager ·
   database-manager · interruptores · propiocepcion · conserje · destilador · homeostasis · lentes-diseno · verificador-visual · portal
 DEJAR ARQUETIPO (órganos de "hostelería con mesas"; NO al core; se encienden solo si el comercio los pide):
@@ -14875,6 +14875,18 @@ CLASE PrismaBossReflejo HEREDA ModuloHibridoReflejo {   // el CEREBRO; el enforc
 }
 ```
 
+## coste (module 0.1.0 · reflejo 0.1.0) — cara comerciante: coste → margen → pvp ✓
+
+```
+CLASE PrismaCosteReflejo HEREDA ModuloHibridoReflejo {   // generaliza escandallo(Σ coste)+viabilidad(food cost→pvp), en céntimos
+  ENTRADA  coste.costear.request { componentes[{coste_centimos,cantidad?}], coste_extra_centimos?, food_cost_objetivo?, pvp_centimos? }
+  _costear  coste_total = Σ(coste×cantidad)+extra ; food_cost_objetivo(0..1] → pvp_sugerido = coste/objetivo ;
+            pvp dado → food_cost_real=coste/pvp · margen=(pvp-coste)/pvp · margen_centimos
+  NO INVENTA  los componentes de coste los pone el COMERCIANTE (respuesta a las preguntas_abiertas de coste). Puro, sin store.
+  FOLLOW-UP  persistir pvp en el producto (precio_base) + marcar la pregunta_abierta de coste como respondida.
+}
+```
+
 ## Topics / eventos
 
 ```
@@ -14890,13 +14902,14 @@ arquetipo.{propuesto,aprobado}           (IA propone · humano aprueba — anti-
 opciones.evaluar.request → .response     (valida + precia la selección del cliente; céntimos; aparta LIBRE)
 boss.{plan,estado}.request → .response   (comercio → arquetipos presentes → unión de órganos)
 boss.plan.actualizado                    (el plan del comercio cambió — lo consume el enforcement: cargar órganos)
+coste.costear.request → .response        (cara comerciante: coste → margen → pvp; los costes los pone el comerciante)
 ```
 
 ## Estado
 
 ```
-✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5)
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (5/5)
 ✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones)
 ◑ adaptador.blueprint (PENSAR fuzzy) montado; verificación real = ai-gateway vivo
-[ ] FASE 2 resto: escaparate (carta-digital) · coste (escandallo) · cablear reflejo adaptador → arquetipos custom · BOSS enforcement (cargar los órganos del plan)
+[ ] FASE 2 resto: escaparate (carta-digital) · cablear reflejo adaptador → arquetipos custom · BOSS enforcement (cargar órganos del plan) · persistir pvp/coste en el producto
 ```

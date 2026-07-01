@@ -1,0 +1,11 @@
+{
+  "_doc": "Manifest de prisma/coste — REFLEJO JS: la cara COMERCIANTE. Calculadora determinista coste → margen → pvp, en CÉNTIMOS (coherente con opciones/tasador). Los componentes de coste los aporta el COMERCIANTE (son la respuesta a las preguntas_abiertas de coste del ProductoUniversal): coste NO inventa precios, solo calcula. Generaliza la aritmética de escandallo (Σ coste de componentes) + viabilidad (food cost objetivo → pvp sugerido; pvp → margen/food cost real) sin lo específico de ingredientes/Mercadona. Función pura, sin store. Ver arquitectura/decisiones/propuestas/prisma.md.",
+  "name": "coste",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): op costear. coste_total = Σ componentes(coste_centimos × cantidad) + coste_extra_centimos. Con food_cost_objetivo (0..1] → pvp_sugerido = coste/objetivo. Con pvp_centimos → food_cost_real + margen + margen_centimos. CÉNTIMOS enteros. La persistencia del pvp en el producto (precio_base) y marcar la pregunta_abierta de coste como respondida es follow-up. Reflejo 0.1.0.",
+  "description": "Calculadora de coste/margen/pvp de Prisma (cara comerciante). Envuelve la aritmética de escandallo+viabilidad en genérico; los costes los pone el comerciante, coste no inventa.",
+  "language": "es",
+  "subscribes": [
+    { "event": "coste.costear.request", "handler": "onCostearRequest", "description": "Reflejo JS: {componentes[{coste_centimos,cantidad?}], coste_extra_centimos?, food_cost_objetivo?, pvp_centimos?} → {coste_total_centimos, pvp_sugerido_centimos?, food_cost_real?, margen?}." }
+  ]
+}

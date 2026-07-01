@@ -1,0 +1,114 @@
+{
+  "id": "adaptador",
+  "version": "blueprint-0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): la mitad FUZZY del adaptador de Prisma. El LLM de la página recibe material sin estructurar (foto de un escaparate, texto libre 'vendo tintes con cita previa', una fila de catálogo) y lo DESCOMPONE en el CRUDO de los 5 huecos (identidad · ejes · naturalezas · restricciones · opciones). Luego DELEGA al REFLEJO (index.js, adaptador.adaptar.request) que clasifica por la forma, marca lo abierto, VALIDA contra el freno de producto-manager y GUARDA (producto.adaptado). El LLM piensa donde de verdad hay que pensar (estructurar lo informe + proponer un arquetipo nuevo si la forma no encaja); lo determinista lo hace el reflejo. Ver arquitectura/decisiones/propuestas/prisma.md.",
+  "language": "es",
+  "temperatura": 0.3,
+
+  "modelo_oop": {
+    "INTERFAZ": "AdaptadorDeProducto { adaptar(in: AdaptarInput): Resultado }",
+    "CLASE AdaptadorFuzzy IMPLEMENTA AdaptadorDeProducto": {
+      "ATRIBUTOS": {
+        "registro": "Arquetipos     // prisma/arquetipos (listar/proponer) — qué formas existen",
+        "reflejo": "Reflejo         // prisma/adaptador index.js (adaptador.adaptar.request) — clasifica·VALIDA·GUARDA",
+        "bus": "EventBus            // Observer: progreso/fallo"
+      },
+      "METODOS": [
+        "adaptar(in): Resultado                 // el espinazo",
+        "descomponer(material): Crudo           // FUZZY — lo ÚNICO que piensa el LLM: informe → 5 huecos",
+        "encaja(forma, arquetipos): bool        // ¿la forma cae en algún arquetipo conocido?"
+      ]
+    },
+    "MANDATOS (Specification — un Resultado válido los satisface)": [
+      "FIDELIDAD: cada dato del crudo procede del material; lo que no se sabe (coste, stock) NO se inventa — el reflejo lo marca como pregunta_abierta al comerciante.",
+      "FORMA: la clasificación nace de ejes+naturalezas (no de la superficie); descríbelos con cuidado y el reflejo clasificará igual.",
+      "VERDAD_OBLIGATORIA: alérgenos · etiqueta energética · seguridad viajan como restricciones tipo verdad_obligatoria (no_negociable), tal cual el material las diga.",
+      "APERTURA: si la forma no encaja en ningún arquetipo, propone uno nuevo (queda propuesto; lo aprueba un humano) — no lo fuerces a 'pieza'.",
+      "DELEGADO: el reflejo VALIDA (freno) y GUARDA; tú solo estructuras. No escribes fs, no persistes."
+    ],
+    "PATRONES": {
+      "Strategy": "descomponer() es el punto fuzzy; el resto es determinista (reflejo).",
+      "Delegation": "VALIDAR+GUARDAR delegados al reflejo (adaptador.adaptar.request).",
+      "Observer": "publish al bus (adaptacion.*).",
+      "Specification/Guard": "los MANDATOS son las guardas que el motor sostiene."
+    }
+  },
+
+  "contrato": {
+    "AdaptarInput": "{ project_id:uuid!, nombre:str!, material?:path, texto?:str, catalogo_id?, correlation_id?, request_id:uuid! }",
+    "Crudo": "{ nombre:str, que_es:str, trabajo_que_resuelve?:str, ejes:{tiempo,estado_de_partida,ciclo}, naturalezas:{stock,precio}, restricciones?:[{tipo,regla,no_negociable}], opciones?:[Opcion], atributos?:[{nombre,valor}], no_objetivos?:[str], categoria_id? }",
+    "Opcion": "{ etiqueta:str, sub_forma in [variante,modificacion,añadido,personalizacion_libre], modo in [ELEGIR_UNO,ELEGIR_VARIOS,QUITAR,LIBRE], valores:[{etiqueta, delta_precio:num, disponible:bool}] }",
+    "ejes.tiempo": ["ninguno", "instante", "cita", "intervalo_que_cobra"],
+    "ejes.ciclo": ["de_ida", "con_retorno"],
+    "naturalezas.stock": ["unidades", "ingredientes", "capacidad_temporal", "activo_reutilizable"],
+    "naturalezas.precio": ["por_unidad", "por_peso", "por_tiempo", "rango_valoracion"],
+    "restricciones.tipo": ["compatibilidad", "factibilidad", "verdad_obligatoria", "periodo", "retorno"],
+    "Resultado": "{ status, data?:{producto, arquetipo, madurez, preguntas_abiertas}, error?:{code,message}, message? }"
+  },
+
+  "transporte": {
+    "entrada": "cajon adaptar (page=adaptador)",
+    "rpc": ["arquetipos.listar.request -> .response (registro)", "arquetipos.proponer.request -> .response (apertura)", "adaptador.adaptar.request -> .response (reflejo: clasifica·VALIDA·GUARDA)"],
+    "salida": ["adaptacion.iniciada", "adaptacion.fallida"],
+    "qos": "publishAndWait (request/response correlado) en registro y en la delegación al reflejo"
+  },
+
+  "operaciones": {
+    "adaptar": {
+      "cajon_descripcion": "Adapta un producto crudo (foto de escaparate, texto libre, fila de catálogo) al ProductoUniversal (5 huecos): lo DESCOMPONE y lo entrega al reflejo, que clasifica su arquetipo, marca lo que falta y lo guarda.",
+      "input": "AdaptarInput (ver contrato)",
+      "pseudocodigo": [
+        "async adaptar(in):",
+        "  // 1. CONTRATO (guardas)",
+        "  si !in.project_id            -> return INVALID_INPUT{field:'project_id'}",
+        "  si !in.nombre?.trim()        -> return INVALID_INPUT{field:'nombre', hint:'pregúntalo al usuario ANTES de invocar'}",
+        "  si !(in.material || in.texto) -> return INVALID_INPUT{hint:'pasa material (foto/fichero) o texto'}",
+        "  publish('adaptacion.iniciada', {project_id:in.project_id, nombre:in.nombre, correlation_id:in.correlation_id})",
+        "",
+        "  // 2. LEER — qué arquetipos existen (para decidir si hace falta proponer uno nuevo)",
+        "  arqs = publishAndWait('arquetipos.listar.request', {project_id:in.project_id}, 8000)   // {semilla, custom}",
+        "",
+        "  // 3. PENSAR (LO TUYO, fuzzy) — descompón el material/texto en el CRUDO de los 5 huecos.",
+        "  //    FIDELIDAD: cada dato sale del material; lo que NO sepas (coste real, stock) NO lo pongas —",
+        "  //    el reflejo lo marcará como pregunta_abierta al comerciante. FORMA: describe ejes+naturalezas",
+        "  //    con cuidado (de ahí nace el arquetipo). VERDAD_OBLIGATORIA: alérgenos/etiqueta/seguridad →",
+        "  //    restricciones tipo verdad_obligatoria, no_negociable, tal cual el material las diga.",
+        "  crudo = descomponer(in.material || in.texto)   // forma = Crudo del contrato",
+        "  si !crudo?.que_es?.trim() -> publish('adaptacion.fallida',{...}) ; return INVALID_INPUT{hint:'no se pudo leer qué es el producto'}",
+        "",
+        "  // 4. APERTURA — si la forma (ejes+naturalezas) no encaja en NINGÚN arquetipo de arqs, propón uno nuevo.",
+        "  //    Queda 'propuesto' (lo aprueba un humano); no bloquees: el reflejo clasificará por forma igualmente.",
+        "  si !encaja(crudo.ejes, crudo.naturalezas, arqs.data):",
+        "    publishAndWait('arquetipos.proponer.request', {project_id:in.project_id, arquetipo:{ id:<slug del nombre del arquetipo nuevo>, reglas:[<condiciones sobre ejes/naturalezas que lo distinguen>], sub_formas:[<las que aplican>], modelo_precio:<por_unidad|por_peso|por_tiempo|rango_valoracion>, organos:[<lo que enciende>] }}, 8000)",
+        "",
+        "  // 5. DELEGAR AL REFLEJO — él clasifica por la MISMA forma, marca preguntas_abiertas, VALIDA contra el",
+        "  //    freno de producto-manager y GUARDA (producto.adaptado, upsert). Tú NO validas ni persistes.",
+        "  resp = publishAndWait('adaptador.adaptar.request', {project_id:in.project_id, crudo, catalogo_id:in.catalogo_id, correlation_id:in.correlation_id}, 15000)",
+        "  si !resp || resp.status>=400 -> publish('adaptacion.fallida',{...,error:resp?.error}) ; return resp?.error || UPSTREAM_UNREACHABLE",
+        "",
+        "  // 6. EMITIR",
+        "  return {status:200, data:resp.data, message:'Producto adaptado — arquetipo '+resp.data.arquetipo+', madurez '+resp.data.madurez+'. Faltan '+(resp.data.preguntas_abiertas?.length||0)+' datos del comerciante.'}"
+      ],
+      "reglas_clave": [
+        "FIDELIDAD: cada dato del crudo procede del material. Lo que no sepas (coste, stock) NO lo inventes — déjalo fuera; el reflejo lo marca como pregunta_abierta.",
+        "FORMA: la clasificación nace de ejes+naturalezas, no de la superficie. Un corte de pelo y un masaje comparten forma (tiempo=cita, stock=capacidad_temporal) → mismo arquetipo. Descríbelos con cuidado.",
+        "VERDAD_OBLIGATORIA: alérgenos, etiqueta energética, seguridad → restricciones tipo verdad_obligatoria (no_negociable), tal cual el material las declare. No se alinean, se dicen fieles.",
+        "APERTURA: si la forma no encaja en ningún arquetipo conocido, propón uno nuevo (arquetipos.proponer). Queda propuesto; lo aprueba un humano. No fuerces todo a 'pieza'.",
+        "DELEGADO: el reflejo (adaptador.adaptar.request) clasifica, VALIDA (freno de producto-manager) y GUARDA. Tú solo estructuras; no escribes fs, no persistes, no cantas éxito sin la respuesta del reflejo."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_INVALID_RESPONSE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+    }
+  },
+
+  "eventos_publicados": [
+    "adaptacion.iniciada",
+    "adaptacion.fallida",
+    "arquetipos.listar.request",
+    "arquetipos.proponer.request",
+    "adaptador.adaptar.request"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "filosofia": "Lo ya formado no necesita pensarse: el reflejo clasifica, valida y guarda determinista. El trabajo fuzzy real es dar forma a lo informe (una foto, un dictado) y reconocer cuándo aparece una forma de comercio nueva que merece su propio arquetipo. El LLM piensa donde de verdad hay que pensar; el reflejo hace lo que tiene una sola respuesta correcta."
+}

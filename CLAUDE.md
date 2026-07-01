@@ -14765,7 +14765,7 @@ CLASIFICADOR: arquetipo por la FORMA (ejes+naturalezas), NO por la superficie (c
 ```
 COPIAR+GENERALIZAR (llevan la forma del producto) → modules/prisma/
   carta-manager   → producto-manager   custodio del ProductoUniversal              ✓ HECHO
-  menu-generator  → adaptador          crudo → 5 huecos + clasifica arquetipo      ◑ MITAD REFLEJO (falta blueprint LLM)
+  menu-generator  → adaptador          crudo → 5 huecos + clasifica arquetipo      ✓ HECHO (híbrido: reflejo determinista + blueprint LLM)
   productos       → proyector          ProductoUniversal → vista destino            ✓ HECHO
   (fase 2) carta-digital → escaparate · variaciones+_shared/motor-opciones → opciones
 REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credential-manager · project-manager ·
@@ -14811,10 +14811,10 @@ CLASE PrismaProyectorReflejo HEREDA ModuloHibridoReflejo {   // gemelo de pizzep
 }
 ```
 
-## adaptador (module 0.1.0 · reflejo 0.1.0) — crudo → ProductoUniversal ◑ (mitad reflejo)
+## adaptador (module 0.2.0 · reflejo 0.1.0 · blueprint 0.1.0) — crudo → ProductoUniversal ✓ (híbrido)
 
 ```
-CLASE PrismaAdaptadorReflejo HEREDA ModuloHibridoReflejo {   // blueprint-agentico 6 fases; v0.1.0 = mitad reflejo
+CLASE PrismaAdaptadorReflejo HEREDA ModuloHibridoReflejo {   // blueprint-agentico 6 fases · REFLEJO = la mitad determinista
   ESPINAZO  CONTRATO {crudo,project_id,catalogo_id?} → LEER[pdte] → PENSAR → VALIDAR → GUARDAR → EMITIR
   PENSAR (determinista v0.1.0)  crudo estructurado → 5 huecos ; _clasificarArquetipo POR LA FORMA:
      ciclo=con_retorno→uso_temporal · tiempo=cita|stock=capacidad_temporal→servicio ·
@@ -14823,8 +14823,10 @@ CLASE PrismaAdaptadorReflejo HEREDA ModuloHibridoReflejo {   // blueprint-agenti
                       → madurez necesita_aclaracion_comerciante (no inventa: MARCA lo que no sabe)
   VALIDAR  catalogo.validar.request → _checkProducto (freno de producto-manager); !valid → 422 FALLA HONESTO
   GUARDAR  publish producto.adaptado (producto-manager: onProductoAdaptado, upsert)
-  MITAD FUZZY [pendiente]  adaptador.blueprint.json — el LLM descompone foto/texto libre → estructura;
-                           entonces PENSAR pasa al LLM y esto (clasificar·marcar·VALIDAR) se queda reflejo.
+  MITAD FUZZY (blueprint 0.1.0)  adaptador.blueprint.json — cajón 'adaptar': el LLM descompone foto/texto libre
+                           → el Crudo de 5 huecos + propone arquetipo nuevo si no encaja (arquetipos.proponer), y
+                           DELEGA al reflejo (adaptador.adaptar.request) el clasificar·VALIDAR·GUARDAR. FIDELIDAD:
+                           lo que no sabe (coste/stock) NO lo inventa → el reflejo lo marca abierto. Verificación real = ai-gateway vivo.
 }
 ```
 
@@ -14849,7 +14851,8 @@ CLASE PrismaArquetiposReflejo HEREDA ModuloHibridoReflejo {
 
 ```
 catalogo.{save,get,list,delete,add_product,remove_product,update_product,add_category,validar,activar,clonar,search,stats,versions,restore}.request → .response
-adaptador.adaptar.request → .response    (crudo → ProductoUniversal; PENSAR + VALIDAR(freno) + GUARDAR)
+adaptador.adaptar.request → .response    (reflejo: crudo → clasifica + VALIDAR(freno) + GUARDAR)
+adaptacion.{iniciada,fallida}            (blueprint del adaptador: progreso/fallo del PENSAR fuzzy)
 producto.adaptado                        (adaptador → producto-manager; upsert idempotente)
 catalogo.{actualizado,editado,borrado}   (producto-manager → proyector; señal de refresco)
 vista.{completa,productos,producto,buscar}.request → .response   (proyector; lectura proyectada)
@@ -14861,7 +14864,7 @@ arquetipo.{propuesto,aprobado}           (IA propone · humano aprueba — anti-
 ## Estado
 
 ```
-✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador mitad reflejo (9/9) · arquetipos registro abierto (4/4)
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO reflejo+blueprint (9/9) · arquetipos (4/4)
 ✓ _shared/arquetipos-semilla — clasificador POR LA FORMA, fuente única (adaptador + arquetipos)
-◑ adaptador  blueprint LLM (PENSAR fuzzy: foto/texto libre → estructura) — pdte; el reflejo (clasificar·marcar·VALIDAR) ya está
+◑ adaptador.blueprint (PENSAR fuzzy: foto/texto → crudo, propone arquetipo, delega al reflejo) montado; verificación real = correrlo en el ai-gateway vivo
 ```

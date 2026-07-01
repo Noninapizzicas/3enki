@@ -11,9 +11,17 @@
  */
 
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const CosechaModule = require('../../modules/cosecha/index.js');
 
 const LOG = { debug(){}, info(){}, warn(){}, error(){} };
+
+// fuente exclusiva de las pruebas de importar (se limpia al final; no pisa la semilla).
+// _slug la normaliza a 'test-import' (así se llama el dir en disco).
+const FUENTE_TEST = '__test-import__';
+const FUENTE_TEST_DIR = path.join(process.cwd(), 'data', 'cosecha', 'cantera', 'test-import');
+function limpiar() { try { fs.rmSync(FUENTE_TEST_DIR, { recursive: true, force: true }); } catch (_) {} }
 
 async function makeCargado() {
   const m = new CosechaModule();
@@ -83,6 +91,49 @@ test('stats: dos fuentes en un pozo (ecc + enki)', async () => {
   const { data } = m._stats();
   assert.ok(data.fuentes.includes('ECC') && data.fuentes.includes('enki'), 'ambas fuentes');
   assert.ok(data.por_fuente['ECC'] >= 2 && data.por_fuente['enki'] >= 1);
+});
+
+test('importar: vuelca una skill, la escribe en data/ y la re-indexa (buscable)', async () => {
+  limpiar();
+  const m = await makeCargado();
+  const antes = m._skills.size;
+  const r = m._importar({ fuente: FUENTE_TEST, skills: [
+    { nombre: 'skill-importada', descripcion: 'venida de fuera', dominio: 'prueba', tags: ['x', 'y'], contenido: '# Cuerpo\nviva en caliente' }
+  ]});
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.importadas, 1);
+  assert.strictEqual(r.data.total, antes + 1, 're-indexa: la cantera crece');
+  const s = m._skills.get('skill-importada');
+  assert.ok(s, 'la skill importada es descubrible');
+  assert.strictEqual(s.dominio, 'prueba');
+  assert.ok(s.contenido.includes('viva en caliente'));
+  // el fichero está en disco
+  const mdPath = path.join(FUENTE_TEST_DIR, 'skill-importada', 'SKILL.md');
+  assert.ok(fs.existsSync(mdPath), 'SKILL.md escrito en data/');
+  limpiar();
+});
+
+test('importar: idempotente por nombre (re-importar pisa, no duplica)', async () => {
+  limpiar();
+  const m = await makeCargado();
+  m._importar({ fuente: FUENTE_TEST, skills: [{ nombre: 'dup', contenido: 'v1' }] });
+  const trasPrimera = m._skills.size;
+  m._importar({ fuente: FUENTE_TEST, skills: [{ nombre: 'dup', contenido: 'v2 nueva' }] });
+  assert.strictEqual(m._skills.size, trasPrimera, 'no duplica');
+  assert.ok(m._skills.get('dup').contenido.includes('v2 nueva'), 'la re-importación pisa');
+  limpiar();
+});
+
+test('importar: fuente/skills inválidos -> INVALID_INPUT; skill sin contenido -> rechazada', async () => {
+  limpiar();
+  const m = await makeCargado();
+  assert.strictEqual(m._importar({ fuente: '', skills: [{ nombre: 'x', contenido: 'y' }] }).status, 400);
+  assert.strictEqual(m._importar({ fuente: FUENTE_TEST, skills: [] }).status, 400);
+  const r = m._importar({ fuente: FUENTE_TEST, skills: [{ nombre: 'sin-cuerpo' }] });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.importadas, 0);
+  assert.strictEqual(r.data.rechazadas.length, 1, 'la skill sin contenido se rechaza, no se traga');
+  limpiar();
 });
 
 (async () => {

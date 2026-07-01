@@ -1,7 +1,8 @@
 {
   "_doc": "Manifest de la COSECHA (cantera) — REFLEJO PURO. Hermano del cuenco (lentes-diseno) en la Teoría del Órgano, cara ADITIVA: el cuenco sostiene las lentes ACTIVAS (inyectadas por turno cuando una página las bebe); la cosecha sostiene TODA la abundancia (skills de cualquier fuente: importadas de ECC/VoltAgent o nacidas del destilador), buscable pero NO inyectada. La cúpula queda viva porque la cantera absorbe lo demás. Sumar, no restar: la abundancia bien alojada es MUNICIÓN del conserje (ofrecer en positivo), no ruido. Las skills viven en cantera/<fuente>/<skill>/SKILL.md (formato Agent Skills de Anthropic).",
   "name": "cosecha",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "_v0_2_nota": "v0.2.0: PUERTA DE ENTRADA — cosecha.importar. La cantera crece EN CALIENTE: cualquier fuente (destilador, ECC, un .md suelto) vuelca skills y se auto-indexan. Escribe cada una como SKILL.md en data/cosecha/cantera/<fuente>/<slug>/ (persistente, no en git); _descubrir ahora escanea DOS dirs (semilla curada en el código + crecido en data), y lo crecido gana en colisión. Idempotente por nombre. Con esto el bridge destilador->cosecha y el import de las 277 de ECC pasan a ser llamadores triviales de importar. Test: cosecha__index (+importar).",
   "_v0_1_nota": "v0.1.0: nace el órgano CANTERA. Auto-descubre cantera/<fuente>/<skill>/SKILL.md (frontmatter name/description/dominio/tags + markdown). Puertas: cosecha.buscar (catálogo BARATO rankeado, sin contenido — evita la dilución de selección), cosecha.obtener (SKILL.md completo bajo demanda), cosecha.listar, cosecha.stats. Semilla: skills portables adaptadas de ECC (deep-research, agentic-engineering). PENDIENTE: cosecha.promover (montar en la cúpula por demanda), conserje mina la cantera para ofrecer, puente destilador→cosecha (su salida también cae al pozo), import masivo de las 277 de ECC.",
   "description": "Cantera de skills: reflejo puro que auto-descubre SKILL.md de cualquier fuente y los sirve buscables por el bus. Biblioteca viva (toda la abundancia), no cúpula (lentes activas). Alimenta cúpula y conserje por demanda.",
   "author": "Event Core Team",
@@ -11,13 +12,15 @@
     { "event": "cosecha.buscar.response",  "description": "Catálogo BARATO rankeado: { skills:[{nombre,descripcion,fuente,dominio,tags}], total }. Sin contenido — para descubrir/ofrecer sin cargar todo." },
     { "event": "cosecha.obtener.response", "description": "El SKILL.md COMPLETO de las skills pedidas: { skills:[{...,contenido}], faltan:[nombres no encontrados] }." },
     { "event": "cosecha.listar.response",  "description": "Catálogo entero (sin contenido) + fuentes: { total, fuentes, skills:[...] }." },
-    { "event": "cosecha.stats.response",   "description": "Recuento: { total, por_fuente, fuentes }." }
+    { "event": "cosecha.stats.response",   "description": "Recuento: { total, por_fuente, fuentes }." },
+    { "event": "cosecha.importar.response","description": "Resultado del volcado: { fuente, importadas, rechazadas:[{nombre,motivo}], total }. total = tamaño de la cantera tras re-indexar." }
   ],
   "subscribes": [
     { "event": "cosecha.buscar.request",  "handler": "onBuscarRequest",  "description": "Reflejo: busca en la cantera por query/dominio/tarea, rankea, devuelve catálogo barato (sin contenido). El conserje/LLM descubre aquí." },
     { "event": "cosecha.obtener.request", "handler": "onObtenerRequest", "description": "Reflejo: entrega el SKILL.md completo de las skills pedidas por nombre (lo caro, solo bajo demanda)." },
     { "event": "cosecha.listar.request",  "handler": "onListarRequest",  "description": "Reflejo: catálogo entero + fuentes." },
-    { "event": "cosecha.stats.request",   "handler": "onStatsRequest",   "description": "Reflejo: recuento por fuente." }
+    { "event": "cosecha.stats.request",   "handler": "onStatsRequest",   "description": "Reflejo: recuento por fuente." },
+    { "event": "cosecha.importar.request","handler": "onImportarRequest","description": "PUERTA DE SUMAR: cualquier fuente (destilador, ECC, un .md suelto) vuelca skills { fuente, skills:[{nombre,contenido,descripcion?,dominio?,tags?}] }. Escribe cada una como SKILL.md en data/cosecha/cantera/<fuente>/<slug>/ y re-indexa. Idempotente por nombre." }
   ],
   "config": {
     "persistence": {

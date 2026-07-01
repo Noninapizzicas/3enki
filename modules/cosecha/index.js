@@ -28,13 +28,17 @@ const fs = require('fs');
 const path = require('path');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
-const CANTERA_DIR = path.join(__dirname, 'cantera');
+// La cantera vive en DOS sitios: la SEMILLA curada (en el código, versionada) y lo
+// CRECIDO en caliente por cosecha.importar (en data/, persistente, no en git). Se
+// escanean ambos; ante colisión de nombre, gana lo crecido (la importación más nueva).
+const CANTERA_SEED_DIR = path.join(__dirname, 'cantera');
+const CANTERA_DATA_DIR = path.join(process.cwd(), 'data', 'cosecha', 'cantera');
 
 class CosechaModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'cosecha';
-    this.version = '0.1.0';
+    this.version = '0.2.0';
     // nombre → { nombre, descripcion, fuente, dominio, tags:[], contenido }
     this._skills = new Map();
   }
@@ -54,15 +58,20 @@ class CosechaModule extends ModuloHibridoReflejo {
   }
 
   // ── LA CANTERA: recoge cantera/<fuente>/<skill>/SKILL.md (biblioteca, no cúpula) ──
+  // Escanea SEMILLA (código) primero y luego CRECIDO (data): lo crecido gana en colisión.
   _descubrir() {
     this._skills.clear();
-    let fuentes;
-    try { fuentes = fs.readdirSync(CANTERA_DIR, { withFileTypes: true }); }
-    catch (err) { this.logger?.warn('cosecha.cantera.missing', { error: err.message }); return; }
+    this._scanDir(CANTERA_SEED_DIR);
+    this._scanDir(CANTERA_DATA_DIR);
+  }
 
+  _scanDir(baseDir) {
+    let fuentes;
+    try { fuentes = fs.readdirSync(baseDir, { withFileTypes: true }); }
+    catch (_) { return; }  // dir ausente (p.ej. data/ aún sin importaciones) = sin ruido
     for (const f of fuentes) {
       if (!f.isDirectory()) continue;
-      const fuenteDir = path.join(CANTERA_DIR, f.name);
+      const fuenteDir = path.join(baseDir, f.name);
       let entradas;
       try { entradas = fs.readdirSync(fuenteDir, { withFileTypes: true }); }
       catch (_) { continue; }
@@ -106,10 +115,11 @@ class CosechaModule extends ModuloHibridoReflejo {
   _fuentes() { return [...new Set([...this._skills.values()].map(s => s.fuente))]; }
 
   // ── handlers (una línea por op; delegan a _atender de la base) ──
-  async onBuscarRequest(event)  { return this._atender(event, 'buscar',  'cosecha.buscar.response',  (d) => this._buscar(d)); }
-  async onObtenerRequest(event) { return this._atender(event, 'obtener', 'cosecha.obtener.response', (d) => this._obtener(d)); }
-  async onListarRequest(event)  { return this._atender(event, 'listar',  'cosecha.listar.response',  () => this._listar()); }
-  async onStatsRequest(event)   { return this._atender(event, 'stats',   'cosecha.stats.response',   () => this._stats()); }
+  async onBuscarRequest(event)   { return this._atender(event, 'buscar',   'cosecha.buscar.response',   (d) => this._buscar(d)); }
+  async onObtenerRequest(event)  { return this._atender(event, 'obtener',  'cosecha.obtener.response',  (d) => this._obtener(d)); }
+  async onListarRequest(event)   { return this._atender(event, 'listar',   'cosecha.listar.response',   () => this._listar()); }
+  async onStatsRequest(event)    { return this._atender(event, 'stats',    'cosecha.stats.response',    () => this._stats()); }
+  async onImportarRequest(event) { return this._atender(event, 'importar', 'cosecha.importar.response', (d) => this._importar(d)); }
 
   // ── proyecciones deterministas (una respuesta correcta computable) ──
 
@@ -158,6 +168,54 @@ class CosechaModule extends ModuloHibridoReflejo {
     const porFuente = {};
     for (const s of this._skills.values()) porFuente[s.fuente] = (porFuente[s.fuente] || 0) + 1;
     return { status: 200, data: { total: this._skills.size, por_fuente: porFuente, fuentes: this._fuentes() } };
+  }
+
+  // importar: la puerta de "sumar" — CUALQUIER fuente (destilador, ECC, un .md suelto)
+  // vuelca skills a la cantera CRECIDA (data/, persistente). Escribe cada una como
+  // SKILL.md y re-indexa. Idempotente por nombre (re-importar pisa la versión previa).
+  _importar({ fuente = '', skills = [] } = {}) {
+    if (!fuente || typeof fuente !== 'string') return this._invalid('fuente');
+    if (!Array.isArray(skills) || skills.length === 0) return this._invalid('skills');
+    const fuenteSlug = this._slug(fuente);
+    let importadas = 0;
+    const rechazadas = [];
+    for (const raw of skills) {
+      const nombre = raw && raw.nombre ? String(raw.nombre).trim() : '';
+      const contenido = raw && raw.contenido ? String(raw.contenido) : '';
+      if (!nombre || !contenido) { rechazadas.push({ nombre: nombre || '(sin nombre)', motivo: 'nombre+contenido requeridos' }); continue; }
+      const dir = path.join(CANTERA_DATA_DIR, fuenteSlug, this._slug(nombre));
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'SKILL.md'), this._serializar({ ...raw, nombre, fuente }), 'utf-8');
+        importadas++;
+      } catch (err) {
+        rechazadas.push({ nombre, motivo: err.message });
+      }
+    }
+    this._descubrir();  // re-indexa (semilla + crecido)
+    this.metrics?.increment('cosecha.importadas.total', { fuente: fuenteSlug });
+    return { status: 200, data: { fuente, importadas, rechazadas, total: this._skills.size } };
+  }
+
+  // serializa una skill a SKILL.md (frontmatter + markdown). Reversible por _parse.
+  _serializar({ nombre, descripcion = '', fuente = '', dominio = '', tags = [], contenido = '' }) {
+    const tagsStr = Array.isArray(tags) ? `[${tags.join(', ')}]` : String(tags || '');
+    const fm = [
+      '---',
+      `name: ${nombre}`,
+      `description: ${String(descripcion).replace(/\n/g, ' ')}`,
+      `fuente: ${fuente}`,
+      `dominio: ${dominio}`,
+      `tags: ${tagsStr}`,
+      '---',
+      ''
+    ].join('\n');
+    return fm + String(contenido).trim() + '\n';
+  }
+
+  _slug(s) {
+    return String(s).toLowerCase().trim()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'x';
   }
 }
 

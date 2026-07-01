@@ -14719,3 +14719,149 @@ pizzepos = VERTICAL 1 (no el producto). DESPUÉS: comercio local = vertical 2 (m
 REGLA   una lente solo entra cuando hay PÁGINA que la beba. Hasta entonces se COSECHAN candidatos, no se montan colgantes.
 COSECHA v2: VoltAgent/08-business-product (assumption-mapping·product-manager·business-analyst·customer-success·growth·legal).
 ```
+
+---
+
+# PRISMA — Vertical universal de comercio (producto de 5 huecos · modules/prisma/)
+
+> Vertical 2 del rumbo (comercio local/universal): producto NO pizza-shaped, molde universal.
+> Propuesta: arquitectura/decisiones/propuestas/prisma.md (6 casos trabajados). Nace 2026-07-01. En construcción.
+
+## Modelo — ProductoUniversal (contrato)
+
+```json
+{
+  "esquema": "producto-universal-v1",
+  "principio": "lo objetivo lo descompone la IA; lo privado se marca ABIERTO (no se inventa)",
+  "identidad": { "que_es": "String", "trabajo_que_resuelve": "String" },
+  "arquetipo": "comestible|pieza|servicio|uso_temporal|... (ABIERTO; la IA propone, humano aprueba = anti-wipe)",
+  "restricciones": [{ "tipo": "compatibilidad|factibilidad|verdad_obligatoria|periodo|retorno", "regla": "String", "no_negociable": "Bool" }],
+  "contrato": {
+    "atributos_saber": [{ "nombre": "String", "valor?": "Any", "derivado?": "Bool", "eje?": "precio|alergenos" }],
+    "opciones": [{ "id": "String", "etiqueta": "String",
+                   "sub_forma": "variante|modificacion|añadido|personalizacion_libre",
+                   "modo": "ELEGIR_UNO|ELEGIR_VARIOS|QUITAR|LIBRE",
+                   "valores": [{ "id": "String", "etiqueta": "String", "delta_precio": "Int", "disponible": "Bool" }] }],
+    "estados": ["ciclo de vida del producto"]
+  },
+  "ejes": { "tiempo": "ninguno|instante|cita|intervalo_que_cobra", "estado_de_partida": "false|String", "ciclo": "de_ida|con_retorno" },
+  "naturalezas": { "stock": "unidades|ingredientes|capacidad_temporal|activo_reutilizable", "precio": "por_unidad|por_peso|por_tiempo|rango_valoracion" },
+  "no_objetivos": ["String"],
+  "preguntas_abiertas": [{ "campo": "coste|stock|tarifa|agenda", "para": "comerciante", "porque": "privado|no_computable", "respondida?": "Bool" }],
+  "madurez": "listo|necesita_aclaracion_comerciante|necesita_revision"
+}
+```
+
+```
+VERDAD_OBLIGATORIA (alérgenos·etiqueta energética·seguridad) = clase aparte: no se alinea, se dice fiel. universal (4/5 casos).
+SUB_FORMA domina según arquetipo:  pizza=modificacion · TV=variante+añadido · tarta=+personalizacion_libre.
+EJES se encienden por producto:    agenda (no-inmediato) · estado_de_partida (servicios) · retorno (alquiler/leasing).
+NATURALEZA stock/precio varía:     ingredientes·unidades·capacidad_temporal·activo_reutilizable / unidad·peso·tiempo·rango_valoracion.
+CLASIFICADOR: arquetipo por la FORMA (ejes+naturalezas), NO por la superficie (corte y masaje = servicio por forma).
+```
+
+## Reparto pizzepos → prisma (copiar · reusar · dejar-arquetipo)
+
+```
+COPIAR+GENERALIZAR (llevan la forma del producto) → modules/prisma/
+  carta-manager   → producto-manager   custodio del ProductoUniversal              ✓ HECHO
+  menu-generator  → adaptador          crudo → 5 huecos + clasifica arquetipo      ◑ MITAD REFLEJO (falta blueprint LLM)
+  productos       → proyector          ProductoUniversal → vista destino            ✓ HECHO
+  (fase 2) carta-digital → escaparate · variaciones+_shared/motor-opciones → opciones
+REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credential-manager · project-manager ·
+  database-manager · interruptores · propiocepcion · conserje · destilador · homeostasis · lentes-diseno · verificador-visual · portal
+DEJAR ARQUETIPO (órganos de "hostelería con mesas"; NO al core; se encienden solo si el comercio los pide):
+  comandero · cuentas · cobros · cocina · pase-cocina · pedidos · persistencia-comandero · impresion · cuentas-canales
+BOSS orquesta: un comercio = conjunto de arquetipos de sus productos; enciende packs+páginas+blueprints de esos arquetipos.
+```
+
+## producto-manager (module 0.1.0 · reflejo 0.1.0) — aggregate root ✓
+
+```
+CLASE ProductoManagerReflejo HEREDA ModuloHibridoReflejo {   // copiado de carta-manager, generalizado (pizza → 5 huecos)
+  STORE    /prisma/catalogo/<id>.json (+ .versions/<id>/<ts>.json)   single-writer
+  AGREGADO catalogo { meta{id,nombre,version,estado,created_at,updated_at}, categorias[], productos[ProductoUniversal] }
+  _mutar   read → snapshot → aplicar → fs.edit → version++ → catalogo.editado   (mismo patrón que carta-manager)
+  OPS (RPC catalogo.<op>.request → .response):
+    save · get · list · delete(soft=archivado) · add_product · remove_product · update_product(merge+renormaliza) ·
+    add_category · activar(exactamente 1 en_servicio) · clonar · search · stats(por arquetipo/madurez) · versions · restore · validar
+  FRENO    _checkProducto: identidad.que_es + arquetipo + nombre presentes · opciones sub_forma/modo canónicos · madurez canónica.
+           NO exige completitud (borrador con preguntas_abiertas = legítimo → "no inventar"). _checkCatalogo: por-producto + CATEGORIA_DANGLING.
+  NORMALIZA _normalizarProducto: rellena los 5 huecos con defaults sanos, canonicaliza opciones/ejes/naturalezas.
+            id determinista slug(categoria_id)+'_'+slug(nombre). NO inventa contenido (vacío = borrador legítimo).
+  ENTRADA  onProductoAdaptado (fire-and-forget del adaptador): upsert idempotente por id en el catálogo general del proyecto.
+  EVENTOS_PUBLISHES { catalogo.actualizado · catalogo.editado · catalogo.borrado + catalogo.<op>.response }
+  EVENTOS_SUBSCRIBES { catalogo.<op>.request (15) · producto.adaptado }
+}
+```
+
+## proyector (module 0.1.0 · reflejo 0.1.0) — proyector sin estado ✓
+
+```
+CLASE PrismaProyectorReflejo HEREDA ModuloHibridoReflejo {   // gemelo de pizzepos/productos, generalizado
+  SIN STORE  vista == proyectar(catalogo_activo) SIEMPRE. Lee via catalogo.get/list.request (producto-manager).
+  _proyectar(catalogo) PURO → { categorias(orden), productos[vista] }
+  _proyectarProducto → aplana el ProductoUniversal a la vista de consumo:
+    { id, nombre, que_es, arquetipo, categoria_id, atributos, opciones(con disponible), estados,
+      verdades_obligatorias (restricciones tipo=verdad_obligatoria → alérgenos/etiqueta/seguridad),
+      ejes, naturalezas, madurez, listo_para_vender(=madurez 'listo'), requiere_tiempo(=eje tiempo≠ninguno) }
+  OPS (RPC vista.<op>.request → .response): completa · productos(filtro categoria/arquetipo) · producto · buscar
+  SEÑAL  catalogo.{actualizado,editado,borrado} → re-emite vista.actualizada (lite). project.activated → warm.
+  DOMAIN 'vista.*' propio para no pisar catalogo.* (que posee producto-manager, el único writer).
+}
+```
+
+## adaptador (module 0.1.0 · reflejo 0.1.0) — crudo → ProductoUniversal ◑ (mitad reflejo)
+
+```
+CLASE PrismaAdaptadorReflejo HEREDA ModuloHibridoReflejo {   // blueprint-agentico 6 fases; v0.1.0 = mitad reflejo
+  ESPINAZO  CONTRATO {crudo,project_id,catalogo_id?} → LEER[pdte] → PENSAR → VALIDAR → GUARDAR → EMITIR
+  PENSAR (determinista v0.1.0)  crudo estructurado → 5 huecos ; _clasificarArquetipo POR LA FORMA:
+     ciclo=con_retorno→uso_temporal · tiempo=cita|stock=capacidad_temporal→servicio ·
+     stock=ingredientes|precio=por_peso→comestible · resto→pieza
+  _preguntasAbiertas  coste+stock (privados) + agenda(tiempo≠ninguno) + tarifa(precio rango/tiempo)
+                      → madurez necesita_aclaracion_comerciante (no inventa: MARCA lo que no sabe)
+  VALIDAR  catalogo.validar.request → _checkProducto (freno de producto-manager); !valid → 422 FALLA HONESTO
+  GUARDAR  publish producto.adaptado (producto-manager: onProductoAdaptado, upsert)
+  MITAD FUZZY [pendiente]  adaptador.blueprint.json — el LLM descompone foto/texto libre → estructura;
+                           entonces PENSAR pasa al LLM y esto (clasificar·marcar·VALIDAR) se queda reflejo.
+}
+```
+
+## arquetipos (module 0.1.0 · reflejo 0.1.0) — registro ABIERTO ✓
+
+```
+_shared/arquetipos-semilla  SEMILLA (comestible·servicio·uso_temporal·pieza) + clasificar(ejes,naturalezas,extra)
+                            FUENTE ÚNICA del clasificador POR LA FORMA (la usan adaptador y arquetipos, sin drift).
+CLASE PrismaArquetiposReflejo HEREDA ModuloHibridoReflejo {
+  ARQUETIPO = forma {ejes+naturalezas} + defaults {sub_formas, modelo_precio, organos que enciende}
+  REGISTRO  semilla (código, intocable) + custom (store /prisma/arquetipos.json, estado propuesto|aprobado)
+  OPS (RPC arquetipos.<op>.request → .response):
+     listar · obtener · clasificar(custom aprobados con PRIORIDAD sobre semilla) · proponer · aprobar
+  ABIERTO   proponer = la IA registra uno nuevo cuando algo no encaja (estado 'propuesto') ;
+            aprobar = el humano lo cierra (estado 'aprobado' → entra a clasificar). ANTI-WIPE: la semilla es
+            intocable (409); un id aprobado no se pisa. Mismo patrón que el destilador con las skills.
+  EVENTOS_PUBLISHES { arquetipo.propuesto · arquetipo.aprobado + arquetipos.<op>.response }
+}
+```
+
+## Topics / eventos
+
+```
+catalogo.{save,get,list,delete,add_product,remove_product,update_product,add_category,validar,activar,clonar,search,stats,versions,restore}.request → .response
+adaptador.adaptar.request → .response    (crudo → ProductoUniversal; PENSAR + VALIDAR(freno) + GUARDAR)
+producto.adaptado                        (adaptador → producto-manager; upsert idempotente)
+catalogo.{actualizado,editado,borrado}   (producto-manager → proyector; señal de refresco)
+vista.{completa,productos,producto,buscar}.request → .response   (proyector; lectura proyectada)
+vista.actualizada                        (proyector → consumidor/escaparate; consume-on-read del refresco)
+arquetipos.{listar,obtener,clasificar,proponer,aprobar}.request → .response   (registro abierto)
+arquetipo.{propuesto,aprobado}           (IA propone · humano aprueba — anti-wipe, la semilla intocable)
+```
+
+## Estado
+
+```
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador mitad reflejo (9/9) · arquetipos registro abierto (4/4)
+✓ _shared/arquetipos-semilla — clasificador POR LA FORMA, fuente única (adaptador + arquetipos)
+◑ adaptador  blueprint LLM (PENSAR fuzzy: foto/texto libre → estructura) — pdte; el reflejo (clasificar·marcar·VALIDAR) ya está
+```

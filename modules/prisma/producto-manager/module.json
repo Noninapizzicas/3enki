@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de prisma/producto-manager — REFLEJO JS puro (aggregate root de Prisma). Copiado y generalizado de pizzepos/carta-manager: misma fontanería (custodio + _mutar versionado + freno), girando la forma del item de 'producto pizza' (ingredientes/variaciones/dietas) al ProductoUniversal (los 5 huecos: identidad · restricciones · contrato{atributos_saber/opciones/estados} · no_objetivos · preguntas_abiertas + arquetipo + ejes + naturalezas + madurez). Custodio unico de /prisma/catalogo/<id>.json (+ .versions/). El adaptador (prisma/adaptador, futuro) DESCOMPONE un producto crudo y escribe aqui via catalogo.<op>.request; el proyector (prisma/proyector) LEE. Ningun hermano escribe al store directamente. Ver arquitectura/decisiones/propuestas/prisma.md.",
+  "name": "producto-manager",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): primer modulo de Prisma. Reflejo puro (sin blueprint aun): sirve las ops deterministas del catalogo universal en el bus. El FRENO es _checkProducto — valida los 5 huecos (identidad.que_es presente, arquetipo presente, opciones con sub_forma/modo canonicos, madurez canonica), SIN exigir completitud de borrador (un producto 'necesita_aclaracion_comerciante' con preguntas_abiertas es legitimo: no se inventa lo que no se sabe). Reflejo 0.1.0.",
+  "description": "Custodio del catalogo de ProductoUniversal (Prisma). Reflejo JS que sirve las ops deterministas (CRUD + versionado + validacion) en el bus (catalogo.<op>.request). Aggregate root de la vertical universal: cualquier arquetipo de producto (comestible, pieza, servicio, uso-temporal...) vive con la misma forma de 5 huecos. Copiado de carta-manager, generalizado de pizza a producto universal.",
+  "language": "es",
+  "subscribes": [
+    { "event": "catalogo.save.request", "handler": "onSaveRequest", "description": "Reflejo JS: persiste el catalogo (snapshot+version++) y emite catalogo.actualizada." },
+    { "event": "catalogo.get.request", "handler": "onGetRequest", "description": "Reflejo JS: un catalogo completo por id." },
+    { "event": "catalogo.list.request", "handler": "onListRequest", "description": "Reflejo JS: lista resumida de catalogos (filtros estado/tag)." },
+    { "event": "catalogo.delete.request", "handler": "onDeleteRequest", "description": "Reflejo JS: soft-delete (estado=archivado), emite catalogo.borrado." },
+    { "event": "catalogo.add_product.request", "handler": "onAddProductRequest", "description": "Reflejo JS: anyade un ProductoUniversal (normaliza los 5 huecos; valida categoria_id si viene)." },
+    { "event": "catalogo.remove_product.request", "handler": "onRemoveProductRequest", "description": "Reflejo JS: quita un producto por id." },
+    { "event": "catalogo.update_product.request", "handler": "onUpdateProductRequest", "description": "Reflejo JS: edita huecos de un producto (identidad, restricciones, contrato, ejes, naturalezas, preguntas_abiertas, madurez)." },
+    { "event": "catalogo.add_category.request", "handler": "onAddCategoryRequest", "description": "Reflejo JS: anyade una categoria (dedup por nombre)." },
+    { "event": "catalogo.validar.request", "handler": "onValidarRequest", "description": "Reflejo JS (FRENO): valida un producto o el catalogo entero contra la forma de 5 huecos de Prisma. Funcion pura. No exige completitud de borrador." },
+    { "event": "catalogo.activar.request", "handler": "onActivarRequest", "description": "Reflejo JS: pone un catalogo en_servicio (patch de 1 campo) y baja a borrador cualquier OTRO activo." },
+    { "event": "catalogo.clonar.request", "handler": "onClonarRequest", "description": "Reflejo JS: clona un catalogo como copia independiente." },
+    { "event": "catalogo.search.request", "handler": "onSearchRequest", "description": "Reflejo JS: busca catalogos/productos por query." },
+    { "event": "catalogo.stats.request", "handler": "onStatsRequest", "description": "Reflejo JS: totales y desglose por estado/arquetipo/madurez." },
+    { "event": "catalogo.versions.request", "handler": "onVersionsRequest", "description": "Reflejo JS: lista los snapshots de un catalogo." },
+    { "event": "catalogo.restore.request", "handler": "onRestoreRequest", "description": "Reflejo JS: restaura una version (snapshot previo + version++)." },
+    { "event": "producto.adaptado", "handler": "onProductoAdaptado", "description": "Reflejo JS (fire-and-forget): el adaptador publica producto.adaptado (crudo descompuesto en 5 huecos); el reflejo lo persiste en el catalogo del proyecto via add_product/update_product (idempotente por id)." }
+  ],
+  "config": {
+    "persistence": {
+      "scope": "project",
+      "data_path": "prisma/catalogo",
+      "pattern": "json-file-per-entity-plus-versions",
+      "concurrency": "single-writer"
+    }
+  }
+}

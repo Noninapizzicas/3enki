@@ -1,0 +1,23 @@
+{
+  "_doc": "Manifest de prisma/arquetipos — REFLEJO JS: el registro ABIERTO de arquetipos de Prisma. Un arquetipo = la FORMA de un producto (ejes+naturalezas) + sus defaults (sub_formas, modelo_precio, organos que enciende). La SEMILLA (comestible·servicio·uso_temporal·pieza) vive en _shared/arquetipos-semilla.js (fuente única del clasificador, compartida con prisma/adaptador). El registro es ABIERTO: la IA PROPONE un arquetipo nuevo cuando un producto no encaja, y un humano lo APRUEBA (anti-wipe: la semilla es intocable, un id ya aprobado no se pisa) — mismo patron que el destilador con las skills. Los custom aprobados entran en la clasificacion con prioridad. Store /prisma/arquetipos.json (project scope v0.1.0; promocion a system-shared es refinamiento posterior). Ver arquitectura/decisiones/propuestas/prisma.md.",
+  "name": "arquetipos",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): registro con semilla (4) + custom persistidos. clasificar(ejes,naturalezas) delega en _shared/arquetipos-semilla (mismo que adaptador). proponer = estado 'propuesto' (anti-wipe: no pisa semilla ni un aprobado). aprobar = estado 'aprobado' (no aprueba sobre semilla). Reflejo 0.1.0.",
+  "description": "Registro ABIERTO de arquetipos de Prisma: semilla en código + custom propuestos por IA y aprobados por humano (anti-wipe). Sirve listar/obtener/clasificar/proponer/aprobar en el bus.",
+  "language": "es",
+  "subscribes": [
+    { "event": "arquetipos.listar.request", "handler": "onListarRequest", "description": "Reflejo JS: semilla + custom." },
+    { "event": "arquetipos.obtener.request", "handler": "onObtenerRequest", "description": "Reflejo JS: un arquetipo por id (semilla o custom)." },
+    { "event": "arquetipos.clasificar.request", "handler": "onClasificarRequest", "description": "Reflejo JS: {ejes,naturalezas} → arquetipo POR LA FORMA (custom aprobados con prioridad)." },
+    { "event": "arquetipos.proponer.request", "handler": "onProponerRequest", "description": "Reflejo JS: registra un arquetipo custom como 'propuesto' (anti-wipe: no pisa semilla ni aprobado)." },
+    { "event": "arquetipos.aprobar.request", "handler": "onAprobarRequest", "description": "Reflejo JS: pasa un custom a 'aprobado' (no aprueba sobre semilla). El humano cierra el anti-wipe." }
+  ],
+  "config": {
+    "persistence": {
+      "scope": "project",
+      "data_path": "prisma",
+      "pattern": "single-json-file",
+      "concurrency": "single-writer"
+    }
+  }
+}

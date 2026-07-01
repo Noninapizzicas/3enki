@@ -14725,7 +14725,7 @@ COSECHA v2: VoltAgent/08-business-product (assumption-mapping·product-manager·
 # PRISMA — Vertical universal de comercio (producto de 5 huecos · modules/prisma/)
 
 > Vertical 2 del rumbo (comercio local/universal): producto NO pizza-shaped, molde universal.
-> Propuesta: arquitectura/decisiones/propuestas/prisma.md (6 casos trabajados). Nace 2026-07-01. En construcción.
+> Propuesta: arquitectura/decisiones/propuestas/prisma.md (6 casos trabajados). Nace 2026-07-01. Columna determinista v0.1 COMPLETA (8 módulos · 50/50); verificación en vivo + wiring pendientes.
 
 ## Modelo — ProductoUniversal (contrato)
 
@@ -14765,9 +14765,9 @@ CLASIFICADOR: arquetipo por la FORMA (ejes+naturalezas), NO por la superficie (c
 ```
 COPIAR+GENERALIZAR (llevan la forma del producto) → modules/prisma/
   carta-manager   → producto-manager   custodio del ProductoUniversal              ✓ HECHO
-  menu-generator  → adaptador          crudo → 5 huecos + clasifica arquetipo      ◑ MITAD REFLEJO (falta blueprint LLM)
+  menu-generator  → adaptador          crudo → 5 huecos + clasifica arquetipo      ✓ HECHO (híbrido: reflejo determinista + blueprint LLM)
   productos       → proyector          ProductoUniversal → vista destino            ✓ HECHO
-  (fase 2) carta-digital → escaparate · variaciones+_shared/motor-opciones → opciones
+  (fase 2) opciones ✓ · coste ✓ · escaparate ✓ (de carta-digital · núcleo público; bundle HTML/PWA follow-up en vivo)
 REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credential-manager · project-manager ·
   database-manager · interruptores · propiocepcion · conserje · destilador · homeostasis · lentes-diseno · verificador-visual · portal
 DEJAR ARQUETIPO (órganos de "hostelería con mesas"; NO al core; se encienden solo si el comercio los pide):
@@ -14811,10 +14811,10 @@ CLASE PrismaProyectorReflejo HEREDA ModuloHibridoReflejo {   // gemelo de pizzep
 }
 ```
 
-## adaptador (module 0.1.0 · reflejo 0.1.0) — crudo → ProductoUniversal ◑ (mitad reflejo)
+## adaptador (module 0.2.0 · reflejo 0.1.0 · blueprint 0.1.0) — crudo → ProductoUniversal ✓ (híbrido)
 
 ```
-CLASE PrismaAdaptadorReflejo HEREDA ModuloHibridoReflejo {   // blueprint-agentico 6 fases; v0.1.0 = mitad reflejo
+CLASE PrismaAdaptadorReflejo HEREDA ModuloHibridoReflejo {   // blueprint-agentico 6 fases · REFLEJO = la mitad determinista
   ESPINAZO  CONTRATO {crudo,project_id,catalogo_id?} → LEER[pdte] → PENSAR → VALIDAR → GUARDAR → EMITIR
   PENSAR (determinista v0.1.0)  crudo estructurado → 5 huecos ; _clasificarArquetipo POR LA FORMA:
      ciclo=con_retorno→uso_temporal · tiempo=cita|stock=capacidad_temporal→servicio ·
@@ -14823,8 +14823,10 @@ CLASE PrismaAdaptadorReflejo HEREDA ModuloHibridoReflejo {   // blueprint-agenti
                       → madurez necesita_aclaracion_comerciante (no inventa: MARCA lo que no sabe)
   VALIDAR  catalogo.validar.request → _checkProducto (freno de producto-manager); !valid → 422 FALLA HONESTO
   GUARDAR  publish producto.adaptado (producto-manager: onProductoAdaptado, upsert)
-  MITAD FUZZY [pendiente]  adaptador.blueprint.json — el LLM descompone foto/texto libre → estructura;
-                           entonces PENSAR pasa al LLM y esto (clasificar·marcar·VALIDAR) se queda reflejo.
+  MITAD FUZZY (blueprint 0.1.0)  adaptador.blueprint.json — cajón 'adaptar': el LLM descompone foto/texto libre
+                           → el Crudo de 5 huecos + propone arquetipo nuevo si no encaja (arquetipos.proponer), y
+                           DELEGA al reflejo (adaptador.adaptar.request) el clasificar·VALIDAR·GUARDAR. FIDELIDAD:
+                           lo que no sabe (coste/stock) NO lo inventa → el reflejo lo marca abierto. Verificación real = ai-gateway vivo.
 }
 ```
 
@@ -14845,23 +14847,87 @@ CLASE PrismaArquetiposReflejo HEREDA ModuloHibridoReflejo {
 }
 ```
 
+## opciones (module 0.1.0 · reflejo 0.1.0) — valida + precia la selección ✓
+
+```
+CLASE PrismaOpcionesReflejo HEREDA ModuloHibridoReflejo {   // ENVUELVE el banco _shared/motor-opciones (puro, céntimos)
+  ENTRADA  opciones.evaluar.request { producto | catalogo_id+producto_id, selecciones } → .response
+  _aProductoMotor  ProductoUniversal → forma del banco: delta_precio(€) → delta_precio_centimos ;
+                   aparta las LIBRE (personalizacion_libre) a `libres` (texto del cliente, sin cardinalidad/precio).
+  _baseCentimos    precio_base_centimos · o atributo 'precio'(€) · o 0 (desconocido → base_resuelto:false, pregunta_abierta)
+  SALIDA   { valida, errores, precio_final_centimos, precio_final_eur, libres, base_resuelto }
+  REUSA    evaluarProducto (banco): Strategy por modo (ELEGIR_UNO/ELEGIR_VARIOS/QUITAR) + Composite. Céntimos enteros.
+  GENERALIZA pizzepos/variaciones (validar) + pedido-tasador (preciar) a cualquier arquetipo.
+}
+```
+
+## boss (module 0.1.0 · reflejo 0.1.0) — el orquestador ✓
+
+```
+CLASE PrismaBossReflejo HEREDA ModuloHibridoReflejo {   // el CEREBRO; el enforcement lo consume aparte
+  TESIS  un comercio NO se declara pizzería/peluquería: su identidad EMERGE de sus productos.
+  NÚCLEO PURO  _arquetiposDelCatalogo(catalogo) → arquetipos presentes ;
+               _organosDe(arqIds, defs) → unión de organos ; _plan(catalogo, defs) → {arquetipos, organos, por_arquetipo, total}
+  ORGANOS semilla: comestible→[carta,cocina] · servicio→[agenda] · uso_temporal→[agenda,retorno,fianza] · pieza→[stock]
+  OPS (RPC boss.{plan,estado}.request → .response): calcula sobre el catálogo activo (producto-manager) + arquetipos (semilla+custom aprobados)
+  SEÑAL  catalogo.{actualizado,editado,borrado} + project.activated → boss.plan.actualizado (un producto nuevo puede encender un órgano nuevo)
+  CEREBRO≠ENFORCEMENT  BOSS señala qué órganos necesita el comercio; cargar páginas/packs/blueprints o gatear interruptores lo hace quien escuche el plan.
+}
+```
+
+## coste (module 0.1.0 · reflejo 0.1.0) — cara comerciante: coste → margen → pvp ✓
+
+```
+CLASE PrismaCosteReflejo HEREDA ModuloHibridoReflejo {   // generaliza escandallo(Σ coste)+viabilidad(food cost→pvp), en céntimos
+  ENTRADA  coste.costear.request { componentes[{coste_centimos,cantidad?}], coste_extra_centimos?, food_cost_objetivo?, pvp_centimos? }
+  _costear  coste_total = Σ(coste×cantidad)+extra ; food_cost_objetivo(0..1] → pvp_sugerido = coste/objetivo ;
+            pvp dado → food_cost_real=coste/pvp · margen=(pvp-coste)/pvp · margen_centimos
+  NO INVENTA  los componentes de coste los pone el COMERCIANTE (respuesta a las preguntas_abiertas de coste). Puro, sin store.
+  FOLLOW-UP  persistir pvp en el producto (precio_base) + marcar la pregunta_abierta de coste como respondida.
+}
+```
+
+## escaparate (module 0.1.0 · reflejo 0.1.0) — cara cliente pública ✓ (núcleo; HTML follow-up)
+
+```
+CLASE PrismaEscaparateReflejo HEREDA ModuloHibridoReflejo {   // gemelo generalizado de carta-digital, sin estado
+  DIFERENCIA con proyector: el escaparate es PÚBLICO → PODA lo que el comerciante no ofrece.
+  _proyectarPublico(catalogo) PURO → { categorias(orden), productos[público] }
+  _productoPublico → { id, nombre, descripcion(=que_es), precio (fijo € | 'consultar' si rango_valoracion/desconocido),
+     opciones (SOLO valores disponible:true; opción sin valores ofrecibles se cae; LIBRE se conserva),
+     avisos_obligatorios (restricciones verdad_obligatoria), requiere_cita (eje tiempo≠ninguno) }
+  OPS (RPC escaparate.publico.request → .response): proyecta el catálogo activo a la vista del cliente.
+  SEÑAL  catalogo.{actualizado,editado,borrado} → escaparate.actualizado.
+  FOLLOW-UP (en vivo)  generar el bundle HTML/PWA (como carta-digital static-template) + branding desde marca.
+}
+```
+
 ## Topics / eventos
 
 ```
 catalogo.{save,get,list,delete,add_product,remove_product,update_product,add_category,validar,activar,clonar,search,stats,versions,restore}.request → .response
-adaptador.adaptar.request → .response    (crudo → ProductoUniversal; PENSAR + VALIDAR(freno) + GUARDAR)
+adaptador.adaptar.request → .response    (reflejo: crudo → clasifica + VALIDAR(freno) + GUARDAR)
+adaptacion.{iniciada,fallida}            (blueprint del adaptador: progreso/fallo del PENSAR fuzzy)
 producto.adaptado                        (adaptador → producto-manager; upsert idempotente)
 catalogo.{actualizado,editado,borrado}   (producto-manager → proyector; señal de refresco)
 vista.{completa,productos,producto,buscar}.request → .response   (proyector; lectura proyectada)
 vista.actualizada                        (proyector → consumidor/escaparate; consume-on-read del refresco)
 arquetipos.{listar,obtener,clasificar,proponer,aprobar}.request → .response   (registro abierto)
 arquetipo.{propuesto,aprobado}           (IA propone · humano aprueba — anti-wipe, la semilla intocable)
+opciones.evaluar.request → .response     (valida + precia la selección del cliente; céntimos; aparta LIBRE)
+boss.{plan,estado}.request → .response   (comercio → arquetipos presentes → unión de órganos)
+boss.plan.actualizado                    (el plan del comercio cambió — lo consume el enforcement: cargar órganos)
+coste.costear.request → .response        (cara comerciante: coste → margen → pvp; los costes los pone el comerciante)
+escaparate.publico.request → .response   (cara cliente: catálogo → vista pública, poda lo no ofrecido)
+escaparate.actualizado                   (escaparate → PWA/consumidor; consume-on-read del refresco)
 ```
 
 ## Estado
 
 ```
-✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador mitad reflejo (9/9) · arquetipos registro abierto (4/4)
-✓ _shared/arquetipos-semilla — clasificador POR LA FORMA, fuente única (adaptador + arquetipos)
-◑ adaptador  blueprint LLM (PENSAR fuzzy: foto/texto libre → estructura) — pdte; el reflejo (clasificar·marcar·VALIDAR) ya está
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (5/5) · escaparate (5/5, núcleo)
+✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones)
+✓ project-type blueprints/project-types/prisma.json — comercio universal INSTANCIABLE
+◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA — se verifican corriendo el Enki
+[ ] wiring: adaptador reflejo → arquetipos custom · BOSS enforcement (cargar órganos del plan) · persistir pvp/coste en el producto
 ```

@@ -1,0 +1,16 @@
+{
+  "_doc": "Manifest de prisma/boss — REFLEJO JS: el ORQUESTADOR de Prisma. Un comercio NO se declara 'pizzería' o 'peluquería': su identidad EMERGE de sus productos. BOSS calcula el PLAN del comercio = el conjunto de arquetipos en los que caen sus productos (leídos del catálogo via producto-manager) → la unión de los ORGANOS que esos arquetipos encienden (leídos de prisma/arquetipos: cada arquetipo declara organos[]). BOSS es el CEREBRO (calcula qué necesita el comercio y lo señala en boss.plan.actualizado); la APLICACION real (cargar páginas/packs/blueprints, gatear interruptores) la hace quien escuche el plan — separado, como manda el reparto reflejo/enforcement. Ver arquitectura/decisiones/propuestas/prisma.md + RUMBO en CLAUDE.md.",
+  "name": "boss",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): el cerebro. Núcleo PURO (_arquetiposDelCatalogo · _organosDe · _plan) + ops plan/estado (leen catálogo activo + arquetipos) + señal boss.plan.actualizado en catalogo.{actualizado,editado,borrado}. La union de organos se calcula de la semilla + custom aprobados. El enforcement (encender de verdad) es follow-up: quien escuche boss.plan lo aplica. Reflejo 0.1.0.",
+  "description": "Orquestador de Prisma: comercio = conjunto de arquetipos de sus productos → unión de órganos a encender. Calcula el plan y lo señala; el enforcement lo consume aparte.",
+  "language": "es",
+  "subscribes": [
+    { "event": "boss.plan.request", "handler": "onPlanRequest", "description": "Reflejo JS: {project_id} → {arquetipos, organos, productos_por_arquetipo}." },
+    { "event": "boss.estado.request", "handler": "onEstadoRequest", "description": "Reflejo JS: resumen del comercio (arquetipos + órganos + nº productos)." },
+    { "event": "catalogo.actualizado", "handler": "onCatalogoCambiado", "description": "Reflejo JS (señal): el catálogo cambió → recalcula y emite boss.plan.actualizado (un producto nuevo puede encender un órgano nuevo)." },
+    { "event": "catalogo.editado", "handler": "onCatalogoCambiado", "description": "Reflejo JS (señal): idem para mutaciones estructuradas." },
+    { "event": "catalogo.borrado", "handler": "onCatalogoCambiado", "description": "Reflejo JS (señal): idem." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS (warm): calcula el plan y emite boss.plan.actualizado al arrancar el proyecto." }
+  ]
+}

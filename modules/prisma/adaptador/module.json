@@ -1,11 +1,16 @@
 {
   "_doc": "Manifest de prisma/adaptador — la pieza que DESCOMPONE un producto crudo en el ProductoUniversal (5 huecos) y clasifica su arquetipo. Sigue blueprint-agentico (6 fases: CONTRATO → LEER → PENSAR → VALIDAR → GUARDAR → EMITIR). v0.1.0 trae la MITAD REFLEJO (determinista): clasifica el arquetipo por la FORMA (ejes+naturalezas, NO la superficie), marca las preguntas_abiertas de lo privado (coste/stock/agenda/tarifa) y orquesta el loop VALIDAR contra el freno de producto-manager (catalogo.validar.request). El PENSAR de v0.1.0 mapea una entrada ESTRUCTURADA; la mitad FUZZY (LLM que descompone foto/texto libre → estructura) llega como adaptador.blueprint.json en el paso siguiente (será híbrido). GUARDAR = emite producto.adaptado, que producto-manager ya consume (onProductoAdaptado, upsert idempotente). Ver arquitectura/decisiones/propuestas/prisma.md.",
   "name": "adaptador",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "_v0_2_0_nota": "v0.2.0 (2026-07-01): HIBRIDADO. + adaptador.blueprint.json (mitad FUZZY): el LLM de la página descompone material sin estructurar (foto/texto libre) en el Crudo de 5 huecos + propone arquetipo nuevo si no encaja, y DELEGA al reflejo (adaptador.adaptar.request) el clasificar/VALIDAR/GUARDAR. El loader carga ambos (blueprint_driven + index.js = híbrido). El cajón 'adaptar' NO colisiona con el subscribe del reflejo (es op de página, no evento). Blueprint 0.1.0.",
   "_v0_1_0_nota": "v0.1.0 (2026-07-01): mitad reflejo del adaptador. _clasificarArquetipo por forma (ciclo=con_retorno→uso_temporal · tiempo=cita|stock=capacidad_temporal→servicio · stock=ingredientes|precio=por_peso→comestible · resto→pieza). _preguntasAbiertas marca coste+stock (privados) + agenda (si tiempo≠ninguno) + tarifa (si precio rango/por_tiempo) → madurez necesita_aclaracion_comerciante. VALIDAR via catalogo.validar.request (freno de producto-manager). GUARDAR via producto.adaptado. Reflejo 0.1.0.",
   "description": "Adaptador de Prisma: producto crudo → ProductoUniversal (5 huecos) + arquetipo. blueprint-agentico; v0.1.0 mitad reflejo (clasifica por forma, marca lo abierto, valida contra el freno). El PENSAR fuzzy (LLM) llega como blueprint después.",
   "language": "es",
+  "blueprint_driven": true,
+  "blueprint_path": "adaptador.blueprint.json",
+  "target_page_id": "adaptador",
   "subscribes": [
-    { "event": "adaptador.adaptar.request", "handler": "onAdaptarRequest", "description": "Reflejo JS: crudo estructurado → ProductoUniversal (clasifica arquetipo, marca preguntas_abiertas, VALIDA contra el freno, EMITE producto.adaptado)." }
-  ]
+    { "event": "adaptador.adaptar.request", "handler": "onAdaptarRequest", "description": "Reflejo JS: crudo estructurado → ProductoUniversal (clasifica arquetipo, marca preguntas_abiertas, VALIDA contra el freno, EMITE producto.adaptado). Lo invoca el blueprint (cajón adaptar) tras descomponer el material." }
+  ],
+  "cajones_enabled": true
 }

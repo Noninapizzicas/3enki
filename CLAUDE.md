@@ -14770,8 +14770,11 @@ COPIAR+GENERALIZAR (llevan la forma del producto) → modules/prisma/
   (fase 2) opciones ✓ · coste ✓ · escaparate ✓ (de carta-digital · núcleo público; bundle HTML/PWA follow-up en vivo)
 REUSAR TAL CUAL (plataforma agnóstica): conversacion/* · filesystem · credential-manager · project-manager ·
   database-manager · interruptores · propiocepcion · conserje · destilador · homeostasis · lentes-diseno · verificador-visual · portal
-DEJAR ARQUETIPO (órganos de "hostelería con mesas"; NO al core; se encienden solo si el comercio los pide):
-  comandero · cuentas · cobros · cocina · pase-cocina · pedidos · persistencia-comandero · impresion · cuentas-canales
+POS UNIVERSAL (la espina de venta SÍ es reutilizable; copiar+generalizar → prisma, como carta-manager):
+  comandero → carrito ✓ (buffer, tasa con opciones, céntimos, sin cocina) · cobros → cobro [ ] (pago: cualquiera cobra) ·
+  cuentas → cuenta/ticket [ ] (abrir→añadir→cobrar→cerrar) · impresion → ticket [ ] (recibo) · persistencia-comandero → cierre de caja [ ]
+HOSTELERÍA (órgano del arquetipo; encender solo si el comercio es de hostelería):
+  cocina · pase-cocina + los ganchos de cocina del comandero (enviar_cocina/estaciones) · cuentas-canales (delivery)
 BOSS orquesta: un comercio = conjunto de arquetipos de sus productos; enciende packs+páginas+blueprints de esos arquetipos.
 ```
 
@@ -14902,6 +14905,19 @@ CLASE PrismaEscaparateReflejo HEREDA ModuloHibridoReflejo {   // gemelo generali
 }
 ```
 
+## carrito (module 0.1.0 · reflejo 0.1.0) — buffer de venta universal ✓ (POS · v0.1)
+
+```
+CLASE PrismaCarritoReflejo HEREDA ModuloHibridoReflejo {   // copiado de comandero, SIN los ganchos de cocina
+  BUFFER  Map<cuenta_id, {items, total_centimos}>. Entrada del flujo de venta: carrito → (cuenta) → cobro.
+  OPS (RPC carrito.<op>.request → .response): get · add_item · remove_item · update_item(0→quita) · vaciar · list
+  TASADO  add_item tasa cada ítem con opciones.evaluar (producto+selección → precio_final_centimos) · o precio_unitario_centimos inline
+  ÍTEM    { id, producto_id, nombre, cantidad, selecciones, precio_unitario_centimos, subtotal_centimos, libres?, notas }
+  DINERO  CÉNTIMOS (coherente con opciones/coste/tasador). SIN enviar_cocina (órgano del arquetipo hostelería).
+  v0.1    en memoria (persistencia = follow-up). Siguiente: cobro (de cobros) + cuenta/ticket + cierre de caja.
+}
+```
+
 ## Topics / eventos
 
 ```
@@ -14920,6 +14936,8 @@ boss.plan.actualizado                    (el plan del comercio cambió — lo co
 coste.costear.request → .response        (cara comerciante: coste → margen → pvp; los costes los pone el comerciante)
 escaparate.publico.request → .response   (cara cliente: catálogo → vista pública, poda lo no ofrecido)
 escaparate.actualizado                   (escaparate → PWA/consumidor; consume-on-read del refresco)
+carrito.{get,add_item,remove_item,update_item,vaciar,list}.request → .response   (buffer de venta; tasa con opciones)
+carrito.{item_agregado,item_eliminado,item_actualizado,vaciado}   (mutaciones del carrito)
 ```
 
 ## Estado
@@ -14928,6 +14946,8 @@ escaparate.actualizado                   (escaparate → PWA/consumidor; consume
 ✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (5/5) · escaparate (5/5, núcleo)
 ✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones)
 ✓ project-type blueprints/project-types/prisma.json — comercio universal INSTANCIABLE
+✓ carrito (6/6) — POS: buffer de venta universal (de comandero, tasa con opciones, sin cocina)
 ◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA — se verifican corriendo el Enki
-[ ] wiring: adaptador reflejo → arquetipos custom · BOSS enforcement (cargar órganos del plan) · persistir pvp/coste en el producto
+[ ] POS resto (copiar+generalizar de pizzepos): cobro (de cobros) · cuenta/ticket (de cuentas) · impresion→ticket · cierre de caja
+[ ] wiring: adaptador reflejo → arquetipos custom · BOSS enforcement (cargar órganos del plan) · persistir pvp/coste + carrito
 ```

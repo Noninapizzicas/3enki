@@ -1,0 +1,16 @@
+{
+  "_doc": "Manifest de prisma/carrito — REFLEJO JS: el BUFFER de venta universal (copiado y generalizado de pizzepos/comandero). Un carrito por cuenta_id: añadir/quitar/actualizar ítems. CAMBIO clave vs comandero: cada ítem se TASA con prisma/opciones (opciones.evaluar: producto + selección → precio_final_centimos) en vez del precio por canal de pizza; dinero en CÉNTIMOS (coherente con opciones/coste/tasador). SIN los ganchos de cocina (enviar_cocina/estaciones = órgano del arquetipo hostelería). Es la entrada del flujo de venta: carrito → (cuenta) → cobro. v0.1 en memoria (persistencia = follow-up). Ver arquitectura/decisiones/propuestas/prisma.md.",
+  "name": "carrito",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): buffer per cuenta_id, ops add_item/remove_item/update_item/get/vaciar/list. add_item tasa via opciones.evaluar (o acepta precio_unitario_centimos inline). Total en céntimos. Sin cocina. En memoria (el siguiente paso: cobro de cobros + persistencia). Reflejo 0.1.0.",
+  "description": "Buffer de venta universal de Prisma (carrito): añadir/quitar/actualizar ítems, tasados por opciones, en céntimos. Copiado de comandero, sin los ganchos de cocina.",
+  "language": "es",
+  "subscribes": [
+    { "event": "carrito.get.request", "handler": "onGetRequest", "description": "Reflejo JS: el carrito de una cuenta (items + total_centimos)." },
+    { "event": "carrito.add_item.request", "handler": "onAddItemRequest", "description": "Reflejo JS: añade un ítem; lo tasa con opciones.evaluar (o usa precio_unitario_centimos inline)." },
+    { "event": "carrito.remove_item.request", "handler": "onRemoveItemRequest", "description": "Reflejo JS: quita un ítem por id; recalcula total." },
+    { "event": "carrito.update_item.request", "handler": "onUpdateItemRequest", "description": "Reflejo JS: cambia la cantidad (0 → quita); recalcula subtotal + total." },
+    { "event": "carrito.vaciar.request", "handler": "onVaciarRequest", "description": "Reflejo JS: vacía el carrito de una cuenta." },
+    { "event": "carrito.list.request", "handler": "onListRequest", "description": "Reflejo JS: todos los carritos activos." }
+  ]
+}

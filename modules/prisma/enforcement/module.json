@@ -1,0 +1,13 @@
+{
+  "_doc": "Manifest de prisma/enforcement — REFLEJO JS: el EFECTOR del BOSS. CEREBRO≠ENFORCEMENT: el BOSS calcula el PLAN (qué órganos necesita el comercio) y lo señala en boss.plan.actualizado; este módulo lo CONSUME y lo APLICA, encendiendo el interruptor de cada órgano necesario en el panel central (organo-<id>), que el dueño del órgano reacciona en caliente (patrón interruptor.registrar/cambiado). Postura v0.1: ADDITIVO (enciende lo necesario, edge-triggered por proyecto, idempotente) · NO APAGA solo (un órgano que sobra recibe solo TESTIGO boss.organo.innecesario — la voluntad de apagar es humana, como la apoptosis de la homeostasis) · SIN FALLO MUDO (registra el interruptor de cada órgano al vuelo, custom incluidos). Ver arquitectura/decisiones/propuestas/prisma.md.",
+  "name": "enforcement",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): el brazo. Cierra el lazo CEREBRO→acción que el BOSS dejaba abierto. Núcleo PURO (_plan via organos-recetario.diffPlan) + consumo de boss.plan.actualizado → _aplicar (interruptor.set enabled:true por órgano necesario + testigo) + RPC enforcement.estado. El interruptor es GLOBAL (panel único); el estado aplicado se lleva por proyecto para el diff. Reflejo 0.1.0.",
+  "description": "El efector del BOSS: consume boss.plan.actualizado y enciende los órganos del comercio vía el panel central de interruptores. Additivo-seguro; no apaga solo.",
+  "language": "es",
+  "subscribes": [
+    { "event": "boss.plan.actualizado", "handler": "onPlanActualizado", "description": "Reflejo JS: el BOSS recalculó el plan → enciende los interruptores de los órganos necesarios (edge-triggered por proyecto) + testigo de los sobrantes." },
+    { "event": "interruptor.solicitar_registro", "handler": "onSolicitarRegistro", "description": "Reflejo JS: interruptores (re)cargó y pide registro → re-anuncia los interruptores organo-<id>." },
+    { "event": "enforcement.estado.request", "handler": "onEstadoRequest", "description": "Reflejo JS: {project_id} → {aplicados, organos_conocidos, registrados}." }
+  ]
+}

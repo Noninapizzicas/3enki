@@ -239,14 +239,22 @@ Aplicando el propio principio de Prisma al doc:
 ## 8. Estado de implementación (v0.1 — 2026-07-01)
 
 Construida entera la columna determinista en `modules/prisma/` (copiar+generalizar de
-pizzepos, cero pizzepos tocado), **50/50 tests**:
+pizzepos, cero pizzepos tocado), **81/81 tests**:
 
 - **producto-manager** (custodio del ProductoUniversal + freno) · **proyector** (vista interna) ·
   **escaparate** (vista pública, poda lo no ofrecido) · **opciones** (precia la selección) ·
   **coste** (coste→margen→pvp) · **arquetipos** (registro abierto + anti-wipe) ·
-  **adaptador** (híbrido: reflejo determinista + blueprint LLM) · **boss** (orquestador comercio→órganos).
-- `_shared/arquetipos-semilla` (clasificador por la forma) · `_shared/motor-opciones` (banco, envuelto).
+  **adaptador** (híbrido: reflejo determinista + blueprint LLM) · **boss** (orquestador comercio→órganos) ·
+  **enforcement** (efector: consume `boss.plan.actualizado` → `interruptor.set` enciende los órganos;
+  additivo-seguro, no apaga solo).
+- **POS universal** (de pizzepos, sin cocina): **carrito → cuenta → cobro → ticket → cierre** (céntimos).
+- `_shared/arquetipos-semilla` (clasificador por la forma) · `_shared/motor-opciones` (banco, envuelto) ·
+  `_shared/organos-recetario` (órgano→interruptor + diff puro del plan).
 - project-type `blueprints/project-types/prisma.json` → un comercio universal es **instanciable**.
+
+El lazo CEREBRO→acción queda cerrado: BOSS calcula qué órganos necesita el comercio (por sus
+productos), enforcement los enciende por el panel central de interruptores. La voluntad de APAGAR se
+deja al humano (los sobrantes reciben testigo, no apagado — como la apoptosis de la homeostasis).
 
 Preguntas del §7, resueltas: semilla = 4 a mano (comestible·pieza·servicio·uso_temporal) + IA propone;
 aprobación de arquetipo = anti-wipe en `prisma/arquetipos` (proponer→aprobar, semilla intocable); primer
@@ -255,9 +263,12 @@ rango-valoración (hoy → `consultar` en escaparate + pregunta_abierta `tarifa`
 
 Falta (todo requiere el Enki vivo o wiring de bus): verificar en vivo el blueprint del adaptador y el
 bundle HTML/PWA del escaparate; cablear el reflejo del adaptador a los arquetipos custom por RPC;
-BOSS enforcement (cargar de verdad los órganos del plan); persistir el pvp de coste en el producto.
+persistir el pvp de coste en el producto; dar DUEÑO a los órganos previstos (agenda/retorno/fianza/stock
+= módulos follow-up que reaccionen a su `interruptor.cambiado`); persistir el POS (carrito/cobro/cuenta,
+hoy en memoria v0.1).
 
 ## Veredicto de madurez
 
-**Columna determinista COMPLETA y probada (50/50). Lista para verificación en vivo + wiring de
-integración. El vertical es instanciable (project-type `prisma`).**
+**Columna determinista + POS + enforcement COMPLETOS y probados (81/81). El lazo CEREBRO→acción cierra
+(BOSS→enforcement→interruptores). Lista para verificación en vivo + wiring de integración. El vertical es
+instanciable (project-type `prisma`).**

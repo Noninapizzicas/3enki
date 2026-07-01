@@ -14874,8 +14874,31 @@ CLASE PrismaBossReflejo HEREDA ModuloHibridoReflejo {   // el CEREBRO; el enforc
   ORGANOS semilla: comestible→[carta,cocina] · servicio→[agenda] · uso_temporal→[agenda,retorno,fianza] · pieza→[stock]
   OPS (RPC boss.{plan,estado}.request → .response): calcula sobre el catálogo activo (producto-manager) + arquetipos (semilla+custom aprobados)
   SEÑAL  catalogo.{actualizado,editado,borrado} + project.activated → boss.plan.actualizado (un producto nuevo puede encender un órgano nuevo)
-  CEREBRO≠ENFORCEMENT  BOSS señala qué órganos necesita el comercio; cargar páginas/packs/blueprints o gatear interruptores lo hace quien escuche el plan.
+  CEREBRO≠ENFORCEMENT  BOSS señala qué órganos necesita el comercio; encender los interruptores de esos órganos lo hace prisma/enforcement (abajo).
 }
+```
+
+## enforcement (module 0.1.0 · reflejo 0.1.0) — el EFECTOR del BOSS ✓
+
+```
+CLASE PrismaEnforcementReflejo HEREDA ModuloHibridoReflejo {   // cierra el lazo CEREBRO→acción
+  CONSUME  boss.plan.actualizado {project_id, organos} → _aplicar: por cada órgano necesario
+           interruptor.set {id:'organo-<x>', enabled:true, motivo:'boss:<project>'} (canal universal;
+           el dueño del órgano lo reacciona en caliente, patrón interruptor.registrar/cambiado).
+  PURO     _plan(project_id, deseados) = organos-recetario.diffPlan(deseados, aplicados[project]) → {encender, innecesarios}
+  ADDITIVO edge-triggered por proyecto (idempotente: interruptores solo emite cambiado en divergencia).
+  NO APAGA solo  un órgano que sobra recibe solo TESTIGO boss.organo.innecesario — la voluntad de
+           apagar es humana (como la apoptosis de la homeostasis: canta, no mata).
+  SIN FALLO MUDO  registra el interruptor de cada órgano al vuelo (custom de arquetipos incluidos)
+           → nunca hay un órgano necesario sin canal de encendido.
+  onLoad   registra organo-<id> por cada órgano de la SEMILLA (grupo 'prisma-organos', default OFF).
+  RPC      enforcement.estado.request {project_id} → {aplicados, organos_conocidos, registrados}.
+  NOTA multi-proyecto  el interruptor es GLOBAL (panel único); 'necesario por este comercio' ⊆
+           'capacidad disponible en este Enki'. El estado APLICADO se lleva por proyecto (diff/testigo).
+}
+_shared/organos-recetario.js  (PURO)  KNOWN_ORGANOS {carta(nativo:escaparate) · cocina(hosteleria) ·
+  agenda/retorno/fianza/stock(previsto)} · ORGANOS_SEMILLA (unión de arquetipos-semilla, sin drift) ·
+  interruptorDe(o)='organo-'+o · metaDe(o) · diffPlan(deseados,aplicados)→{encender,innecesarios}.
 ```
 
 ## coste (module 0.1.0 · reflejo 0.1.0) — cara comerciante: coste → margen → pvp ✓
@@ -14960,7 +14983,10 @@ arquetipos.{listar,obtener,clasificar,proponer,aprobar}.request → .response   
 arquetipo.{propuesto,aprobado}           (IA propone · humano aprueba — anti-wipe, la semilla intocable)
 opciones.evaluar.request → .response     (valida + precia la selección del cliente; céntimos; aparta LIBRE)
 boss.{plan,estado}.request → .response   (comercio → arquetipos presentes → unión de órganos)
-boss.plan.actualizado                    (el plan del comercio cambió — lo consume el enforcement: cargar órganos)
+boss.plan.actualizado                    (el plan del comercio cambió — lo consume prisma/enforcement)
+enforcement.estado.request → .response   (qué órganos hay aplicados a este proyecto)
+interruptor.set {id:'organo-<x>',enabled,motivo}   (enforcement → panel central: enciende el órgano)
+boss.organo.encendido / boss.organo.innecesario    (testigo del efector: encendió / lo dejó sobrando sin apagar)
 coste.costear.request → .response        (cara comerciante: coste → margen → pvp; los costes los pone el comerciante)
 escaparate.publico.request → .response   (cara cliente: catálogo → vista pública, poda lo no ofrecido)
 escaparate.actualizado                   (escaparate → PWA/consumidor; consume-on-read del refresco)
@@ -14977,9 +15003,10 @@ cierre.{cerrar_caja,estado}.request → .response · caja.cerrada   (cuadre del 
 
 ```
 ✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (5/5) · escaparate (5/5, núcleo)
-✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones)
+✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones) · _shared/organos-recetario (órgano→interruptor, diff PURO)
 ✓ project-type blueprints/project-types/prisma.json — comercio universal INSTANCIABLE
 ✓ POS COMPLETO — carrito (6/6) · cobro (7/7) · cuenta (5/5) · ticket (3/3) · cierre (3/3): catálogo→carrito→cuenta→cobro→ticket→cierre (sin cocina)
-◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA — se verifican corriendo el Enki
-[ ] wiring/en vivo: adaptador reflejo → arquetipos custom · BOSS enforcement (cargar órganos del plan) · persistencias (carrito/cobro/cuenta) · encender cocina/pase-cocina para hostelería
+✓ BOSS ENFORCEMENT — enforcement (7/7): boss.plan.actualizado → interruptor.set enciende los órganos del comercio (additivo-seguro, no apaga solo). Lazo CEREBRO→acción cerrado.
+◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · el interruptor de cada órgano espera un dueño que lo beba (agenda/stock/… = módulos follow-up; cocina la reacciona pizzepos) — se verifican corriendo el Enki
+[ ] wiring/en vivo: adaptador reflejo → arquetipos custom · persistencias (carrito/cobro/cuenta) · persistir pvp/coste en el producto · módulos dueños de los órganos previstos (agenda/retorno/fianza/stock)
 ```

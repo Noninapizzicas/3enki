@@ -14928,20 +14928,20 @@ CLASE PrismaEscaparateReflejo HEREDA ModuloHibridoReflejo {   // gemelo generali
 }
 ```
 
-## carrito (module 0.1.0 · reflejo 0.1.0) — buffer de venta universal ✓ (POS · v0.1)
+## carrito (module 0.2.0 · reflejo 0.2.0) — buffer de venta universal ✓ (POS · persistente)
 
 ```
 CLASE PrismaCarritoReflejo HEREDA ModuloHibridoReflejo {   // copiado de comandero, SIN los ganchos de cocina
-  BUFFER  Map<cuenta_id, {items, total_centimos}>. Entrada del flujo de venta: carrito → (cuenta) → cobro.
+  BUFFER  Map<cuenta_id, {items, total_centimos, project_id}>. Entrada del flujo de venta: carrito → (cuenta) → cobro.
   OPS (RPC carrito.<op>.request → .response): get · add_item · remove_item · update_item(0→quita) · vaciar · list
   TASADO  add_item tasa cada ítem con opciones.evaluar (producto+selección → precio_final_centimos) · o precio_unitario_centimos inline
   ÍTEM    { id, producto_id, nombre, cantidad, selecciones, precio_unitario_centimos, subtotal_centimos, libres?, notas }
   DINERO  CÉNTIMOS (coherente con opciones/coste/tasador). SIN enviar_cocina (órgano del arquetipo hostelería).
-  v0.1    en memoria (persistencia = follow-up). Siguiente: cobro (de cobros) + cuenta/ticket + cierre de caja.
+  PERSISTE via _shared/pos-persistencia (snapshot fs por project_id, debounced; restaura en project.activated; vuelca en onUnload).
 }
 ```
 
-## cobro (module 0.1.0 · reflejo 0.1.0) — pago universal ✓ (POS · v0.1)
+## cobro (module 0.2.0 · reflejo 0.2.0) — pago universal ✓ (POS · persistente)
 
 ```
 CLASE PrismaCobroReflejo HEREDA ModuloHibridoReflejo {   // copiado de cobros, en céntimos, sin llevadoo/cajón
@@ -14949,24 +14949,27 @@ CLASE PrismaCobroReflejo HEREDA ModuloHibridoReflejo {   // copiado de cobros, e
   crear   total del carrito (carrito.get) o monto_centimos inline. Métodos: efectivo(cambio)·tarjeta·bizum·transferencia·mixto(split cuadra el total).
   CICLO   pendiente → completado (confirmar) → reembolsado. Idempotencia: un cobro activo por cuenta.
   DINERO  CÉNTIMOS. EVENTOS cobro.iniciado/procesado/reembolsado (mismo dominio que cobros; una cuenta prisma no la conoce pizzepos).
-  v0.1    en memoria · sin link_pago/qr (integraciones externas = follow-up).
+  PERSISTE por project_id (pos-persistencia). Sin link_pago/qr (integraciones externas = follow-up).
 }
 ```
 
-## cuenta · ticket · cierre (module 0.1.0 · reflejo 0.1.0) — POS tail ✓ (v0.1)
+## cuenta · ticket · cierre (module 0.2/0.1 · reflejo 0.2/0.1) — POS tail ✓ (persistente salvo ticket)
 
 ```
-CLASE PrismaCuentaReflejo   // ticket/cuenta (de cuentas, SIN estados de cocina)
+CLASE PrismaCuentaReflejo   // ticket/cuenta (de cuentas, SIN estados de cocina)   [module/reflejo 0.2.0]
   ciclo abierta → cobrada → cerrada. OPS cuenta.{crear,get,list,cerrar}.request. onCobroProcesado → pagada+total.
-  ref_display generado (T-001…). Ata carrito↔cobro bajo un ticket. En memoria.
+  ref_display generado (T-001…). Ata carrito↔cobro bajo un ticket. PERSISTE por project_id (+seq de ref_display).
 
-CLASE PrismaTicketReflejo   // recibo (de impresion, solo el ticket, SIN comanda de cocina)
+CLASE PrismaTicketReflejo   // recibo (de impresion, solo el ticket, SIN comanda de cocina)   [SIN estado → sin persistencia]
   OP ticket.formatear.request { items, total?, comercio?, ref_display?, ancho? } → { texto, total_centimos, ancho }.
   _formatearTicket PURO (líneas item/subtotal €, TOTAL). Emite ticket.generado. Impresora física = follow-up.
 
-CLASE PrismaCierreReflejo   // cuadre de caja (de persistencia-comandero, la parte del cuadre)
-  onCobroProcesado acumula la venta. OPS cierre.{cerrar_caja,estado}.request. _cuadre PURO → {total, por_metodo, num_ventas}.
-  cerrar_caja resetea el día + emite caja.cerrada.
+CLASE PrismaCierreReflejo   // cuadre de caja (de persistencia-comandero, la parte del cuadre)   [module/reflejo 0.2.0]
+  onCobroProcesado acumula la venta (con project_id). OPS cierre.{cerrar_caja,estado}.request. _cuadre PURO → {total, por_metodo, num_ventas}.
+  cerrar_caja resetea el día (global) + emite caja.cerrada. PERSISTE las ventas del día por project_id (dedup por cobro_id al restaurar).
+
+_shared/pos-persistencia.js  (composición)  snapshot(project_id)/hidratar(project_id,data) los pone cada reflejo (map↔obj);
+  el helper escribe /prisma/pos/<mod>.json (fs.write atómico, debounced) y restaura en project.activated. Sin project_id → solo memoria (honesto).
 ```
 
 ## Topics / eventos
@@ -15003,10 +15006,10 @@ cierre.{cerrar_caja,estado}.request → .response · caja.cerrada   (cuadre del 
 
 ```
 ✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (5/5) · escaparate (5/5, núcleo)
-✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones) · _shared/organos-recetario (órgano→interruptor, diff PURO)
+✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones) · _shared/organos-recetario (órgano→interruptor, diff PURO) · _shared/pos-persistencia (snapshot fs por proyecto)
 ✓ project-type blueprints/project-types/prisma.json — comercio universal INSTANCIABLE
-✓ POS COMPLETO — carrito (6/6) · cobro (7/7) · cuenta (5/5) · ticket (3/3) · cierre (3/3): catálogo→carrito→cuenta→cobro→ticket→cierre (sin cocina)
+✓ POS COMPLETO + PERSISTENTE — carrito (7/7) · cobro (8/8) · cuenta (6/6) · ticket (3/3) · cierre (4/4): catálogo→carrito→cuenta→cobro→ticket→cierre (sin cocina). Estado vivo persistido por proyecto (/prisma/pos/*.json), restaura en project.activated.
 ✓ BOSS ENFORCEMENT — enforcement (7/7): boss.plan.actualizado → interruptor.set enciende los órganos del comercio (additivo-seguro, no apaga solo). Lazo CEREBRO→acción cerrado.
 ◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · el interruptor de cada órgano espera un dueño que lo beba (agenda/stock/… = módulos follow-up; cocina la reacciona pizzepos) — se verifican corriendo el Enki
-[ ] wiring/en vivo: adaptador reflejo → arquetipos custom · persistencias (carrito/cobro/cuenta) · persistir pvp/coste en el producto · módulos dueños de los órganos previstos (agenda/retorno/fianza/stock)
+[ ] wiring/en vivo: adaptador reflejo → arquetipos custom · persistir pvp/coste en el producto (cerrar la pregunta_abierta de coste) · módulos dueños de los órganos previstos (agenda/retorno/fianza/stock)
 ```

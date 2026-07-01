@@ -13,6 +13,7 @@
 
 const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+const PosPersistencia = require('../../_shared/pos-persistencia');
 
 const nowISO = () => new Date().toISOString();
 const METODOS = new Set(['efectivo', 'tarjeta', 'bizum', 'transferencia', 'mixto']);
@@ -22,9 +23,17 @@ class PrismaCobroReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'cobro';
-    this.version = 'reflejo-0.1.0';
+    this.version = 'reflejo-0.2.0';
     this.cobros = new Map();   // cobro_id → cobro
+    this._persist = new PosPersistencia({
+      modulo: this, file: 'cobro.json',
+      snapshot: (pid) => ({ cobros: [...this.cobros.values()].filter(c => c.project_id === pid) }),
+      hidratar: (pid, data) => { for (const c of (data.cobros || [])) this.cobros.set(c.id, c); }
+    });
   }
+
+  async onUnload() { await this._persist.flush(); this._persist.detener(); return super.onUnload(); }
+  onProjectActivated(e) { const d = (e && (e.data || e)) || {}; return this._persist.restaurar(d.project_id); }
 
   onCrearRequest(e)      { return this._atender(e, 'crear', 'cobro.crear.response', d => this._crear(d)); }
   onConfirmarRequest(e)  { return this._atender(e, 'confirmar', 'cobro.confirmar.response', d => this._confirmar(d)); }
@@ -69,7 +78,7 @@ class PrismaCobroReflejo extends ModuloHibridoReflejo {
     const propina = this._int(input.propina_centimos);
     const monto_total = monto + propina;
     const cobro = {
-      id: crypto.randomUUID(), cuenta_id: input.cuenta_id,
+      id: crypto.randomUUID(), cuenta_id: input.cuenta_id, project_id: input.project_id || null,
       monto_centimos: monto, propina_centimos: propina, monto_total_centimos: monto_total,
       metodo_pago: input.metodo_pago, estado: 'pendiente', created_at: nowISO()
     };
@@ -87,6 +96,7 @@ class PrismaCobroReflejo extends ModuloHibridoReflejo {
     }
 
     this.cobros.set(cobro.id, cobro);
+    this._persist.marcarDirty(cobro.project_id);
     this.eventBus?.publish('cobro.iniciado', { cobro_id: cobro.id, cuenta_id: cobro.cuenta_id, monto_total_centimos: monto_total, metodo_pago: cobro.metodo_pago, project_id: input.project_id, correlation_id: input.correlation_id, timestamp: nowISO() });
     return { status: 201, data: cobro };
   }
@@ -99,6 +109,7 @@ class PrismaCobroReflejo extends ModuloHibridoReflejo {
     cobro.estado = 'completado';
     cobro.referencia_pago = input.referencia_pago || `REF_${crypto.randomUUID().slice(0, 8)}`;
     cobro.completado_at = nowISO();
+    this._persist.marcarDirty(cobro.project_id);
     this.eventBus?.publish('cobro.procesado', { cobro_id: cobro.id, cuenta_id: cobro.cuenta_id, monto_total_centimos: cobro.monto_total_centimos, metodo_pago: cobro.metodo_pago, referencia_pago: cobro.referencia_pago, project_id: input.project_id, timestamp: nowISO() });
     return { status: 200, data: cobro };
   }
@@ -111,6 +122,7 @@ class PrismaCobroReflejo extends ModuloHibridoReflejo {
     cobro.estado = 'reembolsado';
     cobro.motivo_reembolso = input.motivo || null;
     cobro.reembolsado_at = nowISO();
+    this._persist.marcarDirty(cobro.project_id);
     this.eventBus?.publish('cobro.reembolsado', { cobro_id: cobro.id, cuenta_id: cobro.cuenta_id, monto_reembolsado_centimos: cobro.monto_total_centimos, motivo: cobro.motivo_reembolso, project_id: input.project_id, timestamp: nowISO() });
     return { status: 200, data: cobro };
   }

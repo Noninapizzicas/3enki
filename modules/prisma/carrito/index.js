@@ -15,6 +15,7 @@
 
 const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+const PosPersistencia = require('../../_shared/pos-persistencia');
 
 const nowISO = () => new Date().toISOString();
 
@@ -22,9 +23,17 @@ class PrismaCarritoReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carrito';
-    this.version = 'reflejo-0.1.0';
-    this.carritos = new Map();   // cuenta_id → { items:[], total_centimos }
+    this.version = 'reflejo-0.2.0';
+    this.carritos = new Map();   // cuenta_id → { items:[], total_centimos, project_id }
+    this._persist = new PosPersistencia({
+      modulo: this, file: 'carrito.json',
+      snapshot: (pid) => ({ carritos: [...this.carritos].filter(([, b]) => b.project_id === pid) }),
+      hidratar: (pid, data) => { for (const [cuenta_id, b] of (data.carritos || [])) this.carritos.set(cuenta_id, b); }
+    });
   }
+
+  async onUnload() { await this._persist.flush(); this._persist.detener(); return super.onUnload(); }
+  onProjectActivated(e) { const d = (e && (e.data || e)) || {}; return this._persist.restaurar(d.project_id); }
 
   onGetRequest(e)        { return this._atender(e, 'get', 'carrito.get.response', d => this._get(d)); }
   onAddItemRequest(e)    { return this._atender(e, 'add_item', 'carrito.add_item.response', d => this._addItem(d)); }
@@ -33,9 +42,10 @@ class PrismaCarritoReflejo extends ModuloHibridoReflejo {
   onVaciarRequest(e)     { return this._atender(e, 'vaciar', 'carrito.vaciar.response', d => this._vaciar(d)); }
   onListRequest(e)       { return this._atender(e, 'list', 'carrito.list.response', d => this._list(d)); }
 
-  _buffer(cuenta_id) {
+  _buffer(cuenta_id, project_id) {
     let b = this.carritos.get(cuenta_id);
-    if (!b) { b = { items: [], total_centimos: 0 }; this.carritos.set(cuenta_id, b); }
+    if (!b) { b = { items: [], total_centimos: 0, project_id: project_id || null }; this.carritos.set(cuenta_id, b); }
+    else if (project_id && !b.project_id) b.project_id = project_id;
     return b;
   }
   _calcularTotal(items) { return items.reduce((s, i) => s + (i.subtotal_centimos || 0), 0); }
@@ -72,9 +82,10 @@ class PrismaCarritoReflejo extends ModuloHibridoReflejo {
       notas: input.notas || '',
       created_at: nowISO()
     };
-    const b = this._buffer(input.cuenta_id);
+    const b = this._buffer(input.cuenta_id, input.project_id);
     b.items.push(item);
     b.total_centimos = this._calcularTotal(b.items);
+    this._persist.marcarDirty(b.project_id);
     this.eventBus?.publish('carrito.item_agregado', { cuenta_id: input.cuenta_id, item_id: item.id, producto_id: item.producto_id, subtotal_centimos: item.subtotal_centimos, total_centimos: b.total_centimos, project_id: input.project_id, correlation_id: input.correlation_id, timestamp: nowISO() });
     return { status: 201, data: { item, carrito: { cuenta_id: input.cuenta_id, items: b.items, total_centimos: b.total_centimos } } };
   }
@@ -87,6 +98,7 @@ class PrismaCarritoReflejo extends ModuloHibridoReflejo {
     if (idx < 0) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'ítem no existe en el carrito', { entity_type: 'item', id: input.item_id });
     b.items.splice(idx, 1);
     b.total_centimos = this._calcularTotal(b.items);
+    this._persist.marcarDirty(b.project_id);
     this.eventBus?.publish('carrito.item_eliminado', { cuenta_id: input.cuenta_id, item_id: input.item_id, total_centimos: b.total_centimos, project_id: input.project_id, timestamp: nowISO() });
     return { status: 200, data: { carrito: { cuenta_id: input.cuenta_id, items: b.items, total_centimos: b.total_centimos } } };
   }
@@ -102,6 +114,7 @@ class PrismaCarritoReflejo extends ModuloHibridoReflejo {
     item.cantidad = Math.floor(input.cantidad);
     item.subtotal_centimos = item.precio_unitario_centimos * item.cantidad;
     b.total_centimos = this._calcularTotal(b.items);
+    this._persist.marcarDirty(b.project_id);
     this.eventBus?.publish('carrito.item_actualizado', { cuenta_id: input.cuenta_id, item_id: input.item_id, cantidad: item.cantidad, total_centimos: b.total_centimos, project_id: input.project_id, timestamp: nowISO() });
     return { status: 200, data: { item, carrito: { cuenta_id: input.cuenta_id, items: b.items, total_centimos: b.total_centimos } } };
   }
@@ -114,8 +127,11 @@ class PrismaCarritoReflejo extends ModuloHibridoReflejo {
 
   _vaciar(input) {
     if (!input.cuenta_id) return this._invalid('cuenta_id');
+    const b = this.carritos.get(input.cuenta_id);
+    const pid = input.project_id || (b && b.project_id);
     this.carritos.delete(input.cuenta_id);
-    this.eventBus?.publish('carrito.vaciado', { cuenta_id: input.cuenta_id, project_id: input.project_id, timestamp: nowISO() });
+    this._persist.marcarDirty(pid);
+    this.eventBus?.publish('carrito.vaciado', { cuenta_id: input.cuenta_id, project_id: pid, timestamp: nowISO() });
     return { status: 200, data: { cuenta_id: input.cuenta_id, vaciado: true } };
   }
 

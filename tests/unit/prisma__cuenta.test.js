@@ -44,4 +44,18 @@ test('cobro de una cuenta desconocida → no-op (no revienta)', () => {
   assert.doesNotThrow(() => C.onCobroProcesado({ data: { cuenta_id: 'ajena', monto_total_centimos: 500 } }));
 });
 
+test('persistencia: snapshot por proyecto (+seq) y hidratar restaura la cuenta', () => {
+  const A = new PrismaCuentaReflejo();
+  A._crear({ cuenta_id: 'c1', project_id: 'p1' });
+  A._crear({ cuenta_id: 'c2', project_id: 'p2' });
+  const snap = A._persist._snapshot('p1');
+  assert.equal(snap.cuentas.length, 1);
+  assert.equal(snap.cuentas[0].id, 'c1');
+  const B = new PrismaCuentaReflejo();
+  B._persist._hidratar('p1', snap);
+  assert.equal(B._get({ cuenta_id: 'c1' }).data.estado, 'abierta');
+  assert.equal(B._get({ cuenta_id: 'c2' }).status, 404);   // p2 no viaja
+  A._persist.detener(); B._persist.detener();
+});
+
 console.log('prisma__cuenta: asserts definidos');

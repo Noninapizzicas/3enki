@@ -59,4 +59,18 @@ test('guarda la selección del cliente en el ítem (para el cobro y la cocina)',
   assert.deepEqual(r.data.item.selecciones, { tamano: ['familiar'], quitar: ['cebolla'] });
 });
 
+test('persistencia: snapshot filtra por proyecto y hidratar restaura el buffer', async () => {
+  const A = new PrismaCarritoReflejo();
+  await A._addItem({ cuenta_id: 'c1', nombre: 'A', precio_unitario_centimos: 1000, project_id: 'p1' });
+  await A._addItem({ cuenta_id: 'c2', nombre: 'B', precio_unitario_centimos: 500, project_id: 'p2' });
+  const snap = A._persist._snapshot('p1');
+  assert.equal(snap.carritos.length, 1);          // solo c1 (p1)
+  assert.equal(snap.carritos[0][0], 'c1');
+  const B = new PrismaCarritoReflejo();
+  B._persist._hidratar('p1', snap);
+  assert.equal(B._get({ cuenta_id: 'c1' }).data.total_centimos, 1000);
+  assert.deepEqual(B._get({ cuenta_id: 'c2' }).data.items, []);   // p2 no viaja en el snapshot de p1
+  A._persist.detener(); B._persist.detener();
+});
+
 console.log('prisma__carrito: asserts definidos');

@@ -39,4 +39,19 @@ test('cerrar_caja devuelve el cuadre y resetea', () => {
   assert.equal(C._estado().data.total_centimos, 0);
 });
 
+test('persistencia: snapshot por proyecto y hidratar dedup por cobro_id', () => {
+  const A = new PrismaCierreReflejo();
+  A.onCobroProcesado({ data: { cobro_id: 'k1', monto_total_centimos: 1000, metodo_pago: 'efectivo', project_id: 'p1' } });
+  A.onCobroProcesado({ data: { cobro_id: 'k2', monto_total_centimos: 500, metodo_pago: 'tarjeta', project_id: 'p2' } });
+  const snap = A._persist._snapshot('p1');
+  assert.equal(snap.ventas.length, 1);
+  assert.equal(snap.ventas[0].cobro_id, 'k1');
+  const B = new PrismaCierreReflejo();
+  B._persist._hidratar('p1', snap);
+  B._persist._hidratar('p1', snap);   // idempotente: no duplica
+  assert.equal(B._estado().data.num_ventas, 1);
+  assert.equal(B._estado().data.total_centimos, 1000);
+  A._persist.detener(); B._persist.detener();
+});
+
 console.log('prisma__cierre: asserts definidos');

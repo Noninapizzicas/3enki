@@ -63,4 +63,17 @@ test('método no soportado → error', async () => {
   assert.equal(r.status, 400);
 });
 
+test('persistencia: snapshot por proyecto y hidratar restaura el cobro', async () => {
+  const A = new PrismaCobroReflejo();
+  const c1 = await A._crear({ cuenta_id: 'c1', metodo_pago: 'tarjeta', monto_centimos: 1000, project_id: 'p1' });
+  await A._crear({ cuenta_id: 'c2', metodo_pago: 'efectivo', monto_centimos: 500, project_id: 'p2' });
+  const snap = A._persist._snapshot('p1');
+  assert.equal(snap.cobros.length, 1);
+  assert.equal(snap.cobros[0].project_id, 'p1');
+  const B = new PrismaCobroReflejo();
+  B._persist._hidratar('p1', snap);
+  assert.equal(B._get({ id: c1.data.id }).data.monto_total_centimos, 1000);
+  A._persist.detener(); B._persist.detener();
+});
+
 console.log('prisma__cobro: asserts definidos');

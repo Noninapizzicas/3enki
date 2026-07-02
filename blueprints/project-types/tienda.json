@@ -2,7 +2,7 @@
   "id": "tienda",
   "label": "Tienda",
   "icon": "🛍",
-  "description": "PWA publica del proyecto. Bundle en storage/tienda/bundle/. Accesible en /shop/<slug>.",
+  "description": "PWA publica del proyecto. Bundle en storage/tienda/bundle/. Accesible en /<public_ns>/shop/<slug>.",
 
   "dependencies": [],
 
@@ -16,7 +16,7 @@
     "tienda": {
       "enabled": true,
       "slug": "{{slug}}",
-      "public_url": "/shop/{{slug}}",
+      "public_url": "/{{public_ns}}/shop/{{slug}}",
       "bundle_dir": "storage/tienda/bundle"
     }
   },
@@ -26,7 +26,7 @@
     "storage/tienda/bundle/manifest.json": {
       "name": "{{slug}}",
       "short_name": "{{slug}}",
-      "start_url": "/shop/{{slug}}/",
+      "start_url": "/{{public_ns}}/shop/{{slug}}/",
       "display": "standalone",
       "background_color": "#0a0a0a",
       "theme_color": "#0a0a0a"
@@ -35,7 +35,7 @@
   },
 
   "symlinks": [
-    { "source": "storage/tienda/bundle", "target": "/opt/enki/public/shop/{{slug}}" }
+    { "source": "storage/tienda/bundle", "target": "/opt/enki/public/{{public_ns}}/shop/{{slug}}" }
   ],
 
   "verify_after": [

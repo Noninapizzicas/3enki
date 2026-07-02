@@ -335,16 +335,20 @@ class CartaDigitalModule extends BaseModule {
     // puro: carta+carrito+pedido→cocina). El cerebro del chat es el cf-worker del escenario
     // SUELTO (export-cli + cf-worker/deploy.js); el core no sirve HTTP-SSE de chat. No cablear
     // aquí un endpoint de chat sin tener un worker detrás (sería apuntar a un fantasma).
+    // Prefijo público global (el "botón único": config.json web.public_ns). El bundle
+    // se sirve en /<ns>/shop/<slug>/. Ver lib/public-ns.js.
+    let nsPub = 'a';
+    try { nsPub = require('../../../lib/public-ns.js').publicNs(); } catch (_) { /* default 'a' */ }
     const tplConfig = {
       nombre_negocio: b.nombre || this.activos.get(project_id)?.name || 'Carta',
       moneda: op.moneda || '€',
       whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
       mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
       project_slug: slug,
-      // Caddy sirve el bundle en /shop/<slug>/. La <base> hace que img/·manifest·sw·iconos
-      // resuelvan bien aunque se abra la URL sin barra final (/shop/<slug>) → evita el 404 de
-      // /shop/img/... (sin slug). El SUELTO (export-cli, raíz del dominio) NO setea base_href.
-      base_href: `/shop/${slug}/`,
+      // Caddy sirve el bundle en /<ns>/shop/<slug>/. La <base> hace que img/·manifest·sw·iconos
+      // resuelvan bien aunque se abra la URL sin barra final → evita el 404 de assets sin slug.
+      // El SUELTO (export-cli, raíz del dominio) NO setea base_href.
+      base_href: `/${nsPub}/shop/${slug}/`,
       pago_online: !!op.pago_online,
       pedido_endpoint: op.pedido_endpoint || '',
       tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colores.texto || '#e5e5e5', logo_emoji: logoEmoji }
@@ -409,13 +413,13 @@ class CartaDigitalModule extends BaseModule {
     this.metrics?.increment?.('cartadigital.publicado', { project: slug });
 
     return { status: 200, data: {
-      alojada_url: `/shop/${slug}`,
+      alojada_url: `/${nsPub}/shop/${slug}`,
       bundle_dir: 'storage/tienda/bundle',
       productos: productos.length,
       imagenes_copiadas: imagenesCopiadas,
       extras_sin_precio: extrasSinPrecio,
       ...(extrasSinPrecio > 0 ? { aviso_extras: `${extrasSinPrecio} ingredientes extra sin precio — NO se ofrecen en la carta pública. Ponles precio para activarlos como extras.` } : {}),
-      aviso: `Bundle escrito. Si la feature \`tienda\` está activa en el proyecto, ya se ve en /shop/${slug} (Caddy lo sirve estático por el symlink). Si da 404, activa la feature \`tienda\` (crea el symlink /opt/enki/public/shop/${slug}). Cada cambio requiere volver a publicar — es estático, no al vuelo.`
+      aviso: `Bundle escrito. Si la feature \`tienda\` está activa en el proyecto, ya se ve en /${nsPub}/shop/${slug} (Caddy lo sirve estático por el symlink). Si da 404, activa la feature \`tienda\` (crea el symlink /opt/enki/public/${nsPub}/shop/${slug}). Cada cambio requiere volver a publicar — es estático, no al vuelo.`
     } };
   }
 

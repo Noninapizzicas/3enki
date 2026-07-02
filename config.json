@@ -159,5 +159,8 @@
         "botName": "Noninacloset"
       }
     }
+  },
+  "web": {
+    "public_ns": "a"
   }
 }

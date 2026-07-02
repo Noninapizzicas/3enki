@@ -63,28 +63,23 @@ pizzepos.es {
 		reverse_proxy localhost:3000
 	}
 
-	# (NUEVO subsistema-tienda v1.0.0) — PWA pública por proyecto en `/shop/<slug>`.
-	# Sirve archivos estáticos desde /opt/enki/public/shop/<slug>/ donde cada
-	# subdirectorio es un symlink creado por project-manager al activar la
-	# feature `tienda` (ver blueprints/project-types/tienda.json).
+	# NAMESPACE PÚBLICO GLOBAL `/<public_ns>/` (por defecto /a/). UN solo bloque
+	# sirve TODAS las superficies de TODOS los proyectos: cada superficie (shop,
+	# oraculo, …) es una subcarpeta de /opt/enki/public/<ns>/, y cada proyecto un
+	# symlink dentro (lo crea project-manager al activar su feature). AÑADIR una
+	# superficie o un proyecto = soltar la carpeta/symlink; este Caddyfile NO se
+	# toca. El prefijo se cambia en UN sitio: config.json `web.public_ns`.
 	#
-	# Convención URL → filesystem:
-	#   GET /shop/vapers/         → /opt/enki/public/shop/vapers/index.html
-	#   GET /shop/vapers/sw.js    → /opt/enki/public/shop/vapers/sw.js
-	#   GET /shop/<otro>/         → /opt/enki/public/shop/<otro>/index.html
+	# El bloque de abajo lo GENERA el reconciliador (deployment/reconcile.js) con
+	# el valor de public_ns, sustituyendo este marcador.
 	#
-	# Una sola regla para todos los proyectos. Añadir proyecto nuevo NO requiere
-	# editar este Caddyfile NI hacer reload — el symlink lo crea project-manager
-	# cuando se activa la feature.
+	# Convención URL → filesystem (ns='a'):
+	#   GET /a/shop/vapers/     → /opt/enki/public/a/shop/vapers/index.html
+	#   GET /a/oraculo/vapers/  → /opt/enki/public/a/oraculo/vapers/index.html
 	#
-	# El backend de pedidos sigue en /tienda/pedido/:project (bloque anterior,
-	# reverse_proxy a tienda-api). NO colisiona porque `/tienda/*` y `/shop/*`
-	# son namespaces separados.
-	handle_path /shop/* {
-		root * /opt/enki/public/shop
-		try_files {path} {path}/index.html /index.html
-		file_server
-	}
+	# `/<ns>/` es un namespace reservado: no colisiona con /modules, /ui, /tienda,
+	# /glovo ni el frontend.
+	# @@NAMESPACE@@
 
 	# Frontend SvelteKit (adapter-node) → todo lo demás
 	handle {

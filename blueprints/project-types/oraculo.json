@@ -1,0 +1,45 @@
+{
+  "id": "oraculo",
+  "label": "Oráculo",
+  "icon": "🔮",
+  "description": "Página pública tipo oráculo del proyecto. Bundle en storage/oraculo/bundle/. Accesible en /<public_ns>/oraculo/<slug>.",
+
+  "dependencies": [],
+
+  "slug_required": true,
+
+  "directories": [
+    "storage/oraculo/bundle"
+  ],
+
+  "config": {
+    "oraculo": {
+      "enabled": true,
+      "slug": "{{slug}}",
+      "public_url": "/{{public_ns}}/oraculo/{{slug}}",
+      "bundle_dir": "storage/oraculo/bundle"
+    }
+  },
+
+  "initialFiles": {
+    "storage/oraculo/bundle/index.html": "<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">\n  <title>{{slug}} — oráculo</title>\n  <link rel=\"manifest\" href=\"manifest.json\">\n  <meta name=\"theme-color\" content=\"#0a0a0a\">\n</head>\n<body>\n  <h1>{{slug}}</h1>\n  <p>Oráculo en construcción.</p>\n</body>\n</html>\n",
+    "storage/oraculo/bundle/manifest.json": {
+      "name": "{{slug}}",
+      "short_name": "{{slug}}",
+      "start_url": "/{{public_ns}}/oraculo/{{slug}}/",
+      "display": "standalone",
+      "background_color": "#0a0a0a",
+      "theme_color": "#0a0a0a"
+    },
+    "storage/oraculo/bundle/sw.js": "// Service worker minimo.\nself.addEventListener('install', () => self.skipWaiting());\nself.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));\nself.addEventListener('fetch', () => {});\n"
+  },
+
+  "symlinks": [
+    { "source": "storage/oraculo/bundle", "target": "/opt/enki/public/{{public_ns}}/oraculo/{{slug}}" }
+  ],
+
+  "verify_after": [
+    "storage/oraculo/bundle/index.html",
+    "storage/oraculo/bundle/manifest.json"
+  ]
+}

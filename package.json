@@ -184,7 +184,8 @@
     "test:prisma__cierre": "node tests/unit/prisma__cierre.test.js",
     "test:prisma__enforcement": "node tests/unit/prisma__enforcement.test.js",
     "test:prisma__calendario": "node tests/unit/prisma__calendario.test.js",
-    "test:shared__ical": "node tests/unit/shared__ical.test.js"
+    "test:shared__ical": "node tests/unit/shared__ical.test.js",
+    "test:deployment-reconcile": "node tests/unit/deployment__reconcile.test.js"
   },
   "keywords": [
     "event-driven",

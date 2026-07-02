@@ -33,6 +33,11 @@
 const mqtt   = require('mqtt');
 const crypto = require('crypto');
 
+// Prefijo público global (el "botón único": config.json web.public_ns). Las URLs
+// públicas viven bajo /<ns>/ (por defecto /a/). Ver lib/public-ns.js.
+let NS = 'a';
+try { NS = require('../../lib/public-ns.js').publicNs(); } catch (_) { /* default 'a' */ }
+
 const args = process.argv.slice(2);
 function flag(name, def) {
   const i = args.indexOf('--' + name);
@@ -219,8 +224,8 @@ async function main() {
     catch (_) { failures.push('manifest.json no es JSON valido'); }
     if (manifest) {
       assert(manifest.name === EXPECTED_SLUG, `manifest.name === '${EXPECTED_SLUG}' (real: '${manifest.name}')`);
-      assert(manifest.start_url === `/shop/${EXPECTED_SLUG}/`,
-        `manifest.start_url === '/shop/${EXPECTED_SLUG}/' (real: '${manifest.start_url}')`);
+      assert(manifest.start_url === `/${NS}/shop/${EXPECTED_SLUG}/`,
+        `manifest.start_url === '/${NS}/shop/${EXPECTED_SLUG}/' (real: '${manifest.start_url}')`);
       assert(manifest.display === 'standalone', `manifest.display === 'standalone'`);
     }
     console.log('');
@@ -252,8 +257,8 @@ async function main() {
       assert(config.tienda && config.tienda.enabled === true, `config.tienda.enabled === true`);
       assert(config.tienda && config.tienda.slug === EXPECTED_SLUG,
         `config.tienda.slug === '${EXPECTED_SLUG}' (real: '${config.tienda?.slug}')`);
-      assert(config.tienda && config.tienda.public_url === `/shop/${EXPECTED_SLUG}`,
-        `config.tienda.public_url === '/shop/${EXPECTED_SLUG}' (real: '${config.tienda?.public_url}')`);
+      assert(config.tienda && config.tienda.public_url === `/${NS}/shop/${EXPECTED_SLUG}`,
+        `config.tienda.public_url === '/${NS}/shop/${EXPECTED_SLUG}' (real: '${config.tienda?.public_url}')`);
       assert(config.tienda && config.tienda.bundle_dir === 'storage/tienda/bundle',
         `config.tienda.bundle_dir === 'storage/tienda/bundle'`);
     }

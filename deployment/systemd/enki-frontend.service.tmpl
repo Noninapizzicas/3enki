@@ -1,0 +1,23 @@
+[Unit]
+Description=Enki Frontend (SvelteKit)
+After=network.target enki.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/enki/frontend
+ExecStart=/usr/bin/node build/index.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=ORIGIN={{ORIGIN}}
+
+# Seguridad
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/enki/frontend
+
+[Install]
+WantedBy=multi-user.target

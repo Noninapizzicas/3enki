@@ -16,5 +16,8 @@
   "observability": {
     "logsToMQTT": false,
     "metricsToMQTT": false
+  },
+  "web": {
+    "public_ns": "a"
   }
 }

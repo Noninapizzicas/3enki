@@ -466,12 +466,16 @@ class WhatsappBotModule extends BaseModule {
       if (!waba_id) return this._errorResponse(400, 'INVALID_INPUT', 'waba_id requerido', { field: 'waba_id' });
       if (!display_number) return this._errorResponse(400, 'INVALID_INPUT', 'display_number requerido', { field: 'display_number' });
 
+      // Prefijo público global (el "botón único": config.json web.public_ns). La PWA
+      // se sirve en /<ns>/shop/<slug>. Ver lib/public-ns.js.
+      let nsPub = 'a';
+      try { nsPub = require('../../lib/public-ns.js').publicNs(); } catch (_) { /* default 'a' */ }
       const whatsapp = {
         waba_id,
         phone_number_id,
         display_number,
         webhook_path: `/whatsapp/webhook/${project_slug}`,
-        pwa_url: data?.pwa_url ? String(data.pwa_url).trim() : `https://enki-ai.online/shop/${project_slug}`
+        pwa_url: data?.pwa_url ? String(data.pwa_url).trim() : `https://enki-ai.online/${nsPub}/shop/${project_slug}`
       };
       // template_listo es opcional; si lo mandan, lo preservamos tal cual (string u objeto).
       if (data?.template_listo) whatsapp.template_listo = data.template_listo;

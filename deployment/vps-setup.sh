@@ -188,11 +188,12 @@ fi
 mkdir -p /etc/caddy /var/log/caddy
 chown caddy:caddy /var/log/caddy 2>/dev/null || true
 
-# Dir público de las PWAs por proyecto (/shop/<slug>). DEBE existir antes de arrancar
-# enki.service: con ProtectSystem=strict, systemd solo monta rw los ReadWritePaths que
-# existen. project-manager (en el servicio) crea aquí los symlinks al activar cada proyecto.
-# Caddy (handle_path /shop/*) lo sirve. www-data (usuario del servicio) debe poder escribir.
-mkdir -p /opt/enki/public/shop
+# Dir público de las PWAs por proyecto (/<public_ns>/<superficie>/<slug>). DEBE existir
+# antes de arrancar enki.service: con ProtectSystem=strict, systemd solo monta rw los
+# ReadWritePaths que existen. project-manager crea aquí los symlinks al activar cada
+# feature. El reconciliador (paso 9) asegura el subdir concreto del namespace; aquí basta
+# crear /opt/enki/public. www-data (usuario del servicio) debe poder escribir.
+mkdir -p /opt/enki/public
 chown -R www-data:www-data /opt/enki/public 2>/dev/null || true
 
 # HOME escribible para Chrome (open-wa). Debe existir y ser de www-data antes de arrancar.
@@ -359,6 +360,22 @@ if systemctl is-active --quiet caddy; then
     log "Caddy corriendo OK"
 else
     warn "Caddy no arrancó. Revisar: journalctl -u caddy -f"
+fi
+
+# ---- 9. Reconciliar + verificar (el cerebro único) ----
+# La generación de systemd/Caddy de arriba y el reconciliador comparten forma:
+# las plantillas de deployment/systemd/*.tmpl y deployment/caddy/Caddyfile.vps
+# son la MISMA fuente. El reconciliador es la AUTORIDAD de aquí en adelante —
+# esta pasada final converge cualquier diferencia y VERIFICA que el VPS quedó
+# funcional (dir /shop, bloque Caddy /shop/*, servicios). Solo en modo dominio
+# (el perfil de tiendas necesita HTTPS + dominio).
+if [ "$MODE" = "domain" ]; then
+    log "Reconciliando + verificando (deployment/reconcile.js)..."
+    if node "${REPO_DIR}/deployment/reconcile.js" --fresh --domain "$DOMAIN"; then
+        log "VPS reconciliado y verificado"
+    else
+        warn "El reconciliador reportó drift — revisa la salida de arriba"
+    fi
 fi
 
 # ---- Resumen ----

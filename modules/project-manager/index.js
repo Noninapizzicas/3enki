@@ -1505,13 +1505,19 @@ class ProjectManagerModule extends BaseModule {
   }
 
   async _initializeFromBlueprint(basePath, featureId, projectDef, projectSlug = null) {
-    // Helper canonico: sustituye {{slug}} por projectSlug (NO por featureId).
-    // El bug previo (sustituir por featureId) producia paths con literal 'tienda' en lugar
-    // del slug real. Si slug_required:true y projectSlug es null, el caller ya rechazo.
+    // Helper canonico: sustituye {{slug}} por projectSlug (NO por featureId) y
+    // {{public_ns}} por el prefijo publico global (config.json web.public_ns, el
+    // "botón único" — ver lib/public-ns.js). Asi el prefijo /a/ (o /es/, …) vive en
+    // UN sitio y los blueprints (symlink target, public_url, start_url) lo siguen.
+    // El bug previo (sustituir {{slug}} por featureId) producia paths con literal
+    // 'tienda'. Si slug_required:true y projectSlug es null, el caller ya rechazo.
+    let publicNs = 'a';
+    try { publicNs = require('../../lib/public-ns.js').publicNs(); } catch (_) { /* default 'a' */ }
     const substituteSlug = (s) => {
       if (typeof s !== 'string') return s;
-      if (projectSlug === null) return s;
-      return s.replace(/\{\{slug\}\}/g, projectSlug);
+      let out = s.replace(/\{\{public_ns\}\}/g, publicNs);
+      if (projectSlug !== null) out = out.replace(/\{\{slug\}\}/g, projectSlug);
+      return out;
     };
 
     // 1. Directorios (relativos al base_path; prefijo storage/ se renamespacia

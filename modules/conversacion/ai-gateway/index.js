@@ -1433,6 +1433,28 @@ class AiGatewayModule extends BaseModule {
     );
   }
 
+  // Nervio de la CANTERA: sección GLOBAL y estática (sin RPC → no bloquea) que le dice al
+  // LLM de página las PUERTAS de la biblioteca de skills. No añade tools: el LLM ya empuña
+  // bus.publishAndWait; solo le faltaba SABER que estos eventos existen. Verificado en vivo:
+  // sin esto, el LLM decía "no tengo herramientas para skills.sh". DENTRO = la cantera propia;
+  // FUERA = el ecosistema público (el LLM, que conoce la tarea, pone las palabras en inglés).
+  _composeCanteraSection() {
+    return (
+      '# SKILLS — la cantera (puertas del bus, úsalas con bus.publishAndWait)\n' +
+      'El sistema tiene una biblioteca de skills (oficios/recetas reutilizables). NO necesitas ' +
+      'herramientas nuevas: llámalas con las primitivas del bus que ya tienes. Cuando el usuario ' +
+      'pida una skill, pregunte "¿cómo hago X?", o quiera construir algo, ÚSALAS:\n' +
+      '- DENTRO (la cantera propia): bus.publishAndWait(\'cosecha.buscar.request\', {query, tarea?, limite?}) ' +
+      '→ catálogo rankeado. El cuerpo completo con cosecha.obtener.request {nombres:[...]}.\n' +
+      '- FUERA (ecosistema público skills.sh): bus.publishAndWait(\'feeder.buscar.request\', {query}) — ' +
+      'pon la query en INGLÉS y con las palabras REALES de la tarea ("menu design", "copywriting", ' +
+      '"pricing"), no el nombre interno. Traer una: feeder.instalar.request {paquete:\'owner/repo@skill\'} ' +
+      '(baja código del ecosistema → CONFIRMA con el usuario antes).\n' +
+      '- ACTIVAR una skill como lente viva de una página: cosecha.promover.request {nombre, dominio, tarea}.\n' +
+      'Ofrece, no impongas. FUERA es PULL: sal al ecosistema cuando dentro no basta y la tarea lo pide.'
+    );
+  }
+
   _isPrimitivePrefix(prefix) {
     const PRIMITIVE = new Set([
       'fs', 'project', 'llm', 'ai', 'agent', 'credential', 'security',
@@ -2041,6 +2063,16 @@ class AiGatewayModule extends BaseModule {
     if (!context?.async_invocation && this.sintoniaActiva) {
       const lente = this.sintonizador.seccion();
       effectiveSystem = effectiveSystem ? `${lente}\n\n${effectiveSystem}` : lente;
+    }
+
+    // Nervio de la CANTERA (global): en un turno REAL, dile al LLM las puertas de la
+    // biblioteca de skills. Estático y puro (sin RPC → no bloquea). El LLM ya empuña
+    // bus.publishAndWait; esto solo le da a CONOCER los eventos (cosecha.buscar/feeder.buscar/
+    // cosecha.promover). Verificado en vivo: sin esto el LLM decía "no tengo herramientas
+    // para skills.sh" aunque el motor respondía por el bus. No en turnos sintéticos.
+    if (!context?.async_invocation) {
+      const cantera = this._composeCanteraSection();
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${cantera}` : cantera;
     }
 
     // Nervio propioceptivo: en un turno REAL del chat sobre una pagina de

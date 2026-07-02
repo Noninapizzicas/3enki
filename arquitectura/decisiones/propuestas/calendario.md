@@ -104,5 +104,8 @@ consumidores (follow-up)                  agenda-citas (gateado por organo-agend
   IMPORT: importar_ics ({ics|url}) lee el .ics/CalDAV del dueño → días completos que huelen a cierre →
   excepciones 'días cerrado' (idempotente: reemplaza origen 'ics', respeta las manuales; DTEND exclusivo).
 ◑ v0.2 resto — tz/DST correcto (TZID+VTIMEZONE, luxon; hoy tiempo flotante = reloj de pared).
-[ ] CONSUMIDORES — agenda-citas (gateado por organo-agenda) · alquiler · staff-turnos.
+⏸ CONSUMIDORES — APARCADOS POR DECISIÓN (2026-07-02): el calendario reposa como infra completa; NO se
+  construye agenda-citas ni ningún consumidor en especulación. La forma de uso (una o varias) nace con el
+  proyecto concreto que la necesite y la dicte. Bocetos plausibles: agenda-citas (gateado por organo-agenda) ·
+  alquiler (grano días) · staff-turnos. Se retoman cuando llegue la ocasión.
 ```

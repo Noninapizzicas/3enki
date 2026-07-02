@@ -15000,10 +15000,14 @@ CLASE PrismaCalendarioReflejo HEREDA ModuloHibridoReflejo {   // base compartida
   PRODUCT-AGNÓSTICO  la duración/recurso los aporta el CONSUMIDOR (agenda-citas/alquiler), no el calendario.
   PERSISTE  por proyecto (pos-persistencia, /prisma/calendario/estado.json: disponibilidad + reservas). Siempre cargado (base, no gateado).
 }
-CONSUMIDORES (follow-up, cada uno a su interés — beben por RPC) {
-  agenda-citas  producto(duración+recurso vía proyector) → huecos → reservar → cobro   (gateado por organo-agenda)
-  alquiler      unidad(recurso, con_retorno) → reservar(fin=null) → devolver           (mismo motor, grano días)
-  staff-turnos  turnos = reservas de tipo 'empleado' sobre la capacidad · scheduler-promos = ventanas (ya vive carta-scheduler)
+CONSUMIDORES (posibles — NO construir en especulación · decisión 2026-07-02) {
+  DECISIÓN  el calendario REPOSA como infra completa; su FORMA DE USO nace con el proyecto
+            concreto que la necesite (una o varias formas). No se cablea agenda-citas ni ningún
+            consumidor "por si acaso" — se construye cuando llega la ocasión y el proyecto la dicta.
+  formas de uso PLAUSIBLES (bocetos, no compromisos):
+    agenda-citas  producto(duración+recurso vía proyector) → huecos → reservar → cobro   (gateado por organo-agenda)
+    alquiler      unidad(recurso, con_retorno) → reservar(fin=null) → devolver           (mismo motor, grano días)
+    staff-turnos  turnos = reservas de tipo 'empleado' sobre la capacidad · scheduler-promos = ventanas (ya vive carta-scheduler)
 }
 ```
 
@@ -15052,5 +15056,6 @@ calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta} 
 ✓ COSTE→PRODUCTO — coste.aplicar escribe el pvp en el producto (precio_base_centimos) + cierra la pregunta_abierta de coste (madurez→listo). Lazo cara-comerciante cerrado.
 ✓ ÓRGANO AGENDA (base + feed .ics suscribible + import) — calendario.md (propuesta) + calendario (17/17) + _shared/ical (8/8): base compartida del tiempo (disponibilidad+capacidad+reservas+huecos), motor determinista, un motor para cita y alquiler, persistente, BORDE iCal BIDIRECCIONAL — export (feed .ics + GET suscribible con token) e import (.ics/CalDAV del dueño → días cerrado). El organo-agenda ya tiene BASE (falta el consumidor que lo gatee).
 ◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · calendario tz/DST estricto (luxon; hoy tiempo flotante) · los interruptores organo-* esperan dueño (cocina la reacciona pizzepos) — se verifican corriendo el Enki
-[ ] wiring/en vivo: adaptador reflejo → arquetipos custom · CONSUMIDORES del calendario (agenda-citas gateado por organo-agenda · alquiler · staff-turnos) · dueños de retorno/fianza/stock
+[ ] wiring/en vivo: adaptador reflejo → arquetipos custom · dueños de retorno/fianza/stock
+⏸ APARCADO POR DECISIÓN (2026-07-02): los CONSUMIDORES del calendario (agenda-citas/alquiler/staff-turnos) NO se construyen en especulación. El calendario reposa como infra; su forma de uso se construye cuando un proyecto concreto la pida.
 ```

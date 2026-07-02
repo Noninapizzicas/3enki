@@ -33,12 +33,17 @@ class FeederReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'feeder';
-    this.version = '0.1.0';
+    this.version = '0.2.0';
   }
 
   onIngerirRequest(e)  { return this._atender(e, 'ingerir',  'feeder.ingerir.response',  d => this._ingerir(d)); }
   onInstalarRequest(e) { return this._atender(e, 'instalar', 'feeder.instalar.response', d => this._instalar(d)); }
   onBuscarRequest(e)   { return this._atender(e, 'buscar',   'feeder.buscar.response',   d => this._buscar(d)); }
+
+  // ── SUPERFICIE: tools del LLM de chat (el grifo de FUERA). buscar_skill (cosecha) mira
+  // DENTRO; estas miran FUERA: descubrir en el ecosistema público y traer a la cantera. ──
+  async handleBuscarFueraTool(args) { return this._buscar(args || {}); }
+  async handleTraerTool(args)       { return this._instalar(args || {}); }
 
   // ── parse SKILL.md CRUDO (frontmatter name/description/tags + cuerpo) → skill estructurada.
   // Misma forma que consume cosecha.importar. Determinista, reversible. ──

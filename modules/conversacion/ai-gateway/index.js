@@ -1451,7 +1451,13 @@ class AiGatewayModule extends BaseModule {
       '"pricing"), no el nombre interno. Traer una: feeder.instalar.request {paquete:\'owner/repo@skill\'} ' +
       '(baja código del ecosistema → CONFIRMA con el usuario antes).\n' +
       '- ACTIVAR una skill como lente viva de una página: cosecha.promover.request {nombre, dominio, tarea}.\n' +
-      'Ofrece, no impongas. FUERA es PULL: sal al ecosistema cuando dentro no basta y la tarea lo pide.'
+      'Ofrece, no impongas. FUERA es PULL: sal al ecosistema cuando dentro no basta y la tarea lo pide.\n' +
+      'MANDATO — VERIFICA antes de afirmar (verificar en vivo, no a fe): estas puertas DEVUELVEN un ' +
+      'resultado que debes LEER. feeder.instalar responde {ingeridas:[nombres]} si funcionó, o un error ' +
+      '(status ≥ 400; p.ej. 404 "ningún SKILL.md legible"). Di "instalada/traída" SOLO si el nombre está ' +
+      'en `ingeridas`; si hay error o `ingeridas` viene vacío, di que FALLÓ con el motivo — NUNCA inventes ' +
+      'un éxito. Ante duda, comprueba con cosecha.listar. Igual con promover: confirma status < 400 antes ' +
+      'de decir "activada". Un "hecho" que no puedas verificar en la respuesta NO se afirma.'
     );
   }
 

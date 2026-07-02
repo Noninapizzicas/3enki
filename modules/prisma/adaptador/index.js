@@ -4,7 +4,8 @@
  * Descompone un producto crudo en el ProductoUniversal (5 huecos) y clasifica su
  * arquetipo. Sigue blueprint-agentico (6 fases). v0.1.0 = la mitad REFLEJO:
  *   CONTRATO → { crudo, project_id, catalogo_id? }
- *   LEER     → [pendiente: arquetipos + marca; v0.1.0 no lee, usa el crudo]
+ *   LEER     → arquetipos.listar → los custom APROBADOS del proyecto (cierra el anti-wipe:
+ *              lo que la IA propuso y el humano aprobó entra a clasificar); marca = pendiente
  *   PENSAR   → _pensar: mapea crudo estructurado → 5 huecos, clasifica arquetipo POR LA FORMA
  *              (ejes+naturalezas, no la superficie), marca preguntas_abiertas de lo privado
  *   VALIDAR  → catalogo.validar.request → _checkProducto (el freno de producto-manager)
@@ -31,16 +32,24 @@ class PrismaAdaptadorReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'adaptador';
-    this.version = 'reflejo-0.1.0';
+    this.version = 'reflejo-0.2.0';
   }
 
   onAdaptarRequest(e) { return this._atender(e, 'adaptar', 'adaptador.adaptar.response', d => this._adaptar(d)); }
 
-  // ── PENSAR (determinista v0.1.0): crudo estructurado → ProductoUniversal ──
+  // ── LEER: los arquetipos custom APROBADOS del proyecto (best-effort) ──
+  async _leerAprobados(project_id) {
+    const r = await this._rpc('arquetipos.listar.request', { project_id });
+    const custom = (r && r.status === 200 && r.data && Array.isArray(r.data.custom)) ? r.data.custom : [];
+    return custom.filter(a => a && a.estado === 'aprobado');
+  }
+
+  // ── PENSAR (determinista): crudo estructurado → ProductoUniversal ──
   // Clasifica el arquetipo por la FORMA (ejes+naturalezas), no por la superficie.
-  _clasificarArquetipo(ejes, naturalezas, arquetipoDado) {
+  // Los custom aprobados (LEER) tienen PRIORIDAD sobre la semilla (mismo que el registro).
+  _clasificarArquetipo(ejes, naturalezas, arquetipoDado, aprobados = []) {
     // clasificador POR LA FORMA — fuente única en _shared/arquetipos-semilla (mismo que usa el registro).
-    return arquetipoDado || clasificar(ejes, naturalezas);
+    return arquetipoDado || clasificar(ejes, naturalezas, aprobados);
   }
 
   // Marca lo privado como ABIERTO (no se inventa): coste y stock siempre; agenda si hay tiempo;
@@ -54,7 +63,7 @@ class PrismaAdaptadorReflejo extends ModuloHibridoReflejo {
     return qs;
   }
 
-  _pensar(crudo) {
+  _pensar(crudo, aprobados = []) {
     const ejes = {
       tiempo: TIEMPO.has(crudo.tiempo) ? crudo.tiempo : 'ninguno',
       estado_de_partida: crudo.estado_de_partida || false,
@@ -64,7 +73,7 @@ class PrismaAdaptadorReflejo extends ModuloHibridoReflejo {
       stock: STOCK.has(crudo.stock) ? crudo.stock : 'unidades',
       precio: PRECIO.has(crudo.precio) ? crudo.precio : 'por_unidad'
     };
-    const arquetipo = this._clasificarArquetipo(ejes, naturalezas, crudo.arquetipo);
+    const arquetipo = this._clasificarArquetipo(ejes, naturalezas, crudo.arquetipo, aprobados);
     const preguntas_abiertas = this._preguntasAbiertas(ejes, naturalezas, crudo);
     return {
       nombre: crudo.nombre,
@@ -90,8 +99,11 @@ class PrismaAdaptadorReflejo extends ModuloHibridoReflejo {
     const crudo = input.crudo || input.producto || {};
     if (!crudo.nombre) return this._invalid('crudo.nombre');
 
+    // LEER — los custom aprobados del proyecto (cierra el anti-wipe: propuesto→aprobado→clasifica)
+    const aprobados = await this._leerAprobados(input.project_id);
+
     // PENSAR
-    const producto = this._pensar(crudo);
+    const producto = this._pensar(crudo, aprobados);
 
     // VALIDAR — contra el freno de producto-manager (catalogo.validar.request → _checkProducto).
     const v = await this._rpc('catalogo.validar.request', { producto });

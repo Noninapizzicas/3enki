@@ -14814,14 +14814,16 @@ CLASE PrismaProyectorReflejo HEREDA ModuloHibridoReflejo {   // gemelo de pizzep
 }
 ```
 
-## adaptador (module 0.2.0 · reflejo 0.1.0 · blueprint 0.1.0) — crudo → ProductoUniversal ✓ (híbrido)
+## adaptador (module 0.3.0 · reflejo 0.2.0 · blueprint 0.1.0) — crudo → ProductoUniversal ✓ (híbrido)
 
 ```
 CLASE PrismaAdaptadorReflejo HEREDA ModuloHibridoReflejo {   // blueprint-agentico 6 fases · REFLEJO = la mitad determinista
-  ESPINAZO  CONTRATO {crudo,project_id,catalogo_id?} → LEER[pdte] → PENSAR → VALIDAR → GUARDAR → EMITIR
-  PENSAR (determinista v0.1.0)  crudo estructurado → 5 huecos ; _clasificarArquetipo POR LA FORMA:
+  ESPINAZO  CONTRATO {crudo,project_id,catalogo_id?} → LEER → PENSAR → VALIDAR → GUARDAR → EMITIR
+  LEER (reflejo 0.2.0)  _leerAprobados: arquetipos.listar → los custom APROBADOS del proyecto (best-effort).
+                        Cierra el anti-wipe: propuesto→aprobado→clasifica productos nuevos (prioridad sobre la semilla).
+  PENSAR (determinista)  crudo estructurado → 5 huecos ; _clasificarArquetipo POR LA FORMA (con los aprobados como extra):
      ciclo=con_retorno→uso_temporal · tiempo=cita|stock=capacidad_temporal→servicio ·
-     stock=ingredientes|precio=por_peso→comestible · resto→pieza
+     stock=ingredientes|precio=por_peso→comestible · resto→pieza · (custom aprobado gana)
   _preguntasAbiertas  coste+stock (privados) + agenda(tiempo≠ninguno) + tarifa(precio rango/tiempo)
                       → madurez necesita_aclaracion_comerciante (no inventa: MARCA lo que no sabe)
   VALIDAR  catalogo.validar.request → _checkProducto (freno de producto-manager); !valid → 422 FALLA HONESTO
@@ -15048,7 +15050,7 @@ calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta} 
 ## Estado
 
 ```
-✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (9/9, con aplicar→producto) · escaparate (5/5, núcleo)
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (12/12, LEER cablea arquetipos custom) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (9/9, con aplicar→producto) · escaparate (5/5, núcleo)
 ✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones) · _shared/organos-recetario (órgano→interruptor, diff PURO) · _shared/pos-persistencia (snapshot fs por proyecto)
 ✓ project-type blueprints/project-types/prisma.json — comercio universal INSTANCIABLE
 ✓ POS COMPLETO + PERSISTENTE — carrito (7/7) · cobro (8/8) · cuenta (6/6) · ticket (3/3) · cierre (4/4): catálogo→carrito→cuenta→cobro→ticket→cierre (sin cocina). Estado vivo persistido por proyecto (/prisma/pos/*.json), restaura en project.activated.
@@ -15056,6 +15058,7 @@ calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta} 
 ✓ COSTE→PRODUCTO — coste.aplicar escribe el pvp en el producto (precio_base_centimos) + cierra la pregunta_abierta de coste (madurez→listo). Lazo cara-comerciante cerrado.
 ✓ ÓRGANO AGENDA (base + feed .ics suscribible + import) — calendario.md (propuesta) + calendario (17/17) + _shared/ical (8/8): base compartida del tiempo (disponibilidad+capacidad+reservas+huecos), motor determinista, un motor para cita y alquiler, persistente, BORDE iCal BIDIRECCIONAL — export (feed .ics + GET suscribible con token) e import (.ics/CalDAV del dueño → días cerrado). El organo-agenda ya tiene BASE (falta el consumidor que lo gatee).
 ◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · calendario tz/DST estricto (luxon; hoy tiempo flotante) · los interruptores organo-* esperan dueño (cocina la reacciona pizzepos) — se verifican corriendo el Enki
-[ ] wiring/en vivo: adaptador reflejo → arquetipos custom · dueños de retorno/fianza/stock
+✓ ADAPTADOR LEER — adaptador reflejo 0.2.0: _adaptar lee los arquetipos custom APROBADOS (arquetipos.listar) y los pasa al clasificador con prioridad sobre la semilla. Lazo anti-wipe cerrado (propuesto→aprobado→clasifica).
+[ ] wiring/en vivo: dueños de retorno/fianza/stock (órganos previstos)
 ⏸ APARCADO POR DECISIÓN (2026-07-02): los CONSUMIDORES del calendario (agenda-citas/alquiler/staff-turnos) NO se construyen en especulación. El calendario reposa como infra; su forma de uso se construye cuando un proyecto concreto la pida.
 ```

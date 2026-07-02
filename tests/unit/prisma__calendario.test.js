@@ -99,4 +99,96 @@ test('persistencia: snapshot/hidratar restaura disponibilidad + reservas', () =>
   A._persist.detener(); B._persist.detener();
 });
 
+test('feed .ics: una reserva → un VEVENT con sus horas; cancelada lleva STATUS:CANCELLED', () => {
+  const C = conSilla(2);
+  const a = C._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T09:00`, fin: `${DIA}T10:00`, cliente: 'Ana' });
+  C._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T10:00`, fin: `${DIA}T11:00`, cliente: 'Leo' });
+  C._cancelar({ project_id: 'p', reserva_id: a.data.id });
+  const r = C._feedIcs({ project_id: 'p', _now: '2026-07-01T00:00:00.000Z' });
+  assert.equal(r.status, 200);
+  assert.ok(r.data.content_type.startsWith('text/calendar'));
+  assert.equal((r.data.ics.match(/BEGIN:VEVENT/g) || []).length, 2);
+  assert.ok(r.data.ics.includes('DTSTART:20260706T100000'));   // la cita de Leo
+  assert.ok(r.data.ics.includes('STATUS:CANCELLED'));          // la de Ana, cancelada
+  assert.ok(r.data.ics.includes('SUMMARY:silla · Leo'));   // etiqueta cae al id si no se da
+});
+
+test('feed .ics: alquiler por días (fecha sin hora) → evento de día completo', () => {
+  const C = new PrismaCalendarioReflejo();
+  C._setDisp({ project_id: 'p', recurso_tipos: [{ id: 'maquina', etiqueta: 'Máquina', capacidad: 1 }], horario: HOR_0911 });
+  C._reservar({ project_id: 'p', recurso_tipo: 'maquina', inicio: DIA, grano: 'intervalo' });
+  const r = C._feedIcs({ project_id: 'p', _now: '2026-07-01T00:00:00.000Z' });
+  assert.ok(r.data.ics.includes('DTSTART;VALUE=DATE:20260706'));
+});
+
+test('feed_url provisiona un token secreto; la disponibilidad NO lo filtra', () => {
+  const C = conSilla(1);
+  const u = C._feedUrl({ project_id: 'p' });
+  assert.equal(u.status, 200);
+  assert.ok(u.data.token && u.data.token.length >= 16);
+  assert.ok(u.data.path.includes(`token=${u.data.token}`));
+  const disp = C._getDisp({ project_id: 'p' });
+  assert.equal(disp.data.feed_token, undefined);            // el secreto no viaja en la lectura
+});
+
+test('GET del feed: sin token 401 · token malo 401 · token bueno 200 text/calendar · sin provisionar 404', async () => {
+  const C = conSilla(1);
+  C._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T09:00`, fin: `${DIA}T10:00`, cliente: 'Ana' });
+  const { token } = C._feedUrl({ project_id: 'p' }).data;
+
+  const sin = await C.handleFeedIcs({ params: { project: 'p' }, query: {} }, null);
+  assert.equal(sin.status, 401);
+  const malo = await C.handleFeedIcs({ params: { project: 'p' }, query: { token: 'nope' } }, null);
+  assert.equal(malo.status, 401);
+  const bien = await C.handleFeedIcs({ params: { project: 'p' }, query: { token } }, null);
+  assert.equal(bien.status, 200);
+  assert.ok(bien._contentType.startsWith('text/calendar'));
+  assert.ok(bien._raw.includes('BEGIN:VCALENDAR'));
+  const noProv = await C.handleFeedIcs({ params: { project: 'q' }, query: { token: 'x' } }, null);
+  assert.equal(noProv.status, 404);                         // proyecto sin feed provisionado
+});
+
+// ── import: leer el .ics del dueño → días cerrado ──
+
+const ICS_DUENO = [
+  'BEGIN:VCALENDAR', 'VERSION:2.0',
+  'BEGIN:VEVENT', 'UID:v1', 'DTSTART;VALUE=DATE:20260801', 'DTEND;VALUE=DATE:20260821', 'SUMMARY:Vacaciones', 'END:VEVENT',
+  'BEGIN:VEVENT', 'UID:b1', 'DTSTART;VALUE=DATE:20260810', 'SUMMARY:Cumple Ana', 'END:VEVENT',
+  'BEGIN:VEVENT', 'UID:t1', 'DTSTART:20260805T090000', 'DTEND:20260805T100000', 'SUMMARY:Reunión', 'END:VEVENT',
+  'END:VCALENDAR'
+].join('\r\n');
+
+test('import: solo los días completos que huelen a cierre; DTEND es exclusivo', async () => {
+  const C = conSilla(1);
+  const r = await C._importarIcs({ project_id: 'p', ics: ICS_DUENO });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.importadas, 1);              // Vacaciones sí; Cumple no (título); Reunión no (con hora)
+  const ex = r.data.excepciones[0];
+  assert.equal(ex.desde, '2026-08-01');
+  assert.equal(ex.hasta, '2026-08-20');            // DTEND 08-21 exclusivo → último cerrado 08-20
+  assert.equal(C._diaCerrado(C.dispPorProyecto.get('p'), '2026-08-10'), true);   // día dentro del rango
+});
+
+test('import: todos_dia_completo=true toma también el cumpleaños (pero no la reunión con hora)', async () => {
+  const C = conSilla(1);
+  const r = await C._importarIcs({ project_id: 'p', ics: ICS_DUENO, todos_dia_completo: true });
+  assert.equal(r.data.importadas, 2);
+});
+
+test('import es idempotente y respeta las excepciones manuales', async () => {
+  const C = conSilla(1);
+  C._bloquearDia({ project_id: 'p', fecha: '2026-12-25', motivo: 'navidad' });   // manual
+  await C._importarIcs({ project_id: 'p', ics: ICS_DUENO });
+  await C._importarIcs({ project_id: 'p', ics: ICS_DUENO });                      // re-import
+  const exs = C.dispPorProyecto.get('p').excepciones;
+  assert.equal(exs.filter(x => x.origen === 'ics').length, 1);                    // no duplica las importadas
+  assert.ok(exs.some(x => x.fecha === '2026-12-25'));                             // la manual sobrevive
+});
+
+test('import sin ics ni url → 400', async () => {
+  const C = conSilla(1);
+  const r = await C._importarIcs({ project_id: 'p' });
+  assert.equal(r.status, 400);
+});
+
 console.log('prisma__calendario: asserts definidos');

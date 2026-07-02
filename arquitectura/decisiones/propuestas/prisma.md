@@ -265,9 +265,13 @@ vertical = project-type `prisma` (no toca pizzepos). Siguen abiertas: ingesta (f
 rango-valoración (hoy → `consultar` en escaparate + pregunta_abierta `tarifa`).
 
 Falta (todo requiere el Enki vivo o wiring de bus): verificar en vivo el blueprint del adaptador y el
-bundle HTML/PWA del escaparate; cablear el reflejo del adaptador a los arquetipos custom por RPC; dar
-DUEÑO a los órganos previstos (agenda/retorno/fianza/stock = módulos follow-up que reaccionen a su
-`interruptor.cambiado`).
+bundle HTML/PWA del escaparate; dar DUEÑO a los órganos previstos (agenda/retorno/fianza/stock =
+módulos follow-up que reaccionen a su `interruptor.cambiado`). El calendario (órgano agenda) reposa como
+infra completa: sus consumidores se construyen cuando un proyecto concreto los pida (decisión 2026-07-02).
+
+Cerrado ya (offline): el reflejo del adaptador LEE los arquetipos custom aprobados (arquetipos.listar) y
+los aplica al clasificar con prioridad sobre la semilla → el lazo anti-wipe (IA propone → humano aprueba
+→ clasifica productos nuevos) queda completo en la mitad determinista.
 
 ## Veredicto de madurez
 

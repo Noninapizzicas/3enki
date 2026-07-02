@@ -22,6 +22,7 @@
 const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
+const ical = require('../../_shared/ical');
 
 const nowISO = () => new Date().toISOString();
 const DOW = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];   // getUTCDay(): 0=domingo · L,M(artes),X(miércoles),J,V,S
@@ -33,7 +34,7 @@ class PrismaCalendarioReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'calendario';
-    this.version = 'reflejo-0.1.0';
+    this.version = 'reflejo-0.2.0';
     this.dispPorProyecto = new Map();   // project_id → Disponibilidad
     this.resPorProyecto = new Map();    // project_id → Array<Reserva>
     this._persist = new PosPersistencia({
@@ -57,6 +58,10 @@ class PrismaCalendarioReflejo extends ModuloHibridoReflejo {
   onCancelarRequest(e)          { return this._atender(e, 'cancelar', 'calendario.cancelar.response', d => this._cancelar(d)); }
   onDevolverRequest(e)          { return this._atender(e, 'devolver', 'calendario.devolver.response', d => this._devolver(d)); }
   onListReservasRequest(e)      { return this._atender(e, 'list_reservas', 'calendario.list_reservas.response', d => this._listReservas(d)); }
+  // ── BORDE iCal: feed .ics de las reservas (para el móvil del dueño) ──
+  onFeedIcsRequest(e)           { return this._atender(e, 'feed_ics', 'calendario.feed_ics.response', d => this._feedIcs(d)); }
+  onFeedUrlRequest(e)           { return this._atender(e, 'feed_url', 'calendario.feed_url.response', d => this._feedUrl(d)); }
+  onImportarIcsRequest(e)       { return this._atender(e, 'importar_ics', 'calendario.importar_ics.response', d => this._importarIcs(d)); }
 
   // ============================================================= helpers de estado
   _disp(project_id) {
@@ -156,7 +161,8 @@ class PrismaCalendarioReflejo extends ModuloHibridoReflejo {
   // ============================================================= ops
   _getDisp(input) {
     if (!input.project_id) return this._invalid('project_id');
-    return { status: 200, data: this._disp(input.project_id) };
+    const { feed_token, ...publico } = this._disp(input.project_id);   // el token del feed no viaja en la lectura
+    return { status: 200, data: publico };
   }
 
   _setDisp(input) {
@@ -244,6 +250,93 @@ class PrismaCalendarioReflejo extends ModuloHibridoReflejo {
     if (input.desde) { const d = this._min(input.desde); out = out.filter(r => this._min(r.inicio) >= d); }
     if (input.hasta) { const h = this._min(input.hasta); out = out.filter(r => this._min(r.inicio) <= h); }
     return { status: 200, data: { reservas: out, total: out.length } };
+  }
+
+  // reservas → texto .ics suscribible. Cita/alquiler; canceladas/devueltas van con su STATUS.
+  // Feed de reservas (lo que el dueño quiere ver en el móvil); los días cerrados = follow-up.
+  _feedIcs(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    const disp = this._disp(input.project_id);
+    const etiqueta = (tipo) => { const t = (disp.recurso_tipos || []).find(x => x.id === tipo); return t ? t.etiqueta : tipo; };
+    const events = this._reservas(input.project_id).map(r => ({
+      uid: `${r.id}@prisma-calendario`,
+      start: r.inicio,
+      end: r.fin || undefined,
+      allDay: !/T\d/.test(r.inicio),            // fecha sin hora (alquiler por días) → evento de día completo
+      summary: r.cliente ? `${etiqueta(r.recurso_tipo)} · ${r.cliente}` : etiqueta(r.recurso_tipo),
+      description: r.origen ? `origen: ${r.origen}` : undefined,
+      status: r.estado === 'cancelada' ? 'CANCELLED' : (r.estado === 'no_show' ? 'CANCELLED' : 'CONFIRMED')
+    }));
+    const ics = ical.toIcs({ name: 'Agenda', nowIso: input._now, events });
+    return { status: 200, data: { content_type: 'text/calendar; charset=utf-8', filename: 'agenda.ics', ics } };
+  }
+
+  // token secreto del feed (el clásico "secret iCal URL"): se provisiona una vez y va en la URL.
+  _feedToken(project_id, { crear = false } = {}) {
+    const disp = this._disp(project_id);
+    if (!disp.feed_token && crear) { disp.feed_token = crypto.randomBytes(18).toString('hex'); this._persist.marcarDirty(project_id); }
+    return disp.feed_token || null;
+  }
+
+  // "dame mi enlace suscribible" — provisiona el token y devuelve la ruta para el móvil.
+  _feedUrl(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    const token = this._feedToken(input.project_id, { crear: true });
+    const path = `/modules/calendario/feed/${encodeURIComponent(input.project_id)}?token=${token}`;
+    return { status: 200, data: { token, path, hint: 'Suscríbete a esta URL desde el calendario del móvil (webcal). Es un enlace SECRETO: quien lo tenga ve la agenda.' } };
+  }
+
+  // ── IMPORT: leer el .ics/CalDAV del dueño → "días cerrado" (el reverso del feed) ──
+  // Toma eventos de DÍA COMPLETO cuyo título huele a cierre (vacaciones/festivo/cerrado…) o
+  // TODOS los de día completo si todos_dia_completo=true, y los vuelca como excepciones
+  // cerradas. Idempotente: reemplaza las excepciones origen:'ics' (las manuales sobreviven).
+  async _importarIcs(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    let texto = input.ics;
+    if (!texto && input.url) {
+      try { const r = await fetch(input.url); texto = await r.text(); }
+      catch (err) { return this._errorResponse(502, 'UPSTREAM_UNREACHABLE', 'no se pudo leer el .ics', { url: input.url, error: err.message }); }
+    }
+    if (!texto) return this._invalid('ics|url');
+
+    const eventos = ical.parseIcs(texto);
+    const palabras = Array.isArray(input.palabras) && input.palabras.length ? input.palabras.map(p => String(p).toLowerCase()) : ['cerrad', 'vacacion', 'festiv', 'closed', 'holiday', 'libre'];
+    const todos = input.todos_dia_completo === true;
+    const cierres = [];
+    for (const ev of eventos) {
+      if (!ev.allDay) continue;                                   // solo día completo = "no trabajo ese día"
+      const titulo = (ev.summary || '').toLowerCase();
+      if (!todos && !palabras.some(p => titulo.includes(p))) continue;
+      // DTEND en iCal de día completo es EXCLUSIVO → el último día cerrado es el anterior.
+      const desde = this._fecha(ev.start);
+      let hasta = null;
+      if (ev.end) { const finExcl = this._fecha(ev.end); const ult = this._sumaDia(finExcl, -1); if (ult > desde) hasta = ult; }
+      const ex = hasta ? { desde, hasta, abierto: false, motivo: ev.summary || 'cerrado', origen: 'ics' } : { fecha: desde, abierto: false, motivo: ev.summary || 'cerrado', origen: 'ics' };
+      cierres.push(ex);
+    }
+
+    const disp = this._disp(input.project_id);
+    disp.excepciones = (disp.excepciones || []).filter(x => x.origen !== 'ics').concat(cierres);   // sync: reemplaza las importadas, respeta las manuales
+    this._persist.marcarDirty(input.project_id);
+    this.eventBus?.publish('calendario.disponibilidad.cambiada', { project_id: input.project_id, motivo: 'import_ics', importadas: cierres.length, timestamp: nowISO() });
+    return { status: 200, data: { importadas: cierres.length, excepciones: cierres, eventos_leidos: eventos.length } };
+  }
+
+  // ── endpoint HTTP GET (suscribible desde el móvil) — público con token ──
+  async handleFeedIcs(req, res) {
+    const project_id = (req && (req.params && (req.params.project || req.params.project_id) || (req.query && (req.query.project || req.query.project_id)))) || null;
+    const token = (req && req.query && req.query.token) || null;
+    let status, ctype, body;
+    const disp = project_id ? this.dispPorProyecto.get(project_id) : null;
+    if (!project_id) { status = 400; ctype = 'application/json; charset=utf-8'; body = JSON.stringify({ error: { code: 'INVALID_INPUT', message: 'project requerido' } }); }
+    else if (!disp || !disp.feed_token) { status = 404; ctype = 'application/json; charset=utf-8'; body = JSON.stringify({ error: { code: 'FEED_NO_PROVISIONADO', message: 'pide primero calendario.feed_url' } }); }
+    else if (token !== disp.feed_token) { status = 401; ctype = 'application/json; charset=utf-8'; body = JSON.stringify({ error: { code: 'AUTHENTICATION_REQUIRED', message: 'token del feed inválido' } }); }
+    else { status = 200; ctype = 'text/calendar; charset=utf-8'; body = this._feedIcs({ project_id }).data.ics; }
+
+    const headers = { 'Content-Type': ctype, 'Cache-Control': 'no-cache', ...(status === 200 ? { 'Content-Disposition': 'inline; filename="agenda.ics"' } : {}) };
+    if (res && typeof res.writeHead === 'function' && !res.headersSent) { res.writeHead(status, headers); res.end(body); return; }
+    if (res && typeof res.status === 'function' && !res.headersSent) { if (typeof res.setHeader === 'function') res.setHeader('Content-Type', ctype); return typeof res.send === 'function' ? res.status(status).send(body) : res.status(status).end(body); }
+    return { status, _contentType: ctype, _raw: body };
   }
 }
 

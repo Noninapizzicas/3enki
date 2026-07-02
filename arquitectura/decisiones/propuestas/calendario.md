@@ -95,9 +95,17 @@ consumidores (follow-up)                  agenda-citas (gateado por organo-agend
 ## Estado
 
 ```
-✓ v0.1 CONSTRUIDO — modules/prisma/calendario (reflejo 0.1.0, 9/9 tests): disponibilidad
+✓ v0.1 CONSTRUIDO — modules/prisma/calendario (reflejo 0.1.0): disponibilidad
   (get/set/bloquear_dia) + huecos (motor puro, capacidad − solapadas) + reservas
   (reservar/cancelar/devolver/list, guarda cita↔intervalo) + persistencia por proyecto.
-◑ v0.2 (bordes) — feed .ics (ical-generator) · import .ics/CalDAV del dueño · tz/DST (luxon).
-[ ] CONSUMIDORES — agenda-citas (gateado por organo-agenda) · alquiler · staff-turnos.
+✓ v0.2 BORDE iCal BIDIRECCIONAL — _shared/ical (serializador + parser RFC 5545 PROPIO, sin deps, 8/8).
+  EXPORT: feed_ics (reservas → .ics) + GET público /modules/calendario/feed/:project?token=… (handleFeedIcs)
+  + feed_url (provisiona el token secreto, 'secret iCal URL'). El dueño se suscribe una vez desde el móvil.
+  IMPORT: importar_ics ({ics|url}) lee el .ics/CalDAV del dueño → días completos que huelen a cierre →
+  excepciones 'días cerrado' (idempotente: reemplaza origen 'ics', respeta las manuales; DTEND exclusivo).
+◑ v0.2 resto — tz/DST correcto (TZID+VTIMEZONE, luxon; hoy tiempo flotante = reloj de pared).
+⏸ CONSUMIDORES — APARCADOS POR DECISIÓN (2026-07-02): el calendario reposa como infra completa; NO se
+  construye agenda-citas ni ningún consumidor en especulación. La forma de uso (una o varias) nace con el
+  proyecto concreto que la necesite y la dicte. Bocetos plausibles: agenda-citas (gateado por organo-agenda) ·
+  alquiler (grano días) · staff-turnos. Se retoman cuando llegue la ocasión.
 ```

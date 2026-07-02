@@ -14955,14 +14955,16 @@ CLASE PrismaProyectorReflejo HEREDA ModuloHibridoReflejo {   // gemelo de pizzep
 }
 ```
 
-## adaptador (module 0.2.0 · reflejo 0.1.0 · blueprint 0.1.0) — crudo → ProductoUniversal ✓ (híbrido)
+## adaptador (module 0.3.0 · reflejo 0.2.0 · blueprint 0.1.0) — crudo → ProductoUniversal ✓ (híbrido)
 
 ```
 CLASE PrismaAdaptadorReflejo HEREDA ModuloHibridoReflejo {   // blueprint-agentico 6 fases · REFLEJO = la mitad determinista
-  ESPINAZO  CONTRATO {crudo,project_id,catalogo_id?} → LEER[pdte] → PENSAR → VALIDAR → GUARDAR → EMITIR
-  PENSAR (determinista v0.1.0)  crudo estructurado → 5 huecos ; _clasificarArquetipo POR LA FORMA:
+  ESPINAZO  CONTRATO {crudo,project_id,catalogo_id?} → LEER → PENSAR → VALIDAR → GUARDAR → EMITIR
+  LEER (reflejo 0.2.0)  _leerAprobados: arquetipos.listar → los custom APROBADOS del proyecto (best-effort).
+                        Cierra el anti-wipe: propuesto→aprobado→clasifica productos nuevos (prioridad sobre la semilla).
+  PENSAR (determinista)  crudo estructurado → 5 huecos ; _clasificarArquetipo POR LA FORMA (con los aprobados como extra):
      ciclo=con_retorno→uso_temporal · tiempo=cita|stock=capacidad_temporal→servicio ·
-     stock=ingredientes|precio=por_peso→comestible · resto→pieza
+     stock=ingredientes|precio=por_peso→comestible · resto→pieza · (custom aprobado gana)
   _preguntasAbiertas  coste+stock (privados) + agenda(tiempo≠ninguno) + tarifa(precio rango/tiempo)
                       → madurez necesita_aclaracion_comerciante (no inventa: MARCA lo que no sabe)
   VALIDAR  catalogo.validar.request → _checkProducto (freno de producto-manager); !valid → 422 FALLA HONESTO
@@ -15116,7 +15118,7 @@ _shared/pos-persistencia.js  (composición)  snapshot(project_id)/hidratar(proje
   el helper escribe /prisma/pos/<mod>.json (fs.write atómico, debounced) y restaura en project.activated. Sin project_id → solo memoria (honesto).
 ```
 
-## calendario (module 0.1.0 · reflejo 0.1.0) — BASE COMPARTIDA del tiempo (órgano `agenda`) ✓ (motor v0.1; iCal v0.2)
+## calendario (module 0.2.0 · reflejo 0.2.0) — BASE COMPARTIDA del tiempo (órgano `agenda`) ✓ (motor + iCal bidireccional)
 
 ```
 CLASE PrismaCalendarioReflejo HEREDA ModuloHibridoReflejo {   // base compartida (como marca/recetas) · product-AGNÓSTICO
@@ -15128,16 +15130,27 @@ CLASE PrismaCalendarioReflejo HEREDA ModuloHibridoReflejo {   // base compartida
     get_disponibilidad · set_disponibilidad(deep-merge) · bloquear_dia(excepción cerrada = "día que no trabajo") ·
     huecos({recurso_tipo,desde,hasta,duracion_min} → troceo back-to-back, capacidad−solapadas) ·
     reservar (guarda _hayHueco: cita exige horario+fin · intervalo solo capacidad; 409 SIN_HUECO/412 FUERA_DE_HORARIO/404 RECURSO_DESCONOCIDO) ·
-    cancelar (libera) · devolver (alquiler: cierra el intervalo abierto) · list_reservas
+    cancelar (libera) · devolver (alquiler: cierra el intervalo abierto) · list_reservas ·
+    feed_ics (reservas → texto .ics RFC 5545, vía _shared/ical) · feed_url (provisiona el token secreto → URL suscribible) ·
+    importar_ics ({ics|url} → lee el .ics/CalDAV del dueño, vuelca los días completos que huelen a cierre como excepciones 'días cerrado')
   MOTOR PURO  _ventanasAbiertas(horario−excepciones ∩ [desde,hasta]) · _huecos · _hayHueco · _solapa. Reloj de pared naïve,
-              comparado determinista vía Date.UTC de componentes (sin deriva de zona). tz/DST real + .ics = v0.2 (luxon/rrule/ical-generator).
+              comparado determinista vía Date.UTC de componentes (sin deriva de zona).
+  BORDE iCal  _shared/ical (serializador + parser RFC 5545 PROPIO, sin deps): horas en tiempo FLOTANTE (reloj de pared) · DTSTAMP UTC · plegado 75 octetos · escape.
+              EXPORT — GET público suscribible: apis GET /modules/calendario/feed/:project?token=… (handleFeedIcs) — el clásico 'secret iCal URL'
+              (quien tiene el token ve la agenda; el token se provisiona con feed_url y NO viaja en get_disponibilidad).
+              IMPORT — importar_ics lee el .ics del dueño (fetch de url o texto) → días completos que huelen a cierre → excepciones (idempotente,
+              reemplaza origen 'ics', respeta las manuales; DTEND exclusivo). tz/DST (TZID+VTIMEZONE, luxon) = follow-up.
   PRODUCT-AGNÓSTICO  la duración/recurso los aporta el CONSUMIDOR (agenda-citas/alquiler), no el calendario.
   PERSISTE  por proyecto (pos-persistencia, /prisma/calendario/estado.json: disponibilidad + reservas). Siempre cargado (base, no gateado).
 }
-CONSUMIDORES (follow-up, cada uno a su interés — beben por RPC) {
-  agenda-citas  producto(duración+recurso vía proyector) → huecos → reservar → cobro   (gateado por organo-agenda)
-  alquiler      unidad(recurso, con_retorno) → reservar(fin=null) → devolver           (mismo motor, grano días)
-  staff-turnos  turnos = reservas de tipo 'empleado' sobre la capacidad · scheduler-promos = ventanas (ya vive carta-scheduler)
+CONSUMIDORES (posibles — NO construir en especulación · decisión 2026-07-02) {
+  DECISIÓN  el calendario REPOSA como infra completa; su FORMA DE USO nace con el proyecto
+            concreto que la necesite (una o varias formas). No se cablea agenda-citas ni ningún
+            consumidor "por si acaso" — se construye cuando llega la ocasión y el proyecto la dicta.
+  formas de uso PLAUSIBLES (bocetos, no compromisos):
+    agenda-citas  producto(duración+recurso vía proyector) → huecos → reservar → cobro   (gateado por organo-agenda)
+    alquiler      unidad(recurso, con_retorno) → reservar(fin=null) → devolver           (mismo motor, grano días)
+    staff-turnos  turnos = reservas de tipo 'empleado' sobre la capacidad · scheduler-promos = ventanas (ya vive carta-scheduler)
 }
 ```
 
@@ -15170,20 +15183,46 @@ cobro.{iniciado,procesado,reembolsado}   (ciclo del cobro)
 cuenta.{crear,get,list,cerrar}.request → .response · cuenta.{creada,cerrada}   (ticket)
 ticket.formatear.request → .response · ticket.generado   (recibo)
 cierre.{cerrar_caja,estado}.request → .response · caja.cerrada   (cuadre del día)
-calendario.{get_disponibilidad,set_disponibilidad,bloquear_dia,huecos,reservar,cancelar,devolver,list_reservas}.request → .response   (base del tiempo)
+calendario.{get_disponibilidad,set_disponibilidad,bloquear_dia,huecos,reservar,cancelar,devolver,list_reservas,feed_ics,feed_url,importar_ics}.request → .response   (base del tiempo + feed .ics)
+GET /modules/calendario/feed/:project?token=…   (endpoint HTTP público suscribible: .ics de la agenda, con token secreto)
 calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta}   (señales del calendario)
 ```
 
 ## Estado
 
 ```
-✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (9/9) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (9/9, con aplicar→producto) · escaparate (5/5, núcleo)
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (12/12, LEER cablea arquetipos custom) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (9/9, con aplicar→producto) · escaparate (5/5, núcleo)
 ✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones) · _shared/organos-recetario (órgano→interruptor, diff PURO) · _shared/pos-persistencia (snapshot fs por proyecto)
 ✓ project-type blueprints/project-types/prisma.json — comercio universal INSTANCIABLE
 ✓ POS COMPLETO + PERSISTENTE — carrito (7/7) · cobro (8/8) · cuenta (6/6) · ticket (3/3) · cierre (4/4): catálogo→carrito→cuenta→cobro→ticket→cierre (sin cocina). Estado vivo persistido por proyecto (/prisma/pos/*.json), restaura en project.activated.
 ✓ BOSS ENFORCEMENT — enforcement (7/7): boss.plan.actualizado → interruptor.set enciende los órganos del comercio (additivo-seguro, no apaga solo). Lazo CEREBRO→acción cerrado.
 ✓ COSTE→PRODUCTO — coste.aplicar escribe el pvp en el producto (precio_base_centimos) + cierra la pregunta_abierta de coste (madurez→listo). Lazo cara-comerciante cerrado.
-✓ ÓRGANO AGENDA (base) — calendario.md (propuesta) + calendario (9/9): base compartida del tiempo (disponibilidad+capacidad+reservas+huecos), motor determinista, un motor para cita y alquiler, persistente. El organo-agenda ya tiene BASE (falta el consumidor que lo gatee).
-◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · calendario bordes iCal (feed .ics + import CalDAV) + tz/DST (luxon) · los interruptores organo-* esperan dueño (cocina la reacciona pizzepos) — se verifican corriendo el Enki
-[ ] wiring/en vivo: adaptador reflejo → arquetipos custom · CONSUMIDORES del calendario (agenda-citas gateado por organo-agenda · alquiler · staff-turnos) · dueños de retorno/fianza/stock
+✓ ÓRGANO AGENDA (base + feed .ics suscribible + import) — calendario.md (propuesta) + calendario (17/17) + _shared/ical (8/8): base compartida del tiempo (disponibilidad+capacidad+reservas+huecos), motor determinista, un motor para cita y alquiler, persistente, BORDE iCal BIDIRECCIONAL — export (feed .ics + GET suscribible con token) e import (.ics/CalDAV del dueño → días cerrado). El organo-agenda ya tiene BASE (falta el consumidor que lo gatee).
+◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · calendario tz/DST estricto (luxon; hoy tiempo flotante) · los interruptores organo-* esperan dueño (cocina la reacciona pizzepos) — se verifican corriendo el Enki
+✓ ADAPTADOR LEER — adaptador reflejo 0.2.0: _adaptar lee los arquetipos custom APROBADOS (arquetipos.listar) y los pasa al clasificador con prioridad sobre la semilla. Lazo anti-wipe cerrado (propuesto→aprobado→clasifica).
+[ ] wiring/en vivo: dueños de retorno/fianza/stock (órganos previstos)
+⏸ APARCADO POR DECISIÓN (2026-07-02): los CONSUMIDORES del calendario (agenda-citas/alquiler/staff-turnos) NO se construyen en especulación. El calendario reposa como infra; su forma de uso se construye cuando un proyecto concreto la pida.
+```
+
+## Frontend — plan de arranque (anotado 2026-07-02; NO construir sin proyecto concreto + Enki vivo)
+
+```
+DOS CAPAS {
+  GENÉRICO (ya existe · pizzepos lo prueba)   LazyShell · MqttClient · chat(ai-gateway) · module-loader · stores ·
+                                              request/response. Un proyecto Prisma lo HEREDA tal cual — cero infra nueva.
+  ESPECÍFICO de Prisma (= forma de uso)       páginas Svelte (catálogo/POS/agenda/escaparate) + page-blueprint (el CONDUCTOR
+                                              que traduce intención → reflejos). Se MOLDEA con el comercio concreto.
+}
+CLAVE  el CHAT es la interfaz primaria (el LLM de página es el agente). Un comercio Prisma se opera ENTERO desde el chat
+       genérico con su page-blueprint ("añade una margarita a 8€" → catalogo.add_product + coste.aplicar) ANTES de tener
+       una sola página Svelte propia. Las páginas visuales = mejora progresiva, no requisito.
+REGLA  páginas Svelte = lo más específico del proyecto → se construyen cuando el proyecto las pida (misma disciplina que
+       los consumidores del calendario). El page-blueprint es escribible offline (JSON de cajones) pero solo VERIFICABLE
+       en el Enki vivo (el blueprint lo ejecuta el LLM de página = runtime). Qué cajones necesita lo dicta el flujo real.
+ARRANQUE (cuando llegue el proyecto + Enki) {
+  1. crear proyecto tipo `prisma` (project-type ya existe)
+  2. page-blueprint mínimo (onboarding marca/coste · alta de producto · POS) + verificar en el chat vivo
+  3. páginas Svelte después, según lo que ESE comercio necesite ver
+}
+NO-HACER  no scaffoldear páginas ni cajones en el vacío — sería especular la UX. El chat reutilizado YA es el frontend para arrancar.
 ```

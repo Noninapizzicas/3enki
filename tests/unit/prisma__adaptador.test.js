@@ -65,4 +65,45 @@ for (const crudo of [
   });
 }
 
+// ── LEER: los arquetipos custom aprobados clasifican con prioridad sobre la semilla ──
+
+test('_pensar: un custom aprobado gana a la semilla para la misma forma', () => {
+  const custom = [{ id: 'taller', reglas: [{ ciclo: 'con_retorno' }], estado: 'aprobado' }];
+  const forma = { nombre: 'Grúa', que_es: 'alquiler', ciclo: 'con_retorno', tiempo: 'intervalo_que_cobra', stock: 'activo_reutilizable', precio: 'por_tiempo' };
+  assert.equal(A._pensar(forma).arquetipo, 'uso_temporal');           // solo semilla
+  assert.equal(A._pensar(forma, custom).arquetipo, 'taller');         // custom aprobado gana
+});
+
+test('_pensar: un custom NO aprobado no cuenta (lo filtra _leerAprobados; aquí no se pasa)', () => {
+  // _pensar recibe solo los ya filtrados; con lista vacía → semilla.
+  const forma = { nombre: 'Grúa', ciclo: 'con_retorno' };
+  assert.equal(A._pensar(forma, []).arquetipo, 'uso_temporal');
+});
+
+test('_adaptar (e2e): LEE arquetipos.listar, aplica el custom aprobado y emite producto.adaptado', async () => {
+  const custom = [{ id: 'taller', reglas: [{ ciclo: 'con_retorno' }], estado: 'aprobado' }, { id: 'borrador', reglas: [{ ciclo: 'con_retorno' }], estado: 'propuesto' }];
+  const A2 = new PrismaAdaptadorReflejo();
+  A2.eventBus = fakeBusAdaptador(custom);
+  const r = await A2._adaptar({ project_id: 'p', crudo: { nombre: 'Grúa', que_es: 'alquiler', ciclo: 'con_retorno', tiempo: 'intervalo_que_cobra', stock: 'activo_reutilizable', precio: 'por_tiempo' } });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.arquetipo, 'taller');                            // aprobado gana; el 'propuesto' se ignora
+  const adaptado = A2.eventBus.pub.find(x => x.ev === 'producto.adaptado');
+  assert.ok(adaptado && adaptado.data.producto.arquetipo === 'taller');
+});
+
+// bus falso: responde arquetipos.listar y catalogo.validar; captura los publish.
+function fakeBusAdaptador(custom) {
+  const handlers = {}; const pub = [];
+  const emit = (ev, payload) => setImmediate(() => (handlers[ev] || []).forEach(h => h({ data: payload })));
+  return {
+    pub,
+    subscribe(ev, h) { (handlers[ev] = handlers[ev] || []).push(h); return () => { handlers[ev] = (handlers[ev] || []).filter(x => x !== h); }; },
+    publish(ev, data) {
+      pub.push({ ev, data });
+      if (ev === 'arquetipos.listar.request') emit('arquetipos.listar.response', { request_id: data.request_id, status: 200, data: { custom } });
+      else if (ev === 'catalogo.validar.request') emit('catalogo.validar.response', { request_id: data.request_id, status: 200, data: { valid: true } });
+    }
+  };
+}
+
 console.log('prisma__adaptador: asserts definidos');

@@ -1496,6 +1496,10 @@ class AiGatewayModule extends BaseModule {
       '{query} ó {paquete:"owner/repo@skill"}) → devuelve el VEREDICTO {ok, traidas|motivo}. Baja código del ' +
       'ecosistema → CONFIRMA con el usuario antes.\n' +
       '- ACTIVAR una skill como lente viva de una página: cosecha.promover.request {nombre, dominio, tarea}.\n' +
+      '- CREAR una skill nueva (tras resolver algo REUTILIZABLE, para no repetirlo): cosecha.crear.request ' +
+      '{nombre, contenido, descripcion, dominio?}. MEJORAR una existente (solo CRECIDAS, no las semilla): ' +
+      'cosecha.patch.request {nombre, old_string, new_string}. El reflejo valida y devuelve el veredicto ' +
+      '(409 si ya existe / 422 si quedaría inválida) — no inventes que la creaste/mejoraste.\n' +
       '- EJECUTAR el comando que una skill te indica (una CLI, p.ej. defuddle): bus.publishAndWait(' +
       "'ejecutor.ejecutar.request', {command, project_id, motivo}). USA SIEMPRE esta puerta, NUNCA " +
       'shell.exec crudo. Para input NO confiable (una URL externa, contenido de fuera) añade ' +

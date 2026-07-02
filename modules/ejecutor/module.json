@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest del EJECUTOR — la puerta guardada para EJECUTAR comandos (skills CLI → shell) desde el chat. El LLM llama ejecutor.ejecutar (NUNCA shell.exec crudo). Casa lo que Enki ya tenía (code-executor crudo + portal como patrón de guard) y añade lo que enseña Hermes: aprobación graduada + audit → propiocepción + (Fase 2) aislamiento en contenedor. La reja es para ERRORES COOPERATIVOS, no output adversarial: la contención real de input no-confiable = contenedor. Ver arquitectura/decisiones/propuestas/ejecutor-guardado.md.",
+  "name": "ejecutor",
+  "version": "0.1.0",
+  "_v0_1_nota": "v0.1.0 (Fase 1): nace la puerta guardada. Cadena del guard (orden de Hermes): kill-switch (interruptor 'ejecutor' OFF por defecto) → HARDLINE (blocklist dura, ninguna aprobación la anula) → ALLOWLIST (globs config, auto) → ya-aprobado (cache session/always por project::patrón) → PELIGROSO (patrón → 202 pendiente_aprobacion + emite ejecutor.aprobacion.pendiente; el humano dice sí, el LLM reintenta con confirmado:true) → benigno (permitido). Ejecución LOCAL (child_process, en el workspace del proyecto). Audit: ejecutor.invocado → propiocepción. Fase 2 = aislamiento en contenedor. Fase 3 = cantera escribible en-turno. Test: ejecutor__guard.",
+  "description": "Puerta guardada para ejecutar comandos con reja (hardline + aprobación humana graduada + audit). Reflejo puro. El chat entra por aquí; shell.exec crudo queda para uso interno de reflejos.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "publishes": [
+    { "event": "ejecutor.ejecutar.response",     "description": "Resultado: { ok, veredicto, stdout, stderr, exit_code, duracion_ms, aislamiento } (200) · { ok:false, veredicto:'puerta_cerrada' } (503) · { veredicto:'hardline', motivo } (403) · { veredicto:'pendiente_aprobacion', aprobacion_id, motivo } (202)." },
+    { "event": "ejecutor.aprobacion.pendiente",  "description": "Un comando peligroso espera visto bueno del usuario: { aprobacion_id, project_id, command, motivo }. El nervio (ai-gateway) lo surfacea en el chat; el humano aprueba y el LLM reintenta con confirmado:true." },
+    { "event": "ejecutor.invocado",              "description": "AUDIT (ningún acto invisible): { project_id, command, veredicto, ok, exit_code?, duracion_ms?, aislamiento }. La propiocepción lo capta → el LLM queda consciente de lo ejecutado." },
+    { "event": "interruptor.registrar",          "description": "Registra su botón on/off ('ejecutor', grupo sistema, OFF por defecto) en el panel central." }
+  ],
+  "subscribes": [
+    { "event": "ejecutor.ejecutar.request",       "handler": "onEjecutarRequest",     "description": "LA PUERTA: { command, project_id, cwd?, timeout_ms?, confirmado?, recordar? } → guard (kill-switch/hardline/allowlist/aprobado/peligroso) → ejecución local o 202 pendiente. El chat llama AQUÍ, nunca shell.exec." },
+    { "event": "interruptor.cambiado",            "handler": "onInterruptorCambiado", "description": "on/off en caliente del panel (id='ejecutor'): abre/cierra la puerta sin reinicio." },
+    { "event": "interruptor.solicitar_registro",  "handler": "onSolicitarRegistro",   "description": "interruptores pide registro al cargar → re-registra su botón (cura la carrera de arranque)." }
+  ],
+  "dependencies": ["interruptores"],
+  "config": {
+    "enabled_default": false,
+    "default_timeout_ms": 30000,
+    "max_timeout_ms": 120000,
+    "allowlist": [
+      "defuddle *", "npx skills *", "npx defuddle *",
+      "node *", "python *", "python3 *",
+      "ls *", "ls", "cat *", "head *", "tail *", "wc *", "grep *", "find *", "echo *", "pwd"
+    ]
+  }
+}

@@ -3,7 +3,7 @@
   "name": "calendario",
   "version": "0.2.0",
   "_v0_1_0_nota": "v0.1.0 (2026-07-01): disponibilidad (get/set/bloquear_dia) + huecos (motor puro _ventanasAbiertas/_huecos, back-to-back por ventana, capacidad − solapadas) + reservas (reservar/cancelar/devolver/list) con guarda _hayHueco (cita exige horario; intervalo solo capacidad). Persistencia por proyecto (pos-persistencia, /prisma/calendario/estado.json). Reloj de pared naïve, comparado determinista vía Date.UTC de componentes (sin deriva de zona). Reflejo 0.1.0.",
-  "_v0_2_0_nota": "v0.2.0 (2026-07-01): BORDE iCal — op feed_ics emite las reservas como texto .ics (RFC 5545) suscribible desde el móvil del dueño, vía _shared/ical (serializador propio, sin deps). Horas en tiempo flotante (reloj de pared); tz/DST correcto (TZID+VTIMEZONE, luxon) e import .ics/CalDAV = follow-up. Falta la última milla: exponer el .ics como GET suscribible (webcal). Reflejo 0.2.0.",
+  "_v0_2_0_nota": "v0.2.0 (2026-07-01): BORDE iCal bidireccional vía _shared/ical (serializador+parser RFC 5545 PROPIO, sin deps). EXPORT: feed_ics (reservas → .ics) + endpoint GET público /modules/calendario/feed/:project?token=… (handleFeedIcs, 'secret iCal URL') + feed_url (provisiona el token). IMPORT: importar_ics ({ics|url}) lee el .ics/CalDAV del dueño y vuelca los días completos que huelen a cierre (o todos_dia_completo) como excepciones 'días cerrado' (idempotente: reemplaza origen 'ics', respeta manuales; DTEND exclusivo). Horas en tiempo flotante (reloj de pared); tz/DST correcto (TZID+VTIMEZONE, luxon) = follow-up. Reflejo 0.2.0.",
   "description": "Base compartida del tiempo de Prisma (órgano agenda): disponibilidad + capacidad + reservas + huecos, en un motor determinista para cita y alquiler. Product-agnóstico; los consumidores beben por RPC.",
   "language": "es",
   "subscribes": [
@@ -17,6 +17,7 @@
     { "event": "calendario.list_reservas.request", "handler": "onListReservasRequest", "description": "Reflejo JS: reservas (filtros recurso_tipo/estado/desde/hasta)." },
     { "event": "calendario.feed_ics.request", "handler": "onFeedIcsRequest", "description": "Reflejo JS (borde iCal): {project_id} → texto .ics (RFC 5545) de las reservas." },
     { "event": "calendario.feed_url.request", "handler": "onFeedUrlRequest", "description": "Reflejo JS: provisiona el token secreto del feed y devuelve la URL suscribible (webcal) para el móvil del dueño." },
+    { "event": "calendario.importar_ics.request", "handler": "onImportarIcsRequest", "description": "Reflejo JS (borde iCal, reverso): {ics|url, palabras?, todos_dia_completo?} → lee el .ics/CalDAV del dueño y vuelca los eventos de día completo (que huelen a cierre) como excepciones 'días cerrado'. Idempotente: reemplaza las de origen 'ics', respeta las manuales." },
     { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura la disponibilidad + reservas persistidas de ese proyecto desde /prisma/calendario/estado.json." }
   ],
   "apis": [

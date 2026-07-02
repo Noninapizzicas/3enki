@@ -61,6 +61,7 @@ class PrismaCalendarioReflejo extends ModuloHibridoReflejo {
   // ── BORDE iCal: feed .ics de las reservas (para el móvil del dueño) ──
   onFeedIcsRequest(e)           { return this._atender(e, 'feed_ics', 'calendario.feed_ics.response', d => this._feedIcs(d)); }
   onFeedUrlRequest(e)           { return this._atender(e, 'feed_url', 'calendario.feed_url.response', d => this._feedUrl(d)); }
+  onImportarIcsRequest(e)       { return this._atender(e, 'importar_ics', 'calendario.importar_ics.response', d => this._importarIcs(d)); }
 
   // ============================================================= helpers de estado
   _disp(project_id) {
@@ -283,6 +284,42 @@ class PrismaCalendarioReflejo extends ModuloHibridoReflejo {
     const token = this._feedToken(input.project_id, { crear: true });
     const path = `/modules/calendario/feed/${encodeURIComponent(input.project_id)}?token=${token}`;
     return { status: 200, data: { token, path, hint: 'Suscríbete a esta URL desde el calendario del móvil (webcal). Es un enlace SECRETO: quien lo tenga ve la agenda.' } };
+  }
+
+  // ── IMPORT: leer el .ics/CalDAV del dueño → "días cerrado" (el reverso del feed) ──
+  // Toma eventos de DÍA COMPLETO cuyo título huele a cierre (vacaciones/festivo/cerrado…) o
+  // TODOS los de día completo si todos_dia_completo=true, y los vuelca como excepciones
+  // cerradas. Idempotente: reemplaza las excepciones origen:'ics' (las manuales sobreviven).
+  async _importarIcs(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    let texto = input.ics;
+    if (!texto && input.url) {
+      try { const r = await fetch(input.url); texto = await r.text(); }
+      catch (err) { return this._errorResponse(502, 'UPSTREAM_UNREACHABLE', 'no se pudo leer el .ics', { url: input.url, error: err.message }); }
+    }
+    if (!texto) return this._invalid('ics|url');
+
+    const eventos = ical.parseIcs(texto);
+    const palabras = Array.isArray(input.palabras) && input.palabras.length ? input.palabras.map(p => String(p).toLowerCase()) : ['cerrad', 'vacacion', 'festiv', 'closed', 'holiday', 'libre'];
+    const todos = input.todos_dia_completo === true;
+    const cierres = [];
+    for (const ev of eventos) {
+      if (!ev.allDay) continue;                                   // solo día completo = "no trabajo ese día"
+      const titulo = (ev.summary || '').toLowerCase();
+      if (!todos && !palabras.some(p => titulo.includes(p))) continue;
+      // DTEND en iCal de día completo es EXCLUSIVO → el último día cerrado es el anterior.
+      const desde = this._fecha(ev.start);
+      let hasta = null;
+      if (ev.end) { const finExcl = this._fecha(ev.end); const ult = this._sumaDia(finExcl, -1); if (ult > desde) hasta = ult; }
+      const ex = hasta ? { desde, hasta, abierto: false, motivo: ev.summary || 'cerrado', origen: 'ics' } : { fecha: desde, abierto: false, motivo: ev.summary || 'cerrado', origen: 'ics' };
+      cierres.push(ex);
+    }
+
+    const disp = this._disp(input.project_id);
+    disp.excepciones = (disp.excepciones || []).filter(x => x.origen !== 'ics').concat(cierres);   // sync: reemplaza las importadas, respeta las manuales
+    this._persist.marcarDirty(input.project_id);
+    this.eventBus?.publish('calendario.disponibilidad.cambiada', { project_id: input.project_id, motivo: 'import_ics', importadas: cierres.length, timestamp: nowISO() });
+    return { status: 200, data: { importadas: cierres.length, excepciones: cierres, eventos_leidos: eventos.length } };
   }
 
   // ── endpoint HTTP GET (suscribible desde el móvil) — público con token ──

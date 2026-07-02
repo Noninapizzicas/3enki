@@ -54,4 +54,27 @@ test('evento sin uid o sin start se ignora (no rompe)', () => {
   assert.equal((ics.match(/BEGIN:VEVENT/g) || []).length, 1);   // solo el válido
 });
 
+test('parseIcs: round-trip (toIcs → parseIcs) conserva fechas, allDay y texto', () => {
+  const ics = ical.toIcs({ nowIso: NOW, events: [
+    { uid: 'r1', start: '2026-07-06T09:00', end: '2026-07-06T10:00', summary: 'Corte, tinte' },
+    { uid: 'a1', start: '2026-08-15', allDay: true, summary: 'Vacaciones' }
+  ] });
+  const evs = ical.parseIcs(ics);
+  assert.equal(evs.length, 2);
+  const cita = evs.find(e => e.uid === 'r1');
+  assert.equal(cita.start, '2026-07-06T09:00');
+  assert.equal(cita.end, '2026-07-06T10:00');
+  assert.equal(cita.allDay, false);
+  assert.equal(cita.summary, 'Corte, tinte');      // des-escapado
+  const vac = evs.find(e => e.uid === 'a1');
+  assert.equal(vac.allDay, true);
+  assert.equal(vac.start, '2026-08-15');
+});
+
+test('parseIcs: deshace el plegado de líneas largas', () => {
+  const larga = 'Z'.repeat(120);
+  const evs = ical.parseIcs(ical.toIcs({ nowIso: NOW, events: [{ uid: 'l1', start: '2026-07-06T09:00', summary: larga }] }));
+  assert.equal(evs[0].summary, larga);             // reconstruido pese al fold
+});
+
 console.log('shared__ical: asserts definidos');

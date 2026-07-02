@@ -14988,12 +14988,15 @@ CLASE PrismaCalendarioReflejo HEREDA ModuloHibridoReflejo {   // base compartida
     huecos({recurso_tipo,desde,hasta,duracion_min} → troceo back-to-back, capacidad−solapadas) ·
     reservar (guarda _hayHueco: cita exige horario+fin · intervalo solo capacidad; 409 SIN_HUECO/412 FUERA_DE_HORARIO/404 RECURSO_DESCONOCIDO) ·
     cancelar (libera) · devolver (alquiler: cierra el intervalo abierto) · list_reservas ·
-    feed_ics (reservas → texto .ics RFC 5545, vía _shared/ical) · feed_url (provisiona el token secreto → URL suscribible)
+    feed_ics (reservas → texto .ics RFC 5545, vía _shared/ical) · feed_url (provisiona el token secreto → URL suscribible) ·
+    importar_ics ({ics|url} → lee el .ics/CalDAV del dueño, vuelca los días completos que huelen a cierre como excepciones 'días cerrado')
   MOTOR PURO  _ventanasAbiertas(horario−excepciones ∩ [desde,hasta]) · _huecos · _hayHueco · _solapa. Reloj de pared naïve,
               comparado determinista vía Date.UTC de componentes (sin deriva de zona).
-  BORDE iCal  _shared/ical (serializador RFC 5545 PROPIO, sin deps): horas en tiempo FLOTANTE (reloj de pared) · DTSTAMP UTC · plegado 75 octetos · escape.
-              GET público suscribible: apis GET /modules/calendario/feed/:project?token=… (handleFeedIcs) — el clásico 'secret iCal URL'
-              (quien tiene el token ve la agenda; el token se provisiona con feed_url y NO viaja en get_disponibilidad). tz/DST (TZID+VTIMEZONE, luxon) + import .ics/CalDAV = follow-up.
+  BORDE iCal  _shared/ical (serializador + parser RFC 5545 PROPIO, sin deps): horas en tiempo FLOTANTE (reloj de pared) · DTSTAMP UTC · plegado 75 octetos · escape.
+              EXPORT — GET público suscribible: apis GET /modules/calendario/feed/:project?token=… (handleFeedIcs) — el clásico 'secret iCal URL'
+              (quien tiene el token ve la agenda; el token se provisiona con feed_url y NO viaja en get_disponibilidad).
+              IMPORT — importar_ics lee el .ics del dueño (fetch de url o texto) → días completos que huelen a cierre → excepciones (idempotente,
+              reemplaza origen 'ics', respeta las manuales; DTEND exclusivo). tz/DST (TZID+VTIMEZONE, luxon) = follow-up.
   PRODUCT-AGNÓSTICO  la duración/recurso los aporta el CONSUMIDOR (agenda-citas/alquiler), no el calendario.
   PERSISTE  por proyecto (pos-persistencia, /prisma/calendario/estado.json: disponibilidad + reservas). Siempre cargado (base, no gateado).
 }
@@ -15033,7 +15036,7 @@ cobro.{iniciado,procesado,reembolsado}   (ciclo del cobro)
 cuenta.{crear,get,list,cerrar}.request → .response · cuenta.{creada,cerrada}   (ticket)
 ticket.formatear.request → .response · ticket.generado   (recibo)
 cierre.{cerrar_caja,estado}.request → .response · caja.cerrada   (cuadre del día)
-calendario.{get_disponibilidad,set_disponibilidad,bloquear_dia,huecos,reservar,cancelar,devolver,list_reservas,feed_ics,feed_url}.request → .response   (base del tiempo + feed .ics)
+calendario.{get_disponibilidad,set_disponibilidad,bloquear_dia,huecos,reservar,cancelar,devolver,list_reservas,feed_ics,feed_url,importar_ics}.request → .response   (base del tiempo + feed .ics)
 GET /modules/calendario/feed/:project?token=…   (endpoint HTTP público suscribible: .ics de la agenda, con token secreto)
 calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta}   (señales del calendario)
 ```
@@ -15047,7 +15050,7 @@ calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta} 
 ✓ POS COMPLETO + PERSISTENTE — carrito (7/7) · cobro (8/8) · cuenta (6/6) · ticket (3/3) · cierre (4/4): catálogo→carrito→cuenta→cobro→ticket→cierre (sin cocina). Estado vivo persistido por proyecto (/prisma/pos/*.json), restaura en project.activated.
 ✓ BOSS ENFORCEMENT — enforcement (7/7): boss.plan.actualizado → interruptor.set enciende los órganos del comercio (additivo-seguro, no apaga solo). Lazo CEREBRO→acción cerrado.
 ✓ COSTE→PRODUCTO — coste.aplicar escribe el pvp en el producto (precio_base_centimos) + cierra la pregunta_abierta de coste (madurez→listo). Lazo cara-comerciante cerrado.
-✓ ÓRGANO AGENDA (base + feed .ics suscribible) — calendario.md (propuesta) + calendario (13/13) + _shared/ical (6/6): base compartida del tiempo (disponibilidad+capacidad+reservas+huecos), motor determinista, un motor para cita y alquiler, persistente, feed .ics (RFC 5545, serializador propio) + endpoint GET público suscribible con token secreto para el móvil del dueño. El organo-agenda ya tiene BASE (falta el consumidor que lo gatee).
-◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · calendario: import .ics/CalDAV del dueño (días cerrado) + tz/DST (luxon) · los interruptores organo-* esperan dueño (cocina la reacciona pizzepos) — se verifican corriendo el Enki
+✓ ÓRGANO AGENDA (base + feed .ics suscribible + import) — calendario.md (propuesta) + calendario (17/17) + _shared/ical (8/8): base compartida del tiempo (disponibilidad+capacidad+reservas+huecos), motor determinista, un motor para cita y alquiler, persistente, BORDE iCal BIDIRECCIONAL — export (feed .ics + GET suscribible con token) e import (.ics/CalDAV del dueño → días cerrado). El organo-agenda ya tiene BASE (falta el consumidor que lo gatee).
+◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · calendario tz/DST estricto (luxon; hoy tiempo flotante) · los interruptores organo-* esperan dueño (cocina la reacciona pizzepos) — se verifican corriendo el Enki
 [ ] wiring/en vivo: adaptador reflejo → arquetipos custom · CONSUMIDORES del calendario (agenda-citas gateado por organo-agenda · alquiler · staff-turnos) · dueños de retorno/fianza/stock
 ```

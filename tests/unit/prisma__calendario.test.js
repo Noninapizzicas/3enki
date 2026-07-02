@@ -148,4 +148,47 @@ test('GET del feed: sin token 401 · token malo 401 · token bueno 200 text/cale
   assert.equal(noProv.status, 404);                         // proyecto sin feed provisionado
 });
 
+// ── import: leer el .ics del dueño → días cerrado ──
+
+const ICS_DUENO = [
+  'BEGIN:VCALENDAR', 'VERSION:2.0',
+  'BEGIN:VEVENT', 'UID:v1', 'DTSTART;VALUE=DATE:20260801', 'DTEND;VALUE=DATE:20260821', 'SUMMARY:Vacaciones', 'END:VEVENT',
+  'BEGIN:VEVENT', 'UID:b1', 'DTSTART;VALUE=DATE:20260810', 'SUMMARY:Cumple Ana', 'END:VEVENT',
+  'BEGIN:VEVENT', 'UID:t1', 'DTSTART:20260805T090000', 'DTEND:20260805T100000', 'SUMMARY:Reunión', 'END:VEVENT',
+  'END:VCALENDAR'
+].join('\r\n');
+
+test('import: solo los días completos que huelen a cierre; DTEND es exclusivo', async () => {
+  const C = conSilla(1);
+  const r = await C._importarIcs({ project_id: 'p', ics: ICS_DUENO });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.importadas, 1);              // Vacaciones sí; Cumple no (título); Reunión no (con hora)
+  const ex = r.data.excepciones[0];
+  assert.equal(ex.desde, '2026-08-01');
+  assert.equal(ex.hasta, '2026-08-20');            // DTEND 08-21 exclusivo → último cerrado 08-20
+  assert.equal(C._diaCerrado(C.dispPorProyecto.get('p'), '2026-08-10'), true);   // día dentro del rango
+});
+
+test('import: todos_dia_completo=true toma también el cumpleaños (pero no la reunión con hora)', async () => {
+  const C = conSilla(1);
+  const r = await C._importarIcs({ project_id: 'p', ics: ICS_DUENO, todos_dia_completo: true });
+  assert.equal(r.data.importadas, 2);
+});
+
+test('import es idempotente y respeta las excepciones manuales', async () => {
+  const C = conSilla(1);
+  C._bloquearDia({ project_id: 'p', fecha: '2026-12-25', motivo: 'navidad' });   // manual
+  await C._importarIcs({ project_id: 'p', ics: ICS_DUENO });
+  await C._importarIcs({ project_id: 'p', ics: ICS_DUENO });                      // re-import
+  const exs = C.dispPorProyecto.get('p').excepciones;
+  assert.equal(exs.filter(x => x.origen === 'ics').length, 1);                    // no duplica las importadas
+  assert.ok(exs.some(x => x.fecha === '2026-12-25'));                             // la manual sobrevive
+});
+
+test('import sin ics ni url → 400', async () => {
+  const C = conSilla(1);
+  const r = await C._importarIcs({ project_id: 'p' });
+  assert.equal(r.status, 400);
+});
+
 console.log('prisma__calendario: asserts definidos');

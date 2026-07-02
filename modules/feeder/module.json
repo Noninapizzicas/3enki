@@ -1,0 +1,29 @@
+{
+  "_doc": "Manifest de feeder — el ALIMENTADOR público de la cantera. El destilador sella patrones internos → cantera; el feeder trae skills del ECOSISTEMA público (skills.sh / `npx skills`) → cantera. Reflejo puro. Núcleo determinista: feeder.ingerir (cualquier SKILL.md crudo → cosecha.importar). Adquisición degradeable: feeder.instalar (`npx skills add`) y feeder.buscar (`npx skills find`) — si el CLI no está, degradan LIMPIO (503), nunca falso éxito. Cierra el pipeline: skills.sh → npx add → SKILL.md → feeder ingiere → cantera → conserje ofrece → promover → lente viva → planificador ensambla. Adopta el 'find-skills' de Vercel como FUENTE, no como copia. Ver arquitectura/decisiones/propuestas/feeder-ecosistema.md.",
+  "name": "feeder",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): nace el feeder público. REFLEJO: _ingerir (SKILL.md crudo → cosecha.importar, DETERMINISTA, testeable) + _instalar (`npx skills add` → lee SKILL.md → ingiere, degradeable) + _buscar (`npx skills find`, degradeable). MANDATO fail-honest: el CLI externo ausente → 503 limpio, no falso éxito. Test: feeder__index (parse + ingerir). Los wrappers npx se verifican EN VIVO (dependen de npx skills en el VPS).",
+  "description": "Alimentador público de la cantera: ingiere cualquier SKILL.md externo (skills.sh, npx skills, un .md pegado) a la cantera vía cosecha.importar. El núcleo (ingerir) es determinista y testeable; la adquisición por `npx skills` degrada limpio si el CLI no está.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "publishes": [
+    { "event": "feeder.ingerir.response",  "description": "Resultado de ingerir un SKILL.md crudo: { fuente, ingerida:<nombre>, dominio, total }." },
+    { "event": "feeder.instalar.response", "description": "Resultado de `npx skills add`: { paquete, fuente, ingeridas:[nombres], fallidas:[{md,motivo}] } o 503 degradado si npx no está." },
+    { "event": "feeder.buscar.response",   "description": "Salida cruda de `npx skills find <query>` (best-effort) o 503 degradado." },
+    { "event": "cosecha.importar.request", "description": "RPC SALIENTE: el feeder mete la skill parseada en la cantera. La response la consume el _rpc interno." }
+  ],
+  "subscribes": [
+    { "event": "feeder.ingerir.request",  "handler": "onIngerirRequest",  "description": "Reflejo (DETERMINISTA): parsea un SKILL.md crudo {fuente, md, nombre?} y lo mete en la cantera (cosecha.importar). La puerta universal para cualquier SKILL.md externo." },
+    { "event": "feeder.instalar.request", "handler": "onInstalarRequest", "description": "Reflejo (degradeable): `npx skills add <paquete>` → lee el/los SKILL.md instalados → ingiere cada uno. 503 limpio si npx skills no está." },
+    { "event": "feeder.buscar.request",   "handler": "onBuscarRequest",   "description": "Reflejo (degradeable): `npx skills find <query>` → salida cruda para descubrir en el ecosistema público. 503 limpio si npx no está." }
+  ],
+  "dependencies": ["cosecha"],
+  "config": {
+    "persistence": {
+      "scope": "module",
+      "pattern": "stateless-feeder",
+      "_nota": "Sin store: adquiere del ecosistema público y delega en cosecha.importar. No posee datos propios."
+    }
+  }
+}

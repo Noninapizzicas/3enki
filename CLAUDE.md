@@ -14728,8 +14728,8 @@ COSECHA v2: VoltAgent/08-business-product (assumption-mapping·product-manager·
 > (lentes-diseno) sostiene las lentes ACTIVAS (inyectadas por turno). La CANTERA (cosecha) sostiene
 > TODA la abundancia — skills de cualquier fuente (destilador, ECC/VoltAgent, un .md suelto) —
 > buscable pero NO inyectada. La cúpula queda VIVA porque la cantera absorbe lo demás. **Sumar, no
-> restar:** la abundancia bien alojada no es ruido, es MUNICIÓN (el conserje ofrece; find-skills
-> ensambla). Módulos: `modules/cosecha/` (0.6.0) · `modules/find-skills/` (0.1.0) · cuenco 2.3.0.
+> restar:** la abundancia bien alojada no es ruido, es MUNICIÓN (el conserje ofrece; planificador
+> ensambla). Módulos: `modules/cosecha/` (0.6.0) · `modules/planificador/` (0.1.0) · cuenco 2.3.0.
 
 ## El órgano cosecha/CANTERA (reflejo puro)
 
@@ -14788,11 +14788,16 @@ Demand-driven (sin skill pertinente, no spamea) · cooldown · prioridad menor q
 El nervio (ai-gateway) surfacea el empujón en el chat una vez, natural.
 ```
 
-## find-skills — el planificador GOAL-DRIVEN (gemelo del conserje-cantera)
+## planificador — el ensamblador de proyecto GOAL-DRIVEN (gemelo del conserje-cantera)
 
-> El conserje ofrece 1 skill por lo que TOCASTE (reactivo). find-skills ensambla el SET por lo que
+> NOMBRE: se llamó `find-skills` un rato; renombrado a `planificador` para no chocar con el
+> `find-skills` PÚBLICO de Vercel (github.com/vercel-labs/skills), que es OTRA cosa —un descubridor+
+> instalador del ecosistema público. El nuestro ensambla proyectos sobre la cantera INTERNA. Capas
+> distintas; el de Vercel entra como FUENTE por el feeder (abajo), no como copia.
+>
+> El conserje ofrece 1 skill por lo que TOCASTE (reactivo). planificador ensambla el SET por lo que
 > QUIERES (proactivo). Declaras un proyecto → descompone → busca en la cantera → propone/ensambla el set.
-> blueprint-agentico. Cero infra nueva: reutiliza cosecha.buscar/listar/promover. `modules/find-skills/`.
+> blueprint-agentico. Cero infra nueva: reutiliza cosecha.buscar/listar/promover. `modules/planificador/`.
 
 ```
 ESPINAZO (6 fases)  CONTRATO → PENSAR·1 descomponer → LEER cosecha.buscar → PENSAR·2 elegir/HUECO
@@ -14800,37 +14805,59 @@ ESPINAZO (6 fases)  CONTRATO → PENSAR·1 descomponer → LEER cosecha.buscar �
 REPARTO   LLM (blueprint): descomponer·elegir·criticar   ·   REFLEJO (index): _validar·_ensamblar
 
 FRENO HÍBRIDO de completitud (el corazón — cada mitad su naturaleza):
-  REFLEJO (find_skills.validar) — la LEY computable:
+  REFLEJO (planificador.validar) — la LEY computable:
     no_silent_drops (ninguna capacidad se cae callada) · no_alucinadas (la skill EXISTE, contra
     cosecha.listar) · cobertura = |capacidades con skill| / |capacidades|
   LLM (criticar) — lo IRREDUCIBLE: "¿qué capacidad NECESARIA no está nombrada?"
   → el reflejo no juzga si la descomposición fue completa (fuzzy); el LLM no es de fiar para "existe"
     (determinista). MANDATO P0: el plan nace FÉRTIL — nombra los HUECOS, no los esconde. Un hueco es
-    QUÉ COSECHAR después → find-skills hace crecer la cantera con propósito (cierra el lazo).
+    QUÉ COSECHAR después → planificador hace crecer la cantera con propósito (cierra el lazo).
 GRADUALIDAD  modo proponer por defecto (no promueve) → ensamblar cuando se confíe (como el Portal read→write).
+```
+
+## feeder — el alimentador público (skills.sh → cantera)
+
+> El destilador SELLA patrones internos → cantera; el feeder TRAE del ecosistema PÚBLICO
+> (skills.sh / `npx skills`, vercel-labs/agent-skills, anthropics/skills) → cantera. Reflejo puro.
+> `modules/feeder/`. Adopta el `find-skills` de Vercel como FUENTE, no como copia — los dos
+> "find-skills" son un PIPELINE, no rivales. Ver propuestas/feeder-ecosistema.md.
+
+```
+PIPELINE  skills.sh → npx skills add → SKILL.md → feeder INGIERE → cosecha.importar → cantera
+          → conserje ofrece → promover → lente viva → planificador ensambla proyectos
+PUERTAS   feeder.ingerir {fuente, md, nombre?}  NÚCLEO DETERMINISTA — cualquier SKILL.md crudo →
+                                                cosecha.importar (parsea frontmatter+hogar). Testeable.
+          feeder.instalar {paquete, fuente?}    npx skills add → lee SKILL.md → ingiere. Degradeable.
+          feeder.buscar   {query}               npx skills find → salida cruda. Degradeable.
+MANDATO fail-honest  el CLI externo ausente/red caída → 503 UPSTREAM_UNREACHABLE {degradado:true},
+                     NUNCA falso éxito. El núcleo (ingerir) testeable; los wrappers npx en vivo.
 ```
 
 ## El lazo entero + topics
 
 ```
-aprende (destilador) → aloja (cantera) → OFRECE ACTIVAR (conserje-cantera) → lente viva (cuenco)
-                                       ↘ ENSAMBLA por proyecto (find-skills) ↗
+                          ┌─ destilador (patrones internos, SELLA) ─┐
+aprende ──────────────────┤                                         ├──→ aloja (cantera)
+                          └─ feeder (ecosistema público, TRAE) ─────┘
+  → OFRECE ACTIVAR (conserje-cantera) → lente viva (cuenco)
+  ↘ ENSAMBLA por proyecto (planificador) ↗
 EVENTOS {
   cosecha.{buscar,obtener,listar,stats,importar,promover,olvidar}.request → .response
   aprendizaje.skill.creada                     (destilador → cantera absorbe; lleva contenido_md)
+  feeder.{ingerir,instalar,buscar}.request → .response   (ecosistema público → cantera; degradeable)
   lentes.{montar,desmontar}.request → .response  (cuenco crecible + reversible)
   conserje.empujon {tipo:'skill', accion_sugerida:'cosecha.promover|obtener:<n>'}
-  find_skills.{validar,ensamblar}.request → .response · find_skills.plan.listo  (huecos = demanda)
+  planificador.{validar,ensamblar}.request → .response · planificador.plan.listo  (huecos = demanda)
 }
 INSTANCIAS  semilla: deep-research·agentic-engineering (ECC) · verificar-en-vivo (enki) ·
             vercel-carta-craft (Vercel Web Interface Guidelines destiladas al oficio de CARTA,
             hogar diseño/tema — VERIFICADA en vivo: promovida, la lente entró en un turno real de
             carta-digital y moldeó el diseño con tabular-nums/APCA/nbsp; round-trip reversible sin residuo).
 TESTS  cosecha__index · cosecha__promover · cosecha__destilador-bridge · conserje__cantera ·
-       lentes-diseno__montar · find-skills__index. Gate híbridos 11/0.
+       lentes-diseno__montar · planificador__index · feeder__index. Gate híbridos 11/0.
 ```
 
-> **Trade-off vivo.** find-skills sobre ~4 skills hoy es un juguete; el mecanismo se construye ahora y
+> **Trade-off vivo.** planificador sobre ~4 skills hoy es un juguete; el mecanismo se construye ahora y
 > PAGA a medida que la cantera crece. La semántica del catálogo es determinista (cero embeddings); la
 > descomposición LLM tapa ese hueco por ahora — el upgrade HNSW queda para cuando el catálogo lo pida.
 

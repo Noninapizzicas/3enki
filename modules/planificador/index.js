@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * find-skills — REFLEJO JS (mitad determinista del planificador de proyecto).
+ * planificador — REFLEJO JS (mitad determinista del planificador de proyecto).
  *
  * Gemelo goal-driven del conserje-cantera: el conserje ofrece 1 skill por lo que
- * TOCASTE (reactivo); find-skills ensambla el SET por lo que QUIERES (proactivo).
+ * TOCASTE (reactivo); planificador ensambla el SET por lo que QUIERES (proactivo).
  * Declaras un proyecto → el blueprint (LLM) lo DESCOMPONE en capacidades, busca en la
  * cantera (cosecha.buscar) y elige; este reflejo pone las dos mitades deterministas:
  *
@@ -19,20 +19,20 @@
  *
  * INVARIANTE (P0): el plan nace FÉRTIL — nombra los huecos, no los esconde. Un hueco es
  * el siguiente paso (qué cosechar), jamás una mentira de cobertura.
- * Ver arquitectura/decisiones/propuestas/find-skills.md.
+ * Ver arquitectura/decisiones/propuestas/planificador.md.
  */
 
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
-class FindSkillsReflejo extends ModuloHibridoReflejo {
+class PlanificadorReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
-    this.name = 'find-skills';
+    this.name = 'planificador';
     this.version = '0.1.0';
   }
 
-  onValidarRequest(e)   { return this._atender(e, 'validar',   'find_skills.validar.response',   d => this._validar(d)); }
-  onEnsamblarRequest(e) { return this._atender(e, 'ensamblar', 'find_skills.ensamblar.response', d => this._ensamblar(d)); }
+  onValidarRequest(e)   { return this._atender(e, 'validar',   'planificador.validar.response',   d => this._validar(d)); }
+  onEnsamblarRequest(e) { return this._atender(e, 'ensamblar', 'planificador.ensamblar.response', d => this._ensamblar(d)); }
 
   // ── VALIDAR: el freno computable de completitud. No juzga si el proyecto está bien
   // descompuesto (eso es fuzzy, lo hace el crítico LLM); juzga la INTEGRIDAD del set:
@@ -91,4 +91,4 @@ class FindSkillsReflejo extends ModuloHibridoReflejo {
   }
 }
 
-module.exports = FindSkillsReflejo;
+module.exports = PlanificadorReflejo;

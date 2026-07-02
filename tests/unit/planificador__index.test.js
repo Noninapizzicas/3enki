@@ -1,22 +1,22 @@
 'use strict';
 
 /**
- * find-skills__index — el reflejo del planificador (las dos mitades deterministas).
+ * planificador__index — el reflejo del planificador (las dos mitades deterministas).
  *
  * _validar = el FRENO computable de completitud: no_silent_drops · no_alucinadas ·
  * cobertura. Los huecos NO invalidan (son honestos). _ensamblar = promover el set.
  *
- * Ejecutar: node tests/unit/find-skills__index.test.js
+ * Ejecutar: node tests/unit/planificador__index.test.js
  */
 
 const assert = require('assert');
-const FindSkills = require('../../modules/find-skills/index.js');
+const Planificador = require('../../modules/planificador/index.js');
 
 const LOG = { debug(){}, info(){}, warn(){}, error(){} };
 
 // catálogo simulado que devuelve _rpc('cosecha.listar.request')
 function make(catalogo = ['deep-research', 'vercel-carta-craft', 'agentic-engineering']) {
-  const m = new FindSkills();
+  const m = new Planificador();
   m.logger = LOG; m.metrics = { increment(){} };
   m._promovidas = [];
   m._rpc = async (ev, payload) => {
@@ -121,8 +121,8 @@ test('ensamblar: sin skills → 400', async () => {
     try { await fn(); passed++; }
     catch (err) { fails.push({ name, err }); }
   }
-  if (fails.length === 0) { console.log(`\n[find-skills__index] OK ${passed}/${tests.length}`); process.exit(0); }
-  console.error(`\n[find-skills__index] FAIL ${fails.length}/${tests.length}`);
+  if (fails.length === 0) { console.log(`\n[planificador__index] OK ${passed}/${tests.length}`); process.exit(0); }
+  console.error(`\n[planificador__index] FAIL ${fails.length}/${tests.length}`);
   for (const { name, err } of fails) console.error(`  x ${name}\n    ${err.message}`);
   process.exit(1);
 })();

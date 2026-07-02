@@ -73,11 +73,27 @@ const MAPA_CAP_LENTE = {
   viabilidad: { dominio: 'negocio', tarea: 'viabilidad' }
 };
 
+// La capacidad interna es en ESPAÑOL ('diseno', 'marca', 'escandallo'); skills.sh es un
+// catálogo PÚBLICO en inglés. Buscar fuera con el nombre interno devuelve 0 o basura
+// (verificado en vivo: 'diseno'→0, 'marca'→basura), así que la BÚSQUEDA DE FUERA se
+// traduce a la query que de verdad rinde. Calibrado contra skills.sh, no adivinado:
+//   frontend design → 614K · copywriting → 140K · pricing → 61K.
+// La búsqueda DENTRO (la cantera propia) sigue con el cap español — así está indexada.
+// Un cap sin entrada aquí busca fuera con su propio nombre (probable 0 → silencio honesto).
+const MAPA_CAP_CONSULTA = {
+  carta:      'frontend design',
+  diseno:     'frontend design',
+  digital:    'frontend design',
+  marca:      'copywriting',
+  escandallo: 'pricing',
+  viabilidad: 'pricing'
+};
+
 class ConserjeModule extends BaseModule {
   constructor() {
     super();
     this.name = 'conserje';
-    this.version = '0.6.0';
+    this.version = '0.6.1';
     this.config = null;
     this.libro = new LibroDeCapacidades(PIZZEPOS_CAPACIDADES);
     this.activo = false;                 // OFF por defecto (lo gobierna el interruptor 'conserje')
@@ -293,8 +309,10 @@ class ConserjeModule extends BaseModule {
       if (dentro && dentro.data && Array.isArray(dentro.data.skills) && dentro.data.skills.length > 0) continue;
 
       // 2) FUERA: descubre en el ecosistema público (degrada limpio si npx no está).
+      // El cap interno (español) no casa con el catálogo público (inglés) → se traduce.
+      const consulta = MAPA_CAP_CONSULTA[cap] || cap;
       let fuera = null;
-      try { fuera = await this._rpc('feeder.buscar.request', { query: cap }, { timeout_ms: 20000 }); }
+      try { fuera = await this._rpc('feeder.buscar.request', { query: consulta }, { timeout_ms: 20000 }); }
       catch (_) { this.metrics?.increment('conserje.errors.total', { kind: 'rpc_feeder' }); continue; }
       const salida = fuera && fuera.data && fuera.data.salida;
       if (!salida) continue;                                   // degradado / sin salida → silencio honesto

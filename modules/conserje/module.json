@@ -1,8 +1,7 @@
 {
   "name": "conserje",
-  "version": "0.6.1",
-  "_v0_6_1_nota": "v0.6.1 (fix, verificado en vivo contra Pacoo): la búsqueda de FUERA usaba el nombre de capacidad INTERNO en español ('diseno','marca','escandallo') como query de skills.sh — catálogo público en INGLÉS. Resultado: 0 o basura para toda capacidad real (incluso 'diseno'→0); el flujo proactivo era un no-op silencioso, solo 'funcionaba' con 'design' tecleado a mano. Añadido MAPA_CAP_CONSULTA (cap→query pública CALIBRADA en vivo, no adivinada): frontend design→614K · copywriting→140K · pricing→61K. _tickFuera traduce la query de fuera; la de dentro (cantera propia) sigue con el cap español (así está indexada). Un cap sin entrada busca con su nombre (probable 0 → silencio honesto). Test: conserje__fuera (+traducción de query).",
-  "_v0_6_nota": "v0.6.0: CUARTA FACULTAD — FUERA (trae y activa auto). Cuando la cantera propia no cubre lo que el comerciante hace, sale al ecosistema público (feeder.buscar → skills.sh). Si una skill DOMINA (instalaciones ≥ suelo Y ≥ dominancia× sobre la 2ª), la TRAE (feeder.instalar) y la ACTIVA sola (cosecha.promover al dominio/tarea que la página bebe, vía MAPA_CAP_LENTE con rutas reales de los packs → sin colgantes), avisando DESPUÉS con acción de deshacer (cosecha.olvidar). Si no domina, solo OFRECE traerla (feeder.traer_skill). Cada paso degrada a ofrecer si no puede completarse solo (P0, no_silent). Nuevo interruptor 'conserje-fuera' (OFF por defecto, más agresivo: baja código del ecosistema). Última prioridad del tick: solo actúa si dentro no había nada. Test: conserje__fuera.",
+  "version": "0.7.0",
+  "_v0_7_nota": "v0.7.0 (SIMPLIFICACIÓN): retirada la 4ª facultad (conserje-fuera, buscar FUERA y trae+activa auto) y su MAPA_CAP_CONSULTA. La búsqueda proactiva hacia fuera exigía adivinar la query pública desde el nombre de capacidad interno → un mapa cap→query calibrado a mano contra un catálogo que se mueve (frágil; verificado en vivo que fallaba: 'diseno'→0). El valor de find-skills es que quien tiene la INTENCIÓN la escribe; por eso FUERA se queda como PULL: las tools de chat buscar_fuera/traer_skill (feeder) pasan las palabras REALES del LLM —que ya conoce la tarea del turno vía el nervio— a skills.sh, sin traducción y con mejores resultados. El proactivo que queda (conserje-cantera) ofrece de la cantera PROPIA (indexada en español, sin red por tick). Menos pegamento, mejor resultado. Se van: interruptor 'conserje-fuera', config fuera_*, deps cosecha/feeder de este camino, y el test conserje__fuera.",
   "_v0_5_nota": "v0.5.0: la cantera ahora ofrece ACTIVAR, no solo leer. Si la skill pertinente declara HOGAR (lente_dominio), el empujón sugiere `cosecha.promover:<nombre>` (montarla como lente que el LLM encarna en esa página) en vez de `cosecha.obtener:<nombre>` (solo leerla). promover resuelve dominio/tarea desde la propia skill, así el conserje ofrece a secas. Cierra el arco: abundancia (cantera) → oferta de activación (conserje) → lente viva (cuenco), sin adivinar el destino. Test: conserje__cantera (+promover).",
   "_v0_4_nota": "v0.4.0: TERCERA FACULTAD — CANTERA. Tras un paso, mina la cosecha (cosecha.buscar por la última capacidad tocada) y ofrece en positivo la skill pertinente ('hay una skill de X en la cantera, ¿la montamos?'). Convierte la abundancia guardada en munición de empujones (la cara aditiva de la Teoría del Órgano: tener skills = poder ofrecer el siguiente paso). Demand-driven: si la cantera no tiene skill pertinente, NO ofrece (no spamea). Nuevo interruptor 'conserje-cantera' (grupo aprendizaje, OFF por defecto, independiente de los otros dos). Prioridad menor que brecha/rutas (no pisa empujón pendiente). empujon tipo='skill' con accion_sugerida 'cosecha.obtener:<nombre>'. Test: conserje__cantera.",
   "_v0_3_nota": "v0.3.0: cierra el nag perpetuo de diseno/digital. Su estado `usada` no se observaba (el mapa de señales solo cubría marca/recetas/carta/escandallo), así que una vez desbloqueados se ofrecían cada cooldown para siempre, ya construidos. Añadidas dos SEÑAL_EVENTO autocontenidas: carta.html.generada -> diseno usada; cartadigital.publicado -> digital usada. Sin tocar otros módulos ni el wiring (oído por el bus crudo). Test: conserje__senales-usada (5/5).",
@@ -26,18 +25,6 @@
     {
       "event": "destilador.ruta.request",
       "description": "REPLAY: pregunta al destilador, desde la ultima capacidad tocada, que ruta aprendida suele seguir (RPC; la response la consume el _rpc interno). Solo si el interruptor 'conserje-rutas' esta ON."
-    },
-    {
-      "event": "feeder.buscar.request",
-      "description": "FUERA: cuando la cantera propia no cubre la tarea, descubre en el ecosistema público (skills.sh) por la última capacidad tocada (RPC; la response la consume el _rpc interno). Solo si el interruptor 'conserje-fuera' está ON."
-    },
-    {
-      "event": "feeder.instalar.request",
-      "description": "FUERA: trae la skill dominante del ecosistema a la cantera (RPC; la response la consume el _rpc interno). Solo en el camino auto de 'conserje-fuera'."
-    },
-    {
-      "event": "cosecha.promover.request",
-      "description": "FUERA: activa la skill traída como lente del dominio/tarea que la página bebe (RPC; la response la consume el _rpc interno). Solo en el camino auto de 'conserje-fuera'."
     }
   ],
 
@@ -106,16 +93,13 @@
     }
   ],
 
-  "dependencies": ["interruptores", "cosecha", "feeder"],
+  "dependencies": ["interruptores"],
 
   "config": {
     "enabled": true,
     "enabled_default": false,
     "rutas_enabled_default": false,
     "cantera_enabled_default": false,
-    "fuera_enabled_default": false,
-    "fuera_installs_min": 50000,
-    "fuera_dominancia_x": 1.5,
     "umbral_ruta": 3,
     "tick_ms": 15000,
     "cooldown_h": 24

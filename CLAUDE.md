@@ -14788,29 +14788,26 @@ Demand-driven (sin skill pertinente, no spamea) · cooldown · prioridad menor q
 El nervio (ai-gateway) surfacea el empujón en el chat una vez, natural.
 ```
 
-## conserje-fuera — la 4ª facultad (busca FUERA, TRAE y ACTIVA auto)
+## FUERA = PULL (por qué NO hay 4ª facultad proactiva) — simplificación v0.7.0
 
-> conserje-cantera ofrece lo que YA tienes dentro. conserje-fuera cierra la brecha: cuando la
-> cantera propia no cubre lo que el comerciante hace, el sistema SALE AL MUNDO por él —
-> descubre en skills.sh, y si una skill domina, la trae y la activa sola. "Que te las busque
-> para la tarea que tienes entre manos", sin que la pidas. La cara más agresiva de *sumar*.
+> Hubo una 4ª facultad (conserje-fuera: buscar FUERA y trae+activa auto). Se RETIRÓ. La
+> lección, verificada en vivo: buscar proactivamente fuera obliga a ADIVINAR la query pública
+> desde el nombre de capacidad interno — un mapa cap→query calibrado a mano contra un catálogo
+> que se mueve. Frágil por construcción (probado: `diseno`→0, `marca`→basura; solo "funcionaba"
+> con `design` tecleado a mano). El valor de find-skills es que quien tiene la INTENCIÓN la escribe.
 
 ```
-INTERRUPTOR 'conserje-fuera' (grupo aprendizaje, OFF por defecto — baja código del ecosistema, el más agresivo)
-CADENA (última prioridad del tick; solo actúa si dentro no había nada):
-  1. DENTRO   cosecha.buscar(cap) — si la cantera cubre la tarea → NO sale fuera
-  2. FUERA    feeder.buscar(cap) → skills.sh → _parseSkillsSh (strip ANSI, id@skill + installs, ordena)
-  3. ¿DOMINA? top.installs ≥ fuera_installs_min (50K) Y ≥ fuera_dominancia_x (1.5×) sobre la 2ª
-       SÍ → AUTO:  feeder.instalar(top) → cosecha.promover(nombre, HOGAR) → empujón 'traido_activado'
-                    (avisa DESPUÉS, accion_sugerida `cosecha.olvidar:<n>` = deshacer)
-       NO → OFRECE: empujón 'descubrimiento_externo' (accion `feeder.traer_skill:<id>`)
-HOGAR (MAPA_CAP_LENTE, RUTAS REALES de los packs → sin colgantes):
-  carta/diseno/digital→{diseño,tema} · marca→{copy,copy} · escandallo→{negocio,coste} · viabilidad→{negocio,viabilidad}
-  capacidad sin hogar (p.ej. recetas) → TRAE pero solo OFRECE activar (no hay dónde montarla sola)
-GUARDAS  interruptor propio OFF · cooldown largo (npx cuesta) · umbral+dominancia · SIEMPRE reversible
-         (activación crecida → cosecha.olvidar / lentes.desmontar) · TESTIGO (avisa después) ·
-         cada paso DEGRADA a ofrecer si no puede completarse solo (P0, no_silent — nunca miente que activó)
-Test: conserje__fuera (parse · domina→trae+activa · sin hogar→ofrece · no-domina→ofrece · degrada · OFF · prioridad).
+REGLA  la intención la pone quien la tiene. Fuera se queda como PULL, no PUSH.
+  FUERA (pull)      tools de chat buscar_fuera/traer_skill (feeder) — el LLM, que YA conoce la
+                   tarea del turno (nervio: vista_frontend + lente_default), llama con palabras
+                   REALES ("menu design" → 614K), sin traducción y con mejores resultados.
+  PROACTIVO (push) solo DENTRO: conserje-cantera ofrece de la cantera PROPIA (indexada en
+                   español, sin adivinar, sin red por tick). Robusto y barato.
+GANANCIA  2 capas con propósito nítido (exponer find-skills en el chat · skill→lente viva) en
+          vez de 3 con una de pegamento. Menos que mantener, sin autonomía de bajar código a
+          ciegas, y mejor resultado (pull casa con el catálogo; push adivinaba mal).
+  la "búsqueda para la tarea entre manos" NO se pierde: la hace el LLM (que entiende la tarea)
+  llamando buscar_fuera cuando toca, no un reflejo con un mapa fijo.
 ```
 
 ## planificador — el ensamblador de proyecto GOAL-DRIVEN (gemelo del conserje-cantera)
@@ -14870,7 +14867,8 @@ MANDATO fail-honest  el CLI externo ausente/red caída → 503 UPSTREAM_UNREACHA
 > vía `npx skills find`) + `traer_skill {paquete}` (`npx skills add owner/repo@skill` → cantera,
 > con confirmación). Así el pipeline entero se opera desde el chat: "busca fuera una skill de X"
 > → ver los installs → "tráete la de Y" → queda en la cantera → "actívala". buscar_skill mira
-> DENTRO; buscar_fuera mira FUERA. (El conserje-fuera hace este mismo camino solo, proactivo.)
+> DENTRO; buscar_fuera mira FUERA. (Fuera es PULL a propósito — ver "FUERA = PULL": la búsqueda
+> externa la dispara el LLM con palabras reales cuando conoce la tarea, no un reflejo que adivina.)
 
 ## El lazo entero + topics
 

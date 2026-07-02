@@ -1,14 +1,14 @@
-# find-skills — el planificador goal-driven de proyecto
+# planificador — el planificador goal-driven de proyecto
 
 > Declaras un proyecto ("quiero construir una tienda con reservas y pago") y el
 > planificador lo DESCOMPONE en capacidades, encuentra la skill de cada una en la
 > cantera (cosecha), y te propone (o ensambla) el SET — con un freno de completitud
 > que garantiza COBERTURA (no skills sueltas) y nombra los huecos honestamente.
-> Módulo: `modules/find-skills/` (reflejo + blueprint). Nace 2026-07-01.
+> Módulo: `modules/planificador/` (reflejo + blueprint). Nace 2026-07-01.
 
 ## Tesis y gemelo
 
-El conserje-cantera ofrece **1 skill por lo que TOCASTE** (reactivo). find-skills
+El conserje-cantera ofrece **1 skill por lo que TOCASTE** (reactivo). planificador
 ensambla **el SET por lo que QUIERES** (proactivo). Misma familia — cruzar
 *deseo × catálogo* — otro disparador. Cierra el hueco del conserje reactivo: arrancar
 "un proyecto nuevo desde cero".
@@ -26,9 +26,9 @@ LEER      por capacidad: cosecha.buscar(cap) → candidatos (REFLEJO, catálogo 
 PENSAR·2  elegir(cap, candidatos) → skill | HUECO         (LLM: la mejor por fit, o null)
 PENSAR·3  criticar(proyecto, plan) → capacidades que faltan  (LLM: ¿qué NECESARIO no nombré?)
           loop-until-dry (máx 2 rondas)
-VALIDAR   find_skills.validar → freno computable          (REFLEJO)
-GUARDAR   modo ensamblar: find_skills.ensamblar → promover ×N (REFLEJO) · proponer: nada
-EMITIR    find_skills.plan.listo { proyecto, cobertura, huecos, promovidas }
+VALIDAR   planificador.validar → freno computable          (REFLEJO)
+GUARDAR   modo ensamblar: planificador.ensamblar → promover ×N (REFLEJO) · proponer: nada
+EMITIR    planificador.plan.listo { proyecto, cobertura, huecos, promovidas }
 ```
 
 ## El corazón — freno HÍBRIDO de completitud
@@ -36,7 +36,7 @@ EMITIR    find_skills.plan.listo { proyecto, cobertura, huecos, promovidas }
 "Cubrir un proyecto" es mitad computable, mitad irreducible. Cada mitad, su guardián:
 
 ```
-REFLEJO (find_skills.validar) — la LEY computable:
+REFLEJO (planificador.validar) — la LEY computable:
   no_silent_drops : cada capacidad tiene entrada (skill o hueco); ninguna se cae callada
   no_alucinadas   : cada skill elegida EXISTE en el catálogo (contra cosecha.listar)
   cobertura       : |capacidades con skill válido| / |capacidades|
@@ -67,7 +67,7 @@ delega a cosecha  buscar (LEER) · listar (validar) · promover (ensamblar)
 - **Escala:** con ~4 skills hoy es un juguete; el mecanismo se construye ahora y paga a
   medida que la cantera crece (destilador + imports). Infra anticipada.
 - **Los huecos son demanda:** cada capacidad sin skill = señal de qué cosechar después.
-  find-skills no solo consume el catálogo — lo hace crecer con propósito, cerrando el
+  planificador no solo consume el catálogo — lo hace crecer con propósito, cerrando el
   lazo con el destilador/import.
 - **Semántica:** la descomposición LLM tapa el "cero embeddings" del catálogo; el upgrade
   HNSW queda para cuando el catálogo lo pida, no bloquea el arranque.
@@ -75,18 +75,18 @@ delega a cosecha  buscar (LEER) · listar (validar) · promover (ensamblar)
 ## Topics / eventos
 
 ```
-find_skills.planificar (cajón del blueprint, page=find-skills)
+planificador.planificar (cajón del blueprint, page=planificador)
 cosecha.buscar.request → .response          (LEER)
-find_skills.validar.request → .response     (FRENO computable — reflejo)
-find_skills.ensamblar.request → .response   (GUARDAR — promover ×N — reflejo)
-find_skills.plan.listo                      (EMITIR — huecos = demanda para cosechar)
+planificador.validar.request → .response     (FRENO computable — reflejo)
+planificador.ensamblar.request → .response   (GUARDAR — promover ×N — reflejo)
+planificador.plan.listo                      (EMITIR — huecos = demanda para cosechar)
 ```
 
 ## Estado
 
 ```
-✓ reflejo (index.js 0.1.0): _validar + _ensamblar · test find-skills__index 8/8
-✓ blueprint (find-skills.blueprint.json 0.1.0): op planificar (descomponer/elegir/criticar)
+✓ reflejo (index.js 0.1.0): _validar + _ensamblar · test planificador__index 8/8
+✓ blueprint (planificador.blueprint.json 0.1.0): op planificar (descomponer/elegir/criticar)
 ✓ manifest híbrido (blueprint_driven + index.js) · gate híbridos OK (sin colisión)
 ◑ EN VIVO: el PENSAR fuzzy (descomponer/elegir/criticar) se verifica corriendo el Enki
 [ ] modo ensamblar auto · página/UI de invocación · consumir huecos → señal al destilador

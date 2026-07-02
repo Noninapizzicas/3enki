@@ -1,16 +1,16 @@
 {
-  "id": "find-skills",
+  "id": "planificador",
   "version": "blueprint-0.1.0",
-  "_v0_1_0_nota": "v0.1.0 (2026-07-01): la mitad FUZZY del planificador de proyecto. El LLM de la página recibe un PROYECTO ('quiero construir una tienda con reservas y pago'), lo DESCOMPONE en capacidades, busca la skill de cada una en la cantera (cosecha.buscar), ELIGE la mejor o marca HUECO, y pasa un CRÍTICO de completitud ('¿qué le falta a este plan para construir el proyecto?'). Luego DELEGA al reflejo (find_skills.validar = freno computable; find_skills.ensamblar = promover el set). El LLM piensa donde de verdad hay que pensar (descomponer un deseo informe en capacidades, elegir por fit, ver lo que falta); lo determinista (¿la skill existe?, promover) lo hace el reflejo. Gemelo goal-driven del conserje-cantera. Ver arquitectura/decisiones/propuestas/find-skills.md.",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-01): la mitad FUZZY del planificador de proyecto. El LLM de la página recibe un PROYECTO ('quiero construir una tienda con reservas y pago'), lo DESCOMPONE en capacidades, busca la skill de cada una en la cantera (cosecha.buscar), ELIGE la mejor o marca HUECO, y pasa un CRÍTICO de completitud ('¿qué le falta a este plan para construir el proyecto?'). Luego DELEGA al reflejo (planificador.validar = freno computable; planificador.ensamblar = promover el set). El LLM piensa donde de verdad hay que pensar (descomponer un deseo informe en capacidades, elegir por fit, ver lo que falta); lo determinista (¿la skill existe?, promover) lo hace el reflejo. Gemelo goal-driven del conserje-cantera. Ver arquitectura/decisiones/propuestas/planificador.md.",
   "language": "es",
   "temperatura": 0.3,
 
   "modelo_oop": {
     "INTERFAZ": "PlanificadorDeProyecto { planificar(in: PlanInput): Plan }",
-    "CLASE FindSkillsFuzzy IMPLEMENTA PlanificadorDeProyecto": {
+    "CLASE PlanificadorFuzzy IMPLEMENTA PlanificadorDeProyecto": {
       "ATRIBUTOS": {
         "cantera": "Cosecha        // cosecha.buscar/listar — el catálogo de skills",
-        "reflejo": "Reflejo        // find-skills index.js — VALIDA (freno) y ENSAMBLA (promover)",
+        "reflejo": "Reflejo        // planificador index.js — VALIDA (freno) y ENSAMBLA (promover)",
         "bus": "EventBus           // Observer: plan.listo"
       },
       "METODOS": [
@@ -22,7 +22,7 @@
     },
     "MANDATOS (Specification — un Plan válido los satisface)": [
       "DESCOMPOSICION: nombra las capacidades REALES del proyecto (los oficios/piezas que necesita), no las palabras. 'Tienda con reservas' necesita catálogo + reservas + pago + escaparate + avisos, aunque el usuario solo diga dos.",
-      "FIDELIDAD_DEL_CATALOGO: solo eliges skills que la cantera DEVUELVE. No inventes nombres — el reflejo caza las alucinadas (find_skills.validar) y te las hace re-elegir.",
+      "FIDELIDAD_DEL_CATALOGO: solo eliges skills que la cantera DEVUELVE. No inventes nombres — el reflejo caza las alucinadas (planificador.validar) y te las hace re-elegir.",
       "HUECOS_HONESTOS: si una capacidad no tiene skill en el catálogo, márcala HUECO (skill:null). Un hueco es el siguiente paso (qué cosechar), NO una mentira de cobertura. Jamás rellenes un hueco con una skill que no encaja.",
       "COMPLETITUD: antes de cerrar, corre el CRÍTICO — ¿qué capacidad NECESARIA para construir el proyecto no nombraste? Solo tú lo sabes; el reflejo no puede juzgar la descomposición.",
       "DELEGADO: el reflejo VALIDA (freno) y, en modo ensamblar, PROMUEVE el set. Tú no promueves a mano ni cantas cobertura sin la respuesta del reflejo."
@@ -31,7 +31,7 @@
       "Completeness-critic": "criticar() en bucle (loop-until-dry, máx 2 rondas) — cierra el hueco de 'olvidé nombrar algo'.",
       "Freno hibrido": "lo computable (¿existe la skill?, cobertura) al reflejo; lo irreducible (¿está completo?) al PENSAR.",
       "Gradualidad": "modo proponer (default, no toca nada) → ensamblar (promueve), como el Portal read→write.",
-      "Delegation": "VALIDAR+GUARDAR delegados al reflejo (find_skills.validar/ensamblar)."
+      "Delegation": "VALIDAR+GUARDAR delegados al reflejo (planificador.validar/ensamblar)."
     }
   },
 
@@ -43,13 +43,13 @@
   },
 
   "transporte": {
-    "entrada": "cajon planificar (page=find-skills)",
+    "entrada": "cajon planificar (page=planificador)",
     "rpc": [
       "cosecha.buscar.request -> .response   (LEER — candidatos por capacidad, catálogo barato)",
-      "find_skills.validar.request -> .response   (FRENO computable — reflejo)",
-      "find_skills.ensamblar.request -> .response  (GUARDAR — promover el set, solo modo ensamblar)"
+      "planificador.validar.request -> .response   (FRENO computable — reflejo)",
+      "planificador.ensamblar.request -> .response  (GUARDAR — promover el set, solo modo ensamblar)"
     ],
-    "salida": ["find_skills.plan.listo"],
+    "salida": ["planificador.plan.listo"],
     "qos": "publishAndWait (request/response correlado) en cada búsqueda y en la delegación al reflejo"
   },
 
@@ -82,7 +82,7 @@
         "  si faltan.length y ronda < 2: capacidades += faltan ; REPITE desde el paso 3 SOLO con las nuevas",
         "",
         "  // 5. VALIDAR — el freno computable del reflejo (no_silent_drops · no_alucinadas · cobertura).",
-        "  v = publishAndWait('find_skills.validar.request', {proyecto: in.proyecto, capacidades, elegidas}, 8000)",
+        "  v = publishAndWait('planificador.validar.request', {proyecto: in.proyecto, capacidades, elegidas}, 8000)",
         "  si v?.data?.alucinadas?.length: re-elegir SOLO esas capacidades (inventaste un nombre; usa un candidato REAL o márcala hueco) ; repite VALIDAR ; máx 2",
         "  // los huecos NO son error: son honestos. cobertura < 1 está bien si nombras lo que falta.",
         "",
@@ -90,10 +90,10 @@
         "  promovidas = []",
         "  si modo == 'ensamblar':",
         "    conSkill = elegidas.filter(e => e.skill).map(e => ({nombre: e.skill}))",
-        "    e = publishAndWait('find_skills.ensamblar.request', {skills: conSkill}, 30000)   // promover ×N",
+        "    e = publishAndWait('planificador.ensamblar.request', {skills: conSkill}, 30000)   // promover ×N",
         "    promovidas = e?.data?.promovidas || []",
         "  huecos = v?.data?.huecos || elegidas.filter(e=>!e.skill).map(e=>e.capacidad)",
-        "  publish('find_skills.plan.listo', {proyecto: in.proyecto, cobertura: v?.data?.cobertura, huecos, promovidas, project_id: in.project_id})",
+        "  publish('planificador.plan.listo', {proyecto: in.proyecto, cobertura: v?.data?.cobertura, huecos, promovidas, project_id: in.project_id})",
         "  return {status:200, data:{capacidades, elegidas, huecos, cobertura: v?.data?.cobertura, plan: modo, promovidas}, message: _resumen(modo, elegidas, huecos, promovidas)}"
       ],
       "reglas_clave": [
@@ -108,10 +108,10 @@
   },
 
   "eventos_publicados": [
-    "find_skills.plan.listo",
+    "planificador.plan.listo",
     "cosecha.buscar.request",
-    "find_skills.validar.request",
-    "find_skills.ensamblar.request"
+    "planificador.validar.request",
+    "planificador.ensamblar.request"
   ],
 
   "eventos_que_escucho": [],

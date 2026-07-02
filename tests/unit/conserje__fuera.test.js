@@ -71,6 +71,33 @@ test('si la cantera propia cubre la tarea, NO busca fuera', async () => {
   assert.ok(!empujon(m), 'no ofrece');
 });
 
+// ── la búsqueda de FUERA traduce el cap interno (español) a query pública (inglés) ──
+test('_tickFuera: fuera busca con MAPA_CAP_CONSULTA, no con el cap crudo', async () => {
+  const m = make();
+  let queryFuera = null;
+  m._rpc = async (ev, payload) => {
+    if (ev === 'cosecha.buscar.request') return { data: { skills: [] } };        // dentro con el cap
+    if (ev === 'feeder.buscar.request') { queryFuera = payload.query; return { data: { salida: '' } }; }
+    return null;
+  };
+  estado(m, 'p1', 'diseno');
+  await m._tickFuera(['p1']);
+  assert.strictEqual(queryFuera, 'frontend design', 'fuera traduce diseno→"frontend design"');
+});
+
+test('_tickFuera: cap sin entrada en el mapa busca fuera con su propio nombre', async () => {
+  const m = make();
+  let queryFuera = null;
+  m._rpc = async (ev, payload) => {
+    if (ev === 'cosecha.buscar.request') return { data: { skills: [] } };
+    if (ev === 'feeder.buscar.request') { queryFuera = payload.query; return { data: { salida: '' } }; }
+    return null;
+  };
+  estado(m, 'p1', 'recetas');   // recetas no está en MAPA_CAP_CONSULTA
+  await m._tickFuera(['p1']);
+  assert.strictEqual(queryFuera, 'recetas', 'sin mapeo, usa el cap crudo (probable 0 → silencio)');
+});
+
 // ── DOMINA + hogar conocido -> TRAE y ACTIVA auto, avisa con deshacer ──
 test('skill dominante con hogar (diseno→diseño/tema): trae, activa, avisa (traido_activado)', async () => {
   const m = make();

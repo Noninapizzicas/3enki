@@ -14833,6 +14833,14 @@ MANDATO fail-honest  el CLI externo ausente/red caída → 503 UPSTREAM_UNREACHA
                      NUNCA falso éxito. El núcleo (ingerir) testeable; los wrappers npx en vivo.
 ```
 
+## La superficie — tools del chat (el grifo, v0.7.0)
+
+> Toda la cantera era fontanería de fondo (solo bus). Ahora cosecha registra 2 TOOLS que el
+> LLM de CUALQUIER conversación invoca — el grifo por el que el comerciante la TOCA:
+> `buscar_skill {query}` (busca en la cantera — realiza el "¿cómo hago X?" de find-skills
+> sobre el catálogo interno) y `activar_skill {nombre}` (promueve a lente viva, con confirmación).
+> "busca una skill para X" / "quiero construir X" → el asistente busca y activa, en el chat.
+
 ## El lazo entero + topics
 
 ```

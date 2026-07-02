@@ -127,6 +127,12 @@ class CosechaModule extends ModuloHibridoReflejo {
   async onPromoverRequest(event) { return this._atender(event, 'promover', 'cosecha.promover.response', (d) => this._promover(d)); }
   async onOlvidarRequest(event)  { return this._atender(event, 'olvidar',  'cosecha.olvidar.response',  (d) => this._olvidar(d)); }
 
+  // ── TOOLS del LLM de chat (LA SUPERFICIE): buscar y activar skills desde CUALQUIER
+  // conversación. El grifo por el que el comerciante toca la cantera — realiza el
+  // "¿cómo hago X?" de find-skills sobre nuestro catálogo interno. Devuelven {status,data}. ──
+  async handleBuscarTool(args)   { return this._buscar(args || {}); }
+  async handlePromoverTool(args) { return this._promover(args || {}); }
+
   // ── el NERVIO del destilador: cuando SELLA una skill en una cúpula (memoria por
   // proyecto), la cantera la ABSORBE a la biblioteca global. Fire-and-forget: el cuerpo
   // viaja en el evento (contenido_md), sin re-consultar cúpulas. Sumar, no restar. ──

@@ -1,7 +1,8 @@
 {
   "_doc": "Manifest de la COSECHA (cantera) — REFLEJO PURO. Hermano del cuenco (lentes-diseno) en la Teoría del Órgano, cara ADITIVA: el cuenco sostiene las lentes ACTIVAS (inyectadas por turno cuando una página las bebe); la cosecha sostiene TODA la abundancia (skills de cualquier fuente: importadas de ECC/VoltAgent o nacidas del destilador), buscable pero NO inyectada. La cúpula queda viva porque la cantera absorbe lo demás. Sumar, no restar: la abundancia bien alojada es MUNICIÓN del conserje (ofrecer en positivo), no ruido. Las skills viven en cantera/<fuente>/<skill>/SKILL.md (formato Agent Skills de Anthropic).",
   "name": "cosecha",
-  "version": "0.6.0",
+  "version": "0.7.0",
+  "_v0_7_nota": "v0.7.0: LA SUPERFICIE — tools del LLM de chat. Hasta ahora la cantera solo se alcanzaba por el bus (invisible desde la app). Ahora registra 2 tools que el LLM de CUALQUIER conversación puede invocar: buscar_skill (busca en la cantera por capacidad — realiza el '¿cómo hago X?' de find-skills sobre el catálogo interno) y activar_skill (promueve una skill a lente viva, con confirmación). Con esto el comerciante TOCA la cantera desde el chat: 'busca una skill para X' / 'quiero construir X' → el asistente busca y activa. El grifo que faltaba para SENTIR lo construido. Handlers handleBuscarTool/handlePromoverTool → _buscar/_promover.",
   "_v0_6_nota": "v0.6.0: REVERSIBILIDAD — cosecha.olvidar (par de importar). Borra una skill CRECIDA (data/) y re-indexa. La semilla (código) es intocable: no vive en data/, así que olvidarla → 409. Cierra el ciclo de vida de la cantera: importar ↔ olvidar (y su hermano en el cuenco: montar ↔ desmontar). La abundancia se vuelve reversible en caliente sin tocar el VPS a mano. Test: cosecha__index (+olvidar).",
   "_v0_5_nota": "v0.5.0: HOGAR declarado — una skill puede decir dónde vivir como lente (lente_dominio + lente_tarea en su frontmatter). _parse los lee, _serializar/_importar los persisten, _buscar los expone en el catálogo. cosecha.promover ahora DEFAULTEA dominio/tarea desde ese hogar: basta `cosecha.promover:<nombre>` y sabe dónde montar. Habilita la oferta proactiva del conserje (v0.5.0): si la skill declara hogar, ofrece PROMOVER (activar como lente) en vez de solo OBTENER (leer). Test: cosecha__promover (+hogar).",
   "_v0_4_nota": "v0.4.0: cosecha.promover — el puente cantera→cuenco (cierra el lazo). Toma una skill de la abundancia y la entrega al cuenco (lentes.montar.request) para que la MONTE como lente ACTIVA de un dominio; el nervio de ai-gateway la inyecta por turno en las páginas que beban ese dominio. NO toca ai-gateway: el nervio ya inyecta lo que el pack sirve. La guarda no-colgantes (dominio debe existir como pack, bebido por página) vive en el cuenco y se propaga. Lazo completo: aprende (destilador) → aloja (cantera) → ofrece (conserje) → activa por demanda (promover). Test: cosecha__promover.",
@@ -31,6 +32,42 @@
     { "event": "aprendizaje.skill.creada","handler": "onSkillDestilada","description": "NERVIO destilador→cantera (fire-and-forget): cuando el destilador sella una skill en una cúpula, la cantera la absorbe a la biblioteca global usando el cuerpo que viaja en el evento (contenido_md). Sin response, sin re-consultar cúpulas." },
     { "event": "cosecha.promover.request","handler": "onPromoverRequest","description": "PUENTE cantera→cuenco: promueve una skill de la cantera a lente ACTIVA. {nombre, dominio, tarea?, cuando_usar?} → lee la skill y llama a lentes.montar. Propaga la guarda no-colgantes del cuenco (409 si el dominio no existe)." },
     { "event": "cosecha.olvidar.request", "handler": "onOlvidarRequest", "description": "REVERSIBILIDAD (par de importar): olvida una skill CRECIDA. {nombre} → borra su dir en data/cosecha/cantera/ y re-indexa. La semilla no se olvida (409)." }
+  ],
+  "tools": [
+    {
+      "name": "buscar_skill",
+      "description": "Busca en la cantera (la biblioteca de skills del sistema) las skills que sirven para una tarea o capacidad. ÚSALA cuando el usuario pregunte '¿cómo hago X?', pida una skill para algo, o diga que quiere construir un proyecto — en ese caso descompón el proyecto en capacidades y busca CADA una. Devuelve un catálogo rankeado (nombre, descripción, y si la skill declara un hogar lente_dominio para poder activarse como lente).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "query": { "type": "string", "minLength": 1, "description": "La capacidad o tarea a buscar (p.ej. 'diseño de carta', 'investigación', 'testing e2e')." },
+          "dominio": { "type": "string", "description": "Opcional: ceñir a un dominio." },
+          "tarea": { "type": "string", "description": "Opcional: sesgar el ranking hacia una tarea." },
+          "limite": { "type": "number", "description": "Opcional: cuántas devolver (default 10)." }
+        },
+        "required": ["query"]
+      },
+      "handler": "handleBuscarTool",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "activar_skill",
+      "description": "Activa (promueve) una skill de la cantera como LENTE VIVA: el sistema la encarnará en las páginas de su dominio. ÚSALA cuando el usuario acepte activar una skill que buscar_skill encontró y que declara hogar (lente_dominio). Basta el nombre; el sistema resuelve dónde montarla. Es una acción que cambia el sistema — requiere confirmación.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nombre": { "type": "string", "minLength": 1, "description": "El nombre de la skill a activar (tal cual lo devolvió buscar_skill)." },
+          "dominio": { "type": "string", "description": "Opcional: forzar el dominio destino (si no, se toma del hogar de la skill)." },
+          "tarea": { "type": "string", "description": "Opcional: forzar la tarea/ruta destino." }
+        },
+        "required": ["nombre"]
+      },
+      "handler": "handlePromoverTool",
+      "confirmation": true,
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"]
+    }
   ],
   "config": {
     "persistence": {

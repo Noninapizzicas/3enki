@@ -13,6 +13,7 @@ const assert = require('assert');
 const {
   detectarDominio,
   esGen1,
+  parseWorkingDir,
   renderPlantilla,
   renderBloqueNamespace,
   renderCaddyfile,
@@ -61,6 +62,18 @@ test('Gen-1 si existe la unidad vieja', () => {
 });
 test('NO Gen-1 si no existe nada viejo (canónico)', () => {
   assert.strictEqual(esGen1({ existeDirGen1: false, existeUnitGen1: false }), false);
+});
+
+// ---- parseWorkingDir (encontrar la data vieja del install Gen-1) ----
+test('parseWorkingDir extrae el WorkingDirectory del unit', () => {
+  const unit = '[Service]\nUser=root\nWorkingDirectory=/root/2enki\nExecStart=/usr/bin/node index.js\n';
+  assert.strictEqual(parseWorkingDir(unit), '/root/2enki');
+});
+test('parseWorkingDir null si no hay WorkingDirectory', () => {
+  assert.strictEqual(parseWorkingDir('[Service]\nExecStart=x\n'), null);
+});
+test('parseWorkingDir null con entrada vacía', () => {
+  assert.strictEqual(parseWorkingDir(null), null);
 });
 
 // ---- renderPlantilla ----

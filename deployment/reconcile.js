@@ -71,6 +71,16 @@ function esGen1({ existeDirGen1, existeUnitGen1 }) {
   return Boolean(existeDirGen1 || existeUnitGen1);
 }
 
+/**
+ * Extrae WorkingDirectory de un texto de unidad systemd. null si no hay.
+ * Sirve para encontrar dónde vivía el install Gen-1 (y su data) sin asumir ruta.
+ */
+function parseWorkingDir(unitText) {
+  if (!unitText) return null;
+  const m = String(unitText).match(/^\s*WorkingDirectory\s*=\s*(.+?)\s*$/m);
+  return m && m[1] ? m[1].trim() : null;
+}
+
 /** Renderiza una plantilla sustituyendo {{VAR}} por su valor. */
 function renderPlantilla(texto, vars) {
   return String(texto).replace(/\{\{(\w+)\}\}/g, (m, k) =>
@@ -151,6 +161,7 @@ function evaluarChecklist(sondas, manifiesto) {
 module.exports = {
   detectarDominio,
   esGen1,
+  parseWorkingDir,
   renderPlantilla,
   renderBloqueNamespace,
   renderCaddyfile,
@@ -291,24 +302,49 @@ async function main() {
 }
 
 function migrarGen1(M) {
-  // Para el servicio viejo, deshabilítalo, y si el dir viejo tiene data que el
-  // canónico no tiene, se preserva copiándola. NO borra el dir viejo (seguridad:
-  // el operador lo revisa). El objetivo mínimo: que el servicio canónico mande.
+  // Para el servicio viejo, deshabilítalo, y MERGEA su data en la canónica. NO
+  // borra el dir viejo (seguridad: el operador lo revisa). Idempotente: el merge
+  // es no-destructivo (rsync --ignore-existing → trae lo que falta, jamás pisa).
   shOk(`systemctl stop ${M.gen1.unit}`);
   shOk(`systemctl disable ${M.gen1.unit}`);
-  act(`mv/rsync data de ${M.gen1.install_dir} → ${M.install_dir} (si aplica)`);
-  if (!DRY_RUN) {
-    // Copia data del layout viejo si el canónico aún no la tiene (no destructivo).
-    const oldData = path.join(M.gen1.install_dir, 'data');
-    const newData = path.join(M.install_dir, 'data');
-    if (existe(oldData) && !existe(newData)) {
-      shOk(`mkdir -p ${M.install_dir}`);
-      shOk(`cp -a ${oldData} ${newData}`);
-      shOk(`chown -R ${M.usuario}:${M.usuario} ${newData}`);
+
+  const newData = path.join(M.install_dir, 'data');
+  // La data vieja puede NO estar en /srv/event-core/data: el setup Gen-1 corría
+  // desde el repo clonado (WorkingDirectory del unit). Probamos ambos.
+  const candidatos = _oldDataCandidates(M);
+  let origen = null;
+  for (const oldData of candidatos) {
+    if (existe(oldData) && _tieneContenido(oldData)) {
+      act(`merge data ${oldData} → ${newData} (no-destructivo, no pisa lo existente)`);
+      if (!DRY_RUN) {
+        shOk(`mkdir -p ${newData}`);
+        // rsync --ignore-existing: copia solo lo que falta en destino; NUNCA sobrescribe.
+        shOk(`rsync -a --ignore-existing ${oldData}/ ${newData}/`);
+        shOk(`chown -R ${M.usuario}:${M.usuario} ${newData}`);
+      }
+      origen = oldData;
+      break;
     }
   }
+  if (origen) warn(`data migrada desde ${origen} (merge no-destructivo). El origen queda intacto.`);
+  else warn(`no encontré data vieja con contenido en ${candidatos.join(' | ')} — revisa a mano si faltan proyectos.`);
   warn(`Gen-1 migrado. El dir viejo ${M.gen1.install_dir} queda intacto para que lo revises y borres a mano cuando confirmes.`);
   cambios++;
+}
+
+// Candidatos a la data vieja: WorkingDirectory del unit Gen-1 (+/data) y el dir
+// Gen-1 convencional (+/data). Deduplicados, en orden de preferencia.
+function _oldDataCandidates(M) {
+  const cands = [];
+  const unit = leer(`/etc/systemd/system/${M.gen1.unit}`);
+  const wd = parseWorkingDir(unit);
+  if (wd) cands.push(path.join(wd, 'data'));
+  cands.push(path.join(M.gen1.install_dir, 'data'));
+  return [...new Set(cands)];
+}
+
+function _tieneContenido(dir) {
+  try { return fs.readdirSync(dir).length > 0; } catch (_) { return false; }
 }
 
 function verificar(M, dominio) {

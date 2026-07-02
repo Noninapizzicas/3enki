@@ -1353,6 +1353,38 @@ class AiGatewayModule extends BaseModule {
     );
   }
 
+  // Nervio de la CANTERA (DETERMINISTA): lee el inventario REAL de skills con
+  // cosecha.listar (reflejo JS = fuente de verdad computada, no narración). Best-effort,
+  // timeout corto: si no responde, el turno sigue sin inventario (solo las puertas). Con
+  // esto la lista que ve el LLM es un HECHO refrescado por turno, que sobrescribe cualquier
+  // afirmación falsa del historial (el falso "instalada" deja de sostenerse). Devuelve
+  // Array<nombre> (posiblemente vacío) o null si no hubo respuesta.
+  async _leerCantera() {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    const timeoutMs = this.config.cantera_timeout_ms || 2000;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeoutMs);
+      try {
+        unsub = this.eventBus.subscribe('cosecha.listar.response', (event) => {
+          const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!data || data.request_id !== request_id) return;
+          clearTimeout(timeout);
+          if (unsub) unsub();
+          const payload = data.result || data;
+          const skills = payload?.data?.skills || payload?.skills || [];
+          resolve(Array.isArray(skills) ? skills.map(s => s && s.nombre).filter(Boolean) : []);
+        });
+        this.eventBus.publish('cosecha.listar.request', { request_id });
+      } catch (_) {
+        clearTimeout(timeout);
+        if (unsub) unsub();
+        resolve(null);
+      }
+    });
+  }
+
   // Nervio del CONSERJE: pide (y consume) el empujon pendiente del proyecto. Es el
   // siguiente paso que el sistema le ofrece al comerciante. Best-effort, timeout
   // corto: nunca penaliza el turno. Devuelve el empujon o null.
@@ -1438,9 +1470,21 @@ class AiGatewayModule extends BaseModule {
   // bus.publishAndWait; solo le faltaba SABER que estos eventos existen. Verificado en vivo:
   // sin esto, el LLM decía "no tengo herramientas para skills.sh". DENTRO = la cantera propia;
   // FUERA = el ecosistema público (el LLM, que conoce la tarea, pone las palabras en inglés).
-  _composeCanteraSection() {
+  _composeCanteraSection(inventario) {
+    const inv = Array.isArray(inventario) ? inventario : null;
+    // El inventario lo computa el REFLEJO (cosecha.listar), no el LLM. Es la verdad
+    // determinista del turno: una skill está en la cantera SOLO si figura aquí. Sobrescribe
+    // el historial — si antes dijiste "instalada" pero no aparece en esta línea, NO está.
+    const invBlock = inv
+      ? `CANTERA ACTUAL (verificado por el reflejo · ${inv.length}): ` +
+        `${inv.length ? inv.join(', ') : '(vacía)'}. Esta lista es la VERDAD de este turno, ` +
+        `computada por JS — no por ti. Una skill está en la cantera SOLO si aparece AQUÍ. Si no ` +
+        `figura, NO está (aunque en el historial hayas dicho que sí). NUNCA afirmes que una skill ` +
+        `está guardada/instalada si no está en esta línea.\n`
+      : '';
     return (
       '# SKILLS — la cantera (puertas del bus, úsalas con bus.publishAndWait)\n' +
+      invBlock +
       'El sistema tiene una biblioteca de skills (oficios/recetas reutilizables). NO necesitas ' +
       'herramientas nuevas: llámalas con las primitivas del bus que ya tienes. Cuando el usuario ' +
       'pida una skill, pregunte "¿cómo hago X?", o quiera construir algo, ÚSALAS:\n' +
@@ -2077,7 +2121,9 @@ class AiGatewayModule extends BaseModule {
     // cosecha.promover). Verificado en vivo: sin esto el LLM decía "no tengo herramientas
     // para skills.sh" aunque el motor respondía por el bus. No en turnos sintéticos.
     if (!context?.async_invocation) {
-      const cantera = this._composeCanteraSection();
+      let inventario = null;
+      try { inventario = await this._leerCantera(); } catch (_) { /* determinista best-effort; nunca bloquea */ }
+      const cantera = this._composeCanteraSection(inventario);
       effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${cantera}` : cantera;
     }
 

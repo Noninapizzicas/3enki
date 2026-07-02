@@ -14788,6 +14788,31 @@ Demand-driven (sin skill pertinente, no spamea) · cooldown · prioridad menor q
 El nervio (ai-gateway) surfacea el empujón en el chat una vez, natural.
 ```
 
+## conserje-fuera — la 4ª facultad (busca FUERA, TRAE y ACTIVA auto)
+
+> conserje-cantera ofrece lo que YA tienes dentro. conserje-fuera cierra la brecha: cuando la
+> cantera propia no cubre lo que el comerciante hace, el sistema SALE AL MUNDO por él —
+> descubre en skills.sh, y si una skill domina, la trae y la activa sola. "Que te las busque
+> para la tarea que tienes entre manos", sin que la pidas. La cara más agresiva de *sumar*.
+
+```
+INTERRUPTOR 'conserje-fuera' (grupo aprendizaje, OFF por defecto — baja código del ecosistema, el más agresivo)
+CADENA (última prioridad del tick; solo actúa si dentro no había nada):
+  1. DENTRO   cosecha.buscar(cap) — si la cantera cubre la tarea → NO sale fuera
+  2. FUERA    feeder.buscar(cap) → skills.sh → _parseSkillsSh (strip ANSI, id@skill + installs, ordena)
+  3. ¿DOMINA? top.installs ≥ fuera_installs_min (50K) Y ≥ fuera_dominancia_x (1.5×) sobre la 2ª
+       SÍ → AUTO:  feeder.instalar(top) → cosecha.promover(nombre, HOGAR) → empujón 'traido_activado'
+                    (avisa DESPUÉS, accion_sugerida `cosecha.olvidar:<n>` = deshacer)
+       NO → OFRECE: empujón 'descubrimiento_externo' (accion `feeder.traer_skill:<id>`)
+HOGAR (MAPA_CAP_LENTE, RUTAS REALES de los packs → sin colgantes):
+  carta/diseno/digital→{diseño,tema} · marca→{copy,copy} · escandallo→{negocio,coste} · viabilidad→{negocio,viabilidad}
+  capacidad sin hogar (p.ej. recetas) → TRAE pero solo OFRECE activar (no hay dónde montarla sola)
+GUARDAS  interruptor propio OFF · cooldown largo (npx cuesta) · umbral+dominancia · SIEMPRE reversible
+         (activación crecida → cosecha.olvidar / lentes.desmontar) · TESTIGO (avisa después) ·
+         cada paso DEGRADA a ofrecer si no puede completarse solo (P0, no_silent — nunca miente que activó)
+Test: conserje__fuera (parse · domina→trae+activa · sin hogar→ofrece · no-domina→ofrece · degrada · OFF · prioridad).
+```
+
 ## planificador — el ensamblador de proyecto GOAL-DRIVEN (gemelo del conserje-cantera)
 
 > NOMBRE: se llamó `find-skills` un rato; renombrado a `planificador` para no chocar con el
@@ -14840,6 +14865,12 @@ MANDATO fail-honest  el CLI externo ausente/red caída → 503 UPSTREAM_UNREACHA
 > `buscar_skill {query}` (busca en la cantera — realiza el "¿cómo hago X?" de find-skills
 > sobre el catálogo interno) y `activar_skill {nombre}` (promueve a lente viva, con confirmación).
 > "busca una skill para X" / "quiero construir X" → el asistente busca y activa, en el chat.
+>
+> Y el feeder añade el grifo de FUERA (v0.2.0): `buscar_fuera {query}` (descubre en skills.sh
+> vía `npx skills find`) + `traer_skill {paquete}` (`npx skills add owner/repo@skill` → cantera,
+> con confirmación). Así el pipeline entero se opera desde el chat: "busca fuera una skill de X"
+> → ver los installs → "tráete la de Y" → queda en la cantera → "actívala". buscar_skill mira
+> DENTRO; buscar_fuera mira FUERA. (El conserje-fuera hace este mismo camino solo, proactivo.)
 
 ## El lazo entero + topics
 

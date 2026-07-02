@@ -121,4 +121,31 @@ test('feed .ics: alquiler por días (fecha sin hora) → evento de día completo
   assert.ok(r.data.ics.includes('DTSTART;VALUE=DATE:20260706'));
 });
 
+test('feed_url provisiona un token secreto; la disponibilidad NO lo filtra', () => {
+  const C = conSilla(1);
+  const u = C._feedUrl({ project_id: 'p' });
+  assert.equal(u.status, 200);
+  assert.ok(u.data.token && u.data.token.length >= 16);
+  assert.ok(u.data.path.includes(`token=${u.data.token}`));
+  const disp = C._getDisp({ project_id: 'p' });
+  assert.equal(disp.data.feed_token, undefined);            // el secreto no viaja en la lectura
+});
+
+test('GET del feed: sin token 401 · token malo 401 · token bueno 200 text/calendar · sin provisionar 404', async () => {
+  const C = conSilla(1);
+  C._reservar({ project_id: 'p', recurso_tipo: 'silla', inicio: `${DIA}T09:00`, fin: `${DIA}T10:00`, cliente: 'Ana' });
+  const { token } = C._feedUrl({ project_id: 'p' }).data;
+
+  const sin = await C.handleFeedIcs({ params: { project: 'p' }, query: {} }, null);
+  assert.equal(sin.status, 401);
+  const malo = await C.handleFeedIcs({ params: { project: 'p' }, query: { token: 'nope' } }, null);
+  assert.equal(malo.status, 401);
+  const bien = await C.handleFeedIcs({ params: { project: 'p' }, query: { token } }, null);
+  assert.equal(bien.status, 200);
+  assert.ok(bien._contentType.startsWith('text/calendar'));
+  assert.ok(bien._raw.includes('BEGIN:VCALENDAR'));
+  const noProv = await C.handleFeedIcs({ params: { project: 'q' }, query: { token: 'x' } }, null);
+  assert.equal(noProv.status, 404);                         // proyecto sin feed provisionado
+});
+
 console.log('prisma__calendario: asserts definidos');

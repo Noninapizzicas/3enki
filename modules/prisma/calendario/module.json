@@ -15,7 +15,11 @@
     { "event": "calendario.cancelar.request", "handler": "onCancelarRequest", "description": "Reflejo JS: cancela una reserva (libera el hueco)." },
     { "event": "calendario.devolver.request", "handler": "onDevolverRequest", "description": "Reflejo JS: alquiler con_retorno — cierra el intervalo abierto (libera la unidad)." },
     { "event": "calendario.list_reservas.request", "handler": "onListReservasRequest", "description": "Reflejo JS: reservas (filtros recurso_tipo/estado/desde/hasta)." },
-    { "event": "calendario.feed_ics.request", "handler": "onFeedIcsRequest", "description": "Reflejo JS (borde iCal): {project_id} → texto .ics (RFC 5545) de las reservas, suscribible desde el móvil del dueño." },
+    { "event": "calendario.feed_ics.request", "handler": "onFeedIcsRequest", "description": "Reflejo JS (borde iCal): {project_id} → texto .ics (RFC 5545) de las reservas." },
+    { "event": "calendario.feed_url.request", "handler": "onFeedUrlRequest", "description": "Reflejo JS: provisiona el token secreto del feed y devuelve la URL suscribible (webcal) para el móvil del dueño." },
     { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura la disponibilidad + reservas persistidas de ese proyecto desde /prisma/calendario/estado.json." }
+  ],
+  "apis": [
+    { "method": "GET", "path": "/feed/:project", "handler": "handleFeedIcs", "description": "Endpoint HTTP GET público (con token secreto en ?token=): devuelve el .ics suscribible de la agenda del proyecto (text/calendar). El clásico 'secret iCal URL' — quien tenga el token ve la agenda. Provisiona el token con calendario.feed_url." }
   ]
 }

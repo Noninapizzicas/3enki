@@ -60,6 +60,7 @@ class PrismaCalendarioReflejo extends ModuloHibridoReflejo {
   onListReservasRequest(e)      { return this._atender(e, 'list_reservas', 'calendario.list_reservas.response', d => this._listReservas(d)); }
   // ── BORDE iCal: feed .ics de las reservas (para el móvil del dueño) ──
   onFeedIcsRequest(e)           { return this._atender(e, 'feed_ics', 'calendario.feed_ics.response', d => this._feedIcs(d)); }
+  onFeedUrlRequest(e)           { return this._atender(e, 'feed_url', 'calendario.feed_url.response', d => this._feedUrl(d)); }
 
   // ============================================================= helpers de estado
   _disp(project_id) {
@@ -159,7 +160,8 @@ class PrismaCalendarioReflejo extends ModuloHibridoReflejo {
   // ============================================================= ops
   _getDisp(input) {
     if (!input.project_id) return this._invalid('project_id');
-    return { status: 200, data: this._disp(input.project_id) };
+    const { feed_token, ...publico } = this._disp(input.project_id);   // el token del feed no viaja en la lectura
+    return { status: 200, data: publico };
   }
 
   _setDisp(input) {
@@ -266,6 +268,38 @@ class PrismaCalendarioReflejo extends ModuloHibridoReflejo {
     }));
     const ics = ical.toIcs({ name: 'Agenda', nowIso: input._now, events });
     return { status: 200, data: { content_type: 'text/calendar; charset=utf-8', filename: 'agenda.ics', ics } };
+  }
+
+  // token secreto del feed (el clásico "secret iCal URL"): se provisiona una vez y va en la URL.
+  _feedToken(project_id, { crear = false } = {}) {
+    const disp = this._disp(project_id);
+    if (!disp.feed_token && crear) { disp.feed_token = crypto.randomBytes(18).toString('hex'); this._persist.marcarDirty(project_id); }
+    return disp.feed_token || null;
+  }
+
+  // "dame mi enlace suscribible" — provisiona el token y devuelve la ruta para el móvil.
+  _feedUrl(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    const token = this._feedToken(input.project_id, { crear: true });
+    const path = `/modules/calendario/feed/${encodeURIComponent(input.project_id)}?token=${token}`;
+    return { status: 200, data: { token, path, hint: 'Suscríbete a esta URL desde el calendario del móvil (webcal). Es un enlace SECRETO: quien lo tenga ve la agenda.' } };
+  }
+
+  // ── endpoint HTTP GET (suscribible desde el móvil) — público con token ──
+  async handleFeedIcs(req, res) {
+    const project_id = (req && (req.params && (req.params.project || req.params.project_id) || (req.query && (req.query.project || req.query.project_id)))) || null;
+    const token = (req && req.query && req.query.token) || null;
+    let status, ctype, body;
+    const disp = project_id ? this.dispPorProyecto.get(project_id) : null;
+    if (!project_id) { status = 400; ctype = 'application/json; charset=utf-8'; body = JSON.stringify({ error: { code: 'INVALID_INPUT', message: 'project requerido' } }); }
+    else if (!disp || !disp.feed_token) { status = 404; ctype = 'application/json; charset=utf-8'; body = JSON.stringify({ error: { code: 'FEED_NO_PROVISIONADO', message: 'pide primero calendario.feed_url' } }); }
+    else if (token !== disp.feed_token) { status = 401; ctype = 'application/json; charset=utf-8'; body = JSON.stringify({ error: { code: 'AUTHENTICATION_REQUIRED', message: 'token del feed inválido' } }); }
+    else { status = 200; ctype = 'text/calendar; charset=utf-8'; body = this._feedIcs({ project_id }).data.ics; }
+
+    const headers = { 'Content-Type': ctype, 'Cache-Control': 'no-cache', ...(status === 200 ? { 'Content-Disposition': 'inline; filename="agenda.ics"' } : {}) };
+    if (res && typeof res.writeHead === 'function' && !res.headersSent) { res.writeHead(status, headers); res.end(body); return; }
+    if (res && typeof res.status === 'function' && !res.headersSent) { if (typeof res.setHeader === 'function') res.setHeader('Content-Type', ctype); return typeof res.send === 'function' ? res.status(status).send(body) : res.status(status).end(body); }
+    return { status, _contentType: ctype, _raw: body };
   }
 }
 

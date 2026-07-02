@@ -15,7 +15,17 @@
 
 set -euo pipefail
 
-DOMAIN="${1:-}"
+# Args: el dominio (posicional) y --docker (flag). Se aceptan en cualquier orden.
+# --docker se prefiere a la env var ENKI_ENABLE_DOCKER porque `sudo` limpia el entorno
+# (ENKI_ENABLE_DOCKER=1 sudo … NO llega al script; sudo … --docker sí).
+DOMAIN=""
+for _arg in "$@"; do
+    case "$_arg" in
+        --docker) ENKI_ENABLE_DOCKER=1 ;;
+        --*)      echo "[!] flag desconocido ignorado: $_arg" ;;
+        *)        DOMAIN="$_arg" ;;
+    esac
+done
 INSTALL_DIR="/opt/enki"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 NODE_VERSION="20"
@@ -163,7 +173,8 @@ fi
 # local). Para habilitar la contención REAL de input no-confiable, instala docker y mete al
 # usuario del servicio (www-data) en el grupo docker.
 #
-# OPT-IN a propósito:  ENKI_ENABLE_DOCKER=1 sudo ./vps-setup.sh [dominio]
+# OPT-IN a propósito:  sudo ./vps-setup.sh [dominio] --docker
+#   (usa el flag --docker; NO 'ENKI_ENABLE_DOCKER=1 sudo …' porque sudo limpia el entorno)
 #
 # AVISO DE SEGURIDAD (honesto): meter a www-data en el grupo 'docker' equivale a darle ROOT
 # en el host (docker.sock ≈ root). La mitigación es el guard del ejecutor (hardline +

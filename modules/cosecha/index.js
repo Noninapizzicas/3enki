@@ -38,7 +38,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'cosecha';
-    this.version = '0.6.0';
+    this.version = '0.8.0';
     // nombre → { nombre, descripcion, fuente, dominio, tags:[], contenido }
     this._skills = new Map();
   }
@@ -126,6 +126,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   async onImportarRequest(event) { return this._atender(event, 'importar', 'cosecha.importar.response', (d) => this._importar(d)); }
   async onPromoverRequest(event) { return this._atender(event, 'promover', 'cosecha.promover.response', (d) => this._promover(d)); }
   async onOlvidarRequest(event)  { return this._atender(event, 'olvidar',  'cosecha.olvidar.response',  (d) => this._olvidar(d)); }
+  async onTraerRequest(event)    { return this._atender(event, 'traer',    'cosecha.traer.response',    (d) => this._traer(d)); }
 
   // ── TOOLS del LLM de chat (LA SUPERFICIE): buscar y activar skills desde CUALQUIER
   // conversación. El grifo por el que el comerciante toca la cantera — realiza el
@@ -262,6 +263,50 @@ class CosechaModule extends ModuloHibridoReflejo {
     }
     this.metrics?.increment('cosecha.promovidas.total', { dominio: dominioFinal });
     return { status: 200, data: { nombre, dominio: dominioFinal, promovida: true, montaje: resp.data || null } };
+  }
+
+  // traer: EL TRAYECTO como OP DETERMINISTA (buscar → elegir → instalar → VERIFICAR →
+  // veredicto). El outcome lo computa el reflejo, no lo narra el LLM: por eso el falso
+  // éxito se vuelve IMPOSIBLE (no solo desaconsejado). Patrón blueprint-agentico — el único
+  // paso fuzzy (¿cuál encaja?) lo puede resolver el LLM pasando `paquete`; si no, el reflejo
+  // elige la MÁS INSTALADA (determinista). VERIFICAR contra el store propio es el freno:
+  // no devuelve ok:true si la skill no acabó en la cantera.
+  async _traer({ query, paquete, fuente } = {}) {
+    let elegido = paquete && String(paquete).trim();
+    let candidatos = [];
+
+    // 1) elegir el paquete: el caller ya lo trae (PENSAR del LLM), o lo pone el reflejo
+    //    por instalaciones (determinista, "la más usada").
+    if (!elegido) {
+      const q = query && String(query).trim();
+      if (!q) return this._invalid('query|paquete');
+      const b = await this._rpc('feeder.buscar.request', { query: q });
+      if (!b) return this._errorResponse(504, 'UPSTREAM_TIMEOUT', 'el feeder no respondió a la búsqueda', { query: q });
+      if (typeof b.status === 'number' && b.status >= 400) {
+        return { status: 200, data: { ok: false, motivo: (b.error && b.error.message) || 'no pude buscar fuera', query: q, candidatos: [] } };
+      }
+      candidatos = (b.data && b.data.candidatos) || [];
+      if (candidatos.length === 0) {
+        return { status: 200, data: { ok: false, motivo: `sin resultados en skills.sh para "${q}"`, query: q, candidatos: [] } };
+      }
+      elegido = candidatos[0].id;   // el feeder ya los ordena por instalaciones desc
+    }
+
+    // 2) instalar (feeder.instalar → cosecha.importar; re-indexa este mismo store).
+    const inst = await this._rpc('feeder.instalar.request', { paquete: elegido, ...(fuente ? { fuente } : {}) }, { timeout_ms: 95000 });
+    if (!inst) return this._errorResponse(504, 'UPSTREAM_TIMEOUT', 'el feeder no respondió a la instalación', { paquete: elegido });
+    if (typeof inst.status === 'number' && inst.status >= 400) {
+      return { status: 200, data: { ok: false, paquete: elegido, motivo: (inst.error && inst.error.message) || 'falló la instalación', candidatos } };
+    }
+    const ingeridas = (inst.data && Array.isArray(inst.data.ingeridas)) ? inst.data.ingeridas : [];
+
+    // 3) VERIFICAR (el freno): ¿acabó de verdad en la cantera? La verdad es el store, no el eco.
+    const enCantera = ingeridas.filter(n => this._skills.has(n));
+    if (enCantera.length === 0) {
+      return { status: 200, data: { ok: false, paquete: elegido, motivo: 'la instalación no dejó ninguna skill legible en la cantera', ingeridas, candidatos } };
+    }
+    this.metrics?.increment('cosecha.traidas.total', {});
+    return { status: 200, data: { ok: true, paquete: elegido, traidas: enCantera, total: this._skills.size } };
   }
 
   // olvidar: la reversibilidad de importar. Borra una skill CRECIDA (en data/) y re-indexa.

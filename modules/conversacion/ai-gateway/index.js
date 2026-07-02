@@ -1490,18 +1490,18 @@ class AiGatewayModule extends BaseModule {
       'pida una skill, pregunte "¿cómo hago X?", o quiera construir algo, ÚSALAS:\n' +
       '- DENTRO (la cantera propia): bus.publishAndWait(\'cosecha.buscar.request\', {query, tarea?, limite?}) ' +
       '→ catálogo rankeado. El cuerpo completo con cosecha.obtener.request {nombres:[...]}.\n' +
-      '- FUERA (ecosistema público skills.sh): bus.publishAndWait(\'feeder.buscar.request\', {query}) — ' +
-      'pon la query en INGLÉS y con las palabras REALES de la tarea ("menu design", "copywriting", ' +
-      '"pricing"), no el nombre interno. Traer una: feeder.instalar.request {paquete:\'owner/repo@skill\'} ' +
-      '(baja código del ecosistema → CONFIRMA con el usuario antes).\n' +
+      '- FUERA — descubrir: bus.publishAndWait(\'feeder.buscar.request\', {query}) → {candidatos:[{id,installs}]}. ' +
+      'Query en INGLÉS con las palabras REALES de la tarea ("menu design", "copywriting", "pricing"), no el nombre interno.\n' +
+      '- FUERA — TRAER (usa SIEMPRE esto, NO feeder.instalar a mano): bus.publishAndWait(\'cosecha.traer.request\', ' +
+      '{query} ó {paquete:"owner/repo@skill"}) → devuelve el VEREDICTO {ok, traidas|motivo}. Baja código del ' +
+      'ecosistema → CONFIRMA con el usuario antes.\n' +
       '- ACTIVAR una skill como lente viva de una página: cosecha.promover.request {nombre, dominio, tarea}.\n' +
       'Ofrece, no impongas. FUERA es PULL: sal al ecosistema cuando dentro no basta y la tarea lo pide.\n' +
-      'MANDATO — VERIFICA antes de afirmar (verificar en vivo, no a fe): estas puertas DEVUELVEN un ' +
-      'resultado que debes LEER. feeder.instalar responde {ingeridas:[nombres]} si funcionó, o un error ' +
-      '(status ≥ 400; p.ej. 404 "ningún SKILL.md legible"). Di "instalada/traída" SOLO si el nombre está ' +
-      'en `ingeridas`; si hay error o `ingeridas` viene vacío, di que FALLÓ con el motivo — NUNCA inventes ' +
-      'un éxito. Ante duda, comprueba con cosecha.listar. Igual con promover: confirma status < 400 antes ' +
-      'de decir "activada". Un "hecho" que no puedas verificar en la respuesta NO se afirma.'
+      'MANDATO — el OUTCOME lo computa el reflejo, tú SOLO lo echas (verificar en vivo, no a fe): cosecha.traer ' +
+      'responde {ok:true, traidas:[nombres]} o {ok:false, motivo}. Di "traída/instalada" SOLO si ok===true; si ' +
+      'ok===false, di que FALLÓ con el motivo. NUNCA inventes un éxito ni te fíes del historial: si algo no ' +
+      'aparece en la CANTERA ACTUAL de arriba, NO está. Igual con promover (status < 400 = "activada"). Un ' +
+      'hecho que no puedas verificar en la respuesta NO se afirma.'
     );
   }
 

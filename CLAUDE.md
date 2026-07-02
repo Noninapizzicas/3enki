@@ -14975,7 +14975,7 @@ _shared/pos-persistencia.js  (composición)  snapshot(project_id)/hidratar(proje
   el helper escribe /prisma/pos/<mod>.json (fs.write atómico, debounced) y restaura en project.activated. Sin project_id → solo memoria (honesto).
 ```
 
-## calendario (module 0.2.0 · reflejo 0.2.0) — BASE COMPARTIDA del tiempo (órgano `agenda`) ✓ (motor + feed .ics)
+## calendario (module 0.2.0 · reflejo 0.2.0) — BASE COMPARTIDA del tiempo (órgano `agenda`) ✓ (motor + iCal bidireccional)
 
 ```
 CLASE PrismaCalendarioReflejo HEREDA ModuloHibridoReflejo {   // base compartida (como marca/recetas) · product-AGNÓSTICO

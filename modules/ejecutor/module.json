@@ -1,7 +1,8 @@
 {
   "_doc": "Manifest del EJECUTOR — la puerta guardada para EJECUTAR comandos (skills CLI → shell) desde el chat. El LLM llama ejecutor.ejecutar (NUNCA shell.exec crudo). Casa lo que Enki ya tenía (code-executor crudo + portal como patrón de guard) y añade lo que enseña Hermes: aprobación graduada + audit → propiocepción + (Fase 2) aislamiento en contenedor. La reja es para ERRORES COOPERATIVOS, no output adversarial: la contención real de input no-confiable = contenedor. Ver arquitectura/decisiones/propuestas/ejecutor-guardado.md.",
   "name": "ejecutor",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "_v0_2_nota": "v0.2.0 (Fase 2): AISLAMIENTO EN CONTENEDOR — la contención real de input no-confiable. La request acepta aislamiento:'contenedor' → docker run efímero (--rm --cap-drop ALL --security-opt no-new-privileges --pids-limit --memory, workspace montado en /work, red abierta para fetch). Si docker NO está en el host, degrada HONESTO (503 'aislamiento_no_disponible') — NUNCA cae a local en silencio (sería saltarse la contención pedida; Hermes: no simular un sandbox que no hay). Default sigue 'local' (Fase 1). El guard (hardline/allowlist/aprobación) es el MISMO para los dos aislamientos. Probe de docker en onLoad (dockerOk). Test: ejecutor__guard (+contenedor). Fase 3 = cantera escribible en-turno.",
   "_v0_1_nota": "v0.1.0 (Fase 1): nace la puerta guardada. Cadena del guard (orden de Hermes): kill-switch (interruptor 'ejecutor' OFF por defecto) → HARDLINE (blocklist dura, ninguna aprobación la anula) → ALLOWLIST (globs config, auto) → ya-aprobado (cache session/always por project::patrón) → PELIGROSO (patrón → 202 pendiente_aprobacion + emite ejecutor.aprobacion.pendiente; el humano dice sí, el LLM reintenta con confirmado:true) → benigno (permitido). Ejecución LOCAL (child_process, en el workspace del proyecto). Audit: ejecutor.invocado → propiocepción. Fase 2 = aislamiento en contenedor. Fase 3 = cantera escribible en-turno. Test: ejecutor__guard.",
   "description": "Puerta guardada para ejecutar comandos con reja (hardline + aprobación humana graduada + audit). Reflejo puro. El chat entra por aquí; shell.exec crudo queda para uso interno de reflejos.",
   "author": "Event Core Team",
@@ -23,6 +24,9 @@
     "enabled_default": false,
     "default_timeout_ms": 30000,
     "max_timeout_ms": 120000,
+    "contenedor_imagen": "node:20-slim",
+    "contenedor_memoria": "512m",
+    "contenedor_pids_limit": 256,
     "allowlist": [
       "defuddle *", "npx skills *", "npx defuddle *",
       "node *", "python *", "python3 *",

@@ -30,7 +30,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { exec, execFile, execFileSync } = require('child_process');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
 // HARDLINE — catastrófico, ninguna aprobación lo abre. Mínimo y estable.
@@ -61,7 +61,7 @@ class EjecutorModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'ejecutor';
-    this.version = '0.1.0';
+    this.version = '0.2.0';
     this.config = null;
     this.activo = false;                 // interruptor 'ejecutor' — OFF por defecto (puerta cerrada)
     this.allowlist = [];                 // Array<RegExp> desde globs de config
@@ -69,6 +69,11 @@ class EjecutorModule extends ModuloHibridoReflejo {
     this.defaultTimeoutMs = 30000;
     this.maxTimeoutMs = 120000;
     this.maxBuffer = 4 * 1024 * 1024;
+    // Fase 2 — aislamiento en contenedor (la contención REAL de input no-confiable).
+    this.dockerOk = false;               // ¿docker disponible? (probado en onLoad)
+    this.contenedorImagen = 'node:20-slim';
+    this.contenedorMemoria = '512m';
+    this.contenedorPidsLimit = 256;
   }
 
   async onLoad(context) {
@@ -78,8 +83,12 @@ class EjecutorModule extends ModuloHibridoReflejo {
     this.defaultTimeoutMs = Number(this.config.default_timeout_ms) || 30000;
     this.maxTimeoutMs = Number(this.config.max_timeout_ms) || 120000;
     this.allowlist = (this.config.allowlist || DEFAULT_ALLOWLIST).map(g => this._globToRe(g));
+    this.contenedorImagen = this.config.contenedor_imagen || 'node:20-slim';
+    this.contenedorMemoria = this.config.contenedor_memoria || '512m';
+    this.contenedorPidsLimit = Number(this.config.contenedor_pids_limit) || 256;
+    this.dockerOk = this._probarDocker();   // best-effort: ¿hay docker en este host?
     this._registrarBoton();
-    this.logger?.info('ejecutor.loaded', { module: this.name, version: this.version, activo: this.activo, allowlist: this.allowlist.length });
+    this.logger?.info('ejecutor.loaded', { module: this.name, version: this.version, activo: this.activo, allowlist: this.allowlist.length, docker: this.dockerOk });
   }
 
   async onUnload() {
@@ -110,7 +119,7 @@ class EjecutorModule extends ModuloHibridoReflejo {
   onEjecutarRequest(event) { return this._atender(event, 'ejecutar', 'ejecutor.ejecutar.response', (d) => this._ejecutar(d)); }
 
   // ── LA PUERTA: guard → (aprobación) → ejecución local → audit ──
-  async _ejecutar({ command, project_id, cwd, timeout_ms, confirmado, recordar } = {}) {
+  async _ejecutar({ command, project_id, cwd, timeout_ms, confirmado, recordar, aislamiento } = {}) {
     if (!command || typeof command !== 'string') return this._invalid('command');
     const cmd = command.trim();
 
@@ -124,16 +133,27 @@ class EjecutorModule extends ModuloHibridoReflejo {
       return this._resp(202, { ok: false, veredicto: v.veredicto, aprobacion_id, motivo: v.motivo, instruccion: 'pide el visto bueno al usuario y reintenta con confirmado:true (NO en bucle)' });
     }
 
-    // permitido | allowlist | aprobado → ejecutar (local, Fase 1)
+    // permitido | allowlist | aprobado → ejecutar
     const timeout = Math.min(Number(timeout_ms) || this.defaultTimeoutMs, this.maxTimeoutMs);
     const dir = this._resolverCwd(project_id, cwd);
+    const modo = aislamiento === 'contenedor' ? 'contenedor' : 'local';
+
+    // aislamiento=contenedor pero docker no está → degrada HONESTO (503), NO cae a local en
+    // silencio: sería saltarse la contención que se pidió (Hermes: no simular un sandbox que no hay).
+    if (modo === 'contenedor' && !this.dockerOk) {
+      this._audit(project_id, cmd, 'aislamiento_no_disponible', false, undefined, undefined, 'contenedor');
+      return this._resp(503, { ok: false, veredicto: 'aislamiento_no_disponible', motivo: 'se pidió aislamiento=contenedor pero docker no está en el host; NO se ejecuta en local en silencio' });
+    }
+
     const t0 = Date.now();
-    const res = await this._ejecutarLocal(cmd, dir, timeout);
+    const res = modo === 'contenedor'
+      ? await this._ejecutarContenedor(cmd, dir, timeout)
+      : await this._ejecutarLocal(cmd, dir, timeout);
     const duracion_ms = Date.now() - t0;
-    this._audit(project_id, cmd, v.veredicto, res.exit_code === 0, res.exit_code, duracion_ms);
+    this._audit(project_id, cmd, v.veredicto, res.exit_code === 0, res.exit_code, duracion_ms, modo);
     return this._resp(200, {
       ok: res.exit_code === 0, veredicto: v.veredicto,
-      stdout: res.stdout, stderr: res.stderr, exit_code: res.exit_code, duracion_ms, aislamiento: 'local'
+      stdout: res.stdout, stderr: res.stderr, exit_code: res.exit_code, duracion_ms, aislamiento: modo
     });
   }
 
@@ -180,6 +200,35 @@ class EjecutorModule extends ModuloHibridoReflejo {
     });
   }
 
+  // ── AISLAMIENTO EN CONTENEDOR (la contención real): docker run efímero, sin privilegios,
+  // con límites. El workspace del proyecto se monta en /work. Red ABIERTA (defuddle y demás
+  // necesitan fetch) — la contención es fs + caps + pids + memoria, no red. HONESTO: si docker
+  // no está, _ejecutar ya devolvió 503 (no se llega aquí). ──
+  _ejecutarContenedor(cmd, cwd, timeout) {
+    const args = [
+      'run', '--rm', '-i',
+      '--cap-drop', 'ALL',
+      '--security-opt', 'no-new-privileges',
+      '--pids-limit', String(this.contenedorPidsLimit),
+      '--memory', String(this.contenedorMemoria),
+      '-v', `${cwd}:/work`, '-w', '/work',
+      this.contenedorImagen, 'bash', '-lc', cmd
+    ];
+    return new Promise((resolve) => {
+      execFile('docker', args, { timeout, maxBuffer: this.maxBuffer }, (err, stdout, stderr) => {
+        const exit_code = err ? (typeof err.code === 'number' ? err.code : 1) : 0;
+        const killed = err && err.killed ? '\n[ejecutor] timeout — contenedor terminado' : '';
+        resolve({ stdout: String(stdout || ''), stderr: String(stderr || '') + killed, exit_code });
+      });
+    });
+  }
+
+  // best-effort: ¿docker responde en este host? (una vez, en onLoad). Stubbable en test.
+  _probarDocker() {
+    try { execFileSync('docker', ['version', '--format', '{{.Server.Version}}'], { timeout: 4000, stdio: 'ignore' }); return true; }
+    catch (_) { return false; }
+  }
+
   _emitirPendiente(aprobacion_id, project_id, command, motivo) {
     try {
       this.eventBus.publish('ejecutor.aprobacion.pendiente', {
@@ -189,13 +238,13 @@ class EjecutorModule extends ModuloHibridoReflejo {
   }
 
   // audit → propiocepción lo capta (ningún acto invisible)
-  _audit(project_id, command, veredicto, ok, exit_code, duracion_ms) {
+  _audit(project_id, command, veredicto, ok, exit_code, duracion_ms, aislamiento = 'local') {
     try {
       this.eventBus.publish('ejecutor.invocado', {
         project_id: project_id || null, command, veredicto, ok: !!ok,
         ...(exit_code !== undefined ? { exit_code } : {}),
         ...(duracion_ms !== undefined ? { duracion_ms } : {}),
-        aislamiento: 'local', timestamp: new Date().toISOString()
+        aislamiento, timestamp: new Date().toISOString()
       });
       this.metrics?.increment('ejecutor.invocado.total', { veredicto });
     } catch (_) { /* best-effort */ }

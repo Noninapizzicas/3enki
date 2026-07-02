@@ -33,7 +33,7 @@ class FeederReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'feeder';
-    this.version = '0.2.0';
+    this.version = '0.3.0';
   }
 
   onIngerirRequest(e)  { return this._atender(e, 'ingerir',  'feeder.ingerir.response',  d => this._ingerir(d)); }
@@ -120,14 +120,37 @@ class FeederReflejo extends ModuloHibridoReflejo {
     }
   }
 
-  // ── BUSCAR: npx skills find <query> → salida cruda (best-effort, degrada limpio). ──
+  // ── BUSCAR: npx skills find <query> → candidatos ESTRUCTURADOS (el feeder es dueño del
+  // formato de skills.sh, así que lo parsea aquí; nadie más adivina el layout). ──
   async _buscar({ query } = {}) {
     if (!query || typeof query !== 'string') return this._invalid('query');
     const r = await this._ejec('npx', ['-y', 'skills', 'find', query], { timeout: 45000 });
     if (r.degradado) {
       return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'npx skills no disponible en este entorno (el feeder degrada limpio)', { degradado: true, motivo: r.motivo });
     }
-    return { status: 200, data: { query, salida: r.stdout.slice(0, 4000), ok: r.ok } };
+    const candidatos = this._parseSkillsSh(r.stdout);   // [{id, installs, installsHuman}] ordenado desc
+    return { status: 200, data: { query, candidatos, salida: r.stdout.slice(0, 2000), ok: r.ok } };
+  }
+
+  // ── parse de la salida de `npx skills find`: líneas "owner/repo@skill  <N>[KM] installs".
+  // Determinista y testeable; vive aquí porque el feeder es quien conoce skills.sh. ──
+  _stripAnsi(s) { return String(s || '').replace(/\x1b\[[0-9;]*m/g, ''); }
+  _installsToNum(str) {
+    const m = /^([\d.]+)\s*([KM]?)/.exec(String(str).trim());
+    if (!m) return 0;
+    let n = parseFloat(m[1]);
+    if (m[2] === 'K') n *= 1000; else if (m[2] === 'M') n *= 1000000;
+    return Math.round(n);
+  }
+  _parseSkillsSh(raw) {
+    const clean = this._stripAnsi(raw);
+    const out = [];
+    for (const line of clean.split('\n')) {
+      const m = /^(\S+@\S+)\s+([\d.]+[KM]?)\s+installs/.exec(line.trim());
+      if (m) out.push({ id: m[1], installsHuman: m[2], installs: this._installsToNum(m[2]) });
+    }
+    out.sort((a, b) => b.installs - a.installs);
+    return out;
   }
 
   // ── helpers ──

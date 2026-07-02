@@ -110,6 +110,23 @@ test('buscar: si npx no está, DEGRADA LIMPIO (503)', async () => {
   assert.strictEqual(r.status, 503);
 });
 
+test('buscar: PARSEA candidatos (strip ANSI, id@skill + installs) ordenados desc', async () => {
+  const m = make();
+  m._ejec = async () => ({
+    degradado: false, ok: true, code: 0, stdout:
+      '\x1b[38;5;145ma/b@uno\x1b[0m \x1b[36m120.0K installs\x1b[0m\n' +
+      'ruido sin formato\n' +
+      '\x1b[38;5;145mc/d@dos\x1b[0m \x1b[36m430.7K installs\x1b[0m\n', stderr: ''
+  });
+  const r = await m._buscar({ query: 'design' });
+  assert.strictEqual(r.status, 200);
+  const c = r.data.candidatos;
+  assert.strictEqual(c.length, 2);
+  assert.strictEqual(c[0].id, 'c/d@dos');       // ordenado por installs desc
+  assert.strictEqual(c[0].installs, 430700);
+  assert.strictEqual(c[1].installs, 120000);
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

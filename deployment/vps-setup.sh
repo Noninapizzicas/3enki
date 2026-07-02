@@ -157,6 +157,42 @@ CADDYUNIT
     systemctl daemon-reload
 fi
 
+# ---- 3b. Docker (OPT-IN — aislamiento en contenedor del ejecutor) ----
+# El módulo `ejecutor` (puerta guardada) puede correr comandos aislados en un contenedor
+# efímero pidiendo aislamiento:'contenedor'. Sin docker, degrada HONESTO (503, no cae a
+# local). Para habilitar la contención REAL de input no-confiable, instala docker y mete al
+# usuario del servicio (www-data) en el grupo docker.
+#
+# OPT-IN a propósito:  ENKI_ENABLE_DOCKER=1 sudo ./vps-setup.sh [dominio]
+#
+# AVISO DE SEGURIDAD (honesto): meter a www-data en el grupo 'docker' equivale a darle ROOT
+# en el host (docker.sock ≈ root). La mitigación es el guard del ejecutor (hardline +
+# aprobación humana) y que nace OFF por interruptor. Si no quieres esa concesión, NO habilites
+# docker: el ejecutor sigue funcionando con aislamiento local + la reja (protección cooperativa).
+if [ "${ENKI_ENABLE_DOCKER:-0}" = "1" ]; then
+    if command -v docker &>/dev/null; then
+        log "Docker ya instalado: $(docker --version)"
+    else
+        log "Instalando Docker (aislamiento del ejecutor)..."
+        apt-get install -y -qq docker.io > /dev/null 2>&1 || warn "Instalación de docker.io falló"
+    fi
+    if command -v docker &>/dev/null; then
+        systemctl enable --now docker > /dev/null 2>&1 || warn "No se pudo arrancar docker.service"
+        getent group docker >/dev/null || groupadd docker
+        if id -nG www-data 2>/dev/null | grep -qw docker; then
+            log "www-data ya pertenece al grupo docker"
+        else
+            usermod -aG docker www-data && log "www-data añadido al grupo docker (el reinicio del servicio enki, más abajo, lo aplica)"
+        fi
+        DOCKER_IMG="${ENKI_DOCKER_IMAGE:-node:20-slim}"
+        log "Pre-bajando imagen base ${DOCKER_IMG}..."
+        docker pull "${DOCKER_IMG}" > /dev/null 2>&1 || warn "No se pudo pre-bajar ${DOCKER_IMG} (se bajará al primer uso)"
+    fi
+else
+    warn "Docker NO habilitado. Para el aislamiento en contenedor del ejecutor: ENKI_ENABLE_DOCKER=1 sudo ./vps-setup.sh"
+    warn "Sin docker, el ejecutor usa aislamiento local + reja (degrada honesto si se pide contenedor)."
+fi
+
 # ---- 4. Copiar proyecto ----
 log "Instalando Event Core en ${INSTALL_DIR}..."
 mkdir -p "${INSTALL_DIR}"

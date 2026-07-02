@@ -38,7 +38,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'cosecha';
-    this.version = '0.8.0';
+    this.version = '0.9.0';
     // nombre → { nombre, descripcion, fuente, dominio, tags:[], contenido }
     this._skills = new Map();
   }
@@ -127,6 +127,8 @@ class CosechaModule extends ModuloHibridoReflejo {
   async onPromoverRequest(event) { return this._atender(event, 'promover', 'cosecha.promover.response', (d) => this._promover(d)); }
   async onOlvidarRequest(event)  { return this._atender(event, 'olvidar',  'cosecha.olvidar.response',  (d) => this._olvidar(d)); }
   async onTraerRequest(event)    { return this._atender(event, 'traer',    'cosecha.traer.response',    (d) => this._traer(d)); }
+  async onCrearRequest(event)    { return this._atender(event, 'crear',    'cosecha.crear.response',    (d) => this._crear(d)); }
+  async onPatchRequest(event)    { return this._atender(event, 'patch',    'cosecha.patch.response',    (d) => this._patch(d)); }
 
   // ── TOOLS del LLM de chat (LA SUPERFICIE): buscar y activar skills desde CUALQUIER
   // conversación. El grifo por el que el comerciante toca la cantera — realiza el
@@ -307,6 +309,70 @@ class CosechaModule extends ModuloHibridoReflejo {
     }
     this.metrics?.increment('cosecha.traidas.total', {});
     return { status: 200, data: { ok: true, paquete: elegido, traidas: enCantera, total: this._skills.size } };
+  }
+
+  // crear: la cantera ESCRIBIBLE en-turno (Fase 3). El agente, tras resolver algo reutilizable,
+  // crea una skill NUEVA. Create-only (409 anti-wipe si ya existe → para editar, patch). Valida
+  // frontmatter (name+description) antes de persistir. Complementa al destilador: él DETECTA la
+  // recurrencia (out-of-band); esto deja al LLM escribir en-turno, con freno. Patrón Hermes skill_manage.
+  _crear({ nombre, contenido, descripcion, dominio, tags, fuente, lente_dominio, lente_tarea } = {}) {
+    if (!nombre || typeof nombre !== 'string') return this._invalid('nombre');
+    if (!contenido || typeof contenido !== 'string') return this._invalid('contenido');
+    if (!/^[a-z0-9][a-z0-9._-]*$/i.test(nombre) || nombre.length > 64) {
+      return this._errorResponse(400, 'INVALID_INPUT', 'nombre inválido (slug [a-z0-9._-], ≤64)', { field: 'nombre' });
+    }
+    if (this._skills.has(nombre)) {
+      return this._errorResponse(409, 'CONFLICT_STATE', `'${nombre}' ya existe en la cantera: usa cosecha.patch para editar (anti-wipe)`, { nombre });
+    }
+    // validar que quedará como skill legible (name+description). Se valida el SKILL.md serializado.
+    const md = this._serializar({ nombre, descripcion: descripcion || '', fuente: fuente || 'agente', dominio: dominio || '', tags: tags || [], lente_dominio: lente_dominio || '', lente_tarea: lente_tarea || '', contenido });
+    const chk = this._parse(md, { fuenteDefault: fuente || 'agente', nombreDefault: nombre });
+    if (!chk.nombre || !chk.descripcion) {
+      return this._errorResponse(422, 'UPSTREAM_INVALID_RESPONSE', 'la skill quedaría sin name o description', { field: !chk.nombre ? 'name' : 'description' });
+    }
+    const r = this._importar({ fuente: fuente || 'agente', skills: [{ nombre, contenido, descripcion, dominio, tags, lente_dominio, lente_tarea }] });
+    if (!r || r.data.importadas !== 1) {
+      return this._errorResponse(500, 'UNKNOWN_ERROR', 'no se pudo escribir la skill', { rechazadas: r && r.data && r.data.rechazadas });
+    }
+    this.metrics?.increment('cosecha.creadas.total', { fuente: fuente || 'agente' });
+    return { status: 200, data: { creada: nombre, total: this._skills.size } };
+  }
+
+  // patch: MEJORAR una skill CRECIDA en-turno (find/replace, estilo Edit). Guardas Hermes:
+  //   read-before-write  → old_string debe existir (conoces el texto actual para parchearlo)
+  //   único-o-replace_all → si aparece >1 vez y no replace_all → 409 (afina o pide replace_all)
+  //   semilla intocable   → solo skills en data/ (las del código no se tocan en caliente)
+  //   validar+rollback    → si el resultado no es skill legible (o renombra) → 422, NO escribe
+  _patch({ nombre, old_string, new_string, replace_all } = {}) {
+    if (!nombre || typeof nombre !== 'string') return this._invalid('nombre');
+    if (typeof old_string !== 'string' || old_string.length === 0) return this._invalid('old_string');
+    if (typeof new_string !== 'string') return this._invalid('new_string');
+    if (old_string === new_string) return this._errorResponse(400, 'INVALID_INPUT', 'old_string y new_string son iguales (no-op)', { field: 'new_string' });
+    const skill = this._skills.get(nombre);
+    if (!skill) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `skill desconocida: ${nombre}`, { faltan: [nombre] });
+
+    const dir = path.join(CANTERA_DATA_DIR, this._slug(skill.fuente), this._slug(nombre));
+    const mdPath = path.join(dir, 'SKILL.md');
+    if (!fs.existsSync(mdPath)) {
+      return this._errorResponse(409, 'CONFLICT_STATE', `'${nombre}' es semilla (vive en el código): no se parchea en caliente`, { fuente: skill.fuente });
+    }
+    let raw;
+    try { raw = fs.readFileSync(mdPath, 'utf-8'); } catch (err) { return this._errorResponse(500, 'UNKNOWN_ERROR', err.message, { nombre }); }
+
+    const ocurrencias = raw.split(old_string).length - 1;
+    if (ocurrencias === 0) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'old_string no encontrado en la skill (read-before-write)', { nombre });
+    if (ocurrencias > 1 && !replace_all) return this._errorResponse(409, 'CONFLICT_STATE', `old_string aparece ${ocurrencias} veces: afina o usa replace_all:true`, { ocurrencias });
+
+    const nuevo = replace_all ? raw.split(old_string).join(new_string) : raw.replace(old_string, new_string);
+    // validar el resultado ANTES de persistir (rollback = simplemente no escribir).
+    const chk = this._parse(nuevo, { fuenteDefault: skill.fuente, nombreDefault: nombre });
+    if (!chk.nombre || !chk.descripcion) return this._errorResponse(422, 'UPSTREAM_INVALID_RESPONSE', 'el patch dejaría la skill sin name o description', { nombre });
+    if (chk.nombre !== nombre) return this._errorResponse(422, 'UPSTREAM_INVALID_RESPONSE', 'un patch no puede renombrar la skill (usa crear+olvidar)', { de: nombre, a: chk.nombre });
+
+    try { fs.writeFileSync(mdPath, nuevo, 'utf-8'); } catch (err) { return this._errorResponse(500, 'UNKNOWN_ERROR', err.message, { nombre }); }
+    this._descubrir();
+    this.metrics?.increment('cosecha.patcheadas.total', { fuente: this._slug(skill.fuente) });
+    return { status: 200, data: { patcheada: nombre, reemplazos: replace_all ? ocurrencias : 1, total: this._skills.size } };
   }
 
   // olvidar: la reversibilidad de importar. Borra una skill CRECIDA (en data/) y re-indexa.

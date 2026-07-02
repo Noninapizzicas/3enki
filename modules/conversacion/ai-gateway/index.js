@@ -1498,10 +1498,13 @@ class AiGatewayModule extends BaseModule {
       '- ACTIVAR una skill como lente viva de una página: cosecha.promover.request {nombre, dominio, tarea}.\n' +
       '- EJECUTAR el comando que una skill te indica (una CLI, p.ej. defuddle): bus.publishAndWait(' +
       "'ejecutor.ejecutar.request', {command, project_id, motivo}). USA SIEMPRE esta puerta, NUNCA " +
-      'shell.exec crudo. Si vuelve status 202 (veredicto pendiente_aprobacion), el comando es peligroso: ' +
-      'PIDE el visto bueno al usuario y, cuando diga que sí, reintenta con {..., confirmado:true} — NO ' +
-      'reintentes en bucle sin su ok. Si vuelve 503 (puerta_cerrada), el ejecutor está apagado: díselo, ' +
-      'no insistas. El resultado (ok/stdout/exit_code) es del reflejo — no inventes que ejecutaste.\n' +
+      'shell.exec crudo. Para input NO confiable (una URL externa, contenido de fuera) añade ' +
+      "aislamiento:'contenedor' (corre aislado; si el host no tiene docker devuelve 503 'aislamiento_no_" +
+      "disponible' y NO cae a local — no fuerces local con input no confiable). Si vuelve status 202 " +
+      '(veredicto pendiente_aprobacion), el comando es peligroso: PIDE el visto bueno al usuario y, cuando ' +
+      'diga que sí, reintenta con {..., confirmado:true} — NO reintentes en bucle sin su ok. Si vuelve 503 ' +
+      '(puerta_cerrada), el ejecutor está apagado: díselo, no insistas. El resultado (ok/stdout/exit_code) ' +
+      'es del reflejo — no inventes que ejecutaste.\n' +
       'Ofrece, no impongas. FUERA es PULL: sal al ecosistema cuando dentro no basta y la tarea lo pide.\n' +
       'MANDATO — el OUTCOME lo computa el reflejo, tú SOLO lo echas (verificar en vivo, no a fe): cosecha.traer ' +
       'responde {ok:true, traidas:[nombres]} o {ok:false, motivo}. Di "traída/instalada" SOLO si ok===true; si ' +

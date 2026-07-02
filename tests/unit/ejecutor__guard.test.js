@@ -125,6 +125,39 @@ test('sin command → INVALID_INPUT (400)', async () => {
   assert.strictEqual(r.status, 400);
 });
 
+// ── Fase 2: aislamiento en contenedor ──
+test('aislamiento=contenedor sin docker → 503 degradado HONESTO, NO cae a local', async () => {
+  const m = make();
+  m.dockerOk = false;
+  let corrióLocal = false;
+  m._ejecutarLocal = async () => { corrióLocal = true; return { stdout: '', stderr: '', exit_code: 0 }; };
+  const r = await m._ejecutar({ command: 'defuddle parse https://x.com', project_id: 'p1', aislamiento: 'contenedor' });
+  assert.strictEqual(r.status, 503);
+  assert.strictEqual(r.data.veredicto, 'aislamiento_no_disponible');
+  assert.ok(!corrióLocal, 'no ejecuta en local en silencio');
+});
+
+test('aislamiento=contenedor con docker → corre en contenedor (mismo guard), audita aislamiento', async () => {
+  const m = make();
+  m.dockerOk = true;
+  let corrióContenedor = false;
+  m._ejecutarContenedor = async () => { corrióContenedor = true; return { stdout: 'en contenedor', stderr: '', exit_code: 0 }; };
+  const r = await m._ejecutar({ command: 'defuddle parse https://x.com', project_id: 'p1', aislamiento: 'contenedor' });
+  assert.strictEqual(r.status, 200);
+  assert.ok(corrióContenedor, 'corre en contenedor');
+  assert.strictEqual(r.data.aislamiento, 'contenedor');
+  const inv = m._eventos.find(e => e.ev === 'ejecutor.invocado');
+  assert.strictEqual(inv.payload.aislamiento, 'contenedor', 'audita el aislamiento usado');
+});
+
+test('el guard es el MISMO en contenedor: hardline sigue bloqueando aunque pida contenedor', async () => {
+  const m = make();
+  m.dockerOk = true;
+  m._ejecutarContenedor = async () => ({ stdout: '', stderr: '', exit_code: 0 });
+  const r = await m._ejecutar({ command: 'rm -rf /', project_id: 'p1', aislamiento: 'contenedor', confirmado: true });
+  assert.strictEqual(r.data.veredicto, 'hardline');   // la reja no depende del aislamiento
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

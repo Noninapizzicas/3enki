@@ -15062,3 +15062,26 @@ calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta} 
 [ ] wiring/en vivo: dueños de retorno/fianza/stock (órganos previstos)
 ⏸ APARCADO POR DECISIÓN (2026-07-02): los CONSUMIDORES del calendario (agenda-citas/alquiler/staff-turnos) NO se construyen en especulación. El calendario reposa como infra; su forma de uso se construye cuando un proyecto concreto la pida.
 ```
+
+## Frontend — plan de arranque (anotado 2026-07-02; NO construir sin proyecto concreto + Enki vivo)
+
+```
+DOS CAPAS {
+  GENÉRICO (ya existe · pizzepos lo prueba)   LazyShell · MqttClient · chat(ai-gateway) · module-loader · stores ·
+                                              request/response. Un proyecto Prisma lo HEREDA tal cual — cero infra nueva.
+  ESPECÍFICO de Prisma (= forma de uso)       páginas Svelte (catálogo/POS/agenda/escaparate) + page-blueprint (el CONDUCTOR
+                                              que traduce intención → reflejos). Se MOLDEA con el comercio concreto.
+}
+CLAVE  el CHAT es la interfaz primaria (el LLM de página es el agente). Un comercio Prisma se opera ENTERO desde el chat
+       genérico con su page-blueprint ("añade una margarita a 8€" → catalogo.add_product + coste.aplicar) ANTES de tener
+       una sola página Svelte propia. Las páginas visuales = mejora progresiva, no requisito.
+REGLA  páginas Svelte = lo más específico del proyecto → se construyen cuando el proyecto las pida (misma disciplina que
+       los consumidores del calendario). El page-blueprint es escribible offline (JSON de cajones) pero solo VERIFICABLE
+       en el Enki vivo (el blueprint lo ejecuta el LLM de página = runtime). Qué cajones necesita lo dicta el flujo real.
+ARRANQUE (cuando llegue el proyecto + Enki) {
+  1. crear proyecto tipo `prisma` (project-type ya existe)
+  2. page-blueprint mínimo (onboarding marca/coste · alta de producto · POS) + verificar en el chat vivo
+  3. páginas Svelte después, según lo que ESE comercio necesite ver
+}
+NO-HACER  no scaffoldear páginas ni cajones en el vacío — sería especular la UX. El chat reutilizado YA es el frontend para arrancar.
+```

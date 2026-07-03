@@ -123,11 +123,26 @@ class BaseProvider {
   }
 
   /**
+   * Base URL EFECTIVO del proveedor. Un override por env gana a la config, para redirigir
+   * el tráfico a un proxy (p.ej. Headroom, compresión de contexto) en DESPLIEGUE, sin editar
+   * la config versionada ni el código. El proxy conserva el path (/v1/messages, /anthropic/...)
+   * y solo cambia el host → reenvía al proveedor real comprimiendo por el camino.
+   *   env: AIGATEWAY_API_BASE__<NOMBRE>  (guiones/no-alfa → '_', mayúsculas)
+   *        p.ej. deepseek-anthropic → AIGATEWAY_API_BASE__DEEPSEEK_ANTHROPIC=http://localhost:8787
+   * Default: this.config.api_base. REVERSIBLE: quita la env → vuelve al proveedor directo.
+   */
+  _apiBase() {
+    const key = 'AIGATEWAY_API_BASE__' + String(this.name || '').replace(/[^a-z0-9]+/gi, '_').toUpperCase();
+    const override = process.env[key];
+    return (override && override.trim()) || this.config.api_base;
+  }
+
+  /**
    * HTTP request helper
    */
   async makeRequest(method, path, data = null, headers = {}) {
     return new Promise((resolve, reject) => {
-      const url = new URL(path, this.config.api_base);
+      const url = new URL(path, this._apiBase());
       const isHttps = url.protocol === 'https:';
       const httpModule = isHttps ? https : http;
 
@@ -190,7 +205,7 @@ class BaseProvider {
    * HTTP streaming request helper
    */
   makeStreamRequest(method, path, data = null, headers = {}, onChunk, onEnd, onError) {
-    const url = new URL(path, this.config.api_base);
+    const url = new URL(path, this._apiBase());
     const isHttps = url.protocol === 'https:';
     const httpModule = isHttps ? https : http;
 

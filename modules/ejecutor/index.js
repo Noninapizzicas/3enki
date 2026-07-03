@@ -74,6 +74,9 @@ class EjecutorModule extends ModuloHibridoReflejo {
     this.contenedorImagen = 'node:20-slim';
     this.contenedorMemoria = '512m';
     this.contenedorPidsLimit = 256;
+    this.contenedorReadonly = true;      // rootfs read-only + tmpfs /tmp (solo /work y /tmp escribibles)
+    this.contenedorUsuario = null;       // null → deriva uid:gid del proceso (no-root); 'root' lo desactiva
+    this.scratchDir = null;              // scope-sistema (sin project_id) → aquí, NUNCA el repo Enki
   }
 
   async onLoad(context) {
@@ -86,6 +89,10 @@ class EjecutorModule extends ModuloHibridoReflejo {
     this.contenedorImagen = this.config.contenedor_imagen || 'node:20-slim';
     this.contenedorMemoria = this.config.contenedor_memoria || '512m';
     this.contenedorPidsLimit = Number(this.config.contenedor_pids_limit) || 256;
+    this.contenedorReadonly = this.config.contenedor_readonly !== false;   // default true
+    this.contenedorUsuario = this.config.contenedor_usuario || null;       // null → uid:gid del proceso
+    this.scratchDir = path.resolve(this.config.scratch_dir || path.join(process.cwd(), 'data', 'ejecutor', 'scratch'));
+    try { fs.mkdirSync(this.scratchDir, { recursive: true }); } catch (_) { /* best-effort */ }
     this.dockerOk = this._probarDocker();   // best-effort: ¿hay docker en este host?
     this._registrarBoton();
     this.logger?.info('ejecutor.loaded', { module: this.name, version: this.version, activo: this.activo, allowlist: this.allowlist.length, docker: this.dockerOk });
@@ -185,8 +192,11 @@ class EjecutorModule extends ModuloHibridoReflejo {
 
   _resolverCwd(project_id, cwd) {
     if (cwd && path.isAbsolute(cwd)) return cwd;
-    const base = project_id ? path.join(process.cwd(), 'data', 'projects', String(project_id), 'storage') : process.cwd();
-    const root = fs.existsSync(base) ? base : process.cwd();
+    // Scope-proyecto → su storage. Scope-sistema (sin project_id) → scratch DEDICADO, NUNCA el
+    // repo Enki (un comando de sistema no debe ver/tocar el core por accidente).
+    const scratch = this.scratchDir || path.join(process.cwd(), 'data', 'ejecutor', 'scratch');
+    const base = project_id ? path.join(process.cwd(), 'data', 'projects', String(project_id), 'storage') : scratch;
+    const root = fs.existsSync(base) ? base : scratch;
     return cwd ? path.join(root, cwd) : root;
   }
 
@@ -210,10 +220,18 @@ class EjecutorModule extends ModuloHibridoReflejo {
       '--cap-drop', 'ALL',
       '--security-opt', 'no-new-privileges',
       '--pids-limit', String(this.contenedorPidsLimit),
-      '--memory', String(this.contenedorMemoria),
-      '-v', `${cwd}:/work`, '-w', '/work',
-      this.contenedorImagen, 'bash', '-lc', cmd
+      '--memory', String(this.contenedorMemoria)
     ];
+    // No-root: los ficheros que baje NO quedan root-owned en el host — corremos con el uid:gid del
+    // proceso Node, que es DUEÑO del storage montado → escribe en /work sin EACCES y el Node luego
+    // los lee/mueve. HOME=/tmp (tmpfs) da a npm/npx caché escribible sin root. 'root' en config lo desactiva.
+    const usuario = this.contenedorUsuario === 'root' ? null
+      : (this.contenedorUsuario || `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`);
+    if (usuario) args.push('--user', usuario, '-e', 'HOME=/tmp');
+    // Rootfs read-only: el contenedor no escribe su propio SO. Solo /work (RW, el storage montado)
+    // y /tmp (tmpfs efímero, con exec para postinstalls de npm) son escribibles.
+    if (this.contenedorReadonly) args.push('--read-only', '--tmpfs', '/tmp:rw,exec,size=64m');
+    args.push('-v', `${cwd}:/work`, '-w', '/work', this.contenedorImagen, 'bash', '-lc', cmd);
     return new Promise((resolve) => {
       execFile('docker', args, { timeout, maxBuffer: this.maxBuffer }, (err, stdout, stderr) => {
         const exit_code = err ? (typeof err.code === 'number' ? err.code : 1) : 0;

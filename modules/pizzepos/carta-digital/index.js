@@ -23,10 +23,13 @@ const { generateStaticHTML, generateServiceWorker, generateManifest, generateIco
 
 const CONFIG_PATH = '/pizzepos/carta-digital/config.json';
 const DISENO_PATH = '/pizzepos/carta-digital/diseno.json';   // el look que compone Enki, por proyecto
-// Bundle estático servido por Caddy en /shop/<slug>. project-manager symlinka
-// /opt/enki/public/shop/<slug> → <proyecto>/storage/tienda/bundle/ al activar la feature `tienda`.
-// Publicar = escribir aquí; Caddy lo sirve por el symlink (sin reload, sin tocar Caddyfile).
-const BUNDLE_DIR = '/tienda/bundle';
+// Bundle estático servido por Caddy en /<ns>/<slug>/. project-manager symlinka
+// /opt/enki/public/<ns>/<slug> → <proyecto>/storage/www/ al activar la feature `www`.
+// La PWA de la carta vive en la RAÍZ del www del proyecto (es la home pública); los
+// subdirs que suba el comerciante (www/catalogo/, …) conviven al lado y se espejan en
+// la URL. Publicar = escribir aquí; Caddy lo sirve por el symlink (sin reload, sin
+// tocar Caddyfile). El árbol de www/ se espeja tal cual en /<ns>/<slug>/… (ver www.json).
+const BUNDLE_DIR = '/www';
 
 class CartaDigitalModule extends BaseModule {
   constructor() {
@@ -314,7 +317,7 @@ class CartaDigitalModule extends BaseModule {
     const op = config.opciones_visualizacion || {};
 
     // Imágenes: copiar las locales al bundle (img/<basename>) y reescribir la url a relativa,
-    // para que la PWA estática las sirva desde /shop/<slug>/img/... (fs.copy = binario seguro, JS↔JS).
+    // para que la PWA estática las sirva desde /<ns>/<slug>/img/... (fs.copy = binario seguro, JS↔JS).
     let imagenesCopiadas = 0;
     const productos = [];
     for (const p of (data.productos || [])) {
@@ -336,7 +339,7 @@ class CartaDigitalModule extends BaseModule {
     // SUELTO (export-cli + cf-worker/deploy.js); el core no sirve HTTP-SSE de chat. No cablear
     // aquí un endpoint de chat sin tener un worker detrás (sería apuntar a un fantasma).
     // Prefijo público global (el "botón único": config.json web.public_ns). El bundle
-    // se sirve en /<ns>/shop/<slug>/. Ver lib/public-ns.js.
+    // se sirve en /<ns>/<slug>/ (raíz del www del proyecto). Ver lib/public-ns.js.
     let nsPub = 'a';
     try { nsPub = require('../../../lib/public-ns.js').publicNs(); } catch (_) { /* default 'a' */ }
     const tplConfig = {
@@ -345,10 +348,10 @@ class CartaDigitalModule extends BaseModule {
       whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
       mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
       project_slug: slug,
-      // Caddy sirve el bundle en /<ns>/shop/<slug>/. La <base> hace que img/·manifest·sw·iconos
+      // Caddy sirve el bundle en /<ns>/<slug>/. La <base> hace que img/·manifest·sw·iconos
       // resuelvan bien aunque se abra la URL sin barra final → evita el 404 de assets sin slug.
       // El SUELTO (export-cli, raíz del dominio) NO setea base_href.
-      base_href: `/${nsPub}/shop/${slug}/`,
+      base_href: `/${nsPub}/${slug}/`,
       pago_online: !!op.pago_online,
       pedido_endpoint: op.pedido_endpoint || '',
       tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colores.texto || '#e5e5e5', logo_emoji: logoEmoji }
@@ -366,7 +369,7 @@ class CartaDigitalModule extends BaseModule {
     // o sin respuesta → se publica igual (no se vuelve dependencia dura del deploy).
     //
     // OJO: el verificador renderiza el HTML SUELTO (Chromium headless, about:blank, SIN
-    // servidor). El bundle usa `<img src="img/...">` relativo a /shop/<slug>/ — que ahí NO
+    // servidor). El bundle usa `<img src="img/...">` relativo a /<ns>/<slug>/ — que ahí NO
     // se puede bajar → naturalWidth=0 → 'imagenes_rotas' = FALSO POSITIVO que tumbaba todo
     // publish con imágenes. Para verificar NO inlineamos las imágenes REALES (43×~400KB =
     // HTML de ~23MB → render de ~30s y el botón del frontend corta a 10s): basta un
@@ -389,8 +392,8 @@ class CartaDigitalModule extends BaseModule {
       return this._err(422, 'UPSTREAM_INVALID_RESPONSE', `la carta digital RENDERIZA rota (${(rd.motivos || []).join(', ')}) — NO publicada`);
     }
 
-    // Escribir el bundle (fs.write hace mkdir -p del dir). Si la feature `tienda` no está
-    // activa el symlink no existe y /shop/<slug> dará 404 — lo avisa el aviso, no se finge.
+    // Escribir el bundle (fs.write hace mkdir -p del dir). Si la feature `www` no está
+    // activa el symlink no existe y /<ns>/<slug> dará 404 — lo avisa el aviso, no se finge.
     const files = [
       [`${BUNDLE_DIR}/index.html`, html],
       [`${BUNDLE_DIR}/sw.js`, generateServiceWorker(tplConfig.nombre_negocio)],
@@ -413,13 +416,13 @@ class CartaDigitalModule extends BaseModule {
     this.metrics?.increment?.('cartadigital.publicado', { project: slug });
 
     return { status: 200, data: {
-      alojada_url: `/${nsPub}/shop/${slug}`,
-      bundle_dir: 'storage/tienda/bundle',
+      alojada_url: `/${nsPub}/${slug}`,
+      bundle_dir: 'storage/www',
       productos: productos.length,
       imagenes_copiadas: imagenesCopiadas,
       extras_sin_precio: extrasSinPrecio,
       ...(extrasSinPrecio > 0 ? { aviso_extras: `${extrasSinPrecio} ingredientes extra sin precio — NO se ofrecen en la carta pública. Ponles precio para activarlos como extras.` } : {}),
-      aviso: `Bundle escrito. Si la feature \`tienda\` está activa en el proyecto, ya se ve en /${nsPub}/shop/${slug} (Caddy lo sirve estático por el symlink). Si da 404, activa la feature \`tienda\` (crea el symlink /opt/enki/public/${nsPub}/shop/${slug}). Cada cambio requiere volver a publicar — es estático, no al vuelo.`
+      aviso: `Bundle escrito. Si la feature \`www\` está activa en el proyecto, ya se ve en /${nsPub}/${slug} (Caddy lo sirve estático por el symlink). Si da 404, activa la feature \`www\` (crea el symlink /opt/enki/public/${nsPub}/${slug}). Cada cambio requiere volver a publicar — es estático, no al vuelo.`
     } };
   }
 

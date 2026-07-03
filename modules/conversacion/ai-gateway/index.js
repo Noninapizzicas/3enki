@@ -1447,6 +1447,48 @@ class AiGatewayModule extends BaseModule {
     });
   }
 
+  // Nervio de LENTES — lado CATÁLOGO (el modelo correcto: se inyecta el GRAFO, no el
+  // cuerpo). Trae el menú del dominio — nombre + cuando_usar, SIN contenido (barato) —
+  // vía lentes.listar. El LLM elige leyendo cuando_usar y abre SOLO la que usa con
+  // lentes.obtener {nombres}. Best-effort: timeout → [] y el turno sigue.
+  async _leerCatalogoLentes(dominio) {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return [];
+    const request_id = crypto.randomUUID();
+    const timeoutMs = this.config.lentes_timeout_ms || 3000;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve([]); }, timeoutMs);
+      try {
+        unsub = this.eventBus.subscribe('lentes.listar.response', (event) => {
+          const d = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!d || d.request_id !== request_id) return;
+          clearTimeout(timeout); if (unsub) unsub();
+          const payload = d.data || d;
+          const all = Array.isArray(payload?.lentes) ? payload.lentes : [];
+          resolve(dominio ? all.filter(l => l && l.dominio === dominio) : all);
+        });
+        this.eventBus.publish('lentes.listar.request', { request_id });
+      } catch (_) { clearTimeout(timeout); if (unsub) unsub(); resolve([]); }
+    });
+  }
+
+  // El MENÚ (grafo): nombres + cuando_usar del dominio. NO el cuerpo. El LLM elige y
+  // abre solo la que interesa. Mismo patrón que _composeCanteraSection (probado en vivo).
+  _composeLenteMenu(dominio, items) {
+    const menu = items.map(l => `- ${l.nombre}${l.cuando_usar ? ` — ${l.cuando_usar}` : ''}`).join('\n');
+    const et = (dominio || 'OFICIO').toUpperCase();
+    return (
+      `# LENTES DE ${et} — el GRAFO (menú · contexto silencioso)\n` +
+      'Estas son las lentes (oficios) de esta página. NO se inyecta su cuerpo: primero ELIGE ' +
+      'la que sirve a la tarea leyendo su descripción, y ÁBRELA solo entonces con ' +
+      "bus.publishAndWait('lentes.obtener.request', {nombres:[...]}) — carga SOLO la que uses, " +
+      'NUNCA todas. Una vez abierta, ENCÁRNALA: sus reglas MANDAN sobre tu reflejo por defecto, ' +
+      'para que el resultado no sea genérico. Para saltar a un oficio vecino del grafo: ' +
+      "bus.publishAndWait('lentes.vecinas.request', {desde:'<nombre>', k}).\n\n" +
+      menu
+    );
+  }
+
   _composeLenteSection(lentes) {
     const cuerpos = lentes
       .map(l => `## LENTE: ${l.nombre}${l.dominio ? ' [' + l.dominio + ']' : ''}${l.cuando_usar ? ' — ' + l.cuando_usar : ''}\n${l.contenido}`)
@@ -2215,20 +2257,20 @@ class AiGatewayModule extends BaseModule {
       } catch (_) { /* el empujon es best-effort; nunca bloquea el turno */ }
     }
 
-    // Nervio de LENTES de diseño: si la página declara una lente por defecto
-    // (manifest.lente_default), la EMPUJAMOS en el system prompt — push determinista,
-    // NO depende de que el LLM la pida (eso es el pull del blueprint, refinamiento).
-    // Esta es la entrega event-driven: un turno de diseño dispara la inyección. UNA vez
-    // por conversación (la primera vuelta; luego vive en el historial). Best-effort.
+    // Nervio de LENTES: si la página declara un dominio de lentes (manifest.lente_default),
+    // inyectamos su MENÚ/GRAFO (nombres + cuando_usar, barato) — NO el cuerpo. El error era
+    // inyectar todo; el modelo correcto es: se inyecta el grafo, el LLM elige, y abre solo la
+    // que interesa con lentes.obtener {nombres}. UNA vez por conversación. Best-effort.
     if (blueprintCtx && !context?.async_invocation) {
       const spec = blueprintCtx.manifest?.lente_default || blueprintCtx.child?.lente_default || null;
       if (spec && typeof spec === 'object') {
-        const key = `${conversation_id}::${JSON.stringify(spec)}`;
+        const dominio = spec.dominio || null;
+        const key = `${conversation_id}::lente-menu::${dominio}`;
         if (!this.conversationLenteEnviada.has(key)) {
           try {
-            const lentes = await this._leerLente(spec);
-            if (Array.isArray(lentes) && lentes.length > 0) {
-              const seccion = this._composeLenteSection(lentes);
+            const items = await this._leerCatalogoLentes(dominio);
+            if (Array.isArray(items) && items.length > 0) {
+              const seccion = this._composeLenteMenu(dominio, items);
               effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
               this.conversationLenteEnviada.add(key);
             }

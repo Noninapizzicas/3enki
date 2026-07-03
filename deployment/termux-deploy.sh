@@ -61,8 +61,12 @@ deploy_one(){
     have sshpass || { c_err "sshpass no está — instala: pkg install sshpass"; return 1; }
     # sshpass -e toma la pass de SSH del env SSHPASS (no aparece en 'ps', a diferencia de -p).
     # printf … | ssh  → ese stdin se reenvía al remoto → lo lee 'sudo -S'.
+    # Forzamos auth por CONTRASEÑA (sin probar claves antes → evita 'Too many auth failures'
+    # y que sshpass mande la pass en el momento equivocado) y un solo intento (falla claro).
     printf '%s\n' "$pass" | SSHPASS="$pass" sshpass -e \
-      ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$target" "bash -lc '$remote'"
+      ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
+          -o PreferredAuthentications=password -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=1 \
+          "$target" "bash -lc '$remote'"
   else
     # Modo A (clave SSH). -t da tty por si sudo pide contraseña (o pon NOPASSWD, ver abajo).
     ssh -t -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$target" "bash -lc '$remote'"

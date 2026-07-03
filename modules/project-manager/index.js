@@ -1468,7 +1468,18 @@ class ProjectManagerModule extends BaseModule {
   // Idempotente. source es relativo al base_path; target absoluto. Ambos admiten {{slug}}.
   async _applySymlinks(basePath, symlinks, slug, featureId) {
     if (!Array.isArray(symlinks)) return;
-    const sub = (s) => (slug !== null && typeof s === 'string') ? s.replace(/\{\{slug\}\}/g, slug) : s;
+    // Sustituye {{slug}} Y {{public_ns}} (el prefijo público global, lib/public-ns.js).
+    // El bug: solo se sustituía {{slug}} → el target quedaba con la LITERAL {{public_ns}}
+    // (/opt/enki/public/{{public_ns}}/shop/<slug>), fuera del root /opt/enki/public/<ns> que
+    // sirve Caddy → 404. _initializeFromBlueprint sí lo sustituía; el auto-heal (este método) no.
+    let publicNs = 'a';
+    try { publicNs = require('../../lib/public-ns.js').publicNs(); } catch (_) { /* default 'a' */ }
+    const sub = (s) => {
+      if (typeof s !== 'string') return s;
+      let out = s.replace(/\{\{public_ns\}\}/g, publicNs);
+      if (slug !== null) out = out.replace(/\{\{slug\}\}/g, slug);
+      return out;
+    };
     for (const link of symlinks) {
       if (!link || typeof link.source !== 'string' || typeof link.target !== 'string') continue;
       const sourceAbs = path.join(basePath, sub(link.source));

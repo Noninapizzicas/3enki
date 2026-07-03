@@ -1,6 +1,6 @@
 {
   "name": "project-manager",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Project lifecycle management canónico: CRUD + activate/deactivate + session + AI config + bootstrap (Sistema + Mi Proyecto) + resolución 'una vía fija' de default conversation. Consume composition-manager y database-manager via events.",
   "author": "Event Core Team",
   "language": "en",

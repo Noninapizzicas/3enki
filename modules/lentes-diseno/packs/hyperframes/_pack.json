@@ -1,0 +1,126 @@
+{
+  "_doc": "ADN del pack 'hyperframes' — EXPERIMENTO: las 20 agent-skills de heygen-com/hyperframes (HTML→vídeo MP4 determinista, Apache 2.0) traidas a la cupula. AVISO: COLGANTE deliberado — ninguna pagina bebe el dominio 'hyperframes' hoy (regla montar-pack-lentes); estan alojadas/servibles pero no inyectadas. NATURALEZA: son skill-envoltorio de una CLI (hyperframes render via Puppeteer+FFmpeg) — USARLAS de verdad es territorio del EJECUTOR (allowlist 'hyperframes *' / 'npx hyperframes *' + FFmpeg en el host/contenedor), no solo alojarlas. Encaja con el pipeline de medios de Enki: marca→carta-design(HTML)→publicador(web)→hyperframes(video). Fuente externa Apache-2.0. Retirable borrando el dir.",
+  "dominio": "hyperframes",
+  "cuando_usar": "vídeo desde HTML: crear MP4 determinista (product-launch, website-to-video, slideshow, music-to-video, explainer, motion-graphics, captions) + dominio (core/animation/keyframes/media/cli). Pipeline Chrome-headless+FFmpeg.",
+  "memoria": {
+    "lentes": {
+      "embedded-captions": {
+        "archivo": "embedded-captions.md",
+        "cuando_usar": "'Add captions to a talking-head video. ONE catalog (CATALOG.md) of 32 visual identities behind two engines: column-flow (captions composited INTO the scene — matte occlusion + mix-blend; cream/ink/editorial/keynote/documentary/loud/neon/glitch/chrome/velocity) and themed constitutions (anchor/ordnance/terminal/neonsign/stardust/stomp/scoreboard/transit/vhs/arcade/dossier/laser/thunder/hologram/…"
+      },
+      "faceless-explainer": {
+        "archivo": "faceless-explainer.md",
+        "cuando_usar": "\"turn arbitrary text — an article, notes, a topic, a brief — into a faceless explainer video, up to ~3 min (sweet spot 30-90s), where every visual is invented (typography, abstract graphics, diagrams, data-viz) rather than captured. There is no URL, no website capture, and no real assets. Use this skill for topic explainers, concept breakdowns, how-tos, listicles, and narrative explainers. Do n…"
+      },
+      "general-video": {
+        "archivo": "general-video.md",
+        "cuando_usar": ">"
+      },
+      "hyperframes": {
+        "archivo": "hyperframes.md",
+        "cuando_usar": ">"
+      },
+      "hyperframes-animation": {
+        "archivo": "hyperframes-animation.md",
+        "cuando_usar": "\"All animation knowledge for HyperFrames — atomic motion rules, multi-phase scene blueprints, scene transitions, broader motion-design techniques, AND the seven runtime adapters (GSAP default, plus Lottie, Three.js, Anime.js, CSS keyframes, Web Animations API, TypeGPU). Use for any motion or animation task: pick 2-4 rules and compose, or load a blueprint, or look up runtime-specific API (e.g. G…"
+      },
+      "hyperframes-cli": {
+        "archivo": "hyperframes-cli.md",
+        "cuando_usar": "HyperFrames CLI dev loop. Use when running npx hyperframes init, add, catalog, capture, lint, validate, inspect, layout, snapshot, preview, play, render, publish, lambda, doctor, browser, info, upgrade, skills, compositions, docs, benchmark, telemetry, transcribe, tts, or remove-background, or when troubleshooting the HyperFrames build/render environment. Entry point for AWS Lambda cloud render…"
+      },
+      "hyperframes-core": {
+        "archivo": "hyperframes-core.md",
+        "cuando_usar": "The HyperFrames composition contract — build one renderable project. Use for composition structure, the `data-*` timing attributes, `class=\"clip\"`, tracks, sub-compositions, variables, framework-owned media playback, deterministic-render rules, and validation. Read before writing composition HTML."
+      },
+      "hyperframes-creative": {
+        "archivo": "hyperframes-creative.md",
+        "cuando_usar": "Non-animation creative direction for HyperFrames videos. Use for design spec (frame.md / design.md) handling, palettes, typography, narration, beat planning, audio-reactive visuals, composition patterns, and brand / style decisions. For atomic motion patterns and scene blueprints, use `hyperframes-animation`."
+      },
+      "hyperframes-keyframes": {
+        "archivo": "hyperframes-keyframes.md",
+        "cuando_usar": ">"
+      },
+      "hyperframes-media": {
+        "archivo": "hyperframes-media.md",
+        "cuando_usar": "Audio and media assets for HyperFrames compositions, produced by one shared audio engine (`scripts/audio.mjs`) — multi-provider TTS (HeyGen / ElevenLabs / Kokoro local), background music + sound effects (HeyGen audio-library retrieval by default, with local Lyria / MusicGen BGM generation and a bundled SFX library as the no-credential fallback), Whisper transcription, background removal, and ca…"
+      },
+      "hyperframes-registry": {
+        "archivo": "hyperframes-registry.md",
+        "cuando_usar": "Install and wire registry blocks and components into HyperFrames compositions. Use when running hyperframes add, installing a block or component, wiring an installed item into index.html, or working with hyperframes.json. Covers the add command, install locations, block sub-composition wiring, component snippet merging, registry discovery, and authoring a new block or component to contribute up…"
+      },
+      "media-use": {
+        "archivo": "media-use.md",
+        "cuando_usar": "Agent Media OS — resolve any media need (BGM, SFX, image, icon) into a frozen local file + ledger record. One verb (`resolve`) handles the full cascade — project cache, global cache, HeyGen catalog search, freeze, register. Keeps search noise on disk, hands the agent a path. Use when a composition needs background music, sound effects, images, or icons."
+      },
+      "motion-graphics": {
+        "archivo": "motion-graphics.md",
+        "cuando_usar": ">"
+      },
+      "music-to-video": {
+        "archivo": "music-to-video.md",
+        "cuando_usar": "\"Use when the user has a music track (an audio file, or a video to pull audio from) and wants a beat-synced HyperFrames video, calm to hard-hitting. The music drives everything: one analyzer reads it once, the orchestrator lays out the frames and fills a per-frame plan, and one sub-agent builds each frame. Typography and templates are the floor — a complete video needs zero assets — but any ima…"
+      },
+      "pr-to-video": {
+        "archivo": "pr-to-video.md",
+        "cuando_usar": "\"turn a GitHub pull request (a PR URL like github.com/<owner>/<repo>/pull/<N>, an <owner>/<repo>#<N> ref, or 'this PR' in a checked-out repo) into a code-change explainer video, up to ~3 min (sweet spot 30-90s) — changelog, feature reveal, fix, or refactor walkthrough, rendered from the diff / commits / files. The input is a CODE CHANGE read via the gh CLI; there is no website capture. Use this…"
+      },
+      "product-launch-video": {
+        "archivo": "product-launch-video.md",
+        "cuando_usar": "\"turn a product or marketing URL, pasted script, or brief into a product launch video, including SaaS promos, feature reveals, app launches, company promos, and product marketing videos. Use this skill when the user wants to market, launch, promote, or reveal a product. Do not use it for general non-launch website tours, non-product topic explainers, GitHub pull requests, captioning existing fo…"
+      },
+      "remotion-to-hyperframes": {
+        "archivo": "remotion-to-hyperframes.md",
+        "cuando_usar": "'Port an existing Remotion (React) composition to HyperFrames HTML. Use ONLY when the user explicitly asks to port/convert/migrate/translate a Remotion source. Do NOT use: (a) authoring a new HyperFrames composition; (b) Remotion mentioned in passing; (c) Remotion code shared as reference only; (d) \"same video as my Remotion one\" without explicit migrate request — treat as fresh build. Doubt → …"
+      },
+      "slideshow": {
+        "archivo": "slideshow.md",
+        "cuando_usar": ">"
+      },
+      "talking-head-recut": {
+        "archivo": "talking-head-recut.md",
+        "cuando_usar": "Package an existing talking-head / interview / podcast video by layering timed, designed GRAPHIC OVERLAY cards onto the playing video — titles, lower-thirds, data callouts, quotes, side panels, picture-in-picture — synced to the transcript. The source video plays in full; the agent designs and writes each card's HTML in conversation, then renders to MP4 via hyperframes. Use when the user asks f…"
+      },
+      "website-to-video": {
+        "archivo": "website-to-video.md",
+        "cuando_usar": "\"Capture a general website/URL and turn it into a HyperFrames video (site tour, showcase, or social clip from the site's own visuals). Uses headless Chrome screenshots + brand assets. Use when intent is general — portfolio/blog/landing-page showcase or social clip from the site. NOT for: product/SaaS launch or promo (→ /product-launch-video, even from a URL); topic explainer with no site (→ /fa…"
+      }
+    },
+    "rutas": {
+      "router": [
+        "hyperframes"
+      ],
+      "creacion": [
+        "embedded-captions",
+        "faceless-explainer",
+        "general-video",
+        "motion-graphics",
+        "music-to-video",
+        "pr-to-video",
+        "product-launch-video",
+        "slideshow",
+        "talking-head-recut",
+        "website-to-video"
+      ],
+      "dominio": [
+        "hyperframes-animation",
+        "hyperframes-cli",
+        "hyperframes-core",
+        "hyperframes-creative",
+        "hyperframes-keyframes",
+        "hyperframes-media",
+        "hyperframes-registry",
+        "media-use",
+        "remotion-to-hyperframes"
+      ]
+    }
+  },
+  "evento": {
+    "emite": [
+      "lente.registrar"
+    ],
+    "escucha": [
+      "lentes.obtener.request",
+      "lentes.listar.request"
+    ]
+  }
+}

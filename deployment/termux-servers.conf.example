@@ -1,0 +1,10 @@
+# Enki — lista de VPS para termux-deploy.sh
+# Copia este fichero a  ~/.config/enki-deploy/servers.conf  y edítalo.
+# Formato (los espacios alrededor de | no importan):
+#   alias | user@host | remote_dir | dominio
+#
+# 'remote_dir' es relativo al $HOME del usuario SSH. 'dominio' es el que pide vps-setup.sh.
+# Añadir un VPS = una línea más. Comenta con # para desactivar sin borrar.
+
+vps1 | admin@217.154.105.173 | 2enki/2enki | enki-ai.online
+# vps2 | admin@TU_OTRA_IP     | 2enki/2enki | tu-otro-dominio.com

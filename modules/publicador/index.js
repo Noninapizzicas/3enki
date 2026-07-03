@@ -33,14 +33,12 @@ class PublicadorModule extends ModuloHibridoReflejo {
     this.version = '0.1.0';
     this.activos = new Map();          // project_id → { slug, base_path }
     this.ultimoActivo = null;          // el fs escribe en el último activado
-    this.publicBaseRoot = '/opt/enki/public';
     this.freno = true;                 // verificador-visual best-effort
   }
 
   async onLoad(context) {
     await super.onLoad(context);
     const cfg = (context && context.moduleConfig) || {};
-    this.publicBaseRoot = cfg.public_base || '/opt/enki/public';
     this.freno = cfg.freno_render !== false;
   }
 
@@ -101,27 +99,25 @@ class PublicadorModule extends ModuloHibridoReflejo {
       } catch (_) { /* sin órgano/navegador → se publica igual */ }
     }
 
-    // 1. escribir en el storage del proyecto (JS↔fs directo, en-proceso).
-    const storageDir = path.join(base_path, 'storage', 'publicaciones', dir);
+    // 1. asegurar la feature `www` (crea storage/www + symlink /opt/enki/public/<ns>/<slug>
+    //    → storage/www). Idempotente; el ÚNICO dueño del symlink es project-manager. Así el
+    //    árbol de www/ se espeja tal cual en /<ns>/<slug>/… (ver blueprints/project-types/www.json).
     try {
-      await fs.promises.mkdir(storageDir, { recursive: true });
-      await fs.promises.writeFile(path.join(storageDir, archivo), html, 'utf-8');
+      await this._rpc('project.ensure-feature.request', { id: activeId, features: ['www'] }, { timeout_ms: 12000 });
+    } catch (_) { /* best-effort: si ya está activa, el symlink existe y seguimos */ }
+
+    // 2. escribir en el ÁRBOL www del proyecto, bajo el subdir <dir> (para no pisar la home/
+    //    carta que vive en la RAÍZ del www). El árbol se espeja 1:1 en /<ns>/<slug>/<dir>/…
+    const wwwDir = path.join(base_path, 'storage', 'www', dir);
+    try {
+      await fs.promises.mkdir(wwwDir, { recursive: true });
+      await fs.promises.writeFile(path.join(wwwDir, archivo), html, 'utf-8');
     } catch (err) {
       return this._errorResponse(500, 'UNKNOWN_ERROR', `no se pudo escribir el HTML: ${err.message}`);
     }
 
-    // 2. symlink a la superficie servida: /opt/enki/public/<ns>/<dir>/<slug> → storageDir.
     const ns = publicNsLib.publicNs();
-    const target = path.join(this.publicBaseRoot, ns, dir, slug);
-    try {
-      await fs.promises.mkdir(path.dirname(target), { recursive: true });
-      try { await fs.promises.unlink(target); } catch (_) { /* no existe previo */ }
-      await fs.promises.symlink(storageDir, target);
-    } catch (err) {
-      return this._errorResponse(500, 'UNKNOWN_ERROR', `HTML escrito pero el symlink público falló: ${err.message}`, { storageDir });
-    }
-
-    const url_path = `/${ns}/${dir}/${slug}/` + (archivo === 'index.html' ? '' : archivo);
+    const url_path = `/${ns}/${slug}/${dir}/` + (archivo === 'index.html' ? '' : archivo);
     try {
       this.eventBus.publish('publicador.publicado', { project_id: activeId, dir, slug, archivo, url_path, timestamp: new Date().toISOString() });
       this.metrics?.increment('publicador.publicado.total');

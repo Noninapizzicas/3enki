@@ -6,5 +6,6 @@
 # 'remote_dir' es relativo al $HOME del usuario SSH. 'dominio' es el que pide vps-setup.sh.
 # Añadir un VPS = una línea más. Comenta con # para desactivar sin borrar.
 
+# Cada VPS puede tener SU propio dir y dominio (el vps2 usa 2enki, no 2enki/2enki):
 vps1 | admin@217.154.105.173 | 2enki/2enki | enki-ai.online
-# vps2 | admin@TU_OTRA_IP     | 2enki/2enki | tu-otro-dominio.com
+vps2 | admin@212.227.248.5   | 2enki       | pizzepos.es

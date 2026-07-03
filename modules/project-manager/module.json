@@ -1,6 +1,6 @@
 {
   "name": "project-manager",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "description": "Project lifecycle management canónico: CRUD + activate/deactivate + session + AI config + bootstrap (Sistema + Mi Proyecto) + resolución 'una vía fija' de default conversation. Consume composition-manager y database-manager via events.",
   "author": "Event Core Team",
   "language": "en",
@@ -17,6 +17,7 @@
       "project.get.response",
       "project.list.response",
       "project.active.response",
+      "project.ensure-feature.response",
       "db.query.request",
       "db.schema.init.request",
       "composition.request"
@@ -30,6 +31,7 @@
       { "event": "project.get.request",       "handler": "onGetProjectRequest" },
       { "event": "project.list.request",      "handler": "onListProjectsRequest" },
       { "event": "project.active.request",    "handler": "onGetActiveProjectRequest" },
+      { "event": "project.ensure-feature.request", "handler": "onEnsureFeatureRequest" },
       { "event": "db.query.response",         "handler": "onDbQueryResponse" },
       { "event": "composition.response",      "handler": "onCompositionResponse" }
     ]

@@ -392,6 +392,16 @@ class CartaDigitalModule extends BaseModule {
       return this._err(422, 'UPSTREAM_INVALID_RESPONSE', `la carta digital RENDERIZA rota (${(rd.motivos || []).join(', ')}) — NO publicada`);
     }
 
+    // Auto-activar la feature `www` (crea el symlink /opt/enki/public/<ns>/<slug> → storage/www)
+    // ANTES de escribir → /<ns>/<slug> sirve sin paso manual. Best-effort e IDEMPOTENTE: si ya
+    // está instalada, project-manager no re-inicializa. project-manager es el ÚNICO dueño del
+    // symlink; aquí solo se le PIDE. Si no responde, el aviso de abajo lo dice (no se finge).
+    let featureOk = false;
+    try {
+      const ef = await this._rpc('project.ensure-feature.request', { id: project_id, features: ['www'] }, { timeout_ms: 8000 });
+      featureOk = !!(ef && typeof ef.status === 'number' && ef.status < 400);
+    } catch (_) { /* best-effort */ }
+
     // Escribir el bundle (fs.write hace mkdir -p del dir). Si la feature `www` no está
     // activa el symlink no existe y /<ns>/<slug> dará 404 — lo avisa el aviso, no se finge.
     const files = [
@@ -422,7 +432,10 @@ class CartaDigitalModule extends BaseModule {
       imagenes_copiadas: imagenesCopiadas,
       extras_sin_precio: extrasSinPrecio,
       ...(extrasSinPrecio > 0 ? { aviso_extras: `${extrasSinPrecio} ingredientes extra sin precio — NO se ofrecen en la carta pública. Ponles precio para activarlos como extras.` } : {}),
-      aviso: `Bundle escrito. Si la feature \`www\` está activa en el proyecto, ya se ve en /${nsPub}/${slug} (Caddy lo sirve estático por el symlink). Si da 404, activa la feature \`www\` (crea el symlink /opt/enki/public/${nsPub}/${slug}). Cada cambio requiere volver a publicar — es estático, no al vuelo.`
+      feature_www: featureOk,
+      aviso: featureOk
+        ? `Bundle escrito y feature \`www\` asegurada → se ve en /${nsPub}/${slug} (Caddy lo sirve estático por el symlink). Cada cambio requiere volver a publicar — es estático, no al vuelo.`
+        : `Bundle escrito, pero no se pudo confirmar la feature \`www\` (project-manager no respondió). Si da 404, actívala a mano (crea el symlink /opt/enki/public/${nsPub}/${slug}). Cada cambio requiere volver a publicar — es estático, no al vuelo.`
     } };
   }
 

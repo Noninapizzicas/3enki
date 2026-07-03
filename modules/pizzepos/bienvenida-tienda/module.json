@@ -1,7 +1,7 @@
 {
   "_doc": "Modulo de bienvenida al cliente final que contacta al bot del negocio (Telegram en v1, Discord en v2). Escucha telegram.text.received y telegram.command.received, filtra mensajes que vienen del chat del staff (que ya estan cubiertos por notificador-pedidos en el otro sentido), y responde al cliente con saludo + link a la PWA tienda. Multi-canal: en v2 anyade discord.text.received cuando discord-service exista.",
   "name": "bienvenida-tienda",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Cara cliente del bot del negocio. Responde con saludo + link a la PWA tienda cuando el cliente final escribe al bot por primera vez (o cualquier mensaje libre). Es contraparte de notificador-pedidos (cara staff) — mismo bot, dos roles distintos.",
   "author": "Enki Team",
   "language": "es",

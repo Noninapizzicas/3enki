@@ -1,0 +1,35 @@
+{
+  "id": "www",
+  "label": "Web publica",
+  "icon": "🌐",
+  "description": "Web publica del proyecto. Arbol libre en storage/www/. Servida en /<public_ns>/<slug>/ — el arbol de www/ se espeja tal cual en la URL.",
+
+  "dependencies": [],
+
+  "slug_required": true,
+
+  "directories": [
+    "storage/www"
+  ],
+
+  "config": {
+    "www": {
+      "enabled": true,
+      "slug": "{{slug}}",
+      "public_url": "/{{public_ns}}/{{slug}}",
+      "dir": "storage/www"
+    }
+  },
+
+  "initialFiles": {
+    "storage/www/index.html": "<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">\n  <title>{{slug}}</title>\n  <meta name=\"theme-color\" content=\"#0a0a0a\">\n</head>\n<body>\n  <h1>{{slug}}</h1>\n  <p>Web en construccion.</p>\n</body>\n</html>\n"
+  },
+
+  "symlinks": [
+    { "source": "storage/www", "target": "/opt/enki/public/{{public_ns}}/{{slug}}" }
+  ],
+
+  "verify_after": [
+    "storage/www/index.html"
+  ]
+}

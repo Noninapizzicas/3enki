@@ -153,14 +153,20 @@ class BienvenidaTiendaModule extends BaseModule {
 
   /**
    * Resuelve la URL pública de la PWA del proyecto.
-   *   1) Si project.tienda.pwa_url está declarado → usar.
-   *   2) Si project.pwa_url está declarado → usar.
-   *   3) Default: `https://enki-ai.online/<slug>/`.
+   *   1) Si project.www.public_url está declarado → dominio + ese path (modelo www: /<ns>/<slug>).
+   *   2) Si project.tienda.pwa_url está declarado → usar (legacy).
+   *   3) Si project.pwa_url está declarado → usar.
+   *   4) Default: `https://enki-ai.online/<ns>/<slug>/` (namespace público global, ver lib/public-ns.js).
    */
   _resolvePwaUrl(config, slug) {
+    if (config && config.www && typeof config.www.public_url === 'string') {
+      return `https://enki-ai.online${config.www.public_url.replace(/\/?$/, '/')}`;
+    }
     if (config && config.tienda && typeof config.tienda.pwa_url === 'string') return config.tienda.pwa_url;
     if (config && typeof config.pwa_url === 'string') return config.pwa_url;
-    return `https://enki-ai.online/${encodeURIComponent(slug || '')}/`;
+    let ns = 'a';
+    try { ns = require('../../../lib/public-ns.js').publicNs(); } catch (_) { /* default 'a' */ }
+    return `https://enki-ai.online/${ns}/${encodeURIComponent(slug || '')}/`;
   }
 
   _resolveMensajeBienvenida(config, pwaUrl) {

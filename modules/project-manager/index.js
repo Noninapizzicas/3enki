@@ -1335,6 +1335,27 @@ class ProjectManagerModule extends BaseModule {
     }
   }
 
+  // RPC de bus (patrón híbrido reflejo→reflejo): otro módulo (p.ej. carta-digital al
+  // publicar) pide asegurar una feature en un proyecto sin pasar por la UI. Delega en
+  // handleUIAddFeatures (idempotente: si ya está instalada, no re-inicializa) y correla
+  // la respuesta con request_id. project-manager sigue siendo el ÚNICO dueño del symlink.
+  async onEnsureFeatureRequest(event) {
+    const d = event?.data || event || {};
+    const { request_id, id, project_id, features } = d;
+    let result;
+    try {
+      result = await this.handleUIAddFeatures({ id: id || project_id, features });
+    } catch (err) {
+      result = { status: 500, error: { code: 'UNKNOWN_ERROR', message: err.message } };
+    }
+    try {
+      await this.eventBus.publish('project.ensure-feature.response', {
+        request_id, status: result.status, data: result.data, error: result.error,
+        correlation_id: d.correlation_id || crypto.randomUUID(), timestamp: new Date().toISOString()
+      });
+    } catch (_) { /* best-effort: el caller cae por timeout y usa su aviso */ }
+  }
+
   async handleUIGetUnassigned() {
     try {
       const allProjectIds = Array.from(this.projects.keys());

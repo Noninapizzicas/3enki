@@ -1,9 +1,10 @@
 'use strict';
 
 /**
- * publicador__publicar — el reflejo que publica HTML en /<ns>/<dir>/<proyecto>.
- * Verifica: escribe en el storage del proyecto + crea el symlink a la superficie servida,
- * devuelve url_path; y los guards (dir/html inválidos, sin proyecto activo, mismatch).
+ * publicador__publicar — el reflejo que publica HTML en la web del proyecto (/<ns>/<slug>/<dir>/).
+ * Alineado al modelo www (PR #600): asegura la feature www (RPC, stub aquí) + escribe en
+ * storage/www/<dir>/. Verifica escritura + url_path + guards. NO crea symlinks (los hace
+ * project-manager vía la feature www).
  *
  * Ejecutar: node tests/unit/publicador__publicar.test.js
  */
@@ -20,18 +21,17 @@ function nuevo() {
   m.logger = { info() {}, warn() {}, error() {}, debug() {} };
   m.metrics = { increment() {} };
   m.eventBus = { publish() {}, subscribe() { return () => {}; } };
-  m.freno = false; // sin verificador-visual en unit
+  m.freno = false;                          // sin verificador-visual en unit
+  m._rpc = async () => ({ status: 200, data: {} });   // stub ensure-feature (no cuelga)
   return m;
 }
 
 const tests = [];
 const test = (n, f) => tests.push({ n, f });
 
-test('publica: escribe el HTML + crea el symlink + url_path correcto', async () => {
+test('publica: escribe en storage/www/<dir>/ + url_path /<ns>/<slug>/<dir>/', async () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-base-'));
-  const pub = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-serv-'));
   const m = nuevo();
-  m.publicBaseRoot = pub;
   m.activos.set('p1', { slug: 'regalos', base_path: base });
   m.ultimoActivo = 'p1';
 
@@ -39,55 +39,61 @@ test('publica: escribe el HTML + crea el symlink + url_path correcto', async () 
   const r = await m._publicar({ dir: 'catalogo', html });
 
   assert.strictEqual(r.status, 200, 'status 200');
-  assert.strictEqual(r.data.url_path, '/a/catalogo/regalos/', 'url_path /<ns>/<dir>/<slug>/');
+  assert.strictEqual(r.data.url_path, '/a/regalos/catalogo/', 'url_path proyecto-primero');
   assert.strictEqual(r.data.archivo, 'index.html');
 
-  const storageFile = path.join(base, 'storage', 'publicaciones', 'catalogo', 'index.html');
-  assert.ok(fs.existsSync(storageFile), 'HTML escrito en el storage del proyecto');
-  assert.strictEqual(fs.readFileSync(storageFile, 'utf-8'), html);
-
-  const link = path.join(pub, 'a', 'catalogo', 'regalos');
-  assert.ok(fs.lstatSync(link).isSymbolicLink(), 'symlink creado');
-  assert.strictEqual(fs.readlinkSync(link), path.join(base, 'storage', 'publicaciones', 'catalogo'), 'symlink → storageDir');
+  const wwwFile = path.join(base, 'storage', 'www', 'catalogo', 'index.html');
+  assert.ok(fs.existsSync(wwwFile), 'HTML escrito en storage/www/<dir>/');
+  assert.strictEqual(fs.readFileSync(wwwFile, 'utf-8'), html);
 
   fs.rmSync(base, { recursive: true, force: true });
-  fs.rmSync(pub, { recursive: true, force: true });
+});
+
+test('asegura la feature www (llama project.ensure-feature.request)', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-base-'));
+  const m = nuevo();
+  const llamadas = [];
+  m._rpc = async (ev, payload) => { llamadas.push({ ev, payload }); return { status: 200, data: {} }; };
+  m.activos.set('p1', { slug: 'regalos', base_path: base });
+  m.ultimoActivo = 'p1';
+
+  await m._publicar({ dir: 'x', html: '<h1>x</h1>' });
+  const ef = llamadas.find(c => c.ev === 'project.ensure-feature.request');
+  assert.ok(ef, 'llamó a ensure-feature');
+  assert.deepStrictEqual(ef.payload.features, ['www']);
+  assert.strictEqual(ef.payload.id, 'p1');
+
+  fs.rmSync(base, { recursive: true, force: true });
 });
 
 test('nombre custom → <nombre>.html + url_path lo incluye', async () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-base-'));
-  const pub = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-serv-'));
   const m = nuevo();
-  m.publicBaseRoot = pub;
   m.activos.set('p1', { slug: 'regalos', base_path: base });
   m.ultimoActivo = 'p1';
 
   const r = await m._publicar({ dir: 'informes', html: '<h1>x</h1>', nombre: 'q1' });
   assert.strictEqual(r.status, 200);
   assert.strictEqual(r.data.archivo, 'q1.html');
-  assert.strictEqual(r.data.url_path, '/a/informes/regalos/q1.html');
-  assert.ok(fs.existsSync(path.join(base, 'storage', 'publicaciones', 'informes', 'q1.html')));
+  assert.strictEqual(r.data.url_path, '/a/regalos/informes/q1.html');
+  assert.ok(fs.existsSync(path.join(base, 'storage', 'www', 'informes', 'q1.html')));
 
   fs.rmSync(base, { recursive: true, force: true });
-  fs.rmSync(pub, { recursive: true, force: true });
 });
 
-test('re-publicar el mismo dir → reemplaza el symlink (idempotente)', async () => {
+test('re-publicar el mismo dir → reemplaza el contenido (idempotente)', async () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-base-'));
-  const pub = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-serv-'));
   const m = nuevo();
-  m.publicBaseRoot = pub;
   m.activos.set('p1', { slug: 'regalos', base_path: base });
   m.ultimoActivo = 'p1';
 
   await m._publicar({ dir: 'landing', html: '<h1>v1</h1>' });
   const r2 = await m._publicar({ dir: 'landing', html: '<h1>v2</h1>' });
   assert.strictEqual(r2.status, 200);
-  const file = path.join(base, 'storage', 'publicaciones', 'landing', 'index.html');
+  const file = path.join(base, 'storage', 'www', 'landing', 'index.html');
   assert.strictEqual(fs.readFileSync(file, 'utf-8'), '<h1>v2</h1>', 'contenido actualizado');
 
   fs.rmSync(base, { recursive: true, force: true });
-  fs.rmSync(pub, { recursive: true, force: true });
 });
 
 test('guard: dir inválido → 400', async () => {

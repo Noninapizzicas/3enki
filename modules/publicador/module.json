@@ -1,8 +1,9 @@
 {
-  "_doc": "PUBLICADOR — publica HTML arbitrario en el namespace público /<ns>/<dir>/<proyecto>. Reflejo puro (blueprint-coherente): el LLM de página (skill 'publicar-html') elige el dir y da el HTML; este reflejo hace lo DETERMINISTA — fs.write al storage del proyecto + symlink a la superficie que Caddy sirve. Cero cambios de Caddy (el bloque /<ns>/* ya sirve cualquier subcarpeta). Reusa el prefijo público (lib/public-ns.js) y el patrón symlink de project-manager (arreglado en 4.1.0). NO es la carta (esa es carta-digital / superficie shop).",
+  "_doc": "PUBLICADOR — publica HTML arbitrario en la web pública del proyecto (feature www): /<ns>/<slug>/<dir>/. ALINEADO al modelo www (proyecto-primero, árbol libre): asegura la feature www (project.ensure-feature.request → project-manager crea storage/www + symlink /opt/enki/public/<ns>/<slug>) y escribe el HTML en storage/www/<dir>/ (subdir, para no pisar la home/carta de la raíz). El árbol de www/ se espeja 1:1 en la URL. Reflejo puro (blueprint-coherente): el LLM (skill 'publicar-html') elige el dir y da el HTML; el reflejo hace lo determinista. Cero symlinks propios (el dueño es project-manager). NO es la carta (esa es carta-digital, en la raíz del www).",
   "name": "publicador",
-  "version": "0.1.0",
-  "description": "Publica HTML en /<ns>/<dir>/<proyecto>: escribe en el storage del proyecto y symlinka a la superficie servida. El HTML lo da el LLM; el reflejo hace lo determinista.",
+  "version": "0.2.0",
+  "_v0_2_nota": "v0.2.0: realineado al modelo www (PR #600). Antes creaba su propia superficie /<ns>/<dir>/<slug> (modelo superficie-primero, retirado con shop). Ahora asegura la feature www y escribe en storage/www/<dir>/ → URL /<ns>/<slug>/<dir>/. Sin symlink propio.",
+  "description": "Publica HTML en /<ns>/<slug>/<dir>/: asegura la feature www y escribe en storage/www/<dir>/. El HTML lo da el LLM; el reflejo hace lo determinista.",
   "author": "Event Core Team",
   "language": "es",
   "main": "index.js",
@@ -11,12 +12,14 @@
     { "event": "publicador.publicado",   "description": "AUDIT (ningún acto invisible): { project_id, dir, slug, archivo, url_path } → la propiocepción lo capta." }
   ],
   "subscribes": [
-    { "event": "publicar.html.request", "handler": "onPublicarRequest",     "description": "{ dir, html, nombre?, project_id? } → escribe el HTML en storage/publicaciones/<dir>/ + symlink /opt/enki/public/<ns>/<dir>/<slug> → devuelve url_path." },
-    { "event": "project.activated",     "handler": "onProjectActivated",    "description": "rastrea el proyecto activo (slug + base_path) — de ahí cuelgan el fs y el symlink." },
+    { "event": "publicar.html.request", "handler": "onPublicarRequest",     "description": "{ dir, html, nombre?, project_id? } → asegura la feature www + escribe el HTML en storage/www/<dir>/ → devuelve url_path (/<ns>/<slug>/<dir>/)." },
+    { "event": "project.activated",     "handler": "onProjectActivated",    "description": "rastrea el proyecto activo (slug + base_path) — de ahí cuelga el árbol www." },
     { "event": "project.deactivated",   "handler": "onProjectDeactivated",  "description": "limpia el activo." }
   ],
+  "publishes_rpc": [
+    { "event": "project.ensure-feature.request", "description": "asegura la feature www antes de escribir (idempotente; project-manager crea storage/www + symlink)." }
+  ],
   "config": {
-    "public_base": "/opt/enki/public",
     "freno_render": true
   }
 }

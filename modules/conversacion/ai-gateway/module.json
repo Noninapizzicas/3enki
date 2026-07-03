@@ -1,6 +1,7 @@
 {
   "name": "ai-gateway",
-  "version": "2.26.0",
+  "version": "2.27.0",
+  "_v2_27_nota": "v2.27.0: interruptor 'headroom' (hot-switch del proxy de compresión de contexto Headroom) + override de api_base por env. base-provider._apiBase() resuelve: (1) si config.headroom:true y el interruptor 'headroom' está ON y hay HEADROOM_PROXY_URL → por el proxy (comprime, menos tokens); (2) override estático AIGATEWAY_API_BASE__<NOMBRE>; (3) config.api_base. deepseek-anthropic y anthropic marcados headroom:true (hablan wire Anthropic, compatible con el proxy). Interruptor grupo 'sistema', OFF por defecto (compresión = decisión consciente), conmuta en caliente (_registrarBotonHeadroom + onInterruptorCambiado, patrón del sintonizador). Fallback seguro: sin HEADROOM_PROXY_URL → directo. Los frenos de blueprint son el test de fidelidad (422 si comprime de más). Ver propuesta headroom-compresion.md. Test: ai-gateway__apibase-override (8/8). Provisioning del proxy = trabajo de VPS.",
   "_v2_24_nota": "v2.24.0: el nervio enseña la cantera ESCRIBIBLE (Fase 3). El LLM puede CREAR una skill nueva (cosecha.crear, tras resolver algo reutilizable) y MEJORAR una crecida (cosecha.patch, old_string→new_string). El reflejo valida y devuelve veredicto — no inventa. Complementa al destilador (detección out-of-band) con escritura en-turno, con freno.",
   "_v2_23_nota": "v2.23.0: el nervio enseña el aislamiento del ejecutor (Fase 2). Para input NO confiable (URL externa, contenido de fuera) el LLM añade aislamiento:'contenedor' a ejecutor.ejecutar → corre aislado (docker efímero); si no hay docker, 503 honesto y NO cae a local. Cierra el consejo de seguridad: la contención real de lo no-confiable = contenedor, no la reja.",
   "_v2_22_nota": "v2.22.0: el nervio de la cantera enseña la PUERTA GUARDADA de ejecución. Para correr el comando que una skill indica (una CLI, p.ej. defuddle), el LLM usa bus.publishAndWait('ejecutor.ejecutar.request', {command, project_id, motivo}) — NUNCA shell.exec crudo. Maneja 202 (pendiente_aprobacion → pide visto bueno, reintenta con confirmado:true, sin bucle) y 503 (puerta cerrada). Cierra el frontier 'usar una skill': la skill (lente) dice el QUÉ; el ejecutor guardado hace el CÓMO con reja (hardline + aprobación + audit). Ver módulo ejecutor (Fase 1) + propuesta ejecutor-guardado.md.",
@@ -169,6 +170,7 @@
         "enabled": true,
         "priority": 1,
         "api_base": "https://api.deepseek.com",
+        "headroom": true,
         "default_model": "deepseek-v4-flash",
         "models": [
           "deepseek-v4-flash",
@@ -179,6 +181,7 @@
         "enabled": true,
         "priority": 3,
         "api_base": "https://api.anthropic.com",
+        "headroom": true,
         "default_model": "claude-sonnet-4-6",
         "models": [
           "claude-opus-4-7",

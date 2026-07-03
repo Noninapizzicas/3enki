@@ -10,9 +10,10 @@
 
 const assert = require('assert');
 const BaseProvider = require('../../modules/conversacion/ai-gateway/providers/base-provider.js');
+const hr = require('../../modules/conversacion/ai-gateway/providers/headroom-switch.js');
 
-function prov(name, api_base) {
-  const p = new BaseProvider({ api_base }, { info() {}, warn() {}, error() {}, debug() {} });
+function prov(name, api_base, extra = {}) {
+  const p = new BaseProvider({ api_base, ...extra }, { info() {}, warn() {}, error() {}, debug() {} });
   p.name = name;
   return p;
 }
@@ -47,6 +48,38 @@ test('env vacía/espacios → cae al default (reversible)', () => {
   const p = prov('anthropic', 'https://api.anthropic.com');
   assert.strictEqual(p._apiBase(), 'https://api.anthropic.com');
   delete process.env.AIGATEWAY_API_BASE__ANTHROPIC;
+});
+
+test('interruptor headroom ON + proxy + config.headroom → por el proxy', () => {
+  process.env.HEADROOM_PROXY_URL = 'http://localhost:8787';
+  hr.setOn(true);
+  const p = prov('deepseek-anthropic', 'https://api.deepseek.com', { headroom: true });
+  assert.strictEqual(p._apiBase(), 'http://localhost:8787');
+  hr.setOn(false); delete process.env.HEADROOM_PROXY_URL;
+});
+
+test('interruptor headroom OFF → proveedor directo (aunque haya proxy)', () => {
+  process.env.HEADROOM_PROXY_URL = 'http://localhost:8787';
+  hr.setOn(false);
+  const p = prov('deepseek-anthropic', 'https://api.deepseek.com', { headroom: true });
+  assert.strictEqual(p._apiBase(), 'https://api.deepseek.com');
+  delete process.env.HEADROOM_PROXY_URL;
+});
+
+test('headroom ON pero sin HEADROOM_PROXY_URL → cae a directo (fallback seguro)', () => {
+  delete process.env.HEADROOM_PROXY_URL;
+  hr.setOn(true);
+  const p = prov('anthropic', 'https://api.anthropic.com', { headroom: true });
+  assert.strictEqual(p._apiBase(), 'https://api.anthropic.com');
+  hr.setOn(false);
+});
+
+test('provider SIN config.headroom no lo toca el switch', () => {
+  process.env.HEADROOM_PROXY_URL = 'http://localhost:8787';
+  hr.setOn(true);
+  const p = prov('openai', 'https://api.openai.com/v1'); // sin headroom:true
+  assert.strictEqual(p._apiBase(), 'https://api.openai.com/v1');
+  hr.setOn(false); delete process.env.HEADROOM_PROXY_URL;
 });
 
 (async () => {

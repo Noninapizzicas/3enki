@@ -142,6 +142,7 @@ class AiGatewayModule extends BaseModule {
     // interruptores. Idempotente (se re-registra ante solicitar_registro);
     // el estado persistido del panel manda sobre el default vía cambiado.
     this._registrarBotonSintonia();
+    this._registrarBotonHeadroom();
 
     this.logger.info('ai-gateway.loaded', {
       providers: this.providers.size,
@@ -212,9 +213,23 @@ class AiGatewayModule extends BaseModule {
     } catch (_) { /* best-effort */ }
   }
 
+  // Registra el botón 'headroom' (grupo 'sistema', OFF por defecto): conmuta el proxy de
+  // compresión de contexto en caliente. Idempotente. La compresión es decisión consciente
+  // → nace apagado; el estado persistido del panel lo aplica vía cambiado al arrancar.
+  _registrarBotonHeadroom() {
+    try {
+      this.eventBus.publish('interruptor.registrar', {
+        id: 'headroom', label: 'Headroom (comprimir contexto al LLM)', grupo: 'sistema',
+        descripcion: 'Enruta las llamadas al LLM (providers opt-in) por el proxy de compresión Headroom — menos tokens facturados. Requiere HEADROOM_PROXY_URL en el entorno. OFF = proveedor directo. Los frenos de blueprint son el test de fidelidad (422 si la compresión rompe el contrato).',
+        default: false
+      });
+    } catch (_) { /* best-effort */ }
+  }
+
   // interruptores (re)cargó y pide a todos que se registren -> respondemos.
   onSolicitarRegistro() {
     this._registrarBotonSintonia();
+    this._registrarBotonHeadroom();
   }
 
   // on/off en caliente desde el panel, sin reinicio.
@@ -223,6 +238,10 @@ class AiGatewayModule extends BaseModule {
     if (d.id === 'sintonizador') {
       this.sintoniaActiva = !!d.enabled;
       this.logger?.warn('ai-gateway.sintonia.toggled', { activo: this.sintoniaActiva });
+    }
+    if (d.id === 'headroom') {
+      try { require('./providers/headroom-switch.js').setOn(!!d.enabled); } catch (_) { /* best-effort */ }
+      this.logger?.warn('ai-gateway.headroom.toggled', { activo: !!d.enabled, proxy: !!process.env.HEADROOM_PROXY_URL });
     }
   }
 

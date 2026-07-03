@@ -132,6 +132,16 @@ class BaseProvider {
    * Default: this.config.api_base. REVERSIBLE: quita la env → vuelve al proveedor directo.
    */
   _apiBase() {
+    // 1. Interruptor 'headroom' ON + proxy configurado, para providers opt-in
+    //    (config.headroom:true) → hot-switch al proxy sin reinicio. Fallback: si el proxy
+    //    no está (env vacía) → se ignora y sigue al proveedor directo.
+    if (this.config && this.config.headroom === true) {
+      try {
+        const hr = require('./headroom-switch.js');
+        if (hr.isOn()) { const base = hr.proxyBase(); if (base) return base; }
+      } catch (_) { /* sin switch → directo */ }
+    }
+    // 2. Override estático por env (deploy-time), por proveedor.
     const key = 'AIGATEWAY_API_BASE__' + String(this.name || '').replace(/[^a-z0-9]+/gi, '_').toUpperCase();
     const override = process.env[key];
     return (override && override.trim()) || this.config.api_base;

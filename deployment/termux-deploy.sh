@@ -14,7 +14,8 @@
 #
 # Config (FUERA del repo, uno por servidor). Copia el .example:
 #   ~/.config/enki-deploy/servers.conf     alias | user@host | remote_dir | dominio
-#   ~/.config/enki-deploy/secrets  (600)   alias contraseña     # opcional; si falta, se pregunta
+#   ~/.config/enki-deploy/secrets  (600)   alias contraseña   # una por VPS; o '* contraseña'
+#                                          para la MISMA en todos. Si falta, se pregunta.
 #
 # Añadir un VPS = una línea más en servers.conf. Nada más.
 
@@ -32,12 +33,15 @@ trim(){  local s="$*"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]
 
 [ -f "$CONF" ] || { c_err "No existe $CONF"; echo "Copia deployment/termux-servers.conf.example → $CONF y rellénalo." >&2; exit 1; }
 
-# alias → contraseña (de secrets, o pregunta). Cadena vacía = usar clave SSH (modo A).
+# alias → contraseña. Orden: línea exacta del alias en secrets → comodín '*' (misma pass para
+# TODOS los VPS) → env ENKI_DEPLOY_PASS → pregunta. Cadena vacía = usar clave SSH (modo A).
 pass_for(){
   local a="$1" p=""
   if [ -f "$SECRETS" ]; then
     p="$(awk -v a="$a" '$1==a{$1="";sub(/^[ \t]+/,"");print;exit}' "$SECRETS")"
+    [ -z "$p" ] && p="$(awk '$1=="*"{$1="";sub(/^[ \t]+/,"");print;exit}' "$SECRETS")"
   fi
+  [ -z "$p" ] && p="${ENKI_DEPLOY_PASS:-}"
   if [ -z "$p" ] && [ -t 0 ]; then
     read -rs -p "Contraseña para $a (enter = usar clave SSH): " p </dev/tty; echo >&2
   fi

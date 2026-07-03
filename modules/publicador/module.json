@@ -1,0 +1,22 @@
+{
+  "_doc": "PUBLICADOR — publica HTML arbitrario en el namespace público /<ns>/<dir>/<proyecto>. Reflejo puro (blueprint-coherente): el LLM de página (skill 'publicar-html') elige el dir y da el HTML; este reflejo hace lo DETERMINISTA — fs.write al storage del proyecto + symlink a la superficie que Caddy sirve. Cero cambios de Caddy (el bloque /<ns>/* ya sirve cualquier subcarpeta). Reusa el prefijo público (lib/public-ns.js) y el patrón symlink de project-manager (arreglado en 4.1.0). NO es la carta (esa es carta-digital / superficie shop).",
+  "name": "publicador",
+  "version": "0.1.0",
+  "description": "Publica HTML en /<ns>/<dir>/<proyecto>: escribe en el storage del proyecto y symlinka a la superficie servida. El HTML lo da el LLM; el reflejo hace lo determinista.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "publishes": [
+    { "event": "publicar.html.response", "description": "{ publicado, project_id, slug, dir, archivo, url_path } (200) · 400 dir/html inválido · 409 sin proyecto activo · 412 activo != objetivo · 422 render roto · 500 fs/symlink." },
+    { "event": "publicador.publicado",   "description": "AUDIT (ningún acto invisible): { project_id, dir, slug, archivo, url_path } → la propiocepción lo capta." }
+  ],
+  "subscribes": [
+    { "event": "publicar.html.request", "handler": "onPublicarRequest",     "description": "{ dir, html, nombre?, project_id? } → escribe el HTML en storage/publicaciones/<dir>/ + symlink /opt/enki/public/<ns>/<dir>/<slug> → devuelve url_path." },
+    { "event": "project.activated",     "handler": "onProjectActivated",    "description": "rastrea el proyecto activo (slug + base_path) — de ahí cuelgan el fs y el symlink." },
+    { "event": "project.deactivated",   "handler": "onProjectDeactivated",  "description": "limpia el activo." }
+  ],
+  "config": {
+    "public_base": "/opt/enki/public",
+    "freno_render": true
+  }
+}

@@ -15512,6 +15512,7 @@ calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta} 
 ✓ ADAPTADOR LEER — adaptador reflejo 0.2.0: _adaptar lee los arquetipos custom APROBADOS (arquetipos.listar) y los pasa al clasificador con prioridad sobre la semilla. Lazo anti-wipe cerrado (propuesto→aprobado→clasifica).
 [ ] wiring/en vivo: dueños de retorno/fianza/stock (órganos previstos)
 ⏸ APARCADO POR DECISIÓN (2026-07-02): los CONSUMIDORES del calendario (agenda-citas/alquiler/staff-turnos) NO se construyen en especulación. El calendario reposa como infra; su forma de uso se construye cuando un proyecto concreto la pida.
+↻ REENCUADRE SKILL-FIRST (2026-07-02): la filosofía del sistema viró a SKILLS (cantera·cuenco·planificador·ejecutor). El KNOW-HOW de Prisma (molde·arquetipos por forma·reparto reflejo/blueprint·flujo) se COSECHÓ como skill en la cantera — modules/cosecha/cantera/enki/prisma-modelo-universal/SKILL.md (lente_dominio:prisma). Los módulos reflejo siguen siendo las HERRAMIENTAS deterministas que la skill CONDUCE. La receta montar-pack-lentes manda: sin página que la beba → se cosecha, NO se monta como pack; se promueve a lente cuando una página Prisma llegue. La semilla del molde (product-capability) ya vivía como lente en el pack ecc.
 ```
 
 ## Frontend — plan de arranque (anotado 2026-07-02; NO construir sin proyecto concreto + Enki vivo)

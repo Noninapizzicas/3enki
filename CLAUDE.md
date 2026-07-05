@@ -15068,6 +15068,60 @@ PENDIENTE (opcional)  probar por el CHAT real (LLM de página llama ejecutor par
 
 ---
 
+# Referencia externa — gstack (Garry Tan · MIT) — dos planos de diseño para Enki
+
+> ANALIZADO, no alojado. gstack ("Garry's stack") = OS de harness sprint-estructurado
+> (Think→Plan→Build→Review→Test→Ship→Reflect), 23 skills + 8 binarios, capa de config del
+> asistente (como ECC), no runtime. Sus skills solapan con ECC y son off-vertical (oficio
+> desarrollo, no pizzería) → NO se montan como pack. El oro es el DISEÑO: dos piezas suyas son
+> referencia MADURA para cosas que Enki ya tiene a medias. Compañero de ECC (continuous-learning v2).
+
+## 1. Promoción por confianza + cuarentena → el paso 3 del destilador, ya concreto
+
+```json
+{
+  "esquema": "promocion-cuarentena-gstack",
+  "domain_skills": "comportamiento aprendido por contexto — auto-dispara la próxima vez",
+  "ciclo": "aprender → CUARENTENA (no confiable) → 3 usos exitosos → ASCIENDE a global → confiable",
+  "gbrain": "base de conocimiento persistente cross-sesión (embeddings Supabase PGLite/cloud) + trust tiers por repo (rw/ro/deny)",
+  "mapeo_enki": {
+    "destilador_paso3": "= auto-mejora con ventana de confianza — gstack le da el UMBRAL concreto (N=3, cuarentena hasta probar) que el nuestro dejó abstracto",
+    "gbrain_embeddings": "= el upgrade semántico (HNSW) que la cantera dejó PENDIENTE (hoy match por prefijo determinista)",
+    "trust_tiers": "= grados de confianza por origen para una skill crecida (semilla intocable vs crecido probado vs cuarentena)"
+  },
+  "mandato": "cuando el destilador madure el paso 3: cuarentena por defecto, ascenso por USO exitoso repetido (no por aprobación humana sola), y confianza medida por ventana — no un flag binario"
+}
+```
+
+## 2. Defensa anti-inyección de navegador → la contención que le falta al ejecutor+agent-browser
+
+```json
+{
+  "esquema": "defensa-inyeccion-navegador-gstack",
+  "capas": [
+    "clasificador ML LOCAL (22MB) escanea cada página antes de que el LLM la lea",
+    "voting de un LLM barato (Haiku) sobre la FORMA de la conversación (¿la página intenta secuestrar la tarea?)",
+    "CANARY TOKEN aleatorio en el system prompt → si sale en una request, hubo exfiltración de sesión",
+    "ensemble DeBERTa opt-in (721MB, 2-de-3) para el modo paranoico",
+    "deny-default del escape a Chrome DevTools Protocol"
+  ],
+  "mapeo_enki": {
+    "cuando_aplica": "el día que Enki corra automatización web NO-confiable (agent-browser vía ejecutor) — el contenido de la página es input adversarial",
+    "ejecutor": "la reja (hardline/aprobación) + el contenedor cubren el SO; la inyección de PROMPT via contenido web es OTRA frontera → esta pila la cubre",
+    "canary_token": "barato y potente — un token en el system prompt que NUNCA debe salir; si aparece en una llamada saliente, aborta (aplicable ya al Portal/ejecutor, no solo a navegador)"
+  },
+  "mandato": "no reinventar la seguridad de navegación no-confiable: copiar este patrón (clasificador local + canary + voting) cuando se abra esa frontera"
+}
+```
+
+> **Por qué apunte y no pack.** gstack confirma el rumbo (aprender→confianza→ascenso, y contención
+> por capas) desde un sistema con 20 años de oficio detrás. Guardamos el DISEÑO —el umbral N=3+cuarentena
+> para el destilador, el canary token para el ejecutor— porque son baratos de copiar y caros de descubrir.
+> Las skills no: solapan con ECC y no beben del vertical. El día que el destilador madure o abramos la
+> navegación no-confiable, esta nota es el plano.
+
+---
+
 # PRISMA — Vertical universal de comercio (producto de 5 huecos · modules/prisma/)
 
 > Vertical 2 del rumbo (comercio local/universal): producto NO pizza-shaped, molde universal.

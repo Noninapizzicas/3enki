@@ -1443,6 +1443,51 @@ class AiGatewayModule extends BaseModule {
     );
   }
 
+  // Nervio del RAIL VIVO (cúpula de estados) — lado lectura. Tira la LISTA ACTIVA del
+  // proyecto por RPC (estados.estado sin lista_id → la activa). El estado ES el timón:
+  // el LLM ve qué es 1º, qué está hecho, qué falta — escrito, no en la memoria frágil
+  // del hilo. Best-effort: timeout → null y el turno sigue sin bloquearse.
+  async _leerRailActivo(project_id) {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    const timeoutMs = this.config.estados_timeout_ms || 2000;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeoutMs);
+      try {
+        unsub = this.eventBus.subscribe('estados.estado.response', (event) => {
+          const d = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!d || d.request_id !== request_id) return;
+          clearTimeout(timeout); if (unsub) unsub();
+          const payload = d.data || d;
+          resolve(payload && payload.lista ? payload.lista : null);
+        });
+        this.eventBus.publish('estados.estado.request', { request_id, project_id });
+      } catch (_) { clearTimeout(timeout); if (unsub) unsub(); resolve(null); }
+    });
+  }
+
+  // El RAIL como contexto silencioso: el timón escrito. El LLM lleva el rumbo leyendo el
+  // ESTADO (1º/2º/…, hecho/falta/atascado), no reconstruyéndolo del hilo. NO lo recita;
+  // lo usa para no perder el norte y para saber cuál es el siguiente paso.
+  _composeRailSection(lista) {
+    const marca = (p) => p.estado === 'hecho' ? '[x]' : p.estado === 'atascado' ? '[!]' : p.estado === 'descartado' ? '[-]' : '[ ]';
+    const cuerpo = (lista.pasos || []).map((p, i) =>
+      `${i + 1}. ${marca(p)} ${p.texto}${p.estado === 'atascado' && p.freno ? ` (atascado: falta ${(p.freno.requiere || []).join(', ')})` : ''}`
+    ).join('\n');
+    const estricto = lista.orden === 'estricto';
+    const orden = estricto ? 'ORDEN ESTRICTO (los pasos van 1→2→3; no saltes)' : 'orden libre';
+    const actual = estricto && lista.pasos[lista.actual]
+      ? `\nPaso ACTUAL: ${lista.actual + 1}. ${lista.pasos[lista.actual].texto}` : '';
+    return (
+      `# EL RAIL — lista activa «${lista.nombre}» (${orden}) · contexto silencioso\n` +
+      'Este es el RUMBO escrito: qué está hecho, qué falta, cuál es el siguiente. Llévalo de ' +
+      'fondo para no perder el norte entre turnos; NO lo recites salvo que el usuario pregunte. ' +
+      'Si el usuario completa un paso, refléjalo con estados.marcar (libre) o estados.avanzar ' +
+      '(estricto) — el estado es la verdad, no tu memoria del hilo.' + actual + '\n\n' + cuerpo
+    );
+  }
+
   // Nervio de LENTES de diseño — lado lectura. Tira la lente por defecto de la
   // página (lentes-diseno, base compartida) por RPC del bus. Best-effort: si no
   // responde en timeout, devuelve [] y el turno sigue sin bloquearse.
@@ -2274,6 +2319,21 @@ class AiGatewayModule extends BaseModule {
           effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
         }
       } catch (_) { /* el empujon es best-effort; nunca bloquea el turno */ }
+    }
+
+    // Nervio del RAIL VIVO (cúpula de estados): en un turno REAL con proyecto, si hay una
+    // LISTA ACTIVA, la inyectamos como el RUMBO escrito — el timón que sostiene el hilo entre
+    // turnos (el estado ES la verdad, no la memoria fragil del historial). Universal: NO exige
+    // blueprintCtx — toda conversación con proyecto hereda el rail (patrón cuenco). Sin lista
+    // activa no se inyecta nada. Best-effort: nunca bloquea el turno.
+    if (project_id && !context?.async_invocation) {
+      try {
+        const rail = await this._leerRailActivo(project_id);
+        if (rail && Array.isArray(rail.pasos) && rail.pasos.length > 0) {
+          const seccion = this._composeRailSection(rail);
+          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
+        }
+      } catch (_) { /* el rail es best-effort; nunca bloquea el turno */ }
     }
 
     // Nervio de LENTES: si la página declara un dominio de lentes (manifest.lente_default),

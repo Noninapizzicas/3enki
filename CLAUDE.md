@@ -15122,6 +15122,153 @@ PENDIENTE (opcional)  probar por el CHAT real (LLM de página llama ejecutor par
 
 ---
 
+# CÚPULA DE ESTADOS — el RAIL VIVO (el estado es el timón · modules/estados · vivo 2026-07-05)
+
+> Gemelo del cuenco de lentes, otra sustancia: el cuenco sirve CONOCIMIENTO (lentes); esta cúpula
+> sirve ESTADO (listas ordenadas). Nace de un problema real: el chat DERIVABA —nada sostenía el
+> rumbo entre turnos, el objetivo vivía en la memoria frágil del hilo—. La cura no es más prompt:
+> es escribir el rumbo como ESTADO que el LLM ve cada turno. Un chef's list continuo: fichas
+> entrando (falta) y saliendo (hecho); el timón lo lleva el propio estado, con una mano, por buen
+> rumbo. Confirmado por Paperclip (plano de control = estado como verdad, trabajador sin estado).
+
+## Un primitivo, muchas caras (contrato)
+
+```json
+{
+  "esquema": "cupula-de-estados-v1",
+  "tesis": "el estado ES el timón — mano ligera, el rail sostiene el rumbo entre turnos",
+  "primitivo_unico": "ListaOrdenada { id, nombre, tipo, orden, pasos:[{ id, texto, pos, estado, freno? }], actual, estado }",
+  "estado_paso": "pendiente | hecho | atascado | descartado",
+  "orden": "libre | estricto  (NO es otra máquina, es un FLAG)",
+  "caras": {
+    "notas":       "lista sin orden fuerte — capturas sueltas",
+    "chef_list":   "el rail de servicio — entra pedido, sale plato",
+    "tareas":      "falta / hecho",
+    "compras":     "pendiente → tachado",
+    "orden_1_2_3": "orden ESTRICTO: el paso 2 no salta al 1",
+    "proceso":     "un trabajo con proceso definido (instanciado desde plantilla de arquetipo)"
+  },
+  "freno_entre_pasos": "en orden ESTRICTO, avanzar valida el paso actual contra su freno.requiere (el VALIDAR de blueprint-agentico subido del turno al PASO). La entrega valida → el siguiente recoge; no valida → se ATASCA, no arrastra basura (no_silent_drops).",
+  "custodio": "single-writer de /estados/listas.json por proyecto → el timón no tiembla (nadie más escribe; atomicidad = fs.write tmp+rename, sin lock)."
+}
+```
+
+## HERENCIA universal — el patrón cuenco (nadie se cablea)
+
+```json
+{
+  "no_es": "herencia de clase módulo-por-módulo (los skills son .md, las conversaciones no son módulos)",
+  "es": "UNA cúpula que sirve + un nervio que inyecta + auto-descubrimiento de plantillas — la MISMA máquina de herencia-sin-cableado que el cuenco de lentes",
+  "tres_vias": {
+    "por_bus":          "cualquier módulo/skill llama estados.* por RPC — está en el bus, la tiene (como lentes.obtener)",
+    "por_nervio":       "ai-gateway inyecta la LISTA ACTIVA en todo turno real con proyecto — cero cableado, como propiocepción (cada conversación la hereda gratis; NO exige blueprintCtx → universal)",
+    "por_plantilla":    "se DEJA CAER una plantilla de proceso (un arquetipo PRISMA, un módulo) y la cúpula la instancia — como un pack de lentes se deja caer"
+  },
+  "la_ley": "no se hereda EXTENDIENDO una clase; se hereda ESTANDO en el bus bajo una cúpula que sirve y un nervio que inyecta. Construiste el patrón una vez (cuenco); esto es el mismo molde, otra sustancia (estados)."
+}
+```
+
+## Pseudocódigo (reflejo custodio)
+
+```
+CLASE EstadosReflejo HEREDA ModuloHibridoReflejo {   // custodio single-writer
+  STORE  /estados/listas.json  { activa, listas: { <id>: ListaOrdenada } }
+  OPS (RPC estados.<op>.request → .response):
+    crear(nombre, tipo?, orden?, pasos?, activar?)          // cualquier cara; 409 si el id existe
+    instanciar(arquetipo, nombre?, activar?)                // desde procesos-semilla → PRISMA hereda
+    anadir(lista_id, texto, freno?)                         // ítem/paso pendiente al final
+    avanzar(lista_id, entrega?)                             // ESTRICTO: freno → hecho+siguiente, o atasco
+    marcar(lista_id, paso_id, estado)                       // LIBRE: tacha/descarta por id
+    estado(lista_id?)                                       // una lista, o la ACTIVA (lo que lee el nervio)
+    listar · activar · borrar
+
+  _validarPaso(paso, entrega):                              // EL FRENO (el VALIDAR subido al paso)
+    SI !paso.freno.requiere: RETORNA { ok:true }
+    faltan ← freno.requiere.filtrar(c → vacio(entrega[c]))   // vacío = undefined|null|''|false
+    RETORNA { ok: faltan.vacío, faltan }
+
+  _avanzar(lista):                                          // orden estricto
+    paso ← lista.pasos[lista.actual]
+    f ← _validarPaso(paso, entrega)
+    SI !f.ok: paso.estado ← 'atascado' ; EMITE estados.paso.atascado ; RETORNA { atascado, faltan }
+    paso.estado ← 'hecho' ; lista.actual++ ; EMITE estados.paso.avanzado ; RETORNA { siguiente, completa }
+}
+
+// NERVIO (ai-gateway, gemelo de _leerLente/propiocepción):
+_leerRailActivo(project_id): RPC estados.estado {project_id} (2s best-effort) → la lista activa | null
+_composeRailSection(lista): "# EL RAIL — lista activa «X» (orden) · contexto silencioso"
+  // marca [x]hecho [ ]falta [!]atascado [-]descartado + Paso ACTUAL (estricto).
+  // "llévalo de fondo, NO lo recites; refleja los avances con estados.marcar/avanzar —
+  //  el estado es la verdad, no tu memoria del hilo."
+// inyección: turno REAL con project_id (sin exigir blueprintCtx → universal). Sin lista activa → nada.
+```
+
+## PRISMA hereda — cada arquetipo = un proceso definido (plantilla)
+
+```
+_shared/procesos-semilla.js  (gemelo de arquetipos-semilla · PURO)
+  arquetipo → plantilla de proceso (pasos ordenados, con freno donde el traspaso valida):
+    comestible   recibe → prepara[freno:listo] → sirve → cobra[freno:pagado]
+    servicio     recibe → realiza[freno:hecho] → entrega → cobra[freno:pagado]
+    uso_temporal reserva → entrega → usa → devuelve[freno:estado_ok] → fianza
+    pieza        localiza → prepara → entrega → cobra[freno:pagado]
+  plantillaDe(arquetipo, extra) — custom con prioridad (ABIERTO, como los arquetipos)
+
+PRISMA no cambia; SUELTA plantillas. estados.instanciar {arquetipo:'servicio'} → la lista de proceso
+del servicio (4 pasos, freno en realiza/cobra, orden estricto). La cúpula de estados es el MOTOR DE
+PROCESO que a PRISMA le faltaba: tiene órganos (cocina, agenda, cobro) y arquetipos, pero no QUÉ
+SECUENCIA el trabajo. El arquetipo dice qué pasos y en qué orden; la lista los lleva vivos, con freno
+en cada traspaso. (Wiring cuenta.crear → instanciar = follow-up en vivo; hoy la capacidad + las
+plantillas + el test PRUEBAN la herencia.)
+```
+
+## Referencia — Paperclip (plano de control) VS Enki (federado)
+
+```
+LEY COMÚN  estado = fuente de verdad · trabajador SIN estado · nada en el aire.
+  Enki YA la vive: reflejo = custodio del estado (single-writer) · blueprint (LLM) = trabajador sin
+  estado (nunca toca fs, entra por el reflejo) · propiocepción = "nada en el aire" (el LLM solo afirma
+  lo que el reflejo registró).
+TOPOLOGÍA  Paperclip CENTRALIZA los doce subsistemas en un Postgres (catedral); Enki los REPARTE en
+  ermitas conectadas por el bus (federado). Misma ley, geometría opuesta.
+DOCE SUBSISTEMAS → Enki: identity(credential/security/cert) · agents(module-registry) · work(← los
+  RAILS: cocina/pase-cocina/cuentas/destilador/facturas/conserje/ejecutor, federados) · heartbeat
+  (scheduler+bus) · runtime(project-manager+filesystem) · governance(ejecutor/portal) · budget
+  (conversation-export MIDE) · routines(scheduler) · plugins · secrets(credential, por proyecto) ·
+  activity(propiocepción+bus) · portability(—).
+DOS HUECOS REALES (el resto ya está, federado):
+  1. portabilidad / vista única — precio de la federación (cosechar de N reflejos; PRISMA no la
+     necesita —multi-tenant nativo—, Enki sí para "llevarse una empresa entera").
+  2. ledger de presupuesto que FRENE — hoy se MIDE el coste (conversation-export) pero nadie lo
+     GOBIERNA. Pieza limpia y aislada: un reflejo custodio, estado = el ledger, freno = la ley.
+TRAMPA EVITADA  Paperclip presupone FLOTA (por eso su CLAIM atómico —UPDATE...WHERE— es central).
+  Enki no la tiene: un core por dominio, single-writer. El CLAIM se obtiene GRATIS (no hay carrera
+  entre workers). Copiar su lease sería importar la solución a un problema que el single-writer elimina.
+```
+
+## Topics / eventos · piezas · tests
+
+```
+estados.{crear,instanciar,anadir,avanzar,marcar,estado,listar,activar,borrar}.request → .response
+estados.lista.creada · estados.lista.activada · estados.paso.avanzado · estados.paso.atascado
+PIEZAS {
+  modules/estados (0.1.0 · reflejo 0.1.0)   la cúpula custodio (single-writer, freno entre pasos)
+  modules/_shared/procesos-semilla.js       las plantillas de proceso por arquetipo (PRISMA hereda)
+  ai-gateway (2.28.0)                        el nervio: _leerRailActivo + _composeRailSection (inyecta la activa)
+}
+TESTS  estados__cupula (12: crear libre/estricto · freno atasca y libera · instanciar servicio/uso_temporal ·
+       avanzar-en-libre 409 · marcar · activa=nervio · borrar). Gate híbridos 11/0 (sin blueprint, sin colisión).
+ESTADO ✓ cúpula + procesos-semilla + PRISMA-hereda (plantillas) + nervio. ◑ en vivo: wiring cuenta.crear →
+       instanciar (hoy la capacidad basta) · verificar la inyección del rail en un turno real tras desplegar.
+```
+
+> **Trade-off vivo.** Un rail por conversación puede sonar a fricción (¿otra cosa que mantener?). Pero
+> es lo contrario: el rumbo deja de vivir en la memoria frágil del hilo y pasa a la cúpula, escrito. El
+> LLM no reconstruye el objetivo cada turno —lo LEE—. Mano ligera al timón porque el estado ya marca el
+> norte. Y como es el patrón cuenco, no es infra nueva: es el molde probado con sustancia nueva.
+
+---
+
 # PRISMA — Vertical universal de comercio (producto de 5 huecos · modules/prisma/)
 
 > Vertical 2 del rumbo (comercio local/universal): producto NO pizza-shaped, molde universal.

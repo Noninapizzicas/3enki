@@ -1,0 +1,220 @@
+/**
+ * estados — LA CÚPULA DE ESTADOS (reflejo custodio único).
+ *
+ * Gemelo del cuenco de lentes, otra sustancia: el cuenco sirve CONOCIMIENTO
+ * (lentes); esta cúpula sirve ESTADO (listas ordenadas). Un solo primitivo con
+ * muchas caras — notas · chef's list · tareas · compras · orden 1º 2º 3º — todas
+ * = una ListaOrdenada { pasos:[{ texto, pos, estado }] } con `orden: libre|estricto`.
+ *
+ * El RAIL VIVO: fichas entrando (pendiente) y saliendo (hecho), el estado ES el timón.
+ * Single-writer de /estados/listas.json por proyecto → el timón no tiembla (nadie más
+ * escribe; sin carrera, sin lock — la atomicidad la da fs.write tmp+rename).
+ *
+ * FRENO entre pasos (orden estricto): avanzar valida el paso actual contra su
+ * `freno.requiere` (el VALIDAR de blueprint-agentico subido al paso). Valida → el
+ * siguiente recoge; no valida → se atasca, no arrastra basura al siguiente.
+ *
+ * HERENCIA universal (patrón cuenco, sin cablear a nadie):
+ *   - por bus:   cualquier módulo/skill llama estados.* por RPC.
+ *   - por nervio: ai-gateway inyecta la lista ACTIVA en el turno (como propiocepción).
+ *   - por plantilla: PRISMA (u otro) suelta plantillas de proceso → instanciar las sirve.
+ */
+
+'use strict';
+
+const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
+const { plantillaDe } = require('../_shared/procesos-semilla');
+
+const STORE = '/estados/listas.json';
+const nowISO = () => new Date().toISOString();
+const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+class EstadosReflejo extends ModuloHibridoReflejo {
+  constructor() {
+    super();
+    this.name = 'estados';
+    this.version = 'reflejo-0.1.0';
+  }
+
+  onCrearRequest(e)      { return this._atender(e, 'crear', 'estados.crear.response', d => this._crear(d)); }
+  onInstanciarRequest(e) { return this._atender(e, 'instanciar', 'estados.instanciar.response', d => this._instanciar(d)); }
+  onAnadirRequest(e)     { return this._atender(e, 'anadir', 'estados.anadir.response', d => this._anadir(d)); }
+  onAvanzarRequest(e)    { return this._atender(e, 'avanzar', 'estados.avanzar.response', d => this._avanzar(d)); }
+  onMarcarRequest(e)     { return this._atender(e, 'marcar', 'estados.marcar.response', d => this._marcar(d)); }
+  onEstadoRequest(e)     { return this._atender(e, 'estado', 'estados.estado.response', d => this._estado(d)); }
+  onListarRequest(e)     { return this._atender(e, 'listar', 'estados.listar.response', d => this._listar(d)); }
+  onActivarRequest(e)    { return this._atender(e, 'activar', 'estados.activar.response', d => this._activar(d)); }
+  onBorrarRequest(e)     { return this._atender(e, 'borrar', 'estados.borrar.response', d => this._borrar(d)); }
+
+  // ── store (single-writer) ──
+  async _cargar(project_id) {
+    const obj = await this._leerJson(project_id, STORE);
+    if (obj && obj.listas && typeof obj.listas === 'object') return { activa: obj.activa || null, listas: obj.listas };
+    return { activa: null, listas: {} };
+  }
+  async _guardar(project_id, doc) {
+    return this._rpc('fs.write.request', { project_id, path: STORE, content: JSON.stringify({ _version: 1, _updated: nowISO(), activa: doc.activa || null, listas: doc.listas }, null, 2), encoding: 'utf-8', atomic: true });
+  }
+
+  _paso(clave, texto, pos, freno) {
+    return { id: `p${pos}_${slug(clave || texto).slice(0, 24) || pos}`, texto: String(texto || clave || `paso ${pos}`), pos, estado: 'pendiente', ...(freno ? { freno } : {}) };
+  }
+
+  _lite(lista) {
+    const pendientes = lista.pasos.filter(p => p.estado === 'pendiente').length;
+    return { id: lista.id, nombre: lista.nombre, tipo: lista.tipo, orden: lista.orden, estado: lista.estado, actual: lista.actual, total_pasos: lista.pasos.length, pendientes };
+  }
+
+  // ── crear una lista (cualquier cara: notas/tareas/compras/chef/proceso) ──
+  async _crear(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.nombre) return this._invalid('nombre');
+    const id = input.lista_id ? slug(input.lista_id) : slug(input.nombre);
+    if (!id) return this._invalid('nombre');
+    const doc = await this._cargar(input.project_id);
+    if (doc.listas[id]) return this._errorResponse(409, 'CONFLICT_STATE', 'ya existe una lista con ese id', { id });
+    const orden = input.orden === 'estricto' ? 'estricto' : 'libre';
+    const pasos = (Array.isArray(input.pasos) ? input.pasos : []).map((p, i) =>
+      typeof p === 'string' ? this._paso(null, p, i) : this._paso(p.clave, p.texto, i, p.freno));
+    const lista = { id, nombre: String(input.nombre), tipo: input.tipo || 'tareas', orden, pasos, actual: 0, estado: 'abierta', creada: nowISO(), actualizada: nowISO() };
+    doc.listas[id] = lista;
+    if (input.activar) doc.activa = id;
+    const w = await this._guardar(input.project_id, doc);
+    if (w && w.error) return this._errorResponse(502, 'UPSTREAM_INVALID_RESPONSE', 'no se pudo guardar la lista');
+    this.eventBus.publish('estados.lista.creada', { project_id: input.project_id, lista_id: id, tipo: lista.tipo, timestamp: nowISO() });
+    return { status: 201, data: { lista_id: id, orden, total_pasos: pasos.length } };
+  }
+
+  // ── instanciar una lista desde la PLANTILLA de proceso de un arquetipo (PRISMA hereda) ──
+  async _instanciar(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.arquetipo) return this._invalid('arquetipo');
+    const plantilla = plantillaDe(input.arquetipo, input.plantillas || {});
+    if (!plantilla) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'no hay plantilla de proceso para ese arquetipo', { arquetipo: input.arquetipo });
+    const nombre = input.nombre || plantilla.nombre || `Proceso ${input.arquetipo}`;
+    const id = input.lista_id ? slug(input.lista_id) : slug(nombre);
+    const doc = await this._cargar(input.project_id);
+    if (doc.listas[id]) return this._errorResponse(409, 'CONFLICT_STATE', 'ya existe una lista con ese id', { id });
+    const pasos = (plantilla.pasos || []).map((p, i) => this._paso(p.clave, p.texto, i, p.freno));
+    const lista = { id, nombre, tipo: 'proceso', orden: plantilla.orden === 'libre' ? 'libre' : 'estricto', arquetipo: input.arquetipo, plantilla: input.arquetipo, pasos, actual: 0, estado: 'abierta', creada: nowISO(), actualizada: nowISO() };
+    doc.listas[id] = lista;
+    if (input.activar) doc.activa = id;
+    const w = await this._guardar(input.project_id, doc);
+    if (w && w.error) return this._errorResponse(502, 'UPSTREAM_INVALID_RESPONSE', 'no se pudo guardar la lista');
+    this.eventBus.publish('estados.lista.creada', { project_id: input.project_id, lista_id: id, tipo: 'proceso', arquetipo: input.arquetipo, timestamp: nowISO() });
+    return { status: 201, data: { lista_id: id, arquetipo: input.arquetipo, orden: lista.orden, total_pasos: pasos.length, primer_paso: pasos[0] ? pasos[0].id : null } };
+  }
+
+  // ── añadir un ítem/paso pendiente al final ──
+  async _anadir(input) {
+    if (!input.project_id || !input.lista_id) return this._invalid('lista_id');
+    if (!input.texto) return this._invalid('texto');
+    const doc = await this._cargar(input.project_id);
+    const lista = doc.listas[slug(input.lista_id)];
+    if (!lista) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'lista no existe', { lista_id: input.lista_id });
+    const pos = lista.pasos.length;
+    const paso = this._paso(input.clave, input.texto, pos, input.freno);
+    lista.pasos.push(paso);
+    lista.actualizada = nowISO();
+    if (lista.estado === 'completa') lista.estado = 'abierta';
+    await this._guardar(input.project_id, doc);
+    return { status: 200, data: { lista_id: lista.id, paso: paso.id, total_pasos: lista.pasos.length } };
+  }
+
+  // ── FRENO validador: el paso actual solo suelta si su entrega trae freno.requiere ──
+  _validarPaso(paso, entrega) {
+    const freno = paso && paso.freno;
+    if (!freno || !Array.isArray(freno.requiere) || freno.requiere.length === 0) return { ok: true, faltan: [] };
+    const vacio = (v) => v === undefined || v === null || v === '' || v === false;
+    const faltan = freno.requiere.filter(c => vacio(entrega[c]));
+    return { ok: faltan.length === 0, faltan };
+  }
+
+  // ── avanzar (orden ESTRICTO): valida el paso actual → hecho + siguiente recoge, o atasco ──
+  async _avanzar(input) {
+    if (!input.project_id || !input.lista_id) return this._invalid('lista_id');
+    const doc = await this._cargar(input.project_id);
+    const lista = doc.listas[slug(input.lista_id)];
+    if (!lista) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'lista no existe', { lista_id: input.lista_id });
+    if (lista.orden !== 'estricto') return this._errorResponse(409, 'CONFLICT_STATE', 'avanzar es de orden estricto; en libre usa marcar', { lista_id: lista.id, orden: lista.orden });
+    if (lista.actual >= lista.pasos.length) return { status: 200, data: { avanzado: false, completa: true } };
+    const paso = lista.pasos[lista.actual];
+    const freno = this._validarPaso(paso, input.entrega || {});
+    if (!freno.ok) {
+      paso.estado = 'atascado';
+      lista.actualizada = nowISO();
+      await this._guardar(input.project_id, doc);
+      this.eventBus.publish('estados.paso.atascado', { project_id: input.project_id, lista_id: lista.id, paso: paso.id, faltan: freno.faltan, timestamp: nowISO() });
+      return { status: 200, data: { avanzado: false, atascado: true, paso: paso.id, faltan: freno.faltan } };
+    }
+    paso.estado = 'hecho';
+    if (input.entrega) paso.entrega = input.entrega;
+    lista.actual += 1;
+    const completa = lista.actual >= lista.pasos.length;
+    lista.estado = completa ? 'completa' : 'abierta';
+    lista.actualizada = nowISO();
+    await this._guardar(input.project_id, doc);
+    const siguiente = completa ? null : lista.pasos[lista.actual].id;
+    this.eventBus.publish('estados.paso.avanzado', { project_id: input.project_id, lista_id: lista.id, paso: paso.id, siguiente, completa, timestamp: nowISO() });
+    return { status: 200, data: { avanzado: true, paso: paso.id, siguiente, completa } };
+  }
+
+  // ── marcar (orden LIBRE): tachar/descartar un paso por id ──
+  async _marcar(input) {
+    if (!input.project_id || !input.lista_id || !input.paso_id) return this._invalid('paso_id');
+    const estado = ['hecho', 'descartado', 'pendiente'].includes(input.estado) ? input.estado : 'hecho';
+    const doc = await this._cargar(input.project_id);
+    const lista = doc.listas[slug(input.lista_id)];
+    if (!lista) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'lista no existe', { lista_id: input.lista_id });
+    const paso = lista.pasos.find(p => p.id === input.paso_id);
+    if (!paso) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'paso no existe', { paso_id: input.paso_id });
+    paso.estado = estado;
+    const cerrados = lista.pasos.every(p => p.estado === 'hecho' || p.estado === 'descartado');
+    lista.estado = cerrados && lista.pasos.length > 0 ? 'completa' : 'abierta';
+    lista.actualizada = nowISO();
+    await this._guardar(input.project_id, doc);
+    return { status: 200, data: { lista_id: lista.id, paso: paso.id, estado } };
+  }
+
+  // ── estado: una lista concreta, o la ACTIVA (lo que lee el nervio) ──
+  async _estado(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    const doc = await this._cargar(input.project_id);
+    const id = input.lista_id ? slug(input.lista_id) : doc.activa;
+    if (!id) return { status: 200, data: { activa: null, lista: null } };
+    const lista = doc.listas[id];
+    if (!lista) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'lista no existe', { lista_id: id });
+    return { status: 200, data: { lista, activa: doc.activa === id } };
+  }
+
+  async _listar(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    const doc = await this._cargar(input.project_id);
+    const listas = Object.values(doc.listas).map(l => this._lite(l));
+    return { status: 200, data: { listas, activa: doc.activa, total: listas.length } };
+  }
+
+  async _activar(input) {
+    if (!input.project_id || !input.lista_id) return this._invalid('lista_id');
+    const doc = await this._cargar(input.project_id);
+    const id = slug(input.lista_id);
+    if (!doc.listas[id]) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'lista no existe', { lista_id: id });
+    doc.activa = id;
+    await this._guardar(input.project_id, doc);
+    this.eventBus.publish('estados.lista.activada', { project_id: input.project_id, lista_id: id, timestamp: nowISO() });
+    return { status: 200, data: { activa: id } };
+  }
+
+  async _borrar(input) {
+    if (!input.project_id || !input.lista_id) return this._invalid('lista_id');
+    const doc = await this._cargar(input.project_id);
+    const id = slug(input.lista_id);
+    if (!doc.listas[id]) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'lista no existe', { lista_id: id });
+    delete doc.listas[id];
+    if (doc.activa === id) doc.activa = null;
+    await this._guardar(input.project_id, doc);
+    return { status: 200, data: { borrada: id } };
+  }
+}
+
+module.exports = EstadosReflejo;

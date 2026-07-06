@@ -33,7 +33,7 @@ class EstadosReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'estados';
-    this.version = 'reflejo-0.1.0';
+    this.version = 'reflejo-0.2.0';
   }
 
   onCrearRequest(e)      { return this._atender(e, 'crear', 'estados.crear.response', d => this._crear(d)); }
@@ -45,6 +45,46 @@ class EstadosReflejo extends ModuloHibridoReflejo {
   onListarRequest(e)     { return this._atender(e, 'listar', 'estados.listar.response', d => this._listar(d)); }
   onActivarRequest(e)    { return this._atender(e, 'activar', 'estados.activar.response', d => this._activar(d)); }
   onBorrarRequest(e)     { return this._atender(e, 'borrar', 'estados.borrar.response', d => this._borrar(d)); }
+
+  // =============================================================
+  // TOOLS del chat — el LLM PROPONE, el reflejo SOSTIENE. El nervio ya LEE la lista
+  // activa cada turno; estas cuatro le dan al LLM con qué ESCRIBIRLA. Lazo cerrado.
+  // Los args llegan enriquecidos con project_id del contexto de la conversación
+  // (ai-gateway._executeToolCall), así que el LLM no maneja UUIDs — trabaja sobre la ACTIVA.
+  // =============================================================
+  async handleCrearListaTool(args) {
+    const a = args || {};
+    // crear una lista SIEMPRE la activa (es el rumbo que se está llevando).
+    return this._crear({ project_id: a.project_id, nombre: a.nombre, tipo: a.tipo || 'tareas', orden: a.orden, pasos: a.pasos, activar: true });
+  }
+
+  async handleAnadirPasoTool(args) {
+    const a = args || {};
+    const est = await this._estado({ project_id: a.project_id });
+    if (!est.data || !est.data.lista) return this._errorResponse(409, 'CONFLICT_STATE', 'no hay lista activa; crea una con crear_lista primero');
+    return this._anadir({ project_id: a.project_id, lista_id: est.data.lista.id, texto: a.texto, freno: a.freno });
+  }
+
+  // completar el paso de la lista activa: en orden estricto AVANZA (freno incluido);
+  // en libre marca el paso número `numero` (1-based, tal como lo pinta el nervio) como hecho.
+  async handleCompletarPasoTool(args) {
+    const a = args || {};
+    const est = await this._estado({ project_id: a.project_id });
+    if (!est.data || !est.data.lista) return this._errorResponse(409, 'CONFLICT_STATE', 'no hay lista activa');
+    const lista = est.data.lista;
+    if (lista.orden === 'estricto') return this._avanzar({ project_id: a.project_id, lista_id: lista.id, entrega: a.entrega });
+    const idx = (parseInt(a.numero, 10) || 0) - 1;
+    const paso = lista.pasos[idx];
+    if (!paso) return this._errorResponse(400, 'INVALID_INPUT', 'numero de paso fuera de rango', { numero: a.numero });
+    return this._marcar({ project_id: a.project_id, lista_id: lista.id, paso_id: paso.id, estado: ['hecho', 'descartado'].includes(a.estado) ? a.estado : 'hecho' });
+  }
+
+  async handleVerListasTool(args) {
+    const a = args || {};
+    // lista todas + activa; si piden activar una por id, la activa de paso.
+    if (a.activar) { const r = await this._activar({ project_id: a.project_id, lista_id: a.activar }); if (r.status !== 200) return r; }
+    return this._listar({ project_id: a.project_id });
+  }
 
   // ── store (single-writer) ──
   async _cargar(project_id) {

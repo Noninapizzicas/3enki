@@ -15357,14 +15357,25 @@ TRAMPA EVITADA  Paperclip presupone FLOTA (por eso su CLAIM atómico —UPDATE..
 estados.{crear,instanciar,anadir,avanzar,marcar,estado,listar,activar,borrar}.request → .response
 estados.lista.creada · estados.lista.activada · estados.paso.avanzado · estados.paso.atascado
 PIEZAS {
-  modules/estados (0.1.0 · reflejo 0.1.0)   la cúpula custodio (single-writer, freno entre pasos)
+  modules/estados (0.2.0 · reflejo 0.2.0)   la cúpula custodio (single-writer, freno entre pasos)
+                                            + TOOLS del chat (crear_lista·anadir_paso·completar_paso·ver_listas)
   modules/_shared/procesos-semilla.js       las plantillas de proceso por arquetipo (PRISMA hereda)
   ai-gateway (2.28.0)                        el nervio: _leerRailActivo + _composeRailSection (inyecta la activa)
 }
-TESTS  estados__cupula (12: crear libre/estricto · freno atasca y libera · instanciar servicio/uso_temporal ·
-       avanzar-en-libre 409 · marcar · activa=nervio · borrar). Gate híbridos 11/0 (sin blueprint, sin colisión).
-ESTADO ✓ cúpula + procesos-semilla + PRISMA-hereda (plantillas) + nervio. ◑ en vivo: wiring cuenta.crear →
-       instanciar (hoy la capacidad basta) · verificar la inyección del rail en un turno real tras desplegar.
+LA MANO QUE ESCRIBE (v0.2.0)  el diseño decía "el LLM PROPONE · el reflejo SOSTIENE". v0.1 construyó el que
+  SOSTIENE (custodio) y el que LEE (nervio), pero el LLM no tenía con qué PROPONER → la lista activa siempre
+  vacía → el nervio no inyectaba nada (el rail nacía DORMIDO). El deploy lo destapó: estados solo se alcanzaba
+  por bus (invisible desde el chat; sin puerta ui, y la inyección de eventos de bus desde fuera no se procesa).
+  Cura: registrar las ops como TOOLS del chat (patrón cosecha buscar_skill/activar_skill). Cuatro verbos que el
+  LLM de cualquier conversación invoca; los args llegan enriquecidos con project_id del contexto
+  (ai-gateway._executeToolCall, ~L2131) → el LLM trabaja sobre la ACTIVA sin manejar UUIDs. Lazo cerrado:
+  crear_lista escribe → el nervio la lee → el rumbo vive en la cúpula, no en la memoria del hilo.
+TESTS  estados__cupula (17: crear libre/estricto · freno atasca y libera · instanciar servicio/uso_temporal ·
+       avanzar-en-libre 409 · marcar · activa=nervio · borrar · + las 4 tools crear/anadir/completar/ver).
+       Gate híbridos 11/0 (sin blueprint, sin colisión).
+ESTADO ✓ cúpula + procesos-semilla + PRISMA-hereda (plantillas) + nervio + TOOLS del chat (lazo cerrado).
+       ◑ en vivo: verificar en el chat real tras re-desplegar (crear una lista y que el nervio la lleve) ·
+       wiring cuenta.crear → instanciar (hoy la capacidad basta).
 ```
 
 > **Trade-off vivo.** Un rail por conversación puede sonar a fricción (¿otra cosa que mantener?). Pero

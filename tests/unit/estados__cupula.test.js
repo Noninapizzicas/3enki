@@ -157,6 +157,52 @@ test('borrar una lista → desaparece y limpia la activa', async () => {
   assert.strictEqual(l.data.activa, null);
 });
 
+// ── TOOLS del chat (el LLM PROPONE; args ya enriquecidos con project_id) ──
+test('tool crear_lista crea y ACTIVA; ver_listas la ve como activa', async () => {
+  const r = nuevo();
+  const c = await r.handleCrearListaTool({ project_id: PID, nombre: 'Lanzamiento', pasos: ['a', 'b'] });
+  assert.strictEqual(c.status, 201);
+  const v = await r.handleVerListasTool({ project_id: PID });
+  assert.strictEqual(v.data.activa, 'lanzamiento');
+  assert.strictEqual(v.data.total, 1);
+});
+
+test('tool anadir_paso añade a la ACTIVA sin manejar lista_id', async () => {
+  const r = nuevo();
+  await r.handleCrearListaTool({ project_id: PID, nombre: 'Compra', pasos: ['leche'] });
+  const add = await r.handleAnadirPasoTool({ project_id: PID, texto: 'pan' });
+  assert.strictEqual(add.status, 200);
+  assert.strictEqual(add.data.total_pasos, 2);
+});
+
+test('tool anadir_paso sin lista activa → 409 (crea una primero)', async () => {
+  const r = nuevo();
+  const add = await r.handleAnadirPasoTool({ project_id: PID, texto: 'x' });
+  assert.strictEqual(add.status, 409);
+});
+
+test('tool completar_paso: en LIBRE tacha por numero; en ESTRICTO avanza', async () => {
+  const r = nuevo();
+  // libre: tachar el paso 2 por numero
+  await r.handleCrearListaTool({ project_id: PID, nombre: 'Libre', pasos: ['uno', 'dos'] });
+  const m = await r.handleCompletarPasoTool({ project_id: PID, numero: 2 });
+  assert.strictEqual(m.status, 200);
+  let e = await r._estado({ project_id: PID, lista_id: 'libre' });
+  assert.strictEqual(e.data.lista.pasos[1].estado, 'hecho');
+  // estricto: avanza el actual (con freno cumplido)
+  await r.handleCrearListaTool({ project_id: PID, nombre: 'Estricta', orden: 'estricto', pasos: ['p1'] });
+  const a = await r.handleCompletarPasoTool({ project_id: PID });
+  assert.strictEqual(a.data.avanzado, true);
+});
+
+test('tool ver_listas con activar cambia la activa', async () => {
+  const r = nuevo();
+  await r.handleCrearListaTool({ project_id: PID, nombre: 'Primera', pasos: ['x'] });
+  await r.handleCrearListaTool({ project_id: PID, nombre: 'Segunda', pasos: ['y'] });
+  const v = await r.handleVerListasTool({ project_id: PID, activar: 'primera' });
+  assert.strictEqual(v.data.activa, 'primera');
+});
+
 (async () => {
   let ok = 0; const fails = [];
   for (const { n, f } of tests) { try { await f(); ok++; } catch (e) { fails.push({ n, e }); } }

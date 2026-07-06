@@ -1,0 +1,251 @@
+{
+  "_doc": "Mapa de la migración monolito→rebanadas (una sola vez). Cada entrada casa una sección de primer nivel de CLAUDE.md por PREFIJO de su heading y declara la rebanada destino: archivo, dominio, resumen (para el catálogo) y fuentes (los globs de código que la sección DESCRIBE — el vigilante de staleness se apoya en ellos).",
+  "secciones": [
+    {
+      "match": "🧭 Persona Rectora",
+      "archivo": "_persona.md",
+      "dominio": "persona",
+      "resumen": "QUIÉN responde y CÓMO: P0 Expresión en Positivo, Criterio de Despliegue, Lente de Análisis Profundo, transporte cerrado.",
+      "fuentes": [],
+      "especial": "persona"
+    },
+    {
+      "match": "Capa de Aterrizaje",
+      "archivo": "core/nucleo.md",
+      "dominio": "core",
+      "resumen": "El core event-driven: EventBus, MQTTClient, EmbeddedBroker, ModuleLoader, HookManager, HTTPGateway, UIRequestHandler, ciclo de vida.",
+      "fuentes": ["core/**", "index.js"]
+    },
+    {
+      "match": "Capa de Propiocepción",
+      "archivo": "sistema-nervioso/propiocepcion.md",
+      "dominio": "aprendizaje",
+      "resumen": "Copia eferente + nervio: los eventos de dominio quedan registrados por proyecto y la rebanada nueva se inyecta en el turno.",
+      "fuentes": ["modules/propiocepcion/**"]
+    },
+    {
+      "match": "Patrón Módulo Híbrido",
+      "archivo": "patron/modulo-hibrido.md",
+      "dominio": "patron",
+      "resumen": "Reflejo (JS determinista) + Blueprint (LLM): criterio de reparto, base compartida, gate anti-colisión, receta de 5 pasos, bases compartidas y marca.json.",
+      "fuentes": ["modules/_shared/modulo-hibrido-reflejo.js", "scripts/validate-hibridos.js"]
+    },
+    {
+      "match": "Sistema Nervioso de Aprendizaje",
+      "archivo": "sistema-nervioso/aprendizaje.md",
+      "dominio": "aprendizaje",
+      "resumen": "Destilador (mina el bus y sella skills), Conserje (ofrece en positivo), Interruptores (panel central on/off).",
+      "fuentes": ["modules/destilador/**", "modules/interruptores/**"]
+    },
+    {
+      "match": "Portal — Enki como servidor MCP",
+      "archivo": "sistema-nervioso/portal-mcp.md",
+      "dominio": "sistema",
+      "resumen": "La puerta guardada hacia agentes externos: bridge MCP stdio → bus, guard (interruptor, scope, mode, allowlist, audit).",
+      "fuentes": ["modules/portal/**", "mcp/**"]
+    },
+    {
+      "match": "PizzePOS Módulos — Subsistema",
+      "archivo": "pizzepos/pos-nucleo.md",
+      "dominio": "pizzepos",
+      "resumen": "El POS vivo: comandero, cuentas (state machine), cobros, cocina, productos (proyector), categorías, ingredientes, variaciones, pedidos, tarifas, persistencia, impresión.",
+      "fuentes": ["modules/pizzepos/comandero/**", "modules/pizzepos/cuentas/**", "modules/pizzepos/cobros/**", "modules/pizzepos/cocina/**", "modules/pizzepos/productos/**", "modules/pizzepos/categorias/**", "modules/pizzepos/ingredientes/**", "modules/pizzepos/variaciones/**", "modules/pizzepos/pedidos/**", "modules/pizzepos/tarifas/**", "modules/pizzepos/persistencia-comandero/**", "modules/pizzepos/impresion/**"]
+    },
+    {
+      "match": "Módulos: Project-Manager",
+      "archivo": "conversacion/nucleo-conversacion.md",
+      "dominio": "conversacion",
+      "resumen": "project-manager, credential-manager y el grupo conversación: ai-gateway (+v2: cajones, RPC blueprints, nervios, foco), chat-io, memorias, prompt-builder, ai-agent-framework, agent-observer.",
+      "fuentes": ["modules/conversacion/**", "modules/project-manager/**", "modules/credential-manager/**"]
+    },
+    {
+      "match": "Módulos Pizzepos y Blueprints",
+      "archivo": "pizzepos/managers-y-blueprints.md",
+      "dominio": "pizzepos",
+      "resumen": "Managers de dominio pizzepos (cuentas, productos, categorías, cobros, pedidos, cocina, recetas, ingredientes, variaciones, escandallo, viabilidad, carta-digital, menu-generator) + blueprint drivers.",
+      "fuentes": ["modules/pizzepos/**", "blueprints/**"]
+    },
+    {
+      "match": "MÓDULOS — SEGURIDAD P2P",
+      "archivo": "modulos/seguridad-certificados-export.md",
+      "dominio": "sistema",
+      "resumen": "security-p2p (X25519/ECDH, handshake, SecureEnvelope), certificate-authority (CA, mTLS, P12), conversation-export.",
+      "fuentes": ["modules/security-p2p/**", "modules/certificate-authority/**", "modules/conversation-export/**"]
+    },
+    {
+      "match": "MÓDULOS — GRUPOS 1-3",
+      "archivo": "modulos/grupo-1-3.md",
+      "dominio": "modulos",
+      "resumen": "admin-panel, bienvenida-tienda, bot-manager, channel-manager, code-executor, comandero-cliente-builder, composition-manager, credential-manager.",
+      "fuentes": ["modules/admin-panel/**", "modules/bot-manager/**", "modules/channel-manager/**", "modules/code-executor/**", "modules/composition-manager/**", "modules/credential-manager/**", "modules/pizzepos/bienvenida-tienda/**"]
+    },
+    {
+      "match": "GRUPOS 4-5",
+      "archivo": "modulos/grupo-4-5.md",
+      "dominio": "modulos",
+      "resumen": "dashboard (SSE), database-manager (SQLite por proyecto), device-health, device-registry, device-shadow, esp32-dev.",
+      "fuentes": ["modules/dashboard/**", "modules/database-manager/**", "modules/device-health/**", "modules/device-registry/**", "modules/device-shadow/**", "modules/esp32-dev/**"]
+    },
+    {
+      "match": "LISTA MAESTRA",
+      "archivo": "modulos/lista-maestra.md",
+      "dominio": "modulos",
+      "resumen": "Índice histórico del barrido de análisis por grupos (documento de trabajo, no fuente de verdad del inventario).",
+      "fuentes": []
+    },
+    {
+      "match": "GRUPO 6",
+      "archivo": "modulos/grupo-6.md",
+      "dominio": "modulos",
+      "resumen": "esp32-flasher (flash/monitor/debug) y facturas (pipeline OCR+AI).",
+      "fuentes": ["modules/esp32-flasher/**", "modules/facturas/**", "modules/facturacion/**"]
+    },
+    {
+      "match": "GRUPO 7",
+      "archivo": "modulos/grupo-7.md",
+      "dominio": "modulos",
+      "resumen": "filesystem (scopeado por proyecto), firmware-builder (PlatformIO), firmware-manager (catálogo + OTA via shadow).",
+      "fuentes": ["modules/filesystem/**", "modules/firmware-builder/**", "modules/firmware-manager/**"]
+    },
+    {
+      "match": "GRUPO A",
+      "archivo": "modulos/grupo-a.md",
+      "dominio": "modulos",
+      "resumen": "gateway-manager (gateways software), log-manager (sesiones/logs), mercadona-api (cliente HTTP con throttle+cache).",
+      "fuentes": ["modules/gateway-manager/**", "modules/log-manager/**", "modules/pizzepos/mercadona-api/**"]
+    },
+    {
+      "match": "GRUPO B",
+      "archivo": "modulos/grupo-b.md",
+      "dominio": "modulos",
+      "resumen": "notificador-pedidos (multicanal con retry), pase-cocina (flujo pedidos→cocina), pdf-viewer.",
+      "fuentes": ["modules/pizzepos/notificador-pedidos/**", "modules/pase-cocina/**", "modules/pdf-viewer/**"]
+    },
+    {
+      "match": "GRUPO C",
+      "archivo": "modulos/grupo-c.md",
+      "dominio": "modulos",
+      "resumen": "perifericos (hardware con state machine y reconexión), plugin-manager (plugins npm), project-manager (CRUD + contexto de proyectos).",
+      "fuentes": ["modules/perifericos/**", "modules/plugin-manager/**", "modules/project-manager/**"]
+    },
+    {
+      "match": "GRUPO D",
+      "archivo": "modulos/grupo-d.md",
+      "dominio": "modulos",
+      "resumen": "prompt-manager (plantillas versionadas), recetario-creativo (generación IA), scheduler (jobs cron).",
+      "fuentes": ["modules/prompt-manager/**", "modules/recetario-creativo/**", "modules/scheduler/**"]
+    },
+    {
+      "match": "GRUPO E",
+      "archivo": "modulos/grupo-e.md",
+      "dominio": "modulos",
+      "resumen": "telegram-service (bots polling/webhook), text-editor, tienda-api, whatsapp-bot (Cloud API).",
+      "fuentes": ["modules/telegram-service/**", "modules/text-editor/**", "modules/pizzepos/tienda-api/**"]
+    },
+    {
+      "match": "FRONTEND — Capa de UI",
+      "archivo": "frontend/capa-ui.md",
+      "dominio": "frontend",
+      "resumen": "SvelteKit 2 + Svelte 5 sobre MQTT: MqttClient singleton, mqtt-request, lazy-registry, stores, módulos lazy, rutas multi-tenant, nervio vista-bridge, resiliencia.",
+      "fuentes": ["frontend/src/**"]
+    },
+    {
+      "match": "FRONTEND ↔ BACKEND",
+      "archivo": "frontend/mapa-front-back.md",
+      "dominio": "frontend",
+      "resumen": "El puente MQTT: mapa dominio→módulo backend por cada consumidor del frontend, mapa inverso y ciclo del enlace.",
+      "fuentes": ["frontend/src/lib/ui-core/**", "frontend/src/lib/stores/**"]
+    },
+    {
+      "match": "SUBSISTEMA AUTOSERVICIO",
+      "archivo": "pizzepos/autoservicio-whatsapp.md",
+      "dominio": "pizzepos",
+      "resumen": "Pedido del cliente por WhatsApp: PWA arma #P1 por ids, el bot re-tasa server-side (pedido-tasador), webhook real de Meta, ancla por nombre.",
+      "fuentes": ["modules/whatsapp-bot/**", "modules/openwa-service/**", "modules/pizzepos/carta-digital/**", "modules/pizzepos/pedidos/**", "modules/_shared/pedido-tasador.js"]
+    },
+    {
+      "match": "SERVIR WWW POR PROYECTO",
+      "archivo": "plataforma/servir-www.md",
+      "dominio": "plataforma",
+      "resumen": "Árbol libre en /<ns>/<slug>/ servido por Caddy estático + symlink por proyecto; carta-digital publica el bundle; publicador escribe HTML.",
+      "fuentes": ["modules/publicador/**", "lib/public-ns.js", "blueprints/project-types/www.json", "deployment/**"]
+    },
+    {
+      "match": "AVANZADILLA — Subsistema",
+      "archivo": "patron/opciones-universal.md",
+      "dominio": "patron",
+      "resumen": "Opciones: configuración universal de producto (ELEGIR_UNO/VARIOS/QUITAR) — banco motor-opciones, gate pizzepos cerrado.",
+      "fuentes": ["modules/_shared/motor-opciones.js"]
+    },
+    {
+      "match": "Subsistema CONSERJE",
+      "archivo": "sistema-nervioso/conserje.md",
+      "dominio": "aprendizaje",
+      "resumen": "OFRECE vs USA: LibroDeCapacidades, brecha priorizada por intención, empujón consumido por el nervio, registro central de interruptores.",
+      "fuentes": ["modules/conserje/**", "modules/_shared/libro-capacidades.js", "modules/interruptores/**"]
+    },
+    {
+      "match": "Teoría del Órgano",
+      "archivo": "sistema-nervioso/teoria-del-organo.md",
+      "dominio": "aprendizaje",
+      "resumen": "Órgano = memoria + motor + químico + evento: cuenco de packs (lentes-diseno), homeostasis (termostato), verificador-visual (ojos), rumbo plataforma.",
+      "fuentes": ["modules/lentes-diseno/**", "modules/homeostasis/**", "modules/verificador-visual/**"]
+    },
+    {
+      "match": "CANTERA — la abundancia",
+      "archivo": "sistema-nervioso/cantera.md",
+      "dominio": "aprendizaje",
+      "resumen": "La abundancia alojada: cosecha (importar/promover/crear/patch), planificador, feeder (skills.sh), conserje-cantera, escalera de determinismo, cantera semántica (Turso).",
+      "fuentes": ["modules/cosecha/**", "modules/planificador/**", "modules/feeder/**", "modules/cantera-semantica/**"]
+    },
+    {
+      "match": "EJECUTOR — la puerta guardada",
+      "archivo": "sistema-nervioso/ejecutor.md",
+      "dominio": "sistema",
+      "resumen": "Ejecución guardada: kill-switch, hardline, allowlist, aprobación graduada, audit, aislamiento en contenedor con degradación honesta.",
+      "fuentes": ["modules/ejecutor/**"]
+    },
+    {
+      "match": "Referencia externa — gstack",
+      "archivo": "referencias/gstack.md",
+      "dominio": "referencias",
+      "resumen": "Planos cosechados de gstack: promoción por confianza + cuarentena (destilador paso 3) y defensa anti-inyección de navegador (canary token).",
+      "fuentes": []
+    },
+    {
+      "match": "CÚPULA DE ESTADOS",
+      "archivo": "cupulas/estados.md",
+      "dominio": "cupulas",
+      "resumen": "El rail vivo: listas ordenadas con freno entre pasos, plantillas de proceso por arquetipo, el juez del rail (objetivo + blocker tipado) y el tiro automático.",
+      "fuentes": ["modules/estados/**", "modules/_shared/procesos-semilla.js"]
+    },
+    {
+      "match": "CÚPULA DE AGENTES",
+      "archivo": "cupulas/agentes.md",
+      "dominio": "cupulas",
+      "resumen": "La flota como biblioteca buscable: buscar_agente/activar_agente sobre 363 definiciones (29 nativos + VoltAgent + agency-agents), overlay semilla+crecido.",
+      "fuentes": ["modules/conversacion/ai-agent-framework/**", "agency-agents/**"]
+    },
+    {
+      "match": "PRISMA — Vertical universal de comercio",
+      "archivo": "prisma/vertical-comercio.md",
+      "dominio": "prisma",
+      "resumen": "ProductoUniversal de 5 huecos: producto-manager, adaptador, proyector, arquetipos, opciones, boss+enforcement, coste, escaparate, POS completo, calendario (base del tiempo).",
+      "fuentes": ["modules/prisma/**", "modules/_shared/arquetipos-semilla.js", "modules/_shared/organos-recetario.js", "modules/_shared/pos-persistencia.js", "modules/_shared/ical.js"]
+    },
+    {
+      "match": "PRISMA-CONSTRUCCIÓN",
+      "archivo": "prisma/vertical-construccion.md",
+      "dominio": "prisma",
+      "resumen": "El vertical del HACER: etapas universales como espina (rail), arquetipos de fabricación por forma, órganos de obra — bancos puros v0.1.",
+      "fuentes": ["modules/_shared/etapas-construccion.js", "modules/_shared/arquetipos-fabricacion.js", "modules/_shared/organos-fabricacion.js"]
+    },
+    {
+      "match": "HERRAMIENTAS EXTERNAS",
+      "archivo": "plataforma/herramientas-externas.md",
+      "dominio": "plataforma",
+      "resumen": "Rust nativo en el VPS (fastCRW) · Python en Docker (contenedor universal: SearXNG, Headroom) · enganche al ejecutor por config.",
+      "fuentes": ["deployment/fastcrw/**", "deployment/python-tools/**", "modules/fastcrw/**"]
+    }
+  ]
+}

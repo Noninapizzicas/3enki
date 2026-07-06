@@ -1,0 +1,64 @@
+# CÚPULA DE LA CABECERA — el MOTOR en cada PR (órgano check).
+# Valida marcadores/frontmatter (error duro) y canta STALE cuando el PR toca
+# fuentes de una rebanada sin tocar la rebanada (empujón como comentario).
+# Fase TESTIGO: stale no bloquea. Graduar a freno = hacer required este check
+# y tratar stale como error en validate-cabecera.js.
+name: cabecera-check
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validar cúpula (modo PR)
+        id: validar
+        run: |
+          node scripts/cabecera/validate-cabecera.js --diff "origin/${{ github.base_ref }}" --json | tee /tmp/cabecera.json
+          node scripts/cabecera/validate-cabecera.js --diff "origin/${{ github.base_ref }}"
+
+      - name: Empujón en el PR (stale / errores)
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let r = { errores: [], stale: [], huerfanos: [], fuentesMuertas: [] };
+            try { r = JSON.parse(fs.readFileSync('/tmp/cabecera.json', 'utf8')); } catch {}
+            const marca = '<!-- cabecera-check -->';
+            const hayAlgo = r.errores.length || r.stale.length;
+
+            const lineas = [marca, '## 📜 cabecera-check'];
+            if (r.errores.length) {
+              lineas.push('', '**✗ Errores (bloquean):**');
+              for (const e of r.errores) lineas.push(`- \`${e.archivo || ''}\` [${e.tipo}] ${e.detalle}`);
+            }
+            if (r.stale.length) {
+              lineas.push('', '**⚠ Rebanadas que quedaron atrás de este PR** — actualiza la prosa o sella `verificado:` en el mismo PR:');
+              for (const s of r.stale) lineas.push(`- \`arquitectura/cabecera/${s.archivo}\` (toca ${s.total} fichero(s) de sus fuentes: ${(s.fuentes_tocadas || []).join(', ')}${s.total > 5 ? ', …' : ''})`);
+            }
+            if (!hayAlgo) lineas.push('', '✓ La cabecera va al paso de este PR.');
+
+            const cuerpo = lineas.join('\n');
+            const { data: comentarios } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, per_page: 100
+            });
+            const previo = comentarios.find((c) => c.body && c.body.includes(marca));
+            if (previo) {
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: previo.id, body: cuerpo });
+            } else if (hayAlgo) {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: cuerpo });
+            }

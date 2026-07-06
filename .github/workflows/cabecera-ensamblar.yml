@@ -1,0 +1,37 @@
+# CÚPULA DE LA CABECERA — el ENSAMBLADOR en cada merge (órgano motor).
+# Regenera CLAUDE.md (fino) y CLAUDE.full.md con los {{marcadores}} resueltos
+# contra el código REAL del commit, y los commitea. El monolito deja de
+# mantenerse: SE FABRICA. Sin diff → sin commit (no hay bucle).
+name: cabecera-ensamblar
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  ensamblar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Ensamblar CLAUDE.md + CLAUDE.full.md
+        run: node scripts/cabecera/doc-sync.js --ensamblar
+
+      - name: Commitear artefactos si cambiaron
+        run: |
+          git config user.name "cabecera-bot"
+          git config user.email "actions@github.com"
+          git add CLAUDE.md CLAUDE.full.md
+          if git diff --cached --quiet; then
+            echo "✓ artefactos ya frescos — nada que commitear"
+          else
+            git commit -m "cabecera: ensamblado automático (doc-sync) [skip ci]"
+            git push
+          fi

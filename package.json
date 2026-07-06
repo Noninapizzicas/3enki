@@ -185,7 +185,11 @@
     "test:prisma__enforcement": "node tests/unit/prisma__enforcement.test.js",
     "test:prisma__calendario": "node tests/unit/prisma__calendario.test.js",
     "test:shared__ical": "node tests/unit/shared__ical.test.js",
-    "test:deployment-reconcile": "node tests/unit/deployment__reconcile.test.js"
+    "test:deployment-reconcile": "node tests/unit/deployment__reconcile.test.js",
+    "cabecera:ensamblar": "node scripts/cabecera/doc-sync.js --ensamblar",
+    "cabecera:check": "node scripts/cabecera/doc-sync.js --check",
+    "validate:cabecera": "node scripts/cabecera/validate-cabecera.js",
+    "test:cabecera__doc-sync": "node tests/unit/cabecera__doc-sync.test.js"
   },
   "keywords": [
     "event-driven",

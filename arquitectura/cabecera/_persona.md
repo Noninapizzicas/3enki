@@ -1,5 +1,10 @@
-<!-- GENERADO por scripts/cabecera/doc-sync.js — NO EDITAR A MANO.
-     La fuente de verdad vive en arquitectura/cabecera (rebanadas). -->
+---
+id: persona
+dominio: persona
+resumen: QUIÉN responde y CÓMO: P0 Expresión en Positivo, Criterio de Despliegue, Lente de Análisis Profundo, transporte cerrado.
+fuentes: []
+verificado: 2026-07-06
+---
 
 # 🧭 Persona Rectora — Arquitecto Event-Driven (Fusión A×C)
 
@@ -498,61 +503,3 @@ PATRONES
 > `LentePorObjetivo` solo se enciende cuando el `Objetivo` tiene filo para pagar ese coste. Los dos
 > guardas (`requiereAfilarObjetivo`, `DiagnosticoEsteril`) convierten el análisis de pasivo en
 > resolutivo: sin objetivo nítido no arranca, y nunca se le permite morir en una descripción.
-
----
-
-# CATÁLOGO DE LA CABECERA — léela por rebanadas
-
-> Este CLAUDE.md es FINO a propósito: lleva la persona (que no envejece) y este catálogo.
-> La sustancia técnica vive en `arquitectura/cabecera/**` — una rebanada por subsistema,
-> con frontmatter (`dominio`, `fuentes`, `verificado`). El monolito completo existe como
-> artefacto generado en `CLAUDE.full.md` (no lo edites: se fabrica).
-
-**Mandatos de trabajo (P0 — en positivo):**
-
-1. **Antes de tocar un subsistema, `Read` su rebanada** — el catálogo de abajo dice cuál.
-   Es el patrón cajones: catálogo barato siempre, contenido caro bajo demanda.
-2. **El PR que cambia código cubierto por `fuentes` actualiza su rebanada en el mismo PR**
-   (o sella `verificado:` si la conducta no cambió). El check `cabecera-check` lo canta si se olvida.
-3. **Los números se computan, no se escriben**: usa marcadores `{{ version:modules/x }}`,
-   `{{ tests:glob }}`, `{{ count:glob }}` (sin espacios en el uso real) — `doc-sync` los resuelve al ensamblar.
-4. **Rebanada nueva** = fichero en `arquitectura/cabecera/<dominio>/` + entrada en `_orden.json`.
-
-| rebanada | dominio | qué cubre |
-|---|---|---|
-| `arquitectura/cabecera/core/nucleo.md` | core | El core event-driven: EventBus, MQTTClient, EmbeddedBroker, ModuleLoader, HookManager, HTTPGateway, UIRequestHandler, ciclo de vida. |
-| `arquitectura/cabecera/sistema-nervioso/propiocepcion.md` | aprendizaje | Copia eferente + nervio: los eventos de dominio quedan registrados por proyecto y la rebanada nueva se inyecta en el turno. |
-| `arquitectura/cabecera/patron/modulo-hibrido.md` | patron | Reflejo (JS determinista) + Blueprint (LLM): criterio de reparto, base compartida, gate anti-colisión, receta de 5 pasos, bases compartidas y marca.json. |
-| `arquitectura/cabecera/sistema-nervioso/aprendizaje.md` | aprendizaje | Destilador (mina el bus y sella skills), Conserje (ofrece en positivo), Interruptores (panel central on/off). |
-| `arquitectura/cabecera/sistema-nervioso/portal-mcp.md` | sistema | La puerta guardada hacia agentes externos: bridge MCP stdio → bus, guard (interruptor, scope, mode, allowlist, audit). |
-| `arquitectura/cabecera/pizzepos/pos-nucleo.md` | pizzepos | El POS vivo: comandero, cuentas (state machine), cobros, cocina, productos (proyector), categorías, ingredientes, variaciones, pedidos, tarifas, persistencia, impresión. |
-| `arquitectura/cabecera/conversacion/nucleo-conversacion.md` | conversacion | project-manager, credential-manager y el grupo conversación: ai-gateway (+v2: cajones, RPC blueprints, nervios, foco), chat-io, memorias, prompt-builder, ai-agent-framework, agent-observer. |
-| `arquitectura/cabecera/pizzepos/managers-y-blueprints.md` | pizzepos | Managers de dominio pizzepos (cuentas, productos, categorías, cobros, pedidos, cocina, recetas, ingredientes, variaciones, escandallo, viabilidad, carta-digital, menu-generator) + blueprint drivers. |
-| `arquitectura/cabecera/modulos/seguridad-certificados-export.md` | sistema | security-p2p (X25519/ECDH, handshake, SecureEnvelope), certificate-authority (CA, mTLS, P12), conversation-export. |
-| `arquitectura/cabecera/modulos/grupo-1-3.md` | modulos | admin-panel, bienvenida-tienda, bot-manager, channel-manager, code-executor, comandero-cliente-builder, composition-manager, credential-manager. |
-| `arquitectura/cabecera/modulos/grupo-4-5.md` | modulos | dashboard (SSE), database-manager (SQLite por proyecto), device-health, device-registry, device-shadow, esp32-dev. |
-| `arquitectura/cabecera/modulos/lista-maestra.md` | modulos | Índice histórico del barrido de análisis por grupos (documento de trabajo, no fuente de verdad del inventario). |
-| `arquitectura/cabecera/modulos/grupo-6.md` | modulos | esp32-flasher (flash/monitor/debug) y facturas (pipeline OCR+AI). |
-| `arquitectura/cabecera/modulos/grupo-7.md` | modulos | filesystem (scopeado por proyecto), firmware-builder (PlatformIO), firmware-manager (catálogo + OTA via shadow). |
-| `arquitectura/cabecera/modulos/grupo-a.md` | modulos | gateway-manager (gateways software), log-manager (sesiones/logs), mercadona-api (cliente HTTP con throttle+cache). |
-| `arquitectura/cabecera/modulos/grupo-b.md` | modulos | notificador-pedidos (multicanal con retry), pase-cocina (flujo pedidos→cocina), pdf-viewer. |
-| `arquitectura/cabecera/modulos/grupo-c.md` | modulos | perifericos (hardware con state machine y reconexión), plugin-manager (plugins npm), project-manager (CRUD + contexto de proyectos). |
-| `arquitectura/cabecera/modulos/grupo-d.md` | modulos | prompt-manager (plantillas versionadas), recetario-creativo (generación IA), scheduler (jobs cron). |
-| `arquitectura/cabecera/modulos/grupo-e.md` | modulos | telegram-service (bots polling/webhook), text-editor, tienda-api, whatsapp-bot (Cloud API). |
-| `arquitectura/cabecera/modulos/operativos-sin-seccion.md` | modulos | Fichas breves de módulos vivos que aún no tienen sección propia — cupulas, inventario, mise-en-place, metricas, notas-poc, staff-manager, system-coherence-analyzer, system-inspector. |
-| `arquitectura/cabecera/frontend/capa-ui.md` | frontend | SvelteKit 2 + Svelte 5 sobre MQTT: MqttClient singleton, mqtt-request, lazy-registry, stores, módulos lazy, rutas multi-tenant, nervio vista-bridge, resiliencia. |
-| `arquitectura/cabecera/frontend/mapa-front-back.md` | frontend | El puente MQTT: mapa dominio→módulo backend por cada consumidor del frontend, mapa inverso y ciclo del enlace. |
-| `arquitectura/cabecera/pizzepos/autoservicio-whatsapp.md` | pizzepos | Pedido del cliente por WhatsApp: PWA arma #P1 por ids, el bot re-tasa server-side (pedido-tasador), webhook real de Meta, ancla por nombre. |
-| `arquitectura/cabecera/plataforma/servir-www.md` | plataforma | Árbol libre en /<ns>/<slug>/ servido por Caddy estático + symlink por proyecto; carta-digital publica el bundle; publicador escribe HTML. |
-| `arquitectura/cabecera/patron/opciones-universal.md` | patron | Opciones: configuración universal de producto (ELEGIR_UNO/VARIOS/QUITAR) — banco motor-opciones, gate pizzepos cerrado. |
-| `arquitectura/cabecera/sistema-nervioso/conserje.md` | aprendizaje | OFRECE vs USA: LibroDeCapacidades, brecha priorizada por intención, empujón consumido por el nervio, registro central de interruptores. |
-| `arquitectura/cabecera/sistema-nervioso/teoria-del-organo.md` | aprendizaje | Órgano = memoria + motor + químico + evento: cuenco de packs (lentes-diseno), homeostasis (termostato), verificador-visual (ojos), rumbo plataforma. |
-| `arquitectura/cabecera/sistema-nervioso/cantera.md` | aprendizaje | La abundancia alojada: cosecha (importar/promover/crear/patch), planificador, feeder (skills.sh), conserje-cantera, escalera de determinismo, cantera semántica (Turso). |
-| `arquitectura/cabecera/sistema-nervioso/ejecutor.md` | sistema | Ejecución guardada: kill-switch, hardline, allowlist, aprobación graduada, audit, aislamiento en contenedor con degradación honesta. |
-| `arquitectura/cabecera/referencias/gstack.md` | referencias | gstack + gbrain re-analizados de primera mano — el número duro (+31.4 P@5, vector-solo pierde) cosechado en la cantera (fusión RRF, cosecha 0.10.0 ✓), poda-por-referencia, canary token, panel de review multi-perspectiva, y donde Enki ya supera (ejecutor, portal, rail+juez). |
-| `arquitectura/cabecera/cupulas/estados.md` | cupulas | El rail vivo: listas ordenadas con freno entre pasos, plantillas de proceso por arquetipo, el juez del rail (objetivo + blocker tipado) y el tiro automático. |
-| `arquitectura/cabecera/cupulas/agentes.md` | cupulas | La flota como biblioteca buscable: buscar_agente/activar_agente sobre 363 definiciones (29 nativos + VoltAgent + agency-agents), overlay semilla+crecido. |
-| `arquitectura/cabecera/cupulas/cabecera.md` | cupulas | La cúpula de la cabecera — CLAUDE.md servido por rebanadas, computado por doc-sync y vigilado por CI (la escalera de determinismo aplicada al documento). |
-| `arquitectura/cabecera/prisma/vertical-comercio.md` | prisma | ProductoUniversal de 5 huecos: producto-manager, adaptador, proyector, arquetipos, opciones, boss+enforcement, coste, escaparate, POS completo, calendario (base del tiempo). |
-| `arquitectura/cabecera/prisma/vertical-construccion.md` | prisma | El vertical del HACER: etapas universales como espina (rail), arquetipos de fabricación por forma, órganos de obra — bancos puros v0.1. |
-| `arquitectura/cabecera/plataforma/herramientas-externas.md` | plataforma | Rust nativo en el VPS (fastCRW) · Python en Docker (contenedor universal: SearXNG, Headroom) · enganche al ejecutor por config. |

@@ -1,0 +1,79 @@
+---
+id: cupulas/cabecera
+dominio: cupulas
+resumen: La cúpula de la cabecera — CLAUDE.md servido por rebanadas, computado por doc-sync y vigilado por CI (la escalera de determinismo aplicada al documento).
+fuentes:
+  - scripts/cabecera/**
+  - .github/workflows/cabecera-check.yml
+  - .github/workflows/cabecera-ensamblar.yml
+  - .github/workflows/cabecera-pulso.yml
+verificado: 2026-07-06
+---
+
+# CÚPULA DE LA CABECERA — el documento rector servido por rebanadas (5ª sustancia del molde cúpula)
+
+> Quinta sustancia del molde (lentes=conocimiento · cantera=skills · agentes=trabajadores ·
+> estados=rumbo · **cabecera=memoria rectora**). Resuelve el envejecimiento del monolito con
+> la MISMA idea que rige el bus: mover verdad de la prosa al reflejo. "Totalmente actualizado"
+> por prosa no existe; existe POR CONSTRUCCIÓN para lo computable y POR TESTIGO para lo demás.
+> Vive en el PLANO GitHub (git es el único writer del doc); el VPS lo hereda por deploy.
+
+## Contrato (JSON)
+
+```json
+{
+  "esquema": "cupula-cabecera-v1",
+  "fuente_de_verdad": "arquitectura/cabecera/** — una rebanada .md por subsistema con frontmatter { id, dominio, resumen, fuentes[globs], verificado }",
+  "artefactos_generados": {
+    "CLAUDE.md": "FINO: persona + mandato + catálogo de rebanadas (lo que cada sesión carga siempre)",
+    "CLAUDE.full.md": "el monolito ENSAMBLADO con los computados resueltos (compatibilidad; no se edita)"
+  },
+  "tres_pisos_de_frescura": {
+    "COMPUTADO": "marcadores {{ version:path }} {{ tests:glob }} {{ count:glob }} (sin espacios en el uso real) resueltos por doc-sync — el drift de números es imposible por construcción",
+    "VIGILADO":  "cada rebanada declara sus fuentes; validate-cabecera canta STALE cuando las fuentes cambian y la rebanada no (modo PR: diff del PR; modo repo: git log)",
+    "HONESTO":   "marcador irresoluble → ⚠COMPUTADO_ROTO visible (error, nunca silencio); rebanada stale se sirve marcada, no escondida"
+  },
+  "organos_en_github": {
+    "MEMORIA": "las rebanadas (repo)",
+    "MOTOR":   "Actions cabecera-check (cada PR: valida + comenta el empujón) · cabecera-ensamblar (merge a main: regenera y commitea los artefactos)",
+    "QUIMICO": "cabecera-pulso (cron semanal: re-verifica y abre Issue si hay stale/huérfanos acumulados)",
+    "EVENTO":  "checks + comentario de bot en el PR + Issues — el testigo visible"
+  },
+  "gradualidad": "fase TESTIGO: stale/huérfanos son warning (no bloquean). Graduar a FRENO = tratar stale como error del check (branch protection). Mismo patrón OFF→ON del interruptor.",
+  "un_solo_writer": "git escribe el doc; Enki (VPS) es READER (lo hereda por deploy, mismo commit = misma verdad). Si algún día el runtime quisiera escribir doc (destilador sellando una sección), vuelve por la puerta: un PR con el mismo freno."
+}
+```
+
+## Ciclo
+
+```
+PR toca modules/x/** (fuentes de una rebanada)
+  → cabecera-check corre validate-cabecera --diff origin/main
+  → SI la rebanada no se tocó: comentario de bot (el empujón) + warning en el check
+  → el autor actualiza la prosa (o sella verificado:) en el MISMO PR
+merge a main
+  → cabecera-ensamblar corre doc-sync --ensamblar → CLAUDE.md + CLAUDE.full.md regenerados y commiteados
+  → los {{marcadores}} se resuelven contra el código REAL de ese commit
+lunes (cron)
+  → cabecera-pulso: repo entero → silencio si fresco · UN Issue con la lista si hay stale
+```
+
+## Mandatos de mantenimiento
+
+```
+MANDATO números_computados : versión/recuento/nº de tests → SIEMPRE marcador {{...}}, nunca a mano
+MANDATO rebanada_con_pr    : el PR que cambia código cubierto por fuentes actualiza su rebanada (la red del CI canta el olvido)
+MANDATO rebanada_nueva     : fichero en arquitectura/cabecera/<dominio>/ + entrada en _orden.json + fuentes declaradas
+MANDATO modulo_con_hogar   : todo modules/**/module.json cubierto por las fuentes de alguna rebanada (el validator lista huérfanos)
+```
+
+## Piezas
+
+```
+arquitectura/cabecera/**                 MEMORIA (rebanadas + _orden.json + _mandato.md + _persona.md)
+scripts/cabecera/doc-sync.js             MOTOR: marcadores + catálogo + ensamblado (lib + CLI --check/--ensamblar)
+scripts/cabecera/validate-cabecera.js    VIGILANTE: frontmatter/marcadores (error) · stale/huérfanos/fuentes-muertas (testigo) · --diff BASE · --json
+scripts/cabecera/rebanar.js              migración única monolito→rebanadas (reutilizable por la skill portable)
+.github/workflows/cabecera-*.yml         los tres órganos de GitHub (check · ensamblar · pulso)
+.claude/skills/montar-cupula-cabecera/   la skill que monta esta misma cúpula en cualquier repo
+```

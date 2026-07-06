@@ -410,7 +410,8 @@ class AiGatewayModule extends BaseModule {
     //   escribe desde cualquier página, como el nervio lo lee en todas).
     const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente',
       'fs.read', 'fs.write', 'fs.list', 'fs.search',
-      'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista']);
+      'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
+      'fijar_objetivo', 'evaluar_rail']);
     // Prefijos de tools válidos para este page_id. Permite que módulos como
     // menu-generator (tools 'menu.*') matcheen aunque el name del módulo y el
     // prefijo de la tool no coincidan literalmente — sin renombrar nada.
@@ -471,7 +472,7 @@ class AiGatewayModule extends BaseModule {
     const registry = this.moduleLoader?.toolsRegistry;
     if (!registry?.get) return [];
     const out = [];
-    for (const name of ['crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista']) {
+    for (const name of ['crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista', 'fijar_objetivo', 'evaluar_rail']) {
       const e = registry.get(name);
       if (e) out.push({ name: e.name, description: e.description, parameters: e.parameters });
     }
@@ -1503,12 +1504,21 @@ class AiGatewayModule extends BaseModule {
     const orden = estricto ? 'ORDEN ESTRICTO (los pasos van 1→2→3; no saltes)' : 'orden libre';
     const actual = estricto && lista.pasos[lista.actual]
       ? `\nPaso ACTUAL: ${lista.actual + 1}. ${lista.pasos[lista.actual].texto}` : '';
+    // El OBJETIVO (condición de completitud) + el juez: el LLM puede evaluar el rail
+    // contra el objetivo con evaluar_rail (blocker tipado si no está cumplido).
+    const objetivo = lista.objetivo ? `\nOBJETIVO: ${lista.objetivo}` : '';
+    const ev = lista.ultima_evaluacion
+      ? `\nÚltima evaluación: ${lista.ultima_evaluacion.satisfecho ? 'CUMPLIDO' : `pendiente (${lista.ultima_evaluacion.blocker})`}` : '';
+    const juez = lista.objetivo
+      ? '\nSi el usuario pregunta si ya está / si falta algo, o cierras un tramo, juzga con evaluar_rail: ' +
+        'si no está cumplido, NOMBRA por qué (blocker tipado), no un "no" mudo.'
+      : '';
     return (
       `# EL RAIL — lista activa «${lista.nombre}» (${orden}) · contexto silencioso\n` +
       'Este es el RUMBO escrito: qué está hecho, qué falta, cuál es el siguiente. Llévalo de ' +
       'fondo para no perder el norte entre turnos; NO lo recites salvo que el usuario pregunte. ' +
       'Si el usuario completa un paso, refléjalo con estados.marcar (libre) o estados.avanzar ' +
-      '(estricto) — el estado es la verdad, no tu memoria del hilo.' + actual + '\n\n' + cuerpo
+      '(estricto) — el estado es la verdad, no tu memoria del hilo.' + juez + objetivo + ev + actual + '\n\n' + cuerpo
     );
   }
 

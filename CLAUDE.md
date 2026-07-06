@@ -15351,16 +15351,71 @@ TRAMPA EVITADA  Paperclip presupone FLOTA (por eso su CLAIM atómico —UPDATE..
   entre workers). Copiar su lease sería importar la solución a un problema que el single-writer elimina.
 ```
 
+## EL JUEZ DEL RAIL — objetivo + blocker tipado (v0.4.0 · cierra el lazo abierto)
+
+> El rail sabía QUÉ pasos hay pero no SI el objetivo se cumplió — dependía de que el LLM se
+> auto-declarara hecho (frágil, la deriva). El juez cierra ese lazo. Cosechado de DeerFlow
+> (ver nota de referencia abajo): una lista gana un OBJETIVO y un juicio emite un BLOCKER TIPADO.
+> El juicio es PURO (perspectiva-c): el nervio ya inyecta el rail (objetivo+pasos) cada turno, el
+> LLM que VE la conversación juzga; el reflejo SOSTIENE lo determinista (fijar + freno + aplicar).
+
+```
+LISTA gana  objetivo?:String · ultima_evaluacion?:{satisfecho, blocker, razon, evidencia, ts}
+BLOCKERS    none | missing_evidence | needs_user_input | run_failed | external_wait | goal_not_met_yet
+tools       fijar_objetivo {objetivo} · evaluar_rail {veredicto:{satisfecho, blocker, razon, evidencia}}
+            (en GLOBAL_TOOLS, universales como el resto del rail)
+
+_aplicarVeredicto(lista, veredicto)  EL FRENO (PURO):
+  satisfecho → blocker='none' · estado='completa'
+  !satisfecho → EXIGE blocker tipado ≠ 'none' (si falta/inválido → 422 con la lista de blockers)
+  → el rail queda con DIAGNÓSTICO FÉRTIL (qué falta, por qué), nunca un 'no' mudo (P0)
+EMITE  estados.goal.evaluado · estados.goal.cumplido (si satisfecho)
+
+REPARTO  el JUICIO = LLM (perspectiva-c, ve la conversación) · fijar/validar/aplicar = REFLEJO (determinista)
+NERVIO   _composeRailSection inyecta objetivo + ultima_evaluacion + la instrucción de juzgar con blocker tipado
+FOLLOW-UP  el disparo AUTOMÁTICO tras cada turno (como DeerFlow: evaluador post-run con safety caps) = nervio,
+           siguiente. Hoy el LLM/conserje lo dispara on-demand (evaluar_rail).
+```
+
+## Referencia externa — DeerFlow 2.0 (bytedance/deer-flow · MIT) — plano de super-agent-harness
+
+> ANALIZADO, no importado (como gstack/Paperclip). DeerFlow = "super agent harness" sobre LangGraph:
+> sub-agentes + memoria + sandbox + SKILLS, batteries-included. Convergencia sorprendente con Enki
+> (mismo patrón, geometría opuesta: DeerFlow CENTRALIZA en un runtime, Enki FEDERA sobre el bus).
+
+```json
+{
+  "mapeo": {
+    "SKILL.md + describe_skill diferido": "= cantera (buscar_skill→obtener) — mismo patrón índice-de-nombres + fetch-metadata-on-demand",
+    "/skill activación de turno": "= cuenco de lentes (montar/promover)",
+    "security_scanner de skill writes": "= freno anti-wipe cosecha.crear/patch",
+    "sub-agentes contexto aislado": "= cúpula de agentes + agente-perspectiva-c",
+    "session goal + blocker tipado + continuación": "= rail vivo + EL JUEZ (arriba) — cosechado de aquí",
+    "host bash OFF por defecto": "= ejecutor (la reja nace OFF) — misma frase, misma razón",
+    "memoria cross-sesión": "= propiocepción + memory",
+    "npx skills / find-skills": "= feeder (skills.sh)"
+  },
+  "planos_cosechables_pendientes": [
+    "evaluador de goal con SAFETY CAPS (8 continuaciones · para tras 2 no-progresos idénticos) → cuando el juez suba al nervio",
+    "context engineering: offload de intermedios al FS + summarization por sub-tarea (Enki registra, no comprime el hilo largo)",
+    "required_secrets inyectados como env por skill al activarse (credential-manager × skills)",
+    "la pila de middlewares nombrada (loop_detection · tool_output_budget · dangling_tool_call recovery · read_before_write) como checklist de harness"
+  ],
+  "no_importable": "monolito Python/LangGraph vs JS federado sobre MQTT — se cosecha el DISEÑO, no el código"
+}
+```
+
 ## Topics / eventos · piezas · tests
 
 ```
-estados.{crear,instanciar,anadir,avanzar,marcar,estado,listar,activar,borrar}.request → .response
+estados.{crear,instanciar,anadir,avanzar,marcar,estado,listar,activar,borrar,fijar_objetivo,evaluar}.request → .response
 estados.lista.creada · estados.lista.activada · estados.paso.avanzado · estados.paso.atascado
+estados.objetivo.fijado · estados.goal.evaluado · estados.goal.cumplido   (EL JUEZ)
 PIEZAS {
-  modules/estados (0.3.0 · reflejo 0.3.0)   la cúpula custodio (single-writer, freno entre pasos)
-                                            + TOOLS del chat (crear·anadir·completar·ver·BORRAR — el LLM maneja el ciclo)
+  modules/estados (0.4.0 · reflejo 0.4.0)   la cúpula custodio (single-writer, freno entre pasos + EL JUEZ)
+                                            + TOOLS del chat (crear·anadir·completar·ver·borrar·fijar_objetivo·evaluar_rail)
   modules/_shared/procesos-semilla.js       las plantillas de proceso por arquetipo (PRISMA hereda)
-  ai-gateway (2.28.0)                        el nervio: _leerRailActivo + _composeRailSection (inyecta la activa)
+  ai-gateway (2.30.0)                        el nervio: _leerRailActivo + _composeRailSection (inyecta la activa + objetivo + juez)
 }
 LA MANO QUE ESCRIBE (v0.2.0)  el diseño decía "el LLM PROPONE · el reflejo SOSTIENE". v0.1 construyó el que
   SOSTIENE (custodio) y el que LEE (nervio), pero el LLM no tenía con qué PROPONER → la lista activa siempre
@@ -15374,11 +15429,13 @@ UNIVERSALIDAD DE LAS TOOLS (ai-gateway 2.29.0)  verificado en vivo por el chat: 
   cajones) NO recibía las tools de módulo (el LLM decía "NO TENGO crear_lista" e improvisaba con fs.write a
   /prueba-rail.json). _getTools filtra por page_id: blueprint → universales+cajones · página → GLOBAL_TOOLS+prefijos.
   Las tools de módulo quedaban fuera de TODA página real (solo entraban en el chat plano page_id:null). Cura:
-  _railToolsFromRegistry() pulla las 4 del toolsRegistry y las inyecta en las ramas blueprint; + añadidas a
+  _railToolsFromRegistry() pulla las del toolsRegistry y las inyecta en las ramas blueprint; + añadidas a
   GLOBAL_TOOLS. El rail es universal por diseño → sus tools son globales como fs. Si estados no cargó → [] (no-op).
-TESTS  estados__cupula (17: crear libre/estricto · freno atasca y libera · instanciar servicio/uso_temporal ·
-       avanzar-en-libre 409 · marcar · activa=nervio · borrar · + las 4 tools crear/anadir/completar/ver).
-       Gate híbridos 11/0 (sin blueprint, sin colisión).
+EL JUEZ (v0.4.0)  fijar_objetivo + evaluar_rail (blocker tipado) también en _railToolsFromRegistry + GLOBAL_TOOLS.
+TESTS  estados__cupula (25: crear libre/estricto · freno atasca y libera · instanciar servicio/uso_temporal ·
+       avanzar-en-libre 409 · marcar · activa=nervio · borrar · las tools crear/anadir/completar/ver · + EL JUEZ:
+       fijar_objetivo · crear-con-objetivo · evaluar satisfecho→completa+goal.cumplido · FRENO 422 (no-satisfecho sin
+       blocker tipado) · no-satisfecho registra blocker sin completar · evaluar sin objetivo 409). Gate híbridos 11/0.
 ESTADO ✓ VERIFICADO EN VIVO (Regalos, 3 conversaciones): crear_lista ESCRIBE → el nervio LEE en otra
        conversación sin historial ("tienes «Rumbo», 3 pendientes") → completar_paso TACHA. El rumbo vive en
        la cúpula, no en el hilo. El LLM es dueño del ciclo (crear·añadir·completar·ver·borrar). ◑ follow-up:

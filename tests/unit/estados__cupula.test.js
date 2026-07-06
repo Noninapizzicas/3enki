@@ -219,6 +219,67 @@ test('tool borrar_lista sin lista ni activa → 400', async () => {
   assert.strictEqual(b.status, 400);
 });
 
+// ─── EL JUEZ DEL RAIL (objetivo + veredicto con blocker tipado) ──────────────
+
+test('fijar_objetivo sobre la activa → queda en la lista y lo lee el estado', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Lanzamiento', activar: true });
+  const f = await r.handleFijarObjetivoTool({ project_id: PID, objetivo: 'carta publicada con todo costeado' });
+  assert.strictEqual(f.status, 200);
+  const e = await r._estado({ project_id: PID });
+  assert.strictEqual(e.data.lista.objetivo, 'carta publicada con todo costeado');
+});
+
+test('crear acepta objetivo inline', async () => {
+  const r = nuevo();
+  const c = await r._crear({ project_id: PID, nombre: 'Obra', objetivo: 'terminada y entregada' });
+  assert.strictEqual(c.status, 201);
+  const e = await r._estado({ project_id: PID, lista_id: 'obra' });
+  assert.strictEqual(e.data.lista.objetivo, 'terminada y entregada');
+});
+
+test('evaluar_rail satisfecho → registra, marca la lista completa, emite goal.cumplido', async () => {
+  const r = nuevo();
+  const ev = [];
+  r.eventBus = { publish: (e, d) => ev.push({ e, d }) };
+  await r._crear({ project_id: PID, nombre: 'Meta', objetivo: 'todo hecho', activar: true });
+  const res = await r.handleEvaluarRailTool({ project_id: PID, veredicto: { satisfecho: true, blocker: 'none', razon: 'listo', evidencia: 'la carta está publicada' } });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.data.satisfecho, true);
+  const e = await r._estado({ project_id: PID });
+  assert.strictEqual(e.data.lista.estado, 'completa');
+  assert.strictEqual(e.data.lista.ultima_evaluacion.satisfecho, true);
+  assert.ok(ev.some(x => x.e === 'estados.goal.cumplido'), 'emite goal.cumplido');
+});
+
+test('EL FRENO: veredicto no-satisfecho SIN blocker tipado → 422 con la lista de blockers', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Meta', objetivo: 'x', activar: true });
+  const bad = await r.handleEvaluarRailTool({ project_id: PID, veredicto: { satisfecho: false, blocker: 'none' } });
+  assert.strictEqual(bad.status, 422);
+  assert.ok(Array.isArray(bad.error.details.blockers) && bad.error.details.blockers.includes('missing_evidence'));
+  const bad2 = await r.handleEvaluarRailTool({ project_id: PID, veredicto: { satisfecho: false, blocker: 'inventado' } });
+  assert.strictEqual(bad2.status, 422);
+});
+
+test('evaluar_rail no-satisfecho con blocker tipado → registra el blocker, NO completa', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Meta', objetivo: 'x', activar: true });
+  const res = await r.handleEvaluarRailTool({ project_id: PID, veredicto: { satisfecho: false, blocker: 'needs_user_input', razon: 'falta que elija el precio' } });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.data.blocker, 'needs_user_input');
+  const e = await r._estado({ project_id: PID });
+  assert.notStrictEqual(e.data.lista.estado, 'completa');
+  assert.strictEqual(e.data.lista.ultima_evaluacion.blocker, 'needs_user_input');
+});
+
+test('evaluar_rail sobre lista sin objetivo → 409 (fija uno primero)', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'SinMeta', activar: true });
+  const res = await r.handleEvaluarRailTool({ project_id: PID, veredicto: { satisfecho: true, blocker: 'none' } });
+  assert.strictEqual(res.status, 409);
+});
+
 (async () => {
   let ok = 0; const fails = [];
   for (const { n, f } of tests) { try { await f(); ok++; } catch (e) { fails.push({ n, e }); } }

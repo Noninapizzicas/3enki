@@ -26,6 +26,9 @@ const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 const { plantillaDe } = require('../_shared/procesos-semilla');
 
 const STORE = '/estados/listas.json';
+// Blockers TIPADOS del juez del rail (inspirado en el evaluador de goal de DeerFlow):
+// un objetivo NO cumplido nombra POR QUÉ, no un "no" mudo. 'none' solo si satisfecho.
+const BLOCKERS = ['none', 'missing_evidence', 'needs_user_input', 'run_failed', 'external_wait', 'goal_not_met_yet'];
 const nowISO = () => new Date().toISOString();
 const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
@@ -33,18 +36,20 @@ class EstadosReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'estados';
-    this.version = 'reflejo-0.3.0';
+    this.version = 'reflejo-0.4.0';
   }
 
-  onCrearRequest(e)      { return this._atender(e, 'crear', 'estados.crear.response', d => this._crear(d)); }
-  onInstanciarRequest(e) { return this._atender(e, 'instanciar', 'estados.instanciar.response', d => this._instanciar(d)); }
-  onAnadirRequest(e)     { return this._atender(e, 'anadir', 'estados.anadir.response', d => this._anadir(d)); }
-  onAvanzarRequest(e)    { return this._atender(e, 'avanzar', 'estados.avanzar.response', d => this._avanzar(d)); }
-  onMarcarRequest(e)     { return this._atender(e, 'marcar', 'estados.marcar.response', d => this._marcar(d)); }
-  onEstadoRequest(e)     { return this._atender(e, 'estado', 'estados.estado.response', d => this._estado(d)); }
-  onListarRequest(e)     { return this._atender(e, 'listar', 'estados.listar.response', d => this._listar(d)); }
-  onActivarRequest(e)    { return this._atender(e, 'activar', 'estados.activar.response', d => this._activar(d)); }
-  onBorrarRequest(e)     { return this._atender(e, 'borrar', 'estados.borrar.response', d => this._borrar(d)); }
+  onCrearRequest(e)         { return this._atender(e, 'crear', 'estados.crear.response', d => this._crear(d)); }
+  onInstanciarRequest(e)    { return this._atender(e, 'instanciar', 'estados.instanciar.response', d => this._instanciar(d)); }
+  onAnadirRequest(e)        { return this._atender(e, 'anadir', 'estados.anadir.response', d => this._anadir(d)); }
+  onAvanzarRequest(e)       { return this._atender(e, 'avanzar', 'estados.avanzar.response', d => this._avanzar(d)); }
+  onMarcarRequest(e)        { return this._atender(e, 'marcar', 'estados.marcar.response', d => this._marcar(d)); }
+  onEstadoRequest(e)        { return this._atender(e, 'estado', 'estados.estado.response', d => this._estado(d)); }
+  onListarRequest(e)        { return this._atender(e, 'listar', 'estados.listar.response', d => this._listar(d)); }
+  onActivarRequest(e)       { return this._atender(e, 'activar', 'estados.activar.response', d => this._activar(d)); }
+  onBorrarRequest(e)        { return this._atender(e, 'borrar', 'estados.borrar.response', d => this._borrar(d)); }
+  onFijarObjetivoRequest(e) { return this._atender(e, 'fijar_objetivo', 'estados.fijar_objetivo.response', d => this._fijarObjetivo(d)); }
+  onEvaluarRequest(e)       { return this._atender(e, 'evaluar', 'estados.evaluar.response', d => this._evaluar(d)); }
 
   // =============================================================
   // TOOLS del chat — el LLM PROPONE, el reflejo SOSTIENE. El nervio ya LEE la lista
@@ -96,6 +101,23 @@ class EstadosReflejo extends ModuloHibridoReflejo {
     return this._borrar({ project_id: a.project_id, lista_id: id });
   }
 
+  // ── EL JUEZ DEL RAIL (perspectiva-c: juicio puro) — el nervio ya inyecta el rail
+  // (objetivo + pasos) cada turno; el LLM que VE la conversación juzga y llama estas dos.
+  // El reflejo SOSTIENE lo determinista: fija el objetivo, y valida+aplica el veredicto. ──
+  async handleFijarObjetivoTool(args) {
+    const a = args || {};
+    const est = await this._estado({ project_id: a.project_id });
+    if (!est.data || !est.data.lista) return this._errorResponse(409, 'CONFLICT_STATE', 'no hay lista activa; crea una con crear_lista primero');
+    return this._fijarObjetivo({ project_id: a.project_id, lista_id: est.data.lista.id, objetivo: a.objetivo });
+  }
+
+  async handleEvaluarRailTool(args) {
+    const a = args || {};
+    const est = await this._estado({ project_id: a.project_id });
+    if (!est.data || !est.data.lista) return this._errorResponse(409, 'CONFLICT_STATE', 'no hay lista activa');
+    return this._evaluar({ project_id: a.project_id, lista_id: est.data.lista.id, veredicto: a.veredicto });
+  }
+
   // ── store (single-writer) ──
   async _cargar(project_id) {
     const obj = await this._leerJson(project_id, STORE);
@@ -126,7 +148,7 @@ class EstadosReflejo extends ModuloHibridoReflejo {
     const orden = input.orden === 'estricto' ? 'estricto' : 'libre';
     const pasos = (Array.isArray(input.pasos) ? input.pasos : []).map((p, i) =>
       typeof p === 'string' ? this._paso(null, p, i) : this._paso(p.clave, p.texto, i, p.freno));
-    const lista = { id, nombre: String(input.nombre), tipo: input.tipo || 'tareas', orden, pasos, actual: 0, estado: 'abierta', creada: nowISO(), actualizada: nowISO() };
+    const lista = { id, nombre: String(input.nombre), tipo: input.tipo || 'tareas', orden, pasos, actual: 0, estado: 'abierta', creada: nowISO(), actualizada: nowISO(), ...(input.objetivo ? { objetivo: String(input.objetivo) } : {}) };
     doc.listas[id] = lista;
     if (input.activar) doc.activa = id;
     const w = await this._guardar(input.project_id, doc);
@@ -224,6 +246,55 @@ class EstadosReflejo extends ModuloHibridoReflejo {
     lista.actualizada = nowISO();
     await this._guardar(input.project_id, doc);
     return { status: 200, data: { lista_id: lista.id, paso: paso.id, estado } };
+  }
+
+  // ── fijar el OBJETIVO de una lista (la condición de completitud que juzga el rail) ──
+  async _fijarObjetivo(input) {
+    if (!input.project_id || !input.lista_id) return this._invalid('lista_id');
+    if (!input.objetivo) return this._invalid('objetivo');
+    const doc = await this._cargar(input.project_id);
+    const lista = doc.listas[slug(input.lista_id)];
+    if (!lista) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'lista no existe', { lista_id: input.lista_id });
+    lista.objetivo = String(input.objetivo);
+    lista.actualizada = nowISO();
+    await this._guardar(input.project_id, doc);
+    this.eventBus.publish('estados.objetivo.fijado', { project_id: input.project_id, lista_id: lista.id, objetivo: lista.objetivo, timestamp: nowISO() });
+    return { status: 200, data: { lista_id: lista.id, objetivo: lista.objetivo } };
+  }
+
+  // ── EL FRENO del juez: un veredicto satisfecho:false EXIGE un blocker TIPADO (no 'none').
+  // Deja el rail siempre con un diagnóstico fértil (qué falta, por qué). PURO. ──
+  _aplicarVeredicto(lista, veredicto) {
+    if (!veredicto || typeof veredicto !== 'object') return { ok: false, err: this._errorResponse(400, 'INVALID_INPUT', 'veredicto requerido', { field: 'veredicto' }) };
+    const satisfecho = veredicto.satisfecho === true;
+    let blocker;
+    if (satisfecho) { blocker = 'none'; }
+    else {
+      blocker = veredicto.blocker;
+      if (!BLOCKERS.includes(blocker) || blocker === 'none') {
+        return { ok: false, err: this._errorResponse(422, 'UPSTREAM_INVALID_RESPONSE', 'un veredicto no satisfecho exige un blocker tipado', { blockers: BLOCKERS.filter(b => b !== 'none') }) };
+      }
+    }
+    lista.ultima_evaluacion = { satisfecho, blocker, razon: String(veredicto.razon || ''), evidencia: String(veredicto.evidencia || ''), ts: nowISO() };
+    if (satisfecho) lista.estado = 'completa';
+    return { ok: true, satisfecho, blocker };
+  }
+
+  // ── evaluar el rail contra su objetivo: recibe el VEREDICTO (el juicio lo pone quien ve
+  // la conversación — el LLM de página, perspectiva-c), el reflejo lo valida y aplica. ──
+  async _evaluar(input) {
+    if (!input.project_id || !input.lista_id) return this._invalid('lista_id');
+    const doc = await this._cargar(input.project_id);
+    const lista = doc.listas[slug(input.lista_id)];
+    if (!lista) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'lista no existe', { lista_id: input.lista_id });
+    if (!lista.objetivo) return this._errorResponse(409, 'CONFLICT_STATE', 'la lista no tiene objetivo; fija uno con fijar_objetivo', { lista_id: lista.id });
+    const ap = this._aplicarVeredicto(lista, input.veredicto);
+    if (!ap.ok) return ap.err;
+    lista.actualizada = nowISO();
+    await this._guardar(input.project_id, doc);
+    this.eventBus.publish('estados.goal.evaluado', { project_id: input.project_id, lista_id: lista.id, satisfecho: ap.satisfecho, blocker: ap.blocker, timestamp: nowISO() });
+    if (ap.satisfecho) this.eventBus.publish('estados.goal.cumplido', { project_id: input.project_id, lista_id: lista.id, objetivo: lista.objetivo, timestamp: nowISO() });
+    return { status: 200, data: { lista_id: lista.id, satisfecho: ap.satisfecho, blocker: ap.blocker, estado: lista.estado } };
   }
 
   // ── estado: una lista concreta, o la ACTIVA (lo que lee el nervio) ──

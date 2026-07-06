@@ -1,7 +1,8 @@
 {
   "_doc": "Manifest de estados — LA CÚPULA DE ESTADOS (reflejo custodio único). Gemelo del cuenco de lentes, otra sustancia: el cuenco sirve conocimiento (lentes), esta cúpula sirve ESTADO (listas ordenadas). Un solo primitivo con muchas caras — notas · chef's list · tareas · compras · orden 1º 2º 3º — todas = una ListaOrdenada con `orden: libre|estricto`. El RAIL VIVO: fichas entrando (pendiente) y saliendo (hecho), el estado ES el timón. Single-writer de /estados/listas.json por proyecto → el timón no tiembla. FRENO entre pasos (orden estricto): avanzar valida el paso actual contra su freno.requiere (el VALIDAR de blueprint-agentico subido al paso) → valida y el siguiente recoge, o se atasca sin arrastrar basura. HERENCIA universal (patrón cuenco): por bus (cualquiera llama estados.*), por nervio (ai-gateway inyecta la lista activa como propiocepción), por plantilla (PRISMA suelta plantillas de proceso via _shared/procesos-semilla → instanciar las sirve). Ver CLAUDE.md secciones 'Cúpula de estados / Rail vivo'.",
   "name": "estados",
-  "version": "0.3.0",
+  "version": "0.4.0",
+  "_v0_4_0_nota": "v0.4.0 (2026-07-06): EL JUEZ DEL RAIL (perspectiva-c) — cierra el lazo que la cabecera marcaba abierto. Inspirado en el evaluador de goal de DeerFlow (bytedance/deer-flow): una lista gana un OBJETIVO (condición de completitud) y un juez emite un BLOCKER TIPADO {none|missing_evidence|needs_user_input|run_failed|external_wait|goal_not_met_yet}. El juicio es puro (perspectiva-c): el nervio ya inyecta el rail (objetivo+pasos) cada turno, el LLM que VE la conversación juzga y llama evaluar_rail con su veredicto; el reflejo SOSTIENE lo determinista — fijar_objetivo + el FRENO (un veredicto no-satisfecho EXIGE blocker tipado, no un 'no' mudo → diagnóstico fértil) + satisfecho→estado 'completa' + emite estados.goal.evaluado/cumplido. Tools fijar_objetivo/evaluar_rail (en GLOBAL_TOOLS, universales como el resto del rail). Reflejo 0.4.0. Ver CLAUDE.md 'Cúpula de estados' + la nota de referencia DeerFlow.",
   "_v0_3_0_nota": "v0.3.0 (2026-07-06): + tool borrar_lista (sin id → la activa) para cerrar el ciclo de gestión del LLM: crear·añadir·completar·ver·BORRAR. El LLM es el dueño del ciclo de vida de las listas (crea y maneja en el flujo de la conversación); con borrar puede retirar un rumbo terminado sin intervención externa. Verificado en vivo (Regalos): crear_lista escribe, el nervio lee en otra conversación, completar_paso tacha — el rumbo vive en la cúpula, no en el hilo. Reflejo 0.3.0.",
   "_v0_2_0_nota": "v0.2.0 (2026-07-06): LA MANO QUE ESCRIBE — tools del chat (el LLM PROPONE; el reflejo SOSTIENE; el nervio ya LEE la activa). Cerraba el lazo: hasta ahora estados solo se alcanzaba por bus (invisible desde el chat), así que la lista activa siempre estaba vacía y el nervio no inyectaba nada. Cuatro tools que el LLM de cualquier conversación invoca: crear_lista (crea+activa el rail), anadir_paso, completar_paso (avanza en estricto / tacha nº en libre), ver_listas (+activar). Los args llegan enriquecidos con project_id del contexto (ai-gateway._executeToolCall), el LLM no maneja UUIDs. Handlers handleCrearListaTool/handleAnadirPasoTool/handleCompletarPasoTool/handleVerListasTool → las ops. Reflejo 0.2.0.",
   "_v0_1_0_nota": "v0.1.0 (2026-07-05): cúpula custodio con crear/instanciar/anadir/avanzar/marcar/estado/listar/activar/borrar. Un primitivo (ListaOrdenada) con orden libre|estricto. Freno entre pasos en estricto (freno.requiere gatea el traspaso). instanciar lee _shared/procesos-semilla (plantillas por arquetipo = PRISMA hereda). Store /estados/listas.json single-writer. Reflejo 0.1.0. Nervio (ai-gateway inyecta la lista activa) = tramo siguiente.",
@@ -16,7 +17,9 @@
     { "event": "estados.estado.request", "handler": "onEstadoRequest", "description": "Reflejo JS: una lista concreta, o la ACTIVA (lo que lee el nervio)." },
     { "event": "estados.listar.request", "handler": "onListarRequest", "description": "Reflejo JS: todas las listas del proyecto (lite) + cuál es la activa." },
     { "event": "estados.activar.request", "handler": "onActivarRequest", "description": "Reflejo JS: marca la lista activa (la que surfacea el nervio)." },
-    { "event": "estados.borrar.request", "handler": "onBorrarRequest", "description": "Reflejo JS: quita una lista." }
+    { "event": "estados.borrar.request", "handler": "onBorrarRequest", "description": "Reflejo JS: quita una lista." },
+    { "event": "estados.fijar_objetivo.request", "handler": "onFijarObjetivoRequest", "description": "Reflejo JS: fija el OBJETIVO (condición de completitud) de una lista — lo que juzga el rail." },
+    { "event": "estados.evaluar.request", "handler": "onEvaluarRequest", "description": "Reflejo JS: recibe el VEREDICTO del juez {satisfecho, blocker, razon, evidencia}, lo valida (freno: no-satisfecho exige blocker tipado) y aplica (satisfecho→completa). Emite estados.goal.evaluado/cumplido." }
   ],
   "tools": [
     {
@@ -90,6 +93,44 @@
       },
       "handler": "handleBorrarListaTool",
       "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "fijar_objetivo",
+      "description": "Fija el OBJETIVO de la lista/rail ACTIVA — la condición que dice cuándo el trabajo está COMPLETO (p.ej. 'la carta publicada con todos los productos costeados'). ÚSALA cuando el usuario declara una meta clara para el rumbo en marcha. Luego evaluar_rail juzga contra este objetivo.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "objetivo": { "type": "string", "minLength": 1, "description": "La condición de completitud, en una frase." }
+        },
+        "required": ["objetivo"]
+      },
+      "handler": "handleFijarObjetivoTool",
+      "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "evaluar_rail",
+      "description": "Juzga si el OBJETIVO de la lista/rail ACTIVA se cumplió y registra el veredicto. TÚ eres el juez: mira la conversación y el estado del rail (ya lo tienes en contexto) y responde con 'veredicto'. Si NO está cumplido, DEBES nombrar por qué con un blocker tipado (no un 'no' mudo). ÚSALA cuando el usuario pregunte si ya está / si falta algo, o al cerrar un tramo de trabajo con objetivo.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "veredicto": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "satisfecho": { "type": "boolean", "description": "true si el objetivo está cumplido con evidencia visible." },
+              "blocker": { "type": "string", "enum": ["none", "missing_evidence", "needs_user_input", "run_failed", "external_wait", "goal_not_met_yet"], "description": "Si satisfecho=false, POR QUÉ: missing_evidence (falta prueba) · needs_user_input (falta que el usuario decida/aporte) · run_failed (algo falló) · external_wait (espera algo externo) · goal_not_met_yet (en camino, aún no). 'none' solo si satisfecho." },
+              "razon": { "type": "string", "description": "Una frase de por qué." },
+              "evidencia": { "type": "string", "description": "La evidencia visible que sustenta el juicio." }
+            },
+            "required": ["satisfecho", "blocker"]
+          }
+        },
+        "required": ["veredicto"]
+      },
+      "handler": "handleEvaluarRailTool",
+      "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "UPSTREAM_INVALID_RESPONSE", "UNKNOWN_ERROR"]
     }
   ],
   "config": {

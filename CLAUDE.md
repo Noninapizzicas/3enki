@@ -15444,6 +15444,9 @@ UNIVERSALIDAD DE LAS TOOLS (ai-gateway 2.29.0)  verificado en vivo por el chat: 
   GLOBAL_TOOLS. El rail es universal por diseño → sus tools son globales como fs. Si estados no cargó → [] (no-op).
 EL JUEZ (v0.4.0)  fijar_objetivo + evaluar_rail (blocker tipado) también en _railToolsFromRegistry + GLOBAL_TOOLS.
 EL TIRO AUTOMÁTICO (ai-gateway 2.31.0)  post-turno, detached, safety caps — ver el bloque de arriba.
+       ✓ VERIFICADO EN VIVO (1a): fijado un objetivo, un turno de PURO cotilleo ("¿mejor té o café?") disparó
+       estados.goal.evaluado SOLO (blocker goal_not_met_yet) sin pedirlo — el juez se dispara post-turno sin
+       intervención. Timing: ~14s tras la respuesta (turno + llamada de juez detached).
 TESTS  estados__cupula (25) · ai-gateway__rail-juez-auto (10: _parseVeredicto plano/fenced/en-texto/rechaza ·
        _composeJuezInput objetivo+pasos+conv · sin-objetivo NO dispara · con-objetivo dispara+aplica+cuenta ·
        ya-satisfecho NO re-evalúa · cap 8 · no-progreso para tras 2 · cambio de blocker resetea · best-effort no propaga).

@@ -5,7 +5,11 @@
   "scope": [
     "*"
   ],
-  "tools": [],
+  "tools": [
+    "fs.read",
+    "fs.write",
+    "fs.list"
+  ],
   "provider": "auto",
   "model": null,
   "prompt_file": "prompts/agent-installer.md",

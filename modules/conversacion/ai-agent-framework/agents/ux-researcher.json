@@ -5,7 +5,11 @@
   "scope": [
     "*"
   ],
-  "tools": [],
+  "tools": [
+    "fs.read",
+    "fs.search",
+    "fs.list"
+  ],
   "provider": "auto",
   "model": null,
   "prompt_file": "prompts/ux-researcher.md",

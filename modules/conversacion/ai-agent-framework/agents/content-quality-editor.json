@@ -5,7 +5,11 @@
   "scope": [
     "*"
   ],
-  "tools": [],
+  "tools": [
+    "fs.read",
+    "fs.write",
+    "fs.edit"
+  ],
   "provider": "auto",
   "model": null,
   "prompt_file": "prompts/content-quality-editor.md",

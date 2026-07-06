@@ -52,6 +52,9 @@ test('los 154 de VoltAgent están en la biblioteca (29 nativos + 154 importados)
   const found = m._buscarAgente({ query: 'backend developer' }).agentes.map(a => a.nombre);
   assert.ok(found.includes('backend-developer'), 'buscable');
   assert.strictEqual(m._activar({ nombre: 'backend-developer' }).activado, true, 'activable');
+  // tools MAPEADAS al bus de Enki (no []): Read/Write/Edit/Glob/Grep → fs.*. Bash cae (reja del ejecutor).
+  assert.ok(bd.tools_count >= 4, `backend-developer con tools mapeadas: ${bd.tools_count}`);
+  assert.deepStrictEqual(m.agents.get('backend-developer').tools, ['fs.read', 'fs.write', 'fs.edit', 'fs.list', 'fs.search']);
 });
 
 test('hoy todas están aparcadas → agents (activos/invocables) vacío, pero buscables', () => {

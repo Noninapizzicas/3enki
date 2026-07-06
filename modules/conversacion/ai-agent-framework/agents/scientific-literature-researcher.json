@@ -5,7 +5,9 @@
   "scope": [
     "*"
   ],
-  "tools": [],
+  "tools": [
+    "fs.read"
+  ],
   "provider": "auto",
   "model": null,
   "prompt_file": "prompts/scientific-literature-researcher.md",

@@ -15480,12 +15480,19 @@ CLASE AiAgentFrameworkModule (ampliación 2.1.0) {
 ✓ FLOTA POBLADA (2026-07-06) — los 154 subagentes de VoltAgent (awesome-claude-code-subagents) importados como
   APARCADOS (enabled:false) → biblioteca de 183 (29 nativos + 154). Buscables por buscar_agente, activables por
   activar_agente; cero coste runtime hasta encenderlos (el prompt solo se lee al activar — _loadAgents salta la
-  carga del prompt para los no-activos). tools:[] (las de VoltAgent son de Claude Code, no del bus) → si se
-  encienden corren como perspectiva-c puro (el modo más fiable). metadata {domain=categoría, fuente:'voltagent'}.
+  carga del prompt para los no-activos). metadata {domain=categoría, fuente:'voltagent', upstream_model/tools}.
   10 dominios: core-development(11)·language-specialists(30)·infrastructure(16)·quality-security(17)·data-ai(13)·
   developer-experience(15)·specialized-domains(14)·business-product(16)·meta-orchestration(11)·research-analysis(11).
-TESTS  agentes__cupula-biblioteca (15: biblioteca ≥180 · 154 VoltAgent aparcados+buscables+activables · agents=0 ·
-       escandallo→escandallo-analyzer OFF · filtro dominio · obsoletos fuera · buscar_agente registrada+response ·
+✓ TOOLS MAPEADAS (2026-07-06) — el tool-use FUNCIONA (LLM por API de Claude), así que los agentes tienen MANOS,
+  no tools:[]. Cada uno mapea su set declarado (metadata.upstream_tools) → tools de bus de Enki, POR AGENTE:
+  Read→fs.read · Write→fs.write · Edit→fs.edit · Glob→fs.list · Grep→fs.search. Lo que NO tiene equivalente de
+  agente se DEJA CAER (honesto, no se inventa): Bash/shell viven tras la reja del ejecutor (no es tool de agente,
+  OFF por defecto) · WebFetch/WebSearch/Task sin equivalente. Resultado: 135 con write (developers), 19 read-only
+  (analistas/auditores que solo declaraban Read/Grep/Glob). agent.tools = nombres filtrados contra getToolsForAI →
+  un agente encendido recibe SUS tools reales. (La razón de no copiar tal cual NO era 'tool-use roto' — era que
+  Read/Bash son nombres de Claude Code, no del bus.)
+TESTS  agentes__cupula-biblioteca (15: biblioteca ≥180 · 154 VoltAgent aparcados+buscables+activables+tools mapeadas ·
+       agents=0 · escandallo→escandallo-analyzer OFF · filtro dominio · obsoletos fuera · buscar_agente registrada+response ·
        activar/desactivar confirmation · _activar entra en agents+invoke_agent · persiste y sobrevive recarga ·
        404 desconocido · desactivar revierte · onActivarAgente response).
 TRIAJE 29 nativos  4 perspectiva-c (invoice-structurer/validator, marketing-copywriter/onboarding) · 23 tool-caller ·

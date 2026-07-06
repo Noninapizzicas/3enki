@@ -5,7 +5,13 @@
   "scope": [
     "*"
   ],
-  "tools": [],
+  "tools": [
+    "fs.read",
+    "fs.write",
+    "fs.edit",
+    "fs.list",
+    "fs.search"
+  ],
   "provider": "auto",
   "model": null,
   "prompt_file": "prompts/sales-engineer.md",

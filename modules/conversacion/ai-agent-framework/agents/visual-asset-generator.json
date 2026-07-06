@@ -5,7 +5,10 @@
   "scope": [
     "*"
   ],
-  "tools": [],
+  "tools": [
+    "fs.read",
+    "fs.write"
+  ],
   "provider": "auto",
   "model": null,
   "prompt_file": "prompts/visual-asset-generator.md",

@@ -37,8 +37,10 @@ class AiAgentFrameworkModule extends BaseModule {
     this.mqttRequest = null;
     this.config = null;
 
-    this.agents = new Map();     // ACTIVOS (enabled) — invocables ya vía invoke_agent
+    this.agents = new Map();     // ACTIVOS (enabled ∨ overlay) — invocables ya vía invoke_agent
     this.library = new Map();    // BIBLIOTECA — TODA definición conocida (activa o no), buscable (cúpula de agentes)
+    this.activados = new Set();  // overlay CRECIDO — agentes encendidos por el humano (sobre enabled:false semilla)
+    this._activacionesFile = path.join(process.cwd(), 'data', 'ai-agent-framework', 'activaciones.json');
     this.basePromptText = null;
     this.pendingLlm = new Map();
     this._conversationCache = new Map();
@@ -59,11 +61,13 @@ class AiAgentFrameworkModule extends BaseModule {
     this._conversationCacheTTL = this.config.conversation_cache_ttl_ms || DEFAULT_CONVERSATION_CACHE_TTL_MS;
 
     this._loadBasePrompt();
+    this._loadActivaciones();   // overlay crecido: qué agentes encendió el humano
     this._loadAgents();
 
     if (this.moduleLoader?.toolsRegistry) {
       this._registerInvokeAgentTool();
-      this._registerBuscarAgenteTool();   // cúpula de agentes: buscar en la biblioteca
+      this._registerBuscarAgenteTool();     // cúpula de agentes: buscar en la biblioteca
+      this._registerActivarAgenteTool();    // cúpula de agentes: encender/apagar de la biblioteca
     }
 
     this.logger.info('ai-agent-framework.loaded', {
@@ -79,6 +83,8 @@ class AiAgentFrameworkModule extends BaseModule {
     this.pendingLlm.clear();
     this._conversationCache.clear();
     this.agents.clear();
+    this.library.clear();
+    this.activados.clear();
     this.basePromptText = null;
     this.logger?.info?.('ai-agent-framework.unloaded', {});
   }
@@ -154,6 +160,11 @@ class AiAgentFrameworkModule extends BaseModule {
     const agentsDir = path.join(__dirname, 'agents');
     const promptsDir = path.join(__dirname, 'prompts');
 
+    // Idempotente: re-cargar (tras activar/desactivar) parte de cero, así un agente
+    // apagado por overlay SALE de this.agents (no solo entra el nuevo).
+    this.agents.clear();
+    this.library.clear();
+
     let files;
     try { files = fs.readdirSync(agentsDir); } catch { return; }
 
@@ -166,11 +177,14 @@ class AiAgentFrameworkModule extends BaseModule {
         // BIBLIOTECA (cúpula de agentes): toda definición conocida entra, activa o no, para
         // ser BUSCABLE. Solo las activas (enabled) pasan a this.agents → invocables. Así la
         // flota es una biblioteca (search) sobre la que se activa lo que haga falta.
+        // activo = semilla enabled ∨ overlay del humano (activaciones.json). El overlay
+        // enciende un agente aparcado sin editar su json semilla (patrón semilla+crecido).
+        const activo = def.enabled !== false || this.activados.has(def.name);
         const scopeArr = Array.isArray(def.scope) ? def.scope : (def.scope ? [def.scope] : ['*']);
         this.library.set(def.name, {
           name: def.name,
           description: def.description || '',
-          activo: def.enabled !== false,
+          activo,
           dominio: (def.metadata && def.metadata.domain) || scopeArr[0] || null,
           scope: scopeArr,
           tools_count: Array.isArray(def.tools) ? def.tools.length : 0,
@@ -178,7 +192,7 @@ class AiAgentFrameworkModule extends BaseModule {
           obsoleto: /obsolet|deprecat|apagad|eliminad|fantasma/i.test((def.description || '') + (def._disabled_reason || ''))
         });
 
-        if (def.enabled === false) continue;
+        if (!activo) continue;
 
         let promptText = null;
         const promptFile = def.prompt_file
@@ -314,6 +328,109 @@ class AiAgentFrameworkModule extends BaseModule {
       .slice(0, lim)
       .map(({ a }) => ({ nombre: a.name, descripcion: a.description, dominio: a.dominio, activo: a.activo, tools: a.tools_count }));
     return { total: ranked.length, activos_en_biblioteca: [...this.library.values()].filter(a => a.activo).length, biblioteca: this.library.size, agentes: ranked };
+  }
+
+  // ─── Cúpula de agentes · TRAMO 2: encender/apagar de la biblioteca ──────────
+  // El overlay crecido (data/ai-agent-framework/activaciones.json) enciende agentes
+  // aparcados sin editar su json semilla. Conceder poder = decisión consciente →
+  // activar_agente es confirmation:true. Reversible con desactivar_agente.
+
+  _loadActivaciones() {
+    try {
+      const raw = fs.readFileSync(this._activacionesFile, 'utf8');
+      const data = JSON.parse(raw);
+      const arr = Array.isArray(data.activados) ? data.activados : [];
+      this.activados = new Set(arr.filter(n => typeof n === 'string'));
+    } catch { this.activados = new Set(); }
+  }
+
+  _saveActivaciones() {
+    const dir = path.dirname(this._activacionesFile);
+    fs.mkdirSync(dir, { recursive: true });
+    const tmp = this._activacionesFile + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify({ _updated: new Date().toISOString(), activados: [...this.activados] }, null, 2));
+    fs.renameSync(tmp, this._activacionesFile);
+  }
+
+  _registerActivarAgenteTool() {
+    this.moduleLoader.toolsRegistry.set('activar_agente', {
+      name: 'activar_agente',
+      description: 'Enciende un agente de la biblioteca (uno que buscar_agente encontró con activo:false) para que quede INVOCABLE vía invoke_agent. ÚSALA cuando el usuario acepte activar un especialista aparcado. Es una acción que cambia el sistema (concede un trabajador nuevo) — requiere confirmación.',
+      parameters: {
+        type: 'object', additionalProperties: false,
+        properties: { nombre: { type: 'string', minLength: 1, description: 'Nombre exacto del agente a encender (tal cual lo devolvió buscar_agente).' } },
+        required: ['nombre']
+      },
+      module: 'ai-agent-framework', event_based: true, confirmation: true
+    });
+    this.moduleLoader.toolsRegistry.set('desactivar_agente', {
+      name: 'desactivar_agente',
+      description: 'Apaga un agente que se había encendido con activar_agente (reversibilidad). Solo apaga los encendidos por overlay; los agentes semilla activos no se apagan por aquí.',
+      parameters: {
+        type: 'object', additionalProperties: false,
+        properties: { nombre: { type: 'string', minLength: 1, description: 'Nombre del agente a apagar.' } },
+        required: ['nombre']
+      },
+      module: 'ai-agent-framework', event_based: true, confirmation: true
+    });
+    this.logger.info('ai-agent-framework.activar_agente.registered', { activados: this.activados.size });
+  }
+
+  async onActivarAgente(event) {
+    const d = event?.data || event || {};
+    let result;
+    try { result = this._activar(d); }
+    catch (err) {
+      this.metrics?.increment?.('ai-agent-framework.errors', { code: 'UNKNOWN_ERROR', kind: 'activar_agente' });
+      return this.eventBus.publish('activar_agente.response', { request_id: d.request_id, error: { code: 'UNKNOWN_ERROR', message: err.message } });
+    }
+    return this.eventBus.publish('activar_agente.response', { request_id: d.request_id, ...(result.status ? { error: result.error } : { result }) });
+  }
+
+  async onDesactivarAgente(event) {
+    const d = event?.data || event || {};
+    let result;
+    try { result = this._desactivar(d); }
+    catch (err) {
+      this.metrics?.increment?.('ai-agent-framework.errors', { code: 'UNKNOWN_ERROR', kind: 'desactivar_agente' });
+      return this.eventBus.publish('desactivar_agente.response', { request_id: d.request_id, error: { code: 'UNKNOWN_ERROR', message: err.message } });
+    }
+    return this.eventBus.publish('desactivar_agente.response', { request_id: d.request_id, ...(result.status ? { error: result.error } : { result }) });
+  }
+
+  // Enciende: añade al overlay, persiste, re-carga (el agente entra en this.agents) y
+  // re-registra invoke_agent (queda invocable EN CALIENTE, sin reiniciar).
+  _activar({ nombre } = {}) {
+    const n = String(nombre || '').trim();
+    if (!n) return this._errorResponse(400, 'INVALID_INPUT', 'nombre requerido');
+    const lib = this.library.get(n);
+    if (!lib) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `agente desconocido: ${n}`, { faltan: [n] });
+    if (this.agents.has(n)) return { nombre: n, activado: true, ya_estaba: true, activos: this.agents.size };
+    this.activados.add(n);
+    this._saveActivaciones();
+    this._loadAgents();
+    this._registerInvokeAgentTool();
+    this.metrics?.increment?.('ai-agent-framework.activados.total');
+    this.logger.info('ai-agent-framework.agente.activado', { nombre: n, dominio: lib.dominio, activos: this.agents.size });
+    return { nombre: n, activado: true, dominio: lib.dominio, activos: this.agents.size };
+  }
+
+  // Apaga (reversibilidad): solo lo encendido por overlay. Un agente semilla activo
+  // no se apaga por aquí (409) — su enabled vive en el json, no en el overlay.
+  _desactivar({ nombre } = {}) {
+    const n = String(nombre || '').trim();
+    if (!n) return this._errorResponse(400, 'INVALID_INPUT', 'nombre requerido');
+    if (!this.activados.has(n)) {
+      const lib = this.library.get(n);
+      if (lib && lib.activo) return this._errorResponse(409, 'CONFLICT_STATE', `${n} es semilla activa: no se apaga por overlay`);
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `no estaba encendido por overlay: ${n}`);
+    }
+    this.activados.delete(n);
+    this._saveActivaciones();
+    this._loadAgents();
+    this._registerInvokeAgentTool();
+    this.logger.info('ai-agent-framework.agente.desactivado', { nombre: n, activos: this.agents.size });
+    return { nombre: n, desactivado: true, activos: this.agents.size };
   }
 
   async onAgentExecuteRequest(event) {

@@ -15413,8 +15413,8 @@ ESTADO ✓ VERIFICADO EN VIVO (Regalos, 3 conversaciones): crear_lista ESCRIBE �
   },
   "puertas": {
     "buscar_agente": "{query, dominio?, limite?} → catálogo rankeado por tokens (name+description+tags+dominio), filtra obsoletos+dominio. Gemela de buscar_skill. Devuelve activo:true|false por agente.",
-    "invoke_agent":  "INTACTO — invoca un agente ACTIVO (enabled). La cúpula no lo toca.",
-    "activar_agente (TRAMO 2, pendiente)": "encender uno de la biblioteca (enabled:true + persistencia data/ + re-registrar invoke_agent, con confirmación)"
+    "invoke_agent":  "INTACTO — invoca un agente ACTIVO (enabled ∨ overlay). La cúpula no lo toca.",
+    "activar_agente": "{nombre} confirmation:true → enciende un aparcado (overlay data/ai-agent-framework/activaciones.json, patrón semilla+crecido), lo mete en this.agents y RE-REGISTRA invoke_agent EN CALIENTE → invocable sin reiniciar. Gemela de activar_skill. Reversible con desactivar_agente (solo apaga lo del overlay; la semilla activa no, 409)."
   },
   "obsoletos": "regex sobre description/_disabled_reason (obsolet|deprecat|apagad|eliminad|fantasma) → NO salen en la búsqueda (recipe-curator, recipe-structurer)",
   "universal": "buscar_agente en GLOBAL_TOOLS (ai-gateway) — como invoke_agent, llega a toda página",
@@ -15449,25 +15449,46 @@ CLASE AiAgentFrameworkModule (ampliación 2.1.0) {
   onBuscarAgente(event):                               // path canónico de tool por bus
     result ← _buscarAgente(event.data)
     publish('buscar_agente.response', {request_id, result})   // o {error} en catch
+
+  // ── TRAMO 2: encender/apagar de la biblioteca (overlay semilla+crecido) ──
+  _loadAgents():                                       // activo = enabled ∨ activados.has(name)
+    ... SI !activo: CONTINUAR   // clear() al arrancar → reload idempotente (desactivar SACA de agents)
+
+  _activar({nombre}):                                  // confirmation:true (la tool)
+    SI !library.has(nombre): RETORNA 404 {faltan:[nombre]}
+    SI agents.has(nombre): RETORNA {ya_estaba:true}
+    activados.add(nombre) ; _saveActivaciones()        // data/ai-agent-framework/activaciones.json (tmp+rename)
+    _loadAgents() ; _registerInvokeAgentTool()         // EN CALIENTE: entra en agents + en el enum de invoke_agent
+    RETORNA {activado:true, dominio, activos}
+  _desactivar({nombre}):                               // reversibilidad; semilla activa → 409
+    SI !activados.has(nombre): RETORNA (409 si es semilla activa · 404 si no)
+    activados.delete(nombre) ; _saveActivaciones() ; _loadAgents() ; _registerInvokeAgentTool()
 }
 ```
 
 ## Estado
 
 ```
-✓ TRAMO 1 (2.1.0) — biblioteca + buscar_agente. library llena con las 29 (buscables) · agents vacío (aparcadas) ·
-  buscar_agente en GLOBAL_TOOLS (universal) · path canónico buscar_agente.response.
-◑ TRAMO 2 — activar_agente (encender de la biblioteca + persistencia data/ + re-registrar invoke_agent, confirmación).
-TESTS  agentes__cupula-biblioteca (7: biblioteca ≥25 · agents=0 aparcadas · escandallo→escandallo-analyzer OFF ·
-       filtro dominio · obsoletos fuera · tool registrada · onBuscarAgente publica response).
+✓ TRAMO 1 (2.1.0) — biblioteca + buscar_agente. library llena con las 29 (buscables) · buscar_agente en
+  GLOBAL_TOOLS (universal) · path canónico buscar_agente.response. VERIFICADO EN VIVO (proyecto 1a): el LLM
+  disparó buscar_agente solo → {biblioteca:29, escandallo-analyzer activo:false} en la página chat.
+✓ TRAMO 2 (2.2.0) — activar_agente/desactivar_agente. Overlay CRECIDO (data/…/activaciones.json, semilla+crecido):
+  enciende un aparcado sin editar su json. activar añade al overlay, persiste, re-carga y re-registra invoke_agent
+  EN CALIENTE (invocable sin reiniciar). confirmation:true (conceder trabajador = decisión consciente). desactivar
+  revierte (solo overlay; semilla activa → 409). Ambas en GLOBAL_TOOLS.
+TESTS  agentes__cupula-biblioteca (14: biblioteca ≥25 · agents=0 aparcadas · escandallo→escandallo-analyzer OFF ·
+       filtro dominio · obsoletos fuera · buscar_agente registrada+response · activar/desactivar confirmation ·
+       _activar entra en agents+invoke_agent · persiste y sobrevive recarga · 404 desconocido · desactivar revierte ·
+       onActivarAgente response).
 TRIAJE 29  4 perspectiva-c (invoice-structurer/validator, marketing-copywriter/onboarding) · 23 tool-caller ·
-       2 obsoletos (recipe-curator, recipe-structurer). Afinado = tramo 2+.
+       2 obsoletos (recipe-curator, recipe-structurer). Afinar los que se enciendan = siguiente.
 ```
 
 > **Trade-off vivo.** buscar_agente sobre 29 agentes casi todos apagados suena a catálogo de un almacén
-> cerrado. Pero es el paso honesto: primero HACER LA FLOTA VISIBLE (search), luego encenderla por demanda
-> (activar_agente) — no un big-bang de 29 a la vez. Mismo orden gradual que el Portal (read→write) y la
-> cantera (importar→promover): exponer antes que conceder.
+> cerrado. Pero es el paso honesto: primero HACER LA FLOTA VISIBLE (search, tramo 1), luego encenderla por
+> demanda (activar, tramo 2) — no un big-bang de 29 a la vez. Mismo orden gradual que el Portal (read→write)
+> y la cantera (importar→promover): exponer antes que conceder. El encendido es reversible y por overlay:
+> la semilla (`enabled` del json) queda intocable; el humano enciende encima, y apaga cuando quiera.
 
 ---
 

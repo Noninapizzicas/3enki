@@ -1,7 +1,8 @@
 {
   "name": "ai-agent-framework",
-  "version": "2.1.0",
-  "_v2_1_0_nota": "v2.1.0 (2026-07-06): CÚPULA DE AGENTES (tramo 1). El framework sube al patrón cúpula (gemelo de la cantera para skills). _loadAgents ahora llena this.library con TODAS las definiciones (activas o no) → la flota es una BIBLIOTECA buscable, no un set fijo; solo las enabled pasan a this.agents (invocables vía invoke_agent, intacto). Nueva tool buscar_agente (onBuscarAgente + _buscarAgente puro, ranking por tokens) → el LLM/conserje encuentra el trabajador para una tarea, activo o no. Motivo: el tool-use ya funciona (deepseek por wire Anthropic) → los agentes corren; la cúpula da search+activación sobre ellos. buscar_agente añadida a GLOBAL_TOOLS (universal, como invoke_agent). Tramo 2 = activar_agente (encender uno de la biblioteca, con persistencia data/). Las 29 definiciones siguen aparcadas como runtime pero YA son buscables. Ver CLAUDE.md 'Cúpula de agentes'.",
+  "version": "2.2.0",
+  "_v2_1_0_nota": "v2.1.0 (2026-07-06): CÚPULA DE AGENTES (tramo 1). El framework sube al patrón cúpula (gemelo de la cantera para skills). _loadAgents ahora llena this.library con TODAS las definiciones (activas o no) → la flota es una BIBLIOTECA buscable, no un set fijo; solo las enabled pasan a this.agents (invocables vía invoke_agent, intacto). Nueva tool buscar_agente (onBuscarAgente + _buscarAgente puro, ranking por tokens) → el LLM/conserje encuentra el trabajador para una tarea, activo o no. Motivo: el tool-use ya funciona (deepseek por wire Anthropic) → los agentes corren; la cúpula da search+activación sobre ellos. buscar_agente añadida a GLOBAL_TOOLS (universal, como invoke_agent). Las 29 definiciones siguen aparcadas como runtime pero YA son buscables. Ver CLAUDE.md 'Cúpula de agentes'.",
+  "_v2_2_0_nota": "v2.2.0 (2026-07-06): CÚPULA DE AGENTES (tramo 2) — activar_agente/desactivar_agente. Overlay CRECIDO (data/ai-agent-framework/activaciones.json, patrón semilla+crecido): enciende un agente aparcado sin editar su json semilla. _loadAgents trata activo = enabled ∨ overlay; activar añade al overlay, persiste, re-carga y re-registra invoke_agent EN CALIENTE (queda invocable sin reiniciar). Conceder un trabajador = decisión consciente → confirmation:true. Reversible con desactivar_agente (solo apaga lo del overlay; la semilla activa no se apaga por aquí, 409). Ambas en GLOBAL_TOOLS. Orden gradual: buscar (tramo 1) → activar (tramo 2), como Portal read→write y cantera importar→promover: exponer antes que conceder. Handlers onActivarAgente/onDesactivarAgente → _activar/_desactivar.",
   "description": "Carga agentes desde agents/*.json + prompts/*.{json,md}. Registra la tool invoke_agent (LLM tool flow legacy) en moduleLoader.toolsRegistry y escucha agent.execute.request (entry point canonico agent-flow v1.0.0+) desde modulos del dominio / cron / channels. Publishes canonicos: agent.execute.response (success), agent.execute.failed (no_silent_failures), agent.execute.progress (chat_inline_rendering). La traduccion a chat.assistant.saved la hace agent-observer (adaptador canonico agent-flow → chat-flow) para evitar doble persistencia.",
   "author": "Event Core Team",
   "language": "en",
@@ -43,6 +44,16 @@
         "event": "buscar_agente",
         "handler": "onBuscarAgente",
         "description": "CÚPULA DE AGENTES — tool del chat. Busca en la biblioteca (todas las definiciones, activas o no) el trabajador para una tarea. Responde buscar_agente.response {request_id, result}. Gemela de buscar_skill (cosecha)."
+      },
+      {
+        "event": "activar_agente",
+        "handler": "onActivarAgente",
+        "description": "CÚPULA DE AGENTES (tramo 2) — tool del chat, confirmation:true. Enciende un agente aparcado (overlay data/activaciones.json), lo mete en this.agents y re-registra invoke_agent EN CALIENTE → queda invocable. Responde activar_agente.response {request_id, result|error}. Gemela de activar_skill (cosecha)."
+      },
+      {
+        "event": "desactivar_agente",
+        "handler": "onDesactivarAgente",
+        "description": "CÚPULA DE AGENTES (tramo 2) — reversibilidad de activar_agente. Apaga lo encendido por overlay (la semilla activa no, 409). Responde desactivar_agente.response {request_id, result|error}."
       },
       {
         "event": "agent.execute.request",

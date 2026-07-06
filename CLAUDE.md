@@ -15046,6 +15046,51 @@ CLASE CosechaModule (ampliación) {              // la cantera CRECIBLE en-turno
 TESTS  cosecha__escribir (11: crear/409/400 · patch old→new/404/no-único/rollback-422/no-renombra/semilla-409).
 VERIFICADO EN VIVO (Pacoo)  crear·patch·FRENO-422·409·404·olvidar — limpio, sin residuo.
 
+## Cantera SEMÁNTICA (Turso) — buscar por SIGNIFICADO (modules/cantera-semantica · spike vivo 2026-07-06)
+
+> El upgrade que esta cabecera aplaza en cinco sitios ("semántica DETERMINISTA por prefijo · cero
+> embeddings · HNSW para después"): buscar skills por lo que SIGNIFICAN, no por la palabra exacta.
+> La pieza que faltaba era un índice vectorial; Turso (SQLite reescrito en Rust) lo trae NATIVO.
+
+```json
+{
+  "esquema": "cantera-semantica-v1",
+  "que": "índice vectorial de la cantera sobre Turso — complementa el buscar por palabras de cosecha, no lo reemplaza",
+  "motor": "@tursodatabase/database (SQLite compatible, búsqueda vectorial nativa): vector32() guarda el embedding · vector_distance_cos ordena por distancia coseno",
+  "reparto": "el REFLEJO custodia el índice (indexar/buscar/reindexar, determinista) · el EMBEDDING (lo fuzzy) lo pide al ai-gateway (embedding.generate.request → vector, providers gemini/openai)",
+  "puertas": {
+    "cantera.indexar.request":          "{nombre, dominio, texto} → embed(texto) → upsert en el índice",
+    "cantera.buscar_semantica.request": "{query, dominio?, limite?} → embed(query) → orden por distancia coseno. Filtro opcional por dominio",
+    "cantera.reindexar.request":        "trae todas las skills (cosecha.listar) y las indexa por su descripción",
+    "cantera.semantica_estado.request": "{activo, turso_disponible, total_indexadas, dims}"
+  },
+  "gate_y_degradacion": {
+    "NACE OFF":  "interruptor 'cantera-semantica' (grupo sistema, default OFF). Turso es BETA + dependencia OPCIONAL → encender el índice es decisión consciente",
+    "DEGRADA":   "sin Turso instalado · interruptor OFF · sin embeddings → 503 {degradado, motivo}. El caller cae al buscar por PALABRAS (cosecha.buscar). Fail-honest, como el feeder — nunca finge un resultado",
+    "NO TOCA":   "los datos vivos: índice aparte en data/cantera-semantica/index.db (system). La cantera keyword sigue intacta"
+  }
+}
+```
+
+```
+VERIFICADO (spike real, este entorno)  @tursodatabase/database instala y corre en Node 22 (require CJS OK).
+  vector32() + vector_distance_cos() rankean por significado: query 'coste' → skills de escandallo primero
+  (distancia 0.0003 / 0.0008) vs la de diseño lejísimos (0.86). Test: cantera-semantica__index (10/10, Turso
+  in-memory real + embedder stub determinista: rankea · filtro dominio · upsert no duplica · índice vacío 200 ·
+  reindexar desde cosecha · las 3 degradaciones honestas · estado).
+DETALLE DE CAMPO  Turso BETA: LIMIT no acepta parámetro (se inlinea el entero saneado). Pin ^0.6.1 (0.1.x
+  daba 'Invalid vector type' en vector_distance_cos — versión vieja). optionalDependency: si no instala en una
+  plataforma, el módulo degrada, no rompe.
+SIGUIENTE  el conserje/cosecha ofrece encenderlo · buscar_skill delega a la semántica cuando el interruptor está ON
+  (hoy conviven: keyword por defecto, semántica opt-in) · reindexar automático al crear/importar una skill.
+```
+
+> **Trade-off vivo — por qué un spike y no el motor de todo.** Turso está en BETA y Enki corre pizzerías VIVAS;
+> cambiar el SQLite de los datos reales por una beta es riesgo que no toca. Pero la búsqueda semántica es un
+> subsistema NUEVO y no crítico (la cantera), y el coste de vuelta atrás es cero (índice aparte, degrada a
+> keyword). Por eso Turso entra AQUÍ primero: da el upgrade HNSW que la cabecera promete, sin arriesgar un byte
+> del POS. Si la beta madura, ya está probado para lo demás (concurrencia MVCC, CDC→bus, cifrado, réplicas).
+
 ---
 
 # EJECUTOR — la puerta guardada de EJECUCIÓN (usar la skill · nace de auditar Hermes · vivo, 2026-07-02)

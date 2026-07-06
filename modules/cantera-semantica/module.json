@@ -1,0 +1,30 @@
+{
+  "_doc": "Manifest de cantera-semantica — ÍNDICE SEMÁNTICO de la cantera (skills) sobre TURSO (SQLite reescrito en Rust, con búsqueda vectorial nativa). El upgrade que la cabecera aplaza en cinco sitios ('semántica DETERMINISTA por prefijo · cero embeddings · HNSW para después'): buscar por SIGNIFICADO, no por palabra. El reflejo custodia el índice (indexar/buscar/reindexar, determinista); el EMBEDDING (lo fuzzy) lo pide al ai-gateway (embedding.generate.request → vector). NACE OFF (interruptor 'cantera-semantica', grupo sistema): Turso es BETA y dependencia OPCIONAL → encender el índice semántico es decisión consciente. DEGRADA LIMPIO (fail-honest, como el feeder): sin Turso, o interruptor OFF, o sin embeddings → 503 {degradado, motivo}; el caller cae al buscar por PALABRAS de siempre (cosecha.buscar). No toca datos vivos: índice aparte en data/cantera-semantica/index.db. Ver CLAUDE.md 'Cantera semántica (Turso)'.",
+  "name": "cantera-semantica",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-07-06): spike de Turso para la búsqueda semántica de la cantera. Verificado: @tursodatabase/database instala y corre en Node 22 (require CJS OK); vector32() + vector_distance_cos() rankean por significado (query 'coste' → skills de escandallo primero, distancia coseno 0.0003 vs 0.86 la de diseño). El reflejo envuelve Turso por el bus (cantera.indexar/buscar_semantica/reindexar/semantica_estado). Embedding vía ai-gateway (embedding.generate.request, providers gemini/openai). Gate: interruptor OFF por defecto + dependencia OPCIONAL + degradación honesta. Reflejo 0.1.0. Siguiente: el conserje/cosecha ofrece encenderlo; buscar_skill delega a semántica cuando está ON.",
+  "description": "Índice vectorial de la cantera sobre Turso: buscar skills por SIGNIFICADO (embeddings + distancia coseno). Complementa el buscar por palabras de cosecha; gate por interruptor OFF, degrada limpio.",
+  "language": "es",
+  "dependencies": ["ai-gateway", "cosecha"],
+  "subscribes": [
+    { "event": "cantera.indexar.request", "handler": "onIndexarRequest", "description": "Reflejo: embed(texto) → upsert de la skill en el índice vectorial (Turso)." },
+    { "event": "cantera.buscar_semantica.request", "handler": "onBuscarRequest", "description": "Reflejo: embed(query) → orden por distancia coseno (vector_distance_cos). Filtro opcional por dominio. Degrada 503 si OFF/sin Turso/sin embeddings → el caller usa cosecha.buscar (palabras)." },
+    { "event": "cantera.reindexar.request", "handler": "onReindexarRequest", "description": "Reflejo: trae todas las skills (cosecha.listar) y las indexa por su descripción." },
+    { "event": "cantera.semantica_estado.request", "handler": "onEstadoRequest", "description": "Reflejo: {activo, turso_disponible, total_indexadas, dims}." },
+    { "event": "interruptor.cambiado", "handler": "onInterruptorCambiado", "description": "Enciende/apaga el índice semántico en caliente (id 'cantera-semantica')." },
+    { "event": "interruptor.solicitar_registro", "handler": "onSolicitarRegistro", "description": "Re-registra su botón (cura la carrera de arranque)." }
+  ],
+  "publishes": [
+    { "event": "interruptor.registrar", "description": "Registra el botón 'cantera-semantica' (grupo sistema, OFF por defecto)." },
+    { "event": "embedding.generate.request", "description": "Pide un embedding al ai-gateway (RPC, providers gemini/openai)." },
+    { "event": "cosecha.listar.request", "description": "Trae el catálogo de skills para reindexar." }
+  ],
+  "config": {
+    "persistence": {
+      "scope": "system",
+      "data_path": "cantera-semantica",
+      "pattern": "turso-vector-db",
+      "beta": true
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "ux-researcher",
+  "description": "Use this agent when you need to conduct user research, analyze user behavior, or generate actionable insights to validate design decisions and uncover user needs. Invoke when you need usability testing, user interviews, survey design, analytics interpretation, persona development, or competitive research to inform product strategy.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/ux-researcher.md",
+  "metadata": {
+    "domain": "business-product",
+    "tags": [
+      "business-product",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "08-business-product",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Grep, Glob, WebFetch, WebSearch"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "php-pro",
+  "description": "Use this agent when working with PHP 8.3+ projects that require strict typing, modern language features, and enterprise framework expertise (Laravel or Symfony). Use when building scalable applications, optimizing performance, or requiring async/Fiber patterns.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/php-pro.md",
+  "metadata": {
+    "domain": "language-specialists",
+    "tags": [
+      "language-specialists",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "02-language-specialists",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

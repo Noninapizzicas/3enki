@@ -1,0 +1,23 @@
+{
+  "name": "database-administrator",
+  "description": "Use this agent when optimizing database performance, implementing high-availability architectures, setting up disaster recovery, or managing database infrastructure for production systems.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/database-administrator.md",
+  "metadata": {
+    "domain": "infrastructure",
+    "tags": [
+      "infrastructure",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "03-infrastructure",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

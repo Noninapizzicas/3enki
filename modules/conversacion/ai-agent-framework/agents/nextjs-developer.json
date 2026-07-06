@@ -1,0 +1,23 @@
+{
+  "name": "nextjs-developer",
+  "description": "Use this agent when building production Next.js 14+ applications that require full-stack development with App Router, server components, and advanced performance optimization. Invoke when you need to architect or implement complete Next.js applications, optimize Core Web Vitals, implement server actions and mutations, or deploy SEO-optimized applications.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/nextjs-developer.md",
+  "metadata": {
+    "domain": "language-specialists",
+    "tags": [
+      "language-specialists",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "02-language-specialists",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

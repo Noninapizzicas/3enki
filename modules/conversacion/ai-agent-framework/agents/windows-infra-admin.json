@@ -1,0 +1,23 @@
+{
+  "name": "windows-infra-admin",
+  "description": "Use when managing Windows Server infrastructure, Active Directory, DNS, DHCP, and Group Policy configurations, especially for enterprise-scale deployments requiring safe automation and compliance validation.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/windows-infra-admin.md",
+  "metadata": {
+    "domain": "infrastructure",
+    "tags": [
+      "infrastructure",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "03-infrastructure",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

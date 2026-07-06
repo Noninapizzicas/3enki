@@ -15475,13 +15475,21 @@ CLASE AiAgentFrameworkModule (ampliación 2.1.0) {
 ✓ TRAMO 2 (2.2.0) — activar_agente/desactivar_agente. Overlay CRECIDO (data/…/activaciones.json, semilla+crecido):
   enciende un aparcado sin editar su json. activar añade al overlay, persiste, re-carga y re-registra invoke_agent
   EN CALIENTE (invocable sin reiniciar). confirmation:true (conceder trabajador = decisión consciente). desactivar
-  revierte (solo overlay; semilla activa → 409). Ambas en GLOBAL_TOOLS.
-TESTS  agentes__cupula-biblioteca (14: biblioteca ≥25 · agents=0 aparcadas · escandallo→escandallo-analyzer OFF ·
-       filtro dominio · obsoletos fuera · buscar_agente registrada+response · activar/desactivar confirmation ·
-       _activar entra en agents+invoke_agent · persiste y sobrevive recarga · 404 desconocido · desactivar revierte ·
-       onActivarAgente response).
-TRIAJE 29  4 perspectiva-c (invoice-structurer/validator, marketing-copywriter/onboarding) · 23 tool-caller ·
-       2 obsoletos (recipe-curator, recipe-structurer). Afinar los que se enciendan = siguiente.
+  revierte (solo overlay; semilla activa → 409). Ambas en GLOBAL_TOOLS. VERIFICADO EN VIVO (1a): activar escandallo-analyzer
+  → activos_en_biblioteca 0→1 → invoke_agent lo recoge en caliente → desactivar → 0 (sin residuo).
+✓ FLOTA POBLADA (2026-07-06) — los 154 subagentes de VoltAgent (awesome-claude-code-subagents) importados como
+  APARCADOS (enabled:false) → biblioteca de 183 (29 nativos + 154). Buscables por buscar_agente, activables por
+  activar_agente; cero coste runtime hasta encenderlos (el prompt solo se lee al activar — _loadAgents salta la
+  carga del prompt para los no-activos). tools:[] (las de VoltAgent son de Claude Code, no del bus) → si se
+  encienden corren como perspectiva-c puro (el modo más fiable). metadata {domain=categoría, fuente:'voltagent'}.
+  10 dominios: core-development(11)·language-specialists(30)·infrastructure(16)·quality-security(17)·data-ai(13)·
+  developer-experience(15)·specialized-domains(14)·business-product(16)·meta-orchestration(11)·research-analysis(11).
+TESTS  agentes__cupula-biblioteca (15: biblioteca ≥180 · 154 VoltAgent aparcados+buscables+activables · agents=0 ·
+       escandallo→escandallo-analyzer OFF · filtro dominio · obsoletos fuera · buscar_agente registrada+response ·
+       activar/desactivar confirmation · _activar entra en agents+invoke_agent · persiste y sobrevive recarga ·
+       404 desconocido · desactivar revierte · onActivarAgente response).
+TRIAJE 29 nativos  4 perspectiva-c (invoice-structurer/validator, marketing-copywriter/onboarding) · 23 tool-caller ·
+       2 obsoletos (recipe-curator, recipe-structurer). Los 154 externos = catálogo aparcado, se afinan al encenderse.
 ```
 
 > **Trade-off vivo.** buscar_agente sobre 29 agentes casi todos apagados suena a catálogo de un almacén

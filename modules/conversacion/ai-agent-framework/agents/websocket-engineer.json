@@ -1,0 +1,23 @@
+{
+  "name": "websocket-engineer",
+  "description": "Use this agent when implementing real-time bidirectional communication features using WebSockets, Socket.IO, or similar technologies at scale.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/websocket-engineer.md",
+  "metadata": {
+    "domain": "core-development",
+    "tags": [
+      "core-development",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "01-core-development",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

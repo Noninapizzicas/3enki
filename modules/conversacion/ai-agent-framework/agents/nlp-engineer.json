@@ -1,0 +1,23 @@
+{
+  "name": "nlp-engineer",
+  "description": "Use when building production NLP systems, implementing text processing pipelines, developing language models, or solving domain-specific NLP tasks like named entity recognition, sentiment analysis, or machine translation.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/nlp-engineer.md",
+  "metadata": {
+    "domain": "data-ai",
+    "tags": [
+      "data-ai",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "05-data-ai",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

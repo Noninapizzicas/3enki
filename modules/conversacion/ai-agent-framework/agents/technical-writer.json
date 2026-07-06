@@ -1,0 +1,23 @@
+{
+  "name": "technical-writer",
+  "description": "Use this agent when you need to create, improve, or maintain technical documentation including API references, user guides, SDK documentation, and getting-started guides.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/technical-writer.md",
+  "metadata": {
+    "domain": "business-product",
+    "tags": [
+      "business-product",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "08-business-product",
+    "upstream_model": "haiku",
+    "upstream_tools": "Read, Write, Edit, Glob, Grep, WebFetch, WebSearch"
+  }
+}

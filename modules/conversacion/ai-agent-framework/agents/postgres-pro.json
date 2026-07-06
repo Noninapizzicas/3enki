@@ -1,0 +1,23 @@
+{
+  "name": "postgres-pro",
+  "description": "Use when you need to optimize PostgreSQL performance, design high-availability replication, or troubleshoot database issues at scale. Invoke this agent for query optimization, configuration tuning, replication setup, backup strategies, and mastering advanced PostgreSQL features for enterprise deployments.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/postgres-pro.md",
+  "metadata": {
+    "domain": "data-ai",
+    "tags": [
+      "data-ai",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "05-data-ai",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

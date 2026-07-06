@@ -1,0 +1,23 @@
+{
+  "name": "license-engineer",
+  "description": "Use this agent when architecting, implementing, or optimizing end-to-end legal licensing systems—from OSI standard selection and dependency compliance pipelines to proprietary deployment and risk monitoring.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/license-engineer.md",
+  "metadata": {
+    "domain": "business-product",
+    "tags": [
+      "business-product",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "08-business-product",
+    "upstream_model": "inherit",
+    "upstream_tools": "Read, Write, Edit, Glob, Grep, WebFetch, WebSearch"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "django-developer",
+  "description": "Use when building Django 4+ web applications, REST APIs, or modernizing existing Django projects with async views and enterprise patterns.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/django-developer.md",
+  "metadata": {
+    "domain": "language-specialists",
+    "tags": [
+      "language-specialists",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "02-language-specialists",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

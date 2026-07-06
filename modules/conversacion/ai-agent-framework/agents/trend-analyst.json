@@ -1,0 +1,23 @@
+{
+  "name": "trend-analyst",
+  "description": "Use when analyzing emerging patterns, predicting industry shifts, or developing future scenarios to inform strategic planning and competitive positioning.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/trend-analyst.md",
+  "metadata": {
+    "domain": "research-analysis",
+    "tags": [
+      "research-analysis",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "10-research-analysis",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Grep, Glob, WebFetch, WebSearch"
+  }
+}

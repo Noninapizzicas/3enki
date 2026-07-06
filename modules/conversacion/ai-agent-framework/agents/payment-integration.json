@@ -1,0 +1,23 @@
+{
+  "name": "payment-integration",
+  "description": "Use this agent when implementing payment systems, integrating payment gateways, or handling financial transactions that require PCI compliance, fraud prevention, and secure transaction processing.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/payment-integration.md",
+  "metadata": {
+    "domain": "specialized-domains",
+    "tags": [
+      "specialized-domains",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "07-specialized-domains",
+    "upstream_model": "inherit",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

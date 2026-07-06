@@ -1,0 +1,23 @@
+{
+  "name": "market-researcher",
+  "description": "Use this agent when you need to analyze markets, understand consumer behavior, assess competitive landscapes, and size opportunities to inform business strategy and market entry decisions.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/market-researcher.md",
+  "metadata": {
+    "domain": "research-analysis",
+    "tags": [
+      "research-analysis",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "10-research-analysis",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Grep, Glob, WebFetch, WebSearch"
+  }
+}

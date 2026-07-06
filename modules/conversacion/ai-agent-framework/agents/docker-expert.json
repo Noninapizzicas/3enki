@@ -1,0 +1,23 @@
+{
+  "name": "docker-expert",
+  "description": "Use this agent when you need to build, optimize, or secure Docker container images and orchestration for production environments.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/docker-expert.md",
+  "metadata": {
+    "domain": "infrastructure",
+    "tags": [
+      "infrastructure",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "03-infrastructure",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

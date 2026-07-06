@@ -1,0 +1,23 @@
+{
+  "name": "ad-security-reviewer",
+  "description": "Use this agent when you need to audit Active Directory security posture, evaluate privilege escalation risks, review identity delegation patterns, or assess authentication protocol hardening.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/ad-security-reviewer.md",
+  "metadata": {
+    "domain": "quality-security",
+    "tags": [
+      "quality-security",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "04-quality-security",
+    "upstream_model": "inherit",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

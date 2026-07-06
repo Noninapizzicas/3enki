@@ -1,0 +1,23 @@
+{
+  "name": "spring-boot-engineer",
+  "description": "Use this agent when building enterprise Spring Boot 3+ applications requiring microservices architecture, cloud-native deployment, or reactive programming patterns.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/spring-boot-engineer.md",
+  "metadata": {
+    "domain": "language-specialists",
+    "tags": [
+      "language-specialists",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "02-language-specialists",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

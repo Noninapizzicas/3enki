@@ -1,0 +1,23 @@
+{
+  "name": "api-documenter",
+  "description": "Use this agent when creating or improving API documentation, writing OpenAPI specifications, building interactive documentation portals, or generating code examples for APIs.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/api-documenter.md",
+  "metadata": {
+    "domain": "specialized-domains",
+    "tags": [
+      "specialized-domains",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "07-specialized-domains",
+    "upstream_model": "haiku",
+    "upstream_tools": "Read, Write, Edit, Glob, Grep, WebFetch, WebSearch"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "visual-asset-generator",
+  "description": "Use this agent when you need to generate production-ready visual assets for a project — app icons, favicons, OG images, logos, wordmarks, or social media images. Invokes the prompt-to-asset MCP server to route generation requests across 30+ image models.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/visual-asset-generator.md",
+  "metadata": {
+    "domain": "developer-experience",
+    "tags": [
+      "developer-experience",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "06-developer-experience",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Bash, mcp__prompt-to-asset"
+  }
+}

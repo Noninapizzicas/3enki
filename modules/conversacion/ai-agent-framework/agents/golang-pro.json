@@ -1,0 +1,23 @@
+{
+  "name": "golang-pro",
+  "description": "Use when building Go applications requiring concurrent programming, high-performance systems, microservices, or cloud-native architectures where idiomatic patterns, error handling excellence, and efficiency are critical.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/golang-pro.md",
+  "metadata": {
+    "domain": "language-specialists",
+    "tags": [
+      "language-specialists",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "02-language-specialists",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

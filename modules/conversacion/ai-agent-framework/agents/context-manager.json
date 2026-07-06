@@ -1,0 +1,23 @@
+{
+  "name": "context-manager",
+  "description": "Use for managing shared state, information retrieval, and data synchronization when multiple agents need coordinated access to context and metadata.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/context-manager.md",
+  "metadata": {
+    "domain": "meta-orchestration",
+    "tags": [
+      "meta-orchestration",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "09-meta-orchestration",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Glob, Grep"
+  }
+}

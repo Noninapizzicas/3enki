@@ -1,0 +1,23 @@
+{
+  "name": "ai-engineer",
+  "description": "Use this agent when architecting, implementing, or optimizing end-to-end AI systems—from model selection and training pipelines to production deployment and monitoring.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/ai-engineer.md",
+  "metadata": {
+    "domain": "data-ai",
+    "tags": [
+      "data-ai",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "05-data-ai",
+    "upstream_model": "inherit",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

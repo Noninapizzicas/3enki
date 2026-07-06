@@ -1,0 +1,23 @@
+{
+  "name": "electron-pro",
+  "description": "Use this agent when building Electron desktop applications that require native OS integration, cross-platform distribution, security hardening, and performance optimization. Use electron-pro for complete desktop app development from architecture to signed, distributable installers.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/electron-pro.md",
+  "metadata": {
+    "domain": "core-development",
+    "tags": [
+      "core-development",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "01-core-development",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

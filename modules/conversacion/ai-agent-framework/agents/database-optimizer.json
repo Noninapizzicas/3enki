@@ -1,0 +1,23 @@
+{
+  "name": "database-optimizer",
+  "description": "Use this agent when you need to analyze slow queries, optimize database performance across multiple systems, or implement indexing strategies to improve query execution.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/database-optimizer.md",
+  "metadata": {
+    "domain": "data-ai",
+    "tags": [
+      "data-ai",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "05-data-ai",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

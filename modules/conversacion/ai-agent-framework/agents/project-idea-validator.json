@@ -1,0 +1,23 @@
+{
+  "name": "project-idea-validator",
+  "description": "Use this agent when you need an idea pressure-tested with brutal honesty, competitor teardown, market validation, and clear go/no-go guidance before building.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/project-idea-validator.md",
+  "metadata": {
+    "domain": "research-analysis",
+    "tags": [
+      "research-analysis",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "10-research-analysis",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Glob, Grep, WebFetch, WebSearch"
+  }
+}

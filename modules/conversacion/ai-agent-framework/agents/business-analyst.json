@@ -1,0 +1,23 @@
+{
+  "name": "business-analyst",
+  "description": "Use when analyzing business processes, gathering requirements from stakeholders, or identifying process improvement opportunities to drive operational efficiency and measurable business value.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/business-analyst.md",
+  "metadata": {
+    "domain": "business-product",
+    "tags": [
+      "business-product",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "08-business-product",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Glob, Grep, WebFetch, WebSearch"
+  }
+}

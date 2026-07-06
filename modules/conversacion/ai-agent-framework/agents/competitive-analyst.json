@@ -1,0 +1,23 @@
+{
+  "name": "competitive-analyst",
+  "description": "Use when you need to analyze direct and indirect competitors, benchmark against market leaders, or develop strategies to strengthen competitive positioning and market advantage.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/competitive-analyst.md",
+  "metadata": {
+    "domain": "research-analysis",
+    "tags": [
+      "research-analysis",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "10-research-analysis",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Grep, Glob, WebFetch, WebSearch"
+  }
+}

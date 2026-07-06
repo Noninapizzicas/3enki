@@ -1,0 +1,23 @@
+{
+  "name": "ai-writing-auditor",
+  "description": "Use this agent when you need to audit content for AI writing patterns and rewrite text to remove them.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/ai-writing-auditor.md",
+  "metadata": {
+    "domain": "quality-security",
+    "tags": [
+      "quality-security",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "04-quality-security",
+    "upstream_model": "inherit",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

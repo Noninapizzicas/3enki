@@ -1,0 +1,23 @@
+{
+  "name": "content-quality-editor",
+  "description": "Use this agent before publishing any AI-generated content — blog posts, READMEs, release notes, commit messages, PR descriptions, documentation, or social posts. Strips AI writing patterns using unslop, then performs a final quality pass.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/content-quality-editor.md",
+  "metadata": {
+    "domain": "business-product",
+    "tags": [
+      "business-product",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "08-business-product",
+    "upstream_model": "haiku",
+    "upstream_tools": "Read, Write, Edit, Bash"
+  }
+}

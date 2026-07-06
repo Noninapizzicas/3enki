@@ -1,0 +1,23 @@
+{
+  "name": "refactoring-specialist",
+  "description": "Use when you need to transform poorly structured, complex, or duplicated code into clean, maintainable systems while preserving all existing behavior.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/refactoring-specialist.md",
+  "metadata": {
+    "domain": "developer-experience",
+    "tags": [
+      "developer-experience",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "06-developer-experience",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

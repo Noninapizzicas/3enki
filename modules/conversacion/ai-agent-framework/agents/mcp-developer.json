@@ -1,0 +1,23 @@
+{
+  "name": "mcp-developer",
+  "description": "Use this agent when you need to build, debug, or optimize Model Context Protocol (MCP) servers and clients that connect AI systems to external tools and data sources.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/mcp-developer.md",
+  "metadata": {
+    "domain": "developer-experience",
+    "tags": [
+      "developer-experience",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "06-developer-experience",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

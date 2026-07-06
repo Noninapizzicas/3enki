@@ -1,0 +1,23 @@
+{
+  "name": "legacy-modernizer",
+  "description": "Use this agent when modernizing legacy systems that need incremental migration strategies, technical debt reduction, and risk mitigation while maintaining business continuity.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/legacy-modernizer.md",
+  "metadata": {
+    "domain": "developer-experience",
+    "tags": [
+      "developer-experience",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "06-developer-experience",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

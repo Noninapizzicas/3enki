@@ -1,0 +1,23 @@
+{
+  "name": "mobile-app-developer",
+  "description": "Use this agent when developing iOS and Android mobile applications with focus on native or cross-platform implementation, performance optimization, and platform-specific user experience.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/mobile-app-developer.md",
+  "metadata": {
+    "domain": "specialized-domains",
+    "tags": [
+      "specialized-domains",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "07-specialized-domains",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

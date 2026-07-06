@@ -1,0 +1,23 @@
+{
+  "name": "design-bridge",
+  "description": "Use this agent when you need to translate a DESIGN.md from the VoltAgent/awesome-design-md repository into polished Claude Code instructions for building user interfaces that faithfully match the chosen brand. Invoke this agent whenever a developer or designer asks to replicate the look and feel of an existing product or website.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/design-bridge.md",
+  "metadata": {
+    "domain": "core-development",
+    "tags": [
+      "core-development",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "01-core-development",
+    "upstream_model": "inherit",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch"
+  }
+}

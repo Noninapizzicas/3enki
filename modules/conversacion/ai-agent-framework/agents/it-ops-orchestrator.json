@@ -1,0 +1,23 @@
+{
+  "name": "it-ops-orchestrator",
+  "description": "Use for orchestrating complex IT operations tasks that span multiple domains (PowerShell automation, .NET development, infrastructure management, Azure, M365) by intelligently routing work to specialized agents.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/it-ops-orchestrator.md",
+  "metadata": {
+    "domain": "meta-orchestration",
+    "tags": [
+      "meta-orchestration",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "09-meta-orchestration",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

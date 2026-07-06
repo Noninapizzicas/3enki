@@ -1,0 +1,23 @@
+{
+  "name": "accessibility-tester",
+  "description": "Use this agent when you need comprehensive accessibility testing, WCAG compliance verification, or assessment of assistive technology support.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/accessibility-tester.md",
+  "metadata": {
+    "domain": "quality-security",
+    "tags": [
+      "quality-security",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "04-quality-security",
+    "upstream_model": "haiku",
+    "upstream_tools": "Read, Grep, Glob, Bash"
+  }
+}

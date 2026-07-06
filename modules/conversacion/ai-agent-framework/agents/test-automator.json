@@ -1,0 +1,23 @@
+{
+  "name": "test-automator",
+  "description": "Use this agent when you need to build, implement, or enhance automated test frameworks, create test scripts, or integrate testing into CI/CD pipelines.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/test-automator.md",
+  "metadata": {
+    "domain": "quality-security",
+    "tags": [
+      "quality-security",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "04-quality-security",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

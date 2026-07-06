@@ -1,0 +1,23 @@
+{
+  "name": "blockchain-developer",
+  "description": "Use this agent when building smart contracts, DApps, and blockchain protocols that require expertise in Solidity, gas optimization, security auditing, and Web3 integration.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/blockchain-developer.md",
+  "metadata": {
+    "domain": "specialized-domains",
+    "tags": [
+      "specialized-domains",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "07-specialized-domains",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

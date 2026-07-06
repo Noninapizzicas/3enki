@@ -1,0 +1,23 @@
+{
+  "name": "powershell-module-architect",
+  "description": "Use this agent when architecting and refactoring PowerShell modules, designing profile systems, or creating cross-version compatible automation libraries. Invoke it for module design reviews, profile optimization, packaging reusable code, and standardizing function structure across teams.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/powershell-module-architect.md",
+  "metadata": {
+    "domain": "developer-experience",
+    "tags": [
+      "developer-experience",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "06-developer-experience",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "backend-developer",
+  "description": "Use this agent when building server-side APIs, microservices, and backend systems that require robust architecture, scalability planning, and production-ready implementation.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/backend-developer.md",
+  "metadata": {
+    "domain": "core-development",
+    "tags": [
+      "core-development",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "01-core-development",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

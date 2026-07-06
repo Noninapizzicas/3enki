@@ -1,0 +1,23 @@
+{
+  "name": "agent-installer",
+  "description": "Use this agent when the user wants to discover, browse, or install Claude Code agents from the awesome-claude-code-subagents repository.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/agent-installer.md",
+  "metadata": {
+    "domain": "meta-orchestration",
+    "tags": [
+      "meta-orchestration",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "09-meta-orchestration",
+    "upstream_model": "haiku",
+    "upstream_tools": "Bash, WebFetch, Read, Write, Glob"
+  }
+}

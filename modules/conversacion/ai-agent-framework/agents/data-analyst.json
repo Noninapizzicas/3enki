@@ -1,0 +1,23 @@
+{
+  "name": "data-analyst",
+  "description": "Use when you need to extract insights from business data, create dashboards and reports, or perform statistical analysis to support decision-making.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/data-analyst.md",
+  "metadata": {
+    "domain": "data-ai",
+    "tags": [
+      "data-ai",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "05-data-ai",
+    "upstream_model": "haiku",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

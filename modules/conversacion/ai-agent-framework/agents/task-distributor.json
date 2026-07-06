@@ -1,0 +1,23 @@
+{
+  "name": "task-distributor",
+  "description": "Use when distributing tasks across multiple agents or workers, managing queues, and balancing workloads to maximize throughput while respecting priorities and deadlines.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/task-distributor.md",
+  "metadata": {
+    "domain": "meta-orchestration",
+    "tags": [
+      "meta-orchestration",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "09-meta-orchestration",
+    "upstream_model": "haiku",
+    "upstream_tools": "Read, Write, Edit, Glob, Grep"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "seo-specialist",
+  "description": "Use this agent when you need comprehensive SEO optimization encompassing technical audits, keyword strategy, content optimization, and search rankings improvement.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/seo-specialist.md",
+  "metadata": {
+    "domain": "specialized-domains",
+    "tags": [
+      "specialized-domains",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "07-specialized-domains",
+    "upstream_model": "haiku",
+    "upstream_tools": "Read, Grep, Glob, WebFetch, WebSearch"
+  }
+}

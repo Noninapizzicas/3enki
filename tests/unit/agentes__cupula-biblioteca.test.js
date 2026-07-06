@@ -42,6 +42,18 @@ test('la BIBLIOTECA conoce todas las definiciones (activas o no)', () => {
   assert.ok(m.library.size >= 25, `biblioteca demasiado pequeña: ${m.library.size}`);
 });
 
+test('los 154 de VoltAgent están en la biblioteca (29 nativos + 154 importados)', () => {
+  const m = fw();
+  assert.ok(m.library.size >= 180, `esperaba ≥180, hay ${m.library.size}`);
+  // un agente VoltAgent es buscable, aparcado, y activable
+  const bd = m.library.get('backend-developer');
+  assert.ok(bd, 'backend-developer en la biblioteca');
+  assert.strictEqual(bd.activo, false, 'importado como aparcado');
+  const found = m._buscarAgente({ query: 'backend developer' }).agentes.map(a => a.nombre);
+  assert.ok(found.includes('backend-developer'), 'buscable');
+  assert.strictEqual(m._activar({ nombre: 'backend-developer' }).activado, true, 'activable');
+});
+
 test('hoy todas están aparcadas → agents (activos/invocables) vacío, pero buscables', () => {
   const m = fw();
   assert.strictEqual(m.agents.size, 0, 'ninguna debería estar activa (las 29 aparcadas)');

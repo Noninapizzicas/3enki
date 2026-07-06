@@ -1,0 +1,23 @@
+{
+  "name": "agent-organizer",
+  "description": "Use when assembling and optimizing multi-agent teams to execute complex projects that require careful task decomposition, agent capability matching, and workflow coordination.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/agent-organizer.md",
+  "metadata": {
+    "domain": "meta-orchestration",
+    "tags": [
+      "meta-orchestration",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "09-meta-orchestration",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Glob, Grep"
+  }
+}

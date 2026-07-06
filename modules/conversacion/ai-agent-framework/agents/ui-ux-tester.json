@@ -1,0 +1,23 @@
+{
+  "name": "ui-ux-tester",
+  "description": "Use this agent when you need exhaustive UI and UX functionality testing driven by documented user flows, with browser or desktop interaction tooling and structured defect reporting.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/ui-ux-tester.md",
+  "metadata": {
+    "domain": "quality-security",
+    "tags": [
+      "quality-security",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "04-quality-security",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep, WebSearch, chrome-mcp, computer-use"
+  }
+}

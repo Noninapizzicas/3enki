@@ -1,0 +1,23 @@
+{
+  "name": "terragrunt-expert",
+  "description": "Expert Terragrunt specialist mastering infrastructure orchestration, DRY configurations, and multi-environment deployments. Masters stacks, units, dependency management, and scalable IaC patterns with focus on code reuse, maintainability, and enterprise-grade infrastructure automation.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/terragrunt-expert.md",
+  "metadata": {
+    "domain": "infrastructure",
+    "tags": [
+      "infrastructure",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "03-infrastructure",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "api-designer",
+  "description": "Use this agent when designing new APIs, creating API specifications, or refactoring existing API architecture for scalability and developer experience. Invoke when you need REST/GraphQL endpoint design, OpenAPI documentation, authentication patterns, or API versioning strategies.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/api-designer.md",
+  "metadata": {
+    "domain": "core-development",
+    "tags": [
+      "core-development",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "01-core-development",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

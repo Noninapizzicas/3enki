@@ -1,0 +1,23 @@
+{
+  "name": "workflow-orchestrator",
+  "description": "Use this agent when you need to design, implement, or optimize complex business process workflows with multiple states, error handling, and transaction management.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/workflow-orchestrator.md",
+  "metadata": {
+    "domain": "meta-orchestration",
+    "tags": [
+      "meta-orchestration",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "09-meta-orchestration",
+    "upstream_model": "inherit",
+    "upstream_tools": "Read, Write, Edit, Glob, Grep"
+  }
+}

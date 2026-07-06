@@ -1,0 +1,23 @@
+{
+  "name": "terraform-engineer",
+  "description": "Use when building, refactoring, or scaling infrastructure as code using Terraform with focus on multi-cloud deployments, module architecture, and enterprise-grade state management.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/terraform-engineer.md",
+  "metadata": {
+    "domain": "infrastructure",
+    "tags": [
+      "infrastructure",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "03-infrastructure",
+    "upstream_model": "sonnet",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

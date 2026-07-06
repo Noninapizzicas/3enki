@@ -1,0 +1,23 @@
+{
+  "name": "first-principles-thinking",
+  "description": "Use when the user wants to challenge assumptions, break down a complex problem from scratch, or approach something with first principles reasoning. Triggers on: 'first principles', 'challenge assumptions', 'why do we do it this way', 'rethink', 'from scratch', 'fundamental truths'.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/first-principles-thinking.md",
+  "metadata": {
+    "domain": "research-analysis",
+    "tags": [
+      "research-analysis",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "10-research-analysis",
+    "upstream_model": null,
+    "upstream_tools": "Read, Grep, Glob, WebFetch, WebSearch"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "architect-reviewer",
+  "description": "Use this agent when you need to evaluate system design decisions, architectural patterns, and technology choices at the macro level.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/architect-reviewer.md",
+  "metadata": {
+    "domain": "quality-security",
+    "tags": [
+      "quality-security",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "04-quality-security",
+    "upstream_model": "inherit",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

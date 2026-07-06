@@ -1,0 +1,23 @@
+{
+  "name": "build-engineer",
+  "description": "Use this agent when you need to optimize build performance, reduce compilation times, or scale build systems across growing teams.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/build-engineer.md",
+  "metadata": {
+    "domain": "developer-experience",
+    "tags": [
+      "developer-experience",
+      "voltagent"
+    ],
+    "fuente": "voltagent",
+    "categoria": "06-developer-experience",
+    "upstream_model": "haiku",
+    "upstream_tools": "Read, Write, Edit, Bash, Glob, Grep"
+  }
+}

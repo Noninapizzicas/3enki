@@ -26,7 +26,16 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
+
+// Reciprocal-rank fusion (gbrain/gstack): fusiona el rank por palabras y el rank por
+// significado. K amortigua el peso de las posiciones altas (estándar 60). El boost de
+// tier (source-tier boost de gbrain) nudge a la SEMILLA curada sobre lo CRECIDO sin
+// dominar — ~15% de una contribución rank-1 (1/60 ≈ 0.0167).
+const RRF_K = 60;
+const TIER_BONUS = 0.005;
+const AUTOINDEX_MAX = 20;   // auto-index solo lotes pequeños (aprendizaje incremental); el bulk usa reindexar
 
 // La cantera vive en DOS sitios: la SEMILLA curada (en el código, versionada) y lo
 // CRECIDO en caliente por cosecha.importar (en data/, persistente, no en git). Se
@@ -61,11 +70,11 @@ class CosechaModule extends ModuloHibridoReflejo {
   // Escanea SEMILLA (código) primero y luego CRECIDO (data): lo crecido gana en colisión.
   _descubrir() {
     this._skills.clear();
-    this._scanDir(CANTERA_SEED_DIR);
-    this._scanDir(CANTERA_DATA_DIR);
+    this._scanDir(CANTERA_SEED_DIR, 'semilla');
+    this._scanDir(CANTERA_DATA_DIR, 'crecido');
   }
 
-  _scanDir(baseDir) {
+  _scanDir(baseDir, tier) {
     let fuentes;
     try { fuentes = fs.readdirSync(baseDir, { withFileTypes: true }); }
     catch (_) { return; }  // dir ausente (p.ej. data/ aún sin importaciones) = sin ruido
@@ -82,6 +91,7 @@ class CosechaModule extends ModuloHibridoReflejo {
         try { raw = fs.readFileSync(mdPath, 'utf-8'); }
         catch (_) { this.logger?.warn('cosecha.skill.sin_md', { fuente: f.name, skill: s.name }); continue; }
         const skill = this._parse(raw, { fuenteDefault: f.name, nombreDefault: s.name });
+        skill.tier = tier;   // semilla (curada) | crecido — para el source-tier boost de la fusión
         this._skills.set(skill.nombre, skill);
       }
     }
@@ -133,7 +143,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   // ── TOOLS del LLM de chat (LA SUPERFICIE): buscar y activar skills desde CUALQUIER
   // conversación. El grifo por el que el comerciante toca la cantera — realiza el
   // "¿cómo hago X?" de find-skills sobre nuestro catálogo interno. Devuelven {status,data}. ──
-  async handleBuscarTool(args)   { return this._buscar(args || {}); }
+  async handleBuscarTool(args)   { return this._buscarFusion(args || {}); }
   async handlePromoverTool(args) { return this._promover(args || {}); }
 
   // ── el NERVIO del destilador: cuando SELLA una skill en una cúpula (memoria por
@@ -183,6 +193,53 @@ class CosechaModule extends ModuloHibridoReflejo {
     return { status: 200, data: { skills, total: scored.length } };
   }
 
+  // buscar HÍBRIDO (RRF) — el camino del CHAT (buscar_skill). Fusiona palabras
+  // (_buscar, BM25-lite) + significado (cantera.buscar_semantica, Turso si ON) por
+  // reciprocal-rank fusion + boost de tier semilla. Lección de gbrain (gstack):
+  // vector-solo PIERDE; fusionar vector + palabra + source-tier boost gana (+31.4 P@5).
+  // DEGRADA HONESTO: si la semántica está OFF / sin Turso / sin embeddings / índice
+  // vacío → cae a palabras puras (marcado en `por`). El RPC cosecha.buscar (conserje)
+  // NO fusiona — se queda en palabras (barato, sin RPC por tick).
+  async _buscarFusion({ query = '', dominio = '', tarea = '', limite = 10 } = {}) {
+    const lim = Math.max(1, Number(limite) || 10);
+    const kw = this._buscar({ query, dominio, tarea, limite: lim * 3 });   // mitad palabras
+    const kwNombres = kw.data.skills.map(s => s.nombre);
+
+    // mitad significado (best-effort): si degrada, seguimos solo con palabras.
+    let semNombres = [];
+    try {
+      const sem = await this._rpc('cantera.buscar_semantica.request',
+        { query, dominio, limite: lim * 3 }, { timeout_ms: 4000 });
+      if (sem && sem.status === 200 && sem.data && Array.isArray(sem.data.resultados)) {
+        semNombres = sem.data.resultados.map(r => r.nombre).filter(n => this._skills.has(n));
+      }
+    } catch (_) { /* degrada a palabras */ }
+
+    if (semNombres.length === 0) {   // índice vacío/degradado → palabras puras (honesto)
+      return { status: 200, data: { skills: kw.data.skills.slice(0, lim), total: kw.data.total, por: 'palabras' } };
+    }
+
+    // RRF: score(n) = Σ 1/(K + rank) sobre las listas donde aparece + boost de tier semilla.
+    const fused = new Map();
+    const aportar = (nombres) => nombres.forEach((n, i) => fused.set(n, (fused.get(n) || 0) + 1 / (RRF_K + i)));
+    aportar(kwNombres);
+    aportar(semNombres);
+    for (const [n, sc] of fused) {
+      const s = this._skills.get(n);
+      if (s && s.tier === 'semilla') fused.set(n, sc + TIER_BONUS);   // source-tier boost (gbrain)
+    }
+    const orden = [...fused.entries()].sort((a, b) => b[1] - a[1]).slice(0, lim);
+    const skills = orden.map(([n]) => {
+      const s = this._skills.get(n);
+      return {
+        nombre: s.nombre, descripcion: s.descripcion, fuente: s.fuente, dominio: s.dominio, tags: s.tags,
+        ...(s.lente_dominio ? { lente_dominio: s.lente_dominio } : {}),
+        ...(s.lente_tarea ? { lente_tarea: s.lente_tarea } : {})
+      };
+    });
+    return { status: 200, data: { skills, total: fused.size, por: 'fusion' } };
+  }
+
   // obtener: el SKILL.md COMPLETO de las pedidas (lo caro, solo bajo demanda).
   _obtener({ nombres = [] } = {}) {
     if (!Array.isArray(nombres) || nombres.length === 0) return this._invalid('nombres');
@@ -230,8 +287,28 @@ class CosechaModule extends ModuloHibridoReflejo {
       }
     }
     this._descubrir();  // re-indexa (semilla + crecido)
+    this._autoIndexar(skills, importadas);
     this.metrics?.increment('cosecha.importadas.total', { fuente: fuenteSlug });
     return { status: 200, data: { fuente, importadas, rechazadas, total: this._skills.size } };
+  }
+
+  // nervio → índice semántico: mantén la cantera semántica caliente (fire-and-forget).
+  // Si está OFF/sin embeddings → 503 ignorado; el día que se encienda, las skills nuevas
+  // ya entran (un cantera.reindexar backfillea las viejas). Solo lotes pequeños (aprendizaje
+  // incremental: destilador sella una, LLM crea una); el bulk masivo se apoya en reindexar.
+  _autoIndexar(skills, importadas) {
+    if (!(importadas > 0 && importadas <= AUTOINDEX_MAX)) return;
+    for (const raw of skills) {
+      const nombre = raw && raw.nombre ? String(raw.nombre).trim() : '';
+      const s = nombre && this._skills.get(nombre);
+      if (!s) continue;
+      try {
+        this.eventBus.publish('cantera.indexar.request', {
+          request_id: crypto.randomUUID(), nombre: s.nombre,
+          dominio: s.dominio || '', texto: s.descripcion || s.nombre
+        });
+      } catch (_) { /* best-effort */ }
+    }
   }
 
   // promover: el PUENTE cantera → cuenco. Toma una skill de la abundancia y se la

@@ -15081,8 +15081,12 @@ VERIFICADO (spike real, este entorno)  @tursodatabase/database instala y corre e
 DETALLE DE CAMPO  Turso BETA: LIMIT no acepta parámetro (se inlinea el entero saneado). Pin ^0.6.1 (0.1.x
   daba 'Invalid vector type' en vector_distance_cos — versión vieja). optionalDependency: si no instala en una
   plataforma, el módulo degrada, no rompe.
-SIGUIENTE  el conserje/cosecha ofrece encenderlo · buscar_skill delega a la semántica cuando el interruptor está ON
-  (hoy conviven: keyword por defecto, semántica opt-in) · reindexar automático al crear/importar una skill.
+CABLEADO ✓ (cosecha 0.10.0)  buscar_skill FUSIONA palabras + semántica por reciprocal-rank fusion (no delega ni
+  reemplaza — FUNDE, lección de gbrain/gstack: vector-solo pierde, +31.4 P@5) + source-tier boost semilla +
+  auto-index fire-and-forget al importar/crear (lote ≤20). Degrada honesto a palabras si el índice está OFF/vacío.
+  Ver 'Referencia externa — gstack + gbrain', PLANO 1. SIGUIENTE: el conserje ofrece encenderlo · el GRAFO tipado
+  alimenta el ranking (aristas lentes co-uso, +31.4 en gbrain) · proveedor de embeddings (gemini/openai; deepseek
+  NO embebe) — hasta entonces la fusión corre por palabras y la semántica queda a la espera del embed.
 ```
 
 > **Trade-off vivo — por qué un spike y no el motor de todo.** Turso está en BETA y Enki corre pizzerías VIVAS;
@@ -15218,57 +15222,103 @@ PENDIENTE (opcional)  probar por el CHAT real (LLM de página llama ejecutor par
 
 ---
 
-# Referencia externa — gstack (Garry Tan · MIT) — dos planos de diseño para Enki
+# Referencia externa — gstack + gbrain (Garry Tan · MIT · re-analizado 2026-07-06) — planos cosechados
 
-> ANALIZADO, no alojado. gstack ("Garry's stack") = OS de harness sprint-estructurado
-> (Think→Plan→Build→Review→Test→Ship→Reflect), 23 skills + 8 binarios, capa de config del
-> asistente (como ECC), no runtime. Sus skills solapan con ECC y son off-vertical (oficio
-> desarrollo, no pizzería) → NO se montan como pack. El oro es el DISEÑO: dos piezas suyas son
-> referencia MADURA para cosas que Enki ya tiene a medias. Compañero de ECC (continuous-learning v2).
+> ANALIZADO de primera mano (garrytan/gstack +108K★ · garrytan/gbrain). gstack = OS de harness
+> sprint-estructurado (Think→Plan→Build→Review→Test→Ship→Reflect), 23 skills + binarios, capa de
+> config del asistente (como ECC), no runtime. Sus SKILLS solapan con ECC y son off-vertical (oficio
+> desarrollo) → NO se montan como pack. El oro es el DISEÑO. Compañero de DeerFlow y ECC.
+>
+> **CORRECCIÓN de la nota vieja (honestidad).** La versión previa atribuía a gstack un "N=3 · cuarentena
+> hasta probar" para el destilador. **FALSO** — no existe en la fuente. `/learn` de gstack es un
+> `~/.gstack/projects/$SLUG/learnings.jsonl` con confianza 0–10 + poda cuando el fichero referenciado
+> desaparece; sin cuarentena, sin umbral de N usos. Se corrige abajo.
 
-## 1. Promoción por confianza + cuarentena → el paso 3 del destilador, ya concreto
-
-```json
-{
-  "esquema": "promocion-cuarentena-gstack",
-  "domain_skills": "comportamiento aprendido por contexto — auto-dispara la próxima vez",
-  "ciclo": "aprender → CUARENTENA (no confiable) → 3 usos exitosos → ASCIENDE a global → confiable",
-  "gbrain": "base de conocimiento persistente cross-sesión (embeddings Supabase PGLite/cloud) + trust tiers por repo (rw/ro/deny)",
-  "mapeo_enki": {
-    "destilador_paso3": "= auto-mejora con ventana de confianza — gstack le da el UMBRAL concreto (N=3, cuarentena hasta probar) que el nuestro dejó abstracto",
-    "gbrain_embeddings": "= el upgrade semántico (HNSW) que la cantera dejó PENDIENTE (hoy match por prefijo determinista)",
-    "trust_tiers": "= grados de confianza por origen para una skill crecida (semilla intocable vs crecido probado vs cuarentena)"
-  },
-  "mandato": "cuando el destilador madure el paso 3: cuarentena por defecto, ascenso por USO exitoso repetido (no por aprobación humana sola), y confianza medida por ventana — no un flag binario"
-}
-```
-
-## 2. Defensa anti-inyección de navegador → la contención que le falta al ejecutor+agent-browser
+## Mecanismos reales (los detalles importan)
 
 ```json
 {
-  "esquema": "defensa-inyeccion-navegador-gstack",
-  "capas": [
-    "clasificador ML LOCAL (22MB) escanea cada página antes de que el LLM la lea",
-    "voting de un LLM barato (Haiku) sobre la FORMA de la conversación (¿la página intenta secuestrar la tarea?)",
-    "CANARY TOKEN aleatorio en el system prompt → si sale en una request, hubo exfiltración de sesión",
-    "ensemble DeBERTa opt-in (721MB, 2-de-3) para el modo paranoico",
-    "deny-default del escape a Chrome DevTools Protocol"
-  ],
-  "mapeo_enki": {
-    "cuando_aplica": "el día que Enki corra automatización web NO-confiable (agent-browser vía ejecutor) — el contenido de la página es input adversarial",
-    "ejecutor": "la reja (hardline/aprobación) + el contenedor cubren el SO; la inyección de PROMPT via contenido web es OTRA frontera → esta pila la cubre",
-    "canary_token": "barato y potente — un token en el system prompt que NUNCA debe salir; si aparece en una llamada saliente, aborta (aplicable ya al Portal/ejecutor, no solo a navegador)"
+  "esquema": "gstack-gbrain-mecanismos-v2",
+  "gbrain (el cerebro persistente)": {
+    "store": "PGLite (Postgres 17 vía WASM, zero-config, hasta ~50K páginas) · Postgres+pgvector para grande. Conocimiento = markdown en un git repo ('brain repo') sincronizado a Postgres.",
+    "retrieval_HIBRIDO": "HNSW vector (pgvector) + BM25 keyword + RECIPROCAL-RANK FUSION + source-tier BOOST. Modos conservative/balanced/tokenmax (coste/calidad).",
+    "grafo": "aristas TIPADAS (attended·works_at·founded·advises) extraídas SIN LLM → +31.4 puntos P@5 sobre vector-solo RAG. NÚMERO DURO: vector-solo PIERDE.",
+    "federacion": "brain = instancia DB · source = repo dentro · precedencia 6-tier vía dotfiles .gbrain-source",
+    "permisos": "OAuth scopes read/write/admin · slice por login (cada uno ve solo lo suyo)",
+    "cron_dream_cycle": "mientras duermes: dedup páginas · arregla citas · puntúa salience · halla contradicciones · prepara tareas"
   },
-  "mandato": "no reinventar la seguridad de navegación no-confiable: copiar este patrón (clasificador local + canary + voting) cuando se abra esa frontera"
+  "gstack (el harness)": {
+    "learn": "learnings.jsonl · confianza 0–10 + source + paths · otras skills lo buscan antes de recomendar ('Prior learning applied') · PODA cuando el fichero referenciado ya no existe. SIN cuarentena/umbral.",
+    "review_panel": "3 revisores INDEPENDIENTES leen el MISMO design doc: /plan-ceo-review (¿el producto 10-estrellas oculto? 4 modos scope) · /plan-eng-review (arquitectura+diagramas ASCII+matriz de tests) · /plan-design-review (rate 0–10 por dimensión, detecta AI-slop). /autoplan los corre en cadena, surfacea SOLO decisiones de gusto.",
+    "cso": "OWASP+STRIDE · ZERO-NOISE: 17 exclusiones de falso-positivo + gate confianza 8/10 + verificación INDEPENDIENTE de cada hallazgo + escenario de exploit concreto",
+    "investigate": "Iron Law: NO fixes sin investigación · traza data-flow · PARA tras 3 fixes fallidos · auto-freeze del módulo",
+    "gates": "PreToolUse hooks (session-scoped): /careful (avisa ante rm-rf/DROP/force-push, whitelist) · /freeze (edits a un dir — su doc ADMITE 'no es sandbox, sed se escapa') · /guard = careful+freeze",
+    "pair-agent": "bridge remoto: tunnel scoped + allowlist + session token (NO verificación)"
+  }
 }
 ```
 
-> **Por qué apunte y no pack.** gstack confirma el rumbo (aprender→confianza→ascenso, y contención
-> por capas) desde un sistema con 20 años de oficio detrás. Guardamos el DISEÑO —el umbral N=3+cuarentena
-> para el destilador, el canary token para el ejecutor— porque son baratos de copiar y caros de descubrir.
-> Las skills no: solapan con ECC y no beben del vertical. El día que el destilador madure o abramos la
-> navegación no-confiable, esta nota es el plano.
+## PLANO 1 (COSECHADO ✓) — retrieval HÍBRIDO en la cantera: fusión, no reemplazo
+
+```json
+{
+  "estado": "IMPLEMENTADO — cosecha 0.10.0 (buscar_skill del chat)",
+  "leccion_dura": "gbrain: vector-solo PIERDE (+31.4 P@5 al fusionar). La cantera NO debe sustituir palabras por Turso — debe FUNDIR.",
+  "lo_construido": {
+    "RRF": "buscar_skill = reciprocal-rank fusion de _buscar (palabras, BM25-lite) + cantera.buscar_semantica (Turso si ON). K=60.",
+    "source_tier_boost": "la SEMILLA curada (código) recibe un nudge sobre lo CRECIDO (bulk) — el tier se etiqueta al escanear. = el 'source-tier boost' de gbrain.",
+    "degradacion_honesta": "semántica OFF/sin Turso/sin embeddings/índice vacío → cae a palabras (marcado en `por: palabras|fusion`). Por eso la key de Gemini pasa de REQUISITO a MEJORA: la cantera rankea por palabras hoy, la semántica solo afina el orden.",
+    "auto_index": "importar/crear (lote ≤20) → fire-and-forget cantera.indexar mantiene el índice caliente (503 ignorado si OFF; reindexar backfillea el bulk)",
+    "no_fusiona": "el RPC cosecha.buscar (mina del conserje, cada tick) se queda en palabras — barato, sin RPC por tick. La fusión solo donde paga: el chat interactivo."
+  },
+  "pendiente_del_mismo_plano": "el GRAFO tipado (+31.4) — Enki ya tiene aristas (lentes co-uso, grafo Obsidian); alimentar el ranking con ellas, no solo visualizar. HNSW nativo = el spike Turso (cantera-semantica)."
+}
+```
+
+## PLANO 2 (pendiente) — poda-cuando-obsoleto para skills crecidas
+
+```json
+{
+  "regla_gstack": "learnings.jsonl se poda cuando el fichero referenciado ya no existe",
+  "mapeo_enki": "una skill CRECIDA cuyo módulo/ruta que la motiva ya no está → se poda. Freshness barata, per-reflejo (Enki federado, sin dream-cycle central). El dream-cycle de gbrain (dedup/salience/contradicciones) NO aplica tal cual — Enki no tiene Postgres central."
+}
+```
+
+## PLANO 3 (pendiente, cuando se abra la frontera) — defensa anti-inyección de navegador
+
+```json
+{
+  "capas_gstack": ["clasificador ML LOCAL (22MB) pre-lectura", "voting de un LLM barato sobre la FORMA (¿la página secuestra la tarea?)", "CANARY TOKEN en el system prompt → si sale en una request, exfiltración", "ensemble DeBERTa opt-in (721MB) modo paranoico", "deny-default del escape a Chrome DevTools Protocol"],
+  "cuando": "el día que Enki corra automatización web NO-confiable (agent-browser vía ejecutor) — el contenido de la página es input adversarial",
+  "canary_token": "barato y potente — aplicable YA al Portal/ejecutor (un token que NUNCA debe salir; si aparece en una llamada saliente, aborta), no solo a navegador"
+}
+```
+
+## Donde Enki YA supera a gstack — NO cosechar
+
+```
+AISLAMIENTO   ejecutor (contenedor --rm --cap-drop ALL) > /freeze de gstack, que su propia doc admite "no es sandbox (sed se escapa)".
+PUERTA REMOTA Portal MCP (interruptor kill-switch + scope/mode + audit + confirmación) > /pair-agent (tunnel+allowlist+token).
+RAIL + JUEZ   objetivo + blocker tipado + tiro automático (de DeerFlow) — gstack no tiene evaluador de objetivo.
+```
+
+## Planos aún cosechables (DISEÑO, no código)
+
+```
+PANEL DE REVIEW multi-perspectiva  3 revisores independientes leen el MISMO artefacto (ceo/eng/design) → = judge-panel del Workflow.
+                                   Enki lo tiene como patrón de orquestación; gstack lo tiene como oficio codificado (los 4 modos de scope del CEO).
+CSO zero-noise                     gate de confianza 8/10 + 17 exclusiones + verificación independiente + exploit concreto = el patrón del /security-review,
+                                   afinado contra ruido. Aplicable al code-review de Enki: subir el listón de confianza antes de reportar.
+INVESTIGATE iron-law               "no fixes sin investigación · para tras 3 fallos · auto-freeze" = disciplina anti-parche. Cosechable como skill de oficio.
+```
+
+> **Por qué apunte y no pack, y qué cambió.** El valor real de gstack HOY fue un solo número —**+31.4 P@5,
+> vector-solo pierde**— que cambió cómo cablear la cantera-semántica: FUSIÓN, no reemplazo, con boost de tier
+> semilla (cosecha 0.10.0, ✓). Lo demás (canary, poda-por-referencia, panel de review, cso zero-noise) son
+> planos baratos de copiar y caros de descubrir, guardados aquí para cuando la frontera lo pida. Las skills
+> de gstack no se montan: solapan con ECC y no beben del vertical.
+
+Sources: [github.com/garrytan/gstack](https://github.com/garrytan/gstack) · [github.com/garrytan/gbrain](https://github.com/garrytan/gbrain) · [gstack/docs/skills.md](https://github.com/garrytan/gstack/blob/main/docs/skills.md)
 
 ---
 

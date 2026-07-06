@@ -15373,8 +15373,16 @@ EMITE  estados.goal.evaluado · estados.goal.cumplido (si satisfecho)
 
 REPARTO  el JUICIO = LLM (perspectiva-c, ve la conversación) · fijar/validar/aplicar = REFLEJO (determinista)
 NERVIO   _composeRailSection inyecta objetivo + ultima_evaluacion + la instrucción de juzgar con blocker tipado
-FOLLOW-UP  el disparo AUTOMÁTICO tras cada turno (como DeerFlow: evaluador post-run con safety caps) = nervio,
-           siguiente. Hoy el LLM/conserje lo dispara on-demand (evaluar_rail).
+
+EL TIRO AUTOMÁTICO (ai-gateway 2.31.0 · como DeerFlow: evaluador post-run) {
+  tras un turno REAL con proyecto, _executeLLM dispara _evaluarRailAuto DETACHED (fire-and-forget,
+  sin await → no retrasa ni encarece la respuesta). Si el rail activo tiene objetivo (opt-in) y no
+  está ya satisfecho: UNA llamada de juez (perspectiva-c, temp 0, ~400 tok, sin tools) → _parseVeredicto
+  (tolera fences/texto) → aplica via estados.evaluar → el NEXT turno lee el veredicto en _composeRailSection.
+  SAFETY CAPS (de DeerFlow, por conversación en _railEvalState): rail_eval_max=8 evals · rail_eval_max_no_progress=2
+  (mismo blocker 2 veces seguidas → para; un blocker que CAMBIA resetea = hubo progreso). Best-effort absoluto:
+  cualquier fallo se traga (nunca rompe el turno). El objetivo satisfecho detiene el ciclo.
+}
 ```
 
 ## Referencia externa — DeerFlow 2.0 (bytedance/deer-flow · MIT) — plano de super-agent-harness
@@ -15395,8 +15403,10 @@ FOLLOW-UP  el disparo AUTOMÁTICO tras cada turno (como DeerFlow: evaluador post
     "memoria cross-sesión": "= propiocepción + memory",
     "npx skills / find-skills": "= feeder (skills.sh)"
   },
+  "planos_cosechados": [
+    "evaluador de goal con SAFETY CAPS (8 evals · para tras 2 no-progresos) → HECHO: EL TIRO AUTOMÁTICO (ai-gateway 2.31.0)"
+  ],
   "planos_cosechables_pendientes": [
-    "evaluador de goal con SAFETY CAPS (8 continuaciones · para tras 2 no-progresos idénticos) → cuando el juez suba al nervio",
     "context engineering: offload de intermedios al FS + summarization por sub-tarea (Enki registra, no comprime el hilo largo)",
     "required_secrets inyectados como env por skill al activarse (credential-manager × skills)",
     "la pila de middlewares nombrada (loop_detection · tool_output_budget · dangling_tool_call recovery · read_before_write) como checklist de harness"
@@ -15415,7 +15425,8 @@ PIEZAS {
   modules/estados (0.4.0 · reflejo 0.4.0)   la cúpula custodio (single-writer, freno entre pasos + EL JUEZ)
                                             + TOOLS del chat (crear·anadir·completar·ver·borrar·fijar_objetivo·evaluar_rail)
   modules/_shared/procesos-semilla.js       las plantillas de proceso por arquetipo (PRISMA hereda)
-  ai-gateway (2.30.0)                        el nervio: _leerRailActivo + _composeRailSection (inyecta la activa + objetivo + juez)
+  ai-gateway (2.31.0)                        el nervio: _leerRailActivo + _composeRailSection (activa + objetivo + juez)
+                                            + EL TIRO AUTOMÁTICO (_evaluarRailAuto post-turno, detached, safety caps)
 }
 LA MANO QUE ESCRIBE (v0.2.0)  el diseño decía "el LLM PROPONE · el reflejo SOSTIENE". v0.1 construyó el que
   SOSTIENE (custodio) y el que LEE (nervio), pero el LLM no tenía con qué PROPONER → la lista activa siempre
@@ -15432,10 +15443,11 @@ UNIVERSALIDAD DE LAS TOOLS (ai-gateway 2.29.0)  verificado en vivo por el chat: 
   _railToolsFromRegistry() pulla las del toolsRegistry y las inyecta en las ramas blueprint; + añadidas a
   GLOBAL_TOOLS. El rail es universal por diseño → sus tools son globales como fs. Si estados no cargó → [] (no-op).
 EL JUEZ (v0.4.0)  fijar_objetivo + evaluar_rail (blocker tipado) también en _railToolsFromRegistry + GLOBAL_TOOLS.
-TESTS  estados__cupula (25: crear libre/estricto · freno atasca y libera · instanciar servicio/uso_temporal ·
-       avanzar-en-libre 409 · marcar · activa=nervio · borrar · las tools crear/anadir/completar/ver · + EL JUEZ:
-       fijar_objetivo · crear-con-objetivo · evaluar satisfecho→completa+goal.cumplido · FRENO 422 (no-satisfecho sin
-       blocker tipado) · no-satisfecho registra blocker sin completar · evaluar sin objetivo 409). Gate híbridos 11/0.
+EL TIRO AUTOMÁTICO (ai-gateway 2.31.0)  post-turno, detached, safety caps — ver el bloque de arriba.
+TESTS  estados__cupula (25) · ai-gateway__rail-juez-auto (10: _parseVeredicto plano/fenced/en-texto/rechaza ·
+       _composeJuezInput objetivo+pasos+conv · sin-objetivo NO dispara · con-objetivo dispara+aplica+cuenta ·
+       ya-satisfecho NO re-evalúa · cap 8 · no-progreso para tras 2 · cambio de blocker resetea · best-effort no propaga).
+       Gate híbridos 11/0.
 ESTADO ✓ VERIFICADO EN VIVO (Regalos, 3 conversaciones): crear_lista ESCRIBE → el nervio LEE en otra
        conversación sin historial ("tienes «Rumbo», 3 pendientes") → completar_paso TACHA. El rumbo vive en
        la cúpula, no en el hilo. El LLM es dueño del ciclo (crear·añadir·completar·ver·borrar). ◑ follow-up:

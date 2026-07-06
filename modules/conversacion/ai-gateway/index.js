@@ -38,6 +38,7 @@ class AiGatewayModule extends BaseModule {
     this.moduleLoader = null;
 
     this.providers = new Map();
+    this._railEvalState = new Map();     // conversation_id → { count, noProgress, lastBlocker } (safety caps del juez auto)
     this.credentialCache = new Map();    // provider → { apiKey, resolvedAt, projectId }
     this.pendingCredentials = new Map(); // request_id → { resolve, reject, timeout }
     this.pendingFsReads = new Map();     // request_id → { resolve, reject, timeout }
@@ -1522,6 +1523,97 @@ class AiGatewayModule extends BaseModule {
     );
   }
 
+  // ── EL TIRO AUTOMÁTICO del juez del rail (como DeerFlow: evaluador post-run con
+  // safety caps). Fire-and-forget tras un turno real: si el rail activo tiene OBJETIVO
+  // y las caps lo permiten, hace UNA llamada de juez (perspectiva-c: pura, sin tools) y
+  // aplica el veredicto via estados.evaluar. Best-effort absoluto — corre detached, no
+  // retrasa ni encarece la respuesta; el resultado lo lee el NEXT turno (_composeRailSection).
+  _composeJuezPrompt() {
+    return (
+      'Eres un JUEZ silencioso de objetivos (evaluador, no ejecutor). Recibes un OBJETIVO, el ' +
+      'estado de un rail de trabajo y la conversación reciente. Decide si el objetivo está CUMPLIDO ' +
+      'con evidencia VISIBLE en lo que se te da (no supongas lo que no está). Responde SOLO un objeto JSON:\n' +
+      '{"satisfecho": true|false, "blocker": "...", "razon": "...", "evidencia": "..."}\n' +
+      'Si satisfecho=false, blocker DEBE ser uno de: missing_evidence (falta prueba), ' +
+      'needs_user_input (falta que el usuario decida/aporte), run_failed (algo falló), ' +
+      'external_wait (espera algo externo), goal_not_met_yet (en camino, aún no). ' +
+      'Si satisfecho=true, blocker="none". No añadas texto fuera del JSON.'
+    );
+  }
+
+  _composeJuezInput(rail, mensajes) {
+    const pasos = (rail.pasos || []).map((p, i) => `${i + 1}. [${p.estado}] ${p.texto}`).join('\n');
+    const conv = (Array.isArray(mensajes) ? mensajes.slice(-6) : [])
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .map(m => `${m.role}: ${m.content.slice(0, 800)}`).join('\n');
+    return `OBJETIVO: ${rail.objetivo}\n\nRAIL «${rail.nombre}» (${rail.orden}):\n${pasos || '(sin pasos)'}\n\nCONVERSACIÓN RECIENTE:\n${conv || '(vacía)'}`;
+  }
+
+  // Extrae el veredicto JSON de la salida del juez (tolera fences / texto alrededor).
+  _parseVeredicto(text) {
+    if (!text || typeof text !== 'string') return null;
+    let raw = text.trim();
+    const fence = raw.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
+    if (fence) raw = fence[1].trim();
+    let obj = null;
+    try { obj = JSON.parse(raw); } catch (_) {
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) { try { obj = JSON.parse(m[0]); } catch (_) { return null; } }
+    }
+    if (!obj || typeof obj !== 'object' || typeof obj.satisfecho !== 'boolean') return null;
+    return obj;
+  }
+
+  async _evaluarRailAuto({ project_id, conversation_id, providerName, mensajes }) {
+    try {
+      const rail = await this._leerRailActivo(project_id);
+      if (!rail || !rail.objetivo) return;                                  // solo rails con objetivo (opt-in)
+      if (rail.ultima_evaluacion && rail.ultima_evaluacion.satisfecho) return; // ya cumplido → no re-evaluar
+      const key = conversation_id || project_id;
+      const st = this._railEvalState.get(key) || { count: 0, noProgress: 0, lastBlocker: null };
+      const maxEvals = this.config.rail_eval_max || 8;                      // cap duro de auto-evals (DeerFlow: 8)
+      const maxNoProgress = this.config.rail_eval_max_no_progress || 2;     // para tras 2 no-progresos idénticos
+      if (st.count >= maxEvals || st.noProgress >= maxNoProgress) return;
+
+      const sel = await this._selectProvider(providerName, project_id);
+      const provider = sel && sel.provider;
+      if (!provider?.chatCompletion) return;
+      const res = await provider.chatCompletion(
+        [{ role: 'system', content: this._composeJuezPrompt() }, { role: 'user', content: this._composeJuezInput(rail, mensajes) }],
+        { temperature: 0, max_tokens: 400, projectId: project_id, conversationId: conversation_id }
+      );
+      const veredicto = this._parseVeredicto(res && res.content);
+      if (!veredicto) return;
+      const r = await this._railEvaluar(project_id, rail.id, veredicto);
+      const blocker = (r && r.data && r.data.blocker) || veredicto.blocker || null;
+      st.count++;
+      if (!veredicto.satisfecho && blocker && blocker === st.lastBlocker) st.noProgress++;
+      else st.noProgress = 0;
+      st.lastBlocker = blocker;
+      this._railEvalState.set(key, st);
+      this.logger?.info?.('ai-gateway.rail.auto_evaluado', { project_id, lista: rail.id, satisfecho: !!veredicto.satisfecho, blocker, count: st.count });
+    } catch (_) { /* best-effort: el tiro automático nunca rompe nada */ }
+  }
+
+  // RPC a estados.evaluar (aplica el veredicto), manual como _leerRailActivo.
+  async _railEvaluar(project_id, lista_id, veredicto) {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, 5000);
+      try {
+        unsub = this.eventBus.subscribe('estados.evaluar.response', (event) => {
+          const d = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!d || d.request_id !== request_id) return;
+          clearTimeout(timeout); if (unsub) unsub();
+          resolve(d);
+        });
+        this.eventBus.publish('estados.evaluar.request', { request_id, project_id, lista_id, veredicto });
+      } catch (_) { clearTimeout(timeout); if (unsub) unsub(); resolve(null); }
+    });
+  }
+
   // Nervio de LENTES de diseño — lado lectura. Tira la lente por defecto de la
   // página (lentes-diseno, base compartida) por RPC del bus. Best-effort: si no
   // responde en timeout, devuelve [] y el turno sigue sin bloquearse.
@@ -2581,6 +2673,13 @@ class AiGatewayModule extends BaseModule {
         content: tr.status === 'error' ? formatErr(tr.error) : JSON.stringify(tr.result)
       }));
       workingMessages.push(...toolMessages);
+    }
+
+    // TIRO AUTOMÁTICO del juez del rail (post-turno). DETACHED (sin await) → no retrasa la
+    // respuesta; solo turno real con proyecto. Si el rail activo tiene objetivo y las safety
+    // caps lo permiten, evalúa en background y el veredicto lo lee el próximo turno.
+    if (project_id && !context?.async_invocation) {
+      this._evaluarRailAuto({ project_id, conversation_id, providerName: providerNameUsed, mensajes: messages }).catch(() => {});
     }
 
     return {

@@ -15392,6 +15392,85 @@ ESTADO ✓ VERIFICADO EN VIVO (Regalos, 3 conversaciones): crear_lista ESCRIBE �
 
 ---
 
+# CÚPULA DE AGENTES — la flota es una BIBLIOTECA buscable (ai-agent-framework 2.1.0 · vivo 2026-07-06)
+
+> Tercera sustancia del patrón cúpula (lentes=conocimiento · cantera=skills · **agentes=trabajadores
+> en contexto aislado**). El framework NO cambia de motor —sigue cargando de `agents/*.json` y corriendo
+> el invoke loop— sube al MOLDE: la flota deja de ser un set fijo y pasa a ser una BIBLIOTECA (search +
+> activación por demanda). Gemela EXACTA de la cantera: `buscar_agente` = `buscar_skill`. El muro que
+> aparcó a los 29 (tool-use roto bajo deepseek) YA cayó (deepseek corre por wire Anthropic) → los agentes
+> funcionan; la cúpula da el catálogo y la puerta de encendido sobre ellos. Las 29 siguen aparcadas como
+> RUNTIME (enabled:false) pero YA son BUSCABLES.
+
+## Contrato (JSON)
+
+```json
+{
+  "esquema": "cupula-de-agentes-v1",
+  "dos_mapas": {
+    "library": "TODA definición conocida (activa o no) → BUSCABLE. { name, description, activo, dominio, scope, tools_count, tags, obsoleto }",
+    "agents":  "solo las enabled → INVOCABLES ya vía invoke_agent (intacto). Hoy vacío: las 29 aparcadas"
+  },
+  "puertas": {
+    "buscar_agente": "{query, dominio?, limite?} → catálogo rankeado por tokens (name+description+tags+dominio), filtra obsoletos+dominio. Gemela de buscar_skill. Devuelve activo:true|false por agente.",
+    "invoke_agent":  "INTACTO — invoca un agente ACTIVO (enabled). La cúpula no lo toca.",
+    "activar_agente (TRAMO 2, pendiente)": "encender uno de la biblioteca (enabled:true + persistencia data/ + re-registrar invoke_agent, con confirmación)"
+  },
+  "obsoletos": "regex sobre description/_disabled_reason (obsolet|deprecat|apagad|eliminad|fantasma) → NO salen en la búsqueda (recipe-curator, recipe-structurer)",
+  "universal": "buscar_agente en GLOBAL_TOOLS (ai-gateway) — como invoke_agent, llega a toda página",
+  "no_toca": "el invoke loop, agent-flow canónico (agent.execute.*), agent-observer — solo AÑADE library + buscar_agente"
+}
+```
+
+## Pseudocódigo (reflejo · sobre AiAgentFrameworkModule)
+
+```
+CLASE AiAgentFrameworkModule (ampliación 2.1.0) {
+  ATRIBUTOS_NUEVOS { library: Map<name, DefLite> }   // junto a agents: Map<name, AgenteActivo>
+
+  _loadAgents():                                       // un solo barrido, DOS destinos
+    PARA def EN agents/*.json:
+      SI !def.name: CONTINUAR
+      library.set(def.name, {name, description, activo: def.enabled !== false,
+        dominio: def.metadata?.domain || scope[0], scope, tools_count, tags,
+        obsoleto: /obsolet|deprecat|apagad|eliminad|fantasma/.test(description + _disabled_reason)})
+      SI def.enabled === false: CONTINUAR              // la biblioteca la tiene; agents NO
+      agents.set(def.name, {…prompt, tools, provider…})   // solo activas → invocables
+
+  _buscarAgente({query, dominio?, limite?}): PROYECCIÓN PURA   // gemela de _buscarSkill
+    toks ← tokens(query)
+    items ← library.values().filtrar(!obsoleto)
+    SI dominio: items ← items.filtrar(a.dominio == dominio)
+    ranked ← items.map(a → {a, s: Σ toks.incluido_en(name+description+tags+dominio)})
+             .filtrar(s>0).ordenarDesc(s).tomar(limite ?? 10)
+    RETORNA {total, activos_en_biblioteca, biblioteca: library.size,
+             agentes: ranked.map(→ {nombre, descripcion, dominio, activo, tools})}
+
+  onBuscarAgente(event):                               // path canónico de tool por bus
+    result ← _buscarAgente(event.data)
+    publish('buscar_agente.response', {request_id, result})   // o {error} en catch
+}
+```
+
+## Estado
+
+```
+✓ TRAMO 1 (2.1.0) — biblioteca + buscar_agente. library llena con las 29 (buscables) · agents vacío (aparcadas) ·
+  buscar_agente en GLOBAL_TOOLS (universal) · path canónico buscar_agente.response.
+◑ TRAMO 2 — activar_agente (encender de la biblioteca + persistencia data/ + re-registrar invoke_agent, confirmación).
+TESTS  agentes__cupula-biblioteca (7: biblioteca ≥25 · agents=0 aparcadas · escandallo→escandallo-analyzer OFF ·
+       filtro dominio · obsoletos fuera · tool registrada · onBuscarAgente publica response).
+TRIAJE 29  4 perspectiva-c (invoice-structurer/validator, marketing-copywriter/onboarding) · 23 tool-caller ·
+       2 obsoletos (recipe-curator, recipe-structurer). Afinado = tramo 2+.
+```
+
+> **Trade-off vivo.** buscar_agente sobre 29 agentes casi todos apagados suena a catálogo de un almacén
+> cerrado. Pero es el paso honesto: primero HACER LA FLOTA VISIBLE (search), luego encenderla por demanda
+> (activar_agente) — no un big-bang de 29 a la vez. Mismo orden gradual que el Portal (read→write) y la
+> cantera (importar→promover): exponer antes que conceder.
+
+---
+
 # PRISMA — Vertical universal de comercio (producto de 5 huecos · modules/prisma/)
 
 > Vertical 2 del rumbo (comercio local/universal): producto NO pizza-shaped, molde universal.

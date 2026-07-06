@@ -37,7 +37,8 @@ class AiAgentFrameworkModule extends BaseModule {
     this.mqttRequest = null;
     this.config = null;
 
-    this.agents = new Map();
+    this.agents = new Map();     // ACTIVOS (enabled) — invocables ya vía invoke_agent
+    this.library = new Map();    // BIBLIOTECA — TODA definición conocida (activa o no), buscable (cúpula de agentes)
     this.basePromptText = null;
     this.pendingLlm = new Map();
     this._conversationCache = new Map();
@@ -62,6 +63,7 @@ class AiAgentFrameworkModule extends BaseModule {
 
     if (this.moduleLoader?.toolsRegistry) {
       this._registerInvokeAgentTool();
+      this._registerBuscarAgenteTool();   // cúpula de agentes: buscar en la biblioteca
     }
 
     this.logger.info('ai-agent-framework.loaded', {
@@ -159,8 +161,24 @@ class AiAgentFrameworkModule extends BaseModule {
       if (!file.endsWith('.json')) continue;
       try {
         const def = JSON.parse(fs.readFileSync(path.join(agentsDir, file), 'utf8'));
-        if (def.enabled === false) continue;
         if (!def.name) continue;
+
+        // BIBLIOTECA (cúpula de agentes): toda definición conocida entra, activa o no, para
+        // ser BUSCABLE. Solo las activas (enabled) pasan a this.agents → invocables. Así la
+        // flota es una biblioteca (search) sobre la que se activa lo que haga falta.
+        const scopeArr = Array.isArray(def.scope) ? def.scope : (def.scope ? [def.scope] : ['*']);
+        this.library.set(def.name, {
+          name: def.name,
+          description: def.description || '',
+          activo: def.enabled !== false,
+          dominio: (def.metadata && def.metadata.domain) || scopeArr[0] || null,
+          scope: scopeArr,
+          tools_count: Array.isArray(def.tools) ? def.tools.length : 0,
+          tags: (def.metadata && def.metadata.tags) || [],
+          obsoleto: /obsolet|deprecat|apagad|eliminad|fantasma/i.test((def.description || '') + (def._disabled_reason || ''))
+        });
+
+        if (def.enabled === false) continue;
 
         let promptText = null;
         const promptFile = def.prompt_file
@@ -229,6 +247,30 @@ class AiAgentFrameworkModule extends BaseModule {
     this.logger.info('ai-agent-framework.invoke_agent.registered', { agents: enabledAgents.length });
   }
 
+  // Cúpula de agentes — la puerta de BÚSQUEDA de la biblioteca. Gemela de buscar_skill
+  // (cosecha): el LLM/conserje encuentra el trabajador para una tarea, esté ACTIVO o no.
+  // Lo que está activo se invoca ya con invoke_agent; lo que no, se activa (tramo 2).
+  _registerBuscarAgenteTool() {
+    const tool = {
+      name: 'buscar_agente',
+      description: 'Busca en la biblioteca de AGENTES (trabajadores especialistas que corren en contexto aislado) los que sirven para una tarea. Devuelve nombre, descripción, dominio y si está ACTIVO (invocable ya con invoke_agent) o solo en la biblioteca. ÚSALA cuando una tarea pediría un especialista y no sabes si existe uno.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          query: { type: 'string', minLength: 1, description: 'La tarea/capacidad a buscar (p.ej. "analizar escandallo", "revisar carta digital", "estructurar factura").' },
+          dominio: { type: 'string', description: 'Opcional: ceñir a un dominio (recetas, escandallo, carta-marketing, facturas…).' },
+          limite: { type: 'number', description: 'Opcional: cuántos devolver (default 10).' }
+        },
+        required: ['query']
+      },
+      module: 'ai-agent-framework',
+      event_based: true
+    };
+    this.moduleLoader.toolsRegistry.set('buscar_agente', tool);
+    this.logger.info('ai-agent-framework.buscar_agente.registered', { library: this.library.size });
+  }
+
   // ============================================================
   // Bus subscribers
   // ============================================================
@@ -239,6 +281,39 @@ class AiAgentFrameworkModule extends BaseModule {
     } catch (err) {
       this._handleHandlerError('ai-agent-framework.invoke_agent.error', err);
     }
+  }
+
+  // Cúpula de agentes — handler de buscar_agente (tool del chat). Busca en la biblioteca
+  // y publica buscar_agente.response {request_id, result} (path canónico de tool por bus).
+  async onBuscarAgente(event) {
+    const d = event?.data || event || {};
+    let result;
+    try { result = this._buscarAgente(d); }
+    catch (err) {
+      this.metrics?.increment?.('ai-agent-framework.errors', { code: 'UNKNOWN_ERROR', kind: 'buscar_agente' });
+      return this.eventBus.publish('buscar_agente.response', { request_id: d.request_id, error: { code: 'UNKNOWN_ERROR', message: err.message } });
+    }
+    return this.eventBus.publish('buscar_agente.response', { request_id: d.request_id, result });
+  }
+
+  // Proyección PURA: busca en la biblioteca por tokens del query, filtra dominio/obsoletos, rankea.
+  _buscarAgente({ query, dominio, limite } = {}) {
+    const q = String(query || '').toLowerCase().trim();
+    const lim = Number(limite) || 10;
+    const toks = q.split(/\s+/).filter(Boolean);
+    const score = (a) => {
+      const hay = `${a.name} ${a.description} ${(a.tags || []).join(' ')} ${a.dominio || ''}`.toLowerCase();
+      return toks.reduce((s, t) => s + (hay.includes(t) ? 1 : 0), 0);
+    };
+    let items = [...this.library.values()].filter(a => !a.obsoleto);
+    if (dominio) items = items.filter(a => String(a.dominio || '').toLowerCase() === String(dominio).toLowerCase());
+    const ranked = items
+      .map(a => ({ a, s: toks.length ? score(a) : 1 }))
+      .filter(x => x.s > 0)
+      .sort((x, y) => y.s - x.s)
+      .slice(0, lim)
+      .map(({ a }) => ({ nombre: a.name, descripcion: a.description, dominio: a.dominio, activo: a.activo, tools: a.tools_count }));
+    return { total: ranked.length, activos_en_biblioteca: [...this.library.values()].filter(a => a.activo).length, biblioteca: this.library.size, agentes: ranked };
   }
 
   async onAgentExecuteRequest(event) {

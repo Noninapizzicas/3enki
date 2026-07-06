@@ -1,6 +1,7 @@
 {
   "name": "ai-agent-framework",
-  "version": "2.0.0",
+  "version": "2.1.0",
+  "_v2_1_0_nota": "v2.1.0 (2026-07-06): CÚPULA DE AGENTES (tramo 1). El framework sube al patrón cúpula (gemelo de la cantera para skills). _loadAgents ahora llena this.library con TODAS las definiciones (activas o no) → la flota es una BIBLIOTECA buscable, no un set fijo; solo las enabled pasan a this.agents (invocables vía invoke_agent, intacto). Nueva tool buscar_agente (onBuscarAgente + _buscarAgente puro, ranking por tokens) → el LLM/conserje encuentra el trabajador para una tarea, activo o no. Motivo: el tool-use ya funciona (deepseek por wire Anthropic) → los agentes corren; la cúpula da search+activación sobre ellos. buscar_agente añadida a GLOBAL_TOOLS (universal, como invoke_agent). Tramo 2 = activar_agente (encender uno de la biblioteca, con persistencia data/). Las 29 definiciones siguen aparcadas como runtime pero YA son buscables. Ver CLAUDE.md 'Cúpula de agentes'.",
   "description": "Carga agentes desde agents/*.json + prompts/*.{json,md}. Registra la tool invoke_agent (LLM tool flow legacy) en moduleLoader.toolsRegistry y escucha agent.execute.request (entry point canonico agent-flow v1.0.0+) desde modulos del dominio / cron / channels. Publishes canonicos: agent.execute.response (success), agent.execute.failed (no_silent_failures), agent.execute.progress (chat_inline_rendering). La traduccion a chat.assistant.saved la hace agent-observer (adaptador canonico agent-flow → chat-flow) para evitar doble persistencia.",
   "author": "Event Core Team",
   "language": "en",
@@ -37,6 +38,11 @@
         "event": "invoke_agent",
         "handler": "onInvokeAgent",
         "description": "Tool del LLM (agentic loop de ai-gateway). Mantiene shape propio del invoke_agent flow — NO es evento agent_flow canonico."
+      },
+      {
+        "event": "buscar_agente",
+        "handler": "onBuscarAgente",
+        "description": "CÚPULA DE AGENTES — tool del chat. Busca en la biblioteca (todas las definiciones, activas o no) el trabajador para una tarea. Responde buscar_agente.response {request_id, result}. Gemela de buscar_skill (cosecha)."
       },
       {
         "event": "agent.execute.request",

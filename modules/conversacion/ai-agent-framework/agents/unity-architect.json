@@ -1,0 +1,28 @@
+{
+  "name": "unity-architect",
+  "description": "Data-driven modularity specialist - Masters ScriptableObjects, decoupled systems, and single-responsibility component design for scalable Unity projects",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/unity-architect.md",
+  "metadata": {
+    "domain": "game-development",
+    "tags": [
+      "game-development",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "game-development",
+    "display_name": "Unity Architect",
+    "emoji": "🏛️",
+    "vibe": "Designs data-driven, decoupled Unity systems that scale without spaghetti."
+  }
+}

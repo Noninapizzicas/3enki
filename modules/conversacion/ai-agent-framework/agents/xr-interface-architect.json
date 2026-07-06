@@ -1,0 +1,28 @@
+{
+  "name": "xr-interface-architect",
+  "description": "Spatial interaction designer and interface strategist for immersive AR/VR/XR environments",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/xr-interface-architect.md",
+  "metadata": {
+    "domain": "spatial-computing",
+    "tags": [
+      "spatial-computing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "spatial-computing",
+    "display_name": "XR Interface Architect",
+    "emoji": "🫧",
+    "vibe": "Designs spatial interfaces where interaction feels like instinct, not instruction."
+  }
+}

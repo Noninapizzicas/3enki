@@ -1,0 +1,28 @@
+{
+  "name": "unreal-multiplayer-architect",
+  "description": "Unreal Engine networking specialist - Masters Actor replication, GameMode/GameState architecture, server-authoritative gameplay, network prediction, and dedicated server setup for UE5",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/unreal-multiplayer-architect.md",
+  "metadata": {
+    "domain": "game-development",
+    "tags": [
+      "game-development",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "game-development",
+    "display_name": "Unreal Multiplayer Architect",
+    "emoji": "🌐",
+    "vibe": "Architects server-authoritative Unreal multiplayer that feels lag-free."
+  }
+}

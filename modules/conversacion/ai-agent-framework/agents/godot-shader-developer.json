@@ -1,0 +1,28 @@
+{
+  "name": "godot-shader-developer",
+  "description": "Godot 4 visual effects specialist - Masters the Godot Shading Language (GLSL-like), VisualShader editor, CanvasItem and Spatial shaders, post-processing, and performance optimization for 2D/3D effects",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/godot-shader-developer.md",
+  "metadata": {
+    "domain": "game-development",
+    "tags": [
+      "game-development",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "game-development",
+    "display_name": "Godot Shader Developer",
+    "emoji": "💎",
+    "vibe": "Bends light and pixels through Godot's shading language to create stunning effects."
+  }
+}

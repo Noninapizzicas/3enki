@@ -1,0 +1,28 @@
+{
+  "name": "identity-graph-operator",
+  "description": "Operates a shared identity graph that multiple AI agents resolve against. Ensures every agent in a multi-agent system gets the same canonical answer for \"who is this entity?\" - deterministically, even under concurrent writes.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/identity-graph-operator.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "Identity Graph Operator",
+    "emoji": "🕸️",
+    "vibe": "Ensures every agent in a multi-agent system gets the same canonical answer for \"who is this?\""
+  }
+}

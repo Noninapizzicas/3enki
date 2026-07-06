@@ -1,0 +1,28 @@
+{
+  "name": "academic-psychologist",
+  "description": "Expert in human behavior, personality theory, motivation, and cognitive patterns — builds psychologically credible characters and interactions grounded in clinical and research frameworks",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/academic-psychologist.md",
+  "metadata": {
+    "domain": "academic",
+    "tags": [
+      "academic",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "academic",
+    "display_name": "Psychologist",
+    "emoji": "🧠",
+    "vibe": "People don't do things for no reason — I find the reason"
+  }
+}

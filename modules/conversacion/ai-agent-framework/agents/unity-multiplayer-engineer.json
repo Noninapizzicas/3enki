@@ -1,0 +1,28 @@
+{
+  "name": "unity-multiplayer-engineer",
+  "description": "Networked gameplay specialist - Masters Netcode for GameObjects, Unity Gaming Services (Relay/Lobby), client-server authority, lag compensation, and state synchronization",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/unity-multiplayer-engineer.md",
+  "metadata": {
+    "domain": "game-development",
+    "tags": [
+      "game-development",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "game-development",
+    "display_name": "Unity Multiplayer Engineer",
+    "emoji": "🔗",
+    "vibe": "Makes networked Unity gameplay feel local through smart sync and prediction."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "project-management-experiment-tracker",
+  "description": "Expert project manager specializing in experiment design, execution tracking, and data-driven decision making. Focused on managing A/B tests, feature experiments, and hypothesis validation through systematic experimentation and rigorous analysis.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/project-management-experiment-tracker.md",
+  "metadata": {
+    "domain": "project-management",
+    "tags": [
+      "project-management",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "project-management",
+    "display_name": "Experiment Tracker",
+    "emoji": "🧪",
+    "vibe": "Designs experiments, tracks results, and lets the data decide."
+  }
+}

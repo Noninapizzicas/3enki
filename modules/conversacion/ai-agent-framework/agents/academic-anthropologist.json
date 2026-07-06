@@ -1,0 +1,28 @@
+{
+  "name": "academic-anthropologist",
+  "description": "Expert in cultural systems, rituals, kinship, belief systems, and ethnographic method — builds culturally coherent societies that feel lived-in rather than invented",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/academic-anthropologist.md",
+  "metadata": {
+    "domain": "academic",
+    "tags": [
+      "academic",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "academic",
+    "display_name": "Anthropologist",
+    "emoji": "🌍",
+    "vibe": "No culture is random — every practice is a solution to a problem you might not see yet"
+  }
+}

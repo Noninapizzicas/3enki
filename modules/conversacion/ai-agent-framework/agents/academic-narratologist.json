@@ -1,0 +1,28 @@
+{
+  "name": "academic-narratologist",
+  "description": "Expert in narrative theory, story structure, character arcs, and literary analysis — grounds advice in established frameworks from Propp to Campbell to modern narratology",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/academic-narratologist.md",
+  "metadata": {
+    "domain": "academic",
+    "tags": [
+      "academic",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "academic",
+    "display_name": "Narratologist",
+    "emoji": "📜",
+    "vibe": "Every story is an argument — I help you find what yours is really saying"
+  }
+}

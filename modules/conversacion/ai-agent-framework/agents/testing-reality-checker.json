@@ -1,0 +1,28 @@
+{
+  "name": "testing-reality-checker",
+  "description": "Stops fantasy approvals, evidence-based certification - Default to \"NEEDS WORK\", requires overwhelming proof for production readiness",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/testing-reality-checker.md",
+  "metadata": {
+    "domain": "testing",
+    "tags": [
+      "testing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "testing",
+    "display_name": "Reality Checker",
+    "emoji": "🧐",
+    "vibe": "Defaults to \"NEEDS WORK\" — requires overwhelming proof for production readiness."
+  }
+}

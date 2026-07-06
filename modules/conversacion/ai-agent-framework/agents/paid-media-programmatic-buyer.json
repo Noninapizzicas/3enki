@@ -1,0 +1,28 @@
+{
+  "name": "paid-media-programmatic-buyer",
+  "description": "Display advertising and programmatic media buying specialist covering managed placements, Google Display Network, DV360, trade desk platforms, partner media (newsletters, sponsored content), and ABM display strategies via platforms like Demandbase and 6Sense.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/paid-media-programmatic-buyer.md",
+  "metadata": {
+    "domain": "paid-media",
+    "tags": [
+      "paid-media",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "paid-media",
+    "display_name": "Programmatic & Display Buyer",
+    "emoji": "📺",
+    "vibe": "Buys display and video inventory at scale with surgical precision."
+  }
+}

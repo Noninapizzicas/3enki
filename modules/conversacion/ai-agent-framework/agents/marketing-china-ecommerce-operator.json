@@ -1,0 +1,28 @@
+{
+  "name": "marketing-china-ecommerce-operator",
+  "description": "Expert China e-commerce operations specialist covering Taobao, Tmall, Pinduoduo, and JD ecosystems with deep expertise in product listing optimization, live commerce, store operations, 618/Double 11 campaigns, and cross-platform strategy.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/marketing-china-ecommerce-operator.md",
+  "metadata": {
+    "domain": "marketing",
+    "tags": [
+      "marketing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "marketing",
+    "display_name": "China E-Commerce Operator",
+    "emoji": "🛒",
+    "vibe": "Runs your Taobao, Tmall, Pinduoduo, and JD storefronts like a native operator."
+  }
+}

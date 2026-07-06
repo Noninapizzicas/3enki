@@ -15495,13 +15495,23 @@ CLASE AiAgentFrameworkModule (ampliación 2.1.0) {
   activo:false con tools:5 (fs.read/write/edit/list/search, Bash caído) → activar → {activado:true, activos:1} en
   caliente → desactivar → activos:0. El mapeo y los 154 corren en producción; ciclo idéntico al de los nativos,
   sin residuo.
+✓ agency-agents DEL REPO (2026-07-06) — la 2ª colección ya presente (raíz agency-agents/, formato persona:
+  name·description·color·emoji·vibe, sin tools) importada como APARCADOS → biblioteca de 363 (183 + 180). Import
+  RECURSIVO (los agentes reales están anidados: game-development/unity·godot·unreal-engine·roblox-studio·blender);
+  dominio = categoría de PRIMER nivel (unity-multiplayer-engineer → game-development). Se saltan 21 docs (sin
+  frontmatter name: playbooks/runbooks/examples) + 3 colisiones con VoltAgent (product-manager, sales-engineer,
+  compliance-auditor). SIN tools declaradas (son personas) → default de LECTURA (fs.read/list/search), política
+  consistente con los VoltAgent no-declarados. metadata {fuente:'agency-agents', display_name, emoji, vibe}.
+  13 dominios: engineering(28)·marketing(30)·specialized(39)·game-development(20)·testing(8)·design(8)·sales(7)·
+  paid-media(7)·project-management(6)·support(6)·spatial-computing(6)·academic(5)·finance(5)·product(4)·integrations(1).
 SHELL PARA AGENTES (siguiente deliberado, NO hecho)  darles Bash = exponer ejecutor.ejecutar como tool de agente.
   Es un paso aparte por diseño: la reja del ejecutor NACE OFF (interruptor 'ejecutor', grupo sistema, default OFF →
   puerta_cerrada 503). Aunque se expusiera, ningún agente correría un comando hasta que el humano encienda el
   interruptor (decisión consciente, con testigo ejecutor.invocado→propiocepción, revocable en caliente). Por eso el
   poder de ejecutar no se cuela por default: se concede.
-TESTS  agentes__cupula-biblioteca (15: biblioteca ≥180 · 154 VoltAgent aparcados+buscables+activables+tools mapeadas ·
-       agents=0 · escandallo→escandallo-analyzer OFF · filtro dominio · obsoletos fuera · buscar_agente registrada+response ·
+TESTS  agentes__cupula-biblioteca (16: biblioteca ≥360 · 154 VoltAgent + ~180 agency-agents aparcados+buscables+activables ·
+       VoltAgent tools mapeadas · agency-agents anidados (unity→game-development) con default de lectura · agents=0 ·
+       escandallo→escandallo-analyzer OFF · filtro dominio · obsoletos fuera · buscar_agente registrada+response ·
        activar/desactivar confirmation · _activar entra en agents+invoke_agent · persiste y sobrevive recarga ·
        404 desconocido · desactivar revierte · onActivarAgente response).
 TRIAJE 29 nativos  4 perspectiva-c (invoice-structurer/validator, marketing-copywriter/onboarding) · 23 tool-caller ·

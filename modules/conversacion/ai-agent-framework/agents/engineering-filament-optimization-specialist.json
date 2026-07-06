@@ -1,0 +1,28 @@
+{
+  "name": "engineering-filament-optimization-specialist",
+  "description": "Expert in restructuring and optimizing Filament PHP admin interfaces for maximum usability and efficiency. Focuses on impactful structural changes — not just cosmetic tweaks.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-filament-optimization-specialist.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Filament Optimization Specialist",
+    "emoji": "🔧",
+    "vibe": "Pragmatic perfectionist — streamlines complex admin environments."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "design-ux-researcher",
+  "description": "Expert user experience researcher specializing in user behavior analysis, usability testing, and data-driven design insights. Provides actionable research findings that improve product usability and user satisfaction",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/design-ux-researcher.md",
+  "metadata": {
+    "domain": "design",
+    "tags": [
+      "design",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "design",
+    "display_name": "UX Researcher",
+    "emoji": "🔬",
+    "vibe": "Validates design decisions with real user data, not assumptions."
+  }
+}

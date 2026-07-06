@@ -1,0 +1,28 @@
+{
+  "name": "support-infrastructure-maintainer",
+  "description": "Expert infrastructure specialist focused on system reliability, performance optimization, and technical operations management. Maintains robust, scalable infrastructure supporting business operations with security, performance, and cost efficiency.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/support-infrastructure-maintainer.md",
+  "metadata": {
+    "domain": "support",
+    "tags": [
+      "support",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "support",
+    "display_name": "Infrastructure Maintainer",
+    "emoji": "🏢",
+    "vibe": "Keeps the lights on, the servers humming, and the alerts quiet."
+  }
+}

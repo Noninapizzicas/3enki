@@ -1,0 +1,28 @@
+{
+  "name": "finance-fpa-analyst",
+  "description": "Expert Financial Planning & Analysis (FP&A) analyst specializing in budgeting, variance analysis, financial planning, rolling forecasts, and strategic decision support. Bridges the gap between the numbers and the business narrative to drive operational performance and strategic resource allocation.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/finance-fpa-analyst.md",
+  "metadata": {
+    "domain": "finance",
+    "tags": [
+      "finance",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "finance",
+    "display_name": "FP&A Analyst",
+    "emoji": "📈",
+    "vibe": "The budget whisperer — turns plans into numbers and numbers into action."
+  }
+}

@@ -57,6 +57,19 @@ test('los 154 de VoltAgent están en la biblioteca (29 nativos + 154 importados)
   assert.deepStrictEqual(m.agents.get('backend-developer').tools, ['fs.read', 'fs.write', 'fs.edit', 'fs.list', 'fs.search']);
 });
 
+test('los ~180 de agency-agents (del repo) están en la biblioteca — incluidos los anidados', () => {
+  const m = fw();
+  assert.ok(m.library.size >= 360, `esperaba ≥360 (183 + agency-agents), hay ${m.library.size}`);
+  // un agency-agent ANIDADO (game-development/unity/…) es buscable, aparcado, con dominio = categoría de 1er nivel
+  const u = m.library.get('unity-multiplayer-engineer');
+  assert.ok(u, 'unity-multiplayer-engineer en la biblioteca (import recursivo)');
+  assert.strictEqual(u.activo, false, 'aparcado');
+  assert.strictEqual(u.dominio, 'game-development', 'dominio = categoría de primer nivel, no el subdir');
+  // sin tools declaradas (persona) → set de LECTURA
+  assert.deepStrictEqual(m._activar({ nombre: 'unity-multiplayer-engineer' }).activado ? m.agents.get('unity-multiplayer-engineer').tools : null,
+    ['fs.read', 'fs.list', 'fs.search']);
+});
+
 test('hoy todas están aparcadas → agents (activos/invocables) vacío, pero buscables', () => {
   const m = fw();
   assert.strictEqual(m.agents.size, 0, 'ninguna debería estar activa (las 29 aparcadas)');

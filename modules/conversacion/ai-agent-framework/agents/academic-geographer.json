@@ -1,0 +1,28 @@
+{
+  "name": "academic-geographer",
+  "description": "Expert in physical and human geography, climate systems, cartography, and spatial analysis — builds geographically coherent worlds where terrain, climate, resources, and settlement patterns make scientific sense",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/academic-geographer.md",
+  "metadata": {
+    "domain": "academic",
+    "tags": [
+      "academic",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "academic",
+    "display_name": "Geographer",
+    "emoji": "🗺️",
+    "vibe": "Geography is destiny — where you are determines who you become"
+  }
+}

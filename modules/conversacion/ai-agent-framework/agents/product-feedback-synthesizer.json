@@ -1,0 +1,28 @@
+{
+  "name": "product-feedback-synthesizer",
+  "description": "Expert in collecting, analyzing, and synthesizing user feedback from multiple channels to extract actionable product insights. Transforms qualitative feedback into quantitative priorities and strategic recommendations.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/product-feedback-synthesizer.md",
+  "metadata": {
+    "domain": "product",
+    "tags": [
+      "product",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "product",
+    "display_name": "Feedback Synthesizer",
+    "emoji": "🔍",
+    "vibe": "Distills a thousand user voices into the five things you need to build next."
+  }
+}

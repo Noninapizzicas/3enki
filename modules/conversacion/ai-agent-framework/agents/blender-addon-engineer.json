@@ -1,0 +1,28 @@
+{
+  "name": "blender-addon-engineer",
+  "description": "Blender tooling specialist - Builds Python add-ons, asset validators, exporters, and pipeline automations that turn repetitive DCC work into reliable one-click workflows",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/blender-addon-engineer.md",
+  "metadata": {
+    "domain": "game-development",
+    "tags": [
+      "game-development",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "game-development",
+    "display_name": "Blender Add-on Engineer",
+    "emoji": "🧩",
+    "vibe": "Turns repetitive Blender pipeline work into reliable one-click tools that artists actually use."
+  }
+}

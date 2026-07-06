@@ -1,0 +1,28 @@
+{
+  "name": "testing-test-results-analyzer",
+  "description": "Expert test analysis specialist focused on comprehensive test result evaluation, quality metrics analysis, and actionable insight generation from testing activities",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/testing-test-results-analyzer.md",
+  "metadata": {
+    "domain": "testing",
+    "tags": [
+      "testing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "testing",
+    "display_name": "Test Results Analyzer",
+    "emoji": "📋",
+    "vibe": "Reads test results like a detective reads evidence — nothing gets past."
+  }
+}

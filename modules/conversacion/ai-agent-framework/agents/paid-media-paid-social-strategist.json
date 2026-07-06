@@ -1,0 +1,28 @@
+{
+  "name": "paid-media-paid-social-strategist",
+  "description": "Cross-platform paid social advertising specialist covering Meta (Facebook/Instagram), LinkedIn, TikTok, Pinterest, X, and Snapchat. Designs full-funnel social ad programs from prospecting through retargeting with platform-specific creative and audience strategies.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/paid-media-paid-social-strategist.md",
+  "metadata": {
+    "domain": "paid-media",
+    "tags": [
+      "paid-media",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "paid-media",
+    "display_name": "Paid Social Strategist",
+    "emoji": "📱",
+    "vibe": "Makes every dollar on Meta, LinkedIn, and TikTok ads work harder."
+  }
+}

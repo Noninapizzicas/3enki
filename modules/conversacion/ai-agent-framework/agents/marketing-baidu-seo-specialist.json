@@ -1,0 +1,28 @@
+{
+  "name": "marketing-baidu-seo-specialist",
+  "description": "Expert Baidu search optimization specialist focused on Chinese search engine ranking, Baidu ecosystem integration, ICP compliance, Chinese keyword research, and mobile-first indexing for the China market.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/marketing-baidu-seo-specialist.md",
+  "metadata": {
+    "domain": "marketing",
+    "tags": [
+      "marketing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "marketing",
+    "display_name": "Baidu SEO Specialist",
+    "emoji": "🇨🇳",
+    "vibe": "Masters Baidu's algorithm so your brand ranks in China's search ecosystem."
+  }
+}

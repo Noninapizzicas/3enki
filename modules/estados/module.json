@@ -1,7 +1,8 @@
 {
   "_doc": "Manifest de estados — LA CÚPULA DE ESTADOS (reflejo custodio único). Gemelo del cuenco de lentes, otra sustancia: el cuenco sirve conocimiento (lentes), esta cúpula sirve ESTADO (listas ordenadas). Un solo primitivo con muchas caras — notas · chef's list · tareas · compras · orden 1º 2º 3º — todas = una ListaOrdenada con `orden: libre|estricto`. El RAIL VIVO: fichas entrando (pendiente) y saliendo (hecho), el estado ES el timón. Single-writer de /estados/listas.json por proyecto → el timón no tiembla. FRENO entre pasos (orden estricto): avanzar valida el paso actual contra su freno.requiere (el VALIDAR de blueprint-agentico subido al paso) → valida y el siguiente recoge, o se atasca sin arrastrar basura. HERENCIA universal (patrón cuenco): por bus (cualquiera llama estados.*), por nervio (ai-gateway inyecta la lista activa como propiocepción), por plantilla (PRISMA suelta plantillas de proceso via _shared/procesos-semilla → instanciar las sirve). Ver CLAUDE.md secciones 'Cúpula de estados / Rail vivo'.",
   "name": "estados",
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "_v0_3_0_nota": "v0.3.0 (2026-07-06): + tool borrar_lista (sin id → la activa) para cerrar el ciclo de gestión del LLM: crear·añadir·completar·ver·BORRAR. El LLM es el dueño del ciclo de vida de las listas (crea y maneja en el flujo de la conversación); con borrar puede retirar un rumbo terminado sin intervención externa. Verificado en vivo (Regalos): crear_lista escribe, el nervio lee en otra conversación, completar_paso tacha — el rumbo vive en la cúpula, no en el hilo. Reflejo 0.3.0.",
   "_v0_2_0_nota": "v0.2.0 (2026-07-06): LA MANO QUE ESCRIBE — tools del chat (el LLM PROPONE; el reflejo SOSTIENE; el nervio ya LEE la activa). Cerraba el lazo: hasta ahora estados solo se alcanzaba por bus (invisible desde el chat), así que la lista activa siempre estaba vacía y el nervio no inyectaba nada. Cuatro tools que el LLM de cualquier conversación invoca: crear_lista (crea+activa el rail), anadir_paso, completar_paso (avanza en estricto / tacha nº en libre), ver_listas (+activar). Los args llegan enriquecidos con project_id del contexto (ai-gateway._executeToolCall), el LLM no maneja UUIDs. Handlers handleCrearListaTool/handleAnadirPasoTool/handleCompletarPasoTool/handleVerListasTool → las ops. Reflejo 0.2.0.",
   "_v0_1_0_nota": "v0.1.0 (2026-07-05): cúpula custodio con crear/instanciar/anadir/avanzar/marcar/estado/listar/activar/borrar. Un primitivo (ListaOrdenada) con orden libre|estricto. Freno entre pasos en estricto (freno.requiere gatea el traspaso). instanciar lee _shared/procesos-semilla (plantillas por arquetipo = PRISMA hereda). Store /estados/listas.json single-writer. Reflejo 0.1.0. Nervio (ai-gateway inyecta la lista activa) = tramo siguiente.",
   "description": "Cúpula de estados: listas ordenadas (notas/tareas/compras/chef/proceso) con orden libre|estricto y freno entre pasos. Custodio single-writer; la heredan por bus, por nervio y por plantilla de proceso.",
@@ -75,6 +76,19 @@
         }
       },
       "handler": "handleVerListasTool",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "borrar_lista",
+      "description": "Borra una lista. Sin 'lista_id' borra la ACTIVA. ÚSALA cuando el usuario termine un trabajo y quiera cerrar/retirar su lista, o pida limpiar una lista que ya no sirve. Cierra el ciclo de gestión (crear·añadir·completar·ver·borrar).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "lista_id": { "type": "string", "description": "Opcional: id de la lista a borrar (de ver_listas). Si se omite, borra la activa." }
+        }
+      },
+      "handler": "handleBorrarListaTool",
       "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
     }
   ],

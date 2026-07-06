@@ -203,6 +203,22 @@ test('tool ver_listas con activar cambia la activa', async () => {
   assert.strictEqual(v.data.activa, 'primera');
 });
 
+test('tool borrar_lista sin id borra la ACTIVA (el LLM cierra el ciclo)', async () => {
+  const r = nuevo();
+  await r.handleCrearListaTool({ project_id: PID, nombre: 'Terminada', pasos: ['a'] });
+  const b = await r.handleBorrarListaTool({ project_id: PID });
+  assert.strictEqual(b.status, 200);
+  const l = await r.handleVerListasTool({ project_id: PID });
+  assert.strictEqual(l.data.total, 0);
+  assert.strictEqual(l.data.activa, null);
+});
+
+test('tool borrar_lista sin lista ni activa → 400', async () => {
+  const r = nuevo();
+  const b = await r.handleBorrarListaTool({ project_id: PID });
+  assert.strictEqual(b.status, 400);
+});
+
 (async () => {
   let ok = 0; const fails = [];
   for (const { n, f } of tests) { try { await f(); ok++; } catch (e) { fails.push({ n, e }); } }

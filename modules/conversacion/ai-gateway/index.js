@@ -409,7 +409,7 @@ class AiGatewayModule extends BaseModule {
     // + las tools del RAIL VIVO (cúpula de estados): universales por diseño (el rumbo se
     //   escribe desde cualquier página, como el nervio lo lee en todas).
     const GLOBAL_TOOLS = new Set(['invoke_agent', 'fs.read', 'fs.write', 'fs.list', 'fs.search',
-      'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas']);
+      'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista']);
     // Prefijos de tools válidos para este page_id. Permite que módulos como
     // menu-generator (tools 'menu.*') matcheen aunque el name del módulo y el
     // prefijo de la tool no coincidan literalmente — sin renombrar nada.
@@ -470,7 +470,7 @@ class AiGatewayModule extends BaseModule {
     const registry = this.moduleLoader?.toolsRegistry;
     if (!registry?.get) return [];
     const out = [];
-    for (const name of ['crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas']) {
+    for (const name of ['crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista']) {
       const e = registry.get(name);
       if (e) out.push({ name: e.name, description: e.description, parameters: e.parameters });
     }

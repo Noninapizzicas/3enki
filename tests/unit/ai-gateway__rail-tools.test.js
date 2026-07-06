@@ -12,7 +12,7 @@
 const assert = require('assert');
 const Mod = require('../../modules/conversacion/ai-gateway/index.js');
 
-const RAIL = ['crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas'];
+const RAIL = ['crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista'];
 
 function gateway({ withRail = true } = {}) {
   const m = new Mod();

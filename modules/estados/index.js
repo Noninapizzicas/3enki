@@ -33,7 +33,7 @@ class EstadosReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'estados';
-    this.version = 'reflejo-0.2.0';
+    this.version = 'reflejo-0.3.0';
   }
 
   onCrearRequest(e)      { return this._atender(e, 'crear', 'estados.crear.response', d => this._crear(d)); }
@@ -84,6 +84,16 @@ class EstadosReflejo extends ModuloHibridoReflejo {
     // lista todas + activa; si piden activar una por id, la activa de paso.
     if (a.activar) { const r = await this._activar({ project_id: a.project_id, lista_id: a.activar }); if (r.status !== 200) return r; }
     return this._listar({ project_id: a.project_id });
+  }
+
+  // borrar una lista: por id (de ver_listas) o la ACTIVA si no se da id. Cierra el ciclo
+  // de gestión del LLM (crear · añadir · completar · ver · BORRAR) — el rumbo terminado se retira.
+  async handleBorrarListaTool(args) {
+    const a = args || {};
+    let id = a.lista_id;
+    if (!id) { const est = await this._estado({ project_id: a.project_id }); id = est.data && est.data.lista && est.data.lista.id; }
+    if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'no hay lista que borrar (ni id ni activa)');
+    return this._borrar({ project_id: a.project_id, lista_id: id });
   }
 
   // ── store (single-writer) ──

@@ -167,7 +167,29 @@ CADDYUNIT
     systemctl daemon-reload
 fi
 
-# ---- 3b. Docker (OPT-IN — aislamiento en contenedor del ejecutor) ----
+# ---- 3a-bis. fastCRW — motor de datos web (Rust NATIVO, :3002) ----
+# Binario estático de una pieza (no docker). Da datos web frescos al bus (scrape/extract/map:
+# precio/cantidad/formato de ingredientes de soysuper, etc.). Idempotente: si el binario ya
+# está, NO recompila. Guardado: si falla (sin toolchain/red), el core sigue y el módulo
+# fastcrw degrada honesto (UPSTREAM_UNREACHABLE). El /search (SearXNG) es aparte y opcional.
+log "fastCRW (crw-server, Rust nativo)..."
+if command -v crw-server &>/dev/null || [ -x /usr/local/bin/crw-server ]; then
+    log "crw-server ya instalado ($(/usr/local/bin/crw-server --version 2>/dev/null || echo ok))"
+elif bash "${REPO_DIR}/deployment/fastcrw/install.sh" > /dev/null 2>&1; then
+    log "crw-server compilado e instalado en /usr/local/bin"
+else
+    warn "fastCRW: install.sh falló (¿sin toolchain Rust o red?). El módulo fastcrw degradará a UPSTREAM_UNREACHABLE hasta instalarlo."
+fi
+if [ -x /usr/local/bin/crw-server ]; then
+    if cp "${REPO_DIR}/deployment/fastcrw/crw-server.service" /etc/systemd/system/ \
+       && systemctl daemon-reload && systemctl enable --now crw-server > /dev/null 2>&1; then
+        log "crw-server activo en :3002"
+    else
+        warn "crw-server instalado pero el servicio no arrancó (revisa: journalctl -u crw-server -f)"
+    fi
+fi
+
+# ---- 3b. Docker (OPT-IN — aislamiento en contenedor del ejecutor + herramientas Python) ----
 # El módulo `ejecutor` (puerta guardada) puede correr comandos aislados en un contenedor
 # efímero pidiendo aislamiento:'contenedor'. Sin docker, degrada HONESTO (503, no cae a
 # local). Para habilitar la contención REAL de input no-confiable, instala docker y mete al
@@ -198,6 +220,23 @@ if [ "${ENKI_ENABLE_DOCKER:-0}" = "1" ]; then
         DOCKER_IMG="${ENKI_DOCKER_IMAGE:-node:20-slim}"
         log "Pre-bajando imagen base ${DOCKER_IMG}..."
         docker pull "${DOCKER_IMG}" > /dev/null 2>&1 || warn "No se pudo pre-bajar ${DOCKER_IMG} (se bajará al primer uso)"
+
+        # Hogar de herramientas Python: imagen enki-python-tools (para el ejecutor con
+        # aislamiento:'contenedor' + contenedor_imagen) — cero código, la reja sigue.
+        log "Construyendo imagen enki-python-tools..."
+        docker build -t enki-python-tools "${REPO_DIR}/deployment/python-tools/" > /dev/null 2>&1 \
+            && log "enki-python-tools lista" \
+            || warn "No se pudo construir enki-python-tools (revisa: docker build deployment/python-tools/)"
+
+        # Headroom — proxy de compresión de contexto (:8787). Baja el modelo Kompress al 1er
+        # arranque (tarda). El core lo usa solo si el interruptor 'headroom' se enciende (OFF por defecto).
+        HR_COMPOSE="${REPO_DIR}/deployment/python-tools/docker-compose.headroom.yml"
+        if [ -f "$HR_COMPOSE" ]; then
+            log "Levantando Headroom (proxy de compresión, :8787)..."
+            docker compose -f "$HR_COMPOSE" up -d --build > /dev/null 2>&1 \
+                && log "Headroom arriba (verifica: curl http://127.0.0.1:8787/livez)" \
+                || warn "Headroom no arrancó (revisa: docker compose -f $HR_COMPOSE logs)"
+        fi
     fi
 else
     warn "Docker NO habilitado. Para el aislamiento en contenedor del ejecutor: ENKI_ENABLE_DOCKER=1 sudo ./vps-setup.sh"
@@ -322,6 +361,9 @@ Environment=EVENT_CORE_PORT=3000
 Environment=EVENT_CORE_BROKER_PORT=1883
 Environment=EVENT_CORE_LOG_LEVEL=info
 Environment=CONVERSATION_EXPORT_TOKEN=nonina
+# Proxy de compresión Headroom (:8787, si está levantado con --docker). El core solo lo
+# usa cuando el interruptor 'headroom' está ON (OFF por defecto) → aquí es inofensivo.
+Environment=HEADROOM_PROXY_URL=http://localhost:8787
 # HOME escribible para Chrome (open-wa): su HOME real (/var/www, de www-data) queda
 # de solo-lectura con ProtectSystem=strict, y Chrome necesita escribir config/caché/
 # crashpad. Apuntamos HOME a un dir bajo data/ (sí escribible vía ReadWritePaths).
@@ -435,6 +477,16 @@ echo "  Servicios:"
 echo "    enki           → node index.js (localhost:3000)"
 echo "    enki-frontend  → SvelteKit (localhost:3001)"
 echo "    caddy          → reverse proxy"
+if [ -x /usr/local/bin/crw-server ]; then
+    echo "    crw-server     → fastCRW datos web (localhost:3002)"
+fi
+if [ "${ENKI_ENABLE_DOCKER:-0}" = "1" ] && command -v docker &>/dev/null; then
+    echo "    headroom       → proxy compresión (docker, localhost:8787)"
+fi
+echo ""
+echo "  Para activar (panel Interruptores 🎛️, grupo sistema — nacen OFF a propósito):"
+echo "    headroom       → comprimir contexto al LLM (ahorro de tokens)"
+echo "    ejecutor       → shell guardado; con enki-python-tools = herramientas Python aisladas"
 echo ""
 
 if [ "$MODE" = "domain" ]; then

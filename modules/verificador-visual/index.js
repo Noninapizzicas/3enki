@@ -20,8 +20,18 @@
  * canónico lo capta la homeostasis (sensor de *.failed) → el cuerpo siente cuándo
  * produce un diseño roto sin que nadie se lo diga.
  *
+ * MULTI-ÁNGULO (v1.1.0, cosechado del ui-test de Browserbase — funcional/adversarial/a11y):
+ *   dos severidades. motivos[] = HARD (bloquea 422; los de siempre: consola/js/overflow/
+ *   blanco/img-rota, SIN regresión). avisos[] = SOFT (surfaced, NO bloquea): ángulo
+ *   RESPONSIVE (overflow_movil) + ACCESIBILIDAD (img_sin_alt · lang_ausente · texto_ilegible
+ *   · contraste_bajo). ok = motivos vacíos (invariante: el freno bloquea exactamente lo mismo).
+ *   Los avisos se surfacean SIEMPRE (aun con render OK) → la propiocepción los ve; un caller
+ *   (p.ej. carta-digital, PWA de móvil) puede promover un aviso a bloqueo. Graduado: exponer
+ *   antes que enforcer. SECUENCIAL (una sesión de navegador): cabe en un VPS de 1-2GB; el
+ *   fan-out paralelo de ui-test pide una caja mayor y queda fuera por la RAM.
+ *
  * Puerta (RPC del bus):
- *   render.verificar.request { html, etiqueta? } → { ok, verificado, motivos[], metricas }
+ *   render.verificar.request { html, etiqueta? } → { ok, verificado, motivos[], avisos[], metricas }
  */
 
 'use strict';
@@ -33,8 +43,12 @@ const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 const DEFAULTS = {
   timeout_ms: 15000,
   viewport: { width: 1280, height: 900 },
+  viewport_movil: { width: 390, height: 844 },   // ángulo responsive: la carta debe leerse en el móvil
   max_overflow_px: 4,      // tolerancia de scroll horizontal antes de declarar overflow
   min_text_len: 12,        // menos texto que esto = página en blanco
+  min_font_px: 10,         // texto por debajo de esto = ilegible (a11y)
+  contrast_min: 4.5,       // WCAG AA para texto normal (a11y)
+  a11y_scan_max: 60,       // tope de elementos que escanea el sampler de contraste (no reventar la página)
   executable_path: null    // si se fija, manda; si no, _resolverChromium busca
 };
 
@@ -57,7 +71,7 @@ class VerificadorVisualModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'verificador-visual';
-    this.version = '1.0.0';
+    this.version = '1.1.0';
     this.config = null;
     this._chromium = null;     // ruta resuelta (o null = sin ojos)
   }
@@ -109,28 +123,55 @@ class VerificadorVisualModule extends ModuloHibridoReflejo {
       return { status: 200, data: { ok: false, verificado: true, motivos: ['render_error'], detalle: err.message, metricas: null } };
     }
 
-    const { ok, motivos } = this._evaluarSnapshot(snapshot, this.config);
-    const data = { ok, verificado: true, motivos, metricas: snapshot };
+    const { ok, motivos, avisos } = this._evaluarSnapshot(snapshot, this.config);
+    const data = { ok, verificado: true, motivos, avisos, metricas: snapshot };
     if (ok) {
       this.metrics?.increment?.('verificador-visual.ok.total');
-      this._emit('render.verificado', { etiqueta, metricas: snapshot });
+      this._emit('render.verificado', { etiqueta, avisos, metricas: snapshot });
     } else {
       this.metrics?.increment?.('verificador-visual.roto.total');
-      this._emit('verificacion-visual.failed', { etiqueta, ok: false, motivos });  // .failed → lo siente la homeostasis
+      this._emit('verificacion-visual.failed', { etiqueta, ok: false, motivos, avisos });  // .failed → lo siente la homeostasis
+    }
+    // los ángulos SOFT (a11y/móvil) se surfacean SIEMPRE que existan, aunque el render pase —
+    // así la propiocepción los ve sin que bloqueen el freno (exponer antes que enforcer).
+    if (avisos.length) {
+      this.metrics?.increment?.('verificador-visual.avisos.total', { n: avisos.length });
+      this._emit('verificacion-visual.avisos', { etiqueta, ok, avisos });
     }
     return { status: 200, data };
   }
 
   // ── CEREBRO: función PURA. Métricas del DOM → veredicto. Cero navegador aquí. ──
+  // DOS niveles de severidad (patrón graduado, cosechado de ui-test de Browserbase —
+  // funcional/adversarial/accesibilidad): motivos = HARD (bloquea, 422; los de siempre,
+  // sin regresión) · avisos = SOFT (surfaced, NO bloquea; los ángulos nuevos a11y+móvil).
+  // ok = motivos vacíos (INVARIANTE: el freno sigue bloqueando exactamente lo mismo).
+  // Un caller (p.ej. carta-digital, PWA de móvil) puede ELEGIR promover un aviso a bloqueo.
   _evaluarSnapshot(s, cfg = DEFAULTS) {
     const motivos = [];
+    const avisos = [];
+    const overflowTol = cfg.max_overflow_px ?? DEFAULTS.max_overflow_px;
+
+    // ── ángulo FUNCIONAL (HARD, los de siempre) ──
     if (Array.isArray(s.consoleErrors) && s.consoleErrors.length) motivos.push('errores_consola');
     if (Array.isArray(s.pageErrors) && s.pageErrors.length) motivos.push('errores_js');
     if (typeof s.scrollWidth === 'number' && typeof s.clientWidth === 'number' &&
-        s.scrollWidth > s.clientWidth + (cfg.max_overflow_px ?? DEFAULTS.max_overflow_px)) motivos.push('overflow_horizontal');
+        s.scrollWidth > s.clientWidth + overflowTol) motivos.push('overflow_horizontal');
     if (typeof s.textLength === 'number' && s.textLength < (cfg.min_text_len ?? DEFAULTS.min_text_len)) motivos.push('pagina_en_blanco');
     if (typeof s.imgRoto === 'number' && s.imgRoto > 0) motivos.push('imagenes_rotas');
-    return { ok: motivos.length === 0, motivos };
+
+    // ── ángulo RESPONSIVE (SOFT): ¿se sale del ancho en el móvil? ──
+    if (s.movil && typeof s.movil.scrollWidth === 'number' && typeof s.movil.clientWidth === 'number' &&
+        s.movil.scrollWidth > s.movil.clientWidth + overflowTol) avisos.push('overflow_movil');
+
+    // ── ángulo ACCESIBILIDAD (SOFT): alt, lang, legibilidad, contraste ──
+    const a = s.a11y || {};
+    if (typeof a.imgSinAlt === 'number' && a.imgSinAlt > 0) avisos.push('img_sin_alt');
+    if (a.langAusente === true) avisos.push('lang_ausente');
+    if (typeof a.textoIlegible === 'number' && a.textoIlegible > 0) avisos.push('texto_ilegible');
+    if (typeof a.contrasteBajo === 'number' && a.contrasteBajo > 0) avisos.push('contraste_bajo');
+
+    return { ok: motivos.length === 0, motivos, avisos };
   }
 
   // ── OJOS: abre Chromium (puppeteer-core, ya en el repo) y mide el DOM ──
@@ -160,7 +201,59 @@ class VerificadorVisualModule extends ModuloHibridoReflejo {
           imgRoto
         };
       });
-      return { consoleErrors, pageErrors, ...dom };
+
+      // ── ángulo ACCESIBILIDAD (a11y): alt · lang · legibilidad · contraste (sampler acotado) ──
+      const a11y = await page.evaluate((minFontPx, contrastMin, scanMax) => {
+        const parseRGB = (s) => {
+          const m = /rgba?\(([^)]+)\)/.exec(s || '');
+          if (!m) return null;
+          const p = m[1].split(',').map(x => parseFloat(x.trim()));
+          if (p.length < 3 || p.some(Number.isNaN)) return null;
+          return { r: p[0], g: p[1], b: p[2], a: p.length >= 4 ? p[3] : 1 };
+        };
+        const lum = ({ r, g, b }) => {
+          const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+          return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+        };
+        const ratio = (fg, bg) => { const L1 = lum(fg), L2 = lum(bg), hi = Math.max(L1, L2), lo = Math.min(L1, L2); return (hi + 0.05) / (lo + 0.05); };
+        const bgSolido = (el) => {                       // sube por padres hasta un fondo opaco; defensivo → blanco
+          let n = el;
+          while (n && n !== document.documentElement) {
+            const c = parseRGB(getComputedStyle(n).backgroundColor);
+            if (c && c.a >= 0.95) return c;
+            n = n.parentElement;
+          }
+          const cd = parseRGB(getComputedStyle(document.documentElement).backgroundColor);
+          return (cd && cd.a >= 0.95) ? cd : { r: 255, g: 255, b: 255, a: 1 };
+        };
+        let imgSinAlt = 0;
+        for (const img of Array.from(document.images)) if (!img.hasAttribute('alt')) imgSinAlt++;   // alt="" decorativo es válido
+        const langAusente = !document.documentElement.getAttribute('lang');
+        let textoIlegible = 0, contrasteBajo = 0, escaneados = 0;
+        const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_ELEMENT);
+        let el;
+        while ((el = walker.nextNode()) && escaneados < scanMax) {
+          const propio = Array.from(el.childNodes).some(n => n.nodeType === 3 && n.textContent.trim().length > 0);
+          if (!propio) continue;                         // solo elementos con texto PROPIO
+          if (el.offsetParent === null && el !== document.body) continue;   // invisible
+          const cs = getComputedStyle(el);
+          escaneados++;
+          const fs = parseFloat(cs.fontSize);
+          if (!Number.isNaN(fs) && fs < minFontPx) textoIlegible++;
+          const fg = parseRGB(cs.color);
+          if (fg && fg.a >= 0.95 && ratio(fg, bgSolido(el)) < contrastMin) contrasteBajo++;
+        }
+        return { imgSinAlt, langAusente, textoIlegible, contrasteBajo, escaneados };
+      }, this.config.min_font_px, this.config.contrast_min, this.config.a11y_scan_max);
+
+      // ── ángulo RESPONSIVE: re-mide el overflow en viewport móvil (reflow, misma página) ──
+      let movil = null;
+      try {
+        await page.setViewport(this.config.viewport_movil);
+        movil = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth }));
+      } catch (_) { /* móvil best-effort */ }
+
+      return { consoleErrors, pageErrors, ...dom, a11y, movil };
     } finally {
       if (browser) { try { await browser.close(); } catch (_) { /* */ } }
     }

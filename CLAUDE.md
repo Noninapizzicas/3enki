@@ -15370,6 +15370,12 @@ LA MANO QUE ESCRIBE (v0.2.0)  el diseño decía "el LLM PROPONE · el reflejo SO
   LLM de cualquier conversación invoca; los args llegan enriquecidos con project_id del contexto
   (ai-gateway._executeToolCall, ~L2131) → el LLM trabaja sobre la ACTIVA sin manejar UUIDs. Lazo cerrado:
   crear_lista escribe → el nervio la lee → el rumbo vive en la cúpula, no en la memoria del hilo.
+UNIVERSALIDAD DE LAS TOOLS (ai-gateway 2.29.0)  verificado en vivo por el chat: una página blueprint (con
+  cajones) NO recibía las tools de módulo (el LLM decía "NO TENGO crear_lista" e improvisaba con fs.write a
+  /prueba-rail.json). _getTools filtra por page_id: blueprint → universales+cajones · página → GLOBAL_TOOLS+prefijos.
+  Las tools de módulo quedaban fuera de TODA página real (solo entraban en el chat plano page_id:null). Cura:
+  _railToolsFromRegistry() pulla las 4 del toolsRegistry y las inyecta en las ramas blueprint; + añadidas a
+  GLOBAL_TOOLS. El rail es universal por diseño → sus tools son globales como fs. Si estados no cargó → [] (no-op).
 TESTS  estados__cupula (17: crear libre/estricto · freno atasca y libera · instanciar servicio/uso_temporal ·
        avanzar-en-libre 409 · marcar · activa=nervio · borrar · + las 4 tools crear/anadir/completar/ver).
        Gate híbridos 11/0 (sin blueprint, sin colisión).

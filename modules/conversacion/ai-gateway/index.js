@@ -380,7 +380,12 @@ class AiGatewayModule extends BaseModule {
     if (page_id && this.blueprintModules.has(page_id)) {
       const bp = this.blueprintModules.get(page_id);
       const universal = this._getBlueprintUniversalTools();
-      if (!bp.cajonesEnabled) return universal;
+      // El RAIL VIVO (cúpula de estados) es UNIVERSAL: sus tools deben estar en TODA
+      // conversación, también en páginas blueprint, para que el rumbo pueda escribirse
+      // desde cualquier lado (el nervio ya LEE la activa en todas). Se pulla del registry
+      // (fuente única = estados/module.json); si estados no cargó, [] → no-op seguro.
+      const rail = this._railToolsFromRegistry();
+      if (!bp.cajonesEnabled) return [...universal, ...rail];
       // Cajones-enabled: catalogo + nav tools (page.related, chat.cambiar_foco)
       // + universales. Las nav vienen desde toolsRegistry (declaradas en
       // module.json.tools[] de ai-gateway, single source v1.2) — no duplicamos
@@ -392,7 +397,7 @@ class AiGatewayModule extends BaseModule {
         const entry = registry?.get?.(navName);
         if (entry) navTools.push({ name: entry.name, description: entry.description, parameters: entry.parameters });
       }
-      return [...this._getCajonesTools(), ...navTools, ...universal];
+      return [...this._getCajonesTools(), ...navTools, ...universal, ...rail];
     }
     if (!page_id) return all;
     // Construcción lazy del mapa page_id → prefijos válidos. La primera vez que
@@ -401,7 +406,10 @@ class AiGatewayModule extends BaseModule {
     // Tools globales que SIEMPRE se exponen al LLM principal aunque haya page_id activo.
     // Necesarias para que el LLM pueda delegar a agentes (invoke_agent), leer ficheros
     // del proyecto (fs.read), etc., independientemente de en qué módulo esté.
-    const GLOBAL_TOOLS = new Set(['invoke_agent', 'fs.read', 'fs.write', 'fs.list', 'fs.search']);
+    // + las tools del RAIL VIVO (cúpula de estados): universales por diseño (el rumbo se
+    //   escribe desde cualquier página, como el nervio lo lee en todas).
+    const GLOBAL_TOOLS = new Set(['invoke_agent', 'fs.read', 'fs.write', 'fs.list', 'fs.search',
+      'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas']);
     // Prefijos de tools válidos para este page_id. Permite que módulos como
     // menu-generator (tools 'menu.*') matcheen aunque el name del módulo y el
     // prefijo de la tool no coincidan literalmente — sin renombrar nada.
@@ -452,6 +460,21 @@ class AiGatewayModule extends BaseModule {
       if (b.name === 'invoke_agent') return 1;
       return 0;
     });
+  }
+
+  // Tools del RAIL VIVO (cúpula de estados), pulladas del toolsRegistry (fuente única =
+  // estados/module.json). Universales: se inyectan en TODA conversación (blueprint o no)
+  // para que el LLM pueda ESCRIBIR el rumbo (el nervio ya lo LEE en todas). Si estados no
+  // está cargado/registrado, devuelve [] → no-op seguro (no rompe ninguna rama de _getTools).
+  _railToolsFromRegistry() {
+    const registry = this.moduleLoader?.toolsRegistry;
+    if (!registry?.get) return [];
+    const out = [];
+    for (const name of ['crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas']) {
+      const e = registry.get(name);
+      if (e) out.push({ name: e.name, description: e.description, parameters: e.parameters });
+    }
+    return out;
   }
 
   // ============================================================

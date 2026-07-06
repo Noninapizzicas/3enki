@@ -14876,7 +14876,7 @@ COSECHA v2: VoltAgent/08-business-product (assumption-mapping·product-manager·
 > TODA la abundancia — skills de cualquier fuente (destilador, ECC/VoltAgent, un .md suelto) —
 > buscable pero NO inyectada. La cúpula queda VIVA porque la cantera absorbe lo demás. **Sumar, no
 > restar:** la abundancia bien alojada no es ruido, es MUNICIÓN (el conserje ofrece; planificador
-> ensambla). Módulos: `modules/cosecha/` (0.10.0) · `modules/planificador/` (0.1.0) · cuenco 2.3.0.
+> ensambla). Módulos: `modules/cosecha/` (0.11.0) · `modules/planificador/` (0.1.0) · cuenco 2.3.0.
 
 ## El órgano cosecha/CANTERA (reflejo puro)
 

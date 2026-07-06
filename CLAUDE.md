@@ -15491,6 +15491,15 @@ CLASE AiAgentFrameworkModule (ampliación 2.1.0) {
   (analistas/auditores que solo declaraban Read/Grep/Glob). agent.tools = nombres filtrados contra getToolsForAI →
   un agente encendido recibe SUS tools reales. (La razón de no copiar tal cual NO era 'tool-use roto' — era que
   Read/Bash son nombres de Claude Code, no del bus.)
+✓ DESPLEGADO + VERIFICADO EN VIVO (2026-07-06 · proyecto 1a): buscar_agente → biblioteca:183 · backend-developer
+  activo:false con tools:5 (fs.read/write/edit/list/search, Bash caído) → activar → {activado:true, activos:1} en
+  caliente → desactivar → activos:0. El mapeo y los 154 corren en producción; ciclo idéntico al de los nativos,
+  sin residuo.
+SHELL PARA AGENTES (siguiente deliberado, NO hecho)  darles Bash = exponer ejecutor.ejecutar como tool de agente.
+  Es un paso aparte por diseño: la reja del ejecutor NACE OFF (interruptor 'ejecutor', grupo sistema, default OFF →
+  puerta_cerrada 503). Aunque se expusiera, ningún agente correría un comando hasta que el humano encienda el
+  interruptor (decisión consciente, con testigo ejecutor.invocado→propiocepción, revocable en caliente). Por eso el
+  poder de ejecutar no se cuela por default: se concede.
 TESTS  agentes__cupula-biblioteca (15: biblioteca ≥180 · 154 VoltAgent aparcados+buscables+activables+tools mapeadas ·
        agents=0 · escandallo→escandallo-analyzer OFF · filtro dominio · obsoletos fuera · buscar_agente registrada+response ·
        activar/desactivar confirmation · _activar entra en agents+invoke_agent · persiste y sobrevive recarga ·

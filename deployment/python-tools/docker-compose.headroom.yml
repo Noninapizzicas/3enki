@@ -1,0 +1,34 @@
+# Headroom — proxy de compresión de contexto delante del ai-gateway.
+#
+# Levantar:  docker compose -f deployment/python-tools/docker-compose.headroom.yml up -d
+# Verificar: curl http://127.0.0.1:8787/livez   → {"status":"healthy"}
+#
+# Cablear Enki (una env en el arranque del core):
+#   HEADROOM_PROXY_URL=http://localhost:8787
+# y encender el interruptor 'headroom' (panel/sistema, OFF por defecto). El provider
+# deepseek-anthropic/anthropic (config.headroom:true) enruta por el proxy en caliente.
+# Fallback seguro: interruptor OFF o proxy caído → proveedor directo.
+
+services:
+  headroom:
+    build:
+      context: ./headroom
+      dockerfile: Dockerfile
+    image: enki-headroom
+    container_name: enki-headroom
+    ports:
+      - "127.0.0.1:8787:8787"   # solo localhost: lo consume el core, no la web
+    environment:
+      # El upstream REAL al que Headroom reenvía el tráfico wire-Anthropic.
+      # deepseek expone endpoint Anthropic-compatible; sobre Claude real: quítalo (default api.anthropic.com).
+      - ANTHROPIC_TARGET_API_URL=https://api.deepseek.com/anthropic
+      # token = prioriza compresión (máximo ahorro). cache = congela turnos previos (prefix-cache).
+      - HEADROOM_MODE=token
+      - HEADROOM_HOST=0.0.0.0
+      - HEADROOM_PORT=8787
+    volumes:
+      - headroom-cache:/cache      # modelo Kompress + memorias (persistente entre reinicios)
+    restart: unless-stopped
+
+volumes:
+  headroom-cache:

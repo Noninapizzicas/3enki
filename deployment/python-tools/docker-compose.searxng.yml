@@ -1,0 +1,24 @@
+# SearXNG — backend de búsqueda para el /search de crw-server (OPCIONAL).
+#
+# Solo hace falta si quieres la tool `fastcrw.search` (búsqueda de palabra-clave
+# en la web abierta). scrape/extract/map NO lo necesitan. SearXNG es Python → va
+# en Docker, aislado, mientras crw-server sigue nativo en el VPS y le apunta.
+#
+# Levantar:  docker compose -f deployment/python-tools/docker-compose.searxng.yml up -d
+# Cablear:   descomenta CRW_SEARCH__SEARXNG_URL=http://127.0.0.1:8080 en
+#            deployment/fastcrw/crw-server.service y `systemctl restart crw-server`.
+
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: enki-searxng
+    ports:
+      - "127.0.0.1:8080:8080"   # solo localhost: lo consume crw-server, no la web
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+    volumes:
+      - searxng-data:/etc/searxng
+    restart: unless-stopped
+
+volumes:
+  searxng-data:

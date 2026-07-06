@@ -1,0 +1,102 @@
+{
+  "name": "fastcrw",
+  "version": "0.1.0",
+  "description": "El PUENTE a fastCRW: envuelve el API REST del motor crw-server (Rust, self-hosted nativo en el VPS, http://localhost:3002/v1/*) como tools_http del bus. Da a Enki datos web frescos DENTRO del runtime (hoy solo hay WebSearch en sesiones de Claude, nada en el bus). Motiva el caso: fuente de precio/cantidad/formato de ingredientes (soysuper) para escandallo, reemplazo del API de Mercadona no oficial y frágil. El self-host local NO pide auth (auth_type none). Docker-free y cloud-free: el binario Rust corre nativo; el /search (SearXNG) es opcional y vive aparte. scrape/extract funcionan SOLO con el binario. Cambiar de host/puerto = editar la url del manifest (o apuntar a la cloud con auth bearer).",
+  "author": "enki",
+  "language": "javascript",
+  "main": "index.js",
+  "horizonte": "acceso web en el bus — datos frescos para agentes (precios de ingredientes, scraping, extracción estructurada)",
+  "eventos_publicados": [],
+  "eventos_que_escucho": [],
+  "tools_http": [
+    {
+      "name": "fastcrw.scrape",
+      "description": "Descarga una URL y devuelve su contenido limpio en markdown. Para leer una página web concreta (ficha de producto, artículo) como texto.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "description": "URL absoluta de la página a leer." }
+        },
+        "required": ["url"]
+      },
+      "http": {
+        "method": "POST",
+        "url": "http://localhost:3002/v1/scrape",
+        "auth_type": "none",
+        "body_template": { "url": "{{url}}", "formats": ["markdown"] },
+        "response_path": "data.markdown",
+        "timeout_ms": 60000
+      },
+      "errores_conocidos": ["UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "INVALID_INPUT"]
+    },
+    {
+      "name": "fastcrw.extract",
+      "description": "Extrae JSON estructurado de una URL según un esquema. Para sacar campos concretos de una ficha (ej. {nombre, marca, cantidad, formato, precio, precio_unitario} de un producto de supermercado).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "description": "URL absoluta de la página de la que extraer." },
+          "schema": { "type": "object", "description": "JSON Schema que describe la forma de la salida deseada." }
+        },
+        "required": ["url", "schema"]
+      },
+      "http": {
+        "method": "POST",
+        "url": "http://localhost:3002/v1/scrape",
+        "auth_type": "none",
+        "body_template": { "url": "{{url}}", "formats": ["json"], "jsonOptions": { "schema": "{{schema}}" } },
+        "response_path": "data.json",
+        "timeout_ms": 90000
+      },
+      "errores_conocidos": ["UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "INVALID_INPUT", "UPSTREAM_INVALID_RESPONSE"]
+    },
+    {
+      "name": "fastcrw.search",
+      "description": "Busca en la web una query y devuelve los resultados (título, url, snippet). REQUIERE SearXNG configurado en crw-server (CRW_SEARCH__SEARXNG_URL); sin él devuelve 503. Para descubrir páginas cuando no conoces la URL.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Consulta de búsqueda." },
+          "limit": { "type": "integer", "description": "Máximo de resultados (default 5)." }
+        },
+        "required": ["query"]
+      },
+      "http": {
+        "method": "POST",
+        "url": "http://localhost:3002/v1/search",
+        "auth_type": "none",
+        "body_template": { "query": "{{query}}", "limit": "{{limit}}" },
+        "response_path": "data",
+        "timeout_ms": 60000
+      },
+      "errores_conocidos": ["UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "UPSTREAM_INVALID_RESPONSE"]
+    },
+    {
+      "name": "fastcrw.map",
+      "description": "Descubre las URLs de un dominio o sección. Para listar las fichas de una categoría antes de extraerlas.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "description": "URL raíz del dominio o sección a mapear." },
+          "limit": { "type": "integer", "description": "Máximo de URLs (default 50)." }
+        },
+        "required": ["url"]
+      },
+      "http": {
+        "method": "POST",
+        "url": "http://localhost:3002/v1/map",
+        "auth_type": "none",
+        "body_template": { "url": "{{url}}", "limit": "{{limit}}" },
+        "timeout_ms": 60000
+      },
+      "errores_conocidos": ["UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "INVALID_INPUT"]
+    }
+  ],
+  "config": {
+    "base_url": "http://localhost:3002/v1",
+    "nota_despliegue": "crw-server corre NATIVO en el VPS (ver deployment/fastcrw/). Puerto 3002 para no chocar con el core (3000). El /search necesita SearXNG (opcional; ver deployment/python-tools/). Para usar la cloud: cambiar las url a https://api.fastcrw.com/v1/* y auth_type a 'bearer' con credential_id FASTCRW."
+  },
+  "dependencies": {
+    "crw-server": "motor fastCRW nativo en localhost:3002 (deployment/fastcrw/) — sin él las tools devuelven UPSTREAM_UNREACHABLE, sin reventar"
+  }
+}

@@ -41,9 +41,12 @@ recetas.validar, escandallo.validar…). Si Headroom se come algo que rompe la s
 
 ## Fases graduadas (riesgo creciente, como el ejecutor)
 ```
-FASE 0  PROVISIONING (VPS)   pip install "headroom-ai[all]" + modelo Kompress; proxy como
-                             servicio systemd; verificar que proxya el wire Anthropic (deepseek+claude).
-                             Coste real: el modelo corre local (CPU/mem) → quizá en su contenedor (docker).
+FASE 0  PROVISIONING (VPS)   HECHO (Docker) — deployment/python-tools/headroom/ (Dockerfile +
+                             docker-compose.headroom.yml). `pip install "headroom-ai[all]"`, proxy
+                             en :8787, upstream por ANTHROPIC_TARGET_API_URL (deepseek /anthropic o
+                             Claude real). Cablear: HEADROOM_PROXY_URL=http://localhost:8787 + interruptor.
+                             Verificado contra headroom 0.30.0 (arranca, /livez healthy). El modelo corre
+                             en su contenedor (lo Python en Docker); Kompress se descarga al 1er arranque.
 FASE 1  SLICE ESTRECHO       AIGATEWAY_API_BASE__DEEPSEEK_ANTHROPIC → proxy, SOLO para una página
                              de bajo riesgo (un chat, no una op con freno). Medir (headroom dashboard).
 FASE 2  BLUEPRINT CON FRENO  una op que DA FORMA con freno (carta.generar/escandallo.calcular) por el

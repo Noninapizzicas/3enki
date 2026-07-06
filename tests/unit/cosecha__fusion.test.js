@@ -15,11 +15,12 @@ const assert = require('assert');
 const Mod = require('../../modules/cosecha');
 
 // cantera fija (sin tocar fs): pobla this._skills a mano, con tier.
-function nuevo({ semantica = null } = {}) {
+function nuevo({ semantica = null, hibrida = true } = {}) {
   const m = new Mod();
   m.logger = { info() {}, warn() {}, error() {}, debug() {} };
   m.metrics = { increment() {} };
   m.eventBus = { publish() {} };
+  m.hibrida = hibrida;   // por defecto ON en los tests de fusión; el gate se prueba aparte
   m._skills = new Map([
     ['coste-crecido', { nombre: 'coste-crecido', descripcion: 'costear precio margen', fuente: 'agente', dominio: 'escandallo', tags: [], tier: 'crecido' }],
     ['coste-semilla', { nombre: 'coste-semilla', descripcion: 'coste alimentario food cost', fuente: 'enki', dominio: 'escandallo', tags: [], tier: 'semilla' }],
@@ -62,6 +63,17 @@ test('boost de tier semilla: empate de rank → gana la semilla', async () => {
   assert.strictEqual(nombres[0], 'coste-semilla', 'la semilla sube por el boost de tier: ' + nombres.join(','));
 });
 
+test('boost de tier OFICIAL: una skill de equipo oficial sube igual que la semilla', async () => {
+  // dos skills que salen rank-0 en UNA lista cada una (mismo RRF): oficial en palabra, crecido en semántica.
+  const m = nuevo({ semantica: ['c-comunidad'] });
+  m._skills = new Map([
+    ['b-oficial', { nombre: 'b-oficial', descripcion: 'backend oficial vercel', fuente: 'vercel', dominio: 'dev', tags: [], tier: 'oficial' }],
+    ['c-comunidad', { nombre: 'c-comunidad', descripcion: 'backend comunidad', fuente: 'agente', dominio: 'dev', tags: [], tier: 'crecido' }]
+  ]);
+  const r = await m._buscarFusion({ query: 'oficial', limite: 3 });
+  assert.strictEqual(r.data.skills[0].nombre, 'b-oficial', 'la oficial sube por el source-tier boost: ' + r.data.skills.map(s => s.nombre));
+});
+
 test('DEGRADA honesto: semántica caída (_rpc null) → por:"palabras", solo palabra', async () => {
   const m = nuevo({ semantica: null });
   const r = await m._buscarFusion({ query: 'coste' });
@@ -75,10 +87,31 @@ test('DEGRADA honesto: índice vacío (resultados []) → por:"palabras"', async
   assert.strictEqual(r.data.por, 'palabras');
 });
 
-test('handleBuscarTool es async y enruta a la fusión', async () => {
-  const m = nuevo({ semantica: ['coste-crecido'] });
+test('handleBuscarTool con híbrida ON → enruta a la fusión', async () => {
+  const m = nuevo({ semantica: ['coste-crecido'], hibrida: true });
   const r = await m.handleBuscarTool({ query: 'coste' });
   assert.strictEqual(r.data.por, 'fusion');
+});
+
+test('GATE: híbrida OFF (default) → palabras puras, sin tocar la semántica', async () => {
+  let semLlamada = false;
+  const m = nuevo({ semantica: ['coste-crecido'], hibrida: false });
+  const rpcOrig = m._rpc;
+  m._rpc = async (ev, p, o) => { if (ev === 'cantera.buscar_semantica.request') semLlamada = true; return rpcOrig(ev, p, o); };
+  const r = await m.handleBuscarTool({ query: 'coste' });
+  assert.strictEqual(r.data.por, undefined, 'sin fusión: no marca por');
+  assert.strictEqual(semLlamada, false, 'OFF no llama a la cantera semántica (cero RPC)');
+  assert.ok(r.data.skills.length >= 1, 'sigue devolviendo resultados por palabras');
+});
+
+test('onInterruptorCambiado enciende/apaga en caliente', () => {
+  const m = nuevo({ hibrida: false });
+  m.onInterruptorCambiado({ data: { id: 'busqueda-hibrida', enabled: true } });
+  assert.strictEqual(m.hibrida, true);
+  m.onInterruptorCambiado({ data: { id: 'busqueda-hibrida', enabled: false } });
+  assert.strictEqual(m.hibrida, false);
+  m.onInterruptorCambiado({ data: { id: 'otro', enabled: true } });   // otro id no afecta
+  assert.strictEqual(m.hibrida, false);
 });
 
 test('cosecha.buscar (RPC del conserje) NO fusiona: se queda en palabras (sin `por`)', () => {

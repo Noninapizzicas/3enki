@@ -391,6 +391,13 @@ class CartaDigitalModule extends BaseModule {
       this.metrics?.increment?.('cartadigital.publicar.render_roto', { project: slug });
       return this._err(422, 'UPSTREAM_INVALID_RESPONSE', `la carta digital RENDERIZA rota (${(rd.motivos || []).join(', ')}) — NO publicada`);
     }
+    // carta-digital es una PWA de MÓVIL: una carta que se sale del ancho en el teléfono está
+    // ROTA para este canal (aunque el render de escritorio pase). Promovemos el aviso SOFT
+    // overflow_movil a BLOQUEO — el caller elige su severidad (verificador-visual v1.1.0).
+    if (rd && rd.verificado === true && Array.isArray(rd.avisos) && rd.avisos.includes('overflow_movil')) {
+      this.metrics?.increment?.('cartadigital.publicar.overflow_movil', { project: slug });
+      return this._err(422, 'UPSTREAM_INVALID_RESPONSE', 'la carta digital se SALE DEL ANCHO en móvil (overflow_movil) — NO publicada (es una PWA de móvil)');
+    }
 
     // Auto-activar la feature `www` (crea el symlink /opt/enki/public/<ns>/<slug> → storage/www)
     // ANTES de escribir → /<ns>/<slug> sirve sin paso manual. Best-effort e IDEMPOTENTE: si ya

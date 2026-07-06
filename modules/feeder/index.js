@@ -29,11 +29,22 @@ const path = require('path');
 const { execFile } = require('child_process');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
+// SEÑAL DE TIER: officialskills.sh = "agent skills by official dev teams, no AI-generated
+// filler" (tier curado). El feeder marca las skills que vienen de un equipo OFICIAL con
+// oficial:true → cosecha les da el source-tier boost en la fusión (curada/oficial > comunidad).
+// Allowlist curada y EDITABLE (seed, como la hardline del ejecutor): un owner desconocido cae
+// a comunidad — degrada honesto, nunca marca oficial por error. Fuente de verdad: officialskills.sh.
+const ORGS_OFICIALES = new Set([
+  'browserbase', 'anthropics', 'anthropic', 'vercel', 'vercel-labs', 'openai',
+  'stripe', 'github', 'cloudflare', 'supabase', 'prisma', 'huggingface',
+  'langchain-ai', 'mongodb', 'elastic', 'docker', 'shopify', 'netlify'
+]);
+
 class FeederReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'feeder';
-    this.version = '0.3.0';
+    this.version = '0.4.0';
   }
 
   onIngerirRequest(e)  { return this._atender(e, 'ingerir',  'feeder.ingerir.response',  d => this._ingerir(d)); }
@@ -70,17 +81,29 @@ class FeederReflejo extends ModuloHibridoReflejo {
     };
     if (fm.lente_dominio) skill.lente_dominio = fm.lente_dominio;   // hogar declarado, si viene
     if (fm.lente_tarea) skill.lente_tarea = fm.lente_tarea;
+    if (fm.oficial === 'true' || fm.oficial === true) skill.oficial = true;   // el propio SKILL.md lo declara
     return skill;
   }
 
+  // ── ¿el paquete viene de un equipo OFICIAL? owner del `owner/repo@skill` (o URL github) ∈ allowlist. ──
+  _esOficial(paquete) {
+    const p = String(paquete || '').trim();
+    let owner = '';
+    const url = /github\.com\/([^/]+)\//i.exec(p);
+    if (url) owner = url[1];
+    else { const seg = p.replace(/^https?:\/\//i, '').split('/'); owner = seg[0] ? seg[0].split('@')[0] : ''; }
+    return ORGS_OFICIALES.has(owner.toLowerCase());
+  }
+
   // ── INGERIR: la puerta universal. Cualquier SKILL.md externo → la cantera. ──
-  async _ingerir({ fuente, md, nombre } = {}) {
+  async _ingerir({ fuente, md, nombre, oficial } = {}) {
     if (!fuente || typeof fuente !== 'string') return this._invalid('fuente');
     if (!md || typeof md !== 'string') return this._invalid('md');
     const skill = this._parseMd(md, { nombreDefault: nombre || '' });
     if (!skill.nombre) {
       return this._errorResponse(400, 'INVALID_INPUT', 'el SKILL.md no declara name y no se pasó nombre', { field: 'name' });
     }
+    if (oficial === true) skill.oficial = true;   // el caller (instalar desde equipo oficial) lo eleva de tier
     const r = await this._rpc('cosecha.importar.request', { fuente, skills: [skill] });
     if (!r) return this._errorResponse(504, 'UPSTREAM_TIMEOUT', 'la cantera (cosecha) no respondió', { fuente });
     if (typeof r.status === 'number' && r.status >= 400) {
@@ -90,8 +113,10 @@ class FeederReflejo extends ModuloHibridoReflejo {
   }
 
   // ── INSTALAR: npx skills add <paquete> → lee el/los SKILL.md → ingiere. Degrada limpio. ──
-  async _instalar({ paquete, fuente } = {}) {
+  async _instalar({ paquete, fuente, oficial } = {}) {
     if (!paquete || typeof paquete !== 'string') return this._invalid('paquete');
+    // tier: explícito manda; si no, se deriva del owner del paquete (allowlist de equipos oficiales).
+    const esOficial = (oficial === true) || (oficial === undefined && this._esOficial(paquete));
     let dir;
     try { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feeder-')); }
     catch (err) { return this._errorResponse(500, 'UNKNOWN_ERROR', err.message, {}); }
@@ -110,11 +135,11 @@ class FeederReflejo extends ModuloHibridoReflejo {
       for (const md of mds) {
         let raw = '';
         try { raw = fs.readFileSync(md, 'utf-8'); } catch (_) { continue; }
-        const res = await this._ingerir({ fuente: fue, md: raw, nombre: path.basename(path.dirname(md)) });
+        const res = await this._ingerir({ fuente: fue, md: raw, nombre: path.basename(path.dirname(md)), oficial: esOficial });
         if (res.status === 200) ingeridas.push(res.data.ingerida);
         else fallidas.push({ md: path.relative(dir, md), motivo: (res.error && res.error.code) || 'error' });
       }
-      return { status: 200, data: { paquete, fuente: fue, ingeridas, fallidas } };
+      return { status: 200, data: { paquete, fuente: fue, oficial: esOficial, ingeridas, fallidas } };
     } finally {
       try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* best-effort */ }
     }

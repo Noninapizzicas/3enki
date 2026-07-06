@@ -47,18 +47,45 @@ class CosechaModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'cosecha';
-    this.version = '0.9.0';
+    this.version = '0.11.0';
     // nombre → { nombre, descripcion, fuente, dominio, tags:[], contenido }
     this._skills = new Map();
+    this.hibrida = false;   // interruptor 'busqueda-hibrida' — OFF por defecto (nace apagado)
   }
 
   async onLoad(context) {
     await super.onLoad(context);
     this._descubrir();
+    this._registrarBoton();
     this.logger?.info('cosecha.loaded', {
       module: this.name, version: this.version,
-      skills: this._skills.size, fuentes: this._fuentes().length
+      skills: this._skills.size, fuentes: this._fuentes().length, hibrida: this.hibrida
     });
+  }
+
+  // ── interruptor 'busqueda-hibrida': gate de la fusión RRF (palabras+significado+tier).
+  // OFF (default) → buscar_skill es palabras puras, como antes de la fusión: cero RPC a la
+  // semántica, cero boost de tier. Encenderlo es decisión consciente (patrón Enki, en caliente). ──
+  _registrarBoton() {
+    try {
+      this.eventBus?.publish?.('interruptor.registrar', {
+        id: 'busqueda-hibrida',
+        label: 'Búsqueda híbrida de skills (fusión palabras+significado+tier)',
+        grupo: 'aprendizaje',
+        descripcion: 'buscar_skill fusiona palabras (BM25) + significado (cantera semántica, si ON) + boost de tier (oficial/semilla). OFF = palabras puras, como siempre. Nace apagado.',
+        default: false
+      });
+    } catch (_) { /* best-effort */ }
+  }
+
+  onSolicitarRegistro() { this._registrarBoton(); }
+
+  onInterruptorCambiado(event) {
+    const d = (event && event.data) || event || {};
+    if (d.id === 'busqueda-hibrida') {
+      this.hibrida = !!d.enabled;
+      this.logger?.info?.('cosecha.hibrida.toggled', { hibrida: this.hibrida });
+    }
   }
 
   async onUnload() {
@@ -91,7 +118,7 @@ class CosechaModule extends ModuloHibridoReflejo {
         try { raw = fs.readFileSync(mdPath, 'utf-8'); }
         catch (_) { this.logger?.warn('cosecha.skill.sin_md', { fuente: f.name, skill: s.name }); continue; }
         const skill = this._parse(raw, { fuenteDefault: f.name, nombreDefault: s.name });
-        skill.tier = tier;   // semilla (curada) | crecido — para el source-tier boost de la fusión
+        skill.tier = skill.oficial ? 'oficial' : tier;   // oficial (equipo oficial de skills.sh) · semilla (curada) · crecido — source-tier boost
         this._skills.set(skill.nombre, skill);
       }
     }
@@ -122,6 +149,7 @@ class CosechaModule extends ModuloHibridoReflejo {
       // defecto y el conserje la ofrece para ACTIVAR (no solo leer). Opcional.
       lente_dominio: fm.lente_dominio || '',
       lente_tarea: fm.lente_tarea || '',
+      oficial: fm.oficial === 'true' || fm.oficial === true,   // tier: equipo oficial (source-tier boost)
       contenido: contenido.trim()
     };
   }
@@ -143,7 +171,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   // ── TOOLS del LLM de chat (LA SUPERFICIE): buscar y activar skills desde CUALQUIER
   // conversación. El grifo por el que el comerciante toca la cantera — realiza el
   // "¿cómo hago X?" de find-skills sobre nuestro catálogo interno. Devuelven {status,data}. ──
-  async handleBuscarTool(args)   { return this._buscarFusion(args || {}); }
+  async handleBuscarTool(args)   { return this.hibrida ? this._buscarFusion(args || {}) : this._buscar(args || {}); }
   async handlePromoverTool(args) { return this._promover(args || {}); }
 
   // ── el NERVIO del destilador: cuando SELLA una skill en una cúpula (memoria por
@@ -226,7 +254,7 @@ class CosechaModule extends ModuloHibridoReflejo {
     aportar(semNombres);
     for (const [n, sc] of fused) {
       const s = this._skills.get(n);
-      if (s && s.tier === 'semilla') fused.set(n, sc + TIER_BONUS);   // source-tier boost (gbrain)
+      if (s && (s.tier === 'semilla' || s.tier === 'oficial')) fused.set(n, sc + TIER_BONUS);   // source-tier boost (gbrain): curada/oficial > comunidad
     }
     const orden = [...fused.entries()].sort((a, b) => b[1] - a[1]).slice(0, lim);
     const skills = orden.map(([n]) => {
@@ -473,7 +501,7 @@ class CosechaModule extends ModuloHibridoReflejo {
   }
 
   // serializa una skill a SKILL.md (frontmatter + markdown). Reversible por _parse.
-  _serializar({ nombre, descripcion = '', fuente = '', dominio = '', tags = [], lente_dominio = '', lente_tarea = '', contenido = '' }) {
+  _serializar({ nombre, descripcion = '', fuente = '', dominio = '', tags = [], lente_dominio = '', lente_tarea = '', oficial = false, contenido = '' }) {
     const tagsStr = Array.isArray(tags) ? `[${tags.join(', ')}]` : String(tags || '');
     const fm = [
       '---',
@@ -484,6 +512,7 @@ class CosechaModule extends ModuloHibridoReflejo {
       `tags: ${tagsStr}`,
       ...(lente_dominio ? [`lente_dominio: ${lente_dominio}`] : []),   // hogar declarado (opcional)
       ...(lente_tarea ? [`lente_tarea: ${lente_tarea}`] : []),
+      ...(oficial === true ? ['oficial: true'] : []),                  // tier: equipo oficial (source-tier boost)
       '---',
       ''
     ].join('\n');

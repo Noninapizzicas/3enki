@@ -127,6 +127,38 @@ test('buscar: PARSEA candidatos (strip ANSI, id@skill + installs) ordenados desc
   assert.strictEqual(c[1].installs, 120000);
 });
 
+// ── señal de tier oficial (v0.4.0) ──
+test('esOficial: owner en la allowlist → true (varios formatos)', () => {
+  const m = make();
+  assert.strictEqual(m._esOficial('browserbase/skills@ui-test'), true);
+  assert.strictEqual(m._esOficial('anthropics/skills'), true);
+  assert.strictEqual(m._esOficial('https://github.com/vercel-labs/agent-skills/tree/main/x'), true);
+});
+
+test('esOficial: owner desconocido → false (degrada a comunidad, no marca por error)', () => {
+  const m = make();
+  assert.strictEqual(m._esOficial('randomdev/mis-skills@algo'), false);
+  assert.strictEqual(m._esOficial(''), false);
+});
+
+test('ingerir con oficial:true → cosecha.importar recibe skill.oficial=true', async () => {
+  const m = make();
+  await m._ingerir({ fuente: 'skills.sh', md: MD, oficial: true });
+  assert.strictEqual(m._importado.skills[0].oficial, true);
+});
+
+test('ingerir sin oficial → la skill NO lleva oficial (comunidad por defecto)', async () => {
+  const m = make();
+  await m._ingerir({ fuente: 'skills.sh', md: MD });
+  assert.notStrictEqual(m._importado.skills[0].oficial, true);
+});
+
+test('parseMd: un SKILL.md que declara oficial:true lo lee', () => {
+  const m = make();
+  const s = m._parseMd('---\nname: x\ndescription: d\noficial: true\n---\ncuerpo');
+  assert.strictEqual(s.oficial, true);
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

@@ -60,6 +60,26 @@ test('precio INVENTADO por el LLM (estimado_llm) → valid:false + PRECIO_INVENT
   assert.deepStrictEqual(r.data.precios_estimados, ['Mozzarella']);
 });
 
+test('precio SOYSUPER con evidencia (url) → valid:true (afirmación externa rectificable entra)', async () => {
+  const m = nuevo();
+  const c = clon();
+  c.lineas_detalle[0].fuente = 'soysuper';
+  c.lineas_detalle[0].evidencia = 'https://soysuper.com/p/mozzarella-maxi-santa-lucia-250-g';
+  const r = await m._validar({ costeo: c });
+  assert.strictEqual(r.data.valid, true, JSON.stringify(r.data.errors));
+  assert.deepStrictEqual(r.data.precios_estimados, []);
+});
+
+test('precio SOYSUPER SIN evidencia → valid:false + PRECIO_SIN_EVIDENCIA (label sin dirección de vuelta)', async () => {
+  const m = nuevo();
+  const c = clon();
+  c.lineas_detalle[0].fuente = 'soysuper';   // el número parece bueno, pero sin url no es rectificable
+  const r = await m._validar({ costeo: c });
+  assert.strictEqual(r.data.valid, false);
+  assert.ok(r.data.errors.some(x => x.code === 'PRECIO_SIN_EVIDENCIA' && x.path === '/lineas/0'),
+    'un precio soysuper sin url debe caer: ' + JSON.stringify(r.data.errors));
+});
+
 test('total FABRICADO (no cuadra con las líneas) → TOTAL_INCOHERENTE', async () => {
   const m = nuevo();
   const c = clon();

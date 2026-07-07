@@ -105,7 +105,11 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
   //    total fabricado. Función pura: no lee ni escribe. Determinista. ──
   _checkCosteo(costeo) {
     const finite = x => typeof x === 'number' && Number.isFinite(x);
-    const FUENTES_TRAZABLES = new Set(['mercadona', 'catalogo', 'sub_receta', 'manual']);
+    // FUENTES_TRAZABLES: procedencia con dirección de vuelta. 'soysuper' es una AFIRMACIÓN
+    // EXTERNA (ley rectificable, prisma-del-caso) → entra, pero EXIGE evidencia (url) abajo:
+    // el precio web no se fía por quién lo leyó, sino porque cualquiera puede re-comprobarlo.
+    const FUENTES_TRAZABLES = new Set(['mercadona', 'catalogo', 'sub_receta', 'manual', 'soysuper']);
+    const EXIGEN_EVIDENCIA = new Set(['soysuper']);   // afirmaciones externas web: sin url → rechazo
     const desglose = Array.isArray(costeo.lineas_detalle) ? costeo.lineas_detalle
       : (Array.isArray(costeo.desglose) ? costeo.desglose : []);
     const ct = costeo.coste_total, cu = costeo.coste_unidad, rinde = costeo.rinde;
@@ -129,6 +133,14 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
       if (l.fuente === 'estimado_llm') precios_estimados.push(l.nombre);
       else if (l.fuente && !FUENTES_TRAZABLES.has(l.fuente)) {
         errors.push({ code: 'FUENTE_DESCONOCIDA', path: `/lineas/${i}`, message: `${l.nombre || '(línea)'}: fuente '${l.fuente}' no reconocida` });
+      }
+      // DIRECCIÓN DE VUELTA obligatoria para la afirmación externa: un precio 'soysuper' sin
+      // url no es rectificable → cae, aunque el número parezca bueno (mata el label sin evidencia).
+      if (EXIGEN_EVIDENCIA.has(l.fuente)) {
+        const ev = l.evidencia || l.url || l.soysuper_url;
+        if (!(typeof ev === 'string' && ev.trim())) {
+          errors.push({ code: 'PRECIO_SIN_EVIDENCIA', path: `/lineas/${i}`, message: `${l.nombre || '(línea)'}: fuente '${l.fuente}' sin evidencia (url) — un precio web entra solo con su dirección de vuelta` });
+        }
       }
     }
 

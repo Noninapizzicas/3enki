@@ -31,7 +31,7 @@
     },
     {
       "name": "fastcrw.extract",
-      "description": "Extrae JSON estructurado de una URL según un esquema. Para sacar campos concretos de una ficha (ej. {nombre, marca, cantidad, formato, precio, precio_unitario} de un producto de supermercado).",
+      "description": "Extrae JSON estructurado de una URL según un esquema, en un paso. OJO: el /v1/scrape con formats:json usa un LLM DENTRO de crw-server ([extraction.llm] o llmApiKey en el body); sin él devuelve 422. Si crw-server no tiene LLM, usa fastcrw.scrape (markdown) y extrae con el LLM de página. Para sacar campos concretos de una ficha (ej. {nombre, marca, cantidad, formato, precio, precio_unitario}).",
       "parameters": {
         "type": "object",
         "properties": {

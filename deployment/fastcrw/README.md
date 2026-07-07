@@ -65,7 +65,13 @@ rápido y limpio. La **búsqueda** `/search` es JS-pesada → `crw-server` sin r
 Dos salidas:
 
 - **Ataca por la ficha** (lo que hace la skill `precio-ingredientes-web`): construye/deduce el
-  slug `/p/<slug>` y extrae directo. Sin render, sin timeout.
+  slug `/p/<slug>` y hace `scrape`. Sin render, sin timeout.
+
+> **`extract` (json) usa un LLM DENTRO de crw-server** (`[extraction.llm]` o `llmApiKey` en el
+> body); sin él → **422**. Verificado en vivo. El camino recomendado NO lo necesita: `scrape` trae
+> la markdown con el precio (`Precio medio 16,94 € / 3 kg  5,65 € / 1 kg`) y el **LLM de página de
+> Enki** —que ya está en el turno— lo lee. Un LLM, no dos. `extract` queda para quien configure el
+> LLM de crw-server y quiera el JSON en un paso.
 - **Si necesitas `/search` o sitios full-JS:** compila crw-server con render (CDP) —
   `cargo install crw-server` no lo trae por defecto. Desde fuente:
   ```bash

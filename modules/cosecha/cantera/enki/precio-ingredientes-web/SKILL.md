@@ -57,36 +57,42 @@ FUNCION precioIngredienteWeb(ingrediente, url_soysuper?): FichaPrecio {
           url ← primeraFichaDe(md)        // primer /p/<slug>; si timeout/vacío → sin_precio
       SI !url: RETORNA { estado: 'sin_precio', ... }   // no hay ficha → honesto
 
-  // 2 · EXTRAER estructurado con esquema (fastcrw.extract → data.json)
-  ficha ← fastcrw.extract({ url, schema: {
-    type: 'object',
-    properties: {
-      nombre: { type: 'string' }, marca: { type: 'string' },
-      cantidad: { type: 'string' }, formato: { type: 'string' },
-      precio_promedio_eur: { type: 'number' }, precio_unitario: { type: 'string' }
-    }
-  }})
+  // 2 · TRAER la ficha con fastcrw.scrape (markdown). CLAVE (verificado en vivo): usa
+  //     SCRAPE, no extract. El `extract` (json) de crw-server necesita un LLM configurado
+  //     dentro del servidor (422 si no) — y ese LLM ya lo tienes TÚ, el de página. scrape
+  //     es determinista, sin LLM, y la ficha ya trae el precio en texto.
+  md ← fastcrw.scrape({ url })            // markdown de la ficha (sin LLM en crw-server)
+  SI md == UPSTREAM_*:  RETORNA { estado: 'sin_precio', url }   // motor caído/timeout → honesto
 
-  // 3 · NORMALIZAR al contrato de escandallo (NO inventar)
-  SI ficha.precio_promedio_eur == null:
+  // 3 · EXTRAER tú (LLM de página) de la markdown. La ficha trae la línea canónica:
+  //     "Precio medio 16,94 € / 3 kg   5,65 € / 1 kg"  → precio · cantidad · precio_unitario.
+  //     Es SOLO leer lo que está escrito, NO inventar (si la línea no está → sin_precio).
+  ficha ← leerDeMarkdown(md)              // { nombre, marca?, cantidad, formato?, precio_eur, precio_unitario }
+
+  // 4 · NORMALIZAR al contrato de escandallo (NO inventar)
+  SI ficha.precio_eur == null:
       RETORNA { ...ficha, fuente: 'soysuper', url, estado: 'sin_precio' }
-  RETORNA {
-    nombre: ficha.nombre, marca: ficha.marca ?? null,
-    cantidad: ficha.cantidad, formato: ficha.formato,
-    precio_eur: ficha.precio_promedio_eur, precio_unitario: ficha.precio_unitario ?? null,
-    fuente: 'soysuper', url, estado: 'ok'
-  }
+  RETORNA { ...ficha, fuente: 'soysuper', url, estado: 'ok' }
 }
+
+// Atajo opcional: fastcrw.extract({url, schema}) devuelve el JSON ya estructurado en UN paso,
+// PERO exige [extraction.llm] en la config de crw-server (o llmApiKey en el body). Sin eso da
+// 422. El camino scrape+leer de arriba NO necesita nada extra: úsalo por defecto.
 ```
 
 ## Pasos
 
-1. **Ataca por la FICHA, no por la búsqueda.** La ficha `soysuper.com/p/<slug>` está server-rendered → `fastcrw.extract` va rápido y limpio. Si tienes/deduces el slug, ve directo al paso 3.
-2. Solo si necesitas descubrir la ficha: `fastcrw.scrape` de `/search?q=…`. **Aviso (visto en vivo): `/search` es JS-pesado y da timeout en crw-server sin render (CDP).** Si tarda/viene vacío → NO es éxito: pide la URL de ficha al usuario o marca `sin_precio`.
-3. `fastcrw.extract` sobre la ficha con el esquema de arriba.
+1. **Ataca por la FICHA, no por la búsqueda.** La ficha `soysuper.com/p/<slug>` está server-rendered. Si tienes/deduces el slug, ve directo al paso 2.
+2. **`fastcrw.scrape({url})`** de la ficha → markdown (determinista, sin LLM en crw-server; verificado en vivo que devuelve el precio).
+   - Solo si necesitas descubrir la ficha: `fastcrw.scrape` de `/search?q=…`. **Aviso: `/search` es JS-pesado → timeout sin render (CDP).** Si tarda/vacío → pide la URL o `sin_precio`.
+3. **Lee tú el precio de la markdown** (eres el LLM de página): busca la línea `Precio medio X,XX € / <cantidad>  Y,YY € / 1 kg`. Saca `{nombre, cantidad, precio_eur, precio_unitario}`. Es LEER, no inventar.
 4. Normaliza a `{precio_eur, cantidad, formato, precio_unitario, fuente:'soysuper', url}`.
-5. **Guard no-inventar:** si `precio_promedio_eur` viene vacío O la tool devolvió `UPSTREAM_TIMEOUT`/`UPSTREAM_UNREACHABLE` → `estado: 'sin_precio'`. Jamás rellenes el precio de tu cabeza.
+5. **Guard no-inventar:** si la línea de precio no está, o `fastcrw.scrape` dio `UPSTREAM_TIMEOUT`/`UNREACHABLE` → `estado: 'sin_precio'`. Jamás rellenes el precio de tu cabeza.
 6. Entrega la ficha a escandallo como fuente de coste (misma forma `{precio, cantidad, formato}`).
+
+> `fastcrw.extract` (json en un paso) existe pero pide un LLM configurado DENTRO de crw-server
+> (`[extraction.llm]` o `llmApiKey`); sin él, 422. El paso 2–3 (scrape + tú lees) no necesita nada
+> extra y usa el LLM que ya está en el turno. Ese es el camino por defecto.
 
 ## Herramientas que conduce
 

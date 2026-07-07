@@ -94,11 +94,15 @@ FUNCION precioIngredienteWeb(ingrediente, url_soysuper?): FichaPrecio {
 
 ## Herramientas que conduce
 
-- `fastcrw.scrape` — leer la página de búsqueda de soysuper (markdown) para hallar la ficha.
-- `fastcrw.extract` — sacar el JSON estructurado de la ficha (precio/cantidad/formato).
+Vía el skill genérico **`herramientas-web`** (el canal correcto — `bus.publishAndWait`, NO curl
+por ejecutor). Léelo si dudas cómo invocar:
 
-Requieren `crw-server` corriendo (nativo, `:3002`; ver `deployment/fastcrw/`). Si está caído,
-las tools devuelven `UPSTREAM_UNREACHABLE` → trátalo como `sin_precio`, no como éxito.
+- `bus.publishAndWait('fastcrw.scrape', {url})` — leer la búsqueda o la ficha de soysuper (markdown).
+- `bus.publishAndWait('fastcrw.search', {query})` / `fastcrw.extract` — opcionales (ver herramientas-web).
+
+Requieren `crw-server` corriendo (nativo, `:3002`; ver `deployment/fastcrw/`). Si falla, el
+`message` viene **fértil** (`[TRANSITORIO]`/`[CONFIG]`…): obedece su `SIGUIENTE`. Un `[TRANSITORIO]`
+(504/throttle) NO es `sin_precio` definitivo → reintenta con backoff; solo tras agotarlo, `sin_precio`.
 
 ## Ritmo — soysuper throttlea las ráfagas (VERIFICADO en vivo)
 

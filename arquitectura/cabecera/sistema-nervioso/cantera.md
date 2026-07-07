@@ -7,7 +7,7 @@ fuentes:
   - modules/planificador/**
   - modules/feeder/**
   - modules/cantera-semantica/**
-verificado: 2026-07-06
+verificado: 2026-07-07
 ---
 
 # CANTERA — la abundancia alojada (hermano ADITIVO del cuenco · vivo en main, 2026-07-01)

@@ -6,8 +6,9 @@ fuentes:
   - modules/publicador/**
   - lib/public-ns.js
   - blueprints/project-types/www.json
-  - deployment/**
-verificado: 2026-07-06
+  - deployment/caddy/**
+  - deployment/reconcile.js
+verificado: 2026-07-07
 ---
 
 # SERVIR WWW POR PROYECTO — árbol libre en /<ns>/<slug>/ (Caddy estático + symlink)

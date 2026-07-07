@@ -6,7 +6,7 @@ fuentes:
   - deployment/fastcrw/**
   - deployment/python-tools/**
   - modules/fastcrw/**
-verificado: 2026-07-06
+verificado: 2026-07-07
 ---
 
 # HERRAMIENTAS EXTERNAS — Rust nativo en el VPS · Python en Docker (fastCRW · Headroom · el contenedor Python universal)
@@ -64,6 +64,9 @@ QUÉ ES  API de datos web en Rust (scrape·extract·search·crawl·map), alt. op
      install.sh   cargo install crw-server → /usr/local/bin (no hay releases precompiladas; instala rustup si falta).
      crw-server.service  systemd, :3002 (el core tiene el :3000), sin auth local, endurecido.
      scrape/extract/map funcionan SOLO con el binario. /search necesita SearXNG (inquilino Python, opcional).
+     RENDER (verificado en vivo): páginas server-rendered (ficha soysuper /p/<slug>) → extract rápido y limpio;
+     páginas JS-pesadas (soysuper /search) → crw-server SIN render da timeout. Salida: atacar por la ficha directa,
+     o compilar crw-server --features cdp + LightPanda para full-JS (receta en deployment/fastcrw/README.md).
   }
 2 · PUENTE (bus)  modules/fastcrw/ {
      module.json  tools_http → http://localhost:3002/v1/* (auth_type none). Tools: fastcrw.scrape · extract · search · map.

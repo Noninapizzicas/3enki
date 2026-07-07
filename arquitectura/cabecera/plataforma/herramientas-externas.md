@@ -6,6 +6,9 @@ fuentes:
   - deployment/fastcrw/**
   - deployment/python-tools/**
   - modules/fastcrw/**
+  - modules/_shared/error-fertil.js
+  - modules/cosecha/cantera/enki/herramientas-web/**
+  - modules/cosecha/cantera/enki/precio-ingredientes-web/**
 verificado: 2026-07-07
 ---
 
@@ -76,8 +79,9 @@ QUÉ ES  API de datos web en Rust (scrape·extract·search·crawl·map), alt. op
      cloud opcional: cambiar url a https://api.fastcrw.com/v1/* + auth_type bearer + credential FASTCRW. Sin instalar nada.
   }
 3 · DESCUBRIMIENTO (skill-first, NO se cablea a escandallo)  modules/cosecha/cantera/enki/precio-ingredientes-web/SKILL.md {
-     La skill EMPAQUETA el saber "cómo sacar precio de un ingrediente de soysuper con fastcrw.extract" y CONDUCE
-     las tools deterministas (las manos). Hogar declarado lente_dominio:escandallo · lente_tarea:costear.
+     La skill EMPAQUETA el saber "cómo sacar precio de un ingrediente de soysuper con fastcrw.scrape" (search→ficha→
+     leer precio; extract pide LLM en crw-server) y CONDUCE las tools deterministas (las manos), por bus.publishAndWait,
+     con la invocación INLINE (autocontenida). Hogar declarado lente_dominio:escandallo · lente_tarea:costear.
      → se DESCUBRE (buscar_skill / conserje-cantera al costear) · se ENLAZA (activar_skill → lente en escandallo) ·
        o el LLM la REESCRIBE por proyecto (cosecha.crear). Guard no-inventar: precio de la ficha real o 'sin_precio'
        (mismo mandato que el freno PRECIO_INVENTADO de escandallo). La cantera la auto-indexa (cero código nuevo).
@@ -112,6 +116,60 @@ FIDELIDAD  los frenos de blueprint (<mod>.validar → 422) son el test AUTOMÁTI
            arquitectura/decisiones/propuestas/headroom-compresion.md.
 ```
 
+## OFRECER TOOLS COMO SKILL DE DESCUBRIMIENTO — las tools viven en segundo plano
+
+> El principio que emergió al conectar fastCRW al LLM real. **Las tools están en segundo plano
+> POR DISEÑO** — no es un descuido. El ai-gateway pone `invoke_agent` el PRIMERO ("PREFERENTE… los
+> agentes saben hacer su trabajo mejor que tú encadenando tools básicos; solo cae a tools directas
+> si NINGÚN agente cubre el caso") y **filtra las tools por página** (`_getTools`: `allowedPrefixes`
+> + `GLOBAL_TOOLS`). Una tool_http registrada (p.ej. `fastcrw.scrape`) NO llega al LLM de una página
+> que no la tiene en scope. Eso es correcto: el LLM no debe empuñar el bisturí, debe llamar al cirujano.
+
+```json
+{
+  "esquema": "tools-como-skill-de-descubrimiento-v1",
+  "hallazgo_vivo": "el LLM de escandallo llamó a crw-server 46× por ejecutor+curl y 0× por la tool fastcrw — porque no la tenía en scope. Bypaseaba el endpoint encapsulado Y el error fértil, y se rindió ante un curl-timeout mudo ('web inscrapeable, mételo a mano').",
+  "antipatron": "surfacear la tool a la página (fuerza el diseño; el LLM encadena primitivas).",
+  "patron": "OFRECER la tool por un SKILL de descubrimiento que enseña a alcanzarla por el canal que el LLM YA tiene (bus.publishAndWait) — la tool sigue en segundo plano.",
+  "tres_capas": {
+    "skill_generico": "CÓMO alcanzar la tool (el canal + leer el error fértil + el ritmo). Reutilizable. Ej: herramientas-web (dominio web).",
+    "skill_dominio": "el SABER del caso, AUTOCONTENIDO (la invocación inline, no depende del genérico). Ej: precio-ingredientes-web (dominio escandallo).",
+    "agente": "AISLAR un lote grande fuera del turno de chat (perspectiva-c con throttle+retry). Cuando el volumen no cabe en una vuelta."
+  },
+  "verificado_en_codigo": "bus.publishAndWait es universal y SIN allowlist; bus.publishAndWait('fastcrw.scrape',{url}) correla con 'fastcrw.scrape.response' (loader _renderResponseEvent, ~1108) y resuelve con la markdown; el error fértil viaja en el message.",
+  "autocontencion": "las lentes se filtran/rankean por DOMINIO (ai-gateway ~1658: filter l.dominio===dominio). Una skill de dominio NO puede depender de otra de dominio distinto estando cargada → lleva su invocación INLINE."
+}
+```
+
+```
+canal (lo que el LLM ya tiene)     bus.publishAndWait('fastcrw.scrape', { url })  → markdown
+                                    (NUNCA curl por ejecutor: pierde endpoint + error fértil)
+skill genérico   herramientas-web         (dominio web · lente_tarea consultar) — el canal + error fértil + ritmo
+skill dominio    precio-ingredientes-web  (dominio escandallo) — el saber, con la invocación INLINE (autocontenida)
+agente           precio-web (perspectiva-c, siguiente) — el lote de 39 fuera del turno
+```
+
+## ERROR FÉRTIL — la tool interpreta su propio fallo (no el prior del LLM)
+
+> La otra cara de "qué lleva al LLM a rendirse". Un error crudo (`504`/timeout/código pelado) llega
+> como RUIDO, y el LLM lo rellena con su prior pesimista. Interpretar el fallo de una tool es
+> conocimiento DETERMINISTA (la tool SABE que 504 sobre un scraper = throttle, no "motor caído") —
+> estaba en la capa fuzzy equivocada. La Lente de Análisis Profundo aplicada a los errores.
+
+```
+BANCO   modules/_shared/error-fertil.js — enriquecerError(code) → {clase, reintentable, diagnostico, siguiente, no_es}
+        clase ∈ TRANSITORIO (reintenta/backoff) · TERMINAL (corrige el objetivo) · CONFIG (corrige args/credencial)
+        no_es = mata el prior falso EXPLÍCITO (p.ej. "NO ES: motor caído · web inscrapeable · motivo para rendirse")
+ENGANCHE  core/modules/loader.js _httpErrorResponse → TODA tool_http hereda el error fértil gratis. Degrada honesto
+          (error plano) si el banco no carga. La prescripción va EMBEBIDA en `message` — el único campo que TODA capa
+          de transporte preserva (UIRequestHandler/ai-gateway hacen cherry-pick de {code,message}); los hermanos
+          estructurados sobreviven en el camino directo handler→reflejo (para el gate del rail, futuro).
+VERIFICADO EN VIVO  el 422 de fastcrw.extract llega al caller como:
+          "[CONFIG] … DIAGNÓSTICO: … SIGUIENTE: corrige los argumentos … NO ES: throttle · motor caído · rendirse."
+TESTS  error-fertil (6, caso testigo del 504 incl.) · fastcrw-module asserta el error fértil.
+SIGUIENTE (fases)  gate del rail (no cerrar en 'manual' sin agotar el retry prescrito) · anti-especulación-canonizada.
+```
+
 ## Topics / piezas / estado
 
 ```
@@ -123,16 +181,22 @@ EVENTOS {
 PIEZAS {
   deployment/fastcrw/                     motor Rust nativo (install.sh + crw-server.service)
   modules/fastcrw/                        puente tools_http al bus
-  modules/cosecha/cantera/enki/precio-ingredientes-web/  semilla skill (descubrimiento, no cableado)
+  modules/_shared/error-fertil.js         banco de errores fértiles (heredado por toda tool_http vía loader)
+  modules/cosecha/cantera/enki/herramientas-web/         skill GENÉRICO — cómo alcanzar la tool por bus (descubrimiento)
+  modules/cosecha/cantera/enki/precio-ingredientes-web/  skill DOMINIO — el saber del precio, invocación inline (autocontenida)
   deployment/python-tools/                el hogar Python: imagen base + SearXNG + Headroom
   deployment/python-tools/headroom/       proxy de compresión (FASE 0 docker)
 }
 ESTADO {
-  ✓ código: módulo fastcrw · semilla cantera · headroom (switch+interruptor+_apiBase, 8/8) · tests · validate-all verde
-  ✓ deployment: scaffolding Rust nativo + Docker Python (fastCRW · SearXNG · Headroom) — listo para el VPS
-  ◑ EN VIVO (VPS): correr install.sh (crw-server) + docker compose up (headroom/searxng) + encender interruptores.
-    Nada de esto corre aún en el VPS; el repo tiene todo lo instalable, falta la mano en la máquina.
+  ✓ código: fastcrw · error-fertil · skills (genérico+dominio) · headroom (8/8) · tests · validate-all verde
+  ✓ VIVO (verificado por MQTT): crw-server :3002 sano · fastcrw.scrape devuelve la ficha con precio
+    (mozzarella 4,62€) · error fértil llega al caller con [CLASE]+SIGUIENTE+NO ES.
+  ✓ hallazgo vivo: /search NO da timeout estructural (8 fichas, 200); soysuper THROTTLEA ráfagas (~15-20 → 504);
+    adivinar slug /p/<x> → 404 vacío → descubrir por /search es el camino fiable.
+  ◑ falta cerrar en vivo: que el LLM de escandallo USE la tool por skill (0 fastcrw / 46 curl medidos ANTES del
+    skill genérico + precio autocontenida). Se confirma con un turno real en la app → revisar tool_calls.
   ⏸ escandallo NO cableado a fastcrw por DECISIÓN — el enlace es skill-first (descubrir/promover/crear), no hardcode.
+  ⏸ agente precio-web (perspectiva-c) para el lote de 39 — siguiente.
 }
 ```
 

@@ -43,19 +43,17 @@ Mercadona falla**. NO para inventar un precio: si la web no lo da, marca `sin_pr
 
 ```
 FUNCION precioIngredienteWeb(ingrediente, url_soysuper?): FichaPrecio {
-  // 1 · LOCALIZAR la ficha. CLAVE (verificado en vivo): la FICHA /p/<slug> está
-  //     SERVER-RENDERED → extract va rápido y limpio, sin JS. La BÚSQUEDA /search
-  //     es JS-pesada → crw-server SIN render (CDP) le da TIMEOUT. Ataca por la ficha.
+  // 1 · LOCALIZAR la ficha. VERIFICADO EN VIVO: NO adivines el slug — /p/<inventado>
+  //     devuelve una página vacía (404, ~2,5 KB, sin precio). El descubrimiento FIABLE
+  //     es SCRAPE de /search: devuelve la markdown con los enlaces /p/ de los productos
+  //     que matchean (probado: /search?q=mozzarella → 8 fichas, status 200, sin timeout).
   url ← url_soysuper
   SI !url:
-      // preferente: si sabes el slug, constrúyelo (p.ej. 'mozzarella-rallada-mercadona')
-      url ← `https://soysuper.com/p/${slug(ingrediente)}`   // ficha directa (rápida)
-      // solo si necesitas descubrir: /search es FRÁGIL (timeout sin CDP). Si peta,
-      // NO lo trates como éxito → pide la URL de ficha o marca sin_precio.
-      SI dudoso(url):
-          md ← fastcrw.scrape({ url: `https://soysuper.com/search?q=${encode(ingrediente)}` })
-          url ← primeraFichaDe(md)        // primer /p/<slug>; si timeout/vacío → sin_precio
-      SI !url: RETORNA { estado: 'sin_precio', ... }   // no hay ficha → honesto
+      res ← fastcrw.scrape({ url: `https://soysuper.com/search?q=${encode(ingrediente)}` })
+      SI res == UPSTREAM_*: RETORNA { estado: 'sin_precio', url }   // motor caído/timeout → honesto
+      fichas ← extraerLinks(res, /\/p\/[a-z0-9-]+/)   // los /p/<slug> de la markdown
+      url ← elegirMejor(fichas, ingrediente)          // TÚ (LLM) casas nombre/marca/formato/tamaño
+      SI !url: RETORNA { estado: 'sin_precio' }        // sin match razonable → honesto (no fuerces)
 
   // 2 · TRAER la ficha con fastcrw.scrape (markdown). CLAVE (verificado en vivo): usa
   //     SCRAPE, no extract. El `extract` (json) de crw-server necesita un LLM configurado
@@ -82,13 +80,13 @@ FUNCION precioIngredienteWeb(ingrediente, url_soysuper?): FichaPrecio {
 
 ## Pasos
 
-1. **Ataca por la FICHA, no por la búsqueda.** La ficha `soysuper.com/p/<slug>` está server-rendered. Si tienes/deduces el slug, ve directo al paso 2.
-2. **`fastcrw.scrape({url})`** de la ficha → markdown (determinista, sin LLM en crw-server; verificado en vivo que devuelve el precio).
-   - Solo si necesitas descubrir la ficha: `fastcrw.scrape` de `/search?q=…`. **Aviso: `/search` es JS-pesado → timeout sin render (CDP).** Si tarda/vacío → pide la URL o `sin_precio`.
-3. **Lee tú el precio de la markdown** (eres el LLM de página): busca la línea `Precio medio X,XX € / <cantidad>  Y,YY € / 1 kg`. Saca `{nombre, cantidad, precio_eur, precio_unitario}`. Es LEER, no inventar.
-4. Normaliza a `{precio_eur, cantidad, formato, precio_unitario, fuente:'soysuper', url}`.
-5. **Guard no-inventar:** si la línea de precio no está, o `fastcrw.scrape` dio `UPSTREAM_TIMEOUT`/`UNREACHABLE` → `estado: 'sin_precio'`. Jamás rellenes el precio de tu cabeza.
-6. Entrega la ficha a escandallo como fuente de coste (misma forma `{precio, cantidad, formato}`).
+1. **Descubre por `/search`, NO adivines el slug** (verificado: `/p/<inventado>` → 404 vacío). `fastcrw.scrape({url:'https://soysuper.com/search?q=<ingrediente>'})` → markdown con los enlaces `/p/<slug>` de los productos que matchean (probado en vivo: 8 fichas, sin timeout). Si ya tienes la URL de ficha, salta al paso 3.
+2. **Elige tú la mejor ficha** de esos `/p/<slug>` casando nombre/marca/formato/tamaño con el ingrediente. Sin match razonable → `sin_precio` (no fuerces).
+3. **`fastcrw.scrape({url})`** de la ficha elegida → markdown (determinista, sin LLM en crw-server; verificado que trae el precio).
+4. **Lee tú el precio de la markdown** (eres el LLM de página): busca `Precio medio X,XX € / <cantidad>  Y,YY € / 1 kg`. Saca `{nombre, cantidad, precio_eur, precio_unitario}`. Es LEER, no inventar.
+5. Normaliza a `{precio_eur, cantidad, formato, precio_unitario, fuente:'soysuper', url}`.
+6. **Guard no-inventar:** si la línea de precio no está, o `fastcrw.scrape` dio `UPSTREAM_TIMEOUT`/`UNREACHABLE` → `estado: 'sin_precio'`. Jamás rellenes el precio de tu cabeza.
+7. Entrega la ficha a escandallo como fuente de coste (misma forma `{precio, cantidad, formato}`).
 
 > `fastcrw.extract` (json en un paso) existe pero pide un LLM configurado DENTRO de crw-server
 > (`[extraction.llm]` o `llmApiKey`); sin él, 422. El paso 2–3 (scrape + tú lees) no necesita nada

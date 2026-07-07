@@ -100,6 +100,21 @@ FUNCION precioIngredienteWeb(ingrediente, url_soysuper?): FichaPrecio {
 Requieren `crw-server` corriendo (nativo, `:3002`; ver `deployment/fastcrw/`). Si está caído,
 las tools devuelven `UPSTREAM_UNREACHABLE` → trátalo como `sin_precio`, no como éxito.
 
+## Ritmo — soysuper throttlea las ráfagas (VERIFICADO en vivo)
+
+Soysuper **bloquea tras ~15-20 requests seguidos**: empieza a devolver `504`/timeout aunque la
+ficha exista y crw-server esté sano (comprobado: example.com sigue dando 200 mientras soysuper
+504-ea). NO es fallo del motor; es el sitio protegiéndose. Mandato:
+
+- **UN ingrediente a la vez, con pausa** entre llamadas (≈2-4 s). Jamás dispares el lote de golpe.
+- **`504`/timeout = transitorio, no `sin_precio` definitivo**: reintenta con backoff (4 s, 8 s); si
+  persiste, marca `sin_precio` y **sigue con el siguiente** (no bloquees el escandallo entero).
+- **Cachea**: escandallo persiste el precio en la sub-receta del ingrediente. Un ingrediente ya
+  con precio NO se vuelve a pedir. La carta comparte ingredientes (masa/tomate/mozzarella en casi
+  todas) → costear 31 pizzas son ~39 fichas ÚNICAS, no cientos. Pídelas una vez.
+- Un lote grande (39 ingredientes) es trabajo de **obrero paciente**, no de un turno: si la página
+  se satura, va por tandas. (Aquí encaja un agente perspectiva-c con throttle+retry, si se escala.)
+
 ## Filosofía
 
 El precio público de soysuper es un **promedio** (la ficha lo avisa). Basta para escandallar;

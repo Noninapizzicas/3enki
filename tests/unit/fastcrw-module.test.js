@@ -110,7 +110,7 @@ async function test(desc, fn) {
     assert.deepStrictEqual(res.data, salida, 'response_path data.json');
     const sent = JSON.parse(fetchMock.calls[0].opts.body);
     assert.deepStrictEqual(sent.formats, ['json']);
-    assert.deepStrictEqual(sent.jsonOptions.schema, schema, 'schema pasa como objeto, no stringificado');
+    assert.deepStrictEqual(sent.jsonSchema, schema, 'schema va en jsonSchema top-level (lo que exige crw-server), como objeto crudo');
   });
 
   await test('crw-server caído → UPSTREAM_UNREACHABLE (degrada honesto, sin reventar)', async () => {

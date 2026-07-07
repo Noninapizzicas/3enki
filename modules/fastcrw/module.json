@@ -44,7 +44,7 @@
         "method": "POST",
         "url": "http://localhost:3002/v1/scrape",
         "auth_type": "none",
-        "body_template": { "url": "{{url}}", "formats": ["json"], "jsonOptions": { "schema": "{{schema}}" } },
+        "body_template": { "url": "{{url}}", "formats": ["json"], "jsonSchema": "{{schema}}" },
         "response_path": "data.json",
         "timeout_ms": 120000
       },

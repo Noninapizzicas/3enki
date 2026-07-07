@@ -58,6 +58,23 @@ pública (`precio promedio` + `€/kg` sin login). `fastcrw.extract` sobre una f
 → fuente de precio para **escandallo** con su mismo contrato `{precio, cantidad, formato}`,
 desacoplada del API prestado. (La integración fina en escandallo es el siguiente paso.)
 
+### Páginas JS-pesadas (soysuper /search) — render CDP
+
+Verificado en vivo: la **ficha** `soysuper.com/p/<slug>` está server-rendered → `extract` va
+rápido y limpio. La **búsqueda** `/search` es JS-pesada → `crw-server` sin render le da **timeout**.
+Dos salidas:
+
+- **Ataca por la ficha** (lo que hace la skill `precio-ingredientes-web`): construye/deduce el
+  slug `/p/<slug>` y extrae directo. Sin render, sin timeout.
+- **Si necesitas `/search` o sitios full-JS:** compila crw-server con render (CDP) —
+  `cargo install crw-server` no lo trae por defecto. Desde fuente:
+  ```bash
+  cargo build --release --bin crw-server --features crw-server/cdp
+  crw-server setup            # baja LightPanda (motor de render ligero)
+  lightpanda serve --host 127.0.0.1 --port 9222 &   # antes de arrancar crw-server
+  ```
+  Luego reemplaza el binario en `/usr/local/bin` y reinicia `crw-server`.
+
 ## Usar la cloud en vez de nativo (opcional)
 
 Cambia las `url` del `module.json` a `https://api.fastcrw.com/v1/*`, pon `auth_type: "bearer"`

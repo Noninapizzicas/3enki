@@ -25,7 +25,7 @@
         "auth_type": "none",
         "body_template": { "url": "{{url}}", "formats": ["markdown"] },
         "response_path": "data.markdown",
-        "timeout_ms": 60000
+        "timeout_ms": 120000
       },
       "errores_conocidos": ["UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "INVALID_INPUT"]
     },
@@ -46,7 +46,7 @@
         "auth_type": "none",
         "body_template": { "url": "{{url}}", "formats": ["json"], "jsonOptions": { "schema": "{{schema}}" } },
         "response_path": "data.json",
-        "timeout_ms": 90000
+        "timeout_ms": 120000
       },
       "errores_conocidos": ["UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "INVALID_INPUT", "UPSTREAM_INVALID_RESPONSE"]
     },

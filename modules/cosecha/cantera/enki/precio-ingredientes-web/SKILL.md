@@ -43,11 +43,18 @@ Mercadona falla**. NO para inventar un precio: si la web no lo da, marca `sin_pr
 
 ```
 FUNCION precioIngredienteWeb(ingrediente, url_soysuper?): FichaPrecio {
-  // 1 · LOCALIZAR la ficha (si no te la dan, descúbrela; NO adivines URLs)
+  // 1 · LOCALIZAR la ficha. CLAVE (verificado en vivo): la FICHA /p/<slug> está
+  //     SERVER-RENDERED → extract va rápido y limpio, sin JS. La BÚSQUEDA /search
+  //     es JS-pesada → crw-server SIN render (CDP) le da TIMEOUT. Ataca por la ficha.
   url ← url_soysuper
   SI !url:
-      md ← fastcrw.scrape({ url: `https://soysuper.com/search?q=${encode(ingrediente)}` })
-      url ← primeraFichaDe(md)            // primer /p/<slug> del resultado
+      // preferente: si sabes el slug, constrúyelo (p.ej. 'mozzarella-rallada-mercadona')
+      url ← `https://soysuper.com/p/${slug(ingrediente)}`   // ficha directa (rápida)
+      // solo si necesitas descubrir: /search es FRÁGIL (timeout sin CDP). Si peta,
+      // NO lo trates como éxito → pide la URL de ficha o marca sin_precio.
+      SI dudoso(url):
+          md ← fastcrw.scrape({ url: `https://soysuper.com/search?q=${encode(ingrediente)}` })
+          url ← primeraFichaDe(md)        // primer /p/<slug>; si timeout/vacío → sin_precio
       SI !url: RETORNA { estado: 'sin_precio', ... }   // no hay ficha → honesto
 
   // 2 · EXTRAER estructurado con esquema (fastcrw.extract → data.json)
@@ -74,11 +81,11 @@ FUNCION precioIngredienteWeb(ingrediente, url_soysuper?): FichaPrecio {
 
 ## Pasos
 
-1. Si tienes la URL de soysuper (`soysuper.com/p/<slug>`), ve directo al paso 3.
-2. Si no, `fastcrw.scrape` la búsqueda de soysuper y coge la primera ficha `/p/…`. Si no hay ninguna → `sin_precio`.
+1. **Ataca por la FICHA, no por la búsqueda.** La ficha `soysuper.com/p/<slug>` está server-rendered → `fastcrw.extract` va rápido y limpio. Si tienes/deduces el slug, ve directo al paso 3.
+2. Solo si necesitas descubrir la ficha: `fastcrw.scrape` de `/search?q=…`. **Aviso (visto en vivo): `/search` es JS-pesado y da timeout en crw-server sin render (CDP).** Si tarda/viene vacío → NO es éxito: pide la URL de ficha al usuario o marca `sin_precio`.
 3. `fastcrw.extract` sobre la ficha con el esquema de arriba.
 4. Normaliza a `{precio_eur, cantidad, formato, precio_unitario, fuente:'soysuper', url}`.
-5. **Guard no-inventar:** si `precio_promedio_eur` viene vacío → `estado: 'sin_precio'`. Jamás rellenes el precio de tu cabeza.
+5. **Guard no-inventar:** si `precio_promedio_eur` viene vacío O la tool devolvió `UPSTREAM_TIMEOUT`/`UPSTREAM_UNREACHABLE` → `estado: 'sin_precio'`. Jamás rellenes el precio de tu cabeza.
 6. Entrega la ficha a escandallo como fuente de coste (misma forma `{precio, cantidad, formato}`).
 
 ## Herramientas que conduce

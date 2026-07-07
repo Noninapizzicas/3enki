@@ -59,6 +59,16 @@ test('CASO TESTIGO — el 504 de soysuper mata el prior falso del LLM', () => {
   assert.ok(/backoff|reintenta|health/i.test(e.siguiente), 'el siguiente-paso debe prescribir reintento/verificación, no rendición');
 });
 
+test('la prescripción va EMBEBIDA en message (sobrevive el transporte que aplana los hermanos)', () => {
+  const e = enriquecerError('UPSTREAM_UNREACHABLE', { message: 'HTTP 504' });
+  // el message debe llevar clase + diagnóstico + siguiente + no_es, porque UIRequestHandler /
+  // ai-gateway solo preservan {code, message} — los campos hermanos se pierden en el camino al LLM.
+  assert.ok(e.message.includes('[TRANSITORIO]'), 'message lleva la clase');
+  assert.ok(/SIGUIENTE:/.test(e.message), 'message lleva el siguiente-paso');
+  assert.ok(/NO ES:/.test(e.message) && /inscrapeable/i.test(e.message), 'message niega el prior falso');
+  assert.ok(e.message.includes('HTTP 504'), 'conserva el mensaje original del upstream');
+});
+
 test('código desconocido cae a UNKNOWN_ERROR fértil (no revienta)', () => {
   const e = enriquecerError('ALGO_RARO_QUE_NO_EXISTE', { message: 'm' });
   assert.ok(e.clase && e.siguiente && Array.isArray(e.no_es));

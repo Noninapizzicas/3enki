@@ -97,9 +97,16 @@ const _DEFAULT = TABLA.UNKNOWN_ERROR;
  */
 function enriquecerError(code, opts = {}) {
   const receta = TABLA[code] || _DEFAULT;
+  // La prescripción va EMBEBIDA en `message` — el único campo que TODA capa de transporte
+  // preserva (UIRequestHandler, ai-gateway y el wrapper de bus hacen cherry-pick de code+message;
+  // los campos hermanos se perderían). Así el LLM recibe el diagnóstico fértil pase por donde pase.
+  // Los campos estructurados siguen como hermanos para uso PROGRAMÁTICO (esReintentable, gate del rail)
+  // en el camino directo (handler → reflejo), donde no hay transporte que los aplane.
+  const original = (opts.message && opts.message !== receta.diagnostico) ? `${opts.message}. ` : '';
+  const message = `[${receta.clase}] ${original}DIAGNÓSTICO: ${receta.diagnostico}. SIGUIENTE: ${receta.siguiente}. NO ES: ${receta.no_es.join(' · ')}.`;
   const out = {
     code: code || 'UNKNOWN_ERROR',
-    message: opts.message || receta.diagnostico,
+    message,
     clase: receta.clase,
     reintentable: receta.reintentable,
     diagnostico: receta.diagnostico,

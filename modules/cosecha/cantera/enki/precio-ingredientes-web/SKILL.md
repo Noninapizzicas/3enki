@@ -39,6 +39,18 @@ Mercadona falla**. NO para inventar un precio: si la web no lo da, marca `sin_pr
 }
 ```
 
+## Cómo se INVOCA (autocontenido — NO curl por ejecutor)
+
+fastcrw vive en el bus; lo llamas con la tool universal que ya tienes, `bus.publishAndWait`:
+
+```
+md = bus.publishAndWait('fastcrw.scrape', { url: 'https://…' })   // resuelve con la markdown
+```
+
+**NUNCA** curlees crw-server por el `ejecutor` — pierdes el error fértil y el endpoint. Si la
+llamada FALLA, lanza un Error con `message` YA interpretado (`[TRANSITORIO]`→backoff, no "roto";
+`[CONFIG]/[TERMINAL]`→corrige). (Detalle general: skill `herramientas-web`.)
+
 ## Mecanismo (pseudocódigo — CONDUCE las tools de fastcrw)
 
 ```
@@ -49,8 +61,8 @@ FUNCION precioIngredienteWeb(ingrediente, url_soysuper?): FichaPrecio {
   //     que matchean (probado: /search?q=mozzarella → 8 fichas, status 200, sin timeout).
   url ← url_soysuper
   SI !url:
-      res ← fastcrw.scrape({ url: `https://soysuper.com/search?q=${encode(ingrediente)}` })
-      SI res == UPSTREAM_*: RETORNA { estado: 'sin_precio', url }   // motor caído/timeout → honesto
+      res ← bus.publishAndWait('fastcrw.scrape', { url: `https://soysuper.com/search?q=${encode(ingrediente)}` })
+      // si LANZA [TRANSITORIO] (504/throttle): reintenta con backoff; solo tras agotarlo → sin_precio
       fichas ← extraerLinks(res, /\/p\/[a-z0-9-]+/)   // los /p/<slug> de la markdown
       url ← elegirMejor(fichas, ingrediente)          // TÚ (LLM) casas nombre/marca/formato/tamaño
       SI !url: RETORNA { estado: 'sin_precio' }        // sin match razonable → honesto (no fuerces)
@@ -59,8 +71,8 @@ FUNCION precioIngredienteWeb(ingrediente, url_soysuper?): FichaPrecio {
   //     SCRAPE, no extract. El `extract` (json) de crw-server necesita un LLM configurado
   //     dentro del servidor (422 si no) — y ese LLM ya lo tienes TÚ, el de página. scrape
   //     es determinista, sin LLM, y la ficha ya trae el precio en texto.
-  md ← fastcrw.scrape({ url })            // markdown de la ficha (sin LLM en crw-server)
-  SI md == UPSTREAM_*:  RETORNA { estado: 'sin_precio', url }   // motor caído/timeout → honesto
+  md ← bus.publishAndWait('fastcrw.scrape', { url })   // markdown de la ficha (sin LLM en crw-server)
+  // si LANZA [TRANSITORIO]: reintenta con backoff; tras agotarlo → sin_precio
 
   // 3 · EXTRAER tú (LLM de página) de la markdown. La ficha trae la línea canónica:
   //     "Precio medio 16,94 € / 3 kg   5,65 € / 1 kg"  → precio · cantidad · precio_unitario.
@@ -80,9 +92,9 @@ FUNCION precioIngredienteWeb(ingrediente, url_soysuper?): FichaPrecio {
 
 ## Pasos
 
-1. **Descubre por `/search`, NO adivines el slug** (verificado: `/p/<inventado>` → 404 vacío). `fastcrw.scrape({url:'https://soysuper.com/search?q=<ingrediente>'})` → markdown con los enlaces `/p/<slug>` de los productos que matchean (probado en vivo: 8 fichas, sin timeout). Si ya tienes la URL de ficha, salta al paso 3.
+1. **Descubre por `/search`, NO adivines el slug** (verificado: `/p/<inventado>` → 404 vacío). `bus.publishAndWait('fastcrw.scrape', {url:'https://soysuper.com/search?q=<ingrediente>'})` → markdown con los enlaces `/p/<slug>` de los productos que matchean (probado en vivo: 8 fichas, sin timeout). Si ya tienes la URL de ficha, salta al paso 3.
 2. **Elige tú la mejor ficha** de esos `/p/<slug>` casando nombre/marca/formato/tamaño con el ingrediente. Sin match razonable → `sin_precio` (no fuerces).
-3. **`fastcrw.scrape({url})`** de la ficha elegida → markdown (determinista, sin LLM en crw-server; verificado que trae el precio).
+3. **`bus.publishAndWait('fastcrw.scrape', {url})`** de la ficha elegida → markdown (determinista, sin LLM en crw-server; verificado que trae el precio). NO curl por ejecutor.
 4. **Lee tú el precio de la markdown** (eres el LLM de página): busca `Precio medio X,XX € / <cantidad>  Y,YY € / 1 kg`. Saca `{nombre, cantidad, precio_eur, precio_unitario}`. Es LEER, no inventar.
 5. Normaliza a `{precio_eur, cantidad, formato, precio_unitario, fuente:'soysuper', url}`.
 6. **Guard no-inventar:** si la línea de precio no está, o `fastcrw.scrape` dio `UPSTREAM_TIMEOUT`/`UNREACHABLE` → `estado: 'sin_precio'`. Jamás rellenes el precio de tu cabeza.

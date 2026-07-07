@@ -122,6 +122,11 @@ async function test(desc, fn) {
     const res = await loader.toolsRegistry.get('fastcrw.search').handler({ query: 'harina', limit: 3 });
     assert.strictEqual(res.status, 503);
     assert.ok(res.error && res.error.code === 'UPSTREAM_UNREACHABLE', `esperado UPSTREAM_UNREACHABLE, got ${JSON.stringify(res.error)}`);
+    // el error nace FÉRTIL (error-fertil por el loader): clase + prescripción + no_es
+    assert.strictEqual(res.error.clase, 'TRANSITORIO', 'un 503/504 no es terminal');
+    assert.strictEqual(res.error.reintentable, true);
+    assert.ok(/backoff|reintenta|health/i.test(res.error.siguiente || ''), 'trae el siguiente-paso que resuelve');
+    assert.ok((res.error.no_es || []).join(' ').toLowerCase().includes('inscrapeable'), 'niega el prior falso "web inscrapeable"');
   });
 
   console.log('\n✓ fastcrw: todas las aserciones pasan');

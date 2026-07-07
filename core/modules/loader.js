@@ -1485,11 +1485,23 @@ class ModuleLoader {
 
   /**
    * Helper para construir shape canonico de error de tools_http.
+   *
+   * El error nace FÉRTIL (error-fertil): además de {code, message} lleva
+   * {clase, reintentable, diagnostico, siguiente, no_es}. Así el LLM recibe la
+   * INTERPRETACIÓN del fallo (determinista) en vez de un código pelado que
+   * rellena con su prior pesimista ("está roto → hazlo a mano"). Toda tool_http
+   * lo hereda gratis por pasar por aquí.
    * @private
    */
   _httpErrorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details !== undefined) error.details = details;
+    let error;
+    try {
+      error = require('../../modules/_shared/error-fertil').enriquecerError(code, { message, details });
+    } catch (_) {
+      // Degradación honesta: si el banco no carga, error canónico plano (nunca rompe la tool).
+      error = { code, message };
+      if (details !== undefined) error.details = details;
+    }
     return { status, error };
   }
 

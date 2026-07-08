@@ -1,0 +1,48 @@
+{
+  "_doc": "crawl4rs — PUENTE a Crawl4RS (repo D-os): crawler Rust self-hosted (navegador real Chromium/CDP + stealth + extracción end-to-end + crawl profundo BFS/DFS), envuelto como órgano del bus. Crawl4RS habla HTTP (servidor axum, JOB-BASED: POST /crawl → {id}, poll status, GET result); este reflejo traduce bus↔HTTP y esconde el HTTP en el contenedor, cerrando el 'rechinar' de que el crawler no hablara el bus. NACE OFF (interruptor 'crawl4rs', grupo sistema): el servicio corre ON-DEMAND, encender el puente es decisión consciente. DEGRADA HONESTO: OFF o servicio no alcanzable → 503 {degradado, motivo}; nunca finge. AUTH: /crawl va tras JWT; el token sale de POST /auth/token (libre si el servidor no configura api_key), cacheado y refrescado ante 401. El `stealth` NO es per-petición: es config de arranque del servidor Crawl4RS. Hermano pesado de fastcrw (fastcrw=fetch HTTP ligero; crawl4rs=navegador+stealth). Ver ROADMAP de D-os (Fase 7 = MQTT nativo, alternativa futura a este puente HTTP). Config: base_url (default http://localhost:8080), api_key opcional, timeout_ms.",
+  "name": "crawl4rs",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: nace el puente. Reflejo bus↔HTTP al servicio Crawl4RS. Tools de bus crawl4rs.leer (una URL → markdown + extracción) y crawl4rs.rastrear (crawl profundo). Tool de chat leer_web. Flujo job-based (token→submit→poll→result) con reintento tras 401. Interruptor OFF por defecto (on-demand). Degradación honesta (apagado / sin_servicio / timeout). Test: crawl4rs__index.",
+  "description": "Puente al crawler Crawl4RS (Rust, navegador real + stealth) por HTTP, como órgano del bus. Lee una URL o rastrea un sitio → markdown limpio + extracción estructurada. Gate por interruptor OFF (on-demand), degrada limpio si el servicio no está.",
+  "author": "enki",
+  "language": "javascript",
+  "main": "index.js",
+  "horizonte": "acceso web PESADO en el bus — navegador real + stealth para sitios protegidos (Cloudflare) que fastcrw (fetch ligero) no salta",
+  "dependencies": [],
+  "subscribes": [
+    { "event": "crawl4rs.leer.request", "handler": "onLeerRequest", "description": "Reflejo: lee una URL → POST /crawl (max_depth 0) → poll → markdown limpio + extracción. Degrada 503 si OFF/sin servicio." },
+    { "event": "crawl4rs.rastrear.request", "handler": "onRastrearRequest", "description": "Reflejo: crawl profundo BFS/DFS {url, max_depth?, max_pages?, cross_domain?} → páginas con markdown + extracción." },
+    { "event": "interruptor.cambiado", "handler": "onInterruptorCambiado", "description": "Enciende/apaga el puente en caliente (id 'crawl4rs'). OFF → todo degrada 503." },
+    { "event": "interruptor.solicitar_registro", "handler": "onSolicitarRegistro", "description": "Re-registra su botón (cura la carrera de arranque del panel)." }
+  ],
+  "publishes": [
+    { "event": "crawl4rs.leer.response", "description": "{ markdown, extraido, paginas:[{url, markdown, extraido}], total } o 503 degradado." },
+    { "event": "crawl4rs.rastrear.response", "description": "Igual que leer pero con N páginas del crawl profundo." },
+    { "event": "interruptor.registrar", "description": "Registra el botón 'crawl4rs' (grupo sistema, OFF por defecto)." }
+  ],
+  "tools": [
+    {
+      "name": "leer_web",
+      "description": "Lee una página web y devuelve su contenido limpio en markdown (opcionalmente extrae el contenido principal). ÚSALA cuando necesites el texto de una URL concreta — ficha de producto, artículo, catálogo. Usa un navegador real (pasa sitios que bloquean a los fetchers simples). Requiere que el puente esté encendido (interruptor 'crawl4rs').",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": { "type": "string", "minLength": 1, "description": "URL absoluta de la página a leer." },
+          "query": { "type": "string", "description": "Opcional: consulta para filtrar el contenido por relevancia (BM25)." },
+          "extract_semantic": { "type": "boolean", "description": "Opcional: extraer el contenido principal por densidad semántica." }
+        },
+        "required": ["url"]
+      },
+      "handler": "handleLeerTool",
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "UPSTREAM_INVALID_RESPONSE"]
+    }
+  ],
+  "config": {
+    "base_url": "http://localhost:8080",
+    "api_key": null,
+    "timeout_ms": 120000,
+    "_base_url_doc": "Base del servicio Crawl4RS. Override por env CRAWL4RS_BASE_URL. En docker-compose, el nombre del servicio (p.ej. http://crawl4rs:8080).",
+    "_api_key_doc": "Opcional. Si el servidor Crawl4RS configura api_key, ponla aquí (o env CRAWL4RS_API_KEY) para obtener el token. Si el servidor no la exige, déjala null."
+  }
+}

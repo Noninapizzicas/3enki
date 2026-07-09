@@ -214,6 +214,11 @@ if docker compose version &>/dev/null; then
         echo "CRAWL4RS_JWT_SECRET=$(openssl rand -hex 32)" >> "${INSTALL_DIR}/data/.env"
         log "CRAWL4RS_JWT_SECRET generado en ${INSTALL_DIR}/data/.env"
     fi
+    # Secreto de SearXNG: mismo trato (nace una vez, jamás el default público).
+    if ! grep -q '^SEARXNG_SECRET_KEY=' "${INSTALL_DIR}/data/.env" 2>/dev/null; then
+        echo "SEARXNG_SECRET_KEY=$(openssl rand -hex 32)" >> "${INSTALL_DIR}/data/.env"
+        log "SEARXNG_SECRET_KEY generado en ${INSTALL_DIR}/data/.env"
+    fi
 
     # Red compartida entre órganos web (crawl4rs ↔ searxng).
     docker network inspect enki-web > /dev/null 2>&1 || docker network create enki-web > /dev/null
@@ -228,7 +233,9 @@ if docker compose version &>/dev/null; then
             warn "enki-crawl4rs no levantó — el puente degrada honesto (503). Revisa: docker compose -f deployment/crawl4rs/docker-compose.yml logs"
         fi
         # SearXNG — backend de crawl4rs.buscar (misma red). Si falla, buscar da 503 y el resto sigue.
-        if docker compose -f "${REPO_DIR}/deployment/python-tools/docker-compose.searxng.yml" up -d > /dev/null 2>&1; then
+        _SXNG_SECRET="$(grep -m1 '^SEARXNG_SECRET_KEY=' "${INSTALL_DIR}/data/.env" | cut -d= -f2-)"
+        if SEARXNG_SECRET_KEY="${_SXNG_SECRET}" docker compose \
+             -f "${REPO_DIR}/deployment/python-tools/docker-compose.searxng.yml" up -d > /dev/null 2>&1; then
             log "SearXNG arriba (crawl4rs.buscar operativo)"
         else
             warn "SearXNG no levantó — crawl4rs.buscar responderá 503; leer/mapear/rastrear siguen"

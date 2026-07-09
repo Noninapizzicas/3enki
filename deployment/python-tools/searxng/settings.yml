@@ -1,0 +1,14 @@
+# SearXNG para Enki — el backend de crawl4rs.buscar.
+#
+# La razón de ser de este fichero: crawl4rs consulta /search?format=json y
+# SearXNG trae el formato JSON DESHABILITADO de fábrica → 403 Forbidden
+# (verificado en vivo). Habilitarlo exige declarar los formats en settings.
+#
+# El secret_key llega por env (SEARXNG_SECRET_KEY, generado por vps-setup en
+# data/.env) — jamás el default público 'ultrasecretkey'.
+use_default_settings: true
+
+search:
+  formats:
+    - html
+    - json

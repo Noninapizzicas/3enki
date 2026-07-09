@@ -16213,22 +16213,23 @@ DECISIÓN meta-frame (pipeline genérico parametrizado por tema) = se extrae cua
 
 ---
 
-# HERRAMIENTAS EXTERNAS — Rust nativo en el VPS · Python en Docker (fastCRW · Headroom · el contenedor Python universal)
+# HERRAMIENTAS EXTERNAS — Crawl4RS en Docker (el órgano web) · Python en Docker (Headroom · el contenedor universal)
 
-> Cada lenguaje en su sitio. Un binario Rust estático es una pieza → más limpio NATIVO en el VPS
-> (cargo + systemd) que envuelto en contenedor. Lo Python (dependencias sucias, modelos ML,
-> servicios externos) va AISLADO en Docker. **El contenedor Python es el hogar de TODA herramienta
-> Python que quepa** — no un contenedor por herramienta, sino un lugar Python que crece. La reja del
-> ejecutor ya toma la imagen por config (`contenedor_imagen`), así que darle Python a un agente = un
-> ajuste, no código. Vivo desde 2026-07-06 (rama fastcrw-information-search).
+> Cada pieza en su sitio POR NATURALEZA. Un binario Rust estático puro va NATIVO en el VPS;
+> cuando arrastra una dependencia sucia (Chromium), va CONTENIDO en Docker — Crawl4RS. Lo Python
+> (dependencias sucias, modelos ML, servicios externos) va AISLADO en Docker. **El contenedor
+> Python es el hogar de TODA herramienta Python que quepa** — no un contenedor por herramienta,
+> sino un lugar Python que crece. La reja del ejecutor ya toma la imagen por config
+> (`contenedor_imagen`), así que darle Python a un agente = un ajuste, no código.
 
 ## El principio (JSON)
 
 ```json
 {
-  "esquema": "herramientas-externas-v1",
+  "esquema": "herramientas-externas-v2",
   "reparto_por_naturaleza": {
-    "rust_binario_estatico": "NATIVO en el VPS (cargo install + systemd). Una pieza, sin runtime que ensucie. Ej: crw-server (fastCRW).",
+    "rust_binario_estatico_puro": "NATIVO en el VPS (cargo install + systemd). Una pieza, sin runtime que ensucie.",
+    "rust_con_dependencia_sucia": "DOCKER aislado. Ej: Crawl4RS — el binario es limpio pero arrastra Chromium; lo sucio va contenido (deployment/crawl4rs/).",
     "python_todo": "DOCKER aislado. Dependencias sucias / modelos ML / servicios → no ensucian el VPS. HOGAR ÚNICO: deployment/python-tools/ (una casa Python que crece, NO un contenedor por herramienta)."
   },
   "hogar_python_unico": "deployment/python-tools/ — imagen base enki-python-tools (para el ejecutor) + inquilinos como servicios (SearXNG, Headroom). Añadir una tool Python = crecer aquí, no montar un stack nuevo.",
@@ -16250,45 +16251,57 @@ ENGANCHE AL EJECUTOR (cero código) {
   NOTA: contenedor_imagen es GLOBAL al ejecutor. Node+Python a la vez = una imagen que traiga ambos.
 }
 INQUILINOS (servicios Python, cada uno su compose bajo python-tools/) {
-  SearXNG   docker-compose.searxng.yml — backend de /search para fastcrw.search (OPCIONAL; scrape/extract NO lo necesitan).
-            127.0.0.1:8080 · crw-server nativo le apunta con CRW_SEARCH__SEARXNG_URL.
+  SearXNG   docker-compose.searxng.yml — backend de /search para crawl4rs.buscar (OPCIONAL; leer/mapear/
+            rastrear NO lo necesitan). Red compartida enki-web: el contenedor enki-crawl4rs lo alcanza
+            por nombre (SEARXNG_URL=http://enki-searxng:8080). 127.0.0.1:8080 queda solo para debug.
   Headroom  headroom/Dockerfile + docker-compose.headroom.yml — proxy de compresión de contexto (ver abajo).
 }
 ```
 
-## fastCRW — motor Rust NATIVO + puente en el bus + semilla de cantera (skill-first, NO cableado)
+## Crawl4RS (D-os) — el ÚNICO órgano web del bus (Docker) + puente + semillas de cantera
 
 ```
-QUÉ ES  API de datos web en Rust (scrape·extract·search·crawl·map), alt. open-source a Firecrawl/Tavily.
-        Da a Enki datos web frescos DENTRO del runtime (antes solo WebSearch en sesiones de Claude, nada en el bus).
-        Caso motivador: precio/cantidad/formato de ingredientes (soysuper) para escandallo — reemplazo del
-        API de Mercadona no oficial y frágil.
+QUÉ ES  Crawler Rust del repo hermano D-os (modo auto: fetch HTTP ligero primero, navegador real
+        Chromium/CDP + stealth solo ante 403/challenge/JS pesado · crawl profundo BFS/DFS ·
+        extracción CSS/semántica/JSON-LD · /search vía SearXNG · /map). Da a Enki datos web frescos
+        DENTRO del runtime. Caso motivador: precio/cantidad/formato de ingredientes (soysuper) para
+        escandallo — reemplazo del API de Mercadona no oficial y frágil.
 
-1 · MOTOR (Rust, NATIVO)  deployment/fastcrw/ {
-     install.sh   cargo install crw-server → /usr/local/bin (no hay releases precompiladas; instala rustup si falta).
-     crw-server.service  systemd, :3002 (el core tiene el :3000), sin auth local, endurecido.
-     scrape/extract/map funcionan SOLO con el binario. /search necesita SearXNG (inquilino Python, opcional).
-     RENDER (verificado en vivo): páginas server-rendered (ficha soysuper /p/<slug>) → extract rápido y limpio;
-     páginas JS-pesadas (soysuper /search) → crw-server SIN render da timeout. Salida: atacar por la ficha directa,
-     o compilar crw-server --features cdp + LightPanda para full-JS (receta en deployment/fastcrw/README.md).
+RELEVO (v0.2.0 del puente)  fastcrw (motor crw-server nativo :3002 + puente tools_http) RETIRADO:
+        el modo auto de Crawl4RS cubre el fetch ligero que hacía crw-server, y el navegador real
+        elimina su límite verificado (páginas JS-pesadas → timeout sin render). Un motor, todas
+        las puertas: leer · buscar · mapear · rastrear. El Chromium de crawling vive SOLO en el
+        contenedor (las libs Chromium de vps-setup.sh son de open-wa/WhatsApp, otro órgano).
+
+POR QUÉ DOCKER (la excepción que confirma "Rust → nativo"): el binario es limpio pero ARRASTRA
+        Chromium — la dependencia sucia. Reparto por NATURALEZA: lo sucio va contenido (como python-tools).
+
+1 · MOTOR (Docker)  deployment/crawl4rs/ {
+     docker-compose.yml  build desde el clon /opt/d-os (override DOS_DIR) → imagen enki-crawl4rs.
+     127.0.0.1:8081→8080 (el :8080 local es de SearXNG) · shm_size 1gb (Chromium revienta con 64MB)
+     · CRAWL4RS_JWT_SECRET OBLIGATORIO sin default (el del Dockerfile de D-os es público/forjable;
+       compose falla si falta — fail-closed) · CRAWL4RS_API_KEY opcional · red compartida enki-web
+       con SearXNG (SEARXNG_URL=http://enki-searxng:8080) · healthcheck TCP por bash.
+     README.md  receta completa: clone → secreto → red → up → verificar → encender → usar.
   }
-2 · PUENTE (bus)  modules/fastcrw/ {
-     module.json  tools_http → http://localhost:3002/v1/* (auth_type none). Tools: fastcrw.scrape · extract · search · map.
-                  El loader genera las closures (templating + fetch + response_path); scrape→data.markdown,
-                  extract→data.json (schema como objeto crudo), search→data.
-     index.js     mínimo (BaseModule onLoad; el motor vive fuera). Degradable: crw caído → UPSTREAM_UNREACHABLE, sin reventar.
-     cloud opcional: cambiar url a https://api.fastcrw.com/v1/* + auth_type bearer + credential FASTCRW. Sin instalar nada.
+2 · PUENTE (bus)  modules/crawl4rs/ {
+     Reflejo bus↔HTTP: leer/rastrear job-based (token JWT cacheado → POST /crawl → poll → result,
+     retry ante 401); buscar/mapear directos (POST /search · /map, mismo token). Eventos:
+     crawl4rs.{leer,rastrear,buscar,mapear}.request → .response. Tool de chat: leer_web (url,
+     query BM25, extract_semantic). NACE OFF (interruptor 'crawl4rs', grupo sistema) · degrada
+     honesto (503 {degradado, motivo}; buscar sin SearXNG → la prescripción del servidor viaja en
+     message). Precedencia env > config (CRAWL4RS_BASE_URL/API_KEY). Test: crawl4rs__index.
   }
-3 · DESCUBRIMIENTO (skill-first, NO se cablea a escandallo)  modules/cosecha/cantera/enki/precio-ingredientes-web/SKILL.md {
-     La skill EMPAQUETA el saber "cómo sacar precio de un ingrediente de soysuper con fastcrw.scrape" (search→ficha→
-     leer precio; extract pide LLM en crw-server) y CONDUCE las tools deterministas (las manos), por bus.publishAndWait,
-     con la invocación INLINE (autocontenida). Hogar declarado lente_dominio:escandallo · lente_tarea:costear.
-     → se DESCUBRE (buscar_skill / conserje-cantera al costear) · se ENLAZA (activar_skill → lente en escandallo) ·
-       o el LLM la REESCRIBE por proyecto (cosecha.crear). Guard no-inventar: precio de la ficha real o 'sin_precio'
-       (mismo mandato que el freno PRECIO_INVENTADO de escandallo). La cantera la auto-indexa (cero código nuevo).
+3 · DESCUBRIMIENTO (skill-first, NO se cablea a escandallo) {
+     herramientas-web (genérico, dominio web): el canal — bus.publishAndWait('crawl4rs.leer.request')
+       y hermanos, leer el error, el ritmo. precio-ingredientes-web (dominio escandallo, autocontenida):
+       el saber soysuper — descubrir por /search (no adivinar slug), leer la ficha, guard no-inventar
+       (precio real o 'sin_precio', mismo mandato que el freno PRECIO_INVENTADO). La cantera las
+       auto-indexa; el conserje las ofrece al costear.
   }
-TESTS  fastcrw-module (5: tools registran · scrape/extract templating+response_path · degradación honesta) ·
-       precio-ingredientes-web-seed (4: descubrimiento · búsqueda · hogar · conducción). validate-all cero drift.
+TESTS  crawl4rs__index (9) · herramientas-web-seed (4) · precio-ingredientes-web-seed (4).
+HORIZONTE  Fase 7 de D-os = crate crawl4rs-mqtt (el motor habla MQTT nativo por
+           core/<id>/api/request/crawl/*) → este puente HTTP se retira; el compose solo cambia el CMD.
 ```
 
 ## Headroom — proxy de compresión de contexto (código integrado + FASE 0 en Docker)
@@ -16319,33 +16332,34 @@ FIDELIDAD  los frenos de blueprint (<mod>.validar → 422) son el test AUTOMÁTI
 
 ## OFRECER TOOLS COMO SKILL DE DESCUBRIMIENTO — las tools viven en segundo plano
 
-> El principio que emergió al conectar fastCRW al LLM real. **Las tools están en segundo plano
-> POR DISEÑO** — no es un descuido. El ai-gateway pone `invoke_agent` el PRIMERO ("PREFERENTE… los
-> agentes saben hacer su trabajo mejor que tú encadenando tools básicos; solo cae a tools directas
-> si NINGÚN agente cubre el caso") y **filtra las tools por página** (`_getTools`: `allowedPrefixes`
-> + `GLOBAL_TOOLS`). Una tool_http registrada (p.ej. `fastcrw.scrape`) NO llega al LLM de una página
-> que no la tiene en scope. Eso es correcto: el LLM no debe empuñar el bisturí, debe llamar al cirujano.
+> El principio que emergió al conectar el primer órgano web (entonces fastCRW) al LLM real. **Las
+> tools están en segundo plano POR DISEÑO** — no es un descuido. El ai-gateway pone `invoke_agent`
+> el PRIMERO ("PREFERENTE… los agentes saben hacer su trabajo mejor que tú encadenando tools
+> básicos; solo cae a tools directas si NINGÚN agente cubre el caso") y **filtra las tools por
+> página** (`_getTools`: `allowedPrefixes` + `GLOBAL_TOOLS`). Una tool registrada NO llega al LLM
+> de una página que no la tiene en scope. Eso es correcto: el LLM no debe empuñar el bisturí,
+> debe llamar al cirujano.
 
 ```json
 {
   "esquema": "tools-como-skill-de-descubrimiento-v1",
-  "hallazgo_vivo": "el LLM de escandallo llamó a crw-server 46× por ejecutor+curl y 0× por la tool fastcrw — porque no la tenía en scope. Bypaseaba el endpoint encapsulado Y el error fértil, y se rindió ante un curl-timeout mudo ('web inscrapeable, mételo a mano').",
+  "hallazgo_vivo": "(histórico, ciclo fastcrw) el LLM de escandallo llamó al motor 46× por ejecutor+curl y 0× por la tool — porque no la tenía en scope. Bypaseaba el endpoint encapsulado Y el error fértil, y se rindió ante un curl-timeout mudo ('web inscrapeable, mételo a mano'). El principio sobrevive al relevo: hoy la tool en segundo plano es crawl4rs.",
   "antipatron": "surfacear la tool a la página (fuerza el diseño; el LLM encadena primitivas).",
   "patron": "OFRECER la tool por un SKILL de descubrimiento que enseña a alcanzarla por el canal que el LLM YA tiene (bus.publishAndWait) — la tool sigue en segundo plano.",
   "tres_capas": {
-    "skill_generico": "CÓMO alcanzar la tool (el canal + leer el error fértil + el ritmo). Reutilizable. Ej: herramientas-web (dominio web).",
+    "skill_generico": "CÓMO alcanzar la tool (el canal + leer el error + el ritmo). Reutilizable. Ej: herramientas-web (dominio web).",
     "skill_dominio": "el SABER del caso, AUTOCONTENIDO (la invocación inline, no depende del genérico). Ej: precio-ingredientes-web (dominio escandallo).",
     "agente": "AISLAR un lote grande fuera del turno de chat (perspectiva-c con throttle+retry). Cuando el volumen no cabe en una vuelta."
   },
-  "verificado_en_codigo": "bus.publishAndWait es universal y SIN allowlist; bus.publishAndWait('fastcrw.scrape',{url}) correla con 'fastcrw.scrape.response' (loader _renderResponseEvent, ~1108) y resuelve con la markdown; el error fértil viaja en el message.",
+  "verificado_en_codigo": "bus.publishAndWait es universal y SIN allowlist; bus.publishAndWait('crawl4rs.leer.request',{url}) correla con 'crawl4rs.leer.response' (reflejo _atender, request_id) y resuelve con {status, data.markdown}; la prescripción del fallo viaja en message.",
   "autocontencion": "las lentes se filtran/rankean por DOMINIO (ai-gateway ~1658: filter l.dominio===dominio). Una skill de dominio NO puede depender de otra de dominio distinto estando cargada → lleva su invocación INLINE."
 }
 ```
 
 ```
-canal (lo que el LLM ya tiene)     bus.publishAndWait('fastcrw.scrape', { url })  → markdown
-                                    (NUNCA curl por ejecutor: pierde endpoint + error fértil)
-skill genérico   herramientas-web         (dominio web · lente_tarea consultar) — el canal + error fértil + ritmo
+canal (lo que el LLM ya tiene)     bus.publishAndWait('crawl4rs.leer.request', { url })  → {status, data.markdown}
+                                    (NUNCA curl por ejecutor: pierde el token JWT + el mensaje interpretado)
+skill genérico   herramientas-web         (dominio web · lente_tarea consultar) — el canal + el error + ritmo
 skill dominio    precio-ingredientes-web  (dominio escandallo) — el saber, con la invocación INLINE (autocontenida)
 agente           precio-web (perspectiva-c, siguiente) — el lote de 39 fuera del turno
 ```
@@ -16365,9 +16379,11 @@ ENGANCHE  core/modules/loader.js _httpErrorResponse → TODA tool_http hereda el
           (error plano) si el banco no carga. La prescripción va EMBEBIDA en `message` — el único campo que TODA capa
           de transporte preserva (UIRequestHandler/ai-gateway hacen cherry-pick de {code,message}); los hermanos
           estructurados sobreviven en el camino directo handler→reflejo (para el gate del rail, futuro).
-VERIFICADO EN VIVO  el 422 de fastcrw.extract llega al caller como:
+VERIFICADO EN VIVO  (histórico, con fastcrw.extract, antes del relevo) el 422 llegaba al caller como:
           "[CONFIG] … DIAGNÓSTICO: … SIGUIENTE: corrige los argumentos … NO ES: throttle · motor caído · rendirse."
-TESTS  error-fertil (6, caso testigo del 504 incl.) · fastcrw-module asserta el error fértil.
+          El mismo principio vive en el puente crawl4rs: la prescripción del servidor viaja en message
+          (p.ej. "search no disponible: define SEARXNG_URL") y la degradación lleva {degradado, motivo}.
+TESTS  error-fertil (6, caso testigo del 504 incl.). El banco sigue enganchado a TODA tool_http vía loader.
 SIGUIENTE (fases)  gate del rail (no cerrar en 'manual' sin agotar el retry prescrito) · anti-especulación-canonizada.
 ```
 
@@ -16375,13 +16391,14 @@ SIGUIENTE (fases)  gate del rail (no cerrar en 'manual' sin agotar el retry pres
 
 ```
 EVENTOS {
-  fastcrw.{scrape,extract,search,map}  (tools_http del bus → crw-server :3002)
+  crawl4rs.{leer,rastrear,buscar,mapear}.request → .response  (reflejos del puente → contenedor :8081)
+  interruptor 'crawl4rs' (grupo sistema, OFF) → enciende/apaga el puente en caliente
   interruptor 'headroom' → ai-gateway.onInterruptorCambiado (hot-switch del proxy de compresión)
   conserje.empujon {tipo:'skill', accion 'cosecha.promover:precio-ingredientes-web'}  (descubrimiento al costear)
 }
 PIEZAS {
-  deployment/fastcrw/                     motor Rust nativo (install.sh + crw-server.service)
-  modules/fastcrw/                        puente tools_http al bus
+  deployment/crawl4rs/                    provisioning del órgano web (compose + receta, Docker por Chromium, red enki-web)
+  modules/crawl4rs/                       puente bus↔HTTP al motor Crawl4RS (D-os) — interruptor OFF, degrada honesto
   modules/_shared/error-fertil.js         banco de errores fértiles (heredado por toda tool_http vía loader)
   modules/cosecha/cantera/enki/herramientas-web/         skill GENÉRICO — cómo alcanzar la tool por bus (descubrimiento)
   modules/cosecha/cantera/enki/precio-ingredientes-web/  skill DOMINIO — el saber del precio, invocación inline (autocontenida)
@@ -16389,19 +16406,19 @@ PIEZAS {
   deployment/python-tools/headroom/       proxy de compresión (FASE 0 docker)
 }
 ESTADO {
-  ✓ código: fastcrw · error-fertil · skills (genérico+dominio) · headroom (8/8) · tests · validate-all verde
-  ✓ VIVO (verificado por MQTT): crw-server :3002 sano · fastcrw.scrape devuelve la ficha con precio
-    (mozzarella 4,62€) · error fértil llega al caller con [CLASE]+SIGUIENTE+NO ES.
-  ✓ hallazgo vivo: /search NO da timeout estructural (8 fichas, 200); soysuper THROTTLEA ráfagas (~15-20 → 504);
-    adivinar slug /p/<x> → 404 vacío → descubrir por /search es el camino fiable.
-  ◑ falta cerrar en vivo: que el LLM de escandallo USE la tool por skill (0 fastcrw / 46 curl medidos ANTES del
-    skill genérico + precio autocontenida). Se confirma con un turno real en la app → revisar tool_calls.
-  ⏸ escandallo NO cableado a fastcrw por DECISIÓN — el enlace es skill-first (descubrir/promover/crear), no hardcode.
+  ✓ código: crawl4rs v0.2.0 (leer·rastrear·buscar·mapear) · error-fertil · skills (genérico+dominio
+    recableadas a crawl4rs) · headroom (8/8) · tests (crawl4rs__index 9 · seeds 4+4) · fastcrw RETIRADO.
+  ✓ hallazgo vivo (heredado del ciclo fastcrw — la física del sitio no cambia): soysuper THROTTLEA
+    ráfagas (~15-20 → 504); adivinar slug /p/<x> → 404 vacío → descubrir por /search es el camino fiable.
+  ◑ falta cerrar en vivo: levantar enki-crawl4rs en el VPS (receta deployment/crawl4rs/README.md),
+    encender el interruptor y verificar un turno real de escandallo usando la skill → revisar tool_calls.
+  ⏸ escandallo NO cableado a crawl4rs por DECISIÓN — el enlace es skill-first (descubrir/promover/crear), no hardcode.
   ⏸ agente precio-web (perspectiva-c) para el lote de 39 — siguiente.
 }
 ```
 
-> **Trade-off vivo.** Un contenedor Python compartido puede sonar a acoplar herramientas que no se
-> hablan. Pero el reparto es por NATURALEZA, no por función: Rust estático nativo (limpio) vs Python
-> sucio contenido. El hogar único evita el sprawl de un Docker por tool y mantiene el VPS lean; cuando
-> dos tools Python se estorben de verdad, se separan — no antes.
+> **Trade-off vivo.** Retirar fastcrw compra UN solo órgano web (menos superficie, un token, un
+> interruptor) al precio de pagar Chromium hasta en lecturas simples — mitigado porque el modo auto
+> solo abre el navegador ante 403/challenge. El reparto sigue siendo por NATURALEZA, no por función:
+> binario limpio nativo; dependencia sucia (Chromium, Python) contenida. Cuando dos inquilinos se
+> estorben de verdad, se separan — no antes.

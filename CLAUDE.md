@@ -579,4 +579,4 @@ PATRONES
 | `arquitectura/cabecera/cupulas/cabecera.md` | cupulas | La cúpula de la cabecera — CLAUDE.md servido por rebanadas, computado por doc-sync y vigilado por CI (la escalera de determinismo aplicada al documento). |
 | `arquitectura/cabecera/prisma/vertical-comercio.md` | prisma | ProductoUniversal de 5 huecos: producto-manager, adaptador, proyector, arquetipos, opciones, boss+enforcement, coste, escaparate, POS completo, calendario (base del tiempo). |
 | `arquitectura/cabecera/prisma/vertical-construccion.md` | prisma | El vertical del HACER: etapas universales como espina (rail), arquetipos de fabricación por forma, órganos de obra — bancos puros v0.1. |
-| `arquitectura/cabecera/plataforma/herramientas-externas.md` | plataforma | Rust nativo en el VPS (fastCRW) · Python en Docker (contenedor universal: SearXNG, Headroom) · enganche al ejecutor por config. |
+| `arquitectura/cabecera/plataforma/herramientas-externas.md` | plataforma | Crawl4RS en Docker (Chromium contenido) como ÚNICO órgano web del bus (fastcrw retirado) · Python en Docker (contenedor universal: SearXNG, Headroom) · enganche al ejecutor por config. |

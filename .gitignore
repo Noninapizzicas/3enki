@@ -95,3 +95,9 @@ data/projects/system/
 data/projects/pizzepos/
 data/projects/facturas-nonina/
 audit/
+
+# managed by open-wa (su postinstall lo re-añade en cada npm install; commiteado para que no ensucie el árbol)
+**.data.json
+**.node-persist**
+**_IGNORE_**
+# end managed by open-wa

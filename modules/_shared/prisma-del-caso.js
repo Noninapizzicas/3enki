@@ -140,4 +140,37 @@ function sellarSenda(bitacora = {}) {
   };
 }
 
-module.exports = { NATURALEZAS, NATURALEZA_IDS, clasificar, descomponer, circuloCerrado, sellarSenda };
+// ── LEY DE LA EVIDENCIA: el juez universal de PROCEDENCIA (Specification fértil) ──
+// La fuente JAMÁS se veta por nombre — se clasifica su naturaleza y se le exige lo suyo.
+// Los sets de abajo NO son whitelists (lo desconocido no se rechaza): son ATAJOS de
+// clasificación para las naturalezas internas; cualquier fuente no listada es una
+// afirmación externa y entra nombrando su evidencia. El único rechazo por esencia es
+// la estimación: afirma sobre el mundo SIN dirección de vuelta → IRRECTIFICABLE.
+//
+// dato = { fuente?, evidencia? | url? | referencia_id? | mercadona_producto_id? }
+// → { ok, naturaleza, falta? } — nunca un 'no' pelado: nombra lo que falta (fértil).
+const PROCEDENCIAS = {
+  derivadas: new Set(['catalogo', 'sub_receta']),        // se re-derivan de internos: su evidencia es el propio cálculo
+  testimonio: new Set(['manual']),                       // el humano es la evidencia (quién/cuándo lo da el sistema)
+  con_vuelta_propia: new Set(['mercadona']),             // su producto_id cacheado es la dirección de vuelta
+  sin_vuelta: new Set(['estimado', 'estimado_llm'])      // afirman sin vuelta posible → jamás pasan como reales
+};
+
+function leyDeLaEvidencia(dato = {}) {
+  const fuente = String(dato.fuente || '').toLowerCase().trim();
+  if (PROCEDENCIAS.derivadas.has(fuente)) return { ok: true, naturaleza: 'DERIVABLE' };
+  if (PROCEDENCIAS.testimonio.has(fuente)) return { ok: true, naturaleza: 'TESTIMONIO' };
+  if (PROCEDENCIAS.con_vuelta_propia.has(fuente)) return { ok: true, naturaleza: 'AFIRMACION_EXTERNA' };
+  if (PROCEDENCIAS.sin_vuelta.has(fuente)) {
+    return { ok: false, naturaleza: 'IRRECTIFICABLE',
+      falta: 'una estimación no tiene dirección de vuelta — re-resuelve por una fuente real o deja el dato sin valor (honesto)' };
+  }
+  const ev = dato.evidencia || dato.url || dato.referencia_id || dato.mercadona_producto_id;
+  const evOk = (typeof ev === 'string' && ev.trim().length > 0) ||
+               (ev && typeof ev === 'object' && Object.keys(ev).length > 0);
+  if (evOk) return { ok: true, naturaleza: 'AFIRMACION_EXTERNA' };
+  return { ok: false, naturaleza: 'AFIRMACION_EXTERNA',
+    falta: `la fuente '${dato.fuente || '(sin fuente)'}' afirma sobre el mundo sin dirección de vuelta — nombra tu evidencia (url · referencia_id) y entras` };
+}
+
+module.exports = { NATURALEZAS, NATURALEZA_IDS, PROCEDENCIAS, clasificar, descomponer, circuloCerrado, sellarSenda, leyDeLaEvidencia };

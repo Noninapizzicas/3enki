@@ -4,12 +4,43 @@ dominio: prisma
 resumen: ProductoUniversal de 5 huecos: producto-manager, adaptador, proyector, arquetipos, opciones, boss+enforcement, coste, escaparate, POS completo, calendario (base del tiempo).
 fuentes:
   - modules/prisma/**
+  - modules/_shared/prisma-del-caso.js
   - modules/_shared/arquetipos-semilla.js
   - modules/_shared/organos-recetario.js
   - modules/_shared/pos-persistencia.js
   - modules/_shared/ical.js
-verificado: 2026-07-06
+verificado: 2026-07-09
 ---
+
+## LA LEY DE LA EVIDENCIA — el prisma gobierna la PROCEDENCIA en todos los frenos
+
+> `modules/_shared/prisma-del-caso.js` (banco PURO, hermano meta de los prismas): un caso-de-dato
+> se descompone por NATURALEZA (DERIVABLE · AFIRMACION_EXTERNA · CREACION), el juez tipado
+> `circuloCerrado` cierra el rail, y `leyDeLaEvidencia` es su Specification de procedencia:
+> **la fuente JAMÁS se veta por nombre — se califica por su evidencia.**
+
+```json
+{
+  "esquema": "ley-de-la-evidencia-v1",
+  "tesis": "la línea nunca es fuzzy/determinista — es RECTIFICABLE/IRRECTIFICABLE (piedra angular soysuper)",
+  "juez": "leyDeLaEvidencia({fuente, evidencia|url|referencia_id|mercadona_producto_id}) → {ok, naturaleza, falta?}",
+  "clasificacion": {
+    "derivadas (catalogo, sub_receta)": "pasan — su evidencia es el propio cálculo",
+    "testimonio (manual)": "pasa — el humano es la evidencia",
+    "mercadona": "pasa — su producto_id cacheado es la vuelta",
+    "CUALQUIER otra (soysuper, makro, la-que-venga)": "afirmación externa: nombra tu evidencia y entras — cero muros nuevos por fuente nueva",
+    "estimado / estimado_llm": "IRRECTIFICABLE — afirma sin vuelta posible: jamás persiste como real (el ÚNICO enemigo)"
+  },
+  "fertil": "nunca un 'no' pelado: falta nombra el camino ('nombra tu evidencia y entras')",
+  "consumidores": [
+    "escandallo._checkCosteo (aquí murieron FUENTES_TRAZABLES y EXIGEN_EVIDENCIA)",
+    "recetas.actualizar_precio (fuera el enum de fuente) · recetas crear/actualizar (fuente de receta = string libre)",
+    "pedidos.create_tienda (canal_origen = slug libre: glovo/telegram entran sin tocar código)"
+  ],
+  "vigilancia": "cúpula-eventos canta 'veto por nombre' si un freno futuro nace con lista cerrada sobre procedencia",
+  "tests": "prisma-del-caso (ley 6 casos) · escandallo__reflejo-validar 13 (makro+url ENTRA) · pizzepos__pedidos (telegram ENTRA)"
+}
+```
 
 # PRISMA — Vertical universal de comercio (producto de 5 huecos · modules/prisma/)
 

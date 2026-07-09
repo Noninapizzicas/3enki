@@ -107,13 +107,24 @@ test('precio no finito (NaN/negativo) → PRECIO_NO_FINITO', async () => {
   assert.ok(r.data.errors.some(x => x.code === 'PRECIO_NO_FINITO'));
 });
 
-test('fuente desconocida → FUENTE_DESCONOCIDA', async () => {
+test('LEY DE LA EVIDENCIA: fuente desconocida SIN evidencia → PRECIO_SIN_EVIDENCIA (fértil, no muro)', async () => {
   const m = nuevo();
   const c = clon();
-  c.lineas_detalle[0].fuente = 'adivinada';
+  c.lineas_detalle[0].fuente = 'adivinada';   // afirmación externa sin dirección de vuelta
   const r = await m._validar({ costeo: c });
   assert.strictEqual(r.data.valid, false);
-  assert.ok(r.data.errors.some(x => x.code === 'FUENTE_DESCONOCIDA'));
+  const err = r.data.errors.find(x => x.code === 'PRECIO_SIN_EVIDENCIA');
+  assert.ok(err, 'debe caer por falta de evidencia, no por el nombre');
+  assert.ok(/direcci[oó]n de vuelta/.test(err.message), 'el error prescribe el camino (fértil)');
+});
+
+test('LEY DE LA EVIDENCIA: fuente desconocida CON evidencia → ENTRA (la fuente jamás se veta por nombre)', async () => {
+  const m = nuevo();
+  const c = clon();
+  c.lineas_detalle[0].fuente = 'makro';       // fuente que no existía ayer
+  c.lineas_detalle[0].url = 'https://tienda.makro.es/p/mozzarella-1kg';
+  const r = await m._validar({ costeo: c });
+  assert.strictEqual(r.data.valid, true, 'makro + url = rectificable: entra sin tocar una línea de código');
 });
 
 test('coste_unidad incoherente con el rinde → COSTE_UNIDAD_INCOHERENTE', async () => {

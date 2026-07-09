@@ -13,7 +13,7 @@
  */
 
 const assert = require('assert');
-const { NATURALEZA_IDS, clasificar, descomponer, circuloCerrado, sellarSenda } =
+const { NATURALEZA_IDS, clasificar, descomponer, circuloCerrado, sellarSenda, leyDeLaEvidencia } =
   require('../../modules/_shared/prisma-del-caso');
 
 function test(desc, fn) {
@@ -126,3 +126,36 @@ test('sellarSenda: sin pasos o sin evento de cierre → null (aún no hay senda)
 });
 
 console.log(`\n✓ prisma-del-caso: todas las aserciones pasan (naturalezas: ${[...NATURALEZA_IDS].join(', ')})`);
+
+
+// ── LEY DE LA EVIDENCIA: la fuente jamás se veta por nombre ──
+test('ley: derivadas internas (catalogo, sub_receta) pasan sin evidencia — se re-derivan', () => {
+  assert.strictEqual(leyDeLaEvidencia({ fuente: 'catalogo' }).ok, true);
+  assert.strictEqual(leyDeLaEvidencia({ fuente: 'sub_receta' }).naturaleza, 'DERIVABLE');
+});
+
+test('ley: manual pasa — el humano es la evidencia (testimonio)', () => {
+  assert.deepStrictEqual(leyDeLaEvidencia({ fuente: 'manual' }), { ok: true, naturaleza: 'TESTIMONIO' });
+});
+
+test('ley: mercadona pasa — su producto_id cacheado es la vuelta', () => {
+  assert.strictEqual(leyDeLaEvidencia({ fuente: 'mercadona' }).ok, true);
+});
+
+test('ley: una fuente DESCONOCIDA con evidencia ENTRA (makro + url, sin tocar código)', () => {
+  const r = leyDeLaEvidencia({ fuente: 'makro', url: 'https://tienda.makro.es/p/x' });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.naturaleza, 'AFIRMACION_EXTERNA');
+});
+
+test('ley: una fuente desconocida SIN evidencia no entra — y el fallo es FÉRTIL (nombra el camino)', () => {
+  const r = leyDeLaEvidencia({ fuente: 'adivinada' });
+  assert.strictEqual(r.ok, false);
+  assert.ok(/nombra tu evidencia/.test(r.falta), 'el no lleva su gemelo positivo dentro');
+});
+
+test('ley: la estimación es IRRECTIFICABLE — jamás pasa como real, con o sin lo que sea', () => {
+  const r = leyDeLaEvidencia({ fuente: 'estimado_llm', url: 'https://da-igual.com' });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.naturaleza, 'IRRECTIFICABLE');
+});

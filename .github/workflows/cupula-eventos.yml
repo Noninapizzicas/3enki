@@ -1,0 +1,29 @@
+# CÚPULA DE EVENTOS — el vigilante del contrato del bus en CI.
+#
+# GRADUADA (2026-07-09, repo a 0 fantasmas): un RPC FANTASMA rompe el CI — un
+# evento conducido que nadie atiende no entra a main. Los WARN (huérfanos,
+# tests, vetos) siguen cantando sin bloquear.
+name: cupula-eventos
+
+on:
+  pull_request:
+  schedule:
+    - cron: '0 8 * * 1'   # pulso semanal, lunes 08:00 (junto al de la cabecera)
+  workflow_dispatch:
+
+jobs:
+  vigilante:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Vigilante del contrato del bus (graduado — bloquea fantasmas)
+        run: |
+          set -o pipefail   # sin esto, tee enmascara el exit 1 del vigilante
+          node scripts/cupula-eventos/vigilante.js | tee salida.txt
+          echo '## Cúpula de eventos' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat salida.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

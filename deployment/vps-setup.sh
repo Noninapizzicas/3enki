@@ -212,10 +212,8 @@ if docker compose version &>/dev/null; then
     # Secreto JWT: nace UNA vez y vive en data/.env (excluido del rsync → persiste).
     # El default del Dockerfile de D-os es público/forjable — jamás se usa.
     mkdir -p "${INSTALL_DIR}/data"
-    if ! grep -q '^CRAWL4RS_JWT_SECRET=' "${INSTALL_DIR}/data/.env" 2>/dev/null; then
-        echo "CRAWL4RS_JWT_SECRET=$(openssl rand -hex 32)" >> "${INSTALL_DIR}/data/.env"
-        log "CRAWL4RS_JWT_SECRET generado en ${INSTALL_DIR}/data/.env"
-    fi
+    # CRAWL4RS_JWT_SECRET ya NO se genera: la ley de la frontera (D-os) deja la auth
+    # abierta cuando solo se publica a loopback. Si existe uno previo, se respeta (auth activa).
     # Secreto de SearXNG: mismo trato (nace una vez, jamás el default público).
     if ! grep -q '^SEARXNG_SECRET_KEY=' "${INSTALL_DIR}/data/.env" 2>/dev/null; then
         echo "SEARXNG_SECRET_KEY=$(openssl rand -hex 32)" >> "${INSTALL_DIR}/data/.env"
@@ -227,10 +225,22 @@ if docker compose version &>/dev/null; then
 
     if [ -d /opt/d-os ]; then
         log "Construyendo y levantando enki-crawl4rs (la 1ª vez compila Rust: unos minutos)..."
-        _C4RS_SECRET="$(grep -m1 '^CRAWL4RS_JWT_SECRET=' "${INSTALL_DIR}/data/.env" | cut -d= -f2-)"
+        # LEY DE LA FRONTERA (D-os): el host publica solo a 127.0.0.1 → la frontera vive
+        # aquí, no en el contenedor. Auth abierta declarada; el secreto JWT ya no es teatro
+        # obligatorio (si algún día expones el puerto, pon CRAWL4RS_JWT_SECRET y la auth activa).
+        _C4RS_SECRET="$(grep -m1 '^CRAWL4RS_JWT_SECRET=' "${INSTALL_DIR}/data/.env" 2>/dev/null | cut -d= -f2-)"
         if CRAWL4RS_JWT_SECRET="${_C4RS_SECRET}" docker compose \
              -f "${REPO_DIR}/deployment/crawl4rs/docker-compose.yml" up -d --build > /dev/null 2>&1; then
             log "enki-crawl4rs arriba en 127.0.0.1:8081"
+            # UNA decisión, UNA llave: instalar el órgano ES el consentimiento — el
+            # interruptor nace ON en la instalación. Solo se siembra si el humano no
+            # decidió ya (el estado persistido manda, incluida su decisión de apagarlo).
+            node -e "
+              const fs=require('fs'),p='${INSTALL_DIR}/data/interruptores.json';
+              let st={estados:{}}; try{st=JSON.parse(fs.readFileSync(p,'utf8'))}catch(_){}
+              st.estados=st.estados||{};
+              if(!('crawl4rs' in st.estados)){ st.estados.crawl4rs=true; fs.writeFileSync(p,JSON.stringify(st,null,2)); console.log('sembrado'); }
+            " > /dev/null 2>&1 && log "Interruptor crawl4rs: ON (instalar es decidir; tu apagado manual se respeta)" || true
         else
             warn "enki-crawl4rs no levantó — el puente degrada honesto (503). Revisa: docker compose -f deployment/crawl4rs/docker-compose.yml logs"
         fi

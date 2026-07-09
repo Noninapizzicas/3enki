@@ -34,9 +34,12 @@ services:
     ports:
       - "127.0.0.1:8081:8080"
     environment:
-      # Firma de los JWT de /auth/token. SIN DEFAULT a propósito: el default
-      # del Dockerfile de D-os es público (forjable). Falla si no lo pones.
-      - CRAWL4RS_JWT_SECRET=${CRAWL4RS_JWT_SECRET:?pon CRAWL4RS_JWT_SECRET (openssl rand -hex 32)}
+      # LEY DE LA FRONTERA (D-os): este compose publica SOLO a 127.0.0.1 → la
+      # frontera vive en el host, no en el contenedor (que bindea 0.0.0.0 por
+      # necesidad del port-mapping). Auth abierta DECLARADA. Si algún día
+      # expones el puerto, exporta CRAWL4RS_JWT_SECRET y la auth se activa sola.
+      - CRAWL4RS_AUTH=${CRAWL4RS_AUTH:-abierta}
+      - CRAWL4RS_JWT_SECRET
       # Opcional: exige x-api-key en /auth/token. Passthrough SIN '=': solo
       # llega al contenedor si existe en el entorno del host. CLAVE: el server
       # de D-os trata la variable PRESENTE (aunque vacía) como clave configurada

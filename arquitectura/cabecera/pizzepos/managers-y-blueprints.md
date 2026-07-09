@@ -5,7 +5,7 @@ resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, 
 fuentes:
   - modules/pizzepos/**
   - blueprints/**
-verificado: 2026-07-06
+verificado: 2026-07-09
 ---
 
 # Módulos Pizzepos y Blueprints

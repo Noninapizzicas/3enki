@@ -175,8 +175,7 @@
         "async actividad(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
         "  // TRABAJO_PENDIENTE: hoy devolvemos snapshot vacio.",
-        "  // Cuando agent-observer exponga consulta de invocaciones recientes filtradas por scope='marketing',",
-        "  // hacer publishAndWait('agent-observer.consultar.request', {scope: 'marketing', ventana_dias, ...}).",
+        "  // Ver trabajo_pendiente 'integracion_agent_observer' — el evento esperado esta DECLARADO ahi (forma, no prosa).",
         "  return { status: 200, data: { ventana_dias: input.ventana_dias || 7, invocaciones: [], nota: 'agent-observer integracion pendiente — actividad temporalmente vacia' } }"
       ],
       "reglas_clave": [
@@ -191,7 +190,8 @@
     {
       "id": "integracion_agent_observer",
       "estado": "abierto",
-      "descripcion": "actividad hoy devuelve array vacio. Cuando agent-observer exponga consulta filtrada por scope, integrar."
+      "evento_esperado": "agent-observer.consultar.request",
+      "descripcion": "actividad hoy devuelve array vacio. Cuando agent-observer atienda el evento_esperado (consulta filtrada por scope), integrar — la cupula de eventos cantara INTENCION MADURA cuando exista."
     },
     {
       "id": "subscriber_carta_actualizada",

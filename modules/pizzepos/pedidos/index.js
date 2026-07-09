@@ -448,9 +448,12 @@ class PedidosModule extends BaseModule {
         this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
         return this._errorResponse(400, 'INVALID_INPUT', 'total_centimos debe ser entero >= 0', { field: 'total_centimos' });
       }
-      if (!canal_origen || !['whatsapp', 'web', 'manual'].includes(canal_origen)) {
+      // LEY DE LA EVIDENCIA (prisma): el canal de origen JAMAS se veta por nombre — el pedido
+      // ES su propia evidencia (items+total+cliente). glovo, telegram o el canal de manana
+      // entran sin tocar esta linea; lo unico exigible es que el canal EXISTA (slug).
+      if (!canal_origen || typeof canal_origen !== 'string' || !/^[a-z0-9_-]{2,30}$/.test(canal_origen)) {
         this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
-        return this._errorResponse(400, 'INVALID_INPUT', "canal_origen debe ser 'whatsapp' | 'web' | 'manual'", { field: 'canal_origen' });
+        return this._errorResponse(400, 'INVALID_INPUT', "canal_origen requerido (slug del canal: whatsapp, web, manual, glovo, ...)", { field: 'canal_origen' });
       }
       // El nombre es el ANCLA de recogida (sustituye al codigo_recogida) → obligatorio.
       if (!cliente_nombre_norm || cliente_nombre_norm.length < 2) {

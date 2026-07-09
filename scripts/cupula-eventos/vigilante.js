@@ -61,6 +61,15 @@ const esDinamico = (ev) => !ev || PREFIJOS_DINAMICOS.some((d) => ev.includes(d))
 const atendidos = new Map();
 const conducidos = [];
 const publicados = [];
+const intenciones = [];   // trabajo_pendiente[].evento_esperado — futuro DECLARADO (forma, no prosa)
+
+// Corta el comentario de línea (// …) respetando URLs (http://, https://). La línea
+// comentada del pseudocódigo es intención/prosa, NO conducción — caso testigo:
+// carta-marketing 'conducía' agent-observer.consultar dentro de un comentario (falso fantasma).
+function sinComentario(linea) {
+  const m = linea.match(/(^|[^:])\/\//);
+  return m ? linea.slice(0, m.index + m[1].length) : linea;
+}
 
 function atiende(ev, quien) {
   if (esDinamico(ev)) return;
@@ -115,7 +124,19 @@ for (const f of walk(MODULES)) {
       const ev = typeof e === 'string' ? e : e.event;
       if (!esDinamico(ev)) publicados.push({ evento: ev, por: quien, via: 'blueprint' });
     }
-    escanearTexto(JSON.stringify(bp), quien, 'pseudocodigo');
+    // SOLO el pseudocódigo conduce — la prosa (_doc, changelogs, descripciones) NO lleva
+    // contratos. Y dentro del pseudocódigo, la línea comentada es intención, no conducción.
+    const lineasPseudo = [];
+    (function recoger(nodo, bajoPseudo) {
+      if (typeof nodo === 'string') { if (bajoPseudo) lineasPseudo.push(sinComentario(nodo)); return; }
+      if (Array.isArray(nodo)) { nodo.forEach((n) => recoger(n, bajoPseudo)); return; }
+      if (nodo && typeof nodo === 'object') for (const [k, v] of Object.entries(nodo)) recoger(v, bajoPseudo || k === 'pseudocodigo');
+    })(bp, false);
+    escanearTexto(lineasPseudo.join('\n'), quien, 'pseudocodigo');
+    // INTENCIONES declaradas: el futuro con forma. Cuando su evento exista, la cúpula lo OFRECE.
+    for (const t of bp.trabajo_pendiente || []) {
+      if (t && typeof t.evento_esperado === 'string') intenciones.push({ evento: t.evento_esperado, por: quien, id: t.id || null, estado: t.estado || null });
+    }
   }
 
   if (base === 'SKILL.md') escanearTexto(fs.readFileSync(f, 'utf8'), rel(f), 'skill');
@@ -207,7 +228,7 @@ const avisos = dedup(publishHuerfano);
 
 // ── reporte ──────────────────────────────────────────────────────────────────
 if (AS_JSON) {
-  console.log(JSON.stringify({ atendidos: atendidos.size, conducidos: conducidos.length, publicados: publicados.length, rpc_fantasma: errores, publish_huerfano: avisos, test_fantasma: testFantasma }, null, 1));
+  console.log(JSON.stringify({ atendidos: atendidos.size, conducidos: conducidos.length, publicados: publicados.length, rpc_fantasma: errores, publish_huerfano: avisos, test_fantasma: testFantasma, veto_por_nombre: vetoPorNombre, intenciones }, null, 1));
 } else {
   console.log(`cúpula-eventos: ${atendidos.size} eventos atendidos · ${conducidos.length} RPCs conducidos · ${publicados.length} publicaciones`);
   for (const e of errores) console.log(`${RED}✗ RPC FANTASMA${RST} ${e.evento}  ← conducido por ${e.por} y NADIE lo atiende`);
@@ -218,6 +239,10 @@ if (AS_JSON) {
   for (const a of avisosFuertes) console.log(`${YEL}⚠ publish huérfano${RST} ${a.evento}  ← ${a.por} (${a.via}) — sin subscriber`);
   for (const t of testFantasma) console.log(`${YEL}⚠ test con fantasma${RST} ${t.evento}  ← ${t.por} — el stub perpetúa un evento que nadie atiende`);
   for (const v of vetoPorNombre) console.log(`${YEL}⚠ veto por nombre${RST} ${v.donde} — la procedencia se califica por EVIDENCIA (ley del prisma), no por lista: ${v.linea}`);
+  // El canto POSITIVO: una intención declarada cuyo evento YA vive — ofrécela, ciérrala.
+  for (const it of intenciones.filter((i) => i.estado !== 'cerrado' && respondeAlguien(i.evento))) {
+    console.log(`${GREEN}✦ INTENCIÓN MADURA${RST} ${it.evento} ya se atiende — cierra '${it.id}' en ${it.por}`);
+  }
   const veredicto = errores.length ? `${errores.length} fantasma(s)` : 'contrato íntegro';
   console.log(`${errores.length ? RED : GREEN}${TESTIGO ? '(testigo) ' : ''}${veredicto}${RST} · ${avisosFuertes.length} aviso(s) fuertes · ${avisos.length - avisosFuertes.length} de manifest (ver --json)`);
 }

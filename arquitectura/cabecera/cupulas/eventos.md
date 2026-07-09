@@ -25,16 +25,17 @@ verificado: 2026-07-09
   "vigilante": "scripts/cupula-eventos/vigilante.js [--testigo] [--json]",
   "censo": {
     "atendidos": "module.json subscribes · blueprints eventos_que_escucho · operaciones de blueprint (<id>.<op>.request) · tools/tools_http por su NOMBRE · suscripciones PROGRAMÁTICAS en código (sub/subscribe en .js)",
-    "conducidos": "publishAndWait(...) y _rpc(...) en blueprints, skills de la cantera y código",
+    "conducidos": "publishAndWait(...) y _rpc(...) SOLO en pseudocódigo ejecutable (comentarios y prosa NO conducen — la prosa no lleva contratos), skills de la cantera y código",
     "publicados": "publishes de manifest · eventos_publicados de blueprint · publish(...) en pseudocódigo y código"
   },
   "cantos": {
     "rpc_fantasma": "ERROR — un RPC conducido que NADIE atiende (timeout silencioso garantizado)",
     "publish_huerfano": "WARN — publish de dominio sin subscriber; en consola solo los de pseudocódigo/skill (los de manifest los consume el frontend por MQTT dinámico → viven en --json)",
     "test_fantasma": "WARN — un stub de test compara contra un evento .request de módulo real que nadie atiende (raíz del caso destilador: el fantasma vivía en el test y jamás cantó)",
-    "veto_por_nombre": "WARN — un freno veta PROCEDENCIA (fuente/canal/proveedor/origen/motor/provider) con lista cerrada: la ley de la evidencia (prisma-del-caso) manda calificar por evidencia, no por nombre"
+    "veto_por_nombre": "WARN — un freno veta PROCEDENCIA (fuente/canal/proveedor/origen/motor/provider) con lista cerrada: la ley de la evidencia (prisma-del-caso) manda calificar por evidencia, no por nombre",
+    "intencion_madura": "OFRENDA — un trabajo_pendiente con evento_esperado (futuro DECLARADO, forma no prosa) cuyo evento YA se atiende: ciérralo. El canto positivo del conserje aplicado al contrato"
   },
-  "fase": "TESTIGO — canta sin bloquear (--testigo en CI); se gradúa quitando el flag cuando el repo quede sin fantasmas",
+  "fase": "GRADUADA (2026-07-09, repo a 0 fantasmas) — un rpc_fantasma ROMPE el CI; los WARN cantan sin bloquear",
   "organos_ci": {
     "check_en_pr": "cupula-eventos.yml on:pull_request → veredicto en el job summary",
     "pulso": "cron lunes 08:00 (junto al pulso de la cabecera)"
@@ -48,8 +49,10 @@ verificado: 2026-07-09
 ✗ destilador → propiocepcion.leer.request     la tool se atiende por su NOMBRE (sin .request):
                                               el replay de rutas moría en timeout silencioso. CURADO
                                               en el mismo PR (destilador _rpc('propiocepcion.leer')).
-✗ carta-marketing → agent-observer.consultar.request   agent-observer solo atiende agent.execute.*.
-                                              PENDIENTE: decisión del dueño (¿op nueva o evento mal nombrado?).
+✗ carta-marketing → agent-observer.consultar.request   RESUELTO POR FORMA: era un publishAndWait
+                                              dentro de un COMENTARIO (la prosa escondía el contrato). La intención
+                                              ahora es trabajo_pendiente con evento_esperado TIPADO — cuando
+                                              agent-observer lo atienda, la cúpula canta INTENCIÓN MADURA.
 ⚠ chat.notification.requested (agente-base) · tienda.bundle.actualizada (subsistema-tienda)
                                               publishes de pseudocódigo sin subscriber — revisar al tocar.
 FALSOS POSITIVOS DOMADOS  media-generator y carta-digital se suscriben EN CÓDIGO (onLoad),

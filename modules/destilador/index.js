@@ -520,9 +520,15 @@ class DestiladorModule extends ModuloHibridoReflejo {
 
   async _leerRegistros(input) {
     if (!input.project_id) return this._invalid('project_id');
-    const resp = await this._rpc('propiocepcion.leer.request',
+    // La tool se cablea al bus por su NOMBRE ('propiocepcion.leer', sin .request)
+    // — el loader correla 'propiocepcion.leer.response'. El '.request' de antes
+    // no lo atendia nadie: timeout silencioso en cada replay (cazado por la
+    // cupula de eventos en su primer barrido).
+    const resp = await this._rpc('propiocepcion.leer',
       { project_id: input.project_id, limite: 200 });
-    const eventos = resp?.data?.eventos || resp?.eventos || [];
+    // El wrapper del loader publica {request_id, result} (con data ya desenvuelta)
+    // — resp.result.eventos es el camino real; los otros dos, tolerancia.
+    const eventos = resp?.result?.eventos || resp?.data?.eventos || resp?.eventos || [];
     // grupos vienen como 'corr:xxx' | 'solo:xxx' -> extrae el id correlable
     const corrs = new Set(
       (input.grupos || input.correlation_ids || [])

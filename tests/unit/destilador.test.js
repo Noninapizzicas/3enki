@@ -253,10 +253,11 @@ test('handleAprobar 404 si la candidata no existe', async () => {
 test('_leerRegistros filtra propiocepcion por los grupos de la traza', async () => {
   const bus = fakeBus();
   const mod = await nuevoMinero(bus);
-  // stub del RPC a propiocepcion.leer
+  // stub del RPC a propiocepcion.leer — la tool se atiende por su NOMBRE (sin
+  // .request) y el wrapper del loader responde {request_id, result}.
   mod._rpc = async (evento) => {
-    if (evento === 'propiocepcion.leer.request') {
-      return { data: { eventos: [
+    if (evento === 'propiocepcion.leer') {
+      return { result: { eventos: [
         { correlation_id: 'aaa', resumen: 'costeo r1' },
         { correlation_id: 'bbb', resumen: 'otra cosa' },
         { correlation_id: 'ccc', resumen: 'costeo r2' }

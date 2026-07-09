@@ -1,0 +1,28 @@
+# CÚPULA DE EVENTOS — el vigilante del contrato del bus en CI.
+#
+# Fase TESTIGO (como nació la cúpula de la cabecera): canta en cada PR y en el
+# pulso semanal, sin bloquear todavía. Cuando el repo esté limpio de fantasmas,
+# se gradúa quitando --testigo.
+name: cupula-eventos
+
+on:
+  pull_request:
+  schedule:
+    - cron: '0 8 * * 1'   # pulso semanal, lunes 08:00 (junto al de la cabecera)
+  workflow_dispatch:
+
+jobs:
+  vigilante:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Vigilante del contrato del bus (testigo)
+        run: |
+          node scripts/cupula-eventos/vigilante.js --testigo | tee salida.txt
+          echo '## Cúpula de eventos' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat salida.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

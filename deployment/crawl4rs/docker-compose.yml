@@ -25,6 +25,10 @@ services:
       # Clon del repo D-os en el VPS. Override: DOS_DIR=/ruta docker compose ...
       context: ${DOS_DIR:-/opt/d-os}
       dockerfile: Dockerfile
+      # OBLIGATORIO: sin target, docker construye la ÚLTIMA etapa del Dockerfile
+      # de D-os — 'minimal' (distroless, SIN Chromium ni bash: ni navegador ni
+      # healthcheck). 'runtime' es la imagen Debian slim + Chromium.
+      target: runtime
     image: enki-crawl4rs
     container_name: enki-crawl4rs
     ports:

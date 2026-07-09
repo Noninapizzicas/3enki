@@ -15805,6 +15805,99 @@ scripts/cabecera/rebanar.js              migración única monolito→rebanadas 
 
 ---
 
+# CÚPULA DE EVENTOS — el contrato del bus, vigilado
+
+> Las otras cúpulas guardan el documento (cabecera), el rail (estados) y la flota
+> (agentes). Esta guarda **el idioma**: en un sistema donde todo se habla por
+> eventos, un evento conducido que nadie atiende es un timeout silencioso — el
+> fallo más caro de diagnosticar. Nació de un día real: una skill sellada
+> conduciendo un evento inventado, un enum aceptado por el freno y rechazado por
+> el dueño, y un replay muriendo en silencio años-luz de su causa.
+
+## Contrato (JSON)
+
+```json
+{
+  "esquema": "cupula-eventos-v1",
+  "vigilante": "scripts/cupula-eventos/vigilante.js [--testigo] [--json]",
+  "censo": {
+    "atendidos": "module.json subscribes · blueprints eventos_que_escucho · operaciones de blueprint (<id>.<op>.request) · tools/tools_http por su NOMBRE · suscripciones PROGRAMÁTICAS en código (sub/subscribe en .js)",
+    "conducidos": "publishAndWait(...) y _rpc(...) SOLO en pseudocódigo ejecutable (comentarios y prosa NO conducen — la prosa no lleva contratos), skills de la cantera y código",
+    "publicados": "publishes de manifest · eventos_publicados de blueprint · publish(...) en pseudocódigo y código"
+  },
+  "cantos": {
+    "rpc_fantasma": "ERROR — un RPC conducido que NADIE atiende (timeout silencioso garantizado)",
+    "publish_huerfano": "WARN — publish de dominio sin subscriber; en consola solo los de pseudocódigo/skill (los de manifest los consume el frontend por MQTT dinámico → viven en --json)",
+    "test_fantasma": "WARN — un stub de test compara contra un evento .request de módulo real que nadie atiende (raíz del caso destilador: el fantasma vivía en el test y jamás cantó)",
+    "veto_por_nombre": "WARN — un freno veta PROCEDENCIA (fuente/canal/proveedor/origen/motor/provider) con lista cerrada: la ley de la evidencia (prisma-del-caso) manda calificar por evidencia, no por nombre",
+    "intencion_madura": "OFRENDA — un trabajo_pendiente con evento_esperado (futuro DECLARADO, forma no prosa) cuyo evento YA se atiende: ciérralo. El canto positivo del conserje aplicado al contrato",
+    "rechazo_mudo": "WARN — INVALID_INPUT sin hint en pseudocódigo: un muro sin puerta empuja al rodeo (curl, fs.edit, eventos inventados — visto en vivo). Mandato del freno fértil: todo rechazo lleva su camino. Línea base 2026-07-09: 65 (recetas 32)"
+  },
+  "fase": "GRADUADA (2026-07-09, repo a 0 fantasmas) — un rpc_fantasma ROMPE el CI; los WARN cantan sin bloquear",
+  "organos_ci": {
+    "check_en_pr": "cupula-eventos.yml on:pull_request → veredicto en el job summary",
+    "pulso": "cron lunes 08:00 (junto al pulso de la cabecera)"
+  }
+}
+```
+
+## Cazas del primer barrido (2026-07-09 — la cúpula pagó su coste el día que nació)
+
+```
+✗ destilador → propiocepcion.leer.request     la tool se atiende por su NOMBRE (sin .request):
+                                              el replay de rutas moría en timeout silencioso. CURADO
+                                              en el mismo PR (destilador _rpc('propiocepcion.leer')).
+✗ carta-marketing → agent-observer.consultar.request   RESUELTO POR FORMA: era un publishAndWait
+                                              dentro de un COMENTARIO (la prosa escondía el contrato). La intención
+                                              ahora es trabajo_pendiente con evento_esperado TIPADO — cuando
+                                              agent-observer lo atienda, la cúpula canta INTENCIÓN MADURA.
+⚠ chat.notification.requested (agente-base) · tienda.bundle.actualizada (subsistema-tienda)
+                                              publishes de pseudocódigo sin subscriber — revisar al tocar.
+FALSOS POSITIVOS DOMADOS  media-generator y carta-digital se suscriben EN CÓDIGO (onLoad),
+                          no por manifest → el censo lee también los .js (por eso 'código' es fuente).
+```
+
+## Límite honesto (lo que esta v1 NO cruza)
+
+Shapes y enums entre blueprints (el caso `fuente:'soysuper'` aceptada por el freno de
+escandallo y rechazada por `recetas.actualizar_precio`) piden entender los contratos
+de payload, no solo los nombres — es la siguiente rebanada de la escalera, cuando el
+canto de nombres esté graduado. Tampoco ve las skills selladas EN VIVO en la cantera
+de cada proyecto (datos, no repo): ese cruce pertenece al pulso contra la propiocepción
+(lo declarado vs lo realmente conducido en el bus).
+
+---
+
+## LA LEY DE LA EVIDENCIA — el prisma gobierna la PROCEDENCIA en todos los frenos
+
+> `modules/_shared/prisma-del-caso.js` (banco PURO, hermano meta de los prismas): un caso-de-dato
+> se descompone por NATURALEZA (DERIVABLE · AFIRMACION_EXTERNA · CREACION), el juez tipado
+> `circuloCerrado` cierra el rail, y `leyDeLaEvidencia` es su Specification de procedencia:
+> **la fuente JAMÁS se veta por nombre — se califica por su evidencia.**
+
+```json
+{
+  "esquema": "ley-de-la-evidencia-v1",
+  "tesis": "la línea nunca es fuzzy/determinista — es RECTIFICABLE/IRRECTIFICABLE (piedra angular soysuper)",
+  "juez": "leyDeLaEvidencia({fuente, evidencia|url|referencia_id|mercadona_producto_id}) → {ok, naturaleza, falta?}",
+  "clasificacion": {
+    "derivadas (catalogo, sub_receta)": "pasan — su evidencia es el propio cálculo",
+    "testimonio (manual)": "pasa — el humano es la evidencia",
+    "mercadona": "pasa — su producto_id cacheado es la vuelta",
+    "CUALQUIER otra (soysuper, makro, la-que-venga)": "afirmación externa: nombra tu evidencia y entras — cero muros nuevos por fuente nueva",
+    "estimado / estimado_llm": "IRRECTIFICABLE — afirma sin vuelta posible: jamás persiste como real (el ÚNICO enemigo)"
+  },
+  "fertil": "nunca un 'no' pelado: falta nombra el camino ('nombra tu evidencia y entras')",
+  "consumidores": [
+    "escandallo._checkCosteo (aquí murieron FUENTES_TRAZABLES y EXIGEN_EVIDENCIA)",
+    "recetas.actualizar_precio (fuera el enum de fuente) · recetas crear/actualizar (fuente de receta = string libre)",
+    "pedidos.create_tienda (canal_origen = slug libre: glovo/telegram entran sin tocar código)"
+  ],
+  "vigilancia": "cúpula-eventos canta 'veto por nombre' si un freno futuro nace con lista cerrada sobre procedencia",
+  "tests": "prisma-del-caso (ley 6 casos) · escandallo__reflejo-validar 13 (makro+url ENTRA) · pizzepos__pedidos (telegram ENTRA)"
+}
+```
+
 # PRISMA — Vertical universal de comercio (producto de 5 huecos · modules/prisma/)
 
 > Vertical 2 del rumbo (comercio local/universal): producto NO pizza-shaped, molde universal.

@@ -129,7 +129,10 @@ FASE 0 · PROVISIONING (HECHA, Docker)  deployment/python-tools/headroom/ {
               modelo Kompress cacheado en volumen. Verificado contra headroom-ai 0.30.0 (arranca, /livez healthy).
   docker-compose.headroom.yml  127.0.0.1:8787 · upstream por ANTHROPIC_TARGET_API_URL (default deepseek /anthropic;
               quítalo para Claude real → api.anthropic.com). HEADROOM_MODE=token (máx compresión).
-  ENCENDER  HEADROOM_PROXY_URL=http://localhost:8787 en el arranque del core + interruptor 'headroom' ON.
+  ARRANQUE AUTOMÁTICO  vps-setup.sh lo levanta en el camino por defecto (sin --docker: mismo patrón que
+              crawl4rs — root lo levanta, el core le habla por HTTP, cero concesión de grupo docker) y
+              enki.service ya trae HEADROOM_PROXY_URL=http://localhost:8787.
+  ENCENDER  solo el interruptor 'headroom' ON (nace OFF; con el proxy caído el provider va directo — fallback seguro).
 }
 FIDELIDAD  los frenos de blueprint (<mod>.validar → 422) son el test AUTOMÁTICO: si la compresión rompiera un
            contrato, se ve en el acto. Por eso nace OFF y se gradúa (fases como el ejecutor). Ver propuesta

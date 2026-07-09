@@ -234,32 +234,41 @@ if docker compose version &>/dev/null; then
             warn "SearXNG no levantó — crawl4rs.buscar responderá 503; leer/mapear/rastrear siguen"
         fi
     fi
+
+    # Headroom — proxy de compresión de contexto (:8787). Mismo patrón que crawl4rs: lo
+    # levanta root en el setup y el core le habla por HTTP → cero concesión de seguridad
+    # (no toca el grupo docker). El core solo lo usa si el interruptor 'headroom' se
+    # enciende (OFF por defecto) → tenerlo arriba es inofensivo. Baja el modelo Kompress
+    # al 1er arranque (tarda; el healthcheck lo cubre).
+    HR_COMPOSE="${REPO_DIR}/deployment/python-tools/docker-compose.headroom.yml"
+    if [ -f "$HR_COMPOSE" ]; then
+        log "Levantando Headroom (proxy de compresión, :8787)..."
+        if docker compose -f "$HR_COMPOSE" up -d --build > /dev/null 2>&1; then
+            log "Headroom arriba (verifica: curl http://127.0.0.1:8787/livez)"
+        else
+            warn "Headroom no arrancó — el provider va directo al LLM (fallback seguro). Revisa: docker compose -f $HR_COMPOSE logs"
+        fi
+    fi
 else
-    warn "Sin docker compose: Crawl4RS no se levantó. El puente degrada honesto (503) hasta reejecutar el setup."
+    warn "Sin docker compose: Crawl4RS/SearXNG/Headroom no se levantaron. Todo degrada honesto hasta reejecutar el setup."
 fi
 
-# ---- 3b. Docker (OPT-IN — aislamiento en contenedor del ejecutor + herramientas Python) ----
-# El módulo `ejecutor` (puerta guardada) puede correr comandos aislados en un contenedor
-# efímero pidiendo aislamiento:'contenedor'. Sin docker, degrada HONESTO (503, no cae a
-# local). Para habilitar la contención REAL de input no-confiable, instala docker y mete al
-# usuario del servicio (www-data) en el grupo docker.
+# ---- 3b. Ejecutor en contenedor (OPT-IN --docker — la ÚNICA concesión de seguridad) ----
+# El engine Docker ya lo asegura la sección 3a-bis (crawl4rs/headroom lo usan sin conceder
+# nada: los levanta root y el core les habla por HTTP). Lo que ESTE flag habilita es otra
+# cosa: que el módulo `ejecutor` (puerta guardada) pueda lanzar contenedores EN RUNTIME
+# pidiendo aislamiento:'contenedor'. Eso exige meter a www-data en el grupo docker.
 #
 # OPT-IN a propósito:  sudo ./vps-setup.sh [dominio] --docker
 #   (usa el flag --docker; NO 'ENKI_ENABLE_DOCKER=1 sudo …' porque sudo limpia el entorno)
 #
 # AVISO DE SEGURIDAD (honesto): meter a www-data en el grupo 'docker' equivale a darle ROOT
 # en el host (docker.sock ≈ root). La mitigación es el guard del ejecutor (hardline +
-# aprobación humana) y que nace OFF por interruptor. Si no quieres esa concesión, NO habilites
-# docker: el ejecutor sigue funcionando con aislamiento local + la reja (protección cooperativa).
+# aprobación humana) y que nace OFF por interruptor. Si no quieres esa concesión, NO pases
+# el flag: el ejecutor sigue funcionando con aislamiento local + la reja (protección
+# cooperativa), y degrada HONESTO (503) si se le pide contenedor.
 if [ "${ENKI_ENABLE_DOCKER:-0}" = "1" ]; then
     if command -v docker &>/dev/null; then
-        log "Docker ya instalado: $(docker --version)"
-    else
-        log "Instalando Docker (aislamiento del ejecutor)..."
-        apt-get install -y -qq docker.io > /dev/null 2>&1 || warn "Instalación de docker.io falló"
-    fi
-    if command -v docker &>/dev/null; then
-        systemctl enable --now docker > /dev/null 2>&1 || warn "No se pudo arrancar docker.service"
         getent group docker >/dev/null || groupadd docker
         if id -nG www-data 2>/dev/null | grep -qw docker; then
             log "www-data ya pertenece al grupo docker"
@@ -276,20 +285,12 @@ if [ "${ENKI_ENABLE_DOCKER:-0}" = "1" ]; then
         docker build -t enki-python-tools "${REPO_DIR}/deployment/python-tools/" > /dev/null 2>&1 \
             && log "enki-python-tools lista" \
             || warn "No se pudo construir enki-python-tools (revisa: docker build deployment/python-tools/)"
-
-        # Headroom — proxy de compresión de contexto (:8787). Baja el modelo Kompress al 1er
-        # arranque (tarda). El core lo usa solo si el interruptor 'headroom' se enciende (OFF por defecto).
-        HR_COMPOSE="${REPO_DIR}/deployment/python-tools/docker-compose.headroom.yml"
-        if [ -f "$HR_COMPOSE" ]; then
-            log "Levantando Headroom (proxy de compresión, :8787)..."
-            docker compose -f "$HR_COMPOSE" up -d --build > /dev/null 2>&1 \
-                && log "Headroom arriba (verifica: curl http://127.0.0.1:8787/livez)" \
-                || warn "Headroom no arrancó (revisa: docker compose -f $HR_COMPOSE logs)"
-        fi
+    else
+        warn "--docker pedido pero el engine no está (¿falló la sección 3a-bis?). El ejecutor seguirá con aislamiento local."
     fi
 else
-    warn "Docker NO habilitado. Para el aislamiento en contenedor del ejecutor: ENKI_ENABLE_DOCKER=1 sudo ./vps-setup.sh"
-    warn "Sin docker, el ejecutor usa aislamiento local + reja (degrada honesto si se pide contenedor)."
+    warn "Ejecutor en contenedor NO habilitado (opt-in: sudo ./vps-setup.sh [dominio] --docker)."
+    warn "Sin el flag, el ejecutor usa aislamiento local + reja (degrada honesto si se pide contenedor)."
 fi
 
 # ---- 4. Copiar proyecto ----
@@ -532,8 +533,11 @@ fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-searxng$'; then
     echo "    enki-searxng   → búsqueda web para crawl4rs.buscar (docker)"
 fi
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-headroom$'; then
+    echo "    enki-headroom  → proxy compresión (docker, localhost:8787)"
+fi
 if [ "${ENKI_ENABLE_DOCKER:-0}" = "1" ] && command -v docker &>/dev/null; then
-    echo "    headroom       → proxy compresión (docker, localhost:8787)"
+    echo "    ejecutor       → contención en contenedor habilitada (www-data ∈ docker)"
 fi
 echo ""
 echo "  Para activar (panel Interruptores 🎛️, grupo sistema — nacen OFF a propósito):"

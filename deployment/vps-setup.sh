@@ -167,26 +167,75 @@ CADDYUNIT
     systemctl daemon-reload
 fi
 
-# ---- 3a-bis. fastCRW — motor de datos web (Rust NATIVO, :3002) ----
-# Binario estático de una pieza (no docker). Da datos web frescos al bus (scrape/extract/map:
-# precio/cantidad/formato de ingredientes de soysuper, etc.). Idempotente: si el binario ya
-# está, NO recompila. Guardado: si falla (sin toolchain/red), el core sigue y el módulo
-# fastcrw degrada honesto (UPSTREAM_UNREACHABLE). El /search (SearXNG) es aparte y opcional.
-log "fastCRW (crw-server, Rust nativo)..."
-if command -v crw-server &>/dev/null || [ -x /usr/local/bin/crw-server ]; then
-    log "crw-server ya instalado ($(/usr/local/bin/crw-server --version 2>/dev/null || echo ok))"
-elif bash "${REPO_DIR}/deployment/fastcrw/install.sh" > /dev/null 2>&1; then
-    log "crw-server compilado e instalado en /usr/local/bin"
-else
-    warn "fastCRW: install.sh falló (¿sin toolchain Rust o red?). El módulo fastcrw degradará a UPSTREAM_UNREACHABLE hasta instalarlo."
+# ---- 3a-bis. Crawl4RS — el órgano web del bus (Docker, 127.0.0.1:8081) ----
+# Motor del repo hermano D-os (Rust + Chromium contenido). Es el ÚNICO órgano web desde el
+# relevo de fastcrw: leer · buscar · mapear · rastrear. Docker y no nativo A PROPÓSITO
+# (el binario es limpio; Chromium es la dependencia sucia). Instalar el engine aquí NO
+# concede nada a www-data (el grupo docker sigue siendo opt-in del ejecutor, --docker):
+# el contenedor lo levanta root en el setup y el puente le habla por HTTP.
+# Idempotente y guardado: cualquier fallo → warn, y el puente degrada honesto (503).
+log "Crawl4RS (órgano web, Docker :8081)..."
+
+# Migración: retirar el motor viejo crw-server si quedó de una instalación anterior.
+if systemctl list-unit-files 2>/dev/null | grep -q 'crw-server.service'; then
+    systemctl disable --now crw-server > /dev/null 2>&1 || true
+    rm -f /etc/systemd/system/crw-server.service /usr/local/bin/crw-server
+    systemctl daemon-reload
+    log "Motor viejo crw-server retirado (relevo → Crawl4RS)"
 fi
-if [ -x /usr/local/bin/crw-server ]; then
-    if cp "${REPO_DIR}/deployment/fastcrw/crw-server.service" /etc/systemd/system/ \
-       && systemctl daemon-reload && systemctl enable --now crw-server > /dev/null 2>&1; then
-        log "crw-server activo en :3002"
-    else
-        warn "crw-server instalado pero el servicio no arrancó (revisa: journalctl -u crw-server -f)"
+
+# Docker engine + plugin compose (docker-compose-v2 en Ubuntu; plugin oficial como fallback).
+if ! command -v docker &>/dev/null; then
+    log "Instalando Docker engine..."
+    apt-get install -y -qq docker.io > /dev/null 2>&1 || warn "Instalación de docker.io falló"
+fi
+if command -v docker &>/dev/null; then
+    systemctl enable --now docker > /dev/null 2>&1 || true
+    if ! docker compose version &>/dev/null; then
+        apt-get install -y -qq docker-compose-v2 > /dev/null 2>&1 \
+            || apt-get install -y -qq docker-compose-plugin > /dev/null 2>&1 \
+            || warn "Plugin de compose no disponible por apt"
     fi
+fi
+
+if docker compose version &>/dev/null; then
+    # El motor D-os: clon fresco o actualización (shallow).
+    if [ -d /opt/d-os/.git ]; then
+        git -C /opt/d-os pull --ff-only > /dev/null 2>&1 || warn "No se pudo actualizar /opt/d-os (sigue con la versión local)"
+    else
+        git clone --depth 1 https://github.com/noninapizzicas/d-os /opt/d-os > /dev/null 2>&1 \
+            || warn "Clone de D-os falló (¿red?). Crawl4RS no se levantará esta pasada."
+    fi
+
+    # Secreto JWT: nace UNA vez y vive en data/.env (excluido del rsync → persiste).
+    # El default del Dockerfile de D-os es público/forjable — jamás se usa.
+    mkdir -p "${INSTALL_DIR}/data"
+    if ! grep -q '^CRAWL4RS_JWT_SECRET=' "${INSTALL_DIR}/data/.env" 2>/dev/null; then
+        echo "CRAWL4RS_JWT_SECRET=$(openssl rand -hex 32)" >> "${INSTALL_DIR}/data/.env"
+        log "CRAWL4RS_JWT_SECRET generado en ${INSTALL_DIR}/data/.env"
+    fi
+
+    # Red compartida entre órganos web (crawl4rs ↔ searxng).
+    docker network inspect enki-web > /dev/null 2>&1 || docker network create enki-web > /dev/null
+
+    if [ -d /opt/d-os ]; then
+        log "Construyendo y levantando enki-crawl4rs (la 1ª vez compila Rust: unos minutos)..."
+        _C4RS_SECRET="$(grep -m1 '^CRAWL4RS_JWT_SECRET=' "${INSTALL_DIR}/data/.env" | cut -d= -f2-)"
+        if CRAWL4RS_JWT_SECRET="${_C4RS_SECRET}" docker compose \
+             -f "${REPO_DIR}/deployment/crawl4rs/docker-compose.yml" up -d --build > /dev/null 2>&1; then
+            log "enki-crawl4rs arriba en 127.0.0.1:8081"
+        else
+            warn "enki-crawl4rs no levantó — el puente degrada honesto (503). Revisa: docker compose -f deployment/crawl4rs/docker-compose.yml logs"
+        fi
+        # SearXNG — backend de crawl4rs.buscar (misma red). Si falla, buscar da 503 y el resto sigue.
+        if docker compose -f "${REPO_DIR}/deployment/python-tools/docker-compose.searxng.yml" up -d > /dev/null 2>&1; then
+            log "SearXNG arriba (crawl4rs.buscar operativo)"
+        else
+            warn "SearXNG no levantó — crawl4rs.buscar responderá 503; leer/mapear/rastrear siguen"
+        fi
+    fi
+else
+    warn "Sin docker compose: Crawl4RS no se levantó. El puente degrada honesto (503) hasta reejecutar el setup."
 fi
 
 # ---- 3b. Docker (OPT-IN — aislamiento en contenedor del ejecutor + herramientas Python) ----
@@ -477,14 +526,18 @@ echo "  Servicios:"
 echo "    enki           → node index.js (localhost:3000)"
 echo "    enki-frontend  → SvelteKit (localhost:3001)"
 echo "    caddy          → reverse proxy"
-if [ -x /usr/local/bin/crw-server ]; then
-    echo "    crw-server     → fastCRW datos web (localhost:3002)"
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-crawl4rs$'; then
+    echo "    enki-crawl4rs  → Crawl4RS órgano web (docker, localhost:8081)"
+fi
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-searxng$'; then
+    echo "    enki-searxng   → búsqueda web para crawl4rs.buscar (docker)"
 fi
 if [ "${ENKI_ENABLE_DOCKER:-0}" = "1" ] && command -v docker &>/dev/null; then
     echo "    headroom       → proxy compresión (docker, localhost:8787)"
 fi
 echo ""
 echo "  Para activar (panel Interruptores 🎛️, grupo sistema — nacen OFF a propósito):"
+echo "    crawl4rs       → leer/buscar/mapear/rastrear la web desde el bus y el chat (leer_web)"
 echo "    headroom       → comprimir contexto al LLM (ahorro de tokens)"
 echo "    ejecutor       → shell guardado; con enki-python-tools = herramientas Python aisladas"
 echo ""

@@ -20,31 +20,33 @@ Chromium, ~123 MB) deja el modo navegador funcionando de fábrica. El Chromium
 de crawling vive SOLO aquí — el VPS no lo instala (las libs Chromium de
 `vps-setup.sh` son de open-wa/WhatsApp, otro órgano).
 
-## Receta (una vez, en el VPS)
+## Instalación — la hace el setup, no tú
+
+`sudo ./deployment/vps-setup.sh <dominio>` lo trae TODO (sección 3a-bis del script):
+instala Docker + compose si faltan, retira el crw-server viejo si quedó, clona (o
+actualiza) `/opt/d-os`, genera el secreto JWT una sola vez en `data/.env` (persiste:
+`data/` está excluido del rsync), crea la red `enki-web` y levanta `enki-crawl4rs`
++ SearXNG. Idempotente: re-ejecutar el setup actualiza el motor y reconstruye.
 
 ```bash
-# 1 · Traer el repo del motor
-git clone --depth 1 https://github.com/noninapizzicas/d-os /opt/d-os
-
-# 2 · Secreto JWT propio (el default del Dockerfile es público — NO sirve)
-echo "CRAWL4RS_JWT_SECRET=$(openssl rand -hex 32)" >> /opt/enki/data/.env
-
-# 3 · Red compartida con SearXNG (para crawl4rs.buscar; una vez)
-docker network create enki-web
-
-# 4 · Construir y levantar (lee el secreto del entorno)
-set -a; source /opt/enki/data/.env; set +a
-docker compose -f /opt/enki/deployment/crawl4rs/docker-compose.yml up -d --build
-
-# 5 · Verificar
-curl -s http://127.0.0.1:8081/health
+# verificar tras el setup
+curl -s http://127.0.0.1:8081/health     # → ok
 docker logs enki-crawl4rs --tail 20
-
-# 6 · (opcional) búsqueda web: levantar el inquilino SearXNG en la misma red
-docker compose -f /opt/enki/deployment/python-tools/docker-compose.searxng.yml up -d
 ```
 
-Actualizar el motor = `git -C /opt/d-os pull` + repetir el paso 3.
+Actualizar el motor = volver a correr el setup (o `git -C /opt/d-os pull` + el
+compose de abajo).
+
+## Receta manual (plan B / debug — lo mismo que hace el setup)
+
+```bash
+git clone --depth 1 https://github.com/noninapizzicas/d-os /opt/d-os
+echo "CRAWL4RS_JWT_SECRET=$(openssl rand -hex 32)" >> /opt/enki/data/.env
+docker network create enki-web
+set -a; source /opt/enki/data/.env; set +a
+docker compose -f /opt/enki/deployment/crawl4rs/docker-compose.yml up -d --build
+docker compose -f /opt/enki/deployment/python-tools/docker-compose.searxng.yml up -d
+```
 
 ## Encender y usar desde Enki
 

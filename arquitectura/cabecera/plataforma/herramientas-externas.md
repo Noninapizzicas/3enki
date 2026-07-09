@@ -5,6 +5,7 @@ resumen: Crawl4RS en Docker (Chromium contenido) como ÚNICO órgano web del bus
 fuentes:
   - deployment/python-tools/**
   - deployment/crawl4rs/**
+  - deployment/vps-setup.sh
   - modules/crawl4rs/**
   - modules/_shared/error-fertil.js
   - modules/cosecha/cantera/enki/herramientas-web/**
@@ -81,7 +82,13 @@ POR QUÉ DOCKER (la excepción que confirma "Rust → nativo"): el binario es li
      · CRAWL4RS_JWT_SECRET OBLIGATORIO sin default (el del Dockerfile de D-os es público/forjable;
        compose falla si falta — fail-closed) · CRAWL4RS_API_KEY opcional · red compartida enki-web
        con SearXNG (SEARXNG_URL=http://enki-searxng:8080) · healthcheck TCP por bash.
-     README.md  receta completa: clone → secreto → red → up → verificar → encender → usar.
+     PROVISIONING AUTOMÁTICO  deployment/vps-setup.sh (sección 3a-bis) lo hace TODO en el
+       `sudo ./deployment/vps-setup.sh <dominio>`: docker engine + plugin compose · retira el
+       crw-server viejo si quedó · clona/actualiza /opt/d-os · genera el secreto UNA vez en
+       data/.env (persiste: data/ está excluido del rsync) · crea la red enki-web · levanta
+       enki-crawl4rs + SearXNG. Idempotente y guardado (fallo → warn, el puente degrada honesto).
+       Instalar el engine aquí NO mete a www-data en el grupo docker (eso sigue opt-in, --docker).
+     README.md  el setup lo hace solo; la receta manual queda como plan B / debug.
   }
 2 · PUENTE (bus)  modules/crawl4rs/ {
      Reflejo bus↔HTTP: leer/rastrear job-based (token JWT cacheado → POST /crawl → poll → result,
@@ -209,8 +216,8 @@ ESTADO {
     recableadas a crawl4rs) · headroom (8/8) · tests (crawl4rs__index 9 · seeds 4+4) · fastcrw RETIRADO.
   ✓ hallazgo vivo (heredado del ciclo fastcrw — la física del sitio no cambia): soysuper THROTTLEA
     ráfagas (~15-20 → 504); adivinar slug /p/<x> → 404 vacío → descubrir por /search es el camino fiable.
-  ◑ falta cerrar en vivo: levantar enki-crawl4rs en el VPS (receta deployment/crawl4rs/README.md),
-    encender el interruptor y verificar un turno real de escandallo usando la skill → revisar tool_calls.
+  ◑ falta cerrar en vivo: correr `sudo ./deployment/vps-setup.sh <dominio>` (levanta enki-crawl4rs +
+    SearXNG solo), encender el interruptor y verificar un turno real de escandallo → revisar tool_calls.
   ⏸ escandallo NO cableado a crawl4rs por DECISIÓN — el enlace es skill-first (descubrir/promover/crear), no hardcode.
   ⏸ agente precio-web (perspectiva-c) para el lote de 39 — siguiente.
 }

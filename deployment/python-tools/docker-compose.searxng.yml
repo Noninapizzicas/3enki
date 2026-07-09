@@ -18,8 +18,13 @@ services:
       - "127.0.0.1:8080:8080"   # solo localhost (debug); crawl4rs entra por enki-web
     environment:
       - SEARXNG_BASE_URL=http://localhost:8080/
+      # Secreto propio (vps-setup lo genera en data/.env). Fail-closed: sin él
+      # no levanta — jamás el default público 'ultrasecretkey'.
+      - SEARXNG_SECRET_KEY=${SEARXNG_SECRET_KEY:?pon SEARXNG_SECRET_KEY (openssl rand -hex 32)}
     volumes:
       - searxng-data:/etc/searxng
+      # Habilita format=json — crawl4rs /search lo exige; sin esto, 403 (visto en vivo).
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
     restart: unless-stopped
     networks: [enki-web]
 

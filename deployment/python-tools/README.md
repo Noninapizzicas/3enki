@@ -44,6 +44,12 @@ Nada más que cablear: el compose de `deployment/crawl4rs/` ya apunta a
 `SEARXNG_URL=http://enki-searxng:8080` por la red compartida `enki-web`.
 Sin SearXNG, `crawl4rs.buscar` devuelve 503 con su prescripción y el resto sigue.
 
+Dos piezas que el compose ya trae (aprendidas en vivo):
+- `searxng/settings.yml` montado — habilita `format=json`, que crawl4rs exige
+  y SearXNG deshabilita de fábrica (sin él: `403 Forbidden`).
+- `SEARXNG_SECRET_KEY` por env, fail-closed — la genera `vps-setup.sh` en
+  `data/.env` (jamás el default público `ultrasecretkey`).
+
 ## 3. Headroom (compresión de contexto delante del ai-gateway)
 
 Middleware Python que comprime todo lo que el agente LEE antes del LLM (60–95% menos tokens

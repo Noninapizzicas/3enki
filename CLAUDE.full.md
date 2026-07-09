@@ -16282,7 +16282,13 @@ POR QUÉ DOCKER (la excepción que confirma "Rust → nativo"): el binario es li
      · CRAWL4RS_JWT_SECRET OBLIGATORIO sin default (el del Dockerfile de D-os es público/forjable;
        compose falla si falta — fail-closed) · CRAWL4RS_API_KEY opcional · red compartida enki-web
        con SearXNG (SEARXNG_URL=http://enki-searxng:8080) · healthcheck TCP por bash.
-     README.md  receta completa: clone → secreto → red → up → verificar → encender → usar.
+     PROVISIONING AUTOMÁTICO  deployment/vps-setup.sh (sección 3a-bis) lo hace TODO en el
+       `sudo ./deployment/vps-setup.sh <dominio>`: docker engine + plugin compose · retira el
+       crw-server viejo si quedó · clona/actualiza /opt/d-os · genera el secreto UNA vez en
+       data/.env (persiste: data/ está excluido del rsync) · crea la red enki-web · levanta
+       enki-crawl4rs + SearXNG. Idempotente y guardado (fallo → warn, el puente degrada honesto).
+       Instalar el engine aquí NO mete a www-data en el grupo docker (eso sigue opt-in, --docker).
+     README.md  el setup lo hace solo; la receta manual queda como plan B / debug.
   }
 2 · PUENTE (bus)  modules/crawl4rs/ {
      Reflejo bus↔HTTP: leer/rastrear job-based (token JWT cacheado → POST /crawl → poll → result,
@@ -16323,7 +16329,10 @@ FASE 0 · PROVISIONING (HECHA, Docker)  deployment/python-tools/headroom/ {
               modelo Kompress cacheado en volumen. Verificado contra headroom-ai 0.30.0 (arranca, /livez healthy).
   docker-compose.headroom.yml  127.0.0.1:8787 · upstream por ANTHROPIC_TARGET_API_URL (default deepseek /anthropic;
               quítalo para Claude real → api.anthropic.com). HEADROOM_MODE=token (máx compresión).
-  ENCENDER  HEADROOM_PROXY_URL=http://localhost:8787 en el arranque del core + interruptor 'headroom' ON.
+  ARRANQUE AUTOMÁTICO  vps-setup.sh lo levanta en el camino por defecto (sin --docker: mismo patrón que
+              crawl4rs — root lo levanta, el core le habla por HTTP, cero concesión de grupo docker) y
+              enki.service ya trae HEADROOM_PROXY_URL=http://localhost:8787.
+  ENCENDER  solo el interruptor 'headroom' ON (nace OFF; con el proxy caído el provider va directo — fallback seguro).
 }
 FIDELIDAD  los frenos de blueprint (<mod>.validar → 422) son el test AUTOMÁTICO: si la compresión rompiera un
            contrato, se ve en el acto. Por eso nace OFF y se gradúa (fases como el ejecutor). Ver propuesta
@@ -16410,8 +16419,8 @@ ESTADO {
     recableadas a crawl4rs) · headroom (8/8) · tests (crawl4rs__index 9 · seeds 4+4) · fastcrw RETIRADO.
   ✓ hallazgo vivo (heredado del ciclo fastcrw — la física del sitio no cambia): soysuper THROTTLEA
     ráfagas (~15-20 → 504); adivinar slug /p/<x> → 404 vacío → descubrir por /search es el camino fiable.
-  ◑ falta cerrar en vivo: levantar enki-crawl4rs en el VPS (receta deployment/crawl4rs/README.md),
-    encender el interruptor y verificar un turno real de escandallo usando la skill → revisar tool_calls.
+  ◑ falta cerrar en vivo: correr `sudo ./deployment/vps-setup.sh <dominio>` (levanta enki-crawl4rs +
+    SearXNG solo), encender el interruptor y verificar un turno real de escandallo → revisar tool_calls.
   ⏸ escandallo NO cableado a crawl4rs por DECISIÓN — el enlace es skill-first (descubrir/promover/crear), no hardcode.
   ⏸ agente precio-web (perspectiva-c) para el lote de 39 — siguiente.
 }

@@ -62,6 +62,7 @@ const atendidos = new Map();
 const conducidos = [];
 const publicados = [];
 const intenciones = [];   // trabajo_pendiente[].evento_esperado — futuro DECLARADO (forma, no prosa)
+const rechazosMudos = new Map();   // blueprint → nº de INVALID_INPUT sin hint (muro sin puerta)
 
 // Corta el comentario de línea (// …) respetando URLs (http://, https://). La línea
 // comentada del pseudocódigo es intención/prosa, NO conducción — caso testigo:
@@ -133,6 +134,15 @@ for (const f of walk(MODULES)) {
       if (nodo && typeof nodo === 'object') for (const [k, v] of Object.entries(nodo)) recoger(v, bajoPseudo || k === 'pseudocodigo');
     })(bp, false);
     escanearTexto(lineasPseudo.join('\n'), quien, 'pseudocodigo');
+    // RECHAZO MUDO: un INVALID_INPUT sin hint es un muro sin puerta — el LLM que choca
+    // sin prescripción RODEA (curl, fs.edit, eventos inventados), y el rodeo es peor.
+    // Mandato del freno fértil: todo rechazo lleva su camino. Aquí solo se CUENTA (WARN).
+    let mudos = 0;
+    for (const l of lineasPseudo) {
+      if (/INVALID_INPUT\s*\{/.test(l) && !/hint/.test(l)) mudos++;
+      else if (/return INVALID_INPUT\s*$/.test(l.trim())) mudos++;
+    }
+    if (mudos > 0) rechazosMudos.set(quien, mudos);
     // INTENCIONES declaradas: el futuro con forma. Cuando su evento exista, la cúpula lo OFRECE.
     for (const t of bp.trabajo_pendiente || []) {
       if (t && typeof t.evento_esperado === 'string') intenciones.push({ evento: t.evento_esperado, por: quien, id: t.id || null, estado: t.estado || null });
@@ -228,7 +238,7 @@ const avisos = dedup(publishHuerfano);
 
 // ── reporte ──────────────────────────────────────────────────────────────────
 if (AS_JSON) {
-  console.log(JSON.stringify({ atendidos: atendidos.size, conducidos: conducidos.length, publicados: publicados.length, rpc_fantasma: errores, publish_huerfano: avisos, test_fantasma: testFantasma, veto_por_nombre: vetoPorNombre, intenciones }, null, 1));
+  console.log(JSON.stringify({ atendidos: atendidos.size, conducidos: conducidos.length, publicados: publicados.length, rpc_fantasma: errores, publish_huerfano: avisos, test_fantasma: testFantasma, veto_por_nombre: vetoPorNombre, intenciones, rechazos_mudos: Object.fromEntries(rechazosMudos) }, null, 1));
 } else {
   console.log(`cúpula-eventos: ${atendidos.size} eventos atendidos · ${conducidos.length} RPCs conducidos · ${publicados.length} publicaciones`);
   for (const e of errores) console.log(`${RED}✗ RPC FANTASMA${RST} ${e.evento}  ← conducido por ${e.por} y NADIE lo atiende`);
@@ -242,6 +252,13 @@ if (AS_JSON) {
   // El canto POSITIVO: una intención declarada cuyo evento YA vive — ofrécela, ciérrala.
   for (const it of intenciones.filter((i) => i.estado !== 'cerrado' && respondeAlguien(i.evento))) {
     console.log(`${GREEN}✦ INTENCIÓN MADURA${RST} ${it.evento} ya se atiende — cierra '${it.id}' en ${it.por}`);
+  }
+  // Rechazos mudos: línea base agregada (el detalle por blueprint vive en --json).
+  const totalMudos = [...rechazosMudos.values()].reduce((a, b) => a + b, 0);
+  if (totalMudos > 0) {
+    const top = [...rechazosMudos.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+      .map(([q, n]) => `${q.split('/').pop()}:${n}`).join(' · ');
+    console.log(`${YEL}⚠ rechazos mudos${RST} ${totalMudos} INVALID_INPUT sin hint en blueprints (muro sin puerta) — top: ${top}`);
   }
   const veredicto = errores.length ? `${errores.length} fantasma(s)` : 'contrato íntegro';
   console.log(`${errores.length ? RED : GREEN}${TESTIGO ? '(testigo) ' : ''}${veredicto}${RST} · ${avisosFuertes.length} aviso(s) fuertes · ${avisos.length - avisosFuertes.length} de manifest (ver --json)`);

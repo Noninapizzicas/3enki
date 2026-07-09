@@ -33,7 +33,8 @@ verificado: 2026-07-09
     "publish_huerfano": "WARN — publish de dominio sin subscriber; en consola solo los de pseudocódigo/skill (los de manifest los consume el frontend por MQTT dinámico → viven en --json)",
     "test_fantasma": "WARN — un stub de test compara contra un evento .request de módulo real que nadie atiende (raíz del caso destilador: el fantasma vivía en el test y jamás cantó)",
     "veto_por_nombre": "WARN — un freno veta PROCEDENCIA (fuente/canal/proveedor/origen/motor/provider) con lista cerrada: la ley de la evidencia (prisma-del-caso) manda calificar por evidencia, no por nombre",
-    "intencion_madura": "OFRENDA — un trabajo_pendiente con evento_esperado (futuro DECLARADO, forma no prosa) cuyo evento YA se atiende: ciérralo. El canto positivo del conserje aplicado al contrato"
+    "intencion_madura": "OFRENDA — un trabajo_pendiente con evento_esperado (futuro DECLARADO, forma no prosa) cuyo evento YA se atiende: ciérralo. El canto positivo del conserje aplicado al contrato",
+    "rechazo_mudo": "WARN — INVALID_INPUT sin hint en pseudocódigo: un muro sin puerta empuja al rodeo (curl, fs.edit, eventos inventados — visto en vivo). Mandato del freno fértil: todo rechazo lleva su camino. Línea base 2026-07-09: 65 (recetas 32)"
   },
   "fase": "GRADUADA (2026-07-09, repo a 0 fantasmas) — un rpc_fantasma ROMPE el CI; los WARN cantan sin bloquear",
   "organos_ci": {

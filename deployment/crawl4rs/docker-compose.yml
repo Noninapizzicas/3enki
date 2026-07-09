@@ -7,6 +7,7 @@
 #
 # Traer y levantar:
 #   git clone --depth 1 https://github.com/noninapizzicas/d-os /opt/d-os
+#   docker network create enki-web   # una vez (la comparte con SearXNG)
 #   CRAWL4RS_JWT_SECRET=$(openssl rand -hex 32) \
 #     docker compose -f deployment/crawl4rs/docker-compose.yml up -d --build
 #   (guarda el secreto en /opt/enki/data/.env para que sobreviva reinicios)
@@ -35,8 +36,14 @@ services:
       # Opcional: exige x-api-key en /auth/token. Si la pones aquí, ponla
       # también en el core (env CRAWL4RS_API_KEY) para el puente.
       - CRAWL4RS_API_KEY=${CRAWL4RS_API_KEY:-}
+      # Opcional: backend de /search (crawl4rs.buscar). El inquilino SearXNG
+      # (python-tools) vive en la red compartida enki-web y se alcanza por su
+      # nombre de contenedor. Sin él levantado, /search responde 503 con
+      # prescripción ("define SEARXNG_URL"); leer/mapear/rastrear siguen.
+      - SEARXNG_URL=${SEARXNG_URL:-http://enki-searxng:8080}
     # Chromium revienta con los 64MB de /dev/shm por defecto de Docker.
     shm_size: "1gb"
+    networks: [enki-web]
     restart: unless-stopped
     healthcheck:
       # La imagen (debian slim) no trae curl; TCP-check con bash basta.
@@ -45,3 +52,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+# Red compartida entre órganos web (crawl4rs ↔ searxng). Se crea una vez:
+#   docker network create enki-web
+networks:
+  enki-web:
+    external: true

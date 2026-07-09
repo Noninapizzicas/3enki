@@ -244,8 +244,8 @@
       "match": "HERRAMIENTAS EXTERNAS",
       "archivo": "plataforma/herramientas-externas.md",
       "dominio": "plataforma",
-      "resumen": "Rust nativo en el VPS (fastCRW) · Python en Docker (contenedor universal: SearXNG, Headroom) · enganche al ejecutor por config.",
-      "fuentes": ["deployment/fastcrw/**", "deployment/python-tools/**", "modules/fastcrw/**"]
+      "resumen": "Crawl4RS en Docker (Chromium contenido) como ÚNICO órgano web del bus (fastcrw retirado) · Python en Docker (contenedor universal: SearXNG, Headroom) · enganche al ejecutor por config.",
+      "fuentes": ["deployment/crawl4rs/**", "deployment/python-tools/**", "modules/crawl4rs/**"]
     }
   ]
 }

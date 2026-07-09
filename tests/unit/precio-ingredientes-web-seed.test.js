@@ -1,12 +1,12 @@
 'use strict';
 
 /**
- * precio-ingredientes-web-seed — la semilla de cantera que enlaza fastcrw a escandallo.
+ * precio-ingredientes-web-seed — la semilla de cantera que enlaza crawl4rs a escandallo.
  *
  * No es un cableado: es una SKILL descubrible. Verifica que la cantera la indexa, que se
  * halla buscando por "precio ingrediente", que declara su HOGAR (lente_dominio escandallo →
  * el conserje la ofrece al costear, y se puede promover a lente), y que obtener trae el
- * SKILL.md completo conduciendo las tools de fastcrw.
+ * SKILL.md completo conduciendo los reflejos de crawl4rs.
  *
  * Ejecutar: node tests/unit/precio-ingredientes-web-seed.test.js
  */
@@ -28,7 +28,7 @@ async function test(desc, fn) {
 }
 
 (async () => {
-  console.log('precio-ingredientes-web — semilla de cantera (fastcrw → escandallo)\n');
+  console.log('precio-ingredientes-web — semilla de cantera (crawl4rs → escandallo)\n');
 
   await test('la cantera DESCUBRE la semilla', async () => {
     const m = await makeCargado();
@@ -52,10 +52,10 @@ async function test(desc, fn) {
     assert.strictEqual(row.lente_dominio, 'escandallo', 'el catálogo expone el hogar (para el conserje)');
   });
 
-  await test('obtener trae el SKILL.md COMPLETO que CONDUCE fastcrw (no inventa el precio)', async () => {
+  await test('obtener trae el SKILL.md COMPLETO que CONDUCE crawl4rs (no inventa el precio)', async () => {
     const m = await makeCargado();
     const [s] = m._obtener({ nombres: ['precio-ingredientes-web'] }).data.skills;
-    assert.ok(s.contenido.includes('fastcrw.extract'), 'debe conducir fastcrw.extract');
+    assert.ok(s.contenido.includes("crawl4rs.leer.request"), 'debe conducir crawl4rs.leer');
     assert.ok(s.contenido.includes('sin_precio'), 'debe honrar el guard no-inventar');
   });
 

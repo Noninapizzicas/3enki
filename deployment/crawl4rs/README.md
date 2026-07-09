@@ -5,13 +5,20 @@ El motor vive en el repo hermano [D-os](https://github.com/noninapizzicas/d-os)
 VPS como contenedor `enki-crawl4rs`, y esta receta. El consumidor es el puente
 `modules/crawl4rs` (bus↔HTTP), que ya apunta a `127.0.0.1:8081`.
 
-## Por qué Docker (y no nativo, como crw-server)
+Desde el relevo de fastcrw (v0.2.0 del puente), Crawl4RS es **el único órgano
+web del bus**: leer · buscar · mapear · rastrear. Su modo `auto` cubre también
+el fetch ligero que hacía crw-server (HTTP puro primero; navegador real solo
+ante 403/challenge/JS pesado) — un motor, todas las puertas.
+
+## Por qué Docker (y no nativo)
 
 La regla de la casa es "Rust estático → nativo". Crawl4RS es la excepción que
 confirma el criterio: el binario es limpio pero **arrastra Chromium** — y
 Chromium es la dependencia sucia. El reparto es por naturaleza, no por
 lenguaje: lo sucio va contenido. La imagen por defecto de D-os (Debian slim +
-Chromium, ~123 MB) deja el modo navegador funcionando de fábrica.
+Chromium, ~123 MB) deja el modo navegador funcionando de fábrica. El Chromium
+de crawling vive SOLO aquí — el VPS no lo instala (las libs Chromium de
+`vps-setup.sh` son de open-wa/WhatsApp, otro órgano).
 
 ## Receta (una vez, en el VPS)
 
@@ -22,13 +29,19 @@ git clone --depth 1 https://github.com/noninapizzicas/d-os /opt/d-os
 # 2 · Secreto JWT propio (el default del Dockerfile es público — NO sirve)
 echo "CRAWL4RS_JWT_SECRET=$(openssl rand -hex 32)" >> /opt/enki/data/.env
 
-# 3 · Construir y levantar (lee el secreto del entorno)
+# 3 · Red compartida con SearXNG (para crawl4rs.buscar; una vez)
+docker network create enki-web
+
+# 4 · Construir y levantar (lee el secreto del entorno)
 set -a; source /opt/enki/data/.env; set +a
 docker compose -f /opt/enki/deployment/crawl4rs/docker-compose.yml up -d --build
 
-# 4 · Verificar
+# 5 · Verificar
 curl -s http://127.0.0.1:8081/health
 docker logs enki-crawl4rs --tail 20
+
+# 6 · (opcional) búsqueda web: levantar el inquilino SearXNG en la misma red
+docker compose -f /opt/enki/deployment/python-tools/docker-compose.searxng.yml up -d
 ```
 
 Actualizar el motor = `git -C /opt/d-os pull` + repetir el paso 3.
@@ -50,6 +63,14 @@ const r = await bus.publishAndWait('crawl4rs.leer.request', {
   url: 'https://tienda.com/producto', query: 'precio', extract_semantic: true
 });
 
+// búsqueda web (SearXNG detrás del servidor)
+const s = await bus.publishAndWait('crawl4rs.buscar.request', {
+  query: 'harina de fuerza', limit: 5
+});
+
+// enlaces de una página (ligero, sin contenido)
+const m = await bus.publishAndWait('crawl4rs.mapear.request', { url: 'https://ejemplo.com' });
+
 // crawl profundo BFS/DFS
 const site = await bus.publishAndWait('crawl4rs.rastrear.request', {
   url: 'https://ejemplo.com', max_depth: 2, max_pages: 25
@@ -57,17 +78,8 @@ const site = await bus.publishAndWait('crawl4rs.rastrear.request', {
 ```
 
 Degradación honesta: interruptor OFF o contenedor caído → `503 {degradado,
-motivo}` con error fértil — nunca finge.
-
-## Cuándo esta pieza y cuándo fastcrw
-
-| | fastcrw (crw-server, nativo :3002) | Crawl4RS (Docker :8081) |
-|---|---|---|
-| Motor | fetch HTTP ligero | navegador real (CDP) + stealth |
-| Para | páginas server-rendered, volumen | sitios JS-pesados / protegidos (Cloudflare) |
-| Coste | mínimo | Chromium (RAM, ~1GB shm) |
-
-Primero fastcrw; Crawl4RS cuando el fetch ligero no salta la puerta.
+motivo}`; `buscar` sin SearXNG → 503 con la prescripción del servidor en
+`message` ("define SEARXNG_URL") — nunca finge.
 
 ## Horizonte
 

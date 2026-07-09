@@ -1,11 +1,11 @@
 'use strict';
 
 /**
- * herramientas-web-seed — el skill genérico que enseña a conducir fastcrw por el bus.
+ * herramientas-web-seed — el skill genérico que enseña a conducir crawl4rs por el bus.
  *
  * Verifica que la cantera lo indexa, que se halla buscando "datos web", y que su contenido
  * enseña el CANAL correcto (bus.publishAndWait, no curl por ejecutor) y cómo leer el error
- * fértil — las dos cosas que evitan que el LLM improvise y se rinda.
+ * — las dos cosas que evitan que el LLM improvise y se rinda.
  *
  * Ejecutar: node tests/unit/herramientas-web-seed.test.js
  */
@@ -34,17 +34,17 @@ async function test(desc, fn) { try { await fn(); console.log(`✓ ${desc}`); } 
   await test('enseña el CANAL correcto (bus.publishAndWait, NO curl por ejecutor)', async () => {
     const m = await makeCargado();
     const [s] = m._obtener({ nombres: ['herramientas-web'] }).data.skills;
-    assert.ok(s.contenido.includes("bus.publishAndWait('fastcrw.scrape'"), 'debe enseñar la invocación por bus');
+    assert.ok(s.contenido.includes("bus.publishAndWait('crawl4rs.leer.request'"), 'debe enseñar la invocación por bus');
     assert.ok(/NO uses.*ejecutor|no curl|sin curl/i.test(s.contenido), 'debe desaconsejar curl por ejecutor');
   });
 
-  await test('enseña a LEER el error fértil (no rendirse ante un transitorio)', async () => {
+  await test('enseña a LEER el error (no rendirse ante un transitorio)', async () => {
     const m = await makeCargado();
     const [s] = m._obtener({ nombres: ['herramientas-web'] }).data.skills;
-    assert.ok(s.contenido.includes('[TRANSITORIO]'), 'debe explicar el error fértil');
+    assert.ok(/degradado/.test(s.contenido), 'debe explicar la degradación honesta (apagado/sin_servicio)');
     assert.ok(/inscrapeable/i.test(s.contenido), 'debe negar el prior "web inscrapeable"');
     assert.ok(/backoff|reintenta/i.test(s.contenido), 'debe prescribir reintento, no rendición');
   });
 
-  console.log('\n✓ herramientas-web: descubrimiento + canal + error fértil verificados');
+  console.log('\n✓ herramientas-web: descubrimiento + canal + lectura del error verificados');
 })();

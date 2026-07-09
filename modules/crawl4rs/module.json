@@ -1,24 +1,29 @@
 {
-  "_doc": "crawl4rs — PUENTE a Crawl4RS (repo D-os): crawler Rust self-hosted (navegador real Chromium/CDP + stealth + extracción end-to-end + crawl profundo BFS/DFS), envuelto como órgano del bus. Crawl4RS habla HTTP (servidor axum, JOB-BASED: POST /crawl → {id}, poll status, GET result); este reflejo traduce bus↔HTTP y esconde el HTTP en el contenedor, cerrando el 'rechinar' de que el crawler no hablara el bus. NACE OFF (interruptor 'crawl4rs', grupo sistema): el servicio corre ON-DEMAND, encender el puente es decisión consciente. DEGRADA HONESTO: OFF o servicio no alcanzable → 503 {degradado, motivo}; nunca finge. AUTH: /crawl va tras JWT; el token sale de POST /auth/token (libre si el servidor no configura api_key), cacheado y refrescado ante 401. El `stealth` NO es per-petición: es config de arranque del servidor Crawl4RS. Hermano pesado de fastcrw (fastcrw=fetch HTTP ligero; crawl4rs=navegador+stealth). Ver ROADMAP de D-os (Fase 7 = MQTT nativo, alternativa futura a este puente HTTP). Config: base_url (default http://localhost:8081 — provisioning en deployment/crawl4rs/), api_key opcional, timeout_ms.",
+  "_doc": "crawl4rs — PUENTE a Crawl4RS (repo D-os): crawler Rust self-hosted (navegador real Chromium/CDP + stealth + extracción end-to-end + crawl profundo BFS/DFS), envuelto como órgano del bus. Crawl4RS habla HTTP (servidor axum, JOB-BASED: POST /crawl → {id}, poll status, GET result); este reflejo traduce bus↔HTTP y esconde el HTTP en el contenedor, cerrando el 'rechinar' de que el crawler no hablara el bus. NACE OFF (interruptor 'crawl4rs', grupo sistema): el servicio corre ON-DEMAND, encender el puente es decisión consciente. DEGRADA HONESTO: OFF o servicio no alcanzable → 503 {degradado, motivo}; nunca finge. AUTH: /crawl va tras JWT; el token sale de POST /auth/token (libre si el servidor no configura api_key), cacheado y refrescado ante 401. El `stealth` NO es per-petición: es config de arranque del servidor Crawl4RS. ÚNICO órgano web del bus desde v0.2.0 (fastcrw retirado): el modo auto del motor cubre también el fetch ligero (HTTP puro primero; navegador solo ante 403/challenge). Ver ROADMAP de D-os (Fase 7 = MQTT nativo, alternativa futura a este puente HTTP). Config: base_url (default http://localhost:8081 — provisioning en deployment/crawl4rs/), api_key opcional, timeout_ms.",
   "name": "crawl4rs",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "_v0_1_1_nota": "v0.1.1: llega el provisioning Docker (deployment/crawl4rs/). base_url default → :8081 (el :8080 local es de SearXNG). Precedencia env > config para CRAWL4RS_BASE_URL/CRAWL4RS_API_KEY — el código cumple lo que _base_url_doc ya prometía.",
+  "_v0_2_0_nota": "v0.2.0: el RELEVO de fastcrw — crawl4rs pasa a ser el ÚNICO órgano web del bus. Nuevos reflejos crawl4rs.buscar (POST /search, SearXNG detrás del servidor Crawl4RS) y crawl4rs.mapear (POST /map, enlaces sin contenido), directos (sin job), con el mismo token JWT y retry tras 401. El mensaje prescriptivo del servidor (p.ej. 'define SEARXNG_URL') viaja en message. fastcrw (motor crw-server nativo + puente) retirado.",
   "_v0_1_0_nota": "v0.1.0: nace el puente. Reflejo bus↔HTTP al servicio Crawl4RS. Tools de bus crawl4rs.leer (una URL → markdown + extracción) y crawl4rs.rastrear (crawl profundo). Tool de chat leer_web. Flujo job-based (token→submit→poll→result) con reintento tras 401. Interruptor OFF por defecto (on-demand). Degradación honesta (apagado / sin_servicio / timeout). Test: crawl4rs__index.",
   "description": "Puente al crawler Crawl4RS (Rust, navegador real + stealth) por HTTP, como órgano del bus. Lee una URL o rastrea un sitio → markdown limpio + extracción estructurada. Gate por interruptor OFF (on-demand), degrada limpio si el servicio no está.",
   "author": "enki",
   "language": "javascript",
   "main": "index.js",
-  "horizonte": "acceso web PESADO en el bus — navegador real + stealth para sitios protegidos (Cloudflare) que fastcrw (fetch ligero) no salta",
+  "horizonte": "TODO el acceso web del bus — leer/buscar/mapear/rastrear. Modo auto: fetch HTTP ligero primero, navegador real + stealth cuando la página lo exige (Cloudflare, JS pesado)",
   "dependencies": [],
   "subscribes": [
     { "event": "crawl4rs.leer.request", "handler": "onLeerRequest", "description": "Reflejo: lee una URL → POST /crawl (max_depth 0) → poll → markdown limpio + extracción. Degrada 503 si OFF/sin servicio." },
     { "event": "crawl4rs.rastrear.request", "handler": "onRastrearRequest", "description": "Reflejo: crawl profundo BFS/DFS {url, max_depth?, max_pages?, cross_domain?} → páginas con markdown + extracción." },
+    { "event": "crawl4rs.buscar.request", "handler": "onBuscarRequest", "description": "Reflejo: búsqueda web {query, limit?} → POST /search (SearXNG detrás del servidor) → {resultados:[{titulo,url,resumen}], total}. 503 con prescripción si el servidor no tiene SEARXNG_URL." },
+    { "event": "crawl4rs.mapear.request", "handler": "onMapearRequest", "description": "Reflejo: enlaces de una página {url, mode?} → POST /map → {url, enlaces, total}. Ligero, sin contenido." },
     { "event": "interruptor.cambiado", "handler": "onInterruptorCambiado", "description": "Enciende/apaga el puente en caliente (id 'crawl4rs'). OFF → todo degrada 503." },
     { "event": "interruptor.solicitar_registro", "handler": "onSolicitarRegistro", "description": "Re-registra su botón (cura la carrera de arranque del panel)." }
   ],
   "publishes": [
     { "event": "crawl4rs.leer.response", "description": "{ markdown, extraido, paginas:[{url, markdown, extraido}], total } o 503 degradado." },
     { "event": "crawl4rs.rastrear.response", "description": "Igual que leer pero con N páginas del crawl profundo." },
+    { "event": "crawl4rs.buscar.response", "description": "{ resultados:[{titulo,url,resumen}], total } o error con la prescripción del servidor en message." },
+    { "event": "crawl4rs.mapear.response", "description": "{ url, enlaces:[...], total } o 503 degradado." },
     { "event": "interruptor.registrar", "description": "Registra el botón 'crawl4rs' (grupo sistema, OFF por defecto)." }
   ],
   "tools": [

@@ -48,14 +48,14 @@ test('descomponer(soysuper): identidad + freno del dominio + contrato con eviden
   const h = descomponer({
     necesidad: 'precio del ingrediente', entidad: 'mozzarella rallada',
     dominio: 'escandallo', rasgos: { afirma_sobre_el_mundo: true },
-    herramientas: ['fastcrw.scrape']
+    herramientas: ['crawl4rs.leer.request']
   });
   assert.strictEqual(h.identidad.naturaleza, 'AFIRMACION_EXTERNA');
   assert.strictEqual(h.restricciones.freno, 'escandallo.validar');
   assert.ok('evidencia' in h.contrato, 'el contrato de una afirmación externa lleva evidencia');
   assert.ok(h.preguntas_abiertas.some(p => /evidencia/.test(p)), 'pregunta dónde vive la evidencia');
   assert.ok(h.preguntas_abiertas.some(p => /PERSISTE|persiste/i.test(p)), 'pregunta el evento de cierre');
-  assert.deepStrictEqual(h.herramientas_candidatas, ['fastcrw.scrape']);
+  assert.deepStrictEqual(h.herramientas_candidatas, ['crawl4rs.leer.request']);
 });
 
 test('descomponer(creación): el contrato NO exige evidencia y las preguntas cambian', () => {
@@ -99,8 +99,8 @@ test('sellarSenda(soysuper): pasos + evento_cierre + tipo_evidencia → senda se
     caso: { necesidad: 'precio del ingrediente', entidad: 'mozzarella', dominio: 'escandallo' },
     naturaleza: 'AFIRMACION_EXTERNA',
     pasos: [
-      { evento: 'fastcrw.scrape', hace: 'buscar la ficha en soysuper /search' },
-      { evento: 'fastcrw.scrape', hace: 'leer la ficha /p/<slug> (precio en markdown)' },
+      { evento: 'crawl4rs.leer.request', hace: 'buscar la ficha en soysuper /search' },
+      { evento: 'crawl4rs.leer.request', hace: 'leer la ficha /p/<slug> (precio en markdown)' },
       { evento: 'recetas.actualizar_precio.request', hace: 'cachear {precio, fuente:soysuper, url}' }
     ],
     evento_cierre: 'recetas.actualizar_precio.request',
@@ -115,7 +115,7 @@ test('sellarSenda(soysuper): pasos + evento_cierre + tipo_evidencia → senda se
 test('sellarSenda: una afirmación SIN tipo_evidencia NO se sella (senda no de fiar)', () => {
   const s = sellarSenda({
     caso: { dominio: 'escandallo' }, naturaleza: 'AFIRMACION_EXTERNA',
-    pasos: [{ evento: 'fastcrw.scrape', hace: 'x' }], evento_cierre: 'recetas.actualizar_precio.request'
+    pasos: [{ evento: 'crawl4rs.leer.request', hace: 'x' }], evento_cierre: 'recetas.actualizar_precio.request'
   });
   assert.strictEqual(s, null);
 });

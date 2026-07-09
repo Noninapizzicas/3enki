@@ -24,14 +24,16 @@
 
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
-const DEFAULT_BASE = 'http://localhost:8080';
+// :8081 en el host — el :8080 local es de SearXNG (deployment/python-tools).
+// El contenedor enki-crawl4rs (deployment/crawl4rs) publica 127.0.0.1:8081 → 8080 interno.
+const DEFAULT_BASE = 'http://localhost:8081';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 class Crawl4rsModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'crawl4rs';
-    this.version = '0.1.0';
+    this.version = '0.2.0';
     this.activo = false;          // interruptor OFF por defecto (on-demand)
     this._baseUrl = DEFAULT_BASE;
     this._apiKey = null;
@@ -43,8 +45,10 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   async onLoad(context) {
     await super.onLoad(context);
     const cfg = (context && (context.moduleConfig || (context.config && context.config.crawl4rs))) || {};
-    this._baseUrl = String(cfg.base_url || process.env.CRAWL4RS_BASE_URL || DEFAULT_BASE).replace(/\/+$/, '');
-    this._apiKey = cfg.api_key || process.env.CRAWL4RS_API_KEY || null;
+    // Precedencia: env > config > default — el manifest siempre trae base_url,
+    // así que el env solo manda si va primero (es el override por despliegue).
+    this._baseUrl = String(process.env.CRAWL4RS_BASE_URL || cfg.base_url || DEFAULT_BASE).replace(/\/+$/, '');
+    this._apiKey = process.env.CRAWL4RS_API_KEY || cfg.api_key || null;
     this._timeoutMs = Number(cfg.timeout_ms) || 120000;
     this._registrarBoton();
     this.logger?.info('crawl4rs.loaded', { base_url: this._baseUrl, activo: this.activo });
@@ -74,6 +78,8 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   // ── RPC del bus ──
   onLeerRequest(e)     { return this._atender(e, 'leer',     'crawl4rs.leer.response',     (d) => this._leer(d)); }
   onRastrearRequest(e) { return this._atender(e, 'rastrear', 'crawl4rs.rastrear.response', (d) => this._rastrear(d)); }
+  onBuscarRequest(e)   { return this._atender(e, 'buscar',   'crawl4rs.buscar.response',   (d) => this._buscar(d)); }
+  onMapearRequest(e)   { return this._atender(e, 'mapear',   'crawl4rs.mapear.response',   (d) => this._mapear(d)); }
 
   // ── tool de chat ──
   async handleLeerTool(args) { return this._leer(args || {}); }
@@ -109,6 +115,55 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
       cross_domain: !!input.cross_domain,
       extract_css: input.extract_css || {}, extract_semantic: !!input.extract_semantic
     });
+  }
+
+  // ── buscar: búsqueda web (POST /search → SearXNG detrás del servidor) ──
+  async _buscar(input) {
+    const g = this._guard(); if (g) return g;
+    if (!input || !input.query) return this._invalid('query');
+    const r = await this._directo('POST', '/search', {
+      query: String(input.query),
+      limit: Number.isInteger(input.limit) ? input.limit : 10
+    });
+    if (r.error) return r;
+    const lista = Array.isArray(r.body) ? r.body : [];
+    return { status: 200, data: {
+      resultados: lista.map((x) => ({ titulo: x.title, url: x.url, resumen: x.snippet })),
+      total: lista.length
+    } };
+  }
+
+  // ── mapear: enlaces de una página, sin contenido (POST /map) ──
+  async _mapear(input) {
+    const g = this._guard(); if (g) return g;
+    if (!input || !input.url) return this._invalid('url');
+    const r = await this._directo('POST', '/map', {
+      url: String(input.url), ...(input.mode ? { mode: input.mode } : {})
+    });
+    if (r.error) return r;
+    const body = r.body || {};
+    const enlaces = Array.isArray(body.links) ? body.links : [];
+    return { status: 200, data: { url: body.url || String(input.url), enlaces, total: enlaces.length } };
+  }
+
+  // ── endpoint directo (sin job): token → llamada, retry tras 401 ──
+  async _directo(method, path, payload) {
+    let token;
+    try { token = await this._ensureToken(); }
+    catch (_) { return this._degradado('sin_servicio'); }
+    let r;
+    try {
+      r = await this._http(method, path, payload, token);
+      if (r.status === 401) { this._token = null; token = await this._ensureToken(); r = await this._http(method, path, payload, token); }
+    } catch (_) { return this._degradado('sin_servicio'); }
+    if (r.status < 200 || r.status >= 300) {
+      // El servidor responde texto prescriptivo (p.ej. "search no disponible:
+      // define SEARXNG_URL") — viaja en message, la única capa que todo transporte preserva.
+      const msg = (typeof r.body === 'string' && r.body) ? r.body : 'crawl4rs rechazó la petición';
+      const code = r.status === 503 ? 'UPSTREAM_UNREACHABLE' : 'UPSTREAM_INVALID_RESPONSE';
+      return this._errorResponse(r.status >= 400 ? r.status : 502, code, msg, { status: r.status });
+    }
+    return { body: r.body };
   }
 
   // ── el flujo job-based: token → submit → poll → result ──

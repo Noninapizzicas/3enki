@@ -1,0 +1,60 @@
+# Crawl4RS (repo D-os) — el crawler pesado (navegador real Chromium + stealth)
+# como contenedor en el VPS. Es el motor que consume el puente modules/crawl4rs.
+#
+# Docker y no nativo A PROPÓSITO: el binario Rust es limpio, pero arrastra
+# Chromium (la dependencia sucia). El reparto es por NATURALEZA — igual que
+# python-tools — así que Chromium queda contenido y el VPS lean.
+#
+# Traer y levantar:
+#   git clone --depth 1 https://github.com/noninapizzicas/d-os /opt/d-os
+#   docker network create enki-web   # una vez (la comparte con SearXNG)
+#   CRAWL4RS_JWT_SECRET=$(openssl rand -hex 32) \
+#     docker compose -f deployment/crawl4rs/docker-compose.yml up -d --build
+#   (guarda el secreto en /opt/enki/data/.env para que sobreviva reinicios)
+#
+# Verificar:  curl -s http://127.0.0.1:8081/health
+# Cablear:    nada — modules/crawl4rs ya apunta a :8081. Solo encender el
+#             interruptor 'crawl4rs' (panel/sistema, OFF por defecto).
+#
+# Puerto: 127.0.0.1:8081 (el :8080 local es de SearXNG). Solo localhost:
+# lo consume el core, no la web.
+
+services:
+  crawl4rs:
+    build:
+      # Clon del repo D-os en el VPS. Override: DOS_DIR=/ruta docker compose ...
+      context: ${DOS_DIR:-/opt/d-os}
+      dockerfile: Dockerfile
+    image: enki-crawl4rs
+    container_name: enki-crawl4rs
+    ports:
+      - "127.0.0.1:8081:8080"
+    environment:
+      # Firma de los JWT de /auth/token. SIN DEFAULT a propósito: el default
+      # del Dockerfile de D-os es público (forjable). Falla si no lo pones.
+      - CRAWL4RS_JWT_SECRET=${CRAWL4RS_JWT_SECRET:?pon CRAWL4RS_JWT_SECRET (openssl rand -hex 32)}
+      # Opcional: exige x-api-key en /auth/token. Si la pones aquí, ponla
+      # también en el core (env CRAWL4RS_API_KEY) para el puente.
+      - CRAWL4RS_API_KEY=${CRAWL4RS_API_KEY:-}
+      # Opcional: backend de /search (crawl4rs.buscar). El inquilino SearXNG
+      # (python-tools) vive en la red compartida enki-web y se alcanza por su
+      # nombre de contenedor. Sin él levantado, /search responde 503 con
+      # prescripción ("define SEARXNG_URL"); leer/mapear/rastrear siguen.
+      - SEARXNG_URL=${SEARXNG_URL:-http://enki-searxng:8080}
+    # Chromium revienta con los 64MB de /dev/shm por defecto de Docker.
+    shm_size: "1gb"
+    networks: [enki-web]
+    restart: unless-stopped
+    healthcheck:
+      # La imagen (debian slim) no trae curl; TCP-check con bash basta.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# Red compartida entre órganos web (crawl4rs ↔ searxng). Se crea una vez:
+#   docker network create enki-web
+networks:
+  enki-web:
+    external: true

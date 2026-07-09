@@ -220,7 +220,9 @@ class RecetasReflejo extends ModuloHibridoReflejo {
         : (input.instrucciones ? [String(input.instrucciones)] : []),
       categorias: Array.isArray(input.categorias) ? input.categorias.map(String) : [],
       etiquetas: Array.isArray(input.etiquetas) ? input.etiquetas.map(String) : [],
-      fuente: ['manual', 'importada', 'sugerida', 'agente'].includes(input.fuente) ? input.fuente : 'manual',
+      // fuente de una receta = CREACION (prisma-del-caso): sin evidencia que exigir, pero
+      // la coercion silenciosa a 'manual' MENTIA sobre la procedencia. String libre.
+      fuente: (typeof input.fuente === 'string' && input.fuente.trim()) ? input.fuente.trim().toLowerCase() : 'manual',
       notas: input.notas ? String(input.notas) : '',
       estado_operativo: incompleta ? 'borrador' : 'en_servicio',
       version: 1, history: [], incompleta, campos_pendientes,

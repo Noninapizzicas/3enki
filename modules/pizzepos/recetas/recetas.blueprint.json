@@ -36,7 +36,7 @@
   "modelo_canonico": {
     "_descripcion": "LA estructura. Govierna TODO el blueprint. Tres clases, un solo patron — el LLM construye SIEMPRE asi, no improvisa formas distintas cada vez. El coste es DERIVADO (lo escribe escandallo); el LLM solo estructura, no calcula coste en el chat.",
     "clases": {
-      "Ingrediente": "atomo con precio (vive en ingredientes_catalogo[]). { id: slug, nombre: comercial unico, compra_unidad: 'kg'|'l'|'ud', precio: number por compra_unidad, fuente: 'mercadona'|'manual'|'estimado'|'soysuper', url: string|null (evidencia; obligatoria si fuente='soysuper') }.",
+      "Ingrediente": "atomo con precio (vive en ingredientes_catalogo[]). { id: slug, nombre: comercial unico, compra_unidad: 'kg'|'l'|'ud', precio: number por compra_unidad, fuente: string libre juzgada por la ley de la evidencia (prisma-del-caso), url: string|null (evidencia; obligatoria para toda afirmacion externa) }.",
       "Receta": "TODO lo que se elabora: pizza | masa | salsa | base (vive en recetas[]). { id: slug, nombre, tipo, rinde: {cantidad, unidad}, lineas: Linea[] }. coste_total/coste_unidad son DERIVADOS — los escribe escandallo, el LLM NO los toca.",
       "Linea": "une una Receta con una de sus partes. { ref: id, nombre, cantidad: number, unidad: 'g'|'ml'|'ud', notas?: string }. 'ref' apunta a un Ingrediente (catalogo) O a otra Receta (sub-receta: masa, salsa). UN solo campo de enlace para todo."
     },
@@ -197,7 +197,7 @@
     ],
     "rinde": "{ cantidad: number > 0, unidad: 'ud'|'g'|'ml' }. Si falta, inferir por tipo: pizza={1,'ud'}; masa={nº bolas,'ud'}; salsa={peso total,'g'}.",
     "fuente_receta": "Si input en {manual,importada,sugerida,agente} → preservar. Otro → 'manual'.",
-    "fuente_precio": "Si input en {mercadona,manual,estimado,soysuper} → preservar (soysuper EXIGE url — evidencia). Otro → 'manual'."
+    "fuente_precio": "String LIBRE (ley de la evidencia, prisma-del-caso): derivadas/manual/mercadona pasan; estimacion NO persiste como real; cualquier otra fuente exige evidencia (url|referencia_id) y entra. La fuente jamas se veta por nombre."
   },
   "campos_que_marcan_completa": [
     "nombre",
@@ -429,7 +429,7 @@
         "      case 'lineas':        r.lineas = <normalizar input.cambios.lineas a Linea[] resolviendo ref por nombre>; aplicados.push('lineas')",
         "      case 'instrucciones': r.instrucciones = <normalizar input.cambios.instrucciones>; aplicados.push('instrucciones')",
         "      case 'notas':         r.notas = typeof input.cambios.notas === 'string' ? input.cambios.notas : ''; aplicados.push('notas')",
-        "      case 'fuente':        if (['manual','importada','sugerida','agente'].includes(input.cambios.fuente)) { r.fuente = input.cambios.fuente; aplicados.push('fuente') }",
+        "      case 'fuente':        if (typeof input.cambios.fuente === 'string' && input.cambios.fuente.trim()) { r.fuente = input.cambios.fuente.trim().toLowerCase(); aplicados.push('fuente') }   // string libre — la procedencia jamas se veta por nombre (ley del prisma)",
         "      case 'categorias':    r.categorias = Array.isArray(input.cambios.categorias) ? input.cambios.categorias.map(String) : []; aplicados.push('categorias')",
         "      case 'etiquetas':     r.etiquetas  = Array.isArray(input.cambios.etiquetas) ? input.cambios.etiquetas.map(String) : []; aplicados.push('etiquetas')",
         "      default: <ignorar>",
@@ -821,16 +821,20 @@
     "actualizar_precio": {
       "cajon": false,
       "_frontera": "pricing = trabajo de escandallo. recetas es dueño del catalogo (por eso el upsert vive aqui), pero el LLM de recetas NO debe fijar precios. Solo escandallo la invoca por el bus (recetas.actualizar_precio.request) para cachear lo que navega de Mercadona.",
-      "input": "{ project_id (req), nombre (req), precio (req, number >= 0), compra_unidad? in {kg,l,ud}, categoria?, id?, mercadona_producto_id?, fuente? in {mercadona,manual,estimado,soysuper}, url? (string — evidencia de la afirmacion externa; OBLIGATORIA si fuente='soysuper') }",
+      "input": "{ project_id (req), nombre (req), precio (req, number >= 0), compra_unidad? in {kg,l,ud}, categoria?, id?, mercadona_producto_id?, fuente? (string LIBRE — la fuente jamas se veta por nombre), url?|referencia_id? (evidencia — OBLIGATORIA para toda fuente que no sea derivada interna, manual o mercadona) }",
       "_descripcion_semantica": "Upsert sobre ingredientes_catalogo (clase Ingrediente del modelo_canonico). Clave: input.id si viene, sino slug derivado del nombre. Si no existe lo crea (id estable); si existe actualiza precio + campos opcionales preservando los no enviados. Es la operacion por la que escandallo cachea precios de Mercadona: una conexion por ingrediente, luego todos leen el catalogo.",
       "pseudocodigo": [
         "async actualizar_precio(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
         "  if (!input.nombre || input.nombre.trim() === '') return INVALID_INPUT { field: 'nombre' }",
         "  if (typeof input.precio !== 'number' || input.precio < 0 || isNaN(input.precio)) return INVALID_INPUT { field: 'precio' }",
-        "  if (input.fuente !== undefined && !['mercadona','manual','estimado','soysuper'].includes(input.fuente)) return INVALID_INPUT { field: 'fuente' }",
-  "  // soysuper es una AFIRMACION EXTERNA: exige direccion de vuelta (mismo mandato que el freno de escandallo, #645)",
-  "  if (input.fuente === 'soysuper' && (typeof input.url !== 'string' || !input.url.startsWith('http'))) return INVALID_INPUT { field: 'url', hint: 'fuente soysuper exige url de la ficha (evidencia)' }",
+        "  // LEY DE LA EVIDENCIA (prisma-del-caso.leyDeLaEvidencia): la fuente JAMAS se veta por nombre —",
+  "  //   derivadas internas (catalogo, sub_receta) y testimonio ('manual') pasan; 'mercadona' pasa (su",
+  "  //   producto_id es la vuelta); la estimacion es IRRECTIFICABLE (jamas persiste como real); CUALQUIER",
+  "  //   otra fuente (soysuper, makro, la-que-venga) es afirmacion externa: nombra tu evidencia y entras.",
+  "  fuente = String(input.fuente || 'manual').toLowerCase().trim()",
+  "  ley = leyDeLaEvidencia({ fuente, url: input.url, referencia_id: input.referencia_id, mercadona_producto_id: input.mercadona_producto_id })",
+  "  if (!ley.ok) return INVALID_INPUT { field: ley.naturaleza === 'IRRECTIFICABLE' ? 'fuente' : 'url', hint: ley.falta }",
         "",
         "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
         "  now = nowISO()",
@@ -845,7 +849,7 @@
         "    compra_unidad: ['kg','l','ud'].includes(input.compra_unidad) ? input.compra_unidad : null,",
         "    precio: input.precio,",
         "    mercadona_producto_id: typeof input.mercadona_producto_id === 'string' ? input.mercadona_producto_id : null,",
-        "    fuente: ['mercadona','manual','estimado','soysuper'].includes(input.fuente) ? input.fuente : 'manual',",
+        "    fuente: fuente,   // string libre — ya juzgada por la ley (lo que se exigio fue la evidencia)",
   "    url: typeof input.url === 'string' ? input.url : null,   // evidencia (soysuper) — el freno de escandallo la exige",
         "    created_at: now, updated_at: now",
         "  }",
@@ -893,7 +897,7 @@
         "      ...(typeof input.categoria === 'string' ? { categoria: input.categoria } : {}),",
         "      ...(['kg','l','ud'].includes(input.compra_unidad) ? { compra_unidad: input.compra_unidad } : {}),",
         "      ...(typeof input.mercadona_producto_id === 'string' ? { mercadona_producto_id: input.mercadona_producto_id } : {}),",
-        "      ...(['mercadona','manual','estimado','soysuper'].includes(input.fuente) ? { fuente: input.fuente } : {}),",
+        "      ...(input.fuente ? { fuente } : {}),",
   "      ...(typeof input.url === 'string' ? { url: input.url } : {})",
         "    }",
         "    await publishAndWait('fs.edit.request', {",

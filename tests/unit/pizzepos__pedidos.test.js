@@ -511,13 +511,22 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('tienda · canal_origen invalido devuelve 400 INVALID_INPUT', async () => {
+  await testAsync('tienda · canal_origen malformado devuelve 400 INVALID_INPUT (slug requerido)', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r = await m.handleCreatePedidoTienda(validInputTienda({ canal_origen: 'telegram' }));
+    const r = await m.handleCreatePedidoTienda(validInputTienda({ canal_origen: 'no es un slug!' }));
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.strictEqual(r.error.details.field, 'canal_origen');
+    await m.onUnload();
+  });
+
+  await testAsync('tienda · LEY DE LA EVIDENCIA: un canal nuevo (telegram) ENTRA — jamas se veta por nombre', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleCreatePedidoTienda(validInputTienda({ canal_origen: 'telegram' }));
+    assert.ok(!isCanonicalError(r) || r.error?.details?.field !== 'canal_origen',
+      'el canal de manana entra sin tocar el codigo del freno');
     await m.onUnload();
   });
 

@@ -13,6 +13,7 @@
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+const { leyDeLaEvidencia } = require('../../_shared/prisma-del-caso');
 
 const ORDEN_TIPO = { masa: 0, salsa: 0, base: 0, pizza: 1 };
 
@@ -105,11 +106,10 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
   //    total fabricado. Función pura: no lee ni escribe. Determinista. ──
   _checkCosteo(costeo) {
     const finite = x => typeof x === 'number' && Number.isFinite(x);
-    // FUENTES_TRAZABLES: procedencia con dirección de vuelta. 'soysuper' es una AFIRMACIÓN
-    // EXTERNA (ley rectificable, prisma-del-caso) → entra, pero EXIGE evidencia (url) abajo:
-    // el precio web no se fía por quién lo leyó, sino porque cualquiera puede re-comprobarlo.
-    const FUENTES_TRAZABLES = new Set(['mercadona', 'catalogo', 'sub_receta', 'manual', 'soysuper']);
-    const EXIGEN_EVIDENCIA = new Set(['soysuper']);   // afirmaciones externas web: sin url → rechazo
+    // LEY DE LA EVIDENCIA (prisma-del-caso): la fuente JAMÁS se veta por nombre — se
+    // clasifica su naturaleza y se le exige lo suyo. Cualquier fuente nueva (makro, un
+    // API, un CSV) entra nombrando su dirección de vuelta; la estimación jamás pasa
+    // como real. Aquí murieron FUENTES_TRAZABLES y EXIGEN_EVIDENCIA (listas cerradas).
     const desglose = Array.isArray(costeo.lineas_detalle) ? costeo.lineas_detalle
       : (Array.isArray(costeo.desglose) ? costeo.desglose : []);
     const ct = costeo.coste_total, cu = costeo.coste_unidad, rinde = costeo.rinde;
@@ -130,16 +130,11 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
         }
         suma += finite(val) ? val : esperado;
       }
-      if (l.fuente === 'estimado_llm') precios_estimados.push(l.nombre);
-      else if (l.fuente && !FUENTES_TRAZABLES.has(l.fuente)) {
-        errors.push({ code: 'FUENTE_DESCONOCIDA', path: `/lineas/${i}`, message: `${l.nombre || '(línea)'}: fuente '${l.fuente}' no reconocida` });
-      }
-      // DIRECCIÓN DE VUELTA obligatoria para la afirmación externa: un precio 'soysuper' sin
-      // url no es rectificable → cae, aunque el número parezca bueno (mata el label sin evidencia).
-      if (EXIGEN_EVIDENCIA.has(l.fuente)) {
-        const ev = l.evidencia || l.url || l.soysuper_url;
-        if (!(typeof ev === 'string' && ev.trim())) {
-          errors.push({ code: 'PRECIO_SIN_EVIDENCIA', path: `/lineas/${i}`, message: `${l.nombre || '(línea)'}: fuente '${l.fuente}' sin evidencia (url) — un precio web entra solo con su dirección de vuelta` });
+      if (l.fuente && l.fuente !== 'no_disponible') {
+        const ley = leyDeLaEvidencia({ fuente: l.fuente, evidencia: l.evidencia || l.soysuper_url, url: l.url, referencia_id: l.referencia_id, mercadona_producto_id: l.mercadona_producto_id });
+        if (!ley.ok) {
+          if (ley.naturaleza === 'IRRECTIFICABLE') precios_estimados.push(l.nombre);
+          else errors.push({ code: 'PRECIO_SIN_EVIDENCIA', path: `/lineas/${i}`, message: `${l.nombre || '(línea)'}: ${ley.falta}` });
         }
       }
     }

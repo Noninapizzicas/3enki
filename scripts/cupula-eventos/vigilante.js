@@ -167,6 +167,22 @@ if (fs.existsSync(TESTS_DIR)) {
   }
 }
 
+// ── veto por nombre: ningún freno veta PROCEDENCIA con lista cerrada ─────────
+// Ley de la evidencia (prisma-del-caso): la fuente jamás se veta por nombre — se
+// califica por su evidencia. Un `['a','b'].includes(x.fuente)` que RECHAZA es un
+// muro que crece con cada fuente nueva (caso testigo: soysuper vs actualizar_precio).
+const RE_VETO = /\[(?:\s*['"][a-z0-9_-]+['"]\s*,?)+\]\s*\.includes\([^)]*(?:fuente|canal|proveedor|origen|motor|provider|source)/i;
+const vetoPorNombre = [];
+for (const f of walk(MODULES)) {
+  if (!(f.endsWith('.js') || f.endsWith('.blueprint.json'))) continue;
+  if (f.includes('__tests__')) continue;
+  const texto = fs.readFileSync(f, 'utf8');
+  const lineas = texto.split('\n');
+  for (let i = 0; i < lineas.length; i++) {
+    if (RE_VETO.test(lineas[i])) vetoPorNombre.push({ donde: `${rel(f)}:${i + 1}`, linea: lineas[i].trim().slice(0, 120) });
+  }
+}
+
 // ── cantos ───────────────────────────────────────────────────────────────────
 const rpcFantasma = [];
 for (const c of conducidos) {
@@ -201,6 +217,7 @@ if (AS_JSON) {
   const avisosFuertes = avisos.filter((a) => a.via === 'pseudocodigo' || a.via === 'skill');
   for (const a of avisosFuertes) console.log(`${YEL}⚠ publish huérfano${RST} ${a.evento}  ← ${a.por} (${a.via}) — sin subscriber`);
   for (const t of testFantasma) console.log(`${YEL}⚠ test con fantasma${RST} ${t.evento}  ← ${t.por} — el stub perpetúa un evento que nadie atiende`);
+  for (const v of vetoPorNombre) console.log(`${YEL}⚠ veto por nombre${RST} ${v.donde} — la procedencia se califica por EVIDENCIA (ley del prisma), no por lista: ${v.linea}`);
   const veredicto = errores.length ? `${errores.length} fantasma(s)` : 'contrato íntegro';
   console.log(`${errores.length ? RED : GREEN}${TESTIGO ? '(testigo) ' : ''}${veredicto}${RST} · ${avisosFuertes.length} aviso(s) fuertes · ${avisos.length - avisosFuertes.length} de manifest (ver --json)`);
 }

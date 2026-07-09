@@ -30,7 +30,9 @@ verificado: 2026-07-09
   },
   "cantos": {
     "rpc_fantasma": "ERROR — un RPC conducido que NADIE atiende (timeout silencioso garantizado)",
-    "publish_huerfano": "WARN — publish de dominio sin subscriber; en consola solo los de pseudocódigo/skill (los de manifest los consume el frontend por MQTT dinámico → viven en --json)"
+    "publish_huerfano": "WARN — publish de dominio sin subscriber; en consola solo los de pseudocódigo/skill (los de manifest los consume el frontend por MQTT dinámico → viven en --json)",
+    "test_fantasma": "WARN — un stub de test compara contra un evento .request de módulo real que nadie atiende (raíz del caso destilador: el fantasma vivía en el test y jamás cantó)",
+    "veto_por_nombre": "WARN — un freno veta PROCEDENCIA (fuente/canal/proveedor/origen/motor/provider) con lista cerrada: la ley de la evidencia (prisma-del-caso) manda calificar por evidencia, no por nombre"
   },
   "fase": "TESTIGO — canta sin bloquear (--testigo en CI); se gradúa quitando el flag cuando el repo quede sin fantasmas",
   "organos_ci": {

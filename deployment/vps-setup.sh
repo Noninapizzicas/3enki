@@ -113,8 +113,10 @@ else
 fi
 
 # ---- 2. Node.js ----
-if command -v node &> /dev/null && node -v | grep -q "v${NODE_VERSION}"; then
-    log "Node.js $(node -v) ya instalado"
+# Acepta cualquier versión >= NODE_VERSION (el chequeo literal "v20" no casaba
+# con un v22 ya instalado y re-corría nodesource en cada pasada para nada).
+if command -v node &> /dev/null && [ "$(node -p 'parseInt(process.versions.node)')" -ge "${NODE_VERSION}" ]; then
+    log "Node.js $(node -v) ya instalado (>= v${NODE_VERSION})"
 else
     log "Instalando Node.js ${NODE_VERSION}..."
     curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - > /dev/null 2>&1

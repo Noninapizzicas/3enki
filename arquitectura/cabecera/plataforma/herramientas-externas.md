@@ -1,15 +1,17 @@
 ---
 id: plataforma/herramientas-externas
 dominio: plataforma
-resumen: Rust nativo en el VPS (fastCRW) · Python en Docker (contenedor universal: SearXNG, Headroom) · enganche al ejecutor por config.
+resumen: Rust nativo en el VPS (fastCRW) · Python en Docker (contenedor universal: SearXNG, Headroom) · Crawl4RS en Docker (Chromium contenido) · enganche al ejecutor por config.
 fuentes:
   - deployment/fastcrw/**
   - deployment/python-tools/**
+  - deployment/crawl4rs/**
   - modules/fastcrw/**
+  - modules/crawl4rs/**
   - modules/_shared/error-fertil.js
   - modules/cosecha/cantera/enki/herramientas-web/**
   - modules/cosecha/cantera/enki/precio-ingredientes-web/**
-verificado: 2026-07-07
+verificado: 2026-07-09
 ---
 
 # HERRAMIENTAS EXTERNAS — Rust nativo en el VPS · Python en Docker (fastCRW · Headroom · el contenedor Python universal)
@@ -88,6 +90,33 @@ QUÉ ES  API de datos web en Rust (scrape·extract·search·crawl·map), alt. op
   }
 TESTS  fastcrw-module (5: tools registran · scrape/extract templating+response_path · degradación honesta) ·
        precio-ingredientes-web-seed (4: descubrimiento · búsqueda · hogar · conducción). validate-all cero drift.
+```
+
+## Crawl4RS (D-os) — el crawler PESADO en Docker + puente en el bus
+
+```
+QUÉ ES  Crawler Rust del repo hermano D-os (navegador real Chromium/CDP + stealth + crawl profundo
+        BFS/DFS + extracción CSS/semántica/JSON-LD). HERMANO PESADO de fastcrw: fastcrw = fetch HTTP
+        ligero (primero); Crawl4RS = navegador real para sitios JS-pesados/protegidos que fastcrw no salta.
+
+POR QUÉ DOCKER (la excepción que confirma "Rust → nativo"): el binario es limpio pero ARRASTRA
+        Chromium — la dependencia sucia. Reparto por NATURALEZA: lo sucio va contenido (como python-tools).
+
+1 · MOTOR (Docker)  deployment/crawl4rs/ {
+     docker-compose.yml  build desde el clon /opt/d-os (override DOS_DIR) → imagen enki-crawl4rs.
+     127.0.0.1:8081→8080 (el :8080 local es de SearXNG) · shm_size 1gb (Chromium revienta con 64MB)
+     · CRAWL4RS_JWT_SECRET OBLIGATORIO sin default (el del Dockerfile de D-os es público/forjable;
+       compose falla si falta — fail-closed) · CRAWL4RS_API_KEY opcional · healthcheck TCP por bash.
+     README.md  receta completa: clone → secreto → up → verificar → encender → usar.
+  }
+2 · PUENTE (bus)  modules/crawl4rs/ {
+     Reflejo bus↔HTTP job-based (token JWT cacheado → POST /crawl → poll → result, retry ante 401).
+     Eventos: crawl4rs.{leer,rastrear}.request → .response. Tool de chat: leer_web (url, query BM25,
+     extract_semantic). NACE OFF (interruptor 'crawl4rs', grupo sistema) · degrada honesto (503
+     {degradado, motivo}). Precedencia env > config (CRAWL4RS_BASE_URL/API_KEY). Test: crawl4rs__index.
+  }
+HORIZONTE  Fase 7 de D-os = crate crawl4rs-mqtt (el motor habla MQTT nativo por
+           core/<id>/api/request/crawl/*) → este puente HTTP se retira; el compose solo cambia el CMD.
 ```
 
 ## Headroom — proxy de compresión de contexto (código integrado + FASE 0 en Docker)
@@ -186,6 +215,8 @@ PIEZAS {
   modules/cosecha/cantera/enki/precio-ingredientes-web/  skill DOMINIO — el saber del precio, invocación inline (autocontenida)
   deployment/python-tools/                el hogar Python: imagen base + SearXNG + Headroom
   deployment/python-tools/headroom/       proxy de compresión (FASE 0 docker)
+  deployment/crawl4rs/                    provisioning del crawler pesado (compose + receta, Docker por Chromium)
+  modules/crawl4rs/                       puente bus↔HTTP al motor Crawl4RS (D-os) — interruptor OFF, degrada honesto
 }
 ESTADO {
   ✓ código: fastcrw · error-fertil · skills (genérico+dominio) · headroom (8/8) · tests · validate-all verde

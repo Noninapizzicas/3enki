@@ -24,14 +24,16 @@
 
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
-const DEFAULT_BASE = 'http://localhost:8080';
+// :8081 en el host — el :8080 local es de SearXNG (deployment/python-tools).
+// El contenedor enki-crawl4rs (deployment/crawl4rs) publica 127.0.0.1:8081 → 8080 interno.
+const DEFAULT_BASE = 'http://localhost:8081';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 class Crawl4rsModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'crawl4rs';
-    this.version = '0.1.0';
+    this.version = '0.1.1';
     this.activo = false;          // interruptor OFF por defecto (on-demand)
     this._baseUrl = DEFAULT_BASE;
     this._apiKey = null;
@@ -43,8 +45,10 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   async onLoad(context) {
     await super.onLoad(context);
     const cfg = (context && (context.moduleConfig || (context.config && context.config.crawl4rs))) || {};
-    this._baseUrl = String(cfg.base_url || process.env.CRAWL4RS_BASE_URL || DEFAULT_BASE).replace(/\/+$/, '');
-    this._apiKey = cfg.api_key || process.env.CRAWL4RS_API_KEY || null;
+    // Precedencia: env > config > default — el manifest siempre trae base_url,
+    // así que el env solo manda si va primero (es el override por despliegue).
+    this._baseUrl = String(process.env.CRAWL4RS_BASE_URL || cfg.base_url || DEFAULT_BASE).replace(/\/+$/, '');
+    this._apiKey = process.env.CRAWL4RS_API_KEY || cfg.api_key || null;
     this._timeoutMs = Number(cfg.timeout_ms) || 120000;
     this._registrarBoton();
     this.logger?.info('crawl4rs.loaded', { base_url: this._baseUrl, activo: this.activo });

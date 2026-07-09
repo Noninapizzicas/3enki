@@ -16419,8 +16419,13 @@ ESTADO {
     recableadas a crawl4rs) · headroom (8/8) · tests (crawl4rs__index 9 · seeds 4+4) · fastcrw RETIRADO.
   ✓ hallazgo vivo (heredado del ciclo fastcrw — la física del sitio no cambia): soysuper THROTTLEA
     ráfagas (~15-20 → 504); adivinar slug /p/<x> → 404 vacío → descubrir por /search es el camino fiable.
-  ◑ falta cerrar en vivo: correr `sudo ./deployment/vps-setup.sh <dominio>` (levanta enki-crawl4rs +
-    SearXNG solo), encender el interruptor y verificar un turno real de escandallo → revisar tool_calls.
+  ✓ VIVO (2026-07-09, verificado por el bus MQTT/WSS en enki-ai.online, interruptor ON): leer →
+    example.com 200 y soysuper /search 200 (286 productos, 8.4k chars markdown con enlaces /p/) ·
+    buscar → 3 resultados reales vía SearXNG · mapear → 200. Tres fallos cazados y sellados en el
+    camino: target 'minimal' por defecto del Dockerfile (→ target: runtime) · CRAWL4RS_API_KEY
+    vacía = clave configurada (→ passthrough sin '=') · SearXNG exige env SEARXNG_SECRET, sin _KEY.
+  ◑ falta cerrar en vivo: un turno real de escandallo usando la skill precio-ingredientes-web →
+    revisar tool_calls.
   ⏸ escandallo NO cableado a crawl4rs por DECISIÓN — el enlace es skill-first (descubrir/promover/crear), no hardcode.
   ⏸ agente precio-web (perspectiva-c) para el lote de 39 — siguiente.
 }

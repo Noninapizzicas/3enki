@@ -37,9 +37,13 @@ services:
       # Firma de los JWT de /auth/token. SIN DEFAULT a propósito: el default
       # del Dockerfile de D-os es público (forjable). Falla si no lo pones.
       - CRAWL4RS_JWT_SECRET=${CRAWL4RS_JWT_SECRET:?pon CRAWL4RS_JWT_SECRET (openssl rand -hex 32)}
-      # Opcional: exige x-api-key en /auth/token. Si la pones aquí, ponla
-      # también en el core (env CRAWL4RS_API_KEY) para el puente.
-      - CRAWL4RS_API_KEY=${CRAWL4RS_API_KEY:-}
+      # Opcional: exige x-api-key en /auth/token. Passthrough SIN '=': solo
+      # llega al contenedor si existe en el entorno del host. CLAVE: el server
+      # de D-os trata la variable PRESENTE (aunque vacía) como clave configurada
+      # — pasarla siempre con ${VAR:-} dejaba /auth/token blindado con clave ""
+      # y el puente moría en 401 (visto en vivo). Si la usas, ponla también en
+      # el core (env CRAWL4RS_API_KEY) para el puente.
+      - CRAWL4RS_API_KEY
       # Opcional: backend de /search (crawl4rs.buscar). El inquilino SearXNG
       # (python-tools) vive en la red compartida enki-web y se alcanza por su
       # nombre de contenedor. Sin él levantado, /search responde 503 con

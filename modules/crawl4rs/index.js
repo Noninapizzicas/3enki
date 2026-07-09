@@ -33,7 +33,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'crawl4rs';
-    this.version = '0.2.0';
+    this.version = '0.2.1';
     this.activo = false;          // interruptor OFF por defecto (on-demand)
     this._baseUrl = DEFAULT_BASE;
     this._apiKey = null;
@@ -90,8 +90,15 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     return null;
   }
   _degradado(motivo) {
-    return { status: 503, error: { code: 'UPSTREAM_UNREACHABLE', message: `crawl4rs degradado: ${motivo}`, details: { degradado: true, motivo } } };
+    // Error fértil: la prescripción viaja en message (la única capa que todo transporte preserva).
+    const prescripcion = {
+      apagado: 'el interruptor crawl4rs está OFF — enciéndelo en el panel (grupo sistema). NO ES: motor caído.',
+      sin_servicio: 'el contenedor enki-crawl4rs no responde en :8081 — verifica docker ps y /health. NO ES: web inscrapeable.',
+      auth_rechazada: 'el servidor Crawl4RS exige x-api-key (tiene CRAWL4RS_API_KEY configurada) y el puente no la tiene — ponla en el core (env CRAWL4RS_API_KEY) o retírala del contenedor. NO ES: motor caído ni throttle.'
+    }[motivo] || '';
+    return { status: 503, error: { code: 'UPSTREAM_UNREACHABLE', message: `crawl4rs degradado: ${motivo}${prescripcion ? ' — ' + prescripcion : ''}`, details: { degradado: true, motivo } } };
   }
+  _motivoDe(err) { return err && err.code === 'AUTH' ? 'auth_rechazada' : 'sin_servicio'; }
 
   // ── leer: una URL → markdown (+extracción opcional) ──
   async _leer(input) {
@@ -150,12 +157,12 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   async _directo(method, path, payload) {
     let token;
     try { token = await this._ensureToken(); }
-    catch (_) { return this._degradado('sin_servicio'); }
+    catch (e) { return this._degradado(this._motivoDe(e)); }
     let r;
     try {
       r = await this._http(method, path, payload, token);
       if (r.status === 401) { this._token = null; token = await this._ensureToken(); r = await this._http(method, path, payload, token); }
-    } catch (_) { return this._degradado('sin_servicio'); }
+    } catch (e) { return this._degradado(this._motivoDe(e)); }
     if (r.status < 200 || r.status >= 300) {
       // El servidor responde texto prescriptivo (p.ej. "search no disponible:
       // define SEARXNG_URL") — viaja en message, la única capa que todo transporte preserva.
@@ -171,7 +178,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     // 1. token (refrescable)
     let token;
     try { token = await this._ensureToken(); }
-    catch (_) { return this._degradado('sin_servicio'); }
+    catch (e) { return this._degradado(this._motivoDe(e)); }
 
     // 2. submit (con un reintento tras 401 → token caducado)
     let id;
@@ -180,7 +187,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
       if (r.status === 401) { this._token = null; token = await this._ensureToken(); r = await this._http('POST', '/crawl', body, token); }
       if (r.status >= 200 && r.status < 300) id = r.body && r.body.id;
       else return this._errorResponse(r.status >= 400 ? r.status : 502, 'UPSTREAM_INVALID_RESPONSE', 'crawl4rs rechazó la petición', { status: r.status });
-    } catch (_) { return this._degradado('sin_servicio'); }
+    } catch (e) { return this._degradado(this._motivoDe(e)); }
     if (!id) return this._degradado('sin_id');
 
     // 3. poll hasta done/failed (acotado por timeout)
@@ -218,7 +225,10 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     const headers = this._apiKey ? { 'x-api-key': this._apiKey } : {};
     const r = await this._http('POST', '/auth/token', {}, null, headers);
     if (r.status >= 200 && r.status < 300 && r.body && r.body.token) { this._token = r.body.token; return this._token; }
-    throw new Error('auth failed ' + r.status);
+    const err = new Error('auth failed ' + r.status);
+    // 401/403 = el servidor RESPONDE pero rechaza: es auth, no caída — el motivo debe distinguirse.
+    if (r.status === 401 || r.status === 403) err.code = 'AUTH';
+    throw err;
   }
 
   // ── HTTP (fetch global, node ≥18). Overridable en test. ──

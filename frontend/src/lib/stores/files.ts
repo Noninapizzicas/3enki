@@ -94,7 +94,9 @@ export interface FilesStoreState {
 
 export const HTML_EXTENSION = 'html';
 export const TEXT_EXTENSIONS = ['md', 'json', 'txt', 'html', 'css', 'js', 'ts', 'yaml', 'yml', 'xml', 'svelte', 'jsx', 'tsx'];
-export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp'];
+// Solo las que el navegador pinta en <img>. tiff/heic son binarias (descargan bien) pero
+// no tienen preview nativo → caen a la rama de texto, que muestra un aviso, no basura.
+export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp', 'avif'];
 export const PDF_EXTENSION = 'pdf';
 
 // =============================================================================
@@ -309,14 +311,17 @@ export async function openFile(filePath: string): Promise<void> {
         type: string;
       }>('fs', 'read', { path: filePath });
 
+      // Un binario sin visor (heic, docx, mp4…) llega en base64: no lo muestres como texto
+      // (sería basura) — avisa y deja descargarlo con ⬇️.
+      const esBinario = response.data.encoding === 'base64';
       fileContent = {
         file_path: response.data.path,
         type: 'text',
-        content: response.data.content,
+        content: esBinario ? '(archivo binario — usa ⬇️ para descargarlo)' : response.data.content,
         extension: ext,
         size: response.data.size,
         modified: response.data.modified,
-        readonly: false
+        readonly: esBinario
       };
       viewType = 'editor';
     }
@@ -789,33 +794,29 @@ export async function downloadFile(filePath: string): Promise<void> {
       }
       blob = new Blob([bytes], { type: response.data.content_type || 'application/pdf' });
 
-    } else if (IMAGE_EXTENSIONS.includes(ext)) {
-      const response = await mqttRequest<{
-        file_path: string;
-        content: string;
-        content_type: string;
-        size: number;
-        modified: string;
-      }>('fs', 'read', { file_path: filePath });
-
-      const binary = atob(response.data.content);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      blob = new Blob([bytes], { type: response.data.content_type || 'application/octet-stream' });
-
     } else {
+      // Cualquier otra cosa: fs.read decide. Si vuelve en base64 (binario), se reconstruye
+      // con atob → bytes reales; si es texto, blob de texto. Vale para TODO binario, no solo
+      // imágenes (docx, mp4, woff, zip…), sin perseguir extensiones.
       const response = await mqttRequest<{
         path: string;
         content: string;
         encoding: string;
+        content_type?: string;
         size: number;
         modified: string;
-        type: string;
       }>('fs', 'read', { path: filePath });
 
-      blob = new Blob([response.data.content], { type: 'text/plain;charset=utf-8' });
+      if (response.data.encoding === 'base64') {
+        const binary = atob(response.data.content);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        blob = new Blob([bytes], { type: response.data.content_type || 'application/octet-stream' });
+      } else {
+        blob = new Blob([response.data.content], { type: 'text/plain;charset=utf-8' });
+      }
     }
 
     // Trigger browser download

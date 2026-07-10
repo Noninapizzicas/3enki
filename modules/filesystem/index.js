@@ -55,11 +55,30 @@ const crypto = require('crypto');
 
 const BaseModule = require('../_shared/base-module');
 const TEXT_EXTS = ['.txt', '.md', '.json', '.js', '.ts', '.html', '.css', '.yaml', '.yml', '.xml', '.csv', '.log'];
-const BINARY_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf', '.zip', '.tar', '.gz'];
+// Todo binario va aquí (base64) para que fs.read NO lo corrompa como utf-8 y la descarga
+// lo reconstruya con atob. svg es texto pero se trata como imagen (data:<mime>;base64,…).
+const BINARY_EXTS = [
+  // imágenes
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.avif', '.tiff', '.tif', '.heic', '.heif',
+  // documentos
+  '.pdf', '.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.odt', '.ods', '.odp',
+  // media
+  '.mp4', '.webm', '.mov', '.avi', '.mkv', '.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac',
+  // fuentes
+  '.woff', '.woff2', '.ttf', '.otf', '.eot',
+  // archivos comprimidos
+  '.zip', '.tar', '.gz', '.tgz', '.7z', '.rar', '.bz2', '.xz',
+  // otros
+  '.wasm', '.bin', '.exe', '.dmg', '.apk', '.so', '.dll', '.sqlite', '.db'
+];
 const MAX_READ_SIZE = 10 * 1024 * 1024; // 10MB
 // MIME por extensión (sin punto) para que fs.read de un binario devuelva content_type usable
-// (el visor de imágenes del frontend arma data:<mime>;base64,<content> con él).
-const IMG_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', ico: 'image/x-icon', pdf: 'application/pdf' };
+// (el visor de imágenes arma data:<mime>;base64,<content>). Lo no listado → application/octet-stream.
+const IMG_MIME = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+  svg: 'image/svg+xml', bmp: 'image/bmp', ico: 'image/x-icon', avif: 'image/avif',
+  tiff: 'image/tiff', tif: 'image/tiff', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf'
+};
 const MAX_SEARCH_RESULTS = 100;
 
 class FilesystemModule extends BaseModule {

@@ -254,6 +254,40 @@ if docker compose version &>/dev/null; then
         fi
     fi
 
+    # OCR4RS — el órgano físico (imagen/PDF escaneado → texto), hermano de crawl4rs.
+    # Mismo patrón: clona/actualiza, baja los modelos .rten una vez, levanta y siembra
+    # el interruptor ON. SIN AUTH (ley de la frontera: solo 127.0.0.1). Guardado: fallo → warn.
+    log "OCR4RS (órgano físico, Docker :8090)..."
+    if [ -d /opt/ocr4rs/.git ]; then
+        git -C /opt/ocr4rs pull --ff-only > /dev/null 2>&1 || warn "No se pudo actualizar /opt/ocr4rs (sigue con la versión local)"
+    else
+        git clone --depth 1 https://github.com/noninapizzicas/ocr4rs /opt/ocr4rs > /dev/null 2>&1 \
+            || warn "Clone de ocr4rs falló (¿red?). OCR4RS no se levantará esta pasada."
+    fi
+    if [ -d /opt/ocr4rs ]; then
+        # Modelos .rten (no se versionan, pesan MB): se bajan UNA vez a data/ (persiste).
+        OCR_MODELS="${INSTALL_DIR}/data/ocr4rs-models"
+        if [ ! -f "${OCR_MODELS}/text-detection.rten" ] && [ -x /opt/ocr4rs/scripts/get-models.sh ]; then
+            log "Descargando modelos OCR .rten (una vez)..."
+            /opt/ocr4rs/scripts/get-models.sh "${OCR_MODELS}" > /dev/null 2>&1 \
+                || warn "get-models.sh falló — sin modelos, /ocr degradará con 503 hasta bajarlos"
+        fi
+        log "Construyendo y levantando enki-ocr4rs (la 1ª vez compila Rust: unos minutos)..."
+        if OCR4RS_MODELS_DIR="${OCR_MODELS}" docker compose \
+             -f "${REPO_DIR}/deployment/ocr4rs/docker-compose.yml" up -d --build > /dev/null 2>&1; then
+            log "enki-ocr4rs arriba en 127.0.0.1:8090"
+            # Una decisión, una llave: instalar el órgano lo enciende (solo si el humano no decidió ya).
+            node -e "
+              const fs=require('fs'),p='${INSTALL_DIR}/data/interruptores.json';
+              let st={estados:{}}; try{st=JSON.parse(fs.readFileSync(p,'utf8'))}catch(_){}
+              st.estados=st.estados||{};
+              if(!('ocr4rs' in st.estados)){ st.estados.ocr4rs=true; fs.writeFileSync(p,JSON.stringify(st,null,2)); console.log('sembrado'); }
+            " > /dev/null 2>&1 && log "Interruptor ocr4rs: ON (instalar es decidir; tu apagado manual se respeta)" || true
+        else
+            warn "enki-ocr4rs no levantó — el puente degrada honesto (503). Revisa: docker compose -f deployment/ocr4rs/docker-compose.yml logs"
+        fi
+    fi
+
     # Headroom — proxy de compresión de contexto (:8787). Mismo patrón que crawl4rs: lo
     # levanta root en el setup y el core le habla por HTTP → cero concesión de seguridad
     # (no toca el grupo docker). El core solo lo usa si el interruptor 'headroom' se
@@ -269,7 +303,7 @@ if docker compose version &>/dev/null; then
         fi
     fi
 else
-    warn "Sin docker compose: Crawl4RS/SearXNG/Headroom no se levantaron. Todo degrada honesto hasta reejecutar el setup."
+    warn "Sin docker compose: Crawl4RS/SearXNG/OCR4RS/Headroom no se levantaron. Todo degrada honesto hasta reejecutar el setup."
 fi
 
 # ---- 3b. Ejecutor en contenedor (OPT-IN --docker — la ÚNICA concesión de seguridad) ----
@@ -552,6 +586,9 @@ fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-searxng$'; then
     echo "    enki-searxng   → búsqueda web para crawl4rs.buscar (docker)"
 fi
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-ocr4rs$'; then
+    echo "    enki-ocr4rs    → OCR órgano físico imagen/PDF→texto (docker, localhost:8090)"
+fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-headroom$'; then
     echo "    enki-headroom  → proxy compresión (docker, localhost:8787)"
 fi
@@ -561,6 +598,7 @@ fi
 echo ""
 echo "  Para activar (panel Interruptores 🎛️, grupo sistema — nacen OFF a propósito):"
 echo "    crawl4rs       → leer/buscar/mapear/rastrear la web desde el bus y el chat (leer_web)"
+echo "    ocr4rs         → leer texto de fotos/PDF escaneado desde el bus y el chat (leer_imagen)"
 echo "    headroom       → comprimir contexto al LLM (ahorro de tokens)"
 echo "    ejecutor       → shell guardado; con enki-python-tools = herramientas Python aisladas"
 echo ""

@@ -1,83 +1,105 @@
 ---
 name: herramientas-web
-description: Cómo alcanzar datos de la web DENTRO de un turno (leer una página, buscar, mapear enlaces, rastrear un sitio) sin curl a mano — conduciendo los reflejos de crawl4rs por el canal que ya tienes, bus.publishAndWait. Skill GENÉRICO: cualquier página lo bebe. Enseña la herramienta que el diseño deja en segundo plano, sin surfacearla. Incluye cómo leer el error para no rendirse ante un fallo transitorio.
+description: Leer la web DENTRO de un turno y SACARLE EL MÁXIMO — leer una página, buscar, mapear enlaces, rastrear un sitio, y extraer imágenes/precios/datos estructurados. crawl4rs es un MÓDULO del bus (no un fichero ni un agente): se conduce por bus.publishAndWait, la herramienta que el diseño deja en segundo plano. Playbook con recetas concretas (imágenes de productos, fichas, catálogos) + cómo leer el error para no rendirse.
 fuente: enki
 dominio: web
 lente_dominio: web
 lente_tarea: consultar
-tags: [web, datos, crawl4rs, leer, buscar, mapear, rastrear, scraping, bus, herramientas, precio, investigacion]
+tags: [web, datos, crawl4rs, leer, buscar, mapear, rastrear, imagenes, scraping, bus, herramientas, precio, catalogo, investigacion]
 ---
 
-# Herramientas web — conduce crawl4rs por el bus (no curl a mano)
+# Herramientas web — conduce crawl4rs por el bus y sácale el máximo
 
-> Las tools están en segundo plano por diseño (el sistema prefiere agentes/skills a que el LLM
-> encadene primitivas). Eso NO significa que no puedas usar la web: significa que la alcanzas por
-> el canal que YA tienes —`bus.publishAndWait`— en vez de curlear el servidor a mano por el
-> ejecutor (frágil, y te pierdes el mensaje interpretado del fallo). Este skill es la puerta
-> genérica; cualquier página que necesite web lo bebe. Un caso concreto (precio de ingredientes)
-> lo CONDUCE.
-
-## Cuándo usar
-
-Cuando necesites datos de la web en el turno: leer una página, buscar algo, mapear sus enlaces
-o rastrear un sitio. Motor: **Crawl4RS** (contenedor `enki-crawl4rs`, repo D-os) — modo auto:
-fetch HTTP ligero primero, navegador real (Chromium + stealth) solo cuando la página lo exige.
-Los reflejos viven en el bus (`modules/crawl4rs`); tú los llamas por publishAndWait.
+> **Lo primero, porque es donde todos se atascan:** crawl4rs **NO es un fichero, ni un agente,
+> ni una skill instalada** — no lo busques con `fs.search` ni `buscar_agente`, no lo encontrarás.
+> Es un **MÓDULO del bus**. Su tool de chat es `leer_web`, pero SIEMPRE puedes conducirlo directo
+> por el canal universal que ya tienes: `bus.publishAndWait('crawl4rs.leer.request', {url})`.
+> Las tools viven en segundo plano por diseño; este skill te enseña a alcanzarlas y exprimirlas.
 
 ## El precondicional (una sola cosa)
 
 El puente **nace OFF**: el interruptor `crawl4rs` (grupo sistema) tiene que estar ON. Si está
-apagado, TODA llamada responde `503 {degradado, motivo:'apagado'}` — eso no es un fallo del
-motor, es la puerta cerrada: dilo, no lo rodees.
+apagado, TODA llamada responde `503 {degradado, motivo:'apagado'}` — no es un fallo del motor,
+es la puerta cerrada: dilo, no lo rodees.
 
-## El canal (así se invoca)
+## Los cuatro verbos — cuál para qué
+
+| Verbo | Evento | Para qué | Devuelve |
+|---|---|---|---|
+| **leer** | `crawl4rs.leer.request` | UNA página → su contenido | `data.markdown` (+ `data.extraido`) |
+| **buscar** | `crawl4rs.buscar.request` | no sabes la URL → búscala | `data.resultados[{titulo,url,resumen}]` |
+| **mapear** | `crawl4rs.mapear.request` | los ENLACES de una página (ligero) | `data.enlaces[]` |
+| **rastrear** | `crawl4rs.rastrear.request` | un sitio ENTERO (BFS/DFS) | `data.paginas[{url,markdown,extraido}]` |
 
 ```
-// leer: URL → markdown limpio (+ extracción opcional). query filtra por relevancia (BM25).
 res = bus.publishAndWait('crawl4rs.leer.request', { url: 'https://…', query: 'precio' })
-res.data.markdown                                 // el contenido
-// buscar: query → resultados {titulo, url, resumen}. SearXNG detrás del servidor.
 res = bus.publishAndWait('crawl4rs.buscar.request', { query: 'harina de fuerza', limit: 5 })
-res.data.resultados
-// mapear: página → sus enlaces (ligero, sin contenido)
 res = bus.publishAndWait('crawl4rs.mapear.request', { url: 'https://…' })
-res.data.enlaces
-// rastrear: crawl profundo BFS/DFS (varias páginas — respeta el ritmo, ver abajo)
 res = bus.publishAndWait('crawl4rs.rastrear.request', { url: 'https://…', max_depth: 2, max_pages: 10 })
-res.data.paginas                                  // [{url, markdown, extraido}]
 ```
 
-- La respuesta llega como `{status, data}` (o `{status, error}`). Con `status: 200`, lee `data`.
-- NO uses `ejecutor` + `curl`: pierdes el token JWT encapsulado, el flujo job-based y el mensaje
-  interpretado del error.
-- ¿JSON estructurado en un paso? `leer` acepta `extract_css` (`{campo: 'selector'}` /
-  `::attr(...)`) y `extract_semantic: true` → llega en `data.extraido`. Por defecto:
-  **`leer` + lee tú de la markdown** (el LLM de página ya está en el turno).
+Respuesta siempre `{status, data}` (o `{status, error}`). Con `status: 200`, lee `data`.
+Motor: **Crawl4RS** (Rust, modo auto — fetch ligero primero, navegador real + stealth solo cuando
+la página lo exige). NO uses `ejecutor` + `curl`: pierdes el endpoint encapsulado y el mensaje
+interpretado del error.
+
+## SACAR EL MÁXIMO — recetas
+
+**1 · Imágenes de productos de una página** (el caso e-commerce: catálogo, tienda ajena).
+`extract_css` con `::attr(src)` saca los `src` de las imágenes → llega en `data.extraido`:
+```
+res = bus.publishAndWait('crawl4rs.leer.request', {
+  url: 'https://tienda.com/categoria/gafas',
+  extract_css: { imagenes: 'img::attr(src)', nombres: '.product-title', precios: '.price' }
+})
+res.data.extraido   // { imagenes:[url,...], nombres:[...], precios:[...] }
+```
+Si los selectores no los sabes: `leer` sin extract_css → la **markdown** ya trae las URLs de imagen
+en línea (`![alt](url)`); léelas tú. La markdown es el plan B universal cuando el CSS falla.
+
+**2 · Ficha de un producto** (precio, formato, descripción). Léela y saca de la markdown, o
+`extract_css: { precio: '.price', desc: '.description', img: 'img.main::attr(src)' }`.
+
+**3 · No sabes la URL → busca primero, lee después** (el patrón de descubrimiento, verificado):
+```
+res  = bus.publishAndWait('crawl4rs.buscar.request', { query: 'esther volta paños gafas' })
+url  = elegirMejor(res.data.resultados)        // TÚ casas el resultado
+ficha= bus.publishAndWait('crawl4rs.leer.request', { url })
+```
+No ADIVINES slugs de URL (`/p/<inventado>` → 404 vacío). Descubre por búsqueda o por `mapear`.
+
+**4 · El árbol de un sitio** (¿qué categorías/páginas tiene?): `mapear` la home → te da los
+enlaces → eliges los que valen → `leer` cada uno. Barato antes de rastrear a ciegas.
+
+**5 · Un catálogo entero** (varias páginas de golpe): `rastrear` con `max_depth`/`max_pages`
+acotados. Trae `data.paginas[]` con markdown+extraido de cada una. Respeta el ritmo (abajo).
+
+**6 · Filtrar por relevancia**: `query` en `leer` rankea el contenido por BM25 — útil en páginas
+largas («dame solo lo que hable de precio»). `extract_semantic: true` saca el contenido principal.
 
 ## Leer el error — la parte que evita rendirse
 
-Si `status` no es 200, el `error.message` trae la interpretación (y en los fallos del servidor,
-su prescripción textual, p.ej. `search no disponible: define SEARXNG_URL`):
+Si `status` no es 200, `error.message` trae la interpretación (y la prescripción del servidor):
 
-- **503 `{degradado, motivo:'apagado'}`** → el interruptor está OFF. No es el motor: pide encenderlo.
+- **503 `{degradado, motivo:'apagado'}`** → interruptor OFF. No es el motor: pide encenderlo.
 - **503 `{degradado, motivo:'sin_servicio'}`** → el contenedor no responde. Verifica
   `curl http://127.0.0.1:8081/health`; si responde, fue transitorio → reintenta con backoff (4s, 8s).
 - **504 `UPSTREAM_TIMEOUT`** → la página tardó más que `timeout_ms`. Reintenta una vez; si repite,
   baja el alcance (menos `max_pages` / URL más concreta).
-- **4xx `INVALID_INPUT` / rechazo del servidor** → corrige los argumentos (URL absoluta, query no
-  vacía); no reintentes idéntico.
+- **4xx `INVALID_INPUT`** → corrige los argumentos (URL absoluta, query no vacía); no reintentes igual.
 - Jamás concluyas "la web es inscrapeable" por UN fallo transitorio: el motor lleva navegador real
-  — prueba una URL neutra; si esa va, es el destino frenándote, no el motor.
+  — prueba una URL neutra (example.com); si esa va, es el destino frenándote, no el motor.
 
 ## Ritmo (el sitio destino puede frenarte)
 
-Muchos sitios throttlean las ráfagas (verificado con soysuper: ~15-20 requests seguidos → 504).
-Uno a la vez, con pausa (~2-4s). `rastrear` ya acota con `max_pages` — úsalo bajo. Un lote grande
-NO se dispara de golpe: va por tandas, y si es mucho volumen, es trabajo de un **agente**
-(perspectiva-c con throttle+retry), no de un turno de chat.
+Muchos sitios throttlean las ráfagas (verificado con soysuper: ~15-20 seguidos → 504). Uno a la
+vez, con pausa (~2-4s). `rastrear` ya acota con `max_pages` — úsalo bajo. Un lote grande NO se
+dispara de golpe: va por tandas, y si es mucho volumen, es trabajo de un **agente** (perspectiva-c
+con throttle+retry), no de un turno de chat.
 
 ## Filosofía
 
-El diseño mantiene la tool en segundo plano para que no encadenes primitivas a ciegas. Este skill
-te da justo lo necesario para conducirla bien —el canal, el error, el ritmo— y nada más. La
-tool es la mano; este skill, cómo moverla; el saber de cada caso (p.ej. precios) vive en su skill.
+La tool vive en segundo plano para que no encadenes primitivas a ciegas. Este skill te da el mapa
+completo —los cuatro verbos, cómo extraer, cómo leer el error, el ritmo— para que la exprimas sin
+improvisar. La tool es la mano; este skill, cómo moverla; el saber de cada caso (precios, imágenes
+de un catálogo concreto) vive en su skill de dominio.

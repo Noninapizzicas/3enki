@@ -55,11 +55,13 @@ const crypto = require('crypto');
 
 const BaseModule = require('../_shared/base-module');
 const TEXT_EXTS = ['.txt', '.md', '.json', '.js', '.ts', '.html', '.css', '.yaml', '.yml', '.xml', '.csv', '.log'];
-const BINARY_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf', '.zip', '.tar', '.gz'];
+// svg/bmp van aquí (base64) aunque svg sea texto: el visor y la descarga los tratan como imagen
+// (data:<mime>;base64,…). Alineado con IMAGE_EXTENSIONS del frontend.
+const BINARY_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.pdf', '.zip', '.tar', '.gz'];
 const MAX_READ_SIZE = 10 * 1024 * 1024; // 10MB
 // MIME por extensión (sin punto) para que fs.read de un binario devuelva content_type usable
 // (el visor de imágenes del frontend arma data:<mime>;base64,<content> con él).
-const IMG_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', ico: 'image/x-icon', pdf: 'application/pdf' };
+const IMG_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp', ico: 'image/x-icon', pdf: 'application/pdf' };
 const MAX_SEARCH_RESULTS = 100;
 
 class FilesystemModule extends BaseModule {

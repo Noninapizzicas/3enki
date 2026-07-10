@@ -2,14 +2,13 @@
   /**
    * PerfilPanel — Ver y editar el perfil de marca del proyecto.
    *
-   * Shape canonico: del blueprint carta-marketing (nombre_marca, tono_voz,
-   * valores como array, publico_objetivo, diferenciacion, restricciones,
-   * idiomas como array). Lecturas y escrituras directas via fs.read/fs.write
-   * sobre /storage/config/marca.json — sin handler backend dedicado.
+   * Shape canónico: marca.schema.json (secciones esencia/voz/publico/visual/
+   * negocio + arquetipo/manifiesto). Lecturas y escrituras por la puerta del
+   * dueño: ui/request/carta-marketing/get_perfil · update_perfil (deep-merge
+   * por sección, gate AJV en el reflejo).
    *
-   * El onboarding inicial lo hace el agente marketing-onboarding via chat
-   * (operacion compleja). Este panel solo permite revisar/editar el perfil
-   * ya creado.
+   * El onboarding inicial lo conduce el LLM de página via chat. Este panel
+   * permite revisar/editar el perfil ya creado.
    */
   import { onMount } from 'svelte';
   import {
@@ -21,25 +20,17 @@
     loadPerfil,
     updatePerfil,
     clearError,
-    type PerfilMarca
+    type PerfilCampos
   } from '$lib/stores/carta-marketing';
 
   export let panelId: string = '';
 
   let editMode = false;
-  // Campos editables. valores e idiomas se editan como string CSV → array al save.
-  let editando: {
-    nombre_marca: string;
-    lema: string;
-    tono_voz: string;
-    valoresCsv: string;
-    publico_objetivo: string;
-    diferenciacion: string;
-    restricciones: string;
-    idiomasCsv: string;
-  } = {
-    nombre_marca: '', lema: '', tono_voz: '', valoresCsv: '',
-    publico_objetivo: '', diferenciacion: '', restricciones: '', idiomasCsv: ''
+  // Campos editables. Los arrays (valores, tono, evita) se editan como CSV → array al save.
+  let editando = {
+    nombre: '', lema: '', proposito: '', valoresCsv: '',
+    tonoCsv: '', registro: '', evitaCsv: '',
+    publico_quien: '', publico_actitud: ''
   };
 
   $: p = $perfil;
@@ -49,7 +40,12 @@
   $: completado = $onboardingCompletado;
   // Hay contenido real si el comerciante ya dio algo (aunque no cerrara el onboarding).
   // El empty-state solo cuando NO hay nada — no esconder lo ya rellenado.
-  $: hasContent = !!(p && (p.nombre_marca || p.tono_voz || p.publico_objetivo || (p.valores && p.valores.length > 0)));
+  $: hasContent = !!(p && (
+    p.esencia?.nombre ||
+    (p.esencia?.valores && p.esencia.valores.length > 0) ||
+    (p.voz?.tono && p.voz.tono.length > 0) ||
+    p.publico?.quien
+  ));
 
   onMount(() => loadPerfil());
 
@@ -63,30 +59,38 @@
 
   function startEdit() {
     editando = {
-      nombre_marca: p?.nombre_marca || '',
-      lema: p?.lema || '',
-      tono_voz: p?.tono_voz || '',
-      valoresCsv: csvFromArray(p?.valores),
-      publico_objetivo: p?.publico_objetivo || '',
-      diferenciacion: p?.diferenciacion || '',
-      restricciones: p?.restricciones || '',
-      idiomasCsv: csvFromArray(p?.idiomas) || 'es'
+      nombre: p?.esencia?.nombre || '',
+      lema: p?.esencia?.lema || '',
+      proposito: p?.esencia?.proposito || '',
+      valoresCsv: csvFromArray(p?.esencia?.valores),
+      tonoCsv: csvFromArray(p?.voz?.tono),
+      registro: p?.voz?.registro || '',
+      evitaCsv: csvFromArray(p?.voz?.no),
+      publico_quien: p?.publico?.quien || '',
+      publico_actitud: p?.publico?.actitud || ''
     };
     editMode = true;
   }
 
   async function handleSave() {
-    const patch: Partial<PerfilMarca> = {
-      nombre_marca: editando.nombre_marca,
-      lema: editando.lema,
-      tono_voz: editando.tono_voz,
-      valores: arrayFromCsv(editando.valoresCsv),
-      publico_objetivo: editando.publico_objetivo,
-      diferenciacion: editando.diferenciacion,
-      restricciones: editando.restricciones,
-      idiomas: arrayFromCsv(editando.idiomasCsv)
+    const campos: PerfilCampos = {
+      esencia: {
+        nombre: editando.nombre,
+        lema: editando.lema,
+        proposito: editando.proposito,
+        valores: arrayFromCsv(editando.valoresCsv)
+      },
+      voz: {
+        tono: arrayFromCsv(editando.tonoCsv),
+        registro: editando.registro,
+        no: arrayFromCsv(editando.evitaCsv)
+      },
+      publico: {
+        quien: editando.publico_quien,
+        actitud: editando.publico_actitud
+      }
     };
-    const ok = await updatePerfil(patch);
+    const ok = await updatePerfil(campos);
     if (ok) editMode = false;
   }
 
@@ -111,15 +115,14 @@
       <p><strong>Todavía no te conocemos</strong></p>
       <p class="small">
         Pregúntale al chat algo como "hablame del marketing" o "ayúdame a configurar la marca"
-        y el agente <code>marketing-onboarding</code> te hará unas preguntas para construir
-        el perfil del proyecto.
+        y te hará unas preguntas para construir el perfil del proyecto.
       </p>
     </div>
   {:else if editMode}
     <!-- MODO EDICIÓN -->
     <div class="form-group">
       <label class="form-label" for="p-nombre">Nombre de marca</label>
-      <input id="p-nombre" class="form-input" bind:value={editando.nombre_marca} placeholder="Nonina Pizzicas" />
+      <input id="p-nombre" class="form-input" bind:value={editando.nombre} placeholder="Nonina Pizzicas" />
     </div>
 
     <div class="form-group">
@@ -128,20 +131,9 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label" for="p-tono">Tono de voz</label>
-      <input id="p-tono" class="form-input" bind:value={editando.tono_voz} placeholder="Cercano y familiar, con humor" />
-    </div>
-
-    <div class="form-row">
-      <div class="form-group compact">
-        <label class="form-label" for="p-idiomas">Idiomas</label>
-        <input id="p-idiomas" class="form-input" bind:value={editando.idiomasCsv} placeholder="es, en" />
-        <span class="form-hint">separados por coma</span>
-      </div>
-      <div class="form-group compact">
-        <label class="form-label" for="p-publico">Público objetivo</label>
-        <input id="p-publico" class="form-input" bind:value={editando.publico_objetivo} placeholder="Familias, jóvenes" />
-      </div>
+      <label class="form-label" for="p-proposito">Propósito</label>
+      <textarea id="p-proposito" class="form-input" rows="2" bind:value={editando.proposito}
+        placeholder="Para qué existe la marca, en una frase"></textarea>
     </div>
 
     <div class="form-group">
@@ -151,16 +143,34 @@
       <span class="form-hint">separados por coma</span>
     </div>
 
-    <div class="form-group">
-      <label class="form-label" for="p-dif">Diferenciación</label>
-      <textarea id="p-dif" class="form-input" rows="2" bind:value={editando.diferenciacion}
-        placeholder="Lo que te hace único frente a la competencia"></textarea>
+    <div class="form-row">
+      <div class="form-group compact">
+        <label class="form-label" for="p-tono">Tono de voz</label>
+        <input id="p-tono" class="form-input" bind:value={editando.tonoCsv} placeholder="directo, cercano, con humor" />
+        <span class="form-hint">separados por coma</span>
+      </div>
+      <div class="form-group compact">
+        <label class="form-label" for="p-registro">Registro</label>
+        <input id="p-registro" class="form-input" bind:value={editando.registro} placeholder="desenfadado" />
+      </div>
     </div>
 
     <div class="form-group">
-      <label class="form-label" for="p-rest">Restricciones</label>
-      <textarea id="p-rest" class="form-input" rows="2" bind:value={editando.restricciones}
-        placeholder="Anglicismos, tono pretencioso, frases hechas..."></textarea>
+      <label class="form-label" for="p-evita">La voz evita</label>
+      <input id="p-evita" class="form-input" bind:value={editando.evitaCsv} placeholder="cursi, formal, corporativo" />
+      <span class="form-hint">separados por coma</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="p-quien">Público — quién</label>
+      <textarea id="p-quien" class="form-input" rows="2" bind:value={editando.publico_quien}
+        placeholder="Familias, jóvenes, inconformistas..."></textarea>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="p-actitud">Público — actitud</label>
+      <textarea id="p-actitud" class="form-input" rows="2" bind:value={editando.publico_actitud}
+        placeholder="Qué buscan, cómo viven"></textarea>
     </div>
 
     <div class="actions">
@@ -174,37 +184,28 @@
     <div class="perfil-grid">
       <div class="field">
         <span class="field-label">Nombre</span>
-        <span class="field-value">{p.nombre_marca || '—'}</span>
+        <span class="field-value">{p.esencia?.nombre || '—'}</span>
       </div>
 
-      {#if p.lema}
+      {#if p.esencia?.lema}
         <div class="field">
           <span class="field-label">Lema</span>
-          <span class="field-value">{p.lema}</span>
+          <span class="field-value">{p.esencia.lema}</span>
+        </div>
+      {/if}
+
+      {#if p.esencia?.proposito}
+        <div class="field">
+          <span class="field-label">Propósito</span>
+          <span class="field-value">{p.esencia.proposito}</span>
         </div>
       {/if}
 
       <div class="field">
-        <span class="field-label">Tono de voz</span>
-        <span class="field-value">{p.tono_voz || '—'}</span>
-      </div>
-
-      <div class="field-row">
-        <div class="field compact">
-          <span class="field-label">Idiomas</span>
-          <span class="field-value">{csvFromArray(p.idiomas) || '—'}</span>
-        </div>
-        <div class="field compact">
-          <span class="field-label">Público objetivo</span>
-          <span class="field-value">{p.publico_objetivo || '—'}</span>
-        </div>
-      </div>
-
-      <div class="field">
         <span class="field-label">Valores</span>
-        {#if p.valores && p.valores.length > 0}
+        {#if p.esencia?.valores && p.esencia.valores.length > 0}
           <div class="chips">
-            {#each p.valores as v}
+            {#each p.esencia.valores as v}
               <span class="chip">{v}</span>
             {/each}
           </div>
@@ -213,17 +214,82 @@
         {/if}
       </div>
 
-      {#if p.diferenciacion}
+      <div class="field">
+        <span class="field-label">Tono de voz</span>
+        {#if p.voz?.tono && p.voz.tono.length > 0}
+          <div class="chips">
+            {#each p.voz.tono as t}
+              <span class="chip">{t}</span>
+            {/each}
+          </div>
+        {:else}
+          <span class="field-value">—</span>
+        {/if}
+      </div>
+
+      <div class="field-row">
+        <div class="field compact">
+          <span class="field-label">Registro</span>
+          <span class="field-value">{p.voz?.registro || '—'}</span>
+        </div>
+        {#if p.arquetipo}
+          <div class="field compact">
+            <span class="field-label">Arquetipo</span>
+            <span class="field-value">{p.arquetipo}</span>
+          </div>
+        {/if}
+      </div>
+
+      {#if p.voz?.no && p.voz.no.length > 0}
         <div class="field">
-          <span class="field-label">Diferenciación</span>
-          <span class="field-value">{p.diferenciacion}</span>
+          <span class="field-label">La voz evita</span>
+          <div class="chips">
+            {#each p.voz.no as n}
+              <span class="chip chip-no">{n}</span>
+            {/each}
+          </div>
         </div>
       {/if}
 
-      {#if p.restricciones}
+      {#if p.publico?.quien}
         <div class="field">
-          <span class="field-label">Restricciones</span>
-          <span class="field-value">{p.restricciones}</span>
+          <span class="field-label">Público — quién</span>
+          <span class="field-value">{p.publico.quien}</span>
+        </div>
+      {/if}
+
+      {#if p.publico?.actitud}
+        <div class="field">
+          <span class="field-label">Público — actitud</span>
+          <span class="field-value">{p.publico.actitud}</span>
+        </div>
+      {/if}
+
+      {#if p.visual?.estilo}
+        <div class="field">
+          <span class="field-label">Estilo visual</span>
+          <span class="field-value">{p.visual.estilo}</span>
+        </div>
+      {/if}
+
+      {#if p.visual?.colores && Object.keys(p.visual.colores).length > 0}
+        <div class="field">
+          <span class="field-label">Colores</span>
+          <div class="chips">
+            {#each Object.entries(p.visual.colores) as [rol, hex]}
+              <span class="chip chip-color">
+                <span class="swatch" style="background: {hex}"></span>
+                {rol} {hex}
+              </span>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      {#if p.manifiesto?.texto}
+        <div class="field">
+          <span class="field-label">{p.manifiesto.titulo ? `Manifiesto — ${p.manifiesto.titulo}` : 'Manifiesto'}</span>
+          <span class="field-value manifiesto">{p.manifiesto.texto}</span>
         </div>
       {/if}
 
@@ -255,13 +321,6 @@
   .empty-icon { font-size: 2rem; opacity: 0.7; }
   .onboarding-prompt p { margin: 0; }
   .onboarding-prompt .small { font-size: 0.7rem; line-height: 1.4; }
-  .onboarding-prompt code {
-    font-family: monospace;
-    padding: 0.05rem 0.25rem;
-    background: rgba(255,255,255,0.05);
-    border-radius: 0.15rem;
-    font-size: 0.65rem;
-  }
 
   .form-group { display: flex; flex-direction: column; gap: 0.2rem; }
   .form-group.compact { flex: 1; min-width: 0; }
@@ -296,6 +355,7 @@
     min-height: 1.5rem;
   }
   .field-meta { font-family: monospace; font-size: 0.7rem; opacity: 0.7; }
+  .manifiesto { white-space: pre-line; line-height: 1.5; font-style: italic; }
 
   .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0.2rem 0; }
   .chip {
@@ -304,6 +364,21 @@
     color: var(--color-primary, #3b82f6);
     border-radius: 999px;
     font-size: 0.7rem;
+  }
+  .chip-no {
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--color-error, #ef4444);
+  }
+  .chip-color {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    background: rgba(255,255,255,0.06);
+    color: var(--color-text, #e5e5e5);
+    font-family: monospace; font-size: 0.65rem;
+  }
+  .swatch {
+    width: 0.7rem; height: 0.7rem; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.25);
+    display: inline-block;
   }
 
   .actions { display: flex; gap: 0.5rem; }

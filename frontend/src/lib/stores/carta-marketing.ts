@@ -1,18 +1,17 @@
 /**
- * Carta Marketing Store — perfil de marca + actividad, lecturas+escrituras directas.
+ * Carta Marketing Store — perfil de marca + actividad.
  *
- * El blueprint del modulo carta-marketing (modules/pizzepos/carta-marketing/)
- * persiste el perfil en /config/marca.json del proyecto activo.
- * Operaciones simples (get/update/actividad) van directo via fs.read/fs.write.
+ * El perfil de marca lo sirve carta-marketing (dueño de /pizzepos/marca.json).
+ * Entramos por SU PUERTA (ui/request/carta-marketing/<op>): get_perfil devuelve
+ * el shape CANÓNICO de marca.schema.json (secciones esencia/voz/publico/visual/
+ * negocio); update_perfil hace deep-merge por sección (no pisa lo que rellena
+ * el onboarding) y devuelve el perfil ya fusionado.
+ *
  * Operaciones que requieren razonamiento del LLM (completar_onboarding) las
  * pide el usuario al chat — el blueprint sigue siendo el runtime para eso.
- *
- * Patron documentado en arquitectura/decisiones/propuestas/
- * lecturas-frontend-via-fs-read.md (con extension para escrituras triviales
- * sin listeners del evento canonico).
  */
 
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived } from 'svelte/store';
 import {
   mqttRequest,
   MqttTimeoutError,
@@ -21,21 +20,72 @@ import {
 import { getActiveProject } from '$lib/stores/workspace';
 
 // =============================================================================
-// TYPES — shape canonico del blueprint carta-marketing
+// TYPES — shape canónico de marca.schema.json (arquitectura/decisiones/_schemas/marca)
 // =============================================================================
+
+export interface PerfilEsencia {
+  nombre: string;
+  lema?: string;
+  proposito?: string;
+  valores: string[];
+}
+
+export interface PerfilVoz {
+  tono: string[];
+  registro?: string;
+  referencias?: string[];
+  si?: string[];
+  no?: string[];
+}
+
+export interface PerfilPublico {
+  quien?: string;
+  actitud?: string;
+}
+
+export interface PerfilVisual {
+  colores?: Record<string, string>;
+  tipografias?: Record<string, string>;
+  estilo?: string;
+  logo?: string;
+  detalle_adicional?: string;
+}
+
+export interface PerfilNegocio {
+  tipo_cocina?: string;
+  local?: Record<string, unknown>;
+  redes?: Record<string, string>;
+}
+
+export interface PerfilManifiesto {
+  titulo?: string;
+  texto: string;
+  cierre?: string;
+}
 
 export interface PerfilMarca {
   _version?: string;
   _updated_at?: string;
-  nombre_marca: string;
-  lema?: string;
-  tono_voz: string;
-  valores: string[];
-  publico_objetivo: string;
-  diferenciacion?: string;
-  restricciones?: string;
-  idiomas: string[];
   onboarding_completado: boolean;
+  esencia: PerfilEsencia;
+  voz: PerfilVoz;
+  publico: PerfilPublico;
+  visual: PerfilVisual;
+  negocio: PerfilNegocio;
+  arquetipo?: string;
+  manifiesto?: PerfilManifiesto;
+}
+
+/** Parche parcial por secciones — lo que acepta update_perfil como `campos` (deep-merge). */
+export interface PerfilCampos {
+  onboarding_completado?: boolean;
+  esencia?: Partial<PerfilEsencia>;
+  voz?: Partial<PerfilVoz>;
+  publico?: Partial<PerfilPublico>;
+  visual?: Partial<PerfilVisual>;
+  negocio?: Partial<PerfilNegocio>;
+  arquetipo?: string;
+  manifiesto?: Partial<PerfilManifiesto>;
 }
 
 export interface MarketingActividad {
@@ -55,12 +105,12 @@ export interface MarketingState {
 
 const DEFAULT_PERFIL: PerfilMarca = {
   _version: '1.0',
-  nombre_marca: '',
-  tono_voz: '',
-  valores: [],
-  publico_objetivo: '',
-  idiomas: ['es'],
-  onboarding_completado: false
+  onboarding_completado: false,
+  esencia: { nombre: '', lema: '', proposito: '', valores: [] },
+  voz: { tono: [], registro: '', referencias: [], si: [], no: [] },
+  publico: { quien: '', actitud: '' },
+  visual: { colores: {}, tipografias: {}, estilo: '', logo: '' },
+  negocio: { tipo_cocina: '', local: {}, redes: {} }
 };
 
 // =============================================================================
@@ -78,12 +128,9 @@ const initial: MarketingState = {
 export const marketingStore = writable<MarketingState>(initial);
 
 // =============================================================================
-// PRIMITIVAS — fs.read / fs.write directos
+// PRIMITIVAS — por la puerta del dueño (ui/request/carta-marketing/<op>)
 // =============================================================================
 
-// El perfil de marca lo sirve carta-marketing (dueño de /pizzepos/marca.json). Entramos por
-// SU PUERTA (ui/request/carta-marketing/<op>), no por fs directo al path viejo /config/marca.json:
-// get_perfil devuelve el canónico; update_perfil hace deep-merge (no pisa secciones).
 function projectId(): string | undefined {
   return getActiveProject()?.id;
 }
@@ -134,7 +181,7 @@ export async function loadActividad(): Promise<void> {
   }));
 }
 
-export async function updatePerfil(campos: Partial<PerfilMarca>): Promise<boolean> {
+export async function updatePerfil(campos: PerfilCampos): Promise<boolean> {
   marketingStore.update(s => ({ ...s, saving: true, error: null }));
   try {
     // Por la puerta del dueño: update_perfil hace deep-merge sobre /pizzepos/marca.json

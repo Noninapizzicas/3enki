@@ -68,22 +68,22 @@
         {completado ? 'Completado' : 'Pendiente'}
       </span>
     </div>
-    {#if p?.nombre_marca}
+    {#if p?.esencia?.nombre}
       <div class="info-row">
         <span class="info-label">Nombre</span>
-        <span class="info-value">{p.nombre_marca}</span>
+        <span class="info-value">{p.esencia.nombre}</span>
       </div>
     {/if}
-    {#if p?.tono_voz}
+    {#if p?.voz?.tono && p.voz.tono.length > 0}
       <div class="info-row">
         <span class="info-label">Tono</span>
-        <span class="info-value">{p.tono_voz}</span>
+        <span class="info-value">{p.voz.tono.join(', ')}</span>
       </div>
     {/if}
-    {#if p?.idiomas && p.idiomas.length > 0}
+    {#if p?.arquetipo}
       <div class="info-row">
-        <span class="info-label">Idiomas</span>
-        <span class="info-value">{p.idiomas.join(', ')}</span>
+        <span class="info-label">Arquetipo</span>
+        <span class="info-value">{p.arquetipo}</span>
       </div>
     {/if}
     {#if p?._updated_at}

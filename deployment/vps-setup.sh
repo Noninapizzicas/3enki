@@ -254,40 +254,6 @@ if docker compose version &>/dev/null; then
         fi
     fi
 
-    # OCR4RS — el órgano físico (imagen/PDF escaneado → texto), hermano de crawl4rs.
-    # Mismo patrón: clona/actualiza, baja los modelos .rten una vez, levanta y siembra
-    # el interruptor ON. SIN AUTH (ley de la frontera: solo 127.0.0.1). Guardado: fallo → warn.
-    log "OCR4RS (órgano físico, Docker :8090)..."
-    if [ -d /opt/ocr4rs/.git ]; then
-        git -C /opt/ocr4rs pull --ff-only > /dev/null 2>&1 || warn "No se pudo actualizar /opt/ocr4rs (sigue con la versión local)"
-    else
-        git clone --depth 1 https://github.com/noninapizzicas/ocr4rs /opt/ocr4rs > /dev/null 2>&1 \
-            || warn "Clone de ocr4rs falló (¿red?). OCR4RS no se levantará esta pasada."
-    fi
-    if [ -d /opt/ocr4rs ]; then
-        # Modelos .rten (no se versionan, pesan MB): se bajan UNA vez a data/ (persiste).
-        OCR_MODELS="${INSTALL_DIR}/data/ocr4rs-models"
-        if [ ! -f "${OCR_MODELS}/text-detection.rten" ] && [ -x /opt/ocr4rs/scripts/get-models.sh ]; then
-            log "Descargando modelos OCR .rten (una vez)..."
-            /opt/ocr4rs/scripts/get-models.sh "${OCR_MODELS}" > /dev/null 2>&1 \
-                || warn "get-models.sh falló — sin modelos, /ocr degradará con 503 hasta bajarlos"
-        fi
-        log "Construyendo y levantando enki-ocr4rs (la 1ª vez compila Rust: unos minutos)..."
-        if OCR4RS_MODELS_DIR="${OCR_MODELS}" docker compose \
-             -f "${REPO_DIR}/deployment/ocr4rs/docker-compose.yml" up -d --build > /dev/null 2>&1; then
-            log "enki-ocr4rs arriba en 127.0.0.1:8090"
-            # Una decisión, una llave: instalar el órgano lo enciende (solo si el humano no decidió ya).
-            node -e "
-              const fs=require('fs'),p='${INSTALL_DIR}/data/interruptores.json';
-              let st={estados:{}}; try{st=JSON.parse(fs.readFileSync(p,'utf8'))}catch(_){}
-              st.estados=st.estados||{};
-              if(!('ocr4rs' in st.estados)){ st.estados.ocr4rs=true; fs.writeFileSync(p,JSON.stringify(st,null,2)); console.log('sembrado'); }
-            " > /dev/null 2>&1 && log "Interruptor ocr4rs: ON (instalar es decidir; tu apagado manual se respeta)" || true
-        else
-            warn "enki-ocr4rs no levantó — el puente degrada honesto (503). Revisa: docker compose -f deployment/ocr4rs/docker-compose.yml logs"
-        fi
-    fi
-
     # Headroom — proxy de compresión de contexto (:8787). Mismo patrón que crawl4rs: lo
     # levanta root en el setup y el core le habla por HTTP → cero concesión de seguridad
     # (no toca el grupo docker). El core solo lo usa si el interruptor 'headroom' se
@@ -303,7 +269,68 @@ if docker compose version &>/dev/null; then
         fi
     fi
 else
-    warn "Sin docker compose: Crawl4RS/SearXNG/OCR4RS/Headroom no se levantaron. Todo degrada honesto hasta reejecutar el setup."
+    warn "Sin docker compose: Crawl4RS/SearXNG/Headroom no se levantaron. Todo degrada honesto hasta reejecutar el setup."
+fi
+
+# ---- 3a-ter. OCR4RS — órgano físico NATIVO (Rust puro, sin Docker) ----
+# La regla de la casa por NATURALEZA: Rust estático PURO → nativo en el VPS (cargo +
+# systemd), como fue fastcrw. OCR4RS no arrastra Chromium ni Python (a diferencia de
+# crawl4rs) → no hay dependencia sucia que contener → NO va en Docker. Todo en el deploy:
+# asegura el toolchain Rust si falta, compila, baja los modelos, systemd, siembra ON.
+# SIN AUTH (ley de la frontera: bindea 127.0.0.1). Idempotente y guardado (fallo → warn).
+log "OCR4RS (órgano físico, Rust NATIVO :8090)..."
+if [ -d /opt/ocr4rs/.git ]; then
+    git -C /opt/ocr4rs pull --ff-only > /dev/null 2>&1 || warn "No se pudo actualizar /opt/ocr4rs (sigue con la versión local)"
+else
+    git clone --depth 1 https://github.com/noninapizzicas/ocr4rs /opt/ocr4rs > /dev/null 2>&1 \
+        || warn "Clone de ocr4rs falló (¿red?). OCR4RS no se instalará esta pasada."
+fi
+if command -v ocr4rs &>/dev/null || [ -x /usr/local/bin/ocr4rs ]; then
+    log "ocr4rs ya instalado ($(/usr/local/bin/ocr4rs --version 2>/dev/null || echo ok))"
+elif [ -d /opt/ocr4rs ]; then
+    # Toolchain Rust: rustup si falta (lo retiramos con fastcrw; puede no estar).
+    if ! command -v cargo &>/dev/null; then
+        log "Instalando toolchain Rust (rustup) para compilar ocr4rs..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y > /dev/null 2>&1 || warn "rustup falló"
+        [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+        export PATH="$HOME/.cargo/bin:$PATH"
+    fi
+    if command -v cargo &>/dev/null; then
+        log "Compilando ocr4rs (la 1ª vez tarda unos minutos)..."
+        if cargo install --path /opt/ocr4rs/crates/ocr4rs-cli --root /usr/local --locked > /dev/null 2>&1; then
+            log "ocr4rs compilado en /usr/local/bin"
+        else
+            warn "cargo install de ocr4rs falló — el puente degradará a sin_servicio hasta instalarlo"
+        fi
+    else
+        warn "sin cargo: ocr4rs no se compiló. El puente degrada honesto (503)."
+    fi
+fi
+# Modelos .rten (una vez, en data/ → persiste; excluido del rsync).
+OCR_MODELS="${INSTALL_DIR}/data/ocr4rs-models"
+mkdir -p "${OCR_MODELS}"
+if [ ! -f "${OCR_MODELS}/text-detection.rten" ] && [ -x /opt/ocr4rs/scripts/get-models.sh ]; then
+    log "Descargando modelos OCR .rten (una vez)..."
+    /opt/ocr4rs/scripts/get-models.sh "${OCR_MODELS}" > /dev/null 2>&1 \
+        || warn "get-models.sh falló — sin modelos, /ocr degradará con 503 hasta bajarlos"
+fi
+chown -R www-data:www-data "${OCR_MODELS}" 2>/dev/null || true
+# systemd — el servicio bindea 127.0.0.1:8090 (la frontera vive en el host).
+if [ -x /usr/local/bin/ocr4rs ]; then
+    sed "s#__MODELS__#${OCR_MODELS}#g" "${REPO_DIR}/deployment/ocr4rs/ocr4rs.service" > /etc/systemd/system/ocr4rs.service 2>/dev/null
+    systemctl daemon-reload
+    if systemctl enable --now ocr4rs > /dev/null 2>&1; then
+        log "ocr4rs activo en 127.0.0.1:8090"
+        # Una decisión, una llave: instalar el órgano lo enciende (solo si el humano no decidió ya).
+        node -e "
+          const fs=require('fs'),p='${INSTALL_DIR}/data/interruptores.json';
+          let st={estados:{}}; try{st=JSON.parse(fs.readFileSync(p,'utf8'))}catch(_){}
+          st.estados=st.estados||{};
+          if(!('ocr4rs' in st.estados)){ st.estados.ocr4rs=true; fs.writeFileSync(p,JSON.stringify(st,null,2)); console.log('sembrado'); }
+        " > /dev/null 2>&1 && log "Interruptor ocr4rs: ON (instalar es decidir; tu apagado manual se respeta)" || true
+    else
+        warn "ocr4rs instalado pero el servicio no arrancó (revisa: journalctl -u ocr4rs -f)"
+    fi
 fi
 
 # ---- 3b. Ejecutor en contenedor (OPT-IN --docker — la ÚNICA concesión de seguridad) ----
@@ -586,8 +613,8 @@ fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-searxng$'; then
     echo "    enki-searxng   → búsqueda web para crawl4rs.buscar (docker)"
 fi
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-ocr4rs$'; then
-    echo "    enki-ocr4rs    → OCR órgano físico imagen/PDF→texto (docker, localhost:8090)"
+if systemctl is-active --quiet ocr4rs 2>/dev/null; then
+    echo "    ocr4rs         → OCR órgano físico imagen/PDF→texto (Rust nativo/systemd, localhost:8090)"
 fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-headroom$'; then
     echo "    enki-headroom  → proxy compresión (docker, localhost:8787)"

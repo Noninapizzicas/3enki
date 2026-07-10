@@ -1,78 +1,85 @@
-# OCR4RS en el VPS — el órgano de OCR
+# OCR4RS en el VPS — el órgano de OCR (Rust NATIVO)
 
 El motor vive en el repo [ocr4rs](https://github.com/noninapizzicas/ocr4rs)
 (Rust puro, imagen/PDF escaneado → texto). Aquí vive su **provisioning**: el
-compose que lo trae al VPS como `enki-ocr4rs`. El consumidor es el puente
-`modules/ocr4rs` (bus↔HTTP), que ya apunta a `127.0.0.1:8090`.
+servicio systemd `ocr4rs` en `127.0.0.1:8090`. El consumidor es el puente
+`modules/ocr4rs` (bus↔HTTP).
 
-Es el **hermano físico** de Crawl4RS: cada uno una imagen independiente, se
-encuentran en el bus de Enki. Crawl4RS lee la web; OCR4RS, lo fotografiado.
+Es el **hermano físico** de Crawl4RS: crawl4rs lee la web; ocr4rs, lo
+fotografiado. Se encuentran en el bus de Enki.
+
+## Por qué NATIVO (y no Docker, a diferencia de crawl4rs)
+
+La regla de la casa reparte por NATURALEZA:
+
+| Pieza | Dónde | Por qué |
+|---|---|---|
+| Rust puro (OCR4RS) | **NATIVO** (cargo + systemd) | binario limpio, cero dependencia sucia |
+| Rust + Chromium (Crawl4RS) | Docker | Chromium es la dependencia sucia → contenida |
+| Python (SearXNG, Headroom) | Docker | dependencias sucias contenidas |
+
+OCR4RS no arrastra Chromium ni Python — es Rust estático puro → va nativo,
+como fue fastcrw. Docker para él sería overhead sin razón.
 
 ## Las dos alas de la evidencia externa (prisma-del-caso)
-
-Una afirmación externa entra por la ley de la evidencia con su dirección de
-vuelta. Hay dos:
 
 | Evidencia vive en… | Órgano | Dirección de vuelta |
 |---|---|---|
 | la web (HTML, PDF digital) | **crawl4rs** | `url` · `api_id` |
 | el papel / la imagen | **ocr4rs** | la imagen (`path` + `sha256`) |
 
-Juntos cubren toda la evidencia externa del mundo — un precio en la web lo lee
-crawl4rs; el mismo precio en una etiqueta fotografiada lo lee ocr4rs.
+## Instalación — la hace el setup, TODO dentro
 
-## Instalación — la hace el setup
-
-`sudo ./deployment/vps-setup.sh <dominio>` lo trae todo: clona `/opt/ocr4rs`,
-descarga los modelos `.rten` una vez, crea la red `enki-web`, construye y
-levanta `enki-ocr4rs`, y siembra su interruptor ON.
+`sudo ./deployment/vps-setup.sh <dominio>` lo trae todo (sección 3a-ter):
+asegura el toolchain Rust si falta, clona `/opt/ocr4rs`, **compila** el binario
+a `/usr/local/bin/ocr4rs`, baja los modelos `.rten` una vez, escribe el
+servicio systemd, lo arranca y siembra el interruptor ON.
 
 ```bash
 # verificar tras el setup
 curl -s http://127.0.0.1:8090/health     # → {status:"ok", models_loaded:true}
-docker logs enki-ocr4rs --tail 20
+sudo systemctl status ocr4rs
+sudo journalctl -u ocr4rs -f
 ```
+
+Actualizar el motor = volver a correr el setup (git pull + recompila).
 
 ## Receta manual (plan B / debug)
 
 ```bash
 git clone --depth 1 https://github.com/noninapizzicas/ocr4rs /opt/ocr4rs
-cd /opt/ocr4rs && ./scripts/get-models.sh /opt/enki/data/ocr4rs-models
-docker network create enki-web    # una vez (si no existe)
-OCR4RS_MODELS_DIR=/opt/enki/data/ocr4rs-models \
-  docker compose -f /opt/enki/deployment/ocr4rs/docker-compose.yml up -d --build
+# toolchain Rust si falta:
+command -v cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+cargo install --path /opt/ocr4rs/crates/ocr4rs-cli --root /usr/local --locked
+/opt/ocr4rs/scripts/get-models.sh /opt/enki/data/ocr4rs-models
+# systemd:
+sed 's#__MODELS__#/opt/enki/data/ocr4rs-models#g' \
+  /opt/enki/deployment/ocr4rs/ocr4rs.service > /etc/systemd/system/ocr4rs.service
+systemctl daemon-reload && systemctl enable --now ocr4rs
 ```
 
-Sin modelos, `/ocr` responde 503 honesto y el puente lo prescribe (monta el
-volumen). `leer/mapear/rastrear` de crawl4rs siguen — son órganos separados.
+Sin modelos, `/ocr` responde 503 honesto y el puente lo prescribe.
 
 ## Uso desde Enki
 
 El puente **nace OFF**. Enciende el interruptor `ocr4rs` (panel, grupo sistema):
 
 ```js
-// una imagen o PDF escaneado → texto + evidencia
 const r = await bus.publishAndWait('ocr4rs.leer.request', {
   project_id, path: '/facturas/entrante/factura.jpg'
 });
-r.data.texto;              // el texto reconocido
-r.data.evidencia;          // { path, sha256, source_kind } — la dirección de vuelta
-
-// lote (patrón obrero: uno a uno, los fallidos no frenan)
-const lote = await bus.publishAndWait('ocr4rs.leer_lote.request', {
-  project_id, paths: ['/tickets/a.jpg', '/tickets/b.jpg']
-});
+r.data.texto;        // el texto reconocido
+r.data.evidencia;    // { path, sha256, source_kind } — la dirección de vuelta del prisma
 ```
 
-Y desde el chat, el LLM tiene la tool **`leer_imagen`**.
-
-Degradación honesta: OFF / sin servicio / sin modelos → `503 {degradado,
-motivo}` con prescripción. PDF digital → `409` redirigido a crawl4rs (los
-órganos se pasan el trabajo por el bus).
+Y desde el chat, el LLM tiene la tool **`leer_imagen`**. Degradación honesta:
+OFF / sin servicio / sin modelos → `503 {degradado, motivo}`. PDF digital →
+`409` redirigido a crawl4rs (los órganos se pasan el trabajo por el bus).
 
 ## Horizonte
 
 El motor v0.0.1 aún no expone confianza por línea (`OcrLine` solo trae texto).
-Cuando lo haga, el puente activa el gate `umbral_confianza` + el evento
-`ocr4rs.baja_confianza.detectada` (ya declarados, latentes) — una línea bajo
-umbral se marca, no se afirma cierta: el freno gemelo del "no inventar precio".
+Cuando lo haga, el puente activa el gate `umbral_confianza` +
+`ocr4rs.baja_confianza.detectada` (ya declarados, latentes). Y si ocr4rs
+publica un binario prebuilt (release.yml), el setup dejará de compilar y solo
+lo descargará — aún más ligero.

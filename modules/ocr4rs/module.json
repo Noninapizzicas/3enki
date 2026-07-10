@@ -52,7 +52,7 @@
     "base_url": "http://localhost:8090",
     "timeout_ms": 60000,
     "max_lote": 50,
-    "_base_url_doc": "Base del servicio OCR4RS (contenedor enki-ocr4rs, deployment/ocr4rs/ → 127.0.0.1:8090). Override por env OCR4RS_BASE_URL (el env manda sobre este config).",
+    "_base_url_doc": "Base del servicio OCR4RS (servicio nativo ocr4rs, deployment/ocr4rs/ systemd → 127.0.0.1:8090). Override por env OCR4RS_BASE_URL (el env manda sobre este config).",
     "_sin_auth_doc": "OCR4RS no tiene auth (ley de la frontera: publica solo a loopback). El puente no hace baile de token."
   }
 }

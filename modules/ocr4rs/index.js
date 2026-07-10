@@ -33,7 +33,7 @@
 const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
-// :8090 en el host — el contenedor enki-ocr4rs (deployment/ocr4rs) publica 127.0.0.1:8090.
+// :8090 en el host — el servicio nativo ocr4rs (deployment/ocr4rs, systemd) bindea 127.0.0.1:8090.
 const DEFAULT_BASE = 'http://localhost:8090';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -96,7 +96,7 @@ class Ocr4rsModule extends ModuloHibridoReflejo {
     // Error fértil: la prescripción viaja en message (la única capa que todo transporte preserva).
     const prescripcion = {
       apagado: 'el interruptor ocr4rs está OFF — enciéndelo en el panel (grupo sistema). NO ES: motor caído.',
-      sin_servicio: 'el contenedor enki-ocr4rs no responde en :8090 — verifica docker ps y /health. NO ES: imagen ilegible.',
+      sin_servicio: 'el servicio ocr4rs no responde en :8090 — verifica systemctl status ocr4rs y /health. NO ES: imagen ilegible.',
       sin_modelos: 'el servicio OCR4RS corre pero no cargó los modelos .rten — monta el volumen /models (scripts/get-models.sh). NO ES: imagen ilegible ni motor caído.'
     }[motivo] || '';
     return { status: 503, error: { code: 'UPSTREAM_UNREACHABLE', message: `ocr4rs degradado: ${motivo}${prescripcion ? ' — ' + prescripcion : ''}`, details: { degradado: true, motivo } } };

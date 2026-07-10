@@ -1,7 +1,7 @@
 ---
 id: plataforma/herramientas-externas
 dominio: plataforma
-resumen: Órganos externos en Docker — Crawl4RS (web, Chromium) · OCR4RS (imagen/PDF escaneado, Rust puro) · Python (SearXNG, Headroom). Las dos alas de la evidencia externa (web+físico). Enganche al ejecutor por config.
+resumen: Órganos externos por naturaleza — Crawl4RS (web, Docker por Chromium) · OCR4RS (imagen/PDF escaneado, Rust puro NATIVO) · Python (SearXNG, Headroom, Docker). Las dos alas de la evidencia externa (web+físico). Enganche al ejecutor por config.
 fuentes:
   - deployment/python-tools/**
   - deployment/crawl4rs/**
@@ -112,23 +112,28 @@ HORIZONTE  Fase 7 de D-os = crate crawl4rs-mqtt (el motor habla MQTT nativo por
            core/<id>/api/request/crawl/*) → este puente HTTP se retira; el compose solo cambia el CMD.
 ```
 
-## OCR4RS (repo ocr4rs) — el órgano FÍSICO en Docker (imagen/PDF escaneado → texto)
+## OCR4RS (repo ocr4rs) — el órgano FÍSICO NATIVO (imagen/PDF escaneado → texto)
 
 ```
 QUÉ ES  Motor OCR del repo hermano ocr4rs (Rust PURO — ocrs+rten, sin ONNX/MNN/Python).
         Imagen o PDF ESCANEADO → texto. Rasteriza el PDF (extrae el ráster embebido, NO renderiza)
         y limpia la imagen (deskew·normalizar·binarizar opc.) DENTRO — preparar la imagen ES hacer OCR.
 
+POR QUÉ NATIVO (no Docker, a diferencia de crawl4rs)  la regla de la casa reparte por NATURALEZA:
+        Rust estático PURO → nativo (como fue fastcrw); Rust + dependencia sucia (Chromium) → Docker.
+        OCR4RS no arrastra Chromium ni Python → no hay nada sucio que contener → cargo + systemd.
+
 LAS DOS ALAS DE AFIRMACION_EXTERNA (prisma-del-caso)  una afirmación externa entra con su dirección
         de vuelta. Hay dos, ahora las dos cubiertas: la web (url·api_id → crawl4rs) y el papel/imagen
         (la imagen: path+sha256 → ocr4rs). El prisma ya enumeraba 'url·api_id·documento·medición' —
         crawl4rs respondió las digitales, ocr4rs responde 'documento'. El hueco ya estaba tallado.
 
-1 · MOTOR (Docker)  deployment/ocr4rs/ {
-     docker-compose.yml  build desde el clon /opt/ocr4rs (override OCR4RS_DIR) → imagen enki-ocr4rs.
-     127.0.0.1:8090 · distroless (sin shell → sin healthcheck; la salud se sonda desde el host)
-     · SIN AUTH (ley de la frontera: solo loopback) · modelos .rten en volumen /models:ro
-       (get-models.sh una vez; sin ellos /ocr → 503 honesto). vps-setup lo provisiona + siembra ON.
+1 · MOTOR (Rust NATIVO)  deployment/ocr4rs/ {
+     vps-setup (sección 3a-ter): asegura el toolchain Rust si falta → cargo install --path del clon
+     /opt/ocr4rs → /usr/local/bin/ocr4rs → get-models.sh (una vez) → systemd (ocr4rs.service, bindea
+     127.0.0.1:8090) → siembra el interruptor ON. TODO en el deploy, cero pasos manuales.
+     SIN AUTH (ley de la frontera: solo loopback) · sin modelos → /ocr degrada 503 honesto.
+     ocr4rs.service  unit plantilla (__MODELS__ sustituido por el dir real). Restart=always, hardened.
   }
 2 · PUENTE (bus)  modules/ocr4rs/ {
      Reflejo bus↔HTTP SÍNCRONO (sin job/poll, sin token — más simple que crawl4rs). Lee la imagen del

@@ -57,6 +57,9 @@ const BaseModule = require('../_shared/base-module');
 const TEXT_EXTS = ['.txt', '.md', '.json', '.js', '.ts', '.html', '.css', '.yaml', '.yml', '.xml', '.csv', '.log'];
 const BINARY_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf', '.zip', '.tar', '.gz'];
 const MAX_READ_SIZE = 10 * 1024 * 1024; // 10MB
+// MIME por extensión (sin punto) para que fs.read de un binario devuelva content_type usable
+// (el visor de imágenes del frontend arma data:<mime>;base64,<content> con él).
+const IMG_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', ico: 'image/x-icon', pdf: 'application/pdf' };
 const MAX_SEARCH_RESULTS = 100;
 
 class FilesystemModule extends BaseModule {
@@ -242,7 +245,7 @@ class FilesystemModule extends BaseModule {
 
   async onWriteRequest(event)  { return this._busDispatch(event, 'write',  'fs.write.response',  ['path', 'content', 'encoding', 'expected_hash']); }
   async onEditRequest(event)   { return this._busDispatch(event, 'edit',   'fs.edit.response',   ['path', 'patches', 'expected_hash']); }
-  async onReadRequest(event)   { return this._busDispatch(event, 'read',   'fs.read.response',   ['path']); }
+  async onReadRequest(event)   { return this._busDispatch(event, 'read',   'fs.read.response',   ['path', 'file_path']); }
   async onDeleteRequest(event) { return this._busDispatch(event, 'delete', 'fs.delete.response', ['path']); }
   async onListRequest(event)   { return this._busDispatch(event, 'list',   'fs.list.response',   ['path']); }
   async onMkdirRequest(event)  { return this._busDispatch(event, 'mkdir',  'fs.mkdir.response',  ['path']); }
@@ -648,18 +651,19 @@ class FilesystemModule extends BaseModule {
 
   async handleRead(data) {
     try {
-      if (!data?.path) {
+      const filePath = data?.path || data?.file_path;   // acepta ambos (paridad con handleWrite)
+      if (!filePath) {
         return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
-      const safePath = this.validatePath(data.path, { sourceModule: data?._source_module, project_id: data?.project_id });
+      const safePath = this.validatePath(filePath, { sourceModule: data?._source_module, project_id: data?.project_id });
 
       let stats;
       try { stats = await fs.stat(safePath); }
       catch (e) {
         if (e.code === 'ENOENT') {
           return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'File not found',
-            { entity_type: 'file', entity_id: data.path });
+            { entity_type: 'file', entity_id: filePath });
         }
         throw e;
       }
@@ -673,16 +677,16 @@ class FilesystemModule extends BaseModule {
           { kind: 'limit', max_size: MAX_READ_SIZE, actual_size: stats.size });
       }
 
-      const ext = path.extname(data.path).toLowerCase();
+      const ext = path.extname(filePath).toLowerCase();
       if (BINARY_EXTS.includes(ext)) {
         const buffer = await fs.readFile(safePath);
         this.metrics?.increment('filesystem.read.success', { type: 'binary' });
         return {
           status: 200,
           data: {
-            path: data.path, content: buffer.toString('base64'),
+            path: filePath, content: buffer.toString('base64'),
             encoding: 'base64', size: stats.size,
-            modified: stats.mtime, type: 'binary',
+            modified: stats.mtime, type: 'binary', content_type: IMG_MIME[ext.slice(1)] || 'application/octet-stream',
             hash: this._computeHash(buffer)
           }
         };
@@ -693,7 +697,7 @@ class FilesystemModule extends BaseModule {
       return {
         status: 200,
         data: {
-          path: data.path, content,
+          path: filePath, content,
           encoding: 'utf-8', size: stats.size,
           modified: stats.mtime, type: 'text',
           hash: this._computeHash(content)

@@ -129,11 +129,14 @@ LAS DOS ALAS DE AFIRMACION_EXTERNA (prisma-del-caso)  una afirmación externa en
         crawl4rs respondió las digitales, ocr4rs responde 'documento'. El hueco ya estaba tallado.
 
 1 · MOTOR (Rust NATIVO)  deployment/ocr4rs/ {
-     vps-setup (sección 3a-ter): asegura el toolchain Rust si falta → cargo install --path del clon
-     /opt/ocr4rs → /usr/local/bin/ocr4rs → get-models.sh (una vez) → systemd (ocr4rs.service, bindea
-     127.0.0.1:8090) → siembra el interruptor ON. TODO en el deploy, cero pasos manuales.
+     vps-setup (sección 3a-ter), orden ligero→pesado: 1) baja el binario PREBUILT del release de
+     ocr4rs (musl estático — un fichero, sin toolchain); 2) fallback: compila con cargo (asegura
+     rustup). Luego get-models.sh (una vez) → systemd (ocr4rs.service, bindea 127.0.0.1:8090) →
+     siembra el interruptor ON. TODO en el deploy, cero pasos manuales.
      SIN AUTH (ley de la frontera: solo loopback) · sin modelos → /ocr degrada 503 honesto.
      ocr4rs.service  unit plantilla (__MODELS__ sustituido por el dir real). Restart=always, hardened.
+     RELEASE  ocr4rs/.github/workflows/release.yml — cada tag v* publica el binario musl estático.
+              El binario esquiva la deriva de glibc (no hay que fijar Debian, a diferencia del Dockerfile).
   }
 2 · PUENTE (bus)  modules/ocr4rs/ {
      Reflejo bus↔HTTP SÍNCRONO (sin job/poll, sin token — más simple que crawl4rs). Lee la imagen del

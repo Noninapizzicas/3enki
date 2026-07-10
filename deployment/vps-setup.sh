@@ -273,39 +273,54 @@ else
 fi
 
 # ---- 3a-ter. OCR4RS — órgano físico NATIVO (Rust puro, sin Docker) ----
-# La regla de la casa por NATURALEZA: Rust estático PURO → nativo en el VPS (cargo +
-# systemd), como fue fastcrw. OCR4RS no arrastra Chromium ni Python (a diferencia de
-# crawl4rs) → no hay dependencia sucia que contener → NO va en Docker. Todo en el deploy:
-# asegura el toolchain Rust si falta, compila, baja los modelos, systemd, siembra ON.
-# SIN AUTH (ley de la frontera: bindea 127.0.0.1). Idempotente y guardado (fallo → warn).
+# La regla de la casa por NATURALEZA: Rust estático PURO → nativo en el VPS, como fue
+# fastcrw. OCR4RS no arrastra Chromium ni Python (a diferencia de crawl4rs) → no hay
+# dependencia sucia que contener → NO va en Docker. Todo en el deploy, cero pasos manuales.
+# ORDEN (ligero → pesado): 1) binario PREBUILT (release.yml de ocr4rs, musl estático — un
+# fichero, sin toolchain); 2) fallback: compila con cargo (asegura rustup). SIN AUTH (ley
+# de la frontera: bindea 127.0.0.1). Idempotente y guardado (fallo → warn, el puente degrada).
 log "OCR4RS (órgano físico, Rust NATIVO :8090)..."
-if [ -d /opt/ocr4rs/.git ]; then
-    git -C /opt/ocr4rs pull --ff-only > /dev/null 2>&1 || warn "No se pudo actualizar /opt/ocr4rs (sigue con la versión local)"
-else
-    git clone --depth 1 https://github.com/noninapizzicas/ocr4rs /opt/ocr4rs > /dev/null 2>&1 \
-        || warn "Clone de ocr4rs falló (¿red?). OCR4RS no se instalará esta pasada."
-fi
 if command -v ocr4rs &>/dev/null || [ -x /usr/local/bin/ocr4rs ]; then
     log "ocr4rs ya instalado ($(/usr/local/bin/ocr4rs --version 2>/dev/null || echo ok))"
-elif [ -d /opt/ocr4rs ]; then
-    # Toolchain Rust: rustup si falta (lo retiramos con fastcrw; puede no estar).
-    if ! command -v cargo &>/dev/null; then
-        log "Instalando toolchain Rust (rustup) para compilar ocr4rs..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y > /dev/null 2>&1 || warn "rustup falló"
-        [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
-        export PATH="$HOME/.cargo/bin:$PATH"
-    fi
-    if command -v cargo &>/dev/null; then
-        log "Compilando ocr4rs (la 1ª vez tarda unos minutos)..."
-        if cargo install --path /opt/ocr4rs/crates/ocr4rs-cli --root /usr/local --locked > /dev/null 2>&1; then
-            log "ocr4rs compilado en /usr/local/bin"
-        else
-            warn "cargo install de ocr4rs falló — el puente degradará a sin_servicio hasta instalarlo"
-        fi
+else
+    # 1) PREBUILT: baja el binario musl estático del último release (sin toolchain, un fichero).
+    OCR_URL="https://github.com/noninapizzicas/ocr4rs/releases/latest/download/ocr4rs-x86_64-linux-musl.tar.gz"
+    _tmp="$(mktemp -d)"
+    if curl -sSfL "$OCR_URL" -o "${_tmp}/ocr4rs.tar.gz" 2>/dev/null \
+         && tar xzf "${_tmp}/ocr4rs.tar.gz" -C "${_tmp}" 2>/dev/null \
+         && [ -x "${_tmp}/ocr4rs" ]; then
+        install -m 0755 "${_tmp}/ocr4rs" /usr/local/bin/ocr4rs
+        log "ocr4rs instalado desde el binario prebuilt (musl estático, sin compilar)"
     else
-        warn "sin cargo: ocr4rs no se compiló. El puente degrada honesto (503)."
+        # 2) FALLBACK: compilar desde el fuente (aún no hay release, o no hay red al release).
+        warn "sin binario prebuilt — compilando desde el fuente (cae al fallback)"
+        if [ -d /opt/ocr4rs/.git ]; then
+            git -C /opt/ocr4rs pull --ff-only > /dev/null 2>&1 || true
+        else
+            git clone --depth 1 https://github.com/noninapizzicas/ocr4rs /opt/ocr4rs > /dev/null 2>&1 \
+                || warn "Clone de ocr4rs falló (¿red?). OCR4RS no se instalará esta pasada."
+        fi
+        if [ -d /opt/ocr4rs ]; then
+            if ! command -v cargo &>/dev/null; then
+                log "Instalando toolchain Rust (rustup) para compilar ocr4rs..."
+                curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y > /dev/null 2>&1 || warn "rustup falló"
+                [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+                export PATH="$HOME/.cargo/bin:$PATH"
+            fi
+            if command -v cargo &>/dev/null; then
+                log "Compilando ocr4rs (la 1ª vez tarda unos minutos)..."
+                cargo install --path /opt/ocr4rs/crates/ocr4rs-cli --root /usr/local --locked > /dev/null 2>&1 \
+                    && log "ocr4rs compilado en /usr/local/bin" \
+                    || warn "cargo install de ocr4rs falló — el puente degradará a sin_servicio hasta instalarlo"
+            else
+                warn "sin cargo: ocr4rs no se compiló. El puente degrada honesto (503)."
+            fi
+        fi
     fi
+    rm -rf "${_tmp}"
 fi
+# El clon /opt/ocr4rs se necesita igual para get-models.sh (los modelos no van en el release).
+[ -d /opt/ocr4rs/.git ] || git clone --depth 1 https://github.com/noninapizzicas/ocr4rs /opt/ocr4rs > /dev/null 2>&1 || true
 # Modelos .rten (una vez, en data/ → persiste; excluido del rsync).
 OCR_MODELS="${INSTALL_DIR}/data/ocr4rs-models"
 mkdir -p "${OCR_MODELS}"

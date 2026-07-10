@@ -80,6 +80,9 @@ OFF / sin servicio / sin modelos → `503 {degradado, motivo}`. PDF digital →
 
 El motor v0.0.1 aún no expone confianza por línea (`OcrLine` solo trae texto).
 Cuando lo haga, el puente activa el gate `umbral_confianza` +
-`ocr4rs.baja_confianza.detectada` (ya declarados, latentes). Y si ocr4rs
-publica un binario prebuilt (release.yml), el setup dejará de compilar y solo
-lo descargará — aún más ligero.
+`ocr4rs.baja_confianza.detectada` (ya declarados, latentes).
+
+**El setup ya prefiere el binario PREBUILT**: ocr4rs publica un musl estático
+por tag (`release.yml`); vps-setup lo descarga (un fichero, sin toolchain) y
+solo compila con cargo como fallback si no hay release. Para cortar el primer
+release en ocr4rs: `git tag v0.1.0 && git push --tags`.

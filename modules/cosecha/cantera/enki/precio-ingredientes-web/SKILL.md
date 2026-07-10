@@ -53,7 +53,7 @@ res.data.markdown        // con status 200, la página en markdown limpio
 
 **NUNCA** curlees el contenedor por el `ejecutor` — pierdes el token JWT encapsulado y el
 mensaje interpretado del fallo. Si `status` no es 200, lee `error.message` y sus `details`
-(`{degradado, motivo}`) antes de concluir nada. (Detalle general: skill `herramientas-web`.)
+(`{degradado, motivo}`) antes de concluir nada. (Detalle general: skill `leer-web`.)
 
 ## Mecanismo (pseudocódigo — CONDUCE los reflejos de crawl4rs)
 
@@ -104,7 +104,7 @@ FUNCION precioIngredienteWeb(ingrediente, url_soysuper?): FichaPrecio {
 
 ## Herramientas que conduce
 
-Vía el skill genérico **`herramientas-web`** (el canal correcto — `bus.publishAndWait`, NO curl
+Vía el skill genérico **`leer-web`** (el canal correcto — `bus.publishAndWait`, NO curl
 por ejecutor). Léelo si dudas cómo invocar:
 
 - `bus.publishAndWait('crawl4rs.leer.request', {url})` — leer la búsqueda o la ficha de soysuper (markdown).

@@ -1,5 +1,5 @@
 ---
-name: herramientas-web
+name: leer-web
 description: Leer la web DENTRO de un turno y SACARLE EL MÁXIMO — leer una página, buscar, mapear enlaces, rastrear un sitio, y extraer imágenes/precios/datos estructurados. crawl4rs es un MÓDULO del bus (no un fichero ni un agente): se conduce por bus.publishAndWait, la herramienta que el diseño deja en segundo plano. Playbook con recetas concretas (imágenes de productos, fichas, catálogos) + cómo leer el error para no rendirse.
 fuente: enki
 dominio: web
@@ -8,7 +8,7 @@ lente_tarea: consultar
 tags: [web, datos, crawl4rs, leer, buscar, mapear, rastrear, imagenes, scraping, bus, herramientas, precio, catalogo, investigacion]
 ---
 
-# Herramientas web — conduce crawl4rs por el bus y sácale el máximo
+# Leer web — conduce crawl4rs por el bus y sácale el máximo
 
 > **Lo primero, porque es donde todos se atascan:** crawl4rs **NO es un fichero, ni un agente,
 > ni una skill instalada** — no lo busques con `fs.search` ni `buscar_agente`, no lo encontrarás.
@@ -46,19 +46,27 @@ interpretado del error.
 ## SACAR EL MÁXIMO — recetas
 
 **1 · Imágenes de productos de una página** (el caso e-commerce: catálogo, tienda ajena).
-`extract_css` con `::attr(src)` saca los `src` de las imágenes → llega en `data.extraido`:
+El camino FIABLE es la **markdown**: `leer` a secas ya trae cada imagen en línea como
+`![alt](url)` — extráelas con un regex `!\[[^\]]*\]\(([^)]+)\)`. Verificado en vivo:
+una tienda real devolvió 15 URLs de imagen así, sin tocar selectores.
+```
+res  = bus.publishAndWait('crawl4rs.leer.request', { url: 'https://tienda.com/categoria/gafas' })
+imgs = [...res.data.markdown.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)].map(m => m[1])
+```
+`extract_css` sirve para **texto** con selectores CSS estándar (`.product-title`, `.price`) y
+lo entrega en `data.extraido` — pero NO uses el pseudo `::attr(src)` (sintaxis Scrapy que este
+motor no honra: `data.extraido` vuelve `null`). Para el `src` de una imagen, la markdown es la vía.
 ```
 res = bus.publishAndWait('crawl4rs.leer.request', {
   url: 'https://tienda.com/categoria/gafas',
-  extract_css: { imagenes: 'img::attr(src)', nombres: '.product-title', precios: '.price' }
+  extract_css: { nombres: '.product-title', precios: '.price' }   // texto, sí; ::attr(src), no
 })
-res.data.extraido   // { imagenes:[url,...], nombres:[...], precios:[...] }
+res.data.extraido   // { nombres:[...], precios:[...] }  ·  las imágenes salen de la markdown
 ```
-Si los selectores no los sabes: `leer` sin extract_css → la **markdown** ya trae las URLs de imagen
-en línea (`![alt](url)`); léelas tú. La markdown es el plan B universal cuando el CSS falla.
 
 **2 · Ficha de un producto** (precio, formato, descripción). Léela y saca de la markdown, o
-`extract_css: { precio: '.price', desc: '.description', img: 'img.main::attr(src)' }`.
+`extract_css: { precio: '.price', desc: '.description' }` (texto por selector estándar). La imagen
+principal, de la markdown (rec>1); no del `::attr(src)`, que este motor no honra.
 
 **3 · No sabes la URL → busca primero, lee después** (el patrón de descubrimiento, verificado):
 ```

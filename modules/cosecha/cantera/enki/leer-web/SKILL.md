@@ -85,6 +85,20 @@ acotados. Trae `data.paginas[]` con markdown+extraido de cada una. Respeta el ri
 **6 · Filtrar por relevancia**: `query` en `leer` rankea el contenido por BM25 — útil en páginas
 largas («dame solo lo que hable de precio»). `extract_semantic: true` saca el contenido principal.
 
+**7 · Catálogo que renderiza con JS (WooCommerce/Shopify) — la trampa que hace rendirse.**
+La HOME suele traer imágenes estáticas (banners) y parece que va; la página de CATEGORÍA devuelve
+solo el menú de navegación (`status 200` pero 0 productos) porque el grid lo pinta JavaScript. NO
+concluyas «crawl4rs no puede» — el contenido server-rendered SÍ está, en otra puerta:
+- **El feed RSS de la categoría**: añade `/feed/` a la URL (WooCommerce/WordPress) → XML con
+  nombre, precio e imagen de cada producto. Verificado en vivo: la categoría en página daba 0
+  imágenes; su `/feed/` dio 21 con `crawl4rs.leer.request`. Es la MISMA fuente que un scraper RSS
+  usaría — pero la lees por el bus, sin script aparte.
+- **O mapea→lee**: `mapear` la categoría → coge los enlaces a cada producto → `leer` cada ficha
+  (la ficha del producto sí trae su imagen en la markdown). El grid es un índice; la imagen vive
+  en la ficha.
+Nunca cambies crawl4rs por un scraper Python «porque la categoría no cargó»: es un falso dilema —
+crawl4rs lee ese mismo RSS/ficha. La restricción no es el motor; es apuntar a la puerta correcta.
+
 ## Leer el error — la parte que evita rendirse
 
 Si `status` no es 200, `error.message` trae la interpretación (y la prescripción del servidor):

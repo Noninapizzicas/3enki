@@ -272,6 +272,82 @@ else
     warn "Sin docker compose: Crawl4RS/SearXNG/Headroom no se levantaron. Todo degrada honesto hasta reejecutar el setup."
 fi
 
+# ---- 3a-ter. OCR4RS — órgano físico NATIVO (Rust puro, sin Docker) ----
+# La regla de la casa por NATURALEZA: Rust estático PURO → nativo en el VPS, como fue
+# fastcrw. OCR4RS no arrastra Chromium ni Python (a diferencia de crawl4rs) → no hay
+# dependencia sucia que contener → NO va en Docker. Todo en el deploy, cero pasos manuales.
+# ORDEN (ligero → pesado): 1) binario PREBUILT (release.yml de ocr4rs, musl estático — un
+# fichero, sin toolchain); 2) fallback: compila con cargo (asegura rustup). SIN AUTH (ley
+# de la frontera: bindea 127.0.0.1). Idempotente y guardado (fallo → warn, el puente degrada).
+log "OCR4RS (órgano físico, Rust NATIVO :8090)..."
+if command -v ocr4rs &>/dev/null || [ -x /usr/local/bin/ocr4rs ]; then
+    log "ocr4rs ya instalado ($(/usr/local/bin/ocr4rs --version 2>/dev/null || echo ok))"
+else
+    # 1) PREBUILT: baja el binario musl estático del último release (sin toolchain, un fichero).
+    OCR_URL="https://github.com/noninapizzicas/ocr4rs/releases/latest/download/ocr4rs-x86_64-linux-musl.tar.gz"
+    _tmp="$(mktemp -d)"
+    if curl -sSfL "$OCR_URL" -o "${_tmp}/ocr4rs.tar.gz" 2>/dev/null \
+         && tar xzf "${_tmp}/ocr4rs.tar.gz" -C "${_tmp}" 2>/dev/null \
+         && [ -x "${_tmp}/ocr4rs" ]; then
+        install -m 0755 "${_tmp}/ocr4rs" /usr/local/bin/ocr4rs
+        log "ocr4rs instalado desde el binario prebuilt (musl estático, sin compilar)"
+    else
+        # 2) FALLBACK: compilar desde el fuente (aún no hay release, o no hay red al release).
+        warn "sin binario prebuilt — compilando desde el fuente (cae al fallback)"
+        if [ -d /opt/ocr4rs/.git ]; then
+            git -C /opt/ocr4rs pull --ff-only > /dev/null 2>&1 || true
+        else
+            git clone --depth 1 https://github.com/noninapizzicas/ocr4rs /opt/ocr4rs > /dev/null 2>&1 \
+                || warn "Clone de ocr4rs falló (¿red?). OCR4RS no se instalará esta pasada."
+        fi
+        if [ -d /opt/ocr4rs ]; then
+            if ! command -v cargo &>/dev/null; then
+                log "Instalando toolchain Rust (rustup) para compilar ocr4rs..."
+                curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y > /dev/null 2>&1 || warn "rustup falló"
+                [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+                export PATH="$HOME/.cargo/bin:$PATH"
+            fi
+            if command -v cargo &>/dev/null; then
+                log "Compilando ocr4rs (la 1ª vez tarda unos minutos)..."
+                cargo install --path /opt/ocr4rs/crates/ocr4rs-cli --root /usr/local --locked > /dev/null 2>&1 \
+                    && log "ocr4rs compilado en /usr/local/bin" \
+                    || warn "cargo install de ocr4rs falló — el puente degradará a sin_servicio hasta instalarlo"
+            else
+                warn "sin cargo: ocr4rs no se compiló. El puente degrada honesto (503)."
+            fi
+        fi
+    fi
+    rm -rf "${_tmp}"
+fi
+# El clon /opt/ocr4rs se necesita igual para get-models.sh (los modelos no van en el release).
+[ -d /opt/ocr4rs/.git ] || git clone --depth 1 https://github.com/noninapizzicas/ocr4rs /opt/ocr4rs > /dev/null 2>&1 || true
+# Modelos .rten (una vez, en data/ → persiste; excluido del rsync).
+OCR_MODELS="${INSTALL_DIR}/data/ocr4rs-models"
+mkdir -p "${OCR_MODELS}"
+if [ ! -f "${OCR_MODELS}/text-detection.rten" ] && [ -x /opt/ocr4rs/scripts/get-models.sh ]; then
+    log "Descargando modelos OCR .rten (una vez)..."
+    /opt/ocr4rs/scripts/get-models.sh "${OCR_MODELS}" > /dev/null 2>&1 \
+        || warn "get-models.sh falló — sin modelos, /ocr degradará con 503 hasta bajarlos"
+fi
+chown -R www-data:www-data "${OCR_MODELS}" 2>/dev/null || true
+# systemd — el servicio bindea 127.0.0.1:8090 (la frontera vive en el host).
+if [ -x /usr/local/bin/ocr4rs ]; then
+    sed "s#__MODELS__#${OCR_MODELS}#g" "${REPO_DIR}/deployment/ocr4rs/ocr4rs.service" > /etc/systemd/system/ocr4rs.service 2>/dev/null
+    systemctl daemon-reload
+    if systemctl enable --now ocr4rs > /dev/null 2>&1; then
+        log "ocr4rs activo en 127.0.0.1:8090"
+        # Una decisión, una llave: instalar el órgano lo enciende (solo si el humano no decidió ya).
+        node -e "
+          const fs=require('fs'),p='${INSTALL_DIR}/data/interruptores.json';
+          let st={estados:{}}; try{st=JSON.parse(fs.readFileSync(p,'utf8'))}catch(_){}
+          st.estados=st.estados||{};
+          if(!('ocr4rs' in st.estados)){ st.estados.ocr4rs=true; fs.writeFileSync(p,JSON.stringify(st,null,2)); console.log('sembrado'); }
+        " > /dev/null 2>&1 && log "Interruptor ocr4rs: ON (instalar es decidir; tu apagado manual se respeta)" || true
+    else
+        warn "ocr4rs instalado pero el servicio no arrancó (revisa: journalctl -u ocr4rs -f)"
+    fi
+fi
+
 # ---- 3b. Ejecutor en contenedor (OPT-IN --docker — la ÚNICA concesión de seguridad) ----
 # El engine Docker ya lo asegura la sección 3a-bis (crawl4rs/headroom lo usan sin conceder
 # nada: los levanta root y el core les habla por HTTP). Lo que ESTE flag habilita es otra
@@ -552,6 +628,9 @@ fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-searxng$'; then
     echo "    enki-searxng   → búsqueda web para crawl4rs.buscar (docker)"
 fi
+if systemctl is-active --quiet ocr4rs 2>/dev/null; then
+    echo "    ocr4rs         → OCR órgano físico imagen/PDF→texto (Rust nativo/systemd, localhost:8090)"
+fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-headroom$'; then
     echo "    enki-headroom  → proxy compresión (docker, localhost:8787)"
 fi
@@ -561,6 +640,7 @@ fi
 echo ""
 echo "  Para activar (panel Interruptores 🎛️, grupo sistema — nacen OFF a propósito):"
 echo "    crawl4rs       → leer/buscar/mapear/rastrear la web desde el bus y el chat (leer_web)"
+echo "    ocr4rs         → leer texto de fotos/PDF escaneado desde el bus y el chat (leer_imagen)"
 echo "    headroom       → comprimir contexto al LLM (ahorro de tokens)"
 echo "    ejecutor       → shell guardado; con enki-python-tools = herramientas Python aisladas"
 echo ""

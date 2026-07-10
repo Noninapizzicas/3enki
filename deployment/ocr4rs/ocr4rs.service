@@ -1,0 +1,26 @@
+# OCR4RS — órgano de OCR (Rust puro) como servicio nativo. Lo escribe vps-setup
+# sustituyendo __MODELS__ por el directorio real de modelos. Bindea 127.0.0.1:8090
+# (ley de la frontera: la frontera vive en el host; OCR4RS no tiene auth).
+[Unit]
+Description=OCR4RS — órgano de OCR (imagen/PDF escaneado → texto)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+ExecStart=/usr/local/bin/ocr4rs serve --host 127.0.0.1 --port 8090
+Restart=always
+RestartSec=5
+# Los modelos .rten viven en data/ (persisten entre despliegues). Sin ellos,
+# /ocr degrada con 503 honesto y el puente lo prescribe.
+Environment=OCR4RS_MODELS=__MODELS__
+
+# Seguridad — un binario puro no necesita casi nada del sistema.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadOnlyPaths=__MODELS__
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,58 @@
+{
+  "_doc": "ocr4rs — PUENTE a OCR4RS (repo ocr4rs): órgano de OCR en Rust puro (imagen/PDF escaneado → texto), envuelto como órgano del bus. HERMANO de crawl4rs: crawl4rs lee la WEB (url = evidencia), ocr4rs lee lo FÍSICO (imagen = evidencia). Las dos ALAS de AFIRMACION_EXTERNA del prisma-del-caso — juntas cubren toda la evidencia externa (url·api_id → crawl4rs; documento·medición → ocr4rs). El motor habla HTTP (POST /ocr, bytes de imagen o PDF escaneado, síncrono — sin job/poll). Este reflejo traduce bus↔HTTP y esconde el HTTP. SIN AUTH: el motor no exige token (ley de la frontera: publica solo a 127.0.0.1). NACE OFF (interruptor 'ocr4rs', grupo sistema, on-demand). DEGRADA HONESTO: OFF/sin servicio/sin modelos → 503 {degradado, motivo}; jamás inventa texto. HANDOFF: un PDF digital (con capa de texto) NO es su trabajo → 409 redirigido a crawl4rs + emite ocr4rs.pdf.es_digital (los órganos se pasan el trabajo por el bus). La ESTRUCTURA (total, NIF, precio de una factura) la pone el LLM del consumidor. Config: base_url (default http://localhost:8090), timeout_ms, prep (deskew/normalize/binarize).",
+  "name": "ocr4rs",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: nace el puente. Reflejo bus↔HTTP síncrono al servicio OCR4RS. Tools de bus ocr4rs.leer (una imagen/PDF → texto + evidencia) y ocr4rs.leer_lote (lote con ritmo). Tool de chat leer_imagen. Handoff a crawl4rs ante PDF digital. Interruptor OFF por defecto. Degradación honesta (apagado/sin_servicio/sin_modelos). La evidencia (path+sha256) es la dirección de vuelta del prisma. LATENTE (evento_esperado, se activa cuando el motor exponga confianza por línea): ocr4rs.baja_confianza.detectada + el gate umbral_confianza — OcrLine v0.0.1 solo trae texto. Test: ocr4rs__index.",
+  "description": "Puente al motor OCR4RS (Rust puro, imagen/PDF escaneado → texto) por HTTP, como órgano del bus. Lee una imagen o PDF escaneado → texto + evidencia (la imagen re-comprobable). Gate por interruptor OFF (on-demand), degrada limpio si el servicio no está, reencamina el PDF digital a crawl4rs.",
+  "author": "enki",
+  "language": "javascript",
+  "main": "index.js",
+  "horizonte": "TODO el input DOCUMENTAL físico del bus — factura fotografiada, ticket, etiqueta de precio, menú de la competencia, receta en papel, etiqueta ESP32, pizarra. La segunda ala de AFIRMACION_EXTERNA: lo que no está en la web, se fotografía.",
+  "dependencies": [],
+  "subscribes": [
+    { "event": "ocr4rs.leer.request", "handler": "onLeerRequest", "description": "Reflejo: lee una imagen o PDF escaneado (ruta fs) → POST /ocr → { source_kind, texto, paginas, evidencia }. PDF digital → 409 handoff crawl4rs. Degrada 503 si OFF/sin servicio/sin modelos." },
+    { "event": "ocr4rs.leer_lote.request", "handler": "onLeerLoteRequest", "description": "Reflejo: lote de rutas {paths} → texto por cada una, con ritmo (CPU-bound, uno a uno). Los fallidos no frenan el lote (patrón obrero)." },
+    { "event": "interruptor.cambiado", "handler": "onInterruptorCambiado", "description": "Enciende/apaga el puente en caliente (id 'ocr4rs'). OFF → todo degrada 503." },
+    { "event": "interruptor.solicitar_registro", "handler": "onSolicitarRegistro", "description": "Re-registra su botón (cura la carrera de arranque del panel)." }
+  ],
+  "publishes": [
+    { "event": "ocr4rs.leer.response", "description": "{ source_kind, texto, paginas:[{n,texto}], evidencia:{path,sha256,w,h} } o 503 degradado o 409 redirigido." },
+    { "event": "ocr4rs.leer_lote.response", "description": "{ resultados:[{path,texto,evidencia}], fallidos:[{path,motivo}], total }." },
+    { "event": "ocr4rs.texto.extraido", "description": "Dominio fire-and-forget { project_id, path, source_kind, chars } — lo bebe propiocepción (registra el acto)." },
+    { "event": "ocr4rs.pdf.es_digital", "description": "Handoff { project_id, path } — un PDF con capa de texto llegó al órgano equivocado; el conserje/consumidor puede rutear a crawl4rs." },
+    { "event": "interruptor.registrar", "description": "Registra el botón 'ocr4rs' (grupo sistema, OFF por defecto)." }
+  ],
+  "tools": [
+    {
+      "name": "leer_imagen",
+      "description": "Lee el texto de una imagen o PDF escaneado (factura, ticket, etiqueta de precio, menú fotografiado, receta en papel, pizarra, pantalla). Devuelve el texto + la evidencia (la imagen re-comprobable — su path y hash). ÚSALA cuando el dato está en una FOTO o un ESCANEO, no en la web. La ESTRUCTURA (total, NIF, precio) la pones TÚ leyendo el texto; el órgano solo da texto (nunca lo inventa). Si el PDF ya trae texto (es digital), te avisa para usar leer_web. Requiere el interruptor 'ocr4rs' ON.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "description": "Ruta de la imagen o PDF en el proyecto (p.ej. /facturas/entrante/factura-2026-07.jpg)." },
+          "prep": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Opcional: afinar el pre-proceso. Por defecto grises+normalizar+deskew (bien para la mayoría).",
+            "properties": {
+              "deskew": { "type": "boolean", "description": "Enderezar una foto torcida (ON por defecto en el motor)." },
+              "denoise": { "type": "boolean", "description": "Quitar grano de sensor (foto de móvil ruidosa)." },
+              "binarize": { "type": "boolean", "description": "Blanco/negro duro. Normalmente PEOR para este motor (entrenado en grises) — solo si el texto es muy tenue." }
+            }
+          }
+        },
+        "required": ["path"]
+      },
+      "handler": "handleLeerTool",
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "SIN_MODELOS", "ES_DIGITAL_USA_CRAWL4RS", "IMAGEN_INVALIDA"]
+    }
+  ],
+  "config": {
+    "base_url": "http://localhost:8090",
+    "timeout_ms": 60000,
+    "max_lote": 50,
+    "_base_url_doc": "Base del servicio OCR4RS (servicio nativo ocr4rs, deployment/ocr4rs/ systemd → 127.0.0.1:8090). Override por env OCR4RS_BASE_URL (el env manda sobre este config).",
+    "_sin_auth_doc": "OCR4RS no tiene auth (ley de la frontera: publica solo a loopback). El puente no hace baile de token."
+  }
+}

@@ -1,16 +1,18 @@
 ---
 id: plataforma/herramientas-externas
 dominio: plataforma
-resumen: Crawl4RS en Docker (Chromium contenido) como ÚNICO órgano web del bus (fastcrw retirado) · Python en Docker (contenedor universal: SearXNG, Headroom) · enganche al ejecutor por config.
+resumen: Órganos externos por naturaleza — Crawl4RS (web, Docker por Chromium) · OCR4RS (imagen/PDF escaneado, Rust puro NATIVO) · Python (SearXNG, Headroom, Docker). Las dos alas de la evidencia externa (web+físico). Enganche al ejecutor por config.
 fuentes:
   - deployment/python-tools/**
   - deployment/crawl4rs/**
+  - deployment/ocr4rs/**
   - deployment/vps-setup.sh
   - modules/crawl4rs/**
+  - modules/ocr4rs/**
   - modules/_shared/error-fertil.js
   - modules/cosecha/cantera/enki/herramientas-web/**
   - modules/cosecha/cantera/enki/precio-ingredientes-web/**
-verificado: 2026-07-09
+verificado: 2026-07-10
 ---
 
 # HERRAMIENTAS EXTERNAS — Crawl4RS en Docker (el órgano web) · Python en Docker (Headroom · el contenedor universal)
@@ -108,6 +110,48 @@ POR QUÉ DOCKER (la excepción que confirma "Rust → nativo"): el binario es li
 TESTS  crawl4rs__index (9) · herramientas-web-seed (4) · precio-ingredientes-web-seed (4).
 HORIZONTE  Fase 7 de D-os = crate crawl4rs-mqtt (el motor habla MQTT nativo por
            core/<id>/api/request/crawl/*) → este puente HTTP se retira; el compose solo cambia el CMD.
+```
+
+## OCR4RS (repo ocr4rs) — el órgano FÍSICO NATIVO (imagen/PDF escaneado → texto)
+
+```
+QUÉ ES  Motor OCR del repo hermano ocr4rs (Rust PURO — ocrs+rten, sin ONNX/MNN/Python).
+        Imagen o PDF ESCANEADO → texto. Rasteriza el PDF (extrae el ráster embebido, NO renderiza)
+        y limpia la imagen (deskew·normalizar·binarizar opc.) DENTRO — preparar la imagen ES hacer OCR.
+
+POR QUÉ NATIVO (no Docker, a diferencia de crawl4rs)  la regla de la casa reparte por NATURALEZA:
+        Rust estático PURO → nativo (como fue fastcrw); Rust + dependencia sucia (Chromium) → Docker.
+        OCR4RS no arrastra Chromium ni Python → no hay nada sucio que contener → cargo + systemd.
+
+LAS DOS ALAS DE AFIRMACION_EXTERNA (prisma-del-caso)  una afirmación externa entra con su dirección
+        de vuelta. Hay dos, ahora las dos cubiertas: la web (url·api_id → crawl4rs) y el papel/imagen
+        (la imagen: path+sha256 → ocr4rs). El prisma ya enumeraba 'url·api_id·documento·medición' —
+        crawl4rs respondió las digitales, ocr4rs responde 'documento'. El hueco ya estaba tallado.
+
+1 · MOTOR (Rust NATIVO)  deployment/ocr4rs/ {
+     vps-setup (sección 3a-ter), orden ligero→pesado: 1) baja el binario PREBUILT del release de
+     ocr4rs (musl estático — un fichero, sin toolchain); 2) fallback: compila con cargo (asegura
+     rustup). Luego get-models.sh (una vez) → systemd (ocr4rs.service, bindea 127.0.0.1:8090) →
+     siembra el interruptor ON. TODO en el deploy, cero pasos manuales.
+     SIN AUTH (ley de la frontera: solo loopback) · sin modelos → /ocr degrada 503 honesto.
+     ocr4rs.service  unit plantilla (__MODELS__ sustituido por el dir real). Restart=always, hardened.
+     RELEASE  ocr4rs/.github/workflows/release.yml — cada tag v* publica el binario musl estático.
+              El binario esquiva la deriva de glibc (no hay que fijar Debian, a diferencia del Dockerfile).
+  }
+2 · PUENTE (bus)  modules/ocr4rs/ {
+     Reflejo bus↔HTTP SÍNCRONO (sin job/poll, sin token — más simple que crawl4rs). Lee la imagen del
+     fs (base64, el bus mueve punteros no MB) → POST /ocr → proyecta { source_kind, texto, paginas,
+     evidencia:{path,sha256} }. Eventos: ocr4rs.{leer,leer_lote}.request → .response · texto.extraido
+     (dominio) · pdf.es_digital (HANDOFF: PDF digital → 409 redirigido a crawl4rs, los órganos se pasan
+     el trabajo por el bus). Tool de chat: leer_imagen. NACE OFF (interruptor 'ocr4rs'). Degrada honesto
+     (apagado·sin_servicio·sin_modelos). LA EVIDENCIA (path+sha256) ES la dirección de vuelta del prisma:
+     un dato OCR entra por la ley de la evidencia con fuente='ocr4rs' + imagen. Test: ocr4rs__index (10).
+  }
+LATENTE (forma, no prosa)  el motor v0.0.1 (OcrLine solo texto) aún no da confianza por línea → el gate
+     umbral_confianza + evento ocr4rs.baja_confianza.detectada están DECLARADOS, se activan cuando el
+     motor la exponga. El freno gemelo del 'no inventar precio': línea dudosa se marca, no se afirma.
+RELEVO PENDIENTE  facturas hace OCR hoy con tesseract.js + scribe.js-ocr (JS pesado). OCR4RS es su
+     relevo (como crawl4rs relevó a fastcrw) → esos deps salen del package.json cuando facturas migre.
 ```
 
 ## Headroom — proxy de compresión de contexto (código integrado + FASE 0 en Docker)

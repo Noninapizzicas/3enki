@@ -409,10 +409,16 @@ class AiGatewayModule extends BaseModule {
     // del proyecto (fs.read), etc., independientemente de en qué módulo esté.
     // + las tools del RAIL VIVO (cúpula de estados): universales por diseño (el rumbo se
     //   escribe desde cualquier página, como el nervio lo lee en todas).
+    // + los ÓRGANOS EXTERNOS transversales (leer_web/leer_imagen): la evidencia externa
+    //   se necesita desde cualquier página (una ficha web, una factura escaneada) — sin
+    //   esto el LLM no halla la tool y se rinde a un scraper ad-hoc (visto en vivo). Nombres
+    //   sin punto → no aportan prefijo → aquí es su única puerta. Degradan honesto si el
+    //   interruptor (crawl4rs/ocr4rs) está OFF, así que exponerlas siempre es seguro.
     const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente',
       'fs.read', 'fs.write', 'fs.list', 'fs.search',
       'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
-      'fijar_objetivo', 'evaluar_rail']);
+      'fijar_objetivo', 'evaluar_rail',
+      'leer_web', 'leer_imagen']);
     // Prefijos de tools válidos para este page_id. Permite que módulos como
     // menu-generator (tools 'menu.*') matcheen aunque el name del módulo y el
     // prefijo de la tool no coincidan literalmente — sin renombrar nada.

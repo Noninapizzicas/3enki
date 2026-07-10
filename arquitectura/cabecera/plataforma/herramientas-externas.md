@@ -10,7 +10,7 @@ fuentes:
   - modules/crawl4rs/**
   - modules/ocr4rs/**
   - modules/_shared/error-fertil.js
-  - modules/cosecha/cantera/enki/herramientas-web/**
+  - modules/cosecha/cantera/enki/leer-web/**
   - modules/cosecha/cantera/enki/precio-ingredientes-web/**
 verificado: 2026-07-10
 ---
@@ -101,13 +101,13 @@ POR QUÉ DOCKER (la excepción que confirma "Rust → nativo"): el binario es li
      message). Precedencia env > config (CRAWL4RS_BASE_URL/API_KEY). Test: crawl4rs__index.
   }
 3 · DESCUBRIMIENTO (skill-first, NO se cablea a escandallo) {
-     herramientas-web (genérico, dominio web): el canal — bus.publishAndWait('crawl4rs.leer.request')
+     leer-web (genérico, dominio web): el canal — bus.publishAndWait('crawl4rs.leer.request')
        y hermanos, leer el error, el ritmo. precio-ingredientes-web (dominio escandallo, autocontenida):
        el saber soysuper — descubrir por /search (no adivinar slug), leer la ficha, guard no-inventar
        (precio real o 'sin_precio', mismo mandato que el freno PRECIO_INVENTADO). La cantera las
        auto-indexa; el conserje las ofrece al costear.
   }
-TESTS  crawl4rs__index (9) · herramientas-web-seed (4) · precio-ingredientes-web-seed (4).
+TESTS  crawl4rs__index (9) · leer-web-seed (4) · precio-ingredientes-web-seed (4).
 HORIZONTE  Fase 7 de D-os = crate crawl4rs-mqtt (el motor habla MQTT nativo por
            core/<id>/api/request/crawl/*) → este puente HTTP se retira; el compose solo cambia el CMD.
 ```
@@ -200,7 +200,7 @@ FIDELIDAD  los frenos de blueprint (<mod>.validar → 422) son el test AUTOMÁTI
   "antipatron": "surfacear la tool a la página (fuerza el diseño; el LLM encadena primitivas).",
   "patron": "OFRECER la tool por un SKILL de descubrimiento que enseña a alcanzarla por el canal que el LLM YA tiene (bus.publishAndWait) — la tool sigue en segundo plano.",
   "tres_capas": {
-    "skill_generico": "CÓMO alcanzar la tool (el canal + leer el error + el ritmo). Reutilizable. Ej: herramientas-web (dominio web).",
+    "skill_generico": "CÓMO alcanzar la tool (el canal + leer el error + el ritmo). Reutilizable. Ej: leer-web (dominio web).",
     "skill_dominio": "el SABER del caso, AUTOCONTENIDO (la invocación inline, no depende del genérico). Ej: precio-ingredientes-web (dominio escandallo).",
     "agente": "AISLAR un lote grande fuera del turno de chat (perspectiva-c con throttle+retry). Cuando el volumen no cabe en una vuelta."
   },
@@ -212,7 +212,7 @@ FIDELIDAD  los frenos de blueprint (<mod>.validar → 422) son el test AUTOMÁTI
 ```
 canal (lo que el LLM ya tiene)     bus.publishAndWait('crawl4rs.leer.request', { url })  → {status, data.markdown}
                                     (NUNCA curl por ejecutor: pierde el token JWT + el mensaje interpretado)
-skill genérico   herramientas-web         (dominio web · lente_tarea consultar) — el canal + el error + ritmo
+skill genérico   leer-web                (dominio web · lente_tarea consultar) — el canal + el error + ritmo
 skill dominio    precio-ingredientes-web  (dominio escandallo) — el saber, con la invocación INLINE (autocontenida)
 agente           precio-web (perspectiva-c, siguiente) — el lote de 39 fuera del turno
 ```
@@ -253,7 +253,7 @@ PIEZAS {
   deployment/crawl4rs/                    provisioning del órgano web (compose + receta, Docker por Chromium, red enki-web)
   modules/crawl4rs/                       puente bus↔HTTP al motor Crawl4RS (D-os) — interruptor OFF, degrada honesto
   modules/_shared/error-fertil.js         banco de errores fértiles (heredado por toda tool_http vía loader)
-  modules/cosecha/cantera/enki/herramientas-web/         skill GENÉRICO — cómo alcanzar la tool por bus (descubrimiento)
+  modules/cosecha/cantera/enki/leer-web/         skill GENÉRICO — cómo alcanzar la tool por bus (descubrimiento)
   modules/cosecha/cantera/enki/precio-ingredientes-web/  skill DOMINIO — el saber del precio, invocación inline (autocontenida)
   deployment/python-tools/                el hogar Python: imagen base + SearXNG + Headroom
   deployment/python-tools/headroom/       proxy de compresión (FASE 0 docker)

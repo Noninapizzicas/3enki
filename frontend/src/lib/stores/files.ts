@@ -281,16 +281,15 @@ export async function openFile(filePath: string): Promise<void> {
     } else if (IMAGE_EXTENSIONS.includes(ext)) {
       // Use filesystem for images (reads as base64)
       const response = await mqttRequest<{
-        file_path: string;
-        type: 'image';
+        path: string;
         content: string;
         content_type: string;
         size: number;
         modified: string;
-      }>('fs', 'read', { project_id: projectId, file_path: filePath });
+      }>('fs', 'read', { project_id: projectId, path: filePath });
 
       fileContent = {
-        file_path: response.data.file_path,
+        file_path: response.data.path,
         type: 'image',
         content: response.data.content,
         content_type: response.data.content_type,

@@ -24,7 +24,7 @@
 
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 const { plantillaDe } = require('../_shared/procesos-semilla');
-const { descomponer, circuloCerrado } = require('../_shared/prisma-del-caso');
+const { descomponer, circuloCerrado, leyDeLaEvidencia } = require('../_shared/prisma-del-caso');
 
 const STORE = '/estados/listas.json';
 // Blockers TIPADOS del juez del rail (inspirado en el evaluador de goal de DeerFlow):
@@ -300,12 +300,29 @@ class EstadosReflejo extends ModuloHibridoReflejo {
   // sobre un hecho concreto y re-comprobable, no sobre el juicio entero. ──
   _ensamblarEstado(lista, input) {
     const e = (input && input.estado && typeof input.estado === 'object') ? input.estado : {};
+    const naturaleza = lista.prisma.identidad.naturaleza;
+    let evidencia = e.evidencia !== undefined ? e.evidencia : null;
+    let ley_falta = null;
+    // LA LEY DE LA EVIDENCIA, PLEGADA EN EL CÍRCULO — un solo punto gobierna TODO proceso
+    // externo del rail (autogestión), sin que ningún módulo la cablee. Para una afirmación
+    // sobre el mundo, la evidencia solo CUENTA si la ley la avala (procedencia con vuelta);
+    // el enemigo (estimado_llm / sin vuelta) NO pasa como evidencia — se anula y se nombra.
+    if (naturaleza === 'AFIRMACION_EXTERNA') {
+      const ley = leyDeLaEvidencia({ fuente: e.fuente, evidencia: e.evidencia, url: e.url, referencia_id: e.referencia_id, mercadona_producto_id: e.mercadona_producto_id });
+      if (ley.ok) {
+        // la evidencia es lo que la ley AVALÓ (evidencia | url | ref | el propio testimonio)
+        evidencia = e.evidencia || e.url || e.referencia_id || e.mercadona_producto_id || { fuente: e.fuente, avalado: true };
+      } else {
+        evidencia = null; ley_falta = ley.falta || 'evidencia sin dirección de vuelta';
+      }
+    }
     return {
-      naturaleza: lista.prisma.identidad.naturaleza,
+      naturaleza,
       valor: e.valor !== undefined ? e.valor : null,
-      evidencia: e.evidencia !== undefined ? e.evidencia : null,
+      evidencia,
       freno_verde: e.freno_verde === true,
-      persistido: e.persistido === true        // ← futura fuente: cúpula de eventos (evento de cierre visto)
+      persistido: e.persistido === true,       // ← futura fuente: cúpula de eventos (evento de cierre visto)
+      _ley_falta: ley_falta
     };
   }
   _blockerDeFaltan(faltan) {
@@ -330,8 +347,11 @@ class EstadosReflejo extends ModuloHibridoReflejo {
       const estado = this._ensamblarEstado(lista, input);
       const j = circuloCerrado(estado);
       satisfecho = j.cerrado;
-      faltan = j.faltan;
-      blocker = satisfecho ? 'none' : this._blockerDeFaltan(j.faltan);
+      // el mensaje FÉRTIL de la ley reemplaza al 'evidencia' genérico (nombra el enemigo)
+      faltan = estado._ley_falta
+        ? j.faltan.map(f => /evidencia/i.test(f) ? `evidencia — ${estado._ley_falta}` : f)
+        : j.faltan;
+      blocker = satisfecho ? 'none' : this._blockerDeFaltan(faltan);
       lista.ultima_evaluacion = { satisfecho, blocker, faltan, estado, ts: nowISO() };
       if (satisfecho) lista.estado = 'completa';
     } else {

@@ -333,6 +333,24 @@ test('ESPEJO: hechos completos (valor+evidencia+freno+persistido) → círculo c
   assert.strictEqual(res.data.estado, 'completa');
 });
 
+test('LEY plegada en el círculo: fuente estimado_llm NO cuenta como evidencia (enemigo cazado en el rail)', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Est', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Est', objetivo: 'precio', dominio: 'escandallo', rasgos: { afirma_sobre_el_mundo: true } });
+  // el LLM dice "hecho" con todo en verde, pero la fuente es una estimación
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Est', estado: { valor: 9, evidencia: '9€', fuente: 'estimado_llm', freno_verde: true, persistido: true } });
+  assert.strictEqual(res.data.satisfecho, false, 'una estimación no cierra el círculo');
+  assert.ok(res.data.faltan.some(f => /vuelta|evidencia/i.test(f)), 'nombra la falta de dirección de vuelta');
+});
+
+test('LEY plegada: fuente desconocida CON url → evidencia avalada → círculo cierra', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Ok', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Ok', objetivo: 'imagen', dominio: 'contenido', rasgos: { afirma_sobre_el_mundo: true } });
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Ok', estado: { valor: 'foto', fuente: 'esthervolta', url: 'https://i0.wp.com/x.jpg', freno_verde: true, persistido: true } });
+  assert.strictEqual(res.data.satisfecho, true, 'con dirección de vuelta (url) la evidencia cuenta');
+});
+
 (async () => {
   let ok = 0; const fails = [];
   for (const { n, f } of tests) { try { await f(); ok++; } catch (e) { fails.push({ n, e }); } }

@@ -102,26 +102,37 @@ class ContenidoReflejo extends ModuloHibridoReflejo {
     return { status: 200, data: store.productos };
   }
 
-  // Añade una imagen a un producto. content = base64 del fichero; ext = extensión.
-  // Escribe el FICHERO y guarda la REFERENCIA. La primera imagen es principal por defecto.
+  // Añade una imagen a un producto. DOS modos:
+  //   · REFERENCIA (url_remota): apunta a un CDN público (i0.wp.com…) — no re-aloja, no baja
+  //     bytes. La url ES la evidencia (dirección de vuelta del prisma). El camino barato.
+  //   · FICHERO (content base64 + ext): re-aloja el binario en el proyecto. Para cuando lo
+  //     necesitas propio (viene de descargar_web, o de una subida). Escribe el fichero.
+  // La primera imagen es principal por defecto.
   async _addImagen(input) {
     if (!input.project_id || !input.product_id) return this._invalid('product_id');
-    if (!input.content || !input.ext) return this._invalid('content|ext');
+    const remota = typeof input.url_remota === 'string' && /^https?:\/\//i.test(input.url_remota);
+    if (!remota && (!input.content || !input.ext)) return this._invalid('content|ext (o url_remota)');
     const store = await this._leerStore(input.project_id);
     if (!store) return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'contenido.json no legible');
 
     const imagen_id = crypto.randomUUID().slice(0, 8);
-    const ext = String(input.ext).replace(/[^a-z0-9]/gi, '').toLowerCase();
-    const url = IMG_DIR + input.product_id + '__' + imagen_id + '.' + ext;
-    const w = await this._write(input.project_id, url, input.content, 'base64');
-    if (w.status >= 400) return w;
+    let url, ref = {};
+    if (remota) {
+      url = input.url_remota;                         // apunta al CDN; nada que escribir
+      ref = { remota: true, fuente: input.fuente || 'web' };
+    } else {
+      const ext = String(input.ext).replace(/[^a-z0-9]/gi, '').toLowerCase();
+      url = IMG_DIR + input.product_id + '__' + imagen_id + '.' + ext;
+      const w = await this._write(input.project_id, url, input.content, 'base64');
+      if (w.status >= 400) return w;
+    }
 
     if (!store.productos[input.product_id]) store.productos[input.product_id] = productoVacio();
     const prod = store.productos[input.product_id];
     if (!Array.isArray(prod.imagenes)) prod.imagenes = [];
     const principal = input.principal === true || prod.imagenes.length === 0;
     if (principal) for (const im of prod.imagenes) im.principal = false;
-    const imagen = { id: imagen_id, url, alt: input.alt || '', principal };
+    const imagen = { id: imagen_id, url, alt: input.alt || '', principal, ...ref };
     prod.imagenes.push(imagen);
 
     const g = await this._guardarStore(input.project_id, store);
@@ -141,7 +152,8 @@ class ContenidoReflejo extends ModuloHibridoReflejo {
     if (idx < 0) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'imagen no existe', { imagen_id: input.imagen_id });
     const [removed] = prod.imagenes.splice(idx, 1);
     if (removed.principal && prod.imagenes.length > 0) prod.imagenes[0].principal = true;
-    if (removed.url) { try { await this._delete(input.project_id, removed.url); } catch (_) { /* best-effort */ } }
+    // solo se borra el FICHERO propio; una referencia remota (CDN) no vive en el fs.
+    if (removed.url && !removed.remota) { try { await this._delete(input.project_id, removed.url); } catch (_) { /* best-effort */ } }
 
     const g = await this._guardarStore(input.project_id, store);
     if (g.status >= 400) return g;

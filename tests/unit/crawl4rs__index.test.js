@@ -129,6 +129,41 @@ test('rastrear pasa max_depth/max_pages al cuerpo del crawl', async () => {
   assert.strictEqual(enviado.cross_domain, true);
 });
 
+test('descargar: url de imagen → base64 + content_type + ext', async () => {
+  const m = nuevo();
+  m._fetchBinario = async (url) => ({ status: 200, content_type: 'image/jpeg', ext: 'jpg', bytes: 3, base64: 'AQID' });
+  const r = await m._descargar({ url: 'https://i0.wp.com/x.jpg' });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.base64, 'AQID');
+  assert.strictEqual(r.data.ext, 'jpg');
+  assert.strictEqual(r.data.content_type, 'image/jpeg');
+});
+
+test('descargar: OFF → 503 sin tocar la red', async () => {
+  const m = nuevo({ activo: false });
+  let tocado = false;
+  m._fetchBinario = async () => { tocado = true; return { status: 200 }; };
+  const r = await m._descargar({ url: 'https://x/y.jpg' });
+  assert.strictEqual(r.status, 503);
+  assert.strictEqual(tocado, false);
+});
+
+test('descargar: sin url → INVALID_INPUT; recurso enorme → 413; 404 upstream → error', async () => {
+  const m = nuevo();
+  assert.strictEqual((await m._descargar({})).status, 400);
+  m._fetchBinario = async () => ({ status: 413 });
+  assert.strictEqual((await m._descargar({ url: 'https://x/big.zip' })).status, 413);
+  m._fetchBinario = async () => ({ status: 404 });
+  assert.strictEqual((await m._descargar({ url: 'https://x/no.jpg' })).status, 404);
+});
+
+test('_extDe: content-type manda, la url respalda', () => {
+  const m = nuevo();
+  assert.strictEqual(m._extDe('image/png', 'https://x/a'), 'png');
+  assert.strictEqual(m._extDe('application/octet-stream', 'https://x/a.webp?v=1'), 'webp');
+  assert.strictEqual(m._extDe('', 'https://x/sinpista'), 'bin');
+});
+
 test('onInterruptorCambiado enciende/apaga en caliente', () => {
   const m = nuevo({ activo: false });
   m.onInterruptorCambiado({ data: { id: 'crawl4rs', enabled: true } });

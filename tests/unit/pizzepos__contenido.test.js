@@ -155,5 +155,32 @@ async function testAsync(desc, fn) {
     assert.strictEqual(resp[1].status, 201);
   });
 
+  await testAsync('add_imagen REFERENCIA: url_remota → apunta al CDN, sin escribir fichero, remota:true', async () => {
+    const { m, store } = makeReflejo();
+    const r = await m._addImagen({ ...base, product_id: 'gafas', url_remota: 'https://i0.wp.com/esthervolta.com/x.jpg', alt: 'Gafas' });
+    assert.strictEqual(r.status, 201);
+    assert.strictEqual(r.data.url, 'https://i0.wp.com/esthervolta.com/x.jpg', 'la url es la remota, no una ruta local');
+    assert.strictEqual(r.data.remota, true);
+    assert.ok(!Object.keys(store).some(k => k.startsWith('/pizzepos/contenido/imagenes/')), 'NO escribe fichero (referencia)');
+    const c = JSON.parse(store[STORE]);
+    assert.strictEqual(c.productos.gafas.imagenes[0].fuente, 'web');
+  });
+
+  await testAsync('add_imagen: sin content ni url_remota → INVALID_INPUT', async () => {
+    const { m } = makeReflejo();
+    const r = await m._addImagen({ ...base, product_id: 'p', alt: 'x' });
+    assert.strictEqual(r.status, 400);
+  });
+
+  await testAsync('quitar_imagen REMOTA: no intenta borrar del fs (solo la referencia)', async () => {
+    const { m } = makeReflejo();
+    const add = await m._addImagen({ ...base, product_id: 'p', url_remota: 'https://i0.wp.com/z.png' });
+    let borradoFs = false;
+    m._delete = async () => { borradoFs = true; return { status: 200 }; };
+    const q = await m._quitarImagen({ ...base, product_id: 'p', imagen_id: add.data.id });
+    assert.strictEqual(q.status, 200);
+    assert.strictEqual(borradoFs, false, 'una referencia remota no se borra del fs');
+  });
+
   console.log('\nTodos los tests pasaron.');
 })().catch(e => { console.error(e); process.exit(1); });

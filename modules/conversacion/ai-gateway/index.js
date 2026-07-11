@@ -418,7 +418,7 @@ class AiGatewayModule extends BaseModule {
       'fs.read', 'fs.write', 'fs.list', 'fs.search',
       'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
       'fijar_objetivo', 'evaluar_rail',
-      'leer_web', 'leer_imagen']);
+      'leer_web', 'descargar_web', 'leer_imagen']);
     // Prefijos de tools válidos para este page_id. Permite que módulos como
     // menu-generator (tools 'menu.*') matcheen aunque el name del módulo y el
     // prefijo de la tool no coincidan literalmente — sin renombrar nada.

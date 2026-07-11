@@ -280,6 +280,77 @@ test('evaluar_rail sobre lista sin objetivo → 409 (fija uno primero)', async (
   assert.strictEqual(res.status, 409);
 });
 
+test('PRISMA cuando procede: fijar_objetivo CON rasgos externos → círculo tipado adjunto', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Imagenes', activar: true });
+  const res = await r._fijarObjetivo({
+    project_id: PID, lista_id: 'Imagenes', objetivo: 'imagen del producto',
+    entidad: 'ponte mis gafas', dominio: 'contenido',
+    rasgos: { afirma_sobre_el_mundo: true }
+  });
+  assert.strictEqual(res.status, 200);
+  assert.ok(res.data.prisma, 'debe adjuntar el prisma');
+  assert.strictEqual(res.data.prisma.identidad.naturaleza, 'AFIRMACION_EXTERNA');
+  // exige evidencia → el contrato lleva el hueco de la dirección de vuelta
+  assert.ok('evidencia' in res.data.prisma.contrato, 'el contrato debe exigir evidencia');
+  assert.ok(res.data.prisma.preguntas_abiertas.some(q => /evidencia/i.test(q)), 'pregunta por la evidencia');
+});
+
+test('PRISMA no adivina: fijar_objetivo SIN rasgos → rail intacto (solo texto, sin prisma)', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Libre', activar: true });
+  const res = await r._fijarObjetivo({ project_id: PID, lista_id: 'Libre', objetivo: 'ordenar el menú' });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.data.prisma, null, 'sin rasgos declarados no se fuerza prisma');
+});
+
+test('ESPEJO: lista con prisma EXTERNA + hechos incompletos → NO satisfecho, faltan nombra evidencia+persistido', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Img', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Img', objetivo: 'imagen', dominio: 'contenido', rasgos: { afirma_sobre_el_mundo: true } });
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Img', estado: { valor: 'foto', freno_verde: true, persistido: false } });
+  assert.strictEqual(res.data.satisfecho, false);
+  assert.ok(res.data.faltan.some(f => /evidencia/i.test(f)), 'exige la dirección de vuelta');
+  assert.ok(res.data.faltan.some(f => /persistido/i.test(f)), 'exige el evento de cierre');
+  assert.strictEqual(res.data.blocker, 'missing_evidence');
+});
+
+test('ESPEJO anti-confabulación: sin hechos, el rail NO se cierra (el LLM no puede declararse hecho)', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Img2', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Img2', objetivo: 'imagen', dominio: 'contenido', rasgos: { afirma_sobre_el_mundo: true } });
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Img2', estado: {} });   // "ya está" sin nada
+  assert.strictEqual(res.data.satisfecho, false, 'no hay done sin hechos');
+});
+
+test('ESPEJO: hechos completos (valor+evidencia+freno+persistido) → círculo cerrado', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Img3', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Img3', objetivo: 'imagen', dominio: 'contenido', rasgos: { afirma_sobre_el_mundo: true } });
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Img3', estado: { valor: 'foto', evidencia: { url: 'https://i0.wp.com/x.jpg' }, freno_verde: true, persistido: true } });
+  assert.strictEqual(res.data.satisfecho, true);
+  assert.strictEqual(res.data.blocker, 'none');
+  assert.strictEqual(res.data.estado, 'completa');
+});
+
+test('LEY plegada en el círculo: fuente estimado_llm NO cuenta como evidencia (enemigo cazado en el rail)', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Est', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Est', objetivo: 'precio', dominio: 'escandallo', rasgos: { afirma_sobre_el_mundo: true } });
+  // el LLM dice "hecho" con todo en verde, pero la fuente es una estimación
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Est', estado: { valor: 9, evidencia: '9€', fuente: 'estimado_llm', freno_verde: true, persistido: true } });
+  assert.strictEqual(res.data.satisfecho, false, 'una estimación no cierra el círculo');
+  assert.ok(res.data.faltan.some(f => /vuelta|evidencia/i.test(f)), 'nombra la falta de dirección de vuelta');
+});
+
+test('LEY plegada: fuente desconocida CON url → evidencia avalada → círculo cierra', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Ok', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Ok', objetivo: 'imagen', dominio: 'contenido', rasgos: { afirma_sobre_el_mundo: true } });
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Ok', estado: { valor: 'foto', fuente: 'esthervolta', url: 'https://i0.wp.com/x.jpg', freno_verde: true, persistido: true } });
+  assert.strictEqual(res.data.satisfecho, true, 'con dirección de vuelta (url) la evidencia cuenta');
+});
+
 (async () => {
   let ok = 0; const fails = [];
   for (const { n, f } of tests) { try { await f(); ok++; } catch (e) { fails.push({ n, e }); } }

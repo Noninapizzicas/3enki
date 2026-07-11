@@ -267,10 +267,6 @@ class EstadosReflejo extends ModuloHibridoReflejo {
         dominio: input.dominio || null, rasgos: input.rasgos,
         herramientas: Array.isArray(input.herramientas) ? input.herramientas : []
       });
-      // el HECHO que cierra el círculo: el evento que, al VERSE en el bus, prueba la
-      // persistencia. Sin él, persistido cae a lo reportado (costura honesta).
-      lista.prisma.evento_cierre = input.evento_cierre || null;
-      lista.prisma.fijado_ts = nowISO();     // solo cuentan cierres POSTERIORES a fijar el objetivo
     }
     lista.actualizada = nowISO();
     await this._guardar(input.project_id, doc);
@@ -302,7 +298,7 @@ class EstadosReflejo extends ModuloHibridoReflejo {
   // (cúpula de eventos) — aquí es donde se enchufa. Mientras, exige que los hechos
   // VENGAN NOMBRADOS (no un 'satisfecho' pelado del LLM): la mentira, si la hay, es
   // sobre un hecho concreto y re-comprobable, no sobre el juicio entero. ──
-  _ensamblarEstado(lista, input, persistidoHecho) {
+  _ensamblarEstado(lista, input) {
     const e = (input && input.estado && typeof input.estado === 'object') ? input.estado : {};
     const naturaleza = lista.prisma.identidad.naturaleza;
     let evidencia = e.evidencia !== undefined ? e.evidencia : null;
@@ -325,32 +321,9 @@ class EstadosReflejo extends ModuloHibridoReflejo {
       valor: e.valor !== undefined ? e.valor : null,
       evidencia,
       freno_verde: e.freno_verde === true,
-      persistido: persistidoHecho === true,    // ← EL HECHO: el evento de cierre visto en el bus (no lo reportado)
+      persistido: e.persistido === true,       // ← futura fuente: cúpula de eventos (evento de cierre visto)
       _ley_falta: ley_falta
     };
-  }
-
-  // EL ESPEJO SELLADO: persistido = ¿se VIO el evento de cierre en el bus? Se consulta el
-  // ledger runtime por proyecto (propiocepción). Si no hay evento declarado, o el ledger no
-  // responde, cae HONESTO a lo reportado y lo NOMBRA (fuente) — nunca finge que vio nada.
-  async _persistidoDeHecho(project_id, lista, estadoIn) {
-    const reportado = !!(estadoIn && estadoIn.persistido === true);
-    const ev = lista.prisma && lista.prisma.evento_cierre;
-    if (!ev) return { persistido: reportado, fuente: 'reportado' };   // sin evento declarado
-    const resp = await this._rpc('propiocepcion.leer', { project_id, limite: 200 }, { timeout_ms: 4000 });
-    const eventos = resp && (resp.result?.eventos || resp.data?.eventos || resp.eventos);
-    if (!Array.isArray(eventos)) return { persistido: reportado, fuente: 'reportado_sin_ledger' };
-    const desde = lista.prisma.fijado_ts || null;
-    const clave = estadoIn && (estadoIn.entidad_key || estadoIn.producto_id || estadoIn.id);
-    const visto = eventos.some(e => e && e.evento === ev &&
-      (!desde || (e.ts && e.ts >= desde)) &&
-      (!clave || this._matchClave(e, clave)));
-    return { persistido: visto, fuente: 'observado' };
-  }
-  _matchClave(e, clave) {
-    const dc = (e && e.datos_clave) || {};
-    const k = String(clave).toLowerCase();
-    return Object.values(dc).some(v => { const s = String(v).toLowerCase(); return s === k || s.includes(k); });
   }
   _blockerDeFaltan(faltan) {
     if (faltan.some(f => /evidencia/i.test(f))) return 'missing_evidence';
@@ -371,20 +344,15 @@ class EstadosReflejo extends ModuloHibridoReflejo {
 
     let satisfecho, blocker, faltan = null;
     if (lista.prisma) {
-      const pf = await this._persistidoDeHecho(input.project_id, lista, input.estado);
-      const estado = this._ensamblarEstado(lista, input, pf.persistido);
+      const estado = this._ensamblarEstado(lista, input);
       const j = circuloCerrado(estado);
       satisfecho = j.cerrado;
       // el mensaje FÉRTIL de la ley reemplaza al 'evidencia' genérico (nombra el enemigo)
       faltan = estado._ley_falta
         ? j.faltan.map(f => /evidencia/i.test(f) ? `evidencia — ${estado._ley_falta}` : f)
         : j.faltan;
-      // honestidad de la FUENTE del persistido: si aún cae a lo reportado, se dice
-      if (pf.fuente !== 'observado') {
-        faltan = faltan.map(f => /persistido/i.test(f) ? `${f} [fuente: ${pf.fuente}]` : f);
-      }
       blocker = satisfecho ? 'none' : this._blockerDeFaltan(faltan);
-      lista.ultima_evaluacion = { satisfecho, blocker, faltan, estado, persistido_fuente: pf.fuente, ts: nowISO() };
+      lista.ultima_evaluacion = { satisfecho, blocker, faltan, estado, ts: nowISO() };
       if (satisfecho) lista.estado = 'completa';
     } else {
       const ap = this._aplicarVeredicto(lista, input.veredicto);

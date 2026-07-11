@@ -24,7 +24,7 @@
 
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 const { plantillaDe } = require('../_shared/procesos-semilla');
-const { descomponer } = require('../_shared/prisma-del-caso');
+const { descomponer, circuloCerrado } = require('../_shared/prisma-del-caso');
 
 const STORE = '/estados/listas.json';
 // Blockers TIPADOS del juez del rail (inspirado en el evaluador de goal de DeerFlow):
@@ -292,21 +292,58 @@ class EstadosReflejo extends ModuloHibridoReflejo {
     return { ok: true, satisfecho, blocker };
   }
 
-  // ── evaluar el rail contra su objetivo: recibe el VEREDICTO (el juicio lo pone quien ve
-  // la conversación — el LLM de página, perspectiva-c), el reflejo lo valida y aplica. ──
+  // ── EL ESPEJO: ensambla el estado-de-HECHOS que come circuloCerrado.
+  // COSTURA de fuente de verdad: hoy lee los hechos que reporta el caller (estado);
+  // el `persistido` DEBE venir del hecho de que el evento de cierre se OBSERVÓ en el bus
+  // (cúpula de eventos) — aquí es donde se enchufa. Mientras, exige que los hechos
+  // VENGAN NOMBRADOS (no un 'satisfecho' pelado del LLM): la mentira, si la hay, es
+  // sobre un hecho concreto y re-comprobable, no sobre el juicio entero. ──
+  _ensamblarEstado(lista, input) {
+    const e = (input && input.estado && typeof input.estado === 'object') ? input.estado : {};
+    return {
+      naturaleza: lista.prisma.identidad.naturaleza,
+      valor: e.valor !== undefined ? e.valor : null,
+      evidencia: e.evidencia !== undefined ? e.evidencia : null,
+      freno_verde: e.freno_verde === true,
+      persistido: e.persistido === true        // ← futura fuente: cúpula de eventos (evento de cierre visto)
+    };
+  }
+  _blockerDeFaltan(faltan) {
+    if (faltan.some(f => /evidencia/i.test(f))) return 'missing_evidence';
+    if (faltan.some(f => /freno_verde/i.test(f))) return 'run_failed';
+    return 'goal_not_met_yet';                  // valor / persistido aún sin cerrar
+  }
+
+  // ── evaluar el rail contra su objetivo. DOS caminos:
+  //   · lista CON prisma  → el juez es circuloCerrado sobre HECHOS (tipado, naturaleza-aware);
+  //     el LLM ya NO declara 'satisfecho' — reporta los hechos y el círculo decide.
+  //   · lista SIN prisma  → el VEREDICTO del LLM de página (camino histórico, intacto). ──
   async _evaluar(input) {
     if (!input.project_id || !input.lista_id) return this._invalid('lista_id');
     const doc = await this._cargar(input.project_id);
     const lista = doc.listas[slug(input.lista_id)];
     if (!lista) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'lista no existe', { lista_id: input.lista_id });
     if (!lista.objetivo) return this._errorResponse(409, 'CONFLICT_STATE', 'la lista no tiene objetivo; fija uno con fijar_objetivo', { lista_id: lista.id });
-    const ap = this._aplicarVeredicto(lista, input.veredicto);
-    if (!ap.ok) return ap.err;
+
+    let satisfecho, blocker, faltan = null;
+    if (lista.prisma) {
+      const estado = this._ensamblarEstado(lista, input);
+      const j = circuloCerrado(estado);
+      satisfecho = j.cerrado;
+      faltan = j.faltan;
+      blocker = satisfecho ? 'none' : this._blockerDeFaltan(j.faltan);
+      lista.ultima_evaluacion = { satisfecho, blocker, faltan, estado, ts: nowISO() };
+      if (satisfecho) lista.estado = 'completa';
+    } else {
+      const ap = this._aplicarVeredicto(lista, input.veredicto);
+      if (!ap.ok) return ap.err;
+      satisfecho = ap.satisfecho; blocker = ap.blocker;
+    }
     lista.actualizada = nowISO();
     await this._guardar(input.project_id, doc);
-    this.eventBus.publish('estados.goal.evaluado', { project_id: input.project_id, lista_id: lista.id, satisfecho: ap.satisfecho, blocker: ap.blocker, timestamp: nowISO() });
-    if (ap.satisfecho) this.eventBus.publish('estados.goal.cumplido', { project_id: input.project_id, lista_id: lista.id, objetivo: lista.objetivo, timestamp: nowISO() });
-    return { status: 200, data: { lista_id: lista.id, satisfecho: ap.satisfecho, blocker: ap.blocker, estado: lista.estado } };
+    this.eventBus.publish('estados.goal.evaluado', { project_id: input.project_id, lista_id: lista.id, satisfecho, blocker, faltan, timestamp: nowISO() });
+    if (satisfecho) this.eventBus.publish('estados.goal.cumplido', { project_id: input.project_id, lista_id: lista.id, objetivo: lista.objetivo, timestamp: nowISO() });
+    return { status: 200, data: { lista_id: lista.id, satisfecho, blocker, faltan, estado: lista.estado } };
   }
 
   // ── estado: una lista concreta, o la ACTIVA (lo que lee el nervio) ──

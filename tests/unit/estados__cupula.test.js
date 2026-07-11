@@ -304,6 +304,35 @@ test('PRISMA no adivina: fijar_objetivo SIN rasgos → rail intacto (solo texto,
   assert.strictEqual(res.data.prisma, null, 'sin rasgos declarados no se fuerza prisma');
 });
 
+test('ESPEJO: lista con prisma EXTERNA + hechos incompletos → NO satisfecho, faltan nombra evidencia+persistido', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Img', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Img', objetivo: 'imagen', dominio: 'contenido', rasgos: { afirma_sobre_el_mundo: true } });
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Img', estado: { valor: 'foto', freno_verde: true, persistido: false } });
+  assert.strictEqual(res.data.satisfecho, false);
+  assert.ok(res.data.faltan.some(f => /evidencia/i.test(f)), 'exige la dirección de vuelta');
+  assert.ok(res.data.faltan.some(f => /persistido/i.test(f)), 'exige el evento de cierre');
+  assert.strictEqual(res.data.blocker, 'missing_evidence');
+});
+
+test('ESPEJO anti-confabulación: sin hechos, el rail NO se cierra (el LLM no puede declararse hecho)', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Img2', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Img2', objetivo: 'imagen', dominio: 'contenido', rasgos: { afirma_sobre_el_mundo: true } });
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Img2', estado: {} });   // "ya está" sin nada
+  assert.strictEqual(res.data.satisfecho, false, 'no hay done sin hechos');
+});
+
+test('ESPEJO: hechos completos (valor+evidencia+freno+persistido) → círculo cerrado', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Img3', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Img3', objetivo: 'imagen', dominio: 'contenido', rasgos: { afirma_sobre_el_mundo: true } });
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Img3', estado: { valor: 'foto', evidencia: { url: 'https://i0.wp.com/x.jpg' }, freno_verde: true, persistido: true } });
+  assert.strictEqual(res.data.satisfecho, true);
+  assert.strictEqual(res.data.blocker, 'none');
+  assert.strictEqual(res.data.estado, 'completa');
+});
+
 (async () => {
   let ok = 0; const fails = [];
   for (const { n, f } of tests) { try { await f(); ok++; } catch (e) { fails.push({ n, e }); } }

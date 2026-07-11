@@ -280,6 +280,30 @@ test('evaluar_rail sobre lista sin objetivo → 409 (fija uno primero)', async (
   assert.strictEqual(res.status, 409);
 });
 
+test('PRISMA cuando procede: fijar_objetivo CON rasgos externos → círculo tipado adjunto', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Imagenes', activar: true });
+  const res = await r._fijarObjetivo({
+    project_id: PID, lista_id: 'Imagenes', objetivo: 'imagen del producto',
+    entidad: 'ponte mis gafas', dominio: 'contenido',
+    rasgos: { afirma_sobre_el_mundo: true }
+  });
+  assert.strictEqual(res.status, 200);
+  assert.ok(res.data.prisma, 'debe adjuntar el prisma');
+  assert.strictEqual(res.data.prisma.identidad.naturaleza, 'AFIRMACION_EXTERNA');
+  // exige evidencia → el contrato lleva el hueco de la dirección de vuelta
+  assert.ok('evidencia' in res.data.prisma.contrato, 'el contrato debe exigir evidencia');
+  assert.ok(res.data.prisma.preguntas_abiertas.some(q => /evidencia/i.test(q)), 'pregunta por la evidencia');
+});
+
+test('PRISMA no adivina: fijar_objetivo SIN rasgos → rail intacto (solo texto, sin prisma)', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Libre', activar: true });
+  const res = await r._fijarObjetivo({ project_id: PID, lista_id: 'Libre', objetivo: 'ordenar el menú' });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.data.prisma, null, 'sin rasgos declarados no se fuerza prisma');
+});
+
 (async () => {
   let ok = 0; const fails = [];
   for (const { n, f } of tests) { try { await f(); ok++; } catch (e) { fails.push({ n, e }); } }

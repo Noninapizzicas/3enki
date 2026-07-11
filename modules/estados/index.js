@@ -24,6 +24,7 @@
 
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 const { plantillaDe } = require('../_shared/procesos-semilla');
+const { descomponer } = require('../_shared/prisma-del-caso');
 
 const STORE = '/estados/listas.json';
 // Blockers TIPADOS del juez del rail (inspirado en el evaluador de goal de DeerFlow):
@@ -256,10 +257,21 @@ class EstadosReflejo extends ModuloHibridoReflejo {
     const lista = doc.listas[slug(input.lista_id)];
     if (!lista) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'lista no existe', { lista_id: input.lista_id });
     lista.objetivo = String(input.objetivo);
+    // PRISMA cuando PROCEDE (gate): si quien fija el objetivo DECLARA rasgos del dato
+    // (afirma_sobre_el_mundo? · derivable_de_internos?), el objetivo deja de ser solo
+    // prosa → se le adjunta el círculo TIPADO (naturaleza + contrato + preguntas +
+    // no_objetivos). Sin rasgos declarados, el rail sigue igual (texto). NO adivina.
+    if (input.rasgos && typeof input.rasgos === 'object') {
+      lista.prisma = descomponer({
+        necesidad: input.objetivo, entidad: input.entidad || null,
+        dominio: input.dominio || null, rasgos: input.rasgos,
+        herramientas: Array.isArray(input.herramientas) ? input.herramientas : []
+      });
+    }
     lista.actualizada = nowISO();
     await this._guardar(input.project_id, doc);
-    this.eventBus.publish('estados.objetivo.fijado', { project_id: input.project_id, lista_id: lista.id, objetivo: lista.objetivo, timestamp: nowISO() });
-    return { status: 200, data: { lista_id: lista.id, objetivo: lista.objetivo } };
+    this.eventBus.publish('estados.objetivo.fijado', { project_id: input.project_id, lista_id: lista.id, objetivo: lista.objetivo, prisma: lista.prisma || null, timestamp: nowISO() });
+    return { status: 200, data: { lista_id: lista.id, objetivo: lista.objetivo, prisma: lista.prisma || null } };
   }
 
   // ── EL FRENO del juez: un veredicto satisfecho:false EXIGE un blocker TIPADO (no 'none').

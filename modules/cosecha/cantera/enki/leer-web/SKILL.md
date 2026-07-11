@@ -99,6 +99,21 @@ concluyas «crawl4rs no puede» — el contenido server-rendered SÍ está, en o
 Nunca cambies crawl4rs por un scraper Python «porque la categoría no cargó»: es un falso dilema —
 crawl4rs lee ese mismo RSS/ficha. La restricción no es el motor; es apuntar a la puerta correcta.
 
+**8 · De la URL de imagen al PRODUCTO — dos caminos, ninguno con ejecutor.**
+Ya tienes la url de la imagen (de la markdown o de `extract_css` de texto). Para ponerla en un
+producto hay dos vías, según si la quieres *propia* o basta *apuntar*:
+- **Referenciar (barato, por defecto)**: la imagen vive en un CDN público estable (`i0.wp.com`…) →
+  apunta a ella, no la re-alojes. `bus.publishAndWait('contenido.add_imagen.request',
+  { project_id, product_id, url_remota: 'https://i0.wp.com/…jpg' })`. La url ES la evidencia.
+- **Re-alojar (cuando la necesitas propia)**: baja los bytes con **`descargar_web`** y pásalos:
+  ```
+  img = bus.publishAndWait('crawl4rs.descargar.request', { url: 'https://i0.wp.com/…jpg' })
+  bus.publishAndWait('contenido.add_imagen.request',
+    { project_id, product_id, content: img.data.base64, ext: img.data.ext })
+  ```
+NUNCA descargues con el `ejecutor`+curl (está gated y te atascas): `descargar_web` es el paso
+url→bytes. Y para adjuntarla, `contenido.add_imagen` — no la dejes suelta en un fichero.
+
 ## Leer el error — la parte que evita rendirse
 
 Si `status` no es 200, `error.message` trae la interpretación (y la prescripción del servidor):

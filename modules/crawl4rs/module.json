@@ -1,7 +1,8 @@
 {
   "_doc": "crawl4rs — PUENTE a Crawl4RS (repo D-os): crawler Rust self-hosted (navegador real Chromium/CDP + stealth + extracción end-to-end + crawl profundo BFS/DFS), envuelto como órgano del bus. Crawl4RS habla HTTP (servidor axum, JOB-BASED: POST /crawl → {id}, poll status, GET result); este reflejo traduce bus↔HTTP y esconde el HTTP en el contenedor, cerrando el 'rechinar' de que el crawler no hablara el bus. NACE OFF (interruptor 'crawl4rs', grupo sistema): el servicio corre ON-DEMAND, encender el puente es decisión consciente. DEGRADA HONESTO: OFF o servicio no alcanzable → 503 {degradado, motivo}; nunca finge. AUTH: /crawl va tras JWT; el token sale de POST /auth/token (libre si el servidor no configura api_key), cacheado y refrescado ante 401. El `stealth` NO es per-petición: es config de arranque del servidor Crawl4RS. ÚNICO órgano web del bus desde v0.2.0 (fastcrw retirado): el modo auto del motor cubre también el fetch ligero (HTTP puro primero; navegador solo ante 403/challenge). Ver ROADMAP de D-os (Fase 7 = MQTT nativo, alternativa futura a este puente HTTP). Config: base_url (default http://localhost:8081 — provisioning en deployment/crawl4rs/), api_key opcional, timeout_ms.",
   "name": "crawl4rs",
-  "version": "0.2.1",
+  "version": "0.3.0",
+  "_v0_3_0_nota": "v0.3.0: nace crawl4rs.descargar (tool de chat descargar_web) — el eslabón url→bytes que faltaba. GET binario directo de un asset público (imagen/pdf) → {base64, content_type, ext, bytes}, acotado por max_descarga_bytes (10 MB). Cierra el hueco visto en vivo: el LLM tenía la url de la imagen pero su único url→bytes era el ejecutor+curl (gated), y se atascaba. Ahora encadena leer_web (halla la url) → descargar_web (trae los bytes) → contenido.add_imagen (persiste). Se expone descargar_web como tool global del ai-gateway (transversal, como leer_web).",
   "_v0_2_1_nota": "v0.2.1: motivo de degradación DISTINGUIDO (hallado en vivo): 401/403 del /auth/token ya no se disfraza de 'sin_servicio' — degrada con motivo 'auth_rechazada' y prescripción en message (error fértil). El compose deja de pasar CRAWL4RS_API_KEY vacía (el server de D-os trata la variable PRESENTE como clave configurada y blindaba /auth/token con clave '').",
   "_v0_1_1_nota": "v0.1.1: llega el provisioning Docker (deployment/crawl4rs/). base_url default → :8081 (el :8080 local es de SearXNG). Precedencia env > config para CRAWL4RS_BASE_URL/CRAWL4RS_API_KEY — el código cumple lo que _base_url_doc ya prometía.",
   "_v0_2_0_nota": "v0.2.0: el RELEVO de fastcrw — crawl4rs pasa a ser el ÚNICO órgano web del bus. Nuevos reflejos crawl4rs.buscar (POST /search, SearXNG detrás del servidor Crawl4RS) y crawl4rs.mapear (POST /map, enlaces sin contenido), directos (sin job), con el mismo token JWT y retry tras 401. El mensaje prescriptivo del servidor (p.ej. 'define SEARXNG_URL') viaja en message. fastcrw (motor crw-server nativo + puente) retirado.",
@@ -17,6 +18,7 @@
     { "event": "crawl4rs.rastrear.request", "handler": "onRastrearRequest", "description": "Reflejo: crawl profundo BFS/DFS {url, max_depth?, max_pages?, cross_domain?} → páginas con markdown + extracción." },
     { "event": "crawl4rs.buscar.request", "handler": "onBuscarRequest", "description": "Reflejo: búsqueda web {query, limit?} → POST /search (SearXNG detrás del servidor) → {resultados:[{titulo,url,resumen}], total}. 503 con prescripción si el servidor no tiene SEARXNG_URL." },
     { "event": "crawl4rs.mapear.request", "handler": "onMapearRequest", "description": "Reflejo: enlaces de una página {url, mode?} → POST /map → {url, enlaces, total}. Ligero, sin contenido." },
+    { "event": "crawl4rs.descargar.request", "handler": "onDescargarRequest", "description": "Reflejo: descarga un recurso {url} (imagen/pdf/asset) → {base64, content_type, ext, bytes}. GET binario directo, acotado por tamaño. El eslabón url→bytes entre leer_web y contenido.add_imagen." },
     { "event": "interruptor.cambiado", "handler": "onInterruptorCambiado", "description": "Enciende/apaga el puente en caliente (id 'crawl4rs'). OFF → todo degrada 503." },
     { "event": "interruptor.solicitar_registro", "handler": "onSolicitarRegistro", "description": "Re-registra su botón (cura la carrera de arranque del panel)." }
   ],
@@ -25,6 +27,7 @@
     { "event": "crawl4rs.rastrear.response", "description": "Igual que leer pero con N páginas del crawl profundo." },
     { "event": "crawl4rs.buscar.response", "description": "{ resultados:[{titulo,url,resumen}], total } o error con la prescripción del servidor en message." },
     { "event": "crawl4rs.mapear.response", "description": "{ url, enlaces:[...], total } o 503 degradado." },
+    { "event": "crawl4rs.descargar.response", "description": "{ url, content_type, ext, bytes, base64 } o error (413 demasiado grande, 5xx upstream, 503 degradado)." },
     { "event": "interruptor.registrar", "description": "Registra el botón 'crawl4rs' (grupo sistema, OFF por defecto)." }
   ],
   "tools": [
@@ -43,6 +46,20 @@
       },
       "handler": "handleLeerTool",
       "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "UPSTREAM_INVALID_RESPONSE"]
+    },
+    {
+      "name": "descargar_web",
+      "description": "Descarga un recurso de una URL (imagen, PDF, asset) y devuelve sus BYTES en base64 + content_type + ext. ÚSALA cuando ya tienes la URL de una imagen (de leer_web) y necesitas el fichero para adjuntarlo a un producto (contenido.add_imagen) o guardarlo. Es el paso url→bytes: NO uses el ejecutor+curl para esto. Requiere el interruptor 'crawl4rs' encendido.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": { "type": "string", "minLength": 1, "description": "URL absoluta del recurso a descargar (p.ej. la url de una imagen de producto)." }
+        },
+        "required": ["url"]
+      },
+      "handler": "handleDescargarTool",
+      "errores_conocidos": ["INVALID_INPUT", "DEMASIADO_GRANDE", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
     }
   ],
   "config": {

@@ -40,6 +40,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     this._timeoutMs = 120000;
     this._pollMs = 500;
     this._token = null;           // JWT cacheado
+    this._maxDescargaBytes = 10 * 1024 * 1024;   // tope del binario que baja descargar (10 MB)
   }
 
   async onLoad(context) {
@@ -50,6 +51,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     this._baseUrl = String(process.env.CRAWL4RS_BASE_URL || cfg.base_url || DEFAULT_BASE).replace(/\/+$/, '');
     this._apiKey = process.env.CRAWL4RS_API_KEY || cfg.api_key || null;
     this._timeoutMs = Number(cfg.timeout_ms) || 120000;
+    this._maxDescargaBytes = Number(cfg.max_descarga_bytes) || 10 * 1024 * 1024;
     this._registrarBoton();
     this.logger?.info('crawl4rs.loaded', { base_url: this._baseUrl, activo: this.activo });
   }
@@ -80,9 +82,11 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   onRastrearRequest(e) { return this._atender(e, 'rastrear', 'crawl4rs.rastrear.response', (d) => this._rastrear(d)); }
   onBuscarRequest(e)   { return this._atender(e, 'buscar',   'crawl4rs.buscar.response',   (d) => this._buscar(d)); }
   onMapearRequest(e)   { return this._atender(e, 'mapear',   'crawl4rs.mapear.response',   (d) => this._mapear(d)); }
+  onDescargarRequest(e){ return this._atender(e, 'descargar','crawl4rs.descargar.response',(d) => this._descargar(d)); }
 
   // ── tool de chat ──
-  async handleLeerTool(args) { return this._leer(args || {}); }
+  async handleLeerTool(args)      { return this._leer(args || {}); }
+  async handleDescargarTool(args) { return this._descargar(args || {}); }
 
   // ── guardas ──
   _guard() {
@@ -151,6 +155,44 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     const body = r.body || {};
     const enlaces = Array.isArray(body.links) ? body.links : [];
     return { status: 200, data: { url: body.url || String(input.url), enlaces, total: enlaces.length } };
+  }
+
+  // ── descargar: una URL de recurso (imagen/pdf/asset) → BYTES (base64 + content_type).
+  // El eslabón que faltaba entre leer_web (encuentra la url) y contenido.add_imagen (persiste
+  // los bytes): antes el LLM tenía que curlear por el ejecutor (gated) y se atascaba. GET
+  // directo del asset público; acota el tamaño; degrada honesto si la red falla. ──
+  async _descargar(input) {
+    const g = this._guard(); if (g) return g;
+    if (!input || !input.url) return this._invalid('url');
+    let r;
+    try { r = await this._fetchBinario(String(input.url)); }
+    catch (e) { return this._degradado(this._motivoDe(e)); }
+    if (r.status === 413) return this._errorResponse(413, 'DEMASIADO_GRANDE', `el recurso supera el tope (${Math.round(this._maxDescargaBytes / 1024 / 1024)} MB)`, { url: input.url });
+    if (r.status < 200 || r.status >= 300) return this._errorResponse(r.status >= 400 ? r.status : 502, 'UPSTREAM_INVALID_RESPONSE', 'no se pudo descargar el recurso', { status: r.status, url: input.url });
+    return { status: 200, data: { url: String(input.url), content_type: r.content_type, ext: r.ext, bytes: r.bytes, base64: r.base64 } };
+  }
+
+  // GET binario directo (fetch global). Overridable en test. NO throw por tamaño (→ 413).
+  async _fetchBinario(url) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), this._timeoutMs);
+    try {
+      const resp = await fetch(url, { signal: ctrl.signal, redirect: 'follow' });
+      if (resp.status < 200 || resp.status >= 300) return { status: resp.status };
+      const ab = await resp.arrayBuffer();
+      if (ab.byteLength > this._maxDescargaBytes) return { status: 413 };
+      const ct = resp.headers.get('content-type') || 'application/octet-stream';
+      return { status: 200, content_type: ct, ext: this._extDe(ct, url), bytes: ab.byteLength, base64: Buffer.from(ab).toString('base64') };
+    } finally { clearTimeout(to); }
+  }
+
+  // extensión canónica desde el content-type (o la url como respaldo).
+  _extDe(contentType, url) {
+    const ct = String(contentType || '').toLowerCase();
+    const map = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg', 'application/pdf': 'pdf' };
+    for (const k of Object.keys(map)) if (ct.includes(k)) return map[k];
+    const m = String(url || '').match(/\.([a-z0-9]{2,4})(?:[?#]|$)/i);
+    return m ? m[1].toLowerCase() : 'bin';
   }
 
   // ── endpoint directo (sin job): token → llamada, retry tras 401 ──

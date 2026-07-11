@@ -18,12 +18,14 @@ function nuevo() {
   r.logger = { info() {}, warn() {}, error() {}, debug() {} };
   r.metrics = { increment() {} };
   r.eventBus = { publish() {} };
+  r._ledger = [];   // simula el buffer de propiocepción (eventos vistos en el bus)
   r._rpc = async (evento, payload) => {
     const key = `${payload.project_id}::${payload.path}`;
     if (evento === 'fs.read.request') {
       return fs.has(key) ? { status: 200, content: fs.get(key) } : { status: 404 };
     }
     if (evento === 'fs.write.request') { fs.set(key, payload.content); return { status: 200 }; }
+    if (evento === 'propiocepcion.leer') return { request_id: payload.request_id, result: { eventos: r._ledger } };
     return null;
   };
   return r;
@@ -349,6 +351,39 @@ test('LEY plegada: fuente desconocida CON url → evidencia avalada → círculo
   await r._fijarObjetivo({ project_id: PID, lista_id: 'Ok', objetivo: 'imagen', dominio: 'contenido', rasgos: { afirma_sobre_el_mundo: true } });
   const res = await r._evaluar({ project_id: PID, lista_id: 'Ok', estado: { valor: 'foto', fuente: 'esthervolta', url: 'https://i0.wp.com/x.jpg', freno_verde: true, persistido: true } });
   assert.strictEqual(res.data.satisfecho, true, 'con dirección de vuelta (url) la evidencia cuenta');
+});
+
+test('ESPEJO SELLADO: persistido sale del HECHO (evento de cierre visto), no de lo reportado', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Sella', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Sella', objetivo: 'imagen', dominio: 'contenido',
+    rasgos: { afirma_sobre_el_mundo: true }, evento_cierre: 'contenido.imagen_add' });
+  // el LLM reporta persistido:false, pero el evento SÍ se vio en el bus → el hecho cierra
+  r._ledger = [{ evento: 'contenido.imagen_add', ts: '2099-01-01T00:00:00.000Z', datos_clave: { producto_id: 'gafas' } }];
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Sella',
+    estado: { valor: 'foto', url: 'https://i0.wp.com/x.jpg', freno_verde: true, persistido: false } });
+  assert.strictEqual(res.data.satisfecho, true, 'el evento visto cierra aunque el reporte diga false');
+});
+
+test('ESPEJO SELLADO: el reporte MIENTE (persistido:true) pero el evento NO se vio → NO cierra', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Miente', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Miente', objetivo: 'imagen', dominio: 'contenido',
+    rasgos: { afirma_sobre_el_mundo: true }, evento_cierre: 'contenido.imagen_add' });
+  r._ledger = [];   // el evento de cierre nunca se vio
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Miente',
+    estado: { valor: 'foto', url: 'https://i0.wp.com/x.jpg', freno_verde: true, persistido: true } });
+  assert.strictEqual(res.data.satisfecho, false, 'sin el evento en el bus, la mentira no cierra el círculo');
+  assert.ok(res.data.faltan.some(f => /persistido/i.test(f)), 'nombra el cierre que falta');
+});
+
+test('HONESTIDAD: sin evento_cierre declarado, persistido cae a lo reportado y lo NOMBRA', async () => {
+  const r = nuevo();
+  await r._crear({ project_id: PID, nombre: 'Cae', activar: true });
+  await r._fijarObjetivo({ project_id: PID, lista_id: 'Cae', objetivo: 'imagen', dominio: 'contenido', rasgos: { afirma_sobre_el_mundo: true } });
+  const res = await r._evaluar({ project_id: PID, lista_id: 'Cae', estado: { valor: 'foto', url: 'https://x/y.jpg', freno_verde: true, persistido: false } });
+  assert.strictEqual(res.data.satisfecho, false);
+  assert.ok(res.data.faltan.some(f => /fuente: reportado/i.test(f)), 'confiesa que el persistido es reportado, no observado');
 });
 
 (async () => {

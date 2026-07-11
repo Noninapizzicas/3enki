@@ -65,7 +65,8 @@
     "scope_modulos": [
       "recetas", "escandallo", "carta-design", "carta-digital", "carta-manager",
       "carta-marketing", "carta-scheduler", "tecnicas", "viabilidad",
-      "menu-generator", "productos", "categorias", "ingredientes", "tarifas"
+      "menu-generator", "productos", "categorias", "ingredientes", "tarifas",
+      "contenido"
     ],
     "modulos_blueprint": [
       "recetas", "escandallo", "carta-design", "carta-digital", "carta-manager",

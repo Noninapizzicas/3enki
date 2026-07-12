@@ -41,6 +41,7 @@ class AiAgentFrameworkModule extends BaseModule {
     this.library = new Map();    // BIBLIOTECA — TODA definición conocida (activa o no), buscable (cúpula de agentes)
     this.activados = new Set();  // overlay CRECIDO — agentes encendidos por el humano (sobre enabled:false semilla)
     this._activacionesFile = path.join(process.cwd(), 'data', 'ai-agent-framework', 'activaciones.json');
+    this._crecidoDir = path.join(process.cwd(), 'data', 'ai-agent-framework', 'agents');  // agentes CRECIDOS (creados en caliente, patrón semilla+crecido)
     this.basePromptText = null;
     this.pendingLlm = new Map();
     this._conversationCache = new Map();
@@ -68,6 +69,7 @@ class AiAgentFrameworkModule extends BaseModule {
       this._registerInvokeAgentTool();
       this._registerBuscarAgenteTool();     // cúpula de agentes: buscar en la biblioteca
       this._registerActivarAgenteTool();    // cúpula de agentes: encender/apagar de la biblioteca
+      this._registerCrearAgenteTool();      // cúpula de agentes (tramo 3): crear uno nuevo en caliente
     }
 
     this.logger.info('ai-agent-framework.loaded', {
@@ -157,14 +159,18 @@ class AiAgentFrameworkModule extends BaseModule {
   }
 
   _loadAgents() {
-    const agentsDir = path.join(__dirname, 'agents');
-    const promptsDir = path.join(__dirname, 'prompts');
-
-    // Idempotente: re-cargar (tras activar/desactivar) parte de cero, así un agente
+    // Idempotente: re-cargar (tras activar/desactivar/crear) parte de cero, así un agente
     // apagado por overlay SALE de this.agents (no solo entra el nuevo).
     this.agents.clear();
     this.library.clear();
+    // SEMILLA (repo) + CRECIDO (data/, creado en caliente) — patrón semilla+crecido, como cosecha.
+    // El crecido se carga después: un agente crecido con el mismo nombre pisa a su semilla.
+    this._cargarDir(path.join(__dirname, 'agents'), false);
+    this._cargarDir(this._crecidoDir, true);
+  }
 
+  _cargarDir(agentsDir, crecido) {
+    const promptsDir = path.join(__dirname, 'prompts');
     let files;
     try { files = fs.readdirSync(agentsDir); } catch { return; }
 
@@ -189,12 +195,18 @@ class AiAgentFrameworkModule extends BaseModule {
           scope: scopeArr,
           tools_count: Array.isArray(def.tools) ? def.tools.length : 0,
           tags: (def.metadata && def.metadata.tags) || [],
+          crecido: !!crecido,
           obsoleto: /obsolet|deprecat|apagad|eliminad|fantasma/i.test((def.description || '') + (def._disabled_reason || ''))
         });
 
         if (!activo) continue;
 
         let promptText = null;
+        // CRECIDO: el prompt (la política, p.ej. el loop prisma) viaja INLINE en def.prompt →
+        // el agente es autocontenido, sin fichero aparte. SEMILLA: prompt_file / prompts/<name>.
+        if (typeof def.prompt === 'string' && def.prompt.trim()) {
+          promptText = def.prompt;
+        } else {
         const promptFile = def.prompt_file
           ? path.join(__dirname, def.prompt_file)
           : null;
@@ -213,6 +225,7 @@ class AiAgentFrameworkModule extends BaseModule {
               break;
             }
           }
+        }
         }
 
         this.agents.set(def.name, {
@@ -376,6 +389,26 @@ class AiAgentFrameworkModule extends BaseModule {
     this.logger.info('ai-agent-framework.activar_agente.registered', { activados: this.activados.size });
   }
 
+  _registerCrearAgenteTool() {
+    this.moduleLoader.toolsRegistry.set('crear_agente', {
+      name: 'crear_agente',
+      description: 'CREA un agente nuevo en caliente (tramo 3 de la cúpula: buscar→activar→crear). ÚSALA cuando ninguna búsqueda (buscar_agente) encuentra el trabajador y hace falta uno nuevo — típicamente para EJECUTAR EN LOTE una senda repetitiva fuera del turno de chat. El `prompt` es la política del agente: apóyate en prisma (descompón el caso → el cuerpo es el loop "act(faltan[0]); re-evalúa hasta cerrado"). Nace INVOCABLE al instante vía invoke_agent. Cambia el sistema (nace un trabajador nuevo) — requiere confirmación.',
+      parameters: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          name: { type: 'string', minLength: 1, description: 'Slug único del agente [a-z0-9-]. No puede pisar un agente semilla existente.' },
+          description: { type: 'string', minLength: 1, description: 'Qué resuelve el agente (lo que buscar_agente indexará).' },
+          prompt: { type: 'string', minLength: 1, description: 'La POLÍTICA/instrucciones del agente. Apóyate en prisma: contrato → leer → pensar → validar → guardar → emitir, con el loop hasta cerrar el círculo.' },
+          scope: { type: 'array', items: { type: 'string' }, description: 'Dominios donde aplica (["*"] = global).' },
+          tools: { type: 'array', items: { type: 'string' }, description: 'Nombres de tools que el agente puede usar (p.ej. leer_web, descargar_web).' }
+        },
+        required: ['name', 'description', 'prompt']
+      },
+      module: 'ai-agent-framework', event_based: true, confirmation: true
+    });
+    this.logger.info('ai-agent-framework.crear_agente.registered', {});
+  }
+
   async onActivarAgente(event) {
     const d = event?.data || event || {};
     let result;
@@ -431,6 +464,65 @@ class AiAgentFrameworkModule extends BaseModule {
     this._registerInvokeAgentTool();
     this.logger.info('ai-agent-framework.agente.desactivado', { nombre: n, activos: this.agents.size });
     return { nombre: n, desactivado: true, activos: this.agents.size };
+  }
+
+  // CREA un agente CRECIDO en caliente (tramo 3 de la cúpula: buscar→activar→CREAR).
+  // Gemela de cosecha._crear (skills). Valida la definición, la escribe en el dir crecido
+  // (data/ai-agent-framework/agents/), y re-carga + re-registra invoke_agent EN CALIENTE →
+  // el agente nace INVOCABLE, sin reiniciar. El `prompt` es la POLÍTICA (p.ej. el loop
+  // prisma-dirigido); todo lo demás (invoke, loop, agent-flow) ya funciona sin tocar nada.
+  _crear(input = {}) {
+    const d = input.definicion || input.def || input;
+    const nombre = String((d && d.name) || '').trim();
+    if (!nombre) return this._errorResponse(400, 'INVALID_INPUT', 'name requerido');
+    if (!/^[a-z0-9][a-z0-9-]*$/i.test(nombre)) return this._errorResponse(400, 'INVALID_INPUT', 'name debe ser un slug [a-z0-9-]', { name: nombre });
+    if (!d.description) return this._errorResponse(422, 'UPSTREAM_INVALID_RESPONSE', 'description requerida', { field: 'description' });
+    if (!(typeof d.prompt === 'string' && d.prompt.trim())) return this._errorResponse(422, 'UPSTREAM_INVALID_RESPONSE', 'prompt (la política del agente) requerido', { field: 'prompt' });
+    // Semilla activa con ese nombre: no se pisa por crecido a ciegas (evita secuestrar un nativo).
+    const semilla = this.library.get(nombre);
+    if (semilla && !semilla.crecido) return this._errorResponse(409, 'CONFLICT_STATE', `ya existe un agente semilla '${nombre}': elige otro nombre`, { nombre });
+
+    const def = {
+      name: nombre,
+      description: String(d.description),
+      scope: Array.isArray(d.scope) ? d.scope : (d.scope ? [String(d.scope)] : ['*']),
+      tools: Array.isArray(d.tools) ? d.tools : [],
+      provider: d.provider || 'auto',
+      model: d.model || null,
+      temperature: typeof d.temperature === 'number' ? d.temperature : DEFAULT_AGENT_TEMPERATURE,
+      max_tokens: d.max_tokens || DEFAULT_AGENT_MAX_TOKENS,
+      prompt: String(d.prompt),
+      enabled: true,
+      metadata: {
+        domain: (d.metadata && d.metadata.domain) || (Array.isArray(d.scope) ? d.scope[0] : d.scope) || null,
+        tags: (d.metadata && d.metadata.tags) || [],
+        origen: 'crecido',
+        creado_at: new Date().toISOString()
+      }
+    };
+
+    fs.mkdirSync(this._crecidoDir, { recursive: true });
+    const file = path.join(this._crecidoDir, nombre + '.json');
+    const tmp = file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(def, null, 2));
+    fs.renameSync(tmp, file);
+
+    this._loadAgents();
+    this._registerInvokeAgentTool();
+    this.metrics?.increment?.('ai-agent-framework.creados.total');
+    this.logger.info('ai-agent-framework.agente.creado', { nombre, dominio: def.metadata.domain, activos: this.agents.size });
+    return { nombre, creado: true, invocable: this.agents.has(nombre), activos: this.agents.size };
+  }
+
+  async onCrearAgente(event) {
+    const d = event?.data || event || {};
+    let result;
+    try { result = this._crear(d); }
+    catch (err) {
+      this.metrics?.increment?.('ai-agent-framework.errors', { code: 'UNKNOWN_ERROR', kind: 'crear_agente' });
+      return this.eventBus.publish('crear_agente.response', { request_id: d.request_id, error: { code: 'UNKNOWN_ERROR', message: err.message } });
+    }
+    return this.eventBus.publish('crear_agente.response', { request_id: d.request_id, ...(result.status ? { error: result.error } : { result }) });
   }
 
   async onAgentExecuteRequest(event) {

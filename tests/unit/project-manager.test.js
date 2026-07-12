@@ -300,6 +300,28 @@ function isCanonicalError(result) {
     await cleanup(basePath);
   });
 
+  await testAsync('handleUIDelete borra base_path Y el dir fallback data/projects/<uuid>', async () => {
+    const fs = require('fs');
+    const mocks = makeMocks();
+    const { module: m, basePath } = await instantiate(mocks);
+    const created = await m.handleUICreate({ name: 'Con fantasma' });
+    const id = created.data.project.id;
+    const slugDir = m.projects.get(id).base_path;
+    // El dir fallback por UUID donde filesystem escribe cuando la activación no trae base_path:
+    const uuidDir = path.join(m.projectsBasePath, id);
+    fs.mkdirSync(path.join(uuidDir, 'storage'), { recursive: true });
+    fs.writeFileSync(path.join(uuidDir, 'storage', 'residuo.json'), '{}');
+    const result = await m.handleUIDelete({ id });
+    assert.strictEqual(result.status, 200);
+    assert.ok(!fs.existsSync(slugDir), 'el dir del base_path (slug) debe desaparecer');
+    assert.ok(!fs.existsSync(uuidDir), 'el dir fallback <uuid> debe desaparecer');
+    assert.ok(Array.isArray(result.data.directories.deleted), 'la respuesta reporta el disco');
+    assert.strictEqual(result.data.directories.failed.length, 0);
+    assert.ok(result.data.directories.deleted.includes(uuidDir), 'el dir uuid consta como borrado');
+    await m.onUnload();
+    await cleanup(basePath);
+  });
+
   await testAsync('handleUIDelete proyecto activo → 409 CONFLICT', async () => {
     const mocks = makeMocks();
     const { module: m, basePath } = await instantiate(mocks);

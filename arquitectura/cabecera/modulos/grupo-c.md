@@ -6,7 +6,7 @@ fuentes:
   - modules/perifericos/**
   - modules/plugin-manager/**
   - modules/project-manager/**
-verificado: 2026-07-06
+verificado: 2026-07-12
 ---
 
 # GRUPO C — PERIFERICOS, PLUGIN-MANAGER, PROJECT-MANAGER
@@ -511,7 +511,10 @@ INTERFAZ ProjectManagerContract {
   getProject(project_id: String): Promise<Project>
   listProjects(filters?: {type?, status?}): Promise<Array<Project>>
   updateProject(project_id: String, updates: Object): Promise<Project>
-  deleteProject(project_id: String): Promise<Void>
+  deleteProject(project_id: String): Promise<{id, directories:{deleted[], failed[]}}>
+    // borra BD + AMBOS candidatos de disco: base_path (slug, puede mentir tras un rename)
+    // y data/projects/<uuid> (fallback de filesystem). El disco fallido se REPORTA en la
+    // respuesta (warning + directories.failed), nunca se traga. Rechaza proyecto activo (409).
   activateProject(project_id: String): Promise<{active_project_id}>
   getActiveProject(): Promise<Project>
 }

@@ -199,12 +199,26 @@ export async function updateProject(
 }
 
 /**
- * Elimina un proyecto
+ * Desactiva un proyecto (necesario antes de borrar: el backend rechaza
+ * eliminar proyectos activos, y activateProject nunca desactiva los demás).
+ */
+export async function deactivateProject(id: string): Promise<void> {
+  await mqttRequest('project', 'deactivate', { id });
+}
+
+/**
+ * Elimina un proyecto. Desactiva primero: el backend responde CONFLICT_STATE
+ * ('Cannot delete active project') y la UI no ofrece desactivar por separado.
  */
 export async function deleteProject(id: string): Promise<void> {
   projectsStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
+    try {
+      await deactivateProject(id);
+    } catch {
+      // Ya inactivo (o deactivate no disponible): que lo decida el delete.
+    }
     await mqttRequest<DeleteResponse>('project', 'delete', { id });
 
     // Recargar lista para tener estado actualizado

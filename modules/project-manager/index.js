@@ -518,7 +518,7 @@ class ProjectManagerModule extends BaseModule {
     }
 
     await this._queryDb('DELETE FROM projects WHERE id = ?', [projectId], false, correlation_id);
-    if (project.base_path) await this._deleteProjectDirectories(project.base_path);
+    const directories = await this._deleteProjectDirectories(project);
     this.projects.delete(projectId);
 
     await this._publicarEvento(EVENTS.PROJECT.DELETED, {
@@ -526,7 +526,7 @@ class ProjectManagerModule extends BaseModule {
     }, { correlation_id });
     this.metrics?.increment('project-manager.deleted');
 
-    return { id: projectId };
+    return { id: projectId, directories };
   }
 
   async _activateProject(projectId, correlation_id) {
@@ -1070,8 +1070,14 @@ class ProjectManagerModule extends BaseModule {
         { kind: 'domain', field: 'id' });
       if (!this._getProject(id)) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Project not found',
         { entity_type: 'project', entity_id: id });
-      await this._deleteProject(id, crypto.randomUUID(), { force: !!force });
-      return { status: 200, data: { deleted: true, id } };
+      const res = await this._deleteProject(id, crypto.randomUUID(), { force: !!force });
+      const respuesta = { deleted: true, id, directories: res.directories };
+      // La BD ya está limpia (el proyecto NO existe), pero el disco pudo fallar:
+      // se dice en la respuesta en vez de fingir un borrado completo.
+      if (res.directories?.failed?.length) {
+        respuesta.warning = 'proyecto borrado de BD, pero quedaron directorios en disco (ver directories.failed)';
+      }
+      return { status: 200, data: respuesta };
     } catch (err) {
       return this._handleHandlerError('project-manager.ui.delete.failed', err, 'ui_delete');
     }
@@ -1449,13 +1455,30 @@ class ProjectManagerModule extends BaseModule {
     return basePath;
   }
 
-  async _deleteProjectDirectories(basePath) {
-    try {
-      await fs.promises.rm(basePath, { recursive: true, force: true });
-    } catch (err) {
-      this.logger.warn('project-manager.directories.delete.failed', { basePath, error: err.message });
-      this.metrics?.increment('project-manager.errors', { kind: 'directories_delete' });
+  async _deleteProjectDirectories(project) {
+    // Hay DOS verdades de "dónde vive el proyecto": base_path (BD, dir por slug —
+    // puede ser NULL o quedar desfasado tras un rename) y data/projects/<uuid>,
+    // el fallback donde filesystem escribe cuando la activación no trae base_path.
+    // Se atacan AMBOS candidatos y se reporta el resultado; un path inexistente
+    // no cuenta como borrado (rm force:true no distingue éxito de ausencia).
+    const candidates = [...new Set(
+      [project.base_path, path.join(this.projectsBasePath, project.id)].filter(Boolean)
+    )];
+    const deleted = [];
+    const failed = [];
+    for (const dir of candidates) {
+      const exists = await fs.promises.access(dir).then(() => true, () => false);
+      if (!exists) continue;
+      try {
+        await fs.promises.rm(dir, { recursive: true, force: true });
+        deleted.push(dir);
+      } catch (err) {
+        failed.push({ path: dir, error: err.message });
+        this.logger.warn('project-manager.directories.delete.failed', { basePath: dir, error: err.message });
+        this.metrics?.increment('project-manager.errors', { kind: 'directories_delete' });
+      }
     }
+    return { deleted, failed };
   }
 
   async _initializeProjectSchema(projectId, correlation_id) {

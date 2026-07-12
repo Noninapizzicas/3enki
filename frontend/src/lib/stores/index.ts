@@ -166,6 +166,7 @@ export {
   createProject as createProjectMqtt,
   updateProject as updateProjectMqtt,
   deleteProject as deleteProjectMqtt,
+  deactivateProject as deactivateProjectMqtt,
   activateProject as activateProjectMqtt,
   addFeatures as addFeaturesMqtt,
   listFeatures as listFeaturesMqtt,

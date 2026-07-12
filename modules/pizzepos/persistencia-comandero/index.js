@@ -296,6 +296,35 @@ class PersistenciaComanderoModule extends BaseModule {
     }
   }
 
+  async onProjectDeleted(event) {
+    // Olvidar el proyecto borrado. Las cachés (cuentas/ventas/eventos) alimentan
+    // _getActiveProjectIds(), y los jobs periódicos (backup, jornada) recrean
+    // data/projects/<uuid> para cada id que encuentren ahí: sin esta purga, las
+    // carpetas de un proyecto muerto renacen para siempre.
+    const eventData = this._unwrap(event);
+    const pid = eventData?.project_id;
+    if (!pid) return;
+
+    let cuentas = 0;
+    for (const [cuenta_id, cuenta] of this.cuentasActivasCache) {
+      if (cuenta.project_id === pid) { this.cuentasActivasCache.delete(cuenta_id); cuentas++; }
+    }
+    const ventasAntes  = this.ventasCache.length;
+    this.ventasCache   = this.ventasCache.filter(v => v.project_id !== pid);
+    const eventosAntes = this.eventosCache.length;
+    this.eventosCache  = this.eventosCache.filter(e => (e.payload?.project_id || e.project_id) !== pid);
+
+    const ventas  = ventasAntes - this.ventasCache.length;
+    const eventos = eventosAntes - this.eventosCache.length;
+    if (!cuentas && !ventas && !eventos) return;
+
+    // Persistir el olvido: si solo se purga la caché, el reinicio la recarga del disco.
+    await this._guardarCuentasActivas();
+    await this._guardarVentas();
+    await this._guardarEventos();
+    this.logger.info('persistencia.proyecto.olvidado', { project_id: pid, cuentas, ventas, eventos });
+  }
+
   async onPedidoCreado(event) {
     const eventData     = this._unwrap(event);
     const correlationId = event?.metadata?.correlationId || eventData?.correlation_id;

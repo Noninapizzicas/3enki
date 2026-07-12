@@ -6,7 +6,7 @@ fuentes:
   - modules/filesystem/**
   - modules/firmware-builder/**
   - modules/firmware-manager/**
-verificado: 2026-07-10
+verificado: 2026-07-12
 ---
 
 # GRUPO 7 — PSEUDOCÓDIGO OOP

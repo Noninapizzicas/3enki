@@ -33,6 +33,7 @@
       { "event": "cuenta.creada",            "handler": "onCuentaCreada",          "description": "Guardar evento + registrar cuenta activa en cache" },
       { "event": "cuenta.cerrada",           "handler": "onCuentaCerrada",         "description": "Guardar evento + crear venta (busca cobro asociado)" },
       { "event": "cuenta.eliminada",         "handler": "onCuentaEliminada",       "description": "Limpiar cuenta de cache (safety net post-cobro)" },
+      { "event": "project.deleted",          "handler": "onProjectDeleted",        "description": "Olvidar el proyecto borrado: purga sus cuentas/ventas/eventos de las caches y persiste el olvido — sin esto los jobs periodicos (backup/jornada) recrean data/projects/<uuid> del proyecto muerto para siempre." },
       { "event": "cuenta.estado_cambiado",   "handler": "onCuentaEstadoCambiado",  "description": "Actualizar estado de cuenta activa en cache + disco" },
       { "event": "cuenta.actualizada",       "handler": "onCuentaActualizada",     "description": "Actualizar campos de cuenta activa (pagado, servido, total, items, estado, nombre, ref_display)" },
       { "event": "cobro.iniciado",           "handler": "onEvento",                "description": "Guardar evento de cobro iniciado" },

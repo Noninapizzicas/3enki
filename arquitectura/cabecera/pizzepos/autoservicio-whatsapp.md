@@ -8,7 +8,7 @@ fuentes:
   - modules/pizzepos/carta-digital/**
   - modules/pizzepos/pedidos/**
   - modules/_shared/pedido-tasador.js
-verificado: 2026-07-06
+verificado: 2026-07-12
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)
@@ -290,7 +290,7 @@ PIEZAS {
   modules/whatsapp-bot ({{version:modules/whatsapp-bot}})                   (webhook Meta REAL + alta por UI + snapshot + #P1 + re-tasado + sendTemplate)
   modules/whatsapp-bot/services/meta-cloud-client.js (Meta Cloud API: sendText/sendTemplate/_postMessage/parseWebhookEvent)
   modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura)
-  modules/pizzepos/carta-digital (2.17.0)        (PWA emite #P1 + paridad mitad + nombre obligatorio)
+  modules/pizzepos/carta-digital ({{version:modules/pizzepos/carta-digital}})        (PWA emite #P1 + paridad mitad + nombre obligatorio)
   modules/pizzepos/pedidos (3.3.0)               (estructura tienda → cocina ; ancla = cliente_nombre)
   modules/credential-manager ({{version:modules/credential-manager}})             (META_WHATSAPP[_VERIFY_TOKEN] en catálogo + PROJECT_ONLY)
   frontend credentials (CredentialsPanel + stores) (4ª pestaña 💬 WhatsApp · fix agrupado de la lista)

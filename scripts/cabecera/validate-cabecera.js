@@ -45,6 +45,14 @@ function ultimoCommitTs(pathspecs) {
 
 function main() {
   const diffBase = arg('diff');
+  // FRENO graduado por dominio: los dominios en --freno (coma-separados) tratan su
+  // staleness como ERROR (rompe, exit 1), no como WARN testigo. El resto sigue testigo.
+  // Cierra la fuga del sello barato DONDE el drift ya pasó (p.ej. --freno pizzepos),
+  // sin romper los dominios que aún maduran. Sin flag → todo testigo (comportamiento previo).
+  const frenoArg = arg('freno');
+  const frenoDominios = new Set(
+    (typeof frenoArg === 'string' ? frenoArg : '').split(',').map((s) => s.trim()).filter(Boolean)
+  );
   const errores = [];
   const stale = [];
   const fuentesMuertas = [];
@@ -96,7 +104,7 @@ function main() {
       const tocaFuentes = cambiadosPR.filter((f) => regexes.some((re) => re.test(f)));
       const tocaRebanada = cambiadosPR.includes(rel);
       if (tocaFuentes.length && !tocaRebanada) {
-        stale.push({ archivo: r.archivo, fuentes_tocadas: tocaFuentes.slice(0, 5), total: tocaFuentes.length });
+        stale.push({ archivo: r.archivo, dominio: r.front.dominio, fuentes_tocadas: tocaFuentes.slice(0, 5), total: tocaFuentes.length });
       }
     } else {
       // modo repo: última mano a las fuentes vs última mano a la rebanada
@@ -105,6 +113,7 @@ function main() {
       if (tsFuentes && tsRebanada && tsFuentes > tsRebanada) {
         stale.push({
           archivo: r.archivo,
+          dominio: r.front.dominio,
           fuentes_desde: new Date(tsFuentes * 1000).toISOString().slice(0, 10),
           rebanada_desde: new Date(tsRebanada * 1000).toISOString().slice(0, 10)
         });
@@ -131,7 +140,22 @@ function main() {
     if (!cubierto) huerfanos.push({ modulo: dir });
   }
 
-  return reportar({ errores, stale, fuentesMuertas, huerfanos, rebanadas: rebanadas.length, modo: diffBase ? 'pr' : 'repo' });
+  // FRENO: el stale de un dominio frenado se promueve a ERROR (rompe). El resto queda testigo.
+  const staleFreno = frenoDominios.size ? stale.filter((s) => frenoDominios.has(s.dominio)) : [];
+  const staleTestigo = frenoDominios.size ? stale.filter((s) => !frenoDominios.has(s.dominio)) : stale;
+  for (const s of staleFreno) {
+    errores.push({
+      tipo: 'stale-freno', archivo: s.archivo,
+      detalle: s.fuentes_tocadas
+        ? `dominio '${s.dominio}' es FRENO: el PR toca ${s.total} fichero(s) de sus fuentes (${s.fuentes_tocadas.join(', ')}${s.total > 5 ? ', …' : ''}) sin actualizar la rebanada. Actualiza la prosa o sella verificado: (tras releer) en este PR.`
+        : `dominio '${s.dominio}' es FRENO: fuentes al ${s.fuentes_desde}, rebanada al ${s.rebanada_desde}.`
+    });
+  }
+
+  return reportar({
+    errores, stale: staleTestigo, staleFreno, fuentesMuertas, huerfanos,
+    frenoDominios: [...frenoDominios], rebanadas: rebanadas.length, modo: diffBase ? 'pr' : 'repo'
+  });
 }
 
 function reportar(r) {

@@ -7,7 +7,7 @@ fuentes:
   - .github/workflows/cabecera-check.yml
   - .github/workflows/cabecera-ensamblar.yml
   - .github/workflows/cabecera-pulso.yml
-verificado: 2026-07-06
+verificado: 2026-07-12
 ---
 
 # CÚPULA DE LA CABECERA — el documento rector servido por rebanadas (5ª sustancia del molde cúpula)
@@ -28,18 +28,19 @@ verificado: 2026-07-06
     "CLAUDE.md": "FINO: persona + mandato + catálogo de rebanadas (lo que cada sesión carga siempre)",
     "CLAUDE.full.md": "el monolito ENSAMBLADO con los computados resueltos (compatibilidad; no se edita)"
   },
-  "tres_pisos_de_frescura": {
+  "pisos_de_frescura": {
     "COMPUTADO": "marcadores {{ version:path }} {{ tests:glob }} {{ count:glob }} (sin espacios en el uso real) resueltos por doc-sync — el drift de números es imposible por construcción",
-    "VIGILADO":  "cada rebanada declara sus fuentes; validate-cabecera canta STALE cuando las fuentes cambian y la rebanada no (modo PR: diff del PR; modo repo: git log)",
+    "VIGILADO":  "cada rebanada declara sus fuentes; validate-cabecera canta STALE cuando las fuentes cambian y la rebanada no (modo PR: diff del PR; modo repo: git log). Ve TIMESTAMPS, no significado.",
+    "SEMÁNTICO": "el PRISMA (skill sincronizar-cabecera + sync-reflejo): lee CÓDIGO-vs-PROSA con 5 lentes (contrato·topics·comentarios·pendientes·números) y caza la deriva que el timestamp no ve — prosa viva describiendo código muerto (una rebanada sellada verificado: que ya no es cierta). El reflejo arma el expediente del diff; el prisma juzga.",
     "HONESTO":   "marcador irresoluble → ⚠COMPUTADO_ROTO visible (error, nunca silencio); rebanada stale se sirve marcada, no escondida"
   },
   "organos_en_github": {
     "MEMORIA": "las rebanadas (repo)",
-    "MOTOR":   "Actions cabecera-check (cada PR: valida + comenta el empujón) · cabecera-ensamblar (merge a main: regenera y commitea los artefactos)",
+    "MOTOR":   "Actions cabecera-check (cada PR: valida --freno pizzepos + corre sync-reflejo + comenta el empujón/expediente) · cabecera-ensamblar (merge a main: regenera y commitea los artefactos)",
     "QUIMICO": "cabecera-pulso (cron semanal: re-verifica y abre Issue si hay stale/huérfanos acumulados)",
     "EVENTO":  "checks + comentario de bot en el PR + Issues — el testigo visible"
   },
-  "gradualidad": "fase TESTIGO: stale/huérfanos son warning (no bloquean). Graduar a FRENO = tratar stale como error del check (branch protection). Mismo patrón OFF→ON del interruptor.",
+  "gradualidad": "graduado POR DOMINIO (--freno). pizzepos es FRENO: su stale es ERROR que rompe el check (el drift ya pasó ahí — cierra la fuga del sello barato). El resto sigue TESTIGO (warning, no bloquea). Graduar más dominios = añadirlos al --freno; hacerlo cumplir = marcar el check REQUIRED en branch protection. Mismo patrón OFF→ON del interruptor.",
   "un_solo_writer": "git escribe el doc; Enki (VPS) es READER (lo hereda por deploy, mismo commit = misma verdad). Si algún día el runtime quisiera escribir doc (destilador sellando una sección), vuelve por la puerta: un PR con el mismo freno."
 }
 ```
@@ -48,9 +49,11 @@ verificado: 2026-07-06
 
 ```
 PR toca modules/x/** (fuentes de una rebanada)
-  → cabecera-check corre validate-cabecera --diff origin/main
-  → SI la rebanada no se tocó: comentario de bot (el empujón) + warning en el check
-  → el autor actualiza la prosa (o sella verificado:) en el MISMO PR
+  → cabecera-check corre validate-cabecera --diff origin/main --freno pizzepos + sync-reflejo
+  → SI la rebanada no se tocó: comentario de bot (empujón + expediente semántico del PRISMA)
+     · dominio pizzepos → ERROR que ROMPE el check (freno) · resto → warning (testigo)
+  → el autor actualiza la prosa (o sella verificado: TRAS RELEER) en el MISMO PR;
+    para deriva semántica corre /sincronizar-cabecera (las 5 lentes ofrecen el parche)
 merge a main
   → cabecera-ensamblar corre doc-sync --ensamblar → CLAUDE.md + CLAUDE.full.md regenerados y commiteados
   → los {{marcadores}} se resuelven contra el código REAL de ese commit
@@ -72,8 +75,10 @@ MANDATO modulo_con_hogar   : todo modules/**/module.json cubierto por las fuente
 ```
 arquitectura/cabecera/**                 MEMORIA (rebanadas + _orden.json + _mandato.md + _persona.md)
 scripts/cabecera/doc-sync.js             MOTOR: marcadores + catálogo + ensamblado (lib + CLI --check/--ensamblar)
-scripts/cabecera/validate-cabecera.js    VIGILANTE: frontmatter/marcadores (error) · stale/huérfanos/fuentes-muertas (testigo) · --diff BASE · --json
+scripts/cabecera/validate-cabecera.js    VIGILANTE: frontmatter/marcadores (error) · stale/huérfanos/fuentes-muertas (testigo, o ERROR si --freno <dominio>) · --diff BASE · --json
+scripts/cabecera/sync-reflejo.js         REFLEJO del PRISMA: del diff arma el expediente (rebanadas·secciones·ficheros·pendientes·comentarios) para las lentes semánticas
 scripts/cabecera/rebanar.js              migración única monolito→rebanadas (reutilizable por la skill portable)
 .github/workflows/cabecera-*.yml         los tres órganos de GitHub (check · ensamblar · pulso)
 .claude/skills/montar-cupula-cabecera/   la skill que monta esta misma cúpula en cualquier repo
+.claude/skills/sincronizar-cabecera/     el PRISMA: 5 lentes que leen código-vs-prosa y ofrecen el parche (peldaño SEMÁNTICO sobre el VIGILANTE)
 ```

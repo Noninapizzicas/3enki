@@ -554,17 +554,45 @@ class AiAgentFrameworkModule extends BaseModule {
     const nombre = ('agente-' + (caso.dominio || 'caso') + '-' + caso.necesidad)
       .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
       .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 55) || 'agente-caso';
+    // REUTILIZAR PRISMA PARA ELEGIR LAS HERRAMIENTAS: si el caso no las declara, el resolver
+    // las deriva de la luz (naturaleza + ala de evidencia + dominio). Prisma nombra la 2ª
+    // pregunta ("¿qué herramienta llega a la evidencia?"); el resolver la responde.
+    const herramientas = (Array.isArray(caso.herramientas) && caso.herramientas.length)
+      ? caso.herramientas
+      : this._herramientasDeLuz(caso, luz);
     const def = {
       name: nombre,
       description: `Resuelve el caso: ${caso.necesidad}${caso.entidad ? ' de ' + caso.entidad : ''} — naturaleza ${luz.identidad.naturaleza}`,
       prompt: this._plantillaPrisma(caso, luz),
       scope: caso.dominio ? [String(caso.dominio)] : ['*'],
-      tools: Array.isArray(caso.herramientas) ? caso.herramientas : [],
+      tools: herramientas,
       metadata: { tags: ['prisma', luz.identidad.naturaleza.toLowerCase()], caso }
     };
     const r = this._crear(def);
     if (r && r.creado) r.naturaleza = luz.identidad.naturaleza;
     return r;
+  }
+
+  // EL RESOLVER — reutiliza prisma para ELEGIR las herramientas. Prisma (banco puro) nombra
+  // QUÉ hace falta (naturaleza · dónde vive la evidencia · dominio); esto, que conoce el
+  // registro, elige CUÁL. Se apoya en las dos alas de la evidencia externa (web/físico).
+  _herramientasDeLuz(caso, luz) {
+    const nat = luz.identidad.naturaleza;
+    const dom = caso.dominio ? String(caso.dominio) : null;
+    const donde = (caso.rasgos && caso.rasgos.evidencia_en) || 'web';   // web | fisico | interno
+    const t = new Set(['fs.read', 'fs.list']);                          // HIDRATAR — para saber qué falta, siempre
+    if (nat === 'AFIRMACION_EXTERNA') {
+      if (donde === 'fisico') t.add('leer_imagen');                     // ala ocr4rs (lo fotografiado)
+      else { t.add('leer_web'); t.add('descargar_web'); }               // ala crawl4rs (la web) — default
+    }
+    // PERSISTIR / operar el dominio: si el registro expone tools del dominio, se incluyen.
+    const reg = this.moduleLoader && this.moduleLoader.toolsRegistry;
+    if (reg && dom) {
+      for (const name of reg.keys()) {
+        if (name === dom || name.startsWith(dom + '.') || name.startsWith(dom + '_')) t.add(name);
+      }
+    }
+    return [...t];
   }
 
   // La luz de prisma → el prompt del agente. La política ES el círculo: mira qué falta,

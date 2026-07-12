@@ -124,6 +124,29 @@ test('MOLDE PRISMA: nombre derivado del caso; sin necesidad → INVALID_INPUT', 
   assert.strictEqual(m._crearDesdeCaso({ dominio: 'x' }).status, 400, 'sin necesidad no hay caso');
 });
 
+test('RESOLVER: sin herramientas declaradas, prisma las ELIGE de la luz (web → leer_web + hidratar)', () => {
+  const m = fw();
+  const r = m._crearDesdeCaso({ necesidad: 'imagen', dominio: 'contenido', rasgos: { afirma_sobre_el_mundo: true } });
+  const tools = m.agents.get(r.nombre).tools;
+  assert.ok(tools.includes('fs.read') && tools.includes('fs.list'), 'HIDRATAR siempre (fs.read/list)');
+  assert.ok(tools.includes('leer_web') && tools.includes('descargar_web'), 'ala WEB (crawl4rs) por defecto');
+  assert.ok(!tools.includes('leer_imagen'), 'no la del ala física');
+});
+
+test('RESOLVER: evidencia física → elige el ala ocr4rs (leer_imagen), no la web', () => {
+  const m = fw();
+  const r = m._crearDesdeCaso({ necesidad: 'texto de la factura', dominio: 'facturas', rasgos: { afirma_sobre_el_mundo: true, evidencia_en: 'fisico' } });
+  const tools = m.agents.get(r.nombre).tools;
+  assert.ok(tools.includes('leer_imagen'), 'ala FÍSICA (ocr4rs)');
+  assert.ok(!tools.includes('leer_web'), 'no la del ala web');
+});
+
+test('RESOLVER: caso.herramientas explícitas GANAN sobre el resolver', () => {
+  const m = fw();
+  const r = m._crearDesdeCaso({ necesidad: 'x', dominio: 'y', rasgos: { afirma_sobre_el_mundo: true }, herramientas: ['solo_esta'] });
+  assert.deepStrictEqual(m.agents.get(r.nombre).tools, ['solo_esta'], 'lo declarado manda');
+});
+
 (async () => {
   let ok = 0; const fails = [];
   for (const { n, f } of tests) { try { await f(); ok++; } catch (e) { fails.push({ n, e }); } }

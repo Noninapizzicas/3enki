@@ -2109,6 +2109,15 @@ LUEGO  la PUERTA-DIOS MQTT (scope system: module.reload, db cross-project, inter
 > Filosofía: la puerta cerrada protege un estado nombrable —*el sistema no se opera sin llave
 > (interruptor), sin testigo (audit) ni freno (scope/mode)*— por eso es un Mandato, no miedo.
 
+## La skill que entra por esta puerta (desde cloud)
+
+```
+.claude/skills/conexion-mcp — helper enki-portal.js: health · tools [filtro] · call <tool> [--project] [--confirmado]
+  transporte wss://<host>/mqtt (443; el 1883 no sale de cloud) → ui/request/portal/*
+  LEE los dos interruptores (portal-mcp · escritura) y OBEDECE: 503/403 → nombra el botón apagado al humano
+  hermana: conexion-mqtt = puerta directa SIN guard (dominios ui/request) — esta = la puerta AUDITADA para tools
+```
+
 ## Topics / eventos
 
 ```
@@ -11246,7 +11255,10 @@ INTERFAZ ProjectManagerContract {
   getProject(project_id: String): Promise<Project>
   listProjects(filters?: {type?, status?}): Promise<Array<Project>>
   updateProject(project_id: String, updates: Object): Promise<Project>
-  deleteProject(project_id: String): Promise<Void>
+  deleteProject(project_id: String): Promise<{id, directories:{deleted[], failed[]}}>
+    // borra BD + AMBOS candidatos de disco: base_path (slug, puede mentir tras un rename)
+    // y data/projects/<uuid> (fallback de filesystem). El disco fallido se REPORTA en la
+    // respuesta (warning + directories.failed), nunca se traga. Rechaza proyecto activo (409).
   activateProject(project_id: String): Promise<{active_project_id}>
   getActiveProject(): Promise<Project>
 }

@@ -15732,7 +15732,7 @@ TRIAJE 29 nativos  4 perspectiva-c (invoice-structurer/validator, marketing-copy
   },
   "pisos_de_frescura": {
     "COMPUTADO": "marcadores {{ version:path }} {{ tests:glob }} {{ count:glob }} (sin espacios en el uso real) resueltos por doc-sync — el drift de números es imposible por construcción",
-    "VIGILADO":  "cada rebanada declara sus fuentes; validate-cabecera canta STALE cuando las fuentes cambian y la rebanada no (modo PR: diff del PR; modo repo: git log). Ve TIMESTAMPS, no significado.",
+    "VIGILADO":  "cada rebanada declara sus fuentes; validate-cabecera canta STALE cuando las fuentes cambian y la SECCIÓN que las cubre no (modo PR SECCIÓN-GRANULAR: cruza los hunks del diff con los rangos de sección y mapea fuente→sección por nombre de módulo, así tocar una sección no calla a las otras; modo repo: git log a nivel de fichero). Ve TIMESTAMPS/estructura, no significado.",
     "SEMÁNTICO": "el PRISMA (skill sincronizar-cabecera + sync-reflejo): lee CÓDIGO-vs-PROSA con 5 lentes (contrato·topics·comentarios·pendientes·números) y caza la deriva que el timestamp no ve — prosa viva describiendo código muerto (una rebanada sellada verificado: que ya no es cierta). El reflejo arma el expediente del diff; el prisma juzga.",
     "HONESTO":   "marcador irresoluble → ⚠COMPUTADO_ROTO visible (error, nunca silencio); rebanada stale se sirve marcada, no escondida"
   },
@@ -15777,7 +15777,7 @@ MANDATO modulo_con_hogar   : todo modules/**/module.json cubierto por las fuente
 ```
 arquitectura/cabecera/**                 MEMORIA (rebanadas + _orden.json + _mandato.md + _persona.md)
 scripts/cabecera/doc-sync.js             MOTOR: marcadores + catálogo + ensamblado (lib + CLI --check/--ensamblar)
-scripts/cabecera/validate-cabecera.js    VIGILANTE: frontmatter/marcadores (error) · stale/huérfanos/fuentes-muertas (testigo, o ERROR si --freno <dominio>) · --diff BASE · --json
+scripts/cabecera/validate-cabecera.js    VIGILANTE: frontmatter/marcadores (error) · stale SECCIÓN-GRANULAR/huérfanos/fuentes-muertas (testigo, o ERROR si --freno <dominio>) · --diff BASE · --json
 scripts/cabecera/sync-reflejo.js         REFLEJO del PRISMA: del diff arma el expediente (rebanadas·secciones·ficheros·pendientes·comentarios) para las lentes semánticas
 scripts/cabecera/rebanar.js              migración única monolito→rebanadas (reutilizable por la skill portable)
 .github/workflows/cabecera-*.yml         los tres órganos de GitHub (check · ensamblar · pulso)

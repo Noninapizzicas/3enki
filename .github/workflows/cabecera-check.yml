@@ -30,6 +30,12 @@ jobs:
           node scripts/cabecera/validate-cabecera.js --diff "origin/${{ github.base_ref }}" --json | tee /tmp/cabecera.json
           node scripts/cabecera/validate-cabecera.js --diff "origin/${{ github.base_ref }}"
 
+      - name: Reflejo semántico (arma el expediente para el PRISMA)
+        id: reflejo
+        run: |
+          node scripts/cabecera/sync-reflejo.js --diff "origin/${{ github.base_ref }}" --json | tee /tmp/reflejo.json
+          node scripts/cabecera/sync-reflejo.js --diff "origin/${{ github.base_ref }}"
+
       - name: Empujón en el PR (stale / errores)
         if: always()
         uses: actions/github-script@v7
@@ -38,8 +44,10 @@ jobs:
             const fs = require('fs');
             let r = { errores: [], stale: [], huerfanos: [], fuentesMuertas: [] };
             try { r = JSON.parse(fs.readFileSync('/tmp/cabecera.json', 'utf8')); } catch {}
+            let ref = { expedientes: [] };
+            try { ref = JSON.parse(fs.readFileSync('/tmp/reflejo.json', 'utf8')); } catch {}
             const marca = '<!-- cabecera-check -->';
-            const hayAlgo = r.errores.length || r.stale.length;
+            const hayAlgo = r.errores.length || r.stale.length || ref.expedientes.length;
 
             const lineas = [marca, '## 📜 cabecera-check'];
             if (r.errores.length) {
@@ -49,6 +57,15 @@ jobs:
             if (r.stale.length) {
               lineas.push('', '**⚠ Rebanadas que quedaron atrás de este PR** — actualiza la prosa o sella `verificado:` en el mismo PR:');
               for (const s of r.stale) lineas.push(`- \`arquitectura/cabecera/${s.archivo}\` (toca ${s.total} fichero(s) de sus fuentes: ${(s.fuentes_tocadas || []).join(', ')}${s.total > 5 ? ', …' : ''})`);
+            }
+            if (ref.expedientes.length) {
+              lineas.push('', '**🔬 Deriva SEMÁNTICA posible** — el timestamp puede cuadrar pero la prosa quizá ya no describe el código. Pasa el expediente por el PRISMA: `/sincronizar-cabecera` (lentes: contrato · topics · comentarios · pendientes · números).');
+              for (const e of ref.expedientes) {
+                const extras = [];
+                if (e.blueprints && e.blueprints.length) extras.push(`${e.blueprints.reduce((n, b) => n + b.pendientes.length, 0)} trabajo_pendiente a revisar`);
+                if (e.comentarios_sospechosos && e.comentarios_sospechosos.length) extras.push(`${e.comentarios_sospechosos.length} comentario(s) a revisar`);
+                lineas.push(`- \`${e.rebanada}\`${e.rebanada_tocada ? '' : ' (aún sin tocar en el PR)'} · toca ${e.ficheros_tocados.length} fichero(s)${extras.length ? ' · ' + extras.join(' · ') : ''}`);
+              }
             }
             if (!hayAlgo) lineas.push('', '✓ La cabecera va al paso de este PR.');
 

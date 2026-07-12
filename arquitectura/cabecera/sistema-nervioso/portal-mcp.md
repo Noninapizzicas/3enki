@@ -5,7 +5,8 @@ resumen: La puerta guardada hacia agentes externos: bridge MCP stdio → bus, gu
 fuentes:
   - modules/portal/**
   - mcp/**
-verificado: 2026-07-06
+  - .claude/skills/conexion-mcp/**
+verificado: 2026-07-12
 ---
 
 # Portal — Enki como servidor MCP (puerta guardada hacia agentes externos)
@@ -63,6 +64,15 @@ LUEGO  la PUERTA-DIOS MQTT (scope system: module.reload, db cross-project, inter
 
 > Filosofía: la puerta cerrada protege un estado nombrable —*el sistema no se opera sin llave
 > (interruptor), sin testigo (audit) ni freno (scope/mode)*— por eso es un Mandato, no miedo.
+
+## La skill que entra por esta puerta (desde cloud)
+
+```
+.claude/skills/conexion-mcp — helper enki-portal.js: health · tools [filtro] · call <tool> [--project] [--confirmado]
+  transporte wss://<host>/mqtt (443; el 1883 no sale de cloud) → ui/request/portal/*
+  LEE los dos interruptores (portal-mcp · escritura) y OBEDECE: 503/403 → nombra el botón apagado al humano
+  hermana: conexion-mqtt = puerta directa SIN guard (dominios ui/request) — esta = la puerta AUDITADA para tools
+```
 
 ## Topics / eventos
 

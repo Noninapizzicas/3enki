@@ -37,8 +37,14 @@ const mqtt = require('mqtt');
 const crypto = require('crypto');
 const readline = require('readline');
 
-const SISTEMA_ID = '3b7795d7-2e63-4b8e-a5e3-f153c865f306';
-const SYSTEM_DIRS_WHITELIST = new Set(['_prompts', 'system']);
+// Fallback histórico (Sistema de enki-ai.online). Cada instancia tiene SU uuid de
+// Sistema — se resuelve dinámicamente por systemRole='root' via ui project/list.
+const SISTEMA_ID_FALLBACK = '3b7795d7-2e63-4b8e-a5e3-f153c865f306';
+// 'sistema' y 'default': dirs que nacen del fallback de filesystem cuando algo
+// referencia un proyecto por slug/alias en vez de UUID. Pueden contener datos
+// DESVIADOS pero reales (lección 2026-07-12: se borró data/projects/sistema sin
+// inspeccionar). INTOCABLES para el barrido — si estorban, inspección manual primero.
+const SYSTEM_DIRS_WHITELIST = new Set(['_prompts', 'system', 'sistema', 'default']);
 
 function parseArgs(argv) {
   const f = {
@@ -156,12 +162,17 @@ async function main() {
     });
     console.error('[cleanup] mqtt connected');
 
-    // 1. Activar Sistema para que filesystem entre en systemMode
-    const actResp = await uiRequest(client, 'project', 'activate', { id: SISTEMA_ID }, flags.timeout);
+    // 1. Resolver el Sistema DE ESTA instancia (cada broker tiene su uuid) y
+    //    activarlo para que filesystem entre en systemMode.
+    const uiList = await uiRequest(client, 'project', 'list', {}, flags.timeout);
+    const sistema = (uiList.data?.projects || []).find(p => p.systemRole === 'root')
+                 || (uiList.data?.projects || []).find(p => p.name === 'Sistema');
+    const sistemaId = sistema?.id || SISTEMA_ID_FALLBACK;
+    const actResp = await uiRequest(client, 'project', 'activate', { id: sistemaId }, flags.timeout);
     if (actResp.status !== 200) {
       throw new Error(`activate Sistema failed: ${actResp.status} ${actResp.error?.code}`);
     }
-    console.error('[cleanup] Sistema activado (systemMode on)');
+    console.error(`[cleanup] Sistema activado (systemMode on) id=${sistemaId.slice(0, 8)}`);
 
     // 2. Listar proyectos vivos via BUS rail (no UI rail) — el bus response
     //    incluye base_path explicito, el UI rail solo da slug que puede divergir

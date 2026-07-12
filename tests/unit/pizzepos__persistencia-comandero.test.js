@@ -532,6 +532,30 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  await testAsync('onProjectDeleted purga las caches del proyecto muerto y respeta el vivo', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.cuentasActivasCache.set('c-muerta', { id: 'c-muerta', project_id: 'pid-muerto' });
+    m.cuentasActivasCache.set('c-viva',   { id: 'c-viva',   project_id: 'pid-vivo' });
+    m.ventasCache.push({ venta_id: 'v1', project_id: 'pid-muerto' }, { venta_id: 'v2', project_id: 'pid-vivo' });
+    m.eventosCache.push({ payload: { project_id: 'pid-muerto' } }, { payload: { project_id: 'pid-vivo' } });
+
+    await m.onProjectDeleted({ data: { project_id: 'pid-muerto' } });
+    await m._writeQueue;
+
+    assert.ok(!m.cuentasActivasCache.has('c-muerta'), 'cuenta del muerto purgada');
+    assert.ok(m.cuentasActivasCache.has('c-viva'), 'cuenta del vivo intacta');
+    assert.strictEqual(m.ventasCache.length, 1);
+    assert.strictEqual(m.ventasCache[0].project_id, 'pid-vivo');
+    assert.strictEqual(m.eventosCache.length, 1);
+    assert.strictEqual(m.eventosCache[0].payload.project_id, 'pid-vivo');
+    // Sin ids del muerto, _getActiveProjectIds ya no lo resucita:
+    assert.ok(!m._getActiveProjectIds().has('pid-muerto'));
+    const log = mocks.logs.find(l => l[1] === 'persistencia.proyecto.olvidado');
+    assert.ok(log, 'olvido registrado');
+    await m.onUnload();
+  });
+
   cleanupTmp();
   console.log('\nTodos los tests pasaron.');
   process.exit(0);

@@ -15,7 +15,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-07-06
+verificado: 2026-07-12
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -787,6 +787,9 @@ CLASE PersistenciaComanderoModule HEREDA BaseModule {
     cuentasActivasCache: Map<cuenta_id, CuentaSnapshot>
     eventosCache: Array<Event> (todos los del dia)
     ventasCache: Array<Venta> (pagos completados)
+    // project.deleted -> onProjectDeleted PURGA las 3 caches del proyecto muerto y
+    // persiste el olvido: estas caches alimentan _getActiveProjectIds(), y los jobs
+    // periodicos (backup/jornada) recreaban data/projects/<uuid> de proyectos borrados.
   }
 
   METODOS {

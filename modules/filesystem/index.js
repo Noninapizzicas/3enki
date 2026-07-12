@@ -1258,8 +1258,11 @@ class FilesystemModule extends BaseModule {
       }
 
       const safePath = this.validatePath(filePath, { sourceModule: data?._source_module, project_id: data?.project_id });
+      // lstat, NO stat: un symlink se borra como ENLACE (unlink), sin seguirlo.
+      // Con stat, un symlink roto daba 404 imborrable, y un symlink a directorio
+      // se borraba RECURSIVO a través del enlace — arrasando el destino.
       let stats;
-      try { stats = await fs.stat(safePath); }
+      try { stats = await fs.lstat(safePath); }
       catch (e) {
         if (e.code === 'ENOENT') {
           return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Path not found',

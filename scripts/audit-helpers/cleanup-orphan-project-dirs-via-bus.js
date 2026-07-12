@@ -40,7 +40,11 @@ const readline = require('readline');
 // Fallback histórico (Sistema de enki-ai.online). Cada instancia tiene SU uuid de
 // Sistema — se resuelve dinámicamente por systemRole='root' via ui project/list.
 const SISTEMA_ID_FALLBACK = '3b7795d7-2e63-4b8e-a5e3-f153c865f306';
-const SYSTEM_DIRS_WHITELIST = new Set(['_prompts', 'system']);
+// 'sistema' y 'default': dirs que nacen del fallback de filesystem cuando algo
+// referencia un proyecto por slug/alias en vez de UUID. Pueden contener datos
+// DESVIADOS pero reales (lección 2026-07-12: se borró data/projects/sistema sin
+// inspeccionar). INTOCABLES para el barrido — si estorban, inspección manual primero.
+const SYSTEM_DIRS_WHITELIST = new Set(['_prompts', 'system', 'sistema', 'default']);
 
 function parseArgs(argv) {
   const f = {

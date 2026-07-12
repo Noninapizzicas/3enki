@@ -74,6 +74,19 @@ function lineasCambiadas(rel, diffBase) {
   return set;
 }
 
+// Línea del `verificado:` del frontmatter (1-based) — su cambio = sello de RE-LECTURA
+// de la rebanada ENTERA (la vía sancionada por el mandato: "actualiza la prosa O sella
+// verificado:"). Bumpearla despeja el stale de TODAS las secciones. 0 si no aparece.
+function verificadoLinea(rel) {
+  let lines;
+  try { lines = fs.readFileSync(path.join(ROOT, rel), 'utf8').split('\n'); } catch { return 0; }
+  for (let i = 0; i < lines.length; i++) {
+    if (/^verificado:/.test(lines[i])) return i + 1;
+    if (i > 0 && lines[i] === '---') break;   // fin del frontmatter
+  }
+  return 0;
+}
+
 // Claves candidatas de un fichero fuente = segmentos de directorio bajo modules/
 // (p.ej. modules/pizzepos/carta-digital/index.js → ['pizzepos','carta-digital']).
 // La sección que lo cubre es la que casa la clave MÁS específica (la más larga).
@@ -155,6 +168,10 @@ function main() {
         // de fichero (el toque cuenta), degradación honesta sin falsos positivos.
         const secciones = seccionesFichero(rel);
         const cambiadas = lineasCambiadas(rel, diffBase);
+        // Sello de re-lectura: si el PR bumpeó `verificado:`, la rebanada ENTERA queda
+        // acreditada → ninguna sección es stale (la vía sancionada por el mandato).
+        const vl = verificadoLinea(rel);
+        if (vl && cambiadas.has(vl)) continue;
         const seccionCambio = (sec) => { for (let l = sec.desde; l <= sec.hasta; l++) if (cambiadas.has(l)) return true; return false; };
         const stalePorSeccion = new Map();   // titulo → fuentes huérfanas
         for (const f of tocaFuentes) {

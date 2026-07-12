@@ -43,6 +43,61 @@ function ultimoCommitTs(pathspecs) {
   return out ? Number(out) : null;
 }
 
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '');
+
+// Secciones de una rebanada en coordenadas de FICHERO (para cruzar con los hunks del diff):
+// cada ## / ### abre una sección que llega hasta la línea previa al siguiente encabezado.
+function seccionesFichero(rel) {
+  let lines;
+  try { lines = fs.readFileSync(path.join(ROOT, rel), 'utf8').split('\n'); } catch { return []; }
+  const heads = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(#{2,3})\s+(.+)$/);
+    if (m) heads.push({ titulo: m[2].trim(), linea: i + 1 });
+  }
+  return heads.map((h, idx) => ({
+    titulo: h.titulo, norm: norm(h.titulo),
+    desde: h.linea, hasta: (idx + 1 < heads.length ? heads[idx + 1].linea - 1 : lines.length)
+  }));
+}
+
+// Líneas del fichero (coords NUEVAS) que el PR modificó — de los hunks @@ del diff.
+function lineasCambiadas(rel, diffBase) {
+  const out = git(['diff', '--unified=0', `${diffBase}...HEAD`, '--', rel]);
+  const set = new Set();
+  const re = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm;
+  let m;
+  while ((m = re.exec(out))) {
+    const start = Number(m[1]); const count = (m[2] === undefined) ? 1 : Number(m[2]);
+    for (let i = 0; i < count; i++) set.add(start + i);
+  }
+  return set;
+}
+
+// Línea del `verificado:` del frontmatter (1-based) — su cambio = sello de RE-LECTURA
+// de la rebanada ENTERA (la vía sancionada por el mandato: "actualiza la prosa O sella
+// verificado:"). Bumpearla despeja el stale de TODAS las secciones. 0 si no aparece.
+function verificadoLinea(rel) {
+  let lines;
+  try { lines = fs.readFileSync(path.join(ROOT, rel), 'utf8').split('\n'); } catch { return 0; }
+  for (let i = 0; i < lines.length; i++) {
+    if (/^verificado:/.test(lines[i])) return i + 1;
+    if (i > 0 && lines[i] === '---') break;   // fin del frontmatter
+  }
+  return 0;
+}
+
+// Claves candidatas de un fichero fuente = segmentos de directorio bajo modules/
+// (p.ej. modules/pizzepos/carta-digital/index.js → ['pizzepos','carta-digital']).
+// La sección que lo cubre es la que casa la clave MÁS específica (la más larga).
+function clavesDeFuente(f) {
+  const m = f.match(/^modules\/(.+)$/);
+  if (!m) return [];
+  const segs = m[1].split('/');
+  segs.pop();                              // quita el nombre de fichero
+  return segs.map(norm).filter(Boolean).sort((a, b) => b.length - a.length);
+}
+
 function main() {
   const diffBase = arg('diff');
   // FRENO graduado por dominio: los dominios en --freno (coma-separados) tratan su
@@ -99,12 +154,40 @@ function main() {
 
     // staleness
     if (cambiadosPR) {
-      // modo PR: el PR toca fuentes de la rebanada sin tocar la rebanada
+      // modo PR: el PR toca fuentes de la rebanada sin tocar la SECCIÓN que las cubre.
       const regexes = fuentes.map(ds.globARegex);
       const tocaFuentes = cambiadosPR.filter((f) => regexes.some((re) => re.test(f)));
       const tocaRebanada = cambiadosPR.includes(rel);
       if (tocaFuentes.length && !tocaRebanada) {
+        // la rebanada no se tocó EN ABSOLUTO → stale de fichero (como antes)
         stale.push({ archivo: r.archivo, dominio: r.front.dominio, fuentes_tocadas: tocaFuentes.slice(0, 5), total: tocaFuentes.length });
+      } else if (tocaFuentes.length && tocaRebanada) {
+        // la rebanada SÍ se tocó — sección-granular: cada fuente tocada mapea (por nombre de
+        // módulo) a su sección; si esa sección NO cambió, sigue stale (cierra la fuga 1: tocar
+        // una sección ya no calla a las otras). Fuente sin sección que case → cubierta a nivel
+        // de fichero (el toque cuenta), degradación honesta sin falsos positivos.
+        const secciones = seccionesFichero(rel);
+        const cambiadas = lineasCambiadas(rel, diffBase);
+        // Sello de re-lectura: si el PR bumpeó `verificado:`, la rebanada ENTERA queda
+        // acreditada → ninguna sección es stale (la vía sancionada por el mandato).
+        const vl = verificadoLinea(rel);
+        if (vl && cambiadas.has(vl)) continue;
+        const seccionCambio = (sec) => { for (let l = sec.desde; l <= sec.hasta; l++) if (cambiadas.has(l)) return true; return false; };
+        const stalePorSeccion = new Map();   // titulo → fuentes huérfanas
+        for (const f of tocaFuentes) {
+          let sec = null;
+          for (const clave of clavesDeFuente(f)) {
+            const cand = secciones.find((s) => s.norm.includes(clave));
+            if (cand) { sec = cand; break; }   // clave más específica primero
+          }
+          if (sec && !seccionCambio(sec)) {
+            if (!stalePorSeccion.has(sec.titulo)) stalePorSeccion.set(sec.titulo, []);
+            stalePorSeccion.get(sec.titulo).push(f);
+          }
+        }
+        for (const [titulo, fs2] of stalePorSeccion) {
+          stale.push({ archivo: r.archivo, dominio: r.front.dominio, seccion: titulo, fuentes_tocadas: fs2.slice(0, 5), total: fs2.length });
+        }
       }
     } else {
       // modo repo: última mano a las fuentes vs última mano a la rebanada
@@ -144,10 +227,11 @@ function main() {
   const staleFreno = frenoDominios.size ? stale.filter((s) => frenoDominios.has(s.dominio)) : [];
   const staleTestigo = frenoDominios.size ? stale.filter((s) => !frenoDominios.has(s.dominio)) : stale;
   for (const s of staleFreno) {
+    const donde = s.seccion ? ` §«${s.seccion}»` : '';
     errores.push({
       tipo: 'stale-freno', archivo: s.archivo,
       detalle: s.fuentes_tocadas
-        ? `dominio '${s.dominio}' es FRENO: el PR toca ${s.total} fichero(s) de sus fuentes (${s.fuentes_tocadas.join(', ')}${s.total > 5 ? ', …' : ''}) sin actualizar la rebanada. Actualiza la prosa o sella verificado: (tras releer) en este PR.`
+        ? `dominio '${s.dominio}' es FRENO: el PR toca ${s.total} fichero(s) de sus fuentes (${s.fuentes_tocadas.join(', ')}${s.total > 5 ? ', …' : ''}) sin actualizar la sección que los cubre${donde}. Actualiza esa sección o sella verificado: (tras releer) en este PR.`
         : `dominio '${s.dominio}' es FRENO: fuentes al ${s.fuentes_desde}, rebanada al ${s.rebanada_desde}.`
     });
   }
@@ -165,8 +249,9 @@ function reportar(r) {
     console.log(`cabecera: ${r.rebanadas || 0} rebanadas · modo ${r.modo || '-'}`);
     for (const e of r.errores) console.error(`✗ ERROR [${e.tipo}] ${e.archivo || ''}: ${e.detalle}`);
     for (const s of r.stale) {
+      const donde = s.seccion ? ` §«${s.seccion}»` : '';
       console.warn(s.fuentes_tocadas
-        ? `⚠ STALE ${s.archivo}: el cambio toca ${s.total} fichero(s) de sus fuentes (${s.fuentes_tocadas.join(', ')}${s.total > 5 ? ', …' : ''}) y la rebanada no se tocó`
+        ? `⚠ STALE ${s.archivo}${donde}: el cambio toca ${s.total} fichero(s) de sus fuentes (${s.fuentes_tocadas.join(', ')}${s.total > 5 ? ', …' : ''}) y ${s.seccion ? 'esa sección' : 'la rebanada'} no se tocó`
         : `⚠ STALE ${s.archivo}: fuentes al ${s.fuentes_desde}, rebanada al ${s.rebanada_desde}`);
     }
     for (const f of r.fuentesMuertas) console.warn(`⚠ FUENTE MUERTA ${f.archivo}: ${f.fuente} no casa ningún fichero`);

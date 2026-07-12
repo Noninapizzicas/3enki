@@ -2898,6 +2898,9 @@ CLASE PersistenciaComanderoModule HEREDA BaseModule {
     cuentasActivasCache: Map<cuenta_id, CuentaSnapshot>
     eventosCache: Array<Event> (todos los del dia)
     ventasCache: Array<Venta> (pagos completados)
+    // project.deleted -> onProjectDeleted PURGA las 3 caches del proyecto muerto y
+    // persiste el olvido: estas caches alimentan _getActiveProjectIds(), y los jobs
+    // periodicos (backup/jornada) recreaban data/projects/<uuid> de proyectos borrados.
   }
 
   METODOS {

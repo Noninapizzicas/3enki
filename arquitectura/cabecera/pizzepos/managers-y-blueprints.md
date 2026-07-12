@@ -1088,82 +1088,51 @@ CLASE CartaDigitalModule EXTIENDE BaseModule {  // PROYECTOR, no manager-con-sto
 }
 ```
 
-### MENU-GENERATOR MANAGER
+### MENU-GENERATOR (generador de catálogo · híbrido)
 
 ```
 INTERFAZ MenuGeneratorContract {
-  generateMenu(proyecto_id: String, tema?: String): Promise<Menu>
-  customizeMenu(menu_id: String, personalizaciones: Object): Promise<Menu>
-  previewMenu(menu_id: String): Promise<{html, pdf}>
-  exportMenu(menu_id: String, formato: String): Promise<Buffer>
+  onImportRequest(e): menu.import.response         // REFLEJO: import por referencia
+  // (mitad fuzzy: op `generar` del blueprint — estructura texto libre/dictado)
 }
 
-CLASE MenuGenerator IMPLEMENTA MenuGeneratorContract {
-  ATRIBUTOS {
-    coreId: String
-    eventBus: EventBus
-    logger: Logger
-    menusStore: Map<menu_id, Menu>
-    aiGateway: AIGateway (optional)
-    cartaDigitalManager: CartaDigitalManager
-  }
+> menu-generator (v11.2.0) NO renderiza menús ni exporta PDF/DOCX/PNG: es un
+> GENERADOR DE CATÁLOGO. De cualquier input textual (texto/dictado en lenguaje libre,
+> o JSON ya estructurado) produce una carta en shape canónico carta-pizzepos y la
+> ENTREGA al custodio (carta-manager). Sin OCR, sin agente, sin enriquecimiento — da
+> forma a lo que el material trae y lo entrega limpio. HÍBRIDO: el REFLEJO (index.js)
+> estructura el catálogo YA formado (determinista); el BLUEPRINT (LLM de página)
+> estructura el texto libre dictado. Persistencia delegada en carta-manager.
 
-  CONSTRUCTOR(options: Object)
+CLASE MenuGeneratorReflejo EXTIENDE ModuloHibridoReflejo {   // reflejo-1.1.0
+  version: 'reflejo-1.1.0'
 
-  METODOS {
-    async generateMenu(proyecto_id: String, tema?: String): Promise<Menu>
-      GENERA menu_id (UUID)
-      OBTIENE carta digital PARA proyecto_id
-      APLICA tema (classico, moderno, minimalista)
-      CREA Menu {menu_id, proyecto_id, tema, contenido: {}, created_at}
-      GUARDA EN menusStore
-      EMITE menu.generated {menu_id, proyecto_id, tema}
-      RETORNA menu
+  // IMPORT POR REFERENCIA: el LLM solo dice "importa el adjunto" (cero tokens de
+  // producto). Resuelve el fallo del blueprint-only: emitir 38+ productos en una
+  // respuesta o mandaba vacío (carta-manager borraba) o alucinaba "✅ completas".
+  async _import(input):
+    VALIDA project_id + nombre + fuente (attachments[].path / material_path)
+    // 1. LEER por su puerta: fs.read del adjunto (path real del storage del proyecto)
+    fuente ← _cargarFuente(project_id, rutas)           // JSON directo o extraído de texto libre
+    SI !fuente: RETORNA 404 RESOURCE_NOT_FOUND
+    // 2. IDENTIDAD: reusa la carta general (en_servicio/única) o id determinista
+    carta_id ← _resolverCartaId(project_id, nombre)
+    // 3. PROYECTAR a shape canónico (réplica de la ley de carta-manager, NO inventa):
+    //    ingredientes_base+precio_extra → variaciones/mitad · tipo/grupo → familia canónica ·
+    //    deriva Opciones (QUITAR propios + ELEGIR_VARIOS la paleta de su categoría)
+    carta ← _proyectar(fuente, nombre, carta_id)
+    SI carta.productos == 0: RETORNA 422 UPSTREAM_INVALID_RESPONSE
+    // 4. GUARDAR una vez, atómico, VERIFICADO por el response correlado
+    RETORNA await _rpc('carta.save.request', { project_id, carta, ... })
 
-    async customizeMenu(menu_id: String, personalizaciones: Object): Promise<Menu>
-      OBTIENE menu
-      APLICA personalizaciones (colores, fuentes, orden, filtros)
-      PERSISTE
-      EMITE menu.customized {menu_id}
-      RETORNA menu
-
-    async previewMenu(menu_id: String): Promise<{html, pdf}>
-      OBTIENE menu
-      RENDERIZA HTML
-      GENERA PDF
-      RETORNA {html, pdf}
-
-    async exportMenu(menu_id: String, formato: String): Promise<Buffer>
-      VALIDA formato EN ['pdf', 'html', 'word', 'img']
-      OBTIENE menu
-      SWITCH formato:
-        'pdf': RETORNA generatePDF()
-        'html': RETORNA generateHTML()
-        'word': RETORNA generateDOCX()
-        'img': RETORNA generatePNG()
-
-    async onLoad(moduleContext: Object): Promise<Void>
-      CARGA cartaDigitalManager FROM moduleRegistry
-      REGISTRA UI handlers
-      LOG "menu-generator.onLoad"
-  }
-
-  EVENTO {
-    menu.generated: {menu_id, proyecto_id, tema}
-    menu.customized: {menu_id}
-  }
+  onImportRequest(e): _atender(e, 'import', 'menu.import.response', _import)
 }
 
-CLASE Menu {
-  ATRIBUTOS {
-    menu_id: String
-    proyecto_id: String
-    tema: String
-    contenido: Object
-    personalizaciones: Object
-    created_at: Number
-    updated_at: Number
-  }
+EVENTO {                                             // topics REALES
+  menu.import.request / .response                    // el reflejo
+  carta.generar.iniciada / .fallida                  // el blueprint (op generar)
+  menu.generation.progress / .failed
+  RPC → carta.save.request (custodio) · fs.read.request (leer adjunto)
 }
 ```
 

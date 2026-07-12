@@ -1,8 +1,11 @@
 # CÚPULA DE LA CABECERA — el MOTOR en cada PR (órgano check).
 # Valida marcadores/frontmatter (error duro) y canta STALE cuando el PR toca
 # fuentes de una rebanada sin tocar la rebanada (empujón como comentario).
-# Fase TESTIGO: stale no bloquea. Graduar a freno = hacer required este check
-# y tratar stale como error en validate-cabecera.js.
+# FRENO GRADUADO (--freno pizzepos): stale en dominio pizzepos = ERROR que ROMPE
+# el job (el drift ya pasó ahí; cierra la fuga del sello barato). El resto de
+# dominios sigue TESTIGO (WARN, no bloquea). Para hacerlo cumplir de verdad,
+# marca este check como REQUIRED en la protección de rama. Graduar más dominios
+# = añadirlos al --freno. Además corre el reflejo semántico (nudge al PRISMA).
 name: cabecera-check
 
 on:
@@ -24,17 +27,21 @@ jobs:
         with:
           node-version: 20
 
-      - name: Validar cúpula (modo PR)
+      - name: Validar cúpula (modo PR · FRENO pizzepos)
         id: validar
         run: |
-          node scripts/cabecera/validate-cabecera.js --diff "origin/${{ github.base_ref }}" --json | tee /tmp/cabecera.json
-          node scripts/cabecera/validate-cabecera.js --diff "origin/${{ github.base_ref }}"
+          # Captura el JSON sin morir (|| true) para que el comentario siempre tenga datos.
+          node scripts/cabecera/validate-cabecera.js --diff "origin/${{ github.base_ref }}" --freno pizzepos --json > /tmp/cabecera.json || true
+          # La corrida que MANDA: stale en dominio pizzepos = ERROR (exit 1) → rompe el job.
+          # El resto de dominios sigue testigo (WARN, no rompe). Graduar más dominios = añadirlos aquí.
+          node scripts/cabecera/validate-cabecera.js --diff "origin/${{ github.base_ref }}" --freno pizzepos
 
       - name: Reflejo semántico (arma el expediente para el PRISMA)
         id: reflejo
+        if: always()
         run: |
-          node scripts/cabecera/sync-reflejo.js --diff "origin/${{ github.base_ref }}" --json | tee /tmp/reflejo.json
-          node scripts/cabecera/sync-reflejo.js --diff "origin/${{ github.base_ref }}"
+          node scripts/cabecera/sync-reflejo.js --diff "origin/${{ github.base_ref }}" --json > /tmp/reflejo.json || true
+          node scripts/cabecera/sync-reflejo.js --diff "origin/${{ github.base_ref }}" || true
 
       - name: Empujón en el PR (stale / errores)
         if: always()

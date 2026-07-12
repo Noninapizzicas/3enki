@@ -145,7 +145,7 @@ class CartaDigitalModule extends BaseModule {
     const d = event?.data || event;
     if (!d?.project_id) return;
     // Rastrea el activo + su slug (el evento trae name, igual que lo recibe filesystem).
-    // slug = slugify(name), como project-manager para el symlink /opt/enki/public/shop/<slug>.
+    // slug = slugify(name), como project-manager para el symlink /opt/enki/public/<ns>/<slug>.
     const name = d.name || '';
     this.activos.set(d.project_id, { name, slug: name ? slugify(name) : String(d.project_id).slice(0, 8) });
     this.ultimoActivo = d.project_id;
@@ -288,9 +288,9 @@ class CartaDigitalModule extends BaseModule {
 
 
   // ── PUBLICAR: deploy real desde el chat. Genera el bundle estático y lo escribe en
-  // storage/tienda/bundle/ (que project-manager symlinka a /opt/enki/public/shop/<slug>/
-  // al activar la feature `tienda`). Caddy lo sirve estático — sin reload, sin tocar Caddyfile.
-  // NO es servido al vuelo por el gateway: /shop/* es handle_path estático en Caddy.
+  // storage/www (que project-manager symlinka a /opt/enki/public/<ns>/<slug> al activar
+  // la feature `www`). Caddy lo sirve estático — sin reload, sin tocar Caddyfile.
+  // NO es servido al vuelo por el gateway: /<ns>/<slug>/* es estático en Caddy.
   async _publicarBundle(project_id, slugHint) {
     if (!project_id) return this._err(400, 'INVALID_INPUT', 'project_id requerido');
 

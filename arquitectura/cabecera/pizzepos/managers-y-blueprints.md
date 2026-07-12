@@ -5,7 +5,7 @@ resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, 
 fuentes:
   - modules/pizzepos/**
   - blueprints/**
-verificado: 2026-07-09
+verificado: 2026-07-12
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -1015,79 +1015,75 @@ CLASE EstudioViabilidad {
 }
 ```
 
-### CARTA-DIGITAL MANAGER
+### CARTA-DIGITAL (PROYECTOR del canal digital)
+
+> v2.x REESCRIBIÓ carta-digital de "manager con snapshots" a **PROYECTOR**: gemelo de
+> `productos` pero para la carta pública. NO compone ni guarda `CartaDigital`: proyecta
+> la carta pública AL VUELO bebiendo de las fuentes reales → nunca se queda viejo. Lo
+> ÚNICO que posee: el config del CANAL (dominio + opciones PWA) y el diseño (look de Enki).
+> Híbrido: index.js es el REFLEJO (JS); carta-digital.blueprint.json es la mitad LLM (cajones).
 
 ```
-INTERFAZ CartaDigitalContract {
-  generateCarta(proyecto_id: String): Promise<CartaDigital>
-  getCarta(carta_id: String): Promise<CartaDigital>
-  updateCarta(carta_id: String, updates: Object): Promise<CartaDigital>
-  generatePDF(carta_id: String): Promise<Buffer>
-  generateHTML(carta_id: String): Promise<String>
+INTERFAZ CartaDigitalContract {                 // ui_handlers (RPC del bus / frontend)
+  handleGetCartaPublica(project_id): Proyeccion // proyecta al vuelo (no persiste)
+  handleGetConfig(project_id): Config           // dominio + opciones_visualizacion
+  handleUpdateConfig(project_id, campos): Config // SOLO canal (branding/productos NO)
+  handleGetDiseno(project_id): Diseno           // card_template + tema_css de Enki
+  handlePreview(project_id): { html }           // PWA suelta (WhatsApp) para iframe, no escribe
+  handlePublicar(project_id, slug?): DeployInfo // deploy REAL: escribe el bundle estático
 }
 
-CLASE CartaDigitalManager IMPLEMENTA CartaDigitalContract {
+CLASE CartaDigitalModule EXTIENDE BaseModule {  // PROYECTOR, no manager-con-store
   ATRIBUTOS {
-    coreId: String
-    eventBus: EventBus
-    logger: Logger
-    cartasStore: Map<carta_id, CartaDigital>
-    productosManager: ProductosManager
-    categoriasManager: CategoriasManager
+    version: String                             // DERIVADA de module.json (fuente única)
+    mappingCanalesPerProject: Map<project_id, {canal→carta_id}>  // ÚNICO estado (de tarifas)
+    activos: Map<project_id, {name, slug}>      // proyectos vistos por project.activated
+    ultimoActivo: project_id                    // DONDE escribe el fs (guard cross-project)
   }
 
-  CONSTRUCTOR(options: Object)
+  // BEBE de (RPC del bus — nunca toca fs de otros): NO posee nada de esto
+  //   tarifas         → qué carta le toca al canal 'digital' (mapping, cacheado)
+  //   carta-manager   → esa carta (carta.get)              [categorías/productos/precios]
+  //   carta-marketing → el branding (get_perfil)           [nombre/lema/colores/logo/voz]
+  //   contenido       → imágenes/descripción por producto  (contenido.get)
+  //   productos       → catálogo de ingredientes 'extra'   (handleListIngredientes, canal digital)
 
   METODOS {
-    async generateCarta(proyecto_id: String): Promise<CartaDigital>
-      GENERA carta_id (UUID)
-      OBTIENE categorias + productos
-      ORGANIZA POR categoria
-      CREA CartaDigital {carta_id, proyecto_id, contenido: {categorias: []}, fecha: now()}
-      GUARDA EN cartasStore
-      EMITE carta.generated {carta_id, proyecto_id}
-      RETORNA carta
+    // PROYECCIÓN pura (proyeccion.js): entra dato, sale dato. La misma FORMA para los
+    // dos consumidores — el reflejo (bus) y el export-cli (disco).
+    _proyectarPublica(project_id):
+      [carta, marca, contenido, config] ← Promise.all(bebe_de…)
+      SI !carta: RETORNA 404 (canal sin carta — revisa tarifas)
+      RETORNA proyectarCartaPublica(carta, marca, contenido, config)
+        // → { branding, categorias, productos, alergenos_leyenda (1169/2011), opciones }
 
-    async getCarta(carta_id: String): Promise<CartaDigital>
-      BUSCA EN cartasStore
-      RETORNA carta
+    // DISEÑO con FRENO (skill blueprint-agentico): _checkDiseno exige el CONTRATO de slots
+    //   {{id}} {{nombre}} {{precio}} {{alergenos}} {{add_label}} + hooks data-accion detalle/add.
+    //   Doble cara: cartadigital.validar.request (loop del cajón, máx 3) Y guardar (gate 422
+    //   inquebrantable). Sin precio = carta rota; sin alérgenos = ILEGAL (Reg. UE 1169/2011).
 
-    async updateCarta(carta_id: String, updates: Object): Promise<CartaDigital>
-      VALIDA carta existe
-      MERGES updates
-      PERSISTE
-      EMITE carta.updated {carta_id}
-      RETORNA carta
+    // PUBLICAR = deploy estático REAL (_publicarBundle):
+    //   1. GUARD cross-project (412): el fs escribe en ultimoActivo; si el objetivo no es
+    //      ese, falla claro (no escribir la carta de un proyecto en otro).
+    //   2. proyecta + aplica diseño + generateStaticHTML + copia imágenes a img/
+    //   3. 2º FRENO (render real): render.verificar.request (Chromium) — best-effort, 422
+    //      solo si pudo MIRAR (verificado && !ok). Promueve overflow_movil a BLOQUEO (PWA de móvil).
+    //   4. auto-activa la feature `www` (project.ensure-feature) → symlink /<ns>/<slug>
+    //   5. escribe el bundle (index.html+sw+manifest+icons+img/) en storage/www
+    //      Caddy lo sirve estático en /<ns>/<slug>/ por el symlink. Estático: cada cambio → republicar.
 
-    async generatePDF(carta_id: String): Promise<Buffer>
-      OBTIENE carta
-      RENDERIZA HTML
-      CONVIERTE A PDF USANDO pdfkit
-      RETORNA Buffer
-
-    async generateHTML(carta_id: String): Promise<String>
-      OBTIENE carta
-      RENDERIZA template HTML CON categorias + productos
-      RETORNA string
-
-    async onLoad(moduleContext: Object): Promise<Void>
-      CARGA productosManager, categoriasManager FROM moduleRegistry
-      REGISTRA UI handlers
-      LOG "carta-digital.onLoad"
+    onLoad(core):
+      SUSCRIBE tarifas.config.actualizada · carta.{actualizada,editada,borrada}
+              · contenido.actualizado · marketing.perfil.actualizado
+              · project.{activated,deactivated}
+              · cartadigital.{validar,guardar_diseno,publicar}.request
   }
 
-  EVENTO {
-    carta.generated: {carta_id, proyecto_id}
-    carta.updated: {carta_id}
-  }
-}
-
-CLASE CartaDigital {
-  ATRIBUTOS {
-    carta_id: String
-    proyecto_id: String
-    contenido: {categorias: Array<{nombre, productos: Array<Producto>}>}
-    fecha: Number
+  EVENTO {                                       // topics REALES (dominio cartadigital)
+    cartadigital.carta_publica.actualizada: {project_id}   // refresco para la PWA/frontend
+    cartadigital.diseno.actualizada: {project_id}
+    cartadigital.config.actualizada: {project_id}
+    cartadigital.publicado: {project_id, slug, productos, imagenes}
   }
 }
 ```
@@ -1344,7 +1340,7 @@ recetas ← ingredientes
 escandallo ← recetas
 
 persistencia-comandero: persiste todas las stores
-carta-digital ← productos, categorias
+carta-digital ← tarifas, carta-manager, carta-marketing, contenido, productos (ingredientes), render-verificador
 menu-generator ← carta-digital
 comandero ← cuentas, pedidos
 ```

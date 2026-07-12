@@ -182,7 +182,7 @@
     },
     "publicar": {
       "_es_fuzzy": false,
-      "_doc": "DEPLOY REAL (delega al reflejo). DOS CAMINOS (no excluir): (1) ALOJADA — el reflejo genera el bundle estático (proyección + diseño) y lo ESCRIBE en storage/tienda/bundle/; Caddy lo sirve en /shop/<slug> por el symlink que crea project-manager al activar la feature `tienda`. ES ESTÁTICO, no al vuelo: cada cambio (descripción/imagen/diseño) requiere VOLVER A publicar. (2) SIN ALOJAMIENTO — export estático con carta-digital/export-cli.js para subir a cualquier hosting; pedido y asistente por WhatsApp. NO finjas el deploy: reporta lo que devuelve el reflejo (incluido el aviso sobre la feature `tienda`).",
+      "_doc": "DEPLOY REAL (delega al reflejo). DOS CAMINOS (no excluir): (1) ALOJADA — el reflejo genera el bundle estático (proyección + diseño) y lo ESCRIBE en storage/www; Caddy lo sirve en /<ns>/<slug>/ por el symlink que crea project-manager al activar la feature `www` (el reflejo la AUTO-ACTIVA vía project.ensure-feature antes de escribir, v2.23). ES ESTÁTICO, no al vuelo: cada cambio (descripción/imagen/diseño) requiere VOLVER A publicar. (2) SIN ALOJAMIENTO — export estático con carta-digital/export-cli.js para subir a cualquier hosting; pedido y asistente por WhatsApp. NO finjas el deploy: reporta lo que devuelve el reflejo (incluido el aviso sobre la feature `www`).",
       "input": "{ project_id (req), slug? }",
       "pseudocodigo": [
         "async publicar(in):",
@@ -197,15 +197,15 @@
       ],
       "reglas_clave": [
         "El DEPLOY lo hace el REFLEJO (escribe el bundle estático). El LLM NO escribe fs; solo delega y reporta.",
-        "NO digas 'al vuelo': es ESTÁTICO. Transmite el aviso del reflejo (cada cambio requiere republicar; si /shop/<slug> da 404, hay que activar la feature `tienda`).",
+        "NO digas 'al vuelo': es ESTÁTICO. Transmite el aviso del reflejo (cada cambio requiere republicar; si /<ns>/<slug> da 404, hay que activar la feature `www`).",
         "Si el usuario quiere la PWA SUELTA (sin backend), indícale el export-cli (carta-digital/export-cli.js) — ahí pedido y asistente van por WhatsApp."
       ],
       "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE", "UPSTREAM_UNREACHABLE"]
     }
   },
   "trabajo_pendiente": [
-    { "id": "deploy_frontend", "estado": "resuelto", "descripcion": "v2.2.0: publicar() es deploy real (reflejo cartadigital.publicar) → escribe el bundle en storage/tienda/bundle/, Caddy lo sirve estático en /shop/<slug> por el symlink de project-manager. Hallazgo Caddyfile 2026-06-16: /shop/* NO pasa por el gateway (handle_path estático), por eso la ruta on-demand era código muerto." },
-    { "id": "feature_tienda_auto", "estado": "abierto", "descripcion": "publicar() escribe el bundle aunque la feature `tienda` no esté activa (no hay symlink → 404). Mejora: que publicar detecte/active la feature `tienda` (project.add-features) para crear el symlink automáticamente." },
+    { "id": "deploy_frontend", "estado": "resuelto", "descripcion": "v2.2.0: publicar() es deploy real (reflejo cartadigital.publicar) → escribe el bundle; Caddy lo sirve estático por el symlink de project-manager. v2.23.0 movió el destino de storage/tienda/bundle + /shop/<slug> (feature `tienda`, legacy) al árbol libre storage/www + /<ns>/<slug> (feature `www`). Hallazgo Caddyfile 2026-06-16: la ruta estática NO pasa por el gateway, por eso la ruta on-demand era código muerto." },
+    { "id": "feature_www_auto", "estado": "resuelto", "descripcion": "v2.23.0: _publicarBundle AUTO-ACTIVA la feature `www` (project.ensure-feature.request, best-effort e idempotente) ANTES de escribir → crea el symlink /opt/enki/public/<ns>/<slug> sin paso manual, cerrando la grieta del 404-hasta-activar. Supera el antiguo feature_tienda_auto (la feature `tienda` quedó legacy con el giro a www)." },
     { "id": "sound_designer", "estado": "espera_motor", "descripcion": "Cajón generar_audio cuando media-generator tenga motor de audio (TTS/music). La estructura de contenido ya reserva audio[]." }
   ]
 }

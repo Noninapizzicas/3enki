@@ -22,6 +22,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const BaseModule = require('../../_shared/base-module');
+const { descomponer } = require('../../_shared/prisma-del-caso');
 const DEFAULT_CONVERSATION_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_AGENT_TIMEOUT_MS = 120000;
 const DEFAULT_AGENT_TEMPERATURE = 0.7;
@@ -406,6 +407,22 @@ class AiAgentFrameworkModule extends BaseModule {
       },
       module: 'ai-agent-framework', event_based: true, confirmation: true
     });
+    this.moduleLoader.toolsRegistry.set('crear_agente_desde_caso', {
+      name: 'crear_agente_desde_caso',
+      description: 'CREA un agente ENCENDIENDO UNA LÁMPARA sobre un caso — la forma prisma-dirigida (preferida) de montar un trabajador. No escribes su política: describes el CASO (qué dato falta, sobre qué, con qué herramientas) y prisma lo descompone → el prompt del agente NACE del molde (contrato + senda + el loop "ataca lo que falta hasta cerrar el círculo"). ÚSALA para sendas repetitivas en lote (p.ej. vincular imágenes de una tienda). Nace INVOCABLE. Requiere confirmación.',
+      parameters: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          necesidad: { type: 'string', minLength: 1, description: 'Qué dato/resultado falta (p.ej. "imagen del producto").' },
+          entidad: { type: 'string', description: 'Sobre qué (p.ej. "productos del catálogo").' },
+          dominio: { type: 'string', description: 'El módulo/dominio dueño (p.ej. "contenido").' },
+          rasgos: { type: 'object', description: 'Propiedades del dato: { afirma_sobre_el_mundo?: bool, derivable_de_internos?: bool }. Deciden la naturaleza (y si exige evidencia).' },
+          herramientas: { type: 'array', items: { type: 'string' }, description: 'Herramientas candidatas (p.ej. leer_web, descargar_web, contenido.add_imagen).' }
+        },
+        required: ['necesidad']
+      },
+      module: 'ai-agent-framework', event_based: true, confirmation: true
+    });
     this.logger.info('ai-agent-framework.crear_agente.registered', {});
   }
 
@@ -523,6 +540,73 @@ class AiAgentFrameworkModule extends BaseModule {
       return this.eventBus.publish('crear_agente.response', { request_id: d.request_id, error: { code: 'UNKNOWN_ERROR', message: err.message } });
     }
     return this.eventBus.publish('crear_agente.response', { request_id: d.request_id, ...(result.status ? { error: result.error } : { result }) });
+  }
+
+  // EL MOLDE PRISMA — crear un agente = ENCENDER UNA LÁMPARA SOBRE UN CASO.
+  // No se escribe política a mano: prisma.descomponer ilumina el caso (naturaleza · contrato ·
+  // preguntas · no_objetivos) y esa luz SE VUELVE el prompt del agente, cuyo cuerpo es el loop
+  // "act(faltan[0]) hasta circuloCerrado.cerrado". Instanciar el molde = crear el agente.
+  //   caso = { necesidad, entidad?, dominio?, rasgos?, herramientas? }   (igual que prisma)
+  _crearDesdeCaso(input = {}) {
+    const caso = input.caso || input;
+    if (!caso || !caso.necesidad) return this._errorResponse(400, 'INVALID_INPUT', 'caso.necesidad requerida', { field: 'necesidad' });
+    const luz = descomponer(caso);
+    const nombre = ('agente-' + (caso.dominio || 'caso') + '-' + caso.necesidad)
+      .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 55) || 'agente-caso';
+    const def = {
+      name: nombre,
+      description: `Resuelve el caso: ${caso.necesidad}${caso.entidad ? ' de ' + caso.entidad : ''} — naturaleza ${luz.identidad.naturaleza}`,
+      prompt: this._plantillaPrisma(caso, luz),
+      scope: caso.dominio ? [String(caso.dominio)] : ['*'],
+      tools: Array.isArray(caso.herramientas) ? caso.herramientas : [],
+      metadata: { tags: ['prisma', luz.identidad.naturaleza.toLowerCase()], caso }
+    };
+    const r = this._crear(def);
+    if (r && r.creado) r.naturaleza = luz.identidad.naturaleza;
+    return r;
+  }
+
+  // La luz de prisma → el prompt del agente. La política ES el círculo: mira qué falta,
+  // atácalo, re-evalúa; cierra cuando no falta nada. Positivo, sin narrar.
+  _plantillaPrisma(caso, luz) {
+    const preguntas = (luz.preguntas_abiertas || []).map((p, i) => `  ${i + 1}. ${p}`).join('\n');
+    const noObj = (luz.no_objetivos || []).map(x => `  - ${x}`).join('\n');
+    const tools = (Array.isArray(caso.herramientas) && caso.herramientas.length) ? caso.herramientas.join(', ') : '(las de tu scope)';
+    return [
+      `Eres un agente que RESUELVE un caso de naturaleza ${luz.identidad.naturaleza}. No describes: cierras.`,
+      ``,
+      `CASO: ${caso.necesidad}${caso.entidad ? ' sobre "' + caso.entidad + '"' : ''}${caso.dominio ? ' (dominio ' + caso.dominio + ')' : ''}.`,
+      ``,
+      `LA LUZ (prisma te ilumina el camino):`,
+      `- Ley/restricción: ${luz.restricciones.ley}`,
+      `- Contrato a llenar: ${JSON.stringify(luz.contrato)}`,
+      `- Tu senda (resuelve en orden):`,
+      preguntas,
+      `- Nunca hagas esto:`,
+      noObj,
+      ``,
+      `TU LOOP (camina la luz, no la narres):`,
+      `  repite:`,
+      `    1. mira qué FALTA para cerrar el círculo (valor · evidencia con dirección de vuelta · freno verde · evento de cierre emitido).`,
+      `    2. ataca lo PRIMERO que falta con tus herramientas: ${tools}.`,
+      `    3. re-evalúa.`,
+      `  hasta que no falte nada. Entonces EMITE el evento de cierre y para.`,
+      ``,
+      `Regla de oro: no afirmes "hecho" sin haber emitido el evento de cierre. Una afirmación externa sin`,
+      `dirección de vuelta (una url/ref re-comprobable) NO cuenta — re-resuélvela por una fuente real.`
+    ].join('\n');
+  }
+
+  async onCrearAgenteDesdeCaso(event) {
+    const d = event?.data || event || {};
+    let result;
+    try { result = this._crearDesdeCaso(d); }
+    catch (err) {
+      this.metrics?.increment?.('ai-agent-framework.errors', { code: 'UNKNOWN_ERROR', kind: 'crear_agente_desde_caso' });
+      return this.eventBus.publish('crear_agente_desde_caso.response', { request_id: d.request_id, error: { code: 'UNKNOWN_ERROR', message: err.message } });
+    }
+    return this.eventBus.publish('crear_agente_desde_caso.response', { request_id: d.request_id, ...(result.status ? { error: result.error } : { result }) });
   }
 
   async onAgentExecuteRequest(event) {

@@ -414,7 +414,7 @@ class AiGatewayModule extends BaseModule {
     //   esto el LLM no halla la tool y se rinde a un scraper ad-hoc (visto en vivo). Nombres
     //   sin punto → no aportan prefijo → aquí es su única puerta. Degradan honesto si el
     //   interruptor (crawl4rs/ocr4rs) está OFF, así que exponerlas siempre es seguro.
-    const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente', 'crear_agente',
+    const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente', 'crear_agente', 'crear_agente_desde_caso',
       'fs.read', 'fs.write', 'fs.list', 'fs.search',
       'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
       'fijar_objetivo', 'evaluar_rail',

@@ -62,6 +62,11 @@
         "description": "CÚPULA DE AGENTES (tramo 3) — tool del chat, confirmation:true. CREA un agente crecido en caliente: valida la definición {name, description, prompt, scope?, tools?}, la escribe en data/ai-agent-framework/agents/ (patrón semilla+crecido) y re-carga + re-registra invoke_agent → nace INVOCABLE sin reiniciar. El prompt es la política (apóyate en prisma). Responde crear_agente.response {request_id, result|error}. Gemela de cosecha.crear (skills)."
       },
       {
+        "event": "crear_agente_desde_caso",
+        "handler": "onCrearAgenteDesdeCaso",
+        "description": "CÚPULA DE AGENTES (tramo 3, molde prisma) — crear un agente ENCENDIENDO UNA LÁMPARA sobre un caso. Recibe {necesidad, entidad?, dominio?, rasgos?, herramientas?}, corre prisma.descomponer y GENERA el prompt (contrato + senda + loop act(faltan[0]) hasta cerrado) → llama _crear. Montar un agente sin escribir política a mano. Responde crear_agente_desde_caso.response {request_id, result|error}."
+      },
+      {
         "event": "agent.execute.request",
         "handler": "onAgentExecuteRequest",
         "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",

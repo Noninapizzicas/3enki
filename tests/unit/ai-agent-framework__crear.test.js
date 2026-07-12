@@ -100,6 +100,30 @@ test('onCrearAgente responde correlado por request_id', async () => {
   assert.strictEqual(resp.data.result.creado, true);
 });
 
+test('MOLDE PRISMA: crear_agente_desde_caso enciende la lámpara → agente con el loop como política', () => {
+  const m = fw();
+  const r = m._crearDesdeCaso({
+    necesidad: 'imagen del producto', entidad: 'productos del catálogo', dominio: 'contenido',
+    rasgos: { afirma_sobre_el_mundo: true }, herramientas: ['leer_web', 'descargar_web', 'contenido.add_imagen']
+  });
+  assert.strictEqual(r.creado, true);
+  assert.strictEqual(r.naturaleza, 'AFIRMACION_EXTERNA', 'prisma clasificó el caso');
+  assert.strictEqual(r.invocable, true);
+  const prompt = m.agents.get(r.nombre).prompt_text;
+  // el prompt NACIÓ del molde: lleva naturaleza, el loop, y la ley de la evidencia
+  assert.ok(/AFIRMACION_EXTERNA/.test(prompt), 'la naturaleza está en la política');
+  assert.ok(/qué FALTA|faltan|círculo/i.test(prompt), 'el loop del círculo es la política');
+  assert.ok(/dirección de vuelta|evidencia/i.test(prompt), 'la ley de la evidencia viaja');
+  assert.ok(/leer_web/.test(prompt), 'las herramientas del caso están');
+});
+
+test('MOLDE PRISMA: nombre derivado del caso; sin necesidad → INVALID_INPUT', () => {
+  const m = fw();
+  const r = m._crearDesdeCaso({ necesidad: 'precio', dominio: 'escandallo' });
+  assert.ok(/agente-escandallo-precio/.test(r.nombre), `nombre derivado: ${r.nombre}`);
+  assert.strictEqual(m._crearDesdeCaso({ dominio: 'x' }).status, 400, 'sin necesidad no hay caso');
+});
+
 (async () => {
   let ok = 0; const fails = [];
   for (const { n, f } of tests) { try { await f(); ok++; } catch (e) { fails.push({ n, e }); } }

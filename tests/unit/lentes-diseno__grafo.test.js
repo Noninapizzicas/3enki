@@ -36,12 +36,14 @@ async function run() {
     assert.ok(m._peso('ux-architect', 'brand-guardian') >= 3, 'co-ruta tema + co-dominio');
   });
 
-  // 2. VECINDAD: la vecina más fuerte de ux-architect es brand-guardian (co-ruta tema)
-  t('vecinas(ux-architect) → brand-guardian la primera (peso declarado mayor)', () => {
+  // 2. VECINDAD: la vecina más fuerte de ux-architect es design-tokens (co-rutas tema+tokens,
+  //    reforzado desde la cantera) — por delante de brand-guardian (solo co-ruta tema).
+  t('vecinas(ux-architect) → design-tokens la primera (peso declarado mayor)', () => {
     const r = m._vecinas('ux-architect', 5);
     assert.strictEqual(r.status, 200);
-    assert.strictEqual(r.data.vecinas[0].nombre, 'brand-guardian');
-    assert.ok(r.data.vecinas[0].declarado >= 3);
+    assert.strictEqual(r.data.vecinas[0].nombre, 'design-tokens');
+    assert.ok(r.data.vecinas[0].declarado >= 5);
+    assert.strictEqual(r.data.vecinas[1].nombre, 'brand-guardian');
     assert.ok(r.data.vecinas.every(v => v.dominio === 'diseño'), 'sin tráfico, solo vecinas declaradas (mismo dominio)');
   });
 
@@ -91,7 +93,7 @@ async function run() {
   t('suelo determinista: obtener({tarea:tema}) sigue resolviendo por la tabla', () => {
     const r = m._obtener({ tarea: 'tema' });
     assert.strictEqual(r.status, 200);
-    assert.deepStrictEqual(r.data.lentes.map(l => l.nombre).sort(), ['brand-guardian', 'ux-architect']);
+    assert.deepStrictEqual(r.data.lentes.map(l => l.nombre).sort(), ['brand-guardian', 'design-tokens', 'ux-architect']);
   });
 
   await m.onUnload();

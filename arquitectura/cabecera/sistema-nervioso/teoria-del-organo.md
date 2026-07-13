@@ -6,7 +6,7 @@ fuentes:
   - modules/lentes-diseno/**
   - modules/homeostasis/**
   - modules/verificador-visual/**
-verificado: 2026-07-06
+verificado: 2026-07-13
 ---
 
 # Teoría del Órgano — cuenco · grafo · homeostasis · ojos (vivo en main, 2026-06-29)

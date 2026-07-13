@@ -28,10 +28,11 @@ async function run() {
 
   const cuentaDiseno = () => m._packs.get('diseño')?.lentes.size || 0;
 
-  // 1. el cuenco descubre 3 packs (diseño/copy/negocio); diseño trae sus 8 lentes
-  t('cuenco descubre packs/* (diseño con 8 lentes)', () => {
+  // 1. el cuenco descubre 3 packs (diseño/copy/negocio); diseño trae sus 11 lentes
+  //    (8 base + 3 reforzadas desde la cantera: design-tokens · apple-motion · impeccable)
+  t('cuenco descubre packs/* (diseño con 11 lentes)', () => {
     assert.ok(m._packs.size >= 3, '>=3 packs auto-descubiertos');
-    assert.strictEqual(cuentaDiseno(), 8);
+    assert.strictEqual(cuentaDiseno(), 11);
   });
 
   // 2. listar: catálogo barato (nombre + dominio + cuando_usar) + rutas, SIN contenido
@@ -46,18 +47,18 @@ async function run() {
   });
 
   // 2b. listar ceñido por dominio → solo ese órgano
-  t('listar({dominio:diseño}) → solo las 8 de diseño', () => {
+  t('listar({dominio:diseño}) → solo las 11 de diseño', () => {
     const r = m._listar({ dominio: 'diseño' });
-    assert.strictEqual(r.data.lentes.length, 8);
+    assert.strictEqual(r.data.lentes.length, 11);
     assert.ok(r.data.lentes.every(l => l.dominio === 'diseño'));
   });
 
-  // 3. RUTEO DETERMINISTA (mitad reflejo): tarea 'tema' → ux-architect + brand-guardian
+  // 3. RUTEO DETERMINISTA (mitad reflejo): tarea 'tema' → ux-architect + brand-guardian + design-tokens
   const tema = m._obtener({ tarea: 'tema' });
-  t('obtener({tarea:tema}) → ux-architect + brand-guardian, con contenido íntegro', () => {
+  t('obtener({tarea:tema}) → ux-architect + brand-guardian + design-tokens, con contenido íntegro', () => {
     assert.strictEqual(tema.status, 200);
     const nombres = tema.data.lentes.map(l => l.nombre).sort();
-    assert.deepStrictEqual(nombres, ['brand-guardian', 'ux-architect']);
+    assert.deepStrictEqual(nombres, ['brand-guardian', 'design-tokens', 'ux-architect']);
     assert.ok(tema.data.lentes.every(l => l.contenido && l.contenido.length > 500), 'trae el .md completo');
     assert.ok(tema.data.lentes.find(l => l.nombre === 'ux-architect').contenido.includes('UX Architect'));
   });
@@ -71,17 +72,17 @@ async function run() {
     assert.ok(motion.data.lentes[0].contenido.length > 500);
   });
 
-  // 5. HÍBRIDO + dedupe: tarea 'motion' (→whimsy) + nombre 'whimsy-injector' = 1 sola
+  // 5. HÍBRIDO + dedupe: tarea 'motion' (→whimsy+apple-motion) + nombre 'whimsy-injector' = whimsy 1 sola vez
   const hib = m._obtener({ tarea: 'motion', nombres: ['whimsy-injector', 'brand-guardian'] });
   t('híbrido tarea+nombres se combina y DEDUPLICA', () => {
     assert.strictEqual(hib.status, 200);
     const nombres = hib.data.lentes.map(l => l.nombre).sort();
-    assert.deepStrictEqual(nombres, ['brand-guardian', 'whimsy-injector']); // whimsy una sola vez
+    assert.deepStrictEqual(nombres, ['apple-motion', 'brand-guardian', 'whimsy-injector']); // whimsy una sola vez
   });
 
-  // 6. lazy: obtener NO trae las 8, solo las pedidas
-  t('lazy: obtener trae solo lo pedido (no las 8)', () => {
-    assert.ok(tema.data.lentes.length < 8);
+  // 6. lazy: obtener NO trae las 11, solo las pedidas
+  t('lazy: obtener trae solo lo pedido (no las 11)', () => {
+    assert.ok(tema.data.lentes.length < 11);
   });
 
   // 7. guardas

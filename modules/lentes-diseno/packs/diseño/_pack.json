@@ -1,5 +1,5 @@
 {
-  "_doc": "ADN del pack 'diseño' — el genoma que el cuenco lee al descubrirlo. ANATOMÍA del órgano: memoria (lo que SABE: las 8 lentes .md) + motor (DORMIDO: solo conocimiento, hemisferio derecho) + quimico (ausente) + evento (lo único público). cuando_usar = el trigger fuzzy que el LLM matchea. memoria.rutas = tarea→lentes que el reflejo resuelve determinista (selección híbrida).",
+  "_doc": "ADN del pack 'diseño' — el genoma que el cuenco lee al descubrirlo. ANATOMÍA del órgano: memoria (lo que SABE: las 11 lentes .md) + motor (DORMIDO: solo conocimiento, hemisferio derecho) + quimico (ausente) + evento (lo único público). cuando_usar = el trigger fuzzy que el LLM matchea. memoria.rutas = tarea→lentes que el reflejo resuelve determinista (selección híbrida). Reforzado desde la cantera (2026-07): design-tokens (nextlevelbuilder), apple-motion (emilkowalski), impeccable (pbakaus).",
   "dominio": "diseño",
   "cuando_usar": "diseño visual: tema, tokens CSS, componentes, layout/grid, color, motion/micro-interacciones, marca, narrativa visual, usabilidad, prompts de imagen",
   "memoria": {
@@ -11,17 +11,21 @@
       "visual-storyteller":{ "archivo": "design-visual-storyteller.md",           "cuando_usar": "narrativa visual, jerarquía de atención, flujo, contar algo con el diseño" },
       "ux-researcher":     { "archivo": "design-ux-researcher.md",                "cuando_usar": "usabilidad, comportamiento del usuario, dudas de UX, decisiones basadas en investigación" },
       "image-prompt-engineer": { "archivo": "design-image-prompt-engineer.md",    "cuando_usar": "generar fotos de producto, redactar prompts de imagen para IA generativa" },
-      "inclusive-visuals": { "archivo": "design-inclusive-visuals-specialist.md", "cuando_usar": "personas en imágenes, evitar sesgos/estereotipos, representación culturalmente correcta" }
+      "inclusive-visuals": { "archivo": "design-inclusive-visuals-specialist.md", "cuando_usar": "personas en imágenes, evitar sesgos/estereotipos, representación culturalmente correcta" },
+      "design-tokens":     { "archivo": "design-tokens.md",       "cuando_usar": "arquitectura de tokens de un tema: primitive→semantic→component, escalas de espaciado/tipografía, CSS variables, specs de componentes (el esqueleto sistemático del tema)" },
+      "apple-motion":      { "archivo": "design-apple-motion.md", "cuando_usar": "motion físico y fluido estilo Apple: springs, gestos drag/swipe/sheet, momentum, transiciones interrumpibles, materiales translúcidos, reduced-motion" },
+      "impeccable":        { "archivo": "design-impeccable.md",   "cuando_usar": "auditar/criticar/pulir una UI contra un listón de craft (contraste, tipografía, layout, motion, anti-patterns); cuando el diseño se siente genérico o hay que subir el nivel" }
     },
     "rutas": {
-      "tema":        ["ux-architect", "brand-guardian"],
-      "tokens":      ["ux-architect"],
+      "tema":        ["ux-architect", "brand-guardian", "design-tokens"],
+      "tokens":      ["ux-architect", "design-tokens"],
       "layout":      ["ux-architect"],
-      "componentes": ["ui-designer"],
-      "motion":      ["whimsy-injector"],
+      "componentes": ["ui-designer", "design-tokens"],
+      "motion":      ["whimsy-injector", "apple-motion"],
+      "critica":     ["impeccable"],
       "marca":       ["brand-guardian"],
       "narrativa":   ["visual-storyteller"],
-      "usabilidad":  ["ux-researcher"],
+      "usabilidad":  ["ux-researcher", "impeccable"],
       "imagen":      ["image-prompt-engineer", "inclusive-visuals"]
     }
   },

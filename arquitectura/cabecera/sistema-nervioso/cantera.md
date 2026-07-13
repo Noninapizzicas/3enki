@@ -181,6 +181,9 @@ INSTANCIAS  semilla: deep-research·agentic-engineering (ECC) · verificar-en-vi
             fuente oficial anthropics/skills, buscables por buscar_skill, promovibles cuando una página las beba) ·
             emilkowalski (5: apple-design·animation-vocabulary·improve-animations·review-animations·emil-design-eng —
             cantera/emilkowalski/, folder markdown completo; oficio de MOTION/UI-polish para el frontend y la PWA) ·
+            nextlevelbuilder (7: design·design-system·brand·ui-styling·banner-design·slides·ui-ux-pro-max —
+            cantera/nextlevelbuilder/, markdown-only —fonts/scripts/CSV de payload fuera, el feeder los trae en caliente—;
+            oficio de DESIGN-SYSTEM/tokens/brand para carta-marketing y el frontend) ·
             vercel-carta-craft (Vercel Web Interface Guidelines destiladas al oficio de CARTA,
             hogar diseño/tema — VERIFICADA en vivo: promovida, la lente entró en un turno real de
             carta-digital y moldeó el diseño con tabular-nums/APCA/nbsp; round-trip reversible sin residuo).

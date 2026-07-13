@@ -100,7 +100,7 @@ export function hasCert(): boolean {
  */
 export async function ensureEnrolled(
   mqttRequest: (domain: string, action: string, payload: unknown) => Promise<{ data?: { certificate?: string } }>,
-  opts: { commonName?: string } = {}
+  opts: { commonName?: string; project?: string } = {}
 ): Promise<boolean> {
   if (hasCert()) return true;
   const kp = await ensureKeypair();
@@ -110,6 +110,7 @@ export async function ensureEnrolled(
     publicKeyPem: publicKeyPem_,
     type: 'client',
     identifier,
+    scope: opts.project || 'system',   // el navegador de una tienda → project=<id>; sistema si no
     commonName: opts.commonName || `Navegador ${identifier}`
   });
   const cert = res?.data?.certificate;

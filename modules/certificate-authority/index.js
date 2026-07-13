@@ -265,7 +265,7 @@ class CertificateAuthorityModule extends BaseModule {
   async handleEnrollFromPublicKey(input) {
     try {
       const body = input?.body || input || {};
-      const { publicKeyPem, commonName, type, identifier, organization, email, validityDays, project_id, correlation_id } = body;
+      const { publicKeyPem, commonName, type, identifier, scope, organization, email, validityDays, project_id, correlation_id } = body;
 
       if (!publicKeyPem || !commonName || !type || !identifier) {
         this.metrics?.increment?.('certificate-authority.errors', { code: 'INVALID_INPUT', kind: 'enroll' });
@@ -275,7 +275,9 @@ class CertificateAuthorityModule extends BaseModule {
       }
 
       const result = this.caManager.issueFromPublicKey({
-        publicKeyPem, commonName, type, identifier, organization, email, validityDays
+        publicKeyPem, commonName, type, identifier,
+        scope: scope || project_id || 'system',   // atado al proyecto si se da; si no, sistema
+        organization, email, validityDays
       });
 
       this.stats.certificates_issued++;

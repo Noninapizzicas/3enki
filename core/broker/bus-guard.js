@@ -238,7 +238,9 @@ class BusGuard {
     }
     this._recordarJti(jti, nowSec + this.tokenWindowSec, nowSec);
 
-    return { anonymous: false, credencialPresente: true, valid: true, type: v.type, identifier: v.identifier };
+    // scope: <project_id> | 'system' — el guard lo SELLA; el enforcement por proyecto lo
+    // cierran los módulos (que ya tienen project_id). Aquí solo viaja, no bloquea aún.
+    return { anonymous: false, credencialPresente: true, valid: true, type: v.type, scope: v.scope || 'system', identifier: v.identifier };
   }
 
   // ── aedes: authenticate(client, username, password, callback) ──

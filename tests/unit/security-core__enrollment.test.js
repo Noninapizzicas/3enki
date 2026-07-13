@@ -68,9 +68,9 @@ console.log('Paso 2 (backend) — enrolamiento + token firmado con cripto real\n
     assert.strictEqual(v.type, 'device');
   });
 
-  await atest('LOOP COMPLETO: enroll → mint → guard enforce lo admite y sella el identifier', async () => {
+  await atest('LOOP COMPLETO: enroll (scopeado a proyecto) → mint → guard sella type/scope/identifier', async () => {
     const kp = clienteKeypair();
-    const cert = ca.issueFromPublicKey({ publicKeyPem: kp.publicKey, commonName: 'Portal Roma', type: 'client', identifier: 'roma' }).certificate;
+    const cert = ca.issueFromPublicKey({ publicKeyPem: kp.publicKey, commonName: 'Portal Roma', type: 'client', identifier: 'roma', scope: 'nonina' }).certificate;
     const token = enkiToken.mint({ certPem: cert, privateKeyPem: kp.privateKey, sub: 'roma' });
 
     const g = new BusGuard({ verifier, getMode: () => 'enforce' });
@@ -80,6 +80,14 @@ console.log('Paso 2 (backend) — enrolamiento + token firmado con cripto real\n
     assert.strictEqual(client.enkiIdentity.valid, true);
     assert.strictEqual(client.enkiIdentity.identifier, 'roma');
     assert.strictEqual(client.enkiIdentity.type, 'client');
+    assert.strictEqual(client.enkiIdentity.scope, 'nonina', 'el cert atado al proyecto sella project=nonina');
+  });
+
+  await atest('scope por defecto = system (cert sin proyecto → global)', async () => {
+    const kp = clienteKeypair();
+    const cert = ca.issueFromPublicKey({ publicKeyPem: kp.publicKey, commonName: 'Core', type: 'device', identifier: 'core-a' }).certificate;
+    const v = ca.verifyCertificate(cert);
+    assert.strictEqual(v.scope, 'system', 'sin scope explícito → system (cruza proyectos)');
   });
 
   await atest('cert de OTRA CA → el guard lo rechaza (firma no valida contra nuestra CA)', async () => {

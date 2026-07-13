@@ -116,15 +116,15 @@ class SecurityCoreModule extends BaseModule {
     // Lanza si certificate-authority no está cargado → el guard degrada honesto (verifier-unavailable).
     const r = await this.mqttRequest('certificate-authority', 'verify', { certificate: pem });
     const data = r?.data || r || {};
-    return { valid: !!data.valid, type: data.type, identifier: data.identifier, error: data.error };
+    return { valid: !!data.valid, type: data.type, scope: data.scope || 'system', identifier: data.identifier, error: data.error };
   }
 
   _registrarInterruptores() {
     if (!this.eventBus?.publish) return;
     try {
       this.eventBus.publish('interruptor.registrar', {
-        id: 'bus-guard', label: 'Guardián del bus (identidad por certificado)', grupo: 'sistema',
-        descripcion: 'OFF = broker abierto (hoy). ON = el bus verifica identidad y AUDITA (modo observe): mide quién sería bloqueado sin romper a nadie. Enciéndelo antes de enforce.',
+        id: 'bus-guard', label: '🛡️ Guardián del bus — BOTÓN DE PÁNICO (apágalo si algo va mal)', grupo: 'sistema',
+        descripcion: 'El interruptor maestro de la seguridad del bus. OFF = broker ABIERTO (comportamiento de hoy) — es el botón de escape: si algo falla, apágalo y todo vuelve a funcionar al instante, en caliente, sin reiniciar. ON = el bus verifica identidad por certificado y AUDITA (modo observe): mide quién sería bloqueado SIN romper a nadie. Enciéndelo antes de activar el bloqueo.',
         default: this.activo
       });
       this.eventBus.publish('interruptor.registrar', {

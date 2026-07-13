@@ -46,7 +46,7 @@ const ID_DEVICE = nuevaIdentidad('device', 'esp32-01');   // identidad legítima
 const ID_INTRUSO = nuevaIdentidad('device', 'intruso');   // clave real pero cert NO firmado por la CA
 
 const verifierFake = (certPem) => {
-  if (certPem === ID_DEVICE.certPem) return { valid: true, type: ID_DEVICE.type, identifier: ID_DEVICE.identifier };
+  if (certPem === ID_DEVICE.certPem) return { valid: true, type: ID_DEVICE.type, scope: 'nonina', identifier: ID_DEVICE.identifier };
   return { valid: false, error: 'not signed by this CA' };
 };
 // token firmado válido (fresco) de la identidad legítima
@@ -159,12 +159,13 @@ console.log('BusGuard — el bus como puerta guardada\n');
     assert.strictEqual(r.err, null, 'observe nunca bloquea');
     assert.strictEqual(g.stats.publish_denied, 1, 'pero lo auditó');
   });
-  await atest('observe: token firmado válido sella identidad (type/identifier)', async () => {
+  await atest('observe: token firmado válido sella identidad (type/scope/identifier)', async () => {
     const g = new BusGuard({ verifier: verifierFake, getMode: () => 'observe' });
     const client = {};
     await authP(g, client, credToken());
     assert.strictEqual(client.enkiIdentity.valid, true);
     assert.strictEqual(client.enkiIdentity.identifier, 'esp32-01');
+    assert.strictEqual(client.enkiIdentity.scope, 'nonina', 'el guard sella el scope (proyecto) del cert');
     assert.strictEqual(g.stats.authenticated, 1);
   });
 

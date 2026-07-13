@@ -18,6 +18,21 @@ const fs = require('fs');
 const path = require('path');
 
 class CAManager {
+  // ── SAN de 4 partes (scope): urn:eventcore:<type>:<scope>:<identifier> ──
+  // scope = <project_id> | 'system'. RETROCOMPATIBLE: un SAN viejo de 3 (type:identifier) → scope='system'.
+  static _buildSan(type, scope, identifier) {
+    return `urn:eventcore:${type}:${scope || 'system'}:${identifier}`;
+  }
+  static _parseSan(value) {
+    const parts = String(value).replace('urn:eventcore:', '').split(':');
+    if (parts.length >= 3) {                 // nuevo: type:scope:identifier
+      return { type: parts[0], scope: parts[1], identifier: parts.slice(2).join(':') };
+    }
+    if (parts.length === 2) {                // viejo: type:identifier → scope system
+      return { type: parts[0], scope: 'system', identifier: parts[1] };
+    }
+    return { type: 'client', scope: 'system', identifier: 'unknown' };
+  }
   constructor(options = {}) {
     this.storagePath = options.storagePath || path.join(process.cwd(), 'data', 'ca');
     this.caKeyPath = path.join(this.storagePath, 'ca-key.pem');
@@ -135,6 +150,7 @@ class CAManager {
       commonName,
       type = 'client',
       identifier,
+      scope = 'system',      // <project_id> | 'system' — atado a un proyecto o global
       organization,
       email,
       validityDays = this.config.cert_validity_days,
@@ -194,7 +210,7 @@ class CAManager {
     extensions.push({
       name: 'subjectAltName',
       altNames: [
-        { type: 6, value: `urn:eventcore:${type}:${identifier}` }
+        { type: 6, value: CAManager._buildSan(type, scope, identifier) }
       ]
     });
 
@@ -220,6 +236,7 @@ class CAManager {
     const metadata = {
       serialNumber,
       type,
+      scope,
       identifier,
       commonName,
       organization: organization || null,
@@ -272,7 +289,7 @@ class CAManager {
   issueFromPublicKey(options = {}) {
     if (!this.caKey || !this.caCert) throw new Error('CA not initialized. Call initialize() first.');
     const {
-      publicKeyPem, commonName, type = 'client', identifier,
+      publicKeyPem, commonName, type = 'client', identifier, scope = 'system',
       organization, email, validityDays = this.config.cert_validity_days
     } = options;
 
@@ -311,7 +328,7 @@ class CAManager {
       { name: 'extKeyUsage', clientAuth: true },
       { name: 'subjectKeyIdentifier' },
       { name: 'authorityKeyIdentifier', keyIdentifier: true },
-      { name: 'subjectAltName', altNames: [{ type: 6, value: `urn:eventcore:${type}:${identifier}` }] }
+      { name: 'subjectAltName', altNames: [{ type: 6, value: CAManager._buildSan(type, scope, identifier) }] }
     ]);
 
     cert.sign(this.caKey, forge.md.sha256.create());
@@ -322,7 +339,7 @@ class CAManager {
       .toUpperCase().match(/.{2}/g).join(':');
 
     const metadata = {
-      serialNumber, type, identifier, commonName,
+      serialNumber, type, scope, identifier, commonName,
       organization: organization || null, email: email || null, fingerprint,
       issuedAt: notBefore.toISOString(), expiresAt: notAfter.toISOString(),
       status: 'active', revokedAt: null, keyOrigin: 'client'   // marca: la privada vive en el cliente
@@ -442,18 +459,20 @@ class CAManager {
           valid: true,
           serialNumber,
           type: metadata.type,
+          scope: metadata.scope || 'system',
           identifier: metadata.identifier,
           commonName: metadata.commonName,
           expiresAt: metadata.expiresAt
         };
       }
 
-      // Sin metadata local — extraer info del propio certificado
+      // Sin metadata local — extraer info del propio certificado (SAN)
       const certInfo = this._parseCertificateInfo(cert);
       return {
         valid: true,
         serialNumber,
         type: certInfo.type,
+        scope: certInfo.scope || 'system',
         identifier: certInfo.identifier,
         commonName: certInfo.commonName,
         expiresAt: cert.validity.notAfter.toISOString()
@@ -640,25 +659,16 @@ class CAManager {
     const cn = cert.subject.getField('CN');
     const commonName = cn ? cn.value : 'unknown';
 
-    // Extraer type:identifier de subjectAltName URI
-    let type = 'client';
-    let identifier = 'unknown';
-
+    let parsed = { type: 'client', scope: 'system', identifier: 'unknown' };
     const sanExt = cert.getExtension('subjectAltName');
     if (sanExt && sanExt.altNames) {
       for (const alt of sanExt.altNames) {
-        // type 6 = URI
         if (alt.type === 6 && alt.value.startsWith('urn:eventcore:')) {
-          const parts = alt.value.replace('urn:eventcore:', '').split(':');
-          if (parts.length >= 2) {
-            type = parts[0];
-            identifier = parts.slice(1).join(':');
-          }
+          parsed = CAManager._parseSan(alt.value);
         }
       }
     }
-
-    return { type, identifier, commonName };
+    return { ...parsed, commonName };
   }
 
   /**

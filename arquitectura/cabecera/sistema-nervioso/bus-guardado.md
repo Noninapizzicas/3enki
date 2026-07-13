@@ -152,11 +152,28 @@ PATRONES
 multi-core confía por handshake, no por una lista hardcodeada, y la revocación propaga. El coreId es
 el clientId con que el peer conecta al broker. `fuentes: modules/security-p2p/**`.
 
-**Trabajo pendiente:**
-- **Spoof de clientId**: el trusted-by-clientId sigue spoofeable sin auth de transporte (el crutch pasó
-  de hardcodeado a dinámico, no desapareció). Estado final: los peers también portan token firmado.
-- **Scope por SAN**: un cert válido aún da acceso a TODO — falta acotar por `type`/`identifier` del SAN
-  (device solo su dominio, client solo lo suyo). La política es plana, no scopeada.
+**SAN de 4 partes (hecho, forward-compatible):** el cert lleva su alcance horneado —
+`urn:eventcore:<type>:<scope>:<identifier>`, `scope = <project_id> | 'system'`. Parser
+RETROCOMPATIBLE: un SAN viejo de 3 partes → `scope:'system'` (nadie se rompe). El guard **sella**
+`{type, scope, identifier}` en la identidad. El SAN es lo único caro de cambiar (va en cada cert);
+todo lo demás evoluciona sin re-emitir.
+
+**Trabajo pendiente (aplazado a propósito — que el dato de `observe` lo decida):**
+- **Enforcement por proyecto**: hoy el `scope` VIAJA pero no bloquea. El cierre fino (identity.scope ==
+  payload.project_id) va en los MÓDULOS, que ya tienen `project_id` — los topics del bus se enrutan por
+  core, no por proyecto, así que el guard no puede verlo sin parsear payload. Dominio a dominio, cuando
+  `observe` muestre que cruza tráfico.
+- **Sub-CA por proyecto**: solo cuando delegues gestión a las tiendas. El SAN ya lleva el proyecto → migrar
+  la raíz después NO re-emite certs.
+- **Spoof de clientId (peers)**: el trusted-by-clientId sigue spoofeable; estado final = los peers también
+  portan token firmado.
+
+## El botón de pánico
+
+> El interruptor **`bus-guard`** ES el botón de escape. Apagarlo devuelve el broker a ABIERTO
+> (comportamiento de hoy) **en caliente, sin reiniciar** — si algo va mal tras subir un peldaño,
+> un clic y todo vuelve a funcionar. La escalera nunca salta de golpe: `observe` mide sin romper,
+> `enforce` bloquea, y `off` siempre está a un clic. El dueño manda desde el panel de interruptores.
 
 ## Resiliencia y bordes
 

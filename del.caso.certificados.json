@@ -1,0 +1,116 @@
+{
+  "esquema": "prisma-analisis-modulo-v1",
+  "_doc": "El módulo certificate-authority pasado por el prisma de lentes (restricción · palancas · efecto de segundo orden, orientación RESOLVER). Cada afirmación lleva su dirección de vuelta (file:line). Módulo acotado (3 archivos, 1312 LOC) leído de primera mano.",
+  "caso": {
+    "modulo": "certificate-authority",
+    "version": "2.0.0",
+    "ruta": "modules/certificate-authority/",
+    "archivos": { "index.js": 460, "ca-manager.js": 612, "mtls-middleware.js": 240, "total_loc": 1312 },
+    "proposito_declarado": "CA interna X.509: emite/revoca/verifica certificados cliente (portal facturación + dispositivos) + hook mTLS transparente en beforeRequest",
+    "commit_base": "e5e7921",
+    "fecha": "2026-07-13"
+  },
+  "objetivo": {
+    "enunciado": "¿El módulo protege de verdad, o es criptografía real cableada a una puerta apagada?",
+    "nitidez": 0.9
+  },
+  "lentes": [
+    {
+      "id": "arquitectura-diseno",
+      "veredicto": "SÓLIDO — OOP limpio, composición sobre herencia, cripto real (no juguete)",
+      "hallazgos": [
+        "Extiende BaseModule; inyecta CAManager + MTLSMiddleware por constructor (composición): index.js:23,56,67",
+        "X.509 real vía node-forge (RSA 2048 + SHA-256), PKCS#12 real, CRL en disco: ca-manager.js:73,101,204,589 · package.json:210 (node-forge ^1.3.3)",
+        "Ciclo de vida correcto: registra/desregistra el hook beforeRequest, limpia en onUnload: index.js:81-85,98-99",
+        "Errores canónicos (status+code) heredados del patrón POC2: index.js:112-138"
+      ],
+      "restriccion": {
+        "variable": "la clave raíz de la CA en disco (ca-key.pem, mode 0600) es el ÚNICO ancla de confianza — sin rotación, sin HSM, single-instance filesystem",
+        "evidencia": "ca-manager.js:107 (writeFileSync ca-key.pem 0600) · module.json:59 (concurrency: single-instance) · validity 3650d ca-manager.js:36",
+        "consecuencia": "si se pierde → todos los certs huérfanos; si se filtra → compromiso total y NO hay senda para rotar la raíz"
+      }
+    },
+    {
+      "id": "seguridad-postura",
+      "veredicto": "ABIERTA POR DEFECTO — el guard nace apagado y, aún encendido, se auto-puentea",
+      "hallazgos": [
+        "Doble default-off: mtls_enabled:false Y allow_unauthenticated:true (module.json:40,43). Aún con mtls_enabled:true, sin cert el middleware BYPASEA en vez de bloquear: mtls-middleware.js:85-91",
+        "Solo guarda el gateway HTTP (hook beforeRequest → 403 si context null): core/gateway/http.js:398. NO toca el bus MQTT — que es la puerta real por donde entra el front (hallazgo del análisis global: broker anónimo, core/broker/embedded.js:72)",
+        "P12 con 3DES (cifrado legacy débil) y passphrase '' por defecto: ca-manager.js:594,141 — un bundle con la clave privada, passphrase vacía, descargable en base64 (handleDownloadP12 index.js:394-422)",
+        "Higiene correcta al revocar: borra key.pem + bundle.p12 del disco: ca-manager.js:290-297"
+      ],
+      "restriccion": {
+        "variable": "la postura por defecto abierta + el guard apuntando a la puerta HTTP que el front NO usa",
+        "evidencia": "module.json:40,43 · mtls-middleware.js:85 · core/gateway/http.js:398 vs core/broker/embedded.js:72",
+        "consecuencia": "la criptografía está bien construida pero desactivada y mal ubicada — hoy es casi decorativa"
+      }
+    },
+    {
+      "id": "coherencia-doc-codigo",
+      "veredicto": "DERIVA en el manifest — el mapa no coincide con el territorio",
+      "hallazgos": [
+        "module.json declara rutas de persistencia FALSAS: 'ca.crt/ca.key/issued/<serial>.crt' pero el código escribe 'ca-cert.pem/ca-key.pem/certs/<serial>/cert.pem': module.json:52-56 vs ca-manager.js:23-26,235-239",
+        "certificate.expired declarado en publishes pero NUNCA emitido (solo issued/revoked/renewed): module.json:16 vs grep en index.js (240,289,316). Evento fantasma — y no hay barrido de expiración (ningún scheduler consume)",
+        "excludePaths con dos defaults divergentes: index.js:73-77 ('/modules/.../status') vs mtls-middleware.js:31-37 ('/3333/ca-cert'). index gana (pasa el suyo), el del middleware es trampa latente",
+        "La rebanada arquitectura/cabecera/modulos/seguridad-certificados-export.md SÍ describe el pseudocódigo real (issueCertificate, hook) — la deriva está en el manifest, no en la cabecera"
+      ],
+      "restriccion": {
+        "variable": "el manifest (module.json) como fuente de verdad NO validada contra el código",
+        "evidencia": "module.json:52-56 (rutas) · module.json:16 (evento fantasma)"
+      }
+    },
+    {
+      "id": "salud-tests-integracion",
+      "veredicto": "PROTEGIDO en CI (raro y bueno) pero AISLADO en el bus",
+      "hallazgos": [
+        "TIENE test (18KB) Y corre en CI — de los 43% que sí se ejecutan: tests/unit/certificate-authority.test.js · package.json:99 · validate.yml:255-256",
+        "NADIE consume los eventos certificate.* (grep sin resultados fuera del módulo): son fire-and-forget de auditoría",
+        "certificate.revoked se emite AL VACÍO: revocar no propaga — un dispositivo comprometido revocado sigue publicando en el bus (que no valida certs). La revocación es contable, no efectiva",
+        "Eventos con project_id + correlation_id (propiocepción correcta): index.js:146-160"
+      ],
+      "restriccion": {
+        "variable": "la revocación no tiene consumidor — cerrar el círculo (revocar → cortar acceso) no ocurre",
+        "evidencia": "grep certificate.(revoked) sin consumidores · core/broker/embedded.js:72 (bus no valida certs)"
+      }
+    }
+  ],
+  "diagnostico": {
+    "orientacion": "RESOLVER",
+    "restriccion": {
+      "variable": "criptografía real y bien construida, DESACTIVADA por defecto y cableada a una puerta (HTTP gateway) que el front no usa — mientras la puerta real (bus MQTT) queda anónima",
+      "por_que_es_LA_restriccion": "es la de mayor carga: resolver la postura y el destino del guard convierte el módulo de decorativo en efectivo. fraccionLiberadaPor ≈ 0.9. Todo lo demás (3DES, rutas del manifest, evento fantasma) es real pero de menor carga",
+      "ley": "un guard protege la puerta por donde entra el mundo, y nace cerrado (fail-closed), no abierto"
+    },
+    "palancas_priorizadas": [
+      { "orden": 1, "prioridad": "P0-POSTURA", "accion": "invertir el default: allow_unauthenticated:false cuando mtls_enabled:true, y que enable sin cerrar allow_unauthenticated sea no-op explícito (log de advertencia)", "rendimiento": "máximo — cierra el auto-puenteo", "evidencia": "module.json:40,43 · mtls-middleware.js:85-91" },
+      { "orden": 2, "prioridad": "P0-DESTINO", "accion": "decidir el alcance: o cablear verify al ui/request del bus (heredar el guard, cerrar la puerta real), o declarar explícitamente que este módulo es solo para el portal HTTP de facturación y documentarlo", "rendimiento": "máximo — hoy protege una puerta que nadie cruza", "evidencia": "core/gateway/http.js:398 vs core/broker/embedded.js:72" },
+      { "orden": 3, "prioridad": "P1-CRIPTO", "accion": "subir el P12 de 3DES a AES-256 y exigir passphrase no vacía (rechazar '' en handleIssue/handleRenew)", "rendimiento": "alto — un P12 con clave privada y passphrase vacía es una clave desnuda descargable", "evidencia": "ca-manager.js:594,141 · index.js:394-422" },
+      { "orden": 4, "prioridad": "P1-REVOCACION", "accion": "dar consumidor a certificate.revoked: un módulo que corte el acceso del identifier revocado (o, cuando el bus valide certs, invalide su sesión)", "rendimiento": "alto — hace la revocación efectiva, no solo contable", "evidencia": "grep certificate.revoked sin consumidores" },
+      { "orden": 5, "prioridad": "P2-DERIVA", "accion": "corregir las rutas de persistencia en module.json (ca-cert.pem/ca-key.pem/certs/<serial>/) y, o emitir certificate.expired vía un barrido en scheduler, o quitarlo de publishes", "rendimiento": "medio — cierra los fantasmas del manifest", "evidencia": "module.json:52-56,16 vs ca-manager.js:23-26" },
+      { "orden": 6, "prioridad": "P3-ROTACION", "accion": "añadir senda de rotación de la CA raíz (emitir nueva raíz, re-firmar/puente de confianza) antes de que caduque a 10 años o se filtre", "rendimiento": "bajo hoy, crítico diferido", "evidencia": "ca-manager.js:36 (ca_validity_days 3650)" }
+    ],
+    "efectos_segundo_orden": [
+      "cerrar la postura (P0) SIN cablear el bus (P0-destino) da falsa seguridad: el panel dirá 'mTLS on' mientras el front sigue entrando anónimo por MQTT — las dos palancas van juntas o ninguna",
+      "dar consumidor a la revocación (P1) solo es efectivo si el bus valida certs; ata este módulo a la restricción global del broker anónimo — el módulo de certificados no puede cumplir su promesa sin cerrar el broker primero"
+    ],
+    "plan": [
+      "1. [P0] Invertir el default de postura (fail-closed) y hacer el enable coherente",
+      "2. [P0] Decidir y cablear el DESTINO del guard: bus MQTT o portal HTTP declarado",
+      "3. [P1] AES-256 + passphrase obligatoria en el P12",
+      "4. [P1] Consumidor de certificate.revoked que corte acceso",
+      "5. [P2] Corregir rutas del manifest + resolver el evento fantasma certificate.expired",
+      "6. [P3] Senda de rotación de la CA raíz"
+    ]
+  },
+  "no_objetivos": [
+    "reescribir la criptografía: es real y correcta (node-forge, X.509/PKCS#12 genuinos) — la deuda está en la POSTURA y el DESTINO, no en el motor",
+    "afirmar sin dirección de vuelta (toda variable lleva su file:line)"
+  ],
+  "lo_que_ya_esta_bien": [
+    "cripto genuina: X.509 real, PKCS#12 real, CRL, fingerprints SHA-256 (ca-manager.js)",
+    "OOP limpio y ciclo de vida correcto con des/registro del hook (index.js:81-99)",
+    "tiene test Y corre en CI — de la minoría protegida (validate.yml:255)",
+    "higiene al revocar: borra clave privada y bundle del disco (ca-manager.js:290-297)",
+    "propiocepción correcta: eventos con project_id + correlation_id (index.js:146-160)"
+  ]
+}

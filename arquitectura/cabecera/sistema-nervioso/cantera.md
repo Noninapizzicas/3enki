@@ -184,6 +184,8 @@ INSTANCIAS  semilla: deep-research·agentic-engineering (ECC) · verificar-en-vi
             nextlevelbuilder (7: design·design-system·brand·ui-styling·banner-design·slides·ui-ux-pro-max —
             cantera/nextlevelbuilder/, markdown-only —fonts/scripts/CSV de payload fuera, el feeder los trae en caliente—;
             oficio de DESIGN-SYSTEM/tokens/brand para carta-marketing y el frontend) ·
+            pbakaus (1: impeccable — cantera/pbakaus/, markdown-only —motor detector .mjs fuera—; SKILL.md + 23 comandos
+            en reference/ (critique·audit·polish·distill·animate·bolder·quieter…), evolución del frontend-design de Anthropic) ·
             vercel-carta-craft (Vercel Web Interface Guidelines destiladas al oficio de CARTA,
             hogar diseño/tema — VERIFICADA en vivo: promovida, la lente entró en un turno real de
             carta-digital y moldeó el diseño con tabular-nums/APCA/nbsp; round-trip reversible sin residuo).

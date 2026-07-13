@@ -255,6 +255,12 @@ jobs:
       - name: Run unit tests (certificate-authority — reescritura canonica)
         run: npm run test:certificate-authority
 
+      - name: Run unit tests (security-core/bus-guard — el bus como puerta guardada)
+        run: npm run test:security-core-bus-guard
+
+      - name: Run unit tests (security-core — el cerebro de la puerta guardada)
+        run: npm run test:security-core
+
       - name: Run unit tests (security-p2p — reescritura canonica)
         run: npm run test:security-p2p
 

@@ -1,0 +1,42 @@
+{
+  "name": "security-core",
+  "version": "1.0.0",
+  "description": "El cerebro de la puerta guardada del bus. Cablea el BusGuard del broker (core.busGuard) al verificador de certificate-authority y traduce los interruptores del dueno en el peldano de la escalera off->observe->enforce. Hace que la identidad por certificado rija la seguridad REAL de todo el bus MQTT, no solo el gateway HTTP.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "events": {
+    "publishes": [
+      { "event": "interruptor.registrar", "description": "Registra los interruptores bus-guard y bus-guard-enforce en el panel del dueno (OFF por defecto)." },
+      { "event": "security.bus.mode_changed", "description": "El peldano de la escalera cambio (off/observe/enforce) tras un toggle del dueno. correlation implicit + timestamp." }
+    ],
+    "subscribes": [
+      { "event": "interruptor.cambiado", "handler": "_onInterruptor", "description": "El dueno movio un interruptor; recalcula el modo del guard en caliente." }
+    ]
+  },
+  "ui_handlers": [
+    { "domain": "security-core", "action": "estado", "handler": "handleEstado", "type": "system_panel", "zone": "lateral_derecha" }
+  ],
+  "tools": [],
+  "dependencies": [],
+  "config": {
+    "bus_guard": false,
+    "bus_guard_enforce": false
+  },
+  "observability": {
+    "logging": { "level": "info", "structured": true, "correlation_id": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "security.bus.authenticated",
+        "security.bus.anonymous",
+        "security.bus.rejected",
+        "security.bus.verifier_unavailable",
+        "security.bus.mode_changed"
+      ]
+    }
+  }
+}

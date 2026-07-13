@@ -68,7 +68,10 @@ test('buscar: filtra por dominio', async () => {
 
 test('buscar: tarea pesa más y ordena', async () => {
   const m = await makeCargado();
-  const { data } = m._buscar({ query: 'routing', tarea: 'routing' });
+  // Scopeado al dominio 'agentes': el invariante es que DENTRO del dominio la tarea 'routing'
+  // ordena primero. Sin scope el test era frágil — una skill de OTRO dominio que mencione
+  // 'routing' por casualidad (p.ej. routing web) colisiona por palabra sobre el catálogo abierto.
+  const { data } = m._buscar({ query: 'routing', tarea: 'routing', dominio: 'agentes' });
   assert.strictEqual(data.skills[0].nombre, 'agentic-engineering', 'la de routing debe ir primera');
 });
 

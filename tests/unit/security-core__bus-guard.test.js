@@ -44,7 +44,7 @@ console.log('BusGuard — el bus como puerta guardada\n');
   test('_dominioDeTopic: ui/request/<dominio>/<accion> → dominio', () => {
     assert.strictEqual(_dominioDeTopic('ui/request/credential/list'), 'credential');
     assert.strictEqual(_dominioDeTopic('ui/request/pizzepos/pedidos'), 'pizzepos');
-    assert.strictEqual(_dominioDeTopic('core/core-a/events/x'), 'core');
+    assert.strictEqual(_dominioDeTopic('core/core-a/events/x'), 'x'); // events/<dominio> → el dominio real
   });
 
   // ── policyPorDefecto: el anónimo no toca lo sensible ──
@@ -64,7 +64,6 @@ console.log('BusGuard — el bus como puerta guardada\n');
   test('_dominioDeTopic: evento de dominio con punto (credential.create.request) → credential', () => {
     assert.strictEqual(_dominioDeTopic('credential.create.request'), 'credential');
     assert.strictEqual(_dominioDeTopic('credential-manager.request'), 'credential-manager');
-    assert.strictEqual(_dominioDeTopic('core/core-a/api/request/credential/resolve'), 'credential');
   });
   test('policy: anónimo publica DIRECTO a credential.create.request → DENY (bypass cerrado)', () => {
     const v = policyPorDefecto({ anonymous: true }, 'credential.create.request', 'publish');
@@ -76,6 +75,37 @@ console.log('BusGuard — el bus como puerta guardada\n');
     await authP(g, client, null);
     const r = await pubP(g, client, 'credential.create.request');
     assert.ok(r.err, 'el bypass por topic de dominio queda cerrado');
+  });
+
+  // ── multi-core: la puerta interna real es core/<id>/events/<dominio>/... ──
+  test('_dominioDeTopic: bus interno multi-core core/<id>/events/<dominio> → dominio (P0 cerrado)', () => {
+    assert.strictEqual(_dominioDeTopic('core/core-a/events/credential/resolve/request'), 'credential');
+    assert.strictEqual(_dominioDeTopic('core/core-b/events/pizzepos/pedidos/create'), 'pizzepos');
+    assert.strictEqual(_dominioDeTopic('core/core-a/status'), 'status');
+  });
+  await atest('enforce: anónimo publica core/<id>/events/credential/... → BLOQUEADO (bypass multi-core cerrado)', async () => {
+    const g = new BusGuard({ verifier: verifierFake, getMode: () => 'enforce' });
+    const client = {};
+    await authP(g, client, null);
+    const r = await pubP(g, client, 'core/core-a/events/credential/resolve/request');
+    assert.ok(r.err, 'la puerta interna del bus multi-core queda cerrada');
+  });
+
+  // ── firehose de lectura: el anónimo no cosecha por comodín ──
+  test('policy: anónimo subscribe a comodín (ui/response/#, core/+/events/#, #) → DENY', () => {
+    assert.strictEqual(policyPorDefecto({ anonymous: true }, 'ui/response/#', 'subscribe').allow, false);
+    assert.strictEqual(policyPorDefecto({ anonymous: true }, 'core/+/events/#', 'subscribe').allow, false);
+    assert.strictEqual(policyPorDefecto({ anonymous: true }, '#', 'subscribe').allow, false);
+  });
+  test('policy: identidad válida SÍ puede subscribe por comodín (peer/cliente con cert)', () => {
+    assert.strictEqual(policyPorDefecto({ anonymous: false, valid: true }, 'core/+/events/#', 'subscribe').allow, true);
+  });
+  await atest('enforce: anónimo subscribe ui/response/# → negado (no cosecha respuestas RPC)', async () => {
+    const g = new BusGuard({ verifier: verifierFake, getMode: () => 'enforce' });
+    const client = {};
+    await authP(g, client, null);
+    const r = await subP(g, client, 'ui/response/#');
+    assert.strictEqual(r.sub, null, 'el firehose de lectura queda cerrado');
   });
 
   // ── el core robusto al cambio de peldaño (conectó en off, sigue vivo al subir a enforce) ──

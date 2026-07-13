@@ -38,31 +38,52 @@ function _notAuthorized(message) {
   return err;
 }
 
-// Extrae el DOMINIO de cualquier forma de topic. Crítico: los módulos escuchan en
-// eventos de dominio CON PUNTO (credential.create.request), no solo en ui/request/... —
-// mirar solo el prefijo del front dejaba la puerta interna abierta (bypass).
-//   ui/request/<dominio>/<accion>          → <dominio>
-//   core/<id>/api/request/<dominio>/<accion> → <dominio>   (RPC core-a-core)
-//   <dominio>.<lo-que-sea>.request          → <dominio>    (evento de dominio, la puerta real)
+// Extrae el DOMINIO de cualquier forma de topic. CRÍTICO (multi-core): el tráfico interno
+// REAL viaja por core/<coreId>/events/<dominio>/<accion> (topics.js: build/event) — NO por
+// ui/request/... (eso es solo el frente del navegador). Mirar solo el prefijo del front
+// dejaba la puerta interna de par en par (bypass P0: publicar core/<id>/events/credential/...
+// se clasificaba como dominio 'core', jamás sensible).
+//   ui/request|response/<dominio>/<accion>        → <dominio>
+//   core/<id>/events/<dominio>/<accion>           → <dominio>   (el bus interno multi-core)
+//   core/<id>/api/<dominio>/...                   → <dominio>   (RPC request-reply)
+//   core/<id>/{status,heartbeat,logs,metrics}/... → el tipo     (presencia/telemetría, no sensible)
+//   <dominio>.<lo-que-sea>.request                → <dominio>   (evento plano, por si acaso)
 function _dominioDeTopic(topic) {
   if (typeof topic !== 'string' || !topic) return null;
   const parts = topic.split('/');
   if (parts[0] === 'ui' && (parts[1] === 'request' || parts[1] === 'response')) {
     return parts[2] ? parts[2].split('.')[0] : null;
   }
-  if (parts[0] === 'core' && parts[2] === 'api' && parts[3] === 'request') {
-    return parts[4] ? parts[4].split('.')[0] : null;
+  if (parts[0] === 'core' && parts.length >= 3) {
+    const type = parts[2];                       // events | api | status | heartbeat | logs | metrics
+    if (type === 'events' || type === 'api') {
+      return parts[3] ? parts[3].split('.')[0] : type;
+    }
+    return type;                                 // status/heartbeat/... — el "dominio" es el tipo (no sensible)
   }
   // evento de dominio plano: 'credential.create.request' → 'credential'
   return parts[0].split('.')[0] || null;
 }
 
-// La política por defecto: el confiable/identificado pasa; el anónimo no toca lo sensible.
-// Inyectable — un despliegue puede endurecerla (scope por identifier, allowlist por type).
-function policyPorDefecto(identidad, topic /*, accion */) {
+// ¿el patrón cubre múltiples topics (comodín MQTT)? Un SUBSCRIBE con comodín amplio deja
+// al anónimo cosechar todo el bus —incluidas las respuestas RPC (ui/response/#) con api_keys,
+// y todos los eventos (core/+/events/#)— sin tocar jamás un dominio sensible nominal.
+function _esComodin(topic) {
+  return typeof topic === 'string' && (topic.includes('#') || topic.includes('+'));
+}
+
+// La política por defecto: el confiable/identificado pasa; el anónimo no toca lo sensible
+// ni cosecha por comodín. Inyectable — un despliegue puede endurecerla (scope por identifier
+// del SAN, allowlist por type: core-peer/device/client).
+function policyPorDefecto(identidad, topic, accion) {
   const dominio = _dominioDeTopic(topic);
-  if (identidad && identidad.trusted) return { allow: true, dominio };  // el núcleo y servicios internos
-  if (identidad && identidad.anonymous && dominio && DOMINIOS_SENSIBLES.has(dominio)) {
+  if (identidad && identidad.trusted) return { allow: true, dominio };  // peer core / servicio interno
+  const anon = identidad && identidad.anonymous;
+  // Firehose: el anónimo no se suscribe a comodines amplios (leería todo el bus).
+  if (anon && accion === 'subscribe' && _esComodin(topic)) {
+    return { allow: false, reason: 'anonymous-wildcard-subscribe', dominio };
+  }
+  if (anon && dominio && DOMINIOS_SENSIBLES.has(dominio)) {
     return { allow: false, reason: 'anonymous-sensitive-domain', dominio };
   }
   return { allow: true, dominio };

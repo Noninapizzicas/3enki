@@ -102,6 +102,27 @@ PATRONES
   Guard      → fail-closed SOLO en enforce; observe y off nunca rompen (degradación honesta)
 ```
 
+## Multi-core: cuatro identidades, no una
+
+> **El sistema es multi-core.** El tráfico interno REAL viaja por `core/<coreId>/events/<dominio>/...`
+> (no por `ui/request/...`, que es solo el frente del navegador). La política guarda esa puerta:
+> `_dominioDeTopic` extrae el dominio del segmento `events/<DOMINIO>`. Las identidades que el guard
+> distingue:
+
+```json
+{
+  "core-peer":  "otro core del mesh — se autentica por security-p2p (handshake X25519, emite security.peer.trusted). Necesita subscribe amplio (core/+/events/#) para federar.",
+  "device":     "cert X.509 type=device (certificate-authority) — scope por SAN urn:eventcore:device:<id>",
+  "client":     "cert X.509 type=client (el front/portal facturación) — scope por SAN urn:eventcore:client:<id>",
+  "anonymous":  "sin credencial — en enforce no toca dominios sensibles NI cosecha por comodín (firehose cerrado)"
+}
+```
+
+**Trabajo pendiente (la política aún es plana, no scopeada):** el peer-trust debe venir de
+`security.peer.trusted`/`security.peer.revoked` (no del crutch `trustedClientIds=[coreId]`, spoofeable);
+y un cert válido aún da acceso a todo — falta acotar por `type`/`identifier` del SAN. Ver la sección
+de bordes.
+
 ## Resiliencia y bordes
 
 - **Broker arranca antes que los módulos**: el guard nace en modo `off` (verifier nulo) y sube a `observe/enforce` cuando `security-core` cablea el verifier y el dueño lo enciende. Nunca bloquea durante el arranque.

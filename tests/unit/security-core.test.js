@@ -27,23 +27,26 @@ async function atest(desc, fn) {
 // Doble mínimo del guard.
 function fakeGuard() {
   return {
-    _mode: 'off', verifier: null,
+    _mode: 'off', verifier: null, trusted: new Set(),
     setMode(m) { this._mode = m; },
     setVerifier(fn) { this.verifier = fn; },
+    addTrustedClientId(id) { this.trusted.add(id); },
+    removeTrustedClientId(id) { this.trusted.delete(id); },
     getStats() { return { mode: this._mode }; }
   };
 }
 // Core fake: eventBus que captura publishes y entrega subscribe, mqttRequest programable.
 function fakeCore(overrides = {}) {
   const published = [];
-  let interruptorHandler = null;
+  const handlers = {};
   return {
     published,
-    triggerInterruptor: (d) => interruptorHandler && interruptorHandler(d),
+    trigger: (ev, d) => handlers[ev] && handlers[ev](d),
+    triggerInterruptor: (d) => handlers['interruptor.cambiado'] && handlers['interruptor.cambiado'](d),
     ctx: {
       eventBus: {
         publish: (ev, p) => { published.push({ ev, p }); },
-        subscribe: (ev, fn) => { if (ev === 'interruptor.cambiado') interruptorHandler = fn; return () => {}; }
+        subscribe: (ev, fn) => { handlers[ev] = fn; return () => { delete handlers[ev]; }; }
       },
       logger: { info() {}, warn() {}, error() {}, debug() {} },
       metrics: { increment() {} },
@@ -121,6 +124,34 @@ console.log('security-core — el cerebro de la puerta guardada\n');
     const res = await mod.handleEstado();
     assert.strictEqual(res.data.guard_presente, false);
     assert.strictEqual(res.data.modo, 'sin-guard');
+  });
+
+  // ── peer-trust dinámico: el mesh de cores mueve el trusted set del guard ──
+  await atest('security.peer.trusted → el coreId del peer entra en el trusted set del guard', async () => {
+    const guard = fakeGuard();
+    const core = fakeCore({ busGuard: guard });
+    const mod = new SecurityCoreModule();
+    await mod.onLoad(core.ctx);
+    core.trigger('security.peer.trusted', { peer_core_id: 'core-b', fingerprint: 'ab:cd' });
+    assert.ok(guard.trusted.has('core-b'), 'el peer confiable pasa a trusted');
+  });
+  await atest('security.peer.revoked (con core_id) → el peer sale del trusted set', async () => {
+    const guard = fakeGuard();
+    const core = fakeCore({ busGuard: guard });
+    const mod = new SecurityCoreModule();
+    await mod.onLoad(core.ctx);
+    core.trigger('security.peer.trusted', { peer_core_id: 'core-b' });
+    core.trigger('security.peer.revoked', { core_id: 'core-b', public_key: 'x' });
+    assert.ok(!guard.trusted.has('core-b'), 'revocar propaga al guard');
+  });
+  await atest('handleEstado expone los peer_cores confiables', async () => {
+    const guard = fakeGuard();
+    const core = fakeCore({ busGuard: guard });
+    const mod = new SecurityCoreModule();
+    await mod.onLoad(core.ctx);
+    core.trigger('security.peer.trusted', { peer_core_id: 'core-c' });
+    const res = await mod.handleEstado();
+    assert.deepStrictEqual(res.data.peer_cores, ['core-c']);
   });
 
   // ── handleEstado: refleja el peldaño ──

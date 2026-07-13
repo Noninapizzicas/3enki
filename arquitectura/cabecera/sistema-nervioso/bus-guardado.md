@@ -147,10 +147,16 @@ PATRONES
 }
 ```
 
-**Trabajo pendiente (la política aún es plana, no scopeada):** el peer-trust debe venir de
-`security.peer.trusted`/`security.peer.revoked` (no del crutch `trustedClientIds=[coreId]`, spoofeable);
-y un cert válido aún da acceso a todo — falta acotar por `type`/`identifier` del SAN. Ver la sección
-de bordes.
+**Peer-trust DINÁMICO (hecho):** `security-core` escucha `security.peer.trusted`/`security.peer.revoked`
+(security-p2p, handshake X25519) y mueve el coreId del peer en el trusted set del guard — el mesh
+multi-core confía por handshake, no por una lista hardcodeada, y la revocación propaga. El coreId es
+el clientId con que el peer conecta al broker. `fuentes: modules/security-p2p/**`.
+
+**Trabajo pendiente:**
+- **Spoof de clientId**: el trusted-by-clientId sigue spoofeable sin auth de transporte (el crutch pasó
+  de hardcodeado a dinámico, no desapareció). Estado final: los peers también portan token firmado.
+- **Scope por SAN**: un cert válido aún da acceso a TODO — falta acotar por `type`/`identifier` del SAN
+  (device solo su dominio, client solo lo suyo). La política es plana, no scopeada.
 
 ## Resiliencia y bordes
 

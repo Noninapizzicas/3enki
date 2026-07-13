@@ -160,7 +160,13 @@ class BusGuard {
 
   // Puente tardío: security-core cablea el verifier a certificate-authority cuando carga.
   setVerifier(fn) { if (typeof fn === 'function') this.verifier = fn; }
+  // Peer-trust DINÁMICO: security-core añade/quita coreIds de peers según security.peer.trusted/revoked.
+  // NOTA DE SEGURIDAD: sigue siendo confianza por clientId (spoofeable sin auth de transporte) — el
+  // estado final es que los peers también porten token firmado. Esto reemplaza el crutch HARDCODEADO
+  // por uno DINÁMICO (multi-core real + revocación propagada), no elimina el crutch.
   addTrustedClientId(id) { if (id) this.trustedClientIds.add(id); }
+  removeTrustedClientId(id) { if (id) this.trustedClientIds.delete(id); }
+  trustedCount() { return this.trustedClientIds.size; }
 
   // password del CONNECT. La credencial FUERTE es el token firmado (prueba posesión de la clave).
   //   enki:token:<jws>  → prueba de posesión (identidad válida)

@@ -35,6 +35,8 @@ class SecurityCoreModule extends BaseModule {
     this.activo = false;    // interruptor bus-guard        — OFF (broker abierto)
     this.enforce = false;   // interruptor bus-guard-enforce — OFF (solo observa)
     this._unsub = null;
+    this._unsubPeers = [];
+    this._peerCores = new Set();   // coreIds de peers confiables (dinámico, desde security-p2p)
   }
 
   async onLoad(core) {
@@ -66,6 +68,10 @@ class SecurityCoreModule extends BaseModule {
     // Observer: el dueño mueve un interruptor → recalculamos el peldaño en caliente.
     if (this.eventBus?.subscribe) {
       this._unsub = this.eventBus.subscribe('interruptor.cambiado', (d) => this._onInterruptor(d));
+      // Peer-trust DINÁMICO: el mesh de cores confía por security-p2p (handshake X25519).
+      // Cada peer confiable → su coreId entra en el trusted set del guard (conecta con clientId=coreId).
+      this._unsubPeers.push(this.eventBus.subscribe('security.peer.trusted', (d) => this._onPeerTrusted(d)));
+      this._unsubPeers.push(this.eventBus.subscribe('security.peer.revoked', (d) => this._onPeerRevoked(d)));
     }
 
     this.logger?.info?.('security-core.loaded', {
@@ -74,8 +80,30 @@ class SecurityCoreModule extends BaseModule {
     });
   }
 
+  // ── peer-trust: el mesh de cores (security-p2p) mueve el trusted set del guard ──
+  _coreIdDe(d) {
+    // los eventos de security-p2p no son uniformes: handshake trae peer_core_id, el manual name.
+    return (d && (d.peer_core_id || d.core_id || d.name)) || null;
+  }
+  _onPeerTrusted(d) {
+    const coreId = this._coreIdDe(d);
+    if (!coreId) return;
+    this._peerCores.add(coreId);
+    this.guard?.addTrustedClientId(coreId);
+    this.logger?.info?.('security-core.peer_trusted', { coreId, peers: this._peerCores.size });
+  }
+  _onPeerRevoked(d) {
+    const coreId = d && (d.core_id || d.peer_core_id);
+    if (!coreId) { this.logger?.warn?.('security-core.peer_revoked_sin_coreId', { public_key: !!d?.public_key }); return; }
+    this._peerCores.delete(coreId);
+    this.guard?.removeTrustedClientId(coreId);
+    this.logger?.info?.('security-core.peer_revoked', { coreId, peers: this._peerCores.size });
+  }
+
   async onUnload() {
     if (typeof this._unsub === 'function') { try { this._unsub(); } catch (_) { /* ignore */ } }
+    for (const u of this._unsubPeers) { if (typeof u === 'function') { try { u(); } catch (_) { /* ignore */ } } }
+    this._unsubPeers = [];
     this._unsub = null;
     // Al descargar, la puerta vuelve a 'off' (no dejamos el bus a medio guardar sin cerebro).
     if (this.guard) this.guard.setMode('off');
@@ -134,6 +162,7 @@ class SecurityCoreModule extends BaseModule {
         guard_presente: !!this.guard,
         modo, activo: this.activo, enforce: this.enforce,
         stats,
+        peer_cores: [...this._peerCores],
         escalera: 'off → observe (audita sin romper) → enforce (bloquea)'
       }
     };

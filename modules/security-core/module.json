@@ -14,7 +14,9 @@
       { "event": "security.bus.mode_changed", "description": "El peldano de la escalera cambio (off/observe/enforce) tras un toggle del dueno. correlation implicit + timestamp." }
     ],
     "subscribes": [
-      { "event": "interruptor.cambiado", "handler": "_onInterruptor", "description": "El dueno movio un interruptor; recalcula el modo del guard en caliente." }
+      { "event": "interruptor.cambiado", "handler": "_onInterruptor", "description": "El dueno movio un interruptor; recalcula el modo del guard en caliente." },
+      { "event": "security.peer.trusted", "handler": "_onPeerTrusted", "description": "Un peer core completo el handshake (security-p2p); su coreId entra en el trusted set del guard." },
+      { "event": "security.peer.revoked", "handler": "_onPeerRevoked", "description": "Un peer core fue revocado; su coreId sale del trusted set del guard." }
     ]
   },
   "ui_handlers": [

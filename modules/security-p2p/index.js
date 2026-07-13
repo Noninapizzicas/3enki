@@ -395,12 +395,17 @@ class SecurityP2PModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'public_key required', { field: 'public_key' });
       }
 
+      // Recupera el core_id del peer ANTES de olvidarlo — el guardián del bus lo necesita
+      // para quitar su confianza (security-core mapea core_id → clientId del broker).
+      const peerCoreId = (this.keyManager.listTrustedPeers()
+        .find(p => p.public_key === public_key) || {}).core_id || null;
+
       const removed = this.keyManager.untrustPeer(public_key);
       this._sharedSecrets.delete(public_key);
 
       if (removed) {
         await this._publicarEvento('security.peer.revoked', {
-          public_key
+          public_key, core_id: peerCoreId
         }, { correlation_id, project_id });
       }
 

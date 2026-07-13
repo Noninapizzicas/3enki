@@ -38,14 +38,23 @@ function _notAuthorized(message) {
   return err;
 }
 
-// ui/request/<dominio>/<accion>  ·  core/<id>/...  ·  ui/response/<rid>
+// Extrae el DOMINIO de cualquier forma de topic. Crítico: los módulos escuchan en
+// eventos de dominio CON PUNTO (credential.create.request), no solo en ui/request/... —
+// mirar solo el prefijo del front dejaba la puerta interna abierta (bypass).
+//   ui/request/<dominio>/<accion>          → <dominio>
+//   core/<id>/api/request/<dominio>/<accion> → <dominio>   (RPC core-a-core)
+//   <dominio>.<lo-que-sea>.request          → <dominio>    (evento de dominio, la puerta real)
 function _dominioDeTopic(topic) {
-  if (typeof topic !== 'string') return null;
+  if (typeof topic !== 'string' || !topic) return null;
   const parts = topic.split('/');
   if (parts[0] === 'ui' && (parts[1] === 'request' || parts[1] === 'response')) {
-    return parts[2] || null;
+    return parts[2] ? parts[2].split('.')[0] : null;
   }
-  return parts[0] || null;
+  if (parts[0] === 'core' && parts[2] === 'api' && parts[3] === 'request') {
+    return parts[4] ? parts[4].split('.')[0] : null;
+  }
+  // evento de dominio plano: 'credential.create.request' → 'credential'
+  return parts[0].split('.')[0] || null;
 }
 
 // La política por defecto: el confiable/identificado pasa; el anónimo no toca lo sensible.
@@ -197,6 +206,10 @@ class BusGuard {
     const modo = this._modoActual();
     if (modo === 'off') return cb(null);
     if (!client) return cb(null); // el propio broker/núcleo publica sin restricción
+    // Confiable por clientId ANTES de mirar la identidad sellada: cubre al core que se
+    // conectó en 'off' (identidad anónima) y sigue vivo cuando el dueño sube a 'enforce' —
+    // sin esto, el núcleo se bloquearía a sí mismo al cambiar de peldaño.
+    if (this.trustedClientIds.has(client.id)) return cb(null);
 
     const identidad = client.enkiIdentity || { anonymous: true, credencialPresente: false };
     let veredicto;
@@ -221,6 +234,7 @@ class BusGuard {
     const modo = this._modoActual();
     if (modo === 'off') return cb(null, subscription);
     if (!client) return cb(null, subscription);
+    if (this.trustedClientIds.has(client.id)) return cb(null, subscription); // el núcleo, robusto al cambio de peldaño
 
     const identidad = client.enkiIdentity || { anonymous: true, credencialPresente: false };
     let veredicto;

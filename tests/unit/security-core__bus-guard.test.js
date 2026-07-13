@@ -60,6 +60,33 @@ console.log('BusGuard — el bus como puerta guardada\n');
     assert.strictEqual(policyPorDefecto({ anonymous: false, valid: true }, 'ui/request/credential/list').allow, true);
   });
 
+  // ── BYPASS cerrado: la puerta interna (eventos de dominio con punto) también se guarda ──
+  test('_dominioDeTopic: evento de dominio con punto (credential.create.request) → credential', () => {
+    assert.strictEqual(_dominioDeTopic('credential.create.request'), 'credential');
+    assert.strictEqual(_dominioDeTopic('credential-manager.request'), 'credential-manager');
+    assert.strictEqual(_dominioDeTopic('core/core-a/api/request/credential/resolve'), 'credential');
+  });
+  test('policy: anónimo publica DIRECTO a credential.create.request → DENY (bypass cerrado)', () => {
+    const v = policyPorDefecto({ anonymous: true }, 'credential.create.request', 'publish');
+    assert.strictEqual(v.allow, false, 'la puerta interna no puede quedar abierta');
+  });
+  await atest('enforce: anónimo publica al evento de dominio con punto → BLOQUEADO', async () => {
+    const g = new BusGuard({ verifier: verifierFake, getMode: () => 'enforce' });
+    const client = {};
+    await authP(g, client, null);
+    const r = await pubP(g, client, 'credential.create.request');
+    assert.ok(r.err, 'el bypass por topic de dominio queda cerrado');
+  });
+
+  // ── el core robusto al cambio de peldaño (conectó en off, sigue vivo al subir a enforce) ──
+  await atest('enforce: core conectado en off (identidad stale anónima) → NO se bloquea (trusted por clientId en authorize)', async () => {
+    const g = new BusGuard({ verifier: verifierFake, getMode: () => 'enforce', trustedClientIds: ['core-a'] });
+    // simula: se conectó en off → enkiIdentity anónima sellada, nunca trusted
+    const client = { id: 'core-a', enkiIdentity: { anonymous: true, credencialPresente: false } };
+    const r = await pubP(g, client, 'credential.create.request');
+    assert.strictEqual(r.err, null, 'el núcleo no se bloquea a sí mismo al cambiar de peldaño');
+  });
+
   // ── off: abierto y retrocompatible ──
   await atest('off: authenticate SIEMPRE pasa y no exige credencial', async () => {
     const g = new BusGuard({ verifier: verifierFake, getMode: () => 'off' });

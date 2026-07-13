@@ -252,6 +252,92 @@ class CAManager {
   }
 
   /**
+   * Emite un certificado firmando una CLAVE PÚBLICA provista por el cliente.
+   *
+   * A diferencia de issueCertificate (que genera el par y devuelve la privada), aquí la clave
+   * privada NUNCA existe en el servidor: el cliente (browser vía WebCrypto, device, peer core) la
+   * generó y guardó; solo manda su pubkey. Base del paso 2 (token firmado): el cert prueba QUIÉN es,
+   * y la firma del token prueba que POSEE la privada. No hay .p12 ni key.pem que guardar/filtrar.
+   *
+   * @param {Object} options
+   * @param {string} options.publicKeyPem - Clave pública del cliente (SPKI PEM, la que exporta WebCrypto)
+   * @param {string} options.commonName
+   * @param {string} options.type - 'client' | 'device'
+   * @param {string} options.identifier
+   * @param {string} [options.organization]
+   * @param {string} [options.email]
+   * @param {number} [options.validityDays]
+   * @returns {Object} { serialNumber, certificate, fingerprint, metadata }  (SIN privateKey ni p12)
+   */
+  issueFromPublicKey(options = {}) {
+    if (!this.caKey || !this.caCert) throw new Error('CA not initialized. Call initialize() first.');
+    const {
+      publicKeyPem, commonName, type = 'client', identifier,
+      organization, email, validityDays = this.config.cert_validity_days
+    } = options;
+
+    if (!publicKeyPem) throw new Error('publicKeyPem is required');
+    if (!commonName) throw new Error('commonName is required');
+    if (!identifier) throw new Error('identifier is required');
+    if (!['client', 'device'].includes(type)) throw new Error('type must be "client" or "device"');
+
+    let publicKey;
+    try { publicKey = forge.pki.publicKeyFromPem(publicKeyPem); }
+    catch (e) { throw new Error('invalid publicKeyPem: ' + e.message); }
+
+    const cert = forge.pki.createCertificate();
+    const serialNumber = this._generateSerialNumber();
+    cert.publicKey = publicKey;
+    cert.serialNumber = serialNumber;
+
+    const notBefore = new Date();
+    const notAfter = new Date();
+    notAfter.setDate(notAfter.getDate() + validityDays);
+    cert.validity.notBefore = notBefore;
+    cert.validity.notAfter = notAfter;
+
+    const subjectAttrs = [
+      { name: 'commonName', value: commonName },
+      { name: 'organizationalUnitName', value: type === 'client' ? 'Portal Clientes' : 'Dispositivos' }
+    ];
+    if (organization) subjectAttrs.push({ name: 'organizationName', value: organization });
+    if (email) subjectAttrs.push({ name: 'emailAddress', value: email });
+    cert.setSubject(subjectAttrs);
+    cert.setIssuer(this.caCert.subject.attributes);
+
+    cert.setExtensions([
+      { name: 'basicConstraints', cA: false },
+      { name: 'keyUsage', digitalSignature: true, keyEncipherment: true, critical: true },
+      { name: 'extKeyUsage', clientAuth: true },
+      { name: 'subjectKeyIdentifier' },
+      { name: 'authorityKeyIdentifier', keyIdentifier: true },
+      { name: 'subjectAltName', altNames: [{ type: 6, value: `urn:eventcore:${type}:${identifier}` }] }
+    ]);
+
+    cert.sign(this.caKey, forge.md.sha256.create());
+
+    const certificate = forge.pki.certificateToPem(cert);
+    const certDer = forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes();
+    const fingerprint = forge.md.sha256.create().update(certDer).digest().toHex()
+      .toUpperCase().match(/.{2}/g).join(':');
+
+    const metadata = {
+      serialNumber, type, identifier, commonName,
+      organization: organization || null, email: email || null, fingerprint,
+      issuedAt: notBefore.toISOString(), expiresAt: notAfter.toISOString(),
+      status: 'active', revokedAt: null, keyOrigin: 'client'   // marca: la privada vive en el cliente
+    };
+
+    const certDir = path.join(this.certsPath, serialNumber);
+    fs.mkdirSync(certDir, { recursive: true });
+    fs.writeFileSync(path.join(certDir, 'cert.pem'), certificate);
+    fs.writeFileSync(path.join(certDir, 'metadata.json'), JSON.stringify(metadata, null, 2));
+    // NO se escribe key.pem ni bundle.p12 — el servidor no conoce la privada.
+
+    return { serialNumber, certificate, fingerprint, metadata };
+  }
+
+  /**
    * Revoca un certificado por número de serie
    *
    * @param {string} serialNumber

@@ -21,6 +21,7 @@
     { "domain": "certificate-authority", "action": "status",       "handler": "handleStatus",            "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "certificate-authority", "action": "ca-cert",      "handler": "handleGetCACert",         "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "certificate-authority", "action": "issue",        "handler": "handleIssueCertificate",  "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "enroll",       "handler": "handleEnrollFromPublicKey", "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "certificate-authority", "action": "revoke",       "handler": "handleRevokeCertificate", "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "certificate-authority", "action": "renew",        "handler": "handleRenewCertificate",  "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "certificate-authority", "action": "list",         "handler": "handleListCertificates",  "type": "system_panel", "zone": "lateral_derecha" },

@@ -261,6 +261,9 @@ jobs:
       - name: Run unit tests (security-core — el cerebro de la puerta guardada)
         run: npm run test:security-core
 
+      - name: Run unit tests (security-core/enrollment — token firmado con CA real, paso 2)
+        run: npm run test:security-core-enrollment
+
       - name: Run unit tests (security-p2p — reescritura canonica)
         run: npm run test:security-p2p
 

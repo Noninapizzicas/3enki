@@ -4,10 +4,13 @@ dominio: sistema
 resumen: El bus como PUERTA GUARDADA — la identidad por certificado (certificate-authority) rige el broker MQTT entero, no solo el gateway HTTP. Guard en el broker (authenticate/authorizePublish/authorizeSubscribe) con escalera off→observe→enforce, mandada por el dueño desde el panel de interruptores. Cierra la restricción del prisma: el broker anónimo.
 fuentes:
   - core/broker/bus-guard.js
+  - core/broker/enki-token.js
   - core/broker/embedded.js
   - modules/security-core/**
   - modules/certificate-authority/**
+  - frontend/src/lib/ui-core/enki-identity.ts
   - tests/unit/security-core__bus-guard.test.js
+  - tests/unit/security-core__enrollment.test.js
 verificado: 2026-07-13
 ---
 
@@ -34,10 +37,36 @@ verificado: 2026-07-13
     "enforce": "bloquea: anónimo fuera de los dominios sensibles, credencial inválida rechazada en CONNECT"
   },
   "mando": "el DUEÑO sube el peldaño desde el panel (interruptores bus-guard · bus-guard-enforce) — degradación honesta, jamás un puenteo",
-  "transporte_credencial": "MQTT CONNECT password = 'enki:cert:<base64(PEM)>' (extensible a 'enki:token:<jwt>')",
+  "transporte_credencial": "MQTT CONNECT password = 'enki:token:<jws>' — token FIRMADO que prueba posesión de la clave. El cert desnudo (enki:cert:) es público→replayable y NO da identidad válida.",
   "veredicto": "certificate-authority.verify (node-forge, ya real) — el guard NO re-implementa cripto, la consulta"
 }
 ```
+
+## Paso 2 — el cliente porta su identidad sin que su clave salga jamás
+
+> El cert es PÚBLICO: enseñarlo no prueba nada (replayable). La credencial fuerte es el **token
+> firmado** — el cliente firma `{cert, iat, jti}` con su clave privada y el guard verifica **4 cosas**:
+
+```json
+{
+  "1_CA":       "certificate-authority.verify: el cert lo firmó nuestra CA (identidad + SAN type/identifier)",
+  "2_posesion": "la firma del token valida contra la clave pública DEL cert ⇒ el cliente POSEE la privada",
+  "3_frescura": "iat dentro de ±tokenWindowSec (60s) — un token viejo no vale",
+  "4_no_replay":"jti único dentro de la ventana (cache en el guard) — el mismo token no entra dos veces"
+}
+```
+
+**Formato** (`core/broker/enki-token.js`, RS256 = RSASSA-PKCS1-v1_5+SHA256): `enki:token:` +
+`b64url(header).b64url(payload).b64url(sig)`. Un solo formato para browser (WebCrypto), device y peer core.
+
+**Enrolamiento sin exfiltrar la clave** (`certificate-authority.issueFromPublicKey`, `enki-identity.ts`):
+el cliente genera su par en WebCrypto (privada **no-extraíble** en IndexedDB), manda solo su clave
+**pública** a `certificate-authority/enroll`, y recibe un cert firmado. La privada NUNCA sale del
+dispositivo; el servidor no guarda `key.pem` ni `.p12`.
+
+**Orden de migración**: enrolar durante `observe` (bus abierto) → el front mintea el token en cada
+CONNECT → subir a `enforce` cuando los clientes ya portan cert. El front es inerte hasta enrolar
+(sin cert → conecta anónimo, funciona en off/observe).
 
 ## El motor (pseudocódigo)
 

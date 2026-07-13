@@ -13,8 +13,10 @@
  */
 
 const assert = require('assert');
+const crypto = require('crypto');
 const BusGuard = require('../../core/broker/bus-guard');
 const { policyPorDefecto, _dominioDeTopic } = require('../../core/broker/bus-guard');
+const enkiToken = require('../../core/broker/enki-token');
 
 function test(desc, fn) {
   try { fn(); console.log(`✓ ${desc}`); }
@@ -30,12 +32,28 @@ const authP = (g, client, pass) => new Promise((res) => g.authenticate(client, '
 const pubP = (g, client, topic) => new Promise((res) => g.authorizePublish(client, { topic }, (err) => res({ err })));
 const subP = (g, client, topic) => new Promise((res) => g.authorizeSubscribe(client, { topic }, (err, sub) => res({ err, sub })));
 
-// credencial cert válida = 'enki:cert:<base64(PEM)>' — el verifier fake la resuelve por contenido.
-const credCert = (pem) => 'enki:cert:' + Buffer.from(pem, 'utf8').toString('base64');
-const verifierFake = (pem) => {
-  if (pem === 'PEM-VALIDO') return { valid: true, type: 'device', identifier: 'esp32-01' };
+// Par de claves REAL (RSA-2048): la pubkey PEM hace de "cert" (stand-in), la privada firma el token.
+// El verifier fake acepta esa pubkey como "firmada por la CA" y rechaza cualquier otra.
+function nuevaIdentidad(type, identifier) {
+  const kp = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+  });
+  return { certPem: kp.publicKey, privateKeyPem: kp.privateKey, type, identifier };
+}
+const ID_DEVICE = nuevaIdentidad('device', 'esp32-01');   // identidad legítima (la CA la reconoce)
+const ID_INTRUSO = nuevaIdentidad('device', 'intruso');   // clave real pero cert NO firmado por la CA
+
+const verifierFake = (certPem) => {
+  if (certPem === ID_DEVICE.certPem) return { valid: true, type: ID_DEVICE.type, identifier: ID_DEVICE.identifier };
   return { valid: false, error: 'not signed by this CA' };
 };
+// token firmado válido (fresco) de la identidad legítima
+const credToken = (id = ID_DEVICE, iatSeconds = null) =>
+  enkiToken.mint({ certPem: id.certPem, privateKeyPem: id.privateKeyPem, iatSeconds });
+// cert desnudo (replayable) — ya NO debe dar identidad válida
+const credCert = () => 'enki:cert:' + Buffer.from(ID_DEVICE.certPem, 'utf8').toString('base64');
 
 console.log('BusGuard — el bus como puerta guardada\n');
 
@@ -141,13 +159,42 @@ console.log('BusGuard — el bus como puerta guardada\n');
     assert.strictEqual(r.err, null, 'observe nunca bloquea');
     assert.strictEqual(g.stats.publish_denied, 1, 'pero lo auditó');
   });
-  await atest('observe: credencial válida sella identidad (type/identifier)', async () => {
+  await atest('observe: token firmado válido sella identidad (type/identifier)', async () => {
     const g = new BusGuard({ verifier: verifierFake, getMode: () => 'observe' });
     const client = {};
-    await authP(g, client, credCert('PEM-VALIDO'));
+    await authP(g, client, credToken());
     assert.strictEqual(client.enkiIdentity.valid, true);
     assert.strictEqual(client.enkiIdentity.identifier, 'esp32-01');
     assert.strictEqual(g.stats.authenticated, 1);
+  });
+
+  // ── token firmado: las 4 pruebas (CA · posesión · frescura · no-replay) ──
+  await atest('token: cert DESNUDO (enki:cert) ya NO da identidad válida (replayable)', async () => {
+    const g = new BusGuard({ verifier: verifierFake, getMode: () => 'enforce' });
+    const r = await authP(g, {}, credCert());
+    assert.ok(r.err, 'el cert público no prueba posesión → no entra en enforce');
+  });
+  await atest('token: firma que NO corresponde a la clave del cert → rechazado (posesión falla)', async () => {
+    const g = new BusGuard({ verifier: verifierFake, getMode: () => 'enforce' });
+    // mintea con la clave del INTRUSO pero pega el cert legítimo → la firma no valida contra ese cert
+    const forjado = enkiToken.mint({ certPem: ID_DEVICE.certPem, privateKeyPem: ID_INTRUSO.privateKeyPem });
+    const r = await authP(g, {}, forjado);
+    assert.ok(r.err, 'sin la clave privada del cert no se entra');
+  });
+  await atest('token: replay (mismo jti dos veces) → el segundo se rechaza', async () => {
+    const g = new BusGuard({ verifier: verifierFake, getMode: () => 'enforce' });
+    const tok = credToken();
+    const a = await authP(g, {}, tok);
+    assert.strictEqual(a.ok, true, 'primer uso entra');
+    const b = await authP(g, {}, tok);   // mismo token → mismo jti
+    assert.ok(b.err, 'el replay se bloquea');
+    assert.strictEqual(g.stats.replayed, 1);
+  });
+  await atest('token: fuera de ventana (iat viejo) → rechazado', async () => {
+    const g = new BusGuard({ verifier: verifierFake, getMode: () => 'enforce', tokenWindowSec: 30 });
+    const viejo = credToken(ID_DEVICE, Math.floor(Date.now() / 1000) - 120); // 2 min atrás
+    const r = await authP(g, {}, viejo);
+    assert.ok(r.err, 'un token viejo no vale (anti-replay por ventana)');
   });
 
   // ── enforce: bloquea de verdad ──
@@ -166,17 +213,17 @@ console.log('BusGuard — el bus como puerta guardada\n');
     const r = await pubP(g, client, 'ui/request/pizzepos/pedidos');
     assert.strictEqual(r.err, null);
   });
-  await atest('enforce: credencial PRESENTE pero inválida → rechaza el CONNECT (returnCode 4)', async () => {
+  await atest('enforce: token de cert NO firmado por la CA → rechaza el CONNECT (returnCode 4)', async () => {
     const g = new BusGuard({ verifier: verifierFake, getMode: () => 'enforce' });
-    const r = await authP(g, {}, credCert('PEM-FALSO'));
+    const r = await authP(g, {}, credToken(ID_INTRUSO));   // clave real, pero cert no lo firmó la CA
     assert.ok(r.err, 'no entra');
     assert.strictEqual(r.ok, false);
     assert.strictEqual(r.err.returnCode, 4);
   });
-  await atest('enforce: credencial válida entra y luego toca dominio sensible OK', async () => {
+  await atest('enforce: token válido entra y luego toca dominio sensible OK', async () => {
     const g = new BusGuard({ verifier: verifierFake, getMode: () => 'enforce' });
     const client = {};
-    const a = await authP(g, client, credCert('PEM-VALIDO'));
+    const a = await authP(g, client, credToken());
     assert.strictEqual(a.ok, true);
     const r = await pubP(g, client, 'ui/request/credential/list');
     assert.strictEqual(r.err, null, 'la identidad válida sí toca lo sensible');
@@ -186,7 +233,7 @@ console.log('BusGuard — el bus como puerta guardada\n');
   await atest('enforce: verifier caído (throw) → NO rechaza el CONNECT (degrada a observe) y cuenta', async () => {
     const verifierCaido = () => { throw new Error('certificate-authority down'); };
     const g = new BusGuard({ verifier: verifierCaido, getMode: () => 'enforce' });
-    const r = await authP(g, {}, credCert('PEM-VALIDO'));
+    const r = await authP(g, {}, credToken());
     assert.strictEqual(r.ok, true, 'la seguridad no se paga con una caída total del bus');
     assert.strictEqual(g.stats.verifier_unavailable, 1);
   });

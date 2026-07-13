@@ -17,6 +17,8 @@
 
 'use strict';
 
+const enkiToken = require('./enki-token');
+
 // ── Dominios que el anónimo JAMÁS toca en enforce (espejo de la lista del Portal) ──
 // La puerta grande hereda el criterio de la puerta lateral: lo sensible exige identidad.
 const DOMINIOS_SENSIBLES = new Set([
@@ -113,6 +115,9 @@ class BusGuard {
     this.trustedClientIds = new Set(opts.trustedClientIds || []);
     this.logger = opts.logger || null;
     this.metrics = opts.metrics || null;
+    // Ventana de frescura del token (anti-replay): un token vale ±N segundos de su iat.
+    this.tokenWindowSec = Number.isFinite(opts.tokenWindowSec) ? opts.tokenWindowSec : 60;
+    this._jtiCache = new Map();   // jti → expiry(s) — replay bloqueado dentro de la ventana
 
     this.stats = {
       authenticated: 0,
@@ -120,8 +125,24 @@ class BusGuard {
       rejected: 0,
       verifier_unavailable: 0,
       publish_denied: 0,
-      subscribe_denied: 0
+      subscribe_denied: 0,
+      replayed: 0
     };
+  }
+
+  // ── anti-replay: jti visto dentro de su ventana ── (poda perezosa al consultar)
+  _jtiVisto(jti, nowSec) {
+    const exp = this._jtiCache.get(jti);
+    if (exp === undefined) return false;
+    if (exp < nowSec) { this._jtiCache.delete(jti); return false; }
+    return true;
+  }
+  _recordarJti(jti, expSec, nowSec) {
+    // poda barata: si la cache crece, limpia lo caducado
+    if (this._jtiCache.size > 4096) {
+      for (const [k, e] of this._jtiCache) if (e < nowSec) this._jtiCache.delete(k);
+    }
+    this._jtiCache.set(jti, expSec);
   }
 
   _modoActual() {
@@ -141,44 +162,77 @@ class BusGuard {
   setVerifier(fn) { if (typeof fn === 'function') this.verifier = fn; }
   addTrustedClientId(id) { if (id) this.trustedClientIds.add(id); }
 
-  // password del CONNECT = 'enki:cert:<base64(PEM)>'  (extensible: 'enki:token:<jwt>')
+  // password del CONNECT. La credencial FUERTE es el token firmado (prueba posesión de la clave).
+  //   enki:token:<jws>  → prueba de posesión (identidad válida)
+  //   enki:cert:<b64pem> → REPLAYABLE (el cert es público): NO da identidad válida — se conserva
+  //                        solo para diagnóstico/observe. Usa token para entrar de verdad.
   _extraerCredencial(password) {
     if (!password) return null;
     const raw = Buffer.isBuffer(password) ? password.toString('utf8') : String(password);
+    if (raw.startsWith(enkiToken.PREFIJO)) {
+      return { scheme: 'token', token: raw };
+    }
     if (raw.startsWith('enki:cert:')) {
-      const b64 = raw.slice('enki:cert:'.length);
-      try { return { scheme: 'cert', pem: Buffer.from(b64, 'base64').toString('utf8') }; }
-      catch { return { scheme: 'cert', pem: null, malformed: true }; }
+      return { scheme: 'cert' };   // reconocida pero insuficiente (replayable)
     }
-    if (raw.startsWith('enki:token:')) {
-      return { scheme: 'token', token: raw.slice('enki:token:'.length) };
-    }
-    return { scheme: 'unknown', malformed: true };
+    return { scheme: 'unknown' };
   }
 
   async _resolverIdentidad(password) {
     const cred = this._extraerCredencial(password);
     if (!cred) return { anonymous: true, credencialPresente: false };
-    // Hoy solo se verifica el esquema 'cert' (token queda para la fase JWT).
-    if (cred.scheme !== 'cert' || !cred.pem) {
+    if (cred.scheme === 'cert') {
+      // El cert desnudo es público → replayable. No prueba nada. Exige token firmado.
+      return { anonymous: true, credencialPresente: true, valid: false, error: 'cert-replayable-usa-token' };
+    }
+    if (cred.scheme !== 'token') {
       return { anonymous: true, credencialPresente: true, valid: false, error: 'credencial-malformada' };
     }
-    if (!this.verifier) {
-      // El guard aún no tiene puente a certificate-authority (arranque): trata como anónimo.
-      return { anonymous: true, credencialPresente: true, valid: false, error: 'verifier-ausente' };
-    }
-    try {
-      const v = await this.verifier(cred.pem);
-      if (v && v.valid) {
-        return { anonymous: false, credencialPresente: true, valid: true, type: v.type, identifier: v.identifier };
-      }
-      return { anonymous: true, credencialPresente: true, valid: false, error: (v && v.error) || 'invalida' };
-    } catch (err) {
+    return this._resolverToken(cred.token);
+  }
+
+  // Las 4 pruebas del token firmado: CA · posesión · frescura · no-replay.
+  async _resolverToken(tokenStr) {
+    let parsed;
+    try { parsed = enkiToken.parse(tokenStr); }
+    catch { return { anonymous: true, credencialPresente: true, valid: false, error: 'token-malformado' }; }
+
+    // 1. La CA firmó el cert (identidad + SAN type/identifier). Sin verifier → anónimo (arranque).
+    if (!this.verifier) return { anonymous: true, credencialPresente: true, valid: false, error: 'verifier-ausente' };
+    let v;
+    try { v = await this.verifier(parsed.payload.cert); }
+    catch (err) {
       // certificate-authority caído → no cerramos el bus por una caída: degradar a observe.
       this.stats.verifier_unavailable++;
       this.metrics?.increment?.('security.bus.verifier_unavailable');
       return { anonymous: true, credencialPresente: true, valid: false, error: 'verifier-unavailable', degradar: true };
     }
+    if (!v || !v.valid) {
+      return { anonymous: true, credencialPresente: true, valid: false, error: (v && v.error) || 'cert-invalido' };
+    }
+
+    // 2. Posesión: la firma del token valida contra la clave pública DEL cert (⇒ tiene la privada).
+    if (!enkiToken.verifySignature(parsed)) {
+      return { anonymous: true, credencialPresente: true, valid: false, error: 'firma-token-invalida' };
+    }
+
+    // 3. Frescura: iat dentro de la ventana (±tokenWindowSec).
+    const nowSec = Math.floor(Date.now() / 1000);
+    const iat = parsed.payload.iat;
+    if (!Number.isFinite(iat) || Math.abs(nowSec - iat) > this.tokenWindowSec) {
+      return { anonymous: true, credencialPresente: true, valid: false, error: 'token-fuera-de-ventana' };
+    }
+
+    // 4. No-replay: jti único dentro de la ventana.
+    const jti = parsed.payload.jti;
+    if (!jti || this._jtiVisto(jti, nowSec)) {
+      this.stats.replayed++;
+      this.metrics?.increment?.('security.bus.rejected', { stage: 'replay' });
+      return { anonymous: true, credencialPresente: true, valid: false, error: 'token-replay' };
+    }
+    this._recordarJti(jti, nowSec + this.tokenWindowSec, nowSec);
+
+    return { anonymous: false, credencialPresente: true, valid: true, type: v.type, identifier: v.identifier };
   }
 
   // ── aedes: authenticate(client, username, password, callback) ──

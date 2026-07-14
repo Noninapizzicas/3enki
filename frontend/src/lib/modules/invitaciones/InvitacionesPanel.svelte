@@ -23,8 +23,16 @@
     type AccionInvitacion,
     type EstadoInvitacion
   } from '$lib/stores/invitaciones';
+  import { projectsList, loadProjects } from '$lib/stores/projects';
 
   export let panelId: string = '';
+
+  // Catálogo de roles (semilla del sistema — Fase 2 los hará por-proyecto).
+  const ROLES = [
+    { id: 'project-admin', label: 'Admin de proyecto', desc: 'Control total del proyecto: gestiona todo y puede repartir invitaciones a su equipo.' },
+    { id: 'member',        label: 'Miembro',           desc: 'Opera el proyecto (pedidos, cocina, caja…). No toca identidad ni ajustes de sistema.' },
+    { id: 'device',        label: 'Dispositivo',       desc: 'Equipos IoT (ESP32, TPV, periféricos). Solo el carril de dispositivos y telemetría.' }
+  ];
 
   let cleanup: (() => void) | null = null;
   let tab: 'emitir' | 'gestionar' = 'emitir';
@@ -39,8 +47,11 @@
   };
   let copiado = false;
 
+  $: rolDesc = ROLES.find((r) => r.id === form.role)?.desc ?? '';
+
   onMount(() => {
     loadInvitaciones();
+    loadProjects();
     cleanup = initInvitacionesSubscriptions();
   });
   onDestroy(() => cleanup && cleanup());
@@ -86,8 +97,22 @@
       </label>
 
       {#if form.accion === 'unirse-proyecto'}
-        <label>Proyecto <input type="text" bind:value={form.project} placeholder="id del proyecto (ej: nonina)" /></label>
-        <label>Rol <input type="text" bind:value={form.role} placeholder="member · device · …" /></label>
+        <label>Proyecto
+          <select bind:value={form.project}>
+            <option value="" disabled>— elige un proyecto —</option>
+            {#each $projectsList as p (p.id)}
+              <option value={p.id}>{p.name || p.id}</option>
+            {/each}
+          </select>
+        </label>
+        <label>Rol
+          <select bind:value={form.role}>
+            {#each ROLES as r (r.id)}
+              <option value={r.id}>{r.label}</option>
+            {/each}
+          </select>
+        </label>
+        {#if rolDesc}<p class="hint">{rolDesc}</p>{/if}
       {:else}
         <p class="hint">El invitado creará un proyecto nuevo y será su <strong>project-admin</strong>.</p>
       {/if}
@@ -142,7 +167,7 @@
   .radios label { flex-direction: row; align-items: center; gap: 0.4rem; }
   .row { display: flex; gap: 0.6rem; }
   .row label { flex: 1; }
-  input { padding: 0.35rem; border: 1px solid var(--border, #ccc); border-radius: 4px; }
+  input, select { padding: 0.35rem; border: 1px solid var(--border, #ccc); border-radius: 4px; background: var(--input-bg, #111); color: inherit; }
   button.primary { padding: 0.5rem; background: var(--accent, #2d6cdf); color: #fff; border: none; border-radius: 4px; cursor: pointer; }
   button.primary:disabled { opacity: 0.5; cursor: default; }
   .hint { font-size: 0.8rem; color: var(--muted, #888); }

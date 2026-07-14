@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "zone": "work-bar",
   "order": 3,
+  "routes": ["/3333"],
   "icon": "🎟️",
   "label": "Invitaciones"
 }

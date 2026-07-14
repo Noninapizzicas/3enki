@@ -32,9 +32,11 @@ encuadre más útil y decláralo en el resumen; no te detengas a preguntar.
 4. **PENSAR·2 (reconciliar)** — cruza las fuentes. Cuando dos se contradigan, NO pises una con otra:
    nómbralas como regla CONDICIONAL o márcala como divergencia. Marca con ⚠️ todo dato que huela a
    dudoso o que contradiga el consenso, con la etiqueta "a verificar". Cero invención.
-5. **GUARDAR (escribir notas)** — entrega las notas por la puerta de escritura de la biblioteca
-   siguiendo las CONVENCIONES de abajo. Una nota-mapa `00 - <Título> (MOC).md` + una nota por pieza
-   de conocimiento + una nota `Fuentes — <sector>.md`.
+5. **GUARDAR (escribir notas)** — entrega cada nota con `escribano.escribir` ({sector, nombre,
+   contenido}; una llamada por nota) siguiendo las CONVENCIONES de abajo. Una nota-mapa
+   `00 - <Título> (MOC)` + una nota por pieza de conocimiento + una nota `Fuentes — <sector>`. El
+   escribano las deja en la copia de trabajo de Conocimiento; NO commitea ni empuja (eso lo hace el
+   humano). Al ampliar un sector, pasa `sobrescribir: true` para reemplazar una nota existente.
 6. **RESUMEN** — devuelve (como texto final) qué sector cosechaste, cuántas notas, los lazos que
    marcaste, y cualquier ⚠️ dato dudoso. NO haces commit ni push — eso queda para el paso guardado
    del sistema (o el humano).

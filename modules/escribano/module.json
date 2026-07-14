@@ -1,0 +1,90 @@
+{
+  "_doc": "Manifest del ESCRIBANO — la PUERTA DE ESCRITURA de la biblioteca (repo Conocimiento). Hermano escritor del bibliotecario (que es el lector, read-only por invariante): el bibliotecario SIRVE los libros, el escribano los ESCRIBE. Reflejo puro. Escribe notas Obsidian en una COPIA DE TRABAJO (checkout RW de Conocimiento en data/escribano/obra); NUNCA hace commit ni push — eso lo hace el HUMANO (decisión de diseño: escribir en el árbol de git es local y reversible; empujar al repo externo es acción outward con credencial de escritura, y queda en manos del dueño). El agente acumulador-sectorial es su llamador natural en la fase GUARDAR. Cierra el círculo de la biblioteca: el acumulador cosecha → el escribano deja las notas en la obra → el humano revisa (escribano.pendientes) y sube.",
+  "name": "escribano",
+  "version": "0.1.0",
+  "_v0_1_nota": "v0.1.0: nace la puerta de escritura. escribano.escribir (crea/actualiza una nota .md en obra/<vault>/<sector>/, create-only por defecto con anti-wipe 409, guard de traversal y de nombre sin '/') + escribano.pendientes (git status --porcelain de la obra → qué notas esperan commit+push del humano). Emite escribano.nota.escrita. NUNCA commit/push (opción A: el humano sube). Best-effort: si la obra no existe la clona (read-only); si falla → 503 honesto. PENDIENTE: opción B (push guardado tras la reja del ejecutor) si algún día se decide automatizar.",
+  "description": "Puerta de escritura de la biblioteca: escribe notas Obsidian en una copia de trabajo del repo Conocimiento (checkout RW), sin commit ni push (el humano sube). Hermano escritor del bibliotecario. Llamador natural: el agente acumulador-sectorial en su fase GUARDAR.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+
+  "publishes": [
+    { "event": "escribano.escribir.response",   "description": "Resultado de escribir una nota: { ruta, escrita, sobrescrita } · 409 si ya existe y no se pidió sobrescribir · 400 input inválido · 503 obra no disponible." },
+    { "event": "escribano.pendientes.response",  "description": "Qué notas esperan commit+push del humano: { pendientes:[{ruta, estado}], total }. Estado del árbol de git (porcelain): A/M/?? por nota." },
+    { "event": "escribano.nota.escrita",         "description": "EVENTO: se escribió una nota en la obra. { sector, nombre, ruta }. La UI/el humano puede oírlo para saber que hay cosecha pendiente de subir." }
+  ],
+
+  "subscribes": [
+    { "event": "escribano.escribir.request",   "handler": "onEscribirRequest",   "description": "Reflejo: escribe una nota { sector, nombre, contenido, sobrescribir? } en obra/<vault>/<sector>/<nombre>.md. Create-only salvo sobrescribir. Guards: traversal, nombre sin '/', contenido no vacío. NO commitea." },
+    { "event": "escribano.pendientes.request", "handler": "onPendientesRequest", "description": "Reflejo: git status --porcelain de la obra (bajo el vault) → lista de notas nuevas/modificadas sin commitear. La ventana del humano a lo que falta subir." }
+  ],
+
+  "tools": [
+    {
+      "name": "escribano.escribir",
+      "description": "Escribe (o actualiza) una NOTA de la biblioteca de conocimiento en la copia de trabajo del repo Conocimiento. ÚSALA en la fase GUARDAR tras cosechar un sector: una llamada por nota (MOC + notas + Fuentes). No hace commit ni push — deja la nota en el árbol de git para que el humano la revise y suba. Create-only por defecto (falla 409 si la nota ya existe; pasa sobrescribir=true para reemplazar al ampliar).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sector": { "type": "string", "minLength": 1, "description": "Sector/sub-sector (carpeta). Ej: 'trading', 'trading/opciones', 'cultivo-melena-leon'. Puede llevar subcarpetas con '/'." },
+          "nombre": { "type": "string", "minLength": 1, "description": "Nombre de la nota (sin '/'). Ej: '00 - Trading (MOC)', 'Las griegas'. Se le añade .md si no lo trae." },
+          "contenido": { "type": "string", "minLength": 1, "description": "El markdown completo de la nota, con su frontmatter (tipo, sector, tags, cosechado)." },
+          "sobrescribir": { "type": "boolean", "description": "Si true, reemplaza una nota existente (al ampliar). Default false (create-only, anti-wipe)." }
+        },
+        "required": ["sector", "nombre", "contenido"]
+      },
+      "handler": "handleEscribirTool",
+      "errores_conocidos": ["INVALID_INPUT", "ALREADY_EXISTS", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "escribano.pendientes",
+      "description": "Lista las notas de la biblioteca que se escribieron pero AÚN NO se han commiteado/subido (estado del árbol de git de la copia de trabajo). ÚSALA para ver qué cosecha espera que el humano la suba a Conocimiento.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "handler": "handlePendientesTool",
+      "errores_conocidos": ["UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+    }
+  ],
+
+  "dependencies": [],
+
+  "config": {
+    "enabled": true,
+    "biblioteca": {
+      "repo_url": "https://github.com/Noninapizzicas/Conocimiento.git",
+      "ref": "main",
+      "vault_subdir": "boveda",
+      "obra_path": null,
+      "_nota": "obra_path: null → default data/escribano/obra (copia de trabajo RW). El escribano escribe ahí; el HUMANO commitea y empuja (opción A). Para poder subir, el checkout necesita un remoto con credencial de ESCRITURA — eso lo configura el dueño, no el órgano. Si la obra falta, el escribano la clona read-only para tener dónde escribir."
+    },
+    "persistence": {
+      "scope": "system",
+      "data_path": "escribano",
+      "pattern": "git-working-copy",
+      "restart_resilient": true,
+      "_nota": "Copia de trabajo del repo Conocimiento en data/escribano/obra. Las notas escritas y sin commitear persisten en disco hasta que el humano las sube."
+    }
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "escribano.escribir.total",
+        "escribano.nota.escrita.total",
+        "escribano.errors.total"
+      ],
+      "gauges": [
+        "escribano.pendientes"
+      ],
+      "timings": [
+        "escribano.escribir.duration_ms"
+      ]
+    }
+  }
+}

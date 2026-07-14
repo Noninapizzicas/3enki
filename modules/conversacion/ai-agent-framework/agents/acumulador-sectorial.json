@@ -7,7 +7,8 @@
   "scope": ["aprendizaje"],
   "prompt_file": "prompts/acumulador-sectorial-system.md",
   "tools": [
-    "crawl4rs.leer_web"
+    "crawl4rs.leer_web",
+    "escribano.escribir"
   ],
   "provider": "deepseek",
   "temperature": 0.4,
@@ -19,6 +20,6 @@
     "type": "domain-agent",
     "domain": "aprendizaje",
     "tags": ["conocimiento", "cosecha", "investigacion", "boveda", "sectorial"],
-    "_pendiente": "Activable cuando exista la puerta de escritura de la biblioteca (fase GUARDAR) y, si se decide, un tool de búsqueda web. Hoy tools solo cubre la lectura de páginas (crawl4rs.leer_web)."
+    "_infra": "Cosecha web por crawl4rs.leer_web (lectura de páginas); GUARDAR por escribano.escribir (escribe la nota en la copia de trabajo de Conocimiento, sin commit/push — opción A, el humano sube). Sigue APARCADO (enabled:false) a propósito: activar un trabajador es decisión consciente (activar_agente, confirmation)."
   }
 }

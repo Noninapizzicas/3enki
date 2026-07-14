@@ -1,10 +1,13 @@
 ---
 id: sistema-nervioso/bibliotecario
 dominio: aprendizaje
-resumen: El puente a la biblioteca EXTERNA (repo Conocimiento): mirror git de solo-lectura de la bóveda Obsidian, servido por el bus como catálogo barato + préstamo bajo demanda. Reach-not-resident — el agente pide los libros que necesita, no carga el corpus.
+resumen: La BIBLIOTECA externa (repo Conocimiento) con sus dos órganos — bibliotecario (LECTOR, mirror read-only, catálogo+préstamo bajo demanda, reach-not-resident) y escribano (ESCRITOR, escribe notas en una copia de trabajo, sin commit/push — el humano sube). El acumulador-sectorial cosecha y llena por el escribano.
 fuentes:
   - modules/bibliotecario/**
+  - modules/escribano/**
   - tests/unit/bibliotecario.test.js
+  - tests/unit/escribano.test.js
+  - modules/conversacion/ai-agent-framework/agents/acumulador-sectorial.json
 verificado: 2026-07-14
 ---
 
@@ -72,10 +75,37 @@ El límite protege un estado nombrable: *la biblioteca siempre responde, nunca c
 | respuesta | `core/<id>/api/response/<request_id>` | 1 |
 | biblioteca actualizada | `core/<id>/events/biblioteca/actualizada` | 1 |
 
+## El escribano — la puerta de escritura (el círculo cierra)
+
+El bibliotecario LEE; el **escribano** (`modules/escribano/`, {{version:modules/escribano}}) ESCRIBE.
+Separados por responsabilidad: el mirror de lectura (auto-pulled, se sobreescribe) no se mezcla con la
+obra de escritura (cambios locales sin commitear). Cada uno su checkout.
+
+```json
+{
+  "esquema": "escribano-v1",
+  "obra": "copia de trabajo RW de Conocimiento en data/escribano/obra",
+  "puertas": {
+    "escribano.escribir":   "{sector, nombre, contenido, sobrescribir?} → escribe la nota .md · create-only anti-wipe (409) · guards traversal + nombre sin '/'",
+    "escribano.pendientes": "{} → git status de la obra: qué notas esperan que el humano las suba"
+  },
+  "opcion_A": "escribe en el árbol de git y PARA — NUNCA commit ni push. Empujar a Conocimiento es acción outward con credencial de ESCRITURA → queda en manos del dueño. El escribano solo deja las notas listas.",
+  "emite": "escribano.nota.escrita (la UI/el humano sabe que hay cosecha pendiente de subir)"
+}
+```
+
+**El círculo:** el agente `acumulador-sectorial` (aparcado en la cúpula) cosecha web por
+`crawl4rs.leer_web` → escribe las notas por `escribano.escribir` → el humano revisa
+(`escribano.pendientes`) y sube → el `bibliotecario` sirve lo subido. Acumula → escribe → sube → sirve.
+
 ## Trabajo pendiente (declarado, no oculto)
 
 - **Credencial de solo-lectura** al repo privado `Conocimiento` en el VPS (deploy-key/token) — sin
-  ella el mirror degrada a `stale`.
+  ella el mirror del bibliotecario degrada a `stale`. La **obra** del escribano necesita además un
+  remoto con credencial de ESCRITURA para que el humano suba (lo configura el dueño).
+- **Activar el `acumulador-sectorial`** (`activar_agente`, confirmation) cuando se quiera cosechar —
+  nace aparcado a propósito; su infra (leer_web + escribano.escribir) ya existe.
 - **Indexar el vault en `cantera-semantica`** → `por_significado` pasa de palabras a significado real.
 - **Webhook de push** de `Conocimiento` → `sincronizar` automático (hoy el químico es el pull manual).
-- **Escritura** (la cosecha del `acumulador-sectorial`) es flujo aparte: el bibliotecario solo LEE.
+- **Opción B (push guardado)** — si algún día se automatiza el commit+push, va tras la reja del
+  ejecutor (kill-switch, allowlist, aprobación graduada); hoy la elección es A (el humano sube).

@@ -1,0 +1,24 @@
+{
+  "id": "acumulador-sectorial",
+  "name": "acumulador-sectorial",
+  "description": "Acumulador sectorial de la biblioteca de conocimiento (repo Conocimiento). Dado un tema/sector, ejecuta el ciclo de cosecha de 6 fases (contrato, descomponer, cosechar web, reconciliar, escribir notas Obsidian, resumen) y deja notas markdown enlazadas, fechadas y con fuentes en la bóveda. Hermano ESCRITOR del bibliotecario (que es el lector): él sirve los libros, este los escribe. Reconcilia fuentes sin pisarlas, marca lo dudoso con a-verificar, encuadre honesto en temas sensibles, cero invención. No hace git commit ni push. NACE APARCADO (enabled:false): buscable en la cúpula, activable cuando exista la puerta de escritura de la biblioteca.",
+  "version": "1.0.0",
+  "enabled": false,
+  "scope": ["aprendizaje"],
+  "prompt_file": "prompts/acumulador-sectorial-system.md",
+  "tools": [
+    "crawl4rs.leer_web"
+  ],
+  "provider": "deepseek",
+  "temperature": 0.4,
+  "max_tokens": 8000,
+  "timeout_ms": 180000,
+  "max_retries": 2,
+  "context_enabled": false,
+  "metadata": {
+    "type": "domain-agent",
+    "domain": "aprendizaje",
+    "tags": ["conocimiento", "cosecha", "investigacion", "boveda", "sectorial"],
+    "_pendiente": "Activable cuando exista la puerta de escritura de la biblioteca (fase GUARDAR) y, si se decide, un tool de búsqueda web. Hoy tools solo cubre la lectura de páginas (crawl4rs.leer_web)."
+  }
+}

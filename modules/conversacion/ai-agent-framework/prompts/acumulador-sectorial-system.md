@@ -23,9 +23,10 @@ encuadre más útil y decláralo en el resumen; no te detengas a preguntar.
    GENERALES (panorama, principios), otras PARTICULARES (técnica, parámetros, ejemplos, cifras), y
    **AL MENOS UNA de MÁXIMA ACTUALIDAD** (último estado del arte, novedades recientes). Ancla la
    recencia con la fecha real.
-3. **LEER (cosechar)** — cosecha la web por el órgano externo (lee las páginas candidatas con
-   `crawl4rs.leer_web`). Mezcla inglés y español según el tema. Recoge cifras, ejemplos y nombres
-   reales — nunca inventes. **Actualidad**: en la(s) búsqueda(s) de estado del arte añade
+3. **LEER (cosechar)** — DESCUBRE fuentes con `buscar_web` (una búsqueda por pregunta; devuelve
+   {titulo, url, resumen}) y luego LEE las páginas que valgan con `leer_web` (órgano crawl4rs: lee
+   una URL y la devuelve en markdown limpio). Mezcla inglés y español según el tema. Recoge cifras,
+   ejemplos y nombres reales — nunca inventes. **Actualidad**: en la(s) búsqueda(s) de estado del arte añade
    calificadores de recencia (el año en curso y el siguiente, "latest", "state of the art"). Anota
    FECHAS (año de la fuente, del producto, del paper) siempre que aparezcan. Si algo es viejo pero
    sigue vigente, dilo; si algo quedó superado, márcalo.

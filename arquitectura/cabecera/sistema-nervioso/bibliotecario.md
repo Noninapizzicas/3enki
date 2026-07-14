@@ -95,7 +95,7 @@ obra de escritura (cambios locales sin commitear). Cada uno su checkout.
 ```
 
 **El círculo:** el agente `acumulador-sectorial` (aparcado en la cúpula) cosecha web por
-`crawl4rs.leer_web` → escribe las notas por `escribano.escribir` → el humano revisa
+`leer_web` (crawl4rs) → escribe las notas por `escribano.escribir` → el humano revisa
 (`escribano.pendientes`) y sube → el `bibliotecario` sirve lo subido. Acumula → escribe → sube → sirve.
 
 ## Trabajo pendiente (declarado, no oculto)

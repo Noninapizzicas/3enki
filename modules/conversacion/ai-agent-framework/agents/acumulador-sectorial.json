@@ -7,7 +7,8 @@
   "scope": ["aprendizaje"],
   "prompt_file": "prompts/acumulador-sectorial-system.md",
   "tools": [
-    "crawl4rs.leer_web",
+    "buscar_web",
+    "leer_web",
     "escribano.escribir"
   ],
   "provider": "deepseek",
@@ -20,6 +21,6 @@
     "type": "domain-agent",
     "domain": "aprendizaje",
     "tags": ["conocimiento", "cosecha", "investigacion", "boveda", "sectorial"],
-    "_infra": "Cosecha web por crawl4rs.leer_web (lectura de páginas); GUARDAR por escribano.escribir (escribe la nota en la copia de trabajo de Conocimiento, sin commit/push — opción A, el humano sube). Sigue APARCADO (enabled:false) a propósito: activar un trabajador es decisión consciente (activar_agente, confirmation)."
+    "_infra": "Cosecha web por buscar_web (descubre fuentes, SearXNG) + leer_web (lee páginas), ambos del órgano crawl4rs (interruptor OFF por defecto → encender para cosechar); GUARDAR por escribano.escribir (escribe la nota en la copia de trabajo de Conocimiento, sin commit/push — opción A, el humano sube). Sigue APARCADO (enabled:false) a propósito: activar un trabajador es decisión consciente (activar_agente, confirmation)."
   }
 }

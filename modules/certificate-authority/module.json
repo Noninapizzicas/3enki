@@ -23,6 +23,8 @@
     { "domain": "certificate-authority", "action": "issue",        "handler": "handleIssueCertificate",  "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "certificate-authority", "action": "enroll",       "handler": "handleEnrollFromPublicKey", "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "certificate-authority", "action": "sign-invitation", "handler": "handleSignInvitation", "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "bootstrap-status", "handler": "handleBootstrapStatus", "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "claim-admin", "handler": "handleClaimAdmin", "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "certificate-authority", "action": "revoke",       "handler": "handleRevokeCertificate", "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "certificate-authority", "action": "renew",        "handler": "handleRenewCertificate",  "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "certificate-authority", "action": "list",         "handler": "handleListCertificates",  "type": "system_panel", "zone": "lateral_derecha" },

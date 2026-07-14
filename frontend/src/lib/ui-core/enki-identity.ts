@@ -141,3 +141,27 @@ export async function credentialForConnect(): Promise<string | null> {
   try { return await mintToken(); }
   catch { return null; }
 }
+
+/**
+ * REDIME una invitación (el lado del invitado): genera/usa la clave de ESTE navegador, la manda a
+ * redimir, y si la CA emite el cert, lo guarda → a partir de aquí el navegador porta identidad en el
+ * bus (mintea tokens). Para crear-proyecto hay que pasar nombre_proyecto. Devuelve {project, role}.
+ */
+export async function redimirInvitacion(
+  mqttRequest: (domain: string, action: string, payload: unknown) => Promise<{ data?: { certificate?: string; project?: string; role?: string } }>,
+  codigo: string,
+  opts: { nombre_proyecto?: string } = {}
+): Promise<{ project: string; role: string }> {
+  const kp = await ensureKeypair();
+  const publicKeyPem_ = await publicKeyPem(kp);
+  const res = await mqttRequest('invitaciones', 'redimir', {
+    codigo,
+    publicKeyPem: publicKeyPem_,
+    identifier: getIdentifier(),
+    ...(opts.nombre_proyecto ? { nombre_proyecto: opts.nombre_proyecto } : {})
+  });
+  const data = res?.data;
+  if (!data?.certificate) throw new Error('la redención no devolvió certificado');
+  localStorage.setItem(CERT_LS, data.certificate);   // este navegador ya tiene identidad para el bus
+  return { project: data.project ?? '', role: data.role ?? '' };
+}

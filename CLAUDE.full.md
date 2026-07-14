@@ -15496,7 +15496,7 @@ un **token firmado** que un poseedor de autoridad reparte, y que al **redimirse*
 La cadena solo baja — capacidades monotónicas.
 
 ```
-Nivel 0 · Admin del sistema (raíz = cert auto-firmado de la CA en el bootstrap)
+Nivel 0 · Admin del sistema (raíz — nace del BOOTSTRAP, no de una invitación · ver R2 abajo)
    │  invitación { accion: crear-proyecto, otorga: role=project-admin }
    ▼
 Nivel 1 · Admin de proyecto  (redime → project-manager.create + cert client:<project>:admin)
@@ -15504,6 +15504,22 @@ Nivel 1 · Admin de proyecto  (redime → project-manager.create + cert client:<
    ▼
 Nivel 2 · Equipos / usuarios  (redimen → cert scopeado a {project, role})
 ```
+
+## R2 — el bootstrap del system-admin (la raíz que se emite a sí misma) ✅
+
+> El admin del sistema NO recibe invitación (es la raíz). Su identidad nace del bootstrap:
+
+```
+1. la CA, en el PRIMER arranque, imprime en consola un CÓDIGO de un solo uso
+   (ca-manager.ensureBootstrap → data/ca/admin-bootstrap.json, mode 0600)
+2. el dueño abre /reclamar-admin, pega el código → su navegador genera la clave (no sale)
+3. certificate-authority.claim-admin verifica el código y emite cert admin:system:root
+   (scope=system, role=system-admin) para esa pubkey · QUEMA el código (un solo uso)
+4. ese cert firma/gobierna las invitaciones del sistema; el guard puede exigir system-admin (Fase 5)
+```
+
+Es la única identidad que no viene de arriba: viene del arranque del sistema. Reusa `issueFromPublicKey`
+(la clave nunca sale del navegador) + un gate de token de un solo uso.
 
 ## Contrato (JSON)
 

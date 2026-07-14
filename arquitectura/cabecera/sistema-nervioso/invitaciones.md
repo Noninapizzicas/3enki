@@ -192,7 +192,9 @@ FASE 3 · INVITACIONES (este subsistema) ...........................
   3a ✅ banco puro: construir/emitir/verificar + monotonía (modules/_shared/invitaciones.js)
   3b ✅ módulo invitaciones: emitir/listar/revocar + firma R1 (CA raíz, certificate-authority.
         sign-invitation) + persistencia + código copiable (modules/invitaciones/)
-  3c 🔜 redención = verificar + project-manager.create + issueFromPublicKey + consume uso
+  3c ✅ redención: handleRedimir = verificar (firma vs CA + monotonía + usos) +
+        project-manager.create (si crear) + certificate-authority.enroll (cert scope+role) +
+        consume uso. El rol viaja en metadata del cert (graduará al SAN en Fase 2).
   3d 🔜 UI: admin-sistema reparte · admin-proyecto reparte con roles
 
 FASE 4 · CICLO DE VIDA ............................................

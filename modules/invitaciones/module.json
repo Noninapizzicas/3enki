@@ -11,12 +11,14 @@
   "events": {
     "publishes": [
       { "event": "invitacion.emitida", "description": "El admin emitio una invitacion de proyecto (accion crear-proyecto|unirse-proyecto, con project/role). timestamp." },
-      { "event": "invitacion.revocada", "description": "Una invitacion fue revocada antes de redimirse. timestamp." }
+      { "event": "invitacion.revocada", "description": "Una invitacion fue revocada antes de redimirse. timestamp." },
+      { "event": "invitacion.redimida", "description": "Un portador redimio una invitacion: obtuvo cert scopeado a {project, role} (y creo el proyecto si accion crear-proyecto). timestamp." }
     ],
     "subscribes": []
   },
   "ui_handlers": [
     { "domain": "invitaciones", "action": "emitir",  "handler": "handleEmitir",  "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "invitaciones", "action": "redimir", "handler": "handleRedimir", "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "invitaciones", "action": "listar",  "handler": "handleListar",  "type": "system_panel", "zone": "lateral_derecha" },
     { "domain": "invitaciones", "action": "revocar", "handler": "handleRevocar", "type": "system_panel", "zone": "lateral_derecha" }
   ],

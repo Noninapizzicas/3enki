@@ -290,6 +290,8 @@ class CAManager {
     if (!this.caKey || !this.caCert) throw new Error('CA not initialized. Call initialize() first.');
     const {
       publicKeyPem, commonName, type = 'client', identifier, scope = 'system',
+      role = null,           // rol-del-bus (project-admin/member/device/...) — hoy en metadata,
+                             // graduará al SAN en Fase 2 (política). El guard lo lee vía verify.
       organization, email, validityDays = this.config.cert_validity_days
     } = options;
 
@@ -339,7 +341,7 @@ class CAManager {
       .toUpperCase().match(/.{2}/g).join(':');
 
     const metadata = {
-      serialNumber, type, scope, identifier, commonName,
+      serialNumber, type, scope, role: role || null, identifier, commonName,
       organization: organization || null, email: email || null, fingerprint,
       issuedAt: notBefore.toISOString(), expiresAt: notAfter.toISOString(),
       status: 'active', revokedAt: null, keyOrigin: 'client'   // marca: la privada vive en el cliente
@@ -460,6 +462,7 @@ class CAManager {
           serialNumber,
           type: metadata.type,
           scope: metadata.scope || 'system',
+          role: metadata.role || null,
           identifier: metadata.identifier,
           commonName: metadata.commonName,
           expiresAt: metadata.expiresAt

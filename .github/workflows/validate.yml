@@ -270,6 +270,9 @@ jobs:
       - name: Run unit tests (invitaciones/módulo — emitir/listar/revocar, firma CA)
         run: npm run test:invitaciones-modulo
 
+      - name: Run unit tests (invitaciones/redención — proyecto + cert scopeado, 3c)
+        run: npm run test:invitaciones-redimir
+
       - name: Run unit tests (security-p2p — reescritura canonica)
         run: npm run test:security-p2p
 

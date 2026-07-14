@@ -15664,9 +15664,10 @@ FASE 3 · INVITACIONES (este subsistema) ...........................
   3c ✅ redención: handleRedimir = verificar (firma vs CA + monotonía + usos) +
         project-manager.create (si crear) + certificate-authority.enroll (cert scope+role) +
         consume uso. El rol viaja en metadata del cert (graduará al SAN en Fase 2).
-  3d ✅ UI: panel Invitaciones (front autodescubierto) — pestaña Emitir (crear/unirse →
-        código copiable) + Gestionar (listar con estado + revocar). La redención la hace el
-        navegador del invitado (enki-identity), no el panel. FASE 3 COMPLETA (backend + UI).
+  3d ✅ UI de las DOS caras — (a) panel Invitaciones (admin: Emitir crear/unirse → código
+        copiable + Gestionar listar/revocar, en /3333); (b) ruta /redimir (invitado: pega el
+        código → genera su clave en el navegador → obtiene proyecto + cert scopeado, vía
+        enki-identity.redimirInvitacion). FASE 3 COMPLETA de punta a punta (backend + UI).
 
 FASE 4 · CICLO DE VIDA ............................................
   device-registry.unregister/staff.delete → certificate-authority.revoke

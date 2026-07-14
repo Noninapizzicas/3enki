@@ -503,6 +503,12 @@ PATRONES
 
 # Capa de Aterrizaje — Análisis del Core (Event-Driven Framework)
 
+> **Novedad (2026-07-14) — el broker embebido admite un guard opcional.** `EmbeddedBroker` acepta
+> `opts.guard`; si está, cablea `aedes.authenticate/authorizePublish/authorizeSubscribe` (sin guard →
+> abierto, retrocompatible). `MQTTClient` construye un `BusGuard` (`core/broker/bus-guard.js`) y lo
+> expone en `core.busGuard`; `core/broker/enki-token.js` es el token firmado de la credencial. Nace OFF
+> (no cambia el arranque). El detalle completo vive en `sistema-nervioso/bus-guardado.md`.
+
 ## Contratos Principales
 
 ```
@@ -5517,6 +5523,14 @@ comandero ← cuentas, pedidos
 ---
 
 # MÓDULOS — SEGURIDAD P2P, CERTIFICADOS, EXPORT
+
+> **Novedad (2026-07-14) — certificate-authority pasa de emitir certs a regir identidad del bus.**
+> Superficie nueva: `issueFromPublicKey` + handler `enroll` (el cliente genera su clave, la CA solo
+> firma su pública — la privada nunca sale del cliente); SAN de **4 partes** `urn:eventcore:<type>:<scope>:<identifier>`
+> (scope = project_id | 'system', parser retrocompatible); `signInvitation` + handler `sign-invitation`
+> (la CA raíz firma invitaciones — R1 de la cadena de delegación). security-p2p: el evento
+> `security.peer.revoked` ahora incluye `core_id` (para el peer-trust del guard). El detalle vive en
+> `sistema-nervioso/bus-guardado.md` (el bus como puerta guardada) e `invitaciones.md` (la delegación).
 
 ## SECURITY-P2P (v2.0.0)
 
@@ -12874,6 +12888,14 @@ system-inspector (2.0.0)
 
 # FRONTEND — Capa de UI (SvelteKit + Svelte 5 sobre MQTT)
 
+> **Novedad (2026-07-14) — identidad del navegador en el bus (inerte hasta enrolar).**
+> `ui-core/enki-identity.ts` genera un par RSA en WebCrypto (privada NO-extraíble en IndexedDB), enrola
+> contra `certificate-authority.enroll` y mintea un token firmado; `client.ts` lo presenta como password
+> del CONNECT. Sin cert enrolado → conecta anónimo (comportamiento de hoy). El detalle vive en
+> `sistema-nervioso/bus-guardado.md` (paso 2c). Además el panel **Invitaciones**
+> (`modules/invitaciones/`, autodescubierto) deja al admin del sistema emitir/listar/revocar
+> invitaciones de proyecto — ver `sistema-nervioso/invitaciones.md`.
+
 Stack: SvelteKit 2 · Svelte 5 · TypeScript · Vite 6 · adapter-node · mqtt · marked · highlight.js. SSR deshabilitado (`ssr=false`, `prerender=false`). El frontend es un core más conectado al broker MQTT.
 
 Estructura: `src/lib/ui-core` (transporte+registro), `src/lib/stores` (40 stores), `src/lib/modules` (35 módulos lazy), `src/lib/components` (base+layout+10 grupos de dominio), `src/routes` (31 páginas, multi-tenant `[project_id]`).
@@ -13725,6 +13747,11 @@ RESILIENCIA {
 ---
 
 # FRONTEND ↔ BACKEND — Mapa de Referencias (puente MQTT)
+
+> **Novedad (2026-07-14) — nuevo consumidor: enki-identity → certificate-authority.**
+> `ui-core/enki-identity.ts` añade un enlace front→back nuevo: `certificate-authority.enroll` (el
+> navegador enrola su clave pública y recibe un cert). Es la identidad del navegador para el bus
+> guardado. Detalle en `sistema-nervioso/bus-guardado.md` (paso 2c).
 
 El puente es MQTT. Un consumidor del frontend (store, módulo lazy o pantalla) invoca `mqttRequest(domain, action, data)` → publica en `ui/request/{domain}/{action}` → el `UIRequestHandler` del módulo backend que registró `(domain, action)` responde en `ui/response/{request_id}`. Los eventos backend→frontend viajan por topics directos o `core/*/events/{domain}/{action}` y los stores los consumen vía `subscribe()`.
 
@@ -15252,6 +15279,407 @@ PENDIENTE (opcional)  probar por el CHAT real (LLM de página llama ejecutor par
 > inútil). Por eso la allowlist corre lo rutinario solo y la aprobación graduada cachea el "sí". La reja
 > se GRADÚA: dura donde el daño es irreversible, suelta donde la operación es acotada. Leer es libre; conceder
 > poder que no se retira cerrando una conexión (encender el interruptor) es la mano del humano.
+
+---
+
+# El bus como puerta guardada
+
+> **La restricción que cierra.** El prisma cantó que el broker MQTT WSS es anónimo
+> (`core/broker/embedded.js` — Aedes sin `authenticate`): cualquiera que alcance
+> `wss://host/mqtt` publica `ui/request/{dominio}/{acción}` saltándose el guard del Portal
+> y del Ejecutor. Este subsistema hace que `certificate-authority` —que ya acuña identidades
+> X.509 con `urn:eventcore:<type>:<identifier>`— **rija la puerta grande**: el broker consulta
+> la identidad en CONNECT y autoriza PUBLISH/SUBSCRIBE por scope. Los guards laterales dejan de
+> ser teatro.
+
+## El mandato
+
+```json
+{
+  "esquema": "bus-guardado-v1",
+  "tesis": "un guard protege la puerta por donde entra el mundo (el bus), y nace CERRADO por peldaños, no de golpe",
+  "identidad": "el certificado X.509 de certificate-authority ES la identidad — su SAN urn:eventcore:<type>:<identifier> viaja en el CONNECT",
+  "escalera": {
+    "off":     "el guard no se cablea — broker abierto (comportamiento de hoy, cero riesgo de brickeo)",
+    "observe": "verifica + sella identidad + audita, pero PERMITE todo — aprende quién sería bloqueado sin romper a nadie",
+    "enforce": "bloquea: anónimo fuera de los dominios sensibles, credencial inválida rechazada en CONNECT"
+  },
+  "mando": "el DUEÑO sube el peldaño desde el panel (interruptores bus-guard · bus-guard-enforce) — degradación honesta, jamás un puenteo",
+  "transporte_credencial": "MQTT CONNECT password = 'enki:token:<jws>' — token FIRMADO que prueba posesión de la clave. El cert desnudo (enki:cert:) es público→replayable y NO da identidad válida.",
+  "veredicto": "certificate-authority.verify (node-forge, ya real) — el guard NO re-implementa cripto, la consulta"
+}
+```
+
+## Paso 2 — el cliente porta su identidad sin que su clave salga jamás
+
+> El cert es PÚBLICO: enseñarlo no prueba nada (replayable). La credencial fuerte es el **token
+> firmado** — el cliente firma `{cert, iat, jti}` con su clave privada y el guard verifica **4 cosas**:
+
+```json
+{
+  "1_CA":       "certificate-authority.verify: el cert lo firmó nuestra CA (identidad + SAN type/identifier)",
+  "2_posesion": "la firma del token valida contra la clave pública DEL cert ⇒ el cliente POSEE la privada",
+  "3_frescura": "iat dentro de ±tokenWindowSec (60s) — un token viejo no vale",
+  "4_no_replay":"jti único dentro de la ventana (cache en el guard) — el mismo token no entra dos veces"
+}
+```
+
+**Formato** (`core/broker/enki-token.js`, RS256 = RSASSA-PKCS1-v1_5+SHA256): `enki:token:` +
+`b64url(header).b64url(payload).b64url(sig)`. Un solo formato para browser (WebCrypto), device y peer core.
+
+**Enrolamiento sin exfiltrar la clave** (`certificate-authority.issueFromPublicKey`, `enki-identity.ts`):
+el cliente genera su par en WebCrypto (privada **no-extraíble** en IndexedDB), manda solo su clave
+**pública** a `certificate-authority/enroll`, y recibe un cert firmado. La privada NUNCA sale del
+dispositivo; el servidor no guarda `key.pem` ni `.p12`.
+
+**Orden de migración**: enrolar durante `observe` (bus abierto) → el front mintea el token en cada
+CONNECT → subir a `enforce` cuando los clientes ya portan cert. El front es inerte hasta enrolar
+(sin cert → conecta anónimo, funciona en off/observe).
+
+## El motor (pseudocódigo)
+
+```
+CLASE BusGuard {                                  // vive en el core (el broker lo necesita en CONNECT)
+  verifier : (pem) -> { valid, type, identifier } // inyectado — envuelve caManager.verifyCertificate
+  policy   : (identidad, topic, accion) -> { allow, reason }
+  getMode  : () -> 'off' | 'observe' | 'enforce'  // lee el estado VIVO del interruptor
+
+  authenticate(client, username, password, cb):
+    modo ← getMode()
+    identidad ← _extraerIdentidad(password)       // anonymous si no hay credencial
+    client.enkiIdentity ← identidad               // SELLA la identidad en el cliente
+    SI modo == 'enforce' Y identidad.credencialPresente Y NO identidad.valid:
+        RETORNA cb(errorNotAuthorized, false)     // credencial inválida no entra
+    RETORNA cb(null, true)                         // observe/enforce-sin-credencial: pasa (la política de PUBLISH decide)
+
+  authorizePublish(client, packet, cb):
+    veredicto ← policy(client.enkiIdentity, packet.topic, 'publish')
+    _auditar(veredicto, client, packet)
+    SI getMode() == 'enforce' Y NO veredicto.allow: RETORNA cb(errorNotAuthorized)
+    RETORNA cb(null)                               // observe: permite y aprende
+
+  authorizeSubscribe(client, sub, cb): // simétrico
+}
+
+// Política por defecto (enforce): el anónimo NO toca dominios sensibles
+POLICY_DEFECTO(identidad, topic, accion):
+    dominio ← _dominioDe(topic)                    // ui/request/<dominio>/<accion>
+    SI identidad.anonymous Y dominio ∈ DOMINIOS_SENSIBLES:
+        RETORNA { allow:false, reason:'anonymous-sensitive-domain' }
+    RETORNA { allow:true }
+
+DOMINIOS_SENSIBLES = { credential, security-core, certificate-authority, interruptor,
+                       interruptores, module, plugin, code, db, database, portal, ejecutor,
+                       project (delete), filesystem (write) }   // espejo de la lista del Portal
+```
+
+## OOP + patrones
+
+```
+core/broker/embedded.js  (EmbeddedBroker)
+  └─ opts.guard? → cablea aedes.authenticate/authorizePublish/authorizeSubscribe
+       (sin guard → abierto: RETROCOMPATIBLE, es el peldaño 'off')
+
+core/broker/bus-guard.js (BusGuard)
+  ├─ verifier   (Strategy — inyectado; prod = wrap de certificate-authority.verify)
+  ├─ policy     (Strategy — inyectado; default = POLICY_DEFECTO)
+  └─ getMode    (lee el interruptor vivo — el dueño manda)
+
+modules/security-core (SecurityCore, BaseModule)
+  ├─ registra interruptores bus-guard (OFF) + bus-guard-enforce (OFF)
+  ├─ puente verifier ↔ certificate-authority (bus RPC certificate-authority.verify)
+  ├─ mantiene getMode() desde interruptor.cambiado (Observer)
+  └─ emite security.bus.rejected / security.bus.authenticated (auditoría)
+
+PATRONES
+  Strategy   → verifier + policy (la cripto y la política se inyectan, no se cablean)
+  State      → escalera off→observe→enforce (el modo es estado vivo, no flag de arranque)
+  Observer   → getMode escucha interruptor.cambiado; el guard audita al bus
+  NullObject → sin guard, el broker es abierto (peldaño off sin código especial)
+  Guard      → fail-closed SOLO en enforce; observe y off nunca rompen (degradación honesta)
+```
+
+## Multi-core: cuatro identidades, no una
+
+> **El sistema es multi-core.** El tráfico interno REAL viaja por `core/<coreId>/events/<dominio>/...`
+> (no por `ui/request/...`, que es solo el frente del navegador). La política guarda esa puerta:
+> `_dominioDeTopic` extrae el dominio del segmento `events/<DOMINIO>`. Las identidades que el guard
+> distingue:
+
+```json
+{
+  "core-peer":  "otro core del mesh — se autentica por security-p2p (handshake X25519, emite security.peer.trusted). Necesita subscribe amplio (core/+/events/#) para federar.",
+  "device":     "cert X.509 type=device (certificate-authority) — scope por SAN urn:eventcore:device:<id>",
+  "client":     "cert X.509 type=client (el front/portal facturación) — scope por SAN urn:eventcore:client:<id>",
+  "anonymous":  "sin credencial — en enforce no toca dominios sensibles NI cosecha por comodín (firehose cerrado)"
+}
+```
+
+**Peer-trust DINÁMICO (hecho):** `security-core` escucha `security.peer.trusted`/`security.peer.revoked`
+(security-p2p, handshake X25519) y mueve el coreId del peer en el trusted set del guard — el mesh
+multi-core confía por handshake, no por una lista hardcodeada, y la revocación propaga. El coreId es
+el clientId con que el peer conecta al broker. `fuentes: modules/security-p2p/**`.
+
+**SAN de 4 partes (hecho, forward-compatible):** el cert lleva su alcance horneado —
+`urn:eventcore:<type>:<scope>:<identifier>`, `scope = <project_id> | 'system'`. Parser
+RETROCOMPATIBLE: un SAN viejo de 3 partes → `scope:'system'` (nadie se rompe). El guard **sella**
+`{type, scope, identifier}` en la identidad. El SAN es lo único caro de cambiar (va en cada cert);
+todo lo demás evoluciona sin re-emitir.
+
+**Trabajo pendiente (aplazado a propósito — que el dato de `observe` lo decida):**
+- **Enforcement por proyecto**: hoy el `scope` VIAJA pero no bloquea. El cierre fino (identity.scope ==
+  payload.project_id) va en los MÓDULOS, que ya tienen `project_id` — los topics del bus se enrutan por
+  core, no por proyecto, así que el guard no puede verlo sin parsear payload. Dominio a dominio, cuando
+  `observe` muestre que cruza tráfico.
+- **Sub-CA por proyecto**: solo cuando delegues gestión a las tiendas. El SAN ya lleva el proyecto → migrar
+  la raíz después NO re-emite certs.
+- **Spoof de clientId (peers)**: el trusted-by-clientId sigue spoofeable; estado final = los peers también
+  portan token firmado.
+
+## Fase 1 — runbook de encendido (encender y MEDIR)
+
+> El objetivo de Fase 1 no es bloquear — es **aprender sin romper**. `observe` verifica y audita pero
+> deja pasar todo; el instrumento `deniedByDomain` cuenta qué dominios vería bloqueados `enforce`.
+
+```
+PASO 1 · habilitar la CA (ya hecho en config.json — certificate-authority salió de 'disabled')
+         → el verifier del guard puede consultar certificate-authority.verify
+
+PASO 2 · el DUEÑO enciende el interruptor 'bus-guard' desde el panel  →  modo 'observe'
+         (bus-guard-enforce queda OFF — solo observa)
+
+PASO 3 · dejar correr días de uso real (front, devices, cores)
+
+PASO 4 · LEER el veredicto:  ui/request/security-core/estado  →  data.listo_para_enforce
+         { dominios_sensibles_con_trafico: [...], recomendacion, total_denegaciones }
+         · ninguno sensible con tráfico → 'enforce es seguro'
+         · hay sensibles con tráfico    → 'enrola esos clientes ANTES de enforce'
+
+PASO 5 · GO/NO-GO:
+         GO   → enrola los clientes que aún son anónimos (paso 2 / invitaciones) y sube a enforce
+         NO-GO→ sigue en observe; el botón de pánico ('bus-guard' OFF) siempre a un clic
+```
+
+Lo que NO se hace en Fase 1: encender `enforce`, tocar la política, construir roles o invitaciones.
+Solo medir. El dato decide el siguiente peldaño.
+
+## El botón de pánico
+
+> El interruptor **`bus-guard`** ES el botón de escape. Apagarlo devuelve el broker a ABIERTO
+> (comportamiento de hoy) **en caliente, sin reiniciar** — si algo va mal tras subir un peldaño,
+> un clic y todo vuelve a funcionar. La escalera nunca salta de golpe: `observe` mide sin romper,
+> `enforce` bloquea, y `off` siempre está a un clic. El dueño manda desde el panel de interruptores.
+
+## Resiliencia y bordes
+
+- **Broker arranca antes que los módulos**: el guard nace en modo `off` (verifier nulo) y sube a `observe/enforce` cuando `security-core` cablea el verifier y el dueño lo enciende. Nunca bloquea durante el arranque.
+- **certificate-authority caído**: en `enforce`, si el verifier no responde → el guard degrada a `observe` (audita 'verifier-unavailable') en vez de cerrar el bus entero — la seguridad no se paga con una caída total.
+- **El propio broker publica** (`client == null`): siempre permitido (es el núcleo, no un cliente externo).
+- **Migración del front**: hoy el front conecta sin credencial → en `observe` es `anonymous` y todo sigue igual; el paso a `enforce` se hace DESPUÉS de que el front porte su cert (fase siguiente, documentada — no se enciende enforce antes).
+
+## Observabilidad
+
+Contadores: `security.bus.authenticated`, `security.bus.anonymous`, `security.bus.rejected{domain}`, `security.bus.verifier_unavailable`. El modo `observe` es el instrumento: mide cuánto tráfico anónimo tocaría dominios sensibles ANTES de encender `enforce`.
+
+---
+
+# Invitaciones — la cadena de delegación de capacidades
+
+> **DISEÑO v0 — aún no construido.** Esta rebanada sella el modelo acordado; el código llega por el
+> roadmap de abajo. La marca de nacimiento: una identidad no se auto-otorga — se **hereda** de quien
+> ya la tiene, por una invitación firmada que nunca otorga más de lo que su emisor posee.
+
+## La tesis
+
+El `enroll` (paso 2) prueba QUÉ clave tienes, pero no QUIÉN te autoriza. La invitación es esa puerta:
+un **token firmado** que un poseedor de autoridad reparte, y que al **redimirse** emite un cert scopeado.
+La cadena solo baja — capacidades monotónicas.
+
+```
+Nivel 0 · Admin del sistema (raíz = cert auto-firmado de la CA en el bootstrap)
+   │  invitación { accion: crear-proyecto, otorga: role=project-admin }
+   ▼
+Nivel 1 · Admin de proyecto  (redime → project-manager.create + cert client:<project>:admin)
+   │  invitación { accion: unirse, project: <suyo>, role: <2-3 roles del proyecto> }
+   ▼
+Nivel 2 · Equipos / usuarios  (redimen → cert scopeado a {project, role})
+```
+
+## Contrato (JSON)
+
+```json
+{
+  "esquema": "invitacion-v1",
+  "invitacion": {
+    "id": "inv_<hex>",
+    "emisor":  { "cert_serial": "<serial>", "scope": "<project|system>", "role": "<role>" },
+    "otorga":  {
+      "accion": "crear-proyecto | unirse-proyecto",
+      "project": "<id | null>",          // null en crear-proyecto (se fija al redimir)
+      "role":    "<role otorgado>"
+    },
+    "limites": { "expira_at": "<iso>", "usos_max": 1, "usos": 0 },
+    "firma":   "RS256(privada_del_emisor, canonical(otorga+limites+id))"
+  },
+  "verificacion_offline": "la invitación se prueba contra el cert del emisor — sin lookup (QR/código copiable)",
+  "primitivo": "MISMO que enki-token (RS256) — no se inventa cripto nueva"
+}
+```
+
+## La invariante — delegación monotónica (Specification)
+
+```
+VALIDA(invitacion) ⟺
+    firma_valida(invitacion, cert_del_emisor)          // ¿de verdad la firmó él?
+  ∧ otorga ⊆ autoridad(emisor)                          // no escala (LA invariante)
+  ∧ no_expirada(invitacion) ∧ usos_disponibles(invitacion)
+
+autoridad(emisor):
+  system-admin (scope=system)  → { crear-proyecto, role=project-admin }
+  project-admin (scope=P)      → { unirse-proyecto, project=P, role ∈ roles(P) \ {niveles superiores} }
+  member                       → ∅  (no delega)
+
+// el admin de nonina NUNCA otorga otro proyecto, NUNCA system, NUNCA un rol > el suyo
+```
+
+## Redención = enrolar con invitación (pseudocódigo)
+
+```
+FUNCION redimir(invitacion, miClavePublica): Cert
+  PRE: VALIDA(invitacion)                                       // si no, 403 fértil (nombra por qué)
+  SI invitacion.otorga.accion == 'crear-proyecto':
+      project ← project-manager.create({ owner: portador })     // bootstrap del proyecto
+      role    ← 'project-admin'
+  SINO:
+      project ← invitacion.otorga.project
+      role    ← invitacion.otorga.role
+  cert ← certificate-authority.issueFromPublicKey({
+            publicKeyPem: miClavePublica, type, scope: project, role, identifier
+         })
+  invitacion.usos += 1                                          // consume un uso
+  EMITE 'invitacion.redimida' { id, project, role, portador }
+  RETORNA cert
+```
+
+## Modelo OOP
+
+```
+CLASE Invitacion (ValueObject inmutable)
+  ├─ otorga: Grant { accion, project, role }
+  ├─ limites: { expira_at, usos_max, usos }
+  └─ firma  → verificable contra el cert del emisor
+
+CLASE Autoridad (del cert del emisor: scope + role)
+  └─ puedeOtorgar(grant): Boolean          // la invariante monotónica (Specification)
+
+CLASE Invitador (Factory de invitaciones)
+  └─ emitir(grant, limites): Invitacion    // rechaza si grant ⊄ this.autoridad
+
+CLASE Redentor
+  └─ redimir(invitacion, pubKey): Cert      // verifica + issueFromPublicKey + consume uso
+
+PATRONES
+  Specification → Autoridad.puedeOtorgar (la monotonía)
+  Factory       → Invitador.emitir · Redentor produce el Cert
+  Capability    → la invitación ES la capacidad portable (no una ACL central)
+  Guard         → VALIDA como precondición; el 403 nace fértil (nombra la falta)
+```
+
+## Reusa lo que ya existe (no inventa roster)
+
+| Necesidad | Lo resuelve | Estado |
+|---|---|---|
+| firmar/verificar la invitación | `core/broker/enki-token.js` (RS256) | ✅ vivo |
+| emitir el cert desde una pubkey | `certificate-authority.issueFromPublicKey` | ✅ vivo |
+| scope por proyecto en el cert | SAN de 4 partes `type:scope:identifier` | ✅ vivo |
+| crear el proyecto (nivel 1) | `project-manager.create` | ✅ vivo |
+| usuarios y su rol | `staff-manager` (employee.role ya existe) | ✅ vivo |
+| equipos | `device-registry` (register/unregister) | ✅ vivo |
+| rol → dominios permitidos (política) | `bus-guard` policy (por construir) | 🔜 fase 2 |
+
+## Catálogo de roles — semilla + crecido por proyecto (decisión 1, RESUELTA)
+
+> **El rol es del PROYECTO, no del sistema.** El sistema siembra un mínimo; cada proyecto crece los
+> suyos según sus necesidades. Mismo patrón que agentes/cantera/arquetipos: `semilla ⊕ crecido`, el
+> proyecto gana en conflicto. Se empieza SIMPLE (la semilla basta), pero la puerta queda abierta por diseño.
+
+```json
+{
+  "esquema": "roles-proyecto-v1",
+  "principio": "el sistema siembra el mínimo; el admin de proyecto define/edita los suyos",
+  "rol": {
+    "id": "caja",
+    "dominios": ["pizzepos", "cobros"],     // qué puede TOCAR en el bus (alimenta la policy del guard)
+    "hereda": "member"                        // opcional: base + extras
+  },
+  "resolucion": "roles(project) = SEMILLA_SISTEMA ⊕ roles_del_proyecto   (el proyecto pisa la semilla)",
+  "semilla_minima": {
+    "project-admin": "todos los dominios del proyecto (el que redime crear/entrar)",
+    "member":        "dominios operativos — NO identidad ni sistema (credential/security/module/...)",
+    "device":        "carril IoT — device-*, device-shadow, device-health, telemetría"
+  },
+  "almacen": "por proyecto (project-manager config) — el admin de proyecto CRUD-ea sus roles",
+  "consumo_por_el_guard": "policy(identity, topic) ⟺ _dominioDeTopic(topic) ∈ dominios(identity.role, identity.scope)",
+  "ligadura_con_invitacion": "una invitación solo otorga un role que EXISTE en el catálogo del proyecto (o en la semilla) y ⊆ la autoridad del emisor",
+  "distincion": "rol-del-BUS (qué puede tocar) ≠ rol-de-RRHH de staff-manager (cocinero/camarero, descriptivo). No se mezclan."
+}
+```
+
+**Lo simple ahora, la puerta abierta por diseño:** v0 usa solo la semilla (3 roles) — suficiente para
+arrancar. La estructura (`roles(project) = semilla ⊕ crecido`) ya permite que mañana una tienda añada
+`caja`, `cocina`, `repartidor` sin tocar el sistema. El guard resuelve el rol contra el catálogo del
+proyecto del cert; si el proyecto no definió ninguno, cae a la semilla.
+
+## Decisiones abiertas (cambian el código)
+
+```json
+{
+  "1_catalogo_de_roles": "RESUELTA — roles por proyecto, semilla+crecido, v0 solo la semilla (ver sección arriba)",
+  "2_revocacion_en_cascada": "revocar un admin de proyecto → ¿mueren los certs que repartió? (árbol: revocar nodo revoca subárbol). Potente; opcional en v0.",
+  "3_usos": "invitación de 1 uso (un equipo) vs multiuso con cupo (N tablets de una tienda)."
+}
+```
+
+## Roadmap de construcción (orden por foco — no adelantar peldaños)
+
+```
+FASE 0 · BASE DE IDENTIDAD ......................................... ✅ HECHO
+  guard + escalera off/observe/enforce · token firmado · enroll ·
+  peer-trust dinámico · SAN con scope · botón de pánico
+
+FASE 1 · ENCENDER Y MEDIR (operativo, sin código nuevo) ........... 🔜 siguiente
+  habilitar certificate-authority · correr 'observe' · leer
+  security.bus.rejected{domain} · decidir si enforce grueso basta
+
+FASE 2 · CATÁLOGO DE ROLES (decisión 1 RESUELTA: semilla+crecido) ..
+  v0: sembrar los 3 roles mínimos (project-admin/member/device) +
+  resolver role→dominios en la policy del guard, leyendo el catálogo
+  del proyecto (⊕ semilla). Desbloquea el scope fino que hoy solo VIAJA.
+  La estructura ya deja que cada proyecto crezca sus roles sin tocar el sistema.
+
+FASE 3 · INVITACIONES (este subsistema) ...........................
+  3a ✅ banco puro: construir/emitir/verificar + monotonía (modules/_shared/invitaciones.js)
+  3b ✅ módulo invitaciones: emitir/listar/revocar + firma R1 (CA raíz, certificate-authority.
+        sign-invitation) + persistencia + código copiable (modules/invitaciones/)
+  3c ✅ redención: handleRedimir = verificar (firma vs CA + monotonía + usos) +
+        project-manager.create (si crear) + certificate-authority.enroll (cert scope+role) +
+        consume uso. El rol viaja en metadata del cert (graduará al SAN en Fase 2).
+  3d ✅ UI: panel Invitaciones (front autodescubierto) — pestaña Emitir (crear/unirse →
+        código copiable) + Gestionar (listar con estado + revocar). La redención la hace el
+        navegador del invitado (enki-identity), no el panel. FASE 3 COMPLETA (backend + UI).
+
+FASE 4 · CICLO DE VIDA ............................................
+  device-registry.unregister/staff.delete → certificate-authority.revoke
+  revocación en cascada (decisión 2) · rotación
+
+FASE 5 · ENFORCE REAL .............................................
+  subir a 'enforce' con política scopeada por {role, project}, tras
+  que 'observe' muestre el mapa real de tráfico
+```
+
+> **La disciplina del roadmap:** no construir invitaciones (fase 3) antes de los roles (fase 2), ni
+> encender enforce (fase 5) antes de medir en observe (fase 1). Cada peldaño paga el siguiente; el
+> botón de pánico (`bus-guard` OFF) siempre a un clic.
 
 ---
 

@@ -126,8 +126,17 @@ class BusGuard {
       verifier_unavailable: 0,
       publish_denied: 0,
       subscribe_denied: 0,
-      replayed: 0
+      replayed: 0,
+      // El instrumento de 'observe': cuántas veces CADA dominio sería denegado (would-be en observe,
+      // real en enforce). Es el dato que dice si enforce es seguro: si credential=0 y pizzepos=400,
+      // subir a enforce no rompe a nadie legítimo. Legible sin backend de métricas.
+      deniedByDomain: {}
     };
+  }
+
+  _recordarDenegado(dominio) {
+    const d = dominio || '(sin-dominio)';
+    this.stats.deniedByDomain[d] = (this.stats.deniedByDomain[d] || 0) + 1;
   }
 
   // ── anti-replay: jti visto dentro de su ventana ── (poda perezosa al consultar)
@@ -301,6 +310,7 @@ class BusGuard {
 
     if (!veredicto.allow) {
       this.stats.publish_denied++;
+      this._recordarDenegado(veredicto.dominio);
       this.metrics?.increment?.('security.bus.rejected', { stage: 'publish', domain: veredicto.dominio });
       this.logger?.warn?.('security.bus.publish_denied', {
         client_id: client.id, topic: packet?.topic, reason: veredicto.reason, mode: modo
@@ -326,6 +336,7 @@ class BusGuard {
 
     if (!veredicto.allow) {
       this.stats.subscribe_denied++;
+      this._recordarDenegado(veredicto.dominio);
       this.metrics?.increment?.('security.bus.rejected', { stage: 'subscribe', domain: veredicto.dominio });
       this.logger?.warn?.('security.bus.subscribe_denied', {
         client_id: client.id, topic: subscription?.topic, reason: veredicto.reason, mode: modo

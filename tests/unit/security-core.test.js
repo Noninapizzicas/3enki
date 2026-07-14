@@ -154,6 +154,27 @@ console.log('security-core — el cerebro de la puerta guardada\n');
     assert.deepStrictEqual(res.data.peer_cores, ['core-c']);
   });
 
+  // ── veredicto de Fase 1: ¿listo para enforce? ──
+  await atest('handleEstado: veredicto "enforce seguro" cuando no hay roce con dominios sensibles', async () => {
+    const guard = fakeGuard();
+    guard.getStats = () => ({ mode: 'observe', deniedByDomain: { pizzepos: 300 } });
+    const core = fakeCore({ busGuard: guard });
+    const mod = new SecurityCoreModule();
+    await mod.onLoad(core.ctx);
+    const v = (await mod.handleEstado()).data.listo_para_enforce;
+    assert.ok(/seguro/.test(v.recomendacion), 'solo tráfico normal → enforce seguro');
+  });
+  await atest('handleEstado: veredicto "enrola antes" cuando hay roce con dominio sensible', async () => {
+    const guard = fakeGuard();
+    guard.getStats = () => ({ mode: 'observe', deniedByDomain: { credential: 5, pizzepos: 300 } });
+    const core = fakeCore({ busGuard: guard });
+    const mod = new SecurityCoreModule();
+    await mod.onLoad(core.ctx);
+    const v = (await mod.handleEstado()).data.listo_para_enforce;
+    assert.ok(/enrola/.test(v.recomendacion), 'hay anónimo tocando credential → enrolar antes');
+    assert.strictEqual(v.dominios_sensibles_con_trafico[0].dominio, 'credential');
+  });
+
   // ── handleEstado: refleja el peldaño ──
   await atest('handleEstado: refleja modo y escalera', async () => {
     const guard = fakeGuard();

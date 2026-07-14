@@ -18,6 +18,7 @@
 'use strict';
 
 const BaseModule = require('../_shared/base-module');
+const { DOMINIOS_SENSIBLES } = require('../../core/broker/bus-guard');
 
 // Los dos interruptores → el peldaño. bus-guard OFF gana (off); con él ON, enforce decide.
 function _modoDe(activo, enforce) {
@@ -151,7 +152,7 @@ class SecurityCoreModule extends BaseModule {
     } catch (_) { /* best-effort */ }
   }
 
-  // ── UI: estado de la puerta (para el panel) ──
+  // ── UI: estado de la puerta + veredicto de Fase 1 (¿listo para enforce?) ──
   async handleEstado() {
     const modo = this.guard ? this.guard._mode : 'sin-guard';
     const stats = this.guard ? this.guard.getStats() : null;
@@ -163,8 +164,23 @@ class SecurityCoreModule extends BaseModule {
         modo, activo: this.activo, enforce: this.enforce,
         stats,
         peer_cores: [...this._peerCores],
+        listo_para_enforce: this._veredictoEnforce(stats),
         escalera: 'off → observe (audita sin romper) → enforce (bloquea)'
       }
+    };
+  }
+
+  // El instrumento de decisión de Fase 1: mientras corre 'observe', ¿qué dominios SENSIBLES
+  // vería bloqueados enforce? Si ninguno acumula denegaciones, subir a enforce no rompe a nadie.
+  _veredictoEnforce(stats) {
+    const denied = (stats && stats.deniedByDomain) || {};
+    const sensibles = Object.keys(denied).filter((d) => DOMINIOS_SENSIBLES.has(d));
+    return {
+      dominios_sensibles_con_trafico: sensibles.map((d) => ({ dominio: d, denegaciones: denied[d] })),
+      recomendacion: sensibles.length === 0
+        ? 'sin tráfico anónimo a dominios sensibles — enforce es seguro'
+        : 'hay tráfico anónimo a dominios sensibles — enrola esos clientes ANTES de enforce',
+      total_denegaciones: Object.values(denied).reduce((a, b) => a + b, 0)
     };
   }
 }

@@ -126,6 +126,19 @@ console.log('BusGuard — el bus como puerta guardada\n');
     assert.strictEqual(r.sub, null, 'el firehose de lectura queda cerrado');
   });
 
+  // ── observe legible: el breakdown por dominio (el instrumento de Fase 1) ──
+  await atest('observe: acumula deniedByDomain (qué dominios vería bloqueados enforce)', async () => {
+    const g = new BusGuard({ verifier: verifierFake, getMode: () => 'observe' });
+    const anon = {};
+    await authP(g, anon, null);
+    await pubP(g, anon, 'core/core-a/events/credential/resolve/request');  // sensible
+    await pubP(g, anon, 'core/core-a/events/credential/list/request');     // sensible otra vez
+    await pubP(g, anon, 'ui/request/pizzepos/pedidos');                    // normal → no cuenta
+    const s = g.getStats();
+    assert.strictEqual(s.deniedByDomain.credential, 2, 'contó 2 roces con credential');
+    assert.ok(!('pizzepos' in s.deniedByDomain), 'el dominio normal no aparece');
+  });
+
   // ── el core robusto al cambio de peldaño (conectó en off, sigue vivo al subir a enforce) ──
   await atest('enforce: core conectado en off (identidad stale anónima) → NO se bloquea (trusted por clientId en authorize)', async () => {
     const g = new BusGuard({ verifier: verifierFake, getMode: () => 'enforce', trustedClientIds: ['core-a'] });

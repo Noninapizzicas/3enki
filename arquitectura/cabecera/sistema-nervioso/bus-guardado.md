@@ -168,6 +168,33 @@ todo lo demás evoluciona sin re-emitir.
 - **Spoof de clientId (peers)**: el trusted-by-clientId sigue spoofeable; estado final = los peers también
   portan token firmado.
 
+## Fase 1 — runbook de encendido (encender y MEDIR)
+
+> El objetivo de Fase 1 no es bloquear — es **aprender sin romper**. `observe` verifica y audita pero
+> deja pasar todo; el instrumento `deniedByDomain` cuenta qué dominios vería bloqueados `enforce`.
+
+```
+PASO 1 · habilitar la CA (ya hecho en config.json — certificate-authority salió de 'disabled')
+         → el verifier del guard puede consultar certificate-authority.verify
+
+PASO 2 · el DUEÑO enciende el interruptor 'bus-guard' desde el panel  →  modo 'observe'
+         (bus-guard-enforce queda OFF — solo observa)
+
+PASO 3 · dejar correr días de uso real (front, devices, cores)
+
+PASO 4 · LEER el veredicto:  ui/request/security-core/estado  →  data.listo_para_enforce
+         { dominios_sensibles_con_trafico: [...], recomendacion, total_denegaciones }
+         · ninguno sensible con tráfico → 'enforce es seguro'
+         · hay sensibles con tráfico    → 'enrola esos clientes ANTES de enforce'
+
+PASO 5 · GO/NO-GO:
+         GO   → enrola los clientes que aún son anónimos (paso 2 / invitaciones) y sube a enforce
+         NO-GO→ sigue en observe; el botón de pánico ('bus-guard' OFF) siempre a un clic
+```
+
+Lo que NO se hace en Fase 1: encender `enforce`, tocar la política, construir roles o invitaciones.
+Solo medir. El dato decide el siguiente peldaño.
+
 ## El botón de pánico
 
 > El interruptor **`bus-guard`** ES el botón de escape. Apagarlo devuelve el broker a ABIERTO

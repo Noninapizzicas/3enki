@@ -64,6 +64,18 @@ class CertificateAuthorityModule extends BaseModule {
 
     const result = await this.caManager.initialize();
 
+    // R2 · bootstrap del system-admin: en el PRIMER arranque emite el código de un solo uso.
+    try {
+      const boot = this.caManager.ensureBootstrap();
+      if (boot.created) {
+        const banner = `\n${'='.repeat(64)}\n  CÓDIGO DE BOOTSTRAP DEL ADMIN DEL SISTEMA (un solo uso)\n  Reclama tu identidad en:  /reclamar-admin\n  Código: ${boot.token}\n${'='.repeat(64)}\n`;
+        console.log(banner);
+        this.logger?.warn?.('certificate-authority.admin_bootstrap.created', { hint: 'reclamar en /reclamar-admin (código en consola)' });
+      }
+    } catch (err) {
+      this.logger?.warn?.('certificate-authority.admin_bootstrap.failed', { error_message: err.message });
+    }
+
     this.mtlsMiddleware = new MTLSMiddleware({
       caManager: this.caManager,
       logger: this.logger,
@@ -303,6 +315,42 @@ class CertificateAuthorityModule extends BaseModule {
       };
     } catch (err) {
       return this._handleHandlerError('certificate-authority.enroll.error', err);
+    }
+  }
+
+  async handleBootstrapStatus() {
+    try {
+      return { status: 200, data: this.caManager.getBootstrapStatus() };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.bootstrap_status.error', err);
+    }
+  }
+
+  async handleClaimAdmin(input) {
+    try {
+      const body = input?.body || input || {};
+      const { bootstrapToken, publicKeyPem, commonName } = body;
+      if (!bootstrapToken || !publicKeyPem) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'bootstrapToken y publicKeyPem requeridos', { required: ['bootstrapToken', 'publicKeyPem'] });
+      }
+      let result;
+      try { result = this.caManager.claimAdmin({ bootstrapToken, publicKeyPem, commonName }); }
+      catch (err) {
+        const conflicto = /ya fue reclamado|inválido/i.test(err.message);
+        return this._errorResponse(conflicto ? 403 : 500, conflicto ? 'CONFLICT_STATE' : 'UNKNOWN_ERROR', err.message);
+      }
+      this.stats.certificates_issued++;
+      await this._publicarEvento('certificate.issued', {
+        serialNumber: result.serialNumber, type: 'client', scope: 'system', role: 'system-admin',
+        identifier: 'root', fingerprint: result.fingerprint, keyOrigin: 'client'
+      }, {});
+      this.logger?.warn?.('certificate-authority.admin_claimed', { serialNumber: result.serialNumber });
+      return {
+        status: 201,
+        data: { certificate: result.certificate, serialNumber: result.serialNumber, scope: 'system', role: 'system-admin' }
+      };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.claim_admin.error', err);
     }
   }
 

@@ -136,6 +136,26 @@ export async function mintToken(): Promise<string | null> {
   return 'enki:token:' + signingInput + '.' + b64url(sig);
 }
 
+/**
+ * RECLAMA la identidad del system-admin (R2, la raíz de la cadena): con el código de bootstrap
+ * de un solo uso, genera la clave de ESTE navegador (no sale), obtiene el cert admin:system:root
+ * y lo guarda → el navegador queda como admin del sistema. Devuelve {scope, role}.
+ */
+export async function reclamarAdmin(
+  mqttRequest: (domain: string, action: string, payload: unknown) => Promise<{ data?: { certificate?: string; scope?: string; role?: string } }>,
+  bootstrapToken: string
+): Promise<{ scope: string; role: string }> {
+  const kp = await ensureKeypair();
+  const publicKeyPem_ = await publicKeyPem(kp);
+  const res = await mqttRequest('certificate-authority', 'claim-admin', {
+    bootstrapToken, publicKeyPem: publicKeyPem_, commonName: 'System Admin'
+  });
+  const data = res?.data;
+  if (!data?.certificate) throw new Error('la reclamación no devolvió certificado');
+  localStorage.setItem(CERT_LS, data.certificate);   // este navegador es ahora el admin del sistema
+  return { scope: data.scope ?? 'system', role: data.role ?? 'system-admin' };
+}
+
 /** La credencial para el MQTT CONNECT (password). null → el front conecta anónimo. */
 export async function credentialForConnect(): Promise<string | null> {
   try { return await mintToken(); }

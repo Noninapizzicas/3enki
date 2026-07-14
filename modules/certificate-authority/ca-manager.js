@@ -39,6 +39,7 @@ class CAManager {
     this.caCertPath = path.join(this.storagePath, 'ca-cert.pem');
     this.crlPath = path.join(this.storagePath, 'crl.json');
     this.certsPath = path.join(this.storagePath, 'certs');
+    this.bootstrapPath = path.join(this.storagePath, 'admin-bootstrap.json');   // R2: raíz del system-admin
 
     this.caKey = null;   // forge private key object
     this.caCert = null;  // forge certificate object
@@ -78,6 +79,54 @@ class CAManager {
 
     // Generar nueva CA
     return this._generateCA();
+  }
+
+  // ── R2 · bootstrap del system-admin ──────────────────────────────────────
+  // El admin del sistema es la RAÍZ de la cadena — no lo invita nadie. Su identidad nace de un
+  // código de un solo uso que la CA emite en el PRIMER arranque; el dueño lo reclama desde su
+  // navegador (genera su clave, nunca sale) y recibe un cert admin:system:root.
+
+  /** En el primer arranque crea el código de bootstrap. Devuelve {created, token?}. */
+  ensureBootstrap() {
+    if (fs.existsSync(this.bootstrapPath)) {
+      const st = JSON.parse(fs.readFileSync(this.bootstrapPath, 'utf8'));
+      return { created: false, claimed: !!st.claimed };
+    }
+    const token = crypto.randomBytes(24).toString('base64url');
+    fs.writeFileSync(this.bootstrapPath, JSON.stringify({ claimed: false, token, created_at: new Date().toISOString() }, null, 2), { mode: 0o600 });
+    return { created: true, token, claimed: false };
+  }
+
+  /** Estado del bootstrap (sin revelar el token). */
+  getBootstrapStatus() {
+    if (!fs.existsSync(this.bootstrapPath)) return { exists: false, claimed: false };
+    const st = JSON.parse(fs.readFileSync(this.bootstrapPath, 'utf8'));
+    return { exists: true, claimed: !!st.claimed, claimed_at: st.claimed_at || null };
+  }
+
+  /**
+   * Reclama la identidad del system-admin con el código de bootstrap (un solo uso).
+   * Firma la clave PÚBLICA del dueño → cert admin:system:root, role system-admin. Quema el código.
+   * @returns {Object} { serialNumber, certificate, fingerprint, metadata }
+   */
+  claimAdmin({ bootstrapToken, publicKeyPem, commonName }) {
+    if (!fs.existsSync(this.bootstrapPath)) throw new Error('bootstrap no inicializado');
+    const st = JSON.parse(fs.readFileSync(this.bootstrapPath, 'utf8'));
+    if (st.claimed) throw new Error('el admin del sistema ya fue reclamado');
+    if (!bootstrapToken || bootstrapToken !== st.token) throw new Error('código de bootstrap inválido');
+    if (!publicKeyPem) throw new Error('publicKeyPem required');
+
+    const result = this.issueFromPublicKey({
+      publicKeyPem, type: 'client', scope: 'system', role: 'system-admin',
+      identifier: 'root', commonName: commonName || 'System Admin'
+    });
+
+    // quema el código (un solo uso) — conserva el registro para auditoría
+    fs.writeFileSync(this.bootstrapPath, JSON.stringify({
+      claimed: true, claimed_at: new Date().toISOString(), serialNumber: result.serialNumber
+    }, null, 2), { mode: 0o600 });
+
+    return result;
   }
 
   /**

@@ -55,7 +55,7 @@ console.log('Paso 2 (backend) — enrolamiento + token firmado con cripto real\n
   const ca = new CAManager({ storagePath: tmpDir('ca'), ca_cn: 'Enki Test CA' });
   await ca.initialize();
   // verifier REAL: envuelve certificate-authority.verifyCertificate
-  const verifier = (pem) => { const v = ca.verifyCertificate(pem); return { valid: v.valid, type: v.type, identifier: v.identifier, error: v.error }; };
+  const verifier = (pem) => { const v = ca.verifyCertificate(pem); return { valid: v.valid, type: v.type, scope: v.scope, role: v.role, identifier: v.identifier, error: v.error }; };
 
   await atest('enroll: la CA firma la pubkey del cliente → cert (sin devolver privada)', async () => {
     const kp = clienteKeypair();
@@ -133,5 +133,29 @@ console.log('Paso 2 (backend) — enrolamiento + token firmado con cripto real\n
     assert.strictEqual(banco.verificar(firmada, { verificarFirma }).valida, false);
   });
 
-  console.log('\n✓ Paso 2 backend: la clave nunca sale del cliente; el guard prueba CA + posesión de raíz; la CA firma invitaciones (R1)');
+  await atest('R2: bootstrap del system-admin — reclamar con el código emite admin:system:root; un solo uso', async () => {
+    const caB = new CAManager({ storagePath: tmpDir('bootstrap'), ca_cn: 'Enki Test CA' });
+    await caB.initialize();
+    const boot = caB.ensureBootstrap();
+    assert.strictEqual(boot.created, true, 'primer arranque emite el código');
+    assert.ok(boot.token, 'hay código de bootstrap');
+    assert.strictEqual(caB.getBootstrapStatus().claimed, false);
+
+    const kp = clienteKeypair();
+    // código inválido → rechazado
+    assert.throws(() => caB.claimAdmin({ bootstrapToken: 'malo', publicKeyPem: kp.publicKey }), /inválido/);
+    // código bueno → cert admin:system:root
+    const res = caB.claimAdmin({ bootstrapToken: boot.token, publicKeyPem: kp.publicKey });
+    const v = caB.verifyCertificate(res.certificate);
+    assert.strictEqual(v.scope, 'system');
+    assert.strictEqual(v.role, 'system-admin');
+    assert.strictEqual(v.identifier, 'root');
+    assert.strictEqual(caB.getBootstrapStatus().claimed, true, 'quedó reclamado');
+    // segundo intento → ya reclamado
+    assert.throws(() => caB.claimAdmin({ bootstrapToken: boot.token, publicKeyPem: clienteKeypair().publicKey }), /ya fue reclamado/);
+    // ensureBootstrap idempotente (no regenera)
+    assert.strictEqual(caB.ensureBootstrap().created, false);
+  });
+
+  console.log('\n✓ Paso 2 backend: la clave nunca sale del cliente; el guard prueba CA + posesión de raíz; la CA firma invitaciones (R1); el system-admin nace del bootstrap (R2)');
 })();

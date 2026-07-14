@@ -21,7 +21,7 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'escandallo';
-    this.version = 'reflejo-1.2.0';
+    this.version = 'reflejo-1.3.0';
   }
 
   // ── handlers RPC (una línea) ──
@@ -180,13 +180,16 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
       const cant = (typeof linea.cantidad === 'number' && linea.cantidad > 0) ? linea.cantidad : 1;
       const { precio_u, fuente } = await this._resolverLinea(input, linea, catalogo, receta.id ? cadena.concat(receta.id) : cadena);
       if (precio_u == null) { sin_precio.push(linea.nombre); fuentes.add('no_disponible'); continue; }
-      const v = this._round(cant * precio_u, 2);
+      const v = this._round(cant * precio_u, 6);
       coste += v;
       desglose.push({ ref: linea.ref, nombre: linea.nombre, cantidad: cant, unidad: linea.unidad, precio_unitario: precio_u, valor_calculado: v, fuente });
       fuentes.add(fuente);
     }
     const coste_total = this._round(coste, 2);
-    const coste_unidad = (receta.rinde && receta.rinde.cantidad > 0) ? this._round(coste_total / receta.rinde.cantidad, 2) : coste_total;
+    // Precisión intermedia a 6 decimales: coste_unidad viaja como precio_u a la receta padre
+    // (via _resolverLinea) — redondearlo a 2 tragaba las sub-recetas de <0,005 €/unidad
+    // (la masa a 0,001 €/g se volvía 0,00 y desaparecía). El total final sí cierra en 2 decimales.
+    const coste_unidad = (receta.rinde && receta.rinde.cantidad > 0) ? this._round(coste_total / receta.rinde.cantidad, 6) : coste_total;
     return { coste_total, coste_unidad, desglose, fuentes: Array.from(fuentes), sin_precio };
   }
 

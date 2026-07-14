@@ -5,7 +5,7 @@ resumen: Reflejo (JS determinista) + Blueprint (LLM): criterio de reparto, base 
 fuentes:
   - modules/_shared/modulo-hibrido-reflejo.js
   - scripts/validate-hibridos.js
-verificado: 2026-07-06
+verificado: 2026-07-14
 ---
 
 # Patrón Módulo Híbrido — Reflejo (JS) + Blueprint (LLM)
@@ -329,11 +329,14 @@ APLICADO (los 6 que dan forma del subsistema-carta) {
                HTML no trivial + COMPLETITUD (cada producto aparece) + ALERGENOS (Reg. UE 1169/2011).
                save RE-VALIDA como gate → 422 si no representa.
   }
-  escandallo (module 2.1.0 · blueprint 3.10.0 · reflejo 1.2.0) {
+  escandallo (module 2.2.0 · blueprint 3.11.0 · reflejo 1.3.0) {
     contrato : PROCEDENCIA + COHERENCIA (el coste fija el precio de venta).
     freno    : escandallo.validar.request (_checkCosteo) — rechaza el precio INVENTADO (fuente
                'estimado_llm' → PRECIO_INVENTADO) y la aritmética incoherente (coste_total=Σlíneas).
                _precio_de_mercadona deja de estimar: el PRECIO sale de la API real o queda sin_precio.
+    precisión: _costear lleva los valores intermedios a 6 decimales (coste_total final en 2) — a 2
+               las sub-recetas de <0,005 €/unidad se tragaban (la masa a 0,001 €/g caía a 0,00 y su
+               coste_unidad viajaba como 0,00 a la receta padre). Cazado en vivo costeando El Sansón.
   }
   carta-digital (module 2.18.0 · blueprint 1.3.0 · reflejo 2.7.0) {
     contrato : el CARD_TEMPLATE cumple el contrato de slots.

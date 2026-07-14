@@ -68,6 +68,7 @@ class BibliotecarioModule extends ModuloHibridoReflejo {
     this.repoUrl     = cfg.repo_url || 'https://github.com/Noninapizzicas/Conocimiento.git';
     this.ref         = cfg.ref || 'main';
     this.vaultSubdir = cfg.vault_subdir || 'boveda';
+    this.mirrorPath  = cfg.mirror_path || MIRROR_DIR;   // override para test/despliegue; default data/bibliotecario/mirror
 
     // Materializar el mirror best-effort: si ya existe lo usamos; si no, clonamos.
     // Nunca bloquea el arranque — si falla, degradamos honesto (stale:true).

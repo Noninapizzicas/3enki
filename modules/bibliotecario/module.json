@@ -58,7 +58,8 @@
       "repo_url": "https://github.com/Noninapizzicas/Conocimiento.git",
       "ref": "main",
       "vault_subdir": "boveda",
-      "_nota": "El VPS necesita credencial de SOLO-LECTURA al repo privado (deploy-key/token). El bibliotecario clona y hace pull; nunca escribe por esta vía (la escritura es del acumulador-sectorial, flujo aparte). Override repo_url/ref por config del módulo."
+      "mirror_path": null,
+      "_nota": "El VPS necesita credencial de SOLO-LECTURA al repo privado (deploy-key/token). El bibliotecario clona y hace pull; nunca escribe por esta vía (la escritura es del acumulador-sectorial, flujo aparte). Override repo_url/ref/vault_subdir por config del módulo. mirror_path: null → default data/bibliotecario/mirror; se puede fijar para test/despliegue."
     },
     "persistence": {
       "scope": "system",

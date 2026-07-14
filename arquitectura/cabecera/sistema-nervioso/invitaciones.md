@@ -126,11 +126,44 @@ PATRONES
 | equipos | `device-registry` (register/unregister) | ✅ vivo |
 | rol → dominios permitidos (política) | `bus-guard` policy (por construir) | 🔜 fase 2 |
 
+## Catálogo de roles — semilla + crecido por proyecto (decisión 1, RESUELTA)
+
+> **El rol es del PROYECTO, no del sistema.** El sistema siembra un mínimo; cada proyecto crece los
+> suyos según sus necesidades. Mismo patrón que agentes/cantera/arquetipos: `semilla ⊕ crecido`, el
+> proyecto gana en conflicto. Se empieza SIMPLE (la semilla basta), pero la puerta queda abierta por diseño.
+
+```json
+{
+  "esquema": "roles-proyecto-v1",
+  "principio": "el sistema siembra el mínimo; el admin de proyecto define/edita los suyos",
+  "rol": {
+    "id": "caja",
+    "dominios": ["pizzepos", "cobros"],     // qué puede TOCAR en el bus (alimenta la policy del guard)
+    "hereda": "member"                        // opcional: base + extras
+  },
+  "resolucion": "roles(project) = SEMILLA_SISTEMA ⊕ roles_del_proyecto   (el proyecto pisa la semilla)",
+  "semilla_minima": {
+    "project-admin": "todos los dominios del proyecto (el que redime crear/entrar)",
+    "member":        "dominios operativos — NO identidad ni sistema (credential/security/module/...)",
+    "device":        "carril IoT — device-*, device-shadow, device-health, telemetría"
+  },
+  "almacen": "por proyecto (project-manager config) — el admin de proyecto CRUD-ea sus roles",
+  "consumo_por_el_guard": "policy(identity, topic) ⟺ _dominioDeTopic(topic) ∈ dominios(identity.role, identity.scope)",
+  "ligadura_con_invitacion": "una invitación solo otorga un role que EXISTE en el catálogo del proyecto (o en la semilla) y ⊆ la autoridad del emisor",
+  "distincion": "rol-del-BUS (qué puede tocar) ≠ rol-de-RRHH de staff-manager (cocinero/camarero, descriptivo). No se mezclan."
+}
+```
+
+**Lo simple ahora, la puerta abierta por diseño:** v0 usa solo la semilla (3 roles) — suficiente para
+arrancar. La estructura (`roles(project) = semilla ⊕ crecido`) ya permite que mañana una tienda añada
+`caja`, `cocina`, `repartidor` sin tocar el sistema. El guard resuelve el rol contra el catálogo del
+proyecto del cert; si el proyecto no definió ninguno, cae a la semilla.
+
 ## Decisiones abiertas (cambian el código)
 
 ```json
 {
-  "1_catalogo_de_roles": "rol-del-BUS (admin/staff/device/readonly → dominios) ≠ rol-de-RRHH (cocinero/camarero). El del bus manda la política; el de RRHH es descriptivo. ¿fijos del sistema o definidos por el admin de proyecto?",
+  "1_catalogo_de_roles": "RESUELTA — roles por proyecto, semilla+crecido, v0 solo la semilla (ver sección arriba)",
   "2_revocacion_en_cascada": "revocar un admin de proyecto → ¿mueren los certs que repartió? (árbol: revocar nodo revoca subárbol). Potente; opcional en v0.",
   "3_usos": "invitación de 1 uso (un equipo) vs multiuso con cupo (N tablets de una tienda)."
 }
@@ -147,9 +180,11 @@ FASE 1 · ENCENDER Y MEDIR (operativo, sin código nuevo) ........... 🔜 sigui
   habilitar certificate-authority · correr 'observe' · leer
   security.bus.rejected{domain} · decidir si enforce grueso basta
 
-FASE 2 · CATÁLOGO DE ROLES (decisión 1) ...........................
-  definir roles-del-bus + mapa role→dominios en la policy del guard
-  (desbloquea el scope fino que hoy solo VIAJA)
+FASE 2 · CATÁLOGO DE ROLES (decisión 1 RESUELTA: semilla+crecido) ..
+  v0: sembrar los 3 roles mínimos (project-admin/member/device) +
+  resolver role→dominios en la policy del guard, leyendo el catálogo
+  del proyecto (⊕ semilla). Desbloquea el scope fino que hoy solo VIAJA.
+  La estructura ya deja que cada proyecto crezca sus roles sin tocar el sistema.
 
 FASE 3 · INVITACIONES (este subsistema) ...........................
   3a contrato + firma/verificación (reusa enki-token)

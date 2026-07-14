@@ -1,0 +1,26 @@
+{
+  "id": "acumulador-sectorial",
+  "name": "acumulador-sectorial",
+  "description": "Acumulador sectorial de la biblioteca de conocimiento (repo Conocimiento). Dado un tema/sector, ejecuta el ciclo de cosecha de 6 fases (contrato, descomponer, cosechar web, reconciliar, escribir notas Obsidian, resumen) y deja notas markdown enlazadas, fechadas y con fuentes en la bóveda. Hermano ESCRITOR del bibliotecario (que es el lector): él sirve los libros, este los escribe. Reconcilia fuentes sin pisarlas, marca lo dudoso con a-verificar, encuadre honesto en temas sensibles, cero invención. No hace git commit ni push. NACE APARCADO (enabled:false): buscable en la cúpula, activable cuando exista la puerta de escritura de la biblioteca.",
+  "version": "1.0.0",
+  "enabled": false,
+  "scope": ["aprendizaje"],
+  "prompt_file": "prompts/acumulador-sectorial-system.md",
+  "tools": [
+    "buscar_web",
+    "leer_web",
+    "escribano.escribir"
+  ],
+  "provider": "deepseek",
+  "temperature": 0.4,
+  "max_tokens": 8000,
+  "timeout_ms": 180000,
+  "max_retries": 2,
+  "context_enabled": false,
+  "metadata": {
+    "type": "domain-agent",
+    "domain": "aprendizaje",
+    "tags": ["conocimiento", "cosecha", "investigacion", "boveda", "sectorial"],
+    "_infra": "Cosecha web por buscar_web (descubre fuentes, SearXNG) + leer_web (lee páginas), ambos del órgano crawl4rs (interruptor OFF por defecto → encender para cosechar); GUARDAR por escribano.escribir (escribe la nota en la copia de trabajo de Conocimiento, sin commit/push — opción A, el humano sube). Sigue APARCADO (enabled:false) a propósito: activar un trabajador es decisión consciente (activar_agente, confirmation)."
+  }
+}

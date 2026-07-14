@@ -112,6 +112,7 @@
     "test:facturacion__asesoria": "node tests/unit/facturacion__asesoria.test.js",
     "test:log-manager": "node tests/unit/log-manager.test.js",
     "test:bibliotecario": "node tests/unit/bibliotecario.test.js",
+    "test:escribano": "node tests/unit/escribano.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

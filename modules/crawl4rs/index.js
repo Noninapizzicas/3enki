@@ -85,6 +85,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   onDescargarRequest(e){ return this._atender(e, 'descargar','crawl4rs.descargar.response',(d) => this._descargar(d)); }
 
   // ── tool de chat ──
+  async handleBuscarTool(args)    { return this._buscar(args || {}); }
   async handleLeerTool(args)      { return this._leer(args || {}); }
   async handleDescargarTool(args) { return this._descargar(args || {}); }
 

@@ -32,6 +32,21 @@
   ],
   "tools": [
     {
+      "name": "buscar_web",
+      "description": "Busca en la web (SearXNG) y devuelve una lista de resultados { titulo, url, resumen }. ÚSALA para DESCUBRIR fuentes cuando no tienes la URL — el paso previo a leer_web. Añade calificadores de recencia ('2025 2026', 'latest', 'state of the art') para el estado del arte. Requiere que el puente esté encendido (interruptor 'crawl4rs').",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "query": { "type": "string", "minLength": 1, "description": "La consulta de búsqueda." },
+          "limit": { "type": "number", "description": "Cuántos resultados devolver (default 10)." }
+        },
+        "required": ["query"]
+      },
+      "handler": "handleBuscarTool",
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "UPSTREAM_INVALID_RESPONSE"]
+    },
+    {
       "name": "leer_web",
       "description": "Lee una página web y devuelve su contenido limpio en markdown (opcionalmente extrae el contenido principal). ÚSALA cuando necesites el texto de una URL concreta — ficha de producto, artículo, catálogo. Usa un navegador real (pasa sitios que bloquean a los fetchers simples). Requiere que el puente esté encendido (interruptor 'crawl4rs').",
       "parameters": {

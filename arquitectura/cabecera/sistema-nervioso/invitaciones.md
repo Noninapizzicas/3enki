@@ -5,6 +5,8 @@ resumen: DISEÑO (v0, no construido) — la cadena de delegación de capacidades
 fuentes:
   - modules/_shared/invitaciones.js
   - modules/invitaciones/**
+  - frontend/src/lib/modules/invitaciones/**
+  - frontend/src/lib/stores/invitaciones.ts
   - core/broker/enki-token.js
   - modules/certificate-authority/**
   - modules/security-core/**
@@ -195,7 +197,9 @@ FASE 3 · INVITACIONES (este subsistema) ...........................
   3c ✅ redención: handleRedimir = verificar (firma vs CA + monotonía + usos) +
         project-manager.create (si crear) + certificate-authority.enroll (cert scope+role) +
         consume uso. El rol viaja en metadata del cert (graduará al SAN en Fase 2).
-  3d 🔜 UI: admin-sistema reparte · admin-proyecto reparte con roles
+  3d ✅ UI: panel Invitaciones (front autodescubierto) — pestaña Emitir (crear/unirse →
+        código copiable) + Gestionar (listar con estado + revocar). La redención la hace el
+        navegador del invitado (enki-identity), no el panel. FASE 3 COMPLETA (backend + UI).
 
 FASE 4 · CICLO DE VIDA ............................................
   device-registry.unregister/staff.delete → certificate-authority.revoke

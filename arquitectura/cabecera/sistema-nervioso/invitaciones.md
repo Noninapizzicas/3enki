@@ -3,13 +3,15 @@ id: sistema-nervioso/invitaciones
 dominio: sistema
 resumen: DISEÑO (v0, no construido) — la cadena de delegación de capacidades sobre la identidad: el admin del sistema invita a admins de proyecto (crear/entrar proyecto), y estos invitan a sus equipos con roles. Invitación = token firmado, verificable offline, monotónico (nadie otorga más de lo que tiene). Redimir = enrolar un cert scopeado a {project, role}. Reusa enki-token, el SAN con scope, project-manager y staff-manager.
 fuentes:
+  - modules/_shared/invitaciones.js
+  - modules/invitaciones/**
   - core/broker/enki-token.js
   - modules/certificate-authority/**
   - modules/security-core/**
   - modules/project-manager/**
   - modules/staff-manager/**
   - modules/device-registry/**
-verificado: 2026-07-13
+verificado: 2026-07-14
 ---
 
 # Invitaciones — la cadena de delegación de capacidades
@@ -187,10 +189,11 @@ FASE 2 · CATÁLOGO DE ROLES (decisión 1 RESUELTA: semilla+crecido) ..
   La estructura ya deja que cada proyecto crezca sus roles sin tocar el sistema.
 
 FASE 3 · INVITACIONES (este subsistema) ...........................
-  3a contrato + firma/verificación (reusa enki-token)
-  3b emisión monotónica (Invitador rechaza grant ⊄ autoridad)
-  3c redención = enroll con invitación + create-project
-  3d UI: admin-sistema reparte · admin-proyecto reparte con roles
+  3a ✅ banco puro: construir/emitir/verificar + monotonía (modules/_shared/invitaciones.js)
+  3b ✅ módulo invitaciones: emitir/listar/revocar + firma R1 (CA raíz, certificate-authority.
+        sign-invitation) + persistencia + código copiable (modules/invitaciones/)
+  3c 🔜 redención = verificar + project-manager.create + issueFromPublicKey + consume uso
+  3d 🔜 UI: admin-sistema reparte · admin-proyecto reparte con roles
 
 FASE 4 · CICLO DE VIDA ............................................
   device-registry.unregister/staff.delete → certificate-authority.revoke

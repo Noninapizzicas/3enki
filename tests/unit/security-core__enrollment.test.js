@@ -114,5 +114,24 @@ console.log('Paso 2 (backend) — enrolamiento + token firmado con cripto real\n
     assert.ok(r.err, 'robar el cert público no basta: hay que poseer la privada');
   });
 
-  console.log('\n✓ Paso 2 backend: la clave nunca sale del cliente; el guard prueba CA + posesión de raíz');
+  await atest('R1: la CA raíz firma una invitación y su cert público la verifica (invitaciones)', async () => {
+    const banco = require('../../modules/_shared/invitaciones');
+    const { inv, canonical } = banco.construir({
+      autoridad: { scope: 'system', role: 'system-admin' },
+      grant: { accion: 'crear-proyecto', project: null, role: 'project-admin' },
+      limites: { expira_at: new Date(Date.now() + 7 * 864e5).toISOString() }
+    });
+    const firma = ca.signInvitation(canonical);           // firma forge con la clave raíz
+    const firmada = banco.sellar(inv, firma);
+    // verificar con node crypto contra el cert PÚBLICO de la CA
+    const caCertPem = ca.getCACertificate();
+    const verificarFirma = (c, f) => crypto.verify('RSA-SHA256', Buffer.from(c, 'utf8'), crypto.createPublicKey(caCertPem), Buffer.from(f, 'base64'));
+    const v = banco.verificar(firmada, { verificarFirma });
+    assert.deepStrictEqual(v, { valida: true, faltan: [] }, 'la firma forge de la CA valida con node crypto');
+    // y una manipulación del grant la tumba
+    firmada.otorga.role = 'system-admin';
+    assert.strictEqual(banco.verificar(firmada, { verificarFirma }).valida, false);
+  });
+
+  console.log('\n✓ Paso 2 backend: la clave nunca sale del cliente; el guard prueba CA + posesión de raíz; la CA firma invitaciones (R1)');
 })();

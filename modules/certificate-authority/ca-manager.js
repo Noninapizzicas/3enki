@@ -525,6 +525,24 @@ class CAManager {
   }
 
   /**
+   * Firma una cadena canónica con la clave RAÍZ de la CA (R1: la CA es la autoridad del sistema).
+   * Usado para sellar invitaciones del admin del sistema — verificable con el cert público de la CA
+   * (node crypto.verify('RSA-SHA256', ...)). NO produce un certificado: firma bytes arbitrarios, así
+   * que no sirve para forjar certs (esos se firman sobre el TBSCertificate DER, no sobre este string).
+   *
+   * @param {string} canonical - la cadena a firmar
+   * @returns {string} firma en base64
+   */
+  signInvitation(canonical) {
+    if (!this.caKey) throw new Error('CA not initialized');
+    if (typeof canonical !== 'string' || !canonical) throw new Error('canonical (string) required');
+    const md = forge.md.sha256.create();
+    md.update(canonical, 'utf8');
+    const sig = this.caKey.sign(md);              // RSASSA-PKCS1-v1_5 + SHA-256 (== node RSA-SHA256)
+    return Buffer.from(sig, 'binary').toString('base64');
+  }
+
+  /**
    * Obtiene el certificado raíz de la CA (para instalar en clientes/dispositivos)
    * @returns {string} CA certificate PEM
    */

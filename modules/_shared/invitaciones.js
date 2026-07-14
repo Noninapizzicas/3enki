@@ -39,9 +39,9 @@ function _canonical(inv) {
   });
 }
 
-// ── EMITIR: la Factory. firmar(canonicalString) → firma (base64/hex). El emisor pone su clave. ──
-function emitir({ autoridad, grant, limites = {}, firmar, id = null }) {
-  if (typeof firmar !== 'function') throw new Error('emitir: firmar(canonical) requerido');
+// ── CONSTRUIR: valida monotonía + arma la invitación SIN firma, y devuelve su canonical. ──
+// Separado de la firma porque en prod el firmante (la CA) es ASÍNCRONO (RPC al bus).
+function construir({ autoridad, grant, limites = {}, id = null }) {
   if (!puedeOtorgar(autoridad, grant)) {
     throw new Error(`monotonia: ${autoridad?.scope}/${autoridad?.role} no puede otorgar ` +
       `${grant?.accion}:${grant?.role}${grant?.project ? '@' + grant.project : ''}`);
@@ -53,8 +53,20 @@ function emitir({ autoridad, grant, limites = {}, firmar, id = null }) {
     otorga: { accion: grant.accion, project: grant.project ?? null, role: grant.role },
     limites: { expira_at: limites.expira_at ?? null, usos_max: limites.usos_max ?? 1, usos: 0 }
   };
-  inv.firma = firmar(_canonical(inv));
-  return inv;
+  return { inv, canonical: _canonical(inv) };
+}
+
+// ── SELLAR: pega la firma a la invitación construida. ──
+function sellar(inv, firma) {
+  return { ...inv, firma };
+}
+
+// ── EMITIR: Factory síncrona (firmar inyectado). Para tests y firmantes locales. ──
+// En el módulo se usa construir()+firma-async()+sellar() porque la CA firma por RPC.
+function emitir({ autoridad, grant, limites = {}, firmar, id = null }) {
+  if (typeof firmar !== 'function') throw new Error('emitir: firmar(canonical) requerido');
+  const { inv, canonical } = construir({ autoridad, grant, limites, id });
+  return sellar(inv, firmar(canonical));
 }
 
 // ── VERIFICAR: Specification FÉRTIL — nunca un "no" pelado, nombra lo que falta. ──
@@ -83,4 +95,4 @@ function verificar(invitacion, { verificarFirma, ahoraSec = null } = {}) {
   return { valida: faltan.length === 0, faltan };
 }
 
-module.exports = { ACCIONES, puedeOtorgar, emitir, verificar };
+module.exports = { ACCIONES, puedeOtorgar, construir, sellar, emitir, verificar };

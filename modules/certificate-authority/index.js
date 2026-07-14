@@ -305,6 +305,20 @@ class CertificateAuthorityModule extends BaseModule {
     }
   }
 
+  async handleSignInvitation(input) {
+    try {
+      const body = input?.body || input || {};
+      const { canonical } = body;
+      if (!canonical || typeof canonical !== 'string') {
+        return this._errorResponse(400, 'INVALID_INPUT', 'canonical (string) is required', { field: 'canonical' });
+      }
+      const signature = this.caManager.signInvitation(canonical);
+      return { status: 200, data: { signature, ca_authority: 'system' } };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.sign_invitation.error', err);
+    }
+  }
+
   async handleRevokeCertificate(input) {
     try {
       const body = input?.body || input || {};

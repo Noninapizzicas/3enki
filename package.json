@@ -101,6 +101,7 @@
     "test:security-core": "node tests/unit/security-core.test.js",
     "test:security-core-enrollment": "node tests/unit/security-core__enrollment.test.js",
     "test:invitaciones": "node tests/unit/invitaciones.test.js",
+    "test:invitaciones-modulo": "node tests/unit/invitaciones-modulo.test.js",
     "test:security-p2p": "node tests/unit/security-p2p.test.js",
     "test:dashboard": "node tests/unit/dashboard.test.js",
     "test:bot-manager": "node tests/unit/bot-manager.test.js",

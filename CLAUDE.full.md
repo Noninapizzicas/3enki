@@ -15221,13 +15221,40 @@ El límite protege un estado nombrable: *la biblioteca siempre responde, nunca c
 | respuesta | `core/<id>/api/response/<request_id>` | 1 |
 | biblioteca actualizada | `core/<id>/events/biblioteca/actualizada` | 1 |
 
+## El escribano — la puerta de escritura (el círculo cierra)
+
+El bibliotecario LEE; el **escribano** (`modules/escribano/`, 0.1.0) ESCRIBE.
+Separados por responsabilidad: el mirror de lectura (auto-pulled, se sobreescribe) no se mezcla con la
+obra de escritura (cambios locales sin commitear). Cada uno su checkout.
+
+```json
+{
+  "esquema": "escribano-v1",
+  "obra": "copia de trabajo RW de Conocimiento en data/escribano/obra",
+  "puertas": {
+    "escribano.escribir":   "{sector, nombre, contenido, sobrescribir?} → escribe la nota .md · create-only anti-wipe (409) · guards traversal + nombre sin '/'",
+    "escribano.pendientes": "{} → git status de la obra: qué notas esperan que el humano las suba"
+  },
+  "opcion_A": "escribe en el árbol de git y PARA — NUNCA commit ni push. Empujar a Conocimiento es acción outward con credencial de ESCRITURA → queda en manos del dueño. El escribano solo deja las notas listas.",
+  "emite": "escribano.nota.escrita (la UI/el humano sabe que hay cosecha pendiente de subir)"
+}
+```
+
+**El círculo:** el agente `acumulador-sectorial` (aparcado en la cúpula) cosecha web por
+`leer_web` (crawl4rs) → escribe las notas por `escribano.escribir` → el humano revisa
+(`escribano.pendientes`) y sube → el `bibliotecario` sirve lo subido. Acumula → escribe → sube → sirve.
+
 ## Trabajo pendiente (declarado, no oculto)
 
 - **Credencial de solo-lectura** al repo privado `Conocimiento` en el VPS (deploy-key/token) — sin
-  ella el mirror degrada a `stale`.
+  ella el mirror del bibliotecario degrada a `stale`. La **obra** del escribano necesita además un
+  remoto con credencial de ESCRITURA para que el humano suba (lo configura el dueño).
+- **Activar el `acumulador-sectorial`** (`activar_agente`, confirmation) cuando se quiera cosechar —
+  nace aparcado a propósito; su infra (leer_web + escribano.escribir) ya existe.
 - **Indexar el vault en `cantera-semantica`** → `por_significado` pasa de palabras a significado real.
 - **Webhook de push** de `Conocimiento` → `sincronizar` automático (hoy el químico es el pull manual).
-- **Escritura** (la cosecha del `acumulador-sectorial`) es flujo aparte: el bibliotecario solo LEE.
+- **Opción B (push guardado)** — si algún día se automatiza el commit+push, va tras la reja del
+  ejecutor (kill-switch, allowlist, aprobación graduada); hoy la elección es A (el humano sube).
 
 ---
 

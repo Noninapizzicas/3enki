@@ -1,0 +1,92 @@
+{
+  "_doc": "Manifest del BIBLIOTECARIO — el puente a la BIBLIOTECA externa (repo Noninapizzicas/Conocimiento). Reflejo PURO, hermano de la cosecha (cantera de skills): la cosecha aloja el saber del SISTEMA (skills), el bibliotecario aloja el saber del MUNDO (la bóveda Obsidian: sectores como trading, cultivo, refrigeración, comercio). Mantiene los dos substratos SIN fusionarlos — el código en 2enki, el saber del mundo en Conocimiento — y los une por un PRÉSTAMO, no por una copia. El agente/skill arranca ligero y pide prestados SOLO los libros que la tarea justifica (reach-not-resident). La memoria es un mirror git de solo-lectura en data/bibliotecario/mirror, sincronizado por pull; el catálogo (índice barato derivado de los MOC) siempre cabe en el turno, el libro (caro) se pide aparte. Nace v0.1.0: préstamo POR_REFERENCIA (sector/nota, determinista) + POR_SIGNIFICADO (palabras BM25-lite sobre las notas, degrada honesto hasta que el vault se indexe en la cantera semántica).",
+  "name": "bibliotecario",
+  "version": "0.1.0",
+  "_v0_1_nota": "v0.1.0: nace el órgano BIBLIOTECARIO. Mirror git de Conocimiento (clone --depth 1 en onLoad, best-effort; degrada honesto si falta credencial/red → stale:true, sirve del último mirror bueno o catálogo vacío, nunca cuelga). Puertas del bus: bibliotecario.catalogo (sectores + títulos MOC, sin contenido), bibliotecario.prestamo (las notas pedidas: {sector} → por_referencia · {consulta} → por_significado top-K), bibliotecario.sincronizar (git pull + reindex + emite bibliotecario.actualizada). Tools del LLM: biblioteca_catalogo (qué hay) y biblioteca_consultar (pide los libros). El dato ⚠️ 'a verificar' de la nota viaja como Libro.dudoso — el agente no lo propaga como firme. PENDIENTE: indexar el vault en cantera-semantica para que por_significado sea SIGNIFICADO real (hoy degrada a palabras); webhook de push → sincronizar automático.",
+  "description": "Puente a la biblioteca externa (repo Conocimiento): sirve por el bus los libros (notas Obsidian) de la bóveda, buscables por sector o por consulta. Mirror git de solo-lectura, catálogo barato + préstamo bajo demanda. Reach-not-resident: el agente pide los libros que necesita, no carga el corpus.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+
+  "publishes": [
+    { "event": "bibliotecario.catalogo.response",    "description": "Índice BARATO: { sectores:[{sector, titulo, notas, dudosos}], total, stale }. Sin contenido — para descubrir qué libros existen sin abrirlos." },
+    { "event": "bibliotecario.prestamo.response",    "description": "Los libros pedidos: { libros:[{ruta, titulo, sector, cosechado, dudoso, cuerpo}], por, stale, faltan? }. por = 'referencia' | 'palabras' (degradación honesta del significado mientras no haya índice semántico del vault)." },
+    { "event": "bibliotecario.sincronizar.response", "description": "Resultado del pull: { sincronizado, cambios, sectores, libros, stale, motivo? }." },
+    { "event": "bibliotecario.actualizada",          "description": "EVENTO (no response): la biblioteca cambió tras un pull con novedades. { sectores, libros, resumen }. Los consumidores (o la cantera semántica) reindexan al oírlo." }
+  ],
+
+  "subscribes": [
+    { "event": "bibliotecario.catalogo.request",    "handler": "onCatalogoRequest",    "description": "Reflejo: devuelve el catálogo de sectores + títulos de sus MOC (barato, sin abrir notas)." },
+    { "event": "bibliotecario.prestamo.request",    "handler": "onPrestamoRequest",    "description": "Reflejo: presta los libros. { sector } → todas las notas del sector (por_referencia, determinista); { consulta, topK? } → las notas más afines (por_significado, degrada a palabras)." },
+    { "event": "bibliotecario.sincronizar.request", "handler": "onSincronizarRequest", "description": "Reflejo: git pull del mirror; si hay novedades reindexa el catálogo y emite bibliotecario.actualizada. Químico del órgano (también lo puede disparar un webhook de push)." }
+  ],
+
+  "tools": [
+    {
+      "name": "biblioteca_catalogo",
+      "description": "Lista los SECTORES de la biblioteca de conocimiento (la bóveda: trading, cultivo, refrigeración, comercio…) con el título de cada uno y cuántas notas tiene. ÚSALA para ver qué saber hay disponible ANTES de pedir libros — es barata, no abre las notas. Después usa biblioteca_consultar para traer los libros del sector que necesites.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "handler": "handleCatalogoTool",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "biblioteca_consultar",
+      "description": "Pide prestados LIBROS (notas) de la biblioteca de conocimiento. Dos formas: por SECTOR (p.ej. sector='trading/opciones' trae todas sus notas — determinista) o por CONSULTA en lenguaje natural (p.ej. consulta='cobertura con iron condor' trae las notas más afines). ÚSALA cuando necesites el saber de un tema para resolver una tarea — trae solo lo que pides, no todo el corpus. Cada libro viene con su fecha de cosecha y una marca 'dudoso' si el dato está pendiente de verificar (no lo des por firme).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sector": { "type": "string", "description": "Sector o sub-sector a traer entero (por_referencia). Ej: 'trading', 'trading/opciones', 'cultivo-melena-leon'. Usa biblioteca_catalogo para ver los sectores." },
+          "consulta": { "type": "string", "description": "Consulta en lenguaje natural (por_significado). Ej: 'márgenes en comercio local'. Trae las notas más afines de toda la bóveda." },
+          "topK": { "type": "number", "description": "Cuántas notas devolver como máximo (default 5 para consulta, 40 para sector)." }
+        }
+      },
+      "handler": "handleConsultarTool",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+    }
+  ],
+
+  "dependencies": [],
+
+  "config": {
+    "enabled": true,
+    "biblioteca": {
+      "repo_url": "https://github.com/Noninapizzicas/Conocimiento.git",
+      "ref": "main",
+      "vault_subdir": "boveda",
+      "_nota": "El VPS necesita credencial de SOLO-LECTURA al repo privado (deploy-key/token). El bibliotecario clona y hace pull; nunca escribe por esta vía (la escritura es del acumulador-sectorial, flujo aparte). Override repo_url/ref por config del módulo."
+    },
+    "persistence": {
+      "scope": "system",
+      "data_path": "bibliotecario",
+      "pattern": "git-mirror-readonly",
+      "restart_resilient": true,
+      "_nota": "Mirror del repo Conocimiento en data/bibliotecario/mirror. Conocimiento del mundo (no datos de usuario), materializado desde un repo externo — reconstruible por clone."
+    }
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "bibliotecario.catalogo.served.total",
+        "bibliotecario.prestamo.served.total",
+        "bibliotecario.sincronizar.total",
+        "bibliotecario.errors.total"
+      ],
+      "gauges": [
+        "bibliotecario.sectores",
+        "bibliotecario.libros"
+      ],
+      "timings": [
+        "bibliotecario.prestamo.duration_ms",
+        "bibliotecario.sincronizar.duration_ms"
+      ]
+    }
+  }
+}

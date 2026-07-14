@@ -4,10 +4,18 @@ dominio: frontend
 resumen: SvelteKit 2 + Svelte 5 sobre MQTT: MqttClient singleton, mqtt-request, lazy-registry, stores, módulos lazy, rutas multi-tenant, nervio vista-bridge, resiliencia.
 fuentes:
   - frontend/src/**
-verificado: 2026-07-10
+verificado: 2026-07-14
 ---
 
 # FRONTEND — Capa de UI (SvelteKit + Svelte 5 sobre MQTT)
+
+> **Novedad (2026-07-14) — identidad del navegador en el bus (inerte hasta enrolar).**
+> `ui-core/enki-identity.ts` genera un par RSA en WebCrypto (privada NO-extraíble en IndexedDB), enrola
+> contra `certificate-authority.enroll` y mintea un token firmado; `client.ts` lo presenta como password
+> del CONNECT. Sin cert enrolado → conecta anónimo (comportamiento de hoy). El detalle vive en
+> `sistema-nervioso/bus-guardado.md` (paso 2c). Además el panel **Invitaciones**
+> (`modules/invitaciones/`, autodescubierto) deja al admin del sistema emitir/listar/revocar
+> invitaciones de proyecto — ver `sistema-nervioso/invitaciones.md`.
 
 Stack: SvelteKit 2 · Svelte 5 · TypeScript · Vite 6 · adapter-node · mqtt · marked · highlight.js. SSR deshabilitado (`ssr=false`, `prerender=false`). El frontend es un core más conectado al broker MQTT.
 

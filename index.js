@@ -242,6 +242,9 @@ async function main() {
 
     await core.mqttClient.connect();
 
+    // Exponer la puerta guardada del broker a los módulos (security-core la cablea y la sube).
+    core.busGuard = core.mqttClient.busGuard || null;
+
     const mqttStats = core.mqttClient.getStats();
     console.log(`   ✅ ${mqttStats.usingEmbedded ? 'Started embedded broker' : 'Connected to external broker'} on port ${config.mqtt.broker.port}`);
 

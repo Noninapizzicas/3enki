@@ -22,6 +22,7 @@
 
 const { EventEmitter } = require('events');
 const EmbeddedBroker = require('../broker/embedded');
+const BusGuard = require('../broker/bus-guard');
 const ConnectionPool = require('./pool');
 
 class MQTTClient extends EventEmitter {
@@ -50,6 +51,16 @@ class MQTTClient extends EventEmitter {
     this.embeddedBroker = null;
     this.isConnected = false;
     this.usingEmbedded = false;
+
+    // BusGuard — la puerta guardada del broker embebido. Nace en 'off' (broker abierto,
+    // retrocompatible); el core (coreId) entra como confiable durante la migración.
+    // security-core lo alcanza vía core.busGuard: le cablea el verifier (certificate-authority)
+    // y sube el peldaño (setMode) cuando el dueño enciende el interruptor.
+    this.busGuard = new BusGuard({
+      logger: this.logger,
+      metrics: this.metrics,
+      trustedClientIds: [this.coreId]
+    });
 
     // Connection pooling
     this.usePool = options.usePool || false;
@@ -221,7 +232,8 @@ class MQTTClient extends EventEmitter {
     this.embeddedBroker = new EmbeddedBroker({
       port: this.brokerPort,
       logger: this.logger,
-      metrics: this.metrics
+      metrics: this.metrics,
+      guard: this.busGuard   // la puerta guardada (off por defecto → sin efecto hasta que el dueño la suba)
     });
 
     // Arrancar broker

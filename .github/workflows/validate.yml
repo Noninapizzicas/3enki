@@ -255,6 +255,24 @@ jobs:
       - name: Run unit tests (certificate-authority — reescritura canonica)
         run: npm run test:certificate-authority
 
+      - name: Run unit tests (security-core/bus-guard — el bus como puerta guardada)
+        run: npm run test:security-core-bus-guard
+
+      - name: Run unit tests (security-core — el cerebro de la puerta guardada)
+        run: npm run test:security-core
+
+      - name: Run unit tests (security-core/enrollment — token firmado con CA real, paso 2)
+        run: npm run test:security-core-enrollment
+
+      - name: Run unit tests (invitaciones — cadena de delegación monotónica)
+        run: npm run test:invitaciones
+
+      - name: Run unit tests (invitaciones/módulo — emitir/listar/revocar, firma CA)
+        run: npm run test:invitaciones-modulo
+
+      - name: Run unit tests (invitaciones/redención — proyecto + cert scopeado, 3c)
+        run: npm run test:invitaciones-redimir
+
       - name: Run unit tests (security-p2p — reescritura canonica)
         run: npm run test:security-p2p
 

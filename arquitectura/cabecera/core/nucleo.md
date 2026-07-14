@@ -5,10 +5,16 @@ resumen: El core event-driven: EventBus, MQTTClient, EmbeddedBroker, ModuleLoade
 fuentes:
   - core/**
   - index.js
-verificado: 2026-07-06
+verificado: 2026-07-14
 ---
 
 # Capa de Aterrizaje — Análisis del Core (Event-Driven Framework)
+
+> **Novedad (2026-07-14) — el broker embebido admite un guard opcional.** `EmbeddedBroker` acepta
+> `opts.guard`; si está, cablea `aedes.authenticate/authorizePublish/authorizeSubscribe` (sin guard →
+> abierto, retrocompatible). `MQTTClient` construye un `BusGuard` (`core/broker/bus-guard.js`) y lo
+> expone en `core.busGuard`; `core/broker/enki-token.js` es el token firmado de la credencial. Nace OFF
+> (no cambia el arranque). El detalle completo vive en `sistema-nervioso/bus-guardado.md`.
 
 ## Contratos Principales
 

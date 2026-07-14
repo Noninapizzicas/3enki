@@ -1,0 +1,39 @@
+{
+  "name": "invitaciones",
+  "version": "1.0.0",
+  "description": "Subsistema de la cadena de delegacion de capacidades. El admin del sistema (y luego los admins de proyecto) EMITEN invitaciones firmadas que otros REDIMEN para obtener un cert scopeado a {project, role}. Cablea el banco puro _shared/invitaciones con la firma real (R1: la CA raiz firma via certificate-authority.sign-invitation). Persiste las emitidas para listar/revocar/contar usos. La redencion es el corte 3c.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "events": {
+    "publishes": [
+      { "event": "invitacion.emitida", "description": "El admin emitio una invitacion de proyecto (accion crear-proyecto|unirse-proyecto, con project/role). timestamp." },
+      { "event": "invitacion.revocada", "description": "Una invitacion fue revocada antes de redimirse. timestamp." },
+      { "event": "invitacion.redimida", "description": "Un portador redimio una invitacion: obtuvo cert scopeado a {project, role} (y creo el proyecto si accion crear-proyecto). timestamp." }
+    ],
+    "subscribes": []
+  },
+  "ui_handlers": [
+    { "domain": "invitaciones", "action": "emitir",  "handler": "handleEmitir",  "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "invitaciones", "action": "redimir", "handler": "handleRedimir", "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "invitaciones", "action": "listar",  "handler": "handleListar",  "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "invitaciones", "action": "revocar", "handler": "handleRevocar", "type": "system_panel", "zone": "lateral_derecha" }
+  ],
+  "tools": [],
+  "dependencies": [],
+  "config": {
+    "persistence": {
+      "type": "filesystem",
+      "data_path": "invitaciones",
+      "scope": "system",
+      "owner": "InvitacionesModule (invitaciones emitidas + estado en disk)"
+    }
+  },
+  "observability": {
+    "logging": { "level": "info", "structured": true, "correlation_id": true },
+    "metrics": { "enabled": true, "counters": ["invitaciones.emitidas"] }
+  }
+}

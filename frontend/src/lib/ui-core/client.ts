@@ -42,6 +42,8 @@ export interface MqttConfig {
     reconnectPeriod?: number;
     connectTimeout?: number;
     clean?: boolean;
+    username?: string;
+    password?: string;
   };
 }
 
@@ -343,8 +345,21 @@ export class MqttClient {
       const mqtt = await import('mqtt');
       perfEnd('MQTT.importLibrary');
 
+      // Paso 2c: si el navegador ya está enrolado, mintea un token firmado (enki:token:) y lo
+      // presenta como password del CONNECT. Sin cert enrolado → null → conecta anónimo (funciona
+      // en 'off'/'observe'). Inerte hasta que exista un cert; nunca bloquea la conexión.
+      let password = config.options?.password;
+      try {
+        const { credentialForConnect } = await import('./enki-identity');
+        const token = await credentialForConnect();
+        if (token) password = token;
+      } catch (e) {
+        console.warn('[MQTT] identidad enki no disponible, conectando anónimo', e);
+      }
+
       this.#client = mqtt.default.connect(config.url, {
         ...config.options,
+        ...(password ? { password, username: 'enki' } : {}),
         clientId: config.clientId
       }) as unknown as MqttClientLike;
 

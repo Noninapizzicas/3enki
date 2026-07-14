@@ -36,6 +36,9 @@ class EmbeddedBroker extends EventEmitter {
     this.host = options.host || '0.0.0.0';
     this.logger = options.logger || null;
     this.metrics = options.metrics || null;
+    // BusGuard opcional — la puerta guardada. Ausente → broker abierto (peldaño 'off',
+    // comportamiento retrocompatible). Ver core/broker/bus-guard.js.
+    this.guard = options.guard || null;
 
     this.aedes = null;
     this.server = null;
@@ -73,6 +76,16 @@ class EmbeddedBroker extends EventEmitter {
         heartbeatInterval: 30000, // 30s heartbeat para detectar clientes inactivos
         connectTimeout: 60000    // 60s timeout de conexión
       });
+
+      // Cablear la puerta guardada si hay guard. Sin guard, Aedes queda abierto (peldaño 'off').
+      // El guard lee su modo VIVO (off/observe/enforce) desde el interruptor en cada llamada,
+      // así el dueño sube el peldaño sin reiniciar el broker.
+      if (this.guard) {
+        this.aedes.authenticate = this.guard.authenticate.bind(this.guard);
+        this.aedes.authorizePublish = this.guard.authorizePublish.bind(this.guard);
+        this.aedes.authorizeSubscribe = this.guard.authorizeSubscribe.bind(this.guard);
+        this.logger?.info?.('broker.guard.wired', {});
+      }
 
       // Configurar event handlers de Aedes
       this.setupAedesHandlers();

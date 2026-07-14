@@ -1,0 +1,10 @@
+{
+  "id": "invitaciones",
+  "name": "Invitaciones",
+  "description": "Cadena de delegación: el admin del sistema emite invitaciones de proyecto (crear/unirse), las lista y revoca",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 3,
+  "icon": "🎟️",
+  "label": "Invitaciones"
+}

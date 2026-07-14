@@ -1,0 +1,168 @@
+{
+  "esquema": "prisma-analisis-repo-v1",
+  "_doc": "El repo 2enki tratado como CASO y pasado por el prisma de 5 lentes (Lente de Análisis Profundo del persona: restricción · palancas · efecto de segundo orden, orientación RESOLVER). Cada afirmación lleva su DIRECCIÓN DE VUELTA (file:line o comando) — la ley de la evidencia del propio repo. No describe: resuelve.",
+  "caso": {
+    "repo": "noninapizzicas/2enki",
+    "rama_analisis": "claude/prisma-del-caso-json-y48lpc",
+    "commit_base": "e5e7921",
+    "fecha": "2026-07-13",
+    "horizonte": "MACRO",
+    "naturaleza": "AFIRMACION_EXTERNA (afirma sobre el estado real del código — entra con evidencia re-comprobable)"
+  },
+  "objetivo": {
+    "enunciado": "Encontrar la RESTRICCIÓN que sostiene el sistema y las PALANCAS que la mueven — no inventariar, RESOLVER",
+    "nitidez": 0.9
+  },
+  "topografia": {
+    "modulos": 117,
+    "bancos_shared": 21,
+    "blueprints": 16,
+    "schemas_json": 79,
+    "rebanadas_cabecera": 39,
+    "skills": 53,
+    "tests_unit_existen": 194,
+    "tests_con_script": 116,
+    "tests_que_corren_en_ci": 84,
+    "cobertura_ci_pct": 43,
+    "tests_en_modules": 0,
+    "loc_js": 256444,
+    "loc_frontend": 108286,
+    "todo_fixme_en_modules_core": 33
+  },
+  "lentes": [
+    {
+      "id": "arquitectura-nucleo",
+      "objetivo": "la pieza sin la cual nada funciona",
+      "restriccion": {
+        "variable": "la correlación request_id sobre el par <ev>.request / <ev>.response en el bus — único lenguaje común entre reflejo JS, blueprint LLM y UI",
+        "evidencia": "modules/_shared/modulo-hibrido-reflejo.js:51-74 (descarta lo que no case en :63) · core/events/bus.js:310,236,363 (EventEnvelope) · modules/conversacion/ai-gateway/index.js:51,602-604 (bus.publish/publishAndWait)"
+      },
+      "palancas": [
+        { "accion": "tocar la base ModuloHibridoReflejo altera el contrato de TODOS los reflejos híbridos a la vez (baja de ~200 a ~40 líneas por módulo)", "evidencia": "modules/_shared/modulo-hibrido-reflejo.js:81-94,51" },
+        { "accion": "el gate blueprint_driven del loader convierte una operación cara (turno LLM ~300K tokens) en determinista (ms) con solo añadir index.js junto al blueprint", "evidencia": "core/modules/loader.js:302-304,394-404" },
+        { "accion": "BaseModule._statusFromCode reescribe la semántica de errores de 50+ módulos desde un punto", "evidencia": "modules/_shared/base-module.js:61-159,93" }
+      ],
+      "efectos_segundo_orden": [
+        "mover la base despierta el gate anti-colisión (evento en subscribes + blueprint.eventos_que_escucho → doble respuesta y turno LLM caro): scripts/validate-hibridos.js",
+        "tocar el envelope desincroniza la propiocepción (el LLM deja de ser consciente de lo que el JS hizo sin controlarlo)"
+      ],
+      "acoplamiento": "SANO — cero imports dominio↔dominio fuera del bus; todo apunta a _shared/, al propio subdir o al core (único legacy: menu-generator/_legacy → core/service-executor)"
+    },
+    {
+      "id": "salud-tests-ci",
+      "objetivo": "qué fracción del sistema protege realmente el verde de CI",
+      "restriccion": {
+        "variable": "validate.yml es una lista plana de ~84 pasos escritos a mano (run: npm run test:X), sin glob ni test:all — cada test nuevo exige recordar pegar un paso: la deriva es estructural",
+        "evidencia": ".github/workflows/validate.yml (87 invocaciones) · package.json:12 (test:all encadena solo 5 y CI no lo llama)"
+      },
+      "palancas": [
+        { "accion": "reescribir test:all para iterar todos los test:* y añadir UN paso npm run test:all → sube de 43% a ~100% de lo scriptable", "evidencia": "package.json:12 · validate.yml:26" },
+        { "accion": "añadir bloque para los 13 prisma__* → recupera el subsistema de PAGOS entero (cobro/cuenta/ticket/cierre/enforcement) hoy verde-por-omisión, con 6 líneas", "evidencia": "package.json:172-186 · validate.yml:293" },
+        { "accion": "añadir svelte-check al front (dep typescript ya presente) + un job → primer typecheck de 108K LOC front con near-zero setup", "evidencia": "frontend/package.json (sin script test/lint/check; 0 tests)" }
+      ],
+      "efectos_segundo_orden": [
+        "wire CI completo → el pago deja de estar verde-por-omisión; 110 tests huérfanos (incluido prisma-del-caso.test.js, 0 refs) empiezan a proteger de verdad"
+      ]
+    },
+    {
+      "id": "coherencia-cabecera-codigo",
+      "objetivo": "¿la doc rectora camina al paso del código o deriva?",
+      "restriccion": {
+        "variable": "el sello verificado: es manual y solo el dominio pizzepos está en --freno (ERROR); el resto es warning ignorable → los stale se acumulan",
+        "evidencia": "node scripts/cabecera/validate-cabecera.js → '✓ sin errores (10 stale · 0 huérfanos · 0 fuentes muertas)' · cabecera-check.yml (freno duro solo pizzepos)"
+      },
+      "estado": "FRESCO con deriva controlada — CLAUDE.md/full regenerados 2026-07-13, 0 marcadores rotos, 0 fuentes muertas; 10 rebanadas stale que CANTAN (warning, no bloquean)",
+      "palancas": [
+        { "accion": "graduar más dominios a --freno + marcar el check REQUIRED en branch protection → convierte los 10 stale de warning en deuda visible", "evidencia": "scripts/cabecera/validate-cabecera.js" },
+        { "accion": "archivar los 6 fósiles de raíz + contexto/ (sistema doc paralelo a la cabecera) con banner SUPERSEDED", "evidencia": "SYSTEM-ANALYSIS.md (contenido de marzo), ANALISIS-CODIGO-VS-CONTEXTO.md, MODULOS_PSEUDOCODIGO_OOP.md, INVENTARIO-SISTEMA.json, CLAUDE.archive.md, CLAUDE.v1-archive.md — no enlazados desde CLAUDE.md" },
+        { "accion": "correr /sincronizar-cabecera sobre las 10 rebanadas stale para resellar verificado: tras releer", "evidencia": "conversacion/nucleo-conversacion.md, cupulas/agentes.md (fuentes 07-12 vs sello 07-06)" }
+      ],
+      "efectos_segundo_orden": []
+    },
+    {
+      "id": "deuda-riesgo-muerto",
+      "objetivo": "mayor fuente de fragilidad y peso muerto arrastrado",
+      "restriccion": {
+        "variable": "boilerplate que ELUDE la infraestructura compartida ya existente — 37 módulos publican/suscriben MQTT crudo fuera de _shared/core, 12 reimplementan persistencia JSON, 9 validan ad-hoc; un fix de reconexión o escritura atómica debe replicarse en decenas de sitios",
+        "evidencia": "grep -rln 'mqtt.publish|client.publish|.subscribe(' modules | grep -v _shared = 37 · core/handler-loader.js:227 (4 rutas de carga legacy)"
+      },
+      "peso_muerto": [
+        { "que": "core/flow/engine.js + flows/factura.json", "prueba": "loadFlows sin ningún llamador (grep -rn loadFlows solo halla la definición)", "peso": "8K" },
+        { "que": "graph/", "prueba": "sin una sola referencia viva; los hits de 'graph' son graph.facebook.com", "peso": "364K" },
+        { "que": "backup/flows-v1", "prueba": "cero referencias", "peso": "40K" },
+        { "que": "handlers/ · deployment/", "prueba": "0 referencias desde modules/core/cli (grep require)", "peso": "42+34 archivos" }
+      ],
+      "riesgo_latente": "config.json versionado y NO en .gitignore (git ls-files config.json) — pero SIN credenciales en claro hoy (grep password|secret|token|apikey → solo nombres de módulo); .env sí ignorado. Fuga futura, no actual.",
+      "palancas": [
+        { "accion": "borrar core/flow/, flows/, graph/, backup/ → ~440K sin llamadores verificados", "evidencia": "grep de referencias vacío" },
+        { "accion": "migrar los 37 módulos con MQTT crudo a base-module.js → un solo punto para reconexión/QoS", "evidencia": "modules/_shared/base-module.js" },
+        { "accion": "mover config.json a .gitignore, dejar solo config.example.json → cierra la fuga futura", "evidencia": ".gitignore (config.json ausente)" }
+      ],
+      "efectos_segundo_orden": [
+        "al colapsar I/O en _shared desaparece la razón de los 4 loaders legacy; añadir tests deja de requerir mockear N variantes de I/O → habilita por fin cobertura en los 67 módulos hoy sin test"
+      ]
+    },
+    {
+      "id": "frontend-superficie-externa",
+      "objetivo": "por dónde entra el mundo y qué lo guarda",
+      "restriccion": {
+        "variable": "el broker MQTT WSS es ANÓNIMO y sin ACL — cualquiera que alcance wss://host/mqtt puede publicar ui/request/{cualquier-dominio}/{acción} (fs/write, project/delete, credential/*) saltándose por completo el guard del Portal y del Ejecutor, que solo protegen sus propios dominios",
+        "evidencia": "core/broker/embedded.js:72 (sin authenticate/authorizePublish), :272-274 (solo aedes.handle) · frontend/src/lib/ui-core/client.ts:121-135 (conecta sin usuario/clave) · deployment/caddy/Caddyfile.vps:37"
+      },
+      "puertas_laterales_bien_guardadas": [
+        "Portal MCP: kill-switch OFF→503, scope/mode/allowlist, mutación sin project_id→400, confirmación→409 (modules/portal/index.js:118,133,101-108,160,165)",
+        "Ejecutor: kill-switch→503, HARDLINE→403, allowlist, peligroso→202, degradación honesta contenedor→503 (modules/ejecutor/index.js:168-182,37-45,150)",
+        "Crawl4RS/OCR4RS: interruptor OFF por defecto + 503 honesto; OCR solo 127.0.0.1 (modules/crawl4rs/index.js:73-79)",
+        "CA mTLS: allowUnauthenticated:false por defecto, protege HTTP no el bus (modules/certificate-authority/mtls-middleware.js:29,33)"
+      ],
+      "palancas": [
+        { "accion": "cerrar el broker: hook aedes.authenticate + authorizePublish restringiendo ui/request/* a clientes con token/cert — ÚNICO cambio que hace la superficie una-puerta-guardada real", "evidencia": "core/broker/embedded.js:72" },
+        { "accion": "enrutar ui/request/* externo por el MISMO veredicto scope/mode/allowlist del Portal (ya rodado) en vez de duplicar seguridad por dominio", "evidencia": "modules/portal/index.js:101-108" },
+        { "accion": "endurecer excludePaths de mTLS y confirmar que la CA no queda como bypass del gateway", "evidencia": "modules/certificate-authority/mtls-middleware.js:33" }
+      ],
+      "efectos_segundo_orden": [
+        "cerrar el broker convierte los guards laterales (Portal, Ejecutor) de teatro en defensa real: hoy custodian puertas laterales con la puerta grande abierta"
+      ]
+    }
+  ],
+  "diagnostico": {
+    "orientacion": "RESOLVER",
+    "restriccion": {
+      "variable": "el broker MQTT WSS anónimo sin ACL (core/broker/embedded.js:72)",
+      "por_que_es_LA_restriccion": "es la de mayor carga: al resolverla se abre casi todo el objetivo de seguridad. Invalida por completo el trabajo meticuloso de los guards del Portal y el Ejecutor — la puerta grande abierta hace decorativas las puertas laterales cerradas. fraccionLiberadaPor ≈ 1.0",
+      "ley": "toda superficie externa entra por una puerta guardada; el bus no es una excepción por ser interno de facto — es la entrada real del front"
+    },
+    "palancas_priorizadas": [
+      { "orden": 1, "prioridad": "P0-SEGURIDAD", "accion": "cerrar el broker con aedes.authenticate + authorizePublish y enrutar ui/request/* por el guard del Portal ya rodado", "rendimiento": "máximo — cierra la restricción y activa los guards existentes", "evidencia": "core/broker/embedded.js:72 · modules/portal/index.js:101-108" },
+      { "orden": 2, "prioridad": "P1-CONFIANZA", "accion": "reescribir test:all iterativo + un paso en validate.yml + wire de los 13 prisma__* (pagos) y prisma-del-caso.test.js", "rendimiento": "alto — sube cobertura efectiva de 43% a ~100% de lo scriptable y saca el pago del verde-por-omisión", "evidencia": "package.json:12,172-186 · validate.yml:26,293" },
+      { "orden": 3, "prioridad": "P1-FRAGILIDAD", "accion": "migrar los 37 módulos de MQTT crudo + 12 de persistencia ad-hoc a _shared/base-module; retirar los 4 loaders legacy", "rendimiento": "alto diferido — un punto único para reconexión/QoS/escritura atómica", "evidencia": "modules/_shared/base-module.js · core/handler-loader.js:227" },
+      { "orden": 4, "prioridad": "P2-LIMPIEZA", "accion": "borrar peso muerto (core/flow, flows, graph, backup ≈ 440K sin llamadores); mover config.json a .gitignore", "rendimiento": "medio — reduce ruido y cierra la fuga futura", "evidencia": "grep de referencias vacío · .gitignore" },
+      { "orden": 5, "prioridad": "P2-FRONT", "accion": "añadir svelte-check al front + job CI", "rendimiento": "medio — primer análisis estático de 108K LOC front", "evidencia": "frontend/package.json" },
+      { "orden": 6, "prioridad": "P3-COHERENCIA", "accion": "resellar las 10 rebanadas stale, archivar los 6 fósiles de raíz, graduar más dominios a --freno", "rendimiento": "bajo — la cúpula ya canta; esto la afila", "evidencia": "scripts/cabecera/validate-cabecera.js" }
+    ],
+    "efectos_segundo_orden_del_sistema": [
+      "cerrar el broker (P0) es el habilitador oculto: sin él, endurecer cualquier otra puerta es cosmético",
+      "colapsar el I/O en _shared (P1-fragilidad) desbloquea la cobertura de los 67 módulos sin test — hoy imposible por tener que mockear N variantes de I/O",
+      "wire de CI (P1-confianza) + el broker cerrado convierten el verde en una señal de fiar: la precondición para cualquier despliegue automático"
+    ],
+    "plan": [
+      "1. [P0] Cerrar broker anónimo: authenticate/authorizePublish + ui/request/* por guard Portal — la restricción primero",
+      "2. [P1] test:all iterativo + wire prisma__*/huérfanos — cerrar el verde-por-omisión del pago",
+      "3. [P1] Migrar MQTT crudo/persistencia a _shared; retirar loaders legacy",
+      "4. [P2] Borrar peso muerto ~440K; config.json → .gitignore",
+      "5. [P2] svelte-check + job de front",
+      "6. [P3] Resellar 10 rebanadas stale, archivar 6 fósiles de raíz, graduar --freno"
+    ]
+  },
+  "no_objetivos": [
+    "inventariar módulo por módulo (el prisma extrae lo que CARGA, no el catálogo)",
+    "afirmar sin dirección de vuelta (toda variable lleva su file:line — irrectificable = fuera)",
+    "tratar la arquitectura como enferma: el acoplamiento es sano (cero fronteras dominio↔dominio fuera del bus) y la cúpula de la cabecera está fresca — la deuda está en los BORDES (superficie, CI, I/O duplicado), no en el núcleo"
+  ],
+  "lo_que_ya_esta_bien": [
+    "acoplamiento por bus puro — cero imports dominio↔dominio (lente arquitectura)",
+    "cúpula de la cabecera fresca: 0 marcadores rotos, 0 fuentes muertas, doc regenerado el mismo día del último commit (lente coherencia)",
+    "guards laterales meticulosos y con degradación honesta: Portal, Ejecutor, Crawl4RS/OCR4RS (lente superficie)",
+    "deuda declarada baja: 33 TODO/FIXME en 256K LOC (lente deuda)"
+  ]
+}

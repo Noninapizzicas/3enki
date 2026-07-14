@@ -18,6 +18,21 @@ const fs = require('fs');
 const path = require('path');
 
 class CAManager {
+  // ── SAN de 4 partes (scope): urn:eventcore:<type>:<scope>:<identifier> ──
+  // scope = <project_id> | 'system'. RETROCOMPATIBLE: un SAN viejo de 3 (type:identifier) → scope='system'.
+  static _buildSan(type, scope, identifier) {
+    return `urn:eventcore:${type}:${scope || 'system'}:${identifier}`;
+  }
+  static _parseSan(value) {
+    const parts = String(value).replace('urn:eventcore:', '').split(':');
+    if (parts.length >= 3) {                 // nuevo: type:scope:identifier
+      return { type: parts[0], scope: parts[1], identifier: parts.slice(2).join(':') };
+    }
+    if (parts.length === 2) {                // viejo: type:identifier → scope system
+      return { type: parts[0], scope: 'system', identifier: parts[1] };
+    }
+    return { type: 'client', scope: 'system', identifier: 'unknown' };
+  }
   constructor(options = {}) {
     this.storagePath = options.storagePath || path.join(process.cwd(), 'data', 'ca');
     this.caKeyPath = path.join(this.storagePath, 'ca-key.pem');
@@ -135,6 +150,7 @@ class CAManager {
       commonName,
       type = 'client',
       identifier,
+      scope = 'system',      // <project_id> | 'system' — atado a un proyecto o global
       organization,
       email,
       validityDays = this.config.cert_validity_days,
@@ -194,7 +210,7 @@ class CAManager {
     extensions.push({
       name: 'subjectAltName',
       altNames: [
-        { type: 6, value: `urn:eventcore:${type}:${identifier}` }
+        { type: 6, value: CAManager._buildSan(type, scope, identifier) }
       ]
     });
 
@@ -220,6 +236,7 @@ class CAManager {
     const metadata = {
       serialNumber,
       type,
+      scope,
       identifier,
       commonName,
       organization: organization || null,
@@ -249,6 +266,94 @@ class CAManager {
       fingerprint,
       metadata
     };
+  }
+
+  /**
+   * Emite un certificado firmando una CLAVE PÚBLICA provista por el cliente.
+   *
+   * A diferencia de issueCertificate (que genera el par y devuelve la privada), aquí la clave
+   * privada NUNCA existe en el servidor: el cliente (browser vía WebCrypto, device, peer core) la
+   * generó y guardó; solo manda su pubkey. Base del paso 2 (token firmado): el cert prueba QUIÉN es,
+   * y la firma del token prueba que POSEE la privada. No hay .p12 ni key.pem que guardar/filtrar.
+   *
+   * @param {Object} options
+   * @param {string} options.publicKeyPem - Clave pública del cliente (SPKI PEM, la que exporta WebCrypto)
+   * @param {string} options.commonName
+   * @param {string} options.type - 'client' | 'device'
+   * @param {string} options.identifier
+   * @param {string} [options.organization]
+   * @param {string} [options.email]
+   * @param {number} [options.validityDays]
+   * @returns {Object} { serialNumber, certificate, fingerprint, metadata }  (SIN privateKey ni p12)
+   */
+  issueFromPublicKey(options = {}) {
+    if (!this.caKey || !this.caCert) throw new Error('CA not initialized. Call initialize() first.');
+    const {
+      publicKeyPem, commonName, type = 'client', identifier, scope = 'system',
+      role = null,           // rol-del-bus (project-admin/member/device/...) — hoy en metadata,
+                             // graduará al SAN en Fase 2 (política). El guard lo lee vía verify.
+      organization, email, validityDays = this.config.cert_validity_days
+    } = options;
+
+    if (!publicKeyPem) throw new Error('publicKeyPem is required');
+    if (!commonName) throw new Error('commonName is required');
+    if (!identifier) throw new Error('identifier is required');
+    if (!['client', 'device'].includes(type)) throw new Error('type must be "client" or "device"');
+
+    let publicKey;
+    try { publicKey = forge.pki.publicKeyFromPem(publicKeyPem); }
+    catch (e) { throw new Error('invalid publicKeyPem: ' + e.message); }
+
+    const cert = forge.pki.createCertificate();
+    const serialNumber = this._generateSerialNumber();
+    cert.publicKey = publicKey;
+    cert.serialNumber = serialNumber;
+
+    const notBefore = new Date();
+    const notAfter = new Date();
+    notAfter.setDate(notAfter.getDate() + validityDays);
+    cert.validity.notBefore = notBefore;
+    cert.validity.notAfter = notAfter;
+
+    const subjectAttrs = [
+      { name: 'commonName', value: commonName },
+      { name: 'organizationalUnitName', value: type === 'client' ? 'Portal Clientes' : 'Dispositivos' }
+    ];
+    if (organization) subjectAttrs.push({ name: 'organizationName', value: organization });
+    if (email) subjectAttrs.push({ name: 'emailAddress', value: email });
+    cert.setSubject(subjectAttrs);
+    cert.setIssuer(this.caCert.subject.attributes);
+
+    cert.setExtensions([
+      { name: 'basicConstraints', cA: false },
+      { name: 'keyUsage', digitalSignature: true, keyEncipherment: true, critical: true },
+      { name: 'extKeyUsage', clientAuth: true },
+      { name: 'subjectKeyIdentifier' },
+      { name: 'authorityKeyIdentifier', keyIdentifier: true },
+      { name: 'subjectAltName', altNames: [{ type: 6, value: CAManager._buildSan(type, scope, identifier) }] }
+    ]);
+
+    cert.sign(this.caKey, forge.md.sha256.create());
+
+    const certificate = forge.pki.certificateToPem(cert);
+    const certDer = forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes();
+    const fingerprint = forge.md.sha256.create().update(certDer).digest().toHex()
+      .toUpperCase().match(/.{2}/g).join(':');
+
+    const metadata = {
+      serialNumber, type, scope, role: role || null, identifier, commonName,
+      organization: organization || null, email: email || null, fingerprint,
+      issuedAt: notBefore.toISOString(), expiresAt: notAfter.toISOString(),
+      status: 'active', revokedAt: null, keyOrigin: 'client'   // marca: la privada vive en el cliente
+    };
+
+    const certDir = path.join(this.certsPath, serialNumber);
+    fs.mkdirSync(certDir, { recursive: true });
+    fs.writeFileSync(path.join(certDir, 'cert.pem'), certificate);
+    fs.writeFileSync(path.join(certDir, 'metadata.json'), JSON.stringify(metadata, null, 2));
+    // NO se escribe key.pem ni bundle.p12 — el servidor no conoce la privada.
+
+    return { serialNumber, certificate, fingerprint, metadata };
   }
 
   /**
@@ -356,18 +461,21 @@ class CAManager {
           valid: true,
           serialNumber,
           type: metadata.type,
+          scope: metadata.scope || 'system',
+          role: metadata.role || null,
           identifier: metadata.identifier,
           commonName: metadata.commonName,
           expiresAt: metadata.expiresAt
         };
       }
 
-      // Sin metadata local — extraer info del propio certificado
+      // Sin metadata local — extraer info del propio certificado (SAN)
       const certInfo = this._parseCertificateInfo(cert);
       return {
         valid: true,
         serialNumber,
         type: certInfo.type,
+        scope: certInfo.scope || 'system',
         identifier: certInfo.identifier,
         commonName: certInfo.commonName,
         expiresAt: cert.validity.notAfter.toISOString()
@@ -417,6 +525,24 @@ class CAManager {
     }
 
     return certs.sort((a, b) => new Date(b.issuedAt) - new Date(a.issuedAt));
+  }
+
+  /**
+   * Firma una cadena canónica con la clave RAÍZ de la CA (R1: la CA es la autoridad del sistema).
+   * Usado para sellar invitaciones del admin del sistema — verificable con el cert público de la CA
+   * (node crypto.verify('RSA-SHA256', ...)). NO produce un certificado: firma bytes arbitrarios, así
+   * que no sirve para forjar certs (esos se firman sobre el TBSCertificate DER, no sobre este string).
+   *
+   * @param {string} canonical - la cadena a firmar
+   * @returns {string} firma en base64
+   */
+  signInvitation(canonical) {
+    if (!this.caKey) throw new Error('CA not initialized');
+    if (typeof canonical !== 'string' || !canonical) throw new Error('canonical (string) required');
+    const md = forge.md.sha256.create();
+    md.update(canonical, 'utf8');
+    const sig = this.caKey.sign(md);              // RSASSA-PKCS1-v1_5 + SHA-256 (== node RSA-SHA256)
+    return Buffer.from(sig, 'binary').toString('base64');
   }
 
   /**
@@ -554,25 +680,16 @@ class CAManager {
     const cn = cert.subject.getField('CN');
     const commonName = cn ? cn.value : 'unknown';
 
-    // Extraer type:identifier de subjectAltName URI
-    let type = 'client';
-    let identifier = 'unknown';
-
+    let parsed = { type: 'client', scope: 'system', identifier: 'unknown' };
     const sanExt = cert.getExtension('subjectAltName');
     if (sanExt && sanExt.altNames) {
       for (const alt of sanExt.altNames) {
-        // type 6 = URI
         if (alt.type === 6 && alt.value.startsWith('urn:eventcore:')) {
-          const parts = alt.value.replace('urn:eventcore:', '').split(':');
-          if (parts.length >= 2) {
-            type = parts[0];
-            identifier = parts.slice(1).join(':');
-          }
+          parsed = CAManager._parseSan(alt.value);
         }
       }
     }
-
-    return { type, identifier, commonName };
+    return { ...parsed, commonName };
   }
 
   /**

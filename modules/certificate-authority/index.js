@@ -262,6 +262,64 @@ class CertificateAuthorityModule extends BaseModule {
     }
   }
 
+  async handleEnrollFromPublicKey(input) {
+    try {
+      const body = input?.body || input || {};
+      const { publicKeyPem, commonName, type, identifier, scope, role, organization, email, validityDays, project_id, correlation_id } = body;
+
+      if (!publicKeyPem || !commonName || !type || !identifier) {
+        this.metrics?.increment?.('certificate-authority.errors', { code: 'INVALID_INPUT', kind: 'enroll' });
+        return this._errorResponse(400, 'INVALID_INPUT',
+          'Required: publicKeyPem, commonName, type (client|device), identifier',
+          { required: ['publicKeyPem', 'commonName', 'type', 'identifier'] });
+      }
+
+      const result = this.caManager.issueFromPublicKey({
+        publicKeyPem, commonName, type, identifier,
+        scope: scope || project_id || 'system',   // atado al proyecto si se da; si no, sistema
+        role: role || null,                        // rol-del-bus otorgado por la invitación
+        organization, email, validityDays
+      });
+
+      this.stats.certificates_issued++;
+      this.metrics?.increment?.('certificate-authority.certificates_issued', { via: 'enroll' });
+
+      await this._publicarEvento('certificate.issued', {
+        serialNumber: result.serialNumber, type, identifier, commonName,
+        fingerprint: result.fingerprint, keyOrigin: 'client'
+      }, { correlation_id, project_id });
+
+      this.logger?.info?.('certificate.enrolled', { serialNumber: result.serialNumber, type, identifier });
+
+      // Devuelve SOLO el cert (la privada nunca sale del cliente).
+      return {
+        status: 201,
+        data: {
+          serialNumber: result.serialNumber,
+          certificate: result.certificate,
+          fingerprint: result.fingerprint,
+          metadata: result.metadata
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.enroll.error', err);
+    }
+  }
+
+  async handleSignInvitation(input) {
+    try {
+      const body = input?.body || input || {};
+      const { canonical } = body;
+      if (!canonical || typeof canonical !== 'string') {
+        return this._errorResponse(400, 'INVALID_INPUT', 'canonical (string) is required', { field: 'canonical' });
+      }
+      const signature = this.caManager.signInvitation(canonical);
+      return { status: 200, data: { signature, ca_authority: 'system' } };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.sign_invitation.error', err);
+    }
+  }
+
   async handleRevokeCertificate(input) {
     try {
       const body = input?.body || input || {};

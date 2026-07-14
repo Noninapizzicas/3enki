@@ -57,7 +57,8 @@ const FS_WHITELIST_MODULES = new Set([
   'esp32-dev',           // tooling esp32
   'system-inspector',    // introspeccion del filesystem
   'credential-manager',  // master.key persistencia
-  'certificate-authority' // certificados PKI
+  'certificate-authority', // certificados PKI
+  'invitaciones'         // invitaciones emitidas + estado (cadena de delegacion)
 ]);
 
 // Verticales conocidos (subdirectorios de modules/ que agrupan modulos).

@@ -6,10 +6,18 @@ fuentes:
   - modules/security-p2p/**
   - modules/certificate-authority/**
   - modules/conversation-export/**
-verificado: 2026-07-06
+verificado: 2026-07-14
 ---
 
 # MÓDULOS — SEGURIDAD P2P, CERTIFICADOS, EXPORT
+
+> **Novedad (2026-07-14) — certificate-authority pasa de emitir certs a regir identidad del bus.**
+> Superficie nueva: `issueFromPublicKey` + handler `enroll` (el cliente genera su clave, la CA solo
+> firma su pública — la privada nunca sale del cliente); SAN de **4 partes** `urn:eventcore:<type>:<scope>:<identifier>`
+> (scope = project_id | 'system', parser retrocompatible); `signInvitation` + handler `sign-invitation`
+> (la CA raíz firma invitaciones — R1 de la cadena de delegación). security-p2p: el evento
+> `security.peer.revoked` ahora incluye `core_id` (para el peer-trust del guard). El detalle vive en
+> `sistema-nervioso/bus-guardado.md` (el bus como puerta guardada) e `invitaciones.md` (la delegación).
 
 ## SECURITY-P2P (v2.0.0)
 

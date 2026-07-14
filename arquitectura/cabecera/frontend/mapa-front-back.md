@@ -5,10 +5,15 @@ resumen: El puente MQTT: mapa dominio→módulo backend por cada consumidor del 
 fuentes:
   - frontend/src/lib/ui-core/**
   - frontend/src/lib/stores/**
-verificado: 2026-07-06
+verificado: 2026-07-14
 ---
 
 # FRONTEND ↔ BACKEND — Mapa de Referencias (puente MQTT)
+
+> **Novedad (2026-07-14) — nuevo consumidor: enki-identity → certificate-authority.**
+> `ui-core/enki-identity.ts` añade un enlace front→back nuevo: `certificate-authority.enroll` (el
+> navegador enrola su clave pública y recibe un cert). Es la identidad del navegador para el bus
+> guardado. Detalle en `sistema-nervioso/bus-guardado.md` (paso 2c).
 
 El puente es MQTT. Un consumidor del frontend (store, módulo lazy o pantalla) invoca `mqttRequest(domain, action, data)` → publica en `ui/request/{domain}/{action}` → el `UIRequestHandler` del módulo backend que registró `(domain, action)` responde en `ui/response/{request_id}`. Los eventos backend→frontend viajan por topics directos o `core/*/events/{domain}/{action}` y los stores los consumen vía `subscribe()`.
 

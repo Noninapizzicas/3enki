@@ -229,7 +229,30 @@ if docker compose version &>/dev/null; then
         # aquí, no en el contenedor. Auth abierta declarada; el secreto JWT ya no es teatro
         # obligatorio (si algún día expones el puerto, pon CRAWL4RS_JWT_SECRET y la auth activa).
         _C4RS_SECRET="$(grep -m1 '^CRAWL4RS_JWT_SECRET=' "${INSTALL_DIR}/data/.env" 2>/dev/null | cut -d= -f2-)"
-        if CRAWL4RS_JWT_SECRET="${_C4RS_SECRET}" docker compose \
+
+        # MARCHA LARGA (Playwright): el wrapper (perfil 'larga') con su propio Chromium —
+        # es la 2ª marcha del motor (login con sesión, interacción, interceptar API, stealth,
+        # emulación). BEST-EFFORT: la 1ª vez baja la imagen oficial de Playwright (~1.7 GB) y
+        # tarda; si falla (disco/red) NO tumba la marcha corta — crawl4rs sigue con su
+        # navegador propio. Opt-out del setup ligero: ENKI_MARCHA_LARGA=0 sudo ./vps-setup.sh …
+        _PW_URL=""
+        if [ "${ENKI_MARCHA_LARGA:-1}" = "1" ]; then
+            log "Levantando la marcha larga (wrapper Playwright; 1ª vez descarga ~1.7 GB)..."
+            if docker compose -f "${REPO_DIR}/deployment/crawl4rs/docker-compose.yml" \
+                 --profile larga up -d --build browser > /dev/null 2>&1; then
+                _PW_URL="http://browser:8100"
+                log "Marcha larga arriba — crawl4rs escalará a Playwright (un solo Chromium: el del wrapper)"
+            else
+                warn "Marcha larga no levantó — crawl4rs usará su navegador propio (marcha corta intacta). Revisa: docker compose -f deployment/crawl4rs/docker-compose.yml --profile larga logs browser"
+            fi
+        else
+            log "Marcha larga desactivada (ENKI_MARCHA_LARGA=0) — solo marcha corta"
+        fi
+
+        # MARCHA CORTA (siempre): crawl4rs. CRAWL4RS_PLAYWRIGHT_URL se pasa SOLO si el wrapper
+        # subió — sin él, un endpoint vacío deja que la escalación caiga al navegador propio
+        # (nunca a un endpoint muerto). Se recrea el contenedor si el valor cambió (idempotente).
+        if CRAWL4RS_JWT_SECRET="${_C4RS_SECRET}" CRAWL4RS_PLAYWRIGHT_URL="${_PW_URL}" docker compose \
              -f "${REPO_DIR}/deployment/crawl4rs/docker-compose.yml" up -d --build > /dev/null 2>&1; then
             log "enki-crawl4rs arriba en 127.0.0.1:8081"
             # UNA decisión, UNA llave: instalar el órgano ES el consentimiento — el
@@ -623,7 +646,10 @@ echo "    enki           → node index.js (localhost:3000)"
 echo "    enki-frontend  → SvelteKit (localhost:3001)"
 echo "    caddy          → reverse proxy"
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-crawl4rs$'; then
-    echo "    enki-crawl4rs  → Crawl4RS órgano web (docker, localhost:8081)"
+    echo "    enki-crawl4rs  → Crawl4RS órgano web · marcha corta (docker, localhost:8081)"
+fi
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-crawl4rs-browser$'; then
+    echo "    enki-crawl4rs-browser → wrapper Playwright · marcha larga (docker, red interna)"
 fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-searxng$'; then
     echo "    enki-searxng   → búsqueda web para crawl4rs.buscar (docker)"

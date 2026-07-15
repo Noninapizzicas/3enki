@@ -1118,6 +1118,57 @@ test('handler de core.modules.loaded.all captura errores sin propagarlos', () =>
 });
 
 // --------------------------------------------------
+// 11. GLOBAL_TOOLS llegan al LLM también en páginas blueprint/cajones
+//     (regresión: el LLM de escandallo no veía invoke_agent/crear_agente_desde_caso)
+// --------------------------------------------------
+
+// Simula el registro completo que devuelve moduleLoader.getToolsForAI().
+const GLOBALES_SINTETICAS = [
+  { name: 'invoke_agent', description: 'Invoca un agente.', parameters: {}, _agents: [] },
+  { name: 'buscar_agente', description: 'Busca agentes.', parameters: {} },
+  { name: 'crear_agente_desde_caso', description: 'Crea agente desde caso.', parameters: {} },
+  { name: 'fs.read', description: 'Lee fichero.', parameters: {} },
+  { name: 'recetas.crear', description: 'Tool de dominio (no global).', parameters: {} }
+];
+
+test('_getTools (cajones_enabled) EXPONE las GLOBAL_TOOLS al LLM — invoke_agent/crear_agente_desde_caso', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('escandallo', { manifest: {}, child: {}, parent: null, systemPrompt: '', cajonesEnabled: true });
+  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => GLOBALES_SINTETICAS };
+  const names = m._getTools('escandallo').map(t => t.name);
+  assert.ok(names.includes('invoke_agent'), 'la página de cajones ve invoke_agent');
+  assert.ok(names.includes('buscar_agente'), 've buscar_agente');
+  assert.ok(names.includes('crear_agente_desde_caso'), 've crear_agente_desde_caso (raíz del caso)');
+  assert.ok(names.includes('fs.read'), 've fs.read');
+  assert.ok(names.includes('cajon.listar'), 'sigue teniendo sus cajones');
+  assert.ok(names.includes('bus.publishAndWait'), 'sigue teniendo las universales');
+  // NO cuela las tools de dominio ajenas por esta vía (solo las globales declaradas).
+  assert.ok(!names.includes('recetas.crear'), 'no cuela tools de dominio no-global');
+});
+
+test('_getTools (blueprint SIN cajones) también EXPONE las GLOBAL_TOOLS', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('legacy', { manifest: {}, child: {}, parent: null, systemPrompt: '', cajonesEnabled: false });
+  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => GLOBALES_SINTETICAS };
+  const names = m._getTools('legacy').map(t => t.name);
+  assert.ok(names.includes('invoke_agent'), 'blueprint sin cajones ve invoke_agent');
+  assert.ok(names.includes('crear_agente_desde_caso'), 've crear_agente_desde_caso');
+  assert.ok(!names.includes('cajon.listar'), 'sin cajones no trae cajon tools');
+});
+
+test('_getTools no duplica una tool que es global Y rail (dedupe por nombre)', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('escandallo', { manifest: {}, child: {}, parent: null, systemPrompt: '', cajonesEnabled: true });
+  // evaluar_rail es global y además la aporta el rail: debe salir UNA sola vez.
+  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => [
+    { name: 'invoke_agent', description: 'x', parameters: {}, _agents: [] },
+    { name: 'evaluar_rail', description: 'rail', parameters: {} }
+  ] };
+  const names = m._getTools('escandallo').map(t => t.name);
+  assert.strictEqual(names.filter(n => n === 'evaluar_rail').length <= 1, true, 'evaluar_rail no duplicada');
+});
+
+// --------------------------------------------------
 // Runner
 // --------------------------------------------------
 

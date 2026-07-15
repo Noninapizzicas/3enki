@@ -99,7 +99,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'variaciones');
-    assert.strictEqual(m.version, '4.2.0');
+    assert.strictEqual(m.version, '4.4.0');
     assert.strictEqual(m.configuraciones.size, 0);
     await m.onUnload();
   });
@@ -302,7 +302,7 @@ function publishedOf(mocks, name) {
     assert.deepStrictEqual(texas.extras_sugeridos, [{ ingrediente_id: 'queso', precio_extra: 1 }]);
     assert.deepStrictEqual(texas.ingredientes_base, ['bacon', 'queso']);
     const marga = m.configuraciones.get('pizzas_margarita');
-    assert.strictEqual(marga.permite_anadir, false);             // default sin variaciones
+    assert.strictEqual(marga.permite_anadir, true);              // default: SI se puede anadir salvo negacion explicita
     assert.strictEqual(marga.max_ingredientes_extra, 5);          // default
     // pidió la carta al reflejo de productos
     assert.ok(mocks.uiHandled.some(([d, a]) => d === 'productos' && a === 'carta_completa'));
@@ -366,7 +366,7 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks);
     const r = await m.handleHealthCheck();
     assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.version, '4.2.0');
+    assert.strictEqual(r.data.version, '4.4.0');
     await m.onUnload();
   });
 

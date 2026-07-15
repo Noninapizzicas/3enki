@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const BienvenidaTienda = require('../../modules/bienvenida-tienda');
+const BienvenidaTienda = require('../../modules/pizzepos/bienvenida-tienda');
 
 const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
@@ -84,8 +84,8 @@ test('onProjectActivated registra bot con botName y staff_chat_id', async () => 
     const cfg = m.botsConfig.get('vapers_local_bot');
     assert.ok(cfg);
     assert.strictEqual(cfg.staff_chat_id, 555);
-    assert.strictEqual(cfg.pwa_url, 'https://enki-ai.online/vapers/');
-    assert.ok(cfg.mensaje_bienvenida.includes('https://enki-ai.online/vapers/'));
+    assert.strictEqual(cfg.pwa_url, 'https://enki-ai.online/a/vapers/');
+    assert.ok(cfg.mensaje_bienvenida.includes('https://enki-ai.online/a/vapers/'));
     assert.strictEqual(m.projectToBotName.get('p-1'), 'vapers_local_bot');
   } finally { fix.cleanup(); }
 });
@@ -140,7 +140,7 @@ test('text.received de cliente desconocido → publica bienvenida con link PWA',
     assert.strictEqual(pub.eventType, 'telegram.send_message.request');
     assert.strictEqual(pub.data.botName, 'bot1');
     assert.strictEqual(pub.data.chatId, 999);
-    assert.ok(pub.data.text.includes('https://enki-ai.online/vapers/'));
+    assert.ok(pub.data.text.includes('https://enki-ai.online/a/vapers/'));
     assert.ok(pub.data.text.toLowerCase().includes('bienvenido'));
   } finally { fix.cleanup(); }
 });
@@ -196,7 +196,7 @@ test('_resolvePwaUrl: tienda.pwa_url > pwa_url > default', () => {
   const { m } = makeInstance();
   assert.strictEqual(m._resolvePwaUrl({ tienda: { pwa_url: 'x' } }, 'vapers'), 'x');
   assert.strictEqual(m._resolvePwaUrl({ pwa_url: 'y' }, 'vapers'), 'y');
-  assert.strictEqual(m._resolvePwaUrl({}, 'vapers'), 'https://enki-ai.online/vapers/');
+  assert.strictEqual(m._resolvePwaUrl({}, 'vapers'), 'https://enki-ai.online/a/vapers/');
 });
 
 test('_numericOrNull: maneja PENDIENTE y strings numericos', () => {

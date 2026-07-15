@@ -403,7 +403,7 @@ function wireFakeCredentialManager(bus, credentials) {
     assert.strictEqual(r.status, 404);
     assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
     assert.strictEqual(r.error.details.upstream_status, 404);
-    assert.strictEqual(r.error.message, 'item not found', 'usa upstream message si presente');
+    assert.ok(r.error.message.includes('item not found'), 'preserva el upstream message dentro del diagnostico fertil');
   });
 
   await testAsync('status 401 → PERMISSION_DENIED', async () => {

@@ -33,7 +33,7 @@ class AiGatewayModule extends BaseModule {
   constructor() {
     super();
     this.name = 'ai-gateway';
-    this.version = '2.0.0';
+    this.version = '2.32.0';
     this.config = null;
     this.moduleLoader = null;
 

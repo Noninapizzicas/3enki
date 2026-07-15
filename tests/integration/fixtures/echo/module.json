@@ -1,0 +1,13 @@
+{
+  "name": "echo",
+  "version": "1.0.0",
+  "description": "Echo fixture module for the full-stack integration test. Lives under tests/integration/fixtures so the production module loader never discovers it. Exposes GET /ping and POST /echo APIs, declares the beforeEventPublish hook, and reacts to echo.ping / echo.message bus events.",
+  "author": "Integration Test Fixtures",
+  "provides": {
+    "apis": [
+      { "name": "ping", "method": "GET", "path": "/ping", "description": "Health ping, returns pong." },
+      { "name": "echo", "method": "POST", "path": "/echo", "description": "Echoes back the posted JSON body." }
+    ],
+    "hooks": ["beforeEventPublish"]
+  }
+}

@@ -68,7 +68,7 @@ test('module.json: target_page_id preservado del v7 legacy', () => {
 });
 
 test('module.json: version bumped a 11.0.0 (hibrido, adelgazado al alma v7)', () => {
-  assert.strictEqual(manifest.version, '11.0.0');
+  assert.strictEqual(manifest.version, '11.2.0');
 });
 
 test('module.json: HIBRIDO — declara subscribes con el handler del reflejo (menu.import.request)', () => {
@@ -88,7 +88,7 @@ test('module.json: NO declara dependencies nativas (pdfjs/sharp/google-vision el
 
 test('blueprint: id, version, extends correctos', () => {
   assert.strictEqual(blueprint.id, 'menu-generator');
-  assert.strictEqual(blueprint.version, 'blueprint-11.0.0');
+  assert.strictEqual(blueprint.version, 'blueprint-12.2.0');
   assert.strictEqual(blueprint.extends_blueprint_abstract, 'subsistema-recetario.modulo-base');
   assert.strictEqual(blueprint.language, 'es');
 });
@@ -106,11 +106,16 @@ test('blueprint: v11 RETIRA enriquecer y preparar (salen del alcance del modulo)
   assert.ok(!blueprint.operaciones.preparar, 'preparar (recetas->carta) sale del modulo en v11');
 });
 
-test('blueprint: v11 declara preguntas_universales del producto (abstraccion generica, no perfil pizza)', () => {
-  const pu = blueprint.preguntas_universales || {};
-  const claves = Object.keys(pu).filter(k => !k.startsWith('_') && k !== 'regla_de_hierro');
-  assert.ok(claves.length >= 3, 'deben estar las preguntas universales del producto');
-  assert.ok(pu.regla_de_hierro && /inventar/i.test(pu.regla_de_hierro), 'falta la regla de hierro (no inventar hechos)');
+test('blueprint: v12 modelo_oop es abstraccion generica del producto (GeneradorDeCarta, no perfil pizza) + mandato de FIDELIDAD', () => {
+  const oop = blueprint.modelo_oop || {};
+  assert.ok(oop.INTERFAZ && /GeneradorDeCarta/.test(oop.INTERFAZ), 'abstraccion generica del generador (no perfil pizza)');
+  const mandatosKey = Object.keys(oop).find(k => k.startsWith('MANDATOS'));
+  const mandatos = (mandatosKey && oop[mandatosKey]) || [];
+  assert.ok(mandatos.length >= 3, 'deben estar los mandatos universales del producto');
+  assert.ok(
+    mandatos.some(m => /FIDELIDAD/.test(m) && /procede del material/.test(m)),
+    'falta el mandato de fidelidad (cada dato procede del material o del usuario)'
+  );
 });
 
 test('blueprint: operacion generar tiene input + pseudocodigo + errores_posibles', () => {

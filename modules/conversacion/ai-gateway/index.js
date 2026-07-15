@@ -348,6 +348,20 @@ class AiGatewayModule extends BaseModule {
   _getTools(page_id) {
     if (!this.moduleLoader) return [];
     const all = this.moduleLoader.getToolsForAI?.() || [];
+    // GLOBAL_TOOLS: universales al LLM en CUALQUIER pagina (blueprint y cajones incluidas).
+    // Definidas ARRIBA de las ramas para que TODAS las incluyan. El bug historico: las
+    // ramas blueprint/cajones retornaban ANTES de este set, asi que el LLM de una pagina
+    // de cajones (p.ej. escandallo) NUNCA veia invoke_agent / crear_agente_desde_caso — el
+    // comentario decia "siempre se exponen" pero el codigo se iba antes de cumplirlo.
+    const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente', 'crear_agente', 'crear_agente_desde_caso',
+      'fs.read', 'fs.write', 'fs.list', 'fs.search',
+      'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
+      'fijar_objetivo', 'evaluar_rail',
+      'leer_web', 'descargar_web', 'leer_imagen']);
+    // Slice de globales (de `all`) con la enumeracion de invoke_agent aplicada. Se combina
+    // con las tools de pagina y se deduplica por nombre (el rail ya se anade aparte).
+    const globalSlice = () => this._mapInvokeAgentEnum(all.filter(t => GLOBAL_TOOLS.has(t.name)), page_id);
+    const dedupe = (list) => { const seen = new Set(); const out = []; for (const t of list) { if (t && t.name && !seen.has(t.name)) { seen.add(t.name); out.push(t); } } return out; };
     // Lazy-scan de blueprintModules. ai-gateway puede haberse cargado ANTES
     // que los modulos blueprint-driven en el orden del loader: si el modulo
     // blueprint no aparece en config.modules.enabled, va al final del loadAll
@@ -386,7 +400,8 @@ class AiGatewayModule extends BaseModule {
       // desde cualquier lado (el nervio ya LEE la activa en todas). Se pulla del registry
       // (fuente única = estados/module.json); si estados no cargó, [] → no-op seguro.
       const rail = this._railToolsFromRegistry();
-      if (!bp.cajonesEnabled) return [...universal, ...rail];
+      // Blueprint SIN cajones: universales + rail + GLOBALES (invoke_agent, agentes, fs.*, web…).
+      if (!bp.cajonesEnabled) return dedupe([...universal, ...rail, ...globalSlice()]);
       // Cajones-enabled: catalogo + nav tools (page.related, chat.cambiar_foco)
       // + universales. Las nav vienen desde toolsRegistry (declaradas en
       // module.json.tools[] de ai-gateway, single source v1.2) — no duplicamos
@@ -398,7 +413,9 @@ class AiGatewayModule extends BaseModule {
         const entry = registry?.get?.(navName);
         if (entry) navTools.push({ name: entry.name, description: entry.description, parameters: entry.parameters });
       }
-      return [...this._getCajonesTools(), ...navTools, ...universal, ...rail];
+      // Cajones-enabled: catalogo + nav + universales + rail + GLOBALES. Antes se iba sin
+      // las globales → el LLM de la pagina no podia delegar/crear agentes (raiz del caso).
+      return dedupe([...this._getCajonesTools(), ...navTools, ...universal, ...rail, ...globalSlice()]);
     }
     if (!page_id) return all;
     // Construcción lazy del mapa page_id → prefijos válidos. La primera vez que
@@ -414,11 +431,8 @@ class AiGatewayModule extends BaseModule {
     //   esto el LLM no halla la tool y se rinde a un scraper ad-hoc (visto en vivo). Nombres
     //   sin punto → no aportan prefijo → aquí es su única puerta. Degradan honesto si el
     //   interruptor (crawl4rs/ocr4rs) está OFF, así que exponerlas siempre es seguro.
-    const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente', 'crear_agente', 'crear_agente_desde_caso',
-      'fs.read', 'fs.write', 'fs.list', 'fs.search',
-      'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
-      'fijar_objetivo', 'evaluar_rail',
-      'leer_web', 'descargar_web', 'leer_imagen']);
+    // (GLOBAL_TOOLS se define ARRIBA, en scope de toda la función, para que también las
+    //  ramas blueprint/cajones las incluyan — ver el fix del surfacing.)
     // Prefijos de tools válidos para este page_id. Permite que módulos como
     // menu-generator (tools 'menu.*') matcheen aunque el name del módulo y el
     // prefijo de la tool no coincidan literalmente — sin renombrar nada.
@@ -431,12 +445,17 @@ class AiGatewayModule extends BaseModule {
       if (name.startsWith(page_id + '.')) return true;
       return false;
     });
-    // Filtrado adicional: la tool invoke_agent enumera todos los agentes en su
-    // description. Reducimos esa enumeracion a los agentes cuyo scope incluye
-    // el page actual (o '*' = global). Reduce ~1000 tokens de ruido cuando el
-    // catalogo de agentes crece, y mejora el routing del LLM al no presentarle
-    // opciones irrelevantes para el dominio en el que esta.
-    const mapped = filtered.map(t => {
+    // Enumeracion de agentes en invoke_agent + invoke_agent primero (metodo compartido).
+    return this._mapInvokeAgentEnum(filtered, page_id);
+  }
+
+  // Aplica a una lista de tools: (1) poda la enumeracion de agentes en la description de
+  // invoke_agent al scope de la pagina (ahorra ~1000 tokens y mejora el routing); (2) pone
+  // invoke_agent PRIMERO (los LLMs ponderan posicion → refuerza "prefiere agente cuando
+  // exista"). Compartido por TODAS las ramas de _getTools para que blueprint/cajones y
+  // no-blueprint traten las globales igual.
+  _mapInvokeAgentEnum(tools, page_id) {
+    const mapped = tools.map(t => {
       if (t.name !== 'invoke_agent' || !Array.isArray(t._agents)) return t;
       const relevant = t._agents.filter(a => {
         const scope = Array.isArray(a.scope) ? a.scope : [];
@@ -459,11 +478,6 @@ class AiGatewayModule extends BaseModule {
         }
       };
     });
-
-    // Reordenar para que invoke_agent aparezca PRIMERO en el catalogo que el
-    // LLM ve. Los LLMs ponderan posicion al elegir tool — exponer agentes
-    // antes que tools basicas refuerza la norma "prefer agente cuando exista"
-    // sin depender solo de descripciones textuales.
     return mapped.sort((a, b) => {
       if (a.name === 'invoke_agent') return -1;
       if (b.name === 'invoke_agent') return 1;
@@ -598,6 +612,13 @@ class AiGatewayModule extends BaseModule {
     sections.push('# BLUEPRINT HIJO (concreto, lo que ejecutas)');
     sections.push('```json\n' + JSON.stringify(child, null, 2) + '\n```');
     sections.push(
+      '# CAPACIDADES GLOBALES (además del blueprint)\n' +
+      'Siempre tienes, en cualquier página: buscar_agente/invoke_agent (DELEGA en un especialista), ' +
+      'crear_agente_desde_caso (CREA un trabajador para una senda repetitiva que ningún agente cubre — nace invocable), ' +
+      'y fs.read/list/search · leer_web/leer_imagen. Si el usuario pide crear o invocar un agente, USA estas tools: ' +
+      'NO digas que no las tienes ni propongas importar nada externo.'
+    );
+    sections.push(
       '# REGLAS OPERATIVAS\n' +
       '- Para CADA paso del pseudocodigo que diga `publishAndWait(...)` → llama bus.publishAndWait.\n' +
       '- Para CADA paso que diga `publish(...)` → llama bus.publish.\n' +
@@ -699,6 +720,12 @@ class AiGatewayModule extends BaseModule {
       sections.push(rankeado.map(c => `- ${c.nombre} -> ${c.descripcion}`).join('\n'));
     }
     sections.push(
+      '# CAPACIDADES GLOBALES (más allá de los cajones de esta página)\n' +
+      'Además de los cajones de arriba, SIEMPRE tienes estas tools, en cualquier página:\n' +
+      '- buscar_agente / invoke_agent → DELEGA en un especialista cuando la tarea entra en el dominio de un agente (norma del sistema: un agente lo hace mejor que tú encadenando cajones).\n' +
+      '- crear_agente_desde_caso → cuando NINGÚN agente cubre una senda REPETITIVA (a ejecutar en lote), CREA el trabajador: describes el caso {necesidad, entidad?, dominio?, herramientas?} y nace invocable al instante. crear_agente si prefieres escribir tú la política {name, description, prompt}.\n' +
+      '- fs.read/list/search · leer_web/leer_imagen → leer ficheros del proyecto o evidencia externa.\n' +
+      'Si el usuario pide crear o invocar un agente, USA estas tools directamente. NO digas que no las tienes, NO propongas importar nada del ecosistema externo, NO las confundas con una skill: son tools tuyas, aquí, ahora.\n\n' +
       '# REGLAS OPERATIVAS\n' +
       '- Una sola operacion por turno: cajon.abrir + ejecutar pseudocodigo (publish/publishAndWait) + responder. NO encadenar varias.\n' +
       '- El CATALOGO YA ESTA VISIBLE ARRIBA. NO invoques cajon.listar para listarlo de nuevo — usalo SOLO si necesitas refrescarlo con filtro de zona (cajon.listar({zona:"X"})). Si el usuario pregunta "que puedes hacer aqui", respondele desde el catalogo que ya ves, sin tool calls.\n' +

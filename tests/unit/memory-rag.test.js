@@ -188,7 +188,7 @@ async function testAsync(description, fn) {
     await flush();
     const embReq = mocks.published.find(p => p[0] === 'embedding.generate.request');
     assert.ok(embReq, 'embedding.generate.request publicado');
-    assert.strictEqual(embReq[1].source, 'memory-rag.query');
+    assert.strictEqual(embReq[1].source, 'memory-rag.index');
     assert.strictEqual(embReq[1].project_id, 'p1');
     assert.strictEqual(embReq[1].content, 'Hola compañero del viaje');
     const stored = mocks.dbStore.get('p1');
@@ -205,30 +205,21 @@ async function testAsync(description, fn) {
     assert.ok(!mocks.published.find(p => p[0] === 'chat.context.enriched'), 'no debe publicar enriched');
   });
 
-  await testAsync('consulta top-K: con historico relevante publica chat.context.enriched', async () => {
+  // Modelo PULL (reescritura POC2): onMessageSaved solo indexa + stashea el
+  // embedding en lastQuery; la busqueda top-K se hace bajo demanda en
+  // handleBuscar (que devuelve snippet), no publicando chat.context.enriched
+  // (ese evento lo construye el consumidor de memory.rag.buscar.response).
+  await testAsync('consulta top-K via handleBuscar: con historico relevante devuelve snippet', async () => {
     const mocks = makeMocks();
     const m = instantiate(mocks);
     await m.onMessageSaved({ data: basePayload({ message_id: 'm1', user_message: 'Me gusta el cafe espresso doble' }) });
     await flush();
     await m.onMessageSaved({ data: basePayload({ message_id: 'm2', user_message: 'Me gusta el cafe espresso doble' }) });
     await flush();
-    const enriched = mocks.published.find(p => p[0] === 'chat.context.enriched');
-    assert.ok(enriched, 'chat.context.enriched publicado');
-    assert.strictEqual(enriched[1].source, 'memory-rag');
-    assert.strictEqual(enriched[1].priority, 500);
-    assert.ok(/Mensajes previos relevantes/.test(enriched[1].context_addition));
-  });
-
-  await testAsync('chat.context.enriched VALIDA contra el JSON Schema oficial', async () => {
-    const mocks = makeMocks();
-    const m = instantiate(mocks);
-    await m.onMessageSaved({ data: basePayload({ message_id: 'm1', user_message: 'Me gusta el cafe espresso doble' }) });
-    await flush();
-    await m.onMessageSaved({ data: basePayload({ message_id: 'm2', user_message: 'Me gusta el cafe espresso doble' }) });
-    await flush();
-    const enriched = mocks.published.find(p => p[0] === 'chat.context.enriched');
-    const ok = validateEnriched(enriched[1]);
-    assert.ok(ok, `payload debe validar. errors: ${JSON.stringify(validateEnriched.errors)}`);
+    const res = await m.handleBuscar({ project_id: 'p1', user_id: 'u1', conversation_id: 'conv1' });
+    assert.strictEqual(res.status, 200);
+    assert.ok(res.data.matches >= 1, 'debe haber al menos un match');
+    assert.ok(/Me gusta el cafe espresso doble/.test(res.data.snippet));
   });
 
   await testAsync('ai.chat.response: indexa assistant_message, NO consulta', async () => {

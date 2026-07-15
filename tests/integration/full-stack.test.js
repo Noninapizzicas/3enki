@@ -112,7 +112,7 @@ async function runTests() {
   // Module Registry y Loader
   const registry = new ModuleRegistry({ logger, metrics });
   const loader = new ModuleLoader({
-    modulesPath: path.join(__dirname, '../../modules'),
+    modulesPath: path.join(__dirname, 'fixtures'),
     registry,
     logger,
     metrics,
@@ -237,7 +237,7 @@ async function runTests() {
       }
     };
 
-    await loader.load('echo', path.join(__dirname, '../../modules/echo'), echoManifest);
+    await loader.load('echo', path.join(__dirname, 'fixtures/echo'), echoManifest);
 
     const loaded = loader.getLoadedModules();
     assert(loaded.length === 1, 'Módulo cargado');

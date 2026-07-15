@@ -209,14 +209,15 @@ async function flush(times = 4) {
     bucket.push({ message_id: 'm3', conversation_id: 'c1', role: 'user', content: 'no similar', vector: [0, 1, 0, 0], created_at: 3 });
     m.schemaReady.add('loaded:proj-1');
 
-    await m.onMessageSaved(makeMessage({ message_id: 'newest' }));
-    await flush();
-    const enriched = publishedOf(mocks, 'chat.context.enriched');
-    assert.strictEqual(enriched.length, 1);
-    assert.strictEqual(enriched[0].metadata.matches, 2);
-    assert.ok(enriched[0].context_addition.includes('muy similar'));
-    assert.ok(enriched[0].correlation_id === 'cid-1');
-    assert.ok(enriched[0].project_id === 'proj-1');
+    // Modelo PULL: la busqueda top-K se hace bajo demanda en handleBuscar
+    // (reusa el embedding stasheado en lastQuery), no publicando chat.context.enriched.
+    m.lastQuery.set('conv-1', { vector: [1, 0, 0, 0], message_id: 'newest', ts: Date.now() });
+    const res = await m.handleBuscar({ project_id: 'proj-1', user_id: 'user-1', conversation_id: 'conv-1' });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.data.matches, 2);
+    assert.ok(res.data.snippet.includes('muy similar'));
+    assert.ok(!res.data.snippet.includes('no similar'));
+    assert.strictEqual(res.data.max_similarity, 1);
     await m.onUnload();
   });
 

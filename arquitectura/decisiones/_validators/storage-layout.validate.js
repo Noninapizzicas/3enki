@@ -389,11 +389,15 @@ function finalize(findings, contract, checkSystem, extra = null) {
 
   function dump(level, color) {
     if (!findings[level].length) return;
+    // Simbolo canonico por severidad: lo lee scripts/validate-all.js (parseFindings).
+    const sym = level === 'error' ? '✗' : level === 'warning' ? '!' : 'i';
     console.log(`\n${color}[${level}]${RST} ${findings[level].length} finding${findings[level].length===1?'':'s'}:`);
     for (const f of findings[level]) {
-      console.log(`  ${color}•${RST} ${f.id}`);
-      console.log(`    ${GRY}${f.file}${RST}`);
-      console.log(`    ${f.detail}`);
+      // Linea UNICA en el formato de la casa: "<sym> <drift_id>: <detalle>".
+      // Antes eran 3 lineas con vineta '•' que el harness no sabia parsear
+      // (findings=0 + exit!=0 => se contaba como SCHEMA FAIL). Ahora se integra
+      // al flujo normal (comparacion contra baseline).
+      console.log(`  ${color}${sym}${RST} ${f.id}: ${GRY}${f.file}${RST} — ${f.detail}`);
     }
   }
   dump('error', RED);

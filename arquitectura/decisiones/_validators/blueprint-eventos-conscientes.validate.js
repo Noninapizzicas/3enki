@@ -287,17 +287,30 @@ function main() {
     console.log(`${GREEN}cross-system OK${RST} (0 findings)`);
     return 0;
   }
+  // Cada finding es "categoria|drift_slug|detalle". Se imprime en el formato de
+  // la casa "<sym> <drift_slug>: <detalle>" para que scripts/validate-all.js
+  // (parseFindings) lo entienda. Antes usaba "![]"/pipes que el harness no sabia
+  // leer (findings=0 + exit!=0 => se contaba como SCHEMA FAIL). El simbolo por
+  // severidad: ✗ error, ! warning, i info.
+  const emitir = (sym, color, arr) => {
+    for (const s of arr) {
+      const p = String(s).split('|');
+      const slug = p[1] || p[0];
+      const detalle = (p.slice(2).join('|') || p.slice(1).join('|') || s).trim();
+      console.log(`  ${color}${sym}${RST} ${slug}: ${detalle}`);
+    }
+  };
   if (f.errors.length) {
     console.log(`${RED}cross-system errors (${f.errors.length})${RST}`);
-    for (const e of f.errors) console.log(`  ${RED}![${RST}] ${e}`);
+    emitir('✗', RED, f.errors);
   }
   if (f.warnings.length) {
     console.log(`${YEL}cross-system warnings (${f.warnings.length})${RST}`);
-    for (const w of f.warnings) console.log(`  ${YEL}!${RST} ${w}`);
+    emitir('!', YEL, f.warnings);
   }
   if (f.infos.length) {
     console.log(`${CYAN}cross-system info (${f.infos.length})${RST}`);
-    for (const i of f.infos) console.log(`  ${CYAN}i${RST} ${i}`);
+    emitir('i', CYAN, f.infos);
   }
   return f.errors.length > 0 ? 1 : 0;
 }

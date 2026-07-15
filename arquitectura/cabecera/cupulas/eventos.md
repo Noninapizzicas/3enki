@@ -4,8 +4,9 @@ dominio: cupulas
 resumen: La cúpula del CONTRATO del bus — el vigilante que cruza todo lo que conduce eventos (manifests, blueprints, skills, código) contra todo lo que los atiende, y canta los fantasmas en PR y pulso semanal.
 fuentes:
   - scripts/cupula-eventos/**
+  - modules/cupula-eventos/**
   - .github/workflows/cupula-eventos.yml
-verificado: 2026-07-09
+verificado: 2026-07-15
 ---
 
 # CÚPULA DE EVENTOS — el contrato del bus, vigilado
@@ -43,6 +44,42 @@ verificado: 2026-07-09
   }
 }
 ```
+
+## La CARA RUNTIME — la biblioteca buscable del bus (modules/cupula-eventos, {{version:modules/cupula-eventos}})
+
+> El vigilante (arriba) es la cara de CI: canta fantasmas en PR. Esta es la cara VIVA: sirve el
+> catálogo del bus al LLM, gemela EXACTA de `buscar_agente` (agentes) y `buscar_skill` (cantera).
+> Cierra el propósito por el que se pensaron las cúpulas: **dar acceso a TODAS las capacidades del
+> sistema SIN saturar contexto** — una puerta diminuta y universal, el catálogo entero detrás.
+
+```json
+{
+  "esquema": "cupula-eventos-runtime-v1",
+  "principio": "puerta diminuta universal + catálogo detrás, top-K bajo demanda (los ~400 contratos nunca entran al prompt)",
+  "tools": {
+    "buscar_capacidad": "{query, tipo?:tool|rpc|*, limite?} → top-K {name, tipo, descripcion} rankeado (catálogo BARATO). Gemela de buscar_agente.",
+    "detalle_capacidad": "{name} → {request_shape, como_conducir, response_topic, confirmation} (el CUERPO bajo demanda — el 'abrir cajón' del bus)"
+  },
+  "indice": "moduleLoader.toolsRegistry — el mismo índice VIVO que alimenta getToolsForAI (siempre fresco, sin re-escanear)",
+  "universalidad": "ambas en GLOBAL_TOOLS del ai-gateway → toda página (por el fix de _getTools que expone GLOBAL_TOOLS también en ramas blueprint/cajones)",
+  "dos_caras": "vigilante (CI, escanea ficheros, canta fantasmas) + runtime (vivo, lee el registry, sirve al LLM) — misma verdad, como la cabecera (doc + check)"
+}
+```
+
+```
+FUNCION buscarCapacidad({query, tipo='*', limite=10}):        // PROYECCIÓN PURA (gemela de _buscarAgente)
+  idx ← toolsRegistry.values()                                // índice vivo
+  rank ← idx.filtrar(no-propias · tipo).map(c → {c, s: Σ tokens(query).en(name×2 + description)})
+          .filtrar(s>0).ordenarDesc(s).tomar(limite)
+  RETORNA {total, capacidades: rank.map(→ {name, tipo, descripcion})}   // BARATO, sin cuerpo
+
+FUNCION detalleCapacidad({name}):                             // el cuerpo, bajo demanda (= cajon.abrir)
+  t ← toolsRegistry.get(name)  · SI !t: 404
+  RETORNA {name, tipo, request_shape: t.parameters, como_conducir: "bus.publishAndWait('name', …)",
+           response_topic: name+'.response', confirmation: t.confirmation}
+```
+
+Test: `cupula-eventos__runtime` (12: registro · rank name>description · filtro tipo · límite · no-auto · detalle contrato · confirmation · 404/400 · response correlada).
 
 ## Cazas del primer barrido (2026-07-09 — la cúpula pagó su coste el día que nació)
 

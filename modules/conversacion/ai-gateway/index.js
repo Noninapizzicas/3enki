@@ -354,6 +354,7 @@ class AiGatewayModule extends BaseModule {
     // de cajones (p.ej. escandallo) NUNCA veia invoke_agent / crear_agente_desde_caso — el
     // comentario decia "siempre se exponen" pero el codigo se iba antes de cumplirlo.
     const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente', 'crear_agente', 'crear_agente_desde_caso',
+      'buscar_capacidad', 'detalle_capacidad',
       'fs.read', 'fs.write', 'fs.list', 'fs.search',
       'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
       'fijar_objetivo', 'evaluar_rail',

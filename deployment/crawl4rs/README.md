@@ -83,6 +83,42 @@ Degradación honesta: interruptor OFF o contenedor caído → `503 {degradado,
 motivo}`; `buscar` sin SearXNG → 503 con la prescripción del servidor en
 `message` ("define SEARXNG_URL") — nunca finge.
 
+## Marcha larga (Playwright) — opt-in, no cambia lo de siempre
+
+El motor tiene **dos marchas** (D-os). La corta (arriba) va siempre: HTTP
+determinista + el navegador propio del contenedor. La **larga** es el wrapper
+de Playwright (`bridge/playwright-wrapper` en D-os) — el que desbloquea
+**login con sesión persistente, interacción (scroll/click), interceptar la API
+interna de la página, stealth y emulación** (locale/timezone/geo/móvil).
+
+Vive tras un **perfil de compose (`larga`)**: el `docker compose up` de siempre
+**ni lo mira**, así que la marcha corta queda idéntica. Se enciende explícito:
+
+```bash
+# construye/levanta las DOS marchas y enruta la escalación al wrapper
+CRAWL4RS_PLAYWRIGHT_URL=http://browser:8100 \
+  docker compose -f deployment/crawl4rs/docker-compose.yml \
+  --profile larga up -d --build
+
+docker ps | grep enki-crawl4rs-browser          # el wrapper, en la red interna
+```
+
+- Sin `--profile larga` (o sin `CRAWL4RS_PLAYWRIGHT_URL`): la escalación usa el
+  navegador propio de `enki-crawl4rs`, como hasta ahora. Aditivo puro.
+- Con ambas: cuando la marcha corta topa con login/JS pesado/anti-bot, escala
+  al wrapper por HTTP (`http://browser:8100`, solo red `enki-web`, sin puerto
+  al host).
+- Auto-login opcional: exporta `CRAWL4RS_LOGIN=/etc/crawl4rs/login.json` y monta
+  la receta (`{ url, pasos:[{tipo,selector,valor}] }`) — descomenta el `volumes`
+  del compose. El wrapper hace login, guarda `storageState` y re-loguea solo al
+  perder sesión.
+- Topología "embutido" (alternativa): si ya corre un contenedor con Chromium,
+  mete el `server.js` del wrapper dentro y ponle `PLAYWRIGHT_CDP_URL` — se
+  conecta al Chromium en marcha en vez de lanzar otro. El contrato no cambia.
+
+Degradación honesta: con la marcha larga activa pero el wrapper caído, la
+escalación responde el fallo real (`{ fallo }`) — nunca inventa HTML ni sesión.
+
 ## Horizonte
 
 La Fase 7 de D-os (`crawl4rs-mqtt`) hará que el motor hable MQTT nativo

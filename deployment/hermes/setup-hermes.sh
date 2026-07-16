@@ -15,6 +15,8 @@
 #   4. HERMES_API_KEY: nace UNA vez en /opt/enki/data/.env (Enki la carga al
 #      arrancar → el provider 'hermes' la encuentra solo; persiste al rsync)
 #   5. api_server en ~/.hermes/config.yaml (127.0.0.1:8642, misma key)
+#   5b. LOS OJOS: mcp_servers.enki (Hermes → Enki por el Portal) — inerte hasta
+#      que el dueño encienda 'portal-mcp'. --sin-ojos lo salta.
 #   6. servicio systemd hermes-gateway ('gateway run' — foreground, sin root)
 #   7. sonda de vida + interruptor 'hermes-agente' sembrado ON
 #
@@ -24,19 +26,22 @@
 # Idempotente y guardado: cada paso se salta lo ya hecho; un fallo hace warn.
 #
 # Uso:
-#   sudo ./deployment/hermes/setup-hermes.sh [INSTALL_DIR]           # default /opt/enki
-#   sudo ./deployment/hermes/setup-hermes.sh [INSTALL_DIR] --fresh   # desde CERO (purga y reinstala)
+#   sudo ./deployment/hermes/setup-hermes.sh [INSTALL_DIR]              # default /opt/enki
+#   sudo ./deployment/hermes/setup-hermes.sh [INSTALL_DIR] --fresh      # desde CERO (purga y reinstala)
+#   sudo ./deployment/hermes/setup-hermes.sh [INSTALL_DIR] --sin-ojos   # sin cablear Hermes→Enki
 # =============================================================================
 
 set -uo pipefail
 
 INSTALL_DIR="/opt/enki"
 FRESH=0
+OJOS=1     # cablear los ojos (Hermes → Enki por el Portal MCP). --sin-ojos lo salta.
 for _arg in "$@"; do
     case "$_arg" in
-        --fresh) FRESH=1 ;;
-        --*)     echo "[!] flag desconocido ignorado: $_arg" ;;
-        *)       INSTALL_DIR="$_arg" ;;
+        --fresh)     FRESH=1 ;;
+        --sin-ojos)  OJOS=0 ;;
+        --*)         echo "[!] flag desconocido ignorado: $_arg" ;;
+        *)           INSTALL_DIR="$_arg" ;;
     esac
 done
 
@@ -171,6 +176,42 @@ platforms:
 EOF
     _CFG_CAMBIO=1
     log "bloque api_server añadido a config.yaml"
+fi
+
+# ---- 5b. LOS OJOS: Hermes → Enki por el Portal MCP (bridge stdio) ----
+# Hermes es cliente MCP; el bridge del Portal (mcp/enki-mcp-server.js) le sirve las
+# tools de Enki. La REJA no se toca: el bloque es INERTE hasta que el dueño encienda
+# el interruptor 'portal-mcp' en Enki (OFF por defecto). No se hornea ENKI_PROJECT:
+# el Portal aplica su propio scope/project. --sin-ojos lo salta.
+if [ "${OJOS}" = "1" ]; then
+    if grep -q 'mcp_servers:' "${HERMES_CFG}" 2>/dev/null; then
+        log "mcp_servers ya en config.yaml (los ojos; lo del humano manda)"
+    else
+        sudo -u hermes tee -a "${HERMES_CFG}" > /dev/null <<EOF
+
+# --- LOS OJOS: Hermes → Enki por el Portal MCP (bridge stdio) ---
+# INERTE hasta que el dueño encienda 'portal-mcp' en Enki (OFF por defecto).
+# Doble reja: este include + el guard del Portal (scope/mode/allowlist/audit).
+# Amplía el allowlist cuando el uso lo pida (empieza estrecho, read-only).
+mcp_servers:
+  enki:
+    command: "node"
+    args: ["${INSTALL_DIR}/mcp/enki-mcp-server.js"]
+    env:
+      ENKI_BROKER_URL: "mqtt://localhost:1883"
+    tools:
+      include: ["productos.list", "productos.get", "productos.search"]
+EOF
+        _CFG_CAMBIO=1
+        log "ojos cableados (mcp_servers.enki) — inertes hasta 'portal-mcp' ON"
+    fi
+    # el bridge corre como 'hermes' y lee ${INSTALL_DIR}: acceso de LECTURA por grupo
+    # (www-data es el dueño de /opt/enki). Sin escritura, sin sudo — sigue contenido.
+    if ! id -nG hermes 2>/dev/null | grep -qw www-data; then
+        usermod -aG www-data hermes 2>/dev/null \
+            && log "hermes → grupo www-data (lectura de ${INSTALL_DIR} para el bridge)" \
+            || warn "no pude añadir hermes a www-data — el bridge puede no leer ${INSTALL_DIR}"
+    fi
 fi
 
 # ---- 6. systemd: Hermes VIVO ('gateway run' — foreground, corre como 'hermes') ----

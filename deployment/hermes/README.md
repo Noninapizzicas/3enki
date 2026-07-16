@@ -41,6 +41,7 @@
 3. **Instalación determinista con `uv`** — clona `NousResearch/hermes-agent` en `/home/hermes/.hermes/hermes-agent`, `uv sync --extra all --locked` crea el venv, y symlink `~/.local/bin/hermes`. Python 3.11 lo gestiona uv (sin depender del python del sistema). Si el binario ya está, no se repite.
 4. **`HERMES_API_KEY`**: nace UNA vez en `/opt/enki/data/.env` — Enki lo carga al arrancar (`index.js` lee `data/.env`), así el provider la encuentra solo; persiste al rsync. Si Hermes ya tenía key propia en su config, **la del humano manda** y `data/.env` se sincroniza a ella.
 5. **`api_server`** en `/home/hermes/.hermes/config.yaml` — la puerta local `127.0.0.1:8642`, misma key. **No** se abre en Caddy ni en el firewall (ley de la frontera).
+5b. **Los ojos cableados** (`mcp_servers.enki` en el config de Hermes) — Hermes → Enki por el bridge del Portal, y `hermes` entra al grupo `www-data` (lectura de `/opt/enki` para el bridge). **Inerte** hasta que el dueño encienda `portal-mcp` en Enki (OFF por defecto): cablearlo no abre nada. `--sin-ojos` lo salta.
 6. **`hermes-gateway`** en systemd (`ExecStart=… hermes gateway run` — el proceso en primer plano; **no** `gateway start`, que le habla a systemctl y exige root), `enable --now` + sonda de vida con la key.
 7. **Interruptor `hermes-agente` sembrado ON** — una decisión, una llave: instalar el órgano ES el consentimiento; solo se siembra si el humano no decidió ya (tu apagado manual desde el panel se respeta siempre).
 
@@ -79,14 +80,25 @@ todo encargo lleva memoria del proyecto (`X-Hermes-Session-Key: enki:<project_id
 propósito. Cada delegación emite `hermes.invocado` `{ok, duracion_ms, model,
 session_key, modo, error?}` → lo capta la propiocepción.
 
-## (Opcional, después) Los ojos: Hermes → Enki por el Portal
+## Los ojos: Hermes → Enki por el Portal (ya cableado en el deploy)
 
-Cuando quieras que Hermes, mientras resuelve, pueda **mirar y operar el mundo de
-Enki**: añade el bloque de [`config.mcp-enki.yaml.example`](config.mcp-enki.yaml.example)
-a su `config.yaml` (Hermes es cliente MCP; el bridge `mcp/enki-mcp-server.js` le
-sirve las tools vía el Portal). **Doble reja**: la allowlist del bloque **y** el
-guard del Portal (interruptor `portal-mcp` OFF por defecto, scope, mode, audit).
-Con el portal OFF el bloque es inerte — abre el dueño, desde el panel.
+El setup **ya deja el cable puesto** (paso 5b): `mcp_servers.enki` en el config de
+Hermes + `hermes` en el grupo `www-data` (lectura del bridge). Hermes es cliente
+MCP; el bridge `mcp/enki-mcp-server.js` le sirve las tools de Enki vía el Portal.
+
+Pero el cable está **inerte** hasta que TÚ, el dueño, lo enciendas — así se respeta
+la reja:
+
+1. En Enki: panel de interruptores → `sistema` → **`Portal MCP`** ON (y `Portal MCP ·
+   escritura` ON solo si quieres que Hermes opere, no solo lea).
+2. En Hermes: `sudo -u hermes -i hermes mcp test enki` (debe listar las tools que
+   el Portal deja pasar) · luego `sudo systemctl restart hermes-gateway`.
+
+**Doble reja**: la allowlist del bloque **y** el guard del Portal (scope, mode,
+audit `portal.invocado`). Con `portal-mcp` OFF, `mcp test enki` sale vacío — no es
+un error, es la puerta cerrada. Amplía la allowlist (`tools.include`) cuando el uso
+lo pida; el Portal fija el proyecto/scope desde su propia config. `--sin-ojos` en el
+setup no cablea nada.
 
 ## Límites honestos (hoy)
 

@@ -85,7 +85,7 @@ class FilesystemModule extends BaseModule {
   constructor() {
     super();
     this.name = 'filesystem';
-    this.version = '2.1.0';
+    this.version = '2.3.0';
     this.basePath = path.join(process.cwd(), 'data');
     this.uiHandler = null;
 
@@ -110,6 +110,11 @@ class FilesystemModule extends BaseModule {
     // Sin sourceModule en el evento, fallback al comportamiento scope=project.
     // Cierra storage-layout.contract.json TP4 (capa 2 de la composicion canonica).
     this._moduleManifests = new Map();
+    // Posición 2 (EL TRADUCTOR): mapa de propiedad de datos de dominio, declarado por
+    // los dueños en su manifest (datos_de_dominio). ruta → { dueño, palabras }. Vacío =
+    // no-op. El enforce (bloquear+traducir) es opt-in por interruptor; default OBSERVE.
+    this._mapaPropiedad = [];
+    this._caminoCanonicoEnforce = false;
   }
 
   // ==========================================
@@ -129,10 +134,30 @@ class FilesystemModule extends BaseModule {
     await this._ensureDataDirectory();
     this._loadModuleManifests();
 
+    // Posición 2: el enforce del camino canónico es una decisión consciente del dueño
+    // (escalera off→observe→enforce, como el ejecutor). Nace en OBSERVE: detecta y canta
+    // la escritura ajena (fs.escritura.ajena) SIN bloquear. Enforce = interruptor ON.
+    this.eventBus?.publish?.('interruptor.registrar', {
+      id: 'fs-camino-canonico', grupo: 'sistema', default: false,
+      label: 'FS · camino canónico',
+      descripcion: 'ON: una escritura cruda sobre dato de dominio ajeno se BLOQUEA y se traduce a la palabra del dueño. OFF (default): solo observa y canta.'
+    });
+
     this.logger.info('filesystem.loaded', {
       basePath: this.basePath,
-      manifests_loaded: this._moduleManifests.size
+      manifests_loaded: this._moduleManifests.size,
+      datos_dominio: this._mapaPropiedad.length,
+      camino_canonico: this._caminoCanonicoEnforce ? 'enforce' : 'observe'
     });
+  }
+
+  // Interruptor 'fs-camino-canonico' on/off EN CALIENTE (mandado por el dueño desde el panel).
+  onInterruptorCambiado(event) {
+    const d = event?.data || event || {};
+    if (d.id === 'fs-camino-canonico') {
+      this._caminoCanonicoEnforce = !!d.enabled;
+      this.logger?.info?.('filesystem.camino_canonico.modo', { modo: this._caminoCanonicoEnforce ? 'enforce' : 'observe' });
+    }
   }
 
   // TP4 — escanea modules/**/module.json y cachea los que declaran
@@ -142,6 +167,7 @@ class FilesystemModule extends BaseModule {
   _loadModuleManifests() {
     const syncFs = require('fs');
     const modulesDir = path.join(process.cwd(), 'modules');
+    this._mapaPropiedad = [];   // idempotente: reconstruir desde cero
     if (!syncFs.existsSync(modulesDir)) return;
     const tryRegister = (mjPath) => {
       try {
@@ -149,6 +175,19 @@ class FilesystemModule extends BaseModule {
         const p = m.config?.persistence;
         if (m.name && p && p.scope && p.data_path) {
           this._moduleManifests.set(m.name, { scope: p.scope, data_path: p.data_path });
+        }
+        // Posición 2: el dueño DECLARA sus datos de dominio y las palabras (eventos) con
+        // las que se cambian. El FS no conoce a recetas — lee lo que recetas declare.
+        //   "datos_de_dominio": { "posee": ["/pizzepos/recetas.json"],
+        //     "palabras": [{ "palabra": "escandallo.coste.calculado", "para": "persistir el coste" }] }
+        const dd = m.datos_de_dominio;
+        if (m.name && dd && Array.isArray(dd.posee)) {
+          const palabras = Array.isArray(dd.palabras) ? dd.palabras : [];
+          for (const patron of dd.posee) {
+            if (typeof patron === 'string' && patron) {
+              this._mapaPropiedad.push({ patron, dueno: m.name, palabras });
+            }
+          }
         }
       } catch (err) {
         this.logger?.warn('filesystem.manifest.parse.failed', { path: mjPath, error: err.message });
@@ -786,6 +825,22 @@ class FilesystemModule extends BaseModule {
         contentBuffer = data.content;
         fileSize = Buffer.byteLength(data.content, 'utf-8');
       }
+      // Posición 2 (EL TRADUCTOR): ¿escritura cruda sobre dato de dominio AJENO? No se
+      // forja el efecto; se habla la palabra del dueño. Observe canta; enforce bloquea+traduce.
+      const ajeno = this._apreciarCaminoCanonico(filePath, data?._source_module);
+      if (ajeno) {
+        this.metrics?.increment('filesystem.escritura_ajena', { dueno: ajeno.dueno, modo: this._caminoCanonicoEnforce ? 'enforce' : 'observe', op: 'write' });
+        await this._publicarEvento('fs.escritura.ajena', {
+          path: filePath, dueno: ajeno.dueno, source: data?._source_module || null,
+          palabras: (ajeno.palabras || []).map(p => p.palabra), modo: this._caminoCanonicoEnforce ? 'enforce' : 'observe', op: 'write'
+        });
+        if (this._caminoCanonicoEnforce) return this._respuestaTraductor(filePath, ajeno);
+        // observe: el testigo ya quedó; se permite (positions 1+3 siguen protegiendo)
+      }
+
+      // Posición 3 (la RED): snapshot ANTES de sobrescribir un fichero que ya existe.
+      // Nada que se reemplace se pierde sin red — la destructividad se vuelve reversible.
+      if (!isNew) await this._snapshotAntesDeSobrescribir(safePath);
       await this._atomicWriteFile(safePath, contentBuffer, data.encoding === 'base64' ? undefined : 'utf-8');
 
       const eventType = isNew ? 'fs.file.created' : 'fs.file.updated';
@@ -874,7 +929,19 @@ class FilesystemModule extends BaseModule {
           { kind: 'domain', field: 'patches' });
       }
 
+      // Posición 2 (EL TRADUCTOR): también en edit — dato de dominio ajeno se cambia por la palabra.
+      const ajenoEdit = this._apreciarCaminoCanonico(filePath, data?._source_module);
+      if (ajenoEdit) {
+        this.metrics?.increment('filesystem.escritura_ajena', { dueno: ajenoEdit.dueno, modo: this._caminoCanonicoEnforce ? 'enforce' : 'observe', op: 'edit' });
+        await this._publicarEvento('fs.escritura.ajena', {
+          path: filePath, dueno: ajenoEdit.dueno, source: data?._source_module || null,
+          palabras: (ajenoEdit.palabras || []).map(p => p.palabra), modo: this._caminoCanonicoEnforce ? 'enforce' : 'observe', op: 'edit'
+        });
+        if (this._caminoCanonicoEnforce) return this._respuestaTraductor(filePath, ajenoEdit);
+      }
+
       const newContent = JSON.stringify(doc, null, 2);
+      await this._snapshotAntesDeSobrescribir(safePath);   // la RED también en edit (por si un patch mal formado daña)
       await this._atomicWriteFile(safePath, newContent, 'utf-8');
 
       const fileSize = Buffer.byteLength(newContent, 'utf-8');
@@ -1207,6 +1274,78 @@ class FilesystemModule extends BaseModule {
       }
     }
     return cur;
+  }
+
+  // ==========================================
+  // Posición 2 (EL TRADUCTOR): camino canónico — habla la palabra, no forjes el efecto
+  // ==========================================
+  // El dato de dominio tiene DUEÑO; se cambia emitiendo la palabra (evento) que el dueño
+  // aliñó en su contrato, no escribiendo su fichero por detrás. Esto NO es una reja: es
+  // COMUNICACIÓN. Cuando un NO-dueño escribe dato ajeno, el FS no castiga — le TIENDE la
+  // palabra compartida (Expresión en Positivo). Devuelve null si no aplica (ruta sin dueño,
+  // o el que escribe ES el dueño — su persistencia interna es legítima).
+  _apreciarCaminoCanonico(filePath, sourceModule) {
+    if (!this._mapaPropiedad.length) return null;                 // nadie declaró → no-op
+    const norm = String(filePath || '').replace(/\\/g, '/');
+    const entry = this._mapaPropiedad.find(e => {
+      const pat = e.patron.replace(/\\/g, '/');
+      if (pat === norm) return true;
+      if (pat.endsWith('/**')) return norm.startsWith(pat.slice(0, -2));   // prefijo de directorio
+      if (pat.endsWith('/*')) return path.dirname(norm) === pat.slice(0, -2);
+      return false;
+    });
+    if (!entry) return null;
+    if (sourceModule && sourceModule === entry.dueno) return null;  // el dueño escribe lo suyo → pasa
+    return entry;                                                    // ajeno → hay que traducir
+  }
+
+  // El traductor en POSITIVO: la palabra compartida, no el "prohibido".
+  _respuestaTraductor(filePath, entry) {
+    const palabras = (entry.palabras || []);
+    const listado = palabras.length
+      ? palabras.map(p => `${p.palabra}${p.para ? ` (${p.para})` : ''}`).join(' · ')
+      : `las palabras de '${entry.dueno}'`;
+    const mensaje =
+      `'${filePath}' es dato de dominio de '${entry.dueno}'. No se forja el fichero; se habla su palabra. ` +
+      `Para cambiarlo, publica la palabra canónica y '${entry.dueno}' lo persiste: ${listado}. ` +
+      `El concepto de cada palabra: detalle_capacidad('<palabra>'). O muévete a su página / busca con buscar_capacidad.`;
+    return this._errorResponse(409, 'CANONICAL_PATH', mensaje, {
+      kind: 'domain', path: filePath, dueno: entry.dueno,
+      palabras: palabras.map(p => p.palabra)
+    });
+  }
+
+  // ==========================================
+  // Posición 3 (la RED): snapshot-antes-de-sobrescribir
+  // ==========================================
+  // Antes de reemplazar un fichero que YA existe, vuelca sus bytes previos a un anillo
+  // <dir>/.versions/<base>/<timestamp>.bak. La destructividad se vuelve REVERSIBLE por
+  // construcción: nada que se sobrescriba se pierde sin red. Cierra de raíz la clase
+  // "salmorejo/recetas perdido" — aunque el caller trunque el fichero, el previo queda.
+  // Best-effort: si el snapshot falla, se avisa (métrica + warn) pero la escritura NO se
+  // bloquea (la red que rompe el trabajo sería peor que la red que a veces falla).
+  async _snapshotAntesDeSobrescribir(safePath) {
+    // El versionado no se versiona a sí mismo (evita recursión y explosión de backups).
+    if (safePath.includes(`${path.sep}.versions${path.sep}`)) return;
+    try {
+      const dir = path.dirname(safePath);
+      const base = path.basename(safePath);
+      const vdir = path.join(dir, '.versions', base);
+      const prev = await fs.readFile(safePath);                 // los bytes de AHORA
+      await fs.mkdir(vdir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      await this._atomicWriteFile(path.join(vdir, `${stamp}.bak`), prev);
+      // Anillo acotado: conservar solo las últimas KEEP versiones (poda las más viejas).
+      const KEEP = 10;
+      const baks = (await fs.readdir(vdir)).filter(f => f.endsWith('.bak')).sort();
+      for (const old of baks.slice(0, Math.max(0, baks.length - KEEP))) {
+        try { await fs.unlink(path.join(vdir, old)); } catch (_) { /* best-effort */ }
+      }
+      this.metrics?.increment('filesystem.snapshot.ok');
+    } catch (err) {
+      this.metrics?.increment('filesystem.snapshot.failed', { reason: err.code || 'unknown' });
+      this.logger?.warn?.('filesystem.snapshot.failed', { path: safePath, error: err.message });
+    }
   }
 
   // ==========================================

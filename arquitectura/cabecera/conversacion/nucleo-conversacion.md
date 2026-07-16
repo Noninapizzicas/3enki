@@ -6,7 +6,7 @@ fuentes:
   - modules/conversacion/**
   - modules/project-manager/**
   - modules/credential-manager/**
-verificado: 2026-07-15
+verificado: 2026-07-16
 ---
 
 # Módulos: Project-Manager, Credential-Manager y Conversación

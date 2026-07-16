@@ -16102,7 +16102,7 @@ PIEZAS {
   modules/estados (0.4.0 · reflejo 0.4.0)   la cúpula custodio (single-writer, freno entre pasos + EL JUEZ)
                                             + TOOLS del chat (crear·anadir·completar·ver·borrar·fijar_objetivo·evaluar_rail)
   modules/_shared/procesos-semilla.js       las plantillas de proceso por arquetipo (PRISMA hereda)
-  ai-gateway (2.32.0)                      el nervio: _leerRailActivo + _composeRailSection (activa + objetivo + juez)
+  ai-gateway (2.33.0)                      el nervio: _leerRailActivo + _composeRailSection (activa + objetivo + juez)
                                             + EL TIRO AUTOMÁTICO (_evaluarRailAuto post-turno, detached, safety caps)
 }
 LA MANO QUE ESCRIBE (v0.2.0)  el diseño decía "el LLM PROPONE · el reflejo SOSTIENE". v0.1 construyó el que

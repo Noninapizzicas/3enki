@@ -1128,6 +1128,7 @@ const GLOBALES_SINTETICAS = [
   { name: 'buscar_agente', description: 'Busca agentes.', parameters: {} },
   { name: 'crear_agente_desde_caso', description: 'Crea agente desde caso.', parameters: {} },
   { name: 'fs.read', description: 'Lee fichero.', parameters: {} },
+  { name: 'fs.write', description: 'Escribe fichero (primitiva peligrosa).', parameters: {} },
   { name: 'recetas.crear', description: 'Tool de dominio (no global).', parameters: {} }
 ];
 
@@ -1139,9 +1140,11 @@ test('_getTools (cajones_enabled) EXPONE las GLOBAL_TOOLS al LLM — invoke_agen
   assert.ok(names.includes('invoke_agent'), 'la página de cajones ve invoke_agent');
   assert.ok(names.includes('buscar_agente'), 've buscar_agente');
   assert.ok(names.includes('crear_agente_desde_caso'), 've crear_agente_desde_caso (raíz del caso)');
-  assert.ok(names.includes('fs.read'), 've fs.read');
+  assert.ok(names.includes('fs.read'), 've fs.read (lectura = libre)');
   assert.ok(names.includes('cajon.listar'), 'sigue teniendo sus cajones');
   assert.ok(names.includes('bus.publishAndWait'), 'sigue teniendo las universales');
+  // NACIMIENTO (posición 1): fs.write NO nace en una página de dominio.
+  assert.ok(!names.includes('fs.write'), 'fs.write NO es universal — no llega a la página de cajones');
   // NO cuela las tools de dominio ajenas por esta vía (solo las globales declaradas).
   assert.ok(!names.includes('recetas.crear'), 'no cuela tools de dominio no-global');
 });

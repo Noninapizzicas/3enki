@@ -17095,9 +17095,11 @@ PROVISIONING  deployment/hermes/setup-hermes.sh (idempotente, uv determinista; -
 GOBIERNO    interruptor 'hermes-agente' (OFF de fábrica en el módulo; OFF corta también la selección
             explícita) · priority 90 (el auto-fallback JAMÁS cae en Hermes) · AUDIT hermes.invocado
             {ok, duracion_ms, model, session_key, modo, error?} → propiocepción (espíritu portal.invocado).
-OJOS (inverso, opcional)  Hermes es cliente MCP → bridge mcp/enki-mcp-server.js en su config.yaml
-            (deployment/hermes/config.mcp-enki.yaml.example): DOBLE REJA (allowlist de Hermes +
-            guard del Portal con su interruptor OFF). Con el portal OFF el bloque es inerte.
+OJOS (inverso, YA cableado en el deploy · paso 5b)  Hermes es cliente MCP → bridge
+            mcp/enki-mcp-server.js declarado en su config.yaml (mcp_servers.enki) + hermes al grupo
+            www-data (lectura del bridge). NO se hornea ENKI_PROJECT (el Portal aplica su scope).
+            INERTE hasta que el dueño encienda 'portal-mcp' (OFF por defecto): cablearlo no abre nada.
+            DOBLE REJA (allowlist de Hermes + guard del Portal). --sin-ojos lo salta.
 LÍMITE VIVO  90s/request (makeRequest) — encargos largos → capa async futura (POST /v1/runs + run_id
             → hermes.encargo.completado/.failed por el bus).
 ```

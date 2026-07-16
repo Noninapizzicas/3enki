@@ -35,7 +35,8 @@
 ## Qué hace el deploy por ti (`setup-hermes.sh`, idempotente)
 
 1. **Usuario `hermes`** dedicado — Hermes ejecuta código; vive contenido, fuera de `/opt/enki` y de root.
-2. **Instalador oficial de Nous** (uv, python3.11, node, ffmpeg → todo bajo `/home/hermes`). Si el binario ya está, no se repite.
+1b. **Dependencias de sistema como root** (`ripgrep`, `ffmpeg`, `build-essential`) — ANTES del instalador. El usuario `hermes` no tiene sudo (por diseño); si el instalador oficial las metiera él, pediría contraseña que `hermes` no tiene y el deploy se colgaría. Las mete root aquí → el instalador las encuentra y salta el sudo.
+2. **Instalador oficial de Nous** (uv, python3.11, node → todo bajo `/home/hermes`). Si el binario ya está, no se repite.
 3. **`HERMES_API_KEY`**: nace UNA vez en `/opt/enki/data/.env` — Enki lo carga al arrancar (`index.js` lee `data/.env`), así el provider la encuentra solo; persiste al rsync. Si Hermes ya tenía key propia en su config, **la del humano manda** y `data/.env` se sincroniza a ella.
 4. **`api_server`** en `/home/hermes/.hermes/config.yaml` — la puerta local `127.0.0.1:8642`, misma key. **No** se abre en Caddy ni en el firewall (ley de la frontera).
 5. **`hermes-gateway`** en systemd, `enable --now` + sonda de vida con la key.

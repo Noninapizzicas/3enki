@@ -48,6 +48,18 @@ else
     log "usuario 'hermes' ya existe"
 fi
 
+# ---- 1b. Dependencias de sistema (ROOT) — antes del installer, para que NO pida sudo ----
+# El usuario 'hermes' es contenido: sin contraseña, sin sudo (ejecuta código; mejor
+# que no escale). El installer oficial las metería con `sudo apt-get` → prompt de
+# contraseña que 'hermes' no tiene, y el deploy se cuelga. Las mete ROOT aquí: el
+# installer las encuentra presentes y salta el sudo. build-essential ya lo trae
+# vps-setup.sh (sección 1), pero se repite por si setup-hermes.sh corre standalone
+# (apt es idempotente: lo ya instalado no se toca). Guardado: fallo → warn, sigue.
+log "dependencias de sistema para hermes (ripgrep, ffmpeg, build-essential)..."
+apt-get install -y -qq ripgrep ffmpeg build-essential > /dev/null 2>&1 \
+    && log "ripgrep + ffmpeg + build-essential listos (el installer no pedirá sudo)" \
+    || warn "no pude instalar ripgrep/ffmpeg/build-essential — el installer de hermes puede pedir sudo (que 'hermes' no tiene). Mételos a mano como root."
+
 # ---- 2. Instalador oficial (idempotente: si el binario está, no se repite) ----
 if [ -x "${HERMES_BIN}" ]; then
     log "hermes ya instalado ($(sudo -u hermes ${HERMES_BIN} --version 2>/dev/null || echo ok))"

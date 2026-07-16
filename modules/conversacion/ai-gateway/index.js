@@ -26,6 +26,7 @@ const GeminiProvider    = require('./providers/gemini-provider');
 const OllamaProvider    = require('./providers/ollama-provider');
 const ClaudeCliProvider = require('./providers/claude-cli-provider');
 const KimiProvider      = require('./providers/kimi-provider');
+const HermesProvider    = require('./providers/hermes-provider');
 
 const BaseModule = require('../../_shared/base-module');
 const Sintonizador = require('../../_shared/sintonizador');
@@ -144,6 +145,16 @@ class AiGatewayModule extends BaseModule {
     // el estado persistido del panel manda sobre el default vía cambiado.
     this._registrarBotonSintonia();
     this._registrarBotonHeadroom();
+    this._registrarBotonHermes();
+
+    // Cablea el emisor de AUDIT de la delegación a Hermes: el provider llama
+    // hermesSwitch.audit(...) tras cada llamada y aquí se convierte en evento
+    // de bus → la propiocepción lo capta (mismo espíritu que portal.invocado).
+    try {
+      require('./providers/hermes-switch.js').setAudit((d) => {
+        try { this.eventBus.publish('hermes.invocado', d); } catch (_) { /* best-effort */ }
+      });
+    } catch (_) { /* best-effort */ }
 
     this.logger.info('ai-gateway.loaded', {
       providers: this.providers.size,
@@ -227,10 +238,25 @@ class AiGatewayModule extends BaseModule {
     } catch (_) { /* best-effort */ }
   }
 
+  // Registra el botón 'hermes-agente' (grupo 'sistema', OFF por defecto): gobierna la
+  // delegación al agente Hermes (provider 'hermes', api_server local 127.0.0.1:8642).
+  // Delegar en un agente autónomo con arsenal propio es decisión consciente del dueño
+  // → nace apagado; el estado persistido del panel lo aplica vía cambiado al arrancar.
+  _registrarBotonHermes() {
+    try {
+      this.eventBus.publish('interruptor.registrar', {
+        id: 'hermes-agente', label: 'Hermes (agente trabajador)', grupo: 'sistema',
+        descripcion: 'Enki delega objetivos al agente Hermes (NousResearch, local en 127.0.0.1:8642) — él resuelve con su arsenal (browser, código, subagentes, skills) y memoria por proyecto. OFF = Hermes no existe para Enki. Cada delegación queda auditada (hermes.invocado → propiocepción).',
+        default: false
+      });
+    } catch (_) { /* best-effort */ }
+  }
+
   // interruptores (re)cargó y pide a todos que se registren -> respondemos.
   onSolicitarRegistro() {
     this._registrarBotonSintonia();
     this._registrarBotonHeadroom();
+    this._registrarBotonHermes();
   }
 
   // on/off en caliente desde el panel, sin reinicio.
@@ -243,6 +269,10 @@ class AiGatewayModule extends BaseModule {
     if (d.id === 'headroom') {
       try { require('./providers/headroom-switch.js').setOn(!!d.enabled); } catch (_) { /* best-effort */ }
       this.logger?.warn('ai-gateway.headroom.toggled', { activo: !!d.enabled, proxy: !!process.env.HEADROOM_PROXY_URL });
+    }
+    if (d.id === 'hermes-agente') {
+      try { require('./providers/hermes-switch.js').setOn(!!d.enabled); } catch (_) { /* best-effort */ }
+      this.logger?.warn('ai-gateway.hermes.toggled', { activo: !!d.enabled });
     }
   }
 
@@ -259,7 +289,8 @@ class AiGatewayModule extends BaseModule {
       gemini: GeminiProvider,
       ollama: OllamaProvider,
       'claude-cli': ClaudeCliProvider,
-      kimi: KimiProvider
+      kimi: KimiProvider,
+      hermes: HermesProvider
     };
     const credentialResolver = (provider, projectId) => this._resolveCredential(provider, projectId);
 

@@ -1,0 +1,38 @@
+# hermes-gateway.service — el agente Hermes VIVO como servicio del VPS.
+#
+# Hermes (NousResearch/hermes-agent) corre como TRABAJADOR de Enki: Enki le
+# delega objetivos por el provider 'hermes' del ai-gateway (interruptor
+# 'hermes-agente', OFF por defecto) y Hermes responde por su api_server
+# OpenAI-compatible en 127.0.0.1:8642 — local, sin tocar el 80/443 de Caddy
+# ni el broker MQTT de Enki. Su memoria persiste en /home/hermes/.hermes.
+#
+# Instalar (como root, tras el runbook del README):
+#   cp deployment/hermes/hermes-gateway.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now hermes-gateway
+#
+# Verificar:
+#   systemctl status hermes-gateway
+#   curl -s -H "Authorization: Bearer $API_SERVER_KEY" http://127.0.0.1:8642/v1/models
+
+[Unit]
+Description=Hermes Agent gateway (api_server local 127.0.0.1:8642) — trabajador de Enki
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+WorkingDirectory=/home/hermes
+Environment=HOME=/home/hermes
+# El instalador oficial deja el binario en ~/.local/bin
+ExecStart=/home/hermes/.local/bin/hermes gateway start
+Restart=on-failure
+RestartSec=5
+# Hermes ejecuta código como parte de su arsenal — contenerlo al usuario hermes
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

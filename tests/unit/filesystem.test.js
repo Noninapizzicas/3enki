@@ -786,5 +786,57 @@ function publishedOf(mocks, name) {
     await m.onUnload(); await cleanup(tmpDir);
   });
 
+  // ==========================================
+  // Group: Posición 3 — snapshot-antes-de-sobrescribir (la RED)
+  // ==========================================
+
+  await testAsync('sobrescribir un fichero EXISTENTE deja snapshot del previo en .versions', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    // 26 "recetas" → truncado a 1 (el incidente exacto)
+    const original = JSON.stringify({ recetas: Array.from({ length: 26 }, (_, i) => ({ id: 'r' + i })) });
+    await m.handleWrite({ path: '/pizzepos/recetas.json', content: original });
+    const truncado = JSON.stringify({ recetas: [{ id: 'r0' }] });
+    const r = await m.handleWrite({ path: '/pizzepos/recetas.json', content: truncado });
+    assert.strictEqual(r.status, 200, 'la escritura NO se bloquea (la red no rompe el trabajo)');
+    // el fichero quedó truncado, PERO el previo está a salvo:
+    const vdir = path.join(tmpDir, 'pizzepos', '.versions', 'recetas.json');
+    const baks = fsSync.readdirSync(vdir).filter(f => f.endsWith('.bak'));
+    assert.ok(baks.length >= 1, 'hay al menos un snapshot');
+    const recuperado = fsSync.readFileSync(path.join(vdir, baks[baks.length - 1]), 'utf-8');
+    assert.strictEqual(recuperado, original, 'el snapshot contiene las 26 recetas originales (reversible)');
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
+  await testAsync('crear un fichero NUEVO no genera snapshot (no hay previo que salvar)', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/nuevo.json', content: '{"a":1}' });
+    assert.ok(!fsSync.existsSync(path.join(tmpDir, '.versions')), 'sin previo, sin snapshot');
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
+  await testAsync('el anillo de versiones se poda a las últimas 10', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/x.txt', content: 'v0' });
+    for (let i = 1; i <= 14; i++) await m.handleWrite({ path: '/x.txt', content: 'v' + i });
+    const vdir = path.join(tmpDir, '.versions', 'x.txt');
+    const baks = fsSync.readdirSync(vdir).filter(f => f.endsWith('.bak'));
+    assert.ok(baks.length <= 10, `anillo acotado (${baks.length} ≤ 10)`);
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
+  await testAsync('fs.edit también deja snapshot antes de aplicar el patch', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/lista.json', content: JSON.stringify({ items: [{ id: 'a' }] }) });
+    const r = await m.handleEdit({ path: '/lista.json', patches: [{ op: 'add', path: '/items/-', value: { id: 'b' } }] });
+    assert.strictEqual(r.status, 200);
+    const vdir = path.join(tmpDir, '.versions', 'lista.json');
+    assert.ok(fsSync.existsSync(vdir) && fsSync.readdirSync(vdir).some(f => f.endsWith('.bak')), 'edit dejó snapshot del previo');
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
   console.log('\nTodos los tests pasaron.');
 })();

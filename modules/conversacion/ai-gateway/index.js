@@ -353,9 +353,16 @@ class AiGatewayModule extends BaseModule {
     // ramas blueprint/cajones retornaban ANTES de este set, asi que el LLM de una pagina
     // de cajones (p.ej. escandallo) NUNCA veia invoke_agent / crear_agente_desde_caso — el
     // comentario decia "siempre se exponen" pero el codigo se iba antes de cumplirlo.
+    // NACIMIENTO (posición 1): fs.write NO es universal. Es una primitiva peligrosa del
+    // módulo FS que se filtraba a TODA página; en una página de dominio el LLM habla los
+    // EVENTOS de su dominio (el dato de dominio se cambia emitiendo la causa de su dueño,
+    // no forjando el fichero). fs.write nace SOLO donde escribir ficheros ES el dominio
+    // (chat plano sin page_id → devuelve `all`; páginas con prefijo 'fs' → por prefijo).
+    // Raíz del incidente the-pirate: el LLM en la página de escandallo tenía fs.write y
+    // truncó recetas.json (dato ajeno). fs.read/list/search se quedan (leer es libre).
     const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente', 'crear_agente', 'crear_agente_desde_caso',
       'buscar_capacidad', 'detalle_capacidad',
-      'fs.read', 'fs.write', 'fs.list', 'fs.search',
+      'fs.read', 'fs.list', 'fs.search',
       'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
       'fijar_objetivo', 'evaluar_rail',
       'leer_web', 'descargar_web', 'leer_imagen']);

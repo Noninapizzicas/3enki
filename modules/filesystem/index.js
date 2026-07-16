@@ -85,7 +85,7 @@ class FilesystemModule extends BaseModule {
   constructor() {
     super();
     this.name = 'filesystem';
-    this.version = '2.1.0';
+    this.version = '2.3.0';
     this.basePath = path.join(process.cwd(), 'data');
     this.uiHandler = null;
 
@@ -786,6 +786,9 @@ class FilesystemModule extends BaseModule {
         contentBuffer = data.content;
         fileSize = Buffer.byteLength(data.content, 'utf-8');
       }
+      // Posición 3 (la RED): snapshot ANTES de sobrescribir un fichero que ya existe.
+      // Nada que se reemplace se pierde sin red — la destructividad se vuelve reversible.
+      if (!isNew) await this._snapshotAntesDeSobrescribir(safePath);
       await this._atomicWriteFile(safePath, contentBuffer, data.encoding === 'base64' ? undefined : 'utf-8');
 
       const eventType = isNew ? 'fs.file.created' : 'fs.file.updated';
@@ -875,6 +878,7 @@ class FilesystemModule extends BaseModule {
       }
 
       const newContent = JSON.stringify(doc, null, 2);
+      await this._snapshotAntesDeSobrescribir(safePath);   // la RED también en edit (por si un patch mal formado daña)
       await this._atomicWriteFile(safePath, newContent, 'utf-8');
 
       const fileSize = Buffer.byteLength(newContent, 'utf-8');
@@ -1207,6 +1211,39 @@ class FilesystemModule extends BaseModule {
       }
     }
     return cur;
+  }
+
+  // ==========================================
+  // Posición 3 (la RED): snapshot-antes-de-sobrescribir
+  // ==========================================
+  // Antes de reemplazar un fichero que YA existe, vuelca sus bytes previos a un anillo
+  // <dir>/.versions/<base>/<timestamp>.bak. La destructividad se vuelve REVERSIBLE por
+  // construcción: nada que se sobrescriba se pierde sin red. Cierra de raíz la clase
+  // "salmorejo/recetas perdido" — aunque el caller trunque el fichero, el previo queda.
+  // Best-effort: si el snapshot falla, se avisa (métrica + warn) pero la escritura NO se
+  // bloquea (la red que rompe el trabajo sería peor que la red que a veces falla).
+  async _snapshotAntesDeSobrescribir(safePath) {
+    // El versionado no se versiona a sí mismo (evita recursión y explosión de backups).
+    if (safePath.includes(`${path.sep}.versions${path.sep}`)) return;
+    try {
+      const dir = path.dirname(safePath);
+      const base = path.basename(safePath);
+      const vdir = path.join(dir, '.versions', base);
+      const prev = await fs.readFile(safePath);                 // los bytes de AHORA
+      await fs.mkdir(vdir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      await this._atomicWriteFile(path.join(vdir, `${stamp}.bak`), prev);
+      // Anillo acotado: conservar solo las últimas KEEP versiones (poda las más viejas).
+      const KEEP = 10;
+      const baks = (await fs.readdir(vdir)).filter(f => f.endsWith('.bak')).sort();
+      for (const old of baks.slice(0, Math.max(0, baks.length - KEEP))) {
+        try { await fs.unlink(path.join(vdir, old)); } catch (_) { /* best-effort */ }
+      }
+      this.metrics?.increment('filesystem.snapshot.ok');
+    } catch (err) {
+      this.metrics?.increment('filesystem.snapshot.failed', { reason: err.code || 'unknown' });
+      this.logger?.warn?.('filesystem.snapshot.failed', { path: safePath, error: err.message });
+    }
   }
 
   // ==========================================

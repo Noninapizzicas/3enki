@@ -26,8 +26,13 @@ User=hermes
 Group=hermes
 WorkingDirectory=/home/hermes
 Environment=HOME=/home/hermes
-# El instalador oficial deja el binario en ~/.local/bin
-ExecStart=/home/hermes/.local/bin/hermes gateway start
+# El instalador oficial deja el binario en ~/.local/bin.
+# 'gateway run' = el proceso EN PRIMER PLANO (el que systemd supervisa). OJO: NO
+# 'gateway start' — ése es el wrapper que le habla a systemctl para gestionar el
+# servicio de Hermes y EXIGE root ('System gateway start requires root'); bajo
+# User=hermes entra en bucle de fallo. 'run' es justo lo que Hermes hornea en su
+# propia unit (ExecStart=… -m hermes_cli.main gateway run).
+ExecStart=/home/hermes/.local/bin/hermes gateway run
 Restart=on-failure
 RestartSec=5
 # Hermes ejecuta código como parte de su arsenal — contenerlo al usuario hermes

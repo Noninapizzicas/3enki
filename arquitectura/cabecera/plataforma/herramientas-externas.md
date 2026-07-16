@@ -1,18 +1,20 @@
 ---
 id: plataforma/herramientas-externas
 dominio: plataforma
-resumen: Órganos externos por naturaleza — Crawl4RS (web, Docker por Chromium) · OCR4RS (imagen/PDF escaneado, Rust puro NATIVO) · Python (SearXNG, Headroom, Docker). Las dos alas de la evidencia externa (web+físico). Enganche al ejecutor por config.
+resumen: Órganos externos por naturaleza — Crawl4RS (web, Docker por Chromium) · OCR4RS (imagen/PDF escaneado, Rust puro NATIVO) · Python (SearXNG, Headroom, Docker) · Hermes (agente trabajador nativo :8642, delegación gobernada). Las dos alas de la evidencia externa (web+físico) + el brazo que ejecuta. Enganche al ejecutor por config.
 fuentes:
   - deployment/python-tools/**
   - deployment/crawl4rs/**
   - deployment/ocr4rs/**
+  - deployment/hermes/**
   - deployment/vps-setup.sh
+  - deployment/vps.manifest.js
   - modules/crawl4rs/**
   - modules/ocr4rs/**
   - modules/_shared/error-fertil.js
   - modules/cosecha/cantera/enki/leer-web/**
   - modules/cosecha/cantera/enki/precio-ingredientes-web/**
-verificado: 2026-07-10
+verificado: 2026-07-16
 ---
 
 # HERRAMIENTAS EXTERNAS — Crawl4RS en Docker (el órgano web) · Python en Docker (Headroom · el contenedor universal)
@@ -181,6 +183,35 @@ FASE 0 · PROVISIONING (HECHA, Docker)  deployment/python-tools/headroom/ {
 FIDELIDAD  los frenos de blueprint (<mod>.validar → 422) son el test AUTOMÁTICO: si la compresión rompiera un
            contrato, se ve en el acto. Por eso nace OFF y se gradúa (fases como el ejecutor). Ver propuesta
            arquitectura/decisiones/propuestas/headroom-compresion.md.
+```
+
+## HERMES (repo NousResearch/hermes-agent) — el AGENTE TRABAJADOR nativo (:8642)
+
+> No es una herramienta: es un **agente autónomo** con arsenal propio (browser, ejecución de
+> código, subagentes, skills) y **memoria persistente**. Enki le entrega el OBJETIVO (provider
+> `hermes` del ai-gateway, v2.33.0); Hermes decide el CÓMO. La suma, no el orgullo: Enki pone
+> gobierno (interruptor + audit + propiocepción), Hermes pone el músculo.
+
+```
+NATURALEZA  Python (uv/3.11) NATIVO en /home/hermes (usuario dedicado, contenido) — el installer
+            oficial de Nous trae su mundo entero bajo su HOME; sin Docker (patrón ocr4rs: sin
+            dependencia sucia que contener, la frontera es 127.0.0.1).
+PUERTA      api_server OpenAI-compatible en 127.0.0.1:8642 (key OBLIGATORIA — nace UNA vez en
+            /opt/enki/data/.env como HERMES_API_KEY; index.js carga data/.env → el provider la ve).
+MEMORIA     X-Hermes-Session-Key = 'enki:<project_id>' — cada proyecto tiene SU Hermes que recuerda.
+PROVISIONING  deployment/hermes/setup-hermes.sh (idempotente; vía vps-setup.sh 3a-quater u
+            standalone; opt-out --sin-hermes). vps.manifest.js exige hermes-gateway SOLO donde el
+            binario existe (VPS sin Hermes sigue verde). Interruptor 'hermes-agente' sembrado ON
+            al instalar (instalar es decidir; el apagado manual del panel se respeta).
+            Paso manual único: el proveedor LLM de Hermes (su key) → `sudo -u hermes -i hermes setup`.
+GOBIERNO    interruptor 'hermes-agente' (OFF de fábrica en el módulo; OFF corta también la selección
+            explícita) · priority 90 (el auto-fallback JAMÁS cae en Hermes) · AUDIT hermes.invocado
+            {ok, duracion_ms, model, session_key, modo, error?} → propiocepción (espíritu portal.invocado).
+OJOS (inverso, opcional)  Hermes es cliente MCP → bridge mcp/enki-mcp-server.js en su config.yaml
+            (deployment/hermes/config.mcp-enki.yaml.example): DOBLE REJA (allowlist de Hermes +
+            guard del Portal con su interruptor OFF). Con el portal OFF el bloque es inerte.
+LÍMITE VIVO  90s/request (makeRequest) — encargos largos → capa async futura (POST /v1/runs + run_id
+            → hermes.encargo.completado/.failed por el bus).
 ```
 
 ## OFRECER TOOLS COMO SKILL DE DESCUBRIMIENTO — las tools viven en segundo plano

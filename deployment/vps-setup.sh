@@ -21,7 +21,8 @@ set -euo pipefail
 DOMAIN=""
 for _arg in "$@"; do
     case "$_arg" in
-        --docker) ENKI_ENABLE_DOCKER=1 ;;
+        --docker)     ENKI_ENABLE_DOCKER=1 ;;
+        --sin-hermes) ENKI_ENABLE_HERMES=0 ;;
         --*)      echo "[!] flag desconocido ignorado: $_arg" ;;
         *)        DOMAIN="$_arg" ;;
     esac
@@ -369,6 +370,19 @@ if [ -x /usr/local/bin/ocr4rs ]; then
     else
         warn "ocr4rs instalado pero el servicio no arrancó (revisa: journalctl -u ocr4rs -f)"
     fi
+fi
+
+# ---- 3a-quater. HERMES — el agente trabajador (nativo, :8642) ----
+# La suma, no el orgullo: Enki gobierna (interruptor 'hermes-agente' + audit
+# hermes.invocado), Hermes pone el músculo (browser, código, subagentes, memoria
+# por proyecto). Todo en el deploy, un paso manual honesto (el proveedor LLM de
+# Hermes — su key es tuya; el script lo canta si falta). Opt-out: --sin-hermes.
+# Best-effort: si falla, el provider degrada honesto y el setup sigue.
+if [ "${ENKI_ENABLE_HERMES:-1}" = "1" ]; then
+    bash "${REPO_DIR}/deployment/hermes/setup-hermes.sh" "${INSTALL_DIR}" \
+        || warn "Hermes no quedó arriba — el provider degrada honesto (no-disponible). Reintenta: sudo ./deployment/hermes/setup-hermes.sh"
+else
+    log "Hermes saltado (--sin-hermes)"
 fi
 
 # ---- 3b. Ejecutor en contenedor (OPT-IN --docker — la ÚNICA concesión de seguridad) ----

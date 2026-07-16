@@ -34,15 +34,25 @@
 
 ## Qué hace el deploy por ti (`setup-hermes.sh`, idempotente)
 
+> **No usa el instalador `curl|bash` de Nous** — ése agarra `/dev/tty` (prompts de ripgrep/build-tools/wizard) y hace `sudo` como el usuario `hermes`, que es contenido y sin sudo → el deploy se cuelga. En su lugar instala **determinista con `uv`**, que es lo que ese instalador hace por dentro: uv → clonar el repo → `uv sync --extra all --locked` → symlink del binario. Cero interacción, reproducible.
+
 1. **Usuario `hermes`** dedicado — Hermes ejecuta código; vive contenido, fuera de `/opt/enki` y de root.
-1b. **Dependencias de sistema como root** (`ripgrep`, `ffmpeg`, `build-essential`) — ANTES del instalador. El usuario `hermes` no tiene sudo (por diseño); si el instalador oficial las metiera él, pediría contraseña que `hermes` no tiene y el deploy se colgaría. Las mete root aquí → el instalador las encuentra y salta el sudo.
-2. **Instalador oficial de Nous** (uv, python3.11, node → todo bajo `/home/hermes`). Si el binario ya está, no se repite.
-3. **`HERMES_API_KEY`**: nace UNA vez en `/opt/enki/data/.env` — Enki lo carga al arrancar (`index.js` lee `data/.env`), así el provider la encuentra solo; persiste al rsync. Si Hermes ya tenía key propia en su config, **la del humano manda** y `data/.env` se sincroniza a ella.
-4. **`api_server`** en `/home/hermes/.hermes/config.yaml` — la puerta local `127.0.0.1:8642`, misma key. **No** se abre en Caddy ni en el firewall (ley de la frontera).
-5. **`hermes-gateway`** en systemd, `enable --now` + sonda de vida con la key.
-6. **Interruptor `hermes-agente` sembrado ON** — una decisión, una llave: instalar el órgano ES el consentimiento; solo se siembra si el humano no decidió ya (tu apagado manual desde el panel se respeta siempre).
+2. **Dependencias de sistema como root** (`ripgrep`, `ffmpeg`, `build-essential`, `git`, `curl`) — `hermes` no tiene sudo (por diseño); las mete root.
+3. **Instalación determinista con `uv`** — clona `NousResearch/hermes-agent` en `/home/hermes/.hermes/hermes-agent`, `uv sync --extra all --locked` crea el venv, y symlink `~/.local/bin/hermes`. Python 3.11 lo gestiona uv (sin depender del python del sistema). Si el binario ya está, no se repite.
+4. **`HERMES_API_KEY`**: nace UNA vez en `/opt/enki/data/.env` — Enki lo carga al arrancar (`index.js` lee `data/.env`), así el provider la encuentra solo; persiste al rsync. Si Hermes ya tenía key propia en su config, **la del humano manda** y `data/.env` se sincroniza a ella.
+5. **`api_server`** en `/home/hermes/.hermes/config.yaml` — la puerta local `127.0.0.1:8642`, misma key. **No** se abre en Caddy ni en el firewall (ley de la frontera).
+6. **`hermes-gateway`** en systemd (`ExecStart=… hermes gateway run` — el proceso en primer plano; **no** `gateway start`, que le habla a systemctl y exige root), `enable --now` + sonda de vida con la key.
+7. **Interruptor `hermes-agente` sembrado ON** — una decisión, una llave: instalar el órgano ES el consentimiento; solo se siembra si el humano no decidió ya (tu apagado manual desde el panel se respeta siempre).
 
 Después del setup, el **reconciliador** (`reconcile.js` + `vps.manifest.js`) mantiene la unit convergida en cada pasada y **exige** `hermes-gateway` activo en su self-check — solo en los VPS donde el órgano está instalado. `--sin-hermes` en el setup lo salta y ese VPS sigue verde.
+
+### Empezar de cero (`--fresh`)
+
+Para reinstalar limpio (purga servicio + clon + venv + config, conserva el usuario):
+
+```bash
+sudo ./deployment/hermes/setup-hermes.sh /opt/enki --fresh
+```
 
 ## El único paso manual (una vez por VPS)
 

@@ -193,17 +193,20 @@ FIDELIDAD  los frenos de blueprint (<mod>.validar → 422) son el test AUTOMÁTI
 > gobierno (interruptor + audit + propiocepción), Hermes pone el músculo.
 
 ```
-NATURALEZA  Python (uv/3.11) NATIVO en /home/hermes (usuario dedicado, contenido) — el installer
-            oficial de Nous trae su mundo entero bajo su HOME; sin Docker (patrón ocr4rs: sin
-            dependencia sucia que contener, la frontera es 127.0.0.1).
+NATURALEZA  Python (uv/3.11) NATIVO en /home/hermes (usuario dedicado, contenido) — instalación
+            DETERMINISTA con uv (clonar repo → uv sync --extra all --locked → symlink), NO el
+            instalador curl|bash de Nous (agarra /dev/tty y hace sudo como 'hermes' → cuelga el
+            deploy). Sin Docker (patrón ocr4rs: sin dependencia sucia que contener, frontera 127.0.0.1).
 PUERTA      api_server OpenAI-compatible en 127.0.0.1:8642 (key OBLIGATORIA — nace UNA vez en
             /opt/enki/data/.env como HERMES_API_KEY; index.js carga data/.env → el provider la ve).
 MEMORIA     X-Hermes-Session-Key = 'enki:<project_id>' — cada proyecto tiene SU Hermes que recuerda.
-PROVISIONING  deployment/hermes/setup-hermes.sh (idempotente; vía vps-setup.sh 3a-quater u
-            standalone; opt-out --sin-hermes). vps.manifest.js exige hermes-gateway SOLO donde el
-            binario existe (VPS sin Hermes sigue verde). Interruptor 'hermes-agente' sembrado ON
-            al instalar (instalar es decidir; el apagado manual del panel se respeta).
-            Paso manual único: el proveedor LLM de Hermes (su key) → `sudo -u hermes -i hermes setup`.
+PROVISIONING  deployment/hermes/setup-hermes.sh (idempotente, uv determinista; --fresh purga y
+            reinstala; vía vps-setup.sh 3a-quater u standalone; opt-out --sin-hermes). systemd
+            ExecStart='hermes gateway run' (foreground, corre como 'hermes'; NO 'gateway start',
+            que exige root). vps.manifest.js exige hermes-gateway SOLO donde el binario existe (VPS
+            sin Hermes sigue verde). Interruptor 'hermes-agente' sembrado ON al instalar (instalar
+            es decidir; el apagado manual del panel se respeta). Paso manual único: el proveedor
+            LLM de Hermes (su key) → `sudo -u hermes -i hermes setup`.
 GOBIERNO    interruptor 'hermes-agente' (OFF de fábrica en el módulo; OFF corta también la selección
             explícita) · priority 90 (el auto-fallback JAMÁS cae en Hermes) · AUDIT hermes.invocado
             {ok, duracion_ms, model, session_key, modo, error?} → propiocepción (espíritu portal.invocado).

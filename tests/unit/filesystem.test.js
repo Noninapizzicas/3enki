@@ -838,5 +838,79 @@ function publishedOf(mocks, name) {
     await m.onUnload(); await cleanup(tmpDir);
   });
 
+  // ==========================================
+  // Group: Posición 2 — el traductor (camino canónico)
+  // ==========================================
+
+  // Inyecta una declaración de propiedad (lo que un dueño pondría en su manifest).
+  function declararPropiedad(m) {
+    m._mapaPropiedad = [{
+      patron: '/pizzepos/recetas.json', dueno: 'recetas',
+      palabras: [{ palabra: 'escandallo.coste.calculado', para: 'persistir el coste de una receta' }]
+    }];
+  }
+
+  await testAsync('OBSERVE (default): escritura ajena a dato de dominio → se PERMITE + canta fs.escritura.ajena', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    declararPropiedad(m);
+    // el LLM (source ai-gateway, no dueño) escribe recetas.json:
+    const r = await m.handleWrite({ path: '/pizzepos/recetas.json', content: '{"recetas":[]}', _source_module: 'ai-gateway' });
+    assert.ok(r.status === 200 || r.status === 201, 'observe NO bloquea (seguro en caliente)');
+    const cantos = publishedOf(mocks, 'fs.escritura.ajena');
+    assert.strictEqual(cantos.length, 1, 'cantó el testigo');
+    assert.strictEqual(cantos[0].dueno, 'recetas');
+    assert.deepStrictEqual(cantos[0].palabras, ['escandallo.coste.calculado']);
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
+  await testAsync('ENFORCE: escritura ajena → 409 CANONICAL_PATH que TIENDE la palabra (no escribe)', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    declararPropiedad(m);
+    m.onInterruptorCambiado({ data: { id: 'fs-camino-canonico', enabled: true } });  // enforce ON
+    const r = await m.handleWrite({ path: '/pizzepos/recetas.json', content: '{"recetas":[{"id":"solo1"}]}', _source_module: 'ai-gateway' });
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(r.error.code, 'CANONICAL_PATH');
+    assert.ok(r.error.message.includes('escandallo.coste.calculado'), 'tiende la palabra compartida');
+    assert.ok(r.error.message.includes('No se forja'), 'lenguaje en positivo (comunicación, no reja)');
+    // y NO escribió el fichero (el truncado no ocurre):
+    assert.ok(!fsSync.existsSync(path.join(tmpDir, 'pizzepos', 'recetas.json')), 'no forjó el efecto');
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
+  await testAsync('el DUEÑO escribiendo su propio fichero pasa (persistencia interna legítima)', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    declararPropiedad(m);
+    m.onInterruptorCambiado({ data: { id: 'fs-camino-canonico', enabled: true } });  // incluso en enforce
+    const r = await m.handleWrite({ path: '/pizzepos/recetas.json', content: '{"recetas":[]}', _source_module: 'recetas' });
+    assert.ok(r.status === 200 || r.status === 201, 'el dueño (source=recetas) escribe lo suyo');
+    assert.strictEqual(publishedOf(mocks, 'fs.escritura.ajena').length, 0, 'no canta: no es ajena');
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
+  await testAsync('ruta SIN dueño declarado → no-op (pasa siempre)', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    declararPropiedad(m);
+    m.onInterruptorCambiado({ data: { id: 'fs-camino-canonico', enabled: true } });
+    const r = await m.handleWrite({ path: '/otro/fichero.json', content: '{}', _source_module: 'ai-gateway' });
+    assert.ok(r.status === 200 || r.status === 201, 'ruta sin dueño no se toca');
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
+  await testAsync('el interruptor conmuta enforce↔observe en caliente', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    declararPropiedad(m);
+    m.onInterruptorCambiado({ data: { id: 'fs-camino-canonico', enabled: true } });
+    assert.strictEqual((await m.handleWrite({ path: '/pizzepos/recetas.json', content: '{}', _source_module: 'x' })).status, 409, 'enforce bloquea');
+    m.onInterruptorCambiado({ data: { id: 'fs-camino-canonico', enabled: false } });
+    const r = await m.handleWrite({ path: '/pizzepos/recetas.json', content: '{}', _source_module: 'x' });
+    assert.ok(r.status === 200 || r.status === 201, 'observe permite tras apagar');
+    await m.onUnload(); await cleanup(tmpDir);
+  });
+
   console.log('\nTodos los tests pasaron.');
 })();

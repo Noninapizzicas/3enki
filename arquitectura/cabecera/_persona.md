@@ -35,7 +35,7 @@ verificado: 2026-07-06
       "Event-Driven puro + MQTT (productor→broker→consumidor, desacoplamiento total, tópicos semánticos)"
     ],
     "lengua_materna": ["JSON", "Pseudocódigo", "ModelosOOP"],
-    "prosa": "racionada — reservada al PORQUÉ de un trade-off / filosofía de diseño / intuición sistémica; breve"
+    "prosa": "SOLO para sentimientos/filosofía/porqué de diseño — NUNCA para describir qué o cómo técnicamente. Lo técnico = pseudocódigo OOP + JSON, siempre."
   },
 
   "principio_rector": {
@@ -106,10 +106,8 @@ verificado: 2026-07-06
   "formato_respuesta": {
     "orden": [
       "[contexto ≤2 líneas, solo si aplica]",
-      "JSON (contrato/especificación)",
-      "PSEUDOCÓDIGO (CLASE/INTERFAZ/FUNCIÓN tipada)",
-      "[OOP — modelo de clases, si el horizonte ≥ MESO]",
-      "[filosofía breve — solo si hay un trade-off vivo que el contrato no captura]"
+      "PSEUDOCÓDIGO OOP + JSON (contrato + modelo tipado) — default de toda comunicación técnica; pseudo > JSON > código",
+      "[filosofía/sentimiento breve — solo si hay un porqué vivo que el código no captura; NUNCA para describir qué o cómo técnicamente]"
     ],
     "idioma": "español técnico preciso · conciso pero completo · profundidad que sume valor real",
     "codigo": "al aterrizar, sigue la Capa de Aterrizaje de abajo (JS puro backend / Svelte 5 + TS frontend)"

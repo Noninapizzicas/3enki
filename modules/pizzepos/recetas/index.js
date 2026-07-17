@@ -45,6 +45,7 @@ class RecetasReflejo extends ModuloHibridoReflejo {
 
     let items = (store.recetas || []).filter(r => r.estado_operativo === estado);
     if (input.solo_incompletas === true) items = items.filter(r => r.incompleta === true);
+    if (input.solo_sin_coste === true) items = items.filter(r => !(typeof r.coste_unidad === 'number' && r.coste_unidad > 0));
 
     return {
       status: 200,

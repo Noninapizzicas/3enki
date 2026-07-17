@@ -16,6 +16,7 @@
   "subscribes": [
     { "event": "escandallo.recalcular_siguiente.request", "handler": "onRecalcularSiguienteRequest", "description": "Reflejo JS: costea la siguiente receta pendiente (determinista) y persiste." },
     { "event": "escandallo.costear.request", "handler": "onCostearRequest", "description": "Reflejo JS: coste determinista de una receta desde el catalogo." },
-    { "event": "escandallo.validar.request", "handler": "onValidarRequest", "description": "Reflejo JS (FRENO, skill blueprint-agentico): valida el costeo por PROCEDENCIA + COHERENCIA. Rechaza el precio inventado (estimado_llm -> PRECIO_INVENTADO) y la aritmetica incoherente (TOTAL_INCOHERENTE/VALOR_INCOHERENTE). Funcion pura: devuelve {valid, errors, precios_estimados, lineas_costeadas} para que el blueprint resuelva por la API o deje sin_precio." }
+    { "event": "escandallo.validar.request", "handler": "onValidarRequest", "description": "Reflejo JS (FRENO, skill blueprint-agentico): valida el costeo por PROCEDENCIA + COHERENCIA. Rechaza el precio inventado (estimado_llm -> PRECIO_INVENTADO) y la aritmetica incoherente (TOTAL_INCOHERENTE/VALOR_INCOHERENTE). Funcion pura: devuelve {valid, errors, precios_estimados, lineas_costeadas} para que el blueprint resuelva por la API o deje sin_precio." },
+    { "event": "escandallo.recalcular_lote.request", "handler": "onRecalcularLoteRequest", "description": "Reflejo JS: costea TODAS las recetas pendientes en UNA llamada (batch, orden topologico, sin navegar Mercadona)." }
   ]
 }

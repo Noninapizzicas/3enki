@@ -1692,10 +1692,10 @@ recetas (PRIMER caso · module 2.0.0 · blueprint 2.6.0) {
   BLUEPRINT        : crear · editar · investigar_receta · ...   (cajones, fuzzy)
   resultado        : lectura por RPC de ~20-30s/300K-tokens → milisegundos/determinista
 }
-escandallo (SEGUNDO caso · module 2.0.0 · blueprint 3.8.0) {
-  REFLEJO index.js : recalcular_siguiente · costear   (_costear aritmética pura)
-  BLUEPRINT        : calcular (Mercadona / _precio_de_mercadona)   ;  cajón recalcular delega al reflejo
-  medido           : turno de chat 300K/20-30s → 42K/7.9s ; cadena de costeo ~120ms JS
+escandallo (SEGUNDO caso · module 2.2.0 · blueprint 3.11.0 · reflejo 1.4.0) {
+  REFLEJO index.js : recalcular_siguiente · recalcular_lote · costear   (_costear aritmética pura)
+  BLUEPRINT        : calcular (Mercadona / _precio_de_mercadona)   ;  cajón recalcular_siguiente y recalcular_lote delegan al reflejo
+  medido           : turno de chat 300K/20-30s → 42K/7.9s ; cadena de costeo ~120ms JS ; lote 30 recetas ~500ms
 }
 carta-marketing (TERCER caso · module 2.4.0 · blueprint 1.10.0 · SIN agente) {
   REFLEJO index.js : get_perfil · update_perfil (deep-merge /pizzepos/marca.json) · guardar_copy (/pizzepos/carta-marketing/copy.json) + eventos
@@ -1921,7 +1921,7 @@ APLICADO (los 6 que dan forma del subsistema-carta) {
                HTML no trivial + COMPLETITUD (cada producto aparece) + ALERGENOS (Reg. UE 1169/2011).
                save RE-VALIDA como gate → 422 si no representa.
   }
-  escandallo (module 2.2.0 · blueprint 3.11.0 · reflejo 1.3.0) {
+  escandallo (module 2.2.0 · blueprint 3.11.0 · reflejo 1.4.0) {
     contrato : PROCEDENCIA + COHERENCIA (el coste fija el precio de venta).
     freno    : escandallo.validar.request (_checkCosteo) — rechaza el precio INVENTADO (fuente
                'estimado_llm' → PRECIO_INVENTADO) y la aritmética incoherente (coste_total=Σlíneas).

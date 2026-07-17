@@ -21,12 +21,19 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'escandallo';
-    this.version = 'reflejo-1.3.0';
+    this.version = 'reflejo-1.4.0';
+    this._cacheCatalogo = null;
+    this._cacheProjectId = null;
+    this._cacheTime = 0;
+    this._cacheTTL = 60000; // 1 minuto — evita recargar catalogo en ráfagas (recalcular_siguiente 30x)
   }
 
   // ── handlers RPC (una línea) ──
   onRecalcularSiguienteRequest(e) {
     return this._atender(e, 'recalcular_siguiente', 'escandallo.recalcular_siguiente.response', d => this._recalcularSiguiente(d));
+  }
+  onRecalcularLoteRequest(e) {
+    return this._atender(e, 'recalcular_lote', 'escandallo.recalcular_lote.response', d => this._recalcularLote(d));
   }
   onCostearRequest(e) {
     return this._atender(e, 'costear', 'escandallo.costear.response', d => this._costearReceta(d));
@@ -69,6 +76,54 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
         costeada: { receta_id: receta.id, nombre: receta.nombre, coste_unidad: r.coste_unidad, lineas_sin_precio: r.sin_precio.length },
         faltan, terminado: faltan === 0,
         siguiente: faltan > 0 ? 'vuelve a llamar recalcular_siguiente para la proxima' : 'completo'
+      }
+    };
+  }
+
+  // ── recalcular_lote — costea TODAS las pendientes en UNA llamada (batch, determinista).
+  //    Carga catalogo+recetas una vez, inyecta sub-recetas con coste conocido, costea las
+  //    sin coste en orden topologico. Persiste cada una via escandallo.coste.calculado.
+  //    Devuelve resumen: {costeadas:N, sin_precio:[...], terminado:true}.
+  //    NO navega Mercadona — solo catalogo + sub-recetas. ──
+  async _recalcularLote(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    const soloPendientes = input.solo_pendientes !== false;
+
+    const catalogo = await this._cargarCatalogo(input);
+    let recetas = (await this._cargarRecetas(input, input.estado || 'en_servicio'))
+      .filter(r => r && Array.isArray(r.lineas) && r.lineas.length > 0);
+
+    for (const r of recetas) {
+      if (typeof r.coste_unidad === 'number' && r.coste_unidad > 0) {
+        catalogo.porId[r.id] = { id: r.id, nombre: r.nombre, precio: r.coste_unidad, compra_unidad: 'ud', fuente: 'sub_receta' };
+      }
+    }
+
+    let pend = recetas.filter(r => soloPendientes ? !(typeof r.coste_unidad === 'number' && r.coste_unidad > 0) : true);
+    pend = pend.sort((a, b) => (ORDEN_TIPO[a.tipo] != null ? ORDEN_TIPO[a.tipo] : 1) - (ORDEN_TIPO[b.tipo] != null ? ORDEN_TIPO[b.tipo] : 1));
+
+    if (pend.length === 0) {
+      return { status: 200, data: { costeadas: 0, sin_precio: [], terminado: true } };
+    }
+
+    const costeadas = [];
+    const todas_sin_precio = new Set();
+    for (const receta of pend) {
+      const r = await this._costear(input, receta, catalogo, []);
+      if (r.sin_precio && r.sin_precio.length > 0) {
+        for (const sp of r.sin_precio) todas_sin_precio.add(sp);
+      }
+      this._persistir(input, receta, r);
+      costeadas.push({ receta_id: receta.id, nombre: receta.nombre, coste_unidad: r.coste_unidad, lineas_sin_precio: r.sin_precio.length });
+    }
+
+    return {
+      status: 200,
+      data: {
+        costeadas: costeadas,
+        total_costeadas: costeadas.length,
+        sin_precio: Array.from(todas_sin_precio),
+        terminado: true
       }
     };
   }
@@ -226,11 +281,19 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
   // ── carga de datos via el reflejo de recetas (JS↔JS, ms) ──
 
   async _cargarCatalogo(input) {
+    const now = Date.now();
+    if (this._cacheCatalogo && this._cacheProjectId === input.project_id && (now - this._cacheTime) < this._cacheTTL) {
+      return this._cacheCatalogo;
+    }
     const resp = await this._rpc('recetas.ingredientes.request', { project_id: input.project_id, correlation_id: input.correlation_id });
     const items = (resp && resp.status === 200 ? (resp.data?.ingredientes || []) : []);
     const porId = {}; const porNombre = {};
     for (const c of items) { if (c.id) porId[c.id] = c; if (c.nombre) porNombre[String(c.nombre).toLowerCase()] = c; }
-    return { items, porId, porNombre };
+    const result = { items, porId, porNombre };
+    this._cacheCatalogo = result;
+    this._cacheProjectId = input.project_id;
+    this._cacheTime = now;
+    return result;
   }
 
   async _cargarRecetas(input, estado) {

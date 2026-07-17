@@ -1,7 +1,8 @@
 {
   "_doc": "crawl4rs — PUENTE a Crawl4RS (repo D-os): crawler Rust self-hosted (navegador real Chromium/CDP + stealth + extracción end-to-end + crawl profundo BFS/DFS), envuelto como órgano del bus. Crawl4RS habla HTTP (servidor axum, JOB-BASED: POST /crawl → {id}, poll status, GET result); este reflejo traduce bus↔HTTP y esconde el HTTP en el contenedor, cerrando el 'rechinar' de que el crawler no hablara el bus. NACE OFF (interruptor 'crawl4rs', grupo sistema): el servicio corre ON-DEMAND, encender el puente es decisión consciente. DEGRADA HONESTO: OFF o servicio no alcanzable → 503 {degradado, motivo}; nunca finge. AUTH: /crawl va tras JWT; el token sale de POST /auth/token (libre si el servidor no configura api_key), cacheado y refrescado ante 401. El `stealth` NO es per-petición: es config de arranque del servidor Crawl4RS. ÚNICO órgano web del bus desde v0.2.0 (fastcrw retirado): el modo auto del motor cubre también el fetch ligero (HTTP puro primero; navegador solo ante 403/challenge). Ver ROADMAP de D-os (Fase 7 = MQTT nativo, alternativa futura a este puente HTTP). Config: base_url (default http://localhost:8081 — provisioning en deployment/crawl4rs/), api_key opcional, timeout_ms.",
   "name": "crawl4rs",
-  "version": "0.3.0",
+  "version": "0.4.0",
+  "_v0_4_0_nota": "v0.4.0: nace la MARCHA LARGA en el bus — login→sesión, la puerta que faltaba para páginas con contraseña. Reflejos crawl4rs.entrar (POST wrapper /login {url,pasos} → captura storageState → devuelve un sesion_id handle) y crawl4rs.abrir (POST wrapper /abrir {url,sesion,interactuar?,interceptar?} reusando la sesión). El wrapper Playwright es OTRO servicio (CRAWL4RS_PLAYWRIGHT_URL, default :8100), NO el axum :8081 (cuyo /crawl no conserva sesión): por eso un puente aparte y motivo de degradación 'sin_marcha_larga'. El storageState (cookies+localStorage = SECRETO) se guarda server-side en el módulo (TTL 30 min); el LLM solo maneja el sesion_id, nunca la sesión cruda. Tools de chat entrar_web + abrir_web. interceptar captura el JSON de la API interna (la jugada de precios en portales B2B). Honestidad heredada del motor: el wrapper nunca inventa (responde {fallo}); el stealth NO promete pasar DataDome/Turnstile. Motor: D-os bridge/playwright-wrapper (mergeado en main). Test: crawl4rs__marcha-larga.",
   "_v0_3_0_nota": "v0.3.0: nace crawl4rs.descargar (tool de chat descargar_web) — el eslabón url→bytes que faltaba. GET binario directo de un asset público (imagen/pdf) → {base64, content_type, ext, bytes}, acotado por max_descarga_bytes (10 MB). Cierra el hueco visto en vivo: el LLM tenía la url de la imagen pero su único url→bytes era el ejecutor+curl (gated), y se atascaba. Ahora encadena leer_web (halla la url) → descargar_web (trae los bytes) → contenido.add_imagen (persiste). Se expone descargar_web como tool global del ai-gateway (transversal, como leer_web).",
   "_v0_2_1_nota": "v0.2.1: motivo de degradación DISTINGUIDO (hallado en vivo): 401/403 del /auth/token ya no se disfraza de 'sin_servicio' — degrada con motivo 'auth_rechazada' y prescripción en message (error fértil). El compose deja de pasar CRAWL4RS_API_KEY vacía (el server de D-os trata la variable PRESENTE como clave configurada y blindaba /auth/token con clave '').",
   "_v0_1_1_nota": "v0.1.1: llega el provisioning Docker (deployment/crawl4rs/). base_url default → :8081 (el :8080 local es de SearXNG). Precedencia env > config para CRAWL4RS_BASE_URL/CRAWL4RS_API_KEY — el código cumple lo que _base_url_doc ya prometía.",
@@ -19,6 +20,8 @@
     { "event": "crawl4rs.buscar.request", "handler": "onBuscarRequest", "description": "Reflejo: búsqueda web {query, limit?} → POST /search (SearXNG detrás del servidor) → {resultados:[{titulo,url,resumen}], total}. 503 con prescripción si el servidor no tiene SEARXNG_URL." },
     { "event": "crawl4rs.mapear.request", "handler": "onMapearRequest", "description": "Reflejo: enlaces de una página {url, mode?} → POST /map → {url, enlaces, total}. Ligero, sin contenido." },
     { "event": "crawl4rs.descargar.request", "handler": "onDescargarRequest", "description": "Reflejo: descarga un recurso {url} (imagen/pdf/asset) → {base64, content_type, ext, bytes}. GET binario directo, acotado por tamaño. El eslabón url→bytes entre leer_web y contenido.add_imagen." },
+    { "event": "crawl4rs.entrar.request", "handler": "onEntrarRequest", "description": "MARCHA LARGA: login → sesión. {url, pasos:[{tipo:fill|click|wait|scroll, selector?, valor?, ms?}], stealth?, emular?, proxy?} → POST wrapper /login → captura el storageState → { sesion_id, final_url, expira_en_ms }. El sesion_id es un handle; el storageState (secreto) se queda server-side. 503 sin_marcha_larga si el wrapper no está." },
+    { "event": "crawl4rs.abrir.request", "handler": "onAbrirRequest", "description": "MARCHA LARGA: abre una URL YA autenticado reusando la sesión. {url, sesion_id, interactuar?, interceptar?, stealth?, emular?, proxy?} → POST wrapper /abrir → { html, final_url, status_http, intercepted }. interceptar captura el JSON de la API interna (precios). 409 SESION_DESCONOCIDA si el sesion_id caducó (vuelve a entrar)." },
     { "event": "interruptor.cambiado", "handler": "onInterruptorCambiado", "description": "Enciende/apaga el puente en caliente (id 'crawl4rs'). OFF → todo degrada 503." },
     { "event": "interruptor.solicitar_registro", "handler": "onSolicitarRegistro", "description": "Re-registra su botón (cura la carrera de arranque del panel)." }
   ],
@@ -28,6 +31,8 @@
     { "event": "crawl4rs.buscar.response", "description": "{ resultados:[{titulo,url,resumen}], total } o error con la prescripción del servidor en message." },
     { "event": "crawl4rs.mapear.response", "description": "{ url, enlaces:[...], total } o 503 degradado." },
     { "event": "crawl4rs.descargar.response", "description": "{ url, content_type, ext, bytes, base64 } o error (413 demasiado grande, 5xx upstream, 503 degradado)." },
+    { "event": "crawl4rs.entrar.response", "description": "{ sesion_id, final_url, expira_en_ms } o error (LOGIN_FALLIDO 502/504, 503 sin_marcha_larga). NUNCA devuelve el storageState (secreto)." },
+    { "event": "crawl4rs.abrir.response", "description": "{ html, final_url, status_http, intercepted:[{url,status,json}] } o error (409 SESION_DESCONOCIDA, 503 sin_marcha_larga)." },
     { "event": "interruptor.registrar", "description": "Registra el botón 'crawl4rs' (grupo sistema, OFF por defecto)." }
   ],
   "tools": [
@@ -75,12 +80,72 @@
       },
       "handler": "handleDescargarTool",
       "errores_conocidos": ["INVALID_INPUT", "DEMASIADO_GRANDE", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+    },
+    {
+      "name": "entrar_web",
+      "description": "ENTRA en una página con contraseña (login → sesión) — la marcha larga. Ejecuta un guion de pasos sobre el formulario (rellena email/contraseña, pulsa entrar) y devuelve un sesion_id para leer luego con abrir_web. ÚSALA para portales B2B / mayoristas / paneles de cliente donde los precios o el stock SOLO se ven tras iniciar sesión. Los selectores reales (campos, botón) los sacas abriendo la página una vez con leer_web. Las credenciales, de credential-manager (no las inventes ni las dejes en claro). Requiere el interruptor 'crawl4rs' ON y la marcha larga desplegada.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": { "type": "string", "minLength": 1, "description": "URL de la página de login." },
+          "pasos": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Guion sobre el formulario, en orden. Cada paso: fill (escribe valor en selector), click (pulsa selector), wait (espera selector o ms), scroll (baja veces).",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tipo": { "type": "string", "enum": ["fill", "click", "wait", "scroll"] },
+                "selector": { "type": "string", "description": "Selector CSS del campo/botón (fill/click/wait)." },
+                "valor": { "type": "string", "description": "Texto a escribir (fill) — p.ej. email o contraseña." },
+                "ms": { "type": "number", "description": "Espera en milisegundos (wait sin selector)." },
+                "veces": { "type": "number", "description": "Cuántas veces baja (scroll)." }
+              },
+              "required": ["tipo"]
+            }
+          },
+          "stealth": { "type": "boolean", "description": "Oculta señales de automatización (navigator.webdriver, etc.). No promete pasar DataDome/Turnstile." }
+        },
+        "required": ["url", "pasos"]
+      },
+      "handler": "handleEntrarTool",
+      "errores_conocidos": ["INVALID_INPUT", "LOGIN_FALLIDO", "UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "UPSTREAM_INVALID_RESPONSE"]
+    },
+    {
+      "name": "abrir_web",
+      "description": "Abre una URL YA autenticado, reusando el sesion_id de entrar_web. Devuelve el HTML y, si pides interceptar, el JSON que la página pide a su propia API interna (la vía LIMPIA para precios/stock en un portal B2B — mejor que raspar el HTML). ÚSALA en bucle tras entrar_web: una sesión, muchas páginas. Si el sesion_id caducó (409), vuelve a entrar_web.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "url": { "type": "string", "minLength": 1, "description": "URL a abrir dentro de la sesión (catálogo, ficha, panel)." },
+          "sesion_id": { "type": "string", "minLength": 1, "description": "El handle devuelto por entrar_web." },
+          "interceptar": {
+            "description": "Captura el JSON de la API interna. true = todo JSON; { contiene:['/api/'] } = filtra por subcadena de URL.",
+            "oneOf": [
+              { "type": "boolean" },
+              { "type": "object", "properties": { "contiene": { "type": "array", "items": { "type": "string" } } } }
+            ]
+          },
+          "interactuar": {
+            "type": "array",
+            "description": "Guion (mismo vocabulario que entrar_web) antes de leer: scroll infinito, 'cargar más', pestañas.",
+            "items": { "type": "object", "properties": { "tipo": { "type": "string", "enum": ["fill", "click", "wait", "scroll"] }, "selector": { "type": "string" }, "valor": { "type": "string" }, "ms": { "type": "number" }, "veces": { "type": "number" } }, "required": ["tipo"] }
+          }
+        },
+        "required": ["url", "sesion_id"]
+      },
+      "handler": "handleAbrirTool",
+      "errores_conocidos": ["INVALID_INPUT", "SESION_DESCONOCIDA", "UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "UPSTREAM_INVALID_RESPONSE"]
     }
   ],
   "config": {
     "base_url": "http://localhost:8081",
+    "playwright_url": "http://localhost:8100",
     "api_key": null,
     "timeout_ms": 120000,
+    "_playwright_url_doc": "Base del wrapper Playwright (la MARCHA LARGA: login→sesión), servicio APARTE del axum. En docker-compose es el servicio 'browser' (http://browser:8100). Override por env CRAWL4RS_PLAYWRIGHT_URL (manda sobre este config). Si no está desplegado, entrar/abrir degradan honesto (503 sin_marcha_larga); leer/buscar/mapear/rastrear siguen funcionando.",
     "_base_url_doc": "Base del servicio Crawl4RS (contenedor enki-crawl4rs, deployment/crawl4rs/ → 127.0.0.1:8081; el :8080 local es de SearXNG). Override por env CRAWL4RS_BASE_URL (el env manda sobre este config). En docker-compose compartido, el nombre del servicio (p.ej. http://crawl4rs:8080).",
     "_api_key_doc": "Opcional. Si el servidor Crawl4RS configura api_key, ponla aquí (o env CRAWL4RS_API_KEY) para obtener el token. Si el servidor no la exige, déjala null."
   }

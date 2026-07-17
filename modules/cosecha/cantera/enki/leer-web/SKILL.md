@@ -1,11 +1,11 @@
 ---
 name: leer-web
-description: Leer la web DENTRO de un turno y SACARLE EL MÁXIMO — leer una página, buscar, mapear enlaces, rastrear un sitio, y extraer imágenes/precios/datos estructurados. crawl4rs es un MÓDULO del bus (no un fichero ni un agente): se conduce por bus.publishAndWait, la herramienta que el diseño deja en segundo plano. Playbook con recetas concretas (imágenes de productos, fichas, catálogos) + cómo leer el error para no rendirse.
+description: Leer la web DENTRO de un turno y SACARLE EL MÁXIMO — leer una página, buscar, mapear enlaces, rastrear un sitio, extraer imágenes/precios/datos estructurados, y ENTRAR en páginas con contraseña (login→sesión, la marcha larga). crawl4rs es un MÓDULO del bus (no un fichero ni un agente): se conduce por bus.publishAndWait, la herramienta que el diseño deja en segundo plano. Playbook con recetas concretas (imágenes de productos, fichas, catálogos, portales B2B tras login) + cómo leer el error para no rendirse.
 fuente: enki
 dominio: web
 lente_dominio: web
 lente_tarea: consultar
-tags: [web, datos, crawl4rs, leer, buscar, mapear, rastrear, imagenes, scraping, bus, herramientas, precio, catalogo, investigacion]
+tags: [web, datos, crawl4rs, leer, buscar, mapear, rastrear, imagenes, scraping, bus, herramientas, precio, catalogo, investigacion, login, sesion, autenticado, contraseña, portal, b2b, mayorista, playwright, interceptar, stealth]
 ---
 
 # Leer web — conduce crawl4rs por el bus y sácale el máximo
@@ -114,6 +114,114 @@ producto hay dos vías, según si la quieres *propia* o basta *apuntar*:
 NUNCA descargues con el `ejecutor`+curl (está gated y te atascas): `descargar_web` es el paso
 url→bytes. Y para adjuntarla, `contenido.add_imagen` — no la dejes suelta en un fichero.
 
+## Páginas con contraseña — la MARCHA LARGA (login → sesión)
+
+> **El caso que los cuatro verbos NO cubren:** un portal B2B / mayorista / panel de cliente donde
+> los precios (o el stock, o las fichas) **solo se ven tras iniciar sesión**. `leer`/`rastrear` van
+> al **servidor** de Crawl4RS (marcha corta/auto: fetch ligero → navegador real), y ese servidor
+> **no conserva una sesión con login**. Para entrar con usuario/contraseña el motor tiene una
+> **segunda puerta**: la **marcha larga** (el wrapper Playwright). Y desde v0.4.0 está **asomada al
+> bus** como dos verbos gemelos de los otros — **la conduces igual, por `bus.publishAndWait`**.
+
+### Los dos verbos de la marcha larga (por el bus, como los demás)
+
+```
+ent = bus.publishAndWait('crawl4rs.entrar.request', { url:'https://portal/login', pasos:[…] })
+      // → { sesion_id, final_url, expira_en_ms }
+res = bus.publishAndWait('crawl4rs.abrir.request',  { url:'https://portal/catalogo', sesion_id: ent.data.sesion_id,
+                                                      interceptar:{ contiene:['/api/'] } })
+      // → { html, final_url, status_http, intercepted:[{url,status,json}] }
+```
+
+- **`entrar`** ejecuta el **guion de pasos** sobre el formulario y **captura la sesión**. Te
+  devuelve un **`sesion_id` (un handle)** — **NO** el `storageState`: la sesión (cookies +
+  localStorage = secreto) se queda guardada en el módulo, tú solo llevas el handle. Caduca a los
+  30 min (`expira_en_ms`).
+- **`abrir { url, sesion_id }`** abre **ya autenticado** reusando esa sesión. Un solo `sesion_id`
+  sirve para **muchos `abrir`** → volumen autenticado barato (la palanca: entras una vez, cosechas
+  N páginas). Si el handle caducó → `409 SESION_DESCONOCIDA`: vuelve a `entrar`.
+- En el chat son las tools **`entrar_web`** y **`abrir_web`** (mismos argumentos).
+
+### El guion de `pasos` (el vocabulario)
+
+Cada paso es `{ tipo, selector?, valor?, ms?, veces?, pausa_ms? }`:
+
+| `tipo` | qué hace |
+|---|---|
+| `fill`  | escribe `valor` en el campo `selector` (email, contraseña) |
+| `click` | pulsa `selector` (el botón de entrar, aceptar cookies) |
+| `wait`  | espera un `selector` (algo del área privada) o `ms` milisegundos |
+| `scroll`| baja al fondo `veces` veces con `pausa_ms` (scroll infinito / lazy-load) |
+
+Receta de login típica (portal B2B, precios tras entrar):
+```
+bus.publishAndWait('crawl4rs.entrar.request', {
+  url: 'https://portal.mayorista.com/login',
+  pasos: [
+    { tipo: 'click', selector: '#aceptar-cookies' },
+    { tipo: 'fill',  selector: "input[name='email']",    valor: '<EMAIL>' },
+    { tipo: 'fill',  selector: "input[name='password']", valor: '<SECRETO>' },
+    { tipo: 'click', selector: "button[type='submit']" },
+    { tipo: 'wait',  selector: "a[href*='my-account']" }
+  ]
+})   // → { sesion_id, final_url, expira_en_ms }
+```
+Los **selectores reales** (nombre del campo, botón) se sacan **abriendo la página una vez** con
+`leer` y mirando su markdown/HTML: no los adivines. El `wait` final confirma que entraste — sin él,
+capturas la sesión antes de que el login cuaje.
+
+### La jugada que gana en precios: INTERCEPTAR la API interna
+
+La web pinta la tabla de precios llamando a **su propia API** (`fetch('/api/precios')`). En vez de
+raspar el DOM renderizado, **captura ese JSON directamente** — más limpio y completo, a veces te
+saltas el HTML entero:
+```
+bus.publishAndWait('crawl4rs.abrir.request', {
+  url: 'https://portal/catalogo', sesion_id, interceptar: { contiene: ['/api/', '/precio'] }
+})   // → { intercepted: [ { url, status, json } ] }   json = {producto, precio, stock} tal cual
+```
+`interceptar: true` captura TODO JSON; `{contiene:[...]}` filtra por subcadena de URL. Espera
+`networkidle` para los XHR tardíos. **Para un catálogo con precios de coste, esto suele SER la
+solución** (mejor que `extract_css` sobre el grid).
+
+### Revelar contenido dinámico e imitar un cliente real
+
+- **`interactuar`** (mismo guion de `pasos`) en `abrir`: scroll infinito, "cargar más", pestañas,
+  contenido tras un clic — lo que solo aparece con interacción.
+- **`stealth: true`** (en `entrar` y `abrir`): parche ligero que oculta
+  `navigator.webdriver`/`plugins`/`chrome` + UA y locale realistas. Verificado: `navigator.webdriver`
+  pasa de `true` a `undefined`.
+- **`emular: { locale, timezone, geo:{latitude,longitude}, movil }`**: precios por región, versión
+  móvil, geolocalización con permiso.
+- **`proxy: { server, username?, password? }`**: salida por proxy (residencial cuando el sitio lo pide).
+
+### Si la sesión caduca → re-login automático
+
+El motor (marcha larga cableada en el CLI con `CRAWL4RS_LOGIN`) trae un **lazo**: cuando una
+descarga "huele a sesión perdida" (**401** o **redirección al login**), **re-loguea, refresca la
+celda de sesión y reintenta UNA vez** (sin bucles). No tienes que orquestarlo: si logueaste, el
+volumen sobrevive a que la cookie expire.
+
+### Honestidad (dos verdades que evitan atascarte)
+
+1. **Anti-bot, sin promesas.** El stealth es ligero y honesto: **NO** promete pasar
+   DataDome / PerimeterX / Cloudflare Turnstile — esos detectan por *comportamiento* y señales de
+   *headless*. Si un portal los usa, hace falta residencial + ritmo humano, y **a veces no hay
+   solución**. Dilo, no lo rodees inventando.
+2. **El precondicional de la marcha larga: el wrapper desplegado.** `entrar`/`abrir` viven en el
+   bus (v0.4.0), pero por debajo llaman al **wrapper Playwright** — un servicio APARTE del axum
+   (`CRAWL4RS_PLAYWRIGHT_URL`, el `browser` del compose). Si NO está levantado, `entrar`/`abrir`
+   degradan honesto **`503 sin_marcha_larga`** (mientras `leer`/`buscar`/`mapear`/`rastrear` siguen,
+   porque esos van al axum). Ese 503 **no** es "web inscrapeable": es "falta levantar el servicio
+   browser" — dilo así. (Y sigue sin existir `crawl4rs.login.request`: los verbos son
+   `crawl4rs.entrar`/`crawl4rs.abrir`.)
+
+### Credenciales — nunca en claro
+
+El `<SECRETO>` de la receta se rellena **en caliente**: léelo de **credential-manager**, no lo
+escribas en la skill, ni en un log, ni en la receta guardada. La sesión capturada (`storageState`)
+es igual de sensible que la contraseña — trátala como secreto, no la persistas suelta.
+
 ## Leer el error — la parte que evita rendirse
 
 Si `status` no es 200, `error.message` trae la interpretación (y la prescripción del servidor):
@@ -137,6 +245,7 @@ con throttle+retry), no de un turno de chat.
 ## Filosofía
 
 La tool vive en segundo plano para que no encadenes primitivas a ciegas. Este skill te da el mapa
-completo —los cuatro verbos, cómo extraer, cómo leer el error, el ritmo— para que la exprimas sin
-improvisar. La tool es la mano; este skill, cómo moverla; el saber de cada caso (precios, imágenes
-de un catálogo concreto) vive en su skill de dominio.
+completo —los cuatro verbos, la marcha larga (login→sesión) para lo que hay tras contraseña, cómo
+extraer, cómo interceptar la API, cómo leer el error, el ritmo— para que lo exprimas sin improvisar.
+La tool es la mano; este skill, cómo moverla; el saber de cada caso (precios, imágenes de un catálogo
+concreto) vive en su skill de dominio. Tú, con el mapa entero, montas el trabajo.

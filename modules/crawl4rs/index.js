@@ -22,25 +22,36 @@
  * (`crawl4rs serve` con stealth). Aquí solo se pide el crawl; el contenedor decide.
  */
 
+const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
 // :8081 en el host — el :8080 local es de SearXNG (deployment/python-tools).
 // El contenedor enki-crawl4rs (deployment/crawl4rs) publica 127.0.0.1:8081 → 8080 interno.
 const DEFAULT_BASE = 'http://localhost:8081';
+// La MARCHA LARGA vive en OTRO servicio: el wrapper Playwright (D-os
+// bridge/playwright-wrapper) — POST /login → sesión, POST /abrir {sesion}. En el
+// compose es http://browser:8100; en host, :8100. Es la puerta del login, NO el
+// servidor axum (:8081), cuyo /crawl no conserva sesión.
+const DEFAULT_PLAYWRIGHT = 'http://localhost:8100';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 class Crawl4rsModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'crawl4rs';
-    this.version = '0.2.1';
+    this.version = '0.4.0';
     this.activo = false;          // interruptor OFF por defecto (on-demand)
     this._baseUrl = DEFAULT_BASE;
+    this._playwrightUrl = DEFAULT_PLAYWRIGHT;   // la marcha larga (wrapper Playwright)
     this._apiKey = null;
     this._timeoutMs = 120000;
     this._pollMs = 500;
     this._token = null;           // JWT cacheado
     this._maxDescargaBytes = 10 * 1024 * 1024;   // tope del binario que baja descargar (10 MB)
+    // Almacén de sesiones de la marcha larga: el LLM recibe un sesion_id (handle);
+    // el storageState (cookies + localStorage = SECRETO) se queda AQUÍ, nunca sale al bus.
+    this._sesiones = new Map();   // sesion_id → { storageState, final_url, creada }
+    this._sesionTtlMs = 30 * 60 * 1000;          // la sesión caduca a los 30 min
   }
 
   async onLoad(context) {
@@ -49,9 +60,11 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     // Precedencia: env > config > default — el manifest siempre trae base_url,
     // así que el env solo manda si va primero (es el override por despliegue).
     this._baseUrl = String(process.env.CRAWL4RS_BASE_URL || cfg.base_url || DEFAULT_BASE).replace(/\/+$/, '');
+    this._playwrightUrl = String(process.env.CRAWL4RS_PLAYWRIGHT_URL || cfg.playwright_url || DEFAULT_PLAYWRIGHT).replace(/\/+$/, '');
     this._apiKey = process.env.CRAWL4RS_API_KEY || cfg.api_key || null;
     this._timeoutMs = Number(cfg.timeout_ms) || 120000;
     this._maxDescargaBytes = Number(cfg.max_descarga_bytes) || 10 * 1024 * 1024;
+    if (Number(cfg.sesion_ttl_ms) > 0) this._sesionTtlMs = Number(cfg.sesion_ttl_ms);
     this._registrarBoton();
     this.logger?.info('crawl4rs.loaded', { base_url: this._baseUrl, activo: this.activo });
   }
@@ -83,11 +96,16 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   onBuscarRequest(e)   { return this._atender(e, 'buscar',   'crawl4rs.buscar.response',   (d) => this._buscar(d)); }
   onMapearRequest(e)   { return this._atender(e, 'mapear',   'crawl4rs.mapear.response',   (d) => this._mapear(d)); }
   onDescargarRequest(e){ return this._atender(e, 'descargar','crawl4rs.descargar.response',(d) => this._descargar(d)); }
+  // marcha larga (login → sesión)
+  onEntrarRequest(e)   { return this._atender(e, 'entrar',   'crawl4rs.entrar.response',   (d) => this._entrar(d)); }
+  onAbrirRequest(e)    { return this._atender(e, 'abrir',    'crawl4rs.abrir.response',    (d) => this._abrir(d)); }
 
   // ── tool de chat ──
   async handleBuscarTool(args)    { return this._buscar(args || {}); }
   async handleLeerTool(args)      { return this._leer(args || {}); }
   async handleDescargarTool(args) { return this._descargar(args || {}); }
+  async handleEntrarTool(args)    { return this._entrar(args || {}); }
+  async handleAbrirTool(args)     { return this._abrir(args || {}); }
 
   // ── guardas ──
   _guard() {
@@ -99,7 +117,8 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     const prescripcion = {
       apagado: 'el interruptor crawl4rs está OFF — enciéndelo en el panel (grupo sistema). NO ES: motor caído.',
       sin_servicio: 'el contenedor enki-crawl4rs no responde en :8081 — verifica docker ps y /health. NO ES: web inscrapeable.',
-      auth_rechazada: 'el servidor Crawl4RS exige x-api-key (tiene CRAWL4RS_API_KEY configurada) y el puente no la tiene — ponla en el core (env CRAWL4RS_API_KEY) o retírala del contenedor. NO ES: motor caído ni throttle.'
+      auth_rechazada: 'el servidor Crawl4RS exige x-api-key (tiene CRAWL4RS_API_KEY configurada) y el puente no la tiene — ponla en el core (env CRAWL4RS_API_KEY) o retírala del contenedor. NO ES: motor caído ni throttle.',
+      sin_marcha_larga: 'la marcha larga (wrapper Playwright) no responde en CRAWL4RS_PLAYWRIGHT_URL — verifica el servicio browser (docker) y su /health. La marcha larga es OTRO servicio que el axum :8081; sin ella hay leer/buscar/mapear/rastrear pero NO login. NO ES: web inscrapeable.'
     }[motivo] || '';
     return { status: 503, error: { code: 'UPSTREAM_UNREACHABLE', message: `crawl4rs degradado: ${motivo}${prescripcion ? ' — ' + prescripcion : ''}`, details: { degradado: true, motivo } } };
   }
@@ -171,6 +190,111 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     if (r.status === 413) return this._errorResponse(413, 'DEMASIADO_GRANDE', `el recurso supera el tope (${Math.round(this._maxDescargaBytes / 1024 / 1024)} MB)`, { url: input.url });
     if (r.status < 200 || r.status >= 300) return this._errorResponse(r.status >= 400 ? r.status : 502, 'UPSTREAM_INVALID_RESPONSE', 'no se pudo descargar el recurso', { status: r.status, url: input.url });
     return { status: 200, data: { url: String(input.url), content_type: r.content_type, ext: r.ext, bytes: r.bytes, base64: r.base64 } };
+  }
+
+  // ── MARCHA LARGA: login → sesión (el wrapper Playwright, no el axum) ──
+  // _entrar: ejecuta el guion de pasos (fill/click/wait/scroll) contra el
+  // formulario, captura la sesión (storageState) y la GUARDA aquí. Devuelve al
+  // LLM solo un sesion_id (handle) + final_url — NUNCA el storageState (secreto).
+  async _entrar(input) {
+    const g = this._guard(); if (g) return g;
+    if (!input || !input.url) return this._invalid('url');
+    if (!Array.isArray(input.pasos) || input.pasos.length === 0) return this._invalid('pasos');
+    const payload = {
+      url: String(input.url),
+      pasos: input.pasos,
+      ...(input.stealth ? { stealth: true } : {}),
+      ...(input.emular ? { emular: input.emular } : {}),
+      ...(input.proxy ? { proxy: input.proxy } : {})
+    };
+    let r;
+    try { r = await this._playwrightCall('/login', payload); }
+    catch (_) { return this._degradado('sin_marcha_larga'); }
+    // El wrapper NUNCA inventa: si un paso falla responde { fallo:{tipo,motivo} }.
+    if (r.body && r.body.fallo) {
+      const f = r.body.fallo;
+      return this._errorResponse(f.tipo === 'timeout' ? 504 : 502, 'LOGIN_FALLIDO', `el login no cuajó: ${f.motivo || f.tipo}`, { fallo: f });
+    }
+    if (r.status < 200 || r.status >= 300 || !r.body || r.body.sesion == null) {
+      return this._errorResponse(r.status >= 400 ? r.status : 502, 'UPSTREAM_INVALID_RESPONSE', 'la marcha larga no devolvió sesión', { status: r.status });
+    }
+    const sesion_id = this._guardarSesion(r.body.sesion, r.body.final_url);
+    return { status: 200, data: { sesion_id, final_url: r.body.final_url || String(input.url), expira_en_ms: this._sesionTtlMs } };
+  }
+
+  // _abrir: abre una URL YA autenticado, reusando la sesión guardada. Admite
+  // interactuar (revelar) e interceptar (capturar el JSON de la API interna — la
+  // jugada de precios). El storageState se inyecta AQUÍ desde el sesion_id.
+  async _abrir(input) {
+    const g = this._guard(); if (g) return g;
+    if (!input || !input.url) return this._invalid('url');
+    if (!input.sesion_id) return this._invalid('sesion_id');
+    const storageState = this._leerSesion(input.sesion_id);
+    if (storageState == null) {
+      return this._errorResponse(409, 'SESION_DESCONOCIDA', 'ese sesion_id no existe o caducó — vuelve a entrar (crawl4rs.entrar) para renovar la sesión', { sesion_id: input.sesion_id });
+    }
+    const payload = {
+      url: String(input.url),
+      sesion: storageState,
+      ...(input.interactuar ? { interactuar: input.interactuar } : {}),
+      ...(input.interceptar ? { interceptar: input.interceptar } : {}),
+      ...(input.stealth ? { stealth: true } : {}),
+      ...(input.emular ? { emular: input.emular } : {}),
+      ...(input.proxy ? { proxy: input.proxy } : {})
+    };
+    let r;
+    try { r = await this._playwrightCall('/abrir', payload); }
+    catch (_) { return this._degradado('sin_marcha_larga'); }
+    if (r.body && r.body.fallo) {
+      const f = r.body.fallo;
+      return this._errorResponse(f.tipo === 'timeout' ? 504 : 502, 'UPSTREAM_INVALID_RESPONSE', `no se pudo abrir: ${f.motivo || f.tipo}`, { fallo: f });
+    }
+    if (r.status < 200 || r.status >= 300 || !r.body) {
+      return this._errorResponse(r.status >= 400 ? r.status : 502, 'UPSTREAM_INVALID_RESPONSE', 'la marcha larga rechazó la petición', { status: r.status });
+    }
+    return { status: 200, data: {
+      html: r.body.html || '',
+      final_url: r.body.final_url || String(input.url),
+      status_http: r.body.status ?? null,
+      intercepted: Array.isArray(r.body.intercepted) ? r.body.intercepted : []
+    } };
+  }
+
+  // Guarda una sesión y devuelve su handle. Purga las caducadas de paso.
+  _guardarSesion(storageState, final_url) {
+    this._purgarSesiones();
+    const sesion_id = 'ses_' + crypto.randomUUID();
+    this._sesiones.set(sesion_id, { storageState, final_url, creada: Date.now() });
+    return sesion_id;
+  }
+  // Devuelve el storageState de un handle vivo (o null si no existe/caducó).
+  _leerSesion(sesion_id) {
+    const s = this._sesiones.get(sesion_id);
+    if (!s) return null;
+    if (Date.now() - s.creada > this._sesionTtlMs) { this._sesiones.delete(sesion_id); return null; }
+    return s.storageState;
+  }
+  _purgarSesiones() {
+    const ahora = Date.now();
+    for (const [k, s] of this._sesiones) if (ahora - s.creada > this._sesionTtlMs) this._sesiones.delete(k);
+  }
+
+  // POST al wrapper Playwright (otro servicio, sin JWT). Overridable en test.
+  async _playwrightCall(path, payload) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), this._timeoutMs);
+    try {
+      const resp = await fetch(this._playwrightUrl + path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: ctrl.signal
+      });
+      const text = await resp.text();
+      let parsed = null;
+      try { parsed = text ? JSON.parse(text) : null; } catch (_) { parsed = text; }
+      return { status: resp.status, body: parsed };
+    } finally { clearTimeout(to); }
   }
 
   // GET binario directo (fetch global). Overridable en test. NO throw por tamaño (→ 413).

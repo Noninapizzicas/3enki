@@ -120,21 +120,27 @@ url→bytes. Y para adjuntarla, `contenido.add_imagen` — no la dejes suelta en
 > los precios (o el stock, o las fichas) **solo se ven tras iniciar sesión**. `leer`/`rastrear` van
 > al **servidor** de Crawl4RS (marcha corta/auto: fetch ligero → navegador real), y ese servidor
 > **no conserva una sesión con login**. Para entrar con usuario/contraseña el motor tiene una
-> **segunda puerta**: la **marcha larga** = el *wrapper Playwright* (`CRAWL4RS_PLAYWRIGHT_URL`).
-> Contrato `contrato-puente-v1`, verificado en vivo (Chromium real captura la cookie tras el guion).
+> **segunda puerta**: la **marcha larga** (el wrapper Playwright). Y desde v0.4.0 está **asomada al
+> bus** como dos verbos gemelos de los otros — **la conduces igual, por `bus.publishAndWait`**.
 
-### El contrato de la marcha larga (dos endpoints)
+### Los dos verbos de la marcha larga (por el bus, como los demás)
 
 ```
-POST /login  { url, pasos }            → { sesion, final_url }   // sesion = storageState (cookies + localStorage)
-POST /abrir  { url, sesion, ... }      → { html, final_url, status, intercepted }
+ent = bus.publishAndWait('crawl4rs.entrar.request', { url:'https://portal/login', pasos:[…] })
+      // → { sesion_id, final_url, expira_en_ms }
+res = bus.publishAndWait('crawl4rs.abrir.request',  { url:'https://portal/catalogo', sesion_id: ent.data.sesion_id,
+                                                      interceptar:{ contiene:['/api/'] } })
+      // → { html, final_url, status_http, intercepted:[{url,status,json}] }
 ```
 
-- **`/login`** ejecuta un **guion de pasos** sobre el formulario y **captura la sesión** (el
-  `storageState` de Playwright: cookies + localStorage). Es el objeto de intercambio.
-- **`/abrir { url, sesion }`** abre **ya autenticado** reusando esa sesión. Una sola sesión sirve
-  para **muchos `/abrir`** → volumen autenticado barato (esa es la palanca: logueas una vez,
-  cosechas N páginas).
+- **`entrar`** ejecuta el **guion de pasos** sobre el formulario y **captura la sesión**. Te
+  devuelve un **`sesion_id` (un handle)** — **NO** el `storageState`: la sesión (cookies +
+  localStorage = secreto) se queda guardada en el módulo, tú solo llevas el handle. Caduca a los
+  30 min (`expira_en_ms`).
+- **`abrir { url, sesion_id }`** abre **ya autenticado** reusando esa sesión. Un solo `sesion_id`
+  sirve para **muchos `abrir`** → volumen autenticado barato (la palanca: entras una vez, cosechas
+  N páginas). Si el handle caducó → `409 SESION_DESCONOCIDA`: vuelve a `entrar`.
+- En el chat son las tools **`entrar_web`** y **`abrir_web`** (mismos argumentos).
 
 ### El guion de `pasos` (el vocabulario)
 
@@ -148,17 +154,17 @@ Cada paso es `{ tipo, selector?, valor?, ms?, veces?, pausa_ms? }`:
 | `scroll`| baja al fondo `veces` veces con `pausa_ms` (scroll infinito / lazy-load) |
 
 Receta de login típica (portal B2B, precios tras entrar):
-```json
-{
-  "url": "https://portal.mayorista.com/login",
-  "pasos": [
-    { "tipo": "click", "selector": "#aceptar-cookies" },
-    { "tipo": "fill",  "selector": "input[name='email']",    "valor": "<EMAIL>" },
-    { "tipo": "fill",  "selector": "input[name='password']", "valor": "<SECRETO>" },
-    { "tipo": "click", "selector": "button[type='submit']" },
-    { "tipo": "wait",  "selector": "a[href*='my-account']" }
+```
+bus.publishAndWait('crawl4rs.entrar.request', {
+  url: 'https://portal.mayorista.com/login',
+  pasos: [
+    { tipo: 'click', selector: '#aceptar-cookies' },
+    { tipo: 'fill',  selector: "input[name='email']",    valor: '<EMAIL>' },
+    { tipo: 'fill',  selector: "input[name='password']", valor: '<SECRETO>' },
+    { tipo: 'click', selector: "button[type='submit']" },
+    { tipo: 'wait',  selector: "a[href*='my-account']" }
   ]
-}
+})   // → { sesion_id, final_url, expira_en_ms }
 ```
 Los **selectores reales** (nombre del campo, botón) se sacan **abriendo la página una vez** con
 `leer` y mirando su markdown/HTML: no los adivines. El `wait` final confirma que entraste — sin él,
@@ -170,8 +176,9 @@ La web pinta la tabla de precios llamando a **su propia API** (`fetch('/api/prec
 raspar el DOM renderizado, **captura ese JSON directamente** — más limpio y completo, a veces te
 saltas el HTML entero:
 ```
-POST /abrir { url, sesion, interceptar: { contiene: ["/api/", "/precio"] } }
-   → { ..., intercepted: [ { url, status, json } ] }   // json = {producto, precio, stock} tal cual
+bus.publishAndWait('crawl4rs.abrir.request', {
+  url: 'https://portal/catalogo', sesion_id, interceptar: { contiene: ['/api/', '/precio'] }
+})   // → { intercepted: [ { url, status, json } ] }   json = {producto, precio, stock} tal cual
 ```
 `interceptar: true` captura TODO JSON; `{contiene:[...]}` filtra por subcadena de URL. Espera
 `networkidle` para los XHR tardíos. **Para un catálogo con precios de coste, esto suele SER la
@@ -179,10 +186,11 @@ solución** (mejor que `extract_css` sobre el grid).
 
 ### Revelar contenido dinámico e imitar un cliente real
 
-- **`interactuar`** (mismo guion de `pasos`) en `/abrir`: scroll infinito, "cargar más", pestañas,
+- **`interactuar`** (mismo guion de `pasos`) en `abrir`: scroll infinito, "cargar más", pestañas,
   contenido tras un clic — lo que solo aparece con interacción.
-- **`stealth: true`**: parche ligero que oculta `navigator.webdriver`/`plugins`/`chrome` + UA y
-  locale realistas. Verificado: `navigator.webdriver` pasa de `true` a `undefined`.
+- **`stealth: true`** (en `entrar` y `abrir`): parche ligero que oculta
+  `navigator.webdriver`/`plugins`/`chrome` + UA y locale realistas. Verificado: `navigator.webdriver`
+  pasa de `true` a `undefined`.
 - **`emular: { locale, timezone, geo:{latitude,longitude}, movil }`**: precios por región, versión
   móvil, geolocalización con permiso.
 - **`proxy: { server, username?, password? }`**: salida por proxy (residencial cuando el sitio lo pide).
@@ -200,14 +208,13 @@ volumen sobrevive a que la cookie expire.
    DataDome / PerimeterX / Cloudflare Turnstile — esos detectan por *comportamiento* y señales de
    *headless*. Si un portal los usa, hace falta residencial + ritmo humano, y **a veces no hay
    solución**. Dilo, no lo rodees inventando.
-2. **Por qué puerta se alcanza HOY.** La marcha larga vive en el **wrapper**
-   (`CRAWL4RS_PLAYWRIGHT_URL`: `/login`, `/abrir`), **no** en los verbos del bus: `crawl4rs.leer`/
-   `.rastrear` van al **servidor axum**, cuyo `/crawl` **aún no acepta `sesion`/`login`/`interceptar`**
-   (`{url, query, mode, max_depth, max_pages, extract_css, extract_semantic, extract_jsonld}`). Por
-   eso **NO existe `crawl4rs.login.request`** — no lo llames, no hay handler (404). Cuando el caso
-   pida login: monta la receta contra el **contrato del wrapper** de arriba; y si esa puerta aún no
-   está asomada a tu turno, **nómbralo como el paso que falta** (asomar `sesion`/`login` al puente
-   del bus) en vez de fingir que ya está. El motor lo tiene; asomarlo al bus es lo pendiente.
+2. **El precondicional de la marcha larga: el wrapper desplegado.** `entrar`/`abrir` viven en el
+   bus (v0.4.0), pero por debajo llaman al **wrapper Playwright** — un servicio APARTE del axum
+   (`CRAWL4RS_PLAYWRIGHT_URL`, el `browser` del compose). Si NO está levantado, `entrar`/`abrir`
+   degradan honesto **`503 sin_marcha_larga`** (mientras `leer`/`buscar`/`mapear`/`rastrear` siguen,
+   porque esos van al axum). Ese 503 **no** es "web inscrapeable": es "falta levantar el servicio
+   browser" — dilo así. (Y sigue sin existir `crawl4rs.login.request`: los verbos son
+   `crawl4rs.entrar`/`crawl4rs.abrir`.)
 
 ### Credenciales — nunca en claro
 

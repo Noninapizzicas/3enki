@@ -26,6 +26,10 @@
     { id: 'gemini', name: 'Google Gemini', icon: '💎', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
     { id: 'ollama', name: 'Ollama (Local)', icon: '🦙', models: ['llama2', 'codellama', 'mistral', 'mixtral'] },
     { id: 'claude-cli', name: 'Claude Code (1M)', icon: '🟣', models: ['sonnet', 'opus', 'haiku'] },
+    // Hermes NO es un LLM crudo: es el AGENTE trabajador (NousResearch, local :8642) con su
+    // arsenal (browser, código, subagentes) y memoria por proyecto. Enki le DELEGA. Último en la
+    // lista (priority 90: nunca auto-fallback). Gobernado por el interruptor 'hermes-agente'.
+    { id: 'hermes', name: 'Hermes (agente trabajador)', icon: '🪽', models: ['hermes-agent'] },
   ];
 
   let selectedProvider: Provider | null = $activeProvider || providers[0];

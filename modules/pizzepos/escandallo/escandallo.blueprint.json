@@ -37,7 +37,9 @@
     "escandallo.coste.calculado",
     "escandallo.coste.actualizado",
     "escandallo.recalcular_siguiente.response",
-    "escandallo.recalcular_siguiente.failed"
+    "escandallo.recalcular_siguiente.failed",
+    "escandallo.recalcular_lote.response",
+    "escandallo.recalcular_lote.failed"
   ],
   "_nota_eventos_v3": "v3.0.0: escandallo.coste.calculado es el nuevo evento canonico publicado tras 'calcular' cuando persistir=true (anteriormente escandallo escribia directo /recetas.json y publicaba escandallo.coste.actualizado solo como notificacion). escandallo.coste.actualizado se mantiene en la lista por compat (consumers viejos) pero v3 NO lo publica — sera removido cuando se verifique que nadie lo escucha. El subscriber canonico de escandallo.coste.calculado es el modulo recetas via eventos_que_escucho declarado en SU blueprint (handler _aplicar_coste_calculado, ejecutado por el LLM segun mecanismo de blueprint subscribers asincronos — ver propuestas/blueprint-subscribers-asincronos.md).",
   "eventos_que_escucho": [],
@@ -49,7 +51,7 @@
       "pseudocodigo": [
         "_cargar_catalogo(input):",
         "  // RPC a recetas (blueprint) = turno LLM sintetico, ~20-30s → timeout_ms holgado (55s) como 3er arg, mapea al param timeout_ms de bus.publishAndWait",
-        "  resp = await publishAndWait('recetas.ingredientes.request', { project_id: input.project_id, request_id: uuid(), correlation_id: input.correlation_id }, { timeout_ms: 55000 })",
+        "  resp = await publishAndWait('recetas.ingredientes.request', { project_id: input.project_id, request_id: uuid(), correlation_id: input.correlation_id }, { timeout_ms: 8000 })",
         "  items = (resp.status === 200 ? (resp.data?.ingredientes || []) : [])",
         "  RETORNA { items, porId: indexBy(items, c => c.id), porNombre: indexBy(items, c => (c.nombre||'').toLowerCase()) }"
       ],
@@ -61,7 +63,7 @@
       "pseudocodigo": [
         "_cargar_receta(input, id):",
         "  // RPC a recetas (blueprint) = turno LLM sintetico, ~20-30s → timeout_ms holgado (55s)",
-        "  resp = await publishAndWait('recetas.obtener.request', { project_id: input.project_id, receta_id: id, request_id: uuid(), correlation_id: input.correlation_id }, { timeout_ms: 55000 })",
+        "  resp = await publishAndWait('recetas.obtener.request', { project_id: input.project_id, receta_id: id, request_id: uuid(), correlation_id: input.correlation_id }, { timeout_ms: 8000 })",
         "  RETORNA resp.status === 200 ? (resp.data?.receta || resp.data) : null"
       ],
       "cajon": false
@@ -72,7 +74,7 @@
       "pseudocodigo": [
         "_cargar_recetas(input, estado='en_servicio'):",
         "  // RPC a recetas (blueprint) = turno LLM sintetico, ~20-30s → timeout_ms holgado (55s)",
-        "  resp = await publishAndWait('recetas.listar.request', { project_id: input.project_id, estado, incluir_lineas: true, limit: 1000, request_id: uuid(), correlation_id: input.correlation_id }, { timeout_ms: 55000 })",
+        "  resp = await publishAndWait('recetas.listar.request', { project_id: input.project_id, estado, incluir_lineas: true, limit: 1000, request_id: uuid(), correlation_id: input.correlation_id }, { timeout_ms: 8000 })",
         "  RETORNA resp.status === 200 ? (resp.data?.recetas || []) : []"
       ],
       "cajon": false
@@ -206,8 +208,22 @@
         "    }",
         "  }",
         "",
-        "  // 4. COSTEAR (DETERMINISTA): aritmetica pura sobre el catalogo ya enriquecido. No la haces tu de cabeza.",
-        "  r = _costear(input, receta, catalogo)",
+        "  // 4. COSTEAR (DELEGADO AL REFLEJO): costeo determinista en reflejo JS (ms, sin LLM).",
+        "  costeo = await publishAndWait('escandallo.costear.request', {",
+        "    project_id: input.project_id,",
+        "    lineas: receta.lineas,",
+        "    rinde: receta.rinde,",
+        "    request_id: uuid(),",
+        "    correlation_id: input.correlation_id",
+        "  }, { timeout_ms: 8000 })",
+        "  if (costeo.error) return costeo",
+        "  r = {",
+        "    coste_total: costeo.data.coste_total,",
+        "    coste_unidad: costeo.data.coste_unidad,",
+        "    desglose: costeo.data.lineas_detalle,",
+        "    sin_precio: costeo.data.lineas_sin_precio,",
+        "    fuentes: costeo.data.fuentes_precios",
+        "  }",
         "",
         "  // 5. VALIDAR — EL FRENO (REFLEJO): procedencia + coherencia. No persistas un coste con precios",
         "  //    INVENTADOS (estimado_llm) ni un total que no cuadre. El costeo se da por bueno por la ley, no por ti.",
@@ -246,6 +262,34 @@
         "  // DELEGADO al reflejo JS: este cajon solo dispara, el costeo lo hace el codigo (sin turno LLM).",
         "  resp = await publishAndWait('escandallo.recalcular_siguiente.request', { project_id: input.project_id, solo_pendientes: input.solo_pendientes, estado: input.estado, correlation_id: input.correlation_id }, { timeout_ms: 15000 })",
         "  RETORNA resp   // { status, data: { costeada, faltan, terminado, siguiente } }"
+      ]
+    },
+    "recalcular_lote": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, estado?, solo_pendientes? }",
+      "_descripcion": "DELEGA al reflejo JS (index.js, determinista). Costea TODAS las recetas pendientes en UNA llamada (batch, orden topologico). Carga catalogo+recetas una vez, inyecta sub-recetas con coste conocido, costea las sin coste. Persiste cada una. NO navega Mercadona — solo catalogo + sub-recetas. Un solo turno para todo el lote.",
+      "pseudocodigo": [
+        "async recalcular_lote(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  // DELEGADO al reflejo JS: costeo batch completo en codigo (ms, sin turno LLM).",
+        "  resp = await publishAndWait('escandallo.recalcular_lote.request', {",
+        "    project_id: input.project_id,",
+        "    solo_pendientes: input.solo_pendientes,",
+        "    estado: input.estado,",
+        "    correlation_id: input.correlation_id",
+        "  }, { timeout_ms: 30000 })",
+        "  RETORNA resp   // { status, data: { costeadas[], total_costeadas, sin_precio[], terminado } }"
+      ],
+      "reglas_clave": [
+        "Carga catalogo+recetas UNA vez, no N veces.",
+        "Costea TODAS las pendientes en orden topologico. Persiste cada una.",
+        "NO navega Mercadona — solo catalogo + sub-recetas con coste conocido.",
+        "Tiempo estimado: 200-500ms para 30 recetas en el reflejo."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
       ]
     }
   },

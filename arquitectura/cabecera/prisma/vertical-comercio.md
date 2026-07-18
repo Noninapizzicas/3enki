@@ -9,7 +9,7 @@ fuentes:
   - modules/_shared/organos-recetario.js
   - modules/_shared/pos-persistencia.js
   - modules/_shared/ical.js
-verificado: 2026-07-09
+verificado: 2026-07-18
 ---
 
 ## LA LEY DE LA EVIDENCIA — el prisma gobierna la PROCEDENCIA en todos los frenos
@@ -65,7 +65,7 @@ verificado: 2026-07-09
     "estados": ["ciclo de vida del producto"]
   },
   "ejes": { "tiempo": "ninguno|instante|cita|intervalo_que_cobra", "estado_de_partida": "false|String", "ciclo": "de_ida|con_retorno" },
-  "naturalezas": { "stock": "unidades|ingredientes|capacidad_temporal|activo_reutilizable", "precio": "por_unidad|por_peso|por_tiempo|rango_valoracion" },
+  "naturalezas": { "stock": "unidades|ingredientes|capacidad_temporal|activo_reutilizable", "precio": "por_unidad|por_peso|por_tiempo|rango_valoracion", "origen": "elaborado|de_reventa" },
   "no_objetivos": ["String"],
   "preguntas_abiertas": [{ "campo": "coste|stock|tarifa|agenda", "para": "comerciante", "porque": "privado|no_computable", "respondida?": "Bool" }],
   "madurez": "listo|necesita_aclaracion_comerciante|necesita_revision"
@@ -77,6 +77,9 @@ VERDAD_OBLIGATORIA (alérgenos·etiqueta energética·seguridad) = clase aparte:
 SUB_FORMA domina según arquetipo:  pizza=modificacion · TV=variante+añadido · tarta=+personalizacion_libre.
 EJES se encienden por producto:    agenda (no-inmediato) · estado_de_partida (servicios) · retorno (alquiler/leasing).
 NATURALEZA stock/precio varía:     ingredientes·unidades·capacidad_temporal·activo_reutilizable / unidad·peso·tiempo·rango_valoracion.
+ORIGEN decide si lleva TU TRABAJO: elaborado (lo creas o modificas → RECETARIO) · de_reventa (lo compras hecho → DESCRIPCIÓN).
+   Ortogonal al arquetipo: lámpara fabricada=elaborado · pizza cocinada=elaborado · pizza comprada para revender=de_reventa.
+   El órgano recetario cuelga del ORIGEN, no del arquetipo (una pizza de_reventa no lo lleva; una lámpara elaborada sí).
 CLASIFICADOR: arquetipo por la FORMA (ejes+naturalezas), NO por la superficie (corte y masaje = servicio por forma).
 ```
 
@@ -192,8 +195,11 @@ CLASE PrismaOpcionesReflejo HEREDA ModuloHibridoReflejo {   // ENVUELVE el banco
 CLASE PrismaBossReflejo HEREDA ModuloHibridoReflejo {   // el CEREBRO; el enforcement lo consume aparte
   TESIS  un comercio NO se declara pizzería/peluquería: su identidad EMERGE de sus productos.
   NÚCLEO PURO  _arquetiposDelCatalogo(catalogo) → arquetipos presentes ;
-               _organosDe(arqIds, defs) → unión de organos ; _plan(catalogo, defs) → {arquetipos, organos, por_arquetipo, total}
+               _organosDe(arqIds, defs) → unión de organos por arquetipo ; _plan añade recetario si HAY producto elaborado ;
+               _plan(catalogo, defs) → {arquetipos, organos, por_arquetipo, total}
   ORGANOS semilla: comestible→[carta,cocina] · servicio→[agenda] · uso_temporal→[agenda,retorno,fianza] · pieza→[stock]
+  ORGANO POR ORIGEN (no por arquetipo): recetario ⟺ el catálogo tiene ≥1 producto naturalezas.origen=='elaborado'
+                     (lo creas o modificas). Universal: lo enciende la lámpara fabricada igual que la pizza cocinada.
   OPS (RPC boss.{plan,estado}.request → .response): calcula sobre el catálogo activo (producto-manager) + arquetipos (semilla+custom aprobados)
   SEÑAL  catalogo.{actualizado,editado,borrado} + project.activated → boss.plan.actualizado (un producto nuevo puede encender un órgano nuevo)
   CEREBRO≠ENFORCEMENT  BOSS señala qué órganos necesita el comercio; encender los interruptores de esos órganos lo hace prisma/enforcement (abajo).
@@ -235,6 +241,23 @@ CLASE PrismaCosteReflejo HEREDA ModuloHibridoReflejo {   // generaliza escandall
            LEE catalogo.get → resuelve pvp (pvp_centimos o pvp_sugerido) → _planAplicar (PURO) fija
            precio_base_centimos, marca la pregunta_abierta de coste 'respondida' y sube madurez a 'listo'
            si ya no falta ninguna → GUARDA catalogo.update_product → EMITE coste.aplicado. Cierra el lazo coste→producto.
+}
+```
+
+## recetario (module 0.1.0 · reflejo 0.1.0) — DUEÑO del órgano recetario (productos ELABORADOS) ✓
+
+```
+CLASE PrismaRecetarioReflejo HEREDA ModuloHibridoReflejo {   // glue idiosincrática: la ÚNICA pieza que conoce a la vez la receta y el producto
+  ÓRGANO POR ORIGEN  recetario ⟺ producto.naturalezas.origen == 'elaborado' (lo creas o modificas), NO por arquetipo.
+                     El error corregido: recetario colgaba de comestible (superficie); baja al eje ORIGEN (causa).
+  ATAR  _pendientesDeAtar(catalogo) → productos ELABORADOS sin receta_ref y con nombre (cualquier arquetipo:
+        pizza cocinada Y lámpara fabricada). onCatalogoCambiado ata por NOMBRE a la receta homónima
+        (recetas.obtener), idempotente; sin homónima → no inventa el arco (queda suelto, atable a mano).
+  PUENTE coste→precio  onCosteCalculado (escandallo.coste.calculado) → resuelve el producto por receta_ref →
+        coste.aplicar (prisma/coste escribe el pvp). GATE: sin producto que referencie la receta, no hace nada
+        (las sub-recetas masa/salsa no son productos). NO PISA pvp manual: canta recetario.coste_actualizado (deriva), no sobrescribe.
+  SIN ESTADO  puro puente. NO reescribe recetas/escandallo (contratos vivos) ni coste (genérico). food_cost objetivo 0.30 (política, overridable).
+  EVENTOS_SUBSCRIBES { escandallo.coste.calculado · catalogo.editado · catalogo.actualizado }
 }
 ```
 
@@ -353,6 +376,8 @@ interruptor.set {id:'organo-<x>',enabled,motivo}   (enforcement → panel centra
 boss.organo.encendido / boss.organo.innecesario    (testigo del efector: encendió / lo dejó sobrando sin apagar)
 coste.costear.request → .response        (cara comerciante: coste → margen → pvp; los costes los pone el comerciante)
 coste.aplicar.request → .response · coste.aplicado   (escribe el pvp en el producto + cierra la pregunta_abierta de coste)
+escandallo.coste.calculado               (escandallo → recetario: coste de la ficha; recetario resuelve el producto elaborado y aplica)
+recetario.coste_actualizado              (recetario: deriva cantada cuando el pvp manual ya estaba fijado — no pisa)
 escaparate.publico.request → .response   (cara cliente: catálogo → vista pública, poda lo no ofrecido)
 escaparate.actualizado                   (escaparate → PWA/consumidor; consume-on-read del refresco)
 carrito.{get,add_item,remove_item,update_item,vaciar,list}.request → .response   (buffer de venta; tasa con opciones)
@@ -376,6 +401,7 @@ calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta} 
 ✓ POS COMPLETO + PERSISTENTE — carrito (7/7) · cobro (8/8) · cuenta (6/6) · ticket (3/3) · cierre (4/4): catálogo→carrito→cuenta→cobro→ticket→cierre (sin cocina). Estado vivo persistido por proyecto (/prisma/pos/*.json), restaura en project.activated.
 ✓ BOSS ENFORCEMENT — enforcement (7/7): boss.plan.actualizado → interruptor.set enciende los órganos del comercio (additivo-seguro, no apaga solo). Lazo CEREBRO→acción cerrado.
 ✓ COSTE→PRODUCTO — coste.aplicar escribe el pvp en el producto (precio_base_centimos) + cierra la pregunta_abierta de coste (madurez→listo). Lazo cara-comerciante cerrado.
+✓ ÓRGANO RECETARIO POR ORIGEN — naturaleza `origen` (elaborado|de_reventa) en el ProductoUniversal; recetario (dueño del órgano) ata producto↔receta y cierra escandallo.coste.calculado → coste.aplicar. Corregido el error de superficie: recetario baja del arquetipo comestible al eje ORIGEN → lo enciende TODO producto elaborado (lámpara fabricada = pizza cocinada), nada de_reventa. boss lo añade al plan por producto; el atado y el gate leen origen=='elaborado'. Tests: boss (6/6, gate por origen) · recetario (11/11, ata cross-arquetipo).
 ✓ ÓRGANO AGENDA (base + feed .ics suscribible + import) — calendario.md (propuesta) + calendario (17/17) + _shared/ical (8/8): base compartida del tiempo (disponibilidad+capacidad+reservas+huecos), motor determinista, un motor para cita y alquiler, persistente, BORDE iCal BIDIRECCIONAL — export (feed .ics + GET suscribible con token) e import (.ics/CalDAV del dueño → días cerrado). El organo-agenda ya tiene BASE (falta el consumidor que lo gatee).
 ◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · calendario tz/DST estricto (luxon; hoy tiempo flotante) · los interruptores organo-* esperan dueño (cocina la reacciona pizzepos) — se verifican corriendo el Enki
 ✓ ADAPTADOR LEER — adaptador reflejo 0.2.0: _adaptar lee los arquetipos custom APROBADOS (arquetipos.listar) y los pasa al clasificador con prioridad sobre la semilla. Lazo anti-wipe cerrado (propuesto→aprobado→clasifica).

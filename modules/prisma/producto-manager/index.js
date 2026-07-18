@@ -41,6 +41,11 @@ const CICLO      = new Set(['de_ida', 'con_retorno']);
 const STOCK      = new Set(['unidades', 'ingredientes', 'capacidad_temporal', 'activo_reutilizable']);
 const PRECIO     = new Set(['por_unidad', 'por_peso', 'por_tiempo', 'rango_valoracion']);
 const MADUREZ    = new Set(['listo', 'necesita_aclaracion_comerciante', 'necesita_revision']);
+// origen — el eje que decide si el producto lleva TU TRABAJO. `elaborado` = lo creas o lo
+// modificas (tiene recetario: libro de su composición + proceso); `de_reventa` = lo compras
+// hecho y lo vendes intacto (solo descripción). Ortogonal al arquetipo: una lámpara elaborada
+// y una pizza cocinada son ambas `elaborado`; una pizza comprada para revender es `de_reventa`.
+const ORIGEN     = new Set(['elaborado', 'de_reventa']);
 // modo por defecto según la sub-forma (variante=uno, modificacion=quitar, añadido=varios, libre=libre)
 const MODO_DEFECTO = { variante: 'ELEGIR_UNO', modificacion: 'QUITAR', añadido: 'ELEGIR_VARIOS', personalizacion_libre: 'LIBRE' };
 
@@ -409,7 +414,8 @@ class ProductoManagerReflejo extends ModuloHibridoReflejo {
       },
       naturalezas: {
         stock: STOCK.has(p.naturalezas && p.naturalezas.stock) ? p.naturalezas.stock : 'unidades',
-        precio: PRECIO.has(p.naturalezas && p.naturalezas.precio) ? p.naturalezas.precio : 'por_unidad'
+        precio: PRECIO.has(p.naturalezas && p.naturalezas.precio) ? p.naturalezas.precio : 'por_unidad',
+        origen: ORIGEN.has(p.naturalezas && p.naturalezas.origen) ? p.naturalezas.origen : 'de_reventa'
       },
       no_objetivos: Array.isArray(p.no_objetivos) ? p.no_objetivos.map(String) : [],
       preguntas_abiertas: Array.isArray(p.preguntas_abiertas) ? p.preguntas_abiertas.filter(q => q && q.campo).map(q => ({
@@ -419,10 +425,10 @@ class ProductoManagerReflejo extends ModuloHibridoReflejo {
     };
     if (p.categoria_id) out.categoria_id = p.categoria_id;
     if (p.precio_base_centimos !== undefined) out.precio_base_centimos = p.precio_base_centimos;
-    // receta_ref — el arco de IDENTIDAD hacia la ficha técnica (store de recetas). Idiosincrasia del
-    // arquetipo comestible (órgano recetario): solo él lo rellena. Preservado si viene; ausente =
-    // producto sin ficha (borrador legítimo). Cierra producto↔receta: escandallo cuesta la receta,
-    // el puente (follow-up) lleva ese coste al pvp de ESTE producto.
+    // receta_ref — el arco de IDENTIDAD hacia la ficha técnica (store de recetas). Es la
+    // REALIZACIÓN de un producto ELABORADO (naturalezas.origen === 'elaborado'): apunta a su
+    // composición/proceso. NO depende del arquetipo — una lámpara elaborada lo lleva igual que una
+    // pizza cocinada. Preservado si viene; ausente = sin ficha (borrador legítimo o de_reventa).
     if (typeof p.receta_ref === 'string' && p.receta_ref.trim()) out.receta_ref = p.receta_ref.trim();
     return out;
   }
@@ -467,6 +473,8 @@ class ProductoManagerReflejo extends ModuloHibridoReflejo {
     if (p.madurez !== undefined && !MADUREZ.has(p.madurez)) errors.push({ code: 'MADUREZ_INVALIDA', message: `${at}: madurez '${p.madurez}' no canónica` });
     // receta_ref es OPCIONAL (idiosincrasia comestible) — no se exige; pero si viene, un id no vacío.
     if (p.receta_ref !== undefined && (typeof p.receta_ref !== 'string' || !p.receta_ref.trim())) errors.push({ code: 'RECETA_REF_INVALIDA', message: `${at}: receta_ref debe ser un id no vacío` });
+    // origen — si viene, canónico. Ausente = de_reventa (default sano al normalizar).
+    if (p.naturalezas && p.naturalezas.origen !== undefined && !ORIGEN.has(p.naturalezas.origen)) errors.push({ code: 'ORIGEN_INVALIDO', message: `${at}: naturalezas.origen debe ser 'elaborado' | 'de_reventa'` });
     // opciones (si hay) bien formadas
     const ops = (p.contrato && Array.isArray(p.contrato.opciones)) ? p.contrato.opciones : [];
     for (let k = 0; k < ops.length; k++) {

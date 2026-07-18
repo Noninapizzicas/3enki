@@ -87,15 +87,20 @@ test('puente — sin coste real (0) → no actúa', async () => {
 });
 
 // ── atar identidad: poblar receta_ref por nombre ──
-test('_pendientesDeAtar — solo comestibles SIN receta_ref y con nombre', () => {
+test('_pendientesDeAtar — solo ELABORADOS SIN receta_ref y con nombre (cualquier arquetipo)', () => {
   const R = new PrismaRecetarioReflejo();
+  const el = (origen) => ({ naturalezas: { origen } });
   const cat = { productos: [
-    { id: 'a', arquetipo: 'comestible', nombre: 'Bachata' },                 // ata
-    { id: 'b', arquetipo: 'comestible', nombre: 'Salsa', receta_ref: 'salsa' }, // ya atado
-    { id: 'c', arquetipo: 'pieza', nombre: 'Camiseta' },                     // no comestible
-    { id: 'd', arquetipo: 'comestible', nombre: '  ' }                       // sin nombre
+    { id: 'a', arquetipo: 'comestible', nombre: 'Bachata', ...el('elaborado') },       // ata (pizza cocinada)
+    { id: 'b', arquetipo: 'comestible', nombre: 'Salsa', receta_ref: 'salsa', ...el('elaborado') }, // ya atado
+    { id: 'c', arquetipo: 'pieza', nombre: 'Lámpara', ...el('elaborado') },            // ata TAMBIÉN (pieza elaborada)
+    { id: 'd', arquetipo: 'comestible', nombre: 'Pizza comprada', ...el('de_reventa') }, // NO: la revendes intacta
+    { id: 'e', arquetipo: 'comestible', nombre: '  ', ...el('elaborado') }              // sin nombre
   ] };
-  assert.deepEqual(R._pendientesDeAtar(cat), [{ producto_id: 'a', nombre: 'Bachata' }]);
+  assert.deepEqual(R._pendientesDeAtar(cat), [
+    { producto_id: 'a', nombre: 'Bachata' },
+    { producto_id: 'c', nombre: 'Lámpara' }
+  ]);
 });
 
 function montarAtar(recetaPorNombre) {
@@ -112,7 +117,7 @@ function montarAtar(recetaPorNombre) {
 
 test('atar — comestible sin ficha + receta homónima → fija receta_ref', async () => {
   const { R, llamadas } = montarAtar({ Bachata: 'bachata' });
-  const cat = { meta: { id: 'cat_g' }, productos: [{ id: 'pizzas_bachata', arquetipo: 'comestible', nombre: 'Bachata' }] };
+  const cat = { meta: { id: 'cat_g' }, productos: [{ id: 'pizzas_bachata', arquetipo: 'comestible', nombre: 'Bachata', naturalezas: { origen: 'elaborado' } }] };
   await R.onCatalogoCambiado({ data: { project_id: 'p1', catalogo: cat } });
   const up = llamadas.find(l => l.topic === 'catalogo.update_product.request');
   assert.ok(up, 'llamó update_product');
@@ -122,7 +127,7 @@ test('atar — comestible sin ficha + receta homónima → fija receta_ref', asy
 
 test('atar — sin receta homónima → NO inventa el arco (queda suelto)', async () => {
   const { R, llamadas } = montarAtar({});   // ninguna receta
-  const cat = { meta: { id: 'cat_g' }, productos: [{ id: 'x', arquetipo: 'comestible', nombre: 'Rara' }] };
+  const cat = { meta: { id: 'cat_g' }, productos: [{ id: 'x', arquetipo: 'comestible', nombre: 'Rara', naturalezas: { origen: 'elaborado' } }] };
   await R.onCatalogoCambiado({ data: { project_id: 'p1', catalogo: cat } });
   assert.ok(!llamadas.some(l => l.topic === 'catalogo.update_product.request'));
 });

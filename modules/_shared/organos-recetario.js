@@ -23,7 +23,7 @@ const { SEMILLA } = require('./arquetipos-semilla');
 const KNOWN_ORGANOS = {
   carta:     { estado: 'nativo',     nota: 'escaparate ya vive en prisma' },
   cocina:    { estado: 'hosteleria', nota: 'pizzepos cocina + pase-cocina' },
-  recetario: { estado: 'previsto',   nota: 'ficha técnica + escandallo (food-cost); puente escandallo.coste.calculado → coste.aplicar = follow-up' },
+  recetario: { estado: 'vivo',       nota: 'órgano del ORIGEN (elaborado), no de un arquetipo: lo enciende boss por producto elaborado. Puente escandallo.coste.calculado → coste.aplicar' },
   agenda:  { estado: 'previsto',   nota: 'reserva/cita — módulo follow-up' },
   retorno: { estado: 'previsto',   nota: 'devolución del activo — módulo follow-up' },
   fianza:  { estado: 'previsto',   nota: 'depósito/garantía — módulo follow-up' },

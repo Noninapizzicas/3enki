@@ -1,5 +1,6 @@
 /**
- * prisma/recetario — REFLEJO JS: el DUEÑO del órgano `recetario` (arquetipo comestible).
+ * prisma/recetario — REFLEJO JS: el DUEÑO del órgano `recetario` (productos ELABORADOS —
+ * los que creas o modificas; se enciende por naturalezas.origen === 'elaborado', no por arquetipo).
  *
  * El puente que RECORRE el arco de identidad producto↔receta. escandallo cuesta la
  * ficha técnica y emite `escandallo.coste.calculado`; este órgano resuelve QUÉ producto
@@ -34,13 +35,14 @@ class PrismaRecetarioReflejo extends ModuloHibridoReflejo {
   // Sin estado propio (puro puente); el loader exige onUnload para el shutdown limpio.
   async onUnload() { return super.onUnload(); }
 
-  // ── ATAR la identidad: productos comestibles SIN receta_ref, listos para atar.
+  // ── ATAR la identidad: productos ELABORADOS SIN receta_ref, listos para atar.
   //    Puro: nombra a quién le falta el arco; el IO lo resuelve por nombre después.
-  //    Solo comestible (la ficha técnica es su idiosincrasia); nunca pisa un ref ya puesto. ──
+  //    Solo ELABORADO — origen == 'elaborado' (lo creas o lo modificas); nunca pisa un ref ya
+  //    puesto. La ficha técnica es de todo lo que lleva TU TRABAJO, no de un arquetipo. ──
   _pendientesDeAtar(catalogo) {
     const prods = (catalogo && Array.isArray(catalogo.productos)) ? catalogo.productos : [];
     return prods
-      .filter(p => p && p.arquetipo === 'comestible' && !p.receta_ref && String(p.nombre || '').trim())
+      .filter(p => p && p.naturalezas && p.naturalezas.origen === 'elaborado' && !p.receta_ref && String(p.nombre || '').trim())
       .map(p => ({ producto_id: p.id, nombre: p.nombre }));
   }
 

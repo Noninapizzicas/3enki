@@ -49,6 +49,10 @@ class PrismaBossReflejo extends ModuloHibridoReflejo {
     const arquetipos = this._arquetiposDelCatalogo(catalogo);
     const organos = this._organosDe(arquetipos, defs);
     const prods = Array.isArray(catalogo && catalogo.productos) ? catalogo.productos : [];
+    // recetario NO cuelga de un arquetipo — cuelga del ORIGEN: cualquier producto ELABORADO
+    // (lo creas o lo modificas) lo enciende; nada de_reventa lo toca. Universal, no idiosincrático.
+    const hayElaborado = prods.some(p => p && p.naturalezas && p.naturalezas.origen === 'elaborado');
+    if (hayElaborado && !organos.includes('recetario')) { organos.push('recetario'); organos.sort(); }
     const productos_por_arquetipo = {};
     for (const p of prods) {
       const a = (p && p.arquetipo) || 'sin_arquetipo';

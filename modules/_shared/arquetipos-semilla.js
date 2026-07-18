@@ -18,8 +18,11 @@ const SEMILLA = [
     sub_formas: ['variante', 'añadido'], modelo_precio: 'por_tiempo', organos: ['agenda', 'retorno', 'fianza'] },
   { id: 'servicio', reglas: [{ tiempo: 'cita' }, { stock: 'capacidad_temporal' }],
     sub_formas: ['variante', 'personalizacion_libre'], modelo_precio: 'por_tiempo|rango_valoracion', organos: ['agenda'] },
+  // recetario NO cuelga de comestible — cuelga del ORIGEN (elaborado): lo enciende boss por
+  // producto, no por arquetipo. Una pizza de_reventa (comprada) no lo lleva; una lámpara
+  // elaborada sí. Aquí solo quedan los órganos que SÍ son de la forma comestible.
   { id: 'comestible', reglas: [{ stock: 'ingredientes' }, { precio: 'por_peso' }],
-    sub_formas: ['modificacion', 'añadido', 'variante'], modelo_precio: 'escandallo', organos: ['carta', 'cocina', 'recetario'] },
+    sub_formas: ['modificacion', 'añadido', 'variante'], modelo_precio: 'escandallo', organos: ['carta', 'cocina'] },
   { id: 'pieza', reglas: [], por_defecto: true,
     sub_formas: ['variante', 'añadido'], modelo_precio: 'por_unidad', organos: ['stock'] }
 ];

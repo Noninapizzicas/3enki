@@ -25,10 +25,20 @@ test('la identidad del comercio EMERGE de sus productos (arquetipos presentes)',
 test('el plan = unión de órganos de esos arquetipos (semilla)', () => {
   const plan = B._plan(CATALOGO, SEMILLA);
   assert.deepEqual(plan.arquetipos, ['comestible', 'servicio']);
-  // comestible→[carta,cocina,recetario] · servicio→[agenda] → unión ordenada
-  assert.deepEqual(plan.organos, ['agenda', 'carta', 'cocina', 'recetario']);
+  // comestible→[carta,cocina] · servicio→[agenda] → unión ordenada.
+  // recetario NO está: estos productos son de_reventa (sin origen). Cuelga del ORIGEN, no del arquetipo.
+  assert.deepEqual(plan.organos, ['agenda', 'carta', 'cocina']);
   assert.deepEqual(plan.productos_por_arquetipo, { comestible: 2, servicio: 1 });
   assert.equal(plan.total_productos, 3);
+});
+
+test('recetario cuelga del ORIGEN (elaborado), no del arquetipo', () => {
+  // una pizza COMPRADA para revender (comestible, de_reventa) NO enciende recetario…
+  const revende = { productos: [{ id: 'pizza_comprada', arquetipo: 'comestible', naturalezas: { origen: 'de_reventa' } }] };
+  assert.ok(!B._plan(revende, SEMILLA).organos.includes('recetario'));
+  // …pero una LÁMPARA que fabricas (pieza, elaborado) SÍ lo enciende.
+  const fabrica = { productos: [{ id: 'lampara', arquetipo: 'pieza', naturalezas: { origen: 'elaborado' } }] };
+  assert.ok(B._plan(fabrica, SEMILLA).organos.includes('recetario'));
 });
 
 test('un arquetipo custom aprobado aporta sus órganos a la unión', () => {

@@ -177,6 +177,8 @@
     "test:pizzepos__carta-manager": "node tests/unit/pizzepos__carta-manager.test.js",
     "test:pizzepos__carta-design": "node tests/unit/pizzepos__carta-design.test.js",
     "test:prisma__producto-manager": "node tests/unit/prisma__producto-manager.test.js",
+    "test:prisma__recetario": "node tests/unit/prisma__recetario.test.js",
+    "test:pizza-a-universal": "node tests/unit/pizza-a-universal.test.js",
     "test:prisma__proyector": "node tests/unit/prisma__proyector.test.js",
     "test:prisma__adaptador": "node tests/unit/prisma__adaptador.test.js",
     "test:prisma__arquetipos": "node tests/unit/prisma__arquetipos.test.js",

@@ -419,6 +419,11 @@ class ProductoManagerReflejo extends ModuloHibridoReflejo {
     };
     if (p.categoria_id) out.categoria_id = p.categoria_id;
     if (p.precio_base_centimos !== undefined) out.precio_base_centimos = p.precio_base_centimos;
+    // receta_ref — el arco de IDENTIDAD hacia la ficha técnica (store de recetas). Idiosincrasia del
+    // arquetipo comestible (órgano recetario): solo él lo rellena. Preservado si viene; ausente =
+    // producto sin ficha (borrador legítimo). Cierra producto↔receta: escandallo cuesta la receta,
+    // el puente (follow-up) lleva ese coste al pvp de ESTE producto.
+    if (typeof p.receta_ref === 'string' && p.receta_ref.trim()) out.receta_ref = p.receta_ref.trim();
     return out;
   }
 
@@ -460,6 +465,8 @@ class ProductoManagerReflejo extends ModuloHibridoReflejo {
     if (!p.identidad || !String(p.identidad.que_es || '').trim()) errors.push({ code: 'SIN_IDENTIDAD', message: `${at}: identidad.que_es vacío (hueco 1)` });
     if (!p.arquetipo || !String(p.arquetipo).trim()) errors.push({ code: 'SIN_ARQUETIPO', message: `${at}: sin arquetipo` });
     if (p.madurez !== undefined && !MADUREZ.has(p.madurez)) errors.push({ code: 'MADUREZ_INVALIDA', message: `${at}: madurez '${p.madurez}' no canónica` });
+    // receta_ref es OPCIONAL (idiosincrasia comestible) — no se exige; pero si viene, un id no vacío.
+    if (p.receta_ref !== undefined && (typeof p.receta_ref !== 'string' || !p.receta_ref.trim())) errors.push({ code: 'RECETA_REF_INVALIDA', message: `${at}: receta_ref debe ser un id no vacío` });
     // opciones (si hay) bien formadas
     const ops = (p.contrato && Array.isArray(p.contrato.opciones)) ? p.contrato.opciones : [];
     for (let k = 0; k < ops.length; k++) {

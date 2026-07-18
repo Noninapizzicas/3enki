@@ -31,6 +31,9 @@ class PrismaRecetarioReflejo extends ModuloHibridoReflejo {
     this.version = 'reflejo-0.1.0';
   }
 
+  // Sin estado propio (puro puente); el loader exige onUnload para el shutdown limpio.
+  async onUnload() { return super.onUnload(); }
+
   // ── ATAR la identidad: productos comestibles SIN receta_ref, listos para atar.
   //    Puro: nombra a quién le falta el arco; el IO lo resuelve por nombre después.
   //    Solo comestible (la ficha técnica es su idiosincrasia); nunca pisa un ref ya puesto. ──

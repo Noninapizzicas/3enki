@@ -14557,7 +14557,10 @@ cartadigital.publicar.request → cartadigital.publicado   { project_id, slug, p
 ✓ VIVO  Caddy /a/* estático · symlink por proyecto (project-manager) · www.json · carta-digital publica a www/ raíz · auto-activación (ensure-feature) · URL por defecto /<ns>/<slug>/
 ◑ LEGACY  tienda.json (/<ns>/shop/<slug>) — proyectos vivos migran reactivando www + republicando
 ◑ RUNTIME  activar www en proyectos vivos + migrar los de tienda (no código)
-[ ] prisma/escaparate genera bundle sobre este mismo modelo (hoy solo proyecta datos por bus)
+✓ prisma/escaparate genera bundle sobre este mismo modelo — escaparate.publicar.request (reflejo 0.2.0):
+  RENDER determinista (vista pública + marca → HTML legible, base neutra teñida por --accent de la marca) →
+  render.verificar (verificador-visual, best-effort) → fs.write a storage/www/index.html + ensure-feature('www').
+  Render de bundle verificable en vivo. [ ] assets/PWA (sw.js, manifest, icons) = follow-up.
 VERSIONES  project-manager 4.2.0 · carta-digital 2.23.0 · bienvenida-tienda 1.1.0
 ```
 
@@ -16711,7 +16714,7 @@ CLASE PrismaRecetarioReflejo HEREDA ModuloHibridoReflejo {   // glue idiosincrá
 }
 ```
 
-## escaparate (module 0.1.0 · reflejo 0.1.0) — cara cliente pública ✓ (núcleo; HTML follow-up)
+## escaparate (module 0.2.0 · reflejo 0.2.0) — cara cliente pública ✓ (núcleo + RENDER bundle a www/)
 
 ```
 CLASE PrismaEscaparateReflejo HEREDA ModuloHibridoReflejo {   // gemelo generalizado de carta-digital, sin estado
@@ -16721,8 +16724,13 @@ CLASE PrismaEscaparateReflejo HEREDA ModuloHibridoReflejo {   // gemelo generali
      opciones (SOLO valores disponible:true; opción sin valores ofrecibles se cae; LIBRE se conserva),
      avisos_obligatorios (restricciones verdad_obligatoria), requiere_cita (eje tiempo≠ninguno) }
   OPS (RPC escaparate.publico.request → .response): proyecta el catálogo activo a la vista del cliente.
+       escaparate.publicar.request → .response (reflejo 0.2.0): RENDER determinista del bundle (vista pública +
+       marca → HTML legible, base NEUTRA teñida por --accent de la MARCA) → VALIDAR (render.verificar,
+       verificador-visual, best-effort) → GUARDAR (fs.write storage/www/index.html + ensure-feature('www')) →
+       EMITIR escaparate.publicado. Servido por Caddy en /<ns>/<slug>/. El look emerge de la MARCA de cada
+       comercio (no un tema global): así se diferencia de pizzepos Y de otro prisma a la vez.
   SEÑAL  catalogo.{actualizado,editado,borrado} → escaparate.actualizado.
-  FOLLOW-UP (en vivo)  generar el bundle HTML/PWA (como carta-digital static-template) + branding desde marca.
+  FOLLOW-UP (en vivo)  render real por verificador-visual · assets PWA (sw.js/manifest/icons) · logo de marca.
 }
 ```
 
@@ -16829,6 +16837,7 @@ coste.aplicar.request → .response · coste.aplicado   (escribe el pvp en el pr
 escandallo.coste.calculado               (escandallo → recetario: coste de la ficha; recetario resuelve el producto elaborado y aplica)
 recetario.coste_actualizado              (recetario: deriva cantada cuando el pvp manual ya estaba fijado — no pisa)
 escaparate.publico.request → .response   (cara cliente: catálogo → vista pública, poda lo no ofrecido)
+escaparate.publicar.request → .response · escaparate.publicado   (RENDER bundle + fs.write a www/ + ensure-feature www)
 escaparate.actualizado                   (escaparate → PWA/consumidor; consume-on-read del refresco)
 carrito.{get,add_item,remove_item,update_item,vaciar,list}.request → .response   (buffer de venta; tasa con opciones)
 carrito.{item_agregado,item_eliminado,item_actualizado,vaciado}   (mutaciones del carrito)
@@ -16845,7 +16854,7 @@ calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta} 
 ## Estado
 
 ```
-✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (12/12, LEER cablea arquetipos custom) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (9/9, con aplicar→producto) · escaparate (5/5, núcleo)
+✓ prisma.md · producto-manager (13/13) · proyector (4/4) · adaptador HÍBRIDO (12/12, LEER cablea arquetipos custom) · arquetipos (4/4) · opciones (5/5) · boss (5/5) · coste (9/9, con aplicar→producto) · escaparate (10/10, núcleo + RENDER bundle a www/ · look teñido por la marca)
 ✓ _shared/arquetipos-semilla (clasificador único) · _shared/motor-opciones (banco, envuelto por prisma/opciones) · _shared/organos-recetario (órgano→interruptor, diff PURO) · _shared/pos-persistencia (snapshot fs por proyecto)
 ✓ project-type blueprints/project-types/prisma.json — comercio universal INSTANCIABLE
 ✓ POS COMPLETO + PERSISTENTE — carrito (7/7) · cobro (8/8) · cuenta (6/6) · ticket (3/3) · cierre (4/4): catálogo→carrito→cuenta→cobro→ticket→cierre (sin cocina). Estado vivo persistido por proyecto (/prisma/pos/*.json), restaura en project.activated.

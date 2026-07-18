@@ -12,6 +12,13 @@
   "config": {
     "pizzepos": {
       "enabled": true
+    },
+    "ui": {
+      "pages": [
+        "recetas", "escandallo", "viabilidad", "carta-manager", "menu-generator",
+        "carta-design", "carta-digital", "carta-marketing", "carta-scheduler",
+        "ingredientes", "tarifas"
+      ]
     }
   },
   "copyHandlersFrom": "pizzepos",

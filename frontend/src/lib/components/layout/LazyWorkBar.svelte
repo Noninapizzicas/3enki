@@ -5,6 +5,8 @@
    * Solo muestra íconos de las definiciones.
    * Al hacer click, carga el módulo correspondiente.
    */
+  import { getContext } from 'svelte';
+  import { writable, type Writable } from 'svelte/store';
   import { workBarDefinitions, moduleLoadState } from '$lib/ui-core/lazy-registry';
   import LazyButton from '$lib/components/base/LazyButton.svelte';
 
@@ -13,11 +15,18 @@
   function toggleExpand() {
     expanded = !expanded;
   }
+
+  // El proyecto activo (via [project_id]/+layout). Un proyecto con page-set VACÍO (p.ej. prisma
+  // nuevo) → work-bar VACÍA: sus botones son módulos pizzepos que no le pertenecen. Sin contexto
+  // (rutas planas) o con page-set no vacío → comportamiento previo (filtra por zona+ruta).
+  const projectCtx = getContext<Writable<{ pages?: string[] }> | undefined>('project') ?? writable<{ pages?: string[] }>(null as any);
+  $: emptyPageSet = Array.isArray($projectCtx?.pages) && $projectCtx.pages.length === 0;
+  $: defs = emptyPageSet ? [] : $workBarDefinitions;
 </script>
 
 <div class="workbar" class:collapsed={!expanded}>
   <div class="workbar-content">
-    {#each $workBarDefinitions as def (def.id)}
+    {#each defs as def (def.id)}
       <LazyButton
         definition={def}
         size="md"

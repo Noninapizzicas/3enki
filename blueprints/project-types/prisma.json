@@ -11,6 +11,9 @@
   "config": {
     "prisma": {
       "enabled": true
+    },
+    "ui": {
+      "pages": []
     }
   },
   "initialFiles": {

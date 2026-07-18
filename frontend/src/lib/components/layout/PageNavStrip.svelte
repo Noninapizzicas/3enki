@@ -1,35 +1,26 @@
 <script lang="ts">
   /**
-   * PageNavStrip — rail derecho de navegacion rapida entre paginas del recetario.
+   * PageNavStrip — rail derecho de navegacion rapida entre paginas del proyecto.
    *
-   * Tira vertical compacta pegada al borde derecho (solo icono). Lista FIJA de
-   * paginas (decision del usuario): recetas, escandallo, viabilidad,
-   * carta-manager, menu-generator. La pagina activa se destaca; un tap en otra
-   * = goto directo, sin pasar por el chat ni por chat.cambiar_foco.
-   *
-   * Sin seccion de sistema (history/credentials ya viven en la fila de iconos
-   * sobre el input del chat) y sin hueco central.
-   *
-   * Iconos del manifest de cada modulo-pagina (getDefinition). Fallback '→'.
+   * Tira vertical compacta pegada al borde derecho (solo icono). El page-set EMERGE
+   * del proyecto activo (project-pages: config del proyecto → semilla por tipo), NO
+   * de una lista clavada: un proyecto prisma nace con el rail VACÍO; un pizzepos trae
+   * su set. La pagina activa se destaca; un tap en otra = goto directo, sin pasar por
+   * el chat ni por chat.cambiar_foco. Sin seccion de sistema, sin hueco central.
    */
+  import { getContext } from 'svelte';
+  import { writable, type Writable } from 'svelte/store';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
+  import { pagesFromIds, seedFallback } from '$lib/ui-core/project-pages';
 
-  // Lista fija de páginas del rail, con icono y etiqueta propios (no dependemos
-  // del manifest: así ninguna sale con la flecha de fallback). En orden.
-  const PAGES: { id: string; icon: string; label: string }[] = [
-    { id: 'recetas',         icon: '📖', label: 'Recetas' },
-    { id: 'escandallo',      icon: '📊', label: 'Escandallo' },
-    { id: 'viabilidad',      icon: '📈', label: 'Viabilidad' },
-    { id: 'carta-manager',   icon: '🗂️', label: 'Carta manager' },
-    { id: 'menu-generator',  icon: '✨', label: 'Menú generator' },
-    { id: 'carta-design',    icon: '🎨', label: 'Carta diseño' },
-    { id: 'carta-digital',   icon: '📱', label: 'Carta digital' },
-    { id: 'carta-marketing', icon: '📣', label: 'Carta marketing' },
-    { id: 'carta-scheduler', icon: '📅', label: 'Programación' },
-    { id: 'ingredientes',    icon: '🥬', label: 'Ingredientes' },
-    { id: 'tarifas',         icon: '🏷️', label: 'Tarifas' }
-  ];
+  // El proyecto activo lo aporta [project_id]/+layout via setContext('project').
+  // Sin contexto (rutas planas sin proyecto) → fallback al set histórico pizzepos.
+  const projectCtx = getContext<Writable<{ pages?: string[] } > | undefined>('project') ?? writable<{ pages?: string[] }>(null as any);
+
+  // page-set del proyecto → PageDefs (icono+etiqueta del catálogo, en orden).
+  $: pageIds = $projectCtx?.pages ?? seedFallback();
+  $: PAGES = pagesFromIds(pageIds);
 
   $: segs = $page.url.pathname.split('/').filter(Boolean);
   $: project = segs[0] ?? '';
@@ -41,6 +32,8 @@
   }
 </script>
 
+<!-- rail VACÍO (page-set vacío, p.ej. proyecto prisma nuevo) → no se pinta la tira -->
+{#if PAGES.length > 0}
 <nav class="page-nav-strip" aria-label="Navegación de páginas">
   {#each PAGES as p (p.id)}
     <button
@@ -54,6 +47,7 @@
     </button>
   {/each}
 </nav>
+{/if}
 
 <style>
   .page-nav-strip {

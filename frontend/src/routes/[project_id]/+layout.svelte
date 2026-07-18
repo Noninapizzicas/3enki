@@ -16,24 +16,53 @@
   import { activeProjectId, activateProject } from '$lib/stores/projects';
   import { selectProject } from '$lib/stores/workspace';
   import { saveWorkspace } from '$lib/stores/persistence';
+  import { applyTheme } from '$lib/stores/theme';
+  import { resolveType, resolvePages, isNavPage } from '$lib/ui-core/project-pages';
 
-  // Store del proyecto actual
+  // Store del proyecto actual. `type` + `pages` alimentan la navegación que EMERGE del
+  // proyecto (rail/work-bar) en vez de una lista clavada a pizzepos. `resolved` = datos
+  // reales cargados (el guard de ruta no dispara con los defaults en vuelo).
   const projectStore = writable<{
     id: string;
     name: string;
+    type: string;
+    pages: string[];
     isPizzepos: boolean;
+    resolved: boolean;
     loading: boolean;
     error: string | null;
   }>({
     id: '',
     name: '',
+    type: 'general',
+    pages: [],
     isPizzepos: false,
+    resolved: false,
     loading: true,
     error: null
   });
 
   // Pasar contexto a hijos
   setContext('project', projectStore);
+
+  // MARCA VISIBLE — la UI nueva (prisma) vira a CLARO para distinguirse mientras se construye.
+  // applyTheme('light') aplica el tema sin tocar la preferencia GLOBAL del usuario; al salir del
+  // proyecto (o si no es prisma) se restaura su preferencia con applyTheme().
+  $: applyTheme($projectStore.type === 'prisma' ? 'light' : undefined);
+
+  // GUARD DE RUTA — una página de navegación que NO está en el page-set del proyecto (p.ej.
+  // /[prisma]/menu-generator por URL directa) redirige al chat (la interfaz primaria, siempre
+  // válida). Solo tras `resolved` (no con los defaults en vuelo) y solo sobre páginas conocidas
+  // (dispositivos/facturas/etc. no gateadas no se tocan).
+  $: currentPage = $page.url.pathname.split('/').filter(Boolean)[1] ?? '';
+  $: if (
+    $projectStore.resolved &&
+    currentPage &&
+    isNavPage(currentPage) &&
+    !$projectStore.pages.includes(currentPage)
+  ) {
+    goto(`/${urlParam}/chat`, { replaceState: true });
+  }
 
   // URL es la fuente de verdad
   $: urlParam = $page.params.project_id;
@@ -68,7 +97,10 @@
     projectStore.set({
       id: project_id,
       name: project_id,
+      type: 'general',
+      pages: [],
       isPizzepos: false,
+      resolved: false,
       loading: false,
       error: null
     });
@@ -86,6 +118,8 @@
 
   onDestroy(() => {
     if (unsubConnected) unsubConnected();
+    // Al abandonar el layout de proyecto, restaurar la preferencia de tema del usuario.
+    applyTheme();
   });
 
   // Recargar datos cuando cambia el proyecto en la URL (no en el mount inicial)
@@ -95,7 +129,10 @@
     projectStore.set({
       id: urlParam,
       name: urlParam,
+      type: 'general',
+      pages: [],
       isPizzepos: false,
+      resolved: false,
       loading: false,
       error: null
     });
@@ -111,6 +148,10 @@
       const features: string[] = project?.metadata?.features || [];
       const isPizzepos = features.includes('pizzepos') || project?.metadata?.workspaceType === 'pizzepos';
 
+      // Tipo + page-set: la navegación EMERGE del proyecto (config → semilla por tipo).
+      const type = resolveType(project);
+      const pages = resolvePages(project, type);
+
       // Usar siempre el UUID real del proyecto para los stores
       const realId = project?.id || project_id;
       const slug = project?.slug;
@@ -118,7 +159,10 @@
       projectStore.set({
         id: realId,
         name: project?.name || project_id,
+        type,
+        pages,
         isPizzepos,
+        resolved: true,
         loading: false,
         error: null
       });

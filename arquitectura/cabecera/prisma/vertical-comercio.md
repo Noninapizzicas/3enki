@@ -273,8 +273,9 @@ CLASE PrismaEscaparateReflejo HEREDA ModuloHibridoReflejo {   // gemelo generali
   OPS (RPC escaparate.publico.request → .response): proyecta el catálogo activo a la vista del cliente.
        escaparate.publicar.request → .response (reflejo 0.2.0): RENDER determinista del bundle (vista pública +
        marca → HTML legible, base NEUTRA teñida por --accent de la MARCA) → VALIDAR (render.verificar,
-       verificador-visual, best-effort) → GUARDAR (fs.write storage/www/index.html + ensure-feature('www')) →
-       EMITIR escaparate.publicado. Servido por Caddy en /<ns>/<slug>/. El look emerge de la MARCA de cada
+       verificador-visual, best-effort) → GUARDAR (fs.write storage/www/prisma/index.html + ensure-feature('www')) →
+       EMITIR escaparate.publicado. Servido por Caddy en /<ns>/<slug>/prisma/ (namespace prisma/ bajo www → NO
+       colisiona con carta-digital, que sirve la raíz /<ns>/<slug>/). El look emerge de la MARCA de cada
        comercio (no un tema global): así se diferencia de pizzepos Y de otro prisma a la vez.
   SEÑAL  catalogo.{actualizado,editado,borrado} → escaparate.actualizado.
   FOLLOW-UP (en vivo)  render real por verificador-visual · assets PWA (sw.js/manifest/icons) · logo de marca.
@@ -384,7 +385,7 @@ coste.aplicar.request → .response · coste.aplicado   (escribe el pvp en el pr
 escandallo.coste.calculado               (escandallo → recetario: coste de la ficha; recetario resuelve el producto elaborado y aplica)
 recetario.coste_actualizado              (recetario: deriva cantada cuando el pvp manual ya estaba fijado — no pisa)
 escaparate.publico.request → .response   (cara cliente: catálogo → vista pública, poda lo no ofrecido)
-escaparate.publicar.request → .response · escaparate.publicado   (RENDER bundle + fs.write a www/ + ensure-feature www)
+escaparate.publicar.request → .response · escaparate.publicado   (RENDER bundle + fs.write a www/prisma/ + ensure-feature www; sirve /<ns>/<slug>/prisma/)
 escaparate.actualizado                   (escaparate → PWA/consumidor; consume-on-read del refresco)
 carrito.{get,add_item,remove_item,update_item,vaciar,list}.request → .response   (buffer de venta; tasa con opciones)
 carrito.{item_agregado,item_eliminado,item_actualizado,vaciado}   (mutaciones del carrito)

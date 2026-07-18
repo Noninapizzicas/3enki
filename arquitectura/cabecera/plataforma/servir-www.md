@@ -112,7 +112,9 @@ cartadigital.publicar.request → cartadigital.publicado   { project_id, slug, p
 ◑ RUNTIME  activar www en proyectos vivos + migrar los de tienda (no código)
 ✓ prisma/escaparate genera bundle sobre este mismo modelo — escaparate.publicar.request (reflejo 0.2.0):
   RENDER determinista (vista pública + marca → HTML legible, base neutra teñida por --accent de la marca) →
-  render.verificar (verificador-visual, best-effort) → fs.write a storage/www/index.html + ensure-feature('www').
+  render.verificar (verificador-visual, best-effort) → fs.write a storage/www/prisma/index.html + ensure-feature('www').
+  NAMESPACE prisma/ bajo www → NO colisiona con carta-digital (raíz www/index.html): carta-digital sirve
+  /<ns>/<slug>/, el escaparate prisma /<ns>/<slug>/prisma/. El mismo symlink www cubre todo el árbol.
   Render de bundle verificable en vivo. [ ] assets/PWA (sw.js, manifest, icons) = follow-up.
 VERSIONES  project-manager 4.2.0 · carta-digital 2.23.0 · bienvenida-tienda 1.1.0
 ```

@@ -17,9 +17,11 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// El bundle se escribe en storage/www/ del proyecto (project-manager lo symlinka a
-// /opt/enki/public/<ns>/<slug> al activar la feature `www`). Mismo modelo que carta-digital.
-const BUNDLE_DIR = '/www';
+// El bundle se escribe en storage/www/prisma/ del proyecto (subcarpeta propia bajo el árbol www,
+// que project-manager symlinka a /opt/enki/public/<ns>/<slug> al activar la feature `www`). El
+// namespace `prisma/` evita la COLISIÓN con carta-digital (que escribe www/index.html en la raíz):
+// carta-digital → /<ns>/<slug>/  ·  escaparate prisma → /<ns>/<slug>/prisma/. Conviven, no se pisan.
+const BUNDLE_DIR = '/www/prisma';
 
 // escape HTML — el contenido (nombres, descripciones, avisos) es dato del comerciante: se escapa.
 function esc(s) {
@@ -260,7 +262,7 @@ ${secciones || '<section class="cat"><p class="sub">Aún no hay productos public
     const slug = (cat.meta && cat.meta.slug) || null;
     this.eventBus.publish('escaparate.publicado', { project_id, catalogo_id: cat?.meta?.id || null, total_productos: publico.productos.length, render_ok, timestamp: new Date().toISOString() });
     this.metrics?.increment?.('escaparate.publicado.total');
-    return { status: 200, data: { project_id, bundle_dir: 'storage/www', feature_www, render_ok, total_productos: publico.productos.length, alojada_url: slug ? `/${slug}` : null } };
+    return { status: 200, data: { project_id, bundle_dir: 'storage/www/prisma', feature_www, render_ok, total_productos: publico.productos.length, alojada_url: slug ? `/${slug}/prisma` : null } };
   }
 
   // señal de refresco

@@ -85,3 +85,51 @@ test('puente — sin coste real (0) → no actúa', async () => {
   await R.onCosteCalculado({ data: { project_id: 'p1', receta_id: 'r', coste_unidad: 0 } });
   assert.equal(llamadas.length, 0);
 });
+
+// ── atar identidad: poblar receta_ref por nombre ──
+test('_pendientesDeAtar — solo comestibles SIN receta_ref y con nombre', () => {
+  const R = new PrismaRecetarioReflejo();
+  const cat = { productos: [
+    { id: 'a', arquetipo: 'comestible', nombre: 'Bachata' },                 // ata
+    { id: 'b', arquetipo: 'comestible', nombre: 'Salsa', receta_ref: 'salsa' }, // ya atado
+    { id: 'c', arquetipo: 'pieza', nombre: 'Camiseta' },                     // no comestible
+    { id: 'd', arquetipo: 'comestible', nombre: '  ' }                       // sin nombre
+  ] };
+  assert.deepEqual(R._pendientesDeAtar(cat), [{ producto_id: 'a', nombre: 'Bachata' }]);
+});
+
+function montarAtar(recetaPorNombre) {
+  const R = new PrismaRecetarioReflejo();
+  const llamadas = [];
+  R.metrics = { increment() {} };
+  R._rpc = async (topic, payload) => {
+    llamadas.push({ topic, payload });
+    if (topic === 'recetas.obtener.request') { const id = recetaPorNombre[payload.nombre]; return id ? { status: 200, data: { id } } : { status: 404 }; }
+    return { status: 200 };
+  };
+  return { R, llamadas };
+}
+
+test('atar — comestible sin ficha + receta homónima → fija receta_ref', async () => {
+  const { R, llamadas } = montarAtar({ Bachata: 'bachata' });
+  const cat = { meta: { id: 'cat_g' }, productos: [{ id: 'pizzas_bachata', arquetipo: 'comestible', nombre: 'Bachata' }] };
+  await R.onCatalogoCambiado({ data: { project_id: 'p1', catalogo: cat } });
+  const up = llamadas.find(l => l.topic === 'catalogo.update_product.request');
+  assert.ok(up, 'llamó update_product');
+  assert.equal(up.payload.producto_id, 'pizzas_bachata');
+  assert.equal(up.payload.campos.receta_ref, 'bachata');
+});
+
+test('atar — sin receta homónima → NO inventa el arco (queda suelto)', async () => {
+  const { R, llamadas } = montarAtar({});   // ninguna receta
+  const cat = { meta: { id: 'cat_g' }, productos: [{ id: 'x', arquetipo: 'comestible', nombre: 'Rara' }] };
+  await R.onCatalogoCambiado({ data: { project_id: 'p1', catalogo: cat } });
+  assert.ok(!llamadas.some(l => l.topic === 'catalogo.update_product.request'));
+});
+
+test('atar — idempotente: un producto ya atado no re-dispara update', async () => {
+  const { R, llamadas } = montarAtar({ Bachata: 'bachata' });
+  const cat = { meta: { id: 'cat_g' }, productos: [{ id: 'p', arquetipo: 'comestible', nombre: 'Bachata', receta_ref: 'bachata' }] };
+  await R.onCatalogoCambiado({ data: { project_id: 'p1', catalogo: cat } });
+  assert.equal(llamadas.length, 0);
+});

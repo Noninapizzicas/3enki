@@ -6,6 +6,8 @@
   "description": "Dueño del órgano recetario (comestible): puente coste→precio que recorre producto↔receta. escandallo cuesta la ficha, recetario resuelve el producto por receta_ref y coste.aplicar escribe el pvp.",
   "language": "es",
   "subscribes": [
-    { "event": "escandallo.coste.calculado", "handler": "onCosteCalculado", "description": "Reflejo JS (puente): {project_id, receta_id, coste_unidad|coste_total} → resuelve el producto por receta_ref → coste.aplicar.request (escribe pvp) o testigo recetario.coste_actualizado si el precio es manual. Cierra coste→precio para comestible." }
+    { "event": "escandallo.coste.calculado", "handler": "onCosteCalculado", "description": "Reflejo JS (puente): {project_id, receta_id, coste_unidad|coste_total} → resuelve el producto por receta_ref → coste.aplicar.request (escribe pvp) o testigo recetario.coste_actualizado si el precio es manual. Cierra coste→precio para comestible." },
+    { "event": "catalogo.editado", "handler": "onCatalogoCambiado", "description": "Reflejo JS (atar identidad): un producto comestible sin receta_ref → busca la receta homónima (recetas.obtener por nombre) y fija receta_ref via catalogo.update_product. Idempotente; no inventa el arco si no hay receta homónima." },
+    { "event": "catalogo.actualizado", "handler": "onCatalogoCambiado", "description": "Reflejo JS (atar identidad): igual que catalogo.editado, para save/restore/clonar/activar. Ata comestibles sin ficha a su receta homónima." }
   ]
 }

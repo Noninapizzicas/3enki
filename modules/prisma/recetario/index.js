@@ -31,6 +31,43 @@ class PrismaRecetarioReflejo extends ModuloHibridoReflejo {
     this.version = 'reflejo-0.1.0';
   }
 
+  // ── ATAR la identidad: productos comestibles SIN receta_ref, listos para atar.
+  //    Puro: nombra a quién le falta el arco; el IO lo resuelve por nombre después.
+  //    Solo comestible (la ficha técnica es su idiosincrasia); nunca pisa un ref ya puesto. ──
+  _pendientesDeAtar(catalogo) {
+    const prods = (catalogo && Array.isArray(catalogo.productos)) ? catalogo.productos : [];
+    return prods
+      .filter(p => p && p.arquetipo === 'comestible' && !p.receta_ref && String(p.nombre || '').trim())
+      .map(p => ({ producto_id: p.id, nombre: p.nombre }));
+  }
+
+  // Un catálogo cambió: ata por NOMBRE cada comestible sin ficha a la receta homónima
+  // (recetas.obtener acepta nombre). Idempotente: en cuanto queda el receta_ref, el
+  // siguiente ciclo lo salta. Si no hay receta homónima, no inventa el arco (queda suelto,
+  // atable a mano). Reusa contratos vivos — no toca recetas ni carta.
+  async onCatalogoCambiado(e) {
+    const d = (e && e.data) || e || {};
+    const catalogo = d.catalogo;
+    if (!d.project_id || !catalogo || !catalogo.meta || !catalogo.meta.id) return;
+    const pendientes = this._pendientesDeAtar(catalogo);
+    if (pendientes.length === 0) return;
+    for (const { producto_id, nombre } of pendientes) {
+      try {
+        const r = await this._rpc('recetas.obtener.request', { project_id: d.project_id, nombre, correlation_id: d.correlation_id });
+        const receta_id = (r && r.status === 200 && r.data) ? (r.data.id || (r.data.receta && r.data.receta.id)) : null;
+        if (!receta_id) continue;                          // sin receta homónima → no inventa el arco
+        await this._rpc('catalogo.update_product.request', {
+          project_id: d.project_id, catalogo_id: catalogo.meta.id, producto_id,
+          campos: { receta_ref: receta_id }, correlation_id: d.correlation_id
+        });
+        this.metrics?.increment('recetario.served', { accion: 'atar' });
+      } catch (err) {
+        this.logger?.error('recetario.atar.failed', { producto_id, error: err.message });
+        this.metrics?.increment('recetario.errors', {});
+      }
+    }
+  }
+
   // ── núcleo PURO: dado el producto, el coste y el food-cost → qué hacer + pvp sugerido.
   //    'aplicar' cuando el producto no tiene precio manual firme; 'testigo' cuando el
   //    comerciante ya lo precio (no se pisa su decisión — se canta la deriva). ──

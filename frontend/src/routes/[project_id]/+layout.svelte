@@ -16,7 +16,6 @@
   import { activeProjectId, activateProject } from '$lib/stores/projects';
   import { selectProject } from '$lib/stores/workspace';
   import { saveWorkspace } from '$lib/stores/persistence';
-  import { applyTheme } from '$lib/stores/theme';
   import { resolveType, resolvePages, isNavPage } from '$lib/ui-core/project-pages';
 
   // Store del proyecto actual. `type` + `pages` alimentan la navegación que EMERGE del
@@ -44,11 +43,6 @@
 
   // Pasar contexto a hijos
   setContext('project', projectStore);
-
-  // MARCA VISIBLE — la UI nueva (prisma) vira a CLARO para distinguirse mientras se construye.
-  // applyTheme('light') aplica el tema sin tocar la preferencia GLOBAL del usuario; al salir del
-  // proyecto (o si no es prisma) se restaura su preferencia con applyTheme().
-  $: applyTheme($projectStore.type === 'prisma' ? 'light' : undefined);
 
   // GUARD DE RUTA — una página de navegación que NO está en el page-set del proyecto (p.ej.
   // /[prisma]/menu-generator por URL directa) redirige al chat (la interfaz primaria, siempre
@@ -118,8 +112,6 @@
 
   onDestroy(() => {
     if (unsubConnected) unsubConnected();
-    // Al abandonar el layout de proyecto, restaurar la preferencia de tema del usuario.
-    applyTheme();
   });
 
   // Recargar datos cuando cambia el proyecto en la URL (no en el mount inicial)

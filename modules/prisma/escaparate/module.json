@@ -1,12 +1,14 @@
 {
   "_doc": "Manifest de prisma/escaparate — REFLEJO JS SIN ESTADO: la cara CLIENTE PÚBLICA de Prisma (gemelo generalizado de pizzepos/carta-digital). Proyecta el ProductoUniversal del catálogo activo a la vista PÚBLICA que ve el cliente. Se diferencia de prisma/proyector (vista interna, para POS) en que el escaparate PODA lo que el comerciante NO ofrece: oculta los valores de opción disponible:false (el cliente no ve lo que no puede pedir), presenta el precio de cara al público (fijo € o 'consultar' si es rango_valoracion o desconocido) y surfacea los avisos_obligatorios (verdad_obligatoria: alérgenos/etiqueta/seguridad). Domain propio 'escaparate.*'. La generación de HTML/PWA (bundle público) es follow-up (verificación en vivo). Ver arquitectura/decisiones/propuestas/prisma.md.",
   "name": "escaparate",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "_v0_2_0_nota": "v0.2.0: op escaparate.publicar.request — RENDER determinista del bundle (vista pública + marca → HTML legible, base neutra teñida por --accent de la marca) → VALIDAR (render.verificar, verificador-visual, best-effort) → GUARDAR (fs.write a storage/www/index.html + project.ensure-feature('www')) → EMITIR escaparate.publicado. Cierra el pendiente 'prisma/escaparate genera bundle' del modelo servir-www. Render de bundle verificable en vivo.",
   "_v0_1_0_nota": "v0.1.0 (2026-07-01): núcleo PURO _proyectarPublico(catalogo) + op escaparate.publico.request. Poda pública: oculta valores disponible:false, drop opción sin valores ofrecibles (salvo LIBRE), precio 'consultar' si rango_valoracion/desconocido, avisos_obligatorios de las restricciones verdad_obligatoria, requiere_cita si el eje tiempo lo pide. La generación del bundle HTML/PWA (como carta-digital static-template) es follow-up. Reflejo 0.1.0.",
   "description": "Escaparate público de Prisma: ProductoUniversal → vista cliente (poda lo no ofrecido, presenta precio/avisos). Gemelo generalizado de carta-digital.",
   "language": "es",
   "subscribes": [
     { "event": "escaparate.publico.request", "handler": "onPublicoRequest", "description": "Reflejo JS: proyecta el catálogo activo a la vista pública del cliente (poda disponibilidad, precio de cara al público, avisos obligatorios)." },
+    { "event": "escaparate.publicar.request", "handler": "onPublicarRequest", "description": "Reflejo JS: renderiza el bundle HTML (vista pública + marca) y lo escribe a storage/www/ (auto-activa la feature www), servido por Caddy en /<ns>/<slug>/." },
     { "event": "catalogo.actualizado", "handler": "onCatalogoCambiado", "description": "Reflejo JS (señal): el catálogo cambió → emite escaparate.actualizado (el PWA/consumidor re-pull)." },
     { "event": "catalogo.editado", "handler": "onCatalogoCambiado", "description": "Reflejo JS (señal): idem." },
     { "event": "catalogo.borrado", "handler": "onCatalogoCambiado", "description": "Reflejo JS (señal): idem." }

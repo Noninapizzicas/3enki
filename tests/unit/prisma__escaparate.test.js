@@ -66,4 +66,57 @@ test('proyecta el catálogo — categorías ordenadas + productos públicos', ()
   assert.equal(r.productos.length, 2);
 });
 
+// ── RENDER del bundle (v0.2.0) — _renderBundle(publico, marca) → HTML ──
+const PUBLICO_RENDER = {
+  comercio: { nombre: 'Nonina' },
+  categorias: [{ id: 'pizzas', nombre: 'Pizzas', orden: 1 }, { id: 'bebidas', nombre: 'Bebidas', orden: 2 }],
+  productos: [
+    { id: 'p1', nombre: 'Margarita', descripcion: 'Tomate y mozzarella', categoria_id: 'pizzas',
+      origen: 'elaborado', precio: { tipo: 'fijo', eur: 8.5 },
+      opciones: [{ etiqueta: 'Masa', valores: [{ etiqueta: 'fina' }, { etiqueta: 'napolitana' }] }],
+      avisos_obligatorios: ['gluten', 'lácteos'], requiere_cita: false },
+    { id: 'p2', nombre: 'Lambrusco', descripcion: 'Botella 75cl', categoria_id: 'bebidas',
+      origen: 'de_reventa', precio: { tipo: 'fijo', eur: 9 }, opciones: [], avisos_obligatorios: ['sulfitos'], requiere_cita: false },
+    { id: 'p3', nombre: 'Catering', descripcion: 'Para eventos', categoria_id: 'pizzas',
+      origen: 'elaborado', precio: { tipo: 'consultar', motivo: 'valoración' }, opciones: [], avisos_obligatorios: [], requiere_cita: true }
+  ]
+};
+
+test('render — nombre, productos, categorías y precio español', () => {
+  const html = E._renderBundle(PUBLICO_RENDER, null);
+  assert.match(html, /<!doctype html>/i);
+  assert.match(html, /Nonina/);
+  assert.match(html, /Margarita/);
+  assert.match(html, /8,50/);              // precio fijo formato ES (€ va con espacio no separable)
+  assert.match(html, /Consultar/);
+  assert.match(html, /id="c-pizzas"/);
+});
+
+test('render — badges por origen (elaborado / de reventa) + cita + alérgenos', () => {
+  const html = E._renderBundle(PUBLICO_RENDER, null);
+  assert.match(html, /elaborado/);
+  assert.match(html, /de reventa/);
+  assert.match(html, /requiere cita/);
+  assert.match(html, /contiene: gluten · lácteos/);
+});
+
+test('render — la MARCA tiñe el acento (--accent) y aporta lema', () => {
+  const html = E._renderBundle(PUBLICO_RENDER, { visual: { colores: { primario: '#123456' } }, esencia: { lema: 'Cocina de barrio' } });
+  assert.match(html, /--accent:#123456/);
+  assert.match(html, /Cocina de barrio/);
+});
+
+test('render — escapa el contenido del comerciante (no inyecta HTML)', () => {
+  const html = E._renderBundle({ comercio: { nombre: 'X' }, categorias: [], productos: [
+    { id: 'h', nombre: '<script>alert(1)</script>', descripcion: '', categoria_id: null, origen: 'elaborado', precio: { tipo: 'fijo', eur: 1 }, opciones: [], avisos_obligatorios: [], requiere_cita: false }
+  ] }, null);
+  assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
+  assert.match(html, /&lt;script&gt;/);
+});
+
+test('render — catálogo vacío no rompe (mensaje honesto)', () => {
+  const html = E._renderBundle({ comercio: { nombre: 'Vacío' }, categorias: [], productos: [] }, null);
+  assert.match(html, /Aún no hay productos/);
+});
+
 console.log('prisma__escaparate: asserts definidos');

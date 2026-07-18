@@ -110,6 +110,9 @@ cartadigital.publicar.request → cartadigital.publicado   { project_id, slug, p
 ✓ VIVO  Caddy /a/* estático · symlink por proyecto (project-manager) · www.json · carta-digital publica a www/ raíz · auto-activación (ensure-feature) · URL por defecto /<ns>/<slug>/
 ◑ LEGACY  tienda.json (/<ns>/shop/<slug>) — proyectos vivos migran reactivando www + republicando
 ◑ RUNTIME  activar www en proyectos vivos + migrar los de tienda (no código)
-[ ] prisma/escaparate genera bundle sobre este mismo modelo (hoy solo proyecta datos por bus)
+✓ prisma/escaparate genera bundle sobre este mismo modelo — escaparate.publicar.request (reflejo 0.2.0):
+  RENDER determinista (vista pública + marca → HTML legible, base neutra teñida por --accent de la marca) →
+  render.verificar (verificador-visual, best-effort) → fs.write a storage/www/index.html + ensure-feature('www').
+  Render de bundle verificable en vivo. [ ] assets/PWA (sw.js, manifest, icons) = follow-up.
 VERSIONES  project-manager 4.2.0 · carta-digital 2.23.0 · bienvenida-tienda 1.1.0
 ```

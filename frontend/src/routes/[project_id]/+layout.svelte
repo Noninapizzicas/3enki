@@ -17,6 +17,7 @@
   import { selectProject } from '$lib/stores/workspace';
   import { saveWorkspace } from '$lib/stores/persistence';
   import { resolveType, resolvePages, isNavPage } from '$lib/ui-core/project-pages';
+  import { applyPrismaSkin, clearPrismaSkin } from '$lib/stores/prisma-skin';
 
   // Store del proyecto actual. `type` + `pages` alimentan la navegación que EMERGE del
   // proyecto (rail/work-bar) en vez de una lista clavada a pizzepos. `resolved` = datos
@@ -43,6 +44,11 @@
 
   // Pasar contexto a hijos
   setContext('project', projectStore);
+
+  // PIEL PRISMA — un proyecto prisma se ve con OTRA paleta (verde-petróleo/teal, legible),
+  // distinta del azul-neutro de pizzepos: sabes de un vistazo en qué tipo estás. Al salir (o si
+  // no es prisma) se restaura la preferencia de tema del usuario.
+  $: if ($projectStore.type === 'prisma') applyPrismaSkin(); else clearPrismaSkin();
 
   // GUARD DE RUTA — una página de navegación que NO está en el page-set del proyecto (p.ej.
   // /[prisma]/menu-generator por URL directa) redirige al chat (la interfaz primaria, siempre
@@ -112,6 +118,7 @@
 
   onDestroy(() => {
     if (unsubConnected) unsubConnected();
+    clearPrismaSkin(); // al abandonar el layout de proyecto, restaurar el tema del usuario
   });
 
   // Recargar datos cuando cambia el proyecto en la URL (no en el mount inicial)

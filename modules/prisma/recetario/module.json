@@ -1,0 +1,11 @@
+{
+  "_doc": "Manifest de prisma/recetario — REFLEJO JS: el DUEÑO del órgano `recetario` del arquetipo comestible. El puente que cierra el lazo coste→precio recorriendo el arco de identidad producto↔receta. Suscribe escandallo.coste.calculado: resuelve el producto que referencia la receta (por receta_ref), y entrega su coste a prisma/coste (coste.aplicar), que escribe el precio_base_centimos. GATE implícito: si ningún producto referencia la receta, no hace nada (las sub-recetas no son productos). NO PISA el precio manual: si el comerciante ya fijó pvp y la pregunta de coste está cerrada, canta la deriva (recetario.coste_actualizado) en vez de sobrescribir. NO reescribe recetas/escandallo (contratos vivos) ni coste (genérico) — es la glue idiosincrática de comestible. Ver arquitectura/decisiones/propuestas/prisma.md.",
+  "name": "recetario",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: el puente escandallo.coste.calculado → coste.aplicar. Núcleo _decidir puro (aplicar vs testigo según precio manual). food_cost_objetivo por defecto 0.30 (política overridable por el evento). Dueño del interruptor organo-recetario (gate por interruptor = follow-up; hoy gate implícito por receta_ref).",
+  "description": "Dueño del órgano recetario (comestible): puente coste→precio que recorre producto↔receta. escandallo cuesta la ficha, recetario resuelve el producto por receta_ref y coste.aplicar escribe el pvp.",
+  "language": "es",
+  "subscribes": [
+    { "event": "escandallo.coste.calculado", "handler": "onCosteCalculado", "description": "Reflejo JS (puente): {project_id, receta_id, coste_unidad|coste_total} → resuelve el producto por receta_ref → coste.aplicar.request (escribe pvp) o testigo recetario.coste_actualizado si el precio es manual. Cierra coste→precio para comestible." }
+  ]
+}

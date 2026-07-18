@@ -104,7 +104,21 @@ test('alquiler — ciclo con_retorno y stock reutilizable se preservan', () => {
   assert.equal(p.ejes.tiempo, 'intervalo_que_cobra');
 });
 
+test('receta_ref — el arco de identidad hacia la ficha técnica se preserva (idiosincrasia comestible)', () => {
+  const p = R._normalizarProducto({ nombre: 'Bachata', arquetipo: 'comestible', identidad: { que_es: 'pizza' }, receta_ref: 'bachata' });
+  assert.equal(p.receta_ref, 'bachata');                   // preservado a través de la reconstrucción
+  const sin = R._normalizarProducto({ nombre: 'Agua', arquetipo: 'comestible', identidad: { que_es: 'bebida' } });
+  assert.equal(sin.receta_ref, undefined);                 // ausente = producto sin ficha (legítimo)
+  const trim = R._normalizarProducto({ nombre: 'X', arquetipo: 'comestible', identidad: { que_es: 'x' }, receta_ref: '  ' });
+  assert.equal(trim.receta_ref, undefined);                // vacío no se guarda
+});
+
 // ── el freno caza lo malformado ──
+test('freno — receta_ref presente pero no-string → RECETA_REF_INVALIDA (pero ausente NO se exige)', () => {
+  assert.ok(R._checkProducto({ nombre: 'X', arquetipo: 'comestible', identidad: { que_es: 'x' }, receta_ref: 123 }).some(e => e.code === 'RECETA_REF_INVALIDA'));
+  assert.ok(!R._checkProducto({ nombre: 'X', arquetipo: 'comestible', identidad: { que_es: 'x' } }).some(e => e.code === 'RECETA_REF_INVALIDA'));
+});
+
 test('freno — sin identidad.que_es → SIN_IDENTIDAD', () => {
   const errs = R._checkProducto({ nombre: 'X', arquetipo: 'pieza', identidad: {} });
   assert.ok(errs.some(e => e.code === 'SIN_IDENTIDAD'));

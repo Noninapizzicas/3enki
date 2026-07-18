@@ -19,7 +19,7 @@ const SEMILLA = [
   { id: 'servicio', reglas: [{ tiempo: 'cita' }, { stock: 'capacidad_temporal' }],
     sub_formas: ['variante', 'personalizacion_libre'], modelo_precio: 'por_tiempo|rango_valoracion', organos: ['agenda'] },
   { id: 'comestible', reglas: [{ stock: 'ingredientes' }, { precio: 'por_peso' }],
-    sub_formas: ['modificacion', 'añadido', 'variante'], modelo_precio: 'escandallo', organos: ['carta', 'cocina'] },
+    sub_formas: ['modificacion', 'añadido', 'variante'], modelo_precio: 'escandallo', organos: ['carta', 'cocina', 'recetario'] },
   { id: 'pieza', reglas: [], por_defecto: true,
     sub_formas: ['variante', 'añadido'], modelo_precio: 'por_unidad', organos: ['stock'] }
 ];

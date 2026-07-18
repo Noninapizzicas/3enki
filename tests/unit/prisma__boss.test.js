@@ -25,8 +25,8 @@ test('la identidad del comercio EMERGE de sus productos (arquetipos presentes)',
 test('el plan = unión de órganos de esos arquetipos (semilla)', () => {
   const plan = B._plan(CATALOGO, SEMILLA);
   assert.deepEqual(plan.arquetipos, ['comestible', 'servicio']);
-  // comestible→[carta,cocina] · servicio→[agenda] → unión ordenada
-  assert.deepEqual(plan.organos, ['agenda', 'carta', 'cocina']);
+  // comestible→[carta,cocina,recetario] · servicio→[agenda] → unión ordenada
+  assert.deepEqual(plan.organos, ['agenda', 'carta', 'cocina', 'recetario']);
   assert.deepEqual(plan.productos_por_arquetipo, { comestible: 2, servicio: 1 });
   assert.equal(plan.total_productos, 3);
 });

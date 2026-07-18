@@ -14559,7 +14559,9 @@ cartadigital.publicar.request → cartadigital.publicado   { project_id, slug, p
 ◑ RUNTIME  activar www en proyectos vivos + migrar los de tienda (no código)
 ✓ prisma/escaparate genera bundle sobre este mismo modelo — escaparate.publicar.request (reflejo 0.2.0):
   RENDER determinista (vista pública + marca → HTML legible, base neutra teñida por --accent de la marca) →
-  render.verificar (verificador-visual, best-effort) → fs.write a storage/www/index.html + ensure-feature('www').
+  render.verificar (verificador-visual, best-effort) → fs.write a storage/www/prisma/index.html + ensure-feature('www').
+  NAMESPACE prisma/ bajo www → NO colisiona con carta-digital (raíz www/index.html): carta-digital sirve
+  /<ns>/<slug>/, el escaparate prisma /<ns>/<slug>/prisma/. El mismo symlink www cubre todo el árbol.
   Render de bundle verificable en vivo. [ ] assets/PWA (sw.js, manifest, icons) = follow-up.
 VERSIONES  project-manager 4.2.0 · carta-digital 2.23.0 · bienvenida-tienda 1.1.0
 ```
@@ -16726,8 +16728,9 @@ CLASE PrismaEscaparateReflejo HEREDA ModuloHibridoReflejo {   // gemelo generali
   OPS (RPC escaparate.publico.request → .response): proyecta el catálogo activo a la vista del cliente.
        escaparate.publicar.request → .response (reflejo 0.2.0): RENDER determinista del bundle (vista pública +
        marca → HTML legible, base NEUTRA teñida por --accent de la MARCA) → VALIDAR (render.verificar,
-       verificador-visual, best-effort) → GUARDAR (fs.write storage/www/index.html + ensure-feature('www')) →
-       EMITIR escaparate.publicado. Servido por Caddy en /<ns>/<slug>/. El look emerge de la MARCA de cada
+       verificador-visual, best-effort) → GUARDAR (fs.write storage/www/prisma/index.html + ensure-feature('www')) →
+       EMITIR escaparate.publicado. Servido por Caddy en /<ns>/<slug>/prisma/ (namespace prisma/ bajo www → NO
+       colisiona con carta-digital, que sirve la raíz /<ns>/<slug>/). El look emerge de la MARCA de cada
        comercio (no un tema global): así se diferencia de pizzepos Y de otro prisma a la vez.
   SEÑAL  catalogo.{actualizado,editado,borrado} → escaparate.actualizado.
   FOLLOW-UP (en vivo)  render real por verificador-visual · assets PWA (sw.js/manifest/icons) · logo de marca.
@@ -16837,7 +16840,7 @@ coste.aplicar.request → .response · coste.aplicado   (escribe el pvp en el pr
 escandallo.coste.calculado               (escandallo → recetario: coste de la ficha; recetario resuelve el producto elaborado y aplica)
 recetario.coste_actualizado              (recetario: deriva cantada cuando el pvp manual ya estaba fijado — no pisa)
 escaparate.publico.request → .response   (cara cliente: catálogo → vista pública, poda lo no ofrecido)
-escaparate.publicar.request → .response · escaparate.publicado   (RENDER bundle + fs.write a www/ + ensure-feature www)
+escaparate.publicar.request → .response · escaparate.publicado   (RENDER bundle + fs.write a www/prisma/ + ensure-feature www; sirve /<ns>/<slug>/prisma/)
 escaparate.actualizado                   (escaparate → PWA/consumidor; consume-on-read del refresco)
 carrito.{get,add_item,remove_item,update_item,vaciar,list}.request → .response   (buffer de venta; tasa con opciones)
 carrito.{item_agregado,item_eliminado,item_actualizado,vaciado}   (mutaciones del carrito)

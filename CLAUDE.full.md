@@ -4256,6 +4256,10 @@ agent-observer (conversacion)
 
 ## PIZZEPOS - CORE MODULES
 
+> Nota (carta-marketing): su onboarding/copy siguen el patrón perspectiva-C — el reflejo
+> hidrata+persiste y el agente solo transforma; el determinismo es por COLOCACIÓN, agnóstico
+> al provider (no depende de qué modelo conduzca el turno).
+
 ### CUENTAS MANAGER
 
 ```

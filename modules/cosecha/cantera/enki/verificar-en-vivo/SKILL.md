@@ -29,7 +29,7 @@ frontera (red, provider, protocolo, entrega) o si un síntoma no cuadra con tu m
 
 ## Anti-patrones
 - Subir un número "a ojo" para arreglar un síntoma sin confirmar la causa (parche).
-- Fiarse de una etiqueta caduca ("tool-use roto") sin re-verificarla.
+- Fiarse de una etiqueta caduca sin re-verificarla.
 - Declarar "hecho" cuando lo único verificado es que compila.
 
 ## Procedencia

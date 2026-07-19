@@ -412,7 +412,7 @@ describe('Architect Agent Integration', () => {
 
 | Riesgo | Impacto | Mitigación |
 |--------|---------|------------|
-| DeepSeek falla | Agentes no funcionan | Fallback automático en ai-gateway |
+| Un provider LLM cae | Degradación temporal | Fallback automático en ai-gateway |
 | Prompt mal diseñado | Agentes incorrectos | Templates probados + validación |
 | Bucle infinito | Sistema bloqueado | Timeouts + límite de herramientas |
 | Coste excesivo | Factura alta | DeepSeek por defecto (barato) |

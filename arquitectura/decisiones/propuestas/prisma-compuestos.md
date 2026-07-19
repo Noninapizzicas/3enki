@@ -267,3 +267,199 @@ el puente NO tiene ritmo propio: late cuando laten el costeador o el catálogo. 
 · metáfora que lo fija:  guión = skill (qué hacer) · actor = LLM (interpreta) · tramoya = reflejo (construye, mecánico).
   El puente-compuesto es TRAMOYA: determinista, sin LLM.
 ```
+
+---
+
+## 11 · EL REPARTO (dramatis personae) — 7 papeles + 2 de fondo + 1 actor
+
+> Metáfora: casi todos son TRAMOYA (reflejo determinista); solo el adaptador es ACTOR (LLM, piensa).
+
+```
+CUSTODIOS — guardan y escriben (dueños de UN store) · TRAMOYA
+  1 insumos-manager      dueño /prisma/insumos/       ENTRA: al nacer/cambiar un insumo         [CREAR]
+  2 compuestos-manager   dueño /prisma/compuestos/    ENTRA: al nacer/cambiar una formulación   [CREAR]
+  3 producto-manager     dueño /prisma/catalogo/      ENTRA: al nacer/cambiar un producto       [existe]
+
+MOTORES — calculan, NO guardan · TRAMOYA
+  4 costeador prisma     Σ coste de un compuesto      ENTRA: cambia un insumo o se le pide → EMITE compuesto.coste.calculado
+  5 coste                coste → margen → pvp         ENTRA: el puente le dice coste.aplicar (delega en producto-manager)  [FRONTERA]
+
+PUENTE — conecta, sin store · TRAMOYA
+  6 puente-compuesto     ata producto↔compuesto + pipetea coste→precio (ex-recetario)
+                         ENTRA por 2 puertas: catalogo.editado|actualizado → ATAR · compuesto.coste.calculado → PUENTE
+
+REGISTRO — transversal · TRAMOYA
+  7 taxonomía            árbol abierto familia>subfamilia>grupo (un eje por nivel: compra/fabricación/venta)
+                         ENTRA: al clasificar un item o al proponerse una familia nueva (humano aprueba)
+
+DE FONDO — siempre en escena
+  · filesystem   escribe FÍSICAMENTE (fs.write atómico) a las órdenes de un custodio
+  · bus          el escenario (todo entra/sale por eventos)
+
+EL ÚNICO ACTOR (fuzzy) — el LLM
+  adaptador (blueprint/LLM)  INTERPRETA el crudo (foto/texto/fila) → molde de 5 huecos
+                             ENTRA: al dar de alta insumo/compuesto/producto desde algo sin estructurar
+                             el único que PIENSA; el resto es tramoya.
+
+MAPA: custodio GUARDA · motor CALCULA · puente CONECTA · registro CLASIFICA · actor INTERPRETA · fs ESCRIBE · bus TRANSPORTA
+```
+
+---
+
+## 12 · PUERTAS DE ENTRADA — por dónde entra el dato crudo
+
+> TODAS convergen en el ADAPTADOR (1 normalizador). Cada puerta tiene su lector del medio.
+
+```
+PUERTA               ACTOR (quién recibe)          PAPEL
+  1 CHAT             LLM de página (ai-gateway)    escucha lenguaje natural, entiende intención, CONDUCE
+                     — el que tiene el hilo         (estructura o delega en adaptador). Rellena lo PRIVADO. Actor principal.
+  2 TEXTO libre      adaptador (LLM)                descompone "harina T55, 0,59€/kg" → molde. Normalizador puro.
+  3 FOTO / imagen    ocr4rs + verificador-visual    OJOS: imagen/etiqueta → texto+campos → adaptador
+  4 FACTURA (OCR)    módulo facturas (OCR+AI)       extrae qué compraste + precio real → insumos  [oportunista, ver §16]
+  5 WEB / precio     crawl4rs·mercadona-api·leer-web precio de MERCADO de un insumo → adaptador
+  6 HOJA/CSV/LOTE    importador [por crear]         parte el lote en filas; cada fila → adaptador. VOLUMEN.
+  7 API proveedor    conector [por crear]           sincroniza catálogo/precios del proveedor → insumos
+  8 MIGRACIÓN        importador [por crear]         trae de pizzepos/otro una vez → los 3 niveles
+
+REGLA DE LAS PUERTAS:
+  · ninguna escribe directa en un store: todas pasan por ADAPTADOR → molde → CUSTODIO
+  · lo OBJETIVO (qué es, precio mercado, ingredientes) → lo estructura el adaptador
+  · lo PRIVADO (tu coste real, tarifa, stock) → SOLO por la puerta MANUAL/CHAT. No se inventa (queda ABIERTO).
+  · una puerta puede traer PARCIAL → las preguntas_abiertas marcan lo que falta
+  patrón común:  lector del medio (ojos/OCR/scraper/parser) → ADAPTADOR (normaliza) → molde → custodio
+  (el CHAT es la excepción: el medio es lenguaje, el LLM lo lee directo, sin pre-lector)
+```
+
+---
+
+## 13 · FORMA → NIVEL — cómo el adaptador enruta (y el LÍMITE de la parcela)
+
+> La misma "pizza" llega en formas distintas y cae en niveles distintos. El adaptador lee la FORMA.
+
+```
+¿trae CANTIDADES (g, ml, hojas) y no precio de venta?   → COMPUESTO   (fabricación)   ← NUESTRO
+¿es materia suelta con su precio de compra?             → INSUMO      (materia prima)  ← NUESTRO
+¿trae PRECIO DE VENTA + categoría + opciones?           → PRODUCTO    (venta)          ← PARCELA VECINA
+
+Ej.1  "pizza samba masa 315g tomate 60g mozzarella 100g 2 hojas albahaca"  → COMPUESTO (+ insumos)   NUESTRO
+Ej.2  catálogo JSON {precio 10.5, categoria, ingredientes[opciones QUITAR/AÑADIR]}  → PRODUCTO/venta  NO nuestro
+
+⚠ en el catálogo, "ingredientes" con precio_extra NO son la receta: son OPCIONES DE VENTA (quitar/añadir).
+   precio_extra = delta de VENTA ≠ coste del insumo. Prisma SEPARA opciones (venta) de compuesto (fabricación).
+   El pizzepos viejo los metía en la misma lista — ese era el lío.
+```
+
+### El LÍMITE de la parcela (contra el ansia de control)
+
+```
+NUESTRA PARCELA:  insumo → compuesto → COSTE.  FIN.
+FUERA (vecino):   producto · precio de venta · opciones · categoría-venta · escaparate · POS
+FRONTERA:         el compuesto emite su coste → ahí acaba lo nuestro. Quién lo use para un pvp = el vecino.
+                  (compuesto_ref y el ATAR lo TOCA el puente, pero el producto NO se diseña aquí)
+SEÑAL DE ALARMA:  si aparece "precio de venta / opciones / cliente" en el diseño → me salí de la parcela.
+```
+
+---
+
+## 14 · INGESTA ≠ PROCESO — de a una o en tanda; costeo receta a receta
+
+> P0 (expresión en positivo): se DECLARA el camino correcto, no se prohíbe nada.
+
+```
+INGESTA (cómo ENTRAN)          →  de a una  O  en tanda   (las dos puertas valen)
+PROCESO/COSTEO (cómo se TRABAJAN)  →  CAMINO CORRECTO: receta a receta, una a una
+
+CAMINO CORRECTO (el mandato, no una prohibición):
+  la tanda se PARTE en unidades · el costeo es 1 compuesto : 1 cálculo : 1 evento
+
+POR QUÉ es lo sano (la lección del POS, que petó por "todo de golpe"):
+  · no revienta el timeout        (nunca hay un "de golpe" que ahogue)
+  · fallo AISLADO                 (falla la 137 → las otras 299 siguen)
+  · progreso VISIBLE              (ves 137/300, no 20 min de silencio)
+  · determinista y REINTENTABLE   (repites solo la que falló)
+  · idempotente                   (recostear una no toca a las demás)
+
+MECÁNICA:  tanda de 300 → compuestos-manager persiste cada una → se ENCOLA (rail/chef's list) →
+           el costeador procesa UNA por tick → emite compuesto.coste.calculado (×1) → siguiente.
+           La tanda es la PUERTA; el motor late de a una.
+```
+
+---
+
+## 15 · PASO 0 — RECONCILIAR insumos ANTES de crear (limpieza de biblioteca)
+
+> Lo PRIMERO cuando entra una formulación no es crear insumos: es RECONOCER si ya existen.
+> Sin esto, la biblioteca se llena de duplicados y el anti-cuello se rompe.
+
+```
+ACTOR:  adaptador (LLM, match semántico) + insumos-manager (la biblioteca)
+
+  match EXACTO                        → reusa
+  similitud tipográfica (typo)        "mozarella" ≈ "mozzarella"          → propone el existente
+  mayúsculas / acentos / plural       "Tomate","olivas" → "tomate","oliva"
+  mismo concepto, OTRO idioma         "tomate"/"tomato"/"tomàquet"        → match por concepto
+  sinónimo                            "aceituna" ≈ "oliva"                → propone unir
+  ⚠ ambiguo (¿variante o el mismo?)   "tomate" vs "tomate frito" vs "tomate seco"
+                                      → NO fusiona a la ligera: PROPONE, el humano confirma (anti-wipe)
+  genuinamente nuevo                  → crea el insumo (canónico, en la biblioteca)
+
+POR QUÉ es el paso 0 (no un arreglo posterior):
+  · el compuesto guarda REFS → deben apuntar al insumo CANÓNICO, no a un duplicado
+  · reconciliar DESPUÉS = 5 "mozzarellas" repartidas por 200 compuestos → limpiar es un infierno
+  · reconciliar ANTES = biblioteca nace limpia (un insumo, una identidad, un precio, un sitio)
+  · misma ley que arquetipos: la identidad se RECONOCE, no se duplica · lo dudoso lo aprueba un humano
+
+FLUJO:  formulación entra → adaptador extrae componentes → RECONCILIA cada uno (paso 0) →
+        existe: usa id · nuevo: crea · dudoso: pregunta → compuesto guarda refs CANÓNICAS → costeo de a una
+```
+
+---
+
+## 16 · COSTE POR FASES — estimado ahora, real después (post-venta)
+
+> Meter facturas + coste real en el arranque = mucha complejidad → RALENTIZA la puesta en marcha.
+
+```
+FASE 1 · COMPUESTOS (ahora)          →  coste ESTIMADO
+  insumo lleva precio de REFERENCIA (web) o estimado a mano.
+  compuesto = Σ componentes (por ref, cantidades) → coste estimado. Receta a receta.
+  SUFICIENTE para arrancar y orientar el pvp. Simple, rápido, sistema VIVO ya.
+
+FASE 2 · COSTE REAL (más tarde, POS-VENTA)  →  cruce con la realidad
+  compras REALES (lo que pagaste) × producto VENDIDO (lo que salió) → coste verdadero.
+  vive con la venta/compras, no con la formulación. Otra parcela, otro momento.
+  (llega cuando hay ventas y compras que cruzar — antes no serviría)
+```
+
+### La FACTURA no se cierra — queda OPORTUNISTA (matiz)
+
+```
+FASE 1 no DEPENDE de facturas (arranca con estimado). PERO la puerta no se cierra:
+  · si llega una factura/albarán y encaja con un insumo → se aprovecha (el camino ya existe:
+    misma reconciliación del paso 0 + misma escritura del coste del insumo). No se construye pipeline OCR dedicado.
+
+REGLA DE FUENTE (espera lista, muerde sola cuando el dato cae):
+  hay coste REAL de un insumo (factura/albarán)  →  gana sobre la referencia (web)
+  no hay                                          →  referencia/estimado
+
+NORMAL vs EXCEPCIÓN (por ORIGEN):
+  NORMAL     factura de producto TERMINADO / de_reventa  →  parcela VENTA (un de_reventa NO lleva compuesto). No nuestro.
+  EXCEPCIÓN  factura de una MATERIA PRIMA (insumo de un elaborado)  →  alimenta el coste REAL de ese insumo. Oportunista.
+```
+
+---
+
+## 17 · LO DISTINTO DE CADA PUERTA (lo que NO repite patrón)
+
+```
+1 FOTO no trae CANTIDADES      → identifica componentes, no gramos → formulación INCOMPLETA (cantidades ABIERTAS). Puerta débil.
+2 FACTURA/WEB no traen receta  → traen el COSTE del ÁTOMO (insumo). Precedencia: factura (real) > web (referencia).
+3 CAMBIO DE PRECIO = CASCADA   → actualizar el precio de "harina" NO es un alta: re-costea los N compuestos que la usan.
+                                 Aquí el anti-cuello se vuelve real. La cascada también es receta a receta (por salud).
+                                 Es un RITMO propio: cambio-de-precio → recálculo, distinto de formulación-entra.
+4 RECONCILIAR PROVEEDOR        → la factura dice "HARINA TRIGO W300 25KG" → tu insumo "harina". Misma reconciliación (§15),
+                                 otro vocabulario (jerga de albarán).
+
+CSV · API-alta · migración → variantes de "tanda" o "una a una" del mismo patrón. Sin novedad estructural.
+```

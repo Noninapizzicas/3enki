@@ -1,0 +1,14 @@
+{
+  "_doc": "Manifest de prisma/compuestos — REFLEJO JS: el CUSTODIO de la biblioteca de COMPUESTOS (formulaciones/recetas) de prisma. Store propio en /prisma/compuestos/<id>.json (+ .versions/<id>/<ts>.json), atómico. Un compuesto guarda SOLO refs+cantidades a insumos (o a otros compuestos: sub-mezclas, recursivo), nunca los datos del insumo. Biblioteca independiente del producto: 300 formulaciones pueden existir sin ser producto (I+D). El coste NO se guarda embebido — lo calcula el costeador y viaja por evento. NO toca producto/venta. Ver arquitectura/decisiones/propuestas/prisma-compuestos.md y la skill prisma-compuestos.",
+  "name": "compuestos",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: custodio de /prisma/compuestos/. Ops: crear·get·list·actualizar·pendientes. crear create-only (409 si el slug existe). Componentes = [{ref, cantidad, unidad}] canónicos (reconciliados por insumos.buscar antes). `pendientes` da la cola para costear de a una.",
+  "language": "es",
+  "subscribes": [
+    { "event": "compuestos.crear.request", "handler": "onCrearRequest", "description": "Reflejo: {project_id, nombre, componentes:[{ref,cantidad,unidad}], clasificacion_ref?} → crea la formulación en /prisma/compuestos/<slug>.json. Create-only (409). Emite compuesto.creado." },
+    { "event": "compuestos.get.request", "handler": "onGetRequest", "description": "Reflejo: {project_id, compuesto_id} → la formulación completa, o 404." },
+    { "event": "compuestos.list.request", "handler": "onListRequest", "description": "Reflejo: {project_id} → catálogo barato (id·nombre·nº componentes)." },
+    { "event": "compuestos.actualizar.request", "handler": "onActualizarRequest", "description": "Reflejo: {project_id, compuesto_id, campos} → parcha (componentes/clasificación…), snapshot previo. Emite compuesto.actualizado." },
+    { "event": "compuestos.pendientes.request", "handler": "onPendientesRequest", "description": "Reflejo: {project_id} → los ids a costear (la COLA). El loop cuesta de a una, nunca en bloque." }
+  ]
+}

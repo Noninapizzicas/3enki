@@ -16699,6 +16699,25 @@ CLASE PrismaCosteReflejo HEREDA ModuloHibridoReflejo {   // generaliza escandall
 }
 ```
 
+## ui-forge (module 0.1.0 · reflejo 0.1.0) — EL TALLER DE UI de prisma ✓ (esqueleto v0.1)
+
+```
+CLASE PrismaUiForgeReflejo HEREDA ModuloHibridoReflejo {   // el espacio donde prisma CREA UIs potentes
+  FRAME  ui-forge.generar.request {project_id, proposito} → .response
+    LEER    catálogo (proyección) + marca (carta-marketing.get_perfil) + lentes.obtener{dominio:'diseño'} (best-effort)
+    PENSAR  v0.1 RENDER DETERMINISTA (render-pos.js); la capa LLM (lentes-diseño → diseño puntero) = follow-up
+    VALIDAR render.verificar.request (verificador-visual: render real · a11y · sin overflow), best-effort
+    GUARDAR fs.write a storage/www/prisma/<proposito>/index.html + project.ensure-feature('www')
+    EMITIR  ui-forge.generado
+  PRIMERA SALIDA  proposito 'pos' → el POS de DOS ZONAS dirigido por el catálogo (render-pos.js):
+    grid de productos · botón 2 zonas (cuerpo=añadir rápido · franja=OpcionesRenderer SOLO si hay opciones) ·
+    OpcionesRenderer dibuja el control por opciones[].modo (ELEGIR_UNO=radio · ELEGIR_VARIOS=check · QUITAR=chip · LIBRE=texto) ·
+    carrito cliente + total en céntimos (tasa con deltas) · Cobrar (v0.1 cliente; enganche carrito/cobro por bus = follow-up marcado)
+  CLAVE  qué controles salen NO se copia de pizzepos: se DERIVA del ProductoUniversal (pizza, lámpara, regalo, servicio con 1 UI)
+  NAMESPACE  /www/prisma/<proposito>/ → sirve /<ns>/<slug>/prisma/pos/ (no colisiona con carta-digital ni escaparate)
+}
+```
+
 ## recetario (module 0.1.0 · reflejo 0.1.0) — DUEÑO del órgano recetario (productos ELABORADOS) ✓
 
 ```
@@ -16841,6 +16860,7 @@ escandallo.coste.calculado               (escandallo → recetario: coste de la 
 recetario.coste_actualizado              (recetario: deriva cantada cuando el pvp manual ya estaba fijado — no pisa)
 escaparate.publico.request → .response   (cara cliente: catálogo → vista pública, poda lo no ofrecido)
 escaparate.publicar.request → .response · escaparate.publicado   (RENDER bundle + fs.write a www/prisma/ + ensure-feature www; sirve /<ns>/<slug>/prisma/)
+ui-forge.generar.request → .response · ui-forge.generado   (TALLER: LEER catálogo+marca+lentes → RENDER → verificador-visual → fs.write www/prisma/<proposito>/; primera salida 'pos')
 escaparate.actualizado                   (escaparate → PWA/consumidor; consume-on-read del refresco)
 carrito.{get,add_item,remove_item,update_item,vaciar,list}.request → .response   (buffer de venta; tasa con opciones)
 carrito.{item_agregado,item_eliminado,item_actualizado,vaciado}   (mutaciones del carrito)

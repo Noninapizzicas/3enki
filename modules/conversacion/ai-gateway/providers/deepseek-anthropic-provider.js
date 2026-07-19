@@ -7,9 +7,8 @@ const AnthropicProvider = require('./anthropic-provider');
  * https://api.deepseek.com/anthropic. Este provider hace que deepseek hable el
  * protocolo NATIVO de Anthropic (POST /v1/messages, bloques `tool_use`
  * estructurados) — el MISMO idioma que el provider `anthropic` (Claude) — en vez
- * del dialecto OpenAI-compat (deepseek-provider.js) que exige traducción de
- * nombres (punto→guion_bajo) y correlación por tool_call_id, y que históricamente
- * emitía tool-calls como texto (lo que aparcó los agentes).
+ * del dialecto OpenAI-compat (deepseek-provider.js) que exigía traducción de
+ * nombres (punto→guion_bajo) y correlación por tool_call_id.
  *
  * Reusa TODA la implementación de AnthropicProvider (translateTools,
  * convertMessages, parsing de bloques tool_use, prompt caching). No sobreescribe

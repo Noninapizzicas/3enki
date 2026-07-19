@@ -5,7 +5,7 @@ resumen: La flota como biblioteca buscable: buscar_agente/activar_agente sobre 3
 fuentes:
   - modules/conversacion/ai-agent-framework/**
   - agency-agents/**
-verificado: 2026-07-14
+verificado: 2026-07-19
 ---
 
 # CÚPULA DE AGENTES — la flota es una BIBLIOTECA buscable (ai-agent-framework {{version:modules/conversacion/ai-agent-framework}} · vivo 2026-07-06)
@@ -14,7 +14,7 @@ verificado: 2026-07-14
 > en contexto aislado**). El framework NO cambia de motor —sigue cargando de `agents/*.json` y corriendo
 > el invoke loop— sube al MOLDE: la flota deja de ser un set fijo y pasa a ser una BIBLIOTECA (search +
 > activación por demanda). Gemela EXACTA de la cantera: `buscar_agente` = `buscar_skill`. El muro que
-> aparcó a los 29 (tool-use roto bajo deepseek) YA cayó (deepseek corre por wire Anthropic) → los agentes
+> aparcó a los 29 YA cayó (el framework corre el invoke loop con tool_use estructurado) → los agentes
 > funcionan; la cúpula da el catálogo y la puerta de encendido sobre ellos. Las 29 siguen aparcadas como
 > RUNTIME (enabled:false) pero YA son BUSCABLES.
 
@@ -105,7 +105,7 @@ CLASE AiAgentFrameworkModule (ampliación 2.1.0) {
   agente se DEJA CAER (honesto, no se inventa): Bash/shell viven tras la reja del ejecutor (no es tool de agente,
   OFF por defecto) · WebFetch/WebSearch/Task sin equivalente. Resultado: 135 con write (developers), 19 read-only
   (analistas/auditores que solo declaraban Read/Grep/Glob). agent.tools = nombres filtrados contra getToolsForAI →
-  un agente encendido recibe SUS tools reales. (La razón de no copiar tal cual NO era 'tool-use roto' — era que
+  un agente encendido recibe SUS tools reales. (La razón de no copiar tal cual era que
   Read/Bash son nombres de Claude Code, no del bus.)
 ✓ DESPLEGADO + VERIFICADO EN VIVO (2026-07-06 · proyecto 1a): buscar_agente → biblioteca:183 · backend-developer
   activo:false con tools:5 (fs.read/write/edit/list/search, Bash caído) → activar → {activado:true, activos:1} en

@@ -1,14 +1,15 @@
 ---
 name: agente-perspectiva-c
-description: Convierte un agente de dominio (o crea uno nuevo) al patrón AGENTE-PERSPECTIVA-C — el reflejo JS HIDRATA los datos y PERSISTE el resultado; el agente solo TRANSFORMA (función pura, sin herramientas). Resuelve de raíz el fallo de tool-use roto bajo providers que emiten tool-calls como texto (deepseek): si el agente no toca herramientas, el tool-use roto no importa. Determinismo (cargar/guardar) en JS, chispa fuzzy (generar/decidir) en el agente. Caso testigo: marketing-copywriter.
-when-to-use: Un agente de dominio sale vacío/teatro porque sus tool-calls no ejecutan (auditoría muestra el agente escribiendo `<invoke name="X">` como texto y cero eventos de esa tool en el bus); o quieres crear un agente nuevo que GENERA/DECIDE sobre datos del proyecto y debe ATERRIZAR su salida. NO usar para ops deterministas puras (eso es reflejo sin agente, patrón Módulo Híbrido), ni para agentes que de verdad necesitan navegar/llamar servicios externos en bucle (ahí el tool-use es el punto).
+description: Convierte un agente de dominio (o crea uno nuevo) al patrón AGENTE-PERSPECTIVA-C — el reflejo JS HIDRATA los datos y PERSISTE el resultado; el agente solo TRANSFORMA (función pura, sin herramientas). El problema no es de tools, es de COLOCACIÓN: sacando el determinismo (cargar/guardar) al reflejo, el entregable ATERRIZA siempre y el agente queda como transformación pura, fiable y provider-agnóstica. Determinismo (cargar/guardar) en JS, chispa fuzzy (generar/decidir) en el agente. Caso testigo: marketing-copywriter.
+when-to-use: Un agente de dominio sale vacío/teatro — su salida no aterriza (la auditoría muestra cero eventos de persistencia en el bus); o quieres crear un agente nuevo que GENERA/DECIDE sobre datos del proyecto y debe ATERRIZAR su salida de forma determinista. NO usar para ops deterministas puras (eso es reflejo sin agente, patrón Módulo Híbrido), ni para agentes que de verdad necesitan navegar/llamar servicios externos en bucle (ahí el tool-use es el punto).
 ---
 
 # agente-perspectiva-c
 
 > El problema de las tools no es de tools. Es de **colocación**.
 > Saca el determinismo (cargar/guardar) al reflejo JS; deja al agente solo lo fuzzy
-> (transformar). Sin tools en el agente, el tool-use roto del provider no importa.
+> (transformar). Con la persistencia en el reflejo, el entregable aterriza SIEMPRE —
+> sin depender de que el agente toque herramientas.
 
 ## Contrato (JSON)
 
@@ -17,7 +18,7 @@ when-to-use: Un agente de dominio sale vacío/teatro porque sus tool-calls no ej
   "esquema": "agente-perspectiva-c-v1",
   "principio": "colocacion, no tools: determinismo fuera (reflejo JS), fuzzy dentro (agente puro)",
   "garantiza": [
-    "el agente NO toca herramientas (tools:[]) → no emite tool-calls → el tool-use roto no aplica",
+    "el agente NO toca herramientas (tools:[]) → su entregable no depende de su tool-use; lo aterriza el reflejo",
     "el reflejo HIDRATA antes y PERSISTE despues → el entregable aterriza SIEMPRE",
     "entregable con contrato JSON tipado → si no cumple, error declarado (no length:0 silencioso)",
     "emite <dominio>.<algo>.generado → la propiocepcion lo capta, los consumidores beben"
@@ -105,7 +106,7 @@ CLASE SkillAgentePerspectivaC {
   }
 
   METODO convertir(agente):                 // — RECETA A: agente tool-driven existente —
-    PASO 0  auditar(agente)                  // audit-module/force-agent: confirma vacío + tool-calls-como-texto
+    PASO 0  auditar(agente)                  // audit-module/force-agent: confirma que la salida no aterriza (cero eventos de persistencia)
     PASO 1  { lee, guarda, transforma } ← repartir(agente)   // lee/guarda → reflejo ; transforma → agente
     PASO 2  reescribirPrompt(promptAgente, perspectivaC)     // recibe context, sin tools, entregable JSON
               CONSERVA riquezaDeDominio(tono, reglas)
@@ -153,7 +154,7 @@ marketing-copywriter (carta-marketing · module 2.2.0 · blueprint 1.6.0) {
   REFLEJO _generarCopy : hidrata get_perfil → invoca copywriter(tools:[]) {perfil,productos}
                          → persiste /pizzepos/carta-marketing/copy.json → emite marketing.copy.generado
   AGENTE               : tools:[] · entregable { descripciones:[{producto_id,nombre,texto,emoji,tags}] }
-  antes                : salida vacía (carta.get/save como texto, no ejecutaban)
+  antes                : salida vacía (no aterrizaba)
   después              : el copy aterriza; el agente no toca herramientas
 }
 SIGUIENTES (mismo patrón) {
@@ -166,4 +167,4 @@ SIGUIENTES (mismo patrón) {
 
 - **NO** es para ops deterministas puras (lecturas/CRUD sin LLM) → reflejo sin agente (Patrón Módulo Híbrido).
 - **NO** es para agentes con bucle real de herramientas a servicios externos (ahí el tool-use ES el trabajo).
-- **NO** arregla el tool-use del framework — lo **esquiva** sacando el determinismo al reflejo. Si necesitas tool-use nativo real, esa es otra decisión (fijar provider / parsear el formato del provider).
+- **NO** depende del tool-use del agente — saca el determinismo al reflejo, así el entregable aterriza por diseño. Si necesitas un bucle de tools real con servicios externos, esa es otra decisión (ahí el tool-use ES el trabajo).

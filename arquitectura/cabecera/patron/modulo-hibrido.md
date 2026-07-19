@@ -5,7 +5,7 @@ resumen: Reflejo (JS determinista) + Blueprint (LLM): criterio de reparto, base 
 fuentes:
   - modules/_shared/modulo-hibrido-reflejo.js
   - scripts/validate-hibridos.js
-verificado: 2026-07-14
+verificado: 2026-07-19
 ---
 
 # Patrón Módulo Híbrido — Reflejo (JS) + Blueprint (LLM)
@@ -256,7 +256,7 @@ ORDEN DE MIGRACIÓN  (cada uno: receta de 5 pasos del patrón + gate)
 ```
 ESTADO_CAPA_AGENTES {
   todos los agentes (modules/conversacion/ai-agent-framework/agents/*) : enabled=false (29, aparcados)
-  motivo : tool-use roto bajo deepseek (tool-calls como texto, no ejecutan) → 25/29 nunca hicieron trabajo real
+  motivo : preferir el LLM de PÁGINA (ya tiene el hilo) sobre un sub-agente ciego con bucle discrecional — decisión de arquitectura, NO del provider. La flota sigue cargada y hoy es BUSCABLE (cúpula de agentes); reactivar = decisión de operación.
   framework : sigue cargado (recuperable). Reactivar = otra decision ("lo otro").
 }
 

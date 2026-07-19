@@ -1,6 +1,11 @@
 ---
 name: prisma-taller-ui
 description: El TALLER de UI de prisma — recetario para que el LLM COMPONGA UIs web potentes y con lógica (POS, escaparate, páginas a medida) para un comercio prisma, servidas desde storage/www/prisma/<proposito>/. La UI se DERIVA del ProductoUniversal (no se clava), se tiñe y se habla con TODO lo que resolvió marketing (marca + copy), se diseña con las lentes-diseño punteras, REUSA los módulos de UI de pizzepos donde encajan, y NO se publica hasta que los OJOS (verificador-visual) la aprueban. Úsala cuando haya que crear o regenerar una UI de un comercio prisma.
+fuente: enki
+dominio: comercio
+lente_dominio: prisma
+lente_tarea: disenar-ui
+tags: [prisma, ui, taller, pos, escaparate, diseño, marca, copy, marketing, lentes, verificador-visual, reflejo, blueprint, www]
 ---
 
 # Taller de UI de prisma

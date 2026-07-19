@@ -1,0 +1,11 @@
+{
+  "_doc": "prisma/ui-forge — EL TALLER DE UI de prisma (esqueleto v0.1). El espacio donde prisma CREA UIs potentes y con lógica, servidas desde storage/www/prisma/<proposito>/, dirigidas por el ProductoUniversal, teñidas por la MARCA (carta-marketing) y aprobadas por los OJOS (verificador-visual). Frame: LEER (catálogo + marca + lentes-diseño) → PENSAR (v0.1 RENDER DETERMINISTA; capa LLM con lentes = follow-up) → VALIDAR (render.verificar) → GUARDAR (fs.write + ensure-feature www) → EMITIR (ui-forge.generado). Primera salida: proposito 'pos' = el POS de DOS ZONAS dirigido por el catálogo (cuerpo=añadir rápido · franja=OpcionesRenderer que dibuja el control según opciones[].modo). Namespace propio bajo www; no colisiona con carta-digital ni con el escaparate.",
+  "name": "ui-forge",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: frame del taller + primera salida POS (render determinista, dos zonas, OpcionesRenderer por modo, carrito cliente, total en céntimos). El enganche del cobro al backend (carrito/cobro por bus) y la capa de diseño LLM (lentes-diseño) quedan como LUGARES marcados (follow-up, verificación en vivo). Reflejo 0.1.0.",
+  "description": "Taller de UI de prisma: genera bundles web potentes (POS, …) dirigidos por el ProductoUniversal + marca, verificados por verificador-visual, servidos desde storage/www/prisma/<proposito>/.",
+  "language": "es",
+  "subscribes": [
+    { "event": "ui-forge.generar.request", "handler": "onGenerarRequest", "description": "Reflejo JS: LEE catálogo+marca+lentes → RENDER (v0.1 determinista) → VALIDA (verificador-visual) → ESCRIBE el bundle a storage/www/prisma/<proposito>/index.html + activa la feature www." }
+  ]
+}

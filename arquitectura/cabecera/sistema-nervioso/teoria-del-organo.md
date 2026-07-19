@@ -6,7 +6,7 @@ fuentes:
   - modules/lentes-diseno/**
   - modules/homeostasis/**
   - modules/verificador-visual/**
-verificado: 2026-07-13
+verificado: 2026-07-19
 ---
 
 # Teoría del Órgano — cuenco · grafo · homeostasis · ojos (vivo en main, 2026-06-29)
@@ -18,7 +18,12 @@ verificado: 2026-07-13
 ## CUENCO de packs — modules/lentes-diseno ({{version:modules/lentes-diseno}}, reflejo puro)
 
 ```
-_descubrirPacks()  escanea packs/<dominio>/_pack.json (cúpula invertida; auto-descubre, no dirige)
+_descubrirPacks()  escanea packs/<dominio>/_pack.json (cúpula invertida; auto-descubre, no dirige).
+                   SEMILLA (código) y CRECIDO (data/) PAREN dominios — un dominio emerge de su
+                   primera lente (P0, anti «declara-antes-de-actuar»); no se pre-declara.
+FÁBRICA (montar)   montar en un dominio inexistente lo hace NACER (dominio_nacio:true), no rebota.
+                   El 409 dominio-sin-pack se disolvió; lo que ninguna página beba, el nervio no lo
+                   inyecta (filtro al LEER, no puerta al ESCRIBIR).
 ADN (_pack.json)   { dominio, cuando_usar, memoria{lentes,rutas}, motor?{hook,ops}, quimico?{cada,op,evento}, evento }
 PACKS VIVOS        diseño (8 lentes, solo memoria) · copy (5, marketing→carta-marketing) ·
                    negocio (3 + MOTOR food_cost/pvp_objetivo/salud_margenes céntimos + QUÍMICO pulso 7d→negocio.pulso)
@@ -33,7 +38,8 @@ NERVIO             ai-gateway _leerLente/_composeLenteSection (dominio-aware). P
                    carta-design/digital {diseño,tema} · carta-marketing {copy} · escandallo/viabilidad {negocio}.
 TESTS              servir 15 · anatomia 3 · grafo 9 · nervio-lentes 5
 SKILL              .claude/skills/montar-pack-lentes/ — recetario para onboardear un agente/skill externo
-                   como pack (GUARD: una lente solo entra si hay PÁGINA que la beba; si no, se cosecha).
+                   como pack (GUÍA en positivo, ya no freno de código: prefiere cosechar si aún no hay
+                   página que beba el dominio; pero montar puede parirlo — el nervio filtra al leer).
 ```
 
 ## HOMEOSTASIS — modules/homeostasis (1.0.0) — el termostato (auto-inhibición)

@@ -291,6 +291,28 @@ PATRONES
 > nace fértil"; el "VETADO qos2" → "idempotencia por correlation_id con qos1"). Donde una guarda sigue
 > en el motor (p. ej. `DiagnosticoEsteril`), es solo la cara de enforcement; la cara declarada es el Mandato.
 
+### Anti-patrón nombrado — el freno «declara-antes-de-actuar» (pre-registro central)
+
+> **La clase de freno que se disuelve por P0.** Un `409`/guard que exige *"el recurso (dominio · pack ·
+> registro) debe EXISTIR antes de que actúes sobre él"* no protege al sistema: te trata como sospechoso y
+> centraliza el permiso. Contradice la propia tesis de identidad emergente del sistema (*"la identidad NO
+> se declara, EMERGE"* — prisma): el recurso debe **nacer del acto**, no pre-existir en un registro que
+> concede permiso. Es el opuesto exacto del event-driven desacoplado.
+
+```json
+{
+  "esquema": "anti-patron-declara-antes-de-actuar-v1",
+  "olor": "guard que responde 409/CONFLICT porque un dominio/pack/registro no existe TODAVÍA",
+  "gemelo_positivo": "el freno se vuelve FÁBRICA — el recurso NACE del acto (auto-vivificar), la invariante real (si la hay) se reubica al momento de LEER/INYECTAR, no como puerta de escritura",
+  "discriminador (la pregunta madre)": {
+    "protege al DUEÑO (soberanía → se queda)": ["ejecutor kill-switch/hardline", "bus-guard (identidad por certificado)", "freno-entre-pasos del rail (no_silent_drops)"],
+    "te trata como sospechoso (pre-registro central → se disuelve)": ["lentes.montar 409 dominio-sin-pack", "cosecha.promover heredando ese 409", "todo guard que pida 'declara antes de actuar'"]
+  },
+  "precedente_aplicado": "lentes-diseno._montar — 409 dominio-sin-pack → factory (el dominio emerge de promover la primera lente). 2026-07-19.",
+  "barrido_pendiente": "cuando reaparezca este punto: buscar toda la clase 'declara-antes-de-actuar' en el repo (cada 409 de pre-registro) y convertirla en positivo (factory + filtro al leer). Encargo abierto — no urgente, se aplica al tropezarlo."
+}
+```
+
 ## Lente de Análisis Profundo (AnalistaProfundo) — facultad resolutiva de la persona
 
 > **Cómo analiza el Arquitecto antes de responder (P1, gobernada por P0).** La visión cerrada
@@ -14838,7 +14860,12 @@ TESTS { libro-capacidades 9/9 · interruptores+conserje 12/12 (correlacion req->
 ## CUENCO de packs — modules/lentes-diseno (2.3.0, reflejo puro)
 
 ```
-_descubrirPacks()  escanea packs/<dominio>/_pack.json (cúpula invertida; auto-descubre, no dirige)
+_descubrirPacks()  escanea packs/<dominio>/_pack.json (cúpula invertida; auto-descubre, no dirige).
+                   SEMILLA (código) y CRECIDO (data/) PAREN dominios — un dominio emerge de su
+                   primera lente (P0, anti «declara-antes-de-actuar»); no se pre-declara.
+FÁBRICA (montar)   montar en un dominio inexistente lo hace NACER (dominio_nacio:true), no rebota.
+                   El 409 dominio-sin-pack se disolvió; lo que ninguna página beba, el nervio no lo
+                   inyecta (filtro al LEER, no puerta al ESCRIBIR).
 ADN (_pack.json)   { dominio, cuando_usar, memoria{lentes,rutas}, motor?{hook,ops}, quimico?{cada,op,evento}, evento }
 PACKS VIVOS        diseño (8 lentes, solo memoria) · copy (5, marketing→carta-marketing) ·
                    negocio (3 + MOTOR food_cost/pvp_objetivo/salud_margenes céntimos + QUÍMICO pulso 7d→negocio.pulso)
@@ -14853,7 +14880,8 @@ NERVIO             ai-gateway _leerLente/_composeLenteSection (dominio-aware). P
                    carta-design/digital {diseño,tema} · carta-marketing {copy} · escandallo/viabilidad {negocio}.
 TESTS              servir 15 · anatomia 3 · grafo 9 · nervio-lentes 5
 SKILL              .claude/skills/montar-pack-lentes/ — recetario para onboardear un agente/skill externo
-                   como pack (GUARD: una lente solo entra si hay PÁGINA que la beba; si no, se cosecha).
+                   como pack (GUÍA en positivo, ya no freno de código: prefiere cosechar si aún no hay
+                   página que beba el dominio; pero montar puede parirlo — el nervio filtra al leer).
 ```
 
 ## HOMEOSTASIS — modules/homeostasis (1.0.0) — el termostato (auto-inhibición)
@@ -15037,6 +15065,14 @@ MANDATO fail-honest  el CLI externo ausente/red caída → 503 UPSTREAM_UNREACHA
 > `buscar_skill {query}` (busca en la cantera — realiza el "¿cómo hago X?" de find-skills
 > sobre el catálogo interno) y `activar_skill {nombre}` (promueve a lente viva, con confirmación).
 > "busca una skill para X" / "quiero construir X" → el asistente busca y activa, en el chat.
+>
+> UNIVERSALES (ai-gateway GLOBAL_TOOLS): `buscar_skill`/`activar_skill` afloran en TODA página
+> (blueprint, cajones, filtrada, chat plano). La regla que las gobierna: **ejecutar es universal,
+> solo la PRESENTACIÓN se ciñe al nicho.** El conserje ofrece proactivamente solo lo del contexto
+> (para no saturar); pero una ORDEN explícita ("busca skill de marketing") alcanza TODA la
+> biblioteca desde cualquier lado y el LLM invoca la que decida. (Antes, sin punto y fuera del set,
+> eran invisibles dentro de una página → el LLM se rendía a "no está en la cantera" aunque existiera.
+> Mismo fix que el rail; la intención "cualquier conversación" del v0.7 realizada en código.)
 >
 > Y el feeder añade el grifo de FUERA (v0.2.0): `buscar_fuera {query}` (descubre en skills.sh
 > vía `npx skills find`) + `traer_skill {paquete}` (`npx skills add owner/repo@skill` → cantera,

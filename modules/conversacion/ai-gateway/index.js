@@ -391,8 +391,17 @@ class AiGatewayModule extends BaseModule {
     // (chat plano sin page_id → devuelve `all`; páginas con prefijo 'fs' → por prefijo).
     // Raíz del incidente the-pirate: el LLM en la página de escandallo tenía fs.write y
     // truncó recetas.json (dato ajeno). fs.read/list/search se quedan (leer es libre).
+    // + la CANTERA (buscar_skill/activar_skill): la BÚSQUEDA de skills es universal por
+    //   diseño. La PRESENTACIÓN se ciñe al nicho (el conserje ofrece solo lo del contexto,
+    //   para no saturar) — pero una ORDEN explícita ("busca skill de marketing") debe
+    //   alcanzar TODA la biblioteca desde cualquier página, y el LLM invocar la que decida.
+    //   Ejecutar es universal; solo ofrecer es contextual. Antes buscar_skill (sin punto,
+    //   fuera de este set) era invisible dentro de toda página con page_id → el LLM se
+    //   rendía a "no está en la cantera" aunque existiera (visto en vivo). Mismo fix que el
+    //   rail: intención "cualquier conversación" del v0.7 realizada en código.
     const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente', 'crear_agente', 'crear_agente_desde_caso',
       'buscar_capacidad', 'detalle_capacidad',
+      'buscar_skill', 'activar_skill',
       'fs.read', 'fs.list', 'fs.search',
       'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
       'fijar_objetivo', 'evaluar_rail',

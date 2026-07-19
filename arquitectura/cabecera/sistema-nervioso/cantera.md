@@ -7,7 +7,7 @@ fuentes:
   - modules/planificador/**
   - modules/feeder/**
   - modules/cantera-semantica/**
-verificado: 2026-07-07
+verificado: 2026-07-19
 ---
 
 # CANTERA — la abundancia alojada (hermano ADITIVO del cuenco · vivo en main, 2026-07-01)
@@ -150,6 +150,14 @@ MANDATO fail-honest  el CLI externo ausente/red caída → 503 UPSTREAM_UNREACHA
 > `buscar_skill {query}` (busca en la cantera — realiza el "¿cómo hago X?" de find-skills
 > sobre el catálogo interno) y `activar_skill {nombre}` (promueve a lente viva, con confirmación).
 > "busca una skill para X" / "quiero construir X" → el asistente busca y activa, en el chat.
+>
+> UNIVERSALES (ai-gateway GLOBAL_TOOLS): `buscar_skill`/`activar_skill` afloran en TODA página
+> (blueprint, cajones, filtrada, chat plano). La regla que las gobierna: **ejecutar es universal,
+> solo la PRESENTACIÓN se ciñe al nicho.** El conserje ofrece proactivamente solo lo del contexto
+> (para no saturar); pero una ORDEN explícita ("busca skill de marketing") alcanza TODA la
+> biblioteca desde cualquier lado y el LLM invoca la que decida. (Antes, sin punto y fuera del set,
+> eran invisibles dentro de una página → el LLM se rendía a "no está en la cantera" aunque existiera.
+> Mismo fix que el rail; la intención "cualquier conversación" del v0.7 realizada en código.)
 >
 > Y el feeder añade el grifo de FUERA (v0.2.0): `buscar_fuera {query}` (descubre en skills.sh
 > vía `npx skills find`) + `traer_skill {paquete}` (`npx skills add owner/repo@skill` → cantera,

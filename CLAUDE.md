@@ -291,6 +291,28 @@ PATRONES
 > nace fértil"; el "VETADO qos2" → "idempotencia por correlation_id con qos1"). Donde una guarda sigue
 > en el motor (p. ej. `DiagnosticoEsteril`), es solo la cara de enforcement; la cara declarada es el Mandato.
 
+### Anti-patrón nombrado — el freno «declara-antes-de-actuar» (pre-registro central)
+
+> **La clase de freno que se disuelve por P0.** Un `409`/guard que exige *"el recurso (dominio · pack ·
+> registro) debe EXISTIR antes de que actúes sobre él"* no protege al sistema: te trata como sospechoso y
+> centraliza el permiso. Contradice la propia tesis de identidad emergente del sistema (*"la identidad NO
+> se declara, EMERGE"* — prisma): el recurso debe **nacer del acto**, no pre-existir en un registro que
+> concede permiso. Es el opuesto exacto del event-driven desacoplado.
+
+```json
+{
+  "esquema": "anti-patron-declara-antes-de-actuar-v1",
+  "olor": "guard que responde 409/CONFLICT porque un dominio/pack/registro no existe TODAVÍA",
+  "gemelo_positivo": "el freno se vuelve FÁBRICA — el recurso NACE del acto (auto-vivificar), la invariante real (si la hay) se reubica al momento de LEER/INYECTAR, no como puerta de escritura",
+  "discriminador (la pregunta madre)": {
+    "protege al DUEÑO (soberanía → se queda)": ["ejecutor kill-switch/hardline", "bus-guard (identidad por certificado)", "freno-entre-pasos del rail (no_silent_drops)"],
+    "te trata como sospechoso (pre-registro central → se disuelve)": ["lentes.montar 409 dominio-sin-pack", "cosecha.promover heredando ese 409", "todo guard que pida 'declara antes de actuar'"]
+  },
+  "precedente_aplicado": "lentes-diseno._montar — 409 dominio-sin-pack → factory (el dominio emerge de promover la primera lente). 2026-07-19.",
+  "barrido_pendiente": "cuando reaparezca este punto: buscar toda la clase 'declara-antes-de-actuar' en el repo (cada 409 de pre-registro) y convertirla en positivo (factory + filtro al leer). Encargo abierto — no urgente, se aplica al tropezarlo."
+}
+```
+
 ## Lente de Análisis Profundo (AnalistaProfundo) — facultad resolutiva de la persona
 
 > **Cómo analiza el Arquitecto antes de responder (P1, gobernada por P0).** La visión cerrada

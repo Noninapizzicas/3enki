@@ -88,11 +88,14 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
 
   // ── la cúpula invertida: RECOGE packs/<dominio>/_pack.json (no dirige, recoge) ──
   // Escanea SEMILLA (código) primero y luego CRECIDO (data): lo crecido MERGEA en el
-  // pack semilla de su dominio (añade lentes + extiende rutas); no crea dominios nuevos.
+  // pack semilla de su dominio (añade lentes + extiende rutas) Y PUEDE PARIR dominios
+  // nuevos (P0, anti «declara-antes-de-actuar»): un dominio emerge de promover su primera
+  // lente, no se pre-declara en la semilla. data/ solo lo escribe `_montar`, así que cada
+  // dir de ahí es un hogar legítimo. Lo que ninguna página beba, el nervio no lo inyecta.
   _descubrirPacks() {
     this._packs.clear();
     this._scanPacks(PACKS_DIR, true);        // semilla: crea packs
-    this._scanPacks(PACKS_DATA_DIR, false);  // crecido: solo mergea en dominios existentes
+    this._scanPacks(PACKS_DATA_DIR, true);   // crecido: mergea en existentes Y pare los nuevos
   }
 
   _scanPacks(baseDir, allowNew) {
@@ -112,11 +115,9 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
       catch (err) { this.logger?.warn('lentes-diseno.pack.sin_adn', { dir: d.name, error: err.message }); continue; }
 
       const dominio = adn.dominio || d.name;
-      // GUARDA no-colgantes: lo crecido solo extiende un dominio que YA existe (bebido por página).
-      if (!allowNew && !this._packs.has(dominio)) {
-        this.logger?.warn('lentes-diseno.crecido.dominio_huerfano', { dominio });
-        continue;
-      }
+      // FÁBRICA (P0): semilla y crecido paren dominios; un dominio emerge de su primera lente.
+      // El `allowNew` se conserva por firma; hoy ambos escaneos lo pasan en true.
+      void allowNew;
 
       const lentes = new Map();
       // MEMORIA: carga el .md íntegro de cada lente (vive dentro del órgano).
@@ -394,17 +395,17 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
   // ── MONTAR: la puerta de escritura del cuenco (crecible en caliente). Una skill
   // promovida desde la cantera ENTRA como lente activa en el pack de su dominio y, si
   // trae `tarea`, en esa ruta (para que el ruteo determinista la alcance). Persiste en
-  // data/ (overlay ADN + .md) y re-descubre. GUARDA: no colgantes — el dominio debe
-  // existir como pack (bebido por una página); no se inventan dominios muertos. ──
+  // data/ (overlay ADN + .md) y re-descubre. FÁBRICA (P0, anti «declara-antes-de-actuar»):
+  // el dominio NACE del acto — si no existe como pack, se auto-vivifica aquí (la lente trae
+  // su hogar consigo). La identidad del dominio EMERGE de promover su primera lente, igual
+  // que la de un comercio emerge de su primer producto; no se pre-declara en un registro
+  // central. Lo que ninguna página beba, el nervio no lo inyecta (filtro al leer, no puerta
+  // al escribir). ──
   _montar({ dominio, nombre, contenido, cuando_usar = '', tarea } = {}) {
     if (!dominio || typeof dominio !== 'string') return this._invalid('dominio');
     if (!nombre || typeof nombre !== 'string') return this._invalid('nombre');
     if (!contenido || typeof contenido !== 'string') return this._invalid('contenido');
-    if (!this._packs.has(dominio)) {
-      return this._errorResponse(409, 'CONFLICT_STATE',
-        `dominio sin pack: no se montan colgantes en '${dominio}'`,
-        { dominios_validos: [...this._packs.keys()] });
-    }
+    const dominioNace = !this._packs.has(dominio);   // el dominio emerge del acto de montar
 
     const archivo = `${this._slug(nombre)}.md`;
     const packDir = path.join(PACKS_DATA_DIR, dominio);   // dir por dominio raw (fs UTF-8 ok)
@@ -444,7 +445,7 @@ class LentesDisenoModule extends ModuloHibridoReflejo {
     } catch (_) { /* best-effort */ }
     this.metrics?.increment?.('lentes-diseno.montadas.total', { dominio });
 
-    return { status: 200, data: { dominio, nombre, tarea: tareaNorm, montada: true, total_lentes: pack.lentes.size } };
+    return { status: 200, data: { dominio, nombre, tarea: tareaNorm, montada: true, dominio_nacio: dominioNace, total_lentes: pack.lentes.size } };
   }
 
   // ── DESMONTAR: la reversibilidad de montar. Quita una lente CRECIDA del overlay de un

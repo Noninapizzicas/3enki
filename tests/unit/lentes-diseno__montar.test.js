@@ -6,7 +6,8 @@
  * Una lente montada (skill promovida desde la cantera) ENTRA en el pack semilla de su
  * dominio: se persiste en data/lentes-diseno/packs/<dominio>/, se re-descubre y queda
  * ACTIVA — servible por lentes.obtener {dominio, tarea} (que es lo que el nervio inyecta).
- * Guarda no-colgantes: solo dominios que ya existen como pack (bebidos por una página).
+ * FÁBRICA (P0): si el dominio no existe, NACE del acto de montar (un dominio emerge de su
+ * primera lente); lo que ninguna página beba, el nervio no lo inyecta (filtro al leer).
  *
  * Ejecutar: node tests/unit/lentes-diseno__montar.test.js
  */
@@ -78,12 +79,28 @@ test('la semilla no se pisa: las lentes de código siguen ahí tras montar', asy
   limpiar();
 });
 
-test('GUARDA no-colgantes: dominio inexistente -> 409', async () => {
+test('FÁBRICA (P0): dominio inexistente NACE del acto de montar', async () => {
   limpiar();
   const m = await makeCargado();
-  const r = m._montar({ dominio: 'inventado', nombre: 'x', contenido: '# y' });
-  assert.strictEqual(r.status, 409);
-  assert.strictEqual(r.error.code, 'CONFLICT_STATE');
+  assert.ok(!m._packs.has('inventado'), 'el dominio no existe antes');
+  const r = m._montar({ dominio: 'inventado', nombre: 'x', cuando_usar: 'z', tarea: 'w', contenido: '# y' });
+  assert.strictEqual(r.status, 200, 'ya no rebota — el freno declara-antes-de-actuar se disolvió');
+  assert.strictEqual(r.data.dominio_nacio, true, 'el retorno anuncia el nacimiento');
+  // el dominio recién nacido es ACTIVO: se re-descubre y sirve por lentes.obtener
+  assert.ok(m._packs.has('inventado'), 'el dominio emergió y persiste en el índice');
+  const { data } = m._obtener({ dominio: 'inventado', tarea: 'w' });
+  assert.ok(data.lentes.some(l => l.nombre === 'x'), 'la primera lente de su nuevo hogar es servible');
+  // y persiste en disco como pack crecido
+  assert.ok(fs.existsSync(path.join(DATA_ROOT, 'packs', 'inventado', '_pack.json')), 'el hogar quedó en data/');
+  limpiar();
+});
+
+test('un dominio ya existente NO renace: montar sobre él mergea (dominio_nacio=false)', async () => {
+  limpiar();
+  const m = await makeCargado();
+  const r = m._montar({ dominio: 'diseño', nombre: 'q', cuando_usar: 'z', contenido: '# y' });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.dominio_nacio, false, 'diseño ya existía → no nace, se extiende');
   limpiar();
 });
 

@@ -342,7 +342,8 @@ class CosechaModule extends ModuloHibridoReflejo {
   // promover: el PUENTE cantera → cuenco. Toma una skill de la abundancia y se la
   // entrega al cuenco (lentes-diseno) para que la MONTE como lente activa del dominio;
   // el nervio de ai-gateway la inyectará por turno en las páginas que beban ese dominio.
-  // El cuenco pone la guarda no-colgantes (409 si el dominio no existe); aquí se propaga.
+  // El cuenco es FÁBRICA (P0): si el dominio no existe, NACE del acto de montar la lente
+  // (dominio_nacio); ya no rebota. Lo que ninguna página beba, el nervio no lo inyecta.
   async _promover({ nombre, dominio, tarea, cuando_usar } = {}) {
     if (!nombre || typeof nombre !== 'string') return this._invalid('nombre');
     const skill = this._skills.get(nombre);

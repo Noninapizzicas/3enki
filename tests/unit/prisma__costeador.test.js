@@ -70,6 +70,28 @@ test('_costear compuesto inexistente → 404', async () => {
   assert.strictEqual((await m._costear({ project_id: 'p', compuesto_id: 'no' })).status, 404);
 });
 
+test('_costearTodos EL LOOP: recorre la cola de a una → {total, calculados, incompletos}', async () => {
+  const m = new Mod();
+  m.logger = { info(){}, warn(){}, error(){}, debug(){} };
+  m._publicados = []; m.eventBus = { publish: (ev, p) => m._publicados.push({ ev, p }) }; m.metrics = { increment(){} };
+  const catalogo = {
+    a: { id: 'a', componentes: [{ ref: 'masa', cantidad: 100 }] },              // completa
+    b: { id: 'b', componentes: [{ ref: 'raro', cantidad: 50 }] },               // faltante
+  };
+  m._rpc = async (ev, p) => {
+    if (ev === 'compuestos.pendientes.request') return { status: 200, data: { pendientes: ['a', 'b'] } };
+    if (ev === 'compuestos.get.request') return { status: 200, data: { compuesto: catalogo[p.compuesto_id] } };
+    if (ev === 'insumos.get.request') return (p.insumo_id === 'masa') ? { status: 200, data: { insumo: { naturalezas: { coste_centimos_por_unidad: 0.2 } } } } : { status: 404 };
+    return { status: 404 };
+  };
+  const r = await m._costearTodos({ project_id: 'p' });
+  assert.strictEqual(r.data.total, 2);
+  assert.strictEqual(r.data.calculados, 1, 'a completa');
+  assert.strictEqual(r.data.incompletos, 1, 'b faltante');
+  assert.ok(m._publicados.some(x => x.ev === 'compuesto.coste.calculado'), 'emitió por la completa');
+  assert.ok(m._publicados.some(x => x.ev === 'compuesto.coste.incompleto'), 'avisó por la faltante');
+});
+
 (async () => {
   let ok = 0;
   for (const { n, f } of tests) {

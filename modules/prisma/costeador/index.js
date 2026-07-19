@@ -22,8 +22,22 @@ class PrismaCosteadorReflejo extends ModuloHibridoReflejo {
   }
   async onUnload() { return super.onUnload(); }
 
-  onCostearRequest(e)    { return this._atender(e, 'costear', 'costeador.costear.response', d => this._costear(d)); }
+  onCostearRequest(e)      { return this._atender(e, 'costear', 'costeador.costear.response', d => this._costear(d)); }
+  onCostearTodosRequest(e) { return this._atender(e, 'costear_todos', 'costeador.costear_todos.response', d => this._costearTodos(d)); }
   async onInsumoActualizado(e) { return this._cascada((e && e.data) || e || {}); }
+
+  // ── EL LOOP: recorre la cola y cuesta UNA a UNA (nunca en bloque) ──
+  async _costearTodos({ project_id } = {}) {
+    if (!project_id) return this._invalid('project_id');
+    const l = await this._rpc('compuestos.pendientes.request', { project_id });
+    const ids = (l && l.status === 200 && Array.isArray(l.data?.pendientes)) ? l.data.pendientes : [];
+    let calculados = 0, incompletos = 0;
+    for (const cid of ids) {                                    // await por compuesto → de a una, por salud
+      const r = await this._costear({ project_id, compuesto_id: cid });
+      if (r && r.status === 200) (r.data.faltantes.length ? incompletos++ : calculados++);
+    }
+    return { status: 200, data: { total: ids.length, calculados, incompletos } };
+  }
 
   // ── PURO: Σ (precio × cantidad) sobre componentes ya resueltos a precio.
   //    precioDe: (ref) → centimos|null. Devuelve { coste_centimos, faltantes[] }. ──

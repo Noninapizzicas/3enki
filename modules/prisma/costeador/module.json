@@ -6,6 +6,7 @@
   "language": "es",
   "subscribes": [
     { "event": "costeador.costear.request", "handler": "onCostearRequest", "description": "Reflejo: {project_id, compuesto_id} → resuelve precios de componentes (insumos.get / recursión) → Σ → EMITE compuesto.coste.calculado {coste_unidad} o compuesto.coste.incompleto {faltantes}. Una receta, un cálculo, un evento." },
+    { "event": "costeador.costear_todos.request", "handler": "onCostearTodosRequest", "description": "Reflejo (EL LOOP): {project_id} → lee compuestos.pendientes (la cola) → cuesta UNA a UNA (await por compuesto, nunca en bloque). Devuelve {total, calculados, incompletos}. Por salud: fallo aislado, progreso, reintentable." },
     { "event": "insumo.actualizado", "handler": "onInsumoActualizado", "description": "Reflejo (cascada): cambió el precio de un insumo → re-cuesta de A UNA los compuestos que lo referencian. Nunca en bloque. Aquí el anti-cuello se vuelve real (un precio, propaga)." }
   ]
 }

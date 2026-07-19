@@ -296,10 +296,14 @@ DE FONDO — siempre en escena
   · filesystem   escribe FÍSICAMENTE (fs.write atómico) a las órdenes de un custodio
   · bus          el escenario (todo entra/sale por eventos)
 
-EL ÚNICO ACTOR (fuzzy) — el LLM
-  adaptador (blueprint/LLM)  INTERPRETA el crudo (foto/texto/fila) → molde de 5 huecos
-                             ENTRA: al dar de alta insumo/compuesto/producto desde algo sin estructurar
-                             el único que PIENSA; el resto es tramoya.
+EL ACTOR FUZZY — el FORMULADOR (micro-agentes, forma PRISMA)
+  prisma/formulador          NO es "LLM de página" (eso es pizzepos) ni el agent-framework viejo.
+                             Es event-driven: cada micro-agente = handler donde el REFLEJO hidrata+persiste
+                             y el fuzzy es 1 llamada llm.complete headless (tools:[]) con su guión-prompt.
+    reconciliar   nombre crudo + candidatos → usar|crear|preguntar (sinónimo/idioma; ambiguo→preguntar)
+    modelar       texto de formulación → {nombre, componentes[]} → reconcilia → persiste; cantidad ausente → abierta
+    clasificar    item + eje → familia/subfamilia/grupo o propuesta nueva
+                             el único que PIENSA; el resto es tramoya. NUNCA inventa (contrato JSON validado).
 
 MAPA: custodio GUARDA · motor CALCULA · puente CONECTA · registro CLASIFICA · actor INTERPRETA · fs ESCRIBE · bus TRANSPORTA
 ```

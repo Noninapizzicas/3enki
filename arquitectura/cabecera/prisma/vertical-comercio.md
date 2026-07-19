@@ -250,7 +250,8 @@ CLASE PrismaCosteReflejo HEREDA ModuloHibridoReflejo {   // generaliza escandall
 CLASE PrismaUiForgeReflejo HEREDA ModuloHibridoReflejo {   // el espacio donde prisma CREA UIs potentes
   FRAME  ui-forge.generar.request {project_id, proposito} → .response
     LEER    catálogo (proyección) + marca (carta-marketing.get_perfil) + lentes.obtener{dominio:'diseño'} (best-effort)
-    PENSAR  v0.1 RENDER DETERMINISTA (render-pos.js); la capa LLM (lentes-diseño → diseño puntero) = follow-up
+    PENSAR  v0.1 RENDER DETERMINISTA (render-pos.js); la capa LLM la GUÍA la skill .claude/skills/prisma-taller-ui
+            (LEER catálogo+marca+COPY/marketing+lentes-diseño + módulos UI de pizzepos para REUSAR → COMPONE → ojos)
     VALIDAR render.verificar.request (verificador-visual: render real · a11y · sin overflow), best-effort
     GUARDAR fs.write a storage/www/prisma/<proposito>/index.html + project.ensure-feature('www')
     EMITIR  ui-forge.generado

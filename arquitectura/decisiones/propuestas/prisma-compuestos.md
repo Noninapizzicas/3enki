@@ -254,9 +254,10 @@ el puente NO tiene ritmo propio: late cuando laten el costeador o el catálogo. 
    + conversor        [HECHO] reflejo PURO: unidades · precio→base · fórmula panadera (escalado) · referencia prudente. 12/12
    + puente-compuesto [HECHO] puente prisma-puro: compuesto.coste.calculado → coste.aplicar/testigo. 7/7
 4. taxonomía abierta  [RESUELTO — NO módulo] 3 campos abiertos por eje + formulador.clasificar con taxonomía DERIVADA (proyección de list) + pregunta si propuesta_nueva. Vive en la SKILL.
-5. retirar recetario  [DIFERIDO — no romper pizzepos] el puente-compuesto COEXISTE con el recetario, no lo reemplaza:
-                      el recetario sigue siendo el ÚNICO puente del escandallo (pizzepos, VIVO). Borrarlo hoy corta ese
-                      coste→precio. Retiro condicionado a migrar/apagar el escandallo de pizzepos. Decisión del dueño 2026-07-20.
+5. retirar recetario  [HECHO 2026-07-20] módulo prisma/recetario + su test BORRADOS. En prisma ya no existe: el arco
+                      coste→precio lo hace puente-compuesto (compuesto.coste.calculado). No rompe pizzepos: pizzepos/recetas
+                      escucha escandallo.coste.calculado por su cuenta (persiste su coste); nadie IMPORTA el módulo; el órgano
+                      'recetario' (organos-recetario.js) sigue vivo con beater = costeador+puente-compuesto.
 ```
 
 ---

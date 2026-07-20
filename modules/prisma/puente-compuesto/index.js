@@ -1,10 +1,10 @@
 /**
  * prisma/puente-compuesto — REFLEJO JS: el PUENTE prisma-puro compuesto↔producto↔precio.
  *
- * HERMANO prisma-nativo del recetario (NO lo reemplaza: el recetario bebe de escandallo/pizzepos
- * —vivo—, este de compuesto.coste.calculado. Coexisten; retirar el recetario es follow-up diferido
- * hasta migrar/apagar el escandallo — no romper pizzepos). Escucha compuesto.coste.calculado (evento
- * PRISMA del costeador), resuelve QUÉ producto referencia el compuesto (por compuesto_ref) y
+ * EL puente prisma del arco coste→precio (el módulo prisma/recetario se retiró 2026-07-20; prisma
+ * no usa escandallo/pizzepos — pizzepos/recetas ya persiste su propio coste). Escucha
+ * compuesto.coste.calculado (evento PRISMA del costeador), resuelve QUÉ producto referencia el
+ * compuesto (por compuesto_ref) y
  * entrega el coste a prisma/coste (coste.aplicar), que escribe el pvp. NO PISA el precio manual:
  * si ya hay pvp y la pregunta de coste está cerrada, canta la deriva (puente.coste_actualizado).
  * ATAR: producto elaborado sin compuesto_ref → busca el compuesto homónimo y fija el arco.

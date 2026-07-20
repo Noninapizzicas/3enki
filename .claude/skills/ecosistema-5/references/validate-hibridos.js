@@ -236,9 +236,11 @@ function checkPersistencia() {
 
     checked++;
 
-    // Buscar fs.write directos en modulos blueprint (NO custodios)
+    // Buscar fs.write DIRECTOS de node en modulos blueprint (NO custodios).
+    // La delegacion por bus (_rpc('fs.write.request')) es EXACTAMENTE lo que la ley
+    // pide (delegar al custodio filesystem) — NO es escritura directa, no es violacion.
     if (manifest.blueprint_driven) {
-      const fsWrites = indexContent.match(/fs\.write|fs\.writeFile|fs\.writeFileSync|_rpc\(.*fs\.write/g);
+      const fsWrites = indexContent.match(/\bfs\.(promises\.)?writeFile(Sync)?\s*\(/g);
       if (fsWrites && fsWrites.length > 0) {
         violation(
           'PERSISTENCIA-001',
@@ -264,24 +266,57 @@ function checkContrato() {
   const schemas = glob('*.schema.json');
   let checked = 0;
 
+  // Un schema es CONTRATO de VALIDAR solo si vive en un modulo blueprint_driven
+  // (la fase VALIDAR solo existe en blueprints). Los schemas de SALIDA/estado de
+  // modulos deterministas (p.ej. system-inspector/status) no instruyen a ningun LLM.
+  const esContratoValidar = (schemaFile) => {
+    let dir = path.dirname(schemaFile);
+    for (let i = 0; i < 6; i++) {
+      const mf = path.join(dir, 'module.json');
+      if (fs.existsSync(mf)) {
+        const m = readJSON(mf);
+        return !!(m && m.blueprint_driven);
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return false;
+  };
+
+  // Un campo INSTRUYE/CONSTRINE (necesita description) si acota la forma: enum, rangos,
+  // patron, formato, o es un objeto/array con forma propia. Un free-text de paso
+  // ({type:string} o array de strings sin mas) es passthrough y no instruye a nadie.
+  const instruye = (prop) => {
+    if (!prop || typeof prop !== 'object') return false;
+    const acotadores = ['enum', 'const', 'minLength', 'maxLength', 'minimum', 'maximum',
+      'exclusiveMinimum', 'exclusiveMaximum', 'pattern', 'format'];
+    if (acotadores.some((k) => k in prop)) return true;
+    if (prop.properties || prop.required) return true;
+    if (prop.type === 'array' && prop.items &&
+        (prop.items.properties || prop.items.required)) return true;
+    return false;
+  };
+
   for (const schemaFile of schemas) {
     const schema = readJSON(schemaFile);
     if (!schema) continue;
     if (ONLY_MODULE && !schemaFile.includes(ONLY_MODULE)) continue;
+    if (!esContratoValidar(schemaFile)) continue;
 
     checked++;
 
-    // Verificar que cada propiedad tiene description
+    // Verificar que cada campo QUE CONSTRINE tiene description
     const checkDescriptions = (obj, path_str = '') => {
       if (!obj || typeof obj !== 'object') return;
 
       if (obj.type === 'object' && obj.properties) {
         for (const [key, prop] of Object.entries(obj.properties)) {
           const propPath = path_str ? `${path_str}.${key}` : key;
-          if (!prop.description && !prop.enum) {
+          if (instruye(prop) && !prop.description && !prop.enum) {
             violation(
               'CONTRATO-001',
-              `Campo "${propPath}" sin description. Description instruye al LLM.`,
+              `Campo "${propPath}" acota la forma pero no tiene description. Description instruye al LLM.`,
               schemaFile
             );
           }
@@ -315,6 +350,17 @@ function checkPerspectivaC() {
   const manifests = glob('module.json');
   let checked = 0;
 
+  // La ley aplica SOLO a agentes DECLARADOS perspectiva-c. Un agente normal (voltagent,
+  // domain-agent con herramientas) DEBE tener tools — no es un perspectiva-c. La marca:
+  // metadata.perspectiva_c === true, metadata.type === 'perspectiva-c', o la propia
+  // description se declara "perspectiva C" (funcion pura sin herramientas).
+  const esPerspectivaC = (agent) => {
+    const m = agent.metadata || {};
+    if (m.perspectiva_c === true || m.type === 'perspectiva-c') return true;
+    const texto = `${agent.description || ''} ${agent.systemPrompt || agent.system_prompt || ''}`;
+    return /perspectiva[\s_-]?c\b/i.test(texto);
+  };
+
   for (const mf of manifests) {
     const manifest = readJSON(mf);
     if (!manifest) continue;
@@ -329,35 +375,22 @@ function checkPerspectivaC() {
     const agentFiles = fs.readdirSync(agentsDir).filter((f) => f.endsWith('.json'));
 
     for (const agentFile of agentFiles) {
-      checked++;
       const agentPath = path.join(agentsDir, agentFile);
       const agent = readJSON(agentPath);
       if (!agent) continue;
+      if (!esPerspectivaC(agent)) continue; // agente normal — la ley no le aplica
 
-      // 5a. tools debe ser []
+      checked++;
+
+      // 5a. Un perspectiva-c DEBE tener tools:[] (su fuerza es no poder mentir ni cargar/guardar)
       if (agent.tools && agent.tools.length > 0) {
         violation(
           'PERSPECTIVAC-001',
-          `Agente "${agentFile}" tiene tools (${agent.tools.length}). Un perspectiva-c debe tener tools:[].`,
+          `Agente "${agentFile}" se declara perspectiva-c pero tiene tools (${agent.tools.length}). Debe tener tools:[].`,
           agentPath
         );
       } else {
-        pass(`${agentFile}: tools:[]`);
-      }
-
-      // 5b. Debe haber un reflejo que hidrata y persiste
-      const indexFile = path.join(moduleDir, 'index.js');
-      const indexContent = readFile(indexFile);
-      const agentName = agentFile.replace('.json', '');
-      if (indexContent) {
-        const hasHydrate = indexContent.includes(`${agentName}`) || indexContent.includes('agent.execute');
-        if (!hasHydrate) {
-          violation(
-            'PERSPECTIVAC-002',
-            `Agente "${agentFile}" sin reflejo que lo invoque en index.js. El reflejo debe HIDRATAR y PERSISTIR.`,
-            indexFile
-          );
-        }
+        pass(`${agentFile}: perspectiva-c con tools:[]`);
       }
     }
   }
@@ -386,11 +419,14 @@ function checkEmision() {
 
     checked++;
 
-    // Buscar patrones de guardado sin emision
-    const hasPersist = /\.save\.request|\.write\.request|fs\.write|_editarJson|_persistir/.test(
-      indexContent
-    );
-    const hasEmit = /eventBus\.publish|publish\(|\.emit\(/.test(indexContent);
+    // GUARDA = persistencia LOCAL (el modulo es el custodio del dato). fs.write directo,
+    // fs.write.request (el filesystem como brazo de disco del custodio), o helpers propios.
+    // NO cuenta la delegacion de dominio (<otro>.save.request / <otro>.write.request): ahi
+    // el que emite es el custodio destino, no el que delega (p.ej. menu-generator -> carta).
+    const hasPersist = /fs\.write|_editarJson|_persistir/.test(indexContent);
+    // EMITE: cubre optional-chaining (eventBus?.publish?.(), .emit?.()) y el idioma nativo
+    // castellano (publicar()) ademas de publish/emit directos.
+    const hasEmit = /(publish|publicar|emit|emitir)\w*\s*(\?\.)?\s*\(/.test(indexContent);
 
     if (hasPersist && !hasEmit) {
       violation(

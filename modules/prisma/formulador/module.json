@@ -1,0 +1,12 @@
+{
+  "_doc": "Manifest de prisma/formulador — el ACTOR FUZZY de la parcela compuestos, en forma prisma (event-driven, NO agent-framework, NO página). Aloja MICRO-AGENTES perspectiva-c: cada uno es un handler de evento donde el REFLEJO hidrata el contexto (determinista) y persiste, y el paso fuzzy es UNA llamada llm.complete.request con su guión-prompt + contexto, devolviendo JSON TIPADO validado (si no cumple → error, NUNCA inventa). Tres micro-agentes: RECONCILIAR (nombre crudo + candidatos → decidir usar/crear/preguntar) · MODELAR (texto de formulación → nombre + componentes con cantidad/unidad, reconcilia cada uno y persiste el compuesto) · CLASIFICAR (item + eje → familia/subfamilia/grupo o propuesta nueva). Cero llamada LLM en lo determinista. Ver la skill prisma-compuestos y arquitectura/decisiones/propuestas/prisma-compuestos.md.",
+  "name": "formulador",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: micro-agentes perspectiva-c en forma prisma (reflejo + llm.complete headless, tools:[]). _parse y _validar* son PUROS (testeados). MODELAR no inventa cantidades ausentes (las deja null → pregunta_abierta). RECONCILIAR ambiguo → 'preguntar' (anti-wipe). Guión-prompt inline (self-contained, sin prompt_file externo).",
+  "language": "es",
+  "subscribes": [
+    { "event": "formulador.reconciliar.request", "handler": "onReconciliarRequest", "description": "Micro-agente FUZZY: {project_id, nombre_crudo, candidatos:[{id,nombre,score}]} (de insumos.buscar) → decide {accion:'usar'|'crear'|'preguntar', insumo_id?, motivo}. Pilla sinónimo/idioma que el reflejo no; ambiguo variante↔mismo → 'preguntar'. No inventa." },
+    { "event": "formulador.modelar.request", "handler": "onModelarRequest", "description": "Micro-agente FUZZY: {project_id, crudo} (texto de formulación) → estructura {nombre, componentes:[{nombre_crudo,cantidad,unidad}]}, RECONCILIA cada componente (insumos.buscar + reconciliar) y PERSISTE el compuesto (compuestos.crear). Cantidad ausente → null (pregunta_abierta), no se inventa." },
+    { "event": "formulador.clasificar.request", "handler": "onClasificarRequest", "description": "Micro-agente FUZZY: {project_id, item_nombre, eje, taxonomia:[...]} → {familia, subfamilia, grupo, propuesta_nueva?}. Reusa la taxonomía existente; si no encaja, PROPONE nueva (humano aprueba)." }
+  ]
+}

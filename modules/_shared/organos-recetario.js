@@ -23,7 +23,7 @@ const { SEMILLA } = require('./arquetipos-semilla');
 const KNOWN_ORGANOS = {
   carta:     { estado: 'nativo',     nota: 'escaparate ya vive en prisma' },
   cocina:    { estado: 'hosteleria', nota: 'pizzepos cocina + pase-cocina' },
-  recetario: { estado: 'vivo',       nota: 'órgano del ORIGEN (elaborado), no de un arquetipo: lo enciende boss por producto elaborado. Puente escandallo.coste.calculado → coste.aplicar' },
+  recetario: { estado: 'vivo',       nota: 'órgano del ORIGEN (elaborado), no de un arquetipo: lo enciende boss por producto elaborado. Beater prisma: costeador (compuesto.coste.calculado) + puente-compuesto → coste.aplicar. El módulo prisma/recetario se retiró (2026-07-20): prisma no usa escandallo.' },
   agenda:  { estado: 'previsto',   nota: 'reserva/cita — módulo follow-up' },
   retorno: { estado: 'previsto',   nota: 'devolución del activo — módulo follow-up' },
   fianza:  { estado: 'previsto',   nota: 'depósito/garantía — módulo follow-up' },

@@ -129,4 +129,20 @@ function escalar(formula, { modo = 'referencia', gramos } = {}) {
   return f.map(x => ({ ref: x.ref, cantidad: _round((Number(x.pct) || 0) / 100 * gRef, 3), unidad: 'g' }));
 }
 
-module.exports = { dimensionDe, aBase, convertir, precioPorBase, porcentajePanadero, escalar, BASE, FACTORES };
+/**
+ * PRECIO DE REFERENCIA (fase 1) — NO es compra, no busca el más barato.
+ * De varios precios encontrados saca un coste estimado PRUDENTE, tirando a alto (para no quedarse corto).
+ * Regla determinista: percentil 75 (por encima de la mediana, por debajo del máximo) — "medio, un poco alto".
+ * @param precios array de céntimos (misma base).  @returns céntimos | null (si no hay ninguno válido).
+ */
+function precioReferencia(precios, { percentil = 75 } = {}) {
+  const xs = (Array.isArray(precios) ? precios : []).map(Number).filter(n => Number.isFinite(n) && n >= 0).sort((a, b) => a - b);
+  if (!xs.length) return null;
+  if (xs.length === 1) return xs[0];
+  const q = Math.min(100, Math.max(0, Number(percentil) || 0)) / 100;
+  const pos = q * (xs.length - 1);
+  const lo = Math.floor(pos), hi = Math.ceil(pos);
+  return _round(xs[lo] + (xs[hi] - xs[lo]) * (pos - lo), 2);   // interpola → cae entre mediana y máximo
+}
+
+module.exports = { dimensionDe, aBase, convertir, precioPorBase, porcentajePanadero, escalar, precioReferencia, BASE, FACTORES };

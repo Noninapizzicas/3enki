@@ -78,6 +78,17 @@ test('escalar modo total: 5 kg de tanda → reparte por los %', () => {
   cerca(e.find(x => x.ref === 'harina').cantidad, 5000 / 1.67, 0.01);   // 167% suma → harina = total/1.67 (lib redondea a 3 dec)
 });
 
+test('precioReferencia: NO el más barato — prudente, tirando a alto (p75)', () => {
+  // [10,12,15,20] → p75 = 15 + (20-15)*(2.25-2)=16.25. Por encima de la mediana (13.5), lejos del mínimo (10).
+  cerca(U.precioReferencia([10, 12, 15, 20]), 16.25);
+  assert.ok(U.precioReferencia([10, 12, 15, 20]) > 13.5, 'por encima de la mediana');
+});
+test('precioReferencia: un solo precio → ese; ninguno → null', () => {
+  assert.strictEqual(U.precioReferencia([42]), 42);
+  assert.strictEqual(U.precioReferencia([]), null);
+  assert.strictEqual(U.precioReferencia(['x', -3, NaN]), null, 'descarta inválidos');
+});
+
 (async () => {
   let ok = 0;
   for (const { n, f } of tests) { try { await f(); console.log('  ✓ ' + n); ok++; } catch (e) { console.log('  ✗ ' + n + '\n    ' + e.message); } }

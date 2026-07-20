@@ -22,10 +22,11 @@ class PrismaConversorReflejo extends ModuloHibridoReflejo {
   }
   async onUnload() { return super.onUnload(); }
 
-  onConvertirRequest(e) { return this._atender(e, 'convertir', 'conversor.convertir.response', d => this._convertir(d)); }
-  onPrecioRequest(e)    { return this._atender(e, 'precio',    'conversor.precio.response',    d => this._precio(d)); }
-  onFormulaRequest(e)   { return this._atender(e, 'formula',   'conversor.formula.response',   d => this._formula(d)); }
-  onEscalarRequest(e)   { return this._atender(e, 'escalar',   'conversor.escalar.response',   d => this._escalar(d)); }
+  onConvertirRequest(e)  { return this._atender(e, 'convertir',  'conversor.convertir.response',  d => this._convertir(d)); }
+  onPrecioRequest(e)     { return this._atender(e, 'precio',     'conversor.precio.response',     d => this._precio(d)); }
+  onFormulaRequest(e)    { return this._atender(e, 'formula',    'conversor.formula.response',    d => this._formula(d)); }
+  onEscalarRequest(e)    { return this._atender(e, 'escalar',    'conversor.escalar.response',    d => this._escalar(d)); }
+  onReferenciaRequest(e) { return this._atender(e, 'referencia', 'conversor.referencia.response', d => this._referencia(d)); }
 
   _convertir({ cantidad, desde, hacia, densidad_g_ml } = {}) {
     if (desde == null) return this._invalid('desde');
@@ -54,6 +55,14 @@ class PrismaConversorReflejo extends ModuloHibridoReflejo {
     if (!Array.isArray(formula)) return this._invalid('formula');
     if (!(Number(gramos) > 0)) return this._invalid('gramos');
     return { status: 200, data: { componentes: U.escalar(formula, { modo, gramos }) } };
+  }
+
+  // precio de REFERENCIA (fase 1): de varios precios, uno prudente tirando a alto — NO el más barato (no es compra)
+  _referencia({ precios, percentil } = {}) {
+    if (!Array.isArray(precios)) return this._invalid('precios');
+    const r = U.precioReferencia(precios, { percentil });
+    if (r == null) return this._errorResponse(422, 'SIN_PRECIOS', 'no hay ningún precio válido para estimar la referencia', {});
+    return { status: 200, data: { precio_referencia: r } };
   }
 }
 

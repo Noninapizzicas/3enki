@@ -135,6 +135,10 @@ FASE 1 (ahora)   coste ESTIMADO: insumo con precio de REFERENCIA (web) o manual.
 FASE 2 (después) coste REAL post-venta: compras reales × producto vendido. Otra parcela, otro momento.
 FACTURA          NO es requisito de fase 1, pero la puerta queda ABIERTA/oportunista: si un albarán de un
                  insumo cae, se reconcilia igual y su coste real gana sobre la referencia (regla de fuente).
+
+REFERENCIA ≠ COMPRA: no buscamos el más barato (eso es aprovisionar). Buscamos un coste MEDIO, tirando a
+                 un poco ALTO, para no quedarnos cortos. De varios precios encontrados → conversor.referencia
+                 (percentil 75: entre mediana y máximo). Prudencia por diseño: mejor sobre-estimar que perder margen.
 ```
 
 ## Anti-patrones

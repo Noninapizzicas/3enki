@@ -7,6 +7,7 @@
     { "event": "conversor.convertir.request", "handler": "onConvertirRequest", "description": "Puro: {cantidad, desde, hacia, densidad_g_ml?} → {cantidad}. Misma dimensión = factor directo; masa↔volumen solo con densidad; conteo no cruza (null)." },
     { "event": "conversor.precio.request", "handler": "onPrecioRequest", "description": "Puro: {precio_centimos, cantidad, unidad} → {coste_centimos_por_unidad, base}. Ej 350c/1kg → 0.35 c/g. El número que lee el costeador." },
     { "event": "conversor.formula.request", "handler": "onFormulaRequest", "description": "Puro (fórmula panadera): {componentes:[{ref,cantidad,unidad,densidad_g_ml?}], base_ref} → {formula:[{ref,pct,gramos}], faltantes}. La referencia = 100%. Componente sin masa → faltante, NO inventa." },
-    { "event": "conversor.escalar.request", "handler": "onEscalarRequest", "description": "Puro (gran escalado): {formula:[{ref,pct}], modo:'referencia'|'total', gramos} → [{ref,cantidad,unidad:'g'}]. Cambias un número → toda la receta escala." }
+    { "event": "conversor.escalar.request", "handler": "onEscalarRequest", "description": "Puro (gran escalado): {formula:[{ref,pct}], modo:'referencia'|'total', gramos} → [{ref,cantidad,unidad:'g'}]. Cambias un número → toda la receta escala." },
+    { "event": "conversor.referencia.request", "handler": "onReferenciaRequest", "description": "Puro (fase 1): {precios:[centimos], percentil?=75} → {precio_referencia}. NO es compra, no busca el más barato — coste estimado PRUDENTE tirando a alto (percentil 75: entre mediana y máximo). Para no quedarse corto." }
   ]
 }

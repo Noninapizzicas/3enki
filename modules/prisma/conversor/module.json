@@ -1,0 +1,12 @@
+{
+  "_doc": "Manifest de prisma/conversor — REFLEJO JS PURO (cero LLM, cero estado, cero red): expone en el bus la lib _shared/prisma-unidades. Cuatro cálculos deterministas — convertir unidades (masa→g·volumen→ml·conteo→u; masa↔volumen SOLO con densidad, si falta NO inventa), precio a céntimos POR UNIDAD BASE (lo que el costeador multiplica), fórmula PANADERA (% sobre una referencia) y ESCALAR esa fórmula a una tanda de producción (el gran escalado: cambias un número y toda la receta escala). Sin store, sin custodio: entra objeto, sale objeto.",
+  "name": "conversor",
+  "version": "0.1.0",
+  "language": "es",
+  "subscribes": [
+    { "event": "conversor.convertir.request", "handler": "onConvertirRequest", "description": "Puro: {cantidad, desde, hacia, densidad_g_ml?} → {cantidad}. Misma dimensión = factor directo; masa↔volumen solo con densidad; conteo no cruza (null)." },
+    { "event": "conversor.precio.request", "handler": "onPrecioRequest", "description": "Puro: {precio_centimos, cantidad, unidad} → {coste_centimos_por_unidad, base}. Ej 350c/1kg → 0.35 c/g. El número que lee el costeador." },
+    { "event": "conversor.formula.request", "handler": "onFormulaRequest", "description": "Puro (fórmula panadera): {componentes:[{ref,cantidad,unidad,densidad_g_ml?}], base_ref} → {formula:[{ref,pct,gramos}], faltantes}. La referencia = 100%. Componente sin masa → faltante, NO inventa." },
+    { "event": "conversor.escalar.request", "handler": "onEscalarRequest", "description": "Puro (gran escalado): {formula:[{ref,pct}], modo:'referencia'|'total', gramos} → [{ref,cantidad,unidad:'g'}]. Cambias un número → toda la receta escala." }
+  ]
+}

@@ -145,8 +145,11 @@ FACTURA          NO es requisito de fase 1, pero la puerta queda ABIERTA/oportun
 [EXISTE]  prisma/costeador    costear(compuesto_id) → Σ refs → emite compuesto.coste.calculado (receta a una) · costear_todos = EL LOOP · cascada por insumo
 [EXISTE]  prisma/formulador   el ACTOR FUZZY: 3 micro-agentes (reconciliar·modelar·clasificar) vía llm.complete headless, tools:[] — forma PRISMA, no LLM-de-página ni framework
 [EXISTE]  prisma/puente-compuesto  escucha compuesto.coste.calculado (prisma, ya NO escandallo) → aplicar/testigo sin pisar precio manual
+[EXISTE]  prisma/conversor   PURO (cero LLM): unidades (g·kg·ml·l·u, masa↔volumen solo con densidad) · precio→c/unidad-base · fórmula PANADERA (%) · escalar tanda
 
 LOOP de costeo: costeador.costear_todos recorre compuestos.pendientes → costea de a una → sin bloque.
+CONVERSOR: antes de costear/comparar, normaliza a base (g·ml·u) y precio a c/unidad-base. La fórmula panadera (% sobre
+           harina=100%) es lo que ESCALA la producción: cambias los gramos de la tanda y toda la receta sale sola.
 ```
 
 ## Filosofía (una frase)

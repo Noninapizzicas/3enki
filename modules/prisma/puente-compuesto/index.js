@@ -1,7 +1,9 @@
 /**
  * prisma/puente-compuesto — REFLEJO JS: el PUENTE prisma-puro compuesto↔producto↔precio.
  *
- * Sucesor de recetario, SIN la costura pizzepos. Escucha compuesto.coste.calculado (evento
+ * HERMANO prisma-nativo del recetario (NO lo reemplaza: el recetario bebe de escandallo/pizzepos
+ * —vivo—, este de compuesto.coste.calculado. Coexisten; retirar el recetario es follow-up diferido
+ * hasta migrar/apagar el escandallo — no romper pizzepos). Escucha compuesto.coste.calculado (evento
  * PRISMA del costeador), resuelve QUÉ producto referencia el compuesto (por compuesto_ref) y
  * entrega el coste a prisma/coste (coste.aplicar), que escribe el pvp. NO PISA el precio manual:
  * si ya hay pvp y la pregunta de coste está cerrada, canta la deriva (puente.coste_actualizado).

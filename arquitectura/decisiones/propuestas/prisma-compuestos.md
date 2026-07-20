@@ -244,15 +244,19 @@ el puente NO tiene ritmo propio: late cuando laten el costeador o el catálogo. 
 
 ---
 
-## 9 · Lo que FALTA CREAR en prisma (para cortar pizzepos)
+## 9 · Lo que FALTA CREAR en prisma (para cortar pizzepos) — ESTADO 2026-07-20
 
 ```
-1. insumos-manager        custodio de /prisma/insumos/      (biblioteca de materias primas)
-2. compuestos-manager     custodio de /prisma/compuestos/   (biblioteca de formulaciones, con .versions)
-3. costeador prisma       Σ coste de un compuesto (recorre componentes por ref) → emite compuesto.coste.calculado
-                          — reemplaza la dependencia de escandallo (pizzepos)
-4. taxonomía abierta      registro de clasificación por eje (compra/fabricación/venta), semilla + custom
-5. renombrar              recetario → puente-compuesto · receta_ref → compuesto_ref · recetas.obtener → compuestos.obtener
+1. insumos            [HECHO] custodio /prisma/insumos/ + reconciliación + NORMALIZA precio a base (uno) / referencia prudente (varios). 11/11
+2. compuestos         [HECHO] custodio /prisma/compuestos/ + cola de pendientes
+3. costeador prisma   [HECHO] Σ coste receta a una, CONVIERTE unidad→base (conversor), rendimiento en sub-compuestos, emite compuesto.coste.calculado. 11/11
+   + formulador       [HECHO] actor fuzzy: 3 micro-agentes (reconciliar·modelar·clasificar) vía llm.complete headless. 7/7
+   + conversor        [HECHO] reflejo PURO: unidades · precio→base · fórmula panadera (escalado) · referencia prudente. 12/12
+   + puente-compuesto [HECHO] puente prisma-puro: compuesto.coste.calculado → coste.aplicar/testigo. 7/7
+4. taxonomía abierta  [RESUELTO — NO módulo] 3 campos abiertos por eje + formulador.clasificar con taxonomía DERIVADA (proyección de list) + pregunta si propuesta_nueva. Vive en la SKILL.
+5. retirar recetario  [DIFERIDO — no romper pizzepos] el puente-compuesto COEXISTE con el recetario, no lo reemplaza:
+                      el recetario sigue siendo el ÚNICO puente del escandallo (pizzepos, VIVO). Borrarlo hoy corta ese
+                      coste→precio. Retiro condicionado a migrar/apagar el escandallo de pizzepos. Decisión del dueño 2026-07-20.
 ```
 
 ---

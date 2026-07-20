@@ -309,3 +309,32 @@ export {
   currentFilter as facturasFilter
 } from './facturas';
 export type { Factura, FacturaEstado, FacturaSource, FacturasState } from './facturas';
+
+// Prisma UI-POS Store (MQTT-based) — la superficie de venta que refleja el backend prisma
+export {
+  prismaPosStore,
+  initPrismaPos,
+  nuevaCuenta,
+  addItem as posAddItem,
+  quitarItem as posQuitarItem,
+  cambiarCantidad as posCambiarCantidad,
+  vaciar as posVaciar,
+  seleccionarMetodo as posSeleccionarMetodo,
+  cobrar as posCobrar,
+  initPrismaPosSubscriptions,
+  resetPrismaPos,
+  sumaCantidades,
+  carritoDeRespuesta,
+  formatEuros,
+  posItems,
+  posTotalCentimos,
+  posNumItems,
+  posVacio,
+  posMetodo,
+  posCobrando,
+  posPuedeCobrar,
+  posRefDisplay,
+  posUltimoCobro,
+  posError
+} from './prisma-pos';
+export type { MetodoPago, CarritoItem, DesgloseMixto, UltimoCobro, AddItemInput, CobrarInput } from './prisma-pos';

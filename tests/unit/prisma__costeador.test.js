@@ -10,19 +10,41 @@ const Mod = require('../../modules/prisma/costeador/index.js');
 const tests = [];
 const test = (n, f) => tests.push({ n, f });
 
-test('_sumar PURO: Σ precio×cantidad', () => {
+test('_sumar PURO: Σ precio_por_base × cantidad', () => {
   const m = new Mod();
-  const precioDe = (ref) => ({ masa: 0.2, tomate: 0.1 })[ref];   // céntimos por gramo
-  const r = m._sumar([{ ref: 'masa', cantidad: 315 }, { ref: 'tomate', cantidad: 60 }], precioDe);
+  const resolver = (ref) => ({ masa: { coste_por_base: 0.2 }, tomate: { coste_por_base: 0.1 } })[ref];
+  const r = m._sumar([{ ref: 'masa', cantidad: 315 }, { ref: 'tomate', cantidad: 60 }], resolver);
   assert.strictEqual(r.coste_centimos, 69, '0.2*315 + 0.1*60 = 69');
   assert.deepStrictEqual(r.faltantes, []);
 });
 
 test('_sumar: precio ausente → faltante, NO inventa', () => {
   const m = new Mod();
-  const r = m._sumar([{ ref: 'masa', cantidad: 315 }, { ref: 'albahaca', cantidad: 2 }], (ref) => ({ masa: 0.2 })[ref] ?? null);
+  const r = m._sumar([{ ref: 'masa', cantidad: 315 }, { ref: 'albahaca', cantidad: 2 }], (ref) => ({ masa: { coste_por_base: 0.2 } })[ref] ?? null);
   assert.strictEqual(r.coste_centimos, 63, 'solo suma lo que tiene precio');
   assert.deepStrictEqual(r.faltantes, ['albahaca']);
+});
+
+test('_sumar CONVIERTE: componente en kg, precio en c/g → normaliza antes de multiplicar', () => {
+  const m = new Mod();
+  const resolver = () => ({ coste_por_base: 0.2, unidad_base: 'g' });   // 0.2 c/g
+  const r = m._sumar([{ ref: 'masa', cantidad: 0.315, unidad: 'kg' }], resolver);   // 0.315 kg = 315 g
+  assert.strictEqual(r.coste_centimos, 63, '0.2 c/g * 315 g = 63');
+});
+
+test('_sumar líquido→peso con densidad: 1 L, precio c/g, densidad 1.03', () => {
+  const m = new Mod();
+  const resolver = () => ({ coste_por_base: 0.1, unidad_base: 'g', densidad_g_ml: 1.03 });
+  const r = m._sumar([{ ref: 'leche', cantidad: 1, unidad: 'l' }], resolver);   // 1 L → 1030 g
+  assert.strictEqual(r.coste_centimos, 103, '0.1 c/g * 1030 g = 103');
+});
+
+test('_sumar unidades irreconciliables (ml→g sin densidad) → faltante, NO inventa', () => {
+  const m = new Mod();
+  const resolver = () => ({ coste_por_base: 0.1, unidad_base: 'g' });   // sin densidad
+  const r = m._sumar([{ ref: 'agua', cantidad: 100, unidad: 'ml' }], resolver);
+  assert.strictEqual(r.coste_centimos, 0);
+  assert.deepStrictEqual(r.faltantes, ['agua']);
 });
 
 function gateway(compuesto, precios) {
@@ -52,6 +74,40 @@ test('_costear completo → emite compuesto.coste.calculado', async () => {
   const ev = m._publicados.find(x => x.ev === 'compuesto.coste.calculado');
   assert.ok(ev, 'emitió el evento PRISMA (no escandallo)');
   assert.strictEqual(ev.p.coste_unidad, 0.69);
+});
+
+test('_costear INTEGRA conversor: insumo en c/g + componente en kg → coste correcto', async () => {
+  const m = new Mod();
+  m.logger = { info(){}, warn(){}, error(){}, debug(){} };
+  m._publicados = []; m.eventBus = { publish: (ev, p) => m._publicados.push({ ev, p }) }; m.metrics = { increment(){} };
+  m._rpc = async (ev, p) => {
+    if (ev === 'compuestos.get.request') return { status: 200, data: { compuesto: { id: 'x', componentes: [{ ref: 'harina', cantidad: 2, unidad: 'kg' }] } } };
+    if (ev === 'insumos.get.request') return { status: 200, data: { insumo: { id: 'harina', naturalezas: { coste_centimos_por_unidad: 0.05, unidad_base: 'g' } } } };
+    return { status: 404 };
+  };
+  const r = await m._costear({ project_id: 'p', compuesto_id: 'x' });
+  assert.strictEqual(r.data.coste_centimos, 100, '0.05 c/g * 2000 g = 100');
+  assert.deepStrictEqual(r.data.faltantes, []);
+});
+
+test('_resolverRef sub-compuesto con RENDIMIENTO: coste del lote / lo que rinde → coste por gramo', async () => {
+  const m = new Mod();
+  m.logger = { info(){}, warn(){}, error(){}, debug(){} };
+  m._publicados = []; m.eventBus = { publish(){} }; m.metrics = { increment(){} };
+  const compuestos = {
+    pizza: { id: 'pizza', componentes: [{ ref: 'masa', cantidad: 315, unidad: 'g' }] },
+    masa: { id: 'masa', componentes: [{ ref: 'flour_ins', cantidad: 1000, unidad: 'g' }], rendimiento: { cantidad: 1000, unidad: 'g' } },
+  };
+  m._rpc = async (ev, p) => {
+    if (ev === 'compuestos.get.request') return { status: 200, data: { compuesto: compuestos[p.compuesto_id] } };
+    if (ev === 'insumos.get.request') return (p.insumo_id === 'flour_ins')
+      ? { status: 200, data: { insumo: { naturalezas: { coste_centimos_por_unidad: 0.2, unidad_base: 'g' } } } }
+      : { status: 404 };   // 'masa' NO es insumo → cae a sub-compuesto
+    return { status: 404 };
+  };
+  const r = await m._costear({ project_id: 'p', compuesto_id: 'pizza' });
+  assert.strictEqual(r.data.coste_centimos, 63, 'masa: 200c/1000g = 0.2 c/g; pizza usa 315 g → 63');
+  assert.deepStrictEqual(r.data.faltantes, []);
 });
 
 test('_costear con precio faltante → compuesto.coste.incompleto (avisa, no inventa)', async () => {

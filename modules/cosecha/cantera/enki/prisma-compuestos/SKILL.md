@@ -97,11 +97,21 @@ PROCESO: la tanda se PARTE en unidades. Costeo = 1 compuesto : 1 cálculo : 1 ev
   (la lección del POS: "todo de golpe" → timeout. Una a una: fallo aislado, progreso visible, reintentable.)
 
   PARA CADA compuesto de la cola:
-    costeador.costear(compuesto_id)   // reflejo: Σ (precio_insumo × cantidad), recorre refs
+    costeador.costear(compuesto_id)   // reflejo: Σ (precio_por_base × cantidad_EN_BASE), recorre refs
     → emite compuesto.coste.calculado { compuesto_id, coste_unidad }
 
 CASCADA: cambia el precio de un insumo → re-costea SOLO los compuestos que lo usan, también de a una.
   (aquí el anti-cuello se vuelve real: un precio, un sitio, propaga.)
+```
+
+CONTRATO DE UNIDADES (el costeador convierte por ti, vía prisma/conversor — NO multiplica en crudo):
+```
+INSUMO      naturalezas.{ coste_centimos_por_unidad, unidad_base: 'g'|'ml'|'u', densidad_g_ml? }
+            unidad_base = la base en que está el precio. densidad_g_ml = para cruzar masa↔volumen.
+COMPONENTE  { ref, cantidad, unidad }  → el costeador lleva `cantidad` a `unidad_base` antes de multiplicar
+            (0.315 kg → 315 g · 1 L de leche → 1030 g con densidad 1.03). Sin densidad para cruzar → faltante, AVISA.
+SUB-COMPUESTO con rendimiento:{ cantidad, unidad } → coste POR UNIDAD BASE = coste_lote / rendimiento
+            (masa: 200c el lote de 1000 g → 0.2 c/g). Sin rendimiento → coste POR LOTE (cantidad = nº de lotes).
 ```
 
 ## AVISAR / PREGUNTAR — dato ausente NUNCA se inventa

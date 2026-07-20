@@ -11,6 +11,7 @@
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+const U = require('../../_shared/prisma-unidades');   // conversor PURO: unidad del componente → base del precio
 const nowISO = () => new Date().toISOString();
 const MAX_PROF = 8;   // tope de recursión de sub-compuestos (anti-ciclo)
 
@@ -39,30 +40,49 @@ class PrismaCosteadorReflejo extends ModuloHibridoReflejo {
     return { status: 200, data: { total: ids.length, calculados, incompletos } };
   }
 
-  // ── PURO: Σ (precio × cantidad) sobre componentes ya resueltos a precio.
-  //    precioDe: (ref) → centimos|null. Devuelve { coste_centimos, faltantes[] }. ──
-  _sumar(componentes, precioDe) {
+  // ── PURO: Σ (precio_por_base × cantidad_EN_BASE) sobre componentes ya resueltos.
+  //    resolver: (ref) → { coste_por_base, unidad_base, densidad_g_ml } | null.
+  //    Convierte la cantidad del componente a la base del precio ANTES de multiplicar (g·kg, u·g, líquido·peso).
+  //    Unidades irreconciliables (sin densidad para cruzar, unidad desconocida) → faltante, NO inventa.
+  //    Devuelve { coste_centimos, faltantes[] }. ──
+  _sumar(componentes, resolver) {
     let coste = 0; const faltantes = [];
     for (const c of (componentes || [])) {
-      const p = precioDe(c.ref);
-      if (p == null || !(p >= 0)) { faltantes.push(c.ref); continue; }  // sin precio → NO inventa
-      coste += Math.round(p * c.cantidad);
+      const r = resolver(c.ref);
+      if (!r || r.coste_por_base == null || !(r.coste_por_base >= 0)) { faltantes.push(c.ref); continue; }  // sin precio → NO inventa
+      let cantidad = c.cantidad;
+      if (c.unidad && r.unidad_base) {                          // ambos declaran base → reconcilia unidades
+        const conv = U.convertir(c.cantidad, c.unidad, r.unidad_base, r.densidad_g_ml);
+        if (conv == null) { faltantes.push(c.ref); continue; }  // no reconcilia (falta densidad / unidad rara) → avisa
+        cantidad = conv;
+      }
+      coste += Math.round(r.coste_por_base * cantidad);
     }
     return { coste_centimos: coste, faltantes };
   }
 
-  // ── resuelve el precio de un componente: insumo (referencia) o sub-compuesto (recursión) ──
-  async _precioDeRef(project_id, ref, prof, cid) {
+  // ── resuelve un componente a { coste_por_base, unidad_base, densidad_g_ml }:
+  //    insumo (precio de referencia por unidad base) o sub-compuesto (recursión + rendimiento) ──
+  async _resolverRef(project_id, ref, prof, cid) {
     if (prof > MAX_PROF) return null;
     const ins = await this._rpc('insumos.get.request', { project_id, insumo_id: ref });
     if (ins && ins.status === 200 && ins.data?.insumo) {
-      const p = ins.data.insumo.naturalezas?.coste_centimos_por_unidad;
-      return (typeof p === 'number' && p >= 0) ? p : null;      // precio de REFERENCIA por unidad
+      const nat = ins.data.insumo.naturalezas || {};
+      const p = nat.coste_centimos_por_unidad;
+      if (typeof p !== 'number' || !(p >= 0)) return null;      // precio de REFERENCIA por unidad base
+      return { coste_por_base: p, unidad_base: nat.unidad_base || null, densidad_g_ml: nat.densidad_g_ml || null };
     }
-    // no es insumo → ¿sub-compuesto? cuéstalo (recursivo) y usa su coste por unidad
+    // no es insumo → ¿sub-compuesto? cuéstalo (recursivo). Con rendimiento → coste POR UNIDAD BASE.
+    const g = await this._rpc('compuestos.get.request', { project_id, compuesto_id: ref });
     const sub = await this._costear({ project_id, compuesto_id: ref, _prof: prof + 1, _silencioso: true });
     if (sub && sub.status === 200 && typeof sub.data?.coste_centimos === 'number' && sub.data.faltantes.length === 0) {
-      return sub.data.coste_centimos;
+      const compuesto = g?.data?.compuesto || {};
+      const rend = compuesto.rendimiento;                       // { cantidad, unidad } — cuánto PRODUCE el lote
+      if (rend && U.dimensionDe(rend.unidad) && Number(rend.cantidad) > 0) {
+        const base = U.aBase(rend.cantidad, rend.unidad);       // coste del lote / lo que rinde → coste por unidad base
+        return { coste_por_base: sub.data.coste_centimos / base.cantidad, unidad_base: base.base, densidad_g_ml: compuesto.naturalezas?.densidad_g_ml || null };
+      }
+      return { coste_por_base: sub.data.coste_centimos, unidad_base: null, densidad_g_ml: null };   // sin rendimiento → coste POR LOTE (cantidad = nº de lotes)
     }
     return null;   // ni insumo con precio ni sub-compuesto completo → falta
   }
@@ -76,10 +96,10 @@ class PrismaCosteadorReflejo extends ModuloHibridoReflejo {
       return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'compuesto no existe', { entity_type: 'compuesto', id: compuesto_id });
     }
     const comp = g.data.compuesto.componentes || [];
-    // resuelve precios (uno a uno, respeta recursión)
-    const precios = new Map();
-    for (const c of comp) if (!precios.has(c.ref)) precios.set(c.ref, await this._precioDeRef(project_id, c.ref, _prof, compuesto_id));
-    const { coste_centimos, faltantes } = this._sumar(comp, (ref) => precios.get(ref));
+    // resuelve precios (uno a uno, respeta recursión). Cada ref → { coste_por_base, unidad_base, densidad }
+    const resueltos = new Map();
+    for (const c of comp) if (!resueltos.has(c.ref)) resueltos.set(c.ref, await this._resolverRef(project_id, c.ref, _prof, compuesto_id));
+    const { coste_centimos, faltantes } = this._sumar(comp, (ref) => resueltos.get(ref));
 
     if (!_silencioso) {
       if (faltantes.length) {

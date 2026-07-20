@@ -110,25 +110,25 @@ function checkReparto() {
     checked++;
 
     // 1a. Todo modulo suscrito a <mod>.<op>.request tiene handler
+    // 2enki: subscribes = [{event, handler, description}] (objetos). Compat con strings sueltos.
     if (manifest.subscribes) {
-      for (const event of manifest.subscribes) {
-        if (!event.endsWith('.request')) continue;
+      for (const sub of manifest.subscribes) {
+        const event = typeof sub === 'string' ? sub : (sub && sub.event);
+        const handler = typeof sub === 'string' ? null : (sub && sub.handler);
+        if (!event || !event.endsWith('.request')) continue;
         const indexFile = path.join(moduleDir, 'index.js');
         const indexContent = readFile(indexFile);
         if (!indexContent) {
           violation('REPARTO-001', `Sin index.js para evento ${event}`, indexFile);
           continue;
         }
-        // Busca on<Op>Request o _atender
+        // el handler DECLARADO (2enki) debe existir en index.js; si no se declara, se deriva on<Op>Request
         const opName = event.split('.').slice(1, -1).join('');
-        const handlerPattern = new RegExp(`on${opName}Request|_atender.*['"]${opName}['"]`, 'i');
-        if (!handlerPattern.test(indexContent)) {
-          violation('REPARTO-002', `Evento ${event} no tiene handler on${opName}Request`, indexFile);
-          if (MODE_FIX) {
-            fix('REPARTO-002', `Añadir handler para ${event}`, () => {
-              // Solo reportamos, la reparacion es manual
-            });
-          }
+        const ok = handler
+          ? new RegExp(`(^|[^\\w])${handler}\\b`).test(indexContent)
+          : new RegExp(`on${opName}Request|_atender.*['"]${opName}['"]`, 'i').test(indexContent);
+        if (!ok) {
+          violation('REPARTO-002', `Evento ${event} sin handler ${handler || 'on' + opName + 'Request'} en index.js`, indexFile);
         } else {
           pass(`${event} -> handler presente`);
         }
@@ -193,9 +193,11 @@ function checkAntiColision() {
     const escuchados = (blueprint && blueprint.eventos_que_escucho) || [];
 
     // Colision: el mismo evento en subscribes Y en eventos_que_escucho
-    if (manifest.subscribes && escuchados.length > 0) {
+    // 2enki: subscribes = objetos {event,...}; normalizamos a nombres.
+    const subEvents = (manifest.subscribes || []).map((s) => (typeof s === 'string' ? s : s && s.event)).filter(Boolean);
+    if (subEvents.length > 0 && escuchados.length > 0) {
       for (const evt of escuchados) {
-        if (manifest.subscribes.includes(evt)) {
+        if (subEvents.includes(evt)) {
           violation(
             'ANTICOLISION-001',
             `Evento "${evt}" esta en manifest.subscribes Y en blueprint.eventos_que_escucho. Un cajon que delega NO anade aqui.`,

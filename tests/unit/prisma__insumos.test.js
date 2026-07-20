@@ -64,6 +64,31 @@ test('_buscar y _crear validan entradas', async () => {
   assert.strictEqual((await m._crear({ project_id: 'p' })).status, 400);
 });
 
+test('_normalizarPrecio: precio ÚNICO en crudo (350c/kg) → c/g + unidad_base', () => {
+  const n = m._normalizarPrecio({ precio_centimos: 350, cantidad: 1, unidad: 'kg', densidad_g_ml: 1.0 });
+  assert.strictEqual(n.coste_centimos_por_unidad, 0.35, '350c / 1000g');
+  assert.strictEqual(n.unidad_base, 'g');
+  assert.strictEqual(n.densidad_g_ml, 1.0, 'preserva densidad');
+  assert.ok(!('precio_centimos' in n) && !('unidad' in n), 'consume el crudo');
+});
+
+test('_normalizarPrecio: VARIOS precios → referencia PRUDENTE (no el más barato)', () => {
+  // tres fuentes por kg: 300, 360, 420 c/kg → 0.30, 0.36, 0.42 c/g → p75 ≈ 0.39 (por encima de la mediana 0.36)
+  const n = m._normalizarPrecio({ precios: [
+    { precio_centimos: 300, cantidad: 1, unidad: 'kg' },
+    { precio_centimos: 360, cantidad: 1, unidad: 'kg' },
+    { precio_centimos: 420, cantidad: 1, unidad: 'kg' },
+  ] });
+  assert.strictEqual(n.unidad_base, 'g');
+  assert.ok(n.coste_centimos_por_unidad > 0.36, 'tira a alto, por encima de la mediana');
+  assert.ok(n.coste_centimos_por_unidad <= 0.42, 'sin pasarse del máximo');
+  assert.ok(!('precios' in n), 'consume la lista');
+});
+
+test('_normalizarPrecio: sin datos de precio → naturalezas intactas', () => {
+  assert.deepStrictEqual(m._normalizarPrecio({ precio: 'por_unidad' }), { precio: 'por_unidad' });
+});
+
 (async () => {
   let ok = 0;
   for (const { n, f } of tests) {

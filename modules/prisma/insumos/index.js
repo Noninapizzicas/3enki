@@ -13,6 +13,7 @@
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+const U = require('../../_shared/prisma-unidades');   // normaliza precio → base · referencia prudente (p75)
 
 const DIR = '/prisma/insumos/';
 const insPath = (id) => DIR + id + '.json';
@@ -37,6 +38,30 @@ class PrismaInsumosReflejo extends ModuloHibridoReflejo {
   onGetRequest(e)        { return this._atender(e, 'get',        'insumos.get.response',        d => this._get(d)); }
   onListRequest(e)       { return this._atender(e, 'list',       'insumos.list.response',       d => this._list(d)); }
   onActualizarRequest(e) { return this._atender(e, 'actualizar', 'insumos.actualizar.response', d => this._actualizar(d)); }
+
+  // ── PURO: normaliza el PRECIO de las naturalezas al contrato que lee el costeador.
+  //    Acepta precio en crudo — uno: {precio_centimos, cantidad, unidad}  ·  varios: {precios:[{...}]}.
+  //    Uno → céntimos POR UNIDAD BASE (precioPorBase).  Varios → referencia PRUDENTE (p75, tirando a alto: no es compra).
+  //    Deja naturalezas.{coste_centimos_por_unidad, unidad_base} y preserva densidad_g_ml. Sin datos de precio → intacto. ──
+  _normalizarPrecio(nat) {
+    if (!nat || typeof nat !== 'object') return nat || {};
+    const out = { ...nat };
+    const aBase = (p) => { const r = U.precioPorBase({ precio_centimos: p?.precio_centimos, cantidad: p?.cantidad, unidad: p?.unidad }); return r.error ? null : r; };
+    if (Array.isArray(nat.precios) && nat.precios.length) {
+      const norm = nat.precios.map(aBase).filter(Boolean);
+      if (norm.length) {
+        const base = norm[0].base;                                   // promedia solo los de la misma base (no cruza dimensiones)
+        const ref = U.precioReferencia(norm.filter(x => x.base === base).map(x => x.coste_centimos_por_unidad));
+        if (ref != null) { out.coste_centimos_por_unidad = ref; out.unidad_base = base; }
+      }
+      delete out.precios;
+    } else if (nat.precio_centimos != null && nat.unidad) {
+      const r = aBase(nat);
+      if (r) { out.coste_centimos_por_unidad = r.coste_centimos_por_unidad; out.unidad_base = r.base; }
+      delete out.precio_centimos; delete out.cantidad; delete out.unidad;   // consumidos → ya viven normalizados
+    }
+    return out;
+  }
 
   // ── PURO: normaliza un nombre para comparar (tildes, mayúsculas, plural simple, espacios) ──
   _normalizar(nombre) {
@@ -98,7 +123,7 @@ class PrismaInsumosReflejo extends ModuloHibridoReflejo {
     const existe = await this._read(project_id, insPath(id));
     if (existe) return this._errorResponse(409, 'CONFLICT_STATE', 'el insumo ya existe (usa actualizar)', { insumo_id: id });
     const insumo = { id, nombre: String(nombre).trim(),
-      naturalezas: naturalezas || { precio: 'por_unidad' },
+      naturalezas: this._normalizarPrecio(naturalezas || { precio: 'por_unidad' }),
       clasificacion_ref: clasificacion_ref || null,
       creado: nowISO(), actualizado: nowISO() };
     await this._write(project_id, insPath(id), insumo);
@@ -130,6 +155,7 @@ class PrismaInsumosReflejo extends ModuloHibridoReflejo {
     const raw = await this._read(project_id, insPath(insumo_id));
     if (!raw) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'insumo no existe', { entity_type: 'insumo', id: insumo_id });
     await this._write(project_id, versionPath(insumo_id, tsSafe()), raw);           // snapshot previo
+    if (campos.naturalezas) campos = { ...campos, naturalezas: this._normalizarPrecio(campos.naturalezas) };
     const merged = { ...raw, ...campos, id: raw.id, actualizado: nowISO() };
     await this._write(project_id, insPath(insumo_id), merged);
     this.eventBus?.publish?.('insumo.actualizado', { project_id, insumo_id, campos: Object.keys(campos), timestamp: nowISO() });

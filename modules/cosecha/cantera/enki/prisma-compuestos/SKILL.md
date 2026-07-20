@@ -55,9 +55,30 @@ RESULTADO: cada componente resuelto a un id CANÓNICO. El compuesto guarda ESE i
 // /prisma/compuestos/<id>.json
 { "id": "...", "nombre": "Pizza Samba",
   "componentes": [ { "ref": "<insumo|compuesto_id canónico>", "cantidad": 315, "unidad": "g" }, ... ],
-  "clasificacion_ref": { "familia": "...", "subfamilia": "...", "grupo": "..." }   // eje FABRICACIÓN
+  "naturalezas": { "clasificacion": { "eje": "fabricacion", "familia": "...", "subfamilia": "...", "grupo": "..." } }
 }
 // un componente puede ser OTRO compuesto (sub-mezcla: masa, salsa) → recursivo, sin límite
+```
+
+## CLASIFICAR — registro ABIERTO (no es store, es campo + pregunta)
+
+La clasificación NO se guarda en un registro que deba existir antes de etiquetar (eso sería el
+`declara-antes-de-actuar` que el sistema disuelve). Son 3 campos abiertos que NACEN del acto de clasificar.
+
+```
+EJE por origen:   insumo → compra   ·   compuesto → fabricacion   ·   producto → venta
+CAMPOS:           { familia, subfamilia|null, grupo|null }   ← strings libres, sin enum cerrado
+
+CÓMO se llena:
+  taxonomia(eje) = leer los DISTINTOS ya presentes en insumos.list / compuestos.list  ← proyección, no store
+  formulador.clasificar({ item_nombre, eje, taxonomia })   ← el micro-agente REUTILIZA lo que ya hay
+    → { familia, subfamilia, grupo, propuesta_nueva }
+
+LA PREGUNTA:  propuesta_nueva:true (nada de la taxonomía encajó)
+  → AVISA/pregunta antes de estrenar una familia. Nunca la acuñes en silencio (misma regla que un precio faltante).
+  → el humano confirma → la rama nueva nace del acto, no de un permiso central.
+
+RECONCILIAR:  misma normalización que insumos (tildes/mayúsculas/plural) para no duplicar 'Bebida'/'bebidas'.
 ```
 
 ## GUARDAR — por los custodios (tú propones, ellos escriben)
@@ -119,13 +140,13 @@ FACTURA          NO es requisito de fase 1, pero la puerta queda ABIERTA/oportun
 ## LA TRAMOYA que esta skill conduce (reflejos — build-list, mirando adelante)
 
 ```
-[POR CREAR]  insumos-manager      custodio /prisma/insumos/     · buscar·crear·actualizar·get·list   (+ .versions)
-[POR CREAR]  compuestos-manager   custodio /prisma/compuestos/  · crear·actualizar·get·list·resolver  (+ .versions)
-[POR CREAR]  costeador prisma     costear(compuesto_id) → Σ refs → emite compuesto.coste.calculado (receta a receta)
-[EXISTE→adaptar] puente-compuesto (ex-recetario) → escucha compuesto.coste.calculado (prisma, ya NO escandallo)
-[EXISTE]     adaptador           el actor: crudo → molde (esta skill lo guía)
+[EXISTE]  prisma/insumos      custodio /prisma/insumos/     · buscar·crear·get·list·actualizar   (reconcilia: normaliza+Levenshtein+tokens)
+[EXISTE]  prisma/compuestos   custodio /prisma/compuestos/  · crear·get·list·actualizar·pendientes (la cola)
+[EXISTE]  prisma/costeador    costear(compuesto_id) → Σ refs → emite compuesto.coste.calculado (receta a una) · costear_todos = EL LOOP · cascada por insumo
+[EXISTE]  prisma/formulador   el ACTOR FUZZY: 3 micro-agentes (reconciliar·modelar·clasificar) vía llm.complete headless, tools:[] — forma PRISMA, no LLM-de-página ni framework
+[EXISTE]  prisma/puente-compuesto  escucha compuesto.coste.calculado (prisma, ya NO escandallo) → aplicar/testigo sin pisar precio manual
 
-LOOP de costeo: un code.orquestar (o el rail de estados) itera la cola → costear de a una → sin bloque.
+LOOP de costeo: costeador.costear_todos recorre compuestos.pendientes → costea de a una → sin bloque.
 ```
 
 ## Filosofía (una frase)

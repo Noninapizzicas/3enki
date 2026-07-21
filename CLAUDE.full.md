@@ -14910,19 +14910,22 @@ interruptores 1.2.0  subscribe interruptor.set→onSetRequest (canal del efector
 TESTS   homeostasis__bucle 10
 ```
 
-## VERIFICADOR-VISUAL — modules/verificador-visual (1.0.0) — los OJOS (freno de render)
+## VERIFICADOR-VISUAL — modules/verificador-visual (1.2.0) — los OJOS (freno de render)
 
 ```
 ÓRGANO  MOTOR+EVENTO sin memoria (tipo provider). Cierra el lazo que el freno estructural deja abierto.
 CEREBRO _evaluarSnapshot (PURO): errores_consola/js · overflow_horizontal · pagina_en_blanco · imagenes_rotas
-OJOS    _render: puppeteer-core (YA en repo) + Chromium del host (/opt/pw-browsers). Cero deps nuevas.
-DEGRADA sin navegador → {ok:true, verificado:false} (fail-open + testigo). No es dependencia dura.
+OJOS    _render → _abrirNavegador: PREFIERE obscura (navegador Rust, V8, SIN Chromium, stealth) por CDP
+        (puppeteer.connect ws://127.0.0.1:9222/devtools/browser; server COMPARTIDO → disconnect, no close).
+        Sin obscura → cae honesto a Chromium local (puppeteer.launch). Despliegue: obscura por vps-setup
+        (binario prebuilt → Docker), systemd obscura.service. Config obscura_url · env VERIFICADOR_OBSCURA_URL.
+DEGRADA sin navegador (ni obscura ni Chromium) → SIN_OJOS → {ok:true, verificado:false} (fail-open + testigo).
 RPC     render.verificar.request {html,etiqueta?} → {ok,verificado,motivos[],metricas}
 TESTIGO render.verificado / verificacion-visual.failed (.failed → lo siente la homeostasis)
 FRENO DURO (best-effort: 422 solo si verificado&&!ok)
         carta-design.save (3.3.0)        tras estructural → _checkRender → 422 no guarda
         carta-digital._publicarBundle (2.19.0) genera HTML → render → 422 no publica
-TESTS   verificador-visual__render 12 (incl. Chromium real) · carta-design__freno-render 5
+TESTS   verificador-visual__render 12 (incl. navegador real: obscura si está, Chromium si no) · carta-design__freno-render 5
 ```
 
 ## RUMBO

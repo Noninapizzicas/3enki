@@ -1,0 +1,18 @@
+# obscura — navegador headless en Rust (V8, sin Chromium, stealth) para los OJOS.
+# Se instala en vps-setup.sh (binario prebuilt; fallback Docker). CDP en :9222.
+# Solo loopback (127.0.0.1:9222): lo consume verificador-visual por puppeteer.connect.
+[Unit]
+Description=obscura (navegador headless Rust, CDP :9222)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/obscura serve --port 9222 --stealth
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

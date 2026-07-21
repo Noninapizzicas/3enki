@@ -388,6 +388,46 @@ if ! command -v cargo &>/dev/null; then
     command -v cargo &>/dev/null && log "cargo listo ($(cargo --version 2>/dev/null))" || true
 fi
 
+# ---- 3a-ter-ab. obscura — navegador headless en Rust (los OJOS, sin Chromium) ----
+# El navegador de verificador-visual. obscura (h4ckf0r0day/obscura): V8 embebido, SIN
+# Chromium, stealth, CDP en :9222 — drop-in de puppeteer. Orden: 1) binario prebuilt
+# (nativo, sin compilar V8); 2) Docker (imagen ~57MB, sin Chromium tampoco). Sin ninguno,
+# verificador-visual cae honesto a un Chromium local. NO se compila con cargo por defecto:
+# obscura arrastra V8 desde fuente (brutal en un VPS) — prebuilt/Docker es el camino limpio.
+if [ -x /usr/local/bin/obscura ] || docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^obscura$'; then
+    log "obscura ya presente"
+else
+    log "Instalando obscura (navegador Rust, sin Chromium)..."
+    _obs_tmp="$(mktemp -d)"
+    case "$(uname -m)" in aarch64|arm64) _obs_arch="aarch64";; *) _obs_arch="x86_64";; esac
+    if curl -fsSL "https://github.com/h4ckf0r0day/obscura/releases/latest/download/obscura-${_obs_arch}-linux.tar.gz" -o "${_obs_tmp}/obscura.tar.gz" 2>/dev/null \
+        && tar -xzf "${_obs_tmp}/obscura.tar.gz" -C "${_obs_tmp}" 2>/dev/null; then
+        _obs_bin="$(find "${_obs_tmp}" -type f -name obscura 2>/dev/null | head -1)"
+        [ -n "${_obs_bin}" ] && install -m 0755 "${_obs_bin}" /usr/local/bin/obscura \
+            && log "obscura instalada (binario prebuilt) en /usr/local/bin"
+    fi
+    rm -rf "${_obs_tmp}"
+    # Fallback: Docker (sin compilar). La imagen bindea 127.0.0.1:9222 igual que el binario.
+    if [ ! -x /usr/local/bin/obscura ] && command -v docker &>/dev/null; then
+        warn "sin binario prebuilt de obscura — levantando por Docker (h4ckf0r0day/obscura)..."
+        docker rm -f obscura > /dev/null 2>&1 || true
+        docker run -d --name obscura --restart unless-stopped -p 127.0.0.1:9222:9222 \
+            h4ckf0r0day/obscura serve --port 9222 --stealth > /dev/null 2>&1 \
+            && log "obscura arriba por Docker en 127.0.0.1:9222" \
+            || warn "Docker de obscura falló — verificador-visual cae a Chromium"
+    fi
+fi
+# systemd para el binario nativo (si es Docker, ya quedó levantado arriba).
+if [ -x /usr/local/bin/obscura ]; then
+    install -m 0644 "${REPO_DIR}/deployment/obscura/obscura.service" /etc/systemd/system/obscura.service 2>/dev/null
+    systemctl daemon-reload
+    if systemctl enable --now obscura > /dev/null 2>&1; then
+        log "obscura activa en 127.0.0.1:9222 (CDP, navegador Rust) — verificador-visual la prefiere"
+    else
+        warn "obscura instalada pero el servicio no arrancó (revisa: journalctl -u obscura -f)"
+    fi
+fi
+
 # ---- 3a-ter-bis. motor-ojo — órgano de RENDER de enki-sense (Rust nativo, :8120) ----
 # El PRIMER sentido de enki-sense. Vive DENTRO de 2enki (enki-sense/), NO repo aparte:
 # se compila desde REPO_DIR. Nativo (resvg/usvg/svg2pdf, sin Chromium → sin Docker,

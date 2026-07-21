@@ -17417,8 +17417,21 @@ MOTOR (Rust, EN 2enki · VERIFICADO)  enki-sense/crates/motor-voz — servidor a
      get-models.sh provisiona la voz (~61MB, patrón ocr4rs). VERIFICADO EN VIVO: "Hola, bienvenido a
      Tres Vueltas y Verás. ¿Qué te pongo?" → WAV 22050 Hz, 2.7s de voz española; voz inexistente →
      422 honesto. Nota: ort baja ONNX Runtime al compilar (egress abierto en el VPS).
-PENDIENTE  trazo (canvas) cuando exista la UI que los
-     beba — mismo molde, crates hermanos en enki-sense/.
+PUENTE (bus) 2º PERCEPTOR — CIERRA LA FAMILIA  modules/motor-trazo v0.1.0 —
+     motor-trazo.interpretar.request {trazos:[[{x,y}...]...]} → POST /interpret →
+     {elementos:[{tipo, bbox, cerrado, n_puntos, n_vertices}]}. Tool 'interpretar_trazo' (en
+     GLOBAL_TOOLS). SIN botón (geometría local pura; el guard del canvas vive en el BORDE). El motor
+     da GEOMETRÍA cruda (mitad REFLEJO); la INTENCIÓN (flecha, boceto, tachón) la infiere el LLM
+     (mitad FUZZY, en el core) → sube a la PROPIOCEPCIÓN. Base http://localhost:8125. Test:
+     motor-trazo__index (4).
+MOTOR (Rust nativo, EN 2enki · VERIFICADO)  enki-sense/crates/motor-trazo — servidor axum
+     127.0.0.1:8125: /health · POST /interpret. GEOMETRÍA PURA, SIN modelo (nada que descargar):
+     bbox, cierre por proximidad extremo-inicio, simplificación RDP (vértices reales), rectitud
+     (línea), circularidad 4π·área/largo² (círculo), nº de lados (triángulo/rectángulo/polígono);
+     área por shoelace. Cotas de sanidad (2000 trazos / 100k puntos → {fallo demasiado_grande}).
+     VERIFICADO EN VIVO: rectángulo (44 pts) → rectangulo (4 vértices), línea (31) → linea (2),
+     círculo (37) → circulo, triángulo (39) → triangulo. Es el 2º PERCEPTOR y CIERRA la familia (6º
+     sentido): geometría reflejo aquí, intención en el LLM.
 ```
 
 ## Topics
@@ -17429,6 +17442,6 @@ motor-traduce.request → .response               (traducir · server nativo)   
 motor-voz.decir.request → .response              (decir · piper-rs)            [VIVO · verificado ES]
 motor-oido.transcribir.request → .response       (oír · candle-whisper)        [VIVO · verificado]
 motor-sonido.analizar.request → .response        (sonido · DSP features)       [VIVO · verificado]
-motor-ojo.canvas.interpretado                   (trazo · fuzzy core → propiocepción)  [guión]
+motor-trazo.interpretar.request → .response      (trazo · geometría pura)      [VIVO · verificado]
 SIN interruptor: los órganos de cómputo/salida nacen operativos (único guard: 503 sin_motor)
 ```

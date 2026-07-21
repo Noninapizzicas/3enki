@@ -9,6 +9,7 @@ fuentes:
   - modules/motor-sonido/**
   - modules/motor-voz/**
   - modules/motor-trazo/**
+  - frontend/src/lib/modules/trazo/**
   - enki-sense/**
   - deployment/vps-setup.sh
   - arquitectura/decisiones/propuestas/enki-sense.md
@@ -136,6 +137,12 @@ MOTOR (Rust nativo, EN 2enki · VERIFICADO)  enki-sense/crates/motor-trazo — s
      VERIFICADO EN VIVO: rectángulo (44 pts) → rectangulo (4 vértices), línea (31) → linea (2),
      círculo (37) → circulo, triángulo (39) → triangulo. Es el 2º PERCEPTOR y CIERRA la familia (6º
      sentido): geometría reflejo aquí, intención en el LLM.
+BORDE (clase 3 · cliente)  frontend/src/lib/modules/trazo — la MANO: un <canvas> donde el dueño
+     DIBUJA con dedo/ratón (pointer events, captura en el cliente). Al interpretar manda los trazos por
+     mqttRequest('motor-trazo','interpretar',{trazos}) → ui/request/motor-trazo/interpretar (puerta
+     ui_handlers del puente, misma _interpretar que la tool/bus) → motor :8125; pinta la geometría
+     (cajas + tipo). UNIVERSAL (es un sentido, no página de dominio → se ve en CUALQUIER proyecto,
+     sobrevive al gate de page-set). Degrada honesto (503 → aviso, no inventa formas).
 ```
 
 ## Topics

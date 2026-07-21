@@ -5,6 +5,7 @@ resumen: SvelteKit 2 + Svelte 5 sobre MQTT: MqttClient singleton, mqtt-request, 
 fuentes:
   - frontend/src/**
 verificado: 2026-07-21
+trabajo_pendiente: verificar el módulo trazo en un frontend construido (node_modules) — el wiring espeja interruptores 1:1 pero no se compiló aquí
 ---
 
 # FRONTEND — Capa de UI (SvelteKit + Svelte 5 sobre MQTT)
@@ -841,9 +842,10 @@ ARRANQUE {
        navegación → setCurrentRoute → workBarDefinitions filtra por ruta
        GATE page-set: proyecto con pages:[] (p.ej. prisma recién nacido) → work-bar oculta sus
          botones de DOMINIO (módulos pizzepos que no le pertenecen) PERO conserva los UNIVERSALES
-         (manifest.universal:true) — interruptores (on/off del dueño: kill-switches, features) es
-         control SOBERANO, no página de dominio: se ve en CUALQUIER proyecto. LazyWorkBar filtra
-         d.universal cuando emptyPageSet; con page-set no vacío o sin proyecto → comportamiento previo.
+         (manifest.universal:true) — interruptores (on/off del dueño: kill-switches, features) y
+         trazo (el BORDE del 6º sentido: canvas para dibujar → motor-trazo) son control/sentido
+         SOBERANO, no páginas de dominio: se ven en CUALQUIER proyecto. LazyWorkBar filtra d.universal
+         cuando emptyPageSet; con page-set no vacío o sin proyecto → comportamiento previo.
        click botón work-bar → loadModule → mountModule → onMount(scopedContext)
        click botón barra → openPanel → getPanelComponent → loadPanelComponent (lazy + cache)
        acción UI → mqttRequest(domain, action) → ui/request → ui/response

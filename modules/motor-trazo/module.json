@@ -16,6 +16,9 @@
   "publishes": [
     { "event": "motor-trazo.interpretar.response", "description": "{ elementos:[{tipo, bbox, cerrado, n_vertices}], total, nota } o error (5xx upstream, 503 sin_motor)." }
   ],
+  "ui_handlers": [
+    { "domain": "motor-trazo", "action": "interpretar", "handler": "handleInterpretarTool", "description": "Puerta ui/request para el BORDE: el canvas del frontend manda {trazos} → mismo _interpretar que la tool/bus. Frontend: mqttRequest('motor-trazo','interpretar',{trazos})." }
+  ],
   "tools": [
     {
       "name": "interpretar_trazo",

@@ -1,0 +1,11 @@
+{
+  "id": "trazo",
+  "name": "Trazo",
+  "description": "El BORDE del 6º sentido: dibuja en un canvas y el motor-trazo lee su geometría (línea/círculo/rectángulo…). La forma la mide el motor; la intención la pones tú.",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 98,
+  "universal": true,
+  "icon": "✏️",
+  "label": "Trazo"
+}

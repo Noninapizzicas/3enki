@@ -17374,11 +17374,14 @@ PUENTE (bus) 2º sentido  modules/motor-traduce v0.1.0 — motor-traduce.request
      códigos de idioma en una frontera (es-ES→es); de==a → passthrough. Degrada honesto (sin_motor /
      422 PAR_NO_SOPORTADO). Base http://localhost:8121 (env MOTOR_TRADUCE_URL). Test:
      motor-traduce__index (6). Consumidor latente: carta multi-idioma · whatsapp.
-MOTOR (decisión, PENDIENTE de build)  candle + MarianMT/Opus-MT (Helsinki-NLP) — Rust puro, NO
-     Bergamot (bindings C++). Modelos por par de idiomas (~300MB), descargados en el deploy (patrón
-     ocr4rs get-models, no van en el binario). El puente ya degrada honesto (sin_motor) hasta que
-     el motor exista. Su ciclo build+verify es propio (compila candle + prueba con un par real).
-PENDIENTE  motor de traducir (candle-marian) · voz/oído/sonido/trazo cuando exista la UI que los
+MOTOR (Rust nativo, EN 2enki · VERIFICADO)  enki-sense/crates/motor-traduce — servidor axum
+     127.0.0.1:8121: /health · POST /translate. candle + MarianMT/Opus-MT (Helsinki-NLP), Rust puro,
+     NO Bergamot. Carga LOCAL (sin red en runtime): los modelos por par (~300MB) los provisiona
+     get-models.sh con curl (patrón ocr4rs), NO el binario. VERIFICADO EN VIVO: compila, descarga el
+     modelo fr-en (300MB) y traduce ("Hello world", "Where are the toilets?"). Alias embed_tokens→
+     shared para cargar cualquier Opus-MT; freno anti-bucle (el EOS no cierra 100% limpio con
+     tokenizers lmz+pesos Helsinki → queda algún token de cola; assets emparejados lo pulen).
+PENDIENTE  voz/oído/sonido/trazo cuando exista la UI que los
      beba — mismo molde, crates hermanos en enki-sense/.
 ```
 
@@ -17386,7 +17389,7 @@ PENDIENTE  motor de traducir (candle-marian) · voz/oído/sonido/trazo cuando ex
 
 ```
 motor-ojo.render.request → .response            (renderizar · server nativo)  [VIVO]
-motor-traduce.request → .response               (traducir · server nativo)    [PUENTE listo · motor pendiente]
+motor-traduce.request → .response               (traducir · server nativo)    [VIVO · verificado fr-en]
 motor-voz.decir.request → .audio                (decir · inferencia server)   [guión]
 motor-oido.oir.request → .transcrito            (oír · captura borde)         [guión]
 motor-sonido.analizar.request → .prosodia       (sonido · features+fuzzy)     [guión]

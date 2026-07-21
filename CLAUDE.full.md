@@ -17394,7 +17394,19 @@ MOTOR (Rust nativo, EN 2enki · VERIFICADO)  enki-sense/crates/motor-oido — se
      provisiona el modelo (~145MB, patrón ocr4rs). VERIFICADO EN VIVO: transcribe jfk.wav →
      "And so my fellow Americans ask not what your country can do for you..." (confianza 0.86) y
      detecta el idioma (en). A diferencia de marian, whisper cierra limpio (EOS dispara).
-PENDIENTE  voz (TTS) · sonido/trazo cuando exista la UI que los
+
+PUENTE (bus) 1er PERCEPTOR  modules/motor-sonido v0.1.0 — motor-sonido.analizar.request {audio_base64}
+     → POST /analyze → {features:{energia_rms, pitch_hz, tasa_silabas_s, variacion_energia,
+     proporcion_sonora, duracion_s}}. Tool 'analizar_sonido' (en GLOBAL_TOOLS). SIN botón. El motor
+     da FEATURES crudas (mitad REFLEJO); la etiqueta emocional la infiere el LLM (mitad FUZZY, en el
+     core) → sube a la PROPIOCEPCIÓN. Test: motor-sonido__index (4).
+MOTOR (Rust nativo, EN 2enki · VERIFICADO)  enki-sense/crates/motor-sonido — servidor axum
+     127.0.0.1:8123: /health · POST /analyze. DSP PURO, SIN modelo (nada que descargar): RMS,
+     f0 por autocorrelación (50–400 Hz), ritmo por picos de envolvente, variación de energía.
+     VERIFICADO EN VIVO: tono sintético de 220 Hz → pitch_hz 222.2 (±1%); voz real → prosodia
+     plausible (pitch variable, 37% sonoro, 2 síl/s). Es el 1er PERCEPTOR (clase 2 del bisturí):
+     features reflejo aquí, juicio emocional en el LLM.
+PENDIENTE  voz (TTS, Piper — binario bloqueado en sandbox) · trazo (canvas) cuando exista la UI que los
      beba — mismo molde, crates hermanos en enki-sense/.
 ```
 
@@ -17405,7 +17417,7 @@ motor-ojo.render.request → .response            (renderizar · server nativo) 
 motor-traduce.request → .response               (traducir · server nativo)    [VIVO · verificado fr-en]
 motor-voz.decir.request → .audio                (decir · inferencia server)   [guión]
 motor-oido.transcribir.request → .response       (oír · candle-whisper)        [VIVO · verificado]
-motor-sonido.analizar.request → .prosodia       (sonido · features+fuzzy)     [guión]
+motor-sonido.analizar.request → .response        (sonido · DSP features)       [VIVO · verificado]
 motor-ojo.canvas.interpretado                   (trazo · fuzzy core → propiocepción)  [guión]
 SIN interruptor: los órganos de cómputo/salida nacen operativos (único guard: 503 sin_motor)
 ```

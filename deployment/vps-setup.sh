@@ -76,6 +76,14 @@ apt-get install -y -qq curl git build-essential rsync > /dev/null
 
 # Chromium/Chrome retirados del host: WhatsApp va por Meta Cloud API (HTTP, sin navegador)
 # y los OJOS (verificador-visual) por obscura (navegador Rust). Enki no arrastra Chromium.
+# RETIRA el rastro físico de pasadas anteriores (idempotente; patrón crw-server). NO tocamos
+# las libs libnss3/etc.: son compartidas y su remoción es arriesgada — quedan inertes.
+if command -v google-chrome-stable > /dev/null 2>&1; then
+    log "Retirando Google Chrome del host (open-wa desmantelado)..."
+    apt-get remove --purge -y -qq google-chrome-stable > /dev/null 2>&1 || true
+fi
+rm -rf /opt/enki/data/chrome-home 2>/dev/null || true
+rm -rf /opt/enki/node_modules/@open-wa 2>/dev/null || true
 
 # ---- 2. Node.js ----
 # Acepta cualquier versión >= NODE_VERSION (el chequeo literal "v20" no casaba

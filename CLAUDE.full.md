@@ -13762,9 +13762,10 @@ ARRANQUE {
        navegación → setCurrentRoute → workBarDefinitions filtra por ruta
        GATE page-set: proyecto con pages:[] (p.ej. prisma recién nacido) → work-bar oculta sus
          botones de DOMINIO (módulos pizzepos que no le pertenecen) PERO conserva los UNIVERSALES
-         (manifest.universal:true) — interruptores (on/off del dueño: kill-switches, features) es
-         control SOBERANO, no página de dominio: se ve en CUALQUIER proyecto. LazyWorkBar filtra
-         d.universal cuando emptyPageSet; con page-set no vacío o sin proyecto → comportamiento previo.
+         (manifest.universal:true) — interruptores (on/off del dueño: kill-switches, features) y
+         trazo (el BORDE del 6º sentido: canvas para dibujar → motor-trazo) son control/sentido
+         SOBERANO, no páginas de dominio: se ven en CUALQUIER proyecto. LazyWorkBar filtra d.universal
+         cuando emptyPageSet; con page-set no vacío o sin proyecto → comportamiento previo.
        click botón work-bar → loadModule → mountModule → onMount(scopedContext)
        click botón barra → openPanel → getPanelComponent → loadPanelComponent (lazy + cache)
        acción UI → mqttRequest(domain, action) → ui/request → ui/response
@@ -17437,6 +17438,12 @@ MOTOR (Rust nativo, EN 2enki · VERIFICADO)  enki-sense/crates/motor-trazo — s
      VERIFICADO EN VIVO: rectángulo (44 pts) → rectangulo (4 vértices), línea (31) → linea (2),
      círculo (37) → circulo, triángulo (39) → triangulo. Es el 2º PERCEPTOR y CIERRA la familia (6º
      sentido): geometría reflejo aquí, intención en el LLM.
+BORDE (clase 3 · cliente)  frontend/src/lib/modules/trazo — la MANO: un <canvas> donde el dueño
+     DIBUJA con dedo/ratón (pointer events, captura en el cliente). Al interpretar manda los trazos por
+     mqttRequest('motor-trazo','interpretar',{trazos}) → ui/request/motor-trazo/interpretar (puerta
+     ui_handlers del puente, misma _interpretar que la tool/bus) → motor :8125; pinta la geometría
+     (cajas + tipo). UNIVERSAL (es un sentido, no página de dominio → se ve en CUALQUIER proyecto,
+     sobrevive al gate de page-set). Degrada honesto (503 → aviso, no inventa formas).
 ```
 
 ## Topics

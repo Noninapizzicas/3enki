@@ -1,0 +1,25 @@
+[package]
+name = "motor-traduce"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Órgano de TRADUCCIÓN de enki-sense: texto → texto (candle + MarianMT/Opus-MT), local."
+
+[[bin]]
+name = "motor-traduce"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+anyhow = "1"
+candle-core = "0.8"
+candle-nn = "0.8"
+candle-transformers = "0.8"
+tokenizers = "0.20"

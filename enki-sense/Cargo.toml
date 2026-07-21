@@ -3,7 +3,7 @@
 # oido, traduce, sonido) entran como crates hermanos con el mismo molde.
 [workspace]
 resolver = "2"
-members = ["crates/motor-ojo"]
+members = ["crates/motor-ojo", "crates/motor-traduce"]
 
 [workspace.package]
 version = "0.1.0"
@@ -19,3 +19,8 @@ serde_json = "1"
 base64 = "0.22"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+
+# candle es lento en debug puro; optimizamos SOLO las dependencias (mi código
+# sigue debug, compila rápido). Inferencia usable sin un release completo.
+[profile.dev.package."*"]
+opt-level = 3

@@ -1,0 +1,22 @@
+# motor-traduce — órgano de traducción de enki-sense (Rust nativo, candle-marian).
+# Se compila desde 2enki (enki-sense/) con cargo install en vps-setup.sh.
+# Los modelos se provisionan con get-models.sh (NO van en el binario).
+# Solo loopback (127.0.0.1:8121): lo consume el core por modules/motor-traduce.
+[Unit]
+Description=enki-sense motor-traduce (traducir texto local, candle-marian)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/motor-traduce
+Environment=MOTOR_TRADUCE_PORT=8121
+Environment=MOTOR_TRADUCE_MODELS=__MODELS__
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=__MODELS__
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

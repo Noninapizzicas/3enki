@@ -396,6 +396,36 @@ if [ -x /usr/local/bin/motor-ojo ]; then
     fi
 fi
 
+# ---- 3a-ter-ter. motor-traduce — órgano de TRADUCCIÓN de enki-sense (Rust nativo, :8121) ----
+# 2º sentido. Nativo (candle + MarianMT/Opus-MT, sin nube). Los modelos NO van en
+# el binario: get-models.sh los descarga (patrón ocr4rs). Best-effort: sin binario
+# o sin modelos, el puente modules/motor-traduce degrada honesto (503 sin_motor).
+MT_MODELS="${INSTALL_DIR}/data/traduce-models"
+if [ -x /usr/local/bin/motor-traduce ]; then
+    log "motor-traduce ya instalado"
+elif command -v cargo &>/dev/null; then
+    log "Compilando motor-traduce (enki-sense/traducir, candle — la 1ª vez tarda unos minutos)..."
+    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-traduce" --root /usr/local --locked > /dev/null 2>&1 \
+        && log "motor-traduce compilado en /usr/local/bin" \
+        || warn "cargo install de motor-traduce falló — el puente degrada honesto (503 sin_motor)"
+else
+    warn "sin cargo: motor-traduce no se compiló. El puente degrada honesto (503 sin_motor)."
+fi
+if [ -x /usr/local/bin/motor-traduce ]; then
+    # Modelos (par fr-en verificado). Si falla la descarga, el motor da par_no_soportado.
+    mkdir -p "${MT_MODELS}"
+    bash "${REPO_DIR}/enki-sense/crates/motor-traduce/get-models.sh" "${MT_MODELS}" > /dev/null 2>&1 \
+        && log "motor-traduce: modelos provisionados en ${MT_MODELS}" \
+        || warn "motor-traduce: get-models falló (¿red?) — traducir dará par_no_soportado hasta reintentar"
+    sed "s#__MODELS__#${MT_MODELS}#g" "${REPO_DIR}/enki-sense/deployment/systemd/motor-traduce.service" > /etc/systemd/system/motor-traduce.service 2>/dev/null
+    systemctl daemon-reload
+    if systemctl enable --now motor-traduce > /dev/null 2>&1; then
+        log "motor-traduce activo en 127.0.0.1:8121 (traducir local) — SIN botón, operativo ya"
+    else
+        warn "motor-traduce instalado pero el servicio no arrancó (revisa: journalctl -u motor-traduce -f)"
+    fi
+fi
+
 # ---- 3a-quater. HERMES — el agente trabajador (nativo, :8642) ----
 # La suma, no el orgullo: Enki gobierna (interruptor 'hermes-agente' + audit
 # hermes.invocado), Hermes pone el músculo (browser, código, subagentes, memoria
@@ -697,6 +727,9 @@ if systemctl is-active --quiet ocr4rs 2>/dev/null; then
 fi
 if systemctl is-active --quiet motor-ojo 2>/dev/null; then
     echo "    motor-ojo      → enki-sense render SVG/PDF/imagen (Rust nativo/systemd, localhost:8120)"
+fi
+if systemctl is-active --quiet motor-traduce 2>/dev/null; then
+    echo "    motor-traduce  → enki-sense traducir texto local (Rust/candle, localhost:8121)"
 fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-headroom$'; then
     echo "    enki-headroom  → proxy compresión (docker, localhost:8787)"

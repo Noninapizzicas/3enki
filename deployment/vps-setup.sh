@@ -455,6 +455,30 @@ if [ -x /usr/local/bin/motor-oido ]; then
     fi
 fi
 
+# ---- 3a-ter-quinquies. motor-sonido — PERCEPTOR de prosodia de enki-sense (Rust nativo, :8123) ----
+# El 1er perceptor. DSP puro (SIN modelo → nada que descargar). Da features de
+# prosodia; la emoción la infiere el LLM. Best-effort: sin binario, el puente
+# modules/motor-sonido degrada honesto (503 sin_motor).
+if [ -x /usr/local/bin/motor-sonido ]; then
+    log "motor-sonido ya instalado"
+elif command -v cargo &>/dev/null; then
+    log "Compilando motor-sonido (enki-sense/prosodia, DSP)..."
+    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-sonido" --root /usr/local --locked > /dev/null 2>&1 \
+        && log "motor-sonido compilado en /usr/local/bin" \
+        || warn "cargo install de motor-sonido falló — el puente degrada honesto (503 sin_motor)"
+else
+    warn "sin cargo: motor-sonido no se compiló. El puente degrada honesto (503 sin_motor)."
+fi
+if [ -x /usr/local/bin/motor-sonido ]; then
+    install -m 0644 "${REPO_DIR}/enki-sense/deployment/systemd/motor-sonido.service" /etc/systemd/system/motor-sonido.service 2>/dev/null
+    systemctl daemon-reload
+    if systemctl enable --now motor-sonido > /dev/null 2>&1; then
+        log "motor-sonido activo en 127.0.0.1:8123 (prosodia local) — SIN botón, operativo ya"
+    else
+        warn "motor-sonido instalado pero el servicio no arrancó (revisa: journalctl -u motor-sonido -f)"
+    fi
+fi
+
 # ---- 3a-quater. HERMES — el agente trabajador (nativo, :8642) ----
 # La suma, no el orgullo: Enki gobierna (interruptor 'hermes-agente' + audit
 # hermes.invocado), Hermes pone el músculo (browser, código, subagentes, memoria
@@ -762,6 +786,9 @@ if systemctl is-active --quiet motor-traduce 2>/dev/null; then
 fi
 if systemctl is-active --quiet motor-oido 2>/dev/null; then
     echo "    motor-oido     → enki-sense transcribir voz local (Rust/candle-whisper, localhost:8122)"
+fi
+if systemctl is-active --quiet motor-sonido 2>/dev/null; then
+    echo "    motor-sonido   → enki-sense prosodia local, DSP (Rust nativo, localhost:8123)"
 fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-headroom$'; then
     echo "    enki-headroom  → proxy compresión (docker, localhost:8787)"

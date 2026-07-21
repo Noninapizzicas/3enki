@@ -1,0 +1,40 @@
+{
+  "_doc": "motor-sonido — PUENTE al órgano PERCEPTOR de enki-sense: ANALIZAR-SONIDO (audio → prosodia). Clase 2 del bisturí (PERCEPTOR), PARTIDO: la mitad MEDIBLE (features DSP: energía, tono f0, ritmo) = REFLEJO (este motor Rust las calcula, deterministas); la mitad de JUICIO (etiqueta emocional) = FUZZY, la pone el LLM DE PÁGINA al leer las features. El motor NO etiqueta emoción. Su salida sube a la PROPIOCEPCIÓN (la joya del guión). Rust puro NATIVO (DSP, sin modelo), cero nube. SIN BOTÓN en el motor (guard de privacidad del micro = en el BORDE, al capturar). Único guard: degradación honesta (503 sin_motor). Ver guión: arquitectura/decisiones/propuestas/enki-sense.md. Config: base_url (default http://localhost:8123, override env MOTOR_SONIDO_URL), timeout_ms.",
+  "name": "motor-sonido",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: nace el puente del 1er PERCEPTOR (analizar-sonido). Reflejo bus↔HTTP al servicio enki-sense (DSP puro). Evento motor-sonido.analizar.request {audio_base64} → POST /analyze → {features:{energia_rms, pitch_hz, tasa_silabas_s, variacion_energia, duracion_s}}. Tool 'analizar_sonido' en GLOBAL_TOOLS. SIN botón. El motor da FEATURES crudas; la etiqueta emocional la infiere el LLM (fuzzy, en el core). Degradación honesta (sin_motor / ANALISIS_FALLIDO). Motor Rust: enki-sense/crates/motor-sonido. Test: motor-sonido__index.",
+  "description": "Puente al perceptor de sonido de enki-sense (Rust nativo, DSP). Audio → prosodia (features crudas; la emoción la pone el LLM). SIN botón, degrada limpio si el motor no está.",
+  "author": "enki",
+  "language": "javascript",
+  "main": "index.js",
+  "tier": "sistema",
+  "horizonte": "El PERCEPTOR de la prosodia — cómo se DICE (tono/energía/ritmo), no qué se dice. Alimenta la propiocepción: el LLM lee el estado del hablante. 1er perceptor de enki-sense.",
+  "dependencies": [],
+  "subscribes": [
+    { "event": "motor-sonido.analizar.request", "handler": "onAnalizarRequest", "description": "Reflejo: analiza {audio_base64} → POST /analyze → {features}. Sin botón; 503 sin_motor si el binario no responde. El motor da features crudas, NO etiqueta emoción (eso lo hace el LLM)." }
+  ],
+  "publishes": [
+    { "event": "motor-sonido.analizar.response", "description": "{ features:{energia_rms, pitch_hz, tasa_silabas_s, variacion_energia, duracion_s}, nota } o error (5xx upstream, 503 sin_motor)." }
+  ],
+  "tools": [
+    {
+      "name": "analizar_sonido",
+      "description": "Analiza la PROSODIA de un audio (cómo se dice, no qué se dice): energía, tono (f0), ritmo del habla. LOCAL, cero nube. Devuelve features CRUDAS — la emoción/estado (frustrado, calmado, acelerado) la infieres TÚ al leer las features (el motor no la inventa). Combínala con transcribir para oír Y sentir. Motor Rust nativo (DSP). Operativa siempre; 503 sin_motor si el motor no está.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "audio_base64": { "type": "string", "minLength": 1, "description": "El audio a analizar, en base64 (WAV)." }
+        },
+        "required": ["audio_base64"]
+      },
+      "handler": "handleAnalizarTool",
+      "errores_conocidos": ["INVALID_INPUT", "ANALISIS_FALLIDO", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+    }
+  ],
+  "config": {
+    "base_url": "http://localhost:8123",
+    "timeout_ms": 30000,
+    "_base_url_doc": "Base del servicio enki-sense de sonido (Rust nativo, DSP). Override por env MOTOR_SONIDO_URL. Sin motor desplegado, analizar_sonido degrada honesto (503 sin_motor)."
+  }
+}

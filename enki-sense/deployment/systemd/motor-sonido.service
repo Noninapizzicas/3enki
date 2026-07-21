@@ -1,0 +1,19 @@
+# motor-sonido — perceptor de prosodia de enki-sense (Rust nativo, DSP puro).
+# Se compila desde 2enki (enki-sense/) con cargo install en vps-setup.sh.
+# SIN modelo (solo DSP). Solo loopback (127.0.0.1:8123): lo consume el core.
+[Unit]
+Description=enki-sense motor-sonido (prosodia local, DSP)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/motor-sonido
+Environment=MOTOR_SONIDO_PORT=8123
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

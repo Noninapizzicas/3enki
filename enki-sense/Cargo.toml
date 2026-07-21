@@ -3,7 +3,7 @@
 # oido, traduce, sonido) entran como crates hermanos con el mismo molde.
 [workspace]
 resolver = "2"
-members = ["crates/motor-ojo", "crates/motor-traduce", "crates/motor-oido"]
+members = ["crates/motor-ojo", "crates/motor-traduce", "crates/motor-oido", "crates/motor-sonido"]
 
 [workspace.package]
 version = "0.1.0"

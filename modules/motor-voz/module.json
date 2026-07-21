@@ -1,0 +1,41 @@
+{
+  "_doc": "motor-voz — PUENTE al 4º órgano sensorial de enki-sense: DECIR (texto → voz). Transductor DETERMINISTA (clase 1 del bisturí): mismo texto+voz → mismo audio. Rust NATIVO (piper-rs = voces Piper ONNX vía ort/ONNX Runtime), cero nube. Voces en ESPAÑOL. SIN BOTÓN: decir es salida pura (texto→audio); no captura nada del entorno (a diferencia de oír, que toca el micrófono) → un interruptor no protege ningún estado nombrable. Nace operativo. Único guard: degradación honesta (503 sin_motor; 422 VOZ_NO_DISPONIBLE). Ver guión: arquitectura/decisiones/propuestas/enki-sense.md. Config: base_url (default http://localhost:8124, override env MOTOR_VOZ_URL), timeout_ms.",
+  "name": "motor-voz",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: nace el puente del 4º sentido (decir). Reflejo bus↔HTTP al servicio enki-sense (piper-rs). Evento motor-voz.decir.request {texto, voz?} → POST /speak → {audio_base64 (WAV), sample_rate}. Tool 'decir' en GLOBAL_TOOLS. SIN botón (salida pura). Degradación honesta (sin_motor / VOZ_NO_DISPONIBLE). Motor Rust: enki-sense/crates/motor-voz (piper-rs, voz es_ES). Test: motor-voz__index.",
+  "description": "Puente al órgano de voz de enki-sense (Rust nativo, piper-rs) como órgano del bus. Texto → audio hablado (español), en la máquina local. SIN botón, degrada limpio si el motor no está.",
+  "author": "enki",
+  "language": "javascript",
+  "main": "index.js",
+  "tier": "sistema",
+  "horizonte": "El sentido de la VOZ — hablar localmente (respuestas habladas, avisos, accesibilidad). 4º órgano de enki-sense; hermano de oír (motor-oido).",
+  "dependencies": [],
+  "subscribes": [
+    { "event": "motor-voz.decir.request", "handler": "onDecirRequest", "description": "Reflejo: sintetiza {texto, voz?} → POST /speak → {audio_base64, sample_rate}. Sin botón; 503 sin_motor si el binario no responde; 422 VOZ_NO_DISPONIBLE si la voz no está provisionada." }
+  ],
+  "publishes": [
+    { "event": "motor-voz.decir.response", "description": "{ audio_base64 (WAV), sample_rate, formato, voz } o error (422 VOZ_NO_DISPONIBLE, 5xx upstream, 503 sin_motor)." }
+  ],
+  "tools": [
+    {
+      "name": "decir",
+      "description": "Convierte texto en VOZ hablada (audio WAV), LOCALMENTE (en tu máquina, cero nube). Voz en español. ÚSALA para responder por voz, leer un aviso en alto, o accesibilidad. Devuelve el audio en base64 (para reproducir en el frontend o adjuntar). Motor Rust nativo (piper-rs). Operativa siempre; 503 sin_motor si el motor no está, 422 si la voz pedida no está provisionada.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "texto": { "type": "string", "minLength": 1, "description": "El texto a decir en voz alta." },
+          "voz": { "type": "string", "description": "Opcional: nombre de la voz (p.ej. es_ES-davefx-medium). Por defecto la voz española configurada." }
+        },
+        "required": ["texto"]
+      },
+      "handler": "handleDecirTool",
+      "errores_conocidos": ["INVALID_INPUT", "VOZ_NO_DISPONIBLE", "SINTESIS_FALLIDA", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+    }
+  ],
+  "config": {
+    "base_url": "http://localhost:8124",
+    "timeout_ms": 30000,
+    "_base_url_doc": "Base del servicio enki-sense de voz (Rust nativo, piper-rs). Override por env MOTOR_VOZ_URL. Sin motor desplegado, decir degrada honesto (503 sin_motor)."
+  }
+}

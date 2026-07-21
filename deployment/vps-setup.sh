@@ -479,6 +479,36 @@ if [ -x /usr/local/bin/motor-sonido ]; then
     fi
 fi
 
+# ---- 3a-ter-sexies. motor-voz — órgano de DECIR/hablar de enki-sense (Rust nativo, :8124) ----
+# 4º sentido. Rust (piper-rs = voces Piper ONNX vía ort). Voces en ESPAÑOL. La voz
+# (~61MB) la descarga get-models.sh (patrón ocr4rs). ort baja ONNX Runtime al
+# COMPILAR — el VPS tiene egress abierto. Best-effort: sin binario/voz, el puente
+# modules/motor-voz degrada honesto (503 sin_motor / 422 VOZ_NO_DISPONIBLE).
+MV_MODELS="${INSTALL_DIR}/data/voz-models"
+if [ -x /usr/local/bin/motor-voz ]; then
+    log "motor-voz ya instalado"
+elif command -v cargo &>/dev/null; then
+    log "Compilando motor-voz (enki-sense/voz, piper-rs+ort — baja ONNX Runtime, la 1ª vez tarda)..."
+    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-voz" --root /usr/local --locked > /dev/null 2>&1 \
+        && log "motor-voz compilado en /usr/local/bin" \
+        || warn "cargo install de motor-voz falló (¿ort no bajó ONNX Runtime?) — el puente degrada honesto (503)"
+else
+    warn "sin cargo: motor-voz no se compiló. El puente degrada honesto (503 sin_motor)."
+fi
+if [ -x /usr/local/bin/motor-voz ]; then
+    mkdir -p "${MV_MODELS}"
+    bash "${REPO_DIR}/enki-sense/crates/motor-voz/get-models.sh" "${MV_MODELS}" > /dev/null 2>&1 \
+        && log "motor-voz: voz española provisionada en ${MV_MODELS}" \
+        || warn "motor-voz: get-models falló (¿red?) — decir dará VOZ_NO_DISPONIBLE hasta reintentar"
+    sed "s#__MODELS__#${MV_MODELS}#g" "${REPO_DIR}/enki-sense/deployment/systemd/motor-voz.service" > /etc/systemd/system/motor-voz.service 2>/dev/null
+    systemctl daemon-reload
+    if systemctl enable --now motor-voz > /dev/null 2>&1; then
+        log "motor-voz activo en 127.0.0.1:8124 (hablar local, español) — SIN botón, operativo ya"
+    else
+        warn "motor-voz instalado pero el servicio no arrancó (revisa: journalctl -u motor-voz -f)"
+    fi
+fi
+
 # ---- 3a-quater. HERMES — el agente trabajador (nativo, :8642) ----
 # La suma, no el orgullo: Enki gobierna (interruptor 'hermes-agente' + audit
 # hermes.invocado), Hermes pone el músculo (browser, código, subagentes, memoria
@@ -789,6 +819,9 @@ if systemctl is-active --quiet motor-oido 2>/dev/null; then
 fi
 if systemctl is-active --quiet motor-sonido 2>/dev/null; then
     echo "    motor-sonido   → enki-sense prosodia local, DSP (Rust nativo, localhost:8123)"
+fi
+if systemctl is-active --quiet motor-voz 2>/dev/null; then
+    echo "    motor-voz      → enki-sense hablar local, español (Rust/piper-rs, localhost:8124)"
 fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-headroom$'; then
     echo "    enki-headroom  → proxy compresión (docker, localhost:8787)"

@@ -1,7 +1,7 @@
 ---
 name: ecosistema-5
 description: "META-SKILL que orquesta las 5 skills del ecosistema — diseccionador, prisma-modelo-universal, agente-perspectiva-c, blueprint-agentico, propioceptor. Incluye el flujo completo (disenar -> construir -> validar -> observar), un validador GATE (validate-hibridos.js) que enforcea las leyes, y un manual de uso para el usuario. Una pieza para gobernarlas a todas."
-when-to-use: "Siempre que arranques una tarea nueva del ecosistema 2enki/Prisma. Cargala al inicio de una sesion de trabajo y tendras las 5 skills disponibles + el gate + el manual. NO para tareas ajenas al ecosistema (ahi carga skills individuales)."
+when-to-use: "Siempre que arranques una tarea nueva . Cargala al inicio de una sesion de trabajo y tendras las 5 skills disponibles + el gate + el manual. NO para tareas ajenas al ecosistema (ahi carga skills individuales)."
 ---
 # Ecosistema-5 — Meta-Skill
 

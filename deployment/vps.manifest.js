@@ -46,13 +46,9 @@ const MANIFIESTO = {
   public_ns: NS,
   public_dir: NS_DIR,
 
-  // HOME escribible para Chrome headless (open-wa) bajo ProtectSystem=strict.
-  chrome_home: '/opt/enki/data/chrome-home',
-
   // Dirs que el reconciliador ASEGURA (existen + owner). Idempotente.
   dirs: [
     { path: NS_DIR, owner: 'www-data' },   // /opt/enki/public/<ns> (namespace de superficies)
-    { path: '/opt/enki/data/chrome-home', owner: 'www-data' },
     { path: '/var/log/caddy', owner: 'caddy' }
   ],
 

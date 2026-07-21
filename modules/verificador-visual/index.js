@@ -12,14 +12,14 @@
  *   CEREBRO  _evaluarSnapshot()  función PURA sobre métricas del DOM (siempre presente, testeable)
  *   OJOS     _render()           abre un navegador (puppeteer-core) y mide el DOM
  *
- * OJOS por CDP (v1.2.0): prefiere OBSCURA — navegador headless en RUST (h4ckf0r0day/obscura),
+ * OJOS por CDP (v1.3.0): SOLO OBSCURA — navegador headless en RUST (h4ckf0r0day/obscura),
  * V8 embebido, SIN Chromium, stealth. Se conecta por CDP (puppeteer.connect a
- * ws://127.0.0.1:9222/devtools/browser). Si obscura no responde, cae honesto a un Chromium
- * local (puppeteer.launch). Misma medición del DOM en ambos — obscura es drop-in de puppeteer.
+ * ws://127.0.0.1:9222/devtools/browser). Enki no arrastra Chromium: el fallback a Chrome
+ * se retiró. obscura es drop-in de puppeteer, así que la medición del DOM no cambia.
  *
- * DEGRADACIÓN ELEGANTE: si no hay navegador (ni obscura ni Chromium), el órgano NO bloquea
- * (fail-open) — devuelve {ok:true, verificado:false, motivo:'sin_navegador'} y deja
- * testigo. Donde SÍ hay ojos, verifica de verdad (fail-closed sobre render roto).
+ * DEGRADACIÓN ELEGANTE: si obscura no responde, el órgano NO bloquea (fail-open) —
+ * devuelve {ok:true, verificado:false, motivo:'sin_navegador'} y deja testigo. Con obscura
+ * arriba, verifica de verdad (fail-closed sobre render roto).
  *
  * TESTIGO: render.verificado (ok) / verificacion-visual.failed (roto). El .failed
  * canónico lo capta la homeostasis (sensor de *.failed) → el cuerpo siente cuándo
@@ -41,8 +41,6 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
 const DEFAULTS = {
@@ -54,62 +52,36 @@ const DEFAULTS = {
   min_font_px: 10,         // texto por debajo de esto = ilegible (a11y)
   contrast_min: 4.5,       // WCAG AA para texto normal (a11y)
   a11y_scan_max: 60,       // tope de elementos que escanea el sampler de contraste (no reventar la página)
-  executable_path: null,   // si se fija, manda; si no, _resolverChromium busca
   obscura_url: null        // endpoint CDP de obscura; null → default ws://127.0.0.1:9222/devtools/browser
 };
 
-// Endpoint CDP de obscura (navegador Rust nativo). Default operativo desde el minuto 1;
-// se apaga con obscura:false en config o VERIFICADOR_OBSCURA_URL vacío deliberado.
+// Endpoint CDP de obscura (navegador Rust nativo, SIN Chromium). Default operativo desde el
+// minuto 1; se apaga con obscura:false en config o VERIFICADOR_OBSCURA_URL vacío deliberado.
 const OBSCURA_DEFAULT = 'ws://127.0.0.1:9222/devtools/browser';
-
-// Rutas candidatas del binario de Chromium (este entorno + sistemas comunes).
-function _candidatosChromium() {
-  const c = [];
-  const env = process.env.VERIFICADOR_CHROMIUM_PATH || process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROMIUM_PATH;
-  if (env) c.push(env);
-  const base = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/pw-browsers';
-  try {
-    for (const d of fs.readdirSync(base)) {
-      if (/^chromium-\d+/.test(d)) c.push(path.join(base, d, 'chrome-linux', 'chrome'));
-    }
-  } catch (_) { /* dir ausente */ }
-  c.push('/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable');
-  return c;
-}
 
 class VerificadorVisualModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'verificador-visual';
-    this.version = '1.2.0';
+    this.version = '1.3.0';
     this.config = null;
-    this._chromium = null;     // ruta del Chromium local (fallback), o null
-    this._obscura = null;      // endpoint CDP de obscura (preferido), o null
+    this._obscura = null;      // endpoint CDP de obscura (único navegador)
   }
 
   async onLoad(context) {
     await super.onLoad(context);
     this.config = Object.assign({}, DEFAULTS, context.moduleConfig || {});
     this.config.viewport = Object.assign({}, DEFAULTS.viewport, (context.moduleConfig || {}).viewport || {});
-    this._chromium = this._resolverChromium();
     this._obscura = this._resolverObscura();
     this.logger?.info('verificador-visual.loaded', {
       module: this.name, version: this.version,
-      ojos: this._describeOjos(), obscura: this._obscura || null, chromium: this._chromium || null
+      ojos: this._describeOjos(), obscura: this._obscura || null
     });
   }
 
-  _resolverChromium() {
-    if (this.config.executable_path && fs.existsSync(this.config.executable_path)) return this.config.executable_path;
-    for (const p of _candidatosChromium()) {
-      try { if (p && fs.existsSync(p)) return p; } catch (_) { /* */ }
-    }
-    return null;
-  }
-
   // Endpoint CDP de obscura. env manda; luego config; default ON (obscura nace operativo).
-  // obscura:false en config lo apaga (solo Chromium). Si el server no está, _abrirNavegador
-  // cae a Chromium — resolver un endpoint NO garantiza que responda (eso se sabe al conectar).
+  // obscura:false en config lo apaga. Resolver un endpoint NO garantiza que responda
+  // (eso se sabe al conectar en _abrirNavegador; sin respuesta → sin_navegador honesto).
   _resolverObscura() {
     const cfg = this.config || {};
     if (typeof process.env.VERIFICADOR_OBSCURA_URL === 'string' && process.env.VERIFICADOR_OBSCURA_URL) return process.env.VERIFICADOR_OBSCURA_URL;
@@ -119,10 +91,7 @@ class VerificadorVisualModule extends ModuloHibridoReflejo {
   }
 
   _describeOjos() {
-    const partes = [];
-    if (this._obscura) partes.push('obscura');
-    if (this._chromium) partes.push('chromium');
-    return partes.length ? partes.join('+') : 'sin_navegador';
+    return this._obscura ? 'obscura' : 'sin_navegador';
   }
 
   // ── handler del bus ──
@@ -141,7 +110,7 @@ class VerificadorVisualModule extends ModuloHibridoReflejo {
       snapshot = await this._render(html);
     } catch (err) {
       if (err && err.code === 'SIN_OJOS') {
-        // DEGRADACIÓN: no hay navegador (ni obscura ni Chromium); no bloqueamos, testificamos.
+        // DEGRADACIÓN: obscura no responde (o desactivada); no bloqueamos, testificamos.
         this.metrics?.increment?.('verificador-visual.sin_navegador.total');
         this._emit('verificacion-visual.sin_navegador', { etiqueta });
         return { status: 200, data: { ok: true, verificado: false, motivo: 'sin_navegador', motivos: [], metricas: null } };
@@ -203,9 +172,9 @@ class VerificadorVisualModule extends ModuloHibridoReflejo {
     return { ok: motivos.length === 0, motivos, avisos };
   }
 
-  // ── OJOS: abre obscura (CDP) o Chromium (fallback) y mide el DOM ──
+  // ── OJOS: abre obscura (CDP) y mide el DOM ──
   async _render(html) {
-    const { browser, tipo } = await this._abrirNavegador();
+    const browser = await this._abrirNavegador();
     let page;
     try {
       page = await browser.newPage();
@@ -280,41 +249,24 @@ class VerificadorVisualModule extends ModuloHibridoReflejo {
       return { consoleErrors, pageErrors, ...dom, a11y, movil };
     } finally {
       try { if (page) await page.close(); } catch (_) { /* */ }
-      // obscura es un servidor COMPARTIDO: nos desconectamos (no lo matamos). El Chromium
-      // que lanzamos SÍ se cierra (era nuestro proceso).
-      try {
-        if (tipo === 'obscura') browser.disconnect();
-        else await browser.close();
-      } catch (_) { /* */ }
+      // obscura es un servidor COMPARTIDO: nos DESCONECTAMOS (no lo matamos).
+      try { browser.disconnect(); } catch (_) { /* */ }
     }
   }
 
-  // Abre el navegador: obscura por CDP (preferido, Rust nativo) → Chromium local (fallback).
-  // Sin ninguno → error SIN_OJOS (lo traduce _verificar a fail-open sin_navegador).
+  // Abre el navegador por CDP contra obscura (Rust nativo, sin Chromium). Sin obscura
+  // (apagada o sin responder) → error SIN_OJOS (lo traduce _verificar a fail-open sin_navegador).
   async _abrirNavegador() {
+    if (!this._obscura) { const e = new Error('obscura desactivada'); e.code = 'SIN_OJOS'; throw e; }
     let puppeteer;
     try { puppeteer = require('puppeteer-core'); }
     catch (_) { const e = new Error('puppeteer-core ausente'); e.code = 'SIN_OJOS'; throw e; }
-
-    // 1. obscura — navegador headless en Rust (V8, sin Chromium, stealth), por CDP.
-    if (this._obscura) {
-      try {
-        const browser = await puppeteer.connect({ browserWSEndpoint: this._obscura });
-        return { browser, tipo: 'obscura' };
-      } catch (e) {
-        this.logger?.debug?.('verificador-visual.obscura.no_disponible', { endpoint: this._obscura, error: e.message });
-      }
+    try {
+      return await puppeteer.connect({ browserWSEndpoint: this._obscura });
+    } catch (e) {
+      this.logger?.debug?.('verificador-visual.obscura.no_disponible', { endpoint: this._obscura, error: e.message });
+      const err = new Error('obscura no responde en ' + this._obscura); err.code = 'SIN_OJOS'; throw err;
     }
-    // 2. Chromium local — fallback honesto.
-    if (this._chromium) {
-      const browser = await puppeteer.launch({
-        executablePath: this._chromium,
-        headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-      });
-      return { browser, tipo: 'chromium' };
-    }
-    const e = new Error('sin navegador: ni obscura (CDP) ni Chromium local'); e.code = 'SIN_OJOS'; throw e;
   }
 
   _emit(evento, payload) {
@@ -325,7 +277,7 @@ class VerificadorVisualModule extends ModuloHibridoReflejo {
 
   // ── UI/diagnóstico ──
   async handleHealthCheck() {
-    return { status: 200, data: { module: this.name, version: this.version, ojos: this._describeOjos(), obscura: this._obscura || null, chromium: this._chromium || null } };
+    return { status: 200, data: { module: this.name, version: this.version, ojos: this._describeOjos(), obscura: this._obscura || null } };
   }
 }
 

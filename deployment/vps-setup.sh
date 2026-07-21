@@ -74,44 +74,8 @@ log "Actualizando sistema..."
 apt-get update -qq
 apt-get install -y -qq curl git build-essential rsync > /dev/null
 
-# ---- 1b. Librerías para Chromium headless (transporte WhatsApp open-wa) ----
-# open-wa conduce un Chromium sin pantalla; el binario lo trae @open-wa/wa-automate
-# (puppeteer) al hacer npm install, pero necesita estas librerías del sistema para
-# arrancar. Las instalamos UNA A UNA: 'apt-get install pkg1 pkg2 ...' es todo-o-nada
-# (si un nombre no existe, no instala NINGUNO). Incluimos los nombres viejos Y los
-# 't64' de Ubuntu 24.04: cada VPS instala los que apliquen, los demás se ignoran.
-log "Instalando librerías de Chromium (para open-wa)..."
-CHROMIUM_LIBS="ca-certificates fonts-liberation libnss3 libnspr4 \
-  libatk1.0-0 libatk1.0-0t64 libatk-bridge2.0-0 libatk-bridge2.0-0t64 \
-  libcups2 libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
-  libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 \
-  libasound2 libasound2t64 libatspi2.0-0 libatspi2.0-0t64 \
-  libx11-6 libxcb1 libxext6 libxi6 libglib2.0-0 libglib2.0-0t64 libxrender1"
-_chromium_ok=0; _chromium_missing=""
-for _pkg in $CHROMIUM_LIBS; do
-  if apt-get install -y -qq "$_pkg" > /dev/null 2>&1; then
-    _chromium_ok=$((_chromium_ok + 1))
-  else
-    _chromium_missing="$_chromium_missing $_pkg"
-  fi
-done
-log "Chromium: ${_chromium_ok} libs instaladas.${_chromium_missing:+ (no aplicables a esta versión:${_chromium_missing} )}"
-
-# Navegador para open-wa: Google Chrome stable (.deb real, trae sus deps). openwa-service
-# lo auto-detecta en /usr/bin/google-chrome-stable. Evita el lío del Chromium de puppeteer
-# descargado en el HOME de root (sudo npm install) mientras el servicio corre como www-data.
-if command -v google-chrome-stable > /dev/null 2>&1; then
-    log "Google Chrome ya instalado: $(google-chrome-stable --version 2>/dev/null)"
-else
-    log "Instalando Google Chrome (para open-wa)..."
-    if wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-       && apt-get install -y -qq /tmp/google-chrome.deb > /dev/null 2>&1; then
-        rm -f /tmp/google-chrome.deb
-        log "Google Chrome instalado: $(google-chrome-stable --version 2>/dev/null || echo ok)"
-    else
-        warn "No se pudo instalar Google Chrome; open-wa intentará su Chromium bundled. Instálalo a mano si el navegador no arranca."
-    fi
-fi
+# Chromium/Chrome retirados del host: WhatsApp va por Meta Cloud API (HTTP, sin navegador)
+# y los OJOS (verificador-visual) por obscura (navegador Rust). Enki no arrastra Chromium.
 
 # ---- 2. Node.js ----
 # Acepta cualquier versión >= NODE_VERSION (el chequeo literal "v20" no casaba
@@ -682,10 +646,6 @@ chown caddy:caddy /var/log/caddy 2>/dev/null || true
 mkdir -p /opt/enki/public
 chown -R www-data:www-data /opt/enki/public 2>/dev/null || true
 
-# HOME escribible para Chrome (open-wa). Debe existir y ser de www-data antes de arrancar.
-mkdir -p /opt/enki/data/chrome-home
-chown -R www-data:www-data /opt/enki/data/chrome-home 2>/dev/null || true
-
 if [ "$MODE" = "domain" ]; then
     log "Configurando Caddy para ${DOMAIN} (HTTPS)..."
     # Sustituir dominio hardcoded del template por el real
@@ -764,17 +724,13 @@ Environment=CONVERSATION_EXPORT_TOKEN=nonina
 # Proxy de compresión Headroom (:8787, si está levantado con --docker). El core solo lo
 # usa cuando el interruptor 'headroom' está ON (OFF por defecto) → aquí es inofensivo.
 Environment=HEADROOM_PROXY_URL=http://localhost:8787
-# HOME escribible para Chrome (open-wa): su HOME real (/var/www, de www-data) queda
-# de solo-lectura con ProtectSystem=strict, y Chrome necesita escribir config/caché/
-# crashpad. Apuntamos HOME a un dir bajo data/ (sí escribible vía ReadWritePaths).
-Environment=HOME=/opt/enki/data/chrome-home
 
 # Seguridad
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=/opt/enki/data /opt/enki/modules /opt/enki/public
-# PrivateTmp da un /tmp privado y escribible: Chromium (open-wa) lo necesita
-# (con ProtectSystem=strict el /tmp del sistema queda de solo-lectura).
+# PrivateTmp da un /tmp privado y escribible (con ProtectSystem=strict el /tmp del
+# sistema queda de solo-lectura).
 PrivateTmp=true
 
 [Install]

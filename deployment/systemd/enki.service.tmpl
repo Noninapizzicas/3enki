@@ -15,17 +15,13 @@ Environment=EVENT_CORE_PORT=3000
 Environment=EVENT_CORE_BROKER_PORT=1883
 Environment=EVENT_CORE_LOG_LEVEL=info
 Environment=CONVERSATION_EXPORT_TOKEN=nonina
-# HOME escribible para Chrome (open-wa): su HOME real (/var/www, de www-data) queda
-# de solo-lectura con ProtectSystem=strict, y Chrome necesita escribir config/cache/
-# crashpad. Apuntamos HOME a un dir bajo data/ (si escribible via ReadWritePaths).
-Environment=HOME=/opt/enki/data/chrome-home
 
 # Seguridad
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=/opt/enki/data /opt/enki/modules /opt/enki/public
-# PrivateTmp da un /tmp privado y escribible: Chromium (open-wa) lo necesita
-# (con ProtectSystem=strict el /tmp del sistema queda de solo-lectura).
+# PrivateTmp da un /tmp privado y escribible (con ProtectSystem=strict el /tmp del
+# sistema queda de solo-lectura).
 PrivateTmp=true
 
 [Install]

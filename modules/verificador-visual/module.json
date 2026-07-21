@@ -1,10 +1,10 @@
 {
-  "_doc": "verificador-visual — órgano MOTOR (sin memoria) que MIRA si un HTML renderiza bien (Teoría del Órgano, tipo provider: motor+evento). Cierra el bucle que el freno ESTRUCTURAL de carta-design deja abierto: aquel valida que estén los productos/alérgenos; éste abre Chromium (puppeteer-core ya en el repo) y comprueba RENDER REAL (sin errores de consola/JS, sin overflow horizontal, no en blanco, sin imágenes rotas). Cerebro (_evaluarSnapshot) = función pura sobre métricas del DOM; ojos (_render) = navegador. DEGRADACIÓN: sin navegador no bloquea (fail-open) y deja testigo. render.verificado (ok) / verificacion-visual.failed (roto, lo siente la homeostasis).",
+  "_doc": "verificador-visual — órgano MOTOR (sin memoria) que MIRA si un HTML renderiza bien (Teoría del Órgano, tipo provider: motor+evento). Cierra el bucle que el freno ESTRUCTURAL de carta-design deja abierto: aquel valida que estén los productos/alérgenos; éste abre OBSCURA (navegador Rust, sin Chromium) por CDP y comprueba RENDER REAL (sin errores de consola/JS, sin overflow horizontal, no en blanco, sin imágenes rotas). Cerebro (_evaluarSnapshot) = función pura sobre métricas del DOM; ojos (_render) = navegador. DEGRADACIÓN: sin obscura no bloquea (fail-open) y deja testigo. render.verificado (ok) / verificacion-visual.failed (roto, lo siente la homeostasis).",
   "name": "verificador-visual",
-  "version": "1.2.0",
-  "_v1_2_nota": "v1.2.0: OJOS por CDP. Prefiere OBSCURA — navegador headless en RUST (h4ckf0r0day/obscura, V8 embebido, SIN Chromium, stealth) — conectando por CDP a ws://127.0.0.1:9222/devtools/browser (puppeteer.connect); obscura es un servidor COMPARTIDO → nos desconectamos, no lo matamos. Si obscura no responde, cae honesto a un Chromium local (puppeteer.launch, comportamiento previo). Sin ninguno → fail-open sin_navegador (igual que antes). Misma medición del DOM en ambos (obscura es drop-in de puppeteer). Config: obscura_url (null → default; obscura:false lo apaga) · env VERIFICADOR_OBSCURA_URL.",
+  "version": "1.3.0",
+  "_v1_3_nota": "v1.3.0: OJOS SOLO OBSCURA. El fallback a Chromium se retiró — Enki no arrastra Chromium. verificador-visual abre exclusivamente OBSCURA (h4ckf0r0day/obscura: navegador headless en RUST, V8 embebido, SIN Chromium, stealth) por CDP (puppeteer.connect a ws://127.0.0.1:9222/devtools/browser); obscura es un servidor COMPARTIDO → nos desconectamos, no lo matamos. Sin obscura (apagada o sin responder) → fail-open sin_navegador (ya no busca Chromium). obscura es drop-in de puppeteer → la medición del DOM no cambia. Config: obscura_url (null → default; obscura:false lo apaga) · env VERIFICADOR_OBSCURA_URL. Despliegue: obscura por vps-setup (binario prebuilt → Docker) + systemd obscura.service.",
   "_v1_1_nota": "v1.1.0: MULTI-ÁNGULO (cosechado del ui-test de Browserbase — funcional/adversarial/accesibilidad). Dos severidades: motivos[] = HARD (bloquea 422; los de siempre, SIN regresión) · avisos[] = SOFT (surfaced, NO bloquea). Ángulos nuevos: RESPONSIVE (overflow_movil, re-mide overflow en viewport móvil por reflow) + ACCESIBILIDAD (img_sin_alt · lang_ausente · texto_ilegible <min_font_px · contraste_bajo <WCAG-AA por sampler acotado). ok = motivos vacíos (invariante: el freno bloquea exactamente lo mismo → carta-design/carta-digital no regresionan). Los avisos se surfacean SIEMPRE (verificacion-visual.avisos, aun con render OK) → propiocepción; un caller puede promoverlos a bloqueo. SECUENCIAL (una sesión): cabe en un VPS de 1-2GB; el fan-out paralelo de ui-test pide caja mayor (fuera por RAM). Tests: verificador-visual__multiangulo.",
-  "description": "Órgano que abre un navegador headless y verifica que un HTML renderiza sin romperse. MULTI-ÁNGULO: motivos HARD (overflow, errores JS/consola, página en blanco, imágenes rotas → bloquea) + avisos SOFT (responsive móvil + accesibilidad: alt/lang/legibilidad/contraste → surfaced, no bloquea). El freno de RENDER que complementa el freno estructural de carta-design/carta-digital. Reutiliza puppeteer-core + el Chromium del host; degrada elegante si no hay navegador.",
+  "description": "Órgano que abre un navegador headless (obscura, Rust, sin Chromium) y verifica que un HTML renderiza sin romperse. MULTI-ÁNGULO: motivos HARD (overflow, errores JS/consola, página en blanco, imágenes rotas → bloquea) + avisos SOFT (responsive móvil + accesibilidad: alt/lang/legibilidad/contraste → surfaced, no bloquea). El freno de RENDER que complementa el freno estructural de carta-design/carta-digital. Habla obscura por CDP; degrada elegante si no responde.",
   "author": "Event Core Team",
   "language": "es",
   "main": "index.js",
@@ -12,10 +12,10 @@
     { "event": "render.verificado",             "description": "El HTML renderiza bien {etiqueta, avisos[], metricas}. Testigo del freno superado (avisos SOFT pueden venir aun estando ok)." },
     { "event": "verificacion-visual.failed",     "description": ".failed canónico: el HTML sale roto {etiqueta, ok:false, motivos:[overflow_horizontal|errores_consola|errores_js|pagina_en_blanco|imagenes_rotas|render_error], avisos[]}. Lo capta la homeostasis (sensor de *.failed)." },
     { "event": "verificacion-visual.avisos",     "description": "Ángulos SOFT (a11y/móvil) surfaced {etiqueta, ok, avisos:[overflow_movil|img_sin_alt|lang_ausente|texto_ilegible|contraste_bajo]}. NO bloquea (exponer antes que enforcer); la propiocepción lo ve. Un caller puede promover un aviso a bloqueo." },
-    { "event": "verificacion-visual.sin_navegador","description": "Degradación: no hay Chromium en el host; no se bloqueó pero se testifica {etiqueta}." }
+    { "event": "verificacion-visual.sin_navegador","description": "Degradación: obscura no responde; no se bloqueó pero se testifica {etiqueta}." }
   ],
   "subscribes": [
-    { "event": "render.verificar.request", "handler": "onVerificarRequest", "description": "Reflejo (MOTOR): abre Chromium, carga el HTML y devuelve {ok, verificado, motivos[], metricas}. Sin navegador → {ok:true, verificado:false, motivo:'sin_navegador'} (fail-open)." }
+    { "event": "render.verificar.request", "handler": "onVerificarRequest", "description": "Reflejo (MOTOR): abre obscura por CDP, carga el HTML y devuelve {ok, verificado, motivos[], metricas}. Sin obscura → {ok:true, verificado:false, motivo:'sin_navegador'} (fail-open)." }
   ],
   "ui_handlers": [
     { "domain": "verificador-visual", "action": "verificar", "handler": "onVerificarRequest", "description": "Verifica un HTML {html, etiqueta?}." },
@@ -49,10 +49,8 @@
     "min_font_px": 10,
     "contrast_min": 4.5,
     "a11y_scan_max": 60,
-    "executable_path": null,
-    "_executable_path_doc": "Si se fija, manda. Si null, se resuelve del entorno: VERIFICADOR_CHROMIUM_PATH / PLAYWRIGHT_BROWSERS_PATH/chromium-*/chrome-linux/chrome / /usr/bin/chromium...",
     "obscura_url": null,
-    "_obscura_url_doc": "Endpoint CDP de obscura (navegador Rust nativo). null → default ws://127.0.0.1:9222/devtools/browser (operativo desde el minuto 1). obscura:false lo apaga (solo Chromium). Override por env VERIFICADOR_OBSCURA_URL. Si el server no responde, cae a Chromium."
+    "_obscura_url_doc": "Endpoint CDP de obscura (navegador Rust nativo, único navegador). null → default ws://127.0.0.1:9222/devtools/browser (operativo desde el minuto 1). obscura:false lo apaga. Override por env VERIFICADOR_OBSCURA_URL. Si el server no responde → fail-open sin_navegador."
   },
   "observability": {
     "logging": { "level": "info", "structured": true },

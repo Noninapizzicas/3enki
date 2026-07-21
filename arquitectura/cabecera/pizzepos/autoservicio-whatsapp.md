@@ -4,11 +4,10 @@ dominio: pizzepos
 resumen: Pedido del cliente por WhatsApp: PWA arma #P1 por ids, el bot re-tasa server-side (pedido-tasador), webhook real de Meta, ancla por nombre.
 fuentes:
   - modules/whatsapp-bot/**
-  - modules/openwa-service/**
   - modules/pizzepos/carta-digital/**
   - modules/pizzepos/pedidos/**
   - modules/_shared/pedido-tasador.js
-verificado: 2026-07-12
+verificado: 2026-07-21
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)
@@ -154,8 +153,8 @@ CLASE WhatsappBotModule HEREDA BaseModule {  // ── el INSIDER que re-tasa
 
 ## WhatsApp Cloud API — OPERATIVO end-to-end (v{{version:modules/whatsapp-bot}}) · webhook real de Meta + alta por UI
 
-> Estado: VIVO en producción (enki-ai.online, proyecto nonina). El transporte real es el
-> webhook de Meta (graph.facebook.com), no el bus agnóstico. La PUERTA es el verify_token;
+> Estado: VIVO en producción (enki-ai.online, proyecto nonina). El transporte ÚNICO es el
+> webhook de Meta (graph.facebook.com) — HTTP, sin navegador. La PUERTA es el verify_token;
 > el dato no-secreto de conexión (phone_number_id, waba_id…) se da de alta desde la APP, sin
 > editar ficheros. El secreto (token, verify_token) sigue en el credential-manager.
 
@@ -276,7 +275,7 @@ GARANTÍAS {
 
 ```
 EVENTOS {
-  whatsapp.entrante                  → bot (transporte agnóstico; o webhook Meta directo)
+  (entrante)                         → bot vía WEBHOOK de Meta (Cloud API; único transporte, sin navegador)
   pedido.crear-tienda                : bot/tienda-api → pedidos (items re-tasados + estructura)
   pedido.crear-tienda.response       : pedidos → bot (request_id correlado)
   pedido.creado                      : pedidos (informativo; lleva cuenta_id, sin teléfono/secretos)

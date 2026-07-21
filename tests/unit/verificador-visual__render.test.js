@@ -67,23 +67,24 @@ async function run() {
     t('html vacío → 400 INVALID_INPUT (async)', () => assert.strictEqual(r.status, 400));
   }
   {
-    // DEGRADACIÓN: forzamos sin ojos → fail-open con testigo
-    const chromiumReal = m._chromium;
-    m._chromium = null;
+    // DEGRADACIÓN: obscura apagada → fail-open con testigo (ya no hay Chromium que buscar)
+    const obscuraReal = m._obscura;
+    m._obscura = null;
     const r = await m._verificar({ html: '<p>hola</p>', etiqueta: 'x' });
-    t('sin navegador → fail-open (ok:true, verificado:false) + testigo', () => {
+    t('sin navegador (obscura off) → fail-open (ok:true, verificado:false) + testigo', () => {
       assert.strictEqual(r.status, 200);
       assert.strictEqual(r.data.ok, true);
       assert.strictEqual(r.data.verificado, false);
       assert.strictEqual(r.data.motivo, 'sin_navegador');
       assert.ok(bus.log.find(e => e.ev === 'verificacion-visual.sin_navegador'));
     });
-    m._chromium = chromiumReal;
+    m._obscura = obscuraReal;
   }
 
-  // ── OJOS: render real con Chromium (smoke guarded) ──
-  if (!m._chromium) {
-    console.log('  · (sin Chromium en el host: smoke de render omitido)');
+  // ── OJOS: render real por obscura (smoke guarded: solo si obscura responde en :9222) ──
+  const _probe = await m._verificar({ html: '<html><body><p>probe de obscura, texto suficiente</p></body></html>', etiqueta: 'probe' });
+  if (!_probe.data.verificado) {
+    console.log('  · (obscura no responde en :9222: smoke de render omitido)');
   } else {
     try {
       const bueno = await m._verificar({ html: '<html><body style="margin:0;font-family:sans-serif"><h1>Carta</h1><p>Pizza Margarita 8,50€ · Pizza Trufa 14€</p></body></html>', etiqueta: 'ok' });

@@ -12,7 +12,7 @@
  *
  * Qué asegura (el TERRENO del VPS):
  *   1. migra layout Gen-1 (/srv/event-core + event-core.service) → canónico
- *   2. dirs + owners (public/<ns>, chrome-home, log/caddy)
+ *   2. dirs + owners (public/<ns>, log/caddy)
  *   3. unidades systemd renderizadas de plantilla (solo escribe si difieren)
  *   4. Caddyfile renderizado con el dominio local (solo si difiere)
  *   5. reinicia/recarga SOLO lo que cambió

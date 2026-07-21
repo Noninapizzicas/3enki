@@ -228,7 +228,6 @@
     "ws": "^8.18.3"
   },
   "optionalDependencies": {
-    "@open-wa/wa-automate": "^4.74.0",
     "@tursodatabase/database": "^0.6.1"
   },
   "engines": {

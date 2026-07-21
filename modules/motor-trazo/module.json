@@ -1,0 +1,55 @@
+{
+  "_doc": "motor-trazo — PUENTE al órgano PERCEPTOR de enki-sense: INTERPRETAR-TRAZO (trazos de canvas → geometría). Clase 2 del bisturí (PERCEPTOR), PARTIDO: la mitad MEDIBLE (geometría: línea/círculo/rectángulo/polígono/trazo_libre, bbox, cerrado, nº de vértices) = REFLEJO (este motor Rust la calcula, determinista, cero modelo); la mitad de JUICIO (la INTENCIÓN: flecha, boceto, tachón) = FUZZY, la infiere el LLM DE PÁGINA al leer la geometría. El motor NO adivina intención. Su salida sube a la PROPIOCEPCIÓN (la joya del guión). Rust puro NATIVO (geometría RDP+shoelace, sin modelo), cero nube. SIN BOTÓN en el motor (guard del canvas = en el BORDE, al capturar). Único guard: degradación honesta (503 sin_motor). Ver guión: arquitectura/decisiones/propuestas/enki-sense.md. Config: base_url (default http://localhost:8125, override env MOTOR_TRAZO_URL), timeout_ms.",
+  "name": "motor-trazo",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: nace el puente del 2º PERCEPTOR (interpretar-trazo) — CIERRA la familia enki-sense (6º sentido). Reflejo bus↔HTTP al servicio enki-sense (geometría pura). Evento motor-trazo.interpretar.request {trazos:[[{x,y}...]...]} → POST /interpret → {elementos:[{tipo, bbox, cerrado, n_vertices}...]}. Tool 'interpretar_trazo' en GLOBAL_TOOLS. SIN botón. El motor da GEOMETRÍA cruda; la INTENCIÓN la infiere el LLM (fuzzy, en el core). Degradación honesta (sin_motor / INTERPRETACION_FALLIDA). Motor Rust: enki-sense/crates/motor-trazo. Test: motor-trazo__index.",
+  "description": "Puente al perceptor de trazo de enki-sense (Rust nativo, geometría). Trazos de canvas → formas (geometría cruda; la intención la pone el LLM). SIN botón, degrada limpio si el motor no está.",
+  "author": "enki",
+  "language": "javascript",
+  "main": "index.js",
+  "tier": "sistema",
+  "horizonte": "El PERCEPTOR del gesto — qué FORMA tiene lo dibujado (línea/círculo/rectángulo), no qué significa. Alimenta la propiocepción: el LLM lee el trazo del usuario. 2º perceptor de enki-sense; CIERRA la familia (6º sentido).",
+  "dependencies": [],
+  "subscribes": [
+    { "event": "motor-trazo.interpretar.request", "handler": "onInterpretarRequest", "description": "Reflejo: interpreta {trazos} → POST /interpret → {elementos}. Sin botón; 503 sin_motor si el binario no responde. El motor da geometría cruda, NO adivina intención (eso lo hace el LLM)." }
+  ],
+  "publishes": [
+    { "event": "motor-trazo.interpretar.response", "description": "{ elementos:[{tipo, bbox, cerrado, n_vertices}], total, nota } o error (5xx upstream, 503 sin_motor)." }
+  ],
+  "tools": [
+    {
+      "name": "interpretar_trazo",
+      "description": "Interpreta la GEOMETRÍA de trazos de un canvas (qué forma tiene lo dibujado): línea, círculo, rectángulo, triángulo, polígono o trazo libre, con su caja y nº de vértices. LOCAL, cero nube. Devuelve GEOMETRÍA cruda — la INTENCIÓN (una flecha que apunta, un boceto de mesa, un tachón) la infieres TÚ al leer las formas (el motor no la inventa). Motor Rust nativo (geometría pura, sin modelo). Operativa siempre; 503 sin_motor si el motor no está.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "trazos": {
+            "type": "array",
+            "description": "Lista de trazos; cada trazo es una lista de puntos {x,y} (coordenadas del canvas, en el orden en que se dibujaron).",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "x": { "type": "number" },
+                  "y": { "type": "number" }
+                },
+                "required": ["x", "y"]
+              }
+            }
+          }
+        },
+        "required": ["trazos"]
+      },
+      "handler": "handleInterpretarTool",
+      "errores_conocidos": ["INVALID_INPUT", "INTERPRETACION_FALLIDA", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+    }
+  ],
+  "config": {
+    "base_url": "http://localhost:8125",
+    "timeout_ms": 15000,
+    "_base_url_doc": "Base del servicio enki-sense de trazo (Rust nativo, geometría). Override por env MOTOR_TRAZO_URL. Sin motor desplegado, interpretar_trazo degrada honesto (503 sin_motor)."
+  }
+}

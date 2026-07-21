@@ -509,6 +509,31 @@ if [ -x /usr/local/bin/motor-voz ]; then
     fi
 fi
 
+# ---- 3a-ter-septies. motor-trazo — PERCEPTOR de trazo de enki-sense (Rust nativo, :8125) ----
+# El 2º perceptor — CIERRA la familia enki-sense (6º sentido). Geometría pura (SIN
+# modelo → nada que descargar): trazos de canvas → formas. Da la geometría; la
+# INTENCIÓN la infiere el LLM. Best-effort: sin binario, el puente modules/motor-trazo
+# degrada honesto (503 sin_motor).
+if [ -x /usr/local/bin/motor-trazo ]; then
+    log "motor-trazo ya instalado"
+elif command -v cargo &>/dev/null; then
+    log "Compilando motor-trazo (enki-sense/trazo, geometría pura)..."
+    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-trazo" --root /usr/local --locked > /dev/null 2>&1 \
+        && log "motor-trazo compilado en /usr/local/bin" \
+        || warn "cargo install de motor-trazo falló — el puente degrada honesto (503 sin_motor)"
+else
+    warn "sin cargo: motor-trazo no se compiló. El puente degrada honesto (503 sin_motor)."
+fi
+if [ -x /usr/local/bin/motor-trazo ]; then
+    install -m 0644 "${REPO_DIR}/enki-sense/deployment/systemd/motor-trazo.service" /etc/systemd/system/motor-trazo.service 2>/dev/null
+    systemctl daemon-reload
+    if systemctl enable --now motor-trazo > /dev/null 2>&1; then
+        log "motor-trazo activo en 127.0.0.1:8125 (geometría de canvas local) — SIN botón, operativo ya"
+    else
+        warn "motor-trazo instalado pero el servicio no arrancó (revisa: journalctl -u motor-trazo -f)"
+    fi
+fi
+
 # ---- 3a-quater. HERMES — el agente trabajador (nativo, :8642) ----
 # La suma, no el orgullo: Enki gobierna (interruptor 'hermes-agente' + audit
 # hermes.invocado), Hermes pone el músculo (browser, código, subagentes, memoria

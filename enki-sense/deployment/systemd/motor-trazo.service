@@ -1,0 +1,19 @@
+# motor-trazo — perceptor de trazo de enki-sense (Rust nativo, geometría pura).
+# Se compila desde 2enki (enki-sense/) con cargo install en vps-setup.sh.
+# SIN modelo (solo geometría). Solo loopback (127.0.0.1:8125): lo consume el core.
+[Unit]
+Description=enki-sense motor-trazo (geometría de canvas local)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/motor-trazo
+Environment=MOTOR_TRAZO_PORT=8125
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

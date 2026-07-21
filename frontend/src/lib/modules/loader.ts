@@ -27,6 +27,8 @@ export interface ModuleManifest {
   heavy?: boolean;
   // Rutas donde el módulo es visible en work-bar (sin definir = todas)
   routes?: string[];
+  // Módulo UNIVERSAL del sistema (control del dueño): sobrevive al gate de page-set vacío
+  universal?: boolean;
 }
 
 // ============================================================================
@@ -68,6 +70,7 @@ function buildDefinitions(): LazyModuleDefinition[] {
         label: manifest.label,
         dependencies: manifest.dependencies,
         routes: manifest.routes,
+        universal: manifest.universal,
         loader: () => moduleLoaders[loaderPath]().then(m => m.default)
       });
     }

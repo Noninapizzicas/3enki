@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "zone": "work-bar",
   "order": 99,
+  "universal": true,
   "icon": "🎛️",
   "label": "Interruptores"
 }

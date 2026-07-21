@@ -30,6 +30,10 @@ export interface LazyModuleDefinition {
   dependencies?: string[];
   // Rutas donde el módulo es visible (sin definir = aparece en todas)
   routes?: string[];
+  // Módulo UNIVERSAL del sistema (no de dominio): sobrevive al gate de page-set
+  // vacío. Es control del DUEÑO (kill-switches, features), no una página de proyecto —
+  // debe verse en CUALQUIER proyecto, incluido un prisma recién nacido (page-set vacío).
+  universal?: boolean;
 }
 
 interface LoadedModule {

@@ -17,11 +17,13 @@
   }
 
   // El proyecto activo (via [project_id]/+layout). Un proyecto con page-set VACÍO (p.ej. prisma
-  // nuevo) → work-bar VACÍA: sus botones son módulos pizzepos que no le pertenecen. Sin contexto
-  // (rutas planas) o con page-set no vacío → comportamiento previo (filtra por zona+ruta).
+  // nuevo) → work-bar sin sus botones de DOMINIO (módulos pizzepos que no le pertenecen), PERO
+  // conserva los módulos UNIVERSALES del sistema (interruptores: el on/off del dueño, kill-switches
+  // y features). El gate esconde páginas de dominio, NO el control soberano. Sin contexto (rutas
+  // planas) o con page-set no vacío → comportamiento previo (filtra por zona+ruta).
   const projectCtx = getContext<Writable<{ pages?: string[] }> | undefined>('project') ?? writable<{ pages?: string[] }>(null as any);
   $: emptyPageSet = Array.isArray($projectCtx?.pages) && $projectCtx.pages.length === 0;
-  $: defs = emptyPageSet ? [] : $workBarDefinitions;
+  $: defs = emptyPageSet ? $workBarDefinitions.filter(d => d.universal) : $workBarDefinitions;
 </script>
 
 <div class="workbar" class:collapsed={!expanded}>

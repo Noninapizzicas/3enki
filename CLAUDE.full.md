@@ -17406,7 +17406,18 @@ MOTOR (Rust nativo, EN 2enki · VERIFICADO)  enki-sense/crates/motor-sonido — 
      VERIFICADO EN VIVO: tono sintético de 220 Hz → pitch_hz 222.2 (±1%); voz real → prosodia
      plausible (pitch variable, 37% sonoro, 2 síl/s). Es el 1er PERCEPTOR (clase 2 del bisturí):
      features reflejo aquí, juicio emocional en el LLM.
-PENDIENTE  voz (TTS, Piper — binario bloqueado en sandbox) · trazo (canvas) cuando exista la UI que los
+
+PUENTE (bus) 4º sentido  modules/motor-voz v0.1.0 — motor-voz.decir.request {texto, voz?} →
+     POST /speak → {audio_base64 (WAV), sample_rate}. Tool 'decir' (en GLOBAL_TOOLS). SIN botón
+     (salida pura, no toca micrófono). Degrada honesto (sin_motor / 422 VOZ_NO_DISPONIBLE). Base
+     http://localhost:8124. Test: motor-voz__index (4).
+MOTOR (Rust, EN 2enki · VERIFICADO)  enki-sense/crates/motor-voz — servidor axum 127.0.0.1:8124:
+     /health · POST /speak. piper-rs (voces Piper ONNX vía ort/ONNX Runtime) — Rust, NO Python (el
+     pip piper-tts es Python; candle no tiene VITS). Voces en ESPAÑOL, cache por voz. Carga LOCAL;
+     get-models.sh provisiona la voz (~61MB, patrón ocr4rs). VERIFICADO EN VIVO: "Hola, bienvenido a
+     Tres Vueltas y Verás. ¿Qué te pongo?" → WAV 22050 Hz, 2.7s de voz española; voz inexistente →
+     422 honesto. Nota: ort baja ONNX Runtime al compilar (egress abierto en el VPS).
+PENDIENTE  trazo (canvas) cuando exista la UI que los
      beba — mismo molde, crates hermanos en enki-sense/.
 ```
 
@@ -17415,7 +17426,7 @@ PENDIENTE  voz (TTS, Piper — binario bloqueado en sandbox) · trazo (canvas) c
 ```
 motor-ojo.render.request → .response            (renderizar · server nativo)  [VIVO]
 motor-traduce.request → .response               (traducir · server nativo)    [VIVO · verificado fr-en]
-motor-voz.decir.request → .audio                (decir · inferencia server)   [guión]
+motor-voz.decir.request → .response              (decir · piper-rs)            [VIVO · verificado ES]
 motor-oido.transcribir.request → .response       (oír · candle-whisper)        [VIVO · verificado]
 motor-sonido.analizar.request → .response        (sonido · DSP features)       [VIVO · verificado]
 motor-ojo.canvas.interpretado                   (trazo · fuzzy core → propiocepción)  [guión]

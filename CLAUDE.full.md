@@ -17444,6 +17444,12 @@ BORDE (clase 3 · cliente)  frontend/src/lib/modules/trazo — la MANO: un <canv
      ui_handlers del puente, misma _interpretar que la tool/bus) → motor :8125; pinta la geometría
      (cajas + tipo). UNIVERSAL (es un sentido, no página de dominio → se ve en CUALQUIER proyecto,
      sobrevive al gate de page-set). Degrada honesto (503 → aviso, no inventa formas).
+
+DESPLIEGUE  vps-setup.sh asegura el toolchain Rust (rustup) ANTES de los 6 motores (paso
+     3a-ter-aa) — el bloque ocr4rs solo instalaba cargo en su fallback, y con ocr4rs prebuilt ese
+     camino se saltaba → los motores morían en 'sin cargo'. Ahora cargo se garantiza siempre
+     (idempotente); cada motor compila con cargo install --root /usr/local (binario a /usr/local/bin,
+     lo encuentra systemd). Sin cargo aún → los 6 degradan honesto (503 sin_motor).
 ```
 
 ## Topics

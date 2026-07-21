@@ -14,7 +14,7 @@ fuentes:
   - modules/_shared/error-fertil.js
   - modules/cosecha/cantera/enki/leer-web/**
   - modules/cosecha/cantera/enki/precio-ingredientes-web/**
-verificado: 2026-07-16
+verificado: 2026-07-21
 ---
 
 # HERRAMIENTAS EXTERNAS — Crawl4RS en Docker (el órgano web) · Python en Docker (Headroom · el contenedor universal)
@@ -94,13 +94,22 @@ POR QUÉ DOCKER (la excepción que confirma "Rust → nativo"): el binario es li
        Instalar el engine aquí NO mete a www-data en el grupo docker (eso sigue opt-in, --docker).
      README.md  el setup lo hace solo; la receta manual queda como plan B / debug.
   }
-2 · PUENTE (bus)  modules/crawl4rs/ {
-     Reflejo bus↔HTTP: leer/rastrear job-based (token JWT cacheado → POST /crawl → poll → result,
-     retry ante 401); buscar/mapear directos (POST /search · /map, mismo token). Eventos:
-     crawl4rs.{leer,rastrear,buscar,mapear}.request → .response. Tool de chat: leer_web (url,
-     query BM25, extract_semantic). NACE OFF (interruptor 'crawl4rs', grupo sistema) · degrada
-     honesto (503 {degradado, motivo}; buscar sin SearXNG → la prescripción del servidor viaja en
-     message). Precedencia env > config (CRAWL4RS_BASE_URL/API_KEY). Test: crawl4rs__index.
+2 · PUENTE (bus)  modules/crawl4rs/ (v0.4.0) {
+     MARCHA CORTA/AUTO (axum :8081) — leer/rastrear job-based (token JWT cacheado → POST /crawl →
+     poll → result, retry ante 401); buscar/mapear directos (POST /search · /map). Eventos
+     crawl4rs.{leer,rastrear,buscar,mapear}.request → .response. Tool leer_web (url, query BM25,
+     extract_semantic).
+     MARCHA LARGA (wrapper Playwright :8100) — login→sesión, la puerta de las páginas con contraseña.
+     crawl4rs.entrar {url, pasos[fill/click/wait/scroll]} → POST wrapper /login → captura el
+     storageState → devuelve un sesion_id (HANDLE; el storageState = secreto se guarda server-side,
+     Map TTL 30 min, NUNCA sale al bus). crawl4rs.abrir {url, sesion_id, interactuar?, interceptar?}
+     → POST wrapper /abrir reusando la sesión → {html, intercepted}; interceptar captura el JSON de la
+     API interna (precios B2B). Tools entrar_web + abrir_web. Wrapper = OTRO servicio
+     (CRAWL4RS_PLAYWRIGHT_URL, :8100), no el axum → degradación propia 'sin_marcha_larga'. Sesión
+     caducada → 409.
+     COMÚN — NACE OFF (interruptor 'crawl4rs', cubre las dos marchas) · degrada honesto (503
+     {degradado, motivo}; buscar sin SearXNG → la prescripción viaja en message). Precedencia env >
+     config (CRAWL4RS_BASE_URL/API_KEY/PLAYWRIGHT_URL). Tests: crawl4rs__index · crawl4rs__marcha-larga.
   }
 3 · DESCUBRIMIENTO (skill-first, NO se cablea a escandallo) {
      leer-web (genérico, dominio web): el canal — bus.publishAndWait('crawl4rs.leer.request')
@@ -280,7 +289,8 @@ SIGUIENTE (fases)  gate del rail (no cerrar en 'manual' sin agotar el retry pres
 
 ```
 EVENTOS {
-  crawl4rs.{leer,rastrear,buscar,mapear}.request → .response  (reflejos del puente → contenedor :8081)
+  crawl4rs.{leer,rastrear,buscar,mapear}.request → .response  (marcha corta/auto → axum :8081)
+  crawl4rs.{entrar,abrir}.request → .response                 (marcha larga → wrapper Playwright :8100)
   interruptor 'crawl4rs' (grupo sistema, OFF) → enciende/apaga el puente en caliente
   interruptor 'headroom' → ai-gateway.onInterruptorCambiado (hot-switch del proxy de compresión)
   conserje.empujon {tipo:'skill', accion 'cosecha.promover:precio-ingredientes-web'}  (descubrimiento al costear)

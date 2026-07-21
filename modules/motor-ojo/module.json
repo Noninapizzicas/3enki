@@ -1,0 +1,43 @@
+{
+  "_doc": "motor-ojo — PUENTE al primer órgano sensorial de enki-sense: RENDERIZAR (datos/markup → SVG · PDF · imagen). Transductor DETERMINISTA (clase 1 del bisturí): mismo input → mismos bytes, un test de fixture lo afirma. El motor es Rust puro NATIVO (resvg/tiny-skia/svg2pdf), clon del molde OCR4RS — corre en TU máquina, cero nube. Este reflejo traduce bus↔HTTP y esconde el HTTP en el servicio. SIN BOTÓN: operativo desde el minuto 1 (el render es cómputo local puro; un interruptor no protegería ningún estado nombrable → ceremonia, no invariante). El ÚNICO guard es la degradación honesta: si el motor Rust no responde → 503 sin_motor; nunca finge bytes. Ver guión: arquitectura/decisiones/propuestas/enki-sense.md. Config: base_url (default http://localhost:8120, override env MOTOR_OJO_URL), timeout_ms.",
+  "name": "motor-ojo",
+  "version": "0.2.0",
+  "_v0_2_0_nota": "v0.2.0: SIN BOTÓN. Se retira el interruptor 'motor-ojo' — nace operativo. El render es cómputo local puro (SVG→bytes, sin red/shell/ops peligrosas), así que la pregunta madre falla: el botón no protegía ningún estado → era miedo, se disuelve. Único guard: degradación honesta (503 sin_motor si el binario Rust no responde). Tool 'renderizar' se surface global en el ai-gateway (operativa desde el minuto 1, como leer_web). Principio de la familia enki-sense: los órganos de cómputo/salida nacen sin botón; solo llevan guard lo que protege un estado nombrable (privacidad del micrófono, irreversibilidad).",
+  "_v0_1_0_nota": "v0.1.0: nace el puente del primer sentido. Reflejo bus↔HTTP al servicio enki-sense de render. Evento motor-ojo.render.request {tipo:svg|pdf|imagen, fuente, opts?} → POST /render → {base64, ext}. Tool de chat 'renderizar'. Test: motor-ojo__index.",
+  "description": "Puente al órgano de render de enki-sense (Rust nativo: SVG/PDF/imagen) como órgano del bus. Datos/markup → bytes, en la máquina local. SIN botón (operativo desde el minuto 1), degrada limpio si el motor no está.",
+  "author": "enki",
+  "language": "javascript",
+  "main": "index.js",
+  "tier": "sistema",
+  "horizonte": "El sentido de la VISTA de salida — renderizar artefactos visuales localmente (carta-digital, facturas, publicador, contenido). Primer órgano de enki-sense; molde OCR4RS.",
+  "dependencies": [],
+  "subscribes": [
+    { "event": "motor-ojo.render.request", "handler": "onRenderRequest", "description": "Reflejo: renderiza {tipo:svg|pdf|imagen, fuente, opts?} → POST /render → {base64, ext}. Sin botón (siempre operativo); 503 sin_motor si el binario Rust no responde; 422 RENDER_FALLIDO si el motor no puede (fuente inválida)." }
+  ],
+  "publishes": [
+    { "event": "motor-ojo.render.response", "description": "{ base64, ext, tipo } o error (422 RENDER_FALLIDO, 5xx upstream, 503 sin_motor)." }
+  ],
+  "tools": [
+    {
+      "name": "renderizar",
+      "description": "Renderiza datos/markup a un artefacto visual LOCAL (en tu máquina, cero nube): SVG, PDF o imagen. ÚSALA para generar una carta, una factura, un PDF, o convertir un SVG a PNG. Devuelve los BYTES en base64 + ext (para adjuntar con contenido.add_imagen o guardar). Motor Rust nativo (resvg/svg2pdf). Operativa siempre; si el motor no está desplegado responde 503 sin_motor.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tipo": { "type": "string", "enum": ["svg", "pdf", "imagen"], "description": "Qué producir: svg (render/optimiza SVG), pdf (genera PDF), imagen (SVG→PNG o transforma imagen)." },
+          "fuente": { "description": "La entrada a renderizar: markup SVG, la especificación del PDF, o la imagen (según tipo)." },
+          "opts": { "type": "object", "description": "Opciones del render (tamaño, dpi, fondo…) según el tipo." }
+        },
+        "required": ["tipo", "fuente"]
+      },
+      "handler": "handleRenderTool",
+      "errores_conocidos": ["INVALID_INPUT", "RENDER_FALLIDO", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+    }
+  ],
+  "config": {
+    "base_url": "http://localhost:8120",
+    "timeout_ms": 30000,
+    "_base_url_doc": "Base del servicio enki-sense de render (Rust nativo). Override por env MOTOR_OJO_URL (manda sobre este config). Mientras el motor no esté desplegado, render degrada honesto (503 sin_motor)."
+  }
+}

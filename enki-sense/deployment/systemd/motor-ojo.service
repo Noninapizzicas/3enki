@@ -1,0 +1,20 @@
+# motor-ojo — órgano de render de enki-sense (Rust nativo, como ocr4rs).
+# Se compila desde 2enki (enki-sense/) con `cargo install --root /usr/local` en
+# vps-setup.sh → binario en /usr/local/bin/motor-ojo. Solo loopback
+# (127.0.0.1:8120): lo consume el core por el puente modules/motor-ojo.
+[Unit]
+Description=enki-sense motor-ojo (render SVG/PDF/imagen, local)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/motor-ojo
+Environment=MOTOR_OJO_PORT=8120
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

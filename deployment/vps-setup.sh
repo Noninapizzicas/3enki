@@ -372,6 +372,30 @@ if [ -x /usr/local/bin/ocr4rs ]; then
     fi
 fi
 
+# ---- 3a-ter-bis. motor-ojo — órgano de RENDER de enki-sense (Rust nativo, :8120) ----
+# El PRIMER sentido de enki-sense. Vive DENTRO de 2enki (enki-sense/), NO repo aparte:
+# se compila desde REPO_DIR. Nativo (resvg/usvg/svg2pdf, sin Chromium → sin Docker,
+# como ocr4rs). Best-effort: si falla, el puente modules/motor-ojo degrada honesto (503).
+if [ -x /usr/local/bin/motor-ojo ]; then
+    log "motor-ojo ya instalado"
+elif command -v cargo &>/dev/null; then
+    log "Compilando motor-ojo (enki-sense/render, la 1ª vez tarda unos minutos)..."
+    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-ojo" --root /usr/local --locked > /dev/null 2>&1 \
+        && log "motor-ojo compilado en /usr/local/bin" \
+        || warn "cargo install de motor-ojo falló — el puente degrada honesto (503 sin_motor)"
+else
+    warn "sin cargo: motor-ojo no se compiló. El puente degrada honesto (503 sin_motor)."
+fi
+if [ -x /usr/local/bin/motor-ojo ]; then
+    install -m 0644 "${REPO_DIR}/enki-sense/deployment/systemd/motor-ojo.service" /etc/systemd/system/motor-ojo.service 2>/dev/null
+    systemctl daemon-reload
+    if systemctl enable --now motor-ojo > /dev/null 2>&1; then
+        log "motor-ojo activo en 127.0.0.1:8120 (render SVG/PDF/imagen, local) — SIN botón, operativo ya"
+    else
+        warn "motor-ojo instalado pero el servicio no arrancó (revisa: journalctl -u motor-ojo -f)"
+    fi
+fi
+
 # ---- 3a-quater. HERMES — el agente trabajador (nativo, :8642) ----
 # La suma, no el orgullo: Enki gobierna (interruptor 'hermes-agente' + audit
 # hermes.invocado), Hermes pone el músculo (browser, código, subagentes, memoria
@@ -670,6 +694,9 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-searxng$'; then
 fi
 if systemctl is-active --quiet ocr4rs 2>/dev/null; then
     echo "    ocr4rs         → OCR órgano físico imagen/PDF→texto (Rust nativo/systemd, localhost:8090)"
+fi
+if systemctl is-active --quiet motor-ojo 2>/dev/null; then
+    echo "    motor-ojo      → enki-sense render SVG/PDF/imagen (Rust nativo/systemd, localhost:8120)"
 fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-headroom$'; then
     echo "    enki-headroom  → proxy compresión (docker, localhost:8787)"

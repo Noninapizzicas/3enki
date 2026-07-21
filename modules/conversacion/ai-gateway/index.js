@@ -405,7 +405,7 @@ class AiGatewayModule extends BaseModule {
       'fs.read', 'fs.list', 'fs.search',
       'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
       'fijar_objetivo', 'evaluar_rail',
-      'leer_web', 'descargar_web', 'leer_imagen', 'renderizar']);
+      'leer_web', 'descargar_web', 'leer_imagen', 'renderizar', 'traducir']);
     // Slice de globales (de `all`) con la enumeracion de invoke_agent aplicada. Se combina
     // con las tools de pagina y se deduplica por nombre (el rail ya se anade aparte).
     const globalSlice = () => this._mapInvokeAgentEnum(all.filter(t => GLOBAL_TOOLS.has(t.name)), page_id);

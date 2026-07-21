@@ -1,0 +1,42 @@
+{
+  "_doc": "motor-traduce — PUENTE al 2º órgano sensorial de enki-sense: TRADUCIR (texto → texto en otro idioma). Transductor DETERMINISTA (clase 1 del bisturí): el motor es una caja determinista; el sistema no juzga la traducción, la transduce el modelo. Rust puro NATIVO (candle + MarianMT/Opus-MT de Helsinki-NLP), cero nube — modelos por par de idiomas (~300MB), descargados en el deploy (patrón ocr4rs). SIN BOTÓN: operativo desde el minuto 1 (traducir es cómputo local puro; un interruptor no protege ningún estado nombrable → ceremonia, se disuelve). Único guard: degradación honesta (503 sin_motor si el binario no responde; 422 PAR_NO_SOPORTADO si falta el par). Ver guión: arquitectura/decisiones/propuestas/enki-sense.md. Config: base_url (default http://localhost:8121, override env MOTOR_TRADUCE_URL), timeout_ms.",
+  "name": "motor-traduce",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: nace el puente del 2º sentido (traducir). Reflejo bus↔HTTP al servicio enki-sense. Evento motor-traduce.request {texto, de, a} → POST /translate → {texto_traducido}. Tool 'traducir' en GLOBAL_TOOLS. SIN botón (principio enki-sense: cómputo local puro nace operativo). Normaliza códigos de idioma en una frontera (es-ES→es). de==a → passthrough sin cambio. Degradación honesta (sin_motor / PAR_NO_SOPORTADO / TRADUCCION_FALLIDA). El motor Rust (enki-sense/crates/motor-traduce, candle-marian) es la otra mitad. Test: motor-traduce__index.",
+  "description": "Puente al órgano de traducción de enki-sense (Rust nativo: candle + MarianMT) como órgano del bus. Texto → texto en otro idioma, en la máquina local. SIN botón (operativo desde el minuto 1), degrada limpio si el motor no está.",
+  "author": "enki",
+  "language": "javascript",
+  "main": "index.js",
+  "tier": "sistema",
+  "horizonte": "El sentido de la LENGUA — traducir localmente (carta multi-idioma, whatsapp con clientes en otro idioma). 2º órgano de enki-sense; molde OCR4RS/motor-ojo.",
+  "dependencies": [],
+  "subscribes": [
+    { "event": "motor-traduce.request", "handler": "onTraducirRequest", "description": "Reflejo: traduce {texto, de, a} → POST /translate → {texto_traducido}. Sin botón (siempre operativo); 503 sin_motor si el binario Rust no responde; 422 PAR_NO_SOPORTADO si falta el par de idiomas." }
+  ],
+  "publishes": [
+    { "event": "motor-traduce.response", "description": "{ texto_traducido, de, a } o error (422 PAR_NO_SOPORTADO, 504 timeout, 5xx upstream, 503 sin_motor)." }
+  ],
+  "tools": [
+    {
+      "name": "traducir",
+      "description": "Traduce un texto a otro idioma, LOCALMENTE (en tu máquina, cero nube, sin APIs de terceros). ÚSALA para la carta multi-idioma, mensajes a clientes en otro idioma, o cualquier texto. Códigos de idioma ISO (es, en, ca, fr…). Devuelve el texto traducido. Motor Rust nativo (MarianMT/Opus-MT). Operativa siempre; si el motor no está desplegado responde 503 sin_motor, y 422 si no tiene ese par de idiomas.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "texto": { "type": "string", "minLength": 1, "description": "El texto a traducir." },
+          "de": { "type": "string", "minLength": 2, "description": "Idioma origen (ISO 639-1: es, en, ca, fr…)." },
+          "a": { "type": "string", "minLength": 2, "description": "Idioma destino (ISO 639-1)." }
+        },
+        "required": ["texto", "de", "a"]
+      },
+      "handler": "handleTraducirTool",
+      "errores_conocidos": ["INVALID_INPUT", "PAR_NO_SOPORTADO", "TRADUCCION_FALLIDA", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+    }
+  ],
+  "config": {
+    "base_url": "http://localhost:8121",
+    "timeout_ms": 30000,
+    "_base_url_doc": "Base del servicio enki-sense de traducción (Rust nativo). Override por env MOTOR_TRADUCE_URL. Mientras el motor no esté desplegado, traducir degrada honesto (503 sin_motor)."
+  }
+}

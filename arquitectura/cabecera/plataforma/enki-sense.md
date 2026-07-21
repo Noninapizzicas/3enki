@@ -1,9 +1,10 @@
 ---
 id: plataforma/enki-sense
 dominio: plataforma
-resumen: Los SENTIDOS locales de Enki — órganos Rust en tu máquina (cero nube) que transducen señal↔señal (decir/oír/traducir/renderizar) y perciben (trazo/sonido). Molde OCR4RS; primer puente vivo motor-ojo (render SVG/PDF/imagen). El freno "página que la beba" disuelto (la cúpula rompió montar=inyectar).
+resumen: Los SENTIDOS locales de Enki — órganos Rust en tu máquina (cero nube) que transducen señal↔señal (decir/oír/traducir/renderizar) y perciben (trazo/sonido). Molde OCR4RS. motor-ojo (render) VIVO end-to-end; motor-traduce (traducir) puente listo, motor candle pendiente. SIN botón (nacen operativos). Frenos disueltos: "página que la beba" y el interruptor de cómputo puro.
 fuentes:
   - modules/motor-ojo/**
+  - modules/motor-traduce/**
   - enki-sense/**
   - deployment/vps-setup.sh
   - arquitectura/decisiones/propuestas/enki-sense.md
@@ -65,17 +66,27 @@ MOTOR (Rust nativo, EN 2enki)  enki-sense/ — workspace Cargo, crate motor-ojo.
      como ocr4rs, NO Docker). fuente universal = SVG; tipo → PNG (resvg) · PDF (svg2pdf) · SVG
      (usvg). Carga fuentes del sistema una vez. VERIFICADO EN VIVO: compila y sirve PNG/PDF válidos;
      fuente inválida → {fallo} honesto. Despliegue: vps-setup.sh compila (cargo install), systemd
-     motor-ojo.service, siembra el interruptor ON.
+     motor-ojo.service. SIN botón (nace operativo).
 CONSUMIDOR vivo del render  carta-digital · facturas · publicador · contenido.add_imagen.
-PENDIENTE  traducir (Bergamot) · voz/oído/sonido/trazo cuando exista la UI que los beba —
-     mismo molde, crates hermanos en enki-sense/.
+
+PUENTE (bus) 2º sentido  modules/motor-traduce v0.1.0 — motor-traduce.request {texto, de, a} →
+     POST /translate → {texto_traducido}. Tool 'traducir' (en GLOBAL_TOOLS). SIN botón. Normaliza
+     códigos de idioma en una frontera (es-ES→es); de==a → passthrough. Degrada honesto (sin_motor /
+     422 PAR_NO_SOPORTADO). Base http://localhost:8121 (env MOTOR_TRADUCE_URL). Test:
+     motor-traduce__index (6). Consumidor latente: carta multi-idioma · whatsapp.
+MOTOR (decisión, PENDIENTE de build)  candle + MarianMT/Opus-MT (Helsinki-NLP) — Rust puro, NO
+     Bergamot (bindings C++). Modelos por par de idiomas (~300MB), descargados en el deploy (patrón
+     ocr4rs get-models, no van en el binario). El puente ya degrada honesto (sin_motor) hasta que
+     el motor exista. Su ciclo build+verify es propio (compila candle + prueba con un par real).
+PENDIENTE  motor de traducir (candle-marian) · voz/oído/sonido/trazo cuando exista la UI que los
+     beba — mismo molde, crates hermanos en enki-sense/.
 ```
 
 ## Topics
 
 ```
 motor-ojo.render.request → .response            (renderizar · server nativo)  [VIVO]
-motor-traduce.request → .response               (traducir · server nativo)    [guión]
+motor-traduce.request → .response               (traducir · server nativo)    [PUENTE listo · motor pendiente]
 motor-voz.decir.request → .audio                (decir · inferencia server)   [guión]
 motor-oido.oir.request → .transcrito            (oír · captura borde)         [guión]
 motor-sonido.analizar.request → .prosodia       (sonido · features+fuzzy)     [guión]

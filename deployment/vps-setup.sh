@@ -372,6 +372,22 @@ if [ -x /usr/local/bin/ocr4rs ]; then
     fi
 fi
 
+# ---- 3a-ter-aa. Toolchain Rust — la mano que compila los 6 sentidos nativos ----
+# Los motores enki-sense son Rust NATIVO: sin cargo no nacen (degradan a 503). El
+# bloque ocr4rs de arriba instala rustup SOLO en su fallback de compilación — si
+# ocr4rs ya estaba instalado (binario prebuilt), ese camino se salta y cargo nunca
+# llega. Aquí lo aseguramos SIEMPRE, antes de los 6 motores. Idempotente: si cargo
+# ya está, no hace nada. rustup añade cargo a $HOME/.cargo/bin — lo sourceamos al PATH
+# del script en caliente (el perfil de shell no basta para esta misma pasada).
+if ! command -v cargo &>/dev/null; then
+    log "Instalando toolchain Rust (rustup) para los motores enki-sense..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y > /dev/null 2>&1 \
+        || warn "rustup falló — los 6 motores degradarán honesto (503 sin_motor) hasta instalar cargo"
+    [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+    export PATH="$HOME/.cargo/bin:$PATH"
+    command -v cargo &>/dev/null && log "cargo listo ($(cargo --version 2>/dev/null))" || true
+fi
+
 # ---- 3a-ter-bis. motor-ojo — órgano de RENDER de enki-sense (Rust nativo, :8120) ----
 # El PRIMER sentido de enki-sense. Vive DENTRO de 2enki (enki-sense/), NO repo aparte:
 # se compila desde REPO_DIR. Nativo (resvg/usvg/svg2pdf, sin Chromium → sin Docker,

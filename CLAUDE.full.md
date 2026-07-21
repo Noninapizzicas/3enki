@@ -14339,8 +14339,8 @@ CLASE WhatsappBotModule HEREDA BaseModule {  // ── el INSIDER que re-tasa
 
 ## WhatsApp Cloud API — OPERATIVO end-to-end (v1.5.0) · webhook real de Meta + alta por UI
 
-> Estado: VIVO en producción (enki-ai.online, proyecto nonina). El transporte real es el
-> webhook de Meta (graph.facebook.com), no el bus agnóstico. La PUERTA es el verify_token;
+> Estado: VIVO en producción (enki-ai.online, proyecto nonina). El transporte ÚNICO es el
+> webhook de Meta (graph.facebook.com) — HTTP, sin navegador. La PUERTA es el verify_token;
 > el dato no-secreto de conexión (phone_number_id, waba_id…) se da de alta desde la APP, sin
 > editar ficheros. El secreto (token, verify_token) sigue en el credential-manager.
 
@@ -14461,7 +14461,7 @@ GARANTÍAS {
 
 ```
 EVENTOS {
-  whatsapp.entrante                  → bot (transporte agnóstico; o webhook Meta directo)
+  (entrante)                         → bot vía WEBHOOK de Meta (Cloud API; único transporte, sin navegador)
   pedido.crear-tienda                : bot/tienda-api → pedidos (items re-tasados + estructura)
   pedido.crear-tienda.response       : pedidos → bot (request_id correlado)
   pedido.creado                      : pedidos (informativo; lleva cuenta_id, sin teléfono/secretos)
@@ -17066,7 +17066,8 @@ RELEVO (v0.2.0 del puente)  fastcrw (motor crw-server nativo :3002 + puente tool
         el modo auto de Crawl4RS cubre el fetch ligero que hacía crw-server, y el navegador real
         elimina su límite verificado (páginas JS-pesadas → timeout sin render). Un motor, todas
         las puertas: leer · buscar · mapear · rastrear. El Chromium de crawling vive SOLO en el
-        contenedor (las libs Chromium de vps-setup.sh son de open-wa/WhatsApp, otro órgano).
+        contenedor (D-os) — el HOST ya no instala Chromium: WhatsApp va por Meta Cloud API (HTTP) y
+        los OJOS (verificador-visual) por obscura (navegador Rust). Único Chromium restante: este.
 
 POR QUÉ DOCKER (la excepción que confirma "Rust → nativo"): el binario es limpio pero ARRASTRA
         Chromium — la dependencia sucia. Reparto por NATURALEZA: lo sucio va contenido (como python-tools).

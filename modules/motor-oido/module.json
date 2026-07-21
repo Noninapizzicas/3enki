@@ -1,0 +1,41 @@
+{
+  "_doc": "motor-oido — PUENTE al 3er órgano sensorial de enki-sense: OÍR (audio → texto). Transductor DETERMINISTA (clase 1 del bisturí): whisper transcribe la señal; la confianza la REPORTA, no la juzga. Interpretar la INTENCIÓN ya es el LLM de página; este órgano solo transcribe lo que se DIJO. Rust puro NATIVO (candle-whisper), cero nube. SIN BOTÓN en el motor: transcribir es cómputo local puro sobre un audio que YA llega; el guard de PRIVACIDAD del micrófono (no escuchar sin consentimiento) es real pero vive en el BORDE (permiso al CAPTURAR), no como toggle de servidor. Único guard aquí: degradación honesta (503 sin_motor). Ver guión: arquitectura/decisiones/propuestas/enki-sense.md. Config: base_url (default http://localhost:8122, override env MOTOR_OIDO_URL), timeout_ms.",
+  "name": "motor-oido",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: nace el puente del 3er sentido (oír). Reflejo bus↔HTTP al servicio enki-sense (candle-whisper). Evento motor-oido.transcribir.request {audio_base64, idioma?} → POST /transcribe → {texto, idioma, confianza}. Tool 'transcribir' en GLOBAL_TOOLS. SIN botón (el guard de privacidad del micro vive en el BORDE). Degradación honesta (sin_motor / TRANSCRIPCION_FALLIDA). El motor Rust (enki-sense/crates/motor-oido) es la otra mitad. Test: motor-oido__index.",
+  "description": "Puente al órgano de transcripción de enki-sense (Rust nativo: candle-whisper) como órgano del bus. Audio → texto, en la máquina local. SIN botón (el guard de privacidad del micro vive en el borde), degrada limpio si el motor no está.",
+  "author": "enki",
+  "language": "javascript",
+  "main": "index.js",
+  "tier": "sistema",
+  "horizonte": "El sentido del OÍDO — transcribir voz localmente (dictado, notas de voz, comandos hablados). 3er órgano de enki-sense; molde OCR4RS/motor-traduce.",
+  "dependencies": [],
+  "subscribes": [
+    { "event": "motor-oido.transcribir.request", "handler": "onTranscribirRequest", "description": "Reflejo: transcribe {audio_base64, idioma?} → POST /transcribe → {texto, idioma, confianza}. Sin botón (siempre operativo); 503 sin_motor si el binario Rust no responde; audio ilegible → texto vacío + confianza 0 (no inventa palabras)." }
+  ],
+  "publishes": [
+    { "event": "motor-oido.transcribir.response", "description": "{ texto, idioma, confianza } o error (504 timeout, 5xx upstream, 503 sin_motor)." }
+  ],
+  "tools": [
+    {
+      "name": "transcribir",
+      "description": "Transcribe un audio a texto, LOCALMENTE (en tu máquina, cero nube, sin APIs de terceros). ÚSALA cuando llega una nota de voz, un dictado, o audio hablado y necesitas su texto. Devuelve el texto + idioma detectado + confianza. Motor Rust nativo (whisper). Solo transcribe lo que se DIJO (no interpreta la intención — eso lo haces tú al leer el texto). Operativa siempre; si el motor no está desplegado responde 503 sin_motor.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "audio_base64": { "type": "string", "minLength": 1, "description": "El audio a transcribir, en base64 (WAV/MP3/OGG)." },
+          "idioma": { "type": "string", "description": "Opcional: idioma esperado (ISO 639-1: es, en, fr…). Si se omite, whisper lo detecta." }
+        },
+        "required": ["audio_base64"]
+      },
+      "handler": "handleTranscribirTool",
+      "errores_conocidos": ["INVALID_INPUT", "TRANSCRIPCION_FALLIDA", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+    }
+  ],
+  "config": {
+    "base_url": "http://localhost:8122",
+    "timeout_ms": 60000,
+    "_base_url_doc": "Base del servicio enki-sense de transcripción (Rust nativo, candle-whisper). Override por env MOTOR_OIDO_URL. Mientras el motor no esté desplegado, transcribir degrada honesto (503 sin_motor)."
+  }
+}

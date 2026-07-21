@@ -426,6 +426,35 @@ if [ -x /usr/local/bin/motor-traduce ]; then
     fi
 fi
 
+# ---- 3a-ter-quater. motor-oido — órgano de OÍR/transcribir de enki-sense (Rust nativo, :8122) ----
+# 3er sentido. Nativo (candle-whisper, sin nube). El modelo (~145MB) lo descarga
+# get-models.sh (patrón ocr4rs). Best-effort: sin binario o sin modelo, el puente
+# modules/motor-oido degrada honesto (503 sin_motor).
+MO_MODELS="${INSTALL_DIR}/data/oido-models"
+if [ -x /usr/local/bin/motor-oido ]; then
+    log "motor-oido ya instalado"
+elif command -v cargo &>/dev/null; then
+    log "Compilando motor-oido (enki-sense/oír, candle-whisper — la 1ª vez tarda unos minutos)..."
+    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-oido" --root /usr/local --locked > /dev/null 2>&1 \
+        && log "motor-oido compilado en /usr/local/bin" \
+        || warn "cargo install de motor-oido falló — el puente degrada honesto (503 sin_motor)"
+else
+    warn "sin cargo: motor-oido no se compiló. El puente degrada honesto (503 sin_motor)."
+fi
+if [ -x /usr/local/bin/motor-oido ]; then
+    mkdir -p "${MO_MODELS}"
+    bash "${REPO_DIR}/enki-sense/crates/motor-oido/get-models.sh" "${MO_MODELS}" > /dev/null 2>&1 \
+        && log "motor-oido: modelo whisper provisionado en ${MO_MODELS}" \
+        || warn "motor-oido: get-models falló (¿red?) — transcribir dará sin_motor hasta reintentar"
+    sed "s#__MODELS__#${MO_MODELS}#g" "${REPO_DIR}/enki-sense/deployment/systemd/motor-oido.service" > /etc/systemd/system/motor-oido.service 2>/dev/null
+    systemctl daemon-reload
+    if systemctl enable --now motor-oido > /dev/null 2>&1; then
+        log "motor-oido activo en 127.0.0.1:8122 (transcribir voz local) — SIN botón, operativo ya"
+    else
+        warn "motor-oido instalado pero el servicio no arrancó (revisa: journalctl -u motor-oido -f)"
+    fi
+fi
+
 # ---- 3a-quater. HERMES — el agente trabajador (nativo, :8642) ----
 # La suma, no el orgullo: Enki gobierna (interruptor 'hermes-agente' + audit
 # hermes.invocado), Hermes pone el músculo (browser, código, subagentes, memoria
@@ -730,6 +759,9 @@ if systemctl is-active --quiet motor-ojo 2>/dev/null; then
 fi
 if systemctl is-active --quiet motor-traduce 2>/dev/null; then
     echo "    motor-traduce  → enki-sense traducir texto local (Rust/candle, localhost:8121)"
+fi
+if systemctl is-active --quiet motor-oido 2>/dev/null; then
+    echo "    motor-oido     → enki-sense transcribir voz local (Rust/candle-whisper, localhost:8122)"
 fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-headroom$'; then
     echo "    enki-headroom  → proxy compresión (docker, localhost:8787)"

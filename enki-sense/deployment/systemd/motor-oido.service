@@ -1,0 +1,22 @@
+# motor-oido — órgano de transcripción de enki-sense (Rust nativo, candle-whisper).
+# Se compila desde 2enki (enki-sense/) con cargo install en vps-setup.sh.
+# Los modelos se provisionan con get-models.sh (NO van en el binario).
+# Solo loopback (127.0.0.1:8122): lo consume el core por modules/motor-oido.
+[Unit]
+Description=enki-sense motor-oido (transcribir voz local, candle-whisper)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/motor-oido
+Environment=MOTOR_OIDO_PORT=8122
+Environment=MOTOR_OIDO_MODELS=__MODELS__
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=__MODELS__
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * crawl4rs__index — el PUENTE bus↔HTTP a Crawl4RS. Simula el servicio (job-based)
- * overrideando _http: token → submit → poll → result. Verifica la proyección al bus,
- * el reintento tras 401, el fallo/timeout del job, y la DEGRADACIÓN honesta (interruptor
- * OFF / servicio caído → 503).
+ * crawl4rs__index — el ÓRGANO WEB de Enki sobre OBSCURA. Simula el navegador
+ * overrideando los seams (_render / _buscarSearx / _fetchBinario). Verifica la
+ * proyección al bus (leer/rastrear/mapear/buscar/descargar), el BFS de rastrear,
+ * y la DEGRADACIÓN honesta (interruptor OFF / obscura caída / SearXNG caído → 503).
  *
  * Ejecutar: node tests/unit/crawl4rs__index.test.js
  */
@@ -18,20 +18,8 @@ function nuevo({ activo = true } = {}) {
   m.metrics = { increment() {} };
   m.eventBus = { publish() {} };
   m.activo = activo;
-  m._pollMs = 1;
   m._timeoutMs = 200;
   return m;
-}
-
-// servicio feliz: /auth/token → /crawl {id} → status done → result pages
-function servicioFeliz(m, { pages } = {}) {
-  m._http = async (method, path) => {
-    if (path === '/auth/token') return { status: 200, body: { token: 'tok', token_type: 'Bearer' } };
-    if (method === 'POST' && path === '/crawl') return { status: 202, body: { id: 'job1' } };
-    if (path === '/crawl/job1/status') return { status: 200, body: { id: 'job1', state: 'done', completed: 1 } };
-    if (path === '/crawl/job1/result') return { status: 200, body: { pages: pages || [{ url: 'https://x/y', fit_markdown: '# hola', extracted: { precio: 9 } }] } };
-    return { status: 404, body: null };
-  };
 }
 
 const tests = [];
@@ -39,7 +27,7 @@ const test = (n, f) => tests.push({ n, f });
 
 test('leer feliz → markdown + extracción proyectados al bus', async () => {
   const m = nuevo();
-  servicioFeliz(m);
+  m._render = async (url) => ({ markdown: '# hola', extraido: { precio: 9 }, enlaces: [], final_url: url });
   const r = await m._leer({ url: 'https://x/y' });
   assert.strictEqual(r.status, 200);
   assert.strictEqual(r.data.markdown, '# hola');
@@ -47,91 +35,91 @@ test('leer feliz → markdown + extracción proyectados al bus', async () => {
   assert.strictEqual(r.data.total, 1);
 });
 
-test('GATE: interruptor OFF → 503 {degradado, motivo:apagado}, sin tocar el servicio', async () => {
+test('GATE: interruptor OFF → 503 {degradado, motivo:apagado}, sin tocar obscura', async () => {
   const m = nuevo({ activo: false });
   let tocado = false;
-  m._http = async () => { tocado = true; return { status: 200, body: {} }; };
+  m._render = async () => { tocado = true; return {}; };
   const r = await m._leer({ url: 'https://x/y' });
   assert.strictEqual(r.status, 503);
   assert.strictEqual(r.error.details.motivo, 'apagado');
-  assert.strictEqual(tocado, false, 'OFF ni siquiera llama al servicio');
+  assert.strictEqual(tocado, false, 'OFF ni siquiera abre el navegador');
 });
 
 test('sin url → INVALID_INPUT', async () => {
   const m = nuevo();
-  const r = await m._leer({});
-  assert.strictEqual(r.status, 400);
+  assert.strictEqual((await m._leer({})).status, 400);
 });
 
-test('reintento tras 401: token caduca en submit → re-token y éxito', async () => {
+test('obscura caída (throw) → 503 {motivo:sin_navegador}', async () => {
   const m = nuevo();
-  let submits = 0, tokens = 0;
-  m._http = async (method, path) => {
-    if (path === '/auth/token') { tokens++; return { status: 200, body: { token: 'tok' + tokens } }; }
-    if (method === 'POST' && path === '/crawl') { submits++; return submits === 1 ? { status: 401, body: null } : { status: 202, body: { id: 'job1' } }; }
-    if (path === '/crawl/job1/status') return { status: 200, body: { state: 'done' } };
-    if (path === '/crawl/job1/result') return { status: 200, body: { pages: [{ url: 'u', fit_markdown: 'ok' }] } };
-    return { status: 404, body: null };
-  };
-  const r = await m._leer({ url: 'https://x/y' });
-  assert.strictEqual(r.status, 200);
-  assert.strictEqual(tokens, 2, 're-pidió token tras el 401');
-  assert.strictEqual(r.data.markdown, 'ok');
-});
-
-test('job failed → 502 con el error', async () => {
-  const m = nuevo();
-  m._http = async (method, path) => {
-    if (path === '/auth/token') return { status: 200, body: { token: 't' } };
-    if (method === 'POST' && path === '/crawl') return { status: 202, body: { id: 'j' } };
-    if (path === '/crawl/j/status') return { status: 200, body: { state: 'failed', error: 'boom' } };
-    return { status: 404, body: null };
-  };
-  const r = await m._leer({ url: 'https://x/y' });
-  assert.strictEqual(r.status, 502);
-  assert.strictEqual(r.error.details.error, 'boom');
-});
-
-test('job que nunca termina → 504 timeout', async () => {
-  const m = nuevo();
-  m._timeoutMs = 30;
-  m._http = async (method, path) => {
-    if (path === '/auth/token') return { status: 200, body: { token: 't' } };
-    if (method === 'POST' && path === '/crawl') return { status: 202, body: { id: 'j' } };
-    if (path.endsWith('/status')) return { status: 200, body: { state: 'running' } };
-    return { status: 404, body: null };
-  };
-  const r = await m._leer({ url: 'https://x/y' });
-  assert.strictEqual(r.status, 504);
-});
-
-test('servicio caído (fetch lanza) → 503 {motivo:sin_servicio}', async () => {
-  const m = nuevo();
-  m._http = async () => { throw new Error('ECONNREFUSED'); };
+  m._render = async () => { throw new Error('ECONNREFUSED :9222'); };
   const r = await m._leer({ url: 'https://x/y' });
   assert.strictEqual(r.status, 503);
-  assert.strictEqual(r.error.details.motivo, 'sin_servicio');
+  assert.strictEqual(r.error.details.motivo, 'sin_navegador');
 });
 
-test('rastrear pasa max_depth/max_pages al cuerpo del crawl', async () => {
+test('render con {fallo} (nav/timeout) → 502', async () => {
   const m = nuevo();
-  let enviado = null;
-  m._http = async (method, path, body) => {
-    if (path === '/auth/token') return { status: 200, body: { token: 't' } };
-    if (method === 'POST' && path === '/crawl') { enviado = body; return { status: 202, body: { id: 'j' } }; }
-    if (path === '/crawl/j/status') return { status: 200, body: { state: 'done' } };
-    if (path === '/crawl/j/result') return { status: 200, body: { pages: [] } };
-    return { status: 404, body: null };
+  m._render = async () => ({ fallo: { tipo: 'nav', motivo: '404' } });
+  const r = await m._leer({ url: 'https://x/y' });
+  assert.strictEqual(r.status, 502);
+});
+
+test('rastrear: BFS por obscura, dedup + tope de páginas, mismo dominio por defecto', async () => {
+  const m = nuevo();
+  const visitadas = [];
+  m._render = async (url) => {
+    visitadas.push(url);
+    // la raíz enlaza a 2 internas + 1 externa; las internas no enlazan a nada nuevo
+    if (url === 'https://x/') return { markdown: 'raiz', enlaces: ['https://x/a', 'https://x/b', 'https://otro/c'], final_url: url };
+    return { markdown: 'hoja', enlaces: ['https://x/'], final_url: url };
   };
-  await m._rastrear({ url: 'https://x', max_depth: 3, max_pages: 50, cross_domain: true });
-  assert.strictEqual(enviado.max_depth, 3);
-  assert.strictEqual(enviado.max_pages, 50);
-  assert.strictEqual(enviado.cross_domain, true);
+  const r = await m._rastrear({ url: 'https://x/', max_depth: 1, max_pages: 10 });
+  assert.strictEqual(r.status, 200);
+  const urls = r.data.paginas.map((p) => p.url).sort();
+  assert.deepStrictEqual(urls, ['https://x/', 'https://x/a', 'https://x/b'], 'visita raíz + 2 internas; la externa se descarta (mismo dominio)');
+  assert.strictEqual(r.data.total, 3);
+});
+
+test('rastrear: max_pages acota', async () => {
+  const m = nuevo();
+  m._render = async (url) => ({ markdown: 'p', enlaces: ['https://x/1', 'https://x/2', 'https://x/3', 'https://x/4'], final_url: url });
+  const r = await m._rastrear({ url: 'https://x/0', max_depth: 5, max_pages: 2 });
+  assert.strictEqual(r.data.total, 2);
+});
+
+test('mapear: enlaces de una página', async () => {
+  const m = nuevo();
+  m._render = async (url) => ({ enlaces: ['https://x/a', 'https://x/b'], final_url: url });
+  const r = await m._mapear({ url: 'https://x/' });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.total, 2);
+  assert.deepStrictEqual(r.data.enlaces, ['https://x/a', 'https://x/b']);
+});
+
+test('buscar: SearXNG → resultados proyectados', async () => {
+  const m = nuevo();
+  m._buscarSearx = async (q, limit) => {
+    assert.strictEqual(q, 'pizza');
+    assert.strictEqual(limit, 5);
+    return [{ title: 'T', url: 'https://r', snippet: 's' }];
+  };
+  const r = await m._buscar({ query: 'pizza', limit: 5 });
+  assert.strictEqual(r.status, 200);
+  assert.deepStrictEqual(r.data.resultados, [{ titulo: 'T', url: 'https://r', resumen: 's' }]);
+});
+
+test('buscar: SearXNG caído → 503 {motivo:sin_busqueda}', async () => {
+  const m = nuevo();
+  m._buscarSearx = async () => { throw new Error('ECONNREFUSED :8080'); };
+  const r = await m._buscar({ query: 'x' });
+  assert.strictEqual(r.status, 503);
+  assert.strictEqual(r.error.details.motivo, 'sin_busqueda');
 });
 
 test('descargar: url de imagen → base64 + content_type + ext', async () => {
   const m = nuevo();
-  m._fetchBinario = async (url) => ({ status: 200, content_type: 'image/jpeg', ext: 'jpg', bytes: 3, base64: 'AQID' });
+  m._fetchBinario = async () => ({ status: 200, content_type: 'image/jpeg', ext: 'jpg', bytes: 3, base64: 'AQID' });
   const r = await m._descargar({ url: 'https://i0.wp.com/x.jpg' });
   assert.strictEqual(r.status, 200);
   assert.strictEqual(r.data.base64, 'AQID');

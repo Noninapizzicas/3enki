@@ -142,22 +142,22 @@ CADDYUNIT
     systemctl daemon-reload
 fi
 
-# ---- 3a-bis. Crawl4RS — el órgano web del bus (Docker, 127.0.0.1:8081) ----
-# Motor del repo hermano D-os (Rust + Chromium contenido). Es el ÚNICO órgano web desde el
-# relevo de fastcrw: leer · buscar · mapear · rastrear. Docker y no nativo A PROPÓSITO
-# (el binario es limpio; Chromium es la dependencia sucia). Instalar el engine aquí NO
-# concede nada a www-data (el grupo docker sigue siendo opt-in del ejecutor, --docker):
-# el contenedor lo levanta root en el setup y el puente le habla por HTTP.
-# Idempotente y guardado: cualquier fallo → warn, y el puente degrada honesto (503).
-log "Crawl4RS (órgano web, Docker :8081)..."
+# ---- 3a-bis. Órgano web — CENTRALIZADO en Enki sobre obscura (+ SearXNG por Docker) ----
+# El órgano web (leer/rastrear/mapear/entrar/abrir) ya NO es un contenedor D-os: lo conduce
+# OBSCURA (navegador Rust nativo, §3a-ter-ab) por CDP desde modules/crawl4rs. Aquí solo queda
+# por Docker SearXNG (búsqueda, backend de crawl4rs.buscar). Adiós al Chromium del contenedor.
+log "Órgano web (obscura + SearXNG)..."
 
-# Migración: retirar el motor viejo crw-server si quedó de una instalación anterior.
+# Migración: retirar motores web viejos (crw-server nativo; el contenedor enki-crawl4rs y su
+# wrapper Playwright — obscura los reemplaza; el clon /opt/d-os ya no hace falta).
 if systemctl list-unit-files 2>/dev/null | grep -q 'crw-server.service'; then
     systemctl disable --now crw-server > /dev/null 2>&1 || true
     rm -f /etc/systemd/system/crw-server.service /usr/local/bin/crw-server
     systemctl daemon-reload
-    log "Motor viejo crw-server retirado (relevo → Crawl4RS)"
+    log "Motor viejo crw-server retirado"
 fi
+docker rm -f enki-crawl4rs enki-crawl4rs-browser > /dev/null 2>&1 || true
+rm -rf /opt/d-os 2>/dev/null || true
 
 # Docker engine + plugin compose (docker-compose-v2 en Ubuntu; plugin oficial como fallback).
 if ! command -v docker &>/dev/null; then
@@ -174,81 +174,35 @@ if command -v docker &>/dev/null; then
 fi
 
 if docker compose version &>/dev/null; then
-    # El motor D-os: clon fresco o actualización (shallow).
-    if [ -d /opt/d-os/.git ]; then
-        git -C /opt/d-os pull --ff-only > /dev/null 2>&1 || warn "No se pudo actualizar /opt/d-os (sigue con la versión local)"
-    else
-        git clone --depth 1 https://github.com/noninapizzicas/d-os /opt/d-os > /dev/null 2>&1 \
-            || warn "Clone de D-os falló (¿red?). Crawl4RS no se levantará esta pasada."
-    fi
-
-    # Secreto JWT: nace UNA vez y vive en data/.env (excluido del rsync → persiste).
-    # El default del Dockerfile de D-os es público/forjable — jamás se usa.
     mkdir -p "${INSTALL_DIR}/data"
-    # CRAWL4RS_JWT_SECRET ya NO se genera: la ley de la frontera (D-os) deja la auth
-    # abierta cuando solo se publica a loopback. Si existe uno previo, se respeta (auth activa).
-    # Secreto de SearXNG: mismo trato (nace una vez, jamás el default público).
+    # Secreto de SearXNG: nace UNA vez y vive en data/.env (excluido del rsync → persiste);
+    # jamás el default público.
     if ! grep -q '^SEARXNG_SECRET_KEY=' "${INSTALL_DIR}/data/.env" 2>/dev/null; then
         echo "SEARXNG_SECRET_KEY=$(openssl rand -hex 32)" >> "${INSTALL_DIR}/data/.env"
         log "SEARXNG_SECRET_KEY generado en ${INSTALL_DIR}/data/.env"
     fi
 
-    # Red compartida entre órganos web (crawl4rs ↔ searxng).
+    # Red compartida entre órganos web (SearXNG · Headroom).
     docker network inspect enki-web > /dev/null 2>&1 || docker network create enki-web > /dev/null
 
-    if [ -d /opt/d-os ]; then
-        log "Construyendo y levantando enki-crawl4rs (la 1ª vez compila Rust: unos minutos)..."
-        # LEY DE LA FRONTERA (D-os): el host publica solo a 127.0.0.1 → la frontera vive
-        # aquí, no en el contenedor. Auth abierta declarada; el secreto JWT ya no es teatro
-        # obligatorio (si algún día expones el puerto, pon CRAWL4RS_JWT_SECRET y la auth activa).
-        _C4RS_SECRET="$(grep -m1 '^CRAWL4RS_JWT_SECRET=' "${INSTALL_DIR}/data/.env" 2>/dev/null | cut -d= -f2-)"
-
-        # MARCHA LARGA (Playwright): el wrapper (perfil 'larga') con su propio Chromium —
-        # es la 2ª marcha del motor (login con sesión, interacción, interceptar API, stealth,
-        # emulación). BEST-EFFORT: la 1ª vez baja la imagen oficial de Playwright (~1.7 GB) y
-        # tarda; si falla (disco/red) NO tumba la marcha corta — crawl4rs sigue con su
-        # navegador propio. Opt-out del setup ligero: ENKI_MARCHA_LARGA=0 sudo ./vps-setup.sh …
-        _PW_URL=""
-        if [ "${ENKI_MARCHA_LARGA:-1}" = "1" ]; then
-            log "Levantando la marcha larga (wrapper Playwright; 1ª vez descarga ~1.7 GB)..."
-            if docker compose -f "${REPO_DIR}/deployment/crawl4rs/docker-compose.yml" \
-                 --profile larga up -d --build browser > /dev/null 2>&1; then
-                _PW_URL="http://browser:8100"
-                log "Marcha larga arriba — crawl4rs escalará a Playwright (un solo Chromium: el del wrapper)"
-            else
-                warn "Marcha larga no levantó — crawl4rs usará su navegador propio (marcha corta intacta). Revisa: docker compose -f deployment/crawl4rs/docker-compose.yml --profile larga logs browser"
-            fi
-        else
-            log "Marcha larga desactivada (ENKI_MARCHA_LARGA=0) — solo marcha corta"
-        fi
-
-        # MARCHA CORTA (siempre): crawl4rs. CRAWL4RS_PLAYWRIGHT_URL se pasa SOLO si el wrapper
-        # subió — sin él, un endpoint vacío deja que la escalación caiga al navegador propio
-        # (nunca a un endpoint muerto). Se recrea el contenedor si el valor cambió (idempotente).
-        if CRAWL4RS_JWT_SECRET="${_C4RS_SECRET}" CRAWL4RS_PLAYWRIGHT_URL="${_PW_URL}" docker compose \
-             -f "${REPO_DIR}/deployment/crawl4rs/docker-compose.yml" up -d --build > /dev/null 2>&1; then
-            log "enki-crawl4rs arriba en 127.0.0.1:8081"
-            # UNA decisión, UNA llave: instalar el órgano ES el consentimiento — el
-            # interruptor nace ON en la instalación. Solo se siembra si el humano no
-            # decidió ya (el estado persistido manda, incluida su decisión de apagarlo).
-            node -e "
-              const fs=require('fs'),p='${INSTALL_DIR}/data/interruptores.json';
-              let st={estados:{}}; try{st=JSON.parse(fs.readFileSync(p,'utf8'))}catch(_){}
-              st.estados=st.estados||{};
-              if(!('crawl4rs' in st.estados)){ st.estados.crawl4rs=true; fs.writeFileSync(p,JSON.stringify(st,null,2)); console.log('sembrado'); }
-            " > /dev/null 2>&1 && log "Interruptor crawl4rs: ON (instalar es decidir; tu apagado manual se respeta)" || true
-        else
-            warn "enki-crawl4rs no levantó — el puente degrada honesto (503). Revisa: docker compose -f deployment/crawl4rs/docker-compose.yml logs"
-        fi
-        # SearXNG — backend de crawl4rs.buscar (misma red). Si falla, buscar da 503 y el resto sigue.
-        _SXNG_SECRET="$(grep -m1 '^SEARXNG_SECRET_KEY=' "${INSTALL_DIR}/data/.env" | cut -d= -f2-)"
-        if SEARXNG_SECRET_KEY="${_SXNG_SECRET}" docker compose \
-             -f "${REPO_DIR}/deployment/python-tools/docker-compose.searxng.yml" up -d > /dev/null 2>&1; then
-            log "SearXNG arriba (crawl4rs.buscar operativo)"
-        else
-            warn "SearXNG no levantó — crawl4rs.buscar responderá 503; leer/mapear/rastrear siguen"
-        fi
+    # SearXNG — backend de crawl4rs.buscar. Si falla, buscar da 503 y el resto sigue.
+    _SXNG_SECRET="$(grep -m1 '^SEARXNG_SECRET_KEY=' "${INSTALL_DIR}/data/.env" | cut -d= -f2-)"
+    if SEARXNG_SECRET_KEY="${_SXNG_SECRET}" docker compose \
+         -f "${REPO_DIR}/deployment/python-tools/docker-compose.searxng.yml" up -d > /dev/null 2>&1; then
+        log "SearXNG arriba (crawl4rs.buscar operativo)"
+    else
+        warn "SearXNG no levantó — crawl4rs.buscar responderá 503; leer/mapear/rastrear/entrar/abrir siguen (obscura)"
     fi
+
+    # UNA decisión, UNA llave: el órgano web (obscura) está instalado (§3a-ter-ab) → el
+    # interruptor crawl4rs nace ON. Solo se siembra si el humano no decidió ya (su apagado
+    # manual se respeta).
+    node -e "
+      const fs=require('fs'),p='${INSTALL_DIR}/data/interruptores.json';
+      let st={estados:{}}; try{st=JSON.parse(fs.readFileSync(p,'utf8'))}catch(_){}
+      st.estados=st.estados||{};
+      if(!('crawl4rs' in st.estados)){ st.estados.crawl4rs=true; fs.writeFileSync(p,JSON.stringify(st,null,2)); console.log('sembrado'); }
+    " > /dev/null 2>&1 && log "Interruptor crawl4rs: ON (instalar es decidir; tu apagado manual se respeta)" || true
 
     # Headroom — proxy de compresión de contexto (:8787). Mismo patrón que crawl4rs: lo
     # levanta root en el setup y el core le habla por HTTP → cero concesión de seguridad
@@ -841,11 +795,8 @@ echo "  Servicios:"
 echo "    enki           → node index.js (localhost:3000)"
 echo "    enki-frontend  → SvelteKit (localhost:3001)"
 echo "    caddy          → reverse proxy"
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-crawl4rs$'; then
-    echo "    enki-crawl4rs  → Crawl4RS órgano web · marcha corta (docker, localhost:8081)"
-fi
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-crawl4rs-browser$'; then
-    echo "    enki-crawl4rs-browser → wrapper Playwright · marcha larga (docker, red interna)"
+if systemctl is-active --quiet obscura 2>/dev/null || docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^obscura$'; then
+    echo "    obscura        → navegador web (Rust, CDP :9222) · órgano crawl4rs + verificador-visual"
 fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-searxng$'; then
     echo "    enki-searxng   → búsqueda web para crawl4rs.buscar (docker)"

@@ -1,21 +1,19 @@
-# SearXNG — backend de búsqueda para el /search de Crawl4RS (OPCIONAL).
+# SearXNG — backend de búsqueda para `crawl4rs.buscar` (OPCIONAL).
 #
 # Solo hace falta si quieres `crawl4rs.buscar` (búsqueda de palabra-clave en la
-# web abierta). leer/mapear/rastrear NO lo necesitan. SearXNG es Python → va en
-# Docker, aislado; el contenedor enki-crawl4rs lo alcanza por la red compartida
-# enki-web (nombre de servicio, sin exponer nada al host más allá de localhost).
+# web abierta). leer/mapear/rastrear/entrar/abrir NO lo necesitan (van por obscura).
+# SearXNG es Python → va en Docker, aislado. El módulo crawl4rs corre NATIVO en el
+# host y lo llama por HTTP en 127.0.0.1:8080 (env SEARXNG_URL).
 #
-# Levantar:  docker network create enki-web   # una vez (si no existe)
-#            docker compose -f deployment/python-tools/docker-compose.searxng.yml up -d
-# Cablear:   nada — el compose de deployment/crawl4rs/ ya apunta a
-#            SEARXNG_URL=http://enki-searxng:8080 por defecto.
+# Levantar:  docker compose -f deployment/python-tools/docker-compose.searxng.yml up -d
+# Cablear:   nada — modules/crawl4rs apunta a http://localhost:8080 por defecto.
 
 services:
   searxng:
     image: searxng/searxng:latest
     container_name: enki-searxng
     ports:
-      - "127.0.0.1:8080:8080"   # solo localhost (debug); crawl4rs entra por enki-web
+      - "127.0.0.1:8080:8080"   # el módulo crawl4rs (host) lo llama aquí (SEARXNG_URL)
     environment:
       - SEARXNG_BASE_URL=http://localhost:8080/
       # Secreto propio (vps-setup lo genera como SEARXNG_SECRET_KEY en data/.env).

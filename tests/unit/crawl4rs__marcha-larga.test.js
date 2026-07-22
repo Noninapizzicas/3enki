@@ -1,12 +1,13 @@
 'use strict';
 
 /**
- * crawl4rs__marcha-larga — la MARCHA LARGA del puente (login → sesión).
- * Simula el wrapper Playwright overrideando _playwrightCall. Verifica:
- *   - entrar: /login → captura sesión, devuelve un sesion_id handle (NO el storageState).
- *   - abrir: reusa la sesión por sesion_id → /abrir (con interceptar → JSON de la API).
+ * crawl4rs__marcha-larga — la MARCHA LARGA sobre OBSCURA (login → sesión).
+ * Simula el navegador overrideando los seams (_ejecutarLogin / _render). Verifica:
+ *   - entrar: login en obscura → captura storageState, devuelve un sesion_id handle.
+ *   - abrir: reusa la sesión por sesion_id → _render con el storageState inyectado
+ *     (+ interceptar → JSON de la API interna).
  *   - el storageState (secreto) nunca sale al bus; el LLM solo maneja el handle.
- *   - degradación honesta (interruptor OFF, wrapper caído → 503 sin_marcha_larga).
+ *   - degradación honesta (interruptor OFF, obscura caída → 503 sin_navegador).
  *   - sesión caducada / desconocida → 409; login fallido → 502; validaciones.
  *
  * Ejecutar: node tests/unit/crawl4rs__marcha-larga.test.js
@@ -39,14 +40,11 @@ const test = (n, f) => tests.push({ n, f });
 test('entrar feliz → sesion_id handle (NO devuelve el storageState)', async () => {
   const m = nuevo();
   let visto;
-  m._playwrightCall = async (path, payload) => {
-    visto = { path, payload };
-    return { status: 200, body: { sesion: STORAGE, final_url: 'https://x/my-account' } };
-  };
+  m._ejecutarLogin = async (url, pasos) => { visto = { url, pasos }; return { storageState: STORAGE, final_url: 'https://x/my-account' }; };
   const r = await m._entrar({ url: 'https://x/login', pasos: PASOS });
   assert.strictEqual(r.status, 200);
-  assert.strictEqual(visto.path, '/login');
-  assert.deepStrictEqual(visto.payload.pasos, PASOS, 'reenvía el guion tal cual');
+  assert.strictEqual(visto.url, 'https://x/login');
+  assert.deepStrictEqual(visto.pasos, PASOS, 'reenvía el guion tal cual');
   assert.ok(r.data.sesion_id.startsWith('ses_'), 'devuelve un handle');
   assert.strictEqual(r.data.final_url, 'https://x/my-account');
   assert.strictEqual(JSON.stringify(r.data).includes('abc'), false, 'el storageState NUNCA sale al bus');
@@ -54,12 +52,11 @@ test('entrar feliz → sesion_id handle (NO devuelve el storageState)', async ()
 
 test('abrir reusa la sesión por sesion_id e intercepta el JSON de la API', async () => {
   const m = nuevo();
-  m._playwrightCall = async (path, payload) => {
-    if (path === '/login') return { status: 200, body: { sesion: STORAGE, final_url: 'u' } };
-    // /abrir: el módulo inyecta el storageState desde el handle
-    assert.deepStrictEqual(payload.sesion, STORAGE, 'inyecta el storageState guardado');
-    assert.deepStrictEqual(payload.interceptar, { contiene: ['/api/'] });
-    return { status: 200, body: { html: '<b>ok</b>', final_url: payload.url, status: 200, intercepted: [{ url: 'https://x/api/precios', status: 200, json: { precio: 9 } }] } };
+  m._ejecutarLogin = async () => ({ storageState: STORAGE, final_url: 'u' });
+  m._render = async (url, opts) => {
+    assert.deepStrictEqual(opts.storageState, STORAGE, 'inyecta el storageState guardado');
+    assert.deepStrictEqual(opts.interceptar, { contiene: ['/api/'] });
+    return { html: '<b>ok</b>', final_url: url, status: 200, intercepted: [{ url: 'https://x/api/precios', status: 200, json: { precio: 9 } }] };
   };
   const ent = await m._entrar({ url: 'https://x/login', pasos: PASOS });
   const r = await m._abrir({ url: 'https://x/catalogo', sesion_id: ent.data.sesion_id, interceptar: { contiene: ['/api/'] } });
@@ -68,27 +65,27 @@ test('abrir reusa la sesión por sesion_id e intercepta el JSON de la API', asyn
   assert.deepStrictEqual(r.data.intercepted[0].json, { precio: 9 });
 });
 
-test('GATE: interruptor OFF → 503 apagado, sin tocar el wrapper', async () => {
+test('GATE: interruptor OFF → 503 apagado, sin tocar el navegador', async () => {
   const m = nuevo({ activo: false });
   let tocado = false;
-  m._playwrightCall = async () => { tocado = true; return { status: 200, body: {} }; };
+  m._ejecutarLogin = async () => { tocado = true; return {}; };
   const r = await m._entrar({ url: 'https://x/login', pasos: PASOS });
   assert.strictEqual(r.status, 503);
   assert.strictEqual(r.error.details.motivo, 'apagado');
   assert.strictEqual(tocado, false);
 });
 
-test('wrapper caído (throw) → 503 sin_marcha_larga', async () => {
+test('obscura caída (throw) → 503 sin_navegador', async () => {
   const m = nuevo();
-  m._playwrightCall = async () => { throw new Error('ECONNREFUSED'); };
+  m._ejecutarLogin = async () => { throw new Error('ECONNREFUSED'); };
   const r = await m._entrar({ url: 'https://x/login', pasos: PASOS });
   assert.strictEqual(r.status, 503);
-  assert.strictEqual(r.error.details.motivo, 'sin_marcha_larga');
+  assert.strictEqual(r.error.details.motivo, 'sin_navegador');
 });
 
-test('login fallido (el wrapper responde {fallo}) → 502 LOGIN_FALLIDO, sin sesión', async () => {
+test('login fallido ({fallo}) → 502 LOGIN_FALLIDO, sin sesión', async () => {
   const m = nuevo();
-  m._playwrightCall = async () => ({ status: 200, body: { fallo: { tipo: 'error', motivo: 'selector no encontrado' } } });
+  m._ejecutarLogin = async () => ({ fallo: { tipo: 'error', motivo: 'selector no encontrado' } });
   const r = await m._entrar({ url: 'https://x/login', pasos: PASOS });
   assert.strictEqual(r.status, 502);
   assert.strictEqual(r.error.code, 'LOGIN_FALLIDO');
@@ -97,7 +94,7 @@ test('login fallido (el wrapper responde {fallo}) → 502 LOGIN_FALLIDO, sin ses
 
 test('abrir con sesion_id desconocido → 409 SESION_DESCONOCIDA', async () => {
   const m = nuevo();
-  m._playwrightCall = async () => { throw new Error('no debería llamar'); };
+  m._render = async () => { throw new Error('no debería llamar'); };
   const r = await m._abrir({ url: 'https://x/y', sesion_id: 'ses_inexistente' });
   assert.strictEqual(r.status, 409);
   assert.strictEqual(r.error.code, 'SESION_DESCONOCIDA');
@@ -106,7 +103,7 @@ test('abrir con sesion_id desconocido → 409 SESION_DESCONOCIDA', async () => {
 test('sesión caducada (TTL) → 409', async () => {
   const m = nuevo();
   m._sesionTtlMs = 5;
-  m._playwrightCall = async () => ({ status: 200, body: { sesion: STORAGE, final_url: 'u' } });
+  m._ejecutarLogin = async () => ({ storageState: STORAGE, final_url: 'u' });
   const ent = await m._entrar({ url: 'https://x/login', pasos: PASOS });
   await new Promise((r) => setTimeout(r, 10));
   const r = await m._abrir({ url: 'https://x/y', sesion_id: ent.data.sesion_id });

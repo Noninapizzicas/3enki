@@ -40,8 +40,8 @@ docker network create enki-web   # una vez (si no existe)
 docker compose -f deployment/python-tools/docker-compose.searxng.yml up -d
 ```
 
-Nada más que cablear: el compose de `deployment/crawl4rs/` ya apunta a
-`SEARXNG_URL=http://enki-searxng:8080` por la red compartida `enki-web`.
+Nada más que cablear: `modules/crawl4rs` (nativo en el host) apunta a
+`http://localhost:8080` por defecto (env `SEARXNG_URL`).
 Sin SearXNG, `crawl4rs.buscar` devuelve 503 con su prescripción y el resto sigue.
 
 Dos piezas que el compose ya trae (aprendidas en vivo):
@@ -79,9 +79,9 @@ caliente. **Fallback seguro:** interruptor OFF o proxy caído → proveedor dire
 ## El reparto (por qué así)
 
 ```
-Rust puro           → NATIVO en el VPS   (binario limpio de una pieza)
-Rust + Chromium     → DOCKER aislado     (Crawl4RS: el binario es limpio, Chromium es
-  (Crawl4RS)                              la dependencia sucia — deployment/crawl4rs/)
+Rust puro           → NATIVO en el VPS   (binario limpio de una pieza: obscura, OCR4RS)
+Chromium/navegador  → se ELIMINA         (el órgano web pasó a obscura, navegador Rust
+  (era Crawl4RS)                          nativo sin Chromium — ya no hay Docker web)
 Python (SearXNG,    → DOCKER aislado     (dependencias sucias, no ensucian el VPS)
         Headroom,
         tus tools)

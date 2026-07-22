@@ -1,7 +1,7 @@
 {
   "name": "ai-gateway",
-  "version": "2.34.0",
-  "_v2_34_nota": "v2.34.0: HERMES como TRABAJADOR de Enki (provider 'hermes'). No es un LLM crudo: al otro lado está el agente NousResearch/hermes-agent (api_server OpenAI-compatible, LOCAL en 127.0.0.1:8642) con su arsenal propio (browser, código, subagentes, skills) y MEMORIA persistente — Enki entrega el OBJETIVO, Hermes decide el CÓMO. Memoria por proyecto: cabecera X-Hermes-Session-Key = 'enki:<project_id>' (override: options.hermes_session_key). GOBIERNO (la bomba, gobernada): interruptor 'hermes-agente' (grupo 'sistema', OFF por defecto — OFF corta también la selección explícita, patrón headroom-switch con singleton hermes-switch.js) + credencial obligatoria (credential-manager 'hermes' o env HERMES_API_KEY = API_SERVER_KEY de Hermes) + AUDIT hermes.invocado por cada delegación (→ propiocepción, espíritu portal.invocado; el emisor lo cablea index.js en onLoad vía hermesSwitch.setAudit). priority 90: JAMÁS gana el auto-fallback — a Hermes solo se llega a propósito. Límite honesto: makeRequest corta a 90s; encargos largos → capa async futura (POST /v1/runs + run_id). Deploy del servicio: deployment/hermes/ (systemd + config). La dirección inversa (Hermes→Enki vía Portal MCP, los ojos) es config de Hermes, no código de Enki: deployment/hermes/config.mcp-enki.yaml.example. Test: ai-gateway__hermes-provider.",
+  "version": "2.35.0",
+  "_v2_35_nota": "v2.35.0: RETIRADO el provider 'hermes' — Hermes queda SEPARADO del ecosistema (decisión del dueño). Se elimina el provider hermes-provider.js, el singleton hermes-switch.js, el interruptor 'hermes-agente', el evento de audit hermes.invocado, la entrada del selector en el frontend (ProviderPanel) y todo el provisioning del deploy (deployment/hermes/, bloque en vps-setup.sh, servicio condicional en vps.manifest.js). Retirada LIMPIA: nada bloqueado ni saboteado; Hermes sigue existiendo por su cuenta si el dueño lo mantiene en el VPS, solo deja de estar acoplado a Enki. La v2.34.0 lo había integrado como trabajador (provider OpenAI-compat contra api_server local); esta versión deshace ese acoplamiento.",
   "_v2_33_nota": "v2.33.0 (2026-07-16): POSICIÓN 1 (NACIMIENTO) del blindaje de escritura — fs.write SALE de GLOBAL_TOOLS. Era una primitiva peligrosa del módulo FS que se filtraba a TODA página; en una página de dominio el LLM debe hablar los EVENTOS de su dominio (el dato de dominio se cambia emitiendo la causa de su dueño, no forjando el fichero). Raíz del incidente the-pirate: el LLM en la página escandallo tenía fs.write y truncó recetas.json (dato ajeno, otro módulo) → 25 recetas perdidas. Ahora fs.write nace SOLO donde escribir ficheros ES el dominio (chat plano sin page_id devuelve `all`; páginas con prefijo 'fs' por prefijo). fs.read/list/search se quedan universales (leer es libre). Complementa la RED (filesystem 2.3.0 snapshot). Test: ai-gateway-cajones (fs.write NO llega a página de cajones · fs.read sí).",
   "_v2_32_nota": "v2.32.0: SURFACING GENERAL de GLOBAL_TOOLS en páginas blueprint/cajones. Raíz del caso (the-pirate, escandallo): el LLM de una página de cajones decía 'no tengo invoke_agent / crear_agente_desde_caso' porque _getTools retornaba en la rama blueprint/cajones ANTES del bloque GLOBAL_TOOLS — el comentario decía 'siempre se exponen aunque haya page_id' pero el código se iba antes. v2.29.0 ya había visto ESTE MISMO bug (el LLM decía 'NO TENGO crear_lista') pero lo curó SOLO para las tools del rail, metiéndolas a mano en las ramas blueprint. Cura general: GLOBAL_TOOLS se define ARRIBA de las ramas; globalSlice() (filtrado de all + _mapInvokeAgentEnum) se añade a las 3 ramas (blueprint sin cajones · cajones · no-blueprint) con dedupe por nombre (subsume el parche del rail). Además el prompt de blueprint (_buildCajonesSystemPrompt + el base) gana una sección CAPACIDADES GLOBALES que le EXPLICA al LLM que tiene buscar_agente/invoke_agent/crear_agente_desde_caso/fs.*/web y que NO diga que no las tiene ni proponga importar del ecosistema. Test: ai-gateway-cajones (71/71, +3: cajones expone globales · blueprint sin cajones expone globales · dedupe rail/global).",
   "_v2_31_nota": "v2.31.0: EL TIRO AUTOMÁTICO del juez del rail (como DeerFlow: evaluador post-run con safety caps). Tras un turno REAL con proyecto, _executeLLM dispara _evaluarRailAuto DETACHED (fire-and-forget, sin await → no retrasa la respuesta). Si el rail activo tiene objetivo (opt-in) y no está ya satisfecho: UNA llamada de juez (perspectiva-c, temp 0, ~400 tok, sin tools) → _parseVeredicto → aplica via estados.evaluar → el próximo turno lo lee en _composeRailSection. SAFETY CAPS por conversación (_railEvalState): rail_eval_max=8 · rail_eval_max_no_progress=2 (mismo blocker 2 veces → para; blocker que cambia resetea). Best-effort absoluto: cualquier fallo se traga, nunca rompe el turno. Cierra el follow-up que la cabecera marcaba. Test: ai-gateway__rail-juez-auto (10/10). Ver CLAUDE.md 'Cúpula de estados / EL TIRO AUTOMÁTICO'.",
@@ -72,11 +72,7 @@
     "fs.read.request",
     {
       "event": "interruptor.registrar",
-      "description": "Registra los botones del panel central al cargar: 'sintonizador' (grupo 'chat', default ON — gatea la lente de sintonía), 'headroom' (grupo 'sistema', default OFF — proxy de compresión) y 'hermes-agente' (grupo 'sistema', default OFF — gobierna la delegación al agente Hermes)."
-    },
-    {
-      "event": "hermes.invocado",
-      "description": "AUDIT: cada delegación de Enki al agente Hermes (provider 'hermes', api_server local 127.0.0.1:8642). {ok, duracion_ms, model, session_key, modo: chat|stream, error?}. La capta la propiocepción — ninguna delegación es invisible. Gobernada por el interruptor 'hermes-agente' (OFF por defecto); memoria por proyecto vía X-Hermes-Session-Key."
+      "description": "Registra los botones del panel central al cargar: 'sintonizador' (grupo 'chat', default ON — gatea la lente de sintonía) y 'headroom' (grupo 'sistema', default OFF — proxy de compresión)."
     }
   ],
   "subscribes": [
@@ -266,15 +262,6 @@
           "kimi-k2.5",
           "kimi-k2-thinking",
           "moonshot-v1-128k"
-        ]
-      },
-      "hermes": {
-        "enabled": true,
-        "priority": 90,
-        "api_base": "http://127.0.0.1:8642",
-        "default_model": "hermes-agent",
-        "models": [
-          "hermes-agent"
         ]
       }
     },

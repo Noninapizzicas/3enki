@@ -1,11 +1,10 @@
 ---
 id: plataforma/herramientas-externas
 dominio: plataforma
-resumen: Órganos externos por naturaleza — Crawl4RS (web, NATIVO sobre obscura, sin Chromium) · OCR4RS (imagen/PDF escaneado, Rust puro NATIVO) · Python (SearXNG, Headroom, Docker) · Hermes (agente trabajador nativo :8642, delegación gobernada). Las dos alas de la evidencia externa (web+físico) + el brazo que ejecuta. Enganche al ejecutor por config.
+resumen: Órganos externos por naturaleza — Crawl4RS (web, NATIVO sobre obscura, sin Chromium) · OCR4RS (imagen/PDF escaneado, Rust puro NATIVO) · Python (SearXNG, Headroom, Docker). Las dos alas de la evidencia externa (web+físico). Enganche al ejecutor por config.
 fuentes:
   - deployment/python-tools/**
   - deployment/ocr4rs/**
-  - deployment/hermes/**
   - deployment/vps-setup.sh
   - deployment/vps.manifest.js
   - modules/crawl4rs/**
@@ -185,40 +184,6 @@ FASE 0 · PROVISIONING (HECHA, Docker)  deployment/python-tools/headroom/ {
 FIDELIDAD  los frenos de blueprint (<mod>.validar → 422) son el test AUTOMÁTICO: si la compresión rompiera un
            contrato, se ve en el acto. Por eso nace OFF y se gradúa (fases como el ejecutor). Ver propuesta
            arquitectura/decisiones/propuestas/headroom-compresion.md.
-```
-
-## HERMES (repo NousResearch/hermes-agent) — el AGENTE TRABAJADOR nativo (:8642)
-
-> No es una herramienta: es un **agente autónomo** con arsenal propio (browser, ejecución de
-> código, subagentes, skills) y **memoria persistente**. Enki le entrega el OBJETIVO (provider
-> `hermes` del ai-gateway, v2.33.0); Hermes decide el CÓMO. La suma, no el orgullo: Enki pone
-> gobierno (interruptor + audit + propiocepción), Hermes pone el músculo.
-
-```
-NATURALEZA  Python (uv/3.11) NATIVO en /home/hermes (usuario dedicado, contenido) — instalación
-            DETERMINISTA con uv (clonar repo → uv sync --extra all --locked → symlink), NO el
-            instalador curl|bash de Nous (agarra /dev/tty y hace sudo como 'hermes' → cuelga el
-            deploy). Sin Docker (patrón ocr4rs: sin dependencia sucia que contener, frontera 127.0.0.1).
-PUERTA      api_server OpenAI-compatible en 127.0.0.1:8642 (key OBLIGATORIA — nace UNA vez en
-            /opt/enki/data/.env como HERMES_API_KEY; index.js carga data/.env → el provider la ve).
-MEMORIA     X-Hermes-Session-Key = 'enki:<project_id>' — cada proyecto tiene SU Hermes que recuerda.
-PROVISIONING  deployment/hermes/setup-hermes.sh (idempotente, uv determinista; --fresh purga y
-            reinstala; vía vps-setup.sh 3a-quater u standalone; opt-out --sin-hermes). systemd
-            ExecStart='hermes gateway run' (foreground, corre como 'hermes'; NO 'gateway start',
-            que exige root). vps.manifest.js exige hermes-gateway SOLO donde el binario existe (VPS
-            sin Hermes sigue verde). Interruptor 'hermes-agente' sembrado ON al instalar (instalar
-            es decidir; el apagado manual del panel se respeta). Paso manual único: el proveedor
-            LLM de Hermes (su key) → `sudo -u hermes -i hermes setup`.
-GOBIERNO    interruptor 'hermes-agente' (OFF de fábrica en el módulo; OFF corta también la selección
-            explícita) · priority 90 (el auto-fallback JAMÁS cae en Hermes) · AUDIT hermes.invocado
-            {ok, duracion_ms, model, session_key, modo, error?} → propiocepción (espíritu portal.invocado).
-OJOS (inverso, YA cableado en el deploy · paso 5b)  Hermes es cliente MCP → bridge
-            mcp/enki-mcp-server.js declarado en su config.yaml (mcp_servers.enki) + hermes al grupo
-            www-data (lectura del bridge). NO se hornea ENKI_PROJECT (el Portal aplica su scope).
-            INERTE hasta que el dueño encienda 'portal-mcp' (OFF por defecto): cablearlo no abre nada.
-            DOBLE REJA (allowlist de Hermes + guard del Portal). --sin-ojos lo salta.
-LÍMITE VIVO  90s/request (makeRequest) — encargos largos → capa async futura (POST /v1/runs + run_id
-            → hermes.encargo.completado/.failed por el bus).
 ```
 
 ## OFRECER TOOLS COMO SKILL DE DESCUBRIMIENTO — las tools viven en segundo plano

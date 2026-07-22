@@ -358,21 +358,6 @@ ABSTRACT CLASE ProviderClient {
 }
 ```
 
-### Provider `hermes` — el agente trabajador (v2.33.0)
-
-No es un LLM crudo: al otro lado está el agente **NousResearch/hermes-agent**
-(api_server OpenAI-compatible, LOCAL en `127.0.0.1:8642`) con arsenal propio
-(browser, código, subagentes, skills) y **memoria persistente por proyecto**
-(`X-Hermes-Session-Key: enki:<project_id>`). Enki entrega el OBJETIVO; Hermes
-decide el CÓMO. Gobierno: interruptor `hermes-agente` (grupo sistema, **OFF por
-defecto** — OFF corta también la selección explícita; singleton
-`providers/hermes-switch.js`, patrón headroom) + key obligatoria
-(credential-manager `hermes` / env `HERMES_API_KEY`) + AUDIT `hermes.invocado`
-por delegación → propiocepción (espíritu `portal.invocado`). `priority 90`: el
-auto-fallback jamás cae en Hermes. Límite vivo: 90s por request — encargos
-largos → capa async futura (`POST /v1/runs`). Deploy del servicio y la
-dirección inversa (Hermes→Enki vía Portal MCP, doble reja): `deployment/hermes/`.
-
 ## CONVERSACION - AI-GATEWAY v2 — Cajones-internas · RPC blueprints · Nervio · Foco
 
 > Métodos nuevos sobre la `CLASE AIGateway`.

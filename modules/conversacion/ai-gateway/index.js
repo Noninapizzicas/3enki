@@ -1486,18 +1486,18 @@ class AiGatewayModule extends BaseModule {
       _chat_context:   ctx.context          ?? null
     };
 
-    // Invocacion canonica por bus (unico path permitido).
-    //
-    // El loader auto-suscribe `<toolName>` cuando registra una tool con handler
-    // (ver core/modules/loader.js::_wireToolBusSubscription). Para tools que
-    // viven puramente en el bus (sin handler en su modulo, ej. invoke_agent
-    // registrada por ai-agent-framework via su propio subscribe), el flujo es
-    // el mismo: alguien escucha `<toolName>`, publica `<toolName>.response`
-    // con `{request_id, result|error}`.
-    //
-    // Ver tools.contract.json:
-    //   - decisiones_arquitectonicas.tool_invocacion_canonica_por_bus
-    //   - prohibido.tool_invocacion_directa_via_toolsRegistry_handler
+    // 🆕 RUTA DIRECTA v3: si la tool tiene handler en su módulo, ejecutar sin MQTT.
+    // El módulo igual publica su evento (propiocepción lo captura), el LLM no gestiona el bus.
+    // Rompe intencionadamente: prohibido.tool_invocacion_directa_via_toolsRegistry_handler
+    const toolDef = this.moduleLoader?.toolsRegistry?.get?.(toolName);
+    if (toolDef?.handler && toolDef?.module) {
+      const mod = this.moduleLoader?.loadedModules?.get?.(toolDef.module);
+      if (mod && typeof mod[toolDef.handler] === 'function') {
+        return await mod[toolDef.handler](enrichedArgs);
+      }
+    }
+
+    // Invocacion canonica por bus (fallback si la tool no tiene handler directo).
     const request_id = crypto.randomUUID();
     const timeoutMs = toolName === 'invoke_agent' ? 150000 : (this.config.tool_timeout_ms || 15000);
     return new Promise((resolve, reject) => {

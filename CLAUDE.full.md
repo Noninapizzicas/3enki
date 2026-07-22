@@ -17008,10 +17008,11 @@ DECISIÓN meta-frame (pipeline genérico parametrizado por tema) = se extrae cua
 
 ---
 
-# HERRAMIENTAS EXTERNAS — Crawl4RS en Docker (el órgano web) · Python en Docker (Headroom · el contenedor universal)
+# HERRAMIENTAS EXTERNAS — Crawl4RS sobre obscura (el órgano web, nativo) · Python en Docker (Headroom · el contenedor universal)
 
-> Cada pieza en su sitio POR NATURALEZA. Un binario Rust estático puro va NATIVO en el VPS;
-> cuando arrastra una dependencia sucia (Chromium), va CONTENIDO en Docker — Crawl4RS. Lo Python
+> Cada pieza en su sitio POR NATURALEZA. Un binario Rust estático puro va NATIVO en el VPS
+> (obscura, OCR4RS); cuando una dependencia sucia (Chromium) se puede ELIMINAR, se elimina — el
+> órgano web pasó de Docker+Chromium (D-os) a obscura nativa. Lo que sigue sucio va CONTENIDO. Lo Python
 > (dependencias sucias, modelos ML, servicios externos) va AISLADO en Docker. **El contenedor
 > Python es el hogar de TODA herramienta Python que quepa** — no un contenedor por herramienta,
 > sino un lugar Python que crece. La reja del ejecutor ya toma la imagen por config
@@ -17024,7 +17025,7 @@ DECISIÓN meta-frame (pipeline genérico parametrizado por tema) = se extrae cua
   "esquema": "herramientas-externas-v2",
   "reparto_por_naturaleza": {
     "rust_binario_estatico_puro": "NATIVO en el VPS (cargo install + systemd). Una pieza, sin runtime que ensucie.",
-    "rust_con_dependencia_sucia": "DOCKER aislado. Ej: Crawl4RS — el binario es limpio pero arrastra Chromium; lo sucio va contenido (deployment/crawl4rs/).",
+    "rust_con_dependencia_sucia": "si la dep sucia se puede ELIMINAR, se elimina (mejor que contener). Ej: el órgano web arrastraba Chromium (Docker D-os) → se pasó a obscura (navegador Rust nativo, sin Chromium). Si NO se puede eliminar, DOCKER aislado.",
     "python_todo": "DOCKER aislado. Dependencias sucias / modelos ML / servicios → no ensucian el VPS. HOGAR ÚNICO: deployment/python-tools/ (una casa Python que crece, NO un contenedor por herramienta)."
   },
   "hogar_python_unico": "deployment/python-tools/ — imagen base enki-python-tools (para el ejecutor) + inquilinos como servicios (SearXNG, Headroom). Añadir una tool Python = crecer aquí, no montar un stack nuevo.",
@@ -17046,73 +17047,65 @@ ENGANCHE AL EJECUTOR (cero código) {
   NOTA: contenedor_imagen es GLOBAL al ejecutor. Node+Python a la vez = una imagen que traiga ambos.
 }
 INQUILINOS (servicios Python, cada uno su compose bajo python-tools/) {
-  SearXNG   docker-compose.searxng.yml — backend de /search para crawl4rs.buscar (OPCIONAL; leer/mapear/
-            rastrear NO lo necesitan). Red compartida enki-web: el contenedor enki-crawl4rs lo alcanza
-            por nombre (SEARXNG_URL=http://enki-searxng:8080). 127.0.0.1:8080 queda solo para debug.
+  SearXNG   docker-compose.searxng.yml — backend de crawl4rs.buscar (OPCIONAL; leer/mapear/rastrear/
+            entrar/abrir NO lo necesitan, van por obscura). El módulo crawl4rs (nativo en el host) lo
+            llama por HTTP en 127.0.0.1:8080 (env SEARXNG_URL). Sin él, buscar da 503 sin_busqueda.
   Headroom  headroom/Dockerfile + docker-compose.headroom.yml — proxy de compresión de contexto (ver abajo).
 }
 ```
 
-## Crawl4RS (D-os) — el ÚNICO órgano web del bus (Docker) + puente + semillas de cantera
+## Crawl4RS — el ÚNICO órgano web del bus, CENTRALIZADO en Enki sobre obscura + semillas de cantera
 
 ```
-QUÉ ES  Crawler Rust del repo hermano D-os (modo auto: fetch HTTP ligero primero, navegador real
-        Chromium/CDP + stealth solo ante 403/challenge/JS pesado · crawl profundo BFS/DFS ·
-        extracción CSS/semántica/JSON-LD · /search vía SearXNG · /map). Da a Enki datos web frescos
-        DENTRO del runtime. Caso motivador: precio/cantidad/formato de ingredientes (soysuper) para
-        escandallo — reemplazo del API de Mercadona no oficial y frágil.
+QUÉ ES  El órgano web de Enki: leer · rastrear · mapear · buscar · descargar + la marcha larga
+        (entrar/abrir, login con sesión). Da a Enki datos web frescos DENTRO del runtime. Caso
+        motivador: precio/cantidad/formato de ingredientes (soysuper) para escandallo.
 
-RELEVO (v0.2.0 del puente)  fastcrw (motor crw-server nativo :3002 + puente tools_http) RETIRADO:
-        el modo auto de Crawl4RS cubre el fetch ligero que hacía crw-server, y el navegador real
-        elimina su límite verificado (páginas JS-pesadas → timeout sin render). Un motor, todas
-        las puertas: leer · buscar · mapear · rastrear. El Chromium de crawling vive SOLO en el
-        contenedor (D-os) — el HOST ya no instala Chromium: WhatsApp va por Meta Cloud API (HTTP) y
-        los OJOS (verificador-visual) por obscura (navegador Rust). Único Chromium restante: este.
+CENTRALIZADO (v0.5.0)  el motor dejó de vivir en el repo hermano D-os (Docker + Chromium + un
+        wrapper Playwright aparte). Como OBSCURA (navegador headless en Rust, V8, SIN Chromium,
+        stealth) ya corre en Enki (:9222, ver plataforma/enki-sense — la conduce verificador-visual),
+        este módulo la conduce por CDP con puppeteer-core. Murió el contenedor enki-crawl4rs y su
+        Chromium; murió el wrapper Playwright. Un solo navegador para toda Enki: obscura.
 
-POR QUÉ DOCKER (la excepción que confirma "Rust → nativo"): el binario es limpio pero ARRASTRA
-        Chromium — la dependencia sucia. Reparto por NATURALEZA: lo sucio va contenido (como python-tools).
+RELEVO (v0.2.0 del puente)  fastcrw (motor crw-server nativo :3002) ya había sido retirado.
 
-1 · MOTOR (Docker)  deployment/crawl4rs/ {
-     docker-compose.yml  build desde el clon /opt/d-os (override DOS_DIR) → imagen enki-crawl4rs.
-     127.0.0.1:8081→8080 (el :8080 local es de SearXNG) · shm_size 1gb (Chromium revienta con 64MB)
-     · CRAWL4RS_JWT_SECRET OBLIGATORIO sin default (el del Dockerfile de D-os es público/forjable;
-       compose falla si falta — fail-closed) · CRAWL4RS_API_KEY opcional · red compartida enki-web
-       con SearXNG (SEARXNG_URL=http://enki-searxng:8080) · healthcheck TCP por bash.
-     PROVISIONING AUTOMÁTICO  deployment/vps-setup.sh (sección 3a-bis) lo hace TODO en el
-       `sudo ./deployment/vps-setup.sh <dominio>`: docker engine + plugin compose · retira el
-       crw-server viejo si quedó · clona/actualiza /opt/d-os · genera el secreto UNA vez en
-       data/.env (persiste: data/ está excluido del rsync) · crea la red enki-web · levanta
-       enki-crawl4rs + SearXNG. Idempotente y guardado (fallo → warn, el puente degrada honesto).
-       Instalar el engine aquí NO mete a www-data en el grupo docker (eso sigue opt-in, --docker).
-     README.md  el setup lo hace solo; la receta manual queda como plan B / debug.
+REPARTO de las 7 puertas {
+     leer · rastrear · mapear   → OBSCURA por CDP: render real + markdown (readability-lite EN la
+       página, obscura V8) + extracción de enlaces + extract_css. rastrear = BFS con dedup + tope
+       (max_depth/max_pages, mismo dominio salvo cross_domain).
+     entrar · abrir (login)     → OBSCURA por CDP: entrar ejecuta el guion de pasos
+       [fill/click/wait/scroll/press] y captura el storageState (cookies + localStorage); abrir
+       reinyecta la sesión e intercepta el JSON de la API interna (page.on('response'); precios B2B).
+     buscar                     → SearXNG directo (JSON API, /search?format=json). Ya en Enki
+       (deployment/python-tools); el módulo lo llama por HTTP, sin pasar por el motor.
+     descargar                  → fetch binario plano (url→base64+content_type); ni navegador hace falta.
   }
-2 · PUENTE (bus)  modules/crawl4rs/ (v0.4.0) {
-     MARCHA CORTA/AUTO (axum :8081) — leer/rastrear job-based (token JWT cacheado → POST /crawl →
-     poll → result, retry ante 401); buscar/mapear directos (POST /search · /map). Eventos
-     crawl4rs.{leer,rastrear,buscar,mapear}.request → .response. Tool leer_web (url, query BM25,
-     extract_semantic).
-     MARCHA LARGA (wrapper Playwright :8100) — login→sesión, la puerta de las páginas con contraseña.
-     crawl4rs.entrar {url, pasos[fill/click/wait/scroll]} → POST wrapper /login → captura el
-     storageState → devuelve un sesion_id (HANDLE; el storageState = secreto se guarda server-side,
-     Map TTL 30 min, NUNCA sale al bus). crawl4rs.abrir {url, sesion_id, interactuar?, interceptar?}
-     → POST wrapper /abrir reusando la sesión → {html, intercepted}; interceptar captura el JSON de la
-     API interna (precios B2B). Tools entrar_web + abrir_web. Wrapper = OTRO servicio
-     (CRAWL4RS_PLAYWRIGHT_URL, :8100), no el axum → degradación propia 'sin_marcha_larga'. Sesión
-     caducada → 409.
-     COMÚN — NACE OFF (interruptor 'crawl4rs', cubre las dos marchas) · degrada honesto (503
-     {degradado, motivo}; buscar sin SearXNG → la prescripción viaja en message). Precedencia env >
-     config (CRAWL4RS_BASE_URL/API_KEY/PLAYWRIGHT_URL). Tests: crawl4rs__index · crawl4rs__marcha-larga.
+
+1 · PUENTE = MOTOR (bus, NATIVO)  modules/crawl4rs/ (v0.5.0) {
+     Seams del navegador aislados y overridables → la lógica es pura y testeable:
+       _render(url,opts)         una página en obscura → {html, markdown, enlaces, final_url, status, intercepted}
+       _ejecutarLogin(url,pasos) el guion de login → {storageState, final_url}
+       _buscarSearx(query,limit) SearXNG → resultados
+       _fetchBinario(url)        GET binario (descargar)
+     Eventos crawl4rs.{leer,rastrear,mapear,buscar,descargar,entrar,abrir}.request → .response.
+     El storageState (secreto) se guarda server-side (Map TTL 30 min), NUNCA sale al bus — el LLM
+     solo maneja un sesion_id (handle). Sesión caducada → 409.
+     NACE OFF (interruptor 'crawl4rs') — el botón aquí SÍ protege un estado real: el EGRESS a la web
+     (excepción sin-botón). Degrada honesto: OFF → 503 apagado; obscura no responde → 503
+     sin_navegador; SearXNG caído → 503 sin_busqueda. Config: obscura_url (env CRAWL4RS_OBSCURA_URL),
+     searxng_url (env SEARXNG_URL). Tests: crawl4rs__index (15) · crawl4rs__marcha-larga (8).
+     NOTA de honestidad: la verificación EN VIVO (obscura conduciendo un sitio real) queda pendiente
+     igual que en verificador-visual (obscura no corre en el entorno de tests); la lógica va 23/23.
   }
+2 · DESPLIEGUE  vps-setup.sh §3a-bis ya no clona D-os ni levanta enki-crawl4rs: retira el contenedor
+     viejo + el wrapper Playwright + el clon /opt/d-os, y solo levanta SearXNG (backend de buscar).
+     obscura la provisiona §3a-ter-ab. El interruptor crawl4rs nace ON (el órgano está instalado).
 3 · DESCUBRIMIENTO (skill-first, NO se cablea a escandallo) {
-     leer-web (genérico, dominio web): el canal — bus.publishAndWait('crawl4rs.leer.request')
-       y hermanos, leer el error, el ritmo. precio-ingredientes-web (dominio escandallo, autocontenida):
-       el saber soysuper — descubrir por /search (no adivinar slug), leer la ficha, guard no-inventar
-       (precio real o 'sin_precio', mismo mandato que el freno PRECIO_INVENTADO). La cantera las
-       auto-indexa; el conserje las ofrece al costear.
+     leer-web (genérico): el canal — bus.publishAndWait('crawl4rs.leer.request') y hermanos.
+     precio-ingredientes-web (escandallo, autocontenida): descubrir por buscar (no adivinar slug),
+     leer la ficha, guard no-inventar (precio real o 'sin_precio'). La cantera las auto-indexa.
   }
-TESTS  crawl4rs__index (9) · leer-web-seed (4) · precio-ingredientes-web-seed (4).
-HORIZONTE  Fase 7 de D-os = crate crawl4rs-mqtt (el motor habla MQTT nativo por
-           core/<id>/api/request/crawl/*) → este puente HTTP se retira; el compose solo cambia el CMD.
+TESTS  crawl4rs__index (15) · crawl4rs__marcha-larga (8) · leer-web-seed (4) · precio-ingredientes-web-seed (4).
 ```
 
 ## OCR4RS (repo ocr4rs) — el órgano FÍSICO NATIVO (imagen/PDF escaneado → texto)
@@ -17122,9 +17115,9 @@ QUÉ ES  Motor OCR del repo hermano ocr4rs (Rust PURO — ocrs+rten, sin ONNX/MN
         Imagen o PDF ESCANEADO → texto. Rasteriza el PDF (extrae el ráster embebido, NO renderiza)
         y limpia la imagen (deskew·normalizar·binarizar opc.) DENTRO — preparar la imagen ES hacer OCR.
 
-POR QUÉ NATIVO (no Docker, a diferencia de crawl4rs)  la regla de la casa reparte por NATURALEZA:
-        Rust estático PURO → nativo (como fue fastcrw); Rust + dependencia sucia (Chromium) → Docker.
-        OCR4RS no arrastra Chromium ni Python → no hay nada sucio que contener → cargo + systemd.
+POR QUÉ NATIVO  la regla de la casa reparte por NATURALEZA: Rust estático PURO → nativo.
+        OCR4RS no arrastra Chromium ni Python → no hay nada sucio que contener → cargo + systemd
+        (igual que obscura, el navegador web que reemplazó al Chromium de crawl4rs).
 
 LAS DOS ALAS DE AFIRMACION_EXTERNA (prisma-del-caso)  una afirmación externa entra con su dirección
         de vuelta. Hay dos, ahora las dos cubiertas: la web (url·api_id → crawl4rs) y el papel/imagen
@@ -17281,15 +17274,16 @@ SIGUIENTE (fases)  gate del rail (no cerrar en 'manual' sin agotar el retry pres
 
 ```
 EVENTOS {
-  crawl4rs.{leer,rastrear,buscar,mapear}.request → .response  (marcha corta/auto → axum :8081)
-  crawl4rs.{entrar,abrir}.request → .response                 (marcha larga → wrapper Playwright :8100)
-  interruptor 'crawl4rs' (grupo sistema, OFF) → enciende/apaga el puente en caliente
+  crawl4rs.{leer,rastrear,mapear,entrar,abrir}.request → .response  (obscura por CDP, :9222)
+  crawl4rs.buscar.request → .response                              (SearXNG directo, :8080)
+  crawl4rs.descargar.request → .response                           (fetch binario plano)
+  interruptor 'crawl4rs' (grupo sistema, OFF) → enciende/apaga el órgano en caliente (guarda el egress)
   interruptor 'headroom' → ai-gateway.onInterruptorCambiado (hot-switch del proxy de compresión)
   conserje.empujon {tipo:'skill', accion 'cosecha.promover:precio-ingredientes-web'}  (descubrimiento al costear)
 }
 PIEZAS {
-  deployment/crawl4rs/                    provisioning del órgano web (compose + receta, Docker por Chromium, red enki-web)
-  modules/crawl4rs/                       puente bus↔HTTP al motor Crawl4RS (D-os) — interruptor OFF, degrada honesto
+  modules/crawl4rs/                       órgano web NATIVO sobre obscura (CDP) + SearXNG — interruptor OFF, degrada honesto
+  deployment/obscura/ + vps-setup §3a-ter-ab  obscura (navegador Rust); §3a-bis solo levanta SearXNG
   modules/_shared/error-fertil.js         banco de errores fértiles (heredado por toda tool_http vía loader)
   modules/cosecha/cantera/enki/leer-web/         skill GENÉRICO — cómo alcanzar la tool por bus (descubrimiento)
   modules/cosecha/cantera/enki/precio-ingredientes-web/  skill DOMINIO — el saber del precio, invocación inline (autocontenida)

@@ -16398,6 +16398,8 @@ scripts/cabecera/rebanar.js              migración única monolito→rebanadas 
 .github/workflows/cabecera-*.yml         los tres órganos de GitHub (check · ensamblar · pulso)
 .claude/skills/montar-cupula-cabecera/   la skill que monta esta misma cúpula en cualquier repo
 .claude/skills/sincronizar-cabecera/     el PRISMA: 5 lentes que leen código-vs-prosa y ofrecen el parche (peldaño SEMÁNTICO sobre el VIGILANTE)
+.claude/skills/esquematizador/           descompone cualquier sujeto amorfo en su anatomía completa vía prisma recursivo
+.claude/skills/generar-ui-web/           genera la interfaz web de cualquier proyecto con soporte de marca, UX y audiencia
 ```
 
 ---

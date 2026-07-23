@@ -1,0 +1,95 @@
+---
+name: generar-ui-web
+description: "Dado un proyecto, genera su interfaz web completa en ui/index.html. Analiza el proyecto, detecta su estructura, y produce un HTML autocontenido con navegación, contenido, datos mock y estilo. Soporta inputs opcionales de marca (colores, logo, fuentes), pautas UX (accesibilidad, responsividad) y perfil de audiencia. A más inputs, más matizada la UI. A menos inputs, genérica pero funcional."
+---
+
+# Generar UI Web
+
+Dado un proyecto en disco, produce su interfaz web completa en `ui/index.html`.
+Un solo archivo HTML autocontenido que se abre en navegador.
+
+## Inputs
+
+| Input | Requerido | Formato |
+|---|---|---|
+| Ruta del proyecto | Sí | Path absoluto o relativo |
+| Marca | No | Archivo JSON o parámetros: colores, logo SVG, fuentes, tono |
+| UX | No | Pautas: accesibilidad (AA/AAA), responsive (mobile/desktop-first), densidad |
+| Audiencia | No | Perfil: desarrollador, usuario final, admin; nivel técnico |
+
+## Proceso
+
+### Fase 1: Analizar el proyecto (reflejo)
+
+Usa herramientas de terminal y lectura de archivos para extraer la anatomía del proyecto:
+
+1. Detecta el tipo: API, CLI, app-web, librería, event-driven, o genérico
+2. Lee `package.json`, `README.md`, estructura de directorios
+3. Busca puntos de entrada: rutas de API (express, fastify, hono), comandos CLI, rutas SvelteKit/Next, eventos MQTT
+4. Genera un JSON resumen con: nombre, tipo, endpoints[], commands[], routes[], funciones[], eventos[], estructura_arbol
+
+### Fase 2: Recopilar inputs adicionales
+
+Si el usuario proveyó marca, UX o audiencia, intégralos. Si no, usa defaults:
+
+- **Marca default:** Paleta neutra (grises #f5f5f5/#333, azul #0066cc), tipografía sistema (system-ui, sans-serif), sin logo
+- **UX default:** WCAG AA, mobile-first, densidad media
+- **Audiencia default:** Técnico medio, escritorio+móvil
+
+### Fase 3: Sintetizar la UI (agente)
+
+Con todos los inputs disponibles, genera el HTML completo. La UI debe incluir:
+
+1. **Navegación:** Menú lateral colapsable con las secciones del proyecto
+2. **Layout:** Adaptado al tipo de proyecto (tabla para APIs, detalle para funciones, etc.)
+3. **Contenido:** Datos reales del proyecto + descripciones narrativas coherentes
+4. **Datos mock:** Ejemplos funcionales que usen nombres reales del proyecto
+5. **Estilo:** CSS variable-driven con colores de marca (o neutros), responsive, tema claro/oscuro automático
+
+Reglas:
+- HTML semántico con roles ARIA
+- Sin dependencias externas (no CDN, no npm)
+- Sin backend — todo frontend puro
+- Los datos del proyecto son reales; las respuestas/ejecuciones son mock
+- El logo de marca va en el header si se proporcionó
+
+### Fase 4: Escribir (reflejo)
+
+Crea `ui/index.html` en la raíz del proyecto. Si ya existe `ui/`, pregunta antes de sobrescribir.
+
+## Modo de uso
+
+```bash
+# Mínimo: solo proyecto
+generar-ui web /ruta/al/proyecto
+
+# Con marca
+generar-ui web /ruta/al/proyecto --brand brand.json
+
+# Con todo
+generar-ui web /ruta/al/proyecto \
+  --brand brand.json \
+  --ux "WCAG AAA, mobile-first, densidad baja" \
+  --audiencia "usuario final, no técnico"
+```
+
+## Anatomía de salida
+
+```
+proyecto/
+└── ui/
+    └── index.html      ← Único archivo, autocontenido
+```
+
+## Formas (del esquema)
+
+El generador se compone de:
+
+- **REFLEJO** (13): Analizador de proyecto, extractor de marca, defaults, selector UX, generación de navegación/layouts/CSS/datos/mocks, entregable
+- **MICRO-AGENTE** (2): Tono del contenido según audiencia, prompt del agente sintetizador
+
+## Errores a evitar
+
+- **No generar capas separadas** — la navegación, el estilo y los datos no se construyen por separado y luego se ensamblan. El agente produce un solo HTML que lo sabe todo junto.
+- **No inventar datos del proyecto** — los nombres de endpoints, rutas, funciones y comandos deben ser reales. Solo los valores de ejemplo (respuestas mock) son sintéticos.
+- **No cargar recursos externos** — ni CDN, ni Google Fonts, ni imágenes externas. El logo debe ir como SVG inline si se proporciona.

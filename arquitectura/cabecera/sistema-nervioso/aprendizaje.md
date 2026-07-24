@@ -85,6 +85,10 @@ REGISTRO CENTRAL de todos los botones del sistema. Cada feature registra el suyo
 interruptor.cambiado avisa al dueño para reaccionar EN CALIENTE (sin reinicio).
 Estado global persistido (data/interruptores.json): lo tocado por el humano MANDA sobre el default.
 
+TOGGLE POR PROYECTO (per_project:true)  excepción al estado global: su on/off vive en el DUEÑO por
+   proyecto, no en data/interruptores.json. _upsert conserva metadatos + ruteo (dominio/accion_set/
+   accion_get); el panel lee/escribe con el project_id activo. Testigo: cupula_vista_global (cupulas).
+
 SYNC AL CARGAR (v1.1.0)  onRegistrar, tras el upsert, EMITE interruptor.cambiado si el estado
    persistido difiere del default anunciado → el 'off' (u 'on') del humano SOBREVIVE al reinicio.
    Solo emite en divergencia (sin ruido). Beneficia a todos los dueños.

@@ -327,6 +327,7 @@ CLASE AIGateway IMPLEMENTA AIGatewayContract {
 
     async onLoad(moduleContext: Object): Promise<Void>
       SUSCRIBE A ai.call events
+      SUSCRIBE A cupulas.visibilidad_cambiada   // caché por-proyecto de visibilidad de la vista (reacción en caliente)
       REGISTRA tools PARA AI agent
       REGISTRA UI handlers
       PARA cada provider: INICIALIZA client SI credential disponible
@@ -410,6 +411,13 @@ CLASE AIGateway (ampliación) {
     // ── 5. max_tokens con SUELO
     chatOptions.max_tokens = Math.max(settings?.max_tokens || 0, 4096)   // floor, no default
     // Sube también las conversaciones existentes (que tienen 2000 guardado).
+
+    // ── 6. VISIBILIDAD POR PROYECTO de cupulas.vista_proyecto
+    // La tool entra en GLOBAL_TOOLS pero _filtrarVisibilidadCupula(tools, project_id) la
+    // RETIRA salvo que el proyecto tenga el flag en true (default OFF, honesto). Caché
+    // _cupulaVistaVisible: reacciona a cupulas.visibilidad_cambiada en caliente y calienta
+    // lazy con RPC best-effort a cupulas.visibilidad en miss (patrón _leerRailActivo). El
+    // filtro se aplica en los dos call-sites de _getTools (chat + async-handler).
   }
 }
 ```

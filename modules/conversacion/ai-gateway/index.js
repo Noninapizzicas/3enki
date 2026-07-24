@@ -33,7 +33,7 @@ class AiGatewayModule extends BaseModule {
   constructor() {
     super();
     this.name = 'ai-gateway';
-    this.version = '2.32.0';
+    this.version = '2.36.0';
     this.config = null;
     this.moduleLoader = null;
 
@@ -42,6 +42,10 @@ class AiGatewayModule extends BaseModule {
     this.credentialCache = new Map();    // provider → { apiKey, resolvedAt, projectId }
     this.pendingCredentials = new Map(); // request_id → { resolve, reject, timeout }
     this.pendingFsReads = new Map();     // request_id → { resolve, reject, timeout }
+    // Interruptor POR PROYECTO de visibilidad global de cupulas.vista_proyecto.
+    // project_id → bool. Caché event-driven: se calienta lazy (best-effort RPC) y
+    // reacciona a cupulas.visibilidad_cambiada en caliente. Nace APAGADO por proyecto.
+    this._cupulaVistaVisible = new Map();
     // Cache de prefijos por page_id, poblado lazy por _buildPagePrefixes()
     this.pagePrefixes = null;            // Map<page_id, Set<prefix>>
     // Mapa target_page_id → { manifest, parentBlueprint, childBlueprint, systemPrompt }
@@ -134,6 +138,21 @@ class AiGatewayModule extends BaseModule {
             this.logger?.warn('ai-gateway.modules-loaded-all.handler_failed', {
               error_message: err && err.message ? err.message : String(err)
             });
+          }
+        }
+      );
+    }
+
+    // Interruptor POR PROYECTO de visibilidad global de cupulas.vista_proyecto:
+    // reacciona en caliente al cambio (patrón interruptor.cambiado, pero el estado
+    // vive por proyecto en cupulas, no en el panel global). Best-effort.
+    if (this.eventBus?.subscribe) {
+      this._cupulaVisibilidadUnsub = this.eventBus.subscribe(
+        'cupulas.visibilidad_cambiada',
+        (event) => {
+          const d = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (d && d.project_id && d.flag === 'vista_proyecto_global') {
+            this._cupulaVistaVisible.set(d.project_id, d.enabled === true);
           }
         }
       );
@@ -374,6 +393,7 @@ class AiGatewayModule extends BaseModule {
       'fs.read', 'fs.list', 'fs.search',
       'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
       'fijar_objetivo', 'evaluar_rail',
+      'cupulas.vista_proyecto',
       'leer_web', 'descargar_web', 'leer_imagen', 'renderizar', 'traducir', 'transcribir', 'analizar_sonido', 'decir', 'interpretar_trazo']);
     // Slice de globales (de `all`) con la enumeracion de invoke_agent aplicada. Se combina
     // con las tools de pagina y se deduplica por nombre (el rail ya se anade aparte).
@@ -464,6 +484,37 @@ class AiGatewayModule extends BaseModule {
     });
     // Enumeracion de agentes en invoke_agent + invoke_agent primero (metodo compartido).
     return this._mapInvokeAgentEnum(filtered, page_id);
+  }
+
+  // Filtro POR PROYECTO de la visibilidad global de cupulas.vista_proyecto. La tool está
+  // en GLOBAL_TOOLS (candidata a universal), pero solo se EXPONE si el proyecto encendió su
+  // interruptor (cupulas.set_visibilidad). Nace APAGADA → se retira salvo flag true. Caché
+  // event-driven: en miss calienta best-effort (fire-and-forget) y default OFF este turno.
+  _filtrarVisibilidadCupula(tools, project_id) {
+    if (!Array.isArray(tools)) return tools;
+    if (project_id && !this._cupulaVistaVisible.has(project_id)) this._calentarVisibilidadCupula(project_id);
+    if (project_id && this._cupulaVistaVisible.get(project_id) === true) return tools;
+    return tools.filter(t => t && t.name !== 'cupulas.vista_proyecto');
+  }
+
+  // Calienta la caché del interruptor por proyecto: RPC best-effort a cupulas.visibilidad.
+  // Mismo patrón que _leerRailActivo. Deja OFF hasta que la respuesta llegue (honesto).
+  _calentarVisibilidadCupula(project_id) {
+    this._cupulaVistaVisible.set(project_id, false);
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return;
+    try {
+      const request_id = crypto.randomUUID();
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); }, this.config?.cupulas_timeout_ms || 2000);
+      unsub = this.eventBus.subscribe('cupulas.visibilidad.response', (event) => {
+        const d = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+        if (!d || d.request_id !== request_id) return;
+        clearTimeout(timeout); if (unsub) unsub();
+        const payload = d.data || d;
+        this._cupulaVistaVisible.set(project_id, !!(payload && payload.vista_proyecto_global === true));
+      });
+      this.eventBus.publish('cupulas.visibilidad.request', { request_id, project_id });
+    } catch (_) { /* best-effort; queda en OFF */ }
   }
 
   // Aplica a una lista de tools: (1) poda la enumeracion de agentes en la description de
@@ -1242,7 +1293,7 @@ class AiGatewayModule extends BaseModule {
       await this._executeLLM({
         system: null,
         messages: [{ role: 'user', content: synthetic_message }],
-        tools: this._getTools(page_id),
+        tools: this._filtrarVisibilidadCupula(this._getTools(page_id), project_id),
         settings: {},
         attachments: null,
         project_id,
@@ -2774,7 +2825,7 @@ class AiGatewayModule extends BaseModule {
 
     const tools = tools_disponibles && tools_disponibles.length > 0
       ? tools_disponibles
-      : this._getTools(page_id);
+      : this._filtrarVisibilidadCupula(this._getTools(page_id), project_id);
 
     const startedAt = Date.now();
     let providerAttempted = null;

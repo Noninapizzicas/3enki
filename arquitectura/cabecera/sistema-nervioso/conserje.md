@@ -101,12 +101,17 @@ inyeccion: SOLO turno real con proyecto (no sintetico). Si conserje OFF -> no ha
 
 ```
 CLASE InterruptoresModule HEREDA BaseModule {     // el panel de control
-  toggles: Map<id, {id, label, descripcion, grupo, estado, default}>
+  toggles: Map<id, {id, label, descripcion, grupo, estado, default, per_project?, dominio?, accion_set?, accion_get?}>
   onLoad: publica interruptor.solicitar_registro  // anuncio: cura la carrera de arranque
   onRegistrar(evento): _upsert (el estado PERSISTIDO manda sobre el default)
   ui interruptores.listar -> el panel los pinta por grupo
   ui interruptores.set {id, enabled} -> persiste data/interruptores.json + emite interruptor.cambiado
   // el dueño del interruptor escucha cambiado y reacciona EN CALIENTE sin reinicio
+
+  TOGGLE POR PROYECTO (per_project:true)  su estado NO vive aquí (global) sino en su DUEÑO por
+    proyecto; _upsert solo conserva los metadatos + ruteo (dominio, accion_set, accion_get). El
+    panel enruta el on/off con el project_id activo por dominio, no por interruptores.set.
+    Testigo: cupula_vista_global (dueño cupulas → set_visibilidad/visibilidad).
 
   PATRON anuncio/solicitud (como tarifas.config.solicitada):
     interruptores al cargar pide registro -> cada feature re-registra -> order-independent
@@ -114,6 +119,8 @@ CLASE InterruptoresModule HEREDA BaseModule {     // el panel de control
 
 // FRONTEND: modules/interruptores (work-bar 🎛️) — InterruptoresPanel.svelte
 //   lista los toggles por grupo, un switch por cada uno; al pulsar -> interruptores.set.
+//   TOGGLE per_project: lee el estado real con el project_id activo (accion_get) y enruta el
+//   flip por su dominio (accion_set); badge "por proyecto" + guard sin proyecto activo.
 
 PENDIENTE (boot-sync): al arrancar, el estado persistido (panel ON) no propaga al
   modulo dueño -> el conserje arranca activo:false aunque el toggle estuviera ON.

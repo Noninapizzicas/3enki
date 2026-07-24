@@ -4,7 +4,7 @@ dominio: frontend
 resumen: SvelteKit 2 + Svelte 5 sobre MQTT: MqttClient singleton, mqtt-request, lazy-registry, stores, módulos lazy, rutas multi-tenant, nervio vista-bridge, resiliencia.
 fuentes:
   - frontend/src/**
-verificado: 2026-07-21
+verificado: 2026-07-24
 trabajo_pendiente: verificar el módulo trazo en un frontend construido (node_modules) — el wiring espeja interruptores 1:1 pero no se compiló aquí
 ---
 

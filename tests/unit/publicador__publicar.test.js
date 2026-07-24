@@ -81,6 +81,36 @@ test('nombre custom → <nombre>.html + url_path lo incluye', async () => {
   fs.rmSync(base, { recursive: true, force: true });
 });
 
+test('nombre en MAYÚSCULA (Index) → se normaliza a index.html servible (regresión pos/Index.html)', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-base-'));
+  const m = nuevo();
+  m.activos.set('p1', { slug: 'regalos', base_path: base });
+  m.ultimoActivo = 'p1';
+
+  const r = await m._publicar({ dir: 'pos', html: '<h1>POS</h1>', nombre: 'Index' });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.archivo, 'index.html', 'Index → index.html (minúscula)');
+  // como es el índice, la URL es el directorio (sin colgar el nombre del fichero)
+  assert.strictEqual(r.data.url_path, '/a/regalos/pos/', 'sirve como índice del dir, no /pos/Index.html');
+  assert.ok(fs.existsSync(path.join(base, 'storage', 'www', 'pos', 'index.html')), 'escrito en minúscula');
+  assert.ok(!fs.existsSync(path.join(base, 'storage', 'www', 'pos', 'Index.html')), 'NO deja el Index.html no-servible');
+
+  fs.rmSync(base, { recursive: true, force: true });
+});
+
+test('nombre custom en mayúsculas (Q1) → q1.html (minúscula, servible por su nombre)', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-base-'));
+  const m = nuevo();
+  m.activos.set('p1', { slug: 'regalos', base_path: base });
+  m.ultimoActivo = 'p1';
+
+  const r = await m._publicar({ dir: 'informes', html: '<h1>x</h1>', nombre: 'Q1' });
+  assert.strictEqual(r.data.archivo, 'q1.html');
+  assert.strictEqual(r.data.url_path, '/a/regalos/informes/q1.html');
+
+  fs.rmSync(base, { recursive: true, force: true });
+});
+
 test('re-publicar el mismo dir → reemplaza el contenido (idempotente)', async () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-base-'));
   const m = nuevo();

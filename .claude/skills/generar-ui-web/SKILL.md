@@ -19,14 +19,15 @@ Un solo archivo HTML autocontenido que se abre en navegador.
 
 ## Proceso
 
-### Fase 1: Analizar el proyecto (reflejo)
+### Fase 1: Analizar el proyecto + descubrir cantera (reflejo)
 
 Usa herramientas de terminal y lectura de archivos para extraer la anatomía del proyecto:
 
 1. Detecta el tipo: API, CLI, app-web, librería, event-driven, o genérico
 2. Lee `package.json`, `README.md`, estructura de directorios
 3. Busca puntos de entrada: rutas de API (express, fastify, hono), comandos CLI, rutas SvelteKit/Next, eventos MQTT
-4. Genera un JSON resumen con: nombre, tipo, endpoints[], commands[], routes[], funciones[], eventos[], estructura_arbol
+4. **Consulta la cantera**: busca skills de backend en `modules/cosecha/cantera/enki/sk-*` o `modules/cosecha/cantera/enki/prisma-*` que describan módulos con eventos (carrito, cobro, cuenta, etc.)
+5. Genera un JSON resumen con: nombre, tipo, endpoints[], commands[], routes[], funciones[], eventos[], estructura_arbol, **backend_disponible[]**
 
 ### Fase 2: Recopilar inputs adicionales
 
@@ -45,6 +46,12 @@ Con todos los inputs disponibles, genera el HTML completo. La UI debe incluir:
 3. **Contenido:** Datos reales del proyecto + descripciones narrativas coherentes
 4. **Datos mock:** Ejemplos funcionales que usen nombres reales del proyecto
 5. **Estilo:** CSS variable-driven con colores de marca (o neutros), responsive, tema claro/oscuro automático
+
+**Si se descubrieron skills de backend en la cantera**, la UI debe:
+- Mostrar los módulos disponibles como secciones interactivas (carrito, cobro, cuentas, etc.)
+- Generar el JavaScript que invoca los eventos MQTT según el contrato de cada skill
+- Usar datos reales del backend en lugar de mocks cuando sea posible
+- Incluir UI para las operaciones expuestas (añadir al carrito, cobrar, crear cuenta...)
 
 Reglas:
 - HTML semántico con roles ARIA

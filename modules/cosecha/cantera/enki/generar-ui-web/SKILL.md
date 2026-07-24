@@ -55,12 +55,14 @@ Reglas:
 - Sin backend — todo frontend puro
 - Los datos del proyecto son reales; las respuestas son mock
 
-### Fase 4: Escribir (reflejo)
+### Fase 4: Entregar el HTML
 
-Crea `ui/index.html` en la raíz del proyecto.
+Produce el HTML completo en la respuesta. La persistencia la hace el entorno que ejecuta la skill — no es responsabilidad del agente. El contrato es: el HTML existe como string, listo para escribirse donde corresponda.
 
-## Arquitectura (convergente)
+La skill no decide dónde se escribe, con qué nombre, ni qué tecnología usa el runner para persistir. Proporciona el HTML; el entorno lo aterriza.
 
-No hay capas separadas de navegación, contenido y estilo. El generador recibe todos los inputs (proyecto ± marca ± UX ± audiencia) y produce un solo HTML que lo sabe todo junto. A más inputs, más matizada la UI. A menos inputs, genérica pero funcional.
+## Errores a evitar
 
-**Formas:** 13 REFLEJO + 2 MICRO-AGENTE. El núcleo es mayoritariamente determinista.
+- **No generar capas separadas** — la navegación, el estilo y los datos no se construyen por separado y luego se ensamblan. El agente produce un solo HTML que lo sabe todo junto.
+- **No inventar datos del proyecto** — los nombres de endpoints, rutas, funciones y comandos deben ser reales. Solo los valores de ejemplo (respuestas mock) son sintéticos.
+- **No cargar recursos externos** — ni CDN, ni Google Fonts, ni imágenes externas. El logo debe ir como SVG inline si se proporciona. El HTML debe funcionar sin conexión a internet.

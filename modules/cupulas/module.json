@@ -30,7 +30,8 @@
     { "event": "cupulas.contexto.request", "handler": "onContextoRequest", "description": "Reflejo: bundle de material para que el LLM lo reutilice." },
     { "event": "cupulas.vista_proyecto.request", "handler": "onVistaProyectoRequest", "description": "Reflejo: computa AL MOMENTO la nota-vista con todos los datos del proyecto (identidad + persistencia/current/*)." },
     { "event": "cupulas.visibilidad.request", "handler": "onVisibilidadRequest", "description": "Reflejo: lee el interruptor por-proyecto de visibilidad global de la vista." },
-    { "event": "cupulas.set_visibilidad.request", "handler": "onSetVisibilidadRequest", "description": "Reflejo: pulsa el interruptor por-proyecto (on/off) de visibilidad global de la vista." }
+    { "event": "cupulas.set_visibilidad.request", "handler": "onSetVisibilidadRequest", "description": "Reflejo: pulsa el interruptor por-proyecto (on/off) de visibilidad global de la vista." },
+    { "event": "interruptor.solicitar_registro", "handler": "onSolicitarRegistro", "description": "El panel de interruptores pide re-registro → re-anuncia el botón per_project de la vista." }
   ],
   "ui_handlers": [
     { "domain": "cupulas", "action": "crear_cupula", "handler": "handleCrearCupula" },

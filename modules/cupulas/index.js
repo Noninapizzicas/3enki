@@ -33,6 +33,33 @@ class CupulasReflejo extends ModuloHibridoReflejo {
     this.version = '1.1.0';
   }
 
+  async onLoad(context) {
+    await super.onLoad(context);
+    this._registrarBotonVista();   // aparece junto a los otros on/off del panel
+  }
+
+  // Registra el botón en el PANEL central (junto a los otros on/off), marcado
+  // per_project: su estado NO vive en el panel global sino por proyecto (cupulas);
+  // el panel lee/escribe con el project_id activo vía dominio+accion. Nace APAGADO.
+  _registrarBotonVista() {
+    try {
+      this.eventBus?.publish('interruptor.registrar', {
+        id: 'cupula_vista_global',
+        label: 'Vista de proyecto visible al chat (por proyecto)',
+        grupo: 'cupulas',
+        descripcion: 'Expone cupulas.vista_proyecto al LLM en cualquier página de ESTE proyecto (una nota con sus datos, computada al momento). ON/OFF independiente por proyecto — nace apagado.',
+        default: false,
+        per_project: true,
+        dominio: 'cupulas',
+        accion_set: 'set_visibilidad',
+        accion_get: 'visibilidad'
+      });
+    } catch (_) { /* best-effort */ }
+  }
+
+  // interruptores (re)cargó y pide re-registro → respondemos (cura la carrera de arranque).
+  onSolicitarRegistro() { this._registrarBotonVista(); }
+
   // ── handlers UI/tools (devuelven {status, data}) ──
   handleCrearCupula(d) { return this._crearCupula(d); }
   handleAddNota(d) { return this._addNota(d); }
@@ -410,8 +437,8 @@ class CupulasReflejo extends ModuloHibridoReflejo {
   async _getVisibilidad(input) {
     if (!input.project_id) return this._invalid('project_id');
     const idx = await this._leerIndice(input.project_id);
-    const vis = idx.visibilidad || {};
-    return { status: 200, data: { vista_proyecto_global: vis.vista_proyecto_global === true } };
+    const on = (idx.visibilidad || {}).vista_proyecto_global === true;
+    return { status: 200, data: { vista_proyecto_global: on, enabled: on } };
   }
 
   async _setVisibilidad(input) {
@@ -423,7 +450,7 @@ class CupulasReflejo extends ModuloHibridoReflejo {
     await this._guardarIndice(input.project_id, idx);
     await this._publicarEvento('cupulas.visibilidad_cambiada',
       { project_id: input.project_id, flag: 'vista_proyecto_global', enabled: input.enabled }, input);
-    return { status: 200, data: { vista_proyecto_global: input.enabled } };
+    return { status: 200, data: { vista_proyecto_global: input.enabled, enabled: input.enabled } };
   }
 }
 

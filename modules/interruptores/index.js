@@ -86,7 +86,13 @@ class InterruptoresModule extends BaseModule {
       descripcion: t.descripcion || prev?.descripcion || '',
       grupo: t.grupo || prev?.grupo || 'general',
       default: t.default === true || (prev?.default === true),
-      estado
+      estado,
+      // Metadatos de un toggle POR PROYECTO: su estado NO vive aquí (global) sino en
+      // su dueño por proyecto; el panel enruta con el project_id activo vía dominio+accion.
+      per_project: t.per_project === true || (prev?.per_project === true),
+      dominio: t.dominio || prev?.dominio || null,
+      accion_set: t.accion_set || prev?.accion_set || null,
+      accion_get: t.accion_get || prev?.accion_get || null
     });
   }
 

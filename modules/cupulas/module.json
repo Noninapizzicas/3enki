@@ -16,7 +16,8 @@
   "publishes": [
     { "event": "cupulas.cupula_creada", "description": "Una cupula tematica fue creada." },
     { "event": "cupulas.nota_creada", "description": "Una nota fue anadida a una cupula." },
-    { "event": "cupulas.vista_computada", "description": "La vista viva del proyecto fue computada al momento desde sus datos reales." }
+    { "event": "cupulas.vista_computada", "description": "La vista viva del proyecto fue computada al momento desde sus datos reales." },
+    { "event": "cupulas.visibilidad_cambiada", "description": "El interruptor por-proyecto de visibilidad global de la vista cambió (on/off). El ai-gateway reacciona en caliente." }
   ],
   "subscribes": [
     { "event": "cupulas.crear_cupula.request", "handler": "onCrearCupulaRequest", "description": "Reflejo: crea una cupula tematica de un tipo." },
@@ -27,7 +28,9 @@
     { "event": "cupulas.buscar.request", "handler": "onBuscarRequest", "description": "Reflejo: busqueda en el indice (titulo/resumen/tipo/cupula)." },
     { "event": "cupulas.grafo.request", "handler": "onGrafoRequest", "description": "Reflejo: nodos+aristas (enlaces entre notas)." },
     { "event": "cupulas.contexto.request", "handler": "onContextoRequest", "description": "Reflejo: bundle de material para que el LLM lo reutilice." },
-    { "event": "cupulas.vista_proyecto.request", "handler": "onVistaProyectoRequest", "description": "Reflejo: computa AL MOMENTO la nota-vista con todos los datos del proyecto (identidad + persistencia/current/*)." }
+    { "event": "cupulas.vista_proyecto.request", "handler": "onVistaProyectoRequest", "description": "Reflejo: computa AL MOMENTO la nota-vista con todos los datos del proyecto (identidad + persistencia/current/*)." },
+    { "event": "cupulas.visibilidad.request", "handler": "onVisibilidadRequest", "description": "Reflejo: lee el interruptor por-proyecto de visibilidad global de la vista." },
+    { "event": "cupulas.set_visibilidad.request", "handler": "onSetVisibilidadRequest", "description": "Reflejo: pulsa el interruptor por-proyecto (on/off) de visibilidad global de la vista." }
   ],
   "ui_handlers": [
     { "domain": "cupulas", "action": "crear_cupula", "handler": "handleCrearCupula" },
@@ -38,7 +41,9 @@
     { "domain": "cupulas", "action": "buscar", "handler": "handleBuscar" },
     { "domain": "cupulas", "action": "grafo", "handler": "handleGrafo" },
     { "domain": "cupulas", "action": "contexto", "handler": "handleContexto" },
-    { "domain": "cupulas", "action": "vista_proyecto", "handler": "handleVistaProyecto" }
+    { "domain": "cupulas", "action": "vista_proyecto", "handler": "handleVistaProyecto" },
+    { "domain": "cupulas", "action": "visibilidad", "handler": "handleVisibilidad" },
+    { "domain": "cupulas", "action": "set_visibilidad", "handler": "handleSetVisibilidad" }
   ],
   "tools": [
     {
@@ -52,6 +57,33 @@
         "required": ["project_id"]
       },
       "handler": "handleVistaProyecto",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cupulas.set_visibilidad",
+      "description": "Interruptor POR PROYECTO (on/off): decide si cupulas.vista_proyecto se expone al LLM globalmente (en cualquier página) para este proyecto. Nace APAGADO. enabled:true la enciende, false la apaga. El ai-gateway reacciona en caliente.",
+      "parameters": {
+        "type": "object", "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "enabled": { "type": "boolean", "description": "true = visible global en este proyecto; false = apagada." }
+        },
+        "required": ["project_id", "enabled"]
+      },
+      "handler": "handleSetVisibilidad",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cupulas.visibilidad",
+      "description": "Lee el estado del interruptor por-proyecto de visibilidad global de la vista (on/off).",
+      "parameters": {
+        "type": "object", "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "handleVisibilidad",
       "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
     },
     {

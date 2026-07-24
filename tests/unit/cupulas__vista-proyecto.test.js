@@ -118,6 +118,39 @@ test('todo aterriza bajo la ruta del proyecto (scope:project)', async () => {
   assert.ok(fs.has(`${PID}::/cupulas/proyecto/estado-actual.md`), 'la nota vive en data/projects/<pid>/cupulas/');
 });
 
+// ── interruptor de visibilidad POR PROYECTO ──
+test('visibilidad nace APAGADA por proyecto', async () => {
+  const { r } = nuevo();
+  const v = await r._getVisibilidad({ project_id: PID });
+  assert.strictEqual(v.status, 200);
+  assert.strictEqual(v.data.vista_proyecto_global, false);
+});
+
+test('set_visibilidad enciende/apaga y persiste + emite visibilidad_cambiada', async () => {
+  const { r, published } = nuevo();
+  const on = await r._setVisibilidad({ project_id: PID, enabled: true });
+  assert.strictEqual(on.data.vista_proyecto_global, true);
+  const ev = published.find(p => p.topic === 'cupulas.visibilidad_cambiada');
+  assert.ok(ev && ev.payload.enabled === true && ev.payload.project_id === PID);
+  assert.strictEqual((await r._getVisibilidad({ project_id: PID })).data.vista_proyecto_global, true);
+  const off = await r._setVisibilidad({ project_id: PID, enabled: false });
+  assert.strictEqual(off.data.vista_proyecto_global, false);
+  assert.strictEqual((await r._getVisibilidad({ project_id: PID })).data.vista_proyecto_global, false);
+});
+
+test('set_visibilidad sin enabled booleano → 400', async () => {
+  const { r } = nuevo();
+  const v = await r._setVisibilidad({ project_id: PID });
+  assert.strictEqual(v.status, 400);
+});
+
+test('el interruptor es POR PROYECTO: encender uno no toca al otro', async () => {
+  const { r } = nuevo();
+  await r._setVisibilidad({ project_id: 'proj-A', enabled: true });
+  assert.strictEqual((await r._getVisibilidad({ project_id: 'proj-A' })).data.vista_proyecto_global, true);
+  assert.strictEqual((await r._getVisibilidad({ project_id: 'proj-B' })).data.vista_proyecto_global, false);
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

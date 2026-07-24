@@ -43,6 +43,8 @@ class CupulasReflejo extends ModuloHibridoReflejo {
   handleGrafo(d) { return this._grafo(d); }
   handleContexto(d) { return this._contexto(d); }
   handleVistaProyecto(d) { return this._vistaProyecto(d); }
+  handleVisibilidad(d) { return this._getVisibilidad(d); }
+  handleSetVisibilidad(d) { return this._setVisibilidad(d); }
 
   // ── handlers bus RPC (request/response correlada por la base) ──
   onCrearCupulaRequest(e) { return this._atender(e, 'crear_cupula', 'cupulas.crear_cupula.response', d => this._crearCupula(d)); }
@@ -54,6 +56,8 @@ class CupulasReflejo extends ModuloHibridoReflejo {
   onGrafoRequest(e) { return this._atender(e, 'grafo', 'cupulas.grafo.response', d => this._grafo(d)); }
   onContextoRequest(e) { return this._atender(e, 'contexto', 'cupulas.contexto.response', d => this._contexto(d)); }
   onVistaProyectoRequest(e) { return this._atender(e, 'vista_proyecto', 'cupulas.vista_proyecto.response', d => this._vistaProyecto(d)); }
+  onVisibilidadRequest(e) { return this._atender(e, 'visibilidad', 'cupulas.visibilidad.response', d => this._getVisibilidad(d)); }
+  onSetVisibilidadRequest(e) { return this._atender(e, 'set_visibilidad', 'cupulas.set_visibilidad.response', d => this._setVisibilidad(d)); }
 
   // =============================================================
   // Store de la bóveda — ficheros + un índice (vía el reflejo fs)
@@ -394,6 +398,32 @@ class CupulasReflejo extends ModuloHibridoReflejo {
   _recorta(dato, max = 4000) {
     const s = JSON.stringify(dato, null, 2);
     return s.length > max ? s.slice(0, max) + '\n… (recortado)' : s;
+  }
+
+  // =============================================================
+  // VISIBILIDAD GLOBAL — interruptor POR PROYECTO (on/off a elección del dueño).
+  // Decide si cupulas.vista_proyecto se expone al LLM en CUALQUIER página (global)
+  // para ESTE proyecto. Nace APAGADO (exponer antes que conceder, como ejecutor/portal).
+  // Vive en el _index.json del proyecto (single-writer, dentro de data/projects/<id>/).
+  // El ai-gateway lo consulta con caché event-driven (reacciona a visibilidad_cambiada).
+  // =============================================================
+  async _getVisibilidad(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    const idx = await this._leerIndice(input.project_id);
+    const vis = idx.visibilidad || {};
+    return { status: 200, data: { vista_proyecto_global: vis.vista_proyecto_global === true } };
+  }
+
+  async _setVisibilidad(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (typeof input.enabled !== 'boolean') return this._invalid('enabled');
+    const idx = await this._leerIndice(input.project_id);
+    if (!idx.visibilidad) idx.visibilidad = {};
+    idx.visibilidad.vista_proyecto_global = input.enabled;
+    await this._guardarIndice(input.project_id, idx);
+    await this._publicarEvento('cupulas.visibilidad_cambiada',
+      { project_id: input.project_id, flag: 'vista_proyecto_global', enabled: input.enabled }, input);
+    return { status: 200, data: { vista_proyecto_global: input.enabled } };
   }
 }
 

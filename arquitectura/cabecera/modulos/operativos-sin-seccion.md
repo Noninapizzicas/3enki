@@ -28,6 +28,10 @@ cupulas ({{version:modules/cupulas}})
     persistencia/current/*) — no snapshot; se proyecta desde los datos reales en cada
     lectura (frescura por construcción, piso COMPUTADO de la cabecera). Cúpula 'proyecto'
     exclusiva del proyecto (scope:project → data/projects/<id>/cupulas/).
+  + visibilidad global POR PROYECTO (on/off): cupulas.set_visibilidad/visibilidad guardan el
+    interruptor en el _index.json del proyecto (nace APAGADO). El ai-gateway expone
+    cupulas.vista_proyecto en GLOBAL_TOOLS pero la RETIRA salvo que el proyecto la encienda
+    (filtro _filtrarVisibilidadCupula, caché event-driven por cupulas.visibilidad_cambiada).
 
 inventario ({{version:modules/inventario}})
   Inventario por proyecto con stock_real + reservas con expiración. Multi-proyecto:

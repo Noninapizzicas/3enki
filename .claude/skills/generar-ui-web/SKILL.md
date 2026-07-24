@@ -57,7 +57,12 @@ Reglas:
 
 Produce el HTML completo en la respuesta. La persistencia la hace el entorno que ejecuta la skill — no es responsabilidad del agente. El contrato es: el HTML existe como string, listo para escribirse donde corresponda.
 
-## Output
+**Si el entorno no permite escritura directa**, delega la persistencia:
+- Crea un agente con herramientas de escritura (`crear_agente_desde_caso`) y pásale el HTML para que lo persista
+- O usa `publicar-html` si está disponible en el sistema
+- O simplemente entrega el HTML en la respuesta para que el usuario lo guarde manualmente
+
+La skill no decide dónde se escribe, con qué nombre, ni qué tecnología usa el runner para persistir. Proporciona el HTML; el entorno (o un agente delegado) lo aterriza.
 
 ```
 ┌─────────────────────────────────────────────┐

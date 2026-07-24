@@ -19,15 +19,17 @@ Un solo archivo HTML autocontenido que se abre en navegador.
 
 ## Proceso
 
-### Fase 1: Analizar el proyecto + descubrir cantera (reflejo)
+### Fase 1: Descubrir el proyecto y sus capacidades (reflejo)
 
-Usa herramientas de terminal y lectura de archivos para extraer la anatomía del proyecto:
+Consulta las cúpulas del sistema para obtener toda la información disponible del proyecto:
 
-1. Detecta el tipo: API, CLI, app-web, librería, event-driven, o genérico
-2. Lee `package.json`, `README.md`, estructura de directorios
-3. Busca puntos de entrada: rutas de API (express, fastify, hono), comandos CLI, rutas SvelteKit/Next, eventos MQTT
-4. **Consulta la cantera**: busca skills de backend en `modules/cosecha/cantera/enki/sk-*` o `modules/cosecha/cantera/enki/prisma-*` que describan módulos con eventos (carrito, cobro, cuenta, etc.)
-5. Genera un JSON resumen con: nombre, tipo, endpoints[], commands[], routes[], funciones[], eventos[], estructura_arbol, **backend_disponible[]**
+1. **`cupulas.vista_proyecto.request`** → identidad del proyecto: nombre, dominio, marca (colores, fuentes, logo), configuración, y todos los dominios vivos
+2. **`cupulas.listar_cupulas.request`** → catálogo de cúpulas disponibles: skills, agentes, eventos, handlers, blueprints...
+3. **Buscar skills de backend** en la cantera: `modules/cosecha/cantera/enki/prisma-*` que describan módulos con eventos (carrito, cobro, cuenta, etc.)
+4. **`cupulas.buscar.request`** → busca información adicional relevante para la UI
+5. **Como fallback**, si no hay acceso a cúpulas: lee `package.json`, `README.md`, estructura de directorios y busca puntos de entrada del proyecto
+
+Genera un JSON con todo: nombre, dominio, marca, backend_disponible[], cupulas[], eventos[], endpoints[]
 
 ### Fase 2: Recopilar inputs adicionales
 
@@ -47,11 +49,12 @@ Con todos los inputs disponibles, genera el HTML completo. La UI debe incluir:
 4. **Datos mock:** Ejemplos funcionales que usen nombres reales del proyecto
 5. **Estilo:** CSS variable-driven con colores de marca (o neutros), responsive, tema claro/oscuro automático
 
-**Si se descubrieron skills de backend en la cantera**, la UI debe:
-- Mostrar los módulos disponibles como secciones interactivas (carrito, cobro, cuentas, etc.)
-- Generar el JavaScript que invoca los eventos MQTT según el contrato de cada skill
-- Usar datos reales del backend en lugar de mocks cuando sea posible
-- Incluir UI para las operaciones expuestas (añadir al carrito, cobrar, crear cuenta...)
+**Si se descubrieron cúpulas (skills, eventos, agentes):**
+- Usa la identidad del proyecto (`vista_proyecto`) para marca, colores, fuentes, logo — sin preguntar al usuario
+- Lee las skills de backend descubiertas y genera UI que llame a sus eventos reales (carrito, cobro, cuenta...)
+- Consulta `cupula-eventos` para conocer todos los eventos disponibles y mostrar operaciones reales
+- Si hay agentes disponibles, ofrece activarlos desde la UI
+- Usa datos reales del sistema en lugar de mocks siempre que sea posible
 
 Reglas:
 - HTML semántico con roles ARIA

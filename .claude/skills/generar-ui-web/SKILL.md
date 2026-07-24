@@ -53,33 +53,37 @@ Reglas:
 - Los datos del proyecto son reales; las respuestas/ejecuciones son mock
 - El logo de marca va en el header si se proporcionó
 
-### Fase 4: Escribir (reflejo)
+### Fase 4: Entregar el HTML
 
-Crea `ui/index.html` en la raíz del proyecto. Si ya existe `ui/`, pregunta antes de sobrescribir.
+Produce el HTML completo en la respuesta. La persistencia la hace el entorno que ejecuta la skill — no es responsabilidad del agente. El contrato es: el HTML existe como string, listo para escribirse donde corresponda.
 
-## Modo de uso
-
-```bash
-# Mínimo: solo proyecto
-generar-ui web /ruta/al/proyecto
-
-# Con marca
-generar-ui web /ruta/al/proyecto --brand brand.json
-
-# Con todo
-generar-ui web /ruta/al/proyecto \
-  --brand brand.json \
-  --ux "WCAG AAA, mobile-first, densidad baja" \
-  --audiencia "usuario final, no técnico"
-```
-
-## Anatomía de salida
+## Output
 
 ```
-proyecto/
-└── ui/
-    └── index.html      ← Único archivo, autocontenido
+┌─────────────────────────────────────────────┐
+│  HTML completo y autocontenido              │
+│  (todo en un solo archivo)                  │
+│                                             │
+│  ├── Navegación (menú colapsable)           │
+│  ├── Layout (adaptado al tipo de proyecto)  │
+│  ├── Contenido (datos reales + narrativa)   │
+│  ├── Datos mock (ejemplos funcionales)      │
+│  └── Estilo (CSS variable-driven, temas)    │
+└─────────────────────────────────────────────┘
 ```
+
+La skill no decide dónde se escribe, con qué nombre, ni qué technology usa el runner para persistir. Proporciona el HTML; el entorno lo aterriza.
+
+## Entradas
+
+| Input | Requerido | Descripción |
+|---|---|---|
+| Ruta/anatomía del proyecto | Sí | Path o resumen del proyecto con: nombre, tipo, endpoints[], commands[], routes[], funciones[], eventos[], estructura_arbol |
+| Marca | No | Colores, logo SVG, fuentes, tono. Por defecto: paleta neutra, tipografía sistema, sin logo |
+| UX | No | Pautas de usabilidad: accesibilidad (AA/AAA), responsive (mobile/desktop-first), densidad (baja/media/alta). Por defecto: AA, mobile-first, media |
+| Audiencia | No | Perfil de usuario: nivel técnico, dispositivo, contexto. Por defecto: técnico medio, escritorio+móvil |
+
+Cada input modula el resultado. A más inputs, más matizada la UI. A menos inputs, genérica pero funcional. Siempre produce algo utilizable.
 
 ## Formas (del esquema)
 
@@ -92,4 +96,4 @@ El generador se compone de:
 
 - **No generar capas separadas** — la navegación, el estilo y los datos no se construyen por separado y luego se ensamblan. El agente produce un solo HTML que lo sabe todo junto.
 - **No inventar datos del proyecto** — los nombres de endpoints, rutas, funciones y comandos deben ser reales. Solo los valores de ejemplo (respuestas mock) son sintéticos.
-- **No cargar recursos externos** — ni CDN, ni Google Fonts, ni imágenes externas. El logo debe ir como SVG inline si se proporciona.
+- **No cargar recursos externos** — ni CDN, ni Google Fonts, ni imágenes externas. El logo debe ir como SVG inline si se proporciona. El HTML debe funcionar sin conexión a internet.

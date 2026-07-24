@@ -2055,6 +2055,10 @@ REGISTRO CENTRAL de todos los botones del sistema. Cada feature registra el suyo
 interruptor.cambiado avisa al dueño para reaccionar EN CALIENTE (sin reinicio).
 Estado global persistido (data/interruptores.json): lo tocado por el humano MANDA sobre el default.
 
+TOGGLE POR PROYECTO (per_project:true)  excepción al estado global: su on/off vive en el DUEÑO por
+   proyecto, no en data/interruptores.json. _upsert conserva metadatos + ruteo (dominio/accion_set/
+   accion_get); el panel lee/escribe con el project_id activo. Testigo: cupula_vista_global (cupulas).
+
 SYNC AL CARGAR (v1.1.0)  onRegistrar, tras el upsert, EMITE interruptor.cambiado si el estado
    persistido difiere del default anunciado → el 'off' (u 'on') del humano SOBREVIVE al reinicio.
    Solo emite en divergencia (sin ruido). Beneficia a todos los dueños.
@@ -3441,6 +3445,7 @@ CLASE AIGateway IMPLEMENTA AIGatewayContract {
 
     async onLoad(moduleContext: Object): Promise<Void>
       SUSCRIBE A ai.call events
+      SUSCRIBE A cupulas.visibilidad_cambiada   // caché por-proyecto de visibilidad de la vista (reacción en caliente)
       REGISTRA tools PARA AI agent
       REGISTRA UI handlers
       PARA cada provider: INICIALIZA client SI credential disponible
@@ -3524,6 +3529,13 @@ CLASE AIGateway (ampliación) {
     // ── 5. max_tokens con SUELO
     chatOptions.max_tokens = Math.max(settings?.max_tokens || 0, 4096)   // floor, no default
     // Sube también las conversaciones existentes (que tienen 2000 guardado).
+
+    // ── 6. VISIBILIDAD POR PROYECTO de cupulas.vista_proyecto
+    // La tool entra en GLOBAL_TOOLS pero _filtrarVisibilidadCupula(tools, project_id) la
+    // RETIRA salvo que el proyecto tenga el flag en true (default OFF, honesto). Caché
+    // _cupulaVistaVisible: reacciona a cupulas.visibilidad_cambiada en caliente y calienta
+    // lazy con RPC best-effort a cupulas.visibilidad en miss (patrón _leerRailActivo). El
+    // filtro se aplica en los dos call-sites de _getTools (chat + async-handler).
   }
 }
 ```
@@ -12877,9 +12889,17 @@ https://claude.ai/code/session_019C4pks5RDdscuKPqVdTWRF
 > rebanada propia y su ficha se muda. Descripciones tomadas de sus module.json.
 
 ```
-cupulas (1.0.0)
+cupulas (1.1.0)
   Bóveda estilo Obsidian con prosa mínima: cúpulas temáticas por TIPO DE PRIMITIVA
   (skill/agente/handler/blueprint/clase/...) de notas-código. Semilla: scripts/seed-cupulas.js.
+  + cupulas.vista_proyecto: nota VIVA del proyecto COMPUTADA al momento (identidad +
+    persistencia/current/*) — no snapshot; se proyecta desde los datos reales en cada
+    lectura (frescura por construcción, piso COMPUTADO de la cabecera). Cúpula 'proyecto'
+    exclusiva del proyecto (scope:project → data/projects/<id>/cupulas/).
+  + visibilidad global POR PROYECTO (on/off): cupulas.set_visibilidad/visibilidad guardan el
+    interruptor en el _index.json del proyecto (nace APAGADO). El ai-gateway expone
+    cupulas.vista_proyecto en GLOBAL_TOOLS pero la RETIRA salvo que el proyecto la encienda
+    (filtro _filtrarVisibilidadCupula, caché event-driven por cupulas.visibilidad_cambiada).
 
 inventario (1.0.0)
   Inventario por proyecto con stock_real + reservas con expiración. Multi-proyecto:
@@ -14796,12 +14816,17 @@ inyeccion: SOLO turno real con proyecto (no sintetico). Si conserje OFF -> no ha
 
 ```
 CLASE InterruptoresModule HEREDA BaseModule {     // el panel de control
-  toggles: Map<id, {id, label, descripcion, grupo, estado, default}>
+  toggles: Map<id, {id, label, descripcion, grupo, estado, default, per_project?, dominio?, accion_set?, accion_get?}>
   onLoad: publica interruptor.solicitar_registro  // anuncio: cura la carrera de arranque
   onRegistrar(evento): _upsert (el estado PERSISTIDO manda sobre el default)
   ui interruptores.listar -> el panel los pinta por grupo
   ui interruptores.set {id, enabled} -> persiste data/interruptores.json + emite interruptor.cambiado
   // el dueño del interruptor escucha cambiado y reacciona EN CALIENTE sin reinicio
+
+  TOGGLE POR PROYECTO (per_project:true)  su estado NO vive aquí (global) sino en su DUEÑO por
+    proyecto; _upsert solo conserva los metadatos + ruteo (dominio, accion_set, accion_get). El
+    panel enruta el on/off con el project_id activo por dominio, no por interruptores.set.
+    Testigo: cupula_vista_global (dueño cupulas → set_visibilidad/visibilidad).
 
   PATRON anuncio/solicitud (como tarifas.config.solicitada):
     interruptores al cargar pide registro -> cada feature re-registra -> order-independent
@@ -14809,6 +14834,8 @@ CLASE InterruptoresModule HEREDA BaseModule {     // el panel de control
 
 // FRONTEND: modules/interruptores (work-bar 🎛️) — InterruptoresPanel.svelte
 //   lista los toggles por grupo, un switch por cada uno; al pulsar -> interruptores.set.
+//   TOGGLE per_project: lee el estado real con el project_id activo (accion_get) y enruta el
+//   flip por su dominio (accion_set); badge "por proyecto" + guard sin proyecto activo.
 
 PENDIENTE (boot-sync): al arrancar, el estado persistido (panel ON) no propaga al
   modulo dueño -> el conserje arranca activo:false aunque el toggle estuviera ON.
@@ -16154,7 +16181,7 @@ PIEZAS {
   modules/estados (0.4.0 · reflejo 0.4.0)   la cúpula custodio (single-writer, freno entre pasos + EL JUEZ)
                                             + TOOLS del chat (crear·anadir·completar·ver·borrar·fijar_objetivo·evaluar_rail)
   modules/_shared/procesos-semilla.js       las plantillas de proceso por arquetipo (PRISMA hereda)
-  ai-gateway (2.35.0)                      el nervio: _leerRailActivo + _composeRailSection (activa + objetivo + juez)
+  ai-gateway (2.36.0)                      el nervio: _leerRailActivo + _composeRailSection (activa + objetivo + juez)
                                             + EL TIRO AUTOMÁTICO (_evaluarRailAuto post-turno, detached, safety caps)
 }
 LA MANO QUE ESCRIBE (v0.2.0)  el diseño decía "el LLM PROPONE · el reflejo SOSTIENE". v0.1 construyó el que

@@ -1,7 +1,7 @@
 {
   "_doc": "cupulas — un Obsidian invertido: PROSA minima, el cuerpo es pseudocodigo + OOP. Reflejo JS (determinista) que custodia una boveda de notas navegables (ficheros .md/.json en storage/cupulas/<cupula>/<nota>.<ext>) agrupadas en CUPULAS TEMATICAS por TIPO DE PRIMITIVA del sistema: cupula de skill, de agentes, de handler, de blueprints, de clases — y los que vengan (el eje es ABIERTO, no rigido: 'para no ser muy determinista'). El lenguaje (oop/js/python/...) es metadato OPCIONAL de cada nota, no el eje. Un _index.json mantiene catalogo + ENLACES (wikilinks -> grafo). El LLM REUTILIZA el material: tira de cupulas.contexto (bundle listo para reusar), buscar y grafo, y lo autora via crear_cupula/add_nota. Cada nota: frontmatter (descriptor) + 1 linea de resumen + el cuerpo (codigo/pseudocodigo). El cuerpo manda; la prosa se raciona.",
   "name": "cupulas",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Boveda estilo Obsidian con prosa minima. Cupulas tematicas por TIPO DE PRIMITIVA (skill/agente/handler/blueprint/clase/...) de notas-codigo enlazadas (grafo). Reflejo JS; el LLM reutiliza via cupulas.contexto/buscar/grafo y autora via crear_cupula/add_nota. Vault = ficheros navegables + _index.json. Eje abierto (tipo es string libre); lenguaje es metadato opcional.",
   "author": "Event Core Team",
   "language": "es",
@@ -15,7 +15,8 @@
   },
   "publishes": [
     { "event": "cupulas.cupula_creada", "description": "Una cupula tematica fue creada." },
-    { "event": "cupulas.nota_creada", "description": "Una nota fue anadida a una cupula." }
+    { "event": "cupulas.nota_creada", "description": "Una nota fue anadida a una cupula." },
+    { "event": "cupulas.vista_computada", "description": "La vista viva del proyecto fue computada al momento desde sus datos reales." }
   ],
   "subscribes": [
     { "event": "cupulas.crear_cupula.request", "handler": "onCrearCupulaRequest", "description": "Reflejo: crea una cupula tematica de un tipo." },
@@ -25,7 +26,8 @@
     { "event": "cupulas.listar_notas.request", "handler": "onListarNotasRequest", "description": "Reflejo: notas de una cupula (sin cuerpo)." },
     { "event": "cupulas.buscar.request", "handler": "onBuscarRequest", "description": "Reflejo: busqueda en el indice (titulo/resumen/tipo/cupula)." },
     { "event": "cupulas.grafo.request", "handler": "onGrafoRequest", "description": "Reflejo: nodos+aristas (enlaces entre notas)." },
-    { "event": "cupulas.contexto.request", "handler": "onContextoRequest", "description": "Reflejo: bundle de material para que el LLM lo reutilice." }
+    { "event": "cupulas.contexto.request", "handler": "onContextoRequest", "description": "Reflejo: bundle de material para que el LLM lo reutilice." },
+    { "event": "cupulas.vista_proyecto.request", "handler": "onVistaProyectoRequest", "description": "Reflejo: computa AL MOMENTO la nota-vista con todos los datos del proyecto (identidad + persistencia/current/*)." }
   ],
   "ui_handlers": [
     { "domain": "cupulas", "action": "crear_cupula", "handler": "handleCrearCupula" },
@@ -35,9 +37,23 @@
     { "domain": "cupulas", "action": "listar_notas", "handler": "handleListarNotas" },
     { "domain": "cupulas", "action": "buscar", "handler": "handleBuscar" },
     { "domain": "cupulas", "action": "grafo", "handler": "handleGrafo" },
-    { "domain": "cupulas", "action": "contexto", "handler": "handleContexto" }
+    { "domain": "cupulas", "action": "contexto", "handler": "handleContexto" },
+    { "domain": "cupulas", "action": "vista_proyecto", "handler": "handleVistaProyecto" }
   ],
   "tools": [
+    {
+      "name": "cupulas.vista_proyecto",
+      "description": "Computa AL MOMENTO la nota-vista del proyecto: identidad (config/project.json) + todos los dominios vivos (persistencia/current/*). NO es un snapshot guardado — se proyecta desde los datos reales en cada llamada, siempre fresca. Vive en la cupula 'proyecto' del propio proyecto.",
+      "parameters": {
+        "type": "object", "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "handleVistaProyecto",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
     {
       "name": "cupulas.contexto",
       "description": "Trae material reutilizable de la boveda: el cuerpo (pseudocodigo/OOP/codigo) de las notas de una cupula, de unos ids, o de una busqueda. Usalo para REUTILIZAR piezas (skills/agentes/handlers/blueprints/clases) en vez de reinventarlas.",

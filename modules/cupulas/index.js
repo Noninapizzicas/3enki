@@ -30,7 +30,7 @@ class CupulasReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'cupulas';
-    this.version = '1.0.0';
+    this.version = '1.1.0';
   }
 
   // ── handlers UI/tools (devuelven {status, data}) ──
@@ -42,6 +42,7 @@ class CupulasReflejo extends ModuloHibridoReflejo {
   handleBuscar(d) { return this._buscar(d); }
   handleGrafo(d) { return this._grafo(d); }
   handleContexto(d) { return this._contexto(d); }
+  handleVistaProyecto(d) { return this._vistaProyecto(d); }
 
   // ── handlers bus RPC (request/response correlada por la base) ──
   onCrearCupulaRequest(e) { return this._atender(e, 'crear_cupula', 'cupulas.crear_cupula.response', d => this._crearCupula(d)); }
@@ -52,6 +53,7 @@ class CupulasReflejo extends ModuloHibridoReflejo {
   onBuscarRequest(e) { return this._atender(e, 'buscar', 'cupulas.buscar.response', d => this._buscar(d)); }
   onGrafoRequest(e) { return this._atender(e, 'grafo', 'cupulas.grafo.response', d => this._grafo(d)); }
   onContextoRequest(e) { return this._atender(e, 'contexto', 'cupulas.contexto.response', d => this._contexto(d)); }
+  onVistaProyectoRequest(e) { return this._atender(e, 'vista_proyecto', 'cupulas.vista_proyecto.response', d => this._vistaProyecto(d)); }
 
   // =============================================================
   // Store de la bóveda — ficheros + un índice (vía el reflejo fs)
@@ -290,6 +292,108 @@ class CupulasReflejo extends ModuloHibridoReflejo {
       .join('\n\n---\n\n');
 
     return { status: 200, data: { total: notas.length, notas, material } };
+  }
+
+  // =============================================================
+  // VISTA VIVA DEL PROYECTO — una nota COMPUTADA al momento.
+  // No es un snapshot guardado: se proyecta desde los datos reales del proyecto
+  // en cada llamada (frescura por construcción, piso COMPUTADO de la cabecera).
+  // El .md en el vault es CACHE navegable (Obsidian); la verdad es lo devuelto.
+  // Todo vive dentro de data/projects/<project_id>/ (scope:project del módulo).
+  // =============================================================
+  async _vistaProyecto(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    const pid = input.project_id;
+    const fresca_en = new Date().toISOString();
+
+    // 1. HIDRATAR lo vivo — identidad + TODOS los dominios de persistencia/current.
+    //    Cada fuente es best-effort: una ausente deja su sección vacía, no rompe la nota.
+    const ident = await this._leerJson(pid, '/config/project.json');
+    const fuentes = [{ clave: 'identidad', titulo: 'Identidad', dato: ident, path: '/config/project.json' }];
+    for (const f of await this._listarDatosVivos(pid)) fuentes.push(f);
+
+    // 2. RENDERIZAR — prosa mínima; el cuerpo es el dato (filosofía de la bóveda).
+    const cuerpo = this._renderVista({ pid, ident, fuentes, fresca_en });
+
+    // 3. ASENTAR en el vault (idempotente; la cúpula/nota nacen del acto, sin pre-registro).
+    const cupulaId = 'proyecto', notaId = 'estado-actual';
+    const notaPath = `${VAULT}/${cupulaId}/${notaId}.md`;
+    const idx = await this._leerIndice(pid);
+    if (!idx.cupulas[cupulaId]) {
+      idx.cupulas[cupulaId] = {
+        id: cupulaId, tema: 'proyecto', tipo: 'vista',
+        descripcion: this._prosa('Vista viva del proyecto — computada al momento desde sus datos reales.'),
+        notas: [], created_at: fresca_en
+      };
+    }
+    const meta = {
+      id: notaId, cupula: cupulaId, titulo: 'Estado del proyecto', tipo: 'vista',
+      lenguaje: null, resumen: this._prosa('Datos del proyecto, computados al momento.'),
+      enlaces: [], formato: 'md', path: notaPath, updated_at: fresca_en, fresca_en
+    };
+    idx.notas[notaId] = meta;
+    if (!idx.cupulas[cupulaId].notas.includes(notaId)) idx.cupulas[cupulaId].notas.push(notaId);
+
+    const w = await this._escribirTexto(pid, notaPath, cuerpo);
+    const cacheado = !(w && w.status && w.status >= 400);
+    if (cacheado) await this._guardarIndice(pid, idx);
+
+    const presentes = fuentes.filter(f => f.dato != null).map(f => f.clave);
+    await this._publicarEvento('cupulas.vista_computada',
+      { project_id: pid, cupula: cupulaId, nota_id: notaId, fresca_en, fuentes_presentes: presentes }, input);
+
+    return { status: 200, data: { nota: { ...meta, contenido: cuerpo }, fresca_en, cacheado, fuentes_presentes: presentes } };
+  }
+
+  // Enumera persistencia/current/*.json EN VIVO → una fuente por dominio del proyecto.
+  async _listarDatosVivos(pid) {
+    const dir = '/persistencia/current';
+    const resp = await this._rpc('fs.list.request', { project_id: pid, path: dir });
+    const files = (resp && (resp.files || resp.items)) || [];
+    const jsons = files.filter(f => f && f.type === 'file' && /\.json$/i.test(f.name));
+    const out = [];
+    for (const f of jsons) {
+      const dato = await this._leerJson(pid, f.path);
+      const clave = String(f.name).replace(/\.json$/i, '');
+      out.push({ clave, titulo: this._tituloDominio(clave), dato, path: f.path });
+    }
+    return out;
+  }
+
+  _tituloDominio(clave) {
+    const s = String(clave).replace(/[_-]+/g, ' ').trim();
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : clave;
+  }
+
+  // Cuerpo de la nota viva: sello de frescura + una sección por fuente presente.
+  _renderVista({ pid, ident, fuentes, fresca_en }) {
+    const nombre = (ident && (ident.name || ident.nombre)) || pid;
+    const tipo = (ident && (ident.tipo || ident.type)) || '—';
+    const fm = [
+      '---',
+      'id: estado-actual',
+      'cupula: proyecto',
+      'tipo: vista',
+      `fresca_en: ${fresca_en}`,
+      '---'
+    ].join('\n');
+    const cab = `# ${nombre} · ${tipo}\n> Estado del proyecto · computado al momento: ${fresca_en}`;
+    const secciones = fuentes.map(f => {
+      if (f.dato == null) return `## ${f.titulo}\n> sin datos`;
+      return `## ${f.titulo}\n${this._statLinea(f.dato)}\n\n\`\`\`json\n${this._recorta(f.dato)}\n\`\`\``;
+    });
+    return `${fm}\n${cab}\n\n${secciones.join('\n\n')}\n`;
+  }
+
+  _statLinea(dato) {
+    if (Array.isArray(dato)) return `> ${dato.length} elementos`;
+    if (dato && typeof dato === 'object') return `> ${Object.keys(dato).length} campos`;
+    return `> ${String(dato)}`;
+  }
+
+  _recorta(dato, max = 4000) {
+    const s = JSON.stringify(dato, null, 2);
+    return s.length > max ? s.slice(0, max) + '\n… (recortado)' : s;
   }
 }
 

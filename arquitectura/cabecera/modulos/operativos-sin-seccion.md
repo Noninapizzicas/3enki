@@ -24,6 +24,10 @@ verificado: 2026-07-06
 cupulas ({{version:modules/cupulas}})
   Bóveda estilo Obsidian con prosa mínima: cúpulas temáticas por TIPO DE PRIMITIVA
   (skill/agente/handler/blueprint/clase/...) de notas-código. Semilla: scripts/seed-cupulas.js.
+  + cupulas.vista_proyecto: nota VIVA del proyecto COMPUTADA al momento (identidad +
+    persistencia/current/*) — no snapshot; se proyecta desde los datos reales en cada
+    lectura (frescura por construcción, piso COMPUTADO de la cabecera). Cúpula 'proyecto'
+    exclusiva del proyecto (scope:project → data/projects/<id>/cupulas/).
 
 inventario ({{version:modules/inventario}})
   Inventario por proyecto con stock_real + reservas con expiración. Multi-proyecto:

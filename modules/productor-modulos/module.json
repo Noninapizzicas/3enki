@@ -1,0 +1,77 @@
+{
+  "_doc": "productor-modulos — REFLEJO JS: recibe un diseño de módulo (module.json + index.js + tests) desde disenador-modulos, lo valida contra el patrón de modulo-real.md, pide confirmación vía interruptor, y lo escribe en modules/<nombre>/. Es el brazo ejecutor del flujo: esquematizador → disenador-modulos → productor-modulos.",
+  "name": "productor-modulos",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: tool productor.producir que recibe diseño, valida, escribe archivos en modules/. Interruptor de seguridad (OFF por defecto) en productor-modulos.habilitado.",
+  "description": "Brazo ejecutor: valida y escribe módulos en modules/<nombre>/ a partir de un diseño. Requiere interruptor ON para funcionar.",
+  "language": "es",
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura estado. El módulo no persiste datos de proyecto, solo registra su interruptor."
+    },
+    {
+      "event": "interruptor.cambiado",
+      "handler": "onInterruptorCambiado",
+      "description": "El dueño activó/desactivó el interruptor productor-modulos.habilitado. Actualiza enabled en caliente."
+    },
+    {
+      "event": "interruptor.solicitar_registro",
+      "handler": "onSolicitarRegistro",
+      "description": "Al arrancar, (re)registra su interruptor en el panel."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "productor.modulo.producido",
+      "description": "Un módulo fue escrito exitosamente. Payload: { nombre, path, files[] }."
+    },
+    {
+      "event": "productor.modulo.rechazado",
+      "description": "Un diseño fue rechazado por validación. Payload: { nombre, errores[] }."
+    },
+    {
+      "event": "interruptor.registrar",
+      "description": "Registra el interruptor productor-modulos.habilitado en el panel de control."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "productor.producir",
+      "description": "Escribe un módulo en modules/<nombre>/. Recibe el diseño completo (module.json + index.js + opcional test.js). Valida contra el patrón de modulo-real.md antes de escribir. REQUIERE que el interruptor 'productor-modulos' esté activado.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nombre": { "type": "string", "minLength": 1, "description": "Nombre del módulo (snake_case)." },
+          "module_json": { "type": "object", "description": "Contenido del module.json." },
+          "index_js": { "type": "string", "description": "Código fuente del index.js." },
+          "test_js": { "type": "string", "description": "Código del test unitario (opcional)." }
+        },
+        "required": ["nombre", "module_json", "index_js"]
+      },
+      "handler": "toolProducir",
+      "errores_conocidos": ["INVALID_INPUT", "FORBIDDEN", "CONFLICT", "VALIDATION_ERROR", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "productor.validar",
+      "description": "Valida un diseño de módulo sin escribirlo. Devuelve la lista de errores si los hay.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nombre": { "type": "string", "minLength": 1 },
+          "module_json": { "type": "object" },
+          "index_js": { "type": "string" }
+        },
+        "required": ["nombre", "module_json"]
+      },
+      "handler": "toolValidar",
+      "errores_conocidos": ["INVALID_INPUT", "VALIDATION_ERROR"]
+    }
+  ]
+}

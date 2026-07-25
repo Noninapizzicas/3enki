@@ -3,7 +3,7 @@
  * recolectar-anatomia.js — REFLEJO de piel-del-sistema, Fase 1.
  *
  * Consulta las cúpulas de un proyecto y produce la anatomía JSON
- * que alimenta anatomia-a-spec.js.
+ * que alimenta spec-maker.js.
  *
  * Dos modos:
  *   MQTT  → consulta cúpulas por el bus (Enki vivo)

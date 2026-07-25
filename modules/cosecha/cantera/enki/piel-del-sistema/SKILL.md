@@ -1,106 +1,131 @@
 ---
 name: piel-del-sistema
-description: "Genera la interfaz viva de cualquier proyecto en Enki. No es una UI estática — es la PIEL del sistema: cada componente llama a eventos del bus, consulta cúpulas en caliente, opera el backend real (carrito, cobro, cuentas) y puede delegar al agente conversacional lo que la UI no resuelve sola. El HTML es solo el conductor; el sistema es el backend."
+description: "Genera la interfaz viva de un proyecto — la PIEL del sistema. Cada componente se genera desde los datos reales del proyecto (cúpulas), la estructura se calcula con un reflejo determinista (anatomia-a-spec.js), y las operaciones llaman a eventos del bus en vivo. El agente solo pone estética y tono sobre un esqueleto que no puede modificar. Si el entorno lo permite, la UI opera el backend real en lugar de mostrar mocks."
 ---
 
 # Piel del Sistema
 
-> La UI no se genera y se olvida. La UI se genera CONOCIENDO el sistema y OPERÁNDOLO en vivo.
+> La UI no se genera y se olvida. La UI es la PIEL de un sistema vivo.
+> El esqueleto lo calcula un reflejo; el agente solo lo viste.
 
-Esta skill usa **`generar-ui-web`** como base (conocimiento universal de interfaces: layouts, navegación, estilo, UX) y lo extiende con el conocimiento del sistema Enki: cúpulas, eventos, skills de backend, agentes.
+Esta skill toma el concepto de **`uiwebv2`** — el reparto real de formas con un reflejo determinista que produce un UI-SPEC — y lo convierte en la **piel del sistema**: una interfaz que no solo muestra, sino que opera el backend en tiempo real.
 
-## Arquitectura
+## El reparto de formas
 
 ```
-Usuario (navegador)
-    │
-    ▼
-┌─────────────────────────────────────┐
-│  PIEL (HTML/CSS/JS mínimo)         │
-│  Se sirve una vez desde www/        │
-│  Al cargar, se conecta al sistema   │
-│  Cada interacción = RPC al bus      │
-└──────────┬──────────────────────────┘
-           │
-    ┌──────┴──────┐
-    ▼             ▼
-┌────────┐  ┌──────────┐
-│ EVENTOS│  │  AGENTE  │
-│  bus   │  │  chat    │
-│ MQTT   │  │  Enki    │
-└────────┘  └──────────┘
+┌──────────────────────────────────────────────────────────┐
+│  REFLEJO  (determinista, testeable, puro)                │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  1. recolectar-anatomia.js                         │  │
+│  │     cúpulas → anatomía JSON                        │  │
+│  │     (o fallback: escanea archivos)                 │  │
+│  │                                                     │  │
+│  │  2. anatomia-a-spec.js  (de uiwebv2)               │  │
+│  │     anatomía → UI-SPEC { marca, nav, secciones }    │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                          │
+│  AGENTE  (fuzzy, solo estética y tono)                   │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  UI-SPEC + inputs → HTML                           │  │
+│  │  · Pinta las secciones TAL CUAL (no decide cuáles)  │  │
+│  │  · Tiñe CSS con la marca                            │  │
+│  │  · Redacta con el tono de la audiencia              │  │
+│  │  · Si hay acceso al bus → operaciones reales        │  │
+│  │  · Si no → formularios mock                         │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                          │
+│  REFLEJO  (determinista)                                 │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  3. publicar-piel.js                               │  │
+│  │     HTML → www/index.html (vía fs.write o deploy)  │  │
+│  └────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────┘
 ```
 
-## Inputs (los que recibe de `generar-ui-web` + sistema)
+El reflejo de uiwebv2 (`anatomia-a-spec.js`) se adopta tal cual — ya existe, tiene tests, y cumple: mismo input → mismo output.
 
-| Input | Cómo se obtiene |
-|---|---|
-| Anatomía del proyecto | `cupulas.vista_proyecto` |
-| Marca (colores, fuentes, logo) | `cupulas.vista_proyecto` → identidad |
-| UX / defaults | Propios de `generar-ui-web` |
-| Audiencia | `cupulas.vista_proyecto` o default |
-| **Skills backend** | Cantera: `prisma-carrito`, `prisma-cobro`, etc. |
-| **Eventos del bus** | Cúpula de eventos |
-| **Agentes disponibles** | Cúpula de agentes |
+## Inputs
+
+| Input | Requerido | Cómo se obtiene |
+|---|---|---|
+| Proyecto | Sí | `project_id` — de él sale la anatomía vía cúpulas |
+| Marca | No | De `cupulas.vista_proyecto` o fallback: defaults neutros |
+| UX | No | Default: WCAG AA, mobile-first, densidad media |
+| Audiencia | No | Default: técnico medio, escritorio+móvil |
+
+A más inputs, más matizada la piel. La estructura no depende de ellos — siempre sale del reflejo.
 
 ## Proceso
 
-### Fase 1: Descubrir el sistema
+### Fase 1 — REFLEJO: recolectar anatomía
 
-1. `cupulas.vista_proyecto.request` → identidad, marca, configuración
-2. Listar skills backend en cantera (`modules/cosecha/cantera/enki/prisma-*`)
-3. Leer sus contratos (eventos request/response, payloads exactos) desde los SKILL.md
-4. Listar agentes disponibles
-5. Identificar flujo de operación del proyecto (venta, gestión, dashboard...)
+Dos caminos, en orden de prioridad:
 
-Genera un JSON de **contexto del sistema**.
+**Camino A (Enki vivo):** Ejecuta `recolectar-anatomia.js` que:
+1. Llama a `cupulas.vista_proyecto` → identidad, marca, dominios
+2. Llama a `buscar_capacidad` + `detalle_capacidad` → capacidades del bus
+3. Llama a `cupulas.listar_cupulas` → inventario
+4. Produce JSON `anatomia.json`
 
-### Fase 2: Diseñar la piel
+**Camino B (fallback universal):** Lee `package.json`, `README.md`, estructura de directorios. Detecta tipo de proyecto, endpoints, rutas. Produce el mismo JSON con datos del filesystem.
 
-Con el contexto del sistema + el conocimiento de `generar-ui-web`, define:
-
-- **Secciones:** ¿qué necesita ver el usuario? (catálogo, carrito, cobro, pedidos, dashboard)
-- **Operaciones:** ¿qué puede hacer? (añadir al carrito, cobrar, consultar, buscar...)
-- **Datos vivos:** ¿qué se carga del bus vs qué va estático?
-- **Punto de fallback:** ¿qué pasa si el bus no responde? (delegar al agente)
-
-### Fase 3: Generar la interfaz viva
-
-Produce HTML+JS que:
-
-1. **Al cargar:** hace fetch del contexto y pinta la UI con datos reales
-2. **Cada interacción:** llama al bus MQTT (vía `ui/request/<dominio>/<accion>`)
-3. **Opera el backend:** carrito, cobro, cuentas, productos — todo vía eventos
-4. **Si algo falla:** muestra un botón "consultar al sistema" que envía un mensaje al chat de Enki
-5. **Se refresca:** periódicamente o por evento, sin recargar la página
-
-Requisitos técnicos de la piel generada:
-
-```javascript
-// Patrón de llamada al bus (el navegador no habla MQTT directo,
-// así que la UI se comunica vía el chat como proxy RPC)
-async function rpc(domain, action, payload) {
-  // Opción A: fetch a un endpoint si existe
-  // Opción B: genera un mensaje que el agente interpreta
-  // Opción C: WebSocket si el sistema lo expone
+```json
+{
+  "identidad": { "name": "...", "tipo": "...", "marca": { "colores": {}, "fuentes": "", "logo": null } },
+  "dominios":  [ { "clave": "ventas", "titulo": "Ventas", "resumen": "", "muestra": { } } ],
+  "capacidades": [ { "name": "carrito.add_item", "tipo": "rpc", "descripcion": "", "request_shape": { } } ],
+  "cupulas":   [ { "id": "proyecto", "tipo": "vista", "notas_count": 1 } ]
 }
 ```
 
-## La piel no se abandona
+### Fase 2 — REFLEJO: anatomía → UI-SPEC
 
-A diferencia del HTML estático, la piel puede **evolucionar**:
-
-- El agente `frontend-architect` puede regenerar secciones sin tocar todo
-- Los datos los sirve el sistema, no el HTML — cambiar un precio no requiere regenerar
-- Si el proyecto crece, la piel crece con él: nuevas skills en cantera → nuevas secciones en la UI
-
-## Output
-
-```
-www/
-├── index.html         ← Piel generada (liviana, se conecta al sistema)
-├── manifest.json      ← Para PWA si aplica
-└── config.json        ← Contexto del proyecto (marca, endpoints, skills)
+```bash
+cat anatomia.json | node .claude/skills/piel-del-sistema/references/anatomia-a-spec.js
 ```
 
-El HTML es irrelevante sin el sistema. El sistema es el backend. El HTML es solo el conductor entre el ojo del usuario y los eventos del bus.
+O desde código: `buildSpec(anatomia)`. El UI-SPEC es estable: mismo proyecto → misma estructura, run tras run. **Aquí no entra el agente.**
+
+### Fase 3 — AGENTE: UI-SPEC → HTML (solo piel)
+
+El agente recibe el UI-SPEC + inputs de marca/UX/audiencia y produce **un** `index.html`:
+
+- Recorre `spec.nav` y `spec.secciones` **tal cual** — ni una sección más, ni una menos, en ese orden exacto
+- Cada sección `datos` pinta su `muestra`; cada `operaciones` lista las operaciones con sus campos
+- **Si hay acceso al bus**, cada operación se convierte en un botón que llama a `rpc(dominio, accion, payload)`. El resultado se muestra en la misma UI sin recargar.
+- **Si no hay bus**, las operaciones se muestran como formularios mock con los campos reales
+- Tiñe el CSS con `spec.marca.colores` (variables CSS, tema claro/oscuro)
+- Redacta descripciones con el tono de la audiencia
+
+Reglas que el agente no puede violar:
+- HTML semántico con roles ARIA
+- Sin CDN, sin Google Fonts, sin imágenes externas. Logo SVG inline.
+- Sin backend propio — si hay bus, llama a eventos; si no, mock
+- **No inventa secciones, no las reordena, no las renombra**
+- Si algo falta → se corrige el reflejo, no se improvisa
+
+### Fase 4 — REFLEJO: publicar
+
+Tres caminos, en orden de prioridad:
+
+1. **`publicar-piel.js`** → escribe `www/index.html` vía `fs.write` RPC si el bus responde
+2. **`publicar-html`** (skill en cantera) → si el agente tiene acceso
+3. **Devolver el HTML como string** → que el usuario lo guarde donde corresponda
+
+El índice siempre en minúscula `index.html` (Caddy es case-sensitive).
+
+## Lo que no hace (y no debe hacer)
+
+- El agente no recolecta la anatomía — la recolecta el script reflejo
+- El agente no genera el UI-SPEC — lo genera `anatomia-a-spec.js`
+- El agente no persiste el HTML — lo persiste `publicar-piel.js` o el runner
+- El agente solo **viste** el esqueleto que recibe
+
+## Formas del esquema
+
+| Forma | Qué | Cómo |
+|---|---|---|
+| REFLEJO | recolectar-anatomia.js | Script que consulta cúpulas |
+| REFLEJO | anatomia-a-spec.js | Función pura, testeable (de uiwebv2) |
+| MICRO-AGENTE | UI-SPEC → HTML | LLM: solo estética y tono |
+| REFLEJO | publicar-piel.js | Script que persiste vía fs.write |

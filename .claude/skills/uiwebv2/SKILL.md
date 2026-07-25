@@ -73,14 +73,33 @@ echo "$anatomia" | node .claude/skills/uiwebv2/anatomia-a-spec.js   # → UI-SPE
 O `require('./anatomia-a-spec').buildSpec(anatomia)`. El UI-SPEC es estable: mismo proyecto →
 misma estructura, run tras run. Aquí NO hay agente.
 
-### Fase 3 — MICRO-AGENTE: UI-SPEC → HTML (solo piel)
+### Fase 3 — MICRO-AGENTE: UI-SPEC → HTML (piel + operativa viva)
 
 El agente recibe el UI-SPEC + los inputs de marca/UX/audiencia y produce **un** `index.html`:
 
 - Recorre `spec.nav` y `spec.secciones` **tal cual** → menú lateral colapsable + secciones en ese orden.
-- Cada sección `datos` pinta su `muestra`; cada `operaciones` lista `spec.operaciones` con sus `campos` (formulario mock).
+- Cada sección `datos` pinta su `muestra`; cada `operaciones` lista `spec.operaciones` con sus `campos`.
+- **Si el entorno tiene acceso al bus**, la UI genera llamadas reales a eventos (`rpc(dominio, accion, payload)`) en lugar de mocks. Las operaciones se ejecutan contra el sistema vivo.
+- **Si no hay acceso al bus**, las operaciones se muestran como formularios mock con los campos reales del spec.
 - Tiñe el CSS con `spec.marca.colores` (CSS variable-driven, tema claro/oscuro automático).
 - Redacta descripciones con el TONO de la audiencia.
+
+Patrón de conexión al bus desde la UI (cuando es posible):
+
+```javascript
+// La UI se comunica con el sistema vía el chat como proxy RPC
+async function rpc(domain, action, payload) {
+  // Opción A: fetch a endpoint si existe
+  // Opción B: genera mensaje que el agente interpreta
+  // Opción C: WebSocket si el sistema lo expone
+  return fetch(`/api/${domain}/${action}`, {
+    method: 'POST', body: JSON.stringify(payload)
+  }).then(r => r.json());
+}
+```
+
+Cada operación del spec se convierte en un botón/formulario que llama a `rpc()`.
+El resultado se muestra en la misma UI sin recargar la página.
 
 Reglas (heredadas, siguen valiendo):
 - HTML semántico con roles ARIA. Sin dependencias externas (ni CDN, ni fuentes remotas, ni imágenes externas). Logo como SVG inline.

@@ -14519,6 +14519,7 @@ TESTS {
     "árbol libre":  "lo que el comerciante suba a www/ (www/catalogo/…) convive al lado y se espeja en la URL"
   },
   "shop_desaparece": "el modelo viejo /<ns>/shop/<slug> (feature 'tienda', bundle rígido) queda LEGACY. Migración runtime: reactivar www + republicar.",
+  "indice_minuscula": "el índice servible SIEMPRE 'index.html' en MINÚSCULA — Caddy sirve case-sensitive y su try_files busca 'index.html'. publicador normaliza el nombre a minúscula (SLUG_FILE lleva /i → dejaría pasar 'Index'); si no, el fichero existe pero /<ns>/<slug>/<dir>/ da 404 (caso real pos/Index.html).",
   "no_toca": ["Caddyfile (try_files ya sirve árbol)", "reconcile.js", "project-manager._applySymlinks (lo conduce el blueprint)"],
   "borde": "try_files … /index.html cae al índice del NAMESPACE, no al del proyecto, para rutas inexistentes bajo /<ns>/<slug>/ — irrelevante con árbol de ficheros real"
 }

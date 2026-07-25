@@ -19,6 +19,22 @@ Un solo archivo HTML autocontenido que se abre en navegador.
 
 ## Proceso
 
+### Fase 0 — ESQUEMATIZAR el proyecto (prisma hasta seco + disección)
+
+Antes de generar nada, entiende el proyecto. Aplica `esquematizador`:
+
+1. Toma el proyecto como sujeto crudo
+2. Pásalo por el prisma de 5 huecos: IDENTIDAD, RESTRICCIONES, CONTRATO, NO-OBJETIVOS, PREGUNTAS_ABIERTAS
+3. De cada hueco salen sub-productos; pasa cada uno por el prisma otra vez
+4. Repite hasta que solo queden piezas ATÓMICAS (testeables), ABIERTAS (privadas del dueño) o REPETIDAS
+5. Cuando toques suelo: asigna FORMA a cada pieza (reflejo, micro-agente, custodio, conversor, puente)
+
+**Persiste el resultado:**
+- `esquema/<proyecto>/anatomia.md` con el árbol maestro
+- `esquema/<proyecto>/formas.md` con la disección
+
+Este análisis queda en el sistema. No se pierde. Solo después de entender el proyecto, pasa a la siguiente fase.
+
 ### Fase 1: Descubrir el proyecto y sus capacidades (reflejo)
 
 Consulta las cúpulas del sistema para obtener toda la información disponible del proyecto:

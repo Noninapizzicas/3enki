@@ -44,6 +44,24 @@ A más inputs, más matizada la piel. La estructura no depende de ellos — siem
 
 ## Proceso
 
+### Fase 0 — ESQUEMATIZAR el sujeto (prisma hasta seco + disección)
+
+Antes de generar nada, entiende el proyecto. Aplica `esquematizador`:
+
+1. Toma el proyecto como sujeto crudo
+2. Pásalo por el prisma de 5 huecos: IDENTIDAD, RESTRICCIONES, CONTRATO, NO-OBJETIVOS, PREGUNTAS_ABIERTAS
+3. De cada hueco salen sub-productos; pasa cada uno por el prisma otra vez
+4. Repite hasta que solo queden piezas ATÓMICAS (testeables), ABIERTAS (privadas del dueño) o REPETIDAS
+5. Cuando toques suelo: asigna FORMA (reflejo, micro-agente, custodio, conversor, puente) a cada pieza
+
+**Persiste el resultado** — el esquema completo debe quedar escrito en el sistema:
+- `esquema/<proyecto>/anatomia.md` con el árbol maestro
+- `esquema/<proyecto>/formas.md` con la disección de cada pieza
+
+Este análisis no se pierde. Queda en el sistema para que lo consultes después y para que otros agentes lo usen.
+
+Solo después de entender el proyecto, pasa a la Fase 1.
+
 ### Fase 1 — RECOLECTAR la anatomía (el agente conduce las cúpulas)
 
 Junta los outputs crudos, sin interpretarlos:

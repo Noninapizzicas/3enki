@@ -1,6 +1,6 @@
 ---
 name: piel-del-sistema
-description: "Genera la interfaz viva de un proyecto — la PIEL del sistema. Cada componente se genera desde los datos reales del proyecto (cúpulas), la estructura se calcula con un reflejo determinista (anatomia-a-spec.js), y las operaciones llaman a eventos del bus en vivo. El agente solo pone estética y tono sobre un esqueleto que no puede modificar. Si el entorno lo permite, la UI opera el backend real en lugar de mostrar mocks."
+description: "Genera la interfaz viva de un proyecto — la PIEL del sistema. Cada componente se genera desde los datos reales del proyecto (cúpulas), la estructura se calcula con un reflejo determinista (spec-maker.js), y las operaciones llaman a eventos del bus en vivo. El agente solo pone estética y tono sobre un esqueleto que no puede modificar. Si el entorno lo permite, la UI opera el backend real en lugar de mostrar mocks."
 ---
 
 # Piel del Sistema
@@ -8,7 +8,7 @@ description: "Genera la interfaz viva de un proyecto — la PIEL del sistema. Ca
 > La UI no se genera y se olvida. La UI es la PIEL de un sistema vivo.
 > El esqueleto lo calcula un reflejo; el agente solo lo viste.
 
-Esta skill toma el concepto de **`uiwebv2`** — el reparto real de formas con un reflejo determinista que produce un UI-SPEC — y lo convierte en la **piel del sistema**: una interfaz que no solo muestra, sino que opera el backend en tiempo real.
+Esta skill toma el concepto de **interfaz viva** y lo construye con reflejos propios: `spec-maker.js` para el UI-SPEC (sin copiar código de uiwebv2), `recolectar-anatomia.js` para las cúpulas, y `publicar-piel.js` para la persistencia.
 
 ## El reparto de formas
 
@@ -20,7 +20,7 @@ Esta skill toma el concepto de **`uiwebv2`** — el reparto real de formas con u
 │  │     cúpulas → anatomía JSON                        │  │
 │  │     (o fallback: escanea archivos)                 │  │
 │  │                                                     │  │
-│  │  2. anatomia-a-spec.js  (de uiwebv2)               │  │
+│  │  2. spec-maker.js  (propio, no copiado)               │  │
 │  │     anatomía → UI-SPEC { marca, nav, secciones }    │  │
 │  └────────────────────────────────────────────────────┘  │
 │                                                          │
@@ -42,7 +42,7 @@ Esta skill toma el concepto de **`uiwebv2`** — el reparto real de formas con u
 └──────────────────────────────────────────────────────────┘
 ```
 
-El reflejo de uiwebv2 (`anatomia-a-spec.js`) se adopta tal cual — ya existe, tiene tests, y cumple: mismo input → mismo output.
+El reflejo (`spec-maker.js`) se adopta como propio — escrito desde cero para esta skill.
 
 ## Inputs
 
@@ -81,10 +81,10 @@ Dos caminos, en orden de prioridad:
 ### Fase 2 — REFLEJO: anatomía → UI-SPEC
 
 ```bash
-cat anatomia.json | node .claude/skills/piel-del-sistema/references/anatomia-a-spec.js
+cat anatomia.json | node .claude/skills/piel-del-sistema/references/spec-maker.js
 ```
 
-O desde código: `buildSpec(anatomia)`. El UI-SPEC es estable: mismo proyecto → misma estructura, run tras run. **Aquí no entra el agente.**
+O desde código: `makeSpec(anatomia)`. El UI-SPEC es estable: mismo proyecto → misma estructura, run tras run. **Aquí no entra el agente.**
 
 ### Fase 3 — AGENTE: UI-SPEC → HTML (solo piel)
 
@@ -117,7 +117,7 @@ El índice siempre en minúscula `index.html` (Caddy es case-sensitive).
 ## Lo que no hace (y no debe hacer)
 
 - El agente no recolecta la anatomía — la recolecta el script reflejo
-- El agente no genera el UI-SPEC — lo genera `anatomia-a-spec.js`
+- El agente no genera el UI-SPEC — lo genera `spec-maker.js`
 - El agente no persiste el HTML — lo persiste `publicar-piel.js` o el runner
 - El agente solo **viste** el esqueleto que recibe
 
@@ -126,6 +126,6 @@ El índice siempre en minúscula `index.html` (Caddy es case-sensitive).
 | Forma | Qué | Cómo |
 |---|---|---|
 | REFLEJO | recolectar-anatomia.js | Script que consulta cúpulas |
-| REFLEJO | anatomia-a-spec.js | Función pura, testeable (de uiwebv2) |
+| REFLEJO | spec-maker.js | Función pura, propia (no copiada de uiwebv2) |
 | MICRO-AGENTE | UI-SPEC → HTML | LLM: solo estética y tono |
 | REFLEJO | publicar-piel.js | Script que persiste vía fs.write |

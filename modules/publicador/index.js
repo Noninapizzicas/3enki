@@ -83,9 +83,12 @@ class PublicadorModule extends ModuloHibridoReflejo {
     if (!act || !act.base_path) return this._errorResponse(409, 'CONFLICT_STATE', 'proyecto activo sin base_path conocido');
     const { slug, base_path } = act;
 
-    const archivo = (nombre && SLUG_FILE.test(nombre))
+    // Caddy sirve case-sensitive y su try_files busca 'index.html' en MINÚSCULA: el índice
+    // servible SIEMPRE en minúscula. Normalizamos el nombre (SLUG_FILE lleva flag /i → dejaría
+    // pasar 'Index'); si no, el fichero existe pero /<ns>/<slug>/<dir>/ da 404 (visto en vivo).
+    const archivo = ((nombre && SLUG_FILE.test(nombre))
       ? (nombre.endsWith('.html') ? nombre : `${nombre}.html`)
-      : 'index.html';
+      : 'index.html').toLowerCase();
 
     // FRENO best-effort (verificador-visual): no publica un HTML que renderiza roto. Solo
     // bloquea si el órgano MIRÓ de verdad (verificado && !ok); sin navegador → se publica.

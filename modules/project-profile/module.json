@@ -1,0 +1,92 @@
+{
+  "_doc": "project-profile — REFLEJO JS: gestiona el perfil extendido de un proyecto. Propósito, temporalidad, recursos, stakeholders, entregables, criterios de éxito, valor. Escucha project.created para inicializar el perfil vacío. Persiste por proyecto en state/project_profile.json.",
+  "name": "project-profile",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: perfil con propósito, temporalidad, recursos, stakeholders, entregables, criterios, valor. Escucha project.created y project.activated. CRUD vía tools y ui_handlers.",
+  "description": "Perfil extendido del proyecto: propósito, recursos, stakeholders, entregables, criterios de éxito y valor. Persiste por proyecto en state/project_profile.json.",
+  "language": "es",
+
+  "subscribes": [
+    {
+      "event": "project.created",
+      "handler": "onProjectCreated",
+      "description": "Crea el perfil vacío del proyecto al crearlo."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el perfil del proyecto activado."
+    },
+    {
+      "event": "project-profile.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve el perfil completo de un proyecto."
+    },
+    {
+      "event": "project-profile.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza campos del perfil (parcial)."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "project-profile.actualizado",
+      "description": "El perfil fue actualizado. Payload: { project_id, campos_actualizados[] }."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "project-profile.get",
+      "description": "Obtiene el perfil extendido de un proyecto.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
+    },
+    {
+      "name": "project-profile.update",
+      "description": "Actualiza el perfil de un proyecto (merge parcial).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "proposito": { "type": "string", "description": "Para qué existe el proyecto." },
+          "temporalidad": { "type": "object", "description": "{ inicio, fin_estimado }" },
+          "recursos": { "type": "object", "description": "{ personas: [], presupuesto: number }" },
+          "riesgos": { "type": "array", "description": "[{ descripcion, impacto, probabilidad }]" },
+          "stakeholders": { "type": "array", "description": "[{ nombre, rol, expectativas }]" },
+          "entregables": { "type": "array", "description": "[{ nombre, descripcion, criterios }]" },
+          "criterios_exito": { "type": "array", "description": "[criterio...]" },
+          "valor": { "type": "string", "description": "Justificación del valor del proyecto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "project-profile",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener perfil del proyecto activo."
+    },
+    {
+      "domain": "project-profile",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar perfil del proyecto activo."
+    }
+  ]
+}

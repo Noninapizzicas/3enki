@@ -51,17 +51,6 @@ class ProjectProfileReflejo extends ModuloHibridoReflejo {
     return this._persist.restaurar(d.project_id);
   }
 
-  onProjectCreated(e) {
-    const d = (e && (e.data || e)) || {};
-    const pid = d.project_id || d.id;
-    if (!pid) return;
-    if (!this._perfiles.has(pid)) {
-      this._perfiles.set(pid, { ...PERFIL_VACIO });
-      this._persist.marcarDirty(pid);
-      this._publicarEvento('project-profile.vacio', { project_id: pid });
-    }
-  }
-
   // ── Handlers ──
 
   onGetRequest(e) {
@@ -78,12 +67,12 @@ class ProjectProfileReflejo extends ModuloHibridoReflejo {
     const pid = input.project_id;
     if (!pid) return { status: 400, data: { error: 'INVALID_INPUT', message: 'project_id requerido' } };
 
-    const perfil = this._perfiles.get(pid);
+    let perfil = this._perfiles.get(pid);
     if (!perfil) {
-      // Si no existe, crearlo (puede que project.created no se hubiera emitido)
-      const nuevo = { ...PERFIL_VACIO };
-      this._perfiles.set(pid, nuevo);
-      return { status: 200, data: { project_id: pid, perfil: nuevo } };
+      // Bajo demanda: igual que carrito/cobro/cuenta
+      perfil = { ...PERFIL_VACIO };
+      this._perfiles.set(pid, perfil);
+      this._persist.marcarDirty(pid);
     }
 
     return { status: 200, data: { project_id: pid, perfil } };

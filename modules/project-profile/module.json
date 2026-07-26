@@ -8,11 +8,6 @@
 
   "subscribes": [
     {
-      "event": "project.created",
-      "handler": "onProjectCreated",
-      "description": "Crea el perfil vacío del proyecto al crearlo."
-    },
-    {
       "event": "project.activated",
       "handler": "onProjectActivated",
       "description": "Restaura el perfil del proyecto activado."
@@ -33,10 +28,6 @@
     {
       "event": "project-profile.actualizado",
       "description": "El perfil fue actualizado. Payload: { project_id, campos_actualizados[] }."
-    },
-    {
-      "event": "project-profile.vacio",
-      "description": "Un proyecto se creó con perfil vacío. Payload: { project_id }. El sistema debería rellenarlo vía esquematizador."
     }
   ],
 

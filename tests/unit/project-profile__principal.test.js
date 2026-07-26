@@ -23,7 +23,7 @@ test('get sin project_id → 400', () => {
   assert.strictEqual(r.status, 400);
 });
 
-test('get de proyecto inexistente → crea perfil vacío + 200', () => {
+test('get de proyecto inexistente → crea perfil vacío bajo demanda + 200', () => {
   const r = modulo._get({ project_id: 'test-1' });
   assert.strictEqual(r.status, 200);
   assert.ok(r.data.perfil);
@@ -53,13 +53,6 @@ test('update con múltiples campos', () => {
   assert.strictEqual(r.data.perfil.valor, 'aprender');
   assert.strictEqual(r.data.perfil.entregables.length, 1);
   assert.deepStrictEqual(r.data.campos_actualizados, ['proposito', 'entregables', 'valor']);
-});
-
-test('onProjectCreated → inicializa perfil vacío', () => {
-  modulo.onProjectCreated({ data: { project_id: 'test-nuevo' } });
-  const r = modulo._get({ project_id: 'test-nuevo' });
-  assert.ok(r.data.perfil);
-  assert.strictEqual(r.data.perfil.proposito, '');
 });
 
 (async () => {

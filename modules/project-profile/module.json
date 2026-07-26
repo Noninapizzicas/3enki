@@ -33,6 +33,10 @@
     {
       "event": "project-profile.actualizado",
       "description": "El perfil fue actualizado. Payload: { project_id, campos_actualizados[] }."
+    },
+    {
+      "event": "project-profile.vacio",
+      "description": "Un proyecto se creó con perfil vacío. Payload: { project_id }. El sistema debería rellenarlo vía esquematizador."
     }
   ],
 

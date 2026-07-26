@@ -57,6 +57,8 @@ class ProjectProfileReflejo extends ModuloHibridoReflejo {
     if (!pid) return;
     if (!this._perfiles.has(pid)) {
       this._perfiles.set(pid, { ...PERFIL_VACIO });
+      this._persist.marcarDirty(pid);
+      this._publicarEvento('project-profile.vacio', { project_id: pid });
     }
   }
 

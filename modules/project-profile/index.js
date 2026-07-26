@@ -126,16 +126,21 @@ class ProjectProfileReflejo extends ModuloHibridoReflejo {
   // ── UI Handlers ──
 
   handleUiGet(msg, reply) {
+    if (typeof reply !== 'function') {
+      // Llamado desde el bus sin callback
+      return this._get(msg.data || msg);
+    }
     const pid = msg.project_id || msg.data?.project_id;
     if (!pid) return reply({ status: 400, error: 'project_id requerido' });
-    const result = this._get({ project_id: pid });
-    reply(result);
+    return reply(this._get({ project_id: pid }));
   }
 
   handleUiUpdate(msg, reply) {
     const data = msg.data || msg;
-    const result = this._update(data);
-    reply(result);
+    if (typeof reply !== 'function') {
+      return this._update(data);
+    }
+    return reply(this._update(data));
   }
 }
 

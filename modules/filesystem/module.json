@@ -272,7 +272,7 @@
       { "event": "archivo.leer.solicitado",    "handler": "onArchivoLeerSolicitado" },
       { "event": "archivo.borrar.solicitado",  "handler": "onArchivoBorrarSolicitado" },
       { "event": "fs.read.request",            "handler": "onReadRequest" },
-      { "event": "fs.write.request",           "handler": "onWriteRequest" },
+      { "event": "fs.write.commit.request",    "handler": "onWriteRequest" },
       { "event": "fs.edit.request",            "handler": "onEditRequest" },
       { "event": "fs.copy.request",            "handler": "onCopyRequest" },
       { "event": "fs.delete.request",          "handler": "onDeleteRequest" },

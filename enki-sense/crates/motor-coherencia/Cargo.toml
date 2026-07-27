@@ -1,0 +1,19 @@
+[package]
+name = "motor-coherencia"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Juez de COHERENCIA de operaciones de enki-sense: valora si un acto (ej. fs.write) es coherente; crear/escribir de cero fluye, borrar/truncar pide confirmación. Determinista, puro, local, sin modelo."
+
+[[bin]]
+name = "motor-coherencia"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

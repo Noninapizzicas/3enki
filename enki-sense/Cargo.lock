@@ -1472,6 +1472,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "motor-coherencia"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "motor-oido"
 version = "0.1.0"
 dependencies = [

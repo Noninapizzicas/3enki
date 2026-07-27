@@ -69,8 +69,24 @@ echo "============================================"
 echo ""
 
 # ---- 1. Dependencias del sistema ----
+# Higiene de repos de terceros ANTES del primer update: una pasada anterior pudo
+# dejar el source-list de NodeSource con una firma que ya no valida (deb.nodesource.com
+# devuelve 403 / "InRelease is no longer signed"). Con set -e ese repo roto tumba TODO
+# el script en el primer `apt-get update`. Lo retiramos (idempotente); la sección Node
+# lo re-añade limpio con la clave vigente vía setup_${NODE_VERSION}.x.
+log "Limpiando repos de terceros caducos (NodeSource)..."
+rm -f /etc/apt/sources.list.d/nodesource.list \
+      /etc/apt/sources.list.d/nodesource.sources \
+      /etc/apt/keyrings/nodesource.gpg \
+      /usr/share/keyrings/nodesource.gpg 2>/dev/null || true
+
 log "Actualizando sistema..."
-apt-get update -qq
+# Un repo de terceros roto no debe abortar la pasada: si el update falla, reintenta
+# ignorando los sources.list.d añadidos (solo repos base del sistema) y sigue.
+apt-get update -qq || {
+    warn "apt-get update falló (repo de terceros roto); reintento solo con repos base"
+    apt-get update -qq -o Dir::Etc::sourceparts=/dev/null || true
+}
 apt-get install -y -qq curl git build-essential rsync > /dev/null
 
 # Chromium/Chrome retirados del host: WhatsApp va por Meta Cloud API (HTTP, sin navegador)
@@ -91,8 +107,13 @@ if command -v node &> /dev/null && [ "$(node -p 'parseInt(process.versions.node)
     log "Node.js $(node -v) ya instalado (>= v${NODE_VERSION})"
 else
     log "Instalando Node.js ${NODE_VERSION}..."
-    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - > /dev/null 2>&1
+    # No tragamos el error del setup de NodeSource: si su repo devuelve 403 o la clave
+    # no valida, queremos verlo aquí (no un "nodejs: command not found" tres pasos después).
+    if ! curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -; then
+        err "NodeSource setup_${NODE_VERSION}.x falló (403/clave). Revisa https://deb.nodesource.com o instala Node ${NODE_VERSION} a mano."
+    fi
     apt-get install -y -qq nodejs > /dev/null
+    command -v node > /dev/null || err "nodejs no quedó instalado tras NodeSource"
     log "Node.js $(node -v) instalado"
 fi
 

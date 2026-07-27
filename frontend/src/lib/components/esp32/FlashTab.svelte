@@ -192,8 +192,8 @@
 
     <div class="flash-form">
       <div class="form-row">
-        <label class="form-label">Puerto</label>
-        <select class="input" bind:value={selectedPort}>
+        <label class="form-label" for="flash-port">Puerto</label>
+        <select id="flash-port" class="input" bind:value={selectedPort}>
           <option value="">— selecciona —</option>
           {#each ports.filter(p => !p.in_use_by) as port}
             <option value={port.path}>{port.path}</option>
@@ -202,14 +202,14 @@
       </div>
 
       <div class="form-row">
-        <label class="form-label">Binario (.bin)</label>
-        <input class="input" bind:value={binaryPath} placeholder="ruta al firmware.bin" />
+        <label class="form-label" for="flash-bin">Binario (.bin)</label>
+        <input id="flash-bin" class="input" bind:value={binaryPath} placeholder="ruta al firmware.bin" />
       </div>
 
       <div class="form-row-inline">
         <div class="form-row" style="flex:1">
-          <label class="form-label">Metodo</label>
-          <select class="input" bind:value={flashMethod}>
+          <label class="form-label" for="flash-method">Metodo</label>
+          <select id="flash-method" class="input" bind:value={flashMethod}>
             <option value="esptool">esptool.py</option>
             <option value="platformio">PlatformIO</option>
             <option value="esphome">ESPHome</option>
@@ -217,8 +217,8 @@
           </select>
         </div>
         <div class="form-row" style="flex:1">
-          <label class="form-label">Baud</label>
-          <select class="input" bind:value={flashBaud}>
+          <label class="form-label" for="flash-baud">Baud</label>
+          <select id="flash-baud" class="input" bind:value={flashBaud}>
             <option value={115200}>115200</option>
             <option value={230400}>230400</option>
             <option value={460800}>460800</option>

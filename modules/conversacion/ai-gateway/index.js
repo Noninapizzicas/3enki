@@ -473,17 +473,12 @@ class AiGatewayModule extends BaseModule {
     // Prefijos de tools válidos para este page_id. Permite que módulos como
     // menu-generator (tools 'menu.*') matcheen aunque el name del módulo y el
     // prefijo de la tool no coincidan literalmente — sin renombrar nada.
-    const allowedPrefixes = this.pagePrefixes?.get(page_id);
-    const filtered = all.filter(t => {
-      const name = t.name || '';
-      if (GLOBAL_TOOLS.has(name)) return true;
-      if (allowedPrefixes && name.includes('.') && allowedPrefixes.has(name.split('.')[0])) return true;
-      // Fallback: tool name empieza por page_id (caso recetas — name del módulo coincide con prefijo)
-      if (name.startsWith(page_id + '.')) return true;
-      return false;
-    });
-    // Enumeracion de agentes en invoke_agent + invoke_agent primero (metodo compartido).
-    return this._mapInvokeAgentEnum(filtered, page_id);
+    // REJA ABIERTA (decisión del dueño): las páginas poly-funcionales (incl. el chat) reciben
+    // TODAS las tools, sin scoping por prefijo ni exclusión de fs.write. Libertad de acción:
+    // el chat puede disparar cualquier evento de cualquier dominio. El place-scoping era el
+    // fósil de un mundo de páginas; en el mundo-chat solo restaba. Se retira.
+    // (Las páginas blueprint conservan su modelo declarativo arriba — ese es su mecanismo, no un freno.)
+    return this._mapInvokeAgentEnum(all, page_id);
   }
 
   // Filtro POR PROYECTO de la visibilidad global de cupulas.vista_proyecto. La tool está

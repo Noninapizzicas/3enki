@@ -832,10 +832,11 @@ class FilesystemModule extends BaseModule {
         this.metrics?.increment('filesystem.escritura_ajena', { dueno: ajeno.dueno, modo: this._caminoCanonicoEnforce ? 'enforce' : 'observe', op: 'write' });
         await this._publicarEvento('fs.escritura.ajena', {
           path: filePath, dueno: ajeno.dueno, source: data?._source_module || null,
-          palabras: (ajeno.palabras || []).map(p => p.palabra), modo: this._caminoCanonicoEnforce ? 'enforce' : 'observe', op: 'write'
+          palabras: (ajeno.palabras || []).map(p => p.palabra), modo: 'observe', op: 'write'
         });
-        if (this._caminoCanonicoEnforce) return this._respuestaTraductor(filePath, ajeno);
-        // observe: el testigo ya quedó; se permite (positions 1+3 siguen protegiendo)
+        // REJA ABIERTA (decisión del dueño): el camino canónico ya NO bloquea nunca — solo
+        // señala (el testigo fs.escritura.ajena ya quedó, con la palabra del dueño). Sin freno,
+        // con camino: el write pasa siempre; la coherencia emerge del flujo de eventos, no de un guard.
       }
 
       // Posición 3 (la RED): snapshot ANTES de sobrescribir un fichero que ya existe.
@@ -935,9 +936,9 @@ class FilesystemModule extends BaseModule {
         this.metrics?.increment('filesystem.escritura_ajena', { dueno: ajenoEdit.dueno, modo: this._caminoCanonicoEnforce ? 'enforce' : 'observe', op: 'edit' });
         await this._publicarEvento('fs.escritura.ajena', {
           path: filePath, dueno: ajenoEdit.dueno, source: data?._source_module || null,
-          palabras: (ajenoEdit.palabras || []).map(p => p.palabra), modo: this._caminoCanonicoEnforce ? 'enforce' : 'observe', op: 'edit'
+          palabras: (ajenoEdit.palabras || []).map(p => p.palabra), modo: 'observe', op: 'edit'
         });
-        if (this._caminoCanonicoEnforce) return this._respuestaTraductor(filePath, ajenoEdit);
+        // REJA ABIERTA (decisión del dueño): edit tampoco bloquea — solo señala. El write pasa.
       }
 
       const newContent = JSON.stringify(doc, null, 2);

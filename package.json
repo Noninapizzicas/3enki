@@ -220,6 +220,7 @@
     "pdf-to-png-converter": "^3.14.0",
     "pdfjs-dist": "^5.4.530",
     "pdfkit": "^0.17.2",
+    "puppeteer-core": "^25.3.0",
     "scribe.js-ocr": "^0.9.3",
     "sharp": "^0.34.5",
     "sql.js": "^1.13.0",

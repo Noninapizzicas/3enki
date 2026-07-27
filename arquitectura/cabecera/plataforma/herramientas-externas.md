@@ -12,7 +12,7 @@ fuentes:
   - modules/_shared/error-fertil.js
   - modules/cosecha/cantera/enki/leer-web/**
   - modules/cosecha/cantera/enki/precio-ingredientes-web/**
-verificado: 2026-07-21
+verificado: 2026-07-27
 ---
 
 # HERRAMIENTAS EXTERNAS — Crawl4RS sobre obscura (el órgano web, nativo) · Python en Docker (Headroom · el contenedor universal)
@@ -99,8 +99,9 @@ REPARTO de las 7 puertas {
      solo maneja un sesion_id (handle). Sesión caducada → 409.
      NACE OFF (interruptor 'crawl4rs') — el botón aquí SÍ protege un estado real: el EGRESS a la web
      (excepción sin-botón). Degrada honesto: OFF → 503 apagado; obscura no responde → 503
-     sin_navegador; SearXNG caído → 503 sin_busqueda. Config: obscura_url (env CRAWL4RS_OBSCURA_URL),
-     searxng_url (env SEARXNG_URL). Tests: crawl4rs__index (15) · crawl4rs__marcha-larga (8).
+     sin_navegador; puppeteer-core ausente (MODULE_NOT_FOUND) → 503 sin_cliente_cdp; SearXNG caído →
+     503 sin_busqueda. Config: obscura_url (env CRAWL4RS_OBSCURA_URL),
+     searxng_url (env SEARXNG_URL). Tests: crawl4rs__index (16) · crawl4rs__marcha-larga (8).
      NOTA de honestidad: la verificación EN VIVO (obscura conduciendo un sitio real) queda pendiente
      igual que en verificador-visual (obscura no corre en el entorno de tests); la lógica va 23/23.
   }
@@ -273,6 +274,16 @@ ESTADO {
     buscar → 3 resultados reales vía SearXNG · mapear → 200. Tres fallos cazados y sellados en el
     camino: target 'minimal' por defecto del Dockerfile (→ target: runtime) · CRAWL4RS_API_KEY
     vacía = clave configurada (→ passthrough sin '=') · SearXNG exige env SEARXNG_SECRET, sin _KEY.
+  ✓ CERRADO EL PATH OBSCURA (2026-07-27, verificado por el bus MQTT/WSS en enki-ai.online): tras la
+    migración v0.5.0 (crawl4rs → obscura por puppeteer-core), leer/mapear/rastrear/entrar/abrir caían
+    a 503 'sin_navegador' EN VIVO aunque obscura estaba sana (systemd active, :9222 responde Chrome/145).
+    CAUSA RAÍZ: puppeteer-core NUNCA se declaró en package.json → `npm install --production` no lo trae
+    → `require('puppeteer-core')` lanza MODULE_NOT_FOUND → el `catch (_)` de _render lo disfrazaba de
+    'sin_navegador'. Los tests no lo cazan (sobreescriben el seam _render); el histórico 2026-07-09 era
+    el motor ANTERIOR (fastcrw/D-os, sin puppeteer en Enki). También afecta a verificador-visual (misma
+    dep). ARREGLO: puppeteer-core declarado (^25.3.0, verificado connect+goto contra obscura 0.1.11) +
+    catch honesto (nuevo motivo 'sin_cliente_cdp' que distingue dep-ausente de obscura-caída). Falta el
+    `npm install` + reinicio en el VPS para que reviva en producción.
   ◑ falta cerrar en vivo: un turno real de escandallo usando la skill precio-ingredientes-web →
     revisar tool_calls.
   ⏸ escandallo NO cableado a crawl4rs por DECISIÓN — el enlace es skill-first (descubrir/promover/crear), no hardcode.

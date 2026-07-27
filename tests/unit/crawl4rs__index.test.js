@@ -58,6 +58,15 @@ test('obscura caída (throw) → 503 {motivo:sin_navegador}', async () => {
   assert.strictEqual(r.error.details.motivo, 'sin_navegador');
 });
 
+test('dep ausente (MODULE_NOT_FOUND puppeteer-core) → 503 {motivo:sin_cliente_cdp}, NO miente sin_navegador', async () => {
+  const m = nuevo();
+  m._render = async () => { const e = new Error("Cannot find module 'puppeteer-core'"); e.code = 'MODULE_NOT_FOUND'; throw e; };
+  const r = await m._leer({ url: 'https://x/y' });
+  assert.strictEqual(r.status, 503);
+  assert.strictEqual(r.error.details.motivo, 'sin_cliente_cdp');
+  assert.ok(/puppeteer-core/.test(r.error.message), 'la prescripción nombra la dep');
+});
+
 test('render con {fallo} (nav/timeout) → 502', async () => {
   const m = nuevo();
   m._render = async () => ({ fallo: { tipo: 'nav', motivo: '404' } });

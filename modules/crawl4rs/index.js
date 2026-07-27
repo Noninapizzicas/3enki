@@ -110,9 +110,19 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     const prescripcion = {
       apagado: 'el interruptor crawl4rs está OFF — enciéndelo en el panel (grupo sistema). NO ES: motor caído.',
       sin_navegador: 'obscura no responde en CRAWL4RS_OBSCURA_URL (:9222) — verifica el servicio obscura (systemd/docker) y su CDP. NO ES: web inscrapeable.',
+      sin_cliente_cdp: "falta la dependencia 'puppeteer-core' (require → MODULE_NOT_FOUND) — declárala en package.json y corre `npm install` en el host. NO ES: obscura caída · web inscrapeable.",
       sin_busqueda: 'SearXNG no responde en SEARXNG_URL (:8080) — verifica el contenedor enki-searxng. NO ES: sin resultados.'
     }[motivo] || '';
     return { status: 503, error: { code: 'UPSTREAM_UNREACHABLE', message: `crawl4rs degradado: ${motivo}${prescripcion ? ' — ' + prescripcion : ''}`, details: { degradado: true, motivo } } };
+  }
+
+  // Clasifica un fallo de _render en su motivo HONESTO: la dep ausente (puppeteer-core)
+  // no es lo mismo que obscura caída. El catch dejó de mentir "sin_navegador" a todo.
+  _motivoRender(err) {
+    const code = err && err.code;
+    const msg = String((err && err.message) || '');
+    if (code === 'MODULE_NOT_FOUND' || /Cannot find module 'puppeteer-core'/.test(msg)) return 'sin_cliente_cdp';
+    return 'sin_navegador';
   }
 
   // ── leer: una URL → markdown (+extracción opcional) ──
@@ -121,7 +131,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     if (!input || !input.url) return this._invalid('url');
     let r;
     try { r = await this._render(String(input.url), { extract_css: input.extract_css || {}, stealth: input.stealth, emular: input.emular }); }
-    catch (_) { return this._degradado('sin_navegador'); }
+    catch (e) { return this._degradado(this._motivoRender(e)); }
     if (r && r.fallo) return this._errorResponse(502, 'UPSTREAM_INVALID_RESPONSE', `no se pudo leer: ${r.fallo.motivo || r.fallo.tipo}`, { fallo: r.fallo });
     return { status: 200, data: {
       markdown: r.markdown || '',
@@ -154,7 +164,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
       vistas.add(clave);
       let r;
       try { r = await this._render(url, { extract_css: input.extract_css || {}, stealth: input.stealth }); }
-      catch (_) { if (paginas.length === 0) return this._degradado('sin_navegador'); continue; }
+      catch (e) { if (paginas.length === 0) return this._degradado(this._motivoRender(e)); continue; }
       if (r && r.fallo) continue;
       paginas.push({ url: r.final_url || url, markdown: r.markdown || '', extraido: r.extraido ?? null });
       if (prof < maxDepth) {
@@ -181,7 +191,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     if (!input || !input.url) return this._invalid('url');
     let r;
     try { r = await this._render(String(input.url), { soloEnlaces: true, stealth: input.stealth }); }
-    catch (_) { return this._degradado('sin_navegador'); }
+    catch (e) { return this._degradado(this._motivoRender(e)); }
     if (r && r.fallo) return this._errorResponse(502, 'UPSTREAM_INVALID_RESPONSE', `no se pudo mapear: ${r.fallo.motivo || r.fallo.tipo}`, { fallo: r.fallo });
     const enlaces = Array.isArray(r.enlaces) ? r.enlaces : [];
     return { status: 200, data: { url: r.final_url || String(input.url), enlaces, total: enlaces.length } };
@@ -219,7 +229,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     if (!Array.isArray(input.pasos) || input.pasos.length === 0) return this._invalid('pasos');
     let r;
     try { r = await this._ejecutarLogin(String(input.url), input.pasos, { stealth: input.stealth, emular: input.emular, proxy: input.proxy }); }
-    catch (_) { return this._degradado('sin_navegador'); }
+    catch (e) { return this._degradado(this._motivoRender(e)); }
     if (r && r.fallo) {
       return this._errorResponse(r.fallo.tipo === 'timeout' ? 504 : 502, 'LOGIN_FALLIDO', `el login no cuajó: ${r.fallo.motivo || r.fallo.tipo}`, { fallo: r.fallo });
     }
@@ -241,7 +251,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     }
     let r;
     try { r = await this._render(String(input.url), { storageState, interceptar: input.interceptar, interactuar: input.interactuar, stealth: input.stealth, emular: input.emular }); }
-    catch (_) { return this._degradado('sin_navegador'); }
+    catch (e) { return this._degradado(this._motivoRender(e)); }
     if (r && r.fallo) {
       return this._errorResponse(r.fallo.tipo === 'timeout' ? 504 : 502, 'UPSTREAM_INVALID_RESPONSE', `no se pudo abrir: ${r.fallo.motivo || r.fallo.tipo}`, { fallo: r.fallo });
     }

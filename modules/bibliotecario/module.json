@@ -23,8 +23,8 @@
 
   "tools": [
     {
-      "name": "biblioteca_catalogo",
-      "description": "Lista los SECTORES de la biblioteca de conocimiento (la bóveda: trading, cultivo, refrigeración, comercio…) con el título de cada uno y cuántas notas tiene. ÚSALA para ver qué saber hay disponible ANTES de pedir libros — es barata, no abre las notas. Después usa biblioteca_consultar para traer los libros del sector que necesites.",
+      "name": "bibliotecario.catalogo",
+      "description": "Lista los SECTORES de la bóveda de conocimiento (trading, cultivo, refrigeración, comercio, inmobiliario…) con el título de cada uno y cuántas notas tiene. ÚSALA para ver qué saber hay disponible ANTES de pedir libros — es barata, no abre las notas. Después usa bibliotecario.consultar para traer los libros del sector que necesites.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -34,13 +34,13 @@
       "errores_conocidos": ["UNKNOWN_ERROR"]
     },
     {
-      "name": "biblioteca_consultar",
-      "description": "Pide prestados LIBROS (notas) de la biblioteca de conocimiento. Dos formas: por SECTOR (p.ej. sector='trading/opciones' trae todas sus notas — determinista) o por CONSULTA en lenguaje natural (p.ej. consulta='cobertura con iron condor' trae las notas más afines). ÚSALA cuando necesites el saber de un tema para resolver una tarea — trae solo lo que pides, no todo el corpus. Cada libro viene con su fecha de cosecha y una marca 'dudoso' si el dato está pendiente de verificar (no lo des por firme).",
+      "name": "bibliotecario.consultar",
+      "description": "Pide prestados LIBROS (notas) de la bóveda de conocimiento. Dos formas: por SECTOR (p.ej. sector='trading/opciones' trae todas sus notas — determinista) o por CONSULTA en lenguaje natural (p.ej. consulta='cobertura con iron condor' trae las notas más afines). ÚSALA cuando necesites el saber de un tema para resolver una tarea — trae solo lo que pides, no todo el corpus. Cada libro viene con su fecha de cosecha y una marca 'dudoso' si el dato está pendiente de verificar (no lo des por firme).",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "sector": { "type": "string", "description": "Sector o sub-sector a traer entero (por_referencia). Ej: 'trading', 'trading/opciones', 'cultivo-melena-leon'. Usa biblioteca_catalogo para ver los sectores." },
+          "sector": { "type": "string", "description": "Sector o sub-sector a traer entero (por_referencia). Ej: 'trading', 'trading/opciones', 'cultivo-melena-leon'. Usa bibliotecario.catalogo para ver los sectores." },
           "consulta": { "type": "string", "description": "Consulta en lenguaje natural (por_significado). Ej: 'márgenes en comercio local'. Trae las notas más afines de toda la bóveda." },
           "topK": { "type": "number", "description": "Cuántas notas devolver como máximo (default 5 para consulta, 40 para sector)." }
         }
@@ -55,18 +55,15 @@
   "config": {
     "enabled": true,
     "biblioteca": {
-      "repo_url": "https://github.com/Noninapizzicas/Conocimiento.git",
-      "ref": "main",
-      "vault_subdir": "boveda",
-      "mirror_path": null,
-      "_nota": "El VPS necesita credencial de SOLO-LECTURA al repo privado (deploy-key/token). El bibliotecario clona y hace pull; nunca escribe por esta vía (la escritura es del acumulador-sectorial, flujo aparte). Override repo_url/ref/vault_subdir por config del módulo. mirror_path: null → default data/bibliotecario/mirror; se puede fijar para test/despliegue."
+      "vault_path": null,
+      "_nota": "vault_path: null → default boveda/ en la raíz del repo. La bóveda vive DENTRO de 3enki — sin mirror git, sin clone. Override para test/despliegue."
     },
     "persistence": {
       "scope": "system",
       "data_path": "bibliotecario",
-      "pattern": "git-mirror-readonly",
+      "pattern": "local-directory",
       "restart_resilient": true,
-      "_nota": "Mirror del repo Conocimiento en data/bibliotecario/mirror. Conocimiento del mundo (no datos de usuario), materializado desde un repo externo — reconstruible por clone."
+      "_nota": "La bóveda vive en boveda/ del repo. Conocimiento del mundo (no datos de usuario), versionado junto al código."
     }
   },
 

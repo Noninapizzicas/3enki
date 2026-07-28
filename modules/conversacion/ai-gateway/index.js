@@ -394,7 +394,8 @@ class AiGatewayModule extends BaseModule {
       'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
       'fijar_objetivo', 'evaluar_rail',
       'cupulas.vista_proyecto',
-      'leer_web', 'descargar_web', 'leer_imagen', 'renderizar', 'traducir', 'transcribir', 'analizar_sonido', 'decir', 'interpretar_trazo']);
+      'leer_web', 'descargar_web', 'leer_imagen', 'renderizar', 'traducir', 'transcribir', 'analizar_sonido', 'decir', 'interpretar_trazo',
+      'bibliotecario.catalogo', 'bibliotecario.consultar', 'escribano.escribir', 'escribano.pendientes']);
     // Slice de globales (de `all`) con la enumeracion de invoke_agent aplicada. Se combina
     // con las tools de pagina y se deduplica por nombre (el rail ya se anade aparte).
     const globalSlice = () => this._mapInvokeAgentEnum(all.filter(t => GLOBAL_TOOLS.has(t.name)), page_id);
@@ -1531,6 +1532,31 @@ class AiGatewayModule extends BaseModule {
     });
   }
 
+  async _leerCatalogoBiblioteca() {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    const timeoutMs = this.config.biblioteca_timeout_ms || 2000;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeoutMs);
+      try {
+        unsub = this.eventBus.subscribe('bibliotecario.catalogo.response', (event) => {
+          const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!data || data.request_id !== request_id) return;
+          clearTimeout(timeout);
+          if (unsub) unsub();
+          const payload = data.result || data;
+          resolve(payload?.data || null);
+        });
+        this.eventBus.publish('bibliotecario.catalogo.request', { request_id });
+      } catch (_) {
+        clearTimeout(timeout);
+        if (unsub) unsub();
+        resolve(null);
+      }
+    });
+  }
+
   // Nervio del CONSERJE: pide (y consume) el empujon pendiente del proyecto. Es el
   // siguiente paso que el sistema le ofrece al comerciante. Best-effort, timeout
   // corto: nunca penaliza el turno. Devuelve el empujon o null.
@@ -1848,6 +1874,27 @@ class AiGatewayModule extends BaseModule {
       'ok===false, di que FALLÓ con el motivo. NUNCA inventes un éxito ni te fíes del historial: si algo no ' +
       'aparece en la CANTERA ACTUAL de arriba, NO está. Igual con promover (status < 400 = "activada"). Un ' +
       'hecho que no puedas verificar en la respuesta NO se afirma.'
+    );
+  }
+
+  _composeBibliotecaSection(catalogo) {
+    const cat = catalogo && Array.isArray(catalogo.sectores) ? catalogo : null;
+    const catBlock = cat
+      ? `BÓVEDA ACTUAL (verificado por el reflejo · ${cat.total} sectores, ${cat.libros} libros): ` +
+        `${cat.sectores.map(s => `${s.sector} (${s.notas})`).join(', ')}.\n`
+      : '';
+    return (
+      '# BIBLIOTECA DE CONOCIMIENTO — la bóveda (herramientas directas)\n' +
+      catBlock +
+      'El sistema tiene una bóveda de conocimiento del mundo (notas Obsidian por sector: trading, cultivo, ' +
+      'comercio, inmobiliario, refrigeración…). Usa las herramientas directas:\n' +
+      '- bibliotecario.catalogo → lista los SECTORES (qué hay, cuántas notas). Barata, úsala primero.\n' +
+      '- bibliotecario.consultar({sector}) → trae TODAS las notas de un sector (por referencia).\n' +
+      '- bibliotecario.consultar({consulta}) → busca notas afines en toda la bóveda (por palabras).\n' +
+      '- escribano.escribir({sector, nombre, contenido}) → escribe/actualiza una nota en la bóveda.\n' +
+      '- escribano.pendientes → lista notas escritas pendientes de commit.\n' +
+      'Cada libro viene con su fecha de cosecha y marca "dudoso" si el dato está a verificar — no lo des por firme.\n' +
+      'Reach-not-resident: pide SOLO los libros que la tarea justifica, no cargues todo el corpus.'
     );
   }
 
@@ -2471,6 +2518,16 @@ class AiGatewayModule extends BaseModule {
       try { inventario = await this._leerCantera(); } catch (_) { /* determinista best-effort; nunca bloquea */ }
       const cantera = this._composeCanteraSection(inventario);
       effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${cantera}` : cantera;
+    }
+
+    // Nervio de la BIBLIOTECA (global): en un turno REAL, dile al LLM los sectores de la
+    // bóveda de conocimiento y las herramientas para consultarla/escribir. Estático y
+    // best-effort (como la cantera). No en turnos sintéticos.
+    if (!context?.async_invocation) {
+      let catalogo = null;
+      try { catalogo = await this._leerCatalogoBiblioteca(); } catch (_) { /* best-effort */ }
+      const biblioteca = this._composeBibliotecaSection(catalogo);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${biblioteca}` : biblioteca;
     }
 
     // Nervio propioceptivo: en un turno REAL del chat sobre una pagina de

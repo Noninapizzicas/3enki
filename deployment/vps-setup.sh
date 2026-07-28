@@ -87,7 +87,7 @@ apt-get update -qq || {
     warn "apt-get update falló (repo de terceros roto); reintento solo con repos base"
     apt-get update -qq -o Dir::Etc::sourceparts=/dev/null || true
 }
-apt-get install -y -qq curl git build-essential rsync > /dev/null
+apt-get install -y -qq curl git build-essential rsync libssl-dev libclang-dev espeak-ng > /dev/null
 
 # Chromium/Chrome retirados del host: WhatsApp va por Meta Cloud API (HTTP, sin navegador)
 # y los OJOS (verificador-visual) por obscura (navegador Rust). Enki no arrastra Chromium.

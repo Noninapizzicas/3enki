@@ -11,6 +11,8 @@ Type=simple
 ExecStart=/usr/local/bin/motor-voz
 Environment=MOTOR_VOZ_PORT=8124
 Environment=MOTOR_VOZ_MODELS=__MODELS__
+# espeak-ng para fonemización (piper-rs la necesita para texto→fonemas)
+Environment=PIPER_ESPEAKNG_DATA_DIRECTORY=/usr/lib/x86_64-linux-gnu/espeak-ng-data
 Restart=always
 RestartSec=5
 NoNewPrivileges=true

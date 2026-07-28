@@ -1,15 +1,22 @@
 {
   "id": "acumulador-sectorial",
   "name": "acumulador-sectorial",
-  "description": "Acumulador sectorial de la biblioteca de conocimiento (repo Conocimiento). Dado un tema/sector, ejecuta el ciclo de cosecha de 6 fases (contrato, descomponer, cosechar web, reconciliar, escribir notas Obsidian, resumen) y deja notas markdown enlazadas, fechadas y con fuentes en la bóveda. Hermano ESCRITOR del bibliotecario (que es el lector): él sirve los libros, este los escribe. Reconcilia fuentes sin pisarlas, marca lo dudoso con a-verificar, encuadre honesto en temas sensibles, cero invención. No hace git commit ni push. NACE APARCADO (enabled:false): buscable en la cúpula, activable cuando exista la puerta de escritura de la biblioteca.",
+  "description": "Acumulador sectorial de la bóveda de conocimiento (boveda/ en el repo). Dado un tema/sector, ejecuta el ciclo de cosecha de 6 fases (contrato, descomponer, cosechar web, reconciliar, escribir notas Obsidian, resumen) y deja notas markdown enlazadas, fechadas y con fuentes en la bóveda. Lee lo que ya existe (bibliotecario), investiga en la web (buscar/leer/descargar), procesa PDFs e imágenes (OCR local), traduce fuentes en otros idiomas, y escribe las notas (escribano). Reconcilia fuentes sin pisarlas, marca lo dudoso con a-verificar, encuadre honesto en temas sensibles, cero invención.",
   "version": "1.0.0",
   "enabled": false,
   "scope": ["aprendizaje"],
   "prompt_file": "prompts/acumulador-sectorial-system.md",
   "tools": [
+    "bibliotecario.catalogo",
+    "bibliotecario.consultar",
     "buscar_web",
     "leer_web",
-    "escribano.escribir"
+    "descargar_web",
+    "leer_imagen",
+    "traducir",
+    "transcribir",
+    "escribano.escribir",
+    "escribano.pendientes"
   ],
   "provider": "deepseek",
   "temperature": 0.4,
@@ -21,6 +28,6 @@
     "type": "domain-agent",
     "domain": "aprendizaje",
     "tags": ["conocimiento", "cosecha", "investigacion", "boveda", "sectorial"],
-    "_infra": "Cosecha web por buscar_web (descubre fuentes, SearXNG) + leer_web (lee páginas), ambos del órgano crawl4rs (interruptor OFF por defecto → encender para cosechar); GUARDAR por escribano.escribir (escribe la nota en la copia de trabajo de Conocimiento, sin commit/push — opción A, el humano sube). Sigue APARCADO (enabled:false) a propósito: activar un trabajador es decisión consciente (activar_agente, confirmation)."
+    "_infra": "LEER lo existente: bibliotecario.catalogo + bibliotecario.consultar (bóveda local boveda/). COSECHAR web: buscar_web (SearXNG) + leer_web (navegador headless) + descargar_web (binarios: PDF, imágenes). PROCESAR: leer_imagen (OCR local, Rust) + traducir (MarianMT local) + transcribir (Whisper local). GUARDAR: escribano.escribir (notas en boveda/) + escribano.pendientes (qué falta por commit). crawl4rs interruptor OFF por defecto → encender para cosechar."
   }
 }

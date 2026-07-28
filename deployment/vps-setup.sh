@@ -482,15 +482,16 @@ if [ -x /usr/local/bin/motor-sonido ]; then
 fi
 
 # ---- 3a-ter-sexies. motor-voz — órgano de DECIR/hablar de enki-sense (Rust nativo, :8124) ----
-# 4º sentido. Rust (piper-rs = voces Piper ONNX vía ort). Voces en ESPAÑOL. La voz
-# (~61MB) la descarga get-models.sh (patrón ocr4rs). ort baja ONNX Runtime al
-# COMPILAR — el VPS tiene egress abierto. Best-effort: sin binario/voz, el puente
-# modules/motor-voz degrada honesto (503 sin_motor / 422 VOZ_NO_DISPONIBLE).
+# 4º sentido. Supertonic ONNX (44.1kHz, 31 idiomas, 10 voces M1-M5/F1-F5).
+# Sin espeak-ng, sin piper-rs — procesamiento Unicode nativo. Los modelos ONNX
+# (~4 archivos + estilos) los descarga get-models.sh desde HuggingFace. ort baja
+# ONNX Runtime al COMPILAR — el VPS tiene egress abierto. Best-effort: sin
+# binario/modelos, el puente modules/motor-voz degrada honesto (503 / 422).
 MV_MODELS="${INSTALL_DIR}/data/voz-models"
 if [ -x /usr/local/bin/motor-voz ]; then
     log "motor-voz ya instalado"
 elif command -v cargo &>/dev/null; then
-    log "Compilando motor-voz (enki-sense/voz, piper-rs+ort — baja ONNX Runtime, la 1ª vez tarda)..."
+    log "Compilando motor-voz (enki-sense/voz, Supertonic ONNX — baja ONNX Runtime, la 1ª vez tarda)..."
     cargo install --path "${REPO_DIR}/enki-sense/crates/motor-voz" --root /usr/local --locked > /dev/null 2>&1 \
         && log "motor-voz compilado en /usr/local/bin" \
         || warn "cargo install de motor-voz falló (¿ort no bajó ONNX Runtime?) — el puente degrada honesto (503)"
@@ -500,12 +501,12 @@ fi
 if [ -x /usr/local/bin/motor-voz ]; then
     mkdir -p "${MV_MODELS}"
     bash "${REPO_DIR}/enki-sense/crates/motor-voz/get-models.sh" "${MV_MODELS}" > /dev/null 2>&1 \
-        && log "motor-voz: voz española provisionada en ${MV_MODELS}" \
+        && log "motor-voz: Supertonic ONNX provisionado en ${MV_MODELS} (10 voces, 31 idiomas, 44.1kHz)" \
         || warn "motor-voz: get-models falló (¿red?) — decir dará VOZ_NO_DISPONIBLE hasta reintentar"
     sed "s#__MODELS__#${MV_MODELS}#g" "${REPO_DIR}/enki-sense/deployment/systemd/motor-voz.service" > /etc/systemd/system/motor-voz.service 2>/dev/null
     systemctl daemon-reload
     if systemctl enable --now motor-voz > /dev/null 2>&1; then
-        log "motor-voz activo en 127.0.0.1:8124 (hablar local, español) — SIN botón, operativo ya"
+        log "motor-voz activo en 127.0.0.1:8124 (Supertonic ONNX, 44.1kHz, 31 idiomas) — SIN botón, operativo ya"
     else
         warn "motor-voz instalado pero el servicio no arrancó (revisa: journalctl -u motor-voz -f)"
     fi
@@ -866,7 +867,13 @@ if systemctl is-active --quiet motor-sonido 2>/dev/null; then
     echo "    motor-sonido   → enki-sense prosodia local, DSP (Rust nativo, localhost:8123)"
 fi
 if systemctl is-active --quiet motor-voz 2>/dev/null; then
-    echo "    motor-voz      → enki-sense hablar local, español (Rust/piper-rs, localhost:8124)"
+    echo "    motor-voz      → enki-sense hablar local, 31 idiomas (Rust/Supertonic ONNX 44.1kHz, localhost:8124)"
+fi
+if systemctl is-active --quiet motor-trazo 2>/dev/null; then
+    echo "    motor-trazo    → enki-sense geometría de canvas local (Rust nativo, localhost:8125)"
+fi
+if systemctl is-active --quiet motor-coherencia 2>/dev/null; then
+    echo "    motor-coherencia → enki-sense juez de coherencia (Rust/MQTT, broker:1883)"
 fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^enki-headroom$'; then
     echo "    enki-headroom  → proxy compresión (docker, localhost:8787)"

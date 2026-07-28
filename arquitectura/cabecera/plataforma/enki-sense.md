@@ -1,7 +1,7 @@
 ---
 id: plataforma/enki-sense
 dominio: plataforma
-resumen: Los SENTIDOS locales de Enki — órganos Rust en tu máquina (cero nube) que transducen señal↔señal (decir/oír/traducir/renderizar) y perciben (trazo/sonido). Molde OCR4RS. LA FAMILIA COMPLETA (6 sentidos): motor-ojo (render), motor-traduce (marian), motor-oido (whisper), motor-sonido (prosodia), motor-voz (piper-rs, español) y motor-trazo (geometría de canvas) VIVOS end-to-end, verificados. SIN botón (nacen operativos). Frenos disueltos: "página que la beba" y el interruptor de cómputo puro.
+resumen: Los SENTIDOS locales de Enki — órganos Rust en tu máquina (cero nube) que transducen señal↔señal (decir/oír/traducir/renderizar) y perciben (trazo/sonido). Molde OCR4RS. LA FAMILIA COMPLETA (6 sentidos): motor-ojo (render), motor-traduce (marian), motor-oido (whisper), motor-sonido (prosodia), motor-voz (Supertonic ONNX, 44.1kHz, 31 idiomas) y motor-trazo (geometría de canvas) VIVOS end-to-end, verificados. SIN botón (nacen operativos). Frenos disueltos: "página que la beba" y el interruptor de cómputo puro.
 fuentes:
   - modules/motor-ojo/**
   - modules/motor-traduce/**
@@ -116,12 +116,12 @@ PUENTE (bus) 4º sentido  modules/motor-voz v0.1.0 — motor-voz.decir.request {
      POST /speak → {audio_base64 (WAV), sample_rate}. Tool 'decir' (en GLOBAL_TOOLS). SIN botón
      (salida pura, no toca micrófono). Degrada honesto (sin_motor / 422 VOZ_NO_DISPONIBLE). Base
      http://localhost:8124. Test: motor-voz__index (4).
-MOTOR (Rust, EN 2enki · VERIFICADO)  enki-sense/crates/motor-voz — servidor axum 127.0.0.1:8124:
-     /health · POST /speak. piper-rs (voces Piper ONNX vía ort/ONNX Runtime) — Rust, NO Python (el
-     pip piper-tts es Python; candle no tiene VITS). Voces en ESPAÑOL, cache por voz. Carga LOCAL;
-     get-models.sh provisiona la voz (~61MB, patrón ocr4rs). VERIFICADO EN VIVO: "Hola, bienvenido a
-     Tres Vueltas y Verás. ¿Qué te pongo?" → WAV 22050 Hz, 2.7s de voz española; voz inexistente →
-     422 honesto. Nota: ort baja ONNX Runtime al compilar (egress abierto en el VPS).
+MOTOR (Rust, EN 2enki · MIGRADO A SUPERTONIC)  enki-sense/crates/motor-voz — servidor axum
+     127.0.0.1:8124: /health · POST /speak {texto, voz?, idioma?}. Supertonic ONNX directo (sin
+     espeak-ng, sin piper-rs) — 4 modelos ONNX (duration_predictor, text_encoder, vector_estimator,
+     vocoder) + procesamiento Unicode nativo con tags de idioma. 44.1kHz (era 22kHz), 31 idiomas (era
+     solo ES), 10 voces M1-M5/F1-F5 (era 1). get-models.sh provisiona desde HuggingFace. Campo idioma
+     en SpeakReq (default "es"). ort baja ONNX Runtime al compilar (egress abierto en el VPS).
 PUENTE (bus) 2º PERCEPTOR — CIERRA LA FAMILIA  modules/motor-trazo v0.1.0 —
      motor-trazo.interpretar.request {trazos:[[{x,y}...]...]} → POST /interpret →
      {elementos:[{tipo, bbox, cerrado, n_puntos, n_vertices}]}. Tool 'interpretar_trazo' (en
@@ -156,7 +156,7 @@ DESPLIEGUE  vps-setup.sh asegura el toolchain Rust (rustup) ANTES de los 6 motor
 ```
 motor-ojo.render.request → .response            (renderizar · server nativo)  [VIVO]
 motor-traduce.request → .response               (traducir · server nativo)    [VIVO · verificado fr-en]
-motor-voz.decir.request → .response              (decir · piper-rs)            [VIVO · verificado ES]
+motor-voz.decir.request → .response              (decir · Supertonic ONNX)     [VIVO · 31 idiomas, 44.1kHz]
 motor-oido.transcribir.request → .response       (oír · candle-whisper)        [VIVO · verificado]
 motor-sonido.analizar.request → .response        (sonido · DSP features)       [VIVO · verificado]
 motor-trazo.interpretar.request → .response      (trazo · geometría pura)      [VIVO · verificado]

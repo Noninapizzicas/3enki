@@ -22,7 +22,7 @@
     setCurrentRoute
   } from '$lib/ui-core/lazy-registry';
   import { closePanel } from '$lib/stores/ui';
-  import { initWorkspaceSubscriptions, initChatSubscriptions, initProjectsSubscriptions, initConversations, initHtmlPreviewSubscriptions } from '$lib/stores';
+  import { initWorkspaceSubscriptions, initChatSubscriptions, initProjectsSubscriptions, initConversations, initHtmlPreviewSubscriptions, initVozSubscriptions } from '$lib/stores';
   import { initVistaBridge } from '$lib/stores/vista-bridge';
   import { moduleDefinitions, criticalModules } from '$lib/modules/definitions';
   import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
@@ -46,6 +46,7 @@
   let cleanupConversations: (() => void) | null = null;
   let cleanupHtmlPreview: (() => void) | null = null;
   let cleanupVista: (() => void) | null = null;
+  let cleanupVoz: (() => void) | null = null;
   let panelComponent: any = null;
 
   onMount(async () => {
@@ -64,6 +65,7 @@
     perfStart('LazyShell.initSubscriptions');
     cleanupWorkspace = initWorkspaceSubscriptions();
     cleanupChat = initChatSubscriptions();
+    cleanupVoz = initVozSubscriptions();
     perfEnd('LazyShell.initSubscriptions');
 
     // 3. Conectar a MQTT en background
@@ -109,6 +111,7 @@
     if (cleanupConversations) cleanupConversations();
     if (cleanupHtmlPreview) cleanupHtmlPreview();
     if (cleanupVista) cleanupVista();
+    if (cleanupVoz) cleanupVoz();
 
     // Desconectar MQTT
     disconnect();

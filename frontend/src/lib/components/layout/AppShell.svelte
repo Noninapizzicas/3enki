@@ -31,7 +31,8 @@
     initWorkspaceSubscriptions,
     initProjectsSubscriptions,
     initChatSubscriptions,
-    initConversations
+    initConversations,
+    initVozSubscriptions
   } from '$lib/stores';
   import { registerAllModules, unregisterAllModules } from '$lib/modules';
   import { perfStart, perfEnd, logMsg } from '$lib/utils/perf';
@@ -57,6 +58,7 @@
   let cleanupProjects: (() => void) | null = null;
   let cleanupChat: (() => void) | null = null;
   let cleanupConversations: (() => void) | null = null;
+  let cleanupVoz: (() => void) | null = null;
 
   onMount(() => {
     perfStart('AppShell.onMount.TOTAL');
@@ -70,6 +72,7 @@
     // 2. Inicializar subscripciones base
     perfStart('AppShell.initSubscriptions');
     cleanupWorkspace = initWorkspaceSubscriptions();
+    cleanupVoz = initVozSubscriptions();
     perfEnd('AppShell.initSubscriptions');
 
     // 3. Conectar a MQTT en background
@@ -115,6 +118,7 @@
     if (cleanupProjects) cleanupProjects();
     if (cleanupChat) cleanupChat();
     if (cleanupConversations) cleanupConversations();
+    if (cleanupVoz) cleanupVoz();
 
     // 3. Desconectar MQTT
     disconnect();

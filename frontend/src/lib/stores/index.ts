@@ -340,3 +340,14 @@ export {
   posError
 } from './prisma-pos';
 export type { MetodoPago, CarritoItem, DesgloseMixto, UltimoCobro, AddItemInput, CobrarInput } from './prisma-pos';
+
+// Voz Store (TTS config — idioma/voz)
+export {
+  idiomaVoz,
+  vozActiva,
+  setIdiomaVoz,
+  setVozActiva,
+  initVozSubscriptions,
+  getIdiomaVoz,
+  getVozActiva
+} from './voz';

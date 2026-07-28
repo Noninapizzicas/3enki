@@ -15,6 +15,7 @@
   import type { Message, Attachment } from '$lib/ui-core';
   import { PROVIDER_ICONS } from '$lib/ui-core';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
+  import { idiomaVoz, vozActiva } from '$lib/stores/voz';
   import Chip from './Chip.svelte';
   import MarkdownRenderer from './MarkdownRenderer.svelte';
   import RecipeInvestigationResult from '../recipes/RecipeInvestigationResult.svelte';
@@ -45,11 +46,19 @@
       .trim();
   }
 
+  function stopPlayback() {
+    if (currentSource) {
+      currentSource.onended = null;
+      currentSource.stop();
+      currentSource.disconnect();
+      currentSource = null;
+    }
+    speakState = 'idle';
+  }
+
   async function handleSpeak() {
     if (speakState === 'playing') {
-      currentSource?.stop();
-      currentSource = null;
-      speakState = 'idle';
+      stopPlayback();
       return;
     }
     if (speakState === 'loading') return;
@@ -60,7 +69,9 @@
     speakState = 'loading';
     try {
       const res = await mqttRequest<{ audio_base64: string; sample_rate: number }>(
-        'motor-voz', 'decir', { texto }, { timeout: 30000 }
+        'motor-voz', 'decir',
+        { texto, idioma: $idiomaVoz, voz: $vozActiva },
+        { timeout: 30000 }
       );
       const binary = atob(res.data.audio_base64);
       const buf = new Uint8Array(binary.length);
@@ -69,11 +80,12 @@
       if (!audioCtx) audioCtx = new AudioContext();
       if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-      const audioBuf = await audioCtx.decodeAudioData(buf.buffer);
+      const rawBuf = buf.buffer.slice(0);
+      const audioBuf = await audioCtx.decodeAudioData(rawBuf);
       const source = audioCtx.createBufferSource();
       source.buffer = audioBuf;
       source.connect(audioCtx.destination);
-      source.onended = () => { speakState = 'idle'; currentSource = null; };
+      source.onended = () => { stopPlayback(); };
       source.start();
       currentSource = source;
       speakState = 'playing';

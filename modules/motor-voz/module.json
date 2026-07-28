@@ -14,10 +14,12 @@
     { "event": "motor-voz.decir.request", "handler": "onDecirRequest", "description": "Reflejo: sintetiza {texto, voz?} → POST /speak → {audio_base64, sample_rate}. Sin botón; 503 sin_motor si el binario no responde; 422 VOZ_NO_DISPONIBLE si la voz no está provisionada." }
   ],
   "publishes": [
-    { "event": "motor-voz.decir.response", "description": "{ audio_base64 (WAV), sample_rate, formato, voz } o error (422 VOZ_NO_DISPONIBLE, 5xx upstream, 503 sin_motor)." }
+    { "event": "motor-voz.decir.response", "description": "{ audio_base64 (WAV), sample_rate, formato, voz } o error (422 VOZ_NO_DISPONIBLE, 5xx upstream, 503 sin_motor)." },
+    { "event": "motor-voz.config.updated", "description": "{ idioma?, voz? } — el frontend suscribe para actualizar el store de voz cuando el AI cambia idioma/voz." }
   ],
   "ui_handlers": [
-    { "domain": "motor-voz", "action": "decir", "handler": "handleDecirTool", "description": "Puerta ui/request para el frontend: el botón 'escuchar' manda {texto, voz?, idioma?} → mismo _decir que la tool/bus. Frontend: mqttRequest('motor-voz','decir',{texto})." }
+    { "domain": "motor-voz", "action": "decir", "handler": "handleDecirTool", "description": "Puerta ui/request para el frontend: el botón 'escuchar' manda {texto, voz?, idioma?} → mismo _decir que la tool/bus. Frontend: mqttRequest('motor-voz','decir',{texto})." },
+    { "domain": "motor-voz", "action": "configurar_voz", "handler": "handleConfigurarVozTool", "description": "Cambia idioma/voz del TTS. El AI la llama cuando el usuario pide otro idioma. Publica motor-voz.config.updated al bus → el frontend actualiza su store." }
   ],
   "tools": [
     {
@@ -35,6 +37,19 @@
       },
       "handler": "handleDecirTool",
       "errores_conocidos": ["INVALID_INPUT", "VOZ_NO_DISPONIBLE", "SINTESIS_FALLIDA", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+    },
+    {
+      "name": "configurar_voz",
+      "description": "Cambia el idioma o la voz del motor de voz (TTS). ÚSALA cuando el usuario pida hablar en otro idioma ('háblame en francés', 'cambia a inglés', 'en adelante en portugués') o cambiar de voz ('usa voz femenina', 'cambia a F3'). El cambio se propaga al frontend (botón escuchar) automáticamente vía el bus.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "idioma": { "type": "string", "description": "Código de idioma (es, en, fr, de, it, pt, ja, ko, zh, etc. — 31 idiomas). El frontend actualizará su default." },
+          "voz": { "type": "string", "description": "Estilo de voz (M1-M5, F1-F5). El frontend actualizará su default." }
+        }
+      },
+      "handler": "handleConfigurarVozTool"
     }
   ],
   "config": {

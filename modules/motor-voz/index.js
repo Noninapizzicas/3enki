@@ -45,6 +45,19 @@ class MotorVozModule extends ModuloHibridoReflejo {
   onDecirRequest(e) { return this._atender(e, 'decir', 'motor-voz.decir.response', (d) => this._decir(d)); }
   async handleDecirTool(args) { return this._decir(args || {}); }
 
+  async handleConfigurarVozTool(args) {
+    const input = args || {};
+    const update = {};
+    if (input.idioma) update.idioma = String(input.idioma);
+    if (input.voz) update.voz = String(input.voz);
+    if (!update.idioma && !update.voz) return this._invalid('idioma o voz');
+    this.eventBus?.publish?.('motor-voz.config.updated', update);
+    const partes = [];
+    if (update.idioma) partes.push(`idioma → ${update.idioma}`);
+    if (update.voz) partes.push(`voz → ${update.voz}`);
+    return { status: 200, data: { ...update, mensaje: `Configuración de voz actualizada: ${partes.join(', ')}` } };
+  }
+
   _degradado(motivo) {
     const prescripcion = {
       sin_motor: 'el servicio enki-sense de voz no responde en MOTOR_VOZ_URL — verifica que esté desplegado y su /health. NO ES: texto inválido.'

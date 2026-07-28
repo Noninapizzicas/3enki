@@ -17,17 +17,17 @@ echo "motor-voz · provisionando Supertonic 3 en $DIR"
 
 # ── ONNX models ──
 mkdir -p "$DIR/onnx"
-bajar "$HF/assets/onnx/duration_predictor.onnx"  "$DIR/onnx/duration_predictor.onnx"
-bajar "$HF/assets/onnx/text_encoder.onnx"        "$DIR/onnx/text_encoder.onnx"
-bajar "$HF/assets/onnx/vector_estimator.onnx"    "$DIR/onnx/vector_estimator.onnx"
-bajar "$HF/assets/onnx/vocoder.onnx"             "$DIR/onnx/vocoder.onnx"
-bajar "$HF/assets/onnx/unicode_indexer.json"     "$DIR/onnx/unicode_indexer.json"
-bajar "$HF/assets/onnx/tts.json"                 "$DIR/onnx/tts.json"
+bajar "$HF/onnx/duration_predictor.onnx"  "$DIR/onnx/duration_predictor.onnx"
+bajar "$HF/onnx/text_encoder.onnx"        "$DIR/onnx/text_encoder.onnx"
+bajar "$HF/onnx/vector_estimator.onnx"    "$DIR/onnx/vector_estimator.onnx"
+bajar "$HF/onnx/vocoder.onnx"             "$DIR/onnx/vocoder.onnx"
+bajar "$HF/onnx/unicode_indexer.json"     "$DIR/onnx/unicode_indexer.json"
+bajar "$HF/onnx/tts.json"                 "$DIR/onnx/tts.json"
 
 # ── Voice styles ──
 mkdir -p "$DIR/voice_styles"
 for V in M1 M2 M3 M4 M5 F1 F2 F3 F4 F5; do
-  bajar "$HF/assets/voice_styles/${V}.json" "$DIR/voice_styles/${V}.json"
+  bajar "$HF/voice_styles/${V}.json" "$DIR/voice_styles/${V}.json"
 done
 
 echo "listo. Voces: M1-M5 F1-F5 (10 estilos, 31 idiomas, 44.1kHz)"

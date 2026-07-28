@@ -536,6 +536,33 @@ if [ -x /usr/local/bin/motor-trazo ]; then
     fi
 fi
 
+# ---- 3a-ter-octies. motor-coherencia — JUEZ de coherencia de enki-sense (Rust nativo, MQTT) ----
+# El 7º crate del workspace enki-sense. NO es un sentido (no forma parte de la
+# familia de 6): es la PUERTA de coherencia delante de filesystem. Intercepta
+# fs.write.request por MQTT, juzga (crear/escribir fluye; borrar/truncar pide
+# confirmación), y reenvía a fs.write.commit.request o devuelve veredicto al caller.
+# SIN puerto HTTP — habla MQTT directo al broker (127.0.0.1:1883). Best-effort:
+# sin binario, filesystem escucha fs.write.request directamente (sin juez).
+if [ -x /usr/local/bin/motor-coherencia ]; then
+    log "motor-coherencia ya instalado"
+elif command -v cargo &>/dev/null; then
+    log "Compilando motor-coherencia (enki-sense/coherencia, juez puro)..."
+    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-coherencia" --root /usr/local --locked > /dev/null 2>&1 \
+        && log "motor-coherencia compilado en /usr/local/bin" \
+        || warn "cargo install de motor-coherencia falló — filesystem opera sin juez de coherencia"
+else
+    warn "sin cargo: motor-coherencia no se compiló. Filesystem opera sin juez de coherencia."
+fi
+if [ -x /usr/local/bin/motor-coherencia ]; then
+    install -m 0644 "${REPO_DIR}/enki-sense/deployment/systemd/motor-coherencia.service" /etc/systemd/system/motor-coherencia.service 2>/dev/null
+    systemctl daemon-reload
+    if systemctl enable --now motor-coherencia > /dev/null 2>&1; then
+        log "motor-coherencia activo → mqtt://127.0.0.1:1883 (juez de coherencia de escrituras) — SIN botón, operativo ya"
+    else
+        warn "motor-coherencia instalado pero el servicio no arrancó (revisa: journalctl -u motor-coherencia -f)"
+    fi
+fi
+
 # ---- 3b. Ejecutor en contenedor (OPT-IN --docker — la ÚNICA concesión de seguridad) ----
 # El engine Docker ya lo asegura la sección 3a-bis (crawl4rs/headroom lo usan sin conceder
 # nada: los levanta root y el core les habla por HTTP). Lo que ESTE flag habilita es otra

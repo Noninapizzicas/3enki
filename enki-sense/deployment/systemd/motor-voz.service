@@ -1,9 +1,9 @@
-# motor-voz — órgano de voz de enki-sense (Rust nativo, piper-rs).
+# motor-voz — órgano de voz de enki-sense (Supertonic ONNX, 44.1kHz).
 # Se compila desde 2enki (enki-sense/) con cargo install en vps-setup.sh.
-# Las voces se provisionan con get-models.sh (NO van en el binario).
+# Los modelos se provisionan con get-models.sh (NO van en el binario).
 # Solo loopback (127.0.0.1:8124): lo consume el core por modules/motor-voz.
 [Unit]
-Description=enki-sense motor-voz (hablar local, piper-rs)
+Description=enki-sense motor-voz (Supertonic ONNX, 44.1kHz, 31 idiomas)
 After=network.target
 
 [Service]
@@ -11,15 +11,9 @@ Type=simple
 ExecStart=/usr/local/bin/motor-voz
 Environment=MOTOR_VOZ_PORT=8124
 Environment=MOTOR_VOZ_MODELS=__MODELS__
-# espeak-ng para fonemización (piper-rs la necesita para texto→fonemas)
-Environment=PIPER_ESPEAKNG_DATA_DIRECTORY=/usr/lib/x86_64-linux-gnu/espeak-ng-data
 Restart=always
 RestartSec=5
-# Se ha quitado ProtectSystem=strict porque espeak-ng necesita acceso
-# a /usr/lib/x86_64-linux-gnu/espeak-ng-data/ para fonemización.
-# En su lugar se confía en NoNewPrivileges y PrivateTmp.
 NoNewPrivileges=true
-ReadWritePaths=__MODELS__
 ProtectHome=true
 
 [Install]

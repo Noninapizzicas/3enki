@@ -734,6 +734,10 @@ ReadWritePaths=/opt/enki/frontend
 WantedBy=multi-user.target
 UNIT
 
+# ---- 6b-bis. Hermes Dashboard ----
+log "Creando servicio systemd para Hermes Dashboard..."
+cp "${REPO_DIR}/deployment/systemd/hermes-dashboard.service" /etc/systemd/system/hermes-dashboard.service
+
 # Crear directorio de datos y asignar permisos
 mkdir -p "${INSTALL_DIR}/data"
 chown -R www-data:www-data "${INSTALL_DIR}"
@@ -743,6 +747,7 @@ log "Activando servicios..."
 systemctl daemon-reload
 systemctl enable enki
 systemctl enable enki-frontend
+systemctl enable hermes-dashboard
 systemctl enable caddy
 
 # ---- 8. Iniciar ----
@@ -774,6 +779,16 @@ if systemctl is-active --quiet caddy; then
     log "Caddy corriendo OK"
 else
     warn "Caddy no arrancó. Revisar: journalctl -u caddy -f"
+fi
+
+log "Iniciando Hermes Dashboard..."
+systemctl restart hermes-dashboard
+sleep 3
+
+if systemctl is-active --quiet hermes-dashboard; then
+    log "Hermes Dashboard corriendo OK en puerto 9119"
+else
+    warn "Hermes Dashboard no arrancó. Revisar: journalctl -u hermes-dashboard -f"
 fi
 
 # ---- 9. Reconciliar + verificar (el cerebro único) ----

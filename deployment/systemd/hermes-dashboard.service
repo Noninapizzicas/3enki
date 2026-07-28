@@ -1,0 +1,23 @@
+[Unit]
+Description=Hermes Agent Web Dashboard
+After=network.target
+Documentation=https://hermes-agent.nousresearch.com/docs/
+
+[Service]
+Type=simple
+User=admin
+Group=admin
+WorkingDirectory=/home/admin
+ExecStart=/home/admin/.hermes/hermes-agent/venv/bin/hermes dashboard --no-open
+Restart=always
+RestartSec=5
+Environment=HOME=/home/admin
+Environment=HERMES_HOME=/home/admin/.hermes
+
+# Seguridad
+NoNewPrivileges=true
+# ProtectSystem no se usa porque Hermes necesita escribir en ~/.hermes
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

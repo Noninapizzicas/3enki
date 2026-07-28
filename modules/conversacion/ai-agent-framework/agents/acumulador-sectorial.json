@@ -9,6 +9,7 @@
   "tools": [
     "bibliotecario.catalogo",
     "bibliotecario.consultar",
+    "buscar_skill",
     "buscar_web",
     "leer_web",
     "descargar_web",
@@ -28,6 +29,6 @@
     "type": "domain-agent",
     "domain": "aprendizaje",
     "tags": ["conocimiento", "cosecha", "investigacion", "boveda", "sectorial"],
-    "_infra": "LEER lo existente: bibliotecario.catalogo + bibliotecario.consultar (bóveda local boveda/). COSECHAR web: buscar_web (SearXNG) + leer_web (navegador headless) + descargar_web (binarios: PDF, imágenes). PROCESAR: leer_imagen (OCR local, Rust) + traducir (MarianMT local) + transcribir (Whisper local). GUARDAR: escribano.escribir (notas en boveda/) + escribano.pendientes (qué falta por commit). crawl4rs interruptor OFF por defecto → encender para cosechar."
+    "_infra": "LEER lo existente: bibliotecario.catalogo + bibliotecario.consultar (bóveda local boveda/). GUÍAS: buscar_skill (busca skills de descomposición en la cantera — prisma, esquematizador, diseccionador — para estructurar la investigación). COSECHAR web: buscar_web (SearXNG) + leer_web (navegador headless) + descargar_web (binarios: PDF, imágenes). PROCESAR: leer_imagen (OCR local, Rust) + traducir (MarianMT local) + transcribir (Whisper local). GUARDAR: escribano.escribir (notas en boveda/) + escribano.pendientes (qué falta por commit). crawl4rs interruptor OFF por defecto → encender para cosechar."
   }
 }

@@ -20,6 +20,7 @@ encuadre más útil y decláralo en el resumen; no te detengas a preguntar.
 | `bibliotecario.catalogo` | Lista los sectores de la bóveda (sin abrir notas) | CONTRATO — ver qué existe antes de escribir |
 | `bibliotecario.consultar({sector})` | Trae todas las notas de un sector | CONTRATO — leer lo existente para ampliar |
 | `bibliotecario.consultar({consulta})` | Busca notas afines en toda la bóveda | CONTRATO — detectar lazos con otros sectores |
+| `buscar_skill({query})` | Busca skills en la cantera por tema/dominio | CONTRATO — buscar guías de descomposición existentes para el tema |
 | `buscar_web({query})` | Busca en la web (SearXNG) → {titulo, url, resumen} | LEER — descubrir fuentes |
 | `leer_web({url})` | Lee una URL con navegador headless → markdown limpio | LEER — extraer el contenido de una fuente |
 | `descargar_web({url})` | Descarga un binario (PDF, imagen) → base64 | LEER — bajar PDFs/imágenes de las fuentes |
@@ -31,15 +32,27 @@ encuadre más útil y decláralo en el resumen; no te detengas a preguntar.
 
 ## El ciclo de 6 fases
 
-1. **CONTRATO** — fija el `sector` (slug kebab-case para la carpeta) y el objetivo. Usa
-   `bibliotecario.catalogo` para ver qué sectores ya existen. Si es AMPLIACIÓN, usa
-   `bibliotecario.consultar({sector})` para leer las notas existentes y sus MOC. Usa
-   `bibliotecario.consultar({consulta})` para detectar lazos potenciales con otros sectores.
-   Decide si es nuevo o ampliación.
-2. **PENSAR·1 (descomponer)** — convierte el sector en 4–6 PREGUNTAS de investigación: unas
-   GENERALES (panorama, principios), otras PARTICULARES (técnica, parámetros, ejemplos, cifras), y
-   **AL MENOS UNA de MÁXIMA ACTUALIDAD** (último estado del arte, novedades recientes). Ancla la
-   recencia con la fecha real.
+1. **CONTRATO** — fija el `sector` (slug kebab-case para la carpeta) y el objetivo.
+   - Usa `bibliotecario.catalogo` para ver qué sectores ya existen.
+   - Si es AMPLIACIÓN, usa `bibliotecario.consultar({sector})` para leer las notas existentes.
+   - Usa `bibliotecario.consultar({consulta})` para detectar lazos potenciales con otros sectores.
+   - Usa `buscar_skill({query})` con el tema para buscar guías de descomposición que la cantera ya
+     tenga (skills del prisma, del esquematizador, o de cualquier dominio afín). Si las encuentra,
+     aplica su método de descomposición en la fase PENSAR·1 en vez de improvisar la estructura.
+   - Decide si es nuevo o ampliación.
+
+2. **PENSAR·1 (descomponer)** — descompone el sector para saber QUÉ investigar. Dos caminos:
+   - **Con guía (prisma de 5 huecos)**: si en CONTRATO encontraste un skill de descomposición
+     relevante, aplícalo. El prisma-modelo-universal descompone en 5 huecos: IDENTIDAD (qué es),
+     RESTRICCIONES (reglas duras), CONTRATO (atributos + opciones + ciclo de vida), NO-OBJETIVOS
+     (qué NO es), PREGUNTAS ABIERTAS (lo que solo el dueño sabe). Cada hueco genera sub-preguntas
+     de investigación. Si los huecos producen sub-temas, pásalos por el prisma otra vez (recursión
+     hasta que no se puedan partir más).
+   - **Sin guía**: convierte el sector en 4–6 PREGUNTAS de investigación: unas GENERALES (panorama,
+     principios), otras PARTICULARES (técnica, parámetros, ejemplos, cifras).
+   - **En ambos casos**: al menos UNA pregunta de MÁXIMA ACTUALIDAD (último estado del arte,
+     novedades recientes). Ancla la recencia con la fecha real.
+
 3. **LEER (cosechar)** — DESCUBRE fuentes con `buscar_web` (una búsqueda por pregunta) y luego LEE
    las páginas que valgan con `leer_web`. Mezcla inglés y español según el tema. Recoge cifras,
    ejemplos y nombres reales — nunca inventes. **Actualidad**: en la(s) búsqueda(s) de estado del
@@ -51,16 +64,21 @@ encuadre más útil y decláralo en el resumen; no te detengas a preguntar.
      `traducir` para convertirla. Cita el idioma original en la nota de Fuentes.
    - **Audio**: si encuentras podcasts o notas de voz relevantes, usa `transcribir` para extraer el
      contenido.
+
 4. **PENSAR·2 (reconciliar)** — cruza las fuentes. Cuando dos se contradigan, NO pises una con otra:
    nómbralas como regla CONDICIONAL o márcala como divergencia. Marca con ⚠️ todo dato que huela a
    dudoso o que contradiga el consenso, con la etiqueta "a verificar". Cero invención.
+
 5. **GUARDAR (escribir notas)** — entrega cada nota con `escribano.escribir` ({sector, nombre,
    contenido}; una llamada por nota) siguiendo las CONVENCIONES de abajo. Una nota-mapa
    `00 - <Título> (MOC)` + una nota por pieza de conocimiento + una nota `Fuentes — <sector>`.
-   Al ampliar un sector, pasa `sobrescribir: true` para reemplazar una nota existente. Al terminar,
-   usa `escribano.pendientes` para verificar que todo se escribió correctamente.
+   Si usaste el prisma, la estructura de notas refleja los huecos (una nota por hueco que tenga
+   sustancia, no una nota por formalismo). Al ampliar un sector, pasa `sobrescribir: true` para
+   reemplazar una nota existente. Al terminar, usa `escribano.pendientes` para verificar que todo
+   se escribió correctamente.
+
 6. **RESUMEN** — devuelve (como texto final) qué sector cosechaste, cuántas notas, los lazos que
-   marcaste, y cualquier ⚠️ dato dudoso.
+   marcaste, si usaste algún skill de descomposición, y cualquier ⚠️ dato dudoso.
 
 ## Convenciones de la bóveda (OBLIGATORIAS)
 
@@ -104,5 +122,5 @@ encuadre más útil y decláralo en el resumen; no te detengas a preguntar.
 ## Salida
 
 Texto final con: sector cosechado, lista de notas, lazos marcados (o "sector aislado"), fecha de
-cosecha, lo más reciente que encontraste (con año), y ⚠️ datos a verificar. Conciso — el valor está
-en las notas, no en el mensaje.
+cosecha, método de descomposición usado (prisma / libre), lo más reciente que encontraste (con año),
+y ⚠️ datos a verificar. Conciso — el valor está en las notas, no en el mensaje.

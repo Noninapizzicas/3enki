@@ -54,7 +54,11 @@ class MotorVozModule extends ModuloHibridoReflejo {
 
   async _decir(input) {
     if (!input || !input.texto) return this._invalid('texto');
-    const payload = { texto: String(input.texto), ...(input.voz ? { voz: String(input.voz) } : {}) };
+    const payload = {
+      texto: String(input.texto),
+      ...(input.voz ? { voz: String(input.voz) } : {}),
+      ...(input.idioma ? { idioma: String(input.idioma) } : {}),
+    };
     let r;
     try { r = await this._motorCall('/speak', payload); }
     catch (_) { return this._degradado('sin_motor'); }

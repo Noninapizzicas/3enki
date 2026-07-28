@@ -1,9 +1,9 @@
 {
-  "_doc": "motor-voz — PUENTE al 4º órgano sensorial de enki-sense: DECIR (texto → voz). Transductor DETERMINISTA (clase 1 del bisturí): mismo texto+voz → mismo audio. Rust NATIVO (piper-rs = voces Piper ONNX vía ort/ONNX Runtime), cero nube. Voces en ESPAÑOL. SIN BOTÓN: decir es salida pura (texto→audio); no captura nada del entorno (a diferencia de oír, que toca el micrófono) → un interruptor no protege ningún estado nombrable. Nace operativo. Único guard: degradación honesta (503 sin_motor; 422 VOZ_NO_DISPONIBLE). Ver guión: arquitectura/decisiones/propuestas/enki-sense.md. Config: base_url (default http://localhost:8124, override env MOTOR_VOZ_URL), timeout_ms.",
+  "_doc": "motor-voz — PUENTE al 4º órgano sensorial de enki-sense: DECIR (texto → voz). Transductor DETERMINISTA (clase 1 del bisturí): mismo texto+voz → mismo audio. Rust NATIVO (Supertonic ONNX, 44.1kHz, 31 idiomas, 10 voces M1-M5/F1-F5), cero nube. SIN BOTÓN: decir es salida pura (texto→audio); no captura nada del entorno (a diferencia de oír, que toca el micrófono) → un interruptor no protege ningún estado nombrable. Nace operativo. Único guard: degradación honesta (503 sin_motor; 422 VOZ_NO_DISPONIBLE). Ver guión: arquitectura/decisiones/propuestas/enki-sense.md. Config: base_url (default http://localhost:8124, override env MOTOR_VOZ_URL), timeout_ms.",
   "name": "motor-voz",
   "version": "0.1.0",
   "_v0_1_0_nota": "v0.1.0: nace el puente del 4º sentido (decir). Reflejo bus↔HTTP al servicio enki-sense (piper-rs). Evento motor-voz.decir.request {texto, voz?} → POST /speak → {audio_base64 (WAV), sample_rate}. Tool 'decir' en GLOBAL_TOOLS. SIN botón (salida pura). Degradación honesta (sin_motor / VOZ_NO_DISPONIBLE). Motor Rust: enki-sense/crates/motor-voz (piper-rs, voz es_ES). Test: motor-voz__index.",
-  "description": "Puente al órgano de voz de enki-sense (Rust nativo, piper-rs) como órgano del bus. Texto → audio hablado (español), en la máquina local. SIN botón, degrada limpio si el motor no está.",
+  "description": "Puente al órgano de voz de enki-sense (Rust nativo, Supertonic ONNX 44.1kHz) como órgano del bus. Texto → audio hablado (31 idiomas), en la máquina local. Botón 'escuchar' en el chat; degrada limpio si el motor no está.",
   "author": "enki",
   "language": "javascript",
   "main": "index.js",
@@ -16,16 +16,20 @@
   "publishes": [
     { "event": "motor-voz.decir.response", "description": "{ audio_base64 (WAV), sample_rate, formato, voz } o error (422 VOZ_NO_DISPONIBLE, 5xx upstream, 503 sin_motor)." }
   ],
+  "ui_handlers": [
+    { "domain": "motor-voz", "action": "decir", "handler": "handleDecirTool", "description": "Puerta ui/request para el frontend: el botón 'escuchar' manda {texto, voz?, idioma?} → mismo _decir que la tool/bus. Frontend: mqttRequest('motor-voz','decir',{texto})." }
+  ],
   "tools": [
     {
       "name": "decir",
-      "description": "Convierte texto en VOZ hablada (audio WAV), LOCALMENTE (en tu máquina, cero nube). Voz en español. ÚSALA para responder por voz, leer un aviso en alto, o accesibilidad. Devuelve el audio en base64 (para reproducir en el frontend o adjuntar). Motor Rust nativo (piper-rs). Operativa siempre; 503 sin_motor si el motor no está, 422 si la voz pedida no está provisionada.",
+      "description": "Convierte texto en VOZ hablada (audio WAV 44.1kHz), LOCALMENTE (en tu máquina, cero nube). 31 idiomas, 10 voces (M1-M5, F1-F5). ÚSALA para responder por voz, leer un aviso en alto, o accesibilidad. Devuelve el audio en base64 (para reproducir en el frontend o adjuntar). Motor Rust nativo (Supertonic ONNX). Operativa siempre; 503 sin_motor si el motor no está, 422 si la voz pedida no está provisionada.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "texto": { "type": "string", "minLength": 1, "description": "El texto a decir en voz alta." },
-          "voz": { "type": "string", "description": "Opcional: nombre de la voz (p.ej. es_ES-davefx-medium). Por defecto la voz española configurada." }
+          "voz": { "type": "string", "description": "Opcional: estilo de voz (M1-M5, F1-F5). Por defecto M1." },
+          "idioma": { "type": "string", "description": "Opcional: código de idioma (es, en, fr, de, it, pt, ja, ko, etc. — 31 idiomas). Por defecto es." }
         },
         "required": ["texto"]
       },

@@ -13,7 +13,12 @@ tags: [esquema, descomposicion, anatomia, mapeo, prisma, diseccionador, agnostic
 
 Entra un sujeto crudo. Salen su esquema completo y sus piezas con forma, en archivos. El aparato es el mismo para cualquier luz — cambias lo que entra, no el método.
 
-Esta skill orquesta dos herramientas existentes: **prisma-modelo-universal** (descompone en 5 huecos) y **diseccionador** (asigna forma a cada pieza atómica). Ambas se definen como lentes dentro de la skill `multi-lens-analysis`. Su valor añadido es el *pegamento*: la recursión hasta seco, la persistencia en archivos, y una ley que impide el error más fácil de cometer.
+Esta skill orquesta dos herramientas existentes: **prisma-modelo-universal** (descompone
+en 5 huecos) y **diseccionador** (asigna forma a cada pieza atómica). Ambas existen como
+skills independientes en la cantera —cárgalas individualmente— y también son las lentes 1
+y 2 del análisis cruzado (`multi-lens-analysis`). Su valor añadido es el *pegamento*:
+la recursión hasta seco, la persistencia en archivos, y una ley que impide el error más
+fácil de cometer.
 
 ## El proceso — tres fases
 

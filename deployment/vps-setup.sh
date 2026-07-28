@@ -488,28 +488,25 @@ fi
 # ONNX Runtime al COMPILAR — el VPS tiene egress abierto. Best-effort: sin
 # binario/modelos, el puente modules/motor-voz degrada honesto (503 / 422).
 MV_MODELS="${INSTALL_DIR}/data/voz-models"
-if [ -x /usr/local/bin/motor-voz ]; then
-    log "motor-voz ya instalado"
-elif command -v cargo &>/dev/null; then
-    log "Compilando motor-voz (enki-sense/voz, Supertonic ONNX — baja ONNX Runtime, la 1ª vez tarda)..."
-    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-voz" --root /usr/local --locked > /dev/null 2>&1 \
-        && log "motor-voz compilado en /usr/local/bin" \
+if command -v cargo &>/dev/null; then
+    log "Compilando motor-voz (enki-sense/voz, Supertonic ONNX — recompila si el código cambió)..."
+    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-voz" --root /usr/local --locked 2>&1 | tail -1 \
+        && log "motor-voz compilado/actualizado en /usr/local/bin" \
         || warn "cargo install de motor-voz falló (¿ort no bajó ONNX Runtime?) — el puente degrada honesto (503)"
 else
     warn "sin cargo: motor-voz no se compiló. El puente degrada honesto (503 sin_motor)."
 fi
 if [ -x /usr/local/bin/motor-voz ]; then
     mkdir -p "${MV_MODELS}"
-    bash "${REPO_DIR}/enki-sense/crates/motor-voz/get-models.sh" "${MV_MODELS}" > /dev/null 2>&1 \
+    bash "${REPO_DIR}/enki-sense/crates/motor-voz/get-models.sh" "${MV_MODELS}" 2>&1 | tail -3 \
         && log "motor-voz: Supertonic ONNX provisionado en ${MV_MODELS} (10 voces, 31 idiomas, 44.1kHz)" \
         || warn "motor-voz: get-models falló (¿red?) — decir dará VOZ_NO_DISPONIBLE hasta reintentar"
     sed "s#__MODELS__#${MV_MODELS}#g" "${REPO_DIR}/enki-sense/deployment/systemd/motor-voz.service" > /etc/systemd/system/motor-voz.service 2>/dev/null
     systemctl daemon-reload
-    if systemctl enable --now motor-voz > /dev/null 2>&1; then
-        log "motor-voz activo en 127.0.0.1:8124 (Supertonic ONNX, 44.1kHz, 31 idiomas) — SIN botón, operativo ya"
-    else
-        warn "motor-voz instalado pero el servicio no arrancó (revisa: journalctl -u motor-voz -f)"
-    fi
+    systemctl enable motor-voz > /dev/null 2>&1
+    systemctl restart motor-voz > /dev/null 2>&1 \
+        && log "motor-voz activo en 127.0.0.1:8124 (Supertonic ONNX, 44.1kHz, 31 idiomas) — SIN botón, operativo ya" \
+        || warn "motor-voz instalado pero el servicio no arrancó (revisa: journalctl -u motor-voz -f)"
 fi
 
 # ---- 3a-ter-septies. motor-trazo — PERCEPTOR de trazo de enki-sense (Rust nativo, :8125) ----

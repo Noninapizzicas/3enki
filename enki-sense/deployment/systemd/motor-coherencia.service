@@ -1,0 +1,22 @@
+# motor-coherencia — juez de coherencia de enki-sense (Rust nativo, MQTT directo).
+# Se compila desde 2enki (enki-sense/) con `cargo install --root /usr/local` en
+# vps-setup.sh → binario en /usr/local/bin/motor-coherencia. Se conecta al broker
+# MQTT local (127.0.0.1:1883): intercepta fs.write.request, juzga la coherencia
+# y reenvía a fs.write.commit.request o pide confirmación al caller.
+[Unit]
+Description=enki-sense motor-coherencia (juez de coherencia de escrituras, MQTT)
+After=network.target aedes.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/motor-coherencia
+Environment=MOTOR_COHERENCIA_BROKER=127.0.0.1
+Environment=MOTOR_COHERENCIA_PORT=1883
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -102,7 +102,9 @@ export {
   getAttachmentIcon,
   formatFileSize,
   getAttachments,
-  getAttachmentCount
+  getAttachmentCount,
+  uploadAndAttach,
+  uploadAndAttachMultiple
 } from './attachments';
 
 // Persistence Store

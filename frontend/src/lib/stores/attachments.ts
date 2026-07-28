@@ -10,6 +10,8 @@
 import { writable, derived, get } from 'svelte/store';
 import type { Attachment } from '$lib/ui-core';
 import { generateUUID } from '$lib/utils';
+import { mqttRequest } from '$lib/ui-core/mqtt-request';
+import { activeProjectId } from './projects';
 
 // ============================================================================
 // CONFIGURACIÓN
@@ -155,6 +157,18 @@ export function getFileType(filename: string): string {
     gif: 'image',
     svg: 'image',
     webp: 'image',
+    avif: 'image',
+    bmp: 'image',
+
+    // Audio
+    mp3: 'audio',
+    wav: 'audio',
+    ogg: 'audio',
+    m4a: 'audio',
+    aac: 'audio',
+    flac: 'audio',
+    opus: 'audio',
+    webm: 'audio',
 
     // Datos
     csv: 'data',
@@ -174,6 +188,7 @@ export function getAttachmentIcon(type: string): string {
     text: '📝',
     code: '💻',
     image: '🖼️',
+    audio: '🔊',
     data: '📊',
     file: '📎',
   };
@@ -191,6 +206,88 @@ export function formatFileSize(bytes: number): string {
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
 
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+}
+
+// ============================================================================
+// UPLOAD + ATTACH
+// ============================================================================
+
+const TEXT_EXTENSIONS = ['md', 'json', 'txt', 'html', 'css', 'js', 'ts', 'yaml', 'yml', 'xml', 'svelte', 'jsx', 'tsx', 'csv', 'py'];
+
+function readFile(file: File): Promise<{ content: string; isBinary: boolean }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const isBinary = !TEXT_EXTENSIONS.includes(ext);
+
+    reader.onload = () => {
+      const result = reader.result as string;
+      if (isBinary && result.startsWith('data:')) {
+        resolve({ content: result.split(',')[1], isBinary });
+      } else {
+        resolve({ content: result, isBinary });
+      }
+    };
+    reader.onerror = () => reject(new Error('Error leyendo archivo'));
+
+    if (isBinary) {
+      reader.readAsDataURL(file);
+    } else {
+      reader.readAsText(file);
+    }
+  });
+}
+
+export async function uploadAndAttach(file: File): Promise<boolean> {
+  if (file.size > MAX_FILE_SIZE) {
+    console.warn('[attachments] Archivo demasiado grande:', file.name, file.size);
+    return false;
+  }
+
+  const current = get(attachments);
+  if (current.length >= MAX_ATTACHMENTS) {
+    console.warn('[attachments] Límite de adjuntos alcanzado');
+    return false;
+  }
+
+  const projectId = get(activeProjectId);
+  if (!projectId) {
+    console.warn('[attachments] Sin proyecto activo');
+    return false;
+  }
+
+  try {
+    const { content, isBinary } = await readFile(file);
+    const timestamp = Date.now();
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filePath = `/adjuntos/${timestamp}_${safeName}`;
+
+    await mqttRequest('fs', 'write', {
+      project_id: projectId,
+      path: filePath,
+      content,
+      encoding: isBinary ? 'base64' : 'utf8'
+    });
+
+    const fileType = getFileType(file.name);
+    return addAttachment({
+      name: file.name,
+      type: fileType,
+      path: filePath,
+      size: file.size
+    });
+  } catch (err) {
+    console.error('[attachments] Error subiendo archivo:', file.name, err);
+    return false;
+  }
+}
+
+export async function uploadAndAttachMultiple(files: FileList | File[]): Promise<number> {
+  let added = 0;
+  for (const file of Array.from(files)) {
+    if (await uploadAndAttach(file)) added++;
+  }
+  return added;
 }
 
 // ============================================================================

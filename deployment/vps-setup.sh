@@ -378,12 +378,10 @@ fi
 # El PRIMER sentido de enki-sense. Vive DENTRO de 2enki (enki-sense/), NO repo aparte:
 # se compila desde REPO_DIR. Nativo (resvg/usvg/svg2pdf, sin Chromium → sin Docker,
 # como ocr4rs). Best-effort: si falla, el puente modules/motor-ojo degrada honesto (503).
-if [ -x /usr/local/bin/motor-ojo ]; then
-    log "motor-ojo ya instalado"
-elif command -v cargo &>/dev/null; then
-    log "Compilando motor-ojo (enki-sense/render, la 1ª vez tarda unos minutos)..."
-    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-ojo" --root /usr/local --locked > /dev/null 2>&1 \
-        && log "motor-ojo compilado en /usr/local/bin" \
+if command -v cargo &>/dev/null; then
+    log "Compilando motor-ojo (enki-sense/render — recompila si el código cambió)..."
+    cargo install --force --path "${REPO_DIR}/enki-sense/crates/motor-ojo" --root /usr/local --locked 2>&1 | tail -1 \
+        && log "motor-ojo compilado/actualizado en /usr/local/bin" \
         || warn "cargo install de motor-ojo falló — el puente degrada honesto (503 sin_motor)"
 else
     warn "sin cargo: motor-ojo no se compiló. El puente degrada honesto (503 sin_motor)."
@@ -391,7 +389,8 @@ fi
 if [ -x /usr/local/bin/motor-ojo ]; then
     install -m 0644 "${REPO_DIR}/enki-sense/deployment/systemd/motor-ojo.service" /etc/systemd/system/motor-ojo.service 2>/dev/null
     systemctl daemon-reload
-    if systemctl enable --now motor-ojo > /dev/null 2>&1; then
+    systemctl enable motor-ojo > /dev/null 2>&1
+    if systemctl restart motor-ojo > /dev/null 2>&1; then
         log "motor-ojo activo en 127.0.0.1:8120 (render SVG/PDF/imagen, local) — SIN botón, operativo ya"
     else
         warn "motor-ojo instalado pero el servicio no arrancó (revisa: journalctl -u motor-ojo -f)"
@@ -403,12 +402,10 @@ fi
 # el binario: get-models.sh los descarga (patrón ocr4rs). Best-effort: sin binario
 # o sin modelos, el puente modules/motor-traduce degrada honesto (503 sin_motor).
 MT_MODELS="${INSTALL_DIR}/data/traduce-models"
-if [ -x /usr/local/bin/motor-traduce ]; then
-    log "motor-traduce ya instalado"
-elif command -v cargo &>/dev/null; then
-    log "Compilando motor-traduce (enki-sense/traducir, candle — la 1ª vez tarda unos minutos)..."
-    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-traduce" --root /usr/local --locked > /dev/null 2>&1 \
-        && log "motor-traduce compilado en /usr/local/bin" \
+if command -v cargo &>/dev/null; then
+    log "Compilando motor-traduce (enki-sense/traducir, candle — recompila si el código cambió)..."
+    cargo install --force --path "${REPO_DIR}/enki-sense/crates/motor-traduce" --root /usr/local --locked 2>&1 | tail -1 \
+        && log "motor-traduce compilado/actualizado en /usr/local/bin" \
         || warn "cargo install de motor-traduce falló — el puente degrada honesto (503 sin_motor)"
 else
     warn "sin cargo: motor-traduce no se compiló. El puente degrada honesto (503 sin_motor)."
@@ -421,7 +418,8 @@ if [ -x /usr/local/bin/motor-traduce ]; then
         || warn "motor-traduce: get-models falló (¿red?) — traducir dará par_no_soportado hasta reintentar"
     sed "s#__MODELS__#${MT_MODELS}#g" "${REPO_DIR}/enki-sense/deployment/systemd/motor-traduce.service" > /etc/systemd/system/motor-traduce.service 2>/dev/null
     systemctl daemon-reload
-    if systemctl enable --now motor-traduce > /dev/null 2>&1; then
+    systemctl enable motor-traduce > /dev/null 2>&1
+    if systemctl restart motor-traduce > /dev/null 2>&1; then
         log "motor-traduce activo en 127.0.0.1:8121 (traducir local) — SIN botón, operativo ya"
     else
         warn "motor-traduce instalado pero el servicio no arrancó (revisa: journalctl -u motor-traduce -f)"
@@ -433,12 +431,10 @@ fi
 # get-models.sh (patrón ocr4rs). Best-effort: sin binario o sin modelo, el puente
 # modules/motor-oido degrada honesto (503 sin_motor).
 MO_MODELS="${INSTALL_DIR}/data/oido-models"
-if [ -x /usr/local/bin/motor-oido ]; then
-    log "motor-oido ya instalado"
-elif command -v cargo &>/dev/null; then
-    log "Compilando motor-oido (enki-sense/oír, candle-whisper — la 1ª vez tarda unos minutos)..."
-    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-oido" --root /usr/local --locked > /dev/null 2>&1 \
-        && log "motor-oido compilado en /usr/local/bin" \
+if command -v cargo &>/dev/null; then
+    log "Compilando motor-oido (enki-sense/oír, candle-whisper — recompila si el código cambió)..."
+    cargo install --force --path "${REPO_DIR}/enki-sense/crates/motor-oido" --root /usr/local --locked 2>&1 | tail -1 \
+        && log "motor-oido compilado/actualizado en /usr/local/bin" \
         || warn "cargo install de motor-oido falló — el puente degrada honesto (503 sin_motor)"
 else
     warn "sin cargo: motor-oido no se compiló. El puente degrada honesto (503 sin_motor)."
@@ -450,7 +446,8 @@ if [ -x /usr/local/bin/motor-oido ]; then
         || warn "motor-oido: get-models falló (¿red?) — transcribir dará sin_motor hasta reintentar"
     sed "s#__MODELS__#${MO_MODELS}#g" "${REPO_DIR}/enki-sense/deployment/systemd/motor-oido.service" > /etc/systemd/system/motor-oido.service 2>/dev/null
     systemctl daemon-reload
-    if systemctl enable --now motor-oido > /dev/null 2>&1; then
+    systemctl enable motor-oido > /dev/null 2>&1
+    if systemctl restart motor-oido > /dev/null 2>&1; then
         log "motor-oido activo en 127.0.0.1:8122 (transcribir voz local) — SIN botón, operativo ya"
     else
         warn "motor-oido instalado pero el servicio no arrancó (revisa: journalctl -u motor-oido -f)"
@@ -461,12 +458,10 @@ fi
 # El 1er perceptor. DSP puro (SIN modelo → nada que descargar). Da features de
 # prosodia; la emoción la infiere el LLM. Best-effort: sin binario, el puente
 # modules/motor-sonido degrada honesto (503 sin_motor).
-if [ -x /usr/local/bin/motor-sonido ]; then
-    log "motor-sonido ya instalado"
-elif command -v cargo &>/dev/null; then
-    log "Compilando motor-sonido (enki-sense/prosodia, DSP)..."
-    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-sonido" --root /usr/local --locked > /dev/null 2>&1 \
-        && log "motor-sonido compilado en /usr/local/bin" \
+if command -v cargo &>/dev/null; then
+    log "Compilando motor-sonido (enki-sense/prosodia, DSP — recompila si el código cambió)..."
+    cargo install --force --path "${REPO_DIR}/enki-sense/crates/motor-sonido" --root /usr/local --locked 2>&1 | tail -1 \
+        && log "motor-sonido compilado/actualizado en /usr/local/bin" \
         || warn "cargo install de motor-sonido falló — el puente degrada honesto (503 sin_motor)"
 else
     warn "sin cargo: motor-sonido no se compiló. El puente degrada honesto (503 sin_motor)."
@@ -474,7 +469,8 @@ fi
 if [ -x /usr/local/bin/motor-sonido ]; then
     install -m 0644 "${REPO_DIR}/enki-sense/deployment/systemd/motor-sonido.service" /etc/systemd/system/motor-sonido.service 2>/dev/null
     systemctl daemon-reload
-    if systemctl enable --now motor-sonido > /dev/null 2>&1; then
+    systemctl enable motor-sonido > /dev/null 2>&1
+    if systemctl restart motor-sonido > /dev/null 2>&1; then
         log "motor-sonido activo en 127.0.0.1:8123 (prosodia local) — SIN botón, operativo ya"
     else
         warn "motor-sonido instalado pero el servicio no arrancó (revisa: journalctl -u motor-sonido -f)"
@@ -490,7 +486,7 @@ fi
 MV_MODELS="${INSTALL_DIR}/data/voz-models"
 if command -v cargo &>/dev/null; then
     log "Compilando motor-voz (enki-sense/voz, Supertonic ONNX — recompila si el código cambió)..."
-    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-voz" --root /usr/local --locked 2>&1 | tail -1 \
+    cargo install --force --path "${REPO_DIR}/enki-sense/crates/motor-voz" --root /usr/local --locked 2>&1 | tail -1 \
         && log "motor-voz compilado/actualizado en /usr/local/bin" \
         || warn "cargo install de motor-voz falló (¿ort no bajó ONNX Runtime?) — el puente degrada honesto (503)"
 else
@@ -514,12 +510,10 @@ fi
 # modelo → nada que descargar): trazos de canvas → formas. Da la geometría; la
 # INTENCIÓN la infiere el LLM. Best-effort: sin binario, el puente modules/motor-trazo
 # degrada honesto (503 sin_motor).
-if [ -x /usr/local/bin/motor-trazo ]; then
-    log "motor-trazo ya instalado"
-elif command -v cargo &>/dev/null; then
-    log "Compilando motor-trazo (enki-sense/trazo, geometría pura)..."
-    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-trazo" --root /usr/local --locked > /dev/null 2>&1 \
-        && log "motor-trazo compilado en /usr/local/bin" \
+if command -v cargo &>/dev/null; then
+    log "Compilando motor-trazo (enki-sense/trazo, geometría pura — recompila si el código cambió)..."
+    cargo install --force --path "${REPO_DIR}/enki-sense/crates/motor-trazo" --root /usr/local --locked 2>&1 | tail -1 \
+        && log "motor-trazo compilado/actualizado en /usr/local/bin" \
         || warn "cargo install de motor-trazo falló — el puente degrada honesto (503 sin_motor)"
 else
     warn "sin cargo: motor-trazo no se compiló. El puente degrada honesto (503 sin_motor)."
@@ -527,7 +521,8 @@ fi
 if [ -x /usr/local/bin/motor-trazo ]; then
     install -m 0644 "${REPO_DIR}/enki-sense/deployment/systemd/motor-trazo.service" /etc/systemd/system/motor-trazo.service 2>/dev/null
     systemctl daemon-reload
-    if systemctl enable --now motor-trazo > /dev/null 2>&1; then
+    systemctl enable motor-trazo > /dev/null 2>&1
+    if systemctl restart motor-trazo > /dev/null 2>&1; then
         log "motor-trazo activo en 127.0.0.1:8125 (geometría de canvas local) — SIN botón, operativo ya"
     else
         warn "motor-trazo instalado pero el servicio no arrancó (revisa: journalctl -u motor-trazo -f)"
@@ -541,12 +536,10 @@ fi
 # confirmación), y reenvía a fs.write.commit.request o devuelve veredicto al caller.
 # SIN puerto HTTP — habla MQTT directo al broker (127.0.0.1:1883). Best-effort:
 # sin binario, filesystem escucha fs.write.request directamente (sin juez).
-if [ -x /usr/local/bin/motor-coherencia ]; then
-    log "motor-coherencia ya instalado"
-elif command -v cargo &>/dev/null; then
-    log "Compilando motor-coherencia (enki-sense/coherencia, juez puro)..."
-    cargo install --path "${REPO_DIR}/enki-sense/crates/motor-coherencia" --root /usr/local --locked > /dev/null 2>&1 \
-        && log "motor-coherencia compilado en /usr/local/bin" \
+if command -v cargo &>/dev/null; then
+    log "Compilando motor-coherencia (enki-sense/coherencia, juez puro — recompila si el código cambió)..."
+    cargo install --force --path "${REPO_DIR}/enki-sense/crates/motor-coherencia" --root /usr/local --locked 2>&1 | tail -1 \
+        && log "motor-coherencia compilado/actualizado en /usr/local/bin" \
         || warn "cargo install de motor-coherencia falló — filesystem opera sin juez de coherencia"
 else
     warn "sin cargo: motor-coherencia no se compiló. Filesystem opera sin juez de coherencia."
@@ -554,7 +547,8 @@ fi
 if [ -x /usr/local/bin/motor-coherencia ]; then
     install -m 0644 "${REPO_DIR}/enki-sense/deployment/systemd/motor-coherencia.service" /etc/systemd/system/motor-coherencia.service 2>/dev/null
     systemctl daemon-reload
-    if systemctl enable --now motor-coherencia > /dev/null 2>&1; then
+    systemctl enable motor-coherencia > /dev/null 2>&1
+    if systemctl restart motor-coherencia > /dev/null 2>&1; then
         log "motor-coherencia activo → mqtt://127.0.0.1:1883 (juez de coherencia de escrituras) — SIN botón, operativo ya"
     else
         warn "motor-coherencia instalado pero el servicio no arrancó (revisa: journalctl -u motor-coherencia -f)"

@@ -103,7 +103,13 @@ pizzepos.es {
 # Hermes Agent — dashboard web (hermes.<domain>)
 # Usa: hermes dashboard (localhost:9119)
 hermes.pizzepos.es {
-	reverse_proxy localhost:9119
+	# El dashboard de Hermes solo acepta Host/Origin = 127.0.0.1:9119.
+	# El navegador envía Host=hermes.<domain> y Origin=https://hermes.<domain>,
+	# así que Caddy los reescribe antes de reenviar.
+	reverse_proxy localhost:9119 {
+		header_up Host 127.0.0.1:9119
+		header_up Origin 127.0.0.1:9119
+	}
 
 	header {
 		X-Content-Type-Options nosniff

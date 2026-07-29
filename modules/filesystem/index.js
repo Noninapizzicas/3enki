@@ -115,6 +115,7 @@ class FilesystemModule extends BaseModule {
     // no-op. El enforce (bloquear+traducir) es opt-in por interruptor; default OBSERVE.
     this._mapaPropiedad = [];
     this._caminoCanonicoEnforce = false;
+    this._writeDedup = new Map();
   }
 
   // ==========================================
@@ -301,7 +302,12 @@ class FilesystemModule extends BaseModule {
   // Patron: invoca handle*, propaga shape canonico al response.
   // ==========================================
 
-  async onWriteRequest(event)  { return this._busDispatch(event, 'write',  'fs.write.response',  ['path', 'content', 'encoding', 'expected_hash']); }
+  async onWriteRequest(event) {
+    const rid = (event?.data || event?.payload || event)?.request_id;
+    if (rid && this._writeDedup.has(rid)) return;
+    if (rid) { this._writeDedup.set(rid, 1); setTimeout(() => this._writeDedup.delete(rid), 30000); }
+    return this._busDispatch(event, 'write', 'fs.write.response', ['path', 'content', 'encoding', 'expected_hash']);
+  }
   async onEditRequest(event)   { return this._busDispatch(event, 'edit',   'fs.edit.response',   ['path', 'patches', 'expected_hash']); }
   async onReadRequest(event)   { return this._busDispatch(event, 'read',   'fs.read.response',   ['path', 'file_path']); }
   async onDeleteRequest(event) { return this._busDispatch(event, 'delete', 'fs.delete.response', ['path']); }

@@ -5,8 +5,7 @@ description: >-
   Cada store es un puente que REFLEJA el estado del backend: pide datos
   via mqttRequest, los refleja en un writable, y se suscribe a eventos
   para mantenerse sincronizado en tiempo real.
-fuente: 3enki
-dominio: interfaces
+fuente: interfaces
 tags: [store, mqtt, svelte, patron, frontend, reflejo, cupula-interfaces]
 ---
 

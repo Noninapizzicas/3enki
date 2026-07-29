@@ -5,8 +5,7 @@ description: >-
   componentes y flujo: carta completa en memoria, filtrado local por
   categoría, añadir/eliminar items del buffer, enviar a cocina.
   Botones especiales: mitad-y-mitad, al gusto, porciones.
-fuente: 3enki
-dominio: comercio
+fuente: interfaces
 tags: [pos, comandero, tpv, pedido, svelte, store, cupula-interfaces]
 ---
 

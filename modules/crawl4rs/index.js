@@ -321,7 +321,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
       }
 
       let resp;
-      try { resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: this._timeoutMs }); }
+      try { resp = await page.goto(url, { waitUntil: 'load', timeout: this._timeoutMs }); }
       catch (e) { return { fallo: { tipo: /timeout/i.test(e.message) ? 'timeout' : 'nav', motivo: e.message } }; }
 
       // localStorage best-effort tras estar en el origen
@@ -372,7 +372,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
     try {
       page = await browser.newPage();
       if (opts.emular?.user_agent) { try { await page.setUserAgent(String(opts.emular.user_agent)); } catch (_) {} }
-      try { await page.goto(url, { waitUntil: 'networkidle2', timeout: this._timeoutMs }); }
+      try { await page.goto(url, { waitUntil: 'load', timeout: this._timeoutMs }); }
       catch (e) { return { fallo: { tipo: /timeout/i.test(e.message) ? 'timeout' : 'nav', motivo: e.message } }; }
       const f = await this._ejecutarPasos(page, pasos);
       if (f) return { fallo: f };

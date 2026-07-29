@@ -13,8 +13,7 @@ description: >-
 
   PERTENECE a la cúpula interfaces/patrones-fundacionales/ — gemela de los
   módulos backend. NO usar para crear skills Hermes ni herramientas de chat.
-fuente: 3enki
-dominio: comercio
+fuente: interfaces
 tags: [pos, pizzepos, svelte, sveltekit, mqtt, frontend, ui, tpv, cupula-interfaces]
 ---
 

@@ -5,8 +5,7 @@ description: >-
   componentes y flujo: persistencia como fuente de verdad, creación de
   mesa/llevar/delivery/llevadoo, 16 eventos MQTT de coherencia en tiempo
   real, merge buffer+persistencia.
-fuente: 3enki
-dominio: comercio
+fuente: interfaces
 tags: [pos, cuentas, mesas, persistencia, svelte, store, cupula-interfaces]
 ---
 

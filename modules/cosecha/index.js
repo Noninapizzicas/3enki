@@ -107,19 +107,25 @@ class CosechaModule extends ModuloHibridoReflejo {
     catch (_) { return; }  // dir ausente (p.ej. data/ aún sin importaciones) = sin ruido
     for (const f of fuentes) {
       if (!f.isDirectory()) continue;
-      const fuenteDir = path.join(baseDir, f.name);
-      let entradas;
-      try { entradas = fs.readdirSync(fuenteDir, { withFileTypes: true }); }
-      catch (_) { continue; }
-      for (const s of entradas) {
-        if (!s.isDirectory()) continue;
-        const mdPath = path.join(fuenteDir, s.name, 'SKILL.md');
-        let raw;
-        try { raw = fs.readFileSync(mdPath, 'utf-8'); }
-        catch (_) { this.logger?.warn('cosecha.skill.sin_md', { fuente: f.name, skill: s.name }); continue; }
-        const skill = this._parse(raw, { fuenteDefault: f.name, nombreDefault: s.name });
-        skill.tier = skill.oficial ? 'oficial' : tier;   // oficial (equipo oficial de skills.sh) · semilla (curada) · crecido — source-tier boost
+      this._scanFuente(path.join(baseDir, f.name), f.name, tier);
+    }
+  }
+
+  _scanFuente(dir, fuente, tier) {
+    let entradas;
+    try { entradas = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch (_) { return; }
+    for (const s of entradas) {
+      if (!s.isDirectory()) continue;
+      const skillDir = path.join(dir, s.name);
+      const mdPath = path.join(skillDir, 'SKILL.md');
+      try {
+        const raw = fs.readFileSync(mdPath, 'utf-8');
+        const skill = this._parse(raw, { fuenteDefault: fuente, nombreDefault: s.name });
+        skill.tier = skill.oficial ? 'oficial' : tier;
         this._skills.set(skill.nombre, skill);
+      } catch (_) {
+        this._scanFuente(skillDir, fuente, tier);
       }
     }
   }

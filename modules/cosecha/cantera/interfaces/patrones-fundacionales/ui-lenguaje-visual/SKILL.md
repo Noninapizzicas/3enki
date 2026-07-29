@@ -10,8 +10,7 @@ description: >-
   cuando quieras explicar por qué un elemento tiene cierto color/icono.
   Complementa a pos-frontend-construction (arquitectura) y ux-flujo-cuenta
   (usabilidad). DENTRO de la cúpula interfaces/.
-fuente: 3enki
-dominio: interfaces
+fuente: interfaces
 tags: [visual, lenguaje, color, icono, ux, diseño, pos, semaforo, cupula-interfaces]
 ---
 

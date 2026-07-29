@@ -6,8 +6,7 @@ description: >-
   (pendiente→preparando→listo), notificaciones por pedido listo.
   Coherencia en vivo: si un camarero marca desde la tablet, la pantalla
   de cocina se actualiza sola.
-fuente: 3enki
-dominio: comercio
+fuente: interfaces
 tags: [pos, cocina, display, pedidos, svelte, store, cupula-interfaces]
 ---
 

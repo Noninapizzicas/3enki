@@ -5,8 +5,7 @@ description: >-
   apertura → toma de pedido → cocina → cobro → cierre. Cubre estados
   vacíos, loading, errores, coherencia multi-superficie y transiciones
   entre pantallas. Diseñado para que el camarero nunca se pierda.
-fuente: 3enki
-dominio: interfaces
+fuente: interfaces
 tags: [ux, usabilidad, flujo, pos, cuenta, pedido, cobro, cupula-interfaces]
 ---
 

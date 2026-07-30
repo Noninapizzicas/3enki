@@ -876,14 +876,16 @@ class FilesystemModule extends BaseModule {
   }
 
   // ==========================================
-  // handleEdit — JSON Patch RFC 6902 sobre archivos JSON
+  // handleEdit — Edición universal: JSON Patch RFC 6902 sobre JSON,
+  // operaciones de texto sobre el resto (HTML, JS, CSS, MD, etc.)
   // ==========================================
-  // v1: solo 'op:add' soportado. Cierra el caso testigo "salmorejo perdido"
-  // (audit 2026-05-25) de raiz — el caller declara el patch declarativo en
-  // lugar de componer el archivo entero. Imposible perder entradas viejas.
-  // CAS opcional via expected_hash (reutiliza la mecanica de handleWrite).
-  // Resto de operaciones (remove, replace, move, copy, test) se anyaden
-  // cuando se necesiten, sin libs externas — RFC 6902 es algoritmo acotado.
+  // JSON: aplica JSON Patch RFC 6902 (add/remove/replace/move/copy/test).
+  //   CAS opcional via expected_hash.
+  // Texto: aplica operaciones sobre texto plano. Cada patch:
+  //   { op, search?, value? }
+  //   ops: replace (1ª ocurrencia), replace_all, insert_before, insert_after, remove
+  //   search → texto a buscar (ancla). value → texto a insertar/sustituir.
+  // Snapshot + atomic write en AMBOS modos.
 
   async handleEdit(data) {
     try {
@@ -921,22 +923,31 @@ class FilesystemModule extends BaseModule {
         }
       }
 
+      // Detectar modo: si es JSON, JSON Patch; si no, texto.
+      let isJson = false;
       let doc;
-      try { doc = JSON.parse(currentContent); }
-      catch (e) {
-        return this._errorResponse(400, 'INVALID_INPUT',
-          `File is not valid JSON: ${e.message}`,
-          { kind: 'domain', field: 'content', path: filePath });
+      try { doc = JSON.parse(currentContent); isJson = true; }
+      catch (_) { /* no es JSON → modo texto */ }
+
+      let newContent;
+      if (isJson) {
+        try { doc = this._applyJsonPatchOperations(doc, data.patches); }
+        catch (e) {
+          return this._errorResponse(400, 'INVALID_INPUT',
+            `JSON patch failed: ${e.message}`,
+            { kind: 'domain', field: 'patches' });
+        }
+        newContent = JSON.stringify(doc, null, 2);
+      } else {
+        try { newContent = this._applyTextPatchOperations(currentContent, data.patches); }
+        catch (e) {
+          return this._errorResponse(400, 'INVALID_INPUT',
+            `Text patch failed: ${e.message}`,
+            { kind: 'domain', field: 'patches' });
+        }
       }
 
-      try { doc = this._applyJsonPatchOperations(doc, data.patches); }
-      catch (e) {
-        return this._errorResponse(400, 'INVALID_INPUT',
-          `patch failed: ${e.message}`,
-          { kind: 'domain', field: 'patches' });
-      }
-
-      // Posición 2 (EL TRADUCTOR): también en edit — dato de dominio ajeno se cambia por la palabra.
+      // Posición 2 (EL TRADUCTOR): también en edit
       const ajenoEdit = this._apreciarCaminoCanonico(filePath, data?._source_module);
       if (ajenoEdit) {
         this.metrics?.increment('filesystem.escritura_ajena', { dueno: ajenoEdit.dueno, modo: this._caminoCanonicoEnforce ? 'enforce' : 'observe', op: 'edit' });
@@ -947,13 +958,12 @@ class FilesystemModule extends BaseModule {
         // REJA ABIERTA (decisión del dueño): edit tampoco bloquea — solo señala. El write pasa.
       }
 
-      const newContent = JSON.stringify(doc, null, 2);
-      await this._snapshotAntesDeSobrescribir(safePath);   // la RED también en edit (por si un patch mal formado daña)
+      await this._snapshotAntesDeSobrescribir(safePath);
       await this._atomicWriteFile(safePath, newContent, 'utf-8');
 
       const fileSize = Buffer.byteLength(newContent, 'utf-8');
       await this._publicarEvento('fs.file.updated', { path: filePath, size: fileSize });
-      this.metrics?.increment('filesystem.edit.success', { patches: data.patches.length });
+      this.metrics?.increment('filesystem.edit.success', { patches: data.patches.length, mode: isJson ? 'json' : 'text' });
 
       const newHash = this._computeHash(newContent);
       return {
@@ -962,12 +972,88 @@ class FilesystemModule extends BaseModule {
           path: filePath, file_path: filePath,
           size: fileSize,
           hash: newHash,
-          patches_applied: data.patches.length
+          patches_applied: data.patches.length,
+          mode: isJson ? 'json' : 'text'
         }
       };
     } catch (err) {
       return this._handleHandlerError('filesystem.edit.failed', err, 'edit');
     }
+  }
+
+  // ==========================================
+  // Text Patch — operaciones sobre texto plano
+  // ==========================================
+  // Cada patch: { op, search?, value? }
+  //   replace       → 1ª ocurrencia de 'search' se reemplaza por 'value'
+  //   replace_all   → todas las ocurrencias de 'search' → 'value'
+  //   insert_before → inserta 'value' ANTES de la 1ª ocurrencia de 'search'
+  //   insert_after  → inserta 'value' DESPUÉS de la 1ª ocurrencia de 'search'
+  //   remove        → elimina la(s) línea(s) que contienen 'search'
+  // search y value son strings planos (no regex por defecto; barra segura).
+  _applyTextPatchOperations(content, patches) {
+    const VALID_OPS = new Set(['replace', 'replace_all', 'insert_before', 'insert_after', 'remove']);
+    let result = content;
+    const applied = [];
+
+    for (let i = 0; i < patches.length; i++) {
+      const patch = patches[i];
+      if (!patch || typeof patch !== 'object') {
+        throw new Error(`patch[${i}] must be an object`);
+      }
+      const op = patch.op;
+      if (!VALID_OPS.has(op)) {
+        throw new Error(`patch[${i}].op "${op}" not supported for text (valid: ${[...VALID_OPS].join(', ')})`);
+      }
+      if (op === 'replace' || op === 'replace_all' || op === 'insert_before' || op === 'insert_after') {
+        if (typeof patch.search !== 'string' || !patch.search) {
+          throw new Error(`patch[${i}].search (string) is required for op "${op}"`);
+        }
+        if (typeof patch.value !== 'string') {
+          throw new Error(`patch[${i}].value (string) is required for op "${op}"`);
+        }
+      }
+      if (op === 'remove') {
+        if (typeof patch.search !== 'string' || !patch.search) {
+          throw new Error(`patch[${i}].search (string) is required for op "remove"`);
+        }
+      }
+
+      switch (op) {
+        case 'replace': {
+          const idx = result.indexOf(patch.search);
+          if (idx === -1) throw new Error(`patch[${i}] replace: search string not found`);
+          result = result.slice(0, idx) + patch.value + result.slice(idx + patch.search.length);
+          break;
+        }
+        case 'replace_all': {
+          if (!result.includes(patch.search)) throw new Error(`patch[${i}] replace_all: search string not found`);
+          result = result.split(patch.search).join(patch.value);
+          break;
+        }
+        case 'insert_before': {
+          const idx = result.indexOf(patch.search);
+          if (idx === -1) throw new Error(`patch[${i}] insert_before: search string not found`);
+          result = result.slice(0, idx) + patch.value + result.slice(idx);
+          break;
+        }
+        case 'insert_after': {
+          const idx = result.indexOf(patch.search);
+          if (idx === -1) throw new Error(`patch[${i}] insert_after: search string not found`);
+          result = result.slice(0, idx + patch.search.length) + patch.value + result.slice(idx + patch.search.length);
+          break;
+        }
+        case 'remove': {
+          const lines = result.split('\n');
+          const filtered = lines.filter(line => !line.includes(patch.search));
+          if (filtered.length === lines.length) throw new Error(`patch[${i}] remove: search string not found in any line`);
+          result = filtered.join('\n');
+          break;
+        }
+      }
+      applied.push(patch.op);
+    }
+    return result;
   }
 
   // JSON Patch RFC 6902 — v1 solo soporta 'op:add'.

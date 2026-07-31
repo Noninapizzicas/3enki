@@ -4290,6 +4290,29 @@ Todo módulo nuevo del grupo conversación se declara en `modules.enabled` con o
 explícito; todo POC/sustituido se mueve a `modules.disabled` (no se borra, se apaga)
 y se archiva en `_archived/` cuando se confirma que no se va a rescatar.
 
+### Capa de referencia v1 → runtime v2 (correspondencia)
+`arquitectura/conversacion-ref/` (10 directorios) es la ESPECIFICACIÓN DE DISEÑO v1 del
+subsistema conversación. Sus eventos (chat.send.request, session.create.request,
+chat.message.enriched) NO existen en el runtime actual — es documentación histórica,
+NO se carga (el loader solo mira modules/) y NO se referencia desde runtime ni tests.
+Se conserva como registro de intención de diseño. Correspondencia con lo que le sucedió:
+
+```
+conversacion-ref/chat-session       → modules/conversacion/chat-io          (persistencia + FIFO)
+conversacion-ref/prompt-engine      → modules/conversacion/prompt-builder   (system prompt)
+conversacion-ref/ai-gateway         → modules/conversacion/ai-gateway       (ejecutor LLM v2.36)
+conversacion-ref/agent-manager      → modules/conversacion/ai-agent-framework (agentes + invoke_agent)
+conversacion-ref/chat-ai-bridge     → (absorbido por ai-gateway + nervios)
+conversacion-ref/chat-mqtt          → (absorbido por ui_handlers MQTT del core)
+conversacion-ref/context-manager    → (absorbido por prompt-builder + memorias)
+conversacion-ref/conversation-router→ (absorbido por chat-io + ai-gateway foco)
+conversacion-ref/ai-agent-framework → modules/conversacion/ai-agent-framework
+conversacion-ref/agent-bridge       → (absorbido por agent-observer)
+```
+
+Los monolitos pre-rewrite (v0) preservados en `arquitectura/migracion/_legacy/*.bak`
+son el historial de la reescritura — su sitio canónico (los genera scaffold-rewrite.js).
+
 ---
 
 # Módulos Pizzepos y Blueprints

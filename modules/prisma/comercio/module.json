@@ -1,0 +1,12 @@
+{
+  "_doc": "Manifest de prisma/comercio — EL CONDUCTOR universal de la vertical Prisma. Blueprint-driven (cero JS): el LLM de la página lee este contrato y opera el comercio completo publicando eventos al bus (bus.publishAndWait) contra los RPC de los 22 reflejos prisma. Enseña el NÚCLEO (vender/costear/mostrar) + los VARIABLES (elaborar/preparar/entregar/programar) y la regla de oro: LEER el ProductoUniversal (arquetipo + ejes + naturalezas) para saber QUÉ enciende cada negocio. La lógica es universal; los nombres de hostelería (cocina, variaciones) son instancias. Ver arquitectura/cabecera/prisma/vertical-comercio.md.",
+  "name": "comercio",
+  "version": "0.1.0",
+  "language": "es",
+  "blueprint_driven": true,
+  "blueprint_path": "comercio.blueprint.json",
+  "target_page_id": "prisma-tienda",
+  "description": "Conductor universal de Prisma: el LLM opera un comercio cualquiera (catálogo → venta → preparación → entrega → cobro → escaparate) leyendo el ProductoUniversal y publicando RPC al bus. Blueprint-driven, sin runtime JS.",
+  "subscribes": [],
+  "cajones_enabled": true
+}

@@ -1,0 +1,22 @@
+{
+  "_doc": "Manifest de prisma/preparar — REFLEJO JS: el CUSTODIO de la PREPARACIÓN + ENTREGA universal. La lógica de estados de cocina/pedidos de pizzepos, DESNOMBRADA de hostelería: cualquier negocio que prepara lo que vendió (cocina · empaquetado · encargo · pick&pack) usa la misma máquina de estados. ESTADOS BASE: pendiente → preparando → listo → entregado (≡ recogido|enviado) + cancelado. PUERTA ABIERTA: el proyecto declara estados/transiciones custom en /prisma/preparar/config.json ({estados:[{id,desde,terminal?}]}) sin tocar código — el freno valida contra BASE ∪ CUSTOM. Nace de la VENTA (lo que se prepara es lo que se vendió). Store /prisma/preparar/<pedido_id>.json single-writer. Ver arquitectura/cabecera/prisma/vertical-comercio.md (órgano PREPARAR).",
+  "name": "preparar",
+  "version": "0.2.0",
+  "description": "Custodio de la preparación+entrega universal de Prisma: pedidos con estados por ítem y agregado (pendiente → preparando → listo → entregado/recogido/enviado), estados custom ampliables por proyecto. La lógica de cocina/pedidos de pizzepos generalizada a cualquier negocio (encargos, empaquetado, pick&pack). Reflejo JS en el bus (preparar.<op>.request).",
+  "language": "es",
+  "subscribes": [
+    { "event": "preparar.crear.request", "handler": "onCrearRequest", "description": "Reflejo JS: crea un pedido en preparación (nace de la venta/encargo). Estado inicial: todos los ítems pendiente." },
+    { "event": "preparar.listar.request", "handler": "onListarRequest", "description": "Reflejo JS: lista pedidos en preparación (filtro por estado o todos)." },
+    { "event": "preparar.get.request", "handler": "onGetRequest", "description": "Reflejo JS: un pedido en preparación por id." },
+    { "event": "preparar.estado.request", "handler": "onEstadoRequest", "description": "Reflejo JS: avanza el estado de un ítem o del pedido. Freno: transiciones válidas contra BASE ∪ CUSTOM; pedido listo solo si TODOS los ítems listo." },
+    { "event": "preparar.cancelar.request", "handler": "onCancelarRequest", "description": "Reflejo JS: cancela un pedido en preparación (solo si no está en estado terminal)." }
+  ],
+  "config": {
+    "persistence": {
+      "scope": "project",
+      "data_path": "prisma/preparar",
+      "pattern": "json-file-per-entity-plus-config",
+      "concurrency": "single-writer"
+    }
+  }
+}

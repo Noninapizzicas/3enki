@@ -16966,6 +16966,23 @@ CONSUMIDORES (posibles — NO construir en especulación · decisión 2026-07-02
 }
 ```
 
+## preparar (module 0.2.0 · reflejo 0.2.0) — PREPARACIÓN + ENTREGA universal ✓ (el órgano que faltaba)
+
+```json
+{
+  "esquema": "prisma-preparar-v1",
+  "origen": "la lógica de estados de cocina/pedidos de pizzepos, DESNOMBRADA de hostelería",
+  "tesis": "la lógica es universal; los nombres de hostelería (cocina, variaciones) son instancias. Un negocio que prepara lo que vendió (cocina · empaquetado · encargo · pick&pack) usa la misma máquina de estados.",
+  "estados_base": "pendiente → preparando → listo → entregado (≡ recogido | enviado) · cancelado transversal. TAP DIRECTO a listo desde pendiente (fiel a cocina: un ítem que ya viene hecho salta el pase intermedio).",
+  "puerta_abierta": "el proyecto DECLARA estados/transiciones custom en /prisma/preparar/config.json ({estados:[{id,desde,terminal?}]}) SIN tocar código — el freno valida contra BASE ∪ CUSTOM. Una pastelería añade 'enfriando'; una tienda 'enviado'. Sin cerrar la puerta a ampliar.",
+  "estado_agregado": "si TODOS los ítems están en el MISMO estado (base o custom), el pedido es ese estado; si no, semántica de avance base (listo ⟺ todos listo/terminal).",
+  "nace_de": "la VENTA (carrito/cobro/encargo) — lo que se prepara es lo que se vendió, no inventario suelto",
+  "store": "/prisma/preparar/<pedido_id>.json · single-writer · config.json por proyecto",
+  "ops": "preparar.{crear,listar,get,estado,cancelar}.request → .response",
+  "tests": "prisma__preparar (8/8: transiciones base · tap directo · freno inválido · estado agregado · cancelar transversal · PUERTA ABIERTA custom · estado desconocido · persistencia)"
+}
+```
+
 ## Topics / eventos
 
 ```
@@ -17002,6 +17019,8 @@ cierre.{cerrar_caja,estado}.request → .response · caja.cerrada   (cuadre del 
 calendario.{get_disponibilidad,set_disponibilidad,bloquear_dia,huecos,reservar,cancelar,devolver,list_reservas,feed_ics,feed_url,importar_ics}.request → .response   (base del tiempo + feed .ics)
 GET /modules/calendario/feed/:project?token=…   (endpoint HTTP público suscribible: .ics de la agenda, con token secreto)
 calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta}   (señales del calendario)
+preparar.{crear,listar,get,estado,cancelar}.request → .response   (preparación+entrega universal)
+preparar.creado · preparar.estado.cambiado · preparar.cancelado   (señales de la preparación)
 ```
 
 ## Estado
@@ -17015,6 +17034,7 @@ calendario.disponibilidad.cambiada · calendario.{reservada,cancelada,devuelta} 
 ✓ COSTE→PRODUCTO — coste.aplicar escribe el pvp en el producto (precio_base_centimos) + cierra la pregunta_abierta de coste (madurez→listo). Lazo cara-comerciante cerrado.
 ✓ ÓRGANO RECETARIO POR ORIGEN — naturaleza `origen` (elaborado|de_reventa) en el ProductoUniversal; recetario (dueño del órgano) ata producto↔receta y cierra escandallo.coste.calculado → coste.aplicar. Corregido el error de superficie: recetario baja del arquetipo comestible al eje ORIGEN → lo enciende TODO producto elaborado (lámpara fabricada = pizza cocinada), nada de_reventa. boss lo añade al plan por producto; el atado y el gate leen origen=='elaborado'. Tests: boss (6/6, gate por origen) · recetario (11/11, ata cross-arquetipo).
 ✓ ÓRGANO AGENDA (base + feed .ics suscribible + import) — calendario.md (propuesta) + calendario (17/17) + _shared/ical (8/8): base compartida del tiempo (disponibilidad+capacidad+reservas+huecos), motor determinista, un motor para cita y alquiler, persistente, BORDE iCal BIDIRECCIONAL — export (feed .ics + GET suscribible con token) e import (.ics/CalDAV del dueño → días cerrado). El organo-agenda ya tiene BASE (falta el consumidor que lo gatee).
+✓ ÓRGANO PREPARAR+ENTREGAR — preparar (8/8): la lógica de estados de cocina/pedidos de pizzepos DESNOMBRADA (pendiente→preparando→listo→entregado/recogido/enviado · cancelado) con PUERTA ABIERTA a estados custom por proyecto (config.json, BASE ∪ CUSTOM). El órgano que faltaba entre la venta y la entrega — nace de la venta, no de inventario suelto.
 ◑ EN VIVO: adaptador.blueprint (PENSAR fuzzy) · escaparate bundle HTML/PWA · calendario tz/DST estricto (luxon; hoy tiempo flotante) · los interruptores organo-* esperan dueño (cocina la reacciona pizzepos) — se verifican corriendo el Enki
 ✓ ADAPTADOR LEER — adaptador reflejo 0.2.0: _adaptar lee los arquetipos custom APROBADOS (arquetipos.listar) y los pasa al clasificador con prioridad sobre la semilla. Lazo anti-wipe cerrado (propuesto→aprobado→clasifica).
 [ ] wiring/en vivo: dueños de retorno/fianza/stock (órganos previstos)

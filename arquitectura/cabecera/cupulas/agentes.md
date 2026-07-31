@@ -1,11 +1,11 @@
 ---
 id: cupulas/agentes
 dominio: cupulas
-resumen: La flota como biblioteca buscable: buscar_agente/activar_agente sobre 455 definiciones (29 nativos + 154 VoltAgent + 271 agency-agents + acumulador-sectorial), overlay semilla+crecido.
+resumen: La flota como biblioteca buscable: buscar_agente/activar_agente sobre 455 definiciones (30 nativos + 154 VoltAgent + 271 agency-agents), overlay semilla+crecido.
 fuentes:
   - modules/conversacion/ai-agent-framework/**
   - agency-agents/**
-verificado: 2026-07-19
+verificado: 2026-07-31
 ---
 
 # CÚPULA DE AGENTES — la flota es una BIBLIOTECA buscable (ai-agent-framework {{version:modules/conversacion/ai-agent-framework}} · vivo 2026-07-31)
@@ -113,12 +113,12 @@ CLASE AiAgentFrameworkModule (ampliación 2.1.0) {
   sin residuo.
 ✓ agency-agents DEL REPO (2026-07-06, ampliado 2026-07-31) — colección completa del repo msitarzewski/agency-agents
   (formato persona: name·description·color·emoji·vibe, sin tools) importada como APARCADOS → biblioteca de 455
-  (29 nativos + 154 VoltAgent + 271 agency-agents). Import RECURSIVO (los agentes reales están anidados:
+  (30 nativos + 154 VoltAgent + 271 agency-agents). Import RECURSIVO (los agentes reales están anidados:
   game-development/unity·godot·unreal-engine·roblox-studio·blender); dominio = categoría de PRIMER nivel
   (unity-multiplayer-engineer → game-development). SIN tools declaradas (son personas) → default de LECTURA
   (fs.read/list/search), política consistente con los VoltAgent no-declarados. metadata {fuente:'agency-agents',
   display_name, emoji, vibe}. 17 divisiones: academic·design·engineering·finance·game-development·gis·healthcare·
-  marketing·paid-media·product·project-management·sales·security·spatial-computing·specialized·support·testing.
+  integrations·marketing·paid-media·product·project-management·sales·security·spatial-computing·specialized·support·testing.
 SHELL PARA AGENTES (siguiente deliberado, NO hecho)  darles Bash = exponer ejecutor.ejecutar como tool de agente.
   Es un paso aparte por diseño: la reja del ejecutor NACE OFF (interruptor 'ejecutor', grupo sistema, default OFF →
   puerta_cerrada 503). Aunque se expusiera, ningún agente correría un comando hasta que el humano encienda el

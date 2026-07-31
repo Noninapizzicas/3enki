@@ -111,7 +111,8 @@ class CosechaModule extends ModuloHibridoReflejo {
     }
   }
 
-  _scanFuente(dir, fuente, tier) {
+  _scanFuente(dir, fuente, tier, depth = 0) {
+    if (depth > 5) return;
     let entradas;
     try { entradas = fs.readdirSync(dir, { withFileTypes: true }); }
     catch (_) { return; }
@@ -124,8 +125,8 @@ class CosechaModule extends ModuloHibridoReflejo {
         const skill = this._parse(raw, { fuenteDefault: fuente, nombreDefault: s.name });
         skill.tier = skill.oficial ? 'oficial' : tier;
         this._skills.set(skill.nombre, skill);
-      } catch (_) {
-        this._scanFuente(skillDir, fuente, tier);
+      } catch (e) {
+        if (e.code === 'ENOENT') this._scanFuente(skillDir, fuente, tier, depth + 1);
       }
     }
   }

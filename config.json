@@ -109,7 +109,13 @@
       "memory-user-profile",
       "memory-rag",
       "estados",
-      "propiocepcion"
+      "propiocepcion",
+      "notificador-pedidos",
+      "contenido",
+      "tienda-api",
+      "tecnicas",
+      "media-generator",
+      "pago-gateway"
     ],
     "disabled": [
       "dashboard",
@@ -118,7 +124,8 @@
       "staff-manager",
       "ai-gateway-poc",
       "cocina-poc",
-      "notas-poc"
+      "notas-poc",
+      "bienvenida-tienda"
     ]
   },
   "observability": {

@@ -4247,6 +4247,49 @@ agent-observer (conversacion)
   └─ USADO_POR: frontend (monitoring/dashboard)
 ```
 
+## MAPA REAL DEL RUNTIME (reloj suizo — 2026-07-31)
+
+> Lo que CARGA el ModuleLoader de verdad (por nombre de DIRECTORIO, no por manifest.name):
+> `config.json` → `modules.enabled` solo ORDENA, `modules.disabled` filtra. Todo lo demás con
+> module.json se carga igual (al final del orden). Por eso los POCs corrían en producción.
+
+### Runtime activo (grupo conversacion)
+```
+modules/conversacion/
+  ai-gateway                 v2.36  — ejecutor LLM (chat/generic/embedding)
+  ai-agent-framework         v2.2   — agentes + invoke_agent
+  chat-io                    v2.2   — entrada/salida + persistencia SQLite
+  prompt-builder             v2.0   — arma el system prompt (base.prompt.json)
+  agent-observer             v2.0   — tarjetas de agente en el chat
+  memory-conversation-summary v2.1  — resumen narrativo por tramos
+  memory-user-profile        v2.2   — hechos del usuario
+  memory-rag                 v2.1   — memoria semántica (embeddings)
+```
+Más nervios del chat (también en `enabled`): `estados` (rail vivo), `propiocepcion`,
+`cupula-eventos`, `conserje` (empujones), `lentes-diseno`, `prompt-manager`.
+
+### Desactivados a propósito (`modules.disabled`)
+```
+ai-gateway-poc  — POC v2.0, deepseek-only. SUSCRIBÍA llm.complete.request duplicado con el real.
+cocina-poc      — POC v2.0, duplicado de pizzepos/cocina v3.4.
+notas-poc       — POC huérfano (name real 'notas').
+dashboard, metricas, security-p2p, staff-manager — legacy/opt-in.
+```
+
+### Nombres fantasma eliminados de config.json (2026-07-31)
+```
+prompt-engine · agent-manager · chat-ai-bridge · chat-session · conversacion ·
+pizzepos · carta-impresion · conversacion/context-manager · conversation-manager
+```
+Estos no existen como directorio de módulo: eran nombres de la capa de REFERENCIA
+(`arquitectura/conversacion-ref/`) colados en el runtime. La referencia de diseño sigue
+en `arquitectura/conversacion-ref/` — documentación, NO se carga.
+
+### Regla del reloj suizo
+Todo módulo nuevo del grupo conversación se declara en `modules.enabled` con orden
+explícito; todo POC/sustituido se mueve a `modules.disabled` (no se borra, se apaga)
+y se archiva en `_archived/` cuando se confirma que no se va a rescatar.
+
 ---
 
 # Módulos Pizzepos y Blueprints

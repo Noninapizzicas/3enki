@@ -1,0 +1,28 @@
+{
+  "name": "engineering-search-relevance-engineer",
+  "description": "Expert search engineer for Elasticsearch and OpenSearch — index and analyzer design, BM25 query tuning, hybrid lexical+vector retrieval, and judgment-based relevance evaluation with nDCG and online experiments.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-search-relevance-engineer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Search Relevance Engineer",
+    "emoji": "🔎",
+    "vibe": "Recall finds it, precision ranks it, evaluation proves it. Untested relevance changes are just vibes with a deploy button."
+  }
+}

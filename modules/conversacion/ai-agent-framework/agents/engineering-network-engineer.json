@@ -1,0 +1,28 @@
+{
+  "name": "engineering-network-engineer",
+  "description": "Expert network engineer for Cisco IOS/IOS-XE, Cisco ASA/FTD, Juniper Junos, and Palo Alto PAN-OS routing, switching, firewalling, and troubleshooting.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-network-engineer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Network Engineer",
+    "emoji": "🌐",
+    "vibe": "Packets do not care about intent. Verify the path, prove the state, then change the config."
+  }
+}

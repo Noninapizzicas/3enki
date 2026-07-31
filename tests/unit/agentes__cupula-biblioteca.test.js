@@ -42,7 +42,7 @@ test('la BIBLIOTECA conoce todas las definiciones (activas o no)', () => {
   assert.ok(m.library.size >= 25, `biblioteca demasiado pequeña: ${m.library.size}`);
 });
 
-test('los 154 de VoltAgent están en la biblioteca (29 nativos + 154 importados)', () => {
+test('los 154 de VoltAgent están en la biblioteca (30 nativos + 154 importados)', () => {
   const m = fw();
   assert.ok(m.library.size >= 180, `esperaba ≥180, hay ${m.library.size}`);
   // un agente VoltAgent es buscable, aparcado, y activable
@@ -57,9 +57,9 @@ test('los 154 de VoltAgent están en la biblioteca (29 nativos + 154 importados)
   assert.deepStrictEqual(m.agents.get('backend-developer').tools, ['fs.read', 'fs.write', 'fs.edit', 'fs.list', 'fs.search']);
 });
 
-test('los ~180 de agency-agents (del repo) están en la biblioteca — incluidos los anidados', () => {
+test('los ~271 de agency-agents (del repo) están en la biblioteca — incluidos los anidados', () => {
   const m = fw();
-  assert.ok(m.library.size >= 360, `esperaba ≥360 (183 + agency-agents), hay ${m.library.size}`);
+  assert.ok(m.library.size >= 450, `esperaba ≥450 (30 + 154 + 271 agency-agents), hay ${m.library.size}`);
   // un agency-agent ANIDADO (game-development/unity/…) es buscable, aparcado, con dominio = categoría de 1er nivel
   const u = m.library.get('unity-multiplayer-engineer');
   assert.ok(u, 'unity-multiplayer-engineer en la biblioteca (import recursivo)');

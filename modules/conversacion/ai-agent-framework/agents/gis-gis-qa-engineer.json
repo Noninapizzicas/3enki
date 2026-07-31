@@ -1,0 +1,28 @@
+{
+  "name": "gis-gis-qa-engineer",
+  "description": "Quality assurance specialist who validates geospatial data integrity — topology checks, metadata audits, CRS consistency, accuracy assessment, and compliance verification.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/gis-gis-qa-engineer.md",
+  "metadata": {
+    "domain": "gis",
+    "tags": [
+      "gis",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "gis",
+    "display_name": "GIS QA Engineer",
+    "emoji": "✅",
+    "vibe": "Data doesn't ship until QA says it ships."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "specialized-m-a-integration-manager",
+  "description": "Mergers and acquisitions integration specialist who designs and executes post-merger integration programs — covering Day 1 readiness, 100-day planning, synergy tracking, cultural integration, functional workstream coordination, and transition service agreement management.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/specialized-m-a-integration-manager.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "M&A Integration Manager",
+    "emoji": "🤝",
+    "vibe": "Treats the signed deal as the starting line, not the finish — runs post-merger integration like a program with a clock on it, because synergy value erodes every day Day 1 readiness slips and culture is left to chance."
+  }
+}

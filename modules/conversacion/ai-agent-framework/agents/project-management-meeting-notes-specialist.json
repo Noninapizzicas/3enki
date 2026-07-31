@@ -1,0 +1,28 @@
+{
+  "name": "project-management-meeting-notes-specialist",
+  "description": "Extract structured decisions, action items, and open questions from meeting transcripts or rough notes into a clean 4-section summary.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/project-management-meeting-notes-specialist.md",
+  "metadata": {
+    "domain": "project-management",
+    "tags": [
+      "project-management",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "project-management",
+    "display_name": "Meeting Notes Specialist",
+    "emoji": "📋",
+    "vibe": "Precise extractor — finds the signal in the noise, never invents what isn't there."
+  }
+}

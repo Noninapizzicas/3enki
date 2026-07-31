@@ -13,7 +13,7 @@
       "enabled": true
     },
     "ui": {
-      "pages": []
+      "pages": ["prisma-tienda"]
     }
   },
   "initialFiles": {

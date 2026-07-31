@@ -1,0 +1,224 @@
+{
+  "id": "comercio",
+  "version": "blueprint-0.1.0",
+  "language": "es",
+  "temperatura": 0.3,
+  "_doc": "El CONDUCTOR universal de la vertical Prisma (v0.1.0, 2026-07-31). Nace del esquematizador del negocio universal: la espina es PRODUCIR → VENDER → ENTREGAR; el ProductoUniversal (5 huecos) decide qué órganos enciende cada negocio. El LLM NO inventa nada: lee el producto, elige el flujo, publica RPC contra los reflejos (que poseen los stores y validan). La lógica es universal; los nombres de hostelería (cocina, variaciones) son instancias de la misma máquina.",
+
+  "rol": "Conductor del comercio universal Prisma. El LLM acompaña al dueño del negocio: da de alta productos (ProductoUniversal), los vende (carrito→cobro→cuenta), gestiona la preparación (pendiente→preparando→listo→entregado) y la entrega (recogida/envío/cita), costea y publica el escaparate. NO sustituye a los reflejos: ellos poseen los stores, validan y persisten; tú das forma y publicas RPC.",
+
+  "garantiza": [
+    "Todo lo que el LLM afirma que pasó (producto guardado, venta cobrada, pedido listo) está VERIFICADO por la respuesta del reflejo (status 200/201), no por su propia narración.",
+    "El arquetipo del producto se clasifica POR LA FORMA (ejes+naturalezas), no por la superficie ni por el nombre del negocio.",
+    "Lo privado del dueño (coste real, stock real, agenda real) NO se inventa: se marca pregunta_abierta y se pregunta.",
+    "El modo de venta se decide por el eje tiempo del producto: instante→mostrador · cita→encargo · intervalo→alquiler."
+  ],
+  "no_garantiza": [
+    "No ejecuta cocina de pizzepos ni pase de cocina: si el negocio es hostelería con cocina real, se delega a los módulos pizzepos (cocina/pedidos) — este conductor cubre el flujo prisma puro.",
+    "No sustituye la validación de los reflejos (catalogo.validar, etc.): el freno vive en ellos."
+  ],
+
+  "modelo_canonico": {
+    "_descripcion": "El ProductoUniversal (5 huecos) — LA estructura. El LLM construye SIEMPRE así, no improvisa formas.",
+    "producto": {
+      "identidad": "{ que_es: String (req), trabajo_que_resuelve: String }",
+      "arquetipo": "comestible | pieza | servicio | uso_temporal | (ABIERTO — propone si la forma no encaja)",
+      "restricciones": "[{ tipo: compatibilidad|factibilidad|verdad_obligatoria|periodo|retorno, regla, no_negociable }]",
+      "contrato": {
+        "atributos_saber": "[{ nombre, valor?, derivado?, eje?: precio|alergenos }]",
+        "opciones": "[{ id, etiqueta, sub_forma: variante|modificacion|añadido|personalizacion_libre, modo: ELEGIR_UNO|ELEGIR_VARIOS|QUITAR|LIBRE, valores: [{ id, etiqueta, delta_precio, disponible }] }]",
+        "estados": "ciclo de vida del producto"
+      },
+      "ejes": "{ tiempo: ninguno|instante|cita|intervalo_que_cobra, estado_de_partida: false|String, ciclo: de_ida|con_retorno }",
+      "naturalezas": "{ stock: unidades|ingredientes|capacidad_temporal|activo_reutilizable, precio: por_unidad|por_peso|por_tiempo|rango_valoracion, origen: elaborado|de_reventa }",
+      "no_objetivos": "[String]",
+      "preguntas_abiertas": "[{ campo: coste|stock|tarifa|agenda, para: comerciante, respondida? }]",
+      "madurez": "listo | necesita_aclaracion_comerciante | necesita_revision"
+    },
+    "decisiones_que_toma_el_producto": [
+      "ejes.tiempo == 'instante'  → VENDER en mostrador (carrito → cobro → cuenta)",
+      "ejes.tiempo == 'cita'      → ENCARGAR (fecha de entrega → calendario.huecos/reservar → cobro)",
+      "ejes.tiempo == 'intervalo_que_cobra' → ALQUILER (reserva con retorno → calendario)",
+      "naturalezas.origen == 'elaborado' → hay ELABORAR (recetario) detrás del producto",
+      "naturalezas.stock != null → hay STOCK que gestionar",
+      "opciones con sub_forma/modo → la venta pasa por opciones.evaluar (selección + delta precio)"
+    ],
+    "ejemplo": {
+      "tarta_por_encargo": "{ identidad: { que_es: 'tarta personalizada', trabajo: 'tarta para evento con fecha' }, arquetipo: 'comestible', ejes: { tiempo: 'cita' }, naturalezas: { stock: 'ingredientes', precio: 'por_unidad', origen: 'elaborado' }, opciones: [ { etiqueta: 'Tamaño', sub_forma: 'variante', modo: 'ELEGIR_UNO', valores: [{ etiqueta: '20cm', delta_precio: 0 }, { etiqueta: '26cm', delta_precio: 800 }] } ] }",
+      "pañuelo_de_regalo": "{ identidad: { que_es: 'pañuelo de lino', trabajo: 'regalo' }, arquetipo: 'pieza', ejes: { tiempo: 'instante' }, naturalezas: { stock: 'unidades', precio: 'por_unidad', origen: 'de_reventa' }, opciones: [ { etiqueta: 'Color', sub_forma: 'variante', modo: 'ELEGIR_UNO', valores: [{ etiqueta: 'Azul', delta_precio: 0 }, { etiqueta: 'Verde', delta_precio: 0 }] } ] }"
+    }
+  },
+
+  "operaciones": {
+    "adaptar": {
+      "cajon_descripcion": "Da de alta un producto a partir de material crudo (texto libre, foto de escaparate, fila de catálogo, lo que el dueño describa). Lo descompone en el ProductoUniversal (5 huecos) y delega al reflejo adaptador (clasifica arquetipo por la forma, marca lo privado como pregunta_abierta, valida y guarda).",
+      "input": "{ project_id (req), nombre (req), material? | texto? (al menos uno) }",
+      "pseudocodigo": [
+        "async adaptar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.nombre) return INVALID_INPUT { field: 'nombre', hint: 'pregunta el nombre al dueño ANTES de invocar' }",
+        "  if (!(input.material || input.texto)) return INVALID_INPUT { hint: 'pasa material (foto/fichero) o texto' }",
+        "  // PENSAR (lo tuyo): descompón el material en el Crudo de 5 huecos (modelo_canonico).",
+        "  // FIDELIDAD: cada dato sale del material; lo que NO sepas (coste, stock) NO lo pongas —",
+        "  // el reflejo lo marcará pregunta_abierta. FORMA: describe ejes+naturalezas con cuidado.",
+        "  crudo = <Crudo de 5 huecos del modelo_canonico>",
+        "  if (!crudo?.identidad?.que_es) return INVALID_INPUT { hint: 'no se pudo leer qué es el producto' }",
+        "  // DELEGA: el reflejo clasifica·VALIDA·GUARDA (producto.adaptado → producto-manager)",
+        "  resp = await publishAndWait('adaptador.adaptar.request', {",
+        "    project_id: input.project_id, nombre: input.nombre, crudo: crudo, correlation_id: input.correlation_id",
+        "  }, { timeout_ms: 15000 })",
+        "  return resp  // 201 guardado · 4xx validación del freno · 503 el reflejo NO confirmó → di que NO se guardó"
+      ],
+      "reglas_clave": [
+        "FIDELIDAD: el coste y el stock reales NO se inventan — el reflejo los marca pregunta_abierta (madurez: necesita_aclaracion_comerciante).",
+        "FORMA: el arquetipo nace de ejes+naturalezas (una tarta con fecha = comestible+cita; un servicio = tiempo=cita o stock=capacidad_temporal).",
+        "VERDAD_OBLIGATORIA: alérgenos · etiqueta energética · seguridad van como restricciones tipo verdad_obligatoria, no_negociable.",
+        "DELEGADO: el reflejo posee el store; tú das forma, no escribes fs ni afirmas éxito que el reflejo no confirmó."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+    },
+    "ver_catalogo": {
+      "cajon_descripcion": "Muestra el catálogo activo del negocio (productos con sus 5 huecos) o un producto concreto. Lectura pura vía el proyector.",
+      "input": "{ project_id (req), catalogo_id?, producto_id?, filtro_arquetipo? }",
+      "pseudocodigo": [
+        "async ver_catalogo(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (input.producto_id) resp = await publishAndWait('vista.producto.request', { project_id, producto_id: input.producto_id }, { timeout_ms: 8000 })",
+        "  else resp = await publishAndWait('vista.completa.request', { project_id, catalogo_id: input.catalogo_id }, { timeout_ms: 8000 })",
+        "  return resp  // datos del catálogo proyectado (NO los inventes: si el reflejo no responde, dilo)"
+      ],
+      "reglas_clave": ["LEER: los datos salen del reflejo (proyector), nunca de tu memoria del hilo.", "Si el catálogo está vacío o no hay proyecto con datos, dilo honestamente."],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT"]
+    },
+    "alta_producto": {
+      "cajon_descripcion": "Da de alta un producto YA estructurado (el dueño da los datos) en el catálogo. Distinto de adaptar: aquí no hay material crudo que descomponer — el dueño dicta los campos y tú los organizas en el ProductoUniversal.",
+      "input": "{ project_id (req), catalogo_id?, producto: ProductoUniversal (modelo_canonico), categoria_id? }",
+      "pseudocodigo": [
+        "async alta_producto(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.producto?.identidad?.que_es) return INVALID_INPUT { field: 'producto.identidad.que_es' }",
+        "  // PENSAR: organiza lo que el dueño dictó en el ProductoUniversal. Normaliza opciones",
+        "  // (sub_forma + modo canónicos), ejes y naturalezas con defaults sanos.",
+        "  producto = <ProductoUniversal normalizado>",
+        "  // GUARDAR: el reflejo valida (freno _checkProducto) y persiste",
+        "  resp = await publishAndWait('catalogo.add_product.request', {",
+        "    project_id: input.project_id, catalogo_id: input.catalogo_id, producto: producto, categoria_id: input.categoria_id, correlation_id: input.correlation_id",
+        "  }, { timeout_ms: 15000 })",
+        "  return resp  // 201 guardado · 422 el freno rechazó (muestra los errores y corrige) · 503 NO guardado"
+      ],
+      "reglas_clave": [
+        "FRENO: el reflejo valida la forma (catalogo.validar). Si 422, corrige SOLO los errores señalados y reintenta (máx 3).",
+        "FIDELIDAD: lo que el dueño no dijo (coste, stock, agenda) NO se rellena — nace borrador con pregunta_abierta.",
+        "DELEGADO: producto-manager es el único writer del catálogo; tú solo das forma."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "ALREADY_EXISTS", "UPSTREAM_INVALID_RESPONSE", "UPSTREAM_TIMEOUT"]
+    },
+    "vender": {
+      "cajon_descripcion": "Venta EN MOSTRADOR (producto con ejes.tiempo=instante): el cliente elige productos con sus opciones → carrito → cobro → cuenta cerrada. El flujo completo de la venta inmediata.",
+      "input": "{ project_id (req), items: [{ producto_id, cantidad, selecciones? (opciones elegidas) }], metodo_pago?, cuenta_id? }",
+      "pseudocodigo": [
+        "async vender(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.items?.length) return INVALID_INPUT { field: 'items' }",
+        "  // 1. CARRITO — añade cada ítem; el reflejo TASA con opciones.evaluar (precio final con deltas)",
+        "  cuenta_id = input.cuenta_id",
+        "  for item of input.items:",
+        "    await publishAndWait('carrito.add_item.request', { project_id, cuenta_id, producto_id: item.producto_id, cantidad: item.cantidad, selecciones: item.selecciones }, { timeout_ms: 8000 })",
+        "  // 2. COBRO — crea y confirma el pago del total del carrito",
+        "  cobro = await publishAndWait('cobro.crear.request', { project_id, cuenta_id, metodo_pago: input.metodo_pago }, { timeout_ms: 8000 })",
+        "  if (cobro.status != 200 && cobro.status != 201) return cobro",
+        "  confirm = await publishAndWait('cobro.confirmar.request', { project_id, cobro_id: cobro.data.cobro_id }, { timeout_ms: 8000 })",
+        "  // 3. CUENTA — se cierra sola al cobrar (cuenta.cerrar) y se emite el ticket",
+        "  ticket = await publishAndWait('ticket.formatear.request', { project_id, items: input.items, total_centimos: cobro.data.total_centimos, comercio: <nombre del negocio si se sabe> }, { timeout_ms: 8000 })",
+        "  return { status: 200, data: { cobro: confirm.data, ticket: ticket.data, cuenta_id } }  // TODO verificado por reflejos"
+      ],
+      "reglas_clave": [
+        "MODO: esta operación es SOLO para ejes.tiempo=instante. Si el producto tiene cita/intervalo → usa encargar o alquilar.",
+        "DINERO: céntimos enteros; el reflejo tasa (opciones.evaluar). Nunca calcules precios en el chat.",
+        "VERIFICADO: cada paso devuelve status del reflejo; si cobro.confirmar no confirma, NO digas 'cobrado'.",
+        "CUENTA: el ciclo abierta→cobrada→cerrada lo gestiona el reflejo cuenta (onCobroProcesado)."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+    "encargar": {
+      "cajon_descripcion": "Venta DIFERIDA con fecha (producto con ejes.tiempo=cita — tarta para el sábado, pan para mañana): busca hueco en el calendario, reserva, cobra y deja el pedido en preparación para la fecha pactada.",
+      "input": "{ project_id (req), items, fecha_entrega (req), metodo_pago?, notas? }",
+      "pseudocodigo": [
+        "async encargar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.fecha_entrega) return INVALID_INPUT { field: 'fecha_entrega', hint: 'pregunta CUÁNDO lo quiere el cliente' }",
+        "  // 1. HUECOS — ¿hay capacidad para esa fecha? (calendario.huecos con duración estimada)",
+        "  huecos = await publishAndWait('calendario.huecos.request', { project_id, recurso_tipo: 'entrega', desde: input.fecha_entrega, hasta: input.fecha_entrega, duracion_min: 15 }, { timeout_ms: 8000 })",
+        "  if (huecos.data?.huecos?.length === 0) return CONFLICT_STATE { hint: 'no hay hueco para esa fecha; sugiere otra' }",
+        "  // 2. RESERVAR — ocupa el hueco (cita: exige horario+fin)",
+        "  reserva = await publishAndWait('calendario.reservar.request', { project_id, recurso_tipo: 'entrega', inicio: <hueco elegido>, fin: <hueco + duración>, cliente: input.cliente?, notas: input.notas }, { timeout_ms: 8000 })",
+        "  // 3. COBRO — se cobra (total o señal, según el dueño)",
+        "  cobro = await publishAndWait('cobro.crear.request', { project_id, metodo_pago: input.metodo_pago, monto_centimos: input.monto_centimos }, { timeout_ms: 8000 })",
+        "  await publishAndWait('cobro.confirmar.request', { project_id, cobro_id: cobro.data.cobro_id }, { timeout_ms: 8000 })",
+        "  // 4. PREPARACIÓN — el pedido entra en cola para la fecha (estado inicial pendiente)",
+        "  preparacion = await publishAndWait('preparar.crear.request', { project_id, items: input.items, entrega_at: input.fecha_entrega, reserva_id: reserva.data?.reserva_id, cobro_id: cobro.data?.cobro_id }, { timeout_ms: 8000 })",
+        "  return { status: 200, data: { reserva, cobro, preparacion, fecha_entrega: input.fecha_entrega } }"
+      ],
+      "reglas_clave": [
+        "FECHA: la entrega pactada vive en el calendario (reserva) — es la verdad, no tu memoria del hilo.",
+        "PREPARACIÓN: lo encargado entra en preparar (pendiente → preparando → listo → entregado) con entrega_at = fecha.",
+        "FIDELIDAD: si el dueño no dice si cobra total o señal, PREGUNTA antes de cobrar."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "CONFLICT_STATE", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT"]
+    },
+    "preparar": {
+      "cajon_descripcion": "Gestiona la PREPARACIÓN de los pedidos (la lógica universal de estados, desnombrada de la cocina): qué está pendiente, qué se está preparando, qué está listo para entregar. Vale para comanda de cocina, encargo de tartas, empaquetado de regalos, pick&pack.",
+      "input": "{ project_id (req), accion: ver|empezar|listo|entregar, pedido_id?, item_id? }",
+      "pseudocodigo": [
+        "async preparar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  switch (input.accion):",
+        "    case 'ver':",
+        "      return await publishAndWait('preparar.listar.request', { project_id, estado: input.estado }, { timeout_ms: 8000 })",
+        "    case 'empezar':",
+        "      return await publishAndWait('preparar.estado.request', { project_id, pedido_id: input.pedido_id, item_id: input.item_id, estado: 'preparando' }, { timeout_ms: 8000 })",
+        "    case 'listo':",
+        "      return await publishAndWait('preparar.estado.request', { project_id, pedido_id: input.pedido_id, item_id: input.item_id, estado: 'listo' }, { timeout_ms: 8000 })",
+        "    case 'entregar':",
+        "      return await publishAndWait('preparar.estado.request', { project_id, pedido_id: input.pedido_id, estado: 'entregado' }, { timeout_ms: 8000 })",
+        "  return INVALID_INPUT { field: 'accion', hint: 'ver|empezar|listo|entregar' }"
+      ],
+      "reglas_clave": [
+        "ESTADOS: pendiente → preparando → listo → entregado. El pedido está listo cuando TODOS sus ítems lo están.",
+        "SEÑAL: cuando un pedido pasa a listo, quien entrega (recogida/delivery) se entera — el estado ES la señal.",
+        "ORIGEN: la preparación nace de la VENTA (carrito/cobro/encargo), no es inventario suelto."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "CONFLICT_STATE", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT"]
+    },
+    "costear": {
+      "cajon_descripcion": "Calcula y aplica coste→margen→pvp de un producto. Los costes los pone el DUEÑO (respuesta a la pregunta_abierta); el reflejo calcula y escribe el precio en el producto.",
+      "input": "{ project_id (req), producto_id (req), componentes: [{ coste_centimos, cantidad? }], coste_extra_centimos?, food_cost_objetivo?, pvp_centimos? }",
+      "pseudocodigo": [
+        "async costear(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.producto_id) return INVALID_INPUT { field: 'producto_id' }",
+        "  if (!input.componentes?.length && !input.pvp_centimos) return INVALID_INPUT { hint: 'pide los costes al dueño o el pvp objetivo' }",
+        "  // CALCULAR (puro) — el reflejo da coste_total, pvp_sugerido, food_cost_real",
+        "  calc = await publishAndWait('coste.costear.request', { project_id, componentes: input.componentes, coste_extra_centimos: input.coste_extra_centimos, food_cost_objetivo: input.food_cost_objetivo, pvp_centimos: input.pvp_centimos }, { timeout_ms: 8000 })",
+        "  // APLICAR — escribe precio_base_centimos en el producto + cierra la pregunta_abierta + madurez→listo",
+        "  aplicado = await publishAndWait('coste.aplicar.request', { project_id, producto_id: input.producto_id, pvp_centimos: input.pvp_centimos || calc.data.pvp_sugerido }, { timeout_ms: 8000 })",
+        "  return { status: 200, data: { calculo: calc.data, aplicado: aplicado.data } }"
+      ],
+      "reglas_clave": ["NO INVENTA: los componentes de coste los pone el comerciante (respuesta a la pregunta_abierta).", "CÉNTIMOS: todo el dinero en céntimos enteros.", "CIERRA EL LAZO: aplicar escribe el pvp y sube madurez a listo si no falta nada."],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT"]
+    },
+    "publicar_escaparate": {
+      "cajon_descripcion": "Genera y publica la cara pública del negocio (escaparate): el catálogo proyectado + la marca → HTML servido en /<ns>/<slug>/prisma/. El look emerge de la marca del comercio.",
+      "input": "{ project_id (req), slug? }",
+      "pseudocodigo": [
+        "async publicar_escaparate(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  // RENDER determinista (vista pública + marca → HTML) + fs.write a www/prisma/ + ensure-feature www",
+        "  resp = await publishAndWait('escaparate.publicar.request', { project_id, slug: input.slug }, { timeout_ms: 30000 })",
+        "  return resp  // publicado → indica la URL pública; fallo → di qué falló (verificador/render)"
+      ],
+      "reglas_clave": ["PÚBLICO: el escaparate PODA lo no ofrecido (solo valores disponibles, sin precios privados).", "La URL la da el reflejo; no la inventes."],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"]
+    }
+  }
+}

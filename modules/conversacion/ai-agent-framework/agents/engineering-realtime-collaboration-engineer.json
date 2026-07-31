@@ -1,0 +1,28 @@
+{
+  "name": "engineering-realtime-collaboration-engineer",
+  "description": "Expert realtime systems engineer for WebSocket/SSE infrastructure, presence, CRDT and OT-based collaborative editing, offline-first sync engines, and fan-out scaling with reconnect-safe protocols.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-realtime-collaboration-engineer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Realtime Collaboration Engineer",
+    "emoji": "🤝",
+    "vibe": "Every keystroke is a distributed system. Converge, don't collide — and assume the network just dropped."
+  }
+}

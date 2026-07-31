@@ -1,0 +1,28 @@
+{
+  "name": "gis-drone-reality-mapping-specialist",
+  "description": "Photogrammetry and reality capture expert who processes drone imagery into orthomosaics, digital terrain models, point clouds, and 3D meshes — bridging field capture and GIS-ready products.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/gis-drone-reality-mapping-specialist.md",
+  "metadata": {
+    "domain": "gis",
+    "tags": [
+      "gis",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "gis",
+    "display_name": "Drone/Reality Mapping Specialist",
+    "emoji": "🛸",
+    "vibe": "From raw drone footage to production-ready GIS data — seamless."
+  }
+}

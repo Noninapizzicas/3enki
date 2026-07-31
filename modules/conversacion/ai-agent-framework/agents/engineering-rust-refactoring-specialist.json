@@ -1,0 +1,28 @@
+{
+  "name": "engineering-rust-refactoring-specialist",
+  "description": "Expert Rust engineer for repository-scale refactoring, safe renames, module restructuring, duplication removal, panic hardening, ownership improvements, and compiler or Clippy remediation.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-rust-refactoring-specialist.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Rust Refactoring Specialist",
+    "emoji": "🦀",
+    "vibe": "Complete the coherent refactor, prove its safety, and leave no half-migration behind."
+  }
+}

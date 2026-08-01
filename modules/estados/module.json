@@ -32,7 +32,8 @@
           "nombre": { "type": "string", "minLength": 1, "description": "Nombre de la lista (p.ej. 'Compra', 'Tareas del lanzamiento')." },
           "tipo": { "type": "string", "description": "Opcional: notas | tareas | compras | proceso (informativo)." },
           "orden": { "type": "string", "enum": ["libre", "estricto"], "description": "libre (default, se tacha en cualquier orden) o estricto (secuencia 1→2→3, con frenos)." },
-          "pasos": { "type": "array", "items": { "type": "string" }, "description": "Los ítems/pasos iniciales, como textos." }
+          "pasos": { "type": "array", "items": { "type": "string" }, "description": "Los ítems/pasos iniciales, como textos." },
+          "pasos_forma": { "type": "array", "description": "Opcional — FORMA EJECUTABLE (rail-protocolo): un objeto por paso con {tool, input?, verifica?} que declara EXACTAMENTE cómo ejecutarlo. Ej: {tool:'fs.write', input:{path:'/www/pos/index.html'}, verifica:'status 200'}. El sistema muestra el PROTOCOLO del paso actual cada turno: el LLM no adivina el cómo — ejecuta la tool, verifica la condición, y solo entonces marca el paso hecho." }
         },
         "required": ["nombre"]
       },
@@ -46,7 +47,8 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "texto": { "type": "string", "minLength": 1, "description": "El ítem/paso a añadir." }
+          "texto": { "type": "string", "minLength": 1, "description": "El ítem/paso a añadir." },
+          "forma": { "type": "object", "description": "Opcional — FORMA EJECUTABLE (rail-protocolo): {tool, input?, verifica?} que declara cómo ejecutar este paso. Ej: {tool:'fs.write', input:{path:'/www/pos/index.html'}, verifica:'status 200'}." }
         },
         "required": ["texto"]
       },

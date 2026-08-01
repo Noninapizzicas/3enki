@@ -1627,6 +1627,20 @@ class AiGatewayModule extends BaseModule {
     const orden = estricto ? 'ORDEN ESTRICTO (los pasos van 1→2→3; no saltes)' : 'orden libre';
     const actual = estricto && lista.pasos[lista.actual]
       ? `\nPaso ACTUAL: ${lista.actual + 1}. ${lista.pasos[lista.actual].texto}` : '';
+    // FORMA EJECUTABLE del paso actual (rail-protocolo): si el paso declara
+    // {tool, input, verifica}, el LLM sabe EXACTAMENTE qué hacer y qué cuenta
+    // como hecho — no tiene que adivinar el cómo (causa de atascos).
+    const pasoActual = estricto ? lista.pasos[lista.actual] : (lista.pasos || []).find(p => p.estado === 'pendiente');
+    let forma = '';
+    if (pasoActual && pasoActual.forma && pasoActual.forma.tool) {
+      const f = pasoActual.forma;
+      const inputLine = f.input !== undefined ? `\n    input: ${typeof f.input === 'string' ? f.input : JSON.stringify(f.input)}` : '';
+      const verifLine = f.verifica ? `\n    verifica (hecho si): ${f.verifica}` : '';
+      forma =
+        `\nPROTOCOLO del paso actual — EJECUTA ASÍ:\n` +
+        `    tool: ${f.tool}${inputLine}${verifLine}\n` +
+        `    Cuando la verificación confirme, marca el paso (estados.marcar / completar_paso). NO lo marques antes.`;
+    }
     // El OBJETIVO (condición de completitud) + el juez: el LLM puede evaluar el rail
     // contra el objetivo con evaluar_rail (blocker tipado si no está cumplido).
     const objetivo = lista.objetivo ? `\nOBJETIVO: ${lista.objetivo}` : '';
@@ -1641,7 +1655,7 @@ class AiGatewayModule extends BaseModule {
       'Este es el RUMBO escrito: qué está hecho, qué falta, cuál es el siguiente. Llévalo de ' +
       'fondo para no perder el norte entre turnos; NO lo recites salvo que el usuario pregunte. ' +
       'Si el usuario completa un paso, refléjalo con estados.marcar (libre) o estados.avanzar ' +
-      '(estricto) — el estado es la verdad, no tu memoria del hilo.' + juez + objetivo + ev + actual + '\n\n' + cuerpo
+      '(estricto) — el estado es la verdad, no tu memoria del hilo.' + juez + objetivo + ev + actual + forma + '\n\n' + cuerpo
     );
   }
 
@@ -1690,7 +1704,11 @@ class AiGatewayModule extends BaseModule {
     try {
       const rail = await this._leerRailActivo(project_id);
       if (!rail || !rail.objetivo) return;                                  // solo rails con objetivo (opt-in)
-      if (rail.ultima_evaluacion && rail.ultima_evaluacion.satisfecho) return; // ya cumplido → no re-evaluar
+      // Un veredicto CUMPLIDO solo congela si la lista SIGUE completa. Si la lista
+      // está abierta (reabierta: se añadió un paso, algo volvió a pendiente...),
+      // el veredicto viejo es STALE y NO debe bloquear la re-evaluación — si no,
+      // el juez queda mudo para siempre y el rail atascado (bug Regalos).
+      if (rail.ultima_evaluacion?.satisfecho && rail.estado === 'completa') return;
       const key = conversation_id || project_id;
       const st = this._railEvalState.get(key) || { count: 0, noProgress: 0, lastBlocker: null };
       const maxEvals = this.config.rail_eval_max || 8;                      // cap duro de auto-evals (DeerFlow: 8)
@@ -2826,6 +2844,21 @@ class AiGatewayModule extends BaseModule {
         content: tr.status === 'error' ? formatErr(tr.error) : JSON.stringify(tr.result)
       }));
       workingMessages.push(...toolMessages);
+    }
+
+    // CORTE HONESTO del bucle de tools: si salimos por límite de iteraciones con
+    // tool_calls TODAVÍA pendientes (el LLM quería seguir trabajando), el resultado
+    // crudo sería content:'' → el usuario ve una respuesta vacía y el trabajo a
+    // medias SIN explicación (síntoma "se queda atascado" en tareas largas).
+    // Sustituimos por un cierre explícito que nombra el corte y qué quedó pendiente.
+    if (iteration >= maxIterations && result?.tool_calls?.length > 0) {
+      const pendientes = result.tool_calls.map(tc => tc.function?.name || tc.name || '?').join(', ');
+      const corte = '[corte de herramientas] Se alcanzó el límite de iteraciones de tools ' +
+        `(${maxIterations}) con llamadas pendientes: ${pendientes}. ` +
+        'El trabajo ejecutado hasta aquí quedó aplicado. Si falta terminar, dime "sigue" y ' +
+        'continúo con el siguiente grupo — o crea/actualiza la lista del rail para retomarlo.';
+      result = { ...result, content: corte, finish_reason: 'tool_iterations_cap' };
+      this.logger?.warn?.('ai-gateway.tool_loop.capped', { project_id, iteration: maxIterations, pendientes });
     }
 
     // TIRO AUTOMÁTICO del juez del rail (post-turno). DETACHED (sin await) → no retrasa la

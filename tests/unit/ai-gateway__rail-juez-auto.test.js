@@ -73,11 +73,18 @@ test('con objetivo → dispara el juez, aplica el veredicto, cuenta 1', async ()
   assert.strictEqual(m._railEvalState.get('c').count, 1);
 });
 
-test('objetivo YA satisfecho → NO re-evalúa', async () => {
+test('objetivo YA satisfecho + lista COMPLETA → NO re-evalúa (veredicto vigente)', async () => {
   const m = gw();
-  const calls = armar(m, { rail: { id: 'l1', nombre: 'R', orden: 'libre', objetivo: 'X', pasos: [], ultima_evaluacion: { satisfecho: true } }, verdict: { satisfecho: true, blocker: 'none' } });
+  const calls = armar(m, { rail: { id: 'l1', nombre: 'R', orden: 'libre', objetivo: 'X', estado: 'completa', pasos: [], ultima_evaluacion: { satisfecho: true } }, verdict: { satisfecho: true, blocker: 'none' } });
   await m._evaluarRailAuto({ project_id: 'p', conversation_id: 'c' });
   assert.strictEqual(calls.juez, 0);
+});
+
+test('BUG STALE: satisfecho + lista REABIERTA (abierta) → SÍ re-evalúa (el veredicto viejo no congela)', async () => {
+  const m = gw();
+  const calls = armar(m, { rail: { id: 'l1', nombre: 'R', orden: 'libre', objetivo: 'X', estado: 'abierta', pasos: [{ id: 'p1', texto: 'paso 1', estado: 'pendiente' }], ultima_evaluacion: { satisfecho: true } }, verdict: { satisfecho: true, blocker: 'none' } });
+  await m._evaluarRailAuto({ project_id: 'p', conversation_id: 'c' });
+  assert.strictEqual(calls.juez, 1, 'lista abierta con veredicto viejo → el juez debe re-evaluar');
 });
 
 test('SAFETY CAP: tras 8 evals no dispara más', async () => {

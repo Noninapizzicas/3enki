@@ -1149,7 +1149,10 @@ modules/conversacion/
   memory-rag                 v2.1   — memoria semántica (embeddings)
 ```
 Más nervios del chat (también en `enabled`): `estados` (rail vivo), `propiocepcion`,
-`cupula-eventos`, `conserje` (empujones), `lentes-diseno`, `prompt-manager`.
+`cupula-eventos`, `conserje` (empujones), `lentes-diseno`, `prompt-manager`, `rpc-index`
+(índice RPC del sistema: el LLM consulta el nombre EXACTO de un evento con rpc.buscar/
+rpc.ver antes de publicarlo — NO lo inventa; el índice ~212 RPC se genera de los
+module.json en onLoad y se consulta bajo demanda, nunca se inyecta entero).
 
 ### Desactivados a propósito (`modules.disabled`)
 ```

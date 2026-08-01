@@ -25,3 +25,10 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 ### Ingenieria
 - [[refrigeracion-por-calor/00 - Frio accionado por calor (MOC)|Frio accionado por calor]] — absorcion, adsorcion, eyector; fuentes termicas
 - [[estufas-rocket/00 - Estufas Rocket (MOC)|Estufas Rocket]] — combustion en flujo, readsorcion, masa termica, fabricacion DIY
+
+### Maker y fabricacion
+- [[carpinteria-cnc/00 - Carpintería CNC (MOC)|Carpintería CNC]] — fresado, controladores (Grbl/LinuxCNC/FluidNC), máquinas open-source, nesting, ensambles
+- [[metalurgia-diy/00 - Metalurgia DIY (MOC)|Metalurgia DIY]] — plasma CNC, chapa y desarrollo plano, soldadura, hornos PID, nesting para metal
+- [[construccion-abierta/00 - Construcción Abierta (MOC)|Construcción Abierta]] — impresión 3D en hormigón, WikiHouse, Open Source Ecology, earthbag, materiales
+- [[electronica-maker/00 - Electrónica Maker (MOC)|Electrónica Maker]] — diseño PCB (KiCad), pick-and-place (LumenPnP), fabricación, instrumentación, sigrok
+- [[domotica-iot/00 - Domótica e IoT (MOC)|Domótica e IoT]] — Home Assistant, Tasmota/ESPHome/WLED, Meshtastic, MQTT, OpenMQTTGateway

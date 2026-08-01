@@ -32,3 +32,9 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 - [[construccion-abierta/00 - Construcción Abierta (MOC)|Construcción Abierta]] — impresión 3D en hormigón, WikiHouse, Open Source Ecology, earthbag, materiales
 - [[electronica-maker/00 - Electrónica Maker (MOC)|Electrónica Maker]] — diseño PCB (KiCad), pick-and-place (LumenPnP), fabricación, instrumentación, sigrok
 - [[domotica-iot/00 - Domótica e IoT (MOC)|Domótica e IoT]] — Home Assistant, Tasmota/ESPHome/WLED, Meshtastic, MQTT, OpenMQTTGateway
+
+### Cocina
+- [[cocina-bases/00 - Bases de cocina (MOC)|Bases de cocina]] — caldos, salsas madre (francesa, asiática, mexicana), cortes, cocción, mise en place, fermentación, sabor
+- [[cocina-mediterranea/00 - Cocina mediterránea (MOC)|Cocina mediterránea]] — España, Italia, Francia, Grecia, Turquía, Magreb, Levante, despensa común
+- [[cocina-asiatica/00 - Cocina asiática (MOC)|Cocina asiática]] — Japón, China, Tailandia, Corea, India, Vietnam, arroz, wok
+- [[cocina-mexicana/00 - Cocina mexicana (MOC)|Cocina mexicana]] — regiones, maíz, tacos, antojitos, bebidas, recetas fundamentales

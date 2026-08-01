@@ -24,3 +24,4 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 
 ### Ingenieria
 - [[refrigeracion-por-calor/00 - Frio accionado por calor (MOC)|Frio accionado por calor]] — absorcion, adsorcion, eyector; fuentes termicas
+- [[estufas-rocket/00 - Estufas Rocket (MOC)|Estufas Rocket]] — combustion en flujo, readsorcion, masa termica, fabricacion DIY

@@ -60,15 +60,28 @@ class EstadosReflejo extends ModuloHibridoReflejo {
   // =============================================================
   async handleCrearListaTool(args) {
     const a = args || {};
+    // Los pasos pueden venir como textos (pasos[]) o con FORMA EJECUTABLE
+    // (pasos_forma[]: {tool, input, verifica} por paso, alineado por posición).
+    let pasos = Array.isArray(a.pasos) ? a.pasos : [];
+    const formas = Array.isArray(a.pasos_forma) ? a.pasos_forma : [];
+    if (formas.length > 0) {
+      pasos = pasos.map((texto, i) => (formas[i] && typeof formas[i] === 'object' && formas[i].tool)
+        ? { texto: String(texto), forma: formas[i] }
+        : texto);
+      // Si hay más formas que textos, las sobrantes se añaden como pasos con texto genérico.
+      for (let i = pasos.length; i < formas.length; i++) {
+        if (formas[i] && formas[i].tool) pasos.push({ texto: `Paso ${i + 1}`, forma: formas[i] });
+      }
+    }
     // crear una lista SIEMPRE la activa (es el rumbo que se está llevando).
-    return this._crear({ project_id: a.project_id, nombre: a.nombre, tipo: a.tipo || 'tareas', orden: a.orden, pasos: a.pasos, activar: true });
+    return this._crear({ project_id: a.project_id, nombre: a.nombre, tipo: a.tipo || 'tareas', orden: a.orden, pasos, activar: true });
   }
 
   async handleAnadirPasoTool(args) {
     const a = args || {};
     const est = await this._estado({ project_id: a.project_id });
     if (!est.data || !est.data.lista) return this._errorResponse(409, 'CONFLICT_STATE', 'no hay lista activa; crea una con crear_lista primero');
-    return this._anadir({ project_id: a.project_id, lista_id: est.data.lista.id, texto: a.texto, freno: a.freno });
+    return this._anadir({ project_id: a.project_id, lista_id: est.data.lista.id, texto: a.texto, freno: a.freno, forma: a.forma });
   }
 
   // completar el paso de la lista activa: en orden estricto AVANZA (freno incluido);
@@ -129,8 +142,18 @@ class EstadosReflejo extends ModuloHibridoReflejo {
     return this._rpc('fs.write.request', { project_id, path: STORE, content: JSON.stringify({ _version: 1, _updated: nowISO(), activa: doc.activa || null, listas: doc.listas }, null, 2), encoding: 'utf-8', atomic: true });
   }
 
-  _paso(clave, texto, pos, freno) {
-    return { id: `p${pos}_${slug(clave || texto).slice(0, 24) || pos}`, texto: String(texto || clave || `paso ${pos}`), pos, estado: 'pendiente', ...(freno ? { freno } : {}) };
+  // _paso acepta la FORMA EJECUTABLE (protocolo): { tool, input, verifica } —
+  // el rail deja de ser una lista de intenciones y pasa a ser un protocolo paso a
+  // paso: qué tool usar, con qué input, y qué respuesta confirma que está hecho.
+  _paso(clave, texto, pos, freno, forma) {
+    const base = { id: `p${pos}_${slug(clave || texto).slice(0, 24) || pos}`, texto: String(texto || clave || `paso ${pos}`), pos, estado: 'pendiente', ...(freno ? { freno } : {}) };
+    if (!forma || typeof forma !== 'object') return base;
+    const f = {};
+    if (forma.tool) f.tool = String(forma.tool);
+    if (forma.input !== undefined && forma.input !== null) f.input = forma.input;
+    if (forma.verifica) f.verifica = String(forma.verifica);
+    if (Object.keys(f).length === 0) return base;
+    return { ...base, forma: f };
   }
 
   _lite(lista) {
@@ -148,7 +171,8 @@ class EstadosReflejo extends ModuloHibridoReflejo {
     if (doc.listas[id]) return this._errorResponse(409, 'CONFLICT_STATE', 'ya existe una lista con ese id', { id });
     const orden = input.orden === 'estricto' ? 'estricto' : 'libre';
     const pasos = (Array.isArray(input.pasos) ? input.pasos : []).map((p, i) =>
-      typeof p === 'string' ? this._paso(null, p, i) : this._paso(p.clave, p.texto, i, p.freno));
+      typeof p === 'string' ? this._paso(null, p, i)
+        : this._paso(p.clave, p.texto, i, p.freno, p.forma));
     const lista = { id, nombre: String(input.nombre), tipo: input.tipo || 'tareas', orden, pasos, actual: 0, estado: 'abierta', creada: nowISO(), actualizada: nowISO(), ...(input.objetivo ? { objetivo: String(input.objetivo) } : {}) };
     doc.listas[id] = lista;
     if (input.activar) doc.activa = id;
@@ -186,10 +210,14 @@ class EstadosReflejo extends ModuloHibridoReflejo {
     const lista = doc.listas[slug(input.lista_id)];
     if (!lista) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'lista no existe', { lista_id: input.lista_id });
     const pos = lista.pasos.length;
-    const paso = this._paso(input.clave, input.texto, pos, input.freno);
+    const paso = this._paso(input.clave, input.texto, pos, input.freno, input.forma);
     lista.pasos.push(paso);
     lista.actualizada = nowISO();
     if (lista.estado === 'completa') lista.estado = 'abierta';
+    // INVALIDAR el veredicto: la lista cambió → el "CUMPLIDO" anterior ya no vale
+    // (sin esto, el juez automático early-return por satisfecho y el rail queda
+    // atascado con un veredicto stale — bug visto en Regalos pos_dashboard_hibrido).
+    if (lista.ultima_evaluacion) lista.ultima_evaluacion = null;
     await this._guardar(input.project_id, doc);
     return { status: 200, data: { lista_id: lista.id, paso: paso.id, total_pasos: lista.pasos.length } };
   }
@@ -244,6 +272,8 @@ class EstadosReflejo extends ModuloHibridoReflejo {
     paso.estado = estado;
     const cerrados = lista.pasos.every(p => p.estado === 'hecho' || p.estado === 'descartado');
     lista.estado = cerrados && lista.pasos.length > 0 ? 'completa' : 'abierta';
+    // Invalidar el veredicto si la lista se REABRIÓ (algo volvió a pendiente/descartado).
+    if (lista.estado === 'abierta' && lista.ultima_evaluacion) lista.ultima_evaluacion = null;
     lista.actualizada = nowISO();
     await this._guardar(input.project_id, doc);
     return { status: 200, data: { lista_id: lista.id, paso: paso.id, estado } };
@@ -257,6 +287,8 @@ class EstadosReflejo extends ModuloHibridoReflejo {
     const lista = doc.listas[slug(input.lista_id)];
     if (!lista) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'lista no existe', { lista_id: input.lista_id });
     lista.objetivo = String(input.objetivo);
+    // Cambiar el objetivo INVALIDA la evaluación anterior (juzgaba otra condición).
+    if (lista.ultima_evaluacion) lista.ultima_evaluacion = null;
     // PRISMA cuando PROCEDE (gate): si quien fija el objetivo DECLARA rasgos del dato
     // (afirma_sobre_el_mundo? · derivable_de_internos?), el objetivo deja de ser solo
     // prosa → se le adjunta el círculo TIPADO (naturaleza + contrato + preguntas +

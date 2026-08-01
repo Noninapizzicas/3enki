@@ -16205,6 +16205,26 @@ EL TIRO AUTOMÁTICO (ai-gateway 2.31.0 · como DeerFlow: evaluador post-run) {
   SAFETY CAPS (de DeerFlow, por conversación en _railEvalState): rail_eval_max=8 evals · rail_eval_max_no_progress=2
   (mismo blocker 2 veces seguidas → para; un blocker que CAMBIA resetea = hubo progreso). Best-effort absoluto:
   cualquier fallo se traga (nunca rompe el turno). El objetivo satisfecho detiene el ciclo.
+  FIX STALE (0.4.1): un veredicto CUMPLIDO solo congela si la lista SIGUE 'completa'. Si la lista está
+  'abierta' (se añadió un paso / algo volvió a pendiente / cambió el objetivo), el veredicto viejo es
+  STALE y NO bloquea la re-evaluación — si no, el juez queda mudo para siempre y el rail atascado
+  (bug visto en Regalos pos_dashboard_hibrido: satisfecho:true + lista abierta + paso pendiente).
+  REFLEJO (estados 0.4.1): TODA mutación que reabra la lista o cambie el objetivo INVALIDA
+  ultima_evaluacion (_anadir · _marcar si reabre · _fijarObjetivo) — el "CUMPLIDO" anterior no vale.
+}
+
+RAIL-PROTOCOLO (0.5.0 · el paso con FORMA EJECUTABLE) {
+  TESIS  el rail deja de ser una lista de intenciones y pasa a ser un PROTOCOLO paso a paso:
+         el LLM sabe EXACTAMENTE qué tool usar, con qué input, y qué respuesta confirma que está hecho.
+         Sin esto, el paso dice "publicar todo en www/pos/" y el LLM adivina el cómo → se atasca.
+  PASOS  crear_lista acepta pasos_forma[] y anadir_paso acepta forma: {tool, input?, verifica?}
+         (compatibilidad: los pasos string siguen valiendo, sin forma).
+  NERVIO _composeRailSection inyecta, para el paso ACTUAL con forma:
+         "PROTOCOLO del paso actual — EJECUTA ASÍ: tool · input · verifica (hecho si)
+         Cuando la verificación confirme, marca el paso. NO lo marques antes."
+         (en estricto = lista.actual; en libre = primer pendiente)
+  REGLA  el LLM ejecuta la tool, VERIFICA la condición, y solo entonces marca (estados.marcar/avanzar).
+         Prohibido marcar antes de verificar — el reflejo sostiene, el LLM propone.
 }
 ```
 

@@ -67,6 +67,30 @@ test('orden libre: el paso actual es el PRIMER pendiente', () => {
   assert.ok(/tool: fs\.edit/.test(s), 'el protocolo apunta al primer pendiente (no al hecho)');
 });
 
+test('lista SIN OBJETIVO con pendientes → aviso fijar_objetivo en el nervio', () => {
+  const m = gw();
+  const s = m._composeRailSection({
+    id: 'l1', nombre: 'Rumbo', orden: 'libre',
+    pasos: [
+      { id: 'p0', texto: 'hecho', estado: 'hecho' },
+      { id: 'p1', texto: 'pendiente', estado: 'pendiente' }
+    ]
+    // sin objetivo
+  });
+  assert.ok(/NO TIENE OBJETIVO/.test(s), 'avisa que falta el objetivo');
+  assert.ok(/fijar_objetivo/.test(s), 'apunta a la tool fijar_objetivo');
+  assert.ok(/juez no puede evaluarla/.test(s), 'explica la consecuencia');
+});
+
+test('lista CON objetivo y pendientes → SIN aviso de objetivo', () => {
+  const m = gw();
+  const s = m._composeRailSection({
+    id: 'l1', nombre: 'Con obj', orden: 'libre', objetivo: 'terminar todo',
+    pasos: [{ id: 'p0', texto: 'pendiente', estado: 'pendiente' }]
+  });
+  assert.ok(!/NO TIENE OBJETIVO/.test(s), 'con objetivo no hay aviso');
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { n, f } of tests) {

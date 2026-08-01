@@ -184,6 +184,15 @@ RAIL-PROTOCOLO (0.5.0 · el paso con FORMA EJECUTABLE) {
   REGLA  el LLM ejecuta la tool, VERIFICA la condición, y solo entonces marca (estados.marcar/avanzar).
          Prohibido marcar antes de verificar — el reflejo sostiene, el LLM propone.
 }
+
+AVISO SIN-OBJETIVO (0.5.1 · el otro atasco) {
+  PROBLEMA listas a medias sin objetivo ("Rumbo" en Regalos, "Esther Volta" en tres-v): el juez
+         solo evalúa rails con objetivo (opt-in) → una lista sin objetivo nunca se cierra por juez.
+  FIX    el nervio (_composeRailSection) avisa cuando la lista activa tiene pendientes y NO objetivo:
+         "⚠️ ESTA LISTA NO TIENE OBJETIVO — fíjalo AHORA con fijar_objetivo (una frase que diga
+         cuándo está COMPLETO). Sin objetivo el juez no puede evaluarla." → el LLM lo fija en el
+         siguiente turno y el rail gana criterio de completitud.
+}
 ```
 
 ## Referencia externa — DeerFlow 2.0 (bytedance/deer-flow · MIT) — plano de super-agent-harness

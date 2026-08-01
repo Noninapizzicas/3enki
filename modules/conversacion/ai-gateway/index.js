@@ -2551,6 +2551,20 @@ class AiGatewayModule extends BaseModule {
       effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${biblioteca}` : biblioteca;
     }
 
+    // Nervio del ÍNDICE RPC (global): el LLM consulta el nombre EXACTO de un evento
+    // antes de publicarlo (bus.publishAndWait). Regla estática de 3 líneas — el índice
+    // (~212 RPC) NO se inyecta: se consulta bajo demanda con rpc.buscar / rpc.ver.
+    // Mata la improvisación de nombres de eventos (causa de cascadas de tools fallidas).
+    if (!context?.async_invocation) {
+      const rpcNervio =
+        '# ÍNDICE RPC — los servicios responden en el bus (contexto SILENCIOSO)\n' +
+        'Antes de publicar un evento con bus.publishAndWait, consulta su nombre EXACTO y su ' +
+        'entrada con rpc.buscar {query} (o rpc.ver {modulo} para ver todos los RPC de un módulo). ' +
+        'NO inventes nombres de eventos ni payloads — el índice tiene la verdad determinista ' +
+        'del bus; lo que no está en él no existe.\n';
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${rpcNervio}` : rpcNervio;
+    }
+
     // Nervio propioceptivo: en un turno REAL del chat sobre una pagina de
     // proyecto, inyectamos lo que paso en el mundo de ese proyecto desde el
     // ultimo turno — reflejos JS y ops conscientes que el LLM no controlo pero

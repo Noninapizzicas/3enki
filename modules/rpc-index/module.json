@@ -1,0 +1,18 @@
+{
+  "_doc": "Manifest de rpc-index — EL ÍNDICE RPC del sistema (reflejo JS, determinista). Genera en memoria el catálogo de TODOS los RPC .request del ecosistema (lee los module.json de modules/ en onLoad — los 212 RPC con su descripción ya existen, sin tocar nada) y lo sirve bajo demanda: rpc.buscar (query por nombre/módulo/descripción) y rpc.ver (todos los RPC de un módulo). Es la pieza que cierra el círculo del chat: el LLM deja de improvisar nombres de eventos (causa de cascadas de tools fallidas) y CONSULTA el nombre exacto + su entrada antes de publicar con bus.publishAndWait. Patrón gemelo de la cantera (índice + consulta bajo demanda + nervio con la regla) — el índice no se inyecta entero (~20 KB), se busca.",
+  "name": "rpc-index",
+  "version": "0.1.0",
+  "description": "Índice RPC del sistema: catálogo generado de los 212 RPC .request (evento + módulo + descripción) servido bajo demanda por rpc.buscar / rpc.ver. El LLM consulta el nombre exacto antes de publicar al bus — no lo inventa.",
+  "language": "es",
+  "subscribes": [
+    { "event": "rpc.buscar.request", "handler": "onBuscarRequest", "description": "Reflejo JS: busca RPC por query (nombre, módulo o texto de descripción). Devuelve [{evento, modulo, descripcion}]. Úsalo para saber el nombre EXACTO de un evento antes de publicarlo." },
+    { "event": "rpc.ver.request", "handler": "onVerRequest", "description": "Reflejo JS: devuelve todos los RPC .request de un módulo concreto (p.ej. carrito)." }
+  ],
+  "config": {
+    "indice": {
+      "fuente": "modules/**/module.json (subscribes con evento *.request)",
+      "cache": "en memoria, generado en onLoad",
+      "tamano_estimado": "212 RPC ≈ 20 KB (NO se inyecta — se consulta bajo demanda)"
+    }
+  }
+}

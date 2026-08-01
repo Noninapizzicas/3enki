@@ -1650,12 +1650,20 @@ class AiGatewayModule extends BaseModule {
       ? '\nSi el usuario pregunta si ya está / si falta algo, o cierras un tramo, juzga con evaluar_rail: ' +
         'si no está cumplido, NOMBRA por qué (blocker tipado), no un "no" mudo.'
       : '';
+    // Lista SIN OBJETIVO con pasos pendientes → el juez no puede evaluarla (opt-in por
+    // objetivo). Aviso en el nervio: el LLM fija el objetivo en el siguiente turno y el
+    // rail gana criterio de completitud (causa de atascos: listas a medias sin fin claro).
+    const sinObjetivo = !lista.objetivo && (lista.pasos || []).some(p => p.estado === 'pendiente')
+      ? '\n⚠️ ESTA LISTA NO TIENE OBJETIVO — si es un trabajo con fin claro, fíjalo AHORA con ' +
+        'fijar_objetivo (una frase que diga cuándo está COMPLETO). Sin objetivo el juez no puede ' +
+        'evaluarla y el trabajo puede quedar a medias sin criterio de cierre.'
+      : '';
     return (
       `# EL RAIL — lista activa «${lista.nombre}» (${orden}) · contexto silencioso\n` +
       'Este es el RUMBO escrito: qué está hecho, qué falta, cuál es el siguiente. Llévalo de ' +
       'fondo para no perder el norte entre turnos; NO lo recites salvo que el usuario pregunte. ' +
       'Si el usuario completa un paso, refléjalo con estados.marcar (libre) o estados.avanzar ' +
-      '(estricto) — el estado es la verdad, no tu memoria del hilo.' + juez + objetivo + ev + actual + forma + '\n\n' + cuerpo
+      '(estricto) — el estado es la verdad, no tu memoria del hilo.' + juez + sinObjetivo + objetivo + ev + actual + forma + '\n\n' + cuerpo
     );
   }
 

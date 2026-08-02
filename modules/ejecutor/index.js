@@ -72,7 +72,7 @@ class EjecutorModule extends ModuloHibridoReflejo {
     // Fase 2 — aislamiento en contenedor (la contención REAL de input no-confiable).
     this.dockerOk = false;               // ¿docker disponible? (probado en onLoad)
     this.contenedorImagen = 'node:20-slim';
-    this.contenedorImagenPython = 'python:3.11-slim';  // scripts python3 → imagen Python (Hermes-style, sin ensuciar el host)
+    this.contenedorImagenPython = 'python:3.12-slim';  // scripts python3 → imagen Python (Hermes-style, sin ensuciar el host)
     this._execFile = execFile;   // inyectable en test (patrón _probarDocker: stubbable)
     this.contenedorMemoria = '512m';
     this.contenedorPidsLimit = 256;
@@ -216,12 +216,12 @@ class EjecutorModule extends ModuloHibridoReflejo {
   // con límites. El workspace del proyecto se monta en /work. Red ABIERTA (defuddle y demás
   // necesitan fetch) — la contención es fs + caps + pids + memoria, no red. HONESTO: si docker
   // no está, _ejecutar ya devolvió 503 (no se llega aquí).
-  // IMAGEN SEGÚN EL RUNTIME (opción B): python3/python → python:3.11-slim; node/npx/npm →
+  // IMAGEN SEGÚN EL RUNTIME (opción B): python3/python → python:3.12-slim; node/npx/npm →
   // node:20-slim; resto → node:20-slim (default, retrocompatible). Así Enki puede ejecutar
   // scripts Python como hace Hermes — SIN ensuciar el host (cero Python instalado en el VPS). ──
   _imagenParaComando(cmd) {
     const primero = String(cmd || '').trim().split(/\s+/)[0] || '';
-    if (/^python3?$/.test(primero)) return this.contenedorImagenPython || 'python:3.11-slim';
+    if (/^python3?$/.test(primero)) return this.contenedorImagenPython || 'python:3.12-slim';
     return this.contenedorImagen || 'node:20-slim';
   }
 

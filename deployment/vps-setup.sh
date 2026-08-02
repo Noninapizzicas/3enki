@@ -10,6 +10,7 @@
 # Uso:
 #   sudo ./vps-setup.sh                    # Modo IP (sin dominio, HTTP en puerto 80)
 #   sudo ./vps-setup.sh pizzepos.es        # Modo dominio (HTTPS automático)
+#   sudo ./vps-setup.sh pizzepos.es --docker  # Habilita ejecutor en contenedor (opt-in seguridad)
 #
 # =============================================================================
 
@@ -578,8 +579,10 @@ if [ "${ENKI_ENABLE_DOCKER:-0}" = "1" ]; then
             usermod -aG docker www-data && log "www-data añadido al grupo docker (el reinicio del servicio enki, más abajo, lo aplica)"
         fi
         DOCKER_IMG="${ENKI_DOCKER_IMAGE:-node:20-slim}"
-        log "Pre-bajando imagen base ${DOCKER_IMG}..."
+        PYTHON_IMG="${ENKI_PYTHON_IMAGE:-python:3.11-slim}"
+        log "Pre-bajando imágenes de contenedor (${DOCKER_IMG}, ${PYTHON_IMG})..."
         docker pull "${DOCKER_IMG}" > /dev/null 2>&1 || warn "No se pudo pre-bajar ${DOCKER_IMG} (se bajará al primer uso)"
+        docker pull "${PYTHON_IMG}" > /dev/null 2>&1 || warn "No se pudo pre-bajar ${PYTHON_IMG} (se bajará al primer uso)"
 
         # Hogar de herramientas Python: imagen enki-python-tools (para el ejecutor con
         # aislamiento:'contenedor' + contenedor_imagen) — cero código, la reja sigue.

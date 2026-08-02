@@ -15478,6 +15478,11 @@ CLASE EjecutorModule HEREDA ModuloHibridoReflejo {   // reflejo PURO — el chat
     _audit(project_id, cmd, v.veredicto, res.exit_code==0, res.exit_code, duracion_ms, modo)
     RETORNA 200 { ok, veredicto, stdout, stderr, exit_code, duracion_ms, aislamiento: modo }
 
+  _imagenParaComando(cmd):   // IMAGEN SEGÚN EL RUNTIME (python en contenedor, host limpio)
+    primero ← primera palabra de cmd
+    SI primero ∈ {python3, python}: RETORNA contenedorImagenPython   // python:3.11-slim
+    RETORNA contenedorImagen                                          // node:20-slim (default, retrocompatible)
+
   _guard(cmd, { project_id, confirmado, recordar }):   // DETERMINISTA — orden EXACTO de Hermes
     SI !activo: RETORNA 'puerta_cerrada'
     PARA re EN HARDLINE: SI re.test(cmd): RETORNA 'hardline'

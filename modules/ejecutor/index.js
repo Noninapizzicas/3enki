@@ -72,6 +72,8 @@ class EjecutorModule extends ModuloHibridoReflejo {
     // Fase 2 — aislamiento en contenedor (la contención REAL de input no-confiable).
     this.dockerOk = false;               // ¿docker disponible? (probado en onLoad)
     this.contenedorImagen = 'node:20-slim';
+    this.contenedorImagenPython = 'python:3.11-slim';  // scripts python3 → imagen Python (Hermes-style, sin ensuciar el host)
+    this._execFile = execFile;   // inyectable en test (patrón _probarDocker: stubbable)
     this.contenedorMemoria = '512m';
     this.contenedorPidsLimit = 256;
     this.contenedorReadonly = true;      // rootfs read-only + tmpfs /tmp (solo /work y /tmp escribibles)
@@ -213,8 +215,18 @@ class EjecutorModule extends ModuloHibridoReflejo {
   // ── AISLAMIENTO EN CONTENEDOR (la contención real): docker run efímero, sin privilegios,
   // con límites. El workspace del proyecto se monta en /work. Red ABIERTA (defuddle y demás
   // necesitan fetch) — la contención es fs + caps + pids + memoria, no red. HONESTO: si docker
-  // no está, _ejecutar ya devolvió 503 (no se llega aquí). ──
+  // no está, _ejecutar ya devolvió 503 (no se llega aquí).
+  // IMAGEN SEGÚN EL RUNTIME (opción B): python3/python → python:3.11-slim; node/npx/npm →
+  // node:20-slim; resto → node:20-slim (default, retrocompatible). Así Enki puede ejecutar
+  // scripts Python como hace Hermes — SIN ensuciar el host (cero Python instalado en el VPS). ──
+  _imagenParaComando(cmd) {
+    const primero = String(cmd || '').trim().split(/\s+/)[0] || '';
+    if (/^python3?$/.test(primero)) return this.contenedorImagenPython || 'python:3.11-slim';
+    return this.contenedorImagen || 'node:20-slim';
+  }
+
   _ejecutarContenedor(cmd, cwd, timeout) {
+    const imagen = this._imagenParaComando(cmd);
     const args = [
       'run', '--rm', '-i',
       '--cap-drop', 'ALL',
@@ -231,9 +243,9 @@ class EjecutorModule extends ModuloHibridoReflejo {
     // Rootfs read-only: el contenedor no escribe su propio SO. Solo /work (RW, el storage montado)
     // y /tmp (tmpfs efímero, con exec para postinstalls de npm) son escribibles.
     if (this.contenedorReadonly) args.push('--read-only', '--tmpfs', '/tmp:rw,exec,size=64m');
-    args.push('-v', `${cwd}:/work`, '-w', '/work', this.contenedorImagen, 'bash', '-lc', cmd);
+    args.push('-v', `${cwd}:/work`, '-w', '/work', imagen, 'bash', '-lc', cmd);
     return new Promise((resolve) => {
-      execFile('docker', args, { timeout, maxBuffer: this.maxBuffer }, (err, stdout, stderr) => {
+      this._execFile('docker', args, { timeout, maxBuffer: this.maxBuffer }, (err, stdout, stderr) => {
         const exit_code = err ? (typeof err.code === 'number' ? err.code : 1) : 0;
         const killed = err && err.killed ? '\n[ejecutor] timeout — contenedor terminado' : '';
         resolve({ stdout: String(stdout || ''), stderr: String(stderr || '') + killed, exit_code });

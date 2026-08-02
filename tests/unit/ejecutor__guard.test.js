@@ -158,6 +158,31 @@ test('el guard es el MISMO en contenedor: hardline sigue bloqueando aunque pida 
   assert.strictEqual(r.data.veredicto, 'hardline');   // la reja no depende del aislamiento
 });
 
+// ── imagen según runtime (opción B: python en contenedor, host limpio) ──
+test('imagen para python3 → python:3.11-slim', () => {
+  const m = make();
+  assert.strictEqual(m._imagenParaComando('python3 /tmp/analizar.py'), 'python:3.11-slim');
+  assert.strictEqual(m._imagenParaComando('python /tmp/x.py'), 'python:3.11-slim');
+});
+
+test('imagen para node/npx/otro → node:20-slim (retrocompatible)', () => {
+  const m = make();
+  assert.strictEqual(m._imagenParaComando('node script.js'), 'node:20-slim');
+  assert.strictEqual(m._imagenParaComando('npx defuddle parse https://x.com'), 'node:20-slim');
+  assert.strictEqual(m._imagenParaComando('ls /work'), 'node:20-slim');
+});
+
+test('_ejecutarContenedor usa la imagen Python cuando el comando es python3', async () => {
+  const m = make();
+  let imagenUsada = null;
+  m._execFile = (bin, args, opts, cb) => {
+    imagenUsada = args[args.length - 4];   // [-v, cwd:/work, -w, /work, IMAGEN, bash, -lc, cmd]
+    cb(null, 'ok', '');
+  };
+  await m._ejecutarContenedor('python3 -c "print(1+1)"', '/tmp', 5000);
+  assert.strictEqual(imagenUsada, 'python:3.11-slim');
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

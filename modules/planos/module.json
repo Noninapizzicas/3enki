@@ -1,0 +1,43 @@
+{
+  "_doc": "Manifest de planos — REFLEJO JS: genera archivos CAD (DXF abierto + SVG para visualizar) desde un JSON de entidades con medidas. El chat pide planos.generar {plan, formato} → archivo guardado en data/planos/ + contenido devuelto para previsualizar. Determinista: una respuesta correcta computable → reflejo puro (patrón costeador).",
+  "name": "planos",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: entidades rect/circulo/linea/arco/texto + cotas automáticas (dimensiones dibujadas, para visualizar medidas) → DXF R12 (AutoCAD/LibreCAD/Fusion/CNC) y SVG (navegador). Guarda en data/planos/<nombre>.<ext> y devuelve {ok, formato, archivo, url?, contenido}.",
+  "language": "es",
+  "main": "index.js",
+  "publishes": [
+    { "event": "planos.generar.response", "description": "{ ok, formato, archivo, url, contenido } — el DXF/SVG generado. Error canónico 422 PLAN_INVALIDO con motivos." },
+    { "event": "planos.generado", "description": "AUDIT de dominio: { nombre, unidades, entidades, archivos:[{formato, archivo, url, bytes}] } — ningún plano nace invisible; la propiocepción lo capta." }
+  ],
+  "subscribes": [
+    { "event": "planos.generar.request", "handler": "onGenerarRequest", "description": "Reflejo: { plan: { nombre, unidades, capas[], entidades[], cotas? }, formato: 'dxf'|'svg'|'ambos' } → genera archivo(s) en data/planos/ + devuelve contenido para previsualizar. El chat llama AQUÍ para cualquier plano con medidas." }
+  ],
+  "tools": [
+    {
+      "name": "planos.generar",
+      "description": "Genera un plano CAD (archivo DXF abierto + SVG para visualizar) a partir de un JSON de entidades con medidas. ÚSALA para cualquier diseño con medidas: piezas, tableros, muebles, planos de taller. Entidades: rect {x,y,ancho,alto}, circulo {cx,cy,radio}, linea {x1,y1,x2,y2}, arco {cx,cy,radio,angulo_inicio,angulo_fin}, texto {x,y,valor,altura}. Con cotas:true dibuja las dimensiones automáticamente. Devuelve el archivo guardado y el contenido.",
+      "handler": "onGenerarRequest",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "type": "object",
+            "description": "El plano: { nombre, unidades ('mm'|'cm'|'m'), capas:[{nombre,color}], entidades:[...], cotas? (true para dimensionar todo) }",
+            "additionalProperties": false,
+            "properties": {
+              "nombre": { "type": "string", "description": "Nombre del plano (va al nombre del archivo)" },
+              "unidades": { "type": "string", "enum": ["mm", "cm", "m"], "default": "mm" },
+              "capas": { "type": "array", "items": { "type": "object" } },
+              "entidades": { "type": "array", "items": { "type": "object" }, "description": "rect/circulo/linea/arco/texto con sus coordenadas y medidas" },
+              "cotas": { "type": "boolean", "default": false }
+            }
+          },
+          "formato": { "type": "string", "enum": ["dxf", "svg", "ambos"], "default": "ambos" }
+        }
+      }
+    }
+  ],
+  "dependencies": [],
+  "config": {}
+}

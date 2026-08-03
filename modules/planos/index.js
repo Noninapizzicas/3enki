@@ -30,6 +30,33 @@ class PlanosReflejo extends ModuloHibridoReflejo {
 
   onGenerarRequest(e) { return this._atender(e, 'generar', 'planos.generar.response', d => this._generar(d)); }
 
+  // ── HTTP: servir un plano generado (SVG inline para el chat · DXF descarga) ──
+  // URL: /modules/planos/<archivo>. El gateway HTTP enruta manifest.apis → este handler.
+  async handleDescargar(req) {
+    const { archivo } = (req && req.params) || req || {};
+    if (!archivo || typeof archivo !== 'string' || !/^[a-zA-Z0-9-_]+\.(svg|dxf)$/.test(archivo)) {
+      return { status: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'INVALID_INPUT', message: 'Nombre de archivo inválido' }) };
+    }
+    const dir = path.resolve(process.cwd(), 'data', 'planos');
+    const ruta = path.resolve(dir, archivo);
+    if (!ruta.startsWith(dir)) {
+      return { status: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'INVALID_INPUT', message: 'Ruta inválida' }) };
+    }
+    try {
+      const contenido = fs.readFileSync(ruta);
+      const esSvg = archivo.endsWith('.svg');
+      return {
+        status: 200,
+        headers: esSvg
+          ? { 'Content-Type': 'image/svg+xml', 'Content-Length': contenido.length, 'Cache-Control': 'no-cache' }
+          : { 'Content-Type': 'application/dxf', 'Content-Length': contenido.length, 'Content-Disposition': `attachment; filename="${archivo}"` },
+        body: contenido
+      };
+    } catch (_) {
+      return { status: 404, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'RESOURCE_NOT_FOUND', message: `Plano no encontrado: ${archivo}` }) };
+    }
+  }
+
   // ── VALIDACIÓN (contrato tipado) ──
   _validar(plan) {
     const motivos = [];
@@ -181,20 +208,23 @@ class PlanosReflejo extends ModuloHibridoReflejo {
     const dir = path.join(process.cwd(), 'data', 'planos');
     try { fs.mkdirSync(dir, { recursive: true }); } catch (_) { /* best-effort */ }
     const urlBase = (plan.url_base || '').replace(/\/$/, '');
+    // URL pública por defecto: ruta relativa servida por el gateway HTTP
+    // (/modules/planos/<archivo>) — el frontend la resuelve contra el dominio actual.
+    const urlDe = (archivo) => (urlBase ? `${urlBase}/${archivo}` : `/modules/planos/${archivo}`);
     const salida = { ok: true, nombre: plan.nombre, unidades: plan.unidades || 'mm', entidades: entidades.length, archivos: [] };
 
     if (f === 'dxf' || f === 'ambos') {
       const archivo = path.join(dir, `${nombre}.dxf`);
       const contenido = this._dxf(plan, entidades, Object.fromEntries((plan.capas || []).map(c => [c.nombre, c.color])));
       fs.writeFileSync(archivo, contenido);
-      salida.archivos.push({ formato: 'dxf', archivo, url: urlBase ? `${urlBase}/${nombre}.dxf` : null, bytes: contenido.length });
+      salida.archivos.push({ formato: 'dxf', archivo, url: urlDe(`${nombre}.dxf`), bytes: contenido.length });
     }
     if (f === 'svg' || f === 'ambos') {
       const archivo = path.join(dir, `${nombre}.svg`);
       const bbox = this._bbox(entidades);
       const contenido = this._svg(plan, entidades, bbox);
       fs.writeFileSync(archivo, contenido);
-      salida.archivos.push({ formato: 'svg', archivo, url: urlBase ? `${urlBase}/${nombre}.svg` : null, bytes: contenido.length, svg: contenido });
+      salida.archivos.push({ formato: 'svg', archivo, url: urlDe(`${nombre}.svg`), bytes: contenido.length, svg: contenido });
     }
 
     // AUDIT de dominio — ningún plano nace invisible (la propiocepción lo capta).

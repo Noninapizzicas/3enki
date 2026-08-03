@@ -130,6 +130,23 @@ Usuario: *"hazme el plano de una balda de 80×20 con 2 taladros a los lados y un
 - **Unidades**: si el usuario no las dice, usa `mm` (default) y dilo en la respuesta.
 - **No prometas G-code/CNC**: el DXF se exporta, pero el corte es cosa de la máquina.
 
+### Presentación en el chat (¡IMPORTANTE!)
+
+El usuario debe VER el plano, no un JSON. Cuando `planos.generar` responda, presenta SIEMPRE así:
+
+1. **Muestra el SVG como imagen** con markdown, usando la `url` que devuelve la respuesta:
+   ```markdown
+   ![Plano de la balda](/modules/planos/balda-80x20.svg)
+   ```
+   (La URL es relativa — el frontend la resuelve contra el dominio actual. Renderiza inline.)
+
+2. **Ofrece el DXF como enlace de descarga** (para abrir en AutoCAD/LibreCAD/Fusion/CNC):
+   ```markdown
+   📐 Descarga el DXF: [balda-80x20.dxf](/modules/planos/balda-80x20.dxf)
+   ```
+
+3. Resumen breve: qué contiene el plano (piezas, medidas, cotas).
+
 ### Respuesta esperada
 
 ```jsonc
@@ -141,8 +158,8 @@ Usuario: *"hazme el plano de una balda de 80×20 con 2 taladros a los lados y un
     "unidades": "mm",
     "entidades": 12,
     "archivos": [
-      { "formato": "dxf", "archivo": "data/planos/balda-80x20.dxf", "url": null, "bytes": 942 },
-      { "formato": "svg", "archivo": "data/planos/balda-80x20.svg", "url": null, "bytes": 1456, "svg": "<?xml..." }
+      { "formato": "dxf", "archivo": "data/planos/balda-80x20.dxf", "url": "/modules/planos/balda-80x20.dxf", "bytes": 942 },
+      { "formato": "svg", "archivo": "data/planos/balda-80x20.svg", "url": "/modules/planos/balda-80x20.svg", "bytes": 1456, "svg": "<?xml..." }
     ]
   }
 }

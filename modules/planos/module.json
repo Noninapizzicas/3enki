@@ -15,7 +15,7 @@
   "tools": [
     {
       "name": "planos.generar",
-      "description": "Genera un plano CAD (archivo DXF abierto + SVG para visualizar) a partir de un JSON de entidades con medidas. ÚSALA para cualquier diseño con medidas: piezas, tableros, muebles, planos de taller. Entidades: rect {x,y,ancho,alto}, circulo {cx,cy,radio}, linea {x1,y1,x2,y2}, arco {cx,cy,radio,angulo_inicio,angulo_fin}, texto {x,y,valor,altura}. Con cotas:true dibuja las dimensiones automáticamente. Devuelve el archivo guardado y el contenido.",
+      "description": "Genera un plano CAD (DXF abierto + SVG para visualizar) a partir de un JSON de entidades con medidas. ÚSALA para cualquier diseño con medidas: piezas, tableros, muebles, planos de taller. Entidades: rect {x,y,ancho,alto}, circulo {cx,cy,radio}, linea {x1,y1,x2,y2}, arco {cx,cy,radio,angulo_inicio,angulo_fin}, texto {x,y,valor,altura}. Con cotas:true dibuja las dimensiones automáticamente (800mm, Ø10mm...). EJEMPLO: balda 80x20 con 2 taladros → { plan: { nombre: 'balda-80x20', unidades: 'mm', capas: [{nombre:'corte',color:'#dc2626'},{nombre:'taladro',color:'#2563eb'}], entidades: [ {tipo:'rect',capa:'corte',x:0,y:0,ancho:800,alto:200}, {tipo:'circulo',capa:'taladro',cx:40,cy:100,radio:5}, {tipo:'circulo',capa:'taladro',cx:760,cy:100,radio:5} ], cotas: true }, formato: 'ambos' }. Devuelve archivos guardados + SVG inline para visualizar. Consulta la skill planos-cad si necesitas el flujo completo.",
       "handler": "onGenerarRequest",
       "parameters": {
         "type": "object",

@@ -3,6 +3,7 @@
   "name": "planos",
   "version": "0.1.0",
   "_v0_1_0_nota": "v0.1.0: entidades rect/circulo/linea/arco/texto + cotas automáticas (dimensiones dibujadas, para visualizar medidas) → DXF R12 (AutoCAD/LibreCAD/Fusion/CNC) y SVG (navegador). Guarda en data/planos/<nombre>.<ext> y devuelve {ok, formato, archivo, url?, contenido}.",
+  "description": "Generador de planos CAD: JSON de entidades con medidas → DXF R12 (AutoCAD/LibreCAD/Fusion/CNC) + SVG para visualizar, con cotas automáticas. Reflejo puro.",
   "language": "es",
   "main": "index.js",
   "publishes": [

@@ -184,9 +184,115 @@ class ProductoManagerReflejo extends ModuloHibridoReflejo {
   async _get(input) {
     if (!input.project_id || !input.catalogo_id) return this._invalid('catalogo_id');
     const raw = await this._read(input.project_id, catPath(input.catalogo_id));
-    if (raw && raw.status === 404) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'catálogo no existe', { entity_type: 'catalogo', id: input.catalogo_id });
-    if (!raw || raw.status >= 400) return raw || this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'fs no responde');
-    try { return { status: 200, data: JSON.parse(raw.content) }; } catch (_) { return this._errorResponse(502, 'UPSTREAM_INVALID_RESPONSE', 'catálogo ilegible'); }
+    if (raw && raw.status === 200) {
+      try { return { status: 200, data: JSON.parse(raw.content) }; } catch (_) { return this._errorResponse(502, 'UPSTREAM_INVALID_RESPONSE', 'catálogo ilegible'); }
+    }
+    if (!raw || raw.status >= 400 && raw.status !== 404) return raw || this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'fs no responde');
+
+    // FUENTE DUAL (el puente pizzepos → prisma): el catálogo prisma no existe en
+    // este proyecto → proyectar desde la carta REAL (carta-manager, pizzepos).
+    // pizzepos sigue siendo la fuente única; aquí se LEE, no se copia.
+    if (raw && raw.status === 404) {
+      const proyectado = await this._proyectarDesdeCarta(input);
+      if (proyectado) return { status: 200, data: proyectado };
+    }
+    return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'catálogo no existe', { entity_type: 'catalogo', id: input.catalogo_id });
+  }
+
+  // ── PUENTE: carta pizzepos (shape real) → catálogo ProductoUniversal ──
+  // Lee carta.get.request (carta-manager, el custodio real) y lo proyecta al
+  // molde universal SIN duplicar datos: la carta sigue viviendo en su store,
+  // este catálogo es una VISTA proyectada (como el proyector del POS).
+  // Sin carta en el proyecto → null (el caller devuelve 404 honesto).
+  async _proyectarDesdeCarta(input) {
+    const esGeneral = (input.catalogo_id === 'catalogo_general' || input.catalogo_id === 'general');
+    try {
+      let carta_id = esGeneral ? null : input.catalogo_id;
+      // Sin id explícito → resolver la carta ACTIVA del proyecto (lista → get).
+      if (!carta_id) {
+        const l = await this._rpc('carta.list.request', { project_id: input.project_id });
+        if (!l || l.status !== 200) return null;
+        const activa = this._cartaActivaDeLista(l.data);
+        if (!activa || !activa.id) return null;
+        carta_id = activa.id;
+      }
+      const r = await this._rpc('carta.get.request', { project_id: input.project_id, carta_id });
+      if (!r || r.status !== 200 || !r.data || !r.data.productos) return null;
+      return this._cartaACatalogo(r.data, input.project_id);
+    } catch (_) { return null; }
+  }
+
+  _cartaActivaDeLista(lista) {
+    if (!Array.isArray(lista)) return null;
+    const activa = lista.find(c => c.estado === 'en_servicio' || c.activa === true);
+    return activa || lista[0] || null;
+  }
+
+  // Transformación determinista 1:1 — carta (shape pizzepos) → ProductoUniversal.
+  // Lo que la carta ya declara se mapea fiel; lo que no (coste, stock) queda como
+  // pregunta_abierta (no se inventa). Arquetipo por la FORMA: comestible.
+  _cartaACatalogo(carta, project_id) {
+    const meta = carta.meta || {};
+    const cats = carta.categorias || [];
+    const prods = carta.productos || [];
+    const productos = prods.map(p => this._cartaAProducto(p));
+    return {
+      meta: {
+        id: meta.id || 'catalogo_general',
+        nombre: meta.nombre || 'Catálogo',
+        estado: meta.estado || 'en_servicio',
+        created_at: meta.created_at, updated_at: meta.updated_at,
+        version: meta.version || 1,
+        fuente: 'carta-pizzepos',        // marca la procedencia: es una VISTA, no un store prisma
+        project_id
+      },
+      categorias: cats.map(c => ({ id: c.id, nombre: c.nombre, emoji: c.emoji, descripcion: c.descripcion, orden: c.orden })),
+      productos
+    };
+  }
+
+  _cartaAProducto(p) {
+    const ingredientes = (p.ingredientes || []).map(i => ({
+      id: i.id, nombre: i.nombre, familia: i.familia, emoji: i.emoji, precio_extra: i.precio_extra
+    }));
+    const opciones = (p.ingredientes || [])
+      .filter(i => (i.precio_extra || 0) > 0)
+      .map(i => ({
+        id: `ing-${i.id}`,
+        etiqueta: `+ ${i.nombre}`,
+        sub_forma: 'modificacion',
+        modo: 'ELEGIR_VARIOS',
+        valores: [{ id: i.id, etiqueta: i.nombre, delta_precio: Math.round((i.precio_extra || 0) * 100), disponible: true }]
+      }));
+    return {
+      id: p.id,
+      nombre: p.nombre,
+      identidad: {
+        que_es: p.descripcion || p.nombre,
+        trabajo_que_resuelve: p.descripcion || ''
+      },
+      arquetipo: 'comestible',
+      restricciones: (p.alergenos || []).map(a => ({
+        tipo: 'verdad_obligatoria', regla: `alergeno:${a}`, no_negociable: true
+      })),
+      contrato: {
+        atributos_saber: [
+          { nombre: 'precio', valor: p.precio, derivado: false, eje: 'precio' },
+          ...(p.orden ? [{ nombre: 'orden', valor: p.orden, derivado: false }] : [])
+        ],
+        opciones,
+        estados: p.disponible === false ? ['agotado'] : ['disponible']
+      },
+      ejes: { tiempo: 'ninguno', estado_de_partida: false, ciclo: 'de_ida' },
+      naturalezas: { stock: 'ingredientes', precio: 'por_unidad', origen: 'elaborado' },
+      no_objetivos: [],
+      preguntas_abiertas: [
+        { campo: 'coste', para: 'comerciante', porque: 'privado', respondida: false },
+        { campo: 'stock', para: 'comerciante', porque: 'privado', respondida: false }
+      ],
+      madurez: 'necesita_aclaracion_comerciante',
+      _fuente_carta: true
+    };
   }
 
   async _list(input) {

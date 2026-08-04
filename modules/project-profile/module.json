@@ -28,6 +28,10 @@
     {
       "event": "project-profile.actualizado",
       "description": "El perfil fue actualizado. Payload: { project_id, campos_actualizados[] }."
+    },
+    {
+      "event": "negocio.identificado",
+      "description": "FASE 0 completada: el negocio del proyecto quedó identificado. Payload: { project_id, que_es, que_vende, como_lo_elabora, tipo_derivado, preguntas_abiertas[] }. Lo escuchan los módulos que el tipo_derivado enciende (recetario, stock, venta…)."
     }
   ],
 
@@ -61,7 +65,18 @@
           "stakeholders": { "type": "array", "description": "[{ nombre, rol, expectativas }]" },
           "entregables": { "type": "array", "description": "[{ nombre, descripcion, criterios }]" },
           "criterios_exito": { "type": "array", "description": "[criterio...]" },
-          "valor": { "type": "string", "description": "Justificación del valor del proyecto." }
+          "valor": { "type": "string", "description": "Justificación del valor del proyecto." },
+          "identidad": {
+            "type": "object",
+            "description": "IDENTIDAD DEL NEGOCIO (FASE 0 — skill identidad-negocio): bloque declarado con preguntas abiertas anti-sesgo. El tipo se DERIVA del sujeto (emergente), nunca de una lista.",
+            "properties": {
+              "que_es": { "type": "string", "description": "Qué construye: 'un taller de lámparas de hierro'" },
+              "que_vende": { "type": "string", "description": "Qué ofrece: 'lámparas de mesa y de suelo'" },
+              "como_lo_elabora": { "type": "string", "description": "'compramos cable y piezas, cortamos y soldamos' o 'las compramos hechas'" },
+              "tipo_derivado": { "type": "string", "description": "Emergente del sujeto: 'elaborado+pieza', 'de_reventa', 'servicio', 'uso_temporal'…" },
+              "preguntas_abiertas": { "type": "array", "description": "[{ campo, para, porque, respondida }] — lo que el dueño no dijo" }
+            }
+          }
         },
         "required": ["project_id"]
       },

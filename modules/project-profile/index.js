@@ -22,7 +22,19 @@ const PERFIL_VACIO = Object.freeze({
   stakeholders: [],
   entregables: [],
   criterios_exito: [],
-  valor: ''
+  valor: '',
+  // IDENTIDAD DEL NEGOCIO (FASE 0 — skill identidad-negocio):
+  // el sujeto real del proyecto, declarado con preguntas abiertas anti-sesgo.
+  // El tipo se DERIVA del sujeto (emergente), nunca de una lista.
+  identidad: {
+    estado: 'sin_identidad',            // sin_identidad | con_identidad
+    que_es: '',                          // "un taller de lámparas de hierro"
+    que_vende: '',                       // "lámparas de mesa y de suelo"
+    como_lo_elabora: '',                 // "compramos cable y piezas, cortamos y soldamos" | "las compramos hechas"
+    tipo_derivado: null,                 // emergente del sujeto: elaborado+pieza → recetario+stock+venta
+    preguntas_abiertas: [],              // [{ campo, para, porque, respondida }] — lo que el dueño no dijo
+    declarado_el: null                   // timestamp de la declaración
+  }
 });
 
 class ProjectProfileReflejo extends ModuloHibridoReflejo {
@@ -89,10 +101,24 @@ class ProjectProfileReflejo extends ModuloHibridoReflejo {
     }
 
     const campos = [];
+    const identidadPrevia = perfil.identidad ? perfil.identidad.estado : 'sin_identidad';
     for (const campo of ['proposito', 'temporalidad', 'recursos', 'riesgos',
-                         'stakeholders', 'entregables', 'criterios_exito', 'valor']) {
+                         'stakeholders', 'entregables', 'criterios_exito', 'valor',
+                         'identidad']) {
       if (input[campo] !== undefined) {
-        perfil[campo] = input[campo];
+        // La identidad se declara como bloque completo (la skill la entrega armada).
+        if (campo === 'identidad') {
+          const id = { ...perfil.identidad, ...(input.identidad || {}) };
+          if (id.que_es && id.que_vende) {
+            id.estado = 'con_identidad';
+            if (!id.declarado_el) id.declarado_el = new Date().toISOString();
+          } else {
+            id.estado = 'sin_identidad';
+          }
+          perfil.identidad = id;
+        } else {
+          perfil[campo] = input[campo];
+        }
         campos.push(campo);
       }
     }
@@ -100,6 +126,20 @@ class ProjectProfileReflejo extends ModuloHibridoReflejo {
     this._publicarEvento('project-profile.actualizado', {
       project_id: pid, campos_actualizados: campos
     });
+    // Señal de identidad — SOLO en la TRANSICIÓN sin_identidad → con_identidad
+    // (edge-triggered, no level-triggered: un update posterior no re-emite).
+    // Lo escuchan los módulos que el tipo_derivado enciende (recetario, stock, venta…).
+    const identidadPosterior = perfil.identidad ? perfil.identidad.estado : 'sin_identidad';
+    if (campos.includes('identidad') && identidadPrevia !== 'con_identidad' && identidadPosterior === 'con_identidad') {
+      this._publicarEvento('negocio.identificado', {
+        project_id: pid,
+        que_es: perfil.identidad.que_es,
+        que_vende: perfil.identidad.que_vende,
+        como_lo_elabora: perfil.identidad.como_lo_elabora,
+        tipo_derivado: perfil.identidad.tipo_derivado,
+        preguntas_abiertas: perfil.identidad.preguntas_abiertas
+      });
+    }
 
     return { status: 200, data: { project_id: pid, perfil, campos_actualizados: campos } };
   }

@@ -61,6 +61,32 @@ REGLAS:
 `cómo_lo_elabora` es la clave que decide la naturaleza `origen`
 (elaborado → lleva recetario · de_reventa → no).
 
+### DÓNDE SE PERSISTE (el store oficial)
+
+La declaración se guarda en el **perfil del proyecto** — módulo `project-profile`
+(reflejo, persiste por proyecto en `state/project_profile.json`), campo `identidad`:
+
+```jsonc
+// project-profile.update.request → .response   (merge parcial)
+{
+  "project_id": "<id>",
+  "identidad": {
+    "que_es": "un taller de lámparas de hierro",
+    "que_vende": "lámparas de mesa y de suelo",
+    "como_lo_elabora": "compramos cable y piezas, cortamos y soldamos",
+    "tipo_derivado": "elaborado+pieza",      // emergente del sujeto
+    "preguntas_abiertas": []
+  }
+}
+```
+
+El reflejo hace el resto: `que_es + que_vende` presentes → `estado: con_identidad`
++ sello `declarado_el` + **emite `negocio.identificado`** (la señal que enciende
+los módulos del tipo derivado). Sin ellos → `estado: sin_identidad` (honesto).
+
+**Lectura**: `project-profile.get.request` → `{ perfil.identidad }` — el estado
+de la identidad vive SIEMPRE aquí (fuente única).
+
 ---
 
 ## 2 · EL CAMINO DE DESCUBRIMIENTO — las preguntas que abren el propósito

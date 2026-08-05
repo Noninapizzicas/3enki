@@ -42,9 +42,13 @@ const MAPA_PROCESO = {
   'negocio.planificado': {
     skill: 'construir-modulos',
     mensaje: 'El plan de construcción está listo (esquemas/plan-construccion.md). Siguiente fase (FASE 4): CONSTRUIR — ejecuta el plan etapa a etapa, UNA hoja a la vez: lee el contrato de cada hoja en esquema.md, genera module.json + index.js según su FORMA (REFLEJO · CUSTODIO · CONVERSOR · PUENTE) y llámalo con productor.producir. Verifica cada uno antes de seguir. Al terminar: proceso-negocio.completar_fase { fase: "construido" }.'
+  },
+  'negocio.construido': {
+    skill: 'escribir-skills',
+    mensaje: 'Los módulos del negocio están construidos. Siguiente fase (FASE 5): escribir la SKILL FULL de cada módulo en la cantera — lee modules/<slug>/module.json + index.js de cada uno y escribe modules/cosecha/cantera/enki/<slug>/SKILL.md con TODA la lógica real embebida (ops, eventos, datos, errores — SIN RESTAR NADA). Una skill a la vez, verificada contra el módulo. Al terminar: proceso-negocio.completar_fase { fase: "skills" }.'
   }
   // Fases siguientes (cuando existan y emitan su evento):
-  // 'negocio.construido':   { skill: 'verificar-vivo', mensaje: '...' }
+  // 'negocio.skills':   { skill: 'verificar-vivo', mensaje: '...' }
 };
 
 class ProcesoNegocioReflejo extends ModuloHibridoReflejo {

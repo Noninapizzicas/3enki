@@ -810,6 +810,78 @@ class ChatIoModule extends BaseModule {
       this.metrics?.increment('chat-io.errors', { kind: 'mqtt_publish' });
     }
   }
+
+  // ── PUENTE DEL AGENTE AL FRONTEND (la ventana con ruta) ────────────────────
+  // Los 4 eventos canónicos de agent-flow → topics MQTT del frontend:
+  //   conversation/{id}/agent_status   → working | idle (+error)  [el chat ya lo escucha]
+  //   conversation/{id}/agent_progress → la RUTA del agente en vivo
+  // El frontend (store agente-progreso.ts) alimenta la ventana con ruta
+  // /[project_id]/agentes/[request_id] y el panel embebible del chat.
+
+  _publishAgentTopic(conversation_id, topic, payload) {
+    if (!this.mqtt || !conversation_id) return;
+    try {
+      this.mqtt.publish(`conversation/${conversation_id}/${topic}`, JSON.stringify(payload), { qos: 0 });
+    } catch (err) {
+      this.logger.warn('chat-io.agent_bridge.publish.failed', { error: err.message, conversation_id, topic });
+      this.metrics?.increment('chat-io.errors', { kind: 'agent_bridge_publish' });
+    }
+  }
+
+  onAgentExecuteRequest(event) {
+    const d = event?.data || event || {};
+    if (!d.conversation_id) return;
+    this._publishAgentTopic(d.conversation_id, 'agent_status', {
+      status: 'working',
+      agent: d.agent_name || 'agente',
+      message: d.task ? `iniciando: ${String(d.task).slice(0, 120)}` : null,
+      timestamp: new Date().toISOString()
+    });
+    this.metrics?.increment?.('chat-io.agent_bridge.request', {});
+  }
+
+  onAgentExecuteProgress(event) {
+    const d = event?.data || event || {};
+    if (!d.conversation_id || !d.request_id) return;
+    this._publishAgentTopic(d.conversation_id, 'agent_progress', {
+      request_id: d.request_id,
+      agent_name: d.agent_name || 'agente',
+      step: d.step || 'thinking',
+      tool_invoked: d.tool_invoked || null,
+      message: d.message || null,
+      iteration: typeof d.iteration === 'number' ? d.iteration : null,
+      timestamp: new Date().toISOString()
+    });
+    // También el status ligero (el chat muestra "agente trabajando")
+    this._publishAgentTopic(d.conversation_id, 'agent_status', {
+      status: 'working',
+      agent: d.agent_name || 'agente',
+      message: d.message || null,
+      timestamp: new Date().toISOString()
+    });
+    this.metrics?.increment?.('chat-io.agent_bridge.progress', {});
+  }
+
+  onAgentExecuteDone(event) {
+    const d = event?.data || event || {};
+    if (!d.conversation_id) return;
+    this._publishAgentTopic(d.conversation_id, 'agent_status', {
+      status: 'idle',
+      timestamp: new Date().toISOString()
+    });
+    this.metrics?.increment?.('chat-io.agent_bridge.done', {});
+  }
+
+  onAgentExecuteFailed(event) {
+    const d = event?.data || event || {};
+    if (!d.conversation_id) return;
+    this._publishAgentTopic(d.conversation_id, 'agent_status', {
+      status: 'idle',
+      error: d.error || { code: 'UNKNOWN_ERROR', message: 'El agente falló' },
+      timestamp: new Date().toISOString()
+    });
+    this.metrics?.increment?.('chat-io.agent_bridge.failed', {});
+  }
 }
 
 module.exports = ChatIoModule;

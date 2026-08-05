@@ -221,6 +221,19 @@ export const panels: Record<string, PanelDef> = {
     zone: 'system-bar',
     order: 99,
     loader: () => import('$lib/modules/related-pages/RelatedPagesPanel.svelte')
+  },
+  // === VENTANA DEL AGENTE (panel embebible dentro del chat) ===
+  // El mismo componente que la ruta /[project_id]/agentes/[request_id] — aquí
+  // "esparcido dentro" mientras el agente trabaja. Se abre con openPanel('agente').
+  agente: {
+    id: 'agente',
+    title: 'Agente',
+    icon: '🗺️',
+    size: 'lg',
+    position: 'right',
+    zone: 'system-bar',
+    order: 98,
+    loader: () => import('$lib/modules/agente-progreso/AgenteProgreso.svelte')
   }
 };
 

@@ -26,14 +26,19 @@ Tomar las hojas atómicas de la disección y producir sus módulos, **una a una*
 
 ## 📋 El mandato mecánico — ejecútalo en este orden
 
-### Paso 1 · Lee la disección
+### Paso 1 · Lee el PLAN (la FASE 3 ya lo escribió) + la disección
 
 ```
+fs.read { path: "<proyecto>/esquemas/plan-construccion.md" }
+  → el plan por ETAPAS: qué hoja construir, en qué orden, con qué FORMA
+  → la hoja a construir es la PRIMERA de la ETAPA en curso sin producir
 fs.read { path: "<proyecto>/esquemas/pasada-N-diseccion.md" }
   → la lista de hojas atómicas con su FORMA (REFLEJO · CUSTODIO · CONVERSOR · PUENTE)
 fs.read { path: "<proyecto>/esquemas/esquema.md" }
   → el contrato completo de cada hoja (entrada → salida → garantía → no hace)
 ```
+
+**Si no existe `plan-construccion.md`** → la FASE 3 no se hizo: avísalo y detente (no inventes el orden tú).
 
 ### Paso 2 · Produce UNA hoja
 

@@ -34,10 +34,14 @@ const MAPA_PROCESO = {
   },
   'negocio.esquematizado': {
     // La FASE 2 (agente esquematizar-negocio) INCLUYE la disección punto a
-    // punto (pasada-N-diseccion.md con la FORMA de cada hoja) — por eso el
-    // siguiente paso es DIRECTAMENTE la construcción, no un diseccionador aparte.
+    // punto (pasada-N-diseccion.md con la FORMA de cada hoja). El siguiente
+    // paso es PLANIFICAR la construcción: quién ordena la obra por etapas.
+    skill: 'planificar-construccion',
+    mensaje: 'El esquema y la disección del negocio están listos. Siguiente fase (FASE 3): planificar la CONSTRUCCIÓN — lee esquemas/pasada-N-diseccion.md y esquema.md, ordena las hojas por DEPENDENCIAS, agrupa en ETAPAS con entregable verificable cada una, y escribe el plan en esquemas/plan-construccion.md. Al terminar: proceso-negocio.completar_fase { fase: "planificado" }.'
+  },
+  'negocio.planificado': {
     skill: 'construir-modulos',
-    mensaje: 'El esquema y la disección del negocio están listos. Siguiente fase (FASE 3): construir los MÓDULOS reales desde la disección — lee esquemas/pasada-N-diseccion.md y esquema.md, y por cada hoja con su FORMA (REFLEJO · CUSTODIO · CONVERSOR · PUENTE) genera module.json + index.js y llámalo con productor.producir. UNA hoja a la vez, verificada antes de seguir. Al terminar: proceso-negocio.completar_fase { fase: "construido" }.'
+    mensaje: 'El plan de construcción está listo (esquemas/plan-construccion.md). Siguiente fase (FASE 4): CONSTRUIR — ejecuta el plan etapa a etapa, UNA hoja a la vez: lee el contrato de cada hoja en esquema.md, genera module.json + index.js según su FORMA (REFLEJO · CUSTODIO · CONVERSOR · PUENTE) y llámalo con productor.producir. Verifica cada uno antes de seguir. Al terminar: proceso-negocio.completar_fase { fase: "construido" }.'
   }
   // Fases siguientes (cuando existan y emitan su evento):
   // 'negocio.construido':   { skill: 'verificar-vivo', mensaje: '...' }

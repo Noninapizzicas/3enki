@@ -18,6 +18,25 @@
 
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+
+// Ruta del árbol de módulos del SISTEMA (no del proyecto). El gate de la FASE 4
+// verifica aquí que el módulo construido EXISTE Y CARGA — no se fía del reporte
+// del agente (lección en vivo: el agente reportó 15 módulos que el deploy borró
+// o que nunca existieron de forma verificable).
+const MODULES_DIR = path.resolve(__dirname, '..');
+// El deploy usa rsync --delete desde el REPO → un módulo que no está en el repo
+// se borra en el siguiente deploy (lección en vivo: 15 módulos generados y
+// barridos). El gate verifica contra el REPO de desarrollo (si existe): si el
+// módulo no está commiteado, la fase NO se cierra — se avisa que falta el commit.
+const REPO_MODULES_DIR = (() => {
+  try {
+    const home = require('os').homedir();
+    const p = path.join(home, '3enki', 'modules');
+    return fs.existsSync(p) ? p : null;
+  } catch (_) { return null; }
+})();
 
 // ── EL MAPA DE PROCESO: evento de fase completada → skill siguiente ──
 // El espinazo del proceso. Cada entrada: el evento que marca el fin de una fase
@@ -98,7 +117,8 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         return { status: 400, data: { error: 'FASE_NO_MAPEADA', message: `No hay siguiente fase para '${eventoFase}'`, fase } };
       }
       // GATE DE ENTREGABLE: la fase solo se cierra si el trabajo REAL existe.
-      const entregable = await this._verificarEntregable(project_id, fase);
+      // El sistema no se fía de la palabra del LLM — verifica en disco.
+      const entregable = await this._verificarEntregable(project_id, fase, d.resumen || {});
       if (!entregable.ok) {
         return { status: 409, data: { error: 'FASE_INCOMPLETA', message: entregable.mensaje, fase, esperado: entregable.esperado } };
       }
@@ -116,7 +136,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   // Cada fase declara SU entregable verificable. Sin él → FASE_INCOMPLETA.
   // Lista el directorio del entregable (fs.list) y comprueba los archivos REALES
   // — el sistema no se fía de la palabra del LLM.
-  async _verificarEntregable(project_id, fase) {
+  async _verificarEntregable(project_id, fase, extra = {}) {
     const ESPERADOS = {
       'esquematizado': {
         dir: 'esquemas',
@@ -136,10 +156,27 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
           { nombre: '*diseccion*', cond: 'contiene', desc: 'la disección con la FORMA asignada' }
         ],
         mensaje: 'La disección no está: se espera <proyecto>/esquemas/ con esquema.md (FORMA asignada a cada pieza) y su pasada-N-diseccion.md.'
+      },
+      'construido': {
+        // FASE 4 — GATE REAL (lección en vivo: el agente reportó 15 módulos
+        // que no existían / el deploy los borró). Verifica en el filesystem
+        // del SISTEMA que modules/<slug>/ existe Y su index.js carga.
+        tipo: 'sistema',
+        mensaje: 'El módulo no existe o no carga: se espera modules/<slug>/index.js con require("../_shared/modulo-hibrido-reflejo") (API real). Verifica el módulo en disco — el reporte del agente no cuenta.'
+      },
+      'skills': {
+        // FASE 5 — la skill debe existir en la cantera (la escribió el agente).
+        tipo: 'sistema',
+        mensaje: 'La skill no existe: se espera modules/cosecha/cantera/enki/<slug>/SKILL.md.'
       }
     };
     const spec = ESPERADOS[fase];
     if (!spec) return { ok: true };   // fase sin gate declarado → se acepta
+    // Fases con gate de SISTEMA (módulos/skills): el slug viene del resumen
+    // del agente (d.resumen.modulos[0] o d.resumen.skills[0]).
+    if (spec.tipo === 'sistema') {
+      return this._verificarSistema(fase, extra);
+    }
     try {
       // Listar el directorio del entregable (fs.list) → nombres reales.
       const r = await this._rpc('fs.list.request', { project_id, path: spec.dir });
@@ -160,6 +197,55 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     } catch (_) {
       return { ok: false, esperado: spec.reglas.map(x => x.desc), mensaje: 'No se pudo verificar el entregable (fs no disponible).' };
     }
+  }
+
+  // ── GATE DE SISTEMA (FASE 4 construido / FASE 5 skills) ──
+  // Verifica en el filesystem REAL del sistema — no se fía del reporte del agente.
+  // 'construido': modules/<slug>/ existe + index.js CARGA (require con la API real).
+  // 'skills':      modules/cosecha/cantera/enki/<slug>/SKILL.md existe.
+  _verificarSistema(fase, extra = {}) {
+    const slug = (extra && extra.slug) || (extra && extra.modulos && extra.modulos[0]) || (extra && extra.skills && extra.skills[0]);
+    if (!slug) {
+      return { ok: false, esperado: ['<slug> del módulo construido'], mensaje: 'Falta el slug del módulo en el resumen de completar_fase.' };
+    }
+    if (fase === 'construido') {
+      const dir = path.join(MODULES_DIR, slug);
+      const indexJs = path.join(dir, 'index.js');
+      const moduleJson = path.join(dir, 'module.json');
+      if (!fs.existsSync(indexJs) || !fs.existsSync(moduleJson)) {
+        return { ok: false, esperado: [`modules/${slug}/index.js + module.json en disco`], mensaje: `El módulo ${slug} NO existe en modules/ (verificado en disco). El agente lo reportó pero no está — el deploy pudo borrarlo o nunca se produjo.`, encontrados: fs.existsSync(dir) ? fs.readdirSync(dir) : [] };
+      }
+      // Verificar que la API es la REAL (import _shared + _atender 4 args + name/version)
+      const src = fs.readFileSync(indexJs, 'utf8');
+      const apiOk = src.includes("require('../_shared/modulo-hibrido-reflejo')") && /_atender\([^)]*,\s*[^)]*,\s*[^)]*,\s*[^)]*\)/.test(src) && src.includes('this.name') && src.includes('this.version');
+      if (!apiOk) {
+        return { ok: false, esperado: ['API real: require ../_shared · _atender 4 args · this.name/version'], mensaje: `El módulo ${slug} existe pero NO carga (API interna rota: import, _atender o constructor incorrectos).` };
+      }
+      // El módulo debe estar EN EL REPO (commiteado/trackeado por git) — si no,
+      // el deploy (rsync --delete) lo borrará. No basta con que el archivo
+      // exista en el dir: se comprueba con git ls-files (¿está en el índice?).
+      if (REPO_MODULES_DIR) {
+        const repoDir = path.join(REPO_MODULES_DIR, slug);
+        let trackeado = false;
+        try {
+          const cp = require('child_process');
+          const out = cp.execFileSync('git', ['ls-files', '--', `modules/${slug}`], { cwd: path.join(REPO_MODULES_DIR, '..'), encoding: 'utf8' }).trim();
+          trackeado = out.length > 0;
+        } catch (_) { /* git no disponible → no bloquear, confiar en la existencia */ }
+        if (fs.existsSync(path.join(repoDir, 'index.js')) && !trackeado) {
+          return { ok: false, esperado: [`modules/${slug}/ COMMITEADO en el repo (~/3enki)`], mensaje: `El módulo ${slug} existe en disco pero NO está commiteado en ~/3enki (git ls-files no lo ve) → el siguiente deploy (rsync --delete) lo borrará. Commitea el módulo (rama → PR → merge) antes de cerrar la fase.` };
+        }
+      }
+      return { ok: true, verificados: [`modules/${slug}/ existe, API real, y en el repo`] };
+    }
+    if (fase === 'skills') {
+      const skillMd = path.join(MODULES_DIR, 'cosecha', 'cantera', 'enki', slug, 'SKILL.md');
+      if (!fs.existsSync(skillMd)) {
+        return { ok: false, esperado: [`modules/cosecha/cantera/enki/${slug}/SKILL.md en disco`], mensaje: `La skill de ${slug} NO existe en la cantera (verificado en disco).` };
+      }
+      return { ok: true, verificados: [`skill ${slug} en la cantera`] };
+    }
+    return { ok: true };
   }
 
   // ── NÚCLEO: evento → empujón de la skill siguiente ──

@@ -74,6 +74,13 @@ proceso-negocio.completar_fase {
 
 → el orquestador empuja `escribir-skills` (FASE 5) para escribir la skill de ESTE módulo.
 
+**IMPORTANTE — el módulo debe estar EN EL REPO (commiteado)**: el deploy usa
+`rsync --delete` desde ~/3enki → un módulo que solo está en prod se borra en
+el siguiente deploy (lección en vivo: 15 módulos generados y barridos). Si el
+gate responde 409 con "no está commiteado en ~/3enki", el módulo existe en
+prod pero NO sobrevivirá: avísalo claramente (el humano/Hermes hará el commit
+rama → PR → merge) y NO cierres la fase hasta que el gate pase.
+
 **Si NO quedan hojas sin construir en el plan** (todas tienen módulo):
 
 ```

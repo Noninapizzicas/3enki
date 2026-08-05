@@ -29,11 +29,14 @@ const MAPA_PROCESO = {
     mensaje: 'El proyecto acaba de nacer. Primera fase (FASE 0): dar identidad al negocio — ¿qué estás construyendo, qué vendes, cómo lo elaboras?'
   },
   'negocio.identificado': {
-    skill: 'esquematizador',
-    mensaje: 'El negocio ya tiene identidad declarada. Siguiente fase (FASE 1): esquematizar el negocio completo con el esquematizador — 5 huecos → pasadas → esquema maestro → FORMA de cada pieza.'
+    skill: 'esquematizar-negocio',
+    mensaje: 'El negocio ya tiene identidad declarada. Siguiente fase (FASE 1/2): esquematizar el negocio — lee la identidad (project-profile.get) y aplica el método del esquematizador para descubrir las PIEZAS que el negocio necesita. Al terminar: proceso-negocio.completar_fase { fase: "esquematizado" }.'
+  },
+  'negocio.esquematizado': {
+    skill: 'diseccionador',
+    mensaje: 'El esquema del negocio está listo. Siguiente fase (FASE 3): diseccionar las piezas del esquema y asignar a cada una su FORMA (reflejo · custodio · conversor · puente…). Al terminar: proceso-negocio.completar_fase { fase: "diseccionado" }.'
   }
   // Fases siguientes (cuando existan y emitan su evento):
-  // 'negocio.esquematizado':  { skill: 'diseccionador',     mensaje: '...' },
   // 'negocio.diseccionado':   { skill: 'productor-modulos', mensaje: '...' }
 };
 
@@ -53,6 +56,29 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   onProjectCreated(e)       { return this._encadenar(e, 'project.created'); }
   onNegocioIdentificado(e)  { return this._encadenar(e, 'negocio.identificado'); }
 
+  // El LLM llama esto al terminar una fase de skill (esquematizar-negocio,
+  // diseccionador…): cierra la fase y encadena la siguiente del mapa.
+  onCompletarFaseRequest(e) {
+    return this._atender(e, 'completar_fase', 'proceso-negocio.completar_fase.response', d => {
+      const project_id = d.project_id;
+      if (!project_id) return this._invalid('project_id');
+      const fase = d.fase;   // 'esquematizado' | 'diseccionado' | ...
+      const eventoFase = `negocio.${fase}`;
+      // La skill declara la fase completada → el mapa la encadena.
+      const paso = MAPA_PROCESO[eventoFase];
+      if (!paso) {
+        return { status: 400, data: { error: 'FASE_NO_MAPEADA', message: `No hay siguiente fase para '${eventoFase}'`, fase } };
+      }
+      // Marcar la fase completada (idempotente) y empujar la siguiente.
+      const clave = `${project_id}::${eventoFase}`;
+      if (!this._emitidos.has(clave)) {
+        this._emitidos.set(clave, Date.now());
+        this._empujar(project_id, eventoFase, paso);
+      }
+      return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: paso.skill } };
+    });
+  }
+
   // ── NÚCLEO: evento → empujón de la skill siguiente ──
   _encadenar(event, eventoNombre) {
     const d = (event && event.data) || event || {};
@@ -67,6 +93,11 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     if (this._emitidos.has(clave)) return;
     this._emitidos.set(clave, Date.now());
 
+    this._empujar(project_id, eventoNombre, paso);
+  }
+
+  // Publica el empujón (pendientes + conserje.empujon → el nervio lo surfacea).
+  _empujar(project_id, eventoNombre, paso) {
     const empujon = {
       tipo: 'proceso',
       recurso: paso.skill,
@@ -96,6 +127,24 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     if (!project_id) return this._invalid('project_id');
     const pendiente = this.pendientes.get(project_id) || null;
     return { status: 200, data: { project_id, pendiente, emitidas: [...this._emitidos.keys()].filter(k => k.startsWith(project_id + '::')) } };
+  }
+
+  // ── Tools (para el LLM del chat) ──
+  toolCompletarFase(params) {
+    const project_id = params.project_id;
+    if (!project_id) return { status: 400, data: { error: 'INVALID_INPUT', message: 'project_id requerido' } };
+    const fase = params.fase;
+    const eventoFase = `negocio.${fase}`;
+    const paso = MAPA_PROCESO[eventoFase];
+    if (!paso) {
+      return { status: 400, data: { error: 'FASE_NO_MAPEADA', message: `No hay siguiente fase para '${eventoFase}'`, fase } };
+    }
+    const clave = `${project_id}::${eventoFase}`;
+    if (!this._emitidos.has(clave)) {
+      this._emitidos.set(clave, Date.now());
+      this._empujar(project_id, eventoFase, paso);
+    }
+    return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: paso.skill, resumen: params.resumen || null } };
   }
 }
 

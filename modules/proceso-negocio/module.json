@@ -2,15 +2,35 @@
   "_doc": "Manifest de proceso-negocio — el ORQUESTADOR de fases de un proyecto: encadena las skills del proceso por eventos. project.created → empuja la FASE 0 (identidad-negocio) · negocio.identificado → empuja la FASE 1 (esquematizador) · y así sucesivamente. Usa el mecanismo REAL de Enki: empujón del conserje (pendientes + conserje.empujon) → el nervio lo surfacea en el chat → el LLM ejecuta la skill sugerida. Cero cambios en el nervio, cero en las skills: solo el mapa de proceso.",
   "name": "proceso-negocio",
   "version": "0.1.0",
-  "_v0_1_0_nota": "v0.1.0: MAPA_PROCESO event→skill. Escucha project.created (proyecto nace → empuja identidad-negocio) y negocio.identificado (identidad declarada → empuja esquematizador). El empujón: { tipo:'proceso', recurso:<skill>, mensaje, accion_sugerida:'cosecha.obtener:<skill>' } → pendientes + conserje.empujon (el nervio lo surfacea una vez). Idempotente por proyecto+fase.",
+  "_v0_1_0_nota": "v0.1.0: MAPA_PROCESO event→skill. Escucha project.created (proyecto nace → empuja identidad-negocio) y negocio.identificado (identidad declarada → empuja esquematizar-negocio). Tool proceso-negocio.completar_fase: el LLM cierra una fase de skill y el orquestador encadena la siguiente. El empujón: { tipo:'proceso', recurso:<skill>, mensaje, accion_sugerida:'cosecha.obtener:<skill>' } → pendientes + conserje.empujon (el nervio lo surfacea una vez). Idempotente por proyecto+fase.",
+  "description": "Orquestador del proceso de un proyecto: encadena las skills de fase por eventos (project.created → identidad-negocio · negocio.identificado → esquematizar-negocio · negocio.esquematizado → diseccionador). Tool completar_fase para que el LLM cierre fases. Empuja via conserje.empujon.",
   "language": "es",
   "main": "index.js",
   "publishes": [
-    { "event": "conserje.empujon", "description": "Reutiliza el canal del conserje: { project_id, tipo:'proceso', recurso:<skill>, mensaje, accion_sugerida:'cosecha.obtener:<skill>' } — el nervio lo surfacea en el chat y el LLM ejecuta la skill." }
+    { "event": "conserje.empujon", "description": "Reutiliza el canal del conserje: { project_id, tipo:'proceso', recurso:<skill>, mensaje, accion_sugerida:'cosecha.obtener:<skill>', fase } — el nervio lo surfacea en el chat y el LLM ejecuta la skill." }
+  ],
+  "tools": [
+    {
+      "name": "proceso-negocio.completar_fase",
+      "description": "Cierra una fase de skill del proceso de proyecto y encadena la siguiente. La llaman las skills de fase (esquematizar-negocio, diseccionador…) al terminar su trabajo. Devuelve la skill siguiente.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." },
+          "fase": { "type": "string", "minLength": 1, "description": "Fase completada: 'esquematizado' → empuja diseccionador · 'diseccionado' → empuja productor-modulos." },
+          "resumen": { "type": "object", "description": "Resumen opcional de lo completado: { piezas, formas, archivo_esquema, ... }" }
+        },
+        "required": ["project_id", "fase"]
+      },
+      "handler": "toolCompletarFase",
+      "errores_conocidos": ["INVALID_INPUT", "FASE_NO_MAPEADA"]
+    }
   ],
   "subscribes": [
     { "event": "project.created", "handler": "onProjectCreated", "description": "Un proyecto nace → FASE 0: empuja la skill identidad-negocio (dar identidad al negocio)." },
-    { "event": "negocio.identificado", "handler": "onNegocioIdentificado", "description": "Identidad declarada (project-profile la emite al pasar a con_identidad) → FASE 1: empuja la skill esquematizador." }
+    { "event": "negocio.identificado", "handler": "onNegocioIdentificado", "description": "Identidad declarada (project-profile la emite al pasar a con_identidad) → FASE 2: empuja la skill esquematizar-negocio." },
+    { "event": "proceso-negocio.completar_fase.request", "handler": "onCompletarFaseRequest", "description": "El LLM cierra una fase de skill (fase: 'esquematizado', 'diseccionado'…) → el orquestador registra negocio.<fase> y empuja la siguiente del mapa." }
   ],
   "dependencies": [],
   "config": {}

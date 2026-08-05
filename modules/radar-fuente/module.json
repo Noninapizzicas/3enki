@@ -1,0 +1,18 @@
+{
+  "_doc": "radar-fuente — REFLEJO JS: la célula del radar (hoja 1.1 FUENTE de la disección del observatorio). Canal + métrica + frecuencia + umbral propio, 6 fuentes iniciales (bandcamp, soundcloud, sellos_micro, demos, playlists_nicho, comunidades). Contrato: entrada = su configuración · salida = emisiones regulares de dato crudo · garantía = respeta frecuencia y métrica declaradas · no hace = no analiza, no decide, no es el mecanismo técnico.",
+  "name": "radar-fuente",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: primera hoja construida desde la disección del observatorio (FASE 3 — construir-modulos). REFLEJO puro: listar fuentes semilla + configurar (merge parcial, garantía de métrica/frecuencia).",
+  "description": "La célula del radar: define las 6 fuentes trinchera (bandcamp, soundcloud, sellos_micro, demos, playlists_nicho, comunidades) con su canal, métrica, frecuencia y umbral propio. REFLEJO: listar fuentes y configurarlas (merge parcial con garantía de métrica/frecuencia).",
+  "language": "es",
+  "main": "index.js",
+  "subscribes": [
+    { "event": "radar-fuente.listar.request", "handler": "onListarRequest", "description": "Devuelve las fuentes del radar con su configuración." },
+    { "event": "radar-fuente.configurar.request", "handler": "onConfigurarRequest", "description": "Ajusta canal/métrica/frecuencia/umbral de una fuente (merge parcial)." }
+  ],
+  "publishes": [
+    { "event": "radar-fuente.configurada", "description": "Una fuente fue configurada. Payload: { id, config }." }
+  ],
+  "tools": [],
+  "dependencies": []
+}

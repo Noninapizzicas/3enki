@@ -33,11 +33,14 @@ const MAPA_PROCESO = {
     mensaje: 'El negocio ya tiene identidad declarada. Siguiente fase (FASE 1/2): esquematizar el negocio — lee la identidad (project-profile.get) y aplica el método del esquematizador para descubrir las PIEZAS que el negocio necesita. Al terminar: proceso-negocio.completar_fase { fase: "esquematizado" }.'
   },
   'negocio.esquematizado': {
-    skill: 'diseccionador',
-    mensaje: 'El esquema del negocio está listo. Siguiente fase (FASE 3): diseccionar las piezas del esquema y asignar a cada una su FORMA (reflejo · custodio · conversor · puente…). Al terminar: proceso-negocio.completar_fase { fase: "diseccionado" }.'
+    // La FASE 2 (agente esquematizar-negocio) INCLUYE la disección punto a
+    // punto (pasada-N-diseccion.md con la FORMA de cada hoja) — por eso el
+    // siguiente paso es DIRECTAMENTE la construcción, no un diseccionador aparte.
+    skill: 'construir-modulos',
+    mensaje: 'El esquema y la disección del negocio están listos. Siguiente fase (FASE 3): construir los MÓDULOS reales desde la disección — lee esquemas/pasada-N-diseccion.md y esquema.md, y por cada hoja con su FORMA (REFLEJO · CUSTODIO · CONVERSOR · PUENTE) genera module.json + index.js y llámalo con productor.producir. UNA hoja a la vez, verificada antes de seguir. Al terminar: proceso-negocio.completar_fase { fase: "construido" }.'
   }
   // Fases siguientes (cuando existan y emitan su evento):
-  // 'negocio.diseccionado':   { skill: 'productor-modulos', mensaje: '...' }
+  // 'negocio.construido':   { skill: 'verificar-vivo', mensaje: '...' }
 };
 
 class ProcesoNegocioReflejo extends ModuloHibridoReflejo {

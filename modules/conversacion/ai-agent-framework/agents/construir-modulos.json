@@ -1,0 +1,28 @@
+{
+  "name": "construir-modulos",
+  "description": "Agente de la FASE DE CONSTRUCCIÓN del proceso de un proyecto: lee la disección del negocio (esquemas/pasada-N-diseccion.md — las hojas atómicas con su FORMA: REFLEJO · CUSTODIO · CONVERSOR · PUENTE) y las convierte en MÓDULOS REALES de Enki. Por cada hoja: lee su contrato (entrada → salida → garantía → no hace) en esquema.md, genera module.json + index.js según la FORMA (REFLEJO → ModuloHibridoReflejo con op + evento · CUSTODIO → persiste por proyecto · CONVERSOR → transforma puro · PUENTE → declara el puerto), y llama productor.producir para escribirlo en modules/. Trabaja UNA hoja a la vez, verifica que el módulo carga (validateManifest), y al terminar la tanda cierra la fase con proceso-negocio.completar_fase { fase: 'construido' }.",
+  "enabled": true,
+  "scope": [
+    "*"
+  ],
+  "provider": "auto",
+  "model": null,
+  "timeout_ms": 1800000,
+  "max_tokens": 32000,
+  "prompt_file": "prompts/construir-modulos.md",
+  "metadata": {
+    "domain": "proceso",
+    "fase": 3,
+    "tags": [
+      "proceso",
+      "fase3",
+      "construccion",
+      "productor",
+      "modulos",
+      "diseccion"
+    ],
+    "display_name": "Constructor de Módulos",
+    "emoji": "🏗️",
+    "vibe": "La disección dicta, el productor escribe: cada hoja con su FORMA se convierte en un módulo real, uno a la vez, verificado antes de seguir."
+  }
+}

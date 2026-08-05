@@ -7,11 +7,13 @@ description: >-
   método del esquematizador. MANDATO MECÁNICO: pasa el prisma de 5 huecos PUNTO
   A PUNTO, RONDA A RONDA hasta quedarse seco, escribiendo cada pasada en
   <proyecto>/esquemas/pasada-N-<punto>.md y el árbol maestro en
-  <proyecto>/esquemas/esquema.md (el entregable que el gate verifica). El
-  propósito es descubrir las PIEZAS que el negocio necesita (cada una su
-  parcela). Entrada directa: el sujeto se lee de la identidad, NO se pregunta,
-  NO se ofrecen opciones — se EJECUTA. Al terminar: proceso-negocio.completar_fase
-  { fase: 'esquematizado' } → empuja la FASE 3.
+  <proyecto>/esquemas/esquema.md (el entregable que el gate verifica). Después,
+  DISECCIÓN PUNTO A PUNTO: cada hoja atómica, una a una, su FORMA (reflejo ·
+  custodio · conversor · puente) en pasada-N-diseccion.md — sin dejar ninguna
+  sin forma. El propósito es descubrir las PIEZAS que el negocio necesita (cada
+  una su parcela). Entrada directa: el sujeto se lee de la identidad, NO se
+  pregunta, NO se ofrecen opciones — se EJECUTA. Al terminar:
+  proceso-negocio.completar_fase { fase: 'esquematizado' } → empuja la FASE 3.
 fuente: enki
 dominio: metodo
 lente_dominio: prisma
@@ -109,12 +111,18 @@ proceso no avanza.
 4. Repite: cada punto que sale de cada pasada, al prisma, en su propio archivo — **PUNTO A PUNTO, RONDA A RONDA**.
 5. **PARA cuando un punto es**: atómica (va a disección) · abierta (no se expande) · repetida (se referencia). Eso es "quedarse seco".
 6. Solo cuando NINGÚN punto se parta más (seco) → ensambla TODO en `esquemas/esquema.md` (el árbol maestro con todo embebido, no punteros).
-7. Disecciona cada hoja atómica → su FORMA → anótala en `esquema.md` → `pasada-N-diseccion.md`.
+7. **DISECCIÓN PUNTO A PUNTO** (mecánica, en el mismo espíritu):
+   - Toma la lista de hojas ATÓMICAS que salieron del prisma (las que el prisma ya no parte).
+   - **Cada hoja, una a una, sin saltarte ninguna**: pásala por el diseccionador y sus preguntas → fija su FORMA (reflejo · custodio · conversor · puente · micro-agente).
+   - Escribe cada FORMA en el esquema (`esquema.md`: cada pieza con su forma) y la lista completa en `pasada-N-diseccion.md`.
+   - **NO paras hasta que TODAS las hojas atómicas tengan su FORMA** — si quedan hojas sin forma, la disección no está terminada.
+   - **NO agrupas de golpe**: es una por una, punto a punto, como el prisma.
 8. Cierra la fase: `proceso-negocio.completar_fase { fase: 'esquematizado' }`.
 
 **NO pares a mitad**: si un punto todavía se parte, sigues. **NO resumas**: cada
 pasada es un archivo real en disco. **NO te saltes el esquema.md**: es el
-entregable que el gate verifica.
+entregable que el gate verifica. **NO dejes hojas atómicas sin FORMA**: la
+disección punto a punto es parte del entregable.
 
 ## 4 · SALIDA — señal de fase completada
 

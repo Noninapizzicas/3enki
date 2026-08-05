@@ -87,31 +87,51 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   }
 
   // Cada fase declara SU entregable verificable. Sin él → FASE_INCOMPLETA.
+  // Lista el directorio del entregable (fs.list) y comprueba los archivos REALES
+  // — el sistema no se fía de la palabra del LLM.
   async _verificarEntregable(project_id, fase) {
     const ESPERADOS = {
       'esquematizado': {
-        archivos: ['esquemas/esquema.md', 'esquemas/pasada-1-', 'esquemas/pasada-2-'],
-        mensaje: 'El esquema del negocio no está: se espera <proyecto>/esquemas/esquema.md con sus pasadas (prisma hasta seca). Haz el trabajo primero.'
+        dir: 'esquemas',
+        // reglas: nombre de archivo → condición (todas deben cumplirse)
+        reglas: [
+          { nombre: 'esquema.md', cond: 'existe', desc: 'el árbol maestro' },
+          { nombre: 'pasada-1-*', cond: 'prefijo', desc: 'ronda 1 del prisma' },
+          { nombre: 'pasada-2-*', cond: 'prefijo', desc: 'ronda 2 (prisma recursivo)' },
+          { nombre: '*diseccion*', cond: 'contiene', desc: 'la disección punto a punto (FORMA de cada hoja)' }
+        ],
+        mensaje: 'El esquema del negocio no está completo: se espera <proyecto>/esquemas/ con esquema.md (árbol maestro), las pasadas del prisma (hasta seca) Y la disección (cada hoja atómica con su FORMA). Haz el trabajo primero.'
       },
       'diseccionado': {
-        archivos: ['esquemas/esquema.md'],
-        mensaje: 'La disección no está: se espera <proyecto>/esquemas/esquema.md con la FORMA asignada a cada pieza.'
+        dir: 'esquemas',
+        reglas: [
+          { nombre: 'esquema.md', cond: 'existe', desc: 'el árbol maestro' },
+          { nombre: '*diseccion*', cond: 'contiene', desc: 'la disección con la FORMA asignada' }
+        ],
+        mensaje: 'La disección no está: se espera <proyecto>/esquemas/ con esquema.md (FORMA asignada a cada pieza) y su pasada-N-diseccion.md.'
       }
     };
     const spec = ESPERADOS[fase];
     if (!spec) return { ok: true };   // fase sin gate declarado → se acepta
     try {
-      // Leer el storage del proyecto vía el reflejo fs (como project-profile).
-      const lecturas = await Promise.all(spec.archivos.map(async a => {
-        const r = await this._rpc('fs.read.request', { project_id, path: a });
-        return { archivo: a, ok: r && r.status === 200 };
-      }));
-      const ok = lecturas.every(l => l.ok);
+      // Listar el directorio del entregable (fs.list) → nombres reales.
+      const r = await this._rpc('fs.list.request', { project_id, path: spec.dir });
+      const entries = (r && (r.files || r.items)) || [];
+      const nombres = entries.map(x => (typeof x === 'string' ? x : x && x.name)).filter(Boolean);
+      // Comprobar cada regla contra los nombres reales.
+      const resultados = spec.reglas.map(reg => {
+        let ok = false;
+        if (reg.cond === 'existe') ok = nombres.includes(reg.nombre);
+        if (reg.cond === 'prefijo') ok = nombres.some(n => n.startsWith(reg.nombre.replace('*', '')));
+        if (reg.cond === 'contiene') ok = nombres.some(n => n.includes(reg.nombre.replace(/\*/g, '')));
+        return { ...reg, ok, encontrado: ok ? nombres.find(n => reg.cond === 'existe' ? n === reg.nombre : reg.cond === 'prefijo' ? n.startsWith(reg.nombre.replace('*', '')) : n.includes(reg.nombre.replace(/\*/g, ''))) : null };
+      });
+      const ok = resultados.every(x => x.ok);
       return ok
-        ? { ok: true, verificados: spec.archivos }
-        : { ok: false, esperado: spec.archivos, mensaje: spec.mensaje, encontrados: lecturas.filter(l => l.ok).map(l => l.archivo) };
+        ? { ok: true, verificados: resultados.map(x => x.desc) }
+        : { ok: false, esperado: resultados.filter(x => !x.ok).map(x => x.desc), mensaje: spec.mensaje, encontrados: nombres };
     } catch (_) {
-      return { ok: false, esperado: spec.archivos, mensaje: 'No se pudo verificar el entregable (fs no disponible).' };
+      return { ok: false, esperado: spec.reglas.map(x => x.desc), mensaje: 'No se pudo verificar el entregable (fs no disponible).' };
     }
   }
 

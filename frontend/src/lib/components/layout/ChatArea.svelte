@@ -16,6 +16,7 @@
   import { connected } from '$lib/ui-core';
   import { afterUpdate } from 'svelte';
   import { fade } from 'svelte/transition';
+  import AgenteMarco from '$lib/modules/agente-progreso/AgenteMarco.svelte';
 
   // Show typing dots only when streaming AND no content has arrived yet
   $: showTypingDots = $isStreaming && !($lastMessage?.role === 'assistant' && $lastMessage?.streaming) && !$toolStatus;
@@ -65,6 +66,10 @@
       {#each $messages as message (message.id)}
         <Message {message} on:toggleContext={handleToggleContext} />
       {/each}
+
+      <!-- MARCO DEL AGENTE: desplegable en el chat, se actualiza con lo que
+           devuelve el agente (progress → MQTT → store) — colapsable -->
+      <AgenteMarco />
 
       <!-- Tool execution indicator -->
       {#if $toolStatus}

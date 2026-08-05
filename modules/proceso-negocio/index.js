@@ -58,8 +58,10 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
 
   // El LLM llama esto al terminar una fase de skill (esquematizar-negocio,
   // diseccionador…): cierra la fase y encadena la siguiente del mapa.
-  onCompletarFaseRequest(e) {
-    return this._atender(e, 'completar_fase', 'proceso-negocio.completar_fase.response', d => {
+  // GATE: verifica el entregable real de la fase antes de aceptar — el sistema
+  // no se fía de la palabra del LLM (lección: el LLM hace lo que quiere).
+  async onCompletarFaseRequest(e) {
+    return this._atender(e, 'completar_fase', 'proceso-negocio.completar_fase.response', async d => {
       const project_id = d.project_id;
       if (!project_id) return this._invalid('project_id');
       const fase = d.fase;   // 'esquematizado' | 'diseccionado' | ...
@@ -69,14 +71,68 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       if (!paso) {
         return { status: 400, data: { error: 'FASE_NO_MAPEADA', message: `No hay siguiente fase para '${eventoFase}'`, fase } };
       }
+      // GATE DE ENTREGABLE: la fase solo se cierra si el trabajo REAL existe.
+      const entregable = await this._verificarEntregable(project_id, fase);
+      if (!entregable.ok) {
+        return { status: 409, data: { error: 'FASE_INCOMPLETA', message: entregable.mensaje, fase, esperado: entregable.esperado } };
+      }
       // Marcar la fase completada (idempotente) y empujar la siguiente.
       const clave = `${project_id}::${eventoFase}`;
       if (!this._emitidos.has(clave)) {
         this._emitidos.set(clave, Date.now());
         this._empujar(project_id, eventoFase, paso);
       }
-      return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: paso.skill } };
+      return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: paso.skill, entregable } };
     });
+  }
+
+  // Cada fase declara SU entregable verificable. Sin él → FASE_INCOMPLETA.
+  // Lista el directorio del entregable (fs.list) y comprueba los archivos REALES
+  // — el sistema no se fía de la palabra del LLM.
+  async _verificarEntregable(project_id, fase) {
+    const ESPERADOS = {
+      'esquematizado': {
+        dir: 'esquemas',
+        // reglas: nombre de archivo → condición (todas deben cumplirse)
+        reglas: [
+          { nombre: 'esquema.md', cond: 'existe', desc: 'el árbol maestro' },
+          { nombre: 'pasada-1-*', cond: 'prefijo', desc: 'ronda 1 del prisma' },
+          { nombre: 'pasada-2-*', cond: 'prefijo', desc: 'ronda 2 (prisma recursivo)' },
+          { nombre: '*diseccion*', cond: 'contiene', desc: 'la disección punto a punto (FORMA de cada hoja)' }
+        ],
+        mensaje: 'El esquema del negocio no está completo: se espera <proyecto>/esquemas/ con esquema.md (árbol maestro), las pasadas del prisma (hasta seca) Y la disección (cada hoja atómica con su FORMA). Haz el trabajo primero.'
+      },
+      'diseccionado': {
+        dir: 'esquemas',
+        reglas: [
+          { nombre: 'esquema.md', cond: 'existe', desc: 'el árbol maestro' },
+          { nombre: '*diseccion*', cond: 'contiene', desc: 'la disección con la FORMA asignada' }
+        ],
+        mensaje: 'La disección no está: se espera <proyecto>/esquemas/ con esquema.md (FORMA asignada a cada pieza) y su pasada-N-diseccion.md.'
+      }
+    };
+    const spec = ESPERADOS[fase];
+    if (!spec) return { ok: true };   // fase sin gate declarado → se acepta
+    try {
+      // Listar el directorio del entregable (fs.list) → nombres reales.
+      const r = await this._rpc('fs.list.request', { project_id, path: spec.dir });
+      const entries = (r && (r.files || r.items)) || [];
+      const nombres = entries.map(x => (typeof x === 'string' ? x : x && x.name)).filter(Boolean);
+      // Comprobar cada regla contra los nombres reales.
+      const resultados = spec.reglas.map(reg => {
+        let ok = false;
+        if (reg.cond === 'existe') ok = nombres.includes(reg.nombre);
+        if (reg.cond === 'prefijo') ok = nombres.some(n => n.startsWith(reg.nombre.replace('*', '')));
+        if (reg.cond === 'contiene') ok = nombres.some(n => n.includes(reg.nombre.replace(/\*/g, '')));
+        return { ...reg, ok, encontrado: ok ? nombres.find(n => reg.cond === 'existe' ? n === reg.nombre : reg.cond === 'prefijo' ? n.startsWith(reg.nombre.replace('*', '')) : n.includes(reg.nombre.replace(/\*/g, ''))) : null };
+      });
+      const ok = resultados.every(x => x.ok);
+      return ok
+        ? { ok: true, verificados: resultados.map(x => x.desc) }
+        : { ok: false, esperado: resultados.filter(x => !x.ok).map(x => x.desc), mensaje: spec.mensaje, encontrados: nombres };
+    } catch (_) {
+      return { ok: false, esperado: spec.reglas.map(x => x.desc), mensaje: 'No se pudo verificar el entregable (fs no disponible).' };
+    }
   }
 
   // ── NÚCLEO: evento → empujón de la skill siguiente ──

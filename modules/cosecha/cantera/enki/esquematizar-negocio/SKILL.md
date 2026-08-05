@@ -4,11 +4,16 @@ description: >-
   FASE 2 del proceso de un proyecto (la arranca el orquestador proceso-negocio
   tras negocio.identificado): esquematiza el NEGOCIO ya declarado en la
   identidad (qué_es, qué_vende, cómo_lo_elabora de project-profile) con el
-  método del esquematizador — 5 huecos → pasadas → esquema maestro → FORMA de
-  cada pieza — para descubrir las PIEZAS que el negocio necesita (cada una su
-  parcela). El sujeto NO es amorfo: se lee de la identidad, no se pregunta
-  desde cero. Al terminar: señal de fase completada (proceso-negocio.completar_fase
-  → negocio.esquematizado) para que el orquestador empuje la FASE 3.
+  método del esquematizador. MANDATO MECÁNICO: pasa el prisma de 5 huecos PUNTO
+  A PUNTO, RONDA A RONDA hasta quedarse seco, escribiendo cada pasada en
+  <proyecto>/esquemas/pasada-N-<punto>.md y el árbol maestro en
+  <proyecto>/esquemas/esquema.md (el entregable que el gate verifica). Después,
+  DISECCIÓN PUNTO A PUNTO: cada hoja atómica, una a una, su FORMA (reflejo ·
+  custodio · conversor · puente) en pasada-N-diseccion.md — sin dejar ninguna
+  sin forma. El propósito es descubrir las PIEZAS que el negocio necesita (cada
+  una su parcela). Entrada directa: el sujeto se lee de la identidad, NO se
+  pregunta, NO se ofrecen opciones — se EJECUTA. Al terminar:
+  proceso-negocio.completar_fase { fase: 'esquematizado' } → empuja la FASE 3.
 fuente: enki
 dominio: metodo
 lente_dominio: prisma
@@ -28,6 +33,12 @@ tags: [fase2, negocio, esquema, identidad, prisma, diseccionador, proceso, agnos
 ---
 
 ## 1 · ENTRADA — lee el sujeto de la identidad (no preguntes)
+
+**REGLA DIRECTIVA (innegociable)**: cuando esta skill entra **encadenada por el
+orquestador** (empujón de `proceso-negocio`), el proceso YA decidió: toca
+esquematizar. **NO ofrezcas opciones** — nada de "¿la activo como lente o la
+aplico ya?", nada de caminos A/B/C, nada de pedir permiso. **EJECUTA.** La única
+pregunta legítima al dueño es si la identidad está incompleta (ver abajo).
 
 Antes de esquematizar, lee la identidad del negocio:
 
@@ -71,18 +82,47 @@ genérico): el esquema debe responder **"¿qué piezas necesita este negocio
 para hacer lo que declara?"** — cada pieza es una PARCELA (un futuro módulo
 con su lógica). No es un ejercicio abstracto: es el plano de construcción.
 
-## 3 · DÓNDE SE PERSISTE el esquema
+## 3 · DÓNDE SE PERSISTE — rutas EXACTAS (no negociable)
 
-El esquema del negocio vive en el proyecto (junto a la identidad):
+El esquema del negocio vive en el proyecto, en estas rutas CONCRETAS:
 
 ```
-<storage del proyecto>/esquemas/esquema.md        ← el árbol maestro
-<storage del proyecto>/esquemas/pasada-1-*.md     ← las rondas del prisma
-<storage del proyecto>/esquemas/pasada-N-diseccion.md  ← las formas
+<storage del proyecto>/esquemas/esquema.md              ← el árbol maestro (OBLIGATORIO)
+<storage del proyecto>/esquemas/pasada-1-<pieza>.md     ← ronda 1 del prisma (OBLIGATORIO)
+<storage del proyecto>/esquemas/pasada-2-<pieza>.md     ← ronda 2
+<storage del proyecto>/esquemas/pasada-N-<pieza>.md     ← …hasta seca
+<storage del proyecto>/esquemas/pasada-N-diseccion.md   ← las formas de cada hoja atómica
 ```
 
-**Regla**: si el directorio `esquemas/` no existe, créalo (fs.write). El esquema
-es la fuente de verdad de la fase siguiente (diseccionador → productor-modulos).
+**Rutas exactas** — usa estas, literalmente, con los nombres que salgan del
+prisma. Si el directorio `esquemas/` no existe, créalo (fs.write lo crea).
+
+**El archivo que la fase 2 debe generar SÍ o SÍ**: `esquemas/esquema.md` con
+sus pasadas. Sin él, el gate del orquestador devuelve `FASE_INCOMPLETA` y el
+proceso no avanza.
+
+## 3b · EL MANDATO — prisma punto a punto hasta quedarse seco
+
+**Procedimiento mecánico, en este orden, sin saltarte nada:**
+
+1. Toma el negocio (qué_es + qué_vende + cómo_lo_elabora de la identidad).
+2. Pásalo por el prisma de 5 huecos → escribe `pasada-1-<pieza>.md` con los 5 huecos y los sub-productos que salen.
+3. **Cada sub-producto que salió es un PUNTO nuevo**: pásalo por el prisma OTRA VEZ → escribe `pasada-2-<punto>.md`.
+4. Repite: cada punto que sale de cada pasada, al prisma, en su propio archivo — **PUNTO A PUNTO, RONDA A RONDA**.
+5. **PARA cuando un punto es**: atómica (va a disección) · abierta (no se expande) · repetida (se referencia). Eso es "quedarse seco".
+6. Solo cuando NINGÚN punto se parta más (seco) → ensambla TODO en `esquemas/esquema.md` (el árbol maestro con todo embebido, no punteros).
+7. **DISECCIÓN PUNTO A PUNTO** (mecánica, en el mismo espíritu):
+   - Toma la lista de hojas ATÓMICAS que salieron del prisma (las que el prisma ya no parte).
+   - **Cada hoja, una a una, sin saltarte ninguna**: pásala por el diseccionador y sus preguntas → fija su FORMA (reflejo · custodio · conversor · puente · micro-agente).
+   - Escribe cada FORMA en el esquema (`esquema.md`: cada pieza con su forma) y la lista completa en `pasada-N-diseccion.md`.
+   - **NO paras hasta que TODAS las hojas atómicas tengan su FORMA** — si quedan hojas sin forma, la disección no está terminada.
+   - **NO agrupas de golpe**: es una por una, punto a punto, como el prisma.
+8. Cierra la fase: `proceso-negocio.completar_fase { fase: 'esquematizado' }`.
+
+**NO pares a mitad**: si un punto todavía se parte, sigues. **NO resumas**: cada
+pasada es un archivo real en disco. **NO te saltes el esquema.md**: es el
+entregable que el gate verifica. **NO dejes hojas atómicas sin FORMA**: la
+disección punto a punto es parte del entregable.
 
 ## 4 · SALIDA — señal de fase completada
 
@@ -106,6 +146,8 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 
 ## 5 · Errores a evitar
 
+- **Ofrecer opciones A/B/C al entrar encadenada** — el proceso ya decidió: EJECUTA. (Visto en vivo: el LLM preguntó "¿la activo como lente o la aplico ya?" en vez de esquematizar.)
+- **Pedir permiso de configuración** ("¿activo la skill?") — el orquestador ya la activó; no es tu decisión.
 - **Preguntar el sujeto desde cero** — ya está declarado en la identidad; leerlo.
 - **Esquematizar el contenedor** (el proyecto técnico) — el sujeto es el NEGOCIO.
 - **Colar tecnologías** — agnosticismo: puertos abiertos, cero entorno (la ley del esquematizador).
@@ -116,7 +158,9 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 ## 6 · Verificación
 
 - Leíste la identidad (project-profile.get) y el sujeto es el negocio declarado.
-- CERO preguntas de sujeto al dueño (ya está respondido).
+- CERO preguntas de sujeto al dueño (ya está respondido) — y CERO opciones A/B/C ofrecidas.
+- **Cada punto del prisma tiene su pasada en disco** (`esquemas/pasada-N-<punto>.md`) — ronda a ronda hasta seca.
+- **`esquemas/esquema.md` existe** con el árbol maestro (el gate lo comprueba).
 - CERO tecnologías en el esquema (agnosticismo).
 - `esquema.md` responde "qué piezas necesita este negocio" con su FORMA.
-- Señal de fase enviada: `proceso-negocio.completar_fase { fase: 'esquematizado' }`.
+- Señal de fase enviada: `proceso-negocio.completar_fase { fase: 'esquematizado' }` → 200 (no 409).

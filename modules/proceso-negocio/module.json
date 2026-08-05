@@ -1,0 +1,17 @@
+{
+  "_doc": "Manifest de proceso-negocio — el ORQUESTADOR de fases de un proyecto: encadena las skills del proceso por eventos. project.created → empuja la FASE 0 (identidad-negocio) · negocio.identificado → empuja la FASE 1 (esquematizador) · y así sucesivamente. Usa el mecanismo REAL de Enki: empujón del conserje (pendientes + conserje.empujon) → el nervio lo surfacea en el chat → el LLM ejecuta la skill sugerida. Cero cambios en el nervio, cero en las skills: solo el mapa de proceso.",
+  "name": "proceso-negocio",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: MAPA_PROCESO event→skill. Escucha project.created (proyecto nace → empuja identidad-negocio) y negocio.identificado (identidad declarada → empuja esquematizador). El empujón: { tipo:'proceso', recurso:<skill>, mensaje, accion_sugerida:'cosecha.obtener:<skill>' } → pendientes + conserje.empujon (el nervio lo surfacea una vez). Idempotente por proyecto+fase.",
+  "language": "es",
+  "main": "index.js",
+  "publishes": [
+    { "event": "conserje.empujon", "description": "Reutiliza el canal del conserje: { project_id, tipo:'proceso', recurso:<skill>, mensaje, accion_sugerida:'cosecha.obtener:<skill>' } — el nervio lo surfacea en el chat y el LLM ejecuta la skill." }
+  ],
+  "subscribes": [
+    { "event": "project.created", "handler": "onProjectCreated", "description": "Un proyecto nace → FASE 0: empuja la skill identidad-negocio (dar identidad al negocio)." },
+    { "event": "negocio.identificado", "handler": "onNegocioIdentificado", "description": "Identidad declarada (project-profile la emite al pasar a con_identidad) → FASE 1: empuja la skill esquematizador." }
+  ],
+  "dependencies": [],
+  "config": {}
+}

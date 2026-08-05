@@ -100,6 +100,13 @@ class ProjectProfileReflejo extends ModuloHibridoReflejo {
       this._perfiles.set(pid, perfil);
     }
 
+    // PERSISTENCIA: marcar el proyecto sucio para que PosPersistencia vuelque
+    // el snapshot a disco (debounced 800ms). Sin esto, el update vive SOLO en
+    // memoria — la lectura por RPC lo ve, pero el filesystem nunca se entera
+    // (bug verificado en vivo: identidad visible por project-profile_get y
+    // ausente en project-profile.json).
+    this._persist.marcarDirty(pid);
+
     const campos = [];
     const identidadPrevia = perfil.identidad ? perfil.identidad.estado : 'sin_identidad';
     for (const campo of ['proposito', 'temporalidad', 'recursos', 'riesgos',

@@ -24,7 +24,7 @@
         "required": ["project_id", "fase"]
       },
       "handler": "toolCompletarFase",
-      "errores_conocidos": ["INVALID_INPUT", "FASE_NO_MAPEADA"]
+      "errores_conocidos": ["INVALID_INPUT", "FASE_NO_MAPEADA", "FASE_INCOMPLETA"]
     }
   ],
   "subscribes": [

@@ -29,6 +29,12 @@ tags: [fase2, negocio, esquema, identidad, prisma, diseccionador, proceso, agnos
 
 ## 1 · ENTRADA — lee el sujeto de la identidad (no preguntes)
 
+**REGLA DIRECTIVA (innegociable)**: cuando esta skill entra **encadenada por el
+orquestador** (empujón de `proceso-negocio`), el proceso YA decidió: toca
+esquematizar. **NO ofrezcas opciones** — nada de "¿la activo como lente o la
+aplico ya?", nada de caminos A/B/C, nada de pedir permiso. **EJECUTA.** La única
+pregunta legítima al dueño es si la identidad está incompleta (ver abajo).
+
 Antes de esquematizar, lee la identidad del negocio:
 
 ```
@@ -106,6 +112,8 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 
 ## 5 · Errores a evitar
 
+- **Ofrecer opciones A/B/C al entrar encadenada** — el proceso ya decidió: EJECUTA. (Visto en vivo: el LLM preguntó "¿la activo como lente o la aplico ya?" en vez de esquematizar.)
+- **Pedir permiso de configuración** ("¿activo la skill?") — el orquestador ya la activó; no es tu decisión.
 - **Preguntar el sujeto desde cero** — ya está declarado en la identidad; leerlo.
 - **Esquematizar el contenedor** (el proyecto técnico) — el sujeto es el NEGOCIO.
 - **Colar tecnologías** — agnosticismo: puertos abiertos, cero entorno (la ley del esquematizador).

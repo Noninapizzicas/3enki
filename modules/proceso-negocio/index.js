@@ -58,8 +58,10 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
 
   // El LLM llama esto al terminar una fase de skill (esquematizar-negocio,
   // diseccionador…): cierra la fase y encadena la siguiente del mapa.
-  onCompletarFaseRequest(e) {
-    return this._atender(e, 'completar_fase', 'proceso-negocio.completar_fase.response', d => {
+  // GATE: verifica el entregable real de la fase antes de aceptar — el sistema
+  // no se fía de la palabra del LLM (lección: el LLM hace lo que quiere).
+  async onCompletarFaseRequest(e) {
+    return this._atender(e, 'completar_fase', 'proceso-negocio.completar_fase.response', async d => {
       const project_id = d.project_id;
       if (!project_id) return this._invalid('project_id');
       const fase = d.fase;   // 'esquematizado' | 'diseccionado' | ...
@@ -69,14 +71,48 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       if (!paso) {
         return { status: 400, data: { error: 'FASE_NO_MAPEADA', message: `No hay siguiente fase para '${eventoFase}'`, fase } };
       }
+      // GATE DE ENTREGABLE: la fase solo se cierra si el trabajo REAL existe.
+      const entregable = await this._verificarEntregable(project_id, fase);
+      if (!entregable.ok) {
+        return { status: 409, data: { error: 'FASE_INCOMPLETA', message: entregable.mensaje, fase, esperado: entregable.esperado } };
+      }
       // Marcar la fase completada (idempotente) y empujar la siguiente.
       const clave = `${project_id}::${eventoFase}`;
       if (!this._emitidos.has(clave)) {
         this._emitidos.set(clave, Date.now());
         this._empujar(project_id, eventoFase, paso);
       }
-      return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: paso.skill } };
+      return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: paso.skill, entregable } };
     });
+  }
+
+  // Cada fase declara SU entregable verificable. Sin él → FASE_INCOMPLETA.
+  async _verificarEntregable(project_id, fase) {
+    const ESPERADOS = {
+      'esquematizado': {
+        archivos: ['esquemas/esquema.md', 'esquemas/pasada-1-', 'esquemas/pasada-2-'],
+        mensaje: 'El esquema del negocio no está: se espera <proyecto>/esquemas/esquema.md con sus pasadas (prisma hasta seca). Haz el trabajo primero.'
+      },
+      'diseccionado': {
+        archivos: ['esquemas/esquema.md'],
+        mensaje: 'La disección no está: se espera <proyecto>/esquemas/esquema.md con la FORMA asignada a cada pieza.'
+      }
+    };
+    const spec = ESPERADOS[fase];
+    if (!spec) return { ok: true };   // fase sin gate declarado → se acepta
+    try {
+      // Leer el storage del proyecto vía el reflejo fs (como project-profile).
+      const lecturas = await Promise.all(spec.archivos.map(async a => {
+        const r = await this._rpc('fs.read.request', { project_id, path: a });
+        return { archivo: a, ok: r && r.status === 200 };
+      }));
+      const ok = lecturas.every(l => l.ok);
+      return ok
+        ? { ok: true, verificados: spec.archivos }
+        : { ok: false, esperado: spec.archivos, mensaje: spec.mensaje, encontrados: lecturas.filter(l => l.ok).map(l => l.archivo) };
+    } catch (_) {
+      return { ok: false, esperado: spec.archivos, mensaje: 'No se pudo verificar el entregable (fs no disponible).' };
+    }
   }
 
   // ── NÚCLEO: evento → empujón de la skill siguiente ──

@@ -2726,7 +2726,14 @@ class AiGatewayModule extends BaseModule {
       settings, attachments, prompt, intencion, context
     };
 
-    const maxIterations = this.config.max_tool_iterations || 10;
+    // SIN FRENO (decisión del dueño): el bucle de tools corre hasta que el LLM
+    // deja de pedir tools (o un agente declara su propio límite). El default 10/15
+    // cortaba tareas largas a mitad (el prisma del agente se quedó a 3 writes de
+    // terminar). Ahora: 500 iteraciones = sin freno práctico; un agente puede
+    // declarar max_tool_iterations en su manifest o settings para acotarse.
+    const maxIterations = settings?.max_tool_iterations
+      || (this.config && this.config.max_tool_iterations)
+      || 500;
     let result, iteration = 0;
     let totalInput = 0, totalOutput = 0, totalCost = 0;
     const allToolResults = [];

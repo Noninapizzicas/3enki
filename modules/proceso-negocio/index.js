@@ -45,10 +45,25 @@ const MAPA_PROCESO = {
   },
   'negocio.construido': {
     skill: 'escribir-skills',
-    mensaje: 'Los módulos del negocio están construidos. Siguiente fase (FASE 5): escribir la SKILL FULL de cada módulo en la cantera — lee modules/<slug>/module.json + index.js de cada uno y escribe modules/cosecha/cantera/enki/<slug>/SKILL.md con TODA la lógica real embebida (ops, eventos, datos, errores — SIN RESTAR NADA). Una skill a la vez, verificada contra el módulo. Al terminar: proceso-negocio.completar_fase { fase: "skills" }.'
+    mensaje: 'Un módulo del negocio acaba de construirse. Siguiente paso (FASE 5): escribir la SKILL FULL de ese módulo en la cantera — lee modules/<slug>/module.json + index.js y escribe modules/cosecha/cantera/enki/<slug>/SKILL.md con TODA la lógica real embebida (ops, eventos, datos, errores — SIN RESTAR NADA). Al terminar: proceso-negocio.completar_fase { fase: "skills" }.'
+  },
+  'negocio.skills': {
+    // CICLO POR PIEZA (decisión de Paco: "fase 4 1º, fase 5 1º" — no todos de
+    // una): cada módulo construido recibe su skill ANTES de pasar al siguiente.
+    // construir-modulos construye UNA hoja; escribir-skills escribe SU skill;
+    // el mapa vuelve a construir-modulos para la siguiente hoja. Cuando no
+    // queden hojas sin construir, construir-modulos cierra con fase
+    // 'completado' → fin del proceso.
+    skill: 'construir-modulos',
+    mensaje: 'La skill del módulo está escrita. Siguiente paso (FASE 4): construir el SIGUIENTE módulo del plan — UNA hoja a la vez, en el orden de las etapas de esquemas/plan-construccion.md, sin tocar los ya construidos. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si NO quedan hojas sin construir: proceso-negocio.completar_fase { fase: "completado" }.'
+  },
+  'negocio.completado': {
+    // FIN DEL PROCESO — todas las piezas construidas y con skill.
+    skill: null,
+    mensaje: 'El proceso de construcción del negocio está COMPLETO: todas las hojas de la disección tienen su módulo y su skill. El negocio está construido y documentado.'
   }
   // Fases siguientes (cuando existan y emitan su evento):
-  // 'negocio.skills':   { skill: 'verificar-vivo', mensaje: '...' }
+  // 'negocio.verificado':   { skill: 'verificar-vivo', mensaje: '...' }
 };
 
 class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
@@ -91,9 +106,10 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       const clave = `${project_id}::${eventoFase}`;
       if (!this._emitidos.has(clave)) {
         this._emitidos.set(clave, Date.now());
-        this._empujar(project_id, eventoFase, paso);
+        // skill:null = FIN DEL PROCESO (no hay siguiente fase) → no empujar.
+        if (paso.skill) this._empujar(project_id, eventoFase, paso);
       }
-      return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: paso.skill, entregable } };
+      return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: paso.skill, entregable, fin: !paso.skill } };
     });
   }
 

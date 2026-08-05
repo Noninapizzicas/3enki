@@ -12,7 +12,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
 const MODULES_DIR = path.resolve(__dirname, '..');
 const REBANADA_PATH = path.resolve(__dirname, '../../arquitectura/cabecera/patron/modulo-real.md');

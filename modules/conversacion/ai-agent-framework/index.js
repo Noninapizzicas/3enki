@@ -24,9 +24,9 @@ const crypto = require('crypto');
 const BaseModule = require('../../_shared/base-module');
 const { descomponer } = require('../../_shared/prisma-del-caso');
 const DEFAULT_CONVERSATION_CACHE_TTL_MS = 5 * 60 * 1000;
-const DEFAULT_AGENT_TIMEOUT_MS = 120000;
+const DEFAULT_AGENT_TIMEOUT_MS = 600000;      // LUZ: 120s cortaba el prisma a mitad → 10min (override por agente)
 const DEFAULT_AGENT_TEMPERATURE = 0.7;
-const DEFAULT_AGENT_MAX_TOKENS = 2000;
+const DEFAULT_AGENT_MAX_TOKENS = 16000;       // LUZ: 2000 tokens cortaba un esquema completo → 16K (override por agente)
 const DEFAULT_RESOLVE_TIMEOUT_MS = 5000;
 
 class AiAgentFrameworkModule extends BaseModule {
@@ -754,9 +754,29 @@ class AiAgentFrameworkModule extends BaseModule {
     const system = sections.join('\n\n---\n\n');
 
     const allTools = this.moduleLoader?.getToolsForAI?.() || [];
-    const toolsForAgent = agent.tools.length > 0
-      ? allTools.filter(t => agent.tools.includes(t.name))
-      : [];
+    // LUZ (sombra corregida): tools vacío YA NO deja al agente manco en silencio.
+    // Antes: agent.tools.length === 0 → toolsForAgent = [] (cero herramientas, sin aviso).
+    // Ahora: sin whitelist → TODAS las tools del registro (agente a full), con log.
+    let toolsForAgent;
+    if (agent.tools.length > 0) {
+      toolsForAgent = allTools.filter(t => agent.tools.includes(t.name));
+      // LUZ (sombra corregida): scope ahora SÍ filtra la whitelist por dominio
+      // (antes era metadata decorativa). scope: ["*"] = sin filtro. scope concreto
+      // ("recetas", "carta") → solo tools de esos dominios (name o prefijo name.).
+      if (agent.scope && !agent.scope.includes('*')) {
+        const prefijos = agent.scope;
+        toolsForAgent = toolsForAgent.filter(t =>
+          prefijos.some(p => t.name === p || t.name.startsWith(p + '.') || t.name.startsWith(p + '_'))
+        );
+      }
+    } else {
+      // Sin whitelist declarada → todas las tools (decisión explícita del agente a full).
+      toolsForAgent = allTools;
+      this.logger?.warn?.('ai-agent-framework.agent.tools.empty', {
+        agent_name: agent.name,
+        reason: 'sin whitelist tools → recibe TODAS las tools del registro'
+      });
+    }
 
     const llm_request_id = crypto.randomUUID();
     const timeout_ms = settings?.timeout_ms || agent.timeout_ms;
@@ -765,16 +785,24 @@ class AiAgentFrameworkModule extends BaseModule {
       const pending = this.pendingLlm.get(llm_request_id);
       if (!pending) return;
       this.pendingLlm.delete(llm_request_id);
+      const timeoutPayload = {
+        ...pending,
+        error: { code: 'UPSTREAM_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` },
+        iterations_completed: 0,
+        provider_attempted: null
+      };
+      // LUZ (sombra corregida): el timeout ya NO tira el trabajo a la basura —
+      // devuelve session_id + prev_state para que el caller REANUDE el agente
+      // donde se quedó (el prisma a mitad no se pierde: se continúa).
+      if (pending.session_id) timeoutPayload.session_id = pending.session_id;
+      if (pending.prev_state) timeoutPayload.prev_state = pending.prev_state;
+      if (pending.conversation_id) timeoutPayload.conversation_id = pending.conversation_id;
       if (pending.shape === 'canonical') {
-        this._publishAgentExecuteFailed({
-          ...pending,
-          error: { code: 'UPSTREAM_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` },
-          iterations_completed: 0,
-          provider_attempted: null
-        });
+        this._publishAgentExecuteFailed(timeoutPayload);
       } else {
         this.eventBus.publish(pending.response_event, {
           request_id: pending.original_request_id, session_id: pending.session_id,
+          next_state: pending.prev_state || null, should_continue: !!pending.prev_state,
           error: { code: 'UPSTREAM_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` }
         });
       }

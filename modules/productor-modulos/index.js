@@ -99,6 +99,26 @@ class ProductorModulosReflejo extends ModuloHibridoReflejo {
       if (!indexJs.includes('extends')) {
         errores.push('index_js: debe tener class ... extends ModuloHibridoReflejo');
       }
+      // API INTERNA REAL (el freno de verdad — lección: el LLM produce cascarones
+      // que pasan la forma externa pero no cargan en el bus):
+      // 1. import correcto: ../_shared/modulo-hibrido-reflejo (no _base ni otros)
+      if (!indexJs.includes("require('../_shared/modulo-hibrido-reflejo')")) {
+        errores.push('index_js: el import DEBE ser require(\'../_shared/modulo-hibrido-reflejo\') (el directorio real es _shared, NO _base)');
+      }
+      // 2. _atender con 4 args (event, op, responseEvent, proyeccion) — no 3
+      const atender3 = indexJs.match(/_atender\([^)]*,\s*[^)]*,\s*[^)]*\)/g) || [];
+      const atender4 = indexJs.match(/_atender\([^)]*,\s*[^)]*,\s*[^)]*,\s*[^)]*\)/g) || [];
+      if (atender3.length > atender4.length) {
+        errores.push('index_js: _atender DEBE recibir 4 args (evento, op, responseEvent, proyeccion) — los de 3 args no cargan');
+      }
+      // 3. emisión con _publicarEvento (heredado de BaseModule) — no _publicar
+      if (/_publicar\s*\(/.test(indexJs) && !indexJs.includes('_publicarEvento')) {
+        errores.push('index_js: la emisión DEBE ser this._publicarEvento(...) (heredado de BaseModule) — _publicar no existe');
+      }
+      // 4. constructor con this.name + this.version
+      if (!indexJs.includes('this.name') || !indexJs.includes('this.version')) {
+        errores.push('index_js: el constructor DEBE fijar this.name y this.version');
+      }
       // Verificar que los handlers declarados existen como métodos
       if (moduleJson && Array.isArray(moduleJson.subscribes)) {
         for (const s of moduleJson.subscribes) {

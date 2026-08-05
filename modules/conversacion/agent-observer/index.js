@@ -260,6 +260,12 @@ class AgentObserverModule extends BaseModule {
     if (step) block.step = step;
     if (tool_invoked) block.tool_invoked = tool_invoked;
     if (detail_voluminoso) block.detail_url = `/agent/intervention/${data.request_id}/detail`;
+    // NOTA CON RUTA (la ventana del agente): enlace canónico a la ventana con
+    // ruta real /[project_id]/agentes/[request_id] — abierta fuera o panel dentro.
+    // El frontend lo muestra como "🗺️ Ver la ruta del agente" al terminar.
+    if (data.project_id || card?.project_id) {
+      block.ruta_ventana = `/${data.project_id || card.project_id}/agentes/${data.request_id}`;
+    }
     if (error) block.error = error;
     if (provider_attempted) block.provider_attempted = provider_attempted;
     // Campos canonicos del agent.execute.response (agent-flow.contract).

@@ -239,6 +239,7 @@ class AiAgentFrameworkModule extends BaseModule {
           temperature: def.temperature ?? DEFAULT_AGENT_TEMPERATURE,
           max_tokens: def.max_tokens || DEFAULT_AGENT_MAX_TOKENS,
           timeout_ms: def.timeout_ms || DEFAULT_AGENT_TIMEOUT_MS,
+          max_tool_iterations: def.max_tool_iterations || null,   // sin freno salvo que el agente lo declare
           prompt_text: promptText
         });
       } catch (err) {
@@ -832,6 +833,9 @@ class AiAgentFrameworkModule extends BaseModule {
       settings: {
         temperature: settings?.temperature ?? agent.temperature,
         max_tokens: settings?.max_tokens ?? agent.max_tokens,
+        // El agente puede declarar su propio límite de iteraciones de tools
+        // (o ninguno: el default del gateway es 500 = sin freno práctico).
+        ...(agent.max_tool_iterations ? { max_tool_iterations: agent.max_tool_iterations } : {}),
         ...(settings?.model || agent.model ? { model: settings?.model || agent.model } : {})
       },
       attachments: [],

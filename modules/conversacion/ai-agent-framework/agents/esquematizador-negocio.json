@@ -5,20 +5,10 @@
   "scope": [
     "*"
   ],
-  "tools": [
-    "fs.read",
-    "fs.list",
-    "fs.search",
-    "fs.write",
-    "fs.edit",
-    "project-profile.get",
-    "project-profile.update",
-    "proceso-negocio.completar_fase",
-    "cosecha.obtener",
-    "cosecha.buscar"
-  ],
   "provider": "auto",
   "model": null,
+  "timeout_ms": 1800000,
+  "max_tokens": 32000,
   "prompt_file": "prompts/esquematizador-negocio.md",
   "metadata": {
     "domain": "proceso",

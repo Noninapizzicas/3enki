@@ -40,27 +40,24 @@ fs.read { path: "<proyecto>/esquemas/esquema.md" }
 
 **Si no existe `plan-construccion.md`** → la FASE 3 no se hizo: avísalo y detente (no inventes el orden tú).
 
-### Paso 2 · Produce UNA hoja
+### Paso 2 · Produce O CORRIGE UNA hoja
 
 ```
-hoja = la PRIMERA sin construir (la disección indica el orden; o la que la task pide)
+hoja = la PRIMERA sin construir del plan — o la PRIMERA cuyo módulo existe pero NO CARGA
 
 1. LEE su contrato en esquema.md (entrada, salida, garantía, no hace)
-2. GENERA el diseño según su FORMA:
-   - module_json: { name: slug de la hoja, version: "0.1.0",
-       description: el contrato resumido, language: "es",
-       subscribes: [{ event: "<dominio>.<op>.request", handler: "on<Op>Request",
-                      description: el contrato }],
-       publishes: [{ event: "<dominio>.<op>.hecho", description: ... }] }
-   - index_js: class <Nombre> extends ModuloHibridoReflejo con:
-       on<Op>Request → _atender → la op pura (REFLEJO/CONVERSOR/PUENTE)
-       o con PosPersistencia (CUSTODIO)
-3. VALIDA: productor.validar { nombre, module_json, index_js } → 200?
-   NO → corrige el diseño (errores del productor) y vuelve a validar
-4. PRODUCE: productor.producir { nombre, module_json, index_js } → 201?
-   NO → corrige y reintenta (la hoja NO está construida hasta el 201)
-5. VERIFICA: el módulo carga con validateManifest (name+version+description)
-   y su op responde. (fs.read del module.json producido si hace falta.)
+2. MIRA si modules/<slug>/ ya existe:
+   a) NO existe → GENERA el diseño según su FORMA y usa productor (paso 3)
+   b) EXISTE → COMPRUEBA que carga de verdad:
+        require() del index.js — si falla (import roto, API errónea), ESTÁ ROTO:
+        CORRÍGELO: reescribe modules/<slug>/index.js con fs.write al PATRÓN REAL:
+          · import: require('../_shared/modulo-hibrido-reflejo')   (NO _base)
+          · constructor con this.name y this.version
+          · handlers con _atender(evento, op, responseEvent, proyeccion)  (4 args)
+          · emisión con this._publicarEvento(...)  (heredado de BaseModule)
+        y re-verifica con require() hasta que cargue.
+        (NO uses productor.producir sobre un dir existente — daría conflicto.)
+        Si el module.json también está mal, corrígelo con fs.write.
 ```
 
 ### Paso 3 · Cierra la fase (UNA pieza por ejecución)

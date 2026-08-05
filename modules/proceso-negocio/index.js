@@ -122,15 +122,82 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       if (!entregable.ok) {
         return { status: 409, data: { error: 'FASE_INCOMPLETA', message: entregable.mensaje, fase, esperado: entregable.esperado } };
       }
+
+      // GATE DE COMPLETITUD DEL PLAN (decisión del sistema, no del LLM):
+      // el orquestador consulta el plan-construccion.md y verifica en disco
+      // cuántas hojas están construidas y con skill. Según el progreso REAL:
+      //   · quedan hojas sin construir  → empuja construir-modulos
+      //   · todo construido, faltan skills → empuja escribir-skills
+      //   · todo construido Y con skill → fase 'completado' (fin)
+      // 'completado' SOLO se acepta si el plan está completo — si el LLM lo
+      // declara con trabajo pendiente → 409 (lección: el LLM hace lo que quiere).
+      const progreso = await this._progresoPlan(project_id);
+      const siguiente = this._decidirSiguiente(progreso);
+      if (fase === 'completado' && siguiente.skill !== null) {
+        return { status: 409, data: {
+          error: 'FASE_INCOMPLETA',
+          message: `El proceso NO está completo: ${progreso.faltan_por_construir} hojas sin construir, ${progreso.faltan_por_skill} sin skill (de ${progreso.total}). Sigue el ciclo por pieza.`,
+          fase, esperado: ['plan completo'], progreso
+        }};
+      }
+
       // Marcar la fase completada (idempotente) y empujar la siguiente.
       const clave = `${project_id}::${eventoFase}`;
       if (!this._emitidos.has(clave)) {
         this._emitidos.set(clave, Date.now());
-        // skill:null = FIN DEL PROCESO (no hay siguiente fase) → no empujar.
-        if (paso.skill) this._empujar(project_id, eventoFase, paso);
+        if (siguiente && siguiente.skill) this._empujar(project_id, eventoFase, siguiente);
       }
-      return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: paso.skill, entregable, fin: !paso.skill } };
+      return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: siguiente?.skill || null, entregable, progreso, fin: !siguiente?.skill } };
     });
+  }
+
+  // ── DECISIÓN DETERMINISTA del siguiente paso (el sistema decide, no el LLM) ──
+  // A partir del progreso REAL del plan (contado en disco):
+  //   quedan hojas sin construir         → construir-modulos (FASE 4)
+  //   todo construido, faltan skills     → escribir-skills (FASE 5)
+  //   todo construido y con skill        → completado (FIN)
+  _decidirSiguiente(progreso) {
+    if (progreso.faltan_por_construir > 0) {
+      return { skill: 'construir-modulos', mensaje: `El plan tiene ${progreso.total} hojas: ${progreso.construidos} construidas, faltan ${progreso.faltan_por_construir}. Siguiente paso (FASE 4): construir UNA hoja — la primera del plan sin módulo en disco (verifica modules/<slug>/ — el sistema cuenta lo que existe, no lo que reportas). Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["<slug>"] } }.` };
+    }
+    if (progreso.faltan_por_skill > 0) {
+      return { skill: 'escribir-skills', mensaje: `El plan está construido (${progreso.construidos}/${progreso.total} módulos) pero faltan ${progreso.faltan_por_skill} skills. Siguiente paso (FASE 5): escribir la SKILL FULL de UN módulo construido sin skill en la cantera (SIN RESTAR NADA). Al terminar: proceso-negocio.completar_fase { fase: "skills", resumen: { skills: ["<slug>"] } }.` };
+    }
+    return { skill: null, mensaje: 'El proceso de construcción del negocio está COMPLETO: todas las hojas de la disección tienen su módulo y su skill.' };
+  }
+
+  // ── PROGRESO DEL PLAN (determinista — el sistema decide, no el LLM) ──
+  // Lee plan-construccion.md del proyecto, extrae los slugs de las hojas, y
+  // verifica EN DISCO cuántas tienen módulo (modules/<slug>/) y cuántas skill
+  // (cosecha/cantera/enki/<slug>/SKILL.md). El orquestador usa esto para
+  // decidir el siguiente empujón del ciclo por pieza: si quedan hojas sin
+  // construir → construir-modulos; si no → completado.
+  async _progresoPlan(project_id) {
+    try {
+      const r = await this._rpc('fs.read.request', { project_id, path: 'esquemas/plan-construccion.md' });
+      const contenido = (r && (r.content || r.data?.content)) || '';
+      if (!contenido) return { total: 0, construidos: 0, con_skill: 0, faltan_por_construir: 0, faltan_por_skill: 0, slugs: [] };
+      // Extraer slugs del plan: tokens tipo modulo (radar-adquisicion, config-pesos-fuente…)
+      const slugs = [...new Set((contenido.match(/[a-z][a-z0-9]*(?:-[a-z0-9]+)+/g) || []).filter(s => s.length > 3))];
+      let construidos = 0, con_skill = 0;
+      for (const slug of slugs) {
+        const existe = fs.existsSync(path.join(MODULES_DIR, slug, 'index.js'));
+        if (existe) {
+          construidos++;
+          if (fs.existsSync(path.join(MODULES_DIR, 'cosecha', 'cantera', 'enki', slug, 'SKILL.md'))) con_skill++;
+        }
+      }
+      return {
+        total: slugs.length,
+        construidos,
+        con_skill,
+        faltan_por_construir: slugs.length - construidos,
+        faltan_por_skill: construidos - con_skill,
+        slugs
+      };
+    } catch (_) {
+      return { total: 0, construidos: 0, con_skill: 0, faltan_por_construir: 0, faltan_por_skill: 0, slugs: [] };
+    }
   }
 
   // Cada fase declara SU entregable verificable. Sin él → FASE_INCOMPLETA.

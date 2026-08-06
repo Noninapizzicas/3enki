@@ -39,7 +39,16 @@ function validar(salida, reglas = {}) {
   }
 
   if (typeof reglas.tamano_min === 'number') {
-    const tam = typeof salida === 'string' ? salida.length : (salida && typeof salida === 'object' ? Object.keys(salida).length : 0);
+    let tam;
+    if (typeof salida === 'string') {
+      tam = salida.length;
+    } else if (salida && typeof salida === 'object' && 'content' in salida && typeof salida.content === 'string') {
+      tam = salida.content.length;   // la canónica {content} mide su contenido real
+    } else if (salida && typeof salida === 'object') {
+      tam = Object.keys(salida).length;
+    } else {
+      tam = 0;
+    }
     if (tam < reglas.tamano_min) {
       return { ok: false, regla: 'tamano_min', detalle: `tamaño ${tam} < mínimo ${reglas.tamano_min}` };
     }

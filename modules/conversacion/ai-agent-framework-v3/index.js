@@ -87,15 +87,15 @@ class EjecutorMotorModule extends BaseModule {
   }
 
   // ── El MUNDO (puerto inyectable: storage del proyecto o modules/ del sistema) ──
+  _resolver(rel, project_id) {
+    if (rel.startsWith('storage/')) {
+      return path.join(this.dataDir, 'projects', project_id || 'system', 'storage', rel.replace(/^storage\//, ''));
+    }
+    return path.join(this.modulesDir, rel);
+  }
+
   _mundo(project_id) {
-    const dataDir = this.dataDir;
-    const modulesDir = this.modulesDir;
-    const resolver = (rel) => {
-      if (rel.startsWith('storage/')) {
-        return path.join(dataDir, 'projects', project_id || 'system', 'storage', rel.replace(/^storage\//, ''));
-      }
-      return path.join(modulesDir, rel);
-    };
+    const resolver = (rel) => this._resolver(rel, project_id);
     return {
       existe: (rel) => fs.existsSync(resolver(rel)),
       leer: (rel) => {
@@ -111,12 +111,24 @@ class EjecutorMotorModule extends BaseModule {
     };
   }
 
+  // REFLEJO 'escribir': el pipeline toca el mundo real con la salida del fuzzy.
+  _escribir(rel, canónica, project_id) {
+    const abs = this._resolver(rel, project_id);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    const contenido = (canónica && typeof canónica === 'object' && 'content' in canónica && Object.keys(canónica).length === 1)
+      ? String(canónica.content)
+      : JSON.stringify(canónica, null, 2);
+    fs.writeFileSync(abs, contenido, 'utf8');
+    return abs;
+  }
+
   _resolverSlug(task, pipelineName) {
-    const stop = new Set(['construye', 'construir', 'escribe', 'escribir', 'proyecto', 'modulo', 'fase', 'hoja',
-      'hojas', 'del', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'plan', 'para', 'que', 'con', 'y', 'a', 'su']);
+    const stop = new Set(['construye', 'construir', 'construida', 'construido', 'escribe', 'escribir', 'escriba', 'genera', 'generar', 'proyecto', 'proyectos', 'modulo', 'modulos', 'fase', 'hoja', 'hojas', 'skill', 'skills', 'esquema', 'esquemas', 'esquematiza', 'plan', 'planes', 'del', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'para', 'que', 'con', 'y', 'a', 'su', 'en', 'al', 'se', 'por', 'como', 'mas', 'más', 'the', 'debe', 'debes', 'siguiente', 'siguientes', 'tanda', 'orden', 'primero', 'segundo', 'tercero', 'lee', 'leer', 'verifica', 'verificar', 'completa', 'completar', 'cierra', 'cerrar']);
     const tokens = String(task || '').toLowerCase().match(/[a-z][a-z0-9-]{2,40}/g) || [];
-    const cand = tokens.find(t => !stop.has(t) && t.length > 3 && !/^\d+$/.test(t));
-    return cand || pipelineName;
+    // El nombre del módulo suele ser el token no-stopword MÁS LARGO (no el primero).
+    const candidatos = tokens.filter(t => !stop.has(t) && t.length > 3 && !/^\d+$/.test(t));
+    if (candidatos.length === 0) return pipelineName;
+    return candidatos.sort((a, b) => b.length - a.length)[0];
   }
 
   _resolverEntregable(entregable, task, pipelineName) {
@@ -186,6 +198,9 @@ class EjecutorMotorModule extends BaseModule {
       // 2 · Abrir la BITÁCORA (P6)
       await this._pedir('bitacora.abrir.request', { request_id, project_id, agent_name, task }, 'bitacora.abierta', 8000);
 
+      // El entregable RESUELTO (el slug sale de la task) — lo usan 'escribir' y el JEFE.
+      const entregableReal = this._resolverEntregable(pipeline.entregable, task, agent_name);
+
       // 3 · Recorrer los pasos, uno a uno
       const generacionesMax = (pipeline.presupuesto && pipeline.presupuesto.generaciones_por_paso) || 3;
       let salidaUltima = null;
@@ -221,7 +236,11 @@ class EjecutorMotorModule extends BaseModule {
           }
         } else {
           // REFLEJO: ejecuta el determinista si declara op conocida; si no, no-op registrado.
-          if (paso.op === 'validar' && salidaUltima !== null) {
+          if (paso.op === 'escribir' && salidaUltima !== null) {
+            const abs = this._escribir(entregableReal ? entregableReal.path : pipeline.entregable.path, salidaUltima, project_id);
+            await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `escrito en ${abs}` }, 'bitacora.paso.registrado', 8000);
+            this._progress(project_id, request_id, agent_name, 'tool_call', `escrito en ${abs}`, 'escribir');
+          } else if (paso.op === 'validar' && salidaUltima !== null) {
             const val = validar(salidaUltima, paso.valida || {});
             salidaUltima = val.ok ? salidaUltima : null;
           }
@@ -236,7 +255,6 @@ class EjecutorMotorModule extends BaseModule {
 
       // 4 · El JEFE (P4) contra el MUNDO REAL
       this._progress(project_id, request_id, agent_name, 'finalizing', 'JEFE: verificando entregable…', null);
-      const entregableReal = this._resolverEntregable(pipeline.entregable, task, agent_name);
       const veredicto = verificar(entregableReal, mundo);
 
       // 5 · Sellar la bitácora con el veredicto

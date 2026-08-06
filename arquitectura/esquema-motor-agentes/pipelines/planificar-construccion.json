@@ -1,0 +1,15 @@
+{
+  "name": "planificar-construccion",
+  "description": "Fase 3: genera el plan de construcción del proyecto — el fuzzy genera el plan, el reflejo lo escribe, el JEFE verifica que existe.",
+  "pasos": [
+    {
+      "paso": "generar_plan",
+      "tipo": "fuzzy",
+      "instruccion": "Genera el PLAN DE CONSTRUCCIÓN del proyecto de la task: fases en orden, hojas atómicas con su FORMA (reflejo/custodio/micro-agente/puente/conversor), orden de dependencia, y qué entrega cada hoja. Devuelve SOLO el markdown del plan completo.",
+      "valida": { "tamano_min": 300 }
+    },
+    { "paso": "escribir_plan", "tipo": "reflejo", "op": "escribir" }
+  ],
+  "entregable": { "tipo": "fs", "path": "storage/esquemas/plan-construccion.md", "reglas": ["existe"] },
+  "presupuesto": { "generaciones_por_paso": 3, "max_tokens": 16000, "generacion_timeout_ms": 240000 }
+}

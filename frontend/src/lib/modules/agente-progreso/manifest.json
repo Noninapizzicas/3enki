@@ -1,0 +1,10 @@
+{
+  "id": "agente-progreso",
+  "name": "Agente",
+  "description": "Progreso en vivo del agente: el marco desplegable en el chat (aparece cuando un agente trabaja y se actualiza con lo que devuelve) + la ventana de ruta completa /[project_id]/agentes.",
+  "version": "1.0.0",
+  "zone": "system-bar",
+  "order": 98,
+  "icon": "🗺️",
+  "label": "Agente"
+}

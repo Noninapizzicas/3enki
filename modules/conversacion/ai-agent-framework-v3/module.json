@@ -41,6 +41,10 @@
       "handler": "onAgentExecuteResumeRequest"
     },
     {
+      "event": "buscar_agente.request",
+      "handler": "onBuscarAgente"
+    },
+    {
       "event": "llm.complete.response",
       "handler": "onLlmCompleteResponse"
     },

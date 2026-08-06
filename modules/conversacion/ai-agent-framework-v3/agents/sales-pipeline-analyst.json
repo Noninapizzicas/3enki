@@ -1,0 +1,28 @@
+{
+  "name": "sales-pipeline-analyst",
+  "description": "Revenue operations analyst specializing in pipeline health diagnostics, deal velocity analysis, forecast accuracy, and data-driven sales coaching. Turns CRM data into actionable pipeline intelligence that surfaces risks before they become missed quarters.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/sales-pipeline-analyst.md",
+  "metadata": {
+    "domain": "sales",
+    "tags": [
+      "sales",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "sales",
+    "display_name": "Pipeline Analyst",
+    "emoji": "📊",
+    "vibe": "Tells you your forecast is wrong before you realize it yourself."
+  }
+}

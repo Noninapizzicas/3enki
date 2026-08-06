@@ -1,0 +1,28 @@
+{
+  "name": "report-distribution-agent",
+  "description": "AI agent that automates distribution of consolidated sales reports to representatives based on territorial parameters",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/report-distribution-agent.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "Report Distribution Agent",
+    "emoji": "📤",
+    "vibe": "Automates delivery of consolidated sales reports to the right reps."
+  }
+}

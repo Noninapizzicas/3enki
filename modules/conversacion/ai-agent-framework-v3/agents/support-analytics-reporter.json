@@ -1,0 +1,28 @@
+{
+  "name": "support-analytics-reporter",
+  "description": "Expert data analyst transforming raw data into actionable business insights. Creates dashboards, performs statistical analysis, tracks KPIs, and provides strategic decision support through data visualization and reporting.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/support-analytics-reporter.md",
+  "metadata": {
+    "domain": "support",
+    "tags": [
+      "support",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "support",
+    "display_name": "Analytics Reporter",
+    "emoji": "📊",
+    "vibe": "Transforms raw data into the insights that drive your next decision."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "engineering-desktop-app-engineer",
+  "description": "Expert desktop application engineer for Electron and Tauri — secure IPC and process isolation, code signing and notarization, auto-update pipelines, native OS integration, and resource-footprint discipline.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-desktop-app-engineer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Desktop App Engineer",
+    "emoji": "💻",
+    "vibe": "The web is your UI, the OS is your API. Small binaries, locked-down IPC, and updates that never brick anyone."
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "esquematizador-negocio",
+  "description": "Agente de la FASE 2 del proceso de un proyecto: esquematiza el NEGOCIO declarado en la identidad (project-profile.get) con el prisma de 5 huecos — PUNTO A PUNTO, RONDA A RONDA hasta quedarse seco — escribiendo cada pasada en <proyecto>/esquemas/pasada-N-<punto>.md, ensamblando el árbol maestro en <proyecto>/esquemas/esquema.md, y disecando cada hoja atómica una a una con su FORMA (reflejo · custodio · conversor · puente) en pasada-N-diseccion.md. Autónomo: no pregunta, no ofrece opciones, ejecuta el mandato mecánico completo y cierra la fase con proceso-negocio.completar_fase.",
+  "enabled": true,
+  "presupuesto": {
+    "max_tokens": 64000,
+    "timeout_ms": 2400000,
+    "max_iteraciones": 500
+  },
+  "entregable": {
+    "tipo": "fs",
+    "path": "storage/esquemas/esquema.md",
+    "reglas": ["existe"]
+  },
+  "scope": [
+    "*"
+  ],
+  "provider": "auto",
+  "model": null,
+  "timeout_ms": 1800000,
+  "max_tokens": 32000,
+  "prompt_file": "prompts/esquematizador-negocio.md",
+  "metadata": {
+    "domain": "proceso",
+    "fase": 2,
+    "tags": [
+      "proceso",
+      "fase2",
+      "esquema",
+      "prisma",
+      "diseccion",
+      "negocio"
+    ],
+    "display_name": "Esquematizador del Negocio",
+    "emoji": "🗺️",
+    "vibe": "El taller del prisma: cada punto se parte hasta que no se parte más; cada hoja recibe su forma; nada se queda sin esquematizar."
+  }
+}

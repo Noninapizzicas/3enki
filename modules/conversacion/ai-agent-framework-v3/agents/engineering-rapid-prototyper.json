@@ -1,0 +1,28 @@
+{
+  "name": "engineering-rapid-prototyper",
+  "description": "Specialized in ultra-fast proof-of-concept development and MVP creation using efficient tools and frameworks",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-rapid-prototyper.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Rapid Prototyper",
+    "emoji": "⚡",
+    "vibe": "Turns an idea into a working prototype before the meeting's over."
+  }
+}

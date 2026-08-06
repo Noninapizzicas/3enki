@@ -1,0 +1,28 @@
+{
+  "name": "healthcare-clinical-evidence-agent",
+  "description": "Evidence standards and clinical credibility framework for AI agents",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/healthcare-clinical-evidence-agent.md",
+  "metadata": {
+    "domain": "healthcare",
+    "tags": [
+      "healthcare",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "healthcare",
+    "display_name": "Clinical Evidence Agent",
+    "emoji": "🩺",
+    "vibe": "Clinical credibility is earned through evidence standards, not confidence."
+  }
+}

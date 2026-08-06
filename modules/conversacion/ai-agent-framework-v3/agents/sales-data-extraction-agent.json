@@ -1,0 +1,28 @@
+{
+  "name": "sales-data-extraction-agent",
+  "description": "AI agent specialized in monitoring Excel files and extracting key sales metrics (MTD, YTD, Year End) for internal live reporting",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/sales-data-extraction-agent.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "Sales Data Extraction Agent",
+    "emoji": "📊",
+    "vibe": "Watches your Excel files and extracts the metrics that matter."
+  }
+}

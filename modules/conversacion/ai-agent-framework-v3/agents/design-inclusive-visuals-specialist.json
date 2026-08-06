@@ -1,0 +1,28 @@
+{
+  "name": "design-inclusive-visuals-specialist",
+  "description": "Representation expert who defeats systemic AI biases to generate culturally accurate, affirming, and non-stereotypical images and video.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/design-inclusive-visuals-specialist.md",
+  "metadata": {
+    "domain": "design",
+    "tags": [
+      "design",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "design",
+    "display_name": "Inclusive Visuals Specialist",
+    "emoji": "🌈",
+    "vibe": "Defeats systemic AI biases to generate culturally accurate, affirming imagery."
+  }
+}

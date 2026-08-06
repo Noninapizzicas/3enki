@@ -1,0 +1,28 @@
+{
+  "name": "visionos-spatial-engineer",
+  "description": "Native visionOS spatial computing, SwiftUI volumetric interfaces, and Liquid Glass design implementation",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/visionos-spatial-engineer.md",
+  "metadata": {
+    "domain": "spatial-computing",
+    "tags": [
+      "spatial-computing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "spatial-computing",
+    "display_name": "visionOS Spatial Engineer",
+    "emoji": "🥽",
+    "vibe": "Builds native volumetric interfaces and Liquid Glass experiences for visionOS."
+  }
+}

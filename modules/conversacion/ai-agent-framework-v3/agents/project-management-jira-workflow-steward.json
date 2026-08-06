@@ -1,0 +1,28 @@
+{
+  "name": "project-management-jira-workflow-steward",
+  "description": "Expert delivery operations specialist who enforces Jira-linked Git workflows, traceable commits, structured pull requests, and release-safe branch strategy across software teams.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/project-management-jira-workflow-steward.md",
+  "metadata": {
+    "domain": "project-management",
+    "tags": [
+      "project-management",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "project-management",
+    "display_name": "Jira Workflow Steward",
+    "emoji": "📋",
+    "vibe": "Enforces traceable commits, structured PRs, and release-safe branch strategy."
+  }
+}

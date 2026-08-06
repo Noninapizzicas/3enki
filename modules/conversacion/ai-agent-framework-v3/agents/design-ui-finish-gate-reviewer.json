@@ -1,0 +1,28 @@
+{
+  "name": "design-ui-finish-gate-reviewer",
+  "description": "Product-interface reviewer who catches generic, interchangeable UI before it ships by grounding critique in real product evidence, a written design contract, and a hard implementation finish gate.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/design-ui-finish-gate-reviewer.md",
+  "metadata": {
+    "domain": "design",
+    "tags": [
+      "design",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "design",
+    "display_name": "UI Finish-Gate Reviewer",
+    "emoji": "🧱",
+    "vibe": "Allergic to dashboards that could belong to literally any product."
+  }
+}

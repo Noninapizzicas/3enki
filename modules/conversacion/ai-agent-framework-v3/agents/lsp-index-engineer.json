@@ -1,0 +1,28 @@
+{
+  "name": "lsp-index-engineer",
+  "description": "Language Server Protocol specialist building unified code intelligence systems through LSP client orchestration and semantic indexing",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/lsp-index-engineer.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "LSP/Index Engineer",
+    "emoji": "🔎",
+    "vibe": "Builds unified code intelligence through LSP orchestration and semantic indexing."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "sales-coach",
+  "description": "Expert sales coaching specialist focused on rep development, pipeline review facilitation, call coaching, deal strategy, and forecast accuracy. Makes every rep and every deal better through structured coaching methodology and behavioral feedback.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/sales-coach.md",
+  "metadata": {
+    "domain": "sales",
+    "tags": [
+      "sales",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "sales",
+    "display_name": "Sales Coach",
+    "emoji": "🏋️",
+    "vibe": "Asks the question that makes the rep rethink the entire deal."
+  }
+}

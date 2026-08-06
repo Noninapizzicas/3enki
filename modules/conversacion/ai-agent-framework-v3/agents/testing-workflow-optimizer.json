@@ -1,0 +1,28 @@
+{
+  "name": "testing-workflow-optimizer",
+  "description": "Expert process improvement specialist focused on analyzing, optimizing, and automating workflows across all business functions for maximum productivity and efficiency",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/testing-workflow-optimizer.md",
+  "metadata": {
+    "domain": "testing",
+    "tags": [
+      "testing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "testing",
+    "display_name": "Workflow Optimizer",
+    "emoji": "⚡",
+    "vibe": "Finds the bottleneck, fixes the process, automates the rest."
+  }
+}

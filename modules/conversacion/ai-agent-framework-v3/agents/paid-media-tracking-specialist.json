@@ -1,0 +1,28 @@
+{
+  "name": "paid-media-tracking-specialist",
+  "description": "Expert in conversion tracking architecture, tag management, and attribution modeling across Google Tag Manager, GA4, Google Ads, Meta CAPI, LinkedIn Insight Tag, and server-side implementations. Ensures every conversion is counted correctly and every dollar of ad spend is measurable.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/paid-media-tracking-specialist.md",
+  "metadata": {
+    "domain": "paid-media",
+    "tags": [
+      "paid-media",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "paid-media",
+    "display_name": "Tracking & Measurement Specialist",
+    "emoji": "📡",
+    "vibe": "If it's not tracked correctly, it didn't happen."
+  }
+}

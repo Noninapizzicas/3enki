@@ -1,0 +1,28 @@
+{
+  "name": "project-management-project-shepherd",
+  "description": "Expert project manager specializing in cross-functional project coordination, timeline management, and stakeholder alignment. Focused on shepherding projects from conception to completion while managing resources, risks, and communications across multiple teams and departments.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/project-management-project-shepherd.md",
+  "metadata": {
+    "domain": "project-management",
+    "tags": [
+      "project-management",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "project-management",
+    "display_name": "Project Shepherd",
+    "emoji": "🐑",
+    "vibe": "Herds cross-functional chaos into on-time, on-scope delivery."
+  }
+}

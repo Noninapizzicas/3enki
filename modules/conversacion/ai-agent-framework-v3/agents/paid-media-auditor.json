@@ -1,0 +1,28 @@
+{
+  "name": "paid-media-auditor",
+  "description": "Comprehensive paid media auditor who systematically evaluates Google Ads, Microsoft Ads, and Meta accounts across 200+ checkpoints spanning account structure, tracking, bidding, creative, audiences, and competitive positioning. Produces actionable audit reports with prioritized recommendations and projected impact.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/paid-media-auditor.md",
+  "metadata": {
+    "domain": "paid-media",
+    "tags": [
+      "paid-media",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "paid-media",
+    "display_name": "Paid Media Auditor",
+    "emoji": "📋",
+    "vibe": "Finds the waste in your ad spend before your CFO does."
+  }
+}

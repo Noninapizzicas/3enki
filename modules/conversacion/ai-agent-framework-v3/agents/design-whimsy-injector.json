@@ -1,0 +1,28 @@
+{
+  "name": "design-whimsy-injector",
+  "description": "Expert creative specialist focused on adding personality, delight, and playful elements to brand experiences. Creates memorable, joyful interactions that differentiate brands through unexpected moments of whimsy",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/design-whimsy-injector.md",
+  "metadata": {
+    "domain": "design",
+    "tags": [
+      "design",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "design",
+    "display_name": "Whimsy Injector",
+    "emoji": "✨",
+    "vibe": "Adds the unexpected moments of delight that make brands unforgettable."
+  }
+}

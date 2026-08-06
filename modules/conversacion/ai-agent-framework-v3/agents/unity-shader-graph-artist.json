@@ -1,0 +1,28 @@
+{
+  "name": "unity-shader-graph-artist",
+  "description": "Visual effects and material specialist - Masters Unity Shader Graph, HLSL, URP/HDRP rendering pipelines, and custom pass authoring for real-time visual effects",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/unity-shader-graph-artist.md",
+  "metadata": {
+    "domain": "game-development",
+    "tags": [
+      "game-development",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "game-development",
+    "display_name": "Unity Shader Graph Artist",
+    "emoji": "✨",
+    "vibe": "Crafts real-time visual magic through Shader Graph and custom render passes."
+  }
+}

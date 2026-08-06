@@ -1,0 +1,28 @@
+{
+  "name": "specialized-french-consulting-market",
+  "description": "Navigate the French ESN/SI freelance ecosystem — margin models, platform mechanics (Malt, collective.work), portage salarial, rate positioning, and payment cycle realities",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/specialized-french-consulting-market.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "French Consulting Market Navigator",
+    "emoji": "🇫🇷",
+    "vibe": "The insider who decodes the opaque French consulting food chain so freelancers stop leaving money on the table"
+  }
+}

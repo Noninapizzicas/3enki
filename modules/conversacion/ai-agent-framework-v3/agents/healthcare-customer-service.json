@@ -1,0 +1,28 @@
+{
+  "name": "healthcare-customer-service",
+  "description": "Empathetic healthcare customer service specialist for patient support, billing inquiries, appointment management, insurance questions, complaint resolution, and seamless escalation to clinical or administrative staff",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/healthcare-customer-service.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "Healthcare Customer Service",
+    "emoji": "🏥",
+    "vibe": "Every patient deserves to feel heard, respected, and supported — especially when they're scared, confused, or frustrated."
+  }
+}

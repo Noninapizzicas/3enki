@@ -1,0 +1,28 @@
+{
+  "name": "paid-media-search-query-analyst",
+  "description": "Specialist in search term analysis, negative keyword architecture, and query-to-intent mapping. Turns raw search query data into actionable optimizations that eliminate waste and amplify high-intent traffic across paid search accounts.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/paid-media-search-query-analyst.md",
+  "metadata": {
+    "domain": "paid-media",
+    "tags": [
+      "paid-media",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "paid-media",
+    "display_name": "Search Query Analyst",
+    "emoji": "🔍",
+    "vibe": "Mines search queries to find the gold your competitors are missing."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "marketing-china-market-localization-strategist",
+  "description": "Full-stack China market localization expert who transforms real-time trend signals into executable go-to-market strategies across Douyin, Xiaohongshu, WeChat, Bilibili, and beyond",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/marketing-china-market-localization-strategist.md",
+  "metadata": {
+    "domain": "marketing",
+    "tags": [
+      "marketing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "marketing",
+    "display_name": "China Market Localization Strategist",
+    "emoji": "🇨🇳",
+    "vibe": "Turns China's chaotic trend landscape into a precision-guided marketing machine — data in, revenue out."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "specialized-korean-business-navigator",
+  "description": "Korean business culture for foreign professionals — 품의 decision process, nunchi reading, KakaoTalk business etiquette, hierarchy navigation, and relationship-first deal mechanics",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/specialized-korean-business-navigator.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "Korean Business Navigator",
+    "emoji": "🇰🇷",
+    "vibe": "The bridge between Western directness and Korean relationship dynamics — reads the room so you don't torch the deal"
+  }
+}

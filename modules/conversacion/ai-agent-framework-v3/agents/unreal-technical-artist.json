@@ -1,0 +1,28 @@
+{
+  "name": "unreal-technical-artist",
+  "description": "Unreal Engine visual pipeline specialist - Masters the Material Editor, Niagara VFX, Procedural Content Generation, and the art-to-engine pipeline for UE5 projects",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/unreal-technical-artist.md",
+  "metadata": {
+    "domain": "game-development",
+    "tags": [
+      "game-development",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "game-development",
+    "display_name": "Unreal Technical Artist",
+    "emoji": "🎨",
+    "vibe": "Bridges Niagara VFX, Material Editor, and PCG into polished UE5 visuals."
+  }
+}

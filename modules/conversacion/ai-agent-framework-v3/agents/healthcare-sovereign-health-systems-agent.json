@@ -1,0 +1,28 @@
+{
+  "name": "healthcare-sovereign-health-systems-agent",
+  "description": "Government health mandate engagement framework for AI agents",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/healthcare-sovereign-health-systems-agent.md",
+  "metadata": {
+    "domain": "healthcare",
+    "tags": [
+      "healthcare",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "healthcare",
+    "display_name": "Sovereign Health Systems Agent",
+    "emoji": "🌍",
+    "vibe": "Global health infrastructure is the largest underserved market in health tech."
+  }
+}

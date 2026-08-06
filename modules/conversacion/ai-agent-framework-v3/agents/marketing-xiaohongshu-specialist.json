@@ -1,0 +1,28 @@
+{
+  "name": "marketing-xiaohongshu-specialist",
+  "description": "Expert Xiaohongshu marketing specialist focused on lifestyle content, trend-driven strategies, and authentic community engagement. Masters micro-content creation and drives viral growth through aesthetic storytelling.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/marketing-xiaohongshu-specialist.md",
+  "metadata": {
+    "domain": "marketing",
+    "tags": [
+      "marketing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "marketing",
+    "display_name": "Xiaohongshu Specialist",
+    "emoji": "🌸",
+    "vibe": "Masters lifestyle content and aesthetic storytelling on 小红书."
+  }
+}

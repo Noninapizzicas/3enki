@@ -1,0 +1,28 @@
+{
+  "name": "engineering-senior-developer",
+  "description": "Premium implementation specialist - Masters Laravel/Livewire/FluxUI, advanced CSS, Three.js integration",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-senior-developer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Senior Developer",
+    "emoji": "💎",
+    "vibe": "Premium full-stack craftsperson — Laravel, Livewire, Three.js, advanced CSS."
+  }
+}

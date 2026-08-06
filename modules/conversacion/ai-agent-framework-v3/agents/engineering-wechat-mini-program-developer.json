@@ -1,0 +1,28 @@
+{
+  "name": "engineering-wechat-mini-program-developer",
+  "description": "Expert WeChat Mini Program developer specializing in 小程序 development with WXML/WXSS/WXS, WeChat API integration, payment systems, subscription messaging, and the full WeChat ecosystem.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-wechat-mini-program-developer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "WeChat Mini Program Developer",
+    "emoji": "💬",
+    "vibe": "Builds performant Mini Programs that thrive in the WeChat ecosystem."
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "name": "ai-agent-framework-v3",
+  "version": "0.1.0",
+  "description": "P1 · Ejecutor de pipelines del MOTOR DE AGENTES — recorre los pasos declarados (reflejo → determinista; fuzzy → puerto de generación), cada paso queda escrito en la bitácora, y el JEFE verifica el entregable contra el mundo real antes del success. Un solo camino: invoke_agent es un alias.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "publishes": [
+    {
+      "event": "agent.execute.response",
+      "description": "Pipeline terminado con veredicto del JEFE (verificado:true solo si el entregable existe en el mundo real)."
+    },
+    {
+      "event": "agent.execute.failed",
+      "description": "Pipeline fallido: veredicto no verificado, contrato roto o presupuesto agotado."
+    },
+    {
+      "event": "agent.execute.progress",
+      "description": "Progreso por paso (vitrina/marco): paso ejecutado, tool invocada, veredicto parcial."
+    },
+    {
+      "event": "invoke_agent.response",
+      "description": "Alias legacy para el chat (invoke_agent.request → mismo pipeline, misma verificación)."
+    },
+    {
+      "event": "llm.complete.request",
+      "description": "El puerto fuzzy pide generación al gateway (el único punto no determinista)."
+    }
+  ],
+  "subscribes": [
+    {
+      "event": "agent.execute.request",
+      "handler": "onAgentExecuteRequest"
+    },
+    {
+      "event": "invoke_agent.request",
+      "handler": "onInvokeAgentRequest"
+    },
+    {
+      "event": "agent.execute.resume.request",
+      "handler": "onAgentExecuteResumeRequest"
+    },
+    {
+      "event": "llm.complete.response",
+      "handler": "onLlmCompleteResponse"
+    },
+    {
+      "event": "llm.complete.failed",
+      "handler": "onLlmCompleteFailed"
+    }
+  ],
+  "dependencies": []
+}

@@ -1085,6 +1085,19 @@ class AiAgentFrameworkModule extends BaseModule {
       total: ctx.usage.total_tokens || ((ctx.usage.input_tokens || 0) + (ctx.usage.output_tokens || 0))
     };
 
+    // SEPARACIÓN LLM vs AGENTE: la respuesta del MODELO viaja como anexo etiquetado
+    // bajo `llm:` — la respuesta del AGENTE es el veredicto (verificado + reglas).
+    // result.content se mantiene por compatibilidad (agent-observer/chat lo usan),
+    // pero quien consume puede distinguir: llm.* = lo que dijo el modelo;
+    // veredicto = lo que el sistema juzgó del entregable.
+    payload.llm = {
+      content: ctx.content || '',
+      model: ctx.model || null,
+      provider: ctx.provider || null,
+      tokens: payload.tokens || null,
+      tool_calls_executed: tool_calls
+    };
+
     // CIMIENTO v3 — la VITRINA: el veredicto del JEFE viaja en el response.
     // verificado:true = entregable comprobado en el mundo real.
     // verificado:false + motivo = el agente v1 no declaró entregable (nadie confunde

@@ -8,7 +8,8 @@
   // sigue su camino mientras el agente trabaja; esto se actualiza solo.
   // ────────────────────────────────────────────────────────────────────────────
   import { onMount, onDestroy } from 'svelte';
-  import { ejecuciones, initAgenteProgreso, getEjecucion, abrirEjecucion, ejecucionActivaId } from '$lib/stores/agente-progreso';
+  import { page } from '$app/stores';
+  import { ejecuciones, initAgenteProgreso, getEjecucion, abrirEjecucion, ejecucionActivaId, rehidratarDesdeBitacora } from '$lib/stores/agente-progreso';
   import type { AgenteEjecucion } from '$lib/stores/agente-progreso';
 
   // requestId opcional: la RUTA lo pasa explícito; el PANEL (openPanel('agente'))
@@ -32,6 +33,13 @@
     unsubInit = initAgenteProgreso();
     if (requestId) abrirEjecucion(requestId);
     refrescar();
+    // CIMIENTO v3 — REHIDRATACIÓN: si la ventana se abrió con un request_id y la
+    // ejecución no está en el store (página recargada / sesión nueva), recupera
+    // el marco completo desde su BITÁCORA persistida (pasos + veredicto).
+    if (requestId && !getEjecucion(requestId)) {
+      const pid = $page.params?.project_id;
+      if (pid) rehidratarDesdeBitacora(pid, requestId).then(() => refrescar());
+    }
     // reaccionar a cambios del store (nuevos pasos) y de la ejecución activa
     unsubStore = ejecuciones.subscribe(() => refrescar());
   });

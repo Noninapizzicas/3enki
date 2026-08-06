@@ -69,14 +69,51 @@
     }
   ],
   "ui_handlers": [
-    { "domain": "conversation", "action": "send",            "handler": "handleSend" },
-    { "domain": "conversation", "action": "create",          "handler": "handleCreate" },
-    { "domain": "conversation", "action": "list",            "handler": "handleList" },
-    { "domain": "conversation", "action": "load",            "handler": "handleLoad" },
-    { "domain": "conversation", "action": "delete",          "handler": "handleDelete" },
-    { "domain": "conversation", "action": "update_settings", "handler": "handleUpdateSettings" },
-    { "domain": "conversation", "action": "toggle_context",  "handler": "handleToggleContext" },
-    { "domain": "conversation", "action": "context_stats",   "handler": "handleContextStats" }
+    {
+      "domain": "conversation",
+      "action": "send",
+      "handler": "handleSend"
+    },
+    {
+      "domain": "conversation",
+      "action": "create",
+      "handler": "handleCreate"
+    },
+    {
+      "domain": "conversation",
+      "action": "list",
+      "handler": "handleList"
+    },
+    {
+      "domain": "conversation",
+      "action": "load",
+      "handler": "handleLoad"
+    },
+    {
+      "domain": "conversation",
+      "action": "delete",
+      "handler": "handleDelete"
+    },
+    {
+      "domain": "conversation",
+      "action": "update_settings",
+      "handler": "handleUpdateSettings"
+    },
+    {
+      "domain": "conversation",
+      "action": "toggle_context",
+      "handler": "handleToggleContext"
+    },
+    {
+      "domain": "conversation",
+      "action": "context_stats",
+      "handler": "handleContextStats"
+    },
+    {
+      "domain": "agentes",
+      "action": "bitacora",
+      "handler": "handleBitacora"
+    }
   ],
   "tools": [],
   "dependencies": [
@@ -87,7 +124,9 @@
       {
         "name": "conversations",
         "description": "Conversaciones del usuario por proyecto. Settings (context_window/temperature/max_tokens/prompt_id) inline.",
-        "indexes": ["idx_conversations_project ON (project_id, updated_at DESC)"]
+        "indexes": [
+          "idx_conversations_project ON (project_id, updated_at DESC)"
+        ]
       },
       {
         "name": "messages",
@@ -105,7 +144,11 @@
       "pattern": "owned-tables-via-database-manager-per-project",
       "restart_resilient": true,
       "concurrency": "single-writer",
-      "lost_on_restart": ["pendingDb", "knownConversations", "schemaReady"]
+      "lost_on_restart": [
+        "pendingDb",
+        "knownConversations",
+        "schemaReady"
+      ]
     }
   },
   "observability": {

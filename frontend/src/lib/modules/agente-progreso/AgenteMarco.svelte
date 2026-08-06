@@ -99,6 +99,39 @@
           </div>
         {/if}
 
+        {#if ejecucion.veredicto}
+          <div class="agente-veredicto" class:no-verificado={!ejecucion.veredicto.verificado}>
+            <div class="veredicto-titulo">
+              {#if ejecucion.veredicto.verificado}
+                ✅ <strong>Entregable verificado</strong>
+              {:else}
+                ❌ <strong>Entregable NO verificado</strong>
+              {/if}
+              {#if ejecucion.veredicto.path}<code>{ejecucion.veredicto.path}</code>{/if}
+            </div>
+            {#if ejecucion.veredicto.motivo}
+              <div class="veredicto-motivo">{ejecucion.veredicto.motivo}</div>
+            {/if}
+            {#if ejecucion.veredicto.reglas && ejecucion.veredicto.reglas.length > 0}
+              <ul class="veredicto-reglas">
+                {#each ejecucion.veredicto.reglas as regla (regla.regla)}
+                  <li class:ok={regla.ok} class:no-ok={!regla.ok}>
+                    {regla.ok ? '✓' : '✗'} <code>{regla.regla}</code>
+                    {#if regla.detalle}<span class="regla-detalle">— {regla.detalle}</span>{/if}
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        {/if}
+
+        {#if ejecucion.llm_content}
+          <details class="agente-llm">
+            <summary>💬 Lo que dijo el modelo (respuesta LLM)</summary>
+            <div class="llm-content">{ejecucion.llm_content}</div>
+          </details>
+        {/if}
+
         {#if ultimosPasos(8).length > 0}
           <div class="agente-pasos">
             {#each ultimosPasos(8) as paso (paso.ts)}
@@ -160,6 +193,33 @@
   .agente-error {
     background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
     border-radius: 6px; padding: 0.4rem 0.6rem; font-size: 0.8rem; margin-bottom: 0.5rem;
+  }
+
+  /* SEPARACIÓN LLM vs AGENTE: el veredicto (respuesta del agente) y el texto
+     del modelo (anexo) se muestran como bloques distintos, nunca mezclados. */
+  .agente-veredicto {
+    background: #f0fdf4; border: 1px solid #bbf7d0; color: #14532d;
+    border-radius: 6px; padding: 0.4rem 0.6rem; font-size: 0.8rem; margin-bottom: 0.5rem;
+  }
+  .agente-veredicto.no-verificado {
+    background: #fef2f2; border-color: #fecaca; color: #991b1b;
+  }
+  .veredicto-titulo { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
+  .veredicto-titulo code {
+    background: rgba(0,0,0,0.06); border-radius: 4px; padding: 0.05rem 0.35rem; font-size: 0.72rem;
+  }
+  .veredicto-motivo { margin-top: 0.2rem; opacity: 0.9; }
+  .veredicto-reglas { margin: 0.3rem 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.15rem; }
+  .veredicto-reglas li.ok { color: #166534; }
+  .veredicto-reglas li.no-ok { color: #b91c1c; }
+  .regla-detalle { opacity: 0.8; }
+
+  .agente-llm { margin-bottom: 0.5rem; font-size: 0.78rem; }
+  .agente-llm summary { cursor: pointer; color: #64748b; }
+  .llm-content {
+    margin-top: 0.3rem; padding: 0.4rem 0.6rem; background: #f8fafc;
+    border: 1px solid #e2e8f0; border-radius: 6px; color: #334155;
+    white-space: pre-wrap; max-height: 12rem; overflow: auto;
   }
 
   .agente-pasos { display: flex; flex-direction: column; gap: 0.25rem; }

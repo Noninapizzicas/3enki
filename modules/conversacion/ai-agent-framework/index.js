@@ -706,15 +706,58 @@ class AiAgentFrameworkModule extends BaseModule {
       }
 
       this.metrics?.increment?.('ai-agent-framework.agent.executed', { agent_name });
+      // CIMIENTO v3 — BITÁCORA (custodio): toda ejecución con contrato abre su registro
+      // de pasos (P4: checkpoint por paso). El REANUDADOR la usará tras una pausa.
+      const agente = this.agents.get(agent_name);
+      const bitacora = (agente && cimiento.preparar(agente))
+        ? cimiento.crearBitacora({ project_id, request_id, agent_name, task, startedAt })
+        : null;
       return this._dispatchToLlm({
         ...baseEnvelope,
         conversation_id: resolved_conversation_id,
         shape: 'canonical',
         agent, task, context, session_id, prev_state, settings,
-        cimiento: cimiento.preparar(agent)   // CIMIENTO v3 — contrato del agente (entregable + presupuesto)
+        cimiento: cimiento.preparar(agent),   // CIMIENTO v3 — contrato del agente (entregable + presupuesto)
+        bitacora
       });
     } catch (err) {
       this._handleHandlerError('ai-agent-framework.agent_execute.error', err);
+    }
+  }
+
+  // CIMIENTO v3 — REANUDADOR (reflejo+custodio, del esquema): retoma una ejecución
+  // PAUSADA desde su bitácora (punto de reanudación: session_id + prev_state).
+  // P4: una interrupción (timeout/fallo) nunca pierde el trabajo — se continúa.
+  async onAgentExecuteResumeRequest(event) {
+    try {
+      const data = event?.data || event;
+      const { request_id, project_id, context, settings } = data;
+      if (!request_id || !project_id) {
+        return this._publicarEvento('agent.execute.resume.failed', {
+          request_id, project_id, error: { code: 'INVALID_INPUT', message: 'request_id y project_id requeridos' }
+        });
+      }
+      const bit = cimiento.leerBitacora(project_id, request_id);
+      if (!bit || bit.estado !== 'pausada') {
+        return this._publicarEvento('agent.execute.resume.failed', {
+          request_id, project_id, error: { code: 'NO_REANUDABLE', message: `La ejecución ${request_id} no está pausada o no existe` }
+        });
+      }
+      const pr = bit.punto_reanudacion || {};
+      // Re-despachar la MISMA ejecución con su punto de reanudación (session_id +
+      // prev_state → el llm-flow continúa donde se quedó, no empieza de cero).
+      return this.onAgentExecuteRequest({ data: {
+        request_id,
+        agent_name: bit.agent_name,
+        project_id,
+        task: bit.task,
+        session_id: pr.session_id || null,
+        prev_state: pr.prev_state || null,
+        context: context || {},
+        settings: settings || {}
+      }});
+    } catch (err) {
+      this._handleHandlerError('ai-agent-framework.agent_resume.error', err);
     }
   }
 
@@ -802,6 +845,13 @@ class AiAgentFrameworkModule extends BaseModule {
       if (pending.session_id) timeoutPayload.session_id = pending.session_id;
       if (pending.prev_state) timeoutPayload.prev_state = pending.prev_state;
       if (pending.conversation_id) timeoutPayload.conversation_id = pending.conversation_id;
+      // CIMIENTO v3 — BITÁCORA (custodio): la ejecución queda PAUSADA con su punto
+      // de reanudación (session_id + prev_state). El REANUDADOR la retoma (P4).
+      if (pending.project_id && pending.original_request_id) {
+        cimiento.pausarBitacora(pending.project_id, pending.original_request_id, {
+          session_id: pending.session_id, prev_state: pending.prev_state
+        });
+      }
       if (pending.shape === 'canonical') {
         this._publishAgentExecuteFailed(timeoutPayload);
       } else {
@@ -918,6 +968,14 @@ class AiAgentFrameworkModule extends BaseModule {
             })
           : { verificado: false, motivo: 'sin_entregable_declarado' };
 
+        // BITÁCORA (custodio): sellar con el veredicto; sus pasos van a la VITRINA.
+        let pasos = [];
+        if (pending.project_id && pending.original_request_id) {
+          cimiento.sellarBitacora(pending.project_id, pending.original_request_id, veredicto, duration_ms);
+          const bit = cimiento.leerBitacora(pending.project_id, pending.original_request_id);
+          pasos = (bit && bit.pasos) || [];
+        }
+
         if (contrato && !veredicto.verificado) {
           return this._publishAgentExecuteFailed({
             ...pending,
@@ -926,7 +984,8 @@ class AiAgentFrameworkModule extends BaseModule {
               message: `El agente ${pending.agent_name} reportó éxito pero el entregable NO existe: ${veredicto.motivo}${(veredicto.reglas || []).length ? ' — ' + veredicto.reglas.map(r => r.detalle).join('; ') : ''}`
             },
             duration_ms,
-            veredicto
+            veredicto,
+            pasos
           });
         }
 
@@ -937,7 +996,8 @@ class AiAgentFrameworkModule extends BaseModule {
           model, provider, usage,
           duration_ms,
           verificado: veredicto.verificado,
-          veredicto
+          veredicto,
+          pasos
         });
       }
 
@@ -1031,6 +1091,7 @@ class AiAgentFrameworkModule extends BaseModule {
     // su "success" con trabajo hecho) o el entregable es fuzzy (juicio/evento).
     if ('verificado' in ctx) payload.verificado = ctx.verificado;
     if (ctx.veredicto) payload.veredicto = ctx.veredicto;
+    if (ctx.pasos) payload.pasos = ctx.pasos;   // la VITRINA proyecta los pasos reales
 
     // chat.assistant.saved se delega a agent-observer (adaptador canonico
     // agent-flow → chat-flow). agent-observer escucha agent.execute.response/
@@ -1066,6 +1127,7 @@ class AiAgentFrameworkModule extends BaseModule {
     if (typeof ctx.iterations_completed === 'number') payload.iterations_completed = ctx.iterations_completed;
     if ('provider_attempted' in ctx) payload.provider_attempted = ctx.provider_attempted;
     if (ctx.veredicto) payload.veredicto = ctx.veredicto;   // CIMIENTO v3 — el veredicto viaja también en el failed
+    if (ctx.pasos) payload.pasos = ctx.pasos;               // y la VITRINA proyecta los pasos
 
     return this._publicarEvento('agent.execute.failed', payload, {
       correlation_id: ctx.correlation_id, project_id: ctx.project_id

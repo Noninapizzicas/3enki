@@ -157,4 +157,82 @@ function _verificarFs(entregable, ctx) {
   };
 }
 
-module.exports = { preparar, validarContrato, verificar, MODULES_DIR, REPO_MODULES_DIR };
+// ── BITÁCORA (CUSTODIO — single-writer del registro de pasos de cada ejecución) ──
+// El esquema: "bitácora · CUSTODIO (único escritor del registro de pasos)".
+// El framework es el único que la escribe; la vitrina solo la proyecta.
+// Vive en el storage del proyecto: storage/agentes/bitacoras/<request_id>.json
+// → sobrevive a reinicios y permite REANUDAR (P4: checkpoint por paso).
+
+function bitacoraPath(project_id, request_id) {
+  return path.join(DATA_DIR, 'projects', project_id || 'system', 'storage', 'agentes', 'bitacoras', request_id + '.json');
+}
+
+function crearBitacora({ project_id, request_id, agent_name, task, startedAt }) {
+  const doc = {
+    request_id, agent_name,
+    task: typeof task === 'string' ? task.slice(0, 500) : '',
+    estado: 'ejecutando',       // ejecutando | pausada | verificada | fallida
+    pasos: [{ paso: 'started', ts: startedAt || Date.now(), message: `Agente ${agent_name} iniciando` }],
+    startedAt: startedAt || Date.now(),
+    veredicto: null,
+    punto_reanudacion: null
+  };
+  try {
+    fs.mkdirSync(path.dirname(bitacoraPath(project_id, request_id)), { recursive: true });
+    fs.writeFileSync(bitacoraPath(project_id, request_id), JSON.stringify(doc, null, 2), 'utf8');
+  } catch (_) { /* best-effort: sin bitácora no se bloquea la ejecución */ }
+  return doc;
+}
+
+function registrarPaso(project_id, request_id, paso) {
+  try {
+    const p = bitacoraPath(project_id, request_id);
+    if (!fs.existsSync(p)) return null;
+    const doc = JSON.parse(fs.readFileSync(p, 'utf8'));
+    doc.pasos.push({ ...paso, ts: paso.ts || Date.now() });
+    fs.writeFileSync(p, JSON.stringify(doc, null, 2), 'utf8');
+    return doc;
+  } catch (_) { return null; }
+}
+
+// Punto de reanudación: timeout/interrupción → estado 'pausada' + dónde seguir.
+function pausarBitacora(project_id, request_id, { session_id, prev_state }) {
+  try {
+    const p = bitacoraPath(project_id, request_id);
+    if (!fs.existsSync(p)) return null;
+    const doc = JSON.parse(fs.readFileSync(p, 'utf8'));
+    doc.estado = 'pausada';
+    doc.punto_reanudacion = { session_id: session_id || null, prev_state: prev_state || null };
+    doc.pasos.push({ paso: 'pausada', ts: Date.now(), message: 'Ejecución pausada — reanudable' });
+    fs.writeFileSync(p, JSON.stringify(doc, null, 2), 'utf8');
+    return doc;
+  } catch (_) { return null; }
+}
+
+// Sellar con el veredicto del JEFE (P1): verificada / fallida + reglas.
+function sellarBitacora(project_id, request_id, veredicto, duracion_ms) {
+  try {
+    const p = bitacoraPath(project_id, request_id);
+    if (!fs.existsSync(p)) return null;
+    const doc = JSON.parse(fs.readFileSync(p, 'utf8'));
+    doc.estado = veredicto && veredicto.verificado ? 'verificada' : 'fallida';
+    doc.veredicto = veredicto || null;
+    doc.duracion_ms = duracion_ms || doc.duracion_ms || null;
+    doc.pasos.push({ paso: 'final', ts: Date.now(), message: doc.estado });
+    fs.writeFileSync(p, JSON.stringify(doc, null, 2), 'utf8');
+    return doc;
+  } catch (_) { return null; }
+}
+
+function leerBitacora(project_id, request_id) {
+  try {
+    const p = bitacoraPath(project_id, request_id);
+    return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
+  } catch (_) { return null; }
+}
+
+module.exports = {
+  preparar, validarContrato, verificar,
+  crearBitacora, registrarPaso, pausarBitacora, sellarBitacora, leerBitacora,
+  MODULES_DIR, REPO_MODULES_DIR
+};

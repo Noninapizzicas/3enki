@@ -304,11 +304,33 @@ class AiAgentFrameworkModule extends BaseModule {
   }
 
   // ============================================================
+  // FASE DE CORTE → MOTOR v3: los agentes que tienen PIPELINE en el
+  // registro del motor (agentes/registro/store/<nombre>.json) los ejecuta
+  // SOLO el ai-agent-framework-v3. Este framework viejo DELEGA (no ejecuta,
+  // no responde — el v3 responde al mismo request_id). Síncrono y sin
+  // dependencias: la fuente de verdad es el STORE del registro (el custodio
+  // es el único que lo escribe).
+  // ============================================================
+  _agenteDelMotor(agent_name) {
+    try {
+      const storeDir = path.resolve(__dirname, '../../agentes/registro/store');
+      return fs.existsSync(path.join(storeDir, `${agent_name}.json`));
+    } catch {
+      return false; // si no se puede leer, el viejo ejecuta (seguro: no cortar servicio)
+    }
+  }
+
+  // ============================================================
   // Bus subscribers
   // ============================================================
 
   async onInvokeAgent(event) {
     try {
+      const d = event?.data || event || {};
+      if (d.agent_name && this._agenteDelMotor(d.agent_name)) {
+        this.logger.info('ai-agent-framework.delegado.motor.v3', { agent_name: d.agent_name, via: 'invoke_agent' });
+        return; // el v3 responde invoke_agent.response al mismo request_id
+      }
       return await this._runAgentLegacy(event);
     } catch (err) {
       this._handleHandlerError('ai-agent-framework.invoke_agent.error', err);
@@ -670,6 +692,14 @@ class AiAgentFrameworkModule extends BaseModule {
           reason: 'request_id obligatorio'
         });
         this.metrics?.increment?.('ai-agent-framework.errors', { code: 'INVALID_INPUT', kind: 'agent_execute' });
+        return;
+      }
+
+      // FASE DE CORTE → MOTOR v3: si el agente tiene pipeline en el registro
+      // del motor, este framework viejo NO lo ejecuta (delega — el v3 responde
+      // al mismo request_id con agent.execute.response/failed).
+      if (this._agenteDelMotor(agent_name)) {
+        this.logger.info('ai-agent-framework.delegado.motor.v3', { agent_name, request_id, via: 'agent.execute.request' });
         return;
       }
       if (!agent_name) {

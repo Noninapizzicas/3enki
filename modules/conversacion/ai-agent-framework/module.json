@@ -67,10 +67,15 @@
         "description": "CÚPULA DE AGENTES (tramo 3, molde prisma) — crear un agente ENCENDIENDO UNA LÁMPARA sobre un caso. Recibe {necesidad, entidad?, dominio?, rasgos?, herramientas?}, corre prisma.descomponer y GENERA el prompt (contrato + senda + loop act(faltan[0]) hasta cerrado) → llama _crear. Montar un agente sin escribir política a mano. Responde crear_agente_desde_caso.response {request_id, result|error}."
       },
       {
-        "event": "agent.execute.request",
-        "handler": "onAgentExecuteRequest",
-        "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
-        "description": "Entry point canonico para invocar agentes desde modulos del dominio, scheduler/cron, etc."
+       "event": "agent.execute.request",
+       "handler": "onAgentExecuteRequest",
+       "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
+       "description": "Entry point canonico agent-flow. Lanza el agente (CIMIENTO v3: bitacora + JEFE verifica el entregable antes del success)."
+      },
+      {
+       "event": "agent.execute.resume.request",
+       "handler": "onAgentExecuteResumeRequest",
+       "description": "CIMIENTO v3 — REANUDADOR: retoma una ejecución pausada desde su bitácora (session_id + prev_state). P4: interrupción ≠ pérdida."
       },
       {
         "event": "llm.complete.response",

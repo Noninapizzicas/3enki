@@ -23,6 +23,7 @@ const crypto = require('crypto');
 
 const BaseModule = require('../../_shared/base-module');
 const { descomponer } = require('../../_shared/prisma-del-caso');
+const cimiento = require('./cimiento');   // CIMIENTO v3 — CONTRATO + JEFE (verifica el entregable)
 const DEFAULT_CONVERSATION_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_AGENT_TIMEOUT_MS = 600000;      // LUZ: 120s cortaba el prisma a mitad → 10min (override por agente)
 const DEFAULT_AGENT_TEMPERATURE = 0.7;
@@ -240,6 +241,8 @@ class AiAgentFrameworkModule extends BaseModule {
           max_tokens: def.max_tokens || DEFAULT_AGENT_MAX_TOKENS,
           timeout_ms: def.timeout_ms || DEFAULT_AGENT_TIMEOUT_MS,
           max_tool_iterations: def.max_tool_iterations || null,   // sin freno salvo que el agente lo declare
+          presupuesto: def.presupuesto || null,                   // CIMIENTO v3 — límites por tarea (P2)
+          entregable: def.entregable || null,                     // CIMIENTO v3 — QUÉ entrega (P1, el JEFE lo verifica)
           prompt_text: promptText
         });
       } catch (err) {
@@ -703,14 +706,58 @@ class AiAgentFrameworkModule extends BaseModule {
       }
 
       this.metrics?.increment?.('ai-agent-framework.agent.executed', { agent_name });
+      // CIMIENTO v3 — BITÁCORA (custodio): toda ejecución con contrato abre su registro
+      // de pasos (P4: checkpoint por paso). El REANUDADOR la usará tras una pausa.
+      const agente = this.agents.get(agent_name);
+      const bitacora = (agente && cimiento.preparar(agente))
+        ? cimiento.crearBitacora({ project_id, request_id, agent_name, task, startedAt })
+        : null;
       return this._dispatchToLlm({
         ...baseEnvelope,
         conversation_id: resolved_conversation_id,
         shape: 'canonical',
-        agent, task, context, session_id, prev_state, settings
+        agent, task, context, session_id, prev_state, settings,
+        cimiento: cimiento.preparar(agent),   // CIMIENTO v3 — contrato del agente (entregable + presupuesto)
+        bitacora
       });
     } catch (err) {
       this._handleHandlerError('ai-agent-framework.agent_execute.error', err);
+    }
+  }
+
+  // CIMIENTO v3 — REANUDADOR (reflejo+custodio, del esquema): retoma una ejecución
+  // PAUSADA desde su bitácora (punto de reanudación: session_id + prev_state).
+  // P4: una interrupción (timeout/fallo) nunca pierde el trabajo — se continúa.
+  async onAgentExecuteResumeRequest(event) {
+    try {
+      const data = event?.data || event;
+      const { request_id, project_id, context, settings } = data;
+      if (!request_id || !project_id) {
+        return this._publicarEvento('agent.execute.resume.failed', {
+          request_id, project_id, error: { code: 'INVALID_INPUT', message: 'request_id y project_id requeridos' }
+        });
+      }
+      const bit = cimiento.leerBitacora(project_id, request_id);
+      if (!bit || bit.estado !== 'pausada') {
+        return this._publicarEvento('agent.execute.resume.failed', {
+          request_id, project_id, error: { code: 'NO_REANUDABLE', message: `La ejecución ${request_id} no está pausada o no existe` }
+        });
+      }
+      const pr = bit.punto_reanudacion || {};
+      // Re-despachar la MISMA ejecución con su punto de reanudación (session_id +
+      // prev_state → el llm-flow continúa donde se quedó, no empieza de cero).
+      return this.onAgentExecuteRequest({ data: {
+        request_id,
+        agent_name: bit.agent_name,
+        project_id,
+        task: bit.task,
+        session_id: pr.session_id || null,
+        prev_state: pr.prev_state || null,
+        context: context || {},
+        settings: settings || {}
+      }});
+    } catch (err) {
+      this._handleHandlerError('ai-agent-framework.agent_resume.error', err);
     }
   }
 
@@ -780,7 +827,7 @@ class AiAgentFrameworkModule extends BaseModule {
     }
 
     const llm_request_id = crypto.randomUUID();
-    const timeout_ms = settings?.timeout_ms || agent.timeout_ms;
+    const timeout_ms = settings?.timeout_ms || (agent.presupuesto && agent.presupuesto.timeout_ms) || agent.timeout_ms;
 
     const timeout = setTimeout(() => {
       const pending = this.pendingLlm.get(llm_request_id);
@@ -798,6 +845,13 @@ class AiAgentFrameworkModule extends BaseModule {
       if (pending.session_id) timeoutPayload.session_id = pending.session_id;
       if (pending.prev_state) timeoutPayload.prev_state = pending.prev_state;
       if (pending.conversation_id) timeoutPayload.conversation_id = pending.conversation_id;
+      // CIMIENTO v3 — BITÁCORA (custodio): la ejecución queda PAUSADA con su punto
+      // de reanudación (session_id + prev_state). El REANUDADOR la retoma (P4).
+      if (pending.project_id && pending.original_request_id) {
+        cimiento.pausarBitacora(pending.project_id, pending.original_request_id, {
+          session_id: pending.session_id, prev_state: pending.prev_state
+        });
+      }
       if (pending.shape === 'canonical') {
         this._publishAgentExecuteFailed(timeoutPayload);
       } else {
@@ -832,7 +886,7 @@ class AiAgentFrameworkModule extends BaseModule {
       tools: toolsForAgent,
       settings: {
         temperature: settings?.temperature ?? agent.temperature,
-        max_tokens: settings?.max_tokens ?? agent.max_tokens,
+        max_tokens: settings?.max_tokens ?? (agent.presupuesto && agent.presupuesto.max_tokens) ?? agent.max_tokens,
         // El agente puede declarar su propio límite de iteraciones de tools
         // (o ninguno: el default del gateway es 500 = sin freno práctico).
         ...(agent.max_tool_iterations ? { max_tool_iterations: agent.max_tool_iterations } : {}),
@@ -898,12 +952,52 @@ class AiAgentFrameworkModule extends BaseModule {
           step: 'finalizing',
           message: `Agente ${pending.agent_name} terminando`
         });
+
+        // CIMIENTO v3 — EL JEFE (P1: success = ENTREGABLE VERIFICADO).
+        // El framework ya NO cree al LLM: verifica el entregable declarado en
+        // el manifest contra el mundo real ANTES de permitir el success.
+        // El humo ("success" sin trabajo) se vuelve estructuralmente imposible:
+        //   · contrato con entregable → verificación obligatoria; si falla → FAILED honesto
+        //   · agente v1 sin contrato     → success con verificado:false explícito (nadie lo confunde)
+        const contrato = (pending.cimiento && pending.cimiento.entregable) || null;
+        const veredicto = contrato
+          ? await cimiento.verificar(contrato, {
+              task: pending.task,
+              context: pending.context,
+              project_id: pending.project_id
+            })
+          : { verificado: false, motivo: 'sin_entregable_declarado' };
+
+        // BITÁCORA (custodio): sellar con el veredicto; sus pasos van a la VITRINA.
+        let pasos = [];
+        if (pending.project_id && pending.original_request_id) {
+          cimiento.sellarBitacora(pending.project_id, pending.original_request_id, veredicto, duration_ms);
+          const bit = cimiento.leerBitacora(pending.project_id, pending.original_request_id);
+          pasos = (bit && bit.pasos) || [];
+        }
+
+        if (contrato && !veredicto.verificado) {
+          return this._publishAgentExecuteFailed({
+            ...pending,
+            error: {
+              code: 'ENTREGABLE_NO_VERIFICADO',
+              message: `El agente ${pending.agent_name} reportó éxito pero el entregable NO existe: ${veredicto.motivo}${(veredicto.reglas || []).length ? ' — ' + veredicto.reglas.map(r => r.detalle).join('; ') : ''}`
+            },
+            duration_ms,
+            veredicto,
+            pasos
+          });
+        }
+
         return this._publishAgentExecuteResponse({
           ...pending,
           content,
           tool_calls_executed: tool_calls_executed || [],
           model, provider, usage,
-          duration_ms
+          duration_ms,
+          verificado: veredicto.verificado,
+          veredicto,
+          pasos
         });
       }
 
@@ -991,6 +1085,14 @@ class AiAgentFrameworkModule extends BaseModule {
       total: ctx.usage.total_tokens || ((ctx.usage.input_tokens || 0) + (ctx.usage.output_tokens || 0))
     };
 
+    // CIMIENTO v3 — la VITRINA: el veredicto del JEFE viaja en el response.
+    // verificado:true = entregable comprobado en el mundo real.
+    // verificado:false + motivo = el agente v1 no declaró entregable (nadie confunde
+    // su "success" con trabajo hecho) o el entregable es fuzzy (juicio/evento).
+    if ('verificado' in ctx) payload.verificado = ctx.verificado;
+    if (ctx.veredicto) payload.veredicto = ctx.veredicto;
+    if (ctx.pasos) payload.pasos = ctx.pasos;   // la VITRINA proyecta los pasos reales
+
     // chat.assistant.saved se delega a agent-observer (adaptador canonico
     // agent-flow → chat-flow). agent-observer escucha agent.execute.response/
     // failed/progress y traduce a chat.assistant.saved con metadata.author +
@@ -1024,6 +1126,8 @@ class AiAgentFrameworkModule extends BaseModule {
     else if (ctx.startedAt) payload.duration_ms = Date.now() - ctx.startedAt;
     if (typeof ctx.iterations_completed === 'number') payload.iterations_completed = ctx.iterations_completed;
     if ('provider_attempted' in ctx) payload.provider_attempted = ctx.provider_attempted;
+    if (ctx.veredicto) payload.veredicto = ctx.veredicto;   // CIMIENTO v3 — el veredicto viaja también en el failed
+    if (ctx.pasos) payload.pasos = ctx.pasos;               // y la VITRINA proyecta los pasos
 
     return this._publicarEvento('agent.execute.failed', payload, {
       correlation_id: ctx.correlation_id, project_id: ctx.project_id

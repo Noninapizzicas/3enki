@@ -46,8 +46,9 @@
       const rid = get(ejecucionActivaId) as string | null;
       ejecucion = rid ? getEjecucion(rid) : undefined;
     });
-    // Si no hay activa, esperar a que llegue la primera (agent_progress la crea)
-    if (!get(ejecucionActivaId)) abrirEjecucion(''); // no-op; la suscripción lo cubre
+    // La ejecución activa la fija el STORE al recibir agent_progress (la que
+    // progresa ES la activa). No abrir con '' — eso apuntaba a una ejecución
+    // inexistente y el marco nunca renderizaba (lección en vivo).
   });
 
   onDestroy(() => {

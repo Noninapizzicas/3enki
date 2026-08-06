@@ -210,6 +210,60 @@ class ProductorModulosReflejo extends ModuloHibridoReflejo {
     }
     return { status: 200, data: { ok: true, message: 'Diseño válido' }};
   }
+
+  // ── SKILLS EN LA CANTERA (FASE 5 — escribir-skills) ──
+  // El agente de la FASE 5 escribe la SKILL FULL de cada módulo construido en
+  // modules/cosecha/cantera/enki/<slug>/SKILL.md. NO usa fs.write (scopeado al
+  // storage del proyecto → la skill nunca llega a la cantera del sistema, y el
+  // gate da 409 — lección en vivo: el agente reportó success y la skill no
+  // existía en ningún sitio). El productor es el ÚNICO que escribe en modules/
+  // del sistema (single-writer) → esta tool es la vía para las skills.
+  async toolProducirSkill(params) {
+    if (!this._habilitado) {
+      return { status: 403, data: {
+        error: 'FORBIDDEN',
+        message: 'Interruptor ' + INTERRUPTOR_ID + ' está OFF. Actívalo en el panel para autorizar.'
+      }};
+    }
+
+    const { nombre, markdown } = params;
+    const errores = [];
+
+    if (!nombre || !/^[a-z][a-z0-9_-]*$/.test(nombre)) {
+      errores.push('nombre: debe ser snake_case (letras minúsculas, números, guiones)');
+    }
+    if (!markdown || typeof markdown !== 'string') {
+      errores.push('markdown: requerido (el contenido completo de la SKILL.md)');
+    } else if (markdown.length < 100) {
+      errores.push('markdown: demasiado corto para ser una SKILL FULL (min 100 chars)');
+    } else if (!markdown.includes('---') || !/^name:\s*/.test(markdown.split('---')[1] || '')) {
+      errores.push('markdown: debe tener frontmatter YAML con name: (formato cantera de Enki)');
+    }
+
+    if (errores.length > 0) {
+      this._publicarEvento('productor.skill.rechazada', { nombre, errores });
+      return { status: 400, data: { error: 'VALIDATION_ERROR', errores }};
+    }
+
+    try {
+      const skillDir = path.join(MODULES_DIR, 'cosecha', 'cantera', 'enki', nombre);
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(skillDir, 'SKILL.md'), markdown, 'utf-8');
+
+      this._publicarEvento('productor.skill.producida', { nombre, path: 'modules/cosecha/cantera/enki/' + nombre + '/SKILL.md' });
+
+      return { status: 201, data: {
+        ok: true,
+        nombre,
+        path: 'modules/cosecha/cantera/enki/' + nombre + '/SKILL.md'
+      }};
+    } catch (e) {
+      return { status: 500, data: {
+        error: 'UNKNOWN_ERROR',
+        message: e.message
+      }};
+    }
+  }
 }
 
 module.exports = ProductorModulosReflejo;

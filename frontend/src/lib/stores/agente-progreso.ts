@@ -93,6 +93,56 @@ export function abrirEjecucion(request_id: string): void {
   ejecucionActivaId.set(request_id);
 }
 
+// ── REHIDRATACIÓN DEL MARCO (CIMIENTO v3) ────────────────────────────────────
+// Recupera una ejecución desde su BITÁCORA persistida (servida por chat-io:
+// ui/request/agentes/bitacora). El marco sobrevive a recargas de página:
+// la ventana /agentes/[request_id] se rehidrata al montar.
+export async function rehidratarDesdeBitacora(project_id: string, request_id: string): Promise<AgenteEjecucion | undefined> {
+  try {
+    const { mqttRequest } = await import('$lib/ui-core');
+    const res: any = await mqttRequest('agentes', 'bitacora', { project_id, request_id });
+    const bitacora = res?.data?.bitacora;
+    if (!bitacora) return undefined;
+
+    const estado = bitacora.estado === 'verificada' ? 'done'
+      : bitacora.estado === 'fallida' ? 'failed'
+      : 'running';   // ejecutando / pausada → sigue viva (o reanudable)
+
+    const ejecucion: AgenteEjecucion = {
+      request_id,
+      agent_name: bitacora.agent_name || 'agente',
+      task: bitacora.task,
+      project_id,
+      status: estado,
+      pasos: (bitacora.pasos || []).map((p: any) => ({
+        step: p.paso || 'thinking',
+        message: p.message,
+        ts: p.ts ? new Date(p.ts).toISOString() : new Date().toISOString()
+      })),
+      tools_llamadas: [],
+      started_at: bitacora.startedAt ? new Date(bitacora.startedAt).toISOString() : undefined,
+      duration_ms: bitacora.duracion_ms,
+      veredicto: bitacora.veredicto || undefined
+    };
+    if (estado === 'failed' && bitacora.veredicto && !bitacora.veredicto.verificado) {
+      ejecucion.error = {
+        code: 'ENTREGABLE_NO_VERIFICADO',
+        message: bitacora.veredicto.motivo || 'El entregable no fue verificado'
+      };
+    }
+
+    ejecuciones.update(map => {
+      const m = new Map(map);
+      m.set(request_id, ejecucion);
+      return m;
+    });
+    abrirEjecucion(request_id);
+    return ejecucion;
+  } catch (_) {
+    return undefined;
+  }
+}
+
 // ── Suscripción MQTT (inicializar al montar la app o la página) ─────────────
 // Topics REALES del frontend (el puente backend publica en conversation/{id}/…):
 //   conversation/+/agent_progress → la ruta del agente en vivo

@@ -47,6 +47,8 @@
 'use strict';
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const BaseModule = require('../../_shared/base-module');
 const SCHEMA_SQL = `
@@ -888,6 +890,30 @@ class ChatIoModule extends BaseModule {
       timestamp: new Date().toISOString()
     });
     this.metrics?.increment?.('chat-io.agent_bridge.failed', {});
+  }
+
+  // ── REHIDRATACIÓN DEL MARCO (CIMIENTO v3) ──────────────────────────────────
+  // ui/request/agentes/bitacora { project_id, request_id } → la BITÁCORA
+  // persistida de una ejecución (storage/agentes/bitacoras/<request_id>.json).
+  // El frontend la pide al montar la ventana /agentes/[request_id] y recupera
+  // el marco completo (pasos + veredicto) aunque recargue la página.
+  async handleBitacora(data) {
+    try {
+      const { project_id, request_id } = data || {};
+      if (!project_id || !request_id) {
+        return { status: 400, data: { error: 'INVALID_INPUT', message: 'project_id y request_id requeridos' } };
+      }
+      const p = path.resolve(__dirname, '../../../data/projects', project_id, 'storage', 'agentes', 'bitacoras', request_id + '.json');
+      if (!fs.existsSync(p)) {
+        return { status: 404, data: { error: 'RESOURCE_NOT_FOUND', message: `No hay bitácora para ${request_id}` } };
+      }
+      const bitacora = JSON.parse(fs.readFileSync(p, 'utf8'));
+      this.metrics?.increment?.('chat-io.agent_bridge.bitacora', {});
+      return { status: 200, data: { bitacora } };
+    } catch (err) {
+      this.logger?.error?.('chat-io.agent_bridge.bitacora.error', { error: err.message });
+      return { status: 500, data: { error: 'UNKNOWN_ERROR', message: err.message } };
+    }
   }
 }
 

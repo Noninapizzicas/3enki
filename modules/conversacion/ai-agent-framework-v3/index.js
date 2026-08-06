@@ -36,6 +36,7 @@ class EjecutorMotorModule extends BaseModule {
     this.repoDir = '/home/admin/3enki';
     this.eventBus = null;
     this.logger = null;
+    this.moduleLoader = null;
     // Generaciones en curso (correlación por llm_request_id).
     this._generacionEsperas = new Map();
   }
@@ -43,6 +44,78 @@ class EjecutorMotorModule extends BaseModule {
   async onLoad(context) {
     this.eventBus = context.eventBus;
     this.logger = context.logger;
+    this.moduleLoader = context.moduleLoader || null;
+    if (this.moduleLoader && this.moduleLoader.toolsRegistry) {
+      this._registrarTools();
+    }
+  }
+
+  // ── TOOLS DEL CHAT (la cúpula del MOTOR): invoke_agent + buscar_agente,
+  //    servidas por el v3 — el catálogo SON los pipelines del registro. ──────
+  _registrarTools() {
+    // invoke_agent: la ejecuta el v3 (escucha invoke_agent.request — alias del
+    // mismo pipeline). La descripción lista los pipelines declarados.
+    const pipelines = ['construir-modulos', 'escribir-skills', 'esquematizador-negocio', 'planificar-construccion'];
+    const tool = {
+      name: 'invoke_agent',
+      description: `Invoca un PIPELINE del motor de agentes para una tarea concreta (el pipeline corre casi todo determinista; el JEFE verifica el entregable antes del éxito).\n\nPipelines disponibles:\n${pipelines.map(p => `  - ${p}`).join('\n')}\n\nDevuelve cuando el pipeline termina con el veredicto.`,
+      parameters: {
+        type: 'object',
+        properties: {
+          agent_name: { type: 'string', description: 'Nombre exacto del pipeline', enum: pipelines },
+          task:       { type: 'string', description: 'Tarea concreta en lenguaje natural' },
+          context:    { type: 'object', description: 'Datos específicos (project_id, conversation_id…)' }
+        },
+        required: ['agent_name', 'task']
+      },
+      module: 'ai-agent-framework-v3',
+      event_based: true,
+      _pipelines: pipelines
+    };
+    this.moduleLoader.toolsRegistry.set('invoke_agent', tool);
+
+    // buscar_agente: catálogo de pipelines del registro (consulta en vivo).
+    const toolBuscar = {
+      name: 'buscar_agente',
+      description: 'Busca en el registro del MOTOR DE AGENTES los pipelines (trabajadores deterministas+verificados) que sirven para una tarea. Devuelve nombre y descripción. ÚSALA cuando una tarea pediría un especialista y no sabes si existe un pipeline.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          query: { type: 'string', minLength: 1, description: 'La tarea/capacidad a buscar (p.ej. "construir módulos", "escribir skills", "esquematizar negocio").' },
+          dominio: { type: 'string', description: 'Opcional: ceñir a un dominio.' },
+          limite: { type: 'number', description: 'Opcional: cuántos devolver (default 10).' }
+        },
+        required: ['query']
+      },
+      module: 'ai-agent-framework-v3',
+      event_based: true
+    };
+    this.moduleLoader.toolsRegistry.set('buscar_agente', toolBuscar);
+    this.logger?.info?.('ai-agent-framework-v3.tools.registered', { invoke_agent: true, buscar_agente: true, pipelines: pipelines.length });
+  }
+
+  // Handler de buscar_agente: consulta el registro (pipeline.listar) y filtra.
+  async onBuscarAgente(event) {
+    const d = event?.data || event || {};
+    const request_id = d.request_id;
+    const query = String(d.query || '').toLowerCase();
+    try {
+      const resp = await this._pedir('pipeline.listar.request', { request_id: crypto.randomUUID() }, 'pipeline.listar.response', 8000);
+      const lista = (resp && resp.pipelines) || [];
+      const result = lista
+        .filter(p => !query || String(p.name).toLowerCase().includes(query) || String(p.description || '').toLowerCase().includes(query))
+        .slice(0, d.limite || 10)
+        .map(p => ({ name: p.name, description: p.description, dominio: 'proceso', activo: true }));
+      if (this.eventBus) {
+        this.eventBus.publish('buscar_agente.response', { request_id, result, total: result.length });
+      }
+    } catch (err) {
+      this.logger?.warn?.('ai-agent-framework-v3.buscar_agente.error', { request_id, error: err.message });
+      if (this.eventBus) {
+        this.eventBus.publish('buscar_agente.response', { request_id, result: [], total: 0, error: err.message });
+      }
+    }
   }
 
   // ── Helpers de integración por EVENTOS ─────────────────────────────────────

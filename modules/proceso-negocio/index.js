@@ -329,7 +329,21 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       if (!fs.existsSync(skillMd)) {
         return { ok: false, esperado: [`modules/cosecha/cantera/enki/${slug}/SKILL.md en disco`], mensaje: `La skill de ${slug} NO existe en la cantera (verificado en disco).` };
       }
-      return { ok: true, verificados: [`skill ${slug} en la cantera`] };
+      // Igual que los módulos: la skill también debe estar EN EL REPO — si no,
+      // el deploy (rsync --delete) la borrará de la cantera (misma lección).
+      if (REPO_MODULES_DIR) {
+        const repoSkill = path.join(REPO_MODULES_DIR, 'cosecha', 'cantera', 'enki', slug, 'SKILL.md');
+        let trackeada = false;
+        try {
+          const cp = require('child_process');
+          const out = cp.execFileSync('git', ['ls-files', '--', `modules/cosecha/cantera/enki/${slug}`], { cwd: path.join(REPO_MODULES_DIR, '..'), encoding: 'utf8' }).trim();
+          trackeada = out.length > 0;
+        } catch (_) { /* git no disponible → no bloquear, confiar en la existencia */ }
+        if (fs.existsSync(repoSkill) && !trackeada) {
+          return { ok: false, esperado: [`modules/cosecha/cantera/enki/${slug}/ COMMITEADA en el repo (~/3enki)`], mensaje: `La skill de ${slug} existe en la cantera pero NO está commiteada en ~/3enki (git ls-files no la ve) → el siguiente deploy (rsync --delete) la borrará. Commitea la skill (rama → PR → merge) antes de cerrar la fase.` };
+        }
+      }
+      return { ok: true, verificados: [`skill ${slug} en la cantera y en el repo`] };
     }
     return { ok: true };
   }

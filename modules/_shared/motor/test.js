@@ -1,0 +1,144 @@
+'use strict';
+// Tests puros de los reflejos del motor (P3 validador · P4 JEFE · P10 conversor).
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+
+const { validar } = require('../../_shared/motor/validador');
+const { verificar } = require('../../_shared/motor/verificador');
+const { convertir } = require('../../_shared/motor/conversor');
+
+// ── P3 · VALIDADOR ────────────────────────────────────────────────────────────
+test('validador: salida válida pasa', () => {
+  const r = validar({ nombre: 'x', version: '1.0.0' }, { campos: ['nombre', 'version'], tamano_min: 2 });
+  assert.equal(r.ok, true);
+});
+
+test('validador: campo faltante → corregir con detalle', () => {
+  const r = validar({ nombre: 'x' }, { campos: ['nombre', 'version'] });
+  assert.equal(r.ok, false);
+  assert.equal(r.regla, 'campos');
+  assert.match(r.detalle, /version/);
+});
+
+test('validador: tamaño mínimo no alcanzado', () => {
+  const r = validar('hola', { tamano_min: 100 });
+  assert.equal(r.ok, false);
+  assert.equal(r.regla, 'tamano_min');
+});
+
+test('validador: tipo equivocado', () => {
+  const r = validar('texto', { tipo: 'object' });
+  assert.equal(r.ok, false);
+  assert.equal(r.regla, 'tipo');
+});
+
+test('validador: sin reglas → pasa (declarado)', () => {
+  const r = validar({});
+  assert.equal(r.ok, true);
+});
+
+// ── P10 · CONVERSOR ───────────────────────────────────────────────────────────
+test('conversor: string JSON → canónica parseada', () => {
+  const r = convertir('{"nombre":"x"}');
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.canónica, { nombre: 'x' });
+});
+
+test('conversor: objeto pasa tal cual', () => {
+  const r = convertir({ nombre: 'x' });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.canónica, { nombre: 'x' });
+});
+
+test('conversor: texto plano → envuelto como content', () => {
+  const r = convertir('hola mundo');
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.canónica, { content: 'hola mundo' });
+});
+
+test('conversor: JSON inválido → error de formato con detalle', () => {
+  const r = convertir('{nombre: x}');
+  assert.equal(r.ok, false);
+  assert.match(r.detalle, /JSON inválido/);
+});
+
+test('conversor: vacío → error', () => {
+  assert.equal(convertir('').ok, false);
+  assert.equal(convertir(null).ok, false);
+});
+
+// ── P4 · EL JEFE (verificador) con MUNDO INYECTADO ───────────────────────────
+// Un mundo falso para el test: el archivo "existe" con contenido real.
+function mundoFalso({ existe = true, contenido = '', enRepo = true, sinPuerto = {} } = {}) {
+  return {
+    existe: (p) => (sinPuerto.existe ? undefined : existe),
+    leer: (p) => (sinPuerto.leer ? undefined : contenido),
+    enRepo: (p) => (sinPuerto.enRepo ? undefined : enRepo)
+  };
+}
+
+test('JEFE: entregable que existe → verificado', () => {
+  const v = verificar({ tipo: 'fs', path: 'x/index.js', reglas: ['existe'] }, mundoFalso({ existe: true }));
+  assert.equal(v.verificado, true);
+  assert.equal(v.motivo, 'entregable_verificado');
+});
+
+test('JEFE: el humo se pilla — no existe → NO verificado con regla', () => {
+  const v = verificar({ tipo: 'fs', path: 'x/index.js', reglas: ['existe'] }, mundoFalso({ existe: false }));
+  assert.equal(v.verificado, false);
+  assert.equal(v.motivo, 'entregable_no_verificado');
+  assert.equal(v.reglas[0].ok, false);
+  assert.match(v.reglas[0].detalle, /NO existe/);
+});
+
+test('JEFE: contenido_min — vacío → NO verificado', () => {
+  const v = verificar(
+    { tipo: 'fs', path: 'x/SKILL.md', reglas: ['existe', 'contenido_min'], min_chars: 100 },
+    mundoFalso({ existe: true, contenido: 'corto' })
+  );
+  assert.equal(v.verificado, false);
+  assert.match(v.reglas[1].detalle, /solo \d+ chars/);
+});
+
+test('JEFE: api_real — módulo con _shared + _atender 4 args → ok', () => {
+  const contenido = "const BaseModule = require('../../_shared/base-module');\nclass X extends BaseModule {\n  async _atender(evento, contexto, respuesta, siguiente) {}\n}";
+  const v = verificar(
+    { tipo: 'fs', path: 'x/index.js', reglas: ['api_real'] },
+    mundoFalso({ existe: true, contenido })
+  );
+  assert.equal(v.verificado, true);
+});
+
+test('JEFE: api_real — sin patrón de módulo → NO verificado', () => {
+  const v = verificar(
+    { tipo: 'fs', path: 'x/index.js', reglas: ['api_real'] },
+    mundoFalso({ existe: true, contenido: 'console.log("hola")' })
+  );
+  assert.equal(v.verificado, false);
+  assert.match(v.reglas[0].detalle, /patrón de módulo no completo/);
+});
+
+test('JEFE: en_repo sin puerto → NO bloquea (declarado)', () => {
+  const v = verificar(
+    { tipo: 'fs', path: 'x/index.js', reglas: ['en_repo'] },
+    mundoFalso({ sinPuerto: { enRepo: true } })
+  );
+  assert.equal(v.verificado, true);
+});
+
+test('JEFE: regla desconocida → NO verificado con detalle', () => {
+  const v = verificar({ tipo: 'fs', path: 'x', reglas: ['regla_inexistente'] }, mundoFalso({ existe: true }));
+  assert.equal(v.verificado, false);
+  assert.match(v.reglas[0].detalle, /regla desconocida/);
+});
+
+test('JEFE: entregable sin path → veredicto de contrato roto', () => {
+  const v = verificar({ tipo: 'fs' }, mundoFalso());
+  assert.equal(v.verificado, false);
+  assert.equal(v.motivo, 'entregable_sin_path');
+});
+
+test('JEFE: sin reglas → default existe', () => {
+  const v = verificar({ tipo: 'fs', path: 'x/index.js' }, mundoFalso({ existe: true }));
+  assert.equal(v.verificado, true);
+});

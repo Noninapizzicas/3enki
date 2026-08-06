@@ -72,6 +72,53 @@
     "should_continue": {
       "type": "boolean",
       "description": "Cimentacion futura: el agente indica si la sesion debe continuar (espera input adicional del usuario). Hoy false."
+    },
+
+    "llm": {
+      "type": "object",
+      "description": "SEPARACIÓN LLM vs AGENTE (cimiento v3): la respuesta del MODELO como anexo etiquetado — content (lo que dijo el LLM), model, provider, tokens, tool_calls. NO es la respuesta del agente: esa es 'veredicto'.",
+      "properties": {
+        "content": { "type": "string" },
+        "model": { "type": ["string", "null"] },
+        "provider": { "type": ["string", "null"] },
+        "tokens": { "$ref": "_common.schema.json#/$defs/tokens" },
+        "tool_calls_executed": { "type": "array" }
+      },
+      "additionalProperties": true
+    },
+    "verificado": {
+      "type": "boolean",
+      "description": "CIMIENTO v3: true = el entregable fue comprobado en el mundo real (reglas pasadas). false + motivo = agente v1 sin entregable declarado o entregable no verificable (juicio/evento) — NUNCA confundir con trabajo hecho."
+    },
+    "veredicto": {
+      "type": "object",
+      "description": "CIMIENTO v3: LA RESPUESTA DEL AGENTE — el juicio del sistema sobre el entregable prometido en el manifest. { verificado, motivo, tipo, path, reglas[] }.",
+      "properties": {
+        "verificado": { "type": "boolean" },
+        "motivo": { "type": "string" },
+        "tipo": { "type": "string" },
+        "path": { "type": "string" },
+        "reglas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "regla": { "type": "string" },
+              "ok": { "type": "boolean" },
+              "detalle": { "type": "string" }
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "entregable": {
+      "type": ["object", "null"],
+      "description": "CIMIENTO v3: qué prometió el agente en su manifest (tipo + path). El JEFE lo verificó antes de permitir el success."
+    },
+    "pasos": {
+      "type": "array",
+      "description": "CIMIENTO v3: la BITÁCORA de la ejecución (started → … → final). El marco del frontend la proyecta."
     }
   }
 }

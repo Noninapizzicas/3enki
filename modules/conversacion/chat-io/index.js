@@ -865,8 +865,13 @@ class ChatIoModule extends BaseModule {
   onAgentExecuteDone(event) {
     const d = event?.data || event || {};
     if (!d.conversation_id) return;
+    // SEPARACIÓN LLM vs AGENTE: el marco recibe el VEREDICTO (respuesta del agente)
+    // y la respuesta del modelo como anexo etiquetado (llm.content) — el frontend
+    // ya no confunde "lo que dijo el modelo" con "lo que el sistema verificó".
     this._publishAgentTopic(d.conversation_id, 'agent_status', {
       status: 'idle',
+      veredicto: d.veredicto || null,
+      llm: d.llm ? { content: d.llm.content || '' } : null,
       timestamp: new Date().toISOString()
     });
     this.metrics?.increment?.('chat-io.agent_bridge.done', {});
@@ -878,6 +883,8 @@ class ChatIoModule extends BaseModule {
     this._publishAgentTopic(d.conversation_id, 'agent_status', {
       status: 'idle',
       error: d.error || { code: 'UNKNOWN_ERROR', message: 'El agente falló' },
+      veredicto: d.veredicto || null,
+      llm: d.llm ? { content: d.llm.content || '' } : null,
       timestamp: new Date().toISOString()
     });
     this.metrics?.increment?.('chat-io.agent_bridge.failed', {});

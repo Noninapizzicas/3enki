@@ -40,6 +40,17 @@ export interface AgenteEjecucion {
   duration_ms?: number;
   resultado?: string;
   error?: { code: string; message: string };
+  // SEPARACIÓN LLM vs AGENTE (cimiento v3): el marco distingue la respuesta del
+  // AGENTE (veredicto: lo que el sistema verificó) de la respuesta del MODELO
+  // (llm_content: lo que dijo el LLM) — anexo etiquetado, nunca mezcladas.
+  veredicto?: {
+    verificado: boolean;
+    motivo?: string;
+    tipo?: string;
+    path?: string;
+    reglas?: Array<{ regla: string; ok: boolean; detalle?: string }>;
+  };
+  llm_content?: string;
 }
 
 // ── Store ────────────────────────────────────────────────────────────────────
@@ -145,6 +156,10 @@ export function initAgenteProgreso(): () => void {
           e.status = data.error ? 'failed' : 'done';
           e.ended_at = new Date().toISOString();
           if (data.error) e.error = data.error;
+          // CIMIENTO v3 — el marco recibe LA RESPUESTA DEL AGENTE (veredicto) y
+          // la respuesta del MODELO como anexo etiquetado (llm_content).
+          if (data.veredicto) e.veredicto = data.veredicto;
+          if (data.llm?.content) e.llm_content = data.llm.content;
         }
       }
       return m;

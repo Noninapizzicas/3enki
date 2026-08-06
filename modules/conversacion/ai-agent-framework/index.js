@@ -918,6 +918,13 @@ class AiAgentFrameworkModule extends BaseModule {
       });
     }
 
+    // CIMIENTO v3 — la puerta legacy también se cierra: contrato + bitácora
+    // (el JEFE verificará el entregable antes del invoke_agent.response).
+    const cimientoContrato = cimiento.preparar(agent);
+    const bitacora = cimientoContrato && context.project_id
+      ? cimiento.crearBitacora({ project_id: context.project_id, request_id, agent_name, task, startedAt: Date.now() })
+      : null;
+
     return this._dispatchToLlm({
       shape: 'legacy',
       response_event: 'invoke_agent.response',
@@ -929,7 +936,9 @@ class AiAgentFrameworkModule extends BaseModule {
       session_id, prev_state,
       conversation_id,
       project_id: context.project_id || null,
-      settings: {}
+      settings: {},
+      cimiento: cimientoContrato,
+      bitacora
     });
   }
 
@@ -1001,12 +1010,42 @@ class AiAgentFrameworkModule extends BaseModule {
         });
       }
 
-      // Legacy invoke_agent.response — exito
+      // Legacy invoke_agent.response — exito. CIMIENTO v3: la puerta legacy
+      // TAMBIÉN pasa por el JEFE — si el agente tiene contrato y el entregable
+      // no existe, el response lleva error (el chat NO confunde éxito con humo).
+      const contratoL = (pending.cimiento && pending.cimiento.entregable) || null;
+      const veredictoL = contratoL
+        ? await cimiento.verificar(contratoL, {
+            task: pending.task,
+            context: pending.context,
+            project_id: pending.project_id
+          })
+        : null;
+      if (pending.project_id && pending.original_request_id) {
+        cimiento.sellarBitacora(pending.project_id, pending.original_request_id,
+          veredictoL || { verificado: false, motivo: 'sin_entregable_declarado' },
+          Date.now() - (pending.startedAt || Date.now()));
+      }
+
+      if (contratoL && !veredictoL.verificado) {
+        return this.eventBus.publish('invoke_agent.response', {
+          request_id: pending.original_request_id,
+          session_id: pending.session_id,
+          next_state: null, should_continue: false,
+          error: {
+            code: 'ENTREGABLE_NO_VERIFICADO',
+            message: `El agente ${pending.agent_name} reportó éxito pero el entregable NO existe: ${veredictoL.motivo}${(veredictoL.reglas || []).length ? ' — ' + veredictoL.reglas.map(r => r.detalle).join('; ') : ''}`,
+            veredicto: veredictoL
+          }
+        });
+      }
+
       return this.eventBus.publish('invoke_agent.response', {
         request_id: pending.original_request_id,
         session_id: pending.session_id,
         next_state: null, should_continue: false,
-        result: { agent: pending.agent_name, content, tool_calls_executed: tool_calls_executed || [] }
+        result: { agent: pending.agent_name, content, tool_calls_executed: tool_calls_executed || [] },
+        ...(veredictoL ? { veredicto: veredictoL, verificado: veredictoL.verificado } : {})
       });
     } catch (err) {
       this._handleHandlerError('ai-agent-framework.llm_complete_response.error', err);

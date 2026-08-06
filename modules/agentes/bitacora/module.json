@@ -1,0 +1,57 @@
+{
+  "name": "agentes-bitacora",
+  "version": "1.0.0",
+  "description": "P6 · Bitácora — CUSTODIO único de los pasos de cada ejecución de agente. Todo lo que el pipeline hace queda ESCRITO (qué se hizo, qué devolvió, veredicto). La memoria verificable del motor: la vitrina y el reanudador viven de ella.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "publishes": [
+    {
+      "event": "bitacora.abierta",
+      "description": "Una ejecución abrió su bitácora (payload: { request_id, project_id, agent_name, task, bitacora })."
+    },
+    {
+      "event": "bitacora.paso.registrado",
+      "description": "Un paso quedó escrito (payload: { request_id, project_id, paso })."
+    },
+    {
+      "event": "bitacora.sellada",
+      "description": "La ejecución se selló con veredicto (verificada/fallida)."
+    },
+    {
+      "event": "bitacora.leer.response",
+      "description": "Respuesta con la bitácora completa (para reanudar/rehidratar)."
+    },
+    {
+      "event": "bitacora.abrir.failed",
+      "description": "No se pudo abrir la bitácora."
+    },
+    {
+      "event": "bitacora.paso.failed",
+      "description": "No se pudo registrar el paso."
+    },
+    {
+      "event": "bitacora.sellar.failed",
+      "description": "No se pudo sellar."
+    }
+  ],
+  "subscribes": [
+    {
+      "event": "bitacora.abrir.request",
+      "handler": "onBitacoraAbrirRequest"
+    },
+    {
+      "event": "bitacora.paso.request",
+      "handler": "onBitacoraPasoRequest"
+    },
+    {
+      "event": "bitacora.sellar.request",
+      "handler": "onBitacoraSellarRequest"
+    },
+    {
+      "event": "bitacora.leer.request",
+      "handler": "onBitacoraLeerRequest"
+    }
+  ],
+  "dependencies": []
+}

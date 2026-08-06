@@ -892,6 +892,23 @@ class ChatIoModule extends BaseModule {
     this.metrics?.increment?.('chat-io.agent_bridge.failed', {});
   }
 
+  // ── MARCO (CIMIENTO v3): el legacy cierra la ventana del agente ────────────
+  // invoke_agent.response (las invocaciones del chat) → agent_status idle con
+  // veredicto + respuesta del modelo. El marco abre con agent.execute.progress
+  // (lo publica el framework en legacy) y se cierra aquí con el veredicto.
+  onInvokeAgentResponse(event) {
+    const d = event?.data || event || {};
+    if (!d.conversation_id) return;
+    this._publishAgentTopic(d.conversation_id, 'agent_status', {
+      status: 'idle',
+      error: d.error || null,
+      veredicto: d.veredicto || null,
+      llm: d.result ? { content: d.result.content || '' } : null,
+      timestamp: new Date().toISOString()
+    });
+    this.metrics?.increment?.('chat-io.agent_bridge.legacy_done', {});
+  }
+
   // ── REHIDRATACIÓN DEL MARCO (CIMIENTO v3) ──────────────────────────────────
   // ui/request/agentes/bitacora { project_id, request_id } → la BITÁCORA
   // persistida de una ejecución (storage/agentes/bitacoras/<request_id>.json).

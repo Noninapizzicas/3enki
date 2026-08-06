@@ -925,6 +925,20 @@ class AiAgentFrameworkModule extends BaseModule {
       ? cimiento.crearBitacora({ project_id: context.project_id, request_id, agent_name, task, startedAt: Date.now() })
       : null;
 
+    // MARCO (CIMIENTO v3): el legacy también alimenta la ventana del agente —
+    // publica agent.execute.progress para que el frontend abra el marco
+    // (conversation-export no escucha progress → sin duplicados).
+    if (conversation_id) {
+      this.eventBus.publish('agent.execute.progress', {
+        request_id,
+        agent_name,
+        conversation_id,
+        project_id: context.project_id || null,
+        step: 'started',
+        message: `Agente ${agent_name} iniciado`
+      });
+    }
+
     return this._dispatchToLlm({
       shape: 'legacy',
       response_event: 'invoke_agent.response',
@@ -1028,10 +1042,21 @@ class AiAgentFrameworkModule extends BaseModule {
       }
 
       if (contratoL && !veredictoL.verificado) {
+        if (pending.conversation_id) {
+          this.eventBus.publish('agent.execute.progress', {
+            request_id: pending.original_request_id,
+            agent_name: pending.agent_name,
+            conversation_id: pending.conversation_id,
+            project_id: pending.project_id,
+            step: 'finalizing',
+            message: 'Agente terminó — el JEFE no verificó el entregable'
+          });
+        }
         return this.eventBus.publish('invoke_agent.response', {
           request_id: pending.original_request_id,
           session_id: pending.session_id,
           next_state: null, should_continue: false,
+          conversation_id: pending.conversation_id || undefined,
           error: {
             code: 'ENTREGABLE_NO_VERIFICADO',
             message: `El agente ${pending.agent_name} reportó éxito pero el entregable NO existe: ${veredictoL.motivo}${(veredictoL.reglas || []).length ? ' — ' + veredictoL.reglas.map(r => r.detalle).join('; ') : ''}`,
@@ -1040,10 +1065,22 @@ class AiAgentFrameworkModule extends BaseModule {
         });
       }
 
+      if (pending.conversation_id) {
+        this.eventBus.publish('agent.execute.progress', {
+          request_id: pending.original_request_id,
+          agent_name: pending.agent_name,
+          conversation_id: pending.conversation_id,
+          project_id: pending.project_id,
+          step: 'finalizing',
+          message: `Agente ${pending.agent_name} terminando`
+        });
+      }
+
       return this.eventBus.publish('invoke_agent.response', {
         request_id: pending.original_request_id,
         session_id: pending.session_id,
         next_state: null, should_continue: false,
+        conversation_id: pending.conversation_id || undefined,
         result: { agent: pending.agent_name, content, tool_calls_executed: tool_calls_executed || [] },
         ...(veredictoL ? { veredicto: veredictoL, verificado: veredictoL.verificado } : {})
       });

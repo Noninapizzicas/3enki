@@ -66,6 +66,11 @@
       "event": "agent.execute.failed",
       "handler": "onAgentExecuteFailed",
       "description": "Puente al frontend: publica conversation/{id}/agent_status { status: idle, error } al fallar (la ventana muestra failed)."
+    },
+    {
+      "event": "invoke_agent.response",
+      "handler": "onInvokeAgentResponse",
+      "description": "CIMIENTO v3: cierre del marco para invocaciones legacy (el chat invoca agentes por invoke_agent) — agent_status idle con veredicto."
     }
   ],
   "ui_handlers": [

@@ -271,10 +271,29 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   // 'construido': modules/<slug>/ existe + index.js CARGA (require con la API real).
   // 'skills':      modules/cosecha/cantera/enki/<slug>/SKILL.md existe.
   _verificarSistema(fase, extra = {}) {
-    const slug = (extra && extra.slug) || (extra && extra.modulos && extra.modulos[0]) || (extra && extra.skills && extra.skills[0]);
-    if (!slug) {
+    // Modo 1 en 1: un slug. Modo "a full": TODOS los slugs del resumen — se
+    // verifican todos, no solo el primero (lección: el gate no se fía del
+    // reporte del agente, y un resumen con N módulos exige N verificaciones).
+    const slugs = (extra && extra.slug ? [extra.slug] : [])
+      || (extra && Array.isArray(extra.modulos) && extra.modulos.length ? extra.modulos : [])
+      || (extra && Array.isArray(extra.skills) && extra.skills.length ? extra.skills : [])
+      || [];
+    if (!slugs.length) {
       return { ok: false, esperado: ['<slug> del módulo construido'], mensaje: 'Falta el slug del módulo en el resumen de completar_fase.' };
     }
+    // Cada slug debe pasar su verificación individual; el primero que falle
+    // devuelve FASE_INCOMPLETA con el detalle (el agente debe corregirlo).
+    const verificados = [];
+    for (const slug of slugs) {
+      const v = this._verificarUnSlug(fase, slug);
+      if (!v.ok) return v;
+      verificados.push(...(v.verificados || []));
+    }
+    return { ok: true, verificados };
+  }
+
+  // Verificación individual de UN módulo/skill (usada por _verificarSistema).
+  _verificarUnSlug(fase, slug) {
     if (fase === 'construido') {
       const dir = path.join(MODULES_DIR, slug);
       const indexJs = path.join(dir, 'index.js');

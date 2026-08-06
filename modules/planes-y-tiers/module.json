@@ -1,0 +1,25 @@
+{
+  "_doc": "planes-y-tiers — CUSTODIO: guarda la definición de los planes del Radar de Nichos (Free · Pro · Agencias) con sus rangos declarados y la persiste por proyecto. Escucha project.activated para restaurar la definición. Consulta vía get (un plan) y list (la definición completa). Garantía: rangos declarados respetados — nunca sirve un precio fuera de rango.",
+  "name": "planes-y-tiers",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: custodio de la definición de planes. Defaults del esquema: Free (1 nicho/semana con retraso) · Pro 29-49€/mes · Agencias 199-499€/mes. Ops de consulta get/list. Persiste por proyecto en prisma/pos/planes-y-tiers.json.",
+  "description": "Definición de planes y tiers (Free/Pro/Agencias) con rangos declarados; consulta de plan respeta rangos.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la definición de planes del proyecto activado."
+    },
+    {
+      "event": "planes-y-tiers.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve el detalle de un plan por id."
+    },
+    {
+      "event": "planes-y-tiers.list.request",
+      "handler": "onListRequest",
+      "description": "Devuelve la definición completa de planes y tiers."
+    }
+  ]
+}

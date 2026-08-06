@@ -23,6 +23,7 @@ const crypto = require('crypto');
 
 const BaseModule = require('../../_shared/base-module');
 const { descomponer } = require('../../_shared/prisma-del-caso');
+const cimiento = require('./cimiento');   // CIMIENTO v3 — CONTRATO + JEFE (verifica el entregable)
 const DEFAULT_CONVERSATION_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_AGENT_TIMEOUT_MS = 600000;      // LUZ: 120s cortaba el prisma a mitad → 10min (override por agente)
 const DEFAULT_AGENT_TEMPERATURE = 0.7;
@@ -240,6 +241,8 @@ class AiAgentFrameworkModule extends BaseModule {
           max_tokens: def.max_tokens || DEFAULT_AGENT_MAX_TOKENS,
           timeout_ms: def.timeout_ms || DEFAULT_AGENT_TIMEOUT_MS,
           max_tool_iterations: def.max_tool_iterations || null,   // sin freno salvo que el agente lo declare
+          presupuesto: def.presupuesto || null,                   // CIMIENTO v3 — límites por tarea (P2)
+          entregable: def.entregable || null,                     // CIMIENTO v3 — QUÉ entrega (P1, el JEFE lo verifica)
           prompt_text: promptText
         });
       } catch (err) {
@@ -707,7 +710,8 @@ class AiAgentFrameworkModule extends BaseModule {
         ...baseEnvelope,
         conversation_id: resolved_conversation_id,
         shape: 'canonical',
-        agent, task, context, session_id, prev_state, settings
+        agent, task, context, session_id, prev_state, settings,
+        cimiento: cimiento.preparar(agent)   // CIMIENTO v3 — contrato del agente (entregable + presupuesto)
       });
     } catch (err) {
       this._handleHandlerError('ai-agent-framework.agent_execute.error', err);
@@ -780,7 +784,7 @@ class AiAgentFrameworkModule extends BaseModule {
     }
 
     const llm_request_id = crypto.randomUUID();
-    const timeout_ms = settings?.timeout_ms || agent.timeout_ms;
+    const timeout_ms = settings?.timeout_ms || (agent.presupuesto && agent.presupuesto.timeout_ms) || agent.timeout_ms;
 
     const timeout = setTimeout(() => {
       const pending = this.pendingLlm.get(llm_request_id);
@@ -832,7 +836,7 @@ class AiAgentFrameworkModule extends BaseModule {
       tools: toolsForAgent,
       settings: {
         temperature: settings?.temperature ?? agent.temperature,
-        max_tokens: settings?.max_tokens ?? agent.max_tokens,
+        max_tokens: settings?.max_tokens ?? (agent.presupuesto && agent.presupuesto.max_tokens) ?? agent.max_tokens,
         // El agente puede declarar su propio límite de iteraciones de tools
         // (o ninguno: el default del gateway es 500 = sin freno práctico).
         ...(agent.max_tool_iterations ? { max_tool_iterations: agent.max_tool_iterations } : {}),
@@ -898,12 +902,42 @@ class AiAgentFrameworkModule extends BaseModule {
           step: 'finalizing',
           message: `Agente ${pending.agent_name} terminando`
         });
+
+        // CIMIENTO v3 — EL JEFE (P1: success = ENTREGABLE VERIFICADO).
+        // El framework ya NO cree al LLM: verifica el entregable declarado en
+        // el manifest contra el mundo real ANTES de permitir el success.
+        // El humo ("success" sin trabajo) se vuelve estructuralmente imposible:
+        //   · contrato con entregable → verificación obligatoria; si falla → FAILED honesto
+        //   · agente v1 sin contrato     → success con verificado:false explícito (nadie lo confunde)
+        const contrato = (pending.cimiento && pending.cimiento.entregable) || null;
+        const veredicto = contrato
+          ? await cimiento.verificar(contrato, {
+              task: pending.task,
+              context: pending.context,
+              project_id: pending.project_id
+            })
+          : { verificado: false, motivo: 'sin_entregable_declarado' };
+
+        if (contrato && !veredicto.verificado) {
+          return this._publishAgentExecuteFailed({
+            ...pending,
+            error: {
+              code: 'ENTREGABLE_NO_VERIFICADO',
+              message: `El agente ${pending.agent_name} reportó éxito pero el entregable NO existe: ${veredicto.motivo}${(veredicto.reglas || []).length ? ' — ' + veredicto.reglas.map(r => r.detalle).join('; ') : ''}`
+            },
+            duration_ms,
+            veredicto
+          });
+        }
+
         return this._publishAgentExecuteResponse({
           ...pending,
           content,
           tool_calls_executed: tool_calls_executed || [],
           model, provider, usage,
-          duration_ms
+          duration_ms,
+          verificado: veredicto.verificado,
+          veredicto
         });
       }
 
@@ -991,6 +1025,13 @@ class AiAgentFrameworkModule extends BaseModule {
       total: ctx.usage.total_tokens || ((ctx.usage.input_tokens || 0) + (ctx.usage.output_tokens || 0))
     };
 
+    // CIMIENTO v3 — la VITRINA: el veredicto del JEFE viaja en el response.
+    // verificado:true = entregable comprobado en el mundo real.
+    // verificado:false + motivo = el agente v1 no declaró entregable (nadie confunde
+    // su "success" con trabajo hecho) o el entregable es fuzzy (juicio/evento).
+    if ('verificado' in ctx) payload.verificado = ctx.verificado;
+    if (ctx.veredicto) payload.veredicto = ctx.veredicto;
+
     // chat.assistant.saved se delega a agent-observer (adaptador canonico
     // agent-flow → chat-flow). agent-observer escucha agent.execute.response/
     // failed/progress y traduce a chat.assistant.saved con metadata.author +
@@ -1024,6 +1065,7 @@ class AiAgentFrameworkModule extends BaseModule {
     else if (ctx.startedAt) payload.duration_ms = Date.now() - ctx.startedAt;
     if (typeof ctx.iterations_completed === 'number') payload.iterations_completed = ctx.iterations_completed;
     if ('provider_attempted' in ctx) payload.provider_attempted = ctx.provider_attempted;
+    if (ctx.veredicto) payload.veredicto = ctx.veredicto;   // CIMIENTO v3 — el veredicto viaja también en el failed
 
     return this._publicarEvento('agent.execute.failed', payload, {
       correlation_id: ctx.correlation_id, project_id: ctx.project_id

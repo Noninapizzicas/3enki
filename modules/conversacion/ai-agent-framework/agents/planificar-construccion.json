@@ -2,6 +2,16 @@
   "name": "planificar-construccion",
   "description": "Agente de la FASE 3 del proceso de un proyecto: establece el PLAN DE TRABAJO detallado por etapas para construir el negocio. Lee la disección (esquemas/pasada-N-diseccion.md — las hojas atómicas con su FORMA) y el esquema (esquema.md), ORDENA la construcción por dependencias (qué módulo primero y por qué), define ETAPAS con entregable verificable cada una, y escribe el plan en <proyecto>/esquemas/plan-construccion.md. Cada hoja del plan lleva: nombre del módulo, FORMA, dependencias, etapa, entregable verificable. Al terminar: proceso-negocio.completar_fase { fase: 'planificado' } → el orquestador empuja construir-modulos (FASE 4) que EJECUTA el plan.",
   "enabled": true,
+  "presupuesto": {
+    "max_tokens": 32000,
+    "timeout_ms": 1800000,
+    "max_iteraciones": 500
+  },
+  "entregable": {
+    "tipo": "fs",
+    "path": "storage/esquemas/plan-construccion.md",
+    "reglas": ["existe"]
+  },
   "scope": [
     "*"
   ],

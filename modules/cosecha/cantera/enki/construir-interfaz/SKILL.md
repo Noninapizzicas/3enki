@@ -71,8 +71,16 @@ el repo. Antes de generar NADA, carga y sigue estas fuentes:
 | Store MQTT | Skill `ui-store-mqtt` (patrón fundacional: 1 writable + derivados + acciones que reflejan + suscripciones + reset) | `modules/cosecha/cantera/interfaces/patrones-fundacionales/ui-store-mqtt/` |
 | Trío del módulo (manifest.json + index.ts + Panel.svelte) | Caso vivo `contenido` (el patrón real que el loader autodescubre) | `frontend/src/lib/modules/contenido/` |
 | Zonas del frame | Contrato `frontend.contract` (tipos canónicos ↔ zonas UI) | `arquitectura/decisiones/_contratos/frontend.contract.json` |
+| **RUTAS WEB del manifest** (`routes`) | **Patrón de direcciones web del frame**: deep-links reales de `frontend/src/routes/` (scopeados `/[project_id]/<pagina>` o planos `/chat`) donde el módulo es visible | `frontend/src/routes/` + `PAGE_CATALOG` en `frontend/src/lib/ui-core/project-pages.ts` |
 | Lenguaje visual | CSS del frame (variables `var(--color-*)`, paneles existentes) | `frontend/src/lib/` (componentes vivos) |
 | Llamadas al backend | `mqttRequest(dominio, accion, { project_id })` | `frontend/src/lib/ui-core/mqtt-request.ts` |
+
+**Regla de RUTAS WEB**: el campo `routes` del manifest.json (cuándo el botón del
+módulo es visible) usa SOLO direcciones web que YA existen en el frame —
+deep-links de `frontend/src/routes/` (p.ej. `/comandero`, `/carta-digital`,
+`/facturas`) o páginas del `PAGE_CATALOG`. NUNCA se inventa una URL nueva: si el
+módulo vive en una página que no existe, esa página se crea aparte siguiendo el
+patrón `/[project_id]/<pagina>/` — no se inventa dentro del manifest.
 
 **Regla**: si la pieza que vas a generar tiene un estándar en esa tabla, lo
 sigues TAL CUAL. Nada de "mejorar" el patrón, nada de variantes propias, nada
@@ -119,6 +127,9 @@ artefacto ES múltiple por naturaleza, no por comodidad.
    - mismo lenguaje visual que los paneles existentes (variables CSS del frame)
 6. **Genera el UIMODULE**: `manifest.json` (id, name, version, zone según el
    mapeo, order, icon, label) + `index.ts` (UIModule con manifest + PanelComponent).
+   **El manifest.json lleva `routes`** — las direcciones web del frame donde el
+   módulo es visible (deep-links reales de `frontend/src/routes/`: `/comandero`,
+   `/carta-digital`, `/facturas`… o páginas del PAGE_CATALOG). NUNCA URL inventada.
 7. **Verifica** que el loader lo autodescubre: el patrón es
    `import.meta.glob('./*/manifest.json')` — el archivo en la carpeta correcta
    es suficiente, no hay registro manual que tocar.

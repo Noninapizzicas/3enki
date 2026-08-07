@@ -47,16 +47,45 @@ class EjecutorMotorModule extends BaseModule {
     this.logger = context.logger;
     this.moduleLoader = context.moduleLoader || null;
     if (this.moduleLoader && this.moduleLoader.toolsRegistry) {
-      this._registrarTools();
+      await this._registrarTools();
     }
   }
 
   // ── TOOLS DEL CHAT (la cúpula del MOTOR): invoke_agent + buscar_agente,
   //    servidas por el v3 — el catálogo SON los pipelines del registro. ──────
-  _registrarTools() {
+  async _registrarTools() {
     // invoke_agent: la ejecuta el v3 (escucha invoke_agent.request — alias del
-    // mismo pipeline). La descripción lista los pipelines declarados.
-    const pipelines = ['construir-modulos', 'escribir-skills', 'esquematizador-negocio', 'planificar-construccion'];
+    // mismo pipeline). La lista de pipelines sale del REGISTRO en vivo (como
+    // buscar_agente), con fallback a la lista conocida si el registro no
+    // responde (arranque temprano). Sin esto, un pipeline nuevo (decidir-
+    // interfaz, esquematizar-interfaz, construir-interfaz…) no se puede
+    // invocar desde el chat hasta tocar el código a mano.
+    let pipelines = null;
+    try {
+      const resp = await this._pedir('pipeline.listar.request', { request_id: crypto.randomUUID() }, 'pipeline.listar.response', 6000);
+      pipelines = (resp && resp.pipelines) ? resp.pipelines.map(p => p.name) : null;
+    } catch (_) { pipelines = null; }
+    if (!pipelines || pipelines.length === 0) {
+      pipelines = ['construir-modulos', 'escribir-skills', 'esquematizador-negocio', 'planificar-construccion'];
+      // Reintento en background: el registro puede cargar DESPUÉS del motor
+      // (orden de módulos). Cuando responda, re-registramos el tool con la
+      // lista completa — así un pipeline nuevo entra sin tocar código a mano.
+      this._registrarReintento = setTimeout(async () => {
+        try {
+          const resp2 = await this._pedir('pipeline.listar.request', { request_id: crypto.randomUUID() }, 'pipeline.listar.response', 6000);
+          const lista = (resp2 && resp2.pipelines) ? resp2.pipelines.map(p => p.name) : null;
+          if (lista && lista.length > 0 && this.moduleLoader && this.moduleLoader.toolsRegistry) {
+            const toolVivo = this.moduleLoader.toolsRegistry.get('invoke_agent');
+            if (toolVivo) {
+              toolVivo.parameters.properties.agent_name.enum = lista;
+              toolVivo.description = toolVivo.description.replace(/Pipelines disponibles:\n.*?\n\n/, `Pipelines disponibles:\n${lista.map(p => `  - ${p}`).join('\n')}\n\n`);
+              toolVivo._pipelines = lista;
+              this.logger?.info?.('ai-agent-framework-v3.tools.updated', { pipelines: lista.length });
+            }
+          }
+        } catch (_) { /* el registro sigue sin responder; el fallback sirve */ }
+      }, 8000);
+    }
     const tool = {
       name: 'invoke_agent',
       description: `Invoca un PIPELINE del motor de agentes para una tarea concreta (el pipeline corre casi todo determinista; el JEFE verifica el entregable antes del éxito).\n\nPipelines disponibles:\n${pipelines.map(p => `  - ${p}`).join('\n')}\n\nDevuelve cuando el pipeline termina con el veredicto.`,

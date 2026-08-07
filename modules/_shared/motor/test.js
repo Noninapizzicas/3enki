@@ -171,6 +171,46 @@ test('JEFE: interfaz_decidida — module.json sin ui_handlers ni ui_decision →
   assert.match(v.reglas[0].detalle, /interfaz NO decidida/);
 });
 
+test('JEFE: interfaz_operativa — trío completo → ok', () => {
+  const mundo = {
+    existe: (p) => {
+      if (p === 'frontend/src/lib/modules/pedidos/manifest.json') return true;
+      if (p === 'frontend/src/lib/modules/pedidos/index.ts') return true;
+      if (p === 'frontend/src/lib/modules/pedidos/PedidosPanel.svelte') return true;
+      return false;
+    },
+    leer: () => '', enRepo: () => true
+  };
+  const v = verificar(
+    { tipo: 'fs', path: 'frontend/src/lib/modules/pedidos/manifest.json', reglas: ['interfaz_operativa'] },
+    mundo
+  );
+  assert.equal(v.verificado, true);
+  assert.match(v.reglas[0].detalle, /trío operativo completo/);
+});
+
+test('JEFE: interfaz_operativa — falta el Panel.svelte → NO verificado', () => {
+  const mundo = {
+    existe: (p) => p.includes('manifest.json') || p.includes('index.ts'),
+    leer: () => '', enRepo: () => true
+  };
+  const v = verificar(
+    { tipo: 'fs', path: 'frontend/src/lib/modules/pedidos/manifest.json', reglas: ['interfaz_operativa'] },
+    mundo
+  );
+  assert.equal(v.verificado, false);
+  assert.match(v.reglas[0].detalle, /faltan archivos/);
+  assert.match(v.reglas[0].detalle, /Panel\.svelte/);
+});
+
+test('JEFE: interfaz_operativa — sin carpeta de módulo → NO verificado', () => {
+  const v = verificar(
+    { tipo: 'fs', path: 'frontend/src/lib/modules/nada/manifest.json', reglas: ['interfaz_operativa'] },
+    mundoFalso({ existe: false })
+  );
+  assert.equal(v.verificado, false);
+});
+
 test('JEFE: regla desconocida → NO verificado con detalle', () => {
   const v = verificar({ tipo: 'fs', path: 'x', reglas: ['regla_inexistente'] }, mundoFalso({ existe: true }));
   assert.equal(v.verificado, false);

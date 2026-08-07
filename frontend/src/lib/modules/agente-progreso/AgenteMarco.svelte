@@ -9,17 +9,16 @@
    * No recibe props — usa la ejecución ACTIVA del store (la última abierta).
    */
   import { onMount, onDestroy } from 'svelte';
-  import { get } from 'svelte/store';
-  import { ejecuciones, initAgenteProgreso, getEjecucion, ejecucionActivaId, abrirEjecucion } from '$lib/stores/agente-progreso';
+  import { ejecuciones, initAgenteProgreso, ejecucionActivaId } from '$lib/stores/agente-progreso';
   import type { AgenteEjecucion, AgentePaso } from '$lib/stores/agente-progreso';
 
-  let ejecucion: AgenteEjecucion | undefined = undefined;
-  let abierto = true;          // desplegado por defecto cuando hay agente
-  let unsubStore: (() => void) | undefined;
-  let unsubInit: (() => void) | undefined;
-
+  // Reactividad robusta: leer directamente del store en cada actualización.
+  // Svelte re-renderiza cuando ejecuciones cambia (new Map) o cuando activa cambia.
   $: activa = $ejecucionActivaId;
-  $: ejecucion = activa ? getEjecucion(activa) : undefined;
+  $: ejecucion = activa ? $ejecuciones.get(activa) : undefined;
+
+  let abierto = true;          // desplegado por defecto cuando hay agente
+  let unsubInit: (() => void) | undefined;
 
   // Si la ejecución termina (done/failed), mantener el marco visible pero
   // colapsar el detalle — la cabecera con el estado queda.
@@ -41,18 +40,9 @@
 
   onMount(() => {
     unsubInit = initAgenteProgreso();
-    // reaccionar a cambios del store (nuevos pasos, cierre)
-    unsubStore = ejecuciones.subscribe(() => {
-      const rid = get(ejecucionActivaId) as string | null;
-      ejecucion = rid ? getEjecucion(rid) : undefined;
-    });
-    // La ejecución activa la fija el STORE al recibir agent_progress (la que
-    // progresa ES la activa). No abrir con '' — eso apuntaba a una ejecución
-    // inexistente y el marco nunca renderizaba (lección en vivo).
   });
 
   onDestroy(() => {
-    unsubStore?.();
     unsubInit?.();
   });
 </script>

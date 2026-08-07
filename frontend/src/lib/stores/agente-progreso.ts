@@ -160,6 +160,7 @@ export function initAgenteProgreso(): () => void {
   unsubs.push(subscribe('conversation/+/agent_progress', (topic, payload) => {
     const data = payload as any;
     if (!data?.request_id) return;
+    const convId = data.conversation_id || convIdDeTopic(topic) || undefined;
     // FIX (lección en vivo: el marco nunca aparecía): la ejecución que está
     // progresando ES la activa — si no la fijamos, ejecucionActivaId queda null
     // y el AgenteMarco (que depende de la activa) no renderiza nada.
@@ -171,7 +172,7 @@ export function initAgenteProgreso(): () => void {
           request_id: data.request_id,
           agent_name: data.agent_name || 'agente',
           project_id: data.project_id,
-          conversation_id: convIdDeTopic(topic) || undefined,
+          conversation_id: convId,
           status: 'running',
           pasos: [],
           tools_llamadas: [],

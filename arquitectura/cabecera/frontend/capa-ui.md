@@ -4,11 +4,16 @@ dominio: frontend
 resumen: SvelteKit 2 + Svelte 5 sobre MQTT: MqttClient singleton, mqtt-request, lazy-registry, stores, módulos lazy, rutas multi-tenant, nervio vista-bridge, resiliencia.
 fuentes:
   - frontend/src/**
-verificado: 2026-07-24
+verificado: 2026-08-07
 trabajo_pendiente: verificar el módulo trazo en un frontend construido (node_modules) — el wiring espeja interruptores 1:1 pero no se compiló aquí
 ---
 
 # FRONTEND — Capa de UI (SvelteKit + Svelte 5 sobre MQTT)
+
+> **Novedad (2026-08-07) — AgenteMarco se alimenta correctamente del puente del agente.**
+> El marco desplegable del chat ahora lee `$ejecuciones.get($ejecucionActivaId)` con
+> reactividad robusta, y el backend incluye `conversation_id` en `agent.execute.progress`
+> y normaliza `invoke_agent`/`invoke_agent.response` como alias del puente.
 
 > **Novedad (2026-07-14) — identidad del navegador en el bus (inerte hasta enrolar).**
 > `ui-core/enki-identity.ts` genera un par RSA en WebCrypto (privada NO-extraíble en IndexedDB), enrola

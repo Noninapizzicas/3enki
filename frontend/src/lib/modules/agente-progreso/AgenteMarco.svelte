@@ -9,13 +9,11 @@
    * No recibe props — usa la ejecución ACTIVA del store (la última abierta).
    */
   import { onMount, onDestroy } from 'svelte';
-  import { ejecuciones, initAgenteProgreso, ejecucionActivaId } from '$lib/stores/agente-progreso';
+  import { ejecucionActiva, initAgenteProgreso } from '$lib/stores/agente-progreso';
   import type { AgenteEjecucion, AgentePaso } from '$lib/stores/agente-progreso';
 
-  // Reactividad robusta: leer directamente del store en cada actualización.
-  // Svelte re-renderiza cuando ejecuciones cambia (new Map) o cuando activa cambia.
-  $: activa = $ejecucionActivaId;
-  $: ejecucion = activa ? $ejecuciones.get(activa) : undefined;
+  // Reactividad robusta: derived store que re-evalúa ante cualquier cambio.
+  $: ejecucion = $ejecucionActiva;
 
   let abierto = true;          // desplegado por defecto cuando hay agente
   let unsubInit: (() => void) | undefined;

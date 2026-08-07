@@ -13,7 +13,7 @@
 // el agente trabaja; la ventana se actualiza sola por push MQTT.
 // ============================================================================
 
-import { writable, get } from 'svelte/store';
+import { writable, get, derived } from 'svelte/store';
 import { subscribe } from '$lib/ui-core';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -59,6 +59,12 @@ export interface AgenteEjecucion {
 export const ejecuciones = writable<Map<string, AgenteEjecucion>>(new Map());
 // request_id de la ejecución "activa" (la última que se abrió)
 export const ejecucionActivaId = writable<string | null>(null);
+
+// Derived robusto: re-evalúa automáticamente cuando cambian ejecuciones o la activa.
+export const ejecucionActiva = derived<[typeof ejecuciones, typeof ejecucionActivaId], AgenteEjecucion | undefined>(
+  [ejecuciones, ejecucionActivaId],
+  ([$ejecuciones, $id]) => $id ? $ejecuciones.get($id) : undefined
+);
 
 function nuevaEjecucion(data: any): AgenteEjecucion {
   return {

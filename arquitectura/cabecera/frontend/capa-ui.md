@@ -11,9 +11,10 @@ trabajo_pendiente: verificar el módulo trazo en un frontend construido (node_mo
 # FRONTEND — Capa de UI (SvelteKit + Svelte 5 sobre MQTT)
 
 > **Novedad (2026-08-07) — AgenteMarco se alimenta correctamente del puente del agente.**
-> El marco desplegable del chat ahora lee `$ejecuciones.get($ejecucionActivaId)` con
-> reactividad robusta, y el backend incluye `conversation_id` en `agent.execute.progress`
-> y normaliza `invoke_agent`/`invoke_agent.response` como alias del puente.
+> El marco desplegable del chat ahora lee del derived store `ejecucionActiva` (reactividad
+> robusta frente a updates del Map), y el backend incluye `conversation_id` en
+> `agent.execute.progress` y normaliza `invoke_agent`/`invoke_agent.response` como alias
+> del puente.
 
 > **Novedad (2026-07-14) — identidad del navegador en el bus (inerte hasta enrolar).**
 > `ui-core/enki-identity.ts` genera un par RSA en WebCrypto (privada NO-extraíble en IndexedDB), enrola

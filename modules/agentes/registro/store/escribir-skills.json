@@ -14,6 +14,11 @@
       "paso": "escribir_skill",
       "tipo": "reflejo",
       "op": "escribir"
+    },
+    {
+      "paso": "commitar_skill",
+      "tipo": "reflejo",
+      "op": "commitar"
     }
   ],
   "entregable": {

@@ -38,7 +38,7 @@ test('validador: sin reglas → pasa (declarado)', () => {
 });
 
 test('validador: sin_transcript — basura de tool_thinking/tool_calls se RECHAZA (lección generador-de-informe)', () => {
-  const basura = '<tool_thinking>\nNecesito construir el módulo...\n</tool_thinking>\n\n<tool_calls>\n<invoke name="bus.publishAndWait">\n<parameter name="event">rpc.buscar.request</parameter>\n</invoke>\n</tool_calls>';
+  const basura = '<tool_thinking>\nNecesito construir el módulo generador-de-informe. Primero debo entender qué pide exactamente el esquema del plan "Radar de Nichos". Para leer archivos del proyecto necesito saber qué servicios RPC hay disponibles. Voy a consultar el índice RPC.\n</tool_thinking>\n\n<tool_calls>\n<invoke name="bus.publishAndWait">\n<parameter name="event">rpc.buscar.request</parameter>\n<parameter name="payload">{"query": "leer archivo esquema"}</parameter>\n</invoke>\n<invoke name="bus.publishAndWait">\n<parameter name="event">rpc.buscar.request</parameter>\n<parameter name="payload">{"query": "file read project"}</parameter>\n</invoke>\n</tool_calls>';
   const r = validar({ content: basura }, { tamano_min: 200, sin_transcript: true });
   assert.equal(r.ok, false);
   assert.equal(r.regla, 'sin_transcript');

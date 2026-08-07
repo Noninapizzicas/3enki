@@ -37,6 +37,19 @@ test('validador: sin reglas → pasa (declarado)', () => {
   assert.equal(r.ok, true);
 });
 
+test('validador: sin_transcript — basura de tool_thinking/tool_calls se RECHAZA (lección generador-de-informe)', () => {
+  const basura = '<tool_thinking>\nNecesito construir el módulo...\n</tool_thinking>\n\n<tool_calls>\n<invoke name="bus.publishAndWait">\n<parameter name="event">rpc.buscar.request</parameter>\n</invoke>\n</tool_calls>';
+  const r = validar({ content: basura }, { tamano_min: 200, sin_transcript: true });
+  assert.equal(r.ok, false);
+  assert.equal(r.regla, 'sin_transcript');
+});
+
+test('validador: sin_transcript — código real de módulo pasa', () => {
+  const codigo = "const BaseModule = require('../../_shared/base-module');\nclass Generador extends BaseModule {\n  constructor() { super(); this.name='generador-de-informe'; this.version='0.1.0'; }\n  onXRequest(e) { return this._atender(e, 'x', 'generador-de-informe.x.response', d => this._x(d)); }\n}\nmodule.exports = Generador;";
+  const r = validar({ content: codigo }, { tamano_min: 200, sin_transcript: true });
+  assert.equal(r.ok, true);
+});
+
 // ── P10 · CONVERSOR ───────────────────────────────────────────────────────────
 test('conversor: string JSON → canónica parseada', () => {
   const r = convertir('{"nombre":"x"}');

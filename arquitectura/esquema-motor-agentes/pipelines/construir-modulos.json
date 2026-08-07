@@ -2,16 +2,42 @@
   "name": "construir-modulos",
   "description": "Fase 4: construye el módulo de la hoja (slug) de la task — el fuzzy genera el código, el reflejo lo escribe en modules/, el JEFE verifica el patrón de módulo Enki.",
   "pasos": [
-    { "paso": "leer_plan_y_rail", "tipo": "reflejo" },
+    {
+      "paso": "leer_plan_y_rail",
+      "tipo": "reflejo"
+    },
     {
       "paso": "generar_codigo",
       "tipo": "fuzzy",
-      "instruccion": "Genera el CÓDIGO del módulo Enki (index.js) que la task pide (el slug está en la task). Debe seguir el patrón de módulo Enki: require de _shared/base-module, clase que extiende BaseModule con this.name y this.version, y un método _atender(evento, contexto, respuesta, siguiente) que maneja el evento. Devuelve SOLO el código del index.js como texto plano — sin markdown, sin explicaciones, sin bloques de código.",
-      "valida": { "tamano_min": 200 }
+      "instruccion": "Genera el CÓDIGO del módulo Enki (index.js) que la task pide (el slug está en la task). Debe seguir el patrón de módulo Enki REAL (míralo en modules/_shared/modulo-hibrido-reflejo.js y en módulos existentes como pizzepos/recetas/index.js): require de '../../_shared/base-module' (o '../_shared/modulo-hibrido-reflejo'), clase que extiende BaseModule (o ModuloHibridoReflejo) con this.name y this.version en el constructor, y los handlers RPC como onXRequest(e) { return this._atender(e, 'accion', '<modulo>.<accion>.response', d => this._metodo(d)); } — _atender recibe SIEMPRE 4 argumentos (event, op, responseEvent, proyeccion). La emisión usa this._publicarEvento (heredado), NUNCA _publicar. Devuelve SOLO el código del index.js como texto plano — sin markdown, sin explicaciones, sin bloques de código, sin tool_calls, sin XML ni razonamiento. Un archivo que contenga <tool_thinking>, <tool_calls> o cualquier transcript de agente es BASURA y se rechaza.",
+      "valida": {
+        "tamano_min": 200,
+        "sin_transcript": true
+      }
     },
-    { "paso": "escribir_modulo", "tipo": "reflejo", "op": "escribir" },
-    { "paso": "commitar_modulo", "tipo": "reflejo", "op": "commitar" }
+    {
+      "paso": "escribir_modulo",
+      "tipo": "reflejo",
+      "op": "escribir"
+    },
+    {
+      "paso": "commitar_modulo",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
   ],
-  "entregable": { "tipo": "fs", "path": "<slug>/index.js", "reglas": ["existe", "api_real", "en_repo"] },
-  "presupuesto": { "generaciones_por_paso": 3, "max_tokens": 64000, "generacion_timeout_ms": 240000 }
+  "entregable": {
+    "tipo": "fs",
+    "path": "<slug>/index.js",
+    "reglas": [
+      "existe",
+      "api_real",
+      "en_repo"
+    ]
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 64000,
+    "generacion_timeout_ms": 240000
+  }
 }

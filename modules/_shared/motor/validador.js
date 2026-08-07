@@ -54,6 +54,17 @@ function validar(salida, reglas = {}) {
     }
   }
 
+  if (reglas.sin_transcript === true) {
+    // Rechaza BASURA de transcript de agente (lección en vivo: el LLM del chat
+    // metió su tool_thinking XML como si fuera código y pasó el tamano_min).
+    const txt = typeof salida === 'string'
+      ? salida
+      : (salida && typeof salida === 'object' && 'content' in salida ? String(salida.content) : '');
+    if (/<tool_thinking>|<tool_calls>|<\/?invoke[ >]|<thinking>|<｜end▁of▁thinking｜><\/thinking>/i.test(txt)) {
+      return { ok: false, regla: 'sin_transcript', detalle: 'la salida contiene transcript de agente (tool_thinking/tool_calls/XML) — basura, no código' };
+    }
+  }
+
   return { ok: true, regla: 'todas', detalle: 'salida válida' };
 }
 

@@ -281,8 +281,10 @@ class EjecutorMotorModule extends BaseModule {
         reject(Object.assign(new Error(`generación timeout (${paso.paso})`), { code: 'TIMEOUT' }));
       }, timeoutMs);
       this._generacionEsperas.set(llm_request_id, { resolve, reject, to, paso: paso.paso });
+      // CONTRATO del ai-gateway (Entry 2): exige `request_id` (no llm_request_id).
+      // Sin request_id el gateway hace warn + return sin responder → timeout.
       this._publicar('llm.complete.request', {
-        llm_request_id,
+        request_id: llm_request_id,
         shape: 'canonical',
         provider: pipeline.provider || null,
         model: pipeline.model || null,
@@ -296,19 +298,22 @@ class EjecutorMotorModule extends BaseModule {
 
   async onLlmCompleteResponse(event) {
     const data = event?.data || event || {};
-    const espera = this._generacionEsperas.get(data.llm_request_id);
+    // El gateway responde con request_id (el que mandamos); se acepta llm_request_id por compat (smokes).
+    const rid = data.request_id || data.llm_request_id;
+    const espera = this._generacionEsperas.get(rid);
     if (!espera) return;
     clearTimeout(espera.to);
-    this._generacionEsperas.delete(data.llm_request_id);
+    this._generacionEsperas.delete(rid);
     espera.resolve({ content: data.content || '', model: data.model, provider: data.provider });
   }
 
   async onLlmCompleteFailed(event) {
     const data = event?.data || event || {};
-    const espera = this._generacionEsperas.get(data.llm_request_id);
+    const rid = data.request_id || data.llm_request_id;
+    const espera = this._generacionEsperas.get(rid);
     if (!espera) return;
     clearTimeout(espera.to);
-    this._generacionEsperas.delete(data.llm_request_id);
+    this._generacionEsperas.delete(rid);
     espera.reject(Object.assign(new Error((data.error && data.error.message) || 'generación falló'), { code: (data.error && data.error.code) || 'UNKNOWN_ERROR' }));
   }
 

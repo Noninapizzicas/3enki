@@ -119,18 +119,23 @@ class EjecutorMotorModule extends BaseModule {
   }
 
   // ── Helpers de integración por EVENTOS ─────────────────────────────────────
+  // _pedir: request → response. Escucha AMBOS pares del bus: el `.response` y
+  // el `.failed` canónico (todo flujo de Enki cierra su círculo con su par
+  // *.failed). Sin el failed, un error del custodio se convierte en TIMEOUT.
   _pedir(eventoRequest, payload, eventoResponse, timeoutMs = 10000) {
     return new Promise((resolve, reject) => {
       let unsub = null;
+      let unsubFail = null;
+      const limpiar = () => { if (unsub) unsub(); if (unsubFail) unsubFail(); };
       const to = setTimeout(() => {
-        if (unsub) unsub();
+        limpiar();
         reject(Object.assign(new Error(`timeout esperando ${eventoResponse}`), { code: 'TIMEOUT' }));
       }, timeoutMs);
       unsub = this.eventBus.subscribe(eventoResponse, (event) => {
         const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
         if (!data || data.request_id !== payload.request_id) return;
         clearTimeout(to);
-        if (unsub) unsub();
+        limpiar();
         if (data.error) {
           const e = new Error(data.error.message || String(data.error));
           e.code = data.error.code || 'UNKNOWN_ERROR';
@@ -139,6 +144,19 @@ class EjecutorMotorModule extends BaseModule {
           resolve(data);
         }
       });
+      // El par canónico *.failed del bus: el error real del custodio (no timeout).
+      const eventoFailed = eventoResponse.replace(/\.response$/, '.failed');
+      if (eventoFailed !== eventoResponse) {
+        unsubFail = this.eventBus.subscribe(eventoFailed, (event) => {
+          const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!data || data.request_id !== payload.request_id) return;
+          clearTimeout(to);
+          limpiar();
+          const e = new Error((data.error && data.error.message) || `fallo ${eventoFailed}`);
+          e.code = (data.error && data.error.code) || 'FAILED';
+          reject(e);
+        });
+      }
       this.eventBus.publish(eventoRequest, { ...payload });
     });
   }

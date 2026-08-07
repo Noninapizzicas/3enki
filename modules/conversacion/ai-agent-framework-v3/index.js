@@ -250,8 +250,11 @@ class EjecutorMotorModule extends BaseModule {
       }
       return { commit: true, push: pushed, repo: absRepo };
     } catch (err) {
-      this.logger?.warn?.('ai-agent-framework-v3.commit.error', { relPath, error: String(err.message || '').slice(0, 150) });
-      return { commit: false, error: String(err.message || '').slice(0, 150) };
+      // 600 chars: el e.message del execSync incluye el stderr REAL del git
+      // (150 chars cortaba el detalle — "dubious ownership", "Please tell me who you are"…)
+      const detalle = String(err.message || '').slice(0, 600);
+      this.logger?.warn?.('ai-agent-framework-v3.commit.error', { relPath, error: detalle });
+      return { commit: false, error: detalle };
     }
   }
 

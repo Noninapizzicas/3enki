@@ -168,9 +168,10 @@ class EjecutorMotorModule extends BaseModule {
     }
   }
 
-  _progress(project_id, request_id, agent_name, step, message, tool_invoked) {
+  _progress(project_id, request_id, agent_name, step, message, tool_invoked, conversation_id) {
     this._publicar('agent.execute.progress', {
       request_id, agent_name, project_id,
+      ...(conversation_id ? { conversation_id } : {}),
       step: step || 'thinking',
       message: message || null,
       tool_invoked: tool_invoked || null,
@@ -349,7 +350,7 @@ class EjecutorMotorModule extends BaseModule {
 
       for (const paso of pipeline.pasos) {
         if (paso.tipo === 'fuzzy') {
-          this._progress(project_id, request_id, agent_name, 'tool_call', `generando (${paso.paso})`, 'generar');
+          this._progress(project_id, request_id, agent_name, 'tool_call', `generando (${paso.paso})`, 'generar', conversation_id);
           let ok = false;
           for (let intento = 1; intento <= generacionesMax; intento++) {
             try {
@@ -380,17 +381,17 @@ class EjecutorMotorModule extends BaseModule {
           if (paso.op === 'escribir' && salidaUltima !== null) {
             const abs = this._escribir(entregableReal ? entregableReal.path : pipeline.entregable.path, salidaUltima, project_id);
             await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `escrito en ${abs}` }, 'bitacora.paso.registrado', 8000);
-            this._progress(project_id, request_id, agent_name, 'tool_call', `escrito en ${abs}`, 'escribir');
+            this._progress(project_id, request_id, agent_name, 'tool_call', `escrito en ${abs}`, 'escribir', conversation_id);
           } else if (paso.op === 'commitar' && entregableReal) {
             const cr = this._commitar(entregableReal.path, pipeline.name, project_id);
             await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `commit: ${JSON.stringify(cr)}` }, 'bitacora.paso.registrado', 8000);
-            this._progress(project_id, request_id, agent_name, 'tool_call', `commit ${cr.commit ? 'OK' : 'skip'}: ${entregableReal.path}`, 'commitar');
+            this._progress(project_id, request_id, agent_name, 'tool_call', `commit ${cr.commit ? 'OK' : 'skip'}: ${entregableReal.path}`, 'commitar', conversation_id);
           } else if (paso.op === 'validar' && salidaUltima !== null) {
             const val = validar(salidaUltima, paso.valida || {});
             salidaUltima = val.ok ? salidaUltima : null;
           }
           await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: paso.op ? `reflejo ${paso.op}` : 'reflejo (no-op)' }, 'bitacora.paso.registrado', 8000);
-          this._progress(project_id, request_id, agent_name, 'thinking', `paso ${paso.paso}`, null);
+          this._progress(project_id, request_id, agent_name, 'thinking', `paso ${paso.paso}`, null, conversation_id);
         }
       }
 
@@ -399,7 +400,7 @@ class EjecutorMotorModule extends BaseModule {
       }
 
       // 4 · El JEFE (P4) contra el MUNDO REAL
-      this._progress(project_id, request_id, agent_name, 'finalizing', 'JEFE: verificando entregable…', null);
+      this._progress(project_id, request_id, agent_name, 'finalizing', 'JEFE: verificando entregable…', null, conversation_id);
       const veredicto = verificar(entregableReal, mundo);
 
       // 5 · Sellar la bitácora con el veredicto

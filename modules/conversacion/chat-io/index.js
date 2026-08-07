@@ -842,6 +842,20 @@ class ChatIoModule extends BaseModule {
     this.metrics?.increment?.('chat-io.agent_bridge.request', {});
   }
 
+  // invoke_agent es el alias legacy/usado por el chat para arrancar el motor v3.
+  // Normalizamos al mismo shape de agent.execute.request para que el puente al
+  // frontend (agent_status + agent_progress) se dispare igual.
+  onInvokeAgentBridge(event) {
+    const d = event?.data || event || {};
+    return this.onAgentExecuteRequest({
+      data: {
+        ...d,
+        conversation_id: d.conversation_id || d.context?.conversation_id || null,
+        agent_name: d.agent_name || d.agentName || 'agente'
+      }
+    });
+  }
+
   onAgentExecuteProgress(event) {
     const d = event?.data || event || {};
     if (!d.conversation_id || !d.request_id) return;
@@ -890,6 +904,22 @@ class ChatIoModule extends BaseModule {
       timestamp: new Date().toISOString()
     });
     this.metrics?.increment?.('chat-io.agent_bridge.failed', {});
+  }
+
+  // invoke_agent.response es el alias legacy/usado por el chat para cerrar el motor v3.
+  // Normalizamos al mismo shape de agent.execute.response/failed para cerrar el marco.
+  onInvokeAgentDoneBridge(event) {
+    const d = event?.data || event || {};
+    const conversation_id = d.conversation_id || d.context?.conversation_id || null;
+    if (!conversation_id) return;
+    if (d.error) {
+      return this.onAgentExecuteFailed({
+        data: { ...d, conversation_id, error: d.error, veredicto: d.veredicto, llm: d.llm }
+      });
+    }
+    return this.onAgentExecuteDone({
+      data: { ...d, conversation_id, veredicto: d.veredicto, llm: d.llm }
+    });
   }
 
   // ── REHIDRATACIÓN DEL MARCO (CIMIENTO v3) ──────────────────────────────────

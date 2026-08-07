@@ -7,10 +7,16 @@ fuentes:
   - modules/project-manager/**
   - modules/credential-manager/**
   - config.json
-verificado: 2026-07-31
+verificado: 2026-08-07
 ---
 
 # Módulos: Project-Manager, Credential-Manager y Conversación
+
+> **Novedad (2026-08-07) — chat-io puente de agente al frontend soporta `invoke_agent`.**
+> `chat-io` ya suscribía `agent.execute.request/progress/response/failed`; ahora también
+> escucha `invoke_agent` y `invoke_agent.response` (el alias que usa el chat para arrancar
+> y cerrar el motor v3) para publicar `conversation/{id}/agent_status` y
+> `conversation/{id}/agent_progress` al frontend.
 
 ## PROJECT-MANAGER
 

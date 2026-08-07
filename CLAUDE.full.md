@@ -3129,6 +3129,12 @@ PATRON Multi-Tenant {
 
 # Módulos: Project-Manager, Credential-Manager y Conversación
 
+> **Novedad (2026-08-07) — chat-io puente de agente al frontend soporta `invoke_agent`.**
+> `chat-io` ya suscribía `agent.execute.request/progress/response/failed`; ahora también
+> escucha `invoke_agent` y `invoke_agent.response` (el alias que usa el chat para arrancar
+> y cerrar el motor v3) para publicar `conversation/{id}/agent_status` y
+> `conversation/{id}/agent_progress` al frontend.
+
 ## PROJECT-MANAGER
 
 ```
@@ -13004,6 +13010,11 @@ system-inspector (2.0.0)
 
 # FRONTEND — Capa de UI (SvelteKit + Svelte 5 sobre MQTT)
 
+> **Novedad (2026-08-07) — AgenteMarco se alimenta correctamente del puente del agente.**
+> El marco desplegable del chat ahora lee `$ejecuciones.get($ejecucionActivaId)` con
+> reactividad robusta, y el backend incluye `conversation_id` en `agent.execute.progress`
+> y normaliza `invoke_agent`/`invoke_agent.response` como alias del puente.
+
 > **Novedad (2026-07-14) — identidad del navegador en el bus (inerte hasta enrolar).**
 > `ui-core/enki-identity.ts` genera un par RSA en WebCrypto (privada NO-extraíble en IndexedDB), enrola
 > contra `certificate-authority.enroll` y mintea un token firmado; `client.ts` lo presenta como password
@@ -16324,7 +16335,7 @@ ESTADO ✓ VERIFICADO EN VIVO (Regalos, 3 conversaciones): crear_lista ESCRIBE �
 
 ---
 
-# CÚPULA DE AGENTES — la flota es una BIBLIOTECA buscable (ai-agent-framework 2.2.0 · vivo 2026-07-31)
+# CÚPULA DE AGENTES — la flota es una BIBLIOTECA buscable (ai-agent-framework-v3 0.1.0 · vivo 2026-08-07)
 
 > Tercera sustancia del patrón cúpula (lentes=conocimiento · cantera=skills · **agentes=trabajadores
 > en contexto aislado**). El framework NO cambia de motor —sigue cargando de `agents/*.json` y corriendo

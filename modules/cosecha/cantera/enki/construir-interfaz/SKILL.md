@@ -61,6 +61,24 @@ spec no existe → la fase NO puede ejecutarse: avisa que falta la FASE 6½.
 | `inline_render` | (sin botón; se renderiza en el chat) | Componente que aparece en el flujo |
 | `ui_decision.necesita=false` | — | **NO construir** — cerrar fase directo |
 
+## 2b · LOS ESTÁNDARES — la F7 construye CONFORME a ellos (obligatorio)
+
+La F7 NO inventa estilo: genera cada pieza según el estándar que ya existe en
+el repo. Antes de generar NADA, carga y sigue estas fuentes:
+
+| Pieza | Estándar obligatorio | Dónde vive |
+|---|---|---|
+| Store MQTT | Skill `ui-store-mqtt` (patrón fundacional: 1 writable + derivados + acciones que reflejan + suscripciones + reset) | `modules/cosecha/cantera/interfaces/patrones-fundacionales/ui-store-mqtt/` |
+| Trío del módulo (manifest.json + index.ts + Panel.svelte) | Caso vivo `contenido` (el patrón real que el loader autodescubre) | `frontend/src/lib/modules/contenido/` |
+| Zonas del frame | Contrato `frontend.contract` (tipos canónicos ↔ zonas UI) | `arquitectura/decisiones/_contratos/frontend.contract.json` |
+| Lenguaje visual | CSS del frame (variables `var(--color-*)`, paneles existentes) | `frontend/src/lib/` (componentes vivos) |
+| Llamadas al backend | `mqttRequest(dominio, accion, { project_id })` | `frontend/src/lib/ui-core/mqtt-request.ts` |
+
+**Regla**: si la pieza que vas a generar tiene un estándar en esa tabla, lo
+sigues TAL CUAL. Nada de "mejorar" el patrón, nada de variantes propias, nada
+de estilos inventados. El estándar manda; la spec (F6½) manda sobre el CONTENIDO;
+el estándar manda sobre la FORMA de cada archivo.
+
 ## 3 · EL MANDATO — el trío operativo, mecánico
 
 1. **Lee la SPEC** `esquemas/interfaz-<slug>/esquema.md` (FASE 6½): vistas,

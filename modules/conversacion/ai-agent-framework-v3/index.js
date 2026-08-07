@@ -32,7 +32,8 @@ class EjecutorMotorModule extends BaseModule {
     this.version = '0.1.0';
     // Puertos del mundo (inyectables en el smoke).
     this.dataDir = path.resolve(__dirname, '../../../data');
-    this.modulesDir = path.resolve(__dirname, '../../..');
+    // __dirname = modules/conversacion/ai-agent-framework-v3 → '../..' = modules/ del sistema.
+    this.modulesDir = path.resolve(__dirname, '../..');
     this.repoDir = '/home/admin/3enki';
     this.eventBus = null;
     this.logger = null;
@@ -222,7 +223,10 @@ class EjecutorMotorModule extends BaseModule {
       return { commit: false, motivo: 'storage/ (data/ excluida del rsync — sobrevive sin commit)' };
     }
     const absProd = this._resolver(relPath, project_id);
-    const absRepo = path.join(this.repoDir, relPath);
+    // En el repo, los entregables del sistema viven en modules/ (el rsync los
+    // lleva a /opt/enki/modules/ y el --delete no los borra si están en git).
+    const repoRel = path.join('modules', relPath);
+    const absRepo = path.join(this.repoDir, repoRel);
     if (!fs.existsSync(absProd)) {
       return { commit: false, motivo: `entregable no existe en prod: ${absProd}` };
     }
@@ -231,9 +235,9 @@ class EjecutorMotorModule extends BaseModule {
       fs.copyFileSync(absProd, absRepo);
       const slug = relPath.split('/')[0];
       const mensaje = `motor: ${slug} generado por pipeline ${pipelineName} (verificado)`;
-      execSync(`git -C ${this.repoDir} add -- ${relPath}`, { stdio: 'pipe' });
+      execSync(`git -C ${this.repoDir} add -- ${repoRel}`, { stdio: 'pipe' });
       try {
-        execSync(`git -C ${this.repoDir} commit -m "${mensaje}" -- ${relPath}`, { stdio: 'pipe' });
+        execSync(`git -C ${this.repoDir} commit -m "${mensaje}" -- ${repoRel}`, { stdio: 'pipe' });
       } catch (e) {
         if (!String(e.message || '').includes('nothing to commit')) throw e; // ya commiteado = ok
       }

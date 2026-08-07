@@ -1,0 +1,38 @@
+{
+  "name": "esquematizar-interfaz",
+  "description": "Fase 6½: esquematiza la interfaz CONCRETA del módulo (slug) con su tipo ya decidido (F6) — el fuzzy aplica el prisma de 5 huecos ronda a ronda hasta seco + disección con FORMA y devuelve la SPEC COMPLETA en UN archivo (patrón del repo: UN entregable = UN path, como esquema.md), el reflejo la escribe en storage/esquemas/interfaz-<slug>.md, el JEFE verifica que existe.",
+  "pasos": [
+    {
+      "paso": "generar_espec_interfaz",
+      "tipo": "fuzzy",
+      "instruccion": "Esquematiza la INTERFAZ del módulo cuyo slug está en la task. Método (skill esquematizar-interfaz — cárgala): 1) Lee modules/<slug>/module.json (ui_handlers tipados de la FASE 6 con type+zone, tools, events, description). 2) El sujeto es 'la interfaz del módulo <slug> de tipo <type>'. Pásalo por el prisma de 5 huecos (IDENTIDAD · RESTRICCIONES · CONTRATO · NO-OBJETIVOS · PREGUNTAS_ABIERTAS): de cada hueco salen sub-productos (vistas, operaciones, datos, eventos); pasa cada sub-producto por el prisma otra vez, ronda a ronda, hasta que solo queden hojas atómicas/abiertas/repetidas. 3) Asigna FORMA a cada hoja atómica (reflejo · micro-agente fuzzy · custodio · conversor · puente). 4) Ley del esquematizador: AGNOSTICISMO — cero tecnologías del entorno en el análisis; las piezas declaran puertos (leer(id), observar(evento), operar(accion)). 5) Devuelve SOLO el MARKDOWN COMPLETO de la SPEC en un único documento con estas secciones: '# Spec de la interfaz — <slug>' · '## 1. Prisma ronda 1' (los 5 huecos y sub-productos) · '## 2. Prisma ronda 2' (sub-productos al prisma otra vez) · '## 3. Disección' (cada hoja atómica con su FORMA) · '## 4. Esquema maestro' (árbol: VISTAS · OPERACIONES del module.json · DATOS · EVENTOS · ZONA/TIPO) — sin explicaciones fuera del markdown.",
+      "valida": {
+        "tamano_min": 400
+      }
+    },
+    {
+      "paso": "escribir_espec",
+      "tipo": "reflejo",
+      "op": "escribir"
+    },
+    {
+      "paso": "commitar_espec",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "path": "storage/esquemas/interfaz-<slug>.md",
+    "reglas": [
+      "existe",
+      "contenido_min"
+    ],
+    "min_chars": 300
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 32000,
+    "generacion_timeout_ms": 240000
+  }
+}

@@ -78,8 +78,22 @@ const MAPA_PROCESO = {
     mensaje: 'La skill del módulo está escrita. Siguiente paso (FASE 6): decidir la INTERFAZ de ese módulo — corre scripts/decidir-interfaz.js (skill decidir-interfaz), razona el rol (dominio → workspace_module · gestión → system_panel · operación puntual → chat_tool · contenido en chat → inline_render · puente interno → ninguna) y escribe el resultado en module.json (ui_handlers con type+zone canónicos, o ui_decision.necesita=false documentado). Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"], tipos: {...} } }.'
   },
   'negocio.interfaz': {
+    // FASE 6½ — el tipo está decidido (F6), pero ANTES de construir hay que
+    // esquematizar la interfaz CONCRETA: el prisma de 5 huecos sobre "la
+    // interfaz del módulo X de tipo Y" → la SPEC (vistas, operaciones, datos,
+    // eventos). Lección en vivo: saltar de F6 a F7 improvisa el panel — grave.
+    skill: 'esquematizar-interfaz',
+    mensaje: 'La interfaz del módulo está decidida (FASE 6: type+zone en module.json). Siguiente paso (FASE 6½): ESQUEMATIZAR la interfaz concreta — lee modules/<slug>/module.json (ui_handlers tipados, tools, events) y aplica el prisma de 5 huecos sobre "la interfaz del módulo <slug> de tipo <type>", ronda a ronda hasta seco + disección con FORMA. Escribe las pasadas en esquemas/interfaz-<slug>/ (esquema.md + pasada-1 + pasada-2 + disección). Si module.json tiene ui_decision.necesita=false → cerrar directo. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.'
+  },
+  'negocio.interfaz_esquematizada': {
+    // FASE 7 — la SPEC ya existe (F6½). Construir-interfaz la CONSUME para
+    // generar el trío (store + panel + UIModule) sin improvisar.
+    skill: 'construir-interfaz',
+    mensaje: 'La interfaz del módulo está esquematizada (FASE 6½: esquemas/interfaz-<slug>/esquema.md es la SPEC). Siguiente paso (FASE 7): CONSTRUIR la interfaz operativa en el frontend CONSUMIENDO la spec — lee esquemas/interfaz-<slug>/esquema.md (vistas, operaciones del module.json, datos, eventos, zona) y genera el trío real: store MQTT (frontend/src/lib/stores/<dominio>.ts), Panel Svelte (frontend/src/lib/modules/<slug>/<Slug>Panel.svelte, operaciones vía mqttRequest), UIModule (manifest.json + index.ts, autodescubierto). Cada pieza de la spec → su archivo; NO improvisar fuera de la spec. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.'
+  },
+  'negocio.interfaz_construida': {
     skill: 'construir-modulos',
-    mensaje: 'La interfaz del módulo está decidida. Siguiente paso (FASE 4): construir el SIGUIENTE módulo del plan — UNA hoja a la vez, en el orden de las etapas de esquemas/plan-construccion.md, sin tocar los ya construidos. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si NO quedan hojas sin construir: proceso-negocio.completar_fase { fase: "completado" }.'
+    mensaje: 'La interfaz del módulo está construida y operativa. Siguiente paso (FASE 4): construir el SIGUIENTE módulo del plan — UNA hoja a la vez, en el orden de las etapas de esquemas/plan-construccion.md, sin tocar los ya construidos. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si NO quedan hojas sin construir: proceso-negocio.completar_fase { fase: "completado" }.'
   },
   'negocio.completado': {
     // FIN DEL PROCESO — todas las piezas construidas y con skill.
@@ -161,7 +175,9 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   //   quedan hojas sin construir         → construir-modulos (FASE 4)
   //   todo construido, faltan skills     → escribir-skills (FASE 5)
   //   todo construido+skill, falta interfaz → decidir-interfaz (FASE 6)
-  //   todo construido y con skill e interfaz → completado (FIN)
+  //   todo decidido, falta spec de interfaz → esquematizar-interfaz (FASE 6½)
+  //   todo espec, falta construir interfaz → construir-interfaz (FASE 7)
+  //   todo construido y con skill e interfaz operativa → completado (FIN)
   _decidirSiguiente(progreso) {
     if (progreso.faltan_por_construir > 0) {
       return { skill: 'construir-modulos', mensaje: `El plan tiene ${progreso.total} hojas: ${progreso.construidos} construidas, faltan ${progreso.faltan_por_construir}. Siguiente paso (FASE 4): construir UNA hoja — la primera del plan sin módulo en disco (verifica modules/<slug>/ — el sistema cuenta lo que existe, no lo que reportas). Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["<slug>"] } }.` };
@@ -172,7 +188,13 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     if (progreso.faltan_por_interfaz > 0) {
       return { skill: 'decidir-interfaz', mensaje: `El plan está construido y con skill (${progreso.construidos}/${progreso.total}) pero faltan ${progreso.faltan_por_interfaz} decisiones de interfaz. Siguiente paso (FASE 6): decidir la INTERFAZ de UN módulo construido sin decidir — corre scripts/decidir-interfaz.js (skill decidir-interfaz), razona el rol y escribe el resultado en module.json (ui_handlers con type+zone canónicos, o ui_decision.necesita=false). Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"] } }.` };
     }
-    return { skill: null, mensaje: 'El proceso de construcción del negocio está COMPLETO: todas las hojas de la disección tienen su módulo, su skill y su interfaz decidida.' };
+    if (progreso.faltan_por_interfaz_esquematizada > 0) {
+      return { skill: 'esquematizar-interfaz', mensaje: `El plan está construido, con skill y con interfaz decidida (${progreso.con_interfaz}/${progreso.total}) pero faltan ${progreso.faltan_por_interfaz_esquematizada} SPECS de interfaz. Siguiente paso (FASE 6½): esquematizar la interfaz de UN módulo — prisma de 5 huecos sobre "la interfaz del módulo <slug> de tipo <type>" hasta seco + disección, y escribe la spec en esquemas/interfaz-<slug>/ (esquema.md + pasadas). Si F6 decidió sin interfaz (ui_decision.necesita=false) → cerrar directo. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.` };
+    }
+    if (progreso.faltan_por_interfaz_construida > 0) {
+      return { skill: 'construir-interfaz', mensaje: `El plan está construido, con skill y con interfaz especificada (${progreso.con_interfaz_esquematizada}/${progreso.total}) pero faltan ${progreso.faltan_por_interfaz_construida} interfaces OPERATIVAS. Siguiente paso (FASE 7): construir la interfaz de UN módulo en el frontend CONSUMIENDO su spec (esquemas/interfaz-<slug>/esquema.md) — genera el trío real (store MQTT + Panel Svelte + UIModule manifest/index.ts) en frontend/src/lib/modules/<slug>/. Cada pieza de la spec → su archivo; NO improvisar. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.` };
+    }
+    return { skill: null, mensaje: 'El proceso de construcción del negocio está COMPLETO: todas las hojas de la disección tienen su módulo, su skill, su interfaz especificada y su interfaz operativa.' };
   }
 
   // ── PROGRESO DEL PLAN (determinista — el sistema decide, no el LLM) ──
@@ -186,16 +208,26 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     try {
       const r = await this._rpc('fs.read.request', { project_id, path: 'esquemas/plan-construccion.md' });
       const contenido = (r && (r.content || r.data?.content)) || '';
-      if (!contenido) return { total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, slugs: [] };
+      if (!contenido) return { total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, con_interfaz_esquematizada: 0, con_interfaz_construida: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, faltan_por_interfaz_esquematizada: 0, faltan_por_interfaz_construida: 0, slugs: [] };
       // Extraer slugs del plan: tokens tipo modulo (radar-adquisicion, config-pesos-fuente…)
       const slugs = [...new Set((contenido.match(/[a-z][a-z0-9]*(?:-[a-z0-9]+)+/g) || []).filter(s => s.length > 3))];
-      let construidos = 0, con_skill = 0, con_interfaz = 0;
+      let construidos = 0, con_skill = 0, con_interfaz = 0, con_interfaz_esquematizada = 0, con_interfaz_construida = 0;
       for (const slug of slugs) {
         const dirModulo = this._buscarModulo(slug);
         if (dirModulo) {
           construidos++;
           if (fs.existsSync(path.join(MODULES_DIR, 'cosecha', 'cantera', 'enki', slug, 'SKILL.md'))) con_skill++;
-          if (this._interfazDecidida(dirModulo)) con_interfaz++;
+          if (this._interfazDecidida(dirModulo)) {
+            con_interfaz++;
+            if (this._interfazSinNecesidad(dirModulo)) {
+              // Sin interfaz (F6) → la spec y la construcción se dan por hechas.
+              con_interfaz_esquematizada++;
+              con_interfaz_construida++;
+            } else {
+              if (this._interfazEsquematizadaEnDisco(project_id, slug)) con_interfaz_esquematizada++;
+              if (this._interfazOperativaEnDisco(slug)) con_interfaz_construida++;
+            }
+          }
         }
       }
       return {
@@ -203,13 +235,44 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         construidos,
         con_skill,
         con_interfaz,
+        con_interfaz_esquematizada,
+        con_interfaz_construida,
         faltan_por_construir: slugs.length - construidos,
         faltan_por_skill: construidos - con_skill,
         faltan_por_interfaz: construidos - con_interfaz,
+        faltan_por_interfaz_esquematizada: con_interfaz - con_interfaz_esquematizada,
+        faltan_por_interfaz_construida: con_interfaz_esquematizada - con_interfaz_construida,
         slugs
       };
     } catch (_) {
-      return { total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, slugs: [] };
+      return { total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, con_interfaz_esquematizada: 0, con_interfaz_construida: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, faltan_por_interfaz_esquematizada: 0, faltan_por_interfaz_construida: 0, slugs: [] };
+    }
+  }
+
+  // ¿La SPEC de la interfaz existe en el storage del proyecto?
+  // UN archivo (patrón del repo): esquemas/interfaz-<slug>.md con el prisma,
+  // la disección y el esquema maestro embebidos.
+  async _interfazEsquematizadaEnDisco(project_id, slug) {
+    try {
+      const r = await this._rpc('fs.list.request', { project_id, path: 'esquemas' });
+      const entries = (r && (r.files || r.items)) || [];
+      const nombres = entries.map(x => (typeof x === 'string' ? x : x && x.name)).filter(Boolean);
+      return nombres.includes(`interfaz-${slug}.md`);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ¿La interfaz OPERATIVA del módulo existe en el frontend (trío real)?
+  // frontend/src/lib/modules/<slug>/ con manifest.json + index.ts + <Slug>Panel.svelte
+  _interfazOperativaEnDisco(slug) {
+    try {
+      const baseRepo = REPO_MODULES_DIR ? path.join(REPO_MODULES_DIR, '..') : path.join(MODULES_DIR, '..');
+      const frontDir = path.join(baseRepo, 'frontend', 'src', 'lib', 'modules', slug);
+      const slugCap = slug.charAt(0).toUpperCase() + slug.slice(1);
+      return ['manifest.json', 'index.ts', `${slugCap}Panel.svelte`].every(f => fs.existsSync(path.join(frontDir, f)));
+    } catch (_) {
+      return false;
     }
   }
 
@@ -288,6 +351,25 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         // (type+zone canónicos) o con ui_decision.necesita=false documentado.
         tipo: 'sistema',
         mensaje: 'La decisión de interfaz no está en disco: se espera modules/<slug>/module.json con ui_handlers tipados (type ∈ workspace_module|chat_tool|inline_render|system_panel + zone canónica) o con ui_decision.necesita=false (sin interfaz, documentada). El reporte del agente no cuenta.'
+      },
+      'interfaz_esquematizada': {
+        // FASE 6½ — la SPEC de la interfaz debe existir en el proyecto: UN
+        // archivo (patrón del repo: UN entregable = UN path), como esquema.md
+        // y plan-construccion.md. El prisma + disección van embebidos.
+        dir: 'esquemas',
+        reglas: [
+          { nombre: 'interfaz-', cond: 'prefijo', desc: 'la SPEC de la interfaz (interfaz-<slug>.md)' },
+          { nombre: '.md', cond: 'contiene', desc: 'archivo markdown' }
+        ],
+        mensaje: 'La SPEC de la interfaz no está: se espera <proyecto>/esquemas/interfaz-<slug>.md (prisma + disección + esquema maestro embebidos, patrón UN path como esquema.md). Sin spec no se construye.'
+      },
+      'interfaz_construida': {
+        // FASE 7 — la interfaz OPERATIVA debe existir en el frontend: el trío
+        // real (manifest.json + index.ts + <Slug>Panel.svelte) en
+        // frontend/src/lib/modules/<slug>/. Si F6 dijo sin interfaz, el
+        // entregable se acepta sin archivos (la decisión consta en module.json).
+        tipo: 'sistema',
+        mensaje: 'La interfaz operativa no está en disco: se espera frontend/src/lib/modules/<slug>/ con manifest.json + index.ts + <Slug>Panel.svelte (autodescubiertos por el loader). El reporte del agente no cuenta.'
       }
     };
     const spec = ESPERADOS[fase];
@@ -298,8 +380,14 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       return this._verificarSistema(fase, extra);
     }
     try {
+      // El dir puede llevar <slug> (p.ej. 'esquemas/interfaz-<slug>') — se
+      // sustituye con el slug REAL del resumen (extra.slug o extra.modulos[0]).
+      const slugResumen = (extra && extra.slug) || (extra && Array.isArray(extra.modulos) && extra.modulos[0]) || null;
+      const dirReal = slugResumen && spec.dir.includes('<slug>')
+        ? spec.dir.replace(/<slug>/g, slugResumen)
+        : spec.dir;
       // Listar el directorio del entregable (fs.list) → nombres reales.
-      const r = await this._rpc('fs.list.request', { project_id, path: spec.dir });
+      const r = await this._rpc('fs.list.request', { project_id, path: dirReal });
       const entries = (r && (r.files || r.items)) || [];
       const nombres = entries.map(x => (typeof x === 'string' ? x : x && x.name)).filter(Boolean);
       // Comprobar cada regla contra los nombres reales.
@@ -423,7 +511,43 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       }
       return { ok: true, verificados: [`interfaz de ${slug} decidida en disco y en el repo`] };
     }
+    if (fase === 'interfaz_construida') {
+      // FASE 7 — la interfaz OPERATIVA existe en el frontend: el trío
+      // (manifest.json + index.ts + <Slug>Panel.svelte) autodescubierto por
+      // el loader. Excepción legítima: F6 decidió ui_decision.necesita=false
+      // → el módulo NO lleva interfaz y la fase se acepta sin archivos.
+      const dirModulo = this._buscarModulo(slug);
+      if (dirModulo && this._interfazSinNecesidad(dirModulo)) {
+        return { ok: true, verificados: [`interfaz de ${slug}: F6 decidió sin interfaz (ui_decision.necesita=false) — no hay nada que construir`] };
+      }
+      const slugCap = slug.charAt(0).toUpperCase() + slug.slice(1);
+      const frontDir = path.join(REPO_MODULES_DIR || MODULES_DIR, '..', 'frontend', 'src', 'lib', 'modules', slug);
+      const trío = ['manifest.json', 'index.ts', `${slugCap}Panel.svelte`];
+      const faltantes = trío.filter(f => !fs.existsSync(path.join(frontDir, f)));
+      if (faltantes.length) {
+        return { ok: false, esperado: [`frontend/src/lib/modules/${slug}/ con ${trío.join(' + ')}`], mensaje: `La interfaz operativa de ${slug} NO está completa: faltan ${faltantes.join(', ')} en frontend/src/lib/modules/${slug}/. Corre la skill construir-interfaz y genera el trío real (store + panel + UIModule).` };
+      }
+      // En el repo también (el deploy del frontend va desde el repo).
+      try {
+        const cp = require('child_process');
+        const out = cp.execFileSync('git', ['ls-files', '--', `frontend/src/lib/modules/${slug}`], { cwd: path.join(REPO_MODULES_DIR || MODULES_DIR, '..'), encoding: 'utf8' }).trim();
+        if (!out.length) {
+          return { ok: false, esperado: [`frontend/src/lib/modules/${slug}/ COMMITEADO en el repo (~/3enki)`], mensaje: `La interfaz de ${slug} existe en disco pero NO está commiteada en ~/3enki (git ls-files no la ve) → el siguiente deploy la borrará. Commitea el trío (rama → PR → merge) antes de cerrar la fase.` };
+        }
+      } catch (_) { /* git no disponible → no bloquear */ }
+      return { ok: true, verificados: [`interfaz operativa de ${slug}: trío completo en frontend/ y en el repo`] };
+    }
     return { ok: true };
+  }
+
+  // ¿F6 decidió que el módulo NO necesita interfaz? (ui_decision.necesita=false)
+  _interfazSinNecesidad(dirModulo) {
+    try {
+      const m = JSON.parse(fs.readFileSync(path.join(dirModulo, 'module.json'), 'utf8'));
+      return !!(m.ui_decision && m.ui_decision.necesita === false);
+    } catch (_) {
+      return false;
+    }
   }
 
   // Igual que _buscarModulo pero contra el repo de desarrollo (~/3enki/modules).

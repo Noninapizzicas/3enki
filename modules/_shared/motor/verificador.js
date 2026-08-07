@@ -105,12 +105,44 @@ function _interfazDecidida(rel, _entregable, mundo) {
   };
 }
 
+// FASE 7 — el trío OPERATIVO del frontend existe: manifest.json (autodescubre
+// el loader), index.ts (UIModule) y <Slug>Panel.svelte (la vista). Sin esos 3
+// archivos, un module.json tipado (F6) es una promesa sin panel.
+function _interfazOperativa(rel, entregable, mundo) {
+  if (!mundo || typeof mundo.existe !== 'function') {
+    return { regla: 'interfaz_operativa', ok: false, detalle: 'puerto existe() no disponible' };
+  }
+  // rel = <dir>/manifest.json (o cualquier archivo del trío) → exigimos el trío completo.
+  const dir = String(rel).replace(/\/[^/]+$/, '');
+  const panelName = (() => {
+    const m = String(rel).match(/\/([^/]+)\/manifest\.json$/);
+    if (!m) return null;
+    const slug = m[1];
+    return slug.charAt(0).toUpperCase() + slug.slice(1) + 'Panel.svelte';
+  })();
+  const requisitos = [
+    { archivo: `${dir}/manifest.json`, desc: 'manifest.json (autodescubrimiento del loader)' },
+    { archivo: `${dir}/index.ts`, desc: 'index.ts (UIModule con PanelComponent)' }
+  ];
+  if (panelName) requisitos.push({ archivo: `${dir}/${panelName}`, desc: `${panelName} (la vista Svelte)` });
+  const faltantes = requisitos.filter(r => !mundo.existe(r.archivo));
+  const ok = faltantes.length === 0;
+  return {
+    regla: 'interfaz_operativa',
+    ok,
+    detalle: ok
+      ? `trío operativo completo: ${requisitos.map(r => r.archivo.split('/').pop()).join(' + ')}`
+      : `faltan archivos de la interfaz operativa: ${faltantes.map(f => f.archivo).join(', ')}`
+  };
+}
+
 const REGLAS = {
   existe: _existe,
   contenido_min: _contenidoMin,
   api_real: _apiReal,
   en_repo: _enRepo,
-  interfaz_decidida: _interfazDecidida
+  interfaz_decidida: _interfazDecidida,
+  interfaz_operativa: _interfazOperativa
 };
 
 /**

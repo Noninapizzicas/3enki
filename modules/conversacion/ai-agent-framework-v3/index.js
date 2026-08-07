@@ -184,6 +184,11 @@ class EjecutorMotorModule extends BaseModule {
     if (rel.startsWith('storage/')) {
       return path.join(this.dataDir, 'projects', project_id || 'system', 'storage', rel.replace(/^storage\//, ''));
     }
+    // Frontend del REPO (FASE 7 construir-interfaz): el frame SvelteKit vive en
+    // <repo>/frontend — no en modules/. El entregable multi-archivo escribe ahí.
+    if (rel.startsWith('frontend/')) {
+      return path.join(this.repoDir, rel);
+    }
     return path.join(this.modulesDir, rel);
   }
 
@@ -196,8 +201,10 @@ class EjecutorMotorModule extends BaseModule {
       },
       enRepo: (rel) => {
         if (rel.startsWith('storage/')) return undefined; // storage no se verifica en repo → no bloquea
+        // frontend/ (FASE 7) vive en la raíz del repo; modules/ bajo modules/.
+        const repoPath = rel.startsWith('frontend/') ? rel : `modules/${rel}`;
         try {
-          const out = execSync(`git -C ${this.repoDir} ls-files -- modules/${rel} 2>/dev/null`, { stdio: 'pipe' });
+          const out = execSync(`git -C ${this.repoDir} ls-files -- ${repoPath} 2>/dev/null`, { stdio: 'pipe' });
           return out.toString().trim().length > 0;
         } catch { return undefined; }
       }
@@ -226,7 +233,8 @@ class EjecutorMotorModule extends BaseModule {
     const absProd = this._resolver(relPath, project_id);
     // En el repo, los entregables del sistema viven en modules/ (el rsync los
     // lleva a /opt/enki/modules/ y el --delete no los borra si están en git).
-    const repoRel = path.join('modules', relPath);
+    // Los del FRONTEND (FASE 7) ya viven en frontend/ del repo — misma raíz.
+    const repoRel = relPath.startsWith('frontend/') ? relPath : path.join('modules', relPath);
     const absRepo = path.join(this.repoDir, repoRel);
     if (!fs.existsSync(absProd)) {
       return { commit: false, motivo: `entregable no existe en prod: ${absProd}` };
@@ -260,7 +268,7 @@ class EjecutorMotorModule extends BaseModule {
   }
 
   _resolverSlug(task, pipelineName) {
-    const stop = new Set(['construye', 'construir', 'construida', 'construido', 'escribe', 'escribir', 'escriba', 'genera', 'generar', 'proyecto', 'proyectos', 'modulo', 'modulos', 'fase', 'hoja', 'hojas', 'skill', 'skills', 'esquema', 'esquemas', 'esquematiza', 'plan', 'planes', 'del', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'para', 'que', 'con', 'y', 'a', 'su', 'en', 'al', 'se', 'por', 'como', 'mas', 'más', 'the', 'debe', 'debes', 'siguiente', 'siguientes', 'tanda', 'orden', 'primero', 'segundo', 'tercero', 'lee', 'leer', 'verifica', 'verificar', 'completa', 'completar', 'cierra', 'cerrar']);
+    const stop = new Set(['construye', 'construir', 'construida', 'construido', 'escribe', 'escribir', 'escriba', 'genera', 'generar', 'proyecto', 'proyectos', 'modulo', 'modulos', 'fase', 'hoja', 'hojas', 'skill', 'skills', 'esquema', 'esquemas', 'esquematiza', 'plan', 'planes', 'del', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'para', 'que', 'con', 'y', 'a', 'su', 'en', 'al', 'se', 'por', 'como', 'mas', 'más', 'the', 'debe', 'debes', 'siguiente', 'siguientes', 'tanda', 'orden', 'primero', 'segundo', 'tercero', 'lee', 'leer', 'verifica', 'verificar', 'completa', 'completar', 'cierra', 'cerrar', 'interfaz', 'interfaces', 'operativa', 'operativas', 'operativo', 'frontend', 'panel', 'paneles', 'store', 'stores', 'mqtt', 'uimodule', 'manifest', 'svelte', 'trío', 'trio']);
     const tokens = String(task || '').toLowerCase().match(/[a-z][a-z0-9-]{2,40}/g) || [];
     // El nombre del módulo suele ser el token no-stopword MÁS LARGO (no el primero).
     const candidatos = tokens.filter(t => !stop.has(t) && t.length > 3 && !/^\d+$/.test(t));
@@ -270,10 +278,46 @@ class EjecutorMotorModule extends BaseModule {
 
   _resolverEntregable(entregable, task, pipelineName) {
     const slug = this._resolverSlug(task, pipelineName);
-    return {
+    const base = {
       ...entregable,
-      path: String(entregable.path).replace(/<slug>/g, slug)
+      path: String(entregable.path || '').replace(/<slug>/g, slug)
     };
+    // Multi-archivo (FASE 7 construir-interfaz): dir + archivos[] → paths[]
+    // resueltos (cada archivo con <slug> y <Slug> sustituidos). El pipeline
+    // escribe/verifica/commitea CADA uno; el JEFE exige que todos existan.
+    if (entregable.dir && Array.isArray(entregable.archivos)) {
+      const dir = String(entregable.dir).replace(/<slug>/g, slug).replace(/\/$/, '');
+      base.dir = dir;
+      base.archivos = entregable.archivos.map(a => String(a).replace(/<slug>/g, slug).replace(/<Slug>/g, slug.charAt(0).toUpperCase() + slug.slice(1)));
+      base.paths = base.archivos.map(a => `${dir}/${a}`);
+      base.path = base.paths[0];
+    }
+    // Módulos ANIDADOS (pizzepos/pedidos, prisma/productos…): el entregable
+    // <slug>/module.json debe escribir donde el módulo REAL vive, no crear un
+    // duplicado en modules/<slug>/. Se busca el dir existente (1 nivel).
+    if (base.path && base.path.startsWith(slug + '/')) {
+      const dirReal = this._dirModuloExistente(slug);
+      if (dirReal) {
+        const relReal = path.relative(this.modulesDir, dirReal);
+        base.path = base.path.replace(new RegExp('^' + slug + '/'), relReal + '/');
+        if (base.paths) base.paths = base.paths.map(p => p.replace(new RegExp('^' + slug + '/'), relReal + '/'));
+      }
+    }
+    return base;
+  }
+
+  // Busca el directorio REAL de un módulo: modules/<slug>/ o anidado
+  // (modules/pizzepos/<slug>/). Devuelve null si no existe.
+  _dirModuloExistente(slug) {
+    const directo = path.join(this.modulesDir, slug);
+    if (fs.existsSync(path.join(directo, 'module.json'))) return directo;
+    try {
+      for (const grupo of fs.readdirSync(this.modulesDir)) {
+        const p = path.join(this.modulesDir, grupo, slug, 'module.json');
+        if (fs.existsSync(p)) return path.dirname(p);
+      }
+    } catch (_) {}
+    return null;
   }
 
   // ── PUERTO FUZZY (el único punto no determinista) ──────────────────────────
@@ -379,13 +423,34 @@ class EjecutorMotorModule extends BaseModule {
         } else {
           // REFLEJO: ejecuta el determinista si declara op conocida; si no, no-op registrado.
           if (paso.op === 'escribir' && salidaUltima !== null) {
-            const abs = this._escribir(entregableReal ? entregableReal.path : pipeline.entregable.path, salidaUltima, project_id);
-            await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `escrito en ${abs}` }, 'bitacora.paso.registrado', 8000);
-            this._progress(project_id, request_id, agent_name, 'tool_call', `escrito en ${abs}`, 'escribir', conversation_id);
+            // Multi-archivo (FASE 7): el fuzzy devuelve { archivos: { rel: contenido } }.
+            // Se escriben TODOS los paths declarados del entregable.
+            if (entregableReal.paths && Array.isArray(entregableReal.paths) && salidaUltima.archivos && typeof salidaUltima.archivos === 'object') {
+              for (const rel of entregableReal.paths) {
+                const contenido = salidaUltima.archivos[rel]
+                  ?? salidaUltima.archivos[rel.replace(/^frontend\//, '')]
+                  ?? salidaUltima.archivos[rel.replace(/^storage\//, '')];
+                if (contenido === undefined) continue;
+                const abs = this._escribir(rel, { content: String(contenido) }, project_id);
+                await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `escrito en ${abs}` }, 'bitacora.paso.registrado', 8000);
+              }
+            } else {
+              const abs = this._escribir(entregableReal ? entregableReal.path : pipeline.entregable.path, salidaUltima, project_id);
+              await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `escrito en ${abs}` }, 'bitacora.paso.registrado', 8000);
+              this._progress(project_id, request_id, agent_name, 'tool_call', `escrito en ${abs}`, 'escribir', conversation_id);
+            }
           } else if (paso.op === 'commitar' && entregableReal) {
-            const cr = this._commitar(entregableReal.path, pipeline.name, project_id);
-            await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `commit: ${JSON.stringify(cr)}` }, 'bitacora.paso.registrado', 8000);
-            this._progress(project_id, request_id, agent_name, 'tool_call', `commit ${cr.commit ? 'OK' : 'skip'}: ${entregableReal.path}`, 'commitar', conversation_id);
+            // Multi-archivo: commitea cada path declarado.
+            if (entregableReal.paths && Array.isArray(entregableReal.paths)) {
+              for (const rel of entregableReal.paths) {
+                const cr = this._commitar(rel, pipeline.name, project_id);
+                await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `commit: ${JSON.stringify(cr)}` }, 'bitacora.paso.registrado', 8000);
+              }
+            } else {
+              const cr = this._commitar(entregableReal.path, pipeline.name, project_id);
+              await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `commit: ${JSON.stringify(cr)}` }, 'bitacora.paso.registrado', 8000);
+              this._progress(project_id, request_id, agent_name, 'tool_call', `commit ${cr.commit ? 'OK' : 'skip'}: ${entregableReal.path}`, 'commitar', conversation_id);
+            }
           } else if (paso.op === 'validar' && salidaUltima !== null) {
             const val = validar(salidaUltima, paso.valida || {});
             salidaUltima = val.ok ? salidaUltima : null;
@@ -401,7 +466,27 @@ class EjecutorMotorModule extends BaseModule {
 
       // 4 · El JEFE (P4) contra el MUNDO REAL
       this._progress(project_id, request_id, agent_name, 'finalizing', 'JEFE: verificando entregable…', null, conversation_id);
-      const veredicto = verificar(entregableReal, mundo);
+      // Multi-archivo (FASE 7): el JEFE verifica CADA path declarado; si
+      // cualquiera falta o no cumple → NO verificado. Un solo veredicto.
+      let veredicto = null;
+      if (entregableReal.paths && Array.isArray(entregableReal.paths)) {
+        const veredictos = [];
+        for (const rel of entregableReal.paths) {
+          const v = verificar({ ...entregableReal, path: rel, dir: undefined, archivos: undefined, paths: undefined }, mundo);
+          veredictos.push({ path: rel, ...v });
+        }
+        const todosOk = veredictos.every(v => v.verificado);
+        veredicto = {
+          verificado: todosOk,
+          motivo: todosOk ? 'entregable_verificado' : 'entregable_no_verificado',
+          tipo: 'fs',
+          path: entregableReal.path,
+          reglas: veredictos.flatMap(v => v.reglas.map(r => ({ ...r, path: v.path }))),
+          multi_archivo: veredictos.map(v => ({ path: v.path, verificado: v.verificado }))
+        };
+      } else {
+        veredicto = verificar(entregableReal, mundo);
+      }
 
       // 5 · Sellar la bitácora con el veredicto
       await this._pedir('bitacora.sellar.request', { request_id, project_id, veredicto, duracion_ms: 0 }, 'bitacora.sellada', 8000);

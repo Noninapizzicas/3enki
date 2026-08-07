@@ -292,7 +292,32 @@ class EjecutorMotorModule extends BaseModule {
       base.paths = base.archivos.map(a => `${dir}/${a}`);
       base.path = base.paths[0];
     }
+    // Módulos ANIDADOS (pizzepos/pedidos, prisma/productos…): el entregable
+    // <slug>/module.json debe escribir donde el módulo REAL vive, no crear un
+    // duplicado en modules/<slug>/. Se busca el dir existente (1 nivel).
+    if (base.path && base.path.startsWith(slug + '/')) {
+      const dirReal = this._dirModuloExistente(slug);
+      if (dirReal) {
+        const relReal = path.relative(this.modulesDir, dirReal);
+        base.path = base.path.replace(new RegExp('^' + slug + '/'), relReal + '/');
+        if (base.paths) base.paths = base.paths.map(p => p.replace(new RegExp('^' + slug + '/'), relReal + '/'));
+      }
+    }
     return base;
+  }
+
+  // Busca el directorio REAL de un módulo: modules/<slug>/ o anidado
+  // (modules/pizzepos/<slug>/). Devuelve null si no existe.
+  _dirModuloExistente(slug) {
+    const directo = path.join(this.modulesDir, slug);
+    if (fs.existsSync(path.join(directo, 'module.json'))) return directo;
+    try {
+      for (const grupo of fs.readdirSync(this.modulesDir)) {
+        const p = path.join(this.modulesDir, grupo, slug, 'module.json');
+        if (fs.existsSync(p)) return path.dirname(p);
+      }
+    } catch (_) {}
+    return null;
   }
 
   // ── PUERTO FUZZY (el único punto no determinista) ──────────────────────────

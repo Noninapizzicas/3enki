@@ -79,9 +79,23 @@ sigues TAL CUAL. Nada de "mejorar" el patrón, nada de variantes propias, nada
 de estilos inventados. El estándar manda; la spec (F6½) manda sobre el CONTENIDO;
 el estándar manda sobre la FORMA de cada archivo.
 
+### 2c · EXCEPCIÓN DOCUMENTADA — el trío de la F7 es MULTI-ARCHIVO
+
+El patrón del repo es UN entregable = UN path (como esquema.md, plan-construccion.md,
+SKILL.md). La F7 es la **única excepción declarada**: un panel operativo del
+frontend ES 3-4 archivos físicos inseparables (manifest.json + index.ts +
+<Slug>Panel.svelte + store). No se puede aplanar en uno — el loader
+`import.meta.glob` necesita manifest.json, el frame necesita index.ts, Svelte
+necesita el .svelte.
+
+Por eso el pipeline de la F7 declara `dir` + `archivos[]` (el motor lo soporta
+como excepción multi-archivo, con veredicto `multi_archivo` del JEFE). Cualquier
+fase FUTURA que genere N archivos debe justificar la excepción como esta: el
+artefacto ES múltiple por naturaleza, no por comodidad.
+
 ## 3 · EL MANDATO — el trío operativo, mecánico
 
-1. **Lee la SPEC** `esquemas/interfaz-<slug>/esquema.md` (FASE 6½): vistas,
+1. **Lee la SPEC** `esquemas/interfaz-<slug>.md` (FASE 6½, UN archivo): vistas,
    operaciones del module.json, datos, eventos, zona/tipo. **Si no existe → no
    construyas: avisa que falta la FASE 6½** (el gate del orquestador la exige).
 2. **Lee** el `module.json` del módulo (ui_handlers tipados de la FASE 6) como

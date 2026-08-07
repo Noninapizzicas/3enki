@@ -51,29 +51,28 @@ A/B/C: esquematiza.
 1. **Lee** el `module.json` del módulo: ui_handlers (con type+zone de la F6),
    tools (operaciones reales), events (subscribes/publishes), descripción.
 2. **Pasa la interfaz por el prisma de 5 huecos** (IDENTIDAD · RESTRICCIONES ·
-   CONTRATO · NO-OBJETIVOS · PREGUNTAS_ABIERTAS) → escribe
-   `pasada-1-<punto>.md` con los 5 huecos y los sub-productos que salen.
-3. **Cada sub-producto es un PUNTO nuevo**: pásalo por el prisma OTRA VEZ →
-   `pasada-2-<punto>.md`. Repite ronda a ronda, punto a punto.
-4. **PARA cuando un punto es**: atómica (va a disección) · abierta (privada del
-   dueño → pregunta_abierta) · repetida (se referencia).
-5. Solo cuando NINGÚN punto se parta más (seco) → ensambla **`esquema.md`**
-   (el árbol maestro de la interfaz, con todo embebido).
-6. **DISECCIÓN punto a punto**: cada hoja atómica pasa por el diseccionador →
-   su FORMA (reflejo · micro-agente fuzzy · custodio · conversor · puente) en
-   `pasada-N-diseccion.md`. NINGUNA hoja sin forma.
-7. Cierra la fase: `proceso-negocio.completar_fase { fase: 'interfaz_esquematizada' }`.
+   CONTRATO · NO-OBJETIVOS · PREGUNTAS_ABIERTAS). Ronda 1: los 5 huecos y sus
+   sub-productos. Ronda 2: cada sub-producto al prisma otra vez. Repite hasta
+   que solo queden hojas atómicas/abiertas/repetidas (seco).
+3. **DISECCIÓN**: cada hoja atómica pasa por el diseccionador → su FORMA
+   (reflejo · micro-agente fuzzy · custodio · conversor · puente). NINGUNA hoja
+   sin forma.
+4. **Ensambla la SPEC en UN archivo** `esquemas/interfaz-<slug>.md` con las
+   secciones: prisma ronda 1 · prisma ronda 2 · disección · esquema maestro
+   (VISTAS · OPERACIONES del module.json · DATOS · EVENTOS · ZONA/TIPO).
+5. Cierra la fase: `proceso-negocio.completar_fase { fase: 'interfaz_esquematizada' }`.
 
-**Dónde se persiste** (rutas exactas — el gate las verifica):
+**Dónde se persiste** (ruta exacta — patrón del repo: UN entregable = UN path,
+como `esquema.md` y `plan-construccion.md`):
 
 ```
-<storage del proyecto>/esquemas/interfaz-<slug>/
-├── esquema.md                 ← árbol maestro de la interfaz (OBLIGATORIO)
-├── pasada-1-<punto>.md        ← ronda 1 del prisma (OBLIGATORIO)
-├── pasada-2-<punto>.md        ← ronda 2 (OBLIGATORIO — prisma recursivo)
-├── pasada-N-<punto>.md        ← …hasta seca
-└── pasada-N-diseccion.md      ← FORMA de cada hoja atómica (OBLIGATORIO)
+<storage del proyecto>/esquemas/interfaz-<slug>.md
 ```
+
+Un solo archivo con TODO embebido: el prisma (ronda 1 y ronda 2), la disección
+y el esquema maestro. Nada de directorios de pasadas — el patrón del repo es un
+artefacto por fase (la lección en vivo: yo metí multi-archivo y Paco lo
+detuvo: "revisa, ya tenemos un patrón").
 
 ## 4 · El prisma de 5 huecos APLICADO a una interfaz
 
@@ -106,11 +105,10 @@ panel + UIModule siguiendo la spec punto por punto.
 
 ## 6 · Verificación
 
-- `esquemas/interfaz-<slug>/esquema.md` existe (árbol maestro de la interfaz).
-- `pasada-1-*` y `pasada-2-*` existen (prisma recursivo, ronda 1 y 2).
-- `*diseccion*` existe (cada hoja atómica con su FORMA).
-- CERO tecnologías del entorno en el esquema (agnosticismo).
-- El esquema responde: vistas, operaciones del module.json, datos, eventos, zona.
+- `esquemas/interfaz-<slug>.md` existe (la SPEC completa en UN archivo).
+- Contiene las 4 secciones: prisma ronda 1 · prisma ronda 2 · disección (cada
+  hoja con su FORMA) · esquema maestro (vistas, operaciones, datos, eventos, zona).
+- CERO tecnologías del entorno en la spec (agnosticismo).
 - Señal enviada: `proceso-negocio.completar_fase { fase: 'interfaz_esquematizada' }` → 200.
 
 ## 7 · Errores a evitar

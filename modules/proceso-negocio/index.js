@@ -250,15 +250,14 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   }
 
   // ¿La SPEC de la interfaz existe en el storage del proyecto?
-  // esquemas/interfaz-<slug>/ con esquema.md + pasada-1 + pasada-2 + disección.
+  // UN archivo (patrón del repo): esquemas/interfaz-<slug>.md con el prisma,
+  // la disección y el esquema maestro embebidos.
   async _interfazEsquematizadaEnDisco(project_id, slug) {
     try {
-      const r = await this._rpc('fs.list.request', { project_id, path: `esquemas/interfaz-${slug}` });
+      const r = await this._rpc('fs.list.request', { project_id, path: 'esquemas' });
       const entries = (r && (r.files || r.items)) || [];
       const nombres = entries.map(x => (typeof x === 'string' ? x : x && x.name)).filter(Boolean);
-      const necesarios = ['esquema.md'];
-      const ok = necesarios.every(n => nombres.includes(n)) && nombres.some(n => n.startsWith('pasada-1-')) && nombres.some(n => n.startsWith('pasada-2-')) && nombres.some(n => n.includes('diseccion'));
-      return ok;
+      return nombres.includes(`interfaz-${slug}.md`);
     } catch (_) {
       return false;
     }
@@ -354,17 +353,15 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         mensaje: 'La decisión de interfaz no está en disco: se espera modules/<slug>/module.json con ui_handlers tipados (type ∈ workspace_module|chat_tool|inline_render|system_panel + zone canónica) o con ui_decision.necesita=false (sin interfaz, documentada). El reporte del agente no cuenta.'
       },
       'interfaz_esquematizada': {
-        // FASE 6½ — la SPEC de la interfaz debe existir en el proyecto:
-        // esquemas/interfaz-<slug>/ con esquema.md + pasada-1 + pasada-2 +
-        // disección. Sin spec NO se construye (lección: improvisar = error grave).
-        dir: 'esquemas/interfaz-<slug>',
+        // FASE 6½ — la SPEC de la interfaz debe existir en el proyecto: UN
+        // archivo (patrón del repo: UN entregable = UN path), como esquema.md
+        // y plan-construccion.md. El prisma + disección van embebidos.
+        dir: 'esquemas',
         reglas: [
-          { nombre: 'esquema.md', cond: 'existe', desc: 'el árbol maestro de la interfaz (la SPEC)' },
-          { nombre: 'pasada-1-', cond: 'prefijo', desc: 'ronda 1 del prisma' },
-          { nombre: 'pasada-2-', cond: 'prefijo', desc: 'ronda 2 (prisma recursivo)' },
-          { nombre: 'diseccion', cond: 'contiene', desc: 'la disección con FORMA de cada hoja' }
+          { nombre: 'interfaz-', cond: 'prefijo', desc: 'la SPEC de la interfaz (interfaz-<slug>.md)' },
+          { nombre: '.md', cond: 'contiene', desc: 'archivo markdown' }
         ],
-        mensaje: 'La SPEC de la interfaz no está completa: se espera <proyecto>/esquemas/interfaz-<slug>/ con esquema.md (árbol maestro: vistas, operaciones, datos, eventos, zona), las pasadas del prisma (hasta seca) Y la disección (cada hoja con su FORMA). Sin spec no se construye.'
+        mensaje: 'La SPEC de la interfaz no está: se espera <proyecto>/esquemas/interfaz-<slug>.md (prisma + disección + esquema maestro embebidos, patrón UN path como esquema.md). Sin spec no se construye.'
       },
       'interfaz_construida': {
         // FASE 7 — la interfaz OPERATIVA debe existir en el frontend: el trío
@@ -383,8 +380,14 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       return this._verificarSistema(fase, extra);
     }
     try {
+      // El dir puede llevar <slug> (p.ej. 'esquemas/interfaz-<slug>') — se
+      // sustituye con el slug REAL del resumen (extra.slug o extra.modulos[0]).
+      const slugResumen = (extra && extra.slug) || (extra && Array.isArray(extra.modulos) && extra.modulos[0]) || null;
+      const dirReal = slugResumen && spec.dir.includes('<slug>')
+        ? spec.dir.replace(/<slug>/g, slugResumen)
+        : spec.dir;
       // Listar el directorio del entregable (fs.list) → nombres reales.
-      const r = await this._rpc('fs.list.request', { project_id, path: spec.dir });
+      const r = await this._rpc('fs.list.request', { project_id, path: dirReal });
       const entries = (r && (r.files || r.items)) || [];
       const nombres = entries.map(x => (typeof x === 'string' ? x : x && x.name)).filter(Boolean);
       // Comprobar cada regla contra los nombres reales.

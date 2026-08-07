@@ -69,12 +69,17 @@ const MAPA_PROCESO = {
   'negocio.skills': {
     // CICLO POR PIEZA (decisión de Paco: "fase 4 1º, fase 5 1º" — no todos de
     // una): cada módulo construido recibe su skill ANTES de pasar al siguiente.
-    // construir-modulos construye UNA hoja; escribir-skills escribe SU skill;
-    // el mapa vuelve a construir-modulos para la siguiente hoja. Cuando no
-    // queden hojas sin construir, construir-modulos cierra con fase
-    // 'completado' → fin del proceso.
+    // FASE 6 (decidir-interfaz): tras la skill, se decide la superficie del
+    // módulo (workspace_module · chat_tool · inline_render · system_panel ·
+    // ninguna) ANTES de construir la siguiente hoja. El mapa vuelve a
+    // construir-modulos para la siguiente hoja. Cuando no queden hojas sin
+    // construir, construir-modulos cierra con fase 'completado' → fin.
+    skill: 'decidir-interfaz',
+    mensaje: 'La skill del módulo está escrita. Siguiente paso (FASE 6): decidir la INTERFAZ de ese módulo — corre scripts/decidir-interfaz.js (skill decidir-interfaz), razona el rol (dominio → workspace_module · gestión → system_panel · operación puntual → chat_tool · contenido en chat → inline_render · puente interno → ninguna) y escribe el resultado en module.json (ui_handlers con type+zone canónicos, o ui_decision.necesita=false documentado). Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"], tipos: {...} } }.'
+  },
+  'negocio.interfaz': {
     skill: 'construir-modulos',
-    mensaje: 'La skill del módulo está escrita. Siguiente paso (FASE 4): construir el SIGUIENTE módulo del plan — UNA hoja a la vez, en el orden de las etapas de esquemas/plan-construccion.md, sin tocar los ya construidos. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si NO quedan hojas sin construir: proceso-negocio.completar_fase { fase: "completado" }.'
+    mensaje: 'La interfaz del módulo está decidida. Siguiente paso (FASE 4): construir el SIGUIENTE módulo del plan — UNA hoja a la vez, en el orden de las etapas de esquemas/plan-construccion.md, sin tocar los ya construidos. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si NO quedan hojas sin construir: proceso-negocio.completar_fase { fase: "completado" }.'
   },
   'negocio.completado': {
     // FIN DEL PROCESO — todas las piezas construidas y con skill.
@@ -155,7 +160,8 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   // A partir del progreso REAL del plan (contado en disco):
   //   quedan hojas sin construir         → construir-modulos (FASE 4)
   //   todo construido, faltan skills     → escribir-skills (FASE 5)
-  //   todo construido y con skill        → completado (FIN)
+  //   todo construido+skill, falta interfaz → decidir-interfaz (FASE 6)
+  //   todo construido y con skill e interfaz → completado (FIN)
   _decidirSiguiente(progreso) {
     if (progreso.faltan_por_construir > 0) {
       return { skill: 'construir-modulos', mensaje: `El plan tiene ${progreso.total} hojas: ${progreso.construidos} construidas, faltan ${progreso.faltan_por_construir}. Siguiente paso (FASE 4): construir UNA hoja — la primera del plan sin módulo en disco (verifica modules/<slug>/ — el sistema cuenta lo que existe, no lo que reportas). Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["<slug>"] } }.` };
@@ -163,40 +169,80 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     if (progreso.faltan_por_skill > 0) {
       return { skill: 'escribir-skills', mensaje: `El plan está construido (${progreso.construidos}/${progreso.total} módulos) pero faltan ${progreso.faltan_por_skill} skills. Siguiente paso (FASE 5): escribir la SKILL FULL de UN módulo construido sin skill en la cantera (SIN RESTAR NADA). Al terminar: proceso-negocio.completar_fase { fase: "skills", resumen: { skills: ["<slug>"] } }.` };
     }
-    return { skill: null, mensaje: 'El proceso de construcción del negocio está COMPLETO: todas las hojas de la disección tienen su módulo y su skill.' };
+    if (progreso.faltan_por_interfaz > 0) {
+      return { skill: 'decidir-interfaz', mensaje: `El plan está construido y con skill (${progreso.construidos}/${progreso.total}) pero faltan ${progreso.faltan_por_interfaz} decisiones de interfaz. Siguiente paso (FASE 6): decidir la INTERFAZ de UN módulo construido sin decidir — corre scripts/decidir-interfaz.js (skill decidir-interfaz), razona el rol y escribe el resultado en module.json (ui_handlers con type+zone canónicos, o ui_decision.necesita=false). Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"] } }.` };
+    }
+    return { skill: null, mensaje: 'El proceso de construcción del negocio está COMPLETO: todas las hojas de la disección tienen su módulo, su skill y su interfaz decidida.' };
   }
 
   // ── PROGRESO DEL PLAN (determinista — el sistema decide, no el LLM) ──
   // Lee plan-construccion.md del proyecto, extrae los slugs de las hojas, y
-  // verifica EN DISCO cuántas tienen módulo (modules/<slug>/) y cuántas skill
-  // (cosecha/cantera/enki/<slug>/SKILL.md). El orquestador usa esto para
-  // decidir el siguiente empujón del ciclo por pieza: si quedan hojas sin
-  // construir → construir-modulos; si no → completado.
+  // verifica EN DISCO cuántas tienen módulo (modules/<slug>/), cuántas skill
+  // (cosecha/cantera/enki/<slug>/SKILL.md) y cuántas interfaz decidida
+  // (module.json con ui_handlers tipados o ui_decision.necesita=false).
+  // El orquestador usa esto para decidir el siguiente empujón del ciclo por
+  // pieza: si quedan hojas sin construir → construir-modulos; si no → completado.
   async _progresoPlan(project_id) {
     try {
       const r = await this._rpc('fs.read.request', { project_id, path: 'esquemas/plan-construccion.md' });
       const contenido = (r && (r.content || r.data?.content)) || '';
-      if (!contenido) return { total: 0, construidos: 0, con_skill: 0, faltan_por_construir: 0, faltan_por_skill: 0, slugs: [] };
+      if (!contenido) return { total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, slugs: [] };
       // Extraer slugs del plan: tokens tipo modulo (radar-adquisicion, config-pesos-fuente…)
       const slugs = [...new Set((contenido.match(/[a-z][a-z0-9]*(?:-[a-z0-9]+)+/g) || []).filter(s => s.length > 3))];
-      let construidos = 0, con_skill = 0;
+      let construidos = 0, con_skill = 0, con_interfaz = 0;
       for (const slug of slugs) {
-        const existe = fs.existsSync(path.join(MODULES_DIR, slug, 'index.js'));
-        if (existe) {
+        const dirModulo = this._buscarModulo(slug);
+        if (dirModulo) {
           construidos++;
           if (fs.existsSync(path.join(MODULES_DIR, 'cosecha', 'cantera', 'enki', slug, 'SKILL.md'))) con_skill++;
+          if (this._interfazDecidida(dirModulo)) con_interfaz++;
         }
       }
       return {
         total: slugs.length,
         construidos,
         con_skill,
+        con_interfaz,
         faltan_por_construir: slugs.length - construidos,
         faltan_por_skill: construidos - con_skill,
+        faltan_por_interfaz: construidos - con_interfaz,
         slugs
       };
     } catch (_) {
-      return { total: 0, construidos: 0, con_skill: 0, faltan_por_construir: 0, faltan_por_skill: 0, slugs: [] };
+      return { total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, slugs: [] };
+    }
+  }
+
+  // Localiza el directorio de un módulo: modules/<slug>/ o anidado
+  // (modules/pizzepos/<slug>/). Devuelve null si no existe.
+  _buscarModulo(slug) {
+    const directo = path.join(MODULES_DIR, slug);
+    if (fs.existsSync(path.join(directo, 'module.json'))) return directo;
+    // búsqueda anidada de 1 nivel (verticales: pizzepos, prisma…)
+    try {
+      for (const grupo of fs.readdirSync(MODULES_DIR)) {
+        const p = path.join(MODULES_DIR, grupo, slug, 'module.json');
+        if (fs.existsSync(p)) return path.dirname(p);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // ¿La interfaz del módulo está DECIDIDA (en disco)?
+  //   · ui_handlers con type ∈ canónicos Y zone ∈ zonas → decidida (con interfaz)
+  //   · ui_decision.necesita === false → decidida (sin interfaz, documentada)
+  //   · cualquier otro estado (SIN_TIPO, sin zone, sin ui_decision) → NO decidida
+  _interfazDecidida(dirModulo) {
+    try {
+      const m = JSON.parse(fs.readFileSync(path.join(dirModulo, 'module.json'), 'utf8'));
+      if (m.ui_decision && m.ui_decision.necesita === false) return true;
+      const uis = m.ui_handlers || [];
+      if (!uis.length) return false;
+      const TIPOS = new Set(['workspace_module', 'chat_tool', 'inline_render', 'system_panel']);
+      const ZONAS = new Set(['barra_modulos', 'area_chat', 'barra_chat_superior', 'input_chat', 'barra_chat_inferior', 'lateral_derecha']);
+      return uis.every(h => h && TIPOS.has(h.type) && ZONAS.has(h.zone));
+    } catch (_) {
+      return false;
     }
   }
 
@@ -235,6 +281,13 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         // FASE 5 — la skill debe existir en la cantera (la escribió el agente).
         tipo: 'sistema',
         mensaje: 'La skill no existe: se espera modules/cosecha/cantera/enki/<slug>/SKILL.md.'
+      },
+      'interfaz': {
+        // FASE 6 — la decisión de interfaz debe estar EN DISCO, no en la
+        // palabra del agente: module.json del módulo con ui_handlers tipados
+        // (type+zone canónicos) o con ui_decision.necesita=false documentado.
+        tipo: 'sistema',
+        mensaje: 'La decisión de interfaz no está en disco: se espera modules/<slug>/module.json con ui_handlers tipados (type ∈ workspace_module|chat_tool|inline_render|system_panel + zone canónica) o con ui_decision.necesita=false (sin interfaz, documentada). El reporte del agente no cuenta.'
       }
     };
     const spec = ESPERADOS[fase];
@@ -345,7 +398,45 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       }
       return { ok: true, verificados: [`skill ${slug} en la cantera y en el repo`] };
     }
+    if (fase === 'interfaz') {
+      // FASE 6 — la decisión de interfaz debe estar EN DISCO: module.json con
+      // ui_handlers tipados (type+zone canónicos) o ui_decision.necesita=false.
+      const dir = this._buscarModulo(slug);
+      if (!dir) {
+        return { ok: false, esperado: [`modules/<...>/${slug}/module.json en disco`], mensaje: `El módulo ${slug} NO existe en modules/ (verificado en disco) — la interfaz no puede decidirse sobre un módulo ausente.` };
+      }
+      if (!this._interfazDecidida(dir)) {
+        return { ok: false, esperado: ['ui_handlers tipados (type+zone canónicos) o ui_decision.necesita=false'], mensaje: `La interfaz de ${slug} NO está decidida en disco: module.json sin type canónico en sus ui_handlers (o sin ui_decision.necesita=false para módulos sin interfaz). Corre la skill decidir-interfaz y escribe el resultado en module.json.` };
+      }
+      // En el repo también (el deploy rsync --delete borra lo no commiteado).
+      if (REPO_MODULES_DIR) {
+        const repoDir = this._buscarModuloRepo(slug);
+        let trackeado = false;
+        try {
+          const cp = require('child_process');
+          const out = cp.execFileSync('git', ['ls-files', '--', `modules/${repoDir ? path.relative(MODULES_DIR, repoDir) : slug}`], { cwd: path.join(REPO_MODULES_DIR, '..'), encoding: 'utf8' }).trim();
+          trackeado = out.length > 0;
+        } catch (_) { /* git no disponible → no bloquear */ }
+        if (repoDir && !trackeado) {
+          return { ok: false, esperado: [`module.json de ${slug} COMMITEADO en el repo (~/3enki)`], mensaje: `La decisión de interfaz de ${slug} NO está commiteada en ~/3enki (git ls-files no la ve) → el siguiente deploy la borrará. Commitea el module.json (rama → PR → merge) antes de cerrar la fase.` };
+        }
+      }
+      return { ok: true, verificados: [`interfaz de ${slug} decidida en disco y en el repo`] };
+    }
     return { ok: true };
+  }
+
+  // Igual que _buscarModulo pero contra el repo de desarrollo (~/3enki/modules).
+  _buscarModuloRepo(slug) {
+    const directo = path.join(REPO_MODULES_DIR, slug);
+    if (fs.existsSync(path.join(directo, 'module.json'))) return directo;
+    try {
+      for (const grupo of fs.readdirSync(REPO_MODULES_DIR)) {
+        const p = path.join(REPO_MODULES_DIR, grupo, slug, 'module.json');
+        if (fs.existsSync(p)) return path.dirname(p);
+      }
+    } catch (_) {}
+    return null;
   }
 
   // ── NÚCLEO: evento → empujón de la skill siguiente ──

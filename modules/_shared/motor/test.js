@@ -126,6 +126,51 @@ test('JEFE: en_repo sin puerto → NO bloquea (declarado)', () => {
   assert.equal(v.verificado, true);
 });
 
+test('JEFE: interfaz_decidida — ui_handlers tipados → ok', () => {
+  const contenido = JSON.stringify({
+    name: 'pedidos',
+    ui_handlers: [
+      { domain: 'pedido', action: 'list', type: 'workspace_module', zone: 'barra_modulos' },
+      { domain: 'pedido', action: 'create', type: 'workspace_module', zone: 'barra_modulos' }
+    ]
+  });
+  const v = verificar(
+    { tipo: 'fs', path: 'pedidos/module.json', reglas: ['existe', 'interfaz_decidida'] },
+    mundoFalso({ existe: true, contenido })
+  );
+  assert.equal(v.verificado, true);
+  assert.match(v.reglas[1].detalle, /type\+zone canónicos/);
+});
+
+test('JEFE: interfaz_decidida — ui_decision.necesita=false → ok (sin interfaz documentada)', () => {
+  const contenido = JSON.stringify({ name: 'adaptador', ui_decision: { necesita: false, tipo: null, razon: 'puente interno' } });
+  const v = verificar(
+    { tipo: 'fs', path: 'adaptador/module.json', reglas: ['existe', 'interfaz_decidida'] },
+    mundoFalso({ existe: true, contenido })
+  );
+  assert.equal(v.verificado, true);
+  assert.match(v.reglas[1].detalle, /ui_decision.necesita=false/);
+});
+
+test('JEFE: interfaz_decidida — SIN_TIPO → NO verificado (drift)', () => {
+  const contenido = JSON.stringify({ name: 'filesystem', ui_handlers: [{ domain: 'fs', action: 'list' }] });
+  const v = verificar(
+    { tipo: 'fs', path: 'filesystem/module.json', reglas: ['existe', 'interfaz_decidida'] },
+    mundoFalso({ existe: true, contenido })
+  );
+  assert.equal(v.verificado, false);
+  assert.match(v.reglas[1].detalle, /sin type o zone canónico/);
+});
+
+test('JEFE: interfaz_decidida — module.json sin ui_handlers ni ui_decision → NO verificado', () => {
+  const v = verificar(
+    { tipo: 'fs', path: 'x/module.json', reglas: ['interfaz_decidida'] },
+    mundoFalso({ existe: true, contenido: '{"name":"x"}' })
+  );
+  assert.equal(v.verificado, false);
+  assert.match(v.reglas[0].detalle, /interfaz NO decidida/);
+});
+
 test('JEFE: regla desconocida → NO verificado con detalle', () => {
   const v = verificar({ tipo: 'fs', path: 'x', reglas: ['regla_inexistente'] }, mundoFalso({ existe: true }));
   assert.equal(v.verificado, false);

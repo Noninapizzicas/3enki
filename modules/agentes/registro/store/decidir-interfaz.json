@@ -1,0 +1,38 @@
+{
+  "name": "decidir-interfaz",
+  "description": "Fase 6: decide la interfaz del módulo (slug) — el fuzzy razona el rol (dominio → workspace_module · gestión → system_panel · operación puntual → chat_tool · contenido en chat → inline_render · puente → sin interfaz), el reflejo escribe la decisión en module.json (ui_handlers tipados o ui_decision.necesita=false), el JEFE verifica que quedó en disco y en el repo.",
+  "pasos": [
+    {
+      "paso": "decidir_tipo",
+      "tipo": "fuzzy",
+      "instruccion": "Decide la INTERFAZ del módulo cuyo slug está en la task. Método (skill decidir-interfaz — cárgala): 1) Lee modules/<slug>/module.json (tools, ui_handlers, events). 2) Aplica las señales: puente interno (solo escucha y re-emite, sin tools) → SIN interfaz; reflejo pasivo sin tools → SIN interfaz; expone tools de lectura/escritura → SÍ interfaz. 3) Si hay interfaz, elige UNO de los 4 tipos canónicos por el rol: dominio del negocio con CRUD/flujo (pedidos, productos, cocina…) → workspace_module (zone=barra_modulos) · gestión/sistema bajo demanda (admin, health, firmware, filesystem…) → system_panel (zone=lateral_derecha) · operación puntual desde el chat (generar, verificar, traducir, pagar…) → chat_tool (zone=barra_chat_inferior) · contenido que se renderiza DENTRO del chat → inline_render (zone=area_chat). 4) Devuelve SOLO el module.json COMPLETO del módulo con la decisión aplicada: cada ui_handler existente con type + zone canónicos, o añade ui_decision: { necesita: false, tipo: null, razon: '<rol>' } si el módulo NO necesita interfaz. Conserva TODO lo demás del module.json intacto — es un JSON completo, no un parche.",
+      "valida": {
+        "json_valido": true
+      }
+    },
+    {
+      "paso": "escribir_decision",
+      "tipo": "reflejo",
+      "op": "escribir"
+    },
+    {
+      "paso": "commitar_decision",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "path": "<slug>/module.json",
+    "reglas": [
+      "existe",
+      "interfaz_decidida",
+      "en_repo"
+    ]
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 32000,
+    "generacion_timeout_ms": 240000
+  }
+}

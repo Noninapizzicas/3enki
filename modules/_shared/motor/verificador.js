@@ -70,11 +70,47 @@ function _enRepo(rel, _entregable, mundo) {
   return { regla: 'en_repo', ok, detalle: ok ? `en repo ${rel}` : `NO está en el repo ${rel}` };
 }
 
+const TIPOS_CANONICOS = new Set(['workspace_module', 'chat_tool', 'inline_render', 'system_panel']);
+const ZONAS_CANONICAS = new Set(['barra_modulos', 'area_chat', 'barra_chat_superior', 'input_chat', 'barra_chat_inferior', 'lateral_derecha']);
+
+// FASE 6 — la decisión de interfaz debe estar EN DISCO: module.json con
+// ui_handlers tipados (type+zone canónicos) o con ui_decision.necesita=false
+// (módulo sin interfaz, documentada). El reporte del agente no cuenta.
+function _interfazDecidida(rel, _entregable, mundo) {
+  if (!mundo || typeof mundo.leer !== 'function') {
+    return { regla: 'interfaz_decidida', ok: false, detalle: 'puerto leer() no disponible' };
+  }
+  const contenido = mundo.leer(rel) || '';
+  let m = null;
+  try { m = JSON.parse(contenido); } catch (_) { /* no JSON → no decidida */ }
+  if (!m || typeof m !== 'object') {
+    return { regla: 'interfaz_decidida', ok: false, detalle: `${rel} no es JSON válido — la decisión de interfaz no está en disco` };
+  }
+  // Sin interfaz, documentada: ui_decision.necesita === false
+  if (m.ui_decision && m.ui_decision.necesita === false) {
+    return { regla: 'interfaz_decidida', ok: true, detalle: `${rel} declara ui_decision.necesita=false (sin interfaz, documentada)` };
+  }
+  const uis = Array.isArray(m.ui_handlers) ? m.ui_handlers : [];
+  if (!uis.length) {
+    return { regla: 'interfaz_decidida', ok: false, detalle: `${rel} sin ui_handlers ni ui_decision.necesita=false — interfaz NO decidida` };
+  }
+  const malos = uis.filter(h => !h || typeof h !== 'object' || !TIPOS_CANONICOS.has(h.type) || !ZONAS_CANONICAS.has(h.zone));
+  const ok = malos.length === 0;
+  return {
+    regla: 'interfaz_decidida',
+    ok,
+    detalle: ok
+      ? `${uis.length} ui_handlers con type+zone canónicos (FASE 6 decidida)`
+      : `${malos.length}/${uis.length} ui_handlers sin type o zone canónico — interfaz NO decidida`
+  };
+}
+
 const REGLAS = {
   existe: _existe,
   contenido_min: _contenidoMin,
   api_real: _apiReal,
-  en_repo: _enRepo
+  en_repo: _enRepo,
+  interfaz_decidida: _interfazDecidida
 };
 
 /**

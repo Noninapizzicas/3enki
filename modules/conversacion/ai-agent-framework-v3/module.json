@@ -33,6 +33,10 @@
       "handler": "onAgentExecuteRequest"
     },
     {
+      "event": "invoke_agent",
+      "handler": "onInvokeAgentRequest"
+    },
+    {
       "event": "invoke_agent.request",
       "handler": "onInvokeAgentRequest"
     },

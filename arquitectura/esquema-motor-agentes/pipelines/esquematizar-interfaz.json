@@ -6,11 +6,38 @@
       "paso": "generar_esquema_interfaz",
       "tipo": "fuzzy",
       "instruccion": "Esquematiza la INTERFAZ del módulo cuyo slug está en la task (el slug REAL, en las rutas úsalo resuelto, no literal '<slug>'). Método (skill esquematizar-interfaz — cárgala): 1) Lee modules/<slug>/module.json (ui_handlers tipados de la FASE 6 con type+zone, tools, events, description). 2) El sujeto es 'la interfaz del módulo <slug> de tipo <type>'. Pásalo por el prisma de 5 huecos (IDENTIDAD · RESTRICCIONES · CONTRATO · NO-OBJETIVOS · PREGUNTAS_ABIERTAS): de cada hueco salen sub-productos (vistas, operaciones, datos, eventos); pasa cada sub-producto por el prisma otra vez, ronda a ronda, hasta que solo queden hojas atómicas/abiertas/repetidas. 3) Asigna FORMA a cada hoja atómica (reflejo · micro-agente fuzzy · custodio · conversor · puente). 4) Ley del esquematizador: AGNOSTICISMO — cero tecnologías del entorno en el análisis; las piezas declaran puertos (leer(id), observar(evento), operar(accion)). 5) Devuelve SOLO un JSON: {\"archivos\": {\"esquemas/interfaz-<SLUG_REAL>/esquema.md\": \"<árbol maestro: vistas, operaciones del module.json, datos, eventos, zona/tipo, formas>\", \"esquemas/interfaz-<SLUG_REAL>/pasada-1-prisma.md\": \"<ronda 1: los 5 huecos y sub-productos>\", \"esquemas/interfaz-<SLUG_REAL>/pasada-2-prisma.md\": \"<ronda 2: sub-productos al prisma otra vez>\", \"esquemas/interfaz-<SLUG_REAL>/pasada-3-diseccion.md\": \"<disección: cada hoja atómica con su FORMA>\"}} — contenido markdown completo de cada archivo, sin explicaciones.",
-      "valida": { "json_valido": true }
+      "valida": {
+        "json_valido": true
+      }
     },
-    { "paso": "escribir_esquema", "tipo": "reflejo", "op": "escribir" },
-    { "paso": "commitar_esquema", "tipo": "reflejo", "op": "commitar" }
+    {
+      "paso": "escribir_esquema",
+      "tipo": "reflejo",
+      "op": "escribir"
+    },
+    {
+      "paso": "commitar_esquema",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
   ],
-  "entregable": { "tipo": "fs", "dir": "storage/esquemas/interfaz-<slug>/", "archivos": ["esquema.md", "pasada-1-prisma.md", "pasada-2-prisma.md", "pasada-3-diseccion.md"], "reglas": ["existe", "contenido_min", "en_repo"], "min_chars": 200 },
-  "presupuesto": { "generaciones_por_paso": 3, "max_tokens": 64000, "generacion_timeout_ms": 300000 }
+  "entregable": {
+    "tipo": "fs",
+    "dir": "storage/esquemas/interfaz-<slug>/",
+    "archivos": [
+      "esquema.md",
+      "pasada-1-prisma.md",
+      "pasada-2-prisma.md",
+      "pasada-3-diseccion.md"
+    ],
+    "reglas": [
+      "existe",
+      "en_repo"
+    ]
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 64000,
+    "generacion_timeout_ms": 300000
+  }
 }

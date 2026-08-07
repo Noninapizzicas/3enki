@@ -402,7 +402,9 @@ class EjecutorMotorModule extends BaseModule {
             // Se escriben TODOS los paths declarados del entregable.
             if (entregableReal.paths && Array.isArray(entregableReal.paths) && salidaUltima.archivos && typeof salidaUltima.archivos === 'object') {
               for (const rel of entregableReal.paths) {
-                const contenido = salidaUltima.archivos[rel] ?? salidaUltima.archivos[rel.replace(/^frontend\//, '')];
+                const contenido = salidaUltima.archivos[rel]
+                  ?? salidaUltima.archivos[rel.replace(/^frontend\//, '')]
+                  ?? salidaUltima.archivos[rel.replace(/^storage\//, '')];
                 if (contenido === undefined) continue;
                 const abs = this._escribir(rel, { content: String(contenido) }, project_id);
                 await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `escrito en ${abs}` }, 'bitacora.paso.registrado', 8000);

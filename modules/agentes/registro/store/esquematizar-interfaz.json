@@ -32,10 +32,8 @@
     ],
     "reglas": [
       "existe",
-      "contenido_min",
       "en_repo"
-    ],
-    "min_chars": 200
+    ]
   },
   "presupuesto": {
     "generaciones_por_paso": 3,

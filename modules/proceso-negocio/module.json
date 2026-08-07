@@ -12,7 +12,7 @@
   "tools": [
     {
       "name": "proceso-negocio.completar_fase",
-      "description": "Cierra una fase de skill del proceso de proyecto y encadena la siguiente. La llaman las skills de fase (esquematizar-negocio, diseccionador…) al terminar su trabajo. Devuelve la skill siguiente.",
+      "description": "Cierra una fase de skill del proceso de proyecto y encadena la siguiente. La llaman las skills de fase (esquematizar-negocio, diseccionador, decidir-interfaz…) al terminar su trabajo. Fases: 'esquematizado' → planificar · 'planificado' → construir · 'construido' → escribir-skills · 'skills' → decidir-interfaz (FASE 6) · 'interfaz' → construir-modulos (siguiente hoja). Devuelve la skill siguiente.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

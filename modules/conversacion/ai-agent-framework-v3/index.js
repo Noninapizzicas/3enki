@@ -213,6 +213,44 @@ class EjecutorMotorModule extends BaseModule {
     return abs;
   }
 
+  // REFLEJO 'commitar': el entregable generado en prod se refleja en el REPO
+  // (git add + commit + push) para que sobreviva al deploy (rsync --delete) y
+  // la regla en_repo del JEFE verifique de verdad. Los entregables storage/
+  // (data/) sobreviven por el exclude del rsync — no necesitan commit.
+  _commitar(relPath, pipelineName, project_id) {
+    if (relPath.startsWith('storage/')) {
+      return { commit: false, motivo: 'storage/ (data/ excluida del rsync — sobrevive sin commit)' };
+    }
+    const absProd = this._resolver(relPath, project_id);
+    const absRepo = path.join(this.repoDir, relPath);
+    if (!fs.existsSync(absProd)) {
+      return { commit: false, motivo: `entregable no existe en prod: ${absProd}` };
+    }
+    try {
+      fs.mkdirSync(path.dirname(absRepo), { recursive: true });
+      fs.copyFileSync(absProd, absRepo);
+      const slug = relPath.split('/')[0];
+      const mensaje = `motor: ${slug} generado por pipeline ${pipelineName} (verificado)`;
+      execSync(`git -C ${this.repoDir} add -- ${relPath}`, { stdio: 'pipe' });
+      try {
+        execSync(`git -C ${this.repoDir} commit -m "${mensaje}" -- ${relPath}`, { stdio: 'pipe' });
+      } catch (e) {
+        if (!String(e.message || '').includes('nothing to commit')) throw e; // ya commiteado = ok
+      }
+      let pushed = false;
+      try {
+        execSync(`git -C ${this.repoDir} push origin HEAD`, { stdio: 'pipe', timeout: 60000 });
+        pushed = true;
+      } catch (e) {
+        this.logger?.warn?.('ai-agent-framework-v3.commit.push_failed', { relPath, error: String(e.message || '').slice(0, 120) });
+      }
+      return { commit: true, push: pushed, repo: absRepo };
+    } catch (err) {
+      this.logger?.warn?.('ai-agent-framework-v3.commit.error', { relPath, error: String(err.message || '').slice(0, 150) });
+      return { commit: false, error: String(err.message || '').slice(0, 150) };
+    }
+  }
+
   _resolverSlug(task, pipelineName) {
     const stop = new Set(['construye', 'construir', 'construida', 'construido', 'escribe', 'escribir', 'escriba', 'genera', 'generar', 'proyecto', 'proyectos', 'modulo', 'modulos', 'fase', 'hoja', 'hojas', 'skill', 'skills', 'esquema', 'esquemas', 'esquematiza', 'plan', 'planes', 'del', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'para', 'que', 'con', 'y', 'a', 'su', 'en', 'al', 'se', 'por', 'como', 'mas', 'más', 'the', 'debe', 'debes', 'siguiente', 'siguientes', 'tanda', 'orden', 'primero', 'segundo', 'tercero', 'lee', 'leer', 'verifica', 'verificar', 'completa', 'completar', 'cierra', 'cerrar']);
     const tokens = String(task || '').toLowerCase().match(/[a-z][a-z0-9-]{2,40}/g) || [];
@@ -331,6 +369,10 @@ class EjecutorMotorModule extends BaseModule {
             const abs = this._escribir(entregableReal ? entregableReal.path : pipeline.entregable.path, salidaUltima, project_id);
             await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `escrito en ${abs}` }, 'bitacora.paso.registrado', 8000);
             this._progress(project_id, request_id, agent_name, 'tool_call', `escrito en ${abs}`, 'escribir');
+          } else if (paso.op === 'commitar' && entregableReal) {
+            const cr = this._commitar(entregableReal.path, pipeline.name, project_id);
+            await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `commit: ${JSON.stringify(cr)}` }, 'bitacora.paso.registrado', 8000);
+            this._progress(project_id, request_id, agent_name, 'tool_call', `commit ${cr.commit ? 'OK' : 'skip'}: ${entregableReal.path}`, 'commitar');
           } else if (paso.op === 'validar' && salidaUltima !== null) {
             const val = validar(salidaUltima, paso.valida || {});
             salidaUltima = val.ok ? salidaUltima : null;

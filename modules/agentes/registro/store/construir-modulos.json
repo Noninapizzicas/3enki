@@ -18,6 +18,11 @@
       "paso": "escribir_modulo",
       "tipo": "reflejo",
       "op": "escribir"
+    },
+    {
+      "paso": "commitar_modulo",
+      "tipo": "reflejo",
+      "op": "commitar"
     }
   ],
   "entregable": {

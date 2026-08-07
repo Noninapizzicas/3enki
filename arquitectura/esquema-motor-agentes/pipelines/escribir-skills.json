@@ -8,7 +8,8 @@
       "instruccion": "Genera la SKILL.md COMPLETA del módulo que la task indica (el slug está en la task): frontmatter YAML (name, description, when-to-use, tags) + cuerpo markdown con la guía de uso, pasos y pitfalls. Devuelve SOLO el markdown completo de la SKILL.md — sin explicaciones fuera del archivo.",
       "valida": { "tamano_min": 150 }
     },
-    { "paso": "escribir_skill", "tipo": "reflejo", "op": "escribir" }
+    { "paso": "escribir_skill", "tipo": "reflejo", "op": "escribir" },
+    { "paso": "commitar_skill", "tipo": "reflejo", "op": "commitar" }
   ],
   "entregable": { "tipo": "fs", "path": "cosecha/cantera/enki/<slug>/SKILL.md", "reglas": ["existe", "contenido_min", "en_repo"], "min_chars": 100 },
   "presupuesto": { "generaciones_por_paso": 3, "max_tokens": 32000, "generacion_timeout_ms": 240000 }

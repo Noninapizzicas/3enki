@@ -9,7 +9,8 @@
       "instruccion": "Genera el CÓDIGO del módulo Enki (index.js) que la task pide (el slug está en la task). Debe seguir el patrón de módulo Enki: require de _shared/base-module, clase que extiende BaseModule con this.name y this.version, y un método _atender(evento, contexto, respuesta, siguiente) que maneja el evento. Devuelve SOLO el código del index.js como texto plano — sin markdown, sin explicaciones, sin bloques de código.",
       "valida": { "tamano_min": 200 }
     },
-    { "paso": "escribir_modulo", "tipo": "reflejo", "op": "escribir" }
+    { "paso": "escribir_modulo", "tipo": "reflejo", "op": "escribir" },
+    { "paso": "commitar_modulo", "tipo": "reflejo", "op": "commitar" }
   ],
   "entregable": { "tipo": "fs", "path": "<slug>/index.js", "reglas": ["existe", "api_real", "en_repo"] },
   "presupuesto": { "generaciones_por_paso": 3, "max_tokens": 64000, "generacion_timeout_ms": 240000 }

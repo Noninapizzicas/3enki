@@ -40,14 +40,31 @@ class EjecutorMotorModule extends BaseModule {
     this.moduleLoader = null;
     // Generaciones en curso (correlación por llm_request_id).
     this._generacionEsperas = new Map();
+    // Cache project_id → base_path (dir por SLUG). Se puebla en onLoad con
+    // project.activated y con _resolverBasePath (vivo). Inicializado aquí para
+    // que exista SIEMPRE (el resolver cae al slug aunque onLoad no corrió).
+    this._basePathPorPid = new Map();
   }
 
   async onLoad(context) {
     this.eventBus = context.eventBus;
     this.logger = context.logger;
     this.moduleLoader = context.moduleLoader || null;
+    // Cache project_id → base_path (dir por SLUG del proyecto, el store canónico
+    // donde el chat y la cúpula persisten). Se puebla con project.activated —
+    // mismo puente que whatsapp-bot. Sin esto, el motor escribe en
+    // data/projects/<UUID>/ y el chat en data/projects/<slug>/ → DOS stores.
+    // (El Map se inicializa en el constructor; aquí solo se conecta el evento.)
+    if (this.eventBus) {
+      this._unsubActivated = this.eventBus.subscribe('project.activated', (event) => {
+        const d = event?.data || event || {};
+        if (d.project_id && d.base_path) {
+          this._basePathPorPid.set(d.project_id, d.base_path);
+        }
+      });
+    }
     if (this.moduleLoader && this.moduleLoader.toolsRegistry) {
-      this._registrarTools();
+      await this._registrarTools();
     }
   }
 
@@ -182,7 +199,13 @@ class EjecutorMotorModule extends BaseModule {
   // ── El MUNDO (puerto inyectable: storage del proyecto o modules/ del sistema) ──
   _resolver(rel, project_id) {
     if (rel.startsWith('storage/')) {
-      return path.join(this.dataDir, 'projects', project_id || 'system', 'storage', rel.replace(/^storage\//, ''));
+      // El store canónico del proyecto es su dir por SLUG (base_path), donde el
+      // chat, la cúpula y los módulos de dominio persisten. project.activated
+      // lo cachea aquí (project_id → base_path). Fallback al dir por UUID solo
+      // si el cache no lo tiene (arranque temprano / proyecto sin activar).
+      const base = this._basePathPorPid ? this._basePathPorPid.get(project_id) : null;
+      const raiz = base || path.join(this.dataDir, 'projects', project_id || 'system');
+      return path.join(raiz, 'storage', rel.replace(/^storage\//, ''));
     }
     // Frontend del REPO (FASE 7 construir-interfaz): el frame SvelteKit vive en
     // <repo>/frontend — no en modules/. El entregable multi-archivo escribe ahí.
@@ -190,6 +213,22 @@ class EjecutorMotorModule extends BaseModule {
       return path.join(this.repoDir, rel);
     }
     return path.join(this.modulesDir, rel);
+  }
+
+  // Respaldo del cache: si project.activated no llegó (arranque temprano),
+  // pregunta al project-manager por el base_path REAL del proyecto (slug).
+  async _resolverBasePath(project_id) {
+    if (!project_id || project_id === 'system') return null;
+    const ya = this._basePathPorPid ? this._basePathPorPid.get(project_id) : null;
+    if (ya) return ya;
+    try {
+      const resp = await this._pedir('project.get.request', { request_id: crypto.randomUUID(), id: project_id }, 'project.get.response', 8000);
+      const base = resp && (resp.project?.base_path || resp.data?.base_path);
+      if (base && this._basePathPorPid) this._basePathPorPid.set(project_id, base);
+      return base || null;
+    } catch (_) {
+      return null; // sin base_path → el _resolver usa el fallback UUID
+    }
   }
 
   _mundo(project_id) {
@@ -373,6 +412,10 @@ class EjecutorMotorModule extends BaseModule {
   async _ejecutarPipeline({ request_id, agent_name, project_id, task, conversation_id, session_id, shape }) {
     const responseEvent = shape === 'legacy' ? 'invoke_agent.response' : 'agent.execute.response';
     const failEvent = shape === 'legacy' ? 'invoke_agent.response' : 'agent.execute.failed';
+    // Asegura el base_path (slug) ANTES de crear el mundo: si project.activated
+    // no llegó, lo resuelve en vivo contra project-manager. Así storage/ escribe
+    // SIEMPRE en el dir por slug (store canónico), nunca bifurca al UUID.
+    await this._resolverBasePath(project_id);
     const mundo = this._mundo(project_id);
     const pasosBitacora = [];
 

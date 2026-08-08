@@ -227,3 +227,46 @@ test('JEFE: sin reglas → default existe', () => {
   const v = verificar({ tipo: 'fs', path: 'x/index.js' }, mundoFalso({ existe: true }));
   assert.equal(v.verificado, true);
 });
+
+// ── MOTOR v3 · RESOLVER storage/ → SLUG (base_path del proyecto) ──────────────
+test('motor: _resolver storage/ con project.activated → dir por SLUG (store canónico)', () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  m.dataDir = '/data';
+  m.modulesDir = '/modules';
+  m.repoDir = '/repo';
+  // onLoad sin eventBus real: capturamos el suscriptor
+  let suscriptor = null;
+  return m.onLoad({ eventBus: { subscribe: (ev, fn) => { suscriptor = fn; return () => {}; } }, moduleLoader: null }).then(() => {
+    // project.activated: UUID → base_path (slug)
+    suscriptor({ data: { project_id: 'uuid-abc', base_path: '/data/projects/panaderia-test' } });
+    const r = m._resolver('storage/esquemas/esquema.md', 'uuid-abc');
+    assert.equal(r, '/data/projects/panaderia-test/storage/esquemas/esquema.md');
+  });
+});
+
+test('motor: _resolver storage/ SIN cache → fallback al dir por UUID (no rompe)', () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  m.dataDir = '/data';
+  m.modulesDir = '/modules';
+  m.repoDir = '/repo';
+  const r = m._resolver('storage/esquemas/esquema.md', 'uuid-sin-activar');
+  assert.equal(r, '/data/projects/uuid-sin-activar/storage/esquemas/esquema.md');
+});
+
+test('motor: _resolverBasePath consulta project-manager si el cache no tiene el slug', async () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  m.dataDir = '/data';
+  // _pedir simulado: project.get.response con base_path del slug
+  m._pedir = async (ev, payload, evResp) => {
+    if (ev === 'project.get.request') return { project: { base_path: '/data/projects/panaderia-real' } };
+    return {};
+  };
+  const base = await m._resolverBasePath('uuid-consulta');
+  assert.equal(base, '/data/projects/panaderia-real');
+  // queda cacheado para el siguiente _resolver
+  const r = m._resolver('storage/x.md', 'uuid-consulta');
+  assert.equal(r, '/data/projects/panaderia-real/storage/x.md');
+});

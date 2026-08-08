@@ -270,3 +270,14 @@ test('motor: _resolverBasePath consulta project-manager si el cache no tiene el 
   const r = m._resolver('storage/x.md', 'uuid-consulta');
   assert.equal(r, '/data/projects/panaderia-real/storage/x.md');
 });
+
+// ── MOTOR v3 · finish_reason del provider ────────────────────────────────────
+test('motor: onLlmCompleteResponse propaga finish_reason + tokens (la verdad del truncado)', async () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  let resuelto = null;
+  m._generacionEsperas.set('req-fr', { resolve: (r) => { resuelto = r; }, to: null, paso: 'generar' });
+  await m.onLlmCompleteResponse({ data: { request_id: 'req-fr', content: 'x', finish_reason: 'length', tokens: { input: 100, output: 200, total: 300 } } });
+  assert.equal(resuelto.finish_reason, 'length');
+  assert.equal(resuelto.tokens.total, 300);
+});

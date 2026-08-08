@@ -395,7 +395,16 @@ class EjecutorMotorModule extends BaseModule {
     if (!espera) return;
     clearTimeout(espera.to);
     this._generacionEsperas.delete(rid);
-    espera.resolve({ content: data.content || '', model: data.model, provider: data.provider });
+    // El gateway YA manda finish_reason + tokens en llm.complete.response
+    // (ai-gateway _executeLLM). Antes se descartaban — ahora viajan al pipeline
+    // para que la bitácora diga POR QUÉ se cortó la salida (length = truncado).
+    espera.resolve({
+      content: data.content || '',
+      model: data.model,
+      provider: data.provider,
+      finish_reason: data.finish_reason || null,
+      tokens: data.tokens || null
+    });
   }
 
   async onLlmCompleteFailed(event) {
@@ -442,19 +451,35 @@ class EjecutorMotorModule extends BaseModule {
           for (let intento = 1; intento <= generacionesMax; intento++) {
             try {
               const resp = await this._generar(paso, task, pipeline);
+              // Metadatos del provider (finish_reason + tokens): la verdad de por
+              // qué se cortó la salida. length = truncado por límite — visible en
+              // la bitácora, no escondido.
+              const meta = [];
+              if (resp.finish_reason) meta.push(`finish_reason=${resp.finish_reason}`);
+              if (resp.tokens && resp.tokens.total) meta.push(`tokens=${resp.tokens.total} (in ${resp.tokens.input} / out ${resp.tokens.output})`);
+              const metaStr = meta.length ? ` [${meta.join(' · ')}]` : '';
               const conv = convertir(resp.content);
               if (!conv.ok) {
-                await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `intento ${intento}: ${conv.detalle}` }, 'bitacora.paso.registrado', 8000);
+                await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `intento ${intento}: ${conv.detalle}${metaStr}` }, 'bitacora.paso.registrado', 8000);
+                continue;
+              }
+              // TRUNCADO por límite de tokens (finish_reason=length): la salida
+              // puede pasar tamano_min pero está cortada — un esquema a medias no
+              // sirve. Se trata como NO válido para que el siguiente intento
+              // regenere completo (lección: esquema de "a" truncado a mitad con
+              // verificado:true).
+              if (resp.finish_reason === 'length') {
+                await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `intento ${intento}: TRUNCADO (finish_reason=length)${metaStr} — regenerando` }, 'bitacora.paso.registrado', 8000);
                 continue;
               }
               const val = validar(conv.canónica, paso.valida || {});
               if (val.ok) {
                 salidaUltima = conv.canónica;
                 ok = true;
-                await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `intento ${intento}: válido` }, 'bitacora.paso.registrado', 8000);
+                await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `intento ${intento}: válido${metaStr}` }, 'bitacora.paso.registrado', 8000);
                 break;
               }
-              await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `intento ${intento} no valida: ${val.detalle}` }, 'bitacora.paso.registrado', 8000);
+              await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `intento ${intento} no valida: ${val.detalle}${metaStr}` }, 'bitacora.paso.registrado', 8000);
             } catch (err) {
               await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `intento ${intento} error: ${err.message}` }, 'bitacora.paso.registrado', 8000).catch(() => {});
             }

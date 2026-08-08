@@ -3103,7 +3103,7 @@ class AiGatewayModule extends BaseModule {
     const data = event.data || event;
     const {
       request_id, correlation_id, system, messages, tools, settings,
-      attachments, project_id, user_id, conversation_id, page_id, provider: providerName
+      attachments, project_id, user_id, conversation_id, page_id, provider: providerName, context
     } = data;
 
     if (!request_id) {
@@ -3117,7 +3117,7 @@ class AiGatewayModule extends BaseModule {
     try {
       const result = await this._executeLLM({
         system, messages, tools, settings, attachments,
-        project_id, user_id, conversation_id, correlation_id: cid, page_id, providerName
+        project_id, user_id, conversation_id, correlation_id: cid, page_id, providerName, context
       });
 
       await this._publicarEvento('llm.complete.response', {

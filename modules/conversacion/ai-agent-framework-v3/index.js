@@ -377,6 +377,13 @@ class EjecutorMotorModule extends BaseModule {
       this._publicar('llm.complete.request', {
         request_id: llm_request_id,
         shape: 'canonical',
+        // TURNO SINTÉTICO del motor: el gateway NO debe inyectar el andamiaje
+        // del chat (sintonizador, cantera, biblioteca, índice RPC, propiocepción,
+        // memoria, perfil). Sin esto, cada generación del agente paga el system
+        // prompt completo del chat (55-62K tokens) → 70s por intento, vacíos y
+        // truncados. La RAÍZ de la lentitud del agente (lección: agente vs Hermes,
+        // mismo provider, velocidades opuestas).
+        context: { async_invocation: true, source: 'motor-v3' },
         provider: pipeline.provider || null,
         model: pipeline.model || null,
         max_tokens,

@@ -47,6 +47,13 @@ class AiGatewayModule extends BaseModule {
     // reacciona a cupulas.visibilidad_cambiada en caliente. Nace APAGADO por proyecto.
     this._cupulaVistaVisible = new Map();
     // Cache de prefijos por page_id, poblado lazy por _buildPagePrefixes()
+    // Cache del NERVIO GLOBAL (cantera + biblioteca): inventarios que cambian
+    // SOLO con cosecha.promover/crear/patch — leerlos por RPC en CADA turno
+    // (2s de timeout cada uno) era latencia pura. TTL corto (30s) + invalidación
+    // por evento de cosecha: nunca sirve un inventario podrido.
+    this._nervioCache = new Map();   // 'cantera' | 'biblioteca' → { data, ts }
+    this._nervioCacheTTL = 30000;    // 30s
+    this._nervioInvalidar = () => { this._nervioCache.clear(); };
     this.pagePrefixes = null;            // Map<page_id, Set<prefix>>
     // Mapa target_page_id → { manifest, parentBlueprint, childBlueprint, systemPrompt }
     // poblado por _loadBlueprints() al arrancar. Cuando el chat tiene page_id
@@ -156,6 +163,16 @@ class AiGatewayModule extends BaseModule {
           }
         }
       );
+    }
+
+    // Invalidación del cache del nervio global: la cantera/biblioteca cambian
+    // cuando el reflejo de cosecha completa promover/crear/patch. Limpiar el
+    // cache en ese momento → el próximo turno lee el inventario fresco (y los
+    // turnos intermedios no pagan el RPC).
+    if (this.eventBus?.subscribe) {
+      for (const ev of ['cosecha.promover.response', 'cosecha.crear.response', 'cosecha.patch.response', 'bibliotecario.catalogo.actualizado']) {
+        this.eventBus.subscribe(ev, () => { this._nervioInvalidar(); });
+      }
     }
 
     // Registra el botón on/off de la sintonía en el panel central de
@@ -1503,9 +1520,15 @@ class AiGatewayModule extends BaseModule {
   // Array<nombre> (posiblemente vacío) o null si no hubo respuesta.
   async _leerCantera() {
     if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    // Cache TTL: el inventario de la cantera solo cambia con cosecha.promover/
+    // crear/patch (invalidado por evento). Evita el RPC de 2s en CADA turno.
+    const cached = this._nervioCache?.get('cantera');
+    if (cached && Date.now() - cached.ts < (this._nervioCacheTTL || 30000)) {
+      return cached.data;
+    }
     const request_id = crypto.randomUUID();
     const timeoutMs = this.config.cantera_timeout_ms || 2000;
-    return new Promise((resolve) => {
+    const data = await new Promise((resolve) => {
       let unsub = null;
       const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeoutMs);
       try {
@@ -1525,13 +1548,23 @@ class AiGatewayModule extends BaseModule {
         resolve(null);
       }
     });
+    // Cachea también el null (2s de timeout) para no repetir el castigo: si el
+    // RPC no respondió, el próximo turno tampoco debería bloquearse esperándolo.
+    if (this._nervioCache) this._nervioCache.set('cantera', { data, ts: Date.now() });
+    return data;
   }
 
   async _leerCatalogoBiblioteca() {
     if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    // Cache TTL (mismo patrón que la cantera): el catálogo solo cambia con
+    // bibliotecario.catalogo.actualizado (invalidado por evento).
+    const cached = this._nervioCache?.get('biblioteca');
+    if (cached && Date.now() - cached.ts < (this._nervioCacheTTL || 30000)) {
+      return cached.data;
+    }
     const request_id = crypto.randomUUID();
     const timeoutMs = this.config.biblioteca_timeout_ms || 2000;
-    return new Promise((resolve) => {
+    const data = await new Promise((resolve) => {
       let unsub = null;
       const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeoutMs);
       try {
@@ -1550,6 +1583,8 @@ class AiGatewayModule extends BaseModule {
         resolve(null);
       }
     });
+    if (this._nervioCache) this._nervioCache.set('biblioteca', { data, ts: Date.now() });
+    return data;
   }
 
   // Nervio del CONSERJE: pide (y consume) el empujon pendiente del proyecto. Es el
@@ -2529,25 +2564,51 @@ class AiGatewayModule extends BaseModule {
       effectiveSystem = effectiveSystem ? `${lente}\n\n${effectiveSystem}` : lente;
     }
 
-    // Nervio de la CANTERA (global): en un turno REAL, dile al LLM las puertas de la
-    // biblioteca de skills. Estático y puro (sin RPC → no bloquea). El LLM ya empuña
-    // bus.publishAndWait; esto solo le da a CONOCER los eventos (cosecha.buscar/feeder.buscar/
-    // cosecha.promover). Verificado en vivo: sin esto el LLM decía "no tengo herramientas
-    // para skills.sh" aunque el motor respondía por el bus. No en turnos sintéticos.
-    if (!context?.async_invocation) {
-      let inventario = null;
-      try { inventario = await this._leerCantera(); } catch (_) { /* determinista best-effort; nunca bloquea */ }
-      const cantera = this._composeCanteraSection(inventario);
+    // ── NERVIOS GLOBALES — lecturas RPC EN PARALELO ──────────────────────────
+    // Antes eran 8 awaits SECUENCIALES (cantera→biblioteca→propiocepción→resumen→
+    // perfil→rag→empujón→rail), cada uno con timeout propio de hasta 2-3s: un
+    // turno podía pagar la SUMA (8-20s) antes de llamar al LLM, y el provider
+    // luego cortaba por contexto gigante. Ahora se lanzan en paralelo (el turno
+    // paga el MÁXIMO, ~2-3s) y se ensamblan en el MISMO orden (coherencia del
+    // prompt intacta). Mismas condiciones de gating, mismos best-effort.
+    const esTurnoReal = !context?.async_invocation;
+    let nervios = { cantera: null, biblioteca: null, propio: null, resumen: null, perfil: null, rag: null, empujon: null, rail: null };
+    if (esTurnoReal) {
+      const ultimoMsg = Array.isArray(messages) && messages.length
+        ? messages[messages.length - 1]?.content : '';
+      const desdeTs = this.conversationPropioTs.get(conversation_id) || null;
+      [nervios.cantera, nervios.biblioteca, nervios.propio, nervios.resumen, nervios.perfil, nervios.rag, nervios.empujon, nervios.rail] = await Promise.all([
+        this._leerCantera().catch(() => null),
+        this._leerCatalogoBiblioteca().catch(() => null),
+        (blueprintCtx && project_id)
+          ? this._leerPropiocepcion(project_id, desdeTs).catch(() => ({ eventos: [], total: 0 }))
+          : Promise.resolve(null),
+        (project_id && conversation_id)
+          ? this._leerResumen(project_id, conversation_id).catch(() => null)
+          : Promise.resolve(null),
+        (project_id && user_id)
+          ? this._leerPerfil(project_id, user_id, typeof ultimoMsg === 'string' ? ultimoMsg : '').catch(() => null)
+          : Promise.resolve(null),
+        (project_id && user_id && conversation_id)
+          ? this._leerRag(project_id, user_id, conversation_id).catch(() => null)
+          : Promise.resolve(null),
+        (blueprintCtx && project_id)
+          ? this._leerEmpujon(project_id).catch(() => null)
+          : Promise.resolve(null),
+        project_id
+          ? this._leerRailActivo(project_id).catch(() => null)
+          : Promise.resolve(null)
+      ]);
+    }
+
+    // Ensamblado EN ORDEN (el orden del prompt importa — coherencia preservada)
+    if (nervios.cantera !== undefined) {
+      const cantera = this._composeCanteraSection(nervios.cantera);
       effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${cantera}` : cantera;
     }
 
-    // Nervio de la BIBLIOTECA (global): en un turno REAL, dile al LLM los sectores de la
-    // bóveda de conocimiento y las herramientas para consultarla/escribir. Estático y
-    // best-effort (como la cantera). No en turnos sintéticos.
-    if (!context?.async_invocation) {
-      let catalogo = null;
-      try { catalogo = await this._leerCatalogoBiblioteca(); } catch (_) { /* best-effort */ }
-      const biblioteca = this._composeBibliotecaSection(catalogo);
+    if (nervios.biblioteca !== undefined) {
+      const biblioteca = this._composeBibliotecaSection(nervios.biblioteca);
       effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${biblioteca}` : biblioteca;
     }
 
@@ -2555,7 +2616,7 @@ class AiGatewayModule extends BaseModule {
     // antes de publicarlo (bus.publishAndWait). Regla estática de 3 líneas — el índice
     // (~212 RPC) NO se inyecta: se consulta bajo demanda con rpc.buscar / rpc.ver.
     // Mata la improvisación de nombres de eventos (causa de cascadas de tools fallidas).
-    if (!context?.async_invocation) {
+    if (esTurnoReal) {
       const rpcNervio =
         '# ÍNDICE RPC — los servicios responden en el bus (contexto SILENCIOSO)\n' +
         'Antes de publicar un evento con bus.publishAndWait, consulta su nombre EXACTO y su ' +
@@ -2565,94 +2626,42 @@ class AiGatewayModule extends BaseModule {
       effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${rpcNervio}` : rpcNervio;
     }
 
-    // Nervio propioceptivo: en un turno REAL del chat sobre una pagina de
-    // proyecto, inyectamos lo que paso en el mundo de ese proyecto desde el
-    // ultimo turno — reflejos JS y ops conscientes que el LLM no controlo pero
-    // de los que debe ser consciente. Best-effort: si propiocepcion no responde
-    // rapido, el turno sigue sin bloquearse. No se inyecta en turnos sinteticos
-    // (async-subscriber / RPC responders) ni sin proyecto.
-    if (blueprintCtx && project_id && !context?.async_invocation) {
-      try {
-        const desdeTs = this.conversationPropioTs.get(conversation_id) || null;
-        const { eventos, total } = await this._leerPropiocepcion(project_id, desdeTs);
-        if (Array.isArray(eventos) && eventos.length > 0) {
-          const seccion = this._composePropiocepcionSection(eventos, total);
-          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
-          const ultimaTs = eventos[eventos.length - 1]?.ts;
-          if (ultimaTs) this.conversationPropioTs.set(conversation_id, ultimaTs);
-        }
-      } catch (_) { /* la consciencia es best-effort; nunca bloquea el turno */ }
+    // Nervio propioceptivo (ensamblado tras la lectura paralela)
+    if (nervios.propio && Array.isArray(nervios.propio.eventos) && nervios.propio.eventos.length > 0) {
+      const seccion = this._composePropiocepcionSection(nervios.propio.eventos, nervios.propio.total);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
+      const ultimaTs = nervios.propio.eventos[nervios.propio.eventos.length - 1]?.ts;
+      if (ultimaTs) this.conversationPropioTs.set(conversation_id, ultimaTs);
     }
 
-    // Nervio de MEMORIA (summary): en un turno REAL con proyecto y conversacion,
-    // tiramos el resumen narrativo persistido (lo que el FIFO ya recorto del
-    // historial). PULL — sustituye al push que perdia la carrera. Best-effort:
-    // si no hay resumen (conversacion corta) o tarda, el turno sigue igual.
-    if (project_id && conversation_id && !context?.async_invocation) {
-      try {
-        const resumen = await this._leerResumen(project_id, conversation_id);
-        if (resumen) {
-          const seccion = this._composeResumenSection(resumen);
-          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
-        }
-      } catch (_) { /* memoria best-effort; nunca bloquea el turno */ }
+    // Nervio de MEMORIA (summary)
+    if (nervios.resumen) {
+      const seccion = this._composeResumenSection(nervios.resumen);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
     }
 
-    // Nervio de MEMORIA (profile): hechos del usuario, memoria entre conversaciones.
-    // PULL best-effort. No requiere conversation_id (es a nivel de usuario).
-    if (project_id && user_id && !context?.async_invocation) {
-      try {
-        // el mensaje actual (ultimo de messages) gobierna el top-K de facts pertinentes
-        const ultimoMsg = Array.isArray(messages) && messages.length
-          ? messages[messages.length - 1]?.content : '';
-        const facts = await this._leerPerfil(project_id, user_id, typeof ultimoMsg === 'string' ? ultimoMsg : '');
-        if (facts) {
-          const seccion = this._composePerfilSection(facts);
-          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
-        }
-      } catch (_) { /* memoria best-effort; nunca bloquea el turno */ }
+    // Nervio de MEMORIA (profile)
+    if (nervios.perfil) {
+      const seccion = this._composePerfilSection(nervios.perfil);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
     }
 
-    // Nervio de MEMORIA (rag): fragmentos del historico afines al mensaje actual.
-    // PULL best-effort, reusa el embedding stashed (sin re-embeber en el turno).
-    if (project_id && user_id && conversation_id && !context?.async_invocation) {
-      try {
-        const snippet = await this._leerRag(project_id, user_id, conversation_id);
-        if (snippet) {
-          const seccion = this._composeRagSection(snippet);
-          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
-        }
-      } catch (_) { /* memoria best-effort; nunca bloquea el turno */ }
+    // Nervio de MEMORIA (rag)
+    if (nervios.rag) {
+      const seccion = this._composeRagSection(nervios.rag);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
     }
 
-    // Nervio del conserje: en un turno REAL con proyecto, si hay un empujon
-    // pendiente (el conserje lo emitio porque detecto una brecha con intencion),
-    // lo inyectamos para que el chat lo ofrezca natural, UNA vez. Consume-on-read:
-    // el conserje lo borra al leerlo. Si el conserje esta apagado no hay nada
-    // pendiente -> no se inyecta. Best-effort: nunca bloquea el turno.
-    if (blueprintCtx && project_id && !context?.async_invocation) {
-      try {
-        const empujon = await this._leerEmpujon(project_id);
-        if (empujon && empujon.mensaje) {
-          const seccion = this._composeEmpujonSection(empujon);
-          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
-        }
-      } catch (_) { /* el empujon es best-effort; nunca bloquea el turno */ }
+    // Nervio del conserje (empujón, consume-on-read)
+    if (nervios.empujon && nervios.empujon.mensaje) {
+      const seccion = this._composeEmpujonSection(nervios.empujon);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
     }
 
-    // Nervio del RAIL VIVO (cúpula de estados): en un turno REAL con proyecto, si hay una
-    // LISTA ACTIVA, la inyectamos como el RUMBO escrito — el timón que sostiene el hilo entre
-    // turnos (el estado ES la verdad, no la memoria fragil del historial). Universal: NO exige
-    // blueprintCtx — toda conversación con proyecto hereda el rail (patrón cuenco). Sin lista
-    // activa no se inyecta nada. Best-effort: nunca bloquea el turno.
-    if (project_id && !context?.async_invocation) {
-      try {
-        const rail = await this._leerRailActivo(project_id);
-        if (rail && Array.isArray(rail.pasos) && rail.pasos.length > 0) {
-          const seccion = this._composeRailSection(rail);
-          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
-        }
-      } catch (_) { /* el rail es best-effort; nunca bloquea el turno */ }
+    // Nervio del RAIL VIVO (cúpula de estados)
+    if (nervios.rail && Array.isArray(nervios.rail.pasos) && nervios.rail.pasos.length > 0) {
+      const seccion = this._composeRailSection(nervios.rail);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
     }
 
     // Nervio de LENTES: si la página declara un dominio de lentes (manifest.lente_default),

@@ -11,8 +11,13 @@ description: >-
   DISECCIÓN PUNTO A PUNTO: cada hoja atómica, una a una, su FORMA (reflejo ·
   custodio · conversor · puente) en pasada-N-diseccion.md — sin dejar ninguna
   sin forma. El propósito es descubrir las PIEZAS que el negocio necesita (cada
-  una su parcela). Entrada directa: el sujeto se lee de la identidad, NO se
-  pregunta, NO se ofrecen opciones — se EJECUTA. Al terminar:
+  una su parcela). EL FOCO: identifica TÚ MISMO el cuello de botella del flujo
+  (eslabón limitante) y expándelo al máximo. LEY DE CERO SUPUESTOS: todo valor
+  no declarado es pregunta abierta, nunca estimación. CICLO: pasada 1 →
+  preguntas al dueño → investigación web de los puntos investigables →
+  replanteamiento → pasada 2, hasta que el esquema quede sólido. Entrada
+  directa: el sujeto se lee de la identidad, NO se pregunta, NO se ofrecen
+  opciones — se EJECUTA. Al terminar:
   proceso-negocio.completar_fase { fase: 'esquematizado' } → empuja la FASE 3.
 fuente: enki
 dominio: metodo
@@ -106,23 +111,65 @@ proceso no avanza.
 **Procedimiento mecánico, en este orden, sin saltarte nada:**
 
 1. Toma el negocio (qué_es + qué_vende + cómo_lo_elabora de la identidad).
-2. Pásalo por el prisma de 5 huecos → escribe `pasada-1-<pieza>.md` con los 5 huecos y los sub-productos que salen.
-3. **Cada sub-producto que salió es un PUNTO nuevo**: pásalo por el prisma OTRA VEZ → escribe `pasada-2-<punto>.md`.
-4. Repite: cada punto que sale de cada pasada, al prisma, en su propio archivo — **PUNTO A PUNTO, RONDA A RONDA**.
-5. **PARA cuando un punto es**: atómica (va a disección) · abierta (no se expande) · repetida (se referencia). Eso es "quedarse seco".
-6. Solo cuando NINGÚN punto se parta más (seco) → ensambla TODO en `esquemas/esquema.md` (el árbol maestro con todo embebido, no punteros).
-7. **DISECCIÓN PUNTO A PUNTO** (mecánica, en el mismo espíritu):
+2. **BUSCA EL FOCO TÚ MISMO**: del flujo productivo declarado en cómo_lo_elabora, identifica el ESLABÓN LIMITANTE (el cuello de botella — el paso cuya capacidad/programación restringe al conjunto: fermentación 24h, horno por hornada, amasado, espacio de fermentación, ventana de horneado, mano de obra). NO esperes a que el dueño lo señale: es tu trabajo encontrarlo y EXPANDIRLO AL MÁXIMO (sus restricciones, sus alternativas de desacople, sus decisiones abiertas). El cuello de botella es el CORAZÓN del esquema, no una sección más.
+3. Pásalo por el prisma de 5 huecos → escribe `pasada-1-<pieza>.md` con los 5 huecos y los sub-productos que salen.
+4. **Cada sub-producto que salió es un PUNTO nuevo**: pásalo por el prisma OTRA VEZ → escribe `pasada-2-<punto>.md`.
+5. Repite: cada punto que sale de cada pasada, al prisma, en su propio archivo — **PUNTO A PUNTO, RONDA A RONDA**.
+6. **PARA cuando un punto es**: atómica (va a disección) · abierta (no se expande) · repetida (se referencia). Eso es "quedarse seco".
+7. Solo cuando NINGÚN punto se parta más (seco) → ensambla TODO en `esquemas/esquema.md` (el árbol maestro con todo embebido, no punteros).
+8. **DISECCIÓN PUNTO A PUNTO** (mecánica, en el mismo espíritu):
    - Toma la lista de hojas ATÓMICAS que salieron del prisma (las que el prisma ya no parte).
    - **Cada hoja, una a una, sin saltarte ninguna**: pásala por el diseccionador y sus preguntas → fija su FORMA (reflejo · custodio · conversor · puente · micro-agente).
    - Escribe cada FORMA en el esquema (`esquema.md`: cada pieza con su forma) y la lista completa en `pasada-N-diseccion.md`.
    - **NO paras hasta que TODAS las hojas atómicas tengan su FORMA** — si quedan hojas sin forma, la disección no está terminada.
    - **NO agrupas de golpe**: es una por una, punto a punto, como el prisma.
-8. Cierra la fase: `proceso-negocio.completar_fase { fase: 'esquematizado' }`.
+9. Cierra la fase: `proceso-negocio.completar_fase { fase: 'esquematizado' }`.
 
 **NO pares a mitad**: si un punto todavía se parte, sigues. **NO resumas**: cada
 pasada es un archivo real en disco. **NO te saltes el esquema.md**: es el
 entregable que el gate verifica. **NO dejes hojas atómicas sin FORMA**: la
 disección punto a punto es parte del entregable.
+
+## 3c · LA LEY DE CERO SUPUESTOS (innegociable)
+
+**NO des nada por sentado.** Todo valor que no esté declarado en la identidad
+ni respondido por el dueño — capacidades, kilos por hornada, horas de trabajo,
+precios, costes, consumos, rendimientos, "esto no se puede" — se marca como
+**PREGUNTA ABIERTA** en el hueco correspondiente. **NUNCA** se estima, se
+inventa, ni se da por sabido.
+
+- Prohibido afirmar "se puede producir X kg/día" o "el horno Y es el óptimo" sin dato declarado: eso es un supuesto.
+- Si el esquema no puede decidir algo sin dato del dueño, lo deja como pregunta abierta EXPLÍCITA.
+- Un "no se puede" o un límite de capacidad NUNCA se afirma: se pregunta al dueño.
+- Las preguntas abiertas del esquema son el GUION de la conversación siguiente: el chat se las hace al dueño, una a una.
+
+## 3d · EL CICLO COMPLETO DE LA FASE 2 (no es un pase único)
+
+La fase 2 es un CICLO que puede repetirse hasta que el planteamiento esté
+sólido. NO termines al primer esquema si quedan preguntas abiertas relevantes:
+
+```
+PASADA 1 · esquematiza (el mandato de arriba) → esquema con preguntas_abiertas
+   ↓
+PREGUNTAS · hazle al dueño las preguntas abiertas del esquema, una a una,
+   esperando su respuesta (datos reales: costes, capacidades, kilos, precios)
+   ↓
+INVESTIGACIÓN · EXIGE investigar los puntos investigables que queden
+   (tipo de horno, consumos gas/eléctrico, casos reales de obradores,
+   precios de mercado). Usa la web. Mejor investigar ALGO que no investigar
+   nada: no dejes un hueco investigable sin intentar cerrarlo.
+   ↓
+REPLANTEAMIENTO · rehaz el planteamiento con las respuestas + la investigación
+   ↓
+PASADA 2 · vuelve a pasar el esquematizador (o re-esquematiza) con todo el
+   contexto enriquecido → esquema definitivo con los huecos cerrados
+```
+
+**Reglas del ciclo:**
+- **El chat es quien pregunta e investiga** (el agente del motor es turno sintético, no conversa). Las preguntas_abiertas que el agente deja en el esquema son el guion.
+- **Exigir investigar**: los puntos investigables (horno, consumos, casos, precios) se investigan en web SÍ o SÍ. Mejor una investigación parcial que ninguna.
+- **Re-pasar el agente**: cuando el replanteamiento esté hecho, vuelve a ejecutar el pipeline `esquematizador-negocio` (pasada 2) para que el esquema formal se regenere con los datos reales.
+- El ciclo termina cuando el esquema no deja preguntas abiertas relevantes (o el dueño decide cerrar).
 
 ## 4 · SALIDA — señal de fase completada
 
@@ -152,6 +199,11 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 - **Esquematizar el contenedor** (el proyecto técnico) — el sujeto es el NEGOCIO.
 - **Colar tecnologías** — agnosticismo: puertos abiertos, cero entorno (la ley del esquematizador).
 - **Inventar piezas** — si el dueño no lo declaró, es pregunta abierta, no pieza.
+- **Esperar a que el dueño señale el foco** — el cuello de botella se busca TÚ MISMO en el flujo declarado; es tu trabajo, no su encargo.
+- **Dar por sentado capacidades/valores** — la ley de cero supuestos: lo no declarado es pregunta abierta, nunca estimación.
+- **Afirmar "no se puede"** — un límite de capacidad se consulta al dueño, no se decide solo.
+- **Saltarse la investigación** — los puntos investigables (horno, consumos, casos, precios) se investigan en web; mejor algo que nada.
+- **Terminar en el primer esquema** — si quedan preguntas abiertas relevantes, el ciclo sigue (preguntas → investigación → replanteamiento → pasada 2).
 - **Disecar antes de tocar suelo** — primero el prisma se agota, luego la FORMA.
 - **Olvidar la señal de fase** — sin `proceso-negocio.completar_fase`, el proceso se detiene aquí.
 
@@ -159,8 +211,11 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 
 - Leíste la identidad (project-profile.get) y el sujeto es el negocio declarado.
 - CERO preguntas de sujeto al dueño (ya está respondido) — y CERO opciones A/B/C ofrecidas.
+- **Identificaste TÚ el cuello de botella** del flujo (eslabón limitante) y lo expandiste al máximo — no esperaste a que el dueño lo dijera.
+- **CERO supuestos**: todo valor no declarado aparece como pregunta abierta explícita, ninguno estimado.
 - **Cada punto del prisma tiene su pasada en disco** (`esquemas/pasada-N-<punto>.md`) — ronda a ronda hasta seca.
 - **`esquemas/esquema.md` existe** con el árbol maestro (el gate lo comprueba).
 - CERO tecnologías en el esquema (agnosticismo).
 - `esquema.md` responde "qué piezas necesita este negocio" con su FORMA.
+- **El ciclo está vivo**: si quedan preguntas abiertas relevantes → las haces al dueño, investigas los puntos investigables y re-pasas el agente (pasada 2).
 - Señal de fase enviada: `proceso-negocio.completar_fase { fase: 'esquematizado' }` → 200 (no 409).

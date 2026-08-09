@@ -2520,7 +2520,7 @@ class AiGatewayModule extends BaseModule {
   // Privados — Nucleo: _executeLLM (agentic loop compartido)
   // ============================================================
 
-  async _executeLLM({ system, messages, tools, settings, attachments, project_id, user_id, conversation_id, correlation_id, page_id, context, prompt, intencion, providerName }) {
+  async _executeLLM({ system, messages, tools, settings, attachments, project_id, user_id, conversation_id, correlation_id, page_id, context, prompt, intencion, providerName, max_tokens: payloadMaxTokens }) {
     const desiredProvider = providerName ?? settings?.provider ?? null;
     const { name: providerNameUsed, provider } = await this._selectProvider(desiredProvider, project_id);
 
@@ -2715,7 +2715,9 @@ class AiGatewayModule extends BaseModule {
       // 8192 dobla el margen (~32KB). Verificado: deepseek-v4-flash acepta hasta 64K de
       // salida. Es FLOOR (sube tambien las conversaciones viejas con 2000/4096 guardado);
       // no encarece el chat normal (el modelo para en 'stop', max_tokens es tope no objetivo).
-      max_tokens: Math.max(Number(settings?.max_tokens) || 0, 8192),
+      // El techo del PIPELINE (payloadMaxTokens, ej. 32000 del esquematizador) manda:
+      // si el caller declara su tope, se respeta (el floor solo sube, nunca baja).
+      max_tokens: Math.max(Number(settings?.max_tokens) || 0, Number(payloadMaxTokens) || 0, 8192),
       tools: translatedTools,
       projectId: project_id,
       conversationId: conversation_id,
@@ -3112,7 +3114,8 @@ class AiGatewayModule extends BaseModule {
     const data = event.data || event;
     const {
       request_id, correlation_id, system, messages, tools, settings,
-      attachments, project_id, user_id, conversation_id, page_id, provider: providerName, context
+      attachments, project_id, user_id, conversation_id, page_id, provider: providerName, context,
+      max_tokens: payloadMaxTokens
     } = data;
 
     if (!request_id) {
@@ -3126,7 +3129,12 @@ class AiGatewayModule extends BaseModule {
     try {
       const result = await this._executeLLM({
         system, messages, tools, settings, attachments,
-        project_id, user_id, conversation_id, correlation_id: cid, page_id, providerName, context
+        project_id, user_id, conversation_id, correlation_id: cid, page_id, providerName, context,
+        // El motor v3 manda max_tokens en el payload del pipeline (32000 para
+        // esquemas) — el gateway lo IGNORABA y usaba solo settings (→ floor 8192).
+        // Causa raíz del truncado de "b": finish_reason=max_tokens a los 8192.
+        // El payload manda sobre settings: el pipeline es quien declara su techo.
+        max_tokens: Number(payloadMaxTokens) || undefined
       });
 
       await this._publicarEvento('llm.complete.response', {

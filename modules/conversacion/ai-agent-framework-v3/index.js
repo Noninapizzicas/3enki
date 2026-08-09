@@ -470,13 +470,13 @@ class EjecutorMotorModule extends BaseModule {
                 await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `intento ${intento}: ${conv.detalle}${metaStr}` }, 'bitacora.paso.registrado', 8000);
                 continue;
               }
-              // TRUNCADO por límite de tokens (finish_reason=length): la salida
-              // puede pasar tamano_min pero está cortada — un esquema a medias no
-              // sirve. Se trata como NO válido para que el siguiente intento
-              // regenere completo (lección: esquema de "a" truncado a mitad con
-              // verificado:true).
-              if (resp.finish_reason === 'length') {
-                await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `intento ${intento}: TRUNCADO (finish_reason=length)${metaStr} — regenerando` }, 'bitacora.paso.registrado', 8000);
+              // TRUNCADO por límite de tokens (finish_reason=length o max_tokens):
+              // la salida puede pasar tamano_min pero está cortada — un esquema a
+              // medias no sirve. Se trata como NO válido para que el siguiente
+              // intento regenere completo (lecciones: esquema "a" truncado con
+              // verificado:true, y "b" cortado a 8192 por el techo del gateway).
+              if (resp.finish_reason === 'length' || resp.finish_reason === 'max_tokens') {
+                await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `intento ${intento}: TRUNCADO (finish_reason=${resp.finish_reason})${metaStr} — regenerando` }, 'bitacora.paso.registrado', 8000);
                 continue;
               }
               const val = validar(conv.canónica, paso.valida || {});

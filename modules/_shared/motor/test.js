@@ -291,3 +291,24 @@ test('motor: _resolverSlug prioriza el paréntesis de la hoja (H-01 (config) →
   // Regresión: sin paréntesis, el token largo de módulo sigue ganando
   assert.equal(m._resolverSlug('Construir el módulo gestor-de-suscriptores de la Etapa 2 según el plan', 'construir-modulos'), 'gestor-de-suscriptores');
 });
+
+// ── MOTOR v3 · enRepo verifica COMMIT REAL, no staging ───────────────────────
+test('motor: enRepo usa git log (commit real), no git ls-files (staging)', () => {
+  // El closure enRepo del mundo: git log -- <path> solo devuelve algo si un
+  // commit REAL toca el archivo (lección "b": git add sin commit dejaba el
+  // archivo en staging y ls-files daba ok:true con el commit fallido).
+  const { execSync } = require('child_process');
+  const repoDir = '/home/admin/3enki';
+  function enRepo(rel) {
+    if (rel.startsWith('storage/')) return undefined;
+    const repoPath = rel.startsWith('frontend/') ? rel : `modules/${rel}`;
+    try {
+      const out = execSync(`git -C ${repoDir} log --oneline -1 -- ${repoPath} 2>/dev/null`, { stdio: 'pipe' });
+      return out.toString().trim().length > 0;
+    } catch { return undefined; }
+  }
+  // archivo real commiteado en el repo
+  assert.equal(enRepo('_shared/motor/test.js'), true);
+  // archivo inexistente → false (antes: ls-files también daba false, ok)
+  assert.equal(enRepo('zzz-no-existe-xyz/index.js'), false);
+});

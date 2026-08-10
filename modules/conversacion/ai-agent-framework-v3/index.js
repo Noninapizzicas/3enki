@@ -243,7 +243,11 @@ class EjecutorMotorModule extends BaseModule {
         // frontend/ (FASE 7) vive en la raíz del repo; modules/ bajo modules/.
         const repoPath = rel.startsWith('frontend/') ? rel : `modules/${rel}`;
         try {
-          const out = execSync(`git -C ${this.repoDir} ls-files -- ${repoPath} 2>/dev/null`, { stdio: 'pipe' });
+          // COMMIT REAL, no staging: git ls-files ve el ÍNDICE (git add sin commit
+          // deja el archivo ahí → en_repo daba ok:true con el commit fallido —
+          // lección "b": el módulo quedó sin commiteear y la regla mintió).
+          // git log -- <path> solo devuelve algo si un commit REAL lo toca.
+          const out = execSync(`git -C ${this.repoDir} log --oneline -1 -- ${repoPath} 2>/dev/null`, { stdio: 'pipe' });
           return out.toString().trim().length > 0;
         } catch { return undefined; }
       }

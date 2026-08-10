@@ -1,31 +1,31 @@
 {
   "name": "planificar-construccion",
-  "description": "Fase 3: genera el plan de construcción del proyecto — el fuzzy genera el plan, el reflejo lo escribe, el JEFE verifica que existe.",
+  "description": "Fase 3 · PLASMA: genera el DISEÑO del proyecto en PSEUDOCÓDIGO OOP — el LLM piensa en su ADN natural (clases, objetos, flujos, estándares), SIN conocer Enki ni su inventario. La traducción a Enki NO es su trabajo (la hace el adaptador, fase 3b). El diseño sale fuerte porque piensa sin lastre.",
   "pasos": [
     {
-      "paso": "generar_plan",
+      "paso": "plasmar_diseno",
       "tipo": "fuzzy",
-      "instruccion": "Genera el PLAN DE CONSTRUCCIÓN del proyecto de la task: fases en orden, hojas atómicas con su FORMA (reflejo/custodio/micro-agente/puente/conversor), orden de dependencia, y qué entrega cada hoja. Devuelve SOLO el markdown del plan completo.",
+      "instruccion": "Diseña el SISTEMA que el proyecto de la task necesita, en PSEUDOCÓDIGO OOP — tu lenguaje natural, el que dominas: clases, objetos, atributos, métodos, relaciones, flujos, interfaces.\n\nREGLA DEL PLASMA (innegociable): NO pienses en ningún framework, plataforma ni sistema concreto. NO menciones tecnologías, módulos, ni infraestructura existente. Piensa como diseñador de software en abstracto: qué entidades existen, qué responsabilidades tiene cada una, cómo se comunican, qué contratos definen. Diseña lo que el negocio NECESITA, en su forma más pura y estándar.\n\nEl diseño debe incluir: entidades y clases con sus responsabilidades, atributos y métodos clave, relaciones entre clases (composición/herencia/asociación), los flujos principales (números de paso), y los contratos/interfaces entre componentes. Pseudocódigo tipado (entradas/salidas), sin código real.\n\nDevuelve SOLO el markdown del diseño OOP completo.",
       "valida": {
         "tamano_min": 300
       }
     },
     {
-      "paso": "escribir_plan",
+      "paso": "escribir_diseno",
       "tipo": "reflejo",
       "op": "escribir"
     }
   ],
   "entregable": {
     "tipo": "fs",
-    "path": "storage/esquemas/plan-construccion.md",
+    "path": "storage/esquemas/diseno-oop.md",
     "reglas": [
       "existe"
     ]
   },
   "presupuesto": {
     "generaciones_por_paso": 3,
-    "max_tokens": 16000,
+    "max_tokens": 32000,
     "generacion_timeout_ms": 240000
   }
 }

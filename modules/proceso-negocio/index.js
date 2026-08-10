@@ -54,13 +54,19 @@ const MAPA_PROCESO = {
   'negocio.esquematizado': {
     // La FASE 2 (agente esquematizar-negocio) INCLUYE la disección punto a
     // punto (pasada-N-diseccion.md con la FORMA de cada hoja). El siguiente
-    // paso es PLANIFICAR la construcción: quién ordena la obra por etapas.
+    // paso es PLASMAR el diseño: FASE 3 · PLASMA — el LLM piensa en su ADN
+    // (pseudocódigo OOP), SIN conocer Enki. La traducción a Enki la hace el
+    // ADAPTADOR (fase 3b, polivalente), NO el plasma.
     skill: 'planificar-construccion',
-    mensaje: 'El esquema y la disección del negocio están listos. Siguiente fase (FASE 3): planificar la CONSTRUCCIÓN — lee esquemas/pasada-N-diseccion.md y esquema.md, ordena las hojas por DEPENDENCIAS, agrupa en ETAPAS con entregable verificable cada una, y escribe el plan en esquemas/plan-construccion.md. Al terminar: proceso-negocio.completar_fase { fase: "planificado" }.'
+    mensaje: 'El esquema y la disección del negocio están listos. Siguiente fase (FASE 3 · PLASMA): diseñar el SISTEMA en PSEUDOCÓDIGO OOP — lee esquemas/pasada-N-diseccion.md y esquema.md, y diseña las entidades/clases/flujos/contratos que el negocio necesita, en tu lenguaje natural (OOP estándar), SIN pensar en ningún framework ni sistema concreto. Escribe el diseño en esquemas/diseno-oop.md. La traducción a Enki NO es tu trabajo (la hace el adaptador). Al terminar: proceso-negocio.completar_fase { fase: "planificado" }.'
   },
   'negocio.planificado': {
+    // El diseño OOP (FASE 3 · PLASMA) está listo. El siguiente paso es el
+    // ADAPTADOR X→Enki (fase 3b): traduce el diseño al sistema real (mapea
+    // contra el inventario, reutiliza/construye/adapta, genera el plan de
+    // construcción). Hasta que el adaptador exista, la fase queda esperando.
     skill: 'construir-modulos',
-    mensaje: 'El plan de construcción está listo (esquemas/plan-construccion.md). Siguiente fase (FASE 4): CONSTRUIR — ejecuta el plan etapa a etapa, UNA hoja a la vez: lee el contrato de cada hoja en esquema.md, genera module.json + index.js según su FORMA (REFLEJO · CUSTODIO · CONVERSOR · PUENTE) y llámalo con productor.producir. Verifica cada uno antes de seguir. Al terminar: proceso-negocio.completar_fase { fase: "construido" }.'
+    mensaje: 'El diseño OOP está listo (esquemas/diseno-oop.md). Siguiente fase (FASE 3b · ADAPTADOR): traducir el diseño al sistema Enki — mapea cada entidad/clase del diseño contra el inventario real de módulos (reutiliza lo existente, construye lo que falta, adapta lo que se acerca) y genera el plan de construcción en esquemas/plan-construccion.md. Al terminar: proceso-negocio.completar_fase { fase: "adaptado" }.'
   },
   'negocio.construido': {
     skill: 'escribir-skills',
@@ -332,6 +338,16 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
           { nombre: '*diseccion*', cond: 'contiene', desc: 'la disección con la FORMA asignada' }
         ],
         mensaje: 'La disección no está: se espera <proyecto>/esquemas/ con esquema.md (FORMA asignada a cada pieza) y su pasada-N-diseccion.md.'
+      },
+      'planificado': {
+        // FASE 3 · PLASMA — el entregable es el DISEÑO OOP (pseudocódigo),
+        // pensado libre (sin Enki). La traducción la hace el adaptador (3b),
+        // que genera plan-construccion.md (lo consume la FASE 4).
+        dir: 'esquemas',
+        reglas: [
+          { nombre: 'diseno-oop.md', cond: 'existe', desc: 'el diseño OOP (plasma)' }
+        ],
+        mensaje: 'El diseño OOP no está: se espera <proyecto>/esquemas/diseno-oop.md (el plasma — diseño en pseudocódigo OOP, pensado sin conocer Enki). Haz el trabajo primero.'
       },
       'construido': {
         // FASE 4 — GATE REAL (lección en vivo: el agente reportó 15 módulos

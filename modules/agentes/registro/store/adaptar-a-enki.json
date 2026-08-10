@@ -1,0 +1,37 @@
+{
+  "name": "adaptar-a-enki",
+  "description": "ADAPTADOR X→Enki (fase 3b · polivalente): traduce CUALQUIER diseño/sistema/idea X al sistema Enki real. Recibe un texto (el diseño OOP de la fase 3, o una idea externa: 'una app tipo Substack para nichos B2B'). El motor le inyecta: las REBANADAS de arquitectura relevantes (patrón de módulo real + las del dominio del tema — el ADN vivo, no de memoria) y el INVENTARIO de módulos (146). Produce el PLANO DE ACOPLAMIENTO: qué se REUTILIZA, qué se CONSTRUYE, qué se ADAPTA. Polivalente: sirve para el proceso (fase 3b) y para traer ideas externas.",
+  "pasos": [
+    {
+      "paso": "generar_plano_acoplamiento",
+      "tipo": "fuzzy",
+      "usa_rebanadas": true,
+      "rebanadas_base": [
+        "patron/modulo-real.md",
+        "patron/modulo-hibrido.md"
+      ],
+      "usa_inventario": true,
+      "instruccion": "Eres el ADAPTADOR X→Enki. Recibes un diseño/sistema/idea X (en la task) y el contexto del sistema real (rebanadas de arquitectura + inventario de módulos) que el motor te inyectó. Tu trabajo: producir el PLANO DE ACOPLAMIENTO — cómo se materializa X en el sistema Enki.\n\nMÉTODO (en orden):\n1. LEE el diseño X y extrae sus ENTIDADES/RESPONSABILIDADES (las clases del pseudocódigo OOP, o las piezas de la idea externa).\n2. Mapea CADA entidad contra el INVENTARIO: si existe un módulo que la cubre → REUTILIZA (nómbralo). Si un módulo se acerca pero no exacto → ADAPTA (nómbralo y di qué cambiaría). Si NO existe nada → CONSTRUYE (nuevo módulo).\n3. Para cada módulo a CONSTRUIR/ADAPTAR, indica su FORMA según el patrón Enki (reflejo · custodio · conversor · puente · micro-agente) y su DOMINIO de eventos (qué eventos escucha/publica — sigue el patrón de las rebanadas).\n4. Define el ORDEN de construcción (dependencias) y las ETAPAS.\n\nREGLA DEL ADAPTADOR (innegociable):\n- NO inventes módulos que ya existen — el inventario está delante, REUTILIZA.\n- NO inventes patrones — los patrones están en las rebanadas, SÍGUELOS.\n- Cada módulo nuevo debe justificar por qué no se reutiliza lo existente.\n- El plano debe ser accionable por la FASE 4 (construir-modulos): hojas con slug, forma y contrato.\n\nDevuelve SOLO el markdown del plano de acoplamiento completo.",
+      "valida": {
+        "tamano_min": 300
+      }
+    },
+    {
+      "paso": "escribir_plano",
+      "tipo": "reflejo",
+      "op": "escribir"
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "path": "storage/esquemas/plan-construccion.md",
+    "reglas": [
+      "existe"
+    ]
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 32000,
+    "generacion_timeout_ms": 240000
+  }
+}

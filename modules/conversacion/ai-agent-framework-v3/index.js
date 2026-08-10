@@ -384,6 +384,90 @@ class EjecutorMotorModule extends BaseModule {
     return null;
   }
 
+  // ── INVENTARIO DEL SISTEMA (lo que YA existe) ──────────────────────────────
+  // Lista modules/ del sistema (1er nivel + verticales + _shared explícito).
+  // Lo consume el ADAPTADOR X→Enki (fase 3b) para mapear reutiliza/construye/
+  // adapta — el plan debe nacer conociendo lo que YA existe.
+  _inventarioModulos() {
+    try {
+      const syncFs = require('fs');
+      const dir = this.modulesDir || path.join(process.cwd(), 'modules');
+      if (!syncFs.existsSync(dir)) return [];
+      const out = [];
+      for (const name of syncFs.readdirSync(dir).sort()) {
+        if (name.startsWith('.') || name === 'node_modules' || name === '_archived' || name === '_legacy') continue;
+        const lvl1 = path.join(dir, name);
+        let isDir = false;
+        try { isDir = syncFs.statSync(lvl1).isDirectory(); } catch { continue; }
+        if (!isDir) continue;
+        const tieneMj = syncFs.existsSync(path.join(lvl1, 'module.json'));
+        if (tieneMj) { out.push(name); continue; }
+        // _shared NO tiene module.json (código compartido: base-module, motor) —
+        // pero es la pieza MÁS reutilizable. Se incluye siempre.
+        if (name === '_shared') { out.push(name); continue; }
+        // Nivel 2: vertical/módulo (ej. conversacion/ai-gateway)
+        try {
+          for (const child of syncFs.readdirSync(lvl1).sort()) {
+            if (child.startsWith('.') || child === 'node_modules' || child === '_archived' || child === '_legacy') continue;
+            const childDir = path.join(lvl1, child);
+            if (syncFs.existsSync(path.join(childDir, 'module.json'))) out.push(`${name}/${child}`);
+          }
+        } catch { /* best-effort */ }
+      }
+      return out;
+    } catch { return []; }
+  }
+
+  // ── BÚSQUEDA DE REBANADAS POR TEMA (la cúpula de contexto a demanda) ───────
+  // El adaptador X→Enki NO se carga el sistema entero: busca en las rebanadas
+  // de arquitectura/cabecera SOLO las que tocan el tema que va a trabajar
+  // ("voy a hacer esto → cogo esto, esto, esto"). Las rebanadas tienen
+  // frontmatter (id, dominio, resumen) — se rankean por coincidencia de
+  // palabras del tema contra id/dominio/resumen/título. Devuelve las rutas
+  // relevantes (máx N) para que el pipeline las lea — nunca todo el árbol.
+  _buscarRebanadas(tema, max = 6) {
+    try {
+      const syncFs = require('fs');
+      const base = path.join(__dirname, '..', '..', '..', 'arquitectura', 'cabecera');
+      if (!syncFs.existsSync(base)) return [];
+      const palabras = String(tema || '').toLowerCase()
+        .replace(/ñ/g, 'n').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .match(/[a-z][a-z0-9]{2,}/g) || [];
+      const stopTema = new Set(['para', 'que', 'con', 'los', 'las', 'del', 'como', 'una', 'todo', 'sobre', 'cada', 'puede', 'hacer', 'sistema']);
+      const setPalabras = new Set(palabras.filter(p => p.length > 3 && !stopTema.has(p)));
+      if (setPalabras.size === 0) return [];
+      // Escanear recursivamente las rebanadas .md (no el índice CLAUDE.md)
+      const resultados = [];
+      const scan = (dir) => {
+        let entries = [];
+        try { entries = syncFs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+        for (const e of entries) {
+          if (e.name.startsWith('.')) continue;
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) { scan(full); continue; }
+          if (!e.name.endsWith('.md') || e.name === 'CLAUDE.md') continue;
+          let contenido = '';
+          try { contenido = syncFs.readFileSync(full, 'utf8'); } catch { continue; }
+          const fm = contenido.match(/^---\n([\s\S]*?)\n---/);
+          const meta = fm ? fm[1] : '';
+          const cuerpo = contenido.slice(0, 600).toLowerCase()
+            .replace(/ñ/g, 'n').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          let score = 0;
+          for (const p of setPalabras) {
+            if ((meta + ' ' + cuerpo).includes(p)) score++;
+          }
+          if (score > 0) {
+            const rel = path.relative(base, full).replace(/\\/g, '/');
+            resultados.push({ ruta: rel, score, id: (meta.match(/id:\s*([^\n]+)/) || [])[1]?.trim() || rel });
+          }
+        }
+      };
+      scan(base);
+      resultados.sort((a, b) => b.score - a.score);
+      return resultados.slice(0, max).map(r => r.ruta);
+    } catch { return []; }
+  }
+
   // ── PUERTO FUZZY (el único punto no determinista) ──────────────────────────
   _generar(paso, task, pipeline) {
     const llm_request_id = crypto.randomUUID();
@@ -480,9 +564,46 @@ class EjecutorMotorModule extends BaseModule {
         if (paso.tipo === 'fuzzy') {
           this._progress(project_id, request_id, agent_name, 'tool_call', `generando (${paso.paso})`, 'generar', conversation_id);
           let ok = false;
+          // CONTEXTO DEL SISTEMA A DEMANDA (el adaptador X→Enki y la FASE 3):
+          //  · usa_rebanadas → busca en arquitectura/cabecera SOLO las rebanadas
+          //    que tocan el tema y las inyecta (el adaptador coge lo que necesita
+          //    en cada momento — nunca se carga el árbol entero).
+          //  · usa_inventario → inyecta la lista real de módulos (reutilizar).
+          // El paso declara qué necesita; el motor lo resuelve e inyecta.
+          let taskEfectiva = task;
+          const partesContexto = [];
+          if (paso.usa_rebanadas) {
+            // Base SIEMPRE: las rebanadas de patrón (el ADN de cómo se hace un
+            // módulo en Enki) — declaradas por el pipeline como rebanadas_base.
+            const base = Array.isArray(paso.rebanadas_base) ? paso.rebanadas_base : [];
+            // Tema: las rebanadas que tocan el dominio que se va a adaptar
+            // (búsqueda por palabras — el adaptador coge lo que necesita en cada
+            // momento, nunca el árbol entero).
+            const tema = paso.tema_rebanadas || task;
+            const delTema = this._buscarRebanadas(tema);
+            const rutas = [...new Set([...base, ...delTema])].slice(0, 8);
+            const leidas = rutas.map(r => {
+              try {
+                const abs = path.join(__dirname, '..', '..', '..', 'arquitectura', 'cabecera', r);
+                return `### REBANADA: ${r}\n${fs.readFileSync(abs, 'utf8').slice(0, 4000)}`;
+              } catch { return null; }
+            }).filter(Boolean);
+            if (leidas.length) {
+              partesContexto.push(`# REBANADAS DE ARQUITECTURA RELEVANTES (leídas de arquitectura/cabecera — el ADN vivo del sistema, no de memoria)\n${leidas.join('\n\n')}`);
+              await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `rebanadas inyectadas (${leidas.length}: ${rutas.join(', ')})` }, 'bitacora.paso.registrado', 8000);
+            }
+          }
+          if (paso.usa_inventario) {
+            const inventario = this._inventarioModulos();
+            partesContexto.push(`# INVENTARIO DE MÓDULOS DEL SISTEMA (modules/ — lo que YA existe para reutilizar)\n${inventario.length ? inventario.map(m => `- ${m}`).join('\n') : '(vacío)'}`);
+            await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `inventario del sistema inyectado (${inventario.length} módulos)` }, 'bitacora.paso.registrado', 8000);
+          }
+          if (partesContexto.length) {
+            taskEfectiva = `${task}\n\n${partesContexto.join('\n\n')}\n\nMANDATO: usa SOLO el contexto inyectado. No inventes módulos ni patrones que no estén en las rebanadas o el inventario.`;
+          }
           for (let intento = 1; intento <= generacionesMax; intento++) {
             try {
-              const resp = await this._generar(paso, task, pipeline);
+              const resp = await this._generar(paso, taskEfectiva, pipeline);
               // Metadatos del provider (finish_reason + tokens): la verdad de por
               // qué se cortó la salida. length = truncado por límite — visible en
               // la bitácora, no escondido.

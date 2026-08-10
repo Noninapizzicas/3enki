@@ -337,9 +337,21 @@ class EjecutorMotorModule extends BaseModule {
     // nombre exacto del módulo/skill ("Crear la skill \"adaptar-a-enki\"").
     // Gana sobre TODO (lección: la skill del adaptador se creó en
     // polivalente/ porque el paréntesis "(polivalente)" de la task ganaba).
-    const comillas = tn.match(/["']([a-z][a-z0-9-]{2,40})["']/);
+    // Acepta prefijo de vertical "newsletter/banco-ideas" → se queda el
+    // BASENAME (banco-ideas): un proyecto nuevo NO crea un vertical, los
+    // módulos viven en modules/<slug>/ plano (los verticales pizzepos/prisma
+    // son subsistemas existentes — lección: la F4 escribió en modules/name/
+    // porque el regex no aceptaba la barra del slug del plano).
+    let comillas = tn.match(/["']([a-z][a-z0-9/_-]{2,80})["']/);
     if (comillas && !stop.has(comillas[1])) {
-      return comillas[1];
+      return String(comillas[1]).split('/').pop();
+    }
+    // SEÑAL 0b: la línea "Slug: <nombre>" explícita de las hojas del plano
+    // del adaptador (formato "- Slug: newsletter/banco-ideas"). Tan fiable
+    // como las comillas — es el campo declarado.
+    const slugDeclarado = tn.match(/slug\s*[:=]\s*([a-z][a-z0-9/_-]{2,80})/);
+    if (slugDeclarado && !stop.has(slugDeclarado[1])) {
+      return String(slugDeclarado[1]).split('/').pop();
     }
     // SEÑAL 1: el nombre del módulo ENTRE PARÉNTESIS tras el ID de hoja —
     // el patrón canónico de las tasks del chat es "hoja H-01 (config)".

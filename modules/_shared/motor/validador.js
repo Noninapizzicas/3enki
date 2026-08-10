@@ -45,7 +45,16 @@ function validar(salida, reglas = {}) {
     } else if (salida && typeof salida === 'object' && 'content' in salida && typeof salida.content === 'string') {
       tam = salida.content.length;   // la canónica {content} mide su contenido real
     } else if (salida && typeof salida === 'object') {
-      tam = Object.keys(salida).length;
+      // Multi-archivo (F4 construir-modulos, F7 construir-interfaz): el LLM
+      // devuelve { index.js: '<código>', module.json: '<json>', slug: 'x' } —
+      // el tamaño debe medir el CONTENIDO real (suma de los valores string),
+      // NO el nº de claves. Lección en vivo: construir-modulos rechazaba
+      // "tamaño 3 < mínimo 200" con 4.964 tokens de código generados — el LLM
+      // respondía bien (3 claves), el validador medía mal (Object.keys).
+      const valores = Object.values(salida).filter(v => typeof v === 'string');
+      tam = valores.length
+        ? valores.reduce((acc, v) => acc + v.length, 0)
+        : Object.keys(salida).length;
     } else {
       tam = 0;
     }

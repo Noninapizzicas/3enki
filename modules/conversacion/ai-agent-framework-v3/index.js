@@ -333,12 +333,19 @@ class EjecutorMotorModule extends BaseModule {
     const tn = t.toLowerCase()
       .replace(/ñ/g, 'n')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    // SEÑAL 1 (la fiable): el nombre del módulo ENTRE PARÉNTESIS tras el ID de
-    // hoja — el patrón canónico de las tasks del chat es "hoja H-01 (config)".
-    // El paréntesis gana SIEMPRE sobre la heurística de longitud: es el nombre
-    // que el chat escribió explícitamente (lección: "b" escribió el módulo como
-    // plan-construccion porque el token del archivo de referencia era más largo).
-    const paren = tn.match(/\(\s*([a-z][a-z0-9-]{2,40})\s*\)/);
+    // SEÑAL 0 (la MÁS fiable): el nombre ENTRE COMILLAS — el chat cita el
+    // nombre exacto del módulo/skill ("Crear la skill \"adaptar-a-enki\"").
+    // Gana sobre TODO (lección: la skill del adaptador se creó en
+    // polivalente/ porque el paréntesis "(polivalente)" de la task ganaba).
+    const comillas = tn.match(/["']([a-z][a-z0-9-]{2,40})["']/);
+    if (comillas && !stop.has(comillas[1])) {
+      return comillas[1];
+    }
+    // SEÑAL 1: el nombre del módulo ENTRE PARÉNTESIS tras el ID de hoja —
+    // el patrón canónico de las tasks del chat es "hoja H-01 (config)".
+    // ANCLADO al ID de hoja (h-\d+): un paréntesis suelto "(polivalente)"
+    // NO debe ganar (lección: el slug de la skill salió polivalente).
+    const paren = tn.match(/h-\d+\s*\(\s*([a-z][a-z0-9-]{2,40})\s*\)/);
     if (paren && !stop.has(paren[1])) {
       return paren[1];
     }

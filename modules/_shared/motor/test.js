@@ -312,3 +312,18 @@ test('motor: enRepo usa git log (commit real), no git ls-files (staging)', () =>
   // archivo inexistente → false (antes: ls-files también daba false, ok)
   assert.equal(enRepo('zzz-no-existe-xyz/index.js'), false);
 });
+
+// ── MOTOR v3 · inventario del sistema para la FASE 3 ─────────────────────────
+test('motor: _inventarioModulos lista lo que YA existe (la F3 planea reutilizando, no reinventando)', () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  m.modulesDir = '/home/admin/3enki/modules';
+  const inv = m._inventarioModulos();
+  assert.ok(inv.length > 50, 'inventario poblado');
+  // Las piezas que el plan de "b" proponía construir YA existen en el sistema
+  assert.ok(inv.includes('_shared'), '_shared (base-module) existe');
+  assert.ok(inv.includes('project-profile'), 'project-profile existe');
+  assert.ok(inv.includes('filesystem'), 'filesystem existe');
+  assert.ok(inv.includes('conversacion/ai-gateway'), 'ai-gateway existe (vertical)');
+  assert.ok(inv.includes('estados'), 'estados/rail existe');
+});

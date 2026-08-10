@@ -1,11 +1,12 @@
 {
   "name": "planificar-construccion",
-  "description": "Fase 3: genera el plan de construcción del proyecto — el fuzzy genera el plan, el reflejo lo escribe, el JEFE verifica que existe.",
+  "description": "Fase 3: genera el plan de construcción del proyecto CONOCIENDO el sistema — el fuzzy genera el plan (con el inventario real de módulos del sistema inyectado, reutilizando lo existente), el reflejo lo escribe, el JEFE verifica que existe.",
   "pasos": [
     {
       "paso": "generar_plan",
       "tipo": "fuzzy",
-      "instruccion": "Genera el PLAN DE CONSTRUCCIÓN del proyecto de la task: fases en orden, hojas atómicas con su FORMA (reflejo/custodio/micro-agente/puente/conversor), orden de dependencia, y qué entrega cada hoja. Devuelve SOLO el markdown del plan completo.",
+      "usa_inventario": true,
+      "instruccion": "Genera el PLAN DE CONSTRUCCIÓN del proyecto de la task: fases en orden, hojas atómicas con su FORMA (reflejo/custodio/micro-agente/puente/conversor), orden de dependencia, y qué entrega cada hoja.\n\nMANDATO DEL SISTEMA (innegociable): el plan NO nace en el vacío — nace sobre el sistema que YA EXISTE. Recibes el INVENTARIO DE MÓDULOS del sistema (modules/). Antes de proponer una hoja de construcción, comprueba si el sistema ya tiene algo que lo cubre (base-module _shared, motor, eventBus, filesystem, project-profile, estados/rail, conversacion…). Si YA existe → NO lo propones como hoja nueva: lo REFERENCIAS como 'reutiliza: <módulo>'. Solo propones como hoja a construir lo que el sistema NO tiene. Una hoja nueva debe justificar por qué no se reutiliza lo existente. Devuelve SOLO el markdown del plan completo.",
       "valida": {
         "tamano_min": 300
       }

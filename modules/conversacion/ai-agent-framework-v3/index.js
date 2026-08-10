@@ -231,6 +231,43 @@ class EjecutorMotorModule extends BaseModule {
     }
   }
 
+  // ── INVENTARIO DEL SISTEMA (lo que YA existe) ──────────────────────────────
+  // La FASE 3 (planificar-construccion) planeaba sin conocer el sistema: el plan
+  // de "b" proponía construir config/contracts/bus cuando el sistema YA tiene
+  // _shared/base-module, el motor, eventBus, filesystem, project-profile…
+  // El plan debe NACER conociendo el inventario: reutilizar lo existente, solo
+  // construir lo que falta. Lista modules/ del sistema (1er nivel + verticales).
+  _inventarioModulos() {
+    try {
+      const syncFs = require('fs');
+      const dir = this.modulesDir || path.join(process.cwd(), 'modules');
+      if (!syncFs.existsSync(dir)) return [];
+      const out = [];
+      for (const name of syncFs.readdirSync(dir).sort()) {
+        if (name.startsWith('.') || name === 'node_modules' || name === '_archived' || name === '_legacy') continue;
+        const lvl1 = path.join(dir, name);
+        let isDir = false;
+        try { isDir = syncFs.statSync(lvl1).isDirectory(); } catch { continue; }
+        if (!isDir) continue;
+        const tieneMj = syncFs.existsSync(path.join(lvl1, 'module.json'));
+        if (tieneMj) { out.push(name); continue; }
+        // _shared NO tiene module.json (carpeta de código compartido: base-module,
+        // motor/verificador, validador) — pero es la pieza MÁS reutilizable del
+        // sistema. Se incluye siempre: el plan debe saber que la base existe.
+        if (name === '_shared') { out.push(name); continue; }
+        // Nivel 2: vertical/módulo (ej. conversacion/ai-gateway)
+        try {
+          for (const child of syncFs.readdirSync(lvl1).sort()) {
+            if (child.startsWith('.') || child === 'node_modules' || child === '_archived' || child === '_legacy') continue;
+            const childDir = path.join(lvl1, child);
+            if (syncFs.existsSync(path.join(childDir, 'module.json'))) out.push(`${name}/${child}`);
+          }
+        } catch { /* best-effort */ }
+      }
+      return out;
+    } catch { return []; }
+  }
+
   _mundo(project_id) {
     const resolver = (rel) => this._resolver(rel, project_id);
     return {
@@ -480,9 +517,20 @@ class EjecutorMotorModule extends BaseModule {
         if (paso.tipo === 'fuzzy') {
           this._progress(project_id, request_id, agent_name, 'tool_call', `generando (${paso.paso})`, 'generar', conversation_id);
           let ok = false;
+          // INVENTARIO DEL SISTEMA: si el paso lo declara (usa_inventario, FASE 3
+          // planificar-construccion), se inyecta la lista real de módulos en la
+          // task ANTES de generar — el plan nace conociendo lo que YA existe
+          // (reutiliza) en vez de proponer construir lo que ya está construido
+          // (lección: el plan de "b" proponía config/contracts/bus).
+          let taskEfectiva = task;
+          if (paso.usa_inventario) {
+            const inventario = this._inventarioModulos();
+            taskEfectiva = `${task}\n\n# INVENTARIO DE MÓDULOS DEL SISTEMA (modules/ — lo que YA existe)\n${inventario.length ? inventario.map(m => `- ${m}`).join('\n') : '(vacío)'}\n\nMANDATO: reutiliza lo existente del inventario; propón construir SOLO lo que no está.`;
+            await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `inventario del sistema inyectado (${inventario.length} módulos) — reutilizar lo existente` }, 'bitacora.paso.registrado', 8000);
+          }
           for (let intento = 1; intento <= generacionesMax; intento++) {
             try {
-              const resp = await this._generar(paso, task, pipeline);
+              const resp = await this._generar(paso, taskEfectiva, pipeline);
               // Metadatos del provider (finish_reason + tokens): la verdad de por
               // qué se cortó la salida. length = truncado por límite — visible en
               // la bitácora, no escondido.

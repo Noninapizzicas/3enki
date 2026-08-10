@@ -661,13 +661,34 @@ class EjecutorMotorModule extends BaseModule {
         } else {
           // REFLEJO: ejecuta el determinista si declara op conocida; si no, no-op registrado.
           if (paso.op === 'escribir' && salidaUltima !== null) {
-            // Multi-archivo (FASE 7): el fuzzy devuelve { archivos: { rel: contenido } }.
-            // Se escriben TODOS los paths declarados del entregable.
-            if (entregableReal.paths && Array.isArray(entregableReal.paths) && salidaUltima.archivos && typeof salidaUltima.archivos === 'object') {
+            // Multi-archivo (F4 construir-modulos, F7 construir-interfaz).
+            // El LLM puede devolver DOS formatos — ambos se aceptan:
+            //   A) { archivos: { rel: contenido } }  (F7)
+            //   B) { index.js: '...', module.json: '...' }  (F4 — objeto directo
+            //      con claves = nombres de archivo del entregable)
+            // Lección en vivo: la F4 escribió "index.js como JSON contenedor"
+            // porque el reflejo solo entendía el formato A y el LLM devolvió B
+            // → caía al else y serializaba el objeto entero en index.js,
+            // sin escribir nunca module.json.
+            let archivosMap = null;
+            if (salidaUltima && typeof salidaUltima === 'object' && !Array.isArray(salidaUltima)) {
+              if (salidaUltima.archivos && typeof salidaUltima.archivos === 'object' && !Array.isArray(salidaUltima.archivos)) {
+                archivosMap = salidaUltima.archivos;   // formato A (F7)
+              } else if (entregableReal.paths && Array.isArray(entregableReal.paths)) {
+                // formato B (F4): claves = basename de los archivos declarados
+                const basenames = entregableReal.paths.map(p => String(p).split('/').pop());
+                if (basenames.some(b => b in salidaUltima)) {
+                  archivosMap = salidaUltima;
+                }
+              }
+            }
+            if (entregableReal.paths && Array.isArray(entregableReal.paths) && archivosMap) {
               for (const rel of entregableReal.paths) {
-                const contenido = salidaUltima.archivos[rel]
-                  ?? salidaUltima.archivos[rel.replace(/^frontend\//, '')]
-                  ?? salidaUltima.archivos[rel.replace(/^storage\//, '')];
+                const base = String(rel).split('/').pop();
+                const contenido = archivosMap[rel]
+                  ?? archivosMap[rel.replace(/^frontend\//, '')]
+                  ?? archivosMap[rel.replace(/^storage\//, '')]
+                  ?? archivosMap[base];
                 if (contenido === undefined) continue;
                 const abs = this._escribir(rel, { content: String(contenido) }, project_id);
                 await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `escrito en ${abs}` }, 'bitacora.paso.registrado', 8000);

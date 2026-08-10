@@ -1,17 +1,46 @@
 {
   "name": "construir-modulos",
-  "description": "Fase 4: construye el módulo de la hoja (slug) de la task — el fuzzy genera el código, el reflejo lo escribe en modules/, el JEFE verifica el patrón de módulo Enki.",
+  "description": "Fase 4: construye el módulo de la hoja (slug) de la task — el fuzzy genera index.js + module.json (el par real del patrón), el reflejo los escribe en modules/, el JEFE verifica el patrón de módulo Enki (api_real + en_repo).",
   "pasos": [
-    { "paso": "leer_plan_y_rail", "tipo": "reflejo" },
+    {
+      "paso": "leer_plan_y_rail",
+      "tipo": "reflejo"
+    },
     {
       "paso": "generar_codigo",
       "tipo": "fuzzy",
-      "instruccion": "Genera el CÓDIGO del módulo Enki (index.js) que la task pide (el slug está en la task). Debe seguir el patrón de módulo Enki: require de _shared/base-module, clase que extiende BaseModule con this.name y this.version, y un método _atender(evento, contexto, respuesta, siguiente) que maneja el evento. Devuelve SOLO el código del index.js como texto plano — sin markdown, sin explicaciones, sin bloques de código.",
-      "valida": { "tamano_min": 200 }
+      "instruccion": "Genera el MÓDULO Enki completo (el par real) que la task pide (el slug está en la task):\n\n1. module.json con: _doc (descripción larga), name (el slug), version (0.1.0), description (una línea), subscribes (eventos que escucha con su handler — el dominio del negocio, NO inventes eventos del sistema), publishes (eventos que emite).\n2. index.js que sigue el patrón de módulo Enki: require de _shared/base-module, clase que extiende BaseModule con this.name y this.version, y un método _atender(evento, contexto, respuesta, siguiente) que maneja el evento (4 args — la regla api_real). Si el contrato de la hoja pide lógica determinista → require _shared/modulo-hibrido-reflejo y la lógica en el reflejo.\n\nDevuelve SOLO el JSON: {\"index.js\": \"<código>\", \"module.json\": \"<json>\", \"slug\": \"<slug>\"} — sin markdown, sin explicaciones.",
+      "valida": {
+        "tamano_min": 200
+      }
     },
-    { "paso": "escribir_modulo", "tipo": "reflejo", "op": "escribir" },
-    { "paso": "commitar_modulo", "tipo": "reflejo", "op": "commitar" }
+    {
+      "paso": "escribir_modulo",
+      "tipo": "reflejo",
+      "op": "escribir"
+    },
+    {
+      "paso": "commitar_modulo",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
   ],
-  "entregable": { "tipo": "fs", "path": "<slug>/index.js", "reglas": ["existe", "api_real", "en_repo"] },
-  "presupuesto": { "generaciones_por_paso": 3, "max_tokens": 64000, "generacion_timeout_ms": 240000 }
+  "entregable": {
+    "tipo": "fs",
+    "dir": "<slug>",
+    "archivos": [
+      "index.js",
+      "module.json"
+    ],
+    "reglas": [
+      "existe",
+      "api_real",
+      "en_repo"
+    ]
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 64000,
+    "generacion_timeout_ms": 240000
+  }
 }

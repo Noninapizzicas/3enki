@@ -407,7 +407,7 @@ class AiGatewayModule extends BaseModule {
     const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente', 'crear_agente', 'crear_agente_desde_caso',
       'buscar_capacidad', 'detalle_capacidad',
       'buscar_skill', 'activar_skill',
-      'fs.read', 'fs.list', 'fs.search',
+      'fs.read', 'fs.list', 'fs.search', 'fs.list_modules', 'fs.read_module',
       'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
       'fijar_objetivo', 'evaluar_rail',
       'cupulas.vista_proyecto',

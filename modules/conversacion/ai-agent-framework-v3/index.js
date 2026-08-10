@@ -243,7 +243,11 @@ class EjecutorMotorModule extends BaseModule {
         // frontend/ (FASE 7) vive en la raíz del repo; modules/ bajo modules/.
         const repoPath = rel.startsWith('frontend/') ? rel : `modules/${rel}`;
         try {
-          const out = execSync(`git -C ${this.repoDir} ls-files -- ${repoPath} 2>/dev/null`, { stdio: 'pipe' });
+          // COMMIT REAL, no staging: git ls-files ve el ÍNDICE (git add sin commit
+          // deja el archivo ahí → en_repo daba ok:true con el commit fallido —
+          // lección "b": el módulo quedó sin commiteear y la regla mintió).
+          // git log -- <path> solo devuelve algo si un commit REAL lo toca.
+          const out = execSync(`git -C ${this.repoDir} log --oneline -1 -- ${repoPath} 2>/dev/null`, { stdio: 'pipe' });
           return out.toString().trim().length > 0;
         } catch { return undefined; }
       }
@@ -285,7 +289,11 @@ class EjecutorMotorModule extends BaseModule {
       const mensaje = `motor: ${slug} generado por pipeline ${pipelineName} (verificado)`;
       execSync(`git -C ${this.repoDir} add -- ${repoRel}`, { stdio: 'pipe' });
       try {
-        execSync(`git -C ${this.repoDir} commit -m "${mensaje}" -- ${repoRel}`, { stdio: 'pipe' });
+        // Identidad EXPLÍCITA del motor con -c: no depende del config del repo
+        // (www-data no tiene user.name/email → "Author identity unknown" —
+        // lección: commit fallido en "b" con el módulo sin commiteear, la regla
+        // en_repo mintió porque git ls-files ve el staging, no los commits).
+        execSync(`git -C ${this.repoDir} -c user.name="Enki Motor" -c user.email="motor@enki.local" commit -m "${mensaje}" -- ${repoRel}`, { stdio: 'pipe' });
       } catch (e) {
         if (!String(e.message || '').includes('nothing to commit')) throw e; // ya commiteado = ok
       }
@@ -307,10 +315,27 @@ class EjecutorMotorModule extends BaseModule {
   }
 
   _resolverSlug(task, pipelineName) {
-    const stop = new Set(['construye', 'construir', 'construida', 'construido', 'escribe', 'escribir', 'escriba', 'genera', 'generar', 'proyecto', 'proyectos', 'modulo', 'modulos', 'fase', 'hoja', 'hojas', 'skill', 'skills', 'esquema', 'esquemas', 'esquematiza', 'plan', 'planes', 'del', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'para', 'que', 'con', 'y', 'a', 'su', 'en', 'al', 'se', 'por', 'como', 'mas', 'más', 'the', 'debe', 'debes', 'siguiente', 'siguientes', 'tanda', 'orden', 'primero', 'segundo', 'tercero', 'lee', 'leer', 'verifica', 'verificar', 'completa', 'completar', 'cierra', 'cerrar', 'interfaz', 'interfaces', 'operativa', 'operativas', 'operativo', 'frontend', 'panel', 'paneles', 'store', 'stores', 'mqtt', 'uimodule', 'manifest', 'svelte', 'trío', 'trio']);
-    const tokens = String(task || '').toLowerCase().match(/[a-z][a-z0-9-]{2,40}/g) || [];
-    // El nombre del módulo suele ser el token no-stopword MÁS LARGO (no el primero).
-    const candidatos = tokens.filter(t => !stop.has(t) && t.length > 3 && !/^\d+$/.test(t));
+    const stop = new Set(['construye', 'construir', 'construida', 'construido', 'escribe', 'escribir', 'escriba', 'genera', 'generar', 'proyecto', 'proyectos', 'modulo', 'modulos', 'fase', 'hoja', 'hojas', 'skill', 'skills', 'esquema', 'esquemas', 'esquematiza', 'esquematizar', 'plan', 'planes', 'construccion', 'construcciones', 'plan-construccion', 'del', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'para', 'que', 'con', 'y', 'a', 'su', 'en', 'al', 'se', 'por', 'como', 'mas', 'más', 'segun', 'según', 'the', 'debe', 'debes', 'siguiente', 'siguientes', 'tanda', 'orden', 'primero', 'segundo', 'tercero', 'lee', 'leer', 'verifica', 'verificar', 'completa', 'completar', 'cierra', 'cerrar', 'interfaz', 'interfaces', 'operativa', 'operativas', 'operativo', 'frontend', 'panel', 'paneles', 'store', 'stores', 'mqtt', 'uimodule', 'manifest', 'svelte', 'trío', 'trio']);
+    const t = String(task || '');
+    // Normaliza la task para el matching: ñ→n, tildes fuera (los slugs del
+    // sistema son ASCII). Sin esto, "construcción" se cortaba en "construcci"
+    // (la ñ rompía el regex) y escapaba la stop-list → slug basura.
+    const tn = t.toLowerCase()
+      .replace(/ñ/g, 'n')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    // SEÑAL 1 (la fiable): el nombre del módulo ENTRE PARÉNTESIS tras el ID de
+    // hoja — el patrón canónico de las tasks del chat es "hoja H-01 (config)".
+    // El paréntesis gana SIEMPRE sobre la heurística de longitud: es el nombre
+    // que el chat escribió explícitamente (lección: "b" escribió el módulo como
+    // plan-construccion porque el token del archivo de referencia era más largo).
+    const paren = tn.match(/\(\s*([a-z][a-z0-9-]{2,40})\s*\)/);
+    if (paren && !stop.has(paren[1])) {
+      return paren[1];
+    }
+    // SEÑAL 2: el token no-stopword MÁS LARGO (heurística original de respaldo).
+    const tokens = tn.match(/[a-z][a-z0-9-]{2,40}/g) || [];
+    // Descarta IDs de hoja (h-01, h-02…), rutas de archivo y basura de respaldo.
+    const candidatos = tokens.filter(x => !stop.has(x) && x.length > 3 && !/^\d+$/.test(x) && !/^h-\d+$/.test(x));
     if (candidatos.length === 0) return pipelineName;
     return candidatos.sort((a, b) => b.length - a.length)[0];
   }

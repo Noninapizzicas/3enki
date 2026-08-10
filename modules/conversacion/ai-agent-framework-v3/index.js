@@ -285,7 +285,11 @@ class EjecutorMotorModule extends BaseModule {
       const mensaje = `motor: ${slug} generado por pipeline ${pipelineName} (verificado)`;
       execSync(`git -C ${this.repoDir} add -- ${repoRel}`, { stdio: 'pipe' });
       try {
-        execSync(`git -C ${this.repoDir} commit -m "${mensaje}" -- ${repoRel}`, { stdio: 'pipe' });
+        // Identidad EXPLÍCITA del motor con -c: no depende del config del repo
+        // (www-data no tiene user.name/email → "Author identity unknown" —
+        // lección: commit fallido en "b" con el módulo sin commiteear, la regla
+        // en_repo mintió porque git ls-files ve el staging, no los commits).
+        execSync(`git -C ${this.repoDir} -c user.name="Enki Motor" -c user.email="motor@enki.local" commit -m "${mensaje}" -- ${repoRel}`, { stdio: 'pipe' });
       } catch (e) {
         if (!String(e.message || '').includes('nothing to commit')) throw e; // ya commiteado = ok
       }

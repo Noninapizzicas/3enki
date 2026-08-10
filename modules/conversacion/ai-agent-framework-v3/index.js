@@ -70,10 +70,20 @@ class EjecutorMotorModule extends BaseModule {
 
   // ── TOOLS DEL CHAT (la cúpula del MOTOR): invoke_agent + buscar_agente,
   //    servidas por el v3 — el catálogo SON los pipelines del registro. ──────
-  _registrarTools() {
+  async _registrarTools() {
     // invoke_agent: la ejecuta el v3 (escucha invoke_agent.request — alias del
-    // mismo pipeline). La descripción lista los pipelines declarados.
-    const pipelines = ['construir-modulos', 'escribir-skills', 'esquematizador-negocio', 'planificar-construccion'];
+    // mismo pipeline). La descripción lista los pipelines DECLARADOS EN EL
+    // REGISTRO (pipeline.listar en vivo) — NO una lista hardcodeada (lección:
+    // adaptar-a-enki no aparecía en la cúpula porque la lista era fija y vieja).
+    let pipelines = [];
+    try {
+      const resp = await this._pedir('pipeline.listar.request', { request_id: crypto.randomUUID() }, 'pipeline.listar.response', 8000);
+      pipelines = ((resp && resp.pipelines) || []).map(p => p.name).sort();
+    } catch (err) {
+      // Fallback: si el registro no responde, los pipelines conocidos del proceso.
+      pipelines = ['adaptar-a-enki', 'construir-interfaz', 'construir-modulos', 'decidir-interfaz', 'escribir-skills', 'esquematizador-negocio', 'esquematizar-interfaz', 'planificar-construccion'];
+      this.logger?.warn?.('ai-agent-framework-v3.pipelines.fallback', { error: err.message });
+    }
     const tool = {
       name: 'invoke_agent',
       description: `Invoca un PIPELINE del motor de agentes para una tarea concreta (el pipeline corre casi todo determinista; el JEFE verifica el entregable antes del éxito).\n\nPipelines disponibles:\n${pipelines.map(p => `  - ${p}`).join('\n')}\n\nDevuelve cuando el pipeline termina con el veredicto.`,

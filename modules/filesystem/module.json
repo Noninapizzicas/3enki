@@ -55,6 +55,30 @@
       "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
+      "name": "fs.list_modules",
+      "description": "SOLO LECTURA. Lista los MÓDULOS del sistema (modules/): nombres de directorio de los módulos instalados (cada uno con su module.json/index.js). Sirve para VERIFICAR que un agente construyó un módulo (ej. tras invocar construir-modulos). No expone escritura — solo lectura de la lista.",
+      "handler": "handleListModules",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "fs.read_module",
+      "description": "SOLO LECTURA. Lee un archivo de un MÓDULO del sistema (modules/): ruta relativa al módulo, ej. {module: 'config', file: 'index.js'} o {module: 'config', file: 'module.json'}. Sirve para VERIFICAR el contenido de un módulo que un agente construyó. Solo lectura — no escribe ni edita nada del sistema.",
+      "handler": "handleReadModule",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "module": { "type": "string", "description": "Nombre del módulo (directorio en modules/)" },
+          "file": { "type": "string", "description": "Archivo relativo al módulo (ej. index.js, module.json)", "default": "index.js" }
+        },
+        "required": ["module"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
+    },
+    {
       "name": "fs.write",
       "description": "Escribe contenido a un archivo (crea si no existe). Soporta versionado optimista opt-in: si llega expected_hash, verifica que el contenido actual en disco lo cumple antes de escribir; si no coincide devuelve CONFLICT_STATE con current_hash y expected_hash. Sin expected_hash, comportamiento legacy (sobrescribe sin verificar).",
       "handler": "handleWrite",
@@ -273,6 +297,8 @@
       { "event": "archivo.leer.solicitado",    "handler": "onArchivoLeerSolicitado" },
       { "event": "archivo.borrar.solicitado",  "handler": "onArchivoBorrarSolicitado" },
       { "event": "fs.read.request",            "handler": "onReadRequest" },
+      { "event": "fs.list_modules.request",    "handler": "onListModulesRequest" },
+      { "event": "fs.read_module.request",     "handler": "onReadModuleRequest" },
       { "event": "fs.write.request",            "handler": "onWriteRequest" },
       { "event": "fs.write.commit.request",    "handler": "onWriteRequest" },
       { "event": "fs.edit.request",            "handler": "onEditRequest" },

@@ -310,6 +310,8 @@ class FilesystemModule extends BaseModule {
   }
   async onEditRequest(event)   { return this._busDispatch(event, 'edit',   'fs.edit.response',   ['path', 'patches', 'expected_hash']); }
   async onReadRequest(event)   { return this._busDispatch(event, 'read',   'fs.read.response',   ['path', 'file_path']); }
+  async onListModulesRequest(event) { return this._busDispatch(event, 'list_modules', 'fs.list_modules.response', []); }
+  async onReadModuleRequest(event)  { return this._busDispatch(event, 'read_module', 'fs.read_module.response', ['module', 'file']); }
   async onDeleteRequest(event) { return this._busDispatch(event, 'delete', 'fs.delete.response', ['path']); }
   async onListRequest(event)   { return this._busDispatch(event, 'list',   'fs.list.response',   ['path']); }
   async onMkdirRequest(event)  { return this._busDispatch(event, 'mkdir',  'fs.mkdir.response',  ['path']); }
@@ -769,6 +771,92 @@ class FilesystemModule extends BaseModule {
       };
     } catch (err) {
       return this._handleHandlerError('filesystem.read.failed', err, 'read');
+    }
+  }
+
+  // ── SOLO LECTURA del SISTEMA (módulos) ─────────────────────────────────────
+  // El chat (LLM) NO tiene visibilidad de modules/ del sistema (su fs está
+  // scopeado al storage del proyecto) → tras invocar construir-modulos decía
+  // "no escribió nada en ninguna parte" aunque el motor SÍ había escrito.
+  // Estas tools dan SOLO lectura: listar módulos y leer un archivo de uno.
+  // NUNCA escribir/editar/borrar — el motor es el único escritor de modules/.
+
+  async handleListModules() {
+    try {
+      const modulesDir = path.join(process.cwd(), 'modules');
+      const syncFs = require('fs');
+      if (!syncFs.existsSync(modulesDir)) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'modules dir not found', {});
+      }
+      const names = syncFs.readdirSync(modulesDir)
+        .filter(n => !n.startsWith('.') && n !== 'node_modules' && n !== '_archived' && n !== '_legacy')
+        .filter(n => {
+          try { return syncFs.statSync(path.join(modulesDir, n)).isDirectory(); } catch { return false; }
+        })
+        .sort();
+      // Marca los que tienen module.json (módulos reales) vs carpetas auxiliares
+      const modulos = names.map(n => ({
+        name: n,
+        tiene_module_json: syncFs.existsSync(path.join(modulesDir, n, 'module.json')),
+        tiene_index_js: syncFs.existsSync(path.join(modulesDir, n, 'index.js'))
+      }));
+      this.metrics?.increment('filesystem.list_modules.success');
+      return { status: 200, data: { modules_dir: modulesDir, total: modulos.length, modulos } };
+    } catch (err) {
+      return this._handleHandlerError('filesystem.list_modules.failed', err, 'list_modules');
+    }
+  }
+
+  async handleReadModule(data) {
+    try {
+      const moduleName = data?.module;
+      const file = data?.file || 'index.js';
+      if (!moduleName) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'module is required',
+          { kind: 'domain', field: 'module' });
+      }
+      // Anti-path-traversal: el nombre del módulo y el archivo NO pueden
+      // escapar de modules/<modulo>/ (solo lectura del sistema — defensa dura).
+      const cleanMod = String(moduleName).replace(/^[./\\]+|[./\\]+$/g, '');
+      const cleanFile = String(file).replace(/^[./\\]+|[./\\]+$/g, '');
+      if (!cleanMod || !cleanFile || cleanMod.includes('..') || cleanFile.includes('..')) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'invalid module or file path', {});
+      }
+      const safePath = path.join(process.cwd(), 'modules', cleanMod, cleanFile);
+      const modulesDir = path.join(process.cwd(), 'modules');
+      if (!safePath.startsWith(modulesDir + path.sep)) {
+        return this._errorResponse(403, 'PERMISSION_DENIED', 'path escapes modules dir', {});
+      }
+      let stats;
+      try { stats = await fs.stat(safePath); }
+      catch (e) {
+        if (e.code === 'ENOENT') {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'module file not found',
+            { module: cleanMod, file: cleanFile });
+        }
+        throw e;
+      }
+      if (stats.isDirectory()) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'cannot read directory as file', {});
+      }
+      if (stats.size > MAX_READ_SIZE) {
+        return this._errorResponse(413, 'INVALID_INPUT',
+          `File too large. Max size: ${MAX_READ_SIZE / (1024 * 1024)}MB`,
+          { kind: 'limit', max_size: MAX_READ_SIZE, actual_size: stats.size });
+      }
+      const content = await fs.readFile(safePath, 'utf-8');
+      this.metrics?.increment('filesystem.read_module.success');
+      return {
+        status: 200,
+        data: {
+          module: cleanMod, file: cleanFile, path: `modules/${cleanMod}/${cleanFile}`,
+          content, encoding: 'utf-8', size: stats.size,
+          modified: stats.mtime, type: 'text',
+          hash: this._computeHash(content)
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('filesystem.read_module.failed', err, 'read_module');
     }
   }
 

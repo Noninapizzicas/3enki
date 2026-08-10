@@ -307,10 +307,27 @@ class EjecutorMotorModule extends BaseModule {
   }
 
   _resolverSlug(task, pipelineName) {
-    const stop = new Set(['construye', 'construir', 'construida', 'construido', 'escribe', 'escribir', 'escriba', 'genera', 'generar', 'proyecto', 'proyectos', 'modulo', 'modulos', 'fase', 'hoja', 'hojas', 'skill', 'skills', 'esquema', 'esquemas', 'esquematiza', 'plan', 'planes', 'del', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'para', 'que', 'con', 'y', 'a', 'su', 'en', 'al', 'se', 'por', 'como', 'mas', 'más', 'the', 'debe', 'debes', 'siguiente', 'siguientes', 'tanda', 'orden', 'primero', 'segundo', 'tercero', 'lee', 'leer', 'verifica', 'verificar', 'completa', 'completar', 'cierra', 'cerrar', 'interfaz', 'interfaces', 'operativa', 'operativas', 'operativo', 'frontend', 'panel', 'paneles', 'store', 'stores', 'mqtt', 'uimodule', 'manifest', 'svelte', 'trío', 'trio']);
-    const tokens = String(task || '').toLowerCase().match(/[a-z][a-z0-9-]{2,40}/g) || [];
-    // El nombre del módulo suele ser el token no-stopword MÁS LARGO (no el primero).
-    const candidatos = tokens.filter(t => !stop.has(t) && t.length > 3 && !/^\d+$/.test(t));
+    const stop = new Set(['construye', 'construir', 'construida', 'construido', 'escribe', 'escribir', 'escriba', 'genera', 'generar', 'proyecto', 'proyectos', 'modulo', 'modulos', 'fase', 'hoja', 'hojas', 'skill', 'skills', 'esquema', 'esquemas', 'esquematiza', 'esquematizar', 'plan', 'planes', 'construccion', 'construcciones', 'plan-construccion', 'del', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'para', 'que', 'con', 'y', 'a', 'su', 'en', 'al', 'se', 'por', 'como', 'mas', 'más', 'segun', 'según', 'the', 'debe', 'debes', 'siguiente', 'siguientes', 'tanda', 'orden', 'primero', 'segundo', 'tercero', 'lee', 'leer', 'verifica', 'verificar', 'completa', 'completar', 'cierra', 'cerrar', 'interfaz', 'interfaces', 'operativa', 'operativas', 'operativo', 'frontend', 'panel', 'paneles', 'store', 'stores', 'mqtt', 'uimodule', 'manifest', 'svelte', 'trío', 'trio']);
+    const t = String(task || '');
+    // Normaliza la task para el matching: ñ→n, tildes fuera (los slugs del
+    // sistema son ASCII). Sin esto, "construcción" se cortaba en "construcci"
+    // (la ñ rompía el regex) y escapaba la stop-list → slug basura.
+    const tn = t.toLowerCase()
+      .replace(/ñ/g, 'n')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    // SEÑAL 1 (la fiable): el nombre del módulo ENTRE PARÉNTESIS tras el ID de
+    // hoja — el patrón canónico de las tasks del chat es "hoja H-01 (config)".
+    // El paréntesis gana SIEMPRE sobre la heurística de longitud: es el nombre
+    // que el chat escribió explícitamente (lección: "b" escribió el módulo como
+    // plan-construccion porque el token del archivo de referencia era más largo).
+    const paren = tn.match(/\(\s*([a-z][a-z0-9-]{2,40})\s*\)/);
+    if (paren && !stop.has(paren[1])) {
+      return paren[1];
+    }
+    // SEÑAL 2: el token no-stopword MÁS LARGO (heurística original de respaldo).
+    const tokens = tn.match(/[a-z][a-z0-9-]{2,40}/g) || [];
+    // Descarta IDs de hoja (h-01, h-02…), rutas de archivo y basura de respaldo.
+    const candidatos = tokens.filter(x => !stop.has(x) && x.length > 3 && !/^\d+$/.test(x) && !/^h-\d+$/.test(x));
     if (candidatos.length === 0) return pipelineName;
     return candidatos.sort((a, b) => b.length - a.length)[0];
   }

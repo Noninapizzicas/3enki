@@ -281,3 +281,13 @@ test('motor: onLlmCompleteResponse propaga finish_reason + tokens (la verdad del
   assert.equal(resuelto.finish_reason, 'length');
   assert.equal(resuelto.tokens.total, 300);
 });
+
+// ── MOTOR v3 · _resolverSlug: el nombre del módulo sale del paréntesis de la hoja ──
+test('motor: _resolverSlug prioriza el paréntesis de la hoja (H-01 (config) → config, no plan-construccion)', () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  const task = 'Construir la hoja H-01 (config) de la Fase 0 - Cimientos según el plan de construcción en /esquemas/plan-construccion.md. Es la hoja de configuración base del sistema: leer la especificación de H-01 del plan, crear el módulo de config con su module.json e index.js (estructura de configuración, defaults, validación), siguiendo el patrón de módulo real. No construir más hojas — solo H-01.';
+  assert.equal(m._resolverSlug(task, 'construir-modulos'), 'config');
+  // Regresión: sin paréntesis, el token largo de módulo sigue ganando
+  assert.equal(m._resolverSlug('Construir el módulo gestor-de-suscriptores de la Etapa 2 según el plan', 'construir-modulos'), 'gestor-de-suscriptores');
+});

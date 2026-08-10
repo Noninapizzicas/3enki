@@ -42,6 +42,16 @@ function _contenidoMin(rel, entregable, mundo) {
 }
 
 function _apiReal(rel, _entregable, mundo) {
+  // Regla de CÓDIGO: comprueba el patrón de módulo Enki (require _shared +
+  // _atender 4 args) — SOLO aplica a archivos de código JS. Un module.json
+  // (manifiesto puro) o un .ts/.svelte (frontend) NUNCA puede pasar esta
+  // regla: es como pedirle al archivo de configuración que tenga código.
+  // Lección en vivo: la F4 (construir-modulos, multi-archivo index.js +
+  // module.json) fallaba con "usa _shared: false" aplicada al module.json —
+  // el index.js pasaba api_real pero el JSON lo bloqueaba.
+  if (!/\.(js|mjs|cjs)$/i.test(String(rel))) {
+    return { regla: 'api_real', ok: true, detalle: `api_real es regla de código — no aplica a ${String(rel).split('/').pop()} (su presencia la cubre 'existe')` };
+  }
   if (!mundo || typeof mundo.leer !== 'function') {
     return { regla: 'api_real', ok: false, detalle: 'puerto leer() no disponible' };
   }

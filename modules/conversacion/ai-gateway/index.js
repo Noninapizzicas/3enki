@@ -2485,9 +2485,40 @@ class AiGatewayModule extends BaseModule {
     const request_id = crypto.randomUUID();
     // code.orquestar puede durar hasta su timeout interno (max 60s) -> el
     // dispatch debe esperar mas que el default de 15s o lo cortaria antes.
-    const timeoutMs = toolName === 'invoke_agent' ? 150000
-      : toolName === 'code.orquestar' ? 65000
+    // invoke_agent: el timeout NO es fijo — se deriva del PRESUPUESTO real del
+    // pipeline (generacion_timeout_ms × generaciones_por_paso + margen del
+    // reflejo/JEFE). Lección en vivo: el pipeline adaptar-a-enki tardó 181s
+    // (21K tokens de salida) y el timeout fijo de 150s lo cortaba ANTES de que
+    // el agente terminara → el chat reportaba "timeout" con el agente vivo y
+    // la bitácora verificada después. Fallback generoso si el registro no
+    // responde (300s) — mejor esperar de más que matar a un agente que trabaja.
+    let timeoutMs = toolName === 'code.orquestar' ? 65000
+      : toolName === 'invoke_agent' ? 300000
       : (this.config.tool_timeout_ms || 15000);
+    if (toolName === 'invoke_agent' && args?.agent_name) {
+      try {
+        // Consulta el presupuesto REAL del pipeline (subscribe+publish manual,
+        // el mismo patrón del dispatch de abajo — el gateway no tiene _pedir).
+        const pipeRid = crypto.randomUUID();
+        const pipeTimeout = setTimeout(() => { if (unsubPipe) unsubPipe(); }, 8000);
+        let unsubPipe = this.eventBus.subscribe('pipeline.obtener.response', (ev) => {
+          const d = (ev && typeof ev === 'object' && 'data' in ev) ? ev.data : ev;
+          if (!d || d.request_id !== pipeRid) return;
+          clearTimeout(pipeTimeout);
+          if (unsubPipe) unsubPipe();
+          const presu = d?.pipeline?.presupuesto;
+          if (presu) {
+            const porPaso = Number(presu.generacion_timeout_ms) || 120000;
+            const generaciones = Number(presu.generaciones_por_paso) || 3;
+            // techo del pipeline + margen para reflejo/JEFE/commit
+            timeoutMs = porPaso * generaciones + 30000;
+          }
+        });
+        this.eventBus.publish('pipeline.obtener.request', {
+          request_id: pipeRid, nombre: args.agent_name
+        });
+      } catch (_) { /* fallback 300s */ }
+    }
     return new Promise((resolve, reject) => {
       let unsub = null;
       const timeout = setTimeout(() => {

@@ -312,3 +312,25 @@ test('motor: enRepo usa git log (commit real), no git ls-files (staging)', () =>
   // archivo inexistente → false (antes: ls-files también daba false, ok)
   assert.equal(enRepo('zzz-no-existe-xyz/index.js'), false);
 });
+
+// ── MOTOR v3 · ADAPTADOR X→Enki: rebanadas por tema + inventario ─────────────
+test('motor: _buscarRebanadas encuentra el ADN del tema (adaptador X→Enki)', () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  // El adaptador SIEMPRE inyecta las rebanadas base de patrón
+  const base = ['patron/modulo-real.md', 'patron/modulo-hibrido.md'];
+  // + las del tema (pizzepos para el dominio de venta/comercio)
+  const tema = m._buscarRebanadas('carta digital menu venta pos');
+  const rutas = [...new Set([...base, ...tema])];
+  assert.ok(rutas.includes('patron/modulo-real.md'), 'base de patrón incluida');
+  assert.ok(rutas.length >= 2, 'hay rebanadas inyectadas');
+});
+test('motor: _inventarioModulos lista lo que YA existe (el adaptador reutiliza)', () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  m.modulesDir = '/home/admin/3enki/modules';
+  const inv = m._inventarioModulos();
+  assert.ok(inv.length > 50, 'inventario poblado');
+  assert.ok(inv.includes('_shared'), '_shared (base-module) existe');
+  assert.ok(inv.includes('filesystem'), 'filesystem existe');
+});

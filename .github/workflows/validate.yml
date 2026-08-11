@@ -56,6 +56,9 @@ jobs:
       - name: Run unit tests (conversacion/ai-gateway — cajones-context-partitioning v1.0.0)
         run: npm run test:ai-gateway-cajones
 
+      - name: Run unit tests (motor de agentes — validador · JEFE · conversor)
+        run: npm run test:motor
+
       - name: Run unit tests (core/modules/loader — tool bus auto-subscription)
         run: npm run test:core-module-loader-tool-bus
 

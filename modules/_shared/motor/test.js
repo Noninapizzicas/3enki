@@ -495,23 +495,57 @@ test('motor: _resolverSlug prioriza el paréntesis de la hoja (H-01 (config) →
 
 // ── MOTOR v3 · enRepo verifica COMMIT REAL, no staging ───────────────────────
 test('motor: enRepo usa git log (commit real), no git ls-files (staging)', () => {
-  // El closure enRepo del mundo: git log -- <path> solo devuelve algo si un
-  // commit REAL toca el archivo (lección "b": git add sin commit dejaba el
-  // archivo en staging y ls-files daba ok:true con el commit fallido).
+  // El closure enRepo del mundo REAL (antes el test se lo copiaba, así que
+  // podía pasar mientras el módulo derivaba): git log -- <path> solo devuelve
+  // algo si un commit REAL toca el archivo (lección "b": git add sin commit
+  // dejaba el archivo en staging y ls-files daba ok:true con el commit fallido).
+  // Repo de usar y tirar: el test no depende del checkout que lo corre (el de
+  // CI es superficial — git log -- <path> solo vería el fichero si el commit de
+  // HEAD lo toca), y así puede montar el caso que IMPORTA: staged ≠ commiteado.
+  // Antes este test se copiaba el closure y lo apuntaba a /home/admin/3enki:
+  // verde en el VPS, rojo en cualquier clon, y ciego a lo que hiciera el módulo.
   const { execSync } = require('child_process');
-  const repoDir = '/home/admin/3enki';
-  function enRepo(rel) {
-    if (rel.startsWith('storage/')) return undefined;
-    const repoPath = rel.startsWith('frontend/') ? rel : `modules/${rel}`;
-    try {
-      const out = execSync(`git -C ${repoDir} log --oneline -1 -- ${repoPath} 2>/dev/null`, { stdio: 'pipe' });
-      return out.toString().trim().length > 0;
-    } catch { return undefined; }
+  const os = require('os'), fsn = require('fs'), pathn = require('path');
+  const repo = fsn.mkdtempSync(pathn.join(os.tmpdir(), 'enki-enrepo-'));
+  const git = (cmd) => execSync(`git -C ${repo} ${cmd}`, { stdio: 'pipe' });
+  try {
+    git('init -q');
+    fsn.mkdirSync(pathn.join(repo, 'modules', 'commiteado'), { recursive: true });
+    fsn.writeFileSync(pathn.join(repo, 'modules', 'commiteado', 'index.js'), '// vivo\n');
+    git('add -A');
+    git('-c user.name=T -c user.email=t@t commit -q -m "modulo commiteado"');
+    // El segundo solo se STAGEA: git add sin commit. La lección "b" en vivo.
+    fsn.mkdirSync(pathn.join(repo, 'modules', 'solo-staged'), { recursive: true });
+    fsn.writeFileSync(pathn.join(repo, 'modules', 'solo-staged', 'index.js'), '// a medias\n');
+    git('add -A');
+
+    const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+    const m = new EjecutorMotorModule();
+    m.repoDir = repo;
+    const { enRepo } = m._mundo(null);
+
+    assert.equal(enRepo('commiteado/index.js'), true, 'commit real → en repo');
+    assert.equal(enRepo('solo-staged/index.js'), false, 'staging NO es estar en el repo (ls-files mentía aquí)');
+    assert.equal(enRepo('zzz-no-existe-xyz/index.js'), false);
+    assert.equal(enRepo('storage/esquemas/plan-construccion.md'), undefined, 'storage/ no se verifica contra el repo');
+  } finally {
+    fsn.rmSync(repo, { recursive: true, force: true });
   }
-  // archivo real commiteado en el repo
-  assert.equal(enRepo('_shared/motor/test.js'), true);
-  // archivo inexistente → false (antes: ls-files también daba false, ok)
-  assert.equal(enRepo('zzz-no-existe-xyz/index.js'), false);
+});
+
+test('motor: repoDir tiene default de prod y costura ENKI_REPO_DIR', () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  // El default apunta al CLON con git del VPS a propósito: el código corre desde
+  // /opt/enki, que el deploy rsyncea excluyendo .git — no es un repo, así que
+  // derivarlo de __dirname dejaría a _commitar sin sitio donde commitear.
+  assert.equal(new EjecutorMotorModule().repoDir, '/home/admin/3enki');
+  const previo = process.env.ENKI_REPO_DIR;
+  process.env.ENKI_REPO_DIR = '/tmp/otro-repo';
+  try {
+    assert.equal(new EjecutorMotorModule().repoDir, '/tmp/otro-repo');
+  } finally {
+    if (previo === undefined) delete process.env.ENKI_REPO_DIR; else process.env.ENKI_REPO_DIR = previo;
+  }
 });
 
 // ── MOTOR v3 · ADAPTADOR X→Enki: rebanadas por tema + inventario ─────────────
@@ -529,7 +563,7 @@ test('motor: _buscarRebanadas encuentra el ADN del tema (adaptador X→Enki)', (
 test('motor: _inventarioModulos lista lo que YA existe (el adaptador reutiliza)', () => {
   const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
   const m = new EjecutorMotorModule();
-  m.modulesDir = '/home/admin/3enki/modules';
+  // Sin override de modulesDir: el constructor ya lo resuelve desde __dirname.
   const inv = m._inventarioModulos();
   assert.ok(inv.length > 50, 'inventario poblado');
   assert.ok(inv.includes('_shared'), '_shared (base-module) existe');

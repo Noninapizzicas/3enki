@@ -39,7 +39,12 @@ class EjecutorMotorModule extends BaseModule {
     this.dataDir = path.resolve(__dirname, '../../../data');
     // __dirname = modules/conversacion/ai-agent-framework-v3 → '../..' = modules/ del sistema.
     this.modulesDir = path.resolve(__dirname, '../..');
-    this.repoDir = '/home/admin/3enki';
+    // OJO: repoDir NO se deriva de __dirname como los de arriba. El código corre
+    // desde /opt/enki, donde el deploy rsyncea EXCLUYENDO .git — o sea, el
+    // directorio de ejecución no es un repo. enRepo y _commitar necesitan el
+    // CLON con git del VPS, que es otro sitio. Por eso el default es un path de
+    // máquina; ENKI_REPO_DIR lo mueve (tests, otra máquina, otro layout).
+    this.repoDir = process.env.ENKI_REPO_DIR || '/home/admin/3enki';
     this.eventBus = null;
     this.logger = null;
     this.moduleLoader = null;

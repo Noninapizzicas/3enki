@@ -23,6 +23,14 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # Los unitarios del motor van ANTES del drift a propósito: validate:ci
+      # lleva rojo en main desde hace tiempo (prisma sin description, los
+      # motor-* extendiendo ModuloHibridoReflejo, mqtt en piel-del-sistema) y
+      # corta el job en el paso 3. Un test colocado detrás de esa puerta no
+      # guarda nada — nunca llega a ejecutarse. Delante, sí.
+      - name: Run unit tests (motor de agentes — validador · JEFE · conversor)
+        run: npm run test:motor
+
       - name: Validate architecture (8 contracts vs baseline)
         run: npm run validate:ci
 
@@ -55,9 +63,6 @@ jobs:
 
       - name: Run unit tests (conversacion/ai-gateway — cajones-context-partitioning v1.0.0)
         run: npm run test:ai-gateway-cajones
-
-      - name: Run unit tests (motor de agentes — validador · JEFE · conversor)
-        run: npm run test:motor
 
       - name: Run unit tests (core/modules/loader — tool bus auto-subscription)
         run: npm run test:core-module-loader-tool-bus

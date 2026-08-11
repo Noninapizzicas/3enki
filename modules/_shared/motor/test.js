@@ -241,6 +241,60 @@ test('extraerEspina: la prosa con guiones NO produce hojas (el regex viejo sí l
 // ── El PUENTE F3b→F4: las hojas del plan (orquestador) ──────────────────────
 const PROSA_DEL_PATRON = 'Sistema event-driven: cada isla es un micro-servicio con base-module y single-writer.\nHojas: banco-ideas (custodio) y pipeline-semanal (micro-agente).';
 
+// ── FASE 4: el reflejo LEE la hoja del plano (antes era un no-op) ───────────
+const HOJA = {
+  slug: 'banco-ideas', forma: 'custodio', accion: 'CONSTRUIR',
+  depende_de: ['database-manager'],
+  subscribes: ['banco.registrar.request'],
+  publishes: ['banco.idea.registrada', 'banco.registrar.failed'],
+  proyecciones_internas: ['_priorizar']
+};
+const PLANO = `# Plano\n\n\`\`\`json enki-plan\n${JSON.stringify({ hojas: [HOJA, { slug: 'pipeline-semanal', forma: 'micro-agente' }] })}\n\`\`\``;
+
+test('motor: _hojaDelPlan encuentra la hoja por slug y resume su contrato', () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  const { hoja, nota } = m._hojaDelPlan(PLANO, 'banco-ideas');
+  assert.deepEqual(hoja.publishes, ['banco.idea.registrada', 'banco.registrar.failed']);
+  assert.match(nota, /forma custodio · 1 subscribes · 2 publishes/);
+});
+
+test('motor: _hojaDelPlan sin plano / sin espina / sin la hoja → degrada honesto, no revienta', () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  assert.match(m._hojaDelPlan(null, 'x').nota, /plano ausente/);
+  assert.match(m._hojaDelPlan('# Plano en prosa', 'x').nota, /no lleva espina/);
+  const ajena = m._hojaDelPlan(PLANO, 'otra-hoja');
+  assert.equal(ajena.hoja, null);
+  assert.match(ajena.nota, /no declara 'otra-hoja' \(declara: banco-ideas, pipeline-semanal\)/);
+});
+
+// ── FASE 3b/4: la rebanada BASE entra holgada; el recorte se declara ────────
+test('motor: _leerRebanadas — la base entra holgada y el recorte va declarado', () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  const base = ['patron/modulo-hibrido.md'];
+  const [comoBase] = m._leerRebanadas(base, base);
+  const [comoTema] = m._leerRebanadas(base, []);
+  assert.ok(comoBase.length > 10000, `la base debe entrar holgada (entró ${comoBase.length})`);
+  assert.ok(comoBase.length > comoTema.length * 2, 'la base entra bastante más que el tema');
+  assert.match(comoBase, /\[rebanada recortada: \d+ de \d+ chars\]/, 'el recorte se declara');
+});
+
+test('motor: _leerRebanadas — rebanada corta entra ENTERA y sin nota de recorte', () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  const [entera] = m._leerRebanadas(['patron/modulo-real.md'], ['patron/modulo-real.md']);
+  assert.doesNotMatch(entera, /rebanada recortada/);
+  assert.match(entera, /Lo que NO tiene/, 'la sección final ya no se pierde en el corte');
+});
+
+test('motor: _leerRebanadas — ruta inexistente se salta sin romper', () => {
+  const EjecutorMotorModule = require('../../conversacion/ai-agent-framework-v3/index.js');
+  const m = new EjecutorMotorModule();
+  assert.deepEqual(m._leerRebanadas(['patron/no-existe.md'], []), []);
+});
+
 test('orquestador: _hojasDelPlan lee la ESPINA — solo las hojas declaradas', () => {
   const ProcesoNegocio = require('../../proceso-negocio/index.js');
   const m = new ProcesoNegocio();

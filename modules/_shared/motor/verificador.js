@@ -65,7 +65,15 @@ function _apiReal(rel, _entregable, mundo) {
   }
   const contenido = mundo.leer(rel) || '';
   const llamaShared = REGLA_API_REAL.test(contenido);
-  const atiende4 = /_atender\s*\(\s*evento\s*,\s*contexto\s*,\s*respuesta\s*,\s*siguiente\s*\)|_atender\s*\(\s*\w+\s*,\s*\w+\s*,\s*\w+\s*,\s*\w+\s*\)/.test(contenido);
+  // El patrón REAL de _atender en los módulos vivos (estados, pizzepos):
+  //   this._atender(e, 'crear', 'estados.crear.response', d => this._crear(d))
+  // 4 argumentos donde el 2º es un STRING (op), el 3º un STRING (response event)
+  // y el 4º una ARROW FUNCTION. El regex antiguo (\w+ entre comas) NO matcheaba
+  // ni las comillas ni 'd => ...' → rechazaba código VÁLIDO copiado del patrón
+  // real (lección 11-ago: banco-ideas generado por la F4, 'usa _shared: true,
+  // _atender 4 args: false' con el código correcto en disco). Solo exige 4
+  // argumentos con cualquier contenido razonable.
+  const atiende4 = /_atender\s*\(\s*[^,()]+\s*,\s*[^,()]+\s*,\s*[^,()]+\s*,\s*[^)]+\)/.test(contenido);
   const ok = llamaShared && atiende4;
   return {
     regla: 'api_real',

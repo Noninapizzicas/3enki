@@ -143,7 +143,14 @@
       "ai-gateway-poc",
       "cocina-poc",
       "notas-poc",
-      "bienvenida-tienda"
+      "bienvenida-tienda",
+      "ai-gateway",
+      "prompt-builder",
+      "ai-agent-framework-v3",
+      "agent-observer",
+      "memory-conversation-summary",
+      "memory-rag",
+      "memory-user-profile"
     ]
   },
   "observability": {

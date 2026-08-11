@@ -1,0 +1,38 @@
+{
+  "name": "hermes-bridge",
+  "version": "1.0.0",
+  "description": "Dispatcher de tools para Hermes — extrae _executeToolCall de ai-gateway como servicio HTTP autenticado. Hermes (Python) llama POST /modules/hermes-bridge/execute con Bearer token; el bridge despacha via ruta directa (handler en módulo) o fallback por bus.",
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/execute",
+      "handler": "handleExecute",
+      "description": "Ejecuta una tool de Enki por nombre. Auth: Bearer token (shared secret). Body: { tool_name, args, context? }"
+    },
+    {
+      "method": "GET",
+      "path": "/catalog",
+      "handler": "handleCatalog",
+      "description": "Catálogo de tools disponibles en formato OpenAI function-calling. Auth: Bearer token."
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealth",
+      "description": "Health check del bridge (sin auth)."
+    }
+  ],
+  "subscribes": [
+    "core.started"
+  ],
+  "provides": {
+    "apis": [],
+    "hooks": []
+  },
+  "config": {
+    "token_path": "data/.hermes-bridge-token",
+    "tool_timeout_ms": 15000,
+    "tool_timeout_code_ms": 65000,
+    "tool_timeout_agent_ms": 300000
+  }
+}

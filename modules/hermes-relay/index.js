@@ -1,12 +1,15 @@
 'use strict';
 
 const crypto = require('crypto');
+const fs = require('fs');
 const http = require('http');
 const https = require('https');
+const path = require('path');
 
 const BaseModule = require('../_shared/base-module');
 
 const DB_TIMEOUT_MS = 10000;
+const CLAUDE_MD_TTL_MS = 60000;
 
 class HermesRelayModule extends BaseModule {
   constructor() {
@@ -16,6 +19,8 @@ class HermesRelayModule extends BaseModule {
 
     this.config = {};
     this.pendingDb = new Map();
+    this._claudeMdCache = null;
+    this._claudeMdLoadedAt = 0;
   }
 
   async onLoad(core) {
@@ -24,10 +29,13 @@ class HermesRelayModule extends BaseModule {
     this.metrics = core.metrics || null;
     this.config = this._loadConfig(core);
 
+    this._claudeMdCache = this._readClaudeMd();
+
     this.logger?.info('hermes-relay.loaded', {
       hermes_url: this.config.hermes_url,
       hermes_model: this.config.hermes_model,
-      context_window: this.config.context_window
+      context_window: this.config.context_window,
+      claude_md: this._claudeMdCache ? `${this._claudeMdCache.length} chars` : 'not found'
     });
   }
 
@@ -38,8 +46,28 @@ class HermesRelayModule extends BaseModule {
       hermes_model: mc.hermes_model || process.env.HERMES_MODEL || 'hermes',
       hermes_api_key: mc.hermes_api_key || process.env.HERMES_API_KEY || '',
       context_window: mc.context_window || 40,
-      request_timeout_ms: mc.request_timeout_ms || 300000
+      request_timeout_ms: mc.request_timeout_ms || 300000,
+      claude_md_path: mc.claude_md_path || path.resolve(process.cwd(), 'CLAUDE.md')
     };
+  }
+
+  // ── CLAUDE.md como system prompt (cache con TTL) ──────────────
+
+  _readClaudeMd() {
+    try {
+      const content = fs.readFileSync(this.config.claude_md_path, 'utf8');
+      this._claudeMdLoadedAt = Date.now();
+      return content;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  _getClaudeMd() {
+    if (Date.now() - this._claudeMdLoadedAt > CLAUDE_MD_TTL_MS) {
+      this._claudeMdCache = this._readClaudeMd();
+    }
+    return this._claudeMdCache;
   }
 
   // ── DB helper (mismo patrón que chat-io) ──────────────────────
@@ -83,7 +111,7 @@ class HermesRelayModule extends BaseModule {
       correlation_id, conversation_id, project_id,
       user_id, channel, channel_context,
       message_id, user_message,
-      settings, page_id, attachments, intencion
+      settings, page_id, page_context, attachments, intencion
     } = data;
 
     if (!project_id || !conversation_id || !user_message) {
@@ -97,7 +125,8 @@ class HermesRelayModule extends BaseModule {
 
     try {
       const history = await this._loadHistory(project_id, conversation_id, settings?.context_window);
-      const messages = this._formatMessages(history, user_message);
+      const ctx = { project_id, conversation_id, page_id, page_context };
+      const messages = this._formatMessages(history, user_message, ctx);
 
       const result = await this._callHermes(messages);
 
@@ -169,13 +198,52 @@ class HermesRelayModule extends BaseModule {
     return rows.slice(-(cw));
   }
 
-  _formatMessages(history, currentUserMessage) {
-    const messages = history.map(row => ({
-      role: row.role,
-      content: row.content
-    }));
+  _formatMessages(history, currentUserMessage, ctx) {
+    const messages = [];
+
+    const systemMsg = this._buildSystemMessage(ctx);
+    if (systemMsg) {
+      messages.push({ role: 'system', content: systemMsg });
+    }
+
+    for (const row of history) {
+      messages.push({ role: row.role, content: row.content });
+    }
     messages.push({ role: 'user', content: currentUserMessage });
     return messages;
+  }
+
+  _buildSystemMessage(ctx) {
+    const sections = [];
+
+    const claudeMd = this._getClaudeMd();
+    if (claudeMd) {
+      sections.push(claudeMd);
+    }
+
+    const activeCtx = {
+      project_id: ctx.project_id,
+      conversation_id: ctx.conversation_id,
+      page_id: ctx.page_id || null
+    };
+    const pageContext = ctx.page_context;
+    if (pageContext && typeof pageContext === 'object') {
+      const { vista_frontend, ...rest } = pageContext;
+      Object.assign(activeCtx, rest);
+    }
+    sections.push('CONTEXTO ACTIVO:\n' + JSON.stringify(activeCtx, null, 2));
+
+    if (pageContext?.vista_frontend && typeof pageContext.vista_frontend === 'object'
+        && Object.keys(pageContext.vista_frontend).length > 0) {
+      sections.push(
+        '# LO QUE EL USUARIO ESTA VIENDO (contexto silencioso)\n'
+        + 'Esto es lo que el usuario tiene EN PANTALLA ahora mismo. Usalo para NO preguntar lo que '
+        + 'ya esta a la vista. NO lo recites ni lo enumeres salvo que pregunte.\n'
+        + JSON.stringify(pageContext.vista_frontend, null, 2)
+      );
+    }
+
+    return sections.length > 0 ? sections.join('\n\n---\n\n') : null;
   }
 
   // ── HTTP a Hermes ─────────────────────────────────────────────

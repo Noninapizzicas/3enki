@@ -17,9 +17,23 @@
 'use strict';
 
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
+const { extraerEspina } = require('../_shared/motor/verificador');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+
+// Vocabulario del PATRÓN (no hojas del negocio): palabras con guion que la
+// doctrina del adaptador escribe y el plano puede repetir por eco. Solo aplica
+// al fallback de planos SIN espina — con espina, las hojas van declaradas.
+// Los slugs de módulos REALES no entran aquí: si existen en disco, cuentan.
+const VOCABULARIO_DEL_PATRON = new Set([
+  'event-driven', 'micro-servicio', 'micro-agente', 'single-writer',
+  'base-module', 'pos-persistencia', 'modulo-hibrido', 'modulo-hibrido-reflejo',
+  'modulo-real', 'request-response', 'plan-construccion', 'enki-plan',
+  'adaptar-a-enki', 'construir-modulos', 'construir-interfaz', 'diseno-oop',
+  'kebab-case', 'json-schema', 'state-machine', 'dead-letter',
+  'circuit-breaker', 'correlation-id'
+]);
 
 // Ruta del árbol de módulos del SISTEMA (no del proyecto). El gate de la FASE 4
 // verifica aquí que el módulo construido EXISTE Y CARGA — no se fía del reporte
@@ -215,8 +229,13 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       const r = await this._rpc('fs.read.request', { project_id, path: 'esquemas/plan-construccion.md' });
       const contenido = (r && (r.content || r.data?.content)) || '';
       if (!contenido) return { total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, con_interfaz_esquematizada: 0, con_interfaz_construida: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, faltan_por_interfaz_esquematizada: 0, faltan_por_interfaz_construida: 0, slugs: [] };
-      // Extraer slugs del plan: tokens tipo modulo (radar-adquisicion, config-pesos-fuente…)
-      const slugs = [...new Set((contenido.match(/[a-z][a-z0-9]*(?:-[a-z0-9]+)+/g) || []).filter(s => s.length > 3))];
+      // Las hojas salen de la ESPINA del plano (bloque ```json enki-plan```, el
+      // contrato que el adaptador declara y el JEFE verifica). El fallback es
+      // cosechar kebab-case del texto — lo que se hacía siempre — y por eso
+      // 'event-driven', 'base-module' o 'micro-agente' entraban como hojas a
+      // construir: fantasmas que nunca existen en disco, así que
+      // faltan_por_construir jamás bajaba a 0 y el rail no llegaba a completado.
+      const slugs = this._hojasDelPlan(contenido);
       let construidos = 0, con_skill = 0, con_interfaz = 0, con_interfaz_esquematizada = 0, con_interfaz_construida = 0;
       for (const slug of slugs) {
         const dirModulo = this._buscarModulo(slug);
@@ -280,6 +299,24 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     } catch (_) {
       return false;
     }
+  }
+
+  // ── LAS HOJAS DEL PLAN (el contrato, con red de seguridad) ────────────────
+  // 1º la ESPINA (```json enki-plan``` → hojas[].slug): lo que el adaptador
+  //    DECLARÓ y el JEFE verificó (regla plan_acoplable).
+  // 2º si el plano es de los viejos (sin espina): cosecha kebab-case del texto,
+  //    filtrando el vocabulario del propio patrón — 'event-driven' o
+  //    'base-module' son doctrina, no hojas a construir.
+  _hojasDelPlan(contenido) {
+    const espina = extraerEspina(contenido);
+    if (espina && Array.isArray(espina.hojas)) {
+      const declarados = espina.hojas
+        .map(h => h && typeof h.slug === 'string' ? h.slug.trim() : null)
+        .filter(s => s && !s.includes('/'));
+      if (declarados.length) return [...new Set(declarados)];
+    }
+    return [...new Set((contenido.match(/[a-z][a-z0-9]*(?:-[a-z0-9]+)+/g) || [])
+      .filter(s => s.length > 3 && !VOCABULARIO_DEL_PATRON.has(s)))];
   }
 
   // Localiza el directorio de un módulo: modules/<slug>/ o anidado

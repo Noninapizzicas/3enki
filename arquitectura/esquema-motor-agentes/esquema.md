@@ -26,6 +26,9 @@ MOTOR DE AGENTES
 │                                                  (estructura/tamaño/campos) → corregir o seguir
 ├─ P4 · VERIFICADOR DE ENTREGABLE ...... REFLEJO    el JEFE: reglas contra el MUNDO REAL
 │   (el JEFE)                                       al final; verificado:false = veredicto, jamás éxito
+│                                                  reglas: existe · contenido_min · api_real ·
+│                                                  requires_resueltos · plan_acoplable ·
+│                                                  en_repo · interfaz_decidida · interfaz_operativa
 ├─ P5 · PUERTO DE GENERACIÓN .......... MICRO-AGENTE el ÚNICO fuzzy: genera contenido
 │                                                  (instrucción + contexto → salida cruda);
 │                                                  NUNCA persiste, NUNCA ejecuta, NUNCA decide
@@ -45,6 +48,8 @@ declarar(pipeline)            → P2 registro (el qué)
 ejecutar(proyecto, pipeline)  → P1 ejecutor
   │
   ├─ paso REFLEJO  → P1 ejecuta el determinista → P6 registra → P8 proyecta
+  │                  (leer_plan deja la hoja del plano en el contexto del
+  │                   siguiente fuzzy: el reflejo LEE, el fuzzy PIENSA)
   ├─ paso FUZZY    → P5 genera (instrucción+contexto)
   │                  → P10 convierte (crudo → canónico)
   │                  → P3 valida → ¿corregir? → reintento QUIRÚRGICO de P5 (máx. presupuesto)
@@ -65,6 +70,10 @@ ejecutar(proyecto, pipeline)  → P1 ejecutor
    como corrección).
 3. **El éxito se gana contra el mundo real** — el JEFE (P4) lee el mundo; nadie
    declara éxito sin pasar. verificado:false = veredicto, no promesa.
+   El mundo se RESUELVE, no se lee por encima: `requires_resueltos` sigue cada
+   require relativo hasta el archivo (lección banco-ideas, 11-ago: `api_real`
+   veía el texto `_shared/` y selló verificado:true un módulo que reventaba al
+   cargar), y `plan_acoplable` exige que el plano lleve su espina tipada.
 4. **Todo paso queda escrito** — la bitácora (P6) es la memoria verificable; sin
    paso escrito no hay progreso; la vitrina (P8) y el reanudador (P9) viven de ella.
 5. **Lo determinista no miente** — 10 piezas, 1 fuzzy: el motor es ~90% reflejo.
@@ -73,6 +82,8 @@ ejecutar(proyecto, pipeline)  → P1 ejecutor
 
 ```
 leer(proyecto, ruta)                          → el mundo real entra al pipeline
+leer_plan(proyecto, plan, slug) → hoja        → el REFLEJO lee el contrato de la hoja
+                                                 y se lo pasa al fuzzy que viene detrás
 escribir(proyecto, ruta, contenido)           → el pipeline toca el mundo real
 generar(instruccion, contexto) → salida_cruda → el ÚNICO puerto fuzzy (P5)
 convertir(salida_cruda) → salida_canonica     → la frontera (P10)

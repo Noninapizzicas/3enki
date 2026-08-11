@@ -13,12 +13,20 @@
  *   mundo.enRepo(rel)          → boolean (si el sitio lo soporta; si el puerto
  *                                 no existe, la regla en_repo NO bloquea)
  *
- * Reglas (array de strings): 'existe' (default) · 'contenido_min' · 'api_real' · 'en_repo'
+ * Reglas (array de strings): 'existe' (default) · 'contenido_min' · 'api_real' ·
+ * 'requires_resueltos' · 'en_repo'
  *
  * Devuelve veredicto: { verificado, motivo, tipo, path, reglas: [{regla, ok, detalle}] }
  */
 
+const path = require('path');
+
 const REGLA_API_REAL = /require\s*\(\s*['"]\.\.\/\.\.\/_shared|require\s*\(\s*['"]\.\.\/\.\.\/_shared\/|_shared\//;
+
+// Requires RELATIVOS ('./x', '../_shared/y') — los bare specifiers ('fs',
+// 'mqtt') los resuelve node/npm, no el mundo del entregable.
+const REGLA_REQUIRE_RELATIVO = /require\s*\(\s*['"](\.[^'"]*)['"]\s*\)/g;
+const EXTENSIONES_CANDIDATAS = ['', '.js', '.json', '.cjs', '.mjs', '/index.js'];
 
 function _existe(rel, _entregable, mundo) {
   const ok = !!(mundo && typeof mundo.existe === 'function' && mundo.existe(rel));
@@ -65,6 +73,46 @@ function _apiReal(rel, _entregable, mundo) {
     detalle: ok
       ? 'usa _shared y _atender con 4 args (patrón de módulo Enki)'
       : `patrón de módulo no completo (usa _shared: ${llamaShared}, _atender 4 args: ${atiende4})`
+  };
+}
+
+// Regla de CÓDIGO: cada require RELATIVO del archivo apunta a un destino que
+// EXISTE en el mundo. api_real solo mira el TEXTO ('_shared/' aparece → ok);
+// esta regla RESUELVE. Lección en vivo (banco-ideas, 2026-08-11): el módulo
+// hacía require('../_shared/modulo-hibrido-reflejo') — que existe y satisface
+// api_real — y también require('../_shared/prioridad') — que NO existe. El
+// JEFE lo selló verificado:true y se commiteó un módulo que revienta al
+// cargar. El texto no basta: el destino se resuelve o el veredicto es no.
+function _requiresResueltos(rel, _entregable, mundo) {
+  if (!/\.(js|mjs|cjs)$/i.test(String(rel))) {
+    return { regla: 'requires_resueltos', ok: true, detalle: `regla de código — no aplica a ${String(rel).split('/').pop()}` };
+  }
+  if (!mundo || typeof mundo.leer !== 'function' || typeof mundo.existe !== 'function') {
+    return { regla: 'requires_resueltos', ok: false, detalle: 'puertos leer()/existe() no disponibles' };
+  }
+  const contenido = mundo.leer(rel) || '';
+  const dir = path.posix.dirname(String(rel).replace(/\\/g, '/'));
+  const rotos = [];
+  let fuera = 0;
+  let vistos = 0;
+  for (const m of contenido.matchAll(REGLA_REQUIRE_RELATIVO)) {
+    const spec = m[1];
+    vistos++;
+    const destino = path.posix.normalize(path.posix.join(dir, spec));
+    // Destino por encima de la raíz del mundo (modules/): fuera del alcance
+    // del puerto → se declara, no bloquea (degradación honesta).
+    if (destino.startsWith('..')) { fuera++; continue; }
+    const resuelve = EXTENSIONES_CANDIDATAS.some(ext => mundo.existe(destino + ext));
+    if (!resuelve) rotos.push(spec);
+  }
+  const ok = rotos.length === 0;
+  const nota = fuera > 0 ? ` (${fuera} fuera de la raíz del mundo → no bloquean)` : '';
+  return {
+    regla: 'requires_resueltos',
+    ok,
+    detalle: ok
+      ? `${vistos} require relativos, todos resuelven${nota}`
+      : `require sin destino en disco: ${rotos.join(', ')} — el módulo revienta al cargar${nota}`
   };
 }
 
@@ -146,10 +194,85 @@ function _interfazOperativa(rel, entregable, mundo) {
   };
 }
 
+// FASE 3b — el PLANO DE ACOPLAMIENTO lleva ESPINA: un bloque ```json enki-plan
+// embebido en el markdown con las hojas tipadas. Sin espina, el plano es prosa
+// y el único puente hacia la FASE 4 es cosechar palabras con guion del texto
+// (que recoge 'event-driven' o 'base-module' como si fueran hojas a construir).
+// Con espina, el plan es CONTRATO: slug, forma, acción, dependencias y eventos.
+const FORMAS_CANONICAS = new Set(['reflejo', 'custodio', 'conversor', 'puente', 'micro-agente']);
+const ACCIONES_CANONICAS = new Set(['CONSTRUIR', 'ADAPTAR', 'REUTILIZAR']);
+const RE_SLUG_PLANO = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const RE_ESPINA = /```json\s+enki-plan\s*\n([\s\S]*?)```/;
+
+// Extrae la espina del markdown del plano. Exportada: la usan el JEFE y el
+// orquestador (proceso-negocio) — UNA sola lectura del contrato, no dos.
+function extraerEspina(contenido) {
+  const m = RE_ESPINA.exec(String(contenido || ''));
+  if (!m) return null;
+  try {
+    const espina = JSON.parse(m[1]);
+    return espina && typeof espina === 'object' ? espina : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function _planAcoplable(rel, _entregable, mundo) {
+  if (!mundo || typeof mundo.leer !== 'function') {
+    return { regla: 'plan_acoplable', ok: false, detalle: 'puerto leer() no disponible' };
+  }
+  const espina = extraerEspina(mundo.leer(rel));
+  if (!espina) {
+    return { regla: 'plan_acoplable', ok: false, detalle: 'sin espina: falta el bloque ```json enki-plan con hojas[] (o no es JSON válido) — el plano no es acoplable por la FASE 4' };
+  }
+  const hojas = Array.isArray(espina.hojas) ? espina.hojas : null;
+  if (!hojas || hojas.length === 0) {
+    return { regla: 'plan_acoplable', ok: false, detalle: 'la espina no declara hojas[]' };
+  }
+  const fallos = [];
+  hojas.forEach((h, i) => {
+    const donde = (h && h.slug) || `hoja[${i}]`;
+    if (!h || typeof h !== 'object') { fallos.push(`${donde}: no es objeto`); return; }
+    if (typeof h.slug !== 'string' || !RE_SLUG_PLANO.test(h.slug)) {
+      fallos.push(`${donde}: slug inválido (kebab-case plano, sin prefijo de vertical)`);
+    }
+    if (!FORMAS_CANONICAS.has(h.forma)) {
+      fallos.push(`${donde}: forma '${h.forma}' fuera de [${[...FORMAS_CANONICAS].join(', ')}]`);
+    }
+    if (!ACCIONES_CANONICAS.has(h.accion)) {
+      fallos.push(`${donde}: accion '${h.accion}' fuera de [${[...ACCIONES_CANONICAS].join(', ')}]`);
+    }
+    const subs = Array.isArray(h.subscribes) ? h.subscribes : [];
+    const pubs = Array.isArray(h.publishes) ? h.publishes : [];
+    if (subs.length === 0 && pubs.length === 0) {
+      fallos.push(`${donde}: sin subscribes ni publishes — una isla que ni escucha ni emite no se acopla al bus`);
+    }
+    if (h.depende_de !== undefined && !Array.isArray(h.depende_de)) {
+      fallos.push(`${donde}: depende_de debe ser array de slugs`);
+    }
+  });
+  // El orden de construcción, si se declara, cubre todas las hojas.
+  if (Array.isArray(espina.orden)) {
+    const enOrden = new Set(espina.orden);
+    const sinOrden = hojas.map(h => h && h.slug).filter(s => s && !enOrden.has(s));
+    if (sinOrden.length) fallos.push(`orden[] no cubre: ${sinOrden.join(', ')}`);
+  }
+  const ok = fallos.length === 0;
+  return {
+    regla: 'plan_acoplable',
+    ok,
+    detalle: ok
+      ? `espina válida: ${hojas.length} hojas tipadas (slug · forma · accion · eventos)`
+      : `espina con ${fallos.length} fallo(s): ${fallos.join(' | ')}`
+  };
+}
+
 const REGLAS = {
   existe: _existe,
   contenido_min: _contenidoMin,
   api_real: _apiReal,
+  requires_resueltos: _requiresResueltos,
+  plan_acoplable: _planAcoplable,
   en_repo: _enRepo,
   interfaz_decidida: _interfazDecidida,
   interfaz_operativa: _interfazOperativa
@@ -193,4 +316,4 @@ function verificar(entregable, mundo) {
   };
 }
 
-module.exports = { verificar };
+module.exports = { verificar, extraerEspina };

@@ -21,7 +21,12 @@ const crypto = require('crypto');
 const { execSync } = require('child_process');
 const BaseModule = require('../../_shared/base-module');
 
-const { verificar } = require('../../_shared/motor/verificador');
+const { verificar, extraerEspina } = require('../../_shared/motor/verificador');
+
+// Topes de inyección de rebanadas (chars). La BASE es el patrón que el agente
+// debe seguir → holgada; la del TEMA es contexto de dominio → acotada.
+const TOPE_REBANADA_BASE = 12000;
+const TOPE_REBANADA_TEMA = 4000;
 const { validar } = require('../../_shared/motor/validador');
 const { convertir } = require('../../_shared/motor/conversor');
 
@@ -454,6 +459,49 @@ class EjecutorMotorModule extends BaseModule {
   // frontmatter (id, dominio, resumen) — se rankean por coincidencia de
   // palabras del tema contra id/dominio/resumen/título. Devuelve las rutas
   // relevantes (máx N) para que el pipeline las lea — nunca todo el árbol.
+  // Lee las rebanadas y las deja listas para inyectar. La BASE es el patrón que
+  // el agente debe SEGUIR → entra holgada; la del TEMA es contexto de dominio →
+  // acotada. (patron/modulo-hibrido.md pesa 23.5K: con el tope único de 4.000
+  // llegaba el 17%, y patron/modulo-real.md se cortaba justo en "Lo que NO
+  // tiene", la sección que enseña lo que hay que evitar.) El recorte se DECLARA:
+  // el LLM sabe que la rebanada sigue, en vez de creer que la vio entera.
+  _leerRebanadas(rutas, base = []) {
+    const esBase = new Set(base);
+    return rutas.map(r => {
+      try {
+        const abs = path.join(__dirname, '..', '..', '..', 'arquitectura', 'cabecera', r);
+        const entera = fs.readFileSync(abs, 'utf8');
+        const tope = esBase.has(r) ? TOPE_REBANADA_BASE : TOPE_REBANADA_TEMA;
+        const texto = entera.slice(0, tope);
+        const nota = entera.length > tope
+          ? `\n\n[rebanada recortada: ${texto.length} de ${entera.length} chars]`
+          : '';
+        return `### REBANADA: ${r}\n${texto}${nota}`;
+      } catch { return null; }
+    }).filter(Boolean);
+  }
+
+  // La HOJA del plano (FASE 3b) que esta ejecución va a construir: se busca por
+  // slug en la espina. Devuelve el contrato y la nota para la bitácora — sin
+  // I/O, para que el reflejo que la usa quede fino y el test la alcance.
+  _hojaDelPlan(contenidoPlan, slug) {
+    if (!contenidoPlan) {
+      return { hoja: null, nota: 'plano ausente — se construye con el contrato de la task' };
+    }
+    const espina = extraerEspina(contenidoPlan);
+    if (!espina || !Array.isArray(espina.hojas)) {
+      return { hoja: null, nota: 'el plano no lleva espina — se construye con el contrato de la task' };
+    }
+    const hoja = espina.hojas.find(h => h && h.slug === slug);
+    if (!hoja) {
+      const declaradas = espina.hojas.map(h => h && h.slug).filter(Boolean).join(', ');
+      return { hoja: null, nota: `la espina no declara '${slug}' (declara: ${declaradas}) — se construye con el contrato de la task` };
+    }
+    const subs = Array.isArray(hoja.subscribes) ? hoja.subscribes.length : 0;
+    const pubs = Array.isArray(hoja.publishes) ? hoja.publishes.length : 0;
+    return { hoja, nota: `hoja '${slug}' leída de la espina (forma ${hoja.forma} · ${subs} subscribes · ${pubs} publishes)` };
+  }
+
   _buscarRebanadas(tema, max = 6) {
     try {
       const syncFs = require('fs');
@@ -588,6 +636,10 @@ class EjecutorMotorModule extends BaseModule {
       const generacionesMax = (pipeline.presupuesto && pipeline.presupuesto.generaciones_por_paso) || 3;
       let salidaUltima = null;
       let pasoFallido = null;
+      // Lo que los pasos REFLEJO leen del mundo para los pasos FUZZY que vienen
+      // detrás (op 'leer_plan' → la hoja del plano). El reflejo lee, el fuzzy
+      // piensa: el LLM nunca sale a buscar su propio contexto.
+      const contextoDeReflejos = [];
 
       for (const paso of pipeline.pasos) {
         if (paso.tipo === 'fuzzy') {
@@ -611,12 +663,7 @@ class EjecutorMotorModule extends BaseModule {
             const tema = paso.tema_rebanadas || task;
             const delTema = this._buscarRebanadas(tema);
             const rutas = [...new Set([...base, ...delTema])].slice(0, 8);
-            const leidas = rutas.map(r => {
-              try {
-                const abs = path.join(__dirname, '..', '..', '..', 'arquitectura', 'cabecera', r);
-                return `### REBANADA: ${r}\n${fs.readFileSync(abs, 'utf8').slice(0, 4000)}`;
-              } catch { return null; }
-            }).filter(Boolean);
+            const leidas = this._leerRebanadas(rutas, base);
             if (leidas.length) {
               partesContexto.push(`# REBANADAS DE ARQUITECTURA RELEVANTES (leídas de arquitectura/cabecera — el ADN vivo del sistema, no de memoria)\n${leidas.join('\n\n')}`);
               await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `rebanadas inyectadas (${leidas.length}: ${rutas.join(', ')})` }, 'bitacora.paso.registrado', 8000);
@@ -627,6 +674,9 @@ class EjecutorMotorModule extends BaseModule {
             partesContexto.push(`# INVENTARIO DE MÓDULOS DEL SISTEMA (modules/ — lo que YA existe para reutilizar)\n${inventario.length ? inventario.map(m => `- ${m}`).join('\n') : '(vacío)'}`);
             await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `inventario del sistema inyectado (${inventario.length} módulos)` }, 'bitacora.paso.registrado', 8000);
           }
+          // Lo que ya leyó un reflejo anterior (la hoja del plano) va PRIMERO:
+          // es el contrato concreto de lo que se va a construir, no el ADN.
+          if (contextoDeReflejos.length) partesContexto.unshift(...contextoDeReflejos);
           if (partesContexto.length) {
             taskEfectiva = `${task}\n\n${partesContexto.join('\n\n')}\n\nMANDATO: usa SOLO el contexto inyectado. No inventes módulos ni patrones que no estén en las rebanadas o el inventario.`;
           }
@@ -722,6 +772,30 @@ class EjecutorMotorModule extends BaseModule {
               await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `commit: ${JSON.stringify(cr)}` }, 'bitacora.paso.registrado', 8000);
               this._progress(project_id, request_id, agent_name, 'tool_call', `commit ${cr.commit ? 'OK' : 'skip'}: ${entregableReal.path}`, 'commitar', conversation_id);
             }
+          } else if (paso.op === 'leer_plan') {
+            // EL REFLEJO LEE, EL FUZZY PIENSA. La FASE 4 construye UNA hoja del
+            // plano de la FASE 3b: aquí se lee su contrato (la espina) y se deja
+            // en contextoDeReflejos para el paso fuzzy que viene detrás.
+            // Antes este paso era 'reflejo' SIN op → el motor lo registraba como
+            // no-op y el generador nunca veía el plano: los subscribes/publishes
+            // que el adaptador diseñó no llegaban al module.json.
+            const rutaPlan = paso.plan || 'storage/esquemas/plan-construccion.md';
+            const slugHoja = this._resolverSlug(task, agent_name);
+            const { hoja, nota } = this._hojaDelPlan(mundo.leer(rutaPlan), slugHoja);
+            if (hoja) {
+              contextoDeReflejos.push([
+                `# LA HOJA DEL PLAN (leída de ${rutaPlan} — el contrato que la FASE 3b declaró para '${slugHoja}')`,
+                '```json',
+                JSON.stringify(hoja, null, 2),
+                '```',
+                'MANDATO: el module.json declara EXACTAMENTE estos subscribes y publishes —',
+                'son el contrato que el resto de hojas del plan ya espera del bus. Las',
+                'proyecciones_internas son métodos de ESTE módulo (la lógica de dominio vive',
+                'dentro, nunca como helper en _shared). Lo de depende_de se pide por EVENTO.'
+              ].join('\n'));
+            }
+            await this._pedir('bitacora.paso.request', { request_id, project_id, paso: paso.paso, message: `leer_plan: ${nota}` }, 'bitacora.paso.registrado', 8000);
+            this._progress(project_id, request_id, agent_name, 'thinking', `plan: ${nota}`, null, conversation_id);
           } else if (paso.op === 'validar' && salidaUltima !== null) {
             const val = validar(salidaUltima, paso.valida || {});
             salidaUltima = val.ok ? salidaUltima : null;

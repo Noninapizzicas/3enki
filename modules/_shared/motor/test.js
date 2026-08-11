@@ -4,7 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { validar } = require('../../_shared/motor/validador');
-const { verificar } = require('../../_shared/motor/verificador');
+const { verificar, extraerEspina } = require('../../_shared/motor/verificador');
 const { convertir } = require('../../_shared/motor/conversor');
 
 // ── P3 · VALIDADOR ────────────────────────────────────────────────────────────
@@ -69,9 +69,11 @@ test('conversor: vacío → error', () => {
 
 // ── P4 · EL JEFE (verificador) con MUNDO INYECTADO ───────────────────────────
 // Un mundo falso para el test: el archivo "existe" con contenido real.
+// `existe` acepta boolean (todo existe / nada existe) o función (p → boolean),
+// para los casos que necesitan existencia POR RUTA (requires_resueltos).
 function mundoFalso({ existe = true, contenido = '', enRepo = true, sinPuerto = {} } = {}) {
   return {
-    existe: (p) => (sinPuerto.existe ? undefined : existe),
+    existe: (p) => (sinPuerto.existe ? undefined : (typeof existe === 'function' ? existe(p) : existe)),
     leer: (p) => (sinPuerto.leer ? undefined : contenido),
     enRepo: (p) => (sinPuerto.enRepo ? undefined : enRepo)
   };
@@ -116,6 +118,151 @@ test('JEFE: api_real — sin patrón de módulo → NO verificado', () => {
   );
   assert.equal(v.verificado, false);
   assert.match(v.reglas[0].detalle, /patrón de módulo no completo/);
+});
+
+// ── P4 · requires_resueltos (el freno que api_real no puede dar) ─────────────
+// Testigo: modules/banco-ideas/ (2026-08-11) — api_real:ok + en_repo:ok sobre
+// un módulo con require('../_shared/prioridad') que NO existe. Sellado
+// verificado:true, commiteado, y roto al cargar.
+const EXISTEN_REALES = new Set(['_shared/modulo-hibrido-reflejo.js', '_shared/pos-persistencia.js', '_shared/base-module.js']);
+
+test('JEFE: requires_resueltos — el caso banco-ideas: api_real pasa pero el require fantasma NO', () => {
+  const contenido = [
+    "const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');",
+    "const PosPersistencia = require('../_shared/pos-persistencia');",
+    "const prioridadHelper = require('../_shared/prioridad');",
+    'class X { async _atender(evento, contexto, respuesta, siguiente) {} }'
+  ].join('\n');
+  const mundo = mundoFalso({ existe: (p) => EXISTEN_REALES.has(p), contenido });
+
+  const soloApiReal = verificar({ tipo: 'fs', path: 'banco-ideas/index.js', reglas: ['api_real'] }, mundo);
+  assert.equal(soloApiReal.verificado, true, 'api_real por sí sola deja pasar el módulo roto (por eso hace falta la nueva regla)');
+
+  const conFreno = verificar(
+    { tipo: 'fs', path: 'banco-ideas/index.js', reglas: ['api_real', 'requires_resueltos'] },
+    mundo
+  );
+  assert.equal(conFreno.verificado, false);
+  assert.match(conFreno.reglas[1].detalle, /\.\.\/_shared\/prioridad/);
+  assert.match(conFreno.reglas[1].detalle, /revienta al cargar/);
+});
+
+test('JEFE: requires_resueltos — todos los require resuelven → ok', () => {
+  const contenido = "const BaseModule = require('../_shared/base-module');\nconst fs = require('fs');";
+  const v = verificar(
+    { tipo: 'fs', path: 'x/index.js', reglas: ['requires_resueltos'] },
+    mundoFalso({ existe: (p) => EXISTEN_REALES.has(p), contenido })
+  );
+  assert.equal(v.verificado, true, 'los bare specifiers (fs) los resuelve node, no el mundo');
+  assert.match(v.reglas[0].detalle, /todos resuelven/);
+});
+
+test('JEFE: requires_resueltos — módulo ANIDADO (pizzepos/pedidos) resuelve ../../_shared', () => {
+  const contenido = "const BaseModule = require('../../_shared/base-module');";
+  const v = verificar(
+    { tipo: 'fs', path: 'pizzepos/pedidos/index.js', reglas: ['requires_resueltos'] },
+    mundoFalso({ existe: (p) => EXISTEN_REALES.has(p), contenido })
+  );
+  assert.equal(v.verificado, true);
+});
+
+test('JEFE: requires_resueltos — no aplica al module.json (su presencia la cubre existe)', () => {
+  const v = verificar(
+    { tipo: 'fs', path: 'x/module.json', reglas: ['requires_resueltos'] },
+    mundoFalso({ existe: false, contenido: '{}' })
+  );
+  assert.equal(v.verificado, true);
+  assert.match(v.reglas[0].detalle, /no aplica/);
+});
+
+// ── P4 · plan_acoplable (FASE 3b — el plano como CONTRATO, no como prosa) ────
+const ESPINA_OK = {
+  esquema: 'enki-plan-v1',
+  hojas: [
+    { slug: 'banco-ideas', forma: 'custodio', accion: 'CONSTRUIR', depende_de: ['database-manager'], subscribes: ['banco.registrar.request'], publishes: ['banco.idea.registrada', 'banco.registrar.failed'] }
+  ],
+  orden: ['banco-ideas']
+};
+const planCon = (espina) => `# Plano\n\nprosa event-driven con base-module y micro-agente\n\n\`\`\`json enki-plan\n${JSON.stringify(espina, null, 2)}\n\`\`\`\n`;
+
+test('JEFE: plan_acoplable — espina válida → verificado', () => {
+  const v = verificar(
+    { tipo: 'fs', path: 'storage/esquemas/plan-construccion.md', reglas: ['plan_acoplable'] },
+    mundoFalso({ existe: true, contenido: planCon(ESPINA_OK) })
+  );
+  assert.equal(v.verificado, true);
+  assert.match(v.reglas[0].detalle, /1 hojas tipadas/);
+});
+
+test('JEFE: plan_acoplable — plano de PROSA sin espina → NO verificado', () => {
+  const v = verificar(
+    { tipo: 'fs', path: 'storage/esquemas/plan-construccion.md', reglas: ['plan_acoplable'] },
+    mundoFalso({ existe: true, contenido: '# Plano\n\nHoja 1: banco-ideas (custodio). Hoja 2: pipeline-semanal.' })
+  );
+  assert.equal(v.verificado, false);
+  assert.match(v.reglas[0].detalle, /sin espina/);
+});
+
+test('JEFE: plan_acoplable — slug con prefijo de vertical → NO verificado', () => {
+  const espina = { hojas: [{ ...ESPINA_OK.hojas[0], slug: 'pizzepos/banco-ideas' }] };
+  const v = verificar(
+    { tipo: 'fs', path: 'storage/esquemas/plan-construccion.md', reglas: ['plan_acoplable'] },
+    mundoFalso({ existe: true, contenido: planCon(espina) })
+  );
+  assert.equal(v.verificado, false);
+  assert.match(v.reglas[0].detalle, /slug inválido/);
+});
+
+test('JEFE: plan_acoplable — hoja sin eventos (isla muda) → NO verificado', () => {
+  const espina = { hojas: [{ slug: 'banco-ideas', forma: 'custodio', accion: 'CONSTRUIR', subscribes: [], publishes: [] }] };
+  const v = verificar(
+    { tipo: 'fs', path: 'storage/esquemas/plan-construccion.md', reglas: ['plan_acoplable'] },
+    mundoFalso({ existe: true, contenido: planCon(espina) })
+  );
+  assert.equal(v.verificado, false);
+  assert.match(v.reglas[0].detalle, /ni escucha ni emite/);
+});
+
+test('JEFE: plan_acoplable — forma fuera del patrón Enki → NO verificado', () => {
+  const espina = { hojas: [{ ...ESPINA_OK.hojas[0], forma: 'helper' }] };
+  const v = verificar(
+    { tipo: 'fs', path: 'storage/esquemas/plan-construccion.md', reglas: ['plan_acoplable'] },
+    mundoFalso({ existe: true, contenido: planCon(espina) })
+  );
+  assert.equal(v.verificado, false);
+  assert.match(v.reglas[0].detalle, /forma 'helper' fuera de/);
+});
+
+test('extraerEspina: la prosa con guiones NO produce hojas (el regex viejo sí lo hacía)', () => {
+  assert.equal(extraerEspina('event-driven, base-module, micro-agente'), null);
+  assert.equal(extraerEspina(planCon(ESPINA_OK)).hojas.length, 1);
+});
+
+// ── El PUENTE F3b→F4: las hojas del plan (orquestador) ──────────────────────
+const PROSA_DEL_PATRON = 'Sistema event-driven: cada isla es un micro-servicio con base-module y single-writer.\nHojas: banco-ideas (custodio) y pipeline-semanal (micro-agente).';
+
+test('orquestador: _hojasDelPlan lee la ESPINA — solo las hojas declaradas', () => {
+  const ProcesoNegocio = require('../../proceso-negocio/index.js');
+  const m = new ProcesoNegocio();
+  const plan = `${PROSA_DEL_PATRON}\n\n\`\`\`json enki-plan\n${JSON.stringify({ hojas: [{ slug: 'banco-ideas' }, { slug: 'pipeline-semanal' }] })}\n\`\`\``;
+  assert.deepEqual(m._hojasDelPlan(plan), ['banco-ideas', 'pipeline-semanal']);
+});
+
+test('orquestador: _hojasDelPlan sin espina — el fallback descarta el vocabulario del patrón', () => {
+  const ProcesoNegocio = require('../../proceso-negocio/index.js');
+  const m = new ProcesoNegocio();
+  const hojas = m._hojasDelPlan(PROSA_DEL_PATRON);
+  assert.deepEqual(hojas, ['banco-ideas', 'pipeline-semanal']);
+  for (const fantasma of ['event-driven', 'micro-servicio', 'base-module', 'single-writer', 'micro-agente']) {
+    assert.equal(hojas.includes(fantasma), false, `${fantasma} es doctrina, no una hoja a construir`);
+  }
+});
+
+test('orquestador: _hojasDelPlan ignora slugs con vertical en la espina (modules/<slug>/ es plano)', () => {
+  const ProcesoNegocio = require('../../proceso-negocio/index.js');
+  const m = new ProcesoNegocio();
+  const plan = `x\n\n\`\`\`json enki-plan\n${JSON.stringify({ hojas: [{ slug: 'pizzepos/pedidos' }, { slug: 'banco-ideas' }] })}\n\`\`\``;
+  assert.deepEqual(m._hojasDelPlan(plan), ['banco-ideas']);
 });
 
 test('JEFE: en_repo sin puerto → NO bloquea (declarado)', () => {

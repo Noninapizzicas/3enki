@@ -52,6 +52,10 @@ modules/*/data/
 modules/*/storage/
 modules/*/.cache/
 
+# Python
+__pycache__/
+*.pyc
+
 # Coverage
 coverage/
 .nyc_output/

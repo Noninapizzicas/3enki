@@ -1,240 +1,331 @@
 'use strict';
 
-const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
-const PosPersistencia = require('../../_shared/pos-persistencia');
-const prioridadModulo = require('../../_shared/prioridad');
-const prioridadCalculada = typeof prioridadModulo === 'function' ? prioridadModulo : prioridadModulo.prioridadCalculada;
+const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
+const PosPersistencia = require('../_shared/pos-persistencia');
 
-const ARCHIVO = 'data/newsletter/banco-ideas.json';
-const TOPE = 100;
-const ESTADOS = { CRUDA: 'Cruda', APARCADA: 'Aparcada', SELECCIONADA: 'Seleccionada' };
+const prioridadHelper = require('../_shared/prioridad');
+const calcularPrioridad = (prioridadHelper && (prioridadHelper.calcularPrioridad || prioridadHelper.prioridad)) || function (idea) {
+  return Number((idea && (idea.prioridadCalculada || idea.puntaje)) || 0);
+};
 
 class BancoIdeas extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'banco-ideas';
     this.version = '0.1.0';
-    this._pos = new PosPersistencia({ modulo: this.name, archivo: ARCHIVO });
-  }
-
-  onRegistrarRequest(evento, contexto, respuesta, siguiente) {
-    return this._atender(evento, contexto, respuesta, siguiente);
-  }
-
-  onAparcarRequest(evento, contexto, respuesta, siguiente) {
-    return this._atender(evento, contexto, respuesta, siguiente);
-  }
-
-  onListarRequest(evento, contexto, respuesta, siguiente) {
-    return this._atender(evento, contexto, respuesta, siguiente);
-  }
-
-  onSeleccionarRequest(evento, contexto, respuesta, siguiente) {
-    return this._atender(evento, contexto, respuesta, siguiente);
-  }
-
-  onProjectActivated(evento, contexto, respuesta, siguiente) {
-    return this._atender(evento, contexto, respuesta, siguiente);
+    this.tope = 100;
+    this.persistencia = new PosPersistencia('data/newsletter/banco-ideas.json');
+    this._cola = Promise.resolve();
   }
 
   _atender(evento, contexto, respuesta, siguiente) {
-    const tipo = evento && (evento.tipo || evento.event || evento.nombre);
-    if (!tipo) return siguiente();
-    switch (tipo) {
+    const nombre = this._nombreEvento(evento);
+    switch (nombre) {
       case 'newsletter.idea.registrar.request':
-        return this._manejarRegistrar(evento, contexto, respuesta);
+        return this.onRegistrarRequest(evento, contexto, respuesta, siguiente);
       case 'newsletter.idea.aparcar.request':
-        return this._manejarAparcar(evento, contexto, respuesta);
+        return this.onAparcarRequest(evento, contexto, respuesta, siguiente);
       case 'newsletter.banco.listar.request':
-        return this._manejarListar(evento, contexto, respuesta);
+        return this.onListarRequest(evento, contexto, respuesta, siguiente);
       case 'newsletter.banco.seleccionar.request':
-        return this._manejarSeleccionar(evento, contexto, respuesta);
+        return this.onSeleccionarRequest(evento, contexto, respuesta, siguiente);
       case 'project.activated':
-        return this._manejarProjectActivated(evento, contexto, respuesta);
+        return this.onProjectActivated(evento, contexto, respuesta, siguiente);
       default:
-        return siguiente();
+        return typeof siguiente === 'function' ? siguiente() : undefined;
     }
   }
 
-  _proyectoId(contexto, evento) {
-    const ctx = contexto || {};
-    const payload = (evento && (evento.payload || evento.datos)) || (ctx.payload || {});
-    return (evento && (evento.proyecto_id || evento.proyectoId)) ||
-      ctx.proyecto_id || ctx.proyectoId ||
-      payload.proyecto_id || payload.proyectoId ||
-      'default';
+  _nombreEvento(evento) {
+    if (typeof evento === 'string') return evento;
+    if (!evento) return '';
+    return evento.name || evento.event || evento.tipo || '';
   }
 
-  _cargar(proyectoId) {
+  _datos(evento) {
+    const base = (evento && typeof evento === 'object' && !Array.isArray(evento)) ? evento : {};
+    return Object.assign({}, base, base.data || {});
+  }
+
+  _generarId() {
+    return 'idea_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
+  _calcularPrioridad(idea) {
+    const candidata = Object.assign({}, idea || {});
+    if (!candidata.titulo && candidata.nombre) candidata.titulo = candidata.nombre;
+    if (!candidata.descripcion && candidata.contenido) candidata.descripcion = candidata.contenido;
     try {
-      let datos;
-      if (typeof this._pos.leer === 'function') datos = this._pos.leer(proyectoId);
-      else if (typeof this._pos.cargar === 'function') datos = this._pos.cargar(proyectoId);
-      else if (typeof this._pos.obtener === 'function') datos = this._pos.obtener(proyectoId);
-      if (!datos || typeof datos !== 'object') datos = {};
-      if (!Array.isArray(datos.ideas)) datos.ideas = [];
-      return datos;
-    } catch (error) {
-      return { ideas: [] };
+      const resultado = calcularPrioridad(candidata);
+      if (typeof resultado === 'number') return resultado;
+      if (resultado && typeof resultado === 'object') {
+        if (typeof resultado.prioridad === 'number') return resultado.prioridad;
+        if (typeof resultado.prioridadCalculada === 'number') return resultado.prioridadCalculada;
+        if (typeof resultado.puntaje === 'number') return resultado.puntaje;
+      }
+    } catch (_e) {
+      // fallback
     }
+    const previo = Number((idea && (idea.prioridadCalculada || idea.puntaje)) || 0);
+    return Number.isFinite(previo) ? previo : 0;
   }
 
-  _guardar(proyectoId, estado) {
-    if (typeof this._pos.escribir === 'function') this._pos.escribir(proyectoId, estado);
-    else if (typeof this._pos.guardar === 'function') this._pos.guardar(proyectoId, estado);
-    else if (typeof this._pos.persistir === 'function') this._pos.persistir(proyectoId, estado);
-    return estado;
+  _crearIdea(input) {
+    const id = input.id || input.idea_id || this._generarId();
+    const idea = {
+      id: id,
+      titulo: input.titulo || input.nombre || '',
+      descripcion: input.descripcion || input.contenido || '',
+      estado: 'Cruda',
+      prioridadCalculada: this._calcularPrioridad(input),
+      creadaEn: input.creadaEn || new Date().toISOString(),
+      actualizadaEn: null,
+      decision: null,
+      fechaSeleccion: null,
+      pendienteDeEvidencia: false
+    };
+    if (input.tags) idea.tags = input.tags;
+    if (input.fuente) idea.fuente = input.fuente;
+    return idea;
   }
 
-  _responder(respuesta, datos, statusCode) {
-    const codigo = statusCode || 200;
-    if (typeof respuesta === 'function') {
-      respuesta(datos);
-      return;
+  _cargar() {
+    const persistencia = this.persistencia;
+    if (!persistencia || typeof persistencia.leer !== 'function') {
+      return Promise.resolve({ ideas: [] });
     }
-    if (respuesta && typeof respuesta.json === 'function') {
-      if (typeof respuesta.status === 'function') respuesta.status(codigo).json(datos);
-      else respuesta.json(datos);
-      return;
-    }
-    if (respuesta) {
-      respuesta.statusCode = codigo;
-      respuesta.body = datos;
-    }
+    return Promise.resolve(persistencia.leer())
+      .catch(() => ({ ideas: [] }))
+      .then((contenido) => {
+        if (contenido && Array.isArray(contenido.ideas)) return contenido;
+        if (Array.isArray(contenido)) return { ideas: contenido };
+        return { ideas: [] };
+      });
   }
 
-  _responderError(respuesta, error, mensaje) {
-    this._responder(respuesta, { ok: false, error, mensaje }, 400);
+  _guardar(banco) {
+    const persistencia = this.persistencia;
+    if (!persistencia) return Promise.resolve();
+    const metodo = persistencia.escribir || persistencia.guardar;
+    if (typeof metodo !== 'function') return Promise.resolve();
+    if (metodo.length >= 2) {
+      return Promise.resolve(metodo.call(persistencia, 'data/newsletter/banco-ideas.json', banco));
+    }
+    return Promise.resolve(metodo.call(persistencia, banco));
   }
 
-  _publicar(evento, datos) {
-    if (typeof this.emitir === 'function') return this.emitir(evento, datos);
-    if (typeof this.publicar === 'function') return this.publicar(evento, datos);
-    if (this.bus && typeof this.bus.publish === 'function') return this.bus.publish(evento, datos);
+  _mutar(contexto, fn) {
+    const tarea = this._cola.then(async () => {
+      const banco = await this._cargar(contexto);
+      const resultado = await fn(banco);
+      await this._guardar(banco);
+      return resultado;
+    });
+    this._cola = tarea.then(() => undefined, () => undefined);
+    return tarea;
+  }
+
+  _descartarMenorPrioridad(ideas) {
+    const conPrioridad = ideas.map((idea) => ({ idea: idea, prioridad: this._calcularPrioridad(idea) }));
+    conPrioridad.sort((a, b) => {
+      if (a.prioridad !== b.prioridad) return a.prioridad - b.prioridad;
+      const fa = new Date(a.idea.creadaEn || 0).getTime();
+      const fb = new Date(b.idea.creadaEn || 0).getTime();
+      return fa - fb;
+    });
+    const menor = conPrioridad[0].idea;
+    const indice = ideas.findIndex((i) => i.id === menor.id);
+    if (indice !== -1) ideas.splice(indice, 1);
+    return menor;
+  }
+
+  _registrar(banco, input) {
+    banco.ideas = Array.isArray(banco.ideas) ? banco.ideas : [];
+    const idea = this._crearIdea(input);
+    const existente = banco.ideas.find((i) => i.id === idea.id);
+    if (existente) {
+      return { idea: existente, descartada: null, yaExistia: true };
+    }
+    banco.ideas.push(idea);
+    let descartada = null;
+    if (banco.ideas.length > this.tope) {
+      descartada = this._descartarMenorPrioridad(banco.ideas);
+    }
+    return { idea: idea, descartada: descartada, yaExistia: false };
+  }
+
+  _aparcar(banco, id) {
+    const idea = (banco.ideas || []).find((i) => i.id === id);
+    if (!idea) return { ok: false, motivo: 'no_encontrada' };
+    if (idea.estado === 'Aparcada' || idea.estado === 'PendienteDeEvidencia' || idea.pendienteDeEvidencia === true) {
+      return { ok: true, idea: idea, yaAparcada: true };
+    }
+    idea.estado = 'Aparcada';
+    idea.decision = 10;
+    idea.pendienteDeEvidencia = true;
+    idea.aparcadaEn = new Date().toISOString();
+    idea.actualizadaEn = idea.aparcadaEn;
+    return { ok: true, idea: idea, yaAparcada: false };
+  }
+
+  _seleccionar(banco, id) {
+    const idea = (banco.ideas || []).find((i) => i.id === id);
+    if (!idea) return { ok: false, motivo: 'no_encontrada' };
+    if (idea.estado === 'Seleccionada') {
+      return { ok: true, idea: idea, yaSeleccionada: true };
+    }
+    idea.estado = 'Seleccionada';
+    idea.decision = 1;
+    idea.fechaSeleccion = new Date().toISOString();
+    idea.actualizadaEn = idea.fechaSeleccion;
+    idea.pendienteDeEvidencia = false;
+    return { ok: true, idea: idea, yaSeleccionada: false };
+  }
+
+  _estaAparcada(idea) {
+    return idea.estado === 'Aparcada' || idea.estado === 'PendienteDeEvidencia' || idea.pendienteDeEvidencia === true;
+  }
+
+  _listar(banco, estado) {
+    const ideas = Array.isArray(banco.ideas) ? banco.ideas.slice() : [];
+    if (!estado || estado === 'todas' || estado === 'todos') return ideas;
+    const e = String(estado).toLowerCase();
+    if (e === 'enbanco') return ideas.filter((i) => !this._estaAparcada(i));
+    if (e === 'aparcada' || e === 'pendientedeevidencia' || e === 'pendiente_de_evidencia' || e === 'pendiente de evidencia') {
+      return ideas.filter((i) => this._estaAparcada(i));
+    }
+    return ideas.filter((i) => String(i.estado || '').toLowerCase() === e);
+  }
+
+  async _emitir(respuesta, evento, payload) {
+    if (respuesta && typeof respuesta.publicar === 'function') {
+      return respuesta.publicar(evento, payload);
+    }
+    if (typeof this.publicar === 'function') return this.publicar(evento, payload);
+    if (typeof this.emitir === 'function') return this.emitir(evento, payload);
     return undefined;
   }
 
-  _uuid() {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-    return `idea-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  }
-
-  _registrar(estado, payload) {
-    const ideas = Array.isArray(estado.ideas) ? estado.ideas.slice() : [];
-    const titulo = payload.titulo || payload.nombre || payload.texto || '';
-    if (!titulo) return { ok: false, error: 'titulo_requerido' };
-    const id = payload.id || this._uuid();
-    const prioridad = typeof payload.prioridadCalculada === 'number' ? payload.prioridadCalculada : prioridadCalculada(payload);
-    const idea = {
-      id,
-      titulo,
-      descripcion: payload.descripcion || '',
-      estado: ESTADOS.CRUDA,
-      prioridadCalculada: prioridad,
-      creadaEn: payload.creadaEn || new Date().toISOString()
-    };
-    ideas.push(idea);
-    let descartada = null;
-    if (ideas.length > TOPE) {
-      ideas.sort((a, b) => a.prioridadCalculada - b.prioridadCalculada);
-      descartada = ideas.shift();
-    }
-    return { ok: true, estado: { ...estado, ideas }, idea, descartada, topeAlcanzado: Boolean(descartada) };
-  }
-
-  _aparcar(estado, payload) {
-    const id = payload.id || payload.ideaId;
-    if (!id) return { ok: false, error: 'id_requerido' };
-    const ideas = (estado.ideas || []).map(idea => idea.id === id ? { ...idea, estado: ESTADOS.APARCADA } : idea);
-    const idea = ideas.find(item => item.id === id);
-    if (!idea) return { ok: false, error: 'idea_no_encontrada' };
-    return { ok: true, estado: { ...estado, ideas }, idea };
-  }
-
-  _listar(estado, payload) {
-    const filtro = payload.estado || payload.filtro || 'todas';
-    let ideas = (estado.ideas || []).slice();
-    if (filtro === 'EnBanco') ideas = ideas.filter(item => item.estado === ESTADOS.CRUDA || item.estado === ESTADOS.SELECCIONADA);
-    else if (filtro === 'Aparcada') ideas = ideas.filter(item => item.estado === ESTADOS.APARCADA);
-    else if (filtro === 'Seleccionada') ideas = ideas.filter(item => item.estado === ESTADOS.SELECCIONADA);
-    else if (filtro !== 'todas' && filtro !== 'Todas') ideas = ideas.filter(item => item.estado === filtro);
-    return { ok: true, ideas, total: ideas.length };
-  }
-
-  _seleccionar(estado, payload) {
-    const id = payload.id || payload.ideaId;
-    if (!id) return { ok: false, error: 'id_requerido' };
-    const existente = (estado.ideas || []).find(item => item.id === id);
-    if (!existente) return { ok: false, error: 'idea_no_encontrada' };
-    if (existente.estado === ESTADOS.SELECCIONADA) {
-      return { ok: true, estado, idea: existente, yaSeleccionada: true };
-    }
-    const ideas = (estado.ideas || []).map(item => item.id === id
-      ? { ...item, estado: ESTADOS.SELECCIONADA, fechaSeleccion: payload.fechaSeleccion || new Date().toISOString() }
-      : item
-    );
-    const idea = ideas.find(item => item.id === id);
-    return { ok: true, estado: { ...estado, ideas }, idea, yaSeleccionada: false };
-  }
-
-  _manejarRegistrar(evento, contexto, respuesta) {
-    const proyectoId = this._proyectoId(contexto, evento);
-    const estado = this._cargar(proyectoId);
-    const payload = (evento && (evento.payload || evento.datos)) || (contexto && contexto.payload) || {};
-    const resultado = this._registrar(estado, payload);
-    if (!resultado.ok) return this._responderError(respuesta, resultado.error, 'No se pudo registrar la idea.');
-    this._guardar(proyectoId, resultado.estado);
-    this._publicar('newsletter.idea.registrada', { proyecto_id: proyectoId, idea: resultado.idea });
-    if (resultado.topeAlcanzado) {
-      this._publicar('newsletter.banco.tope_alcanzado', {
-        proyecto_id: proyectoId,
-        descartada: resultado.descartada,
-        tope: TOPE
+  async onRegistrarRequest(evento, contexto, respuesta) {
+    const datos = this._datos(evento);
+    const requestId = datos.request_id;
+    try {
+      const resultado = await this._mutar(contexto, (banco) => this._registrar(banco, datos));
+      if (resultado.descartada) {
+        await this._emitir(respuesta, 'newsletter.banco.tope_alcanzado', {
+          request_id: requestId,
+          descartada: resultado.descartada,
+          tope: this.tope
+        });
+      }
+      await this._emitir(respuesta, 'newsletter.idea.registrada', {
+        request_id: requestId,
+        idea: resultado.idea,
+        descartada: resultado.descartada
+      });
+      await this._emitir(respuesta, 'newsletter.idea.registrar.response', {
+        request_id: requestId,
+        status: 'ok',
+        data: { idea: resultado.idea, descartada: resultado.descartada, yaExistia: resultado.yaExistia }
+      });
+    } catch (error) {
+      await this._emitir(respuesta, 'newsletter.idea.registrar.response', {
+        request_id: requestId,
+        status: 'error',
+        data: { mensaje: error.message }
       });
     }
-    return this._responder(respuesta, {
-      ok: true,
-      idea: resultado.idea,
-      topeAlcanzado: resultado.topeAlcanzado,
-      descartada: resultado.descartada || null,
-      total: resultado.estado.ideas.length
-    });
   }
 
-  _manejarAparcar(evento, contexto, respuesta) {
-    const proyectoId = this._proyectoId(contexto, evento);
-    const estado = this._cargar(proyectoId);
-    const payload = (evento && (evento.payload || evento.datos)) || (contexto && contexto.payload) || {};
-    const resultado = this._aparcar(estado, payload);
-    if (!resultado.ok) return this._responderError(respuesta, resultado.error, 'No se pudo aparcar la idea.');
-    this._guardar(proyectoId, resultado.estado);
-    this._publicar('newsletter.idea.aparcada', { proyecto_id: proyectoId, idea: resultado.idea });
-    return this._responder(respuesta, { ok: true, idea: resultado.idea });
+  async onAparcarRequest(evento, contexto, respuesta) {
+    const datos = this._datos(evento);
+    const requestId = datos.request_id;
+    const id = datos.id || datos.idea_id;
+    try {
+      const resultado = await this._mutar(contexto, (banco) => this._aparcar(banco, id));
+      if (!resultado.ok) {
+        await this._emitir(respuesta, 'newsletter.idea.aparcar.response', {
+          request_id: requestId,
+          status: 'error',
+          data: { motivo: resultado.motivo }
+        });
+        return;
+      }
+      await this._emitir(respuesta, 'newsletter.idea.aparcada', {
+        request_id: requestId,
+        idea: resultado.idea,
+        yaAparcada: resultado.yaAparcada
+      });
+      await this._emitir(respuesta, 'newsletter.idea.aparcar.response', {
+        request_id: requestId,
+        status: 'ok',
+        data: { idea: resultado.idea, yaAparcada: resultado.yaAparcada }
+      });
+    } catch (error) {
+      await this._emitir(respuesta, 'newsletter.idea.aparcar.response', {
+        request_id: requestId,
+        status: 'error',
+        data: { mensaje: error.message }
+      });
+    }
   }
 
-  _manejarListar(evento, contexto, respuesta) {
-    const proyectoId = this._proyectoId(contexto, evento);
-    const estado = this._cargar(proyectoId);
-    const payload = (evento && (evento.payload || evento.datos)) || (contexto && contexto.payload) || {};
-    const resultado = this._listar(estado, payload);
-    return this._responder(respuesta, { ok: true, ideas: resultado.ideas, total: resultado.total });
+  async onListarRequest(evento, contexto, respuesta) {
+    const datos = this._datos(evento);
+    const requestId = datos.request_id;
+    try {
+      const banco = await this._cargar(contexto);
+      const ideas = this._listar(banco, datos.estado);
+      await this._emitir(respuesta, 'newsletter.banco.listar.response', {
+        request_id: requestId,
+        status: 'ok',
+        data: { estado: datos.estado || 'todas', total: ideas.length, ideas: ideas }
+      });
+    } catch (error) {
+      await this._emitir(respuesta, 'newsletter.banco.listar.response', {
+        request_id: requestId,
+        status: 'error',
+        data: { mensaje: error.message }
+      });
+    }
   }
 
-  _manejarSeleccionar(evento, contexto, respuesta) {
-    const proyectoId = this._proyectoId(contexto, evento);
-    const estado = this._cargar(proyectoId);
-    const payload = (evento && (evento.payload || evento.datos)) || (contexto && contexto.payload) || {};
-    const resultado = this._seleccionar(estado, payload);
-    if (!resultado.ok) return this._responderError(respuesta, resultado.error, 'No se pudo seleccionar la idea.');
-    if (!resultado.yaSeleccionada) this._guardar(proyectoId, resultado.estado);
-    return this._responder(respuesta, { ok: true, idea: resultado.idea, yaSeleccionada: resultado.yaSeleccionada });
+  async onSeleccionarRequest(evento, contexto, respuesta) {
+    const datos = this._datos(evento);
+    const requestId = datos.request_id;
+    const id = datos.id || datos.idea_id;
+    try {
+      const resultado = await this._mutar(contexto, (banco) => this._seleccionar(banco, id));
+      if (!resultado.ok) {
+        await this._emitir(respuesta, 'newsletter.banco.seleccionar.response', {
+          request_id: requestId,
+          status: 'error',
+          data: { motivo: resultado.motivo }
+        });
+        return;
+      }
+      await this._emitir(respuesta, 'newsletter.banco.seleccionar.response', {
+        request_id: requestId,
+        status: 'ok',
+        data: { idea: resultado.idea, yaSeleccionada: resultado.yaSeleccionada }
+      });
+    } catch (error) {
+      await this._emitir(respuesta, 'newsletter.banco.seleccionar.response', {
+        request_id: requestId,
+        status: 'error',
+        data: { mensaje: error.message }
+      });
+    }
   }
 
-  _manejarProjectActivated(evento, contexto, respuesta) {
-    const proyectoId = this._proyectoId(contexto, evento);
-    const estado = this._cargar(proyectoId);
-    this._guardar(proyectoId, estado);
-    return this._responder(respuesta, { ok: true, banco: { total: estado.ideas.length } });
+  async onProjectActivated(evento, contexto) {
+    try {
+      const banco = await this._cargar(contexto);
+      if (!Array.isArray(banco.ideas)) banco.ideas = [];
+      await this._guardar(banco);
+    } catch (_error) {
+      // Si no se puede restaurar, el próximo comando reintentará la carga.
+    }
   }
 }
 

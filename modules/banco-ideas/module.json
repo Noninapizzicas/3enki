@@ -1,17 +1,12 @@
 {
-  "_doc": "Custodio del banco de ideas. Single-writer de las ideas: registra, lista, obtiene y elimina. NO decide — el pipeline decide.",
   "name": "banco-ideas",
   "version": "0.1.0",
-  "description": "Banco de ideas para newsletters de nicho.",
-  "language": "es",
-  "subscribes": [
-    { "event": "newsletter.banco.ideas.registrar.request", "handler": "onRegistrarRequest", "description": "Registra una idea en el banco." },
-    { "event": "newsletter.banco.ideas.listar.request",    "handler": "onListarRequest",    "description": "Devuelve las ideas del proyecto." },
-    { "event": "newsletter.banco.ideas.obtener.request",   "handler": "onObtenerRequest",   "description": "Devuelve una idea por id." },
-    { "event": "newsletter.banco.ideas.eliminar.request",  "handler": "onEliminarRequest",  "description": "Elimina una idea." },
-    { "event": "project.activated",                        "handler": "onProjectActivated", "description": "Restaura la persistencia del proyecto." }
-  ],
-  "publishes": [
-    { "event": "newsletter.banco.idea.registrada", "description": "Una idea entró al banco." }
-  ]
+  "description": "Gestiona un banco de ideas: guardar, listar y recuperar ideas.",
+  "_doc": "Módulo que ofrece un banco de ideas compartido. Otros módulos pueden guardar ideas (texto y autor opcional), listarlas y recuperarlas por id. Las ideas se mantienen en memoria durante la vida del proceso.",
+  "subscribes": {
+    "banco-ideas.crear.request": "_crearIdea",
+    "banco-ideas.listar.request": "_listarIdeas",
+    "banco-ideas.obtener.request": "_obtenerIdea"
+  },
+  "publishes": {}
 }

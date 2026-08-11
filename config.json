@@ -9,7 +9,9 @@
     "host": "0.0.0.0",
     "cors": {
       "enabled": true,
-      "origins": ["*"]
+      "origins": [
+        "*"
+      ]
     },
     "compression": {
       "enabled": true,
@@ -144,19 +146,16 @@
       "cocina-poc",
       "notas-poc",
       "bienvenida-tienda",
-      "ai-gateway",
-      "prompt-builder",
-      "ai-agent-framework-v3",
-      "agent-observer",
-      "memory-conversation-summary",
-      "memory-rag",
-      "memory-user-profile"
+      "hermes-bridge",
+      "hermes-relay"
     ]
   },
   "observability": {
     "logging": {
       "level": "info",
-      "outputs": ["console"],
+      "outputs": [
+        "console"
+      ],
       "structured": true
     },
     "tracing": {

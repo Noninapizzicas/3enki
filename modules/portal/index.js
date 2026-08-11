@@ -167,7 +167,17 @@ class PortalModule extends BaseModule {
       }
 
       const t0 = Date.now();
-      const result = await this.moduleLoader.executeTool(tool, argv);
+      // tools event_based (sin handler directo — su handler espera un EVENTO del bus,
+      // ej. buscar_capacidad/detalle_capacidad) NO pasan por executeTool (wrapper simple
+      // que llama tool.handler → "tool.handler is not a function"). Se enrutan por bus.
+      const toolDef = this.moduleLoader?.toolsRegistry?.get?.(tool);
+      let result;
+      if (toolDef?.event_based) {
+        const { _callToolEventBased } = require('../_shared/motor/event-based-call');
+        result = await _callToolEventBased(this.eventBus, tool, argv);
+      } else {
+        result = await this.moduleLoader.executeTool(tool, argv);
+      }
       this._auditar(tool, true, Date.now() - t0);
       return { status: 200, data: { tool, result } };
     } catch (err) {

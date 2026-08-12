@@ -1,0 +1,45 @@
+{
+  "_doc": "Puente entre el dueño (chat Hermes) y el dominio del radar. Presenta candidatos y fichas (transparencia M11), confirma el veredicto del dueño — la decisión final es humana —, añade candidatos a mano y corrige fichas (M10: el dueño aporta el dato que faltaba y se re-evalúa). El cajón del blueprint interpreta la intención libre del chat; el reflejo hace los RPC deterministas a banco y evaluador. No persiste: el estado vive en los custodios.",
+  "blueprint_driven": true,
+  "blueprint_path": "interfaz.blueprint.json",
+  "dependencies": [],
+  "description": "Superficie de dominio del dueño del radar: ver, confirmar, añadir y corregir candidatos.",
+  "language": "es",
+  "main": "index.js",
+  "name": "interfaz",
+  "publishes": [
+    {
+      "event": "interfaz.veredicto_confirmado"
+    },
+    {
+      "event": "interfaz.candidato_manual_anadido"
+    },
+    {
+      "event": "interfaz.confirmar_veredicto.failed"
+    }
+  ],
+  "subscribes": [
+    {
+      "event": "interfaz.listar.request",
+      "handler": "onListarRequest"
+    },
+    {
+      "event": "interfaz.ver.request",
+      "handler": "onVerRequest"
+    },
+    {
+      "event": "interfaz.confirmar_veredicto.request",
+      "handler": "onConfirmarVeredictoRequest"
+    },
+    {
+      "event": "interfaz.anadir_manual.request",
+      "handler": "onAnadirManualRequest"
+    },
+    {
+      "event": "interfaz.corregir_ficha.request",
+      "handler": "onCorregirFichaRequest"
+    }
+  ],
+  "tools": [],
+  "version": "0.1.0"
+}

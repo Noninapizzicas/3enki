@@ -40,6 +40,9 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 - [[cocina-asiatica/00 - Cocina asiática (MOC)|Cocina asiática]] — Japón, China, Tailandia, Corea, India, Vietnam, arroz, wok
 - [[cocina-mexicana/00 - Cocina mexicana (MOC)|Cocina mexicana]] — regiones, maíz, tacos, antojitos, bebidas, recetas fundamentales
 
+### Fermentos
+- [[fermentos/00 - Fermentos (MOC)|Fermentos]] — lactofermentación (chucrut, kimchi, encurtidos), kéfir (leche y agua), kombucha (SCOBY), fermentos alcohólicos (vino, sidra, cerveza), fermentos asiáticos (miso, tempeh, natto, koji), vinagres caseros, técnicas base y seguridad
+
 ### Aerodinámica
 - [[aerodinamica/00 - Aerodinámica aplicada (MOC)|Aerodinámica aplicada]] — sustentación, empuje, arrastre; perfiles NACA y modernos; velas y propulsión eólica; alerones y control activo (AFC, X-65 CRANE); capa límite (NLF/HLFC); biomimética (riblets, tubercles, serrations); alas morfing; estudios y patentes 2020-2025; CFD (OpenFOAM, XFOIL, QBlade) → ver también [[eolica-hogar/00 - Eólica a escala hogar (MOC)|Eólica a escala hogar]]
 

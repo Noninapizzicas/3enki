@@ -42,3 +42,6 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 
 ### Aerodinámica
 - [[aerodinamica/00 - Aerodinámica aplicada (MOC)|Aerodinámica aplicada]] — sustentación, empuje, arrastre; perfiles NACA y modernos; velas y propulsión eólica; alerones y control activo (AFC, X-65 CRANE); capa límite (NLF/HLFC); biomimética (riblets, tubercles, serrations); alas morfing; estudios y patentes 2020-2025; CFD (OpenFOAM, XFOIL, QBlade) → ver también [[eolica-hogar/00 - Eólica a escala hogar (MOC)|Eólica a escala hogar]]
+
+### Electromecánica y Ondas
+- [[electromecanica-ondas/00 - Electromecánica y Ondas (MOC)|Electromecánica y Ondas]] — Maxwell, Faraday, Lenz, Lorentz; imanes NdFeB; bobinado y AWG; motores DC/BLDC/stepper/FOC; generadores PMG axial; resonancia LC/RLC; Tesla (motor AC, bobina Tesla, WPT); antenas (dipolo, Yagi, SDR); simulación (FEMM, LTspice, OpenEMS); proyectos DIY → ver también [[eolica-hogar/00 - Eólica a escala hogar (MOC)|Eólica a escala hogar]]

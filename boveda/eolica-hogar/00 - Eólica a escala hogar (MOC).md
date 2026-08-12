@@ -20,6 +20,7 @@ aislado: true
 
 ## Generador (la conversión)
 - [[Generador PMG — flujo axial]] . [[Alternadores y motores reciclados]]
+- → sector completo: [[../electromecanica-ondas/00 - Electromecánica y Ondas (MOC)|Electromecánica y Ondas]] — bobinado, imanes NdFeB, resonancia LC, motores BLDC, Tesla
 
 ## Sistema eléctrico
 - [[Regulador y carga — controladores]] . [[Baterías y almacenamiento]] . [[Conexión a red e inversores]]

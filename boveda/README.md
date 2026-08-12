@@ -25,6 +25,7 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 ### Ingenieria
 - [[refrigeracion-por-calor/00 - Frio accionado por calor (MOC)|Frio accionado por calor]] — absorcion, adsorcion, eyector; fuentes termicas
 - [[estufas-rocket/00 - Estufas Rocket (MOC)|Estufas Rocket]] — combustion en flujo, readsorcion, masa termica, fabricacion DIY
+- [[eolica-hogar/00 - Eólica a escala hogar (MOC)|Eólica a escala hogar]] — micro y mini eólica (<10 kW): turbinas HAWT/VAWT, perfiles aerodinámicos, BEM, generador PMG, normativa España → ver también [[aerodinamica/00 - Aerodinámica aplicada (MOC)|Aerodinámica aplicada]]
 
 ### Maker y fabricacion
 - [[carpinteria-cnc/00 - Carpintería CNC (MOC)|Carpintería CNC]] — fresado, controladores (Grbl/LinuxCNC/FluidNC), máquinas open-source, nesting, ensambles
@@ -40,4 +41,4 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 - [[cocina-mexicana/00 - Cocina mexicana (MOC)|Cocina mexicana]] — regiones, maíz, tacos, antojitos, bebidas, recetas fundamentales
 
 ### Aerodinámica
-- [[aerodinamica/00 - Aerodinámica aplicada (MOC)|Aerodinámica aplicada]] — sustentación, empuje, arrastre; perfiles NACA y modernos; velas y propulsión eólica; alerones y control activo (AFC, X-65 CRANE); capa límite (NLF/HLFC); biomimética (riblets, tubercles, serrations); alas morfing; estudios y patentes 2020-2025; CFD (OpenFOAM, XFOIL, QBlade)
+- [[aerodinamica/00 - Aerodinámica aplicada (MOC)|Aerodinámica aplicada]] — sustentación, empuje, arrastre; perfiles NACA y modernos; velas y propulsión eólica; alerones y control activo (AFC, X-65 CRANE); capa límite (NLF/HLFC); biomimética (riblets, tubercles, serrations); alas morfing; estudios y patentes 2020-2025; CFD (OpenFOAM, XFOIL, QBlade) → ver también [[eolica-hogar/00 - Eólica a escala hogar (MOC)|Eólica a escala hogar]]

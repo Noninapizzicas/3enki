@@ -16,6 +16,7 @@ aislado: true
 
 ## Aerodinámica (el filo)
 - [[Perfiles aerodinámicos — NACA y SG]] . [[Diseño de palas — BEM y geometría]]
+- → sector completo: [[../aerodinamica/00 - Aerodinámica aplicada (MOC)|Aerodinámica aplicada]] — capa límite, morfing, biomimética, patentes 2020-2025
 
 ## Generador (la conversión)
 - [[Generador PMG — flujo axial]] . [[Alternadores y motores reciclados]]

@@ -1,5 +1,7 @@
 ---
+id: hermes-enki
 dominio: conversacion
+resumen: "Integración Hermes ↔ Enki — hermes-relay (pipe chat.message.saved → Hermes API) + hermes-bridge (dispatcher Node.js de las 434+ tools de Enki) + enki_tools (cliente Python). Hermes gestiona providers LLM; credential-manager conserva todas las credenciales de dominio."
 fuentes:
   - modules/hermes-bridge/index.js
   - modules/hermes-bridge/module.json

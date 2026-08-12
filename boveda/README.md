@@ -48,3 +48,6 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 
 ### Química práctica
 - [[quimica-practica/00 - Química práctica (MOC)|Química práctica]] — electroquímica (electrólisis, galvanotecnia, anodizado, pilas); cristales (alumbre, CuSO₄, bismuto, acetato sódico); saponificación y tensioactivos (jabones cold process, champú sólido); destilación y extracción (AE, hidrolatos, tinturas); pH e indicadores (col lombarda, buffers, dureza del agua); tintes y pigmentos (índigo, cochinilla, ecoprint); polímeros (epoxi, bioplásticos, silicona); análisis casero (cromatografía, TLC, titulación, refractometría); seguridad (SDS, EPI, residuos)
+
+### Agricultura y cultivo natural
+- [[agricultura-natural/00 - Agricultura natural (MOC)|Agricultura natural]] — suelo vivo (microbioma, micorrizas, lombrices); compost y vermicompost (pila termófila, lombricompostador, té de compost aireado); fertilizantes naturales (purín de ortiga, biol, bokashi, ceniza, algas); control biológico (Bt, Beauveria, depredadores, feromonas); pesticidas naturales caseros (jabón potásico, neem, caldo bordelés); enmiendas de suelo (biochar, silicio, micorrizas inoculadas, corrección de pH) → ver también [[hidroponia/00 - Hidroponía (MOC)|Hidroponía]]

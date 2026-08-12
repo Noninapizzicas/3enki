@@ -254,12 +254,20 @@ async function main() {
 
   // 4) Unidades systemd (render + escribir si difieren)
   let systemdCambio = false;
+  // Key del API server de Hermes: preservar la del unit vivo si existe (nunca
+  // versionada; fallback a env, luego vacía). Aplica a enki.service (HERMES_API_KEY).
+  const keyHermesViva = (() => {
+    const unitVivo = leer(M.servicios.enki.destino) || '';
+    const m = unitVivo.match(/Environment=HERMES_API_KEY=(\S+)/);
+    return (m && m[1]) || process.env.HERMES_API_KEY || '';
+  })();
   for (const [nombre, svc] of Object.entries(M.servicios)) {
     const tmpl = leer(svc.plantilla);
     if (tmpl == null) { warn(`plantilla ausente: ${svc.plantilla} (salto ${nombre})`); continue; }
     const vars = {};
     for (const [k, val] of Object.entries(svc.vars || {})) vars[k] = renderPlantilla(val, { DOMAIN: dominio });
-    const rendered = renderPlantilla(tmpl, { DOMAIN: dominio, ...vars });
+    let rendered = renderPlantilla(tmpl, { DOMAIN: dominio, ...vars });
+    if (nombre === 'enki') rendered = rendered.replace(/Environment=HERMES_API_KEY=.*$/m, `Environment=HERMES_API_KEY=${keyHermesViva}`);
     if (escribirSiDifiere(svc.destino, rendered, nombre)) systemdCambio = true;
   }
   if (systemdCambio) { act('systemctl daemon-reload'); shOk('systemctl daemon-reload'); }
@@ -285,6 +293,47 @@ async function main() {
   }
   if (FRESH || caddyCambio) { act('systemctl reload/restart caddy'); shOk('systemctl reload caddy') || shOk('systemctl restart caddy'); }
   else { log('Caddy sin cambios (no recargo)'); }
+
+  // 6b) Hermes TRABAJADOR (/home/hermes/.hermes) — config renderizada preservando
+  // la key + skills de Enki sincronizadas + usuario asegurado. Idempotente.
+  const HW = M.hermes_worker;
+  if (HW) {
+    // usuario hermes (grupo + home) si no existe
+    if (!shOk('id hermes')) {
+      act(`useradd -m -s /bin/bash ${HW.usuario}`);
+      if (!DRY_RUN) shOk(`useradd -m -s /bin/bash ${HW.usuario}`);
+      cambios++;
+    }
+    if (!existe(HW.home)) { act(`mkdir -p ${HW.home}`); if (!DRY_RUN) fs.mkdirSync(HW.home, { recursive: true }); cambios++; }
+
+    // config.yaml: renderizar plantilla, preservando la key del API server viva
+    // (nunca versionada; si no hay key viva, placeholder — el operador la pone).
+    const tmplCfg = leer(HW.config_plantilla);
+    let workerConfigCambio = false;
+    if (tmplCfg == null) {
+      warn(`plantilla hermes-worker ausente: ${HW.config_plantilla} (salto config)`);
+    } else {
+      const vivo = leer(HW.config_destino) || '';
+      const keyViva = (vivo.match(/^(\s*)key:\s*([^\s]+)\s*$/m) || [])[2] || process.env.API_SERVER_KEY || '__API_SERVER_KEY__';
+      const renderedCfg = tmplCfg.replace(/__API_SERVER_KEY__/g, keyViva);
+      workerConfigCambio = escribirSiDifiere(HW.config_destino, renderedCfg, 'hermes-worker config.yaml');
+      if (workerConfigCambio) { act('chown config → hermes'); if (!DRY_RUN) shOk(`chown -R ${HW.usuario}:${HW.usuario} ${HW.home}`); }
+    }
+
+    // skills de Enki: sincronizar desde el repo (rsync sin borrar lo extra)
+    if (existe(HW.skills_origen)) {
+      act(`rsync skills enki → ${HW.skills_destino}`);
+      if (!DRY_RUN) {
+        shOk(`mkdir -p ${HW.skills_destino}`);
+        shOk(`rsync -a --delete ${HW.skills_origen}/ ${HW.skills_destino}/`);
+        shOk(`chown -R ${HW.usuario}:${HW.usuario} ${HW.skills_destino}`);
+      }
+      cambios++;
+    }
+
+    // reiniciar hermes-gateway si su config cambió (la unit ya se reinicia arriba si cambió)
+    if (workerConfigCambio && !DRY_RUN) { act('systemctl restart hermes-gateway'); shOk('systemctl restart hermes-gateway'); }
+  }
 
   // 7) Self-check ruidoso
   if (DRY_RUN) {

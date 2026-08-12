@@ -263,7 +263,9 @@ async function main() {
     const cfgVivo = leer(M.hermes_worker?.config_destino) || '';
     const m1 = unitVivo.match(/Environment=HERMES_API_KEY=(\S+)/);
     const m2 = cfgVivo.match(/^(\s*)key:\s*([^\s]+)\s*$/m);
-    const key = (m1 && m1[1]) || (m2 && m2[1]) || process.env.API_SERVER_KEY || '';
+    // OJO: la key es el grupo 2 ([^\s]+); el grupo 1 es la indentación (\s*).
+    // Usar m2[1] devolvía la indentación (truthy) → no regeneraba la key.
+    const key = (m1 && m1[1]) || (m2 && m2[2]) || process.env.API_SERVER_KEY || '';
     if (!key || key === '__API_SERVER_KEY__') {
       const gen = crypto.randomBytes(24).toString('hex');
       act(`generando key del API server de Hermes (${gen.slice(0, 8)}…)`);

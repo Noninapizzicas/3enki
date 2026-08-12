@@ -49,9 +49,9 @@
 
   "config": {
     "enabled": true,
-    "portal_enabled_default": false,
-    "mode": "read",
-    "scope": "project",
+    "portal_enabled_default": true,
+    "mode": "write",
+    "scope": "system",
     "project_id": null,
     "allowlist": []
   },

@@ -27,6 +27,12 @@ conversacional/mental y Enki es el cuerpo event-driven.
    + MANIFIESTO.md con comandos de restauración.
 6. **Skills de Hermes Y del repo ANTES que agentes.** No inventar vías si hay
    skill (ej. `conexion-mqtt`, `enki-bus-invocacion`).
+7. **Los pipelines de proceso (F0-F7, adaptar-a-enki, construir-modulos) se
+   ejecutan como SUB-AGENTES de Hermes (delegate_task), no con el motor v3**
+   (apagado por la fusión). El registro del agente (`modules/agentes/registro/`)
+   es el CONTRATO que el sub-agente ejecuta: rebanadas + inventario real +
+   espina verificable por el JEFE. Si el chat de Enki se atasca con algo que
+   requiere el motor → avisar al Hermes externo, que lo delega.
 
 ## La filosofía del dueño (lo que gobierna TODO)
 

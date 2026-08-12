@@ -209,6 +209,10 @@
       "context_window": 40,
       "request_timeout_ms": 900000,
       "claude_md_path": ""
+    },
+    "portal": {
+      "scope": "system",
+      "mode": "write"
     }
   }
 }

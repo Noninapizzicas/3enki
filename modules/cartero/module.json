@@ -1,0 +1,46 @@
+{
+  "_doc": "Puente con el proveedor de correo (Gmail del dueño, M7). verificarCanal: disponible | error_autenticacion | suspendido | error (no clasificable). enviar: ok:true SOLO con confirmación explícita del proveedor (M7/M11, honestidad) y registro en historial (p6). Transporte real: provider local.gmail (Gmail API OAuth2, el puente que ya usa el sistema) vía ServiceExecutor; egress consciente por el interruptor 'cartero'.",
+  "dependencies": [],
+  "description": "Puente reflejo con el Gmail del dueño: verifica el canal y entrega la newsletter (M7) con ack explícito del proveedor.",
+  "language": "es",
+  "main": "index.js",
+  "name": "cartero",
+  "publishes": [
+    {
+      "description": "ok:true SOLO con ack del proveedor (messageId). Payload: { ok, envio }.",
+      "event": "cartero.envio_resultado"
+    },
+    {
+      "description": "Par de fallo del envío: proveedor sin ack o error. Payload: { motivo, detalle, envio }.",
+      "event": "cartero.enviar.failed"
+    },
+    {
+      "description": "Resultado de verificarCanal: { estado, detalle, ts }.",
+      "event": "cartero.verificado"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Verifica el canal de correo contra el proveedor (estado disponible | error_autenticacion | suspendido | error).",
+      "event": "cartero.verificar.request",
+      "handler": "onVerificarRequest"
+    },
+    {
+      "description": "Entrega la newsletter (borrador del redactor) al destino; ok:true solo con ack del proveedor.",
+      "event": "cartero.enviar.request",
+      "handler": "onEnviarRequest"
+    },
+    {
+      "description": "Historial de envíos (p6), filtrable por estado.",
+      "event": "cartero.envios.listar.request",
+      "handler": "onEnviosListarRequest"
+    },
+    {
+      "description": "Restaura la persistencia (historial de envíos) del proyecto activado.",
+      "event": "project.activated",
+      "handler": "onProjectActivated"
+    }
+  ],
+  "tools": [],
+  "version": "0.1.0"
+}

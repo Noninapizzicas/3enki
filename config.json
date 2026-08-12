@@ -146,8 +146,13 @@
       "cocina-poc",
       "notas-poc",
       "bienvenida-tienda",
-      "hermes-bridge",
-      "hermes-relay"
+      "ai-gateway",
+      "prompt-builder",
+      "ai-agent-framework-v3",
+      "agent-observer",
+      "memory-conversation-summary",
+      "memory-rag",
+      "memory-user-profile"
     ]
   },
   "observability": {
@@ -195,5 +200,15 @@
   },
   "web": {
     "public_ns": "a"
+  },
+  "modules_config": {
+    "hermes-relay": {
+      "hermes_url": "http://localhost:8642/v1/chat/completions",
+      "hermes_model": "hermes",
+      "hermes_api_key": "",
+      "context_window": 40,
+      "request_timeout_ms": 900000,
+      "claude_md_path": ""
+    }
   }
 }

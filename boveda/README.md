@@ -45,3 +45,6 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 
 ### Electromecánica y Ondas
 - [[electromecanica-ondas/00 - Electromecánica y Ondas (MOC)|Electromecánica y Ondas]] — Maxwell, Faraday, Lenz, Lorentz; imanes NdFeB; bobinado y AWG; motores DC/BLDC/stepper/FOC; generadores PMG axial; resonancia LC/RLC; Tesla (motor AC, bobina Tesla, WPT); antenas (dipolo, Yagi, SDR); simulación (FEMM, LTspice, OpenEMS); proyectos DIY → ver también [[eolica-hogar/00 - Eólica a escala hogar (MOC)|Eólica a escala hogar]]
+
+### Química práctica
+- [[quimica-practica/00 - Química práctica (MOC)|Química práctica]] — electroquímica (electrólisis, galvanotecnia, anodizado, pilas); cristales (alumbre, CuSO₄, bismuto, acetato sódico); saponificación y tensioactivos (jabones cold process, champú sólido); destilación y extracción (AE, hidrolatos, tinturas); pH e indicadores (col lombarda, buffers, dureza del agua); tintes y pigmentos (índigo, cochinilla, ecoprint); polímeros (epoxi, bioplásticos, silicona); análisis casero (cromatografía, TLC, titulación, refractometría); seguridad (SDS, EPI, residuos)

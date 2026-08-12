@@ -58,7 +58,28 @@ const MANIFIESTO = {
       destino: '/etc/systemd/system/enki-frontend.service',
       // ORIGIN = https://<dominio> (SvelteKit adapter-node lo exige para CSRF).
       vars: { ORIGIN: 'https://{{DOMAIN}}' }
+    },
+    // El Hermes TRABAJADOR de Enki (fusión 2026-08): api_server en :8642.
+    // Unit estática (sin vars de dominio) — el reconciliador la copia si difiere.
+    'hermes-gateway': {
+      unit: 'hermes-gateway.service',
+      plantilla: path.join(DEPLOYMENT_DIR, 'systemd', 'hermes-gateway.service'),
+      destino: '/etc/systemd/system/hermes-gateway.service',
+      vars: {}, // no depende del dominio
+      health: null // health se verifica por el API server con Bearer (ver reconcile)
     }
+  },
+
+  // Perfil del Hermes trabajador (/home/hermes/.hermes) — reconciliado desde el repo.
+  // config.yaml se RENDERIZA de plantilla preservando la key del API server;
+  // las skills de Enki se sincronizan desde .hermes/skills/enki del repo.
+  hermes_worker: {
+    home: '/home/hermes/.hermes',
+    usuario: 'hermes',
+    config_plantilla: path.join(DEPLOYMENT_DIR, 'hermes-worker', 'config.yaml.tmpl'),
+    config_destino: '/home/hermes/.hermes/config.yaml',
+    skills_origen: path.join(__dirname, '..', '.hermes', 'skills', 'enki'),
+    skills_destino: '/home/hermes/.hermes/skills/enki'
   },
 
   // Caddy: plantilla con dominio hardcoded (pizzepos.es) que se sustituye por
@@ -83,7 +104,7 @@ const MANIFIESTO = {
     // El Caddyfile vivo DEBE contener estos bloques (el drift clásico: falta el namespace).
     caddy_debe_contener: [`handle_path /${NS}/*`, 'handle /tienda/*'],
     dirs_escribibles: [NS_DIR],
-    servicios_activos: ['enki', 'enki-frontend', 'caddy'],
+    servicios_activos: ['enki', 'enki-frontend', 'caddy', 'hermes-gateway'],
     http_health: 'http://localhost:3000/health'
   }
 };

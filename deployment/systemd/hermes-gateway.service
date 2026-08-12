@@ -1,0 +1,42 @@
+# hermes-gateway.service — el agente Hermes VIVO como servicio del VPS.
+#
+# Hermes (NousResearch/hermes-agent) corre como TRABAJADOR de Enki: su API
+# server OpenAI-compatible en 127.0.0.1:8642 recibe los mensajes del chat vía
+# hermes-relay (fusión 2026-08) y ejecuta el agente COMPLETO (mente), que opera
+# Enki (cuerpo) por el MCP enki (/opt/enki/mcp/enki-mcp-server.js) y sus tools.
+# Local, sin tocar el 80/443 de Caddy ni el broker MQTT de Enki.
+# Su memoria y skills persisten en /home/hermes/.hermes.
+#
+# El reconciliador (deployment/reconcile.js) lo instala/actualiza desde el repo
+# (deployment/systemd/hermes-gateway.service) — idempotente, solo escribe si difiere.
+#
+# Verificar:
+#   systemctl status hermes-gateway
+#   curl -s -H "Authorization: Bearer ***" http://127.0.0.1:8642/v1/models
+
+[Unit]
+Description=Hermes Agent gateway (api_server local 127.0.0.1:8642) — trabajador de Enki
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+WorkingDirectory=/home/hermes
+Environment=HOME=/home/hermes
+# El instalador oficial deja el binario en ~/.local/bin.
+# 'gateway run' = el proceso EN PRIMER PLANO (el que systemd supervisa). OJO: NO
+# 'gateway start' — ése es el wrapper que le habla a systemctl para gestionar el
+# servicio de Hermes y EXIGE root ('System gateway start requires root'); bajo
+# User=hermes entra en bucle de fallo. 'run' es justo lo que Hermes hornea en su
+# propia unit (ExecStart=… -m hermes_cli.main gateway run).
+ExecStart=/home/hermes/.local/bin/hermes gateway run
+Restart=on-failure
+RestartSec=5
+# Hermes ejecuta código como parte de su arsenal — contenerlo al usuario hermes
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

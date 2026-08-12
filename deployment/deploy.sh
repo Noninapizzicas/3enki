@@ -44,6 +44,7 @@ rsync -a --delete \
     --exclude='.git' \
     --exclude='data' \
     --exclude='public' \
+    --exclude='.hermes' \
     "${REPO_DIR}/" "${INSTALL_DIR}/"
 
 # 2) Deps backend

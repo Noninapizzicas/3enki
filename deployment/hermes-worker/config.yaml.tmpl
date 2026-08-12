@@ -1,0 +1,46 @@
+# Plantilla del config del Hermes TRABAJADOR de Enki (/home/hermes/.hermes/config.yaml).
+# La escribe el reconciliador (deployment/reconcile.js) desde el repo.
+# __API_SERVER_KEY__ se sustituye por la key real (preservada del config vivo
+# si existe, o {{API_SERVER_KEY_ENV}} si se pasa por env — NUNCA versionada).
+model:
+  default: deepseek-v4-flash
+  provider: deepseek
+  base_url: https://api.deepseek.com/v1
+agent:
+  max_turns: 150
+display:
+  tool_progress: all
+_config_version: 33
+platforms:
+  api_server:
+    enabled: true
+    extra:
+      key: __API_SERVER_KEY__
+mcp_servers:
+  enki:
+    command: node
+    args:
+      - /opt/enki/mcp/enki-mcp-server.js
+    env:
+      ENKI_BROKER_URL: mqtt://localhost:1883
+session_reset:
+  mode: none
+platform_toolsets:
+  cli:
+    - clarify
+    - code_execution
+    - computer_use
+    - cronjob
+    - delegation
+    - file
+    - image_gen
+    - memory
+    - session_search
+    - skills
+    - terminal
+    - todo
+    - tts
+    - vision
+known_plugin_toolsets:
+  cli:
+    - spotify

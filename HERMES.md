@@ -126,5 +126,9 @@ systemctl show enki -p ActiveEnterTimestamp --value
 - Fusión ACTIVA en prod y repo (config alineado, PRs #183 #184 #185 mergeados).
 - Chat → Hermes operativo (verificado con mensajes reales).
 - MCP 420 tools, skills de Enki en el perfil hermes, permisos g+w aplicados.
+- **El perfil del Hermes trabajador está EN EL REPO** (`deployment/hermes-worker/`
+  + `deployment/systemd/hermes-gateway.service`): el reconciliador lo despliega
+  (config renderizada preservando la key, skills sincronizadas, unit instalado).
+  Si el VPS se pierde, `deploy.sh --fresh --domain X` reconstruye todo.
 - Escandallo de nonina: 30/32 recetas costeadas; bachata/folk pendientes de
   decisión de negocio (factor ud→kg de la anchoa).

@@ -32,6 +32,7 @@
 const fs   = require('fs');
 const path = require('path');
 const cp   = require('child_process');
+const crypto = require('crypto');
 
 const { MANIFIESTO } = require('./vps.manifest.js');
 
@@ -254,12 +255,21 @@ async function main() {
 
   // 4) Unidades systemd (render + escribir si difieren)
   let systemdCambio = false;
-  // Key del API server de Hermes: preservar la del unit vivo si existe (nunca
-  // versionada; fallback a env, luego vacía). Aplica a enki.service (HERMES_API_KEY).
+  // Key del API server de Hermes: preservar la del unit/config vivo si existe
+  // (nunca versionada; fallback a env; en VPS nuevo la GENERA — y alimenta tanto
+  // el unit de enki como el config del worker, para que todo quede listo de una).
   const keyHermesViva = (() => {
     const unitVivo = leer(M.servicios.enki.destino) || '';
-    const m = unitVivo.match(/Environment=HERMES_API_KEY=(\S+)/);
-    return (m && m[1]) || process.env.HERMES_API_KEY || '';
+    const cfgVivo = leer(M.hermes_worker?.config_destino) || '';
+    const m1 = unitVivo.match(/Environment=HERMES_API_KEY=(\S+)/);
+    const m2 = cfgVivo.match(/^(\s*)key:\s*([^\s]+)\s*$/m);
+    const key = (m1 && m1[1]) || (m2 && m2[1]) || process.env.API_SERVER_KEY || '';
+    if (!key || key === '__API_SERVER_KEY__') {
+      const gen = crypto.randomBytes(24).toString('hex');
+      act(`generando key del API server de Hermes (${gen.slice(0, 8)}…)`);
+      return gen;
+    }
+    return key;
   })();
   for (const [nombre, svc] of Object.entries(M.servicios)) {
     const tmpl = leer(svc.plantilla);
@@ -306,16 +316,33 @@ async function main() {
     }
     if (!existe(HW.home)) { act(`mkdir -p ${HW.home}`); if (!DRY_RUN) fs.mkdirSync(HW.home, { recursive: true }); cambios++; }
 
-    // config.yaml: renderizar plantilla, preservando la key del API server viva
-    // (nunca versionada; si no hay key viva, placeholder — el operador la pone).
+    // INSTALAR Hermes si falta el binario (el trabajador no viaja en el repo:
+    // el paquete hermes-agent se instala con el instalador oficial de Nous).
+    // Idempotente: si el binario existe, no hace nada. En un VPS nuevo lo deja
+    // listo de una — y genera la key del API server si no hay (abajo).
+    const binHermes = `/home/${HW.usuario}/.local/bin/hermes`;
+    if (!existe(binHermes)) {
+      const installer = 'https://hermes-agent.nousresearch.com/install.sh';
+      act(`instalando hermes-agent (${installer}) → ${binHermes}`);
+      if (!DRY_RUN) {
+        shOk(`curl -fsSL ${installer} | HOME=/home/${HW.usuario} bash`);
+        if (!existe(binHermes)) {
+          warn(`instalador de Hermes no dejó el binario en ${binHermes} — revisa journalctl/network. El VPS queda degradado (chat sin mente).`);
+        } else {
+          shOk(`chown -R ${HW.usuario}:${HW.usuario} /home/${HW.usuario}/.local /home/${HW.usuario}/.hermes`);
+          cambios++;
+        }
+      }
+    }
+
+    // config.yaml: renderizar plantilla con la key viva (nunca versionada; la
+    // resuelve/genera el paso 4 — VPS nuevo listo de una).
     const tmplCfg = leer(HW.config_plantilla);
     let workerConfigCambio = false;
     if (tmplCfg == null) {
       warn(`plantilla hermes-worker ausente: ${HW.config_plantilla} (salto config)`);
     } else {
-      const vivo = leer(HW.config_destino) || '';
-      const keyViva = (vivo.match(/^(\s*)key:\s*([^\s]+)\s*$/m) || [])[2] || process.env.API_SERVER_KEY || '__API_SERVER_KEY__';
-      const renderedCfg = tmplCfg.replace(/__API_SERVER_KEY__/g, keyViva);
+      const renderedCfg = tmplCfg.replace(/__API_SERVER_KEY__/g, keyHermesViva);
       workerConfigCambio = escribirSiDifiere(HW.config_destino, renderedCfg, 'hermes-worker config.yaml');
       if (workerConfigCambio) { act('chown config → hermes'); if (!DRY_RUN) shOk(`chown -R ${HW.usuario}:${HW.usuario} ${HW.home}`); }
     }

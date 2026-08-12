@@ -1,0 +1,127 @@
+{
+  "id": "sonda",
+  "version": "blueprint-0.1.0",
+  "_v0_1_0_nota": "v0.1.0: la mitad FUZZY de la sonda de nichos. El cajón recolectar LEER (crawl4rs.rastrear/buscar por cada fuente registrada del reflejo) -> PENSAR (extraer señales de nicho del markdown: titulo, url, sector) -> GUARDAR (delegado al reflejo sonda.cosecha.guardar.request, que hace dedupe por fuente+url y persiste) -> EMITIR (sonda.senales_cosechadas con las NUEVAS). El reflejo custodia fuentes y cosecha; el cajón NO decide si un nicho vale (eso es el evaluador). Anti-colisión: sonda.recolectar.request solo aquí, nunca en subscribes del reflejo.",
+  "language": "es",
+  "temperatura": 0.3,
+
+  "modelo_oop": {
+    "INTERFAZ": "Sonda { recolectar(in: RecolectarInput): RecolectarOutput }",
+    "CLASE SondaFuzzy IMPLEMENTA Sonda": {
+      "ATRIBUTOS": {
+        "reflejo": "Reflejo        // sonda index.js — registro de fuentes + dedupe + persistencia",
+        "crawl4rs": "Adquisicion   // crawl4rs.rastrear/buscar — el egress a internet",
+        "bus": "EventBus        // Observer: sonda.senales_cosechadas / sonda.recolectar.failed"
+      },
+      "METODOS": [
+        "recolectar(in): RecolectarOutput            // el ciclo: LEER -> PENSAR -> GUARDAR -> EMITIR",
+        "extraerSenales(markdown, fuente): Array<Senal>  // FUZZY — del markdown a (titulo, url, sector)"
+      ]
+    },
+    "MANDATOS (Specification — una cosecha válida los satisface)": [
+      "FIDELIDAD_DE_FUENTE: toda señal lleva la fuente de la que salió. Nunca inventes una url que no viste en el markdown.",
+      "SEÑAL_CRUDA: solo titulo+url+sector. NO decides si el nicho vale ni puntúas — eso lo hace el evaluador después.",
+      "DEDUPE_DELEGADO: no deduplicas tú. Entrega TODO lo nuevo al reflejo (sonda.cosecha.guardar.request) y él filtra por (fuente,url).",
+      "SIN_FUENTE_NO_HAY_COSECHA: si una fuente falla (timeout/404), anótala en barrido.fuentesConsultadas con ok:false y sigue con las demás; si TODAS fallan, emite sonda.recolectar.failed con el detalle.",
+      "EGRESS_CONSCIENTE: el interruptor 'sonda' manda. Si está apagado, no tocas crawl4rs; devuelves barrido con ok:false y motivo interruptor_apagado."
+    ],
+    "PATRONES": {
+      "TemplateMethod": "el ciclo LEER->PENSAR->GUARDAR->EMITIR es fijo; extraerSenales es el hueco fuzzy",
+      "Delegation": "GUARDAR+dedupe delegados al reflejo (sonda.cosecha.guardar.request)",
+      "Strategy": "crawl4rs.rastrear (feed/RSS) vs crawl4rs.buscar (web) según canal de la fuente",
+      "Interruptor": "gate de egress: interruptor 'sonda' consultado antes de salir a internet"
+    }
+  },
+
+  "contrato": {
+    "Fuente": "{ id:str!, canal:str!, metrica:str!, frecuencia_h:num!, umbral:num, url:str, activa:bool }",
+    "Senal": "{ titulo:str, fuente:str!, url:str!, sector?:str, fechaCosecha:str }",
+    "RecolectarInput": "{ project_id?:uuid, request_id:uuid!, fuentes?:[Fuente], force?:bool }",
+    "RecolectarOutput": "{ status:num, data?:{ añadidas:num, duplicadas:num, malformadas:num, senales:[Senal], barrido:obj }, error?, message? }"
+  },
+
+  "transporte": {
+    "entrada": "cajon recolectar (responde:true en sonda.recolectar.request)",
+    "rpc": [
+      "sonda.fuentes.listar.request -> .response   (LEER — las fuentes registradas del reflejo)",
+      "crawl4rs.rastrear.request -> .response      (LEER — feed/RSS, canal 'rss')",
+      "crawl4rs.buscar.request -> .response        (LEER — web, resto de canales)",
+      "sonda.cosecha.guardar.request -> .response  (GUARDAR — delegado: dedupe + persistencia + emisión)"
+    ],
+    "salida": ["sonda.senales_cosechadas", "sonda.recolectar.failed"],
+    "qos": "publishAndWait (request/response correlado) en cada LEER y en el GUARDAR; best-effort en crawl4rs (timeout 8s por fuente)"
+  },
+
+  "operaciones": {
+    "recolectar": {
+      "cajon_descripcion": "Ciclo de cosecha: recorre las fuentes registradas del reflejo, LEER cada una vía crawl4rs (rastrear si el canal es rss/feed, buscar si es web), PENSAR extrayendo señales de nicho del markdown (titulo, url, sector) y GUARDAR delegando al reflejo, que deduplica por (fuente,url), persiste y emite sonda.senales_cosechadas con las nuevas.",
+      "input": "RecolectarInput (ver contrato)",
+      "usa_internas": [],
+      "pseudocodigo": [
+        "async recolectar(in):",
+        "  // 0. EGRESS CONSCIENTE — el interruptor manda",
+        "  sw = publishAndWait('interruptores.estado.request', {id:'sonda'}, 4000)",
+        "  si sw?.data?.estado == 'off':",
+        "    return {status:200, data:{añadidas:0, duplicadas:0, malformadas:0, senales:[], barrido:{ok:false, motivo:'interruptor_apagado'}}}",
+        "",
+        "  // 1. LEER — las fuentes registradas (o las que el caller fuerza)",
+        "  fuentes = in.fuentes?.length ? in.fuentes : (publishAndWait('sonda.fuentes.listar.request', {project_id: in.project_id}, 4000)?.data?.fuentes || [])",
+        "  si !fuentes.length: return {status:200, data:{añadidas:0, duplicadas:0, malformadas:0, senales:[], barrido:{ok:true, fuentesConsultadas:[]}}}",
+        "",
+        "  // 2. LEER+PENSAR por fuente — la adquisición (Strategy por canal)",
+        "  todas = [] ; barrido = {fuentesConsultadas: []}",
+        "  para f en fuentes:",
+        "    si !f.activa: continue",
+        "    r = (f.canal == 'rss')",
+        "        ? publishAndWait('crawl4rs.rastrear.request', {url: f.url, project_id: in.project_id}, 8000)",
+        "        : publishAndWait('crawl4rs.buscar.request',  {query: f.metrica, project_id: in.project_id, limite: 10}, 8000)",
+        "    si !r || r.status != 200:",
+        "      barrido.fuentesConsultadas.add({id: f.id, ok: false, error: r?.data?.error || 'timeout'})",
+        "      continue   // una fuente caída no tumba el ciclo",
+        "    barrido.fuentesConsultadas.add({id: f.id, ok: true})",
+        "    todas.push(...extraerSenales(r.data?.markdown || r.data?.texto || '', f))   // FUZZY: titulo, url, sector — SOLO lo que viste",
+        "",
+        "  // 3. GUARDAR — delegado al reflejo (dedupe por fuente+url + persistencia + emisión)",
+        "  g = publishAndWait('sonda.cosecha.guardar.request', {project_id: in.project_id, senales: todas, barrido}, 8000)",
+        "  si !g || g.status != 200:",
+        "    publish('sonda.recolectar.failed', {error: 'guardar_fallido', detalle: g?.data?.error})",
+        "    return {status:502, data:{...}, error:'guardar_fallido', message:'el reflejo no pudo persistir la cosecha'}",
+        "",
+        "  // 4. EMITIR — ya lo hizo el reflejo con las NUEVAS (sonda.senales_cosechadas).",
+        "  si barrido.fuentesConsultadas.every(c => !c.ok):",
+        "    publish('sonda.recolectar.failed', {error:'todas_las_fuentes_fallaron', barrido})",
+        "    return {status:502, data:g.data, error:'todas_las_fuentes_fallaron', message:'ninguna fuente respondió'}",
+        "",
+        "  return {status:200, data:g.data, message: `${g.data.añadidas} señales nuevas de ${barrido.fuentesConsultadas.filter(c=>c.ok).length} fuentes`}"
+      ],
+      "reglas_clave": [
+        "FIDELIDAD_DE_FUENTE: la url de cada señal sale del markdown que devolvió crawl4rs para ESA fuente. Nunca la inventes ni la reutilices de otra.",
+        "SEÑAL_CRUDA: solo titulo+url+sector. Sin puntuación, sin veredicto, sin opinión de nicho — el evaluador decide después.",
+        "DEDUPE_DELEGADO: entregas TODO al reflejo; él filtra por (fuente,url). No filtras tú ni llevas memoria.",
+        "UNA_CAÍDA_NO_TUMBA_EL_CICLO: fuente que falla se anota en barrido con ok:false y se sigue. Solo si TODAS fallan emites sonda.recolectar.failed.",
+        "EGRESS_CONSCIENTE: interruptor 'sonda' apagado = no tocas crawl4rs. Devuelves barrido.ok:false con motivo, sin error."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE", "UNKNOWN_ERROR"]
+    }
+  },
+
+  "eventos_publicados": [
+    "sonda.senales_cosechadas",
+    "sonda.recolectar.failed",
+    "sonda.fuentes.listar.request",
+    "crawl4rs.rastrear.request",
+    "crawl4rs.buscar.request",
+    "sonda.cosecha.guardar.request"
+  ],
+
+  "eventos_que_escucho": [
+    {
+      "evento": "sonda.recolectar.request",
+      "handler": "recolectar",
+      "responde": true,
+      "description": "Cajón: ciclo de cosecha LEER->PENSAR->GUARDAR->EMITIR. Responde con el resumen (añadidas/duplicadas/malformadas)."
+    }
+  ],
+
+  "filosofia": "La sonda no decide: VIGILA. Su trabajo es traer señales crudas del mercado —títulos, urls, sectores— con fidelidad a la fuente, sin opinar si un nicho vale. Lo que decide está fuera de ella: el evaluador pondrá el veredicto, el banco custodiará el ciclo. Ella solo mira y trae. Y mira con permiso: el interruptor 'sonda' es la puerta de su egress —apagado, se queda en casa y lo dice claro."
+}

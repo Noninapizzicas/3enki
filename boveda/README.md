@@ -43,6 +43,9 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 ### Fermentos
 - [[fermentos/00 - Fermentos (MOC)|Fermentos]] — lactofermentación (chucrut, kimchi, encurtidos), kéfir (leche y agua), kombucha (SCOBY), fermentos alcohólicos (vino, sidra, cerveza), fermentos asiáticos (miso, tempeh, natto, koji), vinagres caseros, técnicas base y seguridad
 
+### Terapias holísticas
+- [[terapias-holisticas/00 - Terapias holísticas (MOC)|Terapias holísticas]] — plantas medicinales y adaptógenos (fitoterapia, tincturas); flores de Bach (38 remedios, selección, Rescue Remedy); aceites esenciales y aromaterapia (diluciones, mezclas, uso terapéutico); EFT tapping (puntos meridianos, protocolo, matrix reimprinting); respiraciones (box breathing, Wim Hof, coherencia cardíaca, pranayama); frecuencias y sonido (binaural beats, solfeggio, cuencos tibetanos, mantra); kinesiología y péndulo (test muscular, auto-test, radiestesia); afirmaciones y reprogramación (Louise Hay, scripting, ho'oponopono, visualización); tarot y ángeles (arcanos, tiradas, angelología, números angélicos); diseño humano (tipos, estrategia, autoridad, centros, perfiles)
+
 ### Aerodinámica
 - [[aerodinamica/00 - Aerodinámica aplicada (MOC)|Aerodinámica aplicada]] — sustentación, empuje, arrastre; perfiles NACA y modernos; velas y propulsión eólica; alerones y control activo (AFC, X-65 CRANE); capa límite (NLF/HLFC); biomimética (riblets, tubercles, serrations); alas morfing; estudios y patentes 2020-2025; CFD (OpenFOAM, XFOIL, QBlade) → ver también [[eolica-hogar/00 - Eólica a escala hogar (MOC)|Eólica a escala hogar]]
 

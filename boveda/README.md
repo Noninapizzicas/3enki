@@ -38,3 +38,6 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 - [[cocina-mediterranea/00 - Cocina mediterránea (MOC)|Cocina mediterránea]] — España, Italia, Francia, Grecia, Turquía, Magreb, Levante, despensa común
 - [[cocina-asiatica/00 - Cocina asiática (MOC)|Cocina asiática]] — Japón, China, Tailandia, Corea, India, Vietnam, arroz, wok
 - [[cocina-mexicana/00 - Cocina mexicana (MOC)|Cocina mexicana]] — regiones, maíz, tacos, antojitos, bebidas, recetas fundamentales
+
+### Aerodinámica
+- [[aerodinamica/00 - Aerodinámica aplicada (MOC)|Aerodinámica aplicada]] — sustentación, empuje, arrastre; perfiles NACA y modernos; velas y propulsión eólica; alerones y control activo (AFC, X-65 CRANE); capa límite (NLF/HLFC); biomimética (riblets, tubercles, serrations); alas morfing; estudios y patentes 2020-2025; CFD (OpenFOAM, XFOIL, QBlade)

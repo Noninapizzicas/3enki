@@ -45,7 +45,7 @@ class RelojReflejo extends ModuloHibridoReflejo {
     const corr = input.correlation_id || null;
 
     // 1. Cosecha: sonda → señales crudas (cajón). Sin respuesta → abort.
-    const sonda = await this._rpc('sonda.recolectar.request', { project_id: pid, correlation_id: corr }, { timeout_ms: 30000 });
+    const sonda = await this._rpc('sonda.recolectar.request', { project_id: pid, correlation_id: corr }, { timeout_ms: 60000 });
     if (!sonda || sonda.status !== 200) return this._abortar(pid, corr, 'sonda.recolectar', 'sin_señales_o_sonda_no_disponible');
     const señales = sonda.data && (sonda.data.senales || sonda.data.señales) || [];
     this._publicarEvento('reloj.ciclo_iniciado', { project_id: pid, senales: señales.length, ts: new Date().toISOString() });

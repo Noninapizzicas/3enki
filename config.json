@@ -135,7 +135,14 @@
       "calendario",
       "boss",
       "enforcement",
-      "cierre"
+      "cierre",
+      "sonda",
+      "banco",
+      "evaluador",
+      "redactor",
+      "cartero",
+      "interfaz",
+      "reloj"
     ],
     "disabled": [
       "dashboard",
@@ -146,7 +153,6 @@
       "cocina-poc",
       "notas-poc",
       "bienvenida-tienda",
-      "ai-gateway",
       "prompt-builder",
       "ai-agent-framework-v3",
       "agent-observer",

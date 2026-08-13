@@ -1,0 +1,124 @@
+{
+  "id": "redactor",
+  "version": "blueprint-0.1.0",
+  "_v0_1_0_nota": "v0.1.0: la mitad FUZZY del conversor. El cajón redactar LEER (banco.obtener.request — la ficha del candidato que el banco custodia) -> PENSAR (redactar la newsletter M9: ficha visible -> veredicto claro -> decisión accionable, 5 min, español, sin clickbait) -> GUARDAR (validar.request anti borrador vacío + borrador.guardar.request delegado al reflejo, que deduplica por candidato_id con version++ y persiste) -> EMITIR (redactor.borrador_listo con las NUEVAS). El reflejo custodia el historial de borradores y la validación determinista; el cajón NO decide si el nicho vale (eso ya lo hizo el evaluador — el cajón solo lo traduce). Anti-colisión: redactor.redactar.request solo aquí, nunca en subscribes del reflejo.",
+  "language": "es",
+  "temperatura": 0.4,
+
+  "modelo_oop": {
+    "INTERFAZ": "Redactor { redactar(in: RedactarInput): RedactarOutput }",
+    "CLASE RedactorFuzzy IMPLEMENTA Redactor": {
+      "ATRIBUTOS": {
+        "reflejo": "Reflejo        // redactor index.js — validación + historial de borradores + persistencia",
+        "banco": "Banco          // banco.obtener — la ficha del candidato (LEER, nunca escribir en el banco)",
+        "bus": "EventBus        // Observer: redactor.borrador_listo / redactor.redactar.failed"
+      },
+      "METODOS": [
+        "redactar(in): RedactarOutput            // el ciclo: LEER -> PENSAR -> GUARDAR -> EMITIR",
+        "generarBorrador(ficha): Borrador         // FUZZY — de la ficha a (titulo, cuerpo, decision)"
+      ]
+    },
+    "MANDATOS (Specification — un borrador válido los satisface)": [
+      "FIDELIDAD_A_LA_FICHA: redactas SOLO con lo que trae la ficha del banco. Nunca inventes datos, cifras ni fuentes que no estén en ella.",
+      "FICHA_VISIBLE_VEREDICTO_DECISION: estructura fija — qué se ha observado (ficha), qué veredicto dio el evaluador, qué decisión accionable toma el dueño. Sin veredicto no hay newsletter.",
+      "5_MIN_ES_SIN_CLICKBAIT: máximo 5 minutos de lectura, español claro, título honesto. Nada de gancho engañoso.",
+      "VALIDAR_ANTES_DE_GUARDAR: el borrador pasa por redactor.validar.request (anti borrador vacío) antes de persistir. El reflejo decide, no tú.",
+      "GUARDAR_DELEGADO: no persistes tú. Entrega el borrador al reflejo (redactor.borrador.guardar.request) y él hace dedupe por candidato_id con version++ y emite redactor.borrador_listo."
+    ],
+    "PATRONES": {
+      "TemplateMethod": "el ciclo LEER->PENSAR->GUARDAR->EMITIR es fijo; generarBorrador es el hueco fuzzy",
+      "Delegation": "GUARDAR+dedupe+validación delegados al reflejo (redactor.borrador.guardar.request / redactor.validar.request)",
+      "Adapter": "la ficha del banco (estado del candidato) se adapta a texto de newsletter",
+      "NullObject": "ficha no encontrada -> redactor.redactar.failed (nunca un borrador vacío)"
+    }
+  },
+
+  "contrato": {
+    "Ficha": "{ candidato_id:str!, fuente:str!, url:str!, titulo:str!, sector?:str, fecha_deteccion:str, veredicto?:str, criterios?:[str], notas?:str, estado:str! }",
+    "Borrador": "{ candidato_id:str!, titulo:str!, cuerpo:str!, decision:str!, publicado_en:str, version:num }",
+    "RedactarInput": "{ project_id?:uuid, request_id:uuid!, candidato_id:str! }",
+    "RedactarOutput": "{ status:num, data?:{ borrador:Borrador, version:num }, error?, message? }"
+  },
+
+  "transporte": {
+    "entrada": "cajon redactar (responde:true en redactor.redactar.request)",
+    "rpc": [
+      "banco.obtener.request -> .response           (LEER — la ficha del candidato desde el banco)",
+      "redactor.validar.request -> .response        (GUARDAR — anti borrador vacío: candidato + ficha presentes)",
+      "redactor.borrador.guardar.request -> .response (GUARDAR — delegado: dedupe por candidato_id, version++, persistencia + emisión)"
+    ],
+    "salida": ["redactor.borrador_listo", "redactor.redactar.failed"],
+    "qos": "publishAndWait (request/response correlado) en cada RPC; timeout 8s en banco.obtener (la ficha debe existir)"
+  },
+
+  "operaciones": {
+    "redactar": {
+      "cajon_descripcion": "Ciclo de redacción: LEER la ficha del candidato desde el banco (banco.obtener), PENSAR redactando la newsletter (ficha visible -> veredicto claro -> decisión accionable, 5 min, español, sin clickbait) y GUARDAR delegando al reflejo, que valida anti borrador vacío, deduplica por candidato_id con version++ y emite redactor.borrador_listo.",
+      "input": "RedactarInput (ver contrato)",
+      "usa_internas": [],
+      "pseudocodigo": [
+        "async redactar(in):",
+        "  // 0. ENTRADA — el candidato es obligatorio",
+        "  si !in.candidato_id:",
+        "    return {status:400, error:{code:'INVALID_INPUT', message:'candidato_id requerido', details:{field:'candidato_id'}}}",
+        "",
+        "  // 1. LEER — la ficha desde el banco (el estado lo custodia el banco, no yo)",
+        "  f = publishAndWait('banco.obtener.request', {project_id: in.project_id, candidato_id: in.candidato_id}, 8000)",
+        "  si !f || f.status != 200:",
+        "    publish('redactor.redactar.failed', {error:'ficha_no_encontrada', candidato_id: in.candidato_id})",
+        "    return {status:404, error:{code:'RESOURCE_NOT_FOUND', message:'ficha no encontrada en el banco', details:{candidato_id: in.candidato_id}}}",
+        "",
+        "  ficha = f.data.ficha",
+        "  // Sin veredicto del evaluador no hay newsletter: el borrador no puede decidir lo que no se ha juzgado",
+        "  si !ficha.veredicto:",
+        "    publish('redactor.redactar.failed', {error:'sin_veredicto', candidato_id: in.candidato_id})",
+        "    return {status:409, error:{code:'CONFLICT_STATE', message:'la ficha aún no tiene veredicto del evaluador'}}",
+        "",
+        "  // 2. PENSAR — del estado del candidato al borrador (FUZZY: el hueco del TemplateMethod)",
+        "  borrador = generarBorrador(ficha)",
+        "",
+        "  // 3. GUARDAR — validación determinista del reflejo (anti borrador vacío)",
+        "  v = publishAndWait('redactor.validar.request', {project_id: in.project_id, candidato_id: in.candidato_id, ficha: ficha}, 6000)",
+        "  si !v || v.status != 200:",
+        "    publish('redactor.redactar.failed', {error:'validacion_fallida', detalle: v?.data?.error})",
+        "    return {status:422, error:{code:'INVALID_INPUT', message:'el borrador no pasó la validación del reflejo'}}",
+        "",
+        "  // 4. GUARDAR — persistencia delegada al reflejo (dedupe por candidato_id, version++, emite redactor.borrador_listo)",
+        "  g = publishAndWait('redactor.borrador.guardar.request', {project_id: in.project_id, borrador: borrador}, 8000)",
+        "  si !g || g.status != 200:",
+        "    publish('redactor.redactar.failed', {error:'guardar_fallido', detalle: g?.data?.error})",
+        "    return {status:502, error:{code:'UNKNOWN_ERROR', message:'el reflejo no pudo persistir el borrador'}}",
+        "",
+        "  // 5. EMITIR — ya lo hizo el reflejo con redactor.borrador_listo (versión + borrador persistido).",
+        "  return {status:200, data:g.data, message: `borrador v${g.data.version} listo para ${in.candidato_id}`}"
+      ],
+      "reglas_clave": [
+        "FIDELIDAD_A_LA_FICHA: todo lo que escribes sale de la ficha del banco. Nunca inventes datos, cifras, fechas ni fuentes.",
+        "FICHA_VISIBLE_VEREDICTO_DECISION: la estructura del borrador es fija — qué se observó, qué veredicto dio el evaluador, qué decisión accionable toma el dueño.",
+        "5_MIN_ES_SIN_CLICKBAIT: lectura ≤ 5 minutos, español claro, título honesto. La newsletter informa; no vende humo.",
+        "DELEGADO: validar y guardar son del reflejo. No filtras tú ni llevas memoria ni decides versiones.",
+        "SIN_VEREDICTO_NO_HAY_NEWSLETTER: candidato sin veredicto del evaluador = CONFLICT_STATE, no un borrador inventado."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"]
+    }
+  },
+
+  "eventos_publicados": [
+    "redactor.borrador_listo",
+    "redactor.redactar.failed",
+    "banco.obtener.request",
+    "redactor.validar.request",
+    "redactor.borrador.guardar.request"
+  ],
+
+  "eventos_que_escucho": [
+    {
+      "evento": "redactor.redactar.request",
+      "handler": "redactar",
+      "responde": true,
+      "description": "Cajón: ciclo de redacción LEER->PENSAR->GUARDAR->EMITIR. Responde con el borrador persistido (versión incluida)."
+    }
+  ],
+
+  "filosofia": "El redactor no decide qué vale: TRADUCE. La decisión ya la tomó el evaluador sobre la evidencia del banco; su trabajo es convertirla en una newsletter que el dueño pueda leer en 5 minutos y actuar. Escribe con fidelidad a la ficha —si el dato no está en el banco, no está en el borrador— y con honestidad de título: la información no necesita clickbait. Su guarda interior es el veredicto: sin él, prefiere callar (CONFLICT_STATE) antes que inventar una opinión que no se ha ganado."
+}

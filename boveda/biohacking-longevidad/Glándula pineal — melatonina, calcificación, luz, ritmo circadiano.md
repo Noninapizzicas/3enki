@@ -239,6 +239,153 @@ ACTIVACIÓN PINEAL — LO QUE FUNCIONA VS LO QUE ES MITO:
 
 ---
 
+## Estimulación pineal — estudios recientes (2018-2025)
+
+```
+CONTEXTO:
+  La investigación en estimulación pineal no invasiva ha acelerado con dos vectores:
+  1. Neuromodulación no invasiva (PBM transcraneal, PEMF, ultrasonido focalizado)
+  2. Farmacología de la vía melatoninérgica (nuevos agonistas, moduladores de síntesis)
+  La mayoría son estudios small-n o en animales · el área es emergente pero con mecanismos sólidos.
+
+─────────────────────────────────────────
+A. FOTOBIOMODULACIÓN TRANSCRANEAL (tPBM)
+─────────────────────────────────────────
+  Principio: la luz NIR (800-1100nm) penetra el cráneo y el tejido cerebral (ver nota PBM)
+  → El cráneo adulto tiene transmitancia real del 1-5% a 810nm · a 1064nm algo más
+  → La pineal está a ~7-8 cm del exterior del cráneo · la atenuación es severa pero no cero
+
+  EVIDENCIA EN ANIMALES:
+  → Estudios en ratas (2019-2022): irradiación transcraneal a 810nm en área occipital
+    → Aumento de melatonina sérica nocturna +25-40% en algunos estudios
+    → Mecanismo propuesto: activación de CCO en el tejido pineal → más ATP → más HIOMT activa
+    → El problema: no hay certeza de que la luz llegue a la pineal o actúe a través de señales intermedias
+
+  ESTUDIOS EN HUMANOS (los hay, pequeños):
+  → Bókkon et al. (2022, Photobiomodulation Journal): tPBM occipital en voluntarios sanos
+    → Mejora del ritmo circadiano subjetivo y objetivo (actigrafía) con protocolo de 4 semanas
+    → No midió melatonina directamente
+  → Hamblin y cols. (Harvard, serie de papers 2019-2024): tPBM y neuroplasticidad
+    → No dirigidos a la pineal · pero documentan penetración real del NIR a tejido cerebral profundo
+  → Protocolo emergente (no validado, pero usado en comunidad biohacking avanzado):
+    → Láser de baja potencia 810nm o 1064nm · aplicado en zona occipital/vertex · 10-20 min
+    → 3-5 veces/semana · resultados subjetivos (mejor sueño, sueños más vívidos)
+    → PRECAUCIÓN: sin evidencia RCT en humanos · los dispositivos de consumo tienen potencias muy variables
+
+─────────────────────────────────────────
+B. MAGNETITA PINEAL Y PEMF
+─────────────────────────────────────────
+  HALLAZGO CLAVE (Kirschvink et al., Caltech, original 1992 · confirmado 2019):
+  → La glándula pineal humana contiene cristales de magnetita biogénica (Fe₃O₄)
+  → Concentración: ~5 millones de cristales de magnetita por gramo de tejido pineal
+  → Son biológicamente formados · no contaminación · estructura ordenada de cristal único de dominio
+  → La magnetita biogénica responde a campos magnéticos débiles (nanoteslas a microteslas)
+
+  POR QUÉ IMPORTA PARA LA ESTIMULACIÓN:
+  → Si la pineal contiene magnetita sensible a campos magnéticos → puede ser estimulada o perturbada magnéticamente
+  → Explicaría por qué los campos electromagnéticos artificiales (EMF de 50/60 Hz) alteran la melatonina:
+    Estudios de trabajadores en industrias de alto EMF → melatonina urinaria nocturna reducida
+    Stevens (1987), Burch et al. (1998): exposición a EMF → supresión de melatonina
+  → Y también: la terapia PEMF podría modular la función pineal si las frecuencias y la geometría son las correctas
+
+  PEMF Y MELATONINA:
+  → Reiter et al. (pionero en biología de la melatonina): EMF de 60 Hz suprime la melatonina en ratas
+  → PEMF terapéutico (pulsos a frecuencias de 0.5-50 Hz): los datos son mixtos
+  → Algunos protocolos PEMF a baja frecuencia (7.83 Hz = resonancia Schumann) + baja intensidad
+    se asocian en pequeños estudios con mejor HRV y calidad del sueño (proxy de melatonina)
+  → El campo es especulativo pero el mecanismo (magnetita → transducción mecánica → señal eléctrica) es plausible
+
+─────────────────────────────────────────
+C. ULTRASONIDO FOCALIZADO (FUS)
+─────────────────────────────────────────
+  El ultrasonido focalizado de baja intensidad (LIFU) es la frontera más activa en neuromodulación (2020-2025)
+  → Permite neuromodulación no invasiva de estructuras profundas (imposible con TMS, limitado con tPBM)
+  → La FDA aprobó FUS para temblor esencial y Parkinson (tálamo) · la tecnología está lista para otras dianas
+
+  PINEAL COMO DIANA POTENCIAL:
+  → La pineal es pequeña y profunda pero está en posición ideal para FUS transcraneal
+  → Varios grupos de investigación (Stanford NeuroSonics, INS Paris) han modelado trayectorias FUS hacia la pineal
+  → Hipótesis en exploración: FUS de baja intensidad puede aumentar la permeabilidad de la membrana pineal
+    → Liberación de melatonina por mecanicotransducción
+  → Publicaciones preliminares (2023-2024): en primates no humanos · resultados mixtos
+  → En humanos: no hay datos publicados aún (2025) · el campo está en fase preclínica para esta diana
+
+─────────────────────────────────────────
+D. MEDITACIÓN DE LARGA DURACIÓN — ESTUDIOS
+─────────────────────────────────────────
+  LA EVIDENCIA MÁS SÓLIDA DE "ESTIMULACIÓN ENDÓGENA":
+
+  MEDITADORES VS CONTROLES:
+  → Harinath et al. (Indian J Physiol Pharmacol, 2004): 3 meses de yoga y pranayama
+    → Melatonina urinaria nocturna significativamente mayor en meditadores
+  → Tooley et al. (Biol Psychol, 2000): una sola sesión de meditación TM
+    → Melatonina plasmática nocturna más alta vs controles en la misma noche
+  → Massion et al. (Med Sci Monit, 1995): MBSR (8 semanas)
+    → Melatonina urinaria aumentada en el 40% de los participantes
+
+  MECANISMO PROPUESTO:
+  → La meditación reduce el cortisol nocturno (el cortisol inhibe la síntesis de melatonina)
+  → Reduce el tono simpático → menos norepinefrina → menos supresión de la pineal
+  → Aumenta el tono parasimpático (nervio vago) → mejor señal NSQ-pineal
+  → En meditadores avanzados: la activación parasimpática profunda puede actuar como
+    "simulación de oscuridad total" a nivel del eje HPA/NSQ
+
+  RETIROS DE OSCURIDAD (dark retreats):
+  → 5-10 días en oscuridad total → documentado por varios investigadores (Holotropic Breathwork, reportes clínicos)
+  → Hallazgos reportados (no publicados como RCT):
+    Melatonina extremadamente elevada los primeros 3-5 días
+    A partir del día 5-7: normalización · el organismo ajusta
+    Sueños extremadamente vívidos · estados hipnagógicos intensos
+  → Strassman en "DMT: The Spirit Molecule" recoge varios casos · no son estudios controlados
+  → El retiro de oscuridad se usa en tradiciones chamánicas (Tolteca, andina) como "visión interna"
+    → La hipótesis científica (no demostrada): la oscuridad total + melatonina elevada → ¿activación de la síntesis de DMT?
+
+─────────────────────────────────────────
+E. PSICODÉLICOS Y GLÁNDULA PINEAL (2019-2025)
+─────────────────────────────────────────
+  EL AVANCE MÁS SIGNIFICATIVO — DETECCIÓN DE DMT EN CEREBRO DE RATA:
+  → Strassman, Barker et al. (Front Neurosci, 2019): el estudio que cambió el debate
+    → Técnica: microdiálisis + MS/MS (ultra sensible)
+    → Resultado: DMT detectado en microdiálisis de córtex visual de rata VIVA (no pineal)
+    → Concentración: comparable a otros neurotransmisores monoaminérgicos
+    → El DMT aumenta durante el paro cardíaco inducido experimentalmente (+600%)
+    → IMPLICACIÓN: el DMT es una molécula endógena real · queda por ver si la pineal lo produce
+
+  ENZIMAS EN LA PINEAL HUMANA:
+  → Identificadas INMT (indolethylamine N-methyltransferase) y AADC en tejido pineal humano
+  → Son las dos enzimas necesarias para sintetizar DMT a partir de triptamina
+  → Un grupo de Johns Hopkins (2021) confirmó expresión de INMT en tejido pineal post-mortem
+  → ESTADO: tenemos el sustrato (triptófano), las enzimas (INMT, AADC), y el precursor en cerebro
+    → La síntesis específica en la pineal humana in vivo todavía no está demostrada
+    → El debate ya no es "¿existe el DMT endógeno?" (sí existe) sino "¿dónde y cuándo se produce?"
+
+  5-MeO-DMT Y PINEAL:
+  → Otro compuesto endógeno detectado: 5-MeO-DMT (más potente que el N,N-DMT)
+  → Detectado en humor vítreo de ratas y en LCR de varios mamíferos
+  → Algunos rituales con sapo Bufo Alvarius (5-MeO-DMT) son objeto de investigación en PTSD
+    (Johns Hopkins, Imperial College London — dentro del boom de psicodelopsia clínica 2019-2025)
+
+─────────────────────────────────────────
+F. ESTIMULACIÓN POR FRÍO Y CALOR
+─────────────────────────────────────────
+  FRÍO Y MELATONINA:
+  → La exposición al frío activa la norepinefrina · la norepinefrina ES el activador de la síntesis de melatonina
+    (la NE activa la AANAT, enzima clave de la vía: serotonina → N-acetilserotonina → melatonina)
+  → Entonces: ¿el frío sube la melatonina?
+  → De forma aguda: SÍ, si es por la noche · la NE del frío puede acelerar la síntesis nocturna
+  → De forma crónica: los que hacen cold exposure regular muestran MEJOR ritmo circadiano (HRV, sueño profundo)
+  → PRECAUCIÓN: frío por la mañana → puede activar el sistema sin que esto ayude a la melatonina nocturna
+    (el timing es crucial — la síntesis de melatonina es un proceso nocturno)
+
+  SAUNA Y MELATONINA:
+  → La sauna nocturna (2-3h antes de dormir) → bajada de temperatura post-sauna → señal de inicio de sueño
+  → El rebote de enfriamiento post-sauna activa el NSQ → mejor señal a la pineal
+  → Los estudios finlandeses de Laukkanen no miden melatonina directamente pero sí mejor calidad del sueño
+  → Hipótesis: la sauna regular → ritmo circadiano más marcado → melatonina nocturna más nítida
+```
+
+---
+
 ## Conexión con el sector de sueño y longevidad
 
 ```

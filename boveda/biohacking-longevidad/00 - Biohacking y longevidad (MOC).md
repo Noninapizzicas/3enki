@@ -42,6 +42,7 @@ GESTIÓN DEL ESTRÉS Y CONEXIÓN — el pilar más ignorado
 | [[Tai chi y qigong — formas, principios, beneficios documentados\|Tai chi y qigong]] | estilos · principios internos · formas (24, 37) · qigong · evidencia clínica |
 | [[Microbioma y longevidad — gut-brain axis, fermentados, prebióticos\|Microbioma y longevidad]] | gut-brain axis · AGCC · butirato · Akkermansia · fermentados · prebióticos · análisis |
 | [[Gestión del estrés — cortisol, adaptógenos, HRV, resiliencia\|Gestión del estrés]] | cortisol · eje HPA · HRV · ashwagandha · rhodiola · respiración coherente · nervio vago |
+| [[Glándula pineal — melatonina, calcificación, luz, ritmo circadiano\|Glándula pineal]] | melatonina · calcificación · flúor · K2 · luz azul · DMT · antioxidante mitocondrial |
 | [[Fuentes — biohacking y longevidad\|Fuentes]] | libros · podcasts · YouTube · apps · laboratorios analítica en España |
 
 ## Biomarcadores clave a seguir

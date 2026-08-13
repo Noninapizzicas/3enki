@@ -3,11 +3,17 @@
  *
  * Contrato: aplica la máquina de estados del candidato (CRUDO→EN_EVALUACION→APROBADO→
  * SELECCIONADO→PUBLICADO, con EN_OBSERVACION por falta de evidencia y RECHAZADO por el
- * dueño), el tope de 100 candidatos con rotación (M6) y el aparcado por falta de
- * evidencia (M10). NO decide: el evaluador evalúa, el dueño confirma (M11).
+ * dueño), el tope de 100 candidatos con rotación (M6), el aparcado por falta de
+ * evidencia (M10) y la corrección de ficha del dueño (M10: el dueño aporta el dato que
+ * faltaba → EN_OBSERVACION → EN_EVALUACION, se re-evalúa). NO decide: el evaluador
+ * evalúa, el dueño confirma (M11).
  *
  * FORMA: REFLEJO + PosPersistencia por proyecto (patrón custodio, gemelo de
  * project-profile). Store: /radar/banco.json (single-writer, fs.write atómico).
+ *
+ * v0.2.0 (aditiva sobre la v0.1.0 sellada): + banco.corregir_ficha.request
+ * (onCorregirFichaRequest) y + banco.candidato_ficha_corregida. El resto de ops y
+ * eventos quedan intactos.
  */
 
 'use strict';
@@ -28,7 +34,7 @@ class BancoReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'banco';
-    this.version = 'reflejo-0.1.0';
+    this.version = 'reflejo-0.2.0';
     this.candidatos = new Map();   // `${project_id}:${id}` → candidato
     this.historico = new Map();    // `${project_id}:${id}` → candidato (rotado/rechazado, p6)
 
@@ -60,6 +66,7 @@ class BancoReflejo extends ModuloHibridoReflejo {
   onAparcarRequest(e)     { return this._atender(e, 'aparcar', 'banco.aparcar.response', d => this._aparcar(d)); }
   onSeleccionarRequest(e) { return this._atender(e, 'seleccionar', 'banco.seleccionar.response', d => this._seleccionar(d)); }
   onPublicarRequest(e)    { return this._atender(e, 'publicar', 'banco.publicar.response', d => this._publicar(d)); }
+  onCorregirFichaRequest(e) { return this._atender(e, 'corregir_ficha', 'banco.corregir_ficha.response', d => this._corregirFicha(d)); }
 
   // ── Handlers de eventos de dominio (fire-and-forget entrantes) ──
   onVeredictoEmitido(e)   { return this._aplicarVeredicto((e && (e.data || e)) || {}); }
@@ -220,6 +227,37 @@ class BancoReflejo extends ModuloHibridoReflejo {
     await this._guardar(input.project_id, doc);
 
     this._publicarEvento('banco.candidato_publicado', { project_id: input.project_id, candidato: c });
+    return { status: 200, data: { candidato: c } };
+  }
+
+  // _corregirFicha (M10, v0.2.0): el dueño aporta el dato que faltaba. Merge de la
+  // corrección (criterios/evidencia + detalle) y reapertura a EN_EVALUACION para que
+  // se re-dicte. Estados corregibles: CRUDO, EN_OBSERVACION, EN_EVALUACION. Los
+  // terminales/avanzados (APROBADO→SELECCIONADO→PUBLICADO, RECHAZADO) no se corrigen:
+  // el dueño usa confirmar_veredicto para los otros caminos.
+  async _corregirFicha(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.id) return this._invalid('id');
+    if (!input.ficha || typeof input.ficha !== 'object') return this._invalid('ficha');
+    const doc = await this._cargar(input.project_id);
+    const c = doc.candidatos.get(_key(input.project_id, input.id));
+    if (!c) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'candidato_no_encontrado', { id: input.id });
+    if (!['CRUDO', 'EN_OBSERVACION', 'EN_EVALUACION'].includes(c.estado)) {
+      return this._errorResponse(409, 'CONFLICT_STATE', 'correccion_no_permitida_en_este_estado', { id: input.id, estado: c.estado });
+    }
+
+    const prev = c.ficha || { criterios: {}, detalle: {} };
+    c.ficha = {
+      criterios: { ...(prev.criterios || {}), ...(input.ficha.criterios || {}) },
+      detalle: { ...(prev.detalle || {}), ...(input.ficha.detalle || {}) },
+      corregida_en: nowISO()
+    };
+    c.estado = 'EN_EVALUACION';
+    c.criterios_faltantes = [];
+    c.historial.push({ estado: 'EN_EVALUACION', en: nowISO(), motivo: 'correccion_dueño' });
+    await this._guardar(input.project_id, doc);
+
+    this._publicarEvento('banco.candidato_ficha_corregida', { project_id: input.project_id, candidato: c, motivo: 'correccion_dueño' });
     return { status: 200, data: { candidato: c } };
   }
 

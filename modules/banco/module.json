@@ -1,5 +1,5 @@
 {
-  "_doc": "Custodio single-writer del banco de nichos: candidatos, fichas, veredictos e histórico. Aplica la máquina de estados (CRUDO→…→PUBLICADO), el tope 100 con rotación (M6) y el aparcado por falta de evidencia (M10). NO decide: evalúa quien evalúa, decide el dueño (M11).",
+  "_doc": "Custodio single-writer del banco de nichos: candidatos, fichas, veredictos e histórico. Aplica la máquina de estados (CRUDO→…→PUBLICADO), el tope 100 con rotación (M6), el aparcado por falta de evidencia (M10) y la corrección de ficha del dueño (M10: EN_OBSERVACION→EN_EVALUACION, re-evaluación). NO decide: evalúa quien evalúa, decide el dueño (M11).",
   "config": {
     "persistence": {
       "concurrency": "single-writer",
@@ -28,6 +28,9 @@
     },
     {
       "event": "banco.candidato_rotado"
+    },
+    {
+      "event": "banco.candidato_ficha_corregida"
     },
     {
       "event": "banco.anadir.failed"
@@ -62,6 +65,10 @@
       "handler": "onPublicarRequest"
     },
     {
+      "event": "banco.corregir_ficha.request",
+      "handler": "onCorregirFichaRequest"
+    },
+    {
       "event": "evaluador.veredicto_emitido",
       "handler": "onVeredictoEmitido"
     },
@@ -75,5 +82,5 @@
     }
   ],
   "tools": [],
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

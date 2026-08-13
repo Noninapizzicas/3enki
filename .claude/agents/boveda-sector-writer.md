@@ -24,6 +24,8 @@ El usuario te pasa un nombre de sector. Puede ser cualquier tema:
 
 Si el usuario pasa contexto adicional (subtemas de interés, enfoque, nivel del lector), úsalo para orientar la investigación.
 
+**Año de trabajo:** antes de empezar, determina el año actual con `date +%Y`. Usa ese año (y el anterior) en todas las búsquedas de novedades y precios. No hardcodees años.
+
 ---
 
 ## Protocolo de trabajo — 4 fases
@@ -32,21 +34,21 @@ Si el usuario pasa contexto adicional (subtemas de interés, enfoque, nivel del 
 
 No empieces a escribir hasta terminar esta fase. La calidad del sector depende de la densidad de la investigación.
 
-**Búsquedas obligatorias:**
+**Búsquedas obligatorias** (sustituye `<año>` por el año actual y `<año-1>` por el anterior):
 
 ```
 1. "<sector> guía completa técnicas materiales" — conocimiento base
-2. "<sector> últimas noticias 2025" — lo que está pasando ahora
-3. "<sector> avances recientes 2024 2025" — innovaciones y tendencias
+2. "<sector> últimas noticias <año>" — lo que está pasando ahora
+3. "<sector> avances recientes <año-1> <año>" — innovaciones y tendencias
 4. "<sector> herramientas equipamiento mejores opciones" — el arsenal
-5. "<sector> precios España 2024 2025" — datos económicos reales
+5. "<sector> precios España <año>" — datos económicos reales
 6. "<sector> principiantes guía cómo empezar" — nivel de entrada
 7. "<sector> técnicas avanzadas profesionales" — nivel experto
 8. "<sector> comunidades foros recursos online España" — dónde aprender más
 9. "<sector> errores comunes problemas soluciones" — lo que falla
 10. "<sector> proveedores tiendas marcas recomendadas España" — dónde comprar
 11. "<sector> proyectos ideas ejemplos paso a paso" — qué se puede hacer
-12. "<sector> normativa regulación España 2024" — si aplica (seguridad, licencias, etc.)
+12. "<sector> normativa regulación España <año>" — si aplica (seguridad, licencias, etc.)
 ```
 
 **Búsquedas adicionales según el sector:**
@@ -171,19 +173,19 @@ tags: [tag1, tag2, ...]
 
 **Estándares de calidad — OBLIGATORIOS:**
 
-- **Precios reales**: siempre con año · "Rubio Monocoat 350ml: 40-50€ (2025)" — nunca rangos vagos sin dato
+- **Precios reales**: siempre con año actual · "Rubio Monocoat 350ml: 40-50€ (<año>)" — nunca rangos vagos sin dato
 - **Marcas y modelos concretos**: "Sierra Makita HS7601J" — nunca "una sierra circular de buena marca"
 - **Medidas y especificaciones**: dimensiones en mm · tolerancias · resistencias · temperaturas · pH — lo que aplique al sector
 - **Escalas de dificultad**: ★☆☆☆☆ a ★★★★★ en técnicas y proyectos
 - **Alternativas reales**: siempre al menos 2-3 opciones por categoría (económica · media · premium)
 - **Proveedores España**: dónde comprar real, con URL si la tienes
 - **Errores comunes**: qué falla en la práctica y por qué — no solo lo positivo
-- **Novedad 2024-2025**: cada nota debe tener al menos 1 dato, técnica, herramienta o noticia reciente si la investigación la encontró
+- **Novedad reciente**: cada nota debe tener al menos 1 dato, técnica, herramienta o noticia del año actual o anterior si la investigación la encontró
 
 **El bloque de avances recientes** — añadir al menos en las notas de herramientas, técnicas y materiales:
 
 ```markdown
-## Novedades 2024-2025
+## Novedades <año-1>-<año>
 
 \```
 <LO QUE HAS ENCONTRADO EN LA INVESTIGACIÓN>
@@ -234,8 +236,8 @@ git push --force-with-lease origin <branch-name>
 
 Antes del git add, verifica mentalmente:
 
-- [ ] El MOC tiene la sección "Últimas noticias y avances del sector" con datos reales de 2024-2025
-- [ ] Cada nota tiene al menos un dato concreto de 2024-2025 si lo encontré en la investigación
+- [ ] El MOC tiene la sección "Últimas noticias y avances del sector" con datos reales del año actual o anterior
+- [ ] Cada nota tiene al menos un dato concreto reciente si lo encontré en la investigación
 - [ ] Los precios llevan año entre paréntesis
 - [ ] Las marcas son específicas (modelo, no solo fabricante)
 - [ ] Hay al menos 2-3 alternativas en cada categoría de herramienta/material

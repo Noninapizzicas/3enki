@@ -77,7 +77,14 @@ class SondaReflejo extends ModuloHibridoReflejo {
 
   // ── Ops (REFLEJO: deterministas) ──
 
-  _listarFuentes(input) {
+  // Hidratación LAZY: tras un restart, si el mapa está vacío y el proyecto tiene
+  // persistencia en disco, restaurar antes de responder. Cierra la clase entera
+  // "mapa vacío tras restart" aunque project.activated se pierda o llegue sin
+  // base_path (el delator del 2026-08-14: fuentes.listar → [] con 15 en disco).
+  async _listarFuentes(input) {
+    if (this.fuentes.size === 0 && input.project_id) {
+      await this._persistencia.restaurar(input.project_id);
+    }
     const fuentes = [...this.fuentes.entries()].map(([id, f]) => ({ id, ...f }));
     return {
       status: 200,

@@ -41,5 +41,12 @@
     }
   ],
   "tools": [],
+  "ui_handlers": [
+    { "domain": "interfaz", "action": "listar",              "handler": "onListarRequest",            "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "interfaz", "action": "ver",                 "handler": "onVerRequest",               "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "interfaz", "action": "confirmar_veredicto", "handler": "onConfirmarVeredictoRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "interfaz", "action": "anadir_manual",       "handler": "onAnadirManualRequest",       "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "interfaz", "action": "corregir_ficha",      "handler": "onCorregirFichaRequest",      "type": "workspace_module", "zone": "barra_modulos" }
+  ],
   "version": "0.1.0"
 }

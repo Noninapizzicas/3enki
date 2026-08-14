@@ -50,7 +50,7 @@ class RelojReflejo extends ModuloHibridoReflejo {
     const sinFuentes = !fuentes || fuentes.status !== 200 || !(fuentes.data && fuentes.data.fuentes) || fuentes.data.fuentes.length === 0;
     let señales = [];
     if (!sinFuentes) {
-      const sonda = await this._rpc('sonda.recolectar.request', { project_id: pid, correlation_id: corr }, { timeout_ms: 60000 });
+      const sonda = await this._rpc('sonda.recolectar.request', { project_id: pid, correlation_id: corr }, { timeout_ms: 600000 });
       if (!sonda || sonda.status !== 200) return this._abortar(pid, corr, 'sonda.recolectar', 'sin_señales_o_sonda_no_disponible');
       señales = sonda.data && (sonda.data.senales || sonda.data.señales) || [];
     }

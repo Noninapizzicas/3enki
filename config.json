@@ -142,7 +142,8 @@
       "redactor",
       "cartero",
       "interfaz",
-      "reloj"
+      "reloj",
+      "credential-oauth"
     ],
     "disabled": [
       "dashboard",

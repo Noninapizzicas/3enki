@@ -44,10 +44,16 @@ class RelojReflejo extends ModuloHibridoReflejo {
     if (!pid) return this._invalid('project_id');
     const corr = input.correlation_id || null;
 
-    // 1. Cosecha: sonda → señales crudas (cajón). Sin respuesta → abort.
-    const sonda = await this._rpc('sonda.recolectar.request', { project_id: pid, correlation_id: corr }, { timeout_ms: 60000 });
-    if (!sonda || sonda.status !== 200) return this._abortar(pid, corr, 'sonda.recolectar', 'sin_señales_o_sonda_no_disponible');
-    const señales = sonda.data && (sonda.data.senales || sonda.data.señales) || [];
+    // 1. Cosecha: si no hay fuentes registradas, nada que cosechar (determinista —
+    //    no se delega al cajón LLM para el caso vacío). Con fuentes, sonda → señales.
+    const fuentes = await this._rpc('sonda.fuentes.listar.request', { project_id: pid, correlation_id: corr }, { timeout_ms: 10000 });
+    const sinFuentes = !fuentes || fuentes.status !== 200 || !(fuentes.data && fuentes.data.fuentes) || fuentes.data.fuentes.length === 0;
+    let señales = [];
+    if (!sinFuentes) {
+      const sonda = await this._rpc('sonda.recolectar.request', { project_id: pid, correlation_id: corr }, { timeout_ms: 60000 });
+      if (!sonda || sonda.status !== 200) return this._abortar(pid, corr, 'sonda.recolectar', 'sin_señales_o_sonda_no_disponible');
+      señales = sonda.data && (sonda.data.senales || sonda.data.señales) || [];
+    }
     this._publicarEvento('reloj.ciclo_iniciado', { project_id: pid, senales: señales.length, ts: new Date().toISOString() });
 
     // 2. Ingesta: banco.anadir { señales } (dedupe fuente+url, tope 100 → rotación M6).

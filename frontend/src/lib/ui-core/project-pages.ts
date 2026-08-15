@@ -15,6 +15,10 @@ export interface PageDef {
   id: string;
   icon: string;
   label: string;
+  // false = página NO navegable (panel de work-bar, sin ruta propia): el rail
+  // lateral (PageNavStrip) la omite. El page-set la declara para gatear la
+  // work-bar, pero no hay /<proyecto>/<id> que visitar.
+  nav?: boolean;
 }
 
 /** Catálogo de páginas conocidas: id → icono + etiqueta. El page-set del proyecto indexa aquí. */
@@ -37,7 +41,9 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   escaparate:       { id: 'escaparate',       icon: '🪟',  label: 'Escaparate' },
   agenda:           { id: 'agenda',           icon: '📅',  label: 'Agenda' },
   // — buscador de nichos (radar): visible SOLO si el proyecto declara 'interfaz' en su page-set —
-  interfaz:         { id: 'interfaz',         icon: '📡',  label: 'Radar de nichos' }
+  // nav:false → el rail lateral NO la pinta (no hay ruta /<proyecto>/interfaz); el botón
+  // vive en la work-bar (manifest zone work-bar + loader en panels.ts), que abre el panel.
+  interfaz:         { id: 'interfaz',         icon: '📡',  label: 'Radar de nichos', nav: false }
 };
 
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */

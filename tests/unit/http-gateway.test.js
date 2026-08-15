@@ -96,7 +96,7 @@ async function runTests() {
   });
 
   await test('HTTPGateway: debe iniciar servidor HTTP', async () => {
-    const gateway = new HTTPGateway({ port: 3001 });
+    const gateway = new HTTPGateway({ port: process.env.PORT || 3001 });
     await gateway.start();
     assert(gateway.isRunning === true, 'Gateway está corriendo');
     assert(gateway.stats.started_at !== null, 'Timestamp de inicio registrado');

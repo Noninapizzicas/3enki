@@ -14,8 +14,11 @@ const REGISTRO_DEFAULT = './data/telegram-bridge/registro.json';
  *             botName está vinculado a un proyecto → mqttRequest
  *             ('conversation', 'send', {...}) — la vía canónica del loader
  *             (context.mqttRequest → uiHandler.handle → chat-io.handleSend).
- *             La conversación por chatId se crea la primera vez
- *             (conversation/create) y se recuerda en el registro.
+ *             El chatId RESUELVE su conversación: lista las del proyecto
+ *             (conversation/list — el MISMO evento que la web) y usa la
+ *             ÚLTIMA ACTIVA (el backend ordena por updated_at DESC); si no
+ *             hay ninguna, crea una (conversation/create). El id resuelto
+ *             se recuerda en el registro → hilo unificado con la web.
  * SALIENTE  : ai.chat.response / ai.chat.failed con channel='telegram' →
  *             telegram.send_message.request { botName, chatId, text } con el
  *             hilo del mensaje original (channel_context propagado por el
@@ -163,12 +166,13 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
     const project_id = vinculo.project_id;
     const key = String(chatId);
 
-    // 1) Conversación por chatId — se crea la primera vez
+    // 1) Conversación por chatId — se RESUELVE (última activa del proyecto
+    //    o creación si no hay ninguna), se recuerda para futuros mensajes
     let conversation_id = vinculo.conversaciones?.[key];
     if (!conversation_id) {
-      conversation_id = await this._crearConversacion(project_id, chatId, from);
+      conversation_id = await this._resolverConversacion(project_id, chatId, from);
       if (!conversation_id) {
-        this._emitirFallo(botName, chatId, 'conversation_create', 'no se pudo crear la conversación', correlation_id);
+        this._emitirFallo(botName, chatId, 'conversation_resolve', 'no se pudo resolver/crear la conversación', correlation_id);
         return;
       }
       vinculo.conversaciones = vinculo.conversaciones || {};
@@ -192,11 +196,43 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
     this.metrics?.increment('telegram-bridge.entrante.reenviado');
   }
 
-  async _crearConversacion(project_id, chatId, from) {
+  /**
+   * RESUELVE la conversación para un chatId (decisión del dueño: opción B —
+   * 'conversación lista y eliges'):
+   *   1) conversation.list { project_id } — el MISMO evento que la web usa.
+   *      Contrato real (chat-io v2, handleList): response.data.conversations,
+   *      cada una { id, title, updated_at (ISO), message_count, ... }, ya
+   *      ordenadas por updated_at DESC (el backend ordena) → la primera es la
+   *      ÚLTIMA ACTIVA. El campo id es `id` (no `conversation_id`).
+   *   2) Si hay alguna → devuelve su id (NO crea). Hilo unificado con la web.
+   *   3) Si no hay ninguna (o list falla) → conversation.create como antes.
+   */
+  async _resolverConversacion(project_id, chatId, from) {
     if (!this.mqttRequest) return null;
+
+    let res = null;
+    try {
+      res = await this.mqttRequest('conversation', 'list', { project_id });
+    } catch (err) {
+      this.logger?.error('telegram-bridge.conversation.list_error', { error: err.message });
+    }
+
+    const convs = res?.data?.conversations;
+    if (Array.isArray(convs) && convs.length > 0) {
+      const activa = convs[0];
+      if (activa && activa.id) {
+        this.metrics?.increment('telegram-bridge.conversacion.reutilizada');
+        this.logger?.info('telegram-bridge.conversacion.reutilizada', {
+          project_id, chatId, conversation_id: activa.id,
+          titulo: activa.title, updated_at: activa.updated_at
+        });
+        return activa.id;
+      }
+    }
+
     const title = from ? `Telegram ${from}` : `Telegram chat ${chatId}`;
-    const res = await this.mqttRequest('conversation', 'create', { project_id, title });
-    const conv = res?.data;
+    const creada = await this.mqttRequest('conversation', 'create', { project_id, title });
+    const conv = creada?.data;
     return (conv && (conv.conversation_id || conv.conversation?.id)) || null;
   }
 

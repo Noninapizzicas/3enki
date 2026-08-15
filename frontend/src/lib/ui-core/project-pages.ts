@@ -35,7 +35,9 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   catalogo:         { id: 'catalogo',         icon: '🔷',  label: 'Catálogo' },
   pos:              { id: 'pos',              icon: '🧾',  label: 'POS' },
   escaparate:       { id: 'escaparate',       icon: '🪟',  label: 'Escaparate' },
-  agenda:           { id: 'agenda',           icon: '📅',  label: 'Agenda' }
+  agenda:           { id: 'agenda',           icon: '📅',  label: 'Agenda' },
+  // — buscador de nichos (radar): visible SOLO si el proyecto declara 'interfaz' en su page-set —
+  interfaz:         { id: 'interfaz',         icon: '📡',  label: 'Radar de nichos' }
 };
 
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */

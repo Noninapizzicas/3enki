@@ -181,6 +181,20 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/impresion/ImpresionPanel.svelte')
   },
 
+  // === WORK BAR — Radar de nichos (interfaz) ===
+  // El botón de la barra lo renderiza el manifest.json del módulo (zone work-bar,
+  // order 8, icon 📡); esta entrada es el loader que carga el panel al pulsar.
+  interfaz: {
+    id: 'interfaz',
+    title: 'Radar de nichos',
+    icon: '📡',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 8,
+    loader: () => import('$lib/modules/interfaz/InterfazPanel.svelte')
+  },
+
   // === CHAT TOOLS (barra inferior junto al chat) ===
   files: {
     id: 'files',

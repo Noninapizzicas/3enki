@@ -1,0 +1,23 @@
+{
+  "_doc": "Puente Telegram ⇄ chat por proyecto. Cada bot de Telegram vinculado a un proyecto reenvía sus mensajes entrantes (telegram.text.received / telegram.command.received) al chat del proyecto via chat-io (mqttRequest conversation/send), y las respuestas del chat (ai.chat.response / ai.chat.failed con channel='telegram') vuelven al hilo de origen via telegram.send_message.request. Registro GLOBAL botName→project_id persistido en data/telegram-bridge/registro.json (tempfile+rename). Los callbacks inline (telegram.callback.received) NO son mensajes conversacionales: se ignoran con log (su canal es telegram.answer_callback, dominio del bot, no del chat). Reflejo puro determinista, sin blueprint: traduce Telegram ⇄ bus, no toca el core.",
+  "name": "telegram-bridge",
+  "version": "1.0.0",
+  "description": "Puente Telegram ⇄ chat por proyecto: cada bot vinculado a un proyecto reenvía sus mensajes al chat del proyecto (misma mente de Hermes) y las respuestas del chat vuelven al hilo de Telegram.",
+  "language": "es",
+  "subscribes": [
+    { "event": "telegram.text.received", "handler": "onTelegramTextReceived", "description": "Texto entrante de un bot → chat del proyecto vinculado." },
+    { "event": "telegram.command.received", "handler": "onTelegramCommandReceived", "description": "Comando entrante (/cmd args) → chat del proyecto vinculado." },
+    { "event": "telegram.callback.received", "handler": "onTelegramCallbackReceived", "description": "Callback de botón inline: se ignora para el chat (no es mensaje conversacional)." },
+    { "event": "ai.chat.response", "handler": "onAiChatResponse", "description": "Respuesta del chat (Hermes) → reenvía al hilo de Telegram de origen." },
+    { "event": "ai.chat.failed", "handler": "onAiChatFailed", "description": "Fallo del chat → reenvía el error al hilo de Telegram de origen." },
+    { "event": "telegram.bridge.vincular.request", "handler": "onVincularRequest", "description": "Vincula un botName a un project_id." },
+    { "event": "telegram.bridge.listar.request", "handler": "onListarRequest", "description": "Lista vínculos (todos o por project_id)." }
+  ],
+  "publishes": [
+    { "event": "telegram.bridge.vinculado", "description": "Emitido al vincular un bot a un proyecto." },
+    { "event": "telegram.bridge.envio_fallido", "description": "Emitido cuando falla la inyección al chat o el envío a Telegram." }
+  ],
+  "config": {
+    "registro_path": "./data/telegram-bridge/registro.json"
+  }
+}

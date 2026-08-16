@@ -1,7 +1,7 @@
 {
   "_doc": "Puente Telegram ⇄ chat por proyecto. Cada bot de Telegram vinculado a un proyecto reenvía sus mensajes entrantes (telegram.text.received / telegram.command.received) al chat del proyecto via chat-io (mqttRequest conversation/send), y las respuestas del chat (ai.chat.response / ai.chat.failed con channel='telegram') vuelven al hilo de origen via telegram.send_message.request. Registro GLOBAL botName→project_id persistido en data/telegram-bridge/registro.json (tempfile+rename). Los callbacks inline (telegram.callback.received) NO son mensajes conversacionales: se ignoran con log (su canal es telegram.answer_callback, dominio del bot, no del chat). Reflejo puro determinista, sin blueprint: traduce Telegram ⇄ bus, no toca el core.",
   "name": "telegram-bridge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Puente Telegram ⇄ chat por proyecto: cada bot vinculado a un proyecto reenvía sus mensajes al chat del proyecto (misma mente de Hermes) y las respuestas del chat vuelven al hilo de Telegram.",
   "language": "es",
   "subscribes": [

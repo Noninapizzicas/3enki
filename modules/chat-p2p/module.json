@@ -1,0 +1,21 @@
+{
+  "_doc": "Canal AGENTES→AGENTES: los chats de proyecto se hablan entre sí sin pasar por el dueño. chat.p2p.enviar.request { botName:'chat-p2p', from_project_id, to_project_id, message, correlation_id } → resuelve la conversación destino (conversation/list → última activa por updated_at DESC; si no hay ninguna, conversation/create 'P2P <from>') y la inyecta via chat-io (mqttRequest conversation/send con channel='p2p' y channel_context {from_project_id}) — el MISMO circuito canónico que la web y telegram-bridge. PERMISOS: allowlist de pares (from→to) en data/chat-p2p/registro.json, escrita a mano por el dueño (default vacío = nadie; el módulo solo la lee). ANTI-LOOP: mensajes que ya viajan con channel='p2p' o channel_context.from_project_id NO se reenvían. Reflejo puro determinista, sin blueprint: puente chat⇄chat sobre el bus, no toca el core.",
+  "name": "chat-p2p",
+  "version": "1.0.0",
+  "description": "Canal agentes→agentes: un chat de proyecto envía un mensaje a otro chat de proyecto (puente chat⇄chat sobre el circuito canónico de conversación).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "chat.p2p.enviar.request",
+      "handler": "onEnviarRequest",
+      "description": "Envío p2p: from_project_id → to_project_id. Allowlist del registro; anti-loop si el mensaje ya viaja por p2p."
+    }
+  ],
+  "publishes": [
+    { "event": "chat.p2p.enviado", "description": "Emitido cuando un mensaje p2p se entrega al chat destino." },
+    { "event": "chat.p2p.envio_fallido", "description": "Emitido cuando falla la resolución de conversación o la inyección al chat destino." }
+  ],
+  "config": {
+    "registro_path": "./data/chat-p2p/registro.json"
+  }
+}

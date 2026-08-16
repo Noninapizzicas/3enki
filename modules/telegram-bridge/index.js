@@ -32,7 +32,7 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'telegram-bridge';
-    this.version = '1.0.0';
+    this.version = '1.0.1';
 
     this.registro = { _updated_at: null, vinculos: {} };
     this.registroPath = REGISTRO_DEFAULT;
@@ -261,18 +261,28 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
     if (!cc.botName || cc.chatId === undefined || cc.chatId === null) return;
     if (!this.registro.vinculos?.[cc.botName]) return; // bot desvinculado: no responder
 
-    const res = await this._rpc('telegram.send_message.request', {
-      botName: cc.botName,
-      chatId: cc.chatId,
-      text: d.assistant_message || ''
-    }, { timeout_ms: 30000 });
+    const texto = d.assistant_message || '';
+    const chunks = this._trocearTexto(texto, 4000); // Telegram limita a 4096 chars
 
-    if (!res || res.status !== 200) {
-      const msg = (res && (res.error?.message || res.error)) || 'sin respuesta de telegram.send_message';
-      this._emitirFallo(cc.botName, cc.chatId, 'telegram_send', msg, d.correlation_id);
-      return;
+    // Envío SECUENCIAL: un telegram.send_message.request por chunk, esperando
+    // el ack de cada uno antes del siguiente. Si un chunk falla, emite
+    // telegram.bridge.envio_fallido con ese chunk y sigue con el resto
+    // (best-effort: el mensaje completo se intenta entregar igualmente).
+    for (const chunk of chunks) {
+      const res = await this._rpc('telegram.send_message.request', {
+        botName: cc.botName,
+        chatId: cc.chatId,
+        text: chunk
+      }, { timeout_ms: 30000 });
+
+      if (!res || res.status !== 200) {
+        const msg = (res && (res.error?.message || res.error)) || 'sin respuesta de telegram.send_message';
+        this._emitirFallo(cc.botName, cc.chatId, 'telegram_send', msg, d.correlation_id, chunk);
+        this.metrics?.increment('telegram-bridge.saliente.chunk_fallido');
+        continue;
+      }
+      this.metrics?.increment('telegram-bridge.saliente.enviado');
     }
-    this.metrics?.increment('telegram-bridge.saliente.enviado');
   }
 
   async onAiChatFailed(event) {
@@ -297,13 +307,33 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
   // Utilidades
   // =============================================================
 
-  _emitirFallo(botName, chatId, etapa, detalle, correlation_id) {
-    this.logger?.error('telegram-bridge.fallo', { botName, chatId, etapa, detalle });
-    this.eventBus.publish('telegram.bridge.envio_fallido', {
+  _trocearTexto(texto, maxLen = 4000) {
+    if (typeof texto !== 'string' || texto.length === 0) return [texto || ''];
+    if (texto.length <= maxLen) return [texto];
+    const chunks = [];
+    let rest = texto;
+    while (rest.length > maxLen) {
+      const ventana = rest.slice(0, maxLen);
+      let corte = ventana.lastIndexOf('\n');            // 1) salto de línea (preferido)
+      if (corte <= 0) corte = ventana.lastIndexOf(' '); // 2) espacio
+      if (corte <= 0) corte = maxLen;                   // 3) corte duro
+      const pedazo = ventana.slice(0, corte).trimEnd();
+      if (pedazo.length > 0) chunks.push(pedazo);
+      rest = rest.slice(corte).trimStart();
+    }
+    if (rest.length > 0) chunks.push(rest);
+    return chunks;
+  }
+
+  _emitirFallo(botName, chatId, etapa, detalle, correlation_id, chunk) {
+    const payload = {
       botName, chatId, etapa, detalle,
       correlation_id,
       timestamp: new Date().toISOString()
-    });
+    };
+    if (chunk !== undefined) payload.chunk = chunk; // el trozo que falló
+    this.logger?.error('telegram-bridge.fallo', { botName, chatId, etapa, detalle, chunk: chunk && chunk.slice(0, 500) });
+    this.eventBus.publish('telegram.bridge.envio_fallido', payload);
   }
 }
 

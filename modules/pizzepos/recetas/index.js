@@ -201,7 +201,11 @@ class RecetasReflejo extends ModuloHibridoReflejo {
     let id = this._slug(nombre);
     if (recetas.some(r => r.id === id)) { let n = 2; while (recetas.some(r => r.id === `${id}-${n}`)) n++; id = `${id}-${n}`; }
 
-    const tipo = ['pizza', 'masa', 'salsa', 'base'].includes(input.tipo) ? input.tipo : 'pizza';
+    // tipo LIBRE por diseño (contrato: ^[a-z0-9-]+$): cualquier familia del negocio
+    // entra sin tocar código (bocata, cazuela, postre...). Se normaliza a slug para
+    // respetar la forma; si no viene, default 'pizza' (el caso dominante).
+    const tipoRaw = input.tipo ? String(input.tipo).trim().toLowerCase() : '';
+    const tipo = tipoRaw ? tipoRaw.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : 'pizza';
     const lineas = this._normalizarLineas(input.lineas);
     const rinde = (input.rinde && Number(input.rinde.cantidad) > 0)
       ? { cantidad: Number(input.rinde.cantidad), unidad: String(input.rinde.unidad || 'ud') }

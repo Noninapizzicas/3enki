@@ -424,7 +424,7 @@
         "  for (campo in input.cambios) {",
         "    switch (campo) {",
         "      case 'nombre':        r.nombre = String(input.cambios.nombre).trim(); aplicados.push('nombre')",
-        "      case 'tipo':          if (['pizza','masa','salsa','base'].includes(input.cambios.tipo)) { r.tipo = input.cambios.tipo; aplicados.push('tipo') }",
+        "      case 'tipo':          if (input.cambios.tipo) { const t = String(input.cambios.tipo).trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); if (t) { r.tipo = t; aplicados.push('tipo') } }   // familia LIBRE (contrato ^[a-z0-9-]+$) — bocata, cazuela, postre, lo que el negocio abra",
         "      case 'descripcion':   r.descripcion = typeof input.cambios.descripcion === 'string' ? input.cambios.descripcion : ''; aplicados.push('descripcion')",
         "      case 'rinde':         if (input.cambios.rinde && input.cambios.rinde.cantidad > 0) { r.rinde = input.cambios.rinde; aplicados.push('rinde') }",
         "      case 'lineas':        r.lineas = <normalizar input.cambios.lineas a Linea[] resolviendo ref por nombre>; aplicados.push('lineas')",

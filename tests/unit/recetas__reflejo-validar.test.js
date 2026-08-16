@@ -64,11 +64,19 @@ test('cantidad:0 sola → valid:false en /lineas/N/cantidad (la coacción silenc
   assert.ok(r.data.errors.some(e => e.path === '/lineas/1/cantidad'));
 });
 
-test('tipo fuera del enum → valid:false', async () => {
+test('tipo de familia nueva limpio (postre) → valid:true — contrato ABIERTO por diseño', async () => {
   const m = nuevoReflejo();
   const r = await m._validar({ receta: { nombre: 'X', tipo: 'postre', lineas: [LINEA_OK] } });
-  assert.strictEqual(r.data.valid, false);
-  assert.ok(r.data.errors.some(e => e.path === '/tipo'));
+  assert.strictEqual(r.data.valid, true, 'el contrato valida la FORMA (slug), no la semántica: cualquier familia del negocio entra sin tocar código');
+});
+
+test('tipo con forma sucia (mayúsculas/espacios/caracteres) → valid:false en /tipo (la ley es el slug limpio)', async () => {
+  const m = nuevoReflejo();
+  for (const tipoSucio of ['Pizza Pirata', 'cazuela de marisco', 'postre!', 'CazuelaDeMarisco']) {
+    const r = await m._validar({ receta: { nombre: 'X', tipo: tipoSucio, lineas: [LINEA_OK] } });
+    assert.strictEqual(r.data.valid, false, `'${tipoSucio}' no es un slug canónico`);
+    assert.ok(r.data.errors.some(e => e.path === '/tipo'), `'${tipoSucio}' debe señalar /tipo`);
+  }
 });
 
 test('falta tipo (required) → valid:false', async () => {

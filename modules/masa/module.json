@@ -1,0 +1,41 @@
+{
+  "_doc": "Módulo masa — específico a propósito para the-pirate. Custodio single-writer de las reglas de masa (gramajes por formato, referencia declarada, hidratación, ventana de maduración, % límite de reamasado, agenda de decisión) en masa.json del proyecto + 3 conversores puros: gramaje (escala cuadrática por área desde la referencia declarada; los valores declarados mandan), rendimiento (kilos → bolas) y reamasado (política M5: excedente dentro del límite → REAMASAR_CON_MASA_NUEVA). Construido en F4 (2026-08-16) desde diseno-oop.md sección 3 y plan-construccion.md hoja C1. El resto del sistema bebe sus valores por RPC; los nulls del contrato son política por declarar (el dueño los puebla vía masa.reglas.actualizar).",
+  "_v0_1_0_nota": "Primera versión: ReglasMasa custodio + FormulaGramaje/FormulaRendimiento/FormulaReamasado sobre la base ModuloHibridoReflejo. Persistencia por fs reflejo (masa.json en la raíz del storage del proyecto).",
+  "description": "Reglas y conversores de masa: gramajes, rendimiento y reamasado (the-pirate).",
+  "language": "es",
+  "name": "masa",
+  "publishes": [
+    {
+      "description": "Reglas de masa cambiadas (tras actualizar) — la propiocepción lo capta.",
+      "event": "masa.reglas.actualizadas"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Gramaje para un formato: declarado o interpolado por área desde la referencia.",
+      "event": "masa.gramaje.calcular.request",
+      "handler": "onGramajeCalcularRequest"
+    },
+    {
+      "description": "Kilos de masa → nº de bolas/tandas para un formato (lo consume agrupacion-tanda A3).",
+      "event": "masa.rendimiento.calcular.request",
+      "handler": "onRendimientoCalcularRequest"
+    },
+    {
+      "description": "Decisión de reamasado del excedente (política M5, límite configurable).",
+      "event": "masa.reamasado.calcular.request",
+      "handler": "onReamasadoCalcularRequest"
+    },
+    {
+      "description": "Lectura de las reglas de masa del proyecto (todos pueden leer).",
+      "event": "masa.reglas.leer.request",
+      "handler": "onReglasLeerRequest"
+    },
+    {
+      "description": "Escritura single-writer de las reglas (el dueño): valida y persiste.",
+      "event": "masa.reglas.actualizar.request",
+      "handler": "onReglasActualizarRequest"
+    }
+  ],
+  "version": "0.1.0"
+}

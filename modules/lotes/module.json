@@ -1,0 +1,59 @@
+{
+  "_doc": "Módulo lotes — GENÉRICO (el riel compartido de producción anticipada): sigue la vida de cada tanda/lote (masa, huevos prehechos, cazuelas precocidas, salsas…) con ventana de uso. No sabe qué contiene el lote: trabaja con estados (state machine nace→madura→en-ventana→consumido/descartado), fechas, ocupación contra capacidad declarada y avisos por regla. Construido en F4 (2026-08-17) desde pasada-1-lotes.md y plan-construccion.md hoja C2. El resto del sistema bebe sus valores por RPC; la política (ventanas por tipo, capacidad, lote parcial) la declara el negocio vía lote.config.actualizar (ConfigCustodio genérico de _shared).",
+  "_v0_1_0_nota": "Primera versión: LotesReflejo sobre ModuloHibridoReflejo + ConfigCustodio (lotes-config-v1). Persistencia por fs reflejo (lotes.json en la raíz del storage del proyecto).",
+  "description": "Ciclo de vida de lotes de producción con ventana de uso, ocupación y avisos (genérico).",
+  "language": "es",
+  "name": "lotes",
+  "publishes": [
+    {
+      "description": "Un lote nace (creado con su ventana calculada) — la propiocepción lo capta.",
+      "event": "lote.creado"
+    },
+    {
+      "description": "Un lote cambia de estado (madurar · consumir · descartar · reamasado parcial) — la propiocepción lo capta.",
+      "event": "lote.estado.avanzado"
+    },
+    {
+      "description": "Configuración de lotes cambiada (tras actualizar) — la propiocepción lo capta.",
+      "event": "lote.config.actualizado"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Crea un lote (tipo con ventana declarada en lotes-config). Comprueba la capacidad antes de admitirlo.",
+      "event": "lote.crear.request",
+      "handler": "onCrearRequest"
+    },
+    {
+      "description": "Estado actual de un lote: estado efectivo, fechas y tiempo restante de ventana.",
+      "event": "lote.estado.consultar.request",
+      "handler": "onEstadoConsultarRequest"
+    },
+    {
+      "description": "Avanza el ciclo de vida: madurar · consumir · descartar · reamasar_parcial (política configurable).",
+      "event": "lote.avanzar.request",
+      "handler": "onAvanzarRequest"
+    },
+    {
+      "description": "Ocupación actual de los lotes vivos contra la capacidad declarada.",
+      "event": "lote.ocupacion.consultar.request",
+      "handler": "onOcupacionConsultarRequest"
+    },
+    {
+      "description": "Ventana de uso de un tipo de lote (o el mapa completo de ventanas por tipo).",
+      "event": "lote.ventana.consultar.request",
+      "handler": "onVentanaConsultarRequest"
+    },
+    {
+      "description": "Lectura de la configuración de lotes del proyecto (todos pueden leer).",
+      "event": "lote.config.leer.request",
+      "handler": "onConfigLeerRequest"
+    },
+    {
+      "description": "Escritura single-writer de la configuración (el dueño): valida y persiste.",
+      "event": "lote.config.actualizar.request",
+      "handler": "onConfigActualizarRequest"
+    }
+  ],
+  "version": "0.1.0"
+}

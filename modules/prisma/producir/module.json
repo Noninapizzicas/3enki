@@ -5,8 +5,21 @@
   "_v0_1_0_nota": "v0.1.0: proyectar(compuesto_id + objetivo {formato?, cantidad, unidad}) → componentes escalados en SU unidad + totales por insumo en SU unidad base (desmembramiento: g→kg, ml→l por insumo, densidad si cruza dimensión). Registro de 4 reglas de escala (lineal · area diam² · fija · densidad); formato declarado gana; sin regla → pendiente_declaracion. rendimiento(compuesto_id + stock[]) → unidades de producción (floor) + sobrante por componente (la inversa: lo que tengo → lo que sale). validar(comp, objetivo) → freno puro (patrón escandallo.validar). Emite producir.proyeccion.calculada — lo consumirá mise-en-place (retroplanning desde objetivo físico) sin acoplarse al origen del compuesto (prisma o pizzepos).",
   "language": "es",
   "subscribes": [
-    { "event": "producir.proyectar.request", "handler": "onProyectarRequest", "description": "Reflejo: {project_id, compuesto_id, objetivo:{formato?, cantidad, unidad}} → resuelve la regla de escala (declarada en formato → regla_escala_default → pendiente_declaracion) → factor → componentes × factor en SU unidad → totales por insumo en SU unidad base (el desmembramiento: lo que hay que COMPRAR). EMITE producir.proyeccion.calculada {totales}. Un compuesto sin regla declarada responde pendiente_declaracion — nunca decide por el negocio." },
-    { "event": "producir.rendimiento.request", "handler": "onRendimientoRequest", "description": "Reflejo (la INVERSA): {project_id, compuesto_id, stock:[{ref, cantidad, unidad}]} → necesidad por 1 unidad de producción → unidades = min(stock/necesidad) → floor + sobrante por componente. Lo que tengo → lo que sale (bolas/sacos/litros)." },
-    { "event": "producir.validar.request", "handler": "onValidarRequest", "description": "Reflejo (FRENO, función pura): {compuesto_id, objetivo} → {valid, errors}. Unidad coherente, formato conocido, cantidad > 0. Patrón escandallo.validar." }
-  ]
+    {
+      "event": "producir.proyectar.request",
+      "handler": "onProyectarRequest",
+      "description": "Reflejo: {project_id, compuesto_id, objetivo:{formato?, cantidad, unidad}} → resuelve la regla de escala (declarada en formato → regla_escala_default → pendiente_declaracion) → factor → componentes × factor en SU unidad → totales por insumo en SU unidad base (el desmembramiento: lo que hay que COMPRAR). EMITE producir.proyeccion.calculada {totales}. Un compuesto sin regla declarada responde pendiente_declaracion — nunca decide por el negocio."
+    },
+    {
+      "event": "producir.rendimiento.request",
+      "handler": "onRendimientoRequest",
+      "description": "Reflejo (la INVERSA): {project_id, compuesto_id, stock:[{ref, cantidad, unidad}]} → necesidad por 1 unidad de producción → unidades = min(stock/necesidad) → floor + sobrante por componente. Lo que tengo → lo que sale (bolas/sacos/litros)."
+    },
+    {
+      "event": "producir.validar.request",
+      "handler": "onValidarRequest",
+      "description": "Reflejo (FRENO, función pura): {compuesto_id, objetivo} → {valid, errors}. Unidad coherente, formato conocido, cantidad > 0. Patrón escandallo.validar."
+    }
+  ],
+  "description": "Motor de proyección de compuestos a objetivos físicos: calcula gramaje/rendimiento/reamasado para producir un compuesto (masa, mortero, jarabe, fórmula) según su regla de escala. REFLEJO puro sin store: lee compuestos+insumos por RPC y emite producir.proyeccion.calculada. Nacido de la hoja masa (Fase 4 de The Pirate)."
 }

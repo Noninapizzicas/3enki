@@ -144,7 +144,8 @@
       "interfaz",
       "reloj",
       "credential-oauth",
-      "telegram-bridge"
+      "telegram-bridge",
+      "prisma/producir"
     ],
     "disabled": [
       "dashboard",

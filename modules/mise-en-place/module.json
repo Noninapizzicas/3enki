@@ -27,6 +27,10 @@
         "description": "Se calculo la ventana de produccion retroplanning para una senal de demanda."
       },
       {
+        "event": "produccion.tandas.agrupadas",
+        "description": "Se agruparon lineas de demanda en tandas de masa para produccion."
+      },
+      {
         "event": "produccion.plan.estado.avanzado",
         "description": "El plan de produccion avanzo de estado (propuesto -> aprobado -> en_ejecucion -> cerrado)."
       }
@@ -81,6 +85,16 @@
         "event": "masa.reglas.leer.response",
         "handler": "onMasaReglasResponse",
         "description": "Resuelve masa.reglas pendiente por request_id."
+      },
+      {
+        "event": "masa.gramaje.calcular.response",
+        "handler": "onMasaGramajeResponse",
+        "description": "Resuelve masa.gramaje pendiente por request_id (A3)."
+      },
+      {
+        "event": "masa.rendimiento.calcular.response",
+        "handler": "onMasaRendimientoResponse",
+        "description": "Resuelve masa.rendimiento pendiente por request_id (A3)."
       },
       {
         "event": "produccion.retroplanning.calcular",
@@ -556,6 +570,72 @@
         "RESOURCE_NOT_FOUND",
         "CONFLICT_STATE"
       ]
+    },
+    {
+      "name": "produccion.agrupar_tandas",
+      "description": "Agrupar lineas de demanda en tandas de masa: pide a masa el gramaje por pieza y el rendimiento por tanda (masa.gramaje.calcular / masa.rendimiento.calcular); empaqueta por franja con capacidad en bolas. Conversor puro: no persiste. Si masa no responde usa defaults de config y lo declara (fuente).",
+      "handler": "onAgruparTandas",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto activo."
+          },
+          "lineas": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "receta_id": {
+                  "type": "string"
+                },
+                "porciones": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "franja": {
+                  "type": "string",
+                  "enum": [
+                    "desayuno",
+                    "comida",
+                    "merienda",
+                    "cena",
+                    "all_day"
+                  ],
+                  "description": "Opcional: agrupa lineas de la misma franja en la misma tanda si caben."
+                }
+              },
+              "required": [
+                "receta_id",
+                "porciones"
+              ]
+            }
+          },
+          "formato": {
+            "type": "string",
+            "description": "Formato de masa (ej: '33cm'). Default config."
+          },
+          "tamano_tanda_kg": {
+            "type": "number",
+            "minimum": 0.1,
+            "description": "Tamano de tanda en kg. Default config."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Opcional."
+          }
+        },
+        "required": [
+          "project_id",
+          "lineas"
+        ]
+      },
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT"
+      ]
     }
   ],
   "config": {
@@ -571,6 +651,12 @@
       "ventana_default_min_horas": 24,
       "ventana_default_max_horas": 72,
       "masa_request_timeout_ms": 5000
+    },
+    "agrupacion": {
+      "formato_default": "33cm",
+      "gramaje_default_gramos": 280,
+      "tanda_default_kg": 10,
+      "masa_request_timeout_ms": 5000
     }
   },
   "observability": {
@@ -580,6 +666,7 @@
         "mise-en-place.plan.publicado.total",
         "mise-en-place.compra.calculada.total",
         "mise-en-place.retroplanning.calculado.total",
+        "mise-en-place.tandas.agrupadas.total",
         "mise-en-place.plan.estado.avanzado.total",
         "mise-en-place.errors",
         "mise-en-place.publish_error"

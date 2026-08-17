@@ -52,6 +52,12 @@ class MiseEnPlaceModule extends BaseModule {
         ventana_default_min_horas: 24,
         ventana_default_max_horas: 72,
         masa_request_timeout_ms:   5000
+      },
+      agrupacion: {
+        formato_default:         '33cm',
+        gramaje_default_gramos:  280,
+        tanda_default_kg:        10,
+        masa_request_timeout_ms: 5000
       }
     };
 
@@ -171,6 +177,40 @@ class MiseEnPlaceModule extends BaseModule {
   }
 
   onMasaReglasResponse(event) {
+    const data = event?.data || event || {};
+    const request_id = data.request_id;
+    if (!request_id) return;
+    const pending = this.pendingMasa.get(request_id);
+    if (!pending) return;
+
+    clearTimeout(pending.timer);
+    this.pendingMasa.delete(request_id);
+
+    if (data.error) {
+      pending.resolve(null);
+      return;
+    }
+    pending.resolve(data.data ?? null);
+  }
+
+  onMasaGramajeResponse(event) {
+    const data = event?.data || event || {};
+    const request_id = data.request_id;
+    if (!request_id) return;
+    const pending = this.pendingMasa.get(request_id);
+    if (!pending) return;
+
+    clearTimeout(pending.timer);
+    this.pendingMasa.delete(request_id);
+
+    if (data.error) {
+      pending.resolve(null);
+      return;
+    }
+    pending.resolve(data.data ?? null);
+  }
+
+  onMasaRendimientoResponse(event) {
     const data = event?.data || event || {};
     const request_id = data.request_id;
     if (!request_id) return;
@@ -430,6 +470,45 @@ class MiseEnPlaceModule extends BaseModule {
   }
 
   // ============================================================
+  // A3 — agrupacion-tanda: lineas -> tandas de masa
+  // ============================================================
+
+  /**
+   * Agrupa lineas de demanda en tandas de masa. Pide a masa el gramaje por
+   * pieza (masa.gramaje.calcular) y el rendimiento por tanda
+   * (masa.rendimiento.calcular). Si masa no responde (aun no cargado), usa
+   * defaults de config y lo declara en la respuesta (fuente). Conversor puro:
+   * no persiste.
+   */
+  async onAgruparTandas(params = {}) {
+    const { project_id } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+
+    const errores = this._validarAgrupacion(params);
+    if (errores.length > 0) {
+      return this._errorResponse(400, errores[0].code, errores[0].message, { ...errores[0].details, all_errors: errores });
+    }
+
+    try {
+      const datos = await this._agruparTandas(params);
+
+      const payload = {
+        project_id,
+        user_id:   params.user_id || DEFAULT_USER_ID,
+        ...datos
+      };
+
+      await this._publicarEvento('produccion.tandas.agrupadas', payload, params);
+
+      this.metrics?.increment(`${this.name}.tandas.agrupadas.total`, 1, { project_id });
+
+      return { status: 200, data: datos };
+    } catch (err) {
+      return this._handleHandlerError('mise-en-place.agrupar_tandas', err, 'tool');
+    }
+  }
+
+  // ============================================================
   // Helpers POC2 — heredados de BaseModule + override _publicarEvento
   // ============================================================
 
@@ -670,6 +749,29 @@ class MiseEnPlaceModule extends BaseModule {
     return errores;
   }
 
+  _validarAgrupacion(data) {
+    const errores = [];
+    const { lineas } = data;
+
+    if (!Array.isArray(lineas) || lineas.length === 0) {
+      errores.push({ code: 'INVALID_INPUT', message: 'lineas debe ser array no vacio', details: { field: 'lineas' } });
+    } else {
+      for (let i = 0; i < lineas.length; i++) {
+        const l = lineas[i];
+        if (!l || typeof l.receta_id !== 'string' || l.receta_id === '') {
+          errores.push({ code: 'INVALID_INPUT', message: `lineas[${i}].receta_id obligatorio`, details: { field: 'lineas', index: i } });
+          break;
+        }
+        if (!Number.isInteger(l.porciones) || l.porciones < 1) {
+          errores.push({ code: 'INVALID_INPUT', message: `lineas[${i}].porciones debe ser entero >= 1`, details: { field: 'lineas', index: i } });
+          break;
+        }
+      }
+    }
+
+    return errores;
+  }
+
   /**
    * Escalado lineal proporcional: factor = porciones_destino / porciones_origen.
    * cantidad_nueva = cantidad_original * factor.
@@ -805,6 +907,129 @@ class MiseEnPlaceModule extends BaseModule {
         resolve(null);
       });
     });
+  }
+
+  async _requestMasaGramaje(project_id, formato) {
+    if (!this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingMasa.delete(request_id);
+        resolve(null);
+      }, this.config.agrupacion.masa_request_timeout_ms);
+      this.pendingMasa.set(request_id, { resolve, timer });
+      this.eventBus.publish('masa.gramaje.calcular.request', { request_id, project_id, formato }).catch(() => {
+        clearTimeout(timer);
+        this.pendingMasa.delete(request_id);
+        resolve(null);
+      });
+    });
+  }
+
+  async _requestMasaRendimiento(project_id, formato, kilos) {
+    if (!this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingMasa.delete(request_id);
+        resolve(null);
+      }, this.config.agrupacion.masa_request_timeout_ms);
+      this.pendingMasa.set(request_id, { resolve, timer });
+      this.eventBus.publish('masa.rendimiento.calcular.request', { request_id, project_id, formato, kilos }).catch(() => {
+        clearTimeout(timer);
+        this.pendingMasa.delete(request_id);
+        resolve(null);
+      });
+    });
+  }
+
+  /**
+   * Agrupacion-tanda (A3): empaqueta lineas de demanda en tandas de masa.
+   * - Pide a masa el gramaje por pieza (gramaje_gramos) del formato.
+   * - Pide a masa el rendimiento (bolas) para una tanda de `tamano_tanda_kg`.
+   * - Si masa no responde (aun no cargado), usa defaults de config y declara
+   *   fuente: 'config_default'.
+   * - Empaqueta las lineas por franja primero (misma franja -> misma tanda si
+   *   cabe); si una linea excede la capacidad de una tanda, abre tanda nueva.
+   * Conversor puro: no persiste.
+   */
+  async _agruparTandas(params) {
+    const { project_id, lineas } = params;
+    const formato = params.formato || this.config.agrupacion.formato_default;
+    const tamanoTandaKg = params.tamano_tanda_kg || this.config.agrupacion.tanda_default_kg;
+
+    const [gramaje, rendimiento] = await Promise.all([
+      this._requestMasaGramaje(project_id, formato),
+      this._requestMasaRendimiento(project_id, formato, tamanoTandaKg)
+    ]);
+
+    const gramajePieza = (gramaje && typeof gramaje.gramaje_gramos === 'number')
+      ? gramaje.gramaje_gramos
+      : this.config.agrupacion.gramaje_default_gramos;
+
+    const bolasPorTanda = (rendimiento && typeof rendimiento.bolas === 'number' && rendimiento.bolas > 0)
+      ? rendimiento.bolas
+      : Math.max(1, Math.floor((tamanoTandaKg * 1000) / gramajePieza));
+
+    const fuente = (gramaje && rendimiento) ? 'masa' : 'config_default';
+
+    // Porciones por linea = bolas necesarias (1 bola por porcion de pizza).
+    const conBolas = lineas.map(l => ({
+      receta_id: l.receta_id,
+      porciones: l.porciones,
+      bolas:     l.porciones,
+      franja:    l.franja || null
+    }));
+
+    // Orden: franja (agrupa servicios) y dentro, porciones desc (first-fit decreasing).
+    const orden = [...conBolas].sort((a, b) => {
+      const f = (a.franja || '').localeCompare(b.franja || '');
+      return f !== 0 ? f : b.porciones - a.porciones;
+    });
+
+    const tandas = [];
+    const franjaActual = new Map(); // franja -> indice de tanda en curso
+
+    for (const linea of orden) {
+      const franja = linea.franja || null;
+      const idx = franjaActual.get(franja);
+      const abierta = (idx !== undefined && tandas[idx]) ? tandas[idx] : null;
+      const cabe = abierta && (abierta.bolas + linea.bolas) <= bolasPorTanda;
+
+      if (cabe) {
+        abierta.lineas.push({ receta_id: linea.receta_id, porciones: linea.porciones });
+        abierta.bolas += linea.bolas;
+        abierta.gramos_masa = abierta.bolas * gramajePieza;
+        continue;
+      }
+
+      const nueva = {
+        tanda_id:   this._generarId('tanda'),
+        formato,
+        franja,
+        bolas:      linea.bolas,
+        gramos_masa: linea.bolas * gramajePieza,
+        capacidad_bolas: bolasPorTanda,
+        lineas:     [{ receta_id: linea.receta_id, porciones: linea.porciones }]
+      };
+      tandas.push(nueva);
+      franjaActual.set(franja, tandas.length - 1);
+    }
+
+    return {
+      formato,
+      tamano_tanda_kg: tamanoTandaKg,
+      gramaje_pieza_gramos: gramajePieza,
+      bolas_por_tanda: bolasPorTanda,
+      fuente,
+      tandas,
+      resumen: {
+        total_lineas:  lineas.length,
+        total_bolas:   conBolas.reduce((s, l) => s + l.bolas, 0),
+        total_gramos:  tandas.reduce((s, t) => s + t.gramos_masa, 0),
+        total_tandas:  tandas.length
+      }
+    };
   }
 
   // ============================================================

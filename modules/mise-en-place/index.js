@@ -26,6 +26,17 @@ const ENTITY_TYPE        = 'production-plan';
 
 const VALID_FRANJAS         = new Set(['desayuno', 'comida', 'merienda', 'cena', 'all_day']);
 const VALID_HORIZONTE_TIPOS = new Set(['servicio', 'dia', 'semana', 'evento', 'personalizado']);
+const FRANJA_HORA_SERVICIO   = { desayuno: 9, comida: 14, merienda: 17.5, cena: 21, all_day: 13 };
+
+// A2 — estado del plan (contrato plan-v1 del diseno-oop): state machine cerrada.
+// Transiciones: propuesto -> aprobado -> en_ejecucion -> cerrado.
+const ESTADO_INICIAL_PLAN  = 'propuesto';
+const ESTADOS_PLAN         = new Set(['propuesto', 'aprobado', 'en_ejecucion', 'cerrado']);
+const TRANSICIONES_PLAN    = {
+  propuesto:    ['aprobado'],
+  aprobado:     ['en_ejecucion'],
+  en_ejecucion: ['cerrado']
+};
 
 class MiseEnPlaceModule extends BaseModule {
   constructor() {
@@ -36,12 +47,18 @@ class MiseEnPlaceModule extends BaseModule {
     this.config = {
       data_file_pattern:      'data/projects/{slug}/mise-en-place.json',
       project_get_timeout_ms: 5000,
-      fs_request_timeout_ms:  5000
+      fs_request_timeout_ms:  5000,
+      retroplanning: {
+        ventana_default_min_horas: 24,
+        ventana_default_max_horas: 72,
+        masa_request_timeout_ms:   5000
+      }
     };
 
     this.projectBasePaths = new Map();
     this.pendingProject   = new Map();
     this.pendingFs        = new Map();
+    this.pendingMasa      = new Map();
     this.writeQueues      = new Map();
   }
 
@@ -68,9 +85,11 @@ class MiseEnPlaceModule extends BaseModule {
   async onUnload() {
     for (const { timer } of this.pendingProject.values()) clearTimeout(timer);
     for (const { timer } of this.pendingFs.values())      clearTimeout(timer);
+    for (const { timer } of this.pendingMasa.values())    clearTimeout(timer);
 
     this.pendingProject.clear();
     this.pendingFs.clear();
+    this.pendingMasa.clear();
     this.writeQueues.clear();
     this.projectBasePaths.clear();
 
@@ -149,6 +168,23 @@ class MiseEnPlaceModule extends BaseModule {
       return;
     }
     pending.resolve(true);
+  }
+
+  onMasaReglasResponse(event) {
+    const data = event?.data || event || {};
+    const request_id = data.request_id;
+    if (!request_id) return;
+    const pending = this.pendingMasa.get(request_id);
+    if (!pending) return;
+
+    clearTimeout(pending.timer);
+    this.pendingMasa.delete(request_id);
+
+    if (data.error) {
+      pending.resolve(null);
+      return;
+    }
+    pending.resolve(data.data ?? null);
   }
 
   // ============================================================
@@ -239,6 +275,7 @@ class MiseEnPlaceModule extends BaseModule {
           horizonte_desde: params.horizonte_desde,
           horizonte_hasta: params.horizonte_hasta,
           lineas,
+          estado:          ESTADO_INICIAL_PLAN,
           created_at:      ahora
         };
         store.planes.push(plan);
@@ -328,7 +365,7 @@ class MiseEnPlaceModule extends BaseModule {
 
     try {
       return await this._withStore(project_id, async (store) => {
-        const plan = store.planes.find(p => p.id === plan_id);
+        const plan = this._normalizarPlan(store.planes.find(p => p.id === plan_id));
         if (!plan) {
           return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Plan con id ${plan_id} no existe`, { entity_type: ENTITY_TYPE, entity_id: plan_id });
         }
@@ -348,7 +385,7 @@ class MiseEnPlaceModule extends BaseModule {
         return {
           status: 200,
           data: {
-            planes: store.planes.map(p => ({
+            planes: store.planes.map(p => this._normalizarPlan({
               id:               p.id,
               horizonte_desde:  p.horizonte_desde,
               horizonte_hasta:  p.horizonte_hasta,
@@ -364,9 +401,109 @@ class MiseEnPlaceModule extends BaseModule {
     }
   }
 
+  async onCalcularRetroplanning(params = {}) {
+    const { project_id } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+
+    const errores = this._validarRetroplanning(params);
+    if (errores.length > 0) {
+      return this._errorResponse(400, errores[0].code, errores[0].message, { ...errores[0].details, all_errors: errores });
+    }
+
+    try {
+      const { datos } = await this._calcularRetroplanning(params);
+
+      const payload = {
+        project_id,
+        user_id:      params.user_id || DEFAULT_USER_ID,
+        ...datos
+      };
+
+      await this._publicarEvento('produccion.retroplanning.calculado', payload, params);
+
+      this.metrics?.increment(`${this.name}.retroplanning.calculado.total`, 1, { project_id });
+
+      return { status: 200, data: datos };
+    } catch (err) {
+      return this._handleHandlerError('mise-en-place.calcular_retroplanning', err, 'tool');
+    }
+  }
+
   // ============================================================
   // Helpers POC2 — heredados de BaseModule + override _publicarEvento
   // ============================================================
+
+  async onAprobarPlan(params = {}) {
+    return this._transicionarPlanRequest(params, 'aprobado');
+  }
+
+  async onEjecutarPlan(params = {}) {
+    return this._transicionarPlanRequest(params, 'en_ejecucion');
+  }
+
+  async onCerrarPlan(params = {}) {
+    return this._transicionarPlanRequest(params, 'cerrado');
+  }
+
+  /** A2 — custodio estado-plan: una sola maquina de transiciones para las 3 ops. */
+  async _transicionarPlanRequest(params, hacia) {
+    const { project_id, plan_id } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+    if (!plan_id)    return this._errorResponse(400, 'INVALID_INPUT', 'plan_id es obligatorio',    { field: 'plan_id' });
+
+    try {
+      return await this._withStore(project_id, async (store) => {
+        const plan = this._normalizarPlan(store.planes.find(p => p.id === plan_id));
+        if (!plan) {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Plan con id ${plan_id} no existe`, { entity_type: ENTITY_TYPE, entity_id: plan_id });
+        }
+        if (plan.estado === hacia) {
+          return this._errorResponse(409, 'CONFLICT_STATE', `El plan ya esta en estado ${hacia}`, { plan_id, estado_actual: plan.estado });
+        }
+        const permitidas = TRANSICIONES_PLAN[plan.estado] || [];
+        if (!permitidas.includes(hacia)) {
+          return this._errorResponse(409, 'CONFLICT_STATE', `Transicion ${plan.estado} -> ${hacia} no permitida`, {
+            plan_id, estado_actual: plan.estado, transiciones_permitidas: permitidas
+          });
+        }
+        // Precondicion del diseno: aprobar requiere decision_pendiente vacia o confirmada (M3).
+        if (hacia === 'aprobado' && Array.isArray(plan.decision_pendiente) && plan.decision_pendiente.length > 0) {
+          return this._errorResponse(409, 'CONFLICT_STATE', 'El plan tiene decisiones pendientes sin confirmar', {
+            plan_id, decision_pendiente: plan.decision_pendiente
+          });
+        }
+
+        const desde = plan.estado;
+        plan.estado = hacia;
+        plan.estado_actualizado_at = new Date().toISOString();
+
+        const payload = {
+          project_id,
+          user_id:         params.user_id || DEFAULT_USER_ID,
+          plan_id:         plan.id,
+          desde,
+          hacia,
+          horizonte_desde: plan.horizonte_desde,
+          horizonte_hasta: plan.horizonte_hasta,
+          total_lineas:    plan.lineas.length
+        };
+
+        await this._publicarEvento('produccion.plan.estado.avanzado', payload, params);
+        this.metrics?.increment(`${this.name}.plan.estado.avanzado.total`, 1, { project_id, desde, hacia });
+
+        return { status: 200, data: { plan_id: plan.id, estado: plan.estado, desde, hacia } };
+      });
+    } catch (err) {
+      return this._handleHandlerError('mise-en-place.transicionar_plan', err, 'tool');
+    }
+  }
+
+  /** A2 — planes previos al cambio de shape (sin estado) se leen como propuestos. */
+  _normalizarPlan(plan) {
+    if (!plan) return null;
+    if (!ESTADOS_PLAN.has(plan.estado)) plan.estado = ESTADO_INICIAL_PLAN;
+    return plan;
+  }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
     if (!this.eventBus?.publish) {
@@ -504,6 +641,35 @@ class MiseEnPlaceModule extends BaseModule {
     return `${prefix}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
   }
 
+  _validarRetroplanning(data) {
+    const errores = [];
+    const { fecha_servicio, franja, lineas } = data;
+
+    if (!fecha_servicio || typeof fecha_servicio !== 'string' || Number.isNaN(Date.parse(fecha_servicio))) {
+      errores.push({ code: 'INVALID_INPUT', message: 'fecha_servicio es obligatoria y debe ser fecha válida (YYYY-MM-DD o ISO 8601)', details: { field: 'fecha_servicio' } });
+    }
+    if (!VALID_FRANJAS.has(franja)) {
+      errores.push({ code: 'INVALID_INPUT', message: `franja debe ser una de: ${Array.from(VALID_FRANJAS).join(', ')}`, details: { field: 'franja', allowed: Array.from(VALID_FRANJAS) } });
+    }
+    if (!Array.isArray(lineas) || lineas.length === 0) {
+      errores.push({ code: 'INVALID_INPUT', message: 'lineas debe ser array no vacio', details: { field: 'lineas' } });
+    } else {
+      for (let i = 0; i < lineas.length; i++) {
+        const l = lineas[i];
+        if (!l || typeof l.receta_id !== 'string' || l.receta_id === '') {
+          errores.push({ code: 'INVALID_INPUT', message: `lineas[${i}].receta_id obligatorio`, details: { field: 'lineas', index: i } });
+          break;
+        }
+        if (!Number.isInteger(l.porciones) || l.porciones < 1) {
+          errores.push({ code: 'INVALID_INPUT', message: `lineas[${i}].porciones debe ser entero >= 1`, details: { field: 'lineas', index: i } });
+          break;
+        }
+      }
+    }
+
+    return errores;
+  }
+
   /**
    * Escalado lineal proporcional: factor = porciones_destino / porciones_origen.
    * cantidad_nueva = cantidad_original * factor.
@@ -547,6 +713,98 @@ class MiseEnPlaceModule extends BaseModule {
       }
     }
     return Array.from(acc.values());
+  }
+
+  /**
+   * Retroplanning (A1): dada la señal de demanda (fecha_servicio + franja +
+   * recetas con porciones) devuelve la VENTANA de producción de cada receta:
+   *   desde  = servicio − ventana.max  (lo más pronto que se puede producir)
+   *   hasta  = servicio − ventana.min  (lo más tarde, con margen mínimo)
+   *   recomendada = punto medio de la ventana.
+   * La ventana de maduración la pide a masa (masa.reglas.leer); si masa no
+   * responde (aún no cargado), usa el default de config y lo declara en
+   * ventana.fuente. Conversor puro: no persiste nada.
+   */
+  async _calcularRetroplanning(params) {
+    const { fecha_servicio, franja, lineas } = params;
+
+    const servicio = this._resolverInstanteServicio(fecha_servicio, franja);
+    const ahora    = new Date();
+
+    const masaReglas = await this._requestMasaReglas(params.project_id);
+    let ventana;
+    if (masaReglas?.reglas?.ventana_uso && masaReglas.reglas.ventana_uso.min_horas > 0) {
+      ventana = {
+        min_horas:     masaReglas.reglas.ventana_uso.min_horas,
+        max_horas:     masaReglas.reglas.ventana_uso.max_horas,
+        fuente:        'masa.reglas',
+        reglas_fuente: masaReglas.fuente || 'persistida'
+      };
+    } else {
+      ventana = {
+        min_horas: this.config.retroplanning.ventana_default_min_horas,
+        max_horas: this.config.retroplanning.ventana_default_max_horas,
+        fuente:    'config_default'
+      };
+    }
+
+    const producciones = lineas.map((l) => {
+      const desde       = this._restarHoras(servicio, ventana.max_horas);
+      const hasta       = this._restarHoras(servicio, ventana.min_horas);
+      const recomendada = this._restarHoras(servicio, (ventana.min_horas + ventana.max_horas) / 2);
+      return {
+        receta_id:              l.receta_id,
+        porciones:              l.porciones,
+        produccion_desde:       desde.toISOString(),
+        produccion_hasta:       hasta.toISOString(),
+        produccion_recomendada: recomendada.toISOString(),
+        dentro_de_plazo:        hasta.getTime() > ahora.getTime()
+      };
+    });
+
+    producciones.sort((a, b) => a.produccion_recomendada.localeCompare(b.produccion_recomendada));
+
+    return {
+      datos: {
+        fecha_servicio: servicio.toISOString(),
+        franja,
+        franja_hora:    FRANJA_HORA_SERVICIO[franja],
+        ventana,
+        lineas:         producciones
+      }
+    };
+  }
+
+  _resolverInstanteServicio(fecha_servicio, franja) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fecha_servicio)) {
+      const [y, m, d] = fecha_servicio.split('-').map(Number);
+      const hora = FRANJA_HORA_SERVICIO[franja] ?? 13;
+      const hh = Math.floor(hora);
+      const mm = Math.round((hora - hh) * 60);
+      return new Date(Date.UTC(y, m - 1, d, hh, mm));
+    }
+    return new Date(fecha_servicio);
+  }
+
+  _restarHoras(fecha, horas) {
+    return new Date(fecha.getTime() - horas * 3600 * 1000);
+  }
+
+  async _requestMasaReglas(project_id) {
+    if (!this.eventBus?.publish) return null;
+    const request_id = crypto.randomUUID();
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingMasa.delete(request_id);
+        resolve(null);
+      }, this.config.retroplanning.masa_request_timeout_ms);
+      this.pendingMasa.set(request_id, { resolve, timer });
+      this.eventBus.publish('masa.reglas.leer.request', { request_id, project_id }).catch(() => {
+        clearTimeout(timer);
+        this.pendingMasa.delete(request_id);
+        resolve(null);
+      });
+    });
   }
 
   // ============================================================

@@ -21,6 +21,14 @@
         "event": "produccion.compra.calculada",
         "description": "Se consolido la lista de compra de un horizonte.",
         "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/produccion.compra.calculada.schema.json"
+      },
+      {
+        "event": "produccion.retroplanning.calculado",
+        "description": "Se calculo la ventana de produccion retroplanning para una senal de demanda."
+      },
+      {
+        "event": "produccion.plan.estado.avanzado",
+        "description": "El plan de produccion avanzo de estado (propuesto -> aprobado -> en_ejecucion -> cerrado)."
       }
     ],
     "subscribes": [
@@ -68,6 +76,31 @@
         "event": "produccion.planes.listar",
         "handler": "onListarPlanes",
         "description": "Tool LLM: listar planes del proyecto."
+      },
+      {
+        "event": "masa.reglas.leer.response",
+        "handler": "onMasaReglasResponse",
+        "description": "Resuelve masa.reglas pendiente por request_id."
+      },
+      {
+        "event": "produccion.retroplanning.calcular",
+        "handler": "onCalcularRetroplanning",
+        "description": "Tool LLM: retroplanning de produccion (ventana de produccion para servir X)."
+      },
+      {
+        "event": "produccion.plan.aprobar",
+        "handler": "onAprobarPlan",
+        "description": "Tool LLM: aprobar plan (propuesto -> aprobado)."
+      },
+      {
+        "event": "produccion.plan.ejecutar",
+        "handler": "onEjecutarPlan",
+        "description": "Tool LLM: marcar plan en ejecucion (aprobado -> en_ejecucion)."
+      },
+      {
+        "event": "produccion.plan.cerrar",
+        "handler": "onCerrarPlan",
+        "description": "Tool LLM: cerrar plan (en_ejecucion -> cerrado)."
       }
     ]
   },
@@ -368,6 +401,162 @@
         "UPSTREAM_TIMEOUT"
       ]
     }
+    ,
+    {
+      "name": "produccion.retroplanning.calcular",
+      "description": "Retroplanning de produccion: dada la senal de demanda (fecha_servicio + franja + recetas con porciones) devuelve la ventana de produccion de cada receta (desde/hasta/recomendada) restando la ventana de maduracion que declara masa. Conversor puro: no persiste.",
+      "handler": "onCalcularRetroplanning",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto activo."
+          },
+          "fecha_servicio": {
+            "type": "string",
+            "description": "Cuando se sirve: 'YYYY-MM-DD' (la franja fija la hora) o ISO 8601 completo."
+          },
+          "franja": {
+            "type": "string",
+            "enum": [
+              "desayuno",
+              "comida",
+              "merienda",
+              "cena",
+              "all_day"
+            ]
+          },
+          "lineas": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "receta_id": {
+                  "type": "string"
+                },
+                "porciones": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "receta_id",
+                "porciones"
+              ]
+            }
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Opcional."
+          }
+        },
+        "required": [
+          "project_id",
+          "fecha_servicio",
+          "franja",
+          "lineas"
+        ]
+      },
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT"
+      ]
+    },
+    {
+      "name": "produccion.plan.aprobar",
+      "description": "Aprobar un plan de produccion: transicion propuesto -> aprobado. Solo el dueno (quien invoca) aprueba. Rechaza CONFLICT_STATE si el plan tiene decision_pendiente sin confirmar.",
+      "handler": "onAprobarPlan",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto activo."
+          },
+          "plan_id": {
+            "type": "string",
+            "description": "ID del plan a aprobar."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Opcional."
+          }
+        },
+        "required": [
+          "project_id",
+          "plan_id"
+        ]
+      },
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "CONFLICT_STATE"
+      ]
+    },
+    {
+      "name": "produccion.plan.ejecutar",
+      "description": "Marcar un plan aprobado como en ejecucion (hoy: se produce). Transicion aprobado -> en_ejecucion.",
+      "handler": "onEjecutarPlan",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto activo."
+          },
+          "plan_id": {
+            "type": "string",
+            "description": "ID del plan a ejecutar."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Opcional."
+          }
+        },
+        "required": [
+          "project_id",
+          "plan_id"
+        ]
+      },
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "CONFLICT_STATE"
+      ]
+    },
+    {
+      "name": "produccion.plan.cerrar",
+      "description": "Cerrar un plan en ejecucion (producido; las tandas siguen vivas en lotes). Transicion en_ejecucion -> cerrado.",
+      "handler": "onCerrarPlan",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto activo."
+          },
+          "plan_id": {
+            "type": "string",
+            "description": "ID del plan a cerrar."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Opcional."
+          }
+        },
+        "required": [
+          "project_id",
+          "plan_id"
+        ]
+      },
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "CONFLICT_STATE"
+      ]
+    }
   ],
   "config": {
     "data_file_pattern": "data/projects/{slug}/mise-en-place.json",
@@ -377,7 +566,12 @@
       "pattern": "json-per-project"
     },
     "project_get_timeout_ms": 5000,
-    "fs_request_timeout_ms": 5000
+    "fs_request_timeout_ms": 5000,
+    "retroplanning": {
+      "ventana_default_min_horas": 24,
+      "ventana_default_max_horas": 72,
+      "masa_request_timeout_ms": 5000
+    }
   },
   "observability": {
     "metrics": {
@@ -385,6 +579,8 @@
         "mise-en-place.escalado.calculado.total",
         "mise-en-place.plan.publicado.total",
         "mise-en-place.compra.calculada.total",
+        "mise-en-place.retroplanning.calculado.total",
+        "mise-en-place.plan.estado.avanzado.total",
         "mise-en-place.errors",
         "mise-en-place.publish_error"
       ],

@@ -231,18 +231,23 @@
         ]
       },
       "ollama": {
-       "enabled": true,
-       "priority": 9,
+        "enabled": true,
+        "priority": 9,
         "api_base": "https://ollama.com",
         "headroom": true,
-        "default_model": "deepseek-v4-flash",
+        "default_model": "deepseek-v4-flash:preview",
         "models": [
-          "llama3.1",
-          "llama3.3",
-          "qwen2.5",
-          "mistral"
+          "deepseek-v4-flash:preview",
+          "deepseek-v4-pro:preview",
+          "glm-5.2",
+          "kimi-k2.6",
+          "gpt-oss:20b",
+          "gemma4:31b",
+          "nemotron-3-super",
+          "minimax-m2.7",
+          "qwen3.5:397b"
         ],
-        "_nota": "Ollama Cloud — fallback (más caro que deepseek-flash). API key en .env: OLLAMA_API_KEY"
+        "_nota": "Ollama Cloud — API NATIVA en https://ollama.com/api (mismo /api/chat que local, verificado en docs 18-ago-2026). Auth Bearer con OLLAMA_API_KEY (ya en .env). Modelos = catálogo cloud REAL del usuario (GET /api/tags verificado 18-ago-2026). Selección manual por conversación (ConfigTab); priority 9 = último fallback automático."
       },
       "claude-cli": {
         "enabled": true,

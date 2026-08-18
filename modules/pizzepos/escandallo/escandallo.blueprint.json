@@ -293,6 +293,56 @@
       ]
     }
   },
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 4 operaciones se conducen por ui/request/escandallo/<accion>; transporte.rpc vacio a proposito (los topics reales escandallo.*.request tienen 3 segmentos y rompen el parser del generador).",
+    "rpc": [],
+    "salida": [
+      "escandallo.coste.calculado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema->UI (BlueprintForm). Las 4 operaciones del modulo con sus args reales del contrato; el evento escandallo.coste.calculado refresca la zona DATOS (declarada en F6½, consumida por F7). Acciones simples (costear, recalcular_*) porque el RPC real del bus es escandallo.<accion>.request y el wrapper mqttRequest('escandallo', '<accion>') emite ui/request/escandallo/<accion> — transporte.rpc VACIO a proposito (los topics escandallo.*.request tienen 3 segmentos y rompen el parser de deriveZones).",
+    "ops": {
+      "costear": {
+        "titulo": "Costear receta",
+        "descripcion": "Coste total + coste por porcion + desglose por ingrediente, desde catalogo / sub-recetas / Mercadona. Determinista en el reflejo; el freno valida procedencia y coherencia antes de persistir.",
+        "args": [
+          {
+            "nombre": "receta_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Id de la receta a costear (alternativa a lineas+rinde)."
+          },
+          {
+            "nombre": "persistir",
+            "tipo": "boolean",
+            "required": false,
+            "descripcion": "Persistir el coste en la receta (default true si receta_id)."
+          }
+        ]
+      },
+      "recalcular_siguiente": {
+        "titulo": "Costear siguiente pendiente",
+        "descripcion": "Costea UNA receta pendiente por llamada (orden topologico, reanudable) y reporta cuantas faltan. De una en una, nunca se corta el turno."
+      },
+      "recalcular_lote": {
+        "titulo": "Costear lote pendiente",
+        "descripcion": "Costea TODAS las recetas pendientes en UNA llamada (batch, orden topologico, sin navegar Mercadona)."
+      },
+      "validar": {
+        "titulo": "Validar costeo",
+        "descripcion": "Freno (reflejo): valida un costeo por PROCEDENCIA (cada precio trazable a mercadona/catalogo/sub_receta/manual) + COHERENCIA (valor=cantidad×precio, total=Σlineas, unidad=total/rinde)."
+      }
+    },
+    "datos": {
+      "op": "costear",
+      "titulo": "Ultimo costeo",
+      "refresh_on": ["escandallo.coste.calculado"],
+      "columnas": ["coste_total", "coste_unidad", "lineas_detalle", "fuentes_precios"]
+    }
+  },
   "trabajo_pendiente": [
     {
       "id": "reactividad_via_runtime_blueprint",

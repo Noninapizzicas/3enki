@@ -232,15 +232,17 @@
       },
       "ollama": {
         "enabled": true,
-        "priority": 7,
-        "api_base": "http://localhost:11434/api",
-        "default_model": "llama2",
+        "priority": 5,
+        "api_base": "https://ollama.com",
+        "headroom": true,
+        "default_model": "llama3.1",
         "models": [
-          "llama2",
-          "codellama",
-          "mistral",
-          "mixtral"
-        ]
+          "llama3.1",
+          "llama3.3",
+          "qwen2.5",
+          "mistral"
+        ],
+        "_nota": "Ollama Cloud — fallback (más caro que deepseek-flash). API key en .env: OLLAMA_API_KEY"
       },
       "claude-cli": {
         "enabled": true,

@@ -284,7 +284,13 @@
     "blueprint_orquestar_enabled": false,
     "reja_abierta": false,
     "reja_abierta_proyectos": [
-      "f57dfb78-ea42-472c-8fa3-69bcfbca646d"
+      "f57dfb78-ea42-472c-8fa3-69bcfbca646d",
+      "5d6d28eb-24e1-4205-ba18-5f45ebc2657b",
+      "5d09cb49-35a0-409f-9e09-c57da93b84a8",
+      "485cfbd8-3662-4123-8389-f60c6fbf1092",
+      "9527db97-d4c5-4556-b794-302e27ee0e81",
+      "5d3696cc-af7c-48e7-8cdf-9a4c00f054a1",
+      "224f0b00-1fdf-4636-a709-350fca46fdfd"
     ]
   },
   "observability": {

@@ -61,6 +61,7 @@
       "system-inspector",
       "ai-gateway",
       "ai-agent-framework",
+      "ai-agent-framework-v3",
       "cupula-eventos",
       "bot-manager",
       "code-executor",
@@ -163,7 +164,6 @@
       "notas-poc",
       "bienvenida-tienda",
       "prompt-builder",
-      "ai-agent-framework-v3",
       "agent-observer",
       "memory-conversation-summary",
       "memory-rag",
@@ -224,7 +224,9 @@
       "context_window": 40,
       "request_timeout_ms": 900000,
       "claude_md_path": "",
-      "reja_abierta_proyectos": ["f57dfb78-ea42-472c-8fa3-69bcfbca646d"]
+      "reja_abierta_proyectos": [
+        "f57dfb78-ea42-472c-8fa3-69bcfbca646d"
+      ]
     },
     "portal": {
       "scope": "system",

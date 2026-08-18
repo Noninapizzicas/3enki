@@ -40,6 +40,14 @@ tienen. La FASE 6 llena ese hueco con un patrón determinista.
 para operar lo que el módulo ofrece.** Se decide por el ROL del módulo, no por su
 tamaño ni por su nombre.
 
+> **El coste de decir SÍ ya es barato (2026-08, generador schema→UI):** el
+> generador (BlueprintForm — 4 zonas: formulario/acciones/estados vivos/datos,
+> build verde, PR #266) renderiza CUALQUIER módulo desde su blueprint con la
+> sección `ui.*` declarada. Decidir que un módulo necesita interfaz ya NO
+> compromete a un panel artesanal: compromete a declarar `ui.*` en el blueprint
+> (F6½) y al envoltorio mínimo (F7). La decisión se toma por ROL, no por miedo
+> al coste de construir.
+
 ### 2a · ¿NECESITA interfaz? (5 señales, en orden)
 
 | Señal | Respuesta |

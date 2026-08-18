@@ -1,13 +1,13 @@
 {
   "name": "esquematizar-interfaz",
-  "description": "Fase 6½: esquematiza la interfaz CONCRETA del módulo (slug) con su tipo ya decidido (F6) — el fuzzy aplica el prisma de 5 huecos ronda a ronda hasta seco + disección con FORMA y devuelve la SPEC COMPLETA en UN archivo (patrón del repo: UN entregable = UN path, como esquema.md), el reflejo la escribe en storage/esquemas/interfaz-<slug>.md, el JEFE verifica que existe.",
+  "description": "Fase 6½: esquematiza la interfaz CONCRETA del módulo (slug) con su tipo ya decidido (F6) — el fuzzy declara la sección `ui.*` (operaciones a exponer + datos a mostrar) EN el blueprint del módulo, el reflejo la escribe en modules/<slug>/<slug>.blueprint.json, el JEFE verifica que la sección ui está declarada. Nada de spec .md aparte: el entregable es el blueprint con ui.*, el que construir-interfaz (F7) CONSUME para generar el envoltorio sin improvisar.",
   "pasos": [
     {
       "paso": "generar_espec_interfaz",
       "tipo": "fuzzy",
-      "instruccion": "Esquematiza la INTERFAZ del módulo cuyo slug está en la task. Método (skill esquematizar-interfaz — cárgala): 1) Lee modules/<slug>/module.json (ui_handlers tipados de la FASE 6 con type+zone, tools, events, description). 2) El sujeto es 'la interfaz del módulo <slug> de tipo <type>'. Pásalo por el prisma de 5 huecos (IDENTIDAD · RESTRICCIONES · CONTRATO · NO-OBJETIVOS · PREGUNTAS_ABIERTAS): de cada hueco salen sub-productos (vistas, operaciones, datos, eventos); pasa cada sub-producto por el prisma otra vez, ronda a ronda, hasta que solo queden hojas atómicas/abiertas/repetidas. 3) Asigna FORMA a cada hoja atómica (reflejo · micro-agente fuzzy · custodio · conversor · puente). 4) Ley del esquematizador: AGNOSTICISMO — cero tecnologías del entorno en el análisis; las piezas declaran puertos (leer(id), observar(evento), operar(accion)). 5) Devuelve SOLO el MARKDOWN COMPLETO de la SPEC en un único documento con estas secciones: '# Spec de la interfaz — <slug>' · '## 1. Prisma ronda 1' (los 5 huecos y sub-productos) · '## 2. Prisma ronda 2' (sub-productos al prisma otra vez) · '## 3. Disección' (cada hoja atómica con su FORMA) · '## 4. Esquema maestro' (árbol: VISTAS · OPERACIONES del module.json · DATOS · EVENTOS · ZONA/TIPO) — sin explicaciones fuera del markdown.",
+      "instruccion": "Esquematiza la INTERFAZ del módulo cuyo slug está en la task. Método (skill esquematizar-interfaz — cárgala): 1) Lee modules/<slug>/<slug>.blueprint.json (contrato, transporte.rpc, operaciones, eventos_que_escucho, transporte.salida). Si el blueprint NO existe, créalo con las secciones mínimas derivadas del module.json del módulo. 2) Declara la sección `ui` EN el blueprint — el entregable de la fase es el blueprint con ui.*, NO un .md aparte: `ui.ops` (una entrada por operación a exponer: titulo, descripcion, args[{nombre, tipo: string|number|boolean|select|json|kv, required, enum, placeholder}]) y `ui.datos` (op, titulo, refresh_on, columnas). 3) Si los defaults del generador cubren (operaciones sin args o todas con default, sin tabla), declara ui mínima ({} o solo ops vacío) — el generador deriva formulario/acciones/estados vivos solo. 4) Devuelve SOLO el blueprint COMPLETO con la sección ui aplicada — JSON válido, conservando TODO lo demás intacto.",
       "valida": {
-        "tamano_min": 400
+        "json_valido": true
       }
     },
     {
@@ -23,12 +23,12 @@
   ],
   "entregable": {
     "tipo": "fs",
-    "path": "storage/esquemas/interfaz-<slug>.md",
+    "path": "<slug>/<slug>.blueprint.json",
     "reglas": [
       "existe",
-      "contenido_min"
-    ],
-    "min_chars": 300
+      "ui_declarada",
+      "en_repo"
+    ]
   },
   "presupuesto": {
     "generaciones_por_paso": 3,

@@ -275,6 +275,36 @@ function _planAcoplable(rel, _entregable, mundo) {
   };
 }
 
+// FASE 6½ — la interfaz CONCRETA declarada EN el blueprint (patrón generador
+// schema→UI / BlueprintForm): la sección `ui` del <slug>.blueprint.json con las
+// operaciones a exponer (ui.ops) y los datos a mostrar (ui.datos). Si la sección
+// existe (aunque sea vacía) el generador cubre con defaults — la decisión está
+// tomada. Sin la sección, el generador no sabe qué exponer.
+function _uiDeclarada(rel, _entregable, mundo) {
+  if (!mundo || typeof mundo.leer !== 'function') {
+    return { regla: 'ui_declarada', ok: false, detalle: 'puerto leer() no disponible' };
+  }
+  const contenido = mundo.leer(rel) || '';
+  let m = null;
+  try { m = JSON.parse(contenido); } catch (_) { /* no JSON → no declarada */ }
+  if (!m || typeof m !== 'object') {
+    return { regla: 'ui_declarada', ok: false, detalle: `${rel} no es JSON válido — la declaración de interfaz (sección ui) no está en el blueprint` };
+  }
+  const ui = m.ui;
+  if (ui === undefined || ui === null || typeof ui !== 'object' || Array.isArray(ui)) {
+    return { regla: 'ui_declarada', ok: false, detalle: `${rel} sin sección ui — F6½ no declaró la interfaz (el generador no sabe qué exponer)` };
+  }
+  const ops = ui.ops && typeof ui.ops === 'object' ? Object.keys(ui.ops) : [];
+  const datos = ui.datos && typeof ui.datos === 'object' && typeof ui.datos.op === 'string';
+  return {
+    regla: 'ui_declarada',
+    ok: true,
+    detalle: ops.length || datos
+      ? `sección ui declarada: ${ops.length} operaciones${datos ? ` + tabla '${ui.datos.op}'` : ''}`
+      : 'sección ui declarada (vacía) — los defaults del generador cubren'
+  };
+}
+
 const REGLAS = {
   existe: _existe,
   contenido_min: _contenidoMin,
@@ -283,6 +313,7 @@ const REGLAS = {
   plan_acoplable: _planAcoplable,
   en_repo: _enRepo,
   interfaz_decidida: _interfazDecidida,
+  ui_declarada: _uiDeclarada,
   interfaz_operativa: _interfazOperativa
 };
 

@@ -372,6 +372,46 @@ test('JEFE: interfaz_decidida — module.json sin ui_handlers ni ui_decision →
   assert.match(v.reglas[0].detalle, /interfaz NO decidida/);
 });
 
+test('JEFE: ui_declarada — blueprint con sección ui.ops + ui.datos → ok (F6½ por generador)', () => {
+  const contenido = JSON.stringify({
+    id: 'interfaz',
+    transporte: { rpc: ['interfaz.listar.request -> .response'] },
+    ui: {
+      ops: {
+        listar: { titulo: 'Listar candidatos' },
+        ver: { titulo: 'Ver ficha', args: [{ nombre: 'candidatoId', tipo: 'string', required: true }] }
+      },
+      datos: { op: 'listar', titulo: 'Candidatos', refresh_on: ['interfaz.veredicto_confirmado'], columnas: ['titulo', 'estado'] }
+    }
+  });
+  const v = verificar(
+    { tipo: 'fs', path: 'interfaz/interfaz.blueprint.json', reglas: ['existe', 'ui_declarada'] },
+    mundoFalso({ existe: true, contenido })
+  );
+  assert.equal(v.verificado, true);
+  assert.match(v.reglas[1].detalle, /2 operaciones \+ tabla 'listar'/);
+});
+
+test('JEFE: ui_declarada — blueprint con ui vacía → ok (defaults del generador cubren)', () => {
+  const contenido = JSON.stringify({ id: 'sonda', ui: {} });
+  const v = verificar(
+    { tipo: 'fs', path: 'sonda/sonda.blueprint.json', reglas: ['ui_declarada'] },
+    mundoFalso({ existe: true, contenido })
+  );
+  assert.equal(v.verificado, true);
+  assert.match(v.reglas[0].detalle, /defaults del generador cubren/);
+});
+
+test('JEFE: ui_declarada — blueprint sin sección ui → NO verificado (F6½ no declaró)', () => {
+  const contenido = JSON.stringify({ id: 'redactor', transporte: { rpc: [] } });
+  const v = verificar(
+    { tipo: 'fs', path: 'redactor/redactor.blueprint.json', reglas: ['ui_declarada'] },
+    mundoFalso({ existe: true, contenido })
+  );
+  assert.equal(v.verificado, false);
+  assert.match(v.reglas[0].detalle, /sin sección ui/);
+});
+
 test('JEFE: interfaz_operativa — trío completo → ok', () => {
   const mundo = {
     existe: (p) => {

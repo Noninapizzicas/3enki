@@ -122,6 +122,10 @@ lista de módulos por tipo.
 gestiona lo que otra vía crea. Ese hueco de contrato es una PREGUNTA ABIERTA
 para el dueño, no algo que la skill decide.
 
+**La cadena completa (F6 → F6½ → F7 con el generador schema→UI)**:
+`modules/cosecha/cantera/enki/fases-interfaz-f6-f7.md` — decidir es barato,
+esquematizar es declarar `ui.*` en el blueprint, construir es el envoltorio.
+
 ## 5 · Verificación
 
 - El script `decidir-interfaz.js` corre sin error sobre el módulo auditado.

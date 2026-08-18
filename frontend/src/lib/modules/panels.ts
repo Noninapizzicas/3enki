@@ -206,6 +206,18 @@ export const panels: Record<string, PanelDef> = {
     order: 1,
     loader: () => import('$lib/modules/files/FilesPanel.svelte')
   },
+  // === CHAT TOOLS — Producir (F7, prisma). ChatTools NO autodescubre: exige entrada aquí.
+  // El botón lo pinta el manifest (zone chat-tools, order 13, icon 🏭); esta entrada es el loader.
+  producir: {
+    id: 'producir',
+    title: 'Producir',
+    icon: '🏭',
+    size: 'lg',
+    position: 'left',
+    zone: 'chat-tools',
+    order: 2,
+    loader: () => import('$lib/modules/producir/ProducirPanel.svelte')
+  },
 
   // === PANELES PROGRAMÁTICOS (showInBar: false — solo vía openPanel()) ===
   'html-preview': {

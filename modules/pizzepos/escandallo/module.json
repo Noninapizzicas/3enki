@@ -12,11 +12,60 @@
   "target_page_id": "escandallo",
   "cajones_enabled": true,
   "_lente_default_doc": "Lente que ai-gateway EMPUJA (nervio) en cada conversacion de escandallo — el OFICIO de leer food-cost/margenes. dominio 'negocio' (tarea 'coste') rutea a financial-analyst+bookkeeper-controller del cuenco (pack negocio, que ademas tiene MOTOR food_cost determinista por lentes.motor.request).",
-  "lente_default": { "dominio": "negocio", "tarea": "coste" },
+  "lente_default": {
+    "dominio": "negocio",
+    "tarea": "coste"
+  },
   "subscribes": [
-    { "event": "escandallo.recalcular_siguiente.request", "handler": "onRecalcularSiguienteRequest", "description": "Reflejo JS: costea la siguiente receta pendiente (determinista) y persiste." },
-    { "event": "escandallo.costear.request", "handler": "onCostearRequest", "description": "Reflejo JS: coste determinista de una receta desde el catalogo." },
-    { "event": "escandallo.validar.request", "handler": "onValidarRequest", "description": "Reflejo JS (FRENO, skill blueprint-agentico): valida el costeo por PROCEDENCIA + COHERENCIA. Rechaza el precio inventado (estimado_llm -> PRECIO_INVENTADO) y la aritmetica incoherente (TOTAL_INCOHERENTE/VALOR_INCOHERENTE). Funcion pura: devuelve {valid, errors, precios_estimados, lineas_costeadas} para que el blueprint resuelva por la API o deje sin_precio." },
-    { "event": "escandallo.recalcular_lote.request", "handler": "onRecalcularLoteRequest", "description": "Reflejo JS: costea TODAS las recetas pendientes en UNA llamada (batch, orden topologico, sin navegar Mercadona)." }
+    {
+      "event": "escandallo.recalcular_siguiente.request",
+      "handler": "onRecalcularSiguienteRequest",
+      "description": "Reflejo JS: costea la siguiente receta pendiente (determinista) y persiste."
+    },
+    {
+      "event": "escandallo.costear.request",
+      "handler": "onCostearRequest",
+      "description": "Reflejo JS: coste determinista de una receta desde el catalogo."
+    },
+    {
+      "event": "escandallo.validar.request",
+      "handler": "onValidarRequest",
+      "description": "Reflejo JS (FRENO, skill blueprint-agentico): valida el costeo por PROCEDENCIA + COHERENCIA. Rechaza el precio inventado (estimado_llm -> PRECIO_INVENTADO) y la aritmetica incoherente (TOTAL_INCOHERENTE/VALOR_INCOHERENTE). Funcion pura: devuelve {valid, errors, precios_estimados, lineas_costeadas} para que el blueprint resuelva por la API o deje sin_precio."
+    },
+    {
+      "event": "escandallo.recalcular_lote.request",
+      "handler": "onRecalcularLoteRequest",
+      "description": "Reflejo JS: costea TODAS las recetas pendientes en UNA llamada (batch, orden topologico, sin navegar Mercadona)."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "escandallo",
+      "action": "costear",
+      "handler": "onCostearRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "escandallo",
+      "action": "recalcular_siguiente",
+      "handler": "onRecalcularSiguienteRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "escandallo",
+      "action": "recalcular_lote",
+      "handler": "onRecalcularLoteRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "escandallo",
+      "action": "validar",
+      "handler": "onValidarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

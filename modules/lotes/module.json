@@ -55,5 +55,56 @@
       "handler": "onConfigActualizarRequest"
     }
   ],
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "ui_handlers": [
+    {
+      "domain": "lotes",
+      "action": "crear",
+      "handler": "onCrearRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "lotes",
+      "action": "estado.consultar",
+      "handler": "onEstadoConsultarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "lotes",
+      "action": "avanzar",
+      "handler": "onAvanzarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "lotes",
+      "action": "ocupacion.consultar",
+      "handler": "onOcupacionConsultarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "lotes",
+      "action": "ventana.consultar",
+      "handler": "onVentanaConsultarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "lotes",
+      "action": "config.leer",
+      "handler": "onConfigLeerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "lotes",
+      "action": "config.actualizar",
+      "handler": "onConfigActualizarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
 }

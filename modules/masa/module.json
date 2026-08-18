@@ -37,5 +37,42 @@
       "handler": "onReglasActualizarRequest"
     }
   ],
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "ui_handlers": [
+    {
+      "domain": "masa",
+      "action": "reglas.leer",
+      "handler": "onReglasLeerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "masa",
+      "action": "reglas.actualizar",
+      "handler": "onReglasActualizarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "masa",
+      "action": "gramaje.calcular",
+      "handler": "onGramajeCalcularRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "masa",
+      "action": "rendimiento.calcular",
+      "handler": "onRendimientoCalcularRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "masa",
+      "action": "reamasado.calcular",
+      "handler": "onReamasadoCalcularRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
 }

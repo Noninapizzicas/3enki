@@ -24,7 +24,7 @@
     { id: 'openai', name: 'OpenAI', icon: '🤖', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
     { id: 'groq', name: 'Groq', icon: '⚡', models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'] },
     { id: 'gemini', name: 'Google Gemini', icon: '💎', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
-    { id: 'ollama', name: 'Ollama (Local)', icon: '🦙', models: ['llama2', 'codellama', 'mistral', 'mixtral'] },
+    { id: 'ollama', name: 'Ollama (Cloud)', icon: '🦙', models: ['deepseek-v4-flash:preview', 'deepseek-v4-pro:preview', 'glm-5.2', 'kimi-k2.6', 'gpt-oss:20b', 'gemma4:31b', 'nemotron-3-super', 'minimax-m2.7', 'qwen3.5:397b'] },
     { id: 'claude-cli', name: 'Claude Code (1M)', icon: '🟣', models: ['sonnet', 'opus', 'haiku'] },
   ];
 

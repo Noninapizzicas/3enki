@@ -1071,9 +1071,13 @@ class MiseEnPlaceModule extends BaseModule {
     return basePath;
   }
 
-  async _loadStore(basePath) {
-    const absPath = `${basePath}/mise-en-place.json`.replace(/\/+/g, '/');
-    const content = await this._readFile(absPath);
+  async _loadStore(project_id) {
+    // Convencion canonica del filesystem: path relativo al storage del proyecto
+    // (leading-slash -> raiz del storage) + project_id en el payload del request.
+    // El base_path absoluto del proyecto NO se usa: validatePath lo rechaza
+    // (Absolute system path rejected) y resuelve con el project_id del payload.
+    const relPath = '/mise-en-place.json';
+    const content = await this._readFile(project_id, relPath);
     if (!content) return this._emptyStore();
     try {
       const parsed = JSON.parse(content);
@@ -1082,16 +1086,16 @@ class MiseEnPlaceModule extends BaseModule {
       if (!Array.isArray(parsed.compras))   parsed.compras = [];
       return parsed;
     } catch (err) {
-      this.logger?.warn(`${this.name}.persist.parse_error`, { abs_path: absPath, error_message: err.message });
+      this.logger?.warn(`${this.name}.persist.parse_error`, { rel_path: relPath, error_message: err.message });
       return this._emptyStore();
     }
   }
 
-  async _saveStore(basePath, store) {
-    const absPath = `${basePath}/mise-en-place.json`.replace(/\/+/g, '/');
+  async _saveStore(project_id, store) {
+    const relPath = '/mise-en-place.json';
     store._version = this.version;
     store._updated = new Date().toISOString();
-    await this._writeFile(absPath, JSON.stringify(store, null, 2));
+    await this._writeFile(project_id, relPath, JSON.stringify(store, null, 2));
   }
 
   _emptyStore() {
@@ -1099,16 +1103,14 @@ class MiseEnPlaceModule extends BaseModule {
   }
 
   async _withStore(project_id, mutator) {
-    const basePath = await this._basePathForProject(project_id);
-
     const prev = this.writeQueues.get(project_id) || Promise.resolve();
     const next = prev
       .catch(() => {})
       .then(async () => {
-        const store  = await this._loadStore(basePath);
+        const store  = await this._loadStore(project_id);
         const result = await mutator(store);
         if (!result || result.status === undefined || result.status < 400) {
-          await this._saveStore(basePath, store);
+          await this._saveStore(project_id, store);
         }
         return result;
       });
@@ -1121,7 +1123,7 @@ class MiseEnPlaceModule extends BaseModule {
     }
   }
 
-  async _readFile(absPath) {
+  async _readFile(project_id, relPath) {
     if (!this.eventBus?.publish) {
       const err = new Error('eventBus no disponible para fs.read.request');
       err._code = 'UPSTREAM_UNREACHABLE';
@@ -1131,12 +1133,12 @@ class MiseEnPlaceModule extends BaseModule {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingFs.delete(request_id);
-        const err = new Error(`fs.read timeout para ${absPath}`);
+        const err = new Error(`fs.read timeout para ${relPath}`);
         err._code = 'UPSTREAM_TIMEOUT';
         reject(err);
       }, this.config.fs_request_timeout_ms);
       this.pendingFs.set(request_id, { resolve, reject, timer });
-      this.eventBus.publish('fs.read.request', { request_id, path: absPath, encoding: 'utf8' }).catch(err => {
+      this.eventBus.publish('fs.read.request', { request_id, project_id, path: relPath, encoding: 'utf8' }).catch(err => {
         clearTimeout(timer);
         this.pendingFs.delete(request_id);
         err._code = err._code || 'UPSTREAM_UNREACHABLE';
@@ -1145,7 +1147,7 @@ class MiseEnPlaceModule extends BaseModule {
     });
   }
 
-  async _writeFile(absPath, content) {
+  async _writeFile(project_id, relPath, content) {
     if (!this.eventBus?.publish) {
       const err = new Error('eventBus no disponible para fs.write.request');
       err._code = 'UPSTREAM_UNREACHABLE';
@@ -1155,12 +1157,12 @@ class MiseEnPlaceModule extends BaseModule {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingFs.delete(request_id);
-        const err = new Error(`fs.write timeout para ${absPath}`);
+        const err = new Error(`fs.write timeout para ${relPath}`);
         err._code = 'UPSTREAM_TIMEOUT';
         reject(err);
       }, this.config.fs_request_timeout_ms);
       this.pendingFs.set(request_id, { resolve, reject, timer });
-      this.eventBus.publish('fs.write.request', { request_id, path: absPath, content, encoding: 'utf8', atomic: true }).catch(err => {
+      this.eventBus.publish('fs.write.request', { request_id, project_id, path: relPath, content, encoding: 'utf8', atomic: true }).catch(err => {
         clearTimeout(timer);
         this.pendingFs.delete(request_id);
         err._code = err._code || 'UPSTREAM_UNREACHABLE';

@@ -35,7 +35,28 @@ const BROKER = process.env.ENKI_BROKER_URL || 'mqtt://localhost:1883';
 const PROJECT = process.env.ENKI_PROJECT || null;
 const TIMEOUT = Number(process.env.ENKI_PORTAL_TIMEOUT) || 8000;
 const PROTOCOL_VERSION = '2025-06-18';
-const SERVER_INFO = { name: 'enki', version: '0.1.0' };
+const SERVER_INFO = { name: 'enki', version: '0.2.0' };
+
+// ── REJA (piloto mundo-chat sin 460 tools) ─────────────────────────
+// ENKI_REJA_ABIERTA   = 'true' (default) | 'false' → modo reja
+// ENKI_REJA_PROYECTOS = csv de project_ids a los que aplica (vacío = todos)
+// ENKI_REJA_GLOBALES  = csv de tools que se MANTIENEN con la reja
+const REJA_ABIERTA = (process.env.ENKI_REJA_ABIERTA ?? 'true') !== 'false';
+const REJA_PROYECTOS = (process.env.ENKI_REJA_PROYECTOS || '')
+  .split(',').map(s => s.trim()).filter(Boolean);
+const REJA_GLOBALES_DEFAULT = 'buscar_capacidad,detalle_capacidad,fs.read,fs.write,fs.list,fs.search,fs.info,leer_web,leer_imagen,crear_lista,anadir_paso,completar_paso,ver_listas,fijar_objetivo,evaluar_rail';
+const REJA_GLOBALES = (process.env.ENKI_REJA_GLOBALES || REJA_GLOBALES_DEFAULT)
+  .split(',').map(s => s.trim()).filter(Boolean);
+
+// tools/list no lleva project_id en MCP: la reja global decide por el
+// scope del proceso (ENKI_PROJECT). Por-call se decide con el project_id
+// real que viaja en los args (rejaCerradaPara).
+function rejaCerradaPara(projectId) {
+  if (REJA_ABIERTA) return false;
+  if (REJA_PROYECTOS.length === 0) return true;
+  return !!projectId && REJA_PROYECTOS.includes(projectId);
+}
+function rejaCerradaGlobal() { return rejaCerradaPara(PROJECT); }
 
 function log(...a) { process.stderr.write('[enki-mcp] ' + a.join(' ') + '\n'); }
 function send(obj) { process.stdout.write(JSON.stringify(obj) + '\n'); }
@@ -73,16 +94,51 @@ async function onInitialize(id, params) {
   reply(id, { protocolVersion: pv, capabilities: { tools: { listChanged: false } }, serverInfo: SERVER_INFO });
 }
 
+// ui.request — UNA tool genérica de invocación (dominio + accion + args).
+// El LLM la llama con el catálogo compacto del system prompt; el server
+// la traduce a la tool real del portal (ruta directa v3 / bus fallback).
+const UI_REQUEST_TOOL = {
+  name: 'ui.request',
+  description: 'Ejecuta UNA capacidad de Enki por dominio+accion (ej. {dominio:"mercadona", accion:"categorias_listar"}). El CATALOGO DE CAPACIDADES (seccion del system prompt) lista los nombres por dominio; usa buscar_capacidad para rankear por significado del turno y detalle_capacidad para ver el contrato (args) de una antes de llamarla.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      dominio: { type: 'string', description: 'Dominio de la capacidad (prefijo antes del punto, ej: mercadona, productos, escandallo, fs)' },
+      accion: { type: 'string', description: 'Accion de la capacidad (ej: categorias_listar, get, costear)' },
+      args: { type: 'object', description: 'Argumentos de la capacidad. OBLIGATORIO project_id en mutaciones.' },
+      project_id: { type: 'string', description: 'ID del proyecto activo (obligatorio en mutaciones)' }
+    },
+    required: ['dominio', 'accion']
+  }
+};
+
 async function onToolsList(id) {
   try {
     const resp = await portalRpc('list_tools', {});
-    const tools = ((resp && resp.data && resp.data.tools) || []).map(t => ({
+    const all = ((resp && resp.data && resp.data.tools) || []).map(t => ({
       name: t.name,
       description: t.description || t.name,
       inputSchema: t.parameters && typeof t.parameters === 'object'
         ? t.parameters
         : { type: 'object', properties: {} }
     }));
+
+    if (!rejaCerradaGlobal()) {
+      reply(id, { tools: all });
+      return;
+    }
+
+    // REJA CERRADA: ui.request + globales (schema completo). El catálogo
+    // completo (name+desc por dominio) lo inyecta el hermes-relay en el
+    // system prompt — el LLM ejecuta con ui.request y abre el cajón con
+    // buscar_capacidad / detalle_capacidad.
+    const byName = new Map(all.map(t => [t.name, t]));
+    const tools = [UI_REQUEST_TOOL];
+    for (const g of REJA_GLOBALES) {
+      const t = byName.get(g);
+      if (t) tools.push(t);
+    }
+    log('reja cerrada: ' + tools.length + ' tools servidas (antes ' + all.length + ')');
     reply(id, { tools });
   } catch (e) {
     replyErr(id, -32000, 'portal list_tools: ' + e.message);
@@ -94,6 +150,20 @@ async function onToolsCall(id, params) {
   const args = (params && params.arguments) || {};
   if (!name) return replyErr(id, -32602, 'falta params.name');
   try {
+    const callProject = args.project_id || PROJECT;
+
+    if (name === 'ui.request') {
+      return await onUiRequest(id, args, callProject);
+    }
+
+    // REJA por-call: si el proyecto de ESTA llamada está en modo reja,
+    // solo globales + ui.request pueden ejecutarse directamente.
+    if (rejaCerradaPara(callProject) && !REJA_GLOBALES.includes(name)) {
+      return replyErr(id, -32001,
+        `reja cerrada para este proyecto: '${name}' no está en las globales. ` +
+        `Usa ui.request {dominio, accion, args} con el catálogo del system, o buscar_capacidad para encontrarla.`);
+    }
+
     const resp = await portalRpc('call', { tool: name, args, project_id: PROJECT, confirmado: args.__confirmado === true });
     const ok = resp && resp.success !== false && (resp.status === undefined || resp.status < 400);
     const body = ok ? (resp.data && resp.data.result !== undefined ? resp.data.result : resp.data) : (resp && resp.error) || resp;
@@ -103,6 +173,46 @@ async function onToolsCall(id, params) {
     });
   } catch (e) {
     reply(id, { content: [{ type: 'text', text: 'portal call error: ' + e.message }], isError: true });
+  }
+}
+
+// ui.request — UNA tool genérica: {dominio, accion, args} → tool real del portal.
+async function onUiRequest(id, args, callProject) {
+  const { dominio, accion } = args;
+  if (typeof dominio !== 'string' || !dominio || typeof accion !== 'string' || !accion) {
+    return replyErr(id, -32602, 'ui.request requiere {dominio: string, accion: string, args?: object}');
+  }
+  const toolName = `${dominio}.${accion}`;
+  if (toolName === 'ui.request') {
+    return replyErr(id, -32602, 'anti-loop: ui.request no puede invocarse a sí misma');
+  }
+  const callArgs = {
+    ...(args.args && typeof args.args === 'object' ? args.args : {}),
+    project_id: callProject
+  };
+  try {
+    const resp = await portalRpc('call', {
+      tool: toolName,
+      args: callArgs,
+      project_id: callProject,
+      confirmado: callArgs.__confirmado === true || args.__confirmado === true
+    });
+    const ok = resp && resp.success !== false && (resp.status === undefined || resp.status < 400);
+    const body = ok
+      ? (resp.data && resp.data.result !== undefined ? resp.data.result : resp.data)
+      : (resp && resp.error) || resp;
+    if (!ok) {
+      const code = (body && (body.code || body.error?.code)) || 'ERROR';
+      const msg = (body && (body.message || body.error?.message)) || JSON.stringify(body);
+      if (code === 'TOOL_NOT_FOUND' || code === 'RESOURCE_NOT_FOUND' || /not found|no encontrada/i.test(msg)) {
+        return reply(id, { content: [{ type: 'text', text:
+          `ui.request: '${toolName}' no está en el catálogo. Usa buscar_capacidad para rankear por significado o detalle_capacidad para ver el contrato de una que sí exista.` }], isError: true });
+      }
+      return reply(id, { content: [{ type: 'text', text: `ui.request ${toolName} falló: ${msg}` }], isError: true });
+    }
+    reply(id, { content: [{ type: 'text', text: typeof body === 'string' ? body : JSON.stringify(body, null, 2) }] });
+  } catch (e) {
+    reply(id, { content: [{ type: 'text', text: 'ui.request error: ' + e.message }], isError: true });
   }
 }
 

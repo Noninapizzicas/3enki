@@ -147,7 +147,11 @@
       "telegram-bridge",
       "prisma/producir",
       "prisma/insumos",
-      "prisma/compuestos"
+      "prisma/compuestos",
+      "prisma/costeador",
+      "prisma/conversor",
+      "prisma/puente-compuesto",
+      "prisma/formulador"
     ],
     "disabled": [
       "dashboard",

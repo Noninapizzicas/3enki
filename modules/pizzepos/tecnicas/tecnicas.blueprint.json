@@ -311,6 +311,71 @@
     }
   },
 
+  "transporte": {
+    "entrada": "cajones blueprint-driven (el LLM ES el runtime vía ai-gateway)",
+    "rpc": [
+      "tecnicas.codificar.request -> .response",
+      "tecnicas.obtener.request -> .response",
+      "tecnicas.listar.request -> .response",
+      "tecnicas.actualizar.request -> .response",
+      "tecnicas.parametros.request -> .response"
+    ],
+    "salida": ["tecnica.creada", "tecnica.actualizada"],
+    "qos": "publishAndWait (request/response correlado) en cada operación; timeout 8s"
+  },
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 5 operaciones del blueprint con sus args; los eventos de dominio refrescan la zona DATOS. Declarada por F6½ (skill esquematizar-interfaz, regla ui_declarada) — el envoltorio de F7 (construir-interfaz) solo la consume.",
+    "ops": {
+      "codificar": {
+        "titulo": "Codificar técnica",
+        "descripcion": "Da de alta una técnica culinaria (nombre único; parámetros en JSON).",
+        "args": [
+          { "nombre": "nombre", "tipo": "string", "required": true, "placeholder": "Nombre de la técnica *" },
+          { "nombre": "descripcion", "tipo": "string", "required": false, "placeholder": "Descripción (opcional)" },
+          { "nombre": "categoria", "tipo": "string", "required": false, "placeholder": "Categoría (ej. coccion)" },
+          { "nombre": "parametros", "tipo": "json", "required": false, "descripcion": "Parámetros técnicos (temperaturas, tiempos, ratios)" },
+          { "nombre": "materiales", "tipo": "json", "required": false, "descripcion": "Array de strings: útiles necesarios" },
+          { "nombre": "instrucciones", "tipo": "json", "required": false, "descripcion": "Array de strings: pasos" },
+          { "nombre": "etiquetas", "tipo": "json", "required": false, "descripcion": "Array de strings" }
+        ]
+      },
+      "obtener": {
+        "titulo": "Ver técnica",
+        "descripcion": "Técnica completa con history. Pasa tecnica_id o nombre.",
+        "args": [
+          { "nombre": "tecnica_id", "tipo": "string", "required": false, "placeholder": "id de la técnica" },
+          { "nombre": "nombre", "tipo": "string", "required": false, "placeholder": "o nombre (exacto/parcial)" }
+        ]
+      },
+      "listar": {
+        "titulo": "Listar técnicas",
+        "descripcion": "Catálogo alfabético (salida ligera)."
+      },
+      "actualizar": {
+        "titulo": "Actualizar técnica",
+        "descripcion": "Modifica campos permitidos; escribe cada campo como clave y el valor como valor.",
+        "args": [
+          { "nombre": "tecnica_id", "tipo": "string", "required": true, "placeholder": "id de la técnica *" },
+          { "nombre": "campos", "tipo": "kv", "required": true, "descripcion": "campo → valor (descripcion, categoria, parametros, materiales, instrucciones, etiquetas)" }
+        ]
+      },
+      "parametros": {
+        "titulo": "Ver parámetros",
+        "descripcion": "Subset ligero {id, nombre, categoria, parametros}.",
+        "args": [
+          { "nombre": "tecnica_id", "tipo": "string", "required": true, "placeholder": "id de la técnica *" }
+        ]
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Catálogo de técnicas",
+      "refresh_on": ["tecnica.creada", "tecnica.actualizada"],
+      "columnas": ["nombre", "categoria", "descripcion", "etiquetas", "version"]
+    }
+  },
+
   "trabajo_pendiente": [
     {
       "id": "vincular_tecnicas_con_recetas",

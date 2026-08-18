@@ -1,0 +1,98 @@
+{
+  "_doc": "Blueprint del modulo masa (the-pirate). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema→UI (BlueprintForm). Seccion `ui` declarada por F6½ (esquematizar-interfaz, 2026-08-18): las 5 operaciones del modulo con sus args reales del contrato y el evento que refresca la zona DATOS. Las acciones son DOTTED (gramaje.calcular, reglas.leer...) porque el RPC real del bus es masa.<accion>.request y el wrapper mqttRequest('masa', '<accion>') emite ui/request/masa/<accion> — por eso transporte.rpc va VACIO: la regex de deriveZones solo parsea acciones de 2 segmentos y los topics de 3 segmentos generarian ops fantasma con topic roto.",
+  "id": "masa",
+  "version": "blueprint-1.0.0",
+
+  "rol": "Custodio single-writer de las reglas de masa (gramajes por formato, referencia declarada, hidratacion, ventana de maduracion, % limite de reamasado) en masa.json del proyecto + 3 conversores puros: gramaje (escala cuadratica por area desde la referencia declarada), rendimiento (kilos → bolas) y reamasado (politica M5). El resto del sistema bebe sus valores por RPC; los nulls del contrato son politica por declarar (el dueno los puebla via reglas.actualizar).",
+
+  "eventos_publicados": [
+    "masa.reglas.actualizadas"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 5 operaciones se conducen por ui/request/masa/<accion> con la accion dotted; ver seccion ui.ops. transporte.rpc vacio a proposito (los topics reales masa.*.request tienen 3 segmentos y rompen el parser del generador).",
+    "rpc": [],
+    "salida": [
+      "masa.reglas.actualizadas"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 5 operaciones del reflejo con sus args; el evento masa.reglas.actualizadas refresca la zona DATOS (declarada en F6½, consumida por F7).",
+    "ops": {
+      "reglas.leer": {
+        "titulo": "Ver reglas de masa",
+        "descripcion": "Lectura de las reglas del proyecto (gramajes, referencia, hidratacion, ventana, reamasado)."
+      },
+      "reglas.actualizar": {
+        "titulo": "Actualizar reglas",
+        "descripcion": "Escritura single-writer (el dueno). Los campos presentes se validan y aplican; los ausentes se preservan. Schema reglas-masa-v1.",
+        "args": [
+          {
+            "nombre": "cambios",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Cambios a aplicar. Ej: {\"gramajes_formato\":{\"disco_30_cm\":300},\"reamasado_limite_pct\":15}"
+          }
+        ]
+      },
+      "gramaje.calcular": {
+        "titulo": "Calcular gramaje",
+        "descripcion": "Gramaje para un formato: declarado o interpolado por area desde la referencia.",
+        "args": [
+          {
+            "nombre": "formato",
+            "tipo": "select",
+            "required": true,
+            "enum": ["disco_33_cm", "disco_30_cm", "disco_28_cm", "pan_bocata", "pan_hotdog", "cuenco_cazuela"]
+          }
+        ]
+      },
+      "rendimiento.calcular": {
+        "titulo": "Calcular rendimiento",
+        "descripcion": "Kilos de masa → numero de bolas para un formato (consume agrupacion-tanda).",
+        "args": [
+          {
+            "nombre": "formato",
+            "tipo": "select",
+            "required": true,
+            "enum": ["disco_33_cm", "disco_30_cm", "disco_28_cm", "pan_bocata", "pan_hotdog", "cuenco_cazuela"]
+          },
+          {
+            "nombre": "kilos",
+            "tipo": "number",
+            "required": true,
+            "placeholder": "kilos de masa (ej. 5)"
+          }
+        ]
+      },
+      "reamasado.calcular": {
+        "titulo": "Decidir reamasado",
+        "descripcion": "Politica M5: excedente dentro del limite → REAMASAR_CON_MASA_NUEVA; fuera → FUERA_DEL_CIRCUITO.",
+        "args": [
+          {
+            "nombre": "excedente_gramos",
+            "tipo": "number",
+            "required": true,
+            "placeholder": "excedente (g)"
+          },
+          {
+            "nombre": "tanda_original_gramos",
+            "tipo": "number",
+            "required": true,
+            "placeholder": "tanda original (g)"
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "reglas.leer",
+      "titulo": "Reglas de masa del proyecto",
+      "refresh_on": ["masa.reglas.actualizadas"],
+      "columnas": ["reglas", "fuente"]
+    }
+  }
+}

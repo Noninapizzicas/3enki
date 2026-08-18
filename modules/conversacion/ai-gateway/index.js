@@ -29,6 +29,20 @@ const KimiProvider      = require('./providers/kimi-provider');
 
 const BaseModule = require('../../_shared/base-module');
 const Sintonizador = require('../../_shared/sintonizador');
+
+// Tools GLOBALES universales al LLM en CUALQUIER pagina (blueprint y cajones
+// incluidas). Nivel de MODULO (no local a _getTools) porque _buildCatalogoCapacidades
+// tambien las necesita para EXCLUIR del catalogo lo que el LLM ya tiene como tool real.
+const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente', 'crear_agente', 'crear_agente_desde_caso',
+  'buscar_capacidad', 'detalle_capacidad',
+  'buscar_skill', 'activar_skill',
+  'fs.read', 'fs.list', 'fs.search', 'fs.list_modules', 'fs.read_module',
+  'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
+  'fijar_objetivo', 'evaluar_rail',
+  'cupulas.vista_proyecto',
+  'leer_web', 'descargar_web', 'leer_imagen', 'renderizar', 'traducir', 'transcribir', 'analizar_sonido', 'decir', 'interpretar_trazo',
+  'bibliotecario.catalogo', 'bibliotecario.consultar', 'escribano.escribir', 'escribano.pendientes']);
+
 class AiGatewayModule extends BaseModule {
   constructor() {
     super();
@@ -381,7 +395,7 @@ class AiGatewayModule extends BaseModule {
   // Tools desde moduleLoader (filtradas por page_id)
   // ============================================================
 
-  _getTools(page_id) {
+  _getTools(page_id, project_id) {
     if (!this.moduleLoader) return [];
     const all = this.moduleLoader.getToolsForAI?.() || [];
     // GLOBAL_TOOLS: universales al LLM en CUALQUIER pagina (blueprint y cajones incluidas).
@@ -404,15 +418,6 @@ class AiGatewayModule extends BaseModule {
     //   fuera de este set) era invisible dentro de toda página con page_id → el LLM se
     //   rendía a "no está en la cantera" aunque existiera (visto en vivo). Mismo fix que el
     //   rail: intención "cualquier conversación" del v0.7 realizada en código.
-    const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente', 'crear_agente', 'crear_agente_desde_caso',
-      'buscar_capacidad', 'detalle_capacidad',
-      'buscar_skill', 'activar_skill',
-      'fs.read', 'fs.list', 'fs.search', 'fs.list_modules', 'fs.read_module',
-      'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
-      'fijar_objetivo', 'evaluar_rail',
-      'cupulas.vista_proyecto',
-      'leer_web', 'descargar_web', 'leer_imagen', 'renderizar', 'traducir', 'transcribir', 'analizar_sonido', 'decir', 'interpretar_trazo',
-      'bibliotecario.catalogo', 'bibliotecario.consultar', 'escribano.escribir', 'escribano.pendientes']);
     // Slice de globales (de `all`) con la enumeracion de invoke_agent aplicada. Se combina
     // con las tools de pagina y se deduplica por nombre (el rail ya se anade aparte).
     const globalSlice = () => this._mapInvokeAgentEnum(all.filter(t => GLOBAL_TOOLS.has(t.name)), page_id);
@@ -471,6 +476,22 @@ class AiGatewayModule extends BaseModule {
       // Cajones-enabled: catalogo + nav + universales + rail + GLOBALES. Antes se iba sin
       // las globales → el LLM de la pagina no podia delegar/crear agentes (raiz del caso).
       return dedupe([...this._getCajonesTools(), ...navTools, ...universal, ...rail, ...globalSlice()]);
+    }
+    // REJA CERRADA (mundo-chat sin 460 tools — v2.37, piloto por proyecto).
+    // El LLM recibe UNA tool generica (ui.request) + las GLOBALES; el catalogo
+    // compacto de capacidades viaja como SECCION del system prompt (patron cajones:
+    // catalogo barato en el turno, schema del cajon bajo demanda con
+    // detalle_capacidad) y el ranking por significado se hace con buscar_capacidad.
+    // Decision del dueno: v1 = catalogo compacto + cajon bajo demanda; indice
+    // vectorial de tools en Turso = v2 (no construir infra beta en medio del piloto).
+    if (this._rejaCerrada(project_id)) {
+      const herramientas = dedupe([this._uiRequestTool(), ...globalSlice()]);
+      this.logger?.info('ai-gateway.reja-cerrada', {
+        project_id,
+        tools_count: herramientas.length,
+        catalogo_entries: this.moduleLoader?.toolsRegistry?.size || 0
+      });
+      return herramientas;
     }
     if (!page_id) return all;
     // Construcción lazy del mapa page_id → prefijos válidos. La primera vez que
@@ -578,6 +599,51 @@ class AiGatewayModule extends BaseModule {
       const e = registry.get(name);
       if (e) out.push({ name: e.name, description: e.description, parameters: e.parameters });
     }
+    return out;
+  }
+
+  // REJA CERRADA (v2.37): el piloto del mundo-chat sin 460 tools. Solo el proyecto
+  // listado en config.reja_abierta_proyectos con config.reja_abierta === false.
+  // Default (config ausente o true) → modo historico intacto para todo el sistema.
+  _rejaCerrada(project_id) {
+    return this.config?.reja_abierta === false
+      && Array.isArray(this.config?.reja_abierta_proyectos)
+      && this.config.reja_abierta_proyectos.includes(project_id);
+  }
+
+  // Tool generica del mundo-chat. El LLM ejecuta CUALQUIER capacidad con
+  // {dominio, accion, args}; el gateway resuelve el handler real (ruta directa v3)
+  // o el fallback por bus. El catalogo de capacidades vive en el prompt.
+  _uiRequestTool() {
+    return {
+      name: 'ui.request',
+      description: 'Ejecuta UNA capacidad del catalogo del sistema. El catalogo completo (nombres + descripcion de 1 linea) esta en la seccion # CATALOGO DE CAPACIDADES del prompt. Para el schema EXACTO de una operacion (args completos), abre el cajon con detalle_capacidad {name} ANTES de llamar. Para rankear por significado, buscar_capacidad {query}. Uso: ui.request {dominio, accion, args:{...}} donde args es el payload de la operacion (project_id se inyecta solo). Si la capacidad no existe devuelve RESOURCE_NOT_FOUND → usa buscar_capacidad para hallar la correcta.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          dominio: { type: 'string', description: 'Prefijo del modulo (ej: escandallo, recetas, productos).' },
+          accion: { type: 'string', description: 'Accion dentro del modulo (ej: costear, listar).' },
+          args: { type: 'object', description: 'Payload de la operacion (los parametros que pide el cajon de detalle_capacidad).' }
+        },
+        required: ['dominio', 'accion']
+      }
+    };
+  }
+
+  // Catalogo compacto de capacidades para el mundo-chat: name + descripcion de
+  // 1 linea (~120 chars) de TODAS las tools del toolsRegistry, salvo las globales
+  // (que el LLM ya tiene como tools reales). Se inyecta como SECCION del system
+  // prompt — el schema del cajon se abre bajo demanda con detalle_capacidad.
+  _buildCatalogoCapacidades() {
+    const registry = this.moduleLoader?.toolsRegistry;
+    if (!registry?.forEach) return [];
+    const out = [];
+    registry.forEach((entry, name) => {
+      if (!name || typeof name !== 'string' || GLOBAL_TOOLS.has(name)) return;
+      const desc = String(entry?.description || '').replace(/\s+/g, ' ').trim();
+      out.push(`${name} — ${desc.slice(0, 120)}`);
+    });
     return out;
   }
 
@@ -1306,7 +1372,7 @@ class AiGatewayModule extends BaseModule {
       await this._executeLLM({
         system: null,
         messages: [{ role: 'user', content: synthetic_message }],
-        tools: this._filtrarVisibilidadCupula(this._getTools(page_id), project_id),
+        tools: this._filtrarVisibilidadCupula(this._getTools(page_id, project_id), project_id),
         settings: {},
         attachments: null,
         project_id,
@@ -2446,6 +2512,33 @@ class AiGatewayModule extends BaseModule {
     if (toolName === 'cajon.listar' || toolName === 'cajon.abrir') {
       return this._executeCajonTool(toolName, args, ctx);
     }
+    // ui.request — la tool generica del mundo-chat (reja cerrada, v2.37). El LLM
+    // trae {dominio, accion, args}; resolvemos el nombre real de la tool y
+    // re-entramos en el path canonico (ruta directa v3 / fallback por bus).
+    // Anti-loop: ui.request no se auto-llama.
+    if (toolName === 'ui.request') {
+      const dominio = args?.dominio;
+      const accion = args?.accion;
+      const innerArgs = (args && typeof args.args === 'object' && args.args !== null) ? args.args : {};
+      if (!dominio || !accion) {
+        const e = new Error('ui.request requiere {dominio, accion, args}');
+        e.code = 'INVALID_INPUT';
+        throw e;
+      }
+      const realName = `${dominio}.${accion}`;
+      if (realName === 'ui.request') {
+        const e = new Error('ui.request no puede invocarse a si misma (anti-loop)');
+        e.code = 'INVALID_INPUT';
+        throw e;
+      }
+      const toolDef = this.moduleLoader?.toolsRegistry?.get?.(realName);
+      if (!toolDef) {
+        const e = new Error(`La capacidad '${realName}' no existe. Usa buscar_capacidad {query} para hallar la correcta (o detalle_capacidad {name} para ver su schema).`);
+        e.code = 'RESOURCE_NOT_FOUND';
+        throw e;
+      }
+      return this._executeToolCall(realName, { ...innerArgs, project_id: innerArgs.project_id ?? ctx.project_id }, ctx);
+    }
     // cajones Fase 5 bis: chat.cambiar_foco publica evento al bus; page.related
     // sirve del grafo en memoria. Interceptadas antes del path canonico.
     if (toolName === 'chat.cambiar_foco' || toolName === 'page.related') {
@@ -2593,6 +2686,27 @@ class AiGatewayModule extends BaseModule {
     if (!context?.async_invocation && this.sintoniaActiva) {
       const lente = this.sintonizador.seccion();
       effectiveSystem = effectiveSystem ? `${lente}\n\n${effectiveSystem}` : lente;
+    }
+
+    // REJA CERRADA (v2.37): inyecta el CATALOGO DE CAPACIDADES como seccion del
+    // system prompt (patron cajones: catalogo barato en el turno, schema bajo
+    // demanda). Log de desglose para medir la bajada de tokens (antes: 65K tools).
+    if (this._rejaCerrada(project_id)) {
+      const catalogo = this._buildCatalogoCapacidades();
+      if (catalogo.length > 0) {
+        const seccion = `# CATALOGO DE CAPACIDADES (${catalogo.length} operaciones del sistema)\n` +
+          'Ejecuta cualquiera con ui.request {dominio, accion, args}. Si dudas del schema de args, ' +
+          'abre el cajon con detalle_capacidad {name}. Si ninguna capacidad encaja, rankea con ' +
+          'buscar_capacidad {query}. El nombre de la capacidad = dominio.accion (ej: escandallo.costear).\n\n' +
+          catalogo.join('\n');
+        effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
+        this.logger?.info('ai-gateway.reja-cerrada.prompt', {
+          project_id,
+          catalogo_entries: catalogo.length,
+          catalogo_chars: seccion.length,
+          tools_count: Array.isArray(tools) ? tools.length : 0
+        });
+      }
     }
 
     // ── NERVIOS GLOBALES — lecturas RPC EN PARALELO ──────────────────────────
@@ -2979,9 +3093,13 @@ class AiGatewayModule extends BaseModule {
       return;
     }
 
-    const tools = tools_disponibles && tools_disponibles.length > 0
-      ? tools_disponibles
-      : this._filtrarVisibilidadCupula(this._getTools(page_id), project_id);
+    // REJA CERRADA (v2.37): el gateway manda sobre tools_disponibles — si el
+    // piloto esta activo para este proyecto, el LLM recibe ui.request + globales
+    // aunque prompt-builder haya adjuntado el catalogo entero (65K tokens).
+    const rejaCerrada = this._rejaCerrada(project_id);
+    const tools = (rejaCerrada || !(tools_disponibles && tools_disponibles.length > 0))
+      ? this._filtrarVisibilidadCupula(this._getTools(page_id, project_id), project_id)
+      : tools_disponibles;
 
     const startedAt = Date.now();
     let providerAttempted = null;

@@ -119,7 +119,10 @@ artefacto ES múltiple por naturaleza, no por comodidad.
    - suscripciones a los eventos de la SPEC (initSubscriptions)
    - reset al salir
 5. **Genera el PANEL SVELTE** `<slug>/<Slug>Panel.svelte` (naming exacto:
-   primera letra del slug en MAYÚSCULA + el resto IGUAL):
+   el slug en camelCase — cada palabra del kebab capitalizada y unida (ej:
+   'interfaz-dinamico' → 'InterfazDinamicoPanel.svelte', 'device-health' →
+   'DeviceHealthPanel.svelte'; la capitalización solo de la 1ª letra rompe
+   los slugs multi-palabra):
    - `onMount` → load + initSubscriptions · `onDestroy` → cleanup
    - CADA VISTA de la spec → su sección en el panel (lista, detalle, stats, flujo)
    - CADA operación de la spec → su botón que llama a la acción del store

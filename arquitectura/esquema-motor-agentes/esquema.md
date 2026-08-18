@@ -28,7 +28,8 @@ MOTOR DE AGENTES
 │   (el JEFE)                                       al final; verificado:false = veredicto, jamás éxito
 │                                                  reglas: existe · contenido_min · api_real ·
 │                                                  requires_resueltos · plan_acoplable ·
-│                                                  en_repo · interfaz_decidida · interfaz_operativa
+│                                                  en_repo · interfaz_decidida · ui_declarada ·
+│                                                  interfaz_operativa
 ├─ P5 · PUERTO DE GENERACIÓN .......... MICRO-AGENTE el ÚNICO fuzzy: genera contenido
 │                                                  (instrucción + contexto → salida cruda);
 │                                                  NUNCA persiste, NUNCA ejecuta, NUNCA decide

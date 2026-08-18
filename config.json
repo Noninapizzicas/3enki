@@ -223,7 +223,8 @@
       "hermes_api_key": "",
       "context_window": 40,
       "request_timeout_ms": 900000,
-      "claude_md_path": ""
+      "claude_md_path": "",
+      "reja_abierta_proyectos": ["f57dfb78-ea42-472c-8fa3-69bcfbca646d"]
     },
     "portal": {
       "scope": "system",

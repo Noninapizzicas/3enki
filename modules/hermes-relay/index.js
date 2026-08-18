@@ -21,12 +21,16 @@ class HermesRelayModule extends BaseModule {
     this.pendingDb = new Map();
     this._claudeMdCache = null;
     this._claudeMdLoadedAt = 0;
+    this.moduleLoader = null;
+    this._catalogoCache = null;
+    this._catalogoLoadedAt = 0;
   }
 
   async onLoad(core) {
     this.eventBus = core.eventBus;
     this.logger = core.logger;
     this.metrics = core.metrics || null;
+    this.moduleLoader = core.moduleLoader || null;
     this.config = this._loadConfig(core);
 
     this._claudeMdCache = this._readClaudeMd();
@@ -47,7 +51,8 @@ class HermesRelayModule extends BaseModule {
       hermes_api_key: mc.hermes_api_key || process.env.HERMES_API_KEY || '',
       context_window: mc.context_window || 40,
       request_timeout_ms: mc.request_timeout_ms || 300000,
-      claude_md_path: mc.claude_md_path || path.resolve(process.cwd(), 'CLAUDE.md')
+      claude_md_path: mc.claude_md_path || path.resolve(process.cwd(), 'CLAUDE.md'),
+      reja_abierta_proyectos: Array.isArray(mc.reja_abierta_proyectos) ? mc.reja_abierta_proyectos : []
     };
   }
 
@@ -213,6 +218,49 @@ class HermesRelayModule extends BaseModule {
     return messages;
   }
 
+  // ── Catálogo de capacidades agrupado por dominio (modo reja) ──
+  // El LLM ya no recibe las 460 tools; recibe el MAPA de nombres por
+  // dominio en el system prompt (barato) y ejecuta con ui.request.
+  // Cache con TTL 60s (mismo patrón que CLAUDE.md).
+
+  _buildCatalogoAgrupado() {
+    const registry = this.moduleLoader?.toolsRegistry;
+    if (!registry || typeof registry.values !== 'function') return null;
+    const groups = new Map();
+    const sueltos = [];
+    let count = 0;
+    for (const tool of registry.values()) {
+      const name = tool?.name;
+      if (!name) continue;
+      count++;
+      const parts = name.split('.');
+      if (parts.length > 1) {
+        const dominio = parts[0];
+        const accion = parts.slice(1).join('.');
+        if (!groups.has(dominio)) groups.set(dominio, []);
+        groups.get(dominio).push(accion);
+      } else {
+        sueltos.push(name);
+      }
+    }
+    const lines = [];
+    for (const [dominio, acciones] of groups) {
+      lines.push(`- ${dominio}: ${acciones.join(', ')}`);
+    }
+    for (const s of sueltos.sort()) {
+      lines.push(`- ${s}`);
+    }
+    return `Capacidades de Enki (${count}):\n` + lines.join('\n');
+  }
+
+  _getCatalogoAgrupado() {
+    if (Date.now() - this._catalogoLoadedAt > CLAUDE_MD_TTL_MS) {
+      this._catalogoCache = this._buildCatalogoAgrupado();
+      this._catalogoLoadedAt = Date.now();
+    }
+    return this._catalogoCache;
+  }
+
   _buildSystemMessage(ctx) {
     const sections = [];
 
@@ -248,6 +296,26 @@ class HermesRelayModule extends BaseModule {
         + 'ya esta a la vista. NO lo recites ni lo enumeres salvo que pregunte.\n'
         + JSON.stringify(pageContext.vista_frontend, null, 2)
       );
+    }
+
+    // MODO REJA (piloto mundo-chat): el LLM no recibe las 460 tools MCP;
+    // recibe el catálogo compacto + ui.request. Solo para proyectos piloto.
+    if ((this.config.reja_abierta_proyectos || []).includes(ctx.project_id)) {
+      const catalogo = this._getCatalogoAgrupado();
+      if (catalogo) {
+        sections.push(
+          '# CATALOGO DE CAPACIDADES DE ENKI (modo reja — sin 460 tools)\n'
+          + 'Ejecuta CUALQUIER capacidad con UNA tool: ui.request {dominio, accion, args, project_id}.\n'
+          + 'Si no sabes qué capacidad sirve tu objetivo: usa buscar_capacidad (rankeda por significado del turno) '
+          + 'y detalle_capacidad (contrato/args) — el cajón del bus.\n'
+          + catalogo
+        );
+        this.logger?.info('hermes-relay.catalogo', {
+          project_id: ctx.project_id,
+          chars: catalogo.length,
+          tokens_aprox: Math.round(catalogo.length / 4)
+        });
+      }
     }
 
     return sections.length > 0 ? sections.join('\n\n---\n\n') : null;

@@ -99,17 +99,18 @@ const MAPA_PROCESO = {
   },
   'negocio.interfaz': {
     // FASE 6½ — el tipo está decidido (F6), pero ANTES de construir hay que
-    // esquematizar la interfaz CONCRETA: el prisma de 5 huecos sobre "la
-    // interfaz del módulo X de tipo Y" → la SPEC (vistas, operaciones, datos,
-    // eventos). Lección en vivo: saltar de F6 a F7 improvisa el panel — grave.
+    // declarar la interfaz CONCRETA: la sección `ui` EN el blueprint (ops a
+    // exponer con args + datos a mostrar). Lección en vivo: saltar de F6 a F7
+    // improvisa el panel — grave. Con el generador schema→UI (BlueprintForm),
+    // la declaración ES el entregable; F7 solo envuelve.
     skill: 'esquematizar-interfaz',
-    mensaje: 'La interfaz del módulo está decidida (FASE 6: type+zone en module.json). Siguiente paso (FASE 6½): ESQUEMATIZAR la interfaz concreta — lee modules/<slug>/module.json (ui_handlers tipados, tools, events) y aplica el prisma de 5 huecos sobre "la interfaz del módulo <slug> de tipo <type>", ronda a ronda hasta seco + disección con FORMA. Escribe las pasadas en esquemas/interfaz-<slug>/ (esquema.md + pasada-1 + pasada-2 + disección). Si module.json tiene ui_decision.necesita=false → cerrar directo. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.'
+    mensaje: 'La interfaz del módulo está decidida (FASE 6: type+zone en module.json). Siguiente paso (FASE 6½): ESQUEMATIZAR la interfaz concreta — lee modules/<slug>/<slug>.blueprint.json (contrato, transporte.rpc, eventos_que_escucho, transporte.salida; si NO existe, créalo con las secciones mínimas derivadas del module.json) y DECLARA la sección `ui` EN el blueprint: ui.ops (una entrada por operación a exponer: titulo, descripcion, args[{nombre, tipo: string|number|boolean|select|json|kv, required, enum, placeholder}]) + ui.datos (op, titulo, refresh_on, columnas). Si los defaults del generador cubren (ops sin args o con defaults, sin tabla) → declara ui mínima ({}). NO escribas spec .md aparte: el entregable es el blueprint con ui.*. Si module.json tiene ui_decision.necesita=false → cerrar directo. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz_esquematizada': {
-    // FASE 7 — la SPEC ya existe (F6½). Construir-interfaz la CONSUME para
-    // generar el trío (store + panel + UIModule) sin improvisar.
+    // FASE 7 — la sección `ui` ya está declarada (F6½). Construir-interfaz
+    // genera el ENVOLTORIO del generador (BlueprintForm) sin improvisar.
     skill: 'construir-interfaz',
-    mensaje: 'La interfaz del módulo está esquematizada (FASE 6½: esquemas/interfaz-<slug>/esquema.md es la SPEC). Siguiente paso (FASE 7): CONSTRUIR la interfaz operativa en el frontend CONSUMIENDO la spec — lee esquemas/interfaz-<slug>/esquema.md (vistas, operaciones del module.json, datos, eventos, zona) y genera el trío real: store MQTT (frontend/src/lib/stores/<dominio>.ts), Panel Svelte (frontend/src/lib/modules/<slug>/<Slug>Panel.svelte, operaciones vía mqttRequest), UIModule (manifest.json + index.ts, autodescubierto). Cada pieza de la spec → su archivo; NO improvisar fuera de la spec. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.'
+    mensaje: 'La interfaz del módulo está esquematizada (FASE 6½: la sección `ui` del blueprint modules/<slug>/<slug>.blueprint.json es la declaración). Siguiente paso (FASE 7): CONSTRUIR la interfaz operativa en el frontend — genera el ENVOLTORIO MÍNIMO del generador schema→UI siguiendo el patrón vivo frontend/src/lib/modules/interfaz-dinamico/: copia el blueprint al dir del trío (frontend/src/lib/modules/<slug>/<slug>.blueprint.json) y genera manifest.json (zone según F6, routes solo URLs reales del frame/PAGE_CATALOG) + index.ts (UIModule) + <Slug>Panel.svelte (~10 líneas: import BlueprintForm de $lib/components/blueprint-form/BlueprintForm.svelte + import blueprint "./<slug>.blueprint.json" + <BlueprintForm {blueprint} moduleId="<slug>" titulo="..." />; añade <slot name="custom"/> solo si el dinámico no cubre algo). NO generes store MQTT ni panel artesanal: el BlueprintForm renderiza las 4 zonas y llama mqttRequest directo. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz_construida': {
     skill: 'construir-modulos',
@@ -209,10 +210,10 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       return { skill: 'decidir-interfaz', mensaje: `El plan está construido y con skill (${progreso.construidos}/${progreso.total}) pero faltan ${progreso.faltan_por_interfaz} decisiones de interfaz. Siguiente paso (FASE 6): decidir la INTERFAZ de UN módulo construido sin decidir — corre scripts/decidir-interfaz.js (skill decidir-interfaz), razona el rol y escribe el resultado en module.json (ui_handlers con type+zone canónicos, o ui_decision.necesita=false). Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"] } }.` };
     }
     if (progreso.faltan_por_interfaz_esquematizada > 0) {
-      return { skill: 'esquematizar-interfaz', mensaje: `El plan está construido, con skill y con interfaz decidida (${progreso.con_interfaz}/${progreso.total}) pero faltan ${progreso.faltan_por_interfaz_esquematizada} SPECS de interfaz. Siguiente paso (FASE 6½): esquematizar la interfaz de UN módulo — prisma de 5 huecos sobre "la interfaz del módulo <slug> de tipo <type>" hasta seco + disección, y escribe la spec en esquemas/interfaz-<slug>/ (esquema.md + pasadas). Si F6 decidió sin interfaz (ui_decision.necesita=false) → cerrar directo. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.` };
+      return { skill: 'esquematizar-interfaz', mensaje: `El plan está construido, con skill y con interfaz decidida (${progreso.con_interfaz}/${progreso.total}) pero faltan ${progreso.faltan_por_interfaz_esquematizada} DECLARACIONES de interfaz. Siguiente paso (FASE 6½): esquematizar la interfaz de UN módulo — declara la sección \`ui\` EN modules/<slug>/<slug>.blueprint.json (ui.ops con args + ui.datos; si los defaults del generador cubren, ui mínima {}). Si F6 decidió sin interfaz (ui_decision.necesita=false) → cerrar directo. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.` };
     }
     if (progreso.faltan_por_interfaz_construida > 0) {
-      return { skill: 'construir-interfaz', mensaje: `El plan está construido, con skill y con interfaz especificada (${progreso.con_interfaz_esquematizada}/${progreso.total}) pero faltan ${progreso.faltan_por_interfaz_construida} interfaces OPERATIVAS. Siguiente paso (FASE 7): construir la interfaz de UN módulo en el frontend CONSUMIENDO su spec (esquemas/interfaz-<slug>/esquema.md) — genera el trío real (store MQTT + Panel Svelte + UIModule manifest/index.ts) en frontend/src/lib/modules/<slug>/. Cada pieza de la spec → su archivo; NO improvisar. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.` };
+      return { skill: 'construir-interfaz', mensaje: `El plan está construido, con skill y con interfaz especificada (${progreso.con_interfaz_esquematizada}/${progreso.total}) pero faltan ${progreso.faltan_por_interfaz_construida} interfaces OPERATIVAS. Siguiente paso (FASE 7): construir la interfaz de UN módulo en el frontend — genera el ENVOLTORIO del generador schema→UI (patrón frontend/src/lib/modules/interfaz-dinamico/): copia el blueprint al dir del trío (frontend/src/lib/modules/<slug>/<slug>.blueprint.json) y crea manifest.json + index.ts + <Slug>Panel.svelte (~10 líneas con <BlueprintForm blueprint moduleId />) en frontend/src/lib/modules/<slug>/. El BlueprintForm renderiza las 4 zonas desde la sección ui y llama mqttRequest directo: NO store MQTT propio ni panel artesanal. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.` };
     }
     return { skill: null, mensaje: 'El proceso de construcción del negocio está COMPLETO: todas las hojas de la disección tienen su módulo, su skill, su interfaz especificada y su interfaz operativa.' };
   }
@@ -249,7 +250,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
               con_interfaz_esquematizada++;
               con_interfaz_construida++;
             } else {
-              if (this._interfazEsquematizadaEnDisco(project_id, slug)) con_interfaz_esquematizada++;
+              if (this._interfazEsquematizadaEnDisco(dirModulo, slug)) con_interfaz_esquematizada++;
               if (this._interfazOperativaEnDisco(slug)) con_interfaz_construida++;
             }
           }
@@ -274,28 +275,30 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     }
   }
 
-  // ¿La SPEC de la interfaz existe en el storage del proyecto?
-  // UN archivo (patrón del repo): esquemas/interfaz-<slug>.md con el prisma,
-  // la disección y el esquema maestro embebidos.
-  async _interfazEsquematizadaEnDisco(project_id, slug) {
+  // ¿La interfaz está DECLARADA en el blueprint del módulo (F6½ por generador)?
+  // La sección `ui` de modules/<slug>/<slug>.blueprint.json (regla ui_declarada).
+  // Existe (aunque sea vacía) → declarada (los defaults del generador cubren).
+  _interfazEsquematizadaEnDisco(dirModulo, slug) {
     try {
-      const r = await this._rpc('fs.list.request', { project_id, path: 'esquemas' });
-      const entries = (r && (r.files || r.items)) || [];
-      const nombres = entries.map(x => (typeof x === 'string' ? x : x && x.name)).filter(Boolean);
-      return nombres.includes(`interfaz-${slug}.md`);
+      const bpPath = path.join(dirModulo, `${slug}.blueprint.json`);
+      if (!fs.existsSync(bpPath)) return false;
+      const m = JSON.parse(fs.readFileSync(bpPath, 'utf8'));
+      return !!m && typeof m === 'object' && m.ui !== undefined && m.ui !== null && typeof m.ui === 'object' && !Array.isArray(m.ui);
     } catch (_) {
       return false;
     }
   }
 
-  // ¿La interfaz OPERATIVA del módulo existe en el frontend (trío real)?
-  // frontend/src/lib/modules/<slug>/ con manifest.json + index.ts + <Slug>Panel.svelte
+  // ¿La interfaz OPERATIVA del módulo existe en el frontend (envoltorio real)?
+  // frontend/src/lib/modules/<slug>/ con manifest.json + index.ts +
+  // <Slug>Panel.svelte (envoltorio <BlueprintForm>) + <slug>.blueprint.json
+  // (la copia que el Panel importa con ruta relativa).
   _interfazOperativaEnDisco(slug) {
     try {
       const baseRepo = REPO_MODULES_DIR ? path.join(REPO_MODULES_DIR, '..') : path.join(MODULES_DIR, '..');
       const frontDir = path.join(baseRepo, 'frontend', 'src', 'lib', 'modules', slug);
       const slugCap = slug.charAt(0).toUpperCase() + slug.slice(1);
-      return ['manifest.json', 'index.ts', `${slugCap}Panel.svelte`].every(f => fs.existsSync(path.join(frontDir, f)));
+      return ['manifest.json', 'index.ts', `${slugCap}Panel.svelte`, `${slug}.blueprint.json`].every(f => fs.existsSync(path.join(frontDir, f)));
     } catch (_) {
       return false;
     }
@@ -406,23 +409,21 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         mensaje: 'La decisión de interfaz no está en disco: se espera modules/<slug>/module.json con ui_handlers tipados (type ∈ workspace_module|chat_tool|inline_render|system_panel + zone canónica) o con ui_decision.necesita=false (sin interfaz, documentada). El reporte del agente no cuenta.'
       },
       'interfaz_esquematizada': {
-        // FASE 6½ — la SPEC de la interfaz debe existir en el proyecto: UN
-        // archivo (patrón del repo: UN entregable = UN path), como esquema.md
-        // y plan-construccion.md. El prisma + disección van embebidos.
-        dir: 'esquemas',
-        reglas: [
-          { nombre: 'interfaz-', cond: 'prefijo', desc: 'la SPEC de la interfaz (interfaz-<slug>.md)' },
-          { nombre: '.md', cond: 'contiene', desc: 'archivo markdown' }
-        ],
-        mensaje: 'La SPEC de la interfaz no está: se espera <proyecto>/esquemas/interfaz-<slug>.md (prisma + disección + esquema maestro embebidos, patrón UN path como esquema.md). Sin spec no se construye.'
+        // FASE 6½ — la DECLARACIÓN de la interfaz debe estar EN DISCO: la
+        // sección `ui` del blueprint modules/<slug>/<slug>.blueprint.json
+        // (regla ui_declarada). Con el generador schema→UI ya NO hay spec .md
+        // en storage/esquemas: el blueprint con ui.* es el entregable.
+        tipo: 'sistema',
+        mensaje: 'La declaración de interfaz no está en disco: se espera modules/<slug>/<slug>.blueprint.json con sección `ui` (ui.ops con args + ui.datos, o ui mínima {} si los defaults del generador cubren). El reporte del agente no cuenta.'
       },
       'interfaz_construida': {
-        // FASE 7 — la interfaz OPERATIVA debe existir en el frontend: el trío
-        // real (manifest.json + index.ts + <Slug>Panel.svelte) en
-        // frontend/src/lib/modules/<slug>/. Si F6 dijo sin interfaz, el
-        // entregable se acepta sin archivos (la decisión consta en module.json).
+        // FASE 7 — la interfaz OPERATIVA debe existir en el frontend: el
+        // ENVOLTORIO real (manifest.json + index.ts + <Slug>Panel.svelte +
+        // <slug>.blueprint.json) en frontend/src/lib/modules/<slug>/. Si F6
+        // dijo sin interfaz, el entregable se acepta sin archivos (la decisión
+        // consta en module.json).
         tipo: 'sistema',
-        mensaje: 'La interfaz operativa no está en disco: se espera frontend/src/lib/modules/<slug>/ con manifest.json + index.ts + <Slug>Panel.svelte (autodescubiertos por el loader). El reporte del agente no cuenta.'
+        mensaje: 'La interfaz operativa no está en disco: se espera frontend/src/lib/modules/<slug>/ con manifest.json + index.ts + <Slug>Panel.svelte (envoltorio del generador) + <slug>.blueprint.json (autodescubiertos por el loader). El reporte del agente no cuenta.'
       }
     };
     const spec = ESPERADOS[fase];
@@ -564,31 +565,61 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       }
       return { ok: true, verificados: [`interfaz de ${slug} decidida en disco y en el repo`] };
     }
+    if (fase === 'interfaz_esquematizada') {
+      // FASE 6½ — la DECLARACIÓN debe estar EN DISCO: la sección `ui` del
+      // blueprint modules/<slug>/<slug>.blueprint.json (regla ui_declarada).
+      const dirModulo = this._buscarModulo(slug);
+      if (!dirModulo) {
+        return { ok: false, esperado: [`modules/<...>/${slug}/ en disco`], mensaje: `El módulo ${slug} NO existe en modules/ (verificado en disco) — no puede declararse la interfaz de un módulo ausente.` };
+      }
+      if (this._interfazSinNecesidad(dirModulo)) {
+        return { ok: true, verificados: [`interfaz de ${slug}: F6 decidió sin interfaz (ui_decision.necesita=false) — no hay nada que declarar`] };
+      }
+      if (!this._interfazEsquematizadaEnDisco(dirModulo, slug)) {
+        return { ok: false, esperado: [`modules/<slug>/<slug>.blueprint.json con sección ui (o ui mínima {})`], mensaje: `La declaración de interfaz de ${slug} NO está en disco: modules/${slug}/${slug}.blueprint.json sin sección \`ui\`. Corre la skill esquematizar-interfaz y declara ui.ops + ui.datos EN el blueprint (o ui mínima {} si los defaults del generador cubren).` };
+      }
+      // En el repo también (el deploy borra lo no commiteado).
+      if (REPO_MODULES_DIR) {
+        const repoDir = this._buscarModuloRepo(slug);
+        const bpRel = `${repoDir ? path.relative(MODULES_DIR, repoDir) : slug}/${slug}.blueprint.json`;
+        let trackeado = false;
+        try {
+          const cp = require('child_process');
+          const out = cp.execFileSync('git', ['ls-files', '--', `modules/${bpRel}`], { cwd: path.join(REPO_MODULES_DIR, '..'), encoding: 'utf8' }).trim();
+          trackeado = out.length > 0;
+        } catch (_) { /* git no disponible → no bloquear */ }
+        if (repoDir && !trackeado) {
+          return { ok: false, esperado: [`blueprint de ${slug} COMMITEADO en el repo (~/3enki)`], mensaje: `La declaración de interfaz de ${slug} NO está commiteada en ~/3enki (git ls-files no la ve) → el siguiente deploy la borrará. Commitea el blueprint (rama → PR → merge) antes de cerrar la fase.` };
+        }
+      }
+      return { ok: true, verificados: [`interfaz de ${slug} declarada (sección ui en el blueprint), en disco y en el repo`] };
+    }
     if (fase === 'interfaz_construida') {
-      // FASE 7 — la interfaz OPERATIVA existe en el frontend: el trío
-      // (manifest.json + index.ts + <Slug>Panel.svelte) autodescubierto por
-      // el loader. Excepción legítima: F6 decidió ui_decision.necesita=false
-      // → el módulo NO lleva interfaz y la fase se acepta sin archivos.
+      // FASE 7 — la interfaz OPERATIVA existe en el frontend: el ENVOLTORIO
+      // (manifest.json + index.ts + <Slug>Panel.svelte + <slug>.blueprint.json)
+      // autodescubierto por el loader. Excepción legítima: F6 decidió
+      // ui_decision.necesita=false → el módulo NO lleva interfaz y la fase se
+      // acepta sin archivos.
       const dirModulo = this._buscarModulo(slug);
       if (dirModulo && this._interfazSinNecesidad(dirModulo)) {
         return { ok: true, verificados: [`interfaz de ${slug}: F6 decidió sin interfaz (ui_decision.necesita=false) — no hay nada que construir`] };
       }
       const slugCap = slug.charAt(0).toUpperCase() + slug.slice(1);
       const frontDir = path.join(REPO_MODULES_DIR || MODULES_DIR, '..', 'frontend', 'src', 'lib', 'modules', slug);
-      const trío = ['manifest.json', 'index.ts', `${slugCap}Panel.svelte`];
-      const faltantes = trío.filter(f => !fs.existsSync(path.join(frontDir, f)));
+      const envoltorio = ['manifest.json', 'index.ts', `${slugCap}Panel.svelte`, `${slug}.blueprint.json`];
+      const faltantes = envoltorio.filter(f => !fs.existsSync(path.join(frontDir, f)));
       if (faltantes.length) {
-        return { ok: false, esperado: [`frontend/src/lib/modules/${slug}/ con ${trío.join(' + ')}`], mensaje: `La interfaz operativa de ${slug} NO está completa: faltan ${faltantes.join(', ')} en frontend/src/lib/modules/${slug}/. Corre la skill construir-interfaz y genera el trío real (store + panel + UIModule).` };
+        return { ok: false, esperado: [`frontend/src/lib/modules/${slug}/ con ${envoltorio.join(' + ')}`], mensaje: `La interfaz operativa de ${slug} NO está completa: faltan ${faltantes.join(', ')} en frontend/src/lib/modules/${slug}/. Corre la skill construir-interfaz y genera el ENVOLTORIO del generador (manifest + index + <Slug>Panel.svelte con <BlueprintForm blueprint moduleId /> + copia del blueprint).` };
       }
       // En el repo también (el deploy del frontend va desde el repo).
       try {
         const cp = require('child_process');
         const out = cp.execFileSync('git', ['ls-files', '--', `frontend/src/lib/modules/${slug}`], { cwd: path.join(REPO_MODULES_DIR || MODULES_DIR, '..'), encoding: 'utf8' }).trim();
         if (!out.length) {
-          return { ok: false, esperado: [`frontend/src/lib/modules/${slug}/ COMMITEADO en el repo (~/3enki)`], mensaje: `La interfaz de ${slug} existe en disco pero NO está commiteada en ~/3enki (git ls-files no la ve) → el siguiente deploy la borrará. Commitea el trío (rama → PR → merge) antes de cerrar la fase.` };
+          return { ok: false, esperado: [`frontend/src/lib/modules/${slug}/ COMMITEADO en el repo (~/3enki)`], mensaje: `La interfaz de ${slug} existe en disco pero NO está commiteada en ~/3enki (git ls-files no la ve) → el siguiente deploy la borrará. Commitea el envoltorio (rama → PR → merge) antes de cerrar la fase.` };
         }
       } catch (_) { /* git no disponible → no bloquear */ }
-      return { ok: true, verificados: [`interfaz operativa de ${slug}: trío completo en frontend/ y en el repo`] };
+      return { ok: true, verificados: [`interfaz operativa de ${slug}: envoltorio completo (trío + blueprint) en frontend/ y en el repo`] };
     }
     return { ok: true };
   }

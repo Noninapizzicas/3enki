@@ -106,5 +106,53 @@
     }
   ],
 
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 5 RPC del reflejo con sus args; los eventos publicados refrescan la zona DATOS. El panel manual (InterfazPanel) y este schema cubren las mismas 4 zonas — el generador lo demuestra.",
+    "ops": {
+      "listar": {
+        "titulo": "Listar candidatos",
+        "descripcion": "Vista de candidatos con estado (delegado al banco)."
+      },
+      "ver": {
+        "titulo": "Ver ficha (M11)",
+        "descripcion": "Ficha transparente: evidencia completa por criterio.",
+        "args": [
+          { "nombre": "candidatoId", "tipo": "string", "required": true, "placeholder": "id del candidato" }
+        ]
+      },
+      "confirmar_veredicto": {
+        "titulo": "Confirmar veredicto",
+        "descripcion": "La voz del dueño: PASA o NO_PASA. El custodio aplica la transición.",
+        "args": [
+          { "nombre": "candidatoId", "tipo": "string", "required": true, "placeholder": "id del candidato" },
+          { "nombre": "confirmacion", "tipo": "select", "enum": ["PASA", "NO_PASA"], "required": true }
+        ]
+      },
+      "anadir_manual": {
+        "titulo": "Añadir candidato a mano",
+        "descripcion": "Candidato a mano; fuente siempre 'manual'.",
+        "args": [
+          { "nombre": "titulo", "tipo": "string", "required": true, "placeholder": "Título *" },
+          { "nombre": "url", "tipo": "string", "required": false, "placeholder": "URL (opcional)" },
+          { "nombre": "sector", "tipo": "string", "required": false, "placeholder": "Sector (opcional)" }
+        ]
+      },
+      "corregir_ficha": {
+        "titulo": "Corregir ficha (M10)",
+        "descripcion": "El dueño aporta el dato que faltaba → el banco re-abre y re-evalúa. Escribe el campo como clave y el valor correcto como valor.",
+        "args": [
+          { "nombre": "candidatoId", "tipo": "string", "required": true, "placeholder": "id del candidato" },
+          { "nombre": "ficha", "tipo": "kv", "required": true, "descripcion": "campo → valor correcto" }
+        ]
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Candidatos del banco",
+      "refresh_on": ["interfaz.veredicto_confirmado", "interfaz.candidato_manual_anadido"],
+      "columnas": ["titulo", "estado", "fuente", "sector"]
+    }
+  },
+
   "filosofia": "La interfaz no decide: TRADUCE. Es la superficie donde el dueño del radar habla — ve las fichas con toda su evidencia (M11), confirma con su voz (M11), añade lo que sabe a mano, corrige el dato que faltaba (M10). Toda su fuerza está en no decidir por el dueño: clasifica la intención con fidelidad, delega al dominio y devuelve el resultado. Cuando el mensaje es ambiguo, pregunta — nunca inventa. El sistema decide con datos; el dueño decide con la verdad completa delante."
 }

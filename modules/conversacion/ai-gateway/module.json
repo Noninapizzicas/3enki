@@ -176,7 +176,7 @@
     "providers": {
       "deepseek-anthropic": {
         "enabled": true,
-        "priority": 1,
+        "priority": 5,
         "api_base": "https://api.deepseek.com",
         "headroom": true,
         "default_model": "deepseek-v4-flash",
@@ -232,10 +232,10 @@
       },
       "ollama": {
         "enabled": true,
-        "priority": 5,
+        "priority": 1,
         "api_base": "https://ollama.com",
         "headroom": true,
-        "default_model": "llama3.1",
+        "default_model": "deepseek-v4-flash",
         "models": [
           "llama3.1",
           "llama3.3",

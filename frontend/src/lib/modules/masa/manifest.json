@@ -1,0 +1,9 @@
+{
+  "id": "masa",
+  "name": "Masa",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 10,
+  "icon": "🍞",
+  "label": "Masa"
+}

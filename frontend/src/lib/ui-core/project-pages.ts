@@ -43,7 +43,14 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   // — buscador de nichos (radar): visible SOLO si el proyecto declara 'interfaz' en su page-set —
   // nav:false → el rail lateral NO la pinta (no hay ruta /<proyecto>/interfaz); el botón
   // vive en la work-bar (manifest zone work-bar + loader en panels.ts), que abre el panel.
-  interfaz:         { id: 'interfaz',         icon: '📡',  label: 'Radar de nichos', nav: false }
+  interfaz:         { id: 'interfaz',         icon: '📡',  label: 'Radar de nichos', nav: false },
+  // — F6½/F7 (The Pirate — prisma): paneles generados del blueprint. nav:false → el rail
+  // lateral no los pinta (sin ruta /<proyecto>/<id>); el page-set los gatea en la work-bar
+  // (masa/lotes/mise-en-place) y el chat-tools (producir, que además exige loader en panels.ts).
+  masa:             { id: 'masa',             icon: '🍞',  label: 'Masa', nav: false },
+  lotes:            { id: 'lotes',            icon: '🧊',  label: 'Lotes', nav: false },
+  'mise-en-place':  { id: 'mise-en-place',    icon: '🥘',  label: 'Mise en Place', nav: false },
+  producir:         { id: 'producir',         icon: '🏭',  label: 'Producir', nav: false }
 };
 
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */

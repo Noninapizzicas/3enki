@@ -1,0 +1,9 @@
+{
+  "id": "lotes",
+  "name": "Lotes",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 11,
+  "icon": "🧊",
+  "label": "Lotes"
+}

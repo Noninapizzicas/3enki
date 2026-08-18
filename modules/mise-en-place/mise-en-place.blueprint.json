@@ -1,0 +1,122 @@
+{
+  "_doc": "Blueprint del modulo mise-en-place (the-pirate). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema→UI (BlueprintForm). Seccion `ui` declarada por F6½ (esquematizar-interfaz, 2026-08-18): las 10 operaciones del modulo con sus args reales del contrato y los eventos que refrescan la zona DATOS. Las acciones son DOTTED (escalado.calcular, plan.publicar, compra.calcular...) porque el RPC real del bus es produccion.<accion>.request y el wrapper mqttRequest('mise-en-place', '<accion>') emite ui/request/mise-en-place/<accion> — por eso transporte.rpc va VACIO: la regex de deriveZones solo parsea acciones de 2 segmentos y los topics de 3 segmentos generarian ops fantasma con topic roto. Eventos canonicos con prefix 'produccion.*' (decision del sub-contrato).",
+  "id": "mise-en-place",
+  "version": "blueprint-1.0.0",
+
+  "rol": "Planificacion previa al servicio (the-pirate): escalado de recetas a porciones objetivo, planes de produccion (que recetas en que franja con cuantas porciones, state machine propuesto→aprobado→en_ejecucion→cerrado), consolidacion de listas de compra agregando ingredientes a lo largo de un horizonte, retroplanning (ventana de produccion restando la maduracion de masa) y agrupacion de demanda en tandas de masa. Conversores puros + plan con estado; sin acceso cross-modulo (el caller pasa los datos de las recetas).",
+
+  "eventos_publicados": [
+    "produccion.escalado.calculado",
+    "produccion.plan.publicado",
+    "produccion.compra.calculada",
+    "produccion.retroplanning.calculado",
+    "produccion.tandas.agrupadas",
+    "produccion.plan.estado.avanzado"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 10 operaciones se conducen por ui/request/mise-en-place/<accion> con la accion dotted; ver seccion ui.ops. transporte.rpc vacio a proposito (los topics reales produccion.*.request tienen 3 segmentos y rompen el parser del generador).",
+    "rpc": [],
+    "salida": [
+      "produccion.escalado.calculado",
+      "produccion.plan.publicado",
+      "produccion.compra.calculada",
+      "produccion.retroplanning.calculado",
+      "produccion.tandas.agrupadas",
+      "produccion.plan.estado.avanzado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 10 operaciones del reflejo con sus args; produccion.plan.publicado y produccion.plan.estado.avanzado refrescan la zona DATOS (declarada en F6½, consumida por F7).",
+    "ops": {
+      "escalado.calcular": {
+        "titulo": "Escalar receta",
+        "descripcion": "Escalado lineal de una receta a nuevas porciones: factor = porciones_destino / porciones_origen. NO modifica la receta canonica.",
+        "args": [
+          { "nombre": "receta_id", "tipo": "string", "required": true, "placeholder": "id de la receta a escalar" },
+          { "nombre": "porciones_origen", "tipo": "number", "required": true, "placeholder": "porciones originales de la receta" },
+          { "nombre": "porciones_destino", "tipo": "number", "required": true, "placeholder": "porciones objetivo" },
+          { "nombre": "ingredientes", "tipo": "json", "required": true, "descripcion": "Ingredientes de la receta original: [{nombre, cantidad, unidad}]" }
+        ]
+      },
+      "plan.publicar": {
+        "titulo": "Publicar plan de produccion",
+        "descripcion": "Crea un plan propuesto: lineas con receta_id, porciones y franja para un horizonte temporal.",
+        "args": [
+          { "nombre": "plan_id", "tipo": "string", "required": false, "placeholder": "id opcional (si se omite, plan_xxx)" },
+          { "nombre": "horizonte_desde", "tipo": "string", "required": true, "placeholder": "ISO 8601 inicio del horizonte (ej. 2026-08-20T00:00:00Z)" },
+          { "nombre": "horizonte_hasta", "tipo": "string", "required": true, "placeholder": "ISO 8601 fin del horizonte" },
+          { "nombre": "lineas", "tipo": "json", "required": true, "descripcion": "Lineas del plan: [{receta_id, porciones, franja (desayuno|comida|merienda|cena|all_day), dia?}]" }
+        ]
+      },
+      "compra.calcular": {
+        "titulo": "Consolidar lista de compra",
+        "descripcion": "Agrega ingredientes a lo largo de las recetas de un horizonte, con merma_pct opcional.",
+        "args": [
+          { "nombre": "horizonte", "tipo": "json", "required": true, "descripcion": "{tipo (servicio|dia|semana|evento|personalizado), desde?, hasta?, etiqueta?}" },
+          { "nombre": "recetas", "tipo": "json", "required": true, "descripcion": "Recetas con ingredientes ya escalados: [{receta_id, porciones, ingredientes: [{nombre, cantidad, unidad, merma_pct?}]}]" }
+        ]
+      },
+      "plan.obtener": {
+        "titulo": "Ver plan",
+        "descripcion": "Plan de produccion por id: lineas, estado, horizonte.",
+        "args": [
+          { "nombre": "plan_id", "tipo": "string", "required": true, "placeholder": "id del plan" }
+        ]
+      },
+      "planes.listar": {
+        "titulo": "Listar planes",
+        "descripcion": "Todos los planes del proyecto con su estado (propuesto/aprobado/en_ejecucion/cerrado)."
+      },
+      "retroplanning.calcular": {
+        "titulo": "Retroplanning",
+        "descripcion": "Ventana de produccion de cada receta (desde/hasta/recomendada) restando la maduracion que declara masa.",
+        "args": [
+          { "nombre": "fecha_servicio", "tipo": "string", "required": true, "placeholder": "cuando se sirve (YYYY-MM-DD o ISO 8601)" },
+          { "nombre": "franja", "tipo": "select", "required": true, "enum": ["desayuno", "comida", "merienda", "cena", "all_day"] },
+          { "nombre": "lineas", "tipo": "json", "required": true, "descripcion": "Demanda: [{receta_id, porciones}]" }
+        ]
+      },
+      "plan.aprobar": {
+        "titulo": "Aprobar plan",
+        "descripcion": "Transicion propuesto → aprobado. Solo el dueno aprueba; rechaza si hay decision_pendiente sin confirmar.",
+        "args": [
+          { "nombre": "plan_id", "tipo": "string", "required": true, "placeholder": "id del plan a aprobar" }
+        ]
+      },
+      "plan.ejecutar": {
+        "titulo": "Ejecutar plan",
+        "descripcion": "Marca un plan aprobado como en ejecucion (hoy: se produce). Transicion aprobado → en_ejecucion.",
+        "args": [
+          { "nombre": "plan_id", "tipo": "string", "required": true, "placeholder": "id del plan a ejecutar" }
+        ]
+      },
+      "plan.cerrar": {
+        "titulo": "Cerrar plan",
+        "descripcion": "Cierra un plan en ejecucion (producido; las tandas siguen vivas en lotes).",
+        "args": [
+          { "nombre": "plan_id", "tipo": "string", "required": true, "placeholder": "id del plan a cerrar" }
+        ]
+      },
+      "agrupar_tandas": {
+        "titulo": "Agrupar tandas",
+        "descripcion": "Empaqueta lineas de demanda en tandas de masa (gramaje por pieza y rendimiento por tanda via masa). Conversor puro.",
+        "args": [
+          { "nombre": "lineas", "tipo": "json", "required": true, "descripcion": "Demanda: [{receta_id, porciones, franja?}]" },
+          { "nombre": "formato", "tipo": "string", "required": false, "placeholder": "formato de masa (ej. 33cm); default config" },
+          { "nombre": "tamano_tanda_kg", "tipo": "number", "required": false, "placeholder": "tamano de tanda en kg; default config" }
+        ]
+      }
+    },
+    "datos": {
+      "op": "planes.listar",
+      "titulo": "Planes de produccion del proyecto",
+      "refresh_on": ["produccion.plan.publicado", "produccion.plan.estado.avanzado"],
+      "columnas": ["plan_id", "estado", "lineas_count", "horizonte_desde", "horizonte_hasta"]
+    }
+  }
+}

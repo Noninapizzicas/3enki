@@ -5,8 +5,21 @@
   "_v0_1_0_nota": "v0.1.0: costear(compuesto_id) → Σ (precio_por_base × cantidad_EN_BASE), recursivo en sub-compuestos, emite compuesto.coste.calculado o compuesto.coste.incompleto (con faltantes). CONVIERTE la unidad del componente a la base del precio (g·kg, u·g, líquido·peso) vía _shared/prisma-unidades ANTES de multiplicar; unidad irreconciliable (sin densidad para cruzar masa↔volumen, unidad rara) → faltante, NO inventa. El insumo declara naturalezas.{coste_centimos_por_unidad, unidad_base, densidad_g_ml?}; un sub-compuesto con rendimiento:{cantidad,unidad} da coste POR UNIDAD BASE (coste_lote / rendimiento). _sumar es PURO (testeado). Cascada por insumo.actualizado: re-cuesta de a una los compuestos que lo usan.",
   "language": "es",
   "subscribes": [
-    { "event": "costeador.costear.request", "handler": "onCostearRequest", "description": "Reflejo: {project_id, compuesto_id} → resuelve precios de componentes (insumos.get / recursión) → Σ → EMITE compuesto.coste.calculado {coste_unidad} o compuesto.coste.incompleto {faltantes}. Una receta, un cálculo, un evento." },
-    { "event": "costeador.costear_todos.request", "handler": "onCostearTodosRequest", "description": "Reflejo (EL LOOP): {project_id} → lee compuestos.pendientes (la cola) → cuesta UNA a UNA (await por compuesto, nunca en bloque). Devuelve {total, calculados, incompletos}. Por salud: fallo aislado, progreso, reintentable." },
-    { "event": "insumo.actualizado", "handler": "onInsumoActualizado", "description": "Reflejo (cascada): cambió el precio de un insumo → re-cuesta de A UNA los compuestos que lo referencian. Nunca en bloque. Aquí el anti-cuello se vuelve real (un precio, propaga)." }
-  ]
+    {
+      "event": "costeador.costear.request",
+      "handler": "onCostearRequest",
+      "description": "Reflejo: {project_id, compuesto_id} → resuelve precios de componentes (insumos.get / recursión) → Σ → EMITE compuesto.coste.calculado {coste_unidad} o compuesto.coste.incompleto {faltantes}. Una receta, un cálculo, un evento."
+    },
+    {
+      "event": "costeador.costear_todos.request",
+      "handler": "onCostearTodosRequest",
+      "description": "Reflejo (EL LOOP): {project_id} → lee compuestos.pendientes (la cola) → cuesta UNA a UNA (await por compuesto, nunca en bloque). Devuelve {total, calculados, incompletos}. Por salud: fallo aislado, progreso, reintentable."
+    },
+    {
+      "event": "insumo.actualizado",
+      "handler": "onInsumoActualizado",
+      "description": "Reflejo (cascada): cambió el precio de un insumo → re-cuesta de A UNA los compuestos que lo referencian. Nunca en bloque. Aquí el anti-cuello se vuelve real (un precio, propaga)."
+    }
+  ],
+  "description": "Costeador de Prisma — el MOTOR que calcula coste de producción y formula el precio de venta (PVP) a partir de los compuestos y sus proporciones. Reflejo determinista."
 }

@@ -175,8 +175,8 @@
   "config": {
     "providers": {
       "deepseek-anthropic": {
-        "enabled": true,
-        "priority": 5,
+       "enabled": true,
+       "priority": 1,
         "api_base": "https://api.deepseek.com",
         "headroom": true,
         "default_model": "deepseek-v4-flash",
@@ -231,8 +231,8 @@
         ]
       },
       "ollama": {
-        "enabled": true,
-        "priority": 1,
+       "enabled": true,
+       "priority": 9,
         "api_base": "https://ollama.com",
         "headroom": true,
         "default_model": "deepseek-v4-flash",

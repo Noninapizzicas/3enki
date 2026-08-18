@@ -414,8 +414,7 @@
         "INVALID_INPUT",
         "UPSTREAM_TIMEOUT"
       ]
-    }
-    ,
+    },
     {
       "name": "produccion.retroplanning.calcular",
       "description": "Retroplanning de produccion: dada la senal de demanda (fecha_servicio + franja + recetas con porciones) devuelve la ventana de produccion de cada receta (desde/hasta/recomendada) restando la ventana de maduracion que declara masa. Conversor puro: no persiste.",
@@ -678,5 +677,77 @@
         "mise-en-place.compra.duration"
       ]
     }
-  }
+  },
+  "ui_handlers": [
+    {
+      "domain": "mise-en-place",
+      "action": "escalado.calcular",
+      "handler": "onCalcularEscalado",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "mise-en-place",
+      "action": "plan.publicar",
+      "handler": "onPublicarPlan",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "mise-en-place",
+      "action": "compra.calcular",
+      "handler": "onCalcularCompra",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "mise-en-place",
+      "action": "plan.obtener",
+      "handler": "onObtenerPlan",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "mise-en-place",
+      "action": "planes.listar",
+      "handler": "onListarPlanes",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "mise-en-place",
+      "action": "retroplanning.calcular",
+      "handler": "onCalcularRetroplanning",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "mise-en-place",
+      "action": "plan.aprobar",
+      "handler": "onAprobarPlan",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "mise-en-place",
+      "action": "plan.ejecutar",
+      "handler": "onEjecutarPlan",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "mise-en-place",
+      "action": "plan.cerrar",
+      "handler": "onCerrarPlan",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "mise-en-place",
+      "action": "agrupar_tandas",
+      "handler": "onAgruparTandas",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
 }

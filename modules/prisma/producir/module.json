@@ -21,5 +21,28 @@
       "description": "Reflejo (FRENO, función pura): {compuesto_id, objetivo} → {valid, errors}. Unidad coherente, formato conocido, cantidad > 0. Patrón escandallo.validar."
     }
   ],
-  "description": "Motor de proyección de compuestos a objetivos físicos: calcula gramaje/rendimiento/reamasado para producir un compuesto (masa, mortero, jarabe, fórmula) según su regla de escala. REFLEJO puro sin store: lee compuestos+insumos por RPC y emite producir.proyeccion.calculada. Nacido de la hoja masa (Fase 4 de The Pirate)."
+  "description": "Motor de proyección de compuestos a objetivos físicos: calcula gramaje/rendimiento/reamasado para producir un compuesto (masa, mortero, jarabe, fórmula) según su regla de escala. REFLEJO puro sin store: lee compuestos+insumos por RPC y emite producir.proyeccion.calculada. Nacido de la hoja masa (Fase 4 de The Pirate).",
+  "ui_handlers": [
+    {
+      "domain": "producir",
+      "action": "proyectar",
+      "handler": "onProyectarRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    },
+    {
+      "domain": "producir",
+      "action": "rendimiento",
+      "handler": "onRendimientoRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    },
+    {
+      "domain": "producir",
+      "action": "validar",
+      "handler": "onValidarRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    }
+  ]
 }

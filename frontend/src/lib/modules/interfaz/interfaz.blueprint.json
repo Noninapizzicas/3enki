@@ -1,0 +1,158 @@
+{
+  "id": "interfaz",
+  "version": "blueprint-0.1.0",
+  "_v0_1_0_nota": "v0.1.0: la mitad FUZZY de la interfaz del dueño. El cajón interpretar recibe la intención libre del chat (interfaz.intencion.request, NO en subscribes del reflejo — anti-colisión) y la traduce a los RPC deterministas del reflejo: listar (vista de candidatos), ver (ficha transparente M11 vía evaluador.ficha), confirmar_veredicto (la decisión final es del dueño: PASA/NO_PASA), anadir_manual (candidato a mano, fuente 'manual') y corregir_ficha (M10: el dueño aporta el dato que faltaba → el banco re-abre EN_EVALUACION y se re-evalúa). El reflejo emite los eventos de dominio; el cajón NUNCA emite eventos de dominio directos — solo traduce intención y devuelve el resultado al chat.",
+  "language": "es",
+  "temperatura": 0.2,
+
+  "modelo_oop": {
+    "INTERFAZ": "InterfazDelDueño { interpretar(in: IntencionInput): IntencionOutput }",
+    "CLASE InterfazFuzzy IMPLEMENTA InterfazDelDueño": {
+      "ATRIBUTOS": {
+        "reflejo": "Reflejo        // interfaz index.js — los 5 RPC deterministas al dominio",
+        "banco": "Custodio       // banco.listar / banco.anadir / banco.corregir_ficha — vía RPC del reflejo",
+        "evaluador": "Reflejo        // evaluador.ficha / evaluador.evaluar — vía RPC del reflejo",
+        "bus": "EventBus        // Observer: interfaz.veredicto_confirmado / candidato_manual_anadido"
+      },
+      "METODOS": [
+        "interpretar(in): IntencionOutput            // el ciclo: LEER -> PENSAR -> GUARDAR (delegado) -> RESPUESTA",
+        "clasificarIntencion(mensaje, ctx): Accion     // FUZZY — del lenguaje natural a una de las 5 acciones"
+      ]
+    },
+    "MANDATOS (Specification — una respuesta válida los satisface)": [
+      "LA_DECISION_ES_DEL_DUEÑO: nunca confirmas, rechazas ni corriges por tu cuenta. Solo traduces la intención explícita del dueño a los RPC del reflejo.",
+      "TRANSPARENCIA_M11: al VER, muestra el candidato y el detalle por criterio completo (evidencia incluida). No resumas lo que decide el dueño.",
+      "DELEGACION: la GUARDAR es siempre vía los RPC del reflejo (interfaz.<op>.request). Tú no escribes estado, no emites eventos de dominio ni llamas a banco/evaluador directamente.",
+      "FIDELIDAD_DE_INTENCION: si el mensaje es ambiguo (no se puede mapear a una acción con sus parámetros), pregunta al dueño. Nunca inventes candidatoId ni confirmaciones.",
+      "MANUAL_CON_DATO: un candidato manual necesita titulo (y opcionalmente sector/ficha); la fuente es siempre 'manual'."
+    ],
+    "PATRONES": {
+      "TemplateMethod": "el ciclo LEER->PENSAR->GUARDAR->RESPUESTA es fijo; clasificarIntencion es el hueco fuzzy",
+      "Delegation": "GUARDAR delegado al reflejo (interfaz.<op>.request) — el cajón jamás escribe estado",
+      "Strategy": "una Accion por intención: ver | listar | confirmar | anadir | corregir",
+      "Interruptor": "sin egress externo propio — la interfaz solo habla con el dominio interno"
+    }
+  },
+
+  "contrato": {
+    "IntencionInput": "{ project_id:uuid!, mensaje:str!, candidatoId?:str, ficha?:obj }",
+    "IntencionOutput": "{ status:num, data?:obj, error?:str, message?:str }",
+    "Accion": "ver | listar | confirmar | anadir_manual | corregir_ficha | aclarar"
+  },
+
+  "transporte": {
+    "entrada": "cajon interpretar (responde:true en interfaz.intencion.request)",
+    "rpc": [
+      "interfaz.listar.request -> .response        (delegado — vista de candidatos con estado)",
+      "interfaz.ver.request -> .response           (delegado — ficha transparente M11)",
+      "interfaz.confirmar_veredicto.request -> .response (delegado — la voz del dueño)",
+      "interfaz.anadir_manual.request -> .response (delegado — candidato a mano)",
+      "interfaz.corregir_ficha.request -> .response (delegado — el dueño aporta el dato)"
+    ],
+    "salida": ["interfaz.veredicto_confirmado", "interfaz.candidato_manual_anadido"],
+    "qos": "publishAndWait (request/response correlado) en cada delegación; timeout 8s"
+  },
+
+  "operaciones": {
+    "interpretar": {
+      "cajon_descripcion": "Recibe la intención libre del dueño desde el chat (vía hermes-relay) y la traduce a las 5 acciones deterministas del reflejo. LEER el contexto si hace falta (ficha del candidato mencionado), PENSAR clasificando la intención (ver/listar/confirmar/anadir_manual/corregir_ficha), GUARDAR delegando al reflejo (interfaz.<op>.request) y RESPONDER con el resultado para el chat. La decisión final es SIEMPRE del dueño: el cajón solo ejecuta lo que el dueño pide explícitamente.",
+      "input": "IntencionInput (ver contrato)",
+      "usa_internas": [],
+      "pseudocodigo": [
+        "async interpretar(in):",
+        "  // 1. LEER contexto — si el dueño menciona un candidato, trae su ficha transparente (M11)",
+        "  ctx = {}",
+        "  si in.candidatoId:",
+        "    f = publishAndWait('interfaz.ver.request', {project_id: in.project_id, candidatoId: in.candidatoId}, 8000)",
+        "    ctx.ficha = f?.data || null",
+        "",
+        "  // 2. PENSAR — clasificar la intención del mensaje en una Accion (ver/listar/confirmar/anadir_manual/corregir_ficha)",
+        "  accion = clasificarIntencion(in.mensaje, ctx)",
+        "  si accion == 'aclarar':",
+        "    return {status:200, data:{necesitaAclaracion:true, pregunta:'¿Qué candidato? ¿Confirmar PASA o NO_PASA?', accionesPosibles:['ver','listar','confirmar','anadir_manual','corregir_ficha']}}",
+        "",
+        "  // 3. GUARDAR — delegar al reflejo (el cajón no escribe estado ni emite eventos de dominio)",
+        "  r = publishAndWait(`interfaz.${accion}.request`, {project_id: in.project_id, ...params(accion, in, ctx)}, 8000)",
+        "  si !r: return {status:502, error:'UPSTREAM_TIMEOUT', message:`el reflejo no respondió a interfaz.${accion}.request`}",
+        "",
+        "  // 4. RESPUESTA — devolver el resultado al chat (los eventos de dominio ya los emitió el reflejo)",
+        "  return {status:r.status, data:r.data, message:r.message}"
+      ],
+      "reglas_clave": [
+        "LA_DECISION_ES_DEL_DUEÑO: confirmar_veredicto SOLO con confirmación explícita (PASA o NO_PASA). Un '¿qué opinas?' NO es confirmación — responde mostrando la ficha (ver) y pide la decisión.",
+        "TRANSPARENCIA_M11: en ver, devuelve TODO el detalle por criterio con su evidencia. El dueño decide con datos, no con resúmenes.",
+        "DELEGACION: la GUARDAR es vía interfaz.<op>.request (el reflejo responde). Nunca llames a banco.* ni evaluador.* directamente desde el cajón.",
+        "FIDELIDAD_DE_INTENCION: mensaje ambiguo → accion 'aclarar' (pregunta al dueño). Nunca inventes candidatoId, confirmaciones ni evidencias.",
+        "MANUAL_CON_DATO: anadir_manual exige titulo. Si falta, pídelo."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UPSTREAM_ERROR"]
+    }
+  },
+
+  "eventos_publicados": [
+    "interfaz.listar.request",
+    "interfaz.ver.request",
+    "interfaz.confirmar_veredicto.request",
+    "interfaz.anadir_manual.request",
+    "interfaz.corregir_ficha.request"
+  ],
+
+  "eventos_que_escucho": [
+    {
+      "evento": "interfaz.intencion.request",
+      "handler": "interpretar",
+      "responde": true,
+      "description": "Cajón: traduce la intención libre del chat del dueño a las 5 acciones deterministas del reflejo (ver/listar/confirmar/anadir_manual/corregir_ficha). Responde con el resultado para el chat."
+    }
+  ],
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 5 RPC del reflejo con sus args; los eventos publicados refrescan la zona DATOS. El panel manual (InterfazPanel) y este schema cubren las mismas 4 zonas — el generador lo demuestra.",
+    "ops": {
+      "listar": {
+        "titulo": "Listar candidatos",
+        "descripcion": "Vista de candidatos con estado (delegado al banco)."
+      },
+      "ver": {
+        "titulo": "Ver ficha (M11)",
+        "descripcion": "Ficha transparente: evidencia completa por criterio.",
+        "args": [
+          { "nombre": "candidatoId", "tipo": "string", "required": true, "placeholder": "id del candidato" }
+        ]
+      },
+      "confirmar_veredicto": {
+        "titulo": "Confirmar veredicto",
+        "descripcion": "La voz del dueño: PASA o NO_PASA. El custodio aplica la transición.",
+        "args": [
+          { "nombre": "candidatoId", "tipo": "string", "required": true, "placeholder": "id del candidato" },
+          { "nombre": "confirmacion", "tipo": "select", "enum": ["PASA", "NO_PASA"], "required": true }
+        ]
+      },
+      "anadir_manual": {
+        "titulo": "Añadir candidato a mano",
+        "descripcion": "Candidato a mano; fuente siempre 'manual'.",
+        "args": [
+          { "nombre": "titulo", "tipo": "string", "required": true, "placeholder": "Título *" },
+          { "nombre": "url", "tipo": "string", "required": false, "placeholder": "URL (opcional)" },
+          { "nombre": "sector", "tipo": "string", "required": false, "placeholder": "Sector (opcional)" }
+        ]
+      },
+      "corregir_ficha": {
+        "titulo": "Corregir ficha (M10)",
+        "descripcion": "El dueño aporta el dato que faltaba → el banco re-abre y re-evalúa. Escribe el campo como clave y el valor correcto como valor.",
+        "args": [
+          { "nombre": "candidatoId", "tipo": "string", "required": true, "placeholder": "id del candidato" },
+          { "nombre": "ficha", "tipo": "kv", "required": true, "descripcion": "campo → valor correcto" }
+        ]
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Candidatos del banco",
+      "refresh_on": ["interfaz.veredicto_confirmado", "interfaz.candidato_manual_anadido"],
+      "columnas": ["titulo", "estado", "fuente", "sector"]
+    }
+  },
+
+  "filosofia": "La interfaz no decide: TRADUCE. Es la superficie donde el dueño del radar habla — ve las fichas con toda su evidencia (M11), confirma con su voz (M11), añade lo que sabe a mano, corrige el dato que faltaba (M10). Toda su fuerza está en no decidir por el dueño: clasifica la intención con fidelidad, delega al dominio y devuelve el resultado. Cuando el mensaje es ambiguo, pregunta — nunca inventa. El sistema decide con datos; el dueño decide con la verdad completa delante."
+}

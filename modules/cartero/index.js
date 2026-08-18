@@ -120,7 +120,7 @@ class CarteroReflejo extends ModuloHibridoReflejo {
         html: false
       }, { projectId: pid, timeout: 30000 });
       // ok:true SOLO con confirmación explícita del proveedor: messageId presente.
-      const messageId = res?.messageId || null;
+      const messageId = res?.data?.messageId || res?.messageId || null;
       if (!messageId) throw new Error('Proveedor respondió sin messageId (sin ack)');
       const envio = { id, candidato_id, para, asunto, estado: 'ENVIADO', messageId, fecha: new Date().toISOString(), project_id: pid };
       this.envios.set(`${pid}:${id}`, envio);

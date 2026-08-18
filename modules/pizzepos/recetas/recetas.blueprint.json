@@ -1110,6 +1110,120 @@
     "ingrediente.precio.actualizado"
   ],
   "eventos_que_escucho": [],
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Declarada por F6½ (esquematizar-interfaz, 2026-08-18) sobre el modulo HIBRIDO recetas: las 5 operaciones con sus args reales del contrato y los eventos que refrescan la zona DATOS. Las acciones son SIMPLES (listar, obtener, ingredientes, crear, validar) — el RPC real es recetas.<accion>.request y el wrapper mqttRequest('recetas', '<accion>') emite ui/request/recetas/<accion> (3 segmentos, accion de 1 segmento: el parser de deriveZones lo resuelve; NO aplica el pitfall dotted de masa).",
+    "ops": {
+      "listar": {
+        "titulo": "Listar recetas",
+        "descripcion": "Recetas del proyecto con filtros por estado, incompletas o sin coste. Proyeccion servida por el reflejo JS (sin turno LLM).",
+        "args": [
+          {
+            "nombre": "estado",
+            "tipo": "select",
+            "required": false,
+            "enum": ["borrador", "en_servicio", "archivada"],
+            "descripcion": "Estado operativo (default en_servicio)."
+          },
+          {
+            "nombre": "solo_incompletas",
+            "tipo": "boolean",
+            "required": false,
+            "descripcion": "Solo recetas con campos pendientes."
+          },
+          {
+            "nombre": "solo_sin_coste",
+            "tipo": "boolean",
+            "required": false,
+            "descripcion": "Solo recetas sin coste_unidad calculado."
+          },
+          {
+            "nombre": "limit",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "max resultados (default 50)"
+          }
+        ]
+      },
+      "obtener": {
+        "titulo": "Ver una receta",
+        "descripcion": "Receta completa por id (slug) o nombre normalizado. Incluye lineas, rinde y coste si lo calculo escandallo.",
+        "args": [
+          {
+            "nombre": "receta_id",
+            "tipo": "text",
+            "required": false,
+            "placeholder": "id de la receta (slug)"
+          },
+          {
+            "nombre": "nombre",
+            "tipo": "text",
+            "required": false,
+            "placeholder": "o nombre exacto"
+          }
+        ]
+      },
+      "ingredientes": {
+        "titulo": "Catalogo de ingredientes",
+        "descripcion": "Catalogo de ingredientes del proyecto (id, nombre, compra_unidad, precio, fuente). Fuente unica de precio para escandallo. Servido por el reflejo JS."
+      },
+      "crear": {
+        "titulo": "Crear receta",
+        "descripcion": "Alta de una receta del modelo canonico { nombre, tipo, rinde, lineas[] }. El reflejo valida contra el contrato y persiste verificado (201 solo si aterrizo).",
+        "args": [
+          {
+            "nombre": "nombre",
+            "tipo": "text",
+            "required": true,
+            "placeholder": "nombre de la receta"
+          },
+          {
+            "nombre": "tipo",
+            "tipo": "select",
+            "required": false,
+            "enum": ["pizza", "masa", "salsa", "base"],
+            "descripcion": "Tipo (default pizza)."
+          },
+          {
+            "nombre": "lineas",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Lineas [{ref, nombre, cantidad, unidad: g|ml|ud}]. ref = id de ingrediente del catalogo o de otra receta."
+          },
+          {
+            "nombre": "rinde",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Rinde {cantidad, unidad: ud|g|ml}. Si falta, se infiere por tipo."
+          },
+          {
+            "nombre": "notas",
+            "tipo": "text",
+            "required": false
+          }
+        ]
+      },
+      "validar": {
+        "titulo": "Validar receta",
+        "descripcion": "Freno del contrato: valida una receta contra receta.schema.json (AJV). Devuelve {valid, errors}. Funcion pura del reflejo.",
+        "args": [
+          {
+            "nombre": "receta",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Receta a validar (modelo canonico)."
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Recetas del proyecto",
+      "refresh_on": ["receta.creada", "receta.actualizada", "receta.estado.actualizada", "receta.eliminada"],
+      "columnas": ["nombre", "tipo", "estado_operativo", "version", "incompleta"]
+    }
+  },
+
   "trabajo_pendiente": [
     "Primitiva universal del bus 'bus.newId' o 'uuid.generate.request/response' que devuelva UUIDv4 real generado por crypto.randomUUID() — para reemplazar el helper LLM-side uuid() que aluciña ids con shape regular.",
     "Schemas JSON Schema 2020-12 estrictos para los 5 eventos publicados, integrados en subsistema-recetario.contract.json + validator.",

@@ -1,0 +1,30 @@
+{
+  "_doc": "CÚPULA DE EVENTOS — cara RUNTIME. La biblioteca buscable del CONTRATO DEL BUS: da al LLM acceso a TODAS las capacidades del sistema (tools + RPCs) SIN saturar contexto, con dos tools universales (buscar_capacidad + detalle_capacidad). Gemela de buscar_agente (agentes) y buscar_skill (cantera): puerta diminuta, catálogo detrás, top-K bajo demanda. Índice = moduleLoader.toolsRegistry (vivo, mismo que getToolsForAI). El vigilante estático (scripts/cupula-eventos/vigilante.js) es la OTRA cara: canta fantasmas en CI; esta sirve el catálogo al LLM en vivo. Las dos tools se añaden a GLOBAL_TOOLS del ai-gateway → toda página (por el fix de _getTools que expone GLOBAL_TOOLS también en blueprint/cajones).",
+  "name": "cupula-eventos",
+  "version": "0.1.0",
+  "description": "Cúpula de eventos (runtime): buscar_capacidad + detalle_capacidad — el LLM descubre y conduce cualquier capacidad del bus sin cargar el catálogo entero.",
+  "author": "enki",
+  "language": "es",
+  "main": "index.js",
+  "tier": "sistema",
+  "events": {
+    "subscribes": [
+      { "event": "buscar_capacidad", "handler": "onBuscarCapacidad", "description": "Tool del chat (universal). Busca en el catálogo VIVO de capacidades (toolsRegistry) por tokens del query, rankea, devuelve top-K {name, tipo, descripcion}. Responde buscar_capacidad.response {request_id, result}. Gemela de buscar_agente / buscar_skill." },
+      { "event": "detalle_capacidad", "handler": "onDetalleCapacidad", "description": "Tool del chat (universal). Devuelve el contrato completo de UNA capacidad {request_shape, como_conducir, response_topic, confirmation}. El 'abrir cajón' del bus. Responde detalle_capacidad.response {request_id, result|error}." }
+    ],
+    "publishes": [
+      { "event": "buscar_capacidad.response", "description": "Resultado de buscar_capacidad: { total, capacidades:[{name,tipo,descripcion}] }. Correlado por request_id (lo consume el caller: ai-gateway/portal)." },
+      { "event": "detalle_capacidad.response", "description": "Contrato de una capacidad, o error 404 si no existe. Correlado por request_id." }
+    ]
+  },
+  "tools": [],
+  "dependencies": [],
+  "config": {},
+  "tracing": { "propaga_correlation_id": true },
+  "observability": {
+    "metrics": [
+      { "name": "cupula-eventos.served", "type": "counter", "description": "Búsquedas/detalles servidos (label op)." },
+      { "name": "cupula-eventos.errors", "type": "counter", "description": "Errores por handler (label kind)." }
+    ]
+  }
+}

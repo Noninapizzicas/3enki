@@ -1,16 +1,17 @@
 'use strict';
 
 /**
- * CÚPULA DE EVENTOS (runtime) — buscar_capacidad + detalle_capacidad.
+ * CÚPULA DE TOOLS (runtime) — buscar_capacidad + detalle_capacidad + capacidad_dominio.
  *
- * La biblioteca buscable del contrato del bus: el LLM descubre y conduce cualquier
- * capacidad SIN cargar el catálogo entero. Gemela de buscar_agente / buscar_skill.
+ * La biblioteca buscable de las capacidades del sistema: el LLM descubre y conduce cualquier
+ * tool sin cargar el catálogo entero, y puede explorar un dominio completo. Gemela de
+ * buscar_agente / buscar_skill.
  *
- * Ejecutar: node tests/unit/cupula-eventos__runtime.test.js
+ * Ejecutar: node tests/unit/cupula-tools__runtime.test.js
  */
 
 const assert = require('assert');
-const Cupula = require('../../modules/cupula-eventos');
+const Cupula = require('../../modules/cupula-tools');
 
 const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
@@ -37,11 +38,13 @@ function nuevo() {
   return { m, reg, published };
 }
 
-test('onLoad registra buscar_capacidad y detalle_capacidad en el toolsRegistry', () => {
+test('onLoad registra buscar_capacidad, detalle_capacidad y capacidad_dominio', () => {
   const { reg } = nuevo();
   assert.ok(reg.has('buscar_capacidad'), 'registra buscar_capacidad');
   assert.ok(reg.has('detalle_capacidad'), 'registra detalle_capacidad');
+  assert.ok(reg.has('capacidad_dominio'), 'registra capacidad_dominio');
   assert.strictEqual(reg.get('buscar_capacidad').event_based, true);
+  assert.strictEqual(reg.get('capacidad_dominio').module, 'cupula-tools');
 });
 
 test('buscar_capacidad rankea y devuelve el catálogo BARATO (name+tipo+descripcion)', () => {
@@ -130,14 +133,50 @@ test('onDetalleCapacidad publica error como {error} (no como result)', async () 
   assert.strictEqual(ev.payload.error.code, 'RESOURCE_NOT_FOUND');
 });
 
+test('capacidad_dominio lista TODAS las tools de un dominio', () => {
+  const { m } = nuevo();
+  const r = m._dominio({ dominio: 'whatsapp' });
+  assert.strictEqual(r.count, 1);
+  assert.strictEqual(r.tools[0].name, 'whatsapp.enviar_plantilla');
+  assert.ok(r.tools[0].descripcion.includes('plantilla'), 'trae la descripción de cada tool');
+});
+
+test('capacidad_dominio matchea por prefijo (todas las tools del dominio)', () => {
+  const { m } = nuevo();
+  const r = m._dominio({ dominio: 'escandallo' });
+  assert.strictEqual(r.tools.length, 1);
+  assert.strictEqual(r.tools[0].name, 'escandallo.costear');
+});
+
+test('capacidad_dominio → 404 si el dominio no existe', () => {
+  const { m } = nuevo();
+  const r = m._dominio({ dominio: 'zzz' });
+  assert.strictEqual(r.status, 404);
+  assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
+});
+
+test('capacidad_dominio → 400 sin dominio', () => {
+  const { m } = nuevo();
+  assert.strictEqual(m._dominio({}).status, 400);
+});
+
+test('onCapacidadDominio publica capacidad_dominio.response correlada por request_id', async () => {
+  const { m, published } = nuevo();
+  await m.onCapacidadDominio({ data: { request_id: 'r3', dominio: 'whatsapp' } });
+  const ev = published.find(p => p.topic === 'capacidad_dominio.response');
+  assert.ok(ev, 'publica la response');
+  assert.strictEqual(ev.payload.request_id, 'r3');
+  assert.strictEqual(ev.payload.result.count, 1);
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {
     try { await fn(); passed++; }
     catch (err) { fails.push({ name, err }); }
   }
-  if (fails.length === 0) { console.log(`\n[cupula-eventos__runtime] OK ${passed}/${tests.length}`); process.exit(0); }
-  console.error(`\n[cupula-eventos__runtime] FAIL ${fails.length}/${tests.length}`);
+  if (fails.length === 0) { console.log(`\n[cupula-tools__runtime] OK ${passed}/${tests.length}`); process.exit(0); }
+  console.error(`\n[cupula-tools__runtime] FAIL ${fails.length}/${tests.length}`);
   for (const { name, err } of fails) console.error(`  x ${name}\n    ${err.message}`);
   process.exit(1);
 })();

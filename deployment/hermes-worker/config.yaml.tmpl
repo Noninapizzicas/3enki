@@ -4,8 +4,9 @@
 # si existe, o {{API_SERVER_KEY_ENV}} si se pasa por env — NUNCA versionada).
 model:
   default: deepseek-v4-flash
-  provider: deepseek
-  base_url: https://api.deepseek.com/v1
+  provider: custom
+  base_url: https://ollama.com/v1
+  api_key: __OLLAMA_API_KEY__
 agent:
   max_turns: 150
 display:

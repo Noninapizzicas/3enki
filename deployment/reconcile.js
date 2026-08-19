@@ -344,10 +344,11 @@ async function main() {
     if (tmplCfg == null) {
       warn(`plantilla hermes-worker ausente: ${HW.config_plantilla} (salto config)`);
     } else {
-      // Key de Ollama Cloud: se lee del .env vivo (OLLAMA_API_KEY). Nunca se
-      // versiona. Si no está, el config queda sin key (el worker la pedirá al
-      // proveedor y fallará claro, en vez de escribir basura).
-      const ollamaViva = ((envVivo || '').match(/^OLLAMA_API_KEY=(\S+)/m) || [])[1] || '';
+      // Key de Ollama Cloud: se lee del .env vivo de Enki (data/.env, donde el
+      // credential-manager lo persiste). Nunca se versiona. Si no está, el config
+      // queda sin key (el worker fallará claro, en vez de escribir basura).
+      const envOllama = leer(path.join(M.install_dir, 'data', '.env')) || leer(path.join(M.install_dir, '.env')) || '';
+      const ollamaViva = (envOllama.match(/^OLLAMA_API_KEY=(\S+)/m) || [])[1] || '';
       let renderedCfg = tmplCfg.replace(/__API_SERVER_KEY__/g, keyHermesViva);
       renderedCfg = renderedCfg.replace(/__OLLAMA_API_KEY__/g, ollamaViva);
       workerConfigCambio = escribirSiDifiere(HW.config_destino, renderedCfg, 'hermes-worker config.yaml');

@@ -347,7 +347,7 @@ async function main() {
       // Key de Ollama Cloud: se lee del .env vivo (OLLAMA_API_KEY). Nunca se
       // versiona. Si no está, el config queda sin key (el worker la pedirá al
       // proveedor y fallará claro, en vez de escribir basura).
-      const ollamaViva = (envVivo.match(/^OLLAMA_API_KEY=(\S+)/m) || [])[1] || '';
+      const ollamaViva = ((envVivo || '').match(/^OLLAMA_API_KEY=(\S+)/m) || [])[1] || '';
       let renderedCfg = tmplCfg.replace(/__API_SERVER_KEY__/g, keyHermesViva);
       renderedCfg = renderedCfg.replace(/__OLLAMA_API_KEY__/g, ollamaViva);
       workerConfigCambio = escribirSiDifiere(HW.config_destino, renderedCfg, 'hermes-worker config.yaml');

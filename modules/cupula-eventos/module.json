@@ -1,0 +1,99 @@
+{
+  "_doc": "CÚPULA DE EVENTOS — el CONTRATO DEL BUS, servido al LLM en vivo. El vigilante estático (scripts/cupula-eventos/vigilante.js) canta los fantasmas en CI; este módulo runtime escanea los MISMOS orígenes (module.json publicises/subscribes, blueprints, pseudocódigo, código, skills) y construye el CENSO en memoria para que el LLM descubra y consulte el contrato del bus SIN cargar nada pesado. Distinta de cupula-tools (que sirve las CAPACIDADES/tools): esta sirve el IDIOMA del bus — qué eventos existen, quién los atiende, quién los conduce, quién los publica, y dónde hay fantasmas (evento conducido que nadie atiende). Índice barato + detalle a demanda + diagnóstico de huecos.",
+  "name": "cupula-eventos",
+  "version": "0.1.0",
+  "_v0_1_nota": "v0.1.0: nace la cara RUNTIME del contrato del bus. Escanea modules/ (manifests + blueprints + pseudocódigo + código + skills de la cantera) al cargar, construye el CENSO {atendidos, conducidos, publicados, intenciones, rechazosMudos} y lo sirve al LLM con 4 tools: evento_indice (resumen), evento_detalle (contrato de uno), evento_buscar (por palabra), evento_fantasma (los huecos). Reutiliza la MISMA lógica de extracción del vigilante estático (scripts/cupula-eventos/vigilante.js) para que CI y runtime coincidan en la verdad.",
+  "description": "Cúpula de eventos (runtime): el contrato del bus servido al LLM — qué eventos se emiten/atienden/conducen, quién lo hace, y dónde hay fantasmas. Índice barato + detalle a demanda.",
+  "author": "enki",
+  "language": "es",
+  "main": "index.js",
+  "tier": "sistema",
+
+  "subscribes": [
+    { "event": "cupula-eventos.indice.request",    "handler": "onIndiceRequest",    "description": "Reflejo: resumen del censo (nº atendidos/conducidos/publicados, fantasmas) — barato, para orientarse." },
+    { "event": "cupula-eventos.detalle.request",   "handler": "onDetalleRequest",   "description": "Reflejo: el contrato de UN evento {nombre}: quién lo atiende, quién lo conduce, quién lo publica. 404 si no existe." },
+    { "event": "cupula-eventos.buscar.request",    "handler": "onBuscarRequest",    "description": "Reflejo: eventos que matchean por palabra en el nombre (atendidos/conducidos/publicados)." },
+    { "event": "cupula-eventos.fantasma.request",  "handler": "onFantasmaRequest",  "description": "Reflejo: los HUECOS del contrato — eventos conducidos que nadie atiende (rpc fantasma) y publicaciones huérfanas sin subscriber." },
+    { "event": "cupula-eventos.rescanear.request", "handler": "onRescanearRequest", "description": "Reflejo: re-escanea los módulos y reconstruye el censo (cuando nace un módulo)." }
+  ],
+
+  "publishes": [
+    { "event": "cupula-eventos.indice.response",    "description": "Resumen: { atendidos, conducidos, publicados, rpc_fantasma, publish_huerfano, intenciones, actualizado }." },
+    { "event": "cupula-eventos.detalle.response",   "description": "Contrato de un evento: { nombre, atendido_por, conducido_por, publicado_por } o error 404." },
+    { "event": "cupula-eventos.buscar.response",    "description": "Resultado: { q, total, eventos:[{nombre, tipo, quien}] }." },
+    { "event": "cupula-eventos.fantasma.response",  "description": "Los huecos: { rpc_fantasma, publish_huerfano }." },
+    { "event": "cupula-eventos.rescanear.response", "description": "Resultado del re-escaneo: { actualizado, atendidos, conducidos, publicados }." }
+  ],
+
+  "tools": [
+    {
+      "name": "evento_indice",
+      "description": "Resumen del CONTRATO DEL BUS (cúpula de eventos): cuántos eventos se atendieron, se condujeron (publishAndWait/_rpc), se publicaron, y si hay fantasmas (eventos conducidos que nadie atiende). ÚSALA para orientarte sobre el estado del bus antes de conducir un evento nuevo. Es barata — solo cuenta, no trae contratos.",
+      "parameters": { "type": "object", "additionalProperties": false, "properties": {} },
+      "handler": "handleIndiceTool",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "evento_detalle",
+      "description": "Devuelve el CONTRATO de UN evento del bus (p.ej. 'pedido.creado', 'estados.avanzar.request'): quién lo ATIENDE (subscribes/tools), quién lo CONDUCE (publishAndWait/_rpc), y quién lo PUBLICA. ÚSALA cuando vayas a publicar o esperar un evento y quieras confirmar que existe y quién lo escucha — evita conducir fantasmas (eventos que nadie atiende).",
+      "parameters": {
+        "type": "object", "additionalProperties": false,
+        "properties": { "nombre": { "type": "string", "minLength": 1, "description": "Nombre exacto del evento (ej: 'a.pedido.creado', 'escandallo.costear.request')." } },
+        "required": ["nombre"]
+      },
+      "handler": "handleDetalleTool",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "evento_buscar",
+      "description": "Busca EVENTOS del bus por palabra en el nombre (atendidos, conducidos, publicados). ÚSALA cuando no sepas el nombre exacto del evento y quieras ver qué eventos hay sobre un tema (p.ej. 'pedido', 'cobro', 'telegram').",
+      "parameters": {
+        "type": "object", "additionalProperties": false,
+        "properties": { "q": { "type": "string", "minLength": 1, "description": "Palabra a buscar en los nombres de eventos del bus." }, "topK": { "type": "number", "description": "Cuántas devolver como máximo (default 15)." } },
+        "required": ["q"]
+      },
+      "handler": "handleBuscarTool",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "evento_fantasma",
+      "description": "Diagnóstico del bus: los EVENTOS FANTASMA — eventos que se conduce (publishAndWait) pero NADIE atiende (timeout silencioso, el fallo más caro de diagnosticar), y publicaciones huérfan sin subscriber. ÚSALA cuando sospeches que un evento no responde, o para revisar la salud del bus.",
+      "parameters": { "type": "object", "additionalProperties": false, "properties": {} },
+      "handler": "handleFantasmaTool",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    }
+  ],
+
+  "dependencies": [],
+
+  "config": {
+    "enabled": true,
+    "escaneo": {
+      "origenes": ["module.json", "blueprint", "skill", "codigo"],
+      "_nota": "Las 4 fuentes del vigilante estático. El escaneo es síncrono al cargar y bajo demanda (rescanear)."
+    },
+    "persistence": {
+      "scope": "system",
+      "data_path": "cupula-eventos",
+      "pattern": "in-memory",
+      "restart_resilient": true,
+      "_nota": "El censo se reconstruye en cada onLoad escaneando modules/. No hay estado persistente — el código es la fuente."
+    }
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "cupula-eventos.indice.served.total",
+        "cupula-eventos.detalle.served.total",
+        "cupula-eventos.buscar.served.total",
+        "cupula-eventos.fantasma.served.total",
+        "cupula-eventos.errors.total"
+      ],
+      "gauges": [ "cupula-eventos.atendidos", "cupula-eventos.conducidos", "cupula-eventos.publicados", "cupula-eventos.fantasmas" ],
+      "timings": [ "cupula-eventos.rescanear.duration_ms" ]
+    }
+  }
+}

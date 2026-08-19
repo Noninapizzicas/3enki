@@ -1,0 +1,106 @@
+{
+  "_doc": "Manifest de CUPULA-TOOLS — las 439 tools del sistema como CÚPULA GLOBAL consultable a demanda (hermana de la cantera de skills y del bibliotecario). El toolsRegistry es GLOBAL (igual para todos los proyectos); esta cúpula lo proyecta en el MISMO molde que la bóveda: índice BARATO (dominios + conteo, cabe en el turno) + detalle a demanda (las tools de UN dominio o UNA tool con su schema). Nace para que el LLM deje de pagar el catálogo completo (~60K tokens) y consulte lo que necesita (reach-not-resident). Generada AL VUELO desde el toolsRegistry → siempre fresca (si nace un módulo, aparece).",
+  "name": "cupula-tools",
+  "version": "0.1.0",
+  "_v0_1_nota": "v0.1.0: nace la cúpula de tools como reflejo. Lee el toolsRegistry del moduleLoader (fuente única: lo mismo que sirve el hermes-bridge /catalog), proyecta un índice por dominio + detalle por dominio/tool. NO decide todavía inyección vs a-demanda: primero la cúpula existe; la estrategia de uso es un paso posterior (inyectar índice en el primer turno, consultar el detalle a demanda, o no inyectar nada).",
+  "description": "Cúpula global de las tools del sistema (439): índice por dominio (barato) + detalle de dominio/tool (schema completo) a demanda. Hermana del bibliotecario y la cantera — el LLM descubre y consulta las tools sin cargar el catálogo entero.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+
+  "publishes": [
+    { "event": "cupula-tools.indice.response",    "description": "Índice BARATO: { dominios:[{dominio, count}], total }. Sin schemas — para descubrir qué dominios existen sin abrirlos." },
+    { "event": "cupula-tools.dominio.response",   "description": "Las tools de UN dominio: { dominio, tools:[{name, description, has_parameters}], count }. El schema completo se pide aparte con detalle." },
+    { "event": "cupula-tools.detalle.response",   "description": "Una tool completa: { name, description, parameters, type }. Lo que se necesita para EJECUTARLA (o que el LLM la conozca entera)." },
+    { "event": "cupula-tools.buscar.response",    "description": "Búsqueda por palabra en nombre/descripción: { total, tools:[{name, dominio, descripcion_breve}], por }." }
+  ],
+
+  "subscribes": [
+    { "event": "cupula-tools.indice.request",    "handler": "onIndiceRequest",    "description": "Reflejo: índice por dominio (barato, sin schemas)." },
+    { "event": "cupula-tools.dominio.request",   "handler": "onDominioRequest",   "description": "Reflejo: las tools de un dominio por nombre (dominio = prefijo de la tool)." },
+    { "event": "cupula-tools.detalle.request",   "handler": "onDetalleRequest",   "description": "Reflejo: una tool completa por nombre exacto (schema incluido)." },
+    { "event": "cupula-tools.buscar.request",    "handler": "onBuscarRequest",    "description": "Reflejo: tools que matchean por palabra en nombre/descripción." }
+  ],
+
+  "tools": [
+    {
+      "name": "cupula_tools_indice",
+      "description": "Lista los DOMINIOS de las tools del sistema (fs, productos, pedido, cocina, telegram, glovo…) con cuántas tools tiene cada uno y el total. ÚSALA para descubrir qué capacidades existen ANTES de pedir el detalle — es barata, no trae los schemas. Después usa cupula_tools_dominio o cupula_tools_detalle para una herramienta concreta.",
+      "parameters": { "type": "object", "additionalProperties": false, "properties": {} },
+      "handler": "handleIndiceTool",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cupula_tools_dominio",
+      "description": "Trae las tools de UN dominio (p.ej. dominio='telegram' devuelve las ~12 tools de telegram con su descripción en una línea). ÚSALA cuando sepas qué dominio te interesa — es más barato que pedir el detalle de cada una. Después cupula_tools_detalle para la schema completa de la que vayas a ejecutar.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dominio": { "type": "string", "minLength": 1, "description": "El prefijo del dominio (lo que va antes del primer '.' en el nombre de la tool, o el nombre de la tool si no tiene punto). Ej: 'telegram', 'fs', 'productos'. Míralos con cupula_tools_indice." }
+        },
+        "required": ["dominio"]
+      },
+      "handler": "handleDominioTool",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cupula_tools_detalle",
+      "description": "Trae una tool COMPLETA con su schema de parámetros (nombre, descripción, parámetros tipados). ÚSALA cuando ya sepas la tool exacta y necesites su contrato para ejecutarla — es la más cara, tráela solo cuando la vayas a usar.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "description": "El nombre exacto de la tool (ej: 'telegram.send', 'fs.read', 'crear_lista')." }
+        },
+        "required": ["name"]
+      },
+      "handler": "handleDetalleTool",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cupula_tools_buscar",
+      "description": "Busca tools por palabra en el nombre o la descripción. ÚSALA cuando no sepas el dominio exacto y quieras localizar qué tool hace algo (p.ej. buscar 'pago' → cobro, glovo, stripe…).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "q": { "type": "string", "minLength": 1, "description": "Palabra a buscar en nombre/descripción de las tools." },
+          "topK": { "type": "number", "description": "Cuántas devolver como máximo (default 10)." }
+        },
+        "required": ["q"]
+      },
+      "handler": "handleBuscarTool",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    }
+  ],
+
+  "dependencies": [],
+
+  "config": {
+    "enabled": true,
+    "persistence": {
+      "scope": "system",
+      "data_path": "cupula-tools",
+      "pattern": "in-memory",
+      "restart_resilient": true,
+      "_nota": "Generada al vuelo desde el toolsRegistry — sin estado persistente (el registro es la fuente). restart_resilient: en cada onLoad se reconstruye del registry."
+    }
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "cupula-tools.indice.served.total",
+        "cupula-tools.dominio.served.total",
+        "cupula-tools.detalle.served.total",
+        "cupula-tools.buscar.served.total",
+        "cupula-tools.errors.total"
+      ],
+      "gauges": [ "cupula-tools.total", "cupula-tools.dominios" ],
+      "timings": [ "cupula-tools.buscar.duration_ms" ]
+    }
+  }
+}

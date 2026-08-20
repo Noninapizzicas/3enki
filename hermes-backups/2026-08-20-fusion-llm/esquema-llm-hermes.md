@@ -115,3 +115,32 @@ Salida:
 - Órganos: 5 (resolver, proveer, contexto, fallback, store)
 - Puertos: 5
 - Tecnologías nombradas: **0** (las del entorno real quedan fuera — solo el puerto)
+
+---
+
+## ESTADO VERIFICADO EN PROD (deploy 2026-08-20 11:47) — ancla para continuar
+
+> Verificado en vivo con el sistema recién arrancado. Este es el punto de partida
+> real para la pieza 2. No re-investigar lo que aquí se cierra.
+
+- **scope-provider**: en prod, `loaded {default: ollama, ambits:0}` (pieza 1 ✓).
+- **Prioridades ai-gateway**: `{ollama: 1, deepseek-anthropic: 9}` → el 402 de saldo
+  NO volverá en el fallback automático.
+- **Camino del chat**: responde por `hermes-relay.response {model:"hermes"}` →
+  el CHAT de proyecto va por Hermes (mente) YA. Se carga vía `modules_config`
+  (no por la lista `enabled` del config — por eso parecía "apagado").
+- **Agente interno** (force-agent esquematizador): responde `status:response`
+  pero `provider:null` y `length:0` (vacío) → **NO usa scope-provider todavía**,
+  va por el loop del motor v3. Es lo que falta (pieza 2).
+
+### LO QUE FALTA (mapa con datos)
+1. ✅ Saldo agentes (ollama=1)
+2. ✅ scope-provider pieza 1 en prod
+3. ✅ Camino del chat por Hermes
+4. ⚠️ **Pieza 2**: conectar `_executeLLM` (agentes internos) a Hermes vía scope-provider
+   — hoy los agentes internos NO usan scope-provider (provider:null)
+5. ⚠️ Fijar provider por ámbito en scope-provider (`ambits:0` → añadir reglas)
+
+### LA DECISIÓN (Camino B — dueño): Enki no razona, Hermes razona.
+Los pipelines internos pasan a ser subagentes de Hermes (delegate_task), no con el
+motor v3. `scope-provider` queda como el puerto que dice QUÉ provider; Hermes llama.

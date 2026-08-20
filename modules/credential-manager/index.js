@@ -42,6 +42,7 @@ const PROVIDER_ICONS = {
   DEEPSEEK: '🔮',
   ANTHROPIC: '🧠',
   OLLAMA: '🦙',
+  OLLAMA_CLOUD: '🦙',
   GOOGLE: '☁️',
   GEMINI: '☁️',
   GROQ: '⚡',

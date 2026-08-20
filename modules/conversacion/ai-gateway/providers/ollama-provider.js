@@ -52,7 +52,9 @@ class OllamaProvider extends BaseProvider {
    * Termina en _API_KEY → persiste en el store del credential-manager.
    */
   refreshApiKeyFromEnv() {
-    this.apiKey = process.env.OLLAMA_API_KEY || process.env.OLLAMA_API_KEY_GLOBAL || null;
+    // Orden: key cloud explícita (OLLAMA_CLOUD) → key genérica (OLLAMA) → local
+    this.apiKey = process.env.OLLAMA_CLOUD_API_KEY || process.env.OLLAMA_CLOUD_API_KEY_GLOBAL
+      || process.env.OLLAMA_API_KEY || process.env.OLLAMA_API_KEY_GLOBAL || null;
   }
 
   /**

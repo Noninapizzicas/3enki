@@ -232,7 +232,7 @@
       },
       "ollama": {
         "enabled": true,
-        "priority": 1,
+        "priority": 9,
         "api_base": "https://ollama.com",
         "headroom": true,
         "default_model": "deepseek-v4-flash:preview",

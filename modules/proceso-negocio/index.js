@@ -116,6 +116,11 @@ const MAPA_PROCESO = {
     skill: 'construir-modulos',
     mensaje: 'La interfaz del módulo está construida y operativa. Siguiente paso (FASE 4): construir el SIGUIENTE módulo del plan — UNA hoja a la vez, en el orden de las etapas de esquemas/plan-construccion.md, sin tocar los ya construidos. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si NO quedan hojas sin construir: proceso-negocio.completar_fase { fase: "completado" }.'
   },
+  'negocio.verificado': {
+    // FASE 8 — verificación final en vivo completada → CIERRA el círculo.
+    skill: null,
+    mensaje: 'El proceso de construcción del negocio está COMPLETO y VERIFICADO: todas las hojas de la disección tienen su módulo, su skill, su interfaz operativa y se verificó en vivo que funcionan. El círculo F0→F8 está cerrado.'
+  },
   'negocio.completado': {
     // FIN DEL PROCESO — todas las piezas construidas y con skill.
     skill: null,
@@ -172,7 +177,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       // 'completado' SOLO se acepta si el plan está completo — si el LLM lo
       // declara con trabajo pendiente → 409 (lección: el LLM hace lo que quiere).
       const progreso = await this._progresoPlan(project_id);
-      const siguiente = this._decidirSiguiente(progreso);
+      const siguiente = this._decidirSiguiente(progreso, fase);
       if (fase === 'completado' && siguiente.skill !== null) {
         return { status: 409, data: {
           error: 'FASE_INCOMPLETA',
@@ -199,7 +204,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   //   todo decidido, falta spec de interfaz → esquematizar-interfaz (FASE 6½)
   //   todo espec, falta construir interfaz → construir-interfaz (FASE 7)
   //   todo construido y con skill e interfaz operativa → completado (FIN)
-  _decidirSiguiente(progreso) {
+  _decidirSiguiente(progreso, faseActual = null) {
     if (progreso.faltan_por_construir > 0) {
       return { skill: 'construir-modulos', mensaje: `El plan tiene ${progreso.total} hojas: ${progreso.construidos} construidas, faltan ${progreso.faltan_por_construir}. Siguiente paso (FASE 4): construir UNA hoja — la primera del plan sin módulo en disco (verifica modules/<slug>/ — el sistema cuenta lo que existe, no lo que reportas). Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["<slug>"] } }.` };
     }
@@ -215,7 +220,17 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     if (progreso.faltan_por_interfaz_construida > 0) {
       return { skill: 'construir-interfaz', mensaje: `El plan está construido, con skill y con interfaz especificada (${progreso.con_interfaz_esquematizada}/${progreso.total}) pero faltan ${progreso.faltan_por_interfaz_construida} interfaces OPERATIVAS. Siguiente paso (FASE 7): construir la interfaz de UN módulo en el frontend — genera el ENVOLTORIO del generador schema→UI (patrón frontend/src/lib/modules/interfaz-dinamico/): copia el blueprint al dir del trío (frontend/src/lib/modules/<slug>/<slug>.blueprint.json) y crea manifest.json + index.ts + <Slug>Panel.svelte (~10 líneas con <BlueprintForm blueprint moduleId />) en frontend/src/lib/modules/<slug>/. El BlueprintForm renderiza las 4 zonas desde la sección ui y llama mqttRequest directo: NO store MQTT propio ni panel artesanal. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.` };
     }
-    return { skill: null, mensaje: 'El proceso de construcción del negocio está COMPLETO: todas las hojas de la disección tienen su módulo, su skill, su interfaz especificada y su interfaz operativa.' };
+    // FASE 8 — VERIFICACIÓN FINAL EN VIVO (determinista, sin LLM).
+    // Todo el plan está construido (módulo + skill + interfaz operativa). Antes
+    // de declarar 'completado', el orquestador VERIFICA EN DISCO que el negocio
+    // realmente funciona: cada hoja del plan debe tener su módulo que CARGA, su
+    // skill en la cantera y su interfaz operativa en el frontend. No se fía del
+    // reporte del agente (lección de todo el proceso). Si ya se verificó
+    // (flag persistido) o se acaba de completar la fase 'verificado', cierra.
+    if (this._verificado(progreso.project_id) || faseActual === 'verificado') {
+      return { skill: null, mensaje: 'El proceso de construcción del negocio está COMPLETO y VERIFICADO: todas las hojas de la disección tienen su módulo, su skill, su interfaz operativa y se verificó en vivo que funcionan.' };
+    }
+    return { skill: 'verificar-en-vivo', mensaje: `El plan está construido y con interfaz operativa (${progreso.con_interfaz_construida}/${progreso.total}). Siguiente paso (FASE 8 · VERIFICACIÓN FINAL): verificar EN VIVO que el negocio funciona — el orquestador comprueba en disco que cada hoja del plan tiene su módulo que carga, su skill en la cantera y su interfaz operativa en el frontend. Al terminar: proceso-negocio.completar_fase { fase: "verificado" }.` };
   }
 
   // ── PROGRESO DEL PLAN (determinista — el sistema decide, no el LLM) ──
@@ -225,6 +240,13 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   // (module.json con ui_handlers tipados o ui_decision.necesita=false).
   // El orquestador usa esto para decidir el siguiente empujón del ciclo por
   // pieza: si quedan hojas sin construir → construir-modulos; si no → completado.
+
+  // ¿La FASE 8 (verificación final) ya se completó para este proyecto?
+  // Flag persistido en _emitidos (idempotente, como el resto de fases).
+  _verificado(project_id) {
+    return this._emitidos.has(`${project_id}::negocio.verificado`);
+  }
+
   async _progresoPlan(project_id) {
     try {
       const r = await this._rpc('fs.read.request', { project_id, path: 'esquemas/plan-construccion.md' });
@@ -257,6 +279,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         }
       }
       return {
+        project_id,
         total: slugs.length,
         construidos,
         con_skill,
@@ -424,10 +447,31 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         // consta en module.json).
         tipo: 'sistema',
         mensaje: 'La interfaz operativa no está en disco: se espera frontend/src/lib/modules/<slug>/ con manifest.json + index.ts + <Slug>Panel.svelte (envoltorio del generador) + <slug>.blueprint.json (autodescubiertos por el loader). El reporte del agente no cuenta.'
+      },
+      'verificado': {
+        // FASE 8 — VERIFICACIÓN FINAL EN VIVO (determinista, sin LLM).
+        // El negocio está completo: TODAS las hojas del plan deben tener su
+        // módulo que CARGA, su skill en la cantera y su interfaz operativa en
+        // el frontend. No se fía del reporte del agente — cuenta en disco.
+        tipo: 'sistema',
+        mensaje: 'La verificación final no pasa: se espera que TODAS las hojas del plan tengan su módulo (modules/<slug>/index.js que carga), su skill (cosecha/cantera/enki/<slug>/SKILL.md) y su interfaz operativa (frontend/src/lib/modules/<slug>/). El reporte del agente no cuenta.'
       }
     };
     const spec = ESPERADOS[fase];
     if (!spec) return { ok: true };   // fase sin gate declarado → se acepta
+    // FASE 8 — verificación final: TODAS las hojas del plan deben estar
+    // construidas + con skill + con interfaz operativa. No se fía del resumen
+    // del agente: cuenta el progreso REAL en disco (_progresoPlan).
+    if (fase === 'verificado') {
+      const progreso = await this._progresoPlan(project_id);
+      const faltan = progreso.faltan_por_construir + progreso.faltan_por_skill
+        + progreso.faltan_por_interfaz + progreso.faltan_por_interfaz_esquematizada
+        + progreso.faltan_por_interfaz_construida;
+      if (faltan > 0) {
+        return { ok: false, esperado: ['todas las hojas construidas + skill + interfaz operativa'], mensaje: spec.mensaje, progreso };
+      }
+      return { ok: true, verificados: [`${progreso.total} hojas verificadas en disco`] };
+    }
     // Fases con gate de SISTEMA (módulos/skills): el slug viene del resumen
     // del agente (d.resumen.modulos[0] o d.resumen.skills[0]).
     if (spec.tipo === 'sistema') {

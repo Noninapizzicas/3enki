@@ -144,3 +144,20 @@ Salida:
 ### LA DECISIÓN (Camino B — dueño): Enki no razona, Hermes razona.
 Los pipelines internos pasan a ser subagentes de Hermes (delegate_task), no con el
 motor v3. `scope-provider` queda como el puerto que dice QUÉ provider; Hermes llama.
+
+### CIERRE DE LA PIEZA 2 (20-ago, verificado) — NO hay puente que construir
+Tras apagar el motor v3, se verificó quién queda esperando `invoke_agent` /
+`agent.execute.request` en el core: NADIE ejecuta (solo conversation-export buféa
+pasivo, chat-io hace status UI, ai-gateway enriquece args). El chat de proyecto YA
+es Hermes y YA lanza sus pipelines con `delegate_task` (edias lanzó
+planificar-construccion a las 06:30). CONCLUSIÓN: el Camino B está completo de
+facto; fabricar un puente en _executeLLM sería inventar trabajo innecesario
+(regla: no inventar vías).
+
+### PENDIENTES REALES (post-fusión)
+1. `scope-provider` ambits:0 → llenar reglas ámbito→provider cuando haya caso.
+2. **Bug `messages.id` duplicado** (SQLITE_CONSTRAINT) — afecta a edias y f, no
+   bloquea el chat pero ensucia y puede comerse respuestas de agentes.
+3. `facturas_asesoria_bot` token 401 (bucle de error).
+4. Fijar `default_model` correcto en hermes-worker (hoy `deepseek-v4-flash` pero
+   Ollama usa `deepseek-v4-flash:preview`).

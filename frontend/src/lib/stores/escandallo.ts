@@ -76,12 +76,35 @@ export interface EscandalloGlobal {
   costes_actualizados_at?: string;
 }
 
+export interface EscandalloLineaEscalada {
+  ref?: string | null;
+  nombre: string;
+  cantidad: number;
+  unidad: string;
+  es_masa: boolean;
+}
+
+export interface EscandalloEscalado {
+  receta_id: string | null;
+  diametro_origen: number;
+  diametro_destino: number;
+  factor_masa: number;
+  factor_area: number;
+  lineas_escaladas: EscandalloLineaEscalada[];
+  rinde: { cantidad: number; unidad: string };
+  coste_total: number;
+  coste_unidad: number;
+  lineas_sin_precio: string[];
+  fuentes_precios: string[];
+}
+
 export interface EscandalloState {
   escandalloReceta: EscandalloReceta | null;
   escandalloGlobal: EscandalloGlobal | null;
+  escandalloEscalado: EscandalloEscalado | null;
   loading: boolean;
   error: string | null;
-  activeView: 'receta' | 'global' | 'comparativa';
+  activeView: 'receta' | 'global' | 'comparativa' | 'escalar';
 }
 
 // =============================================================================
@@ -129,6 +152,7 @@ const STORE_PATH = '/pizzepos/recetas.json';
 const initialState: EscandalloState = {
   escandalloReceta: null,
   escandalloGlobal: null,
+  escandalloEscalado: null,
   loading: false,
   error: null,
   activeView: 'global'
@@ -356,6 +380,34 @@ export function setActiveView(view: EscandalloState['activeView']): void {
   escandalloStore.update(s => ({ ...s, activeView: view }));
 }
 
+// ── ESCALADO POR SUPERFICIE ──
+// Escala una receta a un diámetro destino via el reflejo (escandallo.escalar.request):
+// la línea de masa escala por DIÁMETRO (factor d2/d1), el resto por ÁREA (factor (d2/d1)²).
+// Conversor puro: NO persiste el resultado (el coste escalado es derivación transitoria).
+export async function escalarReceta(recetaId: string, diametroDestino: number, diametroOrigen: number = 33): Promise<void> {
+  if (!diametroDestino || diametroDestino <= 0) {
+    escandalloStore.update(s => ({ ...s, error: 'Indica un diámetro destino válido (> 0).' }));
+    return;
+  }
+  escandalloStore.update(s => ({ ...s, loading: true, error: null }));
+  try {
+    const resp = await mqttRequest<{ data: EscandalloEscalado }>('escandallo', 'escalar', {
+      receta_id: recetaId,
+      diametro_origen: diametroOrigen,
+      diametro_destino: diametroDestino
+    });
+    const esc = resp.data?.data || (resp.data as unknown as EscandalloEscalado);
+    escandalloStore.update(s => ({
+      ...s,
+      escandalloEscalado: esc ?? null,
+      loading: false,
+      activeView: 'escalar'
+    }));
+  } catch (error) {
+    escandalloStore.update(s => ({ ...s, loading: false, error: getErrorMessage(error) }));
+  }
+}
+
 export function clearError(): void {
   escandalloStore.update(s => ({ ...s, error: null }));
 }
@@ -404,5 +456,6 @@ function getErrorMessage(error: unknown): string {
 
 export const escandalloReceta = derived(escandalloStore, $s => $s.escandalloReceta);
 export const escandalloGlobal = derived(escandalloStore, $s => $s.escandalloGlobal);
+export const escandalloEscalado = derived(escandalloStore, $s => $s.escandalloEscalado);
 export const escandalloLoading = derived(escandalloStore, $s => $s.loading);
 export const escandalloError = derived(escandalloStore, $s => $s.error);

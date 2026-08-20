@@ -12,11 +12,13 @@
     escandalloStore,
     escandalloReceta,
     escandalloGlobal,
+    escandalloEscalado,
     escandalloLoading,
     escandalloError,
     initEscandalloSubscriptions,
     setActiveView,
-    clearError
+    clearError,
+    escalarReceta
   } from '$lib/stores/escandallo';
   import { prefillChatInput } from '$lib/stores/chatInputDraft';
 
@@ -24,9 +26,15 @@
 
   let cleanup: (() => void) | null = null;
 
+  // Form de escalado por superficie
+  let escalarRecetaId: string = '';
+  let escalarDiametroOrigen: number = 33;
+  let escalarDiametroDestino: number = 0;
+
   $: view = $escandalloStore.activeView;
   $: receta = $escandalloReceta;
   $: global_ = $escandalloGlobal;
+  $: escalado = $escandalloEscalado;
   $: loading = $escandalloLoading;
   $: error = $escandalloError;
 
@@ -41,6 +49,20 @@
     if (fc <= 33) return 'rgba(245, 158, 11, 1)';
     return '#ef4444';
   }
+
+  function onEscalar(): void {
+    const id = escalarRecetaId.trim() || receta?.receta_id || '';
+    if (!id) {
+      clearError();
+      escandalloStore.update(s => ({ ...s, error: 'Indica el id o nombre de la receta a escalar.' }));
+      return;
+    }
+    if (!escalarDiametroDestino || escalarDiametroDestino <= 0) {
+      escandalloStore.update(s => ({ ...s, error: 'Indica el diámetro destino (cm).' }));
+      return;
+    }
+    escalarReceta(id, escalarDiametroDestino, escalarDiametroOrigen || 33);
+  }
 </script>
 
 <div class="escandallo-panel">
@@ -50,6 +72,9 @@
     </button>
     <button class="tab" class:active={view === 'receta'} on:click={() => setActiveView('receta')} disabled={!receta}>
       Detalle Receta
+    </button>
+    <button class="tab" class:active={view === 'escalar'} on:click={() => setActiveView('escalar')}>
+      Escalar por superficie
     </button>
   </div>
 
@@ -111,7 +136,7 @@
             {#each global_.top_ingredientes_por_coste.slice(0, 8) as ing}
               <div class="ranking-row">
                 <span class="ranking-name">{ing.nombre}</span>
-                <span class="ranking-cat">{ing.recetas} receta{ing.recetas !== 1 ? 's' : ''}</span>
+                <span class="ranking-cat">{ing.apariciones} receta{ing.apariciones !== 1 ? 's' : ''}</span>
                 <span class="ranking-cost">{formatPrice(ing.coste_total)}</span>
               </div>
             {/each}
@@ -187,6 +212,81 @@
               <li>{insight}</li>
             {/each}
           </ul>
+        {/if}
+      {/if}
+    </div>
+  {/if}
+
+  <!-- ESCALAR VIEW (por superficie) -->
+  {#if view === 'escalar'}
+    <div class="content">
+      <div class="empty" style="text-align:left; padding:0 0 12px 0;">
+        <p style="margin:0 0 4px 0;">Escala una receta a otro diámetro. La masa escala por diámetro (d2/d1), el resto por área ((d2/d1)²). El resultado no se guarda — es una derivación para comparar.</p>
+      </div>
+
+      <div class="escalar-form">
+        <div class="form-row">
+          <label>Receta <span class="hint">(id o nombre)</span>
+            <input
+              bind:value={escalarRecetaId}
+              placeholder={receta?.receta_id ? `actual: ${receta.receta_id}` : 'ej. pizza-margarita'}
+            />
+          </label>
+          <label>Diámetro origen (cm)
+            <input type="number" min="1" step="1" bind:value={escalarDiametroOrigen} />
+          </label>
+          <label>Diámetro destino (cm)
+            <input type="number" min="1" step="1" bind:value={escalarDiametroDestino} />
+          </label>
+        </div>
+        <button class="action-button" on:click={onEscalar} disabled={loading}>
+          Escalar por superficie
+        </button>
+      </div>
+
+      {#if loading}
+        <div class="loading">Escalando...</div>
+      {/if}
+
+      {#if escalado}
+        <div class="kpi-row">
+          <div class="kpi highlight">
+            <span class="kpi-value">{escalado.diametro_origen} → {escalado.diametro_destino} cm</span>
+            <span class="kpi-label">Diámetro</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-value">{formatPrice(escalado.coste_total)}</span>
+            <span class="kpi-label">Coste total</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-value">{formatPrice(escalado.coste_unidad)}</span>
+            <span class="kpi-label">Coste/porción</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-value">×{escalado.factor_area.toFixed(2)}</span>
+            <span class="kpi-label">Factor área</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-value">×{escalado.factor_masa.toFixed(2)}</span>
+            <span class="kpi-label">Factor masa</span>
+          </div>
+        </div>
+
+        <h4>Líneas escaladas</h4>
+        <div class="ranking">
+          {#each escalado.lineas_escaladas as l}
+            <div class="ranking-row">
+              <span class="ranking-name">{l.nombre}</span>
+              {#if l.es_masa}
+                <span class="escala-badge">masa</span>
+              {/if}
+              <span class="ranking-cat">{l.cantidad} {l.unidad}</span>
+            </div>
+          {/each}
+        </div>
+
+        {#if escalado.lineas_sin_precio?.length}
+          <p class="sin-precio">Sin precio: {escalado.lineas_sin_precio.join(', ')}</p>
         {/if}
       {/if}
     </div>
@@ -301,4 +401,27 @@
 
   .insights { padding-left: 20px; font-size: 12px; line-height: 1.6; }
   .insights li { margin-bottom: 4px; }
+
+  .escalar-form { margin-bottom: 12px; }
+  .form-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .form-row label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
+  .form-row input {
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 6px;
+    color: var(--text-primary, rgba(228, 228, 231, 1));
+    font-size: 12px;
+    min-width: 160px;
+  }
+  .form-row input:focus { outline: none; border-color: var(--accent-color, rgba(96, 165, 250, 1)); }
+  .hint { font-size: 11px; opacity: 0.7; font-weight: 400; }
+  .escala-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(245, 158, 11, 0.2);
+    color: rgba(245, 158, 11, 1);
+  }
+  .sin-precio { font-size: 12px; color: rgba(248, 113, 113, 1); margin-top: 8px; }
 </style>

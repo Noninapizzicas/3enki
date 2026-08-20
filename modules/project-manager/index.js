@@ -1452,31 +1452,6 @@ class ProjectManagerModule extends BaseModule {
     await fs.promises.mkdir(path.join(persistenciaBase, 'current'), { recursive: true });
     await fs.promises.mkdir(path.join(persistenciaBase, 'backups'), { recursive: true });
     await fs.promises.mkdir(path.join(basePath, 'contabilidad', 'cierres'), { recursive: true });
-
-    // AUTOPISTA SIN EVENTOS (multi-tenant): el storage del proyecto nace
-    // ESCRIBIBLE POR EL GRUPO (g+w). El proceso de Hermes corre como hermes, que
-    // está en el grupo www-data; tras el deploy el árbol queda www-data:www-data.
-    // Con g+w en el storage (y sus subdirs), Hermes (chat X del proyecto) escribe
-    // por la RUTA DIRECTA del fs (fs.write/fs.edit con handler directo, SIN evento
-    // en el bus) sobre SU storage, scopeado por fs.validatePath con el project_id.
-    // El aislamiento multi-tenant lo da validatePath (X nunca escribe en Y); esto
-    // solo abre el carril de escritura. Antes: nacía 644 → hermes chocaba con EACCES
-    // y el chat pedía activar/code.orquestar por un falso bloqueo (frenazo real).
-    try {
-      const dirs = [
-        basePath, path.join(basePath, 'db'), path.join(basePath, 'storage'),
-        persistenciaBase, path.join(persistenciaBase, 'eventos'),
-        path.join(persistenciaBase, 'ventas'), path.join(persistenciaBase, 'current'),
-        path.join(persistenciaBase, 'backups'), path.join(basePath, 'contabilidad', 'cierres')
-      ];
-      for (const dir of dirs) {
-        await fs.promises.chmod(dir, 0o775); // rwxr-xrwx → grupo puede escribir
-      }
-    } catch (err) {
-      // No debe romper el alta: log + métrica, el chmod es best-effort.
-      this.logger?.warn('project-manager.directories.chmod.failed', { basePath, error: err.message });
-      this.metrics?.increment('project-manager.errors', { kind: 'directories_chmod' });
-    }
     return basePath;
   }
 

@@ -111,8 +111,8 @@
   "trabajo_pendiente": [
     {
       "id": "frontend_path_drift",
-      "estado": "abierto",
-      "descripcion": "El panel del frontend (ViabilidadPanel.svelte) lee '/viabilidad.json' pero el canonico es '/pizzepos/viabilidad.json'. Alinear el path del frontend al canonico para que el panel muestre lo que el reflejo escribe."
+      "estado": "cerrado",
+      "descripcion": "El panel del frontend (ViabilidadPanel.svelte) lee '/pizzepos/viabilidad.json' (linea 20/47) — el canonico. El reflejo (index.js STORE_PATH = '/pizzepos/viabilidad.json') escribe en la misma ruta. Sin drift. Cierre 2026-08-20."
     },
     {
       "id": "umbrales_food_cost_por_proyecto",

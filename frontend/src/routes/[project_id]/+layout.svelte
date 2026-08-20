@@ -18,6 +18,7 @@
   import { saveWorkspace } from '$lib/stores/persistence';
   import { resolveType, resolvePages, isNavPage } from '$lib/ui-core/project-pages';
   import { applyPrismaSkin, clearPrismaSkin } from '$lib/stores/prisma-skin';
+  import ConfirmacionModal from '$lib/components/ConfirmacionModal.svelte';
 
   // Store del proyecto actual. `type` + `pages` alimentan la navegación que EMERGE del
   // proyecto (rail/work-bar) en vez de una lista clavada a pizzepos. `resolved` = datos
@@ -224,6 +225,7 @@
   </div>
 {:else}
   <slot />
+  <ConfirmacionModal />
 {/if}
 
 <style>

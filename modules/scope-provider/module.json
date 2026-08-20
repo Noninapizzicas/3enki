@@ -1,0 +1,69 @@
+{
+  "_doc": "SCOPE PROVIDER — pieza 1 de la fusión LLM (Hermes como cerebro único + provider por ámbito). Resuelve QUÉ provider usa un flujo LLM según su ámbito (proyecto/agente/skill), con cascada contexto > agente > skill > proyecto > GLOBAL. Es un REFLEJO puro (sin estado, sin egress): lee la tabla de scope→provider y devuelve el provider + la necesidad de key. No llama al LLM; solo ELIGE el provider del ámbito. Hermes (la mente) es quien llama; este módulo es el cuerpo que dice 'con qué provider'.",
+  "name": "scope-provider",
+  "version": "0.1.0",
+  "_v0_1_nota": "Pieza 1 de fusion-llm (esquema en hermes-backups/2026-08-20-fusion-llm/esquema-llm-hermes.md). Nace el nervio de RESOLUCIÓN de provider por ámbito. 3 tools de consulta (resolver, lista, estado) + opciones opcionales (fijar_por_ambito v0.2). La tabla scope→provider vive en la config del módulo (default GLOBAL = Ollama Cloud). No ejecuta nada del LLM.",
+  "description": "Fusión LLM pieza 1: resuelve qué provider usa un flujo según su ámbito (proyecto/agente/skill), cascada contexto>agente>skill>proyecto>GLOBAL. Reflejo puro. Hermes decide; esto dice el provider del ámbito.",
+  "author": "enki",
+  "language": "es",
+  "main": "index.js",
+  "tier": "sistema",
+
+  "subscribes": [
+    { "event": "scope-provider.get.request", "handler": "onGetRequest", "description": "Reflejo: devuelve el provider de UN ámbito (scope)." },
+    { "event": "scope-provider.lista_scope.request", "handler": "onListaScopeRequest", "description": "Reflejo: lista los ámbitos y su provider (índice)." },
+    { "event": "scope-provider.estado.request", "handler": "onEstadoRequest", "description": "Reflejo: totales y default." }
+  ],
+
+  "publishes": [
+    { "event": "scope-provider.get.response", "description": "{ scope, provider, model, resolvedFrom }." },
+    { "event": "scope-provider.lista_scope.response", "description": "Índice de ámbitos." },
+    { "event": "scope-provider.estado.response", "description": "Totales." }
+  ],
+
+  "tools": [
+    {
+      "name": "scope_provider",
+      "description": "Resuelve QUÉ provider usa un ámbito (un agente, una skill, un proyecto o el default global). Devuelve { scope, provider, model, resolvedFrom }. CASCADA: contexto > agente > skill > proyecto > GLOBAL. Úsala cuando necesites saber con qué provider se ejecutará un flujo LLM (para diagnosticar '¿por qué este agente usa Ollama?', o para declarar que un agente debe ir por un provider concreto). Es el puerto de la fusión: el cerebro (Hermes) decide, pero aquí se sabe QUÉ provider toca por ámbito.",
+      "parameters": {
+        "type": "object", "additionalProperties": false,
+        "properties": {
+          "scope": {
+            "type": "object",
+            "description": "El ámbito a resolver. Puede traer project_id, agent, skill y/o context (provider explícito por contexto).",
+            "properties": {
+              "project_id": { "type": "string", "description": "Proyecto." },
+              "agent": { "type": "string", "description": "Nombre del agente/pipeline." },
+              "skill": { "type": "string", "description": "Nombre de la skill." },
+              "context": { "type": "string", "description": "Provider explícito de contexto (prioridad máxima)." }
+            }
+          }
+        },
+        "required": ["scope"]
+      },
+      "handler": "handleGetTool",
+      "errores_conocidos": ["INVALID_INPUT"]
+    }
+  ],
+
+  "dependencies": [],
+
+  "config": {
+    "enabled": true,
+    "default_provider": "ollama",
+    "default_model": "deepseek-v4-flash:preview",
+    "scope_rules": {
+      "_doc": "Cascada ámbito→provider. El orden de precedencia en runtime es: context (provider explícito) > agent > skill > project > default. Cada regla puede fijar provider y/o model. GLOBAL/default = Ollama Cloud.",
+      "agents": {},
+      "skills": {},
+      "projects": {}
+    }
+  },
+
+  "observability": {
+    "metrics": {
+      "counters": [ "scope-provider.get.served", "scope-provider.errors.total" ],
+      "gauges": [ "scope-provider.ambitos" ]
+    }
+  }
+}

@@ -1,0 +1,117 @@
+# ESQUEMA — Unificar el LLM a Hermes (P1) con elección multi-tenant de provider
+
+> Esquematizado con el método (prisma recursivo + disección). El sujeto: la fusión
+> LLM — Hermes como cerebro único, Enki como cuerpo, y el provider **elegible por
+> ámbito** (proyecto / agente / skill) para preservar el criterio multi-tenant.
+> Ley del esquematizador respetada: agnosticismo — se nombran puertos, no el
+> entorno concreto salvo donde ya existe y se referencia.
+
+---
+
+## FASE 1 · Prisma de 5 huecos (ronda 0)
+
+### IDENTIDAD
+- **Qué es**: un **nervio único de provisión LLM** que responde a TODO el sistema
+  (chat, agentes internos, skills, blueprints) — Hermes como cerebro.
+- **Qué NO es**: no es "un solo provider fijo"; es un **orquestador** que respeta
+  la elección de provider por ámbito.
+- **Actores**: Hermes (mente, resuelve+llama), Enki (cuerpo, declara ámbitos y
+  guarda keys), credential-manager (store multi-nivel de keys).
+
+### RESTRICCIONES (durables)
+- R1. **Un solo salto**: ningún flujo paga dos veces el contexto (evita el bug del
+  doble salto v2.34 — lección hermes-enki-integracion).
+- R2. **Multi-tenant**: cada proyecto puede tener SU provider (key propia).
+- R3. **Elección por ámbito**: un agente/skill concreto puede fijar provider.
+- R4. **El que no declara cae al global** (Ollama Cloud por defecto).
+- R5. **La key se resuelve una vez** (credential-manager), nunca duplicada.
+- R6. **Nada de Enki elige provider por prioridad interna** (eso muere).
+- R7. **Sin romper lo que ya funciona**: chat (Ollama), Gmail, Telegram.
+
+### CONTRATO (interfaz esperada)
+```
+Entrada de cualquier flujo LLM:
+  context.provider?  → provider elegido por el ámbito (agente/skill/proyecto)
+  context.model?     → modelo dentro de ese provider
+  context.scope      → { project_id?, agent?, skill? }
+
+Resolución (cascada, de más a menos específico):
+  context > agente > skill > proyecto > GLOBAL
+
+Si context.provider viene → usar ESE (resolver su key del credential-manager).
+Si no → GLOBAL (default Ollama Cloud).
+
+Salida:
+  llm.complete.response  → { content, finish_reason, tokens, provider, model }
+```
+
+### NO-OBJETIVOS
+- NO reescribir los providers de Enki (se heredan tal cual).
+- NO hacer que Enki toque la API del LLM (eso es de Hermes — P1).
+- NO eliminar el credential-manager (es el store de keys).
+- NO forzar un provider único (se mantiene la elección).
+- NO unificar el FRONTEND de credenciales (ya es multi-nivel).
+
+### PREGUNTAS ABIERTAS (resueltas)
+- Q1. ¿Hermes resuelve la key del credential-manager por ámbito, o Enki la pre-resuelve?
+  → DECIDIDO: Hermes la resuelve (P1). Enki solo le pasa el ámbito.
+- Q2. ¿Cómo viaja la key entre credential-manager y Hermes sin exponerla en el bus?
+  → DECIDIDO (ver Fase diseño): la key NO viaja por el bus; Hermes la resuelve del
+    credential-manager del cuerpo por ámbito, con el ámbito como clave (scope).
+- Q3. ¿El fallback (provider A cae) lo hace Hermes, o Enki declara alternativas?
+  → **DECISIÓN DEL DUEÑO (20-ago): Hermes.** El que llama es el que reencola al
+  siguiente provider del ámbito. Enki no declara alternativas; solo provee el
+  provider primario del ámbito y la key.
+- Q4. ¿Dónde vive la tabla ámbito→provider?
+  → **DECISIÓN DEL DUEÑO (20-ago): la decide Hermes.** Tabla config central
+  (config de la fusión): `scope_providers` con reglas ámbito→provider (por
+  proyecto, por agente, por skill), default GLOBAL. Residle en el gateway Hermes
+  (lado mente), NO en los manifiestos de los módulos (cuerpo).
+
+---
+
+## 2 · Recursión del prisma (sub-productos)
+
+### Sub: la RESOLUCIÓN de key (por ámbito)
+- Pieza convergente. Entrada: `{provider, scope}` → Salida: key del store.
+- Puerto: `resolve(provider, scope)` desde credential-manager.
+- Forma: **reflejo** (puro, sin estado) — lee el store por cascada GLOBAL→PROJECT→CUSTOM.
+
+### Sub: la PROVISIÓN (Hermes llama)
+- Pieza convergente. Entrada: `{provider, model, key, messages}` → Salida: completion.
+- Puerto: `complete(provider, payload)`.
+- Forma: **puente** (Hermes→API del provider elegido).
+
+### Sub: el CONTEXTO de ámbito
+- Pieza. Entrada: ámbito (agente/skill/proyecto) → `context.provider`.
+- Puerto: `providerDe(agente)`, `providerDeSkill(skill)`, `providerProyecto(proyecto)`.
+- Forma: **reflejo** (leer config del ámbito).
+
+### Sub: el FALLBACK
+- Entrada: provider falló → `fallback(provider, scope)` → otro provider o error claro.
+- Puerto: `fallback`.
+- Forma: **conversor** (traduce el fallo del provider a una alternativa).
+
+---
+
+## 3 · Disección (forma de cada pieza)
+
+| Pieza | Forma | Puerto |
+|---|---|---|
+| resolución de provider | **reflejo** | `resolve(provider, scope)` |
+| provisión LLM | **puente** | `complete(provider, key, payload)` |
+| contexto de ámbito | **reflejo** | `providerOf(agente/skill/proyecto)` |
+| fallback | **conversor** | `fallback(provider, scope)` |
+| store de keys | **custodio** | `get/set(key, level, id)` (credential-manager ya) |
+
+## Reparto de formas
+- 3 reflejos (resolución, contexto, config ámbito)
+- 1 puente (provisión)
+- 1 conversor (fallback)
+- 1 custodio existente (credential-manager)
+
+## Recuento vivo
+- Pasadas: 3 (prisma, sub-recursión, disección)
+- Órganos: 5 (resolver, proveer, contexto, fallback, store)
+- Puertos: 5
+- Tecnologías nombradas: **0** (las del entorno real quedan fuera — solo el puerto)

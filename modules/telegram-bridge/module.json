@@ -11,7 +11,8 @@
     { "event": "ai.chat.response", "handler": "onAiChatResponse", "description": "Respuesta del chat (Hermes) → reenvía al hilo de Telegram de origen." },
     { "event": "ai.chat.failed", "handler": "onAiChatFailed", "description": "Fallo del chat → reenvía el error al hilo de Telegram de origen." },
     { "event": "telegram.bridge.vincular.request", "handler": "onVincularRequest", "description": "Vincula un botName a un project_id." },
-    { "event": "telegram.bridge.listar.request", "handler": "onListarRequest", "description": "Lista vínculos (todos o por project_id)." }
+    { "event": "telegram.bridge.listar.request", "handler": "onListarRequest", "description": "Lista vínculos (todos o por project_id)." },
+    { "event": "portal.confirmation.pendiente", "handler": "onPortalConfirmationPendiente", "description": "Confirmación por UI (paso 3 Telegram): una tool con confirmation:true pidió visto bueno → el bridge manda al bot vinculado al proyecto un mensaje con botones Sí/No. El Sí reenvía portal.call con confirmado:true." }
   ],
   "publishes": [
     { "event": "telegram.bridge.vinculado", "description": "Emitido al vincular un bot a un proyecto." },

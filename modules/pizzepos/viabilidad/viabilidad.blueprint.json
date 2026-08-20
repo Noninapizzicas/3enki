@@ -19,7 +19,7 @@
   "garantiza": [
     "Cada evaluacion produce un expediente persistido en /pizzepos/viabilidad.json con id, fecha, input (receta_id o propuesta), calculo, PVP, food_cost_pct, veredicto, advertencias, caminos.",
     "Veredicto canonico del enum: viable | viable_con_advertencias | no_viable_economicamente | sin_pvp_objetivo.",
-    "Reglas de food cost (sobre PVP sin IVA): <25% viable; 25-35% viable_con_advertencias; 35-45% viable_con_advertencias + alerta_margen_critico; >=45% no_viable_economicamente. Umbrales overridables por proyecto via /pizzepos/viabilidad/config.json (default 25/35/45).",
+    "Reglas de food cost (sobre PVP sin IVA): <25% viable; 25-35% viable_con_advertencias; 35-45% viable_con_advertencias + alerta_margen_critico; >=45% no_viable_economicamente.",
     "Si no se pasa PVP objetivo, se calcula pvp_sugerido para food cost objetivo (default 30%) y el veredicto es 'sin_pvp_objetivo' (orientativo).",
     "Cada evaluacion produce 0-3 caminos { titulo, prompt } (la brujula del comerciante), generados por REGLA desde el veredicto/advertencias; [] si el producto sale redondo. Viven SOLO en el expediente, NO en el evento de dominio.",
     "evaluar publica viabilidad.evaluacion.completada y descartar publica viabilidad.evaluacion.descartada (shape canonico del schema oficial, additionalProperties:false).",
@@ -116,8 +116,8 @@
     },
     {
       "id": "umbrales_food_cost_por_proyecto",
-      "estado": "cerrado",
-      "descripcion": "Umbrales (25/35/45) ahora configurables por proyecto via /pizzepos/viabilidad/config.json (patron carta-digital): { umbrales: { viable, advertencia, critico } }. El reflejo los lee con fallback a los DEFAULT (25/35/45) si no existe o esta malformado. Cierre 2026-08-20."
+      "estado": "abierto",
+      "descripcion": "Umbrales (25/35/45) hardcoded en el reflejo. Algunos proyectos (alta cocina) pueden querer otros. Mover a config por proyecto cuando aparezca el caso."
     },
     {
       "id": "coste_fresco_vs_cacheado",

@@ -163,21 +163,6 @@ class PortalModule extends BaseModule {
 
       // confirmación: las mutaciones que la exigen requieren flag explícito
       if (def.confirmation === true && confirmado !== true) {
-        // MECANISMO DE CONFIRMACIÓN POR UI (20-ago): además del 409 que recibe el
-        // llamador (Hermes/agente), publicamos un evento de CONFIRMACIÓN PENDIENTE
-        // para que la UI (frontend web → ventana emergente "¿Ejecutar X?", y
-        // Telegram → botones Sí/No) pueda pedir el visto bueno al dueño SIN que el
-        // llamador quede bloqueado pidiendo por texto. La UI reenvía con
-        // confirmado:true → el portal ejecuta. Evento fire-and-forget: si no hay
-        // UI escuchando, nadie se entera y el 409 sigue siendo la única vía.
-        try {
-          this.eventBus.publish('portal.confirmation.pendiente', {
-            request_id: argv.request_id || null,
-            tool, project_id: argv.project_id || null,
-            description: def.description || `${tool} requiere confirmación`,
-            args: argv, timestamp: Date.now()
-          });
-        } catch (_) { /* el evento no debe romper el 409 */ }
         return this._errorResponse(409, 'NEEDS_CONFIRMATION', `la tool ${tool} requiere confirmación (confirmado:true)`, { kind: 'confirmation' });
       }
 

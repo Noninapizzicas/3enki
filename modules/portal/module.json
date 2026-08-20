@@ -13,10 +13,6 @@
     {
       "event": "portal.invocado",
       "description": "AUDIT: cada acceso externo a una tool vía el portal. {tool, ok, duracion_ms, scope, mode, error}. La capta la propiocepción — ningún acto-puerta es invisible."
-    },
-    {
-      "event": "portal.confirmation.pendiente",
-      "description": "CONFIRMACIÓN POR UI (mecanismo general, 20-ago): el portal devuelve un 409 NEEDS_CONFIRMATION para una tool con confirmation:true y publica ESTE evento fire-and-forget para que la UI (frontend web → ventana emergente '¿Ejecutar X?'; Telegram → botones Sí/No) pida el visto bueno al dueño SIN que el llamador quede bloqueado. {request_id, tool, project_id, description, args, timestamp}. La UI reenvía con confirmado:true → el portal ejecuta."
     }
   ],
 

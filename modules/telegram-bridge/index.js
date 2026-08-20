@@ -37,6 +37,9 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
     this.registro = { _updated_at: null, vinculos: {} };
     this.registroPath = REGISTRO_DEFAULT;
     this.mqttRequest = null;
+    // Confirmaciones pendientes (paso 3 Telegram): ui_token → datos de la petición
+    // para resolver el callback Sí/No y reenviar portal.call con confirmado:true.
+    this._pendingConfirms = new Map();
   }
 
   async onLoad(context) {
@@ -151,9 +154,94 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
 
   async onTelegramCallbackReceived(event) {
     const d = (event && event.data) || event || {};
+    const { botName, chatId, callbackId, data } = d;
+
+    // Callback de CONFIRMACIÓN por UI (paso 3): data viene como "confirm:<token>"
+    // o "reject:<token>". Resuelve la petición pendiente y actúa.
+    if (typeof data === 'string' && (data.startsWith('confirm:') || data.startsWith('reject:'))) {
+      const [accion, token] = data.split(':');
+      const pend = this._pendingConfirms.get(token);
+      if (!pend) {
+        // Token desconocido o ya respondido: responder el callback y salir.
+        await this._answerCallback(botName, callbackId, 'Petición ya resuelta o expirada');
+        return;
+      }
+      this._pendingConfirms.delete(token);
+
+      if (accion === 'confirm') {
+        // Reenviar al portal con confirmado:true → ejecuta la tool.
+        // Vía canónica del loader: mqttRequest('portal','call') → uiHandler →
+        // portal.handleCall (el mismo camino que el MCP usa).
+        if (this.mqttRequest) {
+          try {
+            await this.mqttRequest('portal', 'call', {
+              tool: pend.tool, args: pend.args,
+              project_id: pend.project_id || null,
+              confirmado: true
+            });
+          } catch (err) {
+            this.logger?.error('telegram-bridge.confirm.ejecutar_fallo', { error: err.message });
+          }
+        }
+        await this._answerCallback(botName, callbackId, '✅ Confirmado');
+        await this._enviarTelegram(botName, chatId, `✅ Ejecutando \`${pend.tool}\`…`);
+      } else {
+        await this._answerCallback(botName, callbackId, 'Descartado');
+        await this._enviarTelegram(botName, chatId, `⛔ Descartado \`${pend.tool}\``);
+      }
+      return;
+    }
+
     this.logger?.info('telegram-bridge.callback.ignored', {
-      botName: d.botName, callbackId: d.callbackId, reason: 'callback no es mensaje conversacional'
+      botName: d.botName, callbackId: d.callbackId, reason: 'callback no es de confirmación ni mensaje conversacional'
     });
+  }
+
+  // ── Confirmación por UI (paso 3): portal.confirmation.pendiente → botones Sí/No ──
+  async onPortalConfirmationPendiente(event) {
+    const d = (event && event.data) || event || {};
+    const { tool, project_id, description, args } = d;
+    if (!tool) return;
+
+    // Buscar el bot vinculado a ESE proyecto. Si el proyecto no tiene bot
+    // Telegram vinculado, no hay superficie donde mostrar (el portal ya respondió 409).
+    let target = null;
+    for (const [botName, vinculo] of Object.entries(this.registro.vinculos || {})) {
+      if (vinculo.project_id === project_id && Object.keys(vinculo.conversaciones || {}).length > 0) {
+        target = { botName, vinculo };
+        break;
+      }
+    }
+    if (!target) return;
+
+    const botName = target.botName;
+    const chatId = Object.keys(target.vinculo.conversaciones)[0]; // primer chat activo
+    const token = `${tool}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    this._pendingConfirms.set(token, { tool, args: args || {}, project_id: project_id || null });
+
+    const replyMarkup = {
+      inline_keyboard: [[
+        { text: '✅ Sí', callback_data: `confirm:${token}` },
+        { text: '⛔ No', callback_data: `reject:${token}` }
+      ]]
+    };
+
+    await this._enviarTelegram(botName, chatId,
+      `⚠️ *Confirmación requerida*\n${description || tool}`,
+      { replyMarkup });
+    this.metrics?.increment('telegram-bridge.confirmation.enviada');
+  }
+
+  async _answerCallback(botName, callbackId, text) {
+    try {
+      await this._rpc('telegram.answer_callback.request', { botName, callbackId, text });
+    } catch (_) { /* no debe romper el flujo */ }
+  }
+
+  async _enviarTelegram(botName, chatId, text, extra = {}) {
+    try {
+      await this._rpc('telegram.send_message.request', { botName, chatId, text, ...extra }, { timeout_ms: 30000 });
+    } catch (_) { /* best-effort */ }
   }
 
   async _reenviarAlChat(d, texto) {

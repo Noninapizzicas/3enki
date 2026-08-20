@@ -400,8 +400,8 @@
   "trabajo_pendiente": [
     {
       "id": "frontend_escalado_superficie",
-      "estado": "abierto",
-      "descripcion": "F6 (rehacer UI) cerrada como decision: la pagina de escandallo debe ofrecer la vista 'Escalar receta por superficie'. F6 1/2 esquematizada en este blueprint (operacion 'escalar' v3.12.0, delegada al reflejo _escalar). Falta F7: el store (escandallo.ts) aun no conoce 'escalar' ni lo expone; el panel (EscandalloPanel.svelte) solo tiene vistas global+receta. Anadir accion escalarReceta(recetaId, diametroDestino) en el store, 3a vista en el panel, y verificar en el bundle."
+      "estado": "cerrado",
+      "descripcion": "F7 COMPLETADA y verificada en prod (2026-08-20, PR #318 + deploy 15:35). El store escandallo.ts conoce 'escalar' (accion escalarReceta(recetaId, diametroDestino) via mqttRequest escandallo.escalar.request) y el panel EscandalloPanel.svelte expone la 3a vista 'Escalar por superficie'. Verificado: el texto 'Escalar por superficie' esta en el bundle frontend/build/client/_app/immutable/chunks/DfCQ5lmt.js. Vista de escalado en produccion."
     },
     {
       "id": "reactividad_via_runtime_blueprint",

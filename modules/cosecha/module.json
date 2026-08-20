@@ -84,6 +84,43 @@
       "handler": "handlePromoverTool",
       "confirmation": true,
       "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "crear_skill",
+      "description": "CREA una skill nueva en la cantera (fase de escritura). Uso: tras resolver algo reutilizable que merece guardarse como skill. Es CREATE-ONLY: devuelve 409 si ya existe (usa mejorar_skill). Valida el frontmatter antes de persistir. NO inventes que la creaste — verifica la respuesta. ÚSALA cuando necesites escribir/guardar una skill nueva.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nombre": { "type": "string", "minLength": 1, "description": "Nombre de la skill nueva (slug)." },
+          "contenido": { "type": "string", "minLength": 1, "description": "Contenido completo: frontmatter (name, description, domain) + cuerpo." },
+          "descripcion": { "type": "string", "description": "Opcional: descripción corta." },
+          "dominio": { "type": "string", "description": "Opcional: dominio de la skill." },
+          "tags": { "type": "array", "items": { "type": "string" }, "description": "Opcional: etiquetas." },
+          "lente_dominio": { "type": "string", "description": "Opcional: dominio-lente para activación." },
+          "lente_tarea": { "type": "string", "description": "Opcional: tarea-lente." }
+        },
+        "required": ["nombre", "contenido"]
+      },
+      "handler": "handleCrearSkillTool",
+      "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "mejorar_skill",
+      "description": "MEJORA una skill crecida de la cantera por old_string→new_string (estilo edit). Guardas: read-before-write (old_string debe existir), único-o-replace_all (409 si aparece >1 y no replace_all), semilla intocable (409), validar+rollback (422 si el resultado no es skill legible o renombra → NO escribe). No renombra.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nombre": { "type": "string", "minLength": 1, "description": "Nombre de la skill a mejorar." },
+          "old_string": { "type": "string", "minLength": 1, "description": "Fragmento a reemplazar (debe existir)." },
+          "new_string": { "type": "string", "minLength": 1, "description": "Fragmento de reemplazo." },
+          "replace_all": { "type": "boolean", "description": "Opcional: reemplazar todas las ocurrencias." }
+        },
+        "required": ["nombre", "old_string", "new_string"]
+      },
+      "handler": "handleMejorarSkillTool",
+      "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
     }
   ],
   "config": {

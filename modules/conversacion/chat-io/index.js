@@ -707,8 +707,12 @@ class ChatIoModule extends BaseModule {
       ? (typeof metadata === 'string' ? metadata : JSON.stringify(metadata))
       : null;
     try {
+      // Idempotente: si el message_id ya existe (chat.assistant.saved re-publicado
+      // por retry/duplicado del emisor), NO reintentar el INSERT — la respuesta del
+      // agente ya está persistida. Sin esto, la segunda INSERT choca con el UNIQUE
+      // messages.id → SQLITE_CONSTRAINT (pagado en vivo edias/f, 20-ago).
       await this._db(project_id,
-        `INSERT INTO messages (id, conversation_id, role, content, metadata, created_at)
+        `INSERT OR IGNORE INTO messages (id, conversation_id, role, content, metadata, created_at)
          VALUES (?, ?, 'assistant', ?, ?, ?)`,
         [message_id, conversation_id, assistant_message, metadataStr, now]
       );

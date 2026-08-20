@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo escandallo v2. Hijo de subsistema-recetario.modulo-base. Calcula el coste de una receta del proyecto O de una propuesta no persistida, Y persiste el resultado en /recetas.json[r] cuando se trata de una receta existente. Invocacion on-demand — el usuario pide 'calcula costes' en el chat O el LLM principal lo invoca como parte de otro flujo (ej. crear receta). NO es reactivo (el blueprint runtime no soporta reactividad sin user request). La lectura/escritura de Mercadona la hace mercadona-api (modulo JS determinista, paradigma plugin); escandallo razona qué productos pedir y cómo mapearlos al ingrediente. Para viabilidad economica (food cost%, PVP, margen, etiquetas) el modulo viabilidad lo hace despues, leyendo los costes ya persistidos.",
   "id": "escandallo",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-3.11.0",
+  "version": "blueprint-3.12.0",
   "_temperatura_doc": "Pagina EXACTA: razona costes/mapeos a ingrediente -> fria, minimiza alucinacion. ai-gateway la usa como default del turno (settings.temperature del humano gana; fallback global 0.7). Lo aritmetico ya vive en el REFLEJO (temperatura irrelevante alli); esto baja la chispa de la parte fuzzy (mapear producto Mercadona).",
   "temperatura": 0.2,
   "language": "es",
@@ -291,10 +291,40 @@
         "UPSTREAM_UNREACHABLE",
         "UNKNOWN_ERROR"
       ]
+    },
+    "escalar": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, receta_id? (alternativa a lineas), lineas? (array de {ref,nombre,cantidad,unidad}), diametro_origen? (default 33), diametro_destino (req) }",
+      "_descripcion": "DELEGA al reflejo JS (index.js, determinista). Re-costea una receta a otro diametro: la linea de MASA escala por DIAMETRO (factor = d2/d1), el resto por AREA (factor = (d2/d1)2). Auto-detecta la masa por nombre/ref que contenga 'masa'. Conversor puro — NO persiste (el coste escalado es derivacion transitoria; quien quiera persistirlo delega en costear con persistir).",
+      "pseudocodigo": [
+        "async escalar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.receta_id && !(Array.isArray(input.lineas) && input.lineas.length > 0)) return INVALID_INPUT { hint: 'pasar receta_id O lineas' }",
+        "  if (!(typeof input.diametro_destino === 'number' && input.diametro_destino > 0)) return INVALID_INPUT { field: 'diametro_destino' }",
+        "  // DELEGADO al reflejo JS: el escalado por superficie es aritmetica pura (masa por diametro, resto por area) — sin turno LLM.",
+        "  resp = await publishAndWait('escandallo.escalar.request', {",
+        "    project_id: input.project_id, receta_id: input.receta_id, lineas: input.lineas,",
+        "    diametro_origen: input.diametro_origen, diametro_destino: input.diametro_destino,",
+        "    correlation_id: input.correlation_id",
+        "  }, { timeout_ms: 8000 })",
+        "  RETORNA resp   // { status, data: { receta_id, diametro_origen, diametro_destino, factor_masa, factor_area, lineas_escaladas, rinde, coste_total, coste_unidad, lineas_sin_precio, fuentes_precios } }"
+      ],
+      "reglas_clave": [
+        "CONVERSOR PURO: no muta la receta ni persiste. El coste escalado es derivacion transitoria; persistirlo = invocar costear con persistir=true.",
+        "MASA escala por DIAMETRO (factor = d2/d1); el resto por AREA (factor = (d2/d1)^2). Auto-detecta masa por nombre/ref que contenga 'masa'.",
+        "El rinde NO escala con el diametro (una pizza sigue siendo 1 a 33 cm y a 28 cm) — solo escalan las cantidades de los ingredientes.",
+        "Cero invencion: lo que no tiene precio queda en lineas_sin_precio, no se inventa."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     }
   },
   "transporte": {
-    "entrada": "reflejo RPC via ui_handlers (module.json) — las 4 operaciones se conducen por ui/request/escandallo/<accion>; transporte.rpc vacio a proposito (los topics reales escandallo.*.request tienen 3 segmentos y rompen el parser del generador).",
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 5 operaciones se conducen por ui/request/escandallo/<accion>; transporte.rpc vacio a proposito (los topics reales escandallo.*.request tienen 3 segmentos y rompen el parser del generador).",
     "rpc": [],
     "salida": [
       "escandallo.coste.calculado"
@@ -331,6 +361,30 @@
         "titulo": "Costear lote pendiente",
         "descripcion": "Costea TODAS las recetas pendientes en UNA llamada (batch, orden topologico, sin navegar Mercadona)."
       },
+      "escalar": {
+        "titulo": "Escalar receta por superficie",
+        "descripcion": "Re-costea una receta a otro diametro: la masa escala por diametro (factor d2/d1), el resto por area (factor (d2/d1)^2). Conversor puro — no persiste.",
+        "args": [
+          {
+            "nombre": "receta_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Id de la receta a escalar (alternativa a lineas)."
+          },
+          {
+            "nombre": "diametro_origen",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Diametro de origen en cm (default 33)."
+          },
+          {
+            "nombre": "diametro_destino",
+            "tipo": "number",
+            "required": true,
+            "descripcion": "Diametro destino en cm (p.ej. 28)."
+          }
+        ]
+      },
       "validar": {
         "titulo": "Validar costeo",
         "descripcion": "Freno (reflejo): valida un costeo por PROCEDENCIA (cada precio trazable a mercadona/catalogo/sub_receta/manual) + COHERENCIA (valor=cantidad×precio, total=Σlineas, unidad=total/rinde)."
@@ -344,6 +398,11 @@
     }
   },
   "trabajo_pendiente": [
+    {
+      "id": "frontend_escalado_superficie",
+      "estado": "abierto",
+      "descripcion": "F6 (rehacer UI) cerrada como decision: la pagina de escandallo debe ofrecer la vista 'Escalar receta por superficie'. F6 1/2 esquematizada en este blueprint (operacion 'escalar' v3.12.0, delegada al reflejo _escalar). Falta F7: el store (escandallo.ts) aun no conoce 'escalar' ni lo expone; el panel (EscandalloPanel.svelte) solo tiene vistas global+receta. Anadir accion escalarReceta(recetaId, diametroDestino) en el store, 3a vista en el panel, y verificar en el bundle."
+    },
     {
       "id": "reactividad_via_runtime_blueprint",
       "estado": "abierto",

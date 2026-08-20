@@ -29,7 +29,12 @@ const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
 const STORE_PATH = '/pizzepos/viabilidad.json';
+const CONFIG_PATH = '/pizzepos/viabilidad/config.json';
 const nowISO = () => new Date().toISOString();
+
+// Umbrales de food cost por defecto (canónicos del sistema). Overridables por
+// proyecto vía config.json (patrón carta-digital): { umbrales: { viable, advertencia, critico } }.
+const DEFAULT_UMBRALES = { viable: 25, advertencia: 35, critico: 45 };
 
 class ViabilidadReflejo extends ModuloHibridoReflejo {
   constructor() {
@@ -65,6 +70,21 @@ class ViabilidadReflejo extends ModuloHibridoReflejo {
     if (!r) return { status: 503 };
     if (r.error) return { status: r.error.code === 'RESOURCE_NOT_FOUND' ? 404 : (r.error.code === 'CONFLICT_STATE' ? 409 : 502), error: r.error };
     return { status: 200 };
+  }
+
+  // Lee los umbrales de food cost del proyecto (config.json). Si no existe o
+  // está malformado, usa los DEFAULT. Nunca falla: el default es la red de seguridad.
+  async _leerUmbrales(project_id) {
+    const raw = await this._readRaw(project_id, CONFIG_PATH);
+    if (raw.status !== 200) return { ...DEFAULT_UMBRALES };
+    let cfg;
+    try { cfg = JSON.parse(raw.content); } catch (_) { return { ...DEFAULT_UMBRALES }; }
+    const u = (cfg && cfg.umbrales) || {};
+    return {
+      viable: Number.isFinite(u.viable) ? u.viable : DEFAULT_UMBRALES.viable,
+      advertencia: Number.isFinite(u.advertencia) ? u.advertencia : DEFAULT_UMBRALES.advertencia,
+      critico: Number.isFinite(u.critico) ? u.critico : DEFAULT_UMBRALES.critico
+    };
   }
 
   // =============================================================
@@ -120,7 +140,8 @@ class ViabilidadReflejo extends ModuloHibridoReflejo {
     }
     const margenPorcion = pvpEfectivo != null ? this._round(pvpEfectivo - calculo.coste_porcion, 2) : null;
 
-    // 4. Veredicto canónico + advertencias.
+    // 4. Veredicto canónico + advertencias (umbrales por proyecto, default 25/35/45).
+    const umbrales = await this._leerUmbrales(input.project_id);
     const advertencias = [];
     if (calculo.ingredientes_sin_precio.length > 0) {
       advertencias.push('ingredientes_sin_precio: ' + calculo.ingredientes_sin_precio.join(', '));
@@ -129,19 +150,19 @@ class ViabilidadReflejo extends ModuloHibridoReflejo {
     if (!input.pvp_objetivo) {
       veredicto = 'sin_pvp_objetivo';
       advertencias.push('veredicto_orientativo: se uso pvp_sugerido al ' + foodCostObj + '% food cost');
-    } else if (foodCostPct < 25) {
+    } else if (foodCostPct < umbrales.viable) {
       veredicto = 'viable';
-    } else if (foodCostPct < 35) {
+    } else if (foodCostPct < umbrales.advertencia) {
       veredicto = 'viable_con_advertencias';
-    } else if (foodCostPct < 45) {
+    } else if (foodCostPct < umbrales.critico) {
       veredicto = 'viable_con_advertencias';
-      advertencias.push('alerta_margen_critico: food cost ' + foodCostPct + '% por encima de 35%');
+      advertencias.push('alerta_margen_critico: food cost ' + foodCostPct + '% por encima de ' + umbrales.advertencia + '%');
     } else {
       veredicto = 'no_viable_economicamente';
     }
 
     // 4b. Caminos (brújula del comerciante) — por regla, "stubs ligeros".
-    const caminos = this._caminos({ veredicto, foodCostPct, advertencias, nombreIdea, costePorcion: calculo.coste_porcion, pvpEfectivo, ingredientesSinPrecio: calculo.ingredientes_sin_precio });
+    const caminos = this._caminos({ veredicto, foodCostPct, advertencias, nombreIdea, costePorcion: calculo.coste_porcion, pvpEfectivo, ingredientesSinPrecio: calculo.ingredientes_sin_precio, umbralAdvertencia: umbrales.advertencia });
 
     // 5. Expediente.
     const expediente = {
@@ -204,7 +225,7 @@ class ViabilidadReflejo extends ModuloHibridoReflejo {
   }
 
   // Caminos deterministas (0-3). Palancas mapeadas del veredicto/advertencias.
-  _caminos({ veredicto, foodCostPct, advertencias, nombreIdea, costePorcion, pvpEfectivo, ingredientesSinPrecio }) {
+  _caminos({ veredicto, foodCostPct, advertencias, nombreIdea, costePorcion, pvpEfectivo, ingredientesSinPrecio, umbralAdvertencia }) {
     const out = [];
     const ctx = `Para "${nombreIdea}" (coste/porción ${costePorcion}€` + (pvpEfectivo != null ? `, PVP ${pvpEfectivo}€)` : ')');
     if (ingredientesSinPrecio.length > 0) {
@@ -214,7 +235,7 @@ class ViabilidadReflejo extends ModuloHibridoReflejo {
       out.push({ titulo: 'Fijar un PVP', prompt: `${ctx}: dame un PVP firme y dime el veredicto económico con ese precio.` });
     } else if (veredicto === 'no_viable_economicamente') {
       out.push({ titulo: 'Replantear el producto', prompt: `${ctx}: el food cost (${foodCostPct}%) lo hace inviable. Replanteemos formato, porción o ingredientes para que salga rentable.` });
-    } else if (advertencias.some(a => a.startsWith('alerta_margen_critico')) || (typeof foodCostPct === 'number' && foodCostPct >= 35)) {
+    } else if (advertencias.some(a => a.startsWith('alerta_margen_critico')) || (typeof foodCostPct === 'number' && foodCostPct >= umbralAdvertencia)) {
       out.push({ titulo: 'Mejorar el margen', prompt: `${ctx}: el food cost (${foodCostPct}%) está apretado. ¿Subimos PVP o recortamos coste sin perder calidad?` });
     }
     return out.slice(0, 3);

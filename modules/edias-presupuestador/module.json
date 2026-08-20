@@ -1,0 +1,26 @@
+{
+  "blueprint_driven": true,
+  "blueprint_path": "edias-presupuestador.blueprint.json",
+  "cajones_enabled": true,
+  "description": "El NÚCLEO de la venta edias: escucha edias.presupuestar.request, CONDUCE el costeo determinista (edias.costeo.costear.request) para el coste base por pieza, aplica la política del admin (margen + descuento por volumen en dos modos: escalones manuales o fórmula automática) y emite un presupuesto en firme con desglose visible — completo o incompleto. NUNCA inventa precios: ante faltante emite edias.presupuesto.incompleto con la lista de faltantes.",
+  "language": "es",
+  "name": "edias-presupuestador",
+  "subscribes": [
+    {
+      "description": "Reflejo JS (NÚCLEO): conduce el costeo determinista, aplica la política del admin y emite presupuesto completo o incompleto. Idempotente por correlation_id.",
+      "event": "edias.presupuestar.request",
+      "handler": "onPresupuestarRequest"
+    },
+    {
+      "description": "Reflejo JS: obtiene un presupuesto por presupuesto_id.",
+      "event": "edias.presupuesto.obtener.request",
+      "handler": "onObtenerRequest"
+    }
+  ],
+  "target_page_id": "edias-presupuestador",
+  "ui_handlers": [
+    { "action": "presupuestar", "domain": "edias", "handler": "onPresupuestarRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "obtener", "domain": "edias", "handler": "onObtenerRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ],
+  "version": "0.1.0"
+}

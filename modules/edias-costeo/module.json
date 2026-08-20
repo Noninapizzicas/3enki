@@ -1,0 +1,32 @@
+{
+  "blueprint_driven": true,
+  "blueprint_path": "edias-costeo.blueprint.json",
+  "cajones_enabled": true,
+  "description": "El CORAZÓN del costeo de piezas: coste_pieza = (tarifa × gramos) + tiempo_maquina. Aritmética pura servida por reflejo JS, sin turno LLM. El freno validar rechaza el PRECIO_INVENTADO (coste que no cuadra) y exige tarifa real (SIN_TARIFA). Espejo del freno anti-invento de escandallo pizzepos.",
+  "language": "es",
+  "name": "edias-costeo",
+  "subscribes": [
+    {
+      "description": "Reflejo JS: coste_pieza determinista = (tarifa_por_gramo × gramos) + tiempo_maquina, escalado a cantidad. 404/422 si faltan datos.",
+      "event": "edias.costeo.costear.request",
+      "handler": "onCostearRequest"
+    },
+    {
+      "description": "Reflejo JS (FRENO): valida el coste por PROCEDENCIA + COHERENCIA. Rechaza PRECIO_INVENTADO (coste que no cuadra con tarifa×gramos+tiempo) y declara sin_tarifa. Devuelve {valid, errors}.",
+      "event": "edias.costeo.validar.request",
+      "handler": "onValidarRequest"
+    },
+    {
+      "description": "Reflejo JS: últimas valoraciones de coste (historial).",
+      "event": "edias.costeo.listar.request",
+      "handler": "onListarRequest"
+    }
+  ],
+  "target_page_id": "edias-costeo",
+  "ui_handlers": [
+    { "action": "costear", "domain": "edias", "handler": "onCostearRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "validar", "domain": "edias", "handler": "onValidarRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "listar", "domain": "edias", "handler": "onListarRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ],
+  "version": "0.1.0"
+}

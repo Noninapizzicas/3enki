@@ -1,0 +1,38 @@
+{
+  "blueprint_driven": true,
+  "blueprint_path": "edias-plano.blueprint.json",
+  "cajones_enabled": true,
+  "description": "Planos del taller: el plano nace del CLIENTE (Hermes valida el DXF con dxf_parse y pasa el resultado al registrar). Persiste plano_id, nombre, archivo_dxf, validacion (entidades/capas/ok) y piezas asociadas. Reflejo puro: persistencia, sin turno LLM. No hace cross-module.",
+  "language": "es",
+  "name": "edias-plano",
+  "subscribes": [
+    {
+      "description": "Reflejo JS: registra un plano con su validación DXF ya hecha por el cliente. Duplicado 409.",
+      "event": "edias.plano.registrar.request",
+      "handler": "onRegistrarRequest"
+    },
+    {
+      "description": "Reflejo JS: lista planos (opcional solo_validos).",
+      "event": "edias.plano.listar.request",
+      "handler": "onListarRequest"
+    },
+    {
+      "description": "Reflejo JS: obtiene un plano por plano_id. 404 si no existe.",
+      "event": "edias.plano.obtener.request",
+      "handler": "onObtenerRequest"
+    },
+    {
+      "description": "Reflejo JS: elimina un plano. 404 si no existe.",
+      "event": "edias.plano.eliminar.request",
+      "handler": "onEliminarRequest"
+    }
+  ],
+  "target_page_id": "edias-plano",
+  "ui_handlers": [
+    { "action": "registrar", "domain": "edias", "handler": "onRegistrarRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "listar", "domain": "edias", "handler": "onListarRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "obtener", "domain": "edias", "handler": "onObtenerRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "eliminar", "domain": "edias", "handler": "onEliminarRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ],
+  "version": "0.1.0"
+}

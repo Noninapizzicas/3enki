@@ -1,0 +1,31 @@
+{
+  "blueprint_driven": true,
+  "blueprint_path": "edias-resolucion-faltantes.blueprint.json",
+  "cajones_enabled": true,
+  "description": "El ORQUESTADOR de la respuesta del dueño (ante obstáculos, soluciones): consume edias.presupuesto.incompleto y RESUELVE cada faltante cableando los órganos que Enki YA tiene vivos — buscar_web (crawl4rs), leer_web (crawl4rs) y cartero.enviar (local.gmail). El dato resuelto vuelve con SU FUENTE; lo no resuelto se ELEVA al admin. NUNCA inventa un precio: sin fuente verificable, eleva.",
+  "language": "es",
+  "name": "edias-resolucion-faltantes",
+  "subscribes": [
+    {
+      "description": "Reflejo JS (ORQUESTADOR): reacciona al presupuesto incompleto y resuelve cada faltante con los órganos (web → proveedor → elevar).",
+      "event": "edias.presupuesto.incompleto",
+      "handler": "onPresupuestoIncompleto"
+    },
+    {
+      "description": "Reflejo JS: disparo manual de resolución de un faltante (RPC).",
+      "event": "edias.resolucion.resolver.request",
+      "handler": "onResolverRequest"
+    },
+    {
+      "description": "Reflejo JS: lista el historial de resoluciones (últimas 50).",
+      "event": "edias.resolucion.historial.request",
+      "handler": "onHistorialRequest"
+    }
+  ],
+  "target_page_id": "edias-resolucion-faltantes",
+  "ui_handlers": [
+    { "action": "resolver", "domain": "edias", "handler": "onResolverRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "historial", "domain": "edias", "handler": "onHistorialRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ],
+  "version": "0.1.0"
+}

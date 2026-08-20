@@ -1,0 +1,48 @@
+{
+  "blueprint_driven": true,
+  "blueprint_path": "edias-cobro.blueprint.json",
+  "cajones_enabled": true,
+  "description": "El ESLABÓN que cierra el flujo pedido → cobro. Pago ANTICIPADO al hacer el pedido (respondido 2026-08-20), vinculado a la cuenta del cliente, con la política de descuentos ACTIVA ya aplicada en el total del presupuesto. Escucha edias.presupuesto.generado para crear el cobro, conduce pago-gateway (pago.iniciar) para el pago online, y pago.confirmado lo marca pagado. El cobro NUNCA inventa el monto: lo toma del presupuesto. Degradable: sin pasarela → queda PENDIENTE y se confirma manualmente.",
+  "language": "es",
+  "name": "edias-cobro",
+  "subscribes": [
+    {
+      "description": "Reflejo JS: crea un cobro (pago anticipado) vinculado a la cuenta, conduce pago-gateway para el pago online. Idempotente por presupuesto_id.",
+      "event": "edias.cobro.crear.request",
+      "handler": "onCrearRequest"
+    },
+    {
+      "description": "Reflejo JS: obtiene un cobro por id.",
+      "event": "edias.cobro.obtener.request",
+      "handler": "onObtenerRequest"
+    },
+    {
+      "description": "Reflejo JS: lista cobros (por cuenta o estado).",
+      "event": "edias.cobro.listar.request",
+      "handler": "onListarRequest"
+    },
+    {
+      "description": "Reflejo JS: confirma un cobro como pagado (efectivo/transferencia). Emite edias.cobro.pagado.",
+      "event": "edias.cobro.confirmar.request",
+      "handler": "onConfirmarRequest"
+    },
+    {
+      "description": "Fire-and-forget: el presupuesto generado (completo) dispara el cobro anticipado. Incompleto → no se cobra.",
+      "event": "edias.presupuesto.generado",
+      "handler": "onPresupuestoGenerado"
+    },
+    {
+      "description": "Fire-and-forget: pago.confirmado (webhook pasarela) marca el cobro pagado y libera el pedido.",
+      "event": "pago.confirmado",
+      "handler": "onPagoConfirmado"
+    }
+  ],
+  "target_page_id": "edias-cobro",
+  "ui_handlers": [
+    { "action": "crear", "domain": "edias", "handler": "onCrearRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "obtener", "domain": "edias", "handler": "onObtenerRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "listar", "domain": "edias", "handler": "onListarRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "confirmar", "domain": "edias", "handler": "onConfirmarRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ],
+  "version": "0.1.0"
+}

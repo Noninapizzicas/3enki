@@ -1,0 +1,43 @@
+{
+  "blueprint_driven": true,
+  "blueprint_path": "edias-facturas.blueprint.json",
+  "cajones_enabled": true,
+  "description": "El ESLABÓN que cierra el flujo pedido → cobro → FACTURA. Emite la factura SALIENTE del pedido ya cobrado (pago anticipado). Escucha edias.cobro.pagado para crear la factura con el monto del cobro (nunca inventado). La factura lleva los datos fiscales del taller (config del proyecto: razon_social, nif, direccion, serie); sin datos fiscales queda en borrador (no se emite una factura sin NIF). Emite edias.factura.emitida. Degradable: sin config fiscal → borrador, se completa luego.",
+  "language": "es",
+  "name": "edias-facturas",
+  "subscribes": [
+    {
+      "description": "Reflejo JS: crea una factura (explícita o re-emitir) con el monto del cobro. Idempotente por cobro_id.",
+      "event": "edias.factura.crear.request",
+      "handler": "onCrearRequest"
+    },
+    {
+      "description": "Reflejo JS: obtiene una factura por id.",
+      "event": "edias.factura.obtener.request",
+      "handler": "onObtenerRequest"
+    },
+    {
+      "description": "Reflejo JS: lista facturas (por cuenta o estado).",
+      "event": "edias.factura.listar.request",
+      "handler": "onListarRequest"
+    },
+    {
+      "description": "Reflejo JS: anula una factura (solo borrador/emitida, no pagada). Emite edias.factura.anulada.",
+      "event": "edias.factura.anular.request",
+      "handler": "onAnularRequest"
+    },
+    {
+      "description": "Fire-and-forget: el cobro pagado dispara la factura. Idempotente por cobro_id.",
+      "event": "edias.cobro.pagado",
+      "handler": "onCobroPagado"
+    }
+  ],
+  "target_page_id": "edias-facturas",
+  "ui_handlers": [
+    { "action": "crear", "domain": "edias", "handler": "onCrearRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "obtener", "domain": "edias", "handler": "onObtenerRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "listar", "domain": "edias", "handler": "onListarRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "action": "anular", "domain": "edias", "handler": "onAnularRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ],
+  "version": "0.1.0"
+}

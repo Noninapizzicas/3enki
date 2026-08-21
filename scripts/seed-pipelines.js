@@ -1,41 +1,58 @@
 'use strict';
 /**
- * SEED de los pipelines de proceso en el REGISTRO (P2 — el custodio único).
+ * VALIDADOR de los pipelines de proceso del REGISTRO (P2 — el custodio único).
  *
- * Ejecutar tras el deploy (el registro lo carga el core; este script declara
- * los pipelines de proceso del motor en su store):
+ * Un solo directorio, una sola verdad: el STORE del registro
+ * (modules/agentes/registro/store/) está commiteado en el repo y es lo que el
+ * custodio SIRVE en vivo (pipeline.obtener). No hay copia semilla que declarar:
+ * el store ES la fuente. Antes existía un dir espejo en arquitectura/ que se
+ * copiaba al store — dos copias que derivaban en silencio. Se unificó.
+ *
+ * Este script ya no COPIA (no hay de dónde): recorre el store y pasa cada
+ * pipeline por el CONTRATO del custodio (_validarContrato). Canta el que esté
+ * mal y termina con código 1 — el guardián de que el store siempre carga.
+ *
  *   node scripts/seed-pipelines.js
- *
- * Declara vía el CUSTODIO (pipeline.declarar.request directo al módulo) —
- * nunca escribiendo el store del registro a mano.
  */
 const fs = require('fs');
 const path = require('path');
 const Registro = require('../modules/agentes/registro/index.js');
 
-const PIPELINES_DIR = path.resolve(__dirname, '../arquitectura/esquema-motor-agentes/pipelines');
+const STORE_DIR = path.resolve(__dirname, '../modules/agentes/registro/store');
 
-async function main() {
+function main() {
   const registro = new Registro();
-  await registro.onLoad({ eventBus: null, logger: console });
 
-  const archivos = fs.readdirSync(PIPELINES_DIR).filter(f => f.endsWith('.json'));
+  if (!fs.existsSync(STORE_DIR)) {
+    console.error(`❌ store no encontrado: ${STORE_DIR}`);
+    process.exit(1);
+  }
+
+  const archivos = fs.readdirSync(STORE_DIR).filter(f => f.endsWith('.json'));
   let ok = 0, fallos = 0;
 
   for (const f of archivos) {
-    const pipeline = JSON.parse(fs.readFileSync(path.join(PIPELINES_DIR, f), 'utf8'));
-    const eventos = [];
-    const bus = { publish: (topic, payload) => eventos.push({ topic, payload }) };
-    registro.eventBus = bus;
-    await registro.onPipelineDeclararRequest({ data: { request_id: `seed-${pipeline.name}`, pipeline } });
-    const r = eventos.find(e => e.topic === 'pipeline.declarado');
-    const err = eventos.find(e => e.topic === 'pipeline.declarar.failed');
-    if (r) { console.log(`  ✅ ${pipeline.name} declarado (${pipeline.pasos.length} pasos, entregable ${pipeline.entregable.path})`); ok++; }
-    else { console.log(`  ❌ ${pipeline.name}: ${err ? err.payload.error.message : 'sin respuesta'}`); fallos++; }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(fs.readFileSync(path.join(STORE_DIR, f), 'utf8'));
+    } catch (err) {
+      console.log(`  ❌ ${f}: JSON inválido — ${err.message}`);
+      fallos++;
+      continue;
+    }
+    const errores = registro._validarContrato(pipeline);
+    if (errores.length === 0) {
+      const destino = pipeline.entregable.path || pipeline.entregable.dir;
+      console.log(`  ✅ ${pipeline.name} (${pipeline.pasos.length} pasos, entregable ${destino})`);
+      ok++;
+    } else {
+      console.log(`  ❌ ${pipeline.name || f}: ${errores.join('; ')}`);
+      fallos++;
+    }
   }
 
-  console.log(`\n${fallos === 0 ? `🎉 ${ok} pipelines declarados en el registro` : `❌ ${fallos} fallos`}`);
+  console.log(`\n${fallos === 0 ? `🎉 ${ok} pipelines válidos en el store` : `❌ ${fallos} fallos de contrato`}`);
   process.exit(fallos === 0 ? 0 : 1);
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+main();

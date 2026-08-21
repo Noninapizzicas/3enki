@@ -42,8 +42,10 @@ tags: [enki, agentes, proceso, rail, orquestador, gate, productor, github]
 - Definición del pipeline (motor v3): `modules/agentes/registro/store/<nombre>.json` — el
   registro (`modules/agentes/registro/index.js`) los auto-descubre leyendo el storeDir, sin
   alta manual. El fuzzy lleva la `instruccion` INLINE en el JSON (no prompts separados).
-  ESpejo del esquema: `arquitectura/esquema-motor-agentes/pipelines/<nombre>.json` (mismo
-  contenido; el esquema del motor es la fuente de verdad de diseño).
+  FUENTE ÚNICA: el store del registro es la verdad viva y está commiteado en el repo; no hay
+  dir espejo (el antiguo `arquitectura/esquema-motor-agentes/pipelines/` se eliminó — dos
+  copias que derivaban). `scripts/seed-pipelines.js` ya no copia: VALIDA el store contra el
+  contrato del custodio.
 - **La cúpula de `invoke_agent` se LEE del registro en vivo (fix 2026-08, PR #170)**: el
   enum de agent_name y la descripción salen de `pipeline.listar.request` (el mismo store/),
   NO de una lista hardcodeada. La lista vieja (4 pipelines) dejaba fuera al adaptador y a

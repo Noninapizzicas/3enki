@@ -87,8 +87,8 @@ path con plantilla `<slug>` y escribe mal.
 
 ### Pipelines de proceso (formato REAL — difiere de la spec inicial)
 
-`arquitectura/esquema-motor-agentes/pipelines/*.json` (construir-modulos,
-escribir-skills, esquematizador-negocio, planificar-construccion):
+`modules/agentes/registro/store/*.json` (fuente única, commiteada — el store del
+custodio; el antiguo dir espejo en arquitectura/ se eliminó):
 
 ```json
 {

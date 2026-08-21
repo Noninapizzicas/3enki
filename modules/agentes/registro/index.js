@@ -70,10 +70,22 @@ class AgentesRegistroModule extends BaseModule {
       });
       if (hayFuzzy && !hayReflejo) errores.push('pipeline sin pasos reflejo (el determinismo es obligatorio)');
     }
-    if (!p.entregable || typeof p.entregable !== 'object' || !p.entregable.path) {
-      errores.push('entregable.path requerido');
-    } else if (!Array.isArray(p.entregable.reglas) || p.entregable.reglas.length === 0) {
-      errores.push('entregable.reglas requerido (array no vacío — el JEFE necesita reglas)');
+    if (!p.entregable || typeof p.entregable !== 'object') {
+      errores.push('entregable requerido (objeto)');
+    } else {
+      // Dos formas válidas (las MISMAS que el ejecutor resuelve):
+      //  · path            → un archivo (esquema.md, module.json…)
+      //  · dir + archivos[] → multi-archivo (F4 construir-modulos, F7 construir-interfaz)
+      // El contrato de ESCRITURA debe aceptar lo que el de EJECUCIÓN corre.
+      const tienePath = typeof p.entregable.path === 'string' && p.entregable.path.trim();
+      const tieneMulti = typeof p.entregable.dir === 'string' && p.entregable.dir.trim() &&
+        Array.isArray(p.entregable.archivos) && p.entregable.archivos.length > 0;
+      if (!tienePath && !tieneMulti) {
+        errores.push('entregable requiere path (un archivo) o dir+archivos[] (multi-archivo)');
+      }
+      if (!Array.isArray(p.entregable.reglas) || p.entregable.reglas.length === 0) {
+        errores.push('entregable.reglas requerido (array no vacío — el JEFE necesita reglas)');
+      }
     }
     return errores;
   }

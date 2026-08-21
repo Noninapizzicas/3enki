@@ -8,8 +8,8 @@ description: >-
   A PUNTO, RONDA A RONDA hasta quedarse seco, escribiendo cada pasada en
   <proyecto>/esquemas/pasada-N-<punto>.md y el árbol maestro en
   <proyecto>/esquemas/esquema.md (el entregable que el gate verifica). Después,
-  DISECCIÓN PUNTO A PUNTO: cada hoja atómica, una a una, su FORMA (reflejo ·
-  custodio · conversor · puente) en pasada-N-diseccion.md — sin dejar ninguna
+  DISECCIÓN PUNTO A PUNTO: cada hoja atómica, una a una, su FORMA (reflejo puro ·
+  micro-agente fuzzy · custodio · conversor · puente) en pasada-N-diseccion.md — sin dejar ninguna
   sin forma. El propósito es descubrir las PIEZAS que el negocio necesita (cada
   una su parcela). EL FOCO: identifica TÚ MISMO el cuello de botella del flujo
   (eslabón limitante) y expándelo al máximo. LEY DE CERO SUPUESTOS: todo valor
@@ -80,8 +80,21 @@ las piezas del negocio, sus relaciones, y lo que cada una necesita (puertos
 abiertos — agnosticismo, cero tecnologías).
 
 **Fase 3 · Disección** — cada hoja atómica pasa por el diseccionador y sus
-preguntas → FORMA (reflejo · custodio · conversor · puente…). Anota la forma
-en `esquema.md`.
+preguntas → FORMA. Las CINCO, en el orden del dueño del vocabulario
+(skill `diseccionador`):
+
+```
+REFLEJO puro       calcular, cero juicio — un test unitario lo AFIRMA
+MICRO-AGENTE fuzzy juicio, lenguaje, ambigüedad — el reflejo hidrata y persiste,
+                   el agente solo transforma (el corte maestro pasa por aquí)
+CUSTODIO           un solo dueño por store — dos escritores es corrupción esperando turno
+CONVERSOR          una sola frontera donde cruzan formatos, unidades o dimensiones
+PUENTE             conecta con lo vecino por EVENTO, sin pisar lo manual
+```
+
+Anota la forma en `esquema.md`. El **micro-agente** es el que decide si una
+pieza lleva LLM: sin él sobre la mesa, las hojas de juicio se disecan como
+reflejos y acaban en if-chains frágiles.
 
 **El propósito afilado** (lo que diferencia esta skill del esquematizador
 genérico): el esquema debe responder **"¿qué piezas necesita este negocio
@@ -132,7 +145,7 @@ proceso no avanza.
 7. Solo cuando NINGÚN punto se parta más (seco) → ensambla TODO en `esquemas/esquema.md` (el árbol maestro con todo embebido, no punteros).
 8. **DISECCIÓN PUNTO A PUNTO** (mecánica, en el mismo espíritu):
    - Toma la lista de hojas ATÓMICAS que salieron del prisma (las que el prisma ya no parte).
-   - **Cada hoja, una a una, sin saltarte ninguna**: pásala por el diseccionador y sus preguntas → fija su FORMA (reflejo · custodio · conversor · puente · micro-agente).
+   - **Cada hoja, una a una, sin saltarte ninguna**: pásala por el diseccionador y sus preguntas → fija su FORMA (reflejo puro · micro-agente fuzzy · custodio · conversor · puente).
    - Escribe cada FORMA en el esquema (`esquema.md`: cada pieza con su forma) y la lista completa en `pasada-N-diseccion.md`.
    - **NO paras hasta que TODAS las hojas atómicas tengan su FORMA** — si quedan hojas sin forma, la disección no está terminada.
    - **NO agrupas de golpe**: es una por una, punto a punto, como el prisma.

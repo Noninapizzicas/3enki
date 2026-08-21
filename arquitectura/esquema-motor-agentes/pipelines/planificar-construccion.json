@@ -1,15 +1,15 @@
 {
   "name": "planificar-construccion",
-  "description": "Fase 3: genera el plan de construcción del proyecto — el fuzzy genera el plan, el reflejo lo escribe, el JEFE verifica que existe.",
+  "description": "Fase 3: genera el plan de construcción del proyecto — el fuzzy lee el esquema (F2) y planifica la obra, el reflejo lo escribe, el JEFE verifica que existe.",
   "pasos": [
     {
       "paso": "generar_plan",
       "tipo": "fuzzy",
-      "instruccion": "Genera el PLAN DE CONSTRUCCIÓN del proyecto de la task: fases en orden, hojas atómicas con su FORMA (reflejo/custodio/micro-agente/puente/conversor), orden de dependencia, y qué entrega cada hoja. Devuelve SOLO el markdown del plan completo.",
-      "valida": { "tamano_min": 300 }
+      "instruccion": "LEE el esquema del proyecto en storage/esquemas/esquema.md (output de F2). A partir de él, genera el PLAN DE CONSTRUCCIÓN:\n\n1. FASES ORDENADAS: agrupa las piezas declaradas en el esquema en fases secuenciales de construcción. Cada fase tiene nombre, objetivo y criterio de cierre.\n\n2. HOJAS ATÓMICAS: cada pieza del esquema se convierte en una hoja del plan. Cada hoja declara:\n   - nombre\n   - FORMA (reflejo/custodio/micro-agente/puente/conversor) — la que el esquema ya asignó\n   - dependencias (qué hojas deben estar cerradas antes)\n   - entregable concreto (qué archivo o estado produce)\n\n3. ESLABÓN LIMITANTE PRIMERO: el cuello de botella identificado en el esquema marca el ORDEN — las hojas que lo desacoplan van antes, las que dependen de él van después. El plan se organiza alrededor de esa restricción, no en orden arbitrario.\n\n4. PREGUNTAS ABIERTAS HEREDADAS: toda pregunta abierta del esquema que afecte a una hoja se arrastra tal cual al plan, marcada en la hoja correspondiente. El plan NO responde lo que el esquema dejó abierto.\n\nLEY DE CERO SUPUESTOS (innegociable): NO inventes plazos, capacidades, costes ni rendimientos que no estén declarados en el esquema. Si una hoja necesita un dato no declarado para planificarse, se marca como PREGUNTA ABIERTA, NUNCA se estima.\n\nDevuelve SOLO el markdown del plan completo.",
+      "valida": { "tamano_min": 800 }
     },
     { "paso": "escribir_plan", "tipo": "reflejo", "op": "escribir" }
   ],
   "entregable": { "tipo": "fs", "path": "storage/esquemas/plan-construccion.md", "reglas": ["existe"] },
-  "presupuesto": { "generaciones_por_paso": 3, "max_tokens": 16000, "generacion_timeout_ms": 240000 }
+  "presupuesto": { "generaciones_por_paso": 3, "max_tokens": 32000, "generacion_timeout_ms": 300000 }
 }

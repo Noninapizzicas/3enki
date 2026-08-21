@@ -70,15 +70,90 @@ function comparar() {
   return { gemelas: gemelas.length, divergen, solo_claude: soloClaude, solo_cantera: soloCantera };
 }
 
+// ── FRENTE 2: el FRONTMATTER de cada SKILL.md ──
+// La clase de fallo que barrimos: `description:` sin comillas con un ": " dentro
+// ("la POLÍTICA: el pseudocódigo", "Referencia: carta-marketing"). YAML lo lee
+// como un mapa anidado y revienta — la skill queda sin metadato para quien lo
+// parsee. El chequeo es DETERMINISTA y sin dependencias: mira la forma del valor
+// de cada clave. Si el paquete `yaml` está instalado (lo está en CI), se usa
+// además como segunda opinión.
+let YAML = null;
+try { YAML = require('yaml'); } catch (_) { try { YAML = require('js-yaml'); } catch (_) { /* sin parser: basta el lint */ } }
+
+function frontmatter(texto) {
+  if (!texto.startsWith('---\n')) return null;
+  const fin = texto.indexOf('\n---', 3);
+  return fin === -1 ? null : texto.slice(4, fin + 1);
+}
+
+// Devuelve los problemas de UN bloque de frontmatter (vacío = sano).
+function revisarFrontmatter(texto) {
+  const fm = frontmatter(texto);
+  if (fm === null) return ['sin frontmatter delimitado por --- al principio'];
+
+  const problemas = [];
+  const lineas = fm.split('\n');
+  for (let i = 0; i < lineas.length; i++) {
+    const l = lineas[i];
+    if (!l.trim() || /^\s/.test(l) || l.trimStart().startsWith('#')) continue;  // continuación o comentario
+    const m = /^([A-Za-z_][\w-]*):(.*)$/.exec(l);
+    if (!m) { problemas.push(`línea ${i + 1}: no es \`clave: valor\` → ${l.slice(0, 48)}`); continue; }
+    const [, clave, resto] = m;
+    const v = resto.trim();
+    if (v === '' || v.startsWith('>') || v.startsWith('|')) continue;           // escalar de bloque: sano
+    if (v.startsWith('"'))  { if (!v.endsWith('"')  || v.length < 2) problemas.push(`${clave}: comilla doble sin cerrar`); continue; }
+    if (v.startsWith("'"))  { if (!v.endsWith("'")  || v.length < 2) problemas.push(`${clave}: comilla simple sin cerrar`); continue; }
+    if (v.startsWith('['))  { if (!v.endsWith(']')) problemas.push(`${clave}: lista sin cerrar`); continue; }
+    if (v.startsWith('{'))  { if (!v.endsWith('}')) problemas.push(`${clave}: mapa sin cerrar`); continue; }
+    // Escalar PLANO: aquí vive el defecto.
+    if (v.includes(': ') || v.endsWith(':')) {
+      problemas.push(`${clave}: valor plano con ": " dentro → YAML lo lee como mapa. Usa un escalar de bloque (>-) o comillas`);
+    }
+  }
+  // Segunda opinión del parser real, si está disponible.
+  if (!problemas.length && YAML) {
+    try { (YAML.parse || YAML.load).call(YAML, fm); }
+    catch (e) { problemas.push(`el parser YAML lo rechaza: ${String(e.message).split('\n')[0]}`); }
+  }
+  return problemas;
+}
+
+function revisarTodoElFrontmatter() {
+  const rotas = [];
+  const raices = [CLAUDE, ...listarCanteras()];
+  for (const raiz of raices) {
+    if (!fs.existsSync(raiz)) continue;
+    for (const e of fs.readdirSync(raiz, { withFileTypes: true })) {
+      if (!e.isDirectory()) continue;
+      const f = path.join(raiz, e.name, 'SKILL.md');
+      if (!fs.existsSync(f)) continue;
+      const problemas = revisarFrontmatter(fs.readFileSync(f, 'utf8'));
+      if (problemas.length) rotas.push({ skill: e.name, archivo: path.relative(RAIZ, f), problemas });
+    }
+  }
+  return rotas;
+}
+
+// Todas las canteras (enki, hermes, hoodini, usuario…), no solo la de enki.
+function listarCanteras() {
+  const base = path.join(RAIZ, 'modules', 'cosecha', 'cantera');
+  if (!fs.existsSync(base)) return [];
+  return fs.readdirSync(base, { withFileTypes: true })
+    .filter(e => e.isDirectory()).map(e => path.join(base, e.name));
+}
+
 function main() {
   const { json, freno } = args();
   const r = comparar();
   const rotas = r.divergen.filter(d => freno.includes(d.skill));
+  // El frontmatter roto es ERROR SIEMPRE, sin escalera: hoy el corpus está a
+  // cero y una skill sin metadato legible no sirve a nadie que la parsee.
+  const frontmatterRoto = revisarTodoElFrontmatter();
 
   if (json) {
     const pendientes = r.divergen.filter(d => PENDIENTES[d.skill])
       .map(d => ({ skill: d.skill, nota: PENDIENTES[d.skill] }));
-    console.log(JSON.stringify({ ...r, freno, rotas, pendientes }, null, 2));
+    console.log(JSON.stringify({ ...r, freno, rotas, pendientes, frontmatter_roto: frontmatterRoto }, null, 2));
   } else {
     console.log(`\n📐 espejo de skills — ${r.gemelas} idénticas · ${r.divergen.length} divergen · ${r.solo_claude.length} solo en .claude · ${r.solo_cantera.length} solo en cantera\n`);
     for (const d of r.divergen) {
@@ -96,8 +171,24 @@ function main() {
     } else {
       console.log('  ✓ Las dos caras van al paso.\n');
     }
+
+    if (frontmatterRoto.length) {
+      console.log(`  ✗ FRONTMATTER — ${frontmatterRoto.length} skill(s) con metadato que no se puede leer:\n`);
+      for (const f of frontmatterRoto) {
+        console.log(`     ${f.archivo}`);
+        for (const p of f.problemas) console.log(`        · ${p}`);
+      }
+      console.log('\n     Un valor largo se escribe como escalar de bloque:\n');
+      console.log('        description: >-');
+      console.log('          primera línea del texto');
+      console.log('          continúa aquí\n');
+    } else {
+      console.log('  ✓ El frontmatter de todas las skills se lee.\n');
+    }
   }
-  process.exit(rotas.length ? 1 : 0);
+  process.exit(rotas.length || frontmatterRoto.length ? 1 : 0);
 }
 
-main();
+// Ejecuta al invocarse; al requerirse, expone sus piezas para poder probarlas.
+if (require.main === module) main();
+module.exports = { revisarFrontmatter, revisarTodoElFrontmatter, comparar };

@@ -1,6 +1,3 @@
-# SKILL.md
-
-```yaml
 ---
 name: buscador-de-nichos
 description: >-
@@ -15,7 +12,6 @@ when-to-use: >-
   de suscripción.
 tags: [fase, nichos, investigacion, suscripcion, radar-de-nichos, proceso-de-proyecto]
 ---
-```
 
 # Buscador de Nichos — Fase de Proceso
 

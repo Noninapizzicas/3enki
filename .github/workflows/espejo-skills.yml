@@ -6,6 +6,10 @@
 # ESCALERA (igual que cabecera-check): por defecto TESTIGO — canta en el PR y
 # no rompe. Las skills del --freno son ERROR duro. Graduar una skill = añadirla
 # a la lista, cuando sus dos caras ya estén fusionadas.
+#
+# El mismo job vigila el FRONTMATTER de todas las skills (las dos raíces y todas
+# las canteras). Eso NO tiene escalera: una skill cuyo metadato no se puede leer
+# rompe el job siempre. El corpus está a cero y así se queda.
 name: espejo-skills
 
 on:
@@ -38,10 +42,11 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            let r = { gemelas: 0, divergen: [], solo_claude: [], freno: [] };
+            let r = { gemelas: 0, divergen: [], solo_claude: [], freno: [], frontmatter_roto: [] };
             try { r = JSON.parse(fs.readFileSync('/tmp/espejo.json', 'utf8')); } catch {}
             const marca = '<!-- espejo-skills -->';
-            const hayAlgo = r.divergen.length > 0;
+            const roto = r.frontmatter_roto || [];
+            const hayAlgo = r.divergen.length > 0 || roto.length > 0;
 
             const lineas = [marca, '## 📐 espejo-skills'];
             lineas.push('', `${r.gemelas} skills con sus dos caras idénticas.`);
@@ -61,6 +66,15 @@ jobs:
               lineas.push('', 'En local: `npm run validate:espejo-skills`');
             } else {
               lineas.push('', '✓ Las dos caras van al paso.');
+            }
+
+            if (roto.length) {
+              lineas.push('', `**✗ Frontmatter ilegible** — ${roto.length} skill(s). Esto **rompe el job**, sin escalera:`, '');
+              for (const f of roto) {
+                lineas.push(`- \`${f.archivo}\``);
+                for (const p of f.problemas) lineas.push(`  - ${p}`);
+              }
+              lineas.push('', 'Un valor largo va como escalar de bloque:', '', '```yaml', 'description: >-', '  primera línea del texto', '  continúa aquí', '```');
             }
 
             const cuerpo = lineas.join('\n');

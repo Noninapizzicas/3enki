@@ -119,6 +119,25 @@ test('fase inexistente → 400 FASE_NO_MAPEADA', async () => {
   assert.strictEqual(r.data.error, 'FASE_NO_MAPEADA');
 });
 
+// BLINDAJE DE LA CADENA: ninguna costura cierra sobre vacío. Cada fase del
+// flujo, cerrada sin su entregable en disco y sin resumen, DEBE frenar (409
+// FASE_INCOMPLETA) — nunca 200. Es la garantía estructural: el gate cubre las
+// 8 costuras, no solo las que ya tenían test individual. Si alguien añade una
+// fase al MAPA sin gate, o afloja un gate, este test lo canta.
+test('ninguna fase del flujo cierra sobre vacío (el gate cubre las 8 costuras)', async () => {
+  const FASES_DEL_FLUJO = [
+    'esquematizado', 'planificado', 'adaptado',            // fs (esquemas/)
+    'construido', 'skills', 'interfaz',                     // sistema (modules/)
+    'interfaz_esquematizada', 'interfaz_construida',        // sistema (modules/ + frontend/)
+    'verificado', 'completado'                              // cierre (progreso del plan)
+  ];
+  for (const fase of FASES_DEL_FLUJO) {
+    const r = await modulo({ ficheros: [], plan: '' })._completarFase({ project_id: `blindaje-${fase}`, fase });
+    assert.strictEqual(r.status, 409, `la fase '${fase}' cerró sin entregable (status ${r.status}, esperado 409)`);
+    assert.strictEqual(r.data.error, 'FASE_INCOMPLETA', `la fase '${fase}' no frenó como FASE_INCOMPLETA`);
+  }
+});
+
 (async () => {
   let ok = 0; const fails = [];
   for (const { n, f } of tests) { try { await f(); ok++; } catch (e) { fails.push({ n, e }); } }

@@ -24,13 +24,13 @@ jobs:
         with:
           node-version: 20
 
-      - name: Comparar las dos caras (FRENO esquematizador)
+      - name: Comparar las dos caras (FRENO sobre las ya fusionadas)
         id: espejo
         run: |
           # Captura el JSON sin morir para que el comentario siempre tenga datos.
           node scripts/cantera/validate-espejo-skills.js --json > /tmp/espejo.json || true
           # La corrida que MANDA: deriva en una skill del freno = exit 1 → rompe el job.
-          node scripts/cantera/validate-espejo-skills.js --freno esquematizador
+          node scripts/cantera/validate-espejo-skills.js --freno esquematizador,diseccionador,agente-perspectiva-c,blueprint-agentico,blueprint-coherente
 
       - name: Empujón en el PR (skills que se soltaron)
         if: always()

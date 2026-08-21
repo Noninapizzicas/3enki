@@ -32,9 +32,7 @@ const CANTERA = path.join(RAIZ, 'modules', 'cosecha', 'cantera', 'enki');
 // Al fusionar una, escríbela en LAS DOS rutas y gradúala al `--freno` del
 // workflow (.github/workflows/espejo-skills.yml).
 const PENDIENTES = {
-  'agente-perspectiva-c':
-    'Δ+70 — la misma clase de brecha que tenía esquematizador: la cara de la ' +
-    'cantera perdió cuerpo. Fusionar (cuerpo rico + frontmatter del cuenco) y graduar al freno.'
+  // (vacío — las fusionadas se gradúan al --freno del workflow y salen de aquí)
 };
 
 function args() {

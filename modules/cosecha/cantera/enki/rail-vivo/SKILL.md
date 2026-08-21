@@ -1,6 +1,13 @@
 ---
 name: rail-vivo
-description: Cuando una conversación o un trabajo tiene VARIOS PASOS y hay que sostener el rumbo entre turnos — una lista de tareas, la compra, notas sueltas, un pedido con proceso (recibe→prepara→cobra), o "vamos por partes: 1º, 2º, 3º". En vez de llevar el plan en la memoria del hilo (que deriva), lo escribes como ESTADO en la cúpula de estados: el nervio inyecta la lista ACTIVA cada turno y el asistente lleva el rumbo leyéndolo, no recordándolo. Un chef's list continuo: fichas entrando (falta) y saliendo (hecho).
+description: >-
+  Cuando una conversación o un trabajo tiene VARIOS PASOS y hay que sostener
+  el rumbo entre turnos — una lista de tareas, la compra, notas sueltas, un
+  pedido con proceso (recibe→prepara→cobra), o "vamos por partes: 1º, 2º, 3º".
+  En vez de llevar el plan en la memoria del hilo (que deriva), lo escribes
+  como ESTADO en la cúpula de estados: el nervio inyecta la lista ACTIVA cada
+  turno y el asistente lleva el rumbo leyéndolo, no recordándolo. Un chef's
+  list continuo: fichas entrando (falta) y saliendo (hecho).
 fuente: enki
 dominio: estados
 tags: [rail, estado, lista, tareas, compras, notas, proceso, rumbo, timon, cupula, chef-list, orden]

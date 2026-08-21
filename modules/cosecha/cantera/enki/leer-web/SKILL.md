@@ -1,6 +1,13 @@
 ---
 name: leer-web
-description: Leer la web DENTRO de un turno y SACARLE EL MÁXIMO — leer una página, buscar, mapear enlaces, rastrear un sitio, extraer imágenes/precios/datos estructurados, y ENTRAR en páginas con contraseña (login→sesión, la marcha larga). crawl4rs es un MÓDULO del bus (no un fichero ni un agente): se conduce por bus.publishAndWait, la herramienta que el diseño deja en segundo plano. Playbook con recetas concretas (imágenes de productos, fichas, catálogos, portales B2B tras login) + cómo leer el error para no rendirse.
+description: >-
+  Leer la web DENTRO de un turno y SACARLE EL MÁXIMO — leer una página,
+  buscar, mapear enlaces, rastrear un sitio, extraer imágenes/precios/datos
+  estructurados, y ENTRAR en páginas con contraseña (login→sesión, la marcha
+  larga). crawl4rs es un MÓDULO del bus (no un fichero ni un agente): se
+  conduce por bus.publishAndWait, la herramienta que el diseño deja en segundo
+  plano. Playbook con recetas concretas (imágenes de productos, fichas,
+  catálogos, portales B2B tras login) + cómo leer el error para no rendirse.
 fuente: enki
 dominio: web
 lente_dominio: web

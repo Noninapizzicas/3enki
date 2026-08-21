@@ -1,6 +1,20 @@
 ---
 name: yuv-pilot
-description: Top-of-pyramid orchestrator for Yuval Avidani's YUV.AI brand work. Apply when (a) the user wants YUV.AI output and the medium is ambiguous or multi-medium, (b) the user is planning a launch or cross-channel campaign for YUV.AI, or (c) explicitly invokes /yuv-pilot or asks "what should I build for YUV.AI / my brand". Triggers: "for YUV.AI", "for my brand", "YUV.AI launch", "ship something for me", "orchestrate", "cross-channel", "multi-platform for me", "yuv-pilot", Hebrew השקה, מולטי-פלטפורמה ל-יובל. Does NOT do the work — it identifies the right downstream YUV.AI skills (yuv-design-system across 3 modes, yuv-decks for slides, yuv-viral-video for short MP4s, hyperframes for HTML→MP4, nano-banana for in-brand imagery, gsap for animation), explains the composition, hands off. Does NOT apply to non-YUV.AI requests. When a request is clearly single-medium (just a deck, just a viral short), the specific skill wins — yuv-pilot is the front door for ambiguous or multi-output requests.
+description: >-
+  Top-of-pyramid orchestrator for Yuval Avidani's YUV.AI brand work. Apply
+  when (a) the user wants YUV.AI output and the medium is ambiguous or
+  multi-medium, (b) the user is planning a launch or cross-channel campaign
+  for YUV.AI, or (c) explicitly invokes /yuv-pilot or asks "what should I
+  build for YUV.AI / my brand". Triggers: "for YUV.AI", "for my brand",
+  "YUV.AI launch", "ship something for me", "orchestrate", "cross-channel",
+  "multi-platform for me", "yuv-pilot", Hebrew השקה, מולטי-פלטפורמה ל-יובל.
+  Does NOT do the work — it identifies the right downstream YUV.AI skills
+  (yuv-design-system across 3 modes, yuv-decks for slides, yuv-viral-video for
+  short MP4s, hyperframes for HTML→MP4, nano-banana for in-brand imagery, gsap
+  for animation), explains the composition, hands off. Does NOT apply to
+  non-YUV.AI requests. When a request is clearly single-medium (just a deck,
+  just a viral short), the specific skill wins — yuv-pilot is the front door
+  for ambiguous or multi-output requests.
 ---
 
 # yuv-pilot — the YUV.AI skills pyramid

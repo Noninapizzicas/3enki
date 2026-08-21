@@ -1,7 +1,24 @@
 ---
 name: agente-perspectiva-c
-description: Convierte un agente de dominio (o crea uno nuevo) al patrón AGENTE-PERSPECTIVA-C — el reflejo JS HIDRATA los datos y PERSISTE el resultado; el agente solo TRANSFORMA (función pura, sin herramientas). El problema no es de tools, es de COLOCACIÓN: sacando el determinismo (cargar/guardar) al reflejo, el entregable ATERRIZA siempre y el agente queda como transformación pura, fiable y provider-agnóstica. Determinismo (cargar/guardar) en JS, chispa fuzzy (generar/decidir) en el agente. Caso testigo: marketing-copywriter.
-when-to-use: Un agente de dominio sale vacío/teatro — su salida no aterriza (la auditoría muestra cero eventos de persistencia en el bus); o quieres crear un agente nuevo que GENERA/DECIDE sobre datos del proyecto y debe ATERRIZAR su salida de forma determinista. NO usar para ops deterministas puras (eso es reflejo sin agente, patrón Módulo Híbrido), ni para agentes que de verdad necesitan navegar/llamar servicios externos en bucle (ahí el tool-use es el punto).
+description: >-
+  Convierte un agente de dominio (o crea uno nuevo) al patrón
+  AGENTE-PERSPECTIVA-C — el reflejo JS HIDRATA los datos y PERSISTE el
+  resultado; el agente solo TRANSFORMA (función pura, sin herramientas). El
+  problema no es de tools, es de COLOCACIÓN: sacando el determinismo
+  (cargar/guardar) al reflejo, el entregable ATERRIZA siempre y el agente
+  queda como transformación pura, fiable y provider-agnóstica. Determinismo
+  (cargar/guardar) en JS, chispa fuzzy (generar/decidir) en el agente. Caso
+  testigo: marketing-copywriter.
+when-to-use: >-
+  Un agente de dominio sale vacío/teatro — su salida no aterriza (la auditoría
+  muestra cero eventos de persistencia en el bus); o quieres crear un agente
+  nuevo que GENERA/DECIDE sobre datos del proyecto y debe ATERRIZAR su salida
+  de forma determinista. NO usar para ops deterministas puras (eso es reflejo
+  sin agente, patrón Módulo Híbrido), ni para agentes que de verdad necesitan
+  navegar/llamar servicios externos en bucle (ahí el tool-use es el punto).
+fuente: enki
+dominio: metodo
+tags: [patron, agente, reflejo, colocacion, determinismo, fuzzy, modulo-hibrido, forma]
 ---
 
 # agente-perspectiva-c
@@ -162,6 +179,37 @@ SIGUIENTES (mismo patrón) {
   marketing-brand-keeper : entregable { ajustes[] }
 }
 ```
+
+## Caso aplicado: el clasificador de formas del diseccionador
+
+El patrón se instrumentó para asignar automáticamente la **forma del
+diseccionador** (reflejo · micro-agente · custodio · conversor · puente) a cada
+módulo del sistema. El script vive en el repo:
+`.claude/skills/agente-perspectiva-c/clasificador-forma.js`.
+
+```
+1. REFLEJO (lector):   module.json + index.js → resumen estructurado
+                       (blueprint, agents, fs.write, llamadas LLM, store, eventos)
+2. AGENTE (tools:[]):  resumen + tabla de formas del diseccionador → clasificación
+3. REFLEJO (escritor): escribe forma_diseccionador en module.json
+```
+
+El ciclo es el patrón entero en tres piezas: el determinismo (leer el módulo,
+escribir el manifest) en el reflejo, y la única decisión de juicio —qué forma
+tiene esta pieza— en el agente sin herramientas.
+
+**Estado**: la herramienta está lista y es ejecutable; hoy **ningún `module.json`
+lleva todavía `forma_diseccionador`**. El caso demuestra el patrón, no un
+barrido ya hecho.
+
+## Antipatrón: LLM cuando sobra
+
+Si la transformación es **puramente determinista** (una tabla de verdad, un
+lookup), el "agente" puede y debe ser reflejo puro. La pregunta que lo zanja es
+la del diseccionador, el corte maestro:
+
+> Si lo implemento como código, ¿puedo escribir un test unitario que lo AFIRME?
+> Si la respuesta es sí, es reflejo, no LLM.
 
 ## Lo que NO es
 

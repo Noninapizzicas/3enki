@@ -8,8 +8,8 @@ description: >-
   A PUNTO, RONDA A RONDA hasta quedarse seco, escribiendo cada pasada en
   <proyecto>/esquemas/pasada-N-<punto>.md y el árbol maestro en
   <proyecto>/esquemas/esquema.md (el entregable que el gate verifica). Después,
-  DISECCIÓN PUNTO A PUNTO: cada hoja atómica, una a una, su FORMA (reflejo ·
-  custodio · conversor · puente) en pasada-N-diseccion.md — sin dejar ninguna
+  DISECCIÓN PUNTO A PUNTO: cada hoja atómica, una a una, su FORMA (reflejo puro ·
+  micro-agente fuzzy · custodio · conversor · puente) en pasada-N-diseccion.md — sin dejar ninguna
   sin forma. El propósito es descubrir las PIEZAS que el negocio necesita (cada
   una su parcela). EL FOCO: identifica TÚ MISMO el cuello de botella del flujo
   (eslabón limitante) y expándelo al máximo. LEY DE CERO SUPUESTOS: todo valor
@@ -18,7 +18,8 @@ description: >-
   replanteamiento → pasada 2, hasta que el esquema quede sólido. Entrada
   directa: el sujeto se lee de la identidad, NO se pregunta, NO se ofrecen
   opciones — se EJECUTA. Al terminar:
-  proceso-negocio.completar_fase { fase: 'esquematizado' } → empuja la FASE 3.
+  proceso-negocio.completar_fase { fase: 'esquematizado' } → empuja la FASE 3 ·
+  PLASMA (planificar-construccion: el diseño OOP en esquemas/diseno-oop.md).
 fuente: enki
 dominio: metodo
 lente_dominio: prisma
@@ -79,8 +80,21 @@ las piezas del negocio, sus relaciones, y lo que cada una necesita (puertos
 abiertos — agnosticismo, cero tecnologías).
 
 **Fase 3 · Disección** — cada hoja atómica pasa por el diseccionador y sus
-preguntas → FORMA (reflejo · custodio · conversor · puente…). Anota la forma
-en `esquema.md`.
+preguntas → FORMA. Las CINCO, en el orden del dueño del vocabulario
+(skill `diseccionador`):
+
+```
+REFLEJO puro       calcular, cero juicio — un test unitario lo AFIRMA
+MICRO-AGENTE fuzzy juicio, lenguaje, ambigüedad — el reflejo hidrata y persiste,
+                   el agente solo transforma (el corte maestro pasa por aquí)
+CUSTODIO           un solo dueño por store — dos escritores es corrupción esperando turno
+CONVERSOR          una sola frontera donde cruzan formatos, unidades o dimensiones
+PUENTE             conecta con lo vecino por EVENTO, sin pisar lo manual
+```
+
+Anota la forma en `esquema.md`. El **micro-agente** es el que decide si una
+pieza lleva LLM: sin él sobre la mesa, las hojas de juicio se disecan como
+reflejos y acaban en if-chains frágiles.
 
 **El propósito afilado** (lo que diferencia esta skill del esquematizador
 genérico): el esquema debe responder **"¿qué piezas necesita este negocio
@@ -99,8 +113,20 @@ El esquema del negocio vive en el proyecto, en estas rutas CONCRETAS:
 <storage del proyecto>/esquemas/pasada-N-diseccion.md   ← las formas de cada hoja atómica
 ```
 
-**Rutas exactas** — usa estas, literalmente, con los nombres que salgan del
-prisma. Si el directorio `esquemas/` no existe, créalo (fs.write lo crea).
+**Rutas exactas y RELATIVAS al proyecto** — el gate lista `esquemas/` con
+`fs.list.request { project_id, path: 'esquemas' }`, así que escribe ahí mismo:
+
+```jsonc
+fs.write.request { "project_id": "<id>", "path": "esquemas/pasada-1-<pieza>.md", "content": "…" }
+```
+
+Nada de rutas absolutas: lo que caiga fuera de `esquemas/` el gate no lo ve. Si
+el directorio no existe, la escritura lo crea.
+
+**La ronda 2 es entregable, no opcional.** El gate exige `esquema.md` +
+`pasada-1-*` + `pasada-2-*` + un fichero con `diseccion` en el nombre. Un sujeto
+que se secara en la ronda 1 no cerraría la fase: pasa al prisma los
+sub-productos de la primera ronda y deja su pasada escrita.
 
 **El archivo que la fase 2 debe generar SÍ o SÍ**: `esquemas/esquema.md` con
 sus pasadas. Sin él, el gate del orquestador devuelve `FASE_INCOMPLETA` y el
@@ -119,7 +145,7 @@ proceso no avanza.
 7. Solo cuando NINGÚN punto se parta más (seco) → ensambla TODO en `esquemas/esquema.md` (el árbol maestro con todo embebido, no punteros).
 8. **DISECCIÓN PUNTO A PUNTO** (mecánica, en el mismo espíritu):
    - Toma la lista de hojas ATÓMICAS que salieron del prisma (las que el prisma ya no parte).
-   - **Cada hoja, una a una, sin saltarte ninguna**: pásala por el diseccionador y sus preguntas → fija su FORMA (reflejo · custodio · conversor · puente · micro-agente).
+   - **Cada hoja, una a una, sin saltarte ninguna**: pásala por el diseccionador y sus preguntas → fija su FORMA (reflejo puro · micro-agente fuzzy · custodio · conversor · puente).
    - Escribe cada FORMA en el esquema (`esquema.md`: cada pieza con su forma) y la lista completa en `pasada-N-diseccion.md`.
    - **NO paras hasta que TODAS las hojas atómicas tengan su FORMA** — si quedan hojas sin forma, la disección no está terminada.
    - **NO agrupas de golpe**: es una por una, punto a punto, como el prisma.
@@ -170,6 +196,10 @@ PASADA 2 · vuelve a pasar el esquematizador (o re-esquematiza) con todo el
 - **Exigir investigar**: los puntos investigables (horno, consumos, casos, precios) se investigan en web SÍ o SÍ. Mejor una investigación parcial que ninguna.
 - **Re-pasar el agente**: cuando el replanteamiento esté hecho, vuelve a ejecutar el pipeline `esquematizador-negocio` (pasada 2) para que el esquema formal se regenere con los datos reales.
 - El ciclo termina cuando el esquema no deja preguntas abiertas relevantes (o el dueño decide cerrar).
+- **Cierra la fase UNA vez, al final del ciclo.** El orquestador marca
+  `<project_id>::negocio.esquematizado` de forma idempotente: el primer cierre
+  aceptado empuja la fase siguiente y los posteriores ya no vuelven a empujar.
+  Cerrar tras la pasada 1 quema el encadenamiento con el esquema a medias.
 
 ## 4 · SALIDA — señal de fase completada
 
@@ -183,8 +213,24 @@ proceso-negocio.completar_fase.request {
 }
 ```
 
-El orquestador (proceso-negocio) registra `negocio.esquematizado` y empuja la
-FASE 3 (diseccionador / productor-modulos según el mapa de proceso).
+El orquestador (`proceso-negocio`) marca la fase y empuja la **FASE 3 · PLASMA**
+(`planificar-construccion`): diseñar el sistema en pseudocódigo OOP sobre
+`esquemas/diseno-oop.md`, sin pensar en ningún framework. Después vienen el
+ADAPTADOR X→Enki (3b, escribe `esquemas/plan-construccion.md`) y, desde ahí, el
+ciclo por pieza.
+
+**Cómo encadena** — `negocio.esquematizado` NO viaja por el bus: es una marca
+interna del orquestador (idempotente por proyecto). El empujón llega al chat por
+la cola de pendientes + `conserje.empujon`, que el nervio surfacea una vez. Lo
+que devuelve la llamada dice quién sigue:
+
+```jsonc
+// respuesta 200
+{ "fase_completada": "negocio.esquematizado",
+  "siguiente": "planificar-construccion",   // ← la FASE 3
+  "entregable": { "ok": true, "verificados": ["el árbol maestro", "…"] },
+  "fin": false }
+```
 
 **Si algo bloquea** (identidad incompleta, no se puede leer el perfil) → informa
 con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
@@ -205,6 +251,8 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 - **Saltarse la investigación** — los puntos investigables (horno, consumos, casos, precios) se investigan en web; mejor algo que nada.
 - **Terminar en el primer esquema** — si quedan preguntas abiertas relevantes, el ciclo sigue (preguntas → investigación → replanteamiento → pasada 2).
 - **Disecar antes de tocar suelo** — primero el prisma se agota, luego la FORMA.
+- **Cerrar la fase tras la pasada 1** — el cierre es idempotente y solo empuja una vez: se cierra cuando el ciclo termina.
+- **Escribir fuera de `esquemas/`** (rutas absolutas) — el gate lista ese directorio del proyecto; lo de fuera no existe para él.
 - **Olvidar la señal de fase** — sin `proceso-negocio.completar_fase`, el proceso se detiene aquí.
 
 ## 6 · Verificación
@@ -218,4 +266,4 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 - CERO tecnologías en el esquema (agnosticismo).
 - `esquema.md` responde "qué piezas necesita este negocio" con su FORMA.
 - **El ciclo está vivo**: si quedan preguntas abiertas relevantes → las haces al dueño, investigas los puntos investigables y re-pasas el agente (pasada 2).
-- Señal de fase enviada: `proceso-negocio.completar_fase { fase: 'esquematizado' }` → 200 (no 409).
+- Señal de fase enviada: `proceso-negocio.completar_fase { fase: 'esquematizado' }` → 200 (no 409), y la respuesta trae `siguiente: 'planificar-construccion'`.

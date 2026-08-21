@@ -313,3 +313,6 @@ jobs:
 
       - name: Run unit tests (bienvenida-tienda — cara cliente del bot, responde con link PWA)
         run: npm run test:bienvenida-tienda
+
+      - name: Run unit tests (proceso-negocio — la cadena de fases F2→F8)
+        run: npm run test:proceso-negocio-cadena

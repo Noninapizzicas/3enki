@@ -14,7 +14,11 @@ when-to-use: >-
   (transporte, persistencia, protocolo, fuente del dato, framework) entra en el
   análisis; se nombra como puerto abierto. No la uses para un fix puntual ni
   para una sola pieza suelta.
-tags: [esquema, descomposicion, anatomia, mapeo, prisma, diseccionador]
+fuente: enki
+dominio: metodo
+lente_dominio: prisma
+lente_tarea: esquematizar
+tags: [esquema, descomposicion, anatomia, mapeo, prisma, diseccionador, agnosticismo, metodo]
 ---
 
 # Esquematizador
@@ -23,8 +27,9 @@ Entra un sujeto crudo. Salen su esquema completo y sus piezas con forma, en arch
 El aparato es el mismo para cualquier luz — cambias lo que entra, no el método.
 
 Esta skill orquesta dos herramientas existentes: **prisma-modelo-universal** (descompone
-en 5 huecos) y **diseccionador** (asigna forma a cada pieza atómica). Ambas se definen
-como lentes dentro de la skill `multi-lens-analysis`. Su valor añadido es el *pegamento*:
+en 5 huecos) y **diseccionador** (asigna forma a cada pieza atómica). Ambas existen como
+skills independientes en la cantera —cárgalas individualmente— y también son las lentes 2
+y 1 del análisis cruzado (`multi-lens-analysis`, que las apunta). Su valor añadido es el *pegamento*:
 la recursión hasta seco, la persistencia en archivos, y una ley que impide el error
 más fácil de cometer.
 
@@ -125,7 +130,10 @@ En el árbol, marca cada hoja para que el estado se lea de un vistazo:
 - **Disecar antes de tocar suelo** — primero el prisma se agota, luego se asigna forma.
 - **Separar dimensiones interdependientes como ramas** — el error más sutil. Si los sub-productos no son componentes independientes sino DIMENSIONES que se modulan mutuamente (como navegación y estilo en una UI, o precio y demanda en un producto), NO las trates como ramas separadas del árbol. El árbol se ve bien pero al ensamblar las piezas no encajan porque cada una fue diseñada sin saber de la otra. Modelalas como INPUTS de una sola pieza convergente que las sintetiza juntas. Las capas no se comunican — convergen en un solo generador que sabe de todas.
 
-## Casos testigo
+## Caso testigo
 
-- `caso-skill-ui-web` en `references/` — skill generadora de UI web, primer esquema con capas separadas.
-- `caso-generador-convergente` en `references/` — el mismo sujeto **corregido**: inputs moduladores (proyecto + marca + UX + audiencia) convergiendo en un solo generador. Léelo en segundo lugar para ver la diferencia entre el modelo de capas y el modelo convergente.
+`esquema/proyecto-puro/` en el repo — el concepto "Proyecto" esquematizado con este
+método, de punta a punta: tres rondas del prisma (`pasada-1` · `pasada-2` · `pasada-3`),
+su `pasada-3-diseccion.md` y el `esquema.md` maestro con el árbol entero embebido y las
+hojas marcadas (17 × `ATÓMICO`, 2 × `SPAWN`, 2 × `[ABIERTO]`). Léelo para ver la forma
+del entregable antes de producir el tuyo.

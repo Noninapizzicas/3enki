@@ -82,6 +82,15 @@ const MAPA_PROCESO = {
     skill: 'construir-modulos',
     mensaje: 'El diseño OOP está listo (esquemas/diseno-oop.md). Siguiente fase (FASE 3b · ADAPTADOR): traducir el diseño al sistema Enki — mapea cada entidad/clase del diseño contra el inventario real de módulos (reutiliza lo existente, construye lo que falta, adapta lo que se acerca) y genera el plan de construcción en esquemas/plan-construccion.md. Al terminar: proceso-negocio.completar_fase { fase: "adaptado" }.'
   },
+  'negocio.adaptado': {
+    // FASE 3b · ADAPTADOR completado — el plano ya está traducido a Enki y
+    // sus hojas viven en esquemas/plan-construccion.md. Desde aquí manda el
+    // PLAN: _decidirSiguiente cuenta el progreso real y reparte el ciclo por
+    // pieza. Este eslabón faltaba: la 3b declara fase 'adaptado' y sin entrada
+    // en el mapa devolvía 400 FASE_NO_MAPEADA — la cadena moría aquí.
+    skill: 'construir-modulos',
+    mensaje: 'El plan de construcción está escrito (esquemas/plan-construccion.md). Siguiente fase (FASE 4): construir UNA hoja del plan — la primera sin módulo en disco, sin tocar las ya construidas. Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["<slug>"] } }.'
+  },
   'negocio.construido': {
     skill: 'escribir-skills',
     mensaje: 'Un módulo del negocio acaba de construirse. Siguiente paso (FASE 5): escribir la SKILL FULL de ese módulo en la cantera — lee modules/<slug>/module.json + index.js y escribe modules/cosecha/cantera/enki/<slug>/SKILL.md con TODA la lógica real embebida (ops, eventos, datos, errores — SIN RESTAR NADA). Al terminar: proceso-negocio.completar_fase { fase: "skills" }.'
@@ -151,7 +160,16 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   // GATE: verifica el entregable real de la fase antes de aceptar — el sistema
   // no se fía de la palabra del LLM (lección: el LLM hace lo que quiere).
   async onCompletarFaseRequest(e) {
-    return this._atender(e, 'completar_fase', 'proceso-negocio.completar_fase.response', async d => {
+    return this._atender(e, 'completar_fase', 'proceso-negocio.completar_fase.response',
+      d => this._completarFase(d));
+  }
+
+  // UNA sola implementación del verbo, dos puertas (evento .request y tool).
+  // Antes eran dos cuerpos distintos: el del evento aplicaba el gate y erraba
+  // el destino; el del tool acertaba el destino y no aplicaba gate ninguno.
+  // Cerrar una fase debe significar lo mismo se llame por donde se llame.
+  async _completarFase(d) {
+    {
       const project_id = d.project_id;
       if (!project_id) return this._invalid('project_id');
       const fase = d.fase;   // 'esquematizado' | 'diseccionado' | ...
@@ -168,20 +186,32 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         return { status: 409, data: { error: 'FASE_INCOMPLETA', message: entregable.mensaje, fase, esperado: entregable.esperado } };
       }
 
-      // GATE DE COMPLETITUD DEL PLAN (decisión del sistema, no del LLM):
-      // el orquestador consulta el plan-construccion.md y verifica en disco
-      // cuántas hojas están construidas y con skill. Según el progreso REAL:
-      //   · quedan hojas sin construir  → empuja construir-modulos
-      //   · todo construido, faltan skills → empuja escribir-skills
-      //   · todo construido Y con skill → fase 'completado' (fin)
-      // 'completado' SOLO se acepta si el plan está completo — si el LLM lo
-      // declara con trabajo pendiente → 409 (lección: el LLM hace lo que quiere).
+      // QUIÉN DECIDE EL SIGUIENTE PASO — el plan manda desde que EXISTE.
+      // plan-construccion.md nace en la FASE 3b (el adaptador), así que en las
+      // fases previas (F2 esquematizado · F3 planificado) todavía no hay plan:
+      // ahí el siguiente paso lo da el MAPA. Con plan en disco toma el relevo
+      // el ciclo por pieza (_decidirSiguiente), que cuenta el progreso REAL.
+      //
+      // BUG QUE ESTO CIERRA (verificado en vivo): _decidirSiguiente se llamaba
+      // SIEMPRE y no mira el mapa. Sin plan, todos los faltan_por_* valían 0 y
+      // caía en su última rama → cerrar la FASE 2 empujaba 'verificar-en-vivo'
+      // (FASE 8), saltándose F3→F7 enteras; y el gate de 'verificado' pasaba
+      // con "0 hojas verificadas en disco" → el proceso se declaraba COMPLETO
+      // Y VERIFICADO sin haber construido nada.
       const progreso = await this._progresoPlan(project_id);
-      const siguiente = this._decidirSiguiente(progreso, fase);
-      if (fase === 'completado' && siguiente.skill !== null) {
+      const hayPlan  = progreso.total > 0;
+      const siguiente = hayPlan ? this._decidirSiguiente(progreso, fase) : paso;
+
+      // GATE DE COMPLETITUD DEL PLAN (decisión del sistema, no del LLM):
+      // 'completado' SOLO se acepta con el plan COMPLETO en disco. Sin plan no
+      // hay nada que declarar completo — el juicio sigue siendo del ciclo por
+      // pieza aunque el empujón lo dé el mapa.
+      if (fase === 'completado' && (!hayPlan || this._decidirSiguiente(progreso, fase).skill !== null)) {
         return { status: 409, data: {
           error: 'FASE_INCOMPLETA',
-          message: `El proceso NO está completo: ${progreso.faltan_por_construir} hojas sin construir, ${progreso.faltan_por_skill} sin skill (de ${progreso.total}). Sigue el ciclo por pieza.`,
+          message: hayPlan
+            ? `El proceso NO está completo: ${progreso.faltan_por_construir} hojas sin construir, ${progreso.faltan_por_skill} sin skill (de ${progreso.total}). Sigue el ciclo por pieza.`
+            : 'No hay plan de construcción (esquemas/plan-construccion.md): no hay nada que declarar completado. Cierra antes la FASE 3b (adaptador).',
           fase, esperado: ['plan completo'], progreso
         }};
       }
@@ -193,7 +223,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         if (siguiente && siguiente.skill) this._empujar(project_id, eventoFase, siguiente);
       }
       return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: siguiente?.skill || null, entregable, progreso, fin: !siguiente?.skill } };
-    });
+    }
   }
 
   // ── DECISIÓN DETERMINISTA del siguiente paso (el sistema decide, no el LLM) ──
@@ -251,7 +281,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     try {
       const r = await this._rpc('fs.read.request', { project_id, path: 'esquemas/plan-construccion.md' });
       const contenido = (r && (r.content || r.data?.content)) || '';
-      if (!contenido) return { total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, con_interfaz_esquematizada: 0, con_interfaz_construida: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, faltan_por_interfaz_esquematizada: 0, faltan_por_interfaz_construida: 0, slugs: [] };
+      if (!contenido) return { project_id, total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, con_interfaz_esquematizada: 0, con_interfaz_construida: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, faltan_por_interfaz_esquematizada: 0, faltan_por_interfaz_construida: 0, slugs: [] };
       // Las hojas salen de la ESPINA del plano (bloque ```json enki-plan```, el
       // contrato que el adaptador declara y el JEFE verifica). El fallback es
       // cosechar kebab-case del texto — lo que se hacía siempre — y por eso
@@ -294,7 +324,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         slugs
       };
     } catch (_) {
-      return { total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, con_interfaz_esquematizada: 0, con_interfaz_construida: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, faltan_por_interfaz_esquematizada: 0, faltan_por_interfaz_construida: 0, slugs: [] };
+      return { project_id, total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, con_interfaz_esquematizada: 0, con_interfaz_construida: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, faltan_por_interfaz_esquematizada: 0, faltan_por_interfaz_construida: 0, slugs: [] };
     }
   }
 
@@ -412,6 +442,15 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         ],
         mensaje: 'El diseño OOP no está: se espera <proyecto>/esquemas/diseno-oop.md (el plasma — diseño en pseudocódigo OOP, pensado sin conocer Enki). Haz el trabajo primero.'
       },
+      'adaptado': {
+        // FASE 3b — el entregable es el PLANO traducido a Enki: la espina que
+        // el ciclo por pieza consume (_hojasDelPlan) desde la FASE 4.
+        dir: 'esquemas',
+        reglas: [
+          { nombre: 'plan-construccion.md', cond: 'existe', desc: 'el plan de construcción (la espina de hojas)' }
+        ],
+        mensaje: 'El plan de construcción no está: se espera <proyecto>/esquemas/plan-construccion.md con la espina de hojas (bloque ```json enki-plan```). Haz la traducción a Enki primero.'
+      },
       'construido': {
         // FASE 4 — GATE REAL (lección en vivo: el agente reportó 15 módulos
         // que no existían / el deploy los borró). Verifica en el filesystem
@@ -464,6 +503,11 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     // del agente: cuenta el progreso REAL en disco (_progresoPlan).
     if (fase === 'verificado') {
       const progreso = await this._progresoPlan(project_id);
+      // Sin plan no hay nada que verificar: "0 hojas verificadas" NO es verde.
+      if (progreso.total === 0) {
+        return { ok: false, esperado: ['un plan de construcción con hojas'], progreso,
+          mensaje: 'No hay plan de construcción (esquemas/plan-construccion.md) con hojas: no hay nada que verificar. Cierra antes las fases 3b y 4.' };
+      }
       const faltan = progreso.faltan_por_construir + progreso.faltan_por_skill
         + progreso.faltan_por_interfaz + progreso.faltan_por_interfaz_esquematizada
         + progreso.faltan_por_interfaz_construida;
@@ -742,22 +786,12 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   }
 
   // ── Tools (para el LLM del chat) ──
-  toolCompletarFase(params) {
-    const project_id = params.project_id;
-    if (!project_id) return { status: 400, data: { error: 'INVALID_INPUT', message: 'project_id requerido' } };
-    const fase = params.fase;
-    const eventoFase = `negocio.${fase}`;
-    const paso = MAPA_PROCESO[eventoFase];
-    if (!paso) {
-      return { status: 400, data: { error: 'FASE_NO_MAPEADA', message: `No hay siguiente fase para '${eventoFase}'`, fase } };
-    }
-    const clave = `${project_id}::${eventoFase}`;
-    if (!this._emitidos.has(clave)) {
-      this._emitidos.set(clave, Date.now());
-      this._empujar(project_id, eventoFase, paso);
-    }
-    return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: paso.skill, resumen: params.resumen || null } };
+  // Misma puerta, mismo verbo: gate incluido. El LLM no gana permisos por
+  // entrar por la tool en vez de por el evento.
+  async toolCompletarFase(params) {
+    return this._completarFase(params || {});
   }
+
 }
 
 module.exports = ProcesoNegocioReflejo;

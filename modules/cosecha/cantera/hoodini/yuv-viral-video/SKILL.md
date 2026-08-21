@@ -1,6 +1,18 @@
 ---
 name: yuv-viral-video
-description: Edit any selfie or screen-share footage into a viral short-form video in YUV.AI's signature style — Apple-style liquid-glass cards (real CSS backdrop-filter), dark-mode polish, MrBeast-paced cuts, video-title karaoke captions, premium GSAP motion graphics, no fake content, never covering the speaker's face. Hebrew is rendered in Rubik Black, English in Anton uppercase. Always renders BOTH 9:16 and 16:9 and always saves with _V<N> suffix for backups. Trigger when the user drops a path to an .mp4/.mov/.mkv and says "edit this", "make it viral", "turn this into a short", or any Hebrew equivalent (ערוך סרטון, סרטון ויראלי, להפוך לוויראלי, ריל, שורט). The pipeline is the COMBINATION of two skills: video-use (transcription + word-snapped cuts + base extraction) and hyperframes (HTML/CSS/GSAP visual composition + render). Do NOT use for podcast-only audio edits.
+description: >-
+  Edit any selfie or screen-share footage into a viral short-form video in
+  YUV.AI's signature style — Apple-style liquid-glass cards (real CSS
+  backdrop-filter), dark-mode polish, MrBeast-paced cuts, video-title karaoke
+  captions, premium GSAP motion graphics, no fake content, never covering the
+  speaker's face. Hebrew is rendered in Rubik Black, English in Anton
+  uppercase. Always renders BOTH 9:16 and 16:9 and always saves with _V<N>
+  suffix for backups. Trigger when the user drops a path to an .mp4/.mov/.mkv
+  and says "edit this", "make it viral", "turn this into a short", or any
+  Hebrew equivalent (ערוך סרטון, סרטון ויראלי, להפוך לוויראלי, ריל, שורט). The
+  pipeline is the COMBINATION of two skills: video-use (transcription +
+  word-snapped cuts + base extraction) and hyperframes (HTML/CSS/GSAP visual
+  composition + render). Do NOT use for podcast-only audio edits.
 ---
 
 # Yuv-Viral-Video

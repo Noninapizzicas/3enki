@@ -1,13 +1,17 @@
-# SKILL.md
-
-```yaml
 ---
 name: buscador-de-nichos
-description: Fase del proceso de proyecto para buscar y filtrar nichos de mercado con potencial de ingresos recurrentes (suscripción a informes) para el negocio Radar de Nichos. Alinea con el perfil de suscriptor: emprendedor solo, poco tiempo, tope ~49€/mes, exige evidencia y quiere acción.
-when-to-use: Cuando el usuario inicie un proyecto de Radar de Nichos, pida "encontrar nichos", "buscar nichos rentables", "validar un nicho para informes recurrentes", o se necesite un ranking de nichos candidatos para un informe de suscripción.
+description: >-
+  Fase del proceso de proyecto para buscar y filtrar nichos de mercado con
+  potencial de ingresos recurrentes (suscripción a informes) para el negocio
+  Radar de Nichos. Alinea con el perfil de suscriptor: emprendedor solo, poco
+  tiempo, tope ~49€/mes, exige evidencia y quiere acción.
+when-to-use: >-
+  Cuando el usuario inicie un proyecto de Radar de Nichos, pida "encontrar
+  nichos", "buscar nichos rentables", "validar un nicho para informes
+  recurrentes", o se necesite un ranking de nichos candidatos para un informe
+  de suscripción.
 tags: [fase, nichos, investigacion, suscripcion, radar-de-nichos, proceso-de-proyecto]
 ---
-```
 
 # Buscador de Nichos — Fase de Proceso
 

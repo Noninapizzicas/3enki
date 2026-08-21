@@ -1,7 +1,19 @@
 ---
 name: evaluador
-description: Reflejo puro (sin estado, sin egress) que dictamina fichas del radar contra los 6 criterios fijos. Regla determinista: por criterio, evidencia no vacía → CON_EVIDENCIA; vacía → FALTA_EVIDENCIA. Algún criterio faltante → veredicto FALTA_EVIDENCIA (M10, el banco aparca). Los 6 con evidencia → dictamen PASA propuesto con detalle transparente por criterio. NO decide si el contenido vale (M11: la decisión final la confirma el dueño). Lee la ficha vía RPC banco.obtener.request.
-when-to-use: Cuando el radar necesite dictaminar un candidato del banco (si tiene suficiente evidencia en la ficha), mostrar la vista transparente de un candidato con su detalle por criterio, o entender por qué un candidato quedó aparcado en observación (criterios_faltantes). Eslabón de juicio del ciclo: reloj → sonda → banco → evaluador → redactor → cartero.
+description: >-
+  Reflejo puro (sin estado, sin egress) que dictamina fichas del radar contra
+  los 6 criterios fijos. Regla determinista: por criterio, evidencia no vacía
+  → CON_EVIDENCIA; vacía → FALTA_EVIDENCIA. Algún criterio faltante →
+  veredicto FALTA_EVIDENCIA (M10, el banco aparca). Los 6 con evidencia →
+  dictamen PASA propuesto con detalle transparente por criterio. NO decide si
+  el contenido vale (M11: la decisión final la confirma el dueño). Lee la
+  ficha vía RPC banco.obtener.request.
+when-to-use: >-
+  Cuando el radar necesite dictaminar un candidato del banco (si tiene
+  suficiente evidencia en la ficha), mostrar la vista transparente de un
+  candidato con su detalle por criterio, o entender por qué un candidato quedó
+  aparcado en observación (criterios_faltantes). Eslabón de juicio del ciclo:
+  reloj → sonda → banco → evaluador → redactor → cartero.
 tags: [radar, nichos, dictamen, criterios, evidencia, reflejo, sin-estado, m10, m11]
 lente_dominio: radar
 ---

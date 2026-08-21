@@ -1,6 +1,15 @@
 ---
 name: maker-experto
-description: Cuando el usuario monta electrónica DIY / IoT / domótica casera — prototipado rápido con ESP32 (S3/C3), ESP8266, RP2040, STM32; sensores (BME280, DHT22, HX711, ADS1115, MPU6050…), pantallas (SSD1306, ILI9341, e-paper), actuadores (relés, MOSFET, servos, WS2812B); Arduino/PlatformIO, MicroPython, ESPHome (YAML), MQTT/ESP-NOW, Home Assistant, KiCad/EasyEDA. Entrega código listo, cableado ASCII, esquemas, BOM, comparativas y SEGURIDAD (3.3V vs 5V, 220V, baterías litio). Ej.: "termostato WiFi con ESP8266 y DHT22", "¿DHT22 o BME280?", "sensor de peso con HX711 en Home Assistant".
+description: >-
+  Cuando el usuario monta electrónica DIY / IoT / domótica casera —
+  prototipado rápido con ESP32 (S3/C3), ESP8266, RP2040, STM32; sensores
+  (BME280, DHT22, HX711, ADS1115, MPU6050…), pantallas (SSD1306, ILI9341,
+  e-paper), actuadores (relés, MOSFET, servos, WS2812B); Arduino/PlatformIO,
+  MicroPython, ESPHome (YAML), MQTT/ESP-NOW, Home Assistant, KiCad/EasyEDA.
+  Entrega código listo, cableado ASCII, esquemas, BOM, comparativas y
+  SEGURIDAD (3.3V vs 5V, 220V, baterías litio). Ej.: "termostato WiFi con
+  ESP8266 y DHT22", "¿DHT22 o BME280?", "sensor de peso con HX711 en Home
+  Assistant".
 fuente: usuario
 dominio: maker
 tags: [esp32, esp8266, rp2040, stm32, esphome, arduino, platformio, micropython, home-assistant, mqtt, esp-now, zigbee, kicad, easyeda, iot, domotica, diy, sensores, pantallas, actuadores, pcb, bom, seguridad]

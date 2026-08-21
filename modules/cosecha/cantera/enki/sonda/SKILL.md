@@ -1,7 +1,17 @@
 ---
 name: sonda
-description: Micro-agente híbrido (reflejo + blueprint) que vigila las fuentes de mercado (RSS, APIs públicas, feeds) y cosecha SEÑALES crudas (titulo, fuente, url, sector, fechaCosecha) SIN decidir si un nicho vale. Reflejo: registro de fuentes (patrón radar-fuente: canal/métrica/frecuencia/umbral) + dedupe por (fuente,url) + persistencia. Blueprint: cajón recolectar (responde:true) que LEER/PENSAR con crawl4rs y DELEGA el GUARDAR al reflejo.
-when-to-use: Cuando el radar de nichos necesite vigilar fuentes de mercado, cosechar señales crudas de la web (RSS/APIs/feeds vía crawl4rs), o persistir/consultar el registro de fuentes de un proyecto. Es el eslabón de ENTRADA del ciclo: reloj → sonda → banco → evaluador → redactor → cartero.
+description: >-
+  Micro-agente híbrido (reflejo + blueprint) que vigila las fuentes de mercado
+  (RSS, APIs públicas, feeds) y cosecha SEÑALES crudas (titulo, fuente, url,
+  sector, fechaCosecha) SIN decidir si un nicho vale. Reflejo: registro de
+  fuentes (patrón radar-fuente: canal/métrica/frecuencia/umbral) + dedupe por
+  (fuente,url) + persistencia. Blueprint: cajón recolectar (responde:true) que
+  LEER/PENSAR con crawl4rs y DELEGA el GUARDAR al reflejo.
+when-to-use: >-
+  Cuando el radar de nichos necesite vigilar fuentes de mercado, cosechar
+  señales crudas de la web (RSS/APIs/feeds vía crawl4rs), o
+  persistir/consultar el registro de fuentes de un proyecto. Es el eslabón de
+  ENTRADA del ciclo: reloj → sonda → banco → evaluador → redactor → cartero.
 tags: [radar, nichos, vigilancia, crawl4rs, rss, cosecha, micro-agente, hibrido, egress]
 lente_dominio: radar
 ---

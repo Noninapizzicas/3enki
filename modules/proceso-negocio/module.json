@@ -18,7 +18,7 @@
         "additionalProperties": false,
         "properties": {
           "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." },
-          "fase": { "type": "string", "minLength": 1, "description": "Fase completada: 'esquematizado' → empuja diseccionador · 'diseccionado' → empuja productor-modulos." },
+          "fase": { "type": "string", "minLength": 1, "description": "Fase completada. Cadena real: 'esquematizado' → planificar-construccion (F3 · PLASMA) · 'planificado' → adaptador X→Enki (F3b) · 'adaptado' → construir-modulos (F4) · desde aquí manda el PLAN (ciclo por pieza): 'construido' → escribir-skills · 'skills' → decidir-interfaz · 'interfaz' → esquematizar-interfaz · 'interfaz_esquematizada' → construir-interfaz · 'interfaz_construida' → siguiente hoja · 'verificado' → fin. 'completado' y 'verificado' solo se aceptan con el plan completo en disco." },
           "resumen": { "type": "object", "description": "Resumen opcional de lo completado: { piezas, formas, archivo_esquema, ... }" }
         },
         "required": ["project_id", "fase"]

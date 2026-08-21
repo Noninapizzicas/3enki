@@ -57,9 +57,9 @@ invoke_agent.request       → ALIAS del mismo pipeline (el chat no cambia; resp
   ampliadas: verbos de proceso, skill, plan, etc.) — no el primero.
 - `op: "escribir"` (reflejo) escribe la salida fuzzy en el entregable resuelto
   (`{content}` → texto plano; objeto → JSON pretty).
-- Los pipelines de proceso viven en `arquitectura/esquema-motor-agentes/pipelines/`
-  y se declaran en el registro con `node scripts/seed-pipelines.js` (vía el
-  custodio — nunca escribiendo el store del registro a mano).
+- Los pipelines de proceso viven en `modules/agentes/registro/store/` (fuente única,
+  commiteada — el store del custodio; ya no hay dir espejo en arquitectura/).
+  `node scripts/seed-pipelines.js` VALIDA el store contra el contrato del custodio.
 
 ## El flujo de una ejecución
 

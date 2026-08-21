@@ -334,8 +334,8 @@ construir-modulos escribe `modules/<slug>/index.js` y `api_real` pasa; escribir-
 escribe la SKILL.md y `contenido_min` pasa. **Sin el paso `escribir` el pipeline no
 toca el mundo: el JEFE fallaría siempre** (nadie escribió el entregable).
 
-Los **4 pipelines de proceso** viven en `arquitectura/esquema-motor-agentes/pipelines/*.json`
-(construir-modulos, escribir-skills, esquematizador-negocio, planificar-construccion).
+Los **pipelines de proceso** viven en `modules/agentes/registro/store/*.json` (fuente única,
+commiteada — el store del custodio; ya no hay dir espejo en arquitectura/).
 Formato REAL (no el de la spec inicial): `pasos: [{paso, tipo: 'reflejo'|'fuzzy',
 op? (ej 'escribir'), instruccion? (el prompt del paso fuzzy), valida: {campos?,
 tamano_min?}}]`, `entregable: {tipo:'fs', path, reglas, min_chars?}`,

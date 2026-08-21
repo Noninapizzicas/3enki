@@ -1,0 +1,71 @@
+# ESPEJO DE SKILLS — una skill, dos caras, la misma versión.
+# `.claude/skills/<n>/SKILL.md` (la que carga Claude Code) y
+# `modules/cosecha/cantera/enki/<n>/SKILL.md` (la que Enki sirve por
+# cosecha.obtener) son la MISMA skill: idénticas byte a byte.
+#
+# ESCALERA (igual que cabecera-check): por defecto TESTIGO — canta en el PR y
+# no rompe. Las skills del --freno son ERROR duro. Graduar una skill = añadirla
+# a la lista, cuando sus dos caras ya estén fusionadas.
+name: espejo-skills
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  espejo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Comparar las dos caras (FRENO esquematizador)
+        id: espejo
+        run: |
+          # Captura el JSON sin morir para que el comentario siempre tenga datos.
+          node scripts/cantera/validate-espejo-skills.js --json > /tmp/espejo.json || true
+          # La corrida que MANDA: deriva en una skill del freno = exit 1 → rompe el job.
+          node scripts/cantera/validate-espejo-skills.js --freno esquematizador
+
+      - name: Empujón en el PR (skills que se soltaron)
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let r = { gemelas: 0, divergen: [], solo_claude: [], freno: [] };
+            try { r = JSON.parse(fs.readFileSync('/tmp/espejo.json', 'utf8')); } catch {}
+            const marca = '<!-- espejo-skills -->';
+            const hayAlgo = r.divergen.length > 0;
+
+            const lineas = [marca, '## 📐 espejo-skills'];
+            lineas.push('', `${r.gemelas} skills con sus dos caras idénticas.`);
+            if (hayAlgo) {
+              lineas.push('', '**Estas se soltaron** — `.claude/skills/` y la cantera sirven versiones distintas de la misma skill:', '');
+              lineas.push('| skill | .claude | cantera | Δ | |');
+              lineas.push('|---|---:|---:|---:|---|');
+              for (const d of r.divergen) {
+                const f = (r.freno || []).includes(d.skill) ? '✗ freno' : '⚠ testigo';
+                lineas.push(`| \`${d.skill}\` | ${d.lineas_claude} | ${d.lineas_cantera} | ${d.delta > 0 ? '+' : ''}${d.delta} | ${f} |`);
+              }
+              lineas.push('', 'Fusiona cuerpo + frontmatter (la cantera necesita `fuente · dominio · lente_*`) y escribe el resultado en **las dos rutas**, byte a byte.');
+              lineas.push('', 'En local: `npm run validate:espejo-skills`');
+            } else {
+              lineas.push('', '✓ Las dos caras van al paso.');
+            }
+
+            const cuerpo = lineas.join('\n');
+            const { data: comentarios } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, per_page: 100
+            });
+            const previo = comentarios.find((c) => c.body && c.body.includes(marca));
+            if (previo) {
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: previo.id, body: cuerpo });
+            } else if (hayAlgo) {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: cuerpo });
+            }

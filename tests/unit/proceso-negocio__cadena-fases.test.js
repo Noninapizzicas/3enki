@@ -119,6 +119,30 @@ test('fase inexistente → 400 FASE_NO_MAPEADA', async () => {
   assert.strictEqual(r.data.error, 'FASE_NO_MAPEADA');
 });
 
+// MÓDULO POR MÓDULO (decisión del dueño): cada hoja recorre TODAS sus fases
+// (módulo → skill → interfaz → esquematizar → interfaz operativa) ANTES de que
+// empiece la siguiente. NO fase-por-fase (todos los módulos, luego todas las
+// skills). _decidirSiguiente actúa sobre la PRIMERA hoja incompleta.
+test('el ciclo va MÓDULO POR MÓDULO, no fase por fase', () => {
+  const m = new ProcesoNegocio();
+  const hoja = (slug, o = {}) => ({ slug, construido: false, con_skill: false, con_interfaz: false, con_interfaz_esquematizada: false, con_interfaz_construida: false, ...o });
+
+  // A construida SIN skill, B sin nada → termina A (su skill), NO empieza B.
+  const s1 = m._decidirSiguiente({ project_id: 'x', total: 2, hojas: [hoja('A', { construido: true }), hoja('B')] });
+  assert.strictEqual(s1.skill, 'escribir-skills', 'con A construida sin skill, el siguiente paso es la SKILL de A — no construir B');
+  assert.match(s1.mensaje, /'A'/, 'el empujón nombra la hoja A, no la B');
+
+  // A completa entera, B sin nada → AHORA sí empieza B (construir su módulo).
+  const completa = { construido: true, con_skill: true, con_interfaz: true, con_interfaz_esquematizada: true, con_interfaz_construida: true };
+  const s2 = m._decidirSiguiente({ project_id: 'x', total: 2, hojas: [hoja('A', completa), hoja('B')] });
+  assert.strictEqual(s2.skill, 'construir-modulos', 'con A completa, el siguiente paso es construir B');
+  assert.match(s2.mensaje, /'B'/, 'el empujón nombra la hoja B');
+
+  // Todas las hojas completas → verificación final (no se queda en bucle).
+  const s3 = m._decidirSiguiente({ project_id: 'x', total: 1, hojas: [hoja('A', completa)] });
+  assert.strictEqual(s3.skill, 'verificar-en-vivo', 'con todo completo, pasa a la verificación final');
+});
+
 // BLINDAJE DE LA CADENA: ninguna costura cierra sobre vacío. Cada fase del
 // flujo, cerrada sin su entregable en disco y sin resumen, DEBE frenar (409
 // FASE_INCOMPLETA) — nunca 200. Es la garantía estructural: el gate cubre las

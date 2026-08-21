@@ -53,6 +53,10 @@ jobs:
                 const f = (r.freno || []).includes(d.skill) ? '✗ freno' : '⚠ testigo';
                 lineas.push(`| \`${d.skill}\` | ${d.lineas_claude} | ${d.lineas_cantera} | ${d.delta > 0 ? '+' : ''}${d.delta} | ${f} |`);
               }
+              if ((r.pendientes || []).length) {
+                lineas.push('', '**📌 Encargo abierto** (anotado en `scripts/cantera/validate-espejo-skills.js`):');
+                for (const p of r.pendientes) lineas.push(`- \`${p.skill}\` — ${p.nota}`);
+              }
               lineas.push('', 'Fusiona cuerpo + frontmatter (la cantera necesita `fuente · dominio · lente_*`) y escribe el resultado en **las dos rutas**, byte a byte.');
               lineas.push('', 'En local: `npm run validate:espejo-skills`');
             } else {

@@ -26,6 +26,17 @@ const RAIZ    = path.resolve(__dirname, '..', '..');
 const CLAUDE  = path.join(RAIZ, '.claude', 'skills');
 const CANTERA = path.join(RAIZ, 'modules', 'cosecha', 'cantera', 'enki');
 
+// ── ENCARGO ABIERTO: skills fusionadas a medias, esperando su turno ──
+// Se anotan aquí porque aquí es donde se tropiezan. La nota se apaga sola: en
+// cuanto las dos caras coinciden, la skill sale de `divergen` y deja de salir.
+// Al fusionar una, escríbela en LAS DOS rutas y gradúala al `--freno` del
+// workflow (.github/workflows/espejo-skills.yml).
+const PENDIENTES = {
+  'agente-perspectiva-c':
+    'Δ+70 — la misma clase de brecha que tenía esquematizador: la cara de la ' +
+    'cantera perdió cuerpo. Fusionar (cuerpo rico + frontmatter del cuenco) y graduar al freno.'
+};
+
 function args() {
   const a = process.argv.slice(2);
   const freno = [];
@@ -67,12 +78,19 @@ function main() {
   const rotas = r.divergen.filter(d => freno.includes(d.skill));
 
   if (json) {
-    console.log(JSON.stringify({ ...r, freno, rotas }, null, 2));
+    const pendientes = r.divergen.filter(d => PENDIENTES[d.skill])
+      .map(d => ({ skill: d.skill, nota: PENDIENTES[d.skill] }));
+    console.log(JSON.stringify({ ...r, freno, rotas, pendientes }, null, 2));
   } else {
     console.log(`\n📐 espejo de skills — ${r.gemelas} idénticas · ${r.divergen.length} divergen · ${r.solo_claude.length} solo en .claude · ${r.solo_cantera.length} solo en cantera\n`);
     for (const d of r.divergen) {
       const marca = freno.includes(d.skill) ? '✗ FRENO' : '⚠ testigo';
       console.log(`  ${marca}  ${d.skill.padEnd(28)} .claude=${String(d.lineas_claude).padStart(4)}  cantera=${String(d.lineas_cantera).padStart(4)}  (Δ${d.delta > 0 ? '+' : ''}${d.delta})`);
+    }
+    const anotadas = r.divergen.filter(d => PENDIENTES[d.skill]);
+    if (anotadas.length) {
+      console.log('\n  📌 Encargo abierto:');
+      for (const d of anotadas) console.log(`     ${d.skill} — ${PENDIENTES[d.skill]}`);
     }
     if (r.divergen.length) {
       console.log('\n  Las dos caras son la MISMA skill: escribe la versión buena en las dos rutas.');

@@ -1,0 +1,22 @@
+[package]
+name = "motor-hermes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Bridge Hermes ↔ Enki (Rust). Sustituye hermes-bridge Node.js: recibe HTTP de enki_tools, publica directo al broker MQTT. Bus fallback: publish toolName → sub toolName.response. Sin core Node.js intermedio."
+
+[[bin]]
+name = "motor-hermes"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true, features = ["sync", "time"] }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+axum.workspace = true
+# MQTT sobre TCP (1883) — motor co-ubicado con el broker
+rumqttc = { version = "0.24", default-features = false }
+uuid = { version = "1", features = ["v4"] }

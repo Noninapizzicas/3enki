@@ -24,7 +24,9 @@ const _diaSemanaISO = (d) => {
   return iso === 0 ? 7 : iso; // 1=Lun..7=Dom
 };
 
-const _aISO = (fecha) => fecha.toISOString().slice(0, 10);
+const _normalISO = (d) => d.toISOString().slice(0, 10);
+const _diaISO = (d) => d.toISOString().slice(0, 10);
+const _diasSemanaISO = (d) => { const iso = d.getUTCDay(); return iso === 0 ? 7 : iso; };
 
 const _siguienteDiaEn = (calendario, desdeISO) => {
   // Dado un producto, el próximo día de salida >= desdeISO.
@@ -39,10 +41,6 @@ const _siguienteDiaEn = (calendario, desdeISO) => {
   }
   return null;
 };
-
-const _normalISO = (d) => d.toISOString().slice(0, 10);
-const _diaISO = (d) => d.toISOString().slice(0, 10);
-const _diasSemanaISO = (d) => { const iso = d.getUTCDay(); return iso === 0 ? 7 : iso; };
 
 // Comprueba el margen: cuántas horas hay entre ahora y la fecha deseada (fecha completa al inicio del día).
 const _horasHasta = (fechaISO, ahoraISO) => {
@@ -61,7 +59,7 @@ const VALIDADORES_CUSTODIA = {
       if (typeof cal !== 'object') return { field: `productos.${id}`, message: 'debe ser objeto' };
       if (cal.dias_salida !== undefined) {
         if (!Array.isArray(cal.dias_salida) || !cal.dias_salida.length ||
-            cal.dias_salida.some(x => !VAL_DIAS.includes(x))) {
+            cal.dias_salida.some(x => !VALID_DIAS.includes(x))) {
           return { field: `productos.${id}.dias_salida`, message: 'debe ser array de días ISO 1..7 (1=Lun..7=Dom)' };
         }
       }
@@ -75,7 +73,7 @@ const VALIDADORES_CUSTODIA = {
 };
 
 // ===========================================================
-// Tabla FORMULAS — conversores puros del módulo.
+// Fórmulas — conversores puros del módulo.
 // ===========================================================
 const validarPedido = (reglas, input) => {
   const cal = (reglas.productos || {})[input.producto_id];
@@ -89,7 +87,7 @@ const validarPedido = (reglas, input) => {
   const esDiaSalida = dias.includes(diaSolicitado);
   const margen_h = typeof cal.margen_antelacion_h === 'number' ? cal.margen_antelacion_h : 0;
   const horasHasta = _horasHasta(fechaISO, ahora.toISOString());
-  const margenCumplido = horasHasta >= margen_horas;
+  const margenCumplido = horasHasta >= margen_h;
 
   if (esDiaSalida && margenCumplido) {
     return {
@@ -105,9 +103,7 @@ const validarPedido = (reglas, input) => {
   }
 
   // No cuadra — proponer el día válido más cercano que cumpla margen.
-  const propuesta = _siguienteDia({ dias_salida: dias }, _diaISO(ahora));
-  // la propuesta debe respetar el margen: partir de mañana es lo más pronto posible
-  // (un encargo hoy para mañana si está en salida y margen lo permite se cubre arriba).
+  const propuesta = _siguienteDiaEn({ dias_salida: dias }, _diaISO(ahora));
   const motivo = [];
   if (!esDiaSalida) motivo.push(`no sale en ${NOMBRE_DIA[diaSolicitado]}`);
   if (!margenCumplido) motivo.push('margen de antelación no cumplido');
@@ -116,7 +112,7 @@ const validarPedido = (reglas, input) => {
     data: {
       producto_id: input.producto_id,
       fecha_deseada: fechaISO,
-      dia_semanal: NOMBRE_DIA[diaSolicitado],
+      dia_semana: NOMBRE_DIA[diaSolicitado],
       valido: false,
       motivo: motivo.join(' · '),
       propuesta: { fecha: propuesta, dia: propuesta ? NOMBRE_DIA[_diasSemanaISO(new Date(propuesta + 'T00:00:00Z'))] : null }
@@ -125,6 +121,11 @@ const validarPedido = (reglas, input) => {
 };
 
 const FORMULAS = {
+  validar: {
+    descripcion: 'Valida si un pedido de un producto cuadra con su calendario (día de salida + margen de antelación).',
+    schema: { producto_id: { tipo: 'string', requerido: true } },
+    fn: validarPedido
+  },
   margen_leer: {
     descripcion: 'Antelación mínima (horas) de un producto para encargar.',
     schema: { producto_id: { tipo: 'string', requerido: true } },
@@ -191,15 +192,15 @@ class CalendarioReflejo extends ModuloHibridoReflejo {
     const error = validarSchema({ producto_id: { tipo: 'string', requerido: true } }, input);
     if (error) return { status: 400, error: 'INVALID_INPUT', message: error.message, field: error.field };
     const { config } = await this._custodio.leer(input?.project_id);
-    return FORMULAS.validar ? FORMULAS.validar(config, input) : { status: 500, error: 'UNKNOWN_ERROR', message: 'formula validar no registrada' };
+    return FORMULAS.validar.fn(config, input);
   }
 
   async _margen(input) {
     const error = validarSchema({ producto_id: { tipo: 'string', requerido: true } }, input);
     if (error) return { status: 400, error: 'INVALID_INPUT', message: error.message, field: error.field };
     const { config } = await this._custodio.leer(input?.project_id);
-    return FORMULOS.producto_leer(config, input);
+    return FORMULAS.margen_leer.fn(config, input);
   }
 }
 
-module.exports = CalendarioRef;
+module.exports = CalendarioReflejo;

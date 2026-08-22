@@ -1,0 +1,77 @@
+{
+  "_doc": "Módulo calendario — base del tiempo de la panadería (despacho-de-pan). Custodio single-writer de la config de calendario por producto (dias_salida + margen_antelacion_h) en calendario.json del proyecto + 2 conversores puros: validar (dada una fecha deseada, confirma si encaja con días de salida y margen; si no, propone el día válido más cercano) y margen (cuál es la antelación mínima de un producto). Construido en F4 (2026-08-21) desde diseno-oop.md sección Calendario. El resto del sistema (H2 motor validación, portal de llamada, cobro anticipado) bebe sus valores por RPC; los nulls del contrato son política por declarar.",
+  "description": "Calendario de producción por producto: días de salida y margen de antelación (panadería).",
+  "language": "es",
+  "name": "calendario",
+  "publishes": [
+    {
+      "description": "Calendario de un producto cambiado (tras actualizar) — la propiocepción lo capta.",
+      "event": "calendario.producto.actualizado"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Leer el calendario de un producto (todos pueden leer).",
+      "event": "calendario.producto.leer.request",
+      "handler": "onProductoLeerRequest"
+    },
+    {
+      "description": "Escritura single-writer del calendario de un producto (el dueño).",
+      "event": "calendario.producto.actualizar.request",
+      "handler": "onProductoActualizarRequest"
+    },
+    {
+      "description": "Leer todos los calendarios del proyecto.",
+      "event": "calendario.productos.leer.request",
+      "handler": "onProductosLeerRequest"
+    },
+    {
+      "description": "Validar una fecha pedida contra el calendario del producto; si no cuadra, propone el día válido más cercano (semilla de H2).",
+      "event": "calendario.validar.request",
+      "handler": "onValidarRequest"
+    },
+    {
+      "description": "Antelación mínima (horas) de un producto para encargar.",
+      "event": "calendario.margen.leer.request",
+      "handler": "onMargenLeerRequest"
+    }
+  ],
+  "ui_handlers": [
+    {
+      "action": "producto.leer",
+      "domain": "calendario",
+      "handler": "onProductoLeerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "action": "producto.actualizar",
+      "domain": "calendario",
+      "handler": "onProductoActualizarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "action": "productos.leer",
+      "domain": "calendario",
+      "handler": "onProductosLeerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "action": "validar",
+      "domain": "calendario",
+      "handler": "onValidarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "action": "margen.leer",
+      "domain": "calendario",
+      "handler": "onMargenLeerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ],
+  "version": "0.1.0"
+}

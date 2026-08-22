@@ -29,15 +29,21 @@ class HermesGateway {
     this.bridge = bridge;
 
     await mqtt.subscribe(`${this.prefix}/tool/+`);
+    await mqtt.subscribe(`${this.prefix}/catalog`);
     mqtt.on('message', (topic, raw) => this._onMessage(topic, raw));
 
     this.logger?.info('hermes-gateway.ready', {
-      topic: `${this.prefix}/tool/+`,
+      tool_topic: `${this.prefix}/tool/+`,
+      catalog_topic: `${this.prefix}/catalog`,
       response: `${this.prefix}/response/{request_id}`
     });
   }
 
   async _onMessage(topic, raw) {
+    if (topic === `${this.prefix}/catalog`) {
+      return this._onCatalog(raw);
+    }
+
     if (!topic.startsWith(`${this.prefix}/tool/`)) return;
 
     const toolName = topic.slice(`${this.prefix}/tool/`.length);
@@ -77,9 +83,41 @@ class HermesGateway {
     }
   }
 
+  async _onCatalog(raw) {
+    let payload;
+    try {
+      const str = typeof raw === 'string' ? raw : raw.toString();
+      payload = JSON.parse(str);
+    } catch {
+      return;
+    }
+
+    const requestId = payload.request_id || crypto.randomUUID();
+    const responseTopic = `${this.prefix}/catalog/response/${requestId}`;
+
+    try {
+      const tools = this.bridge._buildCatalog();
+      this.mqtt.publish(responseTopic, {
+        request_id: requestId,
+        status: 'success',
+        result: tools
+      }, { qos: 1 });
+    } catch (err) {
+      this.mqtt.publish(responseTopic, {
+        request_id: requestId,
+        status: 'error',
+        error: {
+          code: 'CATALOG_ERROR',
+          message: err.message
+        }
+      }, { qos: 1 });
+    }
+  }
+
   async onUnload() {
     if (this.mqtt) {
       try { await this.mqtt.unsubscribe(`${this.prefix}/tool/+`); } catch {}
+      try { await this.mqtt.unsubscribe(`${this.prefix}/catalog`); } catch {}
     }
     this.mqtt = null;
     this.bridge = null;

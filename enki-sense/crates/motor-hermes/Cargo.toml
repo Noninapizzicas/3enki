@@ -1,0 +1,20 @@
+[package]
+name = "motor-hermes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Bridge HTTP→MQTT entre Hermes (Python) y hermes-gateway. Recibe tool calls por HTTP, las despacha por MQTT al gateway (que tiene acceso al toolsRegistry completo), y devuelve el resultado."
+
+[[bin]]
+name = "motor-hermes"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "signal", "fs"] }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+rumqttc = { version = "0.24", default-features = false }

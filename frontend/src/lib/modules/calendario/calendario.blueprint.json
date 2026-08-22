@@ -1,0 +1,104 @@
+{
+  "_doc": "Blueprint del modulo calendario (panaderia). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema→UI (BlueprintForm). Seccion `ui` alineada con los ui_handlers REALES del module.json (F6): producto.leer · producto.actualizar · productos.leer · validar · margen.leer. Las acciones van DOTTED (calendario.<accion>) porque el wrapper mqttRequest('calendario','<accion>') emite ui/request/calendario/<accion>; transporte.rpc vacio a proposito.",
+  "id": "calendario",
+  "version": "blueprint-1.1.0",
+
+  "rol": "Custodio single-writer de dias_salida[] (0=Lun..6=Dom) y margen_antelacion_h por producto en calendario.json del proyecto + conversores puros (validar una fecha pedida contra el calendario y proponer el dia valido mas cercano; leer la antelacion minima). El resto del sistema (H2 motor, encargos) bebe sus valores por RPC.",
+
+  "eventos_publicados": [
+    "calendario.producto.actualizado"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 5 operaciones se conducen por ui/calendario/<accion> con la accion dotted; ver seccion ui.ops. transporte.rpc vacio a proposito (los topics reales calendario.*.request tienen 3 segmentos y rompen el parser del generador).",
+    "rpc": [],
+    "salida": [
+      "calendario.producto.actualizado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 5 operaciones reales del module.json con sus args; el evento calendario.producto.actualizado refresca la zona DATOS (consumida por F7).",
+    "ops": {
+      "productos.leer": {
+        "titulo": "Ver calendarios",
+        "descripcion": "Lectura de los calendarios del proyecto (todos pueden leer): dias_salida y margen_antelacion_h por producto."
+      },
+      "validar": {
+        "titulo": "Validar fecha de encargo",
+        "descripcion": "Dado producto + fecha deseada, valida contra el calendario; si no cuadra propone el dia valido mas cercano (sin barreras).",
+        "args": [
+          {
+            "nombre": "producto_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "ID del producto a validar."
+          },
+          {
+            "nombre": "fecha_iso",
+            "tipo": "date",
+            "required": true,
+            "descripcion": "Fecha deseada (YYYY-MM-DD)."
+          }
+        ]
+      },
+      "producto.leer": {
+        "titulo": "Calendario de un producto",
+        "descripcion": "Leer el calendario de un producto concreto (dias_salida + margen_antelacion_h).",
+        "args": [
+          {
+            "nombre": "producto_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "ID del producto."
+          }
+        ]
+      },
+      "margen.leer": {
+        "titulo": "Antelacion minima",
+        "descripcion": "Antelacion minima (horas) de un producto para encargar.",
+        "args": [
+          {
+            "nombre": "producto_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "ID del producto."
+          }
+        ]
+      },
+      "producto.actualizar": {
+        "titulo": "Actualizar calendario de producto",
+        "descripcion": "Escritura single-writer (el dueno). Los campos presentes se validan (esquema calendario-v1) y persisten.",
+        "args": [
+          {
+            "nombre": "producto_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "ID del producto."
+          },
+          {
+            "nombre": "dias_salida",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Dias de salida (array 0..6, 0=Lun..6=Dom). Ej: [1,3,5]."
+          },
+          {
+            "nombre": "margen_antelacion_h",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Antelacion minima en horas (>=0)."
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "productos.leer",
+      "titulo": "Calendario del proyecto",
+      "refresh_on": ["calendario.producto.actualizado"],
+      "columnas": ["calendario", "fuente"]
+    }
+  }
+}

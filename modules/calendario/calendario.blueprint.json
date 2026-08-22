@@ -1,0 +1,72 @@
+{
+  "_doc": "Blueprint del modulo calendario (panaderia). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema→UI (BlueprintForm). Seccion `ui` declarada por F6½ (esquematizar-interfaz, 2026-08-21): las 4 operaciones del modulo con sus args reales del contrato y el evento que refresca la zona DATOS. Las acciones son DOTTED (validar, listar, leer, actualizar) porque el RPC real del bus es calendario.<accion>.request y el wrapper mqttRequest('calendario', '<accion>') emite ui/request/calendario/<accion> — por eso transporte.rpc va VACIO.",
+  "id": "calendario",
+  "version": "blueprint-1.0.0",
+
+  "rol": "Custodio single-writer de dias_salida[] (0=Lun..6=Dom) y margen_antelacion_h por producto en calendario.json del proyecto + conversor puro validar (dado producto+fecha deseada, valida contra dias_salida; si no cuadra propone el dia valido mas cercano — sin barreras). El resto del sistema (H2 motor, encargos) bebe sus valores por RPC.",
+
+  "eventos_publicados": [
+    "calendario.actualizado"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 4 operaciones se conducen por ui/calendario/<accion> con la accion dotted; ver seccion ui.ops. transporte.rpc vacio a proposito (los topics reales calendario.*.request tienen 3 segmentos y rompen el parser del generador).",
+    "rpc": [],
+    "salida": [
+      "calendario.actualizado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BForm). Las 4 operaciones del reflejo con sus args; el evento calendario.actualizado refresca la zona DATOS (declarada en F6½, consumida por F7).",
+    "ops": {
+      "leer": {
+        "titulo": "Ver calendario",
+        "descripcion": "Lectura del calendario del proyecto (todos pueden leer): dias_salida y margen_antelacion_h por producto."
+      },
+      "validar": {
+        "titulo": "Validar fecha de encargo",
+        "descripcion": "Dado producto + fecha deseada, valida contra el calendario; si no cuadra propone el dia valido mas cercano (sin barreras).",
+        "args": [
+          {
+            "nombre": "producto_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "ID del producto a validar."
+          },
+          {
+            "nombre": "fecha_iso",
+            "tipo": "date",
+            "required": true,
+            "descripcion": "Fecha deseada (YYYY-MM-DD)."
+          }
+        ]
+      },
+      "listar": {
+        "titulo": "Listar productos con calendario",
+        "descripcion": "Lista los productos que declaran dias_salida y margen_antelacion."
+      },
+      "actualizar": {
+        "titulo": "Actualizar calendario",
+        "descripcion": "Escritura single-writer (el dueno). Los campos presentes se validan (esquema calendario-v1) y persisten.",
+        "args": [
+          {
+            "nombre": "cambios",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Cambios a aplicar. Ej: {\"productos\":{\"pan_campesino\":{\"dias_salida\":[1,3,5],\"margen_antelacion_h\":24}}}"
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "leer",
+      "titulo": "Calendario del proyecto",
+      "refresh_on": ["calendario.actualizado"],
+      "columnas": ["calendario", "fuente"]
+    }
+  }
+}

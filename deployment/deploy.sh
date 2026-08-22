@@ -65,6 +65,16 @@ fi
 
 chown -R www-data:www-data "${INSTALL_DIR}" 2>/dev/null || true
 
+# 3.5) Normalizar permisos de módulos (grupo www-data escribe — el chat necesita g+w)
+normalizar_permisos() {
+  local d="$1"
+  find "$d" -type d ! -path "*/node_modules/*" ! -perm -g+w -exec chmod g+w {} + 2>/dev/null || true
+  find "$d" -type d ! -path "*/node_modules/*" ! -perm -2000 -exec chmod g+s {} + 2>/dev/null || true
+  find "$d" -type f ! -path "*/node_modules/*" ! -perm -g+w -exec chmod g+w {} + 2>/dev/null || true
+}
+normalizar_permisos "${INSTALL_DIR}/modules"
+normalizar_permisos "${REPO_DIR}/modules"
+
 # 4) RECONCILIAR la infra — UN solo cerebro, idempotente. Deja el VPS funcional
 #    (dirs shop, ReadWritePaths, bloque Caddy /shop/*, servicios) e igual en todos.
 #    Corre DESDE EL REPO (deployment/ se excluye del rsync a /opt/enki): el

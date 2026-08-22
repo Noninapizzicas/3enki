@@ -1,0 +1,9 @@
+{
+  "id": "calendario",
+  "name": "Calendario",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 12,
+  "icon": "📅",
+  "label": "Calendario"
+}

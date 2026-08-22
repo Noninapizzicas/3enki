@@ -1,16 +1,18 @@
 ---
 id: hermes-enki
 dominio: conversacion
-resumen: "Integración Hermes ↔ Enki — hermes-relay (pipe chat.message.saved → Hermes API) + hermes-bridge (dispatcher Node.js de las 434+ tools de Enki) + enki_tools (cliente Python). Hermes gestiona providers LLM; credential-manager conserva todas las credenciales de dominio."
+resumen: "Integración Hermes ↔ Enki — hermes-relay (pipe chat.message.saved → Hermes API) + hermes-bridge (dispatcher Node.js de las 434+ tools de Enki) + hermes-gateway (expone toolsRegistry por MQTT) + enki_tools (cliente Python). Hermes gestiona providers LLM; credential-manager conserva todas las credenciales de dominio."
 fuentes:
   - modules/hermes-bridge/index.js
   - modules/hermes-bridge/module.json
+  - modules/hermes-gateway/index.js
+  - modules/hermes-gateway/module.json
   - modules/hermes-relay/index.js
   - modules/hermes-relay/module.json
   - hermes/enki_tools/bridge.py
   - hermes/enki_tools/loader.py
   - hermes/enki_tools/__init__.py
-verificado: 2026-08-11
+verificado: 2026-08-22
 ---
 
 # Integración Hermes ↔ Enki
@@ -130,3 +132,26 @@ facturas, mercadona-api, etc.).
 
 **chat-io se mantiene** — persistencia SQLite, CRUD de conversaciones,
 push MQTT al frontend. Es la bisagra entre el relay y el frontend.
+
+## hermes-gateway (módulo Node.js)
+
+Expone TODO el toolsRegistry de Enki por MQTT. Cualquier proceso externo
+(motor-hermes Rust, enki-movil, motores enki-sense) puede invocar tools
+sin HTTP. Delega el dispatch a hermes-bridge (3 rutas intactas).
+
+**Protocolo MQTT:**
+
+| Dirección | Topic | Payload |
+|-----------|-------|---------|
+| Request | `hermes/tool/{toolName}` | `{ request_id, args, context }` |
+| Response | `hermes/response/{request_id}` | `{ request_id, status, result, error }` |
+
+- Suscribe `hermes/tool/+` en el broker (topic propio, sin conflicto con EventBus)
+- Delega a `hermes-bridge._dispatch(toolName, args, context)` — misma lógica de dispatch (bus universal, ruta directa, bus fallback), zero duplicación
+- Publica respuesta en `hermes/response/{request_id}` con QoS 1
+- Sin auth propia — la identidad la rige el broker (bus-guard)
+- Config: `topic_prefix` (default `hermes`)
+
+**Beneficio sistémico:** con hermes-gateway, las tools de ruta directa
+(fs.read, credential.*, code.orquestar, tools de dominio) quedan accesibles
+desde cualquier proceso que hable MQTT, no solo desde dentro del core Node.js.

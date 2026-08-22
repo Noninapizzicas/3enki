@@ -4442,6 +4442,29 @@ facturas, mercadona-api, etc.).
 **chat-io se mantiene** — persistencia SQLite, CRUD de conversaciones,
 push MQTT al frontend. Es la bisagra entre el relay y el frontend.
 
+## hermes-gateway (módulo Node.js)
+
+Expone TODO el toolsRegistry de Enki por MQTT. Cualquier proceso externo
+(motor-hermes Rust, enki-movil, motores enki-sense) puede invocar tools
+sin HTTP. Delega el dispatch a hermes-bridge (3 rutas intactas).
+
+**Protocolo MQTT:**
+
+| Dirección | Topic | Payload |
+|-----------|-------|---------|
+| Request | `hermes/tool/{toolName}` | `{ request_id, args, context }` |
+| Response | `hermes/response/{request_id}` | `{ request_id, status, result, error }` |
+
+- Suscribe `hermes/tool/+` en el broker (topic propio, sin conflicto con EventBus)
+- Delega a `hermes-bridge._dispatch(toolName, args, context)` — misma lógica de dispatch (bus universal, ruta directa, bus fallback), zero duplicación
+- Publica respuesta en `hermes/response/{request_id}` con QoS 1
+- Sin auth propia — la identidad la rige el broker (bus-guard)
+- Config: `topic_prefix` (default `hermes`)
+
+**Beneficio sistémico:** con hermes-gateway, las tools de ruta directa
+(fs.read, credential.*, code.orquestar, tools de dominio) quedan accesibles
+desde cualquier proceso que hable MQTT, no solo desde dentro del core Node.js.
+
 ---
 
 # Módulos Pizzepos y Blueprints

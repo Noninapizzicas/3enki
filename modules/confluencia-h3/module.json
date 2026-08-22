@@ -1,0 +1,25 @@
+{
+  "_doc": "Módulo confluencia-h3 — S1 criterio de escalada + S2 porta-aviso del Portal de llamada (H3) del negocio despacho-de-pan. Reflejo determinista (sin LLM): S1 decide si un resultado del motor de confluencia (H2) abre canal humano, aplicando la regla ajustable en config.h3 (umbral_dia_lejano, umbral_unidades_dueno, prioridades). S2 empaqueta el contexto accionable (cliente + producto + día propuesto + motivo) en un aviso tipado. NO entrega nada (eso es S3, el puente a notificador/UI) ni aplica decisiones (S5). Escucha por el bus, sin toolsRegistry ni UIRequestHandler (interfaz = bus, no catálogo). Construido en F4 (2026-08-22) desde h3-portal-llamada/esquema.md.",
+  "description": "Criterio de escalada + porta-aviso del Portal de llamada: decide si un resultado de confluencia abre canal humano y empaqueta el aviso (panadería).",
+  "language": "es",
+  "name": "confluencia-h3",
+  "publishes": [
+    {
+      "description": "Un aviso de escalada empaquetado y listo para entrega al dueño/cliente.",
+      "event": "confluencia.h3.aviso_emitido"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Evaluar si un resultado de confluencia abre un aviso de escalada (regla config.h3).",
+      "event": "confluencia.h3.criterio.request",
+      "handler": "onCriterioEscaladaRequest"
+    },
+    {
+      "description": "Empaquetar un aviso accionable (cliente + producto + día propuesto + motivo).",
+      "event": "confluencia.h3.porta_aviso.request",
+      "handler": "onPortaAvisoRequest"
+    }
+  ],
+  "version": "0.1.0"
+}

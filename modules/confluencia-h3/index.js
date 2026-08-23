@@ -1,7 +1,14 @@
 'use strict';
 
+const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 const { validarSchema } = require('../_shared/config-custodio');
+
+// Store del rastro de decisiones del Portal de llamada (S4+S5) — por proyecto.
+const STORE_PATH = '/confluencia-h3/decisiones.json';
+
+// Decisiones que el dueño puede cerrar sobre un aviso (S5).
+const DECISIONES_VALIDAS = new Set(['aceptar', 'rechazar', 'proponer_alternativa']);
 
 // Categorías canónicas de escalada del Portal de llamada (H3).
 const CATEGORIA = {
@@ -88,6 +95,13 @@ class ConfluenciaH3Reflejo extends ModuloHibridoReflejo {
   // ================= RPC del bus (una línea por op — dispatch por id) =================
   onCriterioEscaladaRequest(e) { return this._atender(e, 'criterio_escalada', 'confluencia.h3.criterio.response', d => this._criterioEscalada(d)); }
   onPortaAvisoRequest(e)       { return this._atender(e, 'porta_aviso', 'confluencia.h3.porta_aviso.response', d => this._portaAviso(d)); }
+  onAplicarDecisionRequest(e)  { return this._atender(e, 'aplicar_decision', 'confluencia.h3.aplicar_decision.response', d => this._aplicarDecision(d)); }
+
+  // S3 · Entrega — fire-and-forget: escucha el aviso emitido y lo entrega a UI + chat.
+  onAvisoEmitido(e) {
+    const d = (e && e.data) || e || {};
+    this._entregarAviso(d).catch(err => this.logger?.error(`${this.name}.reflejo.entrega.failed`, { error: err.message }));
+  }
 
   // ================= helpers =================
   async _regla(project_id) {
@@ -118,7 +132,119 @@ class ConfluenciaH3Reflejo extends ModuloHibridoReflejo {
     const aviso = _evaluar(input.resultado, regla);
     if (!aviso.aviso) return { status: 200, data: { aviso: null, motivo: 'sin_escalada' } };
     const empaquetado = _empaquetar(input.resultado, input.cliente, aviso);
+    // S3 · Entrega — el aviso empaquetado se emite al bus; S3 (onAvisoEmitido) lo entrega a UI + chat.
+    this.eventBus?.publish('confluencia.h3.aviso_emitido', {
+      aviso: empaquetado,
+      project_id: input.project_id,
+      correlation_id: empaquetado.correlation_id || crypto.randomUUID(),
+      timestamp: new Date().toISOString()
+    });
+    this.metrics?.increment('confluencia-h3.reflejo.aviso_emitido', { categoria: empaquetado.categoria });
     return { status: 200, data: { aviso: empaquetado } };
+  }
+
+  // ================= S3 · Entrega a UI + chat =================
+  // Entrega el aviso a los dos canales de pantalla: UI (evento al frontend) y chat (Hermes).
+  // Fire-and-forget: nunca bloquea el flujo; cada canal emite su estado en aviso_entregado.
+  async _entregarAviso(d) {
+    const aviso = d.aviso || {};
+    const project_id = d.project_id;
+    const correlation_id = d.correlation_id || aviso.correlation_id || crypto.randomUUID();
+    const timestamp = new Date().toISOString();
+
+    const texto = this._formatearAviso(aviso);
+
+    // Canal 1 · UI — evento backend→frontend por core/*/events/{domain}/{action}.
+    // El frontend se suscribe a confluencia.h3.aviso_entregado (o al topic de avisos) y lo pinta.
+    this.eventBus?.publish('confluencia.h3.aviso_entregado', {
+      aviso_id: correlation_id,
+      canal: 'ui',
+      estado: 'entregado',
+      aviso,
+      texto,
+      project_id,
+      correlation_id,
+      timestamp
+    });
+
+    // Canal 2 · Chat — publica el aviso como mensaje del sistema al chat Hermes.
+    // chat.message.saved es el trigger del razonamiento; el compañero lo recoge y responde.
+    if (this.eventBus?.publish) {
+      this.eventBus.publish('chat.message.saved', {
+        correlation_id,
+        conversation_id: d.conversation_id || null,
+        project_id,
+        user_id: 'sistema-h3',
+        channel: 'sistema',
+        channel_context: { origen: 'confluencia-h3', tipo: 'aviso_escalada' },
+        message_id: `h3-${correlation_id}`,
+        user_message: texto,
+        timestamp
+      });
+    }
+
+    this.metrics?.increment('confluencia-h3.reflejo.aviso_entregado', { canal: 'ui+chat' });
+    return { status: 200, data: { entregado: true, canales: ['ui', 'chat'] } };
+  }
+
+  // Formatea el aviso a texto legible para el chat / pantalla.
+  _formatearAviso(aviso) {
+    const c = aviso.cliente || {};
+    const p = aviso.pedido || {};
+    const quien = aviso.categoria === 'dueno' ? 'Dueño' : 'Cliente';
+    const motivo = aviso.motivo || 'escalada';
+    const lineas = [
+      `[AVISO ${quien.toUpperCase()} · ${aviso.prioridad || 'media'}]`,
+      `Motivo: ${motivo}`,
+      c.nombre ? `Cliente: ${c.nombre}` : null,
+      p.producto ? `Producto: ${p.producto}` : null,
+      p.cantidad ? `Cantidad: ${p.cantidad}` : null,
+      p.dia_solicitado ? `Día solicitado: ${p.dia_solicitado}` : null,
+      p.dia_propuesto ? `Día propuesto: ${p.dia_propuesto}` : null,
+      aviso.unidades_movidas != null ? `Unidades movidas: ${aviso.unidades_movidas}` : null
+    ].filter(Boolean);
+    return lineas.join('\n');
+  }
+
+  // S5 · Cierre — la decisión del dueño modifica el flujo y deja rastro auditable.
+  async _aplicarDecision(input) {
+    const error = validarSchema(
+      { correlation_id: { tipo: 'string', requerido: true }, decision: { tipo: 'string', requerido: true } },
+      input
+    );
+    if (error) return { status: 400, error: 'INVALID_INPUT', message: error.message, field: error.field };
+    if (!DECISIONES_VALIDAS.has(input.decision)) {
+      return { status: 400, error: 'INVALID_INPUT', message: `decision debe ser una de: ${[...DECISIONES_VALIDAS].join(', ')}`, field: 'decision' };
+    }
+
+    const registro = {
+      aviso_correlation_id: input.aviso?.correlation_id || input.correlation_id || input.aviso_correlation_id || null,
+      decision: input.decision,
+      motivo: input.motivo || null,
+      alternativas: input.alternativa ? { dia: input.alternativa.dia || null, producto: input.alternativa.producto || null } : null,
+      decidido_por: input.user_id || 'dueno',
+      decidido_en: new Date().toISOString()
+    };
+
+    // Persistir el rastro (S4) — best-effort sobre el store por proyecto.
+    const existia = await this._leerJson(input.project_id, STORE_PATH);
+    if (existia) {
+      await this._editarJson(input.project_id, STORE_PATH, [
+        { op: 'add', path: '/decisiones/-', value: registro }
+      ]);
+    } else {
+      await this._rpc('fs.write.request', { project_id: input.project_id, path: STORE_PATH, content: JSON.stringify({ decisiones: [registro] }, null, 2) });
+    }
+
+    // EMITIR — el evento que "modifica el flujo": el bus lo recoge (propiocepción / portal / quien ejecuta el cambio).
+    this.eventBus?.publish('confluencia.h3.decision_aplicada', {
+      correlation_id: registro.aviso_correlation_id || crypto.randomUUID(),
+      timestamp: registro.decidido_en,
+      ...registro
+    });
+
+    this.metrics?.increment('confluencia-h3.reflejo.decision_aplicada', { decision: input.decision });
+    return { status: 200, data: { aplicada: true, registro } };
   }
 }
 

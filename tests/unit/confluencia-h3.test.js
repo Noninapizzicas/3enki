@@ -120,6 +120,102 @@ test('S2: sin cliente → INVALID_INPUT 400', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// S3 · Entrega a UI + chat
+// ---------------------------------------------------------------------------
+test('S3: porta_aviso con escalada emite aviso_emitido al bus', async () => {
+  const m = makeModulo();
+  const emitido = [];
+  m.eventBus.publish = (ev, p) => { if (ev === 'confluencia.h3.aviso_emitido') emitido.push(p); };
+  const r = await m._portaAviso({
+    resultado: { tipo: 'ajustado', producto_id: 'barra_pan', cantidad: 3, fecha_solicitada: '2026-08-22', propuesta: '2026-08-27' },
+    cliente: { nombre: 'Ana', telefono: '+346****0000' }
+  });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(emitido.length, 1);
+  assert.strictEqual(emitido[0].aviso.categoria, 'cliente');
+  assert.ok(emitido[0].correlation_id);
+});
+
+test('S3: _entregarAviso publica a UI (aviso_entregado) y al chat (chat.message.saved)', async () => {
+  const m = makeModulo();
+  const publicado = [];
+  m.eventBus.publish = (ev, p) => publicado.push({ ev, p });
+  const aviso = {
+    categoria: 'dueno', prioridad: 'media', motivo: 'movimiento_dueno',
+    cliente: { nombre: 'Ana' },
+    pedido: { producto: 'barra_pan', cantidad: 5, dia_solicitado: '2026-08-22', dia_propuesto: null },
+    unidades_movidas: 5, correlation_id: 'c-9'
+  };
+  const r = await m._entregarAviso({ aviso, project_id: 'despacho-de-pan', correlation_id: 'c-9' });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.entregado, true);
+  assert.deepStrictEqual(r.data.canales, ['ui', 'chat']);
+  const evs = publicado.map(x => x.ev);
+  assert.ok(evs.includes('confluencia.h3.aviso_entregado'));
+  assert.ok(evs.includes('chat.message.saved'));
+  const ui = publicado.find(x => x.ev === 'confluencia.h3.aviso_entregado').p;
+  assert.strictEqual(ui.canal, 'ui');
+  assert.strictEqual(ui.estado, 'entregado');
+  assert.strictEqual(ui.aviso_id, 'c-9');
+  const chat = publicado.find(x => x.ev === 'chat.message.saved').p;
+  assert.strictEqual(chat.user_id, 'sistema-h3');
+  assert.strictEqual(chat.channel, 'sistema');
+  assert.ok(chat.user_message.includes('AVISO'));
+});
+
+test('S3: _formatearAviso produce texto legible con los datos del aviso', async () => {
+  const m = makeModulo();
+  const texto = m._formatearAviso({
+    categoria: 'cliente', prioridad: 'alta', motivo: 'no_disponible',
+    cliente: { nombre: 'Ana' },
+    pedido: { producto: 'barra_pan', cantidad: 3, dia_solicitado: '2026-08-22', dia_propuesto: null }
+  });
+  assert.ok(texto.includes('CLIENTE'));
+  assert.ok(texto.includes('alta'));
+  assert.ok(texto.includes('Ana'));
+  assert.ok(texto.includes('barra_pan'));
+});
+
+// ---------------------------------------------------------------------------
+// S5 · Cierre (aplicar_decision) — decisión del dueño modifica flujo + rastro
+// ---------------------------------------------------------------------------
+test('S5: aceptar con correlation_id → 200, aplicada true, emite decision_aplicada', async () => {
+  const m = makeModulo();
+  const publicado = [];
+  m.eventBus.publish = (ev, p) => { if (ev === 'confluencia.h3.decision_aplicada') publicado.push(p); };
+  // sin store previo → fs.write
+  let escrito = null;
+  m._rpc = async (ev, payload) => {
+    if (ev === 'fs.write.request') { escrito = payload.content; return { status: 200 }; }
+    return null;
+  };
+  const r = await m._aplicarDecision({ correlation_id: 'c-1', decision: 'aceptar', user_id: 'dueno' });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.aplicada, true);
+  assert.strictEqual(r.data.registro.decision, 'aceptar');
+  assert.ok(escrito); // persistió el rastro
+  const store = JSON.parse(escrito);
+  assert.strictEqual(store.decisiones.length, 1);
+  assert.strictEqual(store.decisiones[0].aviso_correlation_id, 'c-1');
+  assert.strictEqual(publicado.length, 1);
+  assert.strictEqual(publicado[0].decision, 'aceptar');
+});
+
+test('S5: decision inválida → 400 INVALID_INPUT', async () => {
+  const m = makeModulo();
+  const r = await m._aplicarDecision({ correlation_id: 'c-1', decision: 'borrar_todo' });
+  assert.strictEqual(r.status, 400);
+  assert.strictEqual(r.error, 'INVALID_INPUT');
+});
+
+test('S5: sin correlation_id → 400 INVALID_INPUT', async () => {
+  const m = makeModulo();
+  const r = await m._aplicarDecision({ decision: 'aceptar' });
+  assert.strictEqual(r.status, 400);
+  assert.strictEqual(r.error, 'INVALID_INPUT');
+});
+
+// ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 (async () => {

@@ -7,6 +7,14 @@
     {
       "description": "Un aviso de escalada empaquetado y listo para entrega al dueño/cliente.",
       "event": "confluencia.h3.aviso_emitido"
+    },
+    {
+      "description": "Un aviso entregado a un canal de pantalla (UI o chat) — estado por canal.",
+      "event": "confluencia.h3.aviso_entregado"
+    },
+    {
+      "description": "Una decisión del dueño aplicada sobre un aviso: modifica el flujo y deja rastro.",
+      "event": "confluencia.h3.decision_aplicada"
     }
   ],
   "subscribes": [
@@ -19,6 +27,16 @@
       "description": "Empaquetar un aviso accionable (cliente + producto + día propuesto + motivo).",
       "event": "confluencia.h3.porta_aviso.request",
       "handler": "onPortaAvisoRequest"
+    },
+    {
+      "description": "Entregar un aviso emitido a los canales de pantalla (UI + chat).",
+      "event": "confluencia.h3.aviso_emitido",
+      "handler": "onAvisoEmitido"
+    },
+    {
+      "description": "Aplicar la decisión del dueño sobre un aviso (S5): modifica el flujo y deja rastro.",
+      "event": "confluencia.h3.aplicar_decision.request",
+      "handler": "onAplicarDecisionRequest"
     }
   ],
   "version": "0.1.0"

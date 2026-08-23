@@ -1,0 +1,65 @@
+{
+  "_doc": "Módulo entrega-despacho — custodio single-writer de la entrega/recogida del DESPACHO DE PAN (P-E del esquema maestro): estimación de tiempo (preparación + reparto/entrega) y política de reparto. Porto el patrón de entrega (the-pirate) como esqueleto configurable por proyecto. TODO configuración es por proyecto vía ConfigCustodio — los nulls del contrato son política por declarar (el dueño del proyecto la puebla vía entrega-despacho.reglas.actualizar). La identidad del despacho NO entra en la lógica: el módulo corre igual con identidad vacía o poblada.",
+  "description": "Entrega/recogida del despacho: estimación de tiempo y política de reparto (configurable por proyecto).",
+  "language": "es",
+  "name": "entrega-despacho",
+  "publishes": [
+    {
+      "description": "Reglas de entrega del despacho cambiadas (tras actualizar) — la propiocepción lo capta.",
+      "event": "entrega-despacho.reglas.actualizadas"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Estimación de tiempo total (preparación + entrega) para un pedido.",
+      "event": "entrega-despacho.tiempo.estimar.request",
+      "handler": "onTiempoEstimarRequest"
+    },
+    {
+      "description": "Política de reparto/entrega: radio, coste, tiempo por km.",
+      "event": "entrega-despacho.reparto.obtener.request",
+      "handler": "onRepartoObtenerRequest"
+    },
+    {
+      "description": "Lectura de las reglas de entrega del proyecto (todos pueden leer).",
+      "event": "entrega-despacho.reglas.leer.request",
+      "handler": "onReglasLeerRequest"
+    },
+    {
+      "description": "Escritura single-writer de las reglas (el dueño): valida y persiste.",
+      "event": "entrega-despacho.reglas.actualizar.request",
+      "handler": "onReglasActualizarRequest"
+    }
+  ],
+  "version": "0.1.0",
+  "ui_handlers": [
+    {
+      "domain": "entrega-despacho",
+      "action": "reglas.leer",
+      "handler": "onReglasLeerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "entrega-despacho",
+      "action": "reglas.actualizar",
+      "handler": "onReglasActualizarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "entrega-despacho",
+      "action": "tiempo.estimar",
+      "handler": "onTiempoEstimarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "entrega-despacho",
+      "action": "reparto.obtener",
+      "handler": "onRepartoObtenerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

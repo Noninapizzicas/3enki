@@ -219,6 +219,9 @@
     "public_ns": "a"
   },
   "modules_config": {
+    "ai-gateway": {
+      "blueprint_orquestar_enabled": true
+    },
     "hermes-relay": {
       "hermes_url": "http://localhost:8642/v1/chat/completions",
       "hermes_model": "hermes",

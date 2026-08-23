@@ -15,8 +15,9 @@ class HermesGateway {
     this.prefix = core.config?.modules_config?.['hermes-gateway']?.topic_prefix || 'hermes';
 
     const mqtt = core.eventBus?.mqtt;
-    if (!mqtt || !mqtt.isConnected) {
-      this.logger?.warn('hermes-gateway.skip', { reason: 'mqtt not available' });
+    // isConnected puede no existir en el cliente; si hay object, intentamos
+    if (!mqtt || (typeof mqtt.isConnected === 'boolean' && !mqtt.isConnected)) {
+      this.logger?.warn?.('hermes-gateway.skip', { reason: 'mqtt not available' });
       return;
     }
     this.mqtt = mqtt;

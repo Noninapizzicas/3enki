@@ -68,7 +68,7 @@ impl Dispatcher {
         &self,
         tool_name: &str,
         args: Value,
-        context: Value,
+        _context: Value,
         timeout: Duration,
     ) -> Result<Value, DispatchError> {
         let request_id = format!("mh-{}", self.counter.fetch_add(1, Ordering::Relaxed));
@@ -76,12 +76,20 @@ impl Dispatcher {
 
         self.pending.lock().await.insert(request_id.clone(), tx);
 
+        // Parsear tool_name (domain.action → domain, action)
+        // Si tiene 2+ puntos (domain.action.sub), se toma domain = primera parte
+        let (domain, action) = tool_name.splitn(2, '.').collect::<Vec<_>>();
+        let (domain, action) = if domain.len() == 2 {
+            (domain[0], domain[1])
+        } else {
+            (tool_name, "ejecutar")
+        };
+
         let payload = json!({
             "request_id": request_id,
-            "args": args,
-            "context": context
+            "data": args
         });
-        let topic = format!("{}/tool/{}", self.prefix, tool_name);
+        let topic = format!("ui/request/{domain}/{action}");
         let bytes = serde_json::to_vec(&payload).unwrap_or_default();
 
         if let Err(e) = self.client.publish(&topic, QoS::AtLeastOnce, false, bytes).await {
@@ -127,16 +135,17 @@ impl Dispatcher {
     }
 
     pub async fn route_response(&self, request_id: &str, payload: &Value) {
-        let result = match payload.get("status").and_then(|s| s.as_str()) {
-            Some("success") => Ok(payload.get("result").cloned().unwrap_or(Value::Null)),
-            Some("error") => {
-                let err = payload.get("error").cloned().unwrap_or(json!({}));
-                Err(DispatchError::ToolError {
-                    code: err.get("code").and_then(|c| c.as_str()).unwrap_or("UNKNOWN_ERROR").to_string(),
-                    message: err.get("message").and_then(|m| m.as_str()).unwrap_or("unknown error").to_string(),
-                })
-            }
-            _ => Ok(payload.get("result").cloned().unwrap_or(payload.clone())),
+        let success = payload.get("success").and_then(|s| s.as_bool()).unwrap_or(false);
+        let status_num = payload.get("status").and_then(|s| s.as_u64()).unwrap_or(200);
+
+        let result = if success || (status_num > 0 && status_num < 400) {
+            Ok(payload.get("data").cloned().unwrap_or(payload.clone()))
+        } else {
+            let err = payload.get("error").cloned().unwrap_or(payload.clone());
+            Err(DispatchError::ToolError {
+                code: err.get("code").and_then(|c| c.as_str()).unwrap_or("UNKNOWN_ERROR").to_string(),
+                message: err.get("message").and_then(|m| m.as_str()).unwrap_or("unknown error").to_string(),
+            })
         };
 
         if let Some(tx) = self.pending.lock().await.remove(request_id) {
@@ -145,18 +154,17 @@ impl Dispatcher {
     }
 
     pub fn response_topic_prefix(&self) -> String {
-        format!("{}/response/", self.prefix)
+        "ui/response/".to_string()
     }
 
     pub fn catalog_response_prefix(&self) -> String {
-        format!("{}/catalog/response/", self.prefix)
+        // Catalog via ui/request no tiene respuesta específica; por ahora
+        // se cae al timeout y el health reporta 0 tools
+        String::new()
     }
 
     pub async fn subscribe_responses(&self) {
-        let resp = format!("{}/response/+", self.prefix);
-        let cat = format!("{}/catalog/response/+", self.prefix);
-        let _ = self.client.subscribe(&resp, QoS::AtLeastOnce).await;
-        let _ = self.client.subscribe(&cat, QoS::AtLeastOnce).await;
+        let _ = self.client.subscribe("ui/response/#", QoS::AtLeastOnce).await;
     }
 }
 

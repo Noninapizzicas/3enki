@@ -310,7 +310,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         const dirModulo = this._buscarModulo(slug);
         if (dirModulo) {
           h.construido = true; construidos++;
-          if (fs.existsSync(path.join(MODULES_DIR, 'cosecha', 'cantera', 'enki', slug, 'SKILL.md'))) { h.con_skill = true; con_skill++; }
+          if (this._skillEnCantera(slug)) { h.con_skill = true; con_skill++; }
           if (this._interfazDecidida(dirModulo)) {
             h.con_interfaz = true; con_interfaz++;
             if (this._interfazSinNecesidad(dirModulo)) {
@@ -346,7 +346,23 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     }
   }
 
+
+  // ¿La skill del módulo existe en la cantera? Resuelve el prefijo de vertical:
+  // el plan declara slugs SIN prefijo ('recetas', 'opciones', 'carta-digital'…)
+  // pero la cantera los guarda con prefijo de vertical ('pizzepos-recetas',
+  // 'prisma-opciones', 'pizzepos-carta-digital'…). Busca el slug directo y,
+  // si no, con cada prefijo de vertical conocido.
+  _skillEnCantera(slug) {
+    const cantera = path.join(MODULES_DIR, 'cosecha', 'cantera', 'enki');
+    if (fs.existsSync(path.join(cantera, slug, 'SKILL.md'))) return true;
+    for (const prefijo of ['pizzepos', 'prisma']) {
+      if (fs.existsSync(path.join(cantera, `${prefijo}-${slug}`, 'SKILL.md'))) return true;
+    }
+    return false;
+  }
+
   // ¿La interfaz está DECLARADA en el blueprint del módulo (F6½ por generador)?
+
   // La sección `ui` de modules/<slug>/<slug>.blueprint.json (regla ui_declarada).
   // Existe (aunque sea vacía) → declarada (los defaults del generador cubren).
   _interfazEsquematizadaEnDisco(dirModulo, slug) {

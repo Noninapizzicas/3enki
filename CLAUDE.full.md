@@ -5510,15 +5510,17 @@ CLASE CartaDigitalModule EXTIENDE BaseModule {  // PROYECTOR, no manager-con-sto
   //   carta-marketing → el branding (get_perfil)           [nombre/lema/colores/logo/voz]
   //   contenido       → imágenes/descripción por producto  (contenido.get)
   //   productos       → catálogo de ingredientes 'extra'   (handleListIngredientes, canal digital)
+  //   calendario      → dias_salida[] + margen_antelacion_h por producto (calendario.productos.leer)
 
   METODOS {
     // PROYECCIÓN pura (proyeccion.js): entra dato, sale dato. La misma FORMA para los
-    // dos consumidores — el reflejo (bus) y el export-cli (disco).
+    // dos consumidores: el reflejo (bus) y el export-cli (disco).
     _proyectarPublica(project_id):
-      [carta, marca, contenido, config] ← Promise.all(bebe_de…)
+      [carta, marca, contenido, config, calendario] ← Promise.all(bebe_de_*)
       SI !carta: RETORNA 404 (canal sin carta — revisa tarifas)
-      RETORNA proyectarCartaPublica(carta, marca, contenido, config)
-        // → { branding, categorias, productos, alergenos_leyenda (1169/2011), opciones }
+      RETORNA proyectarCartaPublica(carta, marca, contenido, config, calendario)
+        // → { branding, categorias, productos, alergenos_leyenda (1169/2011), opciones,
+        //     dias_salida[] por producto (para el boton Encargar de la PWA) }
 
     // DISEÑO con FRENO (skill blueprint-agentico): _checkDiseno exige el CONTRATO de slots
     //   {{id}} {{nombre}} {{precio}} {{alergenos}} {{add_label}} + hooks data-accion detalle/add.
@@ -14646,15 +14648,21 @@ sendTemplate (Meta plantillas · salientes >24h) {
 //   nombre al recoger; cocina/staff lo ven como ref_display.
 ```
 
-## CLASE carta-digital (PWA) — emite el pedido por ids (#P1) + paridad comandero
+## CLASE carta-digital (PWA) — emite el pedido por ids (#P1) + paridad comandero + ENCARGO con fecha
 
-```
+```javascript
 // modules/pizzepos/carta-digital/static-template.js (generador de la PWA, v2.6.0):
 //   - cada item del carrito lleva su `estructura` por ids (normal/al_gusto/mitad_mitad).
 //   - buildP1Line(): serializa { v:1, items: buildOrderItems() } a base64url utf8-safe y lo
 //     cuelga del mensaje wa.me tras 'Nombre:'. Las líneas humanas siguen (el cliente ve su pedido).
 //   - MITAD con variaciones en AMBAS mitades (paridad comandero): botón partido (cuerpo=mitad
 //     tal cual · ✏️=personalizar), política max(izq,der)+extras (v2.3.0).
+// ENCARGO con fecha (hoja 2 — boton "Encargar" del detalle de producto):
+//   - los productos que traen dias_salida[] (del módulo calendario, 5ª fuente del proyector)
+//     muestran el botón Encargar → calendario del mes (🟢 sale / 🔴 no sale).
+//   - confirmar para día FUTURO → buildP1Line() añade `fecha_deseada:'YYYY-MM-DD'` al JSON del
+//     #P1 y el mensaje wa.me incluye la cabecera 'Para: <fecha>' (avisos de entrega/cocina).
+//   - confirmar HOY → pedido normal sin fecha_deseada (retrocompat total).
 // PODA previa de carta-digital:
 //   v2.4.0 — fuera ofertas/reseñas/track (la proyección no los daba: UI viva alimentada por vacío).
 //   v2.5.0 — fuera el cerebro FANTASMA del chat (default ai_chat_path '/modules/ai-gateway/chat',

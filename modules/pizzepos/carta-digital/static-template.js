@@ -97,7 +97,11 @@ function generateStaticHTML(carta, config, options = {}) {
       ingredientes: (p.ingredientes || []).map(i => ({
         nombre: i.nombre, emoji: i.emoji || null, tipo: i.tipo || null,
         precio_extra: i.precio_extra ?? null
-      }))
+      })),
+      // Encargo (módulo calendario): días de la semana en que sale (1=Lun..7=Dom) y
+      // antelación mínima para encargar. `[]` → no es encargable (sin selector de fecha).
+      dias_sale: Array.isArray(p.dias_salida) ? p.dias_salida.slice() : [],
+      margen_antelacion_h: (p.margen_antelacion_h ?? null)
     };
   });
   // Leyenda de alérgenos presentes (id/nombre/emoji), de la proyección.
@@ -360,6 +364,24 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .btn-wa:disabled{opacity:.6;cursor:not-allowed}
 .cart-nombre{width:100%;box-sizing:border-box;margin:8px 0;padding:10px 12px;border:1px solid #333;border-radius:10px;background:#111;color:var(--text);font-size:.85rem}
 .cart-nombre:focus{outline:none;border-color:var(--primary)}
+/* Selector "¿Para cuándo?" — encargo anticipado. Un botón por día (HOY/MAÑANA/PM):
+   verde si ese día el producto SALE (dias_sale), ámbar/rojo si no. Cero inputs de fecha. */
+.fecha-row{margin:10px 0}
+.fecha-label{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--text-dim);margin-bottom:6px}
+.fecha-btns{display:flex;gap:6px;flex-wrap:wrap}
+.fecha-btn{flex:1;min-width:86px;padding:10px 6px;border:1px solid #333;border-radius:12px;background:#111;color:var(--text);font:inherit;font-size:.78rem;font-weight:700;cursor:pointer;text-align:center;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column;gap:2px;transition:all .15s}
+.fecha-btn small{font-size:.6rem;font-weight:500;color:var(--text-dim)}
+.fecha-btn.off{opacity:.38;border-color:#2a2a2a}
+.fecha-btn.sale{border-color:rgba(34,197,94,.4)}
+.fecha-btn.sale .dot{color:var(--success)}
+.fecha-btn.nosale{border-color:rgba(239,68,68,.35)}
+.fecha-btn.nosale .dot{color:var(--danger)}
+.fecha-btn.active{border-color:var(--primary);background:var(--primary);color:#000;box-shadow:0 0 0 2px rgba(245,158,11,.25)}
+.fecha-btn.active small,.fecha-btn.active .dot{color:#000}
+.fecha-btn .dot{font-size:.85rem;line-height:1}
+.fecha-hint{font-size:.66rem;color:var(--text-dim);margin-top:5px;line-height:1.35}
+.fecha-hint .off{opacity:.5}
+.fecha-hint .pclaro{color:var(--success)}.fecha-hint .projo{color:var(--danger)}
 .cart-modo{display:flex;gap:6px;margin:8px 0}
 .modo-btn{flex:1;padding:9px 4px;border:1px solid #333;border-radius:10px;background:#111;color:var(--text);font-size:.8rem;font-weight:600;cursor:pointer}
 .modo-btn.active{border-color:var(--primary);background:var(--primary);color:#000}
@@ -1318,7 +1340,9 @@ function updateCart() {
     : '';
   footer.innerHTML = '<div class="total-row"><span class="total-label">' + T.total + '</span><span class="total-amount">' + fmt(total) + '</span></div>' +
     nombreInput + modoSel +
+    '<div id="fecha-cont"></div>' +
     '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button>' + pagarBtn + onlineBtn + waBtn + '</div>';
+  renderFechaRow();   // encargo: bloque "¿Para cuándo?" (verde/rojo según dias_sale)
 }
 
 function changeQty(cid, delta) {
@@ -1370,6 +1394,72 @@ function _pedHora() {
   return (_pedModo() === 'recoger' && h && h.value) ? h.value : '';
 }
 
+// ── Encargo anticipado — "¿Para cuándo?" ──────────────────────────────────
+// El cliente elige DÍA (HOY / MAÑANA / PASADO MAÑANA) con UN botón por vez, verde si
+// ese día SALE el producto (dias_sale), rojo si no. El estado vive en _fechaKey.
+// Regla (dueño): HOY = pedido normal (sin fecha); día futuro = fecha explícita (encargo).
+var _fechaKey = 'hoy';                 // 'hoy' | 'manana' | 'pasado' | 'elegir'
+// Fecha deseada SOLO si es un encargo (día futuro). HOY → null (pedido normal, sin fecha).
+function _fechaDeseada() {
+  if (_fechaKey === 'hoy' || _fechaKey === 'elegir') return null;
+  return _fechaISO(_fechaKey);
+}
+function _fechaOptions() {
+  // Unión de dias_sale de los productos del carrito (vacío → sin selector).
+  var set = new Set();
+  for (var i = 0; i < cart.length; i++) {
+    var p = DATA.productos.find(function(x){ return x.id === cart[i].id; });
+    if (p && Array.isArray(p.dias_sale)) p.dias_sale.forEach(function(d){ set.add(d); });
+  }
+  return Array.from(set).sort(function(a,b){ return a-b; });   // [1..7], 1=Lun
+}
+function _esEncargable() {
+  return _fechaOptions().length > 0 && cart.length > 0;
+}
+function _fechaISO(key) {
+  // Suma días a HOY (local). 'hoy'→+0, 'manana'→+1, 'pasado'→+2. Devuelve 'YYYY-MM-DD'.
+  var dias = { hoy:0, manana:1, pasado:2 }[key];
+  if (dias === undefined) return null;
+  var d = new Date(); d.setDate(d.getDate() + dias);
+  var mm = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
+  return d.getFullYear() + '-' + mm + '-' + dd;
+}
+function _btnFecha(key, label, sub) {
+  var on = _fechaKey === key, ok = _diaSale(key);
+  var cls = 'fecha-btn ' + (on ? 'active' : (ok ? 'sale' : 'nosale'));
+  return '<button type="button" class="' + cls + '" onclick="setFecha(\\'' + key + '\\')" aria-pressed="' + on + '">' +
+    '<span class="dot">' + (ok ? '●' : '○') + '</span>' + label + '<small>' + sub + '</small></button>';
+}
+function _diaSale(key) {
+  if (key === 'hoy') return true;                 // HOY siempre sale (válido encargar hoy)
+  var d = new Date(); d.setDate(d.getDate() + ({hoy:0,manana:1,pasado:2}[key]||0));
+  var iso = (d.getDay()+6) % 7 + 1;              // 1=Lun..7=Dom
+  return _fechaOptions().indexOf(iso) !== -1;
+}
+function setFecha(key) {
+  if (key !== 'hoy' && key !== 'manana' && key !== 'pasado') return;
+  _fechaKey = key;
+  renderFechaRow();   // repinta solo el selector
+  updateCart();       // recalcula hint/estado del footer
+}
+// Render del bloque "¿Para cuándo?" (solo si el carrito tiene al menos un producto encargable).
+function renderFechaRow() {
+  var cont = document.getElementById('fecha-cont');
+  if (!cont) return;
+  if (!_esEncargable()) { cont.innerHTML = ''; return; }
+  var sel = _fechaKey, on = _fechaKey, sale = _diaSale(sel);
+  cont.innerHTML =
+    '<div class="fecha-label">¿Para cuándo?</div>' +
+    '<div class="fecha-btns">' +
+      _btnFecha('hoy','HOY','hoy') + _btnFecha('manana','MAÑANA','manana') + _btnFecha('pasado','PM','pasado') +
+    '</div>' +
+    '<div class="fecha-hint">' +
+      (sel==='hoy' ? '<span class="pclaro">Hoy</span> lo preparamos y va directo a cocina.' :
+       sale     ? '<span class="pclaro">Encargo</span> — se anota para el ' + _fechaISO(sel) + '.' :
+                  '<span class="projo">Ese día no sale</span> — elige otro.' ) +
+    '</div>';
+}
+
 // Pedido CODIFICADO POR IDS (lo autoritativo). El bot lo re-tasa contra la carta; los
 // precios del texto humano son SOLO para que el cliente vea su pedido. Cada item lleva su
 // estructura (normal/al_gusto/mitad) + cantidad. Nombres solo en 'quitar' (gratis, nota cocina).
@@ -1387,6 +1477,8 @@ function buildP1Line() {
     var payload = { v: 1, items: buildOrderItems() };
     var modo = _pedModo(); if (modo) payload.modo_consumo = modo;
     var hora = _pedHora(); if (hora) payload.hora_recogida = hora;
+    // Encargo anticipado: fecha deseada (día futuro) → el parser lo publica con fecha_deseada.
+    var fec = _fechaDeseada(); if (fec) payload.fecha_deseada = fec;
     var json = JSON.stringify(payload);
     var b64 = btoa(unescape(encodeURIComponent(json)));
     var b64url = b64.replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
@@ -1414,6 +1506,9 @@ function buildOrderMsg() {
   var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
   msg += 'Total: ' + _pedEur(total) + '\\n';
   msg += 'Nombre: ' + nombre;
+  // Encargo: fecha deseada en claro (el parser la lee; la #P1 la lleva autoritativa).
+  var fec = _fechaDeseada();
+  if (fec) msg += '\\nPara: ' + fec;
   var p1 = buildP1Line();
   if (p1) msg += '\\n' + p1;
   return msg;
@@ -1451,6 +1546,7 @@ async function pagarAhora() {
     nombre_cliente: nombre,
     modo_consumo: _pedModo(),
     hora_recogida: _pedHora() || null,
+    fecha_deseada: _fechaDeseada() || null,
     pago_online: true,
     return_url: location.origin + location.pathname
   };
@@ -1492,7 +1588,8 @@ async function pedirOnline() {
     total_centimos: Math.round(total * 100),
     nombre_cliente: nombre,
     modo_consumo: _pedModo(),
-    hora_recogida: _pedHora() || null
+    hora_recogida: _pedHora() || null,
+    fecha_deseada: _fechaDeseada() || null
   };
   var btn = document.getElementById('btn-pedir');
   if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }

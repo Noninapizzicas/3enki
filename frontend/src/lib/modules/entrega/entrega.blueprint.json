@@ -1,0 +1,72 @@
+{
+  "_doc": "Blueprint del modulo entrega (the-pirate). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema→UI (BlueprintForm). Seccion `ui` declarada por F6½ (esquematizar-interfaz, 2026-08-24): las 4 operaciones del modulo con sus args reales del contrato y el evento que refresca la zona DATOS. Las acciones son DOTTED (reglas.leer, tiempo.estimar...) porque el RPC real del bus es entrega.<accion>.request y el wrapper mqttRequest('entrega', '<accion>') emite ui/request/entrega/<accion> — por eso transporte.rpc va VACIO: la regex de deriveZones solo parsea acciones de 2 segmentos.",
+  "id": "entrega",
+  "version": "blueprint-1.0.0",
+
+  "rol": "Custodio single-writer de las reglas de entrega (reparto: radio/coste/minutos-por-km; estimacion: minutos-preparacion-base/minutos-por-item) en entrega.json del proyecto + 2 conversores puros: tiempo (estimacion de preparacion+reparto) y reparto (politica declarada). El resto del sistema bebe sus valores por RPC; los nulls del contrato son politica por declarar (el dueno los puebla via reglas.actualizar).",
+
+  "eventos_publicados": [
+    "entrega.reglas.actualizadas"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 4 operaciones se conducen por ui/request/entrega/<accion> con la accion dotted; ver seccion ui.ops. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "entrega.reglas.actualizadas"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 4 operaciones del reflejo con sus args; el evento entrega.reglas.actualizadas refresca la zona eventos.",
+    "ops": {
+      "reglas.leer": {
+        "titulo": "Ver reglas de entrega",
+        "descripcion": "Lectura de las reglas del proyecto (reparto y estimacion). Devuelve el objeto `reglas` con su fuente."
+      },
+      "reglas.actualizar": {
+        "titulo": "Actualizar reglas",
+        "descripcion": "Escritura single-writer (el dueno). Los campos presentes se validan y aplican; los ausentes se preservan. Schema entrega-v1.",
+        "args": [
+          {
+            "nombre": "cambios",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Cambios a aplicar. Ej: {\"reparto\":{\"activo\":true,\"radio_km\":5,\"coste\":2.5,\"minutos_por_km\":3},\"estimacion\":{\"minutos_preparacion_base\":10,\"minutos_por_item\":2}}"
+          }
+        ]
+      },
+      "tiempo.estimar": {
+        "titulo": "Estimar tiempo de entrega",
+        "descripcion": "Tiempo total (preparacion + reparto) para un pedido, segun las reglas declaradas.",
+        "args": [
+          {
+            "nombre": "num_items",
+            "tipo": "number",
+            "required": true,
+            "placeholder": "nº de items del pedido"
+          },
+          {
+            "nombre": "km",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "km de reparto (opcional)"
+          }
+        ]
+      },
+      "reparto.obtener": {
+        "titulo": "Ver politica de reparto",
+        "descripcion": "Politica de reparto declarada: radio, coste y tiempo por km."
+      }
+    },
+    "datos": {
+      "op": "reglas.leer",
+      "titulo": "Reglas de entrega del proyecto",
+      "refresh_on": ["entrega.reglas.actualizadas"],
+      "columnas": ["reglas", "fuente"]
+    }
+  }
+}

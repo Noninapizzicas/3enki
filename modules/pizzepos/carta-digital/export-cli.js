@@ -79,15 +79,18 @@ if (!carta) {
   process.exit(1);
 }
 
-// ── marca · contenido · config (fuentes de la proyección; ausentes = vacío) ──
+// ── marca · contenido · config · calendario (fuentes de la proyección; ausentes = vacío) ──
 const marca = readJson(path.join(pizzeposDir, 'marca.json'), null);
 const contenido = readJson(path.join(pizzeposDir, 'contenido.json'), {});
 const config = readJson(path.join(pizzeposDir, 'carta-digital', 'config.json'), {});
+// Calendario (módulo calendario): vive en la RAÍZ del storage del proyecto (config-custodio usa
+// path relativo 'calendario.json' → fs lo resuelve contra el storage root). Ausente → {}.
+const calendario = readJson(path.join(storageRoot, 'calendario.json'), {});
 // DISEÑO que compuso Enki (card_template + tema_css). Ausente → semilla inmersiva.
 const diseno = readJson(path.join(pizzeposDir, 'carta-digital', 'diseno.json'), {});
 
 // ── PROYECCIÓN (misma forma que sirve el reflejo) ──
-const proy = proyectarCartaPublica(carta, marca, contenido, config);
+const proy = proyectarCartaPublica(carta, marca, contenido, config, calendario);
 const b = proy.branding || {};
 
 console.log(`  Carta:      ${cartaPath}`);

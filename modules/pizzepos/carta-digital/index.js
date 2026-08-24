@@ -194,6 +194,14 @@ class CartaDigitalModule extends BaseModule {
     const r = await this._rpc('contenido.get.request', { project_id }, { timeout_ms: 6000 });
     return (r?.status === 200 && r.data && typeof r.data === 'object') ? r.data : {};
   }
+  // Calendario (módulo calendario): qué días sale cada producto. Soft-fail → {} (la carta
+  // sigue publicándose sin botón de encargo). Contrato: calendario.productos.leer.request →
+  // { status:200, data: { calendarios: { [producto_id]: { dias_salida, margen_antelacion_h } } } }.
+  async _calendario(project_id) {
+    const r = await this._rpc('calendario.productos.leer.request', { project_id }, { timeout_ms: 6000 });
+    const d = (r?.status === 200 && r.data && r.data.calendarios) ? r.data.calendarios : null;
+    return d && typeof d === 'object' ? d : {};
+  }
 
   // ── config del canal (lo único que posee) ──
   async _leerConfig(project_id) {
@@ -469,12 +477,12 @@ class CartaDigitalModule extends BaseModule {
   // ── PROYECCIÓN de la carta pública (al vuelo) ──
   async _proyectarPublica(project_id) {
     if (!project_id) return this._err(400, 'INVALID_INPUT', 'project_id requerido');
-    const [carta, marca, contenido, config] = await Promise.all([
-      this._carta(project_id), this._marca(project_id), this._contenido(project_id), this._leerConfig(project_id)
+    const [carta, marca, contenido, config, calendario] = await Promise.all([
+      this._carta(project_id), this._marca(project_id), this._contenido(project_id), this._leerConfig(project_id), this._calendario(project_id)
     ]);
     if (!carta) return this._err(404, 'RESOURCE_NOT_FOUND', 'el canal digital no tiene carta asignada (revisa tarifas) ni hay carta en servicio');
 
-    return { status: 200, data: proyectarCartaPublica(carta, marca, contenido, config) };
+    return { status: 200, data: proyectarCartaPublica(carta, marca, contenido, config, calendario) };
   }
 
   // ── handlers (ui_handlers) ──

@@ -7,7 +7,7 @@ fuentes:
   - modules/pizzepos/carta-digital/**
   - modules/pizzepos/pedidos/**
   - modules/_shared/pedido-tasador.js
-verificado: 2026-07-21
+verificado: 2026-08-24
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)
@@ -230,15 +230,21 @@ sendTemplate (Meta plantillas · salientes >24h) {
 //   nombre al recoger; cocina/staff lo ven como ref_display.
 ```
 
-## CLASE carta-digital (PWA) — emite el pedido por ids (#P1) + paridad comandero
+## CLASE carta-digital (PWA) — emite el pedido por ids (#P1) + paridad comandero + ENCARGO con fecha
 
-```
+```javascript
 // modules/pizzepos/carta-digital/static-template.js (generador de la PWA, v2.6.0):
 //   - cada item del carrito lleva su `estructura` por ids (normal/al_gusto/mitad_mitad).
 //   - buildP1Line(): serializa { v:1, items: buildOrderItems() } a base64url utf8-safe y lo
 //     cuelga del mensaje wa.me tras 'Nombre:'. Las líneas humanas siguen (el cliente ve su pedido).
 //   - MITAD con variaciones en AMBAS mitades (paridad comandero): botón partido (cuerpo=mitad
 //     tal cual · ✏️=personalizar), política max(izq,der)+extras (v2.3.0).
+// ENCARGO con fecha (hoja 2 — boton "Encargar" del detalle de producto):
+//   - los productos que traen dias_salida[] (del módulo calendario, 5ª fuente del proyector)
+//     muestran el botón Encargar → calendario del mes (🟢 sale / 🔴 no sale).
+//   - confirmar para día FUTURO → buildP1Line() añade `fecha_deseada:'YYYY-MM-DD'` al JSON del
+//     #P1 y el mensaje wa.me incluye la cabecera 'Para: <fecha>' (avisos de entrega/cocina).
+//   - confirmar HOY → pedido normal sin fecha_deseada (retrocompat total).
 // PODA previa de carta-digital:
 //   v2.4.0 — fuera ofertas/reseñas/track (la proyección no los daba: UI viva alimentada por vacío).
 //   v2.5.0 — fuera el cerebro FANTASMA del chat (default ai_chat_path '/modules/ai-gateway/chat',

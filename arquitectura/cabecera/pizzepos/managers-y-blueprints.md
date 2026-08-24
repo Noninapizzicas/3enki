@@ -5,7 +5,7 @@ resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, 
 fuentes:
   - modules/pizzepos/**
   - blueprints/**
-verificado: 2026-07-19
+verificado: 2026-08-24
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -1051,15 +1051,17 @@ CLASE CartaDigitalModule EXTIENDE BaseModule {  // PROYECTOR, no manager-con-sto
   //   carta-marketing → el branding (get_perfil)           [nombre/lema/colores/logo/voz]
   //   contenido       → imágenes/descripción por producto  (contenido.get)
   //   productos       → catálogo de ingredientes 'extra'   (handleListIngredientes, canal digital)
+  //   calendario      → dias_salida[] + margen_antelacion_h por producto (calendario.productos.leer)
 
   METODOS {
     // PROYECCIÓN pura (proyeccion.js): entra dato, sale dato. La misma FORMA para los
-    // dos consumidores — el reflejo (bus) y el export-cli (disco).
+    // dos consumidores: el reflejo (bus) y el export-cli (disco).
     _proyectarPublica(project_id):
-      [carta, marca, contenido, config] ← Promise.all(bebe_de…)
+      [carta, marca, contenido, config, calendario] ← Promise.all(bebe_de_*)
       SI !carta: RETORNA 404 (canal sin carta — revisa tarifas)
-      RETORNA proyectarCartaPublica(carta, marca, contenido, config)
-        // → { branding, categorias, productos, alergenos_leyenda (1169/2011), opciones }
+      RETORNA proyectarCartaPublica(carta, marca, contenido, config, calendario)
+        // → { branding, categorias, productos, alergenos_leyenda (1169/2011), opciones,
+        //     dias_salida[] por producto (para el boton Encargar de la PWA) }
 
     // DISEÑO con FRENO (skill blueprint-agentico): _checkDiseno exige el CONTRATO de slots
     //   {{id}} {{nombre}} {{precio}} {{alergenos}} {{add_label}} + hooks data-accion detalle/add.

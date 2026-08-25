@@ -19,8 +19,8 @@ const ENKI_DIR = process.argv.includes('--dir')
   ? process.argv[process.argv.indexOf('--dir') + 1]
   : '/home/admin/3enki';
 
-const STORE_DIR = path.join(ENKI_DIR, 'modules/agentes/registro/store');
-const ESPEJO_DIR = path.join(ENKI_DIR, 'arquitectura/esquema-motor-agentes/pipelines');
+const STORE_DIR = path.join(ENKI_DIR, 'modules/cosecha/cantera/enki/agentes');
+const ESPEJO_DIR = path.join(ENKI_DIR, 'modules/cosecha/cantera/enki/agentes');
 
 // ── Utilidades de terminal ─────────────────────────────────────────
 
@@ -335,8 +335,7 @@ async function wizard() {
   br();
   console.log(`  Para versionarlo:`);
   console.log(`    cd ${ENKI_DIR}`);
-  console.log(`    git add modules/agentes/registro/store/${name}.json`);
-  console.log(`    git add arquitectura/esquema-motor-agentes/pipelines/${name}.json`);
+  console.log(`    git add modules/cosecha/cantera/enki/agentes/${name}.json`);
   br();
 
   rl.close();

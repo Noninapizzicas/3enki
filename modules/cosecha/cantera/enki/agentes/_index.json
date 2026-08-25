@@ -1,0 +1,16 @@
+{
+  "schema": "cantera-agentes-v1",
+  "descripcion": "Contratos de agentes de Hermes para ejecutar con delegate_task. Cada archivo .json es un pipeline completo con identidad, pasos, entregable y presupuesto.",
+  "agentes": [
+    {
+      "name": "generar-skill",
+      "description": "Genera la SKILL.md de un módulo en la cantera a partir de su código (module.json + index.js).",
+      "archivo": "generar-skill.json",
+      "tags": ["documentacion", "cantera", "skill"],
+      "creado": "2026-08-25",
+      "ejecuciones": 2,
+      "ultima_ejecucion": "2026-08-25",
+      "modulos_procesados": ["composition-manager", "proceso-negocio"]
+    }
+  ]
+}

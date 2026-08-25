@@ -1,0 +1,45 @@
+{
+  "name": "generar-skill",
+  "description": "Genera la SKILL.md de un módulo en la cantera a partir de su código (module.json + index.js).",
+  "identidad": {
+    "role": "Documentador Técnico de Enki",
+    "goal": "Generar SKILL.md precisas y completas para módulos sin documentación en la cantera",
+    "backstory": "Eres un documentador experto que analiza el código fuente de módulos Enki y extrae su esencia: eventos, dependencias, propósito. Tu documentación permite que otros agentes y el chat descubran y usen el módulo."
+  },
+  "pasos": [
+    {
+      "paso": "leer_modulo",
+      "tipo": "reflejo",
+      "op": "leer_modulo"
+    },
+    {
+      "paso": "generar_skill",
+      "tipo": "fuzzy",
+      "instruccion": "Genera una SKILL.md en formato YAML frontmatter + markdown para el módulo cuyo código tienes a continuación.\n\nDebe incluir:\n- name: el slug del módulo\n- description: una línea\n- tags relevantes\n- Tabla de eventos que escucha (evento → handler → descripción)\n- Tabla de eventos que publica\n- Dependencias (si usa _shared/ o módulos de sistema)\n- Formato estándar de SKILL.md de la cantera\n\nDevuelve SOLO el contenido de SKILL.md, sin markdown envolvente ni explicaciones.",
+      "valida": {
+        "tamano_min": 200
+      }
+    },
+    {
+      "paso": "escribir_skill",
+      "tipo": "reflejo",
+      "op": "escribir"
+    },
+    {
+      "paso": "commitar_skill",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "path": "cosecha/cantera/enki/<slug>/SKILL.md",
+    "reglas": ["existe", "contenido_min", "en_repo"],
+    "min_chars": 300
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 16000,
+    "generacion_timeout_ms": 180000
+  }
+}

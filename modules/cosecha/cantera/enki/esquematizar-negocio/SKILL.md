@@ -92,6 +92,8 @@ vez hasta seco. Escribe cada ronda en `pasada-N-<pieza>.md`.
   según su `rol` y su `relacion` declarados — el prisma lo descubre.
 - **RESTRICCIONES**: ¿qué le limita a ESTE actor en su relación con el negocio?
   Se deriva de su `canal`, su `rol` y lo que el negocio le exige.
+  Cada restricción encontrada → aplica FRENOS → EMPUJONES: busca su gemelo
+  positivo (la pieza que la convierte en suma, no en muro).
 - **CONTRATO**: ¿qué intercambia con el negocio? Lo que da ↔ lo que recibe,
   leído de su `relacion` declarada.
 - **NO-OBJETIVOS**: ¿qué NO quiere este actor del negocio? Lo que le haría
@@ -107,6 +109,33 @@ Cada interlocutor genera su pasada: `pasada-N-interlocutor-<rol>.md`. Las
 piezas que emergen SOLO desde la perspectiva de un actor concreto se añaden al
 árbol — son invisibles desde la vista global. Las piezas que varios actores
 comparten se refuerzan y se cruzan (validación cruzada).
+
+**Principio transversal · FRENOS → EMPUJONES** — en TODA pasada del prisma
+(global y por interlocutor), cuando el hueco RESTRICCIONES devuelve un freno
+(algo que limita, bloquea o corta el flujo), NO lo registres como muro.
+Aplica el gemelo positivo de P0:
+
+1. **¿Qué estado deseado protege este freno?** (la pregunta madre).
+2. Si protege un estado REAL → convierte el freno en su **empujón**: la acción
+   construible que abre ese estado. El empujón es una PIEZA del esquema (un
+   futuro módulo, una capacidad, un flujo alternativo que suma).
+3. Si no protege nada nombrable → se disuelve (no era restricción, era miedo
+   o inercia — "siempre se hizo así" no es un estado que proteger).
+
+El proceso NO se detiene ante un freno: lo ATRAVIESA convirtiéndolo en lo que
+hay que construir. Un freno que no encuentra su empujón es una pregunta abierta
+al dueño ("¿qué protege este límite?"), nunca un muro.
+
+Ejemplo vivo (Despacho de pan, MSG 450-451): "pagar por adelantado para
+encargar" era un freno que no protegía al sistema — protegía al dueño de la
+incertidumbre. Su empujón: el cliente elige CUÁNDO paga (adelantado o al
+recoger); el despacho no pierde, el cliente no se siente atado. El freno se
+convirtió en una pieza (flexibilidad de cobro) que suma a los dos lados.
+
+Aplica especialmente al **eslabón limitante** (paso 2 del mandato): el cuello
+de botella es el freno por excelencia — sus alternativas de desacople SON sus
+empujones. Y al **prisma por interlocutor**: cada actor tiene sus frenos
+propios, invisibles desde la vista global.
 
 **Fase 2 · Esquema** — ensambla en `esquema.md` el árbol maestro completo:
 las piezas del negocio (del prisma global + del prisma por interlocutor), sus
@@ -172,7 +201,7 @@ proceso no avanza.
 **Procedimiento mecánico, en este orden, sin saltarte nada:**
 
 1. Toma el negocio (qué_es + qué_vende + cómo_lo_elabora de la identidad).
-2. **BUSCA EL FOCO TÚ MISMO**: del flujo declarado en cómo_lo_elabora, identifica el ESLABÓN LIMITANTE (el cuello de botella — el paso cuya capacidad o programación restringe al conjunto). NO esperes a que el dueño lo señale: es tu trabajo encontrarlo y EXPANDIRLO AL MÁXIMO (sus restricciones, sus alternativas de desacople, sus decisiones abiertas). El cuello de botella es el CORAZÓN del esquema, no una sección más. El eslabón limitante cambia de un negocio a otro — se lee del flujo declarado, nunca de una lista fija.
+2. **BUSCA EL FOCO TÚ MISMO**: del flujo declarado en cómo_lo_elabora, identifica el ESLABÓN LIMITANTE (el cuello de botella — el paso cuya capacidad o programación restringe al conjunto). NO esperes a que el dueño lo señale: es tu trabajo encontrarlo y EXPANDIRLO AL MÁXIMO (sus restricciones, sus alternativas de desacople, sus decisiones abiertas). El cuello de botella es el CORAZÓN del esquema, no una sección más. El eslabón limitante cambia de un negocio a otro — se lee del flujo declarado, nunca de una lista fija. **FRENOS → EMPUJONES**: el cuello de botella es el freno por excelencia del negocio — sus alternativas de desacople SON sus empujones (las piezas que convierten el freno en capacidad). NO lo dejes como limitación: conviértelo en las piezas que lo abren.
 3. Pásalo por el prisma de 5 huecos → escribe `pasada-1-<pieza>.md` con los 5 huecos y los sub-productos que salen.
 4. **Cada sub-producto que salió es un PUNTO nuevo**: pásalo por el prisma OTRA VEZ → escribe `pasada-2-<punto>.md`.
 5. Repite: cada punto que sale de cada pasada, al prisma, en su propio archivo — **PUNTO A PUNTO, RONDA A RONDA**.
@@ -303,6 +332,7 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 - **Terminar en el primer esquema** — si quedan preguntas abiertas relevantes, el ciclo sigue (preguntas → investigación → replanteamiento → pasada 2).
 - **Saltarse el prisma por interlocutor** — el prisma global ve el negocio "desde arriba"; el prisma por interlocutor lo ve desde la silla de cada actor. Las piezas que solo emergen desde una perspectiva concreta se pierden sin esta pasada — y son distintas en cada negocio porque los actores son distintos.
 - **Inventar interlocutores nuevos** — el mapa se cerró en FASE 0; esta fase lo CONSUME, no lo amplía. Si aparece un actor que falta, se devuelve a FASE 0 para reabrir el mapa.
+- **Registrar un freno como muro sin buscar su empujón** — toda restricción que sale del prisma pasa por FRENOS → EMPUJONES: ¿qué estado protege? Si protege algo real → su gemelo positivo es una pieza del esquema. Si no protege nada → se disuelve. Un freno sin empujón es pregunta abierta al dueño, nunca un muro aceptado.
 - **Disecar antes de tocar suelo** — primero el prisma global + prisma por interlocutor se agotan, luego la FORMA.
 - **Cerrar la fase tras la pasada 1** — el cierre es idempotente y solo empuja una vez: se cierra cuando el ciclo termina.
 - **Escribir fuera de `esquemas/`** (rutas absolutas) — el gate lista ese directorio del proyecto; lo de fuera no existe para él.
@@ -318,6 +348,7 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 - **Cada interlocutor tiene su pasada** (`esquemas/pasada-N-interlocutor-<rol>.md`) — uno por actor del mapa cerrado en FASE 0, con los 5 huecos desde SU perspectiva.
 - **Las piezas que solo emergen desde un interlocutor** están en el árbol maestro (no se quedaron solo en la pasada del actor).
 - **`esquemas/esquema.md` existe** con el árbol maestro (piezas globales + piezas por interlocutor — el gate lo comprueba).
+- **FRENOS → EMPUJONES aplicado**: toda restricción del prisma (global + por interlocutor) tiene su gemelo positivo (empujón = pieza construible) o está marcada como pregunta abierta al dueño. Cero frenos aceptados como muros.
 - CERO tecnologías en el esquema (agnosticismo).
 - `esquema.md` responde "qué piezas necesita este negocio" con su FORMA, visto desde TODAS las perspectivas.
 - **El ciclo está vivo**: si quedan preguntas abiertas relevantes → las haces al dueño, investigas los puntos investigables y re-pasas el agente (pasada 2).

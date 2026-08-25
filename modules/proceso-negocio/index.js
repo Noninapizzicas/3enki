@@ -102,50 +102,50 @@ const MAPA_PROCESO = {
   },
   'negocio.adaptado': {
     skill: 'construir-modulos',
-    lee: ['proceso-negocio/fase3b-adaptador.json'],
-    escribe: 'proceso-negocio/fase4-construir-modulos.json',
-    mensaje: 'FASE 4: construir UNA hoja del plan — lee proceso-negocio/fase3b-adaptador.json, la primera hoja sin módulo en disco. Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["<slug>"] } }.'
+    lee: ['esquemas/plan-construccion.md'],
+    escribe: 'modules/<slug>/',
+    mensaje: 'FASE 4: construir UNA hoja del plan — lee esquemas/plan-construccion.md, construye modules/<slug>/ (index.js + module.json) en el repo. Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.construido': {
     skill: 'escribir-skills',
-    lee: ['proceso-negocio/fase4-construir-modulos.json'],
-    escribe: 'proceso-negocio/fase5-escribir-skills.json',
-    mensaje: 'FASE 5: escribir la SKILL FULL del módulo — lee proceso-negocio/fase4-construir-modulos.json + modules/<slug>/module.json + index.js, escribe la skill en la cantera con TODA la lógica real embebida. Al terminar: proceso-negocio.completar_fase { fase: "skills" }.'
+    lee: ['modules/<slug>/module.json', 'modules/<slug>/index.js'],
+    escribe: 'modules/cosecha/cantera/enki/<slug>/SKILL.md',
+    mensaje: 'FASE 5: escribir la SKILL FULL del módulo — lee modules/<slug>/module.json + index.js del repo, escribe modules/cosecha/cantera/enki/<slug>/SKILL.md en el repo. Al terminar: proceso-negocio.completar_fase { fase: "skills" }.'
   },
   'negocio.skills': {
     skill: 'decidir-interfaz',
-    lee: ['proceso-negocio/fase5-escribir-skills.json'],
-    escribe: 'proceso-negocio/fase6-decidir-interfaz.json',
-    mensaje: 'FASE 6: decidir la INTERFAZ del módulo — lee proceso-negocio/fase5-escribir-skills.json + modules/<slug>/module.json, razona el rol y escribe ui_handlers (type+zone) o ui_decision.necesita=false. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"] } }.'
+    lee: ['modules/<slug>/module.json', 'modules/cosecha/cantera/enki/<slug>/SKILL.md'],
+    escribe: 'modules/<slug>/module.json',
+    mensaje: 'FASE 6: decidir la INTERFAZ del módulo — lee modules/<slug>/module.json + la skill de la cantera, razona el rol, escribe ui_handlers (type+zone) en modules/<slug>/module.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz': {
     skill: 'esquematizar-interfaz',
-    lee: ['proceso-negocio/fase6-decidir-interfaz.json'],
-    escribe: 'proceso-negocio/fase6h-esquematizar-interfaz.json',
-    mensaje: 'FASE 6½: esquematizar la interfaz concreta — lee proceso-negocio/fase6-decidir-interfaz.json + modules/<slug>/<slug>.blueprint.json, declara la sección ui (ui.ops + ui.datos) EN el blueprint. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.'
+    lee: ['modules/<slug>/module.json', 'modules/<slug>/<slug>.blueprint.json'],
+    escribe: 'modules/<slug>/<slug>.blueprint.json',
+    mensaje: 'FASE 6½: esquematizar la interfaz concreta — lee modules/<slug>/module.json + blueprint, declara ui.ops + ui.datos EN modules/<slug>/<slug>.blueprint.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz_esquematizada': {
     skill: 'construir-interfaz',
-    lee: ['proceso-negocio/fase6h-esquematizar-interfaz.json'],
-    escribe: 'proceso-negocio/fase7-construir-interfaz.json',
-    mensaje: 'FASE 7: construir la interfaz operativa — lee proceso-negocio/fase6h-esquematizar-interfaz.json, genera el envoltorio frontend (manifest.json + index.ts + <Slug>Panel.svelte + blueprint). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.'
+    lee: ['modules/<slug>/<slug>.blueprint.json'],
+    escribe: 'frontend/src/lib/modules/<slug>/',
+    mensaje: 'FASE 7: construir la interfaz operativa — lee modules/<slug>/<slug>.blueprint.json, genera frontend/src/lib/modules/<slug>/ (manifest.json + index.ts + <Slug>Panel.svelte + blueprint). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz_construida': {
     skill: 'construir-modulos',
-    lee: ['proceso-negocio/fase7-construir-interfaz.json'],
-    escribe: 'proceso-negocio/fase4-construir-modulos.json',
-    mensaje: 'Hoja completa. FASE 4: construir la SIGUIENTE hoja del plan — lee proceso-negocio/fase3b-adaptador.json, la siguiente sin módulo. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si no quedan hojas: proceso-negocio.completar_fase { fase: "completado" }.'
+    lee: ['esquemas/plan-construccion.md'],
+    escribe: 'modules/<slug>/',
+    mensaje: 'Hoja completa. FASE 4: construir la SIGUIENTE hoja del plan — lee esquemas/plan-construccion.md, la siguiente sin módulo en el repo. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si no quedan hojas: proceso-negocio.completar_fase { fase: "completado" }.'
   },
   'negocio.verificado': {
     skill: null,
-    lee: ['proceso-negocio/fase8-verificar-en-vivo.json'],
-    escribe: 'proceso-negocio/fase-completado.json',
+    lee: [],
+    escribe: null,
     mensaje: 'COMPLETO Y VERIFICADO: todas las hojas tienen módulo, skill e interfaz operativa verificados en vivo. F0→F8 cerrado.'
   },
   'negocio.completado': {
     skill: null,
     lee: [],
-    escribe: 'proceso-negocio/fase-completado.json',
+    escribe: null,
     mensaje: 'COMPLETO: todas las hojas de la disección tienen su módulo y su skill. El negocio está construido.'
   }
 };
@@ -262,19 +262,19 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       const h = hojas[i];
       const pos = `hoja ${i + 1}/${n} ('${h.slug}')`;
       if (!h.construido) {
-        return { skill: 'construir-modulos', lee: ['proceso-negocio/fase3b-adaptador.json'], escribe: 'proceso-negocio/fase4-construir-modulos.json', mensaje: `MÓDULO POR MÓDULO — ${pos}: construir su módulo. Lee proceso-negocio/fase3b-adaptador.json, construye modules/${h.slug}/ (index.js + module.json). Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'construir-modulos', lee: ['esquemas/plan-construccion.md'], escribe: `modules/${h.slug}/`, mensaje: `MÓDULO POR MÓDULO — ${pos}: construir su módulo — lee esquemas/plan-construccion.md, escribe modules/${h.slug}/ (index.js + module.json) en el repo. Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       if (!h.con_skill) {
-        return { skill: 'escribir-skills', lee: ['proceso-negocio/fase4-construir-modulos.json'], escribe: 'proceso-negocio/fase5-escribir-skills.json', mensaje: `MÓDULO POR MÓDULO — ${pos}: escribir la SKILL FULL — lee proceso-negocio/fase4-construir-modulos.json + modules/${h.slug}/module.json + index.js, escribe modules/cosecha/cantera/enki/${h.slug}/SKILL.md con TODA la lógica real. Al terminar: proceso-negocio.completar_fase { fase: "skills", resumen: { skills: ["${h.slug}"] } }.` };
+        return { skill: 'escribir-skills', lee: [`modules/${h.slug}/module.json`, `modules/${h.slug}/index.js`], escribe: `modules/cosecha/cantera/enki/${h.slug}/SKILL.md`, mensaje: `MÓDULO POR MÓDULO — ${pos}: escribir la SKILL FULL — lee modules/${h.slug}/module.json + index.js del repo, escribe modules/cosecha/cantera/enki/${h.slug}/SKILL.md en el repo. Al terminar: proceso-negocio.completar_fase { fase: "skills", resumen: { skills: ["${h.slug}"] } }.` };
       }
       if (!h.con_interfaz) {
-        return { skill: 'decidir-interfaz', lee: ['proceso-negocio/fase5-escribir-skills.json'], escribe: 'proceso-negocio/fase6-decidir-interfaz.json', mensaje: `MÓDULO POR MÓDULO — ${pos}: decidir interfaz — lee proceso-negocio/fase5-escribir-skills.json + modules/${h.slug}/module.json, razona el rol, escribe ui_handlers o ui_decision.necesita=false. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'decidir-interfaz', lee: [`modules/${h.slug}/module.json`, `modules/cosecha/cantera/enki/${h.slug}/SKILL.md`], escribe: `modules/${h.slug}/module.json`, mensaje: `MÓDULO POR MÓDULO — ${pos}: decidir interfaz — lee modules/${h.slug}/module.json + skill de la cantera, razona el rol, escribe ui_handlers en modules/${h.slug}/module.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       if (!h.con_interfaz_esquematizada) {
-        return { skill: 'esquematizar-interfaz', lee: ['proceso-negocio/fase6-decidir-interfaz.json'], escribe: 'proceso-negocio/fase6h-esquematizar-interfaz.json', mensaje: `MÓDULO POR MÓDULO — ${pos}: esquematizar la interfaz — lee proceso-negocio/fase6-decidir-interfaz.json + modules/${h.slug}/${h.slug}.blueprint.json, declara ui.ops + ui.datos EN el blueprint. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'esquematizar-interfaz', lee: [`modules/${h.slug}/module.json`, `modules/${h.slug}/${h.slug}.blueprint.json`], escribe: `modules/${h.slug}/${h.slug}.blueprint.json`, mensaje: `MÓDULO POR MÓDULO — ${pos}: esquematizar la interfaz — lee modules/${h.slug}/module.json + blueprint, declara ui.ops + ui.datos EN modules/${h.slug}/${h.slug}.blueprint.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       if (!h.con_interfaz_construida) {
-        return { skill: 'construir-interfaz', lee: ['proceso-negocio/fase6h-esquematizar-interfaz.json'], escribe: 'proceso-negocio/fase7-construir-interfaz.json', mensaje: `MÓDULO POR MÓDULO — ${pos}: construir la interfaz — lee proceso-negocio/fase6h-esquematizar-interfaz.json, genera frontend (manifest.json + index.ts + <Slug>Panel.svelte con BlueprintForm). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'construir-interfaz', lee: [`modules/${h.slug}/${h.slug}.blueprint.json`], escribe: `frontend/src/lib/modules/${h.slug}/`, mensaje: `MÓDULO POR MÓDULO — ${pos}: construir la interfaz — lee modules/${h.slug}/${h.slug}.blueprint.json, genera frontend/src/lib/modules/${h.slug}/ (manifest + index.ts + Panel.svelte). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       // hoja completa → continúa a la siguiente
     }
@@ -286,9 +286,9 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     // reporte del agente (lección de todo el proceso). Si ya se verificó
     // (flag persistido) o se acaba de completar la fase 'verificado', cierra.
     if (this._verificado(progreso.project_id) || faseActual === 'verificado') {
-      return { skill: null, lee: ['proceso-negocio/fase8-verificar-en-vivo.json'], escribe: 'proceso-negocio/fase-completado.json', mensaje: 'COMPLETO Y VERIFICADO: todas las hojas tienen módulo, skill e interfaz operativa verificados en vivo. F0→F8 cerrado.' };
+      return { skill: null, lee: [], escribe: null, mensaje: 'COMPLETO Y VERIFICADO: todas las hojas tienen módulo, skill e interfaz operativa verificados en vivo. F0→F8 cerrado.' };
     }
-    return { skill: 'verificar-en-vivo', lee: ['proceso-negocio/fase7-construir-interfaz.json'], escribe: 'proceso-negocio/fase8-verificar-en-vivo.json', mensaje: `FASE 8 · VERIFICACIÓN FINAL (${progreso.con_interfaz_construida}/${progreso.total}): verificar EN VIVO que cada hoja del plan tiene módulo, skill y interfaz operativa en disco. Al terminar: proceso-negocio.completar_fase { fase: "verificado" }.` };
+    return { skill: 'verificar-en-vivo', lee: ['modules/', 'modules/cosecha/cantera/enki/', 'frontend/src/lib/modules/'], escribe: null, mensaje: `FASE 8 · VERIFICACIÓN FINAL (${progreso.con_interfaz_construida}/${progreso.total}): verificar EN VIVO que cada hoja del plan tiene módulo, skill y interfaz operativa en el repo. Al terminar: proceso-negocio.completar_fase { fase: "verificado" }.` };
   }
 
   // ── PROGRESO DEL PLAN (determinista — el sistema decide, no el LLM) ──

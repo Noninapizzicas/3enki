@@ -1,0 +1,186 @@
+{
+  "schema": "blueprint-interfaz-v1",
+  "moduleId": "estados",
+  "titulo": "Cúpula de estados: listas ordenadas (notas/tareas/compras/chef/proceso) con orden libre|estricto y freno entre pasos. Custodio single-writer; la heredan por bus, por nervio y por plantilla de proceso.",
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "acciones": [
+      {
+        "name": "anadir_paso",
+        "label": "anadir paso",
+        "desc": "Añade un ítem/paso a la lista ACTIVA. ÚSALA cuando el usuario mencione algo nuevo que hacer o comprar mientras hay una l",
+        "args": [
+          {
+            "name": "texto",
+            "type": "text",
+            "label": "texto",
+            "required": true
+          },
+          {
+            "name": "forma",
+            "type": "text",
+            "label": "forma",
+            "required": false
+          }
+        ],
+        "confirm": true
+      },
+      {
+        "name": "completar_paso",
+        "label": "completar paso",
+        "desc": "Marca un paso de la lista ACTIVA como hecho. En una lista LIBRE indica el 'numero' del paso (1-based, tal como se muestr",
+        "args": [
+          {
+            "name": "numero",
+            "type": "number",
+            "label": "numero",
+            "required": false
+          },
+          {
+            "name": "entrega",
+            "type": "text",
+            "label": "entrega",
+            "required": false
+          },
+          {
+            "name": "estado",
+            "type": "text",
+            "label": "estado",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "fijar_objetivo",
+        "label": "fijar objetivo",
+        "desc": "Fija el OBJETIVO de la lista/rail ACTIVA — la condición que dice cuándo el trabajo está COMPLETO (p.ej. 'la carta public",
+        "args": [
+          {
+            "name": "objetivo",
+            "type": "text",
+            "label": "objetivo",
+            "required": true
+          }
+        ],
+        "confirm": true
+      },
+      {
+        "name": "evaluar_rail",
+        "label": "evaluar rail",
+        "desc": "Juzga si el OBJETIVO de la lista/rail ACTIVA se cumplió y registra el veredicto. TÚ eres el juez: mira la conversación y",
+        "args": [
+          {
+            "name": "veredicto",
+            "type": "text",
+            "label": "veredicto",
+            "required": true
+          }
+        ],
+        "confirm": true
+      }
+    ],
+    "datos": [
+      {
+        "name": "crear_lista",
+        "label": "crear lista",
+        "desc": "Crea una lista/rail y la deja ACTIVA (el sistema te la recordará cada turno). ÚSALA cuando el usuario tenga un trabajo d",
+        "refresh_on": [
+          "estados.crear.request",
+          "estados.instanciar.request",
+          "estados.anadir.request",
+          "estados.avanzar.request",
+          "estados.marcar.request",
+          "estados.estado.request",
+          "estados.listar.request",
+          "estados.activar.request",
+          "estados.borrar.request",
+          "estados.fijar_objetivo.request",
+          "estados.evaluar.request"
+        ]
+      },
+      {
+        "name": "ver_listas",
+        "label": "ver listas",
+        "desc": "Muestra las listas del proyecto y cuál está activa. Opcionalmente activa una por id (pasa 'activar'). ÚSALA para retomar",
+        "refresh_on": [
+          "estados.crear.request",
+          "estados.instanciar.request",
+          "estados.anadir.request",
+          "estados.avanzar.request",
+          "estados.marcar.request",
+          "estados.estado.request",
+          "estados.listar.request",
+          "estados.activar.request",
+          "estados.borrar.request",
+          "estados.fijar_objetivo.request",
+          "estados.evaluar.request"
+        ]
+      },
+      {
+        "name": "borrar_lista",
+        "label": "borrar lista",
+        "desc": "Borra una lista. Sin 'lista_id' borra la ACTIVA. ÚSALA cuando el usuario termine un trabajo y quiera cerrar/retirar su l",
+        "refresh_on": [
+          "estados.crear.request",
+          "estados.instanciar.request",
+          "estados.anadir.request",
+          "estados.avanzar.request",
+          "estados.marcar.request",
+          "estados.estado.request",
+          "estados.listar.request",
+          "estados.activar.request",
+          "estados.borrar.request",
+          "estados.fijar_objetivo.request",
+          "estados.evaluar.request"
+        ]
+      }
+    ],
+    "eventos_que_escucho": [
+      {
+        "event": "estados.crear.request",
+        "label": "estados crear"
+      },
+      {
+        "event": "estados.instanciar.request",
+        "label": "estados instanciar"
+      },
+      {
+        "event": "estados.anadir.request",
+        "label": "estados anadir"
+      },
+      {
+        "event": "estados.avanzar.request",
+        "label": "estados avanzar"
+      },
+      {
+        "event": "estados.marcar.request",
+        "label": "estados marcar"
+      },
+      {
+        "event": "estados.estado.request",
+        "label": "estados estado"
+      },
+      {
+        "event": "estados.listar.request",
+        "label": "estados listar"
+      },
+      {
+        "event": "estados.activar.request",
+        "label": "estados activar"
+      },
+      {
+        "event": "estados.borrar.request",
+        "label": "estados borrar"
+      },
+      {
+        "event": "estados.fijar_objetivo.request",
+        "label": "estados fijar objetivo"
+      },
+      {
+        "event": "estados.evaluar.request",
+        "label": "estados evaluar"
+      }
+    ]
+  }
+}

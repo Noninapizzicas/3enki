@@ -1,0 +1,32 @@
+{
+  "name": "generar-blueprint",
+  "description": "Genera el blueprint.json de interfaz para un módulo. DETERMINISTA: lee module.json, extrae tools/subscribes/ui_decision, y genera el JSON con las 4 zonas. SIN LLM.",
+  "identidad": {
+    "role": "Diseñador de Interfaces Enki",
+    "goal": "Generar blueprints de interfaz precisos a partir de la metadata del módulo",
+    "backstory": "Eres un diseñador determinista que transforma la metadata de un módulo (tools + subscribes + ui_decision) en un blueprint JSON estándar. No improvisas, no alucinas, no gastas tokens."
+  },
+  "pasos": [
+    {
+      "paso": "ejecutar_script",
+      "tipo": "reflejo",
+      "op": "ejecutar_script",
+      "comando": "node scripts/generar-blueprint.js <slug>"
+    },
+    {
+      "paso": "verificar_blueprint",
+      "tipo": "reflejo",
+      "op": "verificar"
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "path": "<slug>/<slug>.blueprint.json",
+    "reglas": ["existe", "contenido_min"]
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 1,
+    "max_tokens": 1000,
+    "generacion_timeout_ms": 30000
+  }
+}

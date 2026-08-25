@@ -31,6 +31,16 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
+    },
+    {
+      "name": "generar-blueprint",
+      "description": "Genera el blueprint.json de interfaz para un módulo. DETERMINISTA: sin LLM.",
+      "archivo": "generar-blueprint.json",
+      "tags": ["interfaz", "blueprint", "ui", "determinista"],
+      "creado": "2026-08-25",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

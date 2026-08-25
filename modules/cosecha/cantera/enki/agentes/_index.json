@@ -11,6 +11,16 @@
       "ejecuciones": 2,
       "ultima_ejecucion": "2026-08-25",
       "modulos_procesados": ["composition-manager", "proceso-negocio"]
+    },
+    {
+      "name": "analizar-log",
+      "description": "Analiza el log current.jsonl de Enki, extrae errores, warnings y patrones de los últimos N minutos.",
+      "archivo": "analizar-log.json",
+      "tags": ["analisis", "log", "monitoreo"],
+      "creado": "2026-08-25",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

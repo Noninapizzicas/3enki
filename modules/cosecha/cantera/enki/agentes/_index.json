@@ -21,6 +21,16 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
+    },
+    {
+      "name": "auditar-skills",
+      "description": "Recorre todos los módulos del sistema y detecta los que no tienen skill en cantera.",
+      "archivo": "auditar-skills.json",
+      "tags": ["auditoria", "cantera", "cobertura"],
+      "creado": "2026-08-25",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

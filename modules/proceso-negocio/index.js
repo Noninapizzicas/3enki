@@ -240,7 +240,11 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       const clave = `${project_id}::${eventoFase}`;
       if (!this._emitidos.has(clave)) {
         this._emitidos.set(clave, Date.now());
-        await this._escribirArchivoFase(project_id, fase, eventoFase, entregable, d.resumen || {});
+        if (fase === 'esquematizado') {
+          await this._escribirFase2Pasadas(project_id, entregable);
+        } else {
+          await this._escribirArchivoFase(project_id, fase, eventoFase, entregable, d.resumen || {});
+        }
         if (siguiente && siguiente.skill) this._empujar(project_id, eventoFase, siguiente);
       }
       return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: siguiente?.skill || null, entregable, progreso, fin: !siguiente?.skill } };
@@ -867,6 +871,83 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         content: contenido
       });
     } catch (_) { /* best-effort — no bloquea el proceso */ }
+  }
+
+  // ── F2: escribir un archivo por cada pasada + cierre ──
+  // Lee esquemas/ del proyecto, encuentra las pasadas y la disección,
+  // y escribe fase2-pasada-N.md + fase2-cierre-diseccion.md en proceso-negocio/
+  async _escribirFase2Pasadas(project_id, entregable) {
+    const ts = new Date().toISOString();
+    try {
+      const r = await this._rpc('fs.list.request', { project_id, path: 'esquemas' });
+      const archivos = (r && (r.files || r.items)) || [];
+      const nombres = archivos.map(x => typeof x === 'string' ? x : x && x.name).filter(Boolean);
+
+      // Pasadas: pasada-1-*, pasada-2-*, etc. → ordenadas por número
+      const pasadas = nombres
+        .filter(n => /^pasada-\d+/.test(n))
+        .sort((a, b) => {
+          const na = parseInt(a.match(/pasada-(\d+)/)[1], 10);
+          const nb = parseInt(b.match(/pasada-(\d+)/)[1], 10);
+          return na - nb;
+        });
+
+      for (const pasada of pasadas) {
+        const num = pasada.match(/pasada-(\d+)/)[1];
+        const contenidoPasada = await this._leerArchivoProyecto(project_id, `esquemas/${pasada}`);
+        const md = [
+          `# FASE 2 — PASADA ${num}`,
+          '',
+          `> Registrada: ${ts}`,
+          `> Archivo fuente: esquemas/${pasada}`,
+          '',
+          '## Contenido',
+          '',
+          contenidoPasada || '_No se pudo leer el contenido._',
+          ''
+        ].join('\n');
+        await this._rpc('fs.write.request', {
+          project_id,
+          path: `proceso-negocio/fase2-pasada-${num}.md`,
+          content: md
+        });
+      }
+
+      // Cierre: la disección
+      const diseccion = nombres.find(n => n.includes('diseccion'));
+      if (diseccion) {
+        const contenidoDiseccion = await this._leerArchivoProyecto(project_id, `esquemas/${diseccion}`);
+        const md = [
+          '# FASE 2 — CIERRE (DISECCIÓN)',
+          '',
+          `> Registrada: ${ts}`,
+          `> Archivo fuente: esquemas/${diseccion}`,
+          '',
+          '## Entregable verificado',
+          '',
+          entregable.verificados
+            ? entregable.verificados.map(v => `- ${v}`).join('\n')
+            : '_Gate pasado._',
+          '',
+          '## Contenido',
+          '',
+          contenidoDiseccion || '_No se pudo leer el contenido._',
+          ''
+        ].join('\n');
+        await this._rpc('fs.write.request', {
+          project_id,
+          path: 'proceso-negocio/fase2-cierre-diseccion.md',
+          content: md
+        });
+      }
+    } catch (_) { /* best-effort — no bloquea el proceso */ }
+  }
+
+  async _leerArchivoProyecto(project_id, filePath) {
+    try {
+      const r = await this._rpc('fs.read.request', { project_id, path: filePath });
+      return (r && (r.content || r.data?.content)) || null;
+    } catch (_) { return null; }
   }
 
   // Lectura de la cola (la usa el nervio/ai-gateway si decide leerla aquí).

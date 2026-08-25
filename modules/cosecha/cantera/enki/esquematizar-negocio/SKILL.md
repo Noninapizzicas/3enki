@@ -3,21 +3,24 @@ name: esquematizar-negocio
 description: >-
   FASE 2 del proceso de un proyecto (la arranca el orquestador proceso-negocio
   tras negocio.identificado): esquematiza el NEGOCIO ya declarado en la
-  identidad (qué_es, qué_vende, cómo_lo_elabora de project-profile) con el
-  método del esquematizador. MANDATO MECÁNICO: pasa el prisma de 5 huecos PUNTO
-  A PUNTO, RONDA A RONDA hasta quedarse seco, escribiendo cada pasada en
-  <proyecto>/esquemas/pasada-N-<punto>.md y el árbol maestro en
-  <proyecto>/esquemas/esquema.md (el entregable que el gate verifica). Después,
+  identidad (qué_es, qué_vende, cómo_lo_elabora, interlocutores de
+  project-profile) con el método del esquematizador. MANDATO MECÁNICO: pasa el
+  prisma de 5 huecos PUNTO A PUNTO, RONDA A RONDA hasta quedarse seco,
+  escribiendo cada pasada en <proyecto>/esquemas/pasada-N-<punto>.md y el árbol
+  maestro en <proyecto>/esquemas/esquema.md (el entregable que el gate verifica).
+  Después, PRISMA POR INTERLOCUTOR: cada actor del mapa cerrado en FASE 0
+  (interlocutores[]) pasa por los 5 huecos DESDE SU PERSPECTIVA — qué necesita,
+  qué le restringe, cuál es su contrato con el negocio, qué NO quiere. Después,
   DISECCIÓN PUNTO A PUNTO: cada hoja atómica, una a una, su FORMA (reflejo puro ·
-  micro-agente fuzzy · custodio · conversor · puente) en pasada-N-diseccion.md — sin dejar ninguna
-  sin forma. El propósito es descubrir las PIEZAS que el negocio necesita (cada
-  una su parcela). EL FOCO: identifica TÚ MISMO el cuello de botella del flujo
-  (eslabón limitante) y expándelo al máximo. LEY DE CERO SUPUESTOS: todo valor
-  no declarado es pregunta abierta, nunca estimación. CICLO: pasada 1 →
-  preguntas al dueño → investigación web de los puntos investigables →
-  replanteamiento → pasada 2, hasta que el esquema quede sólido. Entrada
-  directa: el sujeto se lee de la identidad, NO se pregunta, NO se ofrecen
-  opciones — se EJECUTA. Al terminar:
+  micro-agente fuzzy · custodio · conversor · puente) en pasada-N-diseccion.md
+  — sin dejar ninguna sin forma. El propósito es descubrir las PIEZAS que el
+  negocio necesita (cada una su parcela) desde TODAS las perspectivas. EL FOCO:
+  identifica TÚ MISMO el cuello de botella del flujo (eslabón limitante) y
+  expándelo al máximo. LEY DE CERO SUPUESTOS: todo valor no declarado es
+  pregunta abierta, nunca estimación. CICLO: pasada 1 → preguntas al dueño →
+  investigación web de los puntos investigables → replanteamiento → pasada 2,
+  hasta que el esquema quede sólido. Entrada directa: el sujeto se lee de la
+  identidad, NO se pregunta, NO se ofrecen opciones — se EJECUTA. Al terminar:
   proceso-negocio.completar_fase { fase: 'esquematizado' } → empuja la FASE 3 ·
   PLASMA (planificar-construccion: el diseño OOP en esquemas/diseno-oop.md).
 fuente: enki
@@ -55,6 +58,7 @@ project-profile.get.request { project_id }
       que_vende,        // "newsletter pública + panel visual"
       como_lo_elabora,  // "rastreo de fuentes trinchera + aceleración + umbrales"
       tipo_derivado,    // "servicio" | "elaborado+pieza" | "de_reventa" | ...
+      interlocutores,   // [{ rol, canal, relacion }] — mapa cerrado en FASE 0
       preguntas_abiertas
     }
 ```
@@ -63,6 +67,11 @@ project-profile.get.request { project_id }
 contenedor técnico, NUNCA una lista de tipos. Si la identidad está incompleta
 (estado `sin_identidad` o campos vacíos) → NO inventes: pide completar la
 FASE 0 (identidad-negocio) antes de seguir.
+
+**Regla de interlocutores**: `interlocutores[]` es el mapa CERRADO de todos los
+actores que tocan el negocio (lo cerró la FASE 0). Esta lista se consume aquí
+para el prisma por interlocutor — NO descubras actores nuevos. Si el mapa está
+vacío o falta, pide completar la FASE 0 antes de seguir.
 
 ## 2 · EL MÉTODO — el esquematizador aplicado al negocio
 
@@ -75,9 +84,30 @@ De sus huecos salen sub-productos (las PIEZAS del negocio: qué hace falta para
 que venda, elabore y entregue lo declarado); pasa cada uno por el prisma otra
 vez hasta seco. Escribe cada ronda en `pasada-N-<pieza>.md`.
 
+**Fase 1b · Prisma por interlocutor** — toma la lista CERRADA de
+`interlocutores[]` (mapa de FASE 0). Para CADA actor, pasa el negocio por los
+5 huecos DESDE SU PERSPECTIVA:
+
+- **IDENTIDAD**: ¿qué es el negocio para ESTE actor? (el cliente ve una tienda;
+  el proveedor ve un pedido periódico; el trabajador ve su puesto)
+- **RESTRICCIONES**: ¿qué le limita a ESTE actor? (horarios, distancia, pago,
+  conocimiento técnico, capacidad)
+- **CONTRATO**: ¿qué intercambia con el negocio? (paga↔recibe, trabaja↔cobra,
+  suministra↔factura)
+- **NO-OBJETIVOS**: ¿qué NO quiere este actor? (esperas, complejidad,
+  sorpresas, riesgo)
+- **PREGUNTAS ABIERTAS**: lo que no sabemos de la relación de este actor con el
+  negocio
+
+Cada interlocutor genera su pasada: `pasada-N-interlocutor-<rol>.md`. Las
+piezas que emergen SOLO desde una perspectiva concreta (el repartidor necesita
+ruta optimizada; el cliente necesita seguimiento de pedido) se añaden al árbol.
+Las piezas que varios actores comparten se refuerzan y se cruzan.
+
 **Fase 2 · Esquema** — ensambla en `esquema.md` el árbol maestro completo:
-las piezas del negocio, sus relaciones, y lo que cada una necesita (puertos
-abiertos — agnosticismo, cero tecnologías).
+las piezas del negocio (del prisma global + del prisma por interlocutor), sus
+relaciones, y lo que cada una necesita (puertos abiertos — agnosticismo, cero
+tecnologías).
 
 **Fase 3 · Disección** — cada hoja atómica pasa por el diseccionador y sus
 preguntas → FORMA. Las CINCO, en el orden del dueño del vocabulario
@@ -110,6 +140,7 @@ El esquema del negocio vive en el proyecto, en estas rutas CONCRETAS:
 <storage del proyecto>/esquemas/pasada-1-<pieza>.md     ← ronda 1 del prisma (OBLIGATORIO)
 <storage del proyecto>/esquemas/pasada-2-<pieza>.md     ← ronda 2
 <storage del proyecto>/esquemas/pasada-N-<pieza>.md     ← …hasta seca
+<storage del proyecto>/esquemas/pasada-N-interlocutor-<rol>.md ← prisma por actor (1 por interlocutor)
 <storage del proyecto>/esquemas/pasada-N-diseccion.md   ← las formas de cada hoja atómica
 ```
 
@@ -142,14 +173,30 @@ proceso no avanza.
 4. **Cada sub-producto que salió es un PUNTO nuevo**: pásalo por el prisma OTRA VEZ → escribe `pasada-2-<punto>.md`.
 5. Repite: cada punto que sale de cada pasada, al prisma, en su propio archivo — **PUNTO A PUNTO, RONDA A RONDA**.
 6. **PARA cuando un punto es**: atómica (va a disección) · abierta (no se expande) · repetida (se referencia). Eso es "quedarse seco".
-7. Solo cuando NINGÚN punto se parta más (seco) → ensambla TODO en `esquemas/esquema.md` (el árbol maestro con todo embebido, no punteros).
-8. **DISECCIÓN PUNTO A PUNTO** (mecánica, en el mismo espíritu):
-   - Toma la lista de hojas ATÓMICAS que salieron del prisma (las que el prisma ya no parte).
+7. **PRISMA POR INTERLOCUTOR** — con el prisma global seco, toma la lista
+   `interlocutores[]` de la identidad. Para CADA actor, uno a uno:
+   a. Pasa el negocio por los 5 huecos DESDE LA PERSPECTIVA de ese actor
+      (¿qué es el negocio para él? ¿qué le restringe? ¿cuál es su contrato?
+      ¿qué NO quiere? ¿qué no sabemos de su relación con el negocio?).
+   b. Escribe `pasada-N-interlocutor-<rol>.md` (un archivo por actor).
+   c. Las piezas nuevas que emergen SOLO desde esa perspectiva se añaden al
+      árbol — son piezas invisibles desde la vista global.
+   d. Las piezas que varios actores comparten se refuerzan y se cruzan
+      (validación cruzada: si el cliente y el trabajador ven la misma pieza
+      distinto, eso es un conflicto que el esquema debe resolver).
+   e. **Pregunta al dueño** si emerge algo que no estaba en la vista global
+      — las preguntas abiertas del interlocutor se suman al guion.
+8. Solo cuando NINGÚN punto se parta más (seco) y TODOS los interlocutores
+   tengan su pasada → ensambla TODO en `esquemas/esquema.md` (el árbol maestro
+   con piezas globales + piezas por interlocutor, todo embebido, no punteros).
+9. **DISECCIÓN PUNTO A PUNTO** (mecánica, en el mismo espíritu):
+   - Toma la lista de hojas ATÓMICAS que salieron del prisma global + del
+     prisma por interlocutor (las que el prisma ya no parte).
    - **Cada hoja, una a una, sin saltarte ninguna**: pásala por el diseccionador y sus preguntas → fija su FORMA (reflejo puro · micro-agente fuzzy · custodio · conversor · puente).
    - Escribe cada FORMA en el esquema (`esquema.md`: cada pieza con su forma) y la lista completa en `pasada-N-diseccion.md`.
    - **NO paras hasta que TODAS las hojas atómicas tengan su FORMA** — si quedan hojas sin forma, la disección no está terminada.
    - **NO agrupas de golpe**: es una por una, punto a punto, como el prisma.
-9. Cierra la fase: `proceso-negocio.completar_fase { fase: 'esquematizado' }`.
+10. Cierra la fase: `proceso-negocio.completar_fase { fase: 'esquematizado' }`.
 
 **NO pares a mitad**: si un punto todavía se parte, sigues. **NO resumas**: cada
 pasada es un archivo real en disco. **NO te saltes el esquema.md**: es el
@@ -250,7 +297,9 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 - **Afirmar "no se puede"** — un límite de capacidad se consulta al dueño, no se decide solo.
 - **Saltarse la investigación** — los puntos investigables (horno, consumos, casos, precios) se investigan en web; mejor algo que nada.
 - **Terminar en el primer esquema** — si quedan preguntas abiertas relevantes, el ciclo sigue (preguntas → investigación → replanteamiento → pasada 2).
-- **Disecar antes de tocar suelo** — primero el prisma se agota, luego la FORMA.
+- **Saltarse el prisma por interlocutor** — el prisma global ve el negocio "desde arriba"; el prisma por interlocutor lo ve desde la silla de cada actor. Las piezas que solo emergen desde una perspectiva concreta (notificación al cliente, planificación del trabajador, facturación del proveedor) se pierden sin esta pasada.
+- **Inventar interlocutores nuevos** — el mapa se cerró en FASE 0; esta fase lo CONSUME, no lo amplía. Si aparece un actor que falta, se devuelve a FASE 0 para reabrir el mapa.
+- **Disecar antes de tocar suelo** — primero el prisma global + prisma por interlocutor se agotan, luego la FORMA.
 - **Cerrar la fase tras la pasada 1** — el cierre es idempotente y solo empuja una vez: se cierra cuando el ciclo termina.
 - **Escribir fuera de `esquemas/`** (rutas absolutas) — el gate lista ese directorio del proyecto; lo de fuera no existe para él.
 - **Olvidar la señal de fase** — sin `proceso-negocio.completar_fase`, el proceso se detiene aquí.
@@ -262,8 +311,10 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 - **Identificaste TÚ el cuello de botella** del flujo (eslabón limitante) y lo expandiste al máximo — no esperaste a que el dueño lo dijera.
 - **CERO supuestos**: todo valor no declarado aparece como pregunta abierta explícita, ninguno estimado.
 - **Cada punto del prisma tiene su pasada en disco** (`esquemas/pasada-N-<punto>.md`) — ronda a ronda hasta seca.
-- **`esquemas/esquema.md` existe** con el árbol maestro (el gate lo comprueba).
+- **Cada interlocutor tiene su pasada** (`esquemas/pasada-N-interlocutor-<rol>.md`) — uno por actor del mapa cerrado en FASE 0, con los 5 huecos desde SU perspectiva.
+- **Las piezas que solo emergen desde un interlocutor** están en el árbol maestro (no se quedaron solo en la pasada del actor).
+- **`esquemas/esquema.md` existe** con el árbol maestro (piezas globales + piezas por interlocutor — el gate lo comprueba).
 - CERO tecnologías en el esquema (agnosticismo).
-- `esquema.md` responde "qué piezas necesita este negocio" con su FORMA.
+- `esquema.md` responde "qué piezas necesita este negocio" con su FORMA, visto desde TODAS las perspectivas.
 - **El ciclo está vivo**: si quedan preguntas abiertas relevantes → las haces al dueño, investigas los puntos investigables y re-pasas el agente (pasada 2).
 - Señal de fase enviada: `proceso-negocio.completar_fase { fase: 'esquematizado' }` → 200 (no 409), y la respuesta trae `siguiente: 'planificar-construccion'`.

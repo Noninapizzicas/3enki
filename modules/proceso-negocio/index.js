@@ -54,7 +54,7 @@ const REPO_MODULES_DIR = (() => {
 
 // ── PRINCIPIO ARQUITECTÓNICO (antepuesto a cada mensaje de fase) ──
 // La visión del sistema: parcelas pequeñas, evento como pegamento, ensamblaje libre.
-const PRINCIPIO_ARQUITECTONICO = '[PRINCIPIO] Cada módulo es una parcela pequeña que hace SU trabajo bien hecho y punto — funciona por eventos, desacoplado. La reutilización y la potencia vienen de ahí. El ensamblaje se hace DESPUÉS, según necesidades, conectando eventos. No compliques la parcela pensando en el ensamblaje.\n\n';
+const PRINCIPIO_ARQUITECTONICO = '[PRINCIPIO] Cada módulo es una parcela pequeña que hace SU trabajo bien hecho y punto — funciona por eventos, desacoplado. La reutilización y la potencia vienen de ahí. El ensamblaje se hace DESPUÉS, según necesidades, conectando eventos. No compliques la parcela pensando en el ensamblaje.\n\n[FRENOS → EMPUJONES] Cuando encuentres un freno (restricción, bloqueo, límite que corta), NO lo aceptes como muro. Pregunta: ¿qué estado deseado protege? Si protege algo real → conviértelo en su empujón (la acción construible que abre ese estado — una pieza, un flujo alternativo, una capacidad). Si no protege nada nombrable → se disuelve (era inercia, no restricción). El proceso no se detiene ante un freno: lo atraviesa convirtiéndolo en lo que hay que construir.\n\n';
 
 // ── ARCHIVO POR FASE: qué archivo JSON se escribe en el storage del proyecto ──
 // Cada fase completada deja su registro determinista en <proyecto>/proceso-negocio/<archivo>.json

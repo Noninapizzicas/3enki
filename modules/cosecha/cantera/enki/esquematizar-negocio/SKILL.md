@@ -88,21 +88,25 @@ vez hasta seco. Escribe cada ronda en `pasada-N-<pieza>.md`.
 `interlocutores[]` (mapa de FASE 0). Para CADA actor, pasa el negocio por los
 5 huecos DESDE SU PERSPECTIVA:
 
-- **IDENTIDAD**: ¿qué es el negocio para ESTE actor? (el cliente ve una tienda;
-  el proveedor ve un pedido periódico; el trabajador ve su puesto)
-- **RESTRICCIONES**: ¿qué le limita a ESTE actor? (horarios, distancia, pago,
-  conocimiento técnico, capacidad)
-- **CONTRATO**: ¿qué intercambia con el negocio? (paga↔recibe, trabaja↔cobra,
-  suministra↔factura)
-- **NO-OBJETIVOS**: ¿qué NO quiere este actor? (esperas, complejidad,
-  sorpresas, riesgo)
+- **IDENTIDAD**: ¿qué es el negocio para ESTE actor? Cada uno lo ve distinto
+  según su `rol` y su `relacion` declarados — el prisma lo descubre.
+- **RESTRICCIONES**: ¿qué le limita a ESTE actor en su relación con el negocio?
+  Se deriva de su `canal`, su `rol` y lo que el negocio le exige.
+- **CONTRATO**: ¿qué intercambia con el negocio? Lo que da ↔ lo que recibe,
+  leído de su `relacion` declarada.
+- **NO-OBJETIVOS**: ¿qué NO quiere este actor del negocio? Lo que le haría
+  dejar de participar o buscar alternativa.
 - **PREGUNTAS ABIERTAS**: lo que no sabemos de la relación de este actor con el
-  negocio
+  negocio — lo que no se preguntó en FASE 0.
+
+Los actores cambian de un negocio a otro — NO hay lista fija. La lista viene
+de `interlocutores[]` (FASE 0) y cada negocio tiene los suyos. El prisma se
+adapta al actor que tenga delante.
 
 Cada interlocutor genera su pasada: `pasada-N-interlocutor-<rol>.md`. Las
-piezas que emergen SOLO desde una perspectiva concreta (el repartidor necesita
-ruta optimizada; el cliente necesita seguimiento de pedido) se añaden al árbol.
-Las piezas que varios actores comparten se refuerzan y se cruzan.
+piezas que emergen SOLO desde la perspectiva de un actor concreto se añaden al
+árbol — son invisibles desde la vista global. Las piezas que varios actores
+comparten se refuerzan y se cruzan (validación cruzada).
 
 **Fase 2 · Esquema** — ensambla en `esquema.md` el árbol maestro completo:
 las piezas del negocio (del prisma global + del prisma por interlocutor), sus
@@ -168,7 +172,7 @@ proceso no avanza.
 **Procedimiento mecánico, en este orden, sin saltarte nada:**
 
 1. Toma el negocio (qué_es + qué_vende + cómo_lo_elabora de la identidad).
-2. **BUSCA EL FOCO TÚ MISMO**: del flujo productivo declarado en cómo_lo_elabora, identifica el ESLABÓN LIMITANTE (el cuello de botella — el paso cuya capacidad/programación restringe al conjunto: fermentación 24h, horno por hornada, amasado, espacio de fermentación, ventana de horneado, mano de obra). NO esperes a que el dueño lo señale: es tu trabajo encontrarlo y EXPANDIRLO AL MÁXIMO (sus restricciones, sus alternativas de desacople, sus decisiones abiertas). El cuello de botella es el CORAZÓN del esquema, no una sección más.
+2. **BUSCA EL FOCO TÚ MISMO**: del flujo declarado en cómo_lo_elabora, identifica el ESLABÓN LIMITANTE (el cuello de botella — el paso cuya capacidad o programación restringe al conjunto). NO esperes a que el dueño lo señale: es tu trabajo encontrarlo y EXPANDIRLO AL MÁXIMO (sus restricciones, sus alternativas de desacople, sus decisiones abiertas). El cuello de botella es el CORAZÓN del esquema, no una sección más. El eslabón limitante cambia de un negocio a otro — se lee del flujo declarado, nunca de una lista fija.
 3. Pásalo por el prisma de 5 huecos → escribe `pasada-1-<pieza>.md` con los 5 huecos y los sub-productos que salen.
 4. **Cada sub-producto que salió es un PUNTO nuevo**: pásalo por el prisma OTRA VEZ → escribe `pasada-2-<punto>.md`.
 5. Repite: cada punto que sale de cada pasada, al prisma, en su propio archivo — **PUNTO A PUNTO, RONDA A RONDA**.
@@ -297,7 +301,7 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 - **Afirmar "no se puede"** — un límite de capacidad se consulta al dueño, no se decide solo.
 - **Saltarse la investigación** — los puntos investigables (horno, consumos, casos, precios) se investigan en web; mejor algo que nada.
 - **Terminar en el primer esquema** — si quedan preguntas abiertas relevantes, el ciclo sigue (preguntas → investigación → replanteamiento → pasada 2).
-- **Saltarse el prisma por interlocutor** — el prisma global ve el negocio "desde arriba"; el prisma por interlocutor lo ve desde la silla de cada actor. Las piezas que solo emergen desde una perspectiva concreta (notificación al cliente, planificación del trabajador, facturación del proveedor) se pierden sin esta pasada.
+- **Saltarse el prisma por interlocutor** — el prisma global ve el negocio "desde arriba"; el prisma por interlocutor lo ve desde la silla de cada actor. Las piezas que solo emergen desde una perspectiva concreta se pierden sin esta pasada — y son distintas en cada negocio porque los actores son distintos.
 - **Inventar interlocutores nuevos** — el mapa se cerró en FASE 0; esta fase lo CONSUME, no lo amplía. Si aparece un actor que falta, se devuelve a FASE 0 para reabrir el mapa.
 - **Disecar antes de tocar suelo** — primero el prisma global + prisma por interlocutor se agotan, luego la FORMA.
 - **Cerrar la fase tras la pasada 1** — el cierre es idempotente y solo empuja una vez: se cierra cuando el ciclo termina.

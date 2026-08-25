@@ -2,13 +2,14 @@
 name: identidad-negocio
 description: >-
   FASE 0 de todo proyecto nuevo: descubrir la IDENTIDAD del negocio del dueño con
-  9 preguntas ABIERTAS anti-sesgo (qué construye, qué vende, cómo lo elabora, qué
-  pretende) — el tipo se DERIVA del sujeto, nunca se elige de una lista. Escribe
-  { que_es, que_vende, como_lo_elabora, tipo_derivado, preguntas_abiertas } +
-  proposito hermano en el perfil del proyecto (project-profile) con UN SOLO
-  update, y esa transición emite negocio.identificado. El sujeto es el NEGOCIO,
-  jamás el contenedor técnico. La anatomía completa con el prisma de 5 huecos es
-  la FASE SIGUIENTE (esquematizar-negocio), que arranca con ese mismo evento.
+  10 preguntas ABIERTAS anti-sesgo (qué construye, qué vende, cómo lo elabora, qué
+  pretende, quiénes tocan el negocio) — el tipo se DERIVA del sujeto, nunca se
+  elige de una lista. Escribe { que_es, que_vende, como_lo_elabora, tipo_derivado,
+  interlocutores, preguntas_abiertas } + proposito hermano en el perfil del
+  proyecto (project-profile) con UN SOLO update, y esa transición emite
+  negocio.identificado. El sujeto es el NEGOCIO, jamás el contenedor técnico.
+  La anatomía completa con el prisma de 5 huecos es la FASE SIGUIENTE
+  (esquematizar-negocio), que arranca con ese mismo evento.
 when-to-use: >-
   Cuando un proyecto acaba de nacer (project.created) y el negocio del dueño aún
   no tiene identidad declarada — el orquestador proceso-negocio empuja esta skill
@@ -63,9 +64,18 @@ REGLAS:
   "qué_vende":        "lámparas de mesa y de suelo",       // qué ofrece
   "cómo_lo_elabora":  "compramos cable y piezas, cortamos y soldamos", // o: "las compramos hechas"
   "propósito":        "que la gente cocine con fuego vivo sin humo en casa",
+  "interlocutores": [                                       // TODOS los que tocan el negocio
+    { "rol": "cliente particular", "canal": "mostrador", "relacion": "compra pan del día" },
+    { "rol": "proveedor harina",  "canal": "pedido periódico", "relacion": "suministro materia prima" }
+  ],
   "preguntas_abiertas": []                                  // lo que el dueño no sabe
 }
 ```
+
+`interlocutores` es la lista CERRADA de todos los actores que tocan el negocio.
+Se mapea ANTES de que la FASE 2 cruce actores en la matriz de pares — cada actor
+que emerge después invalida pares ya cerrados (coste cuadrático). La lista se
+cierra aquí; la FASE 2 la consume sin descubrir actores nuevos.
 
 `propósito` viaja como campo **`proposito`, HERMANO de `identidad`** en el perfil
 (no vive dentro del bloque identidad) — mismo update, misma llamada. Es el norte
@@ -90,6 +100,11 @@ La declaración se guarda en el **perfil del proyecto** — módulo `project-pro
     "que_vende": "lámparas de mesa y de suelo",
     "como_lo_elabora": "compramos cable y piezas, cortamos y soldamos",
     "tipo_derivado": "elaborado+pieza",      // emergente del sujeto
+    "interlocutores": [                      // TODOS los que tocan el negocio
+      { "rol": "cliente particular", "canal": "mostrador", "relacion": "compra lámparas terminadas" },
+      { "rol": "proveedor cable/piezas", "canal": "pedido periódico", "relacion": "suministro materia prima" },
+      { "rol": "trabajador taller", "canal": "presencial", "relacion": "corta, suelda, monta" }
+    ],
     "preguntas_abiertas": [                  // forma tipada del reflejo
       { "campo": "como_lo_elabora",
         "para": "decidir si el negocio lleva recetario",
@@ -139,13 +154,19 @@ Hazlas EN ORDEN, una por una, esperando respuesta. Cada una abre una dimensión:
 | 3 | "¿Cómo funciona tu negocio?" (¿lo elaboras tú o lo compras hecho?) | Naturaleza origen |
 | 4 | "¿Qué quieres conseguir con esto?" | Intención / objetivo |
 | 5 | "¿Quién lo va a usar y en qué momento?" | Usuario + contexto |
-| 6 | "¿Qué tiene que pasar al final para que digas 'esto funciona'?" | Criterio de éxito (el contrato real) |
-| 7 | "¿Cómo lo imaginas en un día normal?" | Flujo de uso |
-| 8 | "¿Qué NO quieres que sea, aunque sería fácil?" | Límites / no-objetivos |
-| 9 | "¿Por qué esto y no otra cosa ya hecha?" | Motivación raíz (la que sostiene) |
+| 6 | "¿Quiénes tocan tu negocio? — clientes, empleados, proveedores, colaboradores, repartidores, vecinos, administración... Nombra a TODOS los que intervienen, aunque sea de lejos." | **Mapa de interlocutores** (lista cerrada de actores) |
+| 7 | "¿Qué tiene que pasar al final para que digas 'esto funciona'?" | Criterio de éxito (el contrato real) |
+| 8 | "¿Cómo lo imaginas en un día normal?" | Flujo de uso |
+| 9 | "¿Qué NO quieres que sea, aunque sería fácil?" | Límites / no-objetivos |
+| 10 | "¿Por qué esto y no otra cosa ya hecha?" | Motivación raíz (la que sostiene) |
 
 **Regla**: si el dueño responde con una etiqueta ("es una pizzería"), profundiza:
 *"¿y qué la hace tuya / distinta?"* — la etiqueta es superficie, el sujeto es la forma.
+
+**Regla de interlocutores (pregunta 6)**: la lista se CIERRA aquí. La FASE 2
+(esquematizar-negocio) cruzará estos actores en la matriz de pares — cada actor
+que aparezca después obliga a reabrir pares ya cerrados. Insiste hasta que el
+dueño diga "no hay más". Cada interlocutor lleva `{ rol, canal, relacion }`.
 
 ---
 
@@ -154,26 +175,34 @@ Hazlas EN ORDEN, una por una, esperando respuesta. Cada una abre una dimensión:
 ```
 Se aloja el negocio (directorios creados) → ESTADO: sin_identidad
   ↓
-1. PREGUNTAR (las 9 del camino, en orden — abiertas, anti-sesgo)
+1. PREGUNTAR (las 10 del camino, en orden — abiertas, anti-sesgo)
   ↓
 2. DECLARAR el mínimo vital: { qué_es, qué_vende, cómo_lo_elabora, propósito }
   ↓
-3. DERIVAR el tipo EMERGENTE del sujeto (nunca de una lista):
+3. CERRAR EL MAPA DE INTERLOCUTORES: interlocutores[] con { rol, canal, relacion }
+   Insistir hasta que el dueño diga "no hay más". La FASE 2 consume esta lista
+   para cruzar actores en la matriz de pares — actores descubiertos después
+   obligan a reabrir pares (coste cuadrático que se paga aquí una sola vez).
+  ↓
+4. DERIVAR el tipo EMERGENTE del sujeto (nunca de una lista):
      - elaborado + se transforma → recetario + stock + venta
      - de_reventa (compra hecho) → descripción + stock + venta
      - sirve a la gente en un lugar → servicio/agenda
      - se presta y vuelve → uso_temporal (retorno/fianza)
   ↓
-4. Lo que el dueño NO sabe → preguntas_abiertas[] tipado (marcar, NO inventar)
+5. Lo que el dueño NO sabe → preguntas_abiertas[] tipado (marcar, NO inventar)
   ↓
-5. ESCRIBIR con UN SOLO project-profile.update:
+6. ESCRIBIR con UN SOLO project-profile.update:
      { project_id, proposito, identidad: { que_es, que_vende, como_lo_elabora,
-                                           tipo_derivado, preguntas_abiertas } }
+                                           tipo_derivado, interlocutores,
+                                           preguntas_abiertas } }
   ↓
-6. El reflejo EMITE negocio.identificado
-     { project_id, que_es, que_vende, como_lo_elabora, tipo_derivado, preguntas_abiertas[] }
+7. El reflejo EMITE negocio.identificado
+     { project_id, que_es, que_vende, como_lo_elabora, tipo_derivado,
+       interlocutores[], preguntas_abiertas[] }
   → se encienden los módulos del tipo derivado y arranca la FASE SIGUIENTE
-    (esquematizar-negocio: el prisma de 5 huecos sobre el negocio ya declarado)
+    (esquematizar-negocio: el prisma de 5 huecos sobre el negocio ya declarado,
+     con el mapa de interlocutores CERRADO para la matriz de pares)
   ↓
 ESTADO: con_identidad → SIGUIENTE FASE: esquematizar el negocio completo
 ```
@@ -190,7 +219,7 @@ publica al bus directamente.
 
 | Evento | Dirección | Contrato |
 |---|---|---|
-| `negocio.identificado` | lo emite el reflejo | `{ project_id, que_es, que_vende, como_lo_elabora, tipo_derivado, preguntas_abiertas[] }` — enciende los módulos del tipo y empuja la fase siguiente. Nace SOLO en la transición `sin_identidad → con_identidad`. |
+| `negocio.identificado` | lo emite el reflejo | `{ project_id, que_es, que_vende, como_lo_elabora, tipo_derivado, interlocutores[], preguntas_abiertas[] }` — enciende los módulos del tipo y empuja la fase siguiente. Nace SOLO en la transición `sin_identidad → con_identidad`. |
 | `project-profile.actualizado` | lo emite el reflejo | `{ project_id, campos_actualizados[] }` — en todo update, incluidos los que refinan una identidad ya declarada. |
 
 **Entrada**: `project.created` → el orquestador `proceso-negocio` empuja esta
@@ -214,7 +243,8 @@ skill como FASE 0 (`MAPA_PROCESO['project.created']`).
 ## 6 · Verificación
 
 - La declaración tiene los 3 campos del mínimo vital + `proposito` escrito como hermano.
-- La escritura fue UNA sola llamada con el bloque `identidad` completo.
+- `interlocutores[]` está presente con al menos 1 entrada `{ rol, canal, relacion }` — la lista se cerró con el dueño (pregunta 6).
+- La escritura fue UNA sola llamada con el bloque `identidad` completo (incluido `interlocutores`).
 - CERO preguntas sesgadas en la conversación (revisa las que hiciste).
 - El tipo derivado se justifica con la declaración (no con una lista) y viaja en el evento.
 - Las preguntas_abiertas nombran exactamente lo que el dueño no respondió, con su forma tipada `{ campo, para, porque, respondida }`.

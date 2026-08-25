@@ -56,12 +56,11 @@ const REPO_MODULES_DIR = (() => {
 // La visión del sistema: parcelas pequeñas, evento como pegamento, ensamblaje libre.
 const PRINCIPIO_ARQUITECTONICO = '[PRINCIPIO] Cada módulo es una parcela pequeña que hace SU trabajo bien hecho y punto — funciona por eventos, desacoplado. La reutilización y la potencia vienen de ahí. El ensamblaje se hace DESPUÉS, según necesidades, conectando eventos. No compliques la parcela pensando en el ensamblaje.\n\n';
 
-// ── ARCHIVO POR FASE: qué archivo se escribe en el storage del proyecto ──
-// Cada fase completada deja su registro en <proyecto>/proceso-negocio/<archivo>.md
-// con lo que leyó, lo que creó y el resumen de lo completado.
+// ── ARCHIVO POR FASE: qué archivo JSON se escribe en el storage del proyecto ──
+// Cada fase completada deja su registro determinista en <proyecto>/proceso-negocio/<archivo>.json
 const ARCHIVO_FASE = {
   'project.created':              'fase0-identidad-negocio',
-  'negocio.esquematizado':        null,  // F2 usa pasadas dinámicas (fase2-pasada-N)
+  'negocio.esquematizado':        null,  // F2 usa pasadas dinámicas (fase2-pasada-N.json)
   'negocio.planificado':          'fase3-planificar-construccion',
   'negocio.adaptado':             'fase3b-adaptador',
   'negocio.construido':           'fase4-construir-modulos',
@@ -80,73 +79,73 @@ const MAPA_PROCESO = {
   'project.created': {
     skill: 'identidad-negocio',
     lee: [],
-    escribe: 'proceso-negocio/fase0-identidad-negocio.md',
+    escribe: 'proceso-negocio/fase0-identidad-negocio.json',
     mensaje: 'FASE 0: dar identidad al negocio — ¿qué estás construyendo, qué vendes, cómo lo elaboras? Al terminar: el reflejo emite negocio.identificado.'
   },
   'negocio.identificado': {
     skill: 'esquematizar-negocio',
-    lee: ['proceso-negocio/fase0-identidad-negocio.md'],
-    escribe: 'proceso-negocio/fase2-pasada-N.md',
-    mensaje: 'FASE 2: esquematizar el negocio — lee la identidad (proceso-negocio/fase0-identidad-negocio.md), aplica el prisma de 5 huecos ronda a ronda hasta seco. Al terminar: proceso-negocio.completar_fase { fase: "esquematizado" }.'
+    lee: ['proceso-negocio/fase0-identidad-negocio.json'],
+    escribe: 'proceso-negocio/fase2-pasada-N.json',
+    mensaje: 'FASE 2: esquematizar el negocio — lee proceso-negocio/fase0-identidad-negocio.json, aplica el prisma de 5 huecos ronda a ronda hasta seco. Al terminar: proceso-negocio.completar_fase { fase: "esquematizado" }.'
   },
   'negocio.esquematizado': {
     skill: 'planificar-construccion',
-    lee: ['proceso-negocio/fase2-cierre-diseccion.md'],
-    escribe: 'proceso-negocio/fase3-planificar-construccion.md',
-    mensaje: 'FASE 3 · PLASMA: diseñar el SISTEMA en PSEUDOCÓDIGO OOP — lee proceso-negocio/fase2-cierre-diseccion.md, diseña entidades/clases/flujos/contratos en OOP estándar SIN conocer Enki. Escribe esquemas/diseno-oop.md. Al terminar: proceso-negocio.completar_fase { fase: "planificado" }.'
+    lee: ['proceso-negocio/fase2-cierre-diseccion.json'],
+    escribe: 'proceso-negocio/fase3-planificar-construccion.json',
+    mensaje: 'FASE 3 · PLASMA: diseñar el SISTEMA en PSEUDOCÓDIGO OOP — lee proceso-negocio/fase2-cierre-diseccion.json, diseña entidades/clases/flujos/contratos en OOP estándar SIN conocer Enki. Al terminar: proceso-negocio.completar_fase { fase: "planificado" }.'
   },
   'negocio.planificado': {
     skill: 'construir-modulos',
-    lee: ['proceso-negocio/fase3-planificar-construccion.md'],
-    escribe: 'proceso-negocio/fase3b-adaptador.md',
-    mensaje: 'FASE 3b · ADAPTADOR: traducir el diseño OOP al sistema Enki — lee proceso-negocio/fase3-planificar-construccion.md, mapea contra el inventario real (reutiliza/construye/adapta), genera esquemas/plan-construccion.md. Al terminar: proceso-negocio.completar_fase { fase: "adaptado" }.'
+    lee: ['proceso-negocio/fase3-planificar-construccion.json'],
+    escribe: 'proceso-negocio/fase3b-adaptador.json',
+    mensaje: 'FASE 3b · ADAPTADOR: traducir el diseño OOP al sistema Enki — lee proceso-negocio/fase3-planificar-construccion.json, mapea contra el inventario real (reutiliza/construye/adapta). Al terminar: proceso-negocio.completar_fase { fase: "adaptado" }.'
   },
   'negocio.adaptado': {
     skill: 'construir-modulos',
-    lee: ['proceso-negocio/fase3b-adaptador.md'],
-    escribe: 'proceso-negocio/fase4-construir-modulos.md',
-    mensaje: 'FASE 4: construir UNA hoja del plan — lee proceso-negocio/fase3b-adaptador.md, la primera hoja sin módulo en disco. Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["<slug>"] } }.'
+    lee: ['proceso-negocio/fase3b-adaptador.json'],
+    escribe: 'proceso-negocio/fase4-construir-modulos.json',
+    mensaje: 'FASE 4: construir UNA hoja del plan — lee proceso-negocio/fase3b-adaptador.json, la primera hoja sin módulo en disco. Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.construido': {
     skill: 'escribir-skills',
-    lee: ['proceso-negocio/fase4-construir-modulos.md'],
-    escribe: 'proceso-negocio/fase5-escribir-skills.md',
-    mensaje: 'FASE 5: escribir la SKILL FULL del módulo — lee proceso-negocio/fase4-construir-modulos.md + modules/<slug>/module.json + index.js, escribe la skill en la cantera con TODA la lógica real embebida. Al terminar: proceso-negocio.completar_fase { fase: "skills" }.'
+    lee: ['proceso-negocio/fase4-construir-modulos.json'],
+    escribe: 'proceso-negocio/fase5-escribir-skills.json',
+    mensaje: 'FASE 5: escribir la SKILL FULL del módulo — lee proceso-negocio/fase4-construir-modulos.json + modules/<slug>/module.json + index.js, escribe la skill en la cantera con TODA la lógica real embebida. Al terminar: proceso-negocio.completar_fase { fase: "skills" }.'
   },
   'negocio.skills': {
     skill: 'decidir-interfaz',
-    lee: ['proceso-negocio/fase5-escribir-skills.md'],
-    escribe: 'proceso-negocio/fase6-decidir-interfaz.md',
-    mensaje: 'FASE 6: decidir la INTERFAZ del módulo — lee proceso-negocio/fase5-escribir-skills.md + modules/<slug>/module.json, razona el rol y escribe ui_handlers (type+zone) o ui_decision.necesita=false. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"] } }.'
+    lee: ['proceso-negocio/fase5-escribir-skills.json'],
+    escribe: 'proceso-negocio/fase6-decidir-interfaz.json',
+    mensaje: 'FASE 6: decidir la INTERFAZ del módulo — lee proceso-negocio/fase5-escribir-skills.json + modules/<slug>/module.json, razona el rol y escribe ui_handlers (type+zone) o ui_decision.necesita=false. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz': {
     skill: 'esquematizar-interfaz',
-    lee: ['proceso-negocio/fase6-decidir-interfaz.md'],
-    escribe: 'proceso-negocio/fase6h-esquematizar-interfaz.md',
-    mensaje: 'FASE 6½: esquematizar la interfaz concreta — lee proceso-negocio/fase6-decidir-interfaz.md + modules/<slug>/<slug>.blueprint.json, declara la sección ui (ui.ops + ui.datos) EN el blueprint. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.'
+    lee: ['proceso-negocio/fase6-decidir-interfaz.json'],
+    escribe: 'proceso-negocio/fase6h-esquematizar-interfaz.json',
+    mensaje: 'FASE 6½: esquematizar la interfaz concreta — lee proceso-negocio/fase6-decidir-interfaz.json + modules/<slug>/<slug>.blueprint.json, declara la sección ui (ui.ops + ui.datos) EN el blueprint. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz_esquematizada': {
     skill: 'construir-interfaz',
-    lee: ['proceso-negocio/fase6h-esquematizar-interfaz.md'],
-    escribe: 'proceso-negocio/fase7-construir-interfaz.md',
-    mensaje: 'FASE 7: construir la interfaz operativa — lee proceso-negocio/fase6h-esquematizar-interfaz.md, genera el envoltorio frontend (manifest.json + index.ts + <Slug>Panel.svelte + blueprint). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.'
+    lee: ['proceso-negocio/fase6h-esquematizar-interfaz.json'],
+    escribe: 'proceso-negocio/fase7-construir-interfaz.json',
+    mensaje: 'FASE 7: construir la interfaz operativa — lee proceso-negocio/fase6h-esquematizar-interfaz.json, genera el envoltorio frontend (manifest.json + index.ts + <Slug>Panel.svelte + blueprint). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz_construida': {
     skill: 'construir-modulos',
-    lee: ['proceso-negocio/fase7-construir-interfaz.md'],
-    escribe: 'proceso-negocio/fase4-construir-modulos.md',
-    mensaje: 'Hoja completa. FASE 4: construir la SIGUIENTE hoja del plan — lee proceso-negocio/fase3b-adaptador.md, la siguiente sin módulo. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si no quedan hojas: proceso-negocio.completar_fase { fase: "completado" }.'
+    lee: ['proceso-negocio/fase7-construir-interfaz.json'],
+    escribe: 'proceso-negocio/fase4-construir-modulos.json',
+    mensaje: 'Hoja completa. FASE 4: construir la SIGUIENTE hoja del plan — lee proceso-negocio/fase3b-adaptador.json, la siguiente sin módulo. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si no quedan hojas: proceso-negocio.completar_fase { fase: "completado" }.'
   },
   'negocio.verificado': {
     skill: null,
-    lee: ['proceso-negocio/fase8-verificar-en-vivo.md'],
-    escribe: 'proceso-negocio/fase-completado.md',
+    lee: ['proceso-negocio/fase8-verificar-en-vivo.json'],
+    escribe: 'proceso-negocio/fase-completado.json',
     mensaje: 'COMPLETO Y VERIFICADO: todas las hojas tienen módulo, skill e interfaz operativa verificados en vivo. F0→F8 cerrado.'
   },
   'negocio.completado': {
     skill: null,
     lee: [],
-    escribe: 'proceso-negocio/fase-completado.md',
+    escribe: 'proceso-negocio/fase-completado.json',
     mensaje: 'COMPLETO: todas las hojas de la disección tienen su módulo y su skill. El negocio está construido.'
   }
 };
@@ -263,19 +262,19 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       const h = hojas[i];
       const pos = `hoja ${i + 1}/${n} ('${h.slug}')`;
       if (!h.construido) {
-        return { skill: 'construir-modulos', lee: ['proceso-negocio/fase3b-adaptador.md'], escribe: 'proceso-negocio/fase4-construir-modulos.md', mensaje: `MÓDULO POR MÓDULO — ${pos}: construir su módulo. Lee proceso-negocio/fase3b-adaptador.md, construye modules/${h.slug}/ (index.js + module.json). Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'construir-modulos', lee: ['proceso-negocio/fase3b-adaptador.json'], escribe: 'proceso-negocio/fase4-construir-modulos.json', mensaje: `MÓDULO POR MÓDULO — ${pos}: construir su módulo. Lee proceso-negocio/fase3b-adaptador.json, construye modules/${h.slug}/ (index.js + module.json). Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       if (!h.con_skill) {
-        return { skill: 'escribir-skills', lee: ['proceso-negocio/fase4-construir-modulos.md'], escribe: 'proceso-negocio/fase5-escribir-skills.md', mensaje: `MÓDULO POR MÓDULO — ${pos}: escribir la SKILL FULL — lee proceso-negocio/fase4-construir-modulos.md + modules/${h.slug}/module.json + index.js, escribe modules/cosecha/cantera/enki/${h.slug}/SKILL.md con TODA la lógica real. Al terminar: proceso-negocio.completar_fase { fase: "skills", resumen: { skills: ["${h.slug}"] } }.` };
+        return { skill: 'escribir-skills', lee: ['proceso-negocio/fase4-construir-modulos.json'], escribe: 'proceso-negocio/fase5-escribir-skills.json', mensaje: `MÓDULO POR MÓDULO — ${pos}: escribir la SKILL FULL — lee proceso-negocio/fase4-construir-modulos.json + modules/${h.slug}/module.json + index.js, escribe modules/cosecha/cantera/enki/${h.slug}/SKILL.md con TODA la lógica real. Al terminar: proceso-negocio.completar_fase { fase: "skills", resumen: { skills: ["${h.slug}"] } }.` };
       }
       if (!h.con_interfaz) {
-        return { skill: 'decidir-interfaz', lee: ['proceso-negocio/fase5-escribir-skills.md'], escribe: 'proceso-negocio/fase6-decidir-interfaz.md', mensaje: `MÓDULO POR MÓDULO — ${pos}: decidir interfaz — lee proceso-negocio/fase5-escribir-skills.md + modules/${h.slug}/module.json, razona el rol, escribe ui_handlers o ui_decision.necesita=false. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'decidir-interfaz', lee: ['proceso-negocio/fase5-escribir-skills.json'], escribe: 'proceso-negocio/fase6-decidir-interfaz.json', mensaje: `MÓDULO POR MÓDULO — ${pos}: decidir interfaz — lee proceso-negocio/fase5-escribir-skills.json + modules/${h.slug}/module.json, razona el rol, escribe ui_handlers o ui_decision.necesita=false. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       if (!h.con_interfaz_esquematizada) {
-        return { skill: 'esquematizar-interfaz', lee: ['proceso-negocio/fase6-decidir-interfaz.md'], escribe: 'proceso-negocio/fase6h-esquematizar-interfaz.md', mensaje: `MÓDULO POR MÓDULO — ${pos}: esquematizar la interfaz — lee proceso-negocio/fase6-decidir-interfaz.md + modules/${h.slug}/${h.slug}.blueprint.json, declara ui.ops + ui.datos EN el blueprint. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'esquematizar-interfaz', lee: ['proceso-negocio/fase6-decidir-interfaz.json'], escribe: 'proceso-negocio/fase6h-esquematizar-interfaz.json', mensaje: `MÓDULO POR MÓDULO — ${pos}: esquematizar la interfaz — lee proceso-negocio/fase6-decidir-interfaz.json + modules/${h.slug}/${h.slug}.blueprint.json, declara ui.ops + ui.datos EN el blueprint. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       if (!h.con_interfaz_construida) {
-        return { skill: 'construir-interfaz', lee: ['proceso-negocio/fase6h-esquematizar-interfaz.md'], escribe: 'proceso-negocio/fase7-construir-interfaz.md', mensaje: `MÓDULO POR MÓDULO — ${pos}: construir la interfaz — lee proceso-negocio/fase6h-esquematizar-interfaz.md, genera frontend (manifest.json + index.ts + <Slug>Panel.svelte con BlueprintForm). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'construir-interfaz', lee: ['proceso-negocio/fase6h-esquematizar-interfaz.json'], escribe: 'proceso-negocio/fase7-construir-interfaz.json', mensaje: `MÓDULO POR MÓDULO — ${pos}: construir la interfaz — lee proceso-negocio/fase6h-esquematizar-interfaz.json, genera frontend (manifest.json + index.ts + <Slug>Panel.svelte con BlueprintForm). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       // hoja completa → continúa a la siguiente
     }
@@ -287,9 +286,9 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     // reporte del agente (lección de todo el proceso). Si ya se verificó
     // (flag persistido) o se acaba de completar la fase 'verificado', cierra.
     if (this._verificado(progreso.project_id) || faseActual === 'verificado') {
-      return { skill: null, lee: ['proceso-negocio/fase8-verificar-en-vivo.md'], escribe: 'proceso-negocio/fase-completado.md', mensaje: 'COMPLETO Y VERIFICADO: todas las hojas tienen módulo, skill e interfaz operativa verificados en vivo. F0→F8 cerrado.' };
+      return { skill: null, lee: ['proceso-negocio/fase8-verificar-en-vivo.json'], escribe: 'proceso-negocio/fase-completado.json', mensaje: 'COMPLETO Y VERIFICADO: todas las hojas tienen módulo, skill e interfaz operativa verificados en vivo. F0→F8 cerrado.' };
     }
-    return { skill: 'verificar-en-vivo', lee: ['proceso-negocio/fase7-construir-interfaz.md'], escribe: 'proceso-negocio/fase8-verificar-en-vivo.md', mensaje: `FASE 8 · VERIFICACIÓN FINAL (${progreso.con_interfaz_construida}/${progreso.total}): verificar EN VIVO que cada hoja del plan tiene módulo, skill y interfaz operativa en disco. Al terminar: proceso-negocio.completar_fase { fase: "verificado" }.` };
+    return { skill: 'verificar-en-vivo', lee: ['proceso-negocio/fase7-construir-interfaz.json'], escribe: 'proceso-negocio/fase8-verificar-en-vivo.json', mensaje: `FASE 8 · VERIFICACIÓN FINAL (${progreso.con_interfaz_construida}/${progreso.total}): verificar EN VIVO que cada hoja del plan tiene módulo, skill y interfaz operativa en disco. Al terminar: proceso-negocio.completar_fase { fase: "verificado" }.` };
   }
 
   // ── PROGRESO DEL PLAN (determinista — el sistema decide, no el LLM) ──
@@ -834,42 +833,31 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   }
 
   // ── ESCRIBIR ARCHIVO DE FASE en el storage del proyecto ──
-  // Cada fase completada deja su .md en <proyecto>/proceso-negocio/
+  // Cada fase completada deja su registro JSON determinista en <proyecto>/proceso-negocio/<archivo>.json
   async _escribirArchivoFase(project_id, fase, eventoFase, entregable, resumen) {
     const nombre = ARCHIVO_FASE[eventoFase];
     if (!nombre) return;  // F2 pasadas se gestionan aparte
-    const ts = new Date().toISOString();
-    const contenido = [
-      `# ${nombre.replace(/-/g, ' ').toUpperCase()}`,
-      '',
-      `> Fase completada: ${ts}`,
-      `> Evento: ${eventoFase}`,
-      '',
-      '## Resumen',
-      '',
-      resumen && Object.keys(resumen).length
-        ? '```json\n' + JSON.stringify(resumen, null, 2) + '\n```'
-        : '_Sin resumen adicional._',
-      '',
-      '## Entregable verificado',
-      '',
-      entregable.verificados
-        ? entregable.verificados.map(v => `- ${v}`).join('\n')
-        : '_Gate pasado sin verificación explícita._',
-      ''
-    ].join('\n');
+    const registro = {
+      fase: nombre,
+      evento: eventoFase,
+      estado: 'completada',
+      completada_el: new Date().toISOString(),
+      resumen: (resumen && Object.keys(resumen).length) ? resumen : {},
+      verificados: entregable.verificados || [],
+      project_id
+    };
     try {
       await this._rpc('fs.write.request', {
         project_id,
-        path: `proceso-negocio/${nombre}.md`,
-        content: contenido
+        path: `proceso-negocio/${nombre}.json`,
+        content: JSON.stringify(registro, null, 2)
       });
     } catch (_) { /* best-effort — no bloquea el proceso */ }
   }
 
-  // ── F2: escribir un archivo por cada pasada + cierre ──
+  // ── F2: escribir un JSON por cada pasada + cierre ──
   // Lee esquemas/ del proyecto, encuentra las pasadas y la disección,
-  // y escribe fase2-pasada-N.md + fase2-cierre-diseccion.md en proceso-negocio/
+  // y escribe fase2-pasada-N.json + fase2-cierre-diseccion.json en proceso-negocio/
   async _escribirFase2Pasadas(project_id, entregable) {
     const ts = new Date().toISOString();
     try {
@@ -877,7 +865,6 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       const archivos = (r && (r.files || r.items)) || [];
       const nombres = archivos.map(x => typeof x === 'string' ? x : x && x.name).filter(Boolean);
 
-      // Pasadas: pasada-1-*, pasada-2-*, etc. → ordenadas por número
       const pasadas = nombres
         .filter(n => /^pasada-\d+/.test(n))
         .sort((a, b) => {
@@ -888,50 +875,43 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
 
       for (const pasada of pasadas) {
         const num = pasada.match(/pasada-(\d+)/)[1];
-        const contenidoPasada = await this._leerArchivoProyecto(project_id, `esquemas/${pasada}`);
-        const md = [
-          `# FASE 2 — PASADA ${num}`,
-          '',
-          `> Registrada: ${ts}`,
-          `> Archivo fuente: esquemas/${pasada}`,
-          '',
-          '## Contenido',
-          '',
-          contenidoPasada || '_No se pudo leer el contenido._',
-          ''
-        ].join('\n');
+        const contenido = await this._leerArchivoProyecto(project_id, `esquemas/${pasada}`);
+        const registro = {
+          fase: `fase2-pasada-${num}`,
+          evento: 'negocio.esquematizado',
+          tipo: 'pasada',
+          numero: parseInt(num, 10),
+          estado: 'completada',
+          completada_el: ts,
+          fuente: `esquemas/${pasada}`,
+          contenido: contenido || null,
+          project_id
+        };
         await this._rpc('fs.write.request', {
           project_id,
-          path: `proceso-negocio/fase2-pasada-${num}.md`,
-          content: md
+          path: `proceso-negocio/fase2-pasada-${num}.json`,
+          content: JSON.stringify(registro, null, 2)
         });
       }
 
-      // Cierre: la disección
       const diseccion = nombres.find(n => n.includes('diseccion'));
       if (diseccion) {
-        const contenidoDiseccion = await this._leerArchivoProyecto(project_id, `esquemas/${diseccion}`);
-        const md = [
-          '# FASE 2 — CIERRE (DISECCIÓN)',
-          '',
-          `> Registrada: ${ts}`,
-          `> Archivo fuente: esquemas/${diseccion}`,
-          '',
-          '## Entregable verificado',
-          '',
-          entregable.verificados
-            ? entregable.verificados.map(v => `- ${v}`).join('\n')
-            : '_Gate pasado._',
-          '',
-          '## Contenido',
-          '',
-          contenidoDiseccion || '_No se pudo leer el contenido._',
-          ''
-        ].join('\n');
+        const contenido = await this._leerArchivoProyecto(project_id, `esquemas/${diseccion}`);
+        const registro = {
+          fase: 'fase2-cierre-diseccion',
+          evento: 'negocio.esquematizado',
+          tipo: 'cierre',
+          estado: 'completada',
+          completada_el: ts,
+          fuente: `esquemas/${diseccion}`,
+          verificados: entregable.verificados || [],
+          contenido: contenido || null,
+          project_id
+        };
         await this._rpc('fs.write.request', {
           project_id,
-          path: 'proceso-negocio/fase2-cierre-diseccion.md',
-          content: md
+          path: 'proceso-negocio/fase2-cierre-diseccion.json',
+          content: JSON.stringify(registro, null, 2)
         });
       }
     } catch (_) { /* best-effort — no bloquea el proceso */ }

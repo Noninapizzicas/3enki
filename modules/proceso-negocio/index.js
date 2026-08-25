@@ -52,6 +52,10 @@ const REPO_MODULES_DIR = (() => {
   } catch (_) { return null; }
 })();
 
+// ── PRINCIPIO ARQUITECTÓNICO (antepuesto a cada mensaje de fase) ──
+// La visión del sistema: parcelas pequeñas, evento como pegamento, ensamblaje libre.
+const PRINCIPIO_ARQUITECTONICO = '[PRINCIPIO] Cada módulo es una parcela pequeña que hace SU trabajo bien hecho y punto — funciona por eventos, desacoplado. La reutilización y la potencia vienen de ahí. El ensamblaje se hace DESPUÉS, según necesidades, conectando eventos. No compliques la parcela pensando en el ensamblaje.\n\n';
+
 // ── EL MAPA DE PROCESO: evento de fase completada → skill siguiente ──
 // El espinazo del proceso. Cada entrada: el evento que marca el fin de una fase
 // y la skill que el chat debe ejecutar a continuación (con su mensaje).
@@ -791,7 +795,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     const empujon = {
       tipo: 'proceso',
       recurso: paso.skill,
-      mensaje: paso.mensaje,
+      mensaje: PRINCIPIO_ARQUITECTONICO + paso.mensaje,
       accion_sugerida: `cosecha.obtener:${paso.skill}`,
       fase: eventoNombre,
       project_id

@@ -77,86 +77,78 @@ const ARCHIVO_FASE = {
 // El espinazo del proceso. Cada entrada: el evento que marca el fin de una fase
 // y la skill que el chat debe ejecutar a continuación (con su mensaje).
 const MAPA_PROCESO = {
-  // project.created NO es fin de fase: es el NACIMIENTO → arranca la fase 0.
   'project.created': {
     skill: 'identidad-negocio',
-    mensaje: 'El proyecto acaba de nacer. Primera fase (FASE 0): dar identidad al negocio — ¿qué estás construyendo, qué vendes, cómo lo elaboras?'
+    lee: [],
+    escribe: 'proceso-negocio/fase0-identidad-negocio.md',
+    mensaje: 'FASE 0: dar identidad al negocio — ¿qué estás construyendo, qué vendes, cómo lo elaboras? Al terminar: el reflejo emite negocio.identificado.'
   },
   'negocio.identificado': {
     skill: 'esquematizar-negocio',
-    mensaje: 'El negocio ya tiene identidad declarada. Siguiente fase (FASE 1/2): esquematizar el negocio — lee la identidad (project-profile.get) y aplica el método del esquematizador para descubrir las PIEZAS que el negocio necesita. Al terminar: proceso-negocio.completar_fase { fase: "esquematizado" }.'
+    lee: ['proceso-negocio/fase0-identidad-negocio.md'],
+    escribe: 'proceso-negocio/fase2-pasada-N.md',
+    mensaje: 'FASE 2: esquematizar el negocio — lee la identidad (proceso-negocio/fase0-identidad-negocio.md), aplica el prisma de 5 huecos ronda a ronda hasta seco. Al terminar: proceso-negocio.completar_fase { fase: "esquematizado" }.'
   },
   'negocio.esquematizado': {
-    // La FASE 2 (agente esquematizar-negocio) INCLUYE la disección punto a
-    // punto (pasada-N-diseccion.md con la FORMA de cada hoja). El siguiente
-    // paso es PLASMAR el diseño: FASE 3 · PLASMA — el LLM piensa en su ADN
-    // (pseudocódigo OOP), SIN conocer Enki. La traducción a Enki la hace el
-    // ADAPTADOR (fase 3b, polivalente), NO el plasma.
     skill: 'planificar-construccion',
-    mensaje: 'El esquema y la disección del negocio están listos. Siguiente fase (FASE 3 · PLASMA): diseñar el SISTEMA en PSEUDOCÓDIGO OOP — lee esquemas/pasada-N-diseccion.md y esquema.md, y diseña las entidades/clases/flujos/contratos que el negocio necesita, en tu lenguaje natural (OOP estándar), SIN pensar en ningún framework ni sistema concreto. Escribe el diseño en esquemas/diseno-oop.md. La traducción a Enki NO es tu trabajo (la hace el adaptador). Al terminar: proceso-negocio.completar_fase { fase: "planificado" }.'
+    lee: ['proceso-negocio/fase2-cierre-diseccion.md'],
+    escribe: 'proceso-negocio/fase3-planificar-construccion.md',
+    mensaje: 'FASE 3 · PLASMA: diseñar el SISTEMA en PSEUDOCÓDIGO OOP — lee proceso-negocio/fase2-cierre-diseccion.md, diseña entidades/clases/flujos/contratos en OOP estándar SIN conocer Enki. Escribe esquemas/diseno-oop.md. Al terminar: proceso-negocio.completar_fase { fase: "planificado" }.'
   },
   'negocio.planificado': {
-    // El diseño OOP (FASE 3 · PLASMA) está listo. El siguiente paso es el
-    // ADAPTADOR X→Enki (fase 3b): traduce el diseño al sistema real (mapea
-    // contra el inventario, reutiliza/construye/adapta, genera el plan de
-    // construcción). Hasta que el adaptador exista, la fase queda esperando.
     skill: 'construir-modulos',
-    mensaje: 'El diseño OOP está listo (esquemas/diseno-oop.md). Siguiente fase (FASE 3b · ADAPTADOR): traducir el diseño al sistema Enki — mapea cada entidad/clase del diseño contra el inventario real de módulos (reutiliza lo existente, construye lo que falta, adapta lo que se acerca) y genera el plan de construcción en esquemas/plan-construccion.md. Al terminar: proceso-negocio.completar_fase { fase: "adaptado" }.'
+    lee: ['proceso-negocio/fase3-planificar-construccion.md'],
+    escribe: 'proceso-negocio/fase3b-adaptador.md',
+    mensaje: 'FASE 3b · ADAPTADOR: traducir el diseño OOP al sistema Enki — lee proceso-negocio/fase3-planificar-construccion.md, mapea contra el inventario real (reutiliza/construye/adapta), genera esquemas/plan-construccion.md. Al terminar: proceso-negocio.completar_fase { fase: "adaptado" }.'
   },
   'negocio.adaptado': {
-    // FASE 3b · ADAPTADOR completado — el plano ya está traducido a Enki y
-    // sus hojas viven en esquemas/plan-construccion.md. Desde aquí manda el
-    // PLAN: _decidirSiguiente cuenta el progreso real y reparte el ciclo por
-    // pieza. Este eslabón faltaba: la 3b declara fase 'adaptado' y sin entrada
-    // en el mapa devolvía 400 FASE_NO_MAPEADA — la cadena moría aquí.
     skill: 'construir-modulos',
-    mensaje: 'El plan de construcción está escrito (esquemas/plan-construccion.md). Siguiente fase (FASE 4): construir UNA hoja del plan — la primera sin módulo en disco, sin tocar las ya construidas. Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["<slug>"] } }.'
+    lee: ['proceso-negocio/fase3b-adaptador.md'],
+    escribe: 'proceso-negocio/fase4-construir-modulos.md',
+    mensaje: 'FASE 4: construir UNA hoja del plan — lee proceso-negocio/fase3b-adaptador.md, la primera hoja sin módulo en disco. Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.construido': {
     skill: 'escribir-skills',
-    mensaje: 'Un módulo del negocio acaba de construirse. Siguiente paso (FASE 5): escribir la SKILL FULL de ese módulo en la cantera — lee modules/<slug>/module.json + index.js y escribe modules/cosecha/cantera/enki/<slug>/SKILL.md con TODA la lógica real embebida (ops, eventos, datos, errores — SIN RESTAR NADA). Al terminar: proceso-negocio.completar_fase { fase: "skills" }.'
+    lee: ['proceso-negocio/fase4-construir-modulos.md'],
+    escribe: 'proceso-negocio/fase5-escribir-skills.md',
+    mensaje: 'FASE 5: escribir la SKILL FULL del módulo — lee proceso-negocio/fase4-construir-modulos.md + modules/<slug>/module.json + index.js, escribe la skill en la cantera con TODA la lógica real embebida. Al terminar: proceso-negocio.completar_fase { fase: "skills" }.'
   },
   'negocio.skills': {
-    // MÓDULO POR MÓDULO (decisión del dueño): cada hoja recorre TODAS sus fases
-    // (construir → skill → interfaz → esquematizar → interfaz operativa) ANTES
-    // de que empiece la siguiente. Lo implementa _decidirSiguiente recorriendo
-    // las hojas EN ORDEN y actuando sobre la primera incompleta — no fase-por-
-    // fase (todos los módulos, luego todas las skills). Estos mensajes del MAPA
-    // solo se usan SIN plan en disco; con plan manda _decidirSiguiente.
     skill: 'decidir-interfaz',
-    mensaje: 'La skill del módulo está escrita. Siguiente paso (FASE 6): decidir la INTERFAZ de ese módulo — corre scripts/decidir-interfaz.js (skill decidir-interfaz), razona el rol (dominio → workspace_module · gestión → system_panel · operación puntual → chat_tool · contenido en chat → inline_render · puente interno → ninguna) y escribe el resultado en module.json (ui_handlers con type+zone canónicos, o ui_decision.necesita=false documentado). Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"], tipos: {...} } }.'
+    lee: ['proceso-negocio/fase5-escribir-skills.md'],
+    escribe: 'proceso-negocio/fase6-decidir-interfaz.md',
+    mensaje: 'FASE 6: decidir la INTERFAZ del módulo — lee proceso-negocio/fase5-escribir-skills.md + modules/<slug>/module.json, razona el rol y escribe ui_handlers (type+zone) o ui_decision.necesita=false. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz': {
-    // FASE 6½ — el tipo está decidido (F6), pero ANTES de construir hay que
-    // declarar la interfaz CONCRETA: la sección `ui` EN el blueprint (ops a
-    // exponer con args + datos a mostrar). Lección en vivo: saltar de F6 a F7
-    // improvisa el panel — grave. Con el generador schema→UI (BlueprintForm),
-    // la declaración ES el entregable; F7 solo envuelve.
     skill: 'esquematizar-interfaz',
-    mensaje: 'La interfaz del módulo está decidida (FASE 6: type+zone en module.json). Siguiente paso (FASE 6½): ESQUEMATIZAR la interfaz concreta — lee modules/<slug>/<slug>.blueprint.json (contrato, transporte.rpc, eventos_que_escucho, transporte.salida; si NO existe, créalo con las secciones mínimas derivadas del module.json) y DECLARA la sección `ui` EN el blueprint: ui.ops (una entrada por operación a exponer: titulo, descripcion, args[{nombre, tipo: string|number|boolean|select|json|kv, required, enum, placeholder}]) + ui.datos (op, titulo, refresh_on, columnas). Si los defaults del generador cubren (ops sin args o con defaults, sin tabla) → declara ui mínima ({}). NO escribas spec .md aparte: el entregable es el blueprint con ui.*. Si module.json tiene ui_decision.necesita=false → cerrar directo. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.'
+    lee: ['proceso-negocio/fase6-decidir-interfaz.md'],
+    escribe: 'proceso-negocio/fase6h-esquematizar-interfaz.md',
+    mensaje: 'FASE 6½: esquematizar la interfaz concreta — lee proceso-negocio/fase6-decidir-interfaz.md + modules/<slug>/<slug>.blueprint.json, declara la sección ui (ui.ops + ui.datos) EN el blueprint. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz_esquematizada': {
-    // FASE 7 — la sección `ui` ya está declarada (F6½). Construir-interfaz
-    // genera el ENVOLTORIO del generador (BlueprintForm) sin improvisar.
     skill: 'construir-interfaz',
-    mensaje: 'La interfaz del módulo está esquematizada (FASE 6½: la sección `ui` del blueprint modules/<slug>/<slug>.blueprint.json es la declaración). Siguiente paso (FASE 7): CONSTRUIR la interfaz operativa en el frontend — genera el ENVOLTORIO MÍNIMO del generador schema→UI siguiendo el patrón vivo frontend/src/lib/modules/interfaz-dinamico/: copia el blueprint al dir del trío (frontend/src/lib/modules/<slug>/<slug>.blueprint.json) y genera manifest.json (zone según F6, routes solo URLs reales del frame/PAGE_CATALOG) + index.ts (UIModule) + <Slug>Panel.svelte (~10 líneas: import BlueprintForm de $lib/components/blueprint-form/BlueprintForm.svelte + import blueprint "./<slug>.blueprint.json" + <BlueprintForm {blueprint} moduleId="<slug>" titulo="..." />; añade <slot name="custom"/> solo si el dinámico no cubre algo). NO generes store MQTT ni panel artesanal: el BlueprintForm renderiza las 4 zonas y llama mqttRequest directo. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.'
+    lee: ['proceso-negocio/fase6h-esquematizar-interfaz.md'],
+    escribe: 'proceso-negocio/fase7-construir-interfaz.md',
+    mensaje: 'FASE 7: construir la interfaz operativa — lee proceso-negocio/fase6h-esquematizar-interfaz.md, genera el envoltorio frontend (manifest.json + index.ts + <Slug>Panel.svelte + blueprint). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz_construida': {
     skill: 'construir-modulos',
-    mensaje: 'La interfaz del módulo está construida y operativa. Siguiente paso (FASE 4): construir el SIGUIENTE módulo del plan — UNA hoja a la vez, en el orden de las etapas de esquemas/plan-construccion.md, sin tocar los ya construidos. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si NO quedan hojas sin construir: proceso-negocio.completar_fase { fase: "completado" }.'
+    lee: ['proceso-negocio/fase7-construir-interfaz.md'],
+    escribe: 'proceso-negocio/fase4-construir-modulos.md',
+    mensaje: 'Hoja completa. FASE 4: construir la SIGUIENTE hoja del plan — lee proceso-negocio/fase3b-adaptador.md, la siguiente sin módulo. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si no quedan hojas: proceso-negocio.completar_fase { fase: "completado" }.'
   },
   'negocio.verificado': {
-    // FASE 8 — verificación final en vivo completada → CIERRA el círculo.
     skill: null,
-    mensaje: 'El proceso de construcción del negocio está COMPLETO y VERIFICADO: todas las hojas de la disección tienen su módulo, su skill, su interfaz operativa y se verificó en vivo que funcionan. El círculo F0→F8 está cerrado.'
+    lee: ['proceso-negocio/fase8-verificar-en-vivo.md'],
+    escribe: 'proceso-negocio/fase-completado.md',
+    mensaje: 'COMPLETO Y VERIFICADO: todas las hojas tienen módulo, skill e interfaz operativa verificados en vivo. F0→F8 cerrado.'
   },
   'negocio.completado': {
-    // FIN DEL PROCESO — todas las piezas construidas y con skill.
     skill: null,
-    mensaje: 'El proceso de construcción del negocio está COMPLETO: todas las hojas de la disección tienen su módulo y su skill. El negocio está construido y documentado.'
+    lee: [],
+    escribe: 'proceso-negocio/fase-completado.md',
+    mensaje: 'COMPLETO: todas las hojas de la disección tienen su módulo y su skill. El negocio está construido.'
   }
-  // Fases siguientes (cuando existan y emitan su evento):
-  // 'negocio.verificado':   { skill: 'verificar-vivo', mensaje: '...' }
 };
 
 class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
@@ -271,19 +263,19 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       const h = hojas[i];
       const pos = `hoja ${i + 1}/${n} ('${h.slug}')`;
       if (!h.construido) {
-        return { skill: 'construir-modulos', mensaje: `MÓDULO POR MÓDULO — ${pos}: construir su módulo. Siguiente paso (FASE 4): construir modules/${h.slug}/ (index.js + module.json con la API real; el sistema cuenta lo que existe en disco, no lo que reportas). Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'construir-modulos', lee: ['proceso-negocio/fase3b-adaptador.md'], escribe: 'proceso-negocio/fase4-construir-modulos.md', mensaje: `MÓDULO POR MÓDULO — ${pos}: construir su módulo. Lee proceso-negocio/fase3b-adaptador.md, construye modules/${h.slug}/ (index.js + module.json). Al terminar: proceso-negocio.completar_fase { fase: "construido", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       if (!h.con_skill) {
-        return { skill: 'escribir-skills', mensaje: `MÓDULO POR MÓDULO — ${pos}: su módulo está construido, ahora su SKILL. Siguiente paso (FASE 5): escribir modules/cosecha/cantera/enki/${h.slug}/SKILL.md con TODA la lógica real embebida (SIN RESTAR NADA). Al terminar: proceso-negocio.completar_fase { fase: "skills", resumen: { skills: ["${h.slug}"] } }.` };
+        return { skill: 'escribir-skills', lee: ['proceso-negocio/fase4-construir-modulos.md'], escribe: 'proceso-negocio/fase5-escribir-skills.md', mensaje: `MÓDULO POR MÓDULO — ${pos}: escribir la SKILL FULL — lee proceso-negocio/fase4-construir-modulos.md + modules/${h.slug}/module.json + index.js, escribe modules/cosecha/cantera/enki/${h.slug}/SKILL.md con TODA la lógica real. Al terminar: proceso-negocio.completar_fase { fase: "skills", resumen: { skills: ["${h.slug}"] } }.` };
       }
       if (!h.con_interfaz) {
-        return { skill: 'decidir-interfaz', mensaje: `MÓDULO POR MÓDULO — ${pos}: módulo + skill listos, ahora DECIDIR su interfaz. Siguiente paso (FASE 6): corre scripts/decidir-interfaz.js, razona el rol y escribe el resultado en modules/${h.slug}/module.json (ui_handlers con type+zone canónicos, o ui_decision.necesita=false). Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'decidir-interfaz', lee: ['proceso-negocio/fase5-escribir-skills.md'], escribe: 'proceso-negocio/fase6-decidir-interfaz.md', mensaje: `MÓDULO POR MÓDULO — ${pos}: decidir interfaz — lee proceso-negocio/fase5-escribir-skills.md + modules/${h.slug}/module.json, razona el rol, escribe ui_handlers o ui_decision.necesita=false. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       if (!h.con_interfaz_esquematizada) {
-        return { skill: 'esquematizar-interfaz', mensaje: `MÓDULO POR MÓDULO — ${pos}: interfaz decidida, ahora DECLARARLA. Siguiente paso (FASE 6½): declara la sección \`ui\` EN modules/${h.slug}/${h.slug}.blueprint.json (ui.ops con args + ui.datos; si los defaults del generador cubren, ui mínima {}). Si F6 decidió sin interfaz (ui_decision.necesita=false) → cerrar directo. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'esquematizar-interfaz', lee: ['proceso-negocio/fase6-decidir-interfaz.md'], escribe: 'proceso-negocio/fase6h-esquematizar-interfaz.md', mensaje: `MÓDULO POR MÓDULO — ${pos}: esquematizar la interfaz — lee proceso-negocio/fase6-decidir-interfaz.md + modules/${h.slug}/${h.slug}.blueprint.json, declara ui.ops + ui.datos EN el blueprint. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       if (!h.con_interfaz_construida) {
-        return { skill: 'construir-interfaz', mensaje: `MÓDULO POR MÓDULO — ${pos}: interfaz declarada, ahora CONSTRUIRLA. Siguiente paso (FASE 7): genera el ENVOLTORIO del generador schema→UI (patrón frontend/src/lib/modules/interfaz-dinamico/): copia el blueprint a frontend/src/lib/modules/${h.slug}/${h.slug}.blueprint.json y crea manifest.json + index.ts + <Slug>Panel.svelte (~10 líneas con <BlueprintForm blueprint moduleId />). NO store MQTT propio ni panel artesanal. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'construir-interfaz', lee: ['proceso-negocio/fase6h-esquematizar-interfaz.md'], escribe: 'proceso-negocio/fase7-construir-interfaz.md', mensaje: `MÓDULO POR MÓDULO — ${pos}: construir la interfaz — lee proceso-negocio/fase6h-esquematizar-interfaz.md, genera frontend (manifest.json + index.ts + <Slug>Panel.svelte con BlueprintForm). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       // hoja completa → continúa a la siguiente
     }
@@ -295,9 +287,9 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     // reporte del agente (lección de todo el proceso). Si ya se verificó
     // (flag persistido) o se acaba de completar la fase 'verificado', cierra.
     if (this._verificado(progreso.project_id) || faseActual === 'verificado') {
-      return { skill: null, mensaje: 'El proceso de construcción del negocio está COMPLETO y VERIFICADO: todas las hojas de la disección tienen su módulo, su skill, su interfaz operativa y se verificó en vivo que funcionan.' };
+      return { skill: null, lee: ['proceso-negocio/fase8-verificar-en-vivo.md'], escribe: 'proceso-negocio/fase-completado.md', mensaje: 'COMPLETO Y VERIFICADO: todas las hojas tienen módulo, skill e interfaz operativa verificados en vivo. F0→F8 cerrado.' };
     }
-    return { skill: 'verificar-en-vivo', mensaje: `El plan está construido y con interfaz operativa (${progreso.con_interfaz_construida}/${progreso.total}). Siguiente paso (FASE 8 · VERIFICACIÓN FINAL): verificar EN VIVO que el negocio funciona — el orquestador comprueba en disco que cada hoja del plan tiene su módulo que carga, su skill en la cantera y su interfaz operativa en el frontend. Al terminar: proceso-negocio.completar_fase { fase: "verificado" }.` };
+    return { skill: 'verificar-en-vivo', lee: ['proceso-negocio/fase7-construir-interfaz.md'], escribe: 'proceso-negocio/fase8-verificar-en-vivo.md', mensaje: `FASE 8 · VERIFICACIÓN FINAL (${progreso.con_interfaz_construida}/${progreso.total}): verificar EN VIVO que cada hoja del plan tiene módulo, skill y interfaz operativa en disco. Al terminar: proceso-negocio.completar_fase { fase: "verificado" }.` };
   }
 
   // ── PROGRESO DEL PLAN (determinista — el sistema decide, no el LLM) ──
@@ -825,7 +817,9 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       mensaje: PRINCIPIO_ARQUITECTONICO + paso.mensaje,
       accion_sugerida: `cosecha.obtener:${paso.skill}`,
       fase: eventoNombre,
-      project_id
+      project_id,
+      lee: paso.lee || [],
+      escribe: paso.escribe || null
     };
     this.pendientes.set(project_id, empujon);   // el nervio lo lee y consume (una vez)
 

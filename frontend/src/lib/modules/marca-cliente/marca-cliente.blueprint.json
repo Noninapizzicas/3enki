@@ -1,0 +1,82 @@
+{
+  "_doc": "Blueprint del modulo marca-cliente (the-pirate). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema→UI (BlueprintForm). Seccion `ui` declarada por F6½ (esquematizar-interfaz, 2026-08-24): las 6 operaciones del modulo con sus args reales del contrato (module.json + FORMULAS del index.js) y el evento que refresca la zona DATOS. Las acciones son DOTTED (reglas.leer, voz.obtener...) porque el RPC real del bus es marca.<accion>.request y el wrapper mqttRequest('marca', '<accion>') emite ui/request/marca/<accion> — por eso transporte.rpc va VACIO: la regex de deriveZones solo parsea acciones de 2 segmentos.",
+  "id": "marca-cliente",
+  "version": "blueprint-1.0.0",
+
+  "rol": "Custodio single-writer de la relacion con el cliente (voz de marca, presencia digital, clientes, fidelizacion) en marca.json del proyecto + 4 conversores puros (voz, presencia, cliente, fidelizacion). El resto del sistema bebe sus valores por RPC; los nulls del contrato son politica por declarar (el dueno los puebla via reglas.actualizar).",
+
+  "eventos_publicados": [
+    "marca.reglas.actualizadas"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 6 operaciones se conducen por ui/request/marca/<accion> con la accion dotted; ver seccion ui.ops. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "marca.reglas.actualizadas"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 6 operaciones del reflejo con sus args; el evento marca.reglas.actualizadas refresca la zona eventos.",
+    "ops": {
+      "reglas.leer": {
+        "titulo": "Ver reglas de marca",
+        "descripcion": "Lectura de las reglas del proyecto (voz, presencia, clientes, fidelizacion). Devuelve el objeto `reglas` con su fuente."
+      },
+      "reglas.actualizar": {
+        "titulo": "Actualizar reglas",
+        "descripcion": "Escritura single-writer (el dueno). Los campos presentes se validan y aplican; los ausentes se preservan. Schema marca-v1.",
+        "args": [
+          {
+            "nombre": "cambios",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Cambios a aplicar. Ej: {\"voz\":{\"tono\":\"cercano y directo\"},\"fidelizacion\":{\"activa\":true,\"puntos_por_euro\":1}}"
+          }
+        ]
+      },
+      "voz.obtener": {
+        "titulo": "Voz de marca",
+        "descripcion": "Tono, valores y tradicion de referencia declarados."
+      },
+      "presencia.obtener": {
+        "titulo": "Presencia digital",
+        "descripcion": "Canales activos (web, instagram, whatsapp, glovo...)."
+      },
+      "cliente.obtener": {
+        "titulo": "Consultar cliente",
+        "descripcion": "Datos de un cliente por contacto (telefono o email).",
+        "args": [
+          {
+            "nombre": "contacto",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "telefono o email del cliente"
+          }
+        ]
+      },
+      "fidelizacion.obtener": {
+        "titulo": "Fidelizacion de cliente",
+        "descripcion": "Puntos y recompensas de un cliente (si la fidelizacion esta activa).",
+        "args": [
+          {
+            "nombre": "contacto",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "telefono o email del cliente"
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "reglas.leer",
+      "titulo": "Reglas de marca del proyecto",
+      "refresh_on": ["marca.reglas.actualizadas"],
+      "columnas": ["reglas", "fuente"]
+    }
+  }
+}

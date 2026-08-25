@@ -56,6 +56,23 @@ const REPO_MODULES_DIR = (() => {
 // La visión del sistema: parcelas pequeñas, evento como pegamento, ensamblaje libre.
 const PRINCIPIO_ARQUITECTONICO = '[PRINCIPIO] Cada módulo es una parcela pequeña que hace SU trabajo bien hecho y punto — funciona por eventos, desacoplado. La reutilización y la potencia vienen de ahí. El ensamblaje se hace DESPUÉS, según necesidades, conectando eventos. No compliques la parcela pensando en el ensamblaje.\n\n';
 
+// ── ARCHIVO POR FASE: qué archivo se escribe en el storage del proyecto ──
+// Cada fase completada deja su registro en <proyecto>/proceso-negocio/<archivo>.md
+// con lo que leyó, lo que creó y el resumen de lo completado.
+const ARCHIVO_FASE = {
+  'project.created':              'fase0-identidad-negocio',
+  'negocio.esquematizado':        null,  // F2 usa pasadas dinámicas (fase2-pasada-N)
+  'negocio.planificado':          'fase3-planificar-construccion',
+  'negocio.adaptado':             'fase3b-adaptador',
+  'negocio.construido':           'fase4-construir-modulos',
+  'negocio.skills':               'fase5-escribir-skills',
+  'negocio.interfaz':             'fase6-decidir-interfaz',
+  'negocio.interfaz_esquematizada': 'fase6h-esquematizar-interfaz',
+  'negocio.interfaz_construida':  'fase7-construir-interfaz',
+  'negocio.verificado':           'fase8-verificar-en-vivo',
+  'negocio.completado':           'fase-completado'
+};
+
 // ── EL MAPA DE PROCESO: evento de fase completada → skill siguiente ──
 // El espinazo del proceso. Cada entrada: el evento que marca el fin de una fase
 // y la skill que el chat debe ejecutar a continuación (con su mensaje).
@@ -223,6 +240,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       const clave = `${project_id}::${eventoFase}`;
       if (!this._emitidos.has(clave)) {
         this._emitidos.set(clave, Date.now());
+        await this._escribirArchivoFase(project_id, fase, eventoFase, entregable, d.resumen || {});
         if (siguiente && siguiente.skill) this._empujar(project_id, eventoFase, siguiente);
       }
       return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: siguiente?.skill || null, entregable, progreso, fin: !siguiente?.skill } };
@@ -774,7 +792,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   }
 
   // ── NÚCLEO: evento → empujón de la skill siguiente ──
-  _encadenar(event, eventoNombre) {
+  async _encadenar(event, eventoNombre) {
     const d = (event && event.data) || event || {};
     const project_id = d.project_id || d.id;
     if (!project_id) return;
@@ -786,6 +804,11 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     const clave = `${project_id}::${eventoNombre}`;
     if (this._emitidos.has(clave)) return;
     this._emitidos.set(clave, Date.now());
+
+    // negocio.identificado cierra la F0 → escribir su archivo de fase
+    if (eventoNombre === 'negocio.identificado') {
+      await this._escribirArchivoFase(project_id, 'identificado', 'project.created', { ok: true }, d);
+    }
 
     this._empujar(project_id, eventoNombre, paso);
   }
@@ -810,6 +833,40 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       this.metrics?.increment('proceso-negocio.empujon.total', { fase: eventoNombre, skill: paso.skill });
       this.logger?.info('proceso-negocio.empujon', { project_id, fase: eventoNombre, skill: paso.skill });
     } catch (_) { /* best-effort */ }
+  }
+
+  // ── ESCRIBIR ARCHIVO DE FASE en el storage del proyecto ──
+  // Cada fase completada deja su .md en <proyecto>/proceso-negocio/
+  async _escribirArchivoFase(project_id, fase, eventoFase, entregable, resumen) {
+    const nombre = ARCHIVO_FASE[eventoFase];
+    if (!nombre) return;  // F2 pasadas se gestionan aparte
+    const ts = new Date().toISOString();
+    const contenido = [
+      `# ${nombre.replace(/-/g, ' ').toUpperCase()}`,
+      '',
+      `> Fase completada: ${ts}`,
+      `> Evento: ${eventoFase}`,
+      '',
+      '## Resumen',
+      '',
+      resumen && Object.keys(resumen).length
+        ? '```json\n' + JSON.stringify(resumen, null, 2) + '\n```'
+        : '_Sin resumen adicional._',
+      '',
+      '## Entregable verificado',
+      '',
+      entregable.verificados
+        ? entregable.verificados.map(v => `- ${v}`).join('\n')
+        : '_Gate pasado sin verificación explícita._',
+      ''
+    ].join('\n');
+    try {
+      await this._rpc('fs.write.request', {
+        project_id,
+        path: `proceso-negocio/${nombre}.md`,
+        content: contenido
+      });
+    } catch (_) { /* best-effort — no bloquea el proceso */ }
   }
 
   // Lectura de la cola (la usa el nervio/ai-gateway si decide leerla aquí).

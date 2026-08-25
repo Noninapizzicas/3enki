@@ -5,6 +5,60 @@
   "ui": {
     "type": "workspace_module",
     "zone": "modulos",
+    "operaciones": [
+      {
+        "name": "crear_lista",
+        "label": "crear lista",
+        "desc": "Crea una lista/rail y la deja ACTIVA (el sistema te la recordará cada turno). ÚSALA cuando el usuario tenga un trabajo d",
+        "args": [
+          {
+            "name": "nombre",
+            "type": "text",
+            "label": "nombre",
+            "required": true
+          },
+          {
+            "name": "tipo",
+            "type": "text",
+            "label": "tipo",
+            "required": false
+          },
+          {
+            "name": "orden",
+            "type": "text",
+            "label": "orden",
+            "required": false
+          },
+          {
+            "name": "pasos",
+            "type": "text",
+            "label": "pasos",
+            "required": false
+          },
+          {
+            "name": "pasos_forma",
+            "type": "text",
+            "label": "pasos forma",
+            "required": false
+          }
+        ],
+        "confirm": true
+      },
+      {
+        "name": "borrar_lista",
+        "label": "borrar lista",
+        "desc": "Borra una lista. Sin 'lista_id' borra la ACTIVA. ÚSALA cuando el usuario termine un trabajo y quiera cerrar/retirar su l",
+        "args": [
+          {
+            "name": "lista_id",
+            "type": "text",
+            "label": "lista id",
+            "required": false
+          }
+        ],
+        "confirm": true
+      }
+    ],
     "acciones": [
       {
         "name": "anadir_paso",
@@ -52,6 +106,19 @@
         ]
       },
       {
+        "name": "ver_listas",
+        "label": "ver listas",
+        "desc": "Muestra las listas del proyecto y cuál está activa. Opcionalmente activa una por id (pasa 'activar'). ÚSALA para retomar",
+        "args": [
+          {
+            "name": "activar",
+            "type": "text",
+            "label": "activar",
+            "required": false
+          }
+        ]
+      },
+      {
         "name": "fijar_objetivo",
         "label": "fijar objetivo",
         "desc": "Fija el OBJETIVO de la lista/rail ACTIVA — la condición que dice cuándo el trabajo está COMPLETO (p.ej. 'la carta public",
@@ -78,62 +145,6 @@
           }
         ],
         "confirm": true
-      }
-    ],
-    "datos": [
-      {
-        "name": "crear_lista",
-        "label": "crear lista",
-        "desc": "Crea una lista/rail y la deja ACTIVA (el sistema te la recordará cada turno). ÚSALA cuando el usuario tenga un trabajo d",
-        "refresh_on": [
-          "estados.crear.request",
-          "estados.instanciar.request",
-          "estados.anadir.request",
-          "estados.avanzar.request",
-          "estados.marcar.request",
-          "estados.estado.request",
-          "estados.listar.request",
-          "estados.activar.request",
-          "estados.borrar.request",
-          "estados.fijar_objetivo.request",
-          "estados.evaluar.request"
-        ]
-      },
-      {
-        "name": "ver_listas",
-        "label": "ver listas",
-        "desc": "Muestra las listas del proyecto y cuál está activa. Opcionalmente activa una por id (pasa 'activar'). ÚSALA para retomar",
-        "refresh_on": [
-          "estados.crear.request",
-          "estados.instanciar.request",
-          "estados.anadir.request",
-          "estados.avanzar.request",
-          "estados.marcar.request",
-          "estados.estado.request",
-          "estados.listar.request",
-          "estados.activar.request",
-          "estados.borrar.request",
-          "estados.fijar_objetivo.request",
-          "estados.evaluar.request"
-        ]
-      },
-      {
-        "name": "borrar_lista",
-        "label": "borrar lista",
-        "desc": "Borra una lista. Sin 'lista_id' borra la ACTIVA. ÚSALA cuando el usuario termine un trabajo y quiera cerrar/retirar su l",
-        "refresh_on": [
-          "estados.crear.request",
-          "estados.instanciar.request",
-          "estados.anadir.request",
-          "estados.avanzar.request",
-          "estados.marcar.request",
-          "estados.estado.request",
-          "estados.listar.request",
-          "estados.activar.request",
-          "estados.borrar.request",
-          "estados.fijar_objetivo.request",
-          "estados.evaluar.request"
-        ]
       }
     ],
     "eventos_que_escucho": [

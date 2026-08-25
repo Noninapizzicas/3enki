@@ -31,11 +31,11 @@ function eventLabel(ev) {
 }
 
 function esLectura(name) {
-  return /get|list|obtener|listar|leer|buscar|show|status|health/i.test(name);
+  return /get\.|\.get|listar|obtener|leer|buscar|show|status|health/i.test(name);
 }
 
 function esEscritura(name) {
-  return /crear|actualizar|update|set|delete|remove|cambiar|enviar|add|push/i.test(name);
+  return /crear|actualizar|update|set|delete|remove|cambiar|enviar|add|push|borrar/i.test(name);
 }
 
 // ── Normalizar subscribes (array → dict; dict → dict) ──

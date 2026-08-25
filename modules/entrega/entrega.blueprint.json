@@ -1,0 +1,27 @@
+{
+  "schema": "blueprint-interfaz-v1",
+  "moduleId": "entrega",
+  "titulo": "Entrega: estimación de tiempo de preparación/entrega y política de reparto (the-pirate).",
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "eventos_que_escucho": [
+      {
+        "event": "entrega.tiempo.estimar.request",
+        "label": "entrega tiempo estimar"
+      },
+      {
+        "event": "entrega.reparto.obtener.request",
+        "label": "entrega reparto obtener"
+      },
+      {
+        "event": "entrega.reglas.leer.request",
+        "label": "entrega reglas leer"
+      },
+      {
+        "event": "entrega.reglas.actualizar.request",
+        "label": "entrega reglas actualizar"
+      }
+    ]
+  }
+}

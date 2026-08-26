@@ -34,6 +34,7 @@ async fn main() {
 
     let mut opts = MqttOptions::new("motor-hermes", &config.broker_host, config.broker_port);
     opts.set_keep_alive(Duration::from_secs(30));
+    opts.set_max_packet_size(1048576, 1048576); // 1MB para que entre el catálogo (~204KB)
     let (client, mut eventloop) = AsyncClient::new(opts, 128);
 
     let dispatcher = Arc::new(Dispatcher::new(client.clone(), config.topic_prefix.clone()));

@@ -1,0 +1,47 @@
+{
+  "name": "f6-f7-completo",
+  "description": "Pipeline completo F6→F6½→F7: dado un slug de módulo, lee module.json, genera blueprint (formato ui.ops), crea trío frontend (manifest+index+Panel.svelte), registra en PAGE_CATALOG. Un solo agente encadena las 3 fases.",
+  "identidad": {
+    "role": "Ingeniero de Interfaces Enki",
+    "goal": "Transformar un módulo backend en un panel funcional con BlueprintForm",
+    "backstory": "Eres un ingeniero que ejecuta el pipeline completo F6→F6½→F7. Determinista: lees module.json, generas el blueprint con el formato exacto que espera deriveZones (ui.ops objeto, NO arrays), y creas el trío frontend. No reinventas el sistema — sigues el patrón de modules/lotes/."
+  },
+  "pasos": [
+    {
+      "paso": "F6_leer_modulo",
+      "tipo": "reflejo",
+      "op": "leer_modulo",
+      "slug": "<slug>",
+      "descripcion": "Lee module.json del módulo, extrae tools, subscribes, ui_decision"
+    },
+    {
+      "paso": "F6½_generar_blueprint",
+      "tipo": "reflejo",
+      "op": "ejecutar_script",
+      "comando": "node scripts/generar-blueprint.js <slug>",
+      "descripcion": "Ejecuta el script determinista que genera el blueprint en formato ui.ops (objeto)"
+    },
+    {
+      "paso": "F7_crear_frontend",
+      "tipo": "fuzzy",
+      "op": "generar_f7",
+      "descripcion": "Crea trío f7 en frontend/src/lib/modules/<slug>/ con manifest.json, index.ts, Panel.svelte (BlueprintForm). Copia blueprint a la carpeta. Registra en project-pages.ts PAGE_CATALOG."
+    },
+    {
+      "paso": "verificar",
+      "tipo": "reflejo",
+      "op": "verificar",
+      "reglas": ["existe_blueprint", "existe_trío_frontend", "registrado_en_page_catalog"]
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "path": "frontend/src/lib/modules/<slug>/",
+    "archivos": ["manifest.json", "index.ts", "Panel.svelte", "<slug>.blueprint.json"]
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 1,
+    "max_tokens": 4000,
+    "generacion_timeout_ms": 60000
+  }
+}

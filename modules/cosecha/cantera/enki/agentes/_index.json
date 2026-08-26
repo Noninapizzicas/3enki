@@ -41,6 +41,16 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
+    },
+    {
+      "name": "f6-f7-completo",
+      "description": "Pipeline completo F6→F6½→F7 para un módulo: genera blueprint (formato ui.ops) + trío frontend (manifest+index+Panel) + PAGE_CATALOG.",
+      "archivo": "f6-f7-completo.json",
+      "tags": ["interfaz", "blueprint", "f7", "f6"],
+      "creado": "2026-08-26",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

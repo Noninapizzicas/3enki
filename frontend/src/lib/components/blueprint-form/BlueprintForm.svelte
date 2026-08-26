@@ -20,6 +20,7 @@
   import { subscribe } from '$lib/ui-core/mqtt';
   import { activeProjectId } from '$lib/stores/projects';
   import { deriveZones, type BlueprintArg, type BlueprintOp, type BlueprintEventoVivo, type BlueprintDatos } from './blueprint-zones';
+  import RefSelect from './RefSelect.svelte';
 
   export let blueprint: Record<string, unknown> | null = null;
   export let moduleId = '';
@@ -44,6 +45,8 @@
   let datosCols: string[] = [];
   let datosTitulo = '';
   let datosCargando = false;
+  let datosNeedsArgs = false;
+  let datosHint = '';
 
   function getProjectId(): string | null {
     if (projectIdOverride) return projectIdOverride;
@@ -125,6 +128,9 @@
     try {
       const res = await mqttRequest(moduleId, op.nombre, { project_id: pid, ...payload });
       resultados = { ...resultados, [op.nombre]: { ok: true, msg: `ok (${res.status})`, data: res.data } };
+      if (zones.datos && op.nombre === zones.datos.op && res.data) {
+        populateDatos(res.data);
+      }
     } catch (e) {
       resultados = { ...resultados, [op.nombre]: { ok: false, msg: errMsg(e) } };
     } finally {
@@ -172,6 +178,23 @@
     }
   }
 
+  function populateDatos(data: unknown) {
+    const d = zones.datos;
+    if (!d) return;
+    const arr = primerArray(data);
+    if (arr) {
+      datosFilas = arr;
+      datosCols = d.columnas && d.columnas.length
+        ? d.columnas
+        : (arr.length ? Object.keys(arr[0]).slice(0, 8) : []);
+    } else if (data && typeof data === 'object') {
+      datosFilas = [data as Record<string, unknown>];
+      datosCols = d.columnas || Object.keys(data as Record<string, unknown>).slice(0, 8);
+    }
+    datosTitulo = d.titulo;
+    datosHint = '';
+  }
+
   function celda(v: unknown): string {
     if (v === null || v === undefined) return '—';
     if (typeof v === 'object') return JSON.stringify(v).slice(0, 60);
@@ -202,11 +225,18 @@
     if (zones.datos) {
       if (zones.datos.refresh_on) {
         for (const ev of zones.datos.refresh_on) {
-          const unsub = subscribe(ev, () => loadDatos());
+          const unsub = subscribe(ev, () => { if (!datosNeedsArgs) loadDatos(); });
           cleanup.push(unsub);
         }
       }
-      loadDatos();
+      const matchingOp = zones.formulario.find(f => f.nombre === zones.datos!.op);
+      if (matchingOp && matchingOp.args.some(a => a.required)) {
+        datosNeedsArgs = true;
+        datosTitulo = zones.datos.titulo;
+        datosHint = `Ejecuta «${matchingOp.titulo}» en el formulario para ver los datos`;
+      } else {
+        loadDatos();
+      }
     }
   });
 
@@ -247,11 +277,12 @@
                     {/each}
                   </select>
                 {:else if arg.tipo === 'ref'}
-                  <input
-                    type="text"
-                    value={(fieldValue(op.nombre, arg) as string) || ''}
-                    placeholder={arg.placeholder || arg.nombre + ` (fuente: ${arg.ref || '?'})`}
-                    on:input={(e) => setField(op.nombre, arg, (e.target as HTMLInputElement).value)}
+                  <RefSelect
+                    {arg}
+                    op={{ nombre: op.nombre }}
+                    {moduleId}
+                    value={fieldValue(op.nombre, arg)}
+                    onchange={(v) => setField(op.nombre, arg, v)}
                   />
                 {:else if arg.tipo === 'boolean'}
                   <input
@@ -386,7 +417,9 @@
           {datosCargando ? 'cargando…' : '↻ refrescar'}
         </button>
       </h3>
-      {#if datosFilas.length === 0}
+      {#if datosHint}
+        <p class="vivo-vacio">{datosHint}</p>
+      {:else if datosFilas.length === 0}
         <p class="vivo-vacio">sin datos</p>
       {:else}
         <div class="tabla-wrap">

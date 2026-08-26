@@ -141,7 +141,7 @@ function generarFrontend(slugModule, name, description, blueprint, uiDecision) {
   const icon = uiDecision.icon || '📦';
   const zone = uiDecision.zone || 'modulos';
   const order = uiDecision.order || 50;
-  const label = description.charAt(0).toUpperCase() + description.slice(1);
+  const label = pascal;
   const frontDir = path.join(REPO_FRONTEND, slugModule);
 
   const manifest = {

@@ -247,7 +247,12 @@
                     {/each}
                   </select>
                 {:else if arg.tipo === 'ref'}
-                  <RefSelect {arg} {op} moduleId={moduleId} value={fieldValue(op.nombre, arg)} onchange={(v) => setField(op.nombre, arg, v)} />
+                  <input
+                    type="text"
+                    value={(fieldValue(op.nombre, arg) as string) || ''}
+                    placeholder={arg.placeholder || arg.nombre + ` (fuente: ${arg.ref || '?'})`}
+                    on:input={(e) => setField(op.nombre, arg, (e.target as HTMLInputElement).value)}
+                  />
                 {:else if arg.tipo === 'boolean'}
                   <input
                     type="checkbox"

@@ -246,6 +246,8 @@
                       <option value={opt}>{opt}</option>
                     {/each}
                   </select>
+                {:else if arg.tipo === 'ref'}
+                  <RefSelect {arg} {op} moduleId={moduleId} value={fieldValue(op.nombre, arg)} onchange={(v) => setField(op.nombre, arg, v)} />
                 {:else if arg.tipo === 'boolean'}
                   <input
                     type="checkbox"

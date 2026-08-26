@@ -28,7 +28,7 @@
 // TIPOS
 // =============================================================================
 
-export type ArgTipo = 'string' | 'number' | 'boolean' | 'select' | 'json' | 'kv';
+export type ArgTipo = 'string' | 'number' | 'boolean' | 'select' | 'json' | 'kv' | 'ref';
 
 export interface BlueprintArg {
   nombre: string;
@@ -40,6 +40,12 @@ export interface BlueprintArg {
   default?: unknown;
   /** Solo tipo 'kv': clave fija del par. Si se omite, el dueño la escribe en el campo clave. */
   kvClave?: string;
+  /** Tipo 'ref': módulo y acción para obtener opciones (ej: "productos.carta_completa") */
+  ref?: string;
+  /** Tipo 'ref': campo del resultado para mostrar en el select */
+  ref_label?: string;
+  /** Tipo 'ref': campo del resultado para el valor */
+  ref_value?: string;
 }
 
 export interface BlueprintOp {
@@ -125,7 +131,7 @@ function normalizeArg(raw: Record<string, unknown>): BlueprintArg | null {
   if (!nombre) return null;
   let tipo: ArgTipo = 'string';
   const tipoRaw = String(raw.tipo || 'string');
-  if ((['string', 'number', 'boolean', 'select', 'json', 'kv'] as ArgTipo[]).includes(tipoRaw as ArgTipo)) {
+  if ((['string', 'number', 'boolean', 'select', 'json', 'kv', 'ref'] as ArgTipo[]).includes(tipoRaw as ArgTipo)) {
     tipo = tipoRaw as ArgTipo;
   }
   const arg: BlueprintArg = {
@@ -134,7 +140,10 @@ function normalizeArg(raw: Record<string, unknown>): BlueprintArg | null {
     required: raw.required !== false,
     descripcion: typeof raw.descripcion === 'string' ? raw.descripcion : undefined,
     placeholder: typeof raw.placeholder === 'string' ? raw.placeholder : undefined,
-    kvClave: typeof raw.kvClave === 'string' && raw.kvClave ? raw.kvClave : undefined
+    kvClave: typeof raw.kvClave === 'string' && raw.kvClave ? raw.kvClave : undefined,
+    ref: typeof raw.ref === 'string' && raw.ref ? raw.ref : undefined,
+    ref_label: typeof raw.ref_label === 'string' && raw.ref_label ? raw.ref_label : undefined,
+    ref_value: typeof raw.ref_value === 'string' && raw.ref_value ? raw.ref_value : undefined,
   };
   if (Array.isArray(raw.enum)) arg.enum = raw.enum.map(String);
   if (raw.default !== undefined) arg.default = raw.default;

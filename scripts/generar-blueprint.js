@@ -106,6 +106,27 @@ function buscarModulo(baseDir, slugModule) {
 
 // ── Generar blueprint ──
 
+// ── Extraer eventos de ui_handlers ──
+
+function extraerEventosDeUiHandlers(uiHandlers) {
+  const eventos = [];
+  for (const h of (uiHandlers || [])) {
+    if (!h.action) continue;
+    const name = `${h.domain || 'mod'}.${h.action}`;
+    if (esLectura(h.action)) {
+      eventos.push({ tipo: 'dato', name, label: eventLabel(name), desc: '' });
+    } else {
+      eventos.push({
+        tipo: esEscritura(h.action) ? 'operacion' : 'accion',
+        name,
+        label: eventLabel(name),
+        desc: '',
+      });
+    }
+  }
+  return eventos;
+}
+
 function generar(slugModule, deploy) {
   // Buscar en repo (escribible)
   let found = buscarModulo(REPO_MODULES, slugModule);
@@ -125,10 +146,14 @@ function generar(slugModule, deploy) {
   const name = mod.name || slugModule.split('/').pop();
   const description = mod.description || name;
   const tools = mod.tools || [];
+  const uiHandlers = mod.ui_handlers || [];
   const subscribesDict = normalizarSubscribes(mod.subscribes);
   const uiDecision = mod.ui_decision || { type: 'workspace_module', zone: 'modulos' };
 
-  const eventos = extraerEventos(tools);
+  const eventosTools = extraerEventos(tools);
+  const eventosHandlers = extraerEventosDeUiHandlers(uiHandlers);
+  const nombresVistos = new Set(eventosTools.map(e => e.name));
+  const eventos = [...eventosTools, ...eventosHandlers.filter(e => !nombresVistos.has(e.name))];
 
   const operaciones = eventos.filter(e => e.tipo === 'operacion').map(({ tipo, ...rest }) => rest);
   const acciones = eventos.filter(e => e.tipo === 'accion').map(({ tipo, ...rest }) => rest);

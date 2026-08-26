@@ -32,6 +32,7 @@ Environment=HOME=/home/hermes
 # User=hermes entra en bucle de fallo. 'run' es justo lo que Hermes hornea en su
 # propia unit (ExecStart=… -m hermes_cli.main gateway run).
 ExecStart=/home/hermes/.local/bin/hermes gateway run
+Environment=ENKI_BRIDGE_URL=http://localhost:8130
 Restart=on-failure
 RestartSec=5
 # Hermes ejecuta código como parte de su arsenal — contenerlo al usuario hermes

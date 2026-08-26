@@ -68,7 +68,7 @@ impl Dispatcher {
         &self,
         tool_name: &str,
         args: Value,
-        _context: Value,
+        context: Value,
         timeout: Duration,
     ) -> Result<Value, DispatchError> {
         let request_id = format!("mh-{}", self.counter.fetch_add(1, Ordering::Relaxed));
@@ -76,20 +76,14 @@ impl Dispatcher {
 
         self.pending.lock().await.insert(request_id.clone(), tx);
 
-        // Parsear tool_name (domain.action → domain, action)
-        // Si tiene 2+ puntos (domain.action.sub), se toma domain = primera parte
-        let (domain, action) = tool_name.splitn(2, '.').collect::<Vec<_>>();
-        let (domain, action) = if domain.len() == 2 {
-            (domain[0], domain[1])
-        } else {
-            (tool_name, "ejecutar")
-        };
-
-        let payload = json!({
+        let mut payload = json!({
             "request_id": request_id,
-            "data": args
+            "args": args
         });
-        let topic = format!("ui/request/{domain}/{action}");
+        if !context.is_null() && !context.as_object().map(|o| o.is_empty()).unwrap_or(true) {
+            payload["context"] = context;
+        }
+        let topic = format!("hermes/tool/{tool_name}");
         let bytes = serde_json::to_vec(&payload).unwrap_or_default();
 
         if let Err(e) = self.client.publish(&topic, QoS::AtLeastOnce, false, bytes).await {
@@ -135,11 +129,15 @@ impl Dispatcher {
     }
 
     pub async fn route_response(&self, request_id: &str, payload: &Value) {
-        let success = payload.get("success").and_then(|s| s.as_bool()).unwrap_or(false);
-        let status_num = payload.get("status").and_then(|s| s.as_u64()).unwrap_or(200);
+        // Gateway responde: {status: 'success'|'error', result, error}
+        // o {success: true, data}, {status: 200, data}
+        let gateway_status = payload.get("status").and_then(|s| s.as_str()).unwrap_or("");
+        let success = gateway_status == "success"
+            || payload.get("success").and_then(|s| s.as_bool()).unwrap_or(false)
+            || payload.get("status").and_then(|s| s.as_u64()).map(|n| n < 400).unwrap_or(false);
 
-        let result = if success || (status_num > 0 && status_num < 400) {
-            Ok(payload.get("data").cloned().unwrap_or(payload.clone()))
+        let result = if success {
+            Ok(payload.get("result").or_else(|| payload.get("data")).cloned().unwrap_or(payload.clone()))
         } else {
             let err = payload.get("error").cloned().unwrap_or(payload.clone());
             Err(DispatchError::ToolError {
@@ -154,17 +152,16 @@ impl Dispatcher {
     }
 
     pub fn response_topic_prefix(&self) -> String {
-        "ui/response/".to_string()
+        format!("{}/response/", self.prefix)
     }
 
     pub fn catalog_response_prefix(&self) -> String {
-        // Catalog via ui/request no tiene respuesta específica; por ahora
-        // se cae al timeout y el health reporta 0 tools
-        String::new()
+        format!("{}/catalog/response/", self.prefix)
     }
 
     pub async fn subscribe_responses(&self) {
-        let _ = self.client.subscribe("ui/response/#", QoS::AtLeastOnce).await;
+        let _ = self.client.subscribe(format!("{}/response/#", self.prefix), QoS::AtLeastOnce).await;
+        let _ = self.client.subscribe(format!("{}/catalog/response/#", self.prefix), QoS::AtLeastOnce).await;
     }
 }
 

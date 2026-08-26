@@ -1,0 +1,26 @@
+[Unit]
+Description=motor-hermes — Bridge Hermes-Enki (Rust)
+Documentation=https://github.com/Noninapizzicas/3enki/tree/main/enki-sense/crates/motor-hermes
+After=network.target enki.service
+PartOf=enki.service
+
+[Service]
+Type=simple
+ExecStart=/opt/enki/enki-sense/target/release/motor-hermes
+WorkingDirectory=/opt/enki
+Environment=MOTOR_HERMES_BROKER=127.0.0.1
+Environment=MOTOR_HERMES_PORT=8130
+Environment=RUST_LOG=info
+Restart=always
+RestartSec=3
+User=admin
+Group=admin
+
+# Hardening — relajado para que lea data/.hermes-bridge-token
+NoNewPrivileges=true
+PrivateTmp=true
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target

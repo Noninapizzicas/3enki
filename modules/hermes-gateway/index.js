@@ -23,15 +23,15 @@ class HermesGateway {
     this.mqtt = mqtt;
 
     const bridge = core.moduleLoader?.loadedModules?.get?.('hermes-bridge');
-    if (!bridge) {
+    if (!bridge || !bridge.instance) {
       this.logger?.warn('hermes-gateway.skip', { reason: 'hermes-bridge not loaded' });
       return;
     }
-    this.bridge = bridge;
+    this.bridge = bridge.instance;
 
     await mqtt.subscribe(`${this.prefix}/tool/+`);
     await mqtt.subscribe(`${this.prefix}/catalog`);
-    mqtt.on('message', (topic, raw) => this._onMessage(topic, raw));
+    mqtt.on('message', (topic, parsed, raw) => this._onMessage(topic, raw || parsed));
 
     this.logger?.info('hermes-gateway.ready', {
       tool_topic: `${this.prefix}/tool/+`,

@@ -1,0 +1,9 @@
+{
+  "id": "variaciones",
+  "name": "Variaciones",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 16,
+  "icon": "🔧",
+  "label": "Variaciones"
+}

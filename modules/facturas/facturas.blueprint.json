@@ -1,0 +1,59 @@
+{
+  "schema": "blueprint-interfaz-v1",
+  "moduleId": "facturas",
+  "titulo": "Procesamiento comercial de facturas: pipeline step-based con agentes IA, validacion y observabilidad. Pipeline v2 (Intake → Convert → Prepare → OCR → Structure (IA) → Validate → Store).",
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "acciones": [
+      {
+        "name": "facturas.procesar",
+        "label": "facturas procesar",
+        "desc": "Procesa un archivo de factura (PDF/imagen) y extrae datos estructurados via OCR + IA. Devuelve los campos fiscales detec",
+        "args": [
+          {
+            "name": "projectId",
+            "type": "text",
+            "label": "projectId",
+            "required": true
+          },
+          {
+            "name": "filePath",
+            "type": "text",
+            "label": "filePath",
+            "required": true
+          },
+          {
+            "name": "source",
+            "type": "text",
+            "label": "source",
+            "required": false
+          }
+        ],
+        "confirm": true
+      },
+      {
+        "name": "facturas.estadisticas",
+        "label": "facturas estadisticas",
+        "desc": "Devuelve estadisticas agregadas de facturas del proyecto: totales, pendientes, procesadas, errores, exportadas, por orig",
+        "args": [
+          {
+            "name": "projectId",
+            "type": "text",
+            "label": "projectId",
+            "required": true
+          }
+        ],
+        "confirm": true
+      }
+    ],
+    "datos": [
+      {
+        "name": "facturas.listar",
+        "label": "facturas listar",
+        "desc": "Lista facturas del proyecto con filtros opcionales por estado, fechas y limite.",
+        "refresh_on": []
+      }
+    ]
+  }
+}

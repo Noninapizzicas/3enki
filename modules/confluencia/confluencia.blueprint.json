@@ -1,0 +1,19 @@
+{
+  "schema": "blueprint-interfaz-v1",
+  "moduleId": "confluencia",
+  "titulo": "Motor de confluencia: casa líneas de pedido contra el calendario de producción y clasifica confirmado/ajustado/no_disponible (panadería).",
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "eventos_que_escucho": [
+      {
+        "event": "confluencia.resolver_pedido.request",
+        "label": "confluencia resolver pedido"
+      },
+      {
+        "event": "confluencia.validar_linea.request",
+        "label": "confluencia validar linea"
+      }
+    ]
+  }
+}

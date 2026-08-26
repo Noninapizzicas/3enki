@@ -1,0 +1,76 @@
+{
+  "schema": "blueprint-interfaz-v1",
+  "moduleId": "variaciones",
+  "titulo": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{validada,rechazada}.",
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "acciones": [
+      {
+        "name": "variaciones.validar",
+        "label": "variaciones validar",
+        "desc": "Valida una variacion concreta: comprueba que los ingredientes a quitar esten permitidos y que los extras respeten el lim",
+        "args": [
+          {
+            "name": "producto_id",
+            "type": "text",
+            "label": "producto id",
+            "required": true
+          },
+          {
+            "name": "ingredientes_quitar",
+            "type": "text",
+            "label": "ingredientes quitar",
+            "required": false
+          },
+          {
+            "name": "ingredientes_anadir",
+            "type": "text",
+            "label": "ingredientes anadir",
+            "required": false
+          }
+        ],
+        "confirm": true
+      },
+      {
+        "name": "variaciones.calcular_precio",
+        "label": "variaciones calcular precio",
+        "desc": "Calcula el precio total de un producto con variaciones (precio base + suma de extras consultados al modulo ingredientes)",
+        "args": [
+          {
+            "name": "producto_id",
+            "type": "text",
+            "label": "producto id",
+            "required": true
+          },
+          {
+            "name": "ingredientes_anadir",
+            "type": "text",
+            "label": "ingredientes anadir",
+            "required": false
+          }
+        ],
+        "confirm": true
+      },
+      {
+        "name": "variaciones.metrics",
+        "label": "variaciones metrics",
+        "desc": "Metricas operativas del modulo variaciones (counters de variaciones validadas/rechazadas y gauges)."
+      }
+    ],
+    "datos": [
+      {
+        "name": "variaciones.get",
+        "label": "variaciones get",
+        "desc": "Obtiene la configuracion de variaciones de un producto: ingredientes que se pueden quitar, si permite anadir extras, sug",
+        "refresh_on": []
+      },
+      {
+        "name": "variaciones.health",
+        "label": "variaciones health",
+        "desc": "Health check del modulo variaciones: estado del modulo, version y total de productos configurados.",
+        "refresh_on": []
+      }
+    ]
+  }
+}

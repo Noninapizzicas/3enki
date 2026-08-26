@@ -1,0 +1,9 @@
+{
+  "schema": "blueprint-interfaz-v1",
+  "moduleId": "bot-manager",
+  "titulo": "Gestion de bots y almacenamiento. Descarga archivos, guarda en carpetas con convencion de naming (status flags R/P/V/A/X/E/D), publica eventos de lifecycle (registered/unregistered/enabled/disabled) y de actividad (file.stored/message.received/command.received). Auto-registra bots desde credential.saved (TELEGRAM_API_KEY_BOT_*). Auto-respuestas configurables por comando. NO sabe de agentes — solo gestion de bots.",
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos"
+  }
+}

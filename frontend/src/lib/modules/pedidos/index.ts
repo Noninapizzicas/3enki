@@ -1,11 +1,3 @@
-/**
- * Módulo Pedidos — ENVOLTORIO del generador schema→UI (patrón interfaz-dinamico).
- * Un único componente (BlueprintForm) renderiza las zonas del panel del módulo
- * 'pedidos' alimentado por su blueprint (pedidos.blueprint.json, sección `ui`).
- * Nada artesanal: este trío es el mismo para CUALQUIER módulo — solo cambia el blueprint.
- * F7 (construir-interfaz): envoltorio mínimo; el BlueprintForm llama mqttRequest directo.
- */
-
 import type { UIModule } from '$lib/ui-core';
 import PedidosPanel from './PedidosPanel.svelte';
 
@@ -17,10 +9,10 @@ export const pedidosModule: UIModule = {
     zone: 'work-bar',
     button: {
       id: 'pedidos-btn',
-      icon: '📋',
+      icon: '📦',
       label: 'Pedidos',
       action: { type: 'panel', panelId: 'pedidos-panel' },
-      order: 15
+      order: 50
     },
     panels: [{
       id: 'pedidos-panel',

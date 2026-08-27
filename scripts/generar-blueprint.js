@@ -50,7 +50,7 @@ function eventLabel(ev) {
 }
 
 function esLectura(name) {
-  return /^get$|get\.|\.get|listar|obtener|leer|buscar|show|status|health/i.test(name);
+  return /^get$|^list$|get\.|\.get|list\.|\.list|listar|obtener|leer|buscar|show|status|health/i.test(name);
 }
 
 // ── Mapa de dominios conocidos para inferir ref en campos _id ──
@@ -61,9 +61,18 @@ const KNOWN_DOMAINS = {
   ingrediente_id: { ref: 'ingredientes.listar',      ref_label: 'nombre', ref_value: 'id' },
   receta_id:      { ref: 'recetas.listar',            ref_label: 'nombre', ref_value: 'id' },
   cuenta_id:      { ref: 'cuentas.listar',            ref_label: 'nombre', ref_value: 'id' },
-  pedido_id:      { ref: 'pedidos.listar',            ref_label: 'id',     ref_value: 'id' },
+  pedido_id:      { ref: 'pedido.list',               ref_label: 'id',     ref_value: 'id' },
   mesa_id:        { ref: 'mesas.listar',              ref_label: 'nombre', ref_value: 'id' },
 };
+
+const SYSTEM_ID_FIELDS = new Set([
+  'correlation_id', 'session_id', 'request_id', 'trace_id',
+  'transaction_id', 'message_id', 'event_id',
+]);
+
+const SUB_RESOURCE_ID_FIELDS = new Set([
+  'item_id', 'linea_id', 'detalle_id', 'paso_id',
+]);
 
 // ── Normalizar subscribes de module.json ──
 
@@ -151,7 +160,7 @@ function construirArgs(tool, moduleName, selfRef) {
       arg.ref_label = KNOWN_DOMAINS[k].ref_label;
       arg.ref_value = KNOWN_DOMAINS[k].ref_value;
       arg.placeholder = `selecciona un ${k.replace(/_id$/, '').replace(/_/g, ' ')}`;
-    } else if (k.endsWith('_id')) {
+    } else if (k.endsWith('_id') && !SYSTEM_ID_FIELDS.has(k) && !SUB_RESOURCE_ID_FIELDS.has(k)) {
       // ── Referencia genérica: <dominio>_id → <dominio>.listar (RefSelect degrada a texto si no existe) ──
       arg.tipo = 'ref';
       const refDomain = k.replace(/_id$/, '');
@@ -324,7 +333,12 @@ function generar(slugModule, deploy, noFrontend) {
     || [...acciones.keys()].find(a => /(^|_)list(ar)?$/i.test(a));
   if (listAction) {
     const dom = acciones.get(listAction).domain;
-    selfRef = { ref: `${dom}.${listAction}`, ref_label: 'nombre', ref_value: 'id' };
+    const knownSelf = KNOWN_DOMAINS[`${name}_id`] || KNOWN_DOMAINS[`${singular(name)}_id`];
+    selfRef = {
+      ref: `${dom}.${listAction}`,
+      ref_label: knownSelf ? knownSelf.ref_label : 'nombre',
+      ref_value: 'id'
+    };
   }
 
   const datosOps = [];
@@ -348,7 +362,8 @@ function generar(slugModule, deploy, noFrontend) {
     if (esLectura(action)) datosOps.push(action);
   }
 
-  const datosOp = datosOps.find(a => /^(get|listar|obtener|leer|buscar)$/i.test(a))
+  const datosOp = datosOps.find(a => /^(list|listar)$/i.test(a))
+    || datosOps.find(a => /^(get|obtener|leer|buscar)$/i.test(a))
     || datosOps.find(a => !/^(health|status|metrics)$/i.test(a))
     || datosOps[0] || null;
 

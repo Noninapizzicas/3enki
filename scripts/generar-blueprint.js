@@ -173,7 +173,7 @@ function buscarModulo(baseDir, slugModule) {
 function generarFrontend(slugModule, name, description, blueprint, uiDecision) {
   const pascal = pascalCase(name);
   const icon = uiDecision.icon || '📦';
-  const zone = uiDecision.zone || 'modulos';
+  const zone = uiDecision.zone || 'work-bar';
   const order = uiDecision.order || 50;
   const label = pascal;
   const frontDir = path.join(REPO_FRONTEND, slugModule);
@@ -261,7 +261,7 @@ function generar(slugModule, deploy, noFrontend) {
   const name = mod.name || slugModule.split('/').pop();
   const description = mod.description || name;
   const tools = mod.tools || [];
-  const uiDecision = mod.ui_decision || { type: 'workspace_module', zone: 'modulos' };
+  const uiDecision = mod.ui_decision || { type: 'workspace_module', zone: 'work-bar' };
 
   const acciones = extraerAcciones(mod);
   const subscribes = extraerSubscribes(mod);

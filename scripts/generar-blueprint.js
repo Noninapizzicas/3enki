@@ -308,12 +308,15 @@ function generar(slugModule, deploy, noFrontend) {
     || datosOps.find(a => !/^(health|status|metrics)$/i.test(a))
     || datosOps[0] || null;
 
-  // ── ui.datos: primer op de lectura con refresh_on de los subscribes ──
+  // ── eventos de negocio (sin RPCs internos .request/.response) ──
+  const bizEvents = publishes.filter(e => !e.endsWith('.request') && !e.endsWith('.response'));
+
+  // ── ui.datos: refresh_on = eventos de negocio ──
   let datos = undefined;
   if (datosOp) {
-    const refreshOn = publishes.length > 0
-      ? publishes
-      : subscribes.filter(s => !s.startsWith('project.'));
+    const refreshOn = bizEvents.length > 0
+      ? bizEvents
+      : subscribes.filter(s => !s.startsWith('project.') && !s.endsWith('.request') && !s.endsWith('.response'));
     datos = {
       op: datosOp,
       titulo: humanize(datosOp),
@@ -331,11 +334,11 @@ function generar(slugModule, deploy, noFrontend) {
     version: 'blueprint-1.0.0',
     moduleId: name,
     titulo: description.charAt(0).toUpperCase() + description.slice(1),
-    ...(publishes.length && { eventos_publicados: publishes }),
+    ...(bizEvents.length && { eventos_publicados: bizEvents }),
     ...(eventosQueEscucho.length && { eventos_que_escucho: eventosQueEscucho }),
     transporte: {
       rpc: rpcLines,
-      ...(publishes.length && { salida: publishes }),
+      ...(bizEvents.length && { salida: bizEvents }),
     },
     ui: {
       ...(Object.keys(uiOps).length && { ops: uiOps }),

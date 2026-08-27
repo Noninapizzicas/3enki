@@ -1,0 +1,9 @@
+{
+  "id": "productos",
+  "name": "Productos",
+  "version": "0.1.0",
+  "zone": "modulos",
+  "order": 50,
+  "icon": "📦",
+  "label": "Productos"
+}

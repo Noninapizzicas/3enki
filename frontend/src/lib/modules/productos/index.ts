@@ -17,7 +17,9 @@ export const productosModule: UIModule = {
     panels: [{
       id: 'productos-panel',
       title: 'Productos',
-      size: 'lg'
+      size: 'lg',
+      position: 'right',
+      resizable: true
     }]
   },
   PanelComponent: ProductosPanel

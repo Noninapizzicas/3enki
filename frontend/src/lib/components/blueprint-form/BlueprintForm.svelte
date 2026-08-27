@@ -21,6 +21,7 @@
   import { activeProjectId } from '$lib/stores/projects';
   import { deriveZones, labelize, type BlueprintArg, type BlueprintOp, type BlueprintEventoVivo, type BlueprintDatos } from './blueprint-zones';
   import RefSelect from './RefSelect.svelte';
+  import ResultView from './ResultView.svelte';
 
   export let blueprint: Record<string, unknown> | null = null;
   export let moduleId = '';
@@ -345,7 +346,7 @@
             {/if}
           </div>
           {#if resultados[op.nombre]?.ok && resultados[op.nombre].data !== undefined}
-            <pre class="resultado-data">{JSON.stringify(resultados[op.nombre].data, null, 2)}</pre>
+            <div class="resultado-vista"><ResultView data={resultados[op.nombre].data} /></div>
           {/if}
         </div>
       {/each}
@@ -375,7 +376,7 @@
               {resultados[op.nombre].ok ? '✓' : '✗'} {op.titulo}: {resultados[op.nombre].msg}
             </span>
             {#if resultados[op.nombre].ok && resultados[op.nombre].data !== undefined}
-              <pre class="resultado-data">{JSON.stringify(resultados[op.nombre].data, null, 2)}</pre>
+              <div class="resultado-vista"><ResultView data={resultados[op.nombre].data} /></div>
             {/if}
           </div>
         {/if}
@@ -483,6 +484,7 @@
   .resultado.ok { color: #22c55e; }
   .resultado.ko { color: #ef4444; }
   .resultado-data { margin: 0.4rem 0 0; font-size: 0.72rem; background: #0a0a0a; border: 1px solid var(--color-border, #333); border-radius: 6px; padding: 0.4rem 0.55rem; overflow-x: auto; max-height: 140px; color: #9ecaed; }
+  .resultado-vista { margin-top: 0.4rem; }
   .acciones-grid { display: flex; gap: 0.5rem; flex-wrap: wrap; }
   .accion-resultado { margin-top: 0.5rem; }
   .vivo { border-bottom: 1px dashed var(--color-border, #333); padding: 0.3rem 0; }

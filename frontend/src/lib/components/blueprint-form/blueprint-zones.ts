@@ -35,6 +35,8 @@ export interface BlueprintArg {
   tipo: ArgTipo;
   required: boolean;
   enum?: string[];
+  /** Etiquetas legibles paralelas a `enum` (mismo orden). Si falta, se muestra el valor crudo. */
+  enumLabels?: string[];
   descripcion?: string;
   placeholder?: string;
   default?: unknown;
@@ -124,6 +126,16 @@ export function humanize(snake: string): string {
     .join(' ');
 }
 
+/**
+ * Etiqueta legible para un campo de formulario: quita el sufijo `_id` (interno) y
+ * humaniza — `categoria_id` → "Categoría", `q` → "Q". El user ve un nombre de negocio,
+ * no la clave interna del payload.
+ */
+export function labelize(nombre: string): string {
+  const base = nombre.replace(/_id$/i, '');
+  return humanize(base || nombre);
+}
+
 /** Normaliza un arg declarado en ui.ops (valida tipo y enum). */
 function normalizeArg(raw: Record<string, unknown>): BlueprintArg | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -146,6 +158,7 @@ function normalizeArg(raw: Record<string, unknown>): BlueprintArg | null {
     ref_value: typeof raw.ref_value === 'string' && raw.ref_value ? raw.ref_value : undefined,
   };
   if (Array.isArray(raw.enum)) arg.enum = raw.enum.map(String);
+  if (Array.isArray(raw.enumLabels)) arg.enumLabels = raw.enumLabels.map(String);
   if (raw.default !== undefined) arg.default = raw.default;
   return arg;
 }

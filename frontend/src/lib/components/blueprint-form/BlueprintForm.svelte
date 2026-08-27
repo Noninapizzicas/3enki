@@ -234,6 +234,7 @@
         datosNeedsArgs = true;
         datosTitulo = zones.datos.titulo;
         datosHint = `Ejecuta «${matchingOp.titulo}» en el formulario para ver los datos`;
+        error = '';
       } else {
         loadDatos();
       }
@@ -413,9 +414,11 @@
     <div class="zona">
       <h3 class="zona-titulo">
         Datos — {datosTitulo || zones.datos.titulo}
-        <button class="refrescar" on:click={loadDatos} disabled={datosCargando}>
-          {datosCargando ? 'cargando…' : '↻ refrescar'}
-        </button>
+        {#if !datosNeedsArgs}
+          <button class="refrescar" on:click={loadDatos} disabled={datosCargando}>
+            {datosCargando ? 'cargando…' : '↻ refrescar'}
+          </button>
+        {/if}
       </h3>
       {#if datosHint}
         <p class="vivo-vacio">{datosHint}</p>
